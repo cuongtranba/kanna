@@ -211,7 +211,7 @@ export function LocalDev({
             title={isConnecting ? `Connecting ${APP_NAME}` : `Connect ${APP_NAME}`}
             subtitle={isConnecting
               ? `${APP_NAME} is starting up and loading your local projects.`
-              : `Run ${APP_NAME} directly on your machine with full access to your local files and Claude projects.`}
+              : `Run ${APP_NAME} directly on your machine with full access to your local files and agent project history.`}
           />
           <div className="max-w-2xl w-full mx-auto pb-12 px-6">
             <SectionHeader>Status</SectionHeader>
@@ -312,7 +312,7 @@ export function LocalDev({
             ) : (
               <InfoCard>
                 <p className="text-sm text-muted-foreground">
-                  No Claude projects discovered yet. Open one with Claude Code or create a new project here.
+                  No local projects discovered yet. Open one with Claude or Codex, or create a new project here.
                 </p>
               </InfoCard>
             )}

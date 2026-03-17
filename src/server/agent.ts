@@ -10,6 +10,7 @@ import { normalizeToolCall } from "../shared/tools"
 import type { ClientCommand } from "../shared/protocol"
 import { EventStore } from "./event-store"
 import { CodexAppServerManager } from "./codex-app-server"
+import { generateTitleForChat } from "./generate-title"
 import type { HarnessEvent, HarnessToolRequest, HarnessTurn } from "./harness-types"
 import {
   codexServiceTierFromModelOptions,
@@ -64,11 +65,7 @@ interface AgentCoordinatorArgs {
   store: EventStore
   onStateChange: () => void
   codexManager?: CodexAppServerManager
-}
-
-function deriveChatTitle(content: string) {
-  const singleLine = content.replace(/\s+/g, " ").trim()
-  return singleLine.slice(0, 60) || "New Chat"
+  generateTitle?: (messageContent: string, cwd: string) => Promise<string | null>
 }
 
 function timestamped<T extends Omit<TranscriptEntry, "_id" | "createdAt">>(
@@ -321,12 +318,14 @@ export class AgentCoordinator {
   private readonly store: EventStore
   private readonly onStateChange: () => void
   private readonly codexManager: CodexAppServerManager
+  private readonly generateTitle: (messageContent: string, cwd: string) => Promise<string | null>
   readonly activeTurns = new Map<string, ActiveTurn>()
 
   constructor(args: AgentCoordinatorArgs) {
     this.store = args.store
     this.onStateChange = args.onStateChange
     this.codexManager = args.codexManager ?? new CodexAppServerManager()
+    this.generateTitle = args.generateTitle ?? generateTitleForChat
   }
 
   getActiveStatuses() {
@@ -390,9 +389,7 @@ export class AgentCoordinator {
     await this.store.setPlanMode(args.chatId, args.planMode)
 
     const existingMessages = this.store.getMessages(args.chatId)
-    if (args.appendUserPrompt && chat.title === "New Chat" && existingMessages.length === 0) {
-      await this.store.renameChat(args.chatId, deriveChatTitle(args.content))
-    }
+    const shouldGenerateTitle = args.appendUserPrompt && chat.title === "New Chat" && existingMessages.length === 0
 
     if (args.appendUserPrompt) {
       await this.store.appendMessage(args.chatId, timestamped({ kind: "user_prompt", content: args.content }, Date.now()))
@@ -402,6 +399,10 @@ export class AgentCoordinator {
     const project = this.store.getProject(chat.projectId)
     if (!project) {
       throw new Error("Project not found")
+    }
+
+    if (shouldGenerateTitle) {
+      void this.generateTitleInBackground(args.chatId, args.content, project.localPath)
     }
 
     const onToolRequest = async (request: HarnessToolRequest): Promise<unknown> => {
@@ -509,6 +510,21 @@ export class AgentCoordinator {
     })
 
     return { chatId }
+  }
+
+  private async generateTitleInBackground(chatId: string, messageContent: string, cwd: string) {
+    try {
+      const title = await this.generateTitle(messageContent, cwd)
+      if (!title) return
+
+      const chat = this.store.requireChat(chatId)
+      if (chat.title !== "New Chat") return
+
+      await this.store.renameChat(chatId, title)
+      this.onStateChange()
+    } catch {
+      // Ignore background title generation failures.
+    }
   }
 
   private async runTurn(active: ActiveTurn) {

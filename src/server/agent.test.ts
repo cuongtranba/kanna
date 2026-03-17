@@ -64,6 +64,132 @@ describe("normalizeClaudeStreamMessage", () => {
 })
 
 describe("AgentCoordinator codex integration", () => {
+  test("generates a chat title in the background on the first user message", async () => {
+    const fakeCodexManager = {
+      async startSession() {},
+      async startTurn(): Promise<HarnessTurn> {
+        async function* stream() {
+          yield {
+            type: "transcript" as const,
+            entry: timestamped({
+              kind: "system_init",
+              provider: "codex",
+              model: "gpt-5.4",
+              tools: [],
+              agents: [],
+              slashCommands: [],
+              mcpServers: [],
+            }),
+          }
+          yield {
+            type: "transcript" as const,
+            entry: timestamped({
+              kind: "result",
+              subtype: "success",
+              isError: false,
+              durationMs: 0,
+              result: "",
+            }),
+          }
+        }
+
+        return {
+          provider: "codex",
+          stream: stream(),
+          interrupt: async () => {},
+          close: () => {},
+        }
+      },
+    }
+
+    const store = createFakeStore()
+    const coordinator = new AgentCoordinator({
+      store: store as never,
+      onStateChange: () => {},
+      codexManager: fakeCodexManager as never,
+      generateTitle: async () => "Generated title",
+    })
+
+    await coordinator.send({
+      type: "chat.send",
+      chatId: "chat-1",
+      provider: "codex",
+      content: "first message",
+      model: "gpt-5.4",
+    })
+
+    await waitFor(() => store.chat.title === "Generated title")
+    expect(store.messages[0]?.kind).toBe("user_prompt")
+  })
+
+  test("does not overwrite a manual rename when background title generation finishes later", async () => {
+    let releaseTitle!: () => void
+    const titleGate = new Promise<void>((resolve) => {
+      releaseTitle = resolve
+    })
+    const fakeCodexManager = {
+      async startSession() {},
+      async startTurn(): Promise<HarnessTurn> {
+        async function* stream() {
+          yield {
+            type: "transcript" as const,
+            entry: timestamped({
+              kind: "system_init",
+              provider: "codex",
+              model: "gpt-5.4",
+              tools: [],
+              agents: [],
+              slashCommands: [],
+              mcpServers: [],
+            }),
+          }
+          yield {
+            type: "transcript" as const,
+            entry: timestamped({
+              kind: "result",
+              subtype: "success",
+              isError: false,
+              durationMs: 0,
+              result: "",
+            }),
+          }
+        }
+
+        return {
+          provider: "codex",
+          stream: stream(),
+          interrupt: async () => {},
+          close: () => {},
+        }
+      },
+    }
+
+    const store = createFakeStore()
+    const coordinator = new AgentCoordinator({
+      store: store as never,
+      onStateChange: () => {},
+      codexManager: fakeCodexManager as never,
+      generateTitle: async () => {
+        await titleGate
+        return "Generated title"
+      },
+    })
+
+    await coordinator.send({
+      type: "chat.send",
+      chatId: "chat-1",
+      provider: "codex",
+      content: "first message",
+      model: "gpt-5.4",
+    })
+
+    await store.renameChat("chat-1", "Manual title")
+    releaseTitle()
+    await waitFor(() => store.turnFinishedCount === 1)
+
+    expect(store.chat.title).toBe("Manual title")
+  })
+
   test("binds codex provider and reuses the session token on later turns", async () => {
     const sessionCalls: Array<{ chatId: string; sessionToken: string | null }> = []
     const fakeCodexManager = {
@@ -383,7 +509,7 @@ function createFakeStore() {
       return project
     },
     getMessages() {
-      return [] as TranscriptEntry[]
+      return this.messages
     },
     async setChatProvider(_chatId: string, provider: "claude" | "codex") {
       chat.provider = provider

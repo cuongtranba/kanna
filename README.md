@@ -47,7 +47,7 @@ That's it. Kanna opens in your browser at [`localhost:3210`](http://localhost:32
 ## Features
 
 - **Project-first sidebar** — chats grouped under projects, with live status indicators (idle, running, waiting, failed)
-- **Local project discovery** — auto-discovers projects from `~/.claude/projects`
+- **Local project discovery** — auto-discovers projects worked on through Claude and Codex local history
 - **Rich transcript rendering** — user messages, assistant responses, collapsible tool call groups, plan mode dialogs, and interactive prompts
 - **Plan mode** — review and approve agent plans before execution
 - **Persistent local history** — refresh-safe routes backed by JSONL event logs and compacted snapshots
@@ -151,7 +151,7 @@ src/
 │   ├── agent.ts     AgentCoordinator (Claude SDK turn management)
 │   ├── ws-router.ts WebSocket message routing & subscriptions
 │   ├── event-store.ts  JSONL persistence, replay & compaction
-│   ├── discovery.ts Auto-discover projects from ~/.claude/projects
+│   ├── discovery.ts Auto-discover projects from Claude and Codex local state
 │   ├── read-models.ts  Derive view models from event state
 │   └── events.ts    Event type definitions
 └── shared/          Shared between client & server

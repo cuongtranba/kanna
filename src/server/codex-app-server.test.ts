@@ -181,6 +181,56 @@ describe("CodexAppServerManager", () => {
     expect(turnStart?.params.collaborationMode?.settings?.reasoning_effort).toBeNull()
   })
 
+  test("generateStructured returns the final assistant JSON and stops the transient session", async () => {
+    const process = new FakeCodexProcess((message, child) => {
+      if (message.method === "initialize") {
+        child.writeServerMessage({ id: message.id, result: { userAgent: "codex-test" } })
+      } else if (message.method === "thread/start") {
+        child.writeServerMessage({
+          id: message.id,
+          result: { thread: { id: "thread-structured" }, model: "gpt-5.4", reasoningEffort: "high" },
+        })
+      } else if (message.method === "turn/start") {
+        child.writeServerMessage({
+          id: message.id,
+          result: { turn: { id: "turn-structured", status: "completed", error: null } },
+        })
+        child.writeServerMessage({
+          method: "item/completed",
+          params: {
+            threadId: "thread-structured",
+            turnId: "turn-structured",
+            item: {
+              type: "agentMessage",
+              id: "msg-structured",
+              text: "{\"title\":\"Codex title\"}",
+              phase: "final_answer",
+            },
+          },
+        })
+        child.writeServerMessage({
+          method: "turn/completed",
+          params: {
+            threadId: "thread-structured",
+            turn: { id: "turn-structured", status: "completed", error: null },
+          },
+        })
+      }
+    })
+
+    const manager = new CodexAppServerManager({
+      spawnProcess: () => process as never,
+    })
+
+    const result = await manager.generateStructured({
+      cwd: "/tmp/project",
+      prompt: "Return JSON",
+    })
+
+    expect(result).toBe("{\"title\":\"Codex title\"}")
+    expect(process.killed).toBe(true)
+  })
+
   test("maps command execution and agent output into the shared transcript stream", async () => {
     const process = new FakeCodexProcess((message, child) => {
       if (message.method === "initialize") {

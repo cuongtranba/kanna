@@ -122,6 +122,14 @@ export interface StartCodexTurnArgs {
   onApprovalRequest?: PendingTurn["onApprovalRequest"]
 }
 
+export interface GenerateStructuredArgs {
+  cwd: string
+  prompt: string
+  model?: string
+  effort?: CodexReasoningEffort
+  serviceTier?: ServiceTier
+}
+
 function timestamped<T extends Omit<TranscriptEntry, "_id" | "createdAt">>(
   entry: T,
   createdAt = Date.now()
@@ -781,6 +789,49 @@ export class CodexAppServerManager {
         } satisfies TurnInterruptParams)
       },
       close: () => {},
+    }
+  }
+
+  async generateStructured(args: GenerateStructuredArgs): Promise<string | null> {
+    const chatId = `quick-${randomUUID()}`
+    let turn: HarnessTurn | null = null
+    let assistantText = ""
+    let resultText = ""
+
+    try {
+      await this.startSession({
+        chatId,
+        cwd: args.cwd,
+        model: args.model ?? "gpt-5.4",
+        serviceTier: args.serviceTier ?? "fast",
+        sessionToken: null,
+      })
+
+      turn = await this.startTurn({
+        chatId,
+        model: args.model ?? "gpt-5.4",
+        effort: args.effort,
+        serviceTier: args.serviceTier ?? "fast",
+        content: args.prompt,
+        planMode: false,
+        onToolRequest: async () => ({}),
+      })
+
+      for await (const event of turn.stream) {
+        if (event.type !== "transcript" || !event.entry) continue
+        if (event.entry.kind === "assistant_text") {
+          assistantText += assistantText ? `\n${event.entry.text}` : event.entry.text
+        }
+        if (event.entry.kind === "result" && !event.entry.isError && event.entry.result.trim()) {
+          resultText = event.entry.result
+        }
+      }
+
+      const candidate = assistantText.trim() || resultText.trim()
+      return candidate || null
+    } finally {
+      turn?.close()
+      this.stopSession(chatId)
     }
   }
 

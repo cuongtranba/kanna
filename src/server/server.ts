@@ -2,7 +2,7 @@ import path from "node:path"
 import { APP_NAME } from "../shared/branding"
 import { EventStore } from "./event-store"
 import { AgentCoordinator } from "./agent"
-import { discoverClaudeProjects, type DiscoveredProject } from "./discovery"
+import { discoverProjects, type DiscoveredProject } from "./discovery"
 import { getMachineDisplayName } from "./machine-name"
 import { createWsRouter, type ClientState } from "./ws-router"
 
@@ -18,7 +18,7 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
   let discoveredProjects: DiscoveredProject[] = []
 
   async function refreshDiscovery() {
-    discoveredProjects = discoverClaudeProjects()
+    discoveredProjects = discoverProjects()
     return discoveredProjects
   }
 

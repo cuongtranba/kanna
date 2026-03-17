@@ -1,43 +1,36 @@
-import { query } from "@anthropic-ai/claude-agent-sdk"
+import { QuickResponseAdapter } from "./quick-response"
 
-export async function generateTitleForChat(messageContent: string): Promise<string | null> {
-  try {
-    const q = query({
-      prompt: `Generate a short, descriptive title (under 30 chars) for a conversation that starts with this message. Return JSON matching the schema.\n\n${messageContent}`,
-      options: {
-        model: "haiku",
-        tools: [],
-        systemPrompt: "",
-        effort: "low",
-        permissionMode: "bypassPermissions",
-        outputFormat: {
-          type: "json_schema",
-          schema: {
-            type: "object",
-            properties: {
-              title: { type: "string" },
-            },
-            required: ["title"],
-            additionalProperties: false,
-          },
-        },
-        env: { ...process.env },
-      },
-    })
+const TITLE_SCHEMA = {
+  type: "object",
+  properties: {
+    title: { type: "string" },
+  },
+  required: ["title"],
+  additionalProperties: false,
+} as const
 
-    try {
-      for await (const message of q) {
-        if ("result" in message) {
-          const output = (message as Record<string, unknown>).structured_output as { title?: string } | undefined
-          return typeof output?.title === "string" ? output.title.slice(0, 80) : null
-        }
-      }
-    } finally {
-      q.close()
-    }
+function normalizeGeneratedTitle(value: unknown): string | null {
+  if (typeof value !== "string") return null
+  const normalized = value.replace(/\s+/g, " ").trim().slice(0, 80)
+  if (!normalized || normalized === "New Chat") return null
+  return normalized
+}
 
-    return null
-  } catch {
-    return null
-  }
+export async function generateTitleForChat(
+  messageContent: string,
+  cwd: string,
+  adapter = new QuickResponseAdapter()
+): Promise<string | null> {
+  const result = await adapter.generateStructured<string>({
+    cwd,
+    task: "conversation title generation",
+    prompt: `Generate a short, descriptive title (under 30 chars) for a conversation that starts with this message.\n\n${messageContent}`,
+    schema: TITLE_SCHEMA,
+    parse: (value) => {
+      const output = value && typeof value === "object" ? value as { title?: unknown } : {}
+      return normalizeGeneratedTitle(output.title)
+    },
+  })
+
+  return result
 }

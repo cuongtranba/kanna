@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { deriveChatSnapshot, deriveSidebarData } from "./read-models"
+import { deriveChatSnapshot, deriveLocalProjectsSnapshot, deriveSidebarData } from "./read-models"
 import { createEmptyState } from "./events"
 
 describe("read models", () => {
@@ -58,6 +58,48 @@ describe("read models", () => {
       "gpt-5.4",
       "gpt-5.3-codex",
       "gpt-5.3-codex-spark",
+    ])
+  })
+
+  test("prefers saved project metadata over discovered entries for the same path", () => {
+    const state = createEmptyState()
+    state.projectsById.set("project-1", {
+      id: "project-1",
+      localPath: "/tmp/project",
+      title: "Saved Project",
+      createdAt: 1,
+      updatedAt: 50,
+    })
+    state.projectIdsByPath.set("/tmp/project", "project-1")
+    state.chatsById.set("chat-1", {
+      id: "chat-1",
+      projectId: "project-1",
+      title: "Chat",
+      createdAt: 1,
+      updatedAt: 75,
+      provider: "codex",
+      planMode: false,
+      sessionToken: null,
+      lastMessageAt: 100,
+      lastTurnOutcome: null,
+    })
+
+    const snapshot = deriveLocalProjectsSnapshot(state, [
+      {
+        localPath: "/tmp/project",
+        title: "Discovered Project",
+        modifiedAt: 10,
+      },
+    ], "Local Machine")
+
+    expect(snapshot.projects).toEqual([
+      {
+        localPath: "/tmp/project",
+        title: "Saved Project",
+        source: "saved",
+        lastOpenedAt: 100,
+        chatCount: 1,
+      },
     ])
   })
 })
