@@ -1,4 +1,4 @@
-import { useState, useCallback, type ReactNode, type ComponentPropsWithoutRef } from "react"
+import { Children, cloneElement, isValidElement, useState, useCallback, type ReactNode, type ComponentPropsWithoutRef } from "react"
 import { Button } from "../ui/button"
 import {
   ArrowDownToLine,
@@ -192,8 +192,39 @@ function extractText(node: ReactNode): string {
   return ""
 }
 
+type MarkdownChildNode = ReturnType<typeof Children.toArray>[number]
+
+function withChildClassName(node: MarkdownChildNode, className: string): MarkdownChildNode {
+  if (!isValidElement<{ className?: string }>(node)) {
+    return node
+  }
+
+  return cloneElement(node, {
+    className: cn(node.props.className, className),
+  })
+}
+
 // Markdown component overrides
 export const markdownComponents = {
+  h1: ({ children }: { children?: ReactNode }) => (
+    <h1 className="text-[18px] font-normal leading-tight mt-6 mb-4 first:mt-0">{children}</h1>
+  ),
+  h2: ({ children }: { children?: ReactNode }) => (
+    <h2 className="text-[18px] font-normal leading-tight mt-5 mb-3 first:mt-0">{children}</h2>
+  ),
+  h3: ({ children }: { children?: ReactNode }) => (
+    <h3 className="text-[16px] font-normal leading-tight mt-4 mb-2 first:mt-0">{children}</h3>
+  ),
+  h4: ({ children }: { children?: ReactNode }) => (
+    <h4 className="text-[16px] font-normal leading-tight mt-3 mb-2 first:mt-0">{children}</h4>
+  ),
+  h5: ({ children }: { children?: ReactNode }) => (
+    <h5 className="text-[16px] font-normal leading-tight mt-3 mb-1 first:mt-0">{children}</h5>
+  ),
+  h6: ({ children }: { children?: ReactNode }) => (
+    <h6 className="text-[16px] font-normal leading-tight mt-3 mb-1 first:mt-0">{children}</h6>
+  ),
+
   pre: ({ children, ...props }: ComponentPropsWithoutRef<"pre">) => {
     const [copied, setCopied] = useState(false)
     const textContent = extractText(children)
@@ -256,6 +287,32 @@ export const markdownComponents = {
     <p className="break-words" {...props}>{children}</p>
   ),
 
+  blockquote: ({ children, ...props }: ComponentPropsWithoutRef<"blockquote">) => (
+    (() => {
+      const childNodes = Children.toArray(children)
+
+      const firstChild = childNodes[0]
+      if (firstChild !== undefined) {
+        childNodes[0] = withChildClassName(firstChild, "mt-0")
+      }
+
+      const lastIndex = childNodes.length - 1
+      const lastChild = childNodes[lastIndex]
+      if (lastChild !== undefined) {
+        childNodes[lastIndex] = withChildClassName(lastChild, "mb-0")
+      }
+
+      return (
+        <blockquote
+          className="my-1 border-l-2 border-border/80 pl-2 text-muted-foreground"
+          {...props}
+        >
+          {childNodes}
+        </blockquote>
+      )
+    })()
+  ),
+
   a: ({ children, ...props }: ComponentPropsWithoutRef<"a">) => (
     <a
       className="transition-all underline decoration-2 text-orange-500 decoration-orange-500/50 hover:text-orange-500/70 dark:text-logo dark:decoration-logo/70 dark:hover:text-logo/60 dark:hover:decoration-logo/40 "
@@ -270,22 +327,4 @@ export const markdownComponents = {
 
 export const markdownWithHeadingsComponents = {
   ...markdownComponents,
-  h1: ({ children }: { children?: ReactNode }) => (
-    <h1 className="text-2xl font-bold mt-6 mb-4 first:mt-0">{children}</h1>
-  ),
-  h2: ({ children }: { children?: ReactNode }) => (
-    <h2 className="text-xl font-semibold mt-5 mb-3 first:mt-0">{children}</h2>
-  ),
-  h3: ({ children }: { children?: ReactNode }) => (
-    <h3 className="text-lg font-semibold mt-4 mb-2 first:mt-0">{children}</h3>
-  ),
-  h4: ({ children }: { children?: ReactNode }) => (
-    <h4 className="text-base font-semibold mt-3 mb-2 first:mt-0">{children}</h4>
-  ),
-  h5: ({ children }: { children?: ReactNode }) => (
-    <h5 className="text-sm font-semibold mt-3 mb-1 first:mt-0">{children}</h5>
-  ),
-  h6: ({ children }: { children?: ReactNode }) => (
-    <h6 className="text-sm font-medium mt-3 mb-1 first:mt-0">{children}</h6>
-  ),
 }

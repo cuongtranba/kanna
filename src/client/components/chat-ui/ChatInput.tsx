@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useRef, useState, type ComponentType, type SVGProps } from "react"
+import { forwardRef, memo, useCallback, useEffect, useRef, useState, type ComponentType, type SVGProps } from "react"
 import { ArrowUp, Brain, Gauge, ListTodo, LockOpen, Sparkles, Zap } from "lucide-react"
 import {
   CLAUDE_REASONING_OPTIONS,
@@ -155,7 +155,7 @@ interface Props {
   availableProviders: ProviderCatalogEntry[]
 }
 
-export const ChatInput = memo(function ChatInput({
+const ChatInputInner = forwardRef<HTMLTextAreaElement, Props>(function ChatInput({
   onSubmit,
   onCancel,
   disabled,
@@ -163,7 +163,7 @@ export const ChatInput = memo(function ChatInput({
   chatId,
   activeProvider,
   availableProviders,
-}: Props) {
+}, forwardedRef) {
   const { getDraft, setDraft, clearDraft } = useChatInputStore()
   const {
     provider: preferredProvider,
@@ -208,6 +208,15 @@ export const ChatInput = memo(function ChatInput({
   useEffect(() => {
     textareaRef.current?.focus()
   }, [chatId])
+
+  useEffect(() => {
+    if (!forwardedRef) return
+    if (typeof forwardedRef === "function") {
+      forwardedRef(textareaRef.current)
+      return
+    }
+    forwardedRef.current = textareaRef.current
+  }, [forwardedRef])
 
   function setReasoningEffort(reasoningEffort: string) {
     if (selectedProvider === "claude") {
@@ -455,3 +464,5 @@ export const ChatInput = memo(function ChatInput({
     </div>
   )
 })
+
+export const ChatInput = memo(ChatInputInner)

@@ -203,6 +203,34 @@
     margin: 0.25em 0;
   }
 
+  .prose blockquote {
+    margin: 1em 0;
+    padding-left: 1em;
+    border-left: 2px solid hsl(var(--border));
+    color: hsl(var(--muted-foreground));
+  }
+
+  .prose blockquote > * {
+    margin-top: 0.75em;
+    margin-bottom: 0.75em;
+  }
+
+  .prose blockquote > p {
+    margin-top: 0;
+    margin-bottom: 0;
+  }
+
+  .prose blockquote > p + p {
+    margin-top: 0.75em;
+  }
+
+  .prose blockquote ul,
+  .prose blockquote ol,
+  .prose blockquote pre {
+    margin-top: 0.75em;
+    margin-bottom: 0.75em;
+  }
+
   code,
   pre {
     font-family: "Roboto Mono", monospace;

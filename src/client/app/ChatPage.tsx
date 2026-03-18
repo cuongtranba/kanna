@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { ArrowDown, Flower } from "lucide-react"
 import { useOutletContext } from "react-router-dom"
 import { ChatInput } from "../components/chat-ui/ChatInput"
@@ -13,6 +13,7 @@ import { DEFAULT_PROJECT_TERMINAL_LAYOUT, useTerminalLayoutStore } from "../stor
 import { useTerminalPreferencesStore } from "../stores/terminalPreferencesStore"
 import type { KannaState } from "./useKannaState"
 import { KannaTranscript } from "./KannaTranscript"
+import { useStickyChatFocus } from "./useStickyChatFocus"
 
 const EMPTY_STATE_TEXT = "What are we building?"
 const EMPTY_STATE_TYPING_INTERVAL_MS = 19
@@ -20,6 +21,8 @@ const CHAT_NAVBAR_OFFSET_PX = 72
 
 export function ChatPage() {
   const state = useOutletContext<KannaState>()
+  const chatCardRef = useRef<HTMLDivElement>(null)
+  const chatInputRef = useRef<HTMLTextAreaElement>(null)
   const [typedEmptyStateText, setTypedEmptyStateText] = useState("")
   const projectId = state.runtime?.projectId ?? null
   const projectTerminalLayout = useTerminalLayoutStore((store) => (projectId ? store.projects[projectId] : undefined))
@@ -34,6 +37,13 @@ export function ChatPage() {
 
   const hasTerminals = terminalLayout.terminals.length > 0
   const showTerminalPane = Boolean(projectId && terminalLayout.isVisible && hasTerminals)
+
+  useStickyChatFocus({
+    rootRef: chatCardRef,
+    fallbackRef: chatInputRef,
+    enabled: state.hasSelectedProject && state.runtime?.status !== "waiting_for_user",
+  })
+
   useEffect(() => {
     if (state.messages.length !== 0) return
 
@@ -83,7 +93,7 @@ export function ChatPage() {
   }, [showTerminalPane, state.messages.length, state.scrollRef])
 
   const chatCard = (
-    <Card className="bg-background h-full flex flex-col overflow-hidden border-0 rounded-none relative">
+    <Card ref={chatCardRef} className="bg-background h-full flex flex-col overflow-hidden border-0 rounded-none relative">
       <CardContent className="flex flex-1 min-h-0 flex-col p-0 overflow-hidden relative">
         <ChatNavbar
           sidebarCollapsed={state.sidebarCollapsed}
@@ -190,6 +200,7 @@ export function ChatPage() {
       <div className="absolute bottom-0 left-0 right-0 z-20 pointer-events-none">
         <div className="bg-gradient-to-t from-background via-background pointer-events-auto" ref={state.inputRef}>
           <ChatInput
+            ref={chatInputRef}
             key={state.activeChatId ?? "new-chat"}
             onSubmit={state.handleSend}
             onCancel={() => {
