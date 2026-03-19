@@ -1,5 +1,6 @@
 import { useEffect, useState, type KeyboardEvent, type ReactNode } from "react"
 import {
+  BookText,
   FolderCode,
   Info,
   Loader2,
@@ -10,11 +11,16 @@ import {
   Sun,
   TerminalSquare,
 } from "lucide-react"
-import { useOutletContext } from "react-router-dom"
+import Markdown from "react-markdown"
+import remarkGfm from "remark-gfm"
+import { useNavigate, useOutletContext, useParams } from "react-router-dom"
 import { SDK_CLIENT_APP } from "../../shared/branding"
+import { markdownComponents } from "../components/messages/shared"
+import { buttonVariants } from "../components/ui/button"
 import type { EditorPreset } from "../../shared/protocol"
 import { SegmentedControl } from "../components/ui/segmented-control"
 import { useTheme, type ThemePreference } from "../hooks/useTheme"
+import { cn } from "../lib/utils"
 import {
   DEFAULT_TERMINAL_MIN_COLUMN_WIDTH,
   DEFAULT_TERMINAL_SCROLLBACK,
@@ -32,6 +38,12 @@ const sidebarItems = [
     label: "General",
     icon: Settings2,
     subtitle: "Manage appearance, editor behavior, and embedded terminal defaults.",
+  },
+  {
+    id: "changelog",
+    label: "Changelog",
+    icon: BookText,
+    subtitle: "Release notes pulled from the public GitHub releases feed.",
   },
   {
     id: "page-1",
@@ -55,6 +67,11 @@ const sidebarItems = [
 type SidebarItem = (typeof sidebarItems)[number]
 type SidebarPageId = SidebarItem["id"]
 
+export function resolveSettingsSectionId(sectionId: string | undefined): SidebarPageId | null {
+  if (!sectionId) return null
+  return sidebarItems.some((item) => item.id === sectionId) ? (sectionId as SidebarPageId) : null
+}
+
 const themeOptions = [
   { value: "light" as ThemePreference, label: "Light", icon: Sun },
   { value: "dark" as ThemePreference, label: "Dark", icon: Moon },
@@ -67,6 +84,209 @@ const editorOptions: { value: EditorPreset; label: string }[] = [
   { value: "windsurf", label: "Windsurf" },
   { value: "custom", label: "Custom" },
 ]
+
+const GITHUB_RELEASES_URL = "https://api.github.com/repos/jakemor/kanna/releases"
+const CHANGELOG_CACHE_TTL_MS = 5 * 60 * 1000
+
+type GithubRelease = {
+  id: number
+  name: string | null
+  tag_name: string
+  html_url: string
+  published_at: string | null
+  body: string | null
+  prerelease: boolean
+  draft: boolean
+}
+
+type ChangelogStatus = "idle" | "loading" | "success" | "error"
+
+type ChangelogCache = {
+  expiresAt: number
+  releases: GithubRelease[]
+}
+
+type FetchReleases = (input: string, init?: RequestInit) => Promise<Response>
+
+let changelogCache: ChangelogCache | null = null
+
+export function resetSettingsPageChangelogCache() {
+  changelogCache = null
+}
+
+export async function fetchGithubReleases(fetchImpl: FetchReleases = fetch): Promise<GithubRelease[]> {
+  const response = await fetchImpl(GITHUB_RELEASES_URL, {
+    headers: {
+      Accept: "application/vnd.github+json",
+    },
+  })
+  if (!response.ok) {
+    throw new Error(`GitHub releases request failed with status ${response.status}`)
+  }
+
+  const payload = await response.json() as GithubRelease[]
+  return payload.filter((release) => !release.draft)
+}
+
+export function getCachedChangelog() {
+  if (!changelogCache) return null
+  if (Date.now() >= changelogCache.expiresAt) {
+    changelogCache = null
+    return null
+  }
+  return changelogCache.releases
+}
+
+export function setCachedChangelog(releases: GithubRelease[]) {
+  changelogCache = {
+    releases,
+    expiresAt: Date.now() + CHANGELOG_CACHE_TTL_MS,
+  }
+}
+
+export function formatPublishedDate(value: string | null) {
+  if (!value) return "Unpublished"
+
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return "Unknown date"
+
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).format(parsed)
+}
+
+export function ChangelogSection({
+  status,
+  releases,
+  error,
+  onRetry,
+}: {
+  status: ChangelogStatus
+  releases: GithubRelease[]
+  error: string | null
+  onRetry: () => void
+}) {
+  return (
+    <div className="space-y-4">
+      {status === "loading" || status === "idle" ? (
+        <div className="flex min-h-[180px] items-center justify-center rounded-2xl border border-border bg-card/40 px-6 py-8 text-sm text-muted-foreground">
+          <div className="flex items-center gap-3">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            <span>Loading release notes…</span>
+          </div>
+        </div>
+      ) : null}
+
+      {status === "error" ? (
+        <div className="rounded-2xl border border-destructive/20 bg-destructive/5 px-6 py-5">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <div className="text-sm font-medium text-foreground">Could not load changelog</div>
+              <div className="mt-1 text-sm text-muted-foreground">
+                {error ?? "Unable to load changelog."}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={onRetry}
+              className="rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground transition-colors hover:bg-muted"
+            >
+              Retry
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {status === "success" && releases.length === 0 ? (
+        <div className="rounded-2xl border border-border bg-card/30 px-6 py-8">
+          <div className="text-sm font-medium text-foreground">No releases yet</div>
+          <div className="mt-2 text-sm text-muted-foreground">
+            GitHub did not return any published releases for this repository.
+          </div>
+        </div>
+      ) : null}
+
+      {status === "success" && releases.length > 0 ? (
+        releases.map((release) => (
+          <article
+            key={release.id}
+            className="rounded-xl border border-border bg-card/30 pl-6 pr-4 py-4"
+          >
+
+            <div className="flex flex-row items-center min-w-0 flex-1 gap-3 ">
+              <div className="flex flex-row items-center min-w-0 flex-1 gap-3 ">
+                <div className="text-lg font-semibold tracking-[-0.2px] text-foreground">
+                  {release.name?.trim() || release.tag_name}
+                </div>
+                <div className="flex min-w-0 flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                  <span>{formatPublishedDate(release.published_at)}</span>
+                  {release.prerelease ? (
+                    <span className="rounded-full border border-border px-2.5 py-1 uppercase tracking-wide">
+                      Prerelease
+                    </span>
+                  ) : null}
+                  
+                </div>
+              </div>
+
+
+              <div className="flex flex-row items-center justify-end min-w-0 flex-1 gap-3 ">
+                <div className="flex min-w-0 flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                  
+                  <span className="rounded-full bg-muted px-2.5 py-1 font-mono text-foreground/80">
+                    {release.tag_name}
+                  </span>
+                </div>
+
+                <a
+                  href={release.html_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label="View release on GitHub"
+                  className={cn(
+                    buttonVariants({ variant: "ghost", size: "icon-sm" }),
+                    "h-8 w-8 shrink-0 rounded-md"
+                  )}
+                >
+                  <GitHubIcon className="h-4 w-4" />
+                </a>
+
+              </div>
+            
+             
+            </div>
+
+
+            {release.body?.trim() ? (
+              <div className="prose prose-sm mt-5 max-w-none text-foreground dark:prose-invert">
+                <Markdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+                  {release.body}
+                </Markdown>
+              </div>
+            ) : (
+              <div className="mt-5 text-sm text-muted-foreground">No release notes were provided.</div>
+            )}
+          </article>
+        ))
+      ) : null}
+    </div>
+  )
+}
+
+function GitHubIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      aria-hidden="true"
+      className={className}
+    >
+      <path d="M12 .5C5.649.5.5 5.649.5 12A11.5 11.5 0 0 0 8.36 22.04c.575.106.785-.25.785-.556 0-.274-.01-1-.015-1.962-3.181.691-3.853-1.532-3.853-1.532-.52-1.322-1.27-1.674-1.27-1.674-1.038-.71.08-.695.08-.695 1.148.08 1.752 1.178 1.752 1.178 1.02 1.748 2.676 1.243 3.328.95.103-.738.399-1.243.725-1.53-2.54-.289-5.211-1.27-5.211-5.65 0-1.248.446-2.27 1.177-3.07-.118-.288-.51-1.45.112-3.024 0 0 .96-.307 3.145 1.173A10.91 10.91 0 0 1 12 6.03c.973.004 1.954.132 2.87.387 2.182-1.48 3.14-1.173 3.14-1.173.625 1.573.233 2.736.115 3.024.734.8 1.175 1.822 1.175 3.07 0 4.39-2.676 5.358-5.224 5.642.41.353.776 1.05.776 2.117 0 1.528-.014 2.761-.014 3.136 0 .309.207.668.79.555A11.502 11.502 0 0 0 23.5 12C23.5 5.649 18.351.5 12 .5Z" />
+    </svg>
+  )
+}
 
 function SettingsRow({
   title,
@@ -95,9 +315,14 @@ function SettingsRow({
 }
 
 export function SettingsPage() {
+  const navigate = useNavigate()
+  const { sectionId } = useParams<{ sectionId: string }>()
   const state = useOutletContext<KannaState>()
   const { theme, setTheme } = useTheme()
-  const [selectedPage, setSelectedPage] = useState<SidebarPageId>("general")
+  const [changelogStatus, setChangelogStatus] = useState<ChangelogStatus>("idle")
+  const [releases, setReleases] = useState<GithubRelease[]>([])
+  const [changelogError, setChangelogError] = useState<string | null>(null)
+  const selectedPage = resolveSettingsSectionId(sectionId) ?? "general"
   const isConnecting = state.connectionStatus === "connecting" || !state.localProjectsReady
   const machineName = state.localProjects?.machine.displayName ?? "Unavailable"
   const projectCount = state.localProjects?.projects.length ?? 0
@@ -125,6 +350,45 @@ export function SettingsPage() {
   useEffect(() => {
     setEditorCommandDraft(editorCommandTemplate)
   }, [editorCommandTemplate])
+
+  useEffect(() => {
+    if (!sectionId) return
+    if (resolveSettingsSectionId(sectionId)) return
+    navigate("/settings/general", { replace: true })
+  }, [navigate, sectionId])
+
+  useEffect(() => {
+    if (selectedPage !== "changelog" || isConnecting) return
+
+    const cachedReleases = getCachedChangelog()
+    if (cachedReleases) {
+      setReleases(cachedReleases)
+      setChangelogError(null)
+      setChangelogStatus("success")
+      return
+    }
+
+    let cancelled = false
+    setChangelogStatus("loading")
+    setChangelogError(null)
+
+    void fetchGithubReleases()
+      .then((nextReleases) => {
+        if (cancelled) return
+        setCachedChangelog(nextReleases)
+        setReleases(nextReleases)
+        setChangelogStatus("success")
+      })
+      .catch((error: unknown) => {
+        if (cancelled) return
+        setChangelogError(error instanceof Error ? error.message : "Unable to load changelog.")
+        setChangelogStatus("error")
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [isConnecting, selectedPage])
 
   function commitScrollback() {
     const nextValue = Number(scrollbackDraft)
@@ -160,6 +424,23 @@ export function SettingsPage() {
     setEditorCommandTemplate(editorCommandDraft)
   }
 
+  function retryChangelog() {
+    changelogCache = null
+    setChangelogStatus("loading")
+    setChangelogError(null)
+
+    void fetchGithubReleases()
+      .then((nextReleases) => {
+        setCachedChangelog(nextReleases)
+        setReleases(nextReleases)
+        setChangelogStatus("success")
+      })
+      .catch((error: unknown) => {
+        setChangelogError(error instanceof Error ? error.message : "Unable to load changelog.")
+        setChangelogStatus("error")
+      })
+  }
+
   const customEditorPreview = editorCommandDraft
     .replaceAll("{path}", "/Users/jake/Projects/kanna/src/client/app/App.tsx")
     .replaceAll("{line}", "12")
@@ -179,7 +460,7 @@ export function SettingsPage() {
               <button
                 key={item.label}
                 type="button"
-                onClick={() => setSelectedPage(item.id)}
+                onClick={() => navigate(`/settings/${item.id}`)}
                 className={`cursor-pointer rounded-lg px-3 py-2 text-sm ${
                   item.id === selectedPage
                     ? "bg-muted font-medium text-foreground"
@@ -322,6 +603,13 @@ export function SettingsPage() {
                       </SettingsRow>
                     </div>
                   </>
+                ) : selectedPage === "changelog" ? (
+                  <ChangelogSection
+                    status={changelogStatus}
+                    releases={releases}
+                    error={changelogError}
+                    onRetry={retryChangelog}
+                  />
                 ) : (
                   <div className="rounded-2xl border border-border bg-card/30 px-6 py-8">
                     <div className="text-sm font-medium text-foreground">{selectedSection.label}</div>
@@ -346,8 +634,8 @@ export function SettingsPage() {
       </div>
 
       {showFooter ? (
-        <div className="absolute bottom-0 left-0 right-0 border-t border-border bg-background/95 pt-5 backdrop-blur supports-[backdrop-filter]:bg-background/80">
-          <div className="px-6 pb-5">
+        <div className="absolute bottom-0 left-0 right-0 border-t border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+          <div className="px-6 py-[14.25px]">
             <div className="grid gap-3 text-xs text-muted-foreground sm:grid-cols-2 lg:grid-cols-4">
               <div>
                 <div className="mb-1 uppercase tracking-wide text-[11px] text-muted-foreground/80">Machine</div>

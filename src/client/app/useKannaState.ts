@@ -42,6 +42,12 @@ function useKannaSocket() {
   return socketRef.current as KannaSocket
 }
 
+export function shouldPinTranscriptToBottom(distanceFromBottom: number) {
+  return distanceFromBottom < 120
+}
+
+const FIXED_TRANSCRIPT_PADDING_BOTTOM = 320
+
 export interface KannaState {
   socket: KannaSocket
   activeChatId: string | null
@@ -205,7 +211,7 @@ export function useKannaState(activeChatId: string | null): KannaState {
   const availableProviders = chatSnapshot?.availableProviders ?? PROVIDERS
   const isProcessing = isProcessingStatus(runtime?.status)
   const canCancel = canCancelStatus(runtime?.status)
-  const transcriptPaddingBottom = inputHeight + 48
+  const transcriptPaddingBottom = FIXED_TRANSCRIPT_PADDING_BOTTOM
   const showScrollButton = !isAtBottom && messages.length > 0
   const fallbackLocalProjectPath = localProjects?.projects[0]?.localPath ?? null
   const navbarLocalPath =
@@ -223,10 +229,10 @@ export function useKannaState(activeChatId: string | null): KannaState {
     const element = scrollRef.current
     if (!element) return
     const distance = element.scrollHeight - element.scrollTop - element.clientHeight
-    if (distance < 120) {
+    if (shouldPinTranscriptToBottom(distance)) {
       element.scrollTo({ top: element.scrollHeight, behavior: "smooth" })
     }
-  }, [activeChatId, messages.length, runtime?.status])
+  }, [activeChatId, inputHeight, messages.length, runtime?.status])
 
   function updateScrollState() {
     const element = scrollRef.current

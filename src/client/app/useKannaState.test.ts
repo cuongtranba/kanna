@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { getNewestRemainingChatId } from "./useKannaState"
+import { getNewestRemainingChatId, shouldPinTranscriptToBottom } from "./useKannaState"
 import type { SidebarData } from "../../shared/types"
 
 function createSidebarData(): SidebarData {
@@ -82,5 +82,19 @@ describe("getNewestRemainingChatId", () => {
     const sidebarData = createSidebarData()
 
     expect(getNewestRemainingChatId(sidebarData.projectGroups, "missing")).toBeNull()
+  })
+})
+
+describe("shouldPinTranscriptToBottom", () => {
+  test("returns true when the transcript is at the bottom", () => {
+    expect(shouldPinTranscriptToBottom(0)).toBe(true)
+  })
+
+  test("returns true when the transcript is near the bottom", () => {
+    expect(shouldPinTranscriptToBottom(119)).toBe(true)
+  })
+
+  test("returns false when the transcript is not near the bottom", () => {
+    expect(shouldPinTranscriptToBottom(120)).toBe(false)
   })
 })

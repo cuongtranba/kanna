@@ -28,6 +28,7 @@ import { useStickyChatFocus } from "./useStickyChatFocus"
 const EMPTY_STATE_TEXT = "What are we building?"
 const EMPTY_STATE_TYPING_INTERVAL_MS = 19
 const CHAT_NAVBAR_OFFSET_PX = 72
+const SCROLL_BUTTON_BOTTOM_PX = 120
 
 export function ChatPage() {
   const state = useOutletContext<KannaState>()
@@ -140,6 +141,29 @@ export function ChatPage() {
   }, [state.messages.length, state.scrollRef])
 
   useEffect(() => {
+    const frameId = window.requestAnimationFrame(() => {
+      state.updateScrollState()
+    })
+    const timeoutId = window.setTimeout(() => {
+      state.updateScrollState()
+    }, TERMINAL_TOGGLE_ANIMATION_DURATION_MS)
+
+    return () => {
+      window.cancelAnimationFrame(frameId)
+      window.clearTimeout(timeoutId)
+    }
+  }, [shouldRenderTerminalLayout, showTerminalPane, state.updateScrollState])
+
+  useEffect(() => {
+    function handleResize() {
+      state.updateScrollState()
+    }
+
+    window.addEventListener("resize", handleResize)
+    return () => window.removeEventListener("resize", handleResize)
+  }, [state.updateScrollState])
+
+  useEffect(() => {
     const element = layoutRootRef.current
     if (!element || !shouldRenderTerminalLayout) return
 
@@ -218,7 +242,7 @@ export function ChatPage() {
                   </div>
                 ) : null}
               </div>
-              <div style={{ height: state.transcriptPaddingBottom + 96 }} aria-hidden="true" />
+              <div style={{ height: 250 }} aria-hidden="true" />
             </>
           ) : null}
         </ScrollArea>
@@ -261,7 +285,7 @@ export function ChatPage() {
         ) : null}
 
         <div
-          style={{ bottom: state.transcriptPaddingBottom - 75 }}
+          style={{ bottom: SCROLL_BUTTON_BOTTOM_PX }}
           className={cn(
             "absolute left-1/2 -translate-x-1/2 z-10 transition-all",
             state.showScrollButton

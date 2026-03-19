@@ -149,7 +149,7 @@ export function KannaSidebar({
 
   const hasVisibleChats = activeVisibleCount > 0
   const isLocalProjectsActive = location.pathname === "/"
-  const isSettingsActive = location.pathname === "/settings"
+  const isSettingsActive = location.pathname.startsWith("/settings")
   const isUtilityPageActive = isLocalProjectsActive || isSettingsActive
   const isConnecting = connectionStatus === "connecting" || !ready
   const statusLabel = isConnecting ? "Connecting" : connectionStatus === "connected" ? "Connected" : "Disconnected"
@@ -285,10 +285,10 @@ export function KannaSidebar({
         </div>
 
         <div className="border-t border-border p-2">
-          <button
+            <button
             type="button"
             onClick={() => {
-              navigate("/settings")
+              navigate("/settings/general")
               onClose()
             }}
             className={cn(
