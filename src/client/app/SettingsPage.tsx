@@ -1,15 +1,12 @@
 import { useEffect, useState, type KeyboardEvent, type ReactNode } from "react"
 import {
   BookText,
-  FolderCode,
   Info,
   Loader2,
   Monitor,
   Moon,
   Settings2,
-  Sparkles,
   Sun,
-  TerminalSquare,
 } from "lucide-react"
 import Markdown from "react-markdown"
 import remarkGfm from "remark-gfm"
@@ -44,24 +41,6 @@ const sidebarItems = [
     label: "Changelog",
     icon: BookText,
     subtitle: "Release notes pulled from the public GitHub releases feed.",
-  },
-  {
-    id: "page-1",
-    label: "Page 1",
-    icon: Sparkles,
-    subtitle: "Placeholder content for a future settings section.",
-  },
-  {
-    id: "page-2",
-    label: "Page 2",
-    icon: TerminalSquare,
-    subtitle: "Placeholder content for a future settings section.",
-  },
-  {
-    id: "page-3",
-    label: "Page 3",
-    icon: FolderCode,
-    subtitle: "Placeholder content for a future settings section.",
   },
 ] as const
 type SidebarItem = (typeof sidebarItems)[number]
@@ -603,21 +582,13 @@ export function SettingsPage() {
                       </SettingsRow>
                     </div>
                   </>
-                ) : selectedPage === "changelog" ? (
+                ) : (
                   <ChangelogSection
                     status={changelogStatus}
                     releases={releases}
                     error={changelogError}
                     onRetry={retryChangelog}
                   />
-                ) : (
-                  <div className="rounded-2xl border border-border bg-card/30 px-6 py-8">
-                    <div className="text-sm font-medium text-foreground">{selectedSection.label}</div>
-                    <div className="mt-2 max-w-xl text-sm text-muted-foreground">
-                      This page is a placeholder for future settings. The sidebar navigation is now active, but only
-                      General has live controls.
-                    </div>
-                  </div>
                 )}
               </div>
             )}

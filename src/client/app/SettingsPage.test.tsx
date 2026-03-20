@@ -101,6 +101,9 @@ describe("resolveSettingsSectionId", () => {
   })
 
   test("rejects unknown settings sections", () => {
+    expect(resolveSettingsSectionId("page-1")).toBeNull()
+    expect(resolveSettingsSectionId("page-2")).toBeNull()
+    expect(resolveSettingsSectionId("page-3")).toBeNull()
     expect(resolveSettingsSectionId("nope")).toBeNull()
     expect(resolveSettingsSectionId(undefined)).toBeNull()
   })
