@@ -85,7 +85,7 @@ export const useChatPreferencesStore = create<ChatPreferencesState>()(
       provider: "claude",
       planMode: false,
       preferences: {
-        claude: { model: "opus", modelOptions: { ...DEFAULT_CLAUDE_MODEL_OPTIONS } },
+        claude: { model: "sonnet", modelOptions: { ...DEFAULT_CLAUDE_MODEL_OPTIONS } },
         codex: { model: "gpt-5.4", modelOptions: { ...DEFAULT_CODEX_MODEL_OPTIONS } },
       },
       setProvider: (provider) => set({ provider }),
