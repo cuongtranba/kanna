@@ -1,7 +1,6 @@
 import { query } from "@anthropic-ai/claude-agent-sdk"
 import { CodexAppServerManager } from "./codex-app-server"
 
-const LOG_PREFIX = "[kanna:title]"
 const CLAUDE_STRUCTURED_TIMEOUT_MS = 5_000
 
 type JsonSchema = {
@@ -82,7 +81,6 @@ async function runClaudeStructured(args: Omit<StructuredQuickResponseArgs<unknow
 
     return result
   } catch (error) {
-    console.warn(`${LOG_PREFIX} claude structured query failed before fallback:`, error)
     return null
   } finally {
     try {
@@ -116,7 +114,6 @@ export class QuickResponseAdapter {
     this.runCodexStructured = args.runCodexStructured ?? ((structuredArgs) =>
       runCodexStructured(this.codexManager, structuredArgs))
   }
-
   async generateStructured<T>(args: StructuredQuickResponseArgs<T>): Promise<T | null> {
     const request = {
       cwd: args.cwd,
@@ -125,11 +122,9 @@ export class QuickResponseAdapter {
       schema: args.schema,
     }
 
-    console.log(`${LOG_PREFIX} starting ${args.task} via claude`, { cwd: args.cwd })
     const claudeResult = await this.tryProvider("claude", args.task, args.parse, () => this.runClaudeStructured(request))
     if (claudeResult !== null) return claudeResult
 
-    console.warn(`${LOG_PREFIX} claude returned no usable result for ${args.task}, falling back to codex`)
     return await this.tryProvider("codex", args.task, args.parse, () => this.runCodexStructured(request))
   }
 
@@ -142,20 +137,16 @@ export class QuickResponseAdapter {
     try {
       const result = await run()
       if (result === null) {
-        console.warn(`${LOG_PREFIX} ${provider} returned no structured output for ${task}`)
         return null
       }
   
       const parsed = parse(result)
       if (parsed === null) {
-        console.warn(`${LOG_PREFIX} ${provider} returned unparseable structured output for ${task}`, { result })
         return null
       }
   
-      console.log(`${LOG_PREFIX} ${provider} produced structured output for ${task}`)
       return parsed
     } catch (error) {
-      console.warn(`${LOG_PREFIX} ${provider} failed during ${task}:`, error)
       return null
     }
   }
