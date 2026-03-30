@@ -675,7 +675,7 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput({
               }}
               onKeyDown={handleKeyDown}
               disabled={disabled}
-              className="flex-1 text-base p-3 md:p-4 pl-0 md:pl-6 resize-none max-h-[200px] outline-none bg-transparent border-0 shadow-none"
+              className="flex-1 text-base p-3 md:p-4 !pr-2 pl-0 md:pl-6 resize-none max-h-[200px] outline-none bg-transparent border-0 shadow-none"
             />
             <Button
               type="button"
