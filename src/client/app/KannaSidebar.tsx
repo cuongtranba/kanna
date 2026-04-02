@@ -2,10 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Flower, Loader2, PanelLeft, X, Menu, Plus, Settings } from "lucide-react"
 import { useLocation, useNavigate } from "react-router-dom"
 import { APP_NAME } from "../../shared/branding"
-import { type KeybindingsSnapshot } from "../../shared/types"
 import { Button } from "../components/ui/button"
 import { cn } from "../lib/utils"
-import { getResolvedKeybindings } from "../lib/keybindings"
 import { ChatRow } from "../components/chat-ui/sidebar/ChatRow"
 import { LocalProjectsSection } from "../components/chat-ui/sidebar/LocalProjectsSection"
 import type { SidebarData, SidebarChatRow, UpdateSnapshot } from "../../shared/types"
@@ -30,7 +28,6 @@ interface KannaSidebarProps {
   onOpenExternalPath: (action: "open_finder" | "open_editor", localPath: string) => void
   onRemoveProject: (projectId: string) => void
   editorLabel: string
-  keybindings: KeybindingsSnapshot | null
   updateSnapshot: UpdateSnapshot | null
   onInstallUpdate: () => void
 }
@@ -53,7 +50,6 @@ export function KannaSidebar({
   onOpenExternalPath,
   onRemoveProject,
   editorLabel,
-  keybindings,
   updateSnapshot,
   onInstallUpdate,
 }: KannaSidebarProps) {
@@ -83,8 +79,6 @@ export function KannaSidebar({
 
     return ordered
   }, [data.projectGroups, savedOrder])
-  const resolvedKeybindings = useMemo(() => getResolvedKeybindings(keybindings), [keybindings])
-
   const handleReorderGroups = useCallback(
     (newOrder: string[]) => setGroupOrder(newOrder),
     [setGroupOrder]
@@ -311,8 +305,6 @@ export function KannaSidebar({
             <LocalProjectsSection
               projectGroups={orderedProjectGroups}
               editorLabel={editorLabel}
-              finderShortcut={resolvedKeybindings.bindings.openInFinder}
-              editorShortcut={resolvedKeybindings.bindings.openInEditor}
               onReorderGroups={handleReorderGroups}
               collapsedSections={collapsedSections}
               expandedGroups={expandedGroups}

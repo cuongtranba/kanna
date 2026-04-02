@@ -28,8 +28,6 @@ import { ProjectSectionMenu } from "./Menus"
 interface Props {
   projectGroups: SidebarProjectGroup[]
   editorLabel: string
-  finderShortcut?: string[]
-  editorShortcut?: string[]
   collapsedSections: Set<string>
   expandedGroups: Set<string>
   onToggleSection: (key: string) => void
@@ -48,8 +46,6 @@ interface Props {
 interface SortableProjectGroupProps {
   group: SidebarProjectGroup
   editorLabel: string
-  finderShortcut?: string[]
-  editorShortcut?: string[]
   collapsedSections: Set<string>
   expandedGroups: Set<string>
   onToggleSection: (key: string) => void
@@ -67,8 +63,6 @@ interface SortableProjectGroupProps {
 function SortableProjectGroup({
   group,
   editorLabel,
-  finderShortcut,
-  editorShortcut,
   collapsedSections,
   expandedGroups,
   onToggleSection,
@@ -179,8 +173,6 @@ function SortableProjectGroup({
       {onRemoveProject && onCopyPath && onOpenExternalPath ? (
         <ProjectSectionMenu
           editorLabel={editorLabel}
-          finderShortcut={finderShortcut}
-          editorShortcut={editorShortcut}
           onCopyPath={() => onCopyPath(localPath)}
           onOpenInFinder={() => onOpenExternalPath("open_finder", localPath)}
           onOpenInEditor={() => onOpenExternalPath("open_editor", localPath)}
@@ -210,8 +202,6 @@ function SortableProjectGroup({
 export function LocalProjectsSection({
   projectGroups,
   editorLabel,
-  finderShortcut,
-  editorShortcut,
   collapsedSections,
   expandedGroups,
   onToggleSection,
@@ -280,8 +270,6 @@ export function LocalProjectsSection({
           key={group.groupKey}
           group={group}
           editorLabel={editorLabel}
-          finderShortcut={finderShortcut}
-          editorShortcut={editorShortcut}
           collapsedSections={collapsedSections}
           expandedGroups={expandedGroups}
           onToggleSection={onToggleSection}
