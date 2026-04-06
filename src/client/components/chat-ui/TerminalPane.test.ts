@@ -18,6 +18,22 @@ describe("getTerminalOptions", () => {
 })
 
 describe("getMacOptionInputSequence", () => {
+  test("maps plain arrow keys to standard escape sequences", () => {
+    expect(getMacOptionInputSequence({
+      key: "ArrowUp",
+      altKey: false,
+      ctrlKey: false,
+      metaKey: false,
+    }, "MacIntel")).toBe("\x1b[A")
+
+    expect(getMacOptionInputSequence({
+      key: "ArrowDown",
+      altKey: false,
+      ctrlKey: false,
+      metaKey: false,
+    }, "MacIntel")).toBe("\x1b[B")
+  })
+
   test("maps Option+Left and Option+Right to shell word motion on macOS", () => {
     expect(getMacOptionInputSequence({
       key: "ArrowLeft",

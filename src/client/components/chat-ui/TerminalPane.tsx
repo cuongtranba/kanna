@@ -148,8 +148,24 @@ export function getTerminalOptions(scrollback: number, theme: ITheme, platform =
 }
 
 export function getMacOptionInputSequence(event: MacOptionKeyEvent, platform = globalThis.navigator?.platform ?? "") {
-  if (!isMacPlatform(platform)) return null
   if (event.ctrlKey) return null
+
+  if (!event.altKey && !event.metaKey) {
+    switch (event.key) {
+      case "ArrowUp":
+        return "\x1b[A"
+      case "ArrowDown":
+        return "\x1b[B"
+      case "ArrowLeft":
+        return "\x1b[D"
+      case "ArrowRight":
+        return "\x1b[C"
+      default:
+        return null
+    }
+  }
+
+  if (!isMacPlatform(platform)) return null
 
   if (event.metaKey && !event.altKey) {
     switch (event.key) {
