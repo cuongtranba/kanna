@@ -15,6 +15,7 @@ import { deriveChatSnapshot, deriveLocalProjectsSnapshot, deriveSidebarData } fr
 
 export interface ClientState {
   subscriptions: Map<string, SubscriptionTopic>
+  snapshotSignatures: Map<string, string>
 }
 
 interface CreateWsRouterArgs {
@@ -31,6 +32,14 @@ interface CreateWsRouterArgs {
 
 function send(ws: ServerWebSocket<ClientState>, message: ServerEnvelope) {
   ws.send(JSON.stringify(message))
+}
+
+function ensureSnapshotSignatures(ws: ServerWebSocket<ClientState>) {
+  if (!ws.data.snapshotSignatures) {
+    ws.data.snapshotSignatures = new Map()
+  }
+
+  return ws.data.snapshotSignatures
 }
 
 export function createWsRouter({
@@ -143,8 +152,15 @@ export function createWsRouter({
   }
 
   function pushSnapshots(ws: ServerWebSocket<ClientState>) {
+    const snapshotSignatures = ensureSnapshotSignatures(ws)
     for (const [id, topic] of ws.data.subscriptions.entries()) {
-      send(ws, createEnvelope(id, topic))
+      const envelope = createEnvelope(id, topic)
+      const signature = JSON.stringify(envelope.snapshot)
+      if (snapshotSignatures.get(id) === signature) {
+        continue
+      }
+      snapshotSignatures.set(id, signature)
+      send(ws, envelope)
     }
   }
 
@@ -166,9 +182,14 @@ export function createWsRouter({
 
   function pushTerminalSnapshot(terminalId: string) {
     for (const ws of sockets) {
+      const snapshotSignatures = ensureSnapshotSignatures(ws)
       for (const [id, topic] of ws.data.subscriptions.entries()) {
         if (topic.type !== "terminal" || topic.terminalId !== terminalId) continue
-        send(ws, createEnvelope(id, topic))
+        const envelope = createEnvelope(id, topic)
+        const signature = JSON.stringify(envelope.snapshot)
+        if (snapshotSignatures.get(id) === signature) continue
+        snapshotSignatures.set(id, signature)
+        send(ws, envelope)
       }
     }
   }
@@ -193,18 +214,28 @@ export function createWsRouter({
 
   const disposeKeybindingEvents = keybindings.onChange(() => {
     for (const ws of sockets) {
+      const snapshotSignatures = ensureSnapshotSignatures(ws)
       for (const [id, topic] of ws.data.subscriptions.entries()) {
         if (topic.type !== "keybindings") continue
-        send(ws, createEnvelope(id, topic))
+        const envelope = createEnvelope(id, topic)
+        const signature = JSON.stringify(envelope.snapshot)
+        if (snapshotSignatures.get(id) === signature) continue
+        snapshotSignatures.set(id, signature)
+        send(ws, envelope)
       }
     }
   })
 
   const disposeUpdateEvents = updateManager?.onChange(() => {
     for (const ws of sockets) {
+      const snapshotSignatures = ensureSnapshotSignatures(ws)
       for (const [id, topic] of ws.data.subscriptions.entries()) {
         if (topic.type !== "update") continue
-        send(ws, createEnvelope(id, topic))
+        const envelope = createEnvelope(id, topic)
+        const signature = JSON.stringify(envelope.snapshot)
+        if (snapshotSignatures.get(id) === signature) continue
+        snapshotSignatures.set(id, signature)
+        send(ws, envelope)
       }
     }
   }) ?? (() => {})
@@ -452,20 +483,25 @@ export function createWsRouter({
       }
 
       if (parsed.type === "subscribe") {
+        const snapshotSignatures = ensureSnapshotSignatures(ws)
         ws.data.subscriptions.set(parsed.id, parsed.topic)
+        snapshotSignatures.delete(parsed.id)
         if (parsed.topic.type === "local-projects") {
           void refreshDiscovery().then(() => {
             if (ws.data.subscriptions.has(parsed.id)) {
-              send(ws, createEnvelope(parsed.id, parsed.topic))
+              pushSnapshots(ws)
             }
           })
+          return
         }
-        send(ws, createEnvelope(parsed.id, parsed.topic))
+        pushSnapshots(ws)
         return
       }
 
       if (parsed.type === "unsubscribe") {
+        const snapshotSignatures = ensureSnapshotSignatures(ws)
         ws.data.subscriptions.delete(parsed.id)
+        snapshotSignatures.delete(parsed.id)
         send(ws, { v: PROTOCOL_VERSION, type: "ack", id: parsed.id })
         return
       }

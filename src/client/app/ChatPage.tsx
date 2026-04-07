@@ -70,10 +70,10 @@ export function createTranscriptTocItems(messages: HydratedTranscriptMessage[]):
 
 export function shouldShowTranscriptTocPanel(args: {
   enabled: boolean
-  layoutWidth: number
+  chatAreaWidth: number
   itemCount: number
 }) {
-  return args.enabled && args.layoutWidth > TRANSCRIPT_TOC_BREAKPOINT_PX && args.itemCount > 0
+  return args.enabled && args.chatAreaWidth > TRANSCRIPT_TOC_BREAKPOINT_PX && args.itemCount > 0
 }
 
 export function scrollTranscriptMessageIntoView(
@@ -119,6 +119,7 @@ export function ChatPage() {
   const [fixedTerminalHeight, setFixedTerminalHeight] = useState(0)
   const [isPageFileDragActive, setIsPageFileDragActive] = useState(false)
   const [layoutWidth, setLayoutWidth] = useState(0)
+  const [chatAreaWidth, setChatAreaWidth] = useState(0)
   const [diffRenderMode, setDiffRenderMode] = useState<"unified" | "split">("unified")
   const [wrapDiffLines, setWrapDiffLines] = useState(false)
   const pageFileDragDepthRef = useRef(0)
@@ -147,7 +148,7 @@ export function ChatPage() {
   const transcriptTocItems = useMemo(() => createTranscriptTocItems(state.messages), [state.messages])
   const shouldShowTranscriptToc = shouldShowTranscriptTocPanel({
     enabled: showTranscriptToc,
-    layoutWidth,
+    chatAreaWidth,
     itemCount: transcriptTocItems.length,
   })
 
@@ -156,6 +157,29 @@ export function ChatPage() {
   const shouldRenderTerminalLayout = Boolean(projectId && hasTerminals)
   const showRightSidebar = Boolean(projectId && rightSidebarLayout.isVisible)
   const shouldRenderRightSidebarLayout = Boolean(projectId)
+
+  useEffect(() => {
+    if (!state.activeChatId) return
+    if (!state.isProcessing && !showRightSidebar) return
+    console.info("[ChatPage] render state changed", {
+      activeChatId: state.activeChatId,
+      activeProjectId: projectId,
+      isProcessing: state.isProcessing,
+      showRightSidebar,
+      messageCount: state.messages.length,
+      runtimeStatus: state.runtime?.status ?? null,
+      diffStatus: state.chatDiffSnapshot?.status ?? null,
+      diffFileCount: state.chatDiffSnapshot?.files.length ?? 0,
+    })
+  }, [
+    projectId,
+    showRightSidebar,
+    state.activeChatId,
+    state.chatDiffSnapshot,
+    state.isProcessing,
+    state.messages.length,
+    state.runtime?.status,
+  ])
   const {
     isAnimating: isTerminalAnimating,
     mainPanelGroupRef,
@@ -469,6 +493,22 @@ export function ChatPage() {
 
     return () => observer.disconnect()
   }, [projectId, shouldRenderTerminalLayout, terminalLayout.mainSizes])
+
+  useEffect(() => {
+    const element = chatCardRef.current
+    if (!element) return
+
+    const updateWidth = () => {
+      const nextWidth = element.getBoundingClientRect().width
+      setChatAreaWidth((current) => (Math.abs(current - nextWidth) < 1 ? current : nextWidth))
+    }
+
+    const observer = new ResizeObserver(updateWidth)
+    observer.observe(element)
+    updateWidth()
+
+    return () => observer.disconnect()
+  }, [projectId, showRightSidebar, showTerminalPane, shouldRenderTerminalLayout, shouldRenderRightSidebarLayout])
 
   const clampRightSidebarSize = (size: number) => {
     if (!Number.isFinite(size)) {

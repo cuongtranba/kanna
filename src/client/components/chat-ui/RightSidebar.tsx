@@ -457,8 +457,8 @@ function RightSidebarImpl({
               </div>
             )}
           </div>
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 z-30 p-4 pt-14">
-            <div className="absolute inset-x-0 bottom-0 top-0 bg-gradient-to-t from-background via-background/90 to-transparent" />
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 z-30 p-3 pt-14">
+            <div className="absolute inset-x-0 bottom-0 top-0 bg-gradient-to-t from-background  to-transparent" />
             <div className="pointer-events-auto relative mx-auto max-w-[750px]">
               <div className="space-y-0">
                 <Input
@@ -498,7 +498,7 @@ function RightSidebarImpl({
                       : `Commit ${selectedCount} ${selectedCount === 1 ? "file" : "files"} to ${diffs.branchName ?? "current branch"}`)
                     : (isGenerating
                       ? "Generating..."
-                      : `Generate commit for ${selectedCount} ${selectedCount === 1 ? "file" : "files"} on ${diffs.branchName ?? "current branch"}`)}
+                      : `Generate message for ${selectedCount} ${selectedCount === 1 ? "file" : "files"} on ${diffs.branchName ?? "current branch"}`)}
                 </Button>
               </div>
             </div>

@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from "react"
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from "react"
 import { useNavigate } from "react-router-dom"
 import { APP_NAME } from "../../shared/branding"
 import { PROVIDERS, type AgentProvider, type AskUserQuestionAnswerMap, type KeybindingsSnapshot, type ModelOptions, type ProviderCatalogEntry, type UpdateInstallResult, type UpdateSnapshot } from "../../shared/types"
@@ -322,6 +322,7 @@ export function useKannaState(activeChatId: string | null): KannaState {
   const [startingLocalPath, setStartingLocalPath] = useState<string | null>(null)
   const [pendingChatId, setPendingChatId] = useState<string | null>(null)
   const [focusEpoch, setFocusEpoch] = useState(0)
+  const chatSubscriptionDebugRef = useRef(0)
   const lastActiveProjectDiffRef = useRef<{ projectId: string | null; diffs: ChatSnapshot["diffs"] | null }>({
     projectId: null,
     diffs: null,
@@ -416,7 +417,6 @@ export function useKannaState(activeChatId: string | null): KannaState {
   }, [])
 
   useEffect(() => {
-    const activeProjectId = getProjectIdForChat(sidebarData.projectGroups, activeChatId)
     if (!activeChatId) {
       logKannaState("clearing chat snapshot for non-chat route")
       setChatSnapshot(null)
@@ -424,39 +424,79 @@ export function useKannaState(activeChatId: string | null): KannaState {
       return
     }
 
-    logKannaState("subscribing to chat", { activeChatId })
+    const subscriptionId = ++chatSubscriptionDebugRef.current
+    logKannaState("subscribing to chat", {
+      subscriptionId,
+      activeChatId,
+      sidebarProjectGroups: sidebarData.projectGroups.length,
+      sidebarChatCount: sidebarData.projectGroups.reduce((count, group) => count + group.chats.length, 0),
+    })
     setChatSnapshot(null)
     setChatReady(false)
-    return socket.subscribe<ChatSnapshot | null>({ type: "chat", chatId: activeChatId }, (snapshot) => {
-      logKannaState("chat snapshot received", {
-        activeChatId,
-        snapshotChatId: snapshot?.runtime.chatId ?? null,
-        snapshotProvider: snapshot?.runtime.provider ?? null,
-        snapshotStatus: snapshot?.runtime.status ?? null,
+    const unsubscribe = socket.subscribe<ChatSnapshot | null>({ type: "chat", chatId: activeChatId }, (snapshot) => {
+      setChatSnapshot((current) => {
+        const reused = sameChatSnapshotCore(current, snapshot)
+        logKannaState("chat snapshot received", {
+          subscriptionId,
+          activeChatId,
+          snapshotChatId: snapshot?.runtime.chatId ?? null,
+          snapshotProvider: snapshot?.runtime.provider ?? null,
+          snapshotStatus: snapshot?.runtime.status ?? null,
+          messageCount: snapshot?.messages.length ?? 0,
+          diffStatus: snapshot?.diffs?.status ?? null,
+          diffFileCount: snapshot?.diffs?.files.length ?? 0,
+          reusedSnapshot: reused,
+        })
+        return reused ? current : snapshot
       })
-      setChatSnapshot((current) => sameChatSnapshotCore(current, snapshot) ? current : snapshot)
       if (snapshot?.runtime.projectId) {
         setProjectDiffSnapshots((current) => {
           const projectId = snapshot.runtime.projectId
           const nextDiffs = snapshot.diffs ?? null
           if (shouldPreserveExistingProjectDiffs(current[projectId] ?? null, nextDiffs)) {
+            logKannaState("preserving previous project diffs", {
+              subscriptionId,
+              projectId,
+              nextStatus: nextDiffs?.status ?? null,
+              nextFiles: nextDiffs?.files.length ?? 0,
+            })
             return current
           }
           if (sameDiffs(current[projectId] ?? null, nextDiffs)) {
+            logKannaState("project diffs unchanged", {
+              subscriptionId,
+              projectId,
+              status: nextDiffs?.status ?? null,
+              files: nextDiffs?.files.length ?? 0,
+            })
             return current
           }
+          logKannaState("project diffs updated", {
+            subscriptionId,
+            projectId,
+            previousStatus: current[projectId]?.status ?? null,
+            previousFiles: current[projectId]?.files.length ?? 0,
+            nextStatus: nextDiffs?.status ?? null,
+            nextFiles: nextDiffs?.files.length ?? 0,
+          })
           return {
             ...current,
             [projectId]: nextDiffs,
           }
         })
-      } else if (!activeProjectId && snapshot?.diffs === null) {
-        setProjectDiffSnapshots((current) => current)
       }
       setChatReady(true)
       setCommandError(null)
     })
-  }, [activeChatId, sidebarData.projectGroups, socket])
+    return () => {
+      logKannaState("unsubscribing from chat", {
+        subscriptionId,
+        activeChatId,
+        sidebarProjectGroups: sidebarData.projectGroups.length,
+      })
+      unsubscribe()
+    }
+  }, [activeChatId, socket])
 
   useEffect(() => {
     if (selectedProjectId) return
@@ -620,23 +660,23 @@ export function useKannaState(activeChatId: string | null): KannaState {
     return () => window.cancelAnimationFrame(frameId)
   }, [activeChatId, inputHeight, isAtBottom, messages.length, runtime?.status])
 
-  function updateScrollState() {
+  const updateScrollState = useCallback(() => {
     const element = scrollRef.current
     if (!element) return
     const distance = element.scrollHeight - element.scrollTop - element.clientHeight
     setIsAtBottom(shouldAutoFollowTranscript(distance))
-  }
+  }, [])
 
-  function enableAutoFollow(behavior: ScrollBehavior) {
+  const enableAutoFollow = useCallback((behavior: ScrollBehavior) => {
     const element = scrollRef.current
     setIsAtBottom(true)
     if (!element) return
     element.scrollTo({ top: element.scrollHeight, behavior })
-  }
+  }, [])
 
-  function scrollToBottom() {
+  const scrollToBottom = useCallback(() => {
     enableAutoFollow("smooth")
-  }
+  }, [enableAutoFollow])
 
   async function createChatForProject(projectId: string) {
     const chatPreferences = useChatPreferencesStore.getState()
@@ -798,14 +838,14 @@ export function useKannaState(activeChatId: string | null): KannaState {
     }
   }
 
-  async function handleStopDraining() {
+  const handleStopDraining = useCallback(async () => {
     if (!activeChatId) return
     try {
       await socket.command({ type: "chat.stopDraining", chatId: activeChatId })
     } catch (error) {
       setCommandError(error instanceof Error ? error.message : String(error))
     }
-  }
+  }, [activeChatId, socket])
 
   async function handleDeleteChat(chat: SidebarChatRow) {
     const confirmed = await dialog.confirm({
@@ -876,7 +916,7 @@ export function useKannaState(activeChatId: string | null): KannaState {
     }
   }
 
-  async function handleOpenLocalLink(target: { path: string; line?: number; column?: number }) {
+  const handleOpenLocalLink = useCallback(async (target: { path: string; line?: number; column?: number }) => {
     try {
       await openExternal({
         action: "open_editor",
@@ -887,7 +927,7 @@ export function useKannaState(activeChatId: string | null): KannaState {
     } catch (error) {
       setCommandError(error instanceof Error ? error.message : String(error))
     }
-  }
+  }, [])
 
   async function handleOpenExternalPath(action: "open_finder" | "open_editor", localPath: string) {
     try {
@@ -900,12 +940,12 @@ export function useKannaState(activeChatId: string | null): KannaState {
     }
   }
 
-  async function openExternal(command: {
+  const openExternal = useCallback(async (command: {
     action: "open_finder" | "open_terminal" | "open_editor"
     localPath: string
     line?: number
     column?: number
-  }) {
+  }) => {
     const preferences = useTerminalPreferencesStore.getState()
     setCommandError(null)
     await socket.command({
@@ -918,7 +958,7 @@ export function useKannaState(activeChatId: string | null): KannaState {
           }
         : undefined,
     })
-  }
+  }, [socket])
 
   function handleCompose() {
     const intent = resolveComposeIntent({
@@ -934,11 +974,11 @@ export function useKannaState(activeChatId: string | null): KannaState {
     navigate("/")
   }
 
-  async function handleAskUserQuestion(
+  const handleAskUserQuestion = useCallback(async (
     toolUseId: string,
     questions: AskUserQuestionItem[],
     answers: AskUserQuestionAnswerMap
-  ) {
+  ) => {
     if (!activeChatId) return
     try {
       await socket.command({
@@ -950,9 +990,9 @@ export function useKannaState(activeChatId: string | null): KannaState {
     } catch (error) {
       setCommandError(error instanceof Error ? error.message : String(error))
     }
-  }
+  }, [activeChatId, socket])
 
-  async function handleExitPlanMode(toolUseId: string, confirmed: boolean, clearContext?: boolean, message?: string) {
+  const handleExitPlanMode = useCallback(async (toolUseId: string, confirmed: boolean, clearContext?: boolean, message?: string) => {
     if (!activeChatId) return
     if (confirmed) {
       useChatPreferencesStore.getState().setChatComposerPlanMode(activeChatId, false)
@@ -971,7 +1011,7 @@ export function useKannaState(activeChatId: string | null): KannaState {
     } catch (error) {
       setCommandError(error instanceof Error ? error.message : String(error))
     }
-  }
+  }, [activeChatId, socket])
 
   return {
     socket,

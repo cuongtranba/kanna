@@ -66,10 +66,10 @@ describe("transcript TOC helpers", () => {
   })
 
   test("shows the TOC only above the desktop breakpoint when enabled", () => {
-    expect(shouldShowTranscriptTocPanel({ enabled: true, layoutWidth: 1200, itemCount: 2 })).toBe(false)
-    expect(shouldShowTranscriptTocPanel({ enabled: true, layoutWidth: 1201, itemCount: 2 })).toBe(true)
-    expect(shouldShowTranscriptTocPanel({ enabled: false, layoutWidth: 1400, itemCount: 2 })).toBe(false)
-    expect(shouldShowTranscriptTocPanel({ enabled: true, layoutWidth: 1400, itemCount: 0 })).toBe(false)
+    expect(shouldShowTranscriptTocPanel({ enabled: true, chatAreaWidth: 1200, itemCount: 2 })).toBe(false)
+    expect(shouldShowTranscriptTocPanel({ enabled: true, chatAreaWidth: 1201, itemCount: 2 })).toBe(true)
+    expect(shouldShowTranscriptTocPanel({ enabled: false, chatAreaWidth: 1400, itemCount: 2 })).toBe(false)
+    expect(shouldShowTranscriptTocPanel({ enabled: true, chatAreaWidth: 1400, itemCount: 0 })).toBe(false)
   })
 
   test("scrolls the transcript container to the selected user message", () => {

@@ -131,6 +131,7 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
             const upgraded = serverInstance.upgrade(req, {
               data: {
                 subscriptions: new Map(),
+                snapshotSignatures: new Map(),
               },
             })
             return upgraded ? undefined : new Response("WebSocket upgrade failed", { status: 400 })

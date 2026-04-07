@@ -1,4 +1,4 @@
-import { Flower, Code, FolderOpen, Menu, PanelLeft, SquarePen, Terminal } from "lucide-react"
+import { Flower, Code, FolderOpen, GitCompare, Menu, PanelLeft, SquarePen, Terminal } from "lucide-react"
 import { Button } from "../ui/button"
 import { CardHeader } from "../ui/card"
 import { HotkeyTooltip, HotkeyTooltipContent, HotkeyTooltipTrigger } from "../ui/tooltip"
@@ -168,11 +168,10 @@ export function ChatNavbar({
                   onClick={onToggleRightSidebar}
                   className={cn(
                     "border border-border/0",
-                    "text-neutral-900 dark:text-neutral-50",
-                    rightSidebarVisible && "text-white dark:text-white"
+                    rightSidebarVisible && "text-white"
                   )}
                 >
-                  <GitHubMark className="h-4.5 w-4.5" />
+                  <GitCompare className="h-4.5 w-4.5" />
                 </Button>
               </HotkeyTooltipTrigger>
               <HotkeyTooltipContent side="bottom" shortcut={rightSidebarShortcut} />
