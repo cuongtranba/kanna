@@ -42,6 +42,7 @@ interface DirtyPathEntry {
   path: string
   previousPath?: string
   changeType: ChatDiffFile["changeType"]
+  isUntracked: boolean
 }
 
 async function fileExists(filePath: string) {
@@ -167,9 +168,10 @@ function parseStatusPaths(output: string): DirtyPathEntry[] {
     const statusCode = line.slice(0, 2)
     const value = line.slice(3)
     if (!value) continue
+    const isUntracked = statusCode === "??"
     const isRename = statusCode.includes("R")
     const isDelete = statusCode.includes("D")
-    const isAdd = statusCode.includes("A") || statusCode === "??"
+    const isAdd = statusCode.includes("A") || isUntracked
     const changeType: ChatDiffFile["changeType"] = isRename
       ? "renamed"
       : isDelete
@@ -185,6 +187,7 @@ function parseStatusPaths(output: string): DirtyPathEntry[] {
           path: nextPath,
           previousPath: previousPath || undefined,
           changeType,
+          isUntracked,
         })
       }
       continue
@@ -193,6 +196,7 @@ function parseStatusPaths(output: string): DirtyPathEntry[] {
     entries.push({
       path: value,
       changeType,
+      isUntracked,
     })
   }
   return entries.sort((left, right) => left.path.localeCompare(right.path))
@@ -289,6 +293,7 @@ async function computeCurrentFiles(repoRoot: string, baseCommit: string | null):
     files.push({
       path: relativePath,
       changeType: entry.changeType,
+      isUntracked: entry.isUntracked,
       patch,
       mimeType,
       size,
@@ -304,6 +309,64 @@ function normalizeRepoRelativePath(inputPath: string) {
     throw new Error(`Invalid diff path: ${inputPath}`)
   }
   return normalized
+}
+
+async function findDirtyPath(repoRoot: string, relativePath: string) {
+  const dirtyPaths = await listDirtyPaths(repoRoot)
+  return dirtyPaths.find((entry) => entry.path === relativePath)
+}
+
+async function discardAddedPath(repoRoot: string, repoHasHead: boolean, relativePath: string) {
+  if (repoHasHead) {
+    const resetResult = await runGit(["reset", "--quiet", "HEAD", "--", relativePath], repoRoot)
+    if (resetResult.exitCode !== 0) {
+      throw new Error(formatGitFailure(resetResult) || "Failed to unstage added file")
+    }
+  } else {
+    const rmCachedResult = await runGit(["rm", "--cached", "--force", "--", relativePath], repoRoot)
+    if (rmCachedResult.exitCode !== 0) {
+      throw new Error(formatGitFailure(rmCachedResult) || "Failed to unstage added file")
+    }
+  }
+}
+
+async function discardRenamedPath(repoRoot: string, entry: DirtyPathEntry) {
+  if (!entry.previousPath) {
+    throw new Error(`Missing previous path for renamed file: ${entry.path}`)
+  }
+
+  const resetResult = await runGit(["reset", "--quiet", "HEAD", "--", entry.path], repoRoot)
+  if (resetResult.exitCode !== 0) {
+    throw new Error(formatGitFailure(resetResult) || "Failed to unstage renamed file")
+  }
+
+  const restoreResult = await runGit(["restore", "--staged", "--worktree", "--source=HEAD", "--", entry.previousPath], repoRoot)
+  if (restoreResult.exitCode !== 0) {
+    throw new Error(formatGitFailure(restoreResult) || "Failed to restore renamed file")
+  }
+
+  await rm(path.join(repoRoot, entry.path), { recursive: true, force: true })
+}
+
+export function appendGitIgnoreEntry(currentContents: string | null, entry: string) {
+  const normalizedContents = currentContents ?? ""
+  const existingEntries = normalizedContents
+    .split(/\r?\n/u)
+    .map((line) => line.trim())
+    .filter(Boolean)
+
+  if (existingEntries.includes(entry)) {
+    return normalizedContents.length > 0 && !normalizedContents.endsWith("\n")
+      ? `${normalizedContents}\n`
+      : normalizedContents
+  }
+
+  const prefix = normalizedContents.length === 0
+    ? ""
+    : normalizedContents.endsWith("\n")
+      ? normalizedContents
+      : `${normalizedContents}\n`
+  return `${prefix}${entry}\n`
 }
 
 export class DiffStore {
@@ -453,5 +516,77 @@ export class DiffStore {
       pushed: true,
       snapshotChanged,
     } satisfies DiffCommitResult
+  }
+
+  async discardFile(args: {
+    chatId: string
+    projectPath: string
+    path: string
+  }) {
+    const relativePath = normalizeRepoRelativePath(args.path)
+    const repo = await resolveRepo(args.projectPath)
+    if (!repo) {
+      throw new Error("Project is not in a git repository")
+    }
+
+    const entry = await findDirtyPath(repo.repoRoot, relativePath)
+    if (!entry) {
+      throw new Error(`File is no longer changed: ${relativePath}`)
+    }
+
+    if (entry.isUntracked) {
+      await rm(path.join(repo.repoRoot, entry.path), { recursive: true, force: true })
+    } else if (entry.changeType === "added") {
+      await discardAddedPath(repo.repoRoot, repo.baseCommit !== null, entry.path)
+      await rm(path.join(repo.repoRoot, entry.path), { recursive: true, force: true })
+    } else if (entry.changeType === "renamed") {
+      if (!repo.baseCommit) {
+        throw new Error("Cannot discard a rename before the repository has an initial commit")
+      }
+      await discardRenamedPath(repo.repoRoot, entry)
+    } else {
+      if (!repo.baseCommit) {
+        throw new Error("Cannot discard tracked changes before the repository has an initial commit")
+      }
+      const restoreResult = await runGit(["restore", "--staged", "--worktree", "--source=HEAD", "--", entry.path], repo.repoRoot)
+      if (restoreResult.exitCode !== 0) {
+        throw new Error(formatGitFailure(restoreResult) || "Failed to discard file changes")
+      }
+    }
+
+    return {
+      snapshotChanged: await this.refreshSnapshot(args.chatId, args.projectPath),
+    }
+  }
+
+  async ignoreFile(args: {
+    chatId: string
+    projectPath: string
+    path: string
+  }) {
+    const relativePath = normalizeRepoRelativePath(args.path)
+    const repo = await resolveRepo(args.projectPath)
+    if (!repo) {
+      throw new Error("Project is not in a git repository")
+    }
+
+    const entry = await findDirtyPath(repo.repoRoot, relativePath)
+    if (!entry) {
+      throw new Error(`File is no longer changed: ${relativePath}`)
+    }
+    if (!entry.isUntracked) {
+      throw new Error("Only untracked files can be ignored from the diff viewer")
+    }
+
+    const gitignorePath = path.join(repo.repoRoot, ".gitignore")
+    const currentContents = await readFile(gitignorePath, "utf8").catch(() => null)
+    const nextContents = appendGitIgnoreEntry(currentContents, relativePath)
+    if (nextContents !== currentContents) {
+      await writeFile(gitignorePath, nextContents, "utf8")
+    }
+
+    return {
+      snapshotChanged: await this.refreshSnapshot(args.chatId, args.projectPath),
+    }
   }
 }

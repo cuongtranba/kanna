@@ -80,6 +80,8 @@ export type ClientCommand =
   | { type: "chat.refreshDiffs"; chatId: string }
   | { type: "chat.generateCommitMessage"; chatId: string; paths: string[] }
   | { type: "chat.commitDiffs"; chatId: string; paths: string[]; summary: string; description?: string; mode: DiffCommitMode }
+  | { type: "chat.discardDiffFile"; chatId: string; path: string }
+  | { type: "chat.ignoreDiffFile"; chatId: string; path: string }
   | { type: "chat.cancel"; chatId: string }
   | { type: "chat.stopDraining"; chatId: string }
   | { type: "chat.loadHistory"; chatId: string; beforeCursor: string; limit: number }

@@ -213,6 +213,24 @@ const ChatTranscriptViewport = memo(function ChatTranscriptViewport({
   }, [])
 
   useEffect(() => {
+    const contentRoot = contentRootRef.current
+    if (!contentRoot) return
+
+    const observer = new ResizeObserver(() => {
+      if (showScrollButton) return
+      if (pendingPrependAnchorRef.current) return
+
+      const scrollContainer = scrollRef.current
+      if (!scrollContainer) return
+
+      scrollContainer.scrollTo({ top: scrollContainer.scrollHeight, behavior: "auto" })
+    })
+
+    observer.observe(contentRoot)
+    return () => observer.disconnect()
+  }, [scrollRef, showScrollButton])
+
+  useEffect(() => {
     if (transcriptContentWidth === null) return
     rowVirtualizer.measure()
   }, [rowVirtualizer, transcriptContentWidth])
@@ -537,6 +555,12 @@ function joinProjectRelativePath(projectPath: string, filePath: string) {
   return `${normalizedProjectPath}${separator}${normalizedFilePath}`
 }
 
+function resolveDiffFilePath(projectPath: string | null, filePath: string) {
+  return !projectPath || isAbsoluteLocalPath(filePath)
+    ? filePath
+    : joinProjectRelativePath(projectPath, filePath)
+}
+
 export function ChatPage() {
   const state = useOutletContext<KannaState>()
   const dialog = useAppDialog()
@@ -652,11 +676,76 @@ export function ChatPage() {
 
   const handleOpenDiffFile = useCallback((filePath: string) => {
     const projectPath = projectPathRef.current
-    const resolvedPath = !projectPath || isAbsoluteLocalPath(filePath)
-      ? filePath
-      : joinProjectRelativePath(projectPath, filePath)
+    const resolvedPath = resolveDiffFilePath(projectPath, filePath)
     void state.handleOpenLocalLink({ path: resolvedPath })
   }, [state.handleOpenLocalLink])
+
+  const handleCopyDiffFilePath = useCallback((filePath: string) => {
+    const projectPath = projectPathRef.current
+    void state.handleCopyPath(resolveDiffFilePath(projectPath, filePath))
+  }, [state.handleCopyPath])
+
+  const handleCopyDiffRelativePath = useCallback((filePath: string) => {
+    void state.handleCopyPath(filePath)
+  }, [state.handleCopyPath])
+
+  const handleDiscardDiffFile = useCallback((filePath: string) => {
+    const chatId = activeChatIdRef.current
+    if (!chatId) return
+
+    void (async () => {
+      const confirmed = await dialog.confirm({
+        title: "Discard Changes",
+        description: `Discard changes for "${filePath}"? This cannot be undone.`,
+        confirmLabel: "Discard",
+        confirmVariant: "destructive",
+      })
+      if (!confirmed) return
+
+      try {
+        await state.socket.command({
+          type: "chat.discardDiffFile",
+          chatId,
+          path: filePath,
+        })
+      } catch (error) {
+        await dialog.alert({
+          title: "Discard failed",
+          description: error instanceof Error ? error.message : String(error),
+          closeLabel: "OK",
+        })
+      }
+    })()
+  }, [dialog, state.socket])
+
+  const handleIgnoreDiffFile = useCallback((filePath: string) => {
+    const chatId = activeChatIdRef.current
+    if (!chatId) return
+
+    void (async () => {
+      const confirmed = await dialog.confirm({
+        title: "Ignore File",
+        description: `Add "${filePath}" to .gitignore?`,
+        confirmLabel: "Ignore",
+        confirmVariant: "destructive",
+      })
+      if (!confirmed) return
+
+      try {
+        await state.socket.command({
+          type: "chat.ignoreDiffFile",
+          chatId,
+          path: filePath,
+        })
+      } catch (error) {
+        await dialog.alert({
+          title: "Ignore failed",
+          description: error instanceof Error ? error.message : String(error),
+          closeLabel: "OK",
+        })
+      }
+    })()
+  }, [dialog, state.socket])
 
   const handleCommitDiffs = useCallback(async (args: { paths: string[]; summary: string; description: string; mode: DiffCommitMode }) => {
     const chatId = activeChatIdRef.current
@@ -1165,9 +1254,14 @@ export function ChatPage() {
               <RightSidebar
                 projectId={projectId}
                 diffs={state.chatDiffSnapshot ?? EMPTY_DIFF_SNAPSHOT}
+                editorLabel={state.editorLabel}
                 diffRenderMode={diffRenderMode}
                 wrapLines={wrapDiffLines}
                 onOpenFile={handleOpenDiffFile}
+                onDiscardFile={handleDiscardDiffFile}
+                onIgnoreFile={handleIgnoreDiffFile}
+                onCopyFilePath={handleCopyDiffFilePath}
+                onCopyRelativePath={handleCopyDiffRelativePath}
                 onGenerateCommitMessage={handleGenerateCommitMessage}
                 onCommit={handleCommitDiffs}
                 onDiffRenderModeChange={setDiffRenderMode}

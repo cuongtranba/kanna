@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, test } from "bun:test"
-import { mkdtemp, rm, writeFile } from "node:fs/promises"
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
-import { DiffStore } from "./diff-store"
+import { appendGitIgnoreEntry, DiffStore } from "./diff-store"
 
 async function run(command: string[], cwd: string) {
   const process = Bun.spawn(command, {
@@ -54,6 +54,7 @@ describe("DiffStore", () => {
     expect(snapshot.status).toBe("ready")
     expect(snapshot.files).toHaveLength(1)
     expect(snapshot.files[0]?.path).toBe("app.txt")
+    expect(snapshot.files[0]?.isUntracked).toBe(false)
     expect(snapshot.files[0]?.patch).toContain("-base")
     expect(snapshot.files[0]?.patch).toContain("+changed")
   })
@@ -123,5 +124,135 @@ describe("DiffStore", () => {
     expect(snapshot.files).toHaveLength(1)
     expect(snapshot.files[0]?.path).toBe("after.txt")
     expect(snapshot.files[0]?.changeType).toBe("renamed")
+    expect(snapshot.files[0]?.isUntracked).toBe(false)
+  })
+
+  test("marks untracked files so they can be ignored", async () => {
+    const repoRoot = await createRepo()
+    tempDirs.push(repoRoot)
+    await writeFile(path.join(repoRoot, "tracked.txt"), "base\n", "utf8")
+    await run(["git", "add", "."], repoRoot)
+    await run(["git", "commit", "-m", "init"], repoRoot)
+    await writeFile(path.join(repoRoot, "scratch.log"), "tmp\n", "utf8")
+
+    const store = new DiffStore(repoRoot)
+    await store.initialize()
+    await store.refreshSnapshot("chat-1", repoRoot)
+
+    const snapshot = store.getSnapshot("chat-1")
+    expect(snapshot.files).toHaveLength(1)
+    expect(snapshot.files[0]).toMatchObject({
+      path: "scratch.log",
+      changeType: "added",
+      isUntracked: true,
+    })
+  })
+
+  test("discardFile reverts a tracked modified file", async () => {
+    const repoRoot = await createRepo()
+    tempDirs.push(repoRoot)
+    await writeFile(path.join(repoRoot, "app.txt"), "base\n", "utf8")
+    await run(["git", "add", "."], repoRoot)
+    await run(["git", "commit", "-m", "init"], repoRoot)
+    await writeFile(path.join(repoRoot, "app.txt"), "changed\n", "utf8")
+
+    const store = new DiffStore(repoRoot)
+    await store.initialize()
+    await store.refreshSnapshot("chat-1", repoRoot)
+    await store.discardFile({
+      chatId: "chat-1",
+      projectPath: repoRoot,
+      path: "app.txt",
+    })
+
+    expect(await readFile(path.join(repoRoot, "app.txt"), "utf8")).toBe("base\n")
+    expect(store.getSnapshot("chat-1").files).toHaveLength(0)
+  })
+
+  test("discardFile deletes an untracked file", async () => {
+    const repoRoot = await createRepo()
+    tempDirs.push(repoRoot)
+    await writeFile(path.join(repoRoot, "tracked.txt"), "base\n", "utf8")
+    await run(["git", "add", "."], repoRoot)
+    await run(["git", "commit", "-m", "init"], repoRoot)
+    await writeFile(path.join(repoRoot, "scratch.log"), "tmp\n", "utf8")
+
+    const store = new DiffStore(repoRoot)
+    await store.initialize()
+    await store.refreshSnapshot("chat-1", repoRoot)
+    await store.discardFile({
+      chatId: "chat-1",
+      projectPath: repoRoot,
+      path: "scratch.log",
+    })
+
+    expect(await Bun.file(path.join(repoRoot, "scratch.log")).exists()).toBe(false)
+    expect(store.getSnapshot("chat-1").files).toHaveLength(0)
+  })
+
+  test("discardFile reverts a renamed file", async () => {
+    const repoRoot = await createRepo()
+    tempDirs.push(repoRoot)
+    await writeFile(path.join(repoRoot, "before.txt"), "same\n", "utf8")
+    await run(["git", "add", "."], repoRoot)
+    await run(["git", "commit", "-m", "init"], repoRoot)
+    await run(["git", "mv", "before.txt", "after.txt"], repoRoot)
+
+    const store = new DiffStore(repoRoot)
+    await store.initialize()
+    await store.refreshSnapshot("chat-1", repoRoot)
+    await store.discardFile({
+      chatId: "chat-1",
+      projectPath: repoRoot,
+      path: "after.txt",
+    })
+
+    expect(await Bun.file(path.join(repoRoot, "before.txt")).exists()).toBe(true)
+    expect(await Bun.file(path.join(repoRoot, "after.txt")).exists()).toBe(false)
+    expect(store.getSnapshot("chat-1").files).toHaveLength(0)
+  })
+
+  test("ignoreFile appends a .gitignore entry once", async () => {
+    const repoRoot = await createRepo()
+    tempDirs.push(repoRoot)
+    await writeFile(path.join(repoRoot, "tracked.txt"), "base\n", "utf8")
+    await run(["git", "add", "."], repoRoot)
+    await run(["git", "commit", "-m", "init"], repoRoot)
+    await writeFile(path.join(repoRoot, "scratch.log"), "tmp\n", "utf8")
+
+    const store = new DiffStore(repoRoot)
+    await store.initialize()
+    await store.refreshSnapshot("chat-1", repoRoot)
+    await store.ignoreFile({
+      chatId: "chat-1",
+      projectPath: repoRoot,
+      path: "scratch.log",
+    })
+
+    expect(await readFile(path.join(repoRoot, ".gitignore"), "utf8")).toBe("scratch.log\n")
+  })
+
+  test("appendGitIgnoreEntry does not duplicate an existing identical entry", () => {
+    expect(appendGitIgnoreEntry("scratch.log\n", "scratch.log")).toBe("scratch.log\n")
+    expect(appendGitIgnoreEntry("scratch.log", "scratch.log")).toBe("scratch.log\n")
+  })
+
+  test("ignoreFile rejects tracked files", async () => {
+    const repoRoot = await createRepo()
+    tempDirs.push(repoRoot)
+    await writeFile(path.join(repoRoot, "app.txt"), "base\n", "utf8")
+    await run(["git", "add", "."], repoRoot)
+    await run(["git", "commit", "-m", "init"], repoRoot)
+    await writeFile(path.join(repoRoot, "app.txt"), "changed\n", "utf8")
+
+    const store = new DiffStore(repoRoot)
+    await store.initialize()
+    await store.refreshSnapshot("chat-1", repoRoot)
+
+    await expect(store.ignoreFile({
+      chatId: "chat-1",
+      projectPath: repoRoot,
+      path: "app.txt",
+    })).rejects.toThrow("Only untracked files can be ignored from the diff viewer")
   })
 })

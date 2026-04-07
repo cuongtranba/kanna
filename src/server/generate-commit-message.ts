@@ -62,11 +62,11 @@ function buildCommitMessagePrompt(args: {
   const combinedPatch = args.files.map((file) => file.patch).join("\n\n")
 
   return [
-    "Generate a concise git commit message for the selected changes.",
+    "Generate a git commit message for the selected changes.",
     "Return JSON with keys: subject, body.",
     "Rules:",
     "- subject must be imperative, under 72 chars, and have no trailing period",
-    "- body may be an empty string or short bullet points",
+    "- body may be an empty string or 3-5 bullet points",
     "- capture the primary user-visible or developer-visible change",
     "",
     `Branch: ${args.branchName ?? "current branch"}`,

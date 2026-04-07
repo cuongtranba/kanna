@@ -22,7 +22,7 @@ export interface ClientState {
 
 interface CreateWsRouterArgs {
   store: EventStore
-  diffStore?: Pick<DiffStore, "getSnapshot" | "refreshSnapshot" | "generateCommitMessage" | "commitFiles">
+  diffStore?: Pick<DiffStore, "getSnapshot" | "refreshSnapshot" | "generateCommitMessage" | "commitFiles" | "discardFile" | "ignoreFile">
   agent: AgentCoordinator
   terminals: TerminalManager
   keybindings: KeybindingsManager
@@ -61,6 +61,8 @@ export function createWsRouter({
     refreshSnapshot: async () => false,
     generateCommitMessage: async () => ({ subject: "Update selected files", body: "", usedFallback: true, failureMessage: null }),
     commitFiles: async () => ({ ok: true, mode: "commit_only" as const, branchName: undefined, pushed: false, snapshotChanged: false }),
+    discardFile: async () => ({ snapshotChanged: false }),
+    ignoreFile: async () => ({ snapshotChanged: false }),
   }
 
   function createEnvelope(id: string, topic: SubscriptionTopic): ServerEnvelope {
@@ -400,6 +402,46 @@ export function createWsRouter({
             summary: command.summary,
             description: command.description,
             mode: command.mode,
+          })
+          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result })
+          if (result.snapshotChanged) {
+            broadcastSnapshots()
+          }
+          return
+        }
+        case "chat.discardDiffFile": {
+          const chat = store.getChat(command.chatId)
+          if (!chat) {
+            throw new Error("Chat not found")
+          }
+          const project = store.getProject(chat.projectId)
+          if (!project) {
+            throw new Error("Project not found")
+          }
+          const result = await resolvedDiffStore.discardFile({
+            chatId: command.chatId,
+            projectPath: project.localPath,
+            path: command.path,
+          })
+          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result })
+          if (result.snapshotChanged) {
+            broadcastSnapshots()
+          }
+          return
+        }
+        case "chat.ignoreDiffFile": {
+          const chat = store.getChat(command.chatId)
+          if (!chat) {
+            throw new Error("Chat not found")
+          }
+          const project = store.getProject(chat.projectId)
+          if (!project) {
+            throw new Error("Project not found")
+          }
+          const result = await resolvedDiffStore.ignoreFile({
+            chatId: command.chatId,
+            projectPath: project.localPath,
+            path: command.path,
           })
           send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result })
           if (result.snapshotChanged) {

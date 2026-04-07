@@ -11,6 +11,7 @@ describe("generateCommitMessageDetailed", () => {
         files: [{
           path: "app.ts",
           changeType: "modified",
+          isUntracked: false,
           patch: "diff --git a/app.ts b/app.ts\n--- a/app.ts\n+++ b/app.ts\n@@\n-old\n+new\n",
         }],
       },
@@ -38,6 +39,7 @@ describe("generateCommitMessageDetailed", () => {
         files: [{
           path: "src/feature.ts",
           changeType: "modified",
+          isUntracked: false,
           patch: "diff --git a/src/feature.ts b/src/feature.ts\n",
         }],
       },

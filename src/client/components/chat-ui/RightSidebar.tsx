@@ -1,6 +1,6 @@
 import { PatchDiff } from "@pierre/diffs/react"
-import { Check, ChevronDown, ChevronUp, Columns2, ExternalLink, Rows3, SquareArrowRight, SquareDot, SquareMinus, SquarePlus, WrapText, X } from "lucide-react"
-import { memo, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react"
+import { Ban, Check, ChevronDown, ChevronUp, Code, Columns2, Copy, Ellipsis, Rows3, Trash2, WrapText, X } from "lucide-react"
+import { memo, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode, type RefObject } from "react"
 import type { ChatAttachment, ChatDiffSnapshot, DiffCommitMode, DiffCommitResult } from "../../../shared/types"
 import { useStickyState } from "../../hooks/useStickyState"
 import { cn } from "../../lib/utils"
@@ -9,7 +9,7 @@ import { AttachmentFileCard, AttachmentImageCard } from "../messages/AttachmentC
 import { AttachmentPreviewModal } from "../messages/AttachmentPreviewModal"
 import { classifyAttachmentPreview } from "../messages/attachmentPreview"
 import { Button } from "../ui/button"
-import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from "../ui/context-menu"
+import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger } from "../ui/context-menu"
 import { Input } from "../ui/input"
 import { Textarea } from "../ui/textarea"
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip"
@@ -42,14 +42,23 @@ function getDiffPreviewAttachment(projectId: string | null, file: DiffFile): Cha
 interface RightSidebarProps {
   projectId: string | null
   diffs: ChatDiffSnapshot
+  editorLabel: string
   diffRenderMode: DiffRenderMode
   wrapLines: boolean
   onOpenFile: (path: string) => void
+  onDiscardFile: (path: string) => void
+  onIgnoreFile: (path: string) => void
+  onCopyFilePath: (path: string) => void
+  onCopyRelativePath: (path: string) => void
   onGenerateCommitMessage: (args: { paths: string[] }) => Promise<{ subject: string; body: string }>
   onCommit: (args: { paths: string[]; summary: string; description: string; mode: DiffCommitMode }) => Promise<DiffCommitResult | null>
   onDiffRenderModeChange: (mode: DiffRenderMode) => void
   onWrapLinesChange: (wrap: boolean) => void
   onClose: () => void
+}
+
+export function canIgnoreDiffFile(file: DiffFile) {
+  return file.isUntracked
 }
 
 function getPatchCounts(patch: string) {
@@ -99,22 +108,6 @@ function IconButton(props: {
   )
 }
 
-function ChangeTypeBadge({ changeType }: { changeType: DiffFile["changeType"] }) {
-  if (changeType === "modified") {
-    return <SquareDot className="h-3.5 w-3.5 shrink-0 text-blue-400 dark:text-blue-300" />
-  }
-
-  if (changeType === "added") {
-    return <SquarePlus className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
-  }
-
-  if (changeType === "deleted") {
-    return <SquareMinus className="h-3.5 w-3.5 shrink-0 text-red-600 dark:text-red-400" />
-  }
-
-  return <SquareArrowRight className="h-3.5 w-3.5 shrink-0 text-sky-600 dark:text-sky-400" />
-}
-
 function StageCheckbox({
   checked,
   onClick,
@@ -149,30 +142,42 @@ function DiffFileCard({
   projectId,
   isCollapsed,
   isChecked,
+  editorLabel,
   diffRenderMode,
   wrapLines,
   onToggleCollapsed,
   onToggleChecked,
   onOpenFile,
+  onDiscardFile,
+  onIgnoreFile,
+  onCopyFilePath,
+  onCopyRelativePath,
 }: {
   file: DiffFile
   rootRef: RefObject<HTMLDivElement | null>
   projectId: string | null
   isCollapsed: boolean
   isChecked: boolean
+  editorLabel: string
   diffRenderMode: DiffRenderMode
   wrapLines: boolean
   onToggleCollapsed: () => void
   onToggleChecked: () => void
   onOpenFile: (path: string) => void
+  onDiscardFile: (path: string) => void
+  onIgnoreFile: (path: string) => void
+  onCopyFilePath: (path: string) => void
+  onCopyRelativePath: (path: string) => void
 }) {
   const counts = getPatchCounts(file.patch)
-  const previewAttachment = useMemo(() => getDiffPreviewAttachment(projectId, file), [file, projectId])
+  const canIgnore = canIgnoreDiffFile(file)
   const [selectedAttachmentId, setSelectedAttachmentId] = useState<string | null>(null)
+  const cardRef = useRef<HTMLDivElement | null>(null)
   const { sentinelRef, isStuck } = useStickyState<HTMLDivElement>({
     rootRef,
     disabled: isCollapsed,
   })
+  const previewAttachment = useMemo(() => getDiffPreviewAttachment(projectId, file), [file, projectId])
 
   function handleAttachmentClick(attachment: ChatAttachment) {
     const target = classifyAttachmentPreview(attachment)
@@ -185,105 +190,170 @@ function DiffFileCard({
     setSelectedAttachmentId(attachment.id)
   }
 
+  function openContextMenuFromButton(event: ReactMouseEvent<HTMLButtonElement>) {
+    event.preventDefault()
+    event.stopPropagation()
+    const rect = event.currentTarget.getBoundingClientRect()
+    cardRef.current?.dispatchEvent(new MouseEvent("contextmenu", {
+      bubbles: true,
+      cancelable: true,
+      clientX: rect.left + rect.width / 2,
+      clientY: rect.bottom,
+      view: window,
+    }))
+  }
+
   return (
-    <div key={file.path} className="relative rounded-lg border border-border bg-background">
-      {!isCollapsed ? <div ref={sentinelRef} className="pointer-events-none absolute inset-x-0 top-0 h-px" aria-hidden="true" /> : null}
-      <div
-        role="button"
-        tabIndex={0}
-        onClick={onToggleCollapsed}
-        onKeyDown={(event) => {
-          if (event.key !== "Enter" && event.key !== " ") return
-          event.preventDefault()
-          onToggleCollapsed()
-        }}
-        className={cn(
-          "group/header sticky top-0 z-20 flex cursor-pointer items-center justify-between gap-3 bg-background pl-[7px] pr-2.5 py-1.5 text-[13px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground",
-          !isCollapsed && !isStuck && "rounded-t-[calc(theme(borderRadius.lg)-1px)]",
-          isCollapsed && "rounded-[calc(theme(borderRadius.lg)-1px)]",
-          !isCollapsed && "border-b border-border/50"
-        )}
-      >
-        <div className="flex min-w-0 items-center">
-          <StageCheckbox
-            checked={isChecked}
-            onClick={() => {
-              if (!projectId) return
-              onToggleChecked()
+    <ContextMenu>
+      <ContextMenuTrigger asChild>
+        <div ref={cardRef} key={file.path} className="relative rounded-lg border border-border bg-background">
+          {!isCollapsed ? <div ref={sentinelRef} className="pointer-events-none absolute inset-x-0 top-0 h-px" aria-hidden="true" /> : null}
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={onToggleCollapsed}
+            onKeyDown={(event) => {
+              if (event.key !== "Enter" && event.key !== " ") return
+              event.preventDefault()
+              onToggleCollapsed()
             }}
-          />
-          <div className="min-w-0 truncate select-none ml-2 mr-1">{file.path}</div>
-          <button
-            type="button"
-            aria-label={`Open ${file.path} in editor`}
-            title={file.path}
-            onClick={(event) => {
-              event.stopPropagation()
-              onOpenFile(file.path)
-            }}
-            className="flex h-5 w-5 shrink-0 items-center justify-center rounded-sm text-muted-foreground opacity-0 transition-[opacity,color,background-color] group-hover/header:opacity-70 hover:bg-accent hover:text-foreground focus-visible:opacity-100"
+            className={cn(
+              "group/header sticky top-0 z-20 flex cursor-pointer items-center justify-between gap-3 bg-background pl-[7px] pr-2.5 py-1.5 text-[13px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground",
+              !isCollapsed && !isStuck && "rounded-t-[calc(theme(borderRadius.lg)-1px)]",
+              isCollapsed && "rounded-[calc(theme(borderRadius.lg)-1px)]",
+              !isCollapsed && "border-b border-border/50"
+            )}
           >
-            <ExternalLink className="h-3 w-3 shrink-0" />
-          </button>
-        </div>
-        <div className="flex shrink-0 items-center gap-2 select-none">
-          <span className="whitespace-nowrap text-xs font-mono">
-            {counts.additions > 0 ? <span className="text-emerald-600 dark:text-emerald-400">+{counts.additions}</span> : null}
-            {counts.deletions > 0 ? (
-              <span className={counts.additions > 0 ? "ml-2 text-red-600 dark:text-red-400" : "text-red-600 dark:text-red-400"}>
-                -{counts.deletions}
+            <div className="flex min-w-0 items-center">
+              <StageCheckbox
+                checked={isChecked}
+                onClick={onToggleChecked}
+              />
+              <div className="min-w-0 truncate select-none ml-2 mr-1">{file.path}</div>
+            </div>
+            <div className="flex shrink-0 items-center gap-2 select-none">
+              <span className="whitespace-nowrap text-xs font-mono">
+                {counts.additions > 0 ? <span className="text-emerald-600 dark:text-emerald-400">+{counts.additions}</span> : null}
+                {counts.deletions > 0 ? (
+                  <span className={counts.additions > 0 ? "ml-2 text-red-600 dark:text-red-400" : "text-red-600 dark:text-red-400"}>
+                    -{counts.deletions}
+                  </span>
+                ) : null}
               </span>
-            ) : null}
-          </span>
-          <ChangeTypeBadge changeType={file.changeType} />
-          {isCollapsed ? <ChevronDown className="h-3.5 w-3.5 shrink-0" /> : <ChevronUp className="h-3.5 w-3.5 shrink-0" />}
-        </div>
-      </div>
-      {!isCollapsed ? (
-        <div className="kanna-diff-patch overflow-hidden rounded-b-[calc(theme(borderRadius.lg)-1px)] pb-[1px]">
-          {previewAttachment ? (
-            <div className="flex justify-center p-3">
-              {previewAttachment.kind === "image" ? (
-                <AttachmentImageCard
-                  attachment={previewAttachment}
-                  onClick={() => handleAttachmentClick(previewAttachment)}
-                />
+              <button
+                type="button"
+                aria-label={`Open actions for ${file.path}`}
+                onClick={openContextMenuFromButton}
+                className="flex h-5 w-5 shrink-0 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              >
+                <Ellipsis className="h-3.5 w-3.5 shrink-0" />
+              </button>
+              {isCollapsed ? <ChevronDown className="h-3.5 w-3.5 shrink-0" /> : <ChevronUp className="h-3.5 w-3.5 shrink-0" />}
+            </div>
+          </div>
+          {!isCollapsed ? (
+            <div className="kanna-diff-patch overflow-hidden rounded-b-[calc(theme(borderRadius.lg)-1px)] pb-[1px]">
+              {previewAttachment ? (
+                <div className="flex justify-center p-3">
+                  {previewAttachment.kind === "image" ? (
+                    <AttachmentImageCard
+                      attachment={previewAttachment}
+                      onClick={() => handleAttachmentClick(previewAttachment)}
+                    />
+                  ) : (
+                    <AttachmentFileCard
+                      attachment={previewAttachment}
+                      onClick={() => handleAttachmentClick(previewAttachment)}
+                    />
+                  )}
+                </div>
               ) : (
-                <AttachmentFileCard
-                  attachment={previewAttachment}
-                  onClick={() => handleAttachmentClick(previewAttachment)}
+                <PatchDiff
+                  patch={file.patch}
+                  options={{
+                    diffStyle: diffRenderMode,
+                    disableFileHeader: true,
+                    disableBackground: false,
+                    overflow: wrapLines ? "wrap" : "scroll",
+                    lineDiffType: "word",
+                    diffIndicators: "classic",
+                  }}
                 />
               )}
             </div>
-          ) : (
-            <PatchDiff
-              patch={file.patch}
-              options={{
-                diffStyle: diffRenderMode,
-                disableFileHeader: true,
-                disableBackground: false,
-                overflow: wrapLines ? "wrap" : "scroll",
-                lineDiffType: "word",
-                diffIndicators: "classic",
-              }}
-            />
-          )}
+          ) : null}
+          <AttachmentPreviewModal
+            attachment={previewAttachment && selectedAttachmentId === previewAttachment.id ? previewAttachment : null}
+            onOpenChange={(open) => !open && setSelectedAttachmentId(null)}
+          />
         </div>
-      ) : null}
-      <AttachmentPreviewModal
-        attachment={previewAttachment && selectedAttachmentId === previewAttachment.id ? previewAttachment : null}
-        onOpenChange={(open) => !open && setSelectedAttachmentId(null)}
-      />
-    </div>
+      </ContextMenuTrigger>
+      <ContextMenuContent>
+        <ContextMenuItem
+          onSelect={(event) => {
+            event.stopPropagation()
+            onOpenFile(file.path)
+          }}
+        >
+          <Code className="h-3.5 w-3.5" />
+          <span className="text-xs font-medium">Open in {editorLabel}</span>
+        </ContextMenuItem>
+        <ContextMenuItem
+          onSelect={(event) => {
+            event.stopPropagation()
+            onDiscardFile(file.path)
+          }}
+          className="text-destructive dark:text-red-400 hover:bg-destructive/10 focus:bg-destructive/10 dark:hover:bg-red-500/20 dark:focus:bg-red-500/20"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+          <span className="text-xs font-medium">Discard Changes</span>
+        </ContextMenuItem>
+        <ContextMenuItem
+          disabled={!canIgnore}
+          onSelect={(event) => {
+            event.stopPropagation()
+            if (!canIgnore) return
+            onIgnoreFile(file.path)
+          }}
+        >
+          <Ban className="h-3.5 w-3.5" />
+          <span className="text-xs font-medium">Ignore File</span>
+        </ContextMenuItem>
+        <ContextMenuSeparator />
+        <ContextMenuItem
+          onSelect={(event) => {
+            event.stopPropagation()
+            onCopyFilePath(file.path)
+          }}
+        >
+          <Copy className="h-3.5 w-3.5" />
+          <span className="text-xs font-medium">Copy File Path</span>
+        </ContextMenuItem>
+        <ContextMenuItem
+          onSelect={(event) => {
+            event.stopPropagation()
+            onCopyRelativePath(file.path)
+          }}
+        >
+          <Copy className="h-3.5 w-3.5" />
+          <span className="text-xs font-medium">Copy Relative Path</span>
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
   )
 }
 
 function RightSidebarImpl({
   projectId,
   diffs,
+  editorLabel,
   diffRenderMode,
   wrapLines,
   onOpenFile,
+  onDiscardFile,
+  onIgnoreFile,
+  onCopyFilePath,
+  onCopyRelativePath,
   onGenerateCommitMessage,
   onCommit,
   onDiffRenderModeChange,
@@ -450,6 +520,7 @@ function RightSidebarImpl({
                       projectId={projectId}
                       isCollapsed={isCollapsed}
                       isChecked={isChecked}
+                      editorLabel={editorLabel}
                       diffRenderMode={diffRenderMode}
                       wrapLines={wrapLines}
                       onToggleCollapsed={() => setCollapsedPaths((current) => ({ ...current, [file.path]: !isCollapsed }))}
@@ -458,6 +529,10 @@ function RightSidebarImpl({
                         setCheckedPath(projectId, file.path, !isChecked)
                       }}
                       onOpenFile={onOpenFile}
+                      onDiscardFile={onDiscardFile}
+                      onIgnoreFile={onIgnoreFile}
+                      onCopyFilePath={onCopyFilePath}
+                      onCopyRelativePath={onCopyRelativePath}
                     />
                   )
                 })}
