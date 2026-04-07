@@ -202,6 +202,11 @@ describe("getActiveChatSnapshot", () => {
         sessionToken: null,
       },
       messages: [],
+      history: {
+        hasOlder: false,
+        olderCursor: null,
+        recentLimit: 200,
+      },
       diffs: { status: "unknown", files: [] },
       availableProviders: [],
     }
@@ -223,6 +228,11 @@ describe("getActiveChatSnapshot", () => {
         sessionToken: null,
       },
       messages: [],
+      history: {
+        hasOlder: false,
+        olderCursor: null,
+        recentLimit: 200,
+      },
       diffs: { status: "unknown", files: [] },
       availableProviders: [],
     }

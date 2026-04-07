@@ -176,6 +176,92 @@ describe("ws-router", () => {
     })
   })
 
+  test("loads older chat history pages", () => {
+    const state = createEmptyState()
+    state.projectsById.set("project-1", {
+      id: "project-1",
+      localPath: "/tmp/project",
+      title: "Project",
+      createdAt: 1,
+      updatedAt: 1,
+    })
+    state.projectIdsByPath.set("/tmp/project", "project-1")
+    state.chatsById.set("chat-1", {
+      id: "chat-1",
+      projectId: "project-1",
+      title: "Chat",
+      createdAt: 1,
+      updatedAt: 1,
+      unread: false,
+      provider: null,
+      planMode: false,
+      sessionToken: null,
+      lastTurnOutcome: null,
+    })
+
+    const router = createWsRouter({
+      store: {
+        state,
+        getMessagesPageBefore: () => ({
+          messages: [{
+            _id: "msg-1",
+            kind: "assistant_text",
+            createdAt: 1,
+            text: "older message",
+          }],
+          hasOlder: false,
+          olderCursor: null,
+        }),
+        getChat: () => state.chatsById.get("chat-1") ?? null,
+      } as never,
+      agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set() } as never,
+      terminals: {
+        getSnapshot: () => null,
+        onEvent: () => () => {},
+      } as never,
+      keybindings: {
+        getSnapshot: () => DEFAULT_KEYBINDINGS_SNAPSHOT,
+        onChange: () => () => {},
+      } as never,
+      refreshDiscovery: async () => [],
+      getDiscoveredProjects: () => [],
+      machineDisplayName: "Local Machine",
+      updateManager: null,
+    })
+    const ws = new FakeWebSocket()
+
+    router.handleMessage(
+      ws as never,
+      JSON.stringify({
+        v: 1,
+        type: "command",
+        id: "history-1",
+        command: {
+          type: "chat.loadHistory",
+          chatId: "chat-1",
+          beforeCursor: "idx:100",
+          limit: 100,
+        },
+      })
+    )
+
+    expect(ws.sent[0]).toEqual({
+      v: PROTOCOL_VERSION,
+      type: "ack",
+      id: "history-1",
+      result: {
+        messages: [{
+          _id: "msg-1",
+          kind: "assistant_text",
+          createdAt: 1,
+          text: "older message",
+        }],
+        hasOlder: false,
+        olderCursor: null,
+      },
+    })
+  })
+
   test("marks chats read and rebroadcasts sidebar snapshots", async () => {
     const state = createEmptyState()
     state.projectsById.set("project-1", {

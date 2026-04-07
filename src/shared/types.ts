@@ -647,11 +647,24 @@ export interface ChatRuntime {
   sessionToken: string | null
 }
 
+export interface ChatHistorySnapshot {
+  hasOlder: boolean
+  olderCursor: string | null
+  recentLimit: number
+}
+
 export interface ChatSnapshot {
   runtime: ChatRuntime
   messages: TranscriptEntry[]
+  history: ChatHistorySnapshot
   diffs: ChatDiffSnapshot
   availableProviders: ProviderCatalogEntry[]
+}
+
+export interface ChatHistoryPage {
+  messages: TranscriptEntry[]
+  hasOlder: boolean
+  olderCursor: string | null
 }
 
 export interface KannaSnapshot {

@@ -13,6 +13,8 @@ import { TerminalManager } from "./terminal-manager"
 import type { UpdateManager } from "./update-manager"
 import { deriveChatSnapshot, deriveLocalProjectsSnapshot, deriveSidebarData } from "./read-models"
 
+const DEFAULT_CHAT_RECENT_LIMIT = 200
+
 export interface ClientState {
   subscriptions: Map<string, SubscriptionTopic>
   snapshotSignatures: Map<string, string>
@@ -144,7 +146,7 @@ export function createWsRouter({
           agent.getActiveStatuses(),
           agent.getDrainingChatIds(),
           topic.chatId,
-          (chatId) => store.getMessages(chatId),
+          (chatId) => store.getRecentChatHistory(chatId, topic.recentLimit ?? DEFAULT_CHAT_RECENT_LIMIT),
           (chatId) => resolvedDiffStore.getSnapshot(chatId)
         ),
       },
@@ -413,6 +415,15 @@ export function createWsRouter({
           await agent.stopDraining(command.chatId)
           send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
           break
+        }
+        case "chat.loadHistory": {
+          const chat = store.getChat(command.chatId)
+          if (!chat) {
+            throw new Error("Chat not found")
+          }
+          const page = store.getMessagesPageBefore(command.chatId, command.beforeCursor, command.limit)
+          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: page })
+          return
         }
         case "chat.respondTool": {
           await agent.respondTool(command)

@@ -132,6 +132,36 @@ describe("EventStore", () => {
     expect(existsSync(join(dataDir, "transcripts", `${chat.id}.jsonl`))).toBe(true)
   })
 
+  test("pages recent transcript history and older entries by cursor", async () => {
+    const dataDir = await createTempDataDir()
+    const store = new EventStore(dataDir)
+    await store.initialize()
+
+    const project = await store.openProject("/tmp/project")
+    const chat = await store.createChat(project.id)
+
+    for (let index = 1; index <= 5; index += 1) {
+      await store.appendMessage(chat.id, entry(index % 2 === 0 ? "assistant_text" : "user_prompt", 200 + index, {
+        content: `message-${index}`,
+      }))
+    }
+
+    const recentPage = store.getRecentMessagesPage(chat.id, 2)
+    expect(recentPage.messages.map((message) => message._id)).toEqual(["assistant_text-204", "user_prompt-205"])
+    expect(recentPage.hasOlder).toBe(true)
+    expect(recentPage.olderCursor).not.toBeNull()
+
+    const olderPage = store.getMessagesPageBefore(chat.id, recentPage.olderCursor!, 2)
+    expect(olderPage.messages.map((message) => message._id)).toEqual(["assistant_text-202", "user_prompt-203"])
+    expect(olderPage.hasOlder).toBe(true)
+    expect(olderPage.olderCursor).not.toBeNull()
+
+    const oldestPage = store.getMessagesPageBefore(chat.id, olderPage.olderCursor!, 2)
+    expect(oldestPage.messages.map((message) => message._id)).toEqual(["user_prompt-201"])
+    expect(oldestPage.hasOlder).toBe(false)
+    expect(oldestPage.olderCursor).toBeNull()
+  })
+
   test("marks chats unread on completed turns and clears unread when marked read", async () => {
     const dataDir = await createTempDataDir()
     const store = new EventStore(dataDir)

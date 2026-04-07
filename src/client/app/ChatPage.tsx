@@ -1,7 +1,7 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type RefObject } from "react"
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type RefObject } from "react"
 import { ArrowDown, Flower, Upload } from "lucide-react"
 import { useOutletContext } from "react-router-dom"
-import type { ChatDiffSnapshot, HydratedTranscriptMessage } from "../../shared/types"
+import type { ChatDiffSnapshot } from "../../shared/types"
 import { ChatInput, type ChatInputHandle } from "../components/chat-ui/ChatInput"
 import { ChatNavbar } from "../components/chat-ui/ChatNavbar"
 import { RightSidebar } from "../components/chat-ui/RightSidebar"
@@ -10,7 +10,6 @@ import { DrainingIndicator } from "../components/messages/DrainingIndicator"
 import { ProcessingMessage } from "../components/messages/ProcessingMessage"
 import { Card, CardContent } from "../components/ui/card"
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "../components/ui/resizable"
-import { ScrollArea } from "../components/ui/scroll-area"
 import { actionMatchesEvent, getResolvedKeybindings } from "../lib/keybindings"
 import { cn } from "../lib/utils"
 import { deriveLatestContextWindowSnapshot, type ContextWindowSnapshot } from "../lib/contextWindow"
@@ -19,7 +18,6 @@ import {
   RIGHT_SIDEBAR_MIN_SIZE_PERCENT,
   useRightSidebarStore,
 } from "../stores/rightSidebarStore"
-import { useChatPreferencesStore } from "../stores/chatPreferencesStore"
 import { DEFAULT_PROJECT_TERMINAL_LAYOUT, useTerminalLayoutStore } from "../stores/terminalLayoutStore"
 import { useTerminalPreferencesStore } from "../stores/terminalPreferencesStore"
 import { shouldCloseTerminalPane } from "./terminalLayoutResize"
@@ -34,63 +32,8 @@ const EMPTY_STATE_TEXT = "What are we building?"
 const EMPTY_STATE_TYPING_INTERVAL_MS = 19
 const CHAT_NAVBAR_OFFSET_PX = 72
 const SCROLL_BUTTON_BOTTOM_PX = 120
-const TRANSCRIPT_TOC_BREAKPOINT_PX = 1200
 const DIFF_REFRESH_INTERVAL_MS = 5_000
 const EMPTY_DIFF_SNAPSHOT: ChatDiffSnapshot = { status: "unknown", files: [] }
-
-export interface TranscriptTocItem {
-  id: string
-  label: string
-  order: number
-}
-
-export function getTranscriptTocLabel(content: string) {
-  const firstLine = content
-    .split(/\r?\n/u)
-    .map((line) => line.trim())
-    .find((line) => line.length > 0)
-
-  return firstLine ?? "(attachment only)"
-}
-
-export function createTranscriptTocItems(messages: HydratedTranscriptMessage[]): TranscriptTocItem[] {
-  let order = 0
-
-  return messages.flatMap((message) => {
-    if (message.kind !== "user_prompt" || message.hidden) {
-      return []
-    }
-
-    order += 1
-    return [{
-      id: message.id,
-      label: getTranscriptTocLabel(message.content),
-      order,
-    }]
-  })
-}
-
-export function shouldShowTranscriptTocPanel(args: {
-  enabled: boolean
-  chatAreaWidth: number
-  itemCount: number
-}) {
-  return args.enabled && args.chatAreaWidth > TRANSCRIPT_TOC_BREAKPOINT_PX && args.itemCount > 0
-}
-
-export function scrollTranscriptMessageIntoView(
-  container: Pick<HTMLElement, "getBoundingClientRect" | "scrollTop" | "scrollTo">,
-  target: Pick<HTMLElement, "getBoundingClientRect">
-) {
-  const containerRect = container.getBoundingClientRect()
-  const targetRect = target.getBoundingClientRect()
-  const top = container.scrollTop + targetRect.top - containerRect.top - CHAT_NAVBAR_OFFSET_PX
-
-  container.scrollTo({
-    top: Math.max(0, top),
-    behavior: "smooth",
-  })
-}
 
 function sameContextWindowSnapshot(left: ContextWindowSnapshot | null, right: ContextWindowSnapshot | null) {
   if (left === right) return true
@@ -110,17 +53,17 @@ interface ChatTranscriptViewportProps {
   transcriptPaddingBottom: number
   localPath: string | null | undefined
   latestToolIds: KannaState["latestToolIds"]
+  isHistoryLoading: boolean
+  hasOlderHistory: boolean
   isProcessing: boolean
   runtimeStatus: string | null
   isDraining: boolean
   commandError: string | null
+  loadOlderHistory: () => Promise<void>
   onStopDraining: () => void
   onOpenLocalLink: KannaState["handleOpenLocalLink"]
   onAskUserQuestionSubmit: KannaState["handleAskUserQuestion"]
   onExitPlanModeConfirm: KannaState["handleExitPlanMode"]
-  chatAreaWidth: number
-  showTranscriptToc: boolean
-  transcriptTocItems: TranscriptTocItem[]
   showScrollButton: boolean
   onScrollChange: () => void
   scrollToBottom: () => void
@@ -135,17 +78,17 @@ const ChatTranscriptViewport = memo(function ChatTranscriptViewport({
   transcriptPaddingBottom,
   localPath,
   latestToolIds,
+  isHistoryLoading,
+  hasOlderHistory,
   isProcessing,
   runtimeStatus,
   isDraining,
   commandError,
+  loadOlderHistory,
   onStopDraining,
   onOpenLocalLink,
   onAskUserQuestionSubmit,
   onExitPlanModeConfirm,
-  chatAreaWidth,
-  showTranscriptToc,
-  transcriptTocItems,
   showScrollButton,
   onScrollChange,
   scrollToBottom,
@@ -153,77 +96,93 @@ const ChatTranscriptViewport = memo(function ChatTranscriptViewport({
   isEmptyStateTypingComplete,
   isPageFileDragActive,
 }: ChatTranscriptViewportProps) {
-  const shouldShowTranscriptToc = shouldShowTranscriptTocPanel({
-    enabled: showTranscriptToc,
-    chatAreaWidth,
-    itemCount: transcriptTocItems.length,
-  })
+  const previousMessageCountRef = useRef(messages.length)
+  const pendingPrependAnchorRef = useRef<{ scrollHeight: number; scrollTop: number } | null>(null)
+
+  const requestOlderHistory = useCallback(() => {
+    if (isHistoryLoading || !hasOlderHistory) return
+    const scrollContainer = scrollRef.current
+    if (scrollContainer) {
+      pendingPrependAnchorRef.current = {
+        scrollHeight: scrollContainer.scrollHeight,
+        scrollTop: scrollContainer.scrollTop,
+      }
+    }
+    void loadOlderHistory()
+  }, [hasOlderHistory, isHistoryLoading, loadOlderHistory, scrollRef])
+
+  const Header = useCallback(() => (
+    <div className="animate-fade-in pt-[72px] max-w-[800px] mx-auto">
+      {isHistoryLoading ? (
+        <div className="pb-4 text-center text-xs text-muted-foreground">
+          Loading older messages...
+        </div>
+      ) : null}
+    </div>
+  ), [isHistoryLoading])
+
+  const Footer = useCallback(() => (
+    <div className="animate-fade-in max-w-[800px] mx-auto">
+      {isProcessing ? <ProcessingMessage status={runtimeStatus ?? undefined} /> : null}
+      {!isProcessing && isDraining ? (
+        <DrainingIndicator onStop={() => void onStopDraining()} />
+      ) : null}
+      {commandError ? (
+        <div className="text-sm text-destructive border border-destructive/20 bg-destructive/5 rounded-xl px-4 py-3">
+          {commandError}
+        </div>
+      ) : null}
+      <div style={{ height: 250 }} aria-hidden="true" />
+    </div>
+  ), [commandError, isDraining, isProcessing, onStopDraining, runtimeStatus])
+
+  useLayoutEffect(() => {
+    const previousCount = previousMessageCountRef.current
+    const currentCount = messages.length
+
+    if (pendingPrependAnchorRef.current && !isHistoryLoading) {
+      const scrollContainer = scrollRef.current
+      if (scrollContainer && currentCount > previousCount) {
+        const heightDelta = scrollContainer.scrollHeight - pendingPrependAnchorRef.current.scrollHeight
+        scrollContainer.scrollTop = pendingPrependAnchorRef.current.scrollTop + heightDelta
+      }
+      pendingPrependAnchorRef.current = null
+    }
+
+    previousMessageCountRef.current = currentCount
+  }, [isHistoryLoading, messages.length, scrollRef])
+
+  const handleTranscriptScroll = useCallback(() => {
+    onScrollChange()
+    const scrollContainer = scrollRef.current
+    if (!scrollContainer) return
+    if (scrollContainer.scrollTop > 0) return
+    requestOlderHistory()
+  }, [onScrollChange, requestOlderHistory, scrollRef])
 
   return (
     <>
-        <ScrollArea
+        <div
           ref={scrollRef}
-          onScroll={onScrollChange}
-          className="flex-1 min-h-0 px-3 scroll-pt-[72px]"
+          onScroll={handleTranscriptScroll}
+          className="flex-1 min-h-0 overflow-x-hidden overflow-y-auto overscroll-contain px-3 scroll-pt-[72px] [scrollbar-gutter:auto]"
         >
-          {messages.length === 0 ? <div style={{ height: transcriptPaddingBottom }} aria-hidden="true" /> : null}
+          <Header />
           {messages.length > 0 ? (
-            <>
-              <div className="animate-fade-in space-y-5 pt-[72px] max-w-[800px] mx-auto">
-                <KannaTranscript
-                  messages={messages}
-                  isLoading={isProcessing}
-                  localPath={localPath ?? undefined}
-                  latestToolIds={latestToolIds}
-                  onOpenLocalLink={onOpenLocalLink}
-                  onAskUserQuestionSubmit={onAskUserQuestionSubmit}
-                  onExitPlanModeConfirm={onExitPlanModeConfirm}
-                />
-                {isProcessing ? <ProcessingMessage status={runtimeStatus ?? undefined} /> : null}
-                {!isProcessing && isDraining ? (
-                  <DrainingIndicator onStop={() => void onStopDraining()} />
-                ) : null}
-                {commandError ? (
-                  <div className="text-sm text-destructive border border-destructive/20 bg-destructive/5 rounded-xl px-4 py-3">
-                    {commandError}
-                  </div>
-                ) : null}
-              </div>
-              <div style={{ height: 250 }} aria-hidden="true" />
-            </>
-          ) : null}
-        </ScrollArea>
-
-        {shouldShowTranscriptToc ? (
-          <div
-            className="absolute -mt-1 right-3 border border-border/0 border-[1px] z-20 bottom-0 overflow-y-auto pb-[110px] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-            style={{ top: CHAT_NAVBAR_OFFSET_PX }}
-          >
-            <div className=" pl-1 backdrop-blur-md" data-testid="transcript-toc">
-              <div className="flex flex-col items-end gap-[1px]">
-                {transcriptTocItems.map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    className="flex max-w-[170px] items-center justify-end gap-1 rounded-xl px-2 py-1 text-left text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                    onClick={() => {
-                      const container = scrollRef.current
-                      const target = document.getElementById(`msg-${item.id}`)
-                      if (!container || !target) {
-                        return
-                      }
-
-                      scrollTranscriptMessageIntoView(container, target)
-                    }}
-                    title={item.label}
-                  >
-                    <span className="min-w-0 truncate">{item.label}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-        ) : null}
+            <KannaTranscript
+              messages={messages}
+              isLoading={isProcessing}
+              localPath={localPath ?? undefined}
+              latestToolIds={latestToolIds}
+              onOpenLocalLink={onOpenLocalLink}
+              onAskUserQuestionSubmit={onAskUserQuestionSubmit}
+              onExitPlanModeConfirm={onExitPlanModeConfirm}
+            />
+          ) : (
+            <div style={{ height: transcriptPaddingBottom }} aria-hidden="true" />
+          )}
+          <Footer />
+        </div>
 
         {messages.length === 0 ? (
           <div
@@ -427,7 +386,6 @@ export function ChatPage() {
   const [isEmptyStateTypingComplete, setIsEmptyStateTypingComplete] = useState(false)
   const [fixedTerminalHeight, setFixedTerminalHeight] = useState(0)
   const [isPageFileDragActive, setIsPageFileDragActive] = useState(false)
-  const [chatAreaWidth, setChatAreaWidth] = useState(0)
   const [diffRenderMode, setDiffRenderMode] = useState<"unified" | "split">("unified")
   const [wrapDiffLines, setWrapDiffLines] = useState(false)
   const pageFileDragDepthRef = useRef(0)
@@ -450,10 +408,8 @@ export function ChatPage() {
   const setRightSidebarSize = useRightSidebarStore((store) => store.setSize)
   const scrollback = useTerminalPreferencesStore((store) => store.scrollbackLines)
   const minColumnWidth = useTerminalPreferencesStore((store) => store.minColumnWidth)
-  const showTranscriptToc = useChatPreferencesStore((store) => store.showTranscriptToc)
   const keybindings = state.keybindings
   const resolvedKeybindings = useMemo(() => getResolvedKeybindings(keybindings), [keybindings])
-  const transcriptTocItems = useMemo(() => createTranscriptTocItems(state.messages), [state.messages])
   const baseContextWindowSnapshotRef = useRef<ContextWindowSnapshot | null>(null)
   const contextWindowSnapshot = useMemo(() => {
     const derivedSnapshot = deriveLatestContextWindowSnapshot(state.chatSnapshot?.messages ?? [])
@@ -802,22 +758,6 @@ export function ChatPage() {
     return () => observer.disconnect()
   }, [projectId, shouldRenderTerminalLayout, terminalLayout.mainSizes])
 
-  useEffect(() => {
-    const element = chatCardRef.current
-    if (!element) return
-
-    const updateWidth = () => {
-      const nextWidth = element.getBoundingClientRect().width
-      setChatAreaWidth((current) => (Math.abs(current - nextWidth) < 1 ? current : nextWidth))
-    }
-
-    const observer = new ResizeObserver(updateWidth)
-    observer.observe(element)
-    updateWidth()
-
-    return () => observer.disconnect()
-  }, [projectId, showRightSidebar, showTerminalPane, shouldRenderTerminalLayout, shouldRenderRightSidebarLayout])
-
   const clampRightSidebarSize = (size: number) => {
     if (!Number.isFinite(size)) {
       return rightSidebarLayout.size
@@ -892,17 +832,17 @@ export function ChatPage() {
           transcriptPaddingBottom={state.transcriptPaddingBottom}
           localPath={state.runtime?.localPath}
           latestToolIds={state.latestToolIds}
+          isHistoryLoading={state.isHistoryLoading}
+          hasOlderHistory={state.hasOlderHistory}
           isProcessing={state.isProcessing}
           runtimeStatus={state.runtime?.status ?? null}
           isDraining={state.isDraining}
           commandError={state.commandError}
+          loadOlderHistory={state.loadOlderHistory}
           onStopDraining={state.handleStopDraining}
           onOpenLocalLink={state.handleOpenLocalLink}
           onAskUserQuestionSubmit={state.handleAskUserQuestion}
           onExitPlanModeConfirm={state.handleExitPlanMode}
-          chatAreaWidth={chatAreaWidth}
-          showTranscriptToc={showTranscriptToc}
-          transcriptTocItems={transcriptTocItems}
           showScrollButton={state.showScrollButton}
           onScrollChange={state.updateScrollState}
           scrollToBottom={state.scrollToBottom}

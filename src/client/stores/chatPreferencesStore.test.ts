@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import {
-  DEFAULT_SHOW_TRANSCRIPT_TOC,
   migrateChatPreferencesState,
   NEW_CHAT_COMPOSER_ID,
   useChatPreferencesStore,
@@ -57,7 +56,6 @@ describe("migrateChatPreferencesState", () => {
         modelOptions: { reasoningEffort: "high", contextWindow: "1m" },
         planMode: false,
       },
-      showTranscriptToc: true,
     })
   })
 
@@ -89,34 +87,9 @@ describe("migrateChatPreferencesState", () => {
       planMode: false,
     })
   })
-
-  test("defaults transcript TOC visibility to enabled when migrating older state", () => {
-    const migrated = migrateChatPreferencesState({
-      defaultProvider: "last_used",
-      providerDefaults: {
-        claude: {
-          model: "opus",
-          modelOptions: { reasoningEffort: "high", contextWindow: "200k" },
-          planMode: false,
-        },
-      },
-    })
-
-    expect(migrated.showTranscriptToc).toBe(true)
-  })
 })
 
 describe("chat preference store", () => {
-  test("defaults transcript TOC visibility to enabled", () => {
-    expect(useChatPreferencesStore.getState().showTranscriptToc).toBe(DEFAULT_SHOW_TRANSCRIPT_TOC)
-  })
-
-  test("updates transcript TOC visibility", () => {
-    useChatPreferencesStore.getState().setShowTranscriptToc(false)
-
-    expect(useChatPreferencesStore.getState().showTranscriptToc).toBe(false)
-  })
-
   test("editing provider defaults does not change existing chat state", () => {
     useChatPreferencesStore.getState().setComposerState("chat-a", {
       provider: "codex",

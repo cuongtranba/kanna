@@ -3,7 +3,7 @@ import { existsSync, readFileSync as readFileSyncImmediate } from "node:fs"
 import { homedir } from "node:os"
 import path from "node:path"
 import { getDataDir, LOG_PREFIX } from "../shared/branding"
-import type { AgentProvider, TranscriptEntry } from "../shared/types"
+import type { AgentProvider, ChatHistoryPage, ChatHistorySnapshot, TranscriptEntry } from "../shared/types"
 import { STORE_VERSION } from "../shared/types"
 import {
   type ChatEvent,
@@ -19,12 +19,41 @@ import {
 import { resolveLocalPath } from "./paths"
 
 const COMPACTION_THRESHOLD_BYTES = 2 * 1024 * 1024
-
 interface LegacyTranscriptStats {
   hasLegacyData: boolean
   sources: Array<"snapshot" | "messages_log">
   chatCount: number
   entryCount: number
+}
+
+interface TranscriptPageResult {
+  entries: TranscriptEntry[]
+  hasOlder: boolean
+  olderCursor: string | null
+}
+
+function encodeHistoryCursor(index: number) {
+  return `idx:${index}`
+}
+
+function decodeCursor(cursor: string) {
+  if (cursor.startsWith("idx:")) {
+    const value = Number.parseInt(cursor.slice("idx:".length), 10)
+    if (!Number.isInteger(value) || value < 0) {
+      throw new Error("Invalid history cursor")
+    }
+    return value
+  }
+
+  throw new Error("Invalid history cursor")
+}
+
+function getHistorySnapshot(page: TranscriptPageResult, recentLimit: number): ChatHistorySnapshot {
+  return {
+    hasOlder: page.hasOlder,
+    olderCursor: page.olderCursor,
+    recentLimit,
+  }
 }
 
 export class EventStore {
@@ -557,6 +586,20 @@ export class EventStore {
     return chat
   }
 
+  private getMessagesPageFromEntries(entries: TranscriptEntry[], limit: number, beforeIndex?: number): TranscriptPageResult {
+    if (entries.length === 0) {
+      return { entries: [], hasOlder: false, olderCursor: null }
+    }
+
+    const endIndex = beforeIndex === undefined ? entries.length : Math.max(0, Math.min(beforeIndex, entries.length))
+    const startIndex = Math.max(0, endIndex - limit)
+    return {
+      entries: cloneTranscriptEntries(entries.slice(startIndex, endIndex)),
+      hasOlder: startIndex > 0,
+      olderCursor: startIndex > 0 ? encodeHistoryCursor(startIndex) : null,
+    }
+  }
+
   getMessages(chatId: string) {
     if (this.cachedTranscript?.chatId === chatId) {
       return cloneTranscriptEntries(this.cachedTranscript.entries)
@@ -571,6 +614,49 @@ export class EventStore {
     const entries = this.loadTranscriptFromDisk(chatId)
     this.cachedTranscript = { chatId, entries }
     return cloneTranscriptEntries(entries)
+  }
+
+  getRecentMessagesPage(chatId: string, limit: number): ChatHistoryPage {
+    if (limit <= 0) {
+      return { messages: [], hasOlder: false, olderCursor: null }
+    }
+
+    const entries = this.getMessages(chatId)
+    const page = this.getMessagesPageFromEntries(entries, limit)
+
+    return {
+      messages: page.entries,
+      hasOlder: page.hasOlder,
+      olderCursor: page.olderCursor,
+    }
+  }
+
+  getMessagesPageBefore(chatId: string, beforeCursor: string, limit: number): ChatHistoryPage {
+    if (limit <= 0) {
+      return { messages: [], hasOlder: false, olderCursor: null }
+    }
+
+    const beforeIndex = decodeCursor(beforeCursor)
+    const entries = this.getMessages(chatId)
+    const page = this.getMessagesPageFromEntries(entries, limit, beforeIndex)
+
+    return {
+      messages: page.entries,
+      hasOlder: page.hasOlder,
+      olderCursor: page.olderCursor,
+    }
+  }
+
+  getRecentChatHistory(chatId: string, recentLimit: number) {
+    const page = this.getRecentMessagesPage(chatId, recentLimit)
+    return {
+      messages: page.messages,
+      history: getHistorySnapshot({
+        entries: page.messages,
+        hasOlder: page.hasOlder,
+        olderCursor: page.olderCursor,
+      }, recentLimit),
+    }
   }
 
   listProjects() {

@@ -105,7 +105,7 @@ export function deriveChatSnapshot(
   activeStatuses: Map<string, KannaStatus>,
   drainingChatIds: Set<string>,
   chatId: string,
-  getMessages: (chatId: string) => ChatSnapshot["messages"],
+  getMessages: (chatId: string) => Pick<ChatSnapshot, "messages" | "history">,
   getDiffs: (chatId: string) => ChatDiffSnapshot
 ): ChatSnapshot | null {
   const chat = state.chatsById.get(chatId)
@@ -125,9 +125,12 @@ export function deriveChatSnapshot(
     sessionToken: chat.sessionToken,
   }
 
+  const transcript = getMessages(chat.id)
+
   return {
     runtime,
-    messages: getMessages(chat.id),
+    messages: transcript.messages,
+    history: transcript.history,
     diffs: getDiffs(chat.id),
     availableProviders: [...SERVER_PROVIDERS],
   }

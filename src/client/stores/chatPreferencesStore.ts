@@ -93,10 +93,8 @@ type PersistedComposerState =
 
 type PersistedChatPreferencesState = Pick<
   ChatPreferencesState,
-  "defaultProvider" | "providerDefaults" | "chatStates" | "legacyComposerState" | "showTranscriptToc"
+  "defaultProvider" | "providerDefaults" | "chatStates" | "legacyComposerState"
 > & LegacyPersistedChatPreferencesState
-
-export const DEFAULT_SHOW_TRANSCRIPT_TOC = true
 
 function normalizeCodexModel(model?: string) {
   return model === "gpt-5-codex" ? "gpt-5.3-codex" : (model ?? "gpt-5.4")
@@ -365,9 +363,7 @@ interface ChatPreferencesState {
   providerDefaults: ChatProviderPreferences
   chatStates: Record<string, ComposerState>
   legacyComposerState: ComposerState | null
-  showTranscriptToc: boolean
   setDefaultProvider: (provider: DefaultProviderPreference) => void
-  setShowTranscriptToc: (showTranscriptToc: boolean) => void
   setProviderDefaultModel: (provider: AgentProvider, model: string) => void
   setProviderDefaultModelOptions: <TProvider extends AgentProvider>(
     provider: TProvider,
@@ -389,7 +385,7 @@ interface ChatPreferencesState {
 
 export function migrateChatPreferencesState(
   persistedState: Partial<PersistedChatPreferencesState> | undefined
-): Pick<ChatPreferencesState, "defaultProvider" | "providerDefaults" | "chatStates" | "legacyComposerState" | "showTranscriptToc"> {
+): Pick<ChatPreferencesState, "defaultProvider" | "providerDefaults" | "chatStates" | "legacyComposerState"> {
   const providerDefaults = normalizeProviderDefaults(persistedState?.providerDefaults)
   const legacyComposerState = normalizePersistedComposerState(
     persistedState?.legacyComposerState ?? persistedState?.composerState,
@@ -400,9 +396,6 @@ export function migrateChatPreferencesState(
     defaultProvider: normalizeDefaultProvider(persistedState?.defaultProvider),
     providerDefaults,
     chatStates: normalizeChatStates(persistedState?.chatStates, providerDefaults),
-    showTranscriptToc: typeof persistedState?.showTranscriptToc === "boolean"
-      ? persistedState.showTranscriptToc
-      : DEFAULT_SHOW_TRANSCRIPT_TOC,
     legacyComposerState: legacyComposerState ?? normalizeComposerState(
       undefined,
       providerDefaults,
@@ -418,7 +411,6 @@ export const useChatPreferencesStore = create<ChatPreferencesState>()(
       defaultProvider: "last_used",
       providerDefaults: createDefaultProviderDefaults(),
       chatStates: {},
-      showTranscriptToc: DEFAULT_SHOW_TRANSCRIPT_TOC,
       legacyComposerState: {
         provider: "claude",
         model: "opus",
@@ -426,7 +418,6 @@ export const useChatPreferencesStore = create<ChatPreferencesState>()(
         planMode: false,
       },
       setDefaultProvider: (defaultProvider) => set({ defaultProvider }),
-      setShowTranscriptToc: (showTranscriptToc) => set({ showTranscriptToc }),
       setProviderDefaultModel: (provider, model) =>
         set((state) => ({
           providerDefaults: {
