@@ -25,6 +25,33 @@ export type TranscriptRenderItem =
   | { type: "single"; message: HydratedTranscriptMessage; index: number }
   | { type: "tool-group"; messages: HydratedTranscriptMessage[]; startIndex: number }
 
+export interface ResolvedSingleTranscriptRow {
+  kind: "single"
+  id: string
+  message: HydratedTranscriptMessage
+  index: number
+  isLoading: boolean
+  localPath?: string
+  isFirstSystem: boolean
+  isFirstAccount: boolean
+  isLatestAskUserQuestion: boolean
+  isLatestExitPlanMode: boolean
+  isLatestTodoWrite: boolean
+  hideResult: boolean
+  isFinalStatus: boolean
+}
+
+export interface ResolvedToolGroupTranscriptRow {
+  kind: "tool-group"
+  id: string
+  startIndex: number
+  messages: HydratedTranscriptMessage[]
+  isLoading: boolean
+  localPath?: string
+}
+
+export type ResolvedTranscriptRow = ResolvedSingleTranscriptRow | ResolvedToolGroupTranscriptRow
+
 function isCollapsibleToolCall(message: HydratedTranscriptMessage) {
   if (message.kind !== "tool") return false
   const toolName = (message as ProcessedToolCall).toolName
@@ -58,6 +85,52 @@ export function buildTranscriptRenderItems(messages: HydratedTranscriptMessage[]
   }
 
   return result
+}
+
+function getTranscriptRenderItemId(item: TranscriptRenderItem) {
+  if (item.type === "single") {
+    return item.message.id
+  }
+
+  const firstId = item.messages[0]?.id ?? item.startIndex
+  const lastId = item.messages[item.messages.length - 1]?.id ?? item.startIndex
+  return `tool-group:${firstId}:${lastId}:${item.messages.length}`
+}
+
+function shouldRenderTranscriptSingleRow(
+  message: HydratedTranscriptMessage,
+  {
+    isFirstSystem,
+    isFirstAccount,
+    isLatestTodoWrite,
+    hideResult,
+    isFinalStatus,
+  }: {
+    isFirstSystem: boolean
+    isFirstAccount: boolean
+    isLatestTodoWrite: boolean
+    hideResult: boolean
+    isFinalStatus: boolean
+  }
+) {
+  if (message.hidden) return false
+
+  switch (message.kind) {
+    case "system_init":
+      return isFirstSystem
+    case "account_info":
+      return isFirstAccount
+    case "tool":
+      return message.toolKind !== "todo_write" || isLatestTodoWrite
+    case "result":
+      return !hideResult && (!message.success || message.durationMs > 60000)
+    case "context_window_updated":
+      return false
+    case "status":
+      return isFinalStatus
+    default:
+      return true
+  }
 }
 
 function sameStringArray(left: string[] | undefined, right: string[] | undefined) {
@@ -154,6 +227,16 @@ const TranscriptSingleRow = memo(function TranscriptSingleRow({
   onExitPlanModeConfirm,
 }: TranscriptSingleRowProps) {
   let rendered: React.ReactNode = null
+
+  if (!shouldRenderTranscriptSingleRow(message, {
+    isFirstSystem,
+    isFirstAccount,
+    isLatestTodoWrite,
+    hideResult,
+    isFinalStatus,
+  })) {
+    return null
+  }
 
   if (message.kind === "user_prompt") {
     rendered = <UserMessage key={message.id} content={message.content} attachments={message.attachments} />
@@ -280,6 +363,62 @@ const TranscriptToolGroup = memo(function TranscriptToolGroup({
   && prev.messages.every((message, index) => sameMessage(message, next.messages[index]!))
 ))
 
+export function buildResolvedTranscriptRows(
+  messages: HydratedTranscriptMessage[],
+  {
+    isLoading,
+    localPath,
+    latestToolIds,
+  }: {
+    isLoading: boolean
+    localPath?: string
+    latestToolIds: Record<string, string | null>
+  }
+): ResolvedTranscriptRow[] {
+  const renderItems = buildTranscriptRenderItems(messages)
+  const firstSystemIndex = messages.findIndex((entry) => entry.kind === "system_init")
+  const firstAccountIndex = messages.findIndex((entry) => entry.kind === "account_info")
+  const rows: ResolvedTranscriptRow[] = []
+
+  for (const item of renderItems) {
+    if (item.type === "tool-group") {
+      rows.push({
+        kind: "tool-group",
+        id: getTranscriptRenderItemId(item),
+        startIndex: item.startIndex,
+        messages: item.messages,
+        isLoading: isLoading && item.messages.some((message) => message.kind === "tool" && message.result === undefined),
+        localPath,
+      })
+      continue
+    }
+
+    const previousMessage = messages[item.index - 1]
+    const nextMessage = messages[item.index + 1]
+    const row: ResolvedSingleTranscriptRow = {
+      kind: "single",
+      id: getTranscriptRenderItemId(item),
+      message: item.message,
+      index: item.index,
+      isLoading: item.message.kind === "tool" && item.message.result === undefined && isLoading,
+      localPath,
+      isFirstSystem: firstSystemIndex === item.index,
+      isFirstAccount: firstAccountIndex === item.index,
+      isLatestAskUserQuestion: item.message.id === latestToolIds.AskUserQuestion,
+      isLatestExitPlanMode: item.message.id === latestToolIds.ExitPlanMode,
+      isLatestTodoWrite: item.message.id === latestToolIds.TodoWrite,
+      hideResult: nextMessage?.kind === "context_cleared" || previousMessage?.kind === "context_cleared",
+      isFinalStatus: item.index === messages.length - 1,
+    }
+
+    if (shouldRenderTranscriptSingleRow(row.message, row)) {
+      rows.push(row)
+    }
+  }
+
+  return rows
+}
+
 interface KannaTranscriptProps {
   messages: HydratedTranscriptMessage[]
   isLoading: boolean
@@ -295,13 +434,7 @@ interface KannaTranscriptProps {
 }
 
 interface KannaTranscriptRowProps {
-  item: TranscriptRenderItem
-  messages: HydratedTranscriptMessage[]
-  isLoading: boolean
-  localPath?: string
-  latestToolIds: Record<string, string | null>
-  firstSystemIndex: number
-  firstAccountIndex: number
+  row: ResolvedTranscriptRow
   onAskUserQuestionSubmit: (
     toolUseId: string,
     questions: AskUserQuestionItem[],
@@ -311,48 +444,69 @@ interface KannaTranscriptRowProps {
 }
 
 export const KannaTranscriptRow = memo(function KannaTranscriptRow({
-  item,
-  messages,
-  isLoading,
-  localPath,
-  latestToolIds,
-  firstSystemIndex,
-  firstAccountIndex,
+  row,
   onAskUserQuestionSubmit,
   onExitPlanModeConfirm,
 }: KannaTranscriptRowProps) {
-  if (item.type === "tool-group") {
-    const groupIsLoading = isLoading && item.messages.some((message) => message.kind === "tool" && message.result === undefined)
+  if (row.kind === "tool-group") {
     return (
       <TranscriptToolGroup
-        startIndex={item.startIndex}
-        messages={item.messages}
-        isLoading={groupIsLoading}
-        localPath={localPath}
+        startIndex={row.startIndex}
+        messages={row.messages}
+        isLoading={row.isLoading}
+        localPath={row.localPath}
       />
     )
   }
 
-  const previousMessage = messages[item.index - 1]
-  const nextMessage = messages[item.index + 1]
-  const rowIsLoading = item.message.kind === "tool" && item.message.result === undefined && isLoading
   return (
     <TranscriptSingleRow
-      message={item.message}
-      index={item.index}
-      isLoading={rowIsLoading}
-      localPath={localPath}
-      isFirstSystem={firstSystemIndex === item.index}
-      isFirstAccount={firstAccountIndex === item.index}
-      isLatestAskUserQuestion={item.message.id === latestToolIds.AskUserQuestion}
-      isLatestExitPlanMode={item.message.id === latestToolIds.ExitPlanMode}
-      isLatestTodoWrite={item.message.id === latestToolIds.TodoWrite}
-      hideResult={nextMessage?.kind === "context_cleared" || previousMessage?.kind === "context_cleared"}
-      isFinalStatus={item.index === messages.length - 1}
+      message={row.message}
+      index={row.index}
+      isLoading={row.isLoading}
+      localPath={row.localPath}
+      isFirstSystem={row.isFirstSystem}
+      isFirstAccount={row.isFirstAccount}
+      isLatestAskUserQuestion={row.isLatestAskUserQuestion}
+      isLatestExitPlanMode={row.isLatestExitPlanMode}
+      isLatestTodoWrite={row.isLatestTodoWrite}
+      hideResult={row.hideResult}
+      isFinalStatus={row.isFinalStatus}
       onAskUserQuestionSubmit={onAskUserQuestionSubmit}
       onExitPlanModeConfirm={onExitPlanModeConfirm}
     />
   )
+}, (prev, next) => {
+  if (prev.onAskUserQuestionSubmit !== next.onAskUserQuestionSubmit) return false
+  if (prev.onExitPlanModeConfirm !== next.onExitPlanModeConfirm) return false
+  if (prev.row.kind !== next.row.kind) return false
+  if (prev.row.id !== next.row.id) return false
+
+  if (prev.row.kind === "tool-group" && next.row.kind === "tool-group") {
+    const previousRow = prev.row
+    const nextRow = next.row
+    return previousRow.startIndex === nextRow.startIndex
+      && previousRow.isLoading === nextRow.isLoading
+      && previousRow.localPath === nextRow.localPath
+      && previousRow.messages.length === nextRow.messages.length
+      && previousRow.messages.every((message, index) => sameMessage(message, nextRow.messages[index]!))
+  }
+
+  if (prev.row.kind === "single" && next.row.kind === "single") {
+    return prev.row.index === next.row.index
+      && prev.row.isLoading === next.row.isLoading
+      && prev.row.localPath === next.row.localPath
+      && prev.row.isFirstSystem === next.row.isFirstSystem
+      && prev.row.isFirstAccount === next.row.isFirstAccount
+      && prev.row.isLatestAskUserQuestion === next.row.isLatestAskUserQuestion
+      && prev.row.isLatestExitPlanMode === next.row.isLatestExitPlanMode
+      && prev.row.isLatestTodoWrite === next.row.isLatestTodoWrite
+      && prev.row.hideResult === next.row.hideResult
+      && prev.row.isFinalStatus === next.row.isFinalStatus
+      && sameMessage(prev.row.message, next.row.message)
+  }
+
+  return false
 })
 
 function KannaTranscriptImpl({
@@ -364,25 +518,21 @@ function KannaTranscriptImpl({
   onAskUserQuestionSubmit,
   onExitPlanModeConfirm,
 }: KannaTranscriptProps) {
-  const renderItems = useMemo(() => buildTranscriptRenderItems(messages), [messages])
-  const firstSystemIndex = useMemo(() => messages.findIndex((entry) => entry.kind === "system_init"), [messages])
-  const firstAccountIndex = useMemo(() => messages.findIndex((entry) => entry.kind === "account_info"), [messages])
+  const rows = useMemo(() => buildResolvedTranscriptRows(messages, {
+    isLoading,
+    localPath,
+    latestToolIds,
+  }), [isLoading, latestToolIds, localPath, messages])
 
   return (
     <OpenLocalLinkProvider onOpenLocalLink={onOpenLocalLink}>
-      {renderItems.map((item) => (
+      {rows.map((row) => (
         <div
-          key={item.type === "tool-group" ? `group-${item.startIndex}` : item.message.id}
+          key={row.id}
           className="mx-auto max-w-[800px] pb-5"
         >
           <KannaTranscriptRow
-            item={item}
-            messages={messages}
-            isLoading={isLoading}
-            localPath={localPath}
-            latestToolIds={latestToolIds}
-            firstSystemIndex={firstSystemIndex}
-            firstAccountIndex={firstAccountIndex}
+            row={row}
             onAskUserQuestionSubmit={onAskUserQuestionSubmit}
             onExitPlanModeConfirm={onExitPlanModeConfirm}
           />

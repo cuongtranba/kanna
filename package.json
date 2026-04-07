@@ -68,6 +68,7 @@
     "@radix-ui/react-tooltip": "^1.2.8",
     "@tailwindcss/postcss": "^4.1.18",
     "@tailwindcss/typography": "^0.5.19",
+    "@tanstack/react-virtual": "^3.13.23",
     "@types/bun": "latest",
     "@types/node": "^24.10.1",
     "@types/qrcode": "^1.5.6",
