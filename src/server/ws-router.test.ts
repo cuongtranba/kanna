@@ -677,7 +677,7 @@ describe("ws-router", () => {
 
     const discardCalls: Array<{ chatId: string; projectPath: string; path: string }> = []
     const diffStore = {
-      getSnapshot: () => ({ status: "ready" as const, files: [], aheadCount: 0, behindCount: 0, lastFetchedAt: undefined }),
+      getSnapshot: () => ({ status: "ready" as const, files: [], defaultBranchName: "main", originRepoSlug: "acme/repo", aheadCount: 0, behindCount: 0, lastFetchedAt: undefined }),
       refreshSnapshot: async () => false,
       syncBranch: async () => ({ ok: true as const, action: "fetch" as const, snapshotChanged: false }),
       generateCommitMessage: async () => ({ subject: "", body: "" }),
@@ -782,7 +782,7 @@ describe("ws-router", () => {
         getProject: (projectId: string) => state.projectsById.get(projectId) ?? null,
       } as never,
       diffStore: {
-        getSnapshot: () => ({ status: "ready" as const, files: [], aheadCount: 0, behindCount: 0, lastFetchedAt: undefined }),
+        getSnapshot: () => ({ status: "ready" as const, files: [], defaultBranchName: "main", originRepoSlug: "acme/repo", aheadCount: 0, behindCount: 0, lastFetchedAt: undefined }),
         refreshSnapshot: async () => false,
         syncBranch: async () => ({ ok: true as const, action: "fetch" as const, snapshotChanged: false }),
         generateCommitMessage: async () => ({ subject: "", body: "" }),

@@ -785,7 +785,7 @@ export function ChatPage() {
     return result
   }, [dialog, refreshDiffs, state.socket])
 
-  const handleSyncBranch = useCallback(async (action: "fetch" | "pull") => {
+  const handleSyncBranch = useCallback(async (action: "fetch" | "pull" | "publish") => {
     const chatId = activeChatIdRef.current
     if (!chatId) {
       return null

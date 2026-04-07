@@ -523,6 +523,8 @@ export interface ChatBranchListResult {
 export interface ChatDiffSnapshot {
   status: "unknown" | "ready" | "no_repo"
   branchName?: string
+  defaultBranchName?: string
+  originRepoSlug?: string
   hasUpstream?: boolean
   aheadCount?: number
   behindCount?: number
@@ -533,7 +535,7 @@ export interface ChatDiffSnapshot {
 
 export interface ChatSyncSuccess {
   ok: true
-  action: "fetch" | "pull"
+  action: "fetch" | "pull" | "publish"
   branchName?: string
   aheadCount?: number
   behindCount?: number
@@ -542,7 +544,7 @@ export interface ChatSyncSuccess {
 
 export interface ChatSyncFailure {
   ok: false
-  action: "fetch" | "pull"
+  action: "fetch" | "pull" | "publish"
   title: string
   message: string
   detail?: string

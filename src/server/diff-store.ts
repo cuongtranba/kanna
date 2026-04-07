@@ -20,6 +20,8 @@ import { inferProjectFileContentType } from "./uploads"
 interface StoredChatDiffState {
   status: ChatDiffSnapshot["status"]
   branchName?: string
+  defaultBranchName?: string
+  originRepoSlug?: string
   hasUpstream?: boolean
   aheadCount?: number
   behindCount?: number
@@ -32,6 +34,8 @@ function createEmptyState(): StoredChatDiffState {
   return {
     status: "unknown",
     branchName: undefined,
+    defaultBranchName: undefined,
+    originRepoSlug: undefined,
     hasUpstream: undefined,
     aheadCount: undefined,
     behindCount: undefined,
@@ -47,6 +51,8 @@ function snapshotsEqual(left: StoredChatDiffState | undefined, right: StoredChat
   }
   if (left.status !== right.status) return false
   if (left.branchName !== right.branchName) return false
+  if (left.defaultBranchName !== right.defaultBranchName) return false
+  if (left.originRepoSlug !== right.originRepoSlug) return false
   if (left.hasUpstream !== right.hasUpstream) return false
   if (left.aheadCount !== right.aheadCount) return false
   if (left.behindCount !== right.behindCount) return false
@@ -742,6 +748,8 @@ export class DiffStore {
     return {
       status: state.status,
       branchName: state.branchName,
+      defaultBranchName: state.defaultBranchName,
+      originRepoSlug: state.originRepoSlug,
       hasUpstream: state.hasUpstream,
       aheadCount: state.aheadCount,
       behindCount: state.behindCount,
@@ -762,6 +770,8 @@ export class DiffStore {
       const nextState = {
         status: "no_repo",
         branchName: undefined,
+        defaultBranchName: undefined,
+        originRepoSlug: undefined,
         hasUpstream: undefined,
         aheadCount: undefined,
         behindCount: undefined,
@@ -776,6 +786,9 @@ export class DiffStore {
 
     const files = await computeCurrentFiles(repo.repoRoot, repo.baseCommit)
     const branchName = await getBranchName(repo.repoRoot)
+    const defaultBranchName = await resolveDefaultBranchName(repo.repoRoot)
+    const originRemoteUrl = await getOriginRemoteUrl(repo.repoRoot)
+    const originRepoSlug = extractGitHubRepoSlug(originRemoteUrl) ?? undefined
     const hasUpstream = await hasUpstreamBranch(repo.repoRoot)
     const { aheadCount, behindCount } = hasUpstream
       ? await getUpstreamStatusCounts(repo.repoRoot)
@@ -791,6 +804,8 @@ export class DiffStore {
     const nextState = {
       status: "ready",
       branchName,
+      defaultBranchName,
+      originRepoSlug,
       hasUpstream,
       aheadCount,
       behindCount,
@@ -1094,7 +1109,7 @@ export class DiffStore {
   async syncBranch(args: {
     chatId: string
     projectPath: string
-    action: "fetch" | "pull"
+    action: "fetch" | "pull" | "publish"
   }): Promise<ChatSyncResult> {
     const repo = await resolveRepo(args.projectPath)
     if (!repo) {
@@ -1102,6 +1117,46 @@ export class DiffStore {
     }
 
     const hasUpstream = await hasUpstreamBranch(repo.repoRoot)
+    if (args.action === "publish") {
+      const publishResult = await runGit(["push", "-u", "origin", "HEAD"], repo.repoRoot)
+      if (publishResult.exitCode !== 0) {
+        const detail = formatGitFailure(publishResult)
+        const normalized = detail.toLowerCase()
+        let title = "Publish branch failed"
+        let message = summarizeGitFailure(detail, "Git could not publish this branch.")
+
+        if (normalized.includes("could not read from remote repository") || normalized.includes("authentication failed") || normalized.includes("permission denied")) {
+          title = "Remote authentication failed"
+          message = "Git could not authenticate with the remote repository."
+        }
+
+        return {
+          ok: false,
+          action: args.action,
+          title,
+          message,
+          detail,
+          snapshotChanged: false,
+        }
+      }
+
+      const snapshotChanged = await this.refreshSnapshot(args.chatId, args.projectPath)
+      const branchName = await getBranchName(repo.repoRoot)
+      const nextHasUpstream = await hasUpstreamBranch(repo.repoRoot)
+      const { aheadCount, behindCount } = nextHasUpstream
+        ? await getUpstreamStatusCounts(repo.repoRoot)
+        : { aheadCount: undefined, behindCount: undefined }
+
+      return {
+        ok: true,
+        action: args.action,
+        branchName,
+        aheadCount,
+        behindCount,
+        snapshotChanged,
+      }
+    }
+
     if (args.action === "pull" && !hasUpstream) {
       return {
         ok: false,

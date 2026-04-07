@@ -79,7 +79,7 @@ export type ClientCommand =
     }
   | { type: "chat.refreshDiffs"; chatId: string }
   | { type: "chat.listBranches"; chatId: string }
-  | { type: "chat.syncBranch"; chatId: string; action: "fetch" | "pull" }
+  | { type: "chat.syncBranch"; chatId: string; action: "fetch" | "pull" | "publish" }
   | {
       type: "chat.checkoutBranch"
       chatId: string

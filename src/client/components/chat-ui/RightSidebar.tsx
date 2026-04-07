@@ -1,5 +1,5 @@
 import { PatchDiff } from "@pierre/diffs/react"
-import { Ban, Check, ChevronDown, ChevronUp, Code, Columns2, Copy, Download, Ellipsis, GitBranch, GitPullRequest, LoaderCircle, Minus, RefreshCw, Rows3, Search, Trash2, WrapText } from "lucide-react"
+import { Ban, Check, ChevronDown, ChevronUp, Code, Columns2, Copy, Download, Ellipsis, GitBranch, GitPullRequest, LoaderCircle, Minus, RefreshCw, Rows3, Search, Trash2, Upload, WrapText } from "lucide-react"
 import { memo, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode, type RefObject } from "react"
 import type {
   ChatAttachment,
@@ -66,7 +66,7 @@ interface RightSidebarProps {
   onCreateBranch: () => Promise<void>
   onGenerateCommitMessage: (args: { paths: string[] }) => Promise<{ subject: string; body: string }>
   onCommit: (args: { paths: string[]; summary: string; description: string; mode: DiffCommitMode }) => Promise<DiffCommitResult | null>
-  onSyncWithRemote: (action: "fetch" | "pull") => Promise<unknown>
+  onSyncWithRemote: (action: "fetch" | "pull" | "publish") => Promise<unknown>
   onDiffRenderModeChange: (mode: DiffRenderMode) => void
   onWrapLinesChange: (wrap: boolean) => void
   onClose: () => void
@@ -728,7 +728,25 @@ function RightSidebarImpl({
   const isBusy = isGenerating || isCommitting
   const branchHistory = diffs.branchHistory?.entries ?? []
   const behindCount = diffs.behindCount ?? 0
-  const syncAction: "fetch" | "pull" = behindCount > 0 ? "pull" : "fetch"
+  const isPublishedBranch = diffs.hasUpstream === true
+  const isPublishableBranch = diffs.hasUpstream === false && Boolean(diffs.branchName)
+  const encodedBranchName = diffs.branchName
+    ? diffs.branchName.split("/").map((segment) => encodeURIComponent(segment)).join("/")
+    : null
+  const syncAction: "fetch" | "pull" | "publish" = isPublishableBranch
+    ? "publish"
+    : behindCount > 0
+      ? "pull"
+      : "fetch"
+  const compareUrl = diffs.originRepoSlug && encodedBranchName
+    ? `https://github.com/${diffs.originRepoSlug}/compare/${encodedBranchName}?expand=1`
+    : null
+  const canOpenPullRequest = Boolean(
+    isPublishedBranch
+    && compareUrl
+    && diffs.branchName
+    && diffs.branchName !== diffs.defaultBranchName
+  )
   const canGenerate = diffs.status === "ready"
     && selectedCount > 0
     && !isBusy
@@ -804,23 +822,7 @@ function RightSidebarImpl({
             />
           </div>
           {diffs.status === "ready" ? (
-            syncAction === "fetch" ? (
-              <Tooltip delayDuration={0}>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => void handleSync()}
-                    disabled={isSyncing}
-                    className="h-7 gap-1.5 px-2 text-xs hover:!bg-transparent hover:!border-border/0"
-                  >
-                    {isSyncing ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-                    <span>Fetch</span>
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>{formatFetchTooltip(diffs.lastFetchedAt)}</TooltipContent>
-              </Tooltip>
-            ) : (
+            syncAction === "publish" ? (
               <Button
                 variant="ghost"
                 size="sm"
@@ -828,12 +830,57 @@ function RightSidebarImpl({
                 disabled={isSyncing}
                 className="h-7 gap-1.5 px-2 text-xs hover:!bg-transparent hover:!border-border/0"
               >
-                {isSyncing ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
-                <span>Pull</span>
-                <span className="inline-flex min-w-4 items-center justify-center rounded-full bg-muted px-1 text-[10px] text-muted-foreground">
-                  {behindCount}
-                </span>
+                {isSyncing ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+                <span>Publish Branch</span>
               </Button>
+            ) : (
+              <div className="flex items-center gap-1">
+                {syncAction === "fetch" ? (
+                  <Tooltip delayDuration={0}>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => void handleSync()}
+                        disabled={isSyncing}
+                        className="h-7 gap-1.5 px-2 text-xs hover:!bg-transparent hover:!border-border/0"
+                      >
+                        {isSyncing ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                        <span>Fetch</span>
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>{formatFetchTooltip(diffs.lastFetchedAt)}</TooltipContent>
+                  </Tooltip>
+                ) : (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => void handleSync()}
+                    disabled={isSyncing}
+                    className="h-7 gap-1.5 px-2 text-xs hover:!bg-transparent hover:!border-border/0"
+                  >
+                    {isSyncing ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+                    <span>Pull</span>
+                    <span className="inline-flex min-w-4 items-center justify-center rounded-full bg-muted px-1 text-[10px] text-muted-foreground">
+                      {behindCount}
+                    </span>
+                  </Button>
+                )}
+                {canOpenPullRequest && compareUrl ? (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      if (typeof window === "undefined") return
+                      window.open(compareUrl, "_blank", "noopener,noreferrer")
+                    }}
+                    className="h-7 gap-1.5 px-2 text-xs hover:!bg-transparent hover:!border-border/0"
+                  >
+                    <GitPullRequest className="h-3.5 w-3.5" />
+                    <span>Open PR</span>
+                  </Button>
+                ) : null}
+              </div>
             )
           ) : null}
         </div>
