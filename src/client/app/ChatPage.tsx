@@ -581,6 +581,7 @@ export function ChatPage() {
   const [typedEmptyStateText, setTypedEmptyStateText] = useState("")
   const [isEmptyStateTypingComplete, setIsEmptyStateTypingComplete] = useState(false)
   const [fixedTerminalHeight, setFixedTerminalHeight] = useState(0)
+  const [layoutWidth, setLayoutWidth] = useState(0)
   const [isPageFileDragActive, setIsPageFileDragActive] = useState(false)
   const [diffRenderMode, setDiffRenderMode] = useState<"unified" | "split">("unified")
   const [wrapDiffLines, setWrapDiffLines] = useState(false)
@@ -622,6 +623,17 @@ export function ChatPage() {
   const shouldRenderTerminalLayout = Boolean(projectId && hasTerminals)
   const showRightSidebar = Boolean(projectId && rightSidebarLayout.isVisible)
   const shouldRenderRightSidebarLayout = Boolean(projectId)
+  const clampRightSidebarSize = useCallback((size: number, widthOverride?: number) => {
+    if (!Number.isFinite(size)) {
+      return rightSidebarLayout.size
+    }
+    const nextLayoutWidth = widthOverride ?? layoutWidth
+    const minPercentFromWidth = nextLayoutWidth > 0
+      ? (RIGHT_SIDEBAR_MIN_WIDTH_PX / nextLayoutWidth) * 100
+      : RIGHT_SIDEBAR_MIN_SIZE_PERCENT
+    return Math.max(RIGHT_SIDEBAR_MIN_SIZE_PERCENT, minPercentFromWidth, size)
+  }, [layoutWidth, rightSidebarLayout.size])
+  const effectiveRightSidebarSize = clampRightSidebarSize(rightSidebarLayout.size)
 
   const {
     isAnimating: isTerminalAnimating,
@@ -645,7 +657,7 @@ export function ChatPage() {
     projectId,
     shouldRenderRightSidebarLayout,
     showRightSidebar,
-    rightSidebarSize: rightSidebarLayout.size,
+    rightSidebarSize: effectiveRightSidebarSize,
   })
 
   useStickyChatFocus({
@@ -658,6 +670,22 @@ export function ChatPage() {
   useEffect(() => {
     activeChatIdRef.current = state.activeChatId
   }, [state.activeChatId])
+
+  useLayoutEffect(() => {
+    const element = layoutRootRef.current
+    if (!element) return
+
+    const updateWidth = () => {
+      const nextWidth = element.clientWidth
+      setLayoutWidth((current) => (Math.abs(current - nextWidth) < 1 ? current : nextWidth))
+    }
+
+    const observer = new ResizeObserver(updateWidth)
+    observer.observe(element)
+    updateWidth()
+
+    return () => observer.disconnect()
+  }, [])
 
   useEffect(() => {
     projectPathRef.current = state.runtime?.localPath ?? state.navbarLocalPath ?? null
@@ -1191,16 +1219,30 @@ export function ChatPage() {
     return () => observer.disconnect()
   }, [projectId, shouldRenderTerminalLayout, terminalLayout.mainSizes])
 
-  const clampRightSidebarSize = (size: number) => {
-    if (!Number.isFinite(size)) {
-      return rightSidebarLayout.size
+  useLayoutEffect(() => {
+    if (!showRightSidebar || layoutWidth <= 0 || isRightSidebarAnimating.current) {
+      return
     }
-    const layoutWidth = layoutRootRef.current?.clientWidth ?? 0
-    const minPercentFromWidth = layoutWidth > 0
-      ? (RIGHT_SIDEBAR_MIN_WIDTH_PX / layoutWidth) * 100
-      : RIGHT_SIDEBAR_MIN_SIZE_PERCENT
-    return Math.max(RIGHT_SIDEBAR_MIN_SIZE_PERCENT, minPercentFromWidth, size)
-  }
+
+    const clampedRightSidebarSize = clampRightSidebarSize(rightSidebarLayout.size, layoutWidth)
+    const currentLayout = rightSidebarPanelGroupRef.current?.getLayout()
+    if (!currentLayout) return
+    if (Math.abs((currentLayout.rightSidebar ?? 0) - clampedRightSidebarSize) < 0.1) {
+      return
+    }
+
+    rightSidebarPanelGroupRef.current?.setLayout({
+      workspace: 100 - clampedRightSidebarSize,
+      rightSidebar: clampedRightSidebarSize,
+    })
+  }, [
+    clampRightSidebarSize,
+    isRightSidebarAnimating,
+    layoutWidth,
+    rightSidebarLayout.size,
+    rightSidebarPanelGroupRef,
+    showRightSidebar,
+  ])
 
   const handleTranscriptDragEnter = useCallback((event: React.DragEvent) => {
     if (!hasDraggedFiles(event) || !state.hasSelectedProject) return
@@ -1339,7 +1381,7 @@ export function ChatPage() {
         >
           <ResizablePanel
             id="workspace"
-            defaultSize={`${100 - rightSidebarLayout.size}%`}
+            defaultSize={`${100 - effectiveRightSidebarSize}%`}
             minSize="20%"
             className="min-h-0 min-w-0"
           >
@@ -1409,7 +1451,7 @@ export function ChatPage() {
           />
           <ResizablePanel
             id="rightSidebar"
-            defaultSize={`${rightSidebarLayout.size}%`}
+            defaultSize={`${effectiveRightSidebarSize}%`}
             className="min-h-0 min-w-0"
             elementRef={sidebarPanelRef}
           >
