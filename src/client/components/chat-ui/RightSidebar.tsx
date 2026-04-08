@@ -207,7 +207,7 @@ function CommitHistoryRow({ entry, isPendingPush = false }: { entry: ChatBranchH
         window.open(entry.githubUrl, "_blank", "noopener,noreferrer")
       }}
       className={cn(
-        "flex w-full items-start gap-3 rounded-lg border border-border bg-background px-3 py-2 text-left transition-colors",
+        "flex w-full items-start gap-3 rounded-lg border border-border bg-background pl-3 pr-2 py-2 text-left transition-colors",
         isClickable ? "hover:bg-accent" : "cursor-default opacity-60"
       )}
     >
@@ -227,19 +227,19 @@ function CommitHistoryRow({ entry, isPendingPush = false }: { entry: ChatBranchH
       {entry.tags.length > 0 ? (
         <div className="flex shrink-0 flex-wrap justify-end gap-1">
           {entry.tags.map((tag) => (
-            <span key={tag} className="inline-flex items-center rounded-full border border-border px-2 py-0.5 text-[11px] text-muted-foreground">
+            <span key={tag} className="inline-flex items-center rounded-sm border border-text-muted-foreground px-2 py-0.5 text-[11px] text-muted-foreground">
               {tag}
             </span>
           ))}
           {isPendingPush ? (
-            <span className="inline-flex items-center rounded-full border border-border px-2 py-0.5 text-[11px] text-muted-foreground">
+            <span className="inline-flex items-center rounded-sm border border-text-muted-foreground px-2 py-0.5 text-[11px] text-muted-foreground">
               <ArrowUp className="size-3" />
             </span>
           ) : null}
         </div>
       ) : isPendingPush ? (
         <div className="flex shrink-0 flex-wrap justify-end gap-1">
-          <span className="inline-flex items-center rounded-full border border-border px-2 py-0.5 text-[11px] text-muted-foreground">
+          <span className="inline-flex items-center rounded-sm border border-text-muted-foreground px-2 py-0.5 text-[11px] text-muted-foreground">
             <ArrowUp className="size-3" />
           </span>
         </div>
@@ -524,7 +524,7 @@ function MergeBranchModal({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent size="sm" className="max-w-[min(92vw,475px)]">
-        <DialogBody className="flex min-h-0 flex-col gap-4 px-4 pb-4 pt-4">
+        <DialogBody className="flex min-h-0 flex-col gap-3 px-4 pb-4 pt-4">
           <div className="space-y-1">
             <DialogTitle>Merge into {currentBranchName ?? "current branch"}</DialogTitle>
             <DialogDescription>
@@ -576,13 +576,13 @@ function MergeBranchModal({
             ) : preview ? (
               <div className="flex items-start gap-2">
                 {preview.status === "up_to_date" ? (
-                  <Check className="mt-0.5 size-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                  <Check className="mt-1 size-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
                 ) : preview.status === "conflicts" ? (
-                  <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
+                  <AlertTriangle className="mt-1 size-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
                 ) : preview.status === "mergeable" ? (
-                  <GitBranchPlus className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
+                  <GitBranchPlus className="mt-1 size-3.5 shrink-0 text-muted-foreground" />
                 ) : (
-                  <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-destructive" />
+                  <AlertTriangle className="mt-1 size-3.5 shrink-0 text-destructive" />
                 )}
                 <div className="min-w-0 space-y-1">
                   <div className="text-sm font-medium text-foreground">{preview.message}</div>
