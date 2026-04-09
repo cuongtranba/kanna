@@ -234,19 +234,19 @@ function CommitHistoryRow({ entry, isPendingPush = false }: { entry: ChatBranchH
       {entry.tags.length > 0 ? (
         <div className="flex shrink-0 flex-wrap justify-end gap-1">
           {entry.tags.map((tag) => (
-            <span key={tag} className="inline-flex items-center rounded-sm border border-text-muted-foreground px-2 py-0.5 text-[11px]">
+            <span key={tag} className="inline-flex items-center rounded-full bg-slate-900/10 border-black/10 dark:bg-white/10 border dark:border-white/10  px-2 py-0.5 text-[11px]">
               {tag}
             </span>
           ))}
           {isPendingPush ? (
-            <span className="inline-flex items-center rounded-sm border border-text-muted-foreground px-2 py-0.5 text-[11px]">
+            <span className="inline-flex items-center rounded-full bg-slate-900/10 border-black/10 dark:bg-white/10 border dark:border-white/10  px-2 py-0.5 text-[11px]">
               <ArrowUp className="size-3" />
             </span>
           ) : null}
         </div>
       ) : isPendingPush ? (
         <div className="flex shrink-0 flex-wrap justify-end gap-1">
-          <span className="inline-flex items-center rounded-sm border border-text-muted-foreground px-2 py-0.5 text-[11px]">
+          <span className="inline-flex items-center rounded-full bg-slate-900/10 border-black/10 dark:bg-white/10 border dark:border-white/10  px-2 py-0.5 text-[11px]">
             <ArrowUp className="size-3" />
           </span>
         </div>
