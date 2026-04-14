@@ -53,6 +53,15 @@ describe("read models", () => {
       sessionToken: "session-1",
       lastTurnOutcome: null,
     })
+    state.queuedMessagesByChatId.set("chat-1", [{
+      id: "queued-1",
+      content: "follow up",
+      attachments: [],
+      createdAt: 2,
+      provider: "claude",
+      model: "sonnet",
+      planMode: true,
+    }])
 
     const chat = deriveChatSnapshot(
       state,
@@ -69,6 +78,7 @@ describe("read models", () => {
       })
     )
     expect(chat?.runtime.provider).toBe("claude")
+    expect(chat?.queuedMessages.map((message) => message.content)).toEqual(["follow up"])
     expect(chat?.history.recentLimit).toBe(200)
     expect(chat?.availableProviders.length).toBeGreaterThan(1)
     expect(chat?.availableProviders.find((provider) => provider.id === "codex")?.models.map((model) => model.id)).toEqual([

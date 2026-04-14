@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { ensureCloudflaredInstalled, logShareDetails, startShareTunnel } from "./share"
+import { ensureCloudflaredInstalled, logShareDetails, renderTerminalQr, startShareTunnel } from "./share"
 
 describe("ensureCloudflaredInstalled", () => {
   test("returns immediately when the binary already exists", async () => {
@@ -104,5 +104,15 @@ describe("logShareDetails", () => {
       "Local URL:",
       "http://localhost:3333",
     ])
+  })
+})
+
+describe("renderTerminalQr", () => {
+  test("renders an ANSI qr string", async () => {
+    const result = await renderTerminalQr("https://kanna.trycloudflare.com")
+
+    expect(result).toContain("\x1b[47m")
+    expect(result).toContain("\n")
+    expect(result.length).toBeGreaterThan(0)
   })
 })

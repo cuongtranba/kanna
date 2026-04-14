@@ -799,6 +799,34 @@ export function ChatPage() {
     return () => window.removeEventListener("keydown", handleEscape)
   }, [handleCloseRightSidebar, isMobileRightSidebarOverlay, showRightSidebar])
 
+  useEffect(() => {
+    if (!isAtEndRef.current) {
+      return
+    }
+
+    let secondFrame: number | null = null
+    const firstFrame = window.requestAnimationFrame(() => {
+      void transcriptListRef.current?.scrollToEnd?.({ animated: false })
+      secondFrame = window.requestAnimationFrame(() => {
+        void transcriptListRef.current?.scrollToEnd?.({ animated: false })
+      })
+    })
+
+    return () => {
+      window.cancelAnimationFrame(firstFrame)
+      if (secondFrame !== null) {
+        window.cancelAnimationFrame(secondFrame)
+      }
+    }
+  }, [
+    state.commandError,
+    state.isDraining,
+    state.isProcessing,
+    state.messages.length,
+    state.queuedMessages.length,
+    state.runtimeStatus,
+  ])
+
   useLayoutEffect(() => {
     if (!showRightSidebar || isMobileRightSidebarOverlay || layoutWidth <= 0 || isRightSidebarAnimating.current) {
       return
@@ -859,6 +887,7 @@ export function ChatPage() {
           activeChatId={state.activeChatId}
           listRef={transcriptListRef}
           messages={state.messages}
+          queuedMessages={state.queuedMessages}
           transcriptPaddingBottom={transcriptPaddingBottom}
           localPath={state.runtime?.localPath}
           latestToolIds={state.latestToolIds}
@@ -870,6 +899,7 @@ export function ChatPage() {
           commandError={state.commandError}
           loadOlderHistory={state.loadOlderHistory}
           onStopDraining={state.handleStopDraining}
+          onSteerQueuedMessage={state.handleSteerQueuedMessage}
           onOpenLocalLink={state.handleOpenLocalLink}
           onAskUserQuestionSubmit={state.handleAskUserQuestion}
           onExitPlanModeConfirm={state.handleExitPlanMode}

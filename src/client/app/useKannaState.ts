@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { useNavigate } from "react-router-dom"
 import { useShallow } from "zustand/react/shallow"
 import { APP_NAME } from "../../shared/branding"
-import { PROVIDERS, type AgentProvider, type AskUserQuestionAnswerMap, type ChatAttachment, type ChatDiffSnapshot, type ChatHistoryPage, type KeybindingsSnapshot, type ModelOptions, type ProviderCatalogEntry, type TranscriptEntry, type UpdateInstallResult, type UpdateSnapshot, type UserPromptEntry } from "../../shared/types"
+import { PROVIDERS, type AgentProvider, type AskUserQuestionAnswerMap, type ChatAttachment, type ChatDiffSnapshot, type ChatHistoryPage, type KeybindingsSnapshot, type ModelOptions, type ProviderCatalogEntry, type QueuedChatMessage, type TranscriptEntry, type UpdateInstallResult, type UpdateSnapshot, type UserPromptEntry } from "../../shared/types"
 import { NEW_CHAT_COMPOSER_ID, type ComposerState, useChatPreferencesStore } from "../stores/chatPreferencesStore"
 import { useRightSidebarStore } from "../stores/rightSidebarStore"
 import { useTerminalLayoutStore } from "../stores/terminalLayoutStore"
@@ -50,6 +50,41 @@ function sameHistory(left: ChatSnapshot["history"] | null | undefined, right: Ch
   return left.hasOlder === right.hasOlder
     && left.olderCursor === right.olderCursor
     && left.recentLimit === right.recentLimit
+}
+
+function sameQueuedMessage(left: QueuedChatMessage, right: QueuedChatMessage) {
+  return left.id === right.id
+    && left.content === right.content
+    && left.createdAt === right.createdAt
+    && left.provider === right.provider
+    && left.model === right.model
+    && left.planMode === right.planMode
+    && JSON.stringify(left.modelOptions) === JSON.stringify(right.modelOptions)
+    && sameAttachmentArray(left.attachments, right.attachments)
+}
+
+function sameAttachmentArray(left: ChatAttachment[], right: ChatAttachment[]) {
+  if (left === right) return true
+  if (left.length !== right.length) return false
+  return left.every((attachment, index) => {
+    const other = right[index]
+    return Boolean(other)
+      && attachment.id === other.id
+      && attachment.kind === other.kind
+      && attachment.displayName === other.displayName
+      && attachment.absolutePath === other.absolutePath
+      && attachment.relativePath === other.relativePath
+      && attachment.contentUrl === other.contentUrl
+      && attachment.mimeType === other.mimeType
+      && attachment.size === other.size
+  })
+}
+
+function sameQueuedMessages(left: ChatSnapshot["queuedMessages"] | null | undefined, right: ChatSnapshot["queuedMessages"] | null | undefined) {
+  if (left === right) return true
+  if (!left || !right) return false
+  if (left.length !== right.length) return false
+  return left.every((message, index) => sameQueuedMessage(message, right[index]!))
 }
 
 function sameDiffs(left: ChatDiffSnapshot | null | undefined, right: ChatDiffSnapshot | null | undefined) {
@@ -112,6 +147,7 @@ function sameChatSnapshotCore(left: ChatSnapshot | null, right: ChatSnapshot | n
   if (left === right) return true
   if (!left || !right) return false
   return sameRuntime(left.runtime, right.runtime)
+    && sameQueuedMessages(left.queuedMessages, right.queuedMessages)
     && sameTranscriptEntries(left.messages, right.messages)
     && sameHistory(left.history, right.history)
     && sameProviders(left.availableProviders, right.availableProviders)
@@ -425,6 +461,7 @@ export interface KannaState {
   sidebarOpen: boolean
   sidebarCollapsed: boolean
   messages: ReturnType<typeof processTranscriptMessages>
+  queuedMessages: QueuedChatMessage[]
   previousPrompt: string | null
   latestToolIds: ReturnType<typeof getLatestToolIds>
   runtime: ChatSnapshot["runtime"] | null
@@ -452,6 +489,7 @@ export interface KannaState {
   handleCheckForUpdates: (options?: { force?: boolean }) => Promise<void>
   handleInstallUpdate: () => Promise<void>
   handleSend: (content: string, options?: { provider?: AgentProvider; model?: string; modelOptions?: ModelOptions; planMode?: boolean }) => Promise<void>
+  handleSteerQueuedMessage: (queuedMessageId: string) => Promise<void>
   handleCancel: () => Promise<void>
   handleStopDraining: () => Promise<void>
   handleDeleteChat: (chat: SidebarChatRow) => Promise<void>
@@ -798,6 +836,7 @@ export function useKannaState(activeChatId: string | null): KannaState {
   const previousPrompt = useMemo(() => getPreviousPrompt(messages), [messages])
   const latestToolIds = useMemo(() => getLatestToolIds(messages), [messages])
   const runtime = activeChatSnapshot?.runtime ?? null
+  const queuedMessages = activeChatSnapshot?.queuedMessages ?? []
   const optimisticRuntimeStatus = optimisticProcessing?.scopeId === optimisticScopeId && (!runtime || runtime.status === "idle")
     ? "starting"
     : null
@@ -1047,6 +1086,26 @@ export function useKannaState(activeChatId: string | null): KannaState {
     options?: { provider?: AgentProvider; model?: string; modelOptions?: ModelOptions; planMode?: boolean; attachments?: import("../../shared/types").ChatAttachment[] }
   ) => {
     const attachments = options?.attachments ?? []
+    if (activeChatId && isProcessing) {
+      try {
+        await socket.command<{ queuedMessageId: string }>({
+          type: "message.enqueue",
+          chatId: activeChatId,
+          content,
+          attachments,
+          provider: options?.provider,
+          model: options?.model,
+          modelOptions: options?.modelOptions,
+          planMode: options?.planMode,
+        })
+        setCommandError(null)
+        return
+      } catch (error) {
+        setCommandError(error instanceof Error ? error.message : String(error))
+        throw error
+      }
+    }
+
     const optimisticId = generateUUID()
     const clientTraceId = generateUUID()
     const signature = getUserPromptSignature(content, attachments)
@@ -1156,7 +1215,21 @@ export function useKannaState(activeChatId: string | null): KannaState {
       setCommandError(error instanceof Error ? error.message : String(error))
       throw error
     }
-  }, [activeChatId, fallbackLocalProjectPath, navigate, optimisticUserPrompts, selectedProjectId, serverTranscriptEntries, sidebarData.projectGroups, socket])
+  }, [activeChatId, fallbackLocalProjectPath, isProcessing, navigate, optimisticUserPrompts, selectedProjectId, serverTranscriptEntries, sidebarData.projectGroups, socket])
+
+  const handleSteerQueuedMessage = useCallback(async (queuedMessageId: string) => {
+    if (!activeChatId) return
+    try {
+      await socket.command({
+        type: "message.steer",
+        chatId: activeChatId,
+        queuedMessageId,
+      })
+      setCommandError(null)
+    } catch (error) {
+      setCommandError(error instanceof Error ? error.message : String(error))
+    }
+  }, [activeChatId, socket])
 
   const handleCancel = useCallback(async () => {
     if (!activeChatId) return
@@ -1367,6 +1440,7 @@ export function useKannaState(activeChatId: string | null): KannaState {
     sidebarOpen,
     sidebarCollapsed,
     messages,
+    queuedMessages,
     previousPrompt,
     latestToolIds,
     runtime,
@@ -1394,6 +1468,7 @@ export function useKannaState(activeChatId: string | null): KannaState {
     handleCheckForUpdates,
     handleInstallUpdate,
     handleSend,
+    handleSteerQueuedMessage,
     handleCancel,
     handleStopDraining,
     handleDeleteChat,

@@ -162,6 +162,45 @@ describe("EventStore", () => {
     expect(oldestPage.olderCursor).toBeNull()
   })
 
+  test("persists queued messages across restart and removes promoted entries", async () => {
+    const dataDir = await createTempDataDir()
+    const store = new EventStore(dataDir)
+    await store.initialize()
+
+    const project = await store.openProject("/tmp/project")
+    const chat = await store.createChat(project.id)
+
+    const first = await store.enqueueMessage(chat.id, {
+      content: "first queued",
+      attachments: [],
+      provider: "codex",
+      model: "gpt-5.4",
+      planMode: false,
+    })
+    const second = await store.enqueueMessage(chat.id, {
+      content: "second queued",
+      attachments: [],
+      provider: "claude",
+      model: "sonnet",
+      planMode: true,
+    })
+
+    expect(store.getQueuedMessages(chat.id).map((message) => message.content)).toEqual([
+      "first queued",
+      "second queued",
+    ])
+
+    const reloaded = new EventStore(dataDir)
+    await reloaded.initialize()
+    expect(reloaded.getQueuedMessages(chat.id).map((message) => message.content)).toEqual([
+      "first queued",
+      "second queued",
+    ])
+
+    await reloaded.removeQueuedMessage(chat.id, first.id)
+    expect(reloaded.getQueuedMessages(chat.id).map((message) => message.id)).toEqual([second.id])
+  })
+
   test("marks chats unread on completed turns and clears unread when marked read", async () => {
     const dataDir = await createTempDataDir()
     const store = new EventStore(dataDir)

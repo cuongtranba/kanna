@@ -16,6 +16,17 @@ export interface ChatAttachment {
   size: number
 }
 
+export interface QueuedChatMessage {
+  id: string
+  content: string
+  attachments: ChatAttachment[]
+  createdAt: number
+  provider?: AgentProvider
+  model?: string
+  modelOptions?: ModelOptions
+  planMode?: boolean
+}
+
 export interface InternalUserAttachmentsData {
   userText: string
   attachments: ChatAttachment[]
@@ -415,6 +426,7 @@ export interface UserPromptEntry extends TranscriptEntryBase {
   kind: "user_prompt"
   content: string
   attachments?: ChatAttachment[]
+  steered?: boolean
 }
 
 export interface SystemInitEntry extends TranscriptEntryBase {
@@ -767,7 +779,7 @@ export type HydratedToolCall =
   | HydratedUnknownToolCall
 
 export type HydratedTranscriptMessage =
-  | ({ kind: "user_prompt"; content: string; attachments?: ChatAttachment[]; id: string; messageId?: string; timestamp: string; hidden?: boolean })
+  | ({ kind: "user_prompt"; content: string; attachments?: ChatAttachment[]; steered?: boolean; id: string; messageId?: string; timestamp: string; hidden?: boolean })
   | ({ kind: "system_init"; model: string; tools: string[]; agents: string[]; slashCommands: string[]; mcpServers: McpServerInfo[]; provider: AgentProvider; id: string; messageId?: string; timestamp: string; hidden?: boolean; debugRaw?: string })
   | ({ kind: "account_info"; accountInfo: AccountInfo; id: string; messageId?: string; timestamp: string; hidden?: boolean })
   | ({ kind: "assistant_text"; text: string; id: string; messageId?: string; timestamp: string; hidden?: boolean })
@@ -801,6 +813,7 @@ export interface ChatHistorySnapshot {
 
 export interface ChatSnapshot {
   runtime: ChatRuntime
+  queuedMessages: QueuedChatMessage[]
   messages: TranscriptEntry[]
   history: ChatHistorySnapshot
   availableProviders: ProviderCatalogEntry[]

@@ -1,4 +1,4 @@
-import type { AgentProvider, ProjectSummary, TranscriptEntry } from "../shared/types"
+import type { AgentProvider, ProjectSummary, QueuedChatMessage, TranscriptEntry } from "../shared/types"
 
 export interface ProjectRecord extends ProjectSummary {
   deletedAt?: number
@@ -24,6 +24,7 @@ export interface StoreState {
   projectsById: Map<string, ProjectRecord>
   projectIdsByPath: Map<string, string>
   chatsById: Map<string, ChatRecord>
+  queuedMessagesByChatId: Map<string, QueuedChatMessage[]>
 }
 
 export interface SnapshotFile {
@@ -31,6 +32,7 @@ export interface SnapshotFile {
   generatedAt: number
   projects: ProjectRecord[]
   chats: ChatRecord[]
+  queuedMessages?: Array<{ chatId: string; entries: QueuedChatMessage[] }>
   messages?: Array<{ chatId: string; entries: TranscriptEntry[] }>
 }
 
@@ -100,6 +102,22 @@ export type MessageEvent = {
   entry: TranscriptEntry
 }
 
+export type QueuedMessageEvent =
+  | {
+      v: 2
+      type: "queued_message_enqueued"
+      timestamp: number
+      chatId: string
+      message: QueuedChatMessage
+    }
+  | {
+      v: 2
+      type: "queued_message_removed"
+      timestamp: number
+      chatId: string
+      queuedMessageId: string
+    }
+
 export type TurnEvent =
   | {
       v: 2
@@ -134,13 +152,14 @@ export type TurnEvent =
       sessionToken: string | null
     }
 
-export type StoreEvent = ProjectEvent | ChatEvent | MessageEvent | TurnEvent
+export type StoreEvent = ProjectEvent | ChatEvent | MessageEvent | QueuedMessageEvent | TurnEvent
 
 export function createEmptyState(): StoreState {
   return {
     projectsById: new Map(),
     projectIdsByPath: new Map(),
     chatsById: new Map(),
+    queuedMessagesByChatId: new Map(),
   }
 }
 

@@ -931,6 +931,18 @@ export function createWsRouter({
           send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
           return
         }
+        case "message.enqueue": {
+          const result = await agent.enqueue(command)
+          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result })
+          await broadcastChatAndSidebar(command.chatId)
+          return
+        }
+        case "message.steer": {
+          await agent.steer(command)
+          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
+          await broadcastChatAndSidebar(command.chatId)
+          return
+        }
         case "terminal.create": {
           const project = store.getProject(command.projectId)
           if (!project) {

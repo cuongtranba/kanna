@@ -132,6 +132,27 @@ describe("KannaTranscript", () => {
     expect(html).toContain("Please review these.")
   })
 
+  test("hides steer system-message text and renders a steer icon left of the user bubble", () => {
+    const html = renderTranscript([
+      {
+        id: "user-steer-1",
+        kind: "user_prompt",
+        content: `<system-message>
+The user would like you to know the following. Please address the message as you see fit then continue with what you were doing
+</system-message>
+
+Please check the latest error first.`,
+        steered: true,
+        attachments: [],
+        timestamp: new Date().toISOString(),
+      },
+    ])
+
+    expect(html).not.toContain("The user would like you to know the following.")
+    expect(html).toContain("Please check the latest error first.")
+    expect(html).toContain('aria-label="Sent mid-turn"')
+  })
+
   test("does not render wrappers for context window updates", () => {
     const html = renderTranscript([
       {

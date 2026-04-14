@@ -3,9 +3,11 @@ import type {
   AgentProvider,
   ChatAttachment,
   ContextWindowUsageSnapshot,
+  ModelOptions,
   NormalizedToolCall,
   PendingToolSnapshot,
   KannaStatus,
+  QueuedChatMessage,
   TranscriptEntry,
 } from "../shared/types"
 import { normalizeToolCall } from "../shared/tools"
@@ -53,6 +55,7 @@ interface ActiveTurn {
   chatId: string
   provider: AgentProvider
   turn: HarnessTurn
+  claudePromptSeq?: number
   model: string
   effort?: string
   serviceTier?: "fast"
@@ -79,6 +82,7 @@ interface ClaudeSessionHandle {
 }
 
 interface ClaudeSessionState {
+  id: string
   chatId: string
   session: ClaudeSessionHandle
   localPath: string
@@ -87,6 +91,8 @@ interface ClaudeSessionState {
   planMode: boolean
   sessionToken: string | null
   accountInfoLoaded: boolean
+  nextPromptSeq: number
+  pendingPromptSeqs: number[]
 }
 
 interface AgentCoordinatorArgs {
@@ -109,6 +115,30 @@ interface SendToStartingProfile {
   startedAt: number
 }
 
+function isClaudeSteerLoggingEnabled() {
+  return process.env.KANNA_LOG_CLAUDE_STEER === "1"
+}
+
+function logClaudeSteer(stage: string, details?: Record<string, unknown>) {
+  if (!isClaudeSteerLoggingEnabled()) return
+  console.log("[kanna/claude-steer]", JSON.stringify({
+    stage,
+    ...details,
+  }))
+}
+
+const STEERED_MESSAGE_PREFIX = `<system-message>
+The user would like to inform you of something while you continue to work. Acknowledge receipt immediately with a text response, then continue with the task at hand, incorporating the user's feedback if needed.
+</system-message>`
+
+interface SendMessageOptions {
+  provider?: AgentProvider
+  model?: string
+  modelOptions?: ModelOptions
+  effort?: string
+  planMode?: boolean
+}
+
 function timestamped<T extends Omit<TranscriptEntry, "_id" | "createdAt">>(
   entry: T,
   createdAt = Date.now()
@@ -127,6 +157,12 @@ function stringFromUnknown(value: unknown) {
   } catch {
     return String(value)
   }
+}
+
+function buildSteeredMessageContent(content: string) {
+  return content.trim().length > 0
+    ? `${STEERED_MESSAGE_PREFIX}\n\n${content}`
+    : STEERED_MESSAGE_PREFIX
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -702,31 +738,73 @@ export class AgentCoordinator {
     this.emitStateChange(chatId)
   }
 
-  private resolveProvider(command: Extract<ClientCommand, { type: "chat.send" }>, currentProvider: AgentProvider | null) {
+  private resolveProvider(options: SendMessageOptions, currentProvider: AgentProvider | null) {
     if (currentProvider) return currentProvider
-    return command.provider ?? "claude"
+    return options.provider ?? "claude"
   }
 
-  private getProviderSettings(provider: AgentProvider, command: Extract<ClientCommand, { type: "chat.send" }>) {
+  private getProviderSettings(provider: AgentProvider, options: SendMessageOptions) {
     const catalog = getServerProviderCatalog(provider)
     if (provider === "claude") {
-      const model = normalizeServerModel(provider, command.model)
-      const modelOptions = normalizeClaudeModelOptions(model, command.modelOptions, command.effort)
+      const model = normalizeServerModel(provider, options.model)
+      const modelOptions = normalizeClaudeModelOptions(model, options.modelOptions, options.effort)
       return {
         model: resolveClaudeApiModelId(model, modelOptions.contextWindow),
         effort: modelOptions.reasoningEffort,
         serviceTier: undefined,
-        planMode: catalog.supportsPlanMode ? Boolean(command.planMode) : false,
+        planMode: catalog.supportsPlanMode ? Boolean(options.planMode) : false,
       }
     }
 
-    const modelOptions = normalizeCodexModelOptions(command.modelOptions, command.effort)
+    const modelOptions = normalizeCodexModelOptions(options.modelOptions, options.effort)
     return {
-      model: normalizeServerModel(provider, command.model),
+      model: normalizeServerModel(provider, options.model),
       effort: modelOptions.reasoningEffort,
       serviceTier: codexServiceTierFromModelOptions(modelOptions),
-      planMode: catalog.supportsPlanMode ? Boolean(command.planMode) : false,
+      planMode: catalog.supportsPlanMode ? Boolean(options.planMode) : false,
     }
+  }
+
+  private async enqueueMessage(chatId: string, content: string, attachments: ChatAttachment[], options?: SendMessageOptions) {
+    const queued = await this.store.enqueueMessage(chatId, {
+      content,
+      attachments,
+      provider: options?.provider,
+      model: options?.model,
+      modelOptions: options?.modelOptions,
+      planMode: options?.planMode,
+    })
+    this.emitStateChange(chatId)
+    return queued
+  }
+
+  private async dequeueAndStartQueuedMessage(chatId: string, queuedMessage: QueuedChatMessage, options?: { steered?: boolean }) {
+    await this.store.removeQueuedMessage(chatId, queuedMessage.id)
+    const chat = this.store.requireChat(chatId)
+    const provider = this.resolveProvider(queuedMessage, chat.provider)
+    const settings = this.getProviderSettings(provider, queuedMessage)
+    await this.startTurnForChat({
+      chatId,
+      provider,
+      content: options?.steered ? buildSteeredMessageContent(queuedMessage.content) : queuedMessage.content,
+      attachments: queuedMessage.attachments,
+      model: settings.model,
+      effort: settings.effort,
+      serviceTier: settings.serviceTier,
+      planMode: settings.planMode,
+      appendUserPrompt: true,
+      steered: options?.steered,
+    })
+  }
+
+  private async maybeStartNextQueuedMessage(chatId: string) {
+    if (this.activeTurns.has(chatId)) return false
+    const nextQueuedMessage = typeof this.store.getQueuedMessages === "function"
+      ? this.store.getQueuedMessages(chatId)[0]
+      : undefined
+    if (!nextQueuedMessage) return false
+    await this.dequeueAndStartQueuedMessage(chatId, nextQueuedMessage)
+    return true
   }
 
   private async startTurnForChat(args: {
@@ -739,6 +817,7 @@ export class AgentCoordinator {
     serviceTier?: "fast"
     planMode: boolean
     appendUserPrompt: boolean
+    steered?: boolean
     profile?: SendToStartingProfile | null
   }) {
     logSendToStartingProfile(args.profile, "start_turn.begin", {
@@ -792,7 +871,7 @@ export class AgentCoordinator {
 
     if (args.appendUserPrompt) {
       const userPromptEntry = timestamped(
-        { kind: "user_prompt", content: args.content, attachments: args.attachments },
+        { kind: "user_prompt", content: args.content, attachments: args.attachments, steered: args.steered },
         Date.now()
       )
       await this.store.appendMessage(args.chatId, userPromptEntry)
@@ -935,6 +1014,18 @@ export class AgentCoordinator {
       if (!session) {
         throw new Error("Claude session was not initialized")
       }
+      const promptSeq = session.nextPromptSeq + 1
+      session.nextPromptSeq = promptSeq
+      session.pendingPromptSeqs.push(promptSeq)
+      active.claudePromptSeq = promptSeq
+      logClaudeSteer("claude_prompt_sent", {
+        chatId: args.chatId,
+        sessionId: session.id,
+        promptSeq,
+        activeStatus: active.status,
+        contentPreview: args.content.slice(0, 160),
+        pendingPromptSeqs: [...session.pendingPromptSeqs],
+      })
       await session.session.sendPrompt(buildPromptText(args.content, args.attachments))
       logSendToStartingProfile(args.profile, "start_turn.claude_prompt_sent", {
         chatId: args.chatId,
@@ -972,6 +1063,7 @@ export class AgentCoordinator {
       })
 
       session = {
+        id: crypto.randomUUID(),
         chatId: args.chatId,
         session: started,
         localPath: args.localPath,
@@ -980,6 +1072,8 @@ export class AgentCoordinator {
         planMode: args.planMode,
         sessionToken: args.sessionToken,
         accountInfoLoaded: false,
+        nextPromptSeq: 0,
+        pendingPromptSeqs: [],
       }
       this.claudeSessions.set(args.chatId, session)
       void this.runClaudeSession(session)
@@ -1029,6 +1123,17 @@ export class AgentCoordinator {
     }
 
     const chat = this.store.requireChat(chatId)
+    if (this.activeTurns.has(chatId)) {
+      const queuedMessage = await this.enqueueMessage(chatId, command.content, command.attachments ?? [], {
+        provider: command.provider,
+        model: command.model,
+        modelOptions: command.modelOptions,
+        effort: command.effort,
+        planMode: command.planMode,
+      })
+      return { chatId, queuedMessageId: queuedMessage.id, queued: true as const }
+    }
+
     const provider = this.resolveProvider(command, chat.provider)
     const settings = this.getProviderSettings(provider, command)
     await this.startTurnForChat({
@@ -1053,6 +1158,45 @@ export class AgentCoordinator {
     return { chatId }
   }
 
+  async enqueue(command: Extract<ClientCommand, { type: "message.enqueue" }>) {
+    const queuedMessage = await this.enqueueMessage(command.chatId, command.content, command.attachments ?? [], {
+      provider: command.provider,
+      model: command.model,
+      modelOptions: command.modelOptions,
+      planMode: command.planMode,
+    })
+    return { queuedMessageId: queuedMessage.id }
+  }
+
+  async steer(command: Extract<ClientCommand, { type: "message.steer" }>) {
+    const queuedMessage = this.store.getQueuedMessage(command.chatId, command.queuedMessageId)
+    if (!queuedMessage) {
+      throw new Error("Queued message not found")
+    }
+
+    logClaudeSteer("steer_requested", {
+      chatId: command.chatId,
+      queuedMessageId: command.queuedMessageId,
+      activeTurn: this.activeTurns.has(command.chatId),
+      queuedMessagePreview: queuedMessage.content.slice(0, 160),
+    })
+
+    if (this.activeTurns.has(command.chatId)) {
+      await this.cancel(command.chatId, { hideInterrupted: true })
+    }
+
+    logClaudeSteer("steer_after_cancel", {
+      chatId: command.chatId,
+      stillActive: this.activeTurns.has(command.chatId),
+    })
+
+    if (this.activeTurns.has(command.chatId)) {
+      throw new Error("Chat is still running")
+    }
+
+    await this.dequeueAndStartQueuedMessage(command.chatId, queuedMessage, { steered: true })
+  }
+
   private async runClaudeSession(session: ClaudeSessionState) {
     try {
       for await (const event of session.session.stream) {
@@ -1065,13 +1209,32 @@ export class AgentCoordinator {
 
         if (!event.entry) continue
         await this.store.appendMessage(session.chatId, event.entry)
-
         const active = this.activeTurns.get(session.chatId)
         if (event.entry.kind === "system_init" && active) {
           active.status = "running"
+          logClaudeSteer("claude_event_system_init", {
+            chatId: session.chatId,
+            sessionId: session.id,
+            activePromptSeq: active.claudePromptSeq ?? null,
+            pendingPromptSeqs: [...session.pendingPromptSeqs],
+          })
         }
 
-        if (event.entry.kind === "result" && active) {
+        const completedClaudePromptSeq = event.entry.kind === "result" || event.entry.kind === "interrupted"
+          ? (session.pendingPromptSeqs.shift() ?? null)
+          : null
+
+        logClaudeSteer("claude_event", {
+          chatId: session.chatId,
+          sessionId: session.id,
+          entryKind: event.entry.kind,
+          activePromptSeq: active?.claudePromptSeq ?? null,
+          completedPromptSeq: completedClaudePromptSeq,
+          activeStatus: active?.status ?? null,
+          pendingPromptSeqs: [...session.pendingPromptSeqs],
+        })
+
+        if (event.entry.kind === "result" && active && completedClaudePromptSeq === (active.claudePromptSeq ?? null)) {
           active.hasFinalResult = true
           if (event.entry.isError) {
             await this.store.recordTurnFailed(session.chatId, event.entry.result || "Turn failed")
@@ -1079,6 +1242,9 @@ export class AgentCoordinator {
             await this.store.recordTurnFinished(session.chatId)
           }
           this.activeTurns.delete(session.chatId)
+          if (!active.cancelRequested) {
+            await this.maybeStartNextQueuedMessage(session.chatId)
+          }
         }
 
         this.emitStateChange(session.chatId)
@@ -1233,11 +1399,29 @@ export class AgentCoordinator {
           await this.store.recordTurnFailed(active.chatId, message)
           this.emitStateChange(active.chatId)
         }
+      } else if (!active.cancelRequested) {
+        try {
+          await this.maybeStartNextQueuedMessage(active.chatId)
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error)
+          await this.store.appendMessage(
+            active.chatId,
+            timestamped({
+              kind: "result",
+              subtype: "error",
+              isError: true,
+              durationMs: 0,
+              result: message,
+            })
+          )
+          await this.store.recordTurnFailed(active.chatId, message)
+          this.emitStateChange(active.chatId)
+        }
       }
     }
   }
 
-  async cancel(chatId: string) {
+  async cancel(chatId: string, options?: { hideInterrupted?: boolean }) {
     // Also clean up any draining stream for this chat.
     const draining = this.drainingStreams.get(chatId)
     if (draining) {
@@ -1247,6 +1431,12 @@ export class AgentCoordinator {
 
     const active = this.activeTurns.get(chatId)
     if (!active) return
+
+    logClaudeSteer("cancel_requested", {
+      chatId,
+      provider: active.provider,
+      activePromptSeq: active.claudePromptSeq ?? null,
+    })
 
     // Guard against concurrent cancel() calls — only the first one does work.
     if (active.cancelRequested) return
@@ -1270,7 +1460,7 @@ export class AgentCoordinator {
       }
     }
 
-    await this.store.appendMessage(chatId, timestamped({ kind: "interrupted" }))
+    await this.store.appendMessage(chatId, timestamped({ kind: "interrupted", hidden: options?.hideInterrupted }))
     await this.store.recordTurnCancelled(chatId)
     active.cancelRecorded = true
     active.hasFinalResult = true
@@ -1279,6 +1469,11 @@ export class AgentCoordinator {
     // right away, rather than waiting for interrupt() which may hang.
     this.activeTurns.delete(chatId)
     this.emitStateChange(chatId)
+    logClaudeSteer("cancel_active_turn_deleted", {
+      chatId,
+      provider: active.provider,
+      activePromptSeq: active.claudePromptSeq ?? null,
+    })
 
     // Now attempt to interrupt/close the underlying stream in the background.
     // This is best-effort — the turn is already removed from active state above,

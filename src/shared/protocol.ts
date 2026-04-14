@@ -154,6 +154,21 @@ export type ClientCommand =
   | { type: "chat.stopDraining"; chatId: string }
   | { type: "chat.loadHistory"; chatId: string; beforeCursor: string; limit: number }
   | { type: "chat.respondTool"; chatId: string; toolUseId: string; result: unknown }
+  | {
+      type: "message.enqueue"
+      chatId: string
+      content: string
+      attachments?: ChatAttachment[]
+      provider?: AgentProvider
+      model?: string
+      modelOptions?: ModelOptions
+      planMode?: boolean
+    }
+  | {
+      type: "message.steer"
+      chatId: string
+      queuedMessageId: string
+    }
   | { type: "terminal.create"; projectId: string; terminalId: string; cols: number; rows: number; scrollback: number }
   | { type: "terminal.input"; terminalId: string; data: string }
   | { type: "terminal.resize"; terminalId: string; cols: number; rows: number }

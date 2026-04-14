@@ -224,6 +224,7 @@ function sameMessage(left: HydratedTranscriptMessage, right: HydratedTranscriptM
     case "user_prompt":
       return left.content === (right.kind === "user_prompt" ? right.content : null)
         && right.kind === "user_prompt"
+        && left.steered === right.steered
         && sameAttachmentArray(left.attachments, right.attachments)
     case "system_init":
       return right.kind === "system_init"
@@ -367,7 +368,7 @@ const TranscriptSingleRow = memo(function TranscriptSingleRow({
   let rendered: React.ReactNode = null
 
   if (message.kind === "user_prompt") {
-    rendered = <UserMessage key={message.id} content={message.content} attachments={message.attachments} />
+    rendered = <UserMessage key={message.id} content={message.content} attachments={message.attachments} steered={message.steered} />
   } else {
     switch (message.kind) {
       case "unknown":

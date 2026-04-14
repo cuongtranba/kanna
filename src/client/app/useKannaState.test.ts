@@ -231,6 +231,7 @@ describe("getActiveChatSnapshot", () => {
         planMode: false,
         sessionToken: null,
       },
+      queuedMessages: [],
       messages: [],
       history: {
         hasOlder: false,
@@ -256,6 +257,7 @@ describe("getActiveChatSnapshot", () => {
         planMode: false,
         sessionToken: null,
       },
+      queuedMessages: [],
       messages: [],
       history: {
         hasOlder: false,

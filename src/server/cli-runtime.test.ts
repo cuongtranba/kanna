@@ -222,6 +222,7 @@ describe("runCli", () => {
 
   test("starts normally when no newer version exists", async () => {
     const { calls, deps } = createDeps()
+    process.env.KANNA_RUNTIME_PROFILE = "prod"
 
     const result = await runCli(["--port", "4000", "--no-open"], deps)
 

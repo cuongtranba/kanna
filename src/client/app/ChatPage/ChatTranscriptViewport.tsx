@@ -3,6 +3,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { ArrowDown, Flower, Upload } from "lucide-react"
 import { AnimatedShinyText } from "../../components/ui/animated-shiny-text"
 import { DrainingIndicator } from "../../components/messages/DrainingIndicator"
+import { QueuedUserMessage } from "../../components/messages/QueuedUserMessage"
 import { OpenLocalLinkProvider } from "../../components/messages/shared"
 import { ProcessingMessage } from "../../components/messages/ProcessingMessage"
 import { cn } from "../../lib/utils"
@@ -22,6 +23,7 @@ interface ChatTranscriptViewportProps {
   activeChatId: string | null
   listRef: React.RefObject<LegendListRef | null>
   messages: KannaState["messages"]
+  queuedMessages: KannaState["queuedMessages"]
   transcriptPaddingBottom: number
   localPath: string | null | undefined
   latestToolIds: KannaState["latestToolIds"]
@@ -33,6 +35,7 @@ interface ChatTranscriptViewportProps {
   commandError: string | null
   loadOlderHistory: () => Promise<void>
   onStopDraining: () => void
+  onSteerQueuedMessage: (queuedMessageId: string) => Promise<void>
   onOpenLocalLink: KannaState["handleOpenLocalLink"]
   onAskUserQuestionSubmit: KannaState["handleAskUserQuestion"]
   onExitPlanModeConfirm: KannaState["handleExitPlanMode"]
@@ -49,6 +52,7 @@ export const ChatTranscriptViewport = memo(function ChatTranscriptViewport({
   activeChatId,
   listRef,
   messages,
+  queuedMessages,
   transcriptPaddingBottom,
   localPath,
   latestToolIds,
@@ -60,6 +64,7 @@ export const ChatTranscriptViewport = memo(function ChatTranscriptViewport({
   commandError,
   loadOlderHistory,
   onStopDraining,
+  onSteerQueuedMessage,
   onOpenLocalLink,
   onAskUserQuestionSubmit,
   onExitPlanModeConfirm,
@@ -197,6 +202,13 @@ export const ChatTranscriptViewport = memo(function ChatTranscriptViewport({
   const listFooter = (
     <div className="mx-auto w-full max-w-[800px]">
       {isProcessing ? <ProcessingMessage status={runtimeStatus ?? undefined} /> : null}
+      {queuedMessages.map((message) => (
+        <QueuedUserMessage
+          key={message.id}
+          message={message}
+          onSendNow={() => void onSteerQueuedMessage(message.id)}
+        />
+      ))}
       {!isProcessing && isDraining ? (
         <DrainingIndicator onStop={() => void onStopDraining()} />
       ) : null}

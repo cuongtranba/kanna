@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs"
-import QRCode from "qrcode"
+import { renderANSI } from "uqr"
 import { Tunnel, bin as cloudflaredBin, install as installCloudflared } from "cloudflared"
 
 export interface StartedShareTunnel {
@@ -26,10 +26,9 @@ export interface ShareTunnelDeps {
 }
 
 export async function renderTerminalQr(url: string) {
-  return QRCode.toString(url, {
-    type: "terminal",
-    small: true,
-    errorCorrectionLevel: "M",
+  return renderANSI(url, {
+    ecc: "L",
+    border: 2,
   })
 }
 
