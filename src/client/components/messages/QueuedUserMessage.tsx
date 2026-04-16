@@ -3,6 +3,7 @@ import remarkGfm from "remark-gfm"
 import type { QueuedChatMessage } from "../../../shared/types"
 import { Button } from "../ui/button"
 import { createMarkdownComponents } from "./shared"
+import { ArrowUp, Delete, X } from "lucide-react";
 
 interface QueuedUserMessageProps {
   message: QueuedChatMessage
@@ -13,7 +14,7 @@ interface QueuedUserMessageProps {
 export function QueuedUserMessage({ message, onRemove, onSendNow }: QueuedUserMessageProps) {
   return (
     <div className="flex justify-end py-2">
-      <div className="flex max-w-[85%] sm:max-w-[80%] flex-col items-end gap-2 text-right">
+      <div className="flex max-w-[85%] sm:max-w-[80%] flex-col items-end gap-1.5 text-right">
         {message.attachments.length > 0 ? (
           <div className="flex flex-wrap justify-end gap-2">
             {message.attachments.map((attachment) => (
@@ -28,31 +29,52 @@ export function QueuedUserMessage({ message, onRemove, onSendNow }: QueuedUserMe
           </div>
         ) : null}
         {message.content ? (
-          <div className="rounded-[20px] border border-dashed border-border bg-transparent px-3.5 py-1.5 prose prose-sm prose-invert text-primary [&_p]:whitespace-pre-line">
-            <Markdown remarkPlugins={[remarkGfm]} components={createMarkdownComponents()}>{message.content}</Markdown>
-            
+          <div className="relative">
+            <div className="rounded-[20px] border border-dashed border-border bg-transparent px-3.5 py-1.5 prose prose-sm prose-invert text-primary [&_p]:whitespace-pre-line">
+              <Markdown remarkPlugins={[remarkGfm]} components={createMarkdownComponents()}>{message.content}</Markdown>
+              
+            </div>
+            <Button
+              type="button"
+              variant="none"
+              size="none"
+              className="!p-0.5 border rounded-full text-xs font-medium text-muted-foreground hover:text-foreground gap-0.5 absolute top-0 left-0 bg-background -translate-x-[28%] -translate-y-[28%]"
+              onClick={onRemove}
+            >
+              <X className="size-3"/>
+            </Button>
+
+            {/* <Button
+              type="button"
+              variant="none"
+              size="none"
+              className="!p-1 border rounded-full text-xs font-medium text-muted-foreground hover:text-foreground gap-0.5 absolute top-0 right-0 bg-background translate-x-[30%] -translate-y-[30%]"
+              onClick={onSendNow}
+            >
+              <ArrowUp className="size-3"/>
+            </Button> */}
           </div>
           
         ) : null}
-        <div className="flex items-center gap-1 text-xs text-muted-foreground">
-          <Button
+        <div className="flex items-center gap-1 text-xs text-muted-foreground pr-2">
+          {/* <Button
             type="button"
             variant="none"
             size="none"
-            className="h-auto p-0 text-xs font-medium text-muted-foreground hover:text-foreground"
+            className="h-auto p-0 text-xs font-medium text-muted-foreground hover:text-foreground gap-0.5"
             onClick={onRemove}
           >
             Remove
           </Button>
-          <span aria-hidden="true" className="text-[10px] text-muted-foreground/70">|</span>
+          <span aria-hidden="true" className="text-xs text-muted-foreground/70">|</span> */}
           <Button
             type="button"
             variant="none"
             size="none"
-            className="h-auto p-0 text-xs font-medium text-muted-foreground hover:text-foreground"
+            className="h-auto p-0 text-xs font-medium text-muted-foreground hover:text-foreground gap-0.5"
             onClick={onSendNow}
           >
-            Send
+          Send Now
           </Button>
         </div>
       </div>

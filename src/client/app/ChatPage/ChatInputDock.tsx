@@ -48,7 +48,7 @@ export const ChatInputDock = memo(function ChatInputDock({
           key={activeChatId ?? "new-chat"}
           onSubmit={onSubmit}
           onCancel={onCancel}
-          disabled={!hasSelectedProject || runtimeStatus === "waiting_for_user"}
+          disabled={!hasSelectedProject}
           canCancel={canCancel}
           chatId={activeChatId}
           projectId={projectId}

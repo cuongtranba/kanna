@@ -561,7 +561,7 @@ export function ChatPage() {
   useStickyChatFocus({
     rootRef: chatCardRef,
     fallbackRef: chatInputElementRef,
-    enabled: state.hasSelectedProject && state.runtime?.status !== "waiting_for_user",
+    enabled: state.hasSelectedProject,
     canCancel: state.canCancel,
   })
 
