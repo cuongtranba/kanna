@@ -258,6 +258,72 @@ All state is stored locally at `~/.kanna/data/`:
 
 Event logs are append-only JSONL. On startup, Kanna replays the log tail after the last snapshot, then compacts if the logs exceed 2 MB.
 
+## Self-hosting on macOS (launchd + Cloudflare tunnel)
+
+Run Kanna as a background service on macOS, exposed through a named Cloudflare tunnel. Reload after code changes with one command.
+
+### 1. Link the repo as the global install
+
+`bun link` makes the global `kanna` binary resolve to your checkout, so rebuilds go live without reinstalling:
+
+```bash
+cd ~/path/to/kanna
+bun install
+bun run build
+bun link           # registers kanna-code → repo
+```
+
+After this, `~/.bun/install/global/node_modules/kanna-code` is a symlink to your repo.
+
+### 2. Create a launchd agent
+
+Save to `~/Library/LaunchAgents/io.silentium.kanna.plist`, replacing `<TOKEN>` and `<PASSWORD>`:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>io.silentium.kanna</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/YOU/.bun/bin/kanna</string>
+    <string>--cloudflared</string><string><TOKEN></string>
+    <string>--password</string><string><PASSWORD></string>
+    <string>--no-open</string>
+  </array>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>StandardOutPath</key><string>/tmp/kanna.log</string>
+  <key>StandardErrorPath</key><string>/tmp/kanna.err</string>
+</dict>
+</plist>
+```
+
+Load it:
+
+```bash
+launchctl load ~/Library/LaunchAgents/io.silentium.kanna.plist
+launchctl list | grep kanna          # should show a nonzero PID
+```
+
+### 3. Deploy script
+
+`scripts/deploy.sh` installs deps if needed, rebuilds the client, and restarts the launchd job:
+
+```bash
+./scripts/deploy.sh
+```
+
+Typical update flow after pulling new code:
+
+```bash
+git pull
+./scripts/deploy.sh
+```
+
+The tunnel reconnects in a few seconds and keeps the same public hostname configured on your Cloudflare tunnel.
+
 ## Star History
 
 <a href="https://www.star-history.com/?repos=jakemor%2Fkanna&type=date&legend=top-left">
