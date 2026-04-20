@@ -8,6 +8,7 @@ import { useRightSidebarStore } from "../stores/rightSidebarStore"
 import { useTerminalLayoutStore } from "../stores/terminalLayoutStore"
 import { getEditorPresetLabel, useTerminalPreferencesStore } from "../stores/terminalPreferencesStore"
 import { useChatInputStore } from "../stores/chatInputStore"
+import { useSlashCommandsStore } from "../stores/slashCommandsStore"
 import type { ChatSnapshot, LocalProjectsSnapshot, SidebarChatRow, SidebarData } from "../../shared/types"
 import type { AskUserQuestionItem } from "../components/messages/types"
 import { useAppDialog } from "../components/ui/app-dialog"
@@ -818,6 +819,12 @@ export function useKannaState(activeChatId: string | null): KannaState {
       setHasOlderHistory(snapshot?.history.hasOlder ?? false)
       setChatReady(true)
       setCommandError(null)
+      if (snapshot) {
+        useSlashCommandsStore.getState().setForChat(
+          snapshot.runtime.chatId,
+          snapshot.slashCommands ?? [],
+        )
+      }
     })
     return () => {
       logKannaState("unsubscribing from chat", {
