@@ -497,4 +497,24 @@ describe("recordSessionCommandsLoaded", () => {
 
     expect(afterSecond).toBe(afterFirst)
   })
+
+  test("compaction + reload preserves slashCommands on chat records", async () => {
+    const dataDir = await createTempDataDir()
+    const store = new EventStore(dataDir)
+    await store.initialize()
+    const project = await store.openProject("/tmp/project")
+    const chat = await store.createChat(project.id)
+
+    const commands = [
+      { name: "review", description: "Review PR", argumentHint: "<pr>" },
+      { name: "help", description: "Show help", argumentHint: "" },
+    ]
+    await store.recordSessionCommandsLoaded(chat.id, commands)
+    await store.compact()
+
+    const reloaded = new EventStore(dataDir)
+    await reloaded.initialize()
+
+    expect(reloaded.getChat(chat.id)?.slashCommands).toEqual(commands)
+  })
 })
