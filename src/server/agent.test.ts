@@ -1524,6 +1524,142 @@ describe("AgentCoordinator claude integration", () => {
   })
 })
 
+describe("AgentCoordinator.ensureSlashCommandsLoaded", () => {
+  test("starts an ephemeral Claude session to load commands for a chat without a turn", async () => {
+    const store = createFakeStore()
+    const stateChanges: Array<string | undefined> = []
+    const commands: SlashCommand[] = [
+      { name: "review", description: "Review PR", argumentHint: "<pr>" },
+    ]
+    let startCount = 0
+    let closeCount = 0
+    const coordinator = new AgentCoordinator({
+      store: store as never,
+      onStateChange: (chatId) => { stateChanges.push(chatId) },
+      startClaudeSession: async () => {
+        startCount += 1
+        return {
+          provider: "claude",
+          stream: new AsyncEventQueue<any>(),
+          getAccountInfo: async () => null,
+          interrupt: async () => {},
+          close: () => { closeCount += 1 },
+          setModel: async () => {},
+          setPermissionMode: async () => {},
+          getSupportedCommands: async () => commands,
+          sendPrompt: async () => {},
+        }
+      },
+    })
+
+    await coordinator.ensureSlashCommandsLoaded("chat-1")
+
+    expect(startCount).toBe(1)
+    expect(closeCount).toBe(1)
+    expect(store.commandsLoaded).toHaveLength(1)
+    expect(store.commandsLoaded[0].commands).toEqual(commands)
+    expect(stateChanges).toContain("chat-1")
+  })
+
+  test("skips when commands already loaded for the chat", async () => {
+    const store = createFakeStore()
+    store.chat.slashCommands = [
+      { name: "help", description: "", argumentHint: "" },
+    ]
+    let startCount = 0
+    const coordinator = new AgentCoordinator({
+      store: store as never,
+      onStateChange: () => {},
+      startClaudeSession: async () => {
+        startCount += 1
+        return {
+          provider: "claude",
+          stream: new AsyncEventQueue<any>(),
+          getAccountInfo: async () => null,
+          interrupt: async () => {},
+          close: () => {},
+          setModel: async () => {},
+          setPermissionMode: async () => {},
+          getSupportedCommands: async () => [],
+          sendPrompt: async () => {},
+        }
+      },
+    })
+
+    await coordinator.ensureSlashCommandsLoaded("chat-1")
+
+    expect(startCount).toBe(0)
+    expect(store.commandsLoaded).toHaveLength(0)
+  })
+
+  test("skips chats whose provider is codex", async () => {
+    const store = createFakeStore()
+    store.chat.provider = "codex"
+    let startCount = 0
+    const coordinator = new AgentCoordinator({
+      store: store as never,
+      onStateChange: () => {},
+      startClaudeSession: async () => {
+        startCount += 1
+        return {
+          provider: "claude",
+          stream: new AsyncEventQueue<any>(),
+          getAccountInfo: async () => null,
+          interrupt: async () => {},
+          close: () => {},
+          setModel: async () => {},
+          setPermissionMode: async () => {},
+          getSupportedCommands: async () => [],
+          sendPrompt: async () => {},
+        }
+      },
+    })
+
+    await coordinator.ensureSlashCommandsLoaded("chat-1")
+
+    expect(startCount).toBe(0)
+    expect(store.commandsLoaded).toHaveLength(0)
+  })
+
+  test("dedupes concurrent calls via in-flight guard", async () => {
+    const store = createFakeStore()
+    let releaseCommands: (value: SlashCommand[]) => void
+    const commandsReady = new Promise<SlashCommand[]>((resolve) => {
+      releaseCommands = resolve
+    })
+    let startCount = 0
+    const coordinator = new AgentCoordinator({
+      store: store as never,
+      onStateChange: () => {},
+      startClaudeSession: async () => {
+        startCount += 1
+        return {
+          provider: "claude",
+          stream: new AsyncEventQueue<any>(),
+          getAccountInfo: async () => null,
+          interrupt: async () => {},
+          close: () => {},
+          setModel: async () => {},
+          setPermissionMode: async () => {},
+          getSupportedCommands: () => commandsReady,
+          sendPrompt: async () => {},
+        }
+      },
+    })
+
+    const p1 = coordinator.ensureSlashCommandsLoaded("chat-1")
+    const p2 = coordinator.ensureSlashCommandsLoaded("chat-1")
+
+    await new Promise((r) => setTimeout(r, 20))
+    releaseCommands!([{ name: "plan", description: "", argumentHint: "" }])
+
+    await Promise.all([p1, p2])
+
+    expect(startCount).toBe(1)
+    expect(store.commandsLoaded).toHaveLength(1)
+  })
+})
+
 function createFakeStore() {
   const chat = {
     id: "chat-1",
@@ -1532,6 +1668,7 @@ function createFakeStore() {
     provider: null as "claude" | "codex" | null,
     planMode: false,
     sessionToken: null as string | null,
+    slashCommands: undefined as SlashCommand[] | undefined,
   }
   const project = {
     id: "project-1",
@@ -1545,9 +1682,14 @@ function createFakeStore() {
     commandsLoaded: [] as Array<{ chatId: string; commands: SlashCommand[] }>,
     async recordSessionCommandsLoaded(chatId: string, commands: SlashCommand[]) {
       this.commandsLoaded.push({ chatId, commands })
+      chat.slashCommands = commands
     },
     requireChat(chatId: string) {
       expect(chatId).toBe("chat-1")
+      return chat
+    },
+    getChat(chatId: string) {
+      if (chatId !== "chat-1") return null
       return chat
     },
     getProject(projectId: string) {

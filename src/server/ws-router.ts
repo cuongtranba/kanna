@@ -1145,6 +1145,9 @@ export function createWsRouter({
         const snapshotSignatures = ensureSnapshotSignatures(ws)
         ws.data.subscriptions.set(parsed.id, parsed.topic)
         snapshotSignatures.delete(parsed.id)
+        if (parsed.topic.type === "chat") {
+          void agent.ensureSlashCommandsLoaded(parsed.topic.chatId)
+        }
         if (parsed.topic.type === "local-projects") {
           void refreshDiscovery().then(() => {
             if (ws.data.subscriptions.has(parsed.id)) {
