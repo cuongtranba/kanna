@@ -87,6 +87,9 @@ function getReplayEventPriority(event: StoreEvent) {
       return 9
     case "chat_deleted":
       return 10
+    // TODO(Task 3): assign final priority once reducer is implemented
+    case "session_commands_loaded":
+      return 6
   }
 }
 
