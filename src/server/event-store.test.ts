@@ -479,4 +479,22 @@ describe("recordSessionCommandsLoaded", () => {
       { name: "b", description: "", argumentHint: "" },
     ])
   })
+
+  test("skips redundant writes when commands are unchanged", async () => {
+    const dataDir = await createTempDataDir()
+    const store = new EventStore(dataDir)
+    await store.initialize()
+    const project = await store.openProject("/tmp/project")
+    const chat = await store.createChat(project.id)
+    const turnsLogPath = join(dataDir, "turns.jsonl")
+
+    const commands = [{ name: "review", description: "Review", argumentHint: "<pr>" }]
+    await store.recordSessionCommandsLoaded(chat.id, commands)
+    const afterFirst = (await readFile(turnsLogPath, "utf8")).trim().split("\n").length
+
+    await store.recordSessionCommandsLoaded(chat.id, [...commands.map((c) => ({ ...c }))])
+    const afterSecond = (await readFile(turnsLogPath, "utf8")).trim().split("\n").length
+
+    expect(afterSecond).toBe(afterFirst)
+  })
 })
