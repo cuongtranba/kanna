@@ -184,6 +184,6 @@ export function deriveChatSnapshot(
     messages: transcript.messages,
     history: transcript.history,
     availableProviders: [...SERVER_PROVIDERS],
-    slashCommands: [],
+    slashCommands: (chat.slashCommands ?? []).map((c) => ({ ...c })),
   }
 }
