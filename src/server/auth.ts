@@ -47,11 +47,29 @@ function sanitizeNextPath(nextPath: string | null | undefined) {
   return nextPath
 }
 
-function shouldUseSecureCookie(req: Request) {
+function forwardedProto(req: Request): string | null {
+  const xfp = req.headers.get("x-forwarded-proto")
+  if (xfp) return xfp.split(",")[0].trim().toLowerCase()
+  return null
+}
+
+function effectiveOrigin(req: Request, trustProxy: boolean): string {
+  const url = new URL(req.url)
+  if (!trustProxy) return url.origin
+  const proto = forwardedProto(req)
+  const scheme = proto ?? url.protocol.replace(":", "")
+  return `${scheme}://${url.host}`
+}
+
+function shouldUseSecureCookie(req: Request, trustProxy: boolean) {
+  if (trustProxy) {
+    const proto = forwardedProto(req)
+    if (proto) return proto === "https"
+  }
   return new URL(req.url).protocol === "https:"
 }
 
-function buildCookie(name: string, value: string, req: Request, extras: string[] = []) {
+function buildCookie(name: string, value: string, req: Request, trustProxy: boolean, extras: string[] = []) {
   const parts = [
     `${name}=${encodeURIComponent(value)}`,
     "Path=/",
@@ -59,7 +77,7 @@ function buildCookie(name: string, value: string, req: Request, extras: string[]
     "SameSite=Strict",
   ]
 
-  if (shouldUseSecureCookie(req)) {
+  if (shouldUseSecureCookie(req, trustProxy)) {
     parts.push("Secure")
   }
 
@@ -101,9 +119,22 @@ function escapeHtml(value: string) {
     .replaceAll("'", "&#39;")
 }
 
-export function createAuthManager(password: string): AuthManager {
+export interface AuthManagerOptions {
+  /**
+   * When true, the auth layer trusts X-Forwarded-Proto to decide whether the
+   * public origin is https. The hostname always comes from the Host header
+   * (never X-Forwarded-Host) because X-Forwarded-Host is passed through by
+   * some tunnels unmodified and would otherwise allow open redirects.
+   * Enable only when the server is reachable solely through a trusted reverse
+   * proxy such as cloudflared.
+   */
+  trustProxy?: boolean
+}
+
+export function createAuthManager(password: string, options: AuthManagerOptions = {}): AuthManager {
   const sessions = new Set<string>()
   const expectedPassword = Buffer.from(password)
+  const trustProxy = options.trustProxy ?? false
 
   function getSessionToken(req: Request) {
     return parseCookies(req.headers.get("cookie")).get(SESSION_COOKIE_NAME) ?? null
@@ -117,13 +148,15 @@ export function createAuthManager(password: string): AuthManager {
   function validateOrigin(req: Request) {
     const origin = req.headers.get("origin")
     if (!origin) return true
-    return origin === new URL(req.url).origin
+    if (origin === new URL(req.url).origin) return true
+    if (!trustProxy) return false
+    return origin === effectiveOrigin(req, trustProxy)
   }
 
   function createSessionCookie(req: Request) {
     const sessionToken = randomBytes(32).toString("base64url")
     sessions.add(sessionToken)
-    return buildCookie(SESSION_COOKIE_NAME, sessionToken, req)
+    return buildCookie(SESSION_COOKIE_NAME, sessionToken, req, trustProxy)
   }
 
   function clearSessionCookie(req: Request) {
@@ -131,7 +164,7 @@ export function createAuthManager(password: string): AuthManager {
     if (sessionToken) {
       sessions.delete(sessionToken)
     }
-    return buildCookie(SESSION_COOKIE_NAME, "", req, ["Max-Age=0"])
+    return buildCookie(SESSION_COOKIE_NAME, "", req, trustProxy, ["Max-Age=0"])
   }
 
   function verifyPassword(candidate: string) {
@@ -152,7 +185,7 @@ export function createAuthManager(password: string): AuthManager {
   function unauthorizedResponse(req: Request) {
     if (req.method === "GET" && requestWantsHtml(req)) {
       const url = new URL(req.url)
-      const loginUrl = new URL("/auth/login", req.url)
+      const loginUrl = new URL("/auth/login", effectiveOrigin(req, trustProxy))
       loginUrl.searchParams.set("next", sanitizeNextPath(`${url.pathname}${url.search}`))
       return Response.redirect(loginUrl, 302)
     }
@@ -163,7 +196,7 @@ export function createAuthManager(password: string): AuthManager {
   function renderLoginPage(req: Request) {
     if (isAuthenticated(req)) {
       const currentUrl = new URL(req.url)
-      return Response.redirect(new URL(sanitizeNextPath(currentUrl.searchParams.get("next")), req.url), 302)
+      return Response.redirect(new URL(sanitizeNextPath(currentUrl.searchParams.get("next")), effectiveOrigin(req, trustProxy)), 302)
     }
 
     const currentUrl = new URL(req.url)
@@ -264,7 +297,7 @@ export function createAuthManager(password: string): AuthManager {
         return Response.json({ error: "Invalid password" }, { status: 401 })
       }
 
-      const redirectUrl = new URL("/auth/login", req.url)
+      const redirectUrl = new URL("/auth/login", effectiveOrigin(req, trustProxy))
       redirectUrl.searchParams.set("error", "1")
       redirectUrl.searchParams.set("next", sanitizeNextPath(nextPath || fallbackNextPath))
       return Response.redirect(redirectUrl, 302)
@@ -272,7 +305,7 @@ export function createAuthManager(password: string): AuthManager {
 
     const response = wantsJson
       ? Response.json({ ok: true, nextPath: sanitizeNextPath(nextPath || fallbackNextPath) })
-      : Response.redirect(new URL(sanitizeNextPath(nextPath || fallbackNextPath), req.url), 302)
+      : Response.redirect(new URL(sanitizeNextPath(nextPath || fallbackNextPath), effectiveOrigin(req, trustProxy)), 302)
 
     response.headers.set("Set-Cookie", createSessionCookie(req))
     return response

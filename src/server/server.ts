@@ -60,6 +60,14 @@ export interface StartKannaServerOptions {
   host?: string
   password?: string | null
   strictPort?: boolean
+  /**
+   * When true, the auth layer trusts X-Forwarded-Proto / X-Forwarded-Host
+   * headers for CSRF origin checks, redirect URLs, and the Secure cookie flag.
+   * Only enable when the server is reachable solely through a trusted reverse
+   * proxy such as cloudflared — otherwise these headers are client-controlled
+   * and allow CSRF bypass / open redirects.
+   */
+  trustProxy?: boolean
   onMigrationProgress?: (message: string) => void
   update?: {
     version: string
@@ -72,7 +80,7 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
   const port = options.port ?? 3210
   const hostname = options.host ?? "127.0.0.1"
   const strictPort = options.strictPort ?? false
-  const auth = options.password ? createAuthManager(options.password) : null
+  const auth = options.password ? createAuthManager(options.password, { trustProxy: options.trustProxy ?? false }) : null
   const store = new EventStore()
   const diffStore = new DiffStore(store.dataDir)
   const machineDisplayName = getMachineDisplayName()

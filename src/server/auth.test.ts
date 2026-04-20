@@ -11,10 +11,15 @@ afterEach(async () => {
   await Promise.all(tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })))
 })
 
-async function startPasswordServer() {
+async function startPasswordServer(options: { trustProxy?: boolean; port?: number } = {}) {
   const projectDir = await mkdtemp(path.join(tmpdir(), "kanna-auth-test-"))
   tempDirs.push(projectDir)
-  const server = await startKannaServer({ port: 4320, strictPort: true, password: "secret" })
+  const server = await startKannaServer({
+    port: options.port ?? 4320,
+    strictPort: true,
+    password: "secret",
+    trustProxy: options.trustProxy ?? false,
+  })
   const project = await server.store.openProject(projectDir, "Project")
   return { server, projectDir, project }
 }
@@ -164,6 +169,92 @@ describe("password auth", () => {
       })
       expect(contentResponse.status).toBe(200)
       expect(await contentResponse.text()).toBe("hello from upload")
+    } finally {
+      await server.stop()
+    }
+  })
+
+  test("ignores forwarded headers when trustProxy is off", async () => {
+    const { server } = await startPasswordServer({ port: 54321 })
+
+    try {
+      const response = await fetch(`http://localhost:${server.port}/`, {
+        redirect: "manual",
+        headers: {
+          Accept: "text/html",
+          "X-Forwarded-Host": "evil.test",
+          "X-Forwarded-Proto": "https",
+        },
+      })
+      expect(response.status).toBe(302)
+      expect(response.headers.get("location")).toBe(`http://localhost:${server.port}/auth/login?next=%2F`)
+
+      const loginResponse = await fetch(`http://localhost:${server.port}/auth/login`, {
+        method: "POST",
+        body: JSON.stringify({ password: "secret", next: "/" }),
+        headers: {
+          "Content-Type": "application/json",
+          Origin: "https://evil.test",
+          "X-Forwarded-Host": "evil.test",
+          "X-Forwarded-Proto": "https",
+        },
+      })
+      expect(loginResponse.status).toBe(403)
+
+      const goodLoginResponse = await fetch(`http://localhost:${server.port}/auth/login`, {
+        method: "POST",
+        body: JSON.stringify({ password: "secret", next: "/" }),
+        headers: {
+          "Content-Type": "application/json",
+          Origin: `http://localhost:${server.port}`,
+          "X-Forwarded-Proto": "https",
+        },
+      })
+      expect(goodLoginResponse.status).toBe(200)
+      const cookieHeader = goodLoginResponse.headers.get("set-cookie") ?? ""
+      expect(cookieHeader).not.toContain("Secure")
+    } finally {
+      await server.stop()
+    }
+  })
+
+  test("honors forwarded headers when trustProxy is on", async () => {
+    const { server } = await startPasswordServer({ port: 54322, trustProxy: true })
+
+    try {
+      const redirect = await fetch(`http://localhost:${server.port}/`, {
+        redirect: "manual",
+        headers: {
+          Accept: "text/html",
+          "X-Forwarded-Host": `localhost:${server.port}`,
+          "X-Forwarded-Proto": "https",
+        },
+      })
+      expect(redirect.status).toBe(302)
+      expect(redirect.headers.get("location")).toBe(`https://localhost:${server.port}/auth/login?next=%2F`)
+
+      const loginResponse = await fetch(`http://localhost:${server.port}/auth/login`, {
+        method: "POST",
+        body: JSON.stringify({ password: "secret", next: "/" }),
+        headers: {
+          "Content-Type": "application/json",
+          Origin: `https://localhost:${server.port}`,
+          "X-Forwarded-Host": `localhost:${server.port}`,
+          "X-Forwarded-Proto": "https",
+        },
+      })
+      expect(loginResponse.status).toBe(200)
+      expect(loginResponse.headers.get("set-cookie") ?? "").toContain("Secure")
+
+      const evilResponse = await fetch(`http://localhost:${server.port}/auth/login`, {
+        method: "POST",
+        body: JSON.stringify({ password: "secret", next: "/" }),
+        headers: {
+          "Content-Type": "application/json",
+          Origin: `http://localhost:${server.port}`,
+        },
+      })
+      expect(evilResponse.status).toBe(200)
     } finally {
       await server.stop()
     }
