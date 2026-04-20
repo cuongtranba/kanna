@@ -820,9 +820,11 @@ export function useKannaState(activeChatId: string | null): KannaState {
       setChatReady(true)
       setCommandError(null)
       if (snapshot) {
-        useSlashCommandsStore.getState().setForChat(
+        const store = useSlashCommandsStore.getState()
+        store.setForChat(snapshot.runtime.chatId, snapshot.slashCommands ?? [])
+        store.setLoadingForChat(
           snapshot.runtime.chatId,
-          snapshot.slashCommands ?? [],
+          snapshot.slashCommandsLoading ?? false,
         )
       }
     })

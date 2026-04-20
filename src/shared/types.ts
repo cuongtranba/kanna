@@ -882,6 +882,7 @@ export interface ChatSnapshot {
   history: ChatHistorySnapshot
   availableProviders: ProviderCatalogEntry[]
   slashCommands: SlashCommand[]
+  slashCommandsLoading: boolean
 }
 
 export interface ChatHistoryPage {

@@ -427,6 +427,7 @@ export function createWsRouter({
           store.state,
           agent.getActiveStatuses(),
           agent.getDrainingChatIds(),
+          agent.getSlashCommandsLoadingChatIds(),
           topic.chatId,
           (chatId) => store.getRecentChatHistory(chatId, topic.recentLimit ?? DEFAULT_CHAT_RECENT_LIMIT)
         ),

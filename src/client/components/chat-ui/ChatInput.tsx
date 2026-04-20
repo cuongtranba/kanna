@@ -1,7 +1,7 @@
 import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { SlashCommandPicker } from "./SlashCommandPicker"
 import { applyCommandToInput, filterCommands, shouldShowPicker } from "../../lib/slash-commands"
-import { useSlashCommands } from "../../hooks/useSlashCommands"
+import { useSlashCommands, useSlashCommandsLoading } from "../../hooks/useSlashCommands"
 import type { SlashCommand } from "../../../shared/types"
 import { ArrowUp, Paperclip } from "lucide-react"
 import {
@@ -225,6 +225,7 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput({
   const providerPrefs = getEffectiveComposerState(composerState, activeProvider, providerDefaults)
   const selectedProvider = providerLocked ? activeProvider : composerState.provider
   const slashCommands = useSlashCommands(chatId ?? null)
+  const slashCommandsLoading = useSlashCommandsLoading(chatId ?? null)
   const [pickerIndex, setPickerIndex] = useState(0)
   const [pickerDismissed, setPickerDismissed] = useState(false)
   const [caretVersion, setCaretVersion] = useState(0)
@@ -245,7 +246,7 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput({
   )
   const pickerOpen =
     pickerTrigger.open &&
-    slashCommands.length > 0 &&
+    (slashCommands.length > 0 || slashCommandsLoading) &&
     !pickerDismissed &&
     selectedProvider === "claude"
 
@@ -763,6 +764,7 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput({
               <SlashCommandPicker
                 items={filteredCommands}
                 activeIndex={pickerIndex}
+                loading={slashCommandsLoading}
                 onSelect={acceptCommand}
                 onHoverIndex={setPickerIndex}
               />

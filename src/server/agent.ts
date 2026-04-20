@@ -715,6 +715,10 @@ export class AgentCoordinator {
     return new Set(this.drainingStreams.keys())
   }
 
+  getSlashCommandsLoadingChatIds(): Set<string> {
+    return new Set(this.slashCommandsInFlight)
+  }
+
   private emitStateChange(chatId?: string, options?: { immediate?: boolean }) {
     this.onStateChange(chatId, options)
   }
@@ -750,6 +754,7 @@ export class AgentCoordinator {
     if (!project) return
 
     this.slashCommandsInFlight.add(chatId)
+    this.emitStateChange(chatId)
     try {
       let commands: SlashCommand[]
       const existing = this.claudeSessions.get(chatId)
@@ -778,6 +783,7 @@ export class AgentCoordinator {
       console.warn("[kanna/agent] ensureSlashCommandsLoaded failed", error)
     } finally {
       this.slashCommandsInFlight.delete(chatId)
+      this.emitStateChange(chatId)
     }
   }
 

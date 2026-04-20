@@ -73,6 +73,7 @@ describe("read models", () => {
       state,
       new Map(),
       new Set(),
+      new Set(),
       "chat-1",
       () => ({
         messages: [],
@@ -288,6 +289,7 @@ describe("read models", () => {
     const snapshot = deriveChatSnapshot(
       state,
       new Map(),
+      new Set(),
       new Set(),
       "chat-1",
       () => ({

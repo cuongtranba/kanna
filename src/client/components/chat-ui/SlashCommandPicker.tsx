@@ -5,17 +5,42 @@ import { cn } from "../../lib/utils"
 interface SlashCommandPickerProps {
   items: SlashCommand[]
   activeIndex: number
+  loading: boolean
   onSelect: (command: SlashCommand) => void
   onHoverIndex: (index: number) => void
 }
 
-export function SlashCommandPicker({ items, activeIndex, onSelect, onHoverIndex }: SlashCommandPickerProps) {
+const SKELETON_ROWS = 4
+
+export function SlashCommandPicker({ items, activeIndex, loading, onSelect, onHoverIndex }: SlashCommandPickerProps) {
   const listRef = useRef<HTMLUListElement>(null)
 
   useEffect(() => {
     const el = listRef.current?.children.item(activeIndex) as HTMLElement | null
     el?.scrollIntoView({ block: "nearest" })
   }, [activeIndex])
+
+  if (items.length === 0 && loading) {
+    return (
+      <ul
+        aria-busy="true"
+        aria-label="Loading slash commands"
+        className="absolute bottom-full left-0 mb-2 w-full max-w-md rounded-md border border-border bg-popover shadow-md overflow-hidden"
+      >
+        {Array.from({ length: SKELETON_ROWS }).map((_, i) => (
+          <li
+            key={i}
+            className="flex items-baseline gap-2 px-3 py-1.5"
+            data-testid="slash-picker-skeleton-row"
+          >
+            <span className="h-3 w-20 rounded bg-muted animate-pulse" />
+            <span className="h-3 w-12 rounded bg-muted/70 animate-pulse" />
+            <span className="ml-auto h-3 w-32 rounded bg-muted/60 animate-pulse" />
+          </li>
+        ))}
+      </ul>
+    )
+  }
 
   if (items.length === 0) {
     return (
