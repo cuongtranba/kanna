@@ -6,7 +6,7 @@ export type LlmProviderKind = "openai" | "openrouter" | "custom"
 export const DEFAULT_OPENAI_SDK_MODEL = "gpt-5.4-mini"
 export const DEFAULT_OPENROUTER_SDK_MODEL = "moonshotai/kimi-k2.5:nitro"
 
-export type AttachmentKind = "image" | "file"
+export type AttachmentKind = "image" | "file" | "mention"
 
 export interface ChatAttachment {
   id: string

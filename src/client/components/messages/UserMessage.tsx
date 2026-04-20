@@ -71,7 +71,7 @@ export function UserMessage({ content, attachments = [], steered = false }: Prop
               <AttachmentFileCard
                 key={attachment.id}
                 attachment={attachment}
-                onClick={() => handleAttachmentClick(attachment)}
+                onClick={attachment.contentUrl ? () => handleAttachmentClick(attachment) : undefined}
               />
             ))}
           </div>

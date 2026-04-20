@@ -137,3 +137,14 @@ describe("ChatInput", () => {
     expect(html).not.toContain('type="file" multiple="" class="hidden"')
   })
 })
+
+describe("mention picker wiring", () => {
+  test("shouldShowMentionPicker trigger produces the expected shape for mid-input @", async () => {
+    const { shouldShowMentionPicker } = await import("../../lib/mention-suggestions")
+    expect(shouldShowMentionPicker("hello @src", 10)).toEqual({
+      open: true,
+      query: "src",
+      tokenStart: 6,
+    })
+  })
+})

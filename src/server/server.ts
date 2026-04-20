@@ -16,6 +16,7 @@ import type { UpdateInstallAttemptResult } from "./cli-runtime"
 import { createWsRouter, type ClientState } from "./ws-router"
 import { deleteProjectUpload, inferAttachmentContentType, inferProjectFileContentType, persistProjectUpload } from "./uploads"
 import { getProjectUploadDir } from "./paths"
+import { listProjectPaths } from "./project-paths"
 
 const MAX_UPLOAD_FILES = 50
 const MAX_UPLOAD_SIZE_BYTES = 100 * 1024 * 1024
@@ -228,6 +229,11 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
           const projectFileContentResponse = await handleProjectFileContent(req, url, store)
           if (projectFileContentResponse) {
             return projectFileContentResponse
+          }
+
+          const projectPathsResponse = await handleProjectPaths(req, url, store)
+          if (projectPathsResponse) {
+            return projectPathsResponse
           }
 
           return serveStatic(distDir, url.pathname)
@@ -444,6 +450,34 @@ async function handleProjectUploadDelete(req: Request, url: URL, store: EventSto
   })
 
   return Response.json({ ok: deleted })
+}
+
+async function handleProjectPaths(req: Request, url: URL, store: EventStore) {
+  if (req.method !== "GET") return null
+  const match = url.pathname.match(/^\/api\/projects\/([^/]+)\/paths$/)
+  if (!match) return null
+
+  const project = store.getProject(match[1])
+  if (!project) {
+    return Response.json({ error: "Project not found" }, { status: 404 })
+  }
+
+  const query = url.searchParams.get("query") ?? ""
+  const limitRaw = url.searchParams.get("limit")
+  const limit = limitRaw !== null ? Number.parseInt(limitRaw, 10) : undefined
+
+  try {
+    const paths = await listProjectPaths({
+      projectId: project.id,
+      localPath: project.localPath,
+      query,
+      limit: Number.isFinite(limit) ? limit : undefined,
+    })
+    return Response.json({ paths })
+  } catch (error) {
+    console.error("[paths] list failed:", error)
+    return Response.json({ error: "Failed to list paths" }, { status: 500 })
+  }
 }
 
 async function serveStatic(distDir: string, pathname: string) {

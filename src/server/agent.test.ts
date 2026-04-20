@@ -205,6 +205,22 @@ describe("attachment prompt helpers", () => {
 
     expect(hint).toContain("&quot;report&quot; &lt;draft&gt;.txt")
   })
+
+  test("renders kind=\"mention\" attachments", () => {
+    const hint = buildAttachmentHintText([{
+      id: "m1",
+      kind: "mention",
+      displayName: "src/agent.ts",
+      absolutePath: "/tmp/project/src/agent.ts",
+      relativePath: "./src/agent.ts",
+      contentUrl: "",
+      mimeType: "",
+      size: 0,
+    }])
+    expect(hint).toContain("kind=\"mention\"")
+    expect(hint).toContain("path=\"/tmp/project/src/agent.ts\"")
+    expect(hint).toContain("project_path=\"./src/agent.ts\"")
+  })
 })
 
 describe("AgentCoordinator codex integration", () => {

@@ -1,6 +1,9 @@
 import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { SlashCommandPicker } from "./SlashCommandPicker"
+import { MentionPicker } from "./MentionPicker"
 import { applyCommandToInput, filterCommands, shouldShowPicker } from "../../lib/slash-commands"
+import { applyMentionToInput, shouldShowMentionPicker } from "../../lib/mention-suggestions"
+import { useMentionSuggestions, type ProjectPath } from "../../hooks/useMentionSuggestions"
 import { useSlashCommands, useSlashCommandsLoading } from "../../hooks/useSlashCommands"
 import type { SlashCommand } from "../../../shared/types"
 import { ArrowUp, Paperclip } from "lucide-react"
@@ -254,6 +257,33 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput({
     if (pickerOpen) setPickerIndex(0)
   }, [pickerOpen, pickerTrigger.query])
 
+  const [mentionIndex, setMentionIndex] = useState(0)
+  const [mentionDismissed, setMentionDismissed] = useState(false)
+
+  const mentionTrigger = useMemo(
+    () => shouldShowMentionPicker(value, caret),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [value, caret, caretVersion],
+  )
+  const mentionState = useMentionSuggestions({
+    projectId: projectId ?? null,
+    query: mentionTrigger.query,
+    enabled: mentionTrigger.open && !mentionDismissed,
+  })
+  const mentionOpen =
+    mentionTrigger.open &&
+    !mentionDismissed &&
+    !pickerOpen &&
+    (mentionState.items.length > 0 || mentionState.loading)
+
+  useEffect(() => {
+    if (mentionOpen) setMentionIndex(0)
+  }, [mentionOpen, mentionTrigger.query])
+
+  useEffect(() => {
+    if (!mentionTrigger.open) setMentionDismissed(false)
+  }, [mentionTrigger.open, mentionTrigger.tokenStart])
+
   function acceptCommand(cmd: SlashCommand) {
     const { value: nextValue, caret: nextCaret } = applyCommandToInput({
       value,
@@ -263,6 +293,52 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput({
     setValue(nextValue)
     if (chatId) setDraft(chatId, nextValue)
     setPickerDismissed(true)
+    requestAnimationFrame(() => {
+      const el = textareaRef.current
+      if (!el) return
+      el.focus()
+      el.setSelectionRange(nextCaret, nextCaret)
+    })
+  }
+
+  function acceptMention(item: ProjectPath) {
+    if (!projectId) {
+      setMentionDismissed(true)
+      return
+    }
+    const { value: nextValue, caret: nextCaret } = applyMentionToInput({
+      value,
+      caret,
+      tokenStart: mentionTrigger.tokenStart,
+      pickedPath: item.path,
+    })
+    setValue(nextValue)
+    if (chatId) setDraft(chatId, nextValue)
+
+    const relativeForAttachment = item.path.endsWith("/") ? item.path.slice(0, -1) : item.path
+    const alreadyMentioned = attachments.some(
+      (a) => a.kind === "mention" && a.relativePath === `./${relativeForAttachment}`,
+    )
+    if (!alreadyMentioned) {
+      const contentUrl = item.kind === "file"
+        ? `/api/projects/${projectId}/files/${encodeURIComponent(relativeForAttachment)}/content`
+        : ""
+      setAttachments((prev) => [
+        ...prev,
+        {
+          id: crypto.randomUUID(),
+          kind: "mention",
+          displayName: relativeForAttachment,
+          absolutePath: "",
+          relativePath: `./${relativeForAttachment}`,
+          contentUrl,
+          mimeType: "",
+          size: 0,
+          status: "uploaded",
+        },
+      ])
+    }
+    setMentionDismissed(true)
     requestAnimationFrame(() => {
       const el = textareaRef.current
       if (!el) return
@@ -604,6 +680,30 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput({
   }
 
   function handleKeyDown(event: React.KeyboardEvent) {
+    if (mentionOpen) {
+      if (event.key === "Escape") {
+        event.preventDefault()
+        setMentionDismissed(true)
+        return
+      }
+      if (event.key === "ArrowDown") {
+        event.preventDefault()
+        setMentionIndex((i) => Math.min(mentionState.items.length - 1, i + 1))
+        return
+      }
+      if (event.key === "ArrowUp") {
+        event.preventDefault()
+        setMentionIndex((i) => Math.max(0, i - 1))
+        return
+      }
+      if (event.key === "Enter" || event.key === "Tab") {
+        event.preventDefault()
+        const item = mentionState.items[mentionIndex]
+        if (item) acceptMention(item)
+        return
+      }
+    }
+
     if (pickerOpen) {
       if (event.key === "Escape") {
         event.preventDefault()
@@ -749,7 +849,7 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput({
                     ) : (
                       <AttachmentFileCard
                         attachment={attachment}
-                        onClick={attachment.status === "uploaded" ? () => handleAttachmentPreview(attachment) : undefined}
+                        onClick={attachment.status === "uploaded" && attachment.contentUrl ? () => handleAttachmentPreview(attachment) : undefined}
                         onRemove={() => removeAttachment(attachment)}
                       />
                     )}
@@ -767,6 +867,15 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput({
                 loading={slashCommandsLoading}
                 onSelect={acceptCommand}
                 onHoverIndex={setPickerIndex}
+              />
+            )}
+            {mentionOpen && (
+              <MentionPicker
+                items={mentionState.items}
+                activeIndex={mentionIndex}
+                loading={mentionState.loading}
+                onSelect={acceptMention}
+                onHoverIndex={setMentionIndex}
               />
             )}
             <label
