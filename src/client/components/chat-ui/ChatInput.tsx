@@ -229,7 +229,9 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput({
   const [pickerDismissed, setPickerDismissed] = useState(false)
   const [caretVersion, setCaretVersion] = useState(0)
 
-  useEffect(() => { setPickerDismissed(false) }, [value])
+  useEffect(() => {
+    if (!value.startsWith("/")) setPickerDismissed(false)
+  }, [value])
 
   const caret = textareaRef.current?.selectionStart ?? value.length
   const pickerTrigger = useMemo(
@@ -259,7 +261,7 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput({
     })
     setValue(nextValue)
     if (chatId) setDraft(chatId, nextValue)
-    setPickerDismissed(false)
+    setPickerDismissed(true)
     requestAnimationFrame(() => {
       const el = textareaRef.current
       if (!el) return
