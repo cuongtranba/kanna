@@ -140,4 +140,75 @@ describe("importClaudeSessions", () => {
       ctx.cleanup()
     }
   })
+
+  test("re-import with unchanged file is skipped (hash match)", async () => {
+    const ctx = fresh()
+    try {
+      seedSession(ctx.homeDir, ctx.realProj, "sess-hash-1")
+      const store = new EventStore(ctx.dataDir)
+      await store.initialize()
+
+      const first = await importClaudeSessions({ store, homeDir: ctx.homeDir })
+      expect(first.imported).toBe(1)
+
+      const second = await importClaudeSessions({ store, homeDir: ctx.homeDir })
+      expect(second.imported).toBe(0)
+      expect(second.updated).toBe(0)
+      expect(second.skipped).toBe(1)
+    } finally {
+      ctx.cleanup()
+    }
+  })
+
+  test("re-import after JSONL grows appends new messages and counts as updated", async () => {
+    const ctx = fresh()
+    try {
+      const folderName = ctx.realProj.replace(/\//g, "-")
+      const projDir = path.join(ctx.homeDir, ".claude", "projects", folderName)
+      mkdirSync(projDir, { recursive: true })
+      const jsonlPath = path.join(projDir, "sess-grow.jsonl")
+
+      const line1 = JSON.stringify({
+        type: "user", uuid: "u1", sessionId: "sess-grow", cwd: ctx.realProj,
+        timestamp: "2026-04-20T10:00:00.000Z",
+        message: { role: "user", content: "first" },
+      })
+      const line2 = JSON.stringify({
+        type: "assistant", uuid: "a1", sessionId: "sess-grow", cwd: ctx.realProj,
+        timestamp: "2026-04-20T10:00:01.000Z",
+        message: { role: "assistant", id: "m1", content: [{ type: "text", text: "hello" }] },
+      })
+      writeFileSync(jsonlPath, `${line1}\n${line2}\n`, "utf8")
+
+      const store = new EventStore(ctx.dataDir)
+      await store.initialize()
+
+      const first = await importClaudeSessions({ store, homeDir: ctx.homeDir })
+      expect(first.imported).toBe(1)
+      const chats = [...store.state.chatsById.values()].filter((c) => !c.deletedAt)
+      expect(chats.length).toBe(1)
+      expect(store.getMessages(chats[0].id).length).toBe(2)
+
+      // append a new turn
+      const line3 = JSON.stringify({
+        type: "user", uuid: "u2", sessionId: "sess-grow", cwd: ctx.realProj,
+        timestamp: "2026-04-20T10:00:02.000Z",
+        message: { role: "user", content: "second" },
+      })
+      const line4 = JSON.stringify({
+        type: "assistant", uuid: "a2", sessionId: "sess-grow", cwd: ctx.realProj,
+        timestamp: "2026-04-20T10:00:03.000Z",
+        message: { role: "assistant", id: "m2", content: [{ type: "text", text: "world" }] },
+      })
+      writeFileSync(jsonlPath, `${line1}\n${line2}\n${line3}\n${line4}\n`, "utf8")
+
+      const second = await importClaudeSessions({ store, homeDir: ctx.homeDir })
+      expect(second.imported).toBe(0)
+      expect(second.updated).toBe(1)
+      expect(second.skipped).toBe(0)
+      expect(store.getMessages(chats[0].id).length).toBe(4)
+    } finally {
+      ctx.cleanup()
+    }
+  })
 })
