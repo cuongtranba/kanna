@@ -57,4 +57,5 @@ export interface ParsedClaudeSession {
   firstTimestamp: number
   lastTimestamp: number
   records: ClaudeSessionRecord[]
+  sourceHash: string
 }

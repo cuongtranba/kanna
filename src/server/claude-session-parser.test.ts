@@ -14,6 +14,8 @@ describe("parseClaudeSessionFile", () => {
     expect(parsed.records.length).toBe(6)
     expect(parsed.firstTimestamp).toBeGreaterThan(0)
     expect(parsed.lastTimestamp).toBeGreaterThanOrEqual(parsed.firstTimestamp)
+    expect(typeof parsed.sourceHash).toBe("string")
+    expect(parsed.sourceHash.length).toBe(32)  // md5 hex = 32 chars
   })
 
   test("skips malformed lines, keeps valid ones", () => {

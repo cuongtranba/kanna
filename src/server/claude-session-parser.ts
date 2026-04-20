@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto"
 import { readFileSync, statSync } from "node:fs"
 import type { ClaudeSessionRecord, ParsedClaudeSession } from "./claude-session-types"
 
@@ -19,6 +20,7 @@ export function parseClaudeSessionFile(filePath: string): ParsedClaudeSession | 
   } catch {
     return null
   }
+  const sourceHash = createHash("md5").update(raw).digest("hex")
 
   const records: ClaudeSessionRecord[] = []
   let sessionId: string | null = null
@@ -60,5 +62,6 @@ export function parseClaudeSessionFile(filePath: string): ParsedClaudeSession | 
     firstTimestamp: Number.isFinite(first) ? first : mtime,
     lastTimestamp: Number.isFinite(last) ? last : mtime,
     records,
+    sourceHash,
   }
 }
