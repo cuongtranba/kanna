@@ -1087,6 +1087,15 @@ export class AgentCoordinator {
       }
       this.claudeSessions.set(args.chatId, session)
       void this.runClaudeSession(session)
+      void (async () => {
+        try {
+          const commands = await started.getSupportedCommands()
+          await this.store.recordSessionCommandsLoaded(args.chatId, commands)
+          this.emitStateChange(args.chatId)
+        } catch (error) {
+          console.warn("[kanna/agent] failed to load slash commands", error)
+        }
+      })()
     } else {
       if (session.model !== args.model) {
         await session.session.setModel(args.model)

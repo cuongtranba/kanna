@@ -8,7 +8,7 @@ import {
   normalizeClaudeUsageSnapshot,
 } from "./agent"
 import type { HarnessTurn } from "./harness-types"
-import type { ChatAttachment, TranscriptEntry } from "../shared/types"
+import type { ChatAttachment, SlashCommand, TranscriptEntry } from "../shared/types"
 
 function timestamped<T extends Omit<TranscriptEntry, "_id" | "createdAt">>(entry: T): TranscriptEntry {
   return {
@@ -1333,6 +1333,57 @@ describe("AgentCoordinator claude integration", () => {
     events.close()
   })
 
+  test("loads supported commands when a fresh Claude session starts", async () => {
+    const events = new AsyncEventQueue<any>()
+    const commandsFromSDK: SlashCommand[] = [
+      { name: "review", description: "Review PR", argumentHint: "<pr>" },
+      { name: "help", description: "Show help", argumentHint: "" },
+    ]
+
+    const store = createFakeStore()
+    const coordinator = new AgentCoordinator({
+      store: store as never,
+      onStateChange: () => {},
+      startClaudeSession: async () => ({
+        provider: "claude",
+        stream: events,
+        getAccountInfo: async () => null,
+        interrupt: async () => {},
+        close: () => {},
+        setModel: async () => {},
+        setPermissionMode: async () => {},
+        getSupportedCommands: async () => commandsFromSDK,
+        sendPrompt: async () => {
+          events.push({
+            type: "transcript" as const,
+            entry: timestamped({
+              kind: "result",
+              subtype: "success",
+              isError: false,
+              durationMs: 0,
+              result: "done",
+            }),
+          })
+        },
+      }),
+    })
+
+    await coordinator.send({
+      type: "chat.send",
+      chatId: "chat-1",
+      provider: "claude",
+      content: "hello",
+      model: "claude-opus-4-1",
+    })
+    await waitFor(() => store.turnFinishedCount === 1)
+    await waitFor(() => store.commandsLoaded.length === 1)
+
+    expect(store.commandsLoaded[0].chatId).toBe("chat-1")
+    expect(store.commandsLoaded[0].commands).toEqual(commandsFromSDK)
+
+    events.close()
+  })
+
   test("Claude final results clear running state without using draining mode", async () => {
     const events = new AsyncEventQueue<any>()
 
@@ -1475,6 +1526,10 @@ function createFakeStore() {
     turnFinishedCount: 0,
     messages: [] as TranscriptEntry[],
     queuedMessages: [] as any[],
+    commandsLoaded: [] as Array<{ chatId: string; commands: SlashCommand[] }>,
+    async recordSessionCommandsLoaded(chatId: string, commands: SlashCommand[]) {
+      this.commandsLoaded.push({ chatId, commands })
+    },
     requireChat(chatId: string) {
       expect(chatId).toBe("chat-1")
       return chat
