@@ -28,3 +28,6 @@ Thumbs.db
 # vite
 vite.config.ts.timestamp-*
 /.kanna
+
+# git worktrees
+.worktrees/
