@@ -49,6 +49,7 @@ export interface CliRuntimeDeps {
   startServer: (options: CliOptions & {
     update: CliUpdateOptions
     onMigrationProgress?: (message: string) => void
+    trustProxy?: boolean
   }) => Promise<{ port: number; stop: () => Promise<void> }>
   fetchLatestVersion: (packageName: string) => Promise<string>
   installVersion: (packageName: string, version: string) => UpdateInstallAttemptResult
@@ -268,6 +269,7 @@ export async function runCli(argv: string[], deps: CliRuntimeDeps): Promise<CliR
 
   const { port, stop } = await deps.startServer({
     ...parsedArgs.options,
+    trustProxy: isShareEnabled(parsedArgs.options.share),
     onMigrationProgress: deps.log,
     update: {
       version: deps.version,
