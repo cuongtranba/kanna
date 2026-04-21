@@ -392,7 +392,7 @@ function KannaSidebarImpl({
                 size="icon"
                 onClick={() => void handleImport()}
                 disabled={isImporting}
-                className="hidden md:inline-flex size-10 rounded-lg hover:!border-border/0"
+                className="inline-flex size-10 rounded-lg hover:!border-border/0"
                 title="Import Claude Code sessions"
                 aria-label="Import Claude Code sessions"
               >

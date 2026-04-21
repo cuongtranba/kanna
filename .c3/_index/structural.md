@@ -1,7 +1,10 @@
 # C3 Structural Index
-<!-- hash: sha256:19399c2ae7a3d447c2fe501ae0acb7cd27cad75fdd6d54bf58642780b6da97a0 -->
+<!-- hash: sha256:651c48aee01eb39da48679d02f5280daccec070ea3eb1b6d338bb14ed8936ef8 -->
 
 ## adr-00000000-c3-adoption — C3 Architecture Documentation Adoption (adr)
+blocks: Goal ✓
+
+## adr-20260420-import-button-mobile-visible — import-button-mobile-visible (adr)
 blocks: Goal ✓
 
 ## c3-0 — Kanna (context)
