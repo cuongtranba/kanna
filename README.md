@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="https://www.npmjs.com/package/kanna-code"><img src="https://img.shields.io/npm/v/kanna-code.svg?style=flat&colorA=18181b&colorB=f472b6" alt="npm version" /></a>
+  <a href="https://www.npmjs.com/package/@cuongtranba/kanna"><img src="https://img.shields.io/npm/v/@cuongtranba/kanna.svg?style=flat&colorA=18181b&colorB=f472b6" alt="npm version" /></a>
 </p>
 
 <br />
@@ -27,7 +27,7 @@
 ## Quickstart
 
 ```bash
-bun install -g kanna-code
+bun install -g @cuongtranba/kanna
 ```
 
 If Bun isn't installed, install it first:
@@ -92,7 +92,7 @@ Embedded terminal support uses Bun's native PTY APIs and currently works on macO
 Install Kanna globally:
 
 ```bash
-bun install -g kanna-code
+bun install -g @cuongtranba/kanna
 ```
 
 If Bun isn't installed, install it first:
@@ -104,7 +104,7 @@ curl -fsSL https://bun.sh/install | bash
 Or clone and build from source:
 
 ```bash
-git clone https://github.com/jakemor/kanna.git
+git clone https://github.com/cuongtranba/kanna.git
 cd kanna
 bun install
 bun run build
@@ -270,10 +270,10 @@ Run Kanna as a background service on macOS under [pm2](https://pm2.keymetrics.io
 cd ~/path/to/kanna
 bun install
 bun run build
-bun link           # registers kanna-code → repo
+bun link           # registers @cuongtranba/kanna → repo
 ```
 
-After this, `~/.bun/install/global/node_modules/kanna-code` is a symlink to your repo.
+After this, `~/.bun/install/global/node_modules/@cuongtranba/kanna` is a symlink to your repo.
 
 ### 2. (Migrating from launchd) Unload the old agent
 
@@ -316,18 +316,18 @@ The update mechanism is abstracted behind `UpdateChecker` + `UpdateReloader` int
 
 | `KANNA_RELOADER` | Check | Reload | Notes |
 |---|---|---|---|
-| unset / `supervisor` | npm registry for `kanna-code` | `bun install -g kanna-code@latest`, exit 76, supervisor respawns | Default. End-user path for `bunx kanna`. |
+| unset / `supervisor` | npm registry for `@cuongtranba/kanna` | `bun install -g @cuongtranba/kanna@latest`, exit 76, supervisor respawns | Default. End-user path for `bunx kanna`. |
 | `pm2` | `git fetch` + `HEAD` vs `origin/main` | `git pull --ff-only` → cond. `bun install` → `bun run build` → `pm2 reload` | Dev/self-host path. Requires `KANNA_REPO_DIR`. |
 
 To add another reload mechanism (e.g., docker, systemd), implement the two interfaces and branch inside `createUpdateStrategy`; no changes to `UpdateManager`, `server.ts`, or any client code are needed.
 
 ## Star History
 
-<a href="https://www.star-history.com/?repos=jakemor%2Fkanna&type=date&legend=top-left">
+<a href="https://www.star-history.com/?repos=cuongtranba%2Fkanna&type=date&legend=top-left">
  <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/image?repos=jakemor/kanna&type=date&theme=dark&legend=top-left" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/image?repos=jakemor/kanna&type=date&legend=top-left" />
-   <img alt="Star History Chart" src="https://api.star-history.com/image?repos=jakemor/kanna&type=date&legend=top-left" />
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/image?repos=cuongtranba/kanna&type=date&theme=dark&legend=top-left" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/image?repos=cuongtranba/kanna&type=date&legend=top-left" />
+   <img alt="Star History Chart" src="https://api.star-history.com/image?repos=cuongtranba/kanna&type=date&legend=top-left" />
  </picture>
 </a>
 

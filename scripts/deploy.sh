@@ -2,7 +2,7 @@
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-GLOBAL_LINK="$HOME/.bun/install/global/node_modules/kanna-code"
+GLOBAL_LINK="$HOME/.bun/install/global/node_modules/@cuongtranba/kanna"
 PM2_NAME="${KANNA_PM2_PROCESS_NAME:-kanna}"
 PM2_TEMPLATE="$REPO_DIR/scripts/pm2.config.cjs.tmpl"
 PM2_CONFIG="$REPO_DIR/scripts/pm2.config.cjs"

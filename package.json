@@ -1,5 +1,5 @@
 {
-  "name": "kanna-code",
+  "name": "@cuongtranba/kanna",
   "type": "module",
   "version": "0.32.3",
   "description": "A beautiful web UI for Claude Code",
@@ -17,7 +17,7 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/jakemor/kanna.git"
+    "url": "git+https://github.com/cuongtranba/kanna.git"
   },
   "bin": {
     "kanna": "./bin/kanna"

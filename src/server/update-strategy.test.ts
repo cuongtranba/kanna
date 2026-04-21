@@ -40,7 +40,7 @@ describe("SupervisorExitReloader", () => {
       },
     })
     await reloader.reload()
-    expect(calls).toEqual([{ packageName: "kanna-code", version: "0.13.0" }])
+    expect(calls).toEqual([{ packageName: "@cuongtranba/kanna", version: "0.13.0" }])
   })
 
   test("throws UpdateInstallError with structured fields when install fails", async () => {

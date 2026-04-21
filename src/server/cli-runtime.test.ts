@@ -252,7 +252,7 @@ describe("compareVersions", () => {
 
 describe("classifyInstallVersionFailure", () => {
   test("maps version propagation failures to a user-facing retry message", () => {
-    expect(classifyInstallVersionFailure('error: No version matching "0.13.3" found for specifier "kanna-code"')).toEqual({
+    expect(classifyInstallVersionFailure('error: No version matching "0.13.3" found for specifier "@cuongtranba/kanna"')).toEqual({
       ok: false,
       errorCode: "version_not_live_yet",
       userTitle: "Update not live yet",
@@ -280,7 +280,7 @@ describe("runCli", () => {
     const result = await runCli(["--port", "4000", "--no-open"], deps)
 
     expect(result.kind).toBe("started")
-    expect(calls.fetchLatestVersion).toEqual(["kanna-code"])
+    expect(calls.fetchLatestVersion).toEqual(["@cuongtranba/kanna"])
     expect(calls.installVersion).toEqual([])
     expect(calls.startServer).toHaveLength(1)
     expect(calls.startServer[0]).toMatchObject({
@@ -474,7 +474,7 @@ describe("runCli", () => {
     const result = await runCli(["--port", "4000", "--no-open"], deps)
 
     expect(result).toEqual({ kind: "restarting", reason: "startup_update" })
-    expect(calls.installVersion).toEqual([{ packageName: "kanna-code", version: "0.4.0" }])
+    expect(calls.installVersion).toEqual([{ packageName: "@cuongtranba/kanna", version: "0.4.0" }])
     expect(calls.startServer).toEqual([])
   })
 
@@ -498,7 +498,7 @@ describe("runCli", () => {
     const result = await runCli(["--no-open"], deps)
 
     expect(result.kind).toBe("started")
-    expect(calls.installVersion).toEqual([{ packageName: "kanna-code", version: "0.4.0" }])
+    expect(calls.installVersion).toEqual([{ packageName: "@cuongtranba/kanna", version: "0.4.0" }])
     expect(calls.warn).toContain("[kanna] update failed, continuing current version")
   })
 
