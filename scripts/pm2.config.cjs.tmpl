@@ -2,8 +2,8 @@ module.exports = {
   apps: [
     {
       name: "${PM2_NAME}",
-      script: "./src/server/cli.ts",
-      interpreter: "bun",
+      script: "./bin/kanna",
+      interpreter: "none",
       cwd: "${REPO_DIR}",
       env: {
         KANNA_RELOADER: "pm2",
