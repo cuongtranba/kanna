@@ -170,14 +170,15 @@ export function MetaCodeBlock({ label, children, copyText }: { label: ReactNode;
         <Button
           variant="ghost"
           size="icon"
+          aria-label={copied ? "Copied" : "Copy code"}
           className={cn(
-            "absolute top-[4px] right-[4px] z-10 h-6.5 w-6.5 rounded-sm text-muted-foreground opacity-0 group-hover/codeblock:opacity-100 transition-opacity",
+            "absolute top-[4px] right-[4px] z-10 h-11 w-11 md:h-6.5 md:w-6.5 rounded-sm text-muted-foreground opacity-100 md:opacity-0 md:group-hover/codeblock:opacity-100 transition-opacity [@media(hover:none)]:!opacity-100",
             !copied && "hover:text-foreground",
             copied && "hover:!bg-transparent hover:!border-transparent"
           )}
           onClick={handleCopy}
         >
-          {copied ? <Check className="h-3.5 w-3.5 text-green-400" /> : <Copy className="h-4 w-4" />}
+          {copied ? <Check className="h-3.5 w-3.5 text-success" /> : <Copy className="h-4 w-4" />}
         </Button>
       </div>
     </div>
@@ -275,14 +276,15 @@ export const markdownComponents = {
         <Button
           variant="ghost"
           size="icon"
+          aria-label={copied ? "Copied" : "Copy code"}
           className={cn(
-            "absolute top-[35px] -translate-y-[50%] -translate-x-[1px] rounded-md right-1.5 h-8 w-8 text-muted-foreground opacity-0 group-hover/pre:opacity-100 transition-opacity",
+            "absolute top-[35px] -translate-y-[50%] -translate-x-[1px] rounded-md right-1.5 h-11 w-11 md:h-8 md:w-8 text-muted-foreground opacity-100 md:opacity-0 md:group-hover/pre:opacity-100 transition-opacity [@media(hover:none)]:!opacity-100",
             !copied && "hover:text-foreground",
             copied && "hover:!bg-transparent hover:!border-transparent"
           )}
           onClick={handleCopy}
         >
-          {copied ? <Check className="h-4 w-4 text-green-400" /> : <Copy className="h-4 w-4" />}
+          {copied ? <Check className="h-4 w-4 text-success" /> : <Copy className="h-4 w-4" />}
         </Button>
       </div>
     )

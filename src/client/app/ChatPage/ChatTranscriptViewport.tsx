@@ -285,7 +285,7 @@ export const ChatTranscriptViewport = memo(function ChatTranscriptViewport({
 
       {isPageFileDragActive ? (
         <div className="pointer-events-none absolute inset-0 z-30">
-          <div className="absolute inset-0 backdrop-blur-sm" />
+          <div className="absolute inset-0 bg-background/70" />
           <div className="absolute inset-6 ">
             <div className="flex h-full items-center justify-center">
               <div className="flex flex-col items-center justify-center gap-3 text-center">
@@ -302,13 +302,13 @@ export const ChatTranscriptViewport = memo(function ChatTranscriptViewport({
         className={cn(
           "absolute left-1/2 z-10 -translate-x-1/2 transition-all",
           showScrollButton
-            ? "scale-100 duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)]"
-            : "pointer-events-none scale-60 opacity-0 blur-sm duration-300 ease-out",
+            ? "scale-100 opacity-100 duration-200 ease-[cubic-bezier(0.22,1,0.36,1)]"
+            : "pointer-events-none scale-75 opacity-0 duration-200 ease-out",
         )}
       >
         <button
           onClick={scrollToBottom}
-          className="flex aspect-square cursor-pointer items-center gap-1.5 rounded-full border border-border bg-white px-2 text-sm text-primary transition-colors hover:bg-muted hover:text-foreground dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100 dark:hover:bg-slate-600"
+          className="flex aspect-square cursor-pointer items-center gap-1.5 rounded-full border border-border bg-card px-2 text-sm text-foreground transition-colors hover:bg-muted"
         >
           <ArrowDown className="h-5 w-5" />
         </button>

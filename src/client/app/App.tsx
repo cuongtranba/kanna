@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { Navigate, Outlet, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom"
 import { Flower } from "lucide-react"
-import { AppDialogProvider } from "../components/ui/app-dialog"
+import { AppDialogProvider, useAppDialog } from "../components/ui/app-dialog"
 import { Button } from "../components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card"
 import { Input } from "../components/ui/input"
@@ -57,7 +57,7 @@ function PasswordScreen({
           <div className="flex items-center gap-3">
             <Flower className="h-5 w-5 text-logo" />
             <div>
-              <CardTitle className="font-logo text-xl uppercase text-slate-600 dark:text-slate-100">{APP_NAME}</CardTitle>
+              <CardTitle className="font-logo text-xl uppercase text-foreground">{APP_NAME}</CardTitle>
             </div>
           </div>
           <CardDescription className="leading-6">
@@ -166,6 +166,7 @@ function KannaLayout() {
   const navigate = useNavigate()
   const params = useParams()
   const state = useKannaState(params.chatId ?? null)
+  const dialog = useAppDialog()
   const chatSoundPreference = useChatSoundPreferencesStore((store) => store.chatSoundPreference)
   const chatSoundId = useChatSoundPreferencesStore((store) => store.chatSoundId)
   const showMobileOpenButton = location.pathname === "/"
@@ -205,12 +206,18 @@ function KannaLayout() {
         `failed ${result.failed}`,
       ]
       const suffix = result.newProjects > 0 ? ` (${result.newProjects} new projects)` : ""
-      alert(`${parts.join(", ")}.${suffix}`)
+      await dialog.alert({
+        title: "Import complete",
+        description: `${parts.join(", ")}.${suffix}`,
+      })
     } catch (error) {
       console.error("[kanna/import] failed", error)
-      alert("Import failed. See console for details.")
+      await dialog.alert({
+        title: "Import failed",
+        description: "See console for details.",
+      })
     }
-  }, [state])
+  }, [dialog, state])
   const sidebarElement = useMemo(() => (
     <KannaSidebar
       data={state.sidebarData}
@@ -237,6 +244,7 @@ function KannaLayout() {
       editorLabel={state.editorLabel}
       updateSnapshot={state.updateSnapshot}
       onOpenChangelog={handleOpenChangelog}
+      onForceReload={() => { void state.handleForceReload() }}
     />
   ), [
     handleOpenChangelog,

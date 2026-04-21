@@ -515,6 +515,7 @@ export interface KannaState {
   handleCreateProject: (project: ProjectRequest) => Promise<void>
   handleCheckForUpdates: (options?: { force?: boolean }) => Promise<void>
   handleInstallUpdate: () => Promise<void>
+  handleForceReload: () => Promise<void>
   handleReadLlmProvider: () => Promise<void>
   handleWriteLlmProvider: (value: Pick<LlmProviderSnapshot, "provider" | "apiKey" | "model" | "baseUrl">) => Promise<void>
   handleValidateLlmProvider: (value: Pick<LlmProviderSnapshot, "provider" | "apiKey" | "model" | "baseUrl">) => Promise<LlmProviderValidationResult>
@@ -1214,6 +1215,33 @@ export function useKannaState(activeChatId: string | null): KannaState {
     }
   }, [dialog, socket])
 
+  const handleForceReload = useCallback(async () => {
+    try {
+      const result = await socket.command<UpdateInstallResult>({ type: "update.reload" })
+      if (!result.ok) {
+        clearUiUpdateRestartPhase()
+        setCommandError(null)
+        await dialog.alert({
+          title: result.userTitle ?? "Re-deploy failed",
+          description: result.userMessage ?? "Kanna could not re-deploy. Try again later.",
+          closeLabel: "OK",
+        })
+        return
+      }
+
+      if (result.action === "reload") {
+        window.location.reload()
+        return
+      }
+
+      setUiUpdateRestartPhase("awaiting_disconnect")
+      setCommandError(null)
+    } catch (error) {
+      clearUiUpdateRestartPhase()
+      setCommandError(error instanceof Error ? error.message : String(error))
+    }
+  }, [dialog, socket])
+
   const handleSignOut = useCallback(async () => {
     try {
       const response = await fetch("/auth/logout", {
@@ -1649,6 +1677,7 @@ export function useKannaState(activeChatId: string | null): KannaState {
     handleCreateProject,
     handleCheckForUpdates,
     handleInstallUpdate,
+    handleForceReload,
     handleReadLlmProvider,
     handleWriteLlmProvider,
     handleValidateLlmProvider,

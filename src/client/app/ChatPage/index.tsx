@@ -44,6 +44,10 @@ export {
   shouldAutoFollowTranscriptResize,
 } from "./utils"
 
+const TERMINAL_TOGGLE_DURATION_STYLE: CSSProperties = {
+  "--terminal-toggle-duration": `${TERMINAL_TOGGLE_ANIMATION_DURATION_MS}ms`,
+} as CSSProperties
+
 function useEmptyStateTyping(showEmptyState: boolean, activeChatId: string | null) {
   const [typedEmptyStateText, setTypedEmptyStateText] = useState("")
   const [isEmptyStateTypingComplete, setIsEmptyStateTypingComplete] = useState(false)
@@ -291,9 +295,7 @@ const DesktopSidebarPane = memo(function DesktopSidebarPane({
         data-right-sidebar-open={showRightSidebar ? "true" : "false"}
         data-right-sidebar-animated="false"
         data-right-sidebar-visual
-        style={{
-          "--terminal-toggle-duration": `${TERMINAL_TOGGLE_ANIMATION_DURATION_MS}ms`,
-        } as CSSProperties}
+        style={TERMINAL_TOGGLE_DURATION_STYLE}
       >
         {content}
       </div>
@@ -408,9 +410,7 @@ function ChatWorkspace({
           data-terminal-open={showTerminalPane ? "true" : "false"}
           data-terminal-animated="false"
           data-terminal-visual
-          style={{
-            "--terminal-toggle-duration": `${TERMINAL_TOGGLE_ANIMATION_DURATION_MS}ms`,
-          } as CSSProperties}
+          style={TERMINAL_TOGGLE_DURATION_STYLE}
         >
           <TerminalWorkspaceShell
             projectId={projectId}

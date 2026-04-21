@@ -40,7 +40,7 @@ function ChatRowImpl({
       data-chat-id={normalizedChatId}
       className={cn(
         "group flex items-center gap-2 pl-2.5 pr-0.5 py-0.5 rounded-lg cursor-pointer border-border/0 hover:border-border hover:bg-muted/20 active:scale-[0.985] border transition-all",
-        activeChatId === normalizedChatId ? "bg-muted hover:bg-muted border-border" : "border-border/0 dark:hover:border-slate-400/10 "
+        activeChatId === normalizedChatId ? "bg-muted hover:bg-muted border-border" : "border-border/0 dark:hover:border-border/40 "
       )}
       onClick={() => onSelectChat(chat.chatId)}
     >
@@ -49,15 +49,15 @@ function ChatRowImpl({
       ) : chat.status === "waiting_for_user" ? (
         <div className="relative ">
           <div className=" rounded-full z-0 size-3.5 flex items-center justify-center ">
-            <div className="absolute rounded-full z-0 size-2.5 bg-blue-400/80 animate-ping" />
-            <div className=" rounded-full z-0 size-2.5 bg-blue-400 ring-2 ring-muted/20 dark:ring-muted/50" />
+            <div className="absolute rounded-full z-0 size-2.5 bg-info/80 animate-ping" />
+            <div className=" rounded-full z-0 size-2.5 bg-info ring-2 ring-muted/20 dark:ring-muted/50" />
           </div>
         </div>
       ) : chat.unread ? (
         <div className="relative ">
           <div className=" rounded-full z-0 size-3.5 flex items-center justify-center ">
-            <div className="absolute rounded-full z-0 size-2.5 bg-emerald-400/80 animate-ping" />
-            <div className=" rounded-full z-0 size-2.5 bg-emerald-400 ring-2 ring-muted/20 dark:ring-muted/50" />
+            <div className="absolute rounded-full z-0 size-2.5 bg-success/80 animate-ping" />
+            <div className=" rounded-full z-0 size-2.5 bg-success ring-2 ring-muted/20 dark:ring-muted/50" />
           </div>
         </div>
       ) : null}
@@ -73,7 +73,7 @@ function ChatRowImpl({
           chat.title
         )}
       </span>
-      <div className="relative h-7 w-7 mr-[2px] shrink-0">
+      <div className="relative h-11 w-11 md:h-7 md:w-7 mr-[2px] shrink-0">
         {trailingLabel ? (
           showShortcutKeycap ? (
             <span className="hidden md:flex absolute inset-0 items-center justify-end pr-0.5 text-[11px] text-foreground transition-opacity group-hover:opacity-0">
@@ -91,7 +91,7 @@ function ChatRowImpl({
           variant="ghost"
           size="icon"
           className={cn(
-            "absolute inset-0 h-7 w-7 opacity-100 cursor-pointer rounded-sm hover:!bg-transparent !border-0",
+            "absolute inset-0 h-11 w-11 md:h-7 md:w-7 opacity-100 cursor-pointer rounded-sm hover:!bg-transparent !border-0",
             trailingLabel
               ? "md:opacity-0 md:group-hover:opacity-100"
               : "opacity-100 md:opacity-0 md:group-hover:opacity-100"
@@ -101,6 +101,7 @@ function ChatRowImpl({
             onDeleteChat(chat.chatId)
           }}
           title="Delete chat"
+          aria-label="Archive chat"
         >
           <Archive className="size-3.5" />
         </Button>

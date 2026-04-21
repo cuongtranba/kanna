@@ -3,6 +3,7 @@ import { Download, Flower, Loader2, PanelLeft, X, Menu, Plus, Settings } from "l
 import { useLocation, useNavigate } from "react-router-dom"
 import { APP_NAME } from "../../shared/branding"
 import { Button } from "../components/ui/button"
+import { useAppDialog } from "../components/ui/app-dialog"
 import { cn } from "../lib/utils"
 import { ChatRow } from "../components/chat-ui/sidebar/ChatRow"
 import { LocalProjectsSection } from "../components/chat-ui/sidebar/LocalProjectsSection"
@@ -42,6 +43,7 @@ interface KannaSidebarProps {
   editorLabel: string
   updateSnapshot: UpdateSnapshot | null
   onOpenChangelog: () => void
+  onForceReload: () => void
 }
 
 function KannaSidebarImpl({
@@ -69,6 +71,7 @@ function KannaSidebarImpl({
   editorLabel,
   updateSnapshot,
   onOpenChangelog,
+  onForceReload,
 }: KannaSidebarProps) {
   const location = useLocation()
   const navigate = useNavigate()
@@ -260,12 +263,15 @@ function KannaSidebarImpl({
   }, [activeChatId, activeVisibleCount])
 
   const [isImporting, setIsImporting] = useState(false)
+  const dialog = useAppDialog()
 
   const handleImport = useCallback(async () => {
     if (isImporting || !onImportClaudeSessions) return
-    const confirmed = window.confirm(
-      "Scan ~/.claude/projects/ and import all sessions into Kanna? Already-imported sessions are skipped.",
-    )
+    const confirmed = await dialog.confirm({
+      title: "Import Claude sessions",
+      description: "Scan ~/.claude/projects/ and import all sessions into Kanna? Already-imported sessions are skipped.",
+      confirmLabel: "Import",
+    })
     if (!confirmed) return
     setIsImporting(true)
     try {
@@ -275,7 +281,7 @@ function KannaSidebarImpl({
     } finally {
       setIsImporting(false)
     }
-  }, [isImporting, onImportClaudeSessions])
+  }, [dialog, isImporting, onImportClaudeSessions])
 
   const hasVisibleChats = activeVisibleCount > 0
   const isLocalProjectsActive = location.pathname === "/"
@@ -283,7 +289,7 @@ function KannaSidebarImpl({
   const isUtilityPageActive = isLocalProjectsActive || isSettingsActive
   const isConnecting = connectionStatus === "connecting" || !ready
   const statusLabel = isConnecting ? "Connecting" : connectionStatus === "connected" ? "Connected" : "Disconnected"
-  const statusDotClass = connectionStatus === "connected" ? "bg-emerald-500" : "bg-amber-500"
+  const statusDotClass = connectionStatus === "connected" ? "bg-success" : "bg-warning"
   const showUpdateButton = updateSnapshot?.updateAvailable === true
   const showDevBadge = updateSnapshot
     ? updateSnapshot.latestVersion === `${updateSnapshot.currentVersion}-dev`
@@ -295,7 +301,8 @@ function KannaSidebarImpl({
       {!open && showMobileOpenButton && (
         <Button
           variant="ghost"
-          size="icon"
+          size="icon-mobile"
+          aria-label="Open sidebar"
           className="fixed top-3 left-3 z-50 md:hidden"
           onClick={onOpen}
         >
@@ -312,6 +319,7 @@ function KannaSidebarImpl({
               size="icon"
               onClick={onExpand}
               title="Expand sidebar"
+              aria-label="Expand sidebar"
             >
               <PanelLeft className="h-5 w-5" />
             </Button>
@@ -336,6 +344,7 @@ function KannaSidebarImpl({
               className="size-10 rounded-lg hover:!border-border/0"
               onClick={onClose}
               title="Close sidebar"
+              aria-label="Close sidebar"
             >
               <X className="h-5 w-5" />
             </Button>
@@ -345,13 +354,14 @@ function KannaSidebarImpl({
               type="button"
               onClick={onCollapse}
               title="Collapse sidebar"
+              aria-label="Collapse sidebar"
               className="hidden md:flex group/sidebar-collapse relative items-center justify-center h-5 w-5 sm:h-6 sm:w-6"
             >
               <Flower className="absolute inset-0.5 h-4 w-4 sm:h-5 sm:w-5 text-logo transition-all duration-200 ease-out opacity-100 scale-100 group-hover/sidebar-collapse:opacity-0 group-hover/sidebar-collapse:scale-0" />
-              <PanelLeft className="absolute inset-0 h-4 w-4 sm:h-6 sm:w-6 text-slate-500 dark:text-slate-400 transition-all duration-200 ease-out opacity-0 scale-0 group-hover/sidebar-collapse:opacity-100 group-hover/sidebar-collapse:scale-80 hover:opacity-50" />
+              <PanelLeft className="absolute inset-0 h-4 w-4 sm:h-6 sm:w-6 text-muted-foreground transition-all duration-200 ease-out opacity-0 scale-0 group-hover/sidebar-collapse:opacity-100 group-hover/sidebar-collapse:scale-80 hover:opacity-50" />
             </button>
             <Flower className="h-5 w-5 sm:h-6 sm:w-6 text-logo md:hidden" />
-            <span className="font-logo text-base uppercase sm:text-md text-slate-600 dark:text-slate-100">{APP_NAME}</span>
+            <span className="font-logo text-base uppercase sm:text-md text-foreground">{APP_NAME}</span>
           </div>
           <div className="flex items-center justify-self-end md:justify-self-auto">
             <Button
@@ -363,6 +373,7 @@ function KannaSidebarImpl({
               }}
               className="size-10 rounded-lg hover:!border-border/0 md:hidden"
               title="New project"
+              aria-label="New project"
             >
               <Plus className="h-5 w-5" />
             </Button>
@@ -373,7 +384,8 @@ function KannaSidebarImpl({
               >
                 DEV
               </span>
-            ) : showUpdateButton ? (
+            ) : null}
+            {showUpdateButton ? (
               <Button
                 variant="outline"
                 size="sm"
@@ -385,7 +397,19 @@ function KannaSidebarImpl({
                 {isUpdating ? <Loader2 className="mr-1.5 h-3 w-3 animate-spin" /> : null}
                 UPDATE
               </Button>
-            ) : null}
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                className="hidden md:inline-flex rounded-full !h-auto mr-1 py-0.5 px-2 bg-logo/20 hover:bg-logo text-logo border-logo/20 hover:text-foreground hover:border-logo/20 text-[11px] font-bold tracking-wider"
+                onClick={onForceReload}
+                disabled={isUpdating}
+                title="Re-deploy (pm2 reload)"
+              >
+                {isUpdating ? <Loader2 className="mr-1.5 h-3 w-3 animate-spin" /> : null}
+                RELOAD
+              </Button>
+            )}
             {onImportClaudeSessions ? (
               <Button
                 variant="ghost"
@@ -408,6 +432,7 @@ function KannaSidebarImpl({
               }}
               className="hidden md:inline-flex size-10 rounded-lg hover:!border-border/0"
               title="New project"
+              aria-label="New project"
             >
               <Plus className="size-4" />
             </Button>
@@ -444,7 +469,7 @@ function KannaSidebarImpl({
             ) : null}
 
             {!hasVisibleChats && !isConnecting && data.projectGroups.length === 0 ? (
-              <p className="text-sm text-slate-400 p-2 mt-6 text-center">No conversations yet</p>
+              <p className="text-sm text-muted-foreground p-2 mt-6 text-center">No conversations yet</p>
             ) : null}
 
             <LocalProjectsSection

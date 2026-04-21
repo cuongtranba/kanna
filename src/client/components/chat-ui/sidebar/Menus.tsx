@@ -60,7 +60,7 @@ export function ProjectSectionMenu({
             event.stopPropagation()
             onRemove()
           }}
-          className="text-destructive dark:text-red-400 hover:bg-destructive/10 focus:bg-destructive/10 dark:hover:bg-red-500/20 dark:focus:bg-red-500/20"
+          className="text-destructive hover:bg-destructive/10 focus:bg-destructive/10"
         >
           <Trash2 className="h-3.5 w-3.5" />
           <span className="text-xs font-medium">Remove</span>

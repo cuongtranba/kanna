@@ -59,12 +59,13 @@ export function ChatNavbar({
       )}
     >
       <div className="relative flex items-center gap-2 w-full">
-        <div className={`flex items-center gap-1 flex-shrink-0 border border-border rounded-full ${sidebarCollapsed ? 'px-1.5' : ''} p-1 backdrop-blur-lg`}>
+        <div className={`flex items-center gap-1 flex-shrink-0 border border-border rounded-full ${sidebarCollapsed ? 'px-1.5' : ''} p-1 bg-card/95`}>
           <Button
             variant="ghost"
-            size="icon"
+            size="icon-mobile"
             className="md:hidden"
             onClick={onOpenSidebar}
+            aria-label="Open sidebar"
           >
             <Menu className="size-4.5" />
           </Button>
@@ -79,6 +80,7 @@ export function ChatNavbar({
                 className="hidden md:flex"
                 onClick={onExpandSidebar}
                 title="Expand sidebar"
+                aria-label="Expand sidebar"
               >
                 <PanelLeft className="size-4.5" />
               </Button>
@@ -90,6 +92,7 @@ export function ChatNavbar({
             className="hover:!border-border/0 hover:!bg-transparent"
             onClick={onNewChat}
             title="Compose"
+            aria-label="New chat"
           >
             <SquarePen className="size-4.5" />
           </Button>
@@ -98,7 +101,7 @@ export function ChatNavbar({
         <div className="flex-1 min-w-0" />
 
         {localPath && (onOpenExternal || onToggleEmbeddedTerminal || onToggleRightSidebar) ? (
-          <div className="flex items-center  flex-shrink-0 border border-border rounded-full px-2 py-1 backdrop-blur-lg">
+          <div className="flex items-center  flex-shrink-0 border border-border rounded-full px-2 py-1 bg-card/95">
             {(onOpenExternal || onToggleEmbeddedTerminal) ? (
               <>
               {onOpenExternal ? (
@@ -109,6 +112,7 @@ export function ChatNavbar({
                       size="none"
                       onClick={() => onOpenExternal("open_finder")}
                       title="Open in Finder"
+                      aria-label="Open in Finder"
                       className="border border-border/0 hover:!border-border/0 pl-2 pr-1.5 h-9 hover:!bg-transparent"
                     >
                       <FolderOpen strokeWidth={2} className="h-4.5" />
@@ -124,6 +128,8 @@ export function ChatNavbar({
                       variant="ghost"
                       size="none"
                       onClick={onToggleEmbeddedTerminal}
+                      aria-label="Toggle terminal"
+                      aria-pressed={embeddedTerminalVisible}
                       className={cn(
                         "border border-border/0 hover:!border-border/0 px-1.5 h-9 hover:!bg-transparent",
                         embeddedTerminalVisible && "text-foreground"
@@ -143,6 +149,7 @@ export function ChatNavbar({
                       size="none"
                       onClick={() => onOpenExternal("open_editor")}
                       title={`Open in ${editorLabel}`}
+                      aria-label={`Open in ${editorLabel}`}
                       className="border border-border/0 hover:!border-border/0 px-1.5 h-9 hover:!bg-transparent"
                     >
                       <Code strokeWidth={2} className="h-4.5" />
@@ -159,6 +166,8 @@ export function ChatNavbar({
                   <Button
                     variant="ghost"
                     onClick={onToggleRightSidebar}
+                    aria-label={rightSidebarVisible ? "Close branch sidebar" : "Open branch sidebar"}
+                    aria-pressed={rightSidebarVisible}
                     className={cn(
                       "border flex flex-row items-center gap-1.5 h-9 border-border/0 pl-1.5 pr-2 hover:!border-border/0 hover:!bg-transparent",
                       rightSidebarVisible && "text-foreground"

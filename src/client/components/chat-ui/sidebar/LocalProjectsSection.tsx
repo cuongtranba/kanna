@@ -106,17 +106,17 @@ const SortableProjectGroup = memo(function SortableProjectGroup({
       <div className="flex items-center gap-2">
         <span className="relative size-3.5 shrink-0 cursor-pointer">
           {collapsedSections.has(groupKey) ? (
-            <ChevronRight className="translate-y-[1px] size-3.5 shrink-0 text-slate-400 transition-all duration-200" />
+            <ChevronRight className="translate-y-[1px] size-3.5 shrink-0 text-muted-foreground transition-all duration-200" />
           ) : (
             <>
-              <FolderOpen className="absolute inset-0 translate-y-[1px] size-3.5 shrink-0 text-slate-400 dark:text-slate-500 transition-all duration-200 group-hover/section:opacity-0" />
-              <ChevronRight className="absolute inset-0 translate-y-[1px] size-3.5 shrink-0 rotate-90 text-slate-400 opacity-0 transition-all duration-200 group-hover/section:opacity-100" />
+              <FolderOpen className="absolute inset-0 translate-y-[1px] size-3.5 shrink-0 text-muted-foreground transition-all duration-200 group-hover/section:opacity-0" />
+              <ChevronRight className="absolute inset-0 translate-y-[1px] size-3.5 shrink-0 rotate-90 text-muted-foreground opacity-0 transition-all duration-200 group-hover/section:opacity-100" />
             </>
           )}
         </span>
         <Tooltip>
           <TooltipTrigger asChild>
-            <span className="truncate max-w-[150px] whitespace-nowrap text-sm text-slate-500 dark:text-slate-400">
+            <span className="truncate max-w-[150px] whitespace-nowrap text-sm text-muted-foreground">
               {getPathBasename(localPath)}
             </span>
           </TooltipTrigger>
@@ -142,9 +142,9 @@ const SortableProjectGroup = memo(function SortableProjectGroup({
               }}
             >
               {startingLocalPath === localPath ? (
-                <Loader2 className="size-4 text-slate-500 dark:text-slate-400 animate-spin" />
+                <Loader2 className="size-4 text-muted-foreground animate-spin" />
               ) : (
-                <SquarePen className="size-3.5 text-slate-500 dark:text-slate-400" />
+                <SquarePen className="size-3.5 text-muted-foreground" />
               )}
             </Button>
           </TooltipTrigger>

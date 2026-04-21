@@ -46,7 +46,7 @@ export function AttachmentImageCard({
         type="button"
         onClick={onClick}
         className={cn(
-          "group/image relative overflow-hidden rounded-xl border border-border/80 bg-background/85 shadow-sm backdrop-blur-md",
+          "group/image relative overflow-hidden rounded-xl border border-border/80 bg-background shadow-sm",
           isComposer ? "min-w-[80px]" : "min-w-[200px]",
         )}
       >

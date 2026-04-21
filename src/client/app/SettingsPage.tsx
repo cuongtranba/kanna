@@ -225,6 +225,7 @@ export function ChangelogSection({
   currentVersion,
   onInstallUpdate,
   onCheckForUpdates,
+  onForceReload,
 }: {
   status: ChangelogStatus
   releases: GithubRelease[]
@@ -234,6 +235,7 @@ export function ChangelogSection({
   currentVersion: string
   onInstallUpdate: () => void
   onCheckForUpdates: () => void
+  onForceReload: () => void
 }) {
   const latestVersion = updateSnapshot?.latestVersion ?? releases[0]?.tag_name ?? "Unknown"
   const currentVersionLabel = updateSnapshot?.currentVersion ?? currentVersion
@@ -283,8 +285,15 @@ export function ChangelogSection({
         </div>
       ) : null}
 
-      {!canInstallUpdate && status === "success" ? (
-        <div className="flex justify-end">
+      {status === "success" ? (
+        <div className="flex justify-end gap-2">
+          <SettingsHeaderButton
+            variant="outline"
+            onClick={onForceReload}
+            disabled={isUpdating}
+          >
+            {isUpdating ? "Re-deploying…" : "Re-deploy"}
+          </SettingsHeaderButton>
           <SettingsHeaderButton
             variant="outline"
             onClick={onCheckForUpdates}
@@ -344,7 +353,7 @@ export function ChangelogSection({
                   aria-label="View release on GitHub"
                   className={cn(
                     buttonVariants({ variant: "ghost", size: "icon-sm" }),
-                    "h-8 w-8 shrink-0 rounded-md hover:!bg-transparent hover:border-border/0"
+                    "h-11 w-11 md:h-8 md:w-8 shrink-0 rounded-md hover:!bg-transparent hover:border-border/0"
                   )}
                 >
                   <GitHubIcon className="h-4 w-4" />
@@ -763,7 +772,7 @@ export function SettingsPage() {
         className={cn(
           "mt-2 block text-sm font-medium",
           llmValidationStatus === "valid"
-            ? "text-emerald-600 dark:text-emerald-400"
+            ? "text-success"
             : llmValidationStatus === "invalid"
               ? "text-destructive"
               : "hidden"
@@ -1348,6 +1357,9 @@ export function SettingsPage() {
                     }}
                     onCheckForUpdates={() => {
                       void state.handleCheckForUpdates({ force: true })
+                    }}
+                    onForceReload={() => {
+                      void state.handleForceReload()
                     }}
                   />
                 )}

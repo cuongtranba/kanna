@@ -63,10 +63,10 @@ interface McpServerWithTools {
 
 function StatusDot({ status }: { status: string }) {
   const color = status === "connected"
-    ? "bg-emerald-500"
+    ? "bg-success"
     : status === "pending"
-      ? "bg-yellow-500"
-      : "bg-red-500"
+      ? "bg-warning"
+      : "bg-destructive"
   return <span className={cn("inline-block h-2 w-2 rounded-full shrink-0", color)} />
 }
 

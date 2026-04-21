@@ -117,7 +117,7 @@ function IconButton(props: {
           title={props.label}
           onClick={props.onClick}
           className={cn(
-            "flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground",
+            "flex h-11 w-11 md:h-7 md:w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground",
             props.active && "bg-accent text-foreground"
           )}
         >
@@ -243,19 +243,19 @@ function CommitHistoryRow({ entry, isPendingPush = false }: { entry: ChatBranchH
       {entry.tags.length > 0 ? (
         <div className="flex shrink-0 flex-wrap justify-end gap-1">
           {entry.tags.map((tag) => (
-            <span key={tag} className="inline-flex items-center rounded-full bg-slate-900/10 border-black/10 dark:bg-white/10 border dark:border-white/10  px-2 py-0.5 text-[11px]">
+            <span key={tag} className="inline-flex items-center rounded-full bg-muted border border-border  px-2 py-0.5 text-[11px]">
               {tag}
             </span>
           ))}
           {isPendingPush ? (
-            <span className="inline-flex items-center rounded-full bg-slate-900/10 border-black/10 dark:bg-white/10 border dark:border-white/10  px-2 py-0.5 text-[11px]">
+            <span className="inline-flex items-center rounded-full bg-muted border border-border  px-2 py-0.5 text-[11px]">
               <ArrowUp className="size-3" />
             </span>
           ) : null}
         </div>
       ) : isPendingPush ? (
         <div className="flex shrink-0 flex-wrap justify-end gap-1">
-          <span className="inline-flex items-center rounded-full bg-slate-900/10 border-black/10 dark:bg-white/10 border dark:border-white/10  px-2 py-0.5 text-[11px]">
+          <span className="inline-flex items-center rounded-full bg-muted border border-border  px-2 py-0.5 text-[11px]">
             <ArrowUp className="size-3" />
           </span>
         </div>
@@ -507,7 +507,7 @@ function GitHubPublishModal({
                             className={cn(
                               "flex size-6 items-center justify-center rounded-md",
                               availability.available
-                                ? "text-emerald-600 dark:text-emerald-400"
+                                ? "text-success"
                                 : "text-destructive"
                             )}
                           >
@@ -528,7 +528,7 @@ function GitHubPublishModal({
                     onChange={(event) => setDescription(event.target.value)}
                     rows={3}
                     placeholder="Optional description"
-                    className="pl-9 outline-none focus:outline-none focus-visible:outline-none focus:ring-0 focus-visible:ring-0"
+                    className="pl-9 outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                   />
                 </div>
               </div>
@@ -843,9 +843,9 @@ function MergeBranchModal({
             ) : preview ? (
               <div className="flex items-start gap-2">
                 {preview.status === "up_to_date" ? (
-                  <Check className="mt-1 size-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                  <Check className="mt-1 size-3.5 shrink-0 text-success" />
                 ) : preview.status === "conflicts" ? (
-                  <AlertTriangle className="mt-1 size-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
+                  <AlertTriangle className="mt-1 size-3.5 shrink-0 text-warning" />
                 ) : preview.status === "mergeable" ? (
                   <GitBranchPlus className="mt-1 size-3.5 shrink-0 text-muted-foreground" />
                 ) : (
@@ -1222,9 +1222,9 @@ function DiffFileCard({
             </div>
             <div className="flex shrink-0 items-center gap-2 select-none">
               <span className="whitespace-nowrap text-xs font-mono">
-                {file.additions > 0 ? <span className="text-emerald-600 dark:text-emerald-400">+{file.additions}</span> : null}
+                {file.additions > 0 ? <span className="text-success">+{file.additions}</span> : null}
                 {file.deletions > 0 ? (
-                  <span className={file.additions > 0 ? "ml-2 text-red-600 dark:text-red-400" : "text-red-600 dark:text-red-400"}>
+                  <span className={file.additions > 0 ? "ml-2 text-destructive" : "text-destructive"}>
                     -{file.deletions}
                   </span>
                 ) : null}
@@ -1318,7 +1318,7 @@ function DiffFileCard({
             event.stopPropagation()
             fileActions.onDiscardFile(file.path)
           }}
-          className="text-destructive dark:text-red-400 hover:bg-destructive/10 focus:bg-destructive/10 dark:hover:bg-red-500/20 dark:focus:bg-red-500/20"
+          className="text-destructive hover:bg-destructive/10 focus:bg-destructive/10"
         >
           <Trash2 className="h-3.5 w-3.5" />
           <span className="text-xs font-medium">Discard Changes</span>
@@ -1837,7 +1837,7 @@ function RightSidebarImpl({
                   <div className="pointer-events-none sticky inset-x-0 bottom-11 py-1 pb-6 z-30 overflow-y-auto">
                   <div className="absolute inset-x-0 bottom-0 top-0 bg-gradient-to-t from-background to-transparent" />
                   <div className="pointer-events-auto relative">
-                    <div className="space-y-0 rounded-xl  backdrop-blur-md mx-auto max-w-[700px]">
+                    <div className="space-y-0 rounded-xl mx-auto max-w-[700px]">
                       <Input
                         value={summary}
                         onChange={(event) => {
@@ -1864,7 +1864,7 @@ function RightSidebarImpl({
                         onKeyDown={handleCommitKeyDown}
                         placeholder="Description"
                         rows={5}
-                        className="-mt-px rounded-t-none rounded-b-xl px-3 outline-none focus:outline-none focus-visible:outline-none focus:ring-0 focus-visible:ring-0 focus-visible:border-border mb-2"
+                        className="-mt-px rounded-t-none rounded-b-xl px-3 outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background mb-2"
                         disabled={isBusy || diffs.status !== "ready"}
                       />
                       <div className="w-full flex flex-row">

@@ -61,6 +61,42 @@ export class UpdateManager {
     }
   }
 
+  async forceReload(): Promise<UpdateInstallResult> {
+    if (this.deps.devMode) {
+      this.setSnapshot({ ...this.snapshot, status: "restart_pending", reloadRequestedAt: Date.now(), error: null })
+      return { ok: true, action: "restart", errorCode: null, userTitle: null, userMessage: null }
+    }
+
+    if (this.snapshot.status === "updating" || this.snapshot.status === "restart_pending") {
+      return { ok: true, action: "restart", errorCode: null, userTitle: null, userMessage: null }
+    }
+
+    this.setSnapshot({ ...this.snapshot, status: "updating", error: null, reloadRequestedAt: null })
+
+    try {
+      await this.deps.reloader.reload()
+    } catch (error) {
+      const installError = error instanceof UpdateInstallError ? error : null
+      const message = error instanceof Error ? error.message : String(error)
+      this.setSnapshot({ ...this.snapshot, status: "error", error: message, reloadRequestedAt: null })
+      return {
+        ok: false,
+        action: "restart",
+        errorCode: installError?.errorCode ?? "install_failed",
+        userTitle: installError?.userTitle ?? "Re-deploy failed",
+        userMessage: installError?.message ?? message,
+      }
+    }
+
+    this.setSnapshot({
+      ...this.snapshot,
+      status: "restart_pending",
+      error: null,
+      reloadRequestedAt: Date.now(),
+    })
+    return { ok: true, action: "restart", errorCode: null, userTitle: null, userMessage: null }
+  }
+
   async installUpdate(): Promise<UpdateInstallResult> {
     if (this.deps.devMode) {
       this.setSnapshot({ ...this.snapshot, status: "updating", error: null, reloadRequestedAt: null })

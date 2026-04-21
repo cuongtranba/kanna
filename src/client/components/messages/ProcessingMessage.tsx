@@ -24,7 +24,7 @@ export function ProcessingMessage({ status }: ProcessingMessageProps) {
     <MetaRow className="ml-[1px]">
       <MetaContent>
         {isFailed ? (
-          <X className="size-4.5 text-red-500" />
+          <X className="size-4.5 text-destructive" />
         ) : (
           <Loader2 className="size-4.5 animate-spin text-muted-icon" />
         )}

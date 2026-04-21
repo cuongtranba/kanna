@@ -859,7 +859,7 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput({
             </ScrollArea>
           ) : null}
 
-          <div className="relative flex items-end max-w-[840px] mx-auto border dark:bg-card/40 backdrop-blur-lg border-border rounded-[29px] pr-1.5">
+          <div className="relative flex items-end max-w-[840px] mx-auto border bg-background dark:bg-card/90 border-border rounded-[29px] pr-1.5 transition-colors focus-within:border-ring/60 focus-within:ring-2 focus-within:ring-ring/30">
             {pickerOpen && (
               <SlashCommandPicker
                 items={filteredCommands}
@@ -882,7 +882,7 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput({
               aria-label="Add attachment"
               className={cn(
                 buttonVariants({ variant: "ghost", size: "icon" }),
-                "relative md:hidden flex-shrink-0 ml-1 mb-1 h-10 w-10 rounded-full text-muted-foreground hover:text-foreground",
+                "relative md:hidden flex-shrink-0 ml-1 mb-1 h-11 w-11 rounded-full text-muted-foreground hover:text-foreground",
                 disabled && "pointer-events-none opacity-50",
               )}
             >
@@ -920,7 +920,7 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput({
               onPaste={handlePaste}
               onKeyDown={handleKeyDown}
               disabled={disabled}
-              className="flex-1 text-base p-3 md:p-4 !pr-2 pl-0 md:pl-6 resize-none max-h-[200px] outline-none bg-transparent border-0 shadow-none"
+              className="flex-1 text-base p-3 md:p-4 !pr-2 pl-0 md:pl-6 resize-none max-h-[200px] outline-none focus:outline-none focus-visible:outline-none focus-visible:ring-0 bg-transparent border-0 shadow-none"
             />
             <Button
               type="button"
@@ -936,7 +936,8 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput({
               }}
               disabled={disabled || (!canCancel && !canSubmit) || hasPendingUploads}
               size="icon"
-              className="flex-shrink-0 bg-slate-600 text-white dark:bg-white dark:text-slate-900 rounded-full cursor-pointer h-10 w-10 md:h-11 md:w-11 mb-1 -mr-0.5 md:mr-0 md:mb-1.5 touch-manipulation disabled:bg-white/60 disabled:text-slate-700"
+              aria-label={canCancel ? "Stop" : "Send message"}
+              className="flex-shrink-0 bg-primary text-background rounded-full cursor-pointer h-11 w-11 mb-1 -mr-0.5 md:mr-0 md:mb-1.5 touch-manipulation disabled:opacity-50"
             >
               {hasTextToSend ? (
                 <ArrowUp className="h-5 w-5 md:h-6 md:w-6" />

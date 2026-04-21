@@ -18,13 +18,7 @@ interface Props {
   onCommandSent?: () => void
 }
 
-const TERMINAL_THEME_LIGHT: ITheme = {
-  foreground: "#0f172a",
-  background: "transparent",
-  cursor: "#000000",
-  cursorAccent: "#ffffff",
-  selectionBackground: "rgba(221,228,236,0.55)",
-  selectionInactiveBackground: "rgba(221,228,236,0.38)",
+const TERMINAL_ANSI_LIGHT = {
   black: "#0f172a",
   red: "#dc2626",
   green: "#16a34a",
@@ -41,15 +35,9 @@ const TERMINAL_THEME_LIGHT: ITheme = {
   brightMagenta: "#a855f7",
   brightCyan: "#06b6d4",
   brightWhite: "#e2e8f0",
-}
+} as const
 
-const TERMINAL_THEME_DARK: ITheme = {
-  foreground: "#f8fafc",
-  background: "transparent",
-  cursor: "#ffffff",
-  cursorAccent: "#000000",
-  selectionBackground: "rgba(248,250,252,0.28)",
-  selectionInactiveBackground: "rgba(248,250,252,0.18)",
+const TERMINAL_ANSI_DARK = {
   black: "#0f172a",
   red: "#f87171",
   green: "#4ade80",
@@ -66,6 +54,27 @@ const TERMINAL_THEME_DARK: ITheme = {
   brightMagenta: "#d8b4fe",
   brightCyan: "#67e8f9",
   brightWhite: "#f8fafc",
+} as const
+
+function readCssVar(name: string, fallback: string): string {
+  if (typeof document === "undefined") return fallback
+  const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim()
+  return value || fallback
+}
+
+function buildTerminalTheme(mode: "light" | "dark"): ITheme {
+  const ansi = mode === "dark" ? TERMINAL_ANSI_DARK : TERMINAL_ANSI_LIGHT
+  const fg = readCssVar("--foreground", mode === "dark" ? "#f8fafc" : "#0f172a")
+  const bg = readCssVar("--background", mode === "dark" ? "#000000" : "#ffffff")
+  return {
+    foreground: fg,
+    background: "transparent",
+    cursor: fg,
+    cursorAccent: bg,
+    selectionBackground: mode === "dark" ? "rgba(248,250,252,0.28)" : "rgba(221,228,236,0.55)",
+    selectionInactiveBackground: mode === "dark" ? "rgba(248,250,252,0.18)" : "rgba(221,228,236,0.38)",
+    ...ansi,
+  }
 }
 
 function getTerminalSize(terminal: Terminal) {
@@ -249,7 +258,7 @@ export function TerminalPane({
   const lastSizeRef = useRef<{ cols: number; rows: number } | null>(null)
   const [metadata, setMetadata] = useState<Pick<TerminalSnapshot, "cwd" | "shell" | "status" | "exitCode"> | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const terminalTheme = resolvedTheme === "dark" ? TERMINAL_THEME_DARK : TERMINAL_THEME_LIGHT
+  const terminalTheme = buildTerminalTheme(resolvedTheme === "dark" ? "dark" : "light")
   const sendInput = (data: string) => {
     void socket.command({
       type: "terminal.input",

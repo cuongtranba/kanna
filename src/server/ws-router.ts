@@ -718,6 +718,19 @@ export function createWsRouter({
           })
           return
         }
+        case "update.reload": {
+          if (!updateManager) {
+            throw new Error("Update manager unavailable.")
+          }
+          const result = await updateManager.forceReload()
+          send(ws, {
+            v: PROTOCOL_VERSION,
+            type: "ack",
+            id,
+            result,
+          })
+          return
+        }
         case "settings.readKeybindings": {
           send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: keybindings.getSnapshot() })
           return

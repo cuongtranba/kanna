@@ -127,21 +127,21 @@ export function FileContentView({ content, isDiff = false, oldString, newString 
               {diffLines.map((line, i) => {
                 const bg =
                   line.type === "removed"
-                    ? "bg-red-500/10 dark:bg-red-500/15"
+                    ? "bg-destructive/10 dark:bg-destructive/15"
                     : line.type === "added"
-                      ? "bg-green-500/10 dark:bg-green-500/15"
+                      ? "bg-success/10 dark:bg-success/15"
                       : ""
 
                 const textColor =
                   line.type === "removed"
-                    ? "text-red-700 dark:text-red-400"
+                    ? "text-destructive"
                     : line.type === "added"
-                      ? "text-green-700 dark:text-green-400"
+                      ? "text-success"
                       : "text-foreground"
 
                 return (
                   <tr key={i} className={bg}>
-                    <td className={`px-2 py-0 select-none w-0 whitespace-nowrap ${line.type === "removed" ? "text-red-500/50" : line.type === "added" ? "text-green-500/50" : "text-muted-foreground/50"}`}>
+                    <td className={`px-2 py-0 select-none w-0 whitespace-nowrap ${line.type === "removed" ? "text-destructive/50" : line.type === "added" ? "text-success/50" : "text-muted-foreground/50"}`}>
                       {line.type === "removed" ? "-" : line.type === "added" ? "+" : " "}
                     </td>
                     <td className={`px-2 py-0 whitespace-pre select-all ${textColor}`}>

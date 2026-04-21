@@ -57,6 +57,7 @@ export type ClientCommand =
   | { type: "system.ping" }
   | { type: "update.check"; force?: boolean }
   | { type: "update.install" }
+  | { type: "update.reload" }
   | { type: "settings.readKeybindings" }
   | { type: "settings.writeKeybindings"; bindings: KeybindingsSnapshot["bindings"] }
   | { type: "settings.readLlmProvider" }

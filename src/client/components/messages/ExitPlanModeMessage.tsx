@@ -45,14 +45,15 @@ export function ExitPlanModeMessage({ message, onConfirm, isLatest }: Props) {
           <Button
             variant="ghost"
             size="icon"
+            aria-label={copied ? "Copied" : "Copy plan"}
             className={cn(
-              "absolute top-2 right-2 z-10 h-8 w-8 rounded-md text-muted-foreground opacity-0 group-hover/plan:opacity-100 transition-opacity",
+              "absolute top-2 right-2 z-10 h-11 w-11 md:h-8 md:w-8 rounded-md text-muted-foreground opacity-100 md:opacity-0 md:group-hover/plan:opacity-100 transition-opacity [@media(hover:none)]:!opacity-100",
               !copied && "hover:text-foreground",
               copied && "hover:!bg-transparent hover:!border-transparent"
             )}
             onClick={handleCopy}
           >
-            {copied ? <Check className="h-4 w-4 text-green-400" /> : <Copy className="h-4 w-4" />}
+            {copied ? <Check className="h-4 w-4 text-success" /> : <Copy className="h-4 w-4" />}
           </Button>
         )}
         <div className={cn(
@@ -155,7 +156,7 @@ export function ExitPlanModeMessage({ message, onConfirm, isLatest }: Props) {
                 }}
                 placeholder="Describe what you'd like to change..."
                 rows={3}
-                className="w-full rounded-2xl border border-border bg-muted dark:bg-card px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground resize-none outline-none"
+                className="w-full rounded-2xl border border-border bg-muted dark:bg-card px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground resize-none outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
               />
               <div className="flex items-center justify-end gap-2 mx-2">
                 <Button
