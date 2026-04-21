@@ -63,42 +63,10 @@ function createNamedTunnel(token: string, localUrl: string) {
   return tunnel
 }
 
-async function awaitQuickTunnelUrl(tunnel: ShareTunnelProcess) {
-  return await new Promise<string>((resolve, reject) => {
-    let settled = false
-
-    const cleanup = () => {
-      tunnel.off("url", handleUrl)
-      tunnel.off("error", handleError)
-      tunnel.off("exit", handleExit)
-    }
-
-    const settle = (callback: () => void) => {
-      if (settled) return
-      settled = true
-      cleanup()
-      callback()
-    }
-
-    const handleUrl = (url: string) => {
-      settle(() => resolve(normalizePublicUrl(url)))
-    }
-
-    const handleError = (error: Error) => {
-      settle(() => reject(error))
-    }
-
-    const handleExit = (code: number | null, signal: NodeJS.Signals | null) => {
-      settle(() => reject(new Error(`Cloudflare tunnel exited before a public URL was ready (code: ${String(code)}, signal: ${String(signal)})`)))
-    }
-
-    tunnel.once("url", handleUrl)
-    tunnel.once("error", handleError)
-    tunnel.once("exit", handleExit)
-  })
-}
-
-async function awaitNamedTunnelReady(tunnel: ShareTunnelProcess) {
+async function awaitTunnelReady(
+  tunnel: ShareTunnelProcess,
+  { expectUrl }: { expectUrl: boolean },
+) {
   return await new Promise<string | null>((resolve, reject) => {
     let settled = false
 
@@ -121,6 +89,7 @@ async function awaitNamedTunnelReady(tunnel: ShareTunnelProcess) {
     }
 
     const handleConnected = () => {
+      if (expectUrl) return
       settle(() => resolve(null))
     }
 
@@ -129,11 +98,14 @@ async function awaitNamedTunnelReady(tunnel: ShareTunnelProcess) {
     }
 
     const handleExit = (code: number | null, signal: NodeJS.Signals | null) => {
-      settle(() => reject(new Error(`Cloudflare tunnel exited before it was ready (code: ${String(code)}, signal: ${String(signal)})`)))
+      const readyState = expectUrl ? "a public URL was ready" : "it was ready"
+      settle(() => reject(new Error(`Cloudflare tunnel exited before ${readyState} (code: ${String(code)}, signal: ${String(signal)})`)))
     }
 
     tunnel.once("url", handleUrl)
-    tunnel.once("connected", handleConnected)
+    if (!expectUrl) {
+      tunnel.once("connected", handleConnected)
+    }
     tunnel.once("error", handleError)
     tunnel.once("exit", handleExit)
   })
@@ -145,12 +117,11 @@ export async function startShareTunnel(
   deps: ShareTunnelDeps = {},
 ): Promise<StartedShareTunnel> {
   await ensureCloudflaredInstalled(deps)
-  const tunnel = isTokenShareMode(shareMode)
+  const namedTunnel = isTokenShareMode(shareMode)
+  const tunnel = namedTunnel
     ? (deps.createNamedTunnel ?? createNamedTunnel)(shareMode.token, localUrl)
     : (deps.createQuickTunnel ?? ((url) => Tunnel.quick(url)))(localUrl)
-  const publicUrl = isTokenShareMode(shareMode)
-    ? await awaitNamedTunnelReady(tunnel)
-    : await awaitQuickTunnelUrl(tunnel)
+  const publicUrl = await awaitTunnelReady(tunnel, { expectUrl: !namedTunnel })
 
   return {
     publicUrl,

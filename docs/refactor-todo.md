@@ -6,7 +6,7 @@ Use `[x]` when an item is complete. Add any follow-up notes directly under the i
 
 ## Pending
 
-- [ ] Tunnel/share flag cleanup
+- [x] Tunnel/share flag cleanup
   Commits: `77e934f`, `d0eef25`
   Scope: `src/shared/share.ts`, `src/server/cli-runtime.ts`, `src/server/share.ts`
   Goals:
@@ -14,6 +14,7 @@ Use `[x]` when an item is complete. Add any follow-up notes directly under the i
   - Extract shared host/remote incompatibility checks into one `assertNoHostOverride(...)` guard used by `--share` and `--cloudflared`.
   - Remove duplicate `isTokenShareMode` branching in `startShareTunnel`.
   Expected impact: less duplicated tunnel lifecycle and CLI parsing logic; no behavior change intended.
+  Status: completed on 2026-04-21.
 
 - [ ] Sidebar project order persistence simplification
   Commit: `1167a18`
