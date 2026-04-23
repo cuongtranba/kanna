@@ -42,8 +42,6 @@ interface KannaSidebarProps {
   onReorderProjectGroups: (projectIds: string[]) => void
   editorLabel: string
   updateSnapshot: UpdateSnapshot | null
-  onOpenChangelog: () => void
-  onForceReload: () => void
 }
 
 function KannaSidebarImpl({
@@ -70,8 +68,6 @@ function KannaSidebarImpl({
   onReorderProjectGroups,
   editorLabel,
   updateSnapshot,
-  onOpenChangelog,
-  onForceReload,
 }: KannaSidebarProps) {
   const location = useLocation()
   const navigate = useNavigate()
@@ -290,11 +286,9 @@ function KannaSidebarImpl({
   const isConnecting = connectionStatus === "connecting" || !ready
   const statusLabel = isConnecting ? "Connecting" : connectionStatus === "connected" ? "Connected" : "Disconnected"
   const statusDotClass = connectionStatus === "connected" ? "bg-success" : "bg-warning"
-  const showUpdateButton = updateSnapshot?.updateAvailable === true
   const showDevBadge = updateSnapshot
     ? updateSnapshot.latestVersion === `${updateSnapshot.currentVersion}-dev`
     : false
-  const isUpdating = updateSnapshot?.status === "updating" || updateSnapshot?.status === "restart_pending"
 
   return (
     <>
@@ -385,31 +379,6 @@ function KannaSidebarImpl({
                 DEV
               </span>
             ) : null}
-            {showUpdateButton ? (
-              <Button
-                variant="outline"
-                size="sm"
-                className="hidden md:inline-flex rounded-full !h-auto mr-1 py-0.5 px-2 bg-logo/20 hover:bg-logo text-logo border-logo/20 hover:text-foreground hover:border-logo/20 text-[11px] font-bold tracking-wider"
-                onClick={onOpenChangelog}
-                disabled={isUpdating}
-                title={updateSnapshot?.latestVersion ? `Update to ${updateSnapshot.latestVersion}` : "Update Kanna"}
-              >
-                {isUpdating ? <Loader2 className="mr-1.5 h-3 w-3 animate-spin" /> : null}
-                UPDATE
-              </Button>
-            ) : (
-              <Button
-                variant="outline"
-                size="sm"
-                className="hidden md:inline-flex rounded-full !h-auto mr-1 py-0.5 px-2 bg-logo/20 hover:bg-logo text-logo border-logo/20 hover:text-foreground hover:border-logo/20 text-[11px] font-bold tracking-wider"
-                onClick={onForceReload}
-                disabled={isUpdating}
-                title="Re-deploy (pm2 reload)"
-              >
-                {isUpdating ? <Loader2 className="mr-1.5 h-3 w-3 animate-spin" /> : null}
-                RELOAD
-              </Button>
-            )}
             {onImportClaudeSessions ? (
               <Button
                 variant="ghost"

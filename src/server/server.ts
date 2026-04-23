@@ -5,6 +5,7 @@ import type { ChatAttachment } from "../shared/types"
 import { createAuthManager } from "./auth"
 import { EventStore } from "./event-store"
 import { AgentCoordinator } from "./agent"
+import type { LimitDetector } from "./auto-continue/limit-detector"
 import { DiffStore } from "./diff-store"
 import { discoverProjects, type DiscoveredProject } from "./discovery"
 import { KeybindingsManager } from "./keybindings"
@@ -18,6 +19,7 @@ import { createWsRouter, type ClientState } from "./ws-router"
 import { deleteProjectUpload, inferAttachmentContentType, inferProjectFileContentType, persistProjectUpload } from "./uploads"
 import { getProjectUploadDir } from "./paths"
 import { listProjectPaths } from "./project-paths"
+import { ScheduleManager } from "./auto-continue/schedule-manager"
 
 const MAX_UPLOAD_FILES = 50
 const MAX_UPLOAD_SIZE_BYTES = 100 * 1024 * 1024
@@ -76,6 +78,11 @@ export interface StartKannaServerOptions {
     fetchLatestVersion: (packageName: string) => Promise<string>
     installVersion: (packageName: string, version: string) => UpdateInstallAttemptResult
   }
+  agentOverrides?: {
+    claudeLimitDetector?: LimitDetector
+    codexLimitDetector?: LimitDetector
+    throwOnClaudeSessionStart?: boolean
+  }
 }
 
 export async function startKannaServer(options: StartKannaServerOptions = {}) {
@@ -123,8 +130,18 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     })
     return manager
   })()
-  const agent = new AgentCoordinator({
+  let agent!: AgentCoordinator
+  const scheduleManager = new ScheduleManager({
+    fire: async (chatId, scheduleId) => {
+      await agent.fireAutoContinue(chatId, scheduleId)
+    },
+  })
+  agent = new AgentCoordinator({
     store,
+    scheduleManager,
+    claudeLimitDetector: options.agentOverrides?.claudeLimitDetector,
+    codexLimitDetector: options.agentOverrides?.codexLimitDetector,
+    throwOnClaudeSessionStart: options.agentOverrides?.throwOnClaudeSessionStart,
     onStateChange: (chatId?: string, options?: { immediate?: boolean }) => {
       if (chatId) {
         if (options?.immediate) {
@@ -153,6 +170,9 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     machineDisplayName,
     updateManager,
   })
+  scheduleManager.rehydrate(
+    store.listAutoContinueChats().flatMap((chatId) => store.getAutoContinueEvents(chatId))
+  )
   const staleEmptyChatPruneInterval = setInterval(() => {
     void router.pruneStaleEmptyChats()
       .then(() => router.broadcastSnapshots())
@@ -276,6 +296,7 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
   }
 
   const shutdown = async () => {
+    scheduleManager.shutdown()
     clearInterval(staleEmptyChatPruneInterval)
     for (const chatId of [...agent.activeTurns.keys()]) {
       await agent.cancel(chatId)

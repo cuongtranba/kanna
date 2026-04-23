@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test"
 import { renderToStaticMarkup } from "react-dom/server"
 import { RefreshCw } from "lucide-react"
 import {
+  AutoResumeToggleSection,
   ChangelogSection,
   fetchGithubReleases,
   formatPublishedDate,
@@ -14,6 +15,7 @@ import {
   shouldPreviewChatSoundChange,
 } from "./SettingsPage"
 import { SettingsHeaderButton } from "../components/ui/settings-header-button"
+import { usePreferencesStore } from "../stores/preferences"
 import type { UpdateSnapshot } from "../../shared/types"
 
 const SAMPLE_RELEASES = [
@@ -199,6 +201,7 @@ describe("ChangelogSection", () => {
         currentVersion="1.0.0"
         onInstallUpdate={() => {}}
         onCheckForUpdates={() => {}}
+        onForceReload={() => {}}
       />
     )
 
@@ -227,6 +230,7 @@ describe("ChangelogSection", () => {
         currentVersion="1.0.0"
         onInstallUpdate={() => {}}
         onCheckForUpdates={() => {}}
+        onForceReload={() => {}}
       />
     )
 
@@ -250,6 +254,7 @@ describe("ChangelogSection", () => {
         currentVersion="1.0.0"
         onInstallUpdate={() => {}}
         onCheckForUpdates={() => {}}
+        onForceReload={() => {}}
       />
     )
 
@@ -271,10 +276,39 @@ describe("ChangelogSection", () => {
         currentVersion="1.0.0"
         onInstallUpdate={() => {}}
         onCheckForUpdates={() => {}}
+        onForceReload={() => {}}
       />
     )
 
     expect(html).toContain("disabled")
     expect(html).toContain("Updating")
   })
+})
+
+test("AutoResumeToggleSection renders checked and unchecked based on props", () => {
+  // AutoResumeToggleSection is a pure prop-driven component exported from SettingsPage.
+  // SettingsPage wires it to usePreferencesStore; here we test the component directly.
+  usePreferencesStore.setState({ autoResumeOnRateLimit: false })
+  const stateOff = usePreferencesStore.getState()
+  const htmlUnchecked = renderToStaticMarkup(
+    <AutoResumeToggleSection
+      checked={stateOff.autoResumeOnRateLimit}
+      onChange={() => {}}
+    />
+  )
+  expect(htmlUnchecked).toContain("Enabled")
+  expect(htmlUnchecked).toContain('type="checkbox"')
+  expect(htmlUnchecked).not.toContain("checked")
+
+  usePreferencesStore.setState({ autoResumeOnRateLimit: true })
+  const stateOn = usePreferencesStore.getState()
+  const htmlChecked = renderToStaticMarkup(
+    <AutoResumeToggleSection
+      checked={stateOn.autoResumeOnRateLimit}
+      onChange={() => {}}
+    />
+  )
+  expect(htmlChecked).toContain("Enabled")
+  expect(htmlChecked).toContain('type="checkbox"')
+  expect(htmlChecked).toContain("checked")
 })

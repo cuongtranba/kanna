@@ -193,9 +193,6 @@ function KannaLayout() {
   const handleSidebarReorderProjectGroups = useCallback((projectIds: string[]) => {
     void state.handleReorderProjectGroups(projectIds)
   }, [state.handleReorderProjectGroups])
-  const handleOpenChangelog = useCallback(() => {
-    navigate("/settings/changelog")
-  }, [navigate])
   const handleImportClaudeSessions = useCallback(async () => {
     try {
       const result = await state.importClaudeSessions()
@@ -243,11 +240,8 @@ function KannaLayout() {
       onReorderProjectGroups={handleSidebarReorderProjectGroups}
       editorLabel={state.editorLabel}
       updateSnapshot={state.updateSnapshot}
-      onOpenChangelog={handleOpenChangelog}
-      onForceReload={() => { void state.handleForceReload() }}
     />
   ), [
-    handleOpenChangelog,
     handleOpenAddProjectModal,
     handleImportClaudeSessions,
     handleSidebarCopyPath,
