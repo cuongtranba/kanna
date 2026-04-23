@@ -9,6 +9,7 @@ import { useTerminalLayoutStore } from "../stores/terminalLayoutStore"
 import { getEditorPresetLabel, useTerminalPreferencesStore } from "../stores/terminalPreferencesStore"
 import { useChatInputStore } from "../stores/chatInputStore"
 import { useSlashCommandsStore } from "../stores/slashCommandsStore"
+import { usePreferencesStore } from "../stores/preferences"
 import type { ChatSnapshot, LocalProjectsSnapshot, SidebarChatRow, SidebarData } from "../../shared/types"
 import type { AskUserQuestionItem } from "../components/messages/types"
 import { useAppDialog } from "../components/ui/app-dialog"
@@ -144,6 +145,24 @@ function shouldPreserveExistingProjectDiffs(
   )
 }
 
+function sameSchedules(left: ChatSnapshot["schedules"] | null | undefined, right: ChatSnapshot["schedules"] | null | undefined) {
+  if (left === right) return true
+  if (!left || !right) return false
+  const leftKeys = Object.keys(left)
+  const rightKeys = Object.keys(right)
+  if (leftKeys.length !== rightKeys.length) return false
+  return leftKeys.every((key) => {
+    const l = left[key]
+    const r = right[key]
+    if (!l || !r) return false
+    return l.state === r.state
+      && l.scheduledAt === r.scheduledAt
+      && l.resetAt === r.resetAt
+      && l.detectedAt === r.detectedAt
+      && l.tz === r.tz
+  })
+}
+
 function sameChatSnapshotCore(left: ChatSnapshot | null, right: ChatSnapshot | null) {
   if (left === right) return true
   if (!left || !right) return false
@@ -152,6 +171,8 @@ function sameChatSnapshotCore(left: ChatSnapshot | null, right: ChatSnapshot | n
     && sameTranscriptEntries(left.messages, right.messages)
     && sameHistory(left.history, right.history)
     && sameProviders(left.availableProviders, right.availableProviders)
+    && sameSchedules(left.schedules, right.schedules)
+    && left.liveScheduleId === right.liveScheduleId
 }
 
 function mergeTranscriptEntries(olderHistoryEntries: TranscriptEntry[], recentEntries: TranscriptEntry[]) {
@@ -1269,6 +1290,7 @@ export function useKannaState(activeChatId: string | null): KannaState {
     const attachments = options?.attachments ?? []
     if (activeChatId && isProcessing) {
       try {
+        const autoResumeOnRateLimit = usePreferencesStore.getState().autoResumeOnRateLimit
         await socket.command<{ queuedMessageId: string }>({
           type: "message.enqueue",
           chatId: activeChatId,
@@ -1278,6 +1300,7 @@ export function useKannaState(activeChatId: string | null): KannaState {
           model: options?.model,
           modelOptions: options?.modelOptions,
           planMode: options?.planMode,
+          autoResumeOnRateLimit,
         })
         setCommandError(null)
         return
@@ -1347,6 +1370,7 @@ export function useKannaState(activeChatId: string | null): KannaState {
         throw new Error("Open a project first")
       }
 
+      const autoResumeOnRateLimit = usePreferencesStore.getState().autoResumeOnRateLimit
       const result = await socket.command<{ chatId?: string }>({
         type: "chat.send",
         chatId: activeChatId ?? undefined,
@@ -1358,6 +1382,7 @@ export function useKannaState(activeChatId: string | null): KannaState {
         model: options?.model,
         modelOptions: options?.modelOptions,
         planMode: options?.planMode,
+        autoResumeOnRateLimit,
       })
       sendTrace.ackAt = performance.now()
       sendTrace.serverChatId = result.chatId ?? sendTrace.serverChatId

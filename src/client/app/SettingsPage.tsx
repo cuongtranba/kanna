@@ -59,6 +59,7 @@ import {
 } from "../stores/terminalPreferencesStore"
 import { useChatPreferencesStore } from "../stores/chatPreferencesStore"
 import { CHAT_SOUND_OPTIONS, useChatSoundPreferencesStore, type ChatSoundId, type ChatSoundPreference } from "../stores/chatSoundPreferencesStore"
+import { usePreferencesStore } from "../stores/preferences"
 import type { KannaState } from "./useKannaState"
 
 const sidebarItems = [
@@ -453,6 +454,25 @@ function SettingsRow({
   )
 }
 
+export function AutoResumeToggleSection({
+  checked,
+  onChange,
+}: {
+  checked: boolean
+  onChange: (value: boolean) => void
+}) {
+  return (
+    <label className="inline-flex items-center gap-2">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(event) => onChange(event.target.checked)}
+      />
+      Enabled
+    </label>
+  )
+}
+
 export function SettingsPage() {
   const navigate = useNavigate()
   const { sectionId } = useParams<{ sectionId: string }>()
@@ -482,6 +502,8 @@ export function SettingsPage() {
   const setChatSoundId = useChatSoundPreferencesStore((store) => store.setChatSoundId)
   const keybindings = state.keybindings
   const llmProvider = state.llmProvider
+  const autoResumeOnRateLimit = usePreferencesStore((state) => state.autoResumeOnRateLimit)
+  const setAutoResumeOnRateLimit = usePreferencesStore((state) => state.setAutoResumeOnRateLimit)
   const defaultProvider = useChatPreferencesStore((store) => store.defaultProvider)
   const providerDefaults = useChatPreferencesStore((store) => store.providerDefaults)
   const setDefaultProvider = useChatPreferencesStore((store) => store.setDefaultProvider)
@@ -819,23 +841,31 @@ export function SettingsPage() {
             <div className="px-3 pb-5 text-[22px] font-extrabold tracking-[-0.5px] text-foreground">
               Settings
             </div>
-            {sidebarItems.map((item) => (
-              <button
-                key={item.label}
-                type="button"
-                onClick={() => navigate(`/settings/${item.id}`)}
-                className={`cursor-pointer rounded-lg px-3 py-2 text-sm ${
-                  item.id === selectedPage
-                    ? "bg-muted font-medium text-foreground"
-                    : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
-                }`}
-              >
-                <div className="flex items-center gap-2.5">
-                  <item.icon className="h-4 w-4 shrink-0" />
-                  <span>{item.label}</span>
-                </div>
-              </button>
-            ))}
+            {sidebarItems.map((item) => {
+              const showUpdateBadge = item.id === "changelog" && updateSnapshot?.updateAvailable === true
+              return (
+                <button
+                  key={item.label}
+                  type="button"
+                  onClick={() => navigate(`/settings/${item.id}`)}
+                  className={`cursor-pointer rounded-lg px-3 py-2 text-sm ${
+                    item.id === selectedPage
+                      ? "bg-muted font-medium text-foreground"
+                      : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <item.icon className="h-4 w-4 shrink-0" />
+                    <span>{item.label}</span>
+                    {showUpdateBadge ? (
+                      <span className="ml-auto inline-flex items-center rounded-full bg-logo/20 px-2 py-0.5 text-[10px] font-bold tracking-wider text-logo">
+                        UPDATE
+                      </span>
+                    ) : null}
+                  </div>
+                </button>
+              )
+            })}
             {authEnabled ? (
               <button
                 type="button"
@@ -1128,6 +1158,16 @@ export function SettingsPage() {
                             {minColumnWidth === DEFAULT_TERMINAL_MIN_COLUMN_WIDTH ? " (default)" : ""}
                           </div>
                         </div>
+                      </SettingsRow>
+
+                      <SettingsRow
+                        title="Auto-resume on rate limit"
+                        description={'When you hit a rate limit, automatically schedule "continue" at the reset time instead of asking. You can still cancel each one from the chat.'}
+                      >
+                        <AutoResumeToggleSection
+                          checked={autoResumeOnRateLimit}
+                          onChange={setAutoResumeOnRateLimit}
+                        />
                       </SettingsRow>
                     </div>
                   </>

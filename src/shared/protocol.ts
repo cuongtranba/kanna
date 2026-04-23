@@ -100,6 +100,7 @@ export type ClientCommand =
       modelOptions?: ModelOptions
       effort?: string
       planMode?: boolean
+      autoResumeOnRateLimit?: boolean
     }
   | { type: "chat.refreshDiffs"; chatId: string }
   | { type: "chat.initGit"; chatId: string }
@@ -182,6 +183,7 @@ export type ClientCommand =
       model?: string
       modelOptions?: ModelOptions
       planMode?: boolean
+      autoResumeOnRateLimit?: boolean
     }
   | {
       type: "message.steer"
@@ -193,6 +195,9 @@ export type ClientCommand =
       chatId: string
       queuedMessageId: string
     }
+  | { type: "autoContinue.accept"; chatId: string; scheduleId: string; scheduledAt: number }
+  | { type: "autoContinue.reschedule"; chatId: string; scheduleId: string; scheduledAt: number }
+  | { type: "autoContinue.cancel"; chatId: string; scheduleId: string }
   | { type: "terminal.create"; projectId: string; terminalId: string; cols: number; rows: number; scrollback: number }
   | { type: "terminal.input"; terminalId: string; data: string }
   | { type: "terminal.resize"; terminalId: string; cols: number; rows: number }

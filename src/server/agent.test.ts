@@ -9,6 +9,9 @@ import {
 } from "./agent"
 import type { HarnessTurn } from "./harness-types"
 import type { ChatAttachment, SlashCommand, TranscriptEntry } from "../shared/types"
+import type { AutoContinueEvent } from "./auto-continue/events"
+import { AsyncEventQueue } from "./test-helpers/async-event-queue"
+import { waitFor } from "./test-helpers/wait-for"
 
 function timestamped<T extends Omit<TranscriptEntry, "_id" | "createdAt">>(entry: T): TranscriptEntry {
   return {
@@ -16,54 +19,6 @@ function timestamped<T extends Omit<TranscriptEntry, "_id" | "createdAt">>(entry
     createdAt: Date.now(),
     ...entry,
   } as TranscriptEntry
-}
-
-async function waitFor(condition: () => boolean, timeoutMs = 2000) {
-  const start = Date.now()
-  while (!condition()) {
-    if (Date.now() - start > timeoutMs) {
-      throw new Error("Timed out waiting for condition")
-    }
-    await new Promise((resolve) => setTimeout(resolve, 10))
-  }
-}
-
-class AsyncEventQueue<T> implements AsyncIterable<T> {
-  private readonly values: T[] = []
-  private readonly waiters: Array<(result: IteratorResult<T>) => void> = []
-  private closed = false
-
-  push(value: T) {
-    const waiter = this.waiters.shift()
-    if (waiter) {
-      waiter({ done: false, value })
-      return
-    }
-    this.values.push(value)
-  }
-
-  close() {
-    this.closed = true
-    while (this.waiters.length > 0) {
-      this.waiters.shift()?.({ done: true, value: undefined as never })
-    }
-  }
-
-  [Symbol.asyncIterator](): AsyncIterator<T> {
-    return {
-      next: async () => {
-        if (this.values.length > 0) {
-          return { done: false, value: this.values.shift() as T }
-        }
-        if (this.closed) {
-          return { done: true, value: undefined as never }
-        }
-        return await new Promise<IteratorResult<T>>((resolve) => {
-          this.waiters.push(resolve)
-        })
-      },
-    }
-  }
 }
 
 describe("normalizeClaudeStreamMessage", () => {
@@ -1731,10 +1686,23 @@ function createFakeStore() {
     async recordTurnFinished() {
       this.turnFinishedCount += 1
     },
-    async recordTurnFailed() {
-      throw new Error("Did not expect turn failure")
+    turnFailedCount: 0,
+    turnFailures: [] as Array<{ chatId: string; reason: string }>,
+    async recordTurnFailed(chatId: string, reason: string) {
+      this.turnFailedCount += 1
+      this.turnFailures.push({ chatId, reason })
     },
     async recordTurnCancelled() {},
+    autoContinueEvents: [] as AutoContinueEvent[],
+    async appendAutoContinueEvent(event: AutoContinueEvent) {
+      this.autoContinueEvents.push(event)
+    },
+    getAutoContinueEvents(chatId: string) {
+      return this.autoContinueEvents.filter((e) => e.chatId === chatId)
+    },
+    listAutoContinueChats() {
+      return [...new Set(this.autoContinueEvents.map((e) => e.chatId))]
+    },
     async setSessionToken(_chatId: string, sessionToken: string | null) {
       chat.sessionToken = sessionToken
     },
@@ -1751,6 +1719,7 @@ function createFakeStore() {
         model: message.model,
         modelOptions: message.modelOptions,
         planMode: message.planMode,
+        autoContinue: message.autoContinue,
       }
       this.queuedMessages.push(queuedMessage)
       return queuedMessage
@@ -1766,3 +1735,484 @@ function createFakeStore() {
     },
   }
 }
+
+function makeLimitError() {
+  const err = new Error(
+    JSON.stringify({
+      type: "error",
+      error: { type: "rate_limit_error" },
+    })
+  ) as Error & { status?: number; headers?: Record<string, string> }
+  err.status = 429
+  err.headers = {
+    "anthropic-ratelimit-unified-reset": new Date(5_000).toISOString(),
+    "x-anthropic-timezone": "Asia/Saigon",
+  }
+  return err
+}
+
+describe("AgentCoordinator rate-limit detection (manual mode)", () => {
+  test("emits auto_continue_proposed when Claude throws a rate-limit error and autoResumeOnRateLimit is false", async () => {
+    const store = createFakeStore()
+    const limitErr = makeLimitError()
+    const events = new AsyncEventQueue<any>()
+
+    const coordinator = new AgentCoordinator({
+      store: store as never,
+      onStateChange: () => {},
+      getAutoResumePreference: () => false,
+      startClaudeSession: async () => ({
+        provider: "claude",
+        stream: events,
+        getAccountInfo: async () => null,
+        interrupt: async () => {},
+        close: () => {},
+        setModel: async () => {},
+        setPermissionMode: async () => {},
+        getSupportedCommands: async () => [],
+        sendPrompt: async () => {
+          // Throw after sendPrompt is called — activeTurns is already set by this point
+          events.throw(limitErr)
+        },
+      }),
+    })
+
+    await coordinator.send({
+      type: "chat.send",
+      chatId: "chat-1",
+      provider: "claude",
+      content: "hello",
+      model: "claude-opus-4-5",
+      autoResumeOnRateLimit: false,
+    })
+
+    await waitFor(() => store.getAutoContinueEvents("chat-1").length >= 1 && store.turnFailedCount >= 1)
+
+    const acEvents = store.getAutoContinueEvents("chat-1")
+    expect(acEvents).toHaveLength(1)
+    expect(acEvents[0].kind).toBe("auto_continue_proposed")
+    if (acEvents[0].kind === "auto_continue_proposed") {
+      expect(acEvents[0].tz).toBe("Asia/Saigon")
+    }
+    expect(store.turnFailures.some((f) => f.reason === "rate_limit")).toBe(true)
+  })
+
+  test("auto-resume on: emits auto_continue_accepted directly with source=auto_setting", async () => {
+    const store = createFakeStore()
+    const limitErr = makeLimitError()
+    const events = new AsyncEventQueue<any>()
+
+    const coordinator = new AgentCoordinator({
+      store: store as never,
+      onStateChange: () => {},
+      getAutoResumePreference: () => true,
+      startClaudeSession: async () => ({
+        provider: "claude",
+        stream: events,
+        getAccountInfo: async () => null,
+        interrupt: async () => {},
+        close: () => {},
+        setModel: async () => {},
+        setPermissionMode: async () => {},
+        getSupportedCommands: async () => [],
+        sendPrompt: async () => {
+          events.throw(limitErr)
+        },
+      }),
+    })
+
+    await coordinator.send({
+      type: "chat.send",
+      chatId: "chat-1",
+      provider: "claude",
+      content: "hello",
+      model: "claude-opus-4-5",
+      autoResumeOnRateLimit: true,
+    })
+
+    await waitFor(() => store.getAutoContinueEvents("chat-1").length >= 1 && store.turnFailedCount >= 1)
+
+    const acEvents = store.getAutoContinueEvents("chat-1")
+    expect(acEvents).toHaveLength(1)
+    expect(acEvents[0].kind).toBe("auto_continue_accepted")
+    if (acEvents[0].kind === "auto_continue_accepted") {
+      expect(acEvents[0].source).toBe("auto_setting")
+    }
+    expect(store.turnFailures.some((f) => f.reason === "rate_limit")).toBe(true)
+  })
+})
+
+describe("AgentCoordinator auto-continue firing", () => {
+  test("firing enqueues a 'continue' user message carrying autoContinue metadata", async () => {
+    const store = createFakeStore()
+    const limitErr = makeLimitError()
+    const events = new AsyncEventQueue<any>()
+
+    // FakeClock lets us manually advance time to trigger armed schedules.
+    class FakeClock {
+      private currentTime = 0
+      private readonly timers = new Map<number, { fn: () => void; fireAt: number }>()
+      private nextId = 1
+
+      now() { return this.currentTime }
+
+      setTimeout(fn: () => void, delayMs: number): number {
+        const id = this.nextId++
+        this.timers.set(id, { fn, fireAt: this.currentTime + delayMs })
+        return id
+      }
+
+      clearTimeout(id: number) { this.timers.delete(id) }
+
+      advance(ms: number) {
+        this.currentTime += ms
+        for (const [id, timer] of [...this.timers.entries()]) {
+          if (timer.fireAt <= this.currentTime) {
+            this.timers.delete(id)
+            timer.fn()
+          }
+        }
+      }
+    }
+
+    const clock = new FakeClock()
+
+    let coordinator!: AgentCoordinator
+    const { ScheduleManager: SM } = await import("./auto-continue/schedule-manager")
+    const scheduleManager = new SM({
+      clock,
+      fire: async (chatId, scheduleId) => {
+        await coordinator.fireAutoContinue(chatId, scheduleId)
+      },
+    })
+
+    coordinator = new AgentCoordinator({
+      store: store as never,
+      onStateChange: () => {},
+      getAutoResumePreference: () => true,
+      scheduleManager,
+      startClaudeSession: async () => ({
+        provider: "claude",
+        stream: events,
+        getAccountInfo: async () => null,
+        interrupt: async () => {},
+        close: () => {},
+        setModel: async () => {},
+        setPermissionMode: async () => {},
+        getSupportedCommands: async () => [],
+        sendPrompt: async () => {
+          events.throw(limitErr)
+        },
+      }),
+    })
+
+    await coordinator.send({
+      type: "chat.send",
+      chatId: "chat-1",
+      provider: "claude",
+      content: "hello",
+      model: "claude-opus-4-5",
+      autoResumeOnRateLimit: true,
+    })
+
+    // Wait for auto_continue_accepted to be stored (Task 12 already handles this).
+    await waitFor(() => store.getAutoContinueEvents("chat-1").length >= 1 && store.turnFailedCount >= 1)
+
+    const acceptedEvent = store.getAutoContinueEvents("chat-1")[0]
+    expect(acceptedEvent.kind).toBe("auto_continue_accepted")
+
+    // The limit error header sets resetAt = new Date(5_000).toISOString() → 5000 ms from epoch.
+    // Advancing the clock past that fires the schedule.
+    clock.advance(10_000)
+
+    // Wait for the fired event AND the "continue" user_prompt to both appear.
+    await waitFor(
+      () =>
+        store.getAutoContinueEvents("chat-1").some((e) => e.kind === "auto_continue_fired") &&
+        store.messages.some((m) => m.kind === "user_prompt" && m.content === "continue")
+    )
+
+    const acEvents = store.getAutoContinueEvents("chat-1")
+    const firedEvent = acEvents.find((e) => e.kind === "auto_continue_fired")
+    expect(firedEvent).toBeDefined()
+    if (firedEvent?.kind === "auto_continue_fired") {
+      expect(firedEvent.scheduleId).toBe(acceptedEvent.scheduleId)
+    }
+
+    // Exactly one "continue" user_prompt with autoContinue metadata.
+    const userPrompts = store.messages.filter(
+      (m) => m.kind === "user_prompt" && m.content === "continue"
+    )
+    expect(userPrompts).toHaveLength(1)
+    if (userPrompts[0].kind === "user_prompt") {
+      expect(userPrompts[0].autoContinue?.scheduleId).toBe(acceptedEvent.scheduleId)
+    }
+  })
+})
+
+// ── AgentCoordinator: acceptAutoContinue / rescheduleAutoContinue / cancelAutoContinue / listLiveSchedules ──
+
+// Minimal coordinator factory for Task 14 auto-continue tests; intentionally omits
+// codexManager and generateTitle — do not use for tests that need provider flows.
+function makeCoordinatorWithStore(extraStoreFields: Partial<ReturnType<typeof createFakeStore>> = {}) {
+  const store = { ...createFakeStore(), ...extraStoreFields }
+  const coordinator = new AgentCoordinator({
+    store: store as never,
+    onStateChange: () => {},
+    getAutoResumePreference: () => false,
+    startClaudeSession: async () => { throw new Error("not needed") },
+  })
+  return { store, coordinator }
+}
+
+describe("AgentCoordinator.acceptAutoContinue", () => {
+  test("happy path: appends auto_continue_accepted with source 'user' for a proposed schedule", async () => {
+    const { store, coordinator } = makeCoordinatorWithStore()
+    // Seed a proposed event
+    const scheduleId = "sched-1"
+    const proposedEvent: AutoContinueEvent = {
+      v: 3,
+      kind: "auto_continue_proposed",
+      timestamp: Date.now(),
+      chatId: "chat-1",
+      scheduleId,
+      detectedAt: Date.now(),
+      resetAt: Date.now() + 10_000,
+      tz: "UTC",
+
+    }
+    store.autoContinueEvents.push(proposedEvent)
+
+    const future = Date.now() + 60_000
+    await coordinator.acceptAutoContinue("chat-1", scheduleId, future)
+
+    const appended = store.autoContinueEvents.filter((e) => e.kind === "auto_continue_accepted")
+    expect(appended).toHaveLength(1)
+    expect(appended[0]!.kind).toBe("auto_continue_accepted")
+    if (appended[0]!.kind === "auto_continue_accepted") {
+      expect(appended[0]!.source).toBe("user")
+      expect(appended[0]!.scheduledAt).toBe(future)
+    }
+  })
+
+  test("guard: rejects when schedule state is not 'proposed'", async () => {
+    const { store, coordinator } = makeCoordinatorWithStore()
+    const scheduleId = "sched-cancel"
+    // Seed a proposed + cancelled event so state = "cancelled"
+    store.autoContinueEvents.push({
+      v: 3,
+      kind: "auto_continue_proposed",
+      timestamp: Date.now(),
+      chatId: "chat-1",
+      scheduleId,
+      detectedAt: Date.now(),
+      resetAt: Date.now() + 10_000,
+      tz: "UTC",
+
+    })
+    store.autoContinueEvents.push({
+      v: 3,
+      kind: "auto_continue_cancelled",
+      timestamp: Date.now(),
+      chatId: "chat-1",
+      scheduleId,
+      reason: "user",
+    })
+
+    await expect(
+      coordinator.acceptAutoContinue("chat-1", scheduleId, Date.now() + 60_000)
+    ).rejects.toThrow("Schedule not pending")
+  })
+
+  test("guard: rejects when scheduledAt is in the past (time guard)", async () => {
+    const { store, coordinator } = makeCoordinatorWithStore()
+    const scheduleId = "sched-past"
+    store.autoContinueEvents.push({
+      v: 3,
+      kind: "auto_continue_proposed",
+      timestamp: Date.now(),
+      chatId: "chat-1",
+      scheduleId,
+      detectedAt: Date.now(),
+      resetAt: Date.now() + 10_000,
+      tz: "UTC",
+
+    })
+
+    await expect(
+      coordinator.acceptAutoContinue("chat-1", scheduleId, Date.now() - 1)
+    ).rejects.toThrow("scheduledAt must be in the future")
+  })
+})
+
+describe("AgentCoordinator.rescheduleAutoContinue", () => {
+  test("happy path: appends auto_continue_rescheduled for a scheduled schedule", async () => {
+    const { store, coordinator } = makeCoordinatorWithStore()
+    const scheduleId = "sched-sched"
+    // Seed proposed + accepted = state "scheduled"
+    store.autoContinueEvents.push({
+      v: 3,
+      kind: "auto_continue_proposed",
+      timestamp: Date.now(),
+      chatId: "chat-1",
+      scheduleId,
+      detectedAt: Date.now(),
+      resetAt: Date.now() + 10_000,
+      tz: "UTC",
+
+    })
+    store.autoContinueEvents.push({
+      v: 3,
+      kind: "auto_continue_accepted",
+      timestamp: Date.now(),
+      chatId: "chat-1",
+      scheduleId,
+      scheduledAt: Date.now() + 30_000,
+      tz: "UTC",
+      source: "user",
+      resetAt: Date.now() + 10_000,
+      detectedAt: Date.now(),
+    })
+
+    const newTime = Date.now() + 120_000
+    await coordinator.rescheduleAutoContinue("chat-1", scheduleId, newTime)
+
+    const appended = store.autoContinueEvents.filter((e) => e.kind === "auto_continue_rescheduled")
+    expect(appended).toHaveLength(1)
+    if (appended[0]!.kind === "auto_continue_rescheduled") {
+      expect(appended[0]!.scheduledAt).toBe(newTime)
+    }
+  })
+
+  test("guard: rejects when schedule state is not 'scheduled'", async () => {
+    const { store, coordinator } = makeCoordinatorWithStore()
+    const scheduleId = "sched-prop"
+    // Proposed only = state "proposed"
+    store.autoContinueEvents.push({
+      v: 3,
+      kind: "auto_continue_proposed",
+      timestamp: Date.now(),
+      chatId: "chat-1",
+      scheduleId,
+      detectedAt: Date.now(),
+      resetAt: Date.now() + 10_000,
+      tz: "UTC",
+
+    })
+
+    await expect(
+      coordinator.rescheduleAutoContinue("chat-1", scheduleId, Date.now() + 60_000)
+    ).rejects.toThrow("Schedule not active")
+  })
+
+  test("guard: rejects when scheduledAt is in the past (time guard)", async () => {
+    const { store, coordinator } = makeCoordinatorWithStore()
+    const scheduleId = "sched-ts"
+    store.autoContinueEvents.push({
+      v: 3,
+      kind: "auto_continue_proposed",
+      timestamp: Date.now(),
+      chatId: "chat-1",
+      scheduleId,
+      detectedAt: Date.now(),
+      resetAt: Date.now() + 10_000,
+      tz: "UTC",
+
+    })
+    store.autoContinueEvents.push({
+      v: 3,
+      kind: "auto_continue_accepted",
+      timestamp: Date.now(),
+      chatId: "chat-1",
+      scheduleId,
+      scheduledAt: Date.now() + 30_000,
+      tz: "UTC",
+      source: "user",
+      resetAt: Date.now() + 10_000,
+      detectedAt: Date.now(),
+    })
+
+    await expect(
+      coordinator.rescheduleAutoContinue("chat-1", scheduleId, Date.now() - 1)
+    ).rejects.toThrow("scheduledAt must be in the future")
+  })
+})
+
+describe("AgentCoordinator.cancelAutoContinue", () => {
+  test("happy path: appends auto_continue_cancelled with given reason for a live schedule", async () => {
+    const { store, coordinator } = makeCoordinatorWithStore()
+    const scheduleId = "sched-live"
+    store.autoContinueEvents.push({
+      v: 3,
+      kind: "auto_continue_proposed",
+      timestamp: Date.now(),
+      chatId: "chat-1",
+      scheduleId,
+      detectedAt: Date.now(),
+      resetAt: Date.now() + 10_000,
+      tz: "UTC",
+
+    })
+
+    await coordinator.cancelAutoContinue("chat-1", scheduleId, "user")
+
+    const appended = store.autoContinueEvents.filter((e) => e.kind === "auto_continue_cancelled")
+    expect(appended).toHaveLength(1)
+    if (appended[0]!.kind === "auto_continue_cancelled") {
+      expect(appended[0]!.reason).toBe("user")
+    }
+  })
+
+  test("guard: silently no-ops when schedule state is outside proposed|scheduled (does not throw, no event appended)", async () => {
+    const { store, coordinator } = makeCoordinatorWithStore()
+    const scheduleId = "sched-fired"
+    // Seed a fired schedule
+    store.autoContinueEvents.push({
+      v: 3,
+      kind: "auto_continue_fired",
+      timestamp: Date.now(),
+      chatId: "chat-1",
+      scheduleId,
+
+    })
+
+    // Should not throw
+    await coordinator.cancelAutoContinue("chat-1", scheduleId, "user")
+
+    // No cancelled event appended
+    const cancelled = store.autoContinueEvents.filter((e) => e.kind === "auto_continue_cancelled")
+    expect(cancelled).toHaveLength(0)
+  })
+})
+
+describe("AgentCoordinator.listLiveSchedules", () => {
+  test("returns scheduleIds for proposed and scheduled states only", async () => {
+    const { store, coordinator } = makeCoordinatorWithStore()
+    // proposed
+    store.autoContinueEvents.push({
+      v: 3, kind: "auto_continue_proposed", timestamp: Date.now(),
+      chatId: "chat-1", scheduleId: "sched-proposed",
+      detectedAt: Date.now(), resetAt: Date.now() + 10_000, tz: "UTC",
+    })
+    // scheduled
+    store.autoContinueEvents.push({
+      v: 3, kind: "auto_continue_proposed", timestamp: Date.now(),
+      chatId: "chat-1", scheduleId: "sched-scheduled",
+      detectedAt: Date.now(), resetAt: Date.now() + 10_000, tz: "UTC",
+    })
+    store.autoContinueEvents.push({
+      v: 3, kind: "auto_continue_accepted", timestamp: Date.now(),
+      chatId: "chat-1", scheduleId: "sched-scheduled",
+      scheduledAt: Date.now() + 30_000, tz: "UTC", source: "user",
+      resetAt: Date.now() + 10_000, detectedAt: Date.now(),
+    })
+    // fired (should not appear)
+    store.autoContinueEvents.push({
+      v: 3, kind: "auto_continue_fired", timestamp: Date.now(),
+      chatId: "chat-1", scheduleId: "sched-fired",
+    })
+
+    const live = coordinator.listLiveSchedules("chat-1")
+    expect(live.sort()).toEqual(["sched-proposed", "sched-scheduled"].sort())
+  })
+})
