@@ -146,7 +146,7 @@ bun run dev --password my-secret
 ```
 
 Kanna verifies the password once, then sets a browser-session cookie. The password itself is not stored in the browser.
-When password protection is enabled, the backend requires authentication for API routes, `/health`, and `/ws`, and the production server redirects unauthenticated browser requests to a login screen.
+When password protection is enabled, the backend requires authentication for API routes and `/ws`. The SPA shell still loads, `/health` remains public for restart detection, and the same in-app password screen is used in both dev and production.
 
 ### Public share link
 

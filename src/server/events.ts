@@ -17,6 +17,7 @@ export interface ChatRecord {
   planMode: boolean
   sessionToken: string | null
   sourceHash: string | null
+  pendingForkSessionToken?: string | null
   hasMessages?: boolean
   lastMessageAt?: number
   lastTurnOutcome: "success" | "failed" | "cancelled" | null
@@ -176,6 +177,13 @@ export type TurnEvent =
       timestamp: number
       chatId: string
       commands: Array<{ name: string; description: string; argumentHint: string }>
+    }
+  | {
+      v: 3
+      type: "pending_fork_session_token_set"
+      timestamp: number
+      chatId: string
+      pendingForkSessionToken: string | null
     }
 
 export type StoreEvent = ProjectEvent | ChatEvent | MessageEvent | QueuedMessageEvent | TurnEvent | AutoContinueEvent

@@ -3,6 +3,7 @@ import {
   codexServiceTierFromModelOptions,
   normalizeClaudeModelOptions,
   normalizeCodexModelOptions,
+  normalizeServerModel,
 } from "./provider-catalog"
 import { resolveClaudeApiModelId } from "../shared/types"
 
@@ -53,6 +54,11 @@ describe("provider catalog normalization", () => {
       fastMode: true,
     })
     expect(codexServiceTierFromModelOptions(normalized)).toBe("fast")
+  })
+
+  test("normalizes server model ids through the shared alias catalog", () => {
+    expect(normalizeServerModel("claude", "opus")).toBe("claude-opus-4-7")
+    expect(normalizeServerModel("codex", "gpt-5-codex")).toBe("gpt-5.3-codex")
   })
 
   test("resolves Claude API model ids for 1m context window", () => {

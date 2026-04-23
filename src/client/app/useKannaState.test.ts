@@ -1,11 +1,13 @@
 import { describe, expect, test } from "bun:test"
 import {
+  applySidebarProjectOrder,
   countMatchingUserPrompts,
   getActiveChatSnapshot,
   getNextMeasuredInputHeight,
   getNewestRemainingChatId,
   getPreviousPrompt,
   getTranscriptPaddingBottom,
+  getUiUpdateReadinessPath,
   getUserPromptSignature,
   getUiUpdateRestartReconnectAction,
   reconcileOptimisticUserPrompts,
@@ -109,6 +111,30 @@ describe("getNewestRemainingChatId", () => {
   })
 })
 
+describe("applySidebarProjectOrder", () => {
+  test("reorders project groups immediately using the optimistic order", () => {
+    const sidebarData = createSidebarData()
+
+    expect(
+      applySidebarProjectOrder(sidebarData.projectGroups, ["project-2", "project-1"]).map((group) => group.groupKey)
+    ).toEqual(["project-2", "project-1"])
+  })
+
+  test("keeps unspecified groups at the end and ignores unknown ids", () => {
+    const sidebarData = createSidebarData()
+    const reordered = applySidebarProjectOrder(sidebarData.projectGroups, ["missing", "project-2"])
+
+    expect(reordered.map((group) => group.groupKey)).toEqual(["project-2", "project-1"])
+  })
+
+  test("returns the original array when the order already matches", () => {
+    const sidebarData = createSidebarData()
+    const reordered = applySidebarProjectOrder(sidebarData.projectGroups, ["project-1", "project-2"])
+
+    expect(reordered).toBe(sidebarData.projectGroups)
+  })
+})
+
 describe("shouldAutoFollowTranscript", () => {
   test("returns true when the transcript is at the bottom", () => {
     expect(shouldAutoFollowTranscript(0)).toBe(true)
@@ -189,6 +215,12 @@ describe("shouldHandleUiUpdateReloadRequest", () => {
     expect(shouldHandleUiUpdateReloadRequest(null, null)).toBe(false)
     expect(shouldHandleUiUpdateReloadRequest(undefined, null)).toBe(false)
     expect(shouldHandleUiUpdateReloadRequest(123, "123")).toBe(false)
+  })
+})
+
+describe("getUiUpdateReadinessPath", () => {
+  test("uses a public auth endpoint so password-protected restarts can reload", () => {
+    expect(getUiUpdateReadinessPath()).toBe("/auth/status")
   })
 })
 

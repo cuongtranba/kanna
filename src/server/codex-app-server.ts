@@ -34,6 +34,8 @@ import {
   type ThreadItem,
   type ThreadResumeParams,
   type ThreadResumeResponse,
+  type ThreadForkParams,
+  type ThreadForkResponse,
   type ThreadStartParams,
   type ThreadStartResponse,
   type ThreadTokenUsageUpdatedNotification,
@@ -118,6 +120,7 @@ export interface StartCodexSessionArgs {
   model: string
   serviceTier?: ServiceTier
   sessionToken: string | null
+  pendingForkSessionToken?: string | null
 }
 
 export interface StartCodexTurnArgs {
@@ -745,7 +748,7 @@ export class CodexAppServerManager {
 
   async startSession(args: StartCodexSessionArgs) {
     const existing = this.sessions.get(args.chatId)
-    if (existing && !existing.closed && existing.cwd === args.cwd) {
+    if (existing && !existing.closed && existing.cwd === args.cwd && !args.pendingForkSessionToken) {
       return
     }
 
@@ -791,8 +794,18 @@ export class CodexAppServerManager {
       persistExtendedHistory: false,
     } satisfies ThreadStartParams
 
-    let response: ThreadStartResponse | ThreadResumeResponse
-    if (args.sessionToken) {
+    let response: ThreadStartResponse | ThreadResumeResponse | ThreadForkResponse
+    if (args.pendingForkSessionToken) {
+      response = await this.sendRequest<ThreadForkResponse>(context, "thread/fork", {
+        threadId: args.pendingForkSessionToken,
+        model: args.model,
+        cwd: args.cwd,
+        serviceTier: args.serviceTier,
+        approvalPolicy: "never",
+        sandbox: "danger-full-access",
+        persistExtendedHistory: false,
+      } satisfies ThreadForkParams)
+    } else if (args.sessionToken) {
       try {
         response = await this.sendRequest<ThreadResumeResponse>(context, "thread/resume", {
           threadId: args.sessionToken,
@@ -815,6 +828,7 @@ export class CodexAppServerManager {
     }
 
     context.sessionToken = response.thread.id
+    return context.sessionToken
   }
 
   async startTurn(args: StartCodexTurnArgs): Promise<HarnessTurn> {

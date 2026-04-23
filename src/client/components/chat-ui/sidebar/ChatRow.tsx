@@ -1,5 +1,5 @@
 import { memo } from "react"
-import { Archive, Loader2 } from "lucide-react"
+import { Archive, Loader2, Split } from "lucide-react"
 import type { SidebarChatRow } from "../../../../shared/types"
 import { AnimatedShinyText } from "../../ui/animated-shiny-text"
 import { Button } from "../../ui/button"
@@ -17,6 +17,7 @@ interface Props {
   shortcutHint?: string | null
   showShortcutHint?: boolean
   onSelectChat: (chatId: string) => void
+  onForkChat: (chatId: string) => void
   onDeleteChat: (chatId: string) => void
 }
 
@@ -27,6 +28,7 @@ function ChatRowImpl({
   shortcutHint = null,
   showShortcutHint = false,
   onSelectChat,
+  onForkChat,
   onDeleteChat,
 }: Props) {
   const ageLabel = formatSidebarAgeLabel(getSidebarChatTimestamp(chat), nowMs)
@@ -45,7 +47,7 @@ function ChatRowImpl({
       onClick={() => onSelectChat(chat.chatId)}
     >
       {loadingStatuses.has(chat.status) ? (
-        <Loader2 className="size-3.5 flex-shrink-0 animate-spin text-muted-foreground" />
+        <Loader2 className="size-3.5 flex-shrink-0 animate-spin text-logo" />
       ) : chat.status === "waiting_for_user" ? (
         <div className="relative ">
           <div className=" rounded-full z-0 size-3.5 flex items-center justify-center ">
@@ -69,11 +71,11 @@ function ChatRowImpl({
           >
             {chat.title}
           </AnimatedShinyText>
-        ) : (
-          chat.title
-        )}
+        ) : 
+          chat.status !== 'idle' || activeChatId === normalizedChatId || chat.unread ? <span className="">{chat.title}</span> : <span className="text-slate-500 dark:text-slate-400">{chat.title}</span>
+        }
       </span>
-      <div className="relative h-11 w-11 md:h-7 md:w-7 mr-[2px] shrink-0">
+      <div className={cn("relative h-7 mr-[2px] shrink-0", chat.canFork ? "w-12" : "w-6")}>
         {trailingLabel ? (
           showShortcutKeycap ? (
             <span className="hidden md:flex absolute inset-0 items-center justify-end pr-0.5 text-[11px] text-foreground transition-opacity group-hover:opacity-0">
@@ -87,24 +89,41 @@ function ChatRowImpl({
             </span>
           )
         ) : null}
-        <Button
-          variant="ghost"
-          size="icon"
+        <div
           className={cn(
-            "absolute inset-0 h-11 w-11 md:h-7 md:w-7 opacity-100 cursor-pointer rounded-sm hover:!bg-transparent !border-0",
+            "absolute inset-0 flex items-center justify-end gap-0 opacity-100",
             trailingLabel
               ? "md:opacity-0 md:group-hover:opacity-100"
               : "opacity-100 md:opacity-0 md:group-hover:opacity-100"
           )}
-          onClick={(event) => {
-            event.stopPropagation()
-            onDeleteChat(chat.chatId)
-          }}
-          title="Delete chat"
-          aria-label="Archive chat"
         >
-          <Archive className="size-3.5" />
-        </Button>
+          {chat.canFork ? (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6 cursor-pointer rounded-sm hover:!bg-transparent !border-0"
+              onClick={(event) => {
+                event.stopPropagation()
+                onForkChat(chat.chatId)
+              }}
+              title="Fork chat"
+            >
+              <Split className="size-3.5" />
+            </Button>
+          ) : null}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6 cursor-pointer rounded-sm hover:!bg-transparent !border-0"
+            onClick={(event) => {
+              event.stopPropagation()
+              onDeleteChat(chat.chatId)
+            }}
+            title="Delete chat"
+          >
+            <Archive className="size-3.5" />
+          </Button>
+        </div>
       </div>
     </div>
   )

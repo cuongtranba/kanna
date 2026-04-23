@@ -41,7 +41,9 @@ export interface ProviderModelOption {
   id: string
   label: string
   supportsEffort: boolean
+  aliases?: readonly string[]
   contextWindowOptions?: readonly ProviderContextWindowOption[]
+  supportsMaxReasoningEffort?: boolean
 }
 
 export interface ProviderEffortOption {
@@ -120,26 +122,6 @@ export function isClaudeContextWindow(value: unknown): value is ClaudeContextWin
   return CLAUDE_CONTEXT_WINDOW_OPTIONS.some((option) => option.id === value)
 }
 
-export function normalizeClaudeModelId(modelId?: string): string {
-  switch (modelId) {
-    case "opus":
-    case "claude-opus-4-7":
-      return "claude-opus-4-7"
-    case "sonnet":
-    case "claude-sonnet-4-6":
-      return "claude-sonnet-4-6"
-    case "haiku":
-    case "claude-haiku-4-5-20251001":
-      return "claude-haiku-4-5-20251001"
-    default:
-      return modelId ?? "claude-opus-4-7"
-  }
-}
-
-export function isClaudeOpusModelId(modelId: string): boolean {
-  return normalizeClaudeModelId(modelId).startsWith("claude-opus-")
-}
-
 export interface ProviderCatalogEntry {
   id: AgentProvider
   label: string
@@ -158,9 +140,27 @@ export const PROVIDERS: ProviderCatalogEntry[] = [
     defaultEffort: "high",
     supportsPlanMode: true,
     models: [
-      { id: "claude-opus-4-7", label: "Opus 4.7", supportsEffort: true, contextWindowOptions: [...CLAUDE_CONTEXT_WINDOW_OPTIONS] },
-      { id: "claude-sonnet-4-6", label: "Sonnet 4.6", supportsEffort: true, contextWindowOptions: [...CLAUDE_CONTEXT_WINDOW_OPTIONS] },
-      { id: "claude-haiku-4-5-20251001", label: "Haiku 4.5", supportsEffort: true },
+      {
+        id: "claude-opus-4-7",
+        label: "Opus 4.7",
+        supportsEffort: true,
+        aliases: ["opus"],
+        contextWindowOptions: [...CLAUDE_CONTEXT_WINDOW_OPTIONS],
+        supportsMaxReasoningEffort: true,
+      },
+      {
+        id: "claude-sonnet-4-6",
+        label: "Sonnet 4.6",
+        supportsEffort: true,
+        aliases: ["sonnet"],
+        contextWindowOptions: [...CLAUDE_CONTEXT_WINDOW_OPTIONS],
+      },
+      {
+        id: "claude-haiku-4-5-20251001",
+        label: "Haiku 4.5",
+        supportsEffort: true,
+        aliases: ["haiku"],
+      },
     ],
     efforts: [...CLAUDE_REASONING_OPTIONS],
   },
@@ -171,7 +171,7 @@ export const PROVIDERS: ProviderCatalogEntry[] = [
     supportsPlanMode: true,
     models: [
       { id: "gpt-5.4", label: "GPT-5.4", supportsEffort: false },
-      { id: "gpt-5.3-codex", label: "GPT-5.3 Codex", supportsEffort: false },
+      { id: "gpt-5.3-codex", label: "GPT-5.3 Codex", supportsEffort: false, aliases: ["gpt-5-codex"] },
       { id: "gpt-5.3-codex-spark", label: "GPT-5.3 Codex Spark", supportsEffort: false },
     ],
     efforts: [],
@@ -186,8 +186,43 @@ export function getProviderCatalog(provider: AgentProvider): ProviderCatalogEntr
   return entry
 }
 
+function getProviderModelMatch(provider: AgentProvider, modelId?: string): ProviderModelOption | undefined {
+  if (!modelId) return undefined
+
+  return getProviderCatalog(provider).models.find((candidate) =>
+    candidate.id === modelId || candidate.aliases?.includes(modelId)
+  )
+}
+
+export function normalizeProviderModelId(
+  provider: AgentProvider,
+  modelId?: string,
+  fallbackModelId?: string
+): string {
+  return getProviderModelMatch(provider, modelId)?.id
+    ?? fallbackModelId
+    ?? getProviderCatalog(provider).defaultModel
+}
+
+export function normalizeClaudeModelId(modelId?: string, fallbackModelId = "claude-opus-4-7"): string {
+  return normalizeProviderModelId("claude", modelId, fallbackModelId)
+}
+
+export function normalizeCodexModelId(modelId?: string, fallbackModelId = "gpt-5.4"): string {
+  return normalizeProviderModelId("codex", modelId, fallbackModelId)
+}
+
+export function getProviderModelOption(provider: AgentProvider, modelId: string): ProviderModelOption | undefined {
+  const normalizedModelId = normalizeProviderModelId(provider, modelId)
+  return getProviderCatalog(provider).models.find((candidate) => candidate.id === normalizedModelId)
+}
+
 export function getClaudeModelOption(modelId: string): ProviderModelOption | undefined {
-  return getProviderCatalog("claude").models.find((candidate) => candidate.id === modelId)
+  return getProviderModelOption("claude", modelId)
+}
+
+export function supportsClaudeMaxReasoningEffort(modelId: string): boolean {
+  return Boolean(getClaudeModelOption(modelId)?.supportsMaxReasoningEffort)
 }
 
 export function getClaudeContextWindowOptions(modelId: string): readonly ProviderContextWindowOption[] {
@@ -242,6 +277,7 @@ export interface SidebarChatRow {
   provider: AgentProvider | null
   lastMessageAt?: number
   hasAutomation: boolean
+  canFork?: boolean
 }
 
 export interface SidebarProjectGroup {
@@ -271,6 +307,12 @@ export interface LocalProjectsSnapshot {
     displayName: string
   }
   projects: LocalProjectSummary[]
+}
+
+export interface AppSettingsSnapshot {
+  analyticsEnabled: boolean
+  warning: string | null
+  filePathDisplay: string
 }
 
 export interface LlmProviderFile {

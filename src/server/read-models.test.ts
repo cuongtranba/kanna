@@ -28,9 +28,10 @@ describe("read models", () => {
       lastTurnOutcome: null,
     })
 
-    const sidebar = deriveSidebarData(state, new Map(), 1_000_000)
+    const sidebar = deriveSidebarData(state, new Map(), { nowMs: 1_000_000 })
     expect(sidebar.projectGroups[0]?.chats[0]?.provider).toBe("codex")
     expect(sidebar.projectGroups[0]?.chats[0]?.unread).toBe(true)
+    expect(sidebar.projectGroups[0]?.chats[0]?.canFork).toBe(true)
     expect(sidebar.projectGroups[0]?.previewChats.map((chat) => chat.chatId)).toEqual(["chat-1"])
     expect(sidebar.projectGroups[0]?.olderChats).toEqual([])
     expect(sidebar.projectGroups[0]?.defaultCollapsed).toBe(false)
@@ -205,9 +206,7 @@ describe("read models", () => {
       createdAt: 3,
       updatedAt: 15,
     })
-    state.sidebarProjectOrder = ["project-1"]
-
-    const sidebar = deriveSidebarData(state, new Map())
+    const sidebar = deriveSidebarData(state, new Map(), { sidebarProjectOrder: ["project-1"] })
 
     expect(sidebar.projectGroups.map((group) => group.groupKey)).toEqual(["project-1", "project-2", "project-3"])
   })
@@ -251,11 +250,114 @@ describe("read models", () => {
       lastTurnOutcome: null,
     })
 
-    const sidebar = deriveSidebarData(state, new Map(), 1_000_000)
+    const sidebar = deriveSidebarData(state, new Map(), { nowMs: 1_000_000 })
 
     expect(sidebar.projectGroups[0]?.previewChats.map((chat) => chat.chatId)).toEqual(["chat-1"])
     expect(sidebar.projectGroups[0]?.olderChats.map((chat) => chat.chatId)).toEqual(["chat-2"])
     expect(sidebar.projectGroups[0]?.defaultCollapsed).toBe(false)
+  })
+
+  test("limits recent chat previews to five before folding into older chats", () => {
+    const state = createEmptyState()
+    state.projectsById.set("project-1", {
+      id: "project-1",
+      localPath: "/tmp/project",
+      title: "Project",
+      createdAt: 1,
+      updatedAt: 1,
+    })
+    state.projectIdsByPath.set("/tmp/project", "project-1")
+
+    for (let index = 0; index < 6; index++) {
+      const chatNumber = index + 1
+      state.chatsById.set(`chat-${chatNumber}`, {
+        id: `chat-${chatNumber}`,
+        projectId: "project-1",
+        title: `Chat ${chatNumber}`,
+        createdAt: chatNumber,
+        updatedAt: chatNumber,
+        unread: false,
+        provider: "claude",
+        planMode: false,
+        sessionToken: null,
+        sourceHash: null,
+        lastMessageAt: 1_000_000 - chatNumber * 60 * 1_000,
+        lastTurnOutcome: null,
+      })
+    }
+
+    const sidebar = deriveSidebarData(state, new Map(), { nowMs: 1_000_000 })
+
+    expect(sidebar.projectGroups[0]?.previewChats.map((chat) => chat.chatId)).toEqual([
+      "chat-1",
+      "chat-2",
+      "chat-3",
+      "chat-4",
+      "chat-5",
+    ])
+    expect(sidebar.projectGroups[0]?.olderChats.map((chat) => chat.chatId)).toEqual(["chat-6"])
+  })
+
+  test("disables forking for active and draining chats, but allows pending fork chats", () => {
+    const state = createEmptyState()
+    state.projectsById.set("project-1", {
+      id: "project-1",
+      localPath: "/tmp/project",
+      title: "Project",
+      createdAt: 1,
+      updatedAt: 1,
+    })
+    state.projectIdsByPath.set("/tmp/project", "project-1")
+    state.chatsById.set("chat-active", {
+      id: "chat-active",
+      projectId: "project-1",
+      title: "Active",
+      createdAt: 1,
+      updatedAt: 1,
+      unread: false,
+      provider: "claude",
+      planMode: false,
+      sessionToken: "session-active",
+      sourceHash: null,
+      lastTurnOutcome: null,
+    })
+    state.chatsById.set("chat-pending", {
+      id: "chat-pending",
+      projectId: "project-1",
+      title: "Pending fork",
+      createdAt: 2,
+      updatedAt: 2,
+      unread: false,
+      provider: "claude",
+      planMode: false,
+      sessionToken: null,
+      sourceHash: null,
+      pendingForkSessionToken: "session-parent",
+      lastTurnOutcome: null,
+    })
+    state.chatsById.set("chat-draining", {
+      id: "chat-draining",
+      projectId: "project-1",
+      title: "Draining",
+      createdAt: 3,
+      updatedAt: 3,
+      unread: false,
+      provider: "codex",
+      planMode: false,
+      sessionToken: "thread-1",
+      sourceHash: null,
+      lastTurnOutcome: null,
+    })
+
+    const sidebar = deriveSidebarData(
+      state,
+      new Map([["chat-active", "running"]]),
+      { drainingChatIds: new Set(["chat-draining"]) }
+    )
+
+    expect(sidebar.projectGroups[0]?.chats.find((chat) => chat.chatId === "chat-active")?.canFork).toBeUndefined()
+    expect(sidebar.projectGroups[0]?.chats.find((chat) => chat.chatId === "chat-pending")?.canFork).toBe(true)
+    expect(sidebar.projectGroups[0]?.chats.find((chat) => chat.chatId === "chat-draining")?.canFork).toBeUndefined()
   })
 
   test("passes slash commands from ChatRecord through to ChatSnapshot", () => {

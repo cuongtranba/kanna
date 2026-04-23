@@ -22,6 +22,36 @@ class FakeReloader implements UpdateReloader {
 }
 
 describe("UpdateManager", () => {
+  test("tracks update lifecycle events", async () => {
+    const events: Array<{ name: string; properties?: Record<string, unknown> }> = []
+    const manager = new UpdateManager({
+      currentVersion: "0.12.0",
+      checker: new FakeChecker([{ latestVersion: "0.13.0", updateAvailable: true }]),
+      reloader: new FakeReloader(),
+      trackEvent: (eventName, properties) => {
+        events.push({ name: eventName, properties })
+      },
+    })
+
+    await manager.checkForUpdates({ force: true })
+    await manager.installUpdate()
+
+    expect(events).toEqual([
+      {
+        name: "update_checked",
+        properties: {
+          latest_version: "0.13.0",
+        },
+      },
+      {
+        name: "update_installed",
+        properties: {
+          latest_version: "0.13.0",
+        },
+      },
+    ])
+  })
+
   test("detects available updates", async () => {
     const manager = new UpdateManager({
       currentVersion: "0.12.0",

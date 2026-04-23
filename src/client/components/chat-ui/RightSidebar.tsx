@@ -36,6 +36,20 @@ type DiffFile = ChatDiffSnapshot["files"][number]
 type SidebarViewMode = "changes" | "history"
 const EMPTY_CHECKED_PATHS: Record<string, boolean> = {}
 
+export function shouldLoadDiffPatchNow(args: {
+  isCollapsed: boolean
+  hasPreviewAttachment: boolean
+  patch?: string
+  patchError?: string
+  isPatchLoading: boolean
+}) {
+  return !args.isCollapsed
+    && !args.hasPreviewAttachment
+    && args.patch === undefined
+    && args.patchError === undefined
+    && !args.isPatchLoading
+}
+
 function getDiffPreviewAttachment(projectId: string | null, file: DiffFile): ChatAttachment | null {
   if (!projectId || !file.mimeType || typeof file.size !== "number" || file.changeType === "deleted") {
     return null
@@ -1142,11 +1156,34 @@ function DiffFileCard({
   const canIgnoreFolder = canIgnoreDiffFolder(file)
   const [selectedAttachmentId, setSelectedAttachmentId] = useState<string | null>(null)
   const cardRef = useRef<HTMLDivElement | null>(null)
+  const autoLoadPatchKeyRef = useRef<string | null>(null)
   const { sentinelRef, isStuck } = useStickyState<HTMLDivElement>({
     rootRef,
     disabled: isCollapsed,
   })
   const previewAttachment = useMemo(() => getDiffPreviewAttachment(projectId, file), [file, projectId])
+  const hasPreviewAttachment = previewAttachment !== null
+  const shouldLoadPatchWhenVisible = shouldLoadDiffPatchNow({
+    isCollapsed,
+    hasPreviewAttachment,
+    patch,
+    patchError,
+    isPatchLoading,
+  })
+
+  useEffect(() => {
+    if (!shouldLoadPatchWhenVisible) {
+      return
+    }
+
+    const autoLoadKey = `${file.path}\u0000${file.patchDigest}`
+    if (autoLoadPatchKeyRef.current === autoLoadKey) {
+      return
+    }
+
+    autoLoadPatchKeyRef.current = autoLoadKey
+    void onLoadPatch(file.path).catch(() => {})
+  }, [file.patchDigest, file.path, onLoadPatch, shouldLoadPatchWhenVisible])
 
   function handleAttachmentClick(attachment: ChatAttachment) {
     const target = classifyAttachmentPreview(attachment)
@@ -1178,12 +1215,24 @@ function DiffFileCard({
       return
     }
 
-    if (previewAttachment || patch !== undefined) {
+    if (hasPreviewAttachment || patch !== undefined) {
       onToggleCollapsed()
       return
     }
 
     if (isPatchLoading) {
+      return
+    }
+
+    const shouldLoadBeforeExpand = patchError !== undefined || shouldLoadDiffPatchNow({
+      isCollapsed: false,
+      hasPreviewAttachment,
+      patch,
+      patchError,
+      isPatchLoading,
+    })
+    if (!shouldLoadBeforeExpand) {
+      onToggleCollapsed()
       return
     }
 

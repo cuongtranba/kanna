@@ -11,7 +11,7 @@ import {
   type CodexModelOptions,
   type CodexReasoningEffort,
   type ProviderCatalogEntry,
-  isClaudeOpusModelId,
+  supportsClaudeMaxReasoningEffort,
 } from "../../../shared/types"
 import { cn } from "../../lib/utils"
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover"
@@ -258,7 +258,7 @@ export function ChatPreferenceControls({
                 selected={modelOptions.reasoningEffort === effort.id}
                 icon={<Brain className="h-4 w-4 text-muted-foreground" />}
                 label={effort.label}
-                disabled={effort.id === "max" && !isClaudeOpusModelId(model)}
+                disabled={effort.id === "max" && !supportsClaudeMaxReasoningEffort(model)}
               />
             ))
             : CODEX_REASONING_OPTIONS.map((effort) => (

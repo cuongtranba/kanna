@@ -120,6 +120,38 @@ describe("CodexAppServerManager", () => {
     ])
   })
 
+  test("forks a thread when a pending fork session token is provided", async () => {
+    const process = new FakeCodexProcess((message, child) => {
+      if (message.method === "initialize") {
+        child.writeServerMessage({ id: message.id, result: { userAgent: "codex-test" } })
+      } else if (message.method === "thread/fork") {
+        child.writeServerMessage({
+          id: message.id,
+          result: { thread: { id: "thread-fork-1" }, model: "gpt-5.4", reasoningEffort: "high" },
+        })
+      }
+    })
+
+    const manager = new CodexAppServerManager({
+      spawnProcess: () => process as never,
+    })
+
+    const sessionToken = await manager.startSession({
+      chatId: "chat-1",
+      cwd: "/tmp/project",
+      model: "gpt-5.4",
+      sessionToken: null,
+      pendingForkSessionToken: "thread-source",
+    })
+
+    expect(sessionToken).toBe("thread-fork-1")
+    expect(process.messages.map((message: any) => message.method)).toEqual([
+      "initialize",
+      "initialized",
+      "thread/fork",
+    ])
+  })
+
   test("maps fast mode and reasoning into app-server params", async () => {
     const process = new FakeCodexProcess((message, child) => {
       if (message.method === "initialize") {

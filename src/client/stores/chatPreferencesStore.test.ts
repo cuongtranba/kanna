@@ -106,6 +106,25 @@ describe("migrateChatPreferencesState", () => {
       planMode: false,
     })
   })
+
+  test("normalizes legacy Codex model aliases during migration", () => {
+    const migrated = migrateChatPreferencesState({
+      defaultProvider: "last_used",
+      providerDefaults: {
+        codex: {
+          model: "gpt-5-codex",
+          modelOptions: { reasoningEffort: "low", fastMode: true },
+          planMode: false,
+        },
+      },
+    })
+
+    expect(migrated.providerDefaults.codex).toEqual({
+      model: "gpt-5.3-codex",
+      modelOptions: { reasoningEffort: "low", fastMode: true },
+      planMode: false,
+    })
+  })
 })
 
 describe("chat preference store", () => {

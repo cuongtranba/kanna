@@ -5,9 +5,10 @@ import {
   DEFAULT_CODEX_MODEL_OPTIONS,
   normalizeClaudeContextWindow,
   normalizeClaudeModelId,
-  isClaudeOpusModelId,
+  normalizeCodexModelId,
   isClaudeReasoningEffort,
   isCodexReasoningEffort,
+  supportsClaudeMaxReasoningEffort,
   type AgentProvider,
   type ClaudeModelOptions,
   type CodexModelOptions,
@@ -98,10 +99,6 @@ type PersistedChatPreferencesState = Pick<
   "defaultProvider" | "providerDefaults" | "chatStates" | "legacyComposerState"
 > & LegacyPersistedChatPreferencesState
 
-function normalizeCodexModel(model?: string) {
-  return model === "gpt-5-codex" ? "gpt-5.3-codex" : (model ?? "gpt-5.4")
-}
-
 function normalizeDefaultProvider(value?: string): DefaultProviderPreference {
   if (value === "claude" || value === "codex") return value
   return "last_used"
@@ -125,7 +122,7 @@ function normalizeClaudePreference(value?: {
   return {
     model,
     modelOptions: {
-      reasoningEffort: !isClaudeOpusModelId(model) && normalizedEffort === "max" ? "high" : normalizedEffort,
+      reasoningEffort: !supportsClaudeMaxReasoningEffort(model) && normalizedEffort === "max" ? "high" : normalizedEffort,
       contextWindow,
     },
     planMode: Boolean(value?.planMode),
@@ -140,7 +137,7 @@ function normalizeCodexPreference(value?: {
 }): ProviderPreference<CodexModelOptions> {
   const reasoningEffort = value?.modelOptions?.reasoningEffort
   return {
-    model: normalizeCodexModel(value?.model),
+    model: normalizeCodexModelId(value?.model),
     modelOptions: {
       reasoningEffort: isCodexReasoningEffort(reasoningEffort)
         ? reasoningEffort

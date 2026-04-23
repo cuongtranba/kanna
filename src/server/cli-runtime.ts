@@ -3,7 +3,7 @@ import { spawnSync } from "node:child_process"
 import { hasCommand, spawnDetached } from "./process-utils"
 import { APP_NAME, CLI_COMMAND, getDataDirDisplay, LOG_PREFIX, PACKAGE_NAME } from "../shared/branding"
 import type { ShareMode } from "../shared/share"
-import { isShareEnabled, isTokenShareMode } from "../shared/share"
+import { assertNoHostOverride, getShareCliFlag, isShareEnabled, isTokenShareMode } from "../shared/share"
 import type { UpdateInstallErrorCode } from "../shared/types"
 import { PROD_SERVER_PORT } from "../shared/ports"
 import { CLI_SUPPRESS_OPEN_ONCE_ENV_VAR } from "./restart"
@@ -74,6 +74,10 @@ type ParsedArgs =
 
 const MINIMUM_BUN_VERSION = "1.3.5"
 
+function throwShareConflict(share: Exclude<ShareMode, false>, hostFlag: "--host" | "--remote"): never {
+  throw new Error(`${getShareCliFlag(share)} cannot be used with ${hostFlag}`)
+}
+
 function printHelp() {
   console.log(`${APP_NAME} — local-only project chat UI
 
@@ -123,7 +127,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
       const next = argv[index + 1]
       if (!next || next.startsWith("-")) throw new Error("Missing value for --host")
       if (isShareEnabled(share)) {
-        throw new Error(typeof share === "string" ? "--share cannot be used with --host" : "--cloudflared cannot be used with --host")
+        throwShareConflict(share, "--host")
       }
       host = next
       sawHost = true
@@ -132,21 +136,19 @@ export function parseArgs(argv: string[]): ParsedArgs {
     }
     if (arg === "--remote") {
       if (isShareEnabled(share)) {
-        throw new Error(typeof share === "string" ? "--share cannot be used with --remote" : "--cloudflared cannot be used with --remote")
+        throwShareConflict(share, "--remote")
       }
       host = "0.0.0.0"
       sawRemote = true
       continue
     }
     if (arg === "--share") {
-      if (sawHost) throw new Error("--share cannot be used with --host")
-      if (sawRemote) throw new Error("--share cannot be used with --remote")
+      assertNoHostOverride("--share", sawHost, sawRemote)
       share = "quick"
       continue
     }
     if (arg === "--cloudflared") {
-      if (sawHost) throw new Error("--cloudflared cannot be used with --host")
-      if (sawRemote) throw new Error("--cloudflared cannot be used with --remote")
+      assertNoHostOverride("--cloudflared", sawHost, sawRemote)
       const next = argv[index + 1]
       if (!next || next.startsWith("-")) throw new Error("Missing value for --cloudflared")
       share = { kind: "token", token: next }

@@ -21,6 +21,25 @@ import { resolveLocalPath } from "./paths"
 
 const COMPACTION_THRESHOLD_BYTES = 2 * 1024 * 1024
 const STALE_EMPTY_CHAT_MAX_AGE_MS = 30 * 60 * 1000
+const SIDEBAR_PROJECT_ORDER_FILE = "sidebar-order.json"
+
+function normalizeSidebarProjectOrder(value: unknown) {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  const seen = new Set<string>()
+  const projectIds: string[] = []
+  for (const entry of value) {
+    if (typeof entry !== "string") continue
+    const projectId = entry.trim()
+    if (!projectId || seen.has(projectId)) continue
+    seen.add(projectId)
+    projectIds.push(projectId)
+  }
+
+  return projectIds
+}
 
 function isSendToStartingProfilingEnabled() {
   return process.env.KANNA_PROFILE_SEND_TO_STARTING === "1"
@@ -79,6 +98,8 @@ function getReplayEventPriority(event: StoreEvent) {
     case "session_token_set":
     case "session_commands_loaded":
       return 6
+    case "pending_fork_session_token_set":
+      return 6
     case "turn_cancelled":
       return 7
     case "turn_finished":
@@ -134,6 +155,12 @@ function getHistorySnapshot(page: TranscriptPageResult, recentLimit: number): Ch
   }
 }
 
+function getForkedChatTitle(title: string) {
+  const trimmed = title.trim()
+  if (!trimmed) return "Fork: New Chat"
+  return trimmed.startsWith("Fork: ") ? trimmed : `Fork: ${trimmed}`
+}
+
 export class EventStore {
   readonly dataDir: string
   readonly state: StoreState = createEmptyState()
@@ -147,7 +174,10 @@ export class EventStore {
   private readonly turnsLogPath: string
   private readonly schedulesLogPath: string
   private readonly transcriptsDir: string
+  private readonly sidebarProjectOrderPath: string
   private legacyMessagesByChatId = new Map<string, TranscriptEntry[]>()
+  private legacySidebarProjectOrder: string[] = []
+  private sidebarProjectOrder: string[] = []
   private snapshotHasLegacyMessages = false
   private cachedTranscript: { chatId: string; entries: TranscriptEntry[] } | null = null
 
@@ -161,6 +191,7 @@ export class EventStore {
     this.turnsLogPath = path.join(this.dataDir, "turns.jsonl")
     this.schedulesLogPath = path.join(this.dataDir, "schedules.jsonl")
     this.transcriptsDir = path.join(this.dataDir, "transcripts")
+    this.sidebarProjectOrderPath = path.join(this.dataDir, SIDEBAR_PROJECT_ORDER_FILE)
   }
 
   async initialize() {
@@ -174,6 +205,7 @@ export class EventStore {
     await this.ensureFile(this.schedulesLogPath)
     await this.loadSnapshot()
     await this.replayLogs()
+    await this.loadSidebarProjectOrder()
     if (!(await this.hasLegacyTranscriptData()) && await this.shouldCompact()) {
       await this.compact()
     }
@@ -223,9 +255,10 @@ export class EventStore {
         this.state.chatsById.set(chat.id, {
           ...chat,
           unread: chat.unread ?? false,
+          pendingForkSessionToken: chat.pendingForkSessionToken ?? null,
         })
       }
-      this.state.sidebarProjectOrder = [...(parsed.sidebarProjectOrder ?? [])]
+      this.legacySidebarProjectOrder = normalizeSidebarProjectOrder(parsed.sidebarProjectOrder)
       if (parsed.queuedMessages?.length) {
         for (const queuedSet of parsed.queuedMessages) {
           this.state.queuedMessagesByChatId.set(queuedSet.chatId, queuedSet.entries.map((entry) => ({
@@ -258,12 +291,94 @@ export class EventStore {
     this.state.queuedMessagesByChatId.clear()
     this.state.sidebarProjectOrder = []
     this.state.autoContinueEventsByChatId.clear()
+    this.sidebarProjectOrder = []
+    this.legacySidebarProjectOrder = []
     this.cachedTranscript = null
   }
 
   private clearLegacyTranscriptState() {
     this.legacyMessagesByChatId.clear()
     this.snapshotHasLegacyMessages = false
+  }
+
+  private async loadSidebarProjectOrder() {
+    const file = Bun.file(this.sidebarProjectOrderPath)
+    if (await file.exists()) {
+      try {
+        const text = await file.text()
+        if (!text.trim()) {
+          this.sidebarProjectOrder = []
+          return
+        }
+        this.sidebarProjectOrder = normalizeSidebarProjectOrder(JSON.parse(text))
+      } catch (error) {
+        console.warn(`${LOG_PREFIX} Failed to load ${SIDEBAR_PROJECT_ORDER_FILE}, ignoring saved order:`, error)
+        this.sidebarProjectOrder = []
+      }
+      return
+    }
+
+    const legacySidebarProjectOrder = await this.loadLegacySidebarProjectOrder()
+    this.sidebarProjectOrder = legacySidebarProjectOrder
+    if (legacySidebarProjectOrder.length > 0) {
+      await this.writeSidebarProjectOrderFile(legacySidebarProjectOrder)
+    }
+  }
+
+  private async loadLegacySidebarProjectOrder() {
+    const fromProjectsLog = await this.readLegacySidebarProjectOrderFromProjectsLog()
+    if (fromProjectsLog.length > 0) {
+      return fromProjectsLog
+    }
+    return [...this.legacySidebarProjectOrder]
+  }
+
+  private async readLegacySidebarProjectOrderFromProjectsLog() {
+    const file = Bun.file(this.projectsLogPath)
+    if (!(await file.exists())) return []
+
+    const text = await file.text()
+    if (!text.trim()) return []
+
+    const lines = text.split("\n")
+    let lastNonEmpty = -1
+    for (let index = lines.length - 1; index >= 0; index -= 1) {
+      if (lines[index].trim()) {
+        lastNonEmpty = index
+        break
+      }
+    }
+
+    let projectIds: string[] = []
+    for (let index = 0; index < lines.length; index += 1) {
+      const line = lines[index].trim()
+      if (!line) continue
+      try {
+        const event = JSON.parse(line) as {
+          v?: number
+          type?: string
+          projectIds?: unknown
+        }
+        if (event.v !== STORE_VERSION || event.type !== "sidebar_project_order_set") {
+          continue
+        }
+        projectIds = normalizeSidebarProjectOrder(event.projectIds)
+      } catch (error) {
+        if (index === lastNonEmpty) {
+          console.warn(`${LOG_PREFIX} Ignoring corrupt trailing line in ${path.basename(this.projectsLogPath)} while migrating sidebar order`)
+          return projectIds
+        }
+        console.warn(`${LOG_PREFIX} Failed to migrate sidebar order from ${path.basename(this.projectsLogPath)}:`, error)
+        return []
+      }
+    }
+
+    return projectIds
+  }
+
+  private async writeSidebarProjectOrderFile(projectIds: string[]) {
+    await mkdir(this.dataDir, { recursive: true })
+    await writeFile(this.sidebarProjectOrderPath, `${JSON.stringify(projectIds, null, 2)}\n`, "utf8")
   }
 
   private async replayLogs() {
@@ -315,6 +430,9 @@ export class EventStore {
           console.warn(`${LOG_PREFIX} Resetting local history from incompatible event log`)
           await this.clearStorage()
           return []
+        }
+        if ((event as { type?: unknown }).type === "sidebar_project_order_set") {
+          continue
         }
         parsedEvents.push({
           event: event as StoreEvent,
@@ -379,6 +497,7 @@ export class EventStore {
           planMode: false,
           sessionToken: null,
           sourceHash: null,
+          pendingForkSessionToken: null,
           hasMessages: false,
           lastTurnOutcome: null,
         }
@@ -506,6 +625,13 @@ export class EventStore {
         chat.updatedAt = e.timestamp
         break
       }
+      case "pending_fork_session_token_set": {
+        const chat = this.state.chatsById.get(e.chatId)
+        if (!chat) break
+        chat.pendingForkSessionToken = e.pendingForkSessionToken
+        chat.updatedAt = e.timestamp
+        break
+      }
     }
   }
 
@@ -601,7 +727,7 @@ export class EventStore {
     })
 
     const uniqueProjectIds = [...new Set(validProjectIds)]
-    const current = this.state.sidebarProjectOrder
+    const current = this.sidebarProjectOrder
     if (
       uniqueProjectIds.length === current.length
       && uniqueProjectIds.every((projectId, index) => current[index] === projectId)
@@ -609,13 +735,11 @@ export class EventStore {
       return
     }
 
-    const event: ProjectEvent = {
-      v: STORE_VERSION,
-      type: "sidebar_project_order_set",
-      timestamp: Date.now(),
-      projectIds: uniqueProjectIds,
-    }
-    await this.append(this.projectsLogPath, event)
+    this.writeChain = this.writeChain.then(async () => {
+      await this.writeSidebarProjectOrderFile(uniqueProjectIds)
+      this.sidebarProjectOrder = [...uniqueProjectIds]
+    })
+    return this.writeChain
   }
 
   async createChat(projectId: string) {
@@ -633,6 +757,50 @@ export class EventStore {
       title: "New Chat",
     }
     await this.append(this.chatsLogPath, event)
+    return this.state.chatsById.get(chatId)!
+  }
+
+  async forkChat(sourceChatId: string) {
+    const sourceChat = this.requireChat(sourceChatId)
+    const sourceSessionToken = sourceChat.sessionToken ?? sourceChat.pendingForkSessionToken ?? null
+    if (!sourceChat.provider || !sourceSessionToken) {
+      throw new Error("Chat cannot be forked")
+    }
+
+    const chatId = crypto.randomUUID()
+    const createdAt = Date.now()
+    const createEvent: ChatEvent = {
+      v: STORE_VERSION,
+      type: "chat_created",
+      timestamp: createdAt,
+      chatId,
+      projectId: sourceChat.projectId,
+      title: getForkedChatTitle(sourceChat.title),
+    }
+    await this.append(this.chatsLogPath, createEvent)
+    await this.setChatProvider(chatId, sourceChat.provider)
+    await this.setPlanMode(chatId, sourceChat.planMode)
+    await this.setPendingForkSessionToken(chatId, sourceSessionToken)
+
+    const sourceEntries = this.getMessages(sourceChatId)
+    if (sourceEntries.length > 0) {
+      const transcriptPath = this.transcriptPath(chatId)
+      const payload = sourceEntries.map((entry) => JSON.stringify(entry)).join("\n")
+      this.writeChain = this.writeChain.then(async () => {
+        await mkdir(this.transcriptsDir, { recursive: true })
+        await writeFile(transcriptPath, `${payload}\n`, "utf8")
+        const chat = this.state.chatsById.get(chatId)
+        if (chat) {
+          chat.hasMessages = true
+          chat.updatedAt = Math.max(chat.updatedAt, createdAt)
+        }
+        if (this.cachedTranscript?.chatId === chatId) {
+          this.cachedTranscript = { chatId, entries: cloneTranscriptEntries(sourceEntries) }
+        }
+      })
+      await this.writeChain
+    }
+
     return this.state.chatsById.get(chatId)!
   }
 
@@ -891,6 +1059,19 @@ export class EventStore {
     await this.append(this.turnsLogPath, event)
   }
 
+  async setPendingForkSessionToken(chatId: string, pendingForkSessionToken: string | null) {
+    const chat = this.requireChat(chatId)
+    if ((chat.pendingForkSessionToken ?? null) === pendingForkSessionToken) return
+    const event: TurnEvent = {
+      v: STORE_VERSION,
+      type: "pending_fork_session_token_set",
+      timestamp: Date.now(),
+      chatId,
+      pendingForkSessionToken,
+    }
+    await this.append(this.turnsLogPath, event)
+  }
+
   async setSourceHash(chatId: string, sourceHash: string | null) {
     const chat = this.requireChat(chatId)
     if (chat.sourceHash === sourceHash) return
@@ -922,6 +1103,10 @@ export class EventStore {
     const chat = this.state.chatsById.get(chatId)
     if (!chat || chat.deletedAt) return null
     return chat
+  }
+
+  getSidebarProjectOrder() {
+    return [...this.sidebarProjectOrder]
   }
 
   private getMessagesPageFromEntries(entries: TranscriptEntry[], limit: number, beforeIndex?: number): TranscriptPageResult {
@@ -1055,7 +1240,6 @@ export class EventStore {
       v: STORE_VERSION,
       generatedAt: Date.now(),
       projects: this.listProjects().map((project) => ({ ...project })),
-      sidebarProjectOrder: [...this.state.sidebarProjectOrder],
       chats: [...this.state.chatsById.values()]
         .filter((chat) => !chat.deletedAt)
         .map((chat) => ({ ...chat })),

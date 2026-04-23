@@ -23,6 +23,7 @@ describe("ChatRow", () => {
         activeChatId={null}
         nowMs={60_000}
         onSelectChat={() => undefined}
+        onForkChat={() => undefined}
         onDeleteChat={() => undefined}
       />
     )
@@ -37,6 +38,7 @@ describe("ChatRow", () => {
         activeChatId={null}
         nowMs={60_000}
         onSelectChat={() => undefined}
+        onForkChat={() => undefined}
         onDeleteChat={() => undefined}
       />
     )
@@ -51,6 +53,7 @@ describe("ChatRow", () => {
         activeChatId={null}
         nowMs={60_000}
         onSelectChat={() => undefined}
+        onForkChat={() => undefined}
         onDeleteChat={() => undefined}
       />
     )
@@ -68,6 +71,7 @@ describe("ChatRow", () => {
         shortcutHint="1"
         showShortcutHint
         onSelectChat={() => undefined}
+        onForkChat={() => undefined}
         onDeleteChat={() => undefined}
       />
     )
@@ -75,5 +79,21 @@ describe("ChatRow", () => {
     expect(html).toContain(">1<")
     expect(html).toContain("<kbd")
     expect(html).not.toContain(">1m<")
+  })
+
+  test("renders a fork action next to the archive action when the chat can fork", () => {
+    const html = renderToStaticMarkup(
+      <ChatRow
+        chat={{ ...baseChat, canFork: true }}
+        activeChatId={null}
+        nowMs={60_000}
+        onSelectChat={() => undefined}
+        onForkChat={() => undefined}
+        onDeleteChat={() => undefined}
+      />
+    )
+
+    expect(html).toContain("Fork chat")
+    expect(html).toContain("Delete chat")
   })
 })

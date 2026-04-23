@@ -18,6 +18,7 @@ import Markdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import { useNavigate, useOutletContext, useParams } from "react-router-dom"
 import { getKeybindingsFilePathDisplay, SDK_CLIENT_APP } from "../../shared/branding"
+import { ANALYTICS_STATIC_EVENT_NAMES, ANALYTICS_STATIC_PROPERTY_NAMES } from "../../shared/analytics"
 import {
   DEFAULT_KEYBINDINGS,
   DEFAULT_OPENAI_SDK_MODEL,
@@ -114,6 +115,11 @@ const chatSoundPreferenceOptions: { value: ChatSoundPreference; label: string }[
   { value: "never", label: "Never" },
   { value: "unfocused", label: "When Unfocused" },
   { value: "always", label: "Always" },
+]
+
+const analyticsOptions = [
+  { value: "disabled" as const, label: "Off" },
+  { value: "enabled" as const, label: "On" },
 ]
 
 const QUICK_RESPONSE_PROVIDER_OPTIONS: Array<{ value: LlmProviderKind; label: string }> = [
@@ -501,6 +507,7 @@ export function SettingsPage() {
   const setChatSoundPreference = useChatSoundPreferencesStore((store) => store.setChatSoundPreference)
   const setChatSoundId = useChatSoundPreferencesStore((store) => store.setChatSoundId)
   const keybindings = state.keybindings
+  const appSettings = state.appSettings
   const llmProvider = state.llmProvider
   const autoResumeOnRateLimit = usePreferencesStore((state) => state.autoResumeOnRateLimit)
   const setAutoResumeOnRateLimit = usePreferencesStore((state) => state.setAutoResumeOnRateLimit)
@@ -517,6 +524,8 @@ export function SettingsPage() {
   const [editorCommandDraft, setEditorCommandDraft] = useState(editorCommandTemplate)
   const [keybindingDrafts, setKeybindingDrafts] = useState<Record<string, string>>({})
   const [keybindingsError, setKeybindingsError] = useState<string | null>(null)
+  const [appSettingsError, setAppSettingsError] = useState<string | null>(null)
+  const [analyticsDialogOpen, setAnalyticsDialogOpen] = useState(false)
   const [llmProviderDraft, setLlmProviderDraft] = useState({
     provider: "openai" as LlmProviderKind,
     apiKey: "",
@@ -528,6 +537,7 @@ export function SettingsPage() {
   const [llmValidationError, setLlmValidationError] = useState<unknown | null>(null)
   const [llmValidationDialogOpen, setLlmValidationDialogOpen] = useState(false)
   const updateSnapshot = state.updateSnapshot
+  const handleWriteAppSettings = state.handleWriteAppSettings
   const handleReadLlmProvider = state.handleReadLlmProvider
   const handleWriteLlmProvider = state.handleWriteLlmProvider
   const handleValidateLlmProvider = state.handleValidateLlmProvider
@@ -696,6 +706,15 @@ export function SettingsPage() {
     void playChatNotificationSound(nextValue, 1).catch(() => undefined)
   }
 
+  async function handleAnalyticsPreferenceChange(nextValue: "enabled" | "disabled") {
+    try {
+      setAppSettingsError(null)
+      await handleWriteAppSettings({ analyticsEnabled: nextValue === "enabled" })
+    } catch (error) {
+      setAppSettingsError(error instanceof Error ? error.message : "Unable to save analytics settings.")
+    }
+  }
+
   async function commitKeybindings() {
     try {
       setKeybindingsError(null)
@@ -778,6 +797,8 @@ export function SettingsPage() {
     .replaceAll("{path}", "/Users/jake/Projects/kanna/src/client/app/App.tsx")
     .replaceAll("{line}", "12")
     .replaceAll("{column}", "1")
+  const analyticsDisclosureEvents = ANALYTICS_STATIC_EVENT_NAMES
+  const analyticsSettingValue = appSettings?.analyticsEnabled === false ? "disabled" : "enabled"
   const selectedSection = sidebarItems.find((item) => item.id === selectedPage) ?? sidebarItems[0]
   const selectedSectionSubtitle =
     selectedPage === "keybindings"
@@ -977,6 +998,11 @@ export function SettingsPage() {
 
                 {selectedPage === "general" ? (
                   <>
+                    {appSettingsError ? (
+                      <div className="mb-4 rounded-lg border border-destructive/20 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+                        {appSettingsError}
+                      </div>
+                    ) : null}
                     <div className="border-b border-border">
                       <SettingsRow
                         title="Application Update"
@@ -1167,6 +1193,40 @@ export function SettingsPage() {
                         <AutoResumeToggleSection
                           checked={autoResumeOnRateLimit}
                           onChange={setAutoResumeOnRateLimit}
+                        />
+                      </SettingsRow>
+
+                      <SettingsRow
+                        title="Anonymous Analytics"
+                        description={(
+                          <>
+                            <span>
+                              Help improve Kanna with anonymous product analytics. Kanna sends tracked event names plus a small set of event properties like current version, environment, update version info, and launch flags. No message content, prompts, file paths, or provider credentials are sent.
+                            </span>
+                            <span className="mt-1 block">
+                              Stored in {appSettings?.filePathDisplay ?? "~/.kanna/data/settings.json"}.
+                              {" "}
+                              <button
+                                type="button"
+                                onClick={() => setAnalyticsDialogOpen(true)}
+                                className="underline underline-offset-2 text-foreground hover:text-foreground/80"
+                              >
+                                View tracked events
+                              </button>
+                            </span>
+                            {appSettings?.warning ? (
+                              <span className="mt-1 block">{appSettings.warning}</span>
+                            ) : null}
+                          </>
+                        )}
+                      >
+                        <SegmentedControl
+                          value={analyticsSettingValue}
+                          onValueChange={(value) => {
+                            void handleAnalyticsPreferenceChange(value)
+                          }}
+                          options={analyticsOptions}
+                          size="sm"
                         />
                       </SettingsRow>
                     </div>
@@ -1441,6 +1501,43 @@ export function SettingsPage() {
           </div>
         </div>
       ) : null}
+      <Dialog open={analyticsDialogOpen} onOpenChange={setAnalyticsDialogOpen}>
+        <DialogContent size="lg">
+          <DialogBody className="space-y-4">
+            <DialogTitle>Tracked Events</DialogTitle>
+            <div className="text-sm text-muted-foreground">
+              Kanna sends these event names plus the limited property keys below, depending on the event type.
+            </div>
+            <div className="max-h-[60vh] overflow-auto rounded-lg border border-border bg-muted/40 p-3">
+              <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Event Names
+              </div>
+              <ul className="mt-3 space-y-2 text-sm">
+                {analyticsDisclosureEvents.map((eventName) => (
+                  <li key={eventName} className="font-mono text-foreground">
+                    {eventName}
+                  </li>
+                ))}
+              </ul>
+              <div className="mt-6 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Property Keys
+              </div>
+              <ul className="mt-3 space-y-2 text-sm">
+                {ANALYTICS_STATIC_PROPERTY_NAMES.map((propertyName) => (
+                  <li key={propertyName} className="font-mono text-foreground">
+                    {propertyName}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </DialogBody>
+          <DialogFooter>
+            <Button variant="secondary" size="sm" onClick={() => setAnalyticsDialogOpen(false)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <Dialog open={llmValidationDialogOpen} onOpenChange={setLlmValidationDialogOpen}>
         <DialogContent size="lg">
           <DialogBody className="space-y-4">

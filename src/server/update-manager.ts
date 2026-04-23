@@ -8,6 +8,7 @@ export interface UpdateManagerDeps {
   checker: UpdateChecker
   reloader: UpdateReloader
   devMode?: boolean
+  trackEvent?: (eventName: string, properties?: Record<string, unknown>) => void
 }
 
 export class UpdateManager {
@@ -99,6 +100,9 @@ export class UpdateManager {
 
   async installUpdate(): Promise<UpdateInstallResult> {
     if (this.deps.devMode) {
+      this.deps.trackEvent?.("update_installed", {
+        latest_version: this.snapshot.latestVersion,
+      })
       this.setSnapshot({ ...this.snapshot, status: "updating", error: null, reloadRequestedAt: null })
       this.setSnapshot({
         ...this.snapshot,
@@ -144,6 +148,9 @@ export class UpdateManager {
         reloadRequestedAt: null,
       }
       this.setSnapshot(nextSnapshot)
+      this.deps.trackEvent?.("update_checked", {
+        latest_version: latestVersion,
+      })
       return nextSnapshot
     } catch (error) {
       const nextSnapshot: UpdateSnapshot = {
@@ -154,6 +161,9 @@ export class UpdateManager {
         reloadRequestedAt: null,
       }
       this.setSnapshot(nextSnapshot)
+      this.deps.trackEvent?.("update_failed", {
+        latest_version: this.snapshot.latestVersion,
+      })
       return nextSnapshot
     }
   }
@@ -179,6 +189,9 @@ export class UpdateManager {
         error: message,
         reloadRequestedAt: null,
       })
+      this.deps.trackEvent?.("update_failed", {
+        latest_version: null,
+      })
       return {
         ok: false,
         action: "restart",
@@ -195,6 +208,9 @@ export class UpdateManager {
       updateAvailable: false,
       error: null,
       reloadRequestedAt: Date.now(),
+    })
+    this.deps.trackEvent?.("update_installed", {
+      latest_version: this.snapshot.latestVersion,
     })
     return { ok: true, action: "restart", errorCode: null, userTitle: null, userMessage: null }
   }

@@ -1,5 +1,5 @@
 import type { ShareMode } from "./share"
-import { isShareEnabled } from "./share"
+import { assertNoHostOverride, getShareCliFlag, isShareEnabled } from "./share"
 
 export const DEFAULT_DEV_CLIENT_PORT = 5174
 
@@ -89,14 +89,12 @@ export function parseDevArgs(args: string[], localHostname: string): DevArgResol
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index]
     if (arg === "--share") {
-      if (sawHost) throw new Error("--share cannot be used with --host")
-      if (sawRemote) throw new Error("--share cannot be used with --remote")
+      assertNoHostOverride("--share", sawHost, sawRemote)
       share = "quick"
       continue
     }
     if (arg === "--cloudflared") {
-      if (sawHost) throw new Error("--cloudflared cannot be used with --host")
-      if (sawRemote) throw new Error("--cloudflared cannot be used with --remote")
+      assertNoHostOverride("--cloudflared", sawHost, sawRemote)
       const next = args[index + 1]
       if (!next || next.startsWith("-")) throw new Error("Missing value for --cloudflared")
       share = { kind: "token", token: next }
@@ -105,7 +103,7 @@ export function parseDevArgs(args: string[], localHostname: string): DevArgResol
     }
     if (arg === "--remote") {
       if (isShareEnabled(share)) {
-        throw new Error(typeof share === "string" ? "--share cannot be used with --remote" : "--cloudflared cannot be used with --remote")
+        throw new Error(`${getShareCliFlag(share)} cannot be used with --remote`)
       }
       sawRemote = true
       backendTargetHost = "127.0.0.1"
@@ -117,7 +115,7 @@ export function parseDevArgs(args: string[], localHostname: string): DevArgResol
     const next = args[index + 1]
     if (!next || next.startsWith("-")) continue
     if (isShareEnabled(share)) {
-      throw new Error(typeof share === "string" ? "--share cannot be used with --host" : "--cloudflared cannot be used with --host")
+      throw new Error(`${getShareCliFlag(share)} cannot be used with --host`)
     }
     sawHost = true
     hosts.add(next)

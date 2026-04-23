@@ -1220,6 +1220,72 @@ describe("AgentCoordinator codex integration", () => {
 })
 
 describe("AgentCoordinator claude integration", () => {
+  test("tracks analytics for new chats, queued messages, and forks", async () => {
+    const events = new AsyncEventQueue<any>()
+    const analyticsEvents: string[] = []
+    const store = createFakeStore()
+    store.chat.provider = "claude"
+    store.chat.sessionToken = "session-1"
+
+    const coordinator = new AgentCoordinator({
+      store: store as never,
+      analytics: {
+        track: (eventName: string) => {
+          analyticsEvents.push(eventName)
+        },
+        trackLaunch: () => {},
+      },
+      onStateChange: () => {},
+      startClaudeSession: async () => ({
+        provider: "claude",
+        stream: events,
+        getAccountInfo: async () => null,
+        interrupt: async () => {},
+        close: () => {},
+        setModel: async () => {},
+        setPermissionMode: async () => {},
+        getSupportedCommands: async () => [],
+        sendPrompt: async () => {
+          events.push({
+            type: "transcript" as const,
+            entry: timestamped({
+              kind: "result",
+              subtype: "success",
+              isError: false,
+              durationMs: 0,
+              result: "done",
+            }),
+          })
+        },
+      }),
+    })
+
+    await coordinator.send({
+      type: "chat.send",
+      projectId: "project-1",
+      provider: "claude",
+      content: "first message",
+    })
+    await waitFor(() => store.turnFinishedCount === 1)
+
+    await coordinator.enqueue({
+      type: "message.enqueue",
+      chatId: "chat-1",
+      content: "queued message",
+    })
+
+    await coordinator.forkChat("chat-1")
+
+    expect(analyticsEvents).toEqual([
+      "chat_created",
+      "message_sent",
+      "message_sent",
+      "chat_created",
+    ])
+
+    events.close()
+  })
+
   test("reuses a persistent Claude session across turns", async () => {
     const events = new AsyncEventQueue<any>()
     const startSessionCalls: Array<{ model: string; planMode: boolean; sessionToken: string | null }> = []
@@ -1493,6 +1559,78 @@ describe("AgentCoordinator claude integration", () => {
 
     events.close()
   })
+
+  test("uses Claude forkSession when starting a forked chat", async () => {
+    const startSessionCalls: Array<{ sessionToken: string | null; forkSession: boolean }> = []
+    const events = new AsyncEventQueue<any>()
+    const store = createFakeStore()
+    store.chat.provider = "claude"
+    store.chat.pendingForkSessionToken = "claude-parent-1"
+
+    const coordinator = new AgentCoordinator({
+      store: store as never,
+      onStateChange: () => {},
+      startClaudeSession: async (args) => {
+        startSessionCalls.push({
+          sessionToken: args.sessionToken,
+          forkSession: args.forkSession,
+        })
+
+        return {
+          provider: "claude",
+          stream: events,
+          getAccountInfo: async () => null,
+          interrupt: async () => {},
+          close: () => {},
+          setModel: async () => {},
+          setPermissionMode: async () => {},
+          getSupportedCommands: async () => [],
+          sendPrompt: async () => {
+            events.push({ type: "session_token" as const, sessionToken: "claude-fork-1" })
+            events.push({
+              type: "transcript" as const,
+              entry: timestamped({
+                kind: "system_init",
+                provider: "claude",
+                model: "claude-opus-4-1",
+                tools: [],
+                agents: [],
+                slashCommands: [],
+                mcpServers: [],
+              }),
+            })
+            events.push({
+              type: "transcript" as const,
+              entry: timestamped({
+                kind: "result",
+                subtype: "success",
+                isError: false,
+                durationMs: 0,
+                result: "done",
+              }),
+            })
+          },
+        }
+      },
+    })
+
+    await coordinator.send({
+      type: "chat.send",
+      chatId: "chat-1",
+      provider: "claude",
+      content: "branch this",
+      model: "claude-opus-4-1",
+    })
+
+    await waitFor(() => store.turnFinishedCount === 1)
+
+    expect(startSessionCalls).toEqual([{
+      sessionToken: "claude-parent-1",
+      forkSession: true,
+    }])
+    expect(store.chat.pendingForkSessionToken).toBeNull()
+    events.close()
+  })
 })
 
 describe("AgentCoordinator.ensureSlashCommandsLoaded", () => {
@@ -1640,6 +1778,7 @@ function createFakeStore() {
     planMode: false,
     sessionToken: null as string | null,
     slashCommands: undefined as SlashCommand[] | undefined,
+    pendingForkSessionToken: null as string | null,
   }
   const project = {
     id: "project-1",
@@ -1706,8 +1845,20 @@ function createFakeStore() {
     async setSessionToken(_chatId: string, sessionToken: string | null) {
       chat.sessionToken = sessionToken
     },
+    async setPendingForkSessionToken(_chatId: string, pendingForkSessionToken: string | null) {
+      chat.pendingForkSessionToken = pendingForkSessionToken
+    },
     async createChat() {
       return chat
+    },
+    async forkChat() {
+      return {
+        ...chat,
+        id: "chat-fork-1",
+        title: "Fork: New Chat",
+        sessionToken: null,
+        pendingForkSessionToken: chat.sessionToken ?? chat.pendingForkSessionToken,
+      }
     },
     async enqueueMessage(_chatId: string, message: any) {
       const queuedMessage = {

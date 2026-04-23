@@ -45,6 +45,17 @@ export interface ThreadResumeParams {
   persistExtendedHistory: boolean
 }
 
+export interface ThreadForkParams {
+  threadId: string
+  model?: string | null
+  cwd?: string | null
+  serviceTier?: ServiceTier | null
+  approvalPolicy?: "never" | "on-request" | "on-failure" | "untrusted" | null
+  sandbox?: "read-only" | "workspace-write" | "danger-full-access" | null
+  ephemeral?: boolean
+  persistExtendedHistory: boolean
+}
+
 export interface TextUserInput {
   type: "text"
   text: string
@@ -90,6 +101,7 @@ export interface ThreadStartResponse {
 }
 
 export type ThreadResumeResponse = ThreadStartResponse
+export type ThreadForkResponse = ThreadStartResponse
 
 export interface TurnSummary {
   id: string

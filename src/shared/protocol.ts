@@ -1,4 +1,5 @@
 import type {
+  AppSettingsSnapshot,
   AgentProvider,
   ChatAttachment,
   ChatDiffSnapshot,
@@ -60,6 +61,8 @@ export type ClientCommand =
   | { type: "update.reload" }
   | { type: "settings.readKeybindings" }
   | { type: "settings.writeKeybindings"; bindings: KeybindingsSnapshot["bindings"] }
+  | { type: "settings.readAppSettings" }
+  | { type: "settings.writeAppSettings"; analyticsEnabled: boolean }
   | { type: "settings.readLlmProvider" }
   | {
       type: "settings.writeLlmProvider"
@@ -84,6 +87,7 @@ export type ClientCommand =
       editor?: EditorOpenSettings
     }
   | { type: "chat.create"; projectId: string }
+  | { type: "chat.fork"; chatId: string }
   | { type: "chat.rename"; chatId: string; title: string }
   | { type: "chat.delete"; chatId: string }
   | { type: "chat.setDraftProtection"; chatIds: string[] }
@@ -213,6 +217,7 @@ export type ServerSnapshot =
   | { type: "local-projects"; data: LocalProjectsSnapshot }
   | { type: "update"; data: UpdateSnapshot }
   | { type: "keybindings"; data: KeybindingsSnapshot }
+  | { type: "app-settings"; data: AppSettingsSnapshot }
   | { type: "llm-provider"; data: LlmProviderSnapshot }
   | { type: "chat"; data: ChatSnapshot | null }
   | { type: "project-git"; data: ChatDiffSnapshot | null }

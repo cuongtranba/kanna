@@ -1,10 +1,66 @@
 import { describe, expect, mock, test } from "bun:test"
 import { createElement } from "react"
 import { renderToStaticMarkup } from "react-dom/server"
-import { RightSidebar, canIgnoreDiffFile, canIgnoreDiffFolder } from "./RightSidebar"
+import { RightSidebar, canIgnoreDiffFile, canIgnoreDiffFolder, shouldLoadDiffPatchNow } from "./RightSidebar"
 import { TooltipProvider } from "../ui/tooltip"
 
 describe("RightSidebar", () => {
+  test("loads missing patches for expanded rows", () => {
+    expect(shouldLoadDiffPatchNow({
+      isCollapsed: false,
+      hasPreviewAttachment: false,
+      patch: undefined,
+      patchError: undefined,
+      isPatchLoading: false,
+    })).toBe(true)
+  })
+
+  test("does not load patches for collapsed rows", () => {
+    expect(shouldLoadDiffPatchNow({
+      isCollapsed: true,
+      hasPreviewAttachment: false,
+      patch: undefined,
+      patchError: undefined,
+      isPatchLoading: false,
+    })).toBe(false)
+  })
+
+  test("does not load patches for preview attachments", () => {
+    expect(shouldLoadDiffPatchNow({
+      isCollapsed: false,
+      hasPreviewAttachment: true,
+      patch: undefined,
+      patchError: undefined,
+      isPatchLoading: false,
+    })).toBe(false)
+  })
+
+  test("does not load patches when patch content, loading state, or errors already exist", () => {
+    expect(shouldLoadDiffPatchNow({
+      isCollapsed: false,
+      hasPreviewAttachment: false,
+      patch: "diff --git a/app.ts b/app.ts",
+      patchError: undefined,
+      isPatchLoading: false,
+    })).toBe(false)
+
+    expect(shouldLoadDiffPatchNow({
+      isCollapsed: false,
+      hasPreviewAttachment: false,
+      patch: undefined,
+      patchError: "Failed to load patch",
+      isPatchLoading: false,
+    })).toBe(false)
+
+    expect(shouldLoadDiffPatchNow({
+      isCollapsed: false,
+      hasPreviewAttachment: false,
+      patch: undefined,
+      patchError: undefined,
+      isPatchLoading: true,
+    })).toBe(false)
+  })
+
   test("defaults to history when there are no changes", () => {
     const markup = renderToStaticMarkup(createElement(
       TooltipProvider,

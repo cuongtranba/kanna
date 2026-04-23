@@ -358,13 +358,85 @@ describe("EventStore", () => {
     const second = await store.openProject("/tmp/project-b")
 
     await store.setSidebarProjectOrder([second.id, first.id])
-    expect(store.state.sidebarProjectOrder).toEqual([second.id, first.id])
+    expect(store.getSidebarProjectOrder()).toEqual([second.id, first.id])
+    expect(JSON.parse(await readFile(join(dataDir, "sidebar-order.json"), "utf8"))).toEqual([second.id, first.id])
 
     await store.compact()
 
+    const snapshot = JSON.parse(await readFile(join(dataDir, "snapshot.json"), "utf8")) as SnapshotFile
+    expect(snapshot.sidebarProjectOrder).toBeUndefined()
+
     const reloaded = new EventStore(dataDir)
     await reloaded.initialize()
-    expect(reloaded.state.sidebarProjectOrder).toEqual([second.id, first.id])
+    expect(reloaded.getSidebarProjectOrder()).toEqual([second.id, first.id])
+  })
+
+  test("migrates legacy sidebar project order from existing snapshots and project logs", async () => {
+    const dataDir = await createTempDataDir()
+    const snapshotPath = join(dataDir, "snapshot.json")
+    const projectsLogPath = join(dataDir, "projects.jsonl")
+
+    const snapshot = {
+      v: 3,
+      generatedAt: 10,
+      projects: [
+        {
+          id: "project-1",
+          localPath: "/tmp/project-a",
+          title: "Project A",
+          createdAt: 1,
+          updatedAt: 1,
+        },
+        {
+          id: "project-2",
+          localPath: "/tmp/project-b",
+          title: "Project B",
+          createdAt: 2,
+          updatedAt: 2,
+        },
+      ],
+      chats: [],
+      sidebarProjectOrder: ["project-1"],
+    }
+
+    await writeFile(snapshotPath, JSON.stringify(snapshot, null, 2), "utf8")
+    await writeFile(projectsLogPath, [
+      JSON.stringify({
+        v: 3,
+        type: "sidebar_project_order_set",
+        timestamp: 20,
+        projectIds: ["project-2", "project-1"],
+      }),
+      "",
+    ].join("\n"), "utf8")
+
+    const store = new EventStore(dataDir)
+    await store.initialize()
+
+    expect(store.getSidebarProjectOrder()).toEqual(["project-2", "project-1"])
+    expect(JSON.parse(await readFile(join(dataDir, "sidebar-order.json"), "utf8"))).toEqual(["project-2", "project-1"])
+  })
+
+  test("ignores an invalid sidebar order file without resetting store state", async () => {
+    const dataDir = await createTempDataDir()
+    await writeFile(join(dataDir, "sidebar-order.json"), "{not-json", "utf8")
+
+    const originalWarn = console.warn
+    console.warn = () => {}
+    try {
+      const store = new EventStore(dataDir)
+      await store.initialize()
+
+      const project = await store.openProject("/tmp/project")
+
+      const reloaded = new EventStore(dataDir)
+      await reloaded.initialize()
+
+      expect(reloaded.getProject(project.id)?.localPath).toBe("/tmp/project")
+      expect(reloaded.getSidebarProjectOrder()).toEqual([])
+    } finally {
+      console.warn = originalWarn
+    }
   })
 
   test("prunes stale empty chats after thirty minutes", async () => {
@@ -442,6 +514,32 @@ describe("EventStore", () => {
 
     expect(pruned).toEqual([])
     expect(store.getChat(chat.id)?.id).toBe(chat.id)
+  })
+
+  test("forks a chat with copied transcript and pending fork session token", async () => {
+    const dataDir = await createTempDataDir()
+    const store = new EventStore(dataDir)
+    await store.initialize()
+
+    const project = await store.openProject("/tmp/project")
+    const source = await store.createChat(project.id)
+    await store.setChatProvider(source.id, "claude")
+    await store.setPlanMode(source.id, true)
+    await store.setSessionToken(source.id, "session-1")
+    await store.appendMessage(source.id, entry("user_prompt", source.createdAt + 1, { content: "analyze this" }))
+    await store.appendMessage(source.id, entry("assistant_text", source.createdAt + 2, { text: "done" }))
+
+    const forked = await store.forkChat(source.id)
+
+    expect(forked.id).not.toBe(source.id)
+    expect(forked.title).toBe("Fork: New Chat")
+    expect(forked.provider).toBe("claude")
+    expect(forked.planMode).toBe(true)
+    expect(forked.sessionToken).toBeNull()
+    expect(forked.pendingForkSessionToken).toBe("session-1")
+    expect(forked.lastTurnOutcome).toBeNull()
+    expect(forked.lastMessageAt).toBeUndefined()
+    expect(store.getMessages(forked.id)).toEqual(store.getMessages(source.id))
   })
 })
 

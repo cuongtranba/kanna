@@ -13,6 +13,7 @@ import {
   DEFAULT_CODEX_MODEL_OPTIONS,
   PROVIDERS,
   normalizeClaudeContextWindow,
+  normalizeProviderModelId,
   isClaudeReasoningEffort,
   isCodexReasoningEffort,
 } from "../shared/types"
@@ -43,8 +44,9 @@ export function getServerProviderCatalog(provider: AgentProvider): ProviderCatal
 
 export function normalizeServerModel(provider: AgentProvider, model?: string): string {
   const catalog = getServerProviderCatalog(provider)
-  if (model && catalog.models.some((candidate) => candidate.id === model)) {
-    return model
+  const normalizedModel = normalizeProviderModelId(provider, model, catalog.defaultModel)
+  if (catalog.models.some((candidate) => candidate.id === normalizedModel)) {
+    return normalizedModel
   }
   return catalog.defaultModel
 }
