@@ -1,8 +1,7 @@
 import { create } from "zustand"
-import { persist } from "zustand/middleware"
+import type { ChatSoundId, ChatSoundPreference } from "../../shared/types"
 
-export type ChatSoundPreference = "never" | "unfocused" | "always"
-export type ChatSoundId = "blow" | "bottle" | "frog" | "funk" | "glass" | "ping" | "pop" | "purr" | "tink"
+export type { ChatSoundId, ChatSoundPreference }
 
 export const DEFAULT_CHAT_SOUND_PREFERENCE: ChatSoundPreference = "always"
 export const DEFAULT_CHAT_SOUND_ID: ChatSoundId = "funk"
@@ -55,23 +54,10 @@ export interface ChatSoundPreferencesState {
 }
 
 export const useChatSoundPreferencesStore = create<ChatSoundPreferencesState>()(
-  persist(
-    (set) => ({
-      chatSoundPreference: DEFAULT_CHAT_SOUND_PREFERENCE,
-      chatSoundId: DEFAULT_CHAT_SOUND_ID,
-      setChatSoundPreference: (value) => set({ chatSoundPreference: normalizeChatSoundPreference(value) }),
-      setChatSoundId: (value) => set({ chatSoundId: normalizeChatSoundId(value) }),
-    }),
-    {
-      name: "chat-sound-preferences",
-      version: 2,
-      migrate: (persistedState) => {
-        const state = persistedState as Partial<ChatSoundPreferencesState> | undefined
-        return {
-          chatSoundPreference: normalizeChatSoundPreference(state?.chatSoundPreference),
-          chatSoundId: normalizeChatSoundId(state?.chatSoundId),
-        }
-      },
-    }
-  )
+  (set) => ({
+    chatSoundPreference: DEFAULT_CHAT_SOUND_PREFERENCE,
+    chatSoundId: DEFAULT_CHAT_SOUND_ID,
+    setChatSoundPreference: (value) => set({ chatSoundPreference: normalizeChatSoundPreference(value) }),
+    setChatSoundId: (value) => set({ chatSoundId: normalizeChatSoundId(value) }),
+  })
 )

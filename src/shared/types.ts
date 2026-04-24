@@ -3,6 +3,11 @@ export const PROTOCOL_VERSION = 1 as const
 
 export type AgentProvider = "claude" | "codex"
 export type LlmProviderKind = "openai" | "openrouter" | "custom"
+export type AppThemePreference = "light" | "dark" | "system"
+export type ChatSoundPreference = "never" | "unfocused" | "always"
+export type ChatSoundId = "blow" | "bottle" | "frog" | "funk" | "glass" | "ping" | "pop" | "purr" | "tink"
+export type DefaultProviderPreference = "last_used" | AgentProvider
+export type EditorPreset = "cursor" | "vscode" | "xcode" | "windsurf" | "custom"
 export const DEFAULT_OPENAI_SDK_MODEL = "gpt-5.4-mini"
 export const DEFAULT_OPENROUTER_SDK_MODEL = "moonshotai/kimi-k2.5:nitro"
 
@@ -130,6 +135,17 @@ export interface CodexModelOptions {
 export interface ProviderModelOptionsByProvider {
   claude: ClaudeModelOptions
   codex: CodexModelOptions
+}
+
+export interface ProviderPreference<TModelOptions> {
+  model: string
+  modelOptions: TModelOptions
+  planMode: boolean
+}
+
+export type ChatProviderPreferences = {
+  claude: ProviderPreference<ClaudeModelOptions>
+  codex: ProviderPreference<CodexModelOptions>
 }
 
 export type ModelOptions = Partial<{
@@ -354,8 +370,37 @@ export interface LocalProjectsSnapshot {
 
 export interface AppSettingsSnapshot {
   analyticsEnabled: boolean
+  browserSettingsMigrated: boolean
+  theme: AppThemePreference
+  chatSoundPreference: ChatSoundPreference
+  chatSoundId: ChatSoundId
+  terminal: {
+    scrollbackLines: number
+    minColumnWidth: number
+  }
+  editor: {
+    preset: EditorPreset
+    commandTemplate: string
+  }
+  defaultProvider: DefaultProviderPreference
+  providerDefaults: ChatProviderPreferences
   warning: string | null
   filePathDisplay: string
+}
+
+export interface AppSettingsPatch {
+  analyticsEnabled?: boolean
+  browserSettingsMigrated?: boolean
+  theme?: AppThemePreference
+  chatSoundPreference?: ChatSoundPreference
+  chatSoundId?: ChatSoundId
+  terminal?: Partial<AppSettingsSnapshot["terminal"]>
+  editor?: Partial<AppSettingsSnapshot["editor"]>
+  defaultProvider?: DefaultProviderPreference
+  providerDefaults?: {
+    claude?: Partial<ProviderPreference<ClaudeModelOptions>>
+    codex?: Partial<ProviderPreference<CodexModelOptions>>
+  }
 }
 
 export interface LlmProviderFile {

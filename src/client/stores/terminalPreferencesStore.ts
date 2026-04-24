@@ -1,5 +1,4 @@
 import { create } from "zustand"
-import { persist } from "zustand/middleware"
 import type { EditorPreset } from "../../shared/protocol"
 
 export const DEFAULT_TERMINAL_SCROLLBACK = 1_000
@@ -82,43 +81,27 @@ interface TerminalPreferencesState {
 }
 
 export const useTerminalPreferencesStore = create<TerminalPreferencesState>()(
-  persist(
-    (set) => ({
-      scrollbackLines: DEFAULT_TERMINAL_SCROLLBACK,
-      minColumnWidth: DEFAULT_TERMINAL_MIN_COLUMN_WIDTH,
-      editorPreset: DEFAULT_EDITOR_PRESET,
-      editorCommandTemplate: getDefaultEditorCommandTemplate(DEFAULT_EDITOR_PRESET),
-      setScrollbackLines: (scrollbackLines) => set({ scrollbackLines: clampScrollback(scrollbackLines) }),
-      setMinColumnWidth: (minColumnWidth) => set({ minColumnWidth: clampMinColumnWidth(minColumnWidth) }),
-      setEditorPreset: (editorPreset) =>
-        set((state) => {
-          const normalizedPreset = normalizeEditorPreset(editorPreset)
-          return {
-            editorPreset: normalizedPreset,
-            editorCommandTemplate:
-              normalizedPreset === "custom"
-                ? normalizeEditorCommandTemplate(state.editorCommandTemplate, normalizedPreset)
-                : getDefaultEditorCommandTemplate(normalizedPreset),
-          }
-        }),
-      setEditorCommandTemplate: (editorCommandTemplate) =>
-        set((state) => ({
-          editorCommandTemplate: normalizeEditorCommandTemplate(editorCommandTemplate, state.editorPreset),
-        })),
-    }),
-    {
-      name: "terminal-preferences",
-      version: 3,
-      migrate: (persistedState) => {
-        const state = persistedState as Partial<TerminalPreferencesState> | undefined
-        const editorPreset = normalizeEditorPreset(state?.editorPreset)
+  (set) => ({
+    scrollbackLines: DEFAULT_TERMINAL_SCROLLBACK,
+    minColumnWidth: DEFAULT_TERMINAL_MIN_COLUMN_WIDTH,
+    editorPreset: DEFAULT_EDITOR_PRESET,
+    editorCommandTemplate: getDefaultEditorCommandTemplate(DEFAULT_EDITOR_PRESET),
+    setScrollbackLines: (scrollbackLines) => set({ scrollbackLines: clampScrollback(scrollbackLines) }),
+    setMinColumnWidth: (minColumnWidth) => set({ minColumnWidth: clampMinColumnWidth(minColumnWidth) }),
+    setEditorPreset: (editorPreset) =>
+      set((state) => {
+        const normalizedPreset = normalizeEditorPreset(editorPreset)
         return {
-          scrollbackLines: clampScrollback(state?.scrollbackLines ?? DEFAULT_TERMINAL_SCROLLBACK),
-          minColumnWidth: clampMinColumnWidth(state?.minColumnWidth ?? DEFAULT_TERMINAL_MIN_COLUMN_WIDTH),
-          editorPreset,
-          editorCommandTemplate: normalizeEditorCommandTemplate(state?.editorCommandTemplate, editorPreset),
+          editorPreset: normalizedPreset,
+          editorCommandTemplate:
+            normalizedPreset === "custom"
+              ? normalizeEditorCommandTemplate(state.editorCommandTemplate, normalizedPreset)
+              : getDefaultEditorCommandTemplate(normalizedPreset),
         }
-      },
-    }
-  )
+      }),
+    setEditorCommandTemplate: (editorCommandTemplate) =>
+      set((state) => ({
+        editorCommandTemplate: normalizeEditorCommandTemplate(editorCommandTemplate, state.editorPreset),
+      })),
+  })
 )

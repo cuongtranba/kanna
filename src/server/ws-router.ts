@@ -16,7 +16,7 @@ import { writeStandaloneTranscriptExport } from "./standalone-export"
 import { TerminalManager } from "./terminal-manager"
 import type { UpdateManager } from "./update-manager"
 import { deriveChatSnapshot, deriveLocalProjectsSnapshot, deriveSidebarData } from "./read-models"
-import type { AppSettingsSnapshot, LlmProviderSnapshot, LlmProviderValidationResult } from "../shared/types"
+import type { AppSettingsPatch, AppSettingsSnapshot, LlmProviderSnapshot, LlmProviderValidationResult } from "../shared/types"
 
 const DEFAULT_CHAT_RECENT_LIMIT = 200
 
@@ -49,6 +49,7 @@ function countSubscriptionsByTopic(ws: ServerWebSocket<ClientState>) {
   let localProjects = 0
   let update = 0
   let keybindings = 0
+  let appSettings = 0
   let terminal = 0
 
   for (const topic of ws.data.subscriptions.values()) {
@@ -71,6 +72,9 @@ function countSubscriptionsByTopic(ws: ServerWebSocket<ClientState>) {
       case "keybindings":
         keybindings += 1
         break
+      case "app-settings":
+        appSettings += 1
+        break
       case "terminal":
         terminal += 1
         break
@@ -85,6 +89,7 @@ function countSubscriptionsByTopic(ws: ServerWebSocket<ClientState>) {
     localProjects,
     update,
     keybindings,
+    appSettings,
     terminal,
   }
 }
@@ -101,7 +106,7 @@ interface CreateWsRouterArgs {
   agent: AgentCoordinator
   terminals: TerminalManager
   keybindings: KeybindingsManager
-  appSettings?: Pick<AppSettingsManager, "getSnapshot" | "write">
+  appSettings?: Pick<AppSettingsManager, "getSnapshot" | "write"> & Partial<Pick<AppSettingsManager, "writePatch" | "onChange">>
   analytics?: AnalyticsReporter
   llmProvider?: {
     read: () => Promise<LlmProviderSnapshot>
@@ -119,6 +124,7 @@ interface SnapshotBroadcastFilter {
   includeLocalProjects?: boolean
   includeUpdate?: boolean
   includeKeybindings?: boolean
+  includeAppSettings?: boolean
   chatIds?: Set<string>
   projectIds?: Set<string>
   terminalIds?: Set<string>
@@ -226,17 +232,88 @@ export function createWsRouter({
       },
     }),
   }
-  const resolvedAppSettings = appSettings ?? {
-    getSnapshot: () => ({
-      analyticsEnabled: true,
-      warning: null,
-      filePathDisplay: "~/.kanna/data/settings.json",
-    } satisfies AppSettingsSnapshot),
-    write: async ({ analyticsEnabled }: { analyticsEnabled: boolean }) => ({
-      analyticsEnabled,
-      warning: null,
-      filePathDisplay: "~/.kanna/data/settings.json",
-    } satisfies AppSettingsSnapshot),
+  let fallbackAppSettingsSnapshot: AppSettingsSnapshot = {
+    analyticsEnabled: true,
+    browserSettingsMigrated: false,
+    theme: "system",
+    chatSoundPreference: "always",
+    chatSoundId: "funk",
+    terminal: {
+      scrollbackLines: 1_000,
+      minColumnWidth: 450,
+    },
+    editor: {
+      preset: "cursor",
+      commandTemplate: "cursor {path}",
+    },
+    defaultProvider: "last_used",
+    providerDefaults: {
+      claude: {
+        model: "claude-opus-4-7",
+        modelOptions: {
+          reasoningEffort: "high",
+          contextWindow: "200k",
+        },
+        planMode: false,
+      },
+      codex: {
+        model: "gpt-5.5",
+        modelOptions: {
+          reasoningEffort: "high",
+          fastMode: false,
+        },
+        planMode: false,
+      },
+    },
+    warning: null,
+    filePathDisplay: "~/.kanna/data/settings.json",
+  }
+  const mergeAppSettingsPatch = (snapshot: AppSettingsSnapshot, patch: AppSettingsPatch): AppSettingsSnapshot => ({
+    ...snapshot,
+    ...patch,
+    terminal: {
+      ...snapshot.terminal,
+      ...patch.terminal,
+    },
+    editor: {
+      ...snapshot.editor,
+      ...patch.editor,
+    },
+    providerDefaults: {
+      claude: {
+        ...snapshot.providerDefaults.claude,
+        ...patch.providerDefaults?.claude,
+        modelOptions: {
+          ...snapshot.providerDefaults.claude.modelOptions,
+          ...patch.providerDefaults?.claude?.modelOptions,
+        },
+      },
+      codex: {
+        ...snapshot.providerDefaults.codex,
+        ...patch.providerDefaults?.codex,
+        modelOptions: {
+          ...snapshot.providerDefaults.codex.modelOptions,
+          ...patch.providerDefaults?.codex?.modelOptions,
+        },
+      },
+    },
+  })
+  const resolvedAppSettings = {
+    getSnapshot: () => appSettings?.getSnapshot() ?? fallbackAppSettingsSnapshot,
+    write: async (value: { analyticsEnabled: boolean }) => {
+      if (appSettings) return await appSettings.write(value)
+      fallbackAppSettingsSnapshot = { ...fallbackAppSettingsSnapshot, analyticsEnabled: value.analyticsEnabled }
+      return fallbackAppSettingsSnapshot
+    },
+    writePatch: async (patch: AppSettingsPatch) => {
+      if (appSettings?.writePatch) return await appSettings.writePatch(patch)
+      if (appSettings && patch.analyticsEnabled !== undefined && Object.keys(patch).length === 1) {
+        return await appSettings.write({ analyticsEnabled: patch.analyticsEnabled })
+      }
+      fallbackAppSettingsSnapshot = mergeAppSettingsPatch(appSettings?.getSnapshot() ?? fallbackAppSettingsSnapshot, patch)
+      return fallbackAppSettingsSnapshot
+    },
+    onChange: (listener: (snapshot: AppSettingsSnapshot) => void) => appSettings?.onChange?.(listener) ?? (() => {}),
   }
   const resolvedAnalytics = analytics ?? NoopAnalyticsReporter
 
@@ -306,6 +383,9 @@ export function createWsRouter({
     }
     if (topic.type === "keybindings") {
       return Boolean(filter.includeKeybindings)
+    }
+    if (topic.type === "app-settings") {
+      return Boolean(filter.includeAppSettings)
     }
     if (topic.type === "chat") {
       return filter.chatIds?.has(topic.chatId) ?? false
@@ -394,6 +474,18 @@ export function createWsRouter({
         snapshot: {
           type: "keybindings",
           data: keybindings.getSnapshot(),
+        },
+      }
+    }
+
+    if (topic.type === "app-settings") {
+      return {
+        v: PROTOCOL_VERSION,
+        type: "snapshot",
+        id,
+        snapshot: {
+          type: "app-settings",
+          data: resolvedAppSettings.getSnapshot(),
         },
       }
     }
@@ -683,6 +775,21 @@ export function createWsRouter({
     }
   })
 
+  const disposeAppSettingsEvents = resolvedAppSettings.onChange(() => {
+    for (const ws of sockets) {
+      const snapshotSignatures = ensureSnapshotSignatures(ws)
+      for (const [id, topic] of ws.data.subscriptions.entries()) {
+        if (topic.type !== "app-settings") continue
+        const envelope = createEnvelope(id, topic)
+        if (envelope.type !== "snapshot") continue
+        const signature = JSON.stringify(envelope.snapshot)
+        if (snapshotSignatures.get(id) === signature) continue
+        snapshotSignatures.set(id, signature)
+        send(ws, envelope)
+      }
+    }
+  })
+
   const disposeUpdateEvents = updateManager?.onChange(() => {
     for (const ws of sockets) {
       const snapshotSignatures = ensureSnapshotSignatures(ws)
@@ -766,6 +873,18 @@ export function createWsRouter({
           const snapshot = await resolvedAppSettings.write({ analyticsEnabled: command.analyticsEnabled })
           send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: snapshot })
           if (!previousAnalyticsEnabled && command.analyticsEnabled) {
+            resolvedAnalytics.track("analytics_enabled")
+          }
+          return
+        }
+        case "settings.writeAppSettingsPatch": {
+          const previousAnalyticsEnabled = resolvedAppSettings.getSnapshot().analyticsEnabled
+          const snapshot = await resolvedAppSettings.writePatch(command.patch)
+          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: snapshot })
+          if (command.patch.analyticsEnabled !== undefined && previousAnalyticsEnabled && !snapshot.analyticsEnabled) {
+            resolvedAnalytics.track("analytics_disabled")
+          }
+          if (command.patch.analyticsEnabled !== undefined && !previousAnalyticsEnabled && snapshot.analyticsEnabled) {
             resolvedAnalytics.track("analytics_enabled")
           }
           return
@@ -1246,6 +1365,7 @@ export function createWsRouter({
       agent.setBackgroundErrorReporter?.(null)
       disposeTerminalEvents()
       disposeKeybindingEvents()
+      disposeAppSettingsEvents()
       disposeUpdateEvents()
     },
   }

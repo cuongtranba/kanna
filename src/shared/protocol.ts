@@ -1,5 +1,6 @@
 import type {
   AppSettingsSnapshot,
+  AppSettingsPatch,
   AgentProvider,
   ChatAttachment,
   ChatDiffSnapshot,
@@ -14,9 +15,10 @@ import type {
   StandaloneTranscriptAttachmentMode,
   StandaloneTranscriptExportResult,
   UpdateSnapshot,
+  EditorPreset,
 } from "./types"
 
-export type EditorPreset = "cursor" | "vscode" | "xcode" | "windsurf" | "custom"
+export type { EditorPreset }
 
 export interface EditorOpenSettings {
   preset: EditorPreset
@@ -28,6 +30,7 @@ export type SubscriptionTopic =
   | { type: "local-projects" }
   | { type: "update" }
   | { type: "keybindings" }
+  | { type: "app-settings" }
   | { type: "chat"; chatId: string; recentLimit?: number }
   | { type: "project-git"; projectId: string }
   | { type: "terminal"; terminalId: string }
@@ -63,6 +66,7 @@ export type ClientCommand =
   | { type: "settings.writeKeybindings"; bindings: KeybindingsSnapshot["bindings"] }
   | { type: "settings.readAppSettings" }
   | { type: "settings.writeAppSettings"; analyticsEnabled: boolean }
+  | { type: "settings.writeAppSettingsPatch"; patch: AppSettingsPatch }
   | { type: "settings.readLlmProvider" }
   | {
       type: "settings.writeLlmProvider"

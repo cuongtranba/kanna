@@ -2,12 +2,14 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { useNavigate } from "react-router-dom"
 import { useShallow } from "zustand/react/shallow"
 import { APP_NAME } from "../../shared/branding"
-import { PROVIDERS, type AgentProvider, type AppSettingsSnapshot, type AskUserQuestionAnswerMap, type ChatAttachment, type ChatDiffSnapshot, type ChatHistoryPage, type KeybindingsSnapshot, type LlmProviderSnapshot, type LlmProviderValidationResult, type ModelOptions, type ProviderCatalogEntry, type QueuedChatMessage, type StandaloneTranscriptExportCommandResult, type TranscriptEntry, type UpdateInstallResult, type UpdateSnapshot, type UserPromptEntry } from "../../shared/types"
+import { PROVIDERS, type AgentProvider, type AppSettingsPatch, type AppSettingsSnapshot, type AskUserQuestionAnswerMap, type ChatAttachment, type ChatDiffSnapshot, type ChatHistoryPage, type KeybindingsSnapshot, type LlmProviderSnapshot, type LlmProviderValidationResult, type ModelOptions, type ProviderCatalogEntry, type QueuedChatMessage, type StandaloneTranscriptExportCommandResult, type TranscriptEntry, type UpdateInstallResult, type UpdateSnapshot, type UserPromptEntry } from "../../shared/types"
 import { NEW_CHAT_COMPOSER_ID, type ComposerState, useChatPreferencesStore } from "../stores/chatPreferencesStore"
 import { useRightSidebarStore } from "../stores/rightSidebarStore"
 import { useTerminalLayoutStore } from "../stores/terminalLayoutStore"
 import { getEditorPresetLabel, useTerminalPreferencesStore } from "../stores/terminalPreferencesStore"
 import { useChatInputStore } from "../stores/chatInputStore"
+import { useAppSettingsStore } from "../stores/appSettingsStore"
+import { useChatSoundPreferencesStore } from "../stores/chatSoundPreferencesStore"
 import type { ChatSnapshot, LocalProjectsSnapshot, SidebarChatRow, SidebarData } from "../../shared/types"
 import type { AskUserQuestionItem } from "../components/messages/types"
 import { useAppDialog } from "../components/ui/app-dialog"
@@ -177,6 +179,10 @@ export function getPreviousPrompt(messages: ReturnType<typeof processTranscriptM
 }
 
 const NEW_CHAT_OPTIMISTIC_SCOPE = "__new_chat__"
+const LEGACY_THEME_STORAGE_KEY = "lever-theme"
+const LEGACY_CHAT_SOUND_STORAGE_KEY = "chat-sound-preferences"
+const LEGACY_TERMINAL_STORAGE_KEY = "terminal-preferences"
+const LEGACY_CHAT_PREFERENCES_STORAGE_KEY = "chat-preferences"
 
 export interface OptimisticUserPrompt {
   id: string
@@ -189,6 +195,112 @@ export interface OptimisticUserPrompt {
 interface OptimisticProcessingState {
   scopeId: string
   ackedAt: number | null
+}
+
+function readPersistedZustandState(key: string): Record<string, unknown> | null {
+  if (typeof window === "undefined") return null
+  const raw = window.localStorage.getItem(key)
+  if (!raw) return null
+  try {
+    const parsed = JSON.parse(raw) as { state?: unknown }
+    return parsed.state && typeof parsed.state === "object" && !Array.isArray(parsed.state)
+      ? parsed.state as Record<string, unknown>
+      : null
+  } catch {
+    return null
+  }
+}
+
+function readLegacyBrowserSettingsPatch(): AppSettingsPatch | null {
+  if (typeof window === "undefined") return null
+
+  const patch: AppSettingsPatch = {}
+  const theme = window.localStorage.getItem(LEGACY_THEME_STORAGE_KEY)
+  if (theme === "light" || theme === "dark" || theme === "system") {
+    patch.theme = theme
+  }
+
+  const chatSoundState = readPersistedZustandState(LEGACY_CHAT_SOUND_STORAGE_KEY)
+  if (chatSoundState?.chatSoundPreference === "never" || chatSoundState?.chatSoundPreference === "unfocused" || chatSoundState?.chatSoundPreference === "always") {
+    patch.chatSoundPreference = chatSoundState.chatSoundPreference
+  }
+  if (
+    chatSoundState?.chatSoundId === "blow"
+    || chatSoundState?.chatSoundId === "bottle"
+    || chatSoundState?.chatSoundId === "frog"
+    || chatSoundState?.chatSoundId === "funk"
+    || chatSoundState?.chatSoundId === "glass"
+    || chatSoundState?.chatSoundId === "ping"
+    || chatSoundState?.chatSoundId === "pop"
+    || chatSoundState?.chatSoundId === "purr"
+    || chatSoundState?.chatSoundId === "tink"
+  ) {
+    patch.chatSoundId = chatSoundState.chatSoundId
+  }
+
+  const terminalState = readPersistedZustandState(LEGACY_TERMINAL_STORAGE_KEY)
+  if (terminalState) {
+    patch.terminal = {}
+    if (typeof terminalState.scrollbackLines === "number") {
+      patch.terminal.scrollbackLines = terminalState.scrollbackLines
+    }
+    if (typeof terminalState.minColumnWidth === "number") {
+      patch.terminal.minColumnWidth = terminalState.minColumnWidth
+    }
+    const editorPatch: NonNullable<AppSettingsPatch["editor"]> = {}
+    if (
+      terminalState.editorPreset === "cursor"
+      || terminalState.editorPreset === "vscode"
+      || terminalState.editorPreset === "xcode"
+      || terminalState.editorPreset === "windsurf"
+      || terminalState.editorPreset === "custom"
+    ) {
+      editorPatch.preset = terminalState.editorPreset
+    }
+    if (typeof terminalState.editorCommandTemplate === "string") {
+      editorPatch.commandTemplate = terminalState.editorCommandTemplate
+    }
+    if (Object.keys(editorPatch).length > 0) {
+      patch.editor = editorPatch
+    }
+  }
+
+  const chatPreferencesState = readPersistedZustandState(LEGACY_CHAT_PREFERENCES_STORAGE_KEY)
+  if (chatPreferencesState?.defaultProvider === "last_used" || chatPreferencesState?.defaultProvider === "claude" || chatPreferencesState?.defaultProvider === "codex") {
+    patch.defaultProvider = chatPreferencesState.defaultProvider
+  }
+  if (chatPreferencesState?.providerDefaults && typeof chatPreferencesState.providerDefaults === "object") {
+    patch.providerDefaults = chatPreferencesState.providerDefaults as AppSettingsPatch["providerDefaults"]
+  }
+
+  patch.browserSettingsMigrated = true
+  return Object.keys(patch).length > 1 ? patch : null
+}
+
+function clearLegacyBrowserSettings() {
+  if (typeof window === "undefined") return
+  window.localStorage.removeItem(LEGACY_THEME_STORAGE_KEY)
+  window.localStorage.removeItem(LEGACY_CHAT_SOUND_STORAGE_KEY)
+  window.localStorage.removeItem(LEGACY_TERMINAL_STORAGE_KEY)
+  window.localStorage.removeItem(LEGACY_CHAT_PREFERENCES_STORAGE_KEY)
+}
+
+function syncRuntimeStoresFromAppSettings(snapshot: AppSettingsSnapshot) {
+  useAppSettingsStore.getState().setFromServer(snapshot)
+  const terminalPreferences = useTerminalPreferencesStore.getState()
+  terminalPreferences.setScrollbackLines(snapshot.terminal.scrollbackLines)
+  terminalPreferences.setMinColumnWidth(snapshot.terminal.minColumnWidth)
+  terminalPreferences.setEditorPreset(snapshot.editor.preset)
+  terminalPreferences.setEditorCommandTemplate(snapshot.editor.commandTemplate)
+
+  const chatSoundPreferences = useChatSoundPreferencesStore.getState()
+  chatSoundPreferences.setChatSoundPreference(snapshot.chatSoundPreference)
+  chatSoundPreferences.setChatSoundId(snapshot.chatSoundId)
+
+  useChatPreferencesStore.setState({
+    defaultProvider: snapshot.defaultProvider,
+    providerDefaults: snapshot.providerDefaults,
+  })
 }
 
 function serializeAttachmentSignature(attachment: ChatAttachment) {
@@ -559,7 +671,7 @@ export interface KannaState {
   handleCheckForUpdates: (options?: { force?: boolean }) => Promise<void>
   handleInstallUpdate: () => Promise<void>
   handleReadAppSettings: () => Promise<void>
-  handleWriteAppSettings: (value: Pick<AppSettingsSnapshot, "analyticsEnabled">) => Promise<void>
+  handleWriteAppSettings: (patch: AppSettingsPatch) => Promise<void>
   handleReadLlmProvider: () => Promise<void>
   handleWriteLlmProvider: (value: Pick<LlmProviderSnapshot, "provider" | "apiKey" | "model" | "baseUrl">) => Promise<void>
   handleValidateLlmProvider: (value: Pick<LlmProviderSnapshot, "provider" | "apiKey" | "model" | "baseUrl">) => Promise<LlmProviderValidationResult>
@@ -779,31 +891,43 @@ export function useKannaState(activeChatId: string | null): KannaState {
     })
   }, [socket])
 
+  useEffect(() => {
+    return socket.subscribe<AppSettingsSnapshot>({ type: "app-settings" }, (snapshot) => {
+      setAppSettings(snapshot)
+      syncRuntimeStoresFromAppSettings(snapshot)
+      setCommandError(null)
+    })
+  }, [socket])
+
   const handleReadAppSettings = useCallback(async () => {
     try {
+      useAppSettingsStore.getState().setHydrationStatus("loading")
       const snapshot = await socket.command<AppSettingsSnapshot>({ type: "settings.readAppSettings" })
       setAppSettings(snapshot)
+      syncRuntimeStoresFromAppSettings(snapshot)
       setCommandError(null)
     } catch (error) {
+      useAppSettingsStore.getState().setHydrationStatus("error")
       setCommandError(error instanceof Error ? error.message : String(error))
     }
   }, [socket])
 
-  const handleWriteAppSettings = useCallback(async (
-    value: Pick<AppSettingsSnapshot, "analyticsEnabled">
-  ) => {
+  const handleWriteAppSettings = useCallback(async (patch: AppSettingsPatch) => {
     try {
+      useAppSettingsStore.getState().applyOptimisticPatch(patch)
       const snapshot = await socket.command<AppSettingsSnapshot>({
-        type: "settings.writeAppSettings",
-        analyticsEnabled: value.analyticsEnabled,
+        type: "settings.writeAppSettingsPatch",
+        patch,
       })
       setAppSettings(snapshot)
+      syncRuntimeStoresFromAppSettings(snapshot)
       setCommandError(null)
     } catch (error) {
       setCommandError(error instanceof Error ? error.message : String(error))
+      await handleReadAppSettings()
       throw error
     }
-  }, [socket])
+  }, [handleReadAppSettings, socket])
 
   const handleReadLlmProvider = useCallback(async () => {
     try {
@@ -850,6 +974,16 @@ export function useKannaState(activeChatId: string | null): KannaState {
     if (connectionStatus !== "connected") return
     void handleReadAppSettings()
   }, [connectionStatus, handleReadAppSettings])
+
+  useEffect(() => {
+    if (connectionStatus !== "connected") return
+    if (appSettings?.browserSettingsMigrated !== false) return
+    const patch = readLegacyBrowserSettingsPatch()
+    if (!patch) return
+    void handleWriteAppSettings(patch)
+      .then(clearLegacyBrowserSettings)
+      .catch(() => undefined)
+  }, [appSettings?.browserSettingsMigrated, connectionStatus, handleWriteAppSettings])
 
   useEffect(() => {
     if (connectionStatus !== "connected") return

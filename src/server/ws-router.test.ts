@@ -61,6 +61,37 @@ const DEFAULT_KEYBINDINGS_SNAPSHOT: KeybindingsSnapshot = {
 
 const DEFAULT_APP_SETTINGS_SNAPSHOT: AppSettingsSnapshot = {
   analyticsEnabled: true,
+  browserSettingsMigrated: false,
+  theme: "system",
+  chatSoundPreference: "always",
+  chatSoundId: "funk",
+  terminal: {
+    scrollbackLines: 1_000,
+    minColumnWidth: 450,
+  },
+  editor: {
+    preset: "cursor",
+    commandTemplate: "cursor {path}",
+  },
+  defaultProvider: "last_used",
+  providerDefaults: {
+    claude: {
+      model: "claude-opus-4-7",
+      modelOptions: {
+        reasoningEffort: "high",
+        contextWindow: "200k",
+      },
+      planMode: false,
+    },
+    codex: {
+      model: "gpt-5.5",
+      modelOptions: {
+        reasoningEffort: "high",
+        fastMode: false,
+      },
+      planMode: false,
+    },
+  },
   warning: null,
   filePathDisplay: "~/.kanna/data/settings.json",
 }
@@ -163,6 +194,7 @@ describe("ws-router", () => {
       updateManager: null,
     })
     const ws = new FakeWebSocket()
+    router.handleOpen(ws as never)
 
     await router.handleMessage(
       ws as never,
@@ -254,6 +286,7 @@ describe("ws-router", () => {
       updateManager: null,
     })
     const ws = new FakeWebSocket()
+    router.handleOpen(ws as never)
 
     await router.handleMessage(
       ws as never,
@@ -296,6 +329,124 @@ describe("ws-router", () => {
       },
     ])
     expect(writes).toEqual([{ analyticsEnabled: false }])
+  })
+
+  test("subscribes to app settings and writes patches through the router", async () => {
+    let snapshot: AppSettingsSnapshot = DEFAULT_APP_SETTINGS_SNAPSHOT
+    let listener: ((nextSnapshot: AppSettingsSnapshot) => void) | null = null
+    const router = createWsRouter({
+      store: { state: createEmptyState() } as never,
+      agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set() } as never,
+      terminals: {
+        getSnapshot: () => null,
+        onEvent: () => () => {},
+      } as never,
+      keybindings: {
+        getSnapshot: () => DEFAULT_KEYBINDINGS_SNAPSHOT,
+        onChange: () => () => {},
+      } as never,
+      appSettings: {
+        getSnapshot: () => snapshot,
+        write: async (value) => {
+          snapshot = { ...snapshot, analyticsEnabled: value.analyticsEnabled }
+          return snapshot
+        },
+        writePatch: async (patch) => {
+          snapshot = {
+            ...snapshot,
+            analyticsEnabled: patch.analyticsEnabled ?? snapshot.analyticsEnabled,
+            browserSettingsMigrated: patch.browserSettingsMigrated ?? snapshot.browserSettingsMigrated,
+            theme: patch.theme ?? snapshot.theme,
+            chatSoundPreference: patch.chatSoundPreference ?? snapshot.chatSoundPreference,
+            chatSoundId: patch.chatSoundId ?? snapshot.chatSoundId,
+            defaultProvider: patch.defaultProvider ?? snapshot.defaultProvider,
+            terminal: { ...snapshot.terminal, ...patch.terminal },
+            editor: { ...snapshot.editor, ...patch.editor },
+          }
+          listener?.(snapshot)
+          return snapshot
+        },
+        onChange: (nextListener) => {
+          listener = nextListener
+          return () => {
+            listener = null
+          }
+        },
+      },
+      refreshDiscovery: async () => [],
+      getDiscoveredProjects: () => [],
+      machineDisplayName: "Local Machine",
+      updateManager: null,
+    })
+    const ws = new FakeWebSocket()
+    router.handleOpen(ws as never)
+
+    await router.handleMessage(
+      ws as never,
+      JSON.stringify({
+        v: 1,
+        type: "subscribe",
+        id: "app-settings-sub-1",
+        topic: { type: "app-settings" },
+      })
+    )
+
+    await router.handleMessage(
+      ws as never,
+      JSON.stringify({
+        v: 1,
+        type: "command",
+        id: "settings-patch-1",
+        command: {
+          type: "settings.writeAppSettingsPatch",
+          patch: {
+            theme: "dark",
+            terminal: { scrollbackLines: 2_000 },
+          },
+        },
+      })
+    )
+
+    expect(ws.sent).toEqual([
+      {
+        v: PROTOCOL_VERSION,
+        type: "snapshot",
+        id: "app-settings-sub-1",
+        snapshot: {
+          type: "app-settings",
+          data: DEFAULT_APP_SETTINGS_SNAPSHOT,
+        },
+      },
+      {
+        v: PROTOCOL_VERSION,
+        type: "snapshot",
+        id: "app-settings-sub-1",
+        snapshot: {
+          type: "app-settings",
+          data: {
+            ...DEFAULT_APP_SETTINGS_SNAPSHOT,
+            theme: "dark",
+            terminal: {
+              ...DEFAULT_APP_SETTINGS_SNAPSHOT.terminal,
+              scrollbackLines: 2_000,
+            },
+          },
+        },
+      },
+      {
+        v: PROTOCOL_VERSION,
+        type: "ack",
+        id: "settings-patch-1",
+        result: {
+          ...DEFAULT_APP_SETTINGS_SNAPSHOT,
+          theme: "dark",
+          terminal: {
+            ...DEFAULT_APP_SETTINGS_SNAPSHOT.terminal,
+            scrollbackLines: 2_000,
+          },
+        },
+      },
+    ])
   })
 
   test("tracks analytics preference transitions in the correct order", async () => {

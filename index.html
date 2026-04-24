@@ -13,12 +13,7 @@
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
     <script>
       (() => {
-        const storageKey = "lever-theme"
-        const stored = window.localStorage.getItem(storageKey)
-        const preference = stored === "light" || stored === "dark" || stored === "system" ? stored : "system"
-        const resolved = preference === "system"
-          ? (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")
-          : preference
+        const resolved = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"
         const themeColor = resolved === "dark" ? "rgb(33, 34, 35)" : "rgb(255, 255, 255)"
 
         document.documentElement.classList.toggle("dark", resolved === "dark")
