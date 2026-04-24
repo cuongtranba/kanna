@@ -5,7 +5,7 @@ import { cp as copyPath, copyFile, mkdir, readFile, readdir, stat, writeFile } f
 import type {
   StandaloneTranscriptAttachmentMode,
   StandaloneTranscriptBundle,
-  StandaloneTranscriptExportResult,
+  StandaloneTranscriptExportCommandResult,
   StandaloneTranscriptTheme,
   TranscriptEntry,
 } from "../shared/types"
@@ -76,7 +76,7 @@ export function getStandaloneViewerDistDir() {
 export async function writeStandaloneTranscriptExport(
   args: WriteStandaloneTranscriptExportArgs,
   deps: StandaloneExportDeps = {},
-): Promise<StandaloneTranscriptExportResult> {
+): Promise<StandaloneTranscriptExportCommandResult> {
   const viewerDistDir = deps.viewerDistDir ?? getStandaloneViewerDistDir()
   const ensureDir = deps.mkdir ?? mkdir
   const writeFileImpl = deps.writeFile ?? writeFile
@@ -124,21 +124,38 @@ export async function writeStandaloneTranscriptExport(
     messages: prepared.messages,
   }
 
+  const transcriptJson = `${JSON.stringify(bundle, null, 2)}\n`
   const transcriptJsonPath = path.join(outputDir, "transcript.json")
-  await writeFileImpl(transcriptJsonPath, `${JSON.stringify(bundle, null, 2)}\n`, "utf8")
+  await writeFileImpl(transcriptJsonPath, transcriptJson, "utf8")
   const shareSlug = buildStandaloneShareSlug(args.title || args.chatId, deps.shareSlugSuffix)
   const shareUrl = buildStandaloneShareUrl(sharePublicBaseUrl, shareSlug)
-  const uploadedFileCount = await uploadStandaloneExportDirectory({
-    outputDir,
-    shareSlug,
-    uploadBaseUrl: shareUploadBaseUrl,
-    fetch: fetchImpl,
-    pathExists,
-    readDir,
-    readFile: readFileImpl,
-  })
+  let uploadedFileCount = 0
+
+  try {
+    uploadedFileCount = await uploadStandaloneExportDirectory({
+      outputDir,
+      shareSlug,
+      uploadBaseUrl: shareUploadBaseUrl,
+      fetch: fetchImpl,
+      pathExists,
+      readDir,
+      readFile: readFileImpl,
+    })
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : String(error),
+      outputDir,
+      transcriptJsonPath,
+      transcriptFileName: `${path.basename(outputDir)}-transcript.json`,
+      transcriptJson,
+      shareSlug,
+      shareUrl,
+    }
+  }
 
   return {
+    ok: true,
     outputDir,
     indexHtmlPath: path.join(outputDir, "index.html"),
     transcriptJsonPath,

@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react"
-import { ChevronDown, Flower, GitBranch, Loader2, Menu, PanelLeft, PanelRight, Share, Share2, SquarePen, Terminal, UserRound, UserRoundPlus } from "lucide-react"
+import { useEffect, useMemo, useState, type MouseEvent as ReactMouseEvent } from "react"
+import { Check, ChevronDown, Flower, GitBranch, Loader2, Menu, MoreHorizontal, PanelLeft, PanelRight, SquarePen, Terminal, UserRoundPlus } from "lucide-react"
 import type { EditorOpenSettings, EditorPreset } from "../../../shared/protocol"
 import { Button } from "../ui/button"
 import { CardHeader } from "../ui/card"
@@ -8,6 +8,7 @@ import { cn } from "../../lib/utils"
 import { getDefaultEditorCommandTemplate } from "../../stores/terminalPreferencesStore"
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger } from "../ui/select"
 import { EDITOR_OPTIONS, EditorIcon, FinderIcon, FolderFallbackIcon, TerminalIcon } from "../editor-icons"
+import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from "../ui/context-menu"
 
 type OpenExternalAction = "open_finder" | "open_terminal" | "open_editor"
 type OpenSelectValue = "finder" | "terminal" | `editor:${EditorPreset}`
@@ -153,6 +154,88 @@ function OpenExternalSelect({
   )
 }
 
+function openContextMenuFromButton(event: ReactMouseEvent<HTMLButtonElement>) {
+  event.preventDefault()
+  event.stopPropagation()
+  const rect = event.currentTarget.getBoundingClientRect()
+  event.currentTarget.dispatchEvent(new MouseEvent("contextmenu", {
+    bubbles: true,
+    cancelable: true,
+    clientX: rect.left + rect.width / 2,
+    clientY: rect.bottom,
+    view: window,
+  }))
+}
+
+function NavbarOverflowMenu({
+  showOnDesktop,
+  onToggleEmbeddedTerminal,
+  onExportTranscript,
+  canExportTranscript,
+  isExportingTranscript,
+  exportTranscriptComplete,
+}: {
+  showOnDesktop: boolean
+  onToggleEmbeddedTerminal?: () => void
+  onExportTranscript?: () => void
+  canExportTranscript: boolean
+  isExportingTranscript: boolean
+  exportTranscriptComplete: boolean
+}) {
+  if (!onToggleEmbeddedTerminal && !onExportTranscript) return null
+
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger asChild>
+        <Button
+          variant="ghost"
+          size="none"
+          onClick={openContextMenuFromButton}
+          title="More actions"
+          className={cn(
+            "border border-border/0 hover:!border-border/0 px-1.5 h-9 hover:!bg-transparent",
+            showOnDesktop ? "flex" : "flex md:hidden"
+          )}
+        >
+          <MoreHorizontal strokeWidth={2} className="h-4.5" />
+        </Button>
+      </ContextMenuTrigger>
+      <ContextMenuContent>
+        {onToggleEmbeddedTerminal ? (
+          <ContextMenuItem
+            onSelect={(event) => {
+              event.preventDefault()
+              onToggleEmbeddedTerminal()
+            }}
+          >
+            <Terminal strokeWidth={2} className="h-3.5 w-3.5" />
+            <span className="text-xs font-medium">Toggle Terminal</span>
+          </ContextMenuItem>
+        ) : null}
+        {onExportTranscript ? (
+          <ContextMenuItem
+            disabled={!canExportTranscript || isExportingTranscript}
+            onSelect={(event) => {
+              event.preventDefault()
+              if (!canExportTranscript || isExportingTranscript) return
+              onExportTranscript()
+            }}
+          >
+            {isExportingTranscript ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : exportTranscriptComplete ? (
+              <Check className="h-3.5 w-3.5 text-emerald-400" />
+            ) : (
+              <UserRoundPlus strokeWidth={2} className="h-3.5 w-3.5" />
+            )}
+            <span className="text-xs font-medium">Share Chat</span>
+          </ContextMenuItem>
+        ) : null}
+      </ContextMenuContent>
+    </ContextMenu>
+  )
+}
+
 interface Props {
   sidebarCollapsed: boolean
   onOpenSidebar: () => void
@@ -167,6 +250,7 @@ interface Props {
   onExportTranscript?: () => void
   canExportTranscript?: boolean
   isExportingTranscript?: boolean
+  exportTranscriptComplete?: boolean
   editorPreset?: EditorPreset
   editorCommandTemplate?: string
   platform?: NodeJS.Platform
@@ -193,6 +277,7 @@ export function ChatNavbar({
   onExportTranscript,
   canExportTranscript = false,
   isExportingTranscript = false,
+  exportTranscriptComplete = false,
   editorPreset = "cursor",
   editorCommandTemplate,
   platform = "darwin",
@@ -273,6 +358,14 @@ export function ChatNavbar({
             ) : null}
             {(onToggleEmbeddedTerminal || onToggleRightSidebar || onExportTranscript) ? (
               <div className="flex items-center border border-border rounded-2xl px-2 py-0.5 backdrop-blur-lg">
+                <NavbarOverflowMenu
+                  showOnDesktop={rightSidebarVisible}
+                  onToggleEmbeddedTerminal={onToggleEmbeddedTerminal}
+                  onExportTranscript={onExportTranscript}
+                  canExportTranscript={canExportTranscript}
+                  isExportingTranscript={isExportingTranscript}
+                  exportTranscriptComplete={exportTranscriptComplete}
+                />
                 {onToggleEmbeddedTerminal ? (
                 <HotkeyTooltip>
                   <HotkeyTooltipTrigger asChild>
@@ -281,6 +374,7 @@ export function ChatNavbar({
                       size="none"
                       onClick={onToggleEmbeddedTerminal}
                       className={cn(
+                        rightSidebarVisible ? "hidden" : "hidden md:flex",
                         "border border-border/0 hover:!border-border/0 px-1.5 h-9 hover:!bg-transparent",
                         embeddedTerminalVisible && "text-foreground"
                       )}
@@ -297,10 +391,20 @@ export function ChatNavbar({
                     size="none"
                     onClick={onExportTranscript}
                     disabled={!canExportTranscript || isExportingTranscript}
-                    title="Export standalone transcript"
-                    className="border border-border/0 hover:!border-border/0 px-1.5 h-9 hover:!bg-transparent disabled:opacity-50"
+                    title="Share chat"
+                    aria-label="Share chat"
+                    className={cn(
+                      rightSidebarVisible ? "hidden" : "hidden md:flex",
+                      "border border-border/0 hover:!border-border/0 px-1.5 h-9 hover:!bg-transparent disabled:opacity-50"
+                    )}
                   >
-                    {isExportingTranscript ? <Loader2 className="h-4.5 animate-spin" /> : <UserRoundPlus strokeWidth={2} className="h-4.5" />}
+                    {isExportingTranscript ? (
+                      <Loader2 className="h-4.5 animate-spin" />
+                    ) : exportTranscriptComplete ? (
+                      <Check className="h-4.5 text-emerald-400" />
+                    ) : (
+                      <UserRoundPlus strokeWidth={2} className="h-4.5" />
+                    )}
                   </Button>
                 ) : null}
                 {onToggleRightSidebar ? (

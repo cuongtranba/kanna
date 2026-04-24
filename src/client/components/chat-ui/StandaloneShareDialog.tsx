@@ -1,11 +1,11 @@
-import { Check, Copy, ExternalLink, Globe } from "lucide-react"
+import { Check, Copy, ExternalLink } from "lucide-react"
 import { useEffect, useState } from "react"
 import {
   Dialog,
   DialogBody,
   DialogContent,
+  DialogDescription,
   DialogFooter,
-  DialogGhostButton,
   DialogHeader,
   DialogPrimaryButton,
   DialogTitle,
@@ -50,26 +50,28 @@ export function StandaloneShareDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent size="md">
         <DialogHeader>
-          <DialogTitle>Share ready</DialogTitle>
+          <DialogTitle>Shared Link</DialogTitle>
+          <DialogDescription>Shared links are snapshots in time and contain all attachments, tool calls and history. Be mindful of sensitive info.</DialogDescription>
         </DialogHeader>
         <DialogBody className="space-y-3">
-          <button
-            type="button"
-            onClick={() => void handleCopyLink()}
-            className="flex w-full items-center gap-2 rounded-2xl border border-border bg-muted/40 px-3 py-2.5 text-left transition-colors hover:bg-muted/60"
-          >
-            <Globe className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
+          <div className="flex w-full items-center gap-2 rounded-2xl border border-border bg-muted/40 pl-4 px-3 py-2.5">
+            {/* <Globe className="h-4 w-4 flex-shrink-0 text-muted-foreground" /> */}
             <span className="min-w-0 flex-1 truncate font-mono text-sm text-foreground">{shareUrl}</span>
-            <span className="inline-flex flex-shrink-0 items-center gap-1.5 rounded-lg border border-border bg-background px-2.5 py-1 text-xs font-medium text-foreground shadow-sm">
-              {copied ? <Check className="h-3.5 w-3.5 text-green-400" /> : <Copy className="h-3.5 w-3.5" />}
-              {copied ? "Copied" : "Copy"}
-            </span>
-          </button>
+            <button
+              type="button"
+              onClick={() => void handleCopyLink()}
+              title={copied ? "Copied" : "Copy link"}
+              aria-label={copied ? "Copied" : "Copy link"}
+              className="flex flex-shrink-0 items-center justify-center rounded-lg text-logo hover:text-logo/60 transition-colors hover:bg-background hover:text-foreground"
+            >
+              {copied ? <Check className="h-4 w-4 text-emerald-400" /> : <Copy className="h-4 w-4" />}
+            </button>
+          </div>
         </DialogBody>
         <DialogFooter>
           <DialogPrimaryButton type="button" onClick={onOpenLink}>
             <ExternalLink className="mr-2 h-4 w-4" />
-            Open Link
+            Open
           </DialogPrimaryButton>
         </DialogFooter>
       </DialogContent>

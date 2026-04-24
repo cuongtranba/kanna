@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { useNavigate } from "react-router-dom"
 import { useShallow } from "zustand/react/shallow"
 import { APP_NAME } from "../../shared/branding"
-import { PROVIDERS, type AgentProvider, type AppSettingsSnapshot, type AskUserQuestionAnswerMap, type ChatAttachment, type ChatDiffSnapshot, type ChatHistoryPage, type KeybindingsSnapshot, type LlmProviderSnapshot, type LlmProviderValidationResult, type ModelOptions, type ProviderCatalogEntry, type QueuedChatMessage, type StandaloneTranscriptExportResult, type TranscriptEntry, type UpdateInstallResult, type UpdateSnapshot, type UserPromptEntry } from "../../shared/types"
+import { PROVIDERS, type AgentProvider, type AppSettingsSnapshot, type AskUserQuestionAnswerMap, type ChatAttachment, type ChatDiffSnapshot, type ChatHistoryPage, type KeybindingsSnapshot, type LlmProviderSnapshot, type LlmProviderValidationResult, type ModelOptions, type ProviderCatalogEntry, type QueuedChatMessage, type StandaloneTranscriptExportCommandResult, type TranscriptEntry, type UpdateInstallResult, type UpdateSnapshot, type UserPromptEntry } from "../../shared/types"
 import { NEW_CHAT_COMPOSER_ID, type ComposerState, useChatPreferencesStore } from "../stores/chatPreferencesStore"
 import { useRightSidebarStore } from "../stores/rightSidebarStore"
 import { useTerminalLayoutStore } from "../stores/terminalLayoutStore"
@@ -588,7 +588,7 @@ export interface KannaState {
     clearContext?: boolean,
     message?: string
   ) => Promise<void>
-  handleExportStandalone: () => Promise<StandaloneTranscriptExportResult | null>
+  handleExportStandalone: () => Promise<StandaloneTranscriptExportCommandResult | null>
 }
 
 export function useKannaState(activeChatId: string | null): KannaState {
@@ -1661,7 +1661,7 @@ export function useKannaState(activeChatId: string | null): KannaState {
 
     setIsExportingStandalone(true)
     try {
-      const result = await socket.command<StandaloneTranscriptExportResult>({
+      const result = await socket.command<StandaloneTranscriptExportCommandResult>({
         type: "chat.exportStandalone",
         chatId: activeChatId,
         theme: resolvedTheme,

@@ -96,6 +96,10 @@ describe("writeStandaloneTranscriptExport", () => {
       now: new Date("2026-04-23T12:34:56.000Z"),
     })
 
+    expect(result.ok).toBe(true)
+    if (!result.ok) {
+      throw new Error(result.error)
+    }
     expect(await Bun.file(result.indexHtmlPath).exists()).toBe(true)
     expect(await Bun.file(path.join(result.outputDir, "assets", "viewer.js")).exists()).toBe(true)
     expect(result.totalAttachmentCount).toBe(1)
@@ -153,6 +157,10 @@ describe("writeStandaloneTranscriptExport", () => {
       now: new Date("2026-04-23T12:34:56.000Z"),
     })
 
+    expect(result.ok).toBe(true)
+    if (!result.ok) {
+      throw new Error(result.error)
+    }
     expect(result.totalAttachmentCount).toBe(1)
     expect(result.bundledAttachmentCount).toBe(1)
     expect(result.shareUrl).toBe("https://share.example.com/release-review-bundle123")
@@ -169,5 +177,48 @@ describe("writeStandaloneTranscriptExport", () => {
       "https://upload.example.com/api/share/release-review-bundle123/transcript.json",
       expect.stringContaining("https://upload.example.com/api/share/release-review-bundle123/attachments/"),
     ])
+  })
+
+  test("returns transcript json for download when share upload fails", async () => {
+    const viewerDistDir = await createViewerDist()
+    const projectDir = await createTempDir("kanna-project-")
+    const uploadsDir = path.join(projectDir, ".kanna", "uploads")
+    await mkdir(uploadsDir, { recursive: true })
+    const attachmentPath = path.join(uploadsDir, "mock.png")
+    await writeFile(attachmentPath, "mock", "utf8")
+
+    const result = await writeStandaloneTranscriptExport({
+      chatId: "chat-1",
+      title: "Release Review",
+      localPath: projectDir,
+      theme: "light",
+      attachmentMode: "bundle",
+      messages: createMessages(attachmentPath),
+    }, {
+      fetch: async () => new Response(JSON.stringify({ error: "No release viewer assets were found for 0.34.5." }), {
+        status: 400,
+        headers: {
+          "content-type": "application/json",
+        },
+      }),
+      sharePublicBaseUrl: "https://share.example.com",
+      shareSlugSuffix: "failed123",
+      shareUploadBaseUrl: "https://upload.example.com/api/share",
+      viewerDistDir,
+      now: new Date("2026-04-23T12:34:56.000Z"),
+    })
+
+    expect(result.ok).toBe(false)
+    if (result.ok) {
+      throw new Error("Expected export upload to fail")
+    }
+
+    expect(result.error).toContain("Failed to upload shared transcript file transcript.json")
+    expect(result.error).toContain("No release viewer assets were found")
+    expect(result.shareUrl).toBe("https://share.example.com/release-review-failed123")
+    expect(result.transcriptFileName).toBe("Release-Review-2026-04-23T12-34-56Z-transcript.json")
+    expect(result.transcriptJsonPath).toEndWith("/transcript.json")
+    expect(JSON.parse(result.transcriptJson).title).toBe("Release Review")
+    expect(JSON.stringify(JSON.parse(result.transcriptJson))).not.toContain(projectDir)
   })
 })

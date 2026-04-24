@@ -34,6 +34,7 @@ export interface StandaloneTranscriptBundle {
 }
 
 export interface StandaloneTranscriptExportResult {
+  ok: true
   outputDir: string
   indexHtmlPath: string
   transcriptJsonPath: string
@@ -44,6 +45,21 @@ export interface StandaloneTranscriptExportResult {
   shareUrl: string
   uploadedFileCount: number
 }
+
+export interface StandaloneTranscriptExportFailureResult {
+  ok: false
+  error: string
+  outputDir: string
+  transcriptJsonPath: string
+  transcriptFileName: string
+  transcriptJson: string
+  shareSlug: string
+  shareUrl: string
+}
+
+export type StandaloneTranscriptExportCommandResult =
+  | StandaloneTranscriptExportResult
+  | StandaloneTranscriptExportFailureResult
 
 export interface QueuedChatMessage {
   id: string

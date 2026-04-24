@@ -45,6 +45,19 @@ export {
   shouldAutoFollowTranscriptResize,
 } from "./utils"
 
+function downloadTextFile(fileName: string, contents: string, contentType = "application/json") {
+  const blob = new Blob([contents], { type: `${contentType}; charset=utf-8` })
+  const url = URL.createObjectURL(blob)
+  const anchor = document.createElement("a")
+  anchor.href = url
+  anchor.download = fileName
+  anchor.style.display = "none"
+  document.body.append(anchor)
+  anchor.click()
+  anchor.remove()
+  URL.revokeObjectURL(url)
+}
+
 function useEmptyStateTyping(showEmptyState: boolean, activeChatId: string | null) {
   const [typedEmptyStateText, setTypedEmptyStateText] = useState("")
   const [isEmptyStateTypingComplete, setIsEmptyStateTypingComplete] = useState(false)
@@ -447,6 +460,7 @@ export function ChatPage() {
   const { inputRef, syncInputHeight, transcriptPaddingBottom } = useTranscriptPaddingBottom()
   const [showScrollToBottom, setShowScrollToBottom] = useState(false)
   const [standaloneShareUrl, setStandaloneShareUrl] = useState<string | null>(null)
+  const [standaloneShareComplete, setStandaloneShareComplete] = useState(false)
   const showEmptyState = state.messages.length === 0 && state.runtime?.title === "New Chat"
   const projectId = state.activeProjectId
   const projectTerminalLayout = useTerminalLayoutStore((store) => (projectId ? store.projects[projectId] : undefined))
@@ -664,11 +678,28 @@ export function ChatPage() {
     if (!state.activeChatId || state.isExportingStandalone) {
       return
     }
+    setStandaloneShareComplete(false)
     const result = await state.handleExportStandalone()
-    if (result?.shareUrl) {
+    if (result?.ok && result.shareUrl) {
       setStandaloneShareUrl(result.shareUrl)
+      setStandaloneShareComplete(true)
+      return
     }
-  }, [state.activeChatId, state.handleExportStandalone, state.isExportingStandalone])
+
+    if (result && !result.ok) {
+      const shouldDownload = await dialog.confirm({
+        title: "Share failed",
+        description: result.error,
+        confirmLabel: "Download transcript JSON",
+        cancelLabel: "Close",
+        confirmVariant: "secondary",
+      })
+
+      if (shouldDownload) {
+        downloadTextFile(result.transcriptFileName, result.transcriptJson)
+      }
+    }
+  }, [dialog, state.activeChatId, state.handleExportStandalone, state.isExportingStandalone])
 
   const handleCopyStandaloneShareLink = useCallback(async () => {
     if (!standaloneShareUrl) {
@@ -921,6 +952,7 @@ export function ChatPage() {
           onExportTranscript={state.activeChatId ? handleShareTranscript : undefined}
           canExportTranscript={Boolean(state.activeChatId) && !state.isExportingStandalone}
           isExportingTranscript={state.isExportingStandalone}
+          exportTranscriptComplete={standaloneShareComplete}
           editorPreset={editorPreset}
           editorCommandTemplate={editorCommandTemplate}
           platform={state.localProjects?.machine.platform}
@@ -969,6 +1001,7 @@ export function ChatPage() {
         onOpenChange={(open) => {
           if (!open) {
             setStandaloneShareUrl(null)
+            setStandaloneShareComplete(false)
           }
         }}
         onOpenLink={handleOpenStandaloneShareLink}
