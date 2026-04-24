@@ -57,4 +57,20 @@ describe("buildEditorCommand", () => {
       args: ["/Users/jake/Projects/kanna/src/client/app/App.tsx", "--line", "12"],
     })
   })
+
+  test("builds an Xcode line command with xed", () => {
+    expect(
+      buildEditorCommand({
+        localPath: "/Users/jake/Projects/kanna/App.swift",
+        isDirectory: false,
+        line: 24,
+        column: 2,
+        editor: { preset: "xcode", commandTemplate: "xed {path}" },
+        platform: "linux",
+      })
+    ).toEqual({
+      command: "xed",
+      args: ["-l", "24", "/Users/jake/Projects/kanna/App.swift"],
+    })
+  })
 })

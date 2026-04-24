@@ -464,6 +464,8 @@ export function ChatPage() {
   const setRightSidebarSize = useRightSidebarStore((store) => store.setSize)
   const scrollback = useTerminalPreferencesStore((store) => store.scrollbackLines)
   const minColumnWidth = useTerminalPreferencesStore((store) => store.minColumnWidth)
+  const editorPreset = useTerminalPreferencesStore((store) => store.editorPreset)
+  const editorCommandTemplate = useTerminalPreferencesStore((store) => store.editorCommandTemplate)
   const resolvedKeybindings = useMemo(() => getResolvedKeybindings(state.keybindings), [state.keybindings])
   const baseContextWindowSnapshotRef = useRef<ReturnType<typeof deriveLatestContextWindowSnapshot>>(null)
   const contextWindowSnapshot = useMemo(() => {
@@ -654,8 +656,8 @@ export function ChatPage() {
     void state.handleCancel()
   }, [state.handleCancel])
 
-  const handleOpenExternal = useCallback((action: "open_finder" | "open_editor" | "open_terminal") => {
-    void state.handleOpenExternal(action)
+  const handleOpenExternal = useCallback<NonNullable<ComponentProps<typeof ChatNavbar>["onOpenExternal"]>>((action, editor) => {
+    void state.handleOpenExternal(action, editor)
   }, [state.handleOpenExternal])
 
   const handleShareTranscript = useCallback(async () => {
@@ -919,7 +921,9 @@ export function ChatPage() {
           onExportTranscript={state.activeChatId ? handleShareTranscript : undefined}
           canExportTranscript={Boolean(state.activeChatId) && !state.isExportingStandalone}
           isExportingTranscript={state.isExportingStandalone}
-          editorLabel={state.editorLabel}
+          editorPreset={editorPreset}
+          editorCommandTemplate={editorCommandTemplate}
+          platform={state.localProjects?.machine.platform}
           finderShortcut={resolvedKeybindings.bindings.openInFinder}
           editorShortcut={resolvedKeybindings.bindings.openInEditor}
           terminalShortcut={resolvedKeybindings.bindings.toggleEmbeddedTerminal}

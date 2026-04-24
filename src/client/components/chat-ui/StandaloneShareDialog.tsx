@@ -1,4 +1,4 @@
-import { Check, Copy, ExternalLink } from "lucide-react"
+import { Check, Copy, ExternalLink, Globe } from "lucide-react"
 import { useEffect, useState } from "react"
 import {
   Dialog,
@@ -53,15 +53,20 @@ export function StandaloneShareDialog({
           <DialogTitle>Share ready</DialogTitle>
         </DialogHeader>
         <DialogBody className="space-y-3">
-          <div className="rounded-2xl border border-border bg-muted/40 px-4 py-3">
-            <p className="break-all font-mono text-sm text-foreground">{shareUrl}</p>
-          </div>
+          <button
+            type="button"
+            onClick={() => void handleCopyLink()}
+            className="flex w-full items-center gap-2 rounded-2xl border border-border bg-muted/40 px-3 py-2.5 text-left transition-colors hover:bg-muted/60"
+          >
+            <Globe className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
+            <span className="min-w-0 flex-1 truncate font-mono text-sm text-foreground">{shareUrl}</span>
+            <span className="inline-flex flex-shrink-0 items-center gap-1.5 rounded-lg border border-border bg-background px-2.5 py-1 text-xs font-medium text-foreground shadow-sm">
+              {copied ? <Check className="h-3.5 w-3.5 text-green-400" /> : <Copy className="h-3.5 w-3.5" />}
+              {copied ? "Copied" : "Copy"}
+            </span>
+          </button>
         </DialogBody>
         <DialogFooter>
-          <DialogGhostButton type="button" onClick={() => void handleCopyLink()}>
-            {copied ? <Check className="mr-2 h-4 w-4 text-green-400" /> : <Copy className="mr-2 h-4 w-4" />}
-            {copied ? "Copied" : "Copy Link"}
-          </DialogGhostButton>
           <DialogPrimaryButton type="button" onClick={onOpenLink}>
             <ExternalLink className="mr-2 h-4 w-4" />
             Open Link

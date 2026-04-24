@@ -16,6 +16,7 @@ import { processTranscriptMessages } from "../lib/parseTranscript"
 import { generateUUID } from "../lib/utils"
 import { canCancelStatus, getLatestToolIds, isProcessingStatus } from "./derived"
 import { KannaSocket, type SocketStatus } from "./socket"
+import type { EditorOpenSettings } from "../../shared/protocol"
 
 function sameRuntime(left: ChatSnapshot["runtime"] | null | undefined, right: ChatSnapshot["runtime"] | null | undefined) {
   if (left === right) return true
@@ -572,7 +573,7 @@ export interface KannaState {
   handleRemoveProject: (projectId: string) => Promise<void>
   handleReorderProjectGroups: (projectIds: string[]) => Promise<void>
   handleCopyPath: (localPath: string) => Promise<void>
-  handleOpenExternal: (action: "open_finder" | "open_terminal" | "open_editor") => Promise<void>
+  handleOpenExternal: (action: "open_finder" | "open_terminal" | "open_editor", editor?: EditorOpenSettings) => Promise<void>
   handleOpenExternalPath: (action: "open_finder" | "open_editor", localPath: string) => Promise<void>
   handleOpenLocalLink: (target: { path: string; line?: number; column?: number }) => Promise<void>
   handleCompose: () => void
@@ -1587,6 +1588,7 @@ export function useKannaState(activeChatId: string | null): KannaState {
     localPath: string
     line?: number
     column?: number
+    editor?: EditorOpenSettings
   }) => {
     const preferences = useTerminalPreferencesStore.getState()
     setCommandError(null)
@@ -1594,7 +1596,7 @@ export function useKannaState(activeChatId: string | null): KannaState {
       type: "system.openExternal",
       ...command,
       editor: command.action === "open_editor"
-        ? {
+        ? command.editor ?? {
             preset: preferences.editorPreset,
             commandTemplate: preferences.editorCommandTemplate,
           }
@@ -1602,13 +1604,14 @@ export function useKannaState(activeChatId: string | null): KannaState {
     })
   }, [socket])
 
-  const handleOpenExternal = useCallback(async (action: "open_finder" | "open_terminal" | "open_editor") => {
+  const handleOpenExternal = useCallback(async (action: "open_finder" | "open_terminal" | "open_editor", editor?: EditorOpenSettings) => {
     const localPath = runtime?.localPath ?? localProjects?.projects[0]?.localPath ?? sidebarProjectGroups[0]?.localPath
     if (!localPath) return
     try {
       await openExternal({
         action,
         localPath,
+        editor,
       })
     } catch (error) {
       setCommandError(error instanceof Error ? error.message : String(error))

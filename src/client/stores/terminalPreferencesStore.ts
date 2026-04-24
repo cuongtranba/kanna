@@ -14,6 +14,8 @@ export function getDefaultEditorCommandTemplate(preset: EditorPreset) {
   switch (preset) {
     case "vscode":
       return "code {path}"
+    case "xcode":
+      return "xed {path}"
     case "windsurf":
       return "windsurf {path}"
     case "custom":
@@ -28,6 +30,8 @@ export function getEditorPresetLabel(preset: EditorPreset) {
   switch (preset) {
     case "vscode":
       return "VS Code"
+    case "xcode":
+      return "Xcode"
     case "windsurf":
       return "Windsurf"
     case "custom":
@@ -51,6 +55,7 @@ function clampMinColumnWidth(value: number) {
 function normalizeEditorPreset(value?: string): EditorPreset {
   switch (value) {
     case "vscode":
+    case "xcode":
     case "windsurf":
     case "custom":
     case "cursor":

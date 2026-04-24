@@ -1,3 +1,4 @@
+import process from "node:process"
 import type {
   ChatRuntime,
   ChatSnapshot,
@@ -163,6 +164,7 @@ export function deriveLocalProjectsSnapshot(
     machine: {
       id: "local",
       displayName: machineName,
+      platform: process.platform,
     },
     projects: [...projects.values()].sort((a, b) => (b.lastOpenedAt ?? 0) - (a.lastOpenedAt ?? 0)),
   }

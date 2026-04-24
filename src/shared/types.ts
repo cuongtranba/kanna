@@ -331,6 +331,7 @@ export interface LocalProjectsSnapshot {
   machine: {
     id: "local"
     displayName: string
+    platform: NodeJS.Platform
   }
   projects: LocalProjectSummary[]
 }

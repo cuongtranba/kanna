@@ -31,6 +31,7 @@ import {
 } from "../../shared/types"
 import { markdownComponents } from "../components/messages/shared"
 import { ChatPreferenceControls } from "../components/chat-ui/ChatPreferenceControls"
+import { EDITOR_OPTIONS, EditorIcon } from "../components/editor-icons"
 import { Button, buttonVariants } from "../components/ui/button"
 import { Dialog, DialogBody, DialogContent, DialogFooter, DialogTitle } from "../components/ui/dialog"
 import { Input } from "../components/ui/input"
@@ -101,13 +102,6 @@ const themeOptions = [
   { value: "light" as ThemePreference, label: "Light", icon: Sun },
   { value: "dark" as ThemePreference, label: "Dark", icon: Moon },
   { value: "system" as ThemePreference, label: "System", icon: Monitor },
-]
-
-const editorOptions: { value: EditorPreset; label: string }[] = [
-  { value: "cursor", label: "Cursor" },
-  { value: "vscode", label: "VS Code" },
-  { value: "windsurf", label: "Windsurf" },
-  { value: "custom", label: "Custom" },
 ]
 
 const chatSoundPreferenceOptions: { value: ChatSoundPreference; label: string }[] = [
@@ -1053,7 +1047,7 @@ export function SettingsPage() {
 
                       <SettingsRow
                         title="Default Editor"
-                        description="Used by the navbar code button and local file links in chat"
+                        description="Used when opening transcript links or files from the git diff menu"
                         alignStart
                       >
                         <Select
@@ -1065,9 +1059,12 @@ export function SettingsPage() {
                           </SelectTrigger>
                           <SelectContent>
                             <SelectGroup>
-                              {editorOptions.map((option) => (
+                              {EDITOR_OPTIONS.map((option) => (
                                 <SelectItem key={option.value} value={option.value}>
-                                  {option.label}
+                                  <span className="flex items-center gap-2">
+                                    <EditorIcon preset={option.value} className="h-4 w-4 shrink-0" />
+                                    <span>{option.label}</span>
+                                  </span>
                                 </SelectItem>
                               ))}
                             </SelectGroup>

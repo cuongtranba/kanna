@@ -16,7 +16,7 @@ import type {
   UpdateSnapshot,
 } from "./types"
 
-export type EditorPreset = "cursor" | "vscode" | "windsurf" | "custom"
+export type EditorPreset = "cursor" | "vscode" | "xcode" | "windsurf" | "custom"
 
 export interface EditorOpenSettings {
   preset: EditorPreset

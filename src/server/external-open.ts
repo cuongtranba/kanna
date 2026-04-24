@@ -129,6 +129,15 @@ function buildPresetEditorCommand(
 ): CommandSpec {
   const gotoTarget = `${args.localPath}:${args.line ?? 1}:${args.column ?? 1}`
   const opener = resolveEditorExecutable(preset, args.platform)
+  if (preset === "xcode") {
+    if (args.isDirectory || !args.line) {
+      return { command: opener.command, args: [...opener.args, args.localPath] }
+    }
+    if (opener.command !== "xed") {
+      return { command: opener.command, args: [...opener.args, args.localPath] }
+    }
+    return { command: opener.command, args: [...opener.args, "-l", String(args.line), args.localPath] }
+  }
   if (args.isDirectory || !args.line) {
     return { command: opener.command, args: [...opener.args, args.localPath] }
   }
@@ -148,6 +157,10 @@ function resolveEditorExecutable(preset: Exclude<EditorPreset, "custom">, platfo
     if (hasCommand("windsurf")) return { command: "windsurf", args: [] }
     if (platform === "darwin" && canOpenMacApp("Windsurf")) return { command: "open", args: ["-a", "Windsurf"] }
   }
+  if (preset === "xcode") {
+    if (hasCommand("xed")) return { command: "xed", args: [] }
+    if (platform === "darwin" && canOpenMacApp("Xcode")) return { command: "open", args: ["-a", "Xcode"] }
+  }
 
   if (platform === "darwin") {
     switch (preset) {
@@ -157,10 +170,12 @@ function resolveEditorExecutable(preset: Exclude<EditorPreset, "custom">, platfo
         throw new Error("Visual Studio Code is not installed")
       case "windsurf":
         throw new Error("Windsurf is not installed")
+      case "xcode":
+        throw new Error("Xcode is not installed")
     }
   }
 
-  return { command: preset === "vscode" ? "code" : preset, args: [] }
+  return { command: preset === "vscode" ? "code" : preset === "xcode" ? "xed" : preset, args: [] }
 }
 
 function buildCustomEditorCommand(args: {
@@ -248,6 +263,7 @@ function normalizeEditorSettings(editor: EditorOpenSettings): EditorOpenSettings
 function normalizeEditorPreset(preset: EditorPreset): EditorPreset {
   switch (preset) {
     case "vscode":
+    case "xcode":
     case "windsurf":
     case "custom":
     case "cursor":
