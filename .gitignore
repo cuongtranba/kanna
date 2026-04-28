@@ -32,6 +32,12 @@ vite.config.ts.timestamp-*
 # git worktrees
 .worktrees/
 
+# claude code session artifacts
+.claude/scheduled_tasks.lock
+
+# playwright MCP scratch
+.playwright-mcp/
+
 # pm2 rendered config (generated from scripts/pm2.config.cjs.tmpl)
 scripts/pm2.config.cjs
 
