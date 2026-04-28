@@ -214,7 +214,7 @@ function resolvePreviewUrl(url: string) {
     return url
   }
 
-  return new URL(url, window.location.origin).toString()
+  return new URL(url, document.baseURI || window.location.href).toString()
 }
 
 function isPreviewTimeout(error: unknown) {

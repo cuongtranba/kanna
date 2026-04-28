@@ -19,6 +19,7 @@ import {
 } from "../shared/types"
 
 const HARD_CODED_CODEX_MODELS: ProviderModelOption[] = [
+  { id: "gpt-5.5", label: "GPT-5.5", supportsEffort: false },
   { id: "gpt-5.4", label: "GPT-5.4", supportsEffort: false },
   { id: "gpt-5.3-codex", label: "GPT-5.3 Codex", supportsEffort: false },
   { id: "gpt-5.3-codex-spark", label: "GPT-5.3 Codex Spark", supportsEffort: false },
@@ -28,7 +29,7 @@ export const SERVER_PROVIDERS: ProviderCatalogEntry[] = PROVIDERS.map((provider)
   provider.id === "codex"
     ? {
         ...provider,
-        defaultModel: "gpt-5.4",
+        defaultModel: "gpt-5.5",
         models: HARD_CODED_CODEX_MODELS,
       }
     : provider

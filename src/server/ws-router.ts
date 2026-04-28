@@ -12,11 +12,12 @@ import { EventStore } from "./event-store"
 import { openExternal } from "./external-open"
 import { KeybindingsManager } from "./keybindings"
 import { ensureProjectDirectory, resolveLocalPath } from "./paths"
+import { writeStandaloneTranscriptExport } from "./standalone-export"
 import { TerminalManager } from "./terminal-manager"
 import type { UpdateManager } from "./update-manager"
 import { deriveChatSnapshot, deriveLocalProjectsSnapshot, deriveSidebarData } from "./read-models"
 import { CLOUDFLARE_TUNNEL_DEFAULTS } from "../shared/types"
-import type { AppSettingsSnapshot, LlmProviderSnapshot, LlmProviderValidationResult } from "../shared/types"
+import type { AppSettingsPatch, AppSettingsSnapshot, LlmProviderSnapshot, LlmProviderValidationResult } from "../shared/types"
 import { importClaudeSessions } from "./claude-session-importer"
 import type { TunnelGateway } from "./cloudflare-tunnel/gateway"
 
@@ -51,6 +52,7 @@ function countSubscriptionsByTopic(ws: ServerWebSocket<ClientState>) {
   let localProjects = 0
   let update = 0
   let keybindings = 0
+  let appSettings = 0
   let terminal = 0
 
   for (const topic of ws.data.subscriptions.values()) {
@@ -73,6 +75,9 @@ function countSubscriptionsByTopic(ws: ServerWebSocket<ClientState>) {
       case "keybindings":
         keybindings += 1
         break
+      case "app-settings":
+        appSettings += 1
+        break
       case "terminal":
         terminal += 1
         break
@@ -87,6 +92,7 @@ function countSubscriptionsByTopic(ws: ServerWebSocket<ClientState>) {
     localProjects,
     update,
     keybindings,
+    appSettings,
     terminal,
   }
 }
@@ -103,7 +109,7 @@ interface CreateWsRouterArgs {
   agent: AgentCoordinator
   terminals: TerminalManager
   keybindings: KeybindingsManager
-  appSettings?: Pick<AppSettingsManager, "getSnapshot" | "write" | "setCloudflareTunnel">
+  appSettings?: Pick<AppSettingsManager, "getSnapshot" | "write"> & Partial<Pick<AppSettingsManager, "setCloudflareTunnel" | "writePatch" | "onChange">>
   analytics?: AnalyticsReporter
   tunnelGateway?: TunnelGateway
   llmProvider?: {
@@ -122,6 +128,7 @@ interface SnapshotBroadcastFilter {
   includeLocalProjects?: boolean
   includeUpdate?: boolean
   includeKeybindings?: boolean
+  includeAppSettings?: boolean
   chatIds?: Set<string>
   projectIds?: Set<string>
   terminalIds?: Set<string>
@@ -230,25 +237,98 @@ export function createWsRouter({
       },
     }),
   }
-  const resolvedAppSettings = appSettings ?? {
-    getSnapshot: () => ({
-      analyticsEnabled: true,
-      cloudflareTunnel: CLOUDFLARE_TUNNEL_DEFAULTS,
-      warning: null,
-      filePathDisplay: "~/.kanna/data/settings.json",
-    } satisfies AppSettingsSnapshot),
-    write: async ({ analyticsEnabled }: { analyticsEnabled: boolean }) => ({
-      analyticsEnabled,
-      cloudflareTunnel: CLOUDFLARE_TUNNEL_DEFAULTS,
-      warning: null,
-      filePathDisplay: "~/.kanna/data/settings.json",
-    } satisfies AppSettingsSnapshot),
-    setCloudflareTunnel: async (_patch: Partial<AppSettingsSnapshot["cloudflareTunnel"]>): Promise<AppSettingsSnapshot> => ({
-      analyticsEnabled: true,
-      cloudflareTunnel: CLOUDFLARE_TUNNEL_DEFAULTS,
-      warning: null,
-      filePathDisplay: "~/.kanna/data/settings.json",
-    }),
+  let fallbackAppSettingsSnapshot: AppSettingsSnapshot = {
+    analyticsEnabled: true,
+    browserSettingsMigrated: false,
+    theme: "system",
+    chatSoundPreference: "always",
+    chatSoundId: "funk",
+    terminal: {
+      scrollbackLines: 1_000,
+      minColumnWidth: 450,
+    },
+    editor: {
+      preset: "cursor",
+      commandTemplate: "cursor {path}",
+    },
+    defaultProvider: "last_used",
+    providerDefaults: {
+      claude: {
+        model: "claude-opus-4-7",
+        modelOptions: {
+          reasoningEffort: "high",
+          contextWindow: "200k",
+        },
+        planMode: false,
+      },
+      codex: {
+        model: "gpt-5.5",
+        modelOptions: {
+          reasoningEffort: "high",
+          fastMode: false,
+        },
+        planMode: false,
+      },
+    },
+    warning: null,
+    filePathDisplay: "~/.kanna/data/settings.json",
+    cloudflareTunnel: CLOUDFLARE_TUNNEL_DEFAULTS,
+  }
+  const mergeAppSettingsPatch = (snapshot: AppSettingsSnapshot, patch: AppSettingsPatch): AppSettingsSnapshot => ({
+    ...snapshot,
+    ...patch,
+    terminal: {
+      ...snapshot.terminal,
+      ...patch.terminal,
+    },
+    editor: {
+      ...snapshot.editor,
+      ...patch.editor,
+    },
+    providerDefaults: {
+      claude: {
+        ...snapshot.providerDefaults.claude,
+        ...patch.providerDefaults?.claude,
+        modelOptions: {
+          ...snapshot.providerDefaults.claude.modelOptions,
+          ...patch.providerDefaults?.claude?.modelOptions,
+        },
+      },
+      codex: {
+        ...snapshot.providerDefaults.codex,
+        ...patch.providerDefaults?.codex,
+        modelOptions: {
+          ...snapshot.providerDefaults.codex.modelOptions,
+          ...patch.providerDefaults?.codex?.modelOptions,
+        },
+      },
+    },
+    cloudflareTunnel: {
+      ...snapshot.cloudflareTunnel,
+      ...patch.cloudflareTunnel,
+    },
+  })
+  const resolvedAppSettings = {
+    getSnapshot: () => appSettings?.getSnapshot() ?? fallbackAppSettingsSnapshot,
+    write: async (value: { analyticsEnabled: boolean }) => {
+      if (appSettings) return await appSettings.write(value)
+      fallbackAppSettingsSnapshot = { ...fallbackAppSettingsSnapshot, analyticsEnabled: value.analyticsEnabled }
+      return fallbackAppSettingsSnapshot
+    },
+    writePatch: async (patch: AppSettingsPatch) => {
+      if (appSettings?.writePatch) return await appSettings.writePatch(patch)
+      if (appSettings && patch.analyticsEnabled !== undefined && Object.keys(patch).length === 1) {
+        return await appSettings.write({ analyticsEnabled: patch.analyticsEnabled })
+      }
+      fallbackAppSettingsSnapshot = mergeAppSettingsPatch(appSettings?.getSnapshot() ?? fallbackAppSettingsSnapshot, patch)
+      return fallbackAppSettingsSnapshot
+    },
+    setCloudflareTunnel: async (patch: Partial<AppSettingsSnapshot["cloudflareTunnel"]>) => {
+      if (appSettings?.setCloudflareTunnel) return await appSettings.setCloudflareTunnel(patch)
+      fallbackAppSettingsSnapshot = mergeAppSettingsPatch(appSettings?.getSnapshot() ?? fallbackAppSettingsSnapshot, { cloudflareTunnel: patch })
+      return fallbackAppSettingsSnapshot
+    },
+    onChange: (listener: (snapshot: AppSettingsSnapshot) => void) => appSettings?.onChange?.(listener) ?? (() => {}),
   }
   const resolvedAnalytics = analytics ?? NoopAnalyticsReporter
 
@@ -318,6 +398,9 @@ export function createWsRouter({
     }
     if (topic.type === "keybindings") {
       return Boolean(filter.includeKeybindings)
+    }
+    if (topic.type === "app-settings") {
+      return Boolean(filter.includeAppSettings)
     }
     if (topic.type === "chat") {
       return filter.chatIds?.has(topic.chatId) ?? false
@@ -406,6 +489,18 @@ export function createWsRouter({
         snapshot: {
           type: "keybindings",
           data: keybindings.getSnapshot(),
+        },
+      }
+    }
+
+    if (topic.type === "app-settings") {
+      return {
+        v: PROTOCOL_VERSION,
+        type: "snapshot",
+        id,
+        snapshot: {
+          type: "app-settings",
+          data: resolvedAppSettings.getSnapshot(),
         },
       }
     }
@@ -697,6 +792,21 @@ export function createWsRouter({
     }
   })
 
+  const disposeAppSettingsEvents = resolvedAppSettings.onChange(() => {
+    for (const ws of sockets) {
+      const snapshotSignatures = ensureSnapshotSignatures(ws)
+      for (const [id, topic] of ws.data.subscriptions.entries()) {
+        if (topic.type !== "app-settings") continue
+        const envelope = createEnvelope(id, topic)
+        if (envelope.type !== "snapshot") continue
+        const signature = JSON.stringify(envelope.snapshot)
+        if (snapshotSignatures.get(id) === signature) continue
+        snapshotSignatures.set(id, signature)
+        send(ws, envelope)
+      }
+    }
+  })
+
   const disposeUpdateEvents = updateManager?.onChange(() => {
     for (const ws of sockets) {
       const snapshotSignatures = ensureSnapshotSignatures(ws)
@@ -803,6 +913,18 @@ export function createWsRouter({
           send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: snapshot })
           return
         }
+        case "settings.writeAppSettingsPatch": {
+          const previousAnalyticsEnabled = resolvedAppSettings.getSnapshot().analyticsEnabled
+          const snapshot = await resolvedAppSettings.writePatch(command.patch)
+          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: snapshot })
+          if (command.patch.analyticsEnabled !== undefined && previousAnalyticsEnabled && !snapshot.analyticsEnabled) {
+            resolvedAnalytics.track("analytics_disabled")
+          }
+          if (command.patch.analyticsEnabled !== undefined && !previousAnalyticsEnabled && snapshot.analyticsEnabled) {
+            resolvedAnalytics.track("analytics_enabled")
+          }
+          return
+        }
         case "settings.readLlmProvider": {
           send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: await resolvedLlmProvider.read() })
           return
@@ -862,21 +984,9 @@ export function createWsRouter({
           break
         }
         case "project.remove": {
-          const project = store.getProject(command.projectId)
-          const chats = store.listChatsByProject(command.projectId)
-          for (const chat of chats) {
-            await agent.cancel(chat.id)
-            await agent.closeChat(chat.id)
-          }
-          if (project) {
-            terminals.closeByCwd(project.localPath)
-          }
           await store.removeProject(command.projectId)
           send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
           resolvedAnalytics.track("project_removed")
-          for (const _chat of chats) {
-            resolvedAnalytics.track("chat_deleted")
-          }
           break
         }
         case "sidebar.reorderProjectGroups": {
@@ -917,6 +1027,18 @@ export function createWsRouter({
         }
         case "chat.rename": {
           await store.renameChat(command.chatId, command.title)
+          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
+          await broadcastChatAndSidebar(command.chatId)
+          return
+        }
+        case "chat.archive": {
+          await store.archiveChat(command.chatId)
+          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
+          await broadcastFilteredSnapshots({ includeSidebar: true })
+          return
+        }
+        case "chat.unarchive": {
+          await store.unarchiveChat(command.chatId)
           send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
           await broadcastChatAndSidebar(command.chatId)
           return
@@ -1186,6 +1308,19 @@ export function createWsRouter({
           send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
           return
         }
+        case "chat.exportStandalone": {
+          const { chat, project } = resolveChatProject(command.chatId)
+          const result = await writeStandaloneTranscriptExport({
+            chatId: chat.id,
+            title: chat.title,
+            localPath: project.localPath,
+            theme: command.theme,
+            attachmentMode: command.attachmentMode,
+            messages: store.getMessages(command.chatId),
+          })
+          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result })
+          return
+        }
         case "chat.loadHistory": {
           const chat = store.getChat(command.chatId)
           if (!chat) throw new Error("Chat not found")
@@ -1323,6 +1458,7 @@ export function createWsRouter({
       agent.setBackgroundErrorReporter?.(null)
       disposeTerminalEvents()
       disposeKeybindingEvents()
+      disposeAppSettingsEvents()
       disposeUpdateEvents()
     },
   }

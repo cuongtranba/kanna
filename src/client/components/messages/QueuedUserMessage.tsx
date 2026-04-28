@@ -3,7 +3,7 @@ import remarkGfm from "remark-gfm"
 import type { QueuedChatMessage } from "../../../shared/types"
 import { Button } from "../ui/button"
 import { createMarkdownComponents } from "./shared"
-import { X } from "lucide-react"
+import { ArrowUp, X } from "lucide-react"
 
 interface QueuedUserMessageProps {
   message: QueuedChatMessage
@@ -29,16 +29,30 @@ export function QueuedUserMessage({ message, onRemove, onSendNow }: QueuedUserMe
           </div>
         ) : null}
         {message.content ? (
-          <div className="relative">
-            <div className="rounded-[20px] border border-dashed border-border bg-transparent px-3.5 py-1.5 prose prose-sm prose-invert text-left text-primary [&_p]:whitespace-pre-line">
-              <Markdown remarkPlugins={[remarkGfm]} components={createMarkdownComponents()}>{message.content}</Markdown>
+          <div className="relative group">
+
+              <div className="grid grid-cols-[1fr_auto] items-end gap-2.5 rounded-[20px] border border-dashed border-border bg-transparent pl-3.5 pr-1.5 py-1.5 prose prose-sm prose-invert text-left text-primary [&_p]:whitespace-pre-line">
+                <div>
+                <Markdown remarkPlugins={[remarkGfm]} components={createMarkdownComponents()}>{message.content}</Markdown>
+                </div>
+                  <Button
+                  type="button"
+                  variant="default"
+                  size="none"
+                  className="rounded-full size-[24px] bg-muted text-muted-foreground border border-primary/10 group-hover:!text-primary hover:bg-muted/60"
+                  onClick={onSendNow}
+                >
+                  {/* Send Now */}
+                  <ArrowUp className="size-3.5"/>
+                </Button>
+
               
             </div>
             <Button
               type="button"
               variant="none"
               size="none"
-              className="!p-0.5 border rounded-full text-xs font-medium text-muted-foreground hover:text-foreground gap-0.5 absolute top-0 left-0 bg-background -translate-x-[28%] -translate-y-[28%]"
+              className="opacity-0 scale-[0.1] group-hover:scale-[1.0] group-hover:opacity-100 !p-0.5 border rounded-full text-xs font-medium text-muted-foreground hover:text-foreground gap-0.5 absolute top-0 left-0 bg-background -translate-x-[28%] -translate-y-[28%]"
               onClick={onRemove}
             >
               <X className="size-3"/>
@@ -56,27 +70,7 @@ export function QueuedUserMessage({ message, onRemove, onSendNow }: QueuedUserMe
           </div>
           
         ) : null}
-        <div className="flex items-center gap-1 text-xs text-muted-foreground pr-2">
-          {/* <Button
-            type="button"
-            variant="none"
-            size="none"
-            className="h-auto p-0 text-xs font-medium text-muted-foreground hover:text-foreground gap-0.5"
-            onClick={onRemove}
-          >
-            Remove
-          </Button>
-          <span aria-hidden="true" className="text-xs text-muted-foreground/70">|</span> */}
-          <Button
-            type="button"
-            variant="none"
-            size="none"
-            className="h-auto p-0 text-xs font-medium text-muted-foreground hover:text-foreground gap-0.5"
-            onClick={onSendNow}
-          >
-          Send Now
-          </Button>
-        </div>
+
       </div>
     </div>
   )

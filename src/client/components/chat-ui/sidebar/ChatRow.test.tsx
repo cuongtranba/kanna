@@ -23,7 +23,11 @@ describe("ChatRow", () => {
         activeChatId={null}
         nowMs={60_000}
         onSelectChat={() => undefined}
+        onRenameChat={() => undefined}
+        onShareChat={() => undefined}
+        onOpenInFinder={() => undefined}
         onForkChat={() => undefined}
+        onArchiveChat={() => undefined}
         onDeleteChat={() => undefined}
       />
     )
@@ -38,7 +42,11 @@ describe("ChatRow", () => {
         activeChatId={null}
         nowMs={60_000}
         onSelectChat={() => undefined}
+        onRenameChat={() => undefined}
+        onShareChat={() => undefined}
+        onOpenInFinder={() => undefined}
         onForkChat={() => undefined}
+        onArchiveChat={() => undefined}
         onDeleteChat={() => undefined}
       />
     )
@@ -53,7 +61,11 @@ describe("ChatRow", () => {
         activeChatId={null}
         nowMs={60_000}
         onSelectChat={() => undefined}
+        onRenameChat={() => undefined}
+        onShareChat={() => undefined}
+        onOpenInFinder={() => undefined}
         onForkChat={() => undefined}
+        onArchiveChat={() => undefined}
         onDeleteChat={() => undefined}
       />
     )
@@ -71,7 +83,11 @@ describe("ChatRow", () => {
         shortcutHint="1"
         showShortcutHint
         onSelectChat={() => undefined}
+        onRenameChat={() => undefined}
+        onShareChat={() => undefined}
+        onOpenInFinder={() => undefined}
         onForkChat={() => undefined}
+        onArchiveChat={() => undefined}
         onDeleteChat={() => undefined}
       />
     )
@@ -88,12 +104,16 @@ describe("ChatRow", () => {
         activeChatId={null}
         nowMs={60_000}
         onSelectChat={() => undefined}
+        onRenameChat={() => undefined}
+        onShareChat={() => undefined}
+        onOpenInFinder={() => undefined}
         onForkChat={() => undefined}
+        onArchiveChat={() => undefined}
         onDeleteChat={() => undefined}
       />
     )
 
     expect(html).toContain("Fork chat")
-    expect(html).toContain("Delete chat")
+    expect(html).toContain("Archive chat")
   })
 })

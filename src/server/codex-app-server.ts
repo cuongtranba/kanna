@@ -928,14 +928,14 @@ export class CodexAppServerManager {
       await this.startSession({
         chatId,
         cwd: args.cwd,
-        model: args.model ?? "gpt-5.4",
+        model: args.model ?? "gpt-5.5",
         serviceTier: args.serviceTier ?? "fast",
         sessionToken: null,
       })
 
       turn = await this.startTurn({
         chatId,
-        model: args.model ?? "gpt-5.4",
+        model: args.model ?? "gpt-5.5",
         effort: args.effort,
         serviceTier: args.serviceTier ?? "fast",
         content: args.prompt,

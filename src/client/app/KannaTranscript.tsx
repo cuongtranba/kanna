@@ -16,7 +16,7 @@ import { CompactBoundaryMessage, ContextClearedMessage } from "../components/mes
 import { CompactSummaryMessage } from "../components/messages/CompactSummaryMessage"
 import { StatusMessage } from "../components/messages/StatusMessage"
 import { CollapsedToolGroup } from "../components/messages/CollapsedToolGroup"
-import { OpenLocalLinkProvider } from "../components/messages/shared"
+import { OpenLocalLinkProvider, type OpenLocalLinkTarget } from "../components/messages/shared"
 import { AutoContinueCard } from "../components/chat-ui/AutoContinueCard"
 import { CHAT_SELECTION_ZONE_ATTRIBUTE } from "./chatFocusPolicy"
 import type { AutoContinueSchedule } from "../../shared/types"
@@ -606,7 +606,7 @@ interface KannaTranscriptProps {
   isLoading: boolean
   localPath?: string
   latestToolIds: Record<string, string | null>
-  onOpenLocalLink: (target: { path: string; line?: number; column?: number }) => void
+  onOpenLocalLink: (target: OpenLocalLinkTarget) => void
   onAskUserQuestionSubmit: (
     toolUseId: string,
     questions: AskUserQuestionItem[],

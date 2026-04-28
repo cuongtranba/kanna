@@ -541,6 +541,44 @@ describe("EventStore", () => {
     expect(forked.lastMessageAt).toBeUndefined()
     expect(store.getMessages(forked.id)).toEqual(store.getMessages(source.id))
   })
+
+  test("reopening a removed project restores its existing chats", async () => {
+    const dataDir = await createTempDataDir()
+    const store = new EventStore(dataDir)
+    await store.initialize()
+
+    const project = await store.openProject("/tmp/project")
+    const chat = await store.createChat(project.id)
+
+    await store.removeProject(project.id)
+    expect(store.getProject(project.id)).toBeNull()
+
+    const reopened = await store.openProject("/tmp/project")
+
+    expect(reopened.id).toBe(project.id)
+    expect(store.listChatsByProject(reopened.id).map((entry) => entry.id)).toEqual([chat.id])
+  })
+
+  test("archives chats without deleting their transcript", async () => {
+    const dataDir = await createTempDataDir()
+    const store = new EventStore(dataDir)
+    await store.initialize()
+
+    const project = await store.openProject("/tmp/project")
+    const chat = await store.createChat(project.id)
+    await store.appendMessage(chat.id, entry("user_prompt", chat.createdAt + 1, { content: "keep this" }))
+
+    await store.archiveChat(chat.id)
+
+    expect(store.getChat(chat.id)?.archivedAt).toBeNumber()
+    expect(store.listChatsByProject(project.id)).toEqual([])
+    expect(store.getMessages(chat.id).map((message) => message.kind)).toEqual(["user_prompt"])
+
+    await store.unarchiveChat(chat.id)
+
+    expect(store.getChat(chat.id)?.archivedAt).toBeUndefined()
+    expect(store.listChatsByProject(project.id).map((entry) => entry.id)).toEqual([chat.id])
+  })
 })
 
 describe("recordSessionCommandsLoaded", () => {

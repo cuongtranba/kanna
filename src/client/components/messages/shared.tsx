@@ -33,8 +33,16 @@ import {
 } from "lucide-react"
 import { cn } from "../../lib/utils"
 import { parseLocalFileLink } from "../../lib/pathUtils"
+import { useTranscriptRenderOptions } from "./render-context"
 
-type OpenLocalLinkTarget = { path: string; line?: number; column?: number }
+export type OpenLocalLinkTarget = {
+  path: string
+  line?: number
+  column?: number
+  clientX?: number
+  clientY?: number
+  trigger?: "click" | "contextmenu"
+}
 type OpenLocalLinkHandler = (target: OpenLocalLinkTarget) => void
 
 const defaultOpenLocalLink: OpenLocalLinkHandler = () => {}
@@ -368,7 +376,16 @@ export function createMarkdownComponents(options?: {
     ...markdownComponents,
     a: ({ children, href, onClick, ...props }: ComponentPropsWithoutRef<"a">) => {
       const onOpenLocalLink = options?.onOpenLocalLink ?? useContext(OpenLocalLinkContext)
+      const renderOptions = useTranscriptRenderOptions()
       const parsedLocalLink = parseLocalFileLink(href)
+
+      if (parsedLocalLink && renderOptions.localLinkMode === "text") {
+        return (
+          <span className="transition-all underline decoration-2 text-logo decoration-logo/50">
+            {children}
+          </span>
+        )
+      }
 
       return (
         <a
@@ -380,7 +397,22 @@ export function createMarkdownComponents(options?: {
             onClick?.(event)
             if (event.defaultPrevented || !parsedLocalLink || onOpenLocalLink === defaultOpenLocalLink) return
             event.preventDefault()
-            onOpenLocalLink(parsedLocalLink)
+            onOpenLocalLink({
+              ...parsedLocalLink,
+              clientX: event.clientX,
+              clientY: event.clientY,
+              trigger: "click",
+            })
+          }}
+          onContextMenu={(event) => {
+            if (!parsedLocalLink || onOpenLocalLink === defaultOpenLocalLink) return
+            event.preventDefault()
+            onOpenLocalLink({
+              ...parsedLocalLink,
+              clientX: event.clientX,
+              clientY: event.clientY,
+              trigger: "contextmenu",
+            })
           }}
           {...props}
         >

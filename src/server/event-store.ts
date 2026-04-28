@@ -110,6 +110,8 @@ function getReplayEventPriority(event: StoreEvent) {
     case "chat_source_hash_set":
       return 9
     case "chat_deleted":
+    case "chat_archived":
+    case "chat_unarchived":
       return 10
     case "auto_continue_proposed":
     case "auto_continue_accepted":
@@ -528,6 +530,20 @@ export class EventStore {
         this.state.autoContinueEventsByChatId.delete(e.chatId)
         break
       }
+      case "chat_archived": {
+        const chat = this.state.chatsById.get(e.chatId)
+        if (!chat) break
+        chat.archivedAt = e.timestamp
+        chat.updatedAt = e.timestamp
+        break
+      }
+      case "chat_unarchived": {
+        const chat = this.state.chatsById.get(e.chatId)
+        if (!chat) break
+        delete chat.archivedAt
+        chat.updatedAt = e.timestamp
+        break
+      }
       case "chat_provider_set": {
         const chat = this.state.chatsById.get(e.chatId)
         if (!chat) break
@@ -700,7 +716,9 @@ export class EventStore {
       }
     }
 
-    const projectId = crypto.randomUUID()
+    const hiddenProject = [...this.state.projectsById.values()]
+      .find((project) => project.localPath === normalized && project.deletedAt)
+    const projectId = hiddenProject?.id ?? crypto.randomUUID()
     const event: ProjectEvent = {
       v: STORE_VERSION,
       type: "project_opened",
@@ -838,6 +856,28 @@ export class EventStore {
     await this.append(this.chatsLogPath, event)
   }
 
+  async archiveChat(chatId: string) {
+    this.requireChat(chatId)
+    const event: ChatEvent = {
+      v: STORE_VERSION,
+      type: "chat_archived",
+      timestamp: Date.now(),
+      chatId,
+    }
+    await this.append(this.chatsLogPath, event)
+  }
+
+  async unarchiveChat(chatId: string) {
+    this.requireChat(chatId)
+    const event: ChatEvent = {
+      v: STORE_VERSION,
+      type: "chat_unarchived",
+      timestamp: Date.now(),
+      chatId,
+    }
+    await this.append(this.chatsLogPath, event)
+  }
+
   async pruneStaleEmptyChats(args?: {
     now?: number
     maxAgeMs?: number
@@ -853,7 +893,7 @@ export class EventStore {
     const prunedChatIds: string[] = []
 
     for (const chat of this.state.chatsById.values()) {
-      if (chat.deletedAt || protectedChatIds.has(chat.id)) continue
+      if (chat.deletedAt || chat.archivedAt || protectedChatIds.has(chat.id)) continue
       if (now - chat.createdAt < maxAgeMs) continue
       if (chat.hasMessages) continue
       if (this.getMessages(chat.id).length > 0) {
@@ -1208,7 +1248,7 @@ export class EventStore {
 
   listChatsByProject(projectId: string) {
     return [...this.state.chatsById.values()]
-      .filter((chat) => chat.projectId === projectId && !chat.deletedAt)
+      .filter((chat) => chat.projectId === projectId && !chat.deletedAt && !chat.archivedAt)
       .sort((a, b) => (b.lastMessageAt ?? b.updatedAt) - (a.lastMessageAt ?? a.updatedAt))
   }
 

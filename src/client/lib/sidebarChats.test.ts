@@ -25,7 +25,7 @@ function createChat(chatId: string, lastMessageAt?: number): SidebarChatRow {
 }
 
 describe("getSidebarChatBuckets", () => {
-  test("uses up to 10 chats from the last 24 hours for the collapsed slice", () => {
+  test("uses all chats from the last 24 hours for the collapsed slice", () => {
     const chats = [
       createChat("chat-1", nowMs - hourMs),
       createChat("chat-2", nowMs - 2 * hourMs),
@@ -33,7 +33,7 @@ describe("getSidebarChatBuckets", () => {
       createChat("chat-4"),
     ]
 
-    expect(getSidebarChatBuckets(chats, 10, nowMs)).toEqual({
+    expect(getSidebarChatBuckets(chats, nowMs)).toEqual({
       collapsedChats: [chats[0], chats[1], chats[3]],
       remainingChats: [chats[2]],
     })
@@ -45,7 +45,7 @@ describe("getSidebarChatBuckets", () => {
       createChat("chat-2", nowMs - 25 * hourMs),
     ]
 
-    expect(getSidebarChatBuckets(chats, 10, nowMs)).toEqual({
+    expect(getSidebarChatBuckets(chats, nowMs)).toEqual({
       collapsedChats: [chats[0]],
       remainingChats: [chats[1]],
     })
@@ -56,20 +56,20 @@ describe("getSidebarChatBuckets", () => {
       createChat(`chat-${index + 1}`, nowMs - (25 + index) * hourMs)
     ))
 
-    expect(getSidebarChatBuckets(chats, 10, nowMs)).toEqual({
+    expect(getSidebarChatBuckets(chats, nowMs)).toEqual({
       collapsedChats: chats.slice(0, 5),
       remainingChats: chats.slice(5),
     })
   })
 
-  test("keeps additional recent chats in the remaining slice when there are more than 10", () => {
+  test("does not move additional recent chats into the remaining slice", () => {
     const chats = Array.from({ length: 12 }, (_, index) => (
       createChat(`chat-${index + 1}`, nowMs - (index + 1) * hourMs)
     ))
 
-    expect(getSidebarChatBuckets(chats, 10, nowMs)).toEqual({
-      collapsedChats: chats.slice(0, 10),
-      remainingChats: chats.slice(10),
+    expect(getSidebarChatBuckets(chats, nowMs)).toEqual({
+      collapsedChats: chats,
+      remainingChats: [],
     })
   })
 })

@@ -34,6 +34,7 @@ import {
 } from "../../shared/types"
 import { markdownComponents } from "../components/messages/shared"
 import { ChatPreferenceControls } from "../components/chat-ui/ChatPreferenceControls"
+import { EDITOR_OPTIONS, EditorIcon } from "../components/editor-icons"
 import { Button, buttonVariants } from "../components/ui/button"
 import { Dialog, DialogBody, DialogContent, DialogFooter, DialogTitle } from "../components/ui/dialog"
 import { Input } from "../components/ui/input"
@@ -59,6 +60,7 @@ import {
   MAX_TERMINAL_SCROLLBACK,
   MIN_TERMINAL_MIN_COLUMN_WIDTH,
   MIN_TERMINAL_SCROLLBACK,
+  getDefaultEditorCommandTemplate,
   useTerminalPreferencesStore,
 } from "../stores/terminalPreferencesStore"
 import { useChatPreferencesStore } from "../stores/chatPreferencesStore"
@@ -105,13 +107,6 @@ const themeOptions = [
   { value: "light" as ThemePreference, label: "Light", icon: Sun },
   { value: "dark" as ThemePreference, label: "Dark", icon: Moon },
   { value: "system" as ThemePreference, label: "System", icon: Monitor },
-]
-
-const editorOptions: { value: EditorPreset; label: string }[] = [
-  { value: "cursor", label: "Cursor" },
-  { value: "vscode", label: "VS Code" },
-  { value: "windsurf", label: "Windsurf" },
-  { value: "custom", label: "Custom" },
 ]
 
 const chatSoundPreferenceOptions: { value: ChatSoundPreference; label: string }[] = [
@@ -688,6 +683,9 @@ export function SettingsPage() {
       return
     }
     setScrollbackLines(nextValue)
+    void handleWriteAppSettings({ terminal: { scrollbackLines: nextValue } }).catch((error) => {
+      setAppSettingsError(error instanceof Error ? error.message : "Unable to save terminal settings.")
+    })
   }
 
   function commitMinColumnWidth() {
@@ -697,6 +695,9 @@ export function SettingsPage() {
       return
     }
     setMinColumnWidth(nextValue)
+    void handleWriteAppSettings({ terminal: { minColumnWidth: nextValue } }).catch((error) => {
+      setAppSettingsError(error instanceof Error ? error.message : "Unable to save terminal settings.")
+    })
   }
 
   function handleNumberInputKeyDown(event: KeyboardEvent<HTMLInputElement>, commit: () => void) {
@@ -713,6 +714,29 @@ export function SettingsPage() {
 
   function commitEditorCommand() {
     setEditorCommandTemplate(editorCommandDraft)
+    void handleWriteAppSettings({ editor: { commandTemplate: editorCommandDraft } }).catch((error) => {
+      setAppSettingsError(error instanceof Error ? error.message : "Unable to save editor settings.")
+    })
+  }
+
+  function handleThemeChange(nextTheme: typeof theme) {
+    setTheme(nextTheme)
+    void handleWriteAppSettings({ theme: nextTheme }).catch((error) => {
+      setAppSettingsError(error instanceof Error ? error.message : "Unable to save theme settings.")
+    })
+  }
+
+  function handleEditorPresetChange(nextPreset: EditorPreset) {
+    setEditorPreset(nextPreset)
+    const commandTemplate = nextPreset === "custom" ? editorCommandTemplate : getDefaultEditorCommandTemplate(nextPreset)
+    void handleWriteAppSettings({
+      editor: {
+        preset: nextPreset,
+        commandTemplate,
+      },
+    }).catch((error) => {
+      setAppSettingsError(error instanceof Error ? error.message : "Unable to save editor settings.")
+    })
   }
 
   function handleChatSoundPreferenceChange(nextValue: ChatSoundPreference) {
@@ -721,6 +745,9 @@ export function SettingsPage() {
     }
 
     setChatSoundPreference(nextValue)
+    void handleWriteAppSettings({ chatSoundPreference: nextValue }).catch((error) => {
+      setAppSettingsError(error instanceof Error ? error.message : "Unable to save chat sound settings.")
+    })
     void playChatNotificationSound(chatSoundId, 1).catch(() => undefined)
   }
 
@@ -730,6 +757,9 @@ export function SettingsPage() {
     }
 
     setChatSoundId(nextValue)
+    void handleWriteAppSettings({ chatSoundId: nextValue }).catch((error) => {
+      setAppSettingsError(error instanceof Error ? error.message : "Unable to save chat sound settings.")
+    })
     void playChatNotificationSound(nextValue, 1).catch(() => undefined)
   }
 
@@ -749,6 +779,37 @@ export function SettingsPage() {
     } catch (error) {
       setTunnelError(error instanceof Error ? error.message : "Unable to save Cloudflare Tunnel settings.")
     }
+  }
+
+  function handleDefaultProviderChange(nextValue: "last_used" | AgentProvider) {
+    setDefaultProvider(nextValue)
+    void handleWriteAppSettings({ defaultProvider: nextValue }).catch((error) => {
+      setAppSettingsError(error instanceof Error ? error.message : "Unable to save provider settings.")
+    })
+  }
+
+  function handleProviderDefaultModelChange(provider: AgentProvider, model: string) {
+    setProviderDefaultModel(provider, model)
+    void handleWriteAppSettings({ providerDefaults: { [provider]: { model } } }).catch((error) => {
+      setAppSettingsError(error instanceof Error ? error.message : "Unable to save provider settings.")
+    })
+  }
+
+  function handleProviderDefaultModelOptionsChange(
+    provider: AgentProvider,
+    modelOptions: Partial<typeof providerDefaults[typeof provider]["modelOptions"]>
+  ) {
+    setProviderDefaultModelOptions(provider, modelOptions)
+    void handleWriteAppSettings({ providerDefaults: { [provider]: { modelOptions } } }).catch((error) => {
+      setAppSettingsError(error instanceof Error ? error.message : "Unable to save provider settings.")
+    })
+  }
+
+  function handleProviderDefaultPlanModeChange(provider: AgentProvider, planMode: boolean) {
+    setProviderDefaultPlanMode(provider, planMode)
+    void handleWriteAppSettings({ providerDefaults: { [provider]: { planMode } } }).catch((error) => {
+      setAppSettingsError(error instanceof Error ? error.message : "Unable to save provider settings.")
+    })
   }
 
   async function commitKeybindings() {
@@ -1076,7 +1137,7 @@ export function SettingsPage() {
                       >
                         <SegmentedControl
                           value={theme}
-                          onValueChange={setTheme}
+                          onValueChange={handleThemeChange}
                           options={themeOptions}
                           size="sm"
                         />
@@ -1130,21 +1191,24 @@ export function SettingsPage() {
 
                       <SettingsRow
                         title="Default Editor"
-                        description="Used by the navbar code button and local file links in chat"
+                        description="Used when opening transcript links or files from the git diff menu"
                         alignStart
                       >
                         <Select
                           value={editorPreset}
-                          onValueChange={(value) => setEditorPreset(value as EditorPreset)}
+                          onValueChange={(value) => handleEditorPresetChange(value as EditorPreset)}
                         >
                           <SelectTrigger className="min-w-[180px]">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
                             <SelectGroup>
-                              {editorOptions.map((option) => (
+                              {EDITOR_OPTIONS.map((option) => (
                                 <SelectItem key={option.value} value={option.value}>
-                                  {option.label}
+                                  <span className="flex items-center gap-2">
+                                    <EditorIcon preset={option.value} className="h-4 w-4 shrink-0" />
+                                    <span>{option.label}</span>
+                                  </span>
                                 </SelectItem>
                               ))}
                             </SelectGroup>
@@ -1341,7 +1405,7 @@ export function SettingsPage() {
                     >
                       <Select
                         value={defaultProvider}
-                        onValueChange={(value) => setDefaultProvider(value as "last_used" | AgentProvider)}
+                        onValueChange={(value) => handleDefaultProviderChange(value as "last_used" | AgentProvider)}
                       >
                         <SelectTrigger className="min-w-[180px]">
                           <SelectValue />
@@ -1375,17 +1439,17 @@ export function SettingsPage() {
                           model={providerDefaults.claude.model}
                           modelOptions={providerDefaults.claude.modelOptions}
                           onModelChange={(_, model) => {
-                            setProviderDefaultModel("claude", model)
+                            handleProviderDefaultModelChange("claude", model)
                           }}
                           onModelOptionChange={(change) => {
                             if (change.type === "claudeReasoningEffort") {
-                              setProviderDefaultModelOptions("claude", { reasoningEffort: change.effort })
+                              handleProviderDefaultModelOptionsChange("claude", { reasoningEffort: change.effort })
                             } else if (change.type === "contextWindow") {
-                              setProviderDefaultModelOptions("claude", { contextWindow: change.contextWindow })
+                              handleProviderDefaultModelOptionsChange("claude", { contextWindow: change.contextWindow })
                             }
                           }}
                           planMode={providerDefaults.claude.planMode}
-                          onPlanModeChange={(planMode) => setProviderDefaultPlanMode("claude", planMode)}
+                          onPlanModeChange={(planMode) => handleProviderDefaultPlanModeChange("claude", planMode)}
                           includePlanMode
                           className="justify-start flex-wrap"
                         />
@@ -1406,17 +1470,17 @@ export function SettingsPage() {
                           model={providerDefaults.codex.model}
                           modelOptions={providerDefaults.codex.modelOptions}
                           onModelChange={(_, model) => {
-                            setProviderDefaultModel("codex", model)
+                            handleProviderDefaultModelChange("codex", model)
                           }}
                           onModelOptionChange={(change) => {
                             if (change.type === "codexReasoningEffort") {
-                              setProviderDefaultModelOptions("codex", { reasoningEffort: change.effort })
+                              handleProviderDefaultModelOptionsChange("codex", { reasoningEffort: change.effort })
                             } else if (change.type === "fastMode") {
-                              setProviderDefaultModelOptions("codex", { fastMode: change.fastMode })
+                              handleProviderDefaultModelOptionsChange("codex", { fastMode: change.fastMode })
                             }
                           }}
                           planMode={providerDefaults.codex.planMode}
-                          onPlanModeChange={(planMode) => setProviderDefaultPlanMode("codex", planMode)}
+                          onPlanModeChange={(planMode) => handleProviderDefaultPlanModeChange("codex", planMode)}
                           includePlanMode
                           className="justify-start flex-wrap"
                         />

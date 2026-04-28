@@ -1,8 +1,9 @@
 import { describe, expect, test } from "bun:test"
-import { getAppAuthStateFromStatus, shouldRedirectToChangelog, shouldRetryAuthStatusRequest } from "./App"
+import { getAppAuthStateFromStatus, shouldPlayChatNotificationSound, shouldRedirectToChangelog, shouldRetryAuthStatusRequest } from "./App"
 import { getChatNotificationSnapshot, getChatSoundBurstCount, getNotificationTitleCount } from "./chatNotifications"
+import { DEFAULT_SIDEBAR_WIDTH, MAX_SIDEBAR_WIDTH, MIN_SIDEBAR_WIDTH, clampSidebarWidth } from "./KannaSidebar"
 import { isBrowserUnfocused, shouldPlayChatSound } from "../lib/chatSounds"
-import type { SidebarChatRow } from "../../shared/types"
+import type { AppSettingsSnapshot, SidebarChatRow } from "../../shared/types"
 
 function createProjectGroup(chats: SidebarChatRow[]) {
   return {
@@ -22,6 +23,15 @@ describe("shouldRedirectToChangelog", () => {
     expect(shouldRedirectToChangelog("/settings/general", "0.12.0", "0.11.0")).toBe(false)
     expect(shouldRedirectToChangelog("/chat/1", "0.12.0", "0.11.0")).toBe(false)
     expect(shouldRedirectToChangelog("/", "0.12.0", "0.12.0")).toBe(false)
+  })
+})
+
+describe("clampSidebarWidth", () => {
+  test("keeps sidebar resizing within bounds", () => {
+    expect(clampSidebarWidth(MIN_SIDEBAR_WIDTH - 1)).toBe(MIN_SIDEBAR_WIDTH)
+    expect(clampSidebarWidth(MAX_SIDEBAR_WIDTH + 1)).toBe(MAX_SIDEBAR_WIDTH)
+    expect(clampSidebarWidth(333.6)).toBe(334)
+    expect(clampSidebarWidth(Number.NaN)).toBe(DEFAULT_SIDEBAR_WIDTH)
   })
 })
 
@@ -205,5 +215,13 @@ describe("chat sound helpers", () => {
     expect(shouldPlayChatSound("always", focusedDoc)).toBe(true)
     expect(shouldPlayChatSound("unfocused", hiddenDoc)).toBe(true)
     expect(shouldPlayChatSound("unfocused", focusedDoc)).toBe(false)
+  })
+
+  test("blocks notification sounds until app settings are hydrated", () => {
+    const hiddenDoc = { visibilityState: "hidden" as const, hasFocus: () => false }
+
+    expect(shouldPlayChatNotificationSound(null, "always", hiddenDoc)).toBe(false)
+    expect(shouldPlayChatNotificationSound({} as AppSettingsSnapshot, "never", hiddenDoc)).toBe(false)
+    expect(shouldPlayChatNotificationSound({} as AppSettingsSnapshot, "always", hiddenDoc)).toBe(true)
   })
 })

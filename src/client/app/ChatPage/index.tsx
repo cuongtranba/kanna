@@ -463,6 +463,8 @@ export function ChatPage() {
   const setRightSidebarSize = useRightSidebarStore((store) => store.setSize)
   const scrollback = useTerminalPreferencesStore((store) => store.scrollbackLines)
   const minColumnWidth = useTerminalPreferencesStore((store) => store.minColumnWidth)
+  const editorPreset = useTerminalPreferencesStore((store) => store.editorPreset)
+  const editorCommandTemplate = useTerminalPreferencesStore((store) => store.editorCommandTemplate)
   const resolvedKeybindings = useMemo(() => getResolvedKeybindings(state.keybindings), [state.keybindings])
   const baseContextWindowSnapshotRef = useRef<ReturnType<typeof deriveLatestContextWindowSnapshot>>(null)
   const contextWindowSnapshot = useMemo(() => {
@@ -653,8 +655,8 @@ export function ChatPage() {
     void state.handleCancel()
   }, [state.handleCancel])
 
-  const handleOpenExternal = useCallback((action: "open_finder" | "open_editor" | "open_terminal") => {
-    void state.handleOpenExternal(action)
+  const handleOpenExternal = useCallback<NonNullable<ComponentProps<typeof ChatNavbar>["onOpenExternal"]>>((action, editor) => {
+    void state.handleOpenExternal(action, editor)
   }, [state.handleOpenExternal])
 
   const handleRemoveTerminal = useCallback((currentProjectId: string, terminalId: string) => {
@@ -911,7 +913,13 @@ export function ChatPage() {
           rightSidebarVisible={showRightSidebar}
           onToggleRightSidebar={projectId ? handleToggleRightSidebar : undefined}
           onOpenExternal={handleOpenExternal}
-          editorLabel={state.editorLabel}
+          onExportTranscript={state.activeChatId ? () => void state.handleShareChat(state.activeChatId) : undefined}
+          canExportTranscript={Boolean(state.activeChatId) && !state.isExportingStandalone}
+          isExportingTranscript={state.isExportingStandalone}
+          exportTranscriptComplete={state.standaloneShareComplete}
+          editorPreset={editorPreset}
+          editorCommandTemplate={editorCommandTemplate}
+          platform={state.localProjects?.machine.platform}
           finderShortcut={resolvedKeybindings.bindings.openInFinder}
           editorShortcut={resolvedKeybindings.bindings.openInEditor}
           terminalShortcut={resolvedKeybindings.bindings.toggleEmbeddedTerminal}
@@ -939,6 +947,9 @@ export function ChatPage() {
           onSteerQueuedMessage={state.handleSteerQueuedMessage}
           onRemoveQueuedMessage={state.handleRemoveQueuedMessage}
           onOpenLocalLink={state.handleOpenLocalLink}
+          editorPreset={editorPreset}
+          editorCommandTemplate={editorCommandTemplate}
+          platform={state.localProjects?.machine.platform}
           onAskUserQuestionSubmit={state.handleAskUserQuestion}
           onExitPlanModeConfirm={state.handleExitPlanMode}
           schedules={state.chatSnapshot?.schedules ?? EMPTY_SCHEDULES}

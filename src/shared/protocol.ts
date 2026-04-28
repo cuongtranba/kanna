@@ -1,5 +1,6 @@
 import type {
   AppSettingsSnapshot,
+  AppSettingsPatch,
   AgentProvider,
   ChatAttachment,
   ChatDiffSnapshot,
@@ -12,10 +13,13 @@ import type {
   LocalProjectsSnapshot,
   ModelOptions,
   SidebarData,
+  StandaloneTranscriptAttachmentMode,
+  StandaloneTranscriptExportResult,
   UpdateSnapshot,
+  EditorPreset,
 } from "./types"
 
-export type EditorPreset = "cursor" | "vscode" | "windsurf" | "custom"
+export type { EditorPreset }
 
 export interface EditorOpenSettings {
   preset: EditorPreset
@@ -27,6 +31,7 @@ export type SubscriptionTopic =
   | { type: "local-projects" }
   | { type: "update" }
   | { type: "keybindings" }
+  | { type: "app-settings" }
   | { type: "chat"; chatId: string; recentLimit?: number }
   | { type: "project-git"; projectId: string }
   | { type: "terminal"; terminalId: string }
@@ -65,6 +70,7 @@ export type ClientCommand =
   | { type: "settings.readAppSettings" }
   | { type: "settings.writeAppSettings"; analyticsEnabled: boolean }
   | { type: "appSettings.setCloudflareTunnel"; patch: Partial<CloudflareTunnelSettings> }
+  | { type: "settings.writeAppSettingsPatch"; patch: AppSettingsPatch }
   | { type: "settings.readLlmProvider" }
   | {
       type: "settings.writeLlmProvider"
@@ -83,7 +89,7 @@ export type ClientCommand =
   | {
       type: "system.openExternal"
       localPath: string
-      action: "open_finder" | "open_terminal" | "open_editor"
+      action: "open_finder" | "open_terminal" | "open_editor" | "open_preview" | "open_default"
       line?: number
       column?: number
       editor?: EditorOpenSettings
@@ -91,6 +97,8 @@ export type ClientCommand =
   | { type: "chat.create"; projectId: string }
   | { type: "chat.fork"; chatId: string }
   | { type: "chat.rename"; chatId: string; title: string }
+  | { type: "chat.archive"; chatId: string }
+  | { type: "chat.unarchive"; chatId: string }
   | { type: "chat.delete"; chatId: string }
   | { type: "chat.setDraftProtection"; chatIds: string[] }
   | { type: "chat.markRead"; chatId: string }
@@ -178,6 +186,12 @@ export type ClientCommand =
   | { type: "chat.ignoreDiffFile"; chatId: string; path: string }
   | { type: "chat.cancel"; chatId: string }
   | { type: "chat.stopDraining"; chatId: string }
+  | {
+      type: "chat.exportStandalone"
+      chatId: string
+      theme: "light" | "dark"
+      attachmentMode: StandaloneTranscriptAttachmentMode
+    }
   | { type: "chat.loadHistory"; chatId: string; beforeCursor: string; limit: number }
   | { type: "chat.respondTool"; chatId: string; toolUseId: string; result: unknown }
   | {
@@ -212,6 +226,8 @@ export type ClientCommand =
   | { type: "terminal.resize"; terminalId: string; cols: number; rows: number }
   | { type: "terminal.close"; terminalId: string }
 
+export type OpenExternalAction = Extract<ClientCommand, { type: "system.openExternal" }>["action"]
+
 export type ClientEnvelope =
   | { v: 1; type: "subscribe"; id: string; topic: SubscriptionTopic }
   | { v: 1; type: "unsubscribe"; id: string }
@@ -231,7 +247,7 @@ export type ServerSnapshot =
 export type ServerEnvelope =
   | { v: 1; type: "snapshot"; id: string; snapshot: ServerSnapshot }
   | { v: 1; type: "event"; id: string; event: TerminalEvent }
-  | { v: 1; type: "ack"; id: string; result?: unknown | ChatHistoryPage }
+  | { v: 1; type: "ack"; id: string; result?: unknown | ChatHistoryPage | StandaloneTranscriptExportResult }
   | { v: 1; type: "error"; id?: string; message: string }
 
 export function isClientEnvelope(value: unknown): value is ClientEnvelope {

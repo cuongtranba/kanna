@@ -4,6 +4,7 @@ import type { ProcessedToolCall, AskUserQuestionItem, AskUserQuestionOption } fr
 import type { AskUserQuestionAnswerMap } from "../../../shared/types"
 import { Button } from "../ui/button"
 import { cn } from "../../lib/utils"
+import { useTranscriptRenderOptions } from "./render-context"
 
 interface Props {
   message: Extract<ProcessedToolCall, { toolKind: "ask_user_question" }>
@@ -147,6 +148,7 @@ function getQuestionKey(question: AskUserQuestionItem): string {
 }
 
 export function AskUserQuestionMessage({ message, onSubmit, isLatest }: Props) {
+  const renderOptions = useTranscriptRenderOptions()
   const questions = message.input.questions
   const isComplete = !!message.result
   const savedAnswers = parseAnswersFromResult(message.result)
@@ -292,6 +294,33 @@ export function AskUserQuestionMessage({ message, onSubmit, isLatest }: Props) {
               </div>
             )
           })}
+        </div>
+      </div>
+    )
+  }
+
+  if (renderOptions.readonly) {
+    return (
+      <div className="w-full">
+        <div className="rounded-2xl border border-border overflow-hidden">
+          <div className="font-medium text-sm p-3 px-4 pr-5 bg-muted border-b border-border flex flex-row items-center justify-between gap-3">
+            <p>Question{questions.length !== 1 ? "s" : ""}</p>
+            <p className="text-muted-foreground">Awaiting response</p>
+          </div>
+          {questions.map((question, index) => (
+            <div
+              key={getQuestionKey(question)}
+              className={cn(
+                "w-full p-3 pt-2.5 pl-4 pr-5 bg-background flex items-center justify-between gap-3",
+                index < questions.length - 1 && "border-b border-border",
+              )}
+            >
+              <div className="text-sm text-pretty">{question.question}</div>
+              <div className="max-w-[50%] text-right text-xs text-muted-foreground text-pretty">
+                {question.options?.map((option) => option.label).join(", ") || "Freeform response"}
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     )

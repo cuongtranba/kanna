@@ -20,8 +20,11 @@
   "include": [
     "scripts/**/*.ts",
     "vite.config.ts",
+    "vite.export-viewer.config.ts",
     "src/main.tsx",
     "src/index.css",
+    "src/export-viewer/**/*.ts",
+    "src/export-viewer/**/*.tsx",
     "src/shared/**/*.ts",
     "src/server/**/*.ts",
     "src/client/app/**/*.ts",

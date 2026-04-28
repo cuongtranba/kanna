@@ -12,6 +12,7 @@ export interface ChatRecord {
   createdAt: number
   updatedAt: number
   deletedAt?: number
+  archivedAt?: number
   unread: boolean
   provider: AgentProvider | null
   planMode: boolean
@@ -82,6 +83,18 @@ export type ChatEvent =
   | {
       v: 3
       type: "chat_deleted"
+      timestamp: number
+      chatId: string
+    }
+  | {
+      v: 3
+      type: "chat_archived"
+      timestamp: number
+      chatId: string
+    }
+  | {
+      v: 3
+      type: "chat_unarchived"
       timestamp: number
       chatId: string
     }
