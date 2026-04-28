@@ -58,6 +58,7 @@ That's it. Kanna opens in your browser at [`localhost:3210`](http://localhost:32
 - **Auto-generated titles** — chat titles generated in the background via Claude Haiku
 - **Session resumption** — resume agent sessions with full context preservation
 - **WebSocket-driven** — real-time subscription model with reactive state broadcasting
+- **Cloudflare tunnel auto-expose** — opt-in detector watches Bash tool stdout for listening ports and offers an inline "expose via Cloudflare" card per port; spawns `cloudflared tunnel --url` quick tunnels on demand
 
 ## Architecture
 
@@ -176,6 +177,20 @@ http://localhost:3210
 With `--cloudflared <token>`, Kanna runs `cloudflared tunnel run --token <token> --url <local-url>`.
 If Kanna can detect the public hostname from cloudflared output, it prints the same QR/public/local block.
 If not, it keeps the tunnel running, warns that no public hostname was detected, and prints the local URL so you can use the hostname already configured for that tunnel in Cloudflare.
+
+### Auto-expose detected ports
+
+When the agent runs a Bash command in a chat (`bun run dev`, `go run`, `uvicorn`, etc.), Kanna can detect any listening port from the command's stdout and offer to expose it through a Cloudflare quick tunnel without leaving the chat.
+
+Enable from **Settings → Cloudflare Tunnel**:
+
+- **Toggle** — opt-in (off by default)
+- **Mode** — `Always ask` (one card per detected port; click Expose to spawn) or `Auto-expose` (spawn immediately on detection)
+- **`cloudflared` path** — defaults to `cloudflared` on `$PATH`
+
+Each detected port shows up inline in the transcript. Click **Expose**, watch the spinner until cloudflared returns the `*.trycloudflare.com` URL, then click **Stop** when done. Tunnels are also stopped automatically when the chat closes or the server restarts.
+
+Requires the `cloudflared` binary installed locally — `brew install cloudflared` on macOS, or see [Cloudflare's downloads](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/).
 
 ## Development
 
