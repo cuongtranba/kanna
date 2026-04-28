@@ -126,6 +126,20 @@ describe("parseResetFromText", () => {
   test("returns null when no 'resets' token", () => {
     expect(parseResetFromText("nothing interesting", Date.now())).toBeNull()
   })
+
+  test("parses 'resets 2:40pm (Asia/Saigon)' with minutes", () => {
+    const now = Date.parse("2026-04-23T05:00:00Z") // 12:00 Saigon
+    const parsed = parseResetFromText("You've hit your limit · resets 2:40pm (Asia/Saigon)", now)
+    expect(parsed).not.toBeNull()
+    expect(parsed!.tz).toBe("Asia/Saigon")
+    expect(new Date(parsed!.resetAt).toISOString()).toBe("2026-04-23T07:40:00.000Z")
+  })
+
+  test("parses 'resets 12:30am (UTC)' with minutes wraps next day", () => {
+    const now = Date.parse("2026-04-23T10:00:00Z")
+    const parsed = parseResetFromText("resets 12:30am (UTC)", now)
+    expect(new Date(parsed!.resetAt).toISOString()).toBe("2026-04-24T00:30:00.000Z")
+  })
 })
 
 describe("ClaudeLimitDetector.detectFromResultText", () => {

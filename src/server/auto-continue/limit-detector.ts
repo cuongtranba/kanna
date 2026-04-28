@@ -64,12 +64,14 @@ function zonedWallClockToUtcMs(
 
 export function parseResetFromText(text: string, nowMs: number = Date.now()): { resetAt: number; tz: string } | null {
   if (typeof text !== "string") return null
-  const match = text.match(/resets\s+(\d{1,2})(am|pm)\s*\(([^)]+)\)/i)
+  const match = text.match(/resets\s+(\d{1,2})(?::(\d{2}))?(am|pm)\s*\(([^)]+)\)/i)
   if (!match) return null
   const hour12 = Number(match[1])
-  const meridiem = match[2].toLowerCase()
-  const tz = match[3].trim()
+  const minute = match[2] ? Number(match[2]) : 0
+  const meridiem = match[3].toLowerCase()
+  const tz = match[4].trim()
   if (!Number.isFinite(hour12) || hour12 < 1 || hour12 > 12) return null
+  if (!Number.isFinite(minute) || minute < 0 || minute > 59) return null
   const hour24 = meridiem === "pm"
     ? (hour12 === 12 ? 12 : hour12 + 12)
     : (hour12 === 12 ? 0 : hour12)
@@ -89,11 +91,11 @@ export function parseResetFromText(text: string, nowMs: number = Date.now()): { 
   } catch {
     return null
   }
-  let resetAt = zonedWallClockToUtcMs(tzYear, tzMonth, tzDay, hour24, 0, tz)
+  let resetAt = zonedWallClockToUtcMs(tzYear, tzMonth, tzDay, hour24, minute, tz)
   if (resetAt <= nowMs) {
     const next = new Date(Date.UTC(tzYear, tzMonth - 1, tzDay) + 24 * 3600_000)
     resetAt = zonedWallClockToUtcMs(
-      next.getUTCFullYear(), next.getUTCMonth() + 1, next.getUTCDate(), hour24, 0, tz,
+      next.getUTCFullYear(), next.getUTCMonth() + 1, next.getUTCDate(), hour24, minute, tz,
     )
   }
   return { resetAt, tz }
