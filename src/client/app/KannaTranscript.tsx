@@ -419,6 +419,10 @@ const TranscriptSingleRow = memo(function TranscriptSingleRow({
         rendered = <TextMessage key={message.id} message={message} />
         break
       case "tool":
+        if (message.isError) {
+          rendered = <ToolCallMessage key={message.id} message={message} isLoading={isLoading} localPath={localPath} />
+          break
+        }
         if (message.toolKind === "ask_user_question") {
           rendered = (
             <AskUserQuestionMessage

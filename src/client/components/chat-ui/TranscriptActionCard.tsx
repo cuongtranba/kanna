@@ -47,15 +47,18 @@ export function TranscriptActionCard({
   actions = [],
 }: TranscriptActionCardProps) {
   const [busyId, setBusyId] = useState<string | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
 
   const handleClick = useCallback(
     async (action: CardAction) => {
       if (busyId) return
+      setActionError(null)
       let result: void | Promise<void>
       try {
         result = action.onClick()
       } catch (error) {
         console.error("[transcript-action-card] sync click threw", error)
+        setActionError(error instanceof Error ? error.message : String(error))
         return
       }
       if (!(result instanceof Promise)) return
@@ -64,6 +67,7 @@ export function TranscriptActionCard({
         await result
       } catch (error) {
         console.error("[transcript-action-card] async click rejected", error)
+        setActionError(error instanceof Error ? error.message : String(error))
       } finally {
         setBusyId(null)
       }
@@ -94,6 +98,10 @@ export function TranscriptActionCard({
 
       {errorMessage ? (
         <div className="text-destructive text-xs leading-snug">{errorMessage}</div>
+      ) : null}
+
+      {actionError ? (
+        <div className="text-destructive text-xs leading-snug" role="alert">{actionError}</div>
       ) : null}
 
       {actions.length > 0 ? (
