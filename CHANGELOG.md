@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.40.0](https://github.com/cuongtranba/kanna/compare/v0.39.2...v0.40.0) (2026-04-29)
+
+
+### Features
+
+* **auth:** persist sessions across restart and browser close ([#10](https://github.com/cuongtranba/kanna/issues/10)) ([2734f51](https://github.com/cuongtranba/kanna/commit/2734f51a582ebf2d5895a2f7e8021e8274a99d4e))
+
+
+### Bug Fixes
+
+* **chat:** surface tool and action card errors in UI ([8533147](https://github.com/cuongtranba/kanna/commit/85331479c26018a5c07871ed0b3ffcf1fffc204a))
+* **server:** fall back to bundled cloudflared binary ([d539bae](https://github.com/cuongtranba/kanna/commit/d539bae7d87ccb3c7e8490dc1ac03d4b12e7dd07))
+
 ## [0.39.2](https://github.com/cuongtranba/kanna/compare/v0.39.1...v0.39.2) (2026-04-29)
 
 
