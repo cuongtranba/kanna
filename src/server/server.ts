@@ -1,7 +1,8 @@
 import path from "node:path"
 import { stat } from "node:fs/promises"
+import { bin as cloudflaredBin } from "cloudflared"
 import { APP_NAME, getRuntimeProfile } from "../shared/branding"
-import type { ChatAttachment } from "../shared/types"
+import { CLOUDFLARE_TUNNEL_DEFAULTS, type ChatAttachment } from "../shared/types"
 import type { ShareMode } from "../shared/share"
 import { createAuthManager } from "./auth"
 import { EventStore } from "./event-store"
@@ -27,6 +28,13 @@ import { ScheduleManager } from "./auto-continue/schedule-manager"
 import { TunnelGateway } from "./cloudflare-tunnel/gateway"
 import { TunnelManager } from "./cloudflare-tunnel/tunnel-manager"
 import { TunnelLifecycle } from "./cloudflare-tunnel/lifecycle"
+
+function resolveCloudflaredPath(settingsPath: string): string {
+  if (settingsPath !== CLOUDFLARE_TUNNEL_DEFAULTS.cloudflaredPath) {
+    return settingsPath
+  }
+  return cloudflaredBin
+}
 
 const MAX_UPLOAD_FILES = 50
 const MAX_UPLOAD_SIZE_BYTES = 100 * 1024 * 1024
@@ -159,7 +167,7 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     router.scheduleChatStateBroadcast(chatId)
   }
   const tunnelManager = new TunnelManager({
-    cloudflaredPath: appSettings.getSnapshot().cloudflareTunnel.cloudflaredPath,
+    cloudflaredPath: resolveCloudflaredPath(appSettings.getSnapshot().cloudflareTunnel.cloudflaredPath),
     onEvent: async (event) => {
       await store.appendTunnelEvent(event)
       broadcastTunnel(event.chatId)
