@@ -6,6 +6,7 @@ export const PACKAGE_NAME = "@cuongtranba/kanna"
 export const RUNTIME_PROFILE_ENV_VAR = "KANNA_RUNTIME_PROFILE"
 // Read version from package.json — JSON import works in both Bun and Vite
 import pkg from "../../package.json"
+export const APP_VERSION = pkg.version
 export const SDK_CLIENT_APP = `kanna/${pkg.version}`
 export const LOG_PREFIX = "[kanna]"
 export const DEFAULT_NEW_PROJECT_ROOT = `~/${APP_NAME}`

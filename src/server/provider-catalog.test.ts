@@ -57,6 +57,7 @@ describe("provider catalog normalization", () => {
   })
 
   test("normalizes server model ids through the shared alias catalog", () => {
+    expect(normalizeServerModel("codex")).toBe("gpt-5.5")
     expect(normalizeServerModel("claude", "opus")).toBe("claude-opus-4-7")
     expect(normalizeServerModel("codex", "gpt-5-codex")).toBe("gpt-5.3-codex")
   })

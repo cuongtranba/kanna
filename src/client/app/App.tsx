@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { Navigate, Outlet, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom"
 import { Flower } from "lucide-react"
+import { StandaloneShareDialog } from "../components/chat-ui/StandaloneShareDialog"
 import { AppDialogProvider, useAppDialog } from "../components/ui/app-dialog"
 import { Button } from "../components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card"
@@ -8,6 +9,7 @@ import { Input } from "../components/ui/input"
 import { TooltipProvider } from "../components/ui/tooltip"
 import { APP_NAME, SDK_CLIENT_APP } from "../../shared/branding"
 import { useChatSoundPreferencesStore } from "../stores/chatSoundPreferencesStore"
+import type { ChatSoundPreference } from "../stores/chatSoundPreferencesStore"
 import { playChatNotificationSound, shouldPlayChatSound } from "../lib/chatSounds"
 import { getChatSoundBurstCount, getNotificationTitleCount } from "./chatNotifications"
 import { KannaSidebar } from "./KannaSidebar"
@@ -15,6 +17,7 @@ import { ChatPage } from "./ChatPage"
 import { LocalProjectsPage } from "./LocalProjectsPage"
 import { SettingsPage } from "./SettingsPage"
 import { useKannaState } from "./useKannaState"
+import type { AppSettingsSnapshot } from "../../shared/types"
 
 const VERSION_SEEN_STORAGE_KEY = "kanna:last-seen-version"
 const AUTH_STATUS_RETRY_DELAY_MS = 500
@@ -184,6 +187,14 @@ export function shouldRedirectToChangelog(pathname: string, currentVersion: stri
   return pathname === "/" && Boolean(currentVersion) && seenVersion !== currentVersion
 }
 
+export function shouldPlayChatNotificationSound(
+  appSettings: AppSettingsSnapshot | null,
+  preference: ChatSoundPreference,
+  doc: Pick<Document, "visibilityState" | "hasFocus"> = document
+) {
+  return Boolean(appSettings) && shouldPlayChatSound(preference, doc)
+}
+
 function KannaLayout() {
   const location = useLocation()
   const navigate = useNavigate()
@@ -201,6 +212,18 @@ function KannaLayout() {
   const handleSidebarForkChat = useCallback((chat: Parameters<typeof state.handleForkChat>[0]) => {
     void state.handleForkChat(chat)
   }, [state.handleForkChat])
+  const handleSidebarRenameChat = useCallback((chat: Parameters<typeof state.handleRenameChat>[0]) => {
+    void state.handleRenameChat(chat)
+  }, [state.handleRenameChat])
+  const handleSidebarShareChat = useCallback((chatId: string) => {
+    void state.handleShareChat(chatId)
+  }, [state.handleShareChat])
+  const handleSidebarArchiveChat = useCallback((chat: Parameters<typeof state.handleArchiveChat>[0]) => {
+    void state.handleArchiveChat(chat)
+  }, [state.handleArchiveChat])
+  const handleOpenArchivedChat = useCallback((chatId: string) => {
+    void state.handleOpenArchivedChat(chatId)
+  }, [state.handleOpenArchivedChat])
   const handleOpenAddProjectModal = useCallback(() => {
     state.openAddProjectModal()
   }, [state])
@@ -213,9 +236,9 @@ function KannaLayout() {
   const handleSidebarOpenExternalPath = useCallback((action: "open_finder" | "open_editor", localPath: string) => {
     void state.handleOpenExternalPath(action, localPath)
   }, [state.handleOpenExternalPath])
-  const handleSidebarRemoveProject = useCallback((projectId: string) => {
-    void state.handleRemoveProject(projectId)
-  }, [state.handleRemoveProject])
+  const handleSidebarHideProject = useCallback((projectId: string) => {
+    void state.handleHideProject(projectId)
+  }, [state.handleHideProject])
   const handleSidebarReorderProjectGroups = useCallback((projectIds: string[]) => {
     void state.handleReorderProjectGroups(projectIds)
   }, [state.handleReorderProjectGroups])
@@ -258,12 +281,16 @@ function KannaLayout() {
       onForkChat={handleSidebarForkChat}
       currentProjectId={state.activeProjectId}
       keybindings={state.keybindings}
+      onRenameChat={handleSidebarRenameChat}
+      onShareChat={handleSidebarShareChat}
+      onArchiveChat={handleSidebarArchiveChat}
+      onOpenArchivedChat={handleOpenArchivedChat}
       onDeleteChat={handleSidebarDeleteChat}
       onOpenAddProjectModal={handleOpenAddProjectModal}
       onImportClaudeSessions={handleImportClaudeSessions}
       onCopyPath={handleSidebarCopyPath}
       onOpenExternalPath={handleSidebarOpenExternalPath}
-      onRemoveProject={handleSidebarRemoveProject}
+      onHideProject={handleSidebarHideProject}
       onReorderProjectGroups={handleSidebarReorderProjectGroups}
       editorLabel={state.editorLabel}
       updateSnapshot={state.updateSnapshot}
@@ -273,10 +300,15 @@ function KannaLayout() {
     handleImportClaudeSessions,
     handleSidebarCopyPath,
     handleSidebarCreateChat,
+    handleSidebarArchiveChat,
     handleSidebarDeleteChat,
+    handleOpenArchivedChat,
+    handleSidebarForkChat,
     handleSidebarOpenExternalPath,
+    handleSidebarRenameChat,
+    handleSidebarShareChat,
     handleSidebarReorderProjectGroups,
-    handleSidebarRemoveProject,
+    handleSidebarHideProject,
     showMobileOpenButton,
     state.activeChatId,
     state.activeProjectId,
@@ -333,15 +365,26 @@ function KannaLayout() {
     previousSidebarDataRef.current = state.sidebarData
 
     if (burstCount <= 0) return
-    if (!shouldPlayChatSound(chatSoundPreference)) return
+    if (!shouldPlayChatNotificationSound(state.appSettings, chatSoundPreference)) return
 
     void playChatNotificationSound(chatSoundId, burstCount).catch(() => undefined)
-  }, [chatSoundId, chatSoundPreference, state.sidebarData])
+  }, [chatSoundId, chatSoundPreference, state.appSettings, state.sidebarData])
 
   return (
     <div className="flex h-[100dvh] min-h-[100dvh] overflow-hidden">
       {sidebarElement}
       <Outlet context={state} />
+      <StandaloneShareDialog
+        open={Boolean(state.standaloneShareUrl)}
+        shareUrl={state.standaloneShareUrl ?? ""}
+        onOpenChange={(open) => {
+          if (!open) {
+            state.handleCloseStandaloneShareDialog()
+          }
+        }}
+        onOpenLink={state.handleOpenStandaloneShareLink}
+        onCopyLink={state.handleCopyStandaloneShareLink}
+      />
     </div>
   )
 }

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { parseLocalFileLink } from "./pathUtils"
+import { parseLocalFileLink, shouldOpenLocalFileLinkInEditor } from "./pathUtils"
 
 describe("parseLocalFileLink", () => {
   test("parses an absolute file path with a line fragment", () => {
@@ -59,5 +59,21 @@ describe("parseLocalFileLink", () => {
 
   test("does not treat web links as local file links", () => {
     expect(parseLocalFileLink("https://example.com")).toBeNull()
+  })
+})
+
+describe("shouldOpenLocalFileLinkInEditor", () => {
+  test("opens source, markdown, and text files in the editor", () => {
+    expect(shouldOpenLocalFileLinkInEditor("/Users/jake/Projects/kanna/src/app.ts")).toBe(true)
+    expect(shouldOpenLocalFileLinkInEditor("/Users/jake/Projects/kanna/README.md")).toBe(true)
+    expect(shouldOpenLocalFileLinkInEditor("/Users/jake/Projects/kanna/notes.txt")).toBe(true)
+    expect(shouldOpenLocalFileLinkInEditor("/Users/jake/Projects/kanna/.gitignore")).toBe(true)
+  })
+
+  test("opens media and document files in the default app", () => {
+    expect(shouldOpenLocalFileLinkInEditor("/Users/jake/Projects/kanna/shot.png")).toBe(false)
+    expect(shouldOpenLocalFileLinkInEditor("/Users/jake/Projects/kanna/movie.mp4")).toBe(false)
+    expect(shouldOpenLocalFileLinkInEditor("/Users/jake/Projects/kanna/report.docx")).toBe(false)
+    expect(shouldOpenLocalFileLinkInEditor("/Users/jake/Projects/kanna/archive.zip")).toBe(false)
   })
 })

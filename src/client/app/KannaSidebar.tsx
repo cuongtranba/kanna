@@ -1,9 +1,12 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
 import { Download, Flower, Loader2, PanelLeft, X, Menu, Plus, Settings } from "lucide-react"
 import { useLocation, useNavigate } from "react-router-dom"
 import { APP_NAME } from "../../shared/branding"
 import { Button } from "../components/ui/button"
 import { useAppDialog } from "../components/ui/app-dialog"
+import { Dialog, DialogBody, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../components/ui/dialog"
+import { formatSidebarAgeLabel } from "../lib/formatters"
+import { getSidebarChatTimestamp } from "../lib/sidebarChats"
 import { cn } from "../lib/utils"
 import { ChatRow } from "../components/chat-ui/sidebar/ChatRow"
 import { LocalProjectsSection } from "../components/chat-ui/sidebar/LocalProjectsSection"
@@ -17,6 +20,27 @@ import {
   isSidebarModifierShortcut,
   shouldShowSidebarNumberJumpHints,
 } from "./sidebarNumberJump"
+
+const SIDEBAR_WIDTH_STORAGE_KEY = "kanna:sidebar-width"
+export const DEFAULT_SIDEBAR_WIDTH = 275
+export const MIN_SIDEBAR_WIDTH = 220
+export const MAX_SIDEBAR_WIDTH = 520
+
+export function clampSidebarWidth(width: number) {
+  if (!Number.isFinite(width)) return DEFAULT_SIDEBAR_WIDTH
+  return Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, Math.round(width)))
+}
+
+function readStoredSidebarWidth() {
+  if (typeof window === "undefined") return DEFAULT_SIDEBAR_WIDTH
+  const stored = window.localStorage.getItem(SIDEBAR_WIDTH_STORAGE_KEY)
+  return stored ? clampSidebarWidth(Number(stored)) : DEFAULT_SIDEBAR_WIDTH
+}
+
+function persistSidebarWidth(width: number) {
+  if (typeof window === "undefined") return
+  window.localStorage.setItem(SIDEBAR_WIDTH_STORAGE_KEY, String(clampSidebarWidth(width)))
+}
 
 interface KannaSidebarProps {
   data: SidebarData
@@ -34,12 +58,16 @@ interface KannaSidebarProps {
   onForkChat: (chat: SidebarChatRow) => void
   currentProjectId: string | null
   keybindings: KeybindingsSnapshot | null
+  onRenameChat: (chat: SidebarChatRow) => void
+  onShareChat: (chatId: string) => void
+  onArchiveChat: (chat: SidebarChatRow) => void
+  onOpenArchivedChat: (chatId: string) => void
   onDeleteChat: (chat: SidebarChatRow) => void
   onOpenAddProjectModal: () => void
   onImportClaudeSessions?: () => Promise<void>
   onCopyPath: (localPath: string) => void
   onOpenExternalPath: (action: "open_finder" | "open_editor", localPath: string) => void
-  onRemoveProject: (projectId: string) => void
+  onHideProject: (projectId: string) => void
   onReorderProjectGroups: (projectIds: string[]) => void
   editorLabel: string
   updateSnapshot: UpdateSnapshot | null
@@ -61,12 +89,16 @@ function KannaSidebarImpl({
   onForkChat,
   currentProjectId,
   keybindings,
+  onRenameChat,
+  onShareChat,
+  onArchiveChat,
+  onOpenArchivedChat,
   onDeleteChat,
   onOpenAddProjectModal,
   onImportClaudeSessions,
   onCopyPath,
   onOpenExternalPath,
-  onRemoveProject,
+  onHideProject,
   onReorderProjectGroups,
   editorLabel,
   updateSnapshot,
@@ -74,11 +106,15 @@ function KannaSidebarImpl({
   const location = useLocation()
   const navigate = useNavigate()
   const scrollContainerRef = useRef<HTMLDivElement>(null)
+  const resizeStartRef = useRef<{ pointerX: number; width: number } | null>(null)
   const initializedCollapsedGroupKeysRef = useRef<Set<string>>(new Set())
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set())
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
   const [nowMs, setNowMs] = useState(() => Date.now())
   const [showNumberJumpHints, setShowNumberJumpHints] = useState(false)
+  const [sidebarWidth, setSidebarWidth] = useState(readStoredSidebarWidth)
+  const [isResizingSidebar, setIsResizingSidebar] = useState(false)
+  const [archivedProjectId, setArchivedProjectId] = useState<string | null>(null)
   const resolvedKeybindings = useMemo(() => getResolvedKeybindings(keybindings), [keybindings])
   const visibleChats = useMemo(
     () => getVisibleSidebarChats(data.projectGroups, collapsedSections, expandedGroups),
@@ -96,6 +132,10 @@ function KannaSidebarImpl({
   )
 
   const activeVisibleCount = visibleChats.length
+  const archivedProject = useMemo(
+    () => data.projectGroups.find((group) => group.groupKey === archivedProjectId) ?? null,
+    [archivedProjectId, data.projectGroups]
+  )
 
   useEffect(() => {
     visibleChatsRef.current = visibleChats
@@ -169,11 +209,15 @@ function KannaSidebarImpl({
           navigate(`/chat/${chatId}`)
           onClose()
         }}
+        onRenameChat={() => onRenameChat(chat)}
+        onShareChat={() => onShareChat(chat.chatId)}
+        onOpenInFinder={() => onOpenExternalPath("open_finder", chat.localPath)}
         onForkChat={() => onForkChat(chat)}
+        onArchiveChat={() => onArchiveChat(chat)}
         onDeleteChat={() => onDeleteChat(chat)}
       />
     )
-  }, [activeChatId, navigate, nowMs, onClose, onDeleteChat, onForkChat, resolvedKeybindings, showNumberJumpHints, visibleIndexByChatId])
+  }, [activeChatId, navigate, nowMs, onArchiveChat, onClose, onDeleteChat, onForkChat, onOpenExternalPath, onRenameChat, onShareChat, resolvedKeybindings, showNumberJumpHints, visibleIndexByChatId])
 
   useEffect(() => {
     const intervalId = window.setInterval(() => {
@@ -259,7 +303,42 @@ function KannaSidebarImpl({
         container.scrollTo({ top: elementCenter - containerCenter, behavior: "smooth" })
       }
     })
-  }, [activeChatId, activeVisibleCount])
+  }, [activeChatId])
+
+  useEffect(() => {
+    if (!isResizingSidebar) return
+
+    const previousCursor = document.body.style.cursor
+    const previousUserSelect = document.body.style.userSelect
+    document.body.style.cursor = "col-resize"
+    document.body.style.userSelect = "none"
+
+    function handlePointerMove(event: PointerEvent) {
+      const resizeStart = resizeStartRef.current
+      if (!resizeStart) return
+      setSidebarWidth(clampSidebarWidth(resizeStart.width + event.clientX - resizeStart.pointerX))
+    }
+
+    function handlePointerUp() {
+      setIsResizingSidebar(false)
+      resizeStartRef.current = null
+      setSidebarWidth((current) => {
+        const next = clampSidebarWidth(current)
+        persistSidebarWidth(next)
+        return next
+      })
+    }
+
+    window.addEventListener("pointermove", handlePointerMove)
+    window.addEventListener("pointerup", handlePointerUp, { once: true })
+
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove)
+      window.removeEventListener("pointerup", handlePointerUp)
+      document.body.style.cursor = previousCursor
+      document.body.style.userSelect = previousUserSelect
+    }
+  }, [isResizingSidebar])
 
   const [isImporting, setIsImporting] = useState(false)
   const dialog = useAppDialog()
@@ -328,10 +407,11 @@ function KannaSidebarImpl({
         data-sidebar="open"
         className={cn(
           "fixed inset-0 z-50 bg-background dark:bg-card flex flex-col h-[100dvh] select-none",
-          "md:relative md:inset-auto md:w-[275px] md:mr-0 md:h-[calc(100dvh-16px)] md:my-2 md:ml-2 md:border md:border-border md:rounded-2xl",
+          "md:relative md:inset-auto md:w-[var(--sidebar-width)] md:mr-0 md:h-[calc(100dvh-16px)] md:my-2 md:ml-2 md:border md:border-border md:rounded-2xl",
           open ? "flex" : "hidden md:flex",
           collapsed && "md:hidden"
         )}
+        style={{ "--sidebar-width": `${sidebarWidth}px` } as CSSProperties}
       >
         <div className="px-[5px] h-[64px] max-h-[64px] md:h-[55px] md:max-h-[55px] border-b grid grid-cols-[40px_minmax(0,1fr)_40px] items-center md:px-[7px] md:pl-3 md:flex md:justify-between">
           <div className="md:hidden">
@@ -456,6 +536,7 @@ function KannaSidebarImpl({
               onToggleSection={toggleSection}
               onToggleExpandedGroup={toggleExpandedGroup}
               renderChatRow={renderChatRow}
+              onShowArchivedProject={setArchivedProjectId}
               onNewLocalChat={(localPath) => {
                 const projectId = projectIdByPath.get(localPath)
                 if (projectId) {
@@ -464,7 +545,7 @@ function KannaSidebarImpl({
               }}
               onCopyPath={onCopyPath}
               onOpenExternalPath={onOpenExternalPath}
-              onRemoveProject={onRemoveProject}
+              onHideProject={onHideProject}
               isConnected={connectionStatus === "connected"}
             />
           </div>
@@ -500,7 +581,83 @@ function KannaSidebarImpl({
             </div>
           </button>
         </div>
+
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize sidebar"
+          tabIndex={0}
+          title="Resize sidebar"
+          className={cn(
+            "hidden md:block absolute -right-1 top-3 bottom-3 z-20 w-2 cursor-col-resize rounded-full",
+            "focus-visible:outline-none"
+          )}
+          onPointerDown={(event) => {
+            event.preventDefault()
+            resizeStartRef.current = {
+              pointerX: event.clientX,
+              width: sidebarWidth,
+            }
+            setIsResizingSidebar(true)
+          }}
+          onDoubleClick={() => {
+            setSidebarWidth(DEFAULT_SIDEBAR_WIDTH)
+            persistSidebarWidth(DEFAULT_SIDEBAR_WIDTH)
+          }}
+          onKeyDown={(event) => {
+            let nextWidth: number | null = null
+            if (event.key === "ArrowLeft") nextWidth = sidebarWidth - 16
+            else if (event.key === "ArrowRight") nextWidth = sidebarWidth + 16
+            else if (event.key === "Home") nextWidth = MIN_SIDEBAR_WIDTH
+            else if (event.key === "End") nextWidth = MAX_SIDEBAR_WIDTH
+            else if (event.key === "Enter") nextWidth = DEFAULT_SIDEBAR_WIDTH
+            if (nextWidth === null) return
+            event.preventDefault()
+            const clampedWidth = clampSidebarWidth(nextWidth)
+            setSidebarWidth(clampedWidth)
+            persistSidebarWidth(clampedWidth)
+          }}
+        />
       </div>
+
+      <Dialog
+        open={Boolean(archivedProject)}
+        onOpenChange={(dialogOpen) => {
+          if (!dialogOpen) setArchivedProjectId(null)
+        }}
+      >
+        <DialogContent size="md">
+          <DialogHeader>
+            <DialogTitle>Archived Chats</DialogTitle>
+            <DialogDescription>
+              {archivedProject?.localPath ?? ""}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogBody className="space-y-1">
+            {archivedProject?.archivedChats?.length ? (
+              archivedProject.archivedChats.map((chat) => (
+                <button
+                  key={chat.chatId}
+                  type="button"
+                  className="flex w-full items-center justify-between gap-3 rounded-lg border border-border/0 px-3 py-2 text-left transition-colors hover:border-border hover:bg-muted"
+                  onClick={() => {
+                    onOpenArchivedChat(chat.chatId)
+                    setArchivedProjectId(null)
+                    onClose()
+                  }}
+                >
+                  <span className="min-w-0 truncate text-sm">{chat.title}</span>
+                  <span className="shrink-0 text-xs text-muted-foreground">
+                    {formatSidebarAgeLabel(getSidebarChatTimestamp(chat), nowMs)}
+                  </span>
+                </button>
+              ))
+            ) : (
+              <p className="px-1 py-3 text-sm text-muted-foreground">No archived chats</p>
+            )}
+          </DialogBody>
+        </DialogContent>
+      </Dialog>
 
       {open ? <div className="fixed inset-0 bg-black/40 z-40 md:hidden" onClick={onClose} /> : null}
     </>

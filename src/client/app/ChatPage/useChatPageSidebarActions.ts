@@ -86,7 +86,7 @@ export function useChatPageSidebarActions({
   const handleOpenDiffFile = useCallback((filePath: string) => {
     const projectPath = projectPathRef.current
     const resolvedPath = resolveDiffFilePath(projectPath, filePath)
-    void state.handleOpenLocalLink({ path: resolvedPath })
+    void state.handleOpenLocalLink({ path: resolvedPath }, "open_editor")
   }, [state.handleOpenLocalLink])
 
   const handleCopyDiffFilePath = useCallback((filePath: string) => {

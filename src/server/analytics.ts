@@ -2,8 +2,6 @@ import { ANALYTICS_ENDPOINT } from "../shared/analytics"
 import { PROD_SERVER_PORT } from "../shared/ports"
 import type { ShareMode } from "../shared/share"
 import { isTokenShareMode } from "../shared/share"
-import type { AppSettingsManager } from "./app-settings"
-
 interface AnalyticsRequestBody {
   userId: string
   environment: AnalyticsEnvironment
@@ -34,8 +32,15 @@ export interface AnalyticsReporter {
   trackLaunch: (options: LaunchAnalyticsOptions) => void
 }
 
+interface AnalyticsSettings {
+  getState: () => {
+    analyticsEnabled: boolean
+    analyticsUserId: string
+  }
+}
+
 export class KannaAnalyticsReporter implements AnalyticsReporter {
-  private readonly settings: Pick<AppSettingsManager, "getState">
+  private readonly settings: AnalyticsSettings
   private readonly endpoint: string
   private readonly fetchImpl: FetchLike
   private readonly currentVersion: string
@@ -43,7 +48,7 @@ export class KannaAnalyticsReporter implements AnalyticsReporter {
   private queue = Promise.resolve()
 
   constructor(args: {
-    settings: Pick<AppSettingsManager, "getState">
+    settings: AnalyticsSettings
     currentVersion: string
     environment: AnalyticsEnvironment
     endpoint?: string

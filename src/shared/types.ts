@@ -3,10 +3,17 @@ export const PROTOCOL_VERSION = 1 as const
 
 export type AgentProvider = "claude" | "codex"
 export type LlmProviderKind = "openai" | "openrouter" | "custom"
+export type AppThemePreference = "light" | "dark" | "system"
+export type ChatSoundPreference = "never" | "unfocused" | "always"
+export type ChatSoundId = "blow" | "bottle" | "frog" | "funk" | "glass" | "ping" | "pop" | "purr" | "tink"
+export type DefaultProviderPreference = "last_used" | AgentProvider
+export type EditorPreset = "cursor" | "vscode" | "xcode" | "windsurf" | "custom"
 export const DEFAULT_OPENAI_SDK_MODEL = "gpt-5.4-mini"
 export const DEFAULT_OPENROUTER_SDK_MODEL = "moonshotai/kimi-k2.5:nitro"
 
 export type AttachmentKind = "image" | "file" | "mention"
+export type StandaloneTranscriptAttachmentMode = "metadata" | "bundle"
+export type StandaloneTranscriptTheme = "light" | "dark"
 
 export interface ChatAttachment {
   id: string
@@ -18,6 +25,46 @@ export interface ChatAttachment {
   mimeType: string
   size: number
 }
+
+export interface StandaloneTranscriptBundle {
+  version: 1
+  chatId: string
+  title: string
+  localPath: string
+  exportedAt: string
+  viewerVersion: string
+  theme: StandaloneTranscriptTheme
+  attachmentMode: StandaloneTranscriptAttachmentMode
+  messages: TranscriptEntry[]
+}
+
+export interface StandaloneTranscriptExportResult {
+  ok: true
+  outputDir: string
+  indexHtmlPath: string
+  transcriptJsonPath: string
+  attachmentMode: StandaloneTranscriptAttachmentMode
+  totalAttachmentCount: number
+  bundledAttachmentCount: number
+  shareSlug: string
+  shareUrl: string
+  uploadedFileCount: number
+}
+
+export interface StandaloneTranscriptExportFailureResult {
+  ok: false
+  error: string
+  outputDir: string
+  transcriptJsonPath: string
+  transcriptFileName: string
+  transcriptJson: string
+  shareSlug: string
+  shareUrl: string
+}
+
+export type StandaloneTranscriptExportCommandResult =
+  | StandaloneTranscriptExportResult
+  | StandaloneTranscriptExportFailureResult
 
 export interface QueuedChatMessage {
   id: string
@@ -89,6 +136,17 @@ export interface CodexModelOptions {
 export interface ProviderModelOptionsByProvider {
   claude: ClaudeModelOptions
   codex: CodexModelOptions
+}
+
+export interface ProviderPreference<TModelOptions> {
+  model: string
+  modelOptions: TModelOptions
+  planMode: boolean
+}
+
+export type ChatProviderPreferences = {
+  claude: ProviderPreference<ClaudeModelOptions>
+  codex: ProviderPreference<CodexModelOptions>
 }
 
 export type ModelOptions = Partial<{
@@ -167,9 +225,10 @@ export const PROVIDERS: ProviderCatalogEntry[] = [
   {
     id: "codex",
     label: "Codex",
-    defaultModel: "gpt-5.4",
+    defaultModel: "gpt-5.5",
     supportsPlanMode: true,
     models: [
+      { id: "gpt-5.5", label: "GPT-5.5", supportsEffort: false },
       { id: "gpt-5.4", label: "GPT-5.4", supportsEffort: false },
       { id: "gpt-5.3-codex", label: "GPT-5.3 Codex", supportsEffort: false, aliases: ["gpt-5-codex"] },
       { id: "gpt-5.3-codex-spark", label: "GPT-5.3 Codex Spark", supportsEffort: false },
@@ -208,7 +267,7 @@ export function normalizeClaudeModelId(modelId?: string, fallbackModelId = "clau
   return normalizeProviderModelId("claude", modelId, fallbackModelId)
 }
 
-export function normalizeCodexModelId(modelId?: string, fallbackModelId = "gpt-5.4"): string {
+export function normalizeCodexModelId(modelId?: string, fallbackModelId = "gpt-5.5"): string {
   return normalizeProviderModelId("codex", modelId, fallbackModelId)
 }
 
@@ -286,6 +345,7 @@ export interface SidebarProjectGroup {
   chats: SidebarChatRow[]
   previewChats: SidebarChatRow[]
   olderChats: SidebarChatRow[]
+  archivedChats?: SidebarChatRow[]
   defaultCollapsed: boolean
 }
 
@@ -305,15 +365,46 @@ export interface LocalProjectsSnapshot {
   machine: {
     id: "local"
     displayName: string
+    platform: NodeJS.Platform
   }
   projects: LocalProjectSummary[]
 }
 
 export interface AppSettingsSnapshot {
   analyticsEnabled: boolean
+  browserSettingsMigrated: boolean
+  theme: AppThemePreference
+  chatSoundPreference: ChatSoundPreference
+  chatSoundId: ChatSoundId
+  terminal: {
+    scrollbackLines: number
+    minColumnWidth: number
+  }
+  editor: {
+    preset: EditorPreset
+    commandTemplate: string
+  }
+  defaultProvider: DefaultProviderPreference
+  providerDefaults: ChatProviderPreferences
   warning: string | null
   filePathDisplay: string
   cloudflareTunnel: CloudflareTunnelSettings
+}
+
+export interface AppSettingsPatch {
+  analyticsEnabled?: boolean
+  browserSettingsMigrated?: boolean
+  theme?: AppThemePreference
+  chatSoundPreference?: ChatSoundPreference
+  chatSoundId?: ChatSoundId
+  terminal?: Partial<AppSettingsSnapshot["terminal"]>
+  editor?: Partial<AppSettingsSnapshot["editor"]>
+  defaultProvider?: DefaultProviderPreference
+  providerDefaults?: {
+    claude?: Partial<ProviderPreference<ClaudeModelOptions>>
+    codex?: Partial<ProviderPreference<CodexModelOptions>>
+  }
+  cloudflareTunnel?: Partial<CloudflareTunnelSettings>
 }
 
 export interface LlmProviderFile {

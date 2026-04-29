@@ -12,7 +12,8 @@ describe("shared model normalization", () => {
     expect(normalizeClaudeModelId("haiku")).toBe("claude-haiku-4-5-20251001")
   })
 
-  test("normalizes legacy Codex aliases via the provider catalog", () => {
+  test("normalizes legacy Codex aliases and defaults to the latest catalog model", () => {
+    expect(normalizeCodexModelId()).toBe("gpt-5.5")
     expect(normalizeCodexModelId("gpt-5-codex")).toBe("gpt-5.3-codex")
   })
 

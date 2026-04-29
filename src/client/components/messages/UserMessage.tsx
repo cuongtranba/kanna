@@ -7,6 +7,7 @@ import { classifyAttachmentPreview } from "./attachmentPreview"
 import { AttachmentFileCard, AttachmentImageCard } from "./AttachmentCard"
 import { AttachmentPreviewModal } from "./AttachmentPreviewModal"
 import { Zap } from "lucide-react"
+import { useTranscriptRenderOptions } from "./render-context"
 
 interface Props {
   content: string
@@ -29,22 +30,29 @@ function parseSystemMessage(content: string) {
 
 export function UserMessage({ content, attachments = [], steered = false, autoContinue }: Props) {
   const [selectedAttachmentId, setSelectedAttachmentId] = useState<string | null>(null)
+  const renderOptions = useTranscriptRenderOptions()
   const parsedContent = useMemo(() => parseSystemMessage(content), [content])
+  const shouldShowImagePlaceholders = renderOptions.attachmentMode === "metadata"
+  const canInteractWithAttachments = !renderOptions.readonly || renderOptions.attachmentMode === "bundle"
   const imageAttachments = useMemo(
-    () => attachments.filter((attachment) => attachment.kind === "image" && attachment.contentUrl),
-    [attachments],
+    () => attachments.filter((attachment) => attachment.kind === "image" && (attachment.contentUrl || shouldShowImagePlaceholders)),
+    [attachments, shouldShowImagePlaceholders],
   )
   const fileAttachments = useMemo(
-    () => attachments.filter((attachment) => attachment.kind !== "image" || !attachment.contentUrl),
-    [attachments],
+    () => attachments.filter((attachment) => attachment.kind !== "image" || (!attachment.contentUrl && !shouldShowImagePlaceholders)),
+    [attachments, shouldShowImagePlaceholders],
   )
   const selectedAttachment = attachments.find((attachment) => attachment.id === selectedAttachmentId) ?? null
 
   function handleAttachmentClick(attachment: ChatAttachment) {
+    if (!canInteractWithAttachments || !attachment.contentUrl) {
+      return
+    }
+
     const target = classifyAttachmentPreview(attachment)
     if (target.openInNewTab) {
       if (typeof window !== "undefined") {
-        window.open(new URL(attachment.contentUrl, window.location.origin).toString(), "_blank", "noopener,noreferrer")
+        window.open(new URL(attachment.contentUrl, document.baseURI || window.location.href).toString(), "_blank", "noopener,noreferrer")
       }
       return
     }
@@ -61,7 +69,7 @@ export function UserMessage({ content, attachments = [], steered = false, autoCo
               <AttachmentImageCard
                 key={attachment.id}
                 attachment={attachment}
-                onClick={() => handleAttachmentClick(attachment)}
+                onClick={canInteractWithAttachments ? () => handleAttachmentClick(attachment) : undefined}
               />
             ))}
           </div>
@@ -72,7 +80,7 @@ export function UserMessage({ content, attachments = [], steered = false, autoCo
               <AttachmentFileCard
                 key={attachment.id}
                 attachment={attachment}
-                onClick={attachment.contentUrl ? () => handleAttachmentClick(attachment) : undefined}
+                onClick={canInteractWithAttachments ? () => handleAttachmentClick(attachment) : undefined}
               />
             ))}
           </div>

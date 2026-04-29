@@ -964,6 +964,7 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput({
             availableProviders={availableProviders}
             selectedProvider={selectedProvider}
             providerLocked={providerLocked}
+            showCodexCliRequirementHints
             model={providerPrefs.model}
             modelOptions={providerPrefs.modelOptions}
             onProviderChange={(provider) => {

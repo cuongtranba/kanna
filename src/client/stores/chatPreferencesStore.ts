@@ -1,5 +1,4 @@
 import { create } from "zustand"
-import { persist } from "zustand/middleware"
 import {
   DEFAULT_CLAUDE_MODEL_OPTIONS,
   DEFAULT_CODEX_MODEL_OPTIONS,
@@ -10,23 +9,15 @@ import {
   isCodexReasoningEffort,
   supportsClaudeMaxReasoningEffort,
   type AgentProvider,
+  type ChatProviderPreferences,
   type ClaudeModelOptions,
   type CodexModelOptions,
+  type DefaultProviderPreference,
+  type ProviderPreference,
   type ProviderModelOptionsByProvider,
 } from "../../shared/types"
 
-export interface ProviderPreference<TModelOptions> {
-  model: string
-  modelOptions: TModelOptions
-  planMode: boolean
-}
-
-export type DefaultProviderPreference = "last_used" | AgentProvider
-
-export type ChatProviderPreferences = {
-  claude: ProviderPreference<ClaudeModelOptions>
-  codex: ProviderPreference<CodexModelOptions>
-}
+export type { ChatProviderPreferences, DefaultProviderPreference, ProviderPreference }
 
 export type ComposerState =
   | {
@@ -99,12 +90,12 @@ type PersistedChatPreferencesState = Pick<
   "defaultProvider" | "providerDefaults" | "chatStates" | "legacyComposerState"
 > & LegacyPersistedChatPreferencesState
 
-function normalizeDefaultProvider(value?: string): DefaultProviderPreference {
+export function normalizeDefaultProvider(value?: string): DefaultProviderPreference {
   if (value === "claude" || value === "codex") return value
   return "last_used"
 }
 
-function normalizeClaudePreference(value?: {
+export function normalizeClaudePreference(value?: {
   model?: string
   effort?: string
   modelOptions?: Partial<ClaudeModelOptions>
@@ -129,7 +120,7 @@ function normalizeClaudePreference(value?: {
   }
 }
 
-function normalizeCodexPreference(value?: {
+export function normalizeCodexPreference(value?: {
   model?: string
   effort?: string
   modelOptions?: Partial<CodexModelOptions>
@@ -152,7 +143,41 @@ function normalizeCodexPreference(value?: {
   }
 }
 
-function createDefaultProviderDefaults(): ChatProviderPreferences {
+function forcePersistedCodexPreference<T extends {
+  model?: string
+  effort?: string
+  modelOptions?: Partial<CodexModelOptions>
+  planMode?: boolean
+}>(value?: T): T | undefined {
+  if (!value) return value
+  return {
+    ...value,
+    model: "gpt-5.5",
+  }
+}
+
+function forcePersistedCodexComposerState<T extends PersistedComposerState | ComposerState>(value?: T): T | undefined {
+  if (!value || value.provider !== "codex") return value
+  return {
+    ...value,
+    model: "gpt-5.5",
+  }
+}
+
+function forcePersistedCodexChatStates(
+  value?: Record<string, PersistedComposerState | ComposerState>
+): Record<string, PersistedComposerState | ComposerState> | undefined {
+  if (!value) return value
+
+  return Object.fromEntries(
+    Object.entries(value).map(([chatId, composerState]) => [
+      chatId,
+      forcePersistedCodexComposerState(composerState) ?? composerState,
+    ])
+  )
+}
+
+export function createDefaultProviderDefaults(): ChatProviderPreferences {
   return {
     claude: {
       model: "claude-opus-4-7",
@@ -160,14 +185,14 @@ function createDefaultProviderDefaults(): ChatProviderPreferences {
       planMode: false,
     },
     codex: {
-      model: "gpt-5.4",
+      model: "gpt-5.5",
       modelOptions: { ...DEFAULT_CODEX_MODEL_OPTIONS },
       planMode: false,
     },
   }
 }
 
-function normalizeProviderDefaults(value?: {
+export function normalizeProviderDefaults(value?: {
   claude?: {
     model?: string
     effort?: string
@@ -385,38 +410,43 @@ interface ChatPreferencesState {
 export function migrateChatPreferencesState(
   persistedState: Partial<PersistedChatPreferencesState> | undefined
 ): Pick<ChatPreferencesState, "defaultProvider" | "providerDefaults" | "chatStates" | "legacyComposerState"> {
-  const providerDefaults = normalizeProviderDefaults(persistedState?.providerDefaults)
+  const providerDefaults = normalizeProviderDefaults({
+    ...persistedState?.providerDefaults,
+    codex: forcePersistedCodexPreference(persistedState?.providerDefaults?.codex),
+  })
   const legacyComposerState = normalizePersistedComposerState(
-    persistedState?.legacyComposerState ?? persistedState?.composerState,
+    forcePersistedCodexComposerState(persistedState?.legacyComposerState ?? persistedState?.composerState),
     providerDefaults
   )
 
   return {
     defaultProvider: normalizeDefaultProvider(persistedState?.defaultProvider),
     providerDefaults,
-    chatStates: normalizeChatStates(persistedState?.chatStates, providerDefaults),
+    chatStates: normalizeChatStates(forcePersistedCodexChatStates(persistedState?.chatStates), providerDefaults),
     legacyComposerState: legacyComposerState ?? normalizeComposerState(
       undefined,
       providerDefaults,
       persistedState?.liveProvider,
-      persistedState?.livePreferences
+      {
+        ...persistedState?.livePreferences,
+        codex: forcePersistedCodexPreference(persistedState?.livePreferences?.codex),
+      }
     ),
   }
 }
 
 export const useChatPreferencesStore = create<ChatPreferencesState>()(
-  persist(
-    (set, get) => ({
-      defaultProvider: "last_used",
-      providerDefaults: createDefaultProviderDefaults(),
-      chatStates: {},
-      legacyComposerState: {
-        provider: "claude",
-        model: "claude-opus-4-7",
-        modelOptions: { ...DEFAULT_CLAUDE_MODEL_OPTIONS },
-        planMode: false,
-      },
-      setDefaultProvider: (defaultProvider) => set({ defaultProvider }),
+  (set, get) => ({
+    defaultProvider: "last_used",
+    providerDefaults: createDefaultProviderDefaults(),
+    chatStates: {},
+    legacyComposerState: {
+      provider: "claude",
+      model: "claude-opus-4-7",
+      modelOptions: { ...DEFAULT_CLAUDE_MODEL_OPTIONS },
+      planMode: false,
+    },
+    setDefaultProvider: (defaultProvider) => set({ defaultProvider }),
       setProviderDefaultModel: (provider, model) =>
         set((state) => ({
           providerDefaults: {
@@ -567,11 +597,5 @@ export const useChatPreferencesStore = create<ChatPreferencesState>()(
             [chatId]: composerFromProviderDefaults(provider, state.providerDefaults),
           },
         })),
-    }),
-    {
-      name: "chat-preferences",
-      version: 6,
-      migrate: (persistedState) => migrateChatPreferencesState(persistedState as Partial<PersistedChatPreferencesState> | undefined),
-    }
-  )
+  })
 )

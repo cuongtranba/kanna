@@ -6,6 +6,7 @@ import type { ProcessedToolCall } from "./types"
 import { Button } from "../ui/button"
 import { createMarkdownComponents } from "./shared"
 import { cn } from "../../lib/utils"
+import { useTranscriptRenderOptions } from "./render-context"
 
 interface Props {
   message: Extract<ProcessedToolCall, { toolKind: "exit_plan_mode" }>
@@ -14,6 +15,7 @@ interface Props {
 }
 
 export function ExitPlanModeMessage({ message, onConfirm, isLatest }: Props) {
+  const renderOptions = useTranscriptRenderOptions()
   const isComplete = !!message.result
   const [expanded, setExpanded] = useState(false)
   const [copied, setCopied] = useState(false)
@@ -102,6 +104,10 @@ export function ExitPlanModeMessage({ message, onConfirm, isLatest }: Props) {
       ) : !isLatest ? (
         <div className="flex justify-end mx-2">
           <span className="inline text-sm text-muted-foreground italic">Plan pending (newer prompt active)</span>
+        </div>
+      ) : renderOptions.readonly ? (
+        <div className="flex justify-end mx-2">
+          <span className="inline text-sm text-muted-foreground italic">Plan pending in original session</span>
         </div>
       ) : (
         <div className="flex flex-col gap-3">

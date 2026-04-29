@@ -19,12 +19,11 @@ export function shouldDefaultCollapseSidebarProject(
 
 export function getSidebarChatBuckets(
   chats: SidebarChatRow[],
-  chatsPerProject: number,
   nowMs: number
 ): SidebarChatBuckets {
   const recentChats = chats.filter((chat) => isSidebarChatRecent(getSidebarChatTimestamp(chat), nowMs))
   const collapsedChats = recentChats.length > 0
-    ? recentChats.slice(0, chatsPerProject)
+    ? recentChats
     : chats.slice(0, Math.min(5, chats.length))
   const collapsedChatIds = new Set(collapsedChats.map((chat) => chat.chatId))
   const remainingChats = chats.filter((chat) => !collapsedChatIds.has(chat.chatId))

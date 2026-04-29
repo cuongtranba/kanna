@@ -1,5 +1,5 @@
-import { memo, type ReactNode, useMemo } from "react"
-import { ChevronRight, Loader2, SquarePen } from "lucide-react"
+import { memo, type MouseEvent as ReactMouseEvent, type ReactNode, useMemo } from "react"
+import { ChevronRight, Loader2, MoreHorizontal, SquarePen } from "lucide-react"
 import {
   DndContext,
   MouseSensor,
@@ -36,10 +36,11 @@ interface Props {
   onToggleSection: (key: string) => void
   onToggleExpandedGroup: (key: string) => void
   renderChatRow: (chat: SidebarChatRow) => ReactNode
+  onShowArchivedProject?: (projectId: string) => void
   onNewLocalChat?: (localPath: string) => void
   onCopyPath?: (localPath: string) => void
   onOpenExternalPath?: (action: "open_finder" | "open_editor", localPath: string) => void
-  onRemoveProject?: (projectId: string) => void
+  onHideProject?: (projectId: string) => void
   onReorderGroups?: (newOrder: string[]) => void
   isConnected?: boolean
   startingLocalPath?: string | null
@@ -53,15 +54,29 @@ interface SortableProjectGroupProps {
   onToggleSection: (key: string) => void
   onToggleExpandedGroup: (key: string) => void
   renderChatRow: (chat: SidebarChatRow) => ReactNode
+  onShowArchivedProject?: (projectId: string) => void
   onNewLocalChat?: (localPath: string) => void
   onCopyPath?: (localPath: string) => void
   onOpenExternalPath?: (action: "open_finder" | "open_editor", localPath: string) => void
-  onRemoveProject?: (projectId: string) => void
+  onHideProject?: (projectId: string) => void
   isConnected?: boolean
   startingLocalPath?: string | null
 }
 
 const DRAG_REORDER_TRIGGER_OFFSET_PX = 20
+
+function openContextMenuFromButton(event: ReactMouseEvent<HTMLButtonElement>) {
+  event.preventDefault()
+  event.stopPropagation()
+  const rect = event.currentTarget.getBoundingClientRect()
+  event.currentTarget.dispatchEvent(new MouseEvent("contextmenu", {
+    bubbles: true,
+    cancelable: true,
+    clientX: rect.left + rect.width / 2,
+    clientY: rect.bottom,
+    view: window,
+  }))
+}
 
 type RectLookup = {
   get(id: UniqueIdentifier): ClientRect | undefined
@@ -158,10 +173,11 @@ const SortableProjectGroup = memo(function SortableProjectGroup({
   onToggleSection,
   onToggleExpandedGroup,
   renderChatRow,
+  onShowArchivedProject,
   onNewLocalChat,
   onCopyPath,
   onOpenExternalPath,
-  onRemoveProject,
+  onHideProject,
   isConnected,
   startingLocalPath,
 }: SortableProjectGroupProps) {
@@ -169,6 +185,7 @@ const SortableProjectGroup = memo(function SortableProjectGroup({
   const isExpanded = expandedGroups.has(groupKey)
   const isEmptyProject = group.chats.length === 0
   const hasMore = group.olderChats.length > 0
+  const hasProjectMenu = Boolean(onHideProject && onCopyPath && onOpenExternalPath)
 
   const {
     attributes,
@@ -220,33 +237,54 @@ const SortableProjectGroup = memo(function SortableProjectGroup({
           </TooltipContent>
         </Tooltip>
       </div>
-      {onNewLocalChat && (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className={cn(
-                "h-5.5 w-5.5 absolute right-2 !rounded opacity-100 md:opacity-0 md:group-hover/section:opacity-100",
-                (!isConnected || startingLocalPath === localPath) && "opacity-50 cursor-not-allowed"
-              )}
-              disabled={!isConnected || startingLocalPath === localPath}
-              onClick={(event) => {
-                event.stopPropagation()
-                onNewLocalChat(localPath)
-              }}
-            >
-              {startingLocalPath === localPath ? (
-                <Loader2 className="size-4 text-muted-foreground animate-spin" />
-              ) : (
-                <SquarePen className="size-3.5 text-muted-foreground" />
-              )}
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="right" sideOffset={4}>
-            {!isConnected ? `Start ${APP_NAME} to connect` : "New Chat"}
-          </TooltipContent>
-        </Tooltip>
+      {(hasProjectMenu || onNewLocalChat) && (
+        <div className="absolute right-2 flex items-center gap-[1px] opacity-100 md:opacity-0 md:group-hover/section:opacity-100">
+          {hasProjectMenu ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-5.5 w-5.5 !rounded"
+                  onClick={openContextMenuFromButton}
+                >
+                  <MoreHorizontal className="size-3.5 text-slate-500 dark:text-slate-400" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="right" sideOffset={4}>
+                More
+              </TooltipContent>
+            </Tooltip>
+          ) : null}
+          {onNewLocalChat ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className={cn(
+                    "h-5.5 w-5.5 !rounded",
+                    (!isConnected || startingLocalPath === localPath) && "opacity-50 cursor-not-allowed"
+                  )}
+                  disabled={!isConnected || startingLocalPath === localPath}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    onNewLocalChat(localPath)
+                  }}
+                >
+                  {startingLocalPath === localPath ? (
+                    <Loader2 className="size-4 text-slate-500 dark:text-slate-400 animate-spin" />
+                  ) : (
+                    <SquarePen className="size-3.5 text-slate-500 dark:text-slate-400" />
+                  )}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="right" sideOffset={4}>
+                {!isConnected ? `Start ${APP_NAME} to connect` : "New Chat"}
+              </TooltipContent>
+            </Tooltip>
+          ) : null}
+        </div>
       )}
     </div>
   )
@@ -261,13 +299,14 @@ const SortableProjectGroup = memo(function SortableProjectGroup({
       )}
       {...attributes}
     >
-      {onRemoveProject && onCopyPath && onOpenExternalPath ? (
+      {hasProjectMenu ? (
         <ProjectSectionMenu
           editorLabel={editorLabel}
-          onCopyPath={() => onCopyPath(localPath)}
-          onOpenInFinder={() => onOpenExternalPath("open_finder", localPath)}
-          onOpenInEditor={() => onOpenExternalPath("open_editor", localPath)}
-          onRemove={() => onRemoveProject(groupKey)}
+          onCopyPath={() => onCopyPath?.(localPath)}
+          onShowArchived={() => onShowArchivedProject?.(groupKey)}
+          onOpenInFinder={() => onOpenExternalPath?.("open_finder", localPath)}
+          onOpenInEditor={() => onOpenExternalPath?.("open_editor", localPath)}
+          onHide={() => onHideProject?.(groupKey)}
         >
           {header}
         </ProjectSectionMenu>
@@ -288,7 +327,7 @@ const SortableProjectGroup = memo(function SortableProjectGroup({
               {hasMore && isExpanded ? (
                 <button
                   onClick={() => onToggleExpandedGroup(groupKey)}
-                  className="pl-2.5 py-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                  className="pl-2.5 py-1 text-xs text-muted-foreground/60 hover:text-foreground/60 transition-colors flex flex-row items-center gap-2 justify-center"
                 >
                   Hide older
                 </button>
@@ -297,7 +336,7 @@ const SortableProjectGroup = memo(function SortableProjectGroup({
               {hasMore && !isExpanded ? (
                 <button
                   onClick={() => onToggleExpandedGroup(groupKey)}
-                  className="pl-2.5 py-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                  className="pl-2.5 py-1 text-xs text-muted-foreground/60 hover:text-foreground/60 transition-colors flex flex-row items-center gap-2 justify-center"
                 >
                   Show older
                 </button>
@@ -318,10 +357,11 @@ const LocalProjectsSectionImpl = function LocalProjectsSection({
   onToggleSection,
   onToggleExpandedGroup,
   renderChatRow,
+  onShowArchivedProject,
   onNewLocalChat,
   onCopyPath,
   onOpenExternalPath,
-  onRemoveProject,
+  onHideProject,
   onReorderGroups,
   isConnected,
   startingLocalPath,
@@ -398,10 +438,11 @@ const LocalProjectsSectionImpl = function LocalProjectsSection({
           onToggleSection={onToggleSection}
           onToggleExpandedGroup={onToggleExpandedGroup}
           renderChatRow={renderChatRow}
+          onShowArchivedProject={onShowArchivedProject}
           onNewLocalChat={onNewLocalChat}
           onCopyPath={onCopyPath}
           onOpenExternalPath={onOpenExternalPath}
-          onRemoveProject={onRemoveProject}
+          onHideProject={onHideProject}
           isConnected={isConnected}
           startingLocalPath={startingLocalPath}
         />

@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react"
+import { useAppSettingsStore } from "../stores/appSettingsStore"
 
 export type ThemePreference = "light" | "dark" | "system"
 
@@ -8,7 +9,6 @@ interface ThemeContextValue {
   setTheme: (theme: ThemePreference) => void
 }
 
-const THEME_STORAGE_KEY = "lever-theme"
 const ThemeContext = createContext<ThemeContextValue | undefined>(undefined)
 
 const isValidTheme = (value: string | null): value is ThemePreference => {
@@ -54,19 +54,22 @@ const applyThemeClass = (preference: ThemePreference) => {
 }
 
 const getInitialTheme = (): ThemePreference => {
-  if (typeof window === "undefined") return "system"
-  const stored = window.localStorage.getItem(THEME_STORAGE_KEY)
-  return isValidTheme(stored) ? stored : "system"
+  const stored = useAppSettingsStore.getState().settings?.theme
+  return stored && isValidTheme(stored) ? stored : "system"
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
+  const settingsTheme = useAppSettingsStore((store) => store.settings?.theme)
+  const applyOptimisticPatch = useAppSettingsStore((store) => store.applyOptimisticPatch)
   const [theme, setTheme] = useState<ThemePreference>(getInitialTheme)
 
   useEffect(() => {
+    if (!settingsTheme || settingsTheme === theme) return
+    setTheme(settingsTheme)
+  }, [settingsTheme, theme])
+
+  useEffect(() => {
     applyThemeClass(theme)
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem(THEME_STORAGE_KEY, theme)
-    }
   }, [theme])
 
   useEffect(() => {
@@ -93,8 +96,15 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<ThemeContextValue>(() => {
     const resolvedTheme = theme === "system" ? getSystemTheme() : theme
-    return { theme, resolvedTheme, setTheme }
-  }, [theme])
+    return {
+      theme,
+      resolvedTheme,
+      setTheme: (nextTheme) => {
+        setTheme(nextTheme)
+        applyOptimisticPatch({ theme: nextTheme })
+      },
+    }
+  }, [applyOptimisticPatch, theme])
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>
 }

@@ -282,5 +282,5 @@ function toAbsoluteUrl(path: string): string {
     return path
   }
 
-  return new URL(path, window.location.origin).toString()
+  return new URL(path, document.baseURI || window.location.href).toString()
 }

@@ -308,7 +308,7 @@ describe("CodexAppServerManager", () => {
       } else if (message.method === "thread/start") {
         child.writeServerMessage({
           id: message.id,
-          result: { thread: { id: "thread-structured" }, model: "gpt-5.4", reasoningEffort: "high" },
+          result: { thread: { id: "thread-structured" }, model: "gpt-5.5", reasoningEffort: "high" },
         })
       } else if (message.method === "turn/start") {
         child.writeServerMessage({
@@ -349,6 +349,8 @@ describe("CodexAppServerManager", () => {
 
     expect(result).toBe("{\"title\":\"Codex title\"}")
     expect(process.killed).toBe(true)
+    expect((process.messages.find((message: any) => message.method === "thread/start") as any)?.params.model).toBe("gpt-5.5")
+    expect((process.messages.find((message: any) => message.method === "turn/start") as any)?.params.model).toBe("gpt-5.5")
   })
 
   test("maps command execution and agent output into the shared transcript stream", async () => {

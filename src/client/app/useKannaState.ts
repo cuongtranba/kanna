@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { useShallow } from "zustand/react/shallow"
-import { APP_NAME } from "../../shared/branding"
-import { PROVIDERS, type AgentProvider, type AppSettingsSnapshot, type AskUserQuestionAnswerMap, type ChatAttachment, type ChatDiffSnapshot, type ChatHistoryPage, type KeybindingsSnapshot, type LlmProviderSnapshot, type LlmProviderValidationResult, type ModelOptions, type ProviderCatalogEntry, type QueuedChatMessage, type TranscriptEntry, type UpdateInstallResult, type UpdateSnapshot, type UserPromptEntry } from "../../shared/types"
+import { PROVIDERS, type AgentProvider, type AppSettingsPatch, type AppSettingsSnapshot, type AskUserQuestionAnswerMap, type ChatAttachment, type ChatDiffSnapshot, type ChatHistoryPage, type KeybindingsSnapshot, type LlmProviderSnapshot, type LlmProviderValidationResult, type ModelOptions, type ProviderCatalogEntry, type QueuedChatMessage, type StandaloneTranscriptExportCommandResult, type TranscriptEntry, type UpdateInstallResult, type UpdateSnapshot, type UserPromptEntry } from "../../shared/types"
 import { NEW_CHAT_COMPOSER_ID, type ComposerState, useChatPreferencesStore } from "../stores/chatPreferencesStore"
 import { useRightSidebarStore } from "../stores/rightSidebarStore"
 import { useTerminalLayoutStore } from "../stores/terminalLayoutStore"
@@ -10,13 +9,18 @@ import { getEditorPresetLabel, useTerminalPreferencesStore } from "../stores/ter
 import { useChatInputStore } from "../stores/chatInputStore"
 import { useSlashCommandsStore } from "../stores/slashCommandsStore"
 import { usePreferencesStore } from "../stores/preferences"
+import { useAppSettingsStore } from "../stores/appSettingsStore"
+import { useChatSoundPreferencesStore } from "../stores/chatSoundPreferencesStore"
 import type { ChatSnapshot, CloudflareTunnelRecord, CloudflareTunnelSettings, LocalProjectsSnapshot, SidebarChatRow, SidebarData } from "../../shared/types"
 import type { AskUserQuestionItem } from "../components/messages/types"
+import type { OpenLocalLinkTarget } from "../components/messages/shared"
 import { useAppDialog } from "../components/ui/app-dialog"
+import { useTheme } from "../hooks/useTheme"
 import { processTranscriptMessages } from "../lib/parseTranscript"
 import { generateUUID } from "../lib/utils"
 import { canCancelStatus, getLatestToolIds, isProcessingStatus } from "./derived"
 import { KannaSocket, type SocketStatus } from "./socket"
+import type { EditorOpenSettings, OpenExternalAction } from "../../shared/protocol"
 
 function sameRuntime(left: ChatSnapshot["runtime"] | null | undefined, right: ChatSnapshot["runtime"] | null | undefined) {
   if (left === right) return true
@@ -218,6 +222,10 @@ export function getPreviousPrompt(messages: ReturnType<typeof processTranscriptM
 }
 
 const NEW_CHAT_OPTIMISTIC_SCOPE = "__new_chat__"
+const LEGACY_THEME_STORAGE_KEY = "lever-theme"
+const LEGACY_CHAT_SOUND_STORAGE_KEY = "chat-sound-preferences"
+const LEGACY_TERMINAL_STORAGE_KEY = "terminal-preferences"
+const LEGACY_CHAT_PREFERENCES_STORAGE_KEY = "chat-preferences"
 
 export interface OptimisticUserPrompt {
   id: string
@@ -230,6 +238,112 @@ export interface OptimisticUserPrompt {
 interface OptimisticProcessingState {
   scopeId: string
   ackedAt: number | null
+}
+
+function readPersistedZustandState(key: string): Record<string, unknown> | null {
+  if (typeof window === "undefined") return null
+  const raw = window.localStorage.getItem(key)
+  if (!raw) return null
+  try {
+    const parsed = JSON.parse(raw) as { state?: unknown }
+    return parsed.state && typeof parsed.state === "object" && !Array.isArray(parsed.state)
+      ? parsed.state as Record<string, unknown>
+      : null
+  } catch {
+    return null
+  }
+}
+
+function readLegacyBrowserSettingsPatch(): AppSettingsPatch | null {
+  if (typeof window === "undefined") return null
+
+  const patch: AppSettingsPatch = {}
+  const theme = window.localStorage.getItem(LEGACY_THEME_STORAGE_KEY)
+  if (theme === "light" || theme === "dark" || theme === "system") {
+    patch.theme = theme
+  }
+
+  const chatSoundState = readPersistedZustandState(LEGACY_CHAT_SOUND_STORAGE_KEY)
+  if (chatSoundState?.chatSoundPreference === "never" || chatSoundState?.chatSoundPreference === "unfocused" || chatSoundState?.chatSoundPreference === "always") {
+    patch.chatSoundPreference = chatSoundState.chatSoundPreference
+  }
+  if (
+    chatSoundState?.chatSoundId === "blow"
+    || chatSoundState?.chatSoundId === "bottle"
+    || chatSoundState?.chatSoundId === "frog"
+    || chatSoundState?.chatSoundId === "funk"
+    || chatSoundState?.chatSoundId === "glass"
+    || chatSoundState?.chatSoundId === "ping"
+    || chatSoundState?.chatSoundId === "pop"
+    || chatSoundState?.chatSoundId === "purr"
+    || chatSoundState?.chatSoundId === "tink"
+  ) {
+    patch.chatSoundId = chatSoundState.chatSoundId
+  }
+
+  const terminalState = readPersistedZustandState(LEGACY_TERMINAL_STORAGE_KEY)
+  if (terminalState) {
+    patch.terminal = {}
+    if (typeof terminalState.scrollbackLines === "number") {
+      patch.terminal.scrollbackLines = terminalState.scrollbackLines
+    }
+    if (typeof terminalState.minColumnWidth === "number") {
+      patch.terminal.minColumnWidth = terminalState.minColumnWidth
+    }
+    const editorPatch: NonNullable<AppSettingsPatch["editor"]> = {}
+    if (
+      terminalState.editorPreset === "cursor"
+      || terminalState.editorPreset === "vscode"
+      || terminalState.editorPreset === "xcode"
+      || terminalState.editorPreset === "windsurf"
+      || terminalState.editorPreset === "custom"
+    ) {
+      editorPatch.preset = terminalState.editorPreset
+    }
+    if (typeof terminalState.editorCommandTemplate === "string") {
+      editorPatch.commandTemplate = terminalState.editorCommandTemplate
+    }
+    if (Object.keys(editorPatch).length > 0) {
+      patch.editor = editorPatch
+    }
+  }
+
+  const chatPreferencesState = readPersistedZustandState(LEGACY_CHAT_PREFERENCES_STORAGE_KEY)
+  if (chatPreferencesState?.defaultProvider === "last_used" || chatPreferencesState?.defaultProvider === "claude" || chatPreferencesState?.defaultProvider === "codex") {
+    patch.defaultProvider = chatPreferencesState.defaultProvider
+  }
+  if (chatPreferencesState?.providerDefaults && typeof chatPreferencesState.providerDefaults === "object") {
+    patch.providerDefaults = chatPreferencesState.providerDefaults as AppSettingsPatch["providerDefaults"]
+  }
+
+  patch.browserSettingsMigrated = true
+  return Object.keys(patch).length > 1 ? patch : null
+}
+
+function clearLegacyBrowserSettings() {
+  if (typeof window === "undefined") return
+  window.localStorage.removeItem(LEGACY_THEME_STORAGE_KEY)
+  window.localStorage.removeItem(LEGACY_CHAT_SOUND_STORAGE_KEY)
+  window.localStorage.removeItem(LEGACY_TERMINAL_STORAGE_KEY)
+  window.localStorage.removeItem(LEGACY_CHAT_PREFERENCES_STORAGE_KEY)
+}
+
+function syncRuntimeStoresFromAppSettings(snapshot: AppSettingsSnapshot) {
+  useAppSettingsStore.getState().setFromServer(snapshot)
+  const terminalPreferences = useTerminalPreferencesStore.getState()
+  terminalPreferences.setScrollbackLines(snapshot.terminal.scrollbackLines)
+  terminalPreferences.setMinColumnWidth(snapshot.terminal.minColumnWidth)
+  terminalPreferences.setEditorPreset(snapshot.editor.preset)
+  terminalPreferences.setEditorCommandTemplate(snapshot.editor.commandTemplate)
+
+  const chatSoundPreferences = useChatSoundPreferencesStore.getState()
+  chatSoundPreferences.setChatSoundPreference(snapshot.chatSoundPreference)
+  chatSoundPreferences.setChatSoundId(snapshot.chatSoundId)
+
+  useChatPreferencesStore.setState({
+    defaultProvider: snapshot.defaultProvider,
+    providerDefaults: snapshot.providerDefaults,
+  })
 }
 
 function serializeAttachmentSignature(attachment: ChatAttachment) {
@@ -496,6 +610,19 @@ export function getUiUpdateReadinessPath() {
   return "/auth/status"
 }
 
+function downloadTextFile(fileName: string, contents: string, contentType = "application/json") {
+  const blob = new Blob([contents], { type: `${contentType}; charset=utf-8` })
+  const url = URL.createObjectURL(blob)
+  const anchor = document.createElement("a")
+  anchor.href = url
+  anchor.download = fileName
+  anchor.style.display = "none"
+  document.body.append(anchor)
+  anchor.click()
+  anchor.remove()
+  URL.revokeObjectURL(url)
+}
+
 async function isServerReady(fetchImpl: typeof fetch = fetch) {
   const response = await fetchImpl(getUiUpdateReadinessPath(), {
     method: "GET",
@@ -581,6 +708,9 @@ export interface KannaState {
   isProcessing: boolean
   canCancel: boolean
   isDraining: boolean
+  isExportingStandalone: boolean
+  standaloneShareUrl: string | null
+  standaloneShareComplete: boolean
   navbarLocalPath?: string
   editorLabel: string
   hasSelectedProject: boolean
@@ -600,7 +730,7 @@ export interface KannaState {
   handleInstallUpdate: () => Promise<void>
   handleForceReload: () => Promise<void>
   handleReadAppSettings: () => Promise<void>
-  handleWriteAppSettings: (value: Pick<AppSettingsSnapshot, "analyticsEnabled">) => Promise<void>
+  handleWriteAppSettings: (patch: AppSettingsPatch) => Promise<void>
   handleWriteCloudflareTunnel: (patch: Partial<CloudflareTunnelSettings>) => Promise<void>
   handleReadLlmProvider: () => Promise<void>
   handleWriteLlmProvider: (value: Pick<LlmProviderSnapshot, "provider" | "apiKey" | "model" | "baseUrl">) => Promise<void>
@@ -611,14 +741,18 @@ export interface KannaState {
   handleRemoveQueuedMessage: (queuedMessageId: string) => Promise<void>
   handleCancel: () => Promise<void>
   handleStopDraining: () => Promise<void>
+  handleRenameChat: (chat: SidebarChatRow) => Promise<void>
+  handleShareChat: (chatId?: string | null) => Promise<void>
+  handleArchiveChat: (chat: SidebarChatRow) => Promise<void>
+  handleOpenArchivedChat: (chatId: string) => Promise<void>
   handleDeleteChat: (chat: SidebarChatRow) => Promise<void>
-  handleRemoveProject: (projectId: string) => Promise<void>
+  handleHideProject: (projectId: string) => Promise<void>
   handleReorderProjectGroups: (projectIds: string[]) => Promise<void>
   importClaudeSessions: () => Promise<{ imported: number; updated: number; skipped: number; failed: number; newProjects: number }>
   handleCopyPath: (localPath: string) => Promise<void>
-  handleOpenExternal: (action: "open_finder" | "open_terminal" | "open_editor") => Promise<void>
+  handleOpenExternal: (action: OpenExternalAction, editor?: EditorOpenSettings) => Promise<void>
   handleOpenExternalPath: (action: "open_finder" | "open_editor", localPath: string) => Promise<void>
-  handleOpenLocalLink: (target: { path: string; line?: number; column?: number }) => Promise<void>
+  handleOpenLocalLink: (target: OpenLocalLinkTarget, action?: OpenExternalAction, editor?: EditorOpenSettings) => Promise<void>
   handleCompose: () => void
   handleAskUserQuestion: (
     toolUseId: string,
@@ -631,12 +765,17 @@ export interface KannaState {
     clearContext?: boolean,
     message?: string
   ) => Promise<void>
+  handleExportStandalone: (chatId?: string | null) => Promise<StandaloneTranscriptExportCommandResult | null>
+  handleCloseStandaloneShareDialog: () => void
+  handleOpenStandaloneShareLink: () => void
+  handleCopyStandaloneShareLink: () => Promise<boolean>
 }
 
 export function useKannaState(activeChatId: string | null): KannaState {
   const navigate = useNavigate()
   const socket = useKannaSocket()
   const dialog = useAppDialog()
+  const { resolvedTheme } = useTheme()
 
   const [sidebarData, setSidebarData] = useState<SidebarData>({ projectGroups: [] })
   const [optimisticSidebarProjectOrder, setOptimisticSidebarProjectOrder] = useState<string[] | null>(null)
@@ -660,6 +799,9 @@ export function useKannaState(activeChatId: string | null): KannaState {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [addProjectModalOpen, setAddProjectModalOpen] = useState(false)
   const [commandError, setCommandError] = useState<string | null>(null)
+  const [isExportingStandalone, setIsExportingStandalone] = useState(false)
+  const [standaloneShareUrl, setStandaloneShareUrl] = useState<string | null>(null)
+  const [standaloneShareComplete, setStandaloneShareComplete] = useState(false)
   const [startingLocalPath, setStartingLocalPath] = useState<string | null>(null)
   const [pendingChatId, setPendingChatId] = useState<string | null>(null)
   const [optimisticUserPrompts, setOptimisticUserPrompts] = useState<OptimisticUserPrompt[]>([])
@@ -819,31 +961,43 @@ export function useKannaState(activeChatId: string | null): KannaState {
     })
   }, [socket])
 
+  useEffect(() => {
+    return socket.subscribe<AppSettingsSnapshot>({ type: "app-settings" }, (snapshot) => {
+      setAppSettings(snapshot)
+      syncRuntimeStoresFromAppSettings(snapshot)
+      setCommandError(null)
+    })
+  }, [socket])
+
   const handleReadAppSettings = useCallback(async () => {
     try {
+      useAppSettingsStore.getState().setHydrationStatus("loading")
       const snapshot = await socket.command<AppSettingsSnapshot>({ type: "settings.readAppSettings" })
       setAppSettings(snapshot)
+      syncRuntimeStoresFromAppSettings(snapshot)
       setCommandError(null)
     } catch (error) {
+      useAppSettingsStore.getState().setHydrationStatus("error")
       setCommandError(error instanceof Error ? error.message : String(error))
     }
   }, [socket])
 
-  const handleWriteAppSettings = useCallback(async (
-    value: Pick<AppSettingsSnapshot, "analyticsEnabled">
-  ) => {
+  const handleWriteAppSettings = useCallback(async (patch: AppSettingsPatch) => {
     try {
+      useAppSettingsStore.getState().applyOptimisticPatch(patch)
       const snapshot = await socket.command<AppSettingsSnapshot>({
-        type: "settings.writeAppSettings",
-        analyticsEnabled: value.analyticsEnabled,
+        type: "settings.writeAppSettingsPatch",
+        patch,
       })
       setAppSettings(snapshot)
+      syncRuntimeStoresFromAppSettings(snapshot)
       setCommandError(null)
     } catch (error) {
       setCommandError(error instanceof Error ? error.message : String(error))
+      await handleReadAppSettings()
       throw error
     }
-  }, [socket])
+  }, [handleReadAppSettings, socket])
 
   const handleWriteCloudflareTunnel = useCallback(async (patch: Partial<CloudflareTunnelSettings>) => {
     try {
@@ -904,6 +1058,16 @@ export function useKannaState(activeChatId: string | null): KannaState {
     if (connectionStatus !== "connected") return
     void handleReadAppSettings()
   }, [connectionStatus, handleReadAppSettings])
+
+  useEffect(() => {
+    if (connectionStatus !== "connected") return
+    if (appSettings?.browserSettingsMigrated !== false) return
+    const patch = readLegacyBrowserSettingsPatch()
+    if (!patch) return
+    void handleWriteAppSettings(patch)
+      .then(clearLegacyBrowserSettings)
+      .catch(() => undefined)
+  }, [appSettings?.browserSettingsMigrated, connectionStatus, handleWriteAppSettings])
 
   useEffect(() => {
     if (connectionStatus !== "connected") return
@@ -1621,6 +1785,21 @@ export function useKannaState(activeChatId: string | null): KannaState {
     }
   }, [activeChatId, socket])
 
+  const handleRenameChat = useCallback(async (chat: SidebarChatRow) => {
+    const title = await dialog.prompt({
+      title: "Rename Chat",
+      initialValue: chat.title,
+      confirmLabel: "Rename",
+    })
+    if (!title || title === chat.title) return
+    try {
+      await socket.command({ type: "chat.rename", chatId: chat.chatId, title })
+      setCommandError(null)
+    } catch (error) {
+      setCommandError(error instanceof Error ? error.message : String(error))
+    }
+  }, [dialog, socket])
+
   const handleDeleteChat = useCallback(async (chat: SidebarChatRow) => {
     const confirmed = await dialog.confirm({
       title: "Delete Chat",
@@ -1640,18 +1819,32 @@ export function useKannaState(activeChatId: string | null): KannaState {
     }
   }, [activeChatId, dialog, navigate, sidebarProjectGroups, socket])
 
-  const handleRemoveProject = useCallback(async (projectId: string) => {
-    const project = sidebarProjectGroups.find((group) => group.groupKey === projectId)
-    if (!project) return
-    const projectName = project.localPath.split("/").filter(Boolean).pop() ?? project.localPath
-    const confirmed = await dialog.confirm({
-      title: "Remove",
-      description: `Remove "${projectName}" from the sidebar? Existing chats will be removed from ${APP_NAME}.`,
-      confirmLabel: "Remove",
-      confirmVariant: "destructive",
-    })
-    if (!confirmed) return
+  const handleArchiveChat = useCallback(async (chat: SidebarChatRow) => {
+    try {
+      await socket.command({ type: "chat.archive", chatId: chat.chatId })
+      if (chat.chatId === activeChatId) {
+        const nextChatId = getNewestRemainingChatId(sidebarProjectGroups, chat.chatId)
+        navigate(nextChatId ? `/chat/${nextChatId}` : "/")
+      }
+      setCommandError(null)
+    } catch (error) {
+      setCommandError(error instanceof Error ? error.message : String(error))
+    }
+  }, [activeChatId, navigate, sidebarProjectGroups, socket])
 
+  const handleOpenArchivedChat = useCallback(async (chatId: string) => {
+    try {
+      setPendingChatId(chatId)
+      await socket.command({ type: "chat.unarchive", chatId })
+      navigate(`/chat/${chatId}`)
+      setCommandError(null)
+    } catch (error) {
+      setPendingChatId(null)
+      setCommandError(error instanceof Error ? error.message : String(error))
+    }
+  }, [navigate, socket])
+
+  const handleHideProject = useCallback(async (projectId: string) => {
     try {
       await socket.command({ type: "project.remove", projectId })
       useTerminalLayoutStore.getState().clearProject(projectId)
@@ -1663,7 +1856,7 @@ export function useKannaState(activeChatId: string | null): KannaState {
     } catch (error) {
       setCommandError(error instanceof Error ? error.message : String(error))
     }
-  }, [dialog, navigate, runtime?.projectId, sidebarProjectGroups, socket])
+  }, [navigate, runtime?.projectId, socket])
 
   const handleReorderProjectGroups = useCallback(async (projectIds: string[]) => {
     setOptimisticSidebarProjectOrder(projectIds)
@@ -1682,10 +1875,11 @@ export function useKannaState(activeChatId: string | null): KannaState {
   }, [socket])
 
   const openExternal = useCallback(async (command: {
-    action: "open_finder" | "open_terminal" | "open_editor"
+    action: OpenExternalAction
     localPath: string
     line?: number
     column?: number
+    editor?: EditorOpenSettings
   }) => {
     const preferences = useTerminalPreferencesStore.getState()
     setCommandError(null)
@@ -1693,7 +1887,7 @@ export function useKannaState(activeChatId: string | null): KannaState {
       type: "system.openExternal",
       ...command,
       editor: command.action === "open_editor"
-        ? {
+        ? command.editor ?? {
             preset: preferences.editorPreset,
             commandTemplate: preferences.editorCommandTemplate,
           }
@@ -1701,13 +1895,14 @@ export function useKannaState(activeChatId: string | null): KannaState {
     })
   }, [socket])
 
-  const handleOpenExternal = useCallback(async (action: "open_finder" | "open_terminal" | "open_editor") => {
+  const handleOpenExternal = useCallback(async (action: OpenExternalAction, editor?: EditorOpenSettings) => {
     const localPath = runtime?.localPath ?? localProjects?.projects[0]?.localPath ?? sidebarProjectGroups[0]?.localPath
     if (!localPath) return
     try {
       await openExternal({
         action,
         localPath,
+        editor,
       })
     } catch (error) {
       setCommandError(error instanceof Error ? error.message : String(error))
@@ -1726,13 +1921,18 @@ export function useKannaState(activeChatId: string | null): KannaState {
     }
   }, [])
 
-  const handleOpenLocalLink = useCallback(async (target: { path: string; line?: number; column?: number }) => {
+  const handleOpenLocalLink = useCallback(async (
+    target: OpenLocalLinkTarget,
+    action: OpenExternalAction = "open_editor",
+    editor?: EditorOpenSettings,
+  ) => {
     try {
       await openExternal({
-        action: "open_editor",
+        action,
         localPath: target.path,
         line: target.line,
         column: target.column,
+        editor,
       })
     } catch (error) {
       setCommandError(error instanceof Error ? error.message : String(error))
@@ -1749,6 +1949,92 @@ export function useKannaState(activeChatId: string | null): KannaState {
       setCommandError(error instanceof Error ? error.message : String(error))
     }
   }, [openExternal])
+
+  const handleExportStandalone = useCallback(async (chatId: string | null | undefined = activeChatId) => {
+    if (!chatId || isExportingStandalone) {
+      return null
+    }
+
+    setIsExportingStandalone(true)
+    try {
+      const result = await socket.command<StandaloneTranscriptExportCommandResult>({
+        type: "chat.exportStandalone",
+        chatId,
+        theme: resolvedTheme,
+        attachmentMode: "bundle",
+      })
+      setCommandError(null)
+      return result
+    } catch (error) {
+      setCommandError(error instanceof Error ? error.message : String(error))
+      return null
+    } finally {
+      setIsExportingStandalone(false)
+    }
+  }, [activeChatId, isExportingStandalone, resolvedTheme, socket])
+
+  const handleShareChat = useCallback(async (chatId: string | null | undefined = activeChatId) => {
+    if (!chatId || isExportingStandalone) {
+      return
+    }
+
+    setStandaloneShareComplete(false)
+    const result = await handleExportStandalone(chatId)
+    if (result?.ok && result.shareUrl) {
+      setStandaloneShareUrl(result.shareUrl)
+      setStandaloneShareComplete(true)
+      return
+    }
+
+    if (result && !result.ok) {
+      const shouldDownload = await dialog.confirm({
+        title: "Share failed",
+        description: result.error,
+        confirmLabel: "Download transcript JSON",
+        cancelLabel: "Close",
+        confirmVariant: "secondary",
+      })
+
+      if (shouldDownload) {
+        downloadTextFile(result.transcriptFileName, result.transcriptJson)
+      }
+    }
+  }, [activeChatId, dialog, handleExportStandalone, isExportingStandalone])
+
+  const handleCloseStandaloneShareDialog = useCallback(() => {
+    setStandaloneShareUrl(null)
+    setStandaloneShareComplete(false)
+  }, [])
+
+  const handleCopyStandaloneShareLink = useCallback(async () => {
+    if (!standaloneShareUrl) {
+      return false
+    }
+
+    try {
+      if (typeof navigator === "undefined" || !navigator.clipboard?.writeText) {
+        throw new Error("Clipboard is not available")
+      }
+      await navigator.clipboard.writeText(standaloneShareUrl)
+      return true
+    } catch (error) {
+      await dialog.alert({
+        title: "Copy failed",
+        description: error instanceof Error ? error.message : String(error),
+        closeLabel: "Close",
+      })
+      return false
+    }
+  }, [dialog, standaloneShareUrl])
+
+  const handleOpenStandaloneShareLink = useCallback(() => {
+    if (!standaloneShareUrl) {
+      return
+    }
+
+    window.open(standaloneShareUrl, "_blank", "noopener,noreferrer")
+    setStandaloneShareUrl(null)
+  }, [standaloneShareUrl])
 
   const handleCompose = useCallback(() => {
     const intent = resolveComposeIntent({
@@ -1841,6 +2127,9 @@ export function useKannaState(activeChatId: string | null): KannaState {
     isProcessing,
     canCancel,
     isDraining,
+    isExportingStandalone,
+    standaloneShareUrl,
+    standaloneShareComplete,
     navbarLocalPath,
     editorLabel,
     hasSelectedProject,
@@ -1871,8 +2160,12 @@ export function useKannaState(activeChatId: string | null): KannaState {
     handleRemoveQueuedMessage,
     handleCancel,
     handleStopDraining,
+    handleRenameChat,
+    handleShareChat,
+    handleArchiveChat,
+    handleOpenArchivedChat,
     handleDeleteChat,
-    handleRemoveProject,
+    handleHideProject,
     handleReorderProjectGroups,
     importClaudeSessions,
     handleCopyPath,
@@ -1882,5 +2175,9 @@ export function useKannaState(activeChatId: string | null): KannaState {
     handleCompose,
     handleAskUserQuestion,
     handleExitPlanMode,
+    handleExportStandalone,
+    handleCloseStandaloneShareDialog,
+    handleOpenStandaloneShareLink,
+    handleCopyStandaloneShareLink,
   }
 }
