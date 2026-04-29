@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="https://www.npmjs.com/package/@cuongtranba/kanna"><img src="https://img.shields.io/npm/v/@cuongtranba/kanna.svg?style=flat&colorA=18181b&colorB=f472b6" alt="npm version" /></a>
+  <a href="https://www.npmjs.com/package/@cuongtran001/kanna"><img src="https://img.shields.io/npm/v/@cuongtran001/kanna.svg?style=flat&colorA=18181b&colorB=f472b6" alt="npm version" /></a>
 </p>
 
 <br />
@@ -27,7 +27,7 @@
 ## Quickstart
 
 ```bash
-bun install -g @cuongtranba/kanna
+bun install -g @cuongtran001/kanna
 ```
 
 If Bun isn't installed, install it first:
@@ -93,7 +93,7 @@ Embedded terminal support uses Bun's native PTY APIs and currently works on macO
 Install Kanna globally:
 
 ```bash
-bun install -g @cuongtranba/kanna
+bun install -g @cuongtran001/kanna
 ```
 
 If Bun isn't installed, install it first:
@@ -285,10 +285,10 @@ Run Kanna as a background service on macOS under [pm2](https://pm2.keymetrics.io
 cd ~/path/to/kanna
 bun install
 bun run build
-bun link           # registers @cuongtranba/kanna → repo
+bun link           # registers @cuongtran001/kanna → repo
 ```
 
-After this, `~/.bun/install/global/node_modules/@cuongtranba/kanna` is a symlink to your repo.
+After this, `~/.bun/install/global/node_modules/@cuongtran001/kanna` is a symlink to your repo.
 
 ### 2. (Migrating from launchd) Unload the old agent
 
@@ -331,7 +331,7 @@ The update mechanism is abstracted behind `UpdateChecker` + `UpdateReloader` int
 
 | `KANNA_RELOADER` | Check | Reload | Notes |
 |---|---|---|---|
-| unset / `supervisor` | npm registry for `@cuongtranba/kanna` | `bun install -g @cuongtranba/kanna@latest`, exit 76, supervisor respawns | Default. End-user path for `bunx kanna`. |
+| unset / `supervisor` | npm registry for `@cuongtran001/kanna` | `bun install -g @cuongtran001/kanna@latest`, exit 76, supervisor respawns | Default. End-user path for `bunx kanna`. |
 | `pm2` | `git fetch` + `HEAD` vs `origin/main` | `git pull --ff-only` → cond. `bun install` → `bun run build` → `pm2 reload` | Dev/self-host path. Requires `KANNA_REPO_DIR`. |
 
 To add another reload mechanism (e.g., docker, systemd), implement the two interfaces and branch inside `createUpdateStrategy`; no changes to `UpdateManager`, `server.ts`, or any client code are needed.

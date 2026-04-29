@@ -2,7 +2,7 @@ export const APP_NAME = "Kanna"
 export const CLI_COMMAND = "kanna"
 export const DATA_ROOT_NAME = ".kanna"
 export const DEV_DATA_ROOT_NAME = ".kanna-dev"
-export const PACKAGE_NAME = "@cuongtranba/kanna"
+export const PACKAGE_NAME = "@cuongtran001/kanna"
 export const RUNTIME_PROFILE_ENV_VAR = "KANNA_RUNTIME_PROFILE"
 // Read version from package.json — JSON import works in both Bun and Vite
 import pkg from "../../package.json"

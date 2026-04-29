@@ -8,7 +8,7 @@
   "prerelease": false,
   "packages": {
     ".": {
-      "package-name": "@cuongtranba/kanna",
+      "package-name": "@cuongtran001/kanna",
       "changelog-path": "CHANGELOG.md"
     }
   }
