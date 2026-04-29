@@ -10,6 +10,9 @@
 
 <p align="center">
   <a href="https://www.npmjs.com/package/@cuongtran001/kanna"><img src="https://img.shields.io/npm/v/@cuongtran001/kanna.svg?style=flat&colorA=18181b&colorB=f472b6" alt="npm version" /></a>
+  <a href="https://www.npmjs.com/package/@cuongtran001/kanna"><img src="https://img.shields.io/npm/dm/@cuongtran001/kanna.svg?style=flat&colorA=18181b&colorB=f472b6" alt="npm downloads" /></a>
+  <a href="https://github.com/cuongtranba/kanna/actions/workflows/release-please.yml"><img src="https://github.com/cuongtranba/kanna/actions/workflows/release-please.yml/badge.svg?branch=main" alt="Release Please" /></a>
+  <a href="https://github.com/cuongtranba/kanna/blob/main/LICENSE"><img src="https://img.shields.io/npm/l/@cuongtran001/kanna.svg?style=flat&colorA=18181b&colorB=f472b6" alt="license" /></a>
 </p>
 
 <br />
