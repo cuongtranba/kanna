@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.39.2](https://github.com/cuongtranba/kanna/compare/v0.39.1...v0.39.2) (2026-04-29)
+
+
+### Bug Fixes
+
+* **npm:** rename package scope to [@cuongtran001](https://github.com/cuongtran001) to match npm account ([bd2c0d0](https://github.com/cuongtranba/kanna/commit/bd2c0d0e3d6df02712017a0facd023a463412b87))
+
 ## [0.39.1](https://github.com/cuongtranba/kanna/compare/v0.39.0...v0.39.1) (2026-04-29)
 
 
