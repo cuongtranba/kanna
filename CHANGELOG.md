@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.39.1](https://github.com/cuongtranba/kanna/compare/v0.39.0...v0.39.1) (2026-04-29)
+
+
+### Bug Fixes
+
+* **update:** re-deploy installs current version when latest is stale ([7deece0](https://github.com/cuongtranba/kanna/commit/7deece0e12556ce4f252d3e16acd6a3963a43980))
+
 ## [0.39.0](https://github.com/cuongtranba/kanna/compare/v0.38.0...v0.39.0) (2026-04-29)
 
 
