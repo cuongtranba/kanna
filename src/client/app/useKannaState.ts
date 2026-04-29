@@ -329,21 +329,28 @@ function clearLegacyBrowserSettings() {
 }
 
 function syncRuntimeStoresFromAppSettings(snapshot: AppSettingsSnapshot) {
+  if (!snapshot) return
   useAppSettingsStore.getState().setFromServer(snapshot)
   const terminalPreferences = useTerminalPreferencesStore.getState()
-  terminalPreferences.setScrollbackLines(snapshot.terminal.scrollbackLines)
-  terminalPreferences.setMinColumnWidth(snapshot.terminal.minColumnWidth)
-  terminalPreferences.setEditorPreset(snapshot.editor.preset)
-  terminalPreferences.setEditorCommandTemplate(snapshot.editor.commandTemplate)
+  if (snapshot.terminal) {
+    terminalPreferences.setScrollbackLines(snapshot.terminal.scrollbackLines)
+    terminalPreferences.setMinColumnWidth(snapshot.terminal.minColumnWidth)
+  }
+  if (snapshot.editor) {
+    terminalPreferences.setEditorPreset(snapshot.editor.preset)
+    terminalPreferences.setEditorCommandTemplate(snapshot.editor.commandTemplate)
+  }
 
   const chatSoundPreferences = useChatSoundPreferencesStore.getState()
-  chatSoundPreferences.setChatSoundPreference(snapshot.chatSoundPreference)
-  chatSoundPreferences.setChatSoundId(snapshot.chatSoundId)
+  if (snapshot.chatSoundPreference) chatSoundPreferences.setChatSoundPreference(snapshot.chatSoundPreference)
+  if (snapshot.chatSoundId) chatSoundPreferences.setChatSoundId(snapshot.chatSoundId)
 
-  useChatPreferencesStore.setState({
-    defaultProvider: snapshot.defaultProvider,
-    providerDefaults: snapshot.providerDefaults,
-  })
+  if (snapshot.defaultProvider && snapshot.providerDefaults) {
+    useChatPreferencesStore.setState({
+      defaultProvider: snapshot.defaultProvider,
+      providerDefaults: snapshot.providerDefaults,
+    })
+  }
 }
 
 function serializeAttachmentSignature(attachment: ChatAttachment) {

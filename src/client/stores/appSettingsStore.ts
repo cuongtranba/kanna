@@ -28,18 +28,18 @@ export function mergeAppSettingsPatch(
     },
     providerDefaults: {
       claude: {
-        ...settings.providerDefaults.claude,
+        ...settings.providerDefaults?.claude,
         ...patch.providerDefaults?.claude,
         modelOptions: {
-          ...settings.providerDefaults.claude.modelOptions,
+          ...settings.providerDefaults?.claude?.modelOptions,
           ...patch.providerDefaults?.claude?.modelOptions,
         },
       },
       codex: {
-        ...settings.providerDefaults.codex,
+        ...settings.providerDefaults?.codex,
         ...patch.providerDefaults?.codex,
         modelOptions: {
-          ...settings.providerDefaults.codex.modelOptions,
+          ...settings.providerDefaults?.codex?.modelOptions,
           ...patch.providerDefaults?.codex?.modelOptions,
         },
       },

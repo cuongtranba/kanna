@@ -540,7 +540,7 @@ export function SettingsPage() {
   const [analyticsDialogOpen, setAnalyticsDialogOpen] = useState(false)
   const [tunnelError, setTunnelError] = useState<string | null>(null)
   const [cloudflaredPathDraft, setCloudflaredPathDraft] = useState(
-    appSettings?.cloudflareTunnel.cloudflaredPath ?? CLOUDFLARE_TUNNEL_DEFAULTS.cloudflaredPath
+    appSettings?.cloudflareTunnel?.cloudflaredPath ?? CLOUDFLARE_TUNNEL_DEFAULTS.cloudflaredPath
   )
   const [llmProviderDraft, setLlmProviderDraft] = useState({
     provider: "openai" as LlmProviderKind,
@@ -615,7 +615,7 @@ export function SettingsPage() {
   }, [navigate, sectionId])
 
   useEffect(() => {
-    if (!appSettings) return
+    if (!appSettings?.cloudflareTunnel) return
     setCloudflaredPathDraft(appSettings.cloudflareTunnel.cloudflaredPath)
   }, [appSettings])
 
