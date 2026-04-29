@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
-import { CLOUDFLARE_TUNNEL_DEFAULTS, PROTOCOL_VERSION } from "../shared/types"
+import { AUTH_DEFAULTS, CLOUDFLARE_TUNNEL_DEFAULTS, PROTOCOL_VERSION } from "../shared/types"
 import type { AppSettingsSnapshot, KeybindingsSnapshot, LlmProviderSnapshot, UpdateSnapshot } from "../shared/types"
 import { createEmptyState } from "./events"
 import { createWsRouter } from "./ws-router"
@@ -62,6 +62,7 @@ const DEFAULT_KEYBINDINGS_SNAPSHOT: KeybindingsSnapshot = {
 const DEFAULT_APP_SETTINGS_SNAPSHOT: AppSettingsSnapshot = {
   analyticsEnabled: true,
   cloudflareTunnel: CLOUDFLARE_TUNNEL_DEFAULTS,
+  auth: AUTH_DEFAULTS,
   browserSettingsMigrated: false,
   theme: "system",
   chatSoundPreference: "always",

@@ -16,7 +16,7 @@ import { writeStandaloneTranscriptExport } from "./standalone-export"
 import { TerminalManager } from "./terminal-manager"
 import type { UpdateManager } from "./update-manager"
 import { deriveChatSnapshot, deriveLocalProjectsSnapshot, deriveSidebarData } from "./read-models"
-import { CLOUDFLARE_TUNNEL_DEFAULTS } from "../shared/types"
+import { AUTH_DEFAULTS, CLOUDFLARE_TUNNEL_DEFAULTS } from "../shared/types"
 import type { AppSettingsPatch, AppSettingsSnapshot, LlmProviderSnapshot, LlmProviderValidationResult } from "../shared/types"
 import { importClaudeSessions } from "./claude-session-importer"
 import type { TunnelGateway } from "./cloudflare-tunnel/gateway"
@@ -273,6 +273,7 @@ export function createWsRouter({
     warning: null,
     filePathDisplay: "~/.kanna/data/settings.json",
     cloudflareTunnel: CLOUDFLARE_TUNNEL_DEFAULTS,
+    auth: AUTH_DEFAULTS,
   }
   const mergeAppSettingsPatch = (snapshot: AppSettingsSnapshot, patch: AppSettingsPatch): AppSettingsSnapshot => ({
     ...snapshot,
@@ -306,6 +307,10 @@ export function createWsRouter({
     cloudflareTunnel: {
       ...snapshot.cloudflareTunnel,
       ...patch.cloudflareTunnel,
+    },
+    auth: {
+      ...snapshot.auth,
+      ...patch.auth,
     },
   })
   const resolvedAppSettings = {
