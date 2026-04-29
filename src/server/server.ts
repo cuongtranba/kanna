@@ -17,6 +17,7 @@ import { getMachineDisplayName } from "./machine-name"
 import { TerminalManager } from "./terminal-manager"
 import { UpdateManager } from "./update-manager"
 import type { UpdateInstallAttemptResult } from "./cli-runtime"
+import { compareVersions } from "./cli-runtime"
 import { createUpdateStrategy } from "./update-strategy"
 import { createWsRouter, type ClientState } from "./ws-router"
 import { deleteProjectUpload, inferAttachmentContentType, inferProjectFileContentType, persistProjectUpload } from "./uploads"
@@ -134,7 +135,14 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
       currentVersion: options.update.version,
       fetchLatestVersion: options.update.fetchLatestVersion,
       installVersion: options.update.installVersion,
-      latestVersionHint: () => manager?.getSnapshot().latestVersion ?? null,
+      latestVersionHint: () => {
+        const snapshot = manager?.getSnapshot()
+        if (!snapshot) return null
+        const latest = snapshot.latestVersion
+        const current = snapshot.currentVersion
+        if (!latest) return current
+        return compareVersions(latest, current) > 0 ? latest : current
+      },
       repoDir: process.env.KANNA_REPO_DIR,
       pm2ProcessName: process.env.KANNA_PM2_PROCESS_NAME,
     })
