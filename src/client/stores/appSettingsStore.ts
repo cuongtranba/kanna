@@ -48,6 +48,10 @@ export function mergeAppSettingsPatch(
       ...settings.cloudflareTunnel,
       ...patch.cloudflareTunnel,
     },
+    auth: {
+      ...settings.auth,
+      ...patch.auth,
+    },
   }
 }
 

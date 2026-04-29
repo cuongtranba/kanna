@@ -5,6 +5,7 @@ import { APP_NAME, getRuntimeProfile } from "../shared/branding"
 import { CLOUDFLARE_TUNNEL_DEFAULTS, type ChatAttachment } from "../shared/types"
 import type { ShareMode } from "../shared/share"
 import { createAuthManager } from "./auth"
+import { createAuthSessionStore } from "./auth-session-store"
 import { EventStore } from "./event-store"
 import { AgentCoordinator } from "./agent"
 import type { LimitDetector } from "./auto-continue/limit-detector"
@@ -107,7 +108,6 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
   const hostname = options.host ?? "127.0.0.1"
   const strictPort = options.strictPort ?? false
   const runtimeProfile = getRuntimeProfile()
-  const auth = options.password ? createAuthManager(options.password, { trustProxy: options.trustProxy ?? false }) : null
   const store = new EventStore(options.dataDir)
   const diffStore = new DiffStore(store.dataDir)
   const machineDisplayName = getMachineDisplayName()
@@ -130,6 +130,15 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
   const appSettings = new AppSettingsManager(path.join(store.dataDir, "settings.json"))
   await appSettings.initialize()
   await keybindings.initialize()
+  const auth = options.password
+    ? createAuthManager(options.password, {
+        trustProxy: options.trustProxy ?? false,
+        sessionStore: await createAuthSessionStore({
+          filePath: path.join(store.dataDir, "sessions.json"),
+        }),
+        getMaxAgeMs: () => appSettings.getSnapshot().auth.sessionMaxAgeDays * 86_400_000,
+      })
+    : null
   const analytics = new KannaAnalyticsReporter({
     settings: appSettings,
     currentVersion: options.update?.version ?? "unknown",
@@ -372,6 +381,7 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
       await agent.cancel(chatId)
     }
     router.dispose()
+    await auth?.dispose()
     appSettings.dispose()
     keybindings.dispose()
     terminals.closeAll()

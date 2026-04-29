@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test"
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
-import { CLOUDFLARE_TUNNEL_DEFAULTS } from "../shared/types"
+import { AUTH_DEFAULTS, CLOUDFLARE_TUNNEL_DEFAULTS } from "../shared/types"
 import { AppSettingsManager, readAppSettingsSnapshot } from "./app-settings"
 import type { AppSettingsSnapshot } from "../shared/types"
 
@@ -62,6 +62,7 @@ function expectedSettingsSnapshot(filePath: string, overrides: Partial<AppSettin
     warning: null,
     filePathDisplay: filePath,
     cloudflareTunnel: CLOUDFLARE_TUNNEL_DEFAULTS,
+    auth: AUTH_DEFAULTS,
     ...overrides,
   }
 }
