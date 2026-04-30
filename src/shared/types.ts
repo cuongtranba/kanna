@@ -317,6 +317,54 @@ export type KannaStatus =
   | "waiting_for_user"
   | "failed"
 
+export type PushTransitionKind = "waiting_for_user" | "failed" | "completed"
+
+export interface PushSubscriptionRecord {
+  id: string
+  endpoint: string
+  keys: { p256dh: string; auth: string }
+  label: string
+  userAgent: string
+  createdAt: number
+  lastSeenAt: number
+}
+
+export interface PushPayload {
+  v: 1
+  kind: PushTransitionKind
+  projectLocalPath: string
+  projectTitle: string
+  chatId: string
+  chatTitle: string
+  chatUrl: string
+  ts: number
+}
+
+export interface PushPreferences {
+  globalEnabled: boolean
+  mutedProjectPaths: string[]
+}
+
+export interface PushDeviceSummary {
+  id: string
+  label: string
+  userAgent: string
+  createdAt: number
+  lastSeenAt: number
+  isCurrentDevice: boolean
+}
+
+export interface PushConfigSnapshot {
+  vapidPublicKey: string
+  preferences: PushPreferences
+  devices: PushDeviceSummary[]
+}
+
+export interface PushSubscribeRequestPayload {
+  endpoint: string
+  keys: { p256dh: string; auth: string }
+}
+
 export interface ProjectSummary {
   id: string
   localPath: string
