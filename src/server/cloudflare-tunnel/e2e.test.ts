@@ -8,6 +8,7 @@ import { waitFor } from "../test-helpers/wait-for"
 import type { CloudflareTunnelEvent } from "./events"
 import { TunnelGateway } from "./gateway"
 import { TunnelLifecycle } from "./lifecycle"
+import { deriveChatTunnels } from "./read-model"
 import { TunnelManager, type ChildHandle } from "./tunnel-manager"
 
 interface FakeChild extends ChildHandle {
@@ -156,6 +157,38 @@ describe("cloudflare tunnel e2e", () => {
     if (stopped && stopped.kind === "tunnel_stopped") {
       expect(stopped.reason).toBe("user")
     }
+  })
+
+  test("stop on proposed tunnel emits tunnel_stopped and clears liveTunnelId", async () => {
+    await gateway.handleBashResult({
+      command: "bun run dev",
+      stdout: "Local: http://localhost:5173",
+      chatId: "c1",
+      sourcePid: null,
+    })
+
+    await waitFor(
+      () => store.getTunnelEvents("c1").some((e) => e.kind === "tunnel_proposed"),
+      2000,
+      "tunnel_proposed event",
+    )
+
+    const proposed = store.getTunnelEvents("c1").find((e) => e.kind === "tunnel_proposed")
+    if (!proposed || proposed.kind !== "tunnel_proposed") throw new Error("no proposed event")
+
+    expect(deriveChatTunnels(store.getTunnelEvents("c1"), "c1").liveTunnelId).toBe(proposed.tunnelId)
+    expect(pendingChildren).toHaveLength(0)
+
+    await gateway.stop("c1", proposed.tunnelId)
+
+    const events = store.getTunnelEvents("c1")
+    const stopped = events.find((e) => e.kind === "tunnel_stopped")
+    expect(stopped).toBeDefined()
+    if (stopped && stopped.kind === "tunnel_stopped") {
+      expect(stopped.reason).toBe("user")
+      expect(stopped.tunnelId).toBe(proposed.tunnelId)
+    }
+    expect(deriveChatTunnels(events, "c1").liveTunnelId).toBeNull()
   })
 
   test("disabled setting → no proposed event", async () => {

@@ -114,8 +114,22 @@ export class TunnelGateway {
 
   async stop(chatId: string, tunnelId: string): Promise<void> {
     this.lifecycle.unwatch(tunnelId)
+    const record = deriveChatTunnels(this.store.getTunnelEvents(chatId), chatId).tunnels[tunnelId]
+    if (record?.state === "proposed") {
+      // Tunnel was never started (user dismissed the proposal); manager has no
+      // process to kill, so emit tunnel_stopped here to retire the projection.
+      this.proposedSourcePid.delete(tunnelId)
+      await this.persist({
+        v: CLOUDFLARE_TUNNEL_EVENT_VERSION,
+        kind: "tunnel_stopped",
+        timestamp: this.now(),
+        chatId,
+        tunnelId,
+        reason: "user",
+      })
+      return
+    }
     await this.manager.stop(tunnelId, "user")
-    void chatId  // chatId may be useful for logging/auditing
   }
 
   async retry(chatId: string, tunnelId: string): Promise<void> {
