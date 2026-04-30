@@ -68,7 +68,15 @@ import { CHAT_SOUND_OPTIONS, useChatSoundPreferencesStore, type ChatSoundId, typ
 import { usePreferencesStore } from "../stores/preferences"
 import type { KannaState } from "./useKannaState"
 import { PushNotificationsSection } from "../components/settings/PushNotificationsSection"
-import { detectPushSupport, subscribePush, unsubscribePush, type PushPermissionState } from "./pushClient"
+import {
+  clearStoredPushDeviceId,
+  detectPushSupport,
+  getStoredPushDeviceId,
+  setStoredPushDeviceId,
+  subscribePush,
+  unsubscribePush,
+  type PushPermissionState,
+} from "./pushClient"
 
 const sidebarItems = [
   {
@@ -534,9 +542,7 @@ export function SettingsPage() {
   const resolvedKeybindings = useMemo(() => getResolvedKeybindings(keybindings), [keybindings])
   const keybindingsFilePathDisplay = resolvedKeybindings.filePathDisplay || getKeybindingsFilePathDisplay()
   const [pushPermissionState, setPushPermissionState] = useState<PushPermissionState>(() => detectPushSupport().state)
-  const [pushDeviceId, setPushDeviceId] = useState<string | null>(() =>
-    typeof localStorage !== "undefined" ? localStorage.getItem("pushDeviceId") : null
-  )
+  const [pushDeviceId, setPushDeviceId] = useState<string | null>(() => getStoredPushDeviceId())
   const [scrollbackDraft, setScrollbackDraft] = useState(String(scrollbackLines))
   const [minColumnWidthDraft, setMinColumnWidthDraft] = useState(String(minColumnWidth))
   const [editorCommandDraft, setEditorCommandDraft] = useState(editorCommandTemplate)
@@ -1332,9 +1338,7 @@ export function SettingsPage() {
                                     label: payload.label,
                                     userAgent: payload.userAgent,
                                   })
-                                  if (typeof localStorage !== "undefined") {
-                                    localStorage.setItem("pushDeviceId", result.id)
-                                  }
+                                  setStoredPushDeviceId(result.id)
                                   return { id: result.id }
                                 },
                               })
@@ -1348,9 +1352,7 @@ export function SettingsPage() {
                                   await state.socket.command({ type: "push.unsubscribe", pushDeviceId: id })
                                 },
                               })
-                              if (typeof localStorage !== "undefined") {
-                                localStorage.removeItem("pushDeviceId")
-                              }
+                              clearStoredPushDeviceId()
                               setPushDeviceId(null)
                             }}
                             onTest={async () => {

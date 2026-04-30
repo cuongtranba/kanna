@@ -8,6 +8,7 @@ import type {
 } from "../../shared/protocol"
 import { LOG_PREFIX } from "../../shared/branding"
 import { generateUUID } from "../lib/utils"
+import { getStoredPushDeviceId } from "./pushClient"
 
 if (typeof navigator !== "undefined" && "serviceWorker" in navigator) {
   navigator.serviceWorker.addEventListener("message", (event) => {
@@ -164,6 +165,12 @@ export class KannaSocket {
     })
   }
 
+  /**
+   * Fire-and-forget: enqueues a push.setFocusedChat command without awaiting
+   * an ack. Focus hints are advisory (the server suppresses notifications for
+   * the focused chat); a lost or late hint is harmless, so we don't gate the
+   * UI on a round-trip.
+   */
   setFocusedChat(chatId: string | null) {
     const id = generateUUID()
     this.enqueue({
@@ -214,9 +221,7 @@ export class KannaSocket {
           this.sendNow(envelope)
         }
       }
-      const pushDeviceId = typeof localStorage !== "undefined"
-        ? localStorage.getItem("pushDeviceId")
-        : null
+      const pushDeviceId = getStoredPushDeviceId()
       if (pushDeviceId) {
         this.sendNow({
           v: 1,

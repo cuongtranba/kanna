@@ -9,6 +9,23 @@ export interface PushSupportSnapshot {
   state: PushPermissionState
 }
 
+const PUSH_DEVICE_ID_STORAGE_KEY = "pushDeviceId"
+
+export function getStoredPushDeviceId(): string | null {
+  if (typeof localStorage === "undefined") return null
+  return localStorage.getItem(PUSH_DEVICE_ID_STORAGE_KEY)
+}
+
+export function setStoredPushDeviceId(id: string): void {
+  if (typeof localStorage === "undefined") return
+  localStorage.setItem(PUSH_DEVICE_ID_STORAGE_KEY, id)
+}
+
+export function clearStoredPushDeviceId(): void {
+  if (typeof localStorage === "undefined") return
+  localStorage.removeItem(PUSH_DEVICE_ID_STORAGE_KEY)
+}
+
 function isFeatureSupported(): boolean {
   if (typeof window === "undefined") return false
   if (typeof Notification === "undefined") return false
