@@ -9,6 +9,15 @@ import type {
 import { LOG_PREFIX } from "../../shared/branding"
 import { generateUUID } from "../lib/utils"
 
+if (typeof navigator !== "undefined" && "serviceWorker" in navigator) {
+  navigator.serviceWorker.addEventListener("message", (event) => {
+    const data = (event as MessageEvent<{ type?: string; url?: string }>).data
+    if (data?.type === "kanna.navigate" && typeof data.url === "string") {
+      window.location.href = data.url
+    }
+  })
+}
+
 type SnapshotListener<T> = (value: T) => void
 type EventListener<T> = (value: T) => void
 export type SocketStatus = "connecting" | "connected" | "disconnected"
@@ -155,6 +164,16 @@ export class KannaSocket {
     })
   }
 
+  setFocusedChat(chatId: string | null) {
+    const id = generateUUID()
+    this.enqueue({
+      v: 1,
+      type: "command",
+      id,
+      command: { type: "push.setFocusedChat", chatId },
+    })
+  }
+
   ensureHealthyConnection() {
     if (!this.ws || this.ws.readyState === WebSocket.CLOSED || this.ws.readyState === WebSocket.CLOSING) {
       this.reconnectNow()
@@ -194,6 +213,17 @@ export class KannaSocket {
         if (envelope) {
           this.sendNow(envelope)
         }
+      }
+      const pushDeviceId = typeof localStorage !== "undefined"
+        ? localStorage.getItem("pushDeviceId")
+        : null
+      if (pushDeviceId) {
+        this.sendNow({
+          v: 1,
+          type: "command",
+          id: generateUUID(),
+          command: { type: "push.identifyDevice", pushDeviceId },
+        })
       }
     })
 
