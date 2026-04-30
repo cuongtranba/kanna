@@ -124,4 +124,17 @@ describe("PushManager.observeStatuses", () => {
     const payload = JSON.parse(sender.sent[0].payload) as PushPayload
     expect(payload.chatTitle.length).toBe(80)
   })
+
+  test("uses high urgency for failed and low urgency for completed", async () => {
+    await registerSub(manager, store, "d1", "https://push.example/x")
+    await manager.observeStatuses([chat({ status: "running" })])
+    await manager.observeStatuses([chat({ status: "failed" })])
+    expect(sender.sent[0].urgency).toBe("high")
+    expect(sender.sent[0].ttl).toBe(60)
+
+    sender.sent = []
+    await manager.observeStatuses([chat({ status: "running" })])
+    await manager.observeStatuses([chat({ status: "idle" })])
+    expect(sender.sent[0].urgency).toBe("low")
+  })
 })

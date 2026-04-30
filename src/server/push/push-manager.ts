@@ -44,6 +44,12 @@ export interface PushManagerArgs {
   now?: () => number
 }
 
+function urgencyFor(kind: PushTransitionKind): "low" | "normal" | "high" {
+  if (kind === "failed") return "high"
+  if (kind === "completed") return "low"
+  return "normal"
+}
+
 export class PushManager {
   private readonly store: PushEventStore
   private readonly sender: WebPushSender
@@ -131,10 +137,11 @@ export class PushManager {
 
   private async fanOut(payload: PushPayload): Promise<void> {
     const body = JSON.stringify(payload)
+    const urgency = urgencyFor(payload.kind)
     for (const sub of this.subscriptions.values()) {
       await this.sender.send(sub, body, {
         TTL: 60,
-        urgency: "normal",
+        urgency,
         vapidDetails: {
           subject: this.vapid.subject,
           publicKey: this.vapid.publicKey,
