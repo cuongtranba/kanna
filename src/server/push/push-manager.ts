@@ -1,3 +1,4 @@
+import webpush from "web-push"
 import type {
   KannaStatus,
   PushPayload,
@@ -312,5 +313,19 @@ export class PushManager {
       }
     }
   }
+}
+
+export const realWebPushSender: WebPushSender = {
+  async send(sub, payload, opts) {
+    await webpush.sendNotification(
+      { endpoint: sub.endpoint, keys: sub.keys },
+      payload,
+      {
+        TTL: opts.TTL,
+        urgency: opts.urgency,
+        vapidDetails: opts.vapidDetails,
+      },
+    )
+  },
 }
 
