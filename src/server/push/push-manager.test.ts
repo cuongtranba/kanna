@@ -137,4 +137,72 @@ describe("PushManager.observeStatuses", () => {
     await manager.observeStatuses([chat({ status: "idle" })])
     expect(sender.sent[0].urgency).toBe("low")
   })
+
+  test("dedups same (chatId, kind) within 2s", async () => {
+    let nowMs = 1000
+    manager = new PushManager({ store, sender, vapid: VAPID, now: () => nowMs })
+    await registerSub(manager, store, "d1", "https://push.example/x")
+
+    await manager.observeStatuses([chat({ status: "running" })])
+    nowMs = 2000
+    await manager.observeStatuses([chat({ status: "waiting_for_user" })])
+    nowMs = 3500  // 1.5s later
+    await manager.observeStatuses([chat({ status: "running" })])
+    nowMs = 4000  // .5s later
+    await manager.observeStatuses([chat({ status: "waiting_for_user" })])
+
+    expect(sender.sent).toHaveLength(1)
+  })
+
+  test("does not dedup after 2s window", async () => {
+    let nowMs = 1000
+    manager = new PushManager({ store, sender, vapid: VAPID, now: () => nowMs })
+    await registerSub(manager, store, "d1", "https://push.example/x")
+
+    await manager.observeStatuses([chat({ status: "running" })])
+    nowMs = 2000
+    await manager.observeStatuses([chat({ status: "waiting_for_user" })])
+    nowMs = 5000
+    await manager.observeStatuses([chat({ status: "running" })])
+    nowMs = 6000
+    await manager.observeStatuses([chat({ status: "waiting_for_user" })])
+
+    expect(sender.sent).toHaveLength(2)
+  })
+
+  test("skips muted projects", async () => {
+    store.events.push({
+      kind: "project_mute_set",
+      ts: 1,
+      localPath: "/tmp/p",
+      muted: true,
+    })
+    await registerSub(manager, store, "d1", "https://push.example/x")
+
+    await manager.observeStatuses([chat({ status: "running" })])
+    await manager.observeStatuses([chat({ status: "waiting_for_user" })])
+    expect(sender.sent).toEqual([])
+  })
+
+  test("skips devices focused on the firing chat", async () => {
+    await registerSub(manager, store, "d1", "https://push.example/x")
+    await registerSub(manager, store, "d2", "https://push.example/y")
+    manager.setFocusedChat("d1", "c1")
+
+    await manager.observeStatuses([chat({ status: "running" })])
+    await manager.observeStatuses([chat({ status: "waiting_for_user" })])
+
+    expect(sender.sent).toHaveLength(1)
+    expect(sender.sent[0].endpoint).toBe("https://push.example/y")
+  })
+
+  test("clears focus on disconnect", async () => {
+    await registerSub(manager, store, "d1", "https://push.example/x")
+    manager.setFocusedChat("d1", "c1")
+    manager.clearFocus("d1")
+
+    await manager.observeStatuses([chat({ status: "running" })])
+    await manager.observeStatuses([chat({ status: "waiting_for_user" })])
+    expect(sender.sent).toHaveLength(1)
+  })
 })

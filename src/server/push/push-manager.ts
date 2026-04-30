@@ -59,6 +59,8 @@ export class PushManager {
   private readonly mutedProjects = new Set<string>()
   private readonly lastStatusByChat = new Map<string, KannaStatus>()
   private seeded = false
+  private readonly dedupKeyToTs = new Map<string, number>()
+  private readonly focusedByDevice = new Map<string, string | null>()
 
   constructor(args: PushManagerArgs) {
     this.store = args.store
@@ -94,6 +96,14 @@ export class PushManager {
     }
   }
 
+  setFocusedChat(deviceId: string, chatId: string | null): void {
+    this.focusedByDevice.set(deviceId, chatId)
+  }
+
+  clearFocus(deviceId: string): void {
+    this.focusedByDevice.delete(deviceId)
+  }
+
   async observeStatuses(snapshot: readonly ObservedChat[]): Promise<void> {
     if (!this.seeded) {
       for (const chat of snapshot) {
@@ -107,6 +117,8 @@ export class PushManager {
       this.lastStatusByChat.set(chat.chatId, chat.status)
       const kind = this.detectTransition(prev, chat.status)
       if (!kind) continue
+      if (this.isDuplicate(chat.chatId, kind)) continue
+      if (this.mutedProjects.has(chat.projectLocalPath)) continue
       const payload = this.buildPayload(chat, kind)
       await this.fanOut(payload)
     }
@@ -135,10 +147,20 @@ export class PushManager {
     }
   }
 
+  private isDuplicate(chatId: string, kind: PushTransitionKind): boolean {
+    const key = `${chatId}:${kind}`
+    const ts = this.now()
+    const last = this.dedupKeyToTs.get(key)
+    if (last !== undefined && ts - last <= 2000) return true
+    this.dedupKeyToTs.set(key, ts)
+    return false
+  }
+
   private async fanOut(payload: PushPayload): Promise<void> {
     const body = JSON.stringify(payload)
     const urgency = urgencyFor(payload.kind)
     for (const sub of this.subscriptions.values()) {
+      if (this.focusedByDevice.get(sub.id) === payload.chatId) continue
       await this.sender.send(sub, body, {
         TTL: 60,
         urgency,
