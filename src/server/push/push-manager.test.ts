@@ -206,3 +206,191 @@ describe("PushManager.observeStatuses", () => {
     expect(sender.sent).toHaveLength(1)
   })
 })
+
+describe("PushManager subscriptions", () => {
+  let store: FakeStore
+  let sender: FakeSender
+  let manager: PushManager
+  let nowMs = 1000
+
+  beforeEach(() => {
+    store = new FakeStore()
+    sender = new FakeSender()
+    nowMs = 1000
+    manager = new PushManager({ store, sender, vapid: VAPID, now: () => nowMs })
+  })
+
+  test("addSubscription persists and assigns id", async () => {
+    await manager.initialize()
+    const result = await manager.addSubscription({
+      subscription: { endpoint: "https://push.example/x", keys: { p256dh: "p", auth: "a" } },
+      label: "iPhone",
+      userAgent: "Mozilla/5.0",
+    })
+    expect(result.id).toMatch(/^[0-9a-f-]{36}$/)
+    expect(store.events).toHaveLength(1)
+    expect(store.events[0].kind).toBe("subscription_added")
+    expect(manager.listDevices().map(d => d.id)).toContain(result.id)
+  })
+
+  test("removeSubscription writes user_revoked event", async () => {
+    await manager.initialize()
+    const { id } = await manager.addSubscription({
+      subscription: { endpoint: "https://push.example/x", keys: { p256dh: "p", auth: "a" } },
+      label: "iPhone",
+      userAgent: "ua",
+    })
+    await manager.removeSubscription(id, "user_revoked")
+    expect(manager.listDevices()).toEqual([])
+    expect(store.events.some(e => e.kind === "subscription_removed" && e.reason === "user_revoked")).toBe(true)
+  })
+
+  test("410 response purges the subscription as expired", async () => {
+    await manager.initialize()
+    const { id } = await manager.addSubscription({
+      subscription: { endpoint: "https://push.example/x", keys: { p256dh: "p", auth: "a" } },
+      label: "iPhone",
+      userAgent: "ua",
+    })
+    sender.errorByEndpoint.set("https://push.example/x", { statusCode: 410 })
+
+    nowMs = 2000
+    await manager.observeStatuses([chat({ status: "running" })])
+    nowMs = 3000
+    await manager.observeStatuses([chat({ status: "waiting_for_user" })])
+
+    expect(manager.listDevices()).toEqual([])
+    const removed = store.events.find(e => e.kind === "subscription_removed")
+    expect(removed && "reason" in removed && removed.reason).toBe("expired")
+    void id
+  })
+
+  test("5xx response leaves the subscription intact", async () => {
+    await manager.initialize()
+    const { id } = await manager.addSubscription({
+      subscription: { endpoint: "https://push.example/x", keys: { p256dh: "p", auth: "a" } },
+      label: "iPhone",
+      userAgent: "ua",
+    })
+    sender.errorByEndpoint.set("https://push.example/x", { statusCode: 503 })
+
+    nowMs = 2000
+    await manager.observeStatuses([chat({ status: "running" })])
+    nowMs = 3000
+    await manager.observeStatuses([chat({ status: "waiting_for_user" })])
+
+    expect(manager.listDevices().map(d => d.id)).toContain(id)
+    expect(store.events.find(e => e.kind === "subscription_removed")).toBeUndefined()
+  })
+
+  test("setProjectMute persists and filters", async () => {
+    await manager.initialize()
+    await manager.addSubscription({
+      subscription: { endpoint: "https://push.example/x", keys: { p256dh: "p", auth: "a" } },
+      label: "iPhone", userAgent: "ua",
+    })
+    await manager.setProjectMute("/tmp/p", true)
+    expect(manager.getPreferences().mutedProjectPaths).toContain("/tmp/p")
+    expect(store.events.some(e => e.kind === "project_mute_set" && e.muted)).toBe(true)
+  })
+
+  test("sendTest fires only to the requested device", async () => {
+    await manager.initialize()
+    const a = await manager.addSubscription({
+      subscription: { endpoint: "https://push.example/a", keys: { p256dh: "p", auth: "a" } },
+      label: "A", userAgent: "ua",
+    })
+    await manager.addSubscription({
+      subscription: { endpoint: "https://push.example/b", keys: { p256dh: "p", auth: "a" } },
+      label: "B", userAgent: "ua",
+    })
+    await manager.sendTest(a.id)
+    expect(sender.sent).toHaveLength(1)
+    expect(sender.sent[0].endpoint).toBe("https://push.example/a")
+    const payload = JSON.parse(sender.sent[0].payload) as PushPayload
+    expect(payload.kind).toBe("completed")
+    expect(payload.chatTitle).toBe("Test notification")
+  })
+
+  test("recordDeviceSeen debounces to <= 1 event/hour", async () => {
+    await manager.initialize()
+    const { id } = await manager.addSubscription({
+      subscription: { endpoint: "https://push.example/x", keys: { p256dh: "p", auth: "a" } },
+      label: "X", userAgent: "ua",
+    })
+    nowMs = 5_000
+    await manager.recordDeviceSeen(id)
+    nowMs = 5_000 + 30 * 60 * 1000  // 30m later
+    await manager.recordDeviceSeen(id)
+    nowMs = 5_000 + 60 * 60 * 1000 + 1  // 1h+1ms after first
+    await manager.recordDeviceSeen(id)
+
+    const seenEvents = store.events.filter(e => e.kind === "subscription_seen")
+    expect(seenEvents).toHaveLength(2)  // first + after 1h
+  })
+
+  test("addSubscription called twice with same endpoint returns same id and persists update", async () => {
+    await manager.initialize()
+    nowMs = 1000
+    const first = await manager.addSubscription({
+      subscription: { endpoint: "https://push.example/x", keys: { p256dh: "p1", auth: "a1" } },
+      label: "iPhone",
+      userAgent: "ua-1",
+    })
+    nowMs = 5000
+    const second = await manager.addSubscription({
+      subscription: { endpoint: "https://push.example/x", keys: { p256dh: "p2", auth: "a2" } },
+      label: "iPhone (renamed)",
+      userAgent: "ua-2",
+    })
+    expect(second.id).toBe(first.id)
+
+    // Replay events to verify durability
+    const replay = new PushManager({ store, sender, vapid: VAPID, now: () => nowMs })
+    await replay.initialize()
+    const devices = replay.listDevices()
+    expect(devices).toHaveLength(1)
+    expect(devices[0].id).toBe(first.id)
+    expect(devices[0].label).toBe("iPhone (renamed)")
+    expect(devices[0].userAgent).toBe("ua-2")
+    expect(devices[0].lastSeenAt).toBe(5000)
+    expect(devices[0].createdAt).toBe(1000)
+    expect(devices[0].keys.p256dh).toBe("p2")
+  })
+
+  test("removeSubscription with unknown id is a no-op", async () => {
+    await manager.initialize()
+    await manager.removeSubscription("nonexistent-id", "user_revoked")
+    expect(store.events).toEqual([])
+  })
+
+  test("recordDeviceSeen with unknown id is a no-op", async () => {
+    await manager.initialize()
+    await manager.recordDeviceSeen("nonexistent-id")
+    expect(store.events).toEqual([])
+  })
+
+  test("sendTest with unknown id is a no-op", async () => {
+    await manager.initialize()
+    await manager.sendTest("nonexistent-id")
+    expect(sender.sent).toEqual([])
+  })
+
+  test("getConfigSnapshot exposes vapid public key, prefs, and devices", async () => {
+    await manager.initialize()
+    const { id } = await manager.addSubscription({
+      subscription: { endpoint: "https://push.example/x", keys: { p256dh: "p", auth: "a" } },
+      label: "iPhone", userAgent: "ua",
+    })
+    await manager.setProjectMute("/tmp/muted", true)
+
+    const snap = manager.getConfigSnapshot(id)
+    expect(snap.vapidPublicKey).toBe("pub")
+    expect(snap.preferences.mutedProjectPaths).toContain("/tmp/muted")
+    expect(snap.devices).toHaveLength(1)
+    expect(snap.devices[0].isCurrentDevice).toBe(true)
+    // Sensitive material must NOT leak into device summaries:
+    expect(snap.devices[0]).not.toHaveProperty("endpoint")
+    expect(snap.devices[0]).not.toHaveProperty("keys")
+  })
+})
