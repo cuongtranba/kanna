@@ -12,6 +12,8 @@ import type {
   LlmProviderSnapshot,
   LocalProjectsSnapshot,
   ModelOptions,
+  PushConfigSnapshot,
+  PushSubscribeRequestPayload,
   SidebarData,
   StandaloneTranscriptAttachmentMode,
   StandaloneTranscriptExportResult,
@@ -32,6 +34,7 @@ export type SubscriptionTopic =
   | { type: "update" }
   | { type: "keybindings" }
   | { type: "app-settings" }
+  | { type: "push-config" }
   | { type: "chat"; chatId: string; recentLimit?: number }
   | { type: "project-git"; projectId: string }
   | { type: "terminal"; terminalId: string }
@@ -225,6 +228,12 @@ export type ClientCommand =
   | { type: "terminal.input"; terminalId: string; data: string }
   | { type: "terminal.resize"; terminalId: string; cols: number; rows: number }
   | { type: "terminal.close"; terminalId: string }
+  | { type: "push.identifyDevice"; pushDeviceId: string | null }
+  | { type: "push.subscribe"; subscription: PushSubscribeRequestPayload; label: string; userAgent: string }
+  | { type: "push.unsubscribe"; pushDeviceId: string }
+  | { type: "push.test" }
+  | { type: "push.setProjectMute"; localPath: string; muted: boolean }
+  | { type: "push.setFocusedChat"; chatId: string | null }
 
 export type OpenExternalAction = Extract<ClientCommand, { type: "system.openExternal" }>["action"]
 
@@ -240,6 +249,7 @@ export type ServerSnapshot =
   | { type: "keybindings"; data: KeybindingsSnapshot }
   | { type: "app-settings"; data: AppSettingsSnapshot }
   | { type: "llm-provider"; data: LlmProviderSnapshot }
+  | { type: "push-config"; data: PushConfigSnapshot }
   | { type: "chat"; data: ChatSnapshot | null }
   | { type: "project-git"; data: ChatDiffSnapshot | null }
   | { type: "terminal"; data: TerminalSnapshot | null }

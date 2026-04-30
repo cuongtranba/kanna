@@ -60,6 +60,11 @@ c3-118:
   - src/client/app/terminalToggleAnimation.test.ts
   - src/client/app/terminalLayoutResize.ts
   - src/client/app/terminalLayoutResize.test.ts
+c3-119:
+  - src/client/app/pushClient.ts
+  - src/client/app/pushClient.test.ts
+  - src/client/components/settings/PushNotificationsSection.tsx
+  - src/client/components/settings/PushNotificationsSection.test.tsx
 
 # Server foundation
 c3-201:
@@ -142,6 +147,12 @@ c3-222:
   - src/server/keybindings.test.ts
 c3-223:
   - src/server/cloudflare-tunnel/**/*.ts
+c3-224:
+  - src/server/push/push-manager.ts
+  - src/server/push/push-manager.test.ts
+  - src/server/push/vapid.ts
+  - src/server/push/vapid.test.ts
+  - src/server/push/events.ts
 
 # Shared
 c3-301:
@@ -200,6 +211,15 @@ ref-tool-hydration:
   - src/shared/tools.test.ts
   - src/client/components/messages/**/*.tsx
   - src/server/agent.ts
+ref-push:
+  - src/server/push/push-manager.ts
+  - src/server/push/vapid.ts
+  - src/server/push/events.ts
+  - src/client/app/pushClient.ts
+  - src/client/components/settings/PushNotificationsSection.tsx
+  - public/sw.js
+  - src/shared/types.ts
+  - src/shared/protocol.ts
 
 # ---- Exclusions (not counted in coverage) ----
 _exclude:
@@ -209,7 +229,12 @@ _exclude:
   - dist/**
   - scripts/**
   - bin/**
-  - public/**
+  - public/chat-sounds/**
+  - public/editor-icons/**
+  - public/fonts/**
+  - public/*.png
+  - public/*.svg
+  - public/*.webmanifest
   - docs/**
   - assets/**
   - "*.config.js"

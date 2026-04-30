@@ -67,6 +67,16 @@ import { useChatPreferencesStore } from "../stores/chatPreferencesStore"
 import { CHAT_SOUND_OPTIONS, useChatSoundPreferencesStore, type ChatSoundId, type ChatSoundPreference } from "../stores/chatSoundPreferencesStore"
 import { usePreferencesStore } from "../stores/preferences"
 import type { KannaState } from "./useKannaState"
+import { PushNotificationsSection } from "../components/settings/PushNotificationsSection"
+import {
+  clearStoredPushDeviceId,
+  detectPushSupport,
+  getStoredPushDeviceId,
+  setStoredPushDeviceId,
+  subscribePush,
+  unsubscribePush,
+  type PushPermissionState,
+} from "./pushClient"
 
 const sidebarItems = [
   {
@@ -531,6 +541,8 @@ export function SettingsPage() {
   const setProviderDefaultPlanMode = useChatPreferencesStore((store) => store.setProviderDefaultPlanMode)
   const resolvedKeybindings = useMemo(() => getResolvedKeybindings(keybindings), [keybindings])
   const keybindingsFilePathDisplay = resolvedKeybindings.filePathDisplay || getKeybindingsFilePathDisplay()
+  const [pushPermissionState, setPushPermissionState] = useState<PushPermissionState>(() => detectPushSupport().state)
+  const [pushDeviceId, setPushDeviceId] = useState<string | null>(() => getStoredPushDeviceId())
   const [scrollbackDraft, setScrollbackDraft] = useState(String(scrollbackLines))
   const [minColumnWidthDraft, setMinColumnWidthDraft] = useState(String(minColumnWidth))
   const [editorCommandDraft, setEditorCommandDraft] = useState(editorCommandTemplate)
@@ -579,6 +591,12 @@ export function SettingsPage() {
   useEffect(() => {
     setMinColumnWidthDraft(String(minColumnWidth))
   }, [minColumnWidth])
+
+  useEffect(() => {
+    const handler = () => setPushPermissionState(detectPushSupport().state)
+    window.addEventListener("focus", handler)
+    return () => window.removeEventListener("focus", handler)
+  }, [])
 
   useEffect(() => {
     setEditorCommandDraft(editorCommandTemplate)
@@ -1297,6 +1315,58 @@ export function SettingsPage() {
                           onChange={setAutoResumeOnRateLimit}
                         />
                       </SettingsRow>
+
+                      {state.pushConfig ? (
+                        <SettingsRow
+                          title="Push notifications"
+                          description="Get notified when a chat is waiting for you, finishes, or fails. Works on iPhone (after Add to Home Screen), Android, and desktop browsers."
+                          bordered={false}
+                        >
+                          <PushNotificationsSection
+                            permissionState={pushPermissionState}
+                            config={state.pushConfig}
+                            projects={state.localProjects?.projects ?? []}
+                            currentDeviceId={pushDeviceId}
+                            onEnable={async () => {
+                              if (!state.pushConfig) return
+                              const id = await subscribePush({
+                                vapidPublicKey: state.pushConfig.vapidPublicKey,
+                                sendToServer: async (payload) => {
+                                  const result = await state.socket.command<{ id: string }>({
+                                    type: "push.subscribe",
+                                    subscription: payload.subscription,
+                                    label: payload.label,
+                                    userAgent: payload.userAgent,
+                                  })
+                                  setStoredPushDeviceId(result.id)
+                                  return { id: result.id }
+                                },
+                              })
+                              setPushDeviceId(id)
+                            }}
+                            onDisable={async () => {
+                              if (!pushDeviceId) return
+                              await unsubscribePush({
+                                pushDeviceId,
+                                sendToServer: async (id) => {
+                                  await state.socket.command({ type: "push.unsubscribe", pushDeviceId: id })
+                                },
+                              })
+                              clearStoredPushDeviceId()
+                              setPushDeviceId(null)
+                            }}
+                            onTest={async () => {
+                              await state.socket.command({ type: "push.test" })
+                            }}
+                            onMuteToggle={async (localPath, muted) => {
+                              await state.socket.command({ type: "push.setProjectMute", localPath, muted })
+                            }}
+                            onRemoveDevice={async (id) => {
+                              await state.socket.command({ type: "push.unsubscribe", pushDeviceId: id })
+                            }}
+                          />
+                        </SettingsRow>
+                      ) : null}
 
                       <SettingsRow
                         title="Anonymous Analytics"

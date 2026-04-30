@@ -19,6 +19,7 @@ import {
 } from "./events"
 import { resolveLocalPath } from "./paths"
 import type { CloudflareTunnelEvent } from "./cloudflare-tunnel/events"
+import type { PushEvent, PushEventStore } from "./push/events"
 
 const COMPACTION_THRESHOLD_BYTES = 2 * 1024 * 1024
 const STALE_EMPTY_CHAT_MAX_AGE_MS = 30 * 60 * 1000
@@ -164,7 +165,7 @@ function getForkedChatTitle(title: string) {
   return trimmed.startsWith("Fork: ") ? trimmed : `Fork: ${trimmed}`
 }
 
-export class EventStore {
+export class EventStore implements PushEventStore {
   readonly dataDir: string
   readonly state: StoreState = createEmptyState()
   private writeChain = Promise.resolve()
@@ -177,6 +178,7 @@ export class EventStore {
   private readonly turnsLogPath: string
   private readonly schedulesLogPath: string
   private readonly tunnelLogPath: string
+  private readonly pushLogPath: string
   private readonly transcriptsDir: string
   private readonly sidebarProjectOrderPath: string
   private legacyMessagesByChatId = new Map<string, TranscriptEntry[]>()
@@ -196,6 +198,7 @@ export class EventStore {
     this.turnsLogPath = path.join(this.dataDir, "turns.jsonl")
     this.schedulesLogPath = path.join(this.dataDir, "schedules.jsonl")
     this.tunnelLogPath = path.join(this.dataDir, "tunnels.jsonl")
+    this.pushLogPath = path.join(this.dataDir, "push.jsonl")
     this.transcriptsDir = path.join(this.dataDir, "transcripts")
     this.sidebarProjectOrderPath = path.join(this.dataDir, SIDEBAR_PROJECT_ORDER_FILE)
   }
@@ -210,6 +213,7 @@ export class EventStore {
     await this.ensureFile(this.turnsLogPath)
     await this.ensureFile(this.schedulesLogPath)
     await this.ensureFile(this.tunnelLogPath)
+    await this.ensureFile(this.pushLogPath)
     await this.loadSnapshot()
     await this.replayLogs()
     await this.loadTunnelEvents()
@@ -1417,5 +1421,32 @@ export class EventStore {
         console.warn(`${LOG_PREFIX} Ignoring malformed line in tunnels.jsonl`)
       }
     }
+  }
+
+  async appendPushEvent(event: PushEvent): Promise<void> {
+    const payload = `${JSON.stringify(event)}\n`
+    this.writeChain = this.writeChain.then(async () => {
+      await appendFile(this.pushLogPath, payload, "utf8")
+    })
+    await this.writeChain
+  }
+
+  async loadPushEvents(): Promise<PushEvent[]> {
+    const file = Bun.file(this.pushLogPath)
+    if (!(await file.exists())) return []
+    const text = await file.text()
+    if (!text.trim()) return []
+
+    const events: PushEvent[] = []
+    for (const rawLine of text.split("\n")) {
+      const line = rawLine.trim()
+      if (!line) continue
+      try {
+        events.push(JSON.parse(line) as PushEvent)
+      } catch {
+        console.warn(`${LOG_PREFIX} Ignoring malformed line in push.jsonl`)
+      }
+    }
+    return events
   }
 }
