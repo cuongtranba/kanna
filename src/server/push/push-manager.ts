@@ -1,6 +1,8 @@
 import type {
   KannaStatus,
+  PushPayload,
   PushSubscriptionRecord,
+  PushTransitionKind,
 } from "../../shared/types"
 import type { PushEvent, PushEventStore } from "./events"
 import type { VapidKeypair } from "./vapid"
@@ -94,15 +96,51 @@ export class PushManager {
       this.seeded = true
       return
     }
-    // Transition firing comes in later tasks (Task 8).
-    // Reference dispatch deps here to satisfy noUnusedLocals until Task 8 uses them.
-    void this.sender
-    void this.vapid
-    void this.now
     for (const chat of snapshot) {
       const prev = this.lastStatusByChat.get(chat.chatId)
       this.lastStatusByChat.set(chat.chatId, chat.status)
-      void prev
+      const kind = this.detectTransition(prev, chat.status)
+      if (!kind) continue
+      const payload = this.buildPayload(chat, kind)
+      await this.fanOut(payload)
+    }
+  }
+
+  private detectTransition(
+    prev: KannaStatus | undefined,
+    next: KannaStatus,
+  ): PushTransitionKind | null {
+    if (next === "waiting_for_user" && prev !== "waiting_for_user") return "waiting_for_user"
+    if (next === "failed" && prev !== "failed") return "failed"
+    if (next === "idle" && prev === "running") return "completed"
+    return null
+  }
+
+  private buildPayload(chat: ObservedChat, kind: PushTransitionKind): PushPayload {
+    return {
+      v: 1,
+      kind,
+      projectLocalPath: chat.projectLocalPath,
+      projectTitle: chat.projectTitle,
+      chatId: chat.chatId,
+      chatTitle: chat.chatTitle.slice(0, 80),
+      chatUrl: `/chats/${chat.chatId}`,
+      ts: this.now(),
+    }
+  }
+
+  private async fanOut(payload: PushPayload): Promise<void> {
+    const body = JSON.stringify(payload)
+    for (const sub of this.subscriptions.values()) {
+      await this.sender.send(sub, body, {
+        TTL: 60,
+        urgency: "normal",
+        vapidDetails: {
+          subject: this.vapid.subject,
+          publicKey: this.vapid.publicKey,
+          privateKey: this.vapid.privateKey,
+        },
+      })
     }
   }
 }
