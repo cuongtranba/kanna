@@ -3,16 +3,20 @@ import {
   BookText,
   Command,
   Code,
+  ExternalLink,
   Info,
   Loader2,
   Menu,
   Monitor,
   Moon,
   MessageSquareQuote,
+  Search,
   Settings2,
   Sun,
   DownloadCloud,
   LogOut,
+  Trash2,
+  X,
 } from "lucide-react"
 import Markdown from "react-markdown"
 import remarkGfm from "remark-gfm"
@@ -25,8 +29,14 @@ import {
   DEFAULT_OPENROUTER_SDK_MODEL,
   PROVIDERS,
   type AgentProvider,
+  type InstalledSkillSummary,
   type KeybindingAction,
   type LlmProviderKind,
+  type InstalledSkillsSnapshot,
+  type SkillInstallResult,
+  type SkillSearchResult,
+  type SkillSearchSnapshot,
+  type SkillUninstallResult,
   type UpdateSnapshot,
 } from "../../shared/types"
 import { markdownComponents } from "../components/messages/shared"
@@ -70,6 +80,12 @@ const sidebarItems = [
     label: "General",
     icon: Settings2,
     subtitle: "Manage appearance, editor behavior, and embedded terminal defaults.",
+  },
+  {
+    id: "skills",
+    label: "Skills",
+    icon: BookText,
+    subtitle: "Manage globally installed agent skills from the active skill lock file.",
   },
   {
     id: "providers",
@@ -411,6 +427,347 @@ function GitHubIcon({ className }: { className?: string }) {
     >
       <path d="M12 .5C5.649.5.5 5.649.5 12A11.5 11.5 0 0 0 8.36 22.04c.575.106.785-.25.785-.556 0-.274-.01-1-.015-1.962-3.181.691-3.853-1.532-3.853-1.532-.52-1.322-1.27-1.674-1.27-1.674-1.038-.71.08-.695.08-.695 1.148.08 1.752 1.178 1.752 1.178 1.02 1.748 2.676 1.243 3.328.95.103-.738.399-1.243.725-1.53-2.54-.289-5.211-1.27-5.211-5.65 0-1.248.446-2.27 1.177-3.07-.118-.288-.51-1.45.112-3.024 0 0 .96-.307 3.145 1.173A10.91 10.91 0 0 1 12 6.03c.973.004 1.954.132 2.87.387 2.182-1.48 3.14-1.173 3.14-1.173.625 1.573.233 2.736.115 3.024.734.8 1.175 1.822 1.175 3.07 0 4.39-2.676 5.358-5.224 5.642.41.353.776 1.05.776 2.117 0 1.528-.014 2.761-.014 3.136 0 .309.207.668.79.555A11.502 11.502 0 0 0 23.5 12C23.5 5.649 18.351.5 12 .5Z" />
     </svg>
+  )
+}
+
+function formatInstallCount(count: number) {
+  if (!count || count <= 0) return "0 installs"
+  if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(1).replace(/\.0$/, "")}M installs`
+  if (count >= 1_000) return `${(count / 1_000).toFixed(1).replace(/\.0$/, "")}K installs`
+  return `${count} install${count === 1 ? "" : "s"}`
+}
+
+function SkillErrorBlock({ message }: { message: string }) {
+  return (
+    <pre className="max-w-full overflow-x-auto whitespace-pre-wrap rounded-lg border border-destructive/20 bg-destructive/5 px-4 py-3 text-xs text-destructive">
+      {message}
+    </pre>
+  )
+}
+
+function InstalledSkillCard({
+  skill,
+  uninstalling,
+  onUninstall,
+}: {
+  skill: InstalledSkillSummary
+  uninstalling: boolean
+  onUninstall: () => void
+}) {
+  const href = skill.source ? `https://skills.sh/${skill.source}/${skill.name}` : null
+
+  return (
+    <div className="flex min-w-0 items-center justify-between gap-3 rounded-lg border border-border bg-card/30 p-3">
+      <div className="min-w-0">
+        <div className="truncate text-sm font-medium text-foreground">{skill.name}</div>
+        <div className="truncate text-xs text-muted-foreground">{skill.source || "Unknown source"}</div>
+      </div>
+      <div className="flex shrink-0 items-center gap-2">
+        {href ? (
+          <a
+            href={href}
+            target="_blank"
+            rel="noreferrer"
+            aria-label={`View ${skill.name} on skills.sh`}
+            className="touch-manipulation inline-flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          >
+            <ExternalLink className="h-4 w-4" />
+          </a>
+        ) : null}
+        <button
+          type="button"
+          aria-label={`Uninstall ${skill.name}`}
+          disabled={uninstalling}
+          onClick={onUninstall}
+          className="touch-manipulation inline-flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:pointer-events-none disabled:opacity-50"
+        >
+          {uninstalling ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function SkillResultCard({
+  skill,
+  installing,
+  installed,
+  message,
+  onInstall,
+}: {
+  skill: SkillSearchResult
+  installing: boolean
+  installed: boolean
+  message?: string
+  onInstall: () => void
+}) {
+  return (
+    <div className="flex min-w-0 items-center justify-between gap-3 rounded-lg border border-border bg-card/30 p-3">
+      <div className="min-w-0">
+        <div className="truncate text-sm font-medium text-foreground">{skill.name}</div>
+        <div className="truncate text-xs text-muted-foreground">{skill.source} · {formatInstallCount(skill.installs)}</div>
+        {installed && message ? <div className="mt-1 truncate text-xs text-emerald-500">{message}</div> : null}
+      </div>
+      <div className="flex shrink-0 items-center gap-2">
+        <a
+          href={`https://skills.sh/${skill.id}`}
+          target="_blank"
+          rel="noreferrer"
+          aria-label={`View ${skill.name} on skills.sh`}
+          className="touch-manipulation inline-flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        >
+          <ExternalLink className="h-4 w-4" />
+        </a>
+        <Button
+          type="button"
+          size="sm"
+          variant={installed ? "secondary" : "default"}
+          disabled={installing || installed}
+          onClick={onInstall}
+          className="h-6 rounded-full px-2 text-xs"
+        >
+          {installing ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null}
+          {installed ? "Installed" : installing ? "Installing" : "Get"}
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+export function SkillsSection({
+  state,
+}: {
+  state: Pick<KannaState, "connectionStatus" | "socket">
+}) {
+  const socket = state.socket
+  const connectionStatus = state.connectionStatus
+  const [query, setQuery] = useState("")
+  const [results, setResults] = useState<SkillSearchResult[]>([])
+  const [searchLoading, setSearchLoading] = useState(false)
+  const [searchError, setSearchError] = useState<string | null>(null)
+  const [installedSkills, setInstalledSkills] = useState<InstalledSkillSummary[]>([])
+  const [installedSkillIds, setInstalledSkillIds] = useState<Set<string>>(() => new Set())
+  const [installedLoading, setInstalledLoading] = useState(false)
+  const [installedError, setInstalledError] = useState<string | null>(null)
+  const [operationError, setOperationError] = useState<string | null>(null)
+  const [installingSkillId, setInstallingSkillId] = useState<string | null>(null)
+  const [uninstallingSkillId, setUninstallingSkillId] = useState<string | null>(null)
+  const [installMessages, setInstallMessages] = useState<Record<string, string>>({})
+
+  async function loadInstalledSkills() {
+    if (connectionStatus !== "connected") {
+      setInstalledSkills([])
+      setInstalledSkillIds(new Set())
+      setInstalledError(null)
+      setInstalledLoading(false)
+      return
+    }
+
+    try {
+      setInstalledLoading(true)
+      setInstalledError(null)
+      const snapshot = await socket.command<InstalledSkillsSnapshot>({ type: "skills.listInstalled" })
+      setInstalledSkills(snapshot.skills)
+      setInstalledSkillIds(new Set(snapshot.skills.map((skill) => skill.name)))
+    } catch (error) {
+      setInstalledSkills([])
+      setInstalledSkillIds(new Set())
+      setInstalledError(error instanceof Error ? error.message : "Unable to read installed skills.")
+    } finally {
+      setInstalledLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    void loadInstalledSkills()
+  }, [connectionStatus, socket])
+
+  useEffect(() => {
+    const normalizedQuery = query.trim()
+    if (normalizedQuery.length < 2) {
+      setResults([])
+      setSearchError(null)
+      setSearchLoading(false)
+      return
+    }
+
+    if (connectionStatus !== "connected") {
+      setResults([])
+      setSearchLoading(false)
+      setSearchError("Backend connection required.")
+      return
+    }
+
+    let cancelled = false
+    setSearchLoading(true)
+    setSearchError(null)
+
+    const timeout = window.setTimeout(() => {
+      void socket.command<SkillSearchSnapshot>({
+        type: "skills.search",
+        query: normalizedQuery,
+        limit: 100,
+      })
+        .then((snapshot) => {
+          if (cancelled) return
+          setResults(snapshot.skills)
+        })
+        .catch((error) => {
+          if (cancelled) return
+          setResults([])
+          setSearchError(error instanceof Error ? error.message : "Unable to search skills.")
+        })
+        .finally(() => {
+          if (cancelled) return
+          setSearchLoading(false)
+        })
+    }, 250)
+
+    return () => {
+      cancelled = true
+      window.clearTimeout(timeout)
+    }
+  }, [connectionStatus, query, socket])
+
+  async function installSkill(skill: SkillSearchResult) {
+    if (connectionStatus !== "connected") {
+      setOperationError("Backend connection required.")
+      return
+    }
+
+    try {
+      setInstallingSkillId(skill.id)
+      setOperationError(null)
+      setInstallMessages((current) => {
+        const next = { ...current }
+        delete next[skill.id]
+        return next
+      })
+      await socket.command<SkillInstallResult>({
+        type: "skills.install",
+        source: skill.source,
+        skillId: skill.skillId,
+      })
+      setInstalledSkillIds((current) => new Set(current).add(skill.skillId))
+      setInstallMessages((current) => ({
+        ...current,
+        [skill.id]: "Installed globally",
+      }))
+      void loadInstalledSkills()
+    } catch (error) {
+      setOperationError(error instanceof Error ? error.message : "Install failed.")
+    } finally {
+      setInstallingSkillId(null)
+    }
+  }
+
+  async function uninstallSkill(skill: InstalledSkillSummary) {
+    if (connectionStatus !== "connected") {
+      setOperationError("Backend connection required.")
+      return
+    }
+
+    try {
+      setUninstallingSkillId(skill.name)
+      setOperationError(null)
+      await socket.command<SkillUninstallResult>({
+        type: "skills.uninstall",
+        skillId: skill.name,
+      })
+      setInstalledSkills((current) => current.filter((installedSkill) => installedSkill.name !== skill.name))
+      setInstalledSkillIds((current) => {
+        const next = new Set(current)
+        next.delete(skill.name)
+        return next
+      })
+      setInstallMessages((current) => {
+        const next = { ...current }
+        for (const key of Object.keys(next)) {
+          if (key.endsWith(`/${skill.name}`) || key === skill.name) {
+            delete next[key]
+          }
+        }
+        return next
+      })
+      void loadInstalledSkills()
+    } catch (error) {
+      setOperationError(error instanceof Error ? error.message : "Uninstall failed.")
+    } finally {
+      setUninstallingSkillId(null)
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-6">
+      {operationError ? <SkillErrorBlock message={operationError} /> : null}
+      <section className="flex flex-col gap-3">
+        <div className="flex items-center justify-between gap-3">
+          <div className="text-sm font-medium text-foreground">Installed</div>
+          {installedLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" /> : null}
+        </div>
+        {installedError ? <div className="text-xs text-destructive">{installedError}</div> : null}
+        {installedSkills.length > 0 ? (
+          <div className="grid gap-3 md:grid-cols-2">
+            {installedSkills.map((skill) => (
+              <InstalledSkillCard
+                key={`${skill.source}/${skill.name}`}
+                skill={skill}
+                uninstalling={uninstallingSkillId === skill.name}
+                onUninstall={() => { void uninstallSkill(skill) }}
+              />
+            ))}
+          </div>
+        ) : !installedLoading ? (
+          <div className="rounded-lg border border-border bg-card/30 p-3 text-sm text-muted-foreground">
+            No global skills installed.
+          </div>
+        ) : null}
+      </section>
+
+      <section className="flex flex-col gap-3">
+        <div className="text-sm font-medium text-foreground">Discover</div>
+        <div className="flex h-10 items-center gap-2 rounded-lg border border-border bg-card/30 px-3">
+          <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <input
+            type="text"
+            role="searchbox"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search skills"
+            className="min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
+          />
+          {query ? (
+            <button
+              type="button"
+              aria-label="Clear skills search"
+              onClick={() => setQuery("")}
+              className="touch-manipulation inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          ) : null}
+          {searchLoading ? <Loader2 className="h-4 w-4 shrink-0 animate-spin text-muted-foreground" /> : null}
+        </div>
+        {searchError ? <div className="text-xs text-destructive">{searchError}</div> : null}
+        <div className="grid gap-3 md:grid-cols-2">
+          {results.map((skill) => (
+            <SkillResultCard
+              key={skill.id}
+              skill={skill}
+              installing={installingSkillId === skill.id}
+              installed={installedSkillIds.has(skill.skillId)}
+              message={installMessages[skill.id]}
+              onInstall={() => { void installSkill(skill) }}
+            />
+          ))}
+        </div>
+        {!searchLoading && !searchError && query.trim().length >= 2 && results.length === 0 ? (
+          <div className="rounded-lg border border-border bg-card/30 p-3 text-sm text-muted-foreground">
+            No skills found.
+          </div>
+        ) : null}
+      </section>
+    </div>
   )
 }
 
@@ -1459,6 +1816,8 @@ export function SettingsPage() {
                       )
                     })}
                   </div>
+                ) : selectedPage === "skills" ? (
+                  <SkillsSection state={state} />
                 ) : (
                   <ChangelogSection
                     status={changelogStatus}

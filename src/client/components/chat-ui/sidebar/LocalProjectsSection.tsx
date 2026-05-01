@@ -1,5 +1,5 @@
 import { memo, type MouseEvent as ReactMouseEvent, type ReactNode, useMemo } from "react"
-import { ChevronRight, Loader2, MoreHorizontal, SquarePen } from "lucide-react"
+import { ChevronRight, Ellipsis, Loader2, Minus, MoreHorizontal, Plus, SquarePen } from "lucide-react"
 import {
   DndContext,
   PointerSensor,
@@ -328,16 +328,16 @@ const SortableProjectGroup = memo(function SortableProjectGroup({
                   onClick={() => onToggleExpandedGroup(groupKey)}
                   className="pl-2.5 py-1 text-xs text-muted-foreground/60 hover:text-foreground/60 transition-colors flex flex-row items-center gap-2 justify-center"
                 >
-                  Hide older
+                 Show less
                 </button>
               ) : null}
               {isExpanded ? group.olderChats.map(renderChatRow) : null}
               {hasMore && !isExpanded ? (
                 <button
                   onClick={() => onToggleExpandedGroup(groupKey)}
-                  className="pl-2.5 py-1 text-xs text-muted-foreground/60 hover:text-foreground/60 transition-colors flex flex-row items-center gap-2 justify-center"
+                  className="pl-2.5 py-1 text-xs text-muted-foreground/60 hover:text-foreground/60 transition-colors flex flex-row items-center gap-1 justify-center"
                 >
-                  Show older
+                 Show more
                 </button>
               ) : null}
             </>

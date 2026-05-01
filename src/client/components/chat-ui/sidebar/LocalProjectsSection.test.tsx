@@ -87,9 +87,9 @@ describe("LocalProjectsSection", () => {
 
     const html = renderSection(projectGroups, { expandedGroups: new Set(["project-a"]) })
 
-    expect(html).toContain("Hide older")
-    expect(html.indexOf("chat-1")).toBeLessThan(html.indexOf("Hide older"))
-    expect(html.indexOf("Hide older")).toBeLessThan(html.indexOf("chat-3"))
+    expect(html).toContain("Show less")
+    expect(html.indexOf("chat-1")).toBeLessThan(html.indexOf("Show less"))
+    expect(html.indexOf("Show less")).toBeLessThan(html.indexOf("chat-3"))
   })
 
   test("shows the most recent 5 chats when there are no chats in the last 24 hours", () => {
@@ -110,7 +110,7 @@ describe("LocalProjectsSection", () => {
 
     const html = renderSection(projectGroups)
 
-    expect(html).toContain("Show older")
+    expect(html).toContain("Show more")
     expect(html).toContain("chat-1")
     expect(html).toContain("chat-5")
     expect(html).not.toContain("chat-6")
@@ -132,7 +132,7 @@ describe("LocalProjectsSection", () => {
     })
 
     expect(html).toContain("New Chat")
-    expect(html).not.toContain("Show older")
+    expect(html).not.toContain("Show more")
   })
 
   test("hides the faux new chat row when the empty project is collapsed", () => {
