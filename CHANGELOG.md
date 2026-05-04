@@ -1,11 +1,13 @@
 # Changelog
 
-## [0.41.0](https://github.com/cuongtranba/kanna/compare/v0.40.0...v0.41.0) (2026-05-04)
+## [0.41.0](https://github.com/cuongtranba/kanna/compare/v0.40.1...v0.41.0) (2026-05-04)
 
 
 ### Features
 
 * **push:** web push notifications for chat state changes ([#11](https://github.com/cuongtranba/kanna/issues/11)) ([8ecb9d1](https://github.com/cuongtranba/kanna/commit/8ecb9d1b76674a22482b086af033c6e2196bec1c))
+
+## [0.40.1](https://github.com/cuongtranba/kanna/compare/v0.40.0...v0.40.1) (2026-04-30)
 
 
 ### Bug Fixes
