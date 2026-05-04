@@ -7,6 +7,8 @@ import type { ShareMode } from "../shared/share"
 import { createAuthManager } from "./auth"
 import { createAuthSessionStore } from "./auth-session-store"
 import { EventStore } from "./event-store"
+import { PushManager, realWebPushSender } from "./push/push-manager"
+import { loadOrGenerateVapidKeys } from "./push/vapid"
 import { AgentCoordinator } from "./agent"
 import type { LimitDetector } from "./auto-continue/limit-detector"
 import { KannaAnalyticsReporter } from "./analytics"
@@ -112,6 +114,13 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
   const diffStore = new DiffStore(store.dataDir)
   const machineDisplayName = getMachineDisplayName()
   await store.initialize()
+  const vapid = await loadOrGenerateVapidKeys(store.dataDir)
+  const pushManager = new PushManager({
+    store,
+    sender: realWebPushSender,
+    vapid,
+  })
+  await pushManager.initialize()
   await diffStore.initialize()
   await store.migrateLegacyTranscripts(options.onMigrationProgress)
   let discoveredProjects: DiscoveredProject[] = []
@@ -237,6 +246,7 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     getDiscoveredProjects: () => discoveredProjects,
     machineDisplayName,
     updateManager,
+    pushManager,
   })
   scheduleManager.rehydrate(
     store.listAutoContinueChats().flatMap((chatId) => store.getAutoContinueEvents(chatId))

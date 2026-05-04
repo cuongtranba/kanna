@@ -795,3 +795,39 @@ describe("EventStore tunnel events", () => {
     expect(store.getTunnelEvents("nonexistent")).toEqual([])
   })
 })
+
+describe("EventStore push events", () => {
+  test("appends and reloads push events", async () => {
+    const dataDir = await createTempDataDir()
+    const store = new EventStore(dataDir)
+    await store.initialize()
+
+    await store.appendPushEvent({
+      kind: "subscription_added",
+      ts: 1700000000000,
+      id: "sub-1",
+      record: {
+        id: "sub-1",
+        endpoint: "https://push.example/abc",
+        keys: { p256dh: "p", auth: "a" },
+        label: "iPhone",
+        userAgent: "Mozilla/5.0",
+        createdAt: 1700000000000,
+        lastSeenAt: 1700000000000,
+      },
+    })
+    await store.appendPushEvent({
+      kind: "project_mute_set",
+      ts: 1700000000001,
+      localPath: "/tmp/proj-a",
+      muted: true,
+    })
+
+    const reloaded = new EventStore(dataDir)
+    await reloaded.initialize()
+    const events = await reloaded.loadPushEvents()
+    expect(events).toHaveLength(2)
+    expect(events[0].kind).toBe("subscription_added")
+    expect(events[1].kind).toBe("project_mute_set")
+  })
+})

@@ -8,6 +8,16 @@ import type {
 } from "../../shared/protocol"
 import { LOG_PREFIX } from "../../shared/branding"
 import { generateUUID } from "../lib/utils"
+import { getStoredPushDeviceId } from "./pushClient"
+
+if (typeof navigator !== "undefined" && "serviceWorker" in navigator) {
+  navigator.serviceWorker.addEventListener("message", (event) => {
+    const data = (event as MessageEvent<{ type?: string; url?: string }>).data
+    if (data?.type === "kanna.navigate" && typeof data.url === "string") {
+      window.location.href = data.url
+    }
+  })
+}
 
 type SnapshotListener<T> = (value: T) => void
 type EventListener<T> = (value: T) => void
@@ -155,6 +165,22 @@ export class KannaSocket {
     })
   }
 
+  /**
+   * Fire-and-forget: enqueues a push.setFocusedChat command without awaiting
+   * an ack. Focus hints are advisory (the server suppresses notifications for
+   * the focused chat); a lost or late hint is harmless, so we don't gate the
+   * UI on a round-trip.
+   */
+  setFocusedChat(chatId: string | null) {
+    const id = generateUUID()
+    this.enqueue({
+      v: 1,
+      type: "command",
+      id,
+      command: { type: "push.setFocusedChat", chatId },
+    })
+  }
+
   ensureHealthyConnection() {
     if (!this.ws || this.ws.readyState === WebSocket.CLOSED || this.ws.readyState === WebSocket.CLOSING) {
       this.reconnectNow()
@@ -194,6 +220,15 @@ export class KannaSocket {
         if (envelope) {
           this.sendNow(envelope)
         }
+      }
+      const pushDeviceId = getStoredPushDeviceId()
+      if (pushDeviceId) {
+        this.sendNow({
+          v: 1,
+          type: "command",
+          id: generateUUID(),
+          command: { type: "push.identifyDevice", pushDeviceId },
+        })
       }
     })
 

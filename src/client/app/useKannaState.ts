@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { useShallow } from "zustand/react/shallow"
-import { PROVIDERS, type AgentProvider, type AppSettingsPatch, type AppSettingsSnapshot, type AskUserQuestionAnswerMap, type ChatAttachment, type ChatDiffSnapshot, type ChatHistoryPage, type KeybindingsSnapshot, type LlmProviderSnapshot, type LlmProviderValidationResult, type ModelOptions, type ProviderCatalogEntry, type QueuedChatMessage, type StandaloneTranscriptExportCommandResult, type TranscriptEntry, type UpdateInstallResult, type UpdateSnapshot, type UserPromptEntry } from "../../shared/types"
+import { PROVIDERS, type AgentProvider, type AppSettingsPatch, type AppSettingsSnapshot, type AskUserQuestionAnswerMap, type ChatAttachment, type ChatDiffSnapshot, type ChatHistoryPage, type KeybindingsSnapshot, type LlmProviderSnapshot, type LlmProviderValidationResult, type ModelOptions, type ProviderCatalogEntry, type PushConfigSnapshot, type QueuedChatMessage, type StandaloneTranscriptExportCommandResult, type TranscriptEntry, type UpdateInstallResult, type UpdateSnapshot, type UserPromptEntry } from "../../shared/types"
 import { NEW_CHAT_COMPOSER_ID, type ComposerState, useChatPreferencesStore } from "../stores/chatPreferencesStore"
 import { useRightSidebarStore } from "../stores/rightSidebarStore"
 import { useTerminalLayoutStore } from "../stores/terminalLayoutStore"
@@ -688,6 +688,7 @@ export interface KannaState {
   chatDiffSnapshot: ChatDiffSnapshot | null
   keybindings: KeybindingsSnapshot | null
   appSettings: AppSettingsSnapshot | null
+  pushConfig: PushConfigSnapshot | null
   llmProvider: LlmProviderSnapshot | null
   connectionStatus: SocketStatus
   sidebarReady: boolean
@@ -789,6 +790,7 @@ export function useKannaState(activeChatId: string | null): KannaState {
   const [projectDiffSnapshots, setProjectDiffSnapshots] = useState<Record<string, ChatDiffSnapshot | null>>({})
   const [keybindings, setKeybindings] = useState<KeybindingsSnapshot | null>(null)
   const [appSettings, setAppSettings] = useState<AppSettingsSnapshot | null>(null)
+  const [pushConfig, setPushConfig] = useState<PushConfigSnapshot | null>(null)
   const [llmProvider, setLlmProvider] = useState<LlmProviderSnapshot | null>(null)
   const [connectionStatus, setConnectionStatus] = useState<SocketStatus>("connecting")
   const [sidebarReady, setSidebarReady] = useState(false)
@@ -966,6 +968,12 @@ export function useKannaState(activeChatId: string | null): KannaState {
       setAppSettings(snapshot)
       syncRuntimeStoresFromAppSettings(snapshot)
       setCommandError(null)
+    })
+  }, [socket])
+
+  useEffect(() => {
+    return socket.subscribe<PushConfigSnapshot>({ type: "push-config" }, (snapshot) => {
+      setPushConfig(snapshot)
     })
   }, [socket])
 
@@ -2107,6 +2115,7 @@ export function useKannaState(activeChatId: string | null): KannaState {
     chatDiffSnapshot,
     keybindings,
     appSettings,
+    pushConfig,
     llmProvider,
     connectionStatus,
     sidebarReady,

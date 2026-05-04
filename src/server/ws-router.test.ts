@@ -120,6 +120,23 @@ const DEFAULT_LLM_PROVIDER_SNAPSHOT: LlmProviderSnapshot = {
   filePathDisplay: "~/.kanna/llm-provider.json",
 }
 
+const NOOP_PUSH_MANAGER = {
+  initialize: async () => {},
+  observeStatuses: async () => {},
+  getConfigSnapshot: () => ({
+    vapidPublicKey: "test-key",
+    preferences: { globalEnabled: true, mutedProjectPaths: [] },
+    devices: [],
+  }),
+  addSubscription: async () => ({ id: "test-device-id" }),
+  removeSubscription: async () => {},
+  recordDeviceSeen: async () => {},
+  setProjectMute: async () => {},
+  setFocusedChat: () => {},
+  clearFocus: () => {},
+  sendTest: async () => {},
+} as never
+
 describe("ws-router", () => {
   test("acks system.ping without broadcasting snapshots", async () => {
     const router = createWsRouter({
@@ -137,6 +154,7 @@ describe("ws-router", () => {
       getDiscoveredProjects: () => [],
       machineDisplayName: "Local Machine",
       updateManager: null,
+      pushManager: NOOP_PUSH_MANAGER,
     })
     const ws = new FakeWebSocket()
     router.handleOpen(ws as never)
@@ -194,6 +212,7 @@ describe("ws-router", () => {
       getDiscoveredProjects: () => [],
       machineDisplayName: "Local Machine",
       updateManager: null,
+      pushManager: NOOP_PUSH_MANAGER,
     })
     const ws = new FakeWebSocket()
     router.handleOpen(ws as never)
@@ -287,6 +306,7 @@ describe("ws-router", () => {
       getDiscoveredProjects: () => [],
       machineDisplayName: "Local Machine",
       updateManager: null,
+      pushManager: NOOP_PUSH_MANAGER,
     })
     const ws = new FakeWebSocket()
     router.handleOpen(ws as never)
@@ -380,6 +400,7 @@ describe("ws-router", () => {
       getDiscoveredProjects: () => [],
       machineDisplayName: "Local Machine",
       updateManager: null,
+      pushManager: NOOP_PUSH_MANAGER,
     })
     const ws = new FakeWebSocket()
     router.handleOpen(ws as never)
@@ -490,6 +511,7 @@ describe("ws-router", () => {
       getDiscoveredProjects: () => [],
       machineDisplayName: "Local Machine",
       updateManager: null,
+      pushManager: NOOP_PUSH_MANAGER,
     })
     const ws = new FakeWebSocket()
 
@@ -592,6 +614,7 @@ describe("ws-router", () => {
         getDiscoveredProjects: () => [],
         machineDisplayName: "Local Machine",
         updateManager: null,
+        pushManager: NOOP_PUSH_MANAGER,
       })
       const ws = new FakeWebSocket()
 
@@ -642,6 +665,7 @@ describe("ws-router", () => {
       getDiscoveredProjects: () => [],
       machineDisplayName: "Local Machine",
       updateManager: null,
+      pushManager: NOOP_PUSH_MANAGER,
     })
     const ws = new FakeWebSocket()
 
@@ -685,6 +709,7 @@ describe("ws-router", () => {
       getDiscoveredProjects: () => [],
       machineDisplayName: "Local Machine",
       updateManager: null,
+      pushManager: NOOP_PUSH_MANAGER,
     })
     const ws = new FakeWebSocket()
     router.handleOpen(ws as never)
@@ -759,6 +784,7 @@ describe("ws-router", () => {
       getDiscoveredProjects: () => [],
       machineDisplayName: "Local Machine",
       updateManager: null,
+      pushManager: NOOP_PUSH_MANAGER,
     })
 
     const wsA = new FakeWebSocket()
@@ -823,6 +849,7 @@ describe("ws-router", () => {
       getDiscoveredProjects: () => [],
       machineDisplayName: "Local Machine",
       updateManager: null,
+      pushManager: NOOP_PUSH_MANAGER,
     })
     const ws = new FakeWebSocket()
     router.handleOpen(ws as never)
@@ -896,6 +923,7 @@ describe("ws-router", () => {
       getDiscoveredProjects: () => [],
       machineDisplayName: "Local Machine",
       updateManager: null,
+      pushManager: NOOP_PUSH_MANAGER,
     })
     const ws = new FakeWebSocket()
     router.handleOpen(ws as never)
@@ -979,6 +1007,7 @@ describe("ws-router", () => {
       getDiscoveredProjects: () => [],
       machineDisplayName: "Local Machine",
       updateManager: null,
+      pushManager: NOOP_PUSH_MANAGER,
     })
     const ws = new FakeWebSocket()
     router.handleOpen(ws as never)
@@ -1089,6 +1118,7 @@ describe("ws-router", () => {
       getDiscoveredProjects: () => [],
       machineDisplayName: "Local Machine",
       updateManager: null,
+      pushManager: NOOP_PUSH_MANAGER,
     })
     const ws = new FakeWebSocket()
 
@@ -1176,6 +1206,7 @@ describe("ws-router", () => {
       getDiscoveredProjects: () => [],
       machineDisplayName: "Local Machine",
       updateManager: null,
+      pushManager: NOOP_PUSH_MANAGER,
     })
     const wsA = new FakeWebSocket()
     const wsB = new FakeWebSocket()
@@ -1312,6 +1343,7 @@ describe("ws-router", () => {
       getDiscoveredProjects: () => [],
       machineDisplayName: "Local Machine",
       updateManager: null,
+      pushManager: NOOP_PUSH_MANAGER,
     })
     const ws = new FakeWebSocket()
     router.handleOpen(ws as never)
@@ -1427,6 +1459,7 @@ describe("ws-router", () => {
       getDiscoveredProjects: () => [],
       machineDisplayName: "Local Machine",
       updateManager: null,
+      pushManager: NOOP_PUSH_MANAGER,
     })
     const ws = new FakeWebSocket()
     router.handleOpen(ws as never)
@@ -1544,6 +1577,7 @@ describe("ws-router", () => {
       getDiscoveredProjects: () => [],
       machineDisplayName: "Local Machine",
       updateManager: null,
+      pushManager: NOOP_PUSH_MANAGER,
     })
     const ws = new FakeWebSocket()
 
@@ -1624,6 +1658,7 @@ describe("ws-router", () => {
       getDiscoveredProjects: () => [],
       machineDisplayName: "Local Machine",
       updateManager: null,
+      pushManager: NOOP_PUSH_MANAGER,
     })
     const ws = new FakeWebSocket()
     router.handleOpen(ws as never)
@@ -1682,6 +1717,7 @@ describe("ws-router", () => {
       getDiscoveredProjects: () => [],
       machineDisplayName: "Local Machine",
       updateManager: null,
+      pushManager: NOOP_PUSH_MANAGER,
     })
     const ws = new FakeWebSocket()
     router.handleOpen(ws as never)
@@ -1723,6 +1759,7 @@ describe("ws-router", () => {
       getDiscoveredProjects: () => [],
       machineDisplayName: "Local Machine",
       updateManager: null,
+      pushManager: NOOP_PUSH_MANAGER,
     })
     const ws = new FakeWebSocket()
 
@@ -1833,6 +1870,7 @@ describe("ws-router", () => {
       getDiscoveredProjects: () => [],
       machineDisplayName: "Local Machine",
       updateManager: updateManager as never,
+      pushManager: NOOP_PUSH_MANAGER,
     })
     const ws = new FakeWebSocket()
 
@@ -1973,6 +2011,7 @@ describe("ws-router", () => {
       getDiscoveredProjects: () => [],
       machineDisplayName: "Local Machine",
       updateManager: null,
+      pushManager: NOOP_PUSH_MANAGER,
     })
     const ws = new FakeWebSocket()
 
@@ -2070,6 +2109,7 @@ describe("ws-router", () => {
       getDiscoveredProjects: () => [],
       machineDisplayName: "Local Machine",
       updateManager: null,
+      pushManager: NOOP_PUSH_MANAGER,
     })
     const ws = new FakeWebSocket()
 
@@ -2146,6 +2186,7 @@ describe("ws-router", () => {
       getDiscoveredProjects: () => [],
       machineDisplayName: "Local Machine",
       updateManager: null,
+      pushManager: NOOP_PUSH_MANAGER,
     })
     const ws = new FakeWebSocket()
 
@@ -2187,6 +2228,7 @@ describe("ws-router", () => {
       getDiscoveredProjects: () => [],
       machineDisplayName: "Local Machine",
       updateManager: null,
+      pushManager: NOOP_PUSH_MANAGER,
     })
     const ws = new FakeWebSocket()
 
@@ -2227,6 +2269,7 @@ describe("ws-router", () => {
       getDiscoveredProjects: () => [],
       machineDisplayName: "Local Machine",
       updateManager: null,
+      pushManager: NOOP_PUSH_MANAGER,
     })
     const ws = new FakeWebSocket()
 
@@ -2273,6 +2316,7 @@ describe("ws-router", () => {
       getDiscoveredProjects: () => [],
       machineDisplayName: "Local Machine",
       updateManager: null,
+      pushManager: NOOP_PUSH_MANAGER,
     })
     const ws = new FakeWebSocket()
 
