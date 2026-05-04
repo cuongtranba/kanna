@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.41.0](https://github.com/cuongtranba/kanna/compare/v0.40.0...v0.41.0) (2026-05-04)
+
+
+### Features
+
+* **push:** web push notifications for chat state changes ([#11](https://github.com/cuongtranba/kanna/issues/11)) ([8ecb9d1](https://github.com/cuongtranba/kanna/commit/8ecb9d1b76674a22482b086af033c6e2196bec1c))
+
+
+### Bug Fixes
+
+* **tunnel:** hide card when dismissing a proposed tunnel ([097cc23](https://github.com/cuongtranba/kanna/commit/097cc2323e6cdea8bf2ec4ebebbd2513141d209b))
+
 ## [0.40.0](https://github.com/cuongtranba/kanna/compare/v0.39.2...v0.40.0) (2026-04-29)
 
 
