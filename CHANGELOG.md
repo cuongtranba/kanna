@@ -68,6 +68,7 @@
 * **terminal-manager:** prevent zsh-newuser-install dialog in tests ([ac22810](https://github.com/cuongtranba/kanna/commit/ac22810cc57f70124189f16c34a807c3f2d9a9ff))
 * **tests:** use Object.defineProperty to override read-only globalThis props ([aea7eba](https://github.com/cuongtranba/kanna/commit/aea7eba77461bfc3225dd1f7cd99e8c7a5cf3520))
 * **tunnel:** hide card when dismissing a proposed tunnel ([097cc23](https://github.com/cuongtranba/kanna/commit/097cc2323e6cdea8bf2ec4ebebbd2513141d209b))
+* **update:** drop pm2 IPC reload to avoid "Reload in progress" error ([0629f04](https://github.com/cuongtranba/kanna/commit/0629f04f7b02615297dac67fb530c64c3843a394))
 * **update:** re-deploy installs current version when latest is stale ([7deece0](https://github.com/cuongtranba/kanna/commit/7deece0e12556ce4f252d3e16acd6a3963a43980))
 
 ## [0.41.0](https://github.com/cuongtranba/kanna/compare/v0.40.1...v0.41.0) (2026-05-04)
