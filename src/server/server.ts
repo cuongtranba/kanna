@@ -170,7 +170,6 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
         return compareVersions(latest, current) > 0 ? latest : current
       },
       repoDir: process.env.KANNA_REPO_DIR,
-      pm2ProcessName: process.env.KANNA_PM2_PROCESS_NAME,
     })
     manager = new UpdateManager({
       currentVersion: options.update.version,

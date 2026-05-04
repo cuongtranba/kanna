@@ -144,12 +144,10 @@ describe("Pm2Reloader", () => {
   function makeReloader(overrides: {
     lockfileChanged?: boolean
     commandErrors?: Record<string, string>
-    reloadError?: Error | null
   } = {}) {
     const calls: string[] = []
     const reloader = new Pm2Reloader({
       repoDir: "/tmp/repo",
-      processName: "kanna",
       runCommand: async (command, args) => {
         const line = [command, ...args].join(" ")
         calls.push(line)
@@ -158,21 +156,16 @@ describe("Pm2Reloader", () => {
         }
       },
       lockfileChanged: async () => overrides.lockfileChanged ?? false,
-      triggerPm2Reload: async () => {
-        calls.push("pm2.reload kanna")
-        if (overrides.reloadError) throw overrides.reloadError
-      },
     })
     return { reloader, calls }
   }
 
-  test("runs git pull, build, then pm2 reload when lockfile unchanged", async () => {
+  test("runs git pull then build when lockfile unchanged", async () => {
     const { reloader, calls } = makeReloader({ lockfileChanged: false })
     await reloader.reload()
     expect(calls).toEqual([
       "git pull --ff-only",
       "bun run build",
-      "pm2.reload kanna",
     ])
   })
 
@@ -183,11 +176,10 @@ describe("Pm2Reloader", () => {
       "git pull --ff-only",
       "bun install",
       "bun run build",
-      "pm2.reload kanna",
     ])
   })
 
-  test("aborts before reload when git pull fails", async () => {
+  test("aborts before build when git pull fails", async () => {
     const { reloader, calls } = makeReloader({
       commandErrors: { "git pull --ff-only": "merge conflict in src/foo.ts" },
     })
@@ -195,17 +187,12 @@ describe("Pm2Reloader", () => {
     expect(calls).toEqual(["git pull --ff-only"])
   })
 
-  test("aborts before reload when build fails", async () => {
+  test("surfaces build failures", async () => {
     const { reloader, calls } = makeReloader({
       commandErrors: { "bun run build": "tsc error TS2345" },
     })
     await expect(reloader.reload()).rejects.toThrow(/bun run build failed/i)
     expect(calls).toEqual(["git pull --ff-only", "bun run build"])
-  })
-
-  test("surfaces pm2 reload failures", async () => {
-    const { reloader } = makeReloader({ reloadError: new Error("pm2 daemon not running") })
-    await expect(reloader.reload()).rejects.toThrow(/pm2 reload failed/i)
   })
 })
 

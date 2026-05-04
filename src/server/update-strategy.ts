@@ -7,7 +7,6 @@ export interface UpdateChecker {
   check(): Promise<{ latestVersion: string; updateAvailable: boolean }>
 }
 
-// Implemented by SupervisorExitReloader (Task 2) and Pm2Reloader (Task 8).
 export interface UpdateReloader {
   reload(): Promise<void>
 }
@@ -90,10 +89,8 @@ export class GitChecker implements UpdateChecker {
 
 export interface Pm2ReloaderDeps {
   repoDir: string
-  processName: string
   runCommand: (command: string, args: string[]) => Promise<void>
   lockfileChanged: () => Promise<boolean>
-  triggerPm2Reload: (processName: string) => Promise<void>
 }
 
 export class Pm2Reloader implements UpdateReloader {
@@ -105,16 +102,6 @@ export class Pm2Reloader implements UpdateReloader {
       await this.step("bun install", ["bun", "install"])
     }
     await this.step("bun run build", ["bun", "run", "build"])
-    try {
-      await this.deps.triggerPm2Reload(this.deps.processName)
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
-      throw new UpdateInstallError(
-        `pm2 reload failed: ${message}`,
-        "install_failed",
-        "Update failed",
-      )
-    }
   }
 
   private async step(label: string, argv: string[]) {
@@ -140,8 +127,6 @@ export interface CreateUpdateStrategyDeps {
   latestVersionHint: () => string | null
   // Required for pm2 branch (KANNA_REPO_DIR).
   repoDir?: string
-  // Optional pm2 process name override (KANNA_PM2_PROCESS_NAME). Defaults to "kanna".
-  pm2ProcessName?: string
 }
 
 export interface UpdateStrategy {
@@ -176,10 +161,8 @@ export function createUpdateStrategy(deps: CreateUpdateStrategyDeps): UpdateStra
       }),
       reloader: new Pm2Reloader({
         repoDir,
-        processName: deps.pm2ProcessName ?? "kanna",
         runCommand: (command, args) => runCommandThrow(command, args, repoDir),
         lockfileChanged: () => detectLockfileChange(repoDir),
-        triggerPm2Reload,
       }),
     }
   }
@@ -218,24 +201,3 @@ async function detectLockfileChange(repoDir: string): Promise<boolean> {
   }
 }
 
-async function triggerPm2Reload(processName: string): Promise<void> {
-  const pm2Module = await import("pm2")
-  const pm2 = pm2Module.default ?? pm2Module
-  await new Promise<void>((resolve, reject) => {
-    pm2.connect((connectErr) => {
-      if (connectErr) {
-        pm2.disconnect()
-        reject(connectErr instanceof Error ? connectErr : new Error(String(connectErr)))
-        return
-      }
-      pm2.reload(processName, (reloadErr) => {
-        pm2.disconnect()
-        if (reloadErr) {
-          reject(reloadErr instanceof Error ? reloadErr : new Error(String(reloadErr)))
-          return
-        }
-        resolve()
-      })
-    })
-  })
-}
