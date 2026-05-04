@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.40.1](https://github.com/cuongtranba/kanna/compare/v0.40.0...v0.40.1) (2026-04-30)
+
+
+### Bug Fixes
+
+* **tunnel:** hide card when dismissing a proposed tunnel ([097cc23](https://github.com/cuongtranba/kanna/commit/097cc2323e6cdea8bf2ec4ebebbd2513141d209b))
+
 ## [0.40.0](https://github.com/cuongtranba/kanna/compare/v0.39.2...v0.40.0) (2026-04-29)
 
 
