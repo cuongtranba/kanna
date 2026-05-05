@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.42.1](https://github.com/cuongtranba/kanna/compare/v0.42.0...v0.42.1) (2026-05-05)
+
+
+### Bug Fixes
+
+* **settings:** repair push notifications UI overflow ([#16](https://github.com/cuongtranba/kanna/issues/16)) ([ac39fcd](https://github.com/cuongtranba/kanna/commit/ac39fcdc27497e81aa8b36c1d9f95eaf6e1401ec))
+
 ## [0.42.0](https://github.com/cuongtranba/kanna/compare/v0.41.0...v0.42.0) (2026-05-04)
 
 
