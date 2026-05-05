@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.42.3](https://github.com/cuongtranba/kanna/compare/v0.42.2...v0.42.3) (2026-05-05)
+
+
+### Bug Fixes
+
+* **test:** make pushClient tests robust to readonly globalThis.window ([#20](https://github.com/cuongtranba/kanna/issues/20)) ([18451f0](https://github.com/cuongtranba/kanna/commit/18451f08d90296c79192300f4dbcd3c68d692cf7))
+
 ## [0.42.2](https://github.com/cuongtranba/kanna/compare/v0.42.1...v0.42.2) (2026-05-05)
 
 
