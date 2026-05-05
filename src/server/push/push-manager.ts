@@ -278,7 +278,7 @@ export class PushManager {
       projectTitle: chat.projectTitle,
       chatId: chat.chatId,
       chatTitle: chat.chatTitle.slice(0, 80),
-      chatUrl: `/chats/${chat.chatId}`,
+      chatUrl: `/chat/${chat.chatId}`,
       ts: this.now(),
     }
   }
