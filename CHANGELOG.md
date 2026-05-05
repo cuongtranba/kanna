@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.42.6](https://github.com/cuongtranba/kanna/compare/v0.42.5...v0.42.6) (2026-05-05)
+
+
+### Bug Fixes
+
+* **quick-response:** unblock Haiku title gen in nested CC sessions ([fff7fa4](https://github.com/cuongtranba/kanna/commit/fff7fa4e21aef17263cddd3506b1776e8a6682a2))
+
 ## [0.42.5](https://github.com/cuongtranba/kanna/compare/v0.42.4...v0.42.5) (2026-05-05)
 
 
