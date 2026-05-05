@@ -1321,6 +1321,7 @@ export function SettingsPage() {
                           title="Push notifications"
                           description="Get notified when a chat is waiting for you, finishes, or fails. Works on iPhone (after Add to Home Screen), Android, and desktop browsers."
                           bordered={false}
+                          alignStart
                         >
                           <PushNotificationsSection
                             permissionState={pushPermissionState}
