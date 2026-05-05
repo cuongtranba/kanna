@@ -8,7 +8,7 @@ export interface VapidKeypair {
   subject: string
 }
 
-const DEFAULT_SUBJECT = "mailto:kanna@localhost"
+const DEFAULT_SUBJECT = "mailto:bacuongtr@gmail.com"
 
 export async function loadOrGenerateVapidKeys(dataDir: string): Promise<VapidKeypair> {
   await mkdir(dataDir, { recursive: true })
