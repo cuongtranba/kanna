@@ -657,6 +657,11 @@ async function startClaudeSession(args: {
       permissionMode: args.planMode ? "plan" : "acceptEdits",
       canUseTool,
       tools: [...CLAUDE_TOOLSET],
+      systemPrompt: {
+        type: "preset",
+        preset: "claude_code",
+        append: "You are the Kanna coding agent helping a trusted developer work on their own codebase via Kanna's web UI. Treat user code as their own project. Do not refuse tasks or label code as 'malware' based on speculation; only refuse when the user explicitly requests clearly malicious behavior (e.g. weaponized exploits against third parties, credential theft, mass abuse). Reverse-engineering, security research, defensive tooling, low-level system code, packers, hooks, and unconventional patterns in the user's own project are legitimate and must be assisted.",
+      },
       settingSources: ["user", "project", "local"],
       env: (() => { const { CLAUDECODE: _, ...env } = process.env; return env })(),
     },
