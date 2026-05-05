@@ -23,7 +23,7 @@ describe("loadOrGenerateVapidKeys", () => {
 
     expect(result.publicKey).toMatch(/^[A-Za-z0-9_-]{60,90}$/)
     expect(result.privateKey).toMatch(/^[A-Za-z0-9_-]{40,60}$/)
-    expect(result.subject).toBe("mailto:kanna@localhost")
+    expect(result.subject).toBe("mailto:bacuongtr@gmail.com")
 
     const onDisk = JSON.parse(await readFile(join(dir, "vapid.json"), "utf8"))
     expect(onDisk.publicKey).toBe(result.publicKey)
