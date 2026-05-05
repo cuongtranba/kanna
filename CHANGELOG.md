@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.42.5](https://github.com/cuongtranba/kanna/compare/v0.42.4...v0.42.5) (2026-05-05)
+
+
+### Bug Fixes
+
+* **push:** use /chat singular route in notification payload ([#24](https://github.com/cuongtranba/kanna/issues/24)) ([f7ee018](https://github.com/cuongtranba/kanna/commit/f7ee01838df257cf6c650f8e96c8c3b2feca1d74))
+
 ## [0.42.4](https://github.com/cuongtranba/kanna/compare/v0.42.3...v0.42.4) (2026-05-05)
 
 
