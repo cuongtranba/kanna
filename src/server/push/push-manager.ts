@@ -181,7 +181,15 @@ export class PushManager {
 
   async sendTest(id: string): Promise<void> {
     const sub = this.subscriptions.get(id)
-    if (!sub) return
+    if (!sub) {
+      console.warn("[kanna/push] sendTest: no subscription for id", { id })
+      return
+    }
+    console.log("[kanna/push] sendTest: delivering test push", {
+      id,
+      endpoint: safeEndpointHost(sub.endpoint),
+      label: sub.label,
+    })
     const payload: PushPayload = {
       v: 1,
       kind: "completed",
@@ -294,6 +302,14 @@ export class PushManager {
 
   private async deliver(sub: PushSubscriptionRecord, payload: PushPayload): Promise<void> {
     const body = JSON.stringify(payload)
+    const endpointHost = safeEndpointHost(sub.endpoint)
+    console.log("[kanna/push] deliver: sending", {
+      id: sub.id,
+      endpoint: endpointHost,
+      kind: payload.kind,
+      vapidSubject: this.vapid.subject,
+      vapidPublicKeyHead: this.vapid.publicKey.slice(0, 12),
+    })
     try {
       await this.sender.send(sub, body, {
         TTL: 60,
@@ -304,14 +320,31 @@ export class PushManager {
           privateKey: this.vapid.privateKey,
         },
       })
+      console.log("[kanna/push] deliver: ok", { id: sub.id, endpoint: endpointHost })
     } catch (error) {
       const status = (error as { statusCode?: number }).statusCode
+      const headers = (error as { headers?: Record<string, string> }).headers
+      const responseBody = (error as { body?: string }).body
+      console.warn("[kanna/push] deliver: failed", {
+        id: sub.id,
+        endpoint: endpointHost,
+        status,
+        headers,
+        responseBody,
+        message: (error as Error).message,
+      })
       if (status === 410 || status === 404 || status === 403) {
         await this.removeSubscription(sub.id, "expired")
-      } else {
-        console.warn("[kanna/push] delivery failed", { id: sub.id, status, error })
       }
     }
+  }
+}
+
+function safeEndpointHost(endpoint: string): string {
+  try {
+    return new URL(endpoint).host
+  } catch {
+    return "<invalid>"
   }
 }
 
