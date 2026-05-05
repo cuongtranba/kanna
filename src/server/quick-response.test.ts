@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { fallbackTitleFromMessage, generateTitleForChat, generateTitleForChatDetailed } from "./generate-title"
-import { getQuickResponseWorkspace, QuickResponseAdapter } from "./quick-response"
+import { envWithoutParentClaudeCode, getQuickResponseWorkspace, QuickResponseAdapter } from "./quick-response"
 
 describe("QuickResponseAdapter", () => {
   test("returns the SDK structured result when configured and it validates", async () => {
@@ -436,5 +436,47 @@ describe("fallbackTitleFromMessage", () => {
 
   test("returns null for blank input", () => {
     expect(fallbackTitleFromMessage("   \n  ")).toBeNull()
+  })
+})
+
+describe("envWithoutParentClaudeCode", () => {
+  test("strips parent Claude Code env vars that block nested SDK launches", () => {
+    const result = envWithoutParentClaudeCode({
+      PATH: "/usr/bin",
+      HOME: "/home/test",
+      CLAUDECODE: "1",
+      CLAUDE_CODE_ENTRYPOINT: "cli",
+      CLAUDE_CODE_EXECPATH: "/some/path",
+      CLAUDE_CODE_SUBAGENT_MODEL: "sonnet",
+      CLAUDE_AGENT_SDK_VERSION: "0.2.72",
+      AI_AGENT: "claude-code/2.1.121/agent",
+    })
+
+    expect(result.PATH).toBe("/usr/bin")
+    expect(result.HOME).toBe("/home/test")
+    expect(result.CLAUDECODE).toBeUndefined()
+    expect(result.CLAUDE_CODE_ENTRYPOINT).toBeUndefined()
+    expect(result.CLAUDE_CODE_EXECPATH).toBeUndefined()
+    expect(result.CLAUDE_CODE_SUBAGENT_MODEL).toBeUndefined()
+    expect(result.CLAUDE_AGENT_SDK_VERSION).toBeUndefined()
+    expect(result.AI_AGENT).toBeUndefined()
+  })
+
+  test("preserves auth-related env vars (ANTHROPIC_API_KEY, OAUTH token)", () => {
+    const result = envWithoutParentClaudeCode({
+      ANTHROPIC_API_KEY: "sk-ant-test",
+      CLAUDE_CODE_OAUTH_TOKEN: "oat-test",
+      CLAUDECODE: "1",
+    })
+
+    expect(result.ANTHROPIC_API_KEY).toBe("sk-ant-test")
+    expect(result.CLAUDE_CODE_OAUTH_TOKEN).toBe("oat-test")
+    expect(result.CLAUDECODE).toBeUndefined()
+  })
+
+  test("does not mutate the input env object", () => {
+    const input = { CLAUDECODE: "1", PATH: "/usr/bin" }
+    envWithoutParentClaudeCode(input)
+    expect(input.CLAUDECODE).toBe("1")
   })
 })

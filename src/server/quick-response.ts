@@ -6,7 +6,29 @@ import type { LlmProviderSnapshot } from "../shared/types"
 import { CodexAppServerManager } from "./codex-app-server"
 import { readLlmProviderSnapshot } from "./llm-provider"
 
-const CLAUDE_STRUCTURED_TIMEOUT_MS = 5_000
+const CLAUDE_STRUCTURED_TIMEOUT_MS = 20_000
+
+// Env vars set by a parent Claude Code session. The Agent SDK refuses to
+// spawn a child Claude Code process when these are present ("Claude Code
+// cannot be launched inside another Claude Code session"), so strip them
+// before forwarding env to the SDK. Auth still resolves via macOS keychain
+// or ANTHROPIC_API_KEY.
+const NESTED_CLAUDE_CODE_ENV_KEYS = [
+  "CLAUDECODE",
+  "CLAUDE_CODE_ENTRYPOINT",
+  "CLAUDE_CODE_EXECPATH",
+  "CLAUDE_CODE_SUBAGENT_MODEL",
+  "CLAUDE_AGENT_SDK_VERSION",
+  "AI_AGENT",
+] as const
+
+export function envWithoutParentClaudeCode(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const cleaned: NodeJS.ProcessEnv = { ...env }
+  for (const key of NESTED_CLAUDE_CODE_ENV_KEYS) {
+    delete cleaned[key]
+  }
+  return cleaned
+}
 
 type JsonSchema = {
   type: "object"
@@ -107,7 +129,7 @@ export async function runClaudeStructured(args: Omit<StructuredQuickResponseArgs
         type: "json_schema",
         schema: args.schema,
       },
-      env: { ...process.env },
+      env: envWithoutParentClaudeCode(process.env),
     },
   })
 
@@ -131,6 +153,8 @@ export async function runClaudeStructured(args: Omit<StructuredQuickResponseArgs
 
     return result
   } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error)
+    console.warn(`[quick-response] claude structured request failed: ${reason}`)
     return null
   } finally {
     try {
