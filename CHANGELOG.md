@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.42.4](https://github.com/cuongtranba/kanna/compare/v0.42.3...v0.42.4) (2026-05-05)
+
+
+### Bug Fixes
+
+* **push:** include diagnostic delivery logging in release ([fb549a9](https://github.com/cuongtranba/kanna/commit/fb549a9c6fb2a9ee91c603a797ddcb7dfe31f5b0))
+
 ## [0.42.3](https://github.com/cuongtranba/kanna/compare/v0.42.2...v0.42.3) (2026-05-05)
 
 
