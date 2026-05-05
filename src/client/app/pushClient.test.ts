@@ -1,6 +1,19 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import { detectPushSupport, subscribePush, unsubscribePush, urlBase64ToUint8Array, type PushSubscribeServerCall } from "./pushClient"
 
+// Some host environments (jsdom/happy-dom triggered by other test files in the
+// same process) define `globalThis.window` as a non-writable accessor, which
+// makes plain `=` assignment throw "Attempted to assign to readonly property".
+// Use a configurable data property so we can freely reassign in tests.
+function setGlobal(key: string, value: unknown): void {
+  Object.defineProperty(globalThis, key, {
+    value,
+    writable: true,
+    configurable: true,
+    enumerable: true,
+  })
+}
+
 const originalNotification = (globalThis as { Notification?: unknown }).Notification
 const originalNavigator = globalThis.navigator
 const originalIsSecureContext = (globalThis as { isSecureContext?: boolean }).isSecureContext
@@ -8,11 +21,11 @@ const originalWindow = (globalThis as { window?: unknown }).window
 const originalPushManager = (globalThis as { PushManager?: unknown }).PushManager
 
 afterEach(() => {
-  ;(globalThis as { Notification?: unknown }).Notification = originalNotification
-  ;(globalThis as { navigator?: unknown }).navigator = originalNavigator
-  ;(globalThis as { isSecureContext?: boolean }).isSecureContext = originalIsSecureContext
-  ;(globalThis as { window?: unknown }).window = originalWindow
-  ;(globalThis as { PushManager?: unknown }).PushManager = originalPushManager
+  setGlobal("Notification", originalNotification)
+  setGlobal("navigator", originalNavigator)
+  setGlobal("isSecureContext", originalIsSecureContext)
+  setGlobal("window", originalWindow)
+  setGlobal("PushManager", originalPushManager)
 })
 
 function setupBrowser(opts: {
@@ -23,18 +36,24 @@ function setupBrowser(opts: {
   hostname?: string
   permission?: NotificationPermission
 }) {
-  ;(globalThis as { window?: unknown }).window = {
+  setGlobal("window", {
     isSecureContext: opts.isSecureContext ?? true,
     location: { hostname: opts.hostname ?? "example.com" },
-  }
-  ;(globalThis as { isSecureContext?: boolean }).isSecureContext = opts.isSecureContext ?? true
-  ;(globalThis as { Notification?: unknown }).Notification = opts.hasNotification === false
-    ? undefined
-    : { permission: opts.permission ?? "default", requestPermission: async () => "granted" }
-  ;(globalThis as { navigator?: unknown }).navigator = opts.hasServiceWorker === false
-    ? {}
-    : { serviceWorker: { register: async () => ({}), ready: Promise.resolve({}) }, userAgent: "test" }
-  ;(globalThis as { PushManager?: unknown }).PushManager = opts.hasPushManager === false ? undefined : function () {}
+  })
+  setGlobal("isSecureContext", opts.isSecureContext ?? true)
+  setGlobal(
+    "Notification",
+    opts.hasNotification === false
+      ? undefined
+      : { permission: opts.permission ?? "default", requestPermission: async () => "granted" },
+  )
+  setGlobal(
+    "navigator",
+    opts.hasServiceWorker === false
+      ? {}
+      : { serviceWorker: { register: async () => ({}), ready: Promise.resolve({}) }, userAgent: "test" },
+  )
+  setGlobal("PushManager", opts.hasPushManager === false ? undefined : function () {})
 }
 
 describe("detectPushSupport", () => {
@@ -93,19 +112,19 @@ describe("subscribePush", () => {
       }),
     })
     const reg = { pushManager: { subscribe, getSubscription: async () => null } }
-    ;(globalThis as { window?: unknown }).window = { isSecureContext: true, location: { hostname: "x" } }
-    ;(globalThis as { Notification?: unknown }).Notification = {
+    setGlobal("window", { isSecureContext: true, location: { hostname: "x" } })
+    setGlobal("Notification", {
       permission: "default",
       requestPermission: async () => "granted",
-    }
-    ;(globalThis as { navigator?: unknown }).navigator = {
+    })
+    setGlobal("navigator", {
       serviceWorker: {
         register: async () => reg,
         ready: Promise.resolve(reg),
       },
       userAgent: "Mozilla/5.0 (TestUA)",
-    }
-    ;(globalThis as { PushManager?: unknown }).PushManager = function () {}
+    })
+    setGlobal("PushManager", function () {})
 
     const calls: PushSubscribeServerCall[] = []
     const id = await subscribePush({
@@ -123,16 +142,16 @@ describe("subscribePush", () => {
   })
 
   test("throws when permission denied", async () => {
-    ;(globalThis as { window?: unknown }).window = { isSecureContext: true, location: { hostname: "x" } }
-    ;(globalThis as { Notification?: unknown }).Notification = {
+    setGlobal("window", { isSecureContext: true, location: { hostname: "x" } })
+    setGlobal("Notification", {
       permission: "default",
       requestPermission: async () => "denied",
-    }
-    ;(globalThis as { navigator?: unknown }).navigator = {
+    })
+    setGlobal("navigator", {
       serviceWorker: { register: async () => ({}), ready: Promise.resolve({}) },
       userAgent: "ua",
-    }
-    ;(globalThis as { PushManager?: unknown }).PushManager = function () {}
+    })
+    setGlobal("PushManager", function () {})
 
     await expect(subscribePush({
       vapidPublicKey: "BPg4MhSNQjK4FjoUf4f9Ye_K2gM4ahK_5BWj9rYjZ8sHbqJj9oKkrFHBwZJh1XJF8AaXh",
@@ -146,10 +165,10 @@ describe("unsubscribePush", () => {
     let unsubscribed = false
     const sub = { unsubscribe: async () => { unsubscribed = true; return true } }
     const reg = { pushManager: { getSubscription: async () => sub } }
-    ;(globalThis as { navigator?: unknown }).navigator = {
+    setGlobal("navigator", {
       serviceWorker: { ready: Promise.resolve(reg), register: async () => reg },
       userAgent: "ua",
-    }
+    })
 
     let told: string | null = null
     await unsubscribePush({
