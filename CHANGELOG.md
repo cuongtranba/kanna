@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.42.2](https://github.com/cuongtranba/kanna/compare/v0.42.1...v0.42.2) (2026-05-05)
+
+
+### Bug Fixes
+
+* **push:** use real mailto for VAPID subject ([#18](https://github.com/cuongtranba/kanna/issues/18)) ([df5fd48](https://github.com/cuongtranba/kanna/commit/df5fd48878368cf4f71219a1d03d2cea11f1f057))
+
 ## [0.42.1](https://github.com/cuongtranba/kanna/compare/v0.42.0...v0.42.1) (2026-05-05)
 
 
