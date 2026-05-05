@@ -1,5 +1,7 @@
 ---
 id: c3-115
+c3-version: 4
+c3-seal: 560603f17882ccf81a4d4e75759ada5e5b16d36065242942941b2fb4fba3095a
 title: chat-ui-chrome
 type: component
 category: feature
@@ -8,45 +10,72 @@ goal: 'Provide the composer and chat chrome: input dock, provider/model/effort p
 uses:
     - ref-provider-adapter
     - ref-zustand-store
-c3-version: 4
 ---
 
 # chat-ui-chrome
+
 ## Goal
 
 Provide the composer and chat chrome: input dock, provider/model/effort pickers, attachment controls, queued message alignment.
-## Container Connection
 
-The user's input surface — without it there is nothing to send to the agent.
-## Dependencies
+## Parent Fit
 
-| Direction | What | From/To |
-|-----------|------|---------|
-| IN (uses) | Chat input store + preferences | c3-102 |
-| IN (uses) | Primitives | c3-103 |
-| IN (uses) | Provider catalog types | c3-301 |
-## Code References
+| Field | Value |
+| --- | --- |
+| Container | c3-1 (client) |
+| Parent Goal Slice | "Accept user input: chat composer, provider/model switches" |
+| Category | feature |
+| Lifecycle | Mounts inside chat-page for active session |
+| Replaceability | Replaceable provided composer command contract preserved |
 
-<!-- List concrete code files that implement this component -->
-| File | Purpose |
-|------|---------|
-## Related Refs
+## Purpose
 
-| Ref | How It Serves Goal |
-|-----|-------------------|
-| ref-provider-adapter | Pickers use the normalized catalog instead of per-provider forms |
-| ref-zustand-store | Pending input persisted between route changes |
-## Layer Constraints
+Owns the composer and surrounding chrome: textarea input, provider/model/effort pickers, attachment controls, queued message indicator, send action. Non-goals: transcript rendering, server command execution, chat history.
 
-This component operates within these boundaries:
+## Foundational Flow
 
-**MUST:**
-- Focus on single responsibility within its domain
-- Cite refs for patterns instead of re-implementing
-- Hand off cross-component concerns to container
+| Aspect | Detail | Reference |
+| --- | --- | --- |
+| Precondition | Chat-page provides session context | c3-112 |
+| Input — chat input store | Pending text, attachments | c3-102 |
+| Input — preferences | Theme, provider/model defaults | c3-102 |
+| Input — primitives | Textarea, popover, select, tooltip | c3-103 |
+| Input — provider catalog types | Provider/model/effort options | c3-301 |
 
-**MUST NOT:**
-- Import directly from other containers (use container linkages)
-- Define system-wide configuration (context responsibility)
-- Orchestrate multiple peer components (container responsibility)
-- Redefine patterns that exist in refs
+## Business Flow
+
+| Aspect | Detail | Reference |
+| --- | --- | --- |
+| Outcome | User sends a message to the agent with chosen provider/model | c3-1 |
+| Primary path | Type → choose model → click Send → emit chat.send command | c3-208 |
+| Alternate — drag-attach | Drop file → upload → reference inserted in payload | c3-217 |
+| Alternate — provider switch | Picker writes to preferences store; persists across sessions | ref-zustand-store |
+| Failure — send rejected | Show inline banner; retain text in store | c3-115 |
+
+## Governance
+
+| Reference | Type | Governs | Precedence | Notes |
+| --- | --- | --- | --- | --- |
+| ref-provider-adapter | ref | Use normalized catalog, not per-provider forms | must follow | One UI for all providers |
+| ref-zustand-store | ref | Persist pending input + preferences | must follow | Survives reload |
+
+## Contract
+
+| Surface | Direction | Contract | Boundary | Evidence |
+| --- | --- | --- | --- | --- |
+| Composer component | OUT | Renders input + pickers; emits send | c3-112 | src/client/components/chat-ui |
+| Send callback | OUT | Calls socket command chat.send with provider/model | c3-101 | src/client/components/chat-ui |
+| Attachment controls | OUT | Opens file picker; pushes to upload pipeline | c3-217 | src/client/components/chat-ui |
+
+## Change Safety
+
+| Risk | Trigger | Detection | Required Verification |
+| --- | --- | --- | --- |
+| Provider/model mismatch | Catalog type change | Picker shows wrong options | bun run check against src/client/components/chat-ui |
+| Lost draft on reload | Persistence regression | Pending text disappears | bun run check + manual reload smoke against src/client/stores/ |
+
+## Derived Materials
+
+| Material | Must derive from | Allowed variance | Evidence |
+| --- | --- | --- | --- |
+| src/client/components/chat-ui/**/*.tsx | c3-115 Contract | Layout/skin detail | src/client/components/chat-ui |

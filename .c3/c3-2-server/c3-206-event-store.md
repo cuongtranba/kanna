@@ -1,55 +1,84 @@
 ---
 id: c3-206
+c3-version: 4
+c3-seal: 44a82a9c4a711b91ee427f32c95a07e42af82c1dcf68fc918058a2f740e0f85f
 title: event-store
 type: component
 category: foundation
 parent: c3-2
 goal: Append events to JSONL, replay on boot, compact to snapshot.json when the log exceeds 2 MB.
 uses:
+    - ref-colocated-bun-test
     - ref-event-sourcing
     - ref-local-first-data
-    - ref-colocated-bun-test
-c3-version: 4
 ---
 
 # event-store
+
 ## Goal
 
 Append events to JSONL, replay on boot, compact to snapshot.json when the log exceeds 2 MB.
-## Container Connection
 
-Authoritative state of the system. Without it, read-models and subscribers have no source of truth.
-## Dependencies
+## Parent Fit
 
-| Direction | What | From/To |
-|-----------|------|---------|
-| IN (uses) | Events schema | c3-205 |
-| IN (uses) | Paths | c3-204 |
-| OUT (provides) | Append + replay API | c3-207 |
-| OUT (provides) | Append + replay API | c3-210 |
-## Code References
+| Field | Value |
+| --- | --- |
+| Container | c3-2 (server) |
+| Parent Goal Slice | "Persist agent + chat events durably and replay them on boot" |
+| Category | foundation |
+| Lifecycle | Singleton per server process |
+| Replaceability | Replaceable provided append/replay/compact contract preserved |
 
-<!-- List concrete code files that implement this component -->
-| File | Purpose |
-|------|---------|
-## Related Refs
+## Purpose
 
-| Ref | How It Serves Goal |
-|------|------|
-| ref-event-sourcing | Canonical implementation |
-| ref-local-first-data | All files under ~/.kanna/data |
-| ref-colocated-bun-test |  |
-## Layer Constraints
+Owns the JSONL event log: append-only writes, in-order replay on boot, snapshot compaction once the log exceeds 2 MB. Non-goals: projection logic, command handling, network — those live elsewhere.
 
-This component operates within these boundaries:
+## Foundational Flow
 
-**MUST:**
-- Focus on single responsibility within its domain
-- Cite refs for patterns instead of re-implementing
-- Hand off cross-component concerns to container
+| Aspect | Detail | Reference |
+| --- | --- | --- |
+| Precondition | Data dir created and writable | c3-204 |
+| Input — events schema | Typed event union | c3-205 |
+| Input — paths | Log + snapshot file paths | c3-204 |
+| Internal state | In-memory log mirror + write queue | c3-206 |
+| Initialization | Replays JSONL → snapshot before serving | c3-206 |
 
-**MUST NOT:**
-- Import directly from other containers (use container linkages)
-- Define system-wide configuration (context responsibility)
-- Orchestrate multiple peer components (container responsibility)
-- Redefine patterns that exist in refs
+## Business Flow
+
+| Aspect | Detail | Reference |
+| --- | --- | --- |
+| Outcome | Authoritative state survives restarts and compaction | c3-2 |
+| Primary path | Append → fsync → notify subscribers | c3-207 |
+| Alternate — replay | Boot replay rebuilds state from log + snapshot | c3-206 |
+| Alternate — compact | Snapshot taken when log > 2 MB | c3-206 |
+| Failure — write error | Surface to caller; log not advanced | c3-205 |
+
+## Governance
+
+| Reference | Type | Governs | Precedence | Notes |
+| --- | --- | --- | --- | --- |
+| ref-event-sourcing | ref | Append-only log + snapshot strategy | must follow | One log per project |
+| ref-local-first-data | ref | Files under ~/.kanna/data | must follow | No remote replication |
+| ref-colocated-bun-test | ref | Tests live next to source | must follow | event-store.test.ts |
+
+## Contract
+
+| Surface | Direction | Contract | Boundary | Evidence |
+| --- | --- | --- | --- | --- |
+| append(event) | IN | Typed append, returns ack | c3-210 | src/server/event-store.ts |
+| replay() | OUT | Yields events in order | c3-207 | src/server/event-store.ts |
+| compact() | OUT | Writes snapshot.json + truncates JSONL | c3-206 | src/server/event-store.ts |
+
+## Change Safety
+
+| Risk | Trigger | Detection | Required Verification |
+| --- | --- | --- | --- |
+| Lost events on crash | Write order regression | Replay yields incomplete state | bun run test src/server/event-store.test.ts |
+| Snapshot/log divergence | Compact bug | Boot replays stale state | bun run check plus replay smoke against src/server/event-store.ts |
+
+## Derived Materials
+
+| Material | Must derive from | Allowed variance | Evidence |
+| --- | --- | --- | --- |
+| src/server/event-store.ts | c3-206 Contract | Storage detail | src/server/event-store.ts |
+| src/server/event-store.test.ts | c3-206 Contract | Test cases per surface | src/server/event-store.test.ts |

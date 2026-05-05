@@ -1,92 +1,88 @@
 ---
 id: c3-223
+c3-version: 4
+c3-seal: 3db5593a61669b6847cb2d7d540d3144feaabd941b7387a44bc7a5695b758cad
 title: cloudflare-tunnel
 type: component
 category: feature
 parent: c3-2
-goal: Detect listening dev-server ports from Bash tool output via a haiku LLM classifier, then expose them through opt-in `cloudflared` quick tunnels with inline transcript UX.
+goal: Detect listening dev-server ports from Bash tool output via a Haiku classifier and expose them through opt-in `cloudflared` quick tunnels.
 uses:
     - ref-cqrs-read-models
     - ref-strong-typing
     - ref-ws-subscription
-c3-version: 4
 ---
 
 # cloudflare-tunnel
+
 ## Goal
 
-Detect listening dev-server ports from Bash tool output via a haiku LLM classifier, then expose them through opt-in `cloudflared` quick tunnels with inline transcript UX.
+Detect listening dev-server ports from Bash tool output via a Haiku classifier and expose them through opt-in `cloudflared` quick tunnels.
 
-## Container Connection
+## Parent Fit
 
-Lets users access localhost services running inside Kanna-managed projects from outside the local network without invoking `cloudflared` manually. Hooks into the Agent's Bash tool result path; emits events that flow through the same WS broadcast pipeline as auto-continue.
+| Field | Value |
+| --- | --- |
+| Container | c3-2 (server) |
+| Parent Goal Slice | "Auto-tunnel agent-spawned local services through opt-in cloudflared quick tunnels" |
+| Category | feature |
+| Lifecycle | Per-chat lifecycle; tunnels disposed on chat close or source exit |
+| Replaceability | Replaceable provided event union + WS command surface preserved |
 
-## Dependencies
+## Purpose
 
-| Direction | What | From/To |
-|-----------|------|---------|
-| IN (uses) | `query()` from `@anthropic-ai/claude-agent-sdk` for haiku classification | external SDK |
-| IN (uses) | `cloudflared` CLI (assumed installed; path configurable) | external binary |
-| IN (consumes) | Bash `tool_use`/`tool_result` entries | c3-210 (agent-coordinator) |
-| IN (consumes) | `cloudflareTunnel` settings block | c3-225 (app-settings) — see settings normalization |
-| OUT (provides) | Tunnel state projection (`tunnels`, `liveTunnelId` on `ChatSnapshot`) | c3-207 (read-models) |
-| OUT (provides) | `tunnel.accept` / `tunnel.stop` / `tunnel.retry` WS commands | c3-208 (ws-router) |
+Hooks into the Bash tool result path, classifies whether stdout indicates a listening dev server using a Haiku classifier, and offers/accepts a `cloudflared --url` quick tunnel. Non-goals: named tunnels, port allowlists, auto-installing cloudflared.
 
-## Code References
+## Foundational Flow
 
-| File | Purpose |
-|------|---------|
-| `src/server/cloudflare-tunnel/events.ts` | Versioned discriminated union: `tunnel_proposed`/`tunnel_accepted`/`tunnel_active`/`tunnel_stopped`/`tunnel_failed`. |
-| `src/server/cloudflare-tunnel/read-model.ts` | `deriveChatTunnels(events, chatId?)` projects events into `{ tunnels, liveTunnelId }`. |
-| `src/server/cloudflare-tunnel/detector.ts` | `evaluateBashOutput({command, stdout, client})` returns `{isServer, port?}`. Trims stdout to 2KB tail; prompt cap 4KB. |
-| `src/server/cloudflare-tunnel/haiku-client.ts` | Production wrapper around Claude Agent SDK `query()` with `claude-haiku-4-5-20251001` + JSON-schema output, 5s timeout. |
-| `src/server/cloudflare-tunnel/tunnel-manager.ts` | Spawns `cloudflared tunnel --url http://localhost:PORT`; parses `*.trycloudflare.com` URL; tracks active tunnels by port and id. |
-| `src/server/cloudflare-tunnel/lifecycle.ts` | Polls source PIDs; fires `onSourceExit` when the originating dev-server process disappears. |
-| `src/server/cloudflare-tunnel/agent-integration.ts` | `handleBashToolResult` bridges detector hits to event emission; honors `enabled` and `mode` settings. |
-| `src/server/cloudflare-tunnel/gateway.ts` | `TunnelGateway` composes manager + lifecycle + store + broadcast. Single entry point used by agent + ws-router. |
-| `src/server/cloudflare-tunnel/e2e.test.ts` | Integration test: propose → accept → active → stop. |
+| Aspect | Detail | Reference |
+| --- | --- | --- |
+| Precondition | cloudflareTunnel.enabled set true in settings | c3-222 |
+| Input — agent-coordinator | Bash tool entries | c3-210 |
+| Input — process utils | Spawn cloudflared | c3-209 |
+| Input — settings store | Reads enabled + mode + cloudflaredPath | c3-222 |
+| Internal state | In-memory tunnel records (port, URL, lifecycle) | c3-223 |
 
-## Settings
+## Business Flow
 
-```ts
-type CloudflareTunnelSettings = {
-  enabled: boolean              // default false (opt-in)
-  cloudflaredPath: string       // default "cloudflared"
-  mode: "always-ask" | "auto-expose"  // default "always-ask"
-}
-```
+| Aspect | Detail | Reference |
+| --- | --- | --- |
+| Outcome | Users expose agent-started services without leaving Kanna | c3-2 |
+| Primary path | Bash result → classifier → propose → accept → spawn tunnel | c3-208 |
+| Alternate — auto-expose | mode: auto-expose skips proposal | c3-223 |
+| Alternate — stop | User stop, source exit, chat close, server shutdown | c3-216 |
+| Failure — classifier error | Skip without surfacing to user | c3-205 |
 
-Persisted in `~/.kanna/data/settings.json`. UI section in `c3-116 settings-page`. Setter `AppSettingsManager.setCloudflareTunnel(patch)` persists + broadcasts via WS snapshot push.
+## Governance
 
-## Lifecycle Termination Triggers
+| Reference | Type | Governs | Precedence | Notes |
+| --- | --- | --- | --- | --- |
+| ref-cqrs-read-models | ref | Tunnel state projected over WS | must follow | Push, never pull |
+| ref-ws-subscription | ref | Reuses single-WS broadcast pipeline | must follow | No new push channel |
+| ref-strong-typing | ref | Typed event union + injected interfaces | must follow | No any in classifier or spawner |
 
-| Trigger | Reason field |
-|---------|--------------|
-| User clicks Stop | `user` |
-| Source dev-server PID exits | `source_exited` |
-| Chat/session closes | `session_closed` |
-| Server shutdown | `server_shutdown` |
+## Contract
 
-## Related Refs
+| Surface | Direction | Contract | Boundary | Evidence |
+| --- | --- | --- | --- | --- |
+| Tunnel projection | OUT | Adds tunnels + liveTunnelId to chat snapshot | c3-207 | src/server/cloudflare-tunnel/read-model.ts |
+| tunnel.accept/tunnel.stop/tunnel.retry | IN | Typed WS commands | c3-208 | src/server/cloudflare-tunnel/gateway.ts |
+| Bash-result hook | IN | Bridges agent tool output to classifier | c3-210 | src/server/cloudflare-tunnel/agent-integration.ts |
 
-| Ref | How It Serves Goal |
-|-----|-------------------|
-| ref-cqrs-read-models | Tunnel state projected from event log; pushed via WS snapshot. |
-| ref-ws-subscription | Read-model push (not pull) for tunnel state changes. |
-| ref-strong-typing | Discriminated event union; `HaikuClient` interface for test injection; `SpawnFn`/`ChildHandle` boundaries — no `any`. |
+## Change Safety
 
-## Layer Constraints
+| Risk | Trigger | Detection | Required Verification |
+| --- | --- | --- | --- |
+| Always-on regression | Default flips to enabled | Haiku calls without consent | bun run test src/server/cloudflare-tunnel/e2e.test.ts |
+| Tunnel leak after chat close | Lifecycle hook skipped | cloudflared lingers post-session | Manual chat-close smoke + grep src/server/cloudflare-tunnel/lifecycle.ts for cleanup |
 
-This component operates within these boundaries:
+## Derived Materials
 
-**MUST:**
-- Stay opt-in: `enabled: false` default; no haiku call when disabled.
-- Respect ephemeral nature: tunnel records in-memory only; events persisted to `tunnels.jsonl` for in-session replay.
-- Inject `HaikuClient` and `SpawnFn` for tests; never spawn real processes or call real LLM in unit tests.
-- Use the same WS broadcast pipeline as auto-continue; do not invent a new push channel.
-
-**MUST NOT:**
-- Call cloudflared with anything other than quick-tunnel form (`tunnel --url http://localhost:PORT`) — named tunnels out of scope for v1.
-- Persist tunnel state across server restarts (URLs are ephemeral by Cloudflare design).
-- Auto-install cloudflared (out of scope; fail with helpful error if missing).
-- Couple to specific port allow/deny lists — out of scope for v1.
+| Material | Must derive from | Allowed variance | Evidence |
+| --- | --- | --- | --- |
+| src/server/cloudflare-tunnel/events.ts | c3-223 Contract | Event payload detail | src/server/cloudflare-tunnel/events.ts |
+| src/server/cloudflare-tunnel/read-model.ts | c3-223 Contract | Projection detail | src/server/cloudflare-tunnel/read-model.ts |
+| src/server/cloudflare-tunnel/detector.ts | c3-223 Contract | Classifier detail | src/server/cloudflare-tunnel/detector.ts |
+| src/server/cloudflare-tunnel/tunnel-manager.ts | c3-223 Contract | Spawner detail | src/server/cloudflare-tunnel/tunnel-manager.ts |
+| src/server/cloudflare-tunnel/gateway.ts | c3-223 Contract | WS command surface | src/server/cloudflare-tunnel/gateway.ts |
+| src/server/cloudflare-tunnel/e2e.test.ts | c3-223 Contract | Integration test | src/server/cloudflare-tunnel/e2e.test.ts |

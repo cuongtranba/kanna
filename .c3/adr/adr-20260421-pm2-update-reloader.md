@@ -1,12 +1,15 @@
 ---
 id: adr-20260421-pm2-update-reloader
+c3-seal: 9b2b7a5c2ed2d6659771c633b243b4875c75ecbaea474b6edfb93c7c55168285
 title: pm2-update-reloader
 type: adr
+goal: Replace macOS launchd supervision with pm2 for the dev deploy path, and wire the in-app Update button to trigger a pm2-reload pipeline (git pull → build → `pm2 reload`). Abstract the update mechanism so the existing npm/self-update path and the new git/pm2 path coexist and can be swapped without touching `UpdateManager` or server wiring.
 status: implemented
-date: "2026-04-21T00:00:00Z"
+date: "2026-04-21"
 ---
 
 # pm2-update-reloader
+
 ## Goal
 
 Replace macOS launchd supervision with pm2 for the dev deploy path, and wire the in-app Update button to trigger a pm2-reload pipeline (git pull → build → `pm2 reload`). Abstract the update mechanism so the existing npm/self-update path and the new git/pm2 path coexist and can be swapped without touching `UpdateManager` or server wiring.
@@ -21,9 +24,9 @@ Introduced two interfaces in `src/server/update-strategy.ts`:
 Shipped two implementations of each, wired by a factory `createUpdateStrategy` keyed on `KANNA_RELOADER`:
 
 | Mode | Checker | Reloader | Default? |
-|------|---------|----------|----------|
-| `supervisor` (or unset) | `NpmChecker` (npm registry) | `SupervisorExitReloader` (install → restart_pending → process exit 76 → parent respawn) | yes |
-| `pm2` | `GitChecker` (git fetch → HEAD vs origin/branch) | `Pm2Reloader` (git pull → cond. bun install → bun run build → `pm2.reload`) | opt-in |
+| --- | --- | --- | --- |
+| supervisor (or unset) | NpmChecker (npm registry) | SupervisorExitReloader (install → restart_pending → process exit 76 → parent respawn) | yes |
+| pm2 | GitChecker (git fetch → HEAD vs origin/branch) | Pm2Reloader (git pull → cond. bun install → bun run build → pm2.reload) | opt-in |
 
 `UpdateManager` depends only on the interfaces; no knowledge of npm/git/pm2.
 

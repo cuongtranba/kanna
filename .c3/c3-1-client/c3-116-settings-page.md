@@ -1,53 +1,81 @@
 ---
 id: c3-116
+c3-version: 4
+c3-seal: afc4e9052a2f4779692b2f3929e3eda0609069ea95359bc583a80eac5d41ca88
 title: settings-page
 type: component
 category: feature
 parent: c3-1
 goal: 'Expose user settings: provider keys, theme, keybindings, chat preferences, notifications, data location.'
 uses:
-    - ref-zustand-store
     - ref-local-first-data
-c3-version: 4
+    - ref-zustand-store
 ---
 
 # settings-page
+
 ## Goal
 
 Expose user settings: provider keys, theme, keybindings, chat preferences, notifications, data location.
-## Container Connection
 
-One place to configure how the client and the local server behave; without it users cannot customize the tool.
-## Dependencies
+## Parent Fit
 
-| Direction | What | From/To |
-|-----------|------|---------|
-| IN (uses) | Preference stores | c3-102 |
-| IN (uses) | Primitives | c3-103 |
-| IN (uses) | Server keybinding projection | c3-222 |
-| IN (uses) | Cloudflare tunnel settings + setter | c3-223 |
-## Code References
+| Field | Value |
+| --- | --- |
+| Container | c3-1 (client) |
+| Parent Goal Slice | "Accept user input: … settings" |
+| Category | feature |
+| Lifecycle | Mounts on /settings route |
+| Replaceability | Section composition replaceable; settings keys remain stable |
 
-<!-- List concrete code files that implement this component -->
-| File | Purpose |
-|------|---------|
-## Related Refs
+## Purpose
 
-| Ref | How It Serves Goal |
-|-----|-------------------|
-| ref-zustand-store | Preferences live in stores with persistence |
-| ref-local-first-data | Settings surface the paths.ts data dir |
-## Layer Constraints
+Surfaces user-facing configuration: provider API keys, theme, custom keybindings, chat preferences, notification toggles, data directory, cloudflare tunnel toggles. Non-goals: server-side preference enforcement, secret storage policy, multi-user identity.
 
-This component operates within these boundaries:
+## Foundational Flow
 
-**MUST:**
-- Focus on single responsibility within its domain
-- Cite refs for patterns instead of re-implementing
-- Hand off cross-component concerns to container
+| Aspect | Detail | Reference |
+| --- | --- | --- |
+| Precondition | App-shell mounted; preferences hydrated | c3-110 |
+| Input — preferences store | Theme, notifications, model defaults | c3-102 |
+| Input — primitives | Switches, dialogs, sliders | c3-103 |
+| Input — server keybinding projection | Persisted bindings from server | c3-222 |
+| Input — cloudflare tunnel settings | Toggles + setter | c3-223 |
 
-**MUST NOT:**
-- Import directly from other containers (use container linkages)
-- Define system-wide configuration (context responsibility)
-- Orchestrate multiple peer components (container responsibility)
-- Redefine patterns that exist in refs
+## Business Flow
+
+| Aspect | Detail | Reference |
+| --- | --- | --- |
+| Outcome | User configures Kanna without leaving the app | c3-1 |
+| Primary path | Edit field → store/setter → optimistic update + server command | c3-208 |
+| Alternate — provider keys | Saved to local config (via server) only | ref-local-first-data |
+| Alternate — keybinding edit | Capture new chord → emit keybindings.set | c3-222 |
+| Failure — save reject | Revert optimistic change; show banner | c3-116 |
+
+## Governance
+
+| Reference | Type | Governs | Precedence | Notes |
+| --- | --- | --- | --- | --- |
+| ref-zustand-store | ref | Store-backed preferences with persist | must follow | One preferences store |
+| ref-local-first-data | ref | Local-only paths and keys | must follow | No cloud sync |
+
+## Contract
+
+| Surface | Direction | Contract | Boundary | Evidence |
+| --- | --- | --- | --- | --- |
+| <SettingsPage> route | OUT | Mounts at /settings; sections per concern | c3-110 | src/client/app/SettingsPage.tsx |
+| Setting setters | OUT | Emit typed commands (keybindings.set, tunnel.set, ...) | c3-208 | src/client/app/SettingsPage.tsx |
+| Provider key form | IN/OUT | Reads/writes provider config via server | c3-203 | src/client/app/SettingsPage.tsx |
+
+## Change Safety
+
+| Risk | Trigger | Detection | Required Verification |
+| --- | --- | --- | --- |
+| Lost preferences on schema bump | Persist field rename | Settings reset after upgrade | Add migrate in src/client/stores/ + bun run check |
+| Secret leakage | Provider key shown in DOM | Manual inspect of input element | bun run check + grep src/client/app/SettingsPage.tsx for plain logs |
+
+## Derived Materials
+
+| Material | Must derive from | Allowed variance | Evidence |
+| --- | --- | --- | --- |
+| src/client/app/SettingsPage.tsx | c3-116 Contract | Section ordering | src/client/app/SettingsPage.tsx |

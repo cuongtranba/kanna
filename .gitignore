@@ -43,3 +43,4 @@ scripts/pm2.config.cjs
 
 # pm2 local secrets (cloudflared token, password) — sourced by deploy.sh
 scripts/pm2.env
+.c3/c3.db

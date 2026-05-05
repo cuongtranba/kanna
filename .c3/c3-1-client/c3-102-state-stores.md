@@ -1,57 +1,82 @@
 ---
 id: c3-102
+c3-version: 4
+c3-seal: 36efe85c317a9c9a46be805f54d870c4861c64fdb59896abe6ca65f6f2be439c
 title: state-stores
 type: component
 category: foundation
 parent: c3-1
 goal: Hold UI-local state (chat input, terminal layout, sidebar, preferences) in small Zustand stores, persisting only what must survive reload.
 uses:
-    - ref-zustand-store
-    - ref-strong-typing
     - ref-colocated-bun-test
-c3-version: 4
+    - ref-strong-typing
+    - ref-zustand-store
 ---
 
 # state-stores
+
 ## Goal
 
 Hold UI-local state (chat input, terminal layout, sidebar, preferences) in small Zustand stores, persisting only what must survive reload.
-## Container Connection
 
-Gives features a place to keep UI state without pushing it into React context or the server. Without it, the client would need a global store or ad-hoc hooks.
-## Dependencies
+## Parent Fit
 
-| Direction | What | From/To |
-|-----------|------|---------|
-| OUT (provides) | Typed hooks per concern | c3-110 |
-| OUT (provides) | Chat input + preferences stores | c3-115 |
-| OUT (provides) | Sidebar state | c3-111 |
-| OUT (provides) | Chat page layout state | c3-112 |
-| OUT (provides) | Settings preferences | c3-116 |
-| OUT (provides) | Terminal layout + preferences | c3-118 |
-## Code References
+| Field | Value |
+| --- | --- |
+| Container | c3-1 (client) |
+| Parent Goal Slice | "Own the browser-side state surface (Zustand stores, React context, URL routing)" |
+| Category | foundation |
+| Lifecycle | Module-singleton stores instantiated at app boot |
+| Replaceability | Stores can be swapped per-concern as long as typed selector contract holds |
 
-<!-- List concrete code files that implement this component -->
-| File | Purpose |
-|------|---------|
-## Related Refs
+## Purpose
 
-| Ref | How It Serves Goal |
-|------|------|
-| ref-zustand-store | Codifies the per-concern store pattern |
-| ref-strong-typing | Each store exports typed selectors |
-| ref-colocated-bun-test |  |
-## Layer Constraints
+Owns the browser-side ephemeral state split into per-concern Zustand stores (chat input, sidebar order, terminal layout, preferences) with selective `persist` middleware so reloads only restore what users expect. Non-goals: server state, transcript content, route state — those live elsewhere.
 
-This component operates within these boundaries:
+## Foundational Flow
 
-**MUST:**
-- Focus on single responsibility within its domain
-- Cite refs for patterns instead of re-implementing
-- Hand off cross-component concerns to container
+| Aspect | Detail | Reference |
+| --- | --- | --- |
+| Precondition | Browser has localStorage available for persisted slices | c3-102 |
+| Input — types | Domain types and ports for selector typing | c3-301 |
+| Internal state | Per-store slices kept in memory; subset persisted via zustand persist | c3-102 |
+| Initialization | Store factories invoked on first hook call | c3-110 |
 
-**MUST NOT:**
-- Import directly from other containers (use container linkages)
-- Define system-wide configuration (context responsibility)
-- Orchestrate multiple peer components (container responsibility)
-- Redefine patterns that exist in refs
+## Business Flow
+
+| Aspect | Detail | Reference |
+| --- | --- | --- |
+| Outcome | Features read/write UI state without prop-drilling or context refactors | c3-110 |
+| Primary path | Component calls hook → selector returns slice → setter mutates store | ref-zustand-store |
+| Alternate — persistence | Persisted slices rehydrate on next load via zustand persist | ref-zustand-store |
+| Failure — corruption | Persisted JSON parse failure resets to initial state | c3-102 |
+
+## Governance
+
+| Reference | Type | Governs | Precedence | Notes |
+| --- | --- | --- | --- | --- |
+| ref-zustand-store | ref | Per-concern store pattern, persist usage | must follow | Each store is one concern |
+| ref-strong-typing | ref | Typed selectors and setters | must follow | No any in slice types |
+| ref-colocated-bun-test | ref | *.test.ts next to source | must follow | Store tests live alongside |
+
+## Contract
+
+| Surface | Direction | Contract | Boundary | Evidence |
+| --- | --- | --- | --- | --- |
+| useChatInputStore | OUT | Pending text + send actions | c3-115 | src/client/stores |
+| useSidebarStore | OUT | Project order, drag state, persistence | c3-111 | src/client/stores |
+| useTerminalStore | OUT | Layout sizes, visibility, persistence | c3-118 | src/client/stores |
+| usePreferencesStore | OUT | Theme, notifications, provider keys | c3-116 | src/client/stores |
+
+## Change Safety
+
+| Risk | Trigger | Detection | Required Verification |
+| --- | --- | --- | --- |
+| Persisted-shape break on schema change | Slice field renamed without migration | Users see reset to defaults after upgrade | Add version/migrate to persist in src/client/stores/; bun run check |
+| Store coupling drift | Component imports from another store directly | grep cross-imports | bun run check + audit src/client/stores/ |
+
+## Derived Materials
+
+| Material | Must derive from | Allowed variance | Evidence |
+| --- | --- | --- | --- |
+| src/client/stores/**/*.ts | c3-102 Contract | One store per concern; setters/selectors typed | src/client/stores |

@@ -1,27 +1,22 @@
 ---
 id: adr-00000000-c3-adoption
+c3-version: 4
+c3-seal: 104ece0accbf901190d1aa57904ccb29db0e106f997949cdb7ed4739e498f66f
 title: C3 Architecture Documentation Adoption
 type: adr
+goal: Adopt C3 methodology for kanna.
 status: implemented
-date: "20260420"
+date: "2026-04-20"
 affects:
     - c3-0
-c3-version: 4
 ---
 
 # C3 Architecture Documentation Adoption
+
 ## Goal
 
 Adopt C3 methodology for kanna.
 
-<!--
-EXIT CRITERIA (all must be true to mark implemented):
-- All containers documented with Goal Contribution
-- All components documented with Container Connection
-- Refs extracted for repeated patterns
-- Integrity checks pass
-- Audit passes
--->
 ## Workflow
 
 ```mermaid
@@ -63,13 +58,12 @@ flowchart TD
     G2 -->|None| DONE([Implemented])
 ```
 
----
 ## Stage 0: Inventory
 
 ### Context Discovery
 
 | Arg | Value |
-|-----|-------|
+| --- | --- |
 | PROJECT | Kanna |
 | GOAL | Beautiful browser UI for Claude Code + Codex CLIs with project-first navigation, multi-provider agent coordination, and event-sourced local persistence |
 | SUMMARY | Bun+React app driving Claude Agent SDK and Codex App Server over WebSocket, persisting state as append-only JSONL, rendering hydrated tool calls in real time |
@@ -77,7 +71,7 @@ flowchart TD
 ### Abstract Constraints
 
 | Constraint | Rationale | Affected Containers |
-|------------|-----------|---------------------|
+| --- | --- | --- |
 | Event sourcing for all state mutations | Replayable history, crash-safe, debuggable audit trail | c3-2 |
 | CQRS: write (events) decoupled from read (derived models) | UI subscribes to fast snapshots without touching the log | c3-1, c3-2 |
 | Reactive WebSocket broadcasting on every state change | Multiple tabs and agents stay consistent in real time | c3-1, c3-2 |
@@ -88,7 +82,7 @@ flowchart TD
 ### Container Discovery
 
 | N | CONTAINER_NAME | BOUNDARY | GOAL | SUMMARY |
-|---|----------------|----------|------|---------|
+| --- | --- | --- | --- | --- |
 | 1 | client | app | Render chat, accept input, subscribe to WS pushes | React + Zustand SPA under src/client |
 | 2 | server | service | Drive agents, persist events, broadcast snapshots | Bun HTTP+WS runtime under src/server |
 | 3 | shared | library | Publish wire protocol + domain types used by both sides | Code under src/shared imported by client and server |
@@ -96,7 +90,7 @@ flowchart TD
 ### Component Discovery (Brief)
 
 | N | NN | COMPONENT_NAME | CATEGORY | GOAL | SUMMARY |
-|---|----|--------------  |----------|------|---------|
+| --- | --- | --- | --- | --- | --- |
 | 1 | 01 | socket-client | foundation | Connect WS, route messages, emit commands | src/client/app/socket.ts |
 | 1 | 02 | state-stores | foundation | Zustand stores for chat/terminal/sidebar/prefs | src/client/stores/* |
 | 1 | 03 | ui-primitives | foundation | Radix + shadcn primitives (button, dialog, popover...) | src/client/components/ui/* |
@@ -141,13 +135,13 @@ flowchart TD
 ### Ref Discovery
 
 | SLUG | TITLE | GOAL | Scope | Applies To |
-|------|-------|------|-------|------------|
+| --- | --- | --- | --- | --- |
 | ref-event-sourcing | Event Sourcing | All mutations go through append-only JSONL; readers replay | cross-container | c3-2 event-store, events-schema, read-models |
 | ref-cqrs-read-models | CQRS Read Models | Derive view models from event state; broadcast diffs | cross-container | c3-1 state-stores, c3-2 read-models + ws-router |
 | ref-ws-subscription | WebSocket Subscription | Single WS with typed subscribe/command envelope | cross-container | c3-1 socket-client, c3-2 ws-router, c3-3 protocol |
 | ref-provider-adapter | Provider Adapter | Normalize Claude Agent SDK and Codex into one transcript model | cross-container | c3-2 agent-coordinator, provider-catalog, codex-app-server, quick-response |
 | ref-zustand-store | Zustand Store Pattern | Per-concern store, persist via localStorage as needed | client | c3-1 state-stores |
-| ref-colocated-bun-test | Colocated Bun Test | *.test.ts next to impl, runs under `bun test` | cross-container | all |
+| ref-colocated-bun-test | Colocated Bun Test | *.test.ts next to impl, runs under bun test | cross-container | all |
 | ref-strong-typing | Strong Typing Policy | No any/unknown at boundaries; prefer shared types | cross-container | all |
 | ref-local-first-data | Local-First Data | All persistence under ~/.kanna/data; localhost-default binding | server | c3-2 event-store, paths-config |
 | ref-tool-hydration | Tool Call Hydration | Normalize provider tool calls into unified transcript entries | cross-container | c3-3 tools, c3-1 messages-renderer, c3-2 agent-coordinator |
@@ -175,24 +169,17 @@ graph LR
 - [x] All components identified (brief) with args and category
 - [x] Cross-cutting refs identified
 - [x] Overview diagram generated
-## Stage 1: Details
 
-<!--
-Fill in each container with its components.
-- Internal: components that are self-contained
-- Linkage: components that handle connections to other containers
-- Extract refs when patterns repeat
-- If new item found -> back to Stage 0
--->
+## Stage 1: Details
 
 ### Container: c3-1
 
 **Created:** [ ] `.c3/c3-1-{slug}/README.md`
 
 | Type | Component ID | Name | Category | Doc Created |
-|------|--------------|------|----------|-------------|
-| Internal | | | | [ ] |
-| Linkage | | | | [ ] |
+| --- | --- | --- | --- | --- |
+| Internal |  |  |  | [ ] |
+| Linkage |  |  |  | [ ] |
 
 ### Container: c3-N
 
@@ -201,8 +188,8 @@ _(repeat per container from Stage 0)_
 ### Refs Created
 
 | Ref ID | Pattern | Doc Created |
-|--------|---------|-------------|
-| | | [ ] |
+| --- | --- | --- |
+|  |  | [ ] |
 
 ### Gate 1
 
@@ -211,18 +198,12 @@ _(repeat per container from Stage 0)_
 - [ ] All refs documented
 - [ ] No new items discovered (else -> Gate 0)
 
----
 ## Stage 2: Finalize
-
-<!--
-Integrity checks - verify everything connects.
-If issues found -> back to appropriate stage.
--->
 
 ### Integrity Checks
 
 | Check | Status |
-|-------|--------|
+| --- | --- |
 | Context <-> Container (all containers listed in c3-0) | [ ] |
 | Container <-> Component (all components listed in container README) | [ ] |
 | Component <-> Component (linkages documented) | [ ] |
@@ -233,21 +214,20 @@ If issues found -> back to appropriate stage.
 - [ ] All integrity checks pass
 - [ ] Run audit
 
----
 ## Conflict Resolution
 
 If later stage reveals earlier errors:
 
 | Conflict | Found In | Affects | Resolution |
-|----------|----------|---------|------------|
-| | | | |
+| --- | --- | --- | --- |
+|  |  |  |  |
 
----
 ## Exit
 
 When Gate 2 complete -> change frontmatter status to `implemented`
+
 ## Audit Record
 
 | Phase | Date | Notes |
-|-------|------|-------|
+| --- | --- | --- |
 | Adopted | 20260420 | Initial C3 structure created |

@@ -1,5 +1,7 @@
 ---
 id: c3-221
+c3-version: 4
+c3-seal: 1c6f78bcd3646c0041d0d4dc9257c0a71dd2679704aa5b287dbd75fab18fc390
 title: external-open
 type: component
 category: feature
@@ -7,42 +9,68 @@ parent: c3-2
 goal: Open URLs, files, and VS Code / editor links in the user's external apps.
 uses:
     - ref-local-first-data
-c3-version: 4
 ---
 
 # external-open
+
 ## Goal
 
 Open URLs, files, and VS Code / editor links in the user's external apps.
-## Container Connection
 
-Small quality-of-life bridge between the UI and the host OS.
-## Dependencies
+## Parent Fit
 
-| Direction | What | From/To |
-|-----------|------|---------|
-| OUT (provides) | Open command | c3-208 |
-## Code References
+| Field | Value |
+| --- | --- |
+| Container | c3-2 (server) |
+| Parent Goal Slice | "Bridge in-app links to the host OS without leaking remote endpoints" |
+| Category | feature |
+| Lifecycle | Stateless command handler bound at boot |
+| Replaceability | Replaceable provided open command + URL allowlist contract preserved |
 
-<!-- List concrete code files that implement this component -->
-| File | Purpose |
-|------|---------|
-## Related Refs
+## Purpose
 
-| Ref | How It Serves Goal |
-|-----|-------------------|
-| ref-local-first-data | Dispatches to local host only, never remote |
-## Layer Constraints
+Routes UI requests to open URLs/files/VS Code links to the host OS via platform-specific helpers. Non-goals: file content access, remote URL forwarding.
 
-This component operates within these boundaries:
+## Foundational Flow
 
-**MUST:**
-- Focus on single responsibility within its domain
-- Cite refs for patterns instead of re-implementing
-- Hand off cross-component concerns to container
+| Aspect | Detail | Reference |
+| --- | --- | --- |
+| Precondition | Local-only execution context | c3-2 |
+| Input — paths | Validates file paths against data dir | c3-204 |
+| Internal state | Stateless | c3-221 |
+| Initialization | Registered on ws-router boot | c3-208 |
 
-**MUST NOT:**
-- Import directly from other containers (use container linkages)
-- Define system-wide configuration (context responsibility)
-- Orchestrate multiple peer components (container responsibility)
-- Redefine patterns that exist in refs
+## Business Flow
+
+| Aspect | Detail | Reference |
+| --- | --- | --- |
+| Outcome | Users follow links/files without leaving Kanna | c3-101 |
+| Primary path | UI command → spawn open helper | c3-208 |
+| Alternate — VS Code | Detects VS Code link → invokes code CLI | c3-221 |
+| Failure — disallowed scheme | Reject with typed error | c3-208 |
+
+## Governance
+
+| Reference | Type | Governs | Precedence | Notes |
+| --- | --- | --- | --- | --- |
+| ref-local-first-data | ref | Dispatches to local host only | must follow | No remote forwarding |
+
+## Contract
+
+| Surface | Direction | Contract | Boundary | Evidence |
+| --- | --- | --- | --- | --- |
+| open command handler | IN | Accepts typed URL/file payload | c3-208 | src/server/external-open.ts |
+| OS dispatcher | OUT | Spawns platform open binary | c3-209 | src/server/external-open.ts |
+
+## Change Safety
+
+| Risk | Trigger | Detection | Required Verification |
+| --- | --- | --- | --- |
+| Open injection | Payload validation skipped | Arbitrary command runs on host | bun run check against src/server/external-open.ts |
+| Platform fallback drift | New OS path not handled | Open fails silently | Manual macOS+Linux smoke against src/server/external-open.ts |
+
+## Derived Materials
+
+| Material | Must derive from | Allowed variance | Evidence |
+| --- | --- | --- | --- |
+| src/server/external-open.ts | c3-221 Contract | Helper detail | src/server/external-open.ts |

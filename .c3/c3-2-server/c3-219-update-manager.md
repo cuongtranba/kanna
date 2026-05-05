@@ -1,66 +1,83 @@
 ---
 id: c3-219
+c3-version: 4
+c3-seal: fb3750a9bd0f9c431b29868624ed6100bd80bd01f021faa73c6b509def74d5e4
 title: update-manager
 type: component
 category: feature
 parent: c3-2
-goal: Detect newer kanna-code versions, expose update state to the UI, and reload the app via a swappable strategy (npm/supervisor default, git/pm2 opt-in).
+goal: Detect newer kanna-code versions, expose update state to the UI, and reload the app via a swappable strategy.
 uses:
     - ref-cqrs-read-models
     - ref-strong-typing
-c3-version: 4
 ---
 
 # update-manager
+
 ## Goal
 
-Detect newer kanna-code versions, expose update state to the UI, and reload the app via a swappable strategy (npm/supervisor default, git/pm2 opt-in).
-## Container Connection
+Detect newer kanna-code versions, expose update state to the UI, and reload the app via a swappable strategy.
 
-Keeps users aware of new versions without an external updater, and lets operators swap the reload mechanism (supervisor-exit vs pm2-reload) without changing client or server wiring.
-## Dependencies
+## Parent Fit
 
-| Direction | What | From/To |
-|-----------|------|---------|
-| IN (uses) | `UpdateChecker` / `UpdateReloader` interfaces (in `update-strategy.ts`) | self |
-| OUT (provides) | Update status projection | c3-207 |
-| OUT (provides) | `restart_pending` signal consumed by CLI restart path | c3-201, c3-220 |
-## Code References
+| Field | Value |
+| --- | --- |
+| Container | c3-2 (server) |
+| Parent Goal Slice | "Detect new versions and reload via swappable strategies (npm/pm2/git)" |
+| Category | feature |
+| Lifecycle | Singleton manager with timer-driven checks |
+| Replaceability | Replaceable provided checker/reloader interface contract preserved |
 
-| File | Purpose |
-|------|---------|
-| `src/server/update-manager.ts` | State machine; depends on `UpdateChecker` + `UpdateReloader` interfaces. Surfaces structured errors via `UpdateInstallError`. |
-| `src/server/update-strategy.ts` | Interfaces + `NpmChecker` / `GitChecker` / `SupervisorExitReloader` / `Pm2Reloader` + `createUpdateStrategy` factory (keyed on `KANNA_RELOADER`). |
-| `src/server/update-manager.test.ts` | Unit tests for the manager against fake checker/reloader. |
-| `src/server/update-strategy.test.ts` | Unit tests for all checkers, reloaders, and factory branches. |
+## Purpose
 
-## Strategy Matrix
+Hosts the version-check loop, exposes typed update state via a projection, and triggers reloads through a swappable `UpdateChecker` + `UpdateReloader` pair (npm/supervisor default, git/pm2 opt-in). Non-goals: HTTP serving, persistence, restart mechanics — those live in c3-220.
 
-| `KANNA_RELOADER` | Checker | Reloader | Extra env |
-|------------------|---------|----------|-----------|
-| unset / `supervisor` | `NpmChecker` | `SupervisorExitReloader` (install + exit 76) | — |
-| `pm2` | `GitChecker` | `Pm2Reloader` (git pull → build → pm2 reload) | `KANNA_REPO_DIR` (required), `KANNA_PM2_PROCESS_NAME` (optional, default `kanna`) |
+## Foundational Flow
 
-## Related Refs
+| Aspect | Detail | Reference |
+| --- | --- | --- |
+| Precondition | Strategy chosen via KANNA_RELOADER env | c3-219 |
+| Input — strategy module | Checker + reloader factories | c3-219 |
+| Input — read-models | Surfaces update projection | c3-207 |
+| Internal state | Timer + last-known version | c3-219 |
 
-| Ref | How It Serves Goal |
-|-----|-------------------|
-| ref-cqrs-read-models | Exposes update state as a projection |
-| ref-strong-typing | All side effects flow through typed DI interfaces — no `any`, no globals |
+## Business Flow
 
-## Layer Constraints
+| Aspect | Detail | Reference |
+| --- | --- | --- |
+| Outcome | Users see update banner and can trigger reload | c3-101 |
+| Primary path | Timer → checker → projection update | c3-207 |
+| Alternate — apply | User confirms → reloader installs + relaunches | c3-220 |
+| Alternate — pm2 strategy | git pull → build → pm2 reload | c3-219 |
+| Failure — install error | Surfaces structured UpdateInstallError | c3-208 |
 
-This component operates within these boundaries:
+## Governance
 
-**MUST:**
-- Focus on single responsibility within its domain
-- Cite refs for patterns instead of re-implementing
-- Hand off cross-component concerns to container
-- Keep `UpdateManager` free of strategy-specific knowledge (all branching lives in `createUpdateStrategy`)
+| Reference | Type | Governs | Precedence | Notes |
+| --- | --- | --- | --- | --- |
+| ref-cqrs-read-models | ref | Update state projected over WS | must follow | Push, never pull |
+| ref-strong-typing | ref | Typed checker/reloader interfaces | must follow | No any, no globals |
 
-**MUST NOT:**
-- Import directly from other containers (use container linkages)
-- Define system-wide configuration (context responsibility)
-- Orchestrate multiple peer components (container responsibility)
-- Redefine patterns that exist in refs
-- Hardcode npm/git/pm2 behavior in `update-manager.ts` — extend via a new `UpdateChecker`/`UpdateReloader` pair
+## Contract
+
+| Surface | Direction | Contract | Boundary | Evidence |
+| --- | --- | --- | --- | --- |
+| Update projection | OUT | Typed update state for UI | c3-207 | src/server/update-manager.ts |
+| applyUpdate() | IN | Triggers checker → reloader chain | c3-220 | src/server/update-manager.ts |
+| Strategy factory | IN/OUT | Returns checker + reloader pair | c3-219 | src/server/update-strategy.ts |
+
+## Change Safety
+
+| Risk | Trigger | Detection | Required Verification |
+| --- | --- | --- | --- |
+| Hardcoded strategy regression | Manager imports specific reloader | Tests fail without env | bun run test src/server/update-manager.test.ts |
+| Reloader misfire | pm2 strategy edit | Service stuck after reload | bun run test src/server/update-strategy.test.ts |
+
+## Derived Materials
+
+| Material | Must derive from | Allowed variance | Evidence |
+| --- | --- | --- | --- |
+| src/server/update-manager.ts | c3-219 Contract | State machine detail | src/server/update-manager.ts |
+| src/server/update-strategy.ts | c3-219 Contract | Strategy implementations | src/server/update-strategy.ts |
+| src/server/update-manager.test.ts | c3-219 Contract | Manager test cases | src/server/update-manager.test.ts |
+| src/server/update-strategy.test.ts | c3-219 Contract | Strategy test cases | src/server/update-strategy.test.ts |

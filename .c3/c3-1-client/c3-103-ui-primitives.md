@@ -1,5 +1,7 @@
 ---
 id: c3-103
+c3-version: 4
+c3-seal: 3df29e442d4de52d6b103b61af2117a407e4e230ac218cf3a19a9edd6986816b
 title: ui-primitives
 type: component
 category: foundation
@@ -7,47 +9,69 @@ parent: c3-1
 goal: 'Ship the low-level, brand-aligned UI primitives (Radix + shadcn derivatives: button, dialog, popover, scroll-area, tooltip, select, kbd, ...).'
 uses:
     - ref-strong-typing
-c3-version: 4
 ---
 
 # ui-primitives
+
 ## Goal
 
 Ship the low-level, brand-aligned UI primitives (Radix + shadcn derivatives: button, dialog, popover, scroll-area, tooltip, select, kbd, ...).
-## Container Connection
 
-Feature components compose these primitives to keep interaction quality consistent across chat, sidebar, settings, and terminal.
-## Dependencies
+## Parent Fit
 
-| Direction | What | From/To |
-|-----------|------|---------|
-| OUT (provides) | Primitives | c3-111 |
-| OUT (provides) | Primitives | c3-112 |
-| OUT (provides) | Primitives | c3-115 |
-| OUT (provides) | Primitives | c3-116 |
-| OUT (provides) | Primitives | c3-117 |
-| OUT (provides) | Primitives | c3-118 |
-## Code References
+| Field | Value |
+| --- | --- |
+| Container | c3-1 (client) |
+| Parent Goal Slice | "Render the chat experience" — primitives keep interaction quality consistent across surfaces |
+| Category | foundation |
+| Lifecycle | Stateless React components, instantiated by features as needed |
+| Replaceability | Replaceable per-primitive provided shadcn/Radix prop contract is preserved |
 
-<!-- List concrete code files that implement this component -->
-| File | Purpose |
-|------|---------|
-## Related Refs
+## Purpose
 
-| Ref | How It Serves Goal |
-|-----|-------------------|
-| ref-strong-typing | Primitives forward typed props to Radix without loosening types |
-## Layer Constraints
+Hosts every shared UI primitive consumed by feature components: buttons, dialogs, popovers, tooltips, selects, scroll areas, kbd. Pure presentational components forwarding typed props to Radix. Non-goals: feature logic, data fetching, app-level state.
 
-This component operates within these boundaries:
+## Foundational Flow
 
-**MUST:**
-- Focus on single responsibility within its domain
-- Cite refs for patterns instead of re-implementing
-- Hand off cross-component concerns to container
+| Aspect | Detail | Reference |
+| --- | --- | --- |
+| Precondition | Tailwind theme + shadcn tokens loaded | c3-103 |
+| Input — Radix slot APIs | Underlying behavior comes from Radix UI | c3-103 |
+| Internal state | Stateless; controlled or uncontrolled per Radix conventions | c3-103 |
+| Initialization | Tree-shaken; imports happen lazily per consumer | c3-103 |
 
-**MUST NOT:**
-- Import directly from other containers (use container linkages)
-- Define system-wide configuration (context responsibility)
-- Orchestrate multiple peer components (container responsibility)
-- Redefine patterns that exist in refs
+## Business Flow
+
+| Aspect | Detail | Reference |
+| --- | --- | --- |
+| Outcome | Visual + interaction consistency across chat, sidebar, settings, terminal | c3-1 |
+| Primary path | Feature imports primitive → composes with feature-specific markup | c3-103 |
+| Alternate — class merge | cn() helper merges Tailwind classes deterministically | c3-103 |
+| Failure — accessibility regression | aria-* attributes lost during refactor | c3-103 |
+
+## Governance
+
+| Reference | Type | Governs | Precedence | Notes |
+| --- | --- | --- | --- | --- |
+| ref-strong-typing | ref | Typed forwardRef + Props discriminated unions | must follow | No any for HTML attribute spreading |
+
+## Contract
+
+| Surface | Direction | Contract | Boundary | Evidence |
+| --- | --- | --- | --- | --- |
+| <Button> and friends | OUT | Typed forwardRef components with shadcn variants | c3-110 | src/client/components/ui |
+| cn(...classes) helper | OUT | Tailwind class merger | c3-110 | src/client/components/ui |
+| Variant props | OUT | Discriminated variant + size unions | c3-115 | src/client/components/ui |
+
+## Change Safety
+
+| Risk | Trigger | Detection | Required Verification |
+| --- | --- | --- | --- |
+| Accessibility regression | Slot/asChild rewiring | aXe audit fails or focus traps break | Keyboard nav smoke + bun run check on src/client/components/ui/ |
+| Theme drift | Tailwind token rename without sweep | Visual diff in Storybook-style smoke | bun run check + screenshot diff against src/client/components/ui/ |
+
+## Derived Materials
+
+| Material | Must derive from | Allowed variance | Evidence |
+| --- | --- | --- | --- |
+| src/client/components/ui/**/*.tsx | c3-103 Contract | New primitives may be added; existing surface stable | src/client/components/ui |

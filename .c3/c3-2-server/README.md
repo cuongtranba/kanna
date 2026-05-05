@@ -1,17 +1,20 @@
 ---
 id: c3-2
+c3-version: 4
+c3-seal: 9aca67b6a0ccb399e0d91ae0202929564488d9c7f678c28f06750e1fc2c3a488
 title: Server
 type: container
-parent: c3-0
-goal: 'Run the local Bun backend: serve HTTP+WebSocket, coordinate Claude + Codex agent turns, persist events, and broadcast derived read models.'
 boundary: service
-c3-version: 4
+parent: c3-0
+goal: 'Run the local Bun backend: serve HTTP+WebSocket on localhost, coordinate Claude + Codex agent turns, persist events, and broadcast derived read models.'
 ---
 
 # server
+
 ## Goal
 
 Run the local Bun backend: serve HTTP+WebSocket on localhost, coordinate Claude + Codex agent turns, persist events, and broadcast derived read models.
+
 ## Responsibilities
 
 - Own the authoritative event log and derived read models; every state mutation lands as a JSONL event first.
@@ -19,14 +22,11 @@ Run the local Bun backend: serve HTTP+WebSocket on localhost, coordinate Claude 
 - Drive multi-provider agent turns (Claude Agent SDK, Codex App Server) through a single coordinator.
 - Discover local projects, manage terminals and uploads, operate share tunnels.
 - Gate network access (auth), supervise its own CLI lifecycle, and refuse to leave localhost unless explicitly asked.
-## Complexity Assessment
 
-**Level:** <!-- [trivial|simple|moderate|complex|critical] -->
-**Why:** <!-- signals observed from code analysis -->
 ## Components
 
 | ID | Name | Category | Status | Goal Contribution |
-|----|------|----------|--------|-------------------|
+| --- | --- | --- | --- | --- |
 | c3-201 | cli-entry | foundation | implemented | CLI parsing, supervisor, browser launcher |
 | c3-202 | http-ws-server | foundation | implemented | HTTP + WS + static serving |
 | c3-203 | auth | foundation | implemented | Password + session cookie gating |
@@ -49,17 +49,4 @@ Run the local Bun backend: serve HTTP+WebSocket on localhost, coordinate Claude 
 | c3-220 | restart | feature | implemented | In-place server relaunch |
 | c3-221 | external-open | feature | implemented | Open URLs/files in external apps |
 | c3-222 | keybindings | feature | implemented | Persist user keybindings |
-## Layer Constraints
-
-This container operates within these boundaries:
-
-**MUST:**
-- Coordinate components within its boundary
-- Define how context linkages are fulfilled internally
-- Own its technology stack decisions
-
-**MUST NOT:**
-- Define system-wide policies (context responsibility)
-- Implement business logic directly (component responsibility)
-- Bypass refs for cross-cutting concerns
-- Orchestrate other containers (context responsibility)
+| c3-223 | cloudflare-tunnel | feature | implemented | Detect dev-server ports and expose via cloudflared quick tunnels |

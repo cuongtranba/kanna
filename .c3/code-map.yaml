@@ -1,257 +1,218 @@
-# C3 code-map: maps component and ref IDs to source file glob patterns.
-# Edit patterns, then verify with: c3x coverage
-
-# ---- Components ----
-
-# Client foundation
 c3-101:
-  - src/client/app/socket.ts
   - src/client/app/socket.test.ts
+  - src/client/app/socket.ts
 c3-102:
   - src/client/stores/**/*.ts
 c3-103:
   - src/client/components/ui/**/*.tsx
-
-# Client features
 c3-110:
-  - src/main.tsx
-  - src/client/app/App.tsx
   - src/client/app/App.test.tsx
-  - src/client/app/useKannaState.ts
-  - src/client/app/useKannaState.test.ts
-  - src/client/app/derived.ts
-  - src/client/app/chatFocusPolicy.ts
-  - src/client/app/chatFocusPolicy.test.ts
-  - src/client/app/chatNotifications.ts
+  - src/client/app/App.tsx
   - src/client/app/PageHeader.tsx
+  - src/client/app/chatFocusPolicy.test.ts
+  - src/client/app/chatFocusPolicy.ts
+  - src/client/app/chatNotifications.ts
+  - src/client/app/derived.ts
+  - src/client/app/useKannaState.test.ts
+  - src/client/app/useKannaState.ts
   - src/client/components/LocalDev.tsx
   - src/client/hooks/**/*.ts
   - src/client/hooks/**/*.tsx
   - src/client/lib/**/*.ts
+  - src/main.tsx
 c3-111:
   - src/client/app/KannaSidebar.tsx
-  - src/client/app/sidebarNumberJump.ts
   - src/client/app/sidebarNumberJump.test.ts
+  - src/client/app/sidebarNumberJump.ts
 c3-112:
+  - src/client/app/ChatPage.test.ts
   - src/client/app/ChatPage/**/*.ts
   - src/client/app/ChatPage/**/*.tsx
-  - src/client/app/ChatPage.test.ts
-  - src/client/app/useStickyChatFocus.ts
   - src/client/app/useRightSidebarToggleAnimation.ts
+  - src/client/app/useStickyChatFocus.ts
   - src/client/app/useTerminalToggleAnimation.ts
 c3-113:
-  - src/client/app/KannaTranscript.tsx
   - src/client/app/KannaTranscript.test.tsx
+  - src/client/app/KannaTranscript.tsx
 c3-114:
-  - src/client/components/messages/**/*.tsx
   - src/client/components/messages/**/*.ts
+  - src/client/components/messages/**/*.tsx
 c3-115:
-  - src/client/components/chat-ui/**/*.tsx
   - src/client/components/chat-ui/**/*.ts
+  - src/client/components/chat-ui/**/*.tsx
 c3-116:
-  - src/client/app/SettingsPage.tsx
   - src/client/app/SettingsPage.test.tsx
+  - src/client/app/SettingsPage.tsx
 c3-117:
   - src/client/app/LocalProjectsPage.tsx
   - src/client/components/NewProjectModal.tsx
 c3-118:
   - src/client/app/ChatPage/TerminalWorkspaceShell.tsx
-  - src/client/app/terminalToggleAnimation.ts
-  - src/client/app/terminalToggleAnimation.test.ts
-  - src/client/app/terminalLayoutResize.ts
   - src/client/app/terminalLayoutResize.test.ts
-c3-119:
-  - src/client/app/pushClient.ts
-  - src/client/app/pushClient.test.ts
-  - src/client/components/settings/PushNotificationsSection.tsx
-  - src/client/components/settings/PushNotificationsSection.test.tsx
-
-# Server foundation
+  - src/client/app/terminalLayoutResize.ts
+  - src/client/app/terminalToggleAnimation.test.ts
+  - src/client/app/terminalToggleAnimation.ts
 c3-201:
-  - src/server/cli.ts
-  - src/server/cli-runtime.ts
   - src/server/cli-runtime.test.ts
+  - src/server/cli-runtime.ts
   - src/server/cli-supervisor.ts
+  - src/server/cli.ts
 c3-202:
   - src/server/server.ts
 c3-203:
-  - src/server/auth.ts
   - src/server/auth.test.ts
+  - src/server/auth.ts
 c3-204:
-  - src/server/paths.ts
   - src/server/machine-name.ts
+  - src/server/paths.ts
 c3-205:
   - src/server/events.ts
   - src/server/harness-types.ts
 c3-206:
-  - src/server/event-store.ts
   - src/server/event-store.test.ts
+  - src/server/event-store.ts
 c3-207:
-  - src/server/read-models.ts
   - src/server/read-models.test.ts
+  - src/server/read-models.ts
 c3-208:
-  - src/server/ws-router.ts
   - src/server/ws-router.test.ts
+  - src/server/ws-router.ts
 c3-209:
-  - src/server/process-utils.ts
   - src/server/process-utils.test.ts
-
-# Server features
+  - src/server/process-utils.ts
 c3-210:
-  - src/server/agent.ts
   - src/server/agent.test.ts
+  - src/server/agent.ts
 c3-211:
-  - src/server/codex-app-server.ts
-  - src/server/codex-app-server.test.ts
   - src/server/codex-app-server-protocol.ts
+  - src/server/codex-app-server.test.ts
+  - src/server/codex-app-server.ts
 c3-212:
-  - src/server/provider-catalog.ts
   - src/server/provider-catalog.test.ts
+  - src/server/provider-catalog.ts
 c3-213:
-  - src/server/quick-response.ts
-  - src/server/quick-response.test.ts
-  - src/server/generate-title.ts
-  - src/server/title-generation.live.test.ts
-  - src/server/generate-commit-message.ts
   - src/server/generate-commit-message.test.ts
-  - src/server/llm-provider.ts
+  - src/server/generate-commit-message.ts
+  - src/server/generate-title.ts
   - src/server/llm-provider.test.ts
+  - src/server/llm-provider.ts
+  - src/server/quick-response.test.ts
+  - src/server/quick-response.ts
+  - src/server/title-generation.live.test.ts
 c3-214:
-  - src/server/discovery.ts
   - src/server/discovery.test.ts
+  - src/server/discovery.ts
 c3-215:
-  - src/server/diff-store.ts
   - src/server/diff-store.test.ts
+  - src/server/diff-store.ts
 c3-216:
-  - src/server/terminal-manager.ts
   - src/server/terminal-manager.test.ts
+  - src/server/terminal-manager.ts
 c3-217:
-  - src/server/uploads.ts
   - src/server/uploads.test.ts
+  - src/server/uploads.ts
 c3-218:
-  - src/server/share.ts
   - src/server/share.test.ts
+  - src/server/share.ts
 c3-219:
-  - src/server/update-manager.ts
   - src/server/update-manager.test.ts
-  - src/server/update-strategy.ts
+  - src/server/update-manager.ts
   - src/server/update-strategy.test.ts
+  - src/server/update-strategy.ts
 c3-220:
-  - src/server/restart.ts
   - src/server/restart.test.ts
+  - src/server/restart.ts
 c3-221:
-  - src/server/external-open.ts
   - src/server/external-open.test.ts
+  - src/server/external-open.ts
 c3-222:
-  - src/server/keybindings.ts
   - src/server/keybindings.test.ts
+  - src/server/keybindings.ts
 c3-223:
   - src/server/cloudflare-tunnel/**/*.ts
-c3-224:
-  - src/server/push/push-manager.ts
-  - src/server/push/push-manager.test.ts
-  - src/server/push/vapid.ts
-  - src/server/push/vapid.test.ts
-  - src/server/push/events.ts
-
-# Shared
 c3-301:
   - src/shared/types.ts
 c3-302:
   - src/shared/protocol.ts
 c3-303:
-  - src/shared/tools.ts
   - src/shared/tools.test.ts
+  - src/shared/tools.ts
 c3-304:
-  - src/shared/ports.ts
-  - src/shared/dev-ports.ts
   - src/shared/dev-ports.test.ts
+  - src/shared/dev-ports.ts
+  - src/shared/ports.ts
 c3-305:
-  - src/shared/branding.ts
   - src/shared/branding.test.ts
+  - src/shared/branding.ts
 c3-306:
   - src/shared/share.ts
-
-# ---- Refs ----
-
-ref-event-sourcing:
-  - src/server/events.ts
-  - src/server/event-store.ts
-  - src/server/event-store.test.ts
+ref-colocated-bun-test:
+  - **/*.live.test.ts
+  - **/*.test.ts
+  - **/*.test.tsx
 ref-cqrs-read-models:
-  - src/server/read-models.ts
   - src/server/read-models.test.ts
-ref-ws-subscription:
-  - src/shared/protocol.ts
-  - src/server/ws-router.ts
-  - src/client/app/socket.ts
+  - src/server/read-models.ts
+ref-event-sourcing:
+  - src/server/event-store.test.ts
+  - src/server/event-store.ts
+  - src/server/events.ts
+ref-local-first-data:
+  - src/server/auth.ts
+  - src/server/cli.ts
+  - src/server/paths.ts
+  - src/shared/branding.ts
 ref-provider-adapter:
   - src/server/agent.ts
-  - src/server/provider-catalog.ts
-  - src/server/codex-app-server.ts
   - src/server/codex-app-server-protocol.ts
-  - src/server/quick-response.ts
+  - src/server/codex-app-server.ts
   - src/server/llm-provider.ts
-ref-zustand-store:
-  - src/client/stores/**/*.ts
-ref-colocated-bun-test:
-  - "**/*.test.ts"
-  - "**/*.test.tsx"
-  - "**/*.live.test.ts"
+  - src/server/provider-catalog.ts
+  - src/server/quick-response.ts
 ref-strong-typing:
   - src/shared/**/*.ts
   - tsconfig.json
-ref-local-first-data:
-  - src/server/paths.ts
-  - src/shared/branding.ts
-  - src/server/cli.ts
-  - src/server/auth.ts
 ref-tool-hydration:
-  - src/shared/tools.ts
-  - src/shared/tools.test.ts
   - src/client/components/messages/**/*.tsx
   - src/server/agent.ts
-ref-push:
-  - src/server/push/push-manager.ts
-  - src/server/push/vapid.ts
-  - src/server/push/events.ts
-  - src/client/app/pushClient.ts
-  - src/client/components/settings/PushNotificationsSection.tsx
-  - public/sw.js
-  - src/shared/types.ts
+  - src/shared/tools.test.ts
+  - src/shared/tools.ts
+ref-ws-subscription:
+  - src/client/app/socket.ts
+  - src/server/ws-router.ts
   - src/shared/protocol.ts
-
-# ---- Exclusions (not counted in coverage) ----
+ref-zustand-store:
+  - src/client/stores/**/*.ts
 _exclude:
-  - "**/*.test.ts"
-  - "**/*.test.tsx"
-  - "**/*.live.test.ts"
-  - dist/**
-  - scripts/**
+  - **/*.live.test.ts
+  - **/*.test.ts
+  - **/*.test.tsx
+  - *.config.js
+  - *.config.ts
+  - .agents/**
+  - .c3/**
+  - .claude/**
+  - .github/**
+  - .gitignore
+  - LICENSE
+  - README.md
+  - assets/**
   - bin/**
-  - public/chat-sounds/**
-  - public/editor-icons/**
-  - public/fonts/**
+  - bun.lock
+  - dist/**
+  - docs/**
+  - index.html
+  - package.json
+  - postcss.config.js
   - public/*.png
   - public/*.svg
   - public/*.webmanifest
-  - docs/**
-  - assets/**
-  - "*.config.js"
-  - "*.config.ts"
-  - "vite.config.ts"
-  - "tailwind.config.js"
-  - "postcss.config.js"
-  - "tsconfig.json"
-  - "package.json"
-  - "bun.lock"
-  - "skills-lock.json"
-  - "index.html"
-  - ".c3/**"
-  - ".claude/**"
-  - ".github/**"
-  - ".agents/**"
-  - "README.md"
-  - "LICENSE"
-  - ".gitignore"
-  - "src/index.css"
+  - public/chat-sounds/**
+  - public/editor-icons/**
+  - public/fonts/**
+  - scripts/**
+  - skills-lock.json
+  - src/index.css
+  - tailwind.config.js
+  - tsconfig.json
+  - vite.config.ts
