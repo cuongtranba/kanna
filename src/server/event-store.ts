@@ -8,6 +8,7 @@ import { STORE_VERSION } from "../shared/types"
 import type { AutoContinueEvent } from "./auto-continue/events"
 import {
   type ChatEvent,
+  type ChatTimingState,
   type ProjectEvent,
   type QueuedMessageEvent,
   type SnapshotFile,
@@ -20,6 +21,7 @@ import {
 import { resolveLocalPath } from "./paths"
 import type { CloudflareTunnelEvent } from "./cloudflare-tunnel/events"
 import type { PushEvent, PushEventStore } from "./push/events"
+import { ACTIVE_SESSION_IDLE_GAP_MS } from "./read-models"
 
 const COMPACTION_THRESHOLD_BYTES = 2 * 1024 * 1024
 const STALE_EMPTY_CHAT_MAX_AGE_MS = 30 * 60 * 1000
@@ -516,6 +518,7 @@ export class EventStore implements PushEventStore {
           lastTurnOutcome: null,
         }
         this.state.chatsById.set(chat.id, chat)
+        this.updateTiming(e.chatId, e.timestamp, "idle")
         break
       }
       case "chat_renamed": {
@@ -532,6 +535,7 @@ export class EventStore implements PushEventStore {
         chat.updatedAt = e.timestamp
         this.state.queuedMessagesByChatId.delete(e.chatId)
         this.state.autoContinueEventsByChatId.delete(e.chatId)
+        this.state.chatTimingsByChatId.delete(e.chatId)
         break
       }
       case "chat_archived": {
@@ -614,6 +618,7 @@ export class EventStore implements PushEventStore {
         const chat = this.state.chatsById.get(e.chatId)
         if (!chat) break
         chat.updatedAt = e.timestamp
+        this.updateTiming(e.chatId, e.timestamp, "running", true, false)
         break
       }
       case "turn_finished": {
@@ -622,6 +627,7 @@ export class EventStore implements PushEventStore {
         chat.updatedAt = e.timestamp
         chat.unread = true
         chat.lastTurnOutcome = "success"
+        this.updateTiming(e.chatId, e.timestamp, "idle", false, true)
         break
       }
       case "turn_failed": {
@@ -630,6 +636,7 @@ export class EventStore implements PushEventStore {
         chat.updatedAt = e.timestamp
         chat.unread = true
         chat.lastTurnOutcome = "failed"
+        this.updateTiming(e.chatId, e.timestamp, "failed", false, true)
         break
       }
       case "turn_cancelled": {
@@ -637,6 +644,7 @@ export class EventStore implements PushEventStore {
         if (!chat) break
         chat.updatedAt = e.timestamp
         chat.lastTurnOutcome = "cancelled"
+        this.updateTiming(e.chatId, e.timestamp, "idle", false, true)
         break
       }
       case "session_token_set": {
@@ -661,6 +669,48 @@ export class EventStore implements PushEventStore {
         break
       }
     }
+  }
+
+  private updateTiming(chatId: string, eventTs: number, nextStatus: ChatTimingState["status"], onTurnStart?: boolean, onTurnFinish?: boolean) {
+    const prev = this.state.chatTimingsByChatId.get(chatId)
+    if (!prev) {
+      // chat_created path: seed
+      this.state.chatTimingsByChatId.set(chatId, {
+        status: nextStatus,
+        stateEnteredAt: eventTs,
+        activeSessionStartedAt: eventTs,
+        lastTurnStartedAt: null,
+        lastTurnDurationMs: null,
+        cumulativeMs: { idle: 0, starting: 0, running: 0, failed: 0 },
+      })
+      return
+    }
+
+    const segmentMs = Math.max(0, eventTs - prev.stateEnteredAt)
+    let activeSessionStartedAt = prev.activeSessionStartedAt
+    let cumulativeMs = { ...prev.cumulativeMs }
+
+    // Detect long idle gap when leaving idle -> something
+    if (prev.status === "idle" && nextStatus !== "idle" && segmentMs > ACTIVE_SESSION_IDLE_GAP_MS) {
+      activeSessionStartedAt = eventTs
+      cumulativeMs = { idle: 0, starting: 0, running: 0, failed: 0 }
+    } else {
+      cumulativeMs[prev.status] += segmentMs
+    }
+
+    let lastTurnStartedAt = prev.lastTurnStartedAt
+    let lastTurnDurationMs = prev.lastTurnDurationMs
+    if (onTurnStart) lastTurnStartedAt = eventTs
+    if (onTurnFinish && lastTurnStartedAt != null) lastTurnDurationMs = Math.max(0, eventTs - lastTurnStartedAt)
+
+    this.state.chatTimingsByChatId.set(chatId, {
+      status: nextStatus,
+      stateEnteredAt: eventTs,
+      activeSessionStartedAt,
+      lastTurnStartedAt,
+      lastTurnDurationMs,
+      cumulativeMs,
+    })
   }
 
   private applyAutoContinueEvent(event: AutoContinueEvent) {

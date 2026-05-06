@@ -4,9 +4,9 @@ import type { SidebarChatRow } from "../../../../shared/types"
 import { AnimatedShinyText } from "../../ui/animated-shiny-text"
 import { Button } from "../../ui/button"
 import { Kbd } from "../../ui/kbd"
-import { formatSidebarAgeLabel } from "../../../lib/formatters"
-import { getSidebarChatTimestamp } from "../../../lib/sidebarChats"
 import { cn, normalizeChatId } from "../../../lib/utils"
+import { formatCompactDuration, formatLiveDuration } from "../../../lib/formatDuration"
+import { statusLabel, statusTone, statusToneClass } from "../../../lib/statusLabel"
 import { ChatRowMenu } from "./Menus"
 
 const loadingStatuses = new Set(["starting", "running"])
@@ -40,8 +40,12 @@ function ChatRowImpl({
   onArchiveChat,
   onDeleteChat,
 }: Props) {
-  const ageLabel = formatSidebarAgeLabel(getSidebarChatTimestamp(chat), nowMs)
-  const trailingLabel = showShortcutHint && shortcutHint ? shortcutHint : ageLabel
+  const isLiveState = (chat.status === "running" || chat.status === "waiting_for_user") && chat.stateEnteredAt != null
+  const stampLabel = isLiveState && chat.stateEnteredAt != null
+    ? `${statusLabel(chat.status)} ${formatLiveDuration(nowMs - chat.stateEnteredAt)}`
+    : formatCompactDuration(nowMs - (chat.lastMessageAt ?? chat._creationTime))
+
+  const trailingLabel = showShortcutHint && shortcutHint ? shortcutHint : stampLabel
   const showShortcutKeycap = showShortcutHint && Boolean(shortcutHint)
   const normalizedChatId = normalizeChatId(chat.chatId)
 
@@ -84,7 +88,7 @@ function ChatRowImpl({
           chat.status !== 'idle' || activeChatId === normalizedChatId || chat.unread ? <span className="">{chat.title}</span> : <span className="text-slate-500 dark:text-slate-400">{chat.title}</span>
         }
       </span>
-      <div className={cn("relative h-7 mr-[2px] shrink-0", chat.canFork ? "w-12" : "w-6")}>
+      <div className={cn("relative h-7 mr-[2px] shrink-0", chat.canFork ? "w-12" : isLiveState ? "w-20" : "w-6")}>
         {trailingLabel ? (
           showShortcutKeycap ? (
             <span className="hidden md:flex absolute inset-0 items-center justify-end pr-0.5 text-[11px] text-foreground transition-opacity group-hover:opacity-0">
@@ -93,7 +97,10 @@ function ChatRowImpl({
               </Kbd>
             </span>
           ) : (
-            <span className="hidden md:flex absolute inset-0 items-center justify-end pr-1 text-[11px] text-muted-foreground opacity-60 transition-opacity group-hover:opacity-0">
+            <span className={cn(
+              "hidden md:flex absolute inset-0 items-center justify-end pr-1 text-[11px] tabular-nums opacity-80 transition-opacity group-hover:opacity-0",
+              isLiveState ? statusToneClass(statusTone(chat.status)) : "text-muted-foreground opacity-60"
+            )}>
               {trailingLabel}
             </span>
           )

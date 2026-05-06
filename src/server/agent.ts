@@ -76,6 +76,7 @@ interface ActiveTurn {
   cancelRecorded: boolean
   clientTraceId?: string
   profilingStartedAt?: number
+  waitStartedAt: number | null
 }
 
 interface ClaudeSessionHandle {
@@ -760,6 +761,14 @@ export class AgentCoordinator {
     return statuses
   }
 
+  getWaitStartedAtByChatId(): Map<string, number> {
+    const out = new Map<string, number>()
+    for (const [chatId, turn] of this.activeTurns.entries()) {
+      if (turn.waitStartedAt != null) out.set(chatId, turn.waitStartedAt)
+    }
+    return out
+  }
+
   getPendingTool(chatId: string): PendingToolSnapshot | null {
     const pending = this.activeTurns.get(chatId)?.pendingTool
     if (!pending) return null
@@ -1038,6 +1047,7 @@ export class AgentCoordinator {
       }
 
       active.status = "waiting_for_user"
+      active.waitStartedAt = Date.now()
       this.emitStateChange(args.chatId)
 
       return await new Promise<unknown>((resolve) => {
@@ -1125,6 +1135,7 @@ export class AgentCoordinator {
       cancelRecorded: false,
       clientTraceId: args.profile?.traceId,
       profilingStartedAt: args.profile?.startedAt,
+      waitStartedAt: null,
     }
     this.activeTurns.set(args.chatId, active)
     logSendToStartingProfile(args.profile, "start_turn.active_turn_registered", {
@@ -1896,6 +1907,7 @@ export class AgentCoordinator {
 
     active.pendingTool = null
     active.status = "running"
+    active.waitStartedAt = null
 
     if (pending.tool.toolKind === "exit_plan_mode") {
       const result = (command.result ?? {}) as {
