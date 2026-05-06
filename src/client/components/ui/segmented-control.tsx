@@ -63,8 +63,8 @@ export function SegmentedControl<T extends string>({
               icon ? "grid grid-cols-[auto_auto] items-center gap-2" : "inline-flex items-center",
               sizeClasses[size],
               isActive
-                ? "bg-white dark:bg-muted text-slate-900 dark:text-slate-200 border-slate-300 dark:border-white/10 bg-slate-200 "
-                : "border-transparent text-slate-800 hover:text-slate-900 dark:text-muted-foreground dark:hover:text-foreground",
+                ? "bg-card text-foreground border-border"
+                : "border-transparent text-muted-foreground hover:text-foreground",
               option.disabled && "opacity-50 pointer-events-none",
               optionClassName,
             )}

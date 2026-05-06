@@ -17,7 +17,9 @@ import { CompactSummaryMessage } from "../components/messages/CompactSummaryMess
 import { StatusMessage } from "../components/messages/StatusMessage"
 import { CollapsedToolGroup } from "../components/messages/CollapsedToolGroup"
 import { OpenLocalLinkProvider, type OpenLocalLinkTarget } from "../components/messages/shared"
+import { AutoContinueCard } from "../components/chat-ui/AutoContinueCard"
 import { CHAT_SELECTION_ZONE_ATTRIBUTE } from "./chatFocusPolicy"
+import type { AutoContinueSchedule } from "../../shared/types"
 
 const SPECIAL_TOOL_NAMES = new Set(["AskUserQuestion", "ExitPlanMode", "TodoWrite"])
 
@@ -225,6 +227,7 @@ function sameMessage(left: HydratedTranscriptMessage, right: HydratedTranscriptM
       return left.content === (right.kind === "user_prompt" ? right.content : null)
         && right.kind === "user_prompt"
         && left.steered === right.steered
+        && left.autoContinue?.scheduleId === right.autoContinue?.scheduleId
         && sameAttachmentArray(left.attachments, right.attachments)
     case "system_init":
       return right.kind === "system_init"
@@ -266,6 +269,9 @@ function sameMessage(left: HydratedTranscriptMessage, right: HydratedTranscriptM
       return true
     case "unknown":
       return right.kind === "unknown" && left.json === right.json
+    // schedule state changes propagate via outer comparator's prev.schedules !== next.schedules check (line 681)
+    case "auto_continue_prompt":
+      return right.kind === "auto_continue_prompt" && left.scheduleId === right.scheduleId
   }
 }
 
@@ -348,6 +354,10 @@ interface TranscriptSingleRowProps {
     answers: AskUserQuestionAnswerMap
   ) => void
   onExitPlanModeConfirm: (toolUseId: string, confirmed: boolean, clearContext?: boolean, message?: string) => void
+  schedules: Record<string, AutoContinueSchedule>
+  onAutoContinueAccept: (scheduleId: string, scheduledAt: number) => void
+  onAutoContinueReschedule: (scheduleId: string, scheduledAt: number) => void
+  onAutoContinueCancel: (scheduleId: string) => void
 }
 
 const TranscriptSingleRow = memo(function TranscriptSingleRow({
@@ -364,13 +374,38 @@ const TranscriptSingleRow = memo(function TranscriptSingleRow({
   isFinalStatus,
   onAskUserQuestionSubmit,
   onExitPlanModeConfirm,
+  schedules,
+  onAutoContinueAccept,
+  onAutoContinueReschedule,
+  onAutoContinueCancel,
 }: TranscriptSingleRowProps) {
   let rendered: React.ReactNode = null
 
   if (message.kind === "user_prompt") {
-    rendered = <UserMessage key={message.id} content={message.content} attachments={message.attachments} steered={message.steered} />
+    rendered = <UserMessage key={message.id} content={message.content} attachments={message.attachments} steered={message.steered} autoContinue={message.autoContinue} />
   } else {
     switch (message.kind) {
+      case "auto_continue_prompt": {
+        const schedule = schedules[message.scheduleId]
+        if (!schedule) {
+          rendered = (
+            <div key={message.id} className="rounded border px-3 py-2 text-sm opacity-70">
+              Auto-continue expired
+            </div>
+          )
+          break
+        }
+        rendered = (
+          <AutoContinueCard
+            key={message.id}
+            schedule={schedule}
+            onAccept={(scheduledAt) => onAutoContinueAccept(message.scheduleId, scheduledAt)}
+            onReschedule={(scheduledAt) => onAutoContinueReschedule(message.scheduleId, scheduledAt)}
+            onCancel={() => onAutoContinueCancel(message.scheduleId)}
+          />
+        )
+        break
+      }
       case "unknown":
         rendered = <RawJsonMessage key={message.id} json={message.json} />
         break
@@ -384,6 +419,10 @@ const TranscriptSingleRow = memo(function TranscriptSingleRow({
         rendered = <TextMessage key={message.id} message={message} />
         break
       case "tool":
+        if (message.isError) {
+          rendered = <ToolCallMessage key={message.id} message={message} isLoading={isLoading} localPath={localPath} />
+          break
+        }
         if (message.toolKind === "ask_user_question") {
           rendered = (
             <AskUserQuestionMessage
@@ -460,6 +499,10 @@ const TranscriptSingleRow = memo(function TranscriptSingleRow({
   && prev.isFinalStatus === next.isFinalStatus
   && prev.onAskUserQuestionSubmit === next.onAskUserQuestionSubmit
   && prev.onExitPlanModeConfirm === next.onExitPlanModeConfirm
+  && prev.schedules === next.schedules
+  && prev.onAutoContinueAccept === next.onAutoContinueAccept
+  && prev.onAutoContinueReschedule === next.onAutoContinueReschedule
+  && prev.onAutoContinueCancel === next.onAutoContinueCancel
   && sameMessage(prev.message, next.message)
 ))
 
@@ -574,6 +617,13 @@ interface KannaTranscriptProps {
     answers: AskUserQuestionAnswerMap
   ) => void
   onExitPlanModeConfirm: (toolUseId: string, confirmed: boolean, clearContext?: boolean, message?: string) => void
+  schedules?: Record<string, AutoContinueSchedule>
+  onAutoContinueAccept?: (scheduleId: string, scheduledAt: number) => void
+  onAutoContinueReschedule?: (scheduleId: string, scheduledAt: number) => void
+  onAutoContinueCancel?: (scheduleId: string) => void
+  onTunnelAccept?: (tunnelId: string) => void | Promise<void>
+  onTunnelStop?: (tunnelId: string) => void | Promise<void>
+  onTunnelRetry?: (tunnelId: string) => void | Promise<void>
 }
 
 interface KannaTranscriptRowProps {
@@ -586,6 +636,10 @@ interface KannaTranscriptRowProps {
     answers: AskUserQuestionAnswerMap
   ) => void
   onExitPlanModeConfirm: (toolUseId: string, confirmed: boolean, clearContext?: boolean, message?: string) => void
+  schedules: Record<string, AutoContinueSchedule>
+  onAutoContinueAccept: (scheduleId: string, scheduledAt: number) => void
+  onAutoContinueReschedule: (scheduleId: string, scheduledAt: number) => void
+  onAutoContinueCancel: (scheduleId: string) => void
 }
 
 export const KannaTranscriptRow = memo(function KannaTranscriptRow({
@@ -594,6 +648,10 @@ export const KannaTranscriptRow = memo(function KannaTranscriptRow({
   onToolGroupExpandedChange,
   onAskUserQuestionSubmit,
   onExitPlanModeConfirm,
+  schedules,
+  onAutoContinueAccept,
+  onAutoContinueReschedule,
+  onAutoContinueCancel,
 }: KannaTranscriptRowProps) {
   if (row.kind === "tool-group") {
     return (
@@ -624,6 +682,10 @@ export const KannaTranscriptRow = memo(function KannaTranscriptRow({
       isFinalStatus={row.isFinalStatus}
       onAskUserQuestionSubmit={onAskUserQuestionSubmit}
       onExitPlanModeConfirm={onExitPlanModeConfirm}
+      schedules={schedules}
+      onAutoContinueAccept={onAutoContinueAccept}
+      onAutoContinueReschedule={onAutoContinueReschedule}
+      onAutoContinueCancel={onAutoContinueCancel}
     />
   )
 }, (prev, next) => {
@@ -631,6 +693,10 @@ export const KannaTranscriptRow = memo(function KannaTranscriptRow({
   if (prev.onToolGroupExpandedChange !== next.onToolGroupExpandedChange) return false
   if (prev.onAskUserQuestionSubmit !== next.onAskUserQuestionSubmit) return false
   if (prev.onExitPlanModeConfirm !== next.onExitPlanModeConfirm) return false
+  if (prev.schedules !== next.schedules) return false
+  if (prev.onAutoContinueAccept !== next.onAutoContinueAccept) return false
+  if (prev.onAutoContinueReschedule !== next.onAutoContinueReschedule) return false
+  if (prev.onAutoContinueCancel !== next.onAutoContinueCancel) return false
   if (prev.row.kind !== next.row.kind) return false
   if (prev.row.id !== next.row.id) return false
 
@@ -661,6 +727,11 @@ export const KannaTranscriptRow = memo(function KannaTranscriptRow({
   return false
 })
 
+export const EMPTY_SCHEDULES: Record<string, AutoContinueSchedule> = {}
+const NOOP_ACCEPT = (_scheduleId: string, _scheduledAt: number): void => {}
+const NOOP_RESCHEDULE = (_scheduleId: string, _scheduledAt: number): void => {}
+const NOOP_CANCEL = (_scheduleId: string): void => {}
+
 function KannaTranscriptImpl({
   messages,
   isLoading,
@@ -669,6 +740,13 @@ function KannaTranscriptImpl({
   onOpenLocalLink,
   onAskUserQuestionSubmit,
   onExitPlanModeConfirm,
+  schedules = EMPTY_SCHEDULES,
+  onAutoContinueAccept = NOOP_ACCEPT,
+  onAutoContinueReschedule = NOOP_RESCHEDULE,
+  onAutoContinueCancel = NOOP_CANCEL,
+  onTunnelAccept: _onTunnelAccept,  // reserved for future per-message tunnel rendering
+  onTunnelStop: _onTunnelStop,
+  onTunnelRetry: _onTunnelRetry,
 }: KannaTranscriptProps) {
   const [toolGroupExpanded, setToolGroupExpanded] = useState<Record<string, boolean>>({})
   const rows = useMemo(() => buildResolvedTranscriptRows(messages, {
@@ -700,6 +778,10 @@ function KannaTranscriptImpl({
             onToolGroupExpandedChange={handleToolGroupExpandedChange}
             onAskUserQuestionSubmit={onAskUserQuestionSubmit}
             onExitPlanModeConfirm={onExitPlanModeConfirm}
+            schedules={schedules}
+            onAutoContinueAccept={onAutoContinueAccept}
+            onAutoContinueReschedule={onAutoContinueReschedule}
+            onAutoContinueCancel={onAutoContinueCancel}
           />
         </div>
       ))}

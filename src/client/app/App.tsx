@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { Navigate, Outlet, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom"
 import { Flower } from "lucide-react"
 import { StandaloneShareDialog } from "../components/chat-ui/StandaloneShareDialog"
-import { AppDialogProvider } from "../components/ui/app-dialog"
+import { AppDialogProvider, useAppDialog } from "../components/ui/app-dialog"
 import { Button } from "../components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card"
 import { Input } from "../components/ui/input"
@@ -73,7 +73,7 @@ function PasswordScreen({
           <div className="flex items-center gap-3">
             <Flower className="h-5 w-5 text-logo" />
             <div>
-              <CardTitle className="font-logo text-xl uppercase text-slate-600 dark:text-slate-100">{APP_NAME}</CardTitle>
+              <CardTitle className="font-logo text-xl uppercase text-foreground">{APP_NAME}</CardTitle>
             </div>
           </div>
           <CardDescription className="leading-6">
@@ -200,6 +200,7 @@ function KannaLayout() {
   const navigate = useNavigate()
   const params = useParams()
   const state = useKannaState(params.chatId ?? null)
+  const dialog = useAppDialog()
   const chatSoundPreference = useChatSoundPreferencesStore((store) => store.chatSoundPreference)
   const chatSoundId = useChatSoundPreferencesStore((store) => store.chatSoundId)
   const showMobileOpenButton = location.pathname === "/"
@@ -241,9 +242,28 @@ function KannaLayout() {
   const handleSidebarReorderProjectGroups = useCallback((projectIds: string[]) => {
     void state.handleReorderProjectGroups(projectIds)
   }, [state.handleReorderProjectGroups])
-  const handleOpenChangelog = useCallback(() => {
-    navigate("/settings/changelog")
-  }, [navigate])
+  const handleImportClaudeSessions = useCallback(async () => {
+    try {
+      const result = await state.importClaudeSessions()
+      const parts = [
+        `Imported ${result.imported}`,
+        `updated ${result.updated}`,
+        `skipped ${result.skipped}`,
+        `failed ${result.failed}`,
+      ]
+      const suffix = result.newProjects > 0 ? ` (${result.newProjects} new projects)` : ""
+      await dialog.alert({
+        title: "Import complete",
+        description: `${parts.join(", ")}.${suffix}`,
+      })
+    } catch (error) {
+      console.error("[kanna/import] failed", error)
+      await dialog.alert({
+        title: "Import failed",
+        description: "See console for details.",
+      })
+    }
+  }, [dialog, state])
   const sidebarElement = useMemo(() => (
     <KannaSidebar
       data={state.sidebarData}
@@ -267,17 +287,17 @@ function KannaLayout() {
       onOpenArchivedChat={handleOpenArchivedChat}
       onDeleteChat={handleSidebarDeleteChat}
       onOpenAddProjectModal={handleOpenAddProjectModal}
+      onImportClaudeSessions={handleImportClaudeSessions}
       onCopyPath={handleSidebarCopyPath}
       onOpenExternalPath={handleSidebarOpenExternalPath}
       onHideProject={handleSidebarHideProject}
       onReorderProjectGroups={handleSidebarReorderProjectGroups}
       editorLabel={state.editorLabel}
       updateSnapshot={state.updateSnapshot}
-      onOpenChangelog={handleOpenChangelog}
     />
   ), [
-    handleOpenChangelog,
     handleOpenAddProjectModal,
+    handleImportClaudeSessions,
     handleSidebarCopyPath,
     handleSidebarCreateChat,
     handleSidebarArchiveChat,

@@ -1,6 +1,8 @@
 import { randomBytes, timingSafeEqual } from "node:crypto"
+import type { AuthSessionStore } from "./auth-session-store"
 
 const SESSION_COOKIE_NAME = "kanna_session"
+const TOUCH_THROTTLE_MS = 60 * 1000
 
 export interface AuthStatusPayload {
   enabled: boolean
@@ -14,6 +16,7 @@ export interface AuthManager {
   handleLogin(req: Request, nextPath: string): Promise<Response>
   handleLogout(req: Request): Response
   handleStatus(req: Request): Response
+  dispose(): Promise<void>
 }
 
 function parseCookies(header: string | null) {
@@ -64,19 +67,25 @@ function shouldUseSecureCookie(req: Request, trustProxy: boolean) {
   return new URL(req.url).protocol === "https:"
 }
 
-function buildCookie(name: string, value: string, req: Request, trustProxy: boolean, extras: string[] = []) {
+function buildCookie(
+  name: string,
+  value: string,
+  req: Request,
+  trustProxy: boolean,
+  maxAgeSeconds: number,
+) {
   const parts = [
     `${name}=${encodeURIComponent(value)}`,
     "Path=/",
     "HttpOnly",
     "SameSite=Strict",
+    `Max-Age=${maxAgeSeconds}`,
   ]
 
   if (shouldUseSecureCookie(req, trustProxy)) {
     parts.push("Secure")
   }
 
-  parts.push(...extras)
   return parts.join("; ")
 }
 
@@ -109,20 +118,39 @@ export interface AuthManagerOptions {
    * proxy such as cloudflared.
    */
   trustProxy?: boolean
+  sessionStore: AuthSessionStore
+  getMaxAgeMs: () => number
 }
 
-export function createAuthManager(password: string, options: AuthManagerOptions = {}): AuthManager {
-  const sessions = new Set<string>()
+export function createAuthManager(password: string, options: AuthManagerOptions): AuthManager {
   const expectedPassword = Buffer.from(password)
   const trustProxy = options.trustProxy ?? false
+  const sessionStore = options.sessionStore
+  const getMaxAgeMs = options.getMaxAgeMs
+  const lastTouchedAt = new Map<string, number>()
 
   function getSessionToken(req: Request) {
     return parseCookies(req.headers.get("cookie")).get(SESSION_COOKIE_NAME) ?? null
   }
 
+  function maybeTouchSession(token: string) {
+    const now = Date.now()
+    const last = lastTouchedAt.get(token)
+    if (last !== undefined && now - last < TOUCH_THROTTLE_MS) return
+    lastTouchedAt.set(token, now)
+    sessionStore.touch(token, getMaxAgeMs())
+  }
+
   function isAuthenticated(req: Request) {
     const sessionToken = getSessionToken(req)
-    return Boolean(sessionToken && sessions.has(sessionToken))
+    if (!sessionToken) return false
+    const session = sessionStore.validate(sessionToken)
+    if (!session) {
+      lastTouchedAt.delete(sessionToken)
+      return false
+    }
+    maybeTouchSession(sessionToken)
+    return true
   }
 
   function validateOrigin(req: Request) {
@@ -135,16 +163,18 @@ export function createAuthManager(password: string, options: AuthManagerOptions 
 
   function createSessionCookie(req: Request) {
     const sessionToken = randomBytes(32).toString("base64url")
-    sessions.add(sessionToken)
-    return buildCookie(SESSION_COOKIE_NAME, sessionToken, req, trustProxy)
+    const maxAgeMs = getMaxAgeMs()
+    sessionStore.create(sessionToken, maxAgeMs)
+    return buildCookie(SESSION_COOKIE_NAME, sessionToken, req, trustProxy, Math.floor(maxAgeMs / 1000))
   }
 
   function clearSessionCookie(req: Request) {
     const sessionToken = getSessionToken(req)
     if (sessionToken) {
-      sessions.delete(sessionToken)
+      sessionStore.revoke(sessionToken)
+      lastTouchedAt.delete(sessionToken)
     }
-    return buildCookie(SESSION_COOKIE_NAME, "", req, trustProxy, ["Max-Age=0"])
+    return buildCookie(SESSION_COOKIE_NAME, "", req, trustProxy, 0)
   }
 
   function verifyPassword(candidate: string) {
@@ -193,6 +223,11 @@ export function createAuthManager(password: string, options: AuthManagerOptions 
     return response
   }
 
+  async function dispose() {
+    lastTouchedAt.clear()
+    await sessionStore.dispose()
+  }
+
   return {
     isAuthenticated,
     validateOrigin,
@@ -200,5 +235,6 @@ export function createAuthManager(password: string, options: AuthManagerOptions 
     handleLogin,
     handleLogout,
     handleStatus,
+    dispose,
   }
 }

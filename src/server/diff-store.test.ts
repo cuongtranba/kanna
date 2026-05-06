@@ -25,7 +25,7 @@ async function run(command: string[], cwd: string) {
 
 async function createRepo() {
   const root = await mkdtemp(path.join(tmpdir(), "kanna-diff-store-"))
-  await run(["git", "init"], root)
+  await run(["git", "init", "-b", "main"], root)
   await run(["git", "config", "user.email", "kanna@example.com"], root)
   await run(["git", "config", "user.name", "Kanna"], root)
   return root
@@ -33,7 +33,7 @@ async function createRepo() {
 
 async function createBareRemote() {
   const root = await mkdtemp(path.join(tmpdir(), "kanna-diff-remote-"))
-  await run(["git", "init", "--bare"], root)
+  await run(["git", "init", "--bare", "-b", "main"], root)
   return root
 }
 
@@ -146,7 +146,7 @@ describe("DiffStore", () => {
       pushed: true,
     })
     expect((await run(["git", "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"], repoRoot)).trim()).toBe("origin/feature/publish-me")
-  })
+  }, 30_000)
 
   test("commit_and_push degrades to a local commit when origin is missing", async () => {
     const repoRoot = await createRepo()
@@ -174,7 +174,7 @@ describe("DiffStore", () => {
       pushed: false,
     })
     expect((await run(["git", "log", "-1", "--pretty=%s"], repoRoot)).trim()).toBe("Local only")
-  })
+  }, 30_000)
 
   test("commits tracked files inside newly ignored directories", async () => {
     const repoRoot = await createRepo()

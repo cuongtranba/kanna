@@ -71,6 +71,7 @@ export function ProjectSectionMenu({
             event.stopPropagation()
             onHide()
           }}
+          className="text-destructive hover:bg-destructive/10 focus:bg-destructive/10"
         >
           <EyeOff className="h-3.5 w-3.5" />
           <span className="text-xs font-medium">Hide</span>

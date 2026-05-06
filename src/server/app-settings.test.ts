@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test"
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
+import { AUTH_DEFAULTS, CLOUDFLARE_TUNNEL_DEFAULTS } from "../shared/types"
 import { AppSettingsManager, readAppSettingsSnapshot } from "./app-settings"
 import type { AppSettingsSnapshot } from "../shared/types"
 
@@ -16,6 +17,12 @@ async function createTempFilePath() {
   const dir = await mkdtemp(path.join(tmpdir(), "kanna-settings-"))
   tempDirs.push(dir)
   return path.join(dir, "settings.json")
+}
+
+async function writeSettingsFile(content: Record<string, unknown>) {
+  const filePath = await createTempFilePath()
+  await writeFile(filePath, JSON.stringify(content), "utf8")
+  return filePath
 }
 
 function expectedSettingsSnapshot(filePath: string, overrides: Partial<AppSettingsSnapshot> = {}): AppSettingsSnapshot {
@@ -54,6 +61,8 @@ function expectedSettingsSnapshot(filePath: string, overrides: Partial<AppSettin
     },
     warning: null,
     filePathDisplay: filePath,
+    cloudflareTunnel: CLOUDFLARE_TUNNEL_DEFAULTS,
+    auth: AUTH_DEFAULTS,
     ...overrides,
   }
 }
@@ -158,5 +167,68 @@ describe("AppSettingsManager", () => {
     expect(nextPayload.chatSoundId).toBe("glass")
 
     manager.dispose()
+  })
+})
+
+describe("cloudflareTunnel normalization", () => {
+  test("normalizes missing cloudflareTunnel block to defaults", async () => {
+    const filePath = await writeSettingsFile({ analyticsEnabled: true })
+    const snapshot = await readAppSettingsSnapshot(filePath)
+    expect(snapshot.cloudflareTunnel).toEqual({
+      enabled: false,
+      cloudflaredPath: "cloudflared",
+      mode: "always-ask",
+    })
+  })
+
+  test("preserves valid cloudflareTunnel settings", async () => {
+    const filePath = await writeSettingsFile({
+      cloudflareTunnel: { enabled: true, cloudflaredPath: "/usr/local/bin/cloudflared", mode: "auto-expose" },
+    })
+    const snapshot = await readAppSettingsSnapshot(filePath)
+    expect(snapshot.cloudflareTunnel).toEqual({
+      enabled: true,
+      cloudflaredPath: "/usr/local/bin/cloudflared",
+      mode: "auto-expose",
+    })
+  })
+
+  test("rejects invalid mode and resets to default with warning", async () => {
+    const filePath = await writeSettingsFile({
+      cloudflareTunnel: { enabled: true, cloudflaredPath: "cloudflared", mode: "garbage" },
+    })
+    const snapshot = await readAppSettingsSnapshot(filePath)
+    expect(snapshot.cloudflareTunnel.mode).toBe("always-ask")
+    expect(snapshot.warning).toContain("cloudflareTunnel.mode")
+  })
+
+  test("setCloudflareTunnel persists patch to disk and round-trips through readAppSettingsSnapshot", async () => {
+    const filePath = await writeSettingsFile({ analyticsEnabled: true })
+    const manager = new AppSettingsManager(filePath)
+    await manager.initialize()
+    await manager.setCloudflareTunnel({ enabled: true, mode: "auto-expose" })
+    const reloaded = await readAppSettingsSnapshot(filePath)
+    expect(reloaded.cloudflareTunnel).toEqual({
+      enabled: true,
+      cloudflaredPath: "cloudflared",
+      mode: "auto-expose",
+    })
+  })
+
+  test("write() preserves cloudflareTunnel across analytics-only updates", async () => {
+    const filePath = await writeSettingsFile({
+      analyticsEnabled: true,
+      cloudflareTunnel: { enabled: true, cloudflaredPath: "/opt/cloudflared", mode: "auto-expose" },
+    })
+    const manager = new AppSettingsManager(filePath)
+    await manager.initialize()
+    // Simulate analytics toggle — must NOT erase tunnel block
+    await manager.write({ analyticsEnabled: false })
+    const reloaded = await readAppSettingsSnapshot(filePath)
+    expect(reloaded.cloudflareTunnel).toEqual({
+      enabled: true,
+      cloudflaredPath: "/opt/cloudflared",
+      mode: "auto-expose",
+    })
   })
 })

@@ -1,15 +1,17 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { useShallow } from "zustand/react/shallow"
-import { PROVIDERS, type AgentProvider, type AppSettingsPatch, type AppSettingsSnapshot, type AskUserQuestionAnswerMap, type ChatAttachment, type ChatDiffSnapshot, type ChatHistoryPage, type KeybindingsSnapshot, type LlmProviderSnapshot, type LlmProviderValidationResult, type ModelOptions, type ProviderCatalogEntry, type QueuedChatMessage, type StandaloneTranscriptExportCommandResult, type TranscriptEntry, type UpdateInstallResult, type UpdateSnapshot, type UserPromptEntry } from "../../shared/types"
+import { PROVIDERS, type AgentProvider, type AppSettingsPatch, type AppSettingsSnapshot, type AskUserQuestionAnswerMap, type ChatAttachment, type ChatDiffSnapshot, type ChatHistoryPage, type KeybindingsSnapshot, type LlmProviderSnapshot, type LlmProviderValidationResult, type ModelOptions, type ProviderCatalogEntry, type PushConfigSnapshot, type QueuedChatMessage, type StandaloneTranscriptExportCommandResult, type TranscriptEntry, type UpdateInstallResult, type UpdateSnapshot, type UserPromptEntry } from "../../shared/types"
 import { NEW_CHAT_COMPOSER_ID, type ComposerState, useChatPreferencesStore } from "../stores/chatPreferencesStore"
 import { useRightSidebarStore } from "../stores/rightSidebarStore"
 import { useTerminalLayoutStore } from "../stores/terminalLayoutStore"
 import { getEditorPresetLabel, useTerminalPreferencesStore } from "../stores/terminalPreferencesStore"
 import { useChatInputStore } from "../stores/chatInputStore"
+import { useSlashCommandsStore } from "../stores/slashCommandsStore"
+import { usePreferencesStore } from "../stores/preferences"
 import { useAppSettingsStore } from "../stores/appSettingsStore"
 import { useChatSoundPreferencesStore } from "../stores/chatSoundPreferencesStore"
-import type { ChatSnapshot, LocalProjectsSnapshot, SidebarChatRow, SidebarData } from "../../shared/types"
+import type { ChatSnapshot, CloudflareTunnelRecord, CloudflareTunnelSettings, LocalProjectsSnapshot, SidebarChatRow, SidebarData } from "../../shared/types"
 import type { AskUserQuestionItem } from "../components/messages/types"
 import type { OpenLocalLinkTarget } from "../components/messages/shared"
 import { useAppDialog } from "../components/ui/app-dialog"
@@ -147,7 +149,44 @@ function shouldPreserveExistingProjectDiffs(
   )
 }
 
-function sameChatSnapshotCore(left: ChatSnapshot | null, right: ChatSnapshot | null) {
+function sameSchedules(left: ChatSnapshot["schedules"] | null | undefined, right: ChatSnapshot["schedules"] | null | undefined) {
+  if (left === right) return true
+  if (!left || !right) return false
+  const leftKeys = Object.keys(left)
+  const rightKeys = Object.keys(right)
+  if (leftKeys.length !== rightKeys.length) return false
+  return leftKeys.every((key) => {
+    const l = left[key]
+    const r = right[key]
+    if (!l || !r) return false
+    return l.state === r.state
+      && l.scheduledAt === r.scheduledAt
+      && l.resetAt === r.resetAt
+      && l.detectedAt === r.detectedAt
+      && l.tz === r.tz
+  })
+}
+
+function sameTunnels(left: Record<string, CloudflareTunnelRecord> | null | undefined, right: Record<string, CloudflareTunnelRecord> | null | undefined) {
+  if (left === right) return true
+  if (!left || !right) return false
+  const leftKeys = Object.keys(left)
+  const rightKeys = Object.keys(right)
+  if (leftKeys.length !== rightKeys.length) return false
+  return leftKeys.every((key) => {
+    const l = left[key]
+    const r = right[key]
+    if (!l || !r) return false
+    return l.state === r.state
+      && l.url === r.url
+      && l.error === r.error
+      && l.port === r.port
+      && l.activatedAt === r.activatedAt
+      && l.stoppedAt === r.stoppedAt
+  })
+}
+
+export function sameChatSnapshotCore(left: ChatSnapshot | null, right: ChatSnapshot | null) {
   if (left === right) return true
   if (!left || !right) return false
   return sameRuntime(left.runtime, right.runtime)
@@ -155,6 +194,10 @@ function sameChatSnapshotCore(left: ChatSnapshot | null, right: ChatSnapshot | n
     && sameTranscriptEntries(left.messages, right.messages)
     && sameHistory(left.history, right.history)
     && sameProviders(left.availableProviders, right.availableProviders)
+    && sameSchedules(left.schedules, right.schedules)
+    && left.liveScheduleId === right.liveScheduleId
+    && sameTunnels(left.tunnels, right.tunnels)
+    && left.liveTunnelId === right.liveTunnelId
 }
 
 function mergeTranscriptEntries(olderHistoryEntries: TranscriptEntry[], recentEntries: TranscriptEntry[]) {
@@ -645,6 +688,7 @@ export interface KannaState {
   chatDiffSnapshot: ChatDiffSnapshot | null
   keybindings: KeybindingsSnapshot | null
   appSettings: AppSettingsSnapshot | null
+  pushConfig: PushConfigSnapshot | null
   llmProvider: LlmProviderSnapshot | null
   connectionStatus: SocketStatus
   sidebarReady: boolean
@@ -685,8 +729,10 @@ export interface KannaState {
   handleCreateProject: (project: ProjectRequest) => Promise<void>
   handleCheckForUpdates: (options?: { force?: boolean }) => Promise<void>
   handleInstallUpdate: () => Promise<void>
+  handleForceReload: () => Promise<void>
   handleReadAppSettings: () => Promise<void>
   handleWriteAppSettings: (patch: AppSettingsPatch) => Promise<void>
+  handleWriteCloudflareTunnel: (patch: Partial<CloudflareTunnelSettings>) => Promise<void>
   handleReadLlmProvider: () => Promise<void>
   handleWriteLlmProvider: (value: Pick<LlmProviderSnapshot, "provider" | "apiKey" | "model" | "baseUrl">) => Promise<void>
   handleValidateLlmProvider: (value: Pick<LlmProviderSnapshot, "provider" | "apiKey" | "model" | "baseUrl">) => Promise<LlmProviderValidationResult>
@@ -703,6 +749,7 @@ export interface KannaState {
   handleDeleteChat: (chat: SidebarChatRow) => Promise<void>
   handleHideProject: (projectId: string) => Promise<void>
   handleReorderProjectGroups: (projectIds: string[]) => Promise<void>
+  importClaudeSessions: () => Promise<{ imported: number; updated: number; skipped: number; failed: number; newProjects: number }>
   handleCopyPath: (localPath: string) => Promise<void>
   handleOpenExternal: (action: OpenExternalAction, editor?: EditorOpenSettings) => Promise<void>
   handleOpenExternalPath: (action: "open_finder" | "open_editor", localPath: string) => Promise<void>
@@ -743,6 +790,7 @@ export function useKannaState(activeChatId: string | null): KannaState {
   const [projectDiffSnapshots, setProjectDiffSnapshots] = useState<Record<string, ChatDiffSnapshot | null>>({})
   const [keybindings, setKeybindings] = useState<KeybindingsSnapshot | null>(null)
   const [appSettings, setAppSettings] = useState<AppSettingsSnapshot | null>(null)
+  const [pushConfig, setPushConfig] = useState<PushConfigSnapshot | null>(null)
   const [llmProvider, setLlmProvider] = useState<LlmProviderSnapshot | null>(null)
   const [connectionStatus, setConnectionStatus] = useState<SocketStatus>("connecting")
   const [sidebarReady, setSidebarReady] = useState(false)
@@ -923,6 +971,12 @@ export function useKannaState(activeChatId: string | null): KannaState {
     })
   }, [socket])
 
+  useEffect(() => {
+    return socket.subscribe<PushConfigSnapshot>({ type: "push-config" }, (snapshot) => {
+      setPushConfig(snapshot)
+    })
+  }, [socket])
+
   const handleReadAppSettings = useCallback(async () => {
     try {
       useAppSettingsStore.getState().setHydrationStatus("loading")
@@ -941,6 +995,23 @@ export function useKannaState(activeChatId: string | null): KannaState {
       useAppSettingsStore.getState().applyOptimisticPatch(patch)
       const snapshot = await socket.command<AppSettingsSnapshot>({
         type: "settings.writeAppSettingsPatch",
+        patch,
+      })
+      setAppSettings(snapshot)
+      syncRuntimeStoresFromAppSettings(snapshot)
+      setCommandError(null)
+    } catch (error) {
+      setCommandError(error instanceof Error ? error.message : String(error))
+      await handleReadAppSettings()
+      throw error
+    }
+  }, [handleReadAppSettings, socket])
+
+  const handleWriteCloudflareTunnel = useCallback(async (patch: Partial<CloudflareTunnelSettings>) => {
+    try {
+      useAppSettingsStore.getState().applyOptimisticPatch({ cloudflareTunnel: patch })
+      const snapshot = await socket.command<AppSettingsSnapshot>({
+        type: "appSettings.setCloudflareTunnel",
         patch,
       })
       setAppSettings(snapshot)
@@ -1077,6 +1148,14 @@ export function useKannaState(activeChatId: string | null): KannaState {
       setHasOlderHistory(snapshot?.history.hasOlder ?? false)
       setChatReady(true)
       setCommandError(null)
+      if (snapshot) {
+        const store = useSlashCommandsStore.getState()
+        store.setForChat(snapshot.runtime.chatId, snapshot.slashCommands ?? [])
+        store.setLoadingForChat(
+          snapshot.runtime.chatId,
+          snapshot.slashCommandsLoading ?? false,
+        )
+      }
     })
     return () => {
       logKannaState("unsubscribing from chat", {
@@ -1484,6 +1563,33 @@ export function useKannaState(activeChatId: string | null): KannaState {
     }
   }, [dialog, socket])
 
+  const handleForceReload = useCallback(async () => {
+    try {
+      const result = await socket.command<UpdateInstallResult>({ type: "update.reload" })
+      if (!result.ok) {
+        clearUiUpdateRestartPhase()
+        setCommandError(null)
+        await dialog.alert({
+          title: result.userTitle ?? "Re-deploy failed",
+          description: result.userMessage ?? "Kanna could not re-deploy. Try again later.",
+          closeLabel: "OK",
+        })
+        return
+      }
+
+      if (result.action === "reload") {
+        window.location.reload()
+        return
+      }
+
+      setUiUpdateRestartPhase("awaiting_disconnect")
+      setCommandError(null)
+    } catch (error) {
+      clearUiUpdateRestartPhase()
+      setCommandError(error instanceof Error ? error.message : String(error))
+    }
+  }, [dialog, socket])
+
   const handleSignOut = useCallback(async () => {
     try {
       const response = await fetch("/auth/logout", {
@@ -1511,6 +1617,7 @@ export function useKannaState(activeChatId: string | null): KannaState {
     const attachments = options?.attachments ?? []
     if (activeChatId && isProcessing) {
       try {
+        const autoResumeOnRateLimit = usePreferencesStore.getState().autoResumeOnRateLimit
         await socket.command<{ queuedMessageId: string }>({
           type: "message.enqueue",
           chatId: activeChatId,
@@ -1520,6 +1627,7 @@ export function useKannaState(activeChatId: string | null): KannaState {
           model: options?.model,
           modelOptions: options?.modelOptions,
           planMode: options?.planMode,
+          autoResumeOnRateLimit,
         })
         setCommandError(null)
         return
@@ -1589,6 +1697,7 @@ export function useKannaState(activeChatId: string | null): KannaState {
         throw new Error("Open a project first")
       }
 
+      const autoResumeOnRateLimit = usePreferencesStore.getState().autoResumeOnRateLimit
       const result = await socket.command<{ chatId?: string }>({
         type: "chat.send",
         chatId: activeChatId ?? undefined,
@@ -1600,6 +1709,7 @@ export function useKannaState(activeChatId: string | null): KannaState {
         model: options?.model,
         modelOptions: options?.modelOptions,
         planMode: options?.planMode,
+        autoResumeOnRateLimit,
       })
       sendTrace.ackAt = performance.now()
       sendTrace.serverChatId = result.chatId ?? sendTrace.serverChatId
@@ -1768,6 +1878,11 @@ export function useKannaState(activeChatId: string | null): KannaState {
       setOptimisticSidebarProjectOrder(null)
       setCommandError(error instanceof Error ? error.message : String(error))
     }
+  }, [socket])
+
+  const importClaudeSessions = useCallback(async () => {
+    const result = await socket.command<{ imported: number; updated: number; skipped: number; failed: number; newProjects: number }>({ type: "sessions.importClaude" })
+    return result
   }, [socket])
 
   const openExternal = useCallback(async (command: {
@@ -2003,6 +2118,7 @@ export function useKannaState(activeChatId: string | null): KannaState {
     chatDiffSnapshot,
     keybindings,
     appSettings,
+    pushConfig,
     llmProvider,
     connectionStatus,
     sidebarReady,
@@ -2043,8 +2159,10 @@ export function useKannaState(activeChatId: string | null): KannaState {
     handleCreateProject,
     handleCheckForUpdates,
     handleInstallUpdate,
+    handleForceReload,
     handleReadAppSettings,
     handleWriteAppSettings,
+    handleWriteCloudflareTunnel,
     handleReadLlmProvider,
     handleWriteLlmProvider,
     handleValidateLlmProvider,
@@ -2061,6 +2179,7 @@ export function useKannaState(activeChatId: string | null): KannaState {
     handleDeleteChat,
     handleHideProject,
     handleReorderProjectGroups,
+    importClaudeSessions,
     handleCopyPath,
     handleOpenExternal,
     handleOpenExternalPath,

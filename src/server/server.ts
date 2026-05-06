@@ -1,11 +1,16 @@
 import path from "node:path"
 import { stat } from "node:fs/promises"
+import { bin as cloudflaredBin } from "cloudflared"
 import { APP_NAME, getRuntimeProfile } from "../shared/branding"
-import type { ChatAttachment } from "../shared/types"
+import { CLOUDFLARE_TUNNEL_DEFAULTS, type ChatAttachment } from "../shared/types"
 import type { ShareMode } from "../shared/share"
 import { createAuthManager } from "./auth"
+import { createAuthSessionStore } from "./auth-session-store"
 import { EventStore } from "./event-store"
+import { PushManager, realWebPushSender } from "./push/push-manager"
+import { loadOrGenerateVapidKeys } from "./push/vapid"
 import { AgentCoordinator } from "./agent"
+import type { LimitDetector } from "./auto-continue/limit-detector"
 import { KannaAnalyticsReporter } from "./analytics"
 import { AppSettingsManager } from "./app-settings"
 import { DiffStore } from "./diff-store"
@@ -16,9 +21,23 @@ import { getMachineDisplayName } from "./machine-name"
 import { TerminalManager } from "./terminal-manager"
 import { UpdateManager } from "./update-manager"
 import type { UpdateInstallAttemptResult } from "./cli-runtime"
+import { compareVersions } from "./cli-runtime"
+import { createUpdateStrategy } from "./update-strategy"
 import { createWsRouter, type ClientState } from "./ws-router"
 import { deleteProjectUpload, inferAttachmentContentType, inferProjectFileContentType, persistProjectUpload } from "./uploads"
 import { getProjectUploadDir } from "./paths"
+import { listProjectPaths } from "./project-paths"
+import { ScheduleManager } from "./auto-continue/schedule-manager"
+import { TunnelGateway } from "./cloudflare-tunnel/gateway"
+import { TunnelManager } from "./cloudflare-tunnel/tunnel-manager"
+import { TunnelLifecycle } from "./cloudflare-tunnel/lifecycle"
+
+function resolveCloudflaredPath(settingsPath: string): string {
+  if (settingsPath !== CLOUDFLARE_TUNNEL_DEFAULTS.cloudflaredPath) {
+    return settingsPath
+  }
+  return cloudflaredBin
+}
 
 const MAX_UPLOAD_FILES = 50
 const MAX_UPLOAD_SIZE_BYTES = 100 * 1024 * 1024
@@ -79,6 +98,11 @@ export interface StartKannaServerOptions {
     fetchLatestVersion: (packageName: string) => Promise<string>
     installVersion: (packageName: string, version: string) => UpdateInstallAttemptResult
   }
+  agentOverrides?: {
+    claudeLimitDetector?: LimitDetector
+    codexLimitDetector?: LimitDetector
+    throwOnClaudeSessionStart?: boolean
+  }
 }
 
 export async function startKannaServer(options: StartKannaServerOptions = {}) {
@@ -86,11 +110,17 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
   const hostname = options.host ?? "127.0.0.1"
   const strictPort = options.strictPort ?? false
   const runtimeProfile = getRuntimeProfile()
-  const auth = options.password ? createAuthManager(options.password, { trustProxy: options.trustProxy ?? false }) : null
   const store = new EventStore(options.dataDir)
   const diffStore = new DiffStore(store.dataDir)
   const machineDisplayName = getMachineDisplayName()
   await store.initialize()
+  const vapid = await loadOrGenerateVapidKeys(store.dataDir)
+  const pushManager = new PushManager({
+    store,
+    sender: realWebPushSender,
+    vapid,
+  })
+  await pushManager.initialize()
   await diffStore.initialize()
   await store.migrateLegacyTranscripts(options.onMigrationProgress)
   let discoveredProjects: DiscoveredProject[] = []
@@ -109,23 +139,82 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
   const appSettings = new AppSettingsManager(path.join(store.dataDir, "settings.json"))
   await appSettings.initialize()
   await keybindings.initialize()
+  const auth = options.password
+    ? createAuthManager(options.password, {
+        trustProxy: options.trustProxy ?? false,
+        sessionStore: await createAuthSessionStore({
+          filePath: path.join(store.dataDir, "sessions.json"),
+        }),
+        getMaxAgeMs: () => appSettings.getSnapshot().auth.sessionMaxAgeDays * 86_400_000,
+      })
+    : null
   const analytics = new KannaAnalyticsReporter({
     settings: appSettings,
     currentVersion: options.update?.version ?? "unknown",
     environment: runtimeProfile === "dev" ? "dev" : "prod",
   })
-  const updateManager = options.update
-    ? new UpdateManager({
+  const updateManager: UpdateManager | null = (() => {
+    if (!options.update) return null
+    let manager: UpdateManager | null = null
+    const strategy = createUpdateStrategy({
+      reloaderEnv: process.env.KANNA_RELOADER,
       currentVersion: options.update.version,
       fetchLatestVersion: options.update.fetchLatestVersion,
       installVersion: options.update.installVersion,
+      latestVersionHint: () => {
+        const snapshot = manager?.getSnapshot()
+        if (!snapshot) return null
+        const latest = snapshot.latestVersion
+        const current = snapshot.currentVersion
+        if (!latest) return current
+        return compareVersions(latest, current) > 0 ? latest : current
+      },
+      repoDir: process.env.KANNA_REPO_DIR,
+    })
+    manager = new UpdateManager({
+      currentVersion: options.update.version,
+      checker: strategy.checker,
+      reloader: strategy.reloader,
       devMode: runtimeProfile === "dev",
       trackEvent: analytics.track.bind(analytics),
     })
-    : null
-  const agent = new AgentCoordinator({
+    return manager
+  })()
+  const broadcastTunnel = (chatId: string) => {
+    router.scheduleChatStateBroadcast(chatId)
+  }
+  const tunnelManager = new TunnelManager({
+    cloudflaredPath: resolveCloudflaredPath(appSettings.getSnapshot().cloudflareTunnel.cloudflaredPath),
+    onEvent: async (event) => {
+      await store.appendTunnelEvent(event)
+      broadcastTunnel(event.chatId)
+    },
+  })
+  const tunnelLifecycle = new TunnelLifecycle({
+    onSourceExit: (tunnelId) => { void tunnelManager.stop(tunnelId, "source_exited") },
+  })
+  const tunnelGateway = new TunnelGateway({
+    manager: tunnelManager,
+    lifecycle: tunnelLifecycle,
+    settings: appSettings,
     store,
+    broadcast: broadcastTunnel,
+  })
+
+  let agent!: AgentCoordinator
+  const scheduleManager = new ScheduleManager({
+    fire: async (chatId, scheduleId) => {
+      await agent.fireAutoContinue(chatId, scheduleId)
+    },
+  })
+  agent = new AgentCoordinator({
+    store,
+    scheduleManager,
+    claudeLimitDetector: options.agentOverrides?.claudeLimitDetector,
+    codexLimitDetector: options.agentOverrides?.codexLimitDetector,
+    throwOnClaudeSessionStart: options.agentOverrides?.throwOnClaudeSessionStart,
     analytics,
+    tunnelGateway,
     onStateChange: (chatId?: string, options?: { immediate?: boolean }) => {
       if (chatId) {
         if (options?.immediate) {
@@ -146,6 +235,7 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     keybindings,
     appSettings,
     analytics,
+    tunnelGateway,
     llmProvider: {
       read: readLlmProviderSnapshot,
       write: writeLlmProviderSnapshot,
@@ -155,7 +245,12 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     getDiscoveredProjects: () => discoveredProjects,
     machineDisplayName,
     updateManager,
+    pushManager,
   })
+  scheduleManager.rehydrate(
+    store.listAutoContinueChats().flatMap((chatId) => store.getAutoContinueEvents(chatId))
+  )
+  await tunnelGateway.reapOrphanedTunnels()
   const staleEmptyChatPruneInterval = setInterval(() => {
     void router.pruneStaleEmptyChats()
       .then(() => router.broadcastSnapshots())
@@ -247,6 +342,11 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
             return projectFileContentResponse
           }
 
+          const projectPathsResponse = await handleProjectPaths(req, url, store)
+          if (projectPathsResponse) {
+            return projectPathsResponse
+          }
+
           return serveStatic(distDir, url.pathname)
         },
         websocket: {
@@ -283,11 +383,14 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
   })
 
   const shutdown = async () => {
+    scheduleManager.shutdown()
+    tunnelGateway.shutdown()
     clearInterval(staleEmptyChatPruneInterval)
     for (const chatId of [...agent.activeTurns.keys()]) {
       await agent.cancel(chatId)
     }
     router.dispose()
+    await auth?.dispose()
     appSettings.dispose()
     keybindings.dispose()
     terminals.closeAll()
@@ -471,6 +574,34 @@ async function handleProjectUploadDelete(req: Request, url: URL, store: EventSto
   })
 
   return Response.json({ ok: deleted })
+}
+
+async function handleProjectPaths(req: Request, url: URL, store: EventStore) {
+  if (req.method !== "GET") return null
+  const match = url.pathname.match(/^\/api\/projects\/([^/]+)\/paths$/)
+  if (!match) return null
+
+  const project = store.getProject(match[1])
+  if (!project) {
+    return Response.json({ error: "Project not found" }, { status: 404 })
+  }
+
+  const query = url.searchParams.get("query") ?? ""
+  const limitRaw = url.searchParams.get("limit")
+  const limit = limitRaw !== null ? Number.parseInt(limitRaw, 10) : undefined
+
+  try {
+    const paths = await listProjectPaths({
+      projectId: project.id,
+      localPath: project.localPath,
+      query,
+      limit: Number.isFinite(limit) ? limit : undefined,
+    })
+    return Response.json({ paths })
+  } catch (error) {
+    console.error("[paths] list failed:", error)
+    return Response.json({ error: "Failed to list paths" }, { status: 500 })
+  }
 }
 
 async function serveStatic(distDir: string, pathname: string) {

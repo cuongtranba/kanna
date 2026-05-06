@@ -37,10 +37,15 @@ function spawnLabeledProcess(label: string, args: string[]) {
 }
 
 const client = spawnLabeledProcess("client", ["x", "vite", "--host", "0.0.0.0", "--port", String(clientPort), "--strictPort"])
-const server = spawn(bunBin, ["run", "./scripts/dev-server.ts", "--no-open", "--port", String(serverPort), "--strict-port", ...serverArgs], {
+const fakeLimitSeconds = process.env.KANNA_FAKE_LIMIT_SECONDS
+const serverEntry = fakeLimitSeconds ? "./scripts/dev-fake-limit.ts" : "./scripts/dev-server.ts"
+const serverSpawnArgs = fakeLimitSeconds
+  ? ["run", serverEntry, fakeLimitSeconds]
+  : ["run", serverEntry, "--no-open", "--port", String(serverPort), "--strict-port", ...serverArgs]
+const server = spawn(bunBin, serverSpawnArgs, {
   cwd,
   stdio: "inherit",
-  env: process.env,
+  env: { ...process.env, KANNA_PORT: String(serverPort) },
 })
 
 server.on("spawn", () => {

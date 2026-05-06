@@ -5,6 +5,7 @@ import { join } from "node:path"
 import { tmpdir } from "node:os"
 import type { TranscriptEntry } from "../shared/types"
 import type { SnapshotFile } from "./events"
+import type { AutoContinueEvent } from "./auto-continue/events"
 import { EventStore } from "./event-store"
 
 const originalRuntimeProfile = process.env.KANNA_RUNTIME_PROFILE
@@ -50,7 +51,7 @@ describe("EventStore", () => {
     const chatId = "chat-1"
 
     const snapshot: SnapshotFile = {
-      v: 2,
+      v: 3,
       generatedAt: 10,
       projects: [{
         id: "project-1",
@@ -69,6 +70,7 @@ describe("EventStore", () => {
         provider: null,
         planMode: false,
         sessionToken: null,
+        sourceHash: null,
         lastTurnOutcome: null,
       }],
       messages: [{
@@ -81,7 +83,7 @@ describe("EventStore", () => {
 
     await writeFile(snapshotPath, JSON.stringify(snapshot, null, 2), "utf8")
     await writeFile(messagesLogPath, `${JSON.stringify({
-      v: 2,
+      v: 3,
       type: "message_appended",
       timestamp: 101,
       chatId,
@@ -278,7 +280,7 @@ describe("EventStore", () => {
 
     await writeFile(chatsLogPath, [
       JSON.stringify({
-        v: 2,
+        v: 3,
         type: "chat_created",
         timestamp,
         chatId,
@@ -286,7 +288,7 @@ describe("EventStore", () => {
         title: "Chat",
       }),
       JSON.stringify({
-        v: 2,
+        v: 3,
         type: "chat_read_state_set",
         timestamp,
         chatId,
@@ -296,7 +298,7 @@ describe("EventStore", () => {
     ].join("\n"), "utf8")
     await writeFile(turnsLogPath, [
       JSON.stringify({
-        v: 2,
+        v: 3,
         type: "turn_finished",
         timestamp,
         chatId,
@@ -314,8 +316,8 @@ describe("EventStore", () => {
     const dataDir = await createTempDataDir()
     const snapshotPath = join(dataDir, "snapshot.json")
 
-    const snapshot = {
-      v: 2,
+    const snapshot: SnapshotFile = {
+      v: 3,
       generatedAt: 10,
       projects: [{
         id: "project-1",
@@ -330,9 +332,11 @@ describe("EventStore", () => {
         title: "Chat",
         createdAt: 1,
         updatedAt: 5,
+        unread: false,
         provider: null,
         planMode: false,
         sessionToken: null,
+        sourceHash: null,
         lastTurnOutcome: null,
       }],
     }
@@ -372,8 +376,8 @@ describe("EventStore", () => {
     const snapshotPath = join(dataDir, "snapshot.json")
     const projectsLogPath = join(dataDir, "projects.jsonl")
 
-    const snapshot: SnapshotFile = {
-      v: 2,
+    const snapshot = {
+      v: 3,
       generatedAt: 10,
       projects: [
         {
@@ -398,7 +402,7 @@ describe("EventStore", () => {
     await writeFile(snapshotPath, JSON.stringify(snapshot, null, 2), "utf8")
     await writeFile(projectsLogPath, [
       JSON.stringify({
-        v: 2,
+        v: 3,
         type: "sidebar_project_order_set",
         timestamp: 20,
         projectIds: ["project-2", "project-1"],
@@ -574,5 +578,256 @@ describe("EventStore", () => {
 
     expect(store.getChat(chat.id)?.archivedAt).toBeUndefined()
     expect(store.listChatsByProject(project.id).map((entry) => entry.id)).toEqual([chat.id])
+  })
+})
+
+describe("recordSessionCommandsLoaded", () => {
+  test("stores latest commands on chat record", async () => {
+    const dataDir = await createTempDataDir()
+    const store = new EventStore(dataDir)
+    await store.initialize()
+    const project = await store.openProject("/tmp/project")
+    const chat = await store.createChat(project.id)
+
+    await store.recordSessionCommandsLoaded(chat.id, [
+      { name: "review", description: "Review PR", argumentHint: "<pr>" },
+    ])
+
+    expect(store.getChat(chat.id)?.slashCommands).toEqual([
+      { name: "review", description: "Review PR", argumentHint: "<pr>" },
+    ])
+  })
+
+  test("replaces commands on subsequent load", async () => {
+    const dataDir = await createTempDataDir()
+    const store = new EventStore(dataDir)
+    await store.initialize()
+    const project = await store.openProject("/tmp/project")
+    const chat = await store.createChat(project.id)
+
+    await store.recordSessionCommandsLoaded(chat.id, [
+      { name: "a", description: "", argumentHint: "" },
+    ])
+    await store.recordSessionCommandsLoaded(chat.id, [
+      { name: "b", description: "", argumentHint: "" },
+    ])
+
+    expect(store.getChat(chat.id)?.slashCommands).toEqual([
+      { name: "b", description: "", argumentHint: "" },
+    ])
+  })
+
+  test("skips redundant writes when commands are unchanged", async () => {
+    const dataDir = await createTempDataDir()
+    const store = new EventStore(dataDir)
+    await store.initialize()
+    const project = await store.openProject("/tmp/project")
+    const chat = await store.createChat(project.id)
+    const turnsLogPath = join(dataDir, "turns.jsonl")
+
+    const commands = [{ name: "review", description: "Review", argumentHint: "<pr>" }]
+    await store.recordSessionCommandsLoaded(chat.id, commands)
+    const afterFirst = (await readFile(turnsLogPath, "utf8")).trim().split("\n").length
+
+    await store.recordSessionCommandsLoaded(chat.id, [...commands.map((c) => ({ ...c }))])
+    const afterSecond = (await readFile(turnsLogPath, "utf8")).trim().split("\n").length
+
+    expect(afterSecond).toBe(afterFirst)
+  })
+
+  test("compaction + reload preserves slashCommands on chat records", async () => {
+    const dataDir = await createTempDataDir()
+    const store = new EventStore(dataDir)
+    await store.initialize()
+    const project = await store.openProject("/tmp/project")
+    const chat = await store.createChat(project.id)
+
+    const commands = [
+      { name: "review", description: "Review PR", argumentHint: "<pr>" },
+      { name: "help", description: "Show help", argumentHint: "" },
+    ]
+    await store.recordSessionCommandsLoaded(chat.id, commands)
+    await store.compact()
+
+    const reloaded = new EventStore(dataDir)
+    await reloaded.initialize()
+
+    expect(reloaded.getChat(chat.id)?.slashCommands).toEqual(commands)
+  })
+})
+
+describe("EventStore auto-continue schedules", () => {
+  test("appends and replays AutoContinueEvent sequence", async () => {
+    const dataDir = await createTempDataDir()
+    const store = new EventStore(dataDir)
+    await store.initialize()
+    const project = await store.openProject("/tmp/p1")
+    const chat = await store.createChat(project.id)
+
+    const proposed: AutoContinueEvent = {
+      v: 3,
+      kind: "auto_continue_proposed",
+      timestamp: 1_000,
+      chatId: chat.id,
+      scheduleId: "s1",
+      detectedAt: 1_000,
+      resetAt: 2_000,
+      tz: "Asia/Saigon",
+
+    }
+    const accepted: AutoContinueEvent = {
+      v: 3,
+      kind: "auto_continue_accepted",
+      timestamp: 1_100,
+      chatId: chat.id,
+      scheduleId: "s1",
+      scheduledAt: 2_000,
+      tz: "Asia/Saigon",
+      source: "user",
+      resetAt: 2_000,
+      detectedAt: 1_000,
+    }
+    await store.appendAutoContinueEvent(proposed)
+    await store.appendAutoContinueEvent(accepted)
+
+    const rehydrated = new EventStore(dataDir)
+    await rehydrated.initialize()
+    const events = rehydrated.getAutoContinueEvents(chat.id)
+    expect(events).toHaveLength(2)
+    expect(events[0].kind).toBe("auto_continue_proposed")
+    expect(events[1].kind).toBe("auto_continue_accepted")
+  })
+
+  test("snapshot compaction retains auto-continue events", async () => {
+    const dataDir = await createTempDataDir()
+    const store = new EventStore(dataDir)
+    await store.initialize()
+    const project = await store.openProject("/tmp/p1")
+    const chat = await store.createChat(project.id)
+
+    await store.appendAutoContinueEvent({
+      v: 3,
+      kind: "auto_continue_proposed",
+      timestamp: 1_000,
+      chatId: chat.id,
+      scheduleId: "s1",
+      detectedAt: 1_000,
+      resetAt: 2_000,
+      tz: "Asia/Saigon",
+
+    })
+    await store.compact()
+
+    const rehydrated = new EventStore(dataDir)
+    await rehydrated.initialize()
+    expect(rehydrated.getAutoContinueEvents(chat.id)).toHaveLength(1)
+  })
+})
+
+describe("EventStore tunnel events", () => {
+  test("appends two tunnel events and retrieves them in order by chatId", async () => {
+    const dataDir = await createTempDataDir()
+    const store = new EventStore(dataDir)
+    await store.initialize()
+    const project = await store.openProject("/tmp/p-tunnel")
+    const chat = await store.createChat(project.id)
+
+    const proposed = {
+      v: 1 as const,
+      kind: "tunnel_proposed" as const,
+      timestamp: 1_000,
+      chatId: chat.id,
+      tunnelId: "t1",
+      port: 5173,
+      sourcePid: null,
+    }
+    const accepted = {
+      v: 1 as const,
+      kind: "tunnel_accepted" as const,
+      timestamp: 2_000,
+      chatId: chat.id,
+      tunnelId: "t1",
+      source: "user" as const,
+    }
+
+    await store.appendTunnelEvent(proposed)
+    await store.appendTunnelEvent(accepted)
+
+    const events = store.getTunnelEvents(chat.id)
+    expect(events).toHaveLength(2)
+    expect(events[0].kind).toBe("tunnel_proposed")
+    expect(events[1].kind).toBe("tunnel_accepted")
+  })
+
+  test("persists tunnel events across store restart", async () => {
+    const dataDir = await createTempDataDir()
+    const store = new EventStore(dataDir)
+    await store.initialize()
+    const project = await store.openProject("/tmp/p-tunnel2")
+    const chat = await store.createChat(project.id)
+
+    await store.appendTunnelEvent({
+      v: 1 as const,
+      kind: "tunnel_proposed" as const,
+      timestamp: 1_000,
+      chatId: chat.id,
+      tunnelId: "t2",
+      port: 3000,
+      sourcePid: 42,
+    })
+
+    const rehydrated = new EventStore(dataDir)
+    await rehydrated.initialize()
+    const events = rehydrated.getTunnelEvents(chat.id)
+    expect(events).toHaveLength(1)
+    if (events[0].kind === "tunnel_proposed") {
+      expect(events[0].port).toBe(3000)
+      expect(events[0].sourcePid).toBe(42)
+    } else {
+      throw new Error("expected tunnel_proposed")
+    }
+  })
+
+  test("returns empty array for unknown chatId", async () => {
+    const dataDir = await createTempDataDir()
+    const store = new EventStore(dataDir)
+    await store.initialize()
+    expect(store.getTunnelEvents("nonexistent")).toEqual([])
+  })
+})
+
+describe("EventStore push events", () => {
+  test("appends and reloads push events", async () => {
+    const dataDir = await createTempDataDir()
+    const store = new EventStore(dataDir)
+    await store.initialize()
+
+    await store.appendPushEvent({
+      kind: "subscription_added",
+      ts: 1700000000000,
+      id: "sub-1",
+      record: {
+        id: "sub-1",
+        endpoint: "https://push.example/abc",
+        keys: { p256dh: "p", auth: "a" },
+        label: "iPhone",
+        userAgent: "Mozilla/5.0",
+        createdAt: 1700000000000,
+        lastSeenAt: 1700000000000,
+      },
+    })
+    await store.appendPushEvent({
+      kind: "project_mute_set",
+      ts: 1700000000001,
+      localPath: "/tmp/proj-a",
+      muted: true,
+    })
+
+    const reloaded = new EventStore(dataDir)
+    await reloaded.initialize()
+    const events = await reloaded.loadPushEvents()
+    expect(events).toHaveLength(2)
+    expect(events[0].kind).toBe("subscription_added")
+    expect(events[1].kind).toBe("project_mute_set")
   })
 })

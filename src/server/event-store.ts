@@ -3,8 +3,9 @@ import { existsSync, readFileSync as readFileSyncImmediate } from "node:fs"
 import { homedir } from "node:os"
 import path from "node:path"
 import { getDataDir, LOG_PREFIX } from "../shared/branding"
-import type { AgentProvider, ChatHistoryPage, ChatHistorySnapshot, QueuedChatMessage, TranscriptEntry } from "../shared/types"
+import type { AgentProvider, ChatHistoryPage, ChatHistorySnapshot, QueuedChatMessage, SlashCommand, TranscriptEntry } from "../shared/types"
 import { STORE_VERSION } from "../shared/types"
+import type { AutoContinueEvent } from "./auto-continue/events"
 import {
   type ChatEvent,
   type ProjectEvent,
@@ -17,6 +18,8 @@ import {
   createEmptyState,
 } from "./events"
 import { resolveLocalPath } from "./paths"
+import type { CloudflareTunnelEvent } from "./cloudflare-tunnel/events"
+import type { PushEvent, PushEventStore } from "./push/events"
 
 const COMPACTION_THRESHOLD_BYTES = 2 * 1024 * 1024
 const STALE_EMPTY_CHAT_MAX_AGE_MS = 30 * 60 * 1000
@@ -75,9 +78,11 @@ interface ParsedReplayEvent {
 }
 
 function getReplayEventPriority(event: StoreEvent) {
-  switch (event.type) {
+  const discriminator = "type" in event ? event.type : event.kind
+  switch (discriminator) {
     case "project_opened":
     case "project_removed":
+    case "sidebar_project_order_set":
       return 0
     case "chat_created":
       return 1
@@ -93,6 +98,7 @@ function getReplayEventPriority(event: StoreEvent) {
     case "turn_started":
       return 5
     case "session_token_set":
+    case "session_commands_loaded":
       return 6
     case "pending_fork_session_token_set":
       return 6
@@ -102,11 +108,18 @@ function getReplayEventPriority(event: StoreEvent) {
     case "turn_failed":
       return 8
     case "chat_read_state_set":
+    case "chat_source_hash_set":
       return 9
     case "chat_deleted":
     case "chat_archived":
     case "chat_unarchived":
       return 10
+    case "auto_continue_proposed":
+    case "auto_continue_accepted":
+    case "auto_continue_rescheduled":
+    case "auto_continue_cancelled":
+    case "auto_continue_fired":
+      return 11
   }
 }
 
@@ -126,6 +139,18 @@ function decodeCursor(cursor: string) {
   throw new Error("Invalid history cursor")
 }
 
+function slashCommandsEqual(a: SlashCommand[], b: SlashCommand[]) {
+  if (a.length !== b.length) return false
+  for (let i = 0; i < a.length; i += 1) {
+    const ai = a[i]
+    const bi = b[i]
+    if (ai.name !== bi.name || ai.description !== bi.description || ai.argumentHint !== bi.argumentHint) {
+      return false
+    }
+  }
+  return true
+}
+
 function getHistorySnapshot(page: TranscriptPageResult, recentLimit: number): ChatHistorySnapshot {
   return {
     hasOlder: page.hasOlder,
@@ -140,7 +165,7 @@ function getForkedChatTitle(title: string) {
   return trimmed.startsWith("Fork: ") ? trimmed : `Fork: ${trimmed}`
 }
 
-export class EventStore {
+export class EventStore implements PushEventStore {
   readonly dataDir: string
   readonly state: StoreState = createEmptyState()
   private writeChain = Promise.resolve()
@@ -151,6 +176,9 @@ export class EventStore {
   private readonly messagesLogPath: string
   private readonly queuedMessagesLogPath: string
   private readonly turnsLogPath: string
+  private readonly schedulesLogPath: string
+  private readonly tunnelLogPath: string
+  private readonly pushLogPath: string
   private readonly transcriptsDir: string
   private readonly sidebarProjectOrderPath: string
   private legacyMessagesByChatId = new Map<string, TranscriptEntry[]>()
@@ -158,6 +186,7 @@ export class EventStore {
   private sidebarProjectOrder: string[] = []
   private snapshotHasLegacyMessages = false
   private cachedTranscript: { chatId: string; entries: TranscriptEntry[] } | null = null
+  private readonly tunnelEventsByChatId = new Map<string, CloudflareTunnelEvent[]>()
 
   constructor(dataDir = getDataDir(homedir())) {
     this.dataDir = dataDir
@@ -167,6 +196,9 @@ export class EventStore {
     this.messagesLogPath = path.join(this.dataDir, "messages.jsonl")
     this.queuedMessagesLogPath = path.join(this.dataDir, "queued-messages.jsonl")
     this.turnsLogPath = path.join(this.dataDir, "turns.jsonl")
+    this.schedulesLogPath = path.join(this.dataDir, "schedules.jsonl")
+    this.tunnelLogPath = path.join(this.dataDir, "tunnels.jsonl")
+    this.pushLogPath = path.join(this.dataDir, "push.jsonl")
     this.transcriptsDir = path.join(this.dataDir, "transcripts")
     this.sidebarProjectOrderPath = path.join(this.dataDir, SIDEBAR_PROJECT_ORDER_FILE)
   }
@@ -179,8 +211,12 @@ export class EventStore {
     await this.ensureFile(this.messagesLogPath)
     await this.ensureFile(this.queuedMessagesLogPath)
     await this.ensureFile(this.turnsLogPath)
+    await this.ensureFile(this.schedulesLogPath)
+    await this.ensureFile(this.tunnelLogPath)
+    await this.ensureFile(this.pushLogPath)
     await this.loadSnapshot()
     await this.replayLogs()
+    await this.loadTunnelEvents()
     await this.loadSidebarProjectOrder()
     if (!(await this.hasLegacyTranscriptData()) && await this.shouldCompact()) {
       await this.compact()
@@ -206,6 +242,8 @@ export class EventStore {
       Bun.write(this.messagesLogPath, ""),
       Bun.write(this.queuedMessagesLogPath, ""),
       Bun.write(this.turnsLogPath, ""),
+      Bun.write(this.schedulesLogPath, ""),
+      Bun.write(this.tunnelLogPath, ""),
     ])
   }
 
@@ -248,6 +286,11 @@ export class EventStore {
           this.legacyMessagesByChatId.set(messageSet.chatId, cloneTranscriptEntries(messageSet.entries))
         }
       }
+      if (parsed.autoContinueEvents?.length) {
+        for (const entry of parsed.autoContinueEvents) {
+          this.state.autoContinueEventsByChatId.set(entry.chatId, [...entry.events])
+        }
+      }
     } catch (error) {
       console.warn(`${LOG_PREFIX} Failed to load snapshot, resetting local history:`, error)
       await this.clearStorage()
@@ -259,6 +302,9 @@ export class EventStore {
     this.state.projectIdsByPath.clear()
     this.state.chatsById.clear()
     this.state.queuedMessagesByChatId.clear()
+    this.state.sidebarProjectOrder = []
+    this.state.autoContinueEventsByChatId.clear()
+    this.tunnelEventsByChatId.clear()
     this.sidebarProjectOrder = []
     this.legacySidebarProjectOrder = []
     this.cachedTranscript = null
@@ -357,6 +403,7 @@ export class EventStore {
       ...await this.loadReplayEvents(this.messagesLogPath, 2),
       ...await this.loadReplayEvents(this.queuedMessagesLogPath, 3),
       ...await this.loadReplayEvents(this.turnsLogPath, 4),
+      ...await this.loadReplayEvents(this.schedulesLogPath, 5),
     ]
     if (this.storageReset) return
 
@@ -421,39 +468,49 @@ export class EventStore {
   }
 
   private applyEvent(event: StoreEvent) {
-    switch (event.type) {
+    if ("kind" in event) {
+      this.applyAutoContinueEvent(event)
+      return
+    }
+    const e = event as Exclude<StoreEvent, AutoContinueEvent>
+    switch (e.type) {
       case "project_opened": {
-        const localPath = resolveLocalPath(event.localPath)
+        const localPath = resolveLocalPath(e.localPath)
         const project = {
-          id: event.projectId,
+          id: e.projectId,
           localPath,
-          title: event.title,
-          createdAt: event.timestamp,
-          updatedAt: event.timestamp,
+          title: e.title,
+          createdAt: e.timestamp,
+          updatedAt: e.timestamp,
         }
         this.state.projectsById.set(project.id, project)
         this.state.projectIdsByPath.set(localPath, project.id)
         break
       }
       case "project_removed": {
-        const project = this.state.projectsById.get(event.projectId)
+        const project = this.state.projectsById.get(e.projectId)
         if (!project) break
-        project.deletedAt = event.timestamp
-        project.updatedAt = event.timestamp
+        project.deletedAt = e.timestamp
+        project.updatedAt = e.timestamp
         this.state.projectIdsByPath.delete(project.localPath)
+        break
+      }
+      case "sidebar_project_order_set": {
+        this.state.sidebarProjectOrder = [...e.projectIds]
         break
       }
       case "chat_created": {
       const chat = {
-          id: event.chatId,
-          projectId: event.projectId,
-          title: event.title,
-          createdAt: event.timestamp,
-          updatedAt: event.timestamp,
+          id: e.chatId,
+          projectId: e.projectId,
+          title: e.title,
+          createdAt: e.timestamp,
+          updatedAt: e.timestamp,
           unread: false,
           provider: null,
           planMode: false,
           sessionToken: null,
+          sourceHash: null,
           pendingForkSessionToken: null,
           hasMessages: false,
           lastTurnOutcome: null,
@@ -462,133 +519,154 @@ export class EventStore {
         break
       }
       case "chat_renamed": {
-        const chat = this.state.chatsById.get(event.chatId)
+        const chat = this.state.chatsById.get(e.chatId)
         if (!chat) break
-        chat.title = event.title
-        chat.updatedAt = event.timestamp
+        chat.title = e.title
+        chat.updatedAt = e.timestamp
         break
       }
       case "chat_deleted": {
-        const chat = this.state.chatsById.get(event.chatId)
+        const chat = this.state.chatsById.get(e.chatId)
         if (!chat) break
-        chat.deletedAt = event.timestamp
-        chat.updatedAt = event.timestamp
-        this.state.queuedMessagesByChatId.delete(event.chatId)
+        chat.deletedAt = e.timestamp
+        chat.updatedAt = e.timestamp
+        this.state.queuedMessagesByChatId.delete(e.chatId)
+        this.state.autoContinueEventsByChatId.delete(e.chatId)
         break
       }
       case "chat_archived": {
-        const chat = this.state.chatsById.get(event.chatId)
+        const chat = this.state.chatsById.get(e.chatId)
         if (!chat) break
-        chat.archivedAt = event.timestamp
-        chat.updatedAt = event.timestamp
+        chat.archivedAt = e.timestamp
+        chat.updatedAt = e.timestamp
         break
       }
       case "chat_unarchived": {
-        const chat = this.state.chatsById.get(event.chatId)
+        const chat = this.state.chatsById.get(e.chatId)
         if (!chat) break
         delete chat.archivedAt
-        chat.updatedAt = event.timestamp
+        chat.updatedAt = e.timestamp
         break
       }
       case "chat_provider_set": {
-        const chat = this.state.chatsById.get(event.chatId)
+        const chat = this.state.chatsById.get(e.chatId)
         if (!chat) break
-        chat.provider = event.provider
-        chat.updatedAt = event.timestamp
+        chat.provider = e.provider
+        chat.updatedAt = e.timestamp
         break
       }
       case "chat_plan_mode_set": {
-        const chat = this.state.chatsById.get(event.chatId)
+        const chat = this.state.chatsById.get(e.chatId)
         if (!chat) break
-        chat.planMode = event.planMode
-        chat.updatedAt = event.timestamp
+        chat.planMode = e.planMode
+        chat.updatedAt = e.timestamp
         break
       }
       case "chat_read_state_set": {
-        const chat = this.state.chatsById.get(event.chatId)
+        const chat = this.state.chatsById.get(e.chatId)
         if (!chat) break
-        chat.unread = event.unread
-        chat.updatedAt = event.timestamp
+        chat.unread = e.unread
+        chat.updatedAt = e.timestamp
+        break
+      }
+      case "chat_source_hash_set": {
+        const chat = this.state.chatsById.get(e.chatId)
+        if (!chat) break
+        chat.sourceHash = e.sourceHash
+        chat.updatedAt = e.timestamp
         break
       }
       case "message_appended": {
-        this.applyMessageMetadata(event.chatId, event.entry)
-        const existing = this.legacyMessagesByChatId.get(event.chatId) ?? []
-        existing.push({ ...event.entry })
-        this.legacyMessagesByChatId.set(event.chatId, existing)
+        this.applyMessageMetadata(e.chatId, e.entry)
+        const existing = this.legacyMessagesByChatId.get(e.chatId) ?? []
+        existing.push({ ...e.entry })
+        this.legacyMessagesByChatId.set(e.chatId, existing)
         break
       }
       case "queued_message_enqueued": {
-        const existing = this.state.queuedMessagesByChatId.get(event.chatId) ?? []
+        const existing = this.state.queuedMessagesByChatId.get(e.chatId) ?? []
         existing.push({
-          ...event.message,
-          attachments: [...event.message.attachments],
+          ...e.message,
+          attachments: [...e.message.attachments],
         })
-        this.state.queuedMessagesByChatId.set(event.chatId, existing)
-        const chat = this.state.chatsById.get(event.chatId)
+        this.state.queuedMessagesByChatId.set(e.chatId, existing)
+        const chat = this.state.chatsById.get(e.chatId)
         if (chat) {
-          chat.updatedAt = event.timestamp
+          chat.updatedAt = e.timestamp
         }
         break
       }
       case "queued_message_removed": {
-        const existing = this.state.queuedMessagesByChatId.get(event.chatId) ?? []
-        const next = existing.filter((entry) => entry.id !== event.queuedMessageId)
+        const existing = this.state.queuedMessagesByChatId.get(e.chatId) ?? []
+        const next = existing.filter((entry) => entry.id !== e.queuedMessageId)
         if (next.length > 0) {
-          this.state.queuedMessagesByChatId.set(event.chatId, next)
+          this.state.queuedMessagesByChatId.set(e.chatId, next)
         } else {
-          this.state.queuedMessagesByChatId.delete(event.chatId)
+          this.state.queuedMessagesByChatId.delete(e.chatId)
         }
-        const chat = this.state.chatsById.get(event.chatId)
+        const chat = this.state.chatsById.get(e.chatId)
         if (chat) {
-          chat.updatedAt = event.timestamp
+          chat.updatedAt = e.timestamp
         }
         break
       }
       case "turn_started": {
-        const chat = this.state.chatsById.get(event.chatId)
+        const chat = this.state.chatsById.get(e.chatId)
         if (!chat) break
-        chat.updatedAt = event.timestamp
+        chat.updatedAt = e.timestamp
         break
       }
       case "turn_finished": {
-        const chat = this.state.chatsById.get(event.chatId)
+        const chat = this.state.chatsById.get(e.chatId)
         if (!chat) break
-        chat.updatedAt = event.timestamp
+        chat.updatedAt = e.timestamp
         chat.unread = true
         chat.lastTurnOutcome = "success"
         break
       }
       case "turn_failed": {
-        const chat = this.state.chatsById.get(event.chatId)
+        const chat = this.state.chatsById.get(e.chatId)
         if (!chat) break
-        chat.updatedAt = event.timestamp
+        chat.updatedAt = e.timestamp
         chat.unread = true
         chat.lastTurnOutcome = "failed"
         break
       }
       case "turn_cancelled": {
-        const chat = this.state.chatsById.get(event.chatId)
+        const chat = this.state.chatsById.get(e.chatId)
         if (!chat) break
-        chat.updatedAt = event.timestamp
+        chat.updatedAt = e.timestamp
         chat.lastTurnOutcome = "cancelled"
         break
       }
       case "session_token_set": {
-        const chat = this.state.chatsById.get(event.chatId)
+        const chat = this.state.chatsById.get(e.chatId)
         if (!chat) break
-        chat.sessionToken = event.sessionToken
-        chat.updatedAt = event.timestamp
+        chat.sessionToken = e.sessionToken
+        chat.updatedAt = e.timestamp
+        break
+      }
+      case "session_commands_loaded": {
+        const chat = this.state.chatsById.get(e.chatId)
+        if (!chat) break
+        chat.slashCommands = e.commands.map((c) => ({ ...c }))
+        chat.updatedAt = e.timestamp
         break
       }
       case "pending_fork_session_token_set": {
-        const chat = this.state.chatsById.get(event.chatId)
+        const chat = this.state.chatsById.get(e.chatId)
         if (!chat) break
-        chat.pendingForkSessionToken = event.pendingForkSessionToken
-        chat.updatedAt = event.timestamp
+        chat.pendingForkSessionToken = e.pendingForkSessionToken
+        chat.updatedAt = e.timestamp
         break
       }
     }
+  }
+
+  private applyAutoContinueEvent(event: AutoContinueEvent) {
+    const existing = this.state.autoContinueEventsByChatId.get(event.chatId) ?? []
+    existing.push(event)
+    this.state.autoContinueEventsByChatId.set(event.chatId, existing)
   }
 
   private applyMessageMetadata(chatId: string, entry: TranscriptEntry) {
@@ -926,6 +1004,7 @@ export class EventStore {
       model: message.model,
       modelOptions: message.modelOptions,
       planMode: message.planMode,
+      autoContinue: message.autoContinue,
     }
     const event: QueuedMessageEvent = {
       v: STORE_VERSION,
@@ -1012,6 +1091,26 @@ export class EventStore {
     await this.append(this.turnsLogPath, event)
   }
 
+  async recordSessionCommandsLoaded(chatId: string, commands: SlashCommand[]) {
+    const chat = this.requireChat(chatId)
+    const normalized = commands.map((c) => ({
+      name: c.name,
+      description: c.description,
+      argumentHint: c.argumentHint,
+    }))
+    if (chat.slashCommands && slashCommandsEqual(chat.slashCommands, normalized)) {
+      return
+    }
+    const event: TurnEvent = {
+      v: STORE_VERSION,
+      type: "session_commands_loaded",
+      timestamp: Date.now(),
+      chatId,
+      commands: normalized,
+    }
+    await this.append(this.turnsLogPath, event)
+  }
+
   async setPendingForkSessionToken(chatId: string, pendingForkSessionToken: string | null) {
     const chat = this.requireChat(chatId)
     if ((chat.pendingForkSessionToken ?? null) === pendingForkSessionToken) return
@@ -1023,6 +1122,19 @@ export class EventStore {
       pendingForkSessionToken,
     }
     await this.append(this.turnsLogPath, event)
+  }
+
+  async setSourceHash(chatId: string, sourceHash: string | null) {
+    const chat = this.requireChat(chatId)
+    if (chat.sourceHash === sourceHash) return
+    const event: ChatEvent = {
+      v: STORE_VERSION,
+      type: "chat_source_hash_set",
+      timestamp: Date.now(),
+      chatId,
+      sourceHash,
+    }
+    await this.append(this.chatsLogPath, event)
   }
 
   getProject(projectId: string) {
@@ -1191,6 +1303,10 @@ export class EventStore {
             attachments: [...entry.attachments],
           })),
         })),
+      autoContinueEvents: [...this.state.autoContinueEventsByChatId.entries()].map(([chatId, events]) => ({
+        chatId,
+        events: [...events],
+      })),
     }
   }
 
@@ -1203,6 +1319,9 @@ export class EventStore {
       Bun.write(this.messagesLogPath, ""),
       Bun.write(this.queuedMessagesLogPath, ""),
       Bun.write(this.turnsLogPath, ""),
+      Bun.write(this.schedulesLogPath, ""),
+      // tunnels.jsonl is NOT compacted into the snapshot — it's left as-is
+      // so that active tunnel state survives server restarts.
     ])
   }
 
@@ -1244,7 +1363,90 @@ export class EventStore {
       Bun.file(this.messagesLogPath).size,
       Bun.file(this.queuedMessagesLogPath).size,
       Bun.file(this.turnsLogPath).size,
+      Bun.file(this.schedulesLogPath).size,
     ])
     return sizes.reduce((total, size) => total + size, 0) >= COMPACTION_THRESHOLD_BYTES
+  }
+
+  async appendAutoContinueEvent(event: AutoContinueEvent) {
+    return this.append(this.schedulesLogPath, event)
+  }
+
+  getAutoContinueEvents(chatId: string): AutoContinueEvent[] {
+    const list = this.state.autoContinueEventsByChatId.get(chatId)
+    return list ? [...list] : []
+  }
+
+  listAutoContinueChats(): string[] {
+    return [...this.state.autoContinueEventsByChatId.keys()]
+  }
+
+  async appendTunnelEvent(event: CloudflareTunnelEvent): Promise<void> {
+    const payload = `${JSON.stringify(event)}\n`
+    this.writeChain = this.writeChain.then(async () => {
+      await appendFile(this.tunnelLogPath, payload, "utf8")
+      this.applyTunnelEvent(event)
+    })
+    await this.writeChain
+  }
+
+  getTunnelEvents(chatId: string): CloudflareTunnelEvent[] {
+    const list = this.tunnelEventsByChatId.get(chatId)
+    return list ? [...list] : []
+  }
+
+  listTunnelChats(): string[] {
+    return [...this.tunnelEventsByChatId.keys()]
+  }
+
+  private applyTunnelEvent(event: CloudflareTunnelEvent): void {
+    const existing = this.tunnelEventsByChatId.get(event.chatId) ?? []
+    existing.push(event)
+    this.tunnelEventsByChatId.set(event.chatId, existing)
+  }
+
+  private async loadTunnelEvents(): Promise<void> {
+    const file = Bun.file(this.tunnelLogPath)
+    if (!(await file.exists())) return
+    const text = await file.text()
+    if (!text.trim()) return
+
+    for (const rawLine of text.split("\n")) {
+      const line = rawLine.trim()
+      if (!line) continue
+      try {
+        const event = JSON.parse(line) as CloudflareTunnelEvent
+        this.applyTunnelEvent(event)
+      } catch {
+        console.warn(`${LOG_PREFIX} Ignoring malformed line in tunnels.jsonl`)
+      }
+    }
+  }
+
+  async appendPushEvent(event: PushEvent): Promise<void> {
+    const payload = `${JSON.stringify(event)}\n`
+    this.writeChain = this.writeChain.then(async () => {
+      await appendFile(this.pushLogPath, payload, "utf8")
+    })
+    await this.writeChain
+  }
+
+  async loadPushEvents(): Promise<PushEvent[]> {
+    const file = Bun.file(this.pushLogPath)
+    if (!(await file.exists())) return []
+    const text = await file.text()
+    if (!text.trim()) return []
+
+    const events: PushEvent[] = []
+    for (const rawLine of text.split("\n")) {
+      const line = rawLine.trim()
+      if (!line) continue
+      try {
+        events.push(JSON.parse(line) as PushEvent)
+      } catch {
+        console.warn(`${LOG_PREFIX} Ignoring malformed line in push.jsonl`)
+      }
+    }
+    return events
   }
 }

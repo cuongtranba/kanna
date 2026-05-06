@@ -24,11 +24,14 @@ import { useNavigate, useOutletContext, useParams } from "react-router-dom"
 import { getKeybindingsFilePathDisplay, SDK_CLIENT_APP } from "../../shared/branding"
 import { ANALYTICS_STATIC_EVENT_NAMES, ANALYTICS_STATIC_PROPERTY_NAMES } from "../../shared/analytics"
 import {
+  CLOUDFLARE_TUNNEL_DEFAULTS,
   DEFAULT_KEYBINDINGS,
   DEFAULT_OPENAI_SDK_MODEL,
   DEFAULT_OPENROUTER_SDK_MODEL,
   PROVIDERS,
   type AgentProvider,
+  type CloudflareTunnelMode,
+  type CloudflareTunnelSettings,
   type InstalledSkillSummary,
   type KeybindingAction,
   type LlmProviderKind,
@@ -72,7 +75,18 @@ import {
 } from "../stores/terminalPreferencesStore"
 import { useChatPreferencesStore } from "../stores/chatPreferencesStore"
 import { CHAT_SOUND_OPTIONS, useChatSoundPreferencesStore, type ChatSoundId, type ChatSoundPreference } from "../stores/chatSoundPreferencesStore"
+import { usePreferencesStore } from "../stores/preferences"
 import type { KannaState } from "./useKannaState"
+import { PushNotificationsSection } from "../components/settings/PushNotificationsSection"
+import {
+  clearStoredPushDeviceId,
+  detectPushSupport,
+  getStoredPushDeviceId,
+  setStoredPushDeviceId,
+  subscribePush,
+  unsubscribePush,
+  type PushPermissionState,
+} from "./pushClient"
 
 const sidebarItems = [
   {
@@ -132,13 +146,23 @@ const analyticsOptions = [
   { value: "enabled" as const, label: "On" },
 ]
 
+const cloudflareTunnelEnabledOptions = [
+  { value: "disabled" as const, label: "Off" },
+  { value: "enabled" as const, label: "On" },
+]
+
+const cloudflareTunnelModeOptions: { value: CloudflareTunnelMode; label: string }[] = [
+  { value: "always-ask", label: "Always ask" },
+  { value: "auto-expose", label: "Auto-expose detected ports" },
+]
+
 const QUICK_RESPONSE_PROVIDER_OPTIONS: Array<{ value: LlmProviderKind; label: string }> = [
   { value: "openai", label: "OpenAI" },
   { value: "openrouter", label: "OpenRouter" },
   { value: "custom", label: "Custom" },
 ]
 
-const GITHUB_RELEASES_URL = "https://api.github.com/repos/jakemor/kanna/releases"
+const GITHUB_RELEASES_URL = "https://api.github.com/repos/cuongtranba/kanna/releases"
 const CHANGELOG_CACHE_TTL_MS = 5 * 60 * 1000
 
 type GithubRelease = {
@@ -242,6 +266,7 @@ export function ChangelogSection({
   currentVersion,
   onInstallUpdate,
   onCheckForUpdates,
+  onForceReload,
 }: {
   status: ChangelogStatus
   releases: GithubRelease[]
@@ -251,6 +276,7 @@ export function ChangelogSection({
   currentVersion: string
   onInstallUpdate: () => void
   onCheckForUpdates: () => void
+  onForceReload: () => void
 }) {
   const latestVersion = updateSnapshot?.latestVersion ?? releases[0]?.tag_name ?? "Unknown"
   const currentVersionLabel = updateSnapshot?.currentVersion ?? currentVersion
@@ -300,8 +326,15 @@ export function ChangelogSection({
         </div>
       ) : null}
 
-      {!canInstallUpdate && status === "success" ? (
-        <div className="flex justify-end">
+      {status === "success" ? (
+        <div className="flex justify-end gap-2">
+          <SettingsHeaderButton
+            variant="outline"
+            onClick={onForceReload}
+            disabled={isUpdating}
+          >
+            {isUpdating ? "Re-deploying…" : "Re-deploy"}
+          </SettingsHeaderButton>
           <SettingsHeaderButton
             variant="outline"
             onClick={onCheckForUpdates}
@@ -361,7 +394,7 @@ export function ChangelogSection({
                   aria-label="View release on GitHub"
                   className={cn(
                     buttonVariants({ variant: "ghost", size: "icon-sm" }),
-                    "h-8 w-8 shrink-0 rounded-md hover:!bg-transparent hover:border-border/0"
+                    "h-11 w-11 md:h-8 md:w-8 shrink-0 rounded-md hover:!bg-transparent hover:border-border/0"
                   )}
                 >
                   <GitHubIcon className="h-4 w-4" />
@@ -802,6 +835,29 @@ function SettingsRow({
   )
 }
 
+export function AutoResumeToggleSection({
+  checked,
+  onChange,
+}: {
+  checked: boolean
+  onChange: (value: boolean) => void
+}) {
+  return (
+    <label className="inline-flex items-center gap-2">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(event) => onChange(event.target.checked)}
+      />
+      Enabled
+    </label>
+  )
+}
+
+export function CloudflareTunnelSectionTitle() {
+  return <span>Cloudflare Tunnel</span>
+}
+
 export function SettingsPage() {
   const navigate = useNavigate()
   const { sectionId } = useParams<{ sectionId: string }>()
@@ -832,6 +888,8 @@ export function SettingsPage() {
   const keybindings = state.keybindings
   const appSettings = state.appSettings
   const llmProvider = state.llmProvider
+  const autoResumeOnRateLimit = usePreferencesStore((state) => state.autoResumeOnRateLimit)
+  const setAutoResumeOnRateLimit = usePreferencesStore((state) => state.setAutoResumeOnRateLimit)
   const defaultProvider = useChatPreferencesStore((store) => store.defaultProvider)
   const providerDefaults = useChatPreferencesStore((store) => store.providerDefaults)
   const setDefaultProvider = useChatPreferencesStore((store) => store.setDefaultProvider)
@@ -840,6 +898,8 @@ export function SettingsPage() {
   const setProviderDefaultPlanMode = useChatPreferencesStore((store) => store.setProviderDefaultPlanMode)
   const resolvedKeybindings = useMemo(() => getResolvedKeybindings(keybindings), [keybindings])
   const keybindingsFilePathDisplay = resolvedKeybindings.filePathDisplay || getKeybindingsFilePathDisplay()
+  const [pushPermissionState, setPushPermissionState] = useState<PushPermissionState>(() => detectPushSupport().state)
+  const [pushDeviceId, setPushDeviceId] = useState<string | null>(() => getStoredPushDeviceId())
   const [scrollbackDraft, setScrollbackDraft] = useState(String(scrollbackLines))
   const [minColumnWidthDraft, setMinColumnWidthDraft] = useState(String(minColumnWidth))
   const [editorCommandDraft, setEditorCommandDraft] = useState(editorCommandTemplate)
@@ -847,6 +907,10 @@ export function SettingsPage() {
   const [keybindingsError, setKeybindingsError] = useState<string | null>(null)
   const [appSettingsError, setAppSettingsError] = useState<string | null>(null)
   const [analyticsDialogOpen, setAnalyticsDialogOpen] = useState(false)
+  const [tunnelError, setTunnelError] = useState<string | null>(null)
+  const [cloudflaredPathDraft, setCloudflaredPathDraft] = useState(
+    appSettings?.cloudflareTunnel.cloudflaredPath ?? CLOUDFLARE_TUNNEL_DEFAULTS.cloudflaredPath
+  )
   const [llmProviderDraft, setLlmProviderDraft] = useState({
     provider: "openai" as LlmProviderKind,
     apiKey: "",
@@ -859,6 +923,7 @@ export function SettingsPage() {
   const [llmValidationDialogOpen, setLlmValidationDialogOpen] = useState(false)
   const updateSnapshot = state.updateSnapshot
   const handleWriteAppSettings = state.handleWriteAppSettings
+  const handleWriteCloudflareTunnel = state.handleWriteCloudflareTunnel
   const handleReadLlmProvider = state.handleReadLlmProvider
   const handleWriteLlmProvider = state.handleWriteLlmProvider
   const handleValidateLlmProvider = state.handleValidateLlmProvider
@@ -883,6 +948,12 @@ export function SettingsPage() {
   useEffect(() => {
     setMinColumnWidthDraft(String(minColumnWidth))
   }, [minColumnWidth])
+
+  useEffect(() => {
+    const handler = () => setPushPermissionState(detectPushSupport().state)
+    window.addEventListener("focus", handler)
+    return () => window.removeEventListener("focus", handler)
+  }, [])
 
   useEffect(() => {
     setEditorCommandDraft(editorCommandTemplate)
@@ -917,6 +988,11 @@ export function SettingsPage() {
     if (resolveSettingsSectionId(sectionId)) return
     navigate("/settings/general", { replace: true })
   }, [navigate, sectionId])
+
+  useEffect(() => {
+    if (!appSettings) return
+    setCloudflaredPathDraft(appSettings.cloudflareTunnel.cloudflaredPath)
+  }, [appSettings])
 
   useEffect(() => {
     let cancelled = false
@@ -1071,6 +1147,15 @@ export function SettingsPage() {
     }
   }
 
+  async function handleTunnelPatch(patch: Partial<CloudflareTunnelSettings>) {
+    try {
+      setTunnelError(null)
+      await handleWriteCloudflareTunnel(patch)
+    } catch (error) {
+      setTunnelError(error instanceof Error ? error.message : "Unable to save Cloudflare Tunnel settings.")
+    }
+  }
+
   function handleDefaultProviderChange(nextValue: "last_used" | AgentProvider) {
     setDefaultProvider(nextValue)
     void handleWriteAppSettings({ defaultProvider: nextValue }).catch((error) => {
@@ -1186,6 +1271,8 @@ export function SettingsPage() {
     .replaceAll("{column}", "1")
   const analyticsDisclosureEvents = ANALYTICS_STATIC_EVENT_NAMES
   const analyticsSettingValue = appSettings?.analyticsEnabled === false ? "disabled" : "enabled"
+  const tunnelSettings: CloudflareTunnelSettings = appSettings?.cloudflareTunnel ?? CLOUDFLARE_TUNNEL_DEFAULTS
+  const tunnelEnabledValue = tunnelSettings.enabled ? "enabled" : "disabled"
   const selectedSection = sidebarItems.find((item) => item.id === selectedPage) ?? sidebarItems[0]
   const selectedSectionSubtitle =
     selectedPage === "keybindings"
@@ -1202,7 +1289,7 @@ export function SettingsPage() {
         className={cn(
           "mt-2 block text-sm font-medium",
           llmValidationStatus === "valid"
-            ? "text-emerald-600 dark:text-emerald-400"
+            ? "text-success"
             : llmValidationStatus === "invalid"
               ? "text-destructive"
               : "hidden"
@@ -1249,23 +1336,31 @@ export function SettingsPage() {
             <div className="px-3 pb-5 text-[22px] font-extrabold tracking-[-0.5px] text-foreground">
               Settings
             </div>
-            {sidebarItems.map((item) => (
-              <button
-                key={item.label}
-                type="button"
-                onClick={() => navigate(`/settings/${item.id}`)}
-                className={`cursor-pointer rounded-lg px-3 py-2 text-sm ${
-                  item.id === selectedPage
-                    ? "bg-muted font-medium text-foreground"
-                    : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
-                }`}
-              >
-                <div className="flex items-center gap-2.5">
-                  <item.icon className="h-4 w-4 shrink-0" />
-                  <span>{item.label}</span>
-                </div>
-              </button>
-            ))}
+            {sidebarItems.map((item) => {
+              const showUpdateBadge = item.id === "changelog" && updateSnapshot?.updateAvailable === true
+              return (
+                <button
+                  key={item.label}
+                  type="button"
+                  onClick={() => navigate(`/settings/${item.id}`)}
+                  className={`cursor-pointer rounded-lg px-3 py-2 text-sm ${
+                    item.id === selectedPage
+                      ? "bg-muted font-medium text-foreground"
+                      : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <item.icon className="h-4 w-4 shrink-0" />
+                    <span>{item.label}</span>
+                    {showUpdateBadge ? (
+                      <span className="ml-auto inline-flex items-center rounded-full bg-logo/20 px-2 py-0.5 text-[10px] font-bold tracking-wider text-logo">
+                        UPDATE
+                      </span>
+                    ) : null}
+                  </div>
+                </button>
+              )
+            })}
             {authEnabled ? (
               <button
                 type="button"
@@ -1569,6 +1664,69 @@ export function SettingsPage() {
                       </SettingsRow>
 
                       <SettingsRow
+                        title="Auto-resume on rate limit"
+                        description={'When you hit a rate limit, automatically schedule "continue" at the reset time instead of asking. You can still cancel each one from the chat.'}
+                      >
+                        <AutoResumeToggleSection
+                          checked={autoResumeOnRateLimit}
+                          onChange={setAutoResumeOnRateLimit}
+                        />
+                      </SettingsRow>
+
+                      {state.pushConfig ? (
+                        <SettingsRow
+                          title="Push notifications"
+                          description="Get notified when a chat is waiting for you, finishes, or fails. Works on iPhone (after Add to Home Screen), Android, and desktop browsers."
+                          bordered={false}
+                          alignStart
+                        >
+                          <PushNotificationsSection
+                            permissionState={pushPermissionState}
+                            config={state.pushConfig}
+                            projects={state.localProjects?.projects ?? []}
+                            currentDeviceId={pushDeviceId}
+                            onEnable={async () => {
+                              if (!state.pushConfig) return
+                              const id = await subscribePush({
+                                vapidPublicKey: state.pushConfig.vapidPublicKey,
+                                sendToServer: async (payload) => {
+                                  const result = await state.socket.command<{ id: string }>({
+                                    type: "push.subscribe",
+                                    subscription: payload.subscription,
+                                    label: payload.label,
+                                    userAgent: payload.userAgent,
+                                  })
+                                  setStoredPushDeviceId(result.id)
+                                  return { id: result.id }
+                                },
+                              })
+                              setPushDeviceId(id)
+                            }}
+                            onDisable={async () => {
+                              if (!pushDeviceId) return
+                              await unsubscribePush({
+                                pushDeviceId,
+                                sendToServer: async (id) => {
+                                  await state.socket.command({ type: "push.unsubscribe", pushDeviceId: id })
+                                },
+                              })
+                              clearStoredPushDeviceId()
+                              setPushDeviceId(null)
+                            }}
+                            onTest={async () => {
+                              await state.socket.command({ type: "push.test" })
+                            }}
+                            onMuteToggle={async (localPath, muted) => {
+                              await state.socket.command({ type: "push.setProjectMute", localPath, muted })
+                            }}
+                            onRemoveDevice={async (id) => {
+                              await state.socket.command({ type: "push.unsubscribe", pushDeviceId: id })
+                            }}
+                          />
+                        </SettingsRow>
+                      ) : null}
+
+                      <SettingsRow
                         title="Anonymous Analytics"
                         description={(
                           <>
@@ -1601,6 +1759,69 @@ export function SettingsPage() {
                           size="sm"
                         />
                       </SettingsRow>
+                    </div>
+                    <div className="border-b border-border">
+                      {tunnelError ? (
+                        <div className="mb-4 rounded-lg border border-destructive/20 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+                          {tunnelError}
+                        </div>
+                      ) : null}
+                      <SettingsRow
+                        title="Cloudflare Tunnel"
+                        description={(
+                          <>
+                            <span>
+                              Automatically expose local ports via Cloudflare Tunnel when ports are detected in Claude&apos;s output. Requires{" "}
+                              <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">cloudflared</code>{" "}
+                              to be installed.
+                            </span>
+                            <span className="mt-1 block">
+                              Stored in {appSettings?.filePathDisplay ?? "~/.kanna/data/settings.json"}.
+                            </span>
+                          </>
+                        )}
+                        bordered={false}
+                      >
+                        <SegmentedControl
+                          value={tunnelEnabledValue}
+                          onValueChange={(value) => {
+                            void handleTunnelPatch({ enabled: value === "enabled" })
+                          }}
+                          options={cloudflareTunnelEnabledOptions}
+                          size="sm"
+                        />
+                      </SettingsRow>
+                      {tunnelSettings.enabled && (
+                        <>
+                          <SettingsRow
+                            title="Detection mode"
+                            description="Choose how Kanna responds when a port is detected in Claude's output."
+                          >
+                            <SegmentedControl
+                              value={tunnelSettings.mode}
+                              onValueChange={(value) => {
+                                void handleTunnelPatch({ mode: value as CloudflareTunnelMode })
+                              }}
+                              options={cloudflareTunnelModeOptions}
+                              size="sm"
+                            />
+                          </SettingsRow>
+                          <SettingsRow
+                            title="cloudflared path"
+                            description="Path to the cloudflared binary. Defaults to the one found on $PATH."
+                          >
+                            <Input
+                              value={cloudflaredPathDraft}
+                              onChange={(event) => setCloudflaredPathDraft(event.target.value)}
+                              onBlur={() => {
+                                void handleTunnelPatch({ cloudflaredPath: cloudflaredPathDraft })
+                              }}
+                              placeholder="cloudflared"
+                              className="w-full font-mono md:w-64"
+                            />
+                          </SettingsRow>
+                        </>
+                      )}
                     </div>
                   </>
                 ) : selectedPage === "providers" ? (
@@ -1831,6 +2052,9 @@ export function SettingsPage() {
                     }}
                     onCheckForUpdates={() => {
                       void state.handleCheckForUpdates({ force: true })
+                    }}
+                    onForceReload={() => {
+                      void state.handleForceReload()
                     }}
                   />
                 )}

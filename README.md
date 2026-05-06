@@ -9,7 +9,10 @@
 </p>
 
 <p align="center">
-  <a href="https://www.npmjs.com/package/kanna-code"><img src="https://img.shields.io/npm/v/kanna-code.svg?style=flat&colorA=18181b&colorB=f472b6" alt="npm version" /></a>
+  <a href="https://www.npmjs.com/package/@cuongtran001/kanna"><img src="https://img.shields.io/npm/v/@cuongtran001/kanna.svg?style=flat&colorA=18181b&colorB=f472b6" alt="npm version" /></a>
+  <a href="https://www.npmjs.com/package/@cuongtran001/kanna"><img src="https://img.shields.io/npm/dm/@cuongtran001/kanna.svg?style=flat&colorA=18181b&colorB=f472b6" alt="npm downloads" /></a>
+  <a href="https://github.com/cuongtranba/kanna/actions/workflows/release-please.yml"><img src="https://github.com/cuongtranba/kanna/actions/workflows/release-please.yml/badge.svg?branch=main" alt="Release Please" /></a>
+  <a href="https://github.com/cuongtranba/kanna/blob/main/LICENSE"><img src="https://img.shields.io/npm/l/@cuongtran001/kanna.svg?style=flat&colorA=18181b&colorB=f472b6" alt="license" /></a>
 </p>
 
 <br />
@@ -27,7 +30,7 @@
 ## Quickstart
 
 ```bash
-bun install -g kanna-code
+bun install -g @cuongtran001/kanna
 ```
 
 If Bun isn't installed, install it first:
@@ -50,6 +53,7 @@ That's it. Kanna opens in your browser at [`localhost:3210`](http://localhost:32
 - **Project-first sidebar** — chats grouped under projects, with live status indicators (idle, running, waiting, failed)
 - **Drag-and-drop project ordering** — reorder project groups in the sidebar with persistent ordering
 - **Local project discovery** — auto-discovers projects from both Claude and Codex local history
+- **Bulk import Claude Code sessions** — one-click import of existing `~/.claude/projects/` sessions with full transcript and seamless resume via the Claude Agent SDK
 - **Rich transcript rendering** — hydrated tool calls, collapsible tool groups, plan mode dialogs, and interactive prompts with full result display
 - **Quick responses** — lightweight structured queries (e.g. title generation) via Haiku with automatic Codex fallback
 - **Plan mode** — review and approve agent plans before execution
@@ -57,6 +61,7 @@ That's it. Kanna opens in your browser at [`localhost:3210`](http://localhost:32
 - **Auto-generated titles** — chat titles generated in the background via Claude Haiku
 - **Session resumption** — resume agent sessions with full context preservation
 - **WebSocket-driven** — real-time subscription model with reactive state broadcasting
+- **Cloudflare tunnel auto-expose** — opt-in detector watches Bash tool stdout for listening ports and offers an inline "expose via Cloudflare" card per port; spawns `cloudflared tunnel --url` quick tunnels on demand
 
 ## Architecture
 
@@ -91,7 +96,7 @@ Embedded terminal support uses Bun's native PTY APIs and currently works on macO
 Install Kanna globally:
 
 ```bash
-bun install -g kanna-code
+bun install -g @cuongtran001/kanna
 ```
 
 If Bun isn't installed, install it first:
@@ -103,7 +108,7 @@ curl -fsSL https://bun.sh/install | bash
 Or clone and build from source:
 
 ```bash
-git clone https://github.com/jakemor/kanna.git
+git clone https://github.com/cuongtranba/kanna.git
 cd kanna
 bun install
 bun run build
@@ -175,6 +180,20 @@ http://localhost:3210
 With `--cloudflared <token>`, Kanna runs `cloudflared tunnel run --token <token> --url <local-url>`.
 If Kanna can detect the public hostname from cloudflared output, it prints the same QR/public/local block.
 If not, it keeps the tunnel running, warns that no public hostname was detected, and prints the local URL so you can use the hostname already configured for that tunnel in Cloudflare.
+
+### Auto-expose detected ports
+
+When the agent runs a Bash command in a chat (`bun run dev`, `go run`, `uvicorn`, etc.), Kanna can detect any listening port from the command's stdout and offer to expose it through a Cloudflare quick tunnel without leaving the chat.
+
+Enable from **Settings → Cloudflare Tunnel**:
+
+- **Toggle** — opt-in (off by default)
+- **Mode** — `Always ask` (one card per detected port; click Expose to spawn) or `Auto-expose` (spawn immediately on detection)
+- **`cloudflared` path** — defaults to `cloudflared` on `$PATH`
+
+Each detected port shows up inline in the transcript. Click **Expose**, watch the spinner until cloudflared returns the `*.trycloudflare.com` URL, then click **Stop** when done. Tunnels are also stopped automatically when the chat closes or the server restarts.
+
+Requires the `cloudflared` binary installed locally — `brew install cloudflared` on macOS, or see [Cloudflare's downloads](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/).
 
 ## Development
 
@@ -257,13 +276,76 @@ All state is stored locally at `~/.kanna/data/`:
 
 Event logs are append-only JSONL. On startup, Kanna replays the log tail after the last snapshot, then compacts if the logs exceed 2 MB.
 
+## Self-hosting on macOS (pm2 + Cloudflare tunnel)
+
+Run Kanna as a background service on macOS under [pm2](https://pm2.keymetrics.io/), exposed through a named Cloudflare tunnel. The in-app **Update** button then pulls the latest commit, rebuilds, and hot-reloads the pm2 process — no terminal round-trip needed.
+
+### 1. Link the repo as the global install
+
+`bun link` makes the global `kanna` binary resolve to your checkout:
+
+```bash
+cd ~/path/to/kanna
+bun install
+bun run build
+bun link           # registers @cuongtran001/kanna → repo
+```
+
+After this, `~/.bun/install/global/node_modules/@cuongtran001/kanna` is a symlink to your repo.
+
+### 2. (Migrating from launchd) Unload the old agent
+
+If you previously ran Kanna under launchd, unload it once so pm2 can take over:
+
+```bash
+launchctl bootout gui/$(id -u)/io.silentium.kanna || true
+```
+
+### 3. First deploy
+
+`scripts/deploy.sh` installs pm2 if missing, renders `scripts/pm2.config.cjs` from the template (via `envsubst` from `brew install gettext`), and starts the pm2 process:
+
+```bash
+./scripts/deploy.sh
+pm2 list               # kanna should be "online"
+pm2 logs kanna --lines 50
+```
+
+`pm2 save` persists the running process list. To resurrect after a reboot, run `pm2 startup` once (pm2 prints the exact command) and then `pm2 save` again.
+
+The pm2 config sets `KANNA_RELOADER=pm2` and `KANNA_REPO_DIR=<repo>` so the in-app Update button triggers the pm2 reload pipeline (see next section). Override the pm2 process name with `KANNA_PM2_PROCESS_NAME` before running `./scripts/deploy.sh` if you need to run multiple instances.
+
+### 4. Redeploy / update
+
+Two ways to ship a new build:
+
+**a. From the UI (fastest).** Click **Update** in the running app. The server runs `git pull --ff-only` → conditional `bun install` → `bun run build` → `pm2.reload` internally, and the UI reconnects to the fresh build. If any step fails, the UI shows a red banner with the stderr tail and the old build keeps serving.
+
+**b. From the terminal.** Useful for non-Kanna deploys (e.g., pm2 config edits) or when the UI is unreachable:
+
+```bash
+git pull
+./scripts/deploy.sh
+```
+
+### 5. Update strategies
+
+The update mechanism is abstracted behind `UpdateChecker` + `UpdateReloader` interfaces in `src/server/update-strategy.ts`, selected at startup by `KANNA_RELOADER`:
+
+| `KANNA_RELOADER` | Check | Reload | Notes |
+|---|---|---|---|
+| unset / `supervisor` | npm registry for `@cuongtran001/kanna` | `bun install -g @cuongtran001/kanna@latest`, exit 76, supervisor respawns | Default. End-user path for `bunx kanna`. |
+| `pm2` | `git fetch` + `HEAD` vs `origin/main` | `git pull --ff-only` → cond. `bun install` → `bun run build` → `pm2 reload` | Dev/self-host path. Requires `KANNA_REPO_DIR`. |
+
+To add another reload mechanism (e.g., docker, systemd), implement the two interfaces and branch inside `createUpdateStrategy`; no changes to `UpdateManager`, `server.ts`, or any client code are needed.
+
 ## Star History
 
-<a href="https://www.star-history.com/?repos=jakemor%2Fkanna&type=date&legend=top-left">
+<a href="https://www.star-history.com/?repos=cuongtranba%2Fkanna&type=date&legend=top-left">
  <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/image?repos=jakemor/kanna&type=date&theme=dark&legend=top-left" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/image?repos=jakemor/kanna&type=date&legend=top-left" />
-   <img alt="Star History Chart" src="https://api.star-history.com/image?repos=jakemor/kanna&type=date&legend=top-left" />
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/image?repos=cuongtranba/kanna&type=date&theme=dark&legend=top-left" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/image?repos=cuongtranba/kanna&type=date&legend=top-left" />
+   <img alt="Star History Chart" src="https://api.star-history.com/image?repos=cuongtranba/kanna&type=date&legend=top-left" />
  </picture>
 </a>
 

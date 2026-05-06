@@ -1,6 +1,5 @@
 import { useMemo, useState, type ComponentType, type ReactNode } from "react"
 import {
-  ArrowLeftRight,
   Check,
   ChevronRight,
   CodeXml,
@@ -46,11 +45,12 @@ function CopyButton({ text }: { text: string }) {
   return (
     <Button
       variant="ghost"
-      size="icon"
-      className="h-8 w-8 text-muted-foreground hover:text-foreground"
+      size="icon-mobile"
+      aria-label={copied ? "Copied" : "Copy to clipboard"}
+      className="text-muted-foreground hover:text-foreground"
       onClick={() => void handleCopy()}
     >
-      {copied ? <Check className="h-4 w-4 text-green-400" /> : <Copy className="h-4 w-4" />}
+      {copied ? <Check className="h-4 w-4 text-success" /> : <Copy className="h-4 w-4" />}
     </Button>
   )
 }
@@ -91,18 +91,18 @@ function HowItWorksItem({
   iconClassName?: string
 }) {
   return (
-    <div className="flex flex-col items-center gap-0">
-      <div className="p-3 mb-2 rounded-xl bg-background border border-border">
-        <Icon className={iconClassName || "h-8 w-8 text-muted-foreground"} />
-      </div>
-      <span className="text-sm font-medium">{title}</span>
-      <span className="text-xs text-muted-foreground">{subtitle}</span>
+    <div className="flex flex-col items-start gap-1.5 min-w-0">
+      <Icon className={iconClassName || "h-5 w-5 text-muted-foreground"} />
+      <span className="text-sm font-medium text-foreground">{title}</span>
+      <span className="text-xs text-muted-foreground leading-tight">{subtitle}</span>
     </div>
   )
 }
 
 function HowItWorksConnector() {
-  return <ArrowLeftRight className="h-4 w-4 text-muted-foreground" />
+  return (
+    <div aria-hidden className="mt-5 h-px w-6 shrink-0 bg-border" />
+  )
 }
 
 function Step({
@@ -215,7 +215,7 @@ export function LocalDev({
               <div className="mb-10">
               <SectionHeader>How it works</SectionHeader>
               <InfoCard>
-                <div className="flex items-center justify-around gap-6 py-4 px-2">
+                <div className="flex items-start gap-4 py-2 px-2">
                   <HowItWorksItem icon={Terminal} title={`${APP_NAME} CLI`} subtitle="On Your Machine" />
                   <HowItWorksConnector />
                   <HowItWorksItem icon={Monitor} title={`${APP_NAME} Server`} subtitle="Local WebSocket" />
@@ -276,7 +276,7 @@ export function LocalDev({
               </Button>
             </div>
             {projects.length > 0 ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-4 3xl:grid-cols-5 gap-2">
+              <div className="grid gap-2 [grid-template-columns:repeat(auto-fill,minmax(min(260px,100%),1fr))]">
                 {projects.map((project) => (
                   <ProjectCard
                     key={project.localPath}

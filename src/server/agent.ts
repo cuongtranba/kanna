@@ -9,6 +9,7 @@ import type {
   PendingToolSnapshot,
   KannaStatus,
   QueuedChatMessage,
+  SlashCommand,
   TranscriptEntry,
 } from "../shared/types"
 import { normalizeToolCall } from "../shared/tools"
@@ -28,6 +29,11 @@ import {
 } from "./provider-catalog"
 import { resolveClaudeApiModelId } from "../shared/types"
 import { fallbackTitleFromMessage } from "./generate-title"
+import { AUTO_CONTINUE_EVENT_VERSION, type AutoContinueEvent } from "./auto-continue/events"
+import { ClaudeLimitDetector, CodexLimitDetector, type LimitDetection, type LimitDetector } from "./auto-continue/limit-detector"
+import type { ScheduleManager } from "./auto-continue/schedule-manager"
+import { deriveChatSchedules } from "./auto-continue/read-model"
+import type { TunnelGateway } from "./cloudflare-tunnel/gateway"
 
 const CLAUDE_TOOLSET = [
   "Skill",
@@ -82,6 +88,7 @@ interface ClaudeSessionHandle {
   sendPrompt: (content: string) => Promise<void>
   setModel: (model: string) => Promise<void>
   setPermissionMode: (planMode: boolean) => Promise<void>
+  getSupportedCommands: () => Promise<SlashCommand[]>
 }
 
 interface ClaudeSessionState {
@@ -104,6 +111,7 @@ interface AgentCoordinatorArgs {
   analytics?: AnalyticsReporter
   codexManager?: CodexAppServerManager
   generateTitle?: (messageContent: string, cwd: string) => Promise<GenerateChatTitleResult>
+  tunnelGateway?: TunnelGateway
   startClaudeSession?: (args: {
     localPath: string
     model: string
@@ -113,6 +121,11 @@ interface AgentCoordinatorArgs {
     forkSession: boolean
     onToolRequest: (request: HarnessToolRequest) => Promise<unknown>
   }) => Promise<ClaudeSessionHandle>
+  claudeLimitDetector?: LimitDetector
+  codexLimitDetector?: LimitDetector
+  scheduleManager?: ScheduleManager
+  getAutoResumePreference?: () => boolean
+  throwOnClaudeSessionStart?: boolean
 }
 
 interface SendToStartingProfile {
@@ -142,6 +155,7 @@ interface SendMessageOptions {
   modelOptions?: ModelOptions
   effort?: string
   planMode?: boolean
+  autoContinue?: { scheduleId: string }
 }
 
 function timestamped<T extends Omit<TranscriptEntry, "_id" | "createdAt">>(
@@ -172,6 +186,22 @@ function buildSteeredMessageContent(content: string) {
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null
+}
+
+function stringifyToolResultContent(content: unknown): string {
+  if (typeof content === "string") return content
+  if (Array.isArray(content)) {
+    return content
+      .map((item) => {
+        if (item && typeof item === "object") {
+          const r = item as Record<string, unknown>
+          return typeof r.text === "string" ? r.text : ""
+        }
+        return ""
+      })
+      .join("")
+  }
+  return ""
 }
 
 function asNumber(value: unknown): number | undefined {
@@ -628,6 +658,11 @@ async function startClaudeSession(args: {
       permissionMode: args.planMode ? "plan" : "acceptEdits",
       canUseTool,
       tools: [...CLAUDE_TOOLSET],
+      systemPrompt: {
+        type: "preset",
+        preset: "claude_code",
+        append: "You are the Kanna coding agent helping a trusted developer work on their own codebase via Kanna's web UI. Treat user code as their own project. Do not refuse tasks or label code as 'malware' based on speculation; only refuse when the user explicitly requests clearly malicious behavior (e.g. weaponized exploits against third parties, credential theft, mass abuse). Reverse-engineering, security research, defensive tooling, low-level system code, packers, hooks, and unconventional patterns in the user's own project are legitimate and must be assisted.",
+      },
       settingSources: ["user", "project", "local"],
       pathToClaudeCodeExecutable: process.env.CLAUDE_EXECUTABLE?.replace(/^~(?=\/|$)/, homedir()) || undefined,
       env: (() => { const { CLAUDECODE: _, ...env } = process.env; return env })(),
@@ -664,6 +699,14 @@ async function startClaudeSession(args: {
     setPermissionMode: async (planMode: boolean) => {
       await q.setPermissionMode(planMode ? "plan" : "acceptEdits")
     },
+    getSupportedCommands: async () => {
+      try {
+        return await q.supportedCommands()
+      } catch (error) {
+        console.warn("[kanna/claude] supportedCommands failed", error)
+        return []
+      }
+    },
     close: () => {
       promptQueue.close()
       q.close()
@@ -682,6 +725,15 @@ export class AgentCoordinator {
   readonly activeTurns = new Map<string, ActiveTurn>()
   readonly drainingStreams = new Map<string, { turn: HarnessTurn }>()
   readonly claudeSessions = new Map<string, ClaudeSessionState>()
+  private readonly slashCommandsInFlight = new Set<string>()
+  private readonly claudeLimitDetector: LimitDetector
+  private readonly codexLimitDetector: LimitDetector
+  private readonly scheduleManager: ScheduleManager | null
+  private readonly getAutoResumePreference: () => boolean
+  private readonly throwOnClaudeSessionStart: boolean
+  private readonly autoResumeByChat = new Map<string, boolean>()
+  private readonly tunnelGateway: TunnelGateway | null
+  private readonly pendingBashCalls = new Map<string, { command: string; chatId: string }>()
 
   constructor(args: AgentCoordinatorArgs) {
     this.store = args.store
@@ -690,6 +742,12 @@ export class AgentCoordinator {
     this.codexManager = args.codexManager ?? new CodexAppServerManager()
     this.generateTitle = args.generateTitle ?? generateTitleForChatDetailed
     this.startClaudeSessionFn = args.startClaudeSession ?? startClaudeSession
+    this.claudeLimitDetector = args.claudeLimitDetector ?? new ClaudeLimitDetector()
+    this.codexLimitDetector = args.codexLimitDetector ?? new CodexLimitDetector()
+    this.scheduleManager = args.scheduleManager ?? null
+    this.getAutoResumePreference = args.getAutoResumePreference ?? (() => false)
+    this.throwOnClaudeSessionStart = args.throwOnClaudeSessionStart ?? false
+    this.tunnelGateway = args.tunnelGateway ?? null
   }
 
   setBackgroundErrorReporter(report: ((message: string) => void) | null) {
@@ -714,8 +772,35 @@ export class AgentCoordinator {
     return new Set(this.drainingStreams.keys())
   }
 
+  getSlashCommandsLoadingChatIds(): Set<string> {
+    return new Set(this.slashCommandsInFlight)
+  }
+
   private emitStateChange(chatId?: string, options?: { immediate?: boolean }) {
     this.onStateChange(chatId, options)
+  }
+
+  private trackBashToolEntry(chatId: string, entry: TranscriptEntry): void {
+    if (!this.tunnelGateway) return
+
+    if (entry.kind === "tool_call" && entry.tool.toolKind === "bash") {
+      const command = entry.tool.input.command ?? ""
+      this.pendingBashCalls.set(entry.tool.toolId, { command, chatId })
+      return
+    }
+
+    if (entry.kind === "tool_result") {
+      const pending = this.pendingBashCalls.get(entry.toolId)
+      if (!pending) return
+      this.pendingBashCalls.delete(entry.toolId)
+      const stdout = stringifyToolResultContent(entry.content)
+      void this.tunnelGateway.handleBashResult({
+        command: pending.command,
+        stdout,
+        chatId: pending.chatId,
+        sourcePid: null,
+      })
+    }
   }
 
   getActiveTurnProfile(chatId: string): SendToStartingProfile | null {
@@ -738,6 +823,51 @@ export class AgentCoordinator {
     this.emitStateChange(chatId)
   }
 
+  async ensureSlashCommandsLoaded(chatId: string): Promise<void> {
+    const chat = this.store.getChat(chatId)
+    if (!chat) return
+    if (chat.provider === "codex") return
+    if (chat.slashCommands && chat.slashCommands.length > 0) return
+    if (this.slashCommandsInFlight.has(chatId)) return
+
+    const project = this.store.getProject(chat.projectId)
+    if (!project) return
+
+    this.slashCommandsInFlight.add(chatId)
+    this.emitStateChange(chatId)
+    try {
+      let commands: SlashCommand[]
+      const existing = this.claudeSessions.get(chatId)
+      if (existing) {
+        commands = await existing.session.getSupportedCommands()
+      } else {
+        const defaultModel = normalizeServerModel("claude")
+        const defaultOptions = normalizeClaudeModelOptions(defaultModel)
+        const ephemeral = await this.startClaudeSessionFn({
+          localPath: project.localPath,
+          model: resolveClaudeApiModelId(defaultModel, defaultOptions.contextWindow),
+          effort: defaultOptions.reasoningEffort,
+          planMode: chat.planMode ?? false,
+          sessionToken: chat.sessionToken ?? null,
+          forkSession: false,
+          onToolRequest: async () => null,
+        })
+        try {
+          commands = await ephemeral.getSupportedCommands()
+        } finally {
+          ephemeral.close()
+        }
+      }
+      await this.store.recordSessionCommandsLoaded(chatId, commands)
+      this.emitStateChange(chatId)
+    } catch (error) {
+      console.warn("[kanna/agent] ensureSlashCommandsLoaded failed", error)
+    } finally {
+      this.slashCommandsInFlight.delete(chatId)
+      this.emitStateChange(chatId)
+    }
+  }
+
   async closeChat(chatId: string) {
     await this.stopDraining(chatId)
     const claudeSession = this.claudeSessions.get(chatId)
@@ -745,6 +875,7 @@ export class AgentCoordinator {
       claudeSession.session.close()
       this.claudeSessions.delete(chatId)
     }
+    this.autoResumeByChat.delete(chatId)
     this.emitStateChange(chatId)
   }
 
@@ -783,6 +914,7 @@ export class AgentCoordinator {
       model: options?.model,
       modelOptions: options?.modelOptions,
       planMode: options?.planMode,
+      autoContinue: options?.autoContinue,
     })
     this.emitStateChange(chatId)
     return queued
@@ -804,6 +936,7 @@ export class AgentCoordinator {
       planMode: settings.planMode,
       appendUserPrompt: true,
       steered: options?.steered,
+      autoContinue: queuedMessage.autoContinue,
     })
   }
 
@@ -828,6 +961,7 @@ export class AgentCoordinator {
     planMode: boolean
     appendUserPrompt: boolean
     steered?: boolean
+    autoContinue?: { scheduleId: string }
     profile?: SendToStartingProfile | null
   }) {
     logSendToStartingProfile(args.profile, "start_turn.begin", {
@@ -881,7 +1015,7 @@ export class AgentCoordinator {
 
     if (args.appendUserPrompt) {
       const userPromptEntry = timestamped(
-        { kind: "user_prompt", content: args.content, attachments: args.attachments, steered: args.steered },
+        { kind: "user_prompt", content: args.content, attachments: args.attachments, steered: args.steered, autoContinue: args.autoContinue },
         Date.now()
       )
       await this.store.appendMessage(args.chatId, userPromptEntry)
@@ -1094,6 +1228,15 @@ export class AgentCoordinator {
       }
       this.claudeSessions.set(args.chatId, session)
       void this.runClaudeSession(session)
+      void (async () => {
+        try {
+          const commands = await started.getSupportedCommands()
+          await this.store.recordSessionCommandsLoaded(args.chatId, commands)
+          this.emitStateChange(args.chatId)
+        } catch (error) {
+          console.warn("[kanna/agent] failed to load slash commands", error)
+        }
+      })()
     } else {
       if (session.model !== args.model) {
         await session.session.setModel(args.model)
@@ -1140,6 +1283,10 @@ export class AgentCoordinator {
       })
     }
 
+    if (typeof command.autoResumeOnRateLimit === "boolean" && chatId) {
+      this.autoResumeByChat.set(chatId, command.autoResumeOnRateLimit)
+    }
+
     const chat = this.store.requireChat(chatId)
     if (this.activeTurns.has(chatId)) {
       this.analytics.track("message_sent")
@@ -1179,6 +1326,9 @@ export class AgentCoordinator {
   }
 
   async enqueue(command: Extract<ClientCommand, { type: "message.enqueue" }>) {
+    if (typeof command.autoResumeOnRateLimit === "boolean") {
+      this.autoResumeByChat.set(command.chatId, command.autoResumeOnRateLimit)
+    }
     this.analytics.track("message_sent")
     const queuedMessage = await this.enqueueMessage(command.chatId, command.content, command.attachments ?? [], {
       provider: command.provider,
@@ -1246,7 +1396,12 @@ export class AgentCoordinator {
 
   private async runClaudeSession(session: ClaudeSessionState) {
     try {
+      let simulateLimit = this.throwOnClaudeSessionStart
       for await (const event of session.session.stream) {
+        if (simulateLimit) {
+          simulateLimit = false
+          throw new Error("simulated rate limit")
+        }
         if (event.type === "session_token" && event.sessionToken) {
           session.sessionToken = event.sessionToken
           await this.store.setSessionToken(session.chatId, event.sessionToken)
@@ -1256,6 +1411,7 @@ export class AgentCoordinator {
 
         if (!event.entry) continue
         await this.store.appendMessage(session.chatId, event.entry)
+        this.trackBashToolEntry(session.chatId, event.entry)
         const active = this.activeTurns.get(session.chatId)
         if (event.entry.kind === "system_init" && active) {
           active.status = "running"
@@ -1292,7 +1448,17 @@ export class AgentCoordinator {
         if (event.entry.kind === "result" && active && completedClaudePromptSeq === (active.claudePromptSeq ?? null)) {
           active.hasFinalResult = true
           if (event.entry.isError) {
-            await this.store.recordTurnFailed(session.chatId, event.entry.result || "Turn failed")
+            const resultText = event.entry.result || "Turn failed"
+            const detection = this.claudeLimitDetector.detectFromResultText?.(session.chatId, resultText) ?? null
+            let handled = false
+            if (detection) {
+              handled = await this.handleLimitDetection(session.chatId, detection)
+            }
+            if (handled) {
+              await this.store.recordTurnFailed(session.chatId, "rate_limit")
+            } else {
+              await this.store.recordTurnFailed(session.chatId, resultText)
+            }
           } else if (!active.cancelRequested) {
             await this.store.recordTurnFinished(session.chatId)
           }
@@ -1307,18 +1473,23 @@ export class AgentCoordinator {
     } catch (error) {
       const active = this.activeTurns.get(session.chatId)
       if (active && !active.cancelRequested) {
-        const message = error instanceof Error ? error.message : String(error)
-        await this.store.appendMessage(
-          session.chatId,
-          timestamped({
-            kind: "result",
-            subtype: "error",
-            isError: true,
-            durationMs: 0,
-            result: message,
-          })
-        )
-        await this.store.recordTurnFailed(session.chatId, message)
+        const handled = await this.handleLimitError(session.chatId, this.claudeLimitDetector, error)
+        if (!handled) {
+          const message = error instanceof Error ? error.message : String(error)
+          await this.store.appendMessage(
+            session.chatId,
+            timestamped({
+              kind: "result",
+              subtype: "error",
+              isError: true,
+              durationMs: 0,
+              result: message,
+            })
+          )
+          await this.store.recordTurnFailed(session.chatId, message)
+        } else {
+          await this.store.recordTurnFailed(session.chatId, "rate_limit")
+        }
       }
     } finally {
       this.claudeSessions.delete(session.chatId)
@@ -1379,6 +1550,7 @@ export class AgentCoordinator {
 
         if (!event.entry) continue
         await this.store.appendMessage(active.chatId, event.entry)
+        this.trackBashToolEntry(active.chatId, event.entry)
 
         if (event.entry.kind === "system_init") {
           active.status = "running"
@@ -1405,18 +1577,23 @@ export class AgentCoordinator {
       }
     } catch (error) {
       if (!active.cancelRequested) {
-        const message = error instanceof Error ? error.message : String(error)
-        await this.store.appendMessage(
-          active.chatId,
-          timestamped({
-            kind: "result",
-            subtype: "error",
-            isError: true,
-            durationMs: 0,
-            result: message,
-          })
-        )
-        await this.store.recordTurnFailed(active.chatId, message)
+        const handled = await this.handleLimitError(active.chatId, this.codexLimitDetector, error)
+        if (!handled) {
+          const message = error instanceof Error ? error.message : String(error)
+          await this.store.appendMessage(
+            active.chatId,
+            timestamped({
+              kind: "result",
+              subtype: "error",
+              isError: true,
+              durationMs: 0,
+              result: message,
+            })
+          )
+          await this.store.recordTurnFailed(active.chatId, message)
+        } else {
+          await this.store.recordTurnFailed(active.chatId, "rate_limit")
+        }
       }
     } finally {
       if (active.cancelRequested && !active.cancelRecorded) {
@@ -1481,6 +1658,154 @@ export class AgentCoordinator {
         }
       }
     }
+  }
+
+  private resolveAutoResumeFor(chatId: string): boolean {
+    const cached = this.autoResumeByChat.get(chatId)
+    if (typeof cached === "boolean") return cached
+    return this.getAutoResumePreference()
+  }
+
+  private async emitAutoContinueEvent(event: AutoContinueEvent): Promise<void> {
+    await this.store.appendAutoContinueEvent(event)
+    this.scheduleManager?.onEvent(event)
+    this.emitStateChange(event.chatId)
+  }
+
+  private getChatSchedule(chatId: string, scheduleId: string) {
+    const events = this.store.getAutoContinueEvents(chatId)
+    return deriveChatSchedules(events, chatId).schedules[scheduleId]
+  }
+
+  private requireFuture(scheduledAt: number): void {
+    if (scheduledAt <= Date.now()) throw new Error("scheduledAt must be in the future")
+  }
+
+  private async handleLimitError(chatId: string, detector: LimitDetector, error: unknown): Promise<boolean> {
+    const detection = detector.detect(chatId, error)
+    if (!detection) return false
+    return this.handleLimitDetection(chatId, detection)
+  }
+
+  private async handleLimitDetection(chatId: string, detection: LimitDetection): Promise<boolean> {
+    const live = deriveChatSchedules(this.store.getAutoContinueEvents(chatId), chatId).liveScheduleId
+    if (live !== null) return true
+
+    const now = Date.now()
+    const scheduleId = crypto.randomUUID()
+    const base = { v: AUTO_CONTINUE_EVENT_VERSION, timestamp: now, chatId, scheduleId }
+
+    const event: AutoContinueEvent = this.resolveAutoResumeFor(chatId)
+      ? {
+          ...base,
+          kind: "auto_continue_accepted",
+          scheduledAt: detection.resetAt,
+          tz: detection.tz,
+          source: "auto_setting",
+          resetAt: detection.resetAt,
+          detectedAt: now,
+        }
+      : {
+          ...base,
+          kind: "auto_continue_proposed",
+          detectedAt: now,
+          resetAt: detection.resetAt,
+          tz: detection.tz,
+        }
+
+    await this.emitAutoContinueEvent(event)
+    await this.store.appendMessage(chatId, timestamped({
+      kind: "auto_continue_prompt",
+      scheduleId,
+    }))
+
+    return true
+  }
+
+  async fireAutoContinue(chatId: string, scheduleId: string) {
+    if (!this.store.getChat(chatId)) return
+
+    const event: AutoContinueEvent = {
+      v: AUTO_CONTINUE_EVENT_VERSION,
+      kind: "auto_continue_fired",
+      timestamp: Date.now(),
+      chatId,
+      scheduleId,
+    }
+    try {
+      await this.store.appendAutoContinueEvent(event)
+      await this.enqueueMessage(chatId, "continue", [], { autoContinue: { scheduleId } })
+      await this.maybeStartNextQueuedMessage(chatId)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      await this.store.appendMessage(chatId, timestamped({
+        kind: "result",
+        subtype: "error",
+        isError: true,
+        durationMs: 0,
+        result: `Auto-continue failed: ${message}`,
+      }))
+    }
+
+    this.emitStateChange(chatId)
+  }
+
+  async acceptAutoContinue(chatId: string, scheduleId: string, scheduledAt: number): Promise<void> {
+    const schedule = this.getChatSchedule(chatId, scheduleId)
+    if (!schedule) throw new Error("Schedule not found")
+    if (schedule.state !== "proposed") throw new Error("Schedule not pending")
+    this.requireFuture(scheduledAt)
+
+    await this.emitAutoContinueEvent({
+      v: AUTO_CONTINUE_EVENT_VERSION,
+      kind: "auto_continue_accepted",
+      timestamp: Date.now(),
+      chatId,
+      scheduleId,
+      scheduledAt,
+      tz: schedule.tz,
+      source: "user",
+      resetAt: schedule.resetAt,
+      detectedAt: schedule.detectedAt,
+    })
+  }
+
+  async rescheduleAutoContinue(chatId: string, scheduleId: string, scheduledAt: number): Promise<void> {
+    const schedule = this.getChatSchedule(chatId, scheduleId)
+    if (!schedule || schedule.state !== "scheduled") throw new Error("Schedule not active")
+    this.requireFuture(scheduledAt)
+
+    await this.emitAutoContinueEvent({
+      v: AUTO_CONTINUE_EVENT_VERSION,
+      kind: "auto_continue_rescheduled",
+      timestamp: Date.now(),
+      chatId,
+      scheduleId,
+      scheduledAt,
+    })
+  }
+
+  async cancelAutoContinue(chatId: string, scheduleId: string, reason: "user" | "chat_deleted"): Promise<void> {
+    const schedule = this.getChatSchedule(chatId, scheduleId)
+    if (!schedule) return
+    if (schedule.state !== "proposed" && schedule.state !== "scheduled") return
+
+    await this.emitAutoContinueEvent({
+      v: AUTO_CONTINUE_EVENT_VERSION,
+      kind: "auto_continue_cancelled",
+      timestamp: Date.now(),
+      chatId,
+      scheduleId,
+      reason,
+    })
+  }
+
+  listLiveSchedules(chatId: string): string[] {
+    const { schedules } = deriveChatSchedules(this.store.getAutoContinueEvents(chatId), chatId)
+    return Object.values(schedules)
+      .filter((s) => s.state === "proposed" || s.state === "scheduled")
+      .map((s) => s.scheduleId)
+      .sort()
   }
 
   async cancel(chatId: string, options?: { hideInterrupted?: boolean }) {

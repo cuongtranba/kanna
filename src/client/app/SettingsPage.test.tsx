@@ -2,7 +2,9 @@ import { afterEach, describe, expect, test } from "bun:test"
 import { renderToStaticMarkup } from "react-dom/server"
 import { RefreshCw } from "lucide-react"
 import {
+  AutoResumeToggleSection,
   ChangelogSection,
+  CloudflareTunnelSectionTitle,
   fetchGithubReleases,
   formatPublishedDate,
   getCachedChangelog,
@@ -15,6 +17,7 @@ import {
   SkillsSection,
 } from "./SettingsPage"
 import { SettingsHeaderButton } from "../components/ui/settings-header-button"
+import { usePreferencesStore } from "../stores/preferences"
 import type { UpdateSnapshot } from "../../shared/types"
 
 const SAMPLE_RELEASES = [
@@ -22,7 +25,7 @@ const SAMPLE_RELEASES = [
     id: 1,
     name: "v0.8.1",
     tag_name: "v0.8.1",
-    html_url: "https://github.com/jakemor/kanna/releases/tag/v0.8.1",
+    html_url: "https://github.com/cuongtranba/kanna/releases/tag/v0.8.1",
     published_at: "2026-03-19T16:53:08Z",
     body: "## Improvements\n- Better cursor color",
     prerelease: false,
@@ -32,7 +35,7 @@ const SAMPLE_RELEASES = [
     id: 2,
     name: null,
     tag_name: "v0.9.0-beta.1",
-    html_url: "https://github.com/jakemor/kanna/releases/tag/v0.9.0-beta.1",
+    html_url: "https://github.com/cuongtranba/kanna/releases/tag/v0.9.0-beta.1",
     published_at: "2026-03-20T12:00:00Z",
     body: "",
     prerelease: true,
@@ -76,7 +79,7 @@ describe("fetchGithubReleases", () => {
       })
     })
 
-    expect(requestedUrl).toBe("https://api.github.com/repos/jakemor/kanna/releases")
+    expect(requestedUrl).toBe("https://api.github.com/repos/cuongtranba/kanna/releases")
     expect(requestedAcceptHeader).toBe("application/vnd.github+json")
     expect(releases).toEqual([SAMPLE_RELEASES[0]])
   })
@@ -220,6 +223,7 @@ describe("ChangelogSection", () => {
         currentVersion="1.0.0"
         onInstallUpdate={() => {}}
         onCheckForUpdates={() => {}}
+        onForceReload={() => {}}
       />
     )
 
@@ -230,7 +234,7 @@ describe("ChangelogSection", () => {
     expect(html).toContain("v0.8.1")
     expect(html).toContain("Better cursor color")
     expect(html).toContain('aria-label="View release on GitHub"')
-    expect(html).toContain("https://github.com/jakemor/kanna/releases/tag/v0.8.1")
+    expect(html).toContain("https://github.com/cuongtranba/kanna/releases/tag/v0.8.1")
     expect(html).toContain("Prerelease")
     expect(html).toContain("No release notes were provided.")
     expect(html).toContain(formatPublishedDate("2026-03-19T16:53:08Z"))
@@ -248,6 +252,7 @@ describe("ChangelogSection", () => {
         currentVersion="1.0.0"
         onInstallUpdate={() => {}}
         onCheckForUpdates={() => {}}
+        onForceReload={() => {}}
       />
     )
 
@@ -271,6 +276,7 @@ describe("ChangelogSection", () => {
         currentVersion="1.0.0"
         onInstallUpdate={() => {}}
         onCheckForUpdates={() => {}}
+        onForceReload={() => {}}
       />
     )
 
@@ -292,10 +298,46 @@ describe("ChangelogSection", () => {
         currentVersion="1.0.0"
         onInstallUpdate={() => {}}
         onCheckForUpdates={() => {}}
+        onForceReload={() => {}}
       />
     )
 
     expect(html).toContain("disabled")
     expect(html).toContain("Updating")
+  })
+})
+
+test("AutoResumeToggleSection renders checked and unchecked based on props", () => {
+  // AutoResumeToggleSection is a pure prop-driven component exported from SettingsPage.
+  // SettingsPage wires it to usePreferencesStore; here we test the component directly.
+  usePreferencesStore.setState({ autoResumeOnRateLimit: false })
+  const stateOff = usePreferencesStore.getState()
+  const htmlUnchecked = renderToStaticMarkup(
+    <AutoResumeToggleSection
+      checked={stateOff.autoResumeOnRateLimit}
+      onChange={() => {}}
+    />
+  )
+  expect(htmlUnchecked).toContain("Enabled")
+  expect(htmlUnchecked).toContain('type="checkbox"')
+  expect(htmlUnchecked).not.toContain("checked")
+
+  usePreferencesStore.setState({ autoResumeOnRateLimit: true })
+  const stateOn = usePreferencesStore.getState()
+  const htmlChecked = renderToStaticMarkup(
+    <AutoResumeToggleSection
+      checked={stateOn.autoResumeOnRateLimit}
+      onChange={() => {}}
+    />
+  )
+  expect(htmlChecked).toContain("Enabled")
+  expect(htmlChecked).toContain('type="checkbox"')
+  expect(htmlChecked).toContain("checked")
+})
+
+describe("CloudflareTunnelSectionTitle", () => {
+  test("renders Cloudflare Tunnel section title text", () => {
+    const html = renderToStaticMarkup(<CloudflareTunnelSectionTitle />)
+    expect(html).toContain("Cloudflare Tunnel")
   })
 })

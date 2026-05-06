@@ -1,7 +1,7 @@
 {
-  "name": "kanna-code",
+  "name": "@cuongtran001/kanna",
   "type": "module",
-  "version": "0.39.0",
+  "version": "0.42.6",
   "description": "A beautiful web UI for Claude Code",
   "license": "MIT",
   "keywords": [
@@ -17,7 +17,7 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/jakemor/kanna.git"
+    "url": "git+https://github.com/cuongtranba/kanna.git"
   },
   "bin": {
     "kanna": "./bin/kanna"
@@ -63,7 +63,8 @@
     "file-type": "^22.0.0",
     "openai": "^6.34.0",
     "react-resizable-panels": "^4.7.3",
-    "uqr": "^0.1.3"
+    "uqr": "^0.1.3",
+    "web-push": "^3.6.7"
   },
   "devDependencies": {
     "@dnd-kit/core": "^6.3.1",
@@ -79,6 +80,7 @@
     "@types/node": "^24.10.1",
     "@types/react": "19.2.7",
     "@types/react-dom": "19.2.3",
+    "@types/web-push": "^3.6.4",
     "@vitejs/plugin-react": "5.1.1",
     "autoprefixer": "^10.4.23",
     "class-variance-authority": "^0.7.1",

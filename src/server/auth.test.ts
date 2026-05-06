@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test"
-import { mkdtemp, rm } from "node:fs/promises"
+import { mkdtemp, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { persistProjectUpload } from "./uploads"
@@ -11,11 +11,15 @@ afterEach(async () => {
   await Promise.all(tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })))
 })
 
-async function startPasswordServer(options: { trustProxy?: boolean; port?: number } = {}) {
+async function startPasswordServer(options: {
+  trustProxy?: boolean
+  port?: number
+  dataDir?: string
+} = {}) {
   const projectDir = await mkdtemp(path.join(tmpdir(), "kanna-auth-test-"))
-  const dataDir = await mkdtemp(path.join(tmpdir(), "kanna-auth-data-"))
+  const dataDir = options.dataDir ?? await mkdtemp(path.join(tmpdir(), "kanna-auth-data-"))
   tempDirs.push(projectDir)
-  tempDirs.push(dataDir)
+  if (!options.dataDir) tempDirs.push(dataDir)
   const server = await startKannaServer({
     dataDir,
     port: options.port ?? 4320,
@@ -24,7 +28,7 @@ async function startPasswordServer(options: { trustProxy?: boolean; port?: numbe
     trustProxy: options.trustProxy ?? false,
   })
   const project = await server.store.openProject(projectDir, "Project")
-  return { server, projectDir, project }
+  return { server, projectDir, project, dataDir }
 }
 
 function extractCookie(response: Response) {
@@ -288,6 +292,92 @@ describe("password auth", () => {
       expect(loginResponse.headers.get("set-cookie") ?? "").not.toContain("Secure")
     } finally {
       await server.stop()
+    }
+  })
+
+  test("issues Max-Age based on configured session lifetime", async () => {
+    const { server } = await startPasswordServer({ port: 54324 })
+
+    try {
+      const response = await fetch(`http://localhost:${server.port}/auth/login`, {
+        method: "POST",
+        body: JSON.stringify({ password: "secret", next: "/" }),
+        headers: {
+          "Content-Type": "application/json",
+          Origin: `http://localhost:${server.port}`,
+        },
+      })
+
+      expect(response.status).toBe(200)
+      expect(response.headers.get("set-cookie") ?? "").toContain(`Max-Age=${30 * 86_400}`)
+    } finally {
+      await server.stop()
+    }
+  })
+
+  test("respects auth.sessionMaxAgeDays from settings.json", async () => {
+    const dataDir = await mkdtemp(path.join(tmpdir(), "kanna-auth-data-"))
+    tempDirs.push(dataDir)
+    await writeFile(
+      path.join(dataDir, "settings.json"),
+      JSON.stringify({ auth: { sessionMaxAgeDays: 7 } }),
+      "utf8",
+    )
+
+    const { server } = await startPasswordServer({ port: 54325, dataDir })
+
+    try {
+      const response = await fetch(`http://localhost:${server.port}/auth/login`, {
+        method: "POST",
+        body: JSON.stringify({ password: "secret", next: "/" }),
+        headers: {
+          "Content-Type": "application/json",
+          Origin: `http://localhost:${server.port}`,
+        },
+      })
+
+      expect(response.status).toBe(200)
+      expect(response.headers.get("set-cookie") ?? "").toContain(`Max-Age=${7 * 86_400}`)
+    } finally {
+      await server.stop()
+    }
+  })
+
+  test("session survives server restart", async () => {
+    const dataDir = await mkdtemp(path.join(tmpdir(), "kanna-auth-data-"))
+    tempDirs.push(dataDir)
+
+    const first = await startPasswordServer({ port: 54326, dataDir })
+    let cookie: string
+    try {
+      const loginResponse = await fetch(`http://localhost:${first.server.port}/auth/login`, {
+        method: "POST",
+        body: JSON.stringify({ password: "secret", next: "/" }),
+        headers: {
+          "Content-Type": "application/json",
+          Origin: `http://localhost:${first.server.port}`,
+        },
+      })
+      cookie = extractCookie(loginResponse)
+    } finally {
+      await first.server.stop()
+    }
+
+    const second = await startPasswordServer({ port: 54327, dataDir })
+    try {
+      const upload = await persistProjectUpload({
+        projectId: second.project.id,
+        localPath: second.projectDir,
+        fileName: "hello.txt",
+        bytes: new TextEncoder().encode("hello"),
+        fallbackMimeType: "text/plain",
+      })
+      const response = await fetch(`http://localhost:${second.server.port}${upload.contentUrl}`, {
+        headers: { Cookie: cookie },
+      })
+      expect(response.status).toBe(200)
+    } finally {
+      await second.server.stop()
     }
   })
 

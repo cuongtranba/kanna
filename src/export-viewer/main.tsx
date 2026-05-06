@@ -172,6 +172,10 @@ function StandaloneTranscriptApp() {
             onOpenLocalLink={handleOpenLocalLink}
             onAskUserQuestionSubmit={handleAskUserQuestion}
             onExitPlanModeConfirm={handleExitPlanMode}
+            schedules={{}}
+            onAutoContinueAccept={noop}
+            onAutoContinueReschedule={noop}
+            onAutoContinueCancel={noop}
             showScrollButton={!isAtEnd && messages.length > 0}
             onIsAtEndChange={setIsAtEnd}
             scrollToBottom={scrollToBottom}

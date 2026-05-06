@@ -44,6 +44,14 @@ export function mergeAppSettingsPatch(
         },
       },
     },
+    cloudflareTunnel: {
+      ...settings.cloudflareTunnel,
+      ...patch.cloudflareTunnel,
+    },
+    auth: {
+      ...settings.auth,
+      ...patch.auth,
+    },
   }
 }
 

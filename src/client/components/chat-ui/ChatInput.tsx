@@ -1,4 +1,11 @@
 import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from "react"
+import { SlashCommandPicker } from "./SlashCommandPicker"
+import { MentionPicker } from "./MentionPicker"
+import { applyCommandToInput, filterCommands, shouldShowPicker } from "../../lib/slash-commands"
+import { applyMentionToInput, shouldShowMentionPicker } from "../../lib/mention-suggestions"
+import { useMentionSuggestions, type ProjectPath } from "../../hooks/useMentionSuggestions"
+import { useSlashCommands, useSlashCommandsLoading } from "../../hooks/useSlashCommands"
+import type { SlashCommand } from "../../../shared/types"
 import { ArrowUp, Paperclip } from "lucide-react"
 import {
   type AgentProvider,
@@ -220,6 +227,126 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput({
   const providerLocked = activeProvider !== null
   const providerPrefs = getEffectiveComposerState(composerState, activeProvider, providerDefaults)
   const selectedProvider = providerLocked ? activeProvider : composerState.provider
+  const slashCommands = useSlashCommands(chatId ?? null)
+  const slashCommandsLoading = useSlashCommandsLoading(chatId ?? null)
+  const [pickerIndex, setPickerIndex] = useState(0)
+  const [pickerDismissed, setPickerDismissed] = useState(false)
+  const [caretVersion, setCaretVersion] = useState(0)
+
+  useEffect(() => {
+    if (!value.startsWith("/")) setPickerDismissed(false)
+  }, [value])
+
+  const caret = textareaRef.current?.selectionStart ?? value.length
+  const pickerTrigger = useMemo(
+    () => shouldShowPicker(value, caret),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [value, caret, caretVersion],
+  )
+  const filteredCommands = useMemo(
+    () => (pickerTrigger.open ? filterCommands(slashCommands, pickerTrigger.query) : []),
+    [pickerTrigger.open, pickerTrigger.query, slashCommands],
+  )
+  const pickerOpen =
+    pickerTrigger.open &&
+    (slashCommands.length > 0 || slashCommandsLoading) &&
+    !pickerDismissed &&
+    selectedProvider === "claude"
+
+  useEffect(() => {
+    if (pickerOpen) setPickerIndex(0)
+  }, [pickerOpen, pickerTrigger.query])
+
+  const [mentionIndex, setMentionIndex] = useState(0)
+  const [mentionDismissed, setMentionDismissed] = useState(false)
+
+  const mentionTrigger = useMemo(
+    () => shouldShowMentionPicker(value, caret),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [value, caret, caretVersion],
+  )
+  const mentionState = useMentionSuggestions({
+    projectId: projectId ?? null,
+    query: mentionTrigger.query,
+    enabled: mentionTrigger.open && !mentionDismissed,
+  })
+  const mentionOpen =
+    mentionTrigger.open &&
+    !mentionDismissed &&
+    !pickerOpen &&
+    (mentionState.items.length > 0 || mentionState.loading)
+
+  useEffect(() => {
+    if (mentionOpen) setMentionIndex(0)
+  }, [mentionOpen, mentionTrigger.query])
+
+  useEffect(() => {
+    if (!mentionTrigger.open) setMentionDismissed(false)
+  }, [mentionTrigger.open, mentionTrigger.tokenStart])
+
+  function acceptCommand(cmd: SlashCommand) {
+    const { value: nextValue, caret: nextCaret } = applyCommandToInput({
+      value,
+      caret,
+      command: cmd,
+    })
+    setValue(nextValue)
+    if (chatId) setDraft(chatId, nextValue)
+    setPickerDismissed(true)
+    requestAnimationFrame(() => {
+      const el = textareaRef.current
+      if (!el) return
+      el.focus()
+      el.setSelectionRange(nextCaret, nextCaret)
+    })
+  }
+
+  function acceptMention(item: ProjectPath) {
+    if (!projectId) {
+      setMentionDismissed(true)
+      return
+    }
+    const { value: nextValue, caret: nextCaret } = applyMentionToInput({
+      value,
+      caret,
+      tokenStart: mentionTrigger.tokenStart,
+      pickedPath: item.path,
+    })
+    setValue(nextValue)
+    if (chatId) setDraft(chatId, nextValue)
+
+    const relativeForAttachment = item.path.endsWith("/") ? item.path.slice(0, -1) : item.path
+    const alreadyMentioned = attachments.some(
+      (a) => a.kind === "mention" && a.relativePath === `./${relativeForAttachment}`,
+    )
+    if (!alreadyMentioned) {
+      const contentUrl = item.kind === "file"
+        ? `/api/projects/${projectId}/files/${encodeURIComponent(relativeForAttachment)}/content`
+        : ""
+      setAttachments((prev) => [
+        ...prev,
+        {
+          id: crypto.randomUUID(),
+          kind: "mention",
+          displayName: relativeForAttachment,
+          absolutePath: "",
+          relativePath: `./${relativeForAttachment}`,
+          contentUrl,
+          mimeType: "",
+          size: 0,
+          status: "uploaded",
+        },
+      ])
+    }
+    setMentionDismissed(true)
+    requestAnimationFrame(() => {
+      const el = textareaRef.current
+      if (!el) return
+      el.focus()
+      el.setSelectionRange(nextCaret, nextCaret)
+    })
+  }
+
   const providerConfig = availableProviders.find((provider) => provider.id === selectedProvider) ?? availableProviders[0]
   const showPlanMode = providerConfig?.supportsPlanMode ?? false
   const activeContextWindow = useMemo(() => {
@@ -553,6 +680,54 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput({
   }
 
   function handleKeyDown(event: React.KeyboardEvent) {
+    if (mentionOpen) {
+      if (event.key === "Escape") {
+        event.preventDefault()
+        setMentionDismissed(true)
+        return
+      }
+      if (event.key === "ArrowDown") {
+        event.preventDefault()
+        setMentionIndex((i) => Math.min(mentionState.items.length - 1, i + 1))
+        return
+      }
+      if (event.key === "ArrowUp") {
+        event.preventDefault()
+        setMentionIndex((i) => Math.max(0, i - 1))
+        return
+      }
+      if (event.key === "Enter" || event.key === "Tab") {
+        event.preventDefault()
+        const item = mentionState.items[mentionIndex]
+        if (item) acceptMention(item)
+        return
+      }
+    }
+
+    if (pickerOpen) {
+      if (event.key === "Escape") {
+        event.preventDefault()
+        setPickerDismissed(true)
+        return
+      }
+      if (event.key === "ArrowDown") {
+        event.preventDefault()
+        setPickerIndex((i) => Math.min(filteredCommands.length - 1, i + 1))
+        return
+      }
+      if (event.key === "ArrowUp") {
+        event.preventDefault()
+        setPickerIndex((i) => Math.max(0, i - 1))
+        return
+      }
+      if (event.key === "Enter" || event.key === "Tab") {
+        event.preventDefault()
+        const cmd = filteredCommands[pickerIndex]
+        if (cmd) acceptCommand(cmd)
+        return
+      }
+    }
+
     if (event.key === "Tab" && !event.shiftKey) {
       event.preventDefault()
       focusNextChatInput(textareaRef.current, document)
@@ -674,7 +849,7 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput({
                     ) : (
                       <AttachmentFileCard
                         attachment={attachment}
-                        onClick={attachment.status === "uploaded" ? () => handleAttachmentPreview(attachment) : undefined}
+                        onClick={attachment.status === "uploaded" && attachment.contentUrl ? () => handleAttachmentPreview(attachment) : undefined}
                         onRemove={() => removeAttachment(attachment)}
                       />
                     )}
@@ -684,12 +859,30 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput({
             </ScrollArea>
           ) : null}
 
-          <div className="flex items-end max-w-[840px] mx-auto border dark:bg-card/40 backdrop-blur-lg border-border rounded-[29px] pr-1.5">
+          <div className="relative flex items-end max-w-[840px] mx-auto border bg-background dark:bg-card/90 border-border rounded-[29px] pr-1.5 transition-colors focus-within:border-ring/60 focus-within:ring-2 focus-within:ring-ring/30">
+            {pickerOpen && (
+              <SlashCommandPicker
+                items={filteredCommands}
+                activeIndex={pickerIndex}
+                loading={slashCommandsLoading}
+                onSelect={acceptCommand}
+                onHoverIndex={setPickerIndex}
+              />
+            )}
+            {mentionOpen && (
+              <MentionPicker
+                items={mentionState.items}
+                activeIndex={mentionIndex}
+                loading={mentionState.loading}
+                onSelect={acceptMention}
+                onHoverIndex={setMentionIndex}
+              />
+            )}
             <label
               aria-label="Add attachment"
               className={cn(
                 buttonVariants({ variant: "ghost", size: "icon" }),
-                "relative md:hidden flex-shrink-0 ml-1 mb-1 h-10 w-10 rounded-full text-muted-foreground hover:text-foreground",
+                "relative md:hidden flex-shrink-0 ml-1 mb-1 h-11 w-11 rounded-full text-muted-foreground hover:text-foreground",
                 disabled && "pointer-events-none opacity-50",
               )}
             >
@@ -720,11 +913,14 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput({
                 setValue(event.target.value)
                 if (chatId) setDraft(chatId, event.target.value)
                 autoResize()
+                setCaretVersion((v) => v + 1)
               }}
+              onSelect={() => setCaretVersion((v) => v + 1)}
+              onKeyUp={() => setCaretVersion((v) => v + 1)}
               onPaste={handlePaste}
               onKeyDown={handleKeyDown}
               disabled={disabled}
-              className="flex-1 text-base p-3 md:p-4 !pr-2 pl-0 md:pl-6 resize-none max-h-[200px] outline-none bg-transparent border-0 shadow-none"
+              className="flex-1 text-base p-3 md:p-4 !pr-2 pl-0 md:pl-6 resize-none max-h-[200px] outline-none focus:outline-none focus-visible:outline-none focus-visible:ring-0 bg-transparent border-0 shadow-none"
             />
             <Button
               type="button"
@@ -740,7 +936,8 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput({
               }}
               disabled={disabled || (!canCancel && !canSubmit) || hasPendingUploads}
               size="icon"
-              className="flex-shrink-0 bg-slate-600 text-white dark:bg-white dark:text-slate-900 rounded-full cursor-pointer h-10 w-10 md:h-11 md:w-11 mb-1 -mr-0.5 md:mr-0 md:mb-1.5 touch-manipulation disabled:bg-white/60 disabled:text-slate-700"
+              aria-label={canCancel ? "Stop" : "Send message"}
+              className="flex-shrink-0 bg-primary text-background rounded-full cursor-pointer h-11 w-11 mb-1 -mr-0.5 md:mr-0 md:mb-1.5 touch-manipulation disabled:opacity-50"
             >
               {hasTextToSend ? (
                 <ArrowUp className="h-5 w-5 md:h-6 md:w-6" />

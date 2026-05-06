@@ -3,7 +3,7 @@ import { cn } from "../../lib/utils"
 import type { ProcessedToolCall } from "./types"
 
 const STATUS_CONFIG = {
-  completed:   { Icon: Check,   iconClass: "text-emerald-500",             textClass: "text-muted-foreground" },
+  completed:   { Icon: Check,   iconClass: "text-success",                  textClass: "text-muted-foreground" },
   in_progress: { Icon: Loader2, iconClass: "text-foreground animate-spin", textClass: "text-foreground font-medium" },
   pending:     { Icon: Circle,  iconClass: "text-muted-foreground",        textClass: "text-muted-foreground" },
 } as const

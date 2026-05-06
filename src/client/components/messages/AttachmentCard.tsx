@@ -46,7 +46,7 @@ export function AttachmentImageCard({
         type="button"
         onClick={onClick}
         className={cn(
-          "group/image relative overflow-hidden rounded-xl border border-border/80 bg-background/85 shadow-sm backdrop-blur-md",
+          "group/image relative overflow-hidden rounded-xl border border-border/80 bg-background shadow-sm",
           isComposer ? "min-w-[80px]" : "min-w-[200px]",
         )}
       >
@@ -94,28 +94,51 @@ export function AttachmentFileCard({
   onRemove,
   className,
 }: BaseAttachmentCardProps) {
-  const Icon = getAttachmentIcon(classifyAttachmentIcon(attachment))
+  const iconKind: AttachmentIconKind = attachment.kind === "mention" ? "text" : classifyAttachmentIcon(attachment)
+  const Icon = getAttachmentIcon(iconKind)
+  const isMention = attachment.kind === "mention"
+  const mentionLabel = isMention ? basename(attachment.displayName) : attachment.displayName
+  const mentionSubtitle = isMention ? parentPath(attachment.displayName) : ""
 
   return (
     <div className={cn("group relative", className)}>
       <button
         type="button"
         onClick={onClick}
+        title={isMention ? attachment.displayName : undefined}
         className="flex w-[200px] items-center gap-2 rounded-xl border border-border bg-background/85 p-1 pr-3 text-left transition-colors hover:bg-accent/50"
       >
         <div className="flex min-h-10 min-w-10 items-center justify-center rounded-lg border border-border bg-muted text-muted-foreground">
           <Icon className="size-5" />
         </div>
         <div className="min-w-0">
-          <div className="max-w-[150px] truncate text-[13px] font-medium text-foreground">{attachment.displayName}</div>
-          <div className="truncate text-[11px] text-muted-foreground">
-            {attachment.mimeType} · {formatAttachmentSize(attachment.size)}
-          </div>
+          <div className="max-w-[150px] truncate text-[13px] font-medium text-foreground">{mentionLabel}</div>
+          {isMention ? (
+            <div className="max-w-[150px] truncate text-[11px] text-muted-foreground">
+              {mentionSubtitle ? `@${mentionSubtitle}` : "@mention"}
+            </div>
+          ) : (
+            <div className="truncate text-[11px] text-muted-foreground">
+              {attachment.mimeType} · {formatAttachmentSize(attachment.size)}
+            </div>
+          )}
         </div>
       </button>
       {onRemove ? <RemoveButton displayName={attachment.displayName} onRemove={onRemove} /> : null}
     </div>
   )
+}
+
+function basename(relativePath: string): string {
+  const cleaned = relativePath.replace(/\/+$/, "")
+  const idx = cleaned.lastIndexOf("/")
+  return idx >= 0 ? cleaned.slice(idx + 1) : cleaned
+}
+
+function parentPath(relativePath: string): string {
+  const cleaned = relativePath.replace(/\/+$/, "")
+  const idx = cleaned.lastIndexOf("/")
+  return idx >= 0 ? cleaned.slice(0, idx) : ""
 }
 
 function RemoveButton({ displayName, onRemove }: { displayName: string; onRemove: () => void }) {

@@ -19,6 +19,7 @@ import { writeStandaloneTranscriptExport } from "./standalone-export"
 import { TerminalManager } from "./terminal-manager"
 import type { UpdateManager } from "./update-manager"
 import { deriveChatSnapshot, deriveLocalProjectsSnapshot, deriveSidebarData } from "./read-models"
+import { AUTH_DEFAULTS, CLOUDFLARE_TUNNEL_DEFAULTS } from "../shared/types"
 import type {
   AppSettingsPatch,
   AppSettingsSnapshot,
@@ -29,6 +30,9 @@ import type {
   SkillSearchSnapshot,
   SkillUninstallResult,
 } from "../shared/types"
+import { importClaudeSessions } from "./claude-session-importer"
+import type { TunnelGateway } from "./cloudflare-tunnel/gateway"
+import type { PushManager } from "./push/push-manager"
 
 const DEFAULT_CHAT_RECENT_LIMIT = 200
 const SKILL_AGENT_ALIASES = ["universal", "claude-code"] as const
@@ -111,6 +115,7 @@ export interface ClientState {
   subscriptions: Map<string, SubscriptionTopic>
   snapshotSignatures: Map<string, string>
   protectedDraftChatIds?: Set<string>
+  pushDeviceId?: string | null
 }
 
 interface CreateWsRouterArgs {
@@ -119,8 +124,9 @@ interface CreateWsRouterArgs {
   agent: AgentCoordinator
   terminals: TerminalManager
   keybindings: KeybindingsManager
-  appSettings?: Pick<AppSettingsManager, "getSnapshot" | "write"> & Partial<Pick<AppSettingsManager, "writePatch" | "onChange">>
+  appSettings?: Pick<AppSettingsManager, "getSnapshot" | "write"> & Partial<Pick<AppSettingsManager, "setCloudflareTunnel" | "writePatch" | "onChange">>
   analytics?: AnalyticsReporter
+  tunnelGateway?: TunnelGateway
   llmProvider?: {
     read: () => Promise<LlmProviderSnapshot>
     write: (value: Pick<LlmProviderSnapshot, "provider" | "apiKey" | "model" | "baseUrl">) => Promise<LlmProviderSnapshot>
@@ -130,6 +136,7 @@ interface CreateWsRouterArgs {
   getDiscoveredProjects: () => DiscoveredProject[]
   machineDisplayName: string
   updateManager: UpdateManager | null
+  pushManager: PushManager
 }
 
 interface SnapshotBroadcastFilter {
@@ -138,6 +145,7 @@ interface SnapshotBroadcastFilter {
   includeUpdate?: boolean
   includeKeybindings?: boolean
   includeAppSettings?: boolean
+  includePushConfig?: boolean
   chatIds?: Set<string>
   projectIds?: Set<string>
   terminalIds?: Set<string>
@@ -379,11 +387,13 @@ export function createWsRouter({
   keybindings,
   appSettings,
   analytics,
+  tunnelGateway,
   llmProvider,
   refreshDiscovery,
   getDiscoveredProjects,
   machineDisplayName,
   updateManager,
+  pushManager,
 }: CreateWsRouterArgs) {
   const sockets = new Set<ServerWebSocket<ClientState>>()
   let pendingBroadcastTimer: ReturnType<typeof setTimeout> | null = null
@@ -481,6 +491,8 @@ export function createWsRouter({
     },
     warning: null,
     filePathDisplay: "~/.kanna/data/settings.json",
+    cloudflareTunnel: CLOUDFLARE_TUNNEL_DEFAULTS,
+    auth: AUTH_DEFAULTS,
   }
   const mergeAppSettingsPatch = (snapshot: AppSettingsSnapshot, patch: AppSettingsPatch): AppSettingsSnapshot => ({
     ...snapshot,
@@ -511,6 +523,14 @@ export function createWsRouter({
         },
       },
     },
+    cloudflareTunnel: {
+      ...snapshot.cloudflareTunnel,
+      ...patch.cloudflareTunnel,
+    },
+    auth: {
+      ...snapshot.auth,
+      ...patch.auth,
+    },
   })
   const resolvedAppSettings = {
     getSnapshot: () => appSettings?.getSnapshot() ?? fallbackAppSettingsSnapshot,
@@ -525,6 +545,11 @@ export function createWsRouter({
         return await appSettings.write({ analyticsEnabled: patch.analyticsEnabled })
       }
       fallbackAppSettingsSnapshot = mergeAppSettingsPatch(appSettings?.getSnapshot() ?? fallbackAppSettingsSnapshot, patch)
+      return fallbackAppSettingsSnapshot
+    },
+    setCloudflareTunnel: async (patch: Partial<AppSettingsSnapshot["cloudflareTunnel"]>) => {
+      if (appSettings?.setCloudflareTunnel) return await appSettings.setCloudflareTunnel(patch)
+      fallbackAppSettingsSnapshot = mergeAppSettingsPatch(appSettings?.getSnapshot() ?? fallbackAppSettingsSnapshot, { cloudflareTunnel: patch })
       return fallbackAppSettingsSnapshot
     },
     onChange: (listener: (snapshot: AppSettingsSnapshot) => void) => appSettings?.onChange?.(listener) ?? (() => {}),
@@ -601,6 +626,9 @@ export function createWsRouter({
     if (topic.type === "app-settings") {
       return Boolean(filter.includeAppSettings)
     }
+    if (topic.type === "push-config") {
+      return Boolean(filter.includePushConfig)
+    }
     if (topic.type === "chat") {
       return filter.chatIds?.has(topic.chatId) ?? false
     }
@@ -623,6 +651,18 @@ export function createWsRouter({
     const data = deriveSidebarData(store.state, agent.getActiveStatuses(), {
       sidebarProjectOrder: getSidebarProjectOrder(store),
       drainingChatIds: agent.getDrainingChatIds(),
+    })
+    const observed = data.projectGroups.flatMap((group) =>
+      group.chats.map((chat) => ({
+        chatId: chat.chatId,
+        projectLocalPath: group.localPath,
+        projectTitle: group.localPath.split("/").filter(Boolean).pop() ?? group.localPath,
+        chatTitle: chat.title,
+        status: chat.status,
+      }))
+    )
+    void pushManager.observeStatuses(observed).catch((error) => {
+      console.warn("[kanna/push] observeStatuses failed", { error })
     })
     if (isSendToStartingProfilingEnabled()) {
       const totalChats = data.projectGroups.reduce((count, group) => count + group.chats.length, 0)
@@ -651,7 +691,12 @@ export function createWsRouter({
     return sidebar
   }
 
-  function createEnvelope(id: string, topic: SubscriptionTopic, cache?: SnapshotComputationCache): ServerEnvelope {
+  function createEnvelope(
+    id: string,
+    topic: SubscriptionTopic,
+    cache?: SnapshotComputationCache,
+    connection?: ServerWebSocket<ClientState>,
+  ): ServerEnvelope {
     if (topic.type === "sidebar") {
       const sidebar = getSidebarSnapshotCacheEntry(cache)
       return {
@@ -700,6 +745,18 @@ export function createWsRouter({
         snapshot: {
           type: "app-settings",
           data: resolvedAppSettings.getSnapshot(),
+        },
+      }
+    }
+
+    if (topic.type === "push-config") {
+      return {
+        v: PROTOCOL_VERSION,
+        type: "snapshot",
+        id,
+        snapshot: {
+          type: "push-config",
+          data: pushManager.getConfigSnapshot(connection?.data.pushDeviceId ?? null),
         },
       }
     }
@@ -761,8 +818,10 @@ export function createWsRouter({
           store.state,
           agent.getActiveStatuses(),
           agent.getDrainingChatIds(),
+          agent.getSlashCommandsLoadingChatIds(),
           topic.chatId,
-          (chatId) => store.getRecentChatHistory(chatId, topic.recentLimit ?? DEFAULT_CHAT_RECENT_LIMIT)
+          (chatId) => store.getRecentChatHistory(chatId, topic.recentLimit ?? DEFAULT_CHAT_RECENT_LIMIT),
+          (chatId) => store.getTunnelEvents(chatId)
         ),
       },
     }
@@ -784,7 +843,7 @@ export function createWsRouter({
         continue
       }
       const envelopeStartedAt = performance.now()
-      const envelope = createEnvelope(id, topic, options?.cache)
+      const envelope = createEnvelope(id, topic, options?.cache, ws)
       const createdAt = performance.now()
       if (envelope.type !== "snapshot") continue
       const signature = topic.type === "sidebar"
@@ -946,7 +1005,7 @@ export function createWsRouter({
       const snapshotSignatures = ensureSnapshotSignatures(ws)
       for (const [id, topic] of ws.data.subscriptions.entries()) {
         if (topic.type !== "terminal" || topic.terminalId !== terminalId) continue
-        const envelope = createEnvelope(id, topic)
+        const envelope = createEnvelope(id, topic, undefined, ws)
         if (envelope.type !== "snapshot") continue
         const signature = JSON.stringify(envelope.snapshot)
         if (snapshotSignatures.get(id) === signature) continue
@@ -979,7 +1038,7 @@ export function createWsRouter({
       const snapshotSignatures = ensureSnapshotSignatures(ws)
       for (const [id, topic] of ws.data.subscriptions.entries()) {
         if (topic.type !== "keybindings") continue
-        const envelope = createEnvelope(id, topic)
+        const envelope = createEnvelope(id, topic, undefined, ws)
         if (envelope.type !== "snapshot") continue
         const signature = JSON.stringify(envelope.snapshot)
         if (snapshotSignatures.get(id) === signature) continue
@@ -994,7 +1053,7 @@ export function createWsRouter({
       const snapshotSignatures = ensureSnapshotSignatures(ws)
       for (const [id, topic] of ws.data.subscriptions.entries()) {
         if (topic.type !== "app-settings") continue
-        const envelope = createEnvelope(id, topic)
+        const envelope = createEnvelope(id, topic, undefined, ws)
         if (envelope.type !== "snapshot") continue
         const signature = JSON.stringify(envelope.snapshot)
         if (snapshotSignatures.get(id) === signature) continue
@@ -1009,7 +1068,7 @@ export function createWsRouter({
       const snapshotSignatures = ensureSnapshotSignatures(ws)
       for (const [id, topic] of ws.data.subscriptions.entries()) {
         if (topic.type !== "update") continue
-        const envelope = createEnvelope(id, topic)
+        const envelope = createEnvelope(id, topic, undefined, ws)
         if (envelope.type !== "snapshot") continue
         const signature = JSON.stringify(envelope.snapshot)
         if (snapshotSignatures.get(id) === signature) continue
@@ -1066,6 +1125,19 @@ export function createWsRouter({
           })
           return
         }
+        case "update.reload": {
+          if (!updateManager) {
+            throw new Error("Update manager unavailable.")
+          }
+          const result = await updateManager.forceReload()
+          send(ws, {
+            v: PROTOCOL_VERSION,
+            type: "ack",
+            id,
+            result,
+          })
+          return
+        }
         case "settings.readKeybindings": {
           send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: keybindings.getSnapshot() })
           return
@@ -1089,6 +1161,12 @@ export function createWsRouter({
           if (!previousAnalyticsEnabled && command.analyticsEnabled) {
             resolvedAnalytics.track("analytics_enabled")
           }
+          return
+        }
+        case "appSettings.setCloudflareTunnel": {
+          await resolvedAppSettings.setCloudflareTunnel(command.patch)
+          const snapshot = resolvedAppSettings.getSnapshot()
+          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: snapshot })
           return
         }
         case "settings.writeAppSettingsPatch": {
@@ -1172,6 +1250,15 @@ export function createWsRouter({
           }
           break
         }
+        case "sessions.importClaude": {
+          const result = await importClaudeSessions({ store })
+          if (result.newProjects > 0) {
+            await refreshDiscovery()
+          }
+          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result })
+          await broadcastFilteredSnapshots({ includeSidebar: true })
+          break
+        }
         case "project.remove": {
           await store.removeProject(command.projectId)
           send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
@@ -1234,11 +1321,56 @@ export function createWsRouter({
         }
         case "chat.delete": {
           await agent.cancel(command.chatId)
+          for (const scheduleId of agent.listLiveSchedules(command.chatId)) {
+            await agent.cancelAutoContinue(command.chatId, scheduleId, "chat_deleted")
+          }
           await agent.closeChat(command.chatId)
           await store.deleteChat(command.chatId)
           send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
           resolvedAnalytics.track("chat_deleted")
           await broadcastFilteredSnapshots({ includeSidebar: true })
+          return
+        }
+        case "autoContinue.accept": {
+          await agent.acceptAutoContinue(command.chatId, command.scheduleId, command.scheduledAt)
+          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
+          await broadcastChatAndSidebar(command.chatId)
+          return
+        }
+        case "autoContinue.reschedule": {
+          await agent.rescheduleAutoContinue(command.chatId, command.scheduleId, command.scheduledAt)
+          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
+          await broadcastChatAndSidebar(command.chatId)
+          return
+        }
+        case "autoContinue.cancel": {
+          await agent.cancelAutoContinue(command.chatId, command.scheduleId, "user")
+          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
+          await broadcastChatAndSidebar(command.chatId)
+          return
+        }
+        case "tunnel.accept": {
+          if (tunnelGateway) {
+            await tunnelGateway.accept(command.chatId, command.tunnelId)
+          }
+          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
+          await broadcastChatAndSidebar(command.chatId)
+          return
+        }
+        case "tunnel.stop": {
+          if (tunnelGateway) {
+            await tunnelGateway.stop(command.chatId, command.tunnelId)
+          }
+          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
+          await broadcastChatAndSidebar(command.chatId)
+          return
+        }
+        case "tunnel.retry": {
+          if (tunnelGateway) {
+            await tunnelGateway.retry(command.chatId, command.tunnelId)
+          }
+          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
+          await broadcastChatAndSidebar(command.chatId)
           return
         }
         case "chat.markRead": {
@@ -1526,6 +1658,55 @@ export function createWsRouter({
           pushTerminalSnapshot(command.terminalId)
           return
         }
+        case "push.identifyDevice": {
+          ws.data.pushDeviceId = command.pushDeviceId
+          if (command.pushDeviceId) {
+            await pushManager.recordDeviceSeen(command.pushDeviceId)
+            await broadcastFilteredSnapshots({ includePushConfig: true })
+          }
+          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
+          return
+        }
+        case "push.subscribe": {
+          const result = await pushManager.addSubscription({
+            subscription: command.subscription,
+            label: command.label,
+            userAgent: command.userAgent,
+          })
+          ws.data.pushDeviceId = result.id
+          await broadcastFilteredSnapshots({ includePushConfig: true })
+          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result })
+          return
+        }
+        case "push.unsubscribe": {
+          await pushManager.removeSubscription(command.pushDeviceId, "user_revoked")
+          if (ws.data.pushDeviceId === command.pushDeviceId) {
+            ws.data.pushDeviceId = null
+          }
+          await broadcastFilteredSnapshots({ includePushConfig: true })
+          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
+          return
+        }
+        case "push.test": {
+          if (ws.data.pushDeviceId) {
+            await pushManager.sendTest(ws.data.pushDeviceId)
+          }
+          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
+          return
+        }
+        case "push.setProjectMute": {
+          await pushManager.setProjectMute(command.localPath, command.muted)
+          await broadcastFilteredSnapshots({ includePushConfig: true })
+          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
+          return
+        }
+        case "push.setFocusedChat": {
+          if (ws.data.pushDeviceId) {
+            pushManager.setFocusedChat(ws.data.pushDeviceId, command.chatId)
+          }
+          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
+          return
+        }
       }
 
       await broadcastSnapshots()
@@ -1545,6 +1726,9 @@ export function createWsRouter({
       sockets.add(ws)
     },
     handleClose(ws: ServerWebSocket<ClientState>) {
+      if (ws.data.pushDeviceId) {
+        pushManager.clearFocus(ws.data.pushDeviceId)
+      }
       sockets.delete(ws)
     },
     broadcastSnapshots,
@@ -1570,6 +1754,9 @@ export function createWsRouter({
         const snapshotSignatures = ensureSnapshotSignatures(ws)
         ws.data.subscriptions.set(parsed.id, parsed.topic)
         snapshotSignatures.delete(parsed.id)
+        if (parsed.topic.type === "chat") {
+          void agent.ensureSlashCommandsLoaded(parsed.topic.chatId)
+        }
         if (parsed.topic.type === "local-projects") {
           void refreshDiscovery().then(() => {
             if (ws.data.subscriptions.has(parsed.id)) {

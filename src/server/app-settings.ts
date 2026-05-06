@@ -5,6 +5,10 @@ import { homedir } from "node:os"
 import path from "node:path"
 import { getSettingsFilePath, LOG_PREFIX } from "../shared/branding"
 import {
+  AUTH_DEFAULTS,
+  AUTH_SESSION_MAX_AGE_DAYS_MAX,
+  AUTH_SESSION_MAX_AGE_DAYS_MIN,
+  CLOUDFLARE_TUNNEL_DEFAULTS,
   DEFAULT_CLAUDE_MODEL_OPTIONS,
   DEFAULT_CODEX_MODEL_OPTIONS,
   isClaudeReasoningEffort,
@@ -16,10 +20,12 @@ import {
   type AppSettingsPatch,
   type AppSettingsSnapshot,
   type AppThemePreference,
+  type AuthSettings,
   type ChatProviderPreferences,
   type ChatSoundId,
   type ChatSoundPreference,
   type ClaudeModelOptions,
+  type CloudflareTunnelSettings,
   type CodexModelOptions,
   type DefaultProviderPreference,
   type EditorPreset,
@@ -46,6 +52,8 @@ interface AppSettingsFile {
     claude?: Partial<ProviderPreference<Partial<ClaudeModelOptions>>> & { effort?: unknown }
     codex?: Partial<ProviderPreference<Partial<CodexModelOptions>>> & { effort?: unknown }
   }
+  cloudflareTunnel?: unknown
+  auth?: unknown
 }
 
 interface AppSettingsState extends AppSettingsSnapshot {
@@ -212,6 +220,64 @@ function normalizeProviderDefaults(value: AppSettingsFile["providerDefaults"] | 
   }
 }
 
+function normalizeCloudflareTunnel(value: unknown, warnings: string[]): CloudflareTunnelSettings {
+  const tunnelSource = value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null
+  if (value !== undefined && !tunnelSource) {
+    warnings.push("cloudflareTunnel must be an object")
+  }
+
+  const enabled = typeof tunnelSource?.enabled === "boolean"
+    ? tunnelSource.enabled
+    : CLOUDFLARE_TUNNEL_DEFAULTS.enabled
+  if (tunnelSource?.enabled !== undefined && typeof tunnelSource.enabled !== "boolean") {
+    warnings.push("cloudflareTunnel.enabled must be a boolean")
+  }
+
+  const cloudflaredPath = typeof tunnelSource?.cloudflaredPath === "string" && tunnelSource.cloudflaredPath.trim()
+    ? tunnelSource.cloudflaredPath.trim()
+    : CLOUDFLARE_TUNNEL_DEFAULTS.cloudflaredPath
+  if (tunnelSource?.cloudflaredPath !== undefined && typeof tunnelSource.cloudflaredPath !== "string") {
+    warnings.push("cloudflareTunnel.cloudflaredPath must be a string")
+  }
+
+  const rawMode = tunnelSource?.mode
+  const mode: CloudflareTunnelSettings["mode"] =
+    rawMode === "always-ask" || rawMode === "auto-expose"
+      ? rawMode
+      : CLOUDFLARE_TUNNEL_DEFAULTS.mode
+  if (tunnelSource?.mode !== undefined && rawMode !== "always-ask" && rawMode !== "auto-expose") {
+    warnings.push(`cloudflareTunnel.mode must be "always-ask" or "auto-expose"`)
+  }
+
+  return { enabled, cloudflaredPath, mode }
+}
+
+function normalizeAuthSettings(value: unknown, warnings: string[]): AuthSettings {
+  const source = value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null
+  if (value !== undefined && !source) {
+    warnings.push("auth must be an object")
+  }
+
+  const rawMaxAge = source?.sessionMaxAgeDays
+  let sessionMaxAgeDays = AUTH_DEFAULTS.sessionMaxAgeDays
+  if (rawMaxAge !== undefined) {
+    if (typeof rawMaxAge !== "number" || !Number.isFinite(rawMaxAge)) {
+      warnings.push("auth.sessionMaxAgeDays must be a number")
+    } else if (rawMaxAge < AUTH_SESSION_MAX_AGE_DAYS_MIN || rawMaxAge > AUTH_SESSION_MAX_AGE_DAYS_MAX) {
+      warnings.push(`auth.sessionMaxAgeDays must be between ${AUTH_SESSION_MAX_AGE_DAYS_MIN} and ${AUTH_SESSION_MAX_AGE_DAYS_MAX}`)
+      sessionMaxAgeDays = clampNumber(rawMaxAge, AUTH_DEFAULTS.sessionMaxAgeDays, AUTH_SESSION_MAX_AGE_DAYS_MIN, AUTH_SESSION_MAX_AGE_DAYS_MAX)
+    } else {
+      sessionMaxAgeDays = Math.round(rawMaxAge)
+    }
+  }
+
+  return { sessionMaxAgeDays }
+}
+
 function toFilePayload(state: AppSettingsState) {
   return {
     analyticsEnabled: state.analyticsEnabled,
@@ -224,6 +290,8 @@ function toFilePayload(state: AppSettingsState) {
     editor: state.editor,
     defaultProvider: state.defaultProvider,
     providerDefaults: state.providerDefaults,
+    cloudflareTunnel: state.cloudflareTunnel,
+    auth: state.auth,
   }
 }
 
@@ -240,6 +308,8 @@ function toSnapshot(state: AppSettingsState): AppSettingsSnapshot {
     providerDefaults: state.providerDefaults,
     warning: state.warning,
     filePathDisplay: state.filePathDisplay,
+    cloudflareTunnel: state.cloudflareTunnel,
+    auth: state.auth,
   }
 }
 
@@ -270,6 +340,9 @@ function normalizeAppSettings(
     warnings.push("analyticsUserId must be a non-empty string")
   }
 
+  const cloudflareTunnel = normalizeCloudflareTunnel(source?.cloudflareTunnel, warnings)
+  const auth = normalizeAuthSettings(source?.auth, warnings)
+
   const editorPreset = normalizeEditorPreset(source?.editor?.preset)
   const state: AppSettingsState = {
     analyticsEnabled,
@@ -290,6 +363,8 @@ function normalizeAppSettings(
     providerDefaults: normalizeProviderDefaults(source?.providerDefaults),
     warning: null,
     filePathDisplay: formatDisplayPath(filePath),
+    cloudflareTunnel,
+    auth,
   }
 
   const shouldWrite = JSON.stringify(source ? toComparablePayload(source) : null) !== JSON.stringify(toFilePayload(state))
@@ -316,6 +391,8 @@ function toComparablePayload(source: AppSettingsFile) {
     editor: source.editor,
     defaultProvider: source.defaultProvider,
     providerDefaults: source.providerDefaults,
+    cloudflareTunnel: source.cloudflareTunnel,
+    auth: source.auth,
   }
 }
 
@@ -348,6 +425,14 @@ function applyPatch(state: AppSettingsState, patch: AppSettingsPatch): AppSettin
           ...patch.providerDefaults?.codex?.modelOptions,
         },
       },
+    },
+    cloudflareTunnel: {
+      ...state.cloudflareTunnel,
+      ...patch.cloudflareTunnel,
+    },
+    auth: {
+      ...state.auth,
+      ...patch.auth,
     },
   }, state.filePathDisplay).payload
 }
@@ -423,6 +508,24 @@ export class AppSettingsManager {
 
   async write(value: { analyticsEnabled: boolean }) {
     return this.writePatch({ analyticsEnabled: value.analyticsEnabled })
+  }
+
+  async setCloudflareTunnel(patch: Partial<CloudflareTunnelSettings>) {
+    if (patch.mode !== undefined && patch.mode !== "always-ask" && patch.mode !== "auto-expose") {
+      throw new Error("Invalid cloudflareTunnel.mode")
+    }
+    return this.writePatch({ cloudflareTunnel: patch })
+  }
+
+  async setAuth(patch: Partial<AuthSettings>) {
+    if (patch.sessionMaxAgeDays !== undefined) {
+      const value = patch.sessionMaxAgeDays
+      if (typeof value !== "number" || !Number.isFinite(value)
+        || value < AUTH_SESSION_MAX_AGE_DAYS_MIN || value > AUTH_SESSION_MAX_AGE_DAYS_MAX) {
+        throw new Error(`auth.sessionMaxAgeDays must be between ${AUTH_SESSION_MAX_AGE_DAYS_MIN} and ${AUTH_SESSION_MAX_AGE_DAYS_MAX}`)
+      }
+    }
+    return this.writePatch({ auth: patch })
   }
 
   async writePatch(patch: AppSettingsPatch) {

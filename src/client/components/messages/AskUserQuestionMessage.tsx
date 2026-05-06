@@ -88,7 +88,7 @@ function Checkbox({
         "flex-shrink-0 w-5 h-5 border-1 flex items-center justify-center",
         multiSelect ? "rounded" : "rounded-full",
         selected
-          ? "border-slate-500/0 bg-foreground"
+          ? "border-transparent bg-foreground"
           : "border-muted-foreground/50 bg-background",
         onClick && selected && "cursor-pointer"
       )}
@@ -371,7 +371,7 @@ export function AskUserQuestionMessage({ message, onSubmit, isLatest }: Props) {
               onChange={(e) => handleCustomInputChange(currentQuestion, e.target.value)}
               onKeyDown={handleCustomInputEnter}
               placeholder="Other..."
-              className="flex-1 px-3 !py-1 pl-4 min-h-[55px] min-w-0 text-sm bg-transparent outline-none text-foreground placeholder:text-muted-foreground"
+              className="flex-1 px-3 !py-1 pl-4 min-h-[55px] min-w-0 text-sm bg-transparent outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background rounded-md text-foreground placeholder:text-muted-foreground"
             />
             <Checkbox
               selected={!!customInput}

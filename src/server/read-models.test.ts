@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { deriveChatSnapshot, deriveLocalProjectsSnapshot, deriveSidebarData } from "./read-models"
 import { createEmptyState } from "./events"
+import type { SlashCommand } from "../shared/types"
 
 describe("read models", () => {
   test("include provider data in sidebar rows", () => {
@@ -23,6 +24,7 @@ describe("read models", () => {
       provider: "codex",
       planMode: false,
       sessionToken: "thread-1",
+      sourceHash: null,
       lastTurnOutcome: null,
     })
 
@@ -55,6 +57,7 @@ describe("read models", () => {
       provider: null,
       planMode: false,
       sessionToken: null,
+      sourceHash: null,
       lastTurnOutcome: null,
     })
     state.chatsById.set("chat-archived", {
@@ -68,6 +71,7 @@ describe("read models", () => {
       provider: null,
       planMode: false,
       sessionToken: null,
+      sourceHash: null,
       lastTurnOutcome: null,
     })
 
@@ -97,6 +101,7 @@ describe("read models", () => {
       provider: "claude",
       planMode: true,
       sessionToken: "session-1",
+      sourceHash: null,
       lastTurnOutcome: null,
     })
     state.queuedMessagesByChatId.set("chat-1", [{
@@ -113,6 +118,7 @@ describe("read models", () => {
       state,
       new Map(),
       new Set(),
+      new Set(),
       "chat-1",
       () => ({
         messages: [],
@@ -121,7 +127,8 @@ describe("read models", () => {
           olderCursor: null,
           recentLimit: 200,
         },
-      })
+      }),
+      () => []
     )
     expect(chat?.runtime.provider).toBe("claude")
     expect(chat?.queuedMessages.map((message) => message.content)).toEqual(["follow up"])
@@ -155,6 +162,7 @@ describe("read models", () => {
       provider: "codex",
       planMode: false,
       sessionToken: null,
+      sourceHash: null,
       lastMessageAt: 100,
       lastTurnOutcome: null,
     })
@@ -198,6 +206,7 @@ describe("read models", () => {
       provider: "claude",
       planMode: false,
       sessionToken: null,
+      sourceHash: null,
       lastMessageAt: 100,
       lastTurnOutcome: null,
     })
@@ -211,6 +220,7 @@ describe("read models", () => {
       provider: "claude",
       planMode: false,
       sessionToken: null,
+      sourceHash: null,
       lastMessageAt: 200,
       lastTurnOutcome: null,
     })
@@ -267,6 +277,7 @@ describe("read models", () => {
       provider: "claude",
       planMode: false,
       sessionToken: null,
+      sourceHash: null,
       lastMessageAt: 1_000_000 - 60 * 60 * 1_000,
       lastTurnOutcome: null,
     })
@@ -280,6 +291,7 @@ describe("read models", () => {
       provider: "claude",
       planMode: false,
       sessionToken: null,
+      sourceHash: null,
       lastMessageAt: 1_000_000 - 26 * 60 * 60 * 1_000,
       lastTurnOutcome: null,
     })
@@ -314,6 +326,7 @@ describe("read models", () => {
         provider: "claude",
         planMode: false,
         sessionToken: null,
+        sourceHash: null,
         lastMessageAt: 1_000_000 - chatNumber * 60 * 1_000,
         lastTurnOutcome: null,
       })
@@ -352,6 +365,7 @@ describe("read models", () => {
       provider: "claude",
       planMode: false,
       sessionToken: "session-active",
+      sourceHash: null,
       lastTurnOutcome: null,
     })
     state.chatsById.set("chat-pending", {
@@ -364,6 +378,7 @@ describe("read models", () => {
       provider: "claude",
       planMode: false,
       sessionToken: null,
+      sourceHash: null,
       pendingForkSessionToken: "session-parent",
       lastTurnOutcome: null,
     })
@@ -377,6 +392,7 @@ describe("read models", () => {
       provider: "codex",
       planMode: false,
       sessionToken: "thread-1",
+      sourceHash: null,
       lastTurnOutcome: null,
     })
 
@@ -389,5 +405,105 @@ describe("read models", () => {
     expect(sidebar.projectGroups[0]?.chats.find((chat) => chat.chatId === "chat-active")?.canFork).toBeUndefined()
     expect(sidebar.projectGroups[0]?.chats.find((chat) => chat.chatId === "chat-pending")?.canFork).toBe(true)
     expect(sidebar.projectGroups[0]?.chats.find((chat) => chat.chatId === "chat-draining")?.canFork).toBeUndefined()
+  })
+
+  test("passes slash commands from ChatRecord through to ChatSnapshot", () => {
+    const slashCommands: SlashCommand[] = [
+      { name: "review", description: "r", argumentHint: "<pr>" },
+    ]
+    const state = createEmptyState()
+    state.projectsById.set("project-1", {
+      id: "project-1",
+      localPath: "/tmp/project",
+      title: "Project",
+      createdAt: 1,
+      updatedAt: 1,
+    })
+    state.projectIdsByPath.set("/tmp/project", "project-1")
+    state.chatsById.set("chat-1", {
+      id: "chat-1",
+      projectId: "project-1",
+      title: "Chat",
+      createdAt: 1,
+      updatedAt: 1,
+      unread: false,
+      provider: "claude",
+      planMode: false,
+      sessionToken: null,
+      sourceHash: null,
+      lastTurnOutcome: null,
+      slashCommands,
+    })
+
+    const snapshot = deriveChatSnapshot(
+      state,
+      new Map(),
+      new Set(),
+      new Set(),
+      "chat-1",
+      () => ({
+        messages: [],
+        history: {
+          hasOlder: false,
+          olderCursor: null,
+          recentLimit: 200,
+        },
+      }),
+      () => []
+    )
+
+    expect(snapshot?.slashCommands).toEqual(slashCommands)
+  })
+})
+
+describe("deriveChatSnapshot schedules", () => {
+  test("empty schedules produces empty map and null live id", () => {
+    const state = createEmptyState()
+    state.projectsById.set("p1", {
+      id: "p1", localPath: "/tmp/p", title: "P", createdAt: 0, updatedAt: 0,
+    })
+    state.chatsById.set("c1", {
+      id: "c1", projectId: "p1", title: "Chat", createdAt: 0, updatedAt: 0,
+      unread: false, provider: null, planMode: false, sessionToken: null, sourceHash: null, lastTurnOutcome: null,
+    })
+
+    const snapshot = deriveChatSnapshot(
+      state,
+      new Map(),
+      new Set(),
+      new Set(),
+      "c1",
+      () => ({ messages: [], history: { hasOlder: false, olderCursor: null, recentLimit: 0 } }),
+      () => []
+    )
+    expect(snapshot!.schedules).toEqual({})
+    expect(snapshot!.liveScheduleId).toBeNull()
+  })
+
+  test("proposed event projects to schedules + liveScheduleId", () => {
+    const state = createEmptyState()
+    state.projectsById.set("p1", {
+      id: "p1", localPath: "/tmp/p", title: "P", createdAt: 0, updatedAt: 0,
+    })
+    state.chatsById.set("c1", {
+      id: "c1", projectId: "p1", title: "Chat", createdAt: 0, updatedAt: 0,
+      unread: false, provider: null, planMode: false, sessionToken: null, sourceHash: null, lastTurnOutcome: null,
+    })
+    state.autoContinueEventsByChatId.set("c1", [{
+      v: 3, kind: "auto_continue_proposed", timestamp: 1, chatId: "c1", scheduleId: "s1",
+      detectedAt: 1, resetAt: 2_000, tz: "Asia/Saigon",
+    }])
+
+    const snapshot = deriveChatSnapshot(
+      state,
+      new Map(),
+      new Set(),
+      new Set(),
+      "c1",
+      () => ({ messages: [], history: { hasOlder: false, olderCursor: null, recentLimit: 0 } }),
+      () => []
+    )
+    expect(snapshot!.schedules["s1"].state).toBe("proposed")
+    expect(snapshot!.liveScheduleId).toBe("s1")
   })
 })

@@ -1,4 +1,4 @@
-export const STORE_VERSION = 2 as const
+export const STORE_VERSION = 3 as const
 export const PROTOCOL_VERSION = 1 as const
 
 export type AgentProvider = "claude" | "codex"
@@ -11,7 +11,7 @@ export type EditorPreset = "cursor" | "vscode" | "xcode" | "windsurf" | "custom"
 export const DEFAULT_OPENAI_SDK_MODEL = "gpt-5.4-mini"
 export const DEFAULT_OPENROUTER_SDK_MODEL = "moonshotai/kimi-k2.5:nitro"
 
-export type AttachmentKind = "image" | "file"
+export type AttachmentKind = "image" | "file" | "mention"
 export type StandaloneTranscriptAttachmentMode = "metadata" | "bundle"
 export type StandaloneTranscriptTheme = "light" | "dark"
 
@@ -124,6 +124,7 @@ export interface QueuedChatMessage {
   model?: string
   modelOptions?: ModelOptions
   planMode?: boolean
+  autoContinue?: { scheduleId: string }
 }
 
 export interface InternalUserAttachmentsData {
@@ -365,6 +366,54 @@ export type KannaStatus =
   | "waiting_for_user"
   | "failed"
 
+export type PushTransitionKind = "waiting_for_user" | "failed" | "completed"
+
+export interface PushSubscriptionRecord {
+  id: string
+  endpoint: string
+  keys: { p256dh: string; auth: string }
+  label: string
+  userAgent: string
+  createdAt: number
+  lastSeenAt: number
+}
+
+export interface PushPayload {
+  v: 1
+  kind: PushTransitionKind
+  projectLocalPath: string
+  projectTitle: string
+  chatId: string
+  chatTitle: string
+  chatUrl: string
+  ts: number
+}
+
+export interface PushPreferences {
+  globalEnabled: boolean
+  mutedProjectPaths: string[]
+}
+
+export interface PushDeviceSummary {
+  id: string
+  label: string
+  userAgent: string
+  createdAt: number
+  lastSeenAt: number
+  isCurrentDevice: boolean
+}
+
+export interface PushConfigSnapshot {
+  vapidPublicKey: string
+  preferences: PushPreferences
+  devices: PushDeviceSummary[]
+}
+
+export interface PushSubscribeRequestPayload {
+  endpoint: string
+  keys: { p256dh: string; auth: string }
+}
+
 export interface ProjectSummary {
   id: string
   localPath: string
@@ -418,6 +467,17 @@ export interface LocalProjectsSnapshot {
   projects: LocalProjectSummary[]
 }
 
+export interface AuthSettings {
+  sessionMaxAgeDays: number
+}
+
+export const AUTH_DEFAULTS: AuthSettings = {
+  sessionMaxAgeDays: 30,
+}
+
+export const AUTH_SESSION_MAX_AGE_DAYS_MIN = 1
+export const AUTH_SESSION_MAX_AGE_DAYS_MAX = 365
+
 export interface AppSettingsSnapshot {
   analyticsEnabled: boolean
   browserSettingsMigrated: boolean
@@ -436,6 +496,25 @@ export interface AppSettingsSnapshot {
   providerDefaults: ChatProviderPreferences
   warning: string | null
   filePathDisplay: string
+  cloudflareTunnel: CloudflareTunnelSettings
+  auth: AuthSettings
+}
+
+export interface AppSettingsPatch {
+  analyticsEnabled?: boolean
+  browserSettingsMigrated?: boolean
+  theme?: AppThemePreference
+  chatSoundPreference?: ChatSoundPreference
+  chatSoundId?: ChatSoundId
+  terminal?: Partial<AppSettingsSnapshot["terminal"]>
+  editor?: Partial<AppSettingsSnapshot["editor"]>
+  defaultProvider?: DefaultProviderPreference
+  providerDefaults?: {
+    claude?: Partial<ProviderPreference<ClaudeModelOptions>>
+    codex?: Partial<ProviderPreference<CodexModelOptions>>
+  }
+  cloudflareTunnel?: Partial<CloudflareTunnelSettings>
+  auth?: Partial<AuthSettings>
 }
 
 export interface AppSettingsPatch {
@@ -662,6 +741,7 @@ export interface UserPromptEntry extends TranscriptEntryBase {
   content: string
   attachments?: ChatAttachment[]
   steered?: boolean
+  autoContinue?: { scheduleId: string }
 }
 
 export interface SystemInitEntry extends TranscriptEntryBase {
@@ -911,6 +991,7 @@ export type TranscriptEntry =
   | CompactSummaryEntry
   | ContextClearedEntry
   | InterruptedEntry
+  | AutoContinuePromptEntry
 
 export interface HydratedToolCallBase<TKind extends string, TInput, TResult> {
   id: string
@@ -1018,7 +1099,7 @@ export type HydratedToolCall =
   | HydratedUnknownToolCall
 
 export type HydratedTranscriptMessage =
-  | ({ kind: "user_prompt"; content: string; attachments?: ChatAttachment[]; steered?: boolean; id: string; messageId?: string; timestamp: string; hidden?: boolean })
+  | ({ kind: "user_prompt"; content: string; attachments?: ChatAttachment[]; steered?: boolean; autoContinue?: { scheduleId: string }; id: string; messageId?: string; timestamp: string; hidden?: boolean })
   | ({ kind: "system_init"; model: string; tools: string[]; agents: string[]; slashCommands: string[]; mcpServers: McpServerInfo[]; provider: AgentProvider; id: string; messageId?: string; timestamp: string; hidden?: boolean; debugRaw?: string })
   | ({ kind: "account_info"; accountInfo: AccountInfo; id: string; messageId?: string; timestamp: string; hidden?: boolean })
   | ({ kind: "assistant_text"; text: string; id: string; messageId?: string; timestamp: string; hidden?: boolean })
@@ -1030,6 +1111,7 @@ export type HydratedTranscriptMessage =
   | ({ kind: "context_cleared"; id: string; messageId?: string; timestamp: string; hidden?: boolean })
   | ({ kind: "interrupted"; id: string; messageId?: string; timestamp: string; hidden?: boolean })
   | ({ kind: "unknown"; json: string; id: string; messageId?: string; timestamp: string; hidden?: boolean })
+  | ({ kind: "auto_continue_prompt"; scheduleId: string; id: string; messageId?: string; timestamp: string; hidden?: boolean })
   | ({ id: string; messageId?: string; hidden?: boolean } & HydratedToolCall)
 
 export interface ChatRuntime {
@@ -1050,12 +1132,24 @@ export interface ChatHistorySnapshot {
   recentLimit: number
 }
 
+export interface SlashCommand {
+  name: string
+  description: string
+  argumentHint: string
+}
+
 export interface ChatSnapshot {
   runtime: ChatRuntime
   queuedMessages: QueuedChatMessage[]
   messages: TranscriptEntry[]
   history: ChatHistorySnapshot
   availableProviders: ProviderCatalogEntry[]
+  slashCommands: SlashCommand[]
+  slashCommandsLoading: boolean
+  schedules: Record<string, AutoContinueSchedule>
+  liveScheduleId: string | null
+  tunnels: Record<string, CloudflareTunnelRecord>
+  liveTunnelId: string | null
 }
 
 export interface ChatHistoryPage {
@@ -1072,4 +1166,48 @@ export interface KannaSnapshot {
 export interface PendingToolSnapshot {
   toolUseId: string
   toolKind: "ask_user_question" | "exit_plan_mode"
+}
+
+export type AutoContinueScheduleState = "proposed" | "scheduled" | "fired" | "cancelled"
+
+export interface AutoContinueSchedule {
+  scheduleId: string
+  state: AutoContinueScheduleState
+  scheduledAt: number | null
+  tz: string
+  resetAt: number
+  detectedAt: number
+}
+
+export interface AutoContinuePromptEntry extends TranscriptEntryBase {
+  kind: "auto_continue_prompt"
+  scheduleId: string
+}
+
+export type CloudflareTunnelMode = "always-ask" | "auto-expose"
+
+export interface CloudflareTunnelSettings {
+  enabled: boolean
+  cloudflaredPath: string
+  mode: CloudflareTunnelMode
+}
+
+export const CLOUDFLARE_TUNNEL_DEFAULTS: CloudflareTunnelSettings = {
+  enabled: false,
+  cloudflaredPath: "cloudflared",
+  mode: "always-ask",
+}
+
+export type CloudflareTunnelState = "proposed" | "active" | "stopped" | "failed"
+
+export interface CloudflareTunnelRecord {
+  tunnelId: string
+  chatId: string
+  port: number
+  state: CloudflareTunnelState
+  url: string | null
+  error: string | null
+  proposedAt: number
+  activatedAt: number | null
+  stoppedAt: number | null
 }

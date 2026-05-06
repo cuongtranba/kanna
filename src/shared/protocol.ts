@@ -6,11 +6,14 @@ import type {
   ChatDiffSnapshot,
   ChatHistoryPage,
   ChatSnapshot,
+  CloudflareTunnelSettings,
   DiffCommitMode,
   KeybindingsSnapshot,
   LlmProviderSnapshot,
   LocalProjectsSnapshot,
   ModelOptions,
+  PushConfigSnapshot,
+  PushSubscribeRequestPayload,
   SidebarData,
   StandaloneTranscriptAttachmentMode,
   StandaloneTranscriptExportResult,
@@ -31,6 +34,7 @@ export type SubscriptionTopic =
   | { type: "update" }
   | { type: "keybindings" }
   | { type: "app-settings" }
+  | { type: "push-config" }
   | { type: "chat"; chatId: string; recentLimit?: number }
   | { type: "project-git"; projectId: string }
   | { type: "terminal"; terminalId: string }
@@ -56,16 +60,19 @@ export type TerminalEvent =
 export type ClientCommand =
   | { type: "project.open"; localPath: string }
   | { type: "project.create"; localPath: string; title: string }
+  | { type: "sessions.importClaude" }
   | { type: "project.remove"; projectId: string }
   | { type: "sidebar.reorderProjectGroups"; projectIds: string[] }
   | { type: "project.readDiffPatch"; projectId: string; path: string }
   | { type: "system.ping" }
   | { type: "update.check"; force?: boolean }
   | { type: "update.install" }
+  | { type: "update.reload" }
   | { type: "settings.readKeybindings" }
   | { type: "settings.writeKeybindings"; bindings: KeybindingsSnapshot["bindings"] }
   | { type: "settings.readAppSettings" }
   | { type: "settings.writeAppSettings"; analyticsEnabled: boolean }
+  | { type: "appSettings.setCloudflareTunnel"; patch: Partial<CloudflareTunnelSettings> }
   | { type: "settings.writeAppSettingsPatch"; patch: AppSettingsPatch }
   | { type: "settings.readLlmProvider" }
   | { type: "skills.search"; query: string; limit?: number }
@@ -114,6 +121,7 @@ export type ClientCommand =
       modelOptions?: ModelOptions
       effort?: string
       planMode?: boolean
+      autoResumeOnRateLimit?: boolean
     }
   | { type: "chat.refreshDiffs"; chatId: string }
   | { type: "chat.initGit"; chatId: string }
@@ -202,6 +210,7 @@ export type ClientCommand =
       model?: string
       modelOptions?: ModelOptions
       planMode?: boolean
+      autoResumeOnRateLimit?: boolean
     }
   | {
       type: "message.steer"
@@ -213,10 +222,22 @@ export type ClientCommand =
       chatId: string
       queuedMessageId: string
     }
+  | { type: "autoContinue.accept"; chatId: string; scheduleId: string; scheduledAt: number }
+  | { type: "autoContinue.reschedule"; chatId: string; scheduleId: string; scheduledAt: number }
+  | { type: "autoContinue.cancel"; chatId: string; scheduleId: string }
+  | { type: "tunnel.accept"; chatId: string; tunnelId: string }
+  | { type: "tunnel.stop"; chatId: string; tunnelId: string }
+  | { type: "tunnel.retry"; chatId: string; tunnelId: string }
   | { type: "terminal.create"; projectId: string; terminalId: string; cols: number; rows: number; scrollback: number }
   | { type: "terminal.input"; terminalId: string; data: string }
   | { type: "terminal.resize"; terminalId: string; cols: number; rows: number }
   | { type: "terminal.close"; terminalId: string }
+  | { type: "push.identifyDevice"; pushDeviceId: string | null }
+  | { type: "push.subscribe"; subscription: PushSubscribeRequestPayload; label: string; userAgent: string }
+  | { type: "push.unsubscribe"; pushDeviceId: string }
+  | { type: "push.test" }
+  | { type: "push.setProjectMute"; localPath: string; muted: boolean }
+  | { type: "push.setFocusedChat"; chatId: string | null }
 
 export type OpenExternalAction = Extract<ClientCommand, { type: "system.openExternal" }>["action"]
 
@@ -232,6 +253,7 @@ export type ServerSnapshot =
   | { type: "keybindings"; data: KeybindingsSnapshot }
   | { type: "app-settings"; data: AppSettingsSnapshot }
   | { type: "llm-provider"; data: LlmProviderSnapshot }
+  | { type: "push-config"; data: PushConfigSnapshot }
   | { type: "chat"; data: ChatSnapshot | null }
   | { type: "project-git"; data: ChatDiffSnapshot | null }
   | { type: "terminal"; data: TerminalSnapshot | null }

@@ -27,6 +27,7 @@ import { useStickyChatFocus } from "../useStickyChatFocus"
 import { useTerminalToggleAnimation } from "../useTerminalToggleAnimation"
 import type { KannaState } from "../useKannaState"
 import { getNextMeasuredInputHeight, getTranscriptPaddingBottom } from "../useKannaState"
+import { EMPTY_SCHEDULES } from "../KannaTranscript"
 import { ChatInputDock } from "./ChatInputDock"
 import { ChatTranscriptViewport } from "./ChatTranscriptViewport"
 import { TerminalWorkspaceShell } from "./TerminalWorkspaceShell"
@@ -43,6 +44,10 @@ export {
   hasFileDragTypes,
   shouldAutoFollowTranscriptResize,
 } from "./utils"
+
+const TERMINAL_TOGGLE_DURATION_STYLE: CSSProperties = {
+  "--terminal-toggle-duration": `${TERMINAL_TOGGLE_ANIMATION_DURATION_MS}ms`,
+} as CSSProperties
 
 function useEmptyStateTyping(showEmptyState: boolean, activeChatId: string | null) {
   const [typedEmptyStateText, setTypedEmptyStateText] = useState("")
@@ -291,9 +296,7 @@ const DesktopSidebarPane = memo(function DesktopSidebarPane({
         data-right-sidebar-open={showRightSidebar ? "true" : "false"}
         data-right-sidebar-animated="false"
         data-right-sidebar-visual
-        style={{
-          "--terminal-toggle-duration": `${TERMINAL_TOGGLE_ANIMATION_DURATION_MS}ms`,
-        } as CSSProperties}
+        style={TERMINAL_TOGGLE_DURATION_STYLE}
       >
         {content}
       </div>
@@ -408,9 +411,7 @@ function ChatWorkspace({
           data-terminal-open={showTerminalPane ? "true" : "false"}
           data-terminal-animated="false"
           data-terminal-visual
-          style={{
-            "--terminal-toggle-duration": `${TERMINAL_TOGGLE_ANIMATION_DURATION_MS}ms`,
-          } as CSSProperties}
+          style={TERMINAL_TOGGLE_DURATION_STYLE}
         >
           <TerminalWorkspaceShell
             projectId={projectId}
@@ -708,6 +709,42 @@ export function ChatPage() {
     await state.handleSend(content, options)
   }, [scrollToTranscriptEnd, state])
 
+  const handleAutoContinueAccept = useCallback((scheduleId: string, scheduledAt: number) => {
+    const chatId = state.activeChatId
+    if (!chatId) return
+    void state.socket.command({ type: "autoContinue.accept", chatId, scheduleId, scheduledAt }).catch(() => {})
+  }, [state.activeChatId, state.socket])
+
+  const handleAutoContinueReschedule = useCallback((scheduleId: string, scheduledAt: number) => {
+    const chatId = state.activeChatId
+    if (!chatId) return
+    void state.socket.command({ type: "autoContinue.reschedule", chatId, scheduleId, scheduledAt }).catch(() => {})
+  }, [state.activeChatId, state.socket])
+
+  const handleAutoContinueCancel = useCallback((scheduleId: string) => {
+    const chatId = state.activeChatId
+    if (!chatId) return
+    void state.socket.command({ type: "autoContinue.cancel", chatId, scheduleId }).catch(() => {})
+  }, [state.activeChatId, state.socket])
+
+  const sendTunnelAccept = useCallback(async (tunnelId: string): Promise<void> => {
+    const chatId = state.activeChatId
+    if (!chatId) return
+    await state.socket.command({ type: "tunnel.accept", chatId, tunnelId })
+  }, [state.activeChatId, state.socket])
+
+  const sendTunnelStop = useCallback(async (tunnelId: string): Promise<void> => {
+    const chatId = state.activeChatId
+    if (!chatId) return
+    await state.socket.command({ type: "tunnel.stop", chatId, tunnelId })
+  }, [state.activeChatId, state.socket])
+
+  const sendTunnelRetry = useCallback(async (tunnelId: string): Promise<void> => {
+    const chatId = state.activeChatId
+    if (!chatId) return
+    await state.socket.command({ type: "tunnel.retry", chatId, tunnelId })
+  }, [state.activeChatId, state.socket])
+
   useEffect(() => {
     return () => clearShowScrollTimeout()
   }, [clearShowScrollTimeout])
@@ -915,6 +952,15 @@ export function ChatPage() {
           platform={state.localProjects?.machine.platform}
           onAskUserQuestionSubmit={state.handleAskUserQuestion}
           onExitPlanModeConfirm={state.handleExitPlanMode}
+          schedules={state.chatSnapshot?.schedules ?? EMPTY_SCHEDULES}
+          onAutoContinueAccept={handleAutoContinueAccept}
+          onAutoContinueReschedule={handleAutoContinueReschedule}
+          onAutoContinueCancel={handleAutoContinueCancel}
+          tunnels={state.chatSnapshot?.tunnels}
+          liveTunnelId={state.chatSnapshot?.liveTunnelId}
+          onTunnelAccept={sendTunnelAccept}
+          onTunnelStop={sendTunnelStop}
+          onTunnelRetry={sendTunnelRetry}
           showScrollButton={showScrollToBottom && state.messages.length > 0}
           onIsAtEndChange={onIsAtEndChange}
           scrollToBottom={() => scrollToTranscriptEnd(true)}

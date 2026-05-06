@@ -2,7 +2,8 @@ import { memo, type MouseEvent as ReactMouseEvent, type ReactNode, useMemo } fro
 import { ChevronRight, Loader2, MoreHorizontal, SquarePen } from "lucide-react"
 import {
   DndContext,
-  PointerSensor,
+  MouseSensor,
+  TouchSensor,
   KeyboardSensor,
   useSensor,
   useSensors,
@@ -206,7 +207,7 @@ const SortableProjectGroup = memo(function SortableProjectGroup({
       ref={setActivatorNodeRef}
       className={cn(
         "sticky top-0 bg-background dark:bg-card z-10 relative p-[10px] flex items-center justify-between",
-        "cursor-grab active:cursor-grabbing select-none touch-none",
+        "cursor-grab active:cursor-grabbing select-none touch-pan-y",
         isDragging && "cursor-grabbing"
       )}
       onClick={() => onToggleSection(groupKey)}
@@ -214,20 +215,20 @@ const SortableProjectGroup = memo(function SortableProjectGroup({
     >
       <div className="flex items-center gap-2">
         <span className="relative size-3.5 shrink-0 cursor-pointer">
-          <ChevronRight className={`translate-y-[1px] size-3.5 shrink-0 text-slate-400 transition-all duration-200 ${!collapsedSections.has(groupKey) && 'rotate-90'}`} />
-          
+          <ChevronRight className={`translate-y-[1px] size-3.5 shrink-0 text-muted-foreground transition-all duration-200 ${!collapsedSections.has(groupKey) && 'rotate-90'}`} />
+
           {/* {collapsedSections.has(groupKey) ? (
-            <ChevronRight className="translate-y-[1px] size-3.5 shrink-0 text-slate-400 transition-all duration-200" />
+            <ChevronRight className="translate-y-[1px] size-3.5 shrink-0 text-muted-foreground transition-all duration-200" />
           ) : (
             <>
-              <FolderOpen className="absolute inset-0 translate-y-[1px] size-3.5 shrink-0 text-slate-400 dark:text-slate-500 transition-all duration-200 group-hover/section:opacity-0" />
-              <ChevronRight className="absolute inset-0 translate-y-[1px] size-3.5 shrink-0 rotate-90 text-slate-400 opacity-0 transition-all duration-200 group-hover/section:opacity-100" />
+              <FolderOpen className="absolute inset-0 translate-y-[1px] size-3.5 shrink-0 text-muted-foreground transition-all duration-200 group-hover/section:opacity-0" />
+              <ChevronRight className="absolute inset-0 translate-y-[1px] size-3.5 shrink-0 rotate-90 text-muted-foreground opacity-0 transition-all duration-200 group-hover/section:opacity-100" />
             </>
           )} */}
         </span>
         <Tooltip>
           <TooltipTrigger asChild>
-            <span className="truncate max-w-[150px] whitespace-nowrap text-sm ">
+            <span className="truncate max-w-[150px] whitespace-nowrap text-sm text-muted-foreground">
               {getPathBasename(localPath)}
             </span>
           </TooltipTrigger>
@@ -335,7 +336,7 @@ const SortableProjectGroup = memo(function SortableProjectGroup({
               {hasMore && !isExpanded ? (
                 <button
                   onClick={() => onToggleExpandedGroup(groupKey)}
-                  className="pl-2.5 py-1 text-xs text-muted-foreground/60 hover:text-foreground/60 transition-colors flex flex-row items-center gap-1 justify-center"
+                  className="pl-2.5 py-1 text-xs text-muted-foreground/60 hover:text-foreground/60 transition-colors flex flex-row items-center gap-2 justify-center"
                 >
                  Show more
                 </button>
@@ -366,7 +367,8 @@ const LocalProjectsSectionImpl = function LocalProjectsSection({
   startingLocalPath,
 }: Props) {
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 2 } }),
+    useSensor(MouseSensor, { activationConstraint: { distance: 2 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } }),
     useSensor(KeyboardSensor)
   )
 

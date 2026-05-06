@@ -51,7 +51,7 @@ function ChatRowImpl({
       data-chat-id={normalizedChatId}
       className={cn(
         "group flex items-center gap-2 pl-2.5 pr-0.5 py-0.5 rounded-lg cursor-pointer border-border/0 hover:border-border hover:bg-muted/20 active:scale-[0.985] border transition-all",
-        activeChatId === normalizedChatId ? "bg-muted hover:bg-muted border-border" : "border-border/0 dark:hover:border-slate-400/10 "
+        activeChatId === normalizedChatId ? "bg-muted hover:bg-muted border-border" : "border-border/0 dark:hover:border-border/40 "
       )}
       onClick={() => onSelectChat(chat.chatId)}
     >
@@ -60,15 +60,15 @@ function ChatRowImpl({
       ) : chat.status === "waiting_for_user" ? (
         <div className="relative ">
           <div className=" rounded-full z-0 size-3.5 flex items-center justify-center ">
-            <div className="absolute rounded-full z-0 size-2.5 bg-blue-400/80 animate-ping" />
-            <div className=" rounded-full z-0 size-2.5 bg-blue-400 ring-2 ring-muted/20 dark:ring-muted/50" />
+            <div className="absolute rounded-full z-0 size-2.5 bg-info/80 animate-ping" />
+            <div className=" rounded-full z-0 size-2.5 bg-info ring-2 ring-muted/20 dark:ring-muted/50" />
           </div>
         </div>
       ) : chat.unread ? (
         <div className="relative ">
           <div className=" rounded-full z-0 size-3.5 flex items-center justify-center ">
-            <div className="absolute rounded-full z-0 size-2.5 bg-emerald-400/80 animate-ping" />
-            <div className=" rounded-full z-0 size-2.5 bg-emerald-400 ring-2 ring-muted/20 dark:ring-muted/50" />
+            <div className="absolute rounded-full z-0 size-2.5 bg-success/80 animate-ping" />
+            <div className=" rounded-full z-0 size-2.5 bg-success ring-2 ring-muted/20 dark:ring-muted/50" />
           </div>
         </div>
       ) : null}

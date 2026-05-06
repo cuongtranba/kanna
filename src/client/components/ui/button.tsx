@@ -24,6 +24,7 @@ const buttonVariants = cva(
         sm: "h-9 rounded-full px-3",
         lg: "h-11 rounded-full px-8",
         icon: "h-9 w-9 rounded-full",
+        "icon-mobile": "h-11 w-11 rounded-full md:h-9 md:w-9",
         none: "",
         "icon-sm": "h-5.5 w-5.5 rounded-md",
       },
@@ -40,9 +41,10 @@ export interface ButtonProps
   VariantProps<typeof buttonVariants> { }
 
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant, size, ...props }, ref) => {
+  ({ className, variant, size, type = "button", ...props }, ref) => {
     return (
       <button
+        type={type}
         className={cn(buttonVariants({ variant, size, className }))}
         ref={ref}
         {...props}

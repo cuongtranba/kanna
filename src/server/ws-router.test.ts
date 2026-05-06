@@ -2,8 +2,8 @@ import { describe, expect, test } from "bun:test"
 import { mkdtemp, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
+import { AUTH_DEFAULTS, CLOUDFLARE_TUNNEL_DEFAULTS, PROTOCOL_VERSION } from "../shared/types"
 import type { AppSettingsSnapshot, KeybindingsSnapshot, LlmProviderSnapshot, UpdateSnapshot } from "../shared/types"
-import { PROTOCOL_VERSION } from "../shared/types"
 import { createEmptyState } from "./events"
 import {
   assertSafeSkillId,
@@ -69,6 +69,8 @@ const DEFAULT_KEYBINDINGS_SNAPSHOT: KeybindingsSnapshot = {
 
 const DEFAULT_APP_SETTINGS_SNAPSHOT: AppSettingsSnapshot = {
   analyticsEnabled: true,
+  cloudflareTunnel: CLOUDFLARE_TUNNEL_DEFAULTS,
+  auth: AUTH_DEFAULTS,
   browserSettingsMigrated: false,
   theme: "system",
   chatSoundPreference: "always",
@@ -219,11 +221,28 @@ const DEFAULT_LLM_PROVIDER_SNAPSHOT: LlmProviderSnapshot = {
   filePathDisplay: "~/.kanna/llm-provider.json",
 }
 
+const NOOP_PUSH_MANAGER = {
+  initialize: async () => {},
+  observeStatuses: async () => {},
+  getConfigSnapshot: () => ({
+    vapidPublicKey: "test-key",
+    preferences: { globalEnabled: true, mutedProjectPaths: [] },
+    devices: [],
+  }),
+  addSubscription: async () => ({ id: "test-device-id" }),
+  removeSubscription: async () => {},
+  recordDeviceSeen: async () => {},
+  setProjectMute: async () => {},
+  setFocusedChat: () => {},
+  clearFocus: () => {},
+  sendTest: async () => {},
+} as never
+
 describe("ws-router", () => {
   test("acks system.ping without broadcasting snapshots", async () => {
     const router = createWsRouter({
       store: { state: createEmptyState() } as never,
-      agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set() } as never,
+      agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set(), getSlashCommandsLoadingChatIds: () => new Set(), ensureSlashCommandsLoaded: async () => {} } as never,
       terminals: {
         getSnapshot: () => null,
         onEvent: () => () => {},
@@ -236,6 +255,7 @@ describe("ws-router", () => {
       getDiscoveredProjects: () => [],
       machineDisplayName: "Local Machine",
       updateManager: null,
+      pushManager: NOOP_PUSH_MANAGER,
     })
     const ws = new FakeWebSocket()
     router.handleOpen(ws as never)
@@ -264,7 +284,7 @@ describe("ws-router", () => {
     const writes: Array<Pick<LlmProviderSnapshot, "provider" | "apiKey" | "model" | "baseUrl">> = []
     const router = createWsRouter({
       store: { state: createEmptyState() } as never,
-      agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set() } as never,
+      agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set(), getSlashCommandsLoadingChatIds: () => new Set(), ensureSlashCommandsLoaded: async () => {} } as never,
       terminals: {
         getSnapshot: () => null,
         onEvent: () => () => {},
@@ -293,6 +313,7 @@ describe("ws-router", () => {
       getDiscoveredProjects: () => [],
       machineDisplayName: "Local Machine",
       updateManager: null,
+      pushManager: NOOP_PUSH_MANAGER,
     })
     const ws = new FakeWebSocket()
     router.handleOpen(ws as never)
@@ -380,11 +401,13 @@ describe("ws-router", () => {
             analyticsEnabled: value.analyticsEnabled,
           }
         },
+        setCloudflareTunnel: async (_patch) => ({ ...DEFAULT_APP_SETTINGS_SNAPSHOT }),
       },
       refreshDiscovery: async () => [],
       getDiscoveredProjects: () => [],
       machineDisplayName: "Local Machine",
       updateManager: null,
+      pushManager: NOOP_PUSH_MANAGER,
     })
     const ws = new FakeWebSocket()
     router.handleOpen(ws as never)
@@ -478,6 +501,7 @@ describe("ws-router", () => {
       getDiscoveredProjects: () => [],
       machineDisplayName: "Local Machine",
       updateManager: null,
+      pushManager: NOOP_PUSH_MANAGER,
     })
     const ws = new FakeWebSocket()
     router.handleOpen(ws as never)
@@ -576,6 +600,7 @@ describe("ws-router", () => {
             analyticsEnabled: value.analyticsEnabled,
           }
         },
+        setCloudflareTunnel: async (_patch) => ({ ...DEFAULT_APP_SETTINGS_SNAPSHOT }),
       },
       analytics: {
         track: (eventName: string) => {
@@ -587,6 +612,7 @@ describe("ws-router", () => {
       getDiscoveredProjects: () => [],
       machineDisplayName: "Local Machine",
       updateManager: null,
+      pushManager: NOOP_PUSH_MANAGER,
     })
     const ws = new FakeWebSocket()
 
@@ -689,6 +715,7 @@ describe("ws-router", () => {
         getDiscoveredProjects: () => [],
         machineDisplayName: "Local Machine",
         updateManager: null,
+        pushManager: NOOP_PUSH_MANAGER,
       })
       const ws = new FakeWebSocket()
 
@@ -725,7 +752,7 @@ describe("ws-router", () => {
   test("acks terminal.input without rebroadcasting terminal snapshots", async () => {
     const router = createWsRouter({
       store: { state: createEmptyState() } as never,
-      agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set() } as never,
+      agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set(), getSlashCommandsLoadingChatIds: () => new Set(), ensureSlashCommandsLoaded: async () => {} } as never,
       terminals: {
         getSnapshot: () => null,
         onEvent: () => () => {},
@@ -739,6 +766,7 @@ describe("ws-router", () => {
       getDiscoveredProjects: () => [],
       machineDisplayName: "Local Machine",
       updateManager: null,
+      pushManager: NOOP_PUSH_MANAGER,
     })
     const ws = new FakeWebSocket()
 
@@ -769,7 +797,7 @@ describe("ws-router", () => {
   test("subscribes and unsubscribes chat topics", async () => {
     const router = createWsRouter({
       store: { state: createEmptyState() } as never,
-      agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set() } as never,
+      agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set(), getSlashCommandsLoadingChatIds: () => new Set(), ensureSlashCommandsLoaded: async () => {} } as never,
       terminals: {
         getSnapshot: () => null,
         onEvent: () => () => {},
@@ -782,6 +810,7 @@ describe("ws-router", () => {
       getDiscoveredProjects: () => [],
       machineDisplayName: "Local Machine",
       updateManager: null,
+      pushManager: NOOP_PUSH_MANAGER,
     })
     const ws = new FakeWebSocket()
     router.handleOpen(ws as never)
@@ -841,6 +870,8 @@ describe("ws-router", () => {
           return new Map()
         },
         getDrainingChatIds: () => new Set(),
+        getSlashCommandsLoadingChatIds: () => new Set(),
+        ensureSlashCommandsLoaded: async () => {},
       } as never,
       terminals: {
         getSnapshot: () => null,
@@ -854,6 +885,7 @@ describe("ws-router", () => {
       getDiscoveredProjects: () => [],
       machineDisplayName: "Local Machine",
       updateManager: null,
+      pushManager: NOOP_PUSH_MANAGER,
     })
 
     const wsA = new FakeWebSocket()
@@ -905,7 +937,7 @@ describe("ws-router", () => {
         ignoreFile: async () => ({ snapshotChanged: false }),
         readPatch: async () => ({ patch: "" }),
       } as never,
-      agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set() } as never,
+      agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set(), getSlashCommandsLoadingChatIds: () => new Set(), ensureSlashCommandsLoaded: async () => {} } as never,
       terminals: {
         getSnapshot: () => null,
         onEvent: () => () => {},
@@ -918,6 +950,7 @@ describe("ws-router", () => {
       getDiscoveredProjects: () => [],
       machineDisplayName: "Local Machine",
       updateManager: null,
+      pushManager: NOOP_PUSH_MANAGER,
     })
     const ws = new FakeWebSocket()
     router.handleOpen(ws as never)
@@ -978,7 +1011,7 @@ describe("ws-router", () => {
         ignoreFile: async () => ({ snapshotChanged: false }),
         readPatch: async () => ({ patch: "diff --git a/app.txt b/app.txt" }),
       } as never,
-      agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set() } as never,
+      agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set(), getSlashCommandsLoadingChatIds: () => new Set(), ensureSlashCommandsLoaded: async () => {} } as never,
       terminals: {
         getSnapshot: () => null,
         onEvent: () => () => {},
@@ -991,6 +1024,7 @@ describe("ws-router", () => {
       getDiscoveredProjects: () => [],
       machineDisplayName: "Local Machine",
       updateManager: null,
+      pushManager: NOOP_PUSH_MANAGER,
     })
     const ws = new FakeWebSocket()
     router.handleOpen(ws as never)
@@ -1036,6 +1070,7 @@ describe("ws-router", () => {
       provider: null,
       planMode: false,
       sessionToken: null,
+      sourceHash: null,
       lastTurnOutcome: null,
     })
 
@@ -1060,7 +1095,7 @@ describe("ws-router", () => {
         ignoreFile: async () => ({ snapshotChanged: false }),
         readPatch: async () => ({ patch: "" }),
       } as never,
-      agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set() } as never,
+      agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set(), getSlashCommandsLoadingChatIds: () => new Set(), ensureSlashCommandsLoaded: async () => {} } as never,
       terminals: {
         getSnapshot: () => null,
         onEvent: () => () => {},
@@ -1073,6 +1108,7 @@ describe("ws-router", () => {
       getDiscoveredProjects: () => [],
       machineDisplayName: "Local Machine",
       updateManager: null,
+      pushManager: NOOP_PUSH_MANAGER,
     })
     const ws = new FakeWebSocket()
     router.handleOpen(ws as never)
@@ -1151,6 +1187,7 @@ describe("ws-router", () => {
       provider: null,
       planMode: false,
       sessionToken: null,
+      sourceHash: null,
       lastTurnOutcome: null,
     })
 
@@ -1169,7 +1206,7 @@ describe("ws-router", () => {
         }),
         getChat: () => state.chatsById.get("chat-1") ?? null,
       } as never,
-      agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set() } as never,
+      agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set(), getSlashCommandsLoadingChatIds: () => new Set(), ensureSlashCommandsLoaded: async () => {} } as never,
       terminals: {
         getSnapshot: () => null,
         onEvent: () => () => {},
@@ -1182,6 +1219,7 @@ describe("ws-router", () => {
       getDiscoveredProjects: () => [],
       machineDisplayName: "Local Machine",
       updateManager: null,
+      pushManager: NOOP_PUSH_MANAGER,
     })
     const ws = new FakeWebSocket()
 
@@ -1237,11 +1275,13 @@ describe("ws-router", () => {
       provider: null,
       planMode: false,
       sessionToken: null,
+      sourceHash: null,
       lastTurnOutcome: null,
     })
 
     const store = {
       state,
+      getTunnelEvents: (_chatId: string) => [] as never[],
       async setChatReadState(chatId: string, unread: boolean) {
         const chat = state.chatsById.get(chatId)
         if (!chat) throw new Error("Chat not found")
@@ -1267,6 +1307,7 @@ describe("ws-router", () => {
       getDiscoveredProjects: () => [],
       machineDisplayName: "Local Machine",
       updateManager: null,
+      pushManager: NOOP_PUSH_MANAGER,
     })
     const wsA = new FakeWebSocket()
     const wsB = new FakeWebSocket()
@@ -1390,7 +1431,7 @@ describe("ws-router", () => {
           sidebarProjectOrder = [...projectIds]
         },
       } as never,
-      agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set() } as never,
+      agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set(), getSlashCommandsLoadingChatIds: () => new Set(), ensureSlashCommandsLoaded: async () => {} } as never,
       terminals: {
         getSnapshot: () => null,
         onEvent: () => () => {},
@@ -1403,6 +1444,7 @@ describe("ws-router", () => {
       getDiscoveredProjects: () => [],
       machineDisplayName: "Local Machine",
       updateManager: null,
+      pushManager: NOOP_PUSH_MANAGER,
     })
     const ws = new FakeWebSocket()
     router.handleOpen(ws as never)
@@ -1476,6 +1518,7 @@ describe("ws-router", () => {
       provider: "claude",
       planMode: false,
       sessionToken: "session-1",
+      sourceHash: null,
       pendingForkSessionToken: null,
       lastTurnOutcome: null,
     })
@@ -1498,6 +1541,7 @@ describe("ws-router", () => {
             provider: "claude",
             planMode: false,
             sessionToken: null,
+            sourceHash: null,
             pendingForkSessionToken: "session-1",
             lastTurnOutcome: null,
           })
@@ -1516,6 +1560,7 @@ describe("ws-router", () => {
       getDiscoveredProjects: () => [],
       machineDisplayName: "Local Machine",
       updateManager: null,
+      pushManager: NOOP_PUSH_MANAGER,
     })
     const ws = new FakeWebSocket()
     router.handleOpen(ws as never)
@@ -1606,6 +1651,7 @@ describe("ws-router", () => {
       provider: null,
       planMode: false,
       sessionToken: null,
+      sourceHash: null,
       lastTurnOutcome: null,
     })
 
@@ -1619,7 +1665,7 @@ describe("ws-router", () => {
           return ["chat-stale"]
         },
       } as never,
-      agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set() } as never,
+      agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set(), getSlashCommandsLoadingChatIds: () => new Set(), ensureSlashCommandsLoaded: async () => {} } as never,
       terminals: {
         getSnapshot: () => null,
         onEvent: () => () => {},
@@ -1632,6 +1678,7 @@ describe("ws-router", () => {
       getDiscoveredProjects: () => [],
       machineDisplayName: "Local Machine",
       updateManager: null,
+      pushManager: NOOP_PUSH_MANAGER,
     })
     const ws = new FakeWebSocket()
 
@@ -1686,6 +1733,7 @@ describe("ws-router", () => {
       provider: null,
       planMode: false,
       sessionToken: null,
+      sourceHash: null,
       lastTurnOutcome: null,
     })
 
@@ -1698,7 +1746,7 @@ describe("ws-router", () => {
           return []
         },
       } as never,
-      agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set() } as never,
+      agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set(), getSlashCommandsLoadingChatIds: () => new Set(), ensureSlashCommandsLoaded: async () => {} } as never,
       terminals: {
         getSnapshot: () => null,
         onEvent: () => () => {},
@@ -1711,6 +1759,7 @@ describe("ws-router", () => {
       getDiscoveredProjects: () => [],
       machineDisplayName: "Local Machine",
       updateManager: null,
+      pushManager: NOOP_PUSH_MANAGER,
     })
     const ws = new FakeWebSocket()
     router.handleOpen(ws as never)
@@ -1769,6 +1818,7 @@ describe("ws-router", () => {
       getDiscoveredProjects: () => [],
       machineDisplayName: "Local Machine",
       updateManager: null,
+      pushManager: NOOP_PUSH_MANAGER,
     })
     const ws = new FakeWebSocket()
     router.handleOpen(ws as never)
@@ -1800,7 +1850,7 @@ describe("ws-router", () => {
 
     const router = createWsRouter({
       store: { state: createEmptyState() } as never,
-      agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set() } as never,
+      agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set(), getSlashCommandsLoadingChatIds: () => new Set(), ensureSlashCommandsLoaded: async () => {} } as never,
       terminals: {
         getSnapshot: () => null,
         onEvent: () => () => {},
@@ -1810,6 +1860,7 @@ describe("ws-router", () => {
       getDiscoveredProjects: () => [],
       machineDisplayName: "Local Machine",
       updateManager: null,
+      pushManager: NOOP_PUSH_MANAGER,
     })
     const ws = new FakeWebSocket()
 
@@ -1907,7 +1958,7 @@ describe("ws-router", () => {
 
     const router = createWsRouter({
       store: { state: createEmptyState() } as never,
-      agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set() } as never,
+      agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set(), getSlashCommandsLoadingChatIds: () => new Set(), ensureSlashCommandsLoaded: async () => {} } as never,
       terminals: {
         getSnapshot: () => null,
         onEvent: () => () => {},
@@ -1920,6 +1971,7 @@ describe("ws-router", () => {
       getDiscoveredProjects: () => [],
       machineDisplayName: "Local Machine",
       updateManager: updateManager as never,
+      pushManager: NOOP_PUSH_MANAGER,
     })
     const ws = new FakeWebSocket()
 
@@ -2020,6 +2072,7 @@ describe("ws-router", () => {
       provider: null,
       planMode: false,
       sessionToken: null,
+      sourceHash: null,
       lastTurnOutcome: null,
     })
 
@@ -2043,9 +2096,10 @@ describe("ws-router", () => {
         getChat: (chatId: string) => state.chatsById.get(chatId) ?? null,
         getProject: (projectId: string) => state.projectsById.get(projectId) ?? null,
         getRecentChatHistory: () => ({ entries: [], hasOlder: false, olderCursor: null }),
+        getTunnelEvents: (_chatId: string) => [] as never[],
       } as never,
       diffStore: diffStore as never,
-      agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set() } as never,
+      agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set(), getSlashCommandsLoadingChatIds: () => new Set(), ensureSlashCommandsLoaded: async () => {} } as never,
       terminals: {
         getSnapshot: () => null,
         onEvent: () => () => {},
@@ -2058,6 +2112,7 @@ describe("ws-router", () => {
       getDiscoveredProjects: () => [],
       machineDisplayName: "Local Machine",
       updateManager: null,
+      pushManager: NOOP_PUSH_MANAGER,
     })
     const ws = new FakeWebSocket()
 
@@ -2119,6 +2174,7 @@ describe("ws-router", () => {
       provider: null,
       planMode: false,
       sessionToken: null,
+      sourceHash: null,
       lastTurnOutcome: null,
     })
 
@@ -2141,7 +2197,7 @@ describe("ws-router", () => {
           return { snapshotChanged: false }
         },
       } as never,
-      agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set() } as never,
+      agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set(), getSlashCommandsLoadingChatIds: () => new Set(), ensureSlashCommandsLoaded: async () => {} } as never,
       terminals: {
         getSnapshot: () => null,
         onEvent: () => () => {},
@@ -2154,6 +2210,7 @@ describe("ws-router", () => {
       getDiscoveredProjects: () => [],
       machineDisplayName: "Local Machine",
       updateManager: null,
+      pushManager: NOOP_PUSH_MANAGER,
     })
     const ws = new FakeWebSocket()
 
@@ -2182,5 +2239,200 @@ describe("ws-router", () => {
       id: "ignore-1",
       result: { snapshotChanged: false },
     })
+  })
+
+  // ── autoContinue WS command tests ────────────────────────────────────────
+
+  function makeAutoContinueAgent(overrides: Record<string, unknown> = {}) {
+    const appendedEvents: unknown[] = []
+    return {
+      appendedEvents,
+      agent: {
+        getActiveStatuses: () => new Map(),
+        getDrainingChatIds: () => new Set(),
+        getSlashCommandsLoadingChatIds: () => new Set(),
+        ensureSlashCommandsLoaded: async () => {},
+        acceptAutoContinue: async (_chatId: string, _scheduleId: string, _scheduledAt: number) => {},
+        rescheduleAutoContinue: async (_chatId: string, _scheduleId: string, _scheduledAt: number) => {},
+        cancelAutoContinue: async (_chatId: string, _scheduleId: string, _reason: string) => {},
+        listLiveSchedules: (_chatId: string): string[] => [],
+        cancel: async () => {},
+        closeChat: async () => {},
+        ...overrides,
+      },
+    }
+  }
+
+  function makeAutoContinueStore(state: ReturnType<typeof createEmptyState>) {
+    return {
+      state,
+      deleteChat: async () => {},
+    }
+  }
+
+  test("autoContinue.accept routes to agent.acceptAutoContinue and acks", async () => {
+    const acceptCalls: Array<{ chatId: string; scheduleId: string; scheduledAt: number }> = []
+    const { agent } = makeAutoContinueAgent({
+      acceptAutoContinue: async (chatId: string, scheduleId: string, scheduledAt: number) => {
+        acceptCalls.push({ chatId, scheduleId, scheduledAt })
+      },
+    })
+
+    const router = createWsRouter({
+      store: makeAutoContinueStore(createEmptyState()) as never,
+      agent: agent as never,
+      terminals: { getSnapshot: () => null, onEvent: () => () => {} } as never,
+      keybindings: { getSnapshot: () => DEFAULT_KEYBINDINGS_SNAPSHOT, onChange: () => () => {} } as never,
+      refreshDiscovery: async () => [],
+      getDiscoveredProjects: () => [],
+      machineDisplayName: "Local Machine",
+      updateManager: null,
+      pushManager: NOOP_PUSH_MANAGER,
+    })
+    const ws = new FakeWebSocket()
+
+    await router.handleMessage(
+      ws as never,
+      JSON.stringify({
+        v: 1,
+        type: "command",
+        id: "accept-1",
+        command: {
+          type: "autoContinue.accept",
+          chatId: "chat-1",
+          scheduleId: "sched-1",
+          scheduledAt: Date.now() + 60_000,
+        },
+      })
+    )
+
+    expect(acceptCalls).toHaveLength(1)
+    expect(acceptCalls[0]!.chatId).toBe("chat-1")
+    expect(acceptCalls[0]!.scheduleId).toBe("sched-1")
+    expect(ws.sent).toContainEqual({ v: PROTOCOL_VERSION, type: "ack", id: "accept-1" })
+  })
+
+  test("autoContinue.reschedule routes to agent.rescheduleAutoContinue and acks", async () => {
+    const rescheduleCalls: Array<{ chatId: string; scheduleId: string; scheduledAt: number }> = []
+    const { agent } = makeAutoContinueAgent({
+      rescheduleAutoContinue: async (chatId: string, scheduleId: string, scheduledAt: number) => {
+        rescheduleCalls.push({ chatId, scheduleId, scheduledAt })
+      },
+    })
+
+    const router = createWsRouter({
+      store: makeAutoContinueStore(createEmptyState()) as never,
+      agent: agent as never,
+      terminals: { getSnapshot: () => null, onEvent: () => () => {} } as never,
+      keybindings: { getSnapshot: () => DEFAULT_KEYBINDINGS_SNAPSHOT, onChange: () => () => {} } as never,
+      refreshDiscovery: async () => [],
+      getDiscoveredProjects: () => [],
+      machineDisplayName: "Local Machine",
+      updateManager: null,
+      pushManager: NOOP_PUSH_MANAGER,
+    })
+    const ws = new FakeWebSocket()
+
+    await router.handleMessage(
+      ws as never,
+      JSON.stringify({
+        v: 1,
+        type: "command",
+        id: "reschedule-1",
+        command: {
+          type: "autoContinue.reschedule",
+          chatId: "chat-1",
+          scheduleId: "sched-1",
+          scheduledAt: Date.now() + 120_000,
+        },
+      })
+    )
+
+    expect(rescheduleCalls).toHaveLength(1)
+    expect(rescheduleCalls[0]!.chatId).toBe("chat-1")
+    expect(ws.sent).toContainEqual({ v: PROTOCOL_VERSION, type: "ack", id: "reschedule-1" })
+  })
+
+  test("autoContinue.cancel routes to agent.cancelAutoContinue and acks", async () => {
+    const cancelCalls: Array<{ chatId: string; scheduleId: string; reason: string }> = []
+    const { agent } = makeAutoContinueAgent({
+      cancelAutoContinue: async (chatId: string, scheduleId: string, reason: string) => {
+        cancelCalls.push({ chatId, scheduleId, reason })
+      },
+    })
+
+    const router = createWsRouter({
+      store: makeAutoContinueStore(createEmptyState()) as never,
+      agent: agent as never,
+      terminals: { getSnapshot: () => null, onEvent: () => () => {} } as never,
+      keybindings: { getSnapshot: () => DEFAULT_KEYBINDINGS_SNAPSHOT, onChange: () => () => {} } as never,
+      refreshDiscovery: async () => [],
+      getDiscoveredProjects: () => [],
+      machineDisplayName: "Local Machine",
+      updateManager: null,
+      pushManager: NOOP_PUSH_MANAGER,
+    })
+    const ws = new FakeWebSocket()
+
+    await router.handleMessage(
+      ws as never,
+      JSON.stringify({
+        v: 1,
+        type: "command",
+        id: "cancel-1",
+        command: {
+          type: "autoContinue.cancel",
+          chatId: "chat-1",
+          scheduleId: "sched-1",
+        },
+      })
+    )
+
+    expect(cancelCalls).toHaveLength(1)
+    expect(cancelCalls[0]!.reason).toBe("user")
+    expect(ws.sent).toContainEqual({ v: PROTOCOL_VERSION, type: "ack", id: "cancel-1" })
+  })
+
+  test("chat.delete cancels live schedules before closing chat", async () => {
+    const cancelledScheduleIds: string[] = []
+    const callOrder: string[] = []
+
+    const { agent } = makeAutoContinueAgent({
+      listLiveSchedules: (_chatId: string) => ["sched-live"],
+      cancelAutoContinue: async (_chatId: string, scheduleId: string, _reason: string) => {
+        cancelledScheduleIds.push(scheduleId)
+        callOrder.push("cancelAutoContinue")
+      },
+      closeChat: async () => {
+        callOrder.push("closeChat")
+      },
+    })
+
+    const router = createWsRouter({
+      store: makeAutoContinueStore(createEmptyState()) as never,
+      agent: agent as never,
+      terminals: { getSnapshot: () => null, onEvent: () => () => {} } as never,
+      keybindings: { getSnapshot: () => DEFAULT_KEYBINDINGS_SNAPSHOT, onChange: () => () => {} } as never,
+      refreshDiscovery: async () => [],
+      getDiscoveredProjects: () => [],
+      machineDisplayName: "Local Machine",
+      updateManager: null,
+      pushManager: NOOP_PUSH_MANAGER,
+    })
+    const ws = new FakeWebSocket()
+
+    await router.handleMessage(
+      ws as never,
+      JSON.stringify({
+        v: 1,
+        type: "command",
+        id: "delete-1",
+        command: { type: "chat.delete", chatId: "chat-1" },
+      })
+    )
+
+    expect(cancelledScheduleIds).toEqual(["sched-live"])
+    expect(callOrder.indexOf("cancelAutoContinue")).toBeLessThan(callOrder.indexOf("closeChat"))
+    expect(ws.sent).toContainEqual({ v: PROTOCOL_VERSION, type: "ack", id: "delete-1" })
   })
 })

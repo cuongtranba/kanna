@@ -161,9 +161,10 @@ export function ChatNavbar({
         <div className={`flex items-center gap-1 flex-shrink-0 border border-border/0 rounded-2xl ${sidebarCollapsed ? 'px-1.5  border-border' : ''} p-1 backdrop-blur-lg`}>
           <Button
             variant="ghost"
-            size="icon"
+            size="icon-mobile"
             className="md:hidden"
             onClick={onOpenSidebar}
+            aria-label="Open sidebar"
           >
             <Menu className="size-4.5" />
           </Button>
@@ -178,6 +179,7 @@ export function ChatNavbar({
                 className="hidden md:flex"
                 onClick={onExpandSidebar}
                 title="Expand sidebar"
+                aria-label="Expand sidebar"
               >
                 <PanelLeft className="size-4.5" />
               </Button>
@@ -189,6 +191,7 @@ export function ChatNavbar({
             className="hover:!border-border/0 hover:!bg-transparent"
             onClick={onNewChat}
             title="Compose"
+            aria-label="New chat"
           >
             <SquarePen className="size-4.5" />
           </Button>
@@ -227,6 +230,8 @@ export function ChatNavbar({
                       variant="ghost"
                       size="none"
                       onClick={onToggleEmbeddedTerminal}
+                      aria-label="Toggle terminal"
+                      aria-pressed={embeddedTerminalVisible}
                       className={cn(
                         rightSidebarVisible ? "hidden" : "hidden md:flex",
                         "border border-border/0 hover:!border-border/0 px-1.5 h-9 hover:!bg-transparent",
