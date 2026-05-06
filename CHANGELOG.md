@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.43.1](https://github.com/cuongtranba/kanna/compare/v0.43.0...v0.43.1) (2026-05-06)
+
+
+### Bug Fixes
+
+* **diff-store:** harden git spawns and add CI test workflow ([#31](https://github.com/cuongtranba/kanna/issues/31)) ([fe874fb](https://github.com/cuongtranba/kanna/commit/fe874fbfdaa5c670d2c083c4e044b5984bd21028))
+
 ## [0.43.0](https://github.com/cuongtranba/kanna/compare/v0.42.6...v0.43.0) (2026-05-06)
 
 
