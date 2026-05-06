@@ -75,6 +75,10 @@ export type ClientCommand =
   | { type: "appSettings.setCloudflareTunnel"; patch: Partial<CloudflareTunnelSettings> }
   | { type: "settings.writeAppSettingsPatch"; patch: AppSettingsPatch }
   | { type: "settings.readLlmProvider" }
+  | { type: "skills.search"; query: string; limit?: number }
+  | { type: "skills.install"; source: string; skillId: string }
+  | { type: "skills.uninstall"; skillId: string }
+  | { type: "skills.listInstalled" }
   | {
       type: "settings.writeLlmProvider"
       provider: LlmProviderSnapshot["provider"]

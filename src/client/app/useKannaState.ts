@@ -1009,17 +1009,20 @@ export function useKannaState(activeChatId: string | null): KannaState {
 
   const handleWriteCloudflareTunnel = useCallback(async (patch: Partial<CloudflareTunnelSettings>) => {
     try {
+      useAppSettingsStore.getState().applyOptimisticPatch({ cloudflareTunnel: patch })
       const snapshot = await socket.command<AppSettingsSnapshot>({
         type: "appSettings.setCloudflareTunnel",
         patch,
       })
       setAppSettings(snapshot)
+      syncRuntimeStoresFromAppSettings(snapshot)
       setCommandError(null)
     } catch (error) {
       setCommandError(error instanceof Error ? error.message : String(error))
+      await handleReadAppSettings()
       throw error
     }
-  }, [socket])
+  }, [handleReadAppSettings, socket])
 
   const handleReadLlmProvider = useCallback(async () => {
     try {

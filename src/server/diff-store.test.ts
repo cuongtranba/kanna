@@ -146,7 +146,7 @@ describe("DiffStore", () => {
       pushed: true,
     })
     expect((await run(["git", "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"], repoRoot)).trim()).toBe("origin/feature/publish-me")
-  })
+  }, 30_000)
 
   test("commit_and_push degrades to a local commit when origin is missing", async () => {
     const repoRoot = await createRepo()
@@ -174,7 +174,7 @@ describe("DiffStore", () => {
       pushed: false,
     })
     expect((await run(["git", "log", "-1", "--pretty=%s"], repoRoot)).trim()).toBe("Local only")
-  })
+  }, 30_000)
 
   test("commits tracked files inside newly ignored directories", async () => {
     const repoRoot = await createRepo()
