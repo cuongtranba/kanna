@@ -1,10 +1,12 @@
 import { type MouseEvent as ReactMouseEvent } from "react"
 import { Check, Flower, GitBranch, Loader2, Menu, MoreHorizontal, PanelLeft, PanelRight, SquarePen, Terminal, UserRoundPlus } from "lucide-react"
 import type { EditorOpenSettings, EditorPreset, OpenExternalAction } from "../../../shared/protocol"
+import type { ChatStateTimings, KannaStatus } from "../../../shared/types"
 import { Button } from "../ui/button"
 import { CardHeader } from "../ui/card"
 import { HotkeyTooltip, HotkeyTooltipContent, HotkeyTooltipTrigger } from "../ui/tooltip"
 import { cn } from "../../lib/utils"
+import { formatCompactDuration, formatLiveDuration } from "../../lib/formatDuration"
 import { OpenExternalSelect } from "../open-external-menu"
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from "../ui/context-menu"
 
@@ -115,6 +117,8 @@ interface Props {
   branchName?: string
   hasGitRepo?: boolean
   gitStatus?: "unknown" | "ready" | "no_repo"
+  timings?: ChatStateTimings
+  status?: KannaStatus
 }
 
 export function ChatNavbar({
@@ -142,6 +146,8 @@ export function ChatNavbar({
   branchName,
   hasGitRepo = true,
   gitStatus = "unknown",
+  timings,
+  status,
 }: Props) {
   const branchLabel = !hasGitRepo
     ? "Setup Git"
@@ -197,7 +203,32 @@ export function ChatNavbar({
           </Button>
         </div>
 
-        <div className="flex-1 min-w-0" />
+        {timings && status ? (
+          <div
+            className="flex-1 min-w-0 flex items-center justify-center pointer-events-none select-none"
+            title={[
+              `Chat created ${formatCompactDuration(timings.derivedAtMs - timings.chatCreatedAt)} ago`,
+              `idle ${formatCompactDuration(timings.cumulativeMs.idle)}`,
+              `running ${formatCompactDuration(timings.cumulativeMs.running)}`,
+              `waiting ${formatCompactDuration(timings.cumulativeMs.waiting_for_user)}`,
+            ].join(" · ")}
+          >
+            <span className="text-xs text-muted-foreground tabular-nums truncate hidden md:flex items-center gap-1">
+              <span>{status}</span>
+              <span>{formatLiveDuration(timings.derivedAtMs - timings.stateEnteredAt)}</span>
+              <span className="opacity-50">·</span>
+              <span>session {formatCompactDuration(timings.derivedAtMs - timings.activeSessionStartedAt)}</span>
+              {timings.lastTurnDurationMs != null ? (
+                <>
+                  <span className="opacity-50">·</span>
+                  <span>last turn {formatCompactDuration(timings.lastTurnDurationMs)}</span>
+                </>
+              ) : null}
+            </span>
+          </div>
+        ) : (
+          <div className="flex-1 min-w-0" />
+        )}
 
         {localPath && (onOpenExternal || onToggleEmbeddedTerminal || onToggleRightSidebar || onExportTranscript) ? (
           <div className="flex items-center gap-2 flex-shrink-0">
