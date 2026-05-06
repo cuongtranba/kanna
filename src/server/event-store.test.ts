@@ -834,11 +834,16 @@ describe("EventStore push events", () => {
 
 import { ACTIVE_SESSION_IDLE_GAP_MS } from "./read-models"
 
+// Helper: apply a raw store event directly (bypasses file I/O for unit testing)
+function applyRaw(store: EventStore, event: Record<string, unknown>) {
+  ;(store as any).applyEvent(event)
+}
+
 describe("ChatTimingState accumulator", () => {
   test("chat_created seeds idle state with createdAt", () => {
     const store = new EventStore("/tmp/test-timings-1")
-    store.append({ v: 3, type: "project_opened", timestamp: 1000, projectId: "p1", localPath: "/x", title: "X" })
-    store.append({ v: 3, type: "chat_created", timestamp: 2000, chatId: "c1", projectId: "p1", title: "T" })
+    applyRaw(store, { v: 3, type: "project_opened", timestamp: 1000, projectId: "p1", localPath: "/x", title: "X" })
+    applyRaw(store, { v: 3, type: "chat_created", timestamp: 2000, chatId: "c1", projectId: "p1", title: "T" })
 
     const t = store.state.chatTimingsByChatId.get("c1")
     expect(t).toBeDefined()
@@ -850,9 +855,9 @@ describe("ChatTimingState accumulator", () => {
 
   test("turn_started transitions idle -> running and accumulates idle time", () => {
     const store = new EventStore("/tmp/test-timings-2")
-    store.append({ v: 3, type: "project_opened", timestamp: 1000, projectId: "p1", localPath: "/x", title: "X" })
-    store.append({ v: 3, type: "chat_created", timestamp: 2000, chatId: "c1", projectId: "p1", title: "T" })
-    store.append({ v: 3, type: "turn_started", timestamp: 5000, chatId: "c1" })
+    applyRaw(store, { v: 3, type: "project_opened", timestamp: 1000, projectId: "p1", localPath: "/x", title: "X" })
+    applyRaw(store, { v: 3, type: "chat_created", timestamp: 2000, chatId: "c1", projectId: "p1", title: "T" })
+    applyRaw(store, { v: 3, type: "turn_started", timestamp: 5000, chatId: "c1" })
 
     const t = store.state.chatTimingsByChatId.get("c1")!
     expect(t.status).toBe("running")
@@ -864,10 +869,10 @@ describe("ChatTimingState accumulator", () => {
 
   test("turn_finished transitions running -> idle, sets lastTurnDurationMs", () => {
     const store = new EventStore("/tmp/test-timings-3")
-    store.append({ v: 3, type: "project_opened", timestamp: 1000, projectId: "p1", localPath: "/x", title: "X" })
-    store.append({ v: 3, type: "chat_created", timestamp: 2000, chatId: "c1", projectId: "p1", title: "T" })
-    store.append({ v: 3, type: "turn_started", timestamp: 5000, chatId: "c1" })
-    store.append({ v: 3, type: "turn_finished", timestamp: 8000, chatId: "c1" })
+    applyRaw(store, { v: 3, type: "project_opened", timestamp: 1000, projectId: "p1", localPath: "/x", title: "X" })
+    applyRaw(store, { v: 3, type: "chat_created", timestamp: 2000, chatId: "c1", projectId: "p1", title: "T" })
+    applyRaw(store, { v: 3, type: "turn_started", timestamp: 5000, chatId: "c1" })
+    applyRaw(store, { v: 3, type: "turn_finished", timestamp: 8000, chatId: "c1" })
 
     const t = store.state.chatTimingsByChatId.get("c1")!
     expect(t.status).toBe("idle")
@@ -879,10 +884,10 @@ describe("ChatTimingState accumulator", () => {
 
   test("turn_failed transitions running -> failed", () => {
     const store = new EventStore("/tmp/test-timings-4")
-    store.append({ v: 3, type: "project_opened", timestamp: 1000, projectId: "p1", localPath: "/x", title: "X" })
-    store.append({ v: 3, type: "chat_created", timestamp: 2000, chatId: "c1", projectId: "p1", title: "T" })
-    store.append({ v: 3, type: "turn_started", timestamp: 5000, chatId: "c1" })
-    store.append({ v: 3, type: "turn_failed", timestamp: 7000, chatId: "c1", error: "boom" })
+    applyRaw(store, { v: 3, type: "project_opened", timestamp: 1000, projectId: "p1", localPath: "/x", title: "X" })
+    applyRaw(store, { v: 3, type: "chat_created", timestamp: 2000, chatId: "c1", projectId: "p1", title: "T" })
+    applyRaw(store, { v: 3, type: "turn_started", timestamp: 5000, chatId: "c1" })
+    applyRaw(store, { v: 3, type: "turn_failed", timestamp: 7000, chatId: "c1", error: "boom" })
 
     const t = store.state.chatTimingsByChatId.get("c1")!
     expect(t.status).toBe("failed")
@@ -893,12 +898,12 @@ describe("ChatTimingState accumulator", () => {
   test("idle gap > ACTIVE_SESSION_IDLE_GAP_MS resets activeSessionStartedAt and cumulative", () => {
     const store = new EventStore("/tmp/test-timings-5")
     const HOUR = 60 * 60 * 1000
-    store.append({ v: 3, type: "project_opened", timestamp: 1000, projectId: "p1", localPath: "/x", title: "X" })
-    store.append({ v: 3, type: "chat_created", timestamp: 2000, chatId: "c1", projectId: "p1", title: "T" })
-    store.append({ v: 3, type: "turn_started", timestamp: 5000, chatId: "c1" })
-    store.append({ v: 3, type: "turn_finished", timestamp: 8000, chatId: "c1" })
+    applyRaw(store, { v: 3, type: "project_opened", timestamp: 1000, projectId: "p1", localPath: "/x", title: "X" })
+    applyRaw(store, { v: 3, type: "chat_created", timestamp: 2000, chatId: "c1", projectId: "p1", title: "T" })
+    applyRaw(store, { v: 3, type: "turn_started", timestamp: 5000, chatId: "c1" })
+    applyRaw(store, { v: 3, type: "turn_finished", timestamp: 8000, chatId: "c1" })
     // Gap of 1 hour > 30 min threshold
-    store.append({ v: 3, type: "turn_started", timestamp: 8000 + HOUR, chatId: "c1" })
+    applyRaw(store, { v: 3, type: "turn_started", timestamp: 8000 + HOUR, chatId: "c1" })
 
     const t = store.state.chatTimingsByChatId.get("c1")!
     expect(t.activeSessionStartedAt).toBe(8000 + HOUR)
