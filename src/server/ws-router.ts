@@ -608,8 +608,7 @@ export function createWsRouter({
           topic.chatId,
           (chatId) => store.getRecentChatHistory(chatId, topic.recentLimit ?? DEFAULT_CHAT_RECENT_LIMIT),
           (chatId) => store.getTunnelEvents(chatId),
-          // TODO Phase 2: replace with agent.getWaitStartedAtByChatId()
-          new Map<string, number>(),
+          agent.getWaitStartedAtByChatId(),
           Date.now(),
         ),
       },
