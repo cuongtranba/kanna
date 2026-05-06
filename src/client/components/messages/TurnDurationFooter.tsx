@@ -1,4 +1,4 @@
-import { MetaRow, MetaLabel } from "./shared"
+import { RuledLabel } from "./shared"
 
 function formatTurnDuration(ms: number): string {
   if (ms < 1000) return `${ms}ms`
@@ -20,13 +20,5 @@ interface Props {
 
 export function TurnDurationFooter({ durationMs, prefix = "Worked for" }: Props) {
   if (durationMs <= 0) return null
-  return (
-    <MetaRow className="px-0.5 text-xs tracking-wide">
-      <div className="w-full h-[1px] bg-border"></div>
-      <MetaLabel className="whitespace-nowrap text-[11px] tracking-widest text-muted-foreground/60 uppercase flex-shrink-0">
-        {prefix} {formatTurnDuration(durationMs)}
-      </MetaLabel>
-      <div className="w-full h-[1px] bg-border"></div>
-    </MetaRow>
-  )
+  return <RuledLabel>{prefix} {formatTurnDuration(durationMs)}</RuledLabel>
 }

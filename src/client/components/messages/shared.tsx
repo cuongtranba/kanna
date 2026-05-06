@@ -128,6 +128,19 @@ export function MetaText({ children }: { children: ReactNode }) {
   return <span className="text-muted-foreground">{children}</span>
 }
 
+// Centered label flanked by horizontal rules — "—— Worked for 3s ——" footer style
+export function RuledLabel({ children, className }: { children: ReactNode; className?: string }) {
+  return (
+    <MetaRow className={cn("px-0.5 text-xs tracking-wide", className)}>
+      <div className="w-full h-[1px] bg-border" />
+      <MetaLabel className="whitespace-nowrap text-[11px] tracking-widest text-muted-foreground/60 uppercase flex-shrink-0">
+        {children}
+      </MetaLabel>
+      <div className="w-full h-[1px] bg-border" />
+    </MetaRow>
+  )
+}
+
 // Expandable row with chevron
 interface ExpandableRowProps {
   children: ReactNode
