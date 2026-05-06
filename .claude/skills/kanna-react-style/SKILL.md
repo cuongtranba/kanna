@@ -102,6 +102,40 @@ Signs you should extract:
   : <MetaRow><MetaLabel>Failed after {fmt(d)}</MetaLabel></MetaRow>}
 ```
 
+## Check existing primitives before creating new ones
+
+Before writing a fresh component, scan the relevant `shared.tsx` (or `ui/`) for primitives that already cover the pattern. Two primitive registries to check:
+
+- **Generic UI**: `src/client/components/ui/` — `card.tsx`, `button.tsx`, `tooltip.tsx`, `dialog.tsx`, `popover.tsx`, `kbd.tsx`, `select.tsx`, `scroll-area.tsx`, `segmented-control.tsx`, `input.tsx`, `textarea.tsx`, `context-menu.tsx`, `app-dialog.tsx`, `animated-shiny-text.tsx`, `resizable.tsx`, `settings-header-button.tsx`.
+- **Message rendering**: `src/client/components/messages/shared.tsx` — `MetaRow`, `MetaContent`, `MetaSeparator`, `MetaLabel`, `MetaText`, `RuledLabel`, `ExpandableRow`, `MetaCodeBlock`, `VerticalLineContainer`, `getToolIcon`.
+
+Two-tier rule:
+1. **If a primitive already fits**, use it directly. No new file.
+2. **If you find yourself reaching for new ad-hoc markup that resembles a generic shape** (rule lines + label, dot + text + duration, icon + collapsible block, etc.), the right move is to add the **primitive** to the appropriate `shared.tsx` and have your specific component compose it. Don't bake the generic shape into a domain-specific file — it'll get re-invented next time.
+
+Real example from this codebase: `TurnDurationFooter` first inlined the `<line><MetaLabel>X</MetaLabel><line>` sandwich. That sandwich is generic ("centered label flanked by horizontal rules"), so it was hoisted to `messages/shared.tsx` as `RuledLabel`. `TurnDurationFooter` shrank to a one-liner that composes `RuledLabel`. Future ruled footers (e.g. compact-summary boundaries, divider headers) can now use `RuledLabel` without copying the divider markup.
+
+```tsx
+// Yes — domain component composes shared primitive
+export function TurnDurationFooter({ durationMs, prefix = "Worked for" }: Props) {
+  if (durationMs <= 0) return null
+  return <RuledLabel>{prefix} {formatTurnDuration(durationMs)}</RuledLabel>
+}
+
+// No — generic rule-line shape baked into one component
+export function TurnDurationFooter(...) {
+  return (
+    <MetaRow className="...">
+      <div className="w-full h-[1px] bg-border" />
+      <MetaLabel className="...">{prefix} {fmt(durationMs)}</MetaLabel>
+      <div className="w-full h-[1px] bg-border" />
+    </MetaRow>
+  )
+}
+```
+
+When deciding whether a new shape is "generic enough" to belong in `shared.tsx`: ask whether two unrelated callers would plausibly want it. If yes, hoist it. If only one caller will ever want it, keep it co-located with that caller.
+
 ## Defensive guard, not optional chaining the JSX
 
 When required props can be absent, render `null` (or a stable fallback wrapper) early. Don't sprinkle `?.` deep inside the JSX tree — readers can't tell what's optional.
