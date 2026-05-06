@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { deriveChatSnapshot, deriveLocalProjectsSnapshot, deriveSidebarData } from "./read-models"
+import { deriveChatSnapshot, deriveLocalProjectsSnapshot, deriveSidebarData, deriveTimings } from "./read-models"
 import { createEmptyState } from "./events"
 import type { SlashCommand } from "../shared/types"
 
@@ -505,5 +505,59 @@ describe("deriveChatSnapshot schedules", () => {
     )
     expect(snapshot!.schedules["s1"].state).toBe("proposed")
     expect(snapshot!.liveScheduleId).toBe("s1")
+  })
+})
+
+describe("deriveTimings", () => {
+  const baseTiming = {
+    status: "idle" as const,
+    stateEnteredAt: 1000,
+    activeSessionStartedAt: 500,
+    lastTurnStartedAt: null,
+    lastTurnDurationMs: null,
+    cumulativeMs: { idle: 500, starting: 0, running: 0, failed: 0 },
+  }
+
+  test("formats accumulator + nowMs into ChatStateTimings", () => {
+    const out = deriveTimings(
+      { createdAt: 500 } as any,
+      { ...baseTiming },
+      undefined, // no in-memory wait
+      undefined,
+      3000,
+    )
+    expect(out.activeSessionStartedAt).toBe(500)
+    expect(out.chatCreatedAt).toBe(500)
+    expect(out.stateEnteredAt).toBe(1000)
+    expect(out.derivedAtMs).toBe(3000)
+    expect(out.cumulativeMs.idle).toBe(500 + 2000) // 500 from accumulator + 2000 open segment to nowMs
+    expect(out.cumulativeMs.waiting_for_user).toBe(0)
+  })
+
+  test("waitStartedAt overrides current state to waiting_for_user and adds open segment", () => {
+    const out = deriveTimings(
+      { createdAt: 500 } as any,
+      { ...baseTiming, status: "running", stateEnteredAt: 1500, lastTurnStartedAt: 1500 },
+      "waiting_for_user",
+      2500,
+      3000,
+    )
+    expect(out.cumulativeMs.waiting_for_user).toBe(500) // 3000 - 2500
+    expect(out.stateEnteredAt).toBe(2500)
+  })
+
+  test("missing accumulator (legacy chat) falls back to chat.createdAt for everything", () => {
+    const out = deriveTimings(
+      { createdAt: 1000 } as any,
+      undefined,
+      undefined,
+      undefined,
+      4000,
+    )
+    expect(out.activeSessionStartedAt).toBe(1000)
+    expect(out.chatCreatedAt).toBe(1000)
+    expect(out.stateEnteredAt).toBe(1000)
+    expect(out.cumulativeMs.idle).toBe(3000)
+    expect(out.lastTurnDurationMs).toBeNull()
   })
 })

@@ -927,6 +927,8 @@ export function ChatPage() {
           branchName={state.chatDiffSnapshot?.branchName}
           hasGitRepo={state.chatDiffSnapshot?.status !== "no_repo"}
           gitStatus={state.chatDiffSnapshot?.status}
+          timings={state.runtime?.timings}
+          status={state.runtime?.status}
         />
         <ChatTranscriptViewport
           activeChatId={state.activeChatId}

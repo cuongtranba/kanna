@@ -1,10 +1,13 @@
 import { type MouseEvent as ReactMouseEvent } from "react"
 import { Check, Flower, GitBranch, Loader2, Menu, MoreHorizontal, PanelLeft, PanelRight, SquarePen, Terminal, UserRoundPlus } from "lucide-react"
 import type { EditorOpenSettings, EditorPreset, OpenExternalAction } from "../../../shared/protocol"
+import type { ChatStateTimings, KannaStatus } from "../../../shared/types"
 import { Button } from "../ui/button"
 import { CardHeader } from "../ui/card"
-import { HotkeyTooltip, HotkeyTooltipContent, HotkeyTooltipTrigger } from "../ui/tooltip"
+import { HotkeyTooltip, HotkeyTooltipContent, HotkeyTooltipTrigger, Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip"
 import { cn } from "../../lib/utils"
+import { formatCompactDuration, formatLiveDuration } from "../../lib/formatDuration"
+import { statusLabel, statusTone, statusToneClass } from "../../lib/statusLabel"
 import { OpenExternalSelect } from "../open-external-menu"
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from "../ui/context-menu"
 
@@ -115,6 +118,8 @@ interface Props {
   branchName?: string
   hasGitRepo?: boolean
   gitStatus?: "unknown" | "ready" | "no_repo"
+  timings?: ChatStateTimings
+  status?: KannaStatus
 }
 
 export function ChatNavbar({
@@ -142,6 +147,8 @@ export function ChatNavbar({
   branchName,
   hasGitRepo = true,
   gitStatus = "unknown",
+  timings,
+  status,
 }: Props) {
   const branchLabel = !hasGitRepo
     ? "Setup Git"
@@ -197,7 +204,56 @@ export function ChatNavbar({
           </Button>
         </div>
 
-        <div className="flex-1 min-w-0" />
+        {timings && status ? (
+          <div className="flex-1 min-w-0 flex items-center justify-center select-none">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="flex items-center gap-2 cursor-default">
+                  {/* Mobile: state pill + live duration only */}
+                  <span className="flex md:hidden items-center gap-1">
+                    <span className={cn("text-xs font-medium", statusToneClass(statusTone(status)))}>●</span>
+                    <span className="text-xs font-medium text-foreground">{statusLabel(status)}</span>
+                    <span className="text-xs font-mono tabular-nums text-foreground/80">
+                      {formatLiveDuration(timings.derivedAtMs - timings.stateEnteredAt)}
+                    </span>
+                  </span>
+                  {/* Desktop: full row */}
+                  <span className="hidden md:flex items-center gap-2">
+                    <span className="flex items-center gap-1">
+                      <span className={cn("text-xs", statusToneClass(statusTone(status)))}>●</span>
+                      <span className="text-xs font-medium text-foreground">{statusLabel(status)}</span>
+                    </span>
+                    <span className="text-xs font-mono tabular-nums text-foreground/80">
+                      {formatLiveDuration(timings.derivedAtMs - timings.stateEnteredAt)}
+                    </span>
+                    <span className="h-3 w-px bg-border/60" aria-hidden />
+                    <span className="text-xs tabular-nums text-muted-foreground">
+                      {formatCompactDuration(timings.derivedAtMs - timings.activeSessionStartedAt)}
+                    </span>
+                    {timings.lastTurnDurationMs != null ? (
+                      <>
+                        <span className="h-3 w-px bg-border/60" aria-hidden />
+                        <span className="text-xs tabular-nums text-muted-foreground">
+                          {formatCompactDuration(timings.lastTurnDurationMs)}
+                        </span>
+                      </>
+                    ) : null}
+                  </span>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="text-left">
+                <div className="space-y-0.5 text-xs">
+                  <div>Chat created {formatCompactDuration(timings.derivedAtMs - timings.chatCreatedAt)} ago</div>
+                  <div>Idle {formatCompactDuration(timings.cumulativeMs.idle)}</div>
+                  <div>Running {formatCompactDuration(timings.cumulativeMs.running)}</div>
+                  <div>Waiting {formatCompactDuration(timings.cumulativeMs.waiting_for_user)}</div>
+                </div>
+              </TooltipContent>
+            </Tooltip>
+          </div>
+        ) : (
+          <div className="flex-1 min-w-0" />
+        )}
 
         {localPath && (onOpenExternal || onToggleEmbeddedTerminal || onToggleRightSidebar || onExportTranscript) ? (
           <div className="flex items-center gap-2 flex-shrink-0">

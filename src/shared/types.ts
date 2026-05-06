@@ -434,6 +434,7 @@ export interface SidebarChatRow {
   lastMessageAt?: number
   hasAutomation: boolean
   canFork?: boolean
+  stateEnteredAt?: number
 }
 
 export interface SidebarProjectGroup {
@@ -1114,6 +1115,23 @@ export type HydratedTranscriptMessage =
   | ({ kind: "auto_continue_prompt"; scheduleId: string; id: string; messageId?: string; timestamp: string; hidden?: boolean })
   | ({ id: string; messageId?: string; hidden?: boolean } & HydratedToolCall)
 
+export interface ChatTimingCumulativeMs {
+  idle: number
+  starting: number
+  running: number
+  waiting_for_user: number
+  failed: number
+}
+
+export interface ChatStateTimings {
+  activeSessionStartedAt: number
+  chatCreatedAt: number
+  stateEnteredAt: number
+  lastTurnDurationMs: number | null
+  derivedAtMs: number
+  cumulativeMs: ChatTimingCumulativeMs
+}
+
 export interface ChatRuntime {
   chatId: string
   projectId: string
@@ -1124,6 +1142,7 @@ export interface ChatRuntime {
   provider: AgentProvider | null
   planMode: boolean
   sessionToken: string | null
+  timings: ChatStateTimings
 }
 
 export interface ChatHistorySnapshot {

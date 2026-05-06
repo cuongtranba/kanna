@@ -1,4 +1,4 @@
-import type { AgentProvider, ProjectSummary, QueuedChatMessage, SlashCommand, TranscriptEntry } from "../shared/types"
+import type { AgentProvider, KannaStatus, ProjectSummary, QueuedChatMessage, SlashCommand, TranscriptEntry } from "../shared/types"
 import type { AutoContinueEvent } from "./auto-continue/events"
 
 export interface ProjectRecord extends ProjectSummary {
@@ -25,6 +25,20 @@ export interface ChatRecord {
   slashCommands?: SlashCommand[]
 }
 
+export interface ChatTimingState {
+  status: Exclude<KannaStatus, "waiting_for_user">
+  stateEnteredAt: number
+  activeSessionStartedAt: number
+  lastTurnStartedAt: number | null
+  lastTurnDurationMs: number | null
+  cumulativeMs: {
+    idle: number
+    starting: number
+    running: number
+    failed: number
+  }
+}
+
 export interface StoreState {
   projectsById: Map<string, ProjectRecord>
   projectIdsByPath: Map<string, string>
@@ -32,6 +46,7 @@ export interface StoreState {
   queuedMessagesByChatId: Map<string, QueuedChatMessage[]>
   sidebarProjectOrder: string[]
   autoContinueEventsByChatId: Map<string, AutoContinueEvent[]>
+  chatTimingsByChatId: Map<string, ChatTimingState>
 }
 
 export interface SnapshotFile {
@@ -209,6 +224,7 @@ export function createEmptyState(): StoreState {
     queuedMessagesByChatId: new Map(),
     sidebarProjectOrder: [],
     autoContinueEventsByChatId: new Map(),
+    chatTimingsByChatId: new Map(),
   }
 }
 
