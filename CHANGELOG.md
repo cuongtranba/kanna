@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.43.0](https://github.com/cuongtranba/kanna/compare/v0.42.6...v0.43.0) (2026-05-06)
+
+
+### Features
+
+* **timings:** chat session timings UI ([#28](https://github.com/cuongtranba/kanna/issues/28)) ([2f50b22](https://github.com/cuongtranba/kanna/commit/2f50b22d1f21b1b2760cb02f5af5c5d1a7e885cf))
+
+
+### Bug Fixes
+
+* **agent:** set claude_code preset with trust context to stop spurious malware refusals ([a38ec31](https://github.com/cuongtranba/kanna/commit/a38ec3113391c4aef22530a0595d195ecc26ef19))
+
 ## [0.42.6](https://github.com/cuongtranba/kanna/compare/v0.42.5...v0.42.6) (2026-05-05)
 
 
