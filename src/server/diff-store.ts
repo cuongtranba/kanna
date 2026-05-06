@@ -121,10 +121,19 @@ type SelectedBranch =
       remoteRef?: string
     }
 
+const NON_INTERACTIVE_GIT_ENV = {
+  GIT_TERMINAL_PROMPT: "0",
+  GIT_ASKPASS: "echo",
+  SSH_ASKPASS: "echo",
+  GCM_INTERACTIVE: "Never",
+} as const
+
 async function runGit(args: string[], cwd: string) {
   const process = Bun.spawn(["git", "-C", cwd, ...args], {
     stdout: "pipe",
     stderr: "pipe",
+    stdin: "ignore",
+    env: { ...Bun.env, ...NON_INTERACTIVE_GIT_ENV },
   })
   const [stdout, stderr, exitCode] = await Promise.all([
     new Response(process.stdout).text(),
@@ -143,6 +152,7 @@ async function runCommand(args: string[]) {
   const process = Bun.spawn(args, {
     stdout: "pipe",
     stderr: "pipe",
+    stdin: "ignore",
   })
   const [stdout, stderr, exitCode] = await Promise.all([
     new Response(process.stdout).text(),
