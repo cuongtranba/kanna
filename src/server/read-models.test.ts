@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { deriveChatSnapshot, deriveLocalProjectsSnapshot, deriveSidebarData, deriveTimings, ACTIVE_SESSION_IDLE_GAP_MS } from "./read-models"
+import { deriveChatSnapshot, deriveLocalProjectsSnapshot, deriveSidebarData, deriveTimings } from "./read-models"
 import { createEmptyState } from "./events"
 import type { SlashCommand } from "../shared/types"
 

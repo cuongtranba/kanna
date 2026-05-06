@@ -607,7 +607,9 @@ export function createWsRouter({
           agent.getSlashCommandsLoadingChatIds(),
           topic.chatId,
           (chatId) => store.getRecentChatHistory(chatId, topic.recentLimit ?? DEFAULT_CHAT_RECENT_LIMIT),
-          (chatId) => store.getTunnelEvents(chatId)
+          (chatId) => store.getTunnelEvents(chatId),
+          new Map<string, number>(),
+          Date.now(),
         ),
       },
     }

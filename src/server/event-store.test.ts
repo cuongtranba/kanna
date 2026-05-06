@@ -832,8 +832,6 @@ describe("EventStore push events", () => {
   })
 })
 
-import { ACTIVE_SESSION_IDLE_GAP_MS } from "./read-models"
-
 // Helper: apply a raw store event directly (bypasses file I/O for unit testing)
 function applyRaw(store: EventStore, event: Record<string, unknown>) {
   ;(store as any).applyEvent(event)

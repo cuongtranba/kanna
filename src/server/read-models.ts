@@ -116,6 +116,7 @@ export function deriveSidebarData(
         lastMessageAt: chat.lastMessageAt,
         hasAutomation: false,
         canFork: canForkChat(chat, activeStatuses, drainingChatIds) || undefined,
+        stateEnteredAt: state.chatTimingsByChatId.get(chat.id)?.stateEnteredAt,
       }))
   }
 
@@ -248,7 +249,9 @@ export function deriveChatSnapshot(
   slashCommandsLoadingChatIds: Set<string>,
   chatId: string,
   getMessages: (chatId: string) => Pick<ChatSnapshot, "messages" | "history">,
-  getTunnelEvents: (chatId: string) => readonly CloudflareTunnelEvent[]
+  getTunnelEvents: (chatId: string) => readonly CloudflareTunnelEvent[],
+  waitStartedAtByChatId: Map<string, number> = new Map(),
+  nowMs: number = Date.now(),
 ): ChatSnapshot | null {
   const chat = state.chatsById.get(chatId)
   if (!chat || chat.deletedAt) return null
@@ -265,6 +268,13 @@ export function deriveChatSnapshot(
     provider: chat.provider,
     planMode: chat.planMode,
     sessionToken: chat.sessionToken,
+    timings: deriveTimings(
+      chat,
+      state.chatTimingsByChatId.get(chat.id),
+      activeStatuses.get(chat.id),
+      waitStartedAtByChatId.get(chat.id),
+      nowMs,
+    ),
   }
 
   const transcript = getMessages(chat.id)
