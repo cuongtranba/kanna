@@ -1,5 +1,5 @@
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test"
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises"
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { TerminalManager } from "./terminal-manager"
@@ -153,6 +153,78 @@ describeIfSupported("TerminalManager", () => {
 
       expect(manager.getSnapshot(terminalId)?.exitCode).toBe(0)
     } finally {
+      manager.close(terminalId)
+    }
+  })
+
+  test("registers terminal pids and unregisters on close", async () => {
+    const terminalId = "terminal-pid-registry-wiring"
+    const registryPath = path.join(tempProjectPath, "terminals.json")
+    const { TerminalPidRegistry } = await import("./terminal-pid-registry")
+    const registry = new TerminalPidRegistry(registryPath)
+
+    async function readEntries(): Promise<Array<{ terminalId: string; pid: number }>> {
+      try {
+        const raw = JSON.parse(await readFile(registryPath, "utf8")) as { entries: Array<{ terminalId: string; pid: number }> }
+        return raw.entries
+      } catch {
+        return []
+      }
+    }
+
+    async function waitForEntries(predicate: (entries: Array<{ terminalId: string; pid: number }>) => boolean) {
+      const deadline = Date.now() + COMMAND_TIMEOUT_MS
+      while (Date.now() < deadline) {
+        if (predicate(await readEntries())) return
+        await Bun.sleep(25)
+      }
+      throw new Error("Timed out waiting on registry entries")
+    }
+
+    const manager = new TerminalManager({ pidRegistry: registry })
+    manager.createTerminal({
+      projectPath: tempProjectPath,
+      terminalId,
+      cols: 80,
+      rows: 24,
+      scrollback: 1_000,
+    })
+
+    try {
+      await waitForEntries((entries) => entries.some((entry) => entry.terminalId === terminalId))
+
+      manager.close(terminalId)
+
+      await waitForEntries((entries) => !entries.some((entry) => entry.terminalId === terminalId))
+    } finally {
+      manager.close(terminalId)
+    }
+  })
+
+  test("kills the shell process group when the shell exits", async () => {
+    const terminalId = "terminal-descendant-reap"
+    const pgroupKillCalls: Array<{ pgid: number; signal: NodeJS.Signals | number }> = []
+    const originalKill = process.kill.bind(process)
+    process.kill = ((pid: number, signal: NodeJS.Signals | number = "SIGTERM") => {
+      if (pid < 0) {
+        pgroupKillCalls.push({ pgid: -pid, signal })
+      }
+      return originalKill(pid, signal)
+    }) as typeof process.kill
+
+    const { manager } = await createSession(terminalId)
+
+    try {
+      // `exit\r` makes the shell exit naturally — the bug was that this
+      // path never reaped the shell's process group, leaving any
+      // background descendants (e.g. `bun run dev`) adopted by init.
+      manager.write(terminalId, "exit\r")
+      await waitFor(() => manager.getSnapshot(terminalId)?.status === "exited", COMMAND_TIMEOUT_MS)
+
+      // The exited handler must have issued a SIGKILL to the shell pgroup.
+      expect(pgroupKillCalls.some((call) => call.signal === "SIGKILL")).toBe(true)
+    } finally {
+      process.kill = originalKill
       manager.close(terminalId)
     }
   })

@@ -1262,7 +1262,11 @@ export function createWsRouter({
           break
         }
         case "project.remove": {
+          const project = store.getProject(command.projectId)
           await store.removeProject(command.projectId)
+          if (project) {
+            terminals.closeByCwd(project.localPath)
+          }
           send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
           resolvedAnalytics.track("project_removed")
           break
