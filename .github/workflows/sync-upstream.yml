@@ -65,6 +65,13 @@ jobs:
           - Upstream: \`${{ env.UPSTREAM_REPO }}@${UPSTREAM_HEAD}\`
           - Commits ahead: ${{ steps.check.outputs.behind }}
 
+          ## :warning: MUST use "Create a merge commit" — do NOT squash
+
+          Squash collapses upstream commits into one fork SHA, so GitHub keeps
+          showing the fork as "N commits behind upstream" forever. A merge
+          commit preserves upstream's commit graph and the "behind" counter
+          drops to 0.
+
           Resolve conflicts locally if needed:
           \`\`\`bash
           gh pr checkout <pr-number>
@@ -75,10 +82,12 @@ jobs:
           )
           # Check if PR already exists for this branch
           PR_NUMBER=$(gh pr list --head ${{ env.SYNC_BRANCH }} --base ${{ env.BASE_BRANCH }} --state open --json number --jq '.[0].number // empty')
+          # Ensure label exists (idempotent)
+          gh label create merge-commit-required --color FBCA04 --description "Merge with merge-commit, NOT squash" 2>/dev/null || true
           if [ -n "$PR_NUMBER" ]; then
             echo "Updating existing PR #$PR_NUMBER"
-            gh pr edit "$PR_NUMBER" --title "$TITLE" --body "$BODY"
+            gh pr edit "$PR_NUMBER" --title "$TITLE" --body "$BODY" --add-label merge-commit-required
           else
             echo "Creating new PR"
-            gh pr create --base ${{ env.BASE_BRANCH }} --head ${{ env.SYNC_BRANCH }} --title "$TITLE" --body "$BODY"
+            gh pr create --base ${{ env.BASE_BRANCH }} --head ${{ env.SYNC_BRANCH }} --title "$TITLE" --body "$BODY" --label merge-commit-required
           fi
