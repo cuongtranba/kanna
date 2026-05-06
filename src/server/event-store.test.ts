@@ -7,6 +7,7 @@ import type { TranscriptEntry } from "../shared/types"
 import type { SnapshotFile } from "./events"
 import type { AutoContinueEvent } from "./auto-continue/events"
 import { EventStore } from "./event-store"
+import { ACTIVE_SESSION_IDLE_GAP_MS } from "./read-models"
 
 const originalRuntimeProfile = process.env.KANNA_RUNTIME_PROFILE
 const tempDirs: string[] = []
@@ -895,19 +896,34 @@ describe("ChatTimingState accumulator", () => {
 
   test("idle gap > ACTIVE_SESSION_IDLE_GAP_MS resets activeSessionStartedAt and cumulative", () => {
     const store = new EventStore("/tmp/test-timings-5")
-    const HOUR = 60 * 60 * 1000
+    const gap = ACTIVE_SESSION_IDLE_GAP_MS + 1
     applyRaw(store, { v: 3, type: "project_opened", timestamp: 1000, projectId: "p1", localPath: "/x", title: "X" })
     applyRaw(store, { v: 3, type: "chat_created", timestamp: 2000, chatId: "c1", projectId: "p1", title: "T" })
     applyRaw(store, { v: 3, type: "turn_started", timestamp: 5000, chatId: "c1" })
     applyRaw(store, { v: 3, type: "turn_finished", timestamp: 8000, chatId: "c1" })
-    // Gap of 1 hour > 30 min threshold
-    applyRaw(store, { v: 3, type: "turn_started", timestamp: 8000 + HOUR, chatId: "c1" })
+    // Gap of ACTIVE_SESSION_IDLE_GAP_MS + 1 ms > threshold
+    applyRaw(store, { v: 3, type: "turn_started", timestamp: 8000 + gap, chatId: "c1" })
 
     const t = store.state.chatTimingsByChatId.get("c1")!
-    expect(t.activeSessionStartedAt).toBe(8000 + HOUR)
+    expect(t.activeSessionStartedAt).toBe(8000 + gap)
     expect(t.cumulativeMs.idle).toBe(0)
     expect(t.cumulativeMs.running).toBe(0)
     expect(t.status).toBe("running")
-    expect(t.stateEnteredAt).toBe(8000 + HOUR)
+    expect(t.stateEnteredAt).toBe(8000 + gap)
+  })
+
+  test("idle gap exactly equal to ACTIVE_SESSION_IDLE_GAP_MS does NOT reset (strict >)", () => {
+    const store = new EventStore("/tmp/test-timings-boundary")
+    applyRaw(store, { v: 3, type: "project_opened", timestamp: 1000, projectId: "p1", localPath: "/x", title: "X" })
+    applyRaw(store, { v: 3, type: "chat_created", timestamp: 2000, chatId: "c1", projectId: "p1", title: "T" })
+    applyRaw(store, { v: 3, type: "turn_started", timestamp: 5000, chatId: "c1" })
+    applyRaw(store, { v: 3, type: "turn_finished", timestamp: 8000, chatId: "c1" })
+    applyRaw(store, { v: 3, type: "turn_started", timestamp: 8000 + ACTIVE_SESSION_IDLE_GAP_MS, chatId: "c1" })
+
+    const t = store.state.chatTimingsByChatId.get("c1")!
+    // Active session preserved (no reset since gap is not strictly greater)
+    expect(t.activeSessionStartedAt).toBe(2000)
+    // Cumulative idle includes the full threshold gap (8000→8000+gap) plus the original 3000 (2000→5000)
+    expect(t.cumulativeMs.idle).toBe(3000 + ACTIVE_SESSION_IDLE_GAP_MS)
   })
 })
