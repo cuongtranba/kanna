@@ -97,6 +97,48 @@ describe("ChatRow", () => {
     expect(html).not.toContain(">1m<")
   })
 
+  test("live running state shows full word label with elapsed time", () => {
+    const html = renderToStaticMarkup(
+      <ChatRow
+        chat={{ ...baseChat, status: "running", stateEnteredAt: 0 }}
+        activeChatId={null}
+        nowMs={12_000}
+        onSelectChat={() => undefined}
+        onRenameChat={() => undefined}
+        onShareChat={() => undefined}
+        onOpenInFinder={() => undefined}
+        onForkChat={() => undefined}
+        onArchiveChat={() => undefined}
+        onDeleteChat={() => undefined}
+      />
+    )
+    // Full word "Running" not abbreviated "run"
+    expect(html).toContain("Running")
+    // Elapsed time in M:SS format
+    expect(html).toContain("0:12")
+    // Slot must be widened for live state
+    expect(html).toContain("w-20")
+  })
+
+  test("live waiting_for_user state shows Waiting label", () => {
+    const html = renderToStaticMarkup(
+      <ChatRow
+        chat={{ ...baseChat, status: "waiting_for_user", stateEnteredAt: 0 }}
+        activeChatId={null}
+        nowMs={30_000}
+        onSelectChat={() => undefined}
+        onRenameChat={() => undefined}
+        onShareChat={() => undefined}
+        onOpenInFinder={() => undefined}
+        onForkChat={() => undefined}
+        onArchiveChat={() => undefined}
+        onDeleteChat={() => undefined}
+      />
+    )
+    expect(html).toContain("Waiting")
+    expect(html).toContain("0:30")
+  })
+
   test("renders a fork action next to the archive action when the chat can fork", () => {
     const html = renderToStaticMarkup(
       <ChatRow
