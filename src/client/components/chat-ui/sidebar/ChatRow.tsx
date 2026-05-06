@@ -4,9 +4,8 @@ import type { SidebarChatRow } from "../../../../shared/types"
 import { AnimatedShinyText } from "../../ui/animated-shiny-text"
 import { Button } from "../../ui/button"
 import { Kbd } from "../../ui/kbd"
-import { formatSidebarAgeLabel } from "../../../lib/formatters"
-import { getSidebarChatTimestamp } from "../../../lib/sidebarChats"
 import { cn, normalizeChatId } from "../../../lib/utils"
+import { formatCompactDuration, formatLiveDuration } from "../../../lib/formatDuration"
 import { ChatRowMenu } from "./Menus"
 
 const loadingStatuses = new Set(["starting", "running"])
@@ -40,8 +39,13 @@ function ChatRowImpl({
   onArchiveChat,
   onDeleteChat,
 }: Props) {
-  const ageLabel = formatSidebarAgeLabel(getSidebarChatTimestamp(chat), nowMs)
-  const trailingLabel = showShortcutHint && shortcutHint ? shortcutHint : ageLabel
+  const isLiveState = (chat.status === "running" || chat.status === "waiting_for_user") && chat.stateEnteredAt != null
+  const livePrefix = chat.status === "running" ? "run" : "wait"
+  const stampLabel = isLiveState && chat.stateEnteredAt != null
+    ? `${livePrefix} ${formatLiveDuration(nowMs - chat.stateEnteredAt)}`
+    : formatCompactDuration(nowMs - (chat.lastMessageAt ?? chat._creationTime))
+
+  const trailingLabel = showShortcutHint && shortcutHint ? shortcutHint : stampLabel
   const showShortcutKeycap = showShortcutHint && Boolean(shortcutHint)
   const normalizedChatId = normalizeChatId(chat.chatId)
 
@@ -93,7 +97,7 @@ function ChatRowImpl({
               </Kbd>
             </span>
           ) : (
-            <span className="hidden md:flex absolute inset-0 items-center justify-end pr-1 text-[11px] text-muted-foreground opacity-60 transition-opacity group-hover:opacity-0">
+            <span className="hidden md:flex absolute inset-0 items-center justify-end pr-1 text-[11px] text-muted-foreground tabular-nums opacity-60 transition-opacity group-hover:opacity-0">
               {trailingLabel}
             </span>
           )
