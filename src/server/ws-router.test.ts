@@ -750,6 +750,68 @@ describe("ws-router", () => {
     }
   })
 
+  test("project.remove kills terminals running in the project's cwd", async () => {
+    const state = createEmptyState()
+    const projectPath = await mkdtemp(path.join(tmpdir(), "kanna-router-project-"))
+    const closeByCwdCalls: string[] = []
+
+    try {
+      const router = createWsRouter({
+        store: {
+          state,
+          getProject: () => ({
+            id: "project-1",
+            localPath: projectPath,
+          }),
+          listChatsByProject: () => [],
+          removeProject: async () => {},
+        } as never,
+        agent: {
+          cancel: async () => {},
+          closeChat: async () => {},
+          getActiveStatuses: () => new Map(),
+          getDrainingChatIds: () => new Set(),
+          getWaitStartedAtByChatId: () => new Map(),
+        } as never,
+        analytics: {
+          track: () => {},
+          trackLaunch: () => {},
+        },
+        terminals: {
+          closeByCwd: (cwd: string) => {
+            closeByCwdCalls.push(cwd)
+          },
+          getSnapshot: () => null,
+          onEvent: () => () => {},
+        } as never,
+        keybindings: {
+          getSnapshot: () => DEFAULT_KEYBINDINGS_SNAPSHOT,
+          onChange: () => () => {},
+        } as never,
+        refreshDiscovery: async () => [],
+        getDiscoveredProjects: () => [],
+        machineDisplayName: "Local Machine",
+        updateManager: null,
+        pushManager: NOOP_PUSH_MANAGER,
+      })
+      const ws = new FakeWebSocket()
+
+      await router.handleMessage(
+        ws as never,
+        JSON.stringify({
+          v: 1,
+          type: "command",
+          id: "project-remove-1",
+          command: { type: "project.remove", projectId: "project-1" },
+        })
+      )
+
+      expect(closeByCwdCalls).toEqual([projectPath])
+    } finally {
+      await rm(projectPath, { recursive: true, force: true })
+    }
+  })
+
   test("acks terminal.input without rebroadcasting terminal snapshots", async () => {
     const router = createWsRouter({
       store: { state: createEmptyState() } as never,
