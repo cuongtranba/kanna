@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.43.2](https://github.com/cuongtranba/kanna/compare/v0.43.1...v0.43.2) (2026-05-06)
+
+
+### Bug Fixes
+
+* **terminals:** stop dev process leaks on project remove, shell exit, SIGHUP, and crash ([#33](https://github.com/cuongtranba/kanna/issues/33)) ([7d872c1](https://github.com/cuongtranba/kanna/commit/7d872c1dbfa967baae5ccae8f390adb23c6753eb))
+
 ## [0.43.1](https://github.com/cuongtranba/kanna/compare/v0.43.0...v0.43.1) (2026-05-06)
 
 
