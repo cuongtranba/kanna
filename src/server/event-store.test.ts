@@ -831,3 +831,80 @@ describe("EventStore push events", () => {
     expect(events[1].kind).toBe("project_mute_set")
   })
 })
+
+import { ACTIVE_SESSION_IDLE_GAP_MS } from "./read-models"
+
+describe("ChatTimingState accumulator", () => {
+  test("chat_created seeds idle state with createdAt", () => {
+    const store = new EventStore("/tmp/test-timings-1")
+    store.append({ v: 3, type: "project_opened", timestamp: 1000, projectId: "p1", localPath: "/x", title: "X" })
+    store.append({ v: 3, type: "chat_created", timestamp: 2000, chatId: "c1", projectId: "p1", title: "T" })
+
+    const t = store.state.chatTimingsByChatId.get("c1")
+    expect(t).toBeDefined()
+    expect(t!.status).toBe("idle")
+    expect(t!.stateEnteredAt).toBe(2000)
+    expect(t!.activeSessionStartedAt).toBe(2000)
+    expect(t!.cumulativeMs).toEqual({ idle: 0, starting: 0, running: 0, failed: 0 })
+  })
+
+  test("turn_started transitions idle -> running and accumulates idle time", () => {
+    const store = new EventStore("/tmp/test-timings-2")
+    store.append({ v: 3, type: "project_opened", timestamp: 1000, projectId: "p1", localPath: "/x", title: "X" })
+    store.append({ v: 3, type: "chat_created", timestamp: 2000, chatId: "c1", projectId: "p1", title: "T" })
+    store.append({ v: 3, type: "turn_started", timestamp: 5000, chatId: "c1" })
+
+    const t = store.state.chatTimingsByChatId.get("c1")!
+    expect(t.status).toBe("running")
+    expect(t.stateEnteredAt).toBe(5000)
+    expect(t.cumulativeMs.idle).toBe(3000)
+    expect(t.cumulativeMs.running).toBe(0)
+    expect(t.lastTurnStartedAt).toBe(5000)
+  })
+
+  test("turn_finished transitions running -> idle, sets lastTurnDurationMs", () => {
+    const store = new EventStore("/tmp/test-timings-3")
+    store.append({ v: 3, type: "project_opened", timestamp: 1000, projectId: "p1", localPath: "/x", title: "X" })
+    store.append({ v: 3, type: "chat_created", timestamp: 2000, chatId: "c1", projectId: "p1", title: "T" })
+    store.append({ v: 3, type: "turn_started", timestamp: 5000, chatId: "c1" })
+    store.append({ v: 3, type: "turn_finished", timestamp: 8000, chatId: "c1" })
+
+    const t = store.state.chatTimingsByChatId.get("c1")!
+    expect(t.status).toBe("idle")
+    expect(t.stateEnteredAt).toBe(8000)
+    expect(t.cumulativeMs.idle).toBe(3000)
+    expect(t.cumulativeMs.running).toBe(3000)
+    expect(t.lastTurnDurationMs).toBe(3000)
+  })
+
+  test("turn_failed transitions running -> failed", () => {
+    const store = new EventStore("/tmp/test-timings-4")
+    store.append({ v: 3, type: "project_opened", timestamp: 1000, projectId: "p1", localPath: "/x", title: "X" })
+    store.append({ v: 3, type: "chat_created", timestamp: 2000, chatId: "c1", projectId: "p1", title: "T" })
+    store.append({ v: 3, type: "turn_started", timestamp: 5000, chatId: "c1" })
+    store.append({ v: 3, type: "turn_failed", timestamp: 7000, chatId: "c1", error: "boom" })
+
+    const t = store.state.chatTimingsByChatId.get("c1")!
+    expect(t.status).toBe("failed")
+    expect(t.stateEnteredAt).toBe(7000)
+    expect(t.cumulativeMs.running).toBe(2000)
+  })
+
+  test("idle gap > ACTIVE_SESSION_IDLE_GAP_MS resets activeSessionStartedAt and cumulative", () => {
+    const store = new EventStore("/tmp/test-timings-5")
+    const HOUR = 60 * 60 * 1000
+    store.append({ v: 3, type: "project_opened", timestamp: 1000, projectId: "p1", localPath: "/x", title: "X" })
+    store.append({ v: 3, type: "chat_created", timestamp: 2000, chatId: "c1", projectId: "p1", title: "T" })
+    store.append({ v: 3, type: "turn_started", timestamp: 5000, chatId: "c1" })
+    store.append({ v: 3, type: "turn_finished", timestamp: 8000, chatId: "c1" })
+    // Gap of 1 hour > 30 min threshold
+    store.append({ v: 3, type: "turn_started", timestamp: 8000 + HOUR, chatId: "c1" })
+
+    const t = store.state.chatTimingsByChatId.get("c1")!
+    expect(t.activeSessionStartedAt).toBe(8000 + HOUR)
+    expect(t.cumulativeMs.idle).toBe(0)
+    expect(t.cumulativeMs.running).toBe(0)
+    expect(t.status).toBe("running")
+    expect(t.stateEnteredAt).toBe(8000 + HOUR)
+  })
+})
