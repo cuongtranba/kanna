@@ -19,6 +19,7 @@ import { KeybindingsManager } from "./keybindings"
 import { readLlmProviderSnapshot, validateLlmProviderCredentials, writeLlmProviderSnapshot } from "./llm-provider"
 import { getMachineDisplayName } from "./machine-name"
 import { TerminalManager } from "./terminal-manager"
+import { TerminalPidRegistry } from "./terminal-pid-registry"
 import { UpdateManager } from "./update-manager"
 import type { UpdateInstallAttemptResult } from "./cli-runtime"
 import { compareVersions } from "./cli-runtime"
@@ -134,7 +135,12 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
 
   let server: ReturnType<typeof Bun.serve<ClientState>>
   let router: ReturnType<typeof createWsRouter>
-  const terminals = new TerminalManager()
+  const terminalPidRegistry = new TerminalPidRegistry(path.join(store.dataDir, "terminals.json"))
+  const reapedTerminals = await terminalPidRegistry.reapStale()
+  if (reapedTerminals.length > 0) {
+    console.log(`[kanna] reaped ${reapedTerminals.length} orphan terminal process group(s) from previous run`)
+  }
+  const terminals = new TerminalManager({ pidRegistry: terminalPidRegistry })
   const keybindings = new KeybindingsManager()
   const appSettings = new AppSettingsManager(path.join(store.dataDir, "settings.json"))
   await appSettings.initialize()

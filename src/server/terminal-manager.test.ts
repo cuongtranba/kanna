@@ -1,5 +1,5 @@
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test"
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises"
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { TerminalManager } from "./terminal-manager"
@@ -152,6 +152,83 @@ describeIfSupported("TerminalManager", () => {
       await waitFor(() => manager.getSnapshot(terminalId)?.status === "exited", COMMAND_TIMEOUT_MS)
 
       expect(manager.getSnapshot(terminalId)?.exitCode).toBe(0)
+    } finally {
+      manager.close(terminalId)
+    }
+  })
+
+  test("registers terminal pids and unregisters on close", async () => {
+    const terminalId = "terminal-pid-registry-wiring"
+    const registryPath = path.join(tempProjectPath, "terminals.json")
+    const { TerminalPidRegistry } = await import("./terminal-pid-registry")
+    const registry = new TerminalPidRegistry(registryPath)
+
+    async function readEntries(): Promise<Array<{ terminalId: string; pid: number }>> {
+      try {
+        const raw = JSON.parse(await readFile(registryPath, "utf8")) as { entries: Array<{ terminalId: string; pid: number }> }
+        return raw.entries
+      } catch {
+        return []
+      }
+    }
+
+    async function waitForEntries(predicate: (entries: Array<{ terminalId: string; pid: number }>) => boolean) {
+      const deadline = Date.now() + COMMAND_TIMEOUT_MS
+      while (Date.now() < deadline) {
+        if (predicate(await readEntries())) return
+        await Bun.sleep(25)
+      }
+      throw new Error("Timed out waiting on registry entries")
+    }
+
+    const manager = new TerminalManager({ pidRegistry: registry })
+    manager.createTerminal({
+      projectPath: tempProjectPath,
+      terminalId,
+      cols: 80,
+      rows: 24,
+      scrollback: 1_000,
+    })
+
+    try {
+      await waitForEntries((entries) => entries.some((entry) => entry.terminalId === terminalId))
+
+      manager.close(terminalId)
+
+      await waitForEntries((entries) => !entries.some((entry) => entry.terminalId === terminalId))
+    } finally {
+      manager.close(terminalId)
+    }
+  })
+
+  test("reaps descendants left in the shell's process group when the shell exits", async () => {
+    const terminalId = "terminal-descendant-reap"
+    const pidFilePath = path.join(tempProjectPath, "child.pid")
+    const { manager } = await createSession(terminalId)
+
+    try {
+      // Disable job control so `&` keeps the child in the shell's pgroup.
+      // Without our fix, the shell exits but the backgrounded child survives,
+      // adopted by init. With the fix, the exited handler kills the pgroup.
+      manager.write(
+        terminalId,
+        `set +m; sleep 60 & echo $! > ${pidFilePath}; sleep 0.2; exit\r`,
+      )
+
+      await waitFor(() => manager.getSnapshot(terminalId)?.status === "exited", COMMAND_TIMEOUT_MS)
+
+      const childPid = Number.parseInt((await readFile(pidFilePath, "utf8")).trim(), 10)
+      expect(Number.isFinite(childPid)).toBe(true)
+      expect(childPid).toBeGreaterThan(0)
+
+      await waitFor(() => {
+        try {
+          process.kill(childPid, 0)
+          return false
+        } catch {
+          return true
+        }
+      }, COMMAND_TIMEOUT_MS)
     } finally {
       manager.close(terminalId)
     }
