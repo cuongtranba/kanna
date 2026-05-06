@@ -15,6 +15,7 @@ import { deriveChatSchedules } from "./auto-continue/read-model"
 import { deriveChatTunnels } from "./cloudflare-tunnel/read-model"
 import type { CloudflareTunnelEvent } from "./cloudflare-tunnel/events"
 
+export const ACTIVE_SESSION_IDLE_GAP_MS = 30 * 60 * 1_000
 const SIDEBAR_RECENT_WINDOW_MS = 24 * 60 * 60 * 1_000
 const SIDEBAR_FALLBACK_PREVIEW_LIMIT = 5
 
