@@ -1,5 +1,6 @@
 import type { ProcessedResultMessage } from "./types"
 import { MetaRow, MetaLabel } from "./shared"
+import { formatCompactDuration } from "../../lib/formatDuration"
 
 interface Props {
   message: ProcessedResultMessage
@@ -36,10 +37,17 @@ export function ResultMessage({ message }: Props) {
   }
 
   return (
-    <MetaRow className={`px-0.5 text-xs tracking-wide ${message.durationMs > 60000 ? '' : 'hidden'}`}>
-      <div className="w-full h-[1px] bg-border"></div>
-      <MetaLabel className="whitespace-nowrap text-[11px] tracking-widest text-muted-foreground/60 uppercase flex-shrink-0">Worked for {formatDuration(message.durationMs)}</MetaLabel>
-      <div className="w-full h-[1px] bg-border"></div>
-    </MetaRow>
+    <>
+      <MetaRow className={`px-0.5 text-xs tracking-wide ${message.durationMs > 60000 ? '' : 'hidden'}`}>
+        <div className="w-full h-[1px] bg-border"></div>
+        <MetaLabel className="whitespace-nowrap text-[11px] tracking-widest text-muted-foreground/60 uppercase flex-shrink-0">Worked for {formatDuration(message.durationMs)}</MetaLabel>
+        <div className="w-full h-[1px] bg-border"></div>
+      </MetaRow>
+      {message.durationMs > 0 ? (
+        <div className="px-2 pb-1">
+          <span className="text-xs text-muted-foreground ml-2">· {formatCompactDuration(message.durationMs)}</span>
+        </div>
+      ) : null}
+    </>
   )
 }
