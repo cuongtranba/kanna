@@ -2,13 +2,14 @@ import process from "node:process"
 import type {
   ChatRuntime,
   ChatSnapshot,
+  ChatStateTimings,
   KannaStatus,
   LocalProjectsSnapshot,
   SidebarChatRow,
   SidebarData,
   SidebarProjectGroup,
 } from "../shared/types"
-import type { ChatRecord, StoreState } from "./events"
+import type { ChatRecord, ChatTimingState, StoreState } from "./events"
 import { resolveLocalPath } from "./paths"
 import { SERVER_PROVIDERS } from "./provider-catalog"
 import { deriveChatSchedules } from "./auto-continue/read-model"
@@ -178,6 +179,65 @@ export function deriveLocalProjectsSnapshot(
       platform: process.platform,
     },
     projects: [...projects.values()].sort((a, b) => (b.lastOpenedAt ?? 0) - (a.lastOpenedAt ?? 0)),
+  }
+}
+
+export function deriveTimings(
+  chat: Pick<ChatRecord, "createdAt">,
+  accumulator: ChatTimingState | undefined,
+  activeStatus: KannaStatus | undefined,
+  waitStartedAt: number | undefined,
+  nowMs: number,
+): ChatStateTimings {
+  const cumulativeMs = {
+    idle: 0,
+    starting: 0,
+    running: 0,
+    waiting_for_user: 0,
+    failed: 0,
+  }
+
+  if (!accumulator) {
+    // Legacy chat with no events folded yet
+    const idleSegment = Math.max(0, nowMs - chat.createdAt)
+    cumulativeMs.idle = idleSegment
+    return {
+      activeSessionStartedAt: chat.createdAt,
+      chatCreatedAt: chat.createdAt,
+      stateEnteredAt: chat.createdAt,
+      lastTurnDurationMs: null,
+      derivedAtMs: nowMs,
+      cumulativeMs,
+    }
+  }
+
+  cumulativeMs.idle = accumulator.cumulativeMs.idle
+  cumulativeMs.starting = accumulator.cumulativeMs.starting
+  cumulativeMs.running = accumulator.cumulativeMs.running
+  cumulativeMs.failed = accumulator.cumulativeMs.failed
+
+  // Open segment from accumulator's stateEnteredAt → nowMs
+  const openSegmentMs = Math.max(0, nowMs - accumulator.stateEnteredAt)
+
+  let stateEnteredAt = accumulator.stateEnteredAt
+
+  if (activeStatus === "waiting_for_user" && waitStartedAt != null) {
+    // Add the running portion before wait started
+    const preWaitMs = Math.max(0, waitStartedAt - accumulator.stateEnteredAt)
+    cumulativeMs[accumulator.status] += preWaitMs
+    cumulativeMs.waiting_for_user += Math.max(0, nowMs - waitStartedAt)
+    stateEnteredAt = waitStartedAt
+  } else {
+    cumulativeMs[accumulator.status] += openSegmentMs
+  }
+
+  return {
+    activeSessionStartedAt: accumulator.activeSessionStartedAt,
+    chatCreatedAt: chat.createdAt,
+    stateEnteredAt,
+    lastTurnDurationMs: accumulator.lastTurnDurationMs,
+    derivedAtMs: nowMs,
+    cumulativeMs,
   }
 }
 
