@@ -51,7 +51,7 @@ describe("ChatRow", () => {
       />
     )
 
-    expect(html).toContain(">now<")
+    expect(html).toContain(">30s<")
   })
 
   test("prefers lastMessageAt over creation time for the age label", () => {
@@ -71,7 +71,7 @@ describe("ChatRow", () => {
     )
 
     expect(html).toContain(">1m<")
-    expect(html).not.toContain(">now<")
+    expect(html).not.toContain(">1s<")
   })
 
   test("renders the shortcut hint when the modifier is held", () => {
