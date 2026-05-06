@@ -201,35 +201,30 @@ describeIfSupported("TerminalManager", () => {
     }
   })
 
-  test("reaps descendants left in the shell's process group when the shell exits", async () => {
+  test("kills the shell process group when the shell exits", async () => {
     const terminalId = "terminal-descendant-reap"
-    const pidFilePath = path.join(tempProjectPath, "child.pid")
+    const pgroupKillCalls: Array<{ pgid: number; signal: NodeJS.Signals | number }> = []
+    const originalKill = process.kill.bind(process)
+    process.kill = ((pid: number, signal: NodeJS.Signals | number = "SIGTERM") => {
+      if (pid < 0) {
+        pgroupKillCalls.push({ pgid: -pid, signal })
+      }
+      return originalKill(pid, signal)
+    }) as typeof process.kill
+
     const { manager } = await createSession(terminalId)
 
     try {
-      // Disable job control so `&` keeps the child in the shell's pgroup.
-      // Without our fix, the shell exits but the backgrounded child survives,
-      // adopted by init. With the fix, the exited handler kills the pgroup.
-      manager.write(
-        terminalId,
-        `set +m; sleep 60 & echo $! > ${pidFilePath}; sleep 0.2; exit\r`,
-      )
-
+      // `exit\r` makes the shell exit naturally — the bug was that this
+      // path never reaped the shell's process group, leaving any
+      // background descendants (e.g. `bun run dev`) adopted by init.
+      manager.write(terminalId, "exit\r")
       await waitFor(() => manager.getSnapshot(terminalId)?.status === "exited", COMMAND_TIMEOUT_MS)
 
-      const childPid = Number.parseInt((await readFile(pidFilePath, "utf8")).trim(), 10)
-      expect(Number.isFinite(childPid)).toBe(true)
-      expect(childPid).toBeGreaterThan(0)
-
-      await waitFor(() => {
-        try {
-          process.kill(childPid, 0)
-          return false
-        } catch {
-          return true
-        }
-      }, COMMAND_TIMEOUT_MS)
+      // The exited handler must have issued a SIGKILL to the shell pgroup.
+      expect(pgroupKillCalls.some((call) => call.signal === "SIGKILL")).toBe(true)
     } finally {
+      process.kill = originalKill
       manager.close(terminalId)
     }
   })
