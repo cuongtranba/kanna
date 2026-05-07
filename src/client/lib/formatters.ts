@@ -39,6 +39,23 @@ export function formatModelLabel(modelId: string): string {
 
 export const SIDEBAR_RECENT_WINDOW_MS = 24 * 60 * 60_000
 
+/**
+ * Formats elapsed time between startedAt and now as a human-readable string.
+ * Under 60s: "Ns" | 60s..1h: "Mm Ss" | 1h+: "Hh Mm"
+ * Tabular-nums-friendly — no leading zeros except on trailing parts.
+ * Clock skew (startedAt > now) is clamped to 0.
+ */
+export function formatAge(startedAt: number, now: number): string {
+  const elapsedMs = Math.max(0, now - startedAt)
+  const totalSeconds = Math.floor(elapsedMs / 1_000)
+  const hours = Math.floor(totalSeconds / 3_600)
+  const minutes = Math.floor((totalSeconds % 3_600) / 60)
+  const seconds = totalSeconds % 60
+  if (hours > 0) return `${hours}h ${minutes}m`
+  if (minutes > 0) return `${minutes}m ${seconds}s`
+  return `${seconds}s`
+}
+
 export function formatSidebarAgeLabel(lastMessageAt: number | undefined, nowMs: number): string | null {
   if (lastMessageAt === undefined) return null
 
