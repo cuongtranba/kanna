@@ -1,4 +1,5 @@
 import type { BackgroundTask } from "../shared/types"
+import type { AnalyticsReporter } from "./analytics"
 
 export type { BackgroundTask }
 
@@ -77,6 +78,10 @@ async function verifyComm(pid: number, expectedCommand: string): Promise<boolean
   }
 }
 
+export interface BackgroundTaskRegistryOptions {
+  analytics?: AnalyticsReporter
+}
+
 export class BackgroundTaskRegistry {
   private tasks = new Map<string, BackgroundTask>()
   private listeners: Record<RegistryEvent, Set<Listener>> = {
@@ -85,6 +90,11 @@ export class BackgroundTaskRegistry {
     removed: new Set(),
   }
   private strategies: StopStrategies = {}
+  private readonly analytics: AnalyticsReporter | undefined
+
+  constructor(options: BackgroundTaskRegistryOptions = {}) {
+    this.analytics = options.analytics
+  }
 
   setStrategies(strategies: StopStrategies): void {
     this.strategies = { ...this.strategies, ...strategies }
@@ -105,6 +115,7 @@ export class BackgroundTaskRegistry {
   register(task: BackgroundTask): void {
     this.tasks.set(task.id, task)
     this.emit("added", task)
+    this.analytics?.track("bg_task_registered", { task_kind: task.kind })
   }
 
   update(id: string, patch: Partial<BackgroundTask>): void {
@@ -134,19 +145,33 @@ export class BackgroundTaskRegistry {
     const task = this.tasks.get(id)
     if (!task) return { ok: false, error: "task not found" }
 
+    const result = await this.runStop(task, opts)
+
+    if (result.ok) {
+      this.analytics?.track("bg_task_stopped", {
+        task_kind: task.kind,
+        age_ms: Date.now() - task.startedAt,
+        force: opts.force ?? false,
+      })
+    }
+
+    return result
+  }
+
+  private async runStop(task: BackgroundTask, opts: StopOptions): Promise<StopResult> {
     if (task.kind === "draining_stream") {
       await this.strategies.closeStream?.(task)
-      this.unregister(id)
+      this.unregister(task.id)
       return { ok: true, method: "close" }
     }
     if (task.kind === "terminal_pty") {
       await this.strategies.killPty?.(task)
-      this.unregister(id)
+      this.unregister(task.id)
       return { ok: true, method: "close" }
     }
     if (task.kind === "codex_session") {
       await this.strategies.shutdownCodex?.(task)
-      this.unregister(id)
+      this.unregister(task.id)
       return { ok: true, method: "shutdown" }
     }
 
@@ -155,36 +180,36 @@ export class BackgroundTaskRegistry {
 
     const commOk = await verifyComm(task.pid, task.command)
     if (!commOk) {
-      this.unregister(id)
+      this.unregister(task.id)
       return { ok: false, error: "PID mismatch (process reused)" }
     }
 
     if (opts.force) {
-      this.update(id, { status: "stopping" })
+      this.update(task.id, { status: "stopping" })
       await safeKill(task.pid, "SIGKILL")
-      this.unregister(id)
+      this.unregister(task.id)
       return { ok: true, method: "sigkill" }
     }
 
     // If the SDK provides a custom kill strategy, delegate to it.
     if (this.strategies.killShell) {
-      this.update(id, { status: "stopping" })
+      this.update(task.id, { status: "stopping" })
       await this.strategies.killShell(task)
-      this.unregister(id)
+      this.unregister(task.id)
       return { ok: true, method: "sigterm" }
     }
 
-    this.update(id, { status: "stopping" })
+    this.update(task.id, { status: "stopping" })
     await safeKill(task.pid, "SIGTERM")
     const grace = opts.graceMs ?? 3000
     const exited = await waitForExit(task.pid, grace)
     if (exited) {
-      this.unregister(id)
+      this.unregister(task.id)
       return { ok: true, method: "sigterm" }
     }
     await safeKill(task.pid, "SIGKILL")
     await waitForExit(task.pid, 1000)
-    this.unregister(id)
+    this.unregister(task.id)
     return { ok: true, method: "sigkill" }
   }
 

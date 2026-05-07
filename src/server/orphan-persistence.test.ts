@@ -11,6 +11,16 @@ import {
   type PersistedTask,
 } from "./orphan-persistence"
 import { BackgroundTaskRegistry } from "./background-tasks"
+import type { AnalyticsReporter } from "./analytics"
+
+function makeAnalytics() {
+  const calls: Array<{ name: string; properties?: Record<string, unknown> }> = []
+  const reporter: AnalyticsReporter = {
+    track: (name, properties) => { calls.push({ name, properties }) },
+    trackLaunch: () => {},
+  }
+  return { reporter, calls }
+}
 
 const TEST_PORT = 49_999
 
@@ -92,6 +102,32 @@ describe("orphan persistence", () => {
     await writeFile(filePath, "{ not valid json !!!", "utf8")
     const result = await readOrphans(TEST_PORT, { stateDir })
     expect(result).toEqual([])
+  })
+
+  it("analytics: bg_task_orphan_kept emitted with count of survivors", async () => {
+    const { reporter, calls } = makeAnalytics()
+    const stateDir = await makeTmpDir()
+    const tasks = makeTasks([
+      { id: "live1", pid: process.pid, command: "bun", chatId: "c1", startedAt: 1_000 },
+      { id: "live2", pid: process.pid, command: "bun", chatId: "c2", startedAt: 2_000 },
+    ])
+    await writeOrphans(TEST_PORT, tasks, { stateDir })
+    const registry = new BackgroundTaskRegistry()
+    const kept = await recoverOrphans(registry, TEST_PORT, { stateDir, analytics: reporter })
+    expect(kept).toBe(2)
+    expect(calls).toHaveLength(1)
+    expect(calls[0]?.name).toBe("bg_task_orphan_kept")
+    expect(calls[0]?.properties?.count).toBe(2)
+  })
+
+  it("analytics: no event emitted when no orphans survive", async () => {
+    const { reporter, calls } = makeAnalytics()
+    const stateDir = await makeTmpDir()
+    // No orphan file — recoverOrphans returns 0
+    const registry = new BackgroundTaskRegistry()
+    const kept = await recoverOrphans(registry, TEST_PORT, { stateDir, analytics: reporter })
+    expect(kept).toBe(0)
+    expect(calls).toHaveLength(0)
   })
 
   it("atomic write: temp file is renamed to final file", async () => {

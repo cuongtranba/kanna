@@ -3,7 +3,7 @@ import os from "node:os"
 import path from "node:path"
 import type { ServerWebSocket } from "bun"
 import { PROTOCOL_VERSION } from "../shared/types"
-import type { BackgroundTaskDiffEvent, ClientEnvelope, ServerEnvelope, SubscriptionTopic } from "../shared/protocol"
+import type { BackgroundTaskDiffEvent, BgTasksSnapshotData, ClientEnvelope, ServerEnvelope, SubscriptionTopic } from "../shared/protocol"
 import { isClientEnvelope } from "../shared/protocol"
 import type { BackgroundTaskRegistry } from "./background-tasks"
 import type { AgentCoordinator } from "./agent"
@@ -144,6 +144,11 @@ interface CreateWsRouterArgs {
   updateManager: UpdateManager | null
   pushManager: PushManager
   backgroundTasks?: Pick<BackgroundTaskRegistry, "list" | "on" | "stop">
+  /**
+   * Number of orphan tasks recovered at boot. Delivered once in the first
+   * bg-tasks snapshot so the client can show a one-time toast.
+   */
+  bootOrphanRecoveryCount?: number
 }
 
 interface SnapshotBroadcastFilter {
@@ -402,11 +407,14 @@ export function createWsRouter({
   updateManager,
   pushManager,
   backgroundTasks,
+  bootOrphanRecoveryCount,
 }: CreateWsRouterArgs) {
   const sockets = new Set<ServerWebSocket<ClientState>>()
   let pendingBroadcastTimer: ReturnType<typeof setTimeout> | null = null
   let pendingBroadcastAll = false
   const pendingBroadcastChatIds = new Set<string>()
+  // Deliver the boot orphan count in the very first bg-tasks snapshot only.
+  let orphanCountDelivered = false
   const resolvedDiffStore = diffStore ?? {
     getProjectSnapshot: () => ({ status: "unknown", branchName: undefined, defaultBranchName: undefined, hasOriginRemote: undefined, originRepoSlug: undefined, hasUpstream: undefined, aheadCount: undefined, behindCount: undefined, lastFetchedAt: undefined, files: [] as const, branchHistory: { entries: [] as const } }),
     refreshSnapshot: async () => false,
@@ -817,13 +825,22 @@ export function createWsRouter({
     }
 
     if (topic.type === "bg-tasks") {
+      const orphanRecoveryCount =
+        !orphanCountDelivered && bootOrphanRecoveryCount != null && bootOrphanRecoveryCount > 0
+          ? bootOrphanRecoveryCount
+          : undefined
+      if (orphanRecoveryCount !== undefined) orphanCountDelivered = true
+      const bgTasksData: BgTasksSnapshotData = {
+        tasks: backgroundTasks?.list() ?? [],
+        orphanRecoveryCount,
+      }
       return {
         v: PROTOCOL_VERSION,
         type: "snapshot",
         id,
         snapshot: {
           type: "bg-tasks",
-          data: backgroundTasks?.list() ?? [],
+          data: bgTasksData,
         },
       }
     }

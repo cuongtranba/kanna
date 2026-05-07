@@ -2,6 +2,7 @@ import path from "node:path"
 import os from "node:os"
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises"
 import type { BackgroundTaskRegistry } from "./background-tasks"
+import type { AnalyticsReporter } from "./analytics"
 
 export type PersistedTask = {
   id: string
@@ -106,6 +107,10 @@ export function subscribeOrphanPersistence(
   }
 }
 
+export type RecoverOrphansOptions = OrphanPaths & {
+  analytics?: AnalyticsReporter
+}
+
 /**
  * Read orphan file, probe PIDs, and register survivors into the registry.
  * Returns the count of surviving orphan entries registered.
@@ -114,8 +119,9 @@ export function subscribeOrphanPersistence(
 export async function recoverOrphans(
   registry: BackgroundTaskRegistry,
   port: number,
-  paths: OrphanPaths = {},
+  options: RecoverOrphansOptions = {},
 ): Promise<number> {
+  const { analytics, ...paths } = options
   const persisted = await readOrphans(port, paths)
   let kept = 0
   for (const t of persisted) {
@@ -133,6 +139,9 @@ export async function recoverOrphans(
       orphan: true,
     })
     kept++
+  }
+  if (kept > 0) {
+    analytics?.track("bg_task_orphan_kept", { count: kept })
   }
   return kept
 }

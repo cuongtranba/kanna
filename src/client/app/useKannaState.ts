@@ -20,9 +20,9 @@ import { processTranscriptMessages } from "../lib/parseTranscript"
 import { generateUUID } from "../lib/utils"
 import { canCancelStatus, getLatestToolIds, isProcessingStatus } from "./derived"
 import { KannaSocket, type SocketStatus } from "./socket"
-import type { BackgroundTaskDiffEvent, EditorOpenSettings, OpenExternalAction } from "../../shared/protocol"
+import type { BackgroundTaskDiffEvent, BgTasksSnapshotData, EditorOpenSettings, OpenExternalAction } from "../../shared/protocol"
 import { useBackgroundTasksStore } from "../stores/backgroundTasksStore"
-import type { BackgroundTask } from "../../shared/types"
+import { fireOrphanRecoveryToast } from "../lib/orphanToast"
 
 function sameRuntime(left: ChatSnapshot["runtime"] | null | undefined, right: ChatSnapshot["runtime"] | null | undefined) {
   if (left === right) return true
@@ -980,10 +980,15 @@ export function useKannaState(activeChatId: string | null): KannaState {
   }, [socket])
 
   useEffect(() => {
-    return socket.subscribe<BackgroundTask[], BackgroundTaskDiffEvent>(
+    let orphanToastShown = false
+    return socket.subscribe<BgTasksSnapshotData, BackgroundTaskDiffEvent>(
       { type: "bg-tasks" },
       (snapshot) => {
-        useBackgroundTasksStore.getState().applySnapshot(snapshot)
+        useBackgroundTasksStore.getState().applySnapshot(snapshot.tasks)
+        if (!orphanToastShown && snapshot.orphanRecoveryCount != null && snapshot.orphanRecoveryCount > 0) {
+          orphanToastShown = true
+          fireOrphanRecoveryToast(snapshot.orphanRecoveryCount)
+        }
       },
       (event) => {
         if (event.type === "bg-tasks.added") {

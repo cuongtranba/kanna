@@ -1,6 +1,16 @@
 import { describe, expect, it } from "bun:test"
 import { spawn } from "bun"
 import { BackgroundTaskRegistry, type BackgroundTask } from "./background-tasks"
+import type { AnalyticsReporter } from "./analytics"
+
+function makeAnalytics() {
+  const calls: Array<{ name: string; properties?: Record<string, unknown> }> = []
+  const reporter: AnalyticsReporter = {
+    track: (name, properties) => { calls.push({ name, properties }) },
+    trackLaunch: () => {},
+  }
+  return { reporter, calls }
+}
 
 const drainingSample = (
   overrides: Partial<Extract<BackgroundTask, { kind: "draining_stream" }>> = {},
@@ -181,6 +191,63 @@ describe("BackgroundTaskRegistry.stop", () => {
     }
     await child.exited
   }, 5000)
+
+  it("analytics: bg_task_stopped emitted after successful stop", async () => {
+    const { reporter, calls } = makeAnalytics()
+    const child = spawn({
+      cmd: ["bun", "-e", "setInterval(() => {}, 1000);"],
+      stdin: "ignore",
+    })
+    await Bun.sleep(200)
+    const r = new BackgroundTaskRegistry({ analytics: reporter })
+    const startedAt = Date.now() - 500
+    r.register({
+      kind: "bash_shell",
+      id: "sh-analytics",
+      chatId: null,
+      command: "bun",
+      shellId: "shell-analytics",
+      pid: child.pid!,
+      startedAt,
+      lastOutput: "",
+      status: "running",
+    })
+    // bg_task_registered is emitted on register
+    expect(calls).toHaveLength(1)
+    expect(calls[0]?.name).toBe("bg_task_registered")
+    expect(calls[0]?.properties?.task_kind).toBe("bash_shell")
+
+    const result = await r.stop("sh-analytics", { force: true })
+    expect(result.ok).toBe(true)
+    // bg_task_stopped is emitted after successful stop
+    expect(calls).toHaveLength(2)
+    expect(calls[1]?.name).toBe("bg_task_stopped")
+    expect(calls[1]?.properties?.task_kind).toBe("bash_shell")
+    expect(calls[1]?.properties?.force).toBe(true)
+    expect(typeof calls[1]?.properties?.age_ms).toBe("number")
+    await child.exited
+  }, 5000)
+
+  it("analytics: bg_task_stopped not emitted on failed stop (PID mismatch)", async () => {
+    const { reporter, calls } = makeAnalytics()
+    const r = new BackgroundTaskRegistry({ analytics: reporter })
+    r.register({
+      kind: "bash_shell",
+      id: "sh-no-emit",
+      chatId: null,
+      command: "definitely-not-this-one",
+      shellId: "shell-no-emit",
+      pid: 1,
+      startedAt: Date.now(),
+      lastOutput: "",
+      status: "running",
+    })
+    const result = await r.stop("sh-no-emit")
+    expect(result.ok).toBe(false)
+    // Only bg_task_registered, no bg_task_stopped
+    expect(calls).toHaveLength(1)
+    expect(calls[0]?.name).toBe("bg_task_registered")
+  })
 
   it("killShell strategy hook: invoked instead of POSIX signals", async () => {
     const child = spawn({

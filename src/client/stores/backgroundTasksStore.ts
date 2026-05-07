@@ -36,6 +36,9 @@ interface BackgroundTasksState {
    */
   runningCount: number
 
+  /** Whether the background tasks dialog/sheet is open. */
+  dialogOpen: boolean
+
   /** Replace the entire task list (called on WS snapshot). */
   applySnapshot: (tasks: BackgroundTask[]) => void
 
@@ -47,6 +50,15 @@ interface BackgroundTasksState {
    * terminal_pty has no chatId and is never included.
    */
   byChat: (chatId: string) => BackgroundTask[]
+
+  /** Open the background tasks dialog. */
+  openDialog: () => void
+
+  /** Close the background tasks dialog. */
+  closeDialog: () => void
+
+  /** Toggle the background tasks dialog open/closed. */
+  toggleDialog: () => void
 }
 
 // ---------------------------------------------------------------------------
@@ -91,6 +103,7 @@ export function createBackgroundTasksStore(): BackgroundTasksStore {
   return create<BackgroundTasksState>()((set, get) => ({
     tasks: [],
     runningCount: 0,
+    dialogOpen: false,
 
     applySnapshot: (tasks) => set(applySnapshotTo(tasks)),
 
@@ -98,6 +111,10 @@ export function createBackgroundTasksStore(): BackgroundTasksStore {
 
     byChat: (chatId) =>
       get().tasks.filter((t) => "chatId" in t && t.chatId === chatId),
+
+    openDialog: () => set({ dialogOpen: true }),
+    closeDialog: () => set({ dialogOpen: false }),
+    toggleDialog: () => set((state) => ({ dialogOpen: !state.dialogOpen })),
   }))
 }
 
@@ -113,4 +130,11 @@ export const useBackgroundTasksStore = createBackgroundTasksStore()
  */
 export function useRunningTaskCount(): number {
   return useBackgroundTasksStore((state) => state.runningCount)
+}
+
+/**
+ * Selector hook: whether the background tasks dialog is open.
+ */
+export function useBgTasksDialogOpen(): boolean {
+  return useBackgroundTasksStore((state) => state.dialogOpen)
 }

@@ -256,6 +256,12 @@ export type ClientEnvelope =
   | { v: 1; type: "unsubscribe"; id: string }
   | { v: 1; type: "command"; id: string; command: ClientCommand }
 
+export interface BgTasksSnapshotData {
+  tasks: BackgroundTask[]
+  /** Present only in the first snapshot after server boot when orphans were recovered. */
+  orphanRecoveryCount?: number
+}
+
 export type ServerSnapshot =
   | { type: "sidebar"; data: SidebarData }
   | { type: "local-projects"; data: LocalProjectsSnapshot }
@@ -267,7 +273,7 @@ export type ServerSnapshot =
   | { type: "chat"; data: ChatSnapshot | null }
   | { type: "project-git"; data: ChatDiffSnapshot | null }
   | { type: "terminal"; data: TerminalSnapshot | null }
-  | { type: "bg-tasks"; data: BackgroundTask[] }
+  | { type: "bg-tasks"; data: BgTasksSnapshotData }
 
 export type ServerEnvelope =
   | { v: 1; type: "snapshot"; id: string; snapshot: ServerSnapshot }

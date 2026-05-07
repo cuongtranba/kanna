@@ -29,6 +29,7 @@ import type { KannaState } from "../useKannaState"
 import { getNextMeasuredInputHeight, getTranscriptPaddingBottom } from "../useKannaState"
 import { EMPTY_SCHEDULES } from "../KannaTranscript"
 import { BackgroundTasksDialog } from "../../components/chat-ui/BackgroundTasksDialog"
+import { useBackgroundTasksStore } from "../../stores/backgroundTasksStore"
 import { ChatInputDock } from "./ChatInputDock"
 import { ChatTranscriptViewport } from "./ChatTranscriptViewport"
 import { TerminalWorkspaceShell } from "./TerminalWorkspaceShell"
@@ -447,9 +448,9 @@ export function ChatPage() {
   const chatInputRef = useRef<ChatInputHandle | null>(null)
   const { inputRef, syncInputHeight, transcriptPaddingBottom } = useTranscriptPaddingBottom()
   const [showScrollToBottom, setShowScrollToBottom] = useState(false)
-  const [bgTasksOpen, setBgTasksOpen] = useState(false)
+  const bgTasksOpen = useBackgroundTasksStore((s) => s.dialogOpen)
   const handleOpenBgTasks = useCallback(() => {
-    setBgTasksOpen((prev) => !prev)
+    useBackgroundTasksStore.getState().toggleDialog()
   }, [])
   const showEmptyState = state.messages.length === 0 && state.runtime?.title === "New Chat"
   const projectId = state.activeProjectId
@@ -1107,7 +1108,13 @@ export function ChatPage() {
     <div ref={layoutRootRef} className="flex-1 flex flex-col min-w-0 relative">
       <BackgroundTasksDialog
         open={bgTasksOpen}
-        onOpenChange={setBgTasksOpen}
+        onOpenChange={(open) => {
+          if (open) {
+            useBackgroundTasksStore.getState().openDialog()
+          } else {
+            useBackgroundTasksStore.getState().closeDialog()
+          }
+        }}
         socket={state.socket}
       />
       {shouldRenderDesktopRightSidebarLayout && projectId ? (

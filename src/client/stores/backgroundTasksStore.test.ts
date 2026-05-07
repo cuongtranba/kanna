@@ -226,4 +226,32 @@ describe("backgroundTasksStore", () => {
       expect(store.getState().runningCount).toBe(0)
     })
   })
+
+  // -------------------------------------------------------------------------
+  // dialogOpen state
+  // -------------------------------------------------------------------------
+
+  describe("dialogOpen", () => {
+    test("starts closed", () => {
+      expect(store.getState().dialogOpen).toBe(false)
+    })
+
+    test("openDialog sets dialogOpen to true", () => {
+      store.getState().openDialog()
+      expect(store.getState().dialogOpen).toBe(true)
+    })
+
+    test("closeDialog sets dialogOpen to false", () => {
+      store.getState().openDialog()
+      store.getState().closeDialog()
+      expect(store.getState().dialogOpen).toBe(false)
+    })
+
+    test("toggleDialog flips state each call", () => {
+      store.getState().toggleDialog()
+      expect(store.getState().dialogOpen).toBe(true)
+      store.getState().toggleDialog()
+      expect(store.getState().dialogOpen).toBe(false)
+    })
+  })
 })

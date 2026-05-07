@@ -138,8 +138,6 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
 
   let server: ReturnType<typeof Bun.serve<ClientState>>
   let router: ReturnType<typeof createWsRouter>
-  const backgroundTasks = new BackgroundTaskRegistry()
-  const terminals = new TerminalManager({ backgroundTasks })
   const keybindings = new KeybindingsManager()
   const appSettings = new AppSettingsManager(path.join(store.dataDir, "settings.json"))
   await appSettings.initialize()
@@ -158,6 +156,8 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     currentVersion: options.update?.version ?? "unknown",
     environment: runtimeProfile === "dev" ? "dev" : "prod",
   })
+  const backgroundTasks = new BackgroundTaskRegistry({ analytics })
+  const terminals = new TerminalManager({ backgroundTasks })
   const updateManager: UpdateManager | null = (() => {
     if (!options.update) return null
     let manager: UpdateManager | null = null
@@ -233,6 +233,14 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
       router.scheduleBroadcast()
     },
   })
+
+  // Boot recovery: re-register surviving bash_shell PIDs from a previous session.
+  // Must run after backgroundTasks registry and agent are wired, before WS routes serve.
+  // The port is not finalised yet (bind loop below), so we use the desired port for the
+  // orphan file key. If the port shifts due to EADDRINUSE, the file for the original
+  // port is silently ignored on the next boot — acceptable for the edge case.
+  const bootOrphanRecoveryCount = await recoverOrphans(backgroundTasks, port, { analytics })
+
   router = createWsRouter({
     store,
     diffStore,
@@ -253,17 +261,11 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     updateManager,
     pushManager,
     backgroundTasks,
+    bootOrphanRecoveryCount,
   })
   scheduleManager.rehydrate(
     store.listAutoContinueChats().flatMap((chatId) => store.getAutoContinueEvents(chatId))
   )
-
-  // Boot recovery: re-register surviving bash_shell PIDs from a previous session.
-  // Must run after backgroundTasks registry and agent are wired, before WS routes serve.
-  // The port is not finalised yet (bind loop below), so we use the desired port for the
-  // orphan file key. If the port shifts due to EADDRINUSE, the file for the original
-  // port is silently ignored on the next boot — acceptable for the edge case.
-  await recoverOrphans(backgroundTasks, port)
 
   // Subscribe registry events to debounced atomic persist of bash_shell tasks.
   const unsubOrphanPersistence = subscribeOrphanPersistence(backgroundTasks, port)

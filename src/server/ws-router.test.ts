@@ -2507,7 +2507,7 @@ describe("ws-router bg-tasks", () => {
         id: "bg-sub-1",
         snapshot: {
           type: "bg-tasks",
-          data: [],
+          data: { tasks: [], orphanRecoveryCount: undefined },
         },
       },
     ])
@@ -2537,7 +2537,7 @@ describe("ws-router bg-tasks", () => {
         id: "bg-sub-2",
         snapshot: {
           type: "bg-tasks",
-          data: [SAMPLE_BASH_TASK],
+          data: { tasks: [SAMPLE_BASH_TASK], orphanRecoveryCount: undefined },
         },
       },
     ])
@@ -2793,7 +2793,7 @@ describe("ws-router bg-tasks", () => {
         id: "bg-sub-no-reg",
         snapshot: {
           type: "bg-tasks",
-          data: [],
+          data: { tasks: [], orphanRecoveryCount: undefined },
         },
       },
     ])
