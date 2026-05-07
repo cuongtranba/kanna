@@ -34,6 +34,7 @@ import { ClaudeLimitDetector, CodexLimitDetector, type LimitDetection, type Limi
 import type { ScheduleManager } from "./auto-continue/schedule-manager"
 import { deriveChatSchedules } from "./auto-continue/read-model"
 import type { TunnelGateway } from "./cloudflare-tunnel/gateway"
+import type { BackgroundTaskRegistry } from "./background-tasks"
 
 const CLAUDE_TOOLSET = [
   "Skill",
@@ -127,6 +128,7 @@ interface AgentCoordinatorArgs {
   scheduleManager?: ScheduleManager
   getAutoResumePreference?: () => boolean
   throwOnClaudeSessionStart?: boolean
+  backgroundTasks?: BackgroundTaskRegistry
 }
 
 interface SendToStartingProfile {
@@ -715,6 +717,16 @@ async function startClaudeSession(args: {
   }
 }
 
+function parseBackgroundPid(output: string): number | null {
+  const match = output.match(/\bpid[:\s]+(\d+)\b/i)
+  return match ? Number(match[1]) : null
+}
+
+function parseBackgroundShellId(output: string): string | null {
+  const match = output.match(/shell[_\s-]?id[:\s]+([\w-]+)/i)
+  return match ? match[1] : null
+}
+
 export class AgentCoordinator {
   private readonly store: EventStore
   private readonly onStateChange: (chatId?: string, options?: { immediate?: boolean }) => void
@@ -734,7 +746,8 @@ export class AgentCoordinator {
   private readonly throwOnClaudeSessionStart: boolean
   private readonly autoResumeByChat = new Map<string, boolean>()
   private readonly tunnelGateway: TunnelGateway | null
-  private readonly pendingBashCalls = new Map<string, { command: string; chatId: string }>()
+  private readonly backgroundTasks: BackgroundTaskRegistry | null
+  private readonly pendingBashCalls = new Map<string, { command: string; chatId: string; isBg: boolean }>()
 
   constructor(args: AgentCoordinatorArgs) {
     this.store = args.store
@@ -749,6 +762,7 @@ export class AgentCoordinator {
     this.getAutoResumePreference = args.getAutoResumePreference ?? (() => false)
     this.throwOnClaudeSessionStart = args.throwOnClaudeSessionStart ?? false
     this.tunnelGateway = args.tunnelGateway ?? null
+    this.backgroundTasks = args.backgroundTasks ?? null
   }
 
   setBackgroundErrorReporter(report: ((message: string) => void) | null) {
@@ -790,11 +804,10 @@ export class AgentCoordinator {
   }
 
   private trackBashToolEntry(chatId: string, entry: TranscriptEntry): void {
-    if (!this.tunnelGateway) return
-
     if (entry.kind === "tool_call" && entry.tool.toolKind === "bash") {
       const command = entry.tool.input.command ?? ""
-      this.pendingBashCalls.set(entry.tool.toolId, { command, chatId })
+      const isBg = entry.tool.input.runInBackground === true
+      this.pendingBashCalls.set(entry.tool.toolId, { command, chatId, isBg })
       return
     }
 
@@ -803,12 +816,32 @@ export class AgentCoordinator {
       if (!pending) return
       this.pendingBashCalls.delete(entry.toolId)
       const stdout = stringifyToolResultContent(entry.content)
-      void this.tunnelGateway.handleBashResult({
-        command: pending.command,
-        stdout,
-        chatId: pending.chatId,
-        sourcePid: null,
-      })
+
+      if (this.tunnelGateway) {
+        void this.tunnelGateway.handleBashResult({
+          command: pending.command,
+          stdout,
+          chatId: pending.chatId,
+          sourcePid: null,
+        })
+      }
+
+      if (pending.isBg && this.backgroundTasks) {
+        const registryId = `bash:${entry.toolId}`
+        const shellId = parseBackgroundShellId(stdout) ?? entry.toolId
+        const pid = parseBackgroundPid(stdout)
+        this.backgroundTasks.register({
+          kind: "bash_shell",
+          id: registryId,
+          chatId: pending.chatId,
+          command: pending.command,
+          shellId,
+          pid,
+          startedAt: Date.now(),
+          lastOutput: stdout.slice(-1024),
+          status: "running",
+        })
+      }
     }
   }
 

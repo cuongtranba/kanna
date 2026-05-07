@@ -7,6 +7,7 @@ import {
   normalizeClaudeStreamMessage,
   normalizeClaudeUsageSnapshot,
 } from "./agent"
+import { BackgroundTaskRegistry } from "./background-tasks"
 import type { HarnessTurn } from "./harness-types"
 import type { ChatAttachment, SlashCommand, TranscriptEntry } from "../shared/types"
 import type { AutoContinueEvent } from "./auto-continue/events"
@@ -2365,5 +2366,166 @@ describe("AgentCoordinator.listLiveSchedules", () => {
 
     const live = coordinator.listLiveSchedules("chat-1")
     expect(live.sort()).toEqual(["sched-proposed", "sched-scheduled"].sort())
+  })
+})
+
+// ── AgentCoordinator: BackgroundTaskRegistry integration ──
+
+describe("AgentCoordinator background task registry", () => {
+  function makeCoordinatorWithRegistry(registry: BackgroundTaskRegistry) {
+    const store = createFakeStore()
+    const coordinator = new AgentCoordinator({
+      store: store as never,
+      onStateChange: () => {},
+      backgroundTasks: registry,
+    })
+    return { store, coordinator }
+  }
+
+  test("registers a bash_shell task on tool_result when run_in_background is true", () => {
+    const registry = new BackgroundTaskRegistry()
+    const { coordinator } = makeCoordinatorWithRegistry(registry)
+    const chatId = "chat-1"
+    const toolId = "tool-bg-1"
+
+    // Simulate tool_call with run_in_background: true
+    const toolCallEntry = timestamped({
+      kind: "tool_call",
+      tool: {
+        kind: "tool",
+        toolKind: "bash",
+        toolName: "Bash",
+        toolId,
+        input: {
+          command: "bun run dev",
+          runInBackground: true,
+        },
+        rawInput: { command: "bun run dev", run_in_background: true },
+      },
+    })
+
+    // Simulate tool_result with text containing "pid 12345"
+    const toolResultEntry = timestamped({
+      kind: "tool_result",
+      toolId,
+      content: "Started process pid: 12345\nServer running on port 3000",
+    })
+
+    // Invoke trackBashToolEntry via the public appendMessage path is not
+    // available directly; call the private method via casting.
+    const coord = coordinator as unknown as {
+      trackBashToolEntry(chatId: string, entry: TranscriptEntry): void
+    }
+    coord.trackBashToolEntry(chatId, toolCallEntry)
+    coord.trackBashToolEntry(chatId, toolResultEntry)
+
+    expect(registry.list()).toHaveLength(1)
+    const task = registry.list()[0]
+    expect(task?.kind).toBe("bash_shell")
+    if (task?.kind !== "bash_shell") throw new Error("unexpected task kind")
+    expect(task.chatId).toBe(chatId)
+    expect(task.command).toBe("bun run dev")
+    expect(task.pid).toBe(12345)
+    expect(task.status).toBe("running")
+  })
+
+  test("does not register when run_in_background is false", () => {
+    const registry = new BackgroundTaskRegistry()
+    const { coordinator } = makeCoordinatorWithRegistry(registry)
+    const chatId = "chat-1"
+    const toolId = "tool-fg-1"
+
+    const coord = coordinator as unknown as {
+      trackBashToolEntry(chatId: string, entry: TranscriptEntry): void
+    }
+
+    coord.trackBashToolEntry(chatId, timestamped({
+      kind: "tool_call",
+      tool: {
+        kind: "tool",
+        toolKind: "bash",
+        toolName: "Bash",
+        toolId,
+        input: {
+          command: "ls",
+          runInBackground: false,
+        },
+        rawInput: { command: "ls" },
+      },
+    }))
+    coord.trackBashToolEntry(chatId, timestamped({
+      kind: "tool_result",
+      toolId,
+      content: "file.txt",
+    }))
+
+    expect(registry.list()).toHaveLength(0)
+  })
+
+  test("does not register when backgroundTasks is not provided", () => {
+    const store = createFakeStore()
+    const coordinator = new AgentCoordinator({
+      store: store as never,
+      onStateChange: () => {},
+      // no backgroundTasks
+    })
+    const toolId = "tool-no-reg-1"
+
+    const coord = coordinator as unknown as {
+      trackBashToolEntry(chatId: string, entry: TranscriptEntry): void
+    }
+
+    // Should not throw
+    coord.trackBashToolEntry("chat-1", timestamped({
+      kind: "tool_call",
+      tool: {
+        kind: "tool",
+        toolKind: "bash",
+        toolName: "Bash",
+        toolId,
+        input: { command: "sleep 999", runInBackground: true },
+        rawInput: { command: "sleep 999", run_in_background: true },
+      },
+    }))
+    coord.trackBashToolEntry("chat-1", timestamped({
+      kind: "tool_result",
+      toolId,
+      content: "pid: 99999",
+    }))
+    // No registry to check — just verify no exception was thrown
+  })
+
+  test("uses toolId as shellId fallback when output has no shell_id text", () => {
+    const registry = new BackgroundTaskRegistry()
+    const { coordinator } = makeCoordinatorWithRegistry(registry)
+    const toolId = "tool-no-shell-id"
+
+    const coord = coordinator as unknown as {
+      trackBashToolEntry(chatId: string, entry: TranscriptEntry): void
+    }
+
+    coord.trackBashToolEntry("chat-1", timestamped({
+      kind: "tool_call",
+      tool: {
+        kind: "tool",
+        toolKind: "bash",
+        toolName: "Bash",
+        toolId,
+        input: { command: "tail -f /tmp/log.txt", runInBackground: true },
+        rawInput: { command: "tail -f /tmp/log.txt", run_in_background: true },
+      },
+    }))
+    coord.trackBashToolEntry("chat-1", timestamped({
+      kind: "tool_result",
+      toolId,
+      content: "Tailing log file…",
+    }))
+
+    const tasks = registry.list()
+    expect(tasks).toHaveLength(1)
+    const task = tasks[0]
+    if (task?.kind !== "bash_shell") throw new Error("unexpected task kind")
+    expect(task.shellId).toBe(toolId)
+    expect(task.pid).toBeNull()
   })
 })
