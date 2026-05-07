@@ -28,6 +28,7 @@ import { useTerminalToggleAnimation } from "../useTerminalToggleAnimation"
 import type { KannaState } from "../useKannaState"
 import { getNextMeasuredInputHeight, getTranscriptPaddingBottom } from "../useKannaState"
 import { EMPTY_SCHEDULES } from "../KannaTranscript"
+import { BackgroundTasksDialog } from "../../components/chat-ui/BackgroundTasksDialog"
 import { ChatInputDock } from "./ChatInputDock"
 import { ChatTranscriptViewport } from "./ChatTranscriptViewport"
 import { TerminalWorkspaceShell } from "./TerminalWorkspaceShell"
@@ -446,12 +447,10 @@ export function ChatPage() {
   const chatInputRef = useRef<ChatInputHandle | null>(null)
   const { inputRef, syncInputHeight, transcriptPaddingBottom } = useTranscriptPaddingBottom()
   const [showScrollToBottom, setShowScrollToBottom] = useState(false)
-  // TODO(task 10): open BackgroundTasksDialog
   const [bgTasksOpen, setBgTasksOpen] = useState(false)
   const handleOpenBgTasks = useCallback(() => {
-    console.log("TODO: open dialog", bgTasksOpen)
     setBgTasksOpen((prev) => !prev)
-  }, [bgTasksOpen])
+  }, [])
   const showEmptyState = state.messages.length === 0 && state.runtime?.title === "New Chat"
   const projectId = state.activeProjectId
   const projectTerminalLayout = useTerminalLayoutStore((store) => (projectId ? store.projects[projectId] : undefined))
@@ -1106,6 +1105,11 @@ export function ChatPage() {
 
   return (
     <div ref={layoutRootRef} className="flex-1 flex flex-col min-w-0 relative">
+      <BackgroundTasksDialog
+        open={bgTasksOpen}
+        onOpenChange={setBgTasksOpen}
+        socket={state.socket}
+      />
       {shouldRenderDesktopRightSidebarLayout && projectId ? (
         <ResizablePanelGroup
           key={`${projectId}-right-sidebar`}

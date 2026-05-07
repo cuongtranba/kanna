@@ -56,6 +56,17 @@ export function formatAge(startedAt: number, now: number): string {
   return `${seconds}s`
 }
 
+/**
+ * Formats startedAt as a wall-clock "HH:MM" string (24-hour, local time).
+ * Pair with tabular-nums for stable layout.
+ */
+export function formatStartedClock(startedAt: number): string {
+  const d = new Date(startedAt)
+  const hh = d.getHours().toString().padStart(2, "0")
+  const mm = d.getMinutes().toString().padStart(2, "0")
+  return `${hh}:${mm}`
+}
+
 export function formatSidebarAgeLabel(lastMessageAt: number | undefined, nowMs: number): string | null {
   if (lastMessageAt === undefined) return null
 
