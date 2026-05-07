@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test"
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
+import { mkdtemp, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { persistProjectUpload } from "./uploads"
@@ -44,7 +44,6 @@ describe("password auth", () => {
     // Locally (no prior build) we inject a temp distDir via the test-only option.
     const distDir = await mkdtemp(path.join(tmpdir(), "kanna-dist-"))
     tempDirs.push(distDir)
-    await mkdir(path.join(distDir), { recursive: true })
     await writeFile(
       path.join(distDir, "index.html"),
       '<!DOCTYPE html><html><body><div id="root"></div></body></html>',
