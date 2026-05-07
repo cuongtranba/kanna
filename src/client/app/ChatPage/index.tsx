@@ -446,6 +446,12 @@ export function ChatPage() {
   const chatInputRef = useRef<ChatInputHandle | null>(null)
   const { inputRef, syncInputHeight, transcriptPaddingBottom } = useTranscriptPaddingBottom()
   const [showScrollToBottom, setShowScrollToBottom] = useState(false)
+  // TODO(task 10): open BackgroundTasksDialog
+  const [bgTasksOpen, setBgTasksOpen] = useState(false)
+  const handleOpenBgTasks = useCallback(() => {
+    console.log("TODO: open dialog", bgTasksOpen)
+    setBgTasksOpen((prev) => !prev)
+  }, [bgTasksOpen])
   const showEmptyState = state.messages.length === 0 && state.runtime?.title === "New Chat"
   const projectId = state.activeProjectId
   const projectTerminalLayout = useTerminalLayoutStore((store) => (projectId ? store.projects[projectId] : undefined))
@@ -793,6 +799,17 @@ export function ChatPage() {
   }, [addTerminal, handleToggleEmbeddedTerminal, handleToggleRightSidebar, projectId, resolvedKeybindings, state.handleOpenExternal])
 
   useEffect(() => {
+    function handleBgTasksShortcut(event: KeyboardEvent) {
+      if ((event.metaKey || event.ctrlKey) && event.shiftKey && event.key.toLowerCase() === "b") {
+        event.preventDefault()
+        handleOpenBgTasks()
+      }
+    }
+    window.addEventListener("keydown", handleBgTasksShortcut)
+    return () => window.removeEventListener("keydown", handleBgTasksShortcut)
+  }, [handleOpenBgTasks])
+
+  useEffect(() => {
     const frameId = window.requestAnimationFrame(() => {
       syncIsAtEndFromList()
     })
@@ -929,6 +946,7 @@ export function ChatPage() {
           gitStatus={state.chatDiffSnapshot?.status}
           timings={state.runtime?.timings}
           status={state.runtime?.status}
+          onOpenBgTasks={handleOpenBgTasks}
         />
         <ChatTranscriptViewport
           activeChatId={state.activeChatId}

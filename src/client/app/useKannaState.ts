@@ -20,7 +20,9 @@ import { processTranscriptMessages } from "../lib/parseTranscript"
 import { generateUUID } from "../lib/utils"
 import { canCancelStatus, getLatestToolIds, isProcessingStatus } from "./derived"
 import { KannaSocket, type SocketStatus } from "./socket"
-import type { EditorOpenSettings, OpenExternalAction } from "../../shared/protocol"
+import type { BackgroundTaskDiffEvent, EditorOpenSettings, OpenExternalAction } from "../../shared/protocol"
+import { useBackgroundTasksStore } from "../stores/backgroundTasksStore"
+import type { BackgroundTask } from "../../shared/types"
 
 function sameRuntime(left: ChatSnapshot["runtime"] | null | undefined, right: ChatSnapshot["runtime"] | null | undefined) {
   if (left === right) return true
@@ -975,6 +977,24 @@ export function useKannaState(activeChatId: string | null): KannaState {
     return socket.subscribe<PushConfigSnapshot>({ type: "push-config" }, (snapshot) => {
       setPushConfig(snapshot)
     })
+  }, [socket])
+
+  useEffect(() => {
+    return socket.subscribe<BackgroundTask[], BackgroundTaskDiffEvent>(
+      { type: "bg-tasks" },
+      (snapshot) => {
+        useBackgroundTasksStore.getState().applySnapshot(snapshot)
+      },
+      (event) => {
+        if (event.type === "bg-tasks.added") {
+          useBackgroundTasksStore.getState().applyDiff({ op: "added", task: event.task })
+        } else if (event.type === "bg-tasks.updated") {
+          useBackgroundTasksStore.getState().applyDiff({ op: "updated", task: event.task })
+        } else if (event.type === "bg-tasks.removed") {
+          useBackgroundTasksStore.getState().applyDiff({ op: "removed", task: event.task })
+        }
+      }
+    )
   }, [socket])
 
   const handleReadAppSettings = useCallback(async () => {
