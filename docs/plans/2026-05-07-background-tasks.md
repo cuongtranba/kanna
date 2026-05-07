@@ -1153,6 +1153,69 @@ Watch the test workflow; do not merge until CI passes.
 
 ---
 
+---
+
+## Verification
+
+**Date:** 2026-05-07
+
+### Automated checks
+
+| Check | Result |
+|---|---|
+| `bun test --timeout 30000` (full suite) | PASS — 1110 tests, 0 fail, 2384 expect() calls |
+| `bunx tsc --noEmit -p tsconfig.json` | PASS — no output (zero errors) |
+| `bun run build` | PASS — both client and export-viewer built successfully |
+| Dev server smoke (`bun run dev` → `curl http://localhost:3210/`) | PASS — HTTP 200, valid HTML response |
+
+#### Static a11y checks on `BackgroundTasks*.tsx`
+
+| Check | Expected | Result |
+|---|---|---|
+| `title=` (native title attribute) | ZERO matches | PASS — none found |
+| `outline: none` / `outline-none` without focus replacement | ZERO matches | PASS — none found |
+| `animate-pulse` / `animate-spin` on status indicators | ZERO matches | PASS — none found |
+| `aria-label` on icon-only buttons (stop, expand, force-kill) | Present | PASS — 18 aria-label attributes found across Dialog and Indicator |
+| `tabular-nums` Tailwind class on age/count text | Present | PASS — 9 occurrences across Dialog (age spans) and Indicator (count span) |
+
+#### WCAG contrast (OKLCH → sRGB, WCAG 2.1 formula)
+
+| Pair | Ratio | Verdict |
+|---|---|---|
+| **Light** Espresso Ink `oklch(16% 0.01 13)` on Warm Paper `oklch(99.5% 0.003 13)` | 19.13:1 | AAA |
+| **Light** Margin Gray `oklch(55% 0.013 13)` on Warm Paper | 4.81:1 | AA |
+| **Dark** Pale Foreground `oklch(98% 0.003 13)` on Inkstone `oklch(20% 0.01 13)` | 17.11:1 | AAA |
+| **Dark** Margin Gray dark `oklch(70% 0.012 13)` on Inkstone | 6.76:1 | AA |
+| Design spec: Pale Foreground text on Kanna Coral filled button | 2.70:1 | **FAIL** *(theoretical; not used in actual impl)* |
+| **Actual impl** Coral `oklch(71.2% 0.194 13.428)` text on Warm Paper (light destructive labels) | 2.81:1 | **CONCERN — below AA (4.5:1)** |
+| **Actual impl** Coral text on Inkstone (dark destructive labels) | 6.35:1 | AA |
+
+**Coral contrast concern (light theme):** The implementation renders `var(--destructive)` (Kanna Coral) as text/icon color in light theme at 2.81:1 — below the WCAG AA threshold of 4.5:1 for normal-sized text. This affects the "Stop task", "Confirm stop", "Cancel stop", and "Force kill" labels in `BackgroundTasksDialog.tsx`. In dark theme the same coral reads at 6.35:1 (AA). The design doc states "Body contrast ≥ 7:1; large text ≥ 4.5:1; never below AA" — the light-mode coral-on-white combination violates this.
+
+Possible mitigations before merge:
+1. Darken the coral token in light mode only (e.g. `oklch(52% 0.18 13)` reaches ~4.5:1 on white).
+2. Use a border+icon shape with neutral text and coral border, keeping Coral decorative only.
+3. Accept the gap and mark it as a known limitation in the PR, to be addressed when the full design token audit runs.
+
+### Items deferred to manual testing
+
+| Item | Why it cannot be automated |
+|---|---|
+| VoiceOver / TalkBack reading row labels and status | Requires a real screen-reader session with a human listener to confirm spoken output matches "Stop bun run dev, running 2 minutes 14 seconds" |
+| `prefers-reduced-motion` disabling row enter animation | Requires a real browser with the OS media query toggled; jsdom test environment does not honour OS-level preferences |
+| Live Lighthouse audit (contrast, performance, best practices) | Requires a running Chromium-based browser attached to a live dev server |
+| Mobile sheet swipe-left to expose stop | Requires touch-event simulation in a real device or responsive browser emulator |
+| Agent `run_in_background: true` shell spawned through actual Claude SDK → dialog row appears | Requires a live Claude API key and provider connection |
+| Kanna restart → orphan section appears with surviving PID | Requires a multi-step manual session: spawn shell, kill Kanna, relaunch, observe UI |
+
+### Notes for reviewer
+
+- The `bun test` warnings from zustand persist middleware (`Unable to update item 'chat-input-drafts'`) are pre-existing in jsdom and do not indicate a bug.
+- Build output chunk size warnings (`> 500 kB after minification`) are pre-existing and unrelated to this feature.
+- The Coral contrast failure in light mode (2.81:1) is the only substantive new concern found. All other static checks passed.
+
+---
+
 ## Notes for the executor
 
 - This branch is checked out at `.worktrees/bg-tasks`. All commands run there; never `cd` to other worktrees.
