@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test"
-import { mkdtemp, rm, writeFile } from "node:fs/promises"
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { persistProjectUpload } from "./uploads"
@@ -39,7 +39,30 @@ function extractCookie(response: Response) {
 
 describe("password auth", () => {
   test("serves the app shell to unauthenticated browser requests", async () => {
-    const { server } = await startPasswordServer()
+    // Create a minimal client bundle fixture so the static file handler can serve it.
+    // In CI, `bun run build` produces dist/client/index.html before tests run.
+    // Locally (no prior build) we inject a temp distDir via the test-only option.
+    const distDir = await mkdtemp(path.join(tmpdir(), "kanna-dist-"))
+    tempDirs.push(distDir)
+    await mkdir(path.join(distDir), { recursive: true })
+    await writeFile(
+      path.join(distDir, "index.html"),
+      '<!DOCTYPE html><html><body><div id="root"></div></body></html>',
+      "utf8",
+    )
+
+    const projectDir = await mkdtemp(path.join(tmpdir(), "kanna-auth-test-"))
+    const dataDir = await mkdtemp(path.join(tmpdir(), "kanna-auth-data-"))
+    tempDirs.push(projectDir, dataDir)
+    const server = await startKannaServer({
+      dataDir,
+      distDir,
+      port: 4320,
+      strictPort: true,
+      password: "secret",
+      trustProxy: false,
+    })
+    await server.store.openProject(projectDir, "Project")
 
     try {
       const response = await fetch(`http://localhost:${server.port}/chat/demo`, { headers: { Accept: "text/html" } })

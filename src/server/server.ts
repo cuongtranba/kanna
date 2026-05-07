@@ -83,6 +83,8 @@ export interface StartKannaServerOptions {
   openBrowser?: boolean
   share?: ShareMode
   dataDir?: string
+  /** Override the directory containing the built client bundle (default: <root>/dist/client). Used in tests. */
+  distDir?: string
   password?: string | null
   strictPort?: boolean
   /**
@@ -256,7 +258,7 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
       .then(() => router.broadcastSnapshots())
   }, STALE_EMPTY_CHAT_PRUNE_INTERVAL_MS)
 
-  const distDir = path.join(import.meta.dir, "..", "..", "dist", "client")
+  const distDir = options.distDir ?? path.join(import.meta.dir, "..", "..", "dist", "client")
 
   const MAX_PORT_ATTEMPTS = 20
   let actualPort = port
