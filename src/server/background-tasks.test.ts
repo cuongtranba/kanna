@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test"
+import { spawn } from "bun"
 import { BackgroundTaskRegistry, type BackgroundTask } from "./background-tasks"
 
 const drainingSample = (
@@ -67,5 +68,82 @@ describe("BackgroundTaskRegistry", () => {
     })
     const ids = r.listByChat("chat-1").map((t) => t.id)
     expect(ids).toEqual(["ds-1"])
+  })
+})
+
+describe("BackgroundTaskRegistry.stop", () => {
+  it("sends SIGTERM, then SIGKILL after grace, on a real process", async () => {
+    // Spawn a Bun script that ignores SIGTERM and stays alive.
+    const child = spawn({
+      cmd: ["bun", "-e", "process.on('SIGTERM', () => {}); setInterval(() => {}, 1000);"],
+      stdin: "ignore",
+    })
+    // Wait for the child process to finish initializing its signal handlers
+    // before calling stop(), otherwise the SIGTERM arrives before registration.
+    await Bun.sleep(300)
+    const r = new BackgroundTaskRegistry()
+    r.register({
+      kind: "bash_shell",
+      id: "sh-1",
+      chatId: null,
+      command: "bun",
+      shellId: "shell-1",
+      pid: child.pid!,
+      startedAt: Date.now(),
+      lastOutput: "",
+      status: "running",
+    })
+    const result = await r.stop("sh-1", { graceMs: 200 })
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.method).toBe("sigkill")
+    }
+    await child.exited
+  }, 5000)
+
+  it("force: true uses SIGKILL immediately", async () => {
+    const child = spawn({
+      cmd: ["bun", "-e", "setInterval(() => {}, 1000);"],
+      stdin: "ignore",
+    })
+    const r = new BackgroundTaskRegistry()
+    r.register({
+      kind: "bash_shell",
+      id: "sh-2",
+      chatId: null,
+      command: "bun",
+      shellId: "shell-2",
+      pid: child.pid!,
+      startedAt: Date.now(),
+      lastOutput: "",
+      status: "running",
+    })
+    const result = await r.stop("sh-2", { force: true })
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.method).toBe("sigkill")
+    }
+    await child.exited
+  }, 5000)
+
+  it("PID-reuse guard: returns ok:false when comm does not match", async () => {
+    const r = new BackgroundTaskRegistry()
+    r.register({
+      kind: "bash_shell",
+      id: "sh-3",
+      chatId: null,
+      command: "definitely-not-this-one",
+      shellId: "shell-3",
+      pid: 1, // init/launchd, never matches "definitely-not-this-one"
+      startedAt: Date.now(),
+      lastOutput: "",
+      status: "running",
+    })
+    const result = await r.stop("sh-3")
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.error).toContain("PID mismatch")
+    }
+    expect(r.list()).toHaveLength(0) // dropped from registry
   })
 })
