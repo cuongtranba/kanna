@@ -1,7 +1,7 @@
 import { describe, expect, mock, test } from "bun:test"
 import { createElement } from "react"
 import { renderToStaticMarkup } from "react-dom/server"
-import type { BackgroundTask } from "../../../../shared/types"
+import type { BackgroundTask } from "../../../shared/types"
 import {
   BackgroundTasksDialogBody,
   BackgroundTasksDialogView,

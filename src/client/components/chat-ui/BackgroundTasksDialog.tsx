@@ -2,20 +2,13 @@ import { memo, useCallback, useId, useRef, useState } from "react"
 import { ChevronRight, Square } from "lucide-react"
 import type { BackgroundTask } from "../../../shared/types"
 import type { ClientCommand } from "../../../shared/protocol"
+import type { KannaSocket } from "../../app/socket"
 import { useNow } from "../../hooks/useNow"
 import { formatAge, formatStartedClock } from "../../lib/formatters"
 import { useBackgroundTasksStore } from "../../stores/backgroundTasksStore"
 import { Dialog, DialogBody, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip"
 import { cn } from "../../lib/utils"
-
-// ---------------------------------------------------------------------------
-// Socket interface — minimal surface used by the dialog
-// ---------------------------------------------------------------------------
-
-interface SocketLike {
-  command: (command: ClientCommand) => Promise<unknown>
-}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -456,7 +449,7 @@ export function BackgroundTasksDialogView({ open, onOpenChange, tasks, onStop }:
 interface BackgroundTasksDialogConnectedProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  socket?: SocketLike
+  socket?: KannaSocket
 }
 
 export function BackgroundTasksDialog({
