@@ -882,7 +882,7 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput({
               aria-label="Add attachment"
               className={cn(
                 buttonVariants({ variant: "ghost", size: "icon" }),
-                "relative md:hidden flex-shrink-0 ml-1 mb-1 h-11 w-11 rounded-full text-muted-foreground hover:text-foreground",
+                "relative flex-shrink-0 ml-1 mb-1 h-11 w-11 rounded-full text-muted-foreground hover:text-foreground",
                 disabled && "pointer-events-none opacity-50",
               )}
             >
