@@ -468,7 +468,7 @@ describe("TaskRow — stop state machine (phase snapshots)", () => {
   test("confirm phase renders 'Confirm stop?' button with destructive color", () => {
     const html = renderTaskRow(TASK_BASH, { phase: "confirm" })
     expect(html).toContain("Confirm stop?")
-    expect(html).toContain("var(--destructive)")
+    expect(html).toContain("var(--destructive-text)")
   })
 
   test("confirm phase renders Cancel button", () => {
@@ -553,7 +553,7 @@ describe("TaskRow — stop state machine (phase snapshots)", () => {
 
   test("forceAvailable phase Force kill button uses destructive color", () => {
     const html = renderTaskRow(TASK_BASH, { phase: "forceAvailable" })
-    expect(html).toContain("var(--destructive)")
+    expect(html).toContain("var(--destructive-text)")
   })
 
   test("forceAvailable phase renders 'stopping…' in age slot", () => {

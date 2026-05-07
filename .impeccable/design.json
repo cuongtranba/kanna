@@ -4,6 +4,12 @@
   "title": "Design System: Kanna",
   "extensions": {
     "colorMeta": {
+      "destructive-text": {
+        "role": "primary",
+        "displayName": "Destructive Text (Light)",
+        "canonical": "oklch(56% 0.18 13)",
+        "note": "AA-compliant darker coral for text/icon-only destructive foreground in light mode (5.04:1 on Warm Paper). In dark mode aliases to --destructive (6.35:1 on Inkstone). Do NOT use as button-fill background."
+      },
       "kanna-coral": {
         "role": "primary",
         "displayName": "Kanna Coral",

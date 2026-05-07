@@ -261,7 +261,7 @@ export const TaskRow = memo(function TaskRow({
             disabled={status === "stopping"}
             className={cn(
               "w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-md",
-              "text-sm text-muted-foreground hover:text-destructive border border-border/60 hover:border-destructive/40",
+              "text-sm text-muted-foreground hover:text-destructive-text border border-border/60 hover:border-destructive-text/40",
               "focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring",
               "disabled:opacity-40 disabled:pointer-events-none",
               "transition-colors",
@@ -287,7 +287,7 @@ export const TaskRow = memo(function TaskRow({
               disabled={status === "stopping"}
               className={cn(
                 "flex-shrink-0 inline-flex items-center justify-center w-5 h-5 rounded-sm",
-                "text-muted-foreground hover:text-destructive",
+                "text-muted-foreground hover:text-destructive-text",
                 "focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring",
                 "disabled:opacity-40 disabled:pointer-events-none",
                 "transition-colors",
@@ -323,7 +323,7 @@ export const TaskRow = memo(function TaskRow({
                 "focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring",
                 "transition-colors",
               )}
-              style={{ color: "var(--destructive)", borderColor: "var(--destructive)" }}
+              style={{ color: "var(--destructive-text)", borderColor: "var(--destructive-text)" }}
             >
               Confirm stop?
             </button>
@@ -366,7 +366,7 @@ export const TaskRow = memo(function TaskRow({
               "focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring",
               "transition-colors",
             )}
-            style={{ color: "var(--destructive)" }}
+            style={{ color: "var(--destructive-text)" }}
           >
             Confirm stop?
           </button>
@@ -406,7 +406,7 @@ export const TaskRow = memo(function TaskRow({
               "focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring",
               "transition-colors",
             )}
-            style={{ color: "var(--destructive)", borderColor: "var(--destructive)" }}
+            style={{ color: "var(--destructive-text)", borderColor: "var(--destructive-text)" }}
             data-mobile-stop-line
           >
             Force kill
@@ -428,7 +428,7 @@ export const TaskRow = memo(function TaskRow({
                 "focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring",
                 "transition-colors",
               )}
-              style={{ color: "var(--destructive)" }}
+              style={{ color: "var(--destructive-text)" }}
             >
               Force kill
             </button>
@@ -782,7 +782,7 @@ export function OrphanSection({ orphans, now, variant, onStop, graceMs }: Orphan
                 "focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring rounded-sm",
                 "transition-colors",
               )}
-              style={{ color: "var(--destructive)" }}
+              style={{ color: "var(--destructive-text)" }}
             >
               Kill {orphans.length} orphan{orphans.length !== 1 ? "s" : ""}?
             </button>

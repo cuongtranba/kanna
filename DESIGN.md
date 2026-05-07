@@ -17,6 +17,7 @@ colors:
   muted-icon-light: "oklch(82% 0.008 13)"
   muted-icon-dark: "oklch(55% 0.01 13)"
   kanna-coral: "oklch(71.2% 0.194 13.428)"
+  destructive-text: "oklch(56% 0.18 13)"
   verified-sage: "oklch(68% 0.15 155)"
   editor-amber: "oklch(76% 0.14 78)"
   reference-blue: "oklch(66% 0.13 235)"
@@ -131,6 +132,8 @@ The palette is one rose-tinted neutral family with a single saturated coral acce
 ### Primary
 
 - **Kanna Coral** (`oklch(71.2% 0.194 13.428)`): the brand mark and the destructive surface. Used as logo color, as the primary CTA in landing/auth contexts, and as `--destructive` for stop/delete affordances. Never used as a background fill or a decorative gradient stop.
+
+- **Destructive Text** (`oklch(56% 0.18 13)` light / `var(--destructive)` dark): AA-compliant coral variant for text and icon-only destructive contexts (e.g. "Confirm stop?", "Force kill" labels). The bright Kanna Coral (`oklch(71.2% 0.194 13.428)`) achieves only 2.81:1 on Warm Paper — below WCAG AA. This darker variant hits 5.04:1 on Warm Paper in light mode while preserving the editorial-light-text-button feel. In dark mode the token aliases back to `--destructive` (6.35:1 on Inkstone), so the bright coral is used in both contexts where it passes. Filled destructive buttons continue to use the bright coral as background with Pale Foreground text — this token is only for text or icon-only foreground use.
 
 ### Neutral (warm rose family, hue ~13°)
 
