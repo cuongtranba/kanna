@@ -3,6 +3,7 @@ import { ChevronRight, Square } from "lucide-react"
 import type { BackgroundTask } from "../../../shared/types"
 import type { ClientCommand } from "../../../shared/protocol"
 import type { KannaSocket } from "../../app/socket"
+import { useIsMobile } from "../../hooks/useIsMobile"
 import { useNow } from "../../hooks/useNow"
 import { formatAge, formatStartedClock } from "../../lib/formatters"
 import { useBackgroundTasksStore } from "../../stores/backgroundTasksStore"
@@ -1060,14 +1061,19 @@ interface BackgroundTasksDialogConnectedProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   socket?: KannaSocket
+  /** Override layout variant. When omitted, auto-detected via useIsMobile(). */
+  variant?: "desktop" | "mobile"
 }
 
 export function BackgroundTasksDialog({
   open,
   onOpenChange,
   socket,
+  variant: variantProp,
 }: BackgroundTasksDialogConnectedProps) {
   const tasks = useBackgroundTasksStore((state) => state.tasks)
+  const isMobile = useIsMobile()
+  const variant = variantProp ?? (isMobile ? "mobile" : "desktop")
 
   // Wrap stop dispatch so Task 11 can swap in confirm UI here without changing TaskRow
   const handleStop = useCallback(
@@ -1085,6 +1091,7 @@ export function BackgroundTasksDialog({
       onOpenChange={onOpenChange}
       tasks={tasks}
       onStop={handleStop}
+      variant={variant}
     />
   )
 }
