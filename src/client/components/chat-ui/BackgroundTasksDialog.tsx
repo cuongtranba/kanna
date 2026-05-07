@@ -1,4 +1,4 @@
-import { memo, useCallback, useId, useRef, useState } from "react"
+import { memo, useCallback, useEffect, useId, useRef, useState } from "react"
 import { ChevronRight, Square } from "lucide-react"
 import type { BackgroundTask } from "../../../shared/types"
 import type { ClientCommand } from "../../../shared/protocol"
@@ -9,6 +9,16 @@ import { useBackgroundTasksStore } from "../../stores/backgroundTasksStore"
 import { Dialog, DialogBody, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip"
 import { cn } from "../../lib/utils"
+
+// ---------------------------------------------------------------------------
+// Stop state machine
+// ---------------------------------------------------------------------------
+
+type StopPhase =
+  | { phase: "idle" }
+  | { phase: "confirm" }
+  | { phase: "stopping"; startedAt: number }
+  | { phase: "forceAvailable" }
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -73,9 +83,25 @@ interface TaskRowProps {
   now: number
   isFocused: boolean
   isExpanded: boolean
+  isDimmed: boolean
+  graceMs: number
   onFocus: (id: string) => void
   onToggleExpand: (id: string) => void
-  onStop: (id: string) => void
+  /** Called when stop is confirmed; dispatches bg-tasks.stop { force: false } */
+  onStopConfirmed: (id: string) => void
+  /** Called when force-kill is clicked; dispatches bg-tasks.stop { force: true } */
+  onForceKill: (id: string) => void
+  /** Called when this row enters confirm phase — notifies parent to dim others */
+  onConfirmStart: (id: string) => void
+  /** Called when this row leaves confirm phase */
+  onConfirmEnd: () => void
+  /** Ref for the stop button so focus can be restored on cancel */
+  stopButtonRef?: React.RefObject<HTMLButtonElement | null>
+  /**
+   * Override the initial stop phase. Used only in tests to render a specific
+   * phase via SSR without simulating user interaction.
+   */
+  _testInitialPhase?: StopPhase["phase"]
 }
 
 export const TaskRow = memo(function TaskRow({
@@ -84,16 +110,36 @@ export const TaskRow = memo(function TaskRow({
   now,
   isFocused,
   isExpanded,
+  isDimmed,
+  graceMs,
   onFocus,
   onToggleExpand,
-  onStop,
+  onStopConfirmed,
+  onForceKill,
+  onConfirmStart,
+  onConfirmEnd,
+  stopButtonRef: externalStopButtonRef,
+  _testInitialPhase,
 }: TaskRowProps) {
   const rowRef = useRef<HTMLDivElement>(null)
+  const internalStopButtonRef = useRef<HTMLButtonElement>(null)
+  const stopButtonRef = externalStopButtonRef ?? internalStopButtonRef
+  const confirmButtonRef = useRef<HTMLButtonElement>(null)
+
+  const [stopState, setStopState] = useState<StopPhase>(() => {
+    if (_testInitialPhase === "confirm") return { phase: "confirm" }
+    if (_testInitialPhase === "stopping") return { phase: "stopping", startedAt: 0 }
+    if (_testInitialPhase === "forceAvailable") return { phase: "forceAvailable" }
+    return { phase: "idle" }
+  })
+
   const label = taskLabel(task)
   const typeTag = taskTypeTag(task)
   const chatId = taskChatId(task)
   const status = taskStatus(task)
-  const age = formatAge(task.startedAt, now)
+  const ageText = stopState.phase === "stopping" || stopState.phase === "forceAvailable"
+    ? null
+    : formatAge(task.startedAt, now)
   const startedClock = formatStartedClock(task.startedAt)
   const outputLines = lastOutputLines(task)
   const reducedMotion = prefersReducedMotion()
@@ -110,19 +156,71 @@ export const TaskRow = memo(function TaskRow({
         animationDelay: `${staggerDelay}ms`,
       }
 
+  // 3s grace timer: idle → stopping → forceAvailable
+  useEffect(() => {
+    if (stopState.phase !== "stopping") return
+    const timer = setTimeout(() => {
+      setStopState({ phase: "forceAvailable" })
+    }, graceMs)
+    return () => clearTimeout(timer)
+  }, [stopState.phase, graceMs])
+
+  // Move focus to Confirm button when entering confirm phase
+  useEffect(() => {
+    if (stopState.phase === "confirm") {
+      confirmButtonRef.current?.focus()
+    }
+  }, [stopState.phase])
+
+  const handleEnterConfirm = useCallback(() => {
+    setStopState({ phase: "confirm" })
+    onConfirmStart(task.id)
+  }, [task.id, onConfirmStart])
+
+  const handleCancelConfirm = useCallback(() => {
+    setStopState({ phase: "idle" })
+    onConfirmEnd()
+    // restore focus to stop button
+    stopButtonRef.current?.focus()
+  }, [onConfirmEnd, stopButtonRef])
+
+  const handleConfirmStop = useCallback(() => {
+    setStopState({ phase: "stopping", startedAt: Date.now() })
+    onConfirmEnd()
+    onStopConfirmed(task.id)
+  }, [task.id, onConfirmEnd, onStopConfirmed])
+
+  const handleForceKill = useCallback(() => {
+    onForceKill(task.id)
+  }, [task.id, onForceKill])
+
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
+      if (e.key === "Escape") {
+        if (stopState.phase === "confirm") {
+          e.preventDefault()
+          e.stopPropagation()
+          handleCancelConfirm()
+          return
+        }
+      }
       if (e.key === "Enter") {
         e.preventDefault()
         onToggleExpand(task.id)
       }
-      const isStop = (e.metaKey || e.ctrlKey) && e.key === "."
-      if (isStop) {
+      const isCmdDot = (e.metaKey || e.ctrlKey) && e.key === "."
+      if (isCmdDot) {
         e.preventDefault()
-        onStop(task.id)
+        if (stopState.phase === "idle") {
+          handleEnterConfirm()
+        } else if (stopState.phase === "confirm") {
+          handleConfirmStop()
+        } else if (stopState.phase === "forceAvailable") {
+          handleForceKill()
+        }
       }
     },
-    [task.id, onToggleExpand, onStop],
+    [task.id, onToggleExpand, stopState.phase, handleEnterConfirm, handleConfirmStop, handleCancelConfirm, handleForceKill],
   )
 
   const handleExpandClick = useCallback(
@@ -133,13 +231,121 @@ export const TaskRow = memo(function TaskRow({
     [task.id, onToggleExpand],
   )
 
-  const handleStopClick = useCallback(
-    (e: React.MouseEvent) => {
-      e.stopPropagation()
-      onStop(task.id)
-    },
-    [task.id, onStop],
-  )
+  // Slide-in animation style for confirm buttons
+  const confirmSlideStyle: React.CSSProperties = reducedMotion
+    ? {}
+    : {
+        animationName: "bg-task-confirm-slide-in",
+        animationDuration: "180ms",
+        animationTimingFunction: "cubic-bezier(0.22, 1, 0.36, 1)",
+        animationFillMode: "both",
+      }
+
+  // Render the stop-area for line 2 based on current phase
+  const renderStopArea = () => {
+    if (stopState.phase === "idle") {
+      return (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              ref={stopButtonRef as React.RefObject<HTMLButtonElement>}
+              type="button"
+              aria-label="Stop task"
+              onClick={(e) => {
+                e.stopPropagation()
+                handleEnterConfirm()
+              }}
+              disabled={status === "stopping"}
+              className={cn(
+                "flex-shrink-0 inline-flex items-center justify-center w-5 h-5 rounded-sm",
+                "text-muted-foreground hover:text-destructive",
+                "focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring",
+                "disabled:opacity-40 disabled:pointer-events-none",
+                "transition-colors",
+              )}
+            >
+              <Square className="w-3 h-3 fill-current" aria-hidden />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="top">Stop (⌘.)</TooltipContent>
+        </Tooltip>
+      )
+    }
+
+    if (stopState.phase === "confirm") {
+      return (
+        <span
+          className="flex items-center gap-1.5 flex-shrink-0"
+          style={confirmSlideStyle}
+          data-confirm-area
+        >
+          <button
+            ref={confirmButtonRef}
+            type="button"
+            aria-label="Confirm stop"
+            onClick={(e) => {
+              e.stopPropagation()
+              handleConfirmStop()
+            }}
+            className={cn(
+              "inline-flex items-center rounded-sm px-1.5 py-0.5 text-xs font-medium",
+              "focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring",
+              "transition-colors",
+            )}
+            style={{ color: "var(--destructive)" }}
+          >
+            Confirm stop?
+          </button>
+          <button
+            type="button"
+            aria-label="Cancel stop"
+            onClick={(e) => {
+              e.stopPropagation()
+              handleCancelConfirm()
+            }}
+            className={cn(
+              "inline-flex items-center rounded-sm px-1.5 py-0.5 text-xs",
+              "text-muted-foreground hover:text-foreground",
+              "border border-border/60 hover:border-border",
+              "focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring",
+              "transition-colors",
+            )}
+          >
+            Cancel
+          </button>
+        </span>
+      )
+    }
+
+    if (stopState.phase === "forceAvailable") {
+      return (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              aria-label="Force kill task"
+              onClick={(e) => {
+                e.stopPropagation()
+                handleForceKill()
+              }}
+              className={cn(
+                "flex-shrink-0 inline-flex items-center rounded-sm px-1.5 py-0.5 text-xs font-medium",
+                "focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring",
+                "transition-colors",
+              )}
+              style={{ color: "var(--destructive)" }}
+            >
+              Force kill
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="top">Send SIGKILL immediately</TooltipContent>
+        </Tooltip>
+      )
+    }
+
+    // stopping phase — no interactive element
+    return null
+  }
 
   return (
     <div
@@ -152,21 +358,24 @@ export const TaskRow = memo(function TaskRow({
       onFocus={() => onFocus(task.id)}
       onKeyDown={handleKeyDown}
       className={cn(
-        "group relative flex flex-col px-3 py-2.5 rounded-md transition-colors cursor-default",
+        "group relative flex flex-col px-3 py-2.5 rounded-md transition-all cursor-default",
         "hover:bg-secondary focus-visible:bg-secondary",
         "focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-ring",
         isFocused && "bg-secondary",
       )}
-      style={enterStyle}
+      style={{
+        ...enterStyle,
+        ...(isDimmed ? { opacity: 0.6, pointerEvents: "none" } : {}),
+      }}
     >
       {/* Line 1: label + age + expand chevron */}
       <div className="flex items-center gap-2 min-w-0">
-        {/* Status dot */}
+        {/* Status dot — static 8px, muted when stopping */}
         <span
           className="inline-block w-[6px] h-[6px] rounded-full flex-shrink-0 mt-px"
           style={{
             backgroundColor:
-              status === "stopping"
+              stopState.phase === "stopping" || status === "stopping"
                 ? "var(--muted-foreground)"
                 : "var(--warning)",
           }}
@@ -176,10 +385,16 @@ export const TaskRow = memo(function TaskRow({
         <span className="flex-1 min-w-0 truncate font-mono text-sm font-semibold leading-snug">
           {label}
         </span>
-        {/* Age — mono 13px weight 500 tabular-nums */}
-        <span className="flex-shrink-0 font-mono text-[13px] font-medium tabular-nums text-muted-foreground leading-snug">
-          {age}
-        </span>
+        {/* Age — mono 13px weight 500 tabular-nums; hidden while stopping */}
+        {ageText !== null ? (
+          <span className="flex-shrink-0 font-mono text-[13px] font-medium tabular-nums text-muted-foreground leading-snug">
+            {ageText}
+          </span>
+        ) : (
+          <span className="flex-shrink-0 font-mono text-[13px] italic text-muted-foreground leading-snug">
+            {stopState.phase === "forceAvailable" ? "stopping…" : "stopping…"}
+          </span>
+        )}
         {/* Expand chevron */}
         <Tooltip>
           <TooltipTrigger asChild>
@@ -204,7 +419,7 @@ export const TaskRow = memo(function TaskRow({
         </Tooltip>
       </div>
 
-      {/* Line 2: type tag + chat link + started clock + stop button */}
+      {/* Line 2: type tag + chat link + started clock + stop area */}
       <div className="flex items-center gap-1.5 mt-0.5 pl-[14px] min-w-0">
         {/* Type tag */}
         <span className="text-xs text-muted-foreground font-sans leading-none flex-shrink-0">
@@ -233,35 +448,24 @@ export const TaskRow = memo(function TaskRow({
         {/* Status word — never color-only signal */}
         <span
           className="text-xs font-sans leading-none flex-shrink-0"
-          style={status !== "stopping" ? { color: "var(--warning)" } : undefined}
+          style={
+            stopState.phase === "stopping" || stopState.phase === "forceAvailable"
+              ? { color: "var(--muted-foreground)" }
+              : status !== "stopping"
+                ? { color: "var(--warning)" }
+                : undefined
+          }
         >
-          {status === "stopping" ? "stopping" : "running"}
+          {stopState.phase === "stopping" || stopState.phase === "forceAvailable"
+            ? "stopping"
+            : status === "stopping"
+              ? "stopping"
+              : "running"}
         </span>
         {/* Spacer */}
         <span className="flex-1" />
-        {/* Stop button */}
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button
-              type="button"
-              aria-label="Stop task"
-              onClick={handleStopClick}
-              disabled={status === "stopping"}
-              className={cn(
-                "flex-shrink-0 inline-flex items-center justify-center w-5 h-5 rounded-sm",
-                "text-muted-foreground hover:text-destructive",
-                "focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring",
-                "disabled:opacity-40 disabled:pointer-events-none",
-                "transition-colors",
-              )}
-            >
-              <Square className="w-3 h-3 fill-current" aria-hidden />
-            </button>
-          </TooltipTrigger>
-          <TooltipContent side="top">
-            Stop task (⌘.)
-          </TooltipContent>
-        </Tooltip>
+        {/* Stop area — changes per phase */}
+        {renderStopArea()}
       </div>
 
       {/* Expanded output */}
@@ -285,15 +489,19 @@ export const TaskRow = memo(function TaskRow({
 interface BodyProps {
   tasks: BackgroundTask[]
   onStop: (id: string, force: boolean) => void
+  /** Grace period in ms before Force kill button appears. Default 3000. */
+  graceMs?: number
 }
 
-export function BackgroundTasksDialogBody({ tasks, onStop }: BodyProps) {
+export function BackgroundTasksDialogBody({ tasks, onStop, graceMs = 3_000 }: BodyProps) {
   const now = useNow(1_000)
   const listRef = useRef<HTMLDivElement>(null)
   const headingId = useId()
 
   const [focusedId, setFocusedId] = useState<string | null>(null)
   const [expandedId, setExpandedId] = useState<string | null>(null)
+  // Track which row (if any) is in confirm phase — used to dim other rows
+  const [confirmingRowId, setConfirmingRowId] = useState<string | null>(null)
 
   const focusedIndex = tasks.findIndex((t) => t.id === focusedId)
   const effectiveFocusedId = focusedIndex >= 0 ? focusedId : (tasks[0]?.id ?? null)
@@ -306,12 +514,27 @@ export function BackgroundTasksDialogBody({ tasks, onStop }: BodyProps) {
     setExpandedId((prev) => (prev === id ? null : id))
   }, [])
 
-  const handleStop = useCallback(
+  const handleStopConfirmed = useCallback(
     (id: string) => {
       onStop(id, false)
     },
     [onStop],
   )
+
+  const handleForceKill = useCallback(
+    (id: string) => {
+      onStop(id, true)
+    },
+    [onStop],
+  )
+
+  const handleConfirmStart = useCallback((id: string) => {
+    setConfirmingRowId(id)
+  }, [])
+
+  const handleConfirmEnd = useCallback(() => {
+    setConfirmingRowId(null)
+  }, [])
 
   const handleListKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -380,9 +603,14 @@ export function BackgroundTasksDialogBody({ tasks, onStop }: BodyProps) {
                   now={now}
                   isFocused={task.id === effectiveFocusedId}
                   isExpanded={task.id === expandedId}
+                  isDimmed={confirmingRowId !== null && confirmingRowId !== task.id}
+                  graceMs={graceMs}
                   onFocus={handleFocus}
                   onToggleExpand={handleToggleExpand}
-                  onStop={handleStop}
+                  onStopConfirmed={handleStopConfirmed}
+                  onForceKill={handleForceKill}
+                  onConfirmStart={handleConfirmStart}
+                  onConfirmEnd={handleConfirmEnd}
                 />
               ))}
             </div>
@@ -404,17 +632,12 @@ interface ViewProps {
   onOpenChange: (open: boolean) => void
   tasks: BackgroundTask[]
   onStop: (id: string, force: boolean) => void
+  /** Grace period in ms before Force kill button appears. Default 3000. */
+  graceMs?: number
 }
 
-export function BackgroundTasksDialogView({ open, onOpenChange, tasks, onStop }: ViewProps) {
+export function BackgroundTasksDialogView({ open, onOpenChange, tasks, onStop, graceMs }: ViewProps) {
   const headingId = useId()
-
-  const handleStop = useCallback(
-    (id: string) => {
-      onStop(id, false)
-    },
-    [onStop],
-  )
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -435,7 +658,7 @@ export function BackgroundTasksDialogView({ open, onOpenChange, tasks, onStop }:
         </DialogHeader>
 
         <DialogBody className="pt-2">
-          <BackgroundTasksDialogBody tasks={tasks} onStop={handleStop} />
+          <BackgroundTasksDialogBody tasks={tasks} onStop={onStop} graceMs={graceMs} />
         </DialogBody>
       </DialogContent>
     </Dialog>
@@ -488,8 +711,16 @@ const BG_TASK_ROW_KEYFRAME = `
   from { opacity: 0; transform: translateY(4px); }
   to   { opacity: 1; transform: translateY(0); }
 }
+@keyframes bg-task-confirm-slide-in {
+  from { opacity: 0; transform: translateX(8px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
 @media (prefers-reduced-motion: reduce) {
   @keyframes bg-task-row-enter {
+    from { opacity: 1; transform: none; }
+    to   { opacity: 1; transform: none; }
+  }
+  @keyframes bg-task-confirm-slide-in {
     from { opacity: 1; transform: none; }
     to   { opacity: 1; transform: none; }
   }
