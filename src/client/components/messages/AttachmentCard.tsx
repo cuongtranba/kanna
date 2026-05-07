@@ -16,6 +16,7 @@ import {
 import type { ChatAttachment } from "../../../shared/types"
 import { cn } from "../../lib/utils"
 import { classifyAttachmentIcon, type AttachmentIconKind } from "./attachmentPreview"
+import { AttachmentUploadOverlay } from "./AttachmentUploadOverlay"
 
 type BaseAttachmentCardProps = {
   attachment: ChatAttachment
@@ -23,6 +24,8 @@ type BaseAttachmentCardProps = {
   onClick?: () => void
   onRemove?: () => void
   className?: string
+  uploadProgress?: number | null
+  onCancelUpload?: () => void
 }
 
 type AttachmentImageCardProps = BaseAttachmentCardProps & {
@@ -36,9 +39,12 @@ export function AttachmentImageCard({
   onRemove,
   className,
   size = "transcript",
+  uploadProgress,
+  onCancelUpload,
 }: AttachmentImageCardProps) {
   const source = attachment.contentUrl || previewUrl
   const isComposer = size === "composer"
+  const showUploadOverlay = uploadProgress !== undefined
 
   return (
     <div className={cn("group relative flex flex-row items-end", className)}>
@@ -83,7 +89,15 @@ export function AttachmentImageCard({
           </div>
         </div>
       </button>
-      {onRemove ? <RemoveButton displayName={attachment.displayName} onRemove={onRemove} /> : null}
+      {showUploadOverlay ? (
+        <AttachmentUploadOverlay
+          progress={uploadProgress ?? null}
+          onCancel={onCancelUpload}
+          size={isComposer ? "sm" : "md"}
+          cancelLabel={`Cancel upload of ${attachment.displayName}`}
+        />
+      ) : null}
+      {onRemove && !showUploadOverlay ? <RemoveButton displayName={attachment.displayName} onRemove={onRemove} /> : null}
     </div>
   )
 }
@@ -93,12 +107,15 @@ export function AttachmentFileCard({
   onClick,
   onRemove,
   className,
+  uploadProgress,
+  onCancelUpload,
 }: BaseAttachmentCardProps) {
   const iconKind: AttachmentIconKind = attachment.kind === "mention" ? "text" : classifyAttachmentIcon(attachment)
   const Icon = getAttachmentIcon(iconKind)
   const isMention = attachment.kind === "mention"
   const mentionLabel = isMention ? basename(attachment.displayName) : attachment.displayName
   const mentionSubtitle = isMention ? parentPath(attachment.displayName) : ""
+  const showUploadOverlay = uploadProgress !== undefined
 
   return (
     <div className={cn("group relative", className)}>
@@ -124,7 +141,15 @@ export function AttachmentFileCard({
           )}
         </div>
       </button>
-      {onRemove ? <RemoveButton displayName={attachment.displayName} onRemove={onRemove} /> : null}
+      {showUploadOverlay ? (
+        <AttachmentUploadOverlay
+          progress={uploadProgress ?? null}
+          onCancel={onCancelUpload}
+          size="sm"
+          cancelLabel={`Cancel upload of ${attachment.displayName}`}
+        />
+      ) : null}
+      {onRemove && !showUploadOverlay ? <RemoveButton displayName={attachment.displayName} onRemove={onRemove} /> : null}
     </div>
   )
 }
