@@ -85,6 +85,8 @@ interface TaskRowProps {
   isExpanded: boolean
   isDimmed: boolean
   graceMs: number
+  /** Desktop (2-line) or mobile (3-line + details fallback) layout */
+  variant?: "desktop" | "mobile"
   onFocus: (id: string) => void
   onToggleExpand: (id: string) => void
   /** Called when stop is confirmed; dispatches bg-tasks.stop { force: false } */
@@ -112,6 +114,7 @@ export const TaskRow = memo(function TaskRow({
   isExpanded,
   isDimmed,
   graceMs,
+  variant = "desktop",
   onFocus,
   onToggleExpand,
   onStopConfirmed,
@@ -241,9 +244,34 @@ export const TaskRow = memo(function TaskRow({
         animationFillMode: "both",
       }
 
-  // Render the stop-area for line 2 based on current phase
+  // Render the stop-area for line 2 (desktop) or line 3 (mobile) based on current phase
   const renderStopArea = () => {
     if (stopState.phase === "idle") {
+      if (variant === "mobile") {
+        return (
+          <button
+            ref={stopButtonRef as React.RefObject<HTMLButtonElement>}
+            type="button"
+            aria-label="Stop task"
+            onClick={(e) => {
+              e.stopPropagation()
+              handleEnterConfirm()
+            }}
+            disabled={status === "stopping"}
+            className={cn(
+              "w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-md",
+              "text-sm text-muted-foreground hover:text-destructive border border-border/60 hover:border-destructive/40",
+              "focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring",
+              "disabled:opacity-40 disabled:pointer-events-none",
+              "transition-colors",
+            )}
+            data-mobile-stop-line
+          >
+            <Square className="w-3 h-3 fill-current" aria-hidden />
+            Stop
+          </button>
+        )
+      }
       return (
         <Tooltip>
           <TooltipTrigger asChild>
@@ -273,6 +301,51 @@ export const TaskRow = memo(function TaskRow({
     }
 
     if (stopState.phase === "confirm") {
+      if (variant === "mobile") {
+        return (
+          <span
+            className="grid grid-cols-2 gap-2 w-full"
+            style={confirmSlideStyle}
+            data-confirm-area
+            data-mobile-stop-line
+          >
+            <button
+              ref={confirmButtonRef}
+              type="button"
+              aria-label="Confirm stop"
+              onClick={(e) => {
+                e.stopPropagation()
+                handleConfirmStop()
+              }}
+              className={cn(
+                "flex items-center justify-center rounded-md px-3 py-2 text-sm font-medium border",
+                "focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring",
+                "transition-colors",
+              )}
+              style={{ color: "var(--destructive)", borderColor: "var(--destructive)" }}
+            >
+              Confirm stop?
+            </button>
+            <button
+              type="button"
+              aria-label="Cancel stop"
+              onClick={(e) => {
+                e.stopPropagation()
+                handleCancelConfirm()
+              }}
+              className={cn(
+                "flex items-center justify-center rounded-md px-3 py-2 text-sm",
+                "text-muted-foreground hover:text-foreground",
+                "border border-border/60 hover:border-border",
+                "focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring",
+                "transition-colors",
+              )}
+            >
+              Cancel
+            </button>
+          </span>
+        )
+      }
       return (
         <span
           className="flex items-center gap-1.5 flex-shrink-0"
@@ -318,6 +391,27 @@ export const TaskRow = memo(function TaskRow({
     }
 
     if (stopState.phase === "forceAvailable") {
+      if (variant === "mobile") {
+        return (
+          <button
+            type="button"
+            aria-label="Force kill task"
+            onClick={(e) => {
+              e.stopPropagation()
+              handleForceKill()
+            }}
+            className={cn(
+              "w-full flex items-center justify-center rounded-md px-3 py-2 text-sm font-medium border",
+              "focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring",
+              "transition-colors",
+            )}
+            style={{ color: "var(--destructive)", borderColor: "var(--destructive)" }}
+            data-mobile-stop-line
+          >
+            Force kill
+          </button>
+        )
+      }
       return (
         <Tooltip>
           <TooltipTrigger asChild>
@@ -347,6 +441,129 @@ export const TaskRow = memo(function TaskRow({
     return null
   }
 
+  if (variant === "mobile") {
+    return (
+      <div
+        ref={rowRef}
+        role="option"
+        aria-selected={isFocused}
+        tabIndex={isFocused ? 0 : -1}
+        data-task-id={task.id}
+        data-row-enter
+        data-mobile-row
+        onFocus={() => onFocus(task.id)}
+        onKeyDown={handleKeyDown}
+        className={cn(
+          "group relative flex flex-col px-3 py-3 rounded-md transition-all cursor-default gap-1.5",
+          "hover:bg-secondary focus-visible:bg-secondary",
+          "focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-ring",
+          isFocused && "bg-secondary",
+        )}
+        style={{
+          ...enterStyle,
+          ...(isDimmed ? { opacity: 0.6, pointerEvents: "none" } : {}),
+        }}
+      >
+        {/* Line 1: status dot + command + age */}
+        <div className="flex items-center gap-2 min-w-0">
+          <span
+            className="inline-block w-[6px] h-[6px] rounded-full flex-shrink-0 mt-px"
+            style={{
+              backgroundColor:
+                stopState.phase === "stopping" || status === "stopping"
+                  ? "var(--muted-foreground)"
+                  : "var(--warning)",
+            }}
+            aria-hidden
+          />
+          <span className="flex-1 min-w-0 truncate font-mono text-sm font-semibold leading-snug">
+            {label}
+          </span>
+          {ageText !== null ? (
+            <span className="flex-shrink-0 font-mono text-[13px] font-medium tabular-nums text-muted-foreground leading-snug">
+              {ageText}
+            </span>
+          ) : (
+            <span className="flex-shrink-0 font-mono text-[13px] italic text-muted-foreground leading-snug">
+              stopping…
+            </span>
+          )}
+        </div>
+
+        {/* Line 2: type tag + chat + started + status word; full command <details> */}
+        <div className="flex items-center gap-1.5 pl-[14px] min-w-0 flex-wrap">
+          <span className="text-xs text-muted-foreground font-sans leading-none flex-shrink-0">
+            {typeTag}
+          </span>
+          {chatId && (
+            <>
+              <span className="text-xs text-muted-foreground leading-none flex-shrink-0" aria-hidden>
+                ·
+              </span>
+              <a
+                href={`/chat/${chatId}`}
+                className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 leading-none truncate max-w-[160px] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring rounded-sm"
+                onClick={(e) => e.stopPropagation()}
+              >
+                chat
+              </a>
+            </>
+          )}
+          <span className="text-xs text-muted-foreground leading-none flex-shrink-0" aria-hidden>
+            ·
+          </span>
+          <span className="text-xs text-muted-foreground font-sans tabular-nums leading-none flex-shrink-0">
+            started {startedClock}
+          </span>
+          <span
+            className="text-xs font-sans leading-none flex-shrink-0"
+            style={
+              stopState.phase === "stopping" || stopState.phase === "forceAvailable"
+                ? { color: "var(--muted-foreground)" }
+                : status !== "stopping"
+                  ? { color: "var(--warning)" }
+                  : undefined
+            }
+          >
+            {stopState.phase === "stopping" || stopState.phase === "forceAvailable"
+              ? "stopping"
+              : status === "stopping"
+                ? "stopping"
+                : "running"}
+          </span>
+        </div>
+
+        {/* Full command <details> fallback for long-press / tap */}
+        {task.kind === "bash_shell" && label.length > 40 && (
+          <details className="pl-[14px]" data-full-command>
+            <summary className="text-xs text-muted-foreground cursor-pointer select-none list-none underline underline-offset-2">
+              full command
+            </summary>
+            <pre className="mt-1 text-xs font-mono text-muted-foreground whitespace-pre-wrap break-all leading-relaxed">
+              {label}
+            </pre>
+          </details>
+        )}
+
+        {/* Line 3: full-width stop area */}
+        <div className="pl-[14px]" data-mobile-stop-line-wrapper>
+          {renderStopArea()}
+        </div>
+
+        {/* Expanded output */}
+        {isExpanded && (
+          <pre
+            className="mt-1 pl-[14px] text-xs font-mono leading-[1.55] text-muted-foreground max-h-[240px] overflow-y-auto whitespace-pre-wrap break-all"
+            aria-label="Last output"
+          >
+            {outputLines.join("\n") || "(no output)"}
+          </pre>
+        )}
+      </div>
+    )
+  }
+
+  // Desktop variant (original layout)
   return (
     <div
       ref={rowRef}
@@ -482,6 +699,139 @@ export const TaskRow = memo(function TaskRow({
 })
 
 // ---------------------------------------------------------------------------
+// OrphanSection — tasks from a previous session
+// ---------------------------------------------------------------------------
+
+type KillAllPhase = "idle" | "confirm"
+
+interface OrphanSectionProps {
+  orphans: BackgroundTask[]
+  now: number
+  variant: "desktop" | "mobile"
+  onStop: (id: string, force: boolean) => void
+  graceMs: number
+}
+
+export function OrphanSection({ orphans, now, variant, onStop, graceMs }: OrphanSectionProps) {
+  const [killAllPhase, setKillAllPhase] = useState<KillAllPhase>("idle")
+  const [confirmingRowId, setConfirmingRowId] = useState<string | null>(null)
+  const [expandedId, setExpandedId] = useState<string | null>(null)
+  const headingId = useId()
+
+  const handleKillAllClick = useCallback(() => {
+    setKillAllPhase("confirm")
+  }, [])
+
+  const handleKillAllCancel = useCallback(() => {
+    setKillAllPhase("idle")
+  }, [])
+
+  const handleKillAllConfirm = useCallback(() => {
+    setKillAllPhase("idle")
+    for (const orphan of orphans) {
+      onStop(orphan.id, false)
+    }
+  }, [orphans, onStop])
+
+  const handleConfirmStart = useCallback((id: string) => {
+    setConfirmingRowId(id)
+  }, [])
+
+  const handleConfirmEnd = useCallback(() => {
+    setConfirmingRowId(null)
+  }, [])
+
+  const handleToggleExpand = useCallback((id: string) => {
+    setExpandedId((prev) => (prev === id ? null : id))
+  }, [])
+
+  if (orphans.length === 0) return null
+
+  return (
+    <div className="mb-3" data-orphan-section>
+      {/* Section header */}
+      <div className="flex items-center justify-between px-3 py-1.5 mb-1">
+        <span
+          id={headingId}
+          className="text-xs text-muted-foreground font-sans"
+          data-orphan-header
+        >
+          Found from previous session
+        </span>
+        {killAllPhase === "idle" ? (
+          <button
+            type="button"
+            onClick={handleKillAllClick}
+            className={cn(
+              "text-xs text-muted-foreground hover:text-foreground",
+              "focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring rounded-sm",
+              "transition-colors",
+            )}
+            data-kill-all-btn
+          >
+            Kill all
+          </button>
+        ) : (
+          <span className="flex items-center gap-2" data-kill-all-confirm>
+            <button
+              type="button"
+              onClick={handleKillAllConfirm}
+              className={cn(
+                "text-xs font-medium",
+                "focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring rounded-sm",
+                "transition-colors",
+              )}
+              style={{ color: "var(--destructive)" }}
+            >
+              Kill {orphans.length} orphan{orphans.length !== 1 ? "s" : ""}?
+            </button>
+            <button
+              type="button"
+              onClick={handleKillAllCancel}
+              className={cn(
+                "text-xs text-muted-foreground hover:text-foreground",
+                "focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring rounded-sm",
+                "transition-colors",
+              )}
+            >
+              Cancel
+            </button>
+          </span>
+        )}
+      </div>
+      {/* Orphan rows — visually muted */}
+      <div
+        role="listbox"
+        aria-labelledby={headingId}
+        aria-label="Orphan tasks from previous session"
+        className="flex flex-col gap-0.5"
+        style={{ opacity: 0.85 }}
+      >
+        {orphans.map((task, index) => (
+          <TaskRow
+            key={task.id}
+            task={task}
+            index={index}
+            now={now}
+            isFocused={false}
+            isExpanded={task.id === expandedId}
+            isDimmed={confirmingRowId !== null && confirmingRowId !== task.id}
+            graceMs={graceMs}
+            variant={variant}
+            onFocus={() => {}}
+            onToggleExpand={handleToggleExpand}
+            onStopConfirmed={(id) => onStop(id, false)}
+            onForceKill={(id) => onStop(id, true)}
+            onConfirmStart={handleConfirmStart}
+            onConfirmEnd={handleConfirmEnd}
+          />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // BackgroundTasksDialogBody — pure inner content without Portal wrapper.
 // Exported for testing (renderToStaticMarkup works on portal-free content).
 // ---------------------------------------------------------------------------
@@ -491,9 +841,11 @@ interface BodyProps {
   onStop: (id: string, force: boolean) => void
   /** Grace period in ms before Force kill button appears. Default 3000. */
   graceMs?: number
+  /** Desktop (default) or mobile 3-line layout */
+  variant?: "desktop" | "mobile"
 }
 
-export function BackgroundTasksDialogBody({ tasks, onStop, graceMs = 3_000 }: BodyProps) {
+export function BackgroundTasksDialogBody({ tasks, onStop, graceMs = 3_000, variant = "desktop" }: BodyProps) {
   const now = useNow(1_000)
   const listRef = useRef<HTMLDivElement>(null)
   const headingId = useId()
@@ -503,8 +855,17 @@ export function BackgroundTasksDialogBody({ tasks, onStop, graceMs = 3_000 }: Bo
   // Track which row (if any) is in confirm phase — used to dim other rows
   const [confirmingRowId, setConfirmingRowId] = useState<string | null>(null)
 
-  const focusedIndex = tasks.findIndex((t) => t.id === focusedId)
-  const effectiveFocusedId = focusedIndex >= 0 ? focusedId : (tasks[0]?.id ?? null)
+  // Split tasks into orphans and regular
+  const orphanTasks = tasks.filter(
+    (t): t is Extract<BackgroundTask, { kind: "bash_shell" }> =>
+      t.kind === "bash_shell" && t.orphan === true,
+  )
+  const regularTasks = tasks.filter(
+    (t) => !(t.kind === "bash_shell" && t.orphan === true),
+  )
+
+  const focusedIndex = regularTasks.findIndex((t) => t.id === focusedId)
+  const effectiveFocusedId = focusedIndex >= 0 ? focusedId : (regularTasks[0]?.id ?? null)
 
   const handleFocus = useCallback((id: string) => {
     setFocusedId(id)
@@ -538,12 +899,12 @@ export function BackgroundTasksDialogBody({ tasks, onStop, graceMs = 3_000 }: Bo
 
   const handleListKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
-      if (tasks.length === 0) return
-      const currentIndex = tasks.findIndex((t) => t.id === effectiveFocusedId)
+      if (regularTasks.length === 0) return
+      const currentIndex = regularTasks.findIndex((t) => t.id === effectiveFocusedId)
       if (e.key === "ArrowDown") {
         e.preventDefault()
-        const nextIndex = Math.min(currentIndex + 1, tasks.length - 1)
-        const nextId = tasks[nextIndex]?.id
+        const nextIndex = Math.min(currentIndex + 1, regularTasks.length - 1)
+        const nextId = regularTasks[nextIndex]?.id
         if (nextId) {
           setFocusedId(nextId)
           const el = listRef.current?.querySelector<HTMLElement>(`[data-task-id="${nextId}"]`)
@@ -552,7 +913,7 @@ export function BackgroundTasksDialogBody({ tasks, onStop, graceMs = 3_000 }: Bo
       } else if (e.key === "ArrowUp") {
         e.preventDefault()
         const prevIndex = Math.max(currentIndex - 1, 0)
-        const prevId = tasks[prevIndex]?.id
+        const prevId = regularTasks[prevIndex]?.id
         if (prevId) {
           setFocusedId(prevId)
           const el = listRef.current?.querySelector<HTMLElement>(`[data-task-id="${prevId}"]`)
@@ -560,7 +921,7 @@ export function BackgroundTasksDialogBody({ tasks, onStop, graceMs = 3_000 }: Bo
         }
       }
     },
-    [tasks, effectiveFocusedId],
+    [regularTasks, effectiveFocusedId],
   )
 
   const runningCount = tasks.length
@@ -582,11 +943,22 @@ export function BackgroundTasksDialogBody({ tasks, onStop, graceMs = 3_000 }: Bo
 
         {/* Body section */}
         <div className="flex-1 min-h-0 overflow-y-auto px-4 pb-4 pt-3.5">
+          {/* Orphan section (shown above regular tasks when present) */}
+          {orphanTasks.length > 0 && (
+            <OrphanSection
+              orphans={orphanTasks}
+              now={now}
+              variant={variant}
+              onStop={onStop}
+              graceMs={graceMs}
+            />
+          )}
+
           {tasks.length === 0 ? (
             <p className="text-sm text-muted-foreground py-4">
               No background tasks. Anything an agent leaves running here will appear so you can stop it.
             </p>
-          ) : (
+          ) : regularTasks.length === 0 ? null : (
             <div
               ref={listRef}
               role="listbox"
@@ -595,7 +967,7 @@ export function BackgroundTasksDialogBody({ tasks, onStop, graceMs = 3_000 }: Bo
               onKeyDown={handleListKeyDown}
               className="flex flex-col gap-0.5"
             >
-              {tasks.map((task, index) => (
+              {regularTasks.map((task, index) => (
                 <TaskRow
                   key={task.id}
                   task={task}
@@ -605,6 +977,7 @@ export function BackgroundTasksDialogBody({ tasks, onStop, graceMs = 3_000 }: Bo
                   isExpanded={task.id === expandedId}
                   isDimmed={confirmingRowId !== null && confirmingRowId !== task.id}
                   graceMs={graceMs}
+                  variant={variant}
                   onFocus={handleFocus}
                   onToggleExpand={handleToggleExpand}
                   onStopConfirmed={handleStopConfirmed}
@@ -623,6 +996,7 @@ export function BackgroundTasksDialogBody({ tasks, onStop, graceMs = 3_000 }: Bo
 
 // ---------------------------------------------------------------------------
 // BackgroundTasksDialogView — wraps body in the Dialog shell.
+// Desktop: centered dialog. Mobile (< 640px): bottom sheet via Tailwind.
 // The View is the "pure-prop" testable surface; use BackgroundTasksDialogBody
 // for SSR-based tests.
 // ---------------------------------------------------------------------------
@@ -634,17 +1008,30 @@ interface ViewProps {
   onStop: (id: string, force: boolean) => void
   /** Grace period in ms before Force kill button appears. Default 3000. */
   graceMs?: number
+  /** Desktop or mobile layout variant — defaults to "desktop". */
+  variant?: "desktop" | "mobile"
 }
 
-export function BackgroundTasksDialogView({ open, onOpenChange, tasks, onStop, graceMs }: ViewProps) {
+export function BackgroundTasksDialogView({ open, onOpenChange, tasks, onStop, graceMs, variant = "desktop" }: ViewProps) {
   const headingId = useId()
+
+  // Mobile sheet: override the centered positioning to slide from bottom.
+  // max-sm: classes apply at < 640px (Tailwind's "max-sm" variant).
+  const mobileSheetClasses = variant === "mobile"
+    ? "max-w-none w-full rounded-t-xl rounded-b-none left-0 right-0 bottom-0 top-auto translate-x-0 translate-y-0 max-h-[80vh]"
+    : ""
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="w-[min(720px,calc(100vw-2rem))]"
+        className={cn(
+          "w-[min(720px,calc(100vw-2rem))]",
+          mobileSheetClasses,
+          variant === "mobile" && "data-[state=open]:slide-in-from-bottom data-[state=closed]:slide-out-to-bottom data-[state=open]:slide-in-from-left-0 data-[state=closed]:slide-out-to-left-0 data-[state=open]:slide-in-from-top-[0%] data-[state=closed]:slide-out-to-top-[0%]",
+        )}
         size="lg"
         aria-labelledby={headingId}
+        data-variant={variant}
       >
         <DialogHeader className="flex-row items-center justify-between gap-4">
           <DialogTitle id={headingId} className="text-[18px] font-medium leading-none">
@@ -658,7 +1045,7 @@ export function BackgroundTasksDialogView({ open, onOpenChange, tasks, onStop, g
         </DialogHeader>
 
         <DialogBody className="pt-2">
-          <BackgroundTasksDialogBody tasks={tasks} onStop={onStop} graceMs={graceMs} />
+          <BackgroundTasksDialogBody tasks={tasks} onStop={onStop} graceMs={graceMs} variant={variant} />
         </DialogBody>
       </DialogContent>
     </Dialog>
@@ -715,12 +1102,20 @@ const BG_TASK_ROW_KEYFRAME = `
   from { opacity: 0; transform: translateX(8px); }
   to   { opacity: 1; transform: translateX(0); }
 }
+@keyframes bg-task-sheet-slide-in {
+  from { opacity: 0; transform: translateY(100%); }
+  to   { opacity: 1; transform: translateY(0); }
+}
 @media (prefers-reduced-motion: reduce) {
   @keyframes bg-task-row-enter {
     from { opacity: 1; transform: none; }
     to   { opacity: 1; transform: none; }
   }
   @keyframes bg-task-confirm-slide-in {
+    from { opacity: 1; transform: none; }
+    to   { opacity: 1; transform: none; }
+  }
+  @keyframes bg-task-sheet-slide-in {
     from { opacity: 1; transform: none; }
     to   { opacity: 1; transform: none; }
   }
