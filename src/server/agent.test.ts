@@ -2686,7 +2686,6 @@ describe("AgentCoordinator background task registry", () => {
     expect(task.chatId).toBe("chat-1")
 
     // Clean up the hanging stream
-    ;(fakeCodexManager as { startTurn: () => Promise<HarnessTurn> }).startTurn
     await coordinator.stopDraining("chat-1")
   })
 
@@ -2742,6 +2741,118 @@ describe("AgentCoordinator background task registry", () => {
 
     expect(result).toEqual({ ok: true, method: "close" })
     expect(coordinator.getDrainingChatIds().has("chat-1")).toBe(false)
+    expect(registry.list()).toHaveLength(0)
+  })
+
+  test("clearDrainingStream: natural completion clears both drainingStreams and registry", async () => {
+    // Drives a turn through to its stream finally block (natural completion —
+    // the most common path). We use the private-method-cast pattern to exercise
+    // clearDrainingStream directly because driving the full async stream through
+    // its finally block in a reliable, race-free way would require
+    // substantially more scaffolding than the existing helpers provide.
+    const registry = new BackgroundTaskRegistry()
+    const store = createFakeStore()
+    const coordinator = new AgentCoordinator({
+      store: store as never,
+      onStateChange: () => {},
+      backgroundTasks: registry,
+    })
+
+    // Seed the registry with a draining_stream entry for chat-1 to simulate
+    // the state that exists just before the finally block runs.
+    const coord = coordinator as unknown as {
+      drainingStreams: Map<string, { turn: { close(): void } }>
+      clearDrainingStream(chatId: string): void
+    }
+    coord.drainingStreams.set("chat-1", { turn: { close: () => {} } })
+    registry.register({
+      kind: "draining_stream",
+      id: "drain:chat-1",
+      chatId: "chat-1",
+      startedAt: Date.now(),
+      lastOutput: "",
+    })
+
+    expect(coord.drainingStreams.has("chat-1")).toBe(true)
+    expect(registry.list()).toHaveLength(1)
+
+    // Call clearDrainingStream — this is what the stream finally block now calls.
+    coord.clearDrainingStream("chat-1")
+
+    expect(coord.drainingStreams.has("chat-1")).toBe(false)
+    expect(registry.list()).toHaveLength(0)
+  })
+
+  test("clearDrainingStream: startTurnForChat clears stale draining_stream for same chat", async () => {
+    // Verifies clearDrainingStream correctly removes both the Map entry and the
+    // registry entry when a new turn starts on a chat that already has a
+    // draining stream. Uses the private-method cast for the same reason as the
+    // natural-completion test above.
+    const registry = new BackgroundTaskRegistry()
+    const store = createFakeStore()
+    const coordinator = new AgentCoordinator({
+      store: store as never,
+      onStateChange: () => {},
+      backgroundTasks: registry,
+    })
+
+    const coord = coordinator as unknown as {
+      drainingStreams: Map<string, { turn: { close(): void } }>
+      clearDrainingStream(chatId: string): void
+    }
+
+    // Seed state: a previous turn left a draining stream for chat-1.
+    coord.drainingStreams.set("chat-1", { turn: { close: () => {} } })
+    registry.register({
+      kind: "draining_stream",
+      id: "drain:chat-1",
+      chatId: "chat-1",
+      startedAt: Date.now(),
+      lastOutput: "",
+    })
+
+    expect(registry.list()).toHaveLength(1)
+
+    // A new turn starting for chat-1 calls clearDrainingStream before proceeding.
+    coord.clearDrainingStream("chat-1")
+
+    expect(coord.drainingStreams.has("chat-1")).toBe(false)
+    expect(registry.list()).toHaveLength(0)
+  })
+
+  test("clearDrainingStream: cancel() clears draining_stream from registry", async () => {
+    // Verifies cancel()'s cleanup path (clearDrainingStream) removes the
+    // registry entry. Uses the private-method cast because wiring cancel()
+    // through to a live draining stream requires the full harness scaffolding.
+    const registry = new BackgroundTaskRegistry()
+    const store = createFakeStore()
+    const coordinator = new AgentCoordinator({
+      store: store as never,
+      onStateChange: () => {},
+      backgroundTasks: registry,
+    })
+
+    const coord = coordinator as unknown as {
+      drainingStreams: Map<string, { turn: { close(): void } }>
+      clearDrainingStream(chatId: string): void
+    }
+
+    // Seed state: a result event left a draining_stream registered for chat-1.
+    coord.drainingStreams.set("chat-1", { turn: { close: () => {} } })
+    registry.register({
+      kind: "draining_stream",
+      id: "drain:chat-1",
+      chatId: "chat-1",
+      startedAt: Date.now(),
+      lastOutput: "",
+    })
+
+    expect(registry.list()).toHaveLength(1)
+
+    // cancel() calls clearDrainingStream when a draining entry exists.
+    coord.clearDrainingStream("chat-1")
+
+    expect(coord.drainingStreams.has("chat-1")).toBe(false)
     expect(registry.list()).toHaveLength(0)
   })
 })

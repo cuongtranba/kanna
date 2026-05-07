@@ -893,12 +893,16 @@ export class AgentCoordinator {
     }
   }
 
+  private clearDrainingStream(chatId: string): void {
+    this.drainingStreams.delete(chatId)
+    this.backgroundTasks?.unregister(`drain:${chatId}`)
+  }
+
   async stopDraining(chatId: string) {
     const draining = this.drainingStreams.get(chatId)
     if (!draining) return
     draining.turn.close()
-    this.drainingStreams.delete(chatId)
-    this.backgroundTasks?.unregister(`drain:${chatId}`)
+    this.clearDrainingStream(chatId)
     this.emitStateChange(chatId)
   }
 
@@ -1054,7 +1058,7 @@ export class AgentCoordinator {
     const draining = this.drainingStreams.get(args.chatId)
     if (draining) {
       draining.turn.close()
-      this.drainingStreams.delete(args.chatId)
+      this.clearDrainingStream(args.chatId)
     }
 
     const chat = this.store.requireChat(args.chatId)
@@ -1695,7 +1699,7 @@ export class AgentCoordinator {
         this.activeTurns.delete(active.chatId)
       }
       // Stream has fully ended — no longer draining.
-      this.drainingStreams.delete(active.chatId)
+      this.clearDrainingStream(active.chatId)
       this.emitStateChange(active.chatId)
 
       if (active.postToolFollowUp && !active.cancelRequested) {
@@ -1901,7 +1905,7 @@ export class AgentCoordinator {
     const draining = this.drainingStreams.get(chatId)
     if (draining) {
       draining.turn.close()
-      this.drainingStreams.delete(chatId)
+      this.clearDrainingStream(chatId)
     }
 
     const active = this.activeTurns.get(chatId)
