@@ -2610,6 +2610,140 @@ describe("AgentCoordinator background task registry", () => {
     if (task?.kind !== "bash_shell") throw new Error("unexpected task kind")
     expect(task.shellId).toBe("shell_direct789")
   })
+
+  // ── draining_stream registry tracking ──
+
+  function makeDrainingStreamSetup() {
+    let resolveStream!: () => void
+    const fakeCodexManager = {
+      async startSession() {},
+      async startTurn(): Promise<HarnessTurn> {
+        async function* stream() {
+          yield {
+            type: "transcript" as const,
+            entry: timestamped({
+              kind: "system_init",
+              provider: "codex" as const,
+              model: "gpt-5.4",
+              tools: [],
+              agents: [],
+              slashCommands: [],
+              mcpServers: [],
+            }),
+          }
+          yield {
+            type: "transcript" as const,
+            entry: timestamped({
+              kind: "result",
+              subtype: "success" as const,
+              isError: false,
+              durationMs: 0,
+              result: "done",
+            }),
+          }
+          await new Promise<void>((resolve) => {
+            resolveStream = resolve
+          })
+        }
+        return {
+          provider: "codex" as const,
+          stream: stream(),
+          interrupt: async () => {},
+          close: () => {
+            resolveStream?.()
+          },
+        }
+      },
+    }
+    return { fakeCodexManager, resolveStream: () => resolveStream() }
+  }
+
+  test("registers a draining_stream entry in the registry when a turn result arrives with stream still open", async () => {
+    const registry = new BackgroundTaskRegistry()
+    const { fakeCodexManager } = makeDrainingStreamSetup()
+    const store = createFakeStore()
+    const coordinator = new AgentCoordinator({
+      store: store as never,
+      onStateChange: () => {},
+      backgroundTasks: registry,
+      codexManager: fakeCodexManager as never,
+    })
+
+    await coordinator.send({
+      type: "chat.send",
+      chatId: "chat-1",
+      provider: "codex",
+      content: "run with bg task",
+    })
+
+    await waitFor(() => coordinator.getDrainingChatIds().has("chat-1"))
+
+    const tasks = registry.list()
+    expect(tasks).toHaveLength(1)
+    const task = tasks[0]
+    if (task?.kind !== "draining_stream") throw new Error("unexpected task kind")
+    expect(task.id).toBe("drain:chat-1")
+    expect(task.chatId).toBe("chat-1")
+
+    // Clean up the hanging stream
+    ;(fakeCodexManager as { startTurn: () => Promise<HarnessTurn> }).startTurn
+    await coordinator.stopDraining("chat-1")
+  })
+
+  test("unregisters the draining_stream entry when stopDraining is called directly", async () => {
+    const registry = new BackgroundTaskRegistry()
+    const { fakeCodexManager } = makeDrainingStreamSetup()
+    const store = createFakeStore()
+    const coordinator = new AgentCoordinator({
+      store: store as never,
+      onStateChange: () => {},
+      backgroundTasks: registry,
+      codexManager: fakeCodexManager as never,
+    })
+
+    await coordinator.send({
+      type: "chat.send",
+      chatId: "chat-1",
+      provider: "codex",
+      content: "run with bg task",
+    })
+
+    await waitFor(() => coordinator.getDrainingChatIds().has("chat-1"))
+    expect(registry.list()).toHaveLength(1)
+
+    await coordinator.stopDraining("chat-1")
+
+    expect(coordinator.getDrainingChatIds().has("chat-1")).toBe(false)
+    expect(registry.list()).toHaveLength(0)
+  })
+
+  test("registry.stop('drain:CHATID') invokes closeStream strategy and clears both drainingStreams and registry", async () => {
+    const registry = new BackgroundTaskRegistry()
+    const { fakeCodexManager } = makeDrainingStreamSetup()
+    const store = createFakeStore()
+    const coordinator = new AgentCoordinator({
+      store: store as never,
+      onStateChange: () => {},
+      backgroundTasks: registry,
+      codexManager: fakeCodexManager as never,
+    })
+
+    await coordinator.send({
+      type: "chat.send",
+      chatId: "chat-1",
+      provider: "codex",
+      content: "run with bg task",
+    })
+
+    await waitFor(() => coordinator.getDrainingChatIds().has("chat-1"))
+    expect(registry.list()).toHaveLength(1)
+
+    const result = await registry.stop("drain:chat-1")
+
+    expect(result).toEqual({ ok: true, method: "close" })
+    expect(coordinator.getDrainingChatIds().has("chat-1")).toBe(false)
+    expect(registry.list()).toHaveLength(0)
+  })
 })
 
 describe("parseBackgroundPid regex variants", () => {

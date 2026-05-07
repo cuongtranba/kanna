@@ -791,6 +791,11 @@ export class AgentCoordinator {
     this.throwOnClaudeSessionStart = args.throwOnClaudeSessionStart ?? false
     this.tunnelGateway = args.tunnelGateway ?? null
     this.backgroundTasks = args.backgroundTasks ?? null
+    this.backgroundTasks?.setStrategies({
+      closeStream: async (task) => {
+        await this.stopDraining(task.chatId)
+      },
+    })
   }
 
   setBackgroundErrorReporter(report: ((message: string) => void) | null) {
@@ -893,6 +898,7 @@ export class AgentCoordinator {
     if (!draining) return
     draining.turn.close()
     this.drainingStreams.delete(chatId)
+    this.backgroundTasks?.unregister(`drain:${chatId}`)
     this.emitStateChange(chatId)
   }
 
@@ -1646,6 +1652,13 @@ export class AgentCoordinator {
           // Track the still-open stream so the UI can show a draining
           // indicator and the user can stop background tasks.
           this.drainingStreams.set(active.chatId, { turn: active.turn })
+          this.backgroundTasks?.register({
+            kind: "draining_stream",
+            id: `drain:${active.chatId}`,
+            chatId: active.chatId,
+            startedAt: Date.now(),
+            lastOutput: "",
+          })
         }
 
         this.emitStateChange(active.chatId)
