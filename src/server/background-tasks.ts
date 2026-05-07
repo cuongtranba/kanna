@@ -51,6 +51,10 @@ export class BackgroundTaskRegistry {
     return Array.from(this.tasks.values())
   }
 
+  /**
+   * Returns tasks whose chatId matches the given value.
+   * terminal_pty tasks are intentionally excluded because they have no chatId field.
+   */
   listByChat(chatId: string): BackgroundTask[] {
     return this.list().filter((t) => "chatId" in t && t.chatId === chatId)
   }
@@ -63,6 +67,9 @@ export class BackgroundTaskRegistry {
   update(id: string, patch: Partial<BackgroundTask>): void {
     const prev = this.tasks.get(id)
     if (!prev) return
+    if (patch.kind !== undefined && patch.kind !== prev.kind) {
+      throw new Error(`BackgroundTaskRegistry.update: kind mismatch (${prev.kind} -> ${patch.kind})`)
+    }
     const next = { ...prev, ...patch } as BackgroundTask
     this.tasks.set(id, next)
     this.emit("updated", next)
