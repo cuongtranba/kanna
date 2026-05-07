@@ -40,7 +40,6 @@ function resolveCloudflaredPath(settingsPath: string): string {
 }
 
 const MAX_UPLOAD_FILES = 50
-const MAX_UPLOAD_SIZE_BYTES = 100 * 1024 * 1024
 const STALE_EMPTY_CHAT_PRUNE_INTERVAL_MS = 60 * 1000
 
 export async function persistUploadedFiles(args: {
@@ -322,7 +321,7 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
             return Response.json({ ok: true, port: actualPort })
           }
 
-          const uploadResponse = await handleProjectUpload(req, url, store)
+          const uploadResponse = await handleProjectUpload(req, url, store, appSettings)
           if (uploadResponse) {
             return uploadResponse
           }
@@ -403,11 +402,12 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     store,
     diffStore,
     updateManager,
+    appSettings,
     stop: shutdown,
   }
 }
 
-async function handleProjectUpload(req: Request, url: URL, store: EventStore) {
+async function handleProjectUpload(req: Request, url: URL, store: EventStore, appSettings: AppSettingsManager) {
   if (req.method !== "POST") {
     return null
   }
@@ -435,10 +435,12 @@ async function handleProjectUpload(req: Request, url: URL, store: EventStore) {
     return Response.json({ error: `You can upload up to ${MAX_UPLOAD_FILES} files at a time.` }, { status: 400 })
   }
 
+  const { maxFileSizeMb } = appSettings.getSnapshot().uploads
+  const maxBytes = maxFileSizeMb * 1024 * 1024
   for (const file of files) {
-    if (file.size > MAX_UPLOAD_SIZE_BYTES) {
+    if (file.size > maxBytes) {
       return Response.json(
-        { error: `File "${file.name}" exceeds the ${Math.floor(MAX_UPLOAD_SIZE_BYTES / (1024 * 1024))} MB limit.` },
+        { error: `File "${file.name}" exceeds the ${maxFileSizeMb} MB limit.` },
         { status: 413 }
       )
     }
