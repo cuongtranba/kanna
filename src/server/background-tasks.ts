@@ -1,39 +1,6 @@
-export type BackgroundTask =
-  | {
-      kind: "bash_shell"
-      id: string
-      chatId: string | null
-      command: string
-      shellId: string
-      pid: number | null
-      startedAt: number
-      lastOutput: string
-      status: "running" | "stopping"
-      orphan?: boolean
-    }
-  | {
-      kind: "draining_stream"
-      id: string
-      chatId: string
-      startedAt: number
-      lastOutput: string
-    }
-  | {
-      kind: "terminal_pty"
-      id: string
-      ptyId: string
-      cwd: string
-      startedAt: number
-      lastOutput: string
-    }
-  | {
-      kind: "codex_session"
-      id: string
-      chatId: string
-      pid: number | null
-      startedAt: number
-      lastOutput: string
-    }
+import type { BackgroundTask } from "../shared/types"
+
+export type { BackgroundTask }
 
 export type RegistryEvent = "added" | "updated" | "removed"
 export type Listener = (task: BackgroundTask) => void

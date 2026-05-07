@@ -3,8 +3,9 @@ import os from "node:os"
 import path from "node:path"
 import type { ServerWebSocket } from "bun"
 import { PROTOCOL_VERSION } from "../shared/types"
-import type { ClientEnvelope, ServerEnvelope, SubscriptionTopic } from "../shared/protocol"
+import type { BackgroundTaskDiffEvent, ClientEnvelope, ServerEnvelope, SubscriptionTopic } from "../shared/protocol"
 import { isClientEnvelope } from "../shared/protocol"
+import type { BackgroundTaskRegistry } from "./background-tasks"
 import type { AgentCoordinator } from "./agent"
 import type { AnalyticsReporter } from "./analytics"
 import { NoopAnalyticsReporter } from "./analytics"
@@ -68,6 +69,7 @@ function countSubscriptionsByTopic(ws: ServerWebSocket<ClientState>) {
   let keybindings = 0
   let appSettings = 0
   let terminal = 0
+  let bgTasks = 0
 
   for (const topic of ws.data.subscriptions.values()) {
     switch (topic.type) {
@@ -95,6 +97,9 @@ function countSubscriptionsByTopic(ws: ServerWebSocket<ClientState>) {
       case "terminal":
         terminal += 1
         break
+      case "bg-tasks":
+        bgTasks += 1
+        break
     }
   }
 
@@ -108,6 +113,7 @@ function countSubscriptionsByTopic(ws: ServerWebSocket<ClientState>) {
     keybindings,
     appSettings,
     terminal,
+    bgTasks,
   }
 }
 
@@ -137,6 +143,7 @@ interface CreateWsRouterArgs {
   machineDisplayName: string
   updateManager: UpdateManager | null
   pushManager: PushManager
+  backgroundTasks?: Pick<BackgroundTaskRegistry, "list" | "on" | "stop">
 }
 
 interface SnapshotBroadcastFilter {
@@ -394,6 +401,7 @@ export function createWsRouter({
   machineDisplayName,
   updateManager,
   pushManager,
+  backgroundTasks,
 }: CreateWsRouterArgs) {
   const sockets = new Set<ServerWebSocket<ClientState>>()
   let pendingBroadcastTimer: ReturnType<typeof setTimeout> | null = null
@@ -808,6 +816,18 @@ export function createWsRouter({
       }
     }
 
+    if (topic.type === "bg-tasks") {
+      return {
+        v: PROTOCOL_VERSION,
+        type: "snapshot",
+        id,
+        snapshot: {
+          type: "bg-tasks",
+          data: backgroundTasks?.list() ?? [],
+        },
+      }
+    }
+
     return {
       v: PROTOCOL_VERSION,
       type: "snapshot",
@@ -1078,6 +1098,32 @@ export function createWsRouter({
         send(ws, envelope)
       }
     }
+  }) ?? (() => {})
+
+  function pushBgTasksDiffEvent(event: BackgroundTaskDiffEvent) {
+    for (const ws of sockets) {
+      for (const [id, topic] of ws.data.subscriptions.entries()) {
+        if (topic.type !== "bg-tasks") continue
+        send(ws, {
+          v: PROTOCOL_VERSION,
+          type: "event",
+          id,
+          event,
+        })
+      }
+    }
+  }
+
+  const disposeBgTasksAdded = backgroundTasks?.on("added", (task) => {
+    pushBgTasksDiffEvent({ type: "bg-tasks.added", task })
+  }) ?? (() => {})
+
+  const disposeBgTasksUpdated = backgroundTasks?.on("updated", (task) => {
+    pushBgTasksDiffEvent({ type: "bg-tasks.updated", task })
+  }) ?? (() => {})
+
+  const disposeBgTasksRemoved = backgroundTasks?.on("removed", (task) => {
+    pushBgTasksDiffEvent({ type: "bg-tasks.removed", task })
   }) ?? (() => {})
 
   agent.setBackgroundErrorReporter?.(broadcastError)
@@ -1709,6 +1755,19 @@ export function createWsRouter({
           send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
           return
         }
+        case "bg-tasks.stop": {
+          if (!backgroundTasks) {
+            send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: { ok: false, error: "background tasks unavailable" } })
+            return
+          }
+          if (typeof command.id !== "string" || command.id.length === 0) {
+            send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: { ok: false, error: "id must be a non-empty string" } })
+            return
+          }
+          const stopResult = await backgroundTasks.stop(command.id, { force: command.force })
+          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: stopResult })
+          return
+        }
       }
 
       await broadcastSnapshots()
@@ -1790,6 +1849,9 @@ export function createWsRouter({
       disposeKeybindingEvents()
       disposeAppSettingsEvents()
       disposeUpdateEvents()
+      disposeBgTasksAdded()
+      disposeBgTasksUpdated()
+      disposeBgTasksRemoved()
     },
   }
 }
