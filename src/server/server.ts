@@ -31,6 +31,8 @@ import { ScheduleManager } from "./auto-continue/schedule-manager"
 import { TunnelGateway } from "./cloudflare-tunnel/gateway"
 import { TunnelManager } from "./cloudflare-tunnel/tunnel-manager"
 import { TunnelLifecycle } from "./cloudflare-tunnel/lifecycle"
+import { BackgroundTaskRegistry } from "./background-tasks"
+import { subscribeOrphanPersistence, recoverOrphans } from "./orphan-persistence"
 
 function resolveCloudflaredPath(settingsPath: string): string {
   if (settingsPath !== CLOUDFLARE_TUNNEL_DEFAULTS.cloudflaredPath) {
@@ -136,7 +138,8 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
 
   let server: ReturnType<typeof Bun.serve<ClientState>>
   let router: ReturnType<typeof createWsRouter>
-  const terminals = new TerminalManager()
+  const backgroundTasks = new BackgroundTaskRegistry()
+  const terminals = new TerminalManager({ backgroundTasks })
   const keybindings = new KeybindingsManager()
   const appSettings = new AppSettingsManager(path.join(store.dataDir, "settings.json"))
   await appSettings.initialize()
@@ -217,6 +220,7 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     throwOnClaudeSessionStart: options.agentOverrides?.throwOnClaudeSessionStart,
     analytics,
     tunnelGateway,
+    backgroundTasks,
     onStateChange: (chatId?: string, options?: { immediate?: boolean }) => {
       if (chatId) {
         if (options?.immediate) {
@@ -252,6 +256,17 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
   scheduleManager.rehydrate(
     store.listAutoContinueChats().flatMap((chatId) => store.getAutoContinueEvents(chatId))
   )
+
+  // Boot recovery: re-register surviving bash_shell PIDs from a previous session.
+  // Must run after backgroundTasks registry and agent are wired, before WS routes serve.
+  // The port is not finalised yet (bind loop below), so we use the desired port for the
+  // orphan file key. If the port shifts due to EADDRINUSE, the file for the original
+  // port is silently ignored on the next boot — acceptable for the edge case.
+  await recoverOrphans(backgroundTasks, port)
+
+  // Subscribe registry events to debounced atomic persist of bash_shell tasks.
+  const unsubOrphanPersistence = subscribeOrphanPersistence(backgroundTasks, port)
+
   await tunnelGateway.reapOrphanedTunnels()
   const staleEmptyChatPruneInterval = setInterval(() => {
     void router.pruneStaleEmptyChats()
@@ -385,6 +400,9 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
   })
 
   const shutdown = async () => {
+    // Clear the debounce timer for orphan persistence so no straggler writes fire
+    // after the process starts shutting down.
+    unsubOrphanPersistence()
     scheduleManager.shutdown()
     tunnelGateway.shutdown()
     clearInterval(staleEmptyChatPruneInterval)
