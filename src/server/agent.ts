@@ -35,6 +35,7 @@ import type { ScheduleManager } from "./auto-continue/schedule-manager"
 import { deriveChatSchedules } from "./auto-continue/read-model"
 import type { TunnelGateway } from "./cloudflare-tunnel/gateway"
 import type { BackgroundTaskRegistry } from "./background-tasks"
+import type { TerminalManager } from "./terminal-manager"
 
 const CLAUDE_TOOLSET = [
   "Skill",
@@ -112,6 +113,7 @@ interface AgentCoordinatorArgs {
   onStateChange: (chatId?: string, options?: { immediate?: boolean }) => void
   analytics?: AnalyticsReporter
   codexManager?: CodexAppServerManager
+  terminalManager?: TerminalManager
   generateTitle?: (messageContent: string, cwd: string) => Promise<GenerateChatTitleResult>
   tunnelGateway?: TunnelGateway
   startClaudeSession?: (args: {
@@ -760,6 +762,7 @@ export class AgentCoordinator {
   private readonly onStateChange: (chatId?: string, options?: { immediate?: boolean }) => void
   private readonly analytics: AnalyticsReporter
   private readonly codexManager: CodexAppServerManager
+  private readonly terminalManager: TerminalManager | null
   private readonly generateTitle: (messageContent: string, cwd: string) => Promise<GenerateChatTitleResult>
   private readonly startClaudeSessionFn: NonNullable<AgentCoordinatorArgs["startClaudeSession"]>
   private reportBackgroundError: ((message: string) => void) | null = null
@@ -781,7 +784,10 @@ export class AgentCoordinator {
     this.store = args.store
     this.onStateChange = args.onStateChange
     this.analytics = args.analytics ?? NoopAnalyticsReporter
-    this.codexManager = args.codexManager ?? new CodexAppServerManager()
+    this.codexManager = args.codexManager ?? new CodexAppServerManager({
+      backgroundTasks: args.backgroundTasks,
+    })
+    this.terminalManager = args.terminalManager ?? null
     this.generateTitle = args.generateTitle ?? generateTitleForChatDetailed
     this.startClaudeSessionFn = args.startClaudeSession ?? startClaudeSession
     this.claudeLimitDetector = args.claudeLimitDetector ?? new ClaudeLimitDetector()
@@ -794,6 +800,12 @@ export class AgentCoordinator {
     this.backgroundTasks?.setStrategies({
       closeStream: async (task) => {
         await this.stopDraining(task.chatId)
+      },
+      killPty: async (task) => {
+        this.terminalManager?.close(task.ptyId)
+      },
+      shutdownCodex: async (task) => {
+        this.codexManager.stopSession(task.chatId)
       },
     })
   }
