@@ -1,0 +1,184 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-05-07T00:00:00Z",
+  "title": "Design System: Kanna",
+  "extensions": {
+    "colorMeta": {
+      "kanna-coral": {
+        "role": "primary",
+        "displayName": "Kanna Coral",
+        "canonical": "oklch(71.2% 0.194 13.428)",
+        "tonalRamp": [
+          "oklch(15% 0.05 13)",
+          "oklch(28% 0.10 13)",
+          "oklch(40% 0.14 13)",
+          "oklch(52% 0.17 13)",
+          "oklch(63% 0.19 13)",
+          "oklch(71.2% 0.194 13.428)",
+          "oklch(82% 0.13 13)",
+          "oklch(94% 0.05 13)"
+        ]
+      },
+      "paper": {
+        "role": "neutral",
+        "displayName": "Warm Paper",
+        "canonical": "oklch(99.5% 0.003 13)"
+      },
+      "inkstone": {
+        "role": "neutral",
+        "displayName": "Inkstone",
+        "canonical": "oklch(20% 0.01 13)"
+      },
+      "espresso-ink": {
+        "role": "neutral",
+        "displayName": "Espresso Ink",
+        "canonical": "oklch(16% 0.01 13)"
+      },
+      "margin-gray-light": {
+        "role": "neutral",
+        "displayName": "Margin Gray (light)",
+        "canonical": "oklch(55% 0.013 13)"
+      },
+      "soft-edge-light": {
+        "role": "neutral",
+        "displayName": "Soft Edge (light)",
+        "canonical": "oklch(91% 0.008 13)"
+      },
+      "verified-sage": {
+        "role": "secondary",
+        "displayName": "Verified Sage",
+        "canonical": "oklch(68% 0.15 155)"
+      },
+      "editor-amber": {
+        "role": "tertiary",
+        "displayName": "Editor Amber",
+        "canonical": "oklch(76% 0.14 78)"
+      },
+      "reference-blue": {
+        "role": "tertiary",
+        "displayName": "Reference Blue",
+        "canonical": "oklch(66% 0.13 235)"
+      }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "purpose": "Kanna wordmark only." },
+      "headline": { "displayName": "Headline", "purpose": "Page and dialog titles." },
+      "title": { "displayName": "Title", "purpose": "List row primaries, sidebar group labels." },
+      "body": { "displayName": "Body", "purpose": "Chat content, prose, descriptive metadata." },
+      "label": { "displayName": "Label", "purpose": "Metadata pairs, timestamps, type tags." },
+      "mono": { "displayName": "Mono", "purpose": "Commands, durations, ages, pids, tabular numerics." }
+    },
+    "shadows": [
+      { "name": "focus-ring", "value": "0 0 0 2px var(--ring)", "purpose": "Keyboard focus indicator on every interactive element." }
+    ],
+    "motion": [
+      { "name": "ease-out-quart", "value": "cubic-bezier(0.22, 1, 0.36, 1)", "purpose": "Default easing for state transitions, sheet open, sidebar reveal." },
+      { "name": "duration-fast", "value": "160ms", "purpose": "Dialog open, popover open." },
+      { "name": "duration-base", "value": "180ms", "purpose": "Row enter, confirm-stop slide." },
+      { "name": "duration-toggle", "value": "280ms", "purpose": "Terminal pane and right-sidebar reveal." }
+    ],
+    "breakpoints": [
+      { "name": "sm", "value": "640px" },
+      { "name": "md", "value": "768px" },
+      { "name": "lg", "value": "1024px" },
+      { "name": "xl", "value": "1280px" },
+      { "name": "3xl", "value": "1920px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Default primary action. Espresso-ink fill, pale text, rounded-md.",
+      "html": "<button class=\"ds-btn-primary\">Save changes</button>",
+      "css": ".ds-btn-primary { background: oklch(16% 0.01 13); color: oklch(98% 0.005 13); padding: 8px 14px; border: none; border-radius: 6px; font-family: 'Body', system-ui, sans-serif; font-weight: 500; font-size: 14px; line-height: 1.3; cursor: pointer; transition: background 150ms cubic-bezier(0.22,1,0.36,1); } .ds-btn-primary:hover { background: oklch(22% 0.012 13); } .ds-btn-primary:focus-visible { outline: 2px solid oklch(18% 0.01 13); outline-offset: 2px; }"
+    },
+    {
+      "name": "Destructive Button",
+      "kind": "button",
+      "refersTo": "button-destructive",
+      "description": "Stop, delete, force-kill. Kanna Coral fill. Pairs with inline confirm flow.",
+      "html": "<button class=\"ds-btn-destructive\">Stop</button>",
+      "css": ".ds-btn-destructive { background: oklch(71.2% 0.194 13.428); color: oklch(98% 0.005 13); padding: 8px 14px; border: none; border-radius: 6px; font-family: 'Body', system-ui, sans-serif; font-weight: 500; font-size: 14px; line-height: 1.3; cursor: pointer; transition: background 150ms cubic-bezier(0.22,1,0.36,1); } .ds-btn-destructive:hover { background: oklch(66% 0.20 13); } .ds-btn-destructive:focus-visible { outline: 2px solid oklch(71.2% 0.194 13.428); outline-offset: 2px; }"
+    },
+    {
+      "name": "Ghost Button",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "Used inside dense lists where another fill would be noise.",
+      "html": "<button class=\"ds-btn-ghost\">Cancel</button>",
+      "css": ".ds-btn-ghost { background: transparent; color: oklch(16% 0.01 13); padding: 8px 14px; border: none; border-radius: 6px; font-family: 'Body', system-ui, sans-serif; font-weight: 500; font-size: 14px; line-height: 1.3; cursor: pointer; transition: background 150ms cubic-bezier(0.22,1,0.36,1); } .ds-btn-ghost:hover { background: oklch(96% 0.005 13); } .ds-btn-ghost:focus-visible { outline: 2px solid oklch(18% 0.01 13); outline-offset: 2px; }"
+    },
+    {
+      "name": "Input Field",
+      "kind": "input",
+      "refersTo": "input-field",
+      "description": "Text input. Soft-Edge border, paper background, rounded-md. iOS-safe 16px on mobile.",
+      "html": "<label class=\"ds-input-wrap\"><span class=\"ds-input-label\">Project name</span><input class=\"ds-input\" type=\"text\" placeholder=\"kanna\" /></label>",
+      "css": ".ds-input-wrap { display: flex; flex-direction: column; gap: 4px; font-family: 'Body', system-ui, sans-serif; } .ds-input-label { font-size: 12px; font-weight: 500; color: oklch(55% 0.013 13); } .ds-input { background: oklch(99.5% 0.003 13); color: oklch(16% 0.01 13); padding: 8px 12px; border: 1px solid oklch(91% 0.008 13); border-radius: 6px; font-size: 14px; line-height: 1.5; transition: border-color 150ms cubic-bezier(0.22,1,0.36,1); } .ds-input:focus { outline: none; border-color: oklch(18% 0.01 13); box-shadow: 0 0 0 1px oklch(18% 0.01 13); } @media (max-width: 640px) { .ds-input { font-size: 16px; } }"
+    },
+    {
+      "name": "Status Dot",
+      "kind": "chip",
+      "refersTo": "card-surface",
+      "description": "Status indicator. Static, no pulse. Amber = running, sage = idle, coral = failed.",
+      "html": "<span class=\"ds-status-row\"><span class=\"ds-dot ds-dot-running\" aria-hidden=\"true\"></span><span class=\"ds-status-label\">running</span><span class=\"ds-status-meta\">2m 14s</span></span>",
+      "css": ".ds-status-row { display: inline-flex; align-items: center; gap: 8px; font-family: 'Body', system-ui, sans-serif; font-size: 13px; color: oklch(16% 0.01 13); } .ds-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; } .ds-dot-running { background: oklch(76% 0.14 78); } .ds-dot-idle { background: oklch(68% 0.15 155); } .ds-dot-failed { background: oklch(71.2% 0.194 13.428); } .ds-status-label { font-weight: 500; } .ds-status-meta { font-family: 'Roboto Mono', ui-monospace, monospace; font-variant-numeric: tabular-nums; color: oklch(55% 0.013 13); font-size: 13px; }"
+    },
+    {
+      "name": "Background Task Row",
+      "kind": "card",
+      "refersTo": "card-surface",
+      "description": "Two-line row inside the Background Tasks dialog. Mono command + tabular age, sans meta.",
+      "html": "<div class=\"ds-bgrow\"><div class=\"ds-bgrow-line1\"><code class=\"ds-bgrow-cmd\">bun run dev</code><span class=\"ds-bgrow-age\">2m 14s</span></div><div class=\"ds-bgrow-line2\"><span class=\"ds-bgrow-tag\">bash</span><span class=\"ds-bgrow-sep\">·</span><a class=\"ds-bgrow-chat\" href=\"#\">chat: feat/timings</a><span class=\"ds-bgrow-sep\">·</span><span class=\"ds-bgrow-time\">started 11:02</span><button class=\"ds-bgrow-stop\" aria-label=\"Stop bun run dev\">Stop</button></div></div>",
+      "css": ".ds-bgrow { display: flex; flex-direction: column; gap: 4px; padding: 12px 16px; border-radius: 6px; transition: background 150ms cubic-bezier(0.22,1,0.36,1); } .ds-bgrow:hover { background: oklch(96% 0.005 13); } .ds-bgrow-line1 { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; } .ds-bgrow-cmd { font-family: 'Roboto Mono', ui-monospace, monospace; font-size: 14px; font-weight: 600; color: oklch(16% 0.01 13); } .ds-bgrow-age { font-family: 'Roboto Mono', ui-monospace, monospace; font-size: 13px; font-weight: 500; font-variant-numeric: tabular-nums; color: oklch(16% 0.01 13); } .ds-bgrow-line2 { display: flex; align-items: center; gap: 6px; font-family: 'Body', system-ui, sans-serif; font-size: 12px; color: oklch(55% 0.013 13); } .ds-bgrow-tag { text-transform: lowercase; } .ds-bgrow-sep { opacity: 0.6; } .ds-bgrow-chat { color: oklch(55% 0.013 13); text-decoration: none; border-bottom: 1px dotted oklch(91% 0.008 13); } .ds-bgrow-chat:hover { color: oklch(16% 0.01 13); border-bottom-color: oklch(16% 0.01 13); } .ds-bgrow-stop { margin-left: auto; background: transparent; color: oklch(71.2% 0.194 13.428); border: none; padding: 4px 8px; border-radius: 4px; font-family: 'Body', system-ui, sans-serif; font-size: 12px; font-weight: 500; cursor: pointer; } .ds-bgrow-stop:hover { background: oklch(96% 0.005 13); } .ds-bgrow-stop:focus-visible { outline: 2px solid oklch(71.2% 0.194 13.428); outline-offset: 2px; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Editorial Workspace",
+    "overview": "Kanna reads like a well-edited document, not a dashboard. The system stays warm-tinted and quiet so that long agent sessions remain legible at 11pm on a 27-inch monitor without wearing the user down. Density is paid for in rhythm, not in chrome: hierarchy emerges from typographic weight and generous spacing, never from gradients, glow, or decorative borders. Color is restrained by default. One brand accent (Kanna Coral) carries identity and destructive intent both, used on under 10% of any screen.",
+    "keyCharacteristics": [
+      "Warm-tinted neutrals (chroma 0.003–0.013, hue ~13°) across both themes.",
+      "One brand accent, used rarely and on purpose.",
+      "Editorial type pairing: Body for prose, Bricolage Grotesque for the logo only, Roboto Mono for code and tabular data.",
+      "Flat by default. Depth comes from contrast and spacing, not shadows.",
+      "Tabular numerics on every duration, count, age, or pid."
+    ],
+    "rules": [
+      { "name": "The Tint-Everything Rule", "body": "No #000 or #fff. Every neutral carries chroma 0.003–0.013 toward hue 13°. Pure black or pure white in this codebase is a bug.", "section": "colors" },
+      { "name": "The One-Voice Rule", "body": "Kanna Coral is the only brand color and is used on ≤10% of any given screen. Its rarity is the point. Decorative use prohibited.", "section": "colors" },
+      { "name": "The Color-Plus Rule", "body": "Color alone never carries meaning. Status, errors, and live states always pair color with shape (icon), text, or weight.", "section": "colors" },
+      { "name": "The No-All-Caps Rule", "body": "Headers and labels are sentence case. ALL CAPS is reserved for emergencies the system does not have.", "section": "typography" },
+      { "name": "The Tabular-Nums Rule", "body": "Any duration, count, age, pid, or time-to-x ticker uses font-variant-numeric: tabular-nums. Reflow under live tickers is a regression.", "section": "typography" },
+      { "name": "The Mobile-Input-16 Rule", "body": "Inputs, textareas, and selects use font-size: 16px minimum on mobile to prevent iOS zoom-on-focus.", "section": "typography" },
+      { "name": "The Flat-By-Default Rule", "body": "Surfaces are flat at rest. Depth is a state response (focus, overlay), not an idle aesthetic.", "section": "elevation" },
+      { "name": "The No-Glassmorphism Rule", "body": "backdrop-filter blur on a translucent panel is prohibited as a default. Use it only when the underlying content must stay partially visible for a functional reason.", "section": "elevation" }
+    ],
+    "dos": [
+      "Tint every neutral toward hue 13° at chroma 0.003–0.013.",
+      "Carry the One-Voice Rule: Kanna Coral on ≤10% of any screen.",
+      "Pair color with shape, label, or weight on every state indicator.",
+      "Use Roboto Mono with tabular-nums for every duration, age, count, pid.",
+      "Keep dialogs flat: scale-and-fade entry, no backdrop blur, no nested modals.",
+      "Write keyboard shortcuts on every action; every keyboard action also has a clear mouse target.",
+      "Respect prefers-reduced-motion.",
+      "Use the project Tooltip component; native title attributes are prohibited.",
+      "Target body text contrast ≥ 7:1 (AAA) where the design allows."
+    ],
+    "donts": [
+      "Don't use #000, #fff, or any zero-chroma neutral.",
+      "Don't use purple-blue gradients, glassmorphism cards, or glow accents.",
+      "Don't ship marketing-cream backgrounds, oversized illustrations, or hero-feature-card grids.",
+      "Don't put saturated green or cyan on a black background.",
+      "Don't stack panels at Datadog/Grafana density.",
+      "Don't use border-left greater than 1px as a colored stripe.",
+      "Don't clip text inside a gradient.",
+      "Don't open a modal on top of a modal.",
+      "Don't animate layout properties (width, height, top, left, padding).",
+      "Don't pulse status dots.",
+      "Don't use outline: none on focusable elements without a clear replacement.",
+      "Don't rely on color alone for status."
+    ]
+  }
+}
