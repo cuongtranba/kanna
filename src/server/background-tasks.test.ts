@@ -146,4 +146,81 @@ describe("BackgroundTaskRegistry.stop", () => {
     }
     expect(r.list()).toHaveLength(0) // dropped from registry
   })
+
+  it("word-boundary guard: 'bunbar' does not match a 'bun' process", async () => {
+    // Spawn a real bun process so we have a live PID that ps shows as "bun ..."
+    const child = spawn({
+      cmd: ["bun", "-e", "setInterval(() => {}, 1000);"],
+      stdin: "ignore",
+    })
+    await Bun.sleep(200)
+    const r = new BackgroundTaskRegistry()
+    r.register({
+      kind: "bash_shell",
+      id: "sh-wb",
+      chatId: null,
+      // "bunbar" starts with "bun" — the old substring match would wrongly accept it
+      command: "bunbar",
+      shellId: "shell-wb",
+      pid: child.pid!,
+      startedAt: Date.now(),
+      lastOutput: "",
+      status: "running",
+    })
+    const result = await r.stop("sh-wb")
+    // verifyComm should reject because no word boundary match for "bunbar"
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.error).toContain("PID mismatch")
+    }
+    // Clean up the orphaned child
+    try {
+      process.kill(child.pid!, "SIGKILL")
+    } catch {
+      // already dead
+    }
+    await child.exited
+  }, 5000)
+
+  it("killShell strategy hook: invoked instead of POSIX signals", async () => {
+    const child = spawn({
+      cmd: ["bun", "-e", "setInterval(() => {}, 1000);"],
+      stdin: "ignore",
+    })
+    await Bun.sleep(200)
+    const r = new BackgroundTaskRegistry()
+    r.register({
+      kind: "bash_shell",
+      id: "sh-ks",
+      chatId: null,
+      command: "bun",
+      shellId: "shell-ks",
+      pid: child.pid!,
+      startedAt: Date.now(),
+      lastOutput: "",
+      status: "running",
+    })
+
+    let strategyCalled = 0
+    r.setStrategies({
+      killShell: async (task) => {
+        strategyCalled++
+        // Actually kill so the test doesn't leave a zombie
+        try {
+          process.kill(task.pid!, "SIGKILL")
+        } catch {
+          // already gone
+        }
+      },
+    })
+
+    const result = await r.stop("sh-ks")
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.method).toBe("sigterm")
+    }
+    expect(strategyCalled).toBe(1)
+    expect(r.list()).toHaveLength(0)
+    await child.exited
+  }, 5000)
 })

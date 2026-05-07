@@ -53,10 +53,24 @@ export type StopStrategies = {
 }
 
 async function safeKill(pid: number, signal: "SIGTERM" | "SIGKILL"): Promise<void> {
+  // Try the process group first so child processes (e.g. spawned by a shell) are
+  // also signalled. Fall back to single-pid kill if the group signal fails.
+  // Note: ESRCH from -pid means "no such process group" (the pid is not a
+  // group leader), so we always fall through to the single-pid kill in that case.
+  let groupKilled = false
+  try {
+    process.kill(-pid, signal)
+    groupKilled = true
+  } catch {
+    // Any error (ESRCH = no group, EPERM, EINVAL) means group kill failed;
+    // fall through to single-pid kill below.
+  }
+  if (groupKilled) return
   try {
     process.kill(pid, signal)
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "ESRCH") return
+    const code = (err as NodeJS.ErrnoException).code
+    if (code === "ESRCH") return
     throw err
   }
 }
@@ -66,8 +80,10 @@ async function waitForExit(pid: number, timeoutMs: number): Promise<boolean> {
   while (Date.now() - start < timeoutMs) {
     try {
       process.kill(pid, 0)
-    } catch {
-      return true
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code
+      if (code === "ESRCH") return true
+      // EPERM and other codes mean the process still exists; keep polling.
     }
     await Bun.sleep(50)
   }
@@ -80,12 +96,15 @@ async function verifyComm(pid: number, expectedCommand: string): Promise<boolean
       cmd: ["ps", "-p", String(pid), "-o", "command="],
       stdin: "ignore",
       stdout: "pipe",
+      stderr: "ignore",
     })
     const out = (await new Response(proc.stdout).text()).trim()
+    await proc.exited
     if (!out) return false
     const cmdToken = expectedCommand.split(/\s+/)[0] ?? ""
     if (!cmdToken) return true
-    return out.includes(cmdToken)
+    const escaped = cmdToken.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+    return new RegExp(`(?:^|[/\\s])${escaped}(?:\\s|$)`).test(out)
   } catch {
     return false
   }
@@ -174,9 +193,18 @@ export class BackgroundTaskRegistry {
     }
 
     if (opts.force) {
+      this.update(id, { status: "stopping" })
       await safeKill(task.pid, "SIGKILL")
       this.unregister(id)
       return { ok: true, method: "sigkill" }
+    }
+
+    // If the SDK provides a custom kill strategy, delegate to it.
+    if (this.strategies.killShell) {
+      this.update(id, { status: "stopping" })
+      await this.strategies.killShell(task)
+      this.unregister(id)
+      return { ok: true, method: "sigterm" }
     }
 
     this.update(id, { status: "stopping" })
