@@ -718,13 +718,41 @@ async function startClaudeSession(args: {
 }
 
 function parseBackgroundPid(output: string): number | null {
-  const match = output.match(/\bpid[:\s]+(\d+)\b/i)
+  const match = output.match(/\bpid[\s:=]+(\d+)\b/i)
   return match ? Number(match[1]) : null
 }
 
 function parseBackgroundShellId(output: string): string | null {
   const match = output.match(/shell[_\s-]?id[:\s]+([\w-]+)/i)
   return match ? match[1] : null
+}
+
+/**
+ * Extracts the canonical background task ID from a tool_result content value.
+ *
+ * The SDK may surface `backgroundTaskId` either:
+ *  - as a top-level field on a BashOutput object (the direct-object form), or
+ *  - as a field on one of the items in a content-block array.
+ *
+ * Returns the first non-empty string found, or null if absent.
+ */
+function extractBackgroundTaskId(content: unknown): string | null {
+  if (content === null || typeof content !== "object") return null
+  if (Array.isArray(content)) {
+    for (const item of content) {
+      if (typeof item === "object" && item !== null && "backgroundTaskId" in item) {
+        const id = (item as { backgroundTaskId?: unknown }).backgroundTaskId
+        if (typeof id === "string" && id.length > 0) return id
+      }
+    }
+    return null
+  }
+  // Direct BashOutput-like object
+  if ("backgroundTaskId" in content) {
+    const id = (content as { backgroundTaskId?: unknown }).backgroundTaskId
+    if (typeof id === "string" && id.length > 0) return id
+  }
+  return null
 }
 
 export class AgentCoordinator {
@@ -828,7 +856,10 @@ export class AgentCoordinator {
 
       if (pending.isBg && this.backgroundTasks) {
         const registryId = `bash:${entry.toolId}`
-        const shellId = parseBackgroundShellId(stdout) ?? entry.toolId
+        const shellId =
+          extractBackgroundTaskId(entry.content) ??
+          parseBackgroundShellId(stdout) ??
+          entry.toolId
         const pid = parseBackgroundPid(stdout)
         this.backgroundTasks.register({
           kind: "bash_shell",

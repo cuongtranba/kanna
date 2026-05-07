@@ -2528,4 +2528,153 @@ describe("AgentCoordinator background task registry", () => {
     expect(task.shellId).toBe(toolId)
     expect(task.pid).toBeNull()
   })
+
+  test("uses SDK backgroundTaskId from structured content array when present", () => {
+    const registry = new BackgroundTaskRegistry()
+    const { coordinator } = makeCoordinatorWithRegistry(registry)
+    const toolId = "tool-struct-bg-1"
+
+    const coord = coordinator as unknown as {
+      trackBashToolEntry(chatId: string, entry: TranscriptEntry): void
+    }
+
+    coord.trackBashToolEntry("chat-1", timestamped({
+      kind: "tool_call",
+      tool: {
+        kind: "tool",
+        toolKind: "bash",
+        toolName: "Bash",
+        toolId,
+        input: { command: "bun run dev", runInBackground: true },
+        rawInput: { command: "bun run dev", run_in_background: true },
+      },
+    }))
+
+    // Simulate a tool_result where content is an array of content blocks
+    // and one block carries the SDK's canonical backgroundTaskId field.
+    const structuredContent: Array<{ type: string; text?: string; backgroundTaskId?: string }> = [
+      { type: "text", text: "Started pid: 99" },
+      { type: "tool_result", backgroundTaskId: "shell_abc123" },
+    ]
+    coord.trackBashToolEntry("chat-1", timestamped({
+      kind: "tool_result",
+      toolId,
+      content: structuredContent,
+    }))
+
+    const tasks = registry.list()
+    expect(tasks).toHaveLength(1)
+    const task = tasks[0]
+    if (task?.kind !== "bash_shell") throw new Error("unexpected task kind")
+    // Structured backgroundTaskId must win over regex-parsed shell_id or toolId fallback
+    expect(task.shellId).toBe("shell_abc123")
+  })
+
+  test("uses SDK backgroundTaskId from direct BashOutput object when present", () => {
+    const registry = new BackgroundTaskRegistry()
+    const { coordinator } = makeCoordinatorWithRegistry(registry)
+    const toolId = "tool-direct-bg-1"
+
+    const coord = coordinator as unknown as {
+      trackBashToolEntry(chatId: string, entry: TranscriptEntry): void
+    }
+
+    coord.trackBashToolEntry("chat-1", timestamped({
+      kind: "tool_call",
+      tool: {
+        kind: "tool",
+        toolKind: "bash",
+        toolName: "Bash",
+        toolId,
+        input: { command: "sleep 300", runInBackground: true },
+        rawInput: { command: "sleep 300", run_in_background: true },
+      },
+    }))
+
+    // Simulate a BashOutput object as content (direct-object form)
+    const bashOutputContent = {
+      stdout: "Started pid: 55555",
+      stderr: "",
+      interrupted: false,
+      backgroundTaskId: "shell_direct789",
+    }
+    coord.trackBashToolEntry("chat-1", timestamped({
+      kind: "tool_result",
+      toolId,
+      content: bashOutputContent,
+    }))
+
+    const tasks = registry.list()
+    expect(tasks).toHaveLength(1)
+    const task = tasks[0]
+    if (task?.kind !== "bash_shell") throw new Error("unexpected task kind")
+    expect(task.shellId).toBe("shell_direct789")
+  })
+})
+
+describe("parseBackgroundPid regex variants", () => {
+  // These tests exercise parseBackgroundPid indirectly via trackBashToolEntry,
+  // verifying the regex accepts all supported PID output formats.
+  function makeRegistryAndCoord() {
+    const registry = new BackgroundTaskRegistry()
+    const store = createFakeStore()
+    const coordinator = new AgentCoordinator({
+      store: store as never,
+      onStateChange: () => {},
+      backgroundTasks: registry,
+    })
+    const coord = coordinator as unknown as {
+      trackBashToolEntry(chatId: string, entry: TranscriptEntry): void
+    }
+    return { registry, coord }
+  }
+
+  function registerWithOutput(output: string, toolId: string) {
+    const { registry, coord } = makeRegistryAndCoord()
+    coord.trackBashToolEntry("chat-1", timestamped({
+      kind: "tool_call",
+      tool: {
+        kind: "tool",
+        toolKind: "bash",
+        toolName: "Bash",
+        toolId,
+        input: { command: "sleep 60", runInBackground: true },
+        rawInput: { command: "sleep 60", run_in_background: true },
+      },
+    }))
+    coord.trackBashToolEntry("chat-1", timestamped({
+      kind: "tool_result",
+      toolId,
+      content: output,
+    }))
+    return registry
+  }
+
+  test("parses 'pid: N' format", () => {
+    const registry = registerWithOutput("Started pid: 11111", "t1")
+    const task = registry.list()[0]
+    if (task?.kind !== "bash_shell") throw new Error("unexpected task kind")
+    expect(task.pid).toBe(11111)
+  })
+
+  test("parses 'pid N' format (space only)", () => {
+    const registry = registerWithOutput("Server pid 22222 running", "t2")
+    const task = registry.list()[0]
+    if (task?.kind !== "bash_shell") throw new Error("unexpected task kind")
+    expect(task.pid).toBe(22222)
+  })
+
+  test("parses 'PID=N' format", () => {
+    const registry = registerWithOutput("PID=33333", "t3")
+    const task = registry.list()[0]
+    if (task?.kind !== "bash_shell") throw new Error("unexpected task kind")
+    expect(task.pid).toBe(33333)
+  })
+
+  test("returns null when no pid in output", () => {
+    const registry = registerWithOutput("No process info here", "t4")
+    const task = registry.list()[0]
+    if (task?.kind !== "bash_shell") throw new Error("unexpected task kind")
+    expect(task.pid).toBeNull()
+  })
 })
