@@ -1503,7 +1503,13 @@ export class AgentCoordinator {
         }
       }
     } finally {
-      this.claudeSessions.delete(session.chatId)
+      // Only clear the chat's session slot if it still points at us. A cancel
+      // followed by an immediate steer can install a fresh session under the
+      // same chatId before this finally runs; deleting unconditionally would
+      // wipe the new session.
+      if (this.claudeSessions.get(session.chatId) === session) {
+        this.claudeSessions.delete(session.chatId)
+      }
       const active = this.activeTurns.get(session.chatId)
       if (active?.provider === "claude") {
         if (active.cancelRequested && !active.cancelRecorded) {
@@ -1866,6 +1872,20 @@ export class AgentCoordinator {
     // Remove from activeTurns immediately so the UI reflects the cancellation
     // right away, rather than waiting for interrupt() which may hang.
     this.activeTurns.delete(chatId)
+
+    // Drain the cancelled prompt's seq from the Claude session's pending
+    // queue. The SDK does not always echo a `result.subtype=cancelled` for
+    // an interrupted prompt — when the stream just ends, the seq would
+    // otherwise linger and cause a FIFO mismatch when the next turn's
+    // result arrives, leaving the chat stuck in "running".
+    if (active.provider === "claude" && active.claudePromptSeq != null) {
+      const session = this.claudeSessions.get(chatId)
+      if (session) {
+        const idx = session.pendingPromptSeqs.indexOf(active.claudePromptSeq)
+        if (idx >= 0) session.pendingPromptSeqs.splice(idx, 1)
+      }
+    }
+
     this.emitStateChange(chatId)
     logClaudeSteer("cancel_active_turn_deleted", {
       chatId,
