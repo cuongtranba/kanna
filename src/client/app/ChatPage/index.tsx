@@ -23,6 +23,7 @@ import { useTerminalPreferencesStore } from "../../stores/terminalPreferencesSto
 import { shouldCloseTerminalPane } from "../terminalLayoutResize"
 import { TERMINAL_TOGGLE_ANIMATION_DURATION_MS } from "../terminalToggleAnimation"
 import { useRightSidebarToggleAnimation } from "../useRightSidebarToggleAnimation"
+import { usePushFocus } from "../usePushFocus"
 import { useStickyChatFocus } from "../useStickyChatFocus"
 import { useTerminalToggleAnimation } from "../useTerminalToggleAnimation"
 import type { KannaState } from "../useKannaState"
@@ -573,6 +574,8 @@ export function ChatPage() {
     enabled: state.hasSelectedProject,
     canCancel: state.canCancel,
   })
+
+  usePushFocus({ socket: state.socket, activeChatId: state.activeChatId })
 
   const enqueueDroppedFiles = useCallback((files: File[]) => {
     if (!state.hasSelectedProject || files.length === 0) {
