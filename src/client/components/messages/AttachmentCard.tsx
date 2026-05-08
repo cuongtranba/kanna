@@ -1,3 +1,4 @@
+import type { ReactNode } from "react"
 import {
   File,
   FileArchive,
@@ -26,6 +27,14 @@ type BaseAttachmentCardProps = {
   className?: string
   uploadProgress?: number | null
   onCancelUpload?: () => void
+}
+
+type AttachmentFileCardProps = BaseAttachmentCardProps & {
+  href?: string
+  download?: string
+  meta?: ReactNode
+  ariaLabel?: string
+  disabledReason?: string
 }
 
 type AttachmentImageCardProps = BaseAttachmentCardProps & {
@@ -109,38 +118,80 @@ export function AttachmentFileCard({
   className,
   uploadProgress,
   onCancelUpload,
-}: BaseAttachmentCardProps) {
+  href,
+  download,
+  meta,
+  ariaLabel,
+  disabledReason,
+}: AttachmentFileCardProps) {
   const iconKind: AttachmentIconKind = attachment.kind === "mention" ? "text" : classifyAttachmentIcon(attachment)
   const Icon = getAttachmentIcon(iconKind)
   const isMention = attachment.kind === "mention"
   const mentionLabel = isMention ? basename(attachment.displayName) : attachment.displayName
   const mentionSubtitle = isMention ? parentPath(attachment.displayName) : ""
   const showUploadOverlay = uploadProgress !== undefined
+  const isDisabled = Boolean(disabledReason)
+
+  const surfaceClass = cn(
+    "flex w-[200px] items-center gap-2 rounded-xl border border-border bg-background p-1 pr-3 text-left transition-colors",
+    isDisabled
+      ? "cursor-not-allowed opacity-60"
+      : "hover:bg-accent/50"
+  )
+
+  const subtitle = isMention ? (
+    <div className="max-w-[150px] truncate text-[11px] text-muted-foreground">
+      {mentionSubtitle ? `@${mentionSubtitle}` : "@mention"}
+    </div>
+  ) : disabledReason ? (
+    <div className="truncate text-[11px] text-muted-foreground">{disabledReason}</div>
+  ) : meta !== undefined ? (
+    <div className="truncate text-[11px] text-muted-foreground">{meta}</div>
+  ) : (
+    <div className="truncate text-[11px] text-muted-foreground">
+      {attachment.mimeType} · {formatAttachmentSize(attachment.size)}
+    </div>
+  )
+
+  const inner = (
+    <>
+      <div className="flex min-h-10 min-w-10 items-center justify-center rounded-lg border border-border bg-muted text-muted-foreground">
+        <Icon className="size-5" />
+      </div>
+      <div className="min-w-0">
+        <div className={cn("max-w-[150px] truncate text-[13px] font-medium", isDisabled ? "text-muted-foreground line-through" : "text-foreground")}>
+          {mentionLabel}
+        </div>
+        {subtitle}
+      </div>
+    </>
+  )
 
   return (
     <div className={cn("group relative", className)}>
-      <button
-        type="button"
-        onClick={onClick}
-        title={isMention ? attachment.displayName : undefined}
-        className="flex w-[200px] items-center gap-2 rounded-xl border border-border bg-background/85 p-1 pr-3 text-left transition-colors hover:bg-accent/50"
-      >
-        <div className="flex min-h-10 min-w-10 items-center justify-center rounded-lg border border-border bg-muted text-muted-foreground">
-          <Icon className="size-5" />
-        </div>
-        <div className="min-w-0">
-          <div className="max-w-[150px] truncate text-[13px] font-medium text-foreground">{mentionLabel}</div>
-          {isMention ? (
-            <div className="max-w-[150px] truncate text-[11px] text-muted-foreground">
-              {mentionSubtitle ? `@${mentionSubtitle}` : "@mention"}
-            </div>
-          ) : (
-            <div className="truncate text-[11px] text-muted-foreground">
-              {attachment.mimeType} · {formatAttachmentSize(attachment.size)}
-            </div>
-          )}
-        </div>
-      </button>
+      {href && !isDisabled ? (
+        <a
+          href={href}
+          download={download}
+          rel="noopener"
+          aria-label={ariaLabel}
+          className={surfaceClass}
+        >
+          {inner}
+        </a>
+      ) : (
+        <button
+          type="button"
+          onClick={isDisabled ? undefined : onClick}
+          title={isMention ? attachment.displayName : undefined}
+          aria-label={ariaLabel}
+          aria-disabled={isDisabled || undefined}
+          disabled={isDisabled}
+          className={surfaceClass}
+        >
+          {inner}
+        </button>
+      )}
       {showUploadOverlay ? (
         <AttachmentUploadOverlay
           progress={uploadProgress ?? null}

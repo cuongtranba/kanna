@@ -4,6 +4,7 @@ import {
   JSON_PREVIEW_LIMIT_BYTES,
   classifyAttachmentIcon,
   classifyAttachmentPreview,
+  friendlyMimeLabel,
   parseDelimitedPreview,
   prettifyJson,
 } from "./attachmentPreview"
@@ -69,6 +70,26 @@ describe("parseDelimitedPreview", () => {
 describe("prettifyJson", () => {
   test("formats valid json", () => {
     expect(prettifyJson("{\"a\":1}")).toContain("\n  \"a\": 1\n")
+  })
+})
+
+describe("friendlyMimeLabel", () => {
+  test("returns ZIP archive for zip mime", () => {
+    expect(friendlyMimeLabel("archive", "application/zip")).toBe("ZIP archive")
+  })
+
+  test("returns capitalized subtype for images", () => {
+    expect(friendlyMimeLabel("image", "image/png")).toBe("PNG image")
+    expect(friendlyMimeLabel("image", "image/jpeg")).toBe("JPEG image")
+  })
+
+  test("falls back to kind label when mime missing", () => {
+    expect(friendlyMimeLabel("pdf")).toBe("PDF")
+    expect(friendlyMimeLabel("file")).toBe("File")
+  })
+
+  test("strips charset parameters from image subtype", () => {
+    expect(friendlyMimeLabel("image", "image/svg+xml; charset=utf-8")).toContain("image")
   })
 })
 
