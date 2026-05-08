@@ -208,6 +208,42 @@ describe("uploads", () => {
     }
   })
 
+  test("upload limit follows the configured maxFileSizeMb setting", async () => {
+    const projectDir = await mkdtemp(path.join(tmpdir(), "kanna-project-limit-setting-"))
+    tempDirs.push(projectDir)
+
+    const server = await startIsolatedServer({ port: 4315 })
+
+    try {
+      await server.appSettings.setUploads({ maxFileSizeMb: 1 })
+
+      const project = await server.store.openProject(projectDir, "Project")
+      const formData = new FormData()
+      formData.append("files", new File([new Uint8Array(2 * 1024 * 1024)], "two-mb.bin", { type: "application/octet-stream" }))
+
+      const response = await fetch(`http://localhost:${server.port}/api/projects/${project.id}/uploads`, {
+        method: "POST",
+        body: formData,
+      })
+
+      expect(response.status).toBe(413)
+      expect(await response.json()).toEqual({
+        error: "File \"two-mb.bin\" exceeds the 1 MB limit.",
+      })
+
+      await server.appSettings.setUploads({ maxFileSizeMb: 10 })
+      const allowedFormData = new FormData()
+      allowedFormData.append("files", new File([new Uint8Array(2 * 1024 * 1024)], "two-mb.bin", { type: "application/octet-stream" }))
+      const allowed = await fetch(`http://localhost:${server.port}/api/projects/${project.id}/uploads`, {
+        method: "POST",
+        body: allowedFormData,
+      })
+      expect(allowed.status).toBe(200)
+    } finally {
+      await server.stop()
+    }
+  })
+
   test("cleans up already-persisted files when a later file in the batch fails", async () => {
     const projectDir = await mkdtemp(path.join(tmpdir(), "kanna-project-cleanup-"))
     tempDirs.push(projectDir)

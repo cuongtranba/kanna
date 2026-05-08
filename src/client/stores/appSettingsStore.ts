@@ -52,6 +52,10 @@ export function mergeAppSettingsPatch(
       ...settings.auth,
       ...patch.auth,
     },
+    uploads: {
+      ...settings.uploads,
+      ...patch.uploads,
+    },
   }
 }
 
