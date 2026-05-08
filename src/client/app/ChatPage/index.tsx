@@ -28,6 +28,8 @@ import { useTerminalToggleAnimation } from "../useTerminalToggleAnimation"
 import type { KannaState } from "../useKannaState"
 import { getNextMeasuredInputHeight, getTranscriptPaddingBottom } from "../useKannaState"
 import { EMPTY_SCHEDULES } from "../KannaTranscript"
+import { BackgroundTasksDialog } from "../../components/chat-ui/BackgroundTasksDialog"
+import { useBackgroundTasksStore } from "../../stores/backgroundTasksStore"
 import { ChatInputDock } from "./ChatInputDock"
 import { ChatTranscriptViewport } from "./ChatTranscriptViewport"
 import { TerminalWorkspaceShell } from "./TerminalWorkspaceShell"
@@ -446,6 +448,10 @@ export function ChatPage() {
   const chatInputRef = useRef<ChatInputHandle | null>(null)
   const { inputRef, syncInputHeight, transcriptPaddingBottom } = useTranscriptPaddingBottom()
   const [showScrollToBottom, setShowScrollToBottom] = useState(false)
+  const bgTasksOpen = useBackgroundTasksStore((s) => s.dialogOpen)
+  const handleOpenBgTasks = useCallback(() => {
+    useBackgroundTasksStore.getState().toggleDialog()
+  }, [])
   const showEmptyState = state.messages.length === 0 && state.runtime?.title === "New Chat"
   const projectId = state.activeProjectId
   const projectTerminalLayout = useTerminalLayoutStore((store) => (projectId ? store.projects[projectId] : undefined))
@@ -793,6 +799,17 @@ export function ChatPage() {
   }, [addTerminal, handleToggleEmbeddedTerminal, handleToggleRightSidebar, projectId, resolvedKeybindings, state.handleOpenExternal])
 
   useEffect(() => {
+    function handleBgTasksShortcut(event: KeyboardEvent) {
+      if ((event.metaKey || event.ctrlKey) && event.shiftKey && event.key.toLowerCase() === "b") {
+        event.preventDefault()
+        handleOpenBgTasks()
+      }
+    }
+    window.addEventListener("keydown", handleBgTasksShortcut)
+    return () => window.removeEventListener("keydown", handleBgTasksShortcut)
+  }, [handleOpenBgTasks])
+
+  useEffect(() => {
     const frameId = window.requestAnimationFrame(() => {
       syncIsAtEndFromList()
     })
@@ -929,6 +946,7 @@ export function ChatPage() {
           gitStatus={state.chatDiffSnapshot?.status}
           timings={state.runtime?.timings}
           status={state.runtime?.status}
+          onOpenBgTasks={handleOpenBgTasks}
         />
         <ChatTranscriptViewport
           activeChatId={state.activeChatId}
@@ -1088,6 +1106,17 @@ export function ChatPage() {
 
   return (
     <div ref={layoutRootRef} className="flex-1 flex flex-col min-w-0 relative">
+      <BackgroundTasksDialog
+        open={bgTasksOpen}
+        onOpenChange={(open) => {
+          if (open) {
+            useBackgroundTasksStore.getState().openDialog()
+          } else {
+            useBackgroundTasksStore.getState().closeDialog()
+          }
+        }}
+        socket={state.socket}
+      />
       {shouldRenderDesktopRightSidebarLayout && projectId ? (
         <ResizablePanelGroup
           key={`${projectId}-right-sidebar`}

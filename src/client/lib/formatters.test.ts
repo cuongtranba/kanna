@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { formatBashCommandTitle, formatSidebarAgeLabel } from "./formatters"
+import { formatAge, formatBashCommandTitle, formatSidebarAgeLabel } from "./formatters"
 
 describe("formatBashCommandTitle", () => {
   test("unwraps codex zsh -lc commands", () => {
@@ -66,5 +66,37 @@ describe("formatSidebarAgeLabel", () => {
   test("shows whole weeks for seven days and up", () => {
     expect(formatSidebarAgeLabel(now - 7 * 24 * 60 * 60_000, now)).toBe("1w")
     expect(formatSidebarAgeLabel(now - 14 * 24 * 60 * 60_000, now)).toBe("2w")
+  })
+})
+
+describe("formatAge", () => {
+  test("formats age under a minute as Ns", () => {
+    expect(formatAge(0, 4_000)).toBe("4s")
+  })
+
+  test("formats minutes as Mm Ss", () => {
+    expect(formatAge(0, 134_000)).toBe("2m 14s")
+  })
+
+  test("formats hours as Hh Mm", () => {
+    expect(formatAge(0, 4 * 3_600_000 + 12 * 60_000)).toBe("4h 12m")
+  })
+
+  test("returns 0s when startedAt equals now", () => {
+    const now = Date.UTC(2026, 2, 17, 12, 0, 0)
+    expect(formatAge(now, now)).toBe("0s")
+  })
+
+  test("clamps future startedAt (clock skew) to 0s", () => {
+    const now = Date.UTC(2026, 2, 17, 12, 0, 0)
+    expect(formatAge(now + 5_000, now)).toBe("0s")
+  })
+
+  test("formats exactly 60s as 1m 0s", () => {
+    expect(formatAge(0, 60_000)).toBe("1m 0s")
+  })
+
+  test("formats exactly 1h as 1h 0m", () => {
+    expect(formatAge(0, 3_600_000)).toBe("1h 0m")
   })
 })

@@ -7,6 +7,7 @@ import { Button } from "../components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card"
 import { Input } from "../components/ui/input"
 import { TooltipProvider } from "../components/ui/tooltip"
+import { Toaster } from "../components/ui/toaster"
 import { APP_NAME, SDK_CLIENT_APP } from "../../shared/branding"
 import { useChatSoundPreferencesStore } from "../stores/chatSoundPreferencesStore"
 import type { ChatSoundPreference } from "../stores/chatSoundPreferencesStore"
@@ -415,6 +416,7 @@ export function App() {
             <Route path="/chat/:chatId" element={<ChatPage />} />
           </Route>
         </Routes>
+        <Toaster />
       </AppDialogProvider>
     </TooltipProvider>
   )

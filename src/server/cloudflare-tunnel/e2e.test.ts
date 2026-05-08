@@ -51,6 +51,7 @@ describe("cloudflare tunnel e2e", () => {
   let gateway: TunnelGateway
   let pendingChildren: FakeChild[]
   let broadcasts: string[]
+  let pendingWrites: Promise<void>[]
 
   beforeEach(async () => {
     dataDir = await mkdtemp(join(tmpdir(), "kanna-tunnel-e2e-"))
@@ -70,6 +71,7 @@ describe("cloudflare tunnel e2e", () => {
 
     pendingChildren = []
     broadcasts = []
+    pendingWrites = []
 
     manager = new TunnelManager({
       cloudflaredPath: "cloudflared",
@@ -79,7 +81,7 @@ describe("cloudflare tunnel e2e", () => {
         return child
       },
       onEvent: (event: CloudflareTunnelEvent) => {
-        void store.appendTunnelEvent(event)
+        pendingWrites.push(store.appendTunnelEvent(event))
         broadcasts.push(event.chatId)
       },
     })
@@ -102,6 +104,7 @@ describe("cloudflare tunnel e2e", () => {
   afterEach(async () => {
     gateway.shutdown()
     appSettings.dispose()
+    await Promise.all(pendingWrites)
     await rm(dataDir, { recursive: true, force: true })
   })
 

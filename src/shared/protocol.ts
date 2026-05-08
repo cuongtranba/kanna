@@ -2,6 +2,7 @@ import type {
   AppSettingsSnapshot,
   AppSettingsPatch,
   AgentProvider,
+  BackgroundTask,
   ChatAttachment,
   ChatDiffSnapshot,
   ChatHistoryPage,
@@ -38,6 +39,7 @@ export type SubscriptionTopic =
   | { type: "chat"; chatId: string; recentLimit?: number }
   | { type: "project-git"; projectId: string }
   | { type: "terminal"; terminalId: string }
+  | { type: "bg-tasks" }
 
 export interface TerminalSnapshot {
   terminalId: string
@@ -56,6 +58,13 @@ export interface TerminalSnapshot {
 export type TerminalEvent =
   | { type: "terminal.output"; terminalId: string; data: string }
   | { type: "terminal.exit"; terminalId: string; exitCode: number; signal?: number }
+
+export type BackgroundTaskDiffEvent =
+  | { type: "bg-tasks.added"; task: BackgroundTask }
+  | { type: "bg-tasks.updated"; task: BackgroundTask }
+  | { type: "bg-tasks.removed"; task: BackgroundTask }
+
+export type WsEvent = TerminalEvent | BackgroundTaskDiffEvent
 
 export type ClientCommand =
   | { type: "project.open"; localPath: string }
@@ -238,6 +247,7 @@ export type ClientCommand =
   | { type: "push.test" }
   | { type: "push.setProjectMute"; localPath: string; muted: boolean }
   | { type: "push.setFocusedChat"; chatId: string | null }
+  | { type: "bg-tasks.stop"; id: string; force?: boolean }
 
 export type OpenExternalAction = Extract<ClientCommand, { type: "system.openExternal" }>["action"]
 
@@ -245,6 +255,12 @@ export type ClientEnvelope =
   | { v: 1; type: "subscribe"; id: string; topic: SubscriptionTopic }
   | { v: 1; type: "unsubscribe"; id: string }
   | { v: 1; type: "command"; id: string; command: ClientCommand }
+
+export interface BgTasksSnapshotData {
+  tasks: BackgroundTask[]
+  /** Present only in the first snapshot after server boot when orphans were recovered. */
+  orphanRecoveryCount?: number
+}
 
 export type ServerSnapshot =
   | { type: "sidebar"; data: SidebarData }
@@ -257,10 +273,11 @@ export type ServerSnapshot =
   | { type: "chat"; data: ChatSnapshot | null }
   | { type: "project-git"; data: ChatDiffSnapshot | null }
   | { type: "terminal"; data: TerminalSnapshot | null }
+  | { type: "bg-tasks"; data: BgTasksSnapshotData }
 
 export type ServerEnvelope =
   | { v: 1; type: "snapshot"; id: string; snapshot: ServerSnapshot }
-  | { v: 1; type: "event"; id: string; event: TerminalEvent }
+  | { v: 1; type: "event"; id: string; event: WsEvent }
   | { v: 1; type: "ack"; id: string; result?: unknown | ChatHistoryPage | StandaloneTranscriptExportResult }
   | { v: 1; type: "error"; id?: string; message: string }
 

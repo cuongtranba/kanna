@@ -3,6 +3,7 @@ import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { TerminalManager } from "./terminal-manager"
+import { BackgroundTaskRegistry } from "./background-tasks"
 
 const SHELL_START_TIMEOUT_MS = 5_000
 const COMMAND_TIMEOUT_MS = 5_000
@@ -382,6 +383,105 @@ describeIfSupported("TerminalManager", () => {
     } finally {
       manager.close(firstTerminalId)
       manager.close(secondTerminalId)
+    }
+  })
+
+  test("registers terminal_pty entry in BackgroundTaskRegistry on spawn", async () => {
+    const registry = new BackgroundTaskRegistry()
+    const terminalId = "terminal-registry-register"
+    const manager = new TerminalManager({ backgroundTasks: registry })
+    let output = ""
+    manager.onEvent((event) => {
+      if (event.type === "terminal.output" && event.terminalId === terminalId) {
+        output += event.data
+      }
+    })
+
+    try {
+      manager.createTerminal({
+        projectPath: tempProjectPath,
+        terminalId,
+        cols: 80,
+        rows: 24,
+        scrollback: 1_000,
+      })
+      manager.write(terminalId, "printf '__KANNA_READY__\\n'\r")
+      await waitFor(() => output.includes("__KANNA_READY__\r\n"), SHELL_START_TIMEOUT_MS)
+
+      const tasks = registry.list()
+      const task = tasks.find((t) => t.id === `pty:${terminalId}`)
+      expect(task).toBeDefined()
+      expect(task?.kind).toBe("terminal_pty")
+      if (task?.kind === "terminal_pty") {
+        expect(task.ptyId).toBe(terminalId)
+        expect(task.cwd).toBe(tempProjectPath)
+        expect(typeof task.startedAt).toBe("number")
+      }
+    } finally {
+      manager.close(terminalId)
+    }
+  })
+
+  test("unregisters terminal_pty entry from BackgroundTaskRegistry on close", async () => {
+    const registry = new BackgroundTaskRegistry()
+    const terminalId = "terminal-registry-unregister"
+    const manager = new TerminalManager({ backgroundTasks: registry })
+    let output = ""
+    manager.onEvent((event) => {
+      if (event.type === "terminal.output" && event.terminalId === terminalId) {
+        output += event.data
+      }
+    })
+
+    manager.createTerminal({
+      projectPath: tempProjectPath,
+      terminalId,
+      cols: 80,
+      rows: 24,
+      scrollback: 1_000,
+    })
+    manager.write(terminalId, "printf '__KANNA_READY__\\n'\r")
+    await waitFor(() => output.includes("__KANNA_READY__\r\n"), SHELL_START_TIMEOUT_MS)
+
+    expect(registry.list().find((t) => t.id === `pty:${terminalId}`)).toBeDefined()
+
+    manager.close(terminalId)
+    expect(registry.list().find((t) => t.id === `pty:${terminalId}`)).toBeUndefined()
+  })
+
+  test("unregisters terminal_pty entry from BackgroundTaskRegistry on natural exit", async () => {
+    const registry = new BackgroundTaskRegistry()
+    const terminalId = "terminal-registry-exit"
+    const manager = new TerminalManager({ backgroundTasks: registry })
+    let output = ""
+    manager.onEvent((event) => {
+      if (event.type === "terminal.output" && event.terminalId === terminalId) {
+        output += event.data
+      }
+    })
+
+    try {
+      manager.createTerminal({
+        projectPath: tempProjectPath,
+        terminalId,
+        cols: 80,
+        rows: 24,
+        scrollback: 1_000,
+      })
+      manager.write(terminalId, "printf '__KANNA_READY__\\n'\r")
+      await waitFor(() => output.includes("__KANNA_READY__\r\n"), SHELL_START_TIMEOUT_MS)
+
+      expect(registry.list().find((t) => t.id === `pty:${terminalId}`)).toBeDefined()
+
+      // exit the shell naturally
+      manager.write(terminalId, "\x04")
+      await waitFor(() => manager.getSnapshot(terminalId)?.status === "exited", COMMAND_TIMEOUT_MS)
+      // Give the async unregister a tick to run
+      await Bun.sleep(50)
+
+      expect(registry.list().find((t) => t.id === `pty:${terminalId}`)).toBeUndefined()
+    } finally {
+      manager.close(terminalId)
     }
   })
 })

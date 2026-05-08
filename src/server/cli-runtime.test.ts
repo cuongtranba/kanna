@@ -4,6 +4,7 @@ import { CLI_SUPPRESS_OPEN_ONCE_ENV_VAR } from "./restart"
 
 const originalRuntimeProfile = process.env.KANNA_RUNTIME_PROFILE
 const originalSuppressOpen = process.env[CLI_SUPPRESS_OPEN_ONCE_ENV_VAR]
+const originalDisableSelfUpdate = process.env.KANNA_DISABLE_SELF_UPDATE
 
 afterEach(() => {
   if (originalRuntimeProfile === undefined) {
@@ -15,6 +16,11 @@ afterEach(() => {
     delete process.env[CLI_SUPPRESS_OPEN_ONCE_ENV_VAR]
   } else {
     process.env[CLI_SUPPRESS_OPEN_ONCE_ENV_VAR] = originalSuppressOpen
+  }
+  if (originalDisableSelfUpdate === undefined) {
+    delete process.env.KANNA_DISABLE_SELF_UPDATE
+  } else {
+    process.env.KANNA_DISABLE_SELF_UPDATE = originalDisableSelfUpdate
   }
 })
 
@@ -277,6 +283,7 @@ describe("runCli", () => {
   test("starts normally when no newer version exists", async () => {
     const { calls, deps } = createDeps()
     process.env.KANNA_RUNTIME_PROFILE = "prod"
+    delete process.env.KANNA_DISABLE_SELF_UPDATE
 
     const result = await runCli(["--port", "4000", "--no-open"], deps)
 
@@ -468,6 +475,7 @@ describe("runCli", () => {
   })
 
   test("returns restarting when a newer version is available", async () => {
+    delete process.env.KANNA_DISABLE_SELF_UPDATE
     const { calls, deps } = createDeps({
       fetchLatestVersion: async (packageName) => {
         calls.fetchLatestVersion.push(packageName)
@@ -483,6 +491,7 @@ describe("runCli", () => {
   })
 
   test("falls back to current version when install fails", async () => {
+    delete process.env.KANNA_DISABLE_SELF_UPDATE
     const { calls, deps } = createDeps({
       fetchLatestVersion: async (packageName) => {
         calls.fetchLatestVersion.push(packageName)
@@ -507,6 +516,7 @@ describe("runCli", () => {
   })
 
   test("falls back to current version when the registry check fails", async () => {
+    delete process.env.KANNA_DISABLE_SELF_UPDATE
     const { calls, deps } = createDeps({
       fetchLatestVersion: async (packageName) => {
         calls.fetchLatestVersion.push(packageName)

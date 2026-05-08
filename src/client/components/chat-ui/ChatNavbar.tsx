@@ -10,6 +10,7 @@ import { formatCompactDuration, formatLiveDuration } from "../../lib/formatDurat
 import { statusLabel, statusTone, statusToneClass } from "../../lib/statusLabel"
 import { OpenExternalSelect } from "../open-external-menu"
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from "../ui/context-menu"
+import { BackgroundTasksIndicator } from "./BackgroundTasksIndicator"
 
 function openContextMenuFromButton(event: ReactMouseEvent<HTMLButtonElement>) {
   event.preventDefault()
@@ -120,6 +121,7 @@ interface Props {
   gitStatus?: "unknown" | "ready" | "no_repo"
   timings?: ChatStateTimings
   status?: KannaStatus
+  onOpenBgTasks?: () => void
 }
 
 export function ChatNavbar({
@@ -149,6 +151,7 @@ export function ChatNavbar({
   gitStatus = "unknown",
   timings,
   status,
+  onOpenBgTasks,
 }: Props) {
   const branchLabel = !hasGitRepo
     ? "Setup Git"
@@ -254,6 +257,12 @@ export function ChatNavbar({
         ) : (
           <div className="flex-1 min-w-0" />
         )}
+
+        {onOpenBgTasks ? (
+          <div className="flex items-center flex-shrink-0 border border-border rounded-2xl backdrop-blur-lg">
+            <BackgroundTasksIndicator onOpen={onOpenBgTasks} />
+          </div>
+        ) : null}
 
         {localPath && (onOpenExternal || onToggleEmbeddedTerminal || onToggleRightSidebar || onExportTranscript) ? (
           <div className="flex items-center gap-2 flex-shrink-0">

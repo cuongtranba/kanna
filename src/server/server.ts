@@ -32,6 +32,8 @@ import { ScheduleManager } from "./auto-continue/schedule-manager"
 import { TunnelGateway } from "./cloudflare-tunnel/gateway"
 import { TunnelManager } from "./cloudflare-tunnel/tunnel-manager"
 import { TunnelLifecycle } from "./cloudflare-tunnel/lifecycle"
+import { BackgroundTaskRegistry } from "./background-tasks"
+import { subscribeOrphanPersistence, recoverOrphans } from "./orphan-persistence"
 
 function resolveCloudflaredPath(settingsPath: string): string {
   if (settingsPath !== CLOUDFLARE_TUNNEL_DEFAULTS.cloudflaredPath) {
@@ -83,6 +85,8 @@ export interface StartKannaServerOptions {
   openBrowser?: boolean
   share?: ShareMode
   dataDir?: string
+  /** Override the directory containing the built client bundle (default: <root>/dist/client). Used in tests. */
+  distDir?: string
   password?: string | null
   strictPort?: boolean
   /**
@@ -139,7 +143,6 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
   if (reapedTerminals.length > 0) {
     console.log(`[kanna] reaped ${reapedTerminals.length} orphan terminal process group(s) from previous run`)
   }
-  const terminals = new TerminalManager({ pidRegistry: terminalPidRegistry })
   const keybindings = new KeybindingsManager()
   const appSettings = new AppSettingsManager(path.join(store.dataDir, "settings.json"))
   await appSettings.initialize()
@@ -158,6 +161,8 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     currentVersion: options.update?.version ?? "unknown",
     environment: runtimeProfile === "dev" ? "dev" : "prod",
   })
+  const backgroundTasks = new BackgroundTaskRegistry({ analytics })
+  const terminals = new TerminalManager({ backgroundTasks, pidRegistry: terminalPidRegistry })
   const updateManager: UpdateManager | null = (() => {
     if (!options.update) return null
     let manager: UpdateManager | null = null
@@ -220,6 +225,7 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     throwOnClaudeSessionStart: options.agentOverrides?.throwOnClaudeSessionStart,
     analytics,
     tunnelGateway,
+    backgroundTasks,
     onStateChange: (chatId?: string, options?: { immediate?: boolean }) => {
       if (chatId) {
         if (options?.immediate) {
@@ -232,6 +238,14 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
       router.scheduleBroadcast()
     },
   })
+
+  // Boot recovery: re-register surviving bash_shell PIDs from a previous session.
+  // Must run after backgroundTasks registry and agent are wired, before WS routes serve.
+  // The port is not finalised yet (bind loop below), so we use the desired port for the
+  // orphan file key. If the port shifts due to EADDRINUSE, the file for the original
+  // port is silently ignored on the next boot — acceptable for the edge case.
+  const bootOrphanRecoveryCount = await recoverOrphans(backgroundTasks, port, { analytics })
+
   router = createWsRouter({
     store,
     diffStore,
@@ -251,17 +265,23 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     machineDisplayName,
     updateManager,
     pushManager,
+    backgroundTasks,
+    bootOrphanRecoveryCount,
   })
   scheduleManager.rehydrate(
     store.listAutoContinueChats().flatMap((chatId) => store.getAutoContinueEvents(chatId))
   )
+
+  // Subscribe registry events to debounced atomic persist of bash_shell tasks.
+  const unsubOrphanPersistence = subscribeOrphanPersistence(backgroundTasks, port)
+
   await tunnelGateway.reapOrphanedTunnels()
   const staleEmptyChatPruneInterval = setInterval(() => {
     void router.pruneStaleEmptyChats()
       .then(() => router.broadcastSnapshots())
   }, STALE_EMPTY_CHAT_PRUNE_INTERVAL_MS)
 
-  const distDir = path.join(import.meta.dir, "..", "..", "dist", "client")
+  const distDir = options.distDir ?? path.join(import.meta.dir, "..", "..", "dist", "client")
 
   const MAX_PORT_ATTEMPTS = 20
   let actualPort = port
@@ -388,6 +408,9 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
   })
 
   const shutdown = async () => {
+    // Clear the debounce timer for orphan persistence so no straggler writes fire
+    // after the process starts shutting down.
+    unsubOrphanPersistence()
     scheduleManager.shutdown()
     tunnelGateway.shutdown()
     clearInterval(staleEmptyChatPruneInterval)
