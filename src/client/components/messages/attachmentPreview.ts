@@ -86,6 +86,33 @@ export function classifyAttachmentPreview(attachment: ChatAttachment): Attachmen
   return { kind: "external", openInNewTab: true }
 }
 
+const FRIENDLY_MIME_BY_KIND: Record<AttachmentIconKind, string> = {
+  image: "Image",
+  pdf: "PDF",
+  markdown: "Markdown",
+  json: "JSON",
+  table: "Table",
+  code: "Source",
+  text: "Text",
+  archive: "Archive",
+  audio: "Audio",
+  video: "Video",
+  file: "File",
+}
+
+export function friendlyMimeLabel(kind: AttachmentIconKind, mimeType?: string): string {
+  if (kind === "archive" && mimeType) {
+    if (mimeType.includes("zip")) return "ZIP archive"
+    if (mimeType.includes("gzip")) return "Gzip archive"
+    if (mimeType.includes("x-tar")) return "Tar archive"
+  }
+  if (kind === "image" && mimeType) {
+    const subtype = mimeType.split("/")[1]?.split(";")[0]?.toUpperCase()
+    if (subtype) return `${subtype} image`
+  }
+  return FRIENDLY_MIME_BY_KIND[kind]
+}
+
 export function classifyAttachmentIcon(attachment: ChatAttachment): AttachmentIconKind {
   const mimeType = attachment.mimeType.toLowerCase()
   const extension = getFileExtension(attachment.displayName)

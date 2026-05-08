@@ -1,42 +1,90 @@
-import { Download } from "lucide-react"
-import type { HydratedOfferDownloadToolCall } from "../../../shared/types"
-import { formatAttachmentSize } from "./AttachmentCard"
+import { useEffect, useState } from "react"
+import type { ChatAttachment, HydratedOfferDownloadToolCall } from "../../../shared/types"
+import { AttachmentFileCard, formatAttachmentSize } from "./AttachmentCard"
+import { classifyAttachmentIcon, friendlyMimeLabel } from "./attachmentPreview"
 
 interface Props {
   message: HydratedOfferDownloadToolCall
 }
 
+type ProbeState = "idle" | "ready" | "missing"
+
 export function OfferDownloadMessage({ message }: Props) {
   const result = message.result
-  if (!result || !result.contentUrl) {
+  const contentUrl = result?.contentUrl
+  const [state, setState] = useState<ProbeState>("idle")
+
+  useEffect(() => {
+    if (!contentUrl) return
+    const controller = new AbortController()
+    fetch(contentUrl, { method: "HEAD", signal: controller.signal })
+      .then((response) => {
+        if (controller.signal.aborted) return
+        setState(response.ok ? "ready" : "missing")
+      })
+      .catch(() => {
+        // Network errors leave the chip optimistic; only 404-class responses mark missing.
+      })
+    return () => controller.abort()
+  }, [contentUrl])
+
+  if (!result || !contentUrl) {
     return null
   }
 
+  const attachment: ChatAttachment = {
+    id: `offer-download-${message.toolId}`,
+    kind: "file",
+    displayName: result.displayName || result.fileName,
+    absolutePath: result.relativePath,
+    relativePath: result.relativePath,
+    contentUrl,
+    mimeType: result.mimeType ?? "application/octet-stream",
+    size: result.size,
+  }
+
+  const iconKind = classifyAttachmentIcon(attachment)
+  const friendlyType = friendlyMimeLabel(iconKind, result.mimeType)
   const sizeLabel = result.size > 0 ? formatAttachmentSize(result.size) : null
-  const meta = [result.mimeType, sizeLabel].filter(Boolean).join(" · ")
+  const meta = (
+    <>
+      {friendlyType}
+      {sizeLabel ? (
+        <>
+          {" · "}
+          <span className="tabular-nums">{sizeLabel}</span>
+        </>
+      ) : null}
+    </>
+  )
+
+  const ariaLabelParts = [
+    "Download",
+    attachment.displayName,
+    friendlyType,
+    sizeLabel,
+  ].filter(Boolean) as string[]
+
+  if (state === "missing") {
+    return (
+      <div className="flex" data-testid="offer-download-link">
+        <AttachmentFileCard
+          attachment={attachment}
+          disabledReason="File no longer available"
+        />
+      </div>
+    )
+  }
 
   return (
-    <div className="flex">
-      <a
-        href={result.contentUrl}
-        target="_blank"
-        rel="noreferrer"
+    <div className="flex" data-testid="offer-download-link">
+      <AttachmentFileCard
+        attachment={attachment}
+        href={contentUrl}
         download={result.fileName || undefined}
-        className="group flex min-w-0 max-w-[320px] items-center gap-3 rounded-xl border border-border bg-background/85 p-2 pr-4 text-left transition-colors hover:bg-accent/40"
-        data-testid="offer-download-link"
-      >
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-border bg-muted text-muted-foreground transition-colors group-hover:text-foreground">
-          <Download className="size-5" />
-        </div>
-        <div className="min-w-0">
-          <div className="truncate text-[13px] font-medium text-foreground">
-            {result.displayName || result.fileName}
-          </div>
-          {meta ? (
-            <div className="truncate text-[11px] text-muted-foreground">{meta}</div>
-          ) : null}
-        </div>
-      </a>
+        meta={meta}
+        ariaLabel={ariaLabelParts.join(", ")}
+      />
     </div>
   )
 }
