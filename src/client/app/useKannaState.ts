@@ -987,7 +987,7 @@ export function useKannaState(activeChatId: string | null): KannaState {
         useBackgroundTasksStore.getState().applySnapshot(snapshot.tasks)
         if (!orphanToastShown && snapshot.orphanRecoveryCount != null && snapshot.orphanRecoveryCount > 0) {
           orphanToastShown = true
-          fireOrphanRecoveryToast(snapshot.orphanRecoveryCount)
+          void fireOrphanRecoveryToast(snapshot.orphanRecoveryCount)
         }
       },
       (event) => {
