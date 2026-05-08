@@ -479,6 +479,17 @@ export const AUTH_DEFAULTS: AuthSettings = {
 export const AUTH_SESSION_MAX_AGE_DAYS_MIN = 1
 export const AUTH_SESSION_MAX_AGE_DAYS_MAX = 365
 
+export interface UploadSettings {
+  maxFileSizeMb: number
+}
+
+export const UPLOAD_DEFAULTS: UploadSettings = {
+  maxFileSizeMb: 100,
+}
+
+export const UPLOAD_MAX_FILE_SIZE_MB_MIN = 1
+export const UPLOAD_MAX_FILE_SIZE_MB_MAX = 2048
+
 export interface AppSettingsSnapshot {
   analyticsEnabled: boolean
   browserSettingsMigrated: boolean
@@ -499,6 +510,7 @@ export interface AppSettingsSnapshot {
   filePathDisplay: string
   cloudflareTunnel: CloudflareTunnelSettings
   auth: AuthSettings
+  uploads: UploadSettings
 }
 
 export interface AppSettingsPatch {
@@ -516,6 +528,7 @@ export interface AppSettingsPatch {
   }
   cloudflareTunnel?: Partial<CloudflareTunnelSettings>
   auth?: Partial<AuthSettings>
+  uploads?: Partial<UploadSettings>
 }
 
 export interface AppSettingsPatch {

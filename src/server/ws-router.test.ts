@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { mkdtemp, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
-import { AUTH_DEFAULTS, CLOUDFLARE_TUNNEL_DEFAULTS, PROTOCOL_VERSION } from "../shared/types"
+import { AUTH_DEFAULTS, CLOUDFLARE_TUNNEL_DEFAULTS, PROTOCOL_VERSION, UPLOAD_DEFAULTS } from "../shared/types"
 import type { AppSettingsSnapshot, BackgroundTask, KeybindingsSnapshot, LlmProviderSnapshot, UpdateSnapshot } from "../shared/types"
 import { BackgroundTaskRegistry } from "./background-tasks"
 import { createEmptyState } from "./events"
@@ -105,6 +105,7 @@ const DEFAULT_APP_SETTINGS_SNAPSHOT: AppSettingsSnapshot = {
   },
   warning: null,
   filePathDisplay: "~/.kanna/data/settings.json",
+  uploads: UPLOAD_DEFAULTS,
 }
 
 describe("skills helpers", () => {
@@ -746,6 +747,68 @@ describe("ws-router", () => {
         "project_created",
         "project_removed",
       ])
+    } finally {
+      await rm(projectPath, { recursive: true, force: true })
+    }
+  })
+
+  test("project.remove kills terminals running in the project's cwd", async () => {
+    const state = createEmptyState()
+    const projectPath = await mkdtemp(path.join(tmpdir(), "kanna-router-project-"))
+    const closeByCwdCalls: string[] = []
+
+    try {
+      const router = createWsRouter({
+        store: {
+          state,
+          getProject: () => ({
+            id: "project-1",
+            localPath: projectPath,
+          }),
+          listChatsByProject: () => [],
+          removeProject: async () => {},
+        } as never,
+        agent: {
+          cancel: async () => {},
+          closeChat: async () => {},
+          getActiveStatuses: () => new Map(),
+          getDrainingChatIds: () => new Set(),
+          getWaitStartedAtByChatId: () => new Map(),
+        } as never,
+        analytics: {
+          track: () => {},
+          trackLaunch: () => {},
+        },
+        terminals: {
+          closeByCwd: (cwd: string) => {
+            closeByCwdCalls.push(cwd)
+          },
+          getSnapshot: () => null,
+          onEvent: () => () => {},
+        } as never,
+        keybindings: {
+          getSnapshot: () => DEFAULT_KEYBINDINGS_SNAPSHOT,
+          onChange: () => () => {},
+        } as never,
+        refreshDiscovery: async () => [],
+        getDiscoveredProjects: () => [],
+        machineDisplayName: "Local Machine",
+        updateManager: null,
+        pushManager: NOOP_PUSH_MANAGER,
+      })
+      const ws = new FakeWebSocket()
+
+      await router.handleMessage(
+        ws as never,
+        JSON.stringify({
+          v: 1,
+          type: "command",
+          id: "project-remove-1",
+          command: { type: "project.remove", projectId: "project-1" },
+        })
+      )
+
+      expect(closeByCwdCalls).toEqual([projectPath])
     } finally {
       await rm(projectPath, { recursive: true, force: true })
     }

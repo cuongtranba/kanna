@@ -19,6 +19,7 @@ import { KeybindingsManager } from "./keybindings"
 import { readLlmProviderSnapshot, validateLlmProviderCredentials, writeLlmProviderSnapshot } from "./llm-provider"
 import { getMachineDisplayName } from "./machine-name"
 import { TerminalManager } from "./terminal-manager"
+import { TerminalPidRegistry } from "./terminal-pid-registry"
 import { UpdateManager } from "./update-manager"
 import type { UpdateInstallAttemptResult } from "./cli-runtime"
 import { compareVersions } from "./cli-runtime"
@@ -42,7 +43,6 @@ function resolveCloudflaredPath(settingsPath: string): string {
 }
 
 const MAX_UPLOAD_FILES = 50
-const MAX_UPLOAD_SIZE_BYTES = 100 * 1024 * 1024
 const STALE_EMPTY_CHAT_PRUNE_INTERVAL_MS = 60 * 1000
 
 export async function persistUploadedFiles(args: {
@@ -138,6 +138,11 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
 
   let server: ReturnType<typeof Bun.serve<ClientState>>
   let router: ReturnType<typeof createWsRouter>
+  const terminalPidRegistry = new TerminalPidRegistry(path.join(store.dataDir, "terminals.json"))
+  const reapedTerminals = await terminalPidRegistry.reapStale()
+  if (reapedTerminals.length > 0) {
+    console.log(`[kanna] reaped ${reapedTerminals.length} orphan terminal process group(s) from previous run`)
+  }
   const keybindings = new KeybindingsManager()
   const appSettings = new AppSettingsManager(path.join(store.dataDir, "settings.json"))
   await appSettings.initialize()
@@ -157,7 +162,7 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     environment: runtimeProfile === "dev" ? "dev" : "prod",
   })
   const backgroundTasks = new BackgroundTaskRegistry({ analytics })
-  const terminals = new TerminalManager({ backgroundTasks })
+  const terminals = new TerminalManager({ backgroundTasks, pidRegistry: terminalPidRegistry })
   const updateManager: UpdateManager | null = (() => {
     if (!options.update) return null
     let manager: UpdateManager | null = null
@@ -342,7 +347,7 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
             return Response.json({ ok: true, port: actualPort })
           }
 
-          const uploadResponse = await handleProjectUpload(req, url, store)
+          const uploadResponse = await handleProjectUpload(req, url, store, appSettings)
           if (uploadResponse) {
             return uploadResponse
           }
@@ -426,11 +431,12 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     store,
     diffStore,
     updateManager,
+    appSettings,
     stop: shutdown,
   }
 }
 
-async function handleProjectUpload(req: Request, url: URL, store: EventStore) {
+async function handleProjectUpload(req: Request, url: URL, store: EventStore, appSettings: AppSettingsManager) {
   if (req.method !== "POST") {
     return null
   }
@@ -458,10 +464,12 @@ async function handleProjectUpload(req: Request, url: URL, store: EventStore) {
     return Response.json({ error: `You can upload up to ${MAX_UPLOAD_FILES} files at a time.` }, { status: 400 })
   }
 
+  const { maxFileSizeMb } = appSettings.getSnapshot().uploads
+  const maxBytes = maxFileSizeMb * 1024 * 1024
   for (const file of files) {
-    if (file.size > MAX_UPLOAD_SIZE_BYTES) {
+    if (file.size > maxBytes) {
       return Response.json(
-        { error: `File "${file.name}" exceeds the ${Math.floor(MAX_UPLOAD_SIZE_BYTES / (1024 * 1024))} MB limit.` },
+        { error: `File "${file.name}" exceeds the ${maxFileSizeMb} MB limit.` },
         { status: 413 }
       )
     }

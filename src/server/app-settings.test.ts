@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test"
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
-import { AUTH_DEFAULTS, CLOUDFLARE_TUNNEL_DEFAULTS } from "../shared/types"
+import { AUTH_DEFAULTS, CLOUDFLARE_TUNNEL_DEFAULTS, UPLOAD_DEFAULTS } from "../shared/types"
 import { AppSettingsManager, readAppSettingsSnapshot } from "./app-settings"
 import type { AppSettingsSnapshot } from "../shared/types"
 
@@ -63,6 +63,7 @@ function expectedSettingsSnapshot(filePath: string, overrides: Partial<AppSettin
     filePathDisplay: filePath,
     cloudflareTunnel: CLOUDFLARE_TUNNEL_DEFAULTS,
     auth: AUTH_DEFAULTS,
+    uploads: UPLOAD_DEFAULTS,
     ...overrides,
   }
 }
@@ -232,3 +233,55 @@ describe("cloudflareTunnel normalization", () => {
     })
   })
 })
+
+describe("uploads normalization", () => {
+  test("returns defaults when uploads block missing", async () => {
+    const filePath = await writeSettingsFile({ analyticsEnabled: true })
+    const snapshot = await readAppSettingsSnapshot(filePath)
+    expect(snapshot.uploads).toEqual({ maxFileSizeMb: 100 })
+  })
+
+  test("preserves valid maxFileSizeMb", async () => {
+    const filePath = await writeSettingsFile({ uploads: { maxFileSizeMb: 250 } })
+    const snapshot = await readAppSettingsSnapshot(filePath)
+    expect(snapshot.uploads.maxFileSizeMb).toBe(250)
+  })
+
+  test("clamps out-of-range values and emits warning", async () => {
+    const filePath = await writeSettingsFile({ uploads: { maxFileSizeMb: 99999 } })
+    const snapshot = await readAppSettingsSnapshot(filePath)
+    expect(snapshot.uploads.maxFileSizeMb).toBe(2048)
+    expect(snapshot.warning).toContain("uploads.maxFileSizeMb")
+  })
+
+  test("rejects non-number maxFileSizeMb and falls back to default", async () => {
+    const filePath = await writeSettingsFile({ uploads: { maxFileSizeMb: "big" } })
+    const snapshot = await readAppSettingsSnapshot(filePath)
+    expect(snapshot.uploads.maxFileSizeMb).toBe(100)
+    expect(snapshot.warning).toContain("uploads.maxFileSizeMb must be a number")
+  })
+
+  test("setUploads persists patch and round-trips through readAppSettingsSnapshot", async () => {
+    const filePath = await writeSettingsFile({ analyticsEnabled: true })
+    const manager = new AppSettingsManager(filePath)
+    await manager.initialize()
+    await manager.setUploads({ maxFileSizeMb: 500 })
+    const reloaded = await readAppSettingsSnapshot(filePath)
+    expect(reloaded.uploads.maxFileSizeMb).toBe(500)
+    manager.dispose()
+  })
+
+  test("setUploads throws on invalid value", async () => {
+    const filePath = await createTempFilePath()
+    const manager = new AppSettingsManager(filePath)
+    await manager.initialize()
+    let lowError: unknown
+    try { await manager.setUploads({ maxFileSizeMb: 0 }) } catch (error) { lowError = error }
+    expect((lowError as Error)?.message).toMatch(/between/)
+    let highError: unknown
+    try { await manager.setUploads({ maxFileSizeMb: 99999 }) } catch (error) { highError = error }
+    expect((highError as Error)?.message).toMatch(/between/)
+    manager.dispose()
+  })
+})
+

@@ -5,6 +5,7 @@ import { Terminal } from "@xterm/headless"
 import { SerializeAddon } from "@xterm/addon-serialize"
 import type { TerminalEvent, TerminalSnapshot } from "../shared/protocol"
 import type { BackgroundTaskRegistry } from "./background-tasks"
+import type { TerminalPidRegistry } from "./terminal-pid-registry"
 
 const DEFAULT_COLS = 80
 const DEFAULT_ROWS = 24
@@ -125,6 +126,16 @@ function killTerminalProcessTree(subprocess: Bun.Subprocess | null) {
   }
 }
 
+function reapShellPgroup(pid: number | undefined) {
+  if (process.platform === "win32") return
+  if (typeof pid !== "number" || pid <= 0) return
+  try {
+    process.kill(-pid, "SIGKILL")
+  } catch {
+    // ESRCH (empty pgrp) and EPERM (race with kernel reap) are expected.
+  }
+}
+
 function signalTerminalProcessGroup(subprocess: Bun.Subprocess | null, signal: NodeJS.Signals) {
   if (!subprocess) return false
 
@@ -152,9 +163,11 @@ export class TerminalManager {
   private readonly sessions = new Map<string, TerminalSession>()
   private readonly listeners = new Set<(event: TerminalEvent) => void>()
   private readonly backgroundTasks: BackgroundTaskRegistry | null
+  private readonly pidRegistry: TerminalPidRegistry | null
 
-  constructor(args: { backgroundTasks?: BackgroundTaskRegistry } = {}) {
+  constructor(args: { backgroundTasks?: BackgroundTaskRegistry; pidRegistry?: TerminalPidRegistry | null } = {}) {
     this.backgroundTasks = args.backgroundTasks ?? null
+    this.pidRegistry = args.pidRegistry ?? null
   }
 
   onEvent(listener: (event: TerminalEvent) => void) {
@@ -237,7 +250,20 @@ export class TerminalManager {
       session.headless.dispose()
       throw error
     }
+    const shellPid = session.process.pid
+    if (typeof shellPid === "number") {
+      void this.pidRegistry?.register({
+        terminalId: args.terminalId,
+        pid: shellPid,
+        cwd: args.projectPath,
+      })
+    }
+    const handleShellExit = () => {
+      reapShellPgroup(shellPid)
+      void this.pidRegistry?.unregister(args.terminalId)
+    }
     void session.process.exited.then((exitCode) => {
+      handleShellExit()
       const active = this.sessions.get(args.terminalId)
       if (!active) return
       active.status = "exited"
@@ -249,6 +275,7 @@ export class TerminalManager {
       })
       this.backgroundTasks?.unregister(`pty:${args.terminalId}`)
     }).catch((error) => {
+      handleShellExit()
       const active = this.sessions.get(args.terminalId)
       if (!active) return
       active.status = "exited"
@@ -326,6 +353,7 @@ export class TerminalManager {
     this.sessions.delete(terminalId)
     this.backgroundTasks?.unregister(`pty:${terminalId}`)
     killTerminalProcessTree(session.process)
+    void this.pidRegistry?.unregister(terminalId)
     session.terminal.close()
     session.serializeAddon.dispose()
     session.headless.dispose()

@@ -17,6 +17,9 @@ import {
   normalizeClaudeModelId,
   normalizeCodexModelId,
   supportsClaudeMaxReasoningEffort,
+  UPLOAD_DEFAULTS,
+  UPLOAD_MAX_FILE_SIZE_MB_MAX,
+  UPLOAD_MAX_FILE_SIZE_MB_MIN,
   type AppSettingsPatch,
   type AppSettingsSnapshot,
   type AppThemePreference,
@@ -30,6 +33,7 @@ import {
   type DefaultProviderPreference,
   type EditorPreset,
   type ProviderPreference,
+  type UploadSettings,
 } from "../shared/types"
 
 interface AppSettingsFile {
@@ -54,6 +58,7 @@ interface AppSettingsFile {
   }
   cloudflareTunnel?: unknown
   auth?: unknown
+  uploads?: unknown
 }
 
 interface AppSettingsState extends AppSettingsSnapshot {
@@ -278,6 +283,30 @@ function normalizeAuthSettings(value: unknown, warnings: string[]): AuthSettings
   return { sessionMaxAgeDays }
 }
 
+function normalizeUploadSettings(value: unknown, warnings: string[]): UploadSettings {
+  const source = value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null
+  if (value !== undefined && !source) {
+    warnings.push("uploads must be an object")
+  }
+
+  const rawSize = source?.maxFileSizeMb
+  let maxFileSizeMb = UPLOAD_DEFAULTS.maxFileSizeMb
+  if (rawSize !== undefined) {
+    if (typeof rawSize !== "number" || !Number.isFinite(rawSize)) {
+      warnings.push("uploads.maxFileSizeMb must be a number")
+    } else if (rawSize < UPLOAD_MAX_FILE_SIZE_MB_MIN || rawSize > UPLOAD_MAX_FILE_SIZE_MB_MAX) {
+      warnings.push(`uploads.maxFileSizeMb must be between ${UPLOAD_MAX_FILE_SIZE_MB_MIN} and ${UPLOAD_MAX_FILE_SIZE_MB_MAX}`)
+      maxFileSizeMb = clampNumber(rawSize, UPLOAD_DEFAULTS.maxFileSizeMb, UPLOAD_MAX_FILE_SIZE_MB_MIN, UPLOAD_MAX_FILE_SIZE_MB_MAX)
+    } else {
+      maxFileSizeMb = Math.round(rawSize)
+    }
+  }
+
+  return { maxFileSizeMb }
+}
+
 function toFilePayload(state: AppSettingsState) {
   return {
     analyticsEnabled: state.analyticsEnabled,
@@ -292,6 +321,7 @@ function toFilePayload(state: AppSettingsState) {
     providerDefaults: state.providerDefaults,
     cloudflareTunnel: state.cloudflareTunnel,
     auth: state.auth,
+    uploads: state.uploads,
   }
 }
 
@@ -310,6 +340,7 @@ function toSnapshot(state: AppSettingsState): AppSettingsSnapshot {
     filePathDisplay: state.filePathDisplay,
     cloudflareTunnel: state.cloudflareTunnel,
     auth: state.auth,
+    uploads: state.uploads,
   }
 }
 
@@ -342,6 +373,7 @@ function normalizeAppSettings(
 
   const cloudflareTunnel = normalizeCloudflareTunnel(source?.cloudflareTunnel, warnings)
   const auth = normalizeAuthSettings(source?.auth, warnings)
+  const uploads = normalizeUploadSettings(source?.uploads, warnings)
 
   const editorPreset = normalizeEditorPreset(source?.editor?.preset)
   const state: AppSettingsState = {
@@ -365,6 +397,7 @@ function normalizeAppSettings(
     filePathDisplay: formatDisplayPath(filePath),
     cloudflareTunnel,
     auth,
+    uploads,
   }
 
   const shouldWrite = JSON.stringify(source ? toComparablePayload(source) : null) !== JSON.stringify(toFilePayload(state))
@@ -393,6 +426,7 @@ function toComparablePayload(source: AppSettingsFile) {
     providerDefaults: source.providerDefaults,
     cloudflareTunnel: source.cloudflareTunnel,
     auth: source.auth,
+    uploads: source.uploads,
   }
 }
 
@@ -433,6 +467,10 @@ function applyPatch(state: AppSettingsState, patch: AppSettingsPatch): AppSettin
     auth: {
       ...state.auth,
       ...patch.auth,
+    },
+    uploads: {
+      ...state.uploads,
+      ...patch.uploads,
     },
   }, state.filePathDisplay).payload
 }
@@ -526,6 +564,17 @@ export class AppSettingsManager {
       }
     }
     return this.writePatch({ auth: patch })
+  }
+
+  async setUploads(patch: Partial<UploadSettings>) {
+    if (patch.maxFileSizeMb !== undefined) {
+      const value = patch.maxFileSizeMb
+      if (typeof value !== "number" || !Number.isFinite(value)
+        || value < UPLOAD_MAX_FILE_SIZE_MB_MIN || value > UPLOAD_MAX_FILE_SIZE_MB_MAX) {
+        throw new Error(`uploads.maxFileSizeMb must be between ${UPLOAD_MAX_FILE_SIZE_MB_MIN} and ${UPLOAD_MAX_FILE_SIZE_MB_MAX}`)
+      }
+    }
+    return this.writePatch({ uploads: patch })
   }
 
   async writePatch(patch: AppSettingsPatch) {

@@ -1561,6 +1561,93 @@ describe("AgentCoordinator claude integration", () => {
     events.close()
   })
 
+  test("Claude steer + result without echoed cancel still clears running state", async () => {
+    // Repro: sometimes the underlying SDK closes its stream cleanly on cancel
+    // and never emits a `result.subtype=cancelled` (which would map to an
+    // `interrupted` entry). When the next prompt's `result` arrives the
+    // session.pendingPromptSeqs queue still holds the orphaned cancelled seq,
+    // so the FIFO shift returns the wrong seq and `activeTurns` is never
+    // cleared — leaving the UI stuck on "Running...".
+    const events = new AsyncEventQueue<any>()
+    const prompts: string[] = []
+
+    const store = createFakeStore()
+    await store.enqueueMessage("chat-1", {
+      id: "queued-1",
+      content: "follow up",
+      attachments: [],
+      provider: "claude",
+      model: "claude-opus-4-1",
+      planMode: false,
+    })
+
+    const coordinator = new AgentCoordinator({
+      store: store as never,
+      onStateChange: () => {},
+      startClaudeSession: async () => ({
+        provider: "claude",
+        stream: events,
+        getAccountInfo: async () => null,
+        interrupt: async () => {},
+        close: () => {},
+        setModel: async () => {},
+        setPermissionMode: async () => {},
+        getSupportedCommands: async () => [],
+        sendPrompt: async (content: string) => {
+          prompts.push(content)
+          if (prompts.length === 1) {
+            events.push({
+              type: "transcript" as const,
+              entry: timestamped({
+                kind: "system_init",
+                provider: "claude",
+                model: "claude-opus-4-1",
+                tools: [],
+                agents: [],
+                slashCommands: [],
+                mcpServers: [],
+              }),
+            })
+          }
+        },
+      }),
+    })
+
+    await coordinator.send({
+      type: "chat.send",
+      chatId: "chat-1",
+      provider: "claude",
+      content: "first prompt",
+      model: "claude-opus-4-1",
+    })
+
+    await coordinator.steer({
+      type: "message.steer",
+      chatId: "chat-1",
+      queuedMessageId: "queued-1",
+    })
+
+    expect(prompts).toHaveLength(2)
+
+    // SDK never echoes a cancelled result for the first prompt — only the
+    // result for the steered second prompt arrives.
+    events.push({
+      type: "transcript" as const,
+      entry: timestamped({
+        kind: "result",
+        subtype: "success",
+        isError: false,
+        durationMs: 0,
+        result: "done",
+      }),
+    })
+
+    await waitFor(() => !coordinator.getActiveStatuses().has("chat-1"))
+    expect(coordinator.getActiveStatuses().has("chat-1")).toBe(false)
+
+    events.close()
+  })
+
   test("uses Claude forkSession when starting a forked chat", async () => {
     const startSessionCalls: Array<{ sessionToken: string | null; forkSession: boolean }> = []
     const events = new AsyncEventQueue<any>()

@@ -29,6 +29,9 @@ import {
   DEFAULT_OPENAI_SDK_MODEL,
   DEFAULT_OPENROUTER_SDK_MODEL,
   PROVIDERS,
+  UPLOAD_DEFAULTS,
+  UPLOAD_MAX_FILE_SIZE_MB_MAX,
+  UPLOAD_MAX_FILE_SIZE_MB_MIN,
   type AgentProvider,
   type CloudflareTunnelMode,
   type CloudflareTunnelSettings,
@@ -902,6 +905,8 @@ export function SettingsPage() {
   const [pushDeviceId, setPushDeviceId] = useState<string | null>(() => getStoredPushDeviceId())
   const [scrollbackDraft, setScrollbackDraft] = useState(String(scrollbackLines))
   const [minColumnWidthDraft, setMinColumnWidthDraft] = useState(String(minColumnWidth))
+  const uploadMaxFileSizeMb = appSettings?.uploads.maxFileSizeMb ?? UPLOAD_DEFAULTS.maxFileSizeMb
+  const [uploadMaxFileSizeDraft, setUploadMaxFileSizeDraft] = useState(String(uploadMaxFileSizeMb))
   const [editorCommandDraft, setEditorCommandDraft] = useState(editorCommandTemplate)
   const [keybindingDrafts, setKeybindingDrafts] = useState<Record<string, string>>({})
   const [keybindingsError, setKeybindingsError] = useState<string | null>(null)
@@ -948,6 +953,10 @@ export function SettingsPage() {
   useEffect(() => {
     setMinColumnWidthDraft(String(minColumnWidth))
   }, [minColumnWidth])
+
+  useEffect(() => {
+    setUploadMaxFileSizeDraft(String(uploadMaxFileSizeMb))
+  }, [uploadMaxFileSizeMb])
 
   useEffect(() => {
     const handler = () => setPushPermissionState(detectPushSupport().state)
@@ -1072,6 +1081,24 @@ export function SettingsPage() {
     setMinColumnWidth(nextValue)
     void handleWriteAppSettings({ terminal: { minColumnWidth: nextValue } }).catch((error) => {
       setAppSettingsError(error instanceof Error ? error.message : "Unable to save terminal settings.")
+    })
+  }
+
+  function commitUploadMaxFileSize() {
+    const nextValue = Number(uploadMaxFileSizeDraft)
+    if (!Number.isFinite(nextValue)
+      || nextValue < UPLOAD_MAX_FILE_SIZE_MB_MIN
+      || nextValue > UPLOAD_MAX_FILE_SIZE_MB_MAX) {
+      setUploadMaxFileSizeDraft(String(uploadMaxFileSizeMb))
+      setAppSettingsError(`Max file size must be between ${UPLOAD_MAX_FILE_SIZE_MB_MIN} and ${UPLOAD_MAX_FILE_SIZE_MB_MAX} MB.`)
+      return
+    }
+    if (Math.round(nextValue) === uploadMaxFileSizeMb) {
+      setUploadMaxFileSizeDraft(String(uploadMaxFileSizeMb))
+      return
+    }
+    void handleWriteAppSettings({ uploads: { maxFileSizeMb: Math.round(nextValue) } }).catch((error) => {
+      setAppSettingsError(error instanceof Error ? error.message : "Unable to save upload settings.")
     })
   }
 
@@ -1659,6 +1686,32 @@ export function SettingsPage() {
                           <div className="text-left text-xs text-muted-foreground md:text-right">
                             {MIN_TERMINAL_MIN_COLUMN_WIDTH}-{MAX_TERMINAL_MIN_COLUMN_WIDTH} px
                             {minColumnWidth === DEFAULT_TERMINAL_MIN_COLUMN_WIDTH ? " (default)" : ""}
+                          </div>
+                        </div>
+                      </SettingsRow>
+
+                      <SettingsRow
+                        title="Max upload file size"
+                        description="Largest single file the chat upload endpoint accepts."
+                      >
+                        <div className="flex w-full min-w-0 flex-col items-stretch gap-1.5 md:w-auto md:items-end">
+                          <div className="flex items-center gap-2 md:justify-end">
+                            <Input
+                              type="number"
+                              min={UPLOAD_MAX_FILE_SIZE_MB_MIN}
+                              max={UPLOAD_MAX_FILE_SIZE_MB_MAX}
+                              step={1}
+                              value={uploadMaxFileSizeDraft}
+                              onChange={(event) => setUploadMaxFileSizeDraft(event.target.value)}
+                              onBlur={commitUploadMaxFileSize}
+                              onKeyDown={(event) => handleNumberInputKeyDown(event, commitUploadMaxFileSize)}
+                              className="hide-number-steppers w-full text-left font-mono tabular-nums md:w-24 md:text-right"
+                              aria-label="Max upload file size in megabytes"
+                            />
+                            <span className="text-sm text-muted-foreground">MB</span>
+                          </div>
+                          <div className="text-left text-xs text-muted-foreground tabular-nums md:text-right">
+                            {UPLOAD_MAX_FILE_SIZE_MB_MIN}–{UPLOAD_MAX_FILE_SIZE_MB_MAX} MB · default {UPLOAD_DEFAULTS.maxFileSizeMb}
                           </div>
                         </div>
                       </SettingsRow>

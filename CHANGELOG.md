@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.44.0](https://github.com/cuongtranba/kanna/compare/v0.43.2...v0.44.0) (2026-05-08)
+
+
+### Features
+
+* **uploads:** configurable max file size + upload progress UI ([#37](https://github.com/cuongtranba/kanna/issues/37)) ([220d590](https://github.com/cuongtranba/kanna/commit/220d590f541d7e13bce1499484380f5d9be0c87b))
+
+
+### Bug Fixes
+
+* **agent:** clear stuck Running state after cancel-then-steer ([#39](https://github.com/cuongtranba/kanna/issues/39)) ([c951f1c](https://github.com/cuongtranba/kanna/commit/c951f1c8e941b300f488bda7db31189a2a36895a))
+* **chat-input:** show attach button on desktop ([#35](https://github.com/cuongtranba/kanna/issues/35)) ([40c8c8e](https://github.com/cuongtranba/kanna/commit/40c8c8eb50ba95381a5279f0319b76b5d5c68643))
+
+## [0.43.2](https://github.com/cuongtranba/kanna/compare/v0.43.1...v0.43.2) (2026-05-06)
+
+
+### Bug Fixes
+
+* **terminals:** stop dev process leaks on project remove, shell exit, SIGHUP, and crash ([#33](https://github.com/cuongtranba/kanna/issues/33)) ([7d872c1](https://github.com/cuongtranba/kanna/commit/7d872c1dbfa967baae5ccae8f390adb23c6753eb))
+
 ## [0.43.1](https://github.com/cuongtranba/kanna/compare/v0.43.0...v0.43.1) (2026-05-06)
 
 

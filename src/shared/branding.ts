@@ -68,6 +68,10 @@ export function getLlmProviderFilePath(homeDir: string, env: RuntimeEnv = getRun
   return `${getDataRootDir(homeDir, env)}/llm-provider.json`
 }
 
+export function getTerminalRegistryFilePath(homeDir: string, env: RuntimeEnv = getRuntimeEnv()) {
+  return `${getDataRootDir(homeDir, env)}/terminals.json`
+}
+
 export function getLlmProviderFilePathDisplay(env: RuntimeEnv = getRuntimeEnv()) {
   return `${getDataRootDirDisplay(env)}/llm-provider.json`
 }
