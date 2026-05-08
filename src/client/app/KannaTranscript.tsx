@@ -10,6 +10,7 @@ import { AskUserQuestionMessage } from "../components/messages/AskUserQuestionMe
 import { ExitPlanModeMessage } from "../components/messages/ExitPlanModeMessage"
 import { TodoWriteMessage } from "../components/messages/TodoWriteMessage"
 import { ToolCallMessage } from "../components/messages/ToolCallMessage"
+import { OfferDownloadMessage } from "../components/messages/OfferDownloadMessage"
 import { ResultMessage } from "../components/messages/ResultMessage"
 import { InterruptedMessage } from "../components/messages/InterruptedMessage"
 import { CompactBoundaryMessage, ContextClearedMessage } from "../components/messages/CompactBoundaryMessage"
@@ -447,6 +448,10 @@ const TranscriptSingleRow = memo(function TranscriptSingleRow({
         }
         if (message.toolKind === "todo_write") {
           rendered = isLatestTodoWrite ? <TodoWriteMessage key={message.id} message={message} /> : null
+          break
+        }
+        if (message.toolKind === "offer_download" && message.result) {
+          rendered = <OfferDownloadMessage key={message.id} message={message} />
           break
         }
         rendered = <ToolCallMessage key={message.id} message={message} isLoading={isLoading} localPath={localPath} />

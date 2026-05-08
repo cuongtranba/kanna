@@ -723,6 +723,18 @@ export interface SubagentTaskToolCall
 export interface McpGenericToolCall
   extends ToolCallBase<"mcp_generic", { server: string; tool: string; payload: Record<string, unknown> }> { }
 
+export interface OfferDownloadToolCall
+  extends ToolCallBase<"offer_download", { path: string; label?: string }> { }
+
+export interface OfferDownloadToolResult {
+  contentUrl: string
+  relativePath: string
+  fileName: string
+  displayName: string
+  size: number
+  mimeType?: string
+}
+
 export interface UnknownToolCall
   extends ToolCallBase<"unknown_tool", { payload: Record<string, unknown> }> { }
 
@@ -741,6 +753,7 @@ export type NormalizedToolCall =
   | DeleteFileToolCall
   | SubagentTaskToolCall
   | McpGenericToolCall
+  | OfferDownloadToolCall
   | UnknownToolCall
 
 export interface ToolResultEntry extends TranscriptEntryBase {
@@ -1092,6 +1105,9 @@ export type HydratedSubagentTaskToolCall =
 export type HydratedMcpGenericToolCall =
   HydratedToolCallBase<"mcp_generic", McpGenericToolCall["input"], unknown>
 
+export type HydratedOfferDownloadToolCall =
+  HydratedToolCallBase<"offer_download", OfferDownloadToolCall["input"], OfferDownloadToolResult>
+
 export type HydratedUnknownToolCall =
   HydratedToolCallBase<"unknown_tool", UnknownToolCall["input"], unknown>
 
@@ -1110,6 +1126,7 @@ export type HydratedToolCall =
   | HydratedDeleteFileToolCall
   | HydratedSubagentTaskToolCall
   | HydratedMcpGenericToolCall
+  | HydratedOfferDownloadToolCall
   | HydratedUnknownToolCall
 
 export type HydratedTranscriptMessage =
