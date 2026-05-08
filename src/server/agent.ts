@@ -1,4 +1,6 @@
 import { query, type CanUseTool, type PermissionResult, type Query, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk"
+import { createKannaMcpServer } from "./kanna-mcp"
+import { KANNA_MCP_SERVER_NAME } from "../shared/tools"
 import { homedir } from "node:os"
 import type {
   AgentProvider,
@@ -117,6 +119,7 @@ interface AgentCoordinatorArgs {
   generateTitle?: (messageContent: string, cwd: string) => Promise<GenerateChatTitleResult>
   tunnelGateway?: TunnelGateway
   startClaudeSession?: (args: {
+    projectId: string
     localPath: string
     model: string
     effort?: string
@@ -587,6 +590,7 @@ class AsyncMessageQueue<T> implements AsyncIterable<T> {
 }
 
 async function startClaudeSession(args: {
+  projectId: string
   localPath: string
   model: string
   effort?: string
@@ -663,6 +667,12 @@ async function startClaudeSession(args: {
       permissionMode: args.planMode ? "plan" : "acceptEdits",
       canUseTool,
       tools: [...CLAUDE_TOOLSET],
+      mcpServers: {
+        [KANNA_MCP_SERVER_NAME]: createKannaMcpServer({
+          projectId: args.projectId,
+          localPath: args.localPath,
+        }),
+      },
       systemPrompt: {
         type: "preset",
         preset: "claude_code",
@@ -939,6 +949,7 @@ export class AgentCoordinator {
         const defaultModel = normalizeServerModel("claude")
         const defaultOptions = normalizeClaudeModelOptions(defaultModel)
         const ephemeral = await this.startClaudeSessionFn({
+          projectId: project.id,
           localPath: project.localPath,
           model: resolveClaudeApiModelId(defaultModel, defaultOptions.contextWindow),
           effort: defaultOptions.reasoningEffort,
@@ -1156,6 +1167,7 @@ export class AgentCoordinator {
       })
       turn = await this.startClaudeTurn({
         chatId: args.chatId,
+        projectId: project.id,
         localPath: project.localPath,
         model: args.model,
         effort: args.effort,
@@ -1284,6 +1296,7 @@ export class AgentCoordinator {
 
   private async startClaudeTurn(args: {
     chatId: string
+    projectId: string
     localPath: string
     model: string
     effort?: string
@@ -1301,6 +1314,7 @@ export class AgentCoordinator {
       }
 
       const started = await this.startClaudeSessionFn({
+        projectId: args.projectId,
         localPath: args.localPath,
         model: args.model,
         effort: args.effort,

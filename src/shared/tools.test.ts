@@ -51,6 +51,19 @@ describe("normalizeToolCall", () => {
     expect(tool.input.server).toBe("sentry")
     expect(tool.input.tool).toBe("search_issues")
   })
+
+  test("recognizes mcp__kanna__offer_download as offer_download tool kind", () => {
+    const tool = normalizeToolCall({
+      toolName: "mcp__kanna__offer_download",
+      toolId: "tool-od",
+      input: { path: "dist/build.zip", label: "Download build" },
+    })
+
+    expect(tool.toolKind).toBe("offer_download")
+    if (tool.toolKind !== "offer_download") throw new Error("unexpected tool kind")
+    expect(tool.input.path).toBe("dist/build.zip")
+    expect(tool.input.label).toBe("Download build")
+  })
 })
 
 describe("hydrateToolResult", () => {
@@ -129,6 +142,58 @@ describe("hydrateToolResult", () => {
           mimeType: "image/png",
         },
       ],
+    })
+  })
+
+  test("hydrates offer_download payload from MCP text content", () => {
+    const tool = normalizeToolCall({
+      toolName: "mcp__kanna__offer_download",
+      toolId: "tool-od-1",
+      input: { path: "dist/build.zip" },
+    })
+
+    const payload = {
+      kind: "download_offer",
+      contentUrl: "/api/projects/p1/files/dist%2Fbuild.zip/content",
+      relativePath: "dist/build.zip",
+      fileName: "build.zip",
+      displayName: "build.zip",
+      size: 2048,
+      mimeType: "application/zip",
+    }
+
+    expect(hydrateToolResult(tool, [{ type: "text", text: JSON.stringify(payload) }])).toEqual({
+      contentUrl: payload.contentUrl,
+      relativePath: payload.relativePath,
+      fileName: payload.fileName,
+      displayName: payload.displayName,
+      size: payload.size,
+      mimeType: payload.mimeType,
+    })
+  })
+
+  test("hydrates offer_download payload nested under content", () => {
+    const tool = normalizeToolCall({
+      toolName: "mcp__kanna__offer_download",
+      toolId: "tool-od-2",
+      input: { path: "report.pdf" },
+    })
+
+    const payload = {
+      kind: "download_offer",
+      contentUrl: "/api/projects/p1/files/report.pdf/content",
+      relativePath: "report.pdf",
+      fileName: "report.pdf",
+      displayName: "Q4 report",
+      size: 4096,
+      mimeType: "application/pdf",
+    }
+
+    expect(hydrateToolResult(tool, { content: [{ type: "text", text: JSON.stringify(payload) }] })).toMatchObject({
+      contentUrl: payload.contentUrl,
+      displayName: "Q4 report",
+      size: 4096,
+      mimeType: "application/pdf",
     })
   })
 

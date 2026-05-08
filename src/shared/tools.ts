@@ -5,9 +5,13 @@ import type {
   ExitPlanModeToolResult,
   HydratedToolCall,
   NormalizedToolCall,
+  OfferDownloadToolResult,
   ReadFileToolResult,
   TodoItem,
 } from "./types"
+
+export const KANNA_MCP_SERVER_NAME = "kanna"
+export const OFFER_DOWNLOAD_TOOL_NAME = `mcp__${KANNA_MCP_SERVER_NAME}__offer_download`
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null
@@ -153,6 +157,20 @@ export function normalizeToolCall(args: {
       }
   }
 
+  if (toolName === OFFER_DOWNLOAD_TOOL_NAME) {
+    return {
+      kind: "tool",
+      toolKind: "offer_download",
+      toolName,
+      toolId,
+      input: {
+        path: typeof input.path === "string" ? input.path : "",
+        label: typeof input.label === "string" ? input.label : undefined,
+      },
+      rawInput: input,
+    }
+  }
+
   const mcpMatch = toolName.match(/^mcp__(.+?)__(.+)$/)
   if (mcpMatch) {
     return {
@@ -269,6 +287,29 @@ function normalizeReadBlocks(value: unknown): Array<ReadStructuredTextBlock | Re
   return normalized
 }
 
+function extractMcpTextContent(value: unknown): string | null {
+  const blocks = (
+    value
+    && typeof value === "object"
+    && "content" in value
+    && Array.isArray((value as { content?: unknown }).content)
+  )
+    ? (value as { content: unknown[] }).content
+    : Array.isArray(value)
+      ? value
+      : null
+
+  if (!blocks) return null
+
+  const parts: string[] = []
+  for (const block of blocks) {
+    if (block && typeof block === "object" && "type" in block && block.type === "text" && typeof (block as { text?: unknown }).text === "string") {
+      parts.push((block as { text: string }).text)
+    }
+  }
+  return parts.length > 0 ? parts.join("") : null
+}
+
 export function hydrateToolResult(tool: NormalizedToolCall, raw: unknown): HydratedToolCall["result"] {
   const parsed = parseJsonValue(raw)
 
@@ -302,6 +343,21 @@ export function hydrateToolResult(tool: NormalizedToolCall, raw: unknown): Hydra
         message: typeof record?.message === "string" ? record.message : undefined,
         ...(record?.discarded === true ? { discarded: true } : {}),
       } satisfies ExitPlanModeToolResult
+    }
+    case "offer_download": {
+      const text = extractMcpTextContent(parsed)
+      const payload = text ? parseJsonValue(text) : parsed
+      const record = asRecord(payload)
+      return {
+        contentUrl: typeof record?.contentUrl === "string" ? record.contentUrl : "",
+        relativePath: typeof record?.relativePath === "string" ? record.relativePath : "",
+        fileName: typeof record?.fileName === "string" ? record.fileName : "",
+        displayName: typeof record?.displayName === "string"
+          ? record.displayName
+          : typeof record?.fileName === "string" ? record.fileName : "",
+        size: typeof record?.size === "number" ? record.size : 0,
+        ...(typeof record?.mimeType === "string" ? { mimeType: record.mimeType } : {}),
+      } satisfies OfferDownloadToolResult
     }
     case "read_file":
       if (typeof parsed === "string") {
