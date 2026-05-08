@@ -1,10 +1,14 @@
-import { afterEach, describe, expect, test } from "bun:test"
+import { afterEach, beforeEach, describe, expect, test } from "bun:test"
 import { compareVersions, classifyInstallVersionFailure, parseArgs, runCli } from "./cli-runtime"
 import { CLI_SUPPRESS_OPEN_ONCE_ENV_VAR } from "./restart"
 
 const originalRuntimeProfile = process.env.KANNA_RUNTIME_PROFILE
 const originalSuppressOpen = process.env[CLI_SUPPRESS_OPEN_ONCE_ENV_VAR]
 const originalDisableSelfUpdate = process.env.KANNA_DISABLE_SELF_UPDATE
+
+beforeEach(() => {
+  delete process.env.KANNA_DISABLE_SELF_UPDATE
+})
 
 afterEach(() => {
   if (originalRuntimeProfile === undefined) {
