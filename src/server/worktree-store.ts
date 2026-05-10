@@ -66,6 +66,26 @@ export async function removeWorktree(repoRoot: string, path: string, opts: { for
   }
 }
 
+export function slugifyBranchForPath(branch: string): string {
+  return branch
+    .toLowerCase()
+    .replace(/[^a-z0-9._/-]+/gu, "-")
+    .replace(/[\\/]+/gu, "-")
+    .replace(/\.+/gu, "-")
+    .replace(/-+/gu, "-")
+    .replace(/^-+|-+$/gu, "")
+}
+
+export function resolveDefaultWorktreePath(repoRoot: string, dir: string, branch: string, existing: Set<string>): string {
+  const slug = slugifyBranchForPath(branch)
+  const base = `${repoRoot}/${dir}/${slug}`
+  if (!existing.has(base)) return base
+  for (let i = 2; ; i++) {
+    const candidate = `${base}-${i}`
+    if (!existing.has(candidate)) return candidate
+  }
+}
+
 export async function addWorktree(repoRoot: string, opts: AddWorktreeOpts): Promise<GitWorktree> {
   const args = ["worktree", "add"]
   if (opts.kind === "new-branch") {

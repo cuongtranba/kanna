@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { join } from "node:path"
 import { git, makeTempRepo } from "./test-helpers/worktree-repo"
-import { parseWorktreeList, listWorktrees, addWorktree, isDirty, removeWorktree } from "./worktree-store"
+import { parseWorktreeList, listWorktrees, addWorktree, isDirty, removeWorktree, slugifyBranchForPath, resolveDefaultWorktreePath } from "./worktree-store"
 import { writeFileSync } from "node:fs"
 
 describe("parseWorktreeList", () => {
@@ -190,3 +190,16 @@ test("removeWorktree --force clears dirty worktree", async () => {
     expect((await listWorktrees(dir)).length).toBe(1)
   } finally { cleanup() }
 }, 30_000)
+
+describe("path helpers", () => {
+  test("slugifyBranchForPath replaces unsafe chars", () => {
+    expect(slugifyBranchForPath("feat/x")).toBe("feat-x")
+    expect(slugifyBranchForPath("Feat With Space")).toBe("feat-with-space")
+    expect(slugifyBranchForPath("../escape")).toBe("escape")
+  })
+
+  test("resolveDefaultWorktreePath suffixes on collision", () => {
+    const existing = new Set(["/r/.worktrees/feat-x"])
+    expect(resolveDefaultWorktreePath("/r", ".worktrees", "feat/x", existing)).toBe("/r/.worktrees/feat-x-2")
+  })
+})
