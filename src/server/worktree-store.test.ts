@@ -46,4 +46,26 @@ describe("parseWorktreeList", () => {
     ].join("\n")
     expect(parseWorktreeList(input)[0].isLocked).toBe(true)
   })
+
+  test("returns [] for empty input", () => {
+    expect(parseWorktreeList("")).toEqual([])
+  })
+
+  test("filters out bare-repo blocks", () => {
+    const input = [
+      "worktree /repo/bare",
+      "bare",
+      "",
+    ].join("\n")
+    expect(parseWorktreeList(input)).toEqual([])
+  })
+
+  test("filters out blocks missing the worktree line", () => {
+    const input = [
+      "HEAD abc123",
+      "branch refs/heads/main",
+      "",
+    ].join("\n")
+    expect(parseWorktreeList(input)).toEqual([])
+  })
 })
