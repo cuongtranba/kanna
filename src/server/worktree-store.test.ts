@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { join } from "node:path"
 import { git, makeTempRepo } from "./test-helpers/worktree-repo"
-import { parseWorktreeList, listWorktrees } from "./worktree-store"
+import { parseWorktreeList, listWorktrees, addWorktree } from "./worktree-store"
 
 describe("parseWorktreeList", () => {
   test("parses primary + secondary worktree", () => {
@@ -92,6 +92,23 @@ test("listWorktrees sees a secondary worktree", async () => {
     expect(result.length).toBe(2)
     const secondary = result.find((w) => !w.isPrimary)
     expect(secondary?.branch).toBe("feat/x")
+  } finally {
+    cleanup()
+  }
+}, 30_000)
+
+test("addWorktree creates a new branch worktree", async () => {
+  const { dir, cleanup } = makeTempRepo()
+  try {
+    const wt = await addWorktree(dir, {
+      kind: "new-branch",
+      branch: "feat/y",
+      path: join(dir, ".worktrees", "feat-y"),
+    })
+    expect(wt.branch).toBe("feat/y")
+    expect(wt.isPrimary).toBe(false)
+    const list = await listWorktrees(dir)
+    expect(list.some((w) => w.branch === "feat/y")).toBe(true)
   } finally {
     cleanup()
   }

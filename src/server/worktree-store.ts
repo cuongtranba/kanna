@@ -1,3 +1,4 @@
+import { realpathSync, existsSync } from "node:fs"
 import type { GitWorktree } from "../shared/types"
 import { runGit, formatGitFailure } from "./diff-store"
 
@@ -34,4 +35,29 @@ export async function listWorktrees(repoRoot: string): Promise<GitWorktree[]> {
     throw new Error(formatGitFailure(result) || "git worktree list failed")
   }
   return parseWorktreeList(result.stdout)
+}
+
+export type AddWorktreeOpts =
+  | { kind: "new-branch"; branch: string; path: string; base?: string }
+  | { kind: "existing-branch"; branch: string; path: string }
+
+export async function addWorktree(repoRoot: string, opts: AddWorktreeOpts): Promise<GitWorktree> {
+  const args = ["worktree", "add"]
+  if (opts.kind === "new-branch") {
+    args.push("-b", opts.branch, opts.path)
+    if (opts.base) args.push(opts.base)
+  } else {
+    args.push(opts.path, opts.branch)
+  }
+  const result = await runGit(args, repoRoot)
+  if (result.exitCode !== 0) {
+    throw new Error(formatGitFailure(result) || "git worktree add failed")
+  }
+  const list = await listWorktrees(repoRoot)
+  // Resolve symlinks before comparing: on macOS, mkdtemp returns /var/... but
+  // git resolves /var -> /private/var, so a plain string match would fail.
+  const resolvedPath = existsSync(opts.path) ? realpathSync(opts.path) : opts.path
+  const created = list.find((w) => w.path === resolvedPath || w.path === opts.path)
+  if (!created) throw new Error("worktree created but not found in list")
+  return created
 }
