@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.45.0](https://github.com/cuongtranba/kanna/compare/v0.44.0...v0.45.0) (2026-05-10)
+
+
+### Features
+
+* **agent:** inline file downloads via offer_download SDK MCP tool ([#42](https://github.com/cuongtranba/kanna/issues/42)) ([20b2d99](https://github.com/cuongtranba/kanna/commit/20b2d998e532860551b22bd7dcd4b30ff1e436ef))
+* **bg-tasks:** visibility and stop control for background tasks ([#38](https://github.com/cuongtranba/kanna/issues/38)) ([416bab5](https://github.com/cuongtranba/kanna/commit/416bab580b0cede033f6a16e2bce29026d472e10))
+* **worktrees:** server git wrapper (phase 1) ([#44](https://github.com/cuongtranba/kanna/issues/44)) ([8c1553c](https://github.com/cuongtranba/kanna/commit/8c1553c8c8e0b0bb3d64b70b4b23eae4acfb6299))
+
+
+### Bug Fixes
+
+* **push:** skip push when chat is currently open ([#41](https://github.com/cuongtranba/kanna/issues/41)) ([f6c6bf2](https://github.com/cuongtranba/kanna/commit/f6c6bf23b4ccb658a6ea81c048947bdc3a035050))
+
 ## [0.44.0](https://github.com/cuongtranba/kanna/compare/v0.43.2...v0.44.0) (2026-05-08)
 
 
