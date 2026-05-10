@@ -1,4 +1,5 @@
 import { realpathSync, existsSync } from "node:fs"
+import { join } from "node:path"
 import type { GitWorktree } from "../shared/types"
 import { runGit, formatGitFailure } from "./diff-store"
 
@@ -52,6 +53,10 @@ export async function isDirty(worktreePath: string): Promise<{ dirty: boolean; f
     throw new Error(formatGitFailure(result) || "git status failed")
   }
   if (result.stdout.length === 0) return { dirty: false, fileCount: 0 }
+  // NOTE: git status --porcelain -z emits two NUL-separated fields for rename/copy
+  // entries (newname\0oldname). The naive split here over-counts those by one. The
+  // `dirty` boolean is unaffected; only `fileCount` is approximate. Phase 2 may
+  // refine if a precise count is needed for UI/gating.
   const fileCount = result.stdout.split("\0").filter((s) => s.length > 0).length
   return { dirty: fileCount > 0, fileCount }
 }
@@ -78,7 +83,10 @@ export function slugifyBranchForPath(branch: string): string {
 
 export function resolveDefaultWorktreePath(repoRoot: string, dir: string, branch: string, existing: Set<string>): string {
   const slug = slugifyBranchForPath(branch)
-  const base = `${repoRoot}/${dir}/${slug}`
+  if (slug === "") {
+    throw new Error(`branch name "${branch}" produces an empty path slug`)
+  }
+  const base = join(repoRoot, dir, slug)
   if (!existing.has(base)) return base
   for (let i = 2; ; i++) {
     const candidate = `${base}-${i}`

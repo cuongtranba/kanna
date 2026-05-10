@@ -202,4 +202,8 @@ describe("path helpers", () => {
     const existing = new Set(["/r/.worktrees/feat-x"])
     expect(resolveDefaultWorktreePath("/r", ".worktrees", "feat/x", existing)).toBe("/r/.worktrees/feat-x-2")
   })
+
+  test("resolveDefaultWorktreePath throws on empty slug", () => {
+    expect(() => resolveDefaultWorktreePath("/r", ".worktrees", "...", new Set())).toThrow(/empty path slug/)
+  })
 })
