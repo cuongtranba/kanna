@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import { join } from "node:path"
 import { git, makeTempRepo } from "./test-helpers/worktree-repo"
-import { parseWorktreeList, listWorktrees, addWorktree } from "./worktree-store"
+import { parseWorktreeList, listWorktrees, addWorktree, isDirty } from "./worktree-store"
+import { writeFileSync } from "node:fs"
 
 describe("parseWorktreeList", () => {
   test("parses primary + secondary worktree", () => {
@@ -139,4 +140,22 @@ test("addWorktree throws with git stderr on conflict", async () => {
   } finally {
     cleanup()
   }
+}, 30_000)
+
+test("isDirty is false on a clean tree", async () => {
+  const { dir, cleanup } = makeTempRepo()
+  try {
+    expect(await isDirty(dir)).toEqual({ dirty: false, fileCount: 0 })
+  } finally { cleanup() }
+}, 30_000)
+
+test("isDirty counts modified + untracked", async () => {
+  const { dir, cleanup } = makeTempRepo()
+  try {
+    writeFileSync(join(dir, "a.txt"), "hello")
+    writeFileSync(join(dir, "b.txt"), "world")
+    const r = await isDirty(dir)
+    expect(r.dirty).toBe(true)
+    expect(r.fileCount).toBe(2)
+  } finally { cleanup() }
 }, 30_000)

@@ -46,6 +46,16 @@ export type AddWorktreeOpts =
   | { kind: "new-branch"; branch: string; path: string; base?: string }
   | { kind: "existing-branch"; branch: string; path: string }
 
+export async function isDirty(worktreePath: string): Promise<{ dirty: boolean; fileCount: number }> {
+  const result = await runGit(["status", "--porcelain", "-z"], worktreePath)
+  if (result.exitCode !== 0) {
+    throw new Error(formatGitFailure(result) || "git status failed")
+  }
+  if (result.stdout.length === 0) return { dirty: false, fileCount: 0 }
+  const fileCount = result.stdout.split("\0").filter((s) => s.length > 0).length
+  return { dirty: fileCount > 0, fileCount }
+}
+
 export async function addWorktree(repoRoot: string, opts: AddWorktreeOpts): Promise<GitWorktree> {
   const args = ["worktree", "add"]
   if (opts.kind === "new-branch") {
