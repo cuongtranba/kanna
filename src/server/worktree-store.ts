@@ -1,0 +1,22 @@
+import type { GitWorktree } from "../shared/types"
+
+export function parseWorktreeList(porcelain: string): GitWorktree[] {
+  const blocks = porcelain.split(/\r?\n\r?\n/u).map((b) => b.trim()).filter(Boolean)
+  return blocks.map((block, index) => {
+    const lines = block.split(/\r?\n/u)
+    let path = ""
+    let head = ""
+    let branch = "(detached)"
+    let isLocked = false
+    for (const line of lines) {
+      if (line.startsWith("worktree ")) path = line.slice("worktree ".length).trim()
+      else if (line.startsWith("HEAD ")) head = line.slice("HEAD ".length).trim()
+      else if (line.startsWith("branch ")) {
+        const ref = line.slice("branch ".length).trim()
+        branch = ref.startsWith("refs/heads/") ? ref.slice("refs/heads/".length) : ref
+      } else if (line === "detached") branch = "(detached)"
+      else if (line === "locked" || line.startsWith("locked ")) isLocked = true
+    }
+    return { path, sha: head, branch, isPrimary: index === 0, isLocked }
+  })
+}
