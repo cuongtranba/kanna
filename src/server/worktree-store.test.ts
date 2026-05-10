@@ -113,3 +113,18 @@ test("addWorktree creates a new branch worktree", async () => {
     cleanup()
   }
 }, 30_000)
+
+test("addWorktree attaches an existing branch", async () => {
+  const { dir, cleanup } = makeTempRepo()
+  try {
+    git(dir, "branch", "feat/exists")
+    const wt = await addWorktree(dir, {
+      kind: "existing-branch",
+      branch: "feat/exists",
+      path: join(dir, ".worktrees", "feat-exists"),
+    })
+    expect(wt.branch).toBe("feat/exists")
+  } finally {
+    cleanup()
+  }
+}, 30_000)
