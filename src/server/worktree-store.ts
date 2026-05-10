@@ -2,6 +2,11 @@ import { realpathSync, existsSync } from "node:fs"
 import type { GitWorktree } from "../shared/types"
 import { runGit, formatGitFailure } from "./diff-store"
 
+// Resolves macOS /var -> /private/var symlinks so git's resolved path matches the caller-supplied one.
+function normalizePath(p: string): string {
+  return existsSync(p) ? realpathSync(p) : p
+}
+
 export function parseWorktreeList(porcelain: string): GitWorktree[] {
   const blocks = porcelain.split(/\r?\n\r?\n/u).map((b) => b.trim()).filter(Boolean)
   const parsed: Array<GitWorktree | null> = blocks.map((block) => {
@@ -56,8 +61,12 @@ export async function addWorktree(repoRoot: string, opts: AddWorktreeOpts): Prom
   const list = await listWorktrees(repoRoot)
   // Resolve symlinks before comparing: on macOS, mkdtemp returns /var/... but
   // git resolves /var -> /private/var, so a plain string match would fail.
-  const resolvedPath = existsSync(opts.path) ? realpathSync(opts.path) : opts.path
-  const created = list.find((w) => w.path === resolvedPath || w.path === opts.path)
-  if (!created) throw new Error("worktree created but not found in list")
+  const normalized = normalizePath(opts.path)
+  const created = list.find((w) => w.path === normalized || w.path === opts.path)
+  if (!created) {
+    throw new Error(
+      `worktree created but not found in list (requested: ${opts.path}, resolved: ${normalized})`
+    )
+  }
   return created
 }
