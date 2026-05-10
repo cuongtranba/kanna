@@ -128,3 +128,15 @@ test("addWorktree attaches an existing branch", async () => {
     cleanup()
   }
 }, 30_000)
+
+test("addWorktree throws with git stderr on conflict", async () => {
+  const { dir, cleanup } = makeTempRepo()
+  try {
+    await addWorktree(dir, { kind: "new-branch", branch: "feat/dup", path: join(dir, ".worktrees", "a") })
+    await expect(
+      addWorktree(dir, { kind: "new-branch", branch: "feat/dup", path: join(dir, ".worktrees", "b") })
+    ).rejects.toThrow(/already (used|exists)/)
+  } finally {
+    cleanup()
+  }
+}, 30_000)
