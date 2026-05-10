@@ -1,5 +1,24 @@
 import { describe, expect, test } from "bun:test"
-import { parseWorktreeList } from "./worktree-store"
+import { mkdtempSync, rmSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
+import { spawnSync } from "node:child_process"
+import { parseWorktreeList, listWorktrees } from "./worktree-store"
+
+function git(cwd: string, ...args: string[]) {
+  const r = spawnSync("git", args, { cwd, stdio: "pipe", env: { ...process.env, GIT_TERMINAL_PROMPT: "0" } })
+  if (r.status !== 0) throw new Error(`git ${args.join(" ")} failed: ${r.stderr.toString()}`)
+  return r.stdout.toString().trim()
+}
+
+function makeTempRepo(): { dir: string; cleanup: () => void } {
+  const dir = mkdtempSync(join(tmpdir(), "kanna-wt-"))
+  git(dir, "init", "-q", "-b", "main")
+  git(dir, "config", "user.email", "test@example.com")
+  git(dir, "config", "user.name", "Test")
+  git(dir, "commit", "--allow-empty", "-m", "init")
+  return { dir, cleanup: () => rmSync(dir, { recursive: true, force: true }) }
+}
 
 describe("parseWorktreeList", () => {
   test("parses primary + secondary worktree", () => {
@@ -69,3 +88,28 @@ describe("parseWorktreeList", () => {
     expect(parseWorktreeList(input)).toEqual([])
   })
 })
+
+test("listWorktrees returns the primary worktree for a fresh repo", async () => {
+  const { dir, cleanup } = makeTempRepo()
+  try {
+    const result = await listWorktrees(dir)
+    expect(result.length).toBe(1)
+    expect(result[0].isPrimary).toBe(true)
+    expect(result[0].branch).toBe("main")
+  } finally {
+    cleanup()
+  }
+}, 30_000)
+
+test("listWorktrees sees a secondary worktree", async () => {
+  const { dir, cleanup } = makeTempRepo()
+  try {
+    git(dir, "worktree", "add", join(dir, ".worktrees", "feat-x"), "-b", "feat/x")
+    const result = await listWorktrees(dir)
+    expect(result.length).toBe(2)
+    const secondary = result.find((w) => !w.isPrimary)
+    expect(secondary?.branch).toBe("feat/x")
+  } finally {
+    cleanup()
+  }
+}, 30_000)

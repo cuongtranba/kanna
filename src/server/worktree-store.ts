@@ -1,4 +1,5 @@
 import type { GitWorktree } from "../shared/types"
+import { runGit, formatGitFailure } from "./diff-store"
 
 export function parseWorktreeList(porcelain: string): GitWorktree[] {
   const blocks = porcelain.split(/\r?\n\r?\n/u).map((b) => b.trim()).filter(Boolean)
@@ -25,4 +26,12 @@ export function parseWorktreeList(porcelain: string): GitWorktree[] {
   })
   const filtered = parsed.filter((w): w is GitWorktree => w !== null)
   return filtered.map((w, index) => ({ ...w, isPrimary: index === 0 }))
+}
+
+export async function listWorktrees(repoRoot: string): Promise<GitWorktree[]> {
+  const result = await runGit(["worktree", "list", "--porcelain"], repoRoot)
+  if (result.exitCode !== 0) {
+    throw new Error(formatGitFailure(result) || "git worktree list failed")
+  }
+  return parseWorktreeList(result.stdout)
 }
