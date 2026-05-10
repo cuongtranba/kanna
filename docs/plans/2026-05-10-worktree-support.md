@@ -68,9 +68,9 @@ git commit -m "refactor(diff-store): export runGit and formatGitFailure for reus
 export interface GitWorktree {
   path: string                 // absolute
   branch: string               // e.g. "main", "feat/x", "(detached)"
-  head: string                 // commit sha
+  sha: string                  // HEAD commit sha
   isPrimary: boolean
-  isLocked: boolean
+  isLocked: boolean            // git has flagged this worktree as locked (pruning inhibited)
 }
 ```
 
@@ -113,8 +113,8 @@ describe("parseWorktreeList", () => {
     const result = parseWorktreeList(input)
 
     expect(result).toEqual([
-      { path: "/repo/main", head: "abc123", branch: "main", isPrimary: true,  isLocked: false },
-      { path: "/repo/.worktrees/feat-x", head: "def456", branch: "feat/x", isPrimary: false, isLocked: false },
+      { path: "/repo/main", sha: "abc123", branch: "main", isPrimary: true,  isLocked: false },
+      { path: "/repo/.worktrees/feat-x", sha: "def456", branch: "feat/x", isPrimary: false, isLocked: false },
     ])
   })
 
@@ -173,7 +173,7 @@ export function parseWorktreeList(porcelain: string): GitWorktree[] {
       } else if (line === "detached") branch = "(detached)"
       else if (line === "locked" || line.startsWith("locked ")) isLocked = true
     }
-    return { path, head, branch, isPrimary: index === 0, isLocked }
+    return { path, sha: head, branch, isPrimary: index === 0, isLocked }
   })
 }
 ```

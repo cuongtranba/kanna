@@ -1284,7 +1284,7 @@ export type BackgroundTask =
 export interface GitWorktree {
   path: string                 // absolute
   branch: string               // e.g. "main", "feat/x", "(detached)"
-  head: string                 // commit sha
+  sha: string                  // HEAD commit sha
   isPrimary: boolean
-  isLocked: boolean
+  isLocked: boolean            // git has flagged this worktree as locked (pruning inhibited)
 }
