@@ -6,7 +6,20 @@ import { spawnSync } from "node:child_process"
 import { parseWorktreeList, listWorktrees } from "./worktree-store"
 
 function git(cwd: string, ...args: string[]) {
-  const r = spawnSync("git", args, { cwd, stdio: "pipe", env: { ...process.env, GIT_TERMINAL_PROMPT: "0" } })
+  // spawnSync (not Bun.spawn) is chosen here so makeTempRepo can stay synchronous;
+  // the env block mirrors NON_INTERACTIVE_GIT_ENV in diff-store.ts to ensure no
+  // credential helper or askpass prompt can hang the test on CI runners.
+  const r = spawnSync("git", args, {
+    cwd,
+    stdio: "pipe",
+    env: {
+      ...process.env,
+      GIT_TERMINAL_PROMPT: "0",
+      GIT_ASKPASS: "echo",
+      SSH_ASKPASS: "echo",
+      GCM_INTERACTIVE: "Never",
+    },
+  })
   if (r.status !== 0) throw new Error(`git ${args.join(" ")} failed: ${r.stderr.toString()}`)
   return r.stdout.toString().trim()
 }
