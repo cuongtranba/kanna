@@ -1280,3 +1280,11 @@ export type BackgroundTask =
       startedAt: number
       lastOutput: string
     }
+
+export interface GitWorktree {
+  path: string                 // absolute
+  branch: string               // e.g. "main", "feat/x", "(detached)"
+  head: string                 // commit sha
+  isPrimary: boolean
+  isLocked: boolean
+}
