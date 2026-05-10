@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { join } from "node:path"
 import { git, makeTempRepo } from "./test-helpers/worktree-repo"
-import { parseWorktreeList, listWorktrees, addWorktree, isDirty } from "./worktree-store"
+import { parseWorktreeList, listWorktrees, addWorktree, isDirty, removeWorktree } from "./worktree-store"
 import { writeFileSync } from "node:fs"
 
 describe("parseWorktreeList", () => {
@@ -157,5 +157,36 @@ test("isDirty counts modified + untracked", async () => {
     const r = await isDirty(dir)
     expect(r.dirty).toBe(true)
     expect(r.fileCount).toBe(2)
+  } finally { cleanup() }
+}, 30_000)
+
+test("removeWorktree removes a clean worktree", async () => {
+  const { dir, cleanup } = makeTempRepo()
+  try {
+    const path = join(dir, ".worktrees", "feat-z")
+    await addWorktree(dir, { kind: "new-branch", branch: "feat/z", path })
+    await removeWorktree(dir, path, { force: false })
+    expect((await listWorktrees(dir)).length).toBe(1)
+  } finally { cleanup() }
+}, 30_000)
+
+test("removeWorktree refuses dirty without force", async () => {
+  const { dir, cleanup } = makeTempRepo()
+  try {
+    const path = join(dir, ".worktrees", "feat-z")
+    await addWorktree(dir, { kind: "new-branch", branch: "feat/z", path })
+    writeFileSync(join(path, "x.txt"), "dirty")
+    await expect(removeWorktree(dir, path, { force: false })).rejects.toThrow()
+  } finally { cleanup() }
+}, 30_000)
+
+test("removeWorktree --force clears dirty worktree", async () => {
+  const { dir, cleanup } = makeTempRepo()
+  try {
+    const path = join(dir, ".worktrees", "feat-z")
+    await addWorktree(dir, { kind: "new-branch", branch: "feat/z", path })
+    writeFileSync(join(path, "x.txt"), "dirty")
+    await removeWorktree(dir, path, { force: true })
+    expect((await listWorktrees(dir)).length).toBe(1)
   } finally { cleanup() }
 }, 30_000)

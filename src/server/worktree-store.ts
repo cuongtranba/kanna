@@ -56,6 +56,16 @@ export async function isDirty(worktreePath: string): Promise<{ dirty: boolean; f
   return { dirty: fileCount > 0, fileCount }
 }
 
+export async function removeWorktree(repoRoot: string, path: string, opts: { force: boolean }): Promise<void> {
+  const args = ["worktree", "remove"]
+  if (opts.force) args.push("--force")
+  args.push(path)
+  const result = await runGit(args, repoRoot)
+  if (result.exitCode !== 0) {
+    throw new Error(formatGitFailure(result) || "git worktree remove failed")
+  }
+}
+
 export async function addWorktree(repoRoot: string, opts: AddWorktreeOpts): Promise<GitWorktree> {
   const args = ["worktree", "add"]
   if (opts.kind === "new-branch") {
