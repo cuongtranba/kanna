@@ -128,7 +128,7 @@ const NON_INTERACTIVE_GIT_ENV = {
   GCM_INTERACTIVE: "Never",
 } as const
 
-async function runGit(args: string[], cwd: string) {
+export async function runGit(args: string[], cwd: string) {
   const process = Bun.spawn(["git", "-C", cwd, ...args], {
     stdout: "pipe",
     stderr: "pipe",
@@ -167,7 +167,7 @@ async function runCommand(args: string[]) {
   }
 }
 
-function formatGitFailure(result: Awaited<ReturnType<typeof runGit>>) {
+export function formatGitFailure(result: Awaited<ReturnType<typeof runGit>>) {
   return [result.stderr.trim(), result.stdout.trim()].filter(Boolean).join("\n")
 }
 

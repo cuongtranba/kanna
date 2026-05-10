@@ -1,0 +1,120 @@
+import { realpathSync, existsSync } from "node:fs"
+import { join } from "node:path"
+import type { GitWorktree } from "../shared/types"
+import { runGit, formatGitFailure } from "./diff-store"
+
+// Resolves macOS /var -> /private/var symlinks so git's resolved path matches the caller-supplied one.
+function normalizePath(p: string): string {
+  return existsSync(p) ? realpathSync(p) : p
+}
+
+export function parseWorktreeList(porcelain: string): GitWorktree[] {
+  const blocks = porcelain.split(/\r?\n\r?\n/u).map((b) => b.trim()).filter(Boolean)
+  const parsed: Array<GitWorktree | null> = blocks.map((block) => {
+    const lines = block.split(/\r?\n/u)
+    let path = ""
+    let head = ""
+    let branch = "(detached)"
+    let isLocked = false
+    let isBare = false
+    for (const line of lines) {
+      if (line.startsWith("worktree ")) path = line.slice("worktree ".length).trim()
+      else if (line.startsWith("HEAD ")) head = line.slice("HEAD ".length).trim()
+      else if (line.startsWith("branch ")) {
+        const ref = line.slice("branch ".length).trim()
+        branch = ref.startsWith("refs/heads/") ? ref.slice("refs/heads/".length) : ref
+      } else if (line === "detached") branch = "(detached)"
+      else if (line === "locked" || line.startsWith("locked ")) isLocked = true
+      else if (line === "bare") isBare = true
+    }
+    if (isBare) return null
+    if (path === "") return null
+    return { path, sha: head, branch, isPrimary: false, isLocked }
+  })
+  const filtered = parsed.filter((w): w is GitWorktree => w !== null)
+  return filtered.map((w, index) => ({ ...w, isPrimary: index === 0 }))
+}
+
+export async function listWorktrees(repoRoot: string): Promise<GitWorktree[]> {
+  const result = await runGit(["worktree", "list", "--porcelain"], repoRoot)
+  if (result.exitCode !== 0) {
+    throw new Error(formatGitFailure(result) || "git worktree list failed")
+  }
+  return parseWorktreeList(result.stdout)
+}
+
+export type AddWorktreeOpts =
+  | { kind: "new-branch"; branch: string; path: string; base?: string }
+  | { kind: "existing-branch"; branch: string; path: string }
+
+export async function isDirty(worktreePath: string): Promise<{ dirty: boolean; fileCount: number }> {
+  const result = await runGit(["status", "--porcelain", "-z"], worktreePath)
+  if (result.exitCode !== 0) {
+    throw new Error(formatGitFailure(result) || "git status failed")
+  }
+  if (result.stdout.length === 0) return { dirty: false, fileCount: 0 }
+  // NOTE: git status --porcelain -z emits two NUL-separated fields for rename/copy
+  // entries (newname\0oldname). The naive split here over-counts those by one. The
+  // `dirty` boolean is unaffected; only `fileCount` is approximate. Phase 2 may
+  // refine if a precise count is needed for UI/gating.
+  const fileCount = result.stdout.split("\0").filter((s) => s.length > 0).length
+  return { dirty: fileCount > 0, fileCount }
+}
+
+export async function removeWorktree(repoRoot: string, path: string, opts: { force: boolean }): Promise<void> {
+  const args = ["worktree", "remove"]
+  if (opts.force) args.push("--force")
+  args.push(path)
+  const result = await runGit(args, repoRoot)
+  if (result.exitCode !== 0) {
+    throw new Error(formatGitFailure(result) || "git worktree remove failed")
+  }
+}
+
+export function slugifyBranchForPath(branch: string): string {
+  return branch
+    .toLowerCase()
+    .replace(/[^a-z0-9._/-]+/gu, "-")
+    .replace(/[\\/]+/gu, "-")
+    .replace(/\.+/gu, "-")
+    .replace(/-+/gu, "-")
+    .replace(/^-+|-+$/gu, "")
+}
+
+export function resolveDefaultWorktreePath(repoRoot: string, dir: string, branch: string, existing: Set<string>): string {
+  const slug = slugifyBranchForPath(branch)
+  if (slug === "") {
+    throw new Error(`branch name "${branch}" produces an empty path slug`)
+  }
+  const base = join(repoRoot, dir, slug)
+  if (!existing.has(base)) return base
+  for (let i = 2; ; i++) {
+    const candidate = `${base}-${i}`
+    if (!existing.has(candidate)) return candidate
+  }
+}
+
+export async function addWorktree(repoRoot: string, opts: AddWorktreeOpts): Promise<GitWorktree> {
+  const args = ["worktree", "add"]
+  if (opts.kind === "new-branch") {
+    args.push("-b", opts.branch, opts.path)
+    if (opts.base) args.push(opts.base)
+  } else {
+    args.push(opts.path, opts.branch)
+  }
+  const result = await runGit(args, repoRoot)
+  if (result.exitCode !== 0) {
+    throw new Error(formatGitFailure(result) || "git worktree add failed")
+  }
+  const list = await listWorktrees(repoRoot)
+  // Resolve symlinks before comparing: on macOS, mkdtemp returns /var/... but
+  // git resolves /var -> /private/var, so a plain string match would fail.
+  const normalized = normalizePath(opts.path)
+  const created = list.find((w) => w.path === normalized || w.path === opts.path)
+  if (!created) {
+    throw new Error(
+      `worktree created but not found in list (requested: ${opts.path}, resolved: ${normalized})`
+    )
+  }
+  return created
+}
