@@ -39,6 +39,7 @@ import { deriveChatSchedules } from "./auto-continue/read-model"
 import type { TunnelGateway } from "./cloudflare-tunnel/gateway"
 import type { BackgroundTaskRegistry } from "./background-tasks"
 import type { TerminalManager } from "./terminal-manager"
+import { OAuthTokenPool } from "./oauth-pool/oauth-token-pool"
 
 export function resolveSpawnPaths(
   chat: Pick<ChatRecord, "id" | "stackBindings">,
@@ -127,6 +128,7 @@ interface ClaudeSessionState {
   accountInfoLoaded: boolean
   nextPromptSeq: number
   pendingPromptSeqs: number[]
+  activeTokenId: string | null
 }
 
 interface AgentCoordinatorArgs {
@@ -145,6 +147,7 @@ interface AgentCoordinatorArgs {
     planMode: boolean
     sessionToken: string | null
     forkSession: boolean
+    oauthToken: string | null
     additionalDirectories?: string[]
     onToolRequest: (request: HarnessToolRequest) => Promise<unknown>
   }) => Promise<ClaudeSessionHandle>
@@ -154,6 +157,7 @@ interface AgentCoordinatorArgs {
   getAutoResumePreference?: () => boolean
   throwOnClaudeSessionStart?: boolean
   backgroundTasks?: BackgroundTaskRegistry
+  oauthPool?: OAuthTokenPool
 }
 
 interface SendToStartingProfile {
@@ -609,6 +613,14 @@ class AsyncMessageQueue<T> implements AsyncIterable<T> {
   }
 }
 
+export function buildClaudeEnv(baseEnv: NodeJS.ProcessEnv, oauthToken: string | null): NodeJS.ProcessEnv {
+  const { CLAUDECODE: _unused, ...rest } = baseEnv
+  // Empty string is treated the same as null. Blank tokens are rejected at persistence time
+  // by normalizeTokenEntry, so in practice oauthToken is either a non-empty string or null.
+  if (!oauthToken) return rest
+  return { ...rest, CLAUDE_CODE_OAUTH_TOKEN: oauthToken }
+}
+
 async function startClaudeSession(args: {
   projectId: string
   localPath: string
@@ -617,6 +629,7 @@ async function startClaudeSession(args: {
   planMode: boolean
   sessionToken: string | null
   forkSession: boolean
+  oauthToken: string | null
   additionalDirectories?: string[]
   onToolRequest: (request: HarnessToolRequest) => Promise<unknown>
 }): Promise<ClaudeSessionHandle> {
@@ -704,7 +717,7 @@ async function startClaudeSession(args: {
       },
       settingSources: ["user", "project", "local"],
       pathToClaudeCodeExecutable: process.env.CLAUDE_EXECUTABLE?.replace(/^~(?=\/|$)/, homedir()) || undefined,
-      env: (() => { const { CLAUDECODE: _, ...env } = process.env; return env })(),
+      env: buildClaudeEnv(process.env, args.oauthToken),
     },
   })
 
@@ -791,6 +804,8 @@ function extractBackgroundTaskId(content: unknown): string | null {
   return null
 }
 
+const TOKEN_ROTATION_SCHEDULE_DELAY_MS = 100
+
 export class AgentCoordinator {
   private readonly store: EventStore
   private readonly onStateChange: (chatId?: string, options?: { immediate?: boolean }) => void
@@ -812,6 +827,7 @@ export class AgentCoordinator {
   private readonly autoResumeByChat = new Map<string, boolean>()
   private readonly tunnelGateway: TunnelGateway | null
   private readonly backgroundTasks: BackgroundTaskRegistry | null
+  private readonly oauthPool: OAuthTokenPool | null
   private readonly pendingBashCalls = new Map<string, { command: string; chatId: string; isBg: boolean }>()
 
   constructor(args: AgentCoordinatorArgs) {
@@ -831,6 +847,7 @@ export class AgentCoordinator {
     this.throwOnClaudeSessionStart = args.throwOnClaudeSessionStart ?? false
     this.tunnelGateway = args.tunnelGateway ?? null
     this.backgroundTasks = args.backgroundTasks ?? null
+    this.oauthPool = args.oauthPool ?? null
     this.backgroundTasks?.setStrategies({
       closeStream: async (task) => {
         await this.stopDraining(task.chatId)
@@ -972,6 +989,8 @@ export class AgentCoordinator {
       } else {
         const defaultModel = normalizeServerModel("claude")
         const defaultOptions = normalizeClaudeModelOptions(defaultModel)
+        const picked = this.oauthPool?.pickActive() ?? null
+        if (picked) this.oauthPool!.markUsed(picked.id)
         const ephemeral = await this.startClaudeSessionFn({
           projectId: project.id,
           localPath: project.localPath,
@@ -980,6 +999,7 @@ export class AgentCoordinator {
           planMode: chat.planMode ?? false,
           sessionToken: chat.sessionToken ?? null,
           forkSession: false,
+          oauthToken: picked?.token ?? null,
           onToolRequest: async () => null,
         })
         try {
@@ -1347,6 +1367,8 @@ export class AgentCoordinator {
         this.claudeSessions.delete(args.chatId)
       }
 
+      const picked = this.oauthPool?.pickActive() ?? null
+      if (picked) this.oauthPool!.markUsed(picked.id)
       const started = await this.startClaudeSessionFn({
         projectId: args.projectId,
         localPath: args.localPath,
@@ -1355,6 +1377,7 @@ export class AgentCoordinator {
         planMode: args.planMode,
         sessionToken: args.sessionToken,
         forkSession: args.forkSession,
+        oauthToken: picked?.token ?? null,
         additionalDirectories: args.additionalDirectories,
         onToolRequest: args.onToolRequest,
       })
@@ -1372,6 +1395,7 @@ export class AgentCoordinator {
         accountInfoLoaded: false,
         nextPromptSeq: 0,
         pendingPromptSeqs: [],
+        activeTokenId: picked?.id ?? null,
       }
       this.claudeSessions.set(args.chatId, session)
       void this.runClaudeSession(session)
@@ -1851,33 +1875,53 @@ export class AgentCoordinator {
     const live = deriveChatSchedules(this.store.getAutoContinueEvents(chatId), chatId).liveScheduleId
     if (live !== null) return true
 
+    const session = this.claudeSessions.get(chatId)
+    if (this.oauthPool && session?.activeTokenId) {
+      this.oauthPool.markLimited(session.activeTokenId, detection.resetAt)
+    }
+    const rotationTarget = this.oauthPool?.pickActive() ?? null
+    const canRotate = rotationTarget !== null
+      && (!session?.activeTokenId || rotationTarget.id !== session.activeTokenId)
+
     const now = Date.now()
     const scheduleId = crypto.randomUUID()
     const base = { v: AUTO_CONTINUE_EVENT_VERSION, timestamp: now, chatId, scheduleId }
 
-    const event: AutoContinueEvent = this.resolveAutoResumeFor(chatId)
+    const event: AutoContinueEvent = canRotate
       ? {
           ...base,
           kind: "auto_continue_accepted",
-          scheduledAt: detection.resetAt,
+          scheduledAt: now + TOKEN_ROTATION_SCHEDULE_DELAY_MS,
           tz: detection.tz,
-          source: "auto_setting",
+          source: "token_rotation",
           resetAt: detection.resetAt,
           detectedAt: now,
         }
-      : {
-          ...base,
-          kind: "auto_continue_proposed",
-          detectedAt: now,
-          resetAt: detection.resetAt,
-          tz: detection.tz,
-        }
+      : this.resolveAutoResumeFor(chatId)
+        ? {
+            ...base,
+            kind: "auto_continue_accepted",
+            scheduledAt: detection.resetAt,
+            tz: detection.tz,
+            source: "auto_setting",
+            resetAt: detection.resetAt,
+            detectedAt: now,
+          }
+        : {
+            ...base,
+            kind: "auto_continue_proposed",
+            detectedAt: now,
+            resetAt: detection.resetAt,
+            tz: detection.tz,
+          }
 
     await this.emitAutoContinueEvent(event)
-    await this.store.appendMessage(chatId, timestamped({
-      kind: "auto_continue_prompt",
-      scheduleId,
-    }))
+    if (!canRotate) {
+      await this.store.appendMessage(chatId, timestamped({
+        kind: "auto_continue_prompt",
+        scheduleId,
+      }))
+    }
 
     return true
   }

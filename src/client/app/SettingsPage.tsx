@@ -47,6 +47,7 @@ import {
 } from "../../shared/types"
 import { markdownComponents } from "../components/messages/shared"
 import { ChatPreferenceControls } from "../components/chat-ui/ChatPreferenceControls"
+import { OAuthTokenPoolCard } from "../components/chat-ui/OAuthTokenPoolCard"
 import { EDITOR_OPTIONS, EditorIcon } from "../components/editor-icons"
 import { Button, buttonVariants } from "../components/ui/button"
 import { Dialog, DialogBody, DialogContent, DialogFooter, DialogTitle } from "../components/ui/dialog"
@@ -929,6 +930,8 @@ export function SettingsPage() {
   const updateSnapshot = state.updateSnapshot
   const handleWriteAppSettings = state.handleWriteAppSettings
   const handleWriteCloudflareTunnel = state.handleWriteCloudflareTunnel
+  const handleWriteClaudeAuth = state.handleWriteClaudeAuth
+  const handleTestOAuthToken = state.handleTestOAuthToken
   const handleReadLlmProvider = state.handleReadLlmProvider
   const handleWriteLlmProvider = state.handleWriteLlmProvider
   const handleValidateLlmProvider = state.handleValidateLlmProvider
@@ -1880,9 +1883,22 @@ export function SettingsPage() {
                 ) : selectedPage === "providers" ? (
                   <div className="border-b border-border">
                     <SettingsRow
+                      title="Claude OAuth tokens"
+                      description="Manage multiple Claude OAuth tokens. Kanna switches automatically when one hits its rate limit."
+                      bordered={false}
+                      alignStart
+                    >
+                      <div className="w-full md:w-[420px]">
+                        <OAuthTokenPoolCard
+                          tokens={appSettings?.claudeAuth.tokens ?? []}
+                          onWrite={handleWriteClaudeAuth}
+                          onTest={handleTestOAuthToken}
+                        />
+                      </div>
+                    </SettingsRow>
+                    <SettingsRow
                       title="Default Provider"
                       description="The default harness used for new chats before a provider is locked by an existing session."
-                      bordered={false}
                     >
                       <Select
                         value={defaultProvider}

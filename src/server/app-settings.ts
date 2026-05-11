@@ -8,6 +8,7 @@ import {
   AUTH_DEFAULTS,
   AUTH_SESSION_MAX_AGE_DAYS_MAX,
   AUTH_SESSION_MAX_AGE_DAYS_MIN,
+  CLAUDE_AUTH_DEFAULTS,
   CLOUDFLARE_TUNNEL_DEFAULTS,
   DEFAULT_CLAUDE_MODEL_OPTIONS,
   DEFAULT_CODEX_MODEL_OPTIONS,
@@ -16,6 +17,8 @@ import {
   normalizeClaudeContextWindow,
   normalizeClaudeModelId,
   normalizeCodexModelId,
+  OAUTH_TOKEN_LABEL_MAX,
+  OAUTH_TOKEN_VALUE_MAX,
   supportsClaudeMaxReasoningEffort,
   UPLOAD_DEFAULTS,
   UPLOAD_MAX_FILE_SIZE_MB_MAX,
@@ -27,14 +30,21 @@ import {
   type ChatProviderPreferences,
   type ChatSoundId,
   type ChatSoundPreference,
+  type ClaudeAuthSettings,
   type ClaudeModelOptions,
   type CloudflareTunnelSettings,
   type CodexModelOptions,
   type DefaultProviderPreference,
   type EditorPreset,
+  type OAuthTokenEntry,
+  type OAuthTokenStatus,
   type ProviderPreference,
   type UploadSettings,
 } from "../shared/types"
+
+type StatusPatch = Partial<Pick<OAuthTokenEntry,
+  "status" | "limitedUntil" | "lastUsedAt" | "lastErrorAt" | "lastErrorMessage"
+>>
 
 interface AppSettingsFile {
   analyticsEnabled?: unknown
@@ -58,6 +68,7 @@ interface AppSettingsFile {
   }
   cloudflareTunnel?: unknown
   auth?: unknown
+  claudeAuth?: unknown
   uploads?: unknown
 }
 
@@ -307,6 +318,54 @@ function normalizeUploadSettings(value: unknown, warnings: string[]): UploadSett
   return { maxFileSizeMb }
 }
 
+function normalizeOAuthTokenStatus(value: unknown): OAuthTokenStatus {
+  return value === "limited" || value === "error" ? value : "active"
+}
+
+function normalizeTokenEntry(value: unknown, warnings: string[]): OAuthTokenEntry | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null
+  const src = value as Record<string, unknown>
+  const id = typeof src.id === "string" && src.id.trim() ? src.id.trim() : null
+  const token = typeof src.token === "string" ? src.token : ""
+  if (!id || !token) {
+    warnings.push("claudeAuth.tokens entry missing id or token")
+    return null
+  }
+  const label = typeof src.label === "string" && src.label.trim()
+    ? src.label.trim().slice(0, OAUTH_TOKEN_LABEL_MAX)
+    : id
+  return {
+    id,
+    label,
+    token: token.slice(0, OAUTH_TOKEN_VALUE_MAX),
+    status: normalizeOAuthTokenStatus(src.status),
+    limitedUntil: typeof src.limitedUntil === "number" && Number.isFinite(src.limitedUntil) ? src.limitedUntil : null,
+    lastUsedAt: typeof src.lastUsedAt === "number" && Number.isFinite(src.lastUsedAt) ? src.lastUsedAt : null,
+    lastErrorAt: typeof src.lastErrorAt === "number" && Number.isFinite(src.lastErrorAt) ? src.lastErrorAt : null,
+    lastErrorMessage: typeof src.lastErrorMessage === "string" ? src.lastErrorMessage : null,
+    addedAt: typeof src.addedAt === "number" && Number.isFinite(src.addedAt) ? src.addedAt : Date.now(),
+  }
+}
+
+function normalizeClaudeAuth(value: unknown, warnings: string[]): ClaudeAuthSettings {
+  if (value === undefined) return { ...CLAUDE_AUTH_DEFAULTS }
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    warnings.push("claudeAuth must be an object")
+    return { ...CLAUDE_AUTH_DEFAULTS }
+  }
+  const src = value as { tokens?: unknown }
+  if (src.tokens !== undefined && !Array.isArray(src.tokens)) {
+    warnings.push("claudeAuth.tokens must be an array")
+    return { ...CLAUDE_AUTH_DEFAULTS }
+  }
+  const tokens: OAuthTokenEntry[] = []
+  for (const raw of (src.tokens ?? []) as unknown[]) {
+    const entry = normalizeTokenEntry(raw, warnings)
+    if (entry) tokens.push(entry)
+  }
+  return { tokens }
+}
+
 function toFilePayload(state: AppSettingsState) {
   return {
     analyticsEnabled: state.analyticsEnabled,
@@ -321,6 +380,7 @@ function toFilePayload(state: AppSettingsState) {
     providerDefaults: state.providerDefaults,
     cloudflareTunnel: state.cloudflareTunnel,
     auth: state.auth,
+    claudeAuth: state.claudeAuth,
     uploads: state.uploads,
   }
 }
@@ -340,6 +400,7 @@ function toSnapshot(state: AppSettingsState): AppSettingsSnapshot {
     filePathDisplay: state.filePathDisplay,
     cloudflareTunnel: state.cloudflareTunnel,
     auth: state.auth,
+    claudeAuth: state.claudeAuth,
     uploads: state.uploads,
   }
 }
@@ -373,6 +434,7 @@ function normalizeAppSettings(
 
   const cloudflareTunnel = normalizeCloudflareTunnel(source?.cloudflareTunnel, warnings)
   const auth = normalizeAuthSettings(source?.auth, warnings)
+  const claudeAuth = normalizeClaudeAuth(source?.claudeAuth, warnings)
   const uploads = normalizeUploadSettings(source?.uploads, warnings)
 
   const editorPreset = normalizeEditorPreset(source?.editor?.preset)
@@ -397,6 +459,7 @@ function normalizeAppSettings(
     filePathDisplay: formatDisplayPath(filePath),
     cloudflareTunnel,
     auth,
+    claudeAuth,
     uploads,
   }
 
@@ -426,6 +489,7 @@ function toComparablePayload(source: AppSettingsFile) {
     providerDefaults: source.providerDefaults,
     cloudflareTunnel: source.cloudflareTunnel,
     auth: source.auth,
+    claudeAuth: source.claudeAuth,
     uploads: source.uploads,
   }
 }
@@ -467,6 +531,9 @@ function applyPatch(state: AppSettingsState, patch: AppSettingsPatch): AppSettin
     auth: {
       ...state.auth,
       ...patch.auth,
+    },
+    claudeAuth: {
+      tokens: patch.claudeAuth?.tokens ?? state.claudeAuth.tokens,
     },
     uploads: {
       ...state.uploads,
@@ -575,6 +642,18 @@ export class AppSettingsManager {
       }
     }
     return this.writePatch({ uploads: patch })
+  }
+
+  async setClaudeAuth(patch: Partial<ClaudeAuthSettings>) {
+    if (patch.tokens !== undefined && !Array.isArray(patch.tokens)) {
+      throw new Error("claudeAuth.tokens must be an array")
+    }
+    return this.writePatch({ claudeAuth: patch })
+  }
+
+  async mutateTokenStatus(id: string, patch: StatusPatch) {
+    const tokens = this.state.claudeAuth.tokens.map((t) => t.id === id ? { ...t, ...patch } : t)
+    return this.setClaudeAuth({ tokens })
   }
 
   async writePatch(patch: AppSettingsPatch) {

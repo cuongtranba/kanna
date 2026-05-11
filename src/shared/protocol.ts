@@ -7,6 +7,7 @@ import type {
   ChatDiffSnapshot,
   ChatHistoryPage,
   ChatSnapshot,
+  ClaudeAuthSettings,
   CloudflareTunnelSettings,
   DiffCommitMode,
   KeybindingsSnapshot,
@@ -88,6 +89,8 @@ export type ClientCommand =
   | { type: "settings.readAppSettings" }
   | { type: "settings.writeAppSettings"; analyticsEnabled: boolean }
   | { type: "appSettings.setCloudflareTunnel"; patch: Partial<CloudflareTunnelSettings> }
+  | { type: "appSettings.setClaudeAuth"; patch: Partial<ClaudeAuthSettings> }
+  | { type: "appSettings.testOAuthToken"; token: string }
   | { type: "settings.writeAppSettingsPatch"; patch: AppSettingsPatch }
   | { type: "settings.readLlmProvider" }
   | { type: "skills.search"; query: string; limit?: number }

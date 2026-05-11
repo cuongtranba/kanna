@@ -48,6 +48,9 @@ export function mergeAppSettingsPatch(
       ...settings.cloudflareTunnel,
       ...patch.cloudflareTunnel,
     },
+    claudeAuth: {
+      tokens: patch.claudeAuth?.tokens ?? settings.claudeAuth.tokens,
+    },
     auth: {
       ...settings.auth,
       ...patch.auth,

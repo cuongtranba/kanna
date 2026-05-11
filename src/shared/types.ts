@@ -503,6 +503,31 @@ export const AUTH_DEFAULTS: AuthSettings = {
 export const AUTH_SESSION_MAX_AGE_DAYS_MIN = 1
 export const AUTH_SESSION_MAX_AGE_DAYS_MAX = 365
 
+export type OAuthTokenStatus = "active" | "limited" | "error"
+
+export interface OAuthTokenEntry {
+  id: string
+  label: string
+  token: string
+  status: OAuthTokenStatus
+  limitedUntil: number | null
+  lastUsedAt: number | null
+  lastErrorAt: number | null
+  lastErrorMessage: string | null
+  addedAt: number
+}
+
+export interface ClaudeAuthSettings {
+  tokens: OAuthTokenEntry[]
+}
+
+export const CLAUDE_AUTH_DEFAULTS: ClaudeAuthSettings = {
+  tokens: [],
+}
+
+export const OAUTH_TOKEN_LABEL_MAX = 64
+export const OAUTH_TOKEN_VALUE_MAX = 1024
+
 export interface UploadSettings {
   maxFileSizeMb: number
 }
@@ -534,6 +559,7 @@ export interface AppSettingsSnapshot {
   filePathDisplay: string
   cloudflareTunnel: CloudflareTunnelSettings
   auth: AuthSettings
+  claudeAuth: ClaudeAuthSettings
   uploads: UploadSettings
 }
 
@@ -552,22 +578,8 @@ export interface AppSettingsPatch {
   }
   cloudflareTunnel?: Partial<CloudflareTunnelSettings>
   auth?: Partial<AuthSettings>
+  claudeAuth?: Partial<ClaudeAuthSettings>
   uploads?: Partial<UploadSettings>
-}
-
-export interface AppSettingsPatch {
-  analyticsEnabled?: boolean
-  browserSettingsMigrated?: boolean
-  theme?: AppThemePreference
-  chatSoundPreference?: ChatSoundPreference
-  chatSoundId?: ChatSoundId
-  terminal?: Partial<AppSettingsSnapshot["terminal"]>
-  editor?: Partial<AppSettingsSnapshot["editor"]>
-  defaultProvider?: DefaultProviderPreference
-  providerDefaults?: {
-    claude?: Partial<ProviderPreference<ClaudeModelOptions>>
-    codex?: Partial<ProviderPreference<CodexModelOptions>>
-  }
 }
 
 export interface LlmProviderFile {
