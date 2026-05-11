@@ -1,7 +1,8 @@
 import { type MouseEvent as ReactMouseEvent } from "react"
 import { Check, Flower, GitBranch, Loader2, Menu, MoreHorizontal, PanelLeft, PanelRight, SquarePen, Terminal, UserRoundPlus } from "lucide-react"
 import type { EditorOpenSettings, EditorPreset, OpenExternalAction } from "../../../shared/protocol"
-import type { ChatStateTimings, KannaStatus } from "../../../shared/types"
+import type { AgentProvider, ChatStateTimings, KannaStatus, ResolvedStackBinding } from "../../../shared/types"
+import { PeerWorktreeStrip } from "./PeerWorktreeStrip"
 import { Button } from "../ui/button"
 import { CardHeader } from "../ui/card"
 import { HotkeyTooltip, HotkeyTooltipContent, HotkeyTooltipTrigger, Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip"
@@ -122,6 +123,9 @@ interface Props {
   timings?: ChatStateTimings
   status?: KannaStatus
   onOpenBgTasks?: () => void
+  resolvedBindings?: ResolvedStackBinding[]
+  provider?: AgentProvider | null
+  onOpenPath?: (path: string) => void
 }
 
 export function ChatNavbar({
@@ -152,6 +156,9 @@ export function ChatNavbar({
   timings,
   status,
   onOpenBgTasks,
+  resolvedBindings,
+  provider,
+  onOpenPath = () => undefined,
 }: Props) {
   const branchLabel = !hasGitRepo
     ? "Setup Git"
@@ -354,6 +361,13 @@ export function ChatNavbar({
           </div>
         ) : null}
       </div>
+      {resolvedBindings && resolvedBindings.length > 1 && (
+        <PeerWorktreeStrip
+          bindings={resolvedBindings}
+          provider={provider ?? null}
+          onOpenPath={onOpenPath}
+        />
+      )}
     </CardHeader>
   )
 }
