@@ -11,7 +11,7 @@ import { useSlashCommandsStore } from "../stores/slashCommandsStore"
 import { usePreferencesStore } from "../stores/preferences"
 import { useAppSettingsStore } from "../stores/appSettingsStore"
 import { useChatSoundPreferencesStore } from "../stores/chatSoundPreferencesStore"
-import type { ChatSnapshot, CloudflareTunnelRecord, CloudflareTunnelSettings, LocalProjectsSnapshot, SidebarChatRow, SidebarData } from "../../shared/types"
+import type { ChatSnapshot, CloudflareTunnelRecord, CloudflareTunnelSettings, LocalProjectsSnapshot, SidebarChatRow, SidebarData, StackSummary } from "../../shared/types"
 import type { AskUserQuestionItem } from "../components/messages/types"
 import type { OpenLocalLinkTarget } from "../components/messages/shared"
 import { useAppDialog } from "../components/ui/app-dialog"
@@ -751,6 +751,13 @@ export interface KannaState {
   handleDeleteChat: (chat: SidebarChatRow) => Promise<void>
   handleHideProject: (projectId: string) => Promise<void>
   handleReorderProjectGroups: (projectIds: string[]) => Promise<void>
+  stacks: StackSummary[]
+  handleCreateStack: (title: string, projectIds: string[]) => Promise<void>
+  handleRenameStack: (stackId: string, title: string) => Promise<void>
+  handleRemoveStack: (stackId: string) => Promise<void>
+  handleAddProjectToStack: (stackId: string, projectId: string) => Promise<void>
+  handleRemoveProjectFromStack: (stackId: string, projectId: string) => Promise<void>
+  handleCreateStackChat: (primaryProjectId: string, stackId: string, stackBindings: Array<{ projectId: string; worktreePath: string; role: "primary" | "additional" }>) => Promise<void>
   importClaudeSessions: () => Promise<{ imported: number; updated: number; skipped: number; failed: number; newProjects: number }>
   handleCopyPath: (localPath: string) => Promise<void>
   handleOpenExternal: (action: OpenExternalAction, editor?: EditorOpenSettings) => Promise<void>
@@ -1905,6 +1912,78 @@ export function useKannaState(activeChatId: string | null): KannaState {
     }
   }, [socket])
 
+  const handleCreateStack = useCallback(async (title: string, projectIds: string[]) => {
+    try {
+      await socket.command({ type: "stack.create", title, projectIds })
+      setCommandError(null)
+    } catch (error) {
+      setCommandError(error instanceof Error ? error.message : String(error))
+    }
+  }, [socket])
+
+  const handleRenameStack = useCallback(async (stackId: string, title: string) => {
+    try {
+      await socket.command({ type: "stack.rename", stackId, title })
+      setCommandError(null)
+    } catch (error) {
+      setCommandError(error instanceof Error ? error.message : String(error))
+    }
+  }, [socket])
+
+  const handleRemoveStack = useCallback(async (stackId: string) => {
+    try {
+      await socket.command({ type: "stack.remove", stackId })
+      setCommandError(null)
+    } catch (error) {
+      setCommandError(error instanceof Error ? error.message : String(error))
+    }
+  }, [socket])
+
+  const handleAddProjectToStack = useCallback(async (stackId: string, projectId: string) => {
+    try {
+      await socket.command({ type: "stack.addProject", stackId, projectId })
+      setCommandError(null)
+    } catch (error) {
+      setCommandError(error instanceof Error ? error.message : String(error))
+    }
+  }, [socket])
+
+  const handleRemoveProjectFromStack = useCallback(async (stackId: string, projectId: string) => {
+    try {
+      await socket.command({ type: "stack.removeProject", stackId, projectId })
+      setCommandError(null)
+    } catch (error) {
+      setCommandError(error instanceof Error ? error.message : String(error))
+    }
+  }, [socket])
+
+  const handleCreateStackChat = useCallback(async (
+    primaryProjectId: string,
+    stackId: string,
+    stackBindings: Array<{ projectId: string; worktreePath: string; role: "primary" | "additional" }>,
+  ) => {
+    try {
+      const chatPreferences = useChatPreferencesStore.getState()
+      const sourceComposerState = activeChatId
+        ? chatPreferences.getComposerState(activeChatId)
+        : chatPreferences.getComposerState(NEW_CHAT_COMPOSER_ID)
+      const result = await socket.command<{ chatId: string }>({
+        type: "chat.create",
+        projectId: primaryProjectId,
+        stackId,
+        stackBindings,
+      })
+      chatPreferences.initializeComposerForChat(result.chatId, { sourceState: sourceComposerState })
+      setSelectedProjectId(primaryProjectId)
+      setPendingChatId(result.chatId)
+      navigate(`/chat/${result.chatId}`)
+      setSidebarOpen(false)
+      setCommandError(null)
+    } catch (error) {
+      setCommandError(error instanceof Error ? error.message : String(error))
+    }
+  }, [activeChatId, navigate, socket])
+
   const importClaudeSessions = useCallback(async () => {
     const result = await socket.command<{ imported: number; updated: number; skipped: number; failed: number; newProjects: number }>({ type: "sessions.importClaude" })
     return result
@@ -2204,6 +2283,13 @@ export function useKannaState(activeChatId: string | null): KannaState {
     handleDeleteChat,
     handleHideProject,
     handleReorderProjectGroups,
+    stacks: resolvedSidebarData.stacks,
+    handleCreateStack,
+    handleRenameStack,
+    handleRemoveStack,
+    handleAddProjectToStack,
+    handleRemoveProjectFromStack,
+    handleCreateStackChat,
     importClaudeSessions,
     handleCopyPath,
     handleOpenExternal,
