@@ -109,6 +109,7 @@ interface ClaudeSessionState {
   accountInfoLoaded: boolean
   nextPromptSeq: number
   pendingPromptSeqs: number[]
+  activeTokenId: string | null
 }
 
 interface AgentCoordinatorArgs {
@@ -127,6 +128,7 @@ interface AgentCoordinatorArgs {
     planMode: boolean
     sessionToken: string | null
     forkSession: boolean
+    oauthToken: string | null
     onToolRequest: (request: HarnessToolRequest) => Promise<unknown>
   }) => Promise<ClaudeSessionHandle>
   claudeLimitDetector?: LimitDetector
@@ -591,6 +593,12 @@ class AsyncMessageQueue<T> implements AsyncIterable<T> {
   }
 }
 
+export function buildClaudeEnv(baseEnv: NodeJS.ProcessEnv, oauthToken: string | null): NodeJS.ProcessEnv {
+  const { CLAUDECODE: _unused, ...rest } = baseEnv
+  if (!oauthToken) return rest
+  return { ...rest, CLAUDE_CODE_OAUTH_TOKEN: oauthToken }
+}
+
 async function startClaudeSession(args: {
   projectId: string
   localPath: string
@@ -599,6 +607,7 @@ async function startClaudeSession(args: {
   planMode: boolean
   sessionToken: string | null
   forkSession: boolean
+  oauthToken: string | null
   onToolRequest: (request: HarnessToolRequest) => Promise<unknown>
 }): Promise<ClaudeSessionHandle> {
   const canUseTool: CanUseTool = async (toolName, input, options) => {
@@ -682,7 +691,7 @@ async function startClaudeSession(args: {
       },
       settingSources: ["user", "project", "local"],
       pathToClaudeCodeExecutable: process.env.CLAUDE_EXECUTABLE?.replace(/^~(?=\/|$)/, homedir()) || undefined,
-      env: (() => { const { CLAUDECODE: _, ...env } = process.env; return env })(),
+      env: buildClaudeEnv(process.env, args.oauthToken),
     },
   })
 
@@ -790,7 +799,6 @@ export class AgentCoordinator {
   private readonly autoResumeByChat = new Map<string, boolean>()
   private readonly tunnelGateway: TunnelGateway | null
   private readonly backgroundTasks: BackgroundTaskRegistry | null
-  // @ts-expect-error TS6133 — consumed by Task 5 (pickActive integration). Remove this comment when Task 5 reads this.oauthPool.
   private readonly oauthPool: OAuthTokenPool | null
   private readonly pendingBashCalls = new Map<string, { command: string; chatId: string; isBg: boolean }>()
 
@@ -953,6 +961,8 @@ export class AgentCoordinator {
       } else {
         const defaultModel = normalizeServerModel("claude")
         const defaultOptions = normalizeClaudeModelOptions(defaultModel)
+        const picked = this.oauthPool?.pickActive() ?? null
+        if (picked) this.oauthPool!.markUsed(picked.id)
         const ephemeral = await this.startClaudeSessionFn({
           projectId: project.id,
           localPath: project.localPath,
@@ -961,6 +971,7 @@ export class AgentCoordinator {
           planMode: chat.planMode ?? false,
           sessionToken: chat.sessionToken ?? null,
           forkSession: false,
+          oauthToken: picked?.token ?? null,
           onToolRequest: async () => null,
         })
         try {
@@ -1318,6 +1329,8 @@ export class AgentCoordinator {
         this.claudeSessions.delete(args.chatId)
       }
 
+      const picked = this.oauthPool?.pickActive() ?? null
+      if (picked) this.oauthPool!.markUsed(picked.id)
       const started = await this.startClaudeSessionFn({
         projectId: args.projectId,
         localPath: args.localPath,
@@ -1326,6 +1339,7 @@ export class AgentCoordinator {
         planMode: args.planMode,
         sessionToken: args.sessionToken,
         forkSession: args.forkSession,
+        oauthToken: picked?.token ?? null,
         onToolRequest: args.onToolRequest,
       })
 
@@ -1341,6 +1355,7 @@ export class AgentCoordinator {
         accountInfoLoaded: false,
         nextPromptSeq: 0,
         pendingPromptSeqs: [],
+        activeTokenId: picked?.id ?? null,
       }
       this.claudeSessions.set(args.chatId, session)
       void this.runClaudeSession(session)
