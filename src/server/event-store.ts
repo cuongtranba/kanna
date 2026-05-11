@@ -80,7 +80,7 @@ interface ParsedReplayEvent {
   lineIndex: number
 }
 
-function getReplayEventPriority(event: StoreEvent) {
+function getReplayEventPriority(event: StoreEvent): number {
   const discriminator = "type" in event ? event.type : event.kind
   switch (discriminator) {
     case "project_opened":
@@ -129,6 +129,10 @@ function getReplayEventPriority(event: StoreEvent) {
     case "stack_project_added":
     case "stack_project_removed":
       return 0
+    default: {
+      const _exhaustive: never = discriminator
+      return 0
+    }
   }
 }
 
@@ -694,7 +698,7 @@ export class EventStore implements PushEventStore {
       }
       case "stack_removed": {
         const stack = this.state.stacksById.get(e.stackId)
-        if (!stack) break
+        if (!stack || stack.deletedAt) break
         stack.deletedAt = e.timestamp
         stack.updatedAt = e.timestamp
         break
