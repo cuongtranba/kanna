@@ -436,6 +436,7 @@ export interface StackSummary {
   projectIds: string[]
   memberCount: number
   createdAt: number
+  updatedAt: number
 }
 
 export interface SidebarChatRow {

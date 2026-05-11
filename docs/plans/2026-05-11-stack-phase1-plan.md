@@ -66,6 +66,7 @@ export interface StackSummary {
   projectIds: string[]
   memberCount: number
   createdAt: number
+  updatedAt: number
 }
 ```
 
@@ -844,6 +845,7 @@ export function stackSummaries(state: StoreState): StackSummary[] {
       projectIds: [...s.projectIds],
       memberCount: s.projectIds.length,
       createdAt: s.createdAt,
+      updatedAt: s.updatedAt,
     }))
 }
 ```
