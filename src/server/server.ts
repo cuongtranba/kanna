@@ -2,7 +2,7 @@ import path from "node:path"
 import { stat } from "node:fs/promises"
 import { bin as cloudflaredBin } from "cloudflared"
 import { APP_NAME, getRuntimeProfile } from "../shared/branding"
-import { CLOUDFLARE_TUNNEL_DEFAULTS, type ChatAttachment } from "../shared/types"
+import { CLOUDFLARE_TUNNEL_DEFAULTS, UPLOAD_MAX_FILE_SIZE_MB_MAX, type ChatAttachment } from "../shared/types"
 import type { ShareMode } from "../shared/share"
 import { createAuthManager } from "./auth"
 import { createAuthSessionStore } from "./auth-session-store"
@@ -44,6 +44,8 @@ function resolveCloudflaredPath(settingsPath: string): string {
 
 const MAX_UPLOAD_FILES = 50
 const STALE_EMPTY_CHAT_PRUNE_INTERVAL_MS = 60 * 1000
+const MULTIPART_OVERHEAD_BYTES = 16 * 1024 * 1024
+const MAX_REQUEST_BODY_BYTES = UPLOAD_MAX_FILE_SIZE_MB_MAX * 1024 * 1024 + MULTIPART_OVERHEAD_BYTES
 
 export async function persistUploadedFiles(args: {
   projectId: string
@@ -291,6 +293,7 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
       server = Bun.serve<ClientState>({
         port: actualPort,
         hostname,
+        maxRequestBodySize: MAX_REQUEST_BODY_BYTES,
         async fetch(req, serverInstance) {
           const url = new URL(req.url)
 
