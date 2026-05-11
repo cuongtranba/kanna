@@ -5,13 +5,15 @@ import { APP_NAME } from "../../shared/branding"
 import { Button } from "../components/ui/button"
 import { useAppDialog } from "../components/ui/app-dialog"
 import { Dialog, DialogBody, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../components/ui/dialog"
-import { formatSidebarAgeLabel } from "../lib/formatters"
+import { formatSidebarAgeLabel, getPathBasename } from "../lib/formatters"
 import { getSidebarChatTimestamp } from "../lib/sidebarChats"
 import { cn } from "../lib/utils"
 import { ChatRow } from "../components/chat-ui/sidebar/ChatRow"
 import { LocalProjectsSection } from "../components/chat-ui/sidebar/LocalProjectsSection"
+import { StacksSection } from "../components/chat-ui/sidebar/StacksSection"
+import { StackCreatePanel } from "../components/chat-ui/sidebar/StackCreatePanel"
 import { getResolvedKeybindings } from "../lib/keybindings"
-import type { KeybindingsSnapshot, SidebarData, SidebarChatRow, UpdateSnapshot } from "../../shared/types"
+import type { KeybindingsSnapshot, SidebarData, SidebarChatRow, StackBinding, UpdateSnapshot } from "../../shared/types"
 import type { SocketStatus } from "./socket"
 import {
   getSidebarJumpTargetIndex,
@@ -69,6 +71,10 @@ interface KannaSidebarProps {
   onOpenExternalPath: (action: "open_finder" | "open_editor", localPath: string) => void
   onHideProject: (projectId: string) => void
   onReorderProjectGroups: (projectIds: string[]) => void
+  onCreateStack: (title: string, projectIds: string[]) => void
+  onRenameStack: (stackId: string, title: string) => void
+  onRemoveStack: (stackId: string) => void
+  onCreateStackChat: (primaryProjectId: string, stackId: string, stackBindings: StackBinding[]) => void
   editorLabel: string
   updateSnapshot: UpdateSnapshot | null
 }
@@ -100,6 +106,10 @@ function KannaSidebarImpl({
   onOpenExternalPath,
   onHideProject,
   onReorderProjectGroups,
+  onCreateStack,
+  onRenameStack,
+  onRemoveStack,
+  onCreateStackChat: _onCreateStackChat,
   editorLabel,
   updateSnapshot,
 }: KannaSidebarProps) {
@@ -115,6 +125,10 @@ function KannaSidebarImpl({
   const [sidebarWidth, setSidebarWidth] = useState(readStoredSidebarWidth)
   const [isResizingSidebar, setIsResizingSidebar] = useState(false)
   const [archivedProjectId, setArchivedProjectId] = useState<string | null>(null)
+  const [expandedStackIds, setExpandedStackIds] = useState<Set<string>>(new Set())
+  const [stackCreatePanelOpen, setStackCreatePanelOpen] = useState(false)
+  const [stackEditId, setStackEditId] = useState<string | null>(null)
+  const [stackDeleteConfirmId, setStackDeleteConfirmId] = useState<string | null>(null)
   const resolvedKeybindings = useMemo(() => getResolvedKeybindings(keybindings), [keybindings])
   const visibleChats = useMemo(
     () => getVisibleSidebarChats(data.projectGroups, collapsedSections, expandedGroups),
@@ -124,6 +138,11 @@ function KannaSidebarImpl({
   const visibleIndexByChatId = useMemo(
     () => new Map(visibleChats.map((entry) => [entry.chat.chatId, entry.visibleIndex])),
     [visibleChats]
+  )
+
+  const stackProjects = useMemo(
+    () => data.projectGroups.map((group) => ({ id: group.groupKey, title: getPathBasename(group.localPath) })),
+    [data.projectGroups]
   )
 
   const projectIdByPath = useMemo(
@@ -246,6 +265,19 @@ function KannaSidebarImpl({
         navigate("/")
         onClose()
         onOpenAddProjectModal()
+        return
+      }
+
+      if (isSidebarModifierShortcut(resolvedKeybindings, "newStack", event)) {
+        event.preventDefault()
+        setStackCreatePanelOpen(true)
+        return
+      }
+
+      if (isSidebarModifierShortcut(resolvedKeybindings, "newStackChat", event)) {
+        event.preventDefault()
+        // TODO: open stack chat creation for the first stack if any
+        // For now just ensure the binding is registered
         return
       }
 
@@ -526,6 +558,72 @@ function KannaSidebarImpl({
             {!hasVisibleChats && !isConnecting && data.projectGroups.length === 0 ? (
               <p className="text-sm text-muted-foreground p-2 mt-6 text-center">No conversations yet</p>
             ) : null}
+
+            <StacksSection
+              stacks={data.stacks}
+              projects={stackProjects}
+              expandedStackIds={expandedStackIds}
+              onToggleExpanded={(stackId) => setExpandedStackIds((prev) => {
+                const next = new Set(prev)
+                if (next.has(stackId)) next.delete(stackId)
+                else next.add(stackId)
+                return next
+              })}
+              onOpenCreatePanel={() => setStackCreatePanelOpen(true)}
+              onOpenStackMenu={(stackId) => {
+                setStackEditId(stackId)
+                setStackCreatePanelOpen(true)
+              }}
+              chats={visibleChats.map((e) => e.chat)}
+            />
+
+            {stackCreatePanelOpen && (
+              <StackCreatePanel
+                mode={stackEditId ? "edit" : "create"}
+                projects={stackProjects}
+                initialProjectIds={stackEditId ? (data.stacks.find(s => s.id === stackEditId)?.projectIds ?? []) : []}
+                initialTitle={stackEditId ? (data.stacks.find(s => s.id === stackEditId)?.title ?? "") : ""}
+                onSubmit={async (title, projectIds) => {
+                  if (stackEditId) {
+                    onRenameStack(stackEditId, title)
+                  } else {
+                    onCreateStack(title, projectIds)
+                  }
+                  setStackCreatePanelOpen(false)
+                  setStackEditId(null)
+                }}
+                onCancel={() => {
+                  setStackCreatePanelOpen(false)
+                  setStackEditId(null)
+                }}
+              />
+            )}
+
+            {stackDeleteConfirmId && (() => {
+              const stack = data.stacks.find(s => s.id === stackDeleteConfirmId)
+              if (!stack) return null
+              return (
+                <div className="px-2.5 py-2 border border-destructive/50 rounded-lg bg-background mx-2 my-1">
+                  <p className="text-xs text-destructive mb-2">Delete "{stack.title}"?</p>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      className="text-xs px-2 py-1 rounded bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                      onClick={() => { onRemoveStack(stackDeleteConfirmId); setStackDeleteConfirmId(null) }}
+                    >
+                      Delete
+                    </button>
+                    <button
+                      type="button"
+                      className="text-xs px-2 py-1 rounded border border-border hover:bg-muted"
+                      onClick={() => setStackDeleteConfirmId(null)}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )
+            })()}
 
             <LocalProjectsSection
               projectGroups={data.projectGroups}
