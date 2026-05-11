@@ -26,6 +26,35 @@ async function buildStoreWithProjects(paths: string[]): Promise<{ store: EventSt
   return { store, projectIds }
 }
 
+describe("removeProjectFromStack", () => {
+  test("removeProjectFromStack removes the project", async () => {
+    const { store, projectIds: [p1, p2, p3] } = await buildStoreWithProjects(["/tmp/p1", "/tmp/p2", "/tmp/p3"])
+    const stack = await store.createStack("My Stack", [p1, p2, p3])
+    await store.removeProjectFromStack(stack.id, p3)
+    expect(store.getStack(stack.id)?.projectIds).toEqual([p1, p2])
+  })
+
+  test("removeProjectFromStack blocks dropping below 2 members", async () => {
+    const { store, projectIds: [p1, p2] } = await buildStoreWithProjects(["/tmp/p1", "/tmp/p2"])
+    const stack = await store.createStack("Two Members", [p1, p2])
+    await expect(store.removeProjectFromStack(stack.id, p1)).rejects.toThrow(
+      /Stack must keep at least 2 projects\. Delete the stack instead\./u,
+    )
+  })
+
+  test("removeProjectFromStack on non-member is idempotent", async () => {
+    const { store, projectIds: [p1, p2, p3] } = await buildStoreWithProjects(["/tmp/p1", "/tmp/p2", "/tmp/p3"])
+    const stack = await store.createStack("My Stack", [p1, p2])
+    await expect(store.removeProjectFromStack(stack.id, p3)).resolves.toBeUndefined()
+    expect(store.getStack(stack.id)?.projectIds).toEqual([p1, p2])
+  })
+
+  test("removeProjectFromStack on unknown stack throws", async () => {
+    const { store, projectIds: [p1] } = await buildStoreWithProjects(["/tmp/p1"])
+    await expect(store.removeProjectFromStack("nonexistent-id", p1)).rejects.toThrow(/Stack not found/u)
+  })
+})
+
 describe("addProjectToStack", () => {
   test("addProjectToStack appends the project id", async () => {
     const { store, projectIds: [p1, p2, p3] } = await buildStoreWithProjects(["/tmp/p1", "/tmp/p2", "/tmp/p3"])

@@ -940,6 +940,23 @@ export class EventStore implements PushEventStore {
     await this.append(this.stacksLogPath, event)
   }
 
+  async removeProjectFromStack(stackId: string, projectId: string): Promise<void> {
+    const stack = this.state.stacksById.get(stackId)
+    if (!stack || stack.deletedAt) throw new Error("Stack not found")
+    if (!stack.projectIds.includes(projectId)) return
+    if (stack.projectIds.length <= 2) {
+      throw new Error("Stack must keep at least 2 projects. Delete the stack instead.")
+    }
+    const event: StackEvent = {
+      v: STORE_VERSION,
+      type: "stack_project_removed",
+      timestamp: Date.now(),
+      stackId,
+      projectId,
+    }
+    await this.append(this.stacksLogPath, event)
+  }
+
   async setSidebarProjectOrder(projectIds: string[]) {
     const validProjectIds = projectIds.filter((projectId) => {
       const project = this.state.projectsById.get(projectId)
