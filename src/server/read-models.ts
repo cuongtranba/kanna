@@ -8,6 +8,7 @@ import type {
   SidebarChatRow,
   SidebarData,
   SidebarProjectGroup,
+  StackSummary,
 } from "../shared/types"
 import type { ChatRecord, ChatTimingState, StoreState } from "./events"
 import { resolveLocalPath } from "./paths"
@@ -136,7 +137,7 @@ export function deriveSidebarData(
     }
   })
 
-  return { projectGroups }
+  return { projectGroups, stacks: stackSummaries(state) }
 }
 
 export function deriveLocalProjectsSnapshot(
@@ -282,6 +283,20 @@ export function deriveChatSnapshot(
   const { schedules, liveScheduleId } = deriveChatSchedules(autoContinueEvents, chat.id)
   const { tunnels, liveTunnelId } = deriveChatTunnels(getTunnelEvents(chat.id), chat.id)
 
+  const resolvedBindings = chat.stackBindings && chat.stackBindings.length > 0
+    ? chat.stackBindings.map((binding) => {
+        const bindingProject = state.projectsById.get(binding.projectId)
+        const projectStatus: "active" | "missing" = bindingProject && !bindingProject.deletedAt ? "active" : "missing"
+        return {
+          projectId: binding.projectId,
+          projectTitle: bindingProject?.title ?? "(missing)",
+          worktreePath: binding.worktreePath,
+          role: binding.role,
+          projectStatus,
+        }
+      })
+    : undefined
+
   return {
     runtime,
     queuedMessages: (state.queuedMessagesByChatId.get(chat.id) ?? []).map((entry) => ({
@@ -297,5 +312,19 @@ export function deriveChatSnapshot(
     liveScheduleId,
     tunnels,
     liveTunnelId,
+    ...(resolvedBindings !== undefined ? { resolvedBindings } : {}),
   }
+}
+
+export function stackSummaries(state: StoreState): StackSummary[] {
+  return [...state.stacksById.values()]
+    .filter((s) => !s.deletedAt)
+    .map((s) => ({
+      id: s.id,
+      title: s.title,
+      projectIds: [...s.projectIds],
+      memberCount: s.projectIds.length,
+      createdAt: s.createdAt,
+      updatedAt: s.updatedAt,
+    }))
 }

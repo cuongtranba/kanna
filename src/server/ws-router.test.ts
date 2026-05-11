@@ -63,6 +63,9 @@ const DEFAULT_KEYBINDINGS_SNAPSHOT: KeybindingsSnapshot = {
     jumpToSidebarChat: ["cmd+alt"],
     createChatInCurrentProject: ["cmd+alt+n"],
     openAddProject: ["cmd+alt+o"],
+    newStack: ["cmd+alt+w"],
+    newStackChat: ["cmd+alt+shift+n"],
+    jumpToStacks: ["g s"],
   },
   warning: null,
   filePathDisplay: "~/.kanna/keybindings.json",
@@ -1439,6 +1442,7 @@ describe("ws-router", () => {
               hasAutomation: false,
             }],
           })],
+          stacks: [],
         },
       },
     })
@@ -1464,6 +1468,7 @@ describe("ws-router", () => {
               hasAutomation: false,
             }],
           })],
+          stacks: [],
         },
       },
     })
@@ -1562,6 +1567,7 @@ describe("ws-router", () => {
               chats: [],
             }),
           ],
+          stacks: [],
         },
       },
     })
@@ -1695,6 +1701,7 @@ describe("ws-router", () => {
               hasAutomation: false,
             }],
           })],
+          stacks: [],
         },
       },
     })
@@ -1777,6 +1784,7 @@ describe("ws-router", () => {
               chats: [],
             }),
           }],
+          stacks: [],
         },
       },
     })

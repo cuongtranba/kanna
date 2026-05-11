@@ -1,4 +1,4 @@
-import type { AgentProvider, KannaStatus, ProjectSummary, QueuedChatMessage, SlashCommand, TranscriptEntry } from "../shared/types"
+import type { AgentProvider, KannaStatus, ProjectSummary, QueuedChatMessage, SlashCommand, StackBinding, TranscriptEntry } from "../shared/types"
 import type { AutoContinueEvent } from "./auto-continue/events"
 
 export interface ProjectRecord extends ProjectSummary {
@@ -23,6 +23,8 @@ export interface ChatRecord {
   lastMessageAt?: number
   lastTurnOutcome: "success" | "failed" | "cancelled" | null
   slashCommands?: SlashCommand[]
+  stackId?: string
+  stackBindings?: StackBinding[]
 }
 
 export interface ChatTimingState {
@@ -47,6 +49,7 @@ export interface StoreState {
   sidebarProjectOrder: string[]
   autoContinueEventsByChatId: Map<string, AutoContinueEvent[]>
   chatTimingsByChatId: Map<string, ChatTimingState>
+  stacksById: Map<string, StackRecord>
 }
 
 export interface SnapshotFile {
@@ -58,6 +61,7 @@ export interface SnapshotFile {
   queuedMessages?: Array<{ chatId: string; entries: QueuedChatMessage[] }>
   messages?: Array<{ chatId: string; entries: TranscriptEntry[] }>
   autoContinueEvents?: Array<{ chatId: string; events: AutoContinueEvent[] }>
+  stacks?: StackRecord[]
 }
 
 export type ProjectEvent = {
@@ -87,6 +91,8 @@ export type ChatEvent =
       chatId: string
       projectId: string
       title: string
+      stackId?: string
+      stackBindings?: StackBinding[]
     }
   | {
       v: 3
@@ -214,7 +220,53 @@ export type TurnEvent =
       pendingForkSessionToken: string | null
     }
 
-export type StoreEvent = ProjectEvent | ChatEvent | MessageEvent | QueuedMessageEvent | TurnEvent | AutoContinueEvent
+export type StackEvent =
+  | {
+      v: 3
+      type: "stack_added"
+      timestamp: number
+      stackId: string
+      title: string
+      projectIds: string[]    // ≥2 at creation; invariant enforced by the store, not the event
+    }
+  | {
+      v: 3
+      type: "stack_removed"
+      timestamp: number
+      stackId: string
+    }
+  | {
+      v: 3
+      type: "stack_renamed"
+      timestamp: number
+      stackId: string
+      title: string
+    }
+  | {
+      v: 3
+      type: "stack_project_added"
+      timestamp: number
+      stackId: string
+      projectId: string
+    }
+  | {
+      v: 3
+      type: "stack_project_removed"
+      timestamp: number
+      stackId: string
+      projectId: string
+    }
+
+export type StoreEvent = ProjectEvent | ChatEvent | MessageEvent | QueuedMessageEvent | TurnEvent | StackEvent | AutoContinueEvent
+
+export interface StackRecord {
+  id: string
+  title: string
+  projectIds: string[]
+  createdAt: number
+  updatedAt: number
+  deletedAt?: number
+}
 
 export function createEmptyState(): StoreState {
   return {
@@ -225,6 +277,7 @@ export function createEmptyState(): StoreState {
     sidebarProjectOrder: [],
     autoContinueEventsByChatId: new Map(),
     chatTimingsByChatId: new Map(),
+    stacksById: new Map(),
   }
 }
 

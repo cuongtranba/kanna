@@ -422,6 +422,29 @@ export interface ProjectSummary {
   updatedAt: number
 }
 
+export interface Stack {
+  id: string
+  title: string
+  projectIds: string[]   // insertion order; drives sidebar order within the stack
+  createdAt: number
+  updatedAt: number
+}
+
+export interface StackSummary {
+  id: string
+  title: string
+  projectIds: string[]
+  memberCount: number
+  createdAt: number
+  updatedAt: number
+}
+
+export interface StackBinding {
+  projectId: string
+  worktreePath: string                          // absolute, matches agent SDK cwd input
+  role: "primary" | "additional"
+}
+
 export interface SidebarChatRow {
   _id: string
   _creationTime: number
@@ -449,6 +472,7 @@ export interface SidebarProjectGroup {
 
 export interface SidebarData {
   projectGroups: SidebarProjectGroup[]
+  stacks: StackSummary[]
 }
 
 export interface LocalProjectSummary {
@@ -623,6 +647,9 @@ export type KeybindingAction =
   | "jumpToSidebarChat"
   | "createChatInCurrentProject"
   | "openAddProject"
+  | "newStack"
+  | "newStackChat"
+  | "jumpToStacks"
 
 export const DEFAULT_KEYBINDINGS: Record<KeybindingAction, string[]> = {
   toggleEmbeddedTerminal: ["cmd+j", "ctrl+`"],
@@ -633,6 +660,9 @@ export const DEFAULT_KEYBINDINGS: Record<KeybindingAction, string[]> = {
   jumpToSidebarChat: ["cmd+alt"],
   createChatInCurrentProject: ["cmd+alt+n"],
   openAddProject: ["cmd+alt+o"],
+  newStack: ["cmd+alt+w"],
+  newStackChat: ["cmd+alt+shift+n"],
+  jumpToStacks: ["g s"],
 }
 
 export interface KeybindingsSnapshot {
@@ -1199,6 +1229,14 @@ export interface SlashCommand {
   argumentHint: string
 }
 
+export interface ResolvedStackBinding {
+  projectId: string
+  projectTitle: string
+  worktreePath: string
+  role: "primary" | "additional"
+  projectStatus: "active" | "missing"
+}
+
 export interface ChatSnapshot {
   runtime: ChatRuntime
   queuedMessages: QueuedChatMessage[]
@@ -1211,6 +1249,7 @@ export interface ChatSnapshot {
   liveScheduleId: string | null
   tunnels: Record<string, CloudflareTunnelRecord>
   liveTunnelId: string | null
+  resolvedBindings?: ResolvedStackBinding[]
 }
 
 export interface ChatHistoryPage {

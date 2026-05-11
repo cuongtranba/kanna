@@ -14,6 +14,7 @@ import type {
   SlashCommand,
   TranscriptEntry,
 } from "../shared/types"
+import type { ChatRecord } from "./events"
 import { normalizeToolCall } from "../shared/tools"
 import type { ClientCommand } from "../shared/protocol"
 import { EventStore } from "./event-store"
@@ -39,6 +40,23 @@ import type { TunnelGateway } from "./cloudflare-tunnel/gateway"
 import type { BackgroundTaskRegistry } from "./background-tasks"
 import type { TerminalManager } from "./terminal-manager"
 import { OAuthTokenPool } from "./oauth-pool/oauth-token-pool"
+
+export function resolveSpawnPaths(
+  chat: Pick<ChatRecord, "id" | "stackBindings">,
+  fallbackLocalPath: string,
+): { cwd: string; additionalDirectories: string[] } {
+  if (!chat.stackBindings || chat.stackBindings.length === 0) {
+    return { cwd: fallbackLocalPath, additionalDirectories: [] }
+  }
+  const primary = chat.stackBindings.find((b) => b.role === "primary")
+  if (!primary) {
+    throw new Error(`Chat ${chat.id} has stackBindings but no primary`)
+  }
+  const additionalDirectories = chat.stackBindings
+    .filter((b) => b.role === "additional")
+    .map((b) => b.worktreePath)
+  return { cwd: primary.worktreePath, additionalDirectories }
+}
 
 const CLAUDE_TOOLSET = [
   "Skill",
@@ -102,6 +120,7 @@ interface ClaudeSessionState {
   chatId: string
   session: ClaudeSessionHandle
   localPath: string
+  additionalDirectories: string[]
   model: string
   effort?: string
   planMode: boolean
@@ -129,6 +148,7 @@ interface AgentCoordinatorArgs {
     sessionToken: string | null
     forkSession: boolean
     oauthToken: string | null
+    additionalDirectories?: string[]
     onToolRequest: (request: HarnessToolRequest) => Promise<unknown>
   }) => Promise<ClaudeSessionHandle>
   claudeLimitDetector?: LimitDetector
@@ -610,6 +630,7 @@ async function startClaudeSession(args: {
   sessionToken: string | null
   forkSession: boolean
   oauthToken: string | null
+  additionalDirectories?: string[]
   onToolRequest: (request: HarnessToolRequest) => Promise<unknown>
 }): Promise<ClaudeSessionHandle> {
   const canUseTool: CanUseTool = async (toolName, input, options) => {
@@ -673,6 +694,9 @@ async function startClaudeSession(args: {
     prompt: promptQueue,
     options: {
       cwd: args.localPath,
+      ...(args.additionalDirectories && args.additionalDirectories.length > 0
+        ? { additionalDirectories: args.additionalDirectories }
+        : {}),
       model: args.model,
       effort: args.effort as "low" | "medium" | "high" | "max" | undefined,
       resume: args.sessionToken ?? undefined,
@@ -1185,10 +1209,12 @@ export class AgentCoordinator {
         provider: args.provider,
         model: args.model,
       })
+      const spawn = resolveSpawnPaths(chat, project.localPath)
       turn = await this.startClaudeTurn({
         chatId: args.chatId,
         projectId: project.id,
-        localPath: project.localPath,
+        localPath: spawn.cwd,
+        additionalDirectories: spawn.additionalDirectories,
         model: args.model,
         effort: args.effort,
         planMode: args.planMode,
@@ -1207,9 +1233,10 @@ export class AgentCoordinator {
         provider: args.provider,
         model: args.model,
       })
+      // Codex single-cwd: peer worktrees not passed to startSession. Cross-root writes use grantRoot.
       const sessionToken = await this.codexManager.startSession({
         chatId: args.chatId,
-        cwd: project.localPath,
+        cwd: resolveSpawnPaths(chat, project.localPath).cwd,
         model: args.model,
         serviceTier: args.serviceTier,
         sessionToken: chat.sessionToken,
@@ -1318,6 +1345,7 @@ export class AgentCoordinator {
     chatId: string
     projectId: string
     localPath: string
+    additionalDirectories?: string[]
     model: string
     effort?: string
     planMode: boolean
@@ -1327,7 +1355,13 @@ export class AgentCoordinator {
   }): Promise<HarnessTurn> {
     let session = this.claudeSessions.get(args.chatId)
 
-    if (!session || session.localPath !== args.localPath || session.effort !== args.effort || args.forkSession) {
+    if (
+      !session ||
+      session.localPath !== args.localPath ||
+      session.effort !== args.effort ||
+      args.forkSession ||
+      session.additionalDirectories.join("|") !== (args.additionalDirectories ?? []).join("|")
+    ) {
       if (session) {
         session.session.close()
         this.claudeSessions.delete(args.chatId)
@@ -1344,6 +1378,7 @@ export class AgentCoordinator {
         sessionToken: args.sessionToken,
         forkSession: args.forkSession,
         oauthToken: picked?.token ?? null,
+        additionalDirectories: args.additionalDirectories,
         onToolRequest: args.onToolRequest,
       })
 
@@ -1352,6 +1387,7 @@ export class AgentCoordinator {
         chatId: args.chatId,
         session: started,
         localPath: args.localPath,
+        additionalDirectories: args.additionalDirectories ?? [],
         model: args.model,
         effort: args.effort,
         planMode: args.planMode,

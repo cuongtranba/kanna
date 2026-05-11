@@ -74,6 +74,12 @@ export type ClientCommand =
   | { type: "project.remove"; projectId: string }
   | { type: "sidebar.reorderProjectGroups"; projectIds: string[] }
   | { type: "project.readDiffPatch"; projectId: string; path: string }
+  | { type: "stack.create"; title: string; projectIds: string[] }
+  | { type: "stack.rename"; stackId: string; title: string }
+  | { type: "stack.remove"; stackId: string }
+  | { type: "stack.addProject"; stackId: string; projectId: string }
+  | { type: "stack.removeProject"; stackId: string; projectId: string }
+  | { type: "stack.listWorktrees"; projectId: string }
   | { type: "system.ping" }
   | { type: "update.check"; force?: boolean }
   | { type: "update.install" }
@@ -113,7 +119,12 @@ export type ClientCommand =
       column?: number
       editor?: EditorOpenSettings
     }
-  | { type: "chat.create"; projectId: string }
+  | {
+      type: "chat.create"
+      projectId: string
+      stackId?: string
+      stackBindings?: Array<{ projectId: string; worktreePath: string; role: "primary" | "additional" }>
+    }
   | { type: "chat.fork"; chatId: string }
   | { type: "chat.rename"; chatId: string; title: string }
   | { type: "chat.archive"; chatId: string }

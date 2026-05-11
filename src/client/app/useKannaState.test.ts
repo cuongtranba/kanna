@@ -89,6 +89,7 @@ function createSidebarData(): SidebarData {
         defaultCollapsed: true,
       },
     ],
+    stacks: [],
   }
 }
 

@@ -32,6 +32,7 @@ import type {
   SkillUninstallResult,
 } from "../shared/types"
 import { importClaudeSessions } from "./claude-session-importer"
+import { listWorktrees } from "./worktree-store"
 import type { TunnelGateway } from "./cloudflare-tunnel/gateway"
 import type { PushManager } from "./push/push-manager"
 
@@ -1387,7 +1388,10 @@ export function createWsRouter({
           break
         }
         case "chat.create": {
-          const chat = await store.createChat(command.projectId)
+          const chat = await store.createChat(command.projectId, {
+            stackId: command.stackId,
+            stackBindings: command.stackBindings,
+          })
           send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: { chatId: chat.id } })
           resolvedAnalytics.track("chat_created")
           await broadcastChatAndSidebar(chat.id)
@@ -1816,6 +1820,46 @@ export function createWsRouter({
           }
           const stopResult = await backgroundTasks.stop(command.id, { force: command.force })
           send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: stopResult })
+          return
+        }
+        case "stack.create": {
+          const stack = await store.createStack(command.title, command.projectIds)
+          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: { stackId: stack.id } })
+          resolvedAnalytics.track("stack_created")
+          await broadcastFilteredSnapshots({ includeSidebar: true })
+          return
+        }
+        case "stack.rename": {
+          await store.renameStack(command.stackId, command.title)
+          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
+          await broadcastFilteredSnapshots({ includeSidebar: true })
+          return
+        }
+        case "stack.remove": {
+          await store.removeStack(command.stackId)
+          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
+          await broadcastFilteredSnapshots({ includeSidebar: true })
+          return
+        }
+        case "stack.addProject": {
+          await store.addProjectToStack(command.stackId, command.projectId)
+          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
+          await broadcastFilteredSnapshots({ includeSidebar: true })
+          return
+        }
+        case "stack.removeProject": {
+          await store.removeProjectFromStack(command.stackId, command.projectId)
+          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
+          await broadcastFilteredSnapshots({ includeSidebar: true })
+          return
+        }
+        case "stack.listWorktrees": {
+          const project = store.getProject(command.projectId)
+          if (!project) {
+            throw new Error("Project not found")
+          }
+          const worktrees = await listWorktrees(project.localPath)
+          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: { worktrees } })
           return
         }
       }

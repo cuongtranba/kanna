@@ -90,6 +90,7 @@ describe("getNotificationTitleCount", () => {
             hasAutomation: false,
           },
         ])],
+      stacks: [],
     })).toBe(4)
   })
 })
@@ -107,6 +108,7 @@ describe("chat sound helpers", () => {
         provider: null,
         hasAutomation: false,
       }])],
+    stacks: [],
   }
 
   test("extracts unread and waiting notification state", () => {
@@ -135,6 +137,7 @@ describe("chat sound helpers", () => {
             hasAutomation: false,
           },
         ])],
+      stacks: [],
     })
 
     expect(snapshot.unreadCount).toBe(1)
@@ -171,6 +174,7 @@ describe("chat sound helpers", () => {
             hasAutomation: false,
           },
         ])],
+      stacks: [],
     })).toBe(3)
   })
 
@@ -187,6 +191,7 @@ describe("chat sound helpers", () => {
           provider: null,
           hasAutomation: false,
         }])],
+      stacks: [],
     }
 
     expect(getChatSoundBurstCount(current, current)).toBe(0)

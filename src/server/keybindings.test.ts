@@ -19,6 +19,12 @@ async function createTempFilePath() {
   return path.join(dir, "keybindings.json")
 }
 
+test("DEFAULT_KEYBINDINGS includes stack-related actions", () => {
+  expect(DEFAULT_KEYBINDINGS.newStack).toEqual(["cmd+alt+w"])
+  expect(DEFAULT_KEYBINDINGS.newStackChat).toEqual(["cmd+alt+shift+n"])
+  expect(DEFAULT_KEYBINDINGS.jumpToStacks).toEqual(["g s"])
+})
+
 describe("normalizeKeybindings", () => {
   test("falls back to defaults for invalid entries", () => {
     const snapshot = normalizeKeybindings({
@@ -41,6 +47,9 @@ describe("normalizeKeybindings", () => {
       jumpToSidebarChat: ["Cmd+Alt"],
       createChatInCurrentProject: ["Cmd+Alt+N"],
       openAddProject: ["Cmd+Alt+O"],
+      newStack: ["Cmd+Alt+W"],
+      newStackChat: ["Cmd+Alt+Shift+N"],
+      jumpToStacks: ["G S"],
     }, TEST_FILE_PATH)
 
     expect(snapshot).toEqual({
@@ -53,6 +62,9 @@ describe("normalizeKeybindings", () => {
         jumpToSidebarChat: ["cmd+alt"],
         createChatInCurrentProject: ["cmd+alt+n"],
         openAddProject: ["cmd+alt+o"],
+        newStack: ["cmd+alt+w"],
+        newStackChat: ["cmd+alt+shift+n"],
+        jumpToStacks: ["g s"],
       },
       warning: null,
       filePathDisplay: TEST_FILE_PATH,
@@ -106,6 +118,9 @@ describe("KeybindingsManager", () => {
       jumpToSidebarChat: ["Cmd+Alt"],
       createChatInCurrentProject: ["Cmd+Alt+N"],
       openAddProject: ["Cmd+Alt+O"],
+      newStack: ["Cmd+Alt+W"],
+      newStackChat: ["Cmd+Alt+Shift+N"],
+      jumpToStacks: ["G S"],
     })
 
     expect(snapshot).toEqual({
@@ -118,6 +133,9 @@ describe("KeybindingsManager", () => {
         jumpToSidebarChat: ["cmd+alt"],
         createChatInCurrentProject: ["cmd+alt+n"],
         openAddProject: ["cmd+alt+o"],
+        newStack: ["cmd+alt+w"],
+        newStackChat: ["cmd+alt+shift+n"],
+        jumpToStacks: ["g s"],
       },
       warning: null,
       filePathDisplay: filePath,

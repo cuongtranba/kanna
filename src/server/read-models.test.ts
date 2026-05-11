@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { deriveChatSnapshot, deriveLocalProjectsSnapshot, deriveSidebarData, deriveTimings } from "./read-models"
+import { deriveChatSnapshot, deriveLocalProjectsSnapshot, deriveSidebarData, deriveTimings, stackSummaries } from "./read-models"
 import { createEmptyState } from "./events"
 import type { SlashCommand } from "../shared/types"
 
@@ -407,6 +407,20 @@ describe("read models", () => {
     expect(sidebar.projectGroups[0]?.chats.find((chat) => chat.chatId === "chat-draining")?.canFork).toBeUndefined()
   })
 
+  test("deriveSidebarData includes stack summaries", () => {
+    const state = createEmptyState()
+    state.stacksById.set("s1", {
+      id: "s1",
+      title: "Integration",
+      projectIds: ["p1", "p2"],
+      createdAt: 1,
+      updatedAt: 1,
+    })
+    const sidebar = deriveSidebarData(state, new Map())
+    expect(sidebar.stacks).toHaveLength(1)
+    expect(sidebar.stacks[0]?.title).toBe("Integration")
+  })
+
   test("passes slash commands from ChatRecord through to ChatSnapshot", () => {
     const slashCommands: SlashCommand[] = [
       { name: "review", description: "r", argumentHint: "<pr>" },
@@ -559,5 +573,131 @@ describe("deriveTimings", () => {
     expect(out.stateEnteredAt).toBe(1000)
     expect(out.cumulativeMs.idle).toBe(3000)
     expect(out.lastTurnDurationMs).toBeNull()
+  })
+})
+
+describe("stackSummaries", () => {
+  test("returns active stacks with member counts in insertion order", () => {
+    const state = createEmptyState()
+    state.stacksById.set("s1", {
+      id: "s1",
+      title: "A",
+      projectIds: ["p1", "p2"],
+      createdAt: 1,
+      updatedAt: 1,
+    })
+    state.stacksById.set("s2", {
+      id: "s2",
+      title: "B",
+      projectIds: ["p2", "p3"],
+      createdAt: 2,
+      updatedAt: 2,
+    })
+    const summaries = stackSummaries(state)
+    expect(summaries).toHaveLength(2)
+    expect(summaries[0]?.title).toBe("A")
+    expect(summaries[0]?.memberCount).toBe(2)
+    expect(summaries[1]?.title).toBe("B")
+    expect(summaries[1]?.memberCount).toBe(2)
+  })
+
+  test("excludes deleted stacks", () => {
+    const state = createEmptyState()
+    state.stacksById.set("s1", {
+      id: "s1",
+      title: "Gone",
+      projectIds: ["p1", "p2"],
+      createdAt: 1,
+      updatedAt: 2,
+      deletedAt: 2,
+    })
+    expect(stackSummaries(state)).toEqual([])
+  })
+})
+
+describe("deriveChatSnapshot resolvedBindings", () => {
+  function buildSnapshot(state: ReturnType<typeof createEmptyState>, chatId: string) {
+    return deriveChatSnapshot(
+      state,
+      new Map(),
+      new Set(),
+      new Set(),
+      chatId,
+      () => ({ messages: [], history: { hasOlder: false, olderCursor: null, recentLimit: 200 } }),
+      () => [],
+    )
+  }
+
+  function seedStackChat(opts: { p2Deleted?: boolean } = {}) {
+    const state = createEmptyState()
+    state.projectsById.set("p1", { id: "p1", localPath: "/p1", title: "Backend", createdAt: 1, updatedAt: 1 })
+    state.projectsById.set("p2", {
+      id: "p2",
+      localPath: "/p2",
+      title: "Frontend",
+      createdAt: 1,
+      updatedAt: 1,
+      ...(opts.p2Deleted ? { deletedAt: 2 } : {}),
+    })
+    state.chatsById.set("c1", {
+      id: "c1",
+      projectId: "p1",
+      title: "Integration",
+      createdAt: 1,
+      updatedAt: 1,
+      unread: false,
+      provider: "claude",
+      planMode: false,
+      sessionToken: null,
+      sourceHash: null,
+      lastTurnOutcome: null,
+      stackId: "s1",
+      stackBindings: [
+        { projectId: "p1", worktreePath: "/p1", role: "primary" },
+        { projectId: "p2", worktreePath: "/p2", role: "additional" },
+      ],
+    })
+    return state
+  }
+
+  test("includes resolvedBindings when chat has stackBindings", () => {
+    const state = seedStackChat()
+    const snapshot = buildSnapshot(state, "c1")
+    expect(snapshot?.resolvedBindings).toEqual([
+      { projectId: "p1", projectTitle: "Backend", worktreePath: "/p1", role: "primary", projectStatus: "active" },
+      { projectId: "p2", projectTitle: "Frontend", worktreePath: "/p2", role: "additional", projectStatus: "active" },
+    ])
+  })
+
+  test("marks deleted peer projects as projectStatus: missing", () => {
+    const state = seedStackChat({ p2Deleted: true })
+    const snapshot = buildSnapshot(state, "c1")
+    expect(snapshot?.resolvedBindings?.[1]).toEqual({
+      projectId: "p2",
+      projectTitle: "Frontend",
+      worktreePath: "/p2",
+      role: "additional",
+      projectStatus: "missing",
+    })
+  })
+
+  test("omits resolvedBindings on a solo chat", () => {
+    const state = createEmptyState()
+    state.projectsById.set("p1", { id: "p1", localPath: "/p1", title: "Solo", createdAt: 1, updatedAt: 1 })
+    state.chatsById.set("c1", {
+      id: "c1",
+      projectId: "p1",
+      title: "T",
+      createdAt: 1,
+      updatedAt: 1,
+      unread: false,
+      provider: "claude",
+      planMode: false,
+      sessionToken: null,
+      sourceHash: null,
+      lastTurnOutcome: null,
+    })
+    const snapshot = buildSnapshot(state, "c1")
+    expect(snapshot?.resolvedBindings).toBeUndefined()
   })
 })
