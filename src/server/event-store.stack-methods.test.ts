@@ -180,3 +180,117 @@ describe("createStack", () => {
     await expect(store.createStack("X", [p1, p1])).rejects.toThrow(/duplicate/u)
   })
 })
+
+describe("chat_created with stack fields", () => {
+  test("apply preserves stackId and stackBindings on the ChatRecord", async () => {
+    const { store, projectIds: [p1, p2] } = await buildStoreWithProjects(["/tmp/p1", "/tmp/p2"])
+    const stack = await store.createStack("X", [p1, p2])
+    const chat = await store.createChat(p1, {
+      stackId: stack.id,
+      stackBindings: [
+        { projectId: p1, worktreePath: "/tmp/p1", role: "primary" },
+        { projectId: p2, worktreePath: "/tmp/p2", role: "additional" },
+      ],
+    })
+    expect(chat.stackId).toBe(stack.id)
+    expect(chat.stackBindings).toEqual([
+      { projectId: p1, worktreePath: "/tmp/p1", role: "primary" },
+      { projectId: p2, worktreePath: "/tmp/p2", role: "additional" },
+    ])
+  })
+
+  test("apply ignores stack fields when absent (legacy path)", async () => {
+    const { store, projectIds: [p1] } = await buildStoreWithProjects(["/tmp/p1"])
+    const chat = await store.createChat(p1)
+    expect(chat.stackId).toBeUndefined()
+    expect(chat.stackBindings).toBeUndefined()
+  })
+})
+
+test("createChat rejects only one of stackId/stackBindings", async () => {
+  const { store, projectIds: [p1, p2] } = await buildStoreWithProjects(["/tmp/p1", "/tmp/p2"])
+  const stack = await store.createStack("X", [p1, p2])
+  await expect(store.createChat(p1, { stackId: stack.id })).rejects.toThrow(/together/u)
+})
+
+test("createChat rejects bindings with no primary", async () => {
+  const { store, projectIds: [p1, p2] } = await buildStoreWithProjects(["/tmp/p1", "/tmp/p2"])
+  const stack = await store.createStack("X", [p1, p2])
+  await expect(store.createChat(p1, {
+    stackId: stack.id,
+    stackBindings: [
+      { projectId: p1, worktreePath: "/tmp/p1", role: "additional" },
+      { projectId: p2, worktreePath: "/tmp/p2", role: "additional" },
+    ],
+  })).rejects.toThrow(/primary/u)
+})
+
+test("createChat rejects two primaries", async () => {
+  const { store, projectIds: [p1, p2] } = await buildStoreWithProjects(["/tmp/p1", "/tmp/p2"])
+  const stack = await store.createStack("X", [p1, p2])
+  await expect(store.createChat(p1, {
+    stackId: stack.id,
+    stackBindings: [
+      { projectId: p1, worktreePath: "/tmp/p1", role: "primary" },
+      { projectId: p2, worktreePath: "/tmp/p2", role: "primary" },
+    ],
+  })).rejects.toThrow(/Exactly one primary/u)
+})
+
+test("createChat rejects binding projectId outside the stack", async () => {
+  const { store, projectIds: [p1, p2] } = await buildStoreWithProjects(["/tmp/p1", "/tmp/p2", "/tmp/p3"])
+  const stack = await store.createStack("X", [p1, p2])
+  await expect(store.createChat(p1, {
+    stackId: stack.id,
+    stackBindings: [
+      { projectId: p1, worktreePath: "/tmp/p1", role: "primary" },
+      { projectId: store.listProjects()[2].id, worktreePath: "/tmp/p3", role: "additional" },
+    ],
+  })).rejects.toThrow(/not a member of stack/u)
+})
+
+test("createChat rejects primary projectId not equal to top-level projectId arg", async () => {
+  const { store, projectIds: [p1, p2] } = await buildStoreWithProjects(["/tmp/p1", "/tmp/p2"])
+  const stack = await store.createStack("X", [p1, p2])
+  await expect(store.createChat(p1, {
+    stackId: stack.id,
+    stackBindings: [
+      { projectId: p2, worktreePath: "/tmp/p2", role: "primary" },
+      { projectId: p1, worktreePath: "/tmp/p1", role: "additional" },
+    ],
+  })).rejects.toThrow(/Primary binding projectId/u)
+})
+
+test("createChat rejects empty worktreePath", async () => {
+  const { store, projectIds: [p1, p2] } = await buildStoreWithProjects(["/tmp/p1", "/tmp/p2"])
+  const stack = await store.createStack("X", [p1, p2])
+  await expect(store.createChat(p1, {
+    stackId: stack.id,
+    stackBindings: [
+      { projectId: p1, worktreePath: "", role: "primary" },
+      { projectId: p2, worktreePath: "/tmp/p2", role: "additional" },
+    ],
+  })).rejects.toThrow(/worktreePath/u)
+})
+
+test("Replay preserves chat stackId and stackBindings", async () => {
+  const dir = await createTempDataDir()
+  const store1 = new EventStore(dir)
+  await store1.initialize()
+  const pa = await store1.openProject("/tmp/a", "A")
+  const pb = await store1.openProject("/tmp/b", "B")
+  const stack = await store1.createStack("X", [pa.id, pb.id])
+  const chat = await store1.createChat(pa.id, {
+    stackId: stack.id,
+    stackBindings: [
+      { projectId: pa.id, worktreePath: "/tmp/a", role: "primary" },
+      { projectId: pb.id, worktreePath: "/tmp/b", role: "additional" },
+    ],
+  })
+
+  const store2 = new EventStore(dir)
+  await store2.initialize()
+  const replayed = store2.getChat(chat.id)
+  expect(replayed?.stackId).toBe(stack.id)
+  expect(replayed?.stackBindings).toEqual(chat.stackBindings)
+})

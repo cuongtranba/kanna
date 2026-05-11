@@ -3,7 +3,7 @@ import { existsSync, readFileSync as readFileSyncImmediate } from "node:fs"
 import { homedir } from "node:os"
 import path from "node:path"
 import { getDataDir, LOG_PREFIX } from "../shared/branding"
-import type { AgentProvider, ChatHistoryPage, ChatHistorySnapshot, QueuedChatMessage, SlashCommand, TranscriptEntry } from "../shared/types"
+import type { AgentProvider, ChatHistoryPage, ChatHistorySnapshot, QueuedChatMessage, SlashCommand, StackBinding, TranscriptEntry } from "../shared/types"
 import { STORE_VERSION } from "../shared/types"
 import type { AutoContinueEvent } from "./auto-continue/events"
 import {
@@ -525,7 +525,7 @@ export class EventStore implements PushEventStore {
         break
       }
       case "chat_created": {
-      const chat = {
+        const chat: import("./events").ChatRecord = {
           id: e.chatId,
           projectId: e.projectId,
           title: e.title,
@@ -540,6 +540,8 @@ export class EventStore implements PushEventStore {
           hasMessages: false,
           lastTurnOutcome: null,
         }
+        if (e.stackId !== undefined) chat.stackId = e.stackId
+        if (e.stackBindings !== undefined) chat.stackBindings = e.stackBindings.map((b) => ({ ...b }))
         this.state.chatsById.set(chat.id, chat)
         this.updateTiming(e.chatId, e.timestamp, "idle")
         break
@@ -979,11 +981,46 @@ export class EventStore implements PushEventStore {
     return this.writeChain
   }
 
-  async createChat(projectId: string) {
+  async createChat(
+    projectId: string,
+    options?: { stackId?: string; stackBindings?: StackBinding[] },
+  ): Promise<import("./events").ChatRecord> {
     const project = this.state.projectsById.get(projectId)
     if (!project || project.deletedAt) {
       throw new Error("Project not found")
     }
+
+    if (options?.stackId !== undefined || options?.stackBindings !== undefined) {
+      if (options.stackId === undefined || options.stackBindings === undefined) {
+        throw new Error("stackId and stackBindings must be provided together")
+      }
+      const stack = this.state.stacksById.get(options.stackId)
+      if (!stack || stack.deletedAt) throw new Error("Stack not found")
+      if (options.stackBindings.length === 0) throw new Error("stackBindings cannot be empty")
+      const primaries = options.stackBindings.filter((b) => b.role === "primary")
+      if (primaries.length !== 1) throw new Error("Exactly one primary binding required")
+      const seenProjects = new Set<string>()
+      for (const binding of options.stackBindings) {
+        if (seenProjects.has(binding.projectId)) {
+          throw new Error("Duplicate projectId in stackBindings")
+        }
+        seenProjects.add(binding.projectId)
+        if (!stack.projectIds.includes(binding.projectId)) {
+          throw new Error(`Binding projectId not a member of stack: ${binding.projectId}`)
+        }
+        const peerProject = this.state.projectsById.get(binding.projectId)
+        if (!peerProject || peerProject.deletedAt) {
+          throw new Error(`Project not found: ${binding.projectId}`)
+        }
+        if (typeof binding.worktreePath !== "string" || binding.worktreePath.trim() === "") {
+          throw new Error("worktreePath must be a non-empty string")
+        }
+      }
+      if (primaries[0].projectId !== projectId) {
+        throw new Error("Primary binding projectId must match createChat projectId")
+      }
+    }
+
     const chatId = crypto.randomUUID()
     const event: ChatEvent = {
       v: STORE_VERSION,
@@ -992,6 +1029,8 @@ export class EventStore implements PushEventStore {
       chatId,
       projectId,
       title: "New Chat",
+      ...(options?.stackId !== undefined ? { stackId: options.stackId } : {}),
+      ...(options?.stackBindings !== undefined ? { stackBindings: options.stackBindings.map((b) => ({ ...b })) } : {}),
     }
     await this.append(this.chatsLogPath, event)
     return this.state.chatsById.get(chatId)!
