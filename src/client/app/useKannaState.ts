@@ -780,7 +780,7 @@ export function useKannaState(activeChatId: string | null): KannaState {
   const dialog = useAppDialog()
   const { resolvedTheme } = useTheme()
 
-  const [sidebarData, setSidebarData] = useState<SidebarData>({ projectGroups: [] })
+  const [sidebarData, setSidebarData] = useState<SidebarData>({ projectGroups: [], stacks: [] })
   const [optimisticSidebarProjectOrder, setOptimisticSidebarProjectOrder] = useState<string[] | null>(null)
   const [localProjects, setLocalProjects] = useState<LocalProjectsSnapshot | null>(null)
   const [updateSnapshot, setUpdateSnapshot] = useState<UpdateSnapshot | null>(null)

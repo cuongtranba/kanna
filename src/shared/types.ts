@@ -472,6 +472,7 @@ export interface SidebarProjectGroup {
 
 export interface SidebarData {
   projectGroups: SidebarProjectGroup[]
+  stacks: StackSummary[]
 }
 
 export interface LocalProjectSummary {
