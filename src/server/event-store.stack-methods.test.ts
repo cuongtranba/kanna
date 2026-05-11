@@ -26,6 +26,30 @@ async function buildStoreWithProjects(paths: string[]): Promise<{ store: EventSt
   return { store, projectIds }
 }
 
+describe("Replay determinism", () => {
+  test("Replay produces identical state to live mutations", async () => {
+    const dir = await createTempDataDir()
+
+    // Live mutations.
+    const store1 = new EventStore(dir)
+    await store1.initialize()
+    const pa = await store1.openProject("/tmp/a", "A")
+    const pb = await store1.openProject("/tmp/b", "B")
+    const pc = await store1.openProject("/tmp/c", "C")
+    const s = await store1.createStack("X", [pa.id, pb.id])
+    await store1.addProjectToStack(s.id, pc.id)
+    await store1.renameStack(s.id, "Renamed")
+    await store1.removeProjectFromStack(s.id, pa.id)
+    const liveStacks = store1.listStacks()
+
+    // Fresh store, same dir → replays the log.
+    const store2 = new EventStore(dir)
+    await store2.initialize()
+    const replayed = store2.listStacks()
+    expect(replayed).toEqual(liveStacks)
+  })
+})
+
 describe("removeProjectFromStack", () => {
   test("removeProjectFromStack removes the project", async () => {
     const { store, projectIds: [p1, p2, p3] } = await buildStoreWithProjects(["/tmp/p1", "/tmp/p2", "/tmp/p3"])
