@@ -2022,6 +2022,7 @@ export function useKannaState(activeChatId: string | null): KannaState {
     }
   }, [socket])
 
+
   const importClaudeSessions = useCallback(async () => {
     const result = await socket.command<{ imported: number; updated: number; skipped: number; failed: number; newProjects: number }>({ type: "sessions.importClaude" })
     return result
