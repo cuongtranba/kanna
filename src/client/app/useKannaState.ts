@@ -11,7 +11,7 @@ import { useSlashCommandsStore } from "../stores/slashCommandsStore"
 import { usePreferencesStore } from "../stores/preferences"
 import { useAppSettingsStore } from "../stores/appSettingsStore"
 import { useChatSoundPreferencesStore } from "../stores/chatSoundPreferencesStore"
-import type { ChatSnapshot, CloudflareTunnelRecord, CloudflareTunnelSettings, LocalProjectsSnapshot, SidebarChatRow, SidebarData, StackSummary } from "../../shared/types"
+import type { ChatSnapshot, CloudflareTunnelRecord, CloudflareTunnelSettings, GitWorktree, LocalProjectsSnapshot, SidebarChatRow, SidebarData, StackSummary } from "../../shared/types"
 import type { AskUserQuestionItem } from "../components/messages/types"
 import type { OpenLocalLinkTarget } from "../components/messages/shared"
 import { useAppDialog } from "../components/ui/app-dialog"
@@ -758,6 +758,7 @@ export interface KannaState {
   handleAddProjectToStack: (stackId: string, projectId: string) => Promise<void>
   handleRemoveProjectFromStack: (stackId: string, projectId: string) => Promise<void>
   handleCreateStackChat: (primaryProjectId: string, stackId: string, stackBindings: Array<{ projectId: string; worktreePath: string; role: "primary" | "additional" }>) => Promise<void>
+  handleListStackWorktrees: (projectId: string) => Promise<GitWorktree[]>
   importClaudeSessions: () => Promise<{ imported: number; updated: number; skipped: number; failed: number; newProjects: number }>
   handleCopyPath: (localPath: string) => Promise<void>
   handleOpenExternal: (action: OpenExternalAction, editor?: EditorOpenSettings) => Promise<void>
@@ -1984,6 +1985,17 @@ export function useKannaState(activeChatId: string | null): KannaState {
     }
   }, [activeChatId, navigate, socket])
 
+  const handleListStackWorktrees = useCallback(async (projectId: string): Promise<GitWorktree[]> => {
+    try {
+      const result = await socket.command<{ worktrees: GitWorktree[] }>({ type: "stack.listWorktrees", projectId })
+      setCommandError(null)
+      return result.worktrees
+    } catch (error) {
+      setCommandError(error instanceof Error ? error.message : String(error))
+      return []
+    }
+  }, [socket])
+
   const importClaudeSessions = useCallback(async () => {
     const result = await socket.command<{ imported: number; updated: number; skipped: number; failed: number; newProjects: number }>({ type: "sessions.importClaude" })
     return result
@@ -2290,6 +2302,7 @@ export function useKannaState(activeChatId: string | null): KannaState {
     handleAddProjectToStack,
     handleRemoveProjectFromStack,
     handleCreateStackChat,
+    handleListStackWorktrees,
     importClaudeSessions,
     handleCopyPath,
     handleOpenExternal,
