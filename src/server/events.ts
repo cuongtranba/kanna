@@ -1,4 +1,4 @@
-import type { AgentProvider, KannaStatus, ProjectSummary, QueuedChatMessage, SlashCommand, TranscriptEntry } from "../shared/types"
+import type { AgentProvider, KannaStatus, ProjectSummary, QueuedChatMessage, SlashCommand, StackBinding, TranscriptEntry } from "../shared/types"
 import type { AutoContinueEvent } from "./auto-continue/events"
 
 export interface ProjectRecord extends ProjectSummary {
@@ -23,6 +23,8 @@ export interface ChatRecord {
   lastMessageAt?: number
   lastTurnOutcome: "success" | "failed" | "cancelled" | null
   slashCommands?: SlashCommand[]
+  stackId?: string
+  stackBindings?: StackBinding[]
 }
 
 export interface ChatTimingState {
@@ -89,6 +91,8 @@ export type ChatEvent =
       chatId: string
       projectId: string
       title: string
+      stackId?: string
+      stackBindings?: StackBinding[]
     }
   | {
       v: 3
