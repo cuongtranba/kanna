@@ -1441,6 +1441,7 @@ describe("ws-router", () => {
               hasAutomation: false,
             }],
           })],
+          stacks: [],
         },
       },
     })
@@ -1466,6 +1467,7 @@ describe("ws-router", () => {
               hasAutomation: false,
             }],
           })],
+          stacks: [],
         },
       },
     })
@@ -1564,6 +1566,7 @@ describe("ws-router", () => {
               chats: [],
             }),
           ],
+          stacks: [],
         },
       },
     })
@@ -1697,6 +1700,7 @@ describe("ws-router", () => {
               hasAutomation: false,
             }],
           })],
+          stacks: [],
         },
       },
     })
@@ -1779,6 +1783,7 @@ describe("ws-router", () => {
               chats: [],
             }),
           }],
+          stacks: [],
         },
       },
     })
