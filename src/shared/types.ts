@@ -422,6 +422,23 @@ export interface ProjectSummary {
   updatedAt: number
 }
 
+export interface Stack {
+  id: string
+  title: string
+  projectIds: string[]   // insertion order; drives sidebar order within the stack
+  createdAt: number
+  updatedAt: number
+}
+
+export interface StackSummary {
+  id: string
+  title: string
+  projectIds: string[]
+  memberCount: number
+  createdAt: number
+  updatedAt: number
+}
+
 export interface SidebarChatRow {
   _id: string
   _creationTime: number

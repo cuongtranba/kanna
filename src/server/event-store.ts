@@ -12,6 +12,8 @@ import {
   type ProjectEvent,
   type QueuedMessageEvent,
   type SnapshotFile,
+  type StackEvent,
+  type StackRecord,
   type StoreEvent,
   type StoreState,
   type TurnEvent,
@@ -79,7 +81,7 @@ interface ParsedReplayEvent {
   lineIndex: number
 }
 
-function getReplayEventPriority(event: StoreEvent) {
+function getReplayEventPriority(event: StoreEvent): number {
   const discriminator = "type" in event ? event.type : event.kind
   switch (discriminator) {
     case "project_opened":
@@ -122,6 +124,16 @@ function getReplayEventPriority(event: StoreEvent) {
     case "auto_continue_cancelled":
     case "auto_continue_fired":
       return 11
+    case "stack_added":
+    case "stack_removed":
+    case "stack_renamed":
+    case "stack_project_added":
+    case "stack_project_removed":
+      return 0
+    default: {
+      const _exhaustive: never = discriminator
+      throw new Error(`Unhandled replay event type: ${String(_exhaustive)}`)
+    }
   }
 }
 
@@ -181,6 +193,7 @@ export class EventStore implements PushEventStore {
   private readonly schedulesLogPath: string
   private readonly tunnelLogPath: string
   private readonly pushLogPath: string
+  private readonly stacksLogPath: string
   private readonly transcriptsDir: string
   private readonly sidebarProjectOrderPath: string
   private legacyMessagesByChatId = new Map<string, TranscriptEntry[]>()
@@ -201,6 +214,7 @@ export class EventStore implements PushEventStore {
     this.schedulesLogPath = path.join(this.dataDir, "schedules.jsonl")
     this.tunnelLogPath = path.join(this.dataDir, "tunnels.jsonl")
     this.pushLogPath = path.join(this.dataDir, "push.jsonl")
+    this.stacksLogPath = path.join(this.dataDir, "stacks.jsonl")
     this.transcriptsDir = path.join(this.dataDir, "transcripts")
     this.sidebarProjectOrderPath = path.join(this.dataDir, SIDEBAR_PROJECT_ORDER_FILE)
   }
@@ -216,6 +230,7 @@ export class EventStore implements PushEventStore {
     await this.ensureFile(this.schedulesLogPath)
     await this.ensureFile(this.tunnelLogPath)
     await this.ensureFile(this.pushLogPath)
+    await this.ensureFile(this.stacksLogPath)
     await this.loadSnapshot()
     await this.replayLogs()
     await this.loadTunnelEvents()
@@ -246,6 +261,7 @@ export class EventStore implements PushEventStore {
       Bun.write(this.turnsLogPath, ""),
       Bun.write(this.schedulesLogPath, ""),
       Bun.write(this.tunnelLogPath, ""),
+      Bun.write(this.stacksLogPath, ""),
     ])
   }
 
@@ -293,6 +309,11 @@ export class EventStore implements PushEventStore {
           this.state.autoContinueEventsByChatId.set(entry.chatId, [...entry.events])
         }
       }
+      if (parsed.stacks?.length) {
+        for (const stack of parsed.stacks) {
+          this.state.stacksById.set(stack.id, { ...stack, projectIds: [...stack.projectIds] })
+        }
+      }
     } catch (error) {
       console.warn(`${LOG_PREFIX} Failed to load snapshot, resetting local history:`, error)
       await this.clearStorage()
@@ -306,6 +327,7 @@ export class EventStore implements PushEventStore {
     this.state.queuedMessagesByChatId.clear()
     this.state.sidebarProjectOrder = []
     this.state.autoContinueEventsByChatId.clear()
+    this.state.stacksById.clear()
     this.tunnelEventsByChatId.clear()
     this.sidebarProjectOrder = []
     this.legacySidebarProjectOrder = []
@@ -401,11 +423,12 @@ export class EventStore implements PushEventStore {
     if (this.storageReset) return
     const replayEvents = [
       ...await this.loadReplayEvents(this.projectsLogPath, 0),
-      ...await this.loadReplayEvents(this.chatsLogPath, 1),
-      ...await this.loadReplayEvents(this.messagesLogPath, 2),
-      ...await this.loadReplayEvents(this.queuedMessagesLogPath, 3),
-      ...await this.loadReplayEvents(this.turnsLogPath, 4),
-      ...await this.loadReplayEvents(this.schedulesLogPath, 5),
+      ...await this.loadReplayEvents(this.stacksLogPath, 1),
+      ...await this.loadReplayEvents(this.chatsLogPath, 2),
+      ...await this.loadReplayEvents(this.messagesLogPath, 3),
+      ...await this.loadReplayEvents(this.queuedMessagesLogPath, 4),
+      ...await this.loadReplayEvents(this.turnsLogPath, 5),
+      ...await this.loadReplayEvents(this.schedulesLogPath, 6),
     ]
     if (this.storageReset) return
 
@@ -668,6 +691,47 @@ export class EventStore implements PushEventStore {
         chat.updatedAt = e.timestamp
         break
       }
+      case "stack_added": {
+        const record: StackRecord = {
+          id: e.stackId,
+          title: e.title,
+          projectIds: [...e.projectIds],
+          createdAt: e.timestamp,
+          updatedAt: e.timestamp,
+        }
+        this.state.stacksById.set(record.id, record)
+        break
+      }
+      case "stack_removed": {
+        const stack = this.state.stacksById.get(e.stackId)
+        if (!stack || stack.deletedAt) break
+        stack.deletedAt = e.timestamp
+        stack.updatedAt = e.timestamp
+        break
+      }
+      case "stack_renamed": {
+        const stack = this.state.stacksById.get(e.stackId)
+        if (!stack || stack.deletedAt) break
+        stack.title = e.title
+        stack.updatedAt = e.timestamp
+        break
+      }
+      case "stack_project_added": {
+        const stack = this.state.stacksById.get(e.stackId)
+        if (!stack || stack.deletedAt) break
+        if (stack.projectIds.includes(e.projectId)) break
+        stack.projectIds = [...stack.projectIds, e.projectId]
+        stack.updatedAt = e.timestamp
+        break
+      }
+      case "stack_project_removed": {
+        const stack = this.state.stacksById.get(e.stackId)
+        if (!stack || stack.deletedAt) break
+        const next = stack.projectIds.filter((id) => id !== e.projectId)
+        stack.projectIds = next
+        stack.updatedAt = e.timestamp
+        break
+      }
     }
   }
 
@@ -798,6 +862,99 @@ export class EventStore implements PushEventStore {
       projectId,
     }
     await this.append(this.projectsLogPath, event)
+  }
+
+  async createStack(title: string, projectIds: string[]): Promise<StackRecord> {
+    const trimmed = title.trim()
+    if (trimmed === "") throw new Error("Stack title cannot be empty")
+    if (projectIds.length < 2) throw new Error("Stack requires at least 2 projects")
+    if (new Set(projectIds).size !== projectIds.length) throw new Error("Stack projectIds contain duplicates")
+    for (const projectId of projectIds) {
+      const project = this.state.projectsById.get(projectId)
+      if (!project || project.deletedAt) throw new Error(`Project not found: ${projectId}`)
+    }
+    const stackId = crypto.randomUUID()
+    const event: StackEvent = {
+      v: STORE_VERSION,
+      type: "stack_added",
+      timestamp: Date.now(),
+      stackId,
+      title: trimmed,
+      projectIds: [...projectIds],
+    }
+    await this.append(this.stacksLogPath, event)
+    return this.state.stacksById.get(stackId)!
+  }
+
+  getStack(stackId: string): StackRecord | null {
+    const stack = this.state.stacksById.get(stackId)
+    return stack && !stack.deletedAt ? stack : null
+  }
+
+  listStacks(): StackRecord[] {
+    return [...this.state.stacksById.values()].filter((s) => !s.deletedAt)
+  }
+
+  async renameStack(stackId: string, title: string): Promise<void> {
+    const stack = this.state.stacksById.get(stackId)
+    if (!stack || stack.deletedAt) throw new Error("Stack not found")
+    const trimmed = title.trim()
+    if (trimmed === "") throw new Error("Stack title cannot be empty")
+    if (trimmed === stack.title) return
+    const event: StackEvent = {
+      v: STORE_VERSION,
+      type: "stack_renamed",
+      timestamp: Date.now(),
+      stackId,
+      title: trimmed,
+    }
+    await this.append(this.stacksLogPath, event)
+  }
+
+  async removeStack(stackId: string): Promise<void> {
+    const stack = this.state.stacksById.get(stackId)
+    if (!stack) throw new Error("Stack not found")
+    if (stack.deletedAt) return
+    const event: StackEvent = {
+      v: STORE_VERSION,
+      type: "stack_removed",
+      timestamp: Date.now(),
+      stackId,
+    }
+    await this.append(this.stacksLogPath, event)
+  }
+
+  async addProjectToStack(stackId: string, projectId: string): Promise<void> {
+    const stack = this.state.stacksById.get(stackId)
+    if (!stack || stack.deletedAt) throw new Error("Stack not found")
+    const project = this.state.projectsById.get(projectId)
+    if (!project || project.deletedAt) throw new Error("Project not found")
+    if (stack.projectIds.includes(projectId)) return
+    const event: StackEvent = {
+      v: STORE_VERSION,
+      type: "stack_project_added",
+      timestamp: Date.now(),
+      stackId,
+      projectId,
+    }
+    await this.append(this.stacksLogPath, event)
+  }
+
+  async removeProjectFromStack(stackId: string, projectId: string): Promise<void> {
+    const stack = this.state.stacksById.get(stackId)
+    if (!stack || stack.deletedAt) throw new Error("Stack not found")
+    if (!stack.projectIds.includes(projectId)) return
+    if (stack.projectIds.length <= 2) {
+      throw new Error("Stack must keep at least 2 projects. Delete the stack instead.")
+    }
+    const event: StackEvent = {
+      v: STORE_VERSION,
+      type: "stack_project_removed",
+      timestamp: Date.now(),
+      stackId,
+      projectId,
+    }
+    await this.append(this.stacksLogPath, event)
   }
 
   async setSidebarProjectOrder(projectIds: string[]) {
@@ -1357,6 +1514,9 @@ export class EventStore implements PushEventStore {
         chatId,
         events: [...events],
       })),
+      stacks: [...this.state.stacksById.values()]
+        .filter((stack) => !stack.deletedAt)
+        .map((stack) => ({ ...stack, projectIds: [...stack.projectIds] })),
     }
   }
 
@@ -1370,6 +1530,7 @@ export class EventStore implements PushEventStore {
       Bun.write(this.queuedMessagesLogPath, ""),
       Bun.write(this.turnsLogPath, ""),
       Bun.write(this.schedulesLogPath, ""),
+      Bun.write(this.stacksLogPath, ""),
       // tunnels.jsonl is NOT compacted into the snapshot — it's left as-is
       // so that active tunnel state survives server restarts.
     ])
@@ -1414,6 +1575,7 @@ export class EventStore implements PushEventStore {
       Bun.file(this.queuedMessagesLogPath).size,
       Bun.file(this.turnsLogPath).size,
       Bun.file(this.schedulesLogPath).size,
+      Bun.file(this.stacksLogPath).size,
     ])
     return sizes.reduce((total, size) => total + size, 0) >= COMPACTION_THRESHOLD_BYTES
   }

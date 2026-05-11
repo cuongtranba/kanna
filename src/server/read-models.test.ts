@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { deriveChatSnapshot, deriveLocalProjectsSnapshot, deriveSidebarData, deriveTimings } from "./read-models"
+import { deriveChatSnapshot, deriveLocalProjectsSnapshot, deriveSidebarData, deriveTimings, stackSummaries } from "./read-models"
 import { createEmptyState } from "./events"
 import type { SlashCommand } from "../shared/types"
 
@@ -559,5 +559,44 @@ describe("deriveTimings", () => {
     expect(out.stateEnteredAt).toBe(1000)
     expect(out.cumulativeMs.idle).toBe(3000)
     expect(out.lastTurnDurationMs).toBeNull()
+  })
+})
+
+describe("stackSummaries", () => {
+  test("returns active stacks with member counts in insertion order", () => {
+    const state = createEmptyState()
+    state.stacksById.set("s1", {
+      id: "s1",
+      title: "A",
+      projectIds: ["p1", "p2"],
+      createdAt: 1,
+      updatedAt: 1,
+    })
+    state.stacksById.set("s2", {
+      id: "s2",
+      title: "B",
+      projectIds: ["p2", "p3"],
+      createdAt: 2,
+      updatedAt: 2,
+    })
+    const summaries = stackSummaries(state)
+    expect(summaries).toHaveLength(2)
+    expect(summaries[0]?.title).toBe("A")
+    expect(summaries[0]?.memberCount).toBe(2)
+    expect(summaries[1]?.title).toBe("B")
+    expect(summaries[1]?.memberCount).toBe(2)
+  })
+
+  test("excludes deleted stacks", () => {
+    const state = createEmptyState()
+    state.stacksById.set("s1", {
+      id: "s1",
+      title: "Gone",
+      projectIds: ["p1", "p2"],
+      createdAt: 1,
+      updatedAt: 2,
+      deletedAt: 2,
+    })
+    expect(stackSummaries(state)).toEqual([])
   })
 })

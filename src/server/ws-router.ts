@@ -1794,6 +1794,37 @@ export function createWsRouter({
           send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: stopResult })
           return
         }
+        case "stack.create": {
+          const stack = await store.createStack(command.title, command.projectIds)
+          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: { stackId: stack.id } })
+          resolvedAnalytics.track("stack_created")
+          await broadcastFilteredSnapshots({ includeSidebar: true })
+          return
+        }
+        case "stack.rename": {
+          await store.renameStack(command.stackId, command.title)
+          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
+          await broadcastFilteredSnapshots({ includeSidebar: true })
+          return
+        }
+        case "stack.remove": {
+          await store.removeStack(command.stackId)
+          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
+          await broadcastFilteredSnapshots({ includeSidebar: true })
+          return
+        }
+        case "stack.addProject": {
+          await store.addProjectToStack(command.stackId, command.projectId)
+          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
+          await broadcastFilteredSnapshots({ includeSidebar: true })
+          return
+        }
+        case "stack.removeProject": {
+          await store.removeProjectFromStack(command.stackId, command.projectId)
+          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
+          await broadcastFilteredSnapshots({ includeSidebar: true })
+          return
+        }
       }
 
       await broadcastSnapshots()

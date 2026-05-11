@@ -73,6 +73,11 @@ export type ClientCommand =
   | { type: "project.remove"; projectId: string }
   | { type: "sidebar.reorderProjectGroups"; projectIds: string[] }
   | { type: "project.readDiffPatch"; projectId: string; path: string }
+  | { type: "stack.create"; title: string; projectIds: string[] }
+  | { type: "stack.rename"; stackId: string; title: string }
+  | { type: "stack.remove"; stackId: string }
+  | { type: "stack.addProject"; stackId: string; projectId: string }
+  | { type: "stack.removeProject"; stackId: string; projectId: string }
   | { type: "system.ping" }
   | { type: "update.check"; force?: boolean }
   | { type: "update.install" }

@@ -8,6 +8,7 @@ import type {
   SidebarChatRow,
   SidebarData,
   SidebarProjectGroup,
+  StackSummary,
 } from "../shared/types"
 import type { ChatRecord, ChatTimingState, StoreState } from "./events"
 import { resolveLocalPath } from "./paths"
@@ -298,4 +299,17 @@ export function deriveChatSnapshot(
     tunnels,
     liveTunnelId,
   }
+}
+
+export function stackSummaries(state: StoreState): StackSummary[] {
+  return [...state.stacksById.values()]
+    .filter((s) => !s.deletedAt)
+    .map((s) => ({
+      id: s.id,
+      title: s.title,
+      projectIds: [...s.projectIds],
+      memberCount: s.projectIds.length,
+      createdAt: s.createdAt,
+      updatedAt: s.updatedAt,
+    }))
 }
