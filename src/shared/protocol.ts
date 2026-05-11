@@ -78,6 +78,7 @@ export type ClientCommand =
   | { type: "stack.remove"; stackId: string }
   | { type: "stack.addProject"; stackId: string; projectId: string }
   | { type: "stack.removeProject"; stackId: string; projectId: string }
+  | { type: "stack.listWorktrees"; projectId: string }
   | { type: "system.ping" }
   | { type: "update.check"; force?: boolean }
   | { type: "update.install" }
