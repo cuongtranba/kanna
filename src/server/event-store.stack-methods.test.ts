@@ -26,6 +26,28 @@ async function buildStoreWithProjects(paths: string[]): Promise<{ store: EventSt
   return { store, projectIds }
 }
 
+describe("removeStack", () => {
+  test("removeStack marks the stack deleted; getStack returns null", async () => {
+    const { store, projectIds: [p1, p2] } = await buildStoreWithProjects(["/tmp/p1", "/tmp/p2"])
+    const stack = await store.createStack("To Delete", [p1, p2])
+    await store.removeStack(stack.id)
+    expect(store.getStack(stack.id)).toBeNull()
+    expect(store.listStacks()).toEqual([])
+  })
+
+  test("removeStack on unknown id throws", async () => {
+    const { store } = await buildStoreWithProjects(["/tmp/p1", "/tmp/p2"])
+    await expect(store.removeStack("nonexistent-id")).rejects.toThrow(/Stack not found/u)
+  })
+
+  test("removeStack on already-deleted id is idempotent (does not throw)", async () => {
+    const { store, projectIds: [p1, p2] } = await buildStoreWithProjects(["/tmp/p1", "/tmp/p2"])
+    const stack = await store.createStack("Twice Deleted", [p1, p2])
+    await store.removeStack(stack.id)
+    await expect(store.removeStack(stack.id)).resolves.toBeUndefined()
+  })
+})
+
 describe("renameStack", () => {
   test("renameStack updates the title and emits stack_renamed", async () => {
     const { store, projectIds: [p1, p2] } = await buildStoreWithProjects(["/tmp/p1", "/tmp/p2"])
