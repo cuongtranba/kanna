@@ -595,6 +595,8 @@ class AsyncMessageQueue<T> implements AsyncIterable<T> {
 
 export function buildClaudeEnv(baseEnv: NodeJS.ProcessEnv, oauthToken: string | null): NodeJS.ProcessEnv {
   const { CLAUDECODE: _unused, ...rest } = baseEnv
+  // Empty string is treated the same as null. Blank tokens are rejected at persistence time
+  // by normalizeTokenEntry, so in practice oauthToken is either a non-empty string or null.
   if (!oauthToken) return rest
   return { ...rest, CLAUDE_CODE_OAUTH_TOKEN: oauthToken }
 }

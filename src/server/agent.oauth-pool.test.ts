@@ -20,7 +20,7 @@ describe("buildClaudeEnv", () => {
     expect(env.CLAUDE_CODE_OAUTH_TOKEN).toBe("from-env")
   })
 
-  test("removes CLAUDE_CODE_OAUTH_TOKEN when token is empty string", () => {
+  test("treats empty-string token as no-override (env value preserved)", () => {
     const env = buildClaudeEnv({ CLAUDE_CODE_OAUTH_TOKEN: "from-env" }, "")
     expect(env.CLAUDE_CODE_OAUTH_TOKEN).toBe("from-env")
   })
