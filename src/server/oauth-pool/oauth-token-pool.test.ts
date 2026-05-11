@@ -52,6 +52,22 @@ describe("OAuthTokenPool.pickActive", () => {
     )
     expect(pool.pickActive()?.id).toBe("c")
   })
+
+  test("skips error-status tokens", () => {
+    const pool = new OAuthTokenPool(
+      () => [tok("a", { status: "error" }), tok("b")],
+      () => {}, () => 1000,
+    )
+    expect(pool.pickActive()?.id).toBe("b")
+  })
+
+  test("returns null when all tokens are error-status", () => {
+    const pool = new OAuthTokenPool(
+      () => [tok("a", { status: "error" })],
+      () => {}, () => 1000,
+    )
+    expect(pool.pickActive()).toBe(null)
+  })
 })
 
 describe("OAuthTokenPool.markLimited", () => {

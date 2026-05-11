@@ -15,8 +15,9 @@ export class OAuthTokenPool {
     const now = this.now()
     const candidates: OAuthTokenEntry[] = []
     for (const t of this.readTokens()) {
-      if (t.status === "limited" && t.limitedUntil !== null && t.limitedUntil > now) continue
-      if (t.status === "limited" && (t.limitedUntil === null || t.limitedUntil <= now)) {
+      if (t.status === "error") continue
+      if (t.status === "limited") {
+        if (t.limitedUntil !== null && t.limitedUntil > now) continue
         this.writeStatus(t.id, { status: "active", limitedUntil: null })
         candidates.push({ ...t, status: "active", limitedUntil: null })
         continue
