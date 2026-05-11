@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test"
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
-import { AUTH_DEFAULTS, CLOUDFLARE_TUNNEL_DEFAULTS, UPLOAD_DEFAULTS } from "../shared/types"
+import { AUTH_DEFAULTS, CLAUDE_AUTH_DEFAULTS, CLOUDFLARE_TUNNEL_DEFAULTS, UPLOAD_DEFAULTS } from "../shared/types"
 import { AppSettingsManager, readAppSettingsSnapshot } from "./app-settings"
 import type { AppSettingsSnapshot } from "../shared/types"
 
@@ -63,6 +63,7 @@ function expectedSettingsSnapshot(filePath: string, overrides: Partial<AppSettin
     filePathDisplay: filePath,
     cloudflareTunnel: CLOUDFLARE_TUNNEL_DEFAULTS,
     auth: AUTH_DEFAULTS,
+    claudeAuth: CLAUDE_AUTH_DEFAULTS,
     uploads: UPLOAD_DEFAULTS,
     ...overrides,
   }
@@ -282,6 +283,52 @@ describe("uploads normalization", () => {
     try { await manager.setUploads({ maxFileSizeMb: 99999 }) } catch (error) { highError = error }
     expect((highError as Error)?.message).toMatch(/between/)
     manager.dispose()
+  })
+})
+
+describe("AppSettingsManager.setClaudeAuth", () => {
+  test("persists tokens and round-trips", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "kanna-settings-"))
+    const filePath = path.join(dir, "settings.json")
+    const mgr = new AppSettingsManager(filePath)
+    await mgr.initialize()
+
+    const snapshot = await mgr.setClaudeAuth({
+      tokens: [{
+        id: "t1", label: "prod", token: "sk-ant-abc",
+        status: "active", limitedUntil: null,
+        lastUsedAt: null, lastErrorAt: null, lastErrorMessage: null, addedAt: 100,
+      }],
+    })
+    expect(snapshot.claudeAuth.tokens).toHaveLength(1)
+    expect(snapshot.claudeAuth.tokens[0]?.label).toBe("prod")
+
+    const raw = JSON.parse(await readFile(filePath, "utf8"))
+    expect(raw.claudeAuth.tokens[0].token).toBe("sk-ant-abc")
+
+    mgr.dispose()
+  })
+
+  test("mutateTokenStatus updates one field without disturbing others", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "kanna-settings-"))
+    const filePath = path.join(dir, "settings.json")
+    const mgr = new AppSettingsManager(filePath)
+    await mgr.initialize()
+
+    await mgr.setClaudeAuth({
+      tokens: [{
+        id: "t1", label: "prod", token: "sk-ant-abc",
+        status: "active", limitedUntil: null,
+        lastUsedAt: null, lastErrorAt: null, lastErrorMessage: null, addedAt: 100,
+      }],
+    })
+    await mgr.mutateTokenStatus("t1", { status: "limited", limitedUntil: 9999 })
+    const snapshot = mgr.getSnapshot()
+    expect(snapshot.claudeAuth.tokens[0]?.status).toBe("limited")
+    expect(snapshot.claudeAuth.tokens[0]?.limitedUntil).toBe(9999)
+    expect(snapshot.claudeAuth.tokens[0]?.token).toBe("sk-ant-abc")
+
+    mgr.dispose()
   })
 })
 
