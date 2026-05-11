@@ -84,7 +84,7 @@ export function StacksSection({
                 >
                   <ChevronRight
                     className={cn(
-                      "h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform",
+                      "h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform motion-reduce:transition-none",
                       isExpanded && "rotate-90"
                     )}
                   />
