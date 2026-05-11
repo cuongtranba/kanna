@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { useShallow } from "zustand/react/shallow"
-import { PROVIDERS, type AgentProvider, type AppSettingsPatch, type AppSettingsSnapshot, type AskUserQuestionAnswerMap, type ChatAttachment, type ChatDiffSnapshot, type ChatHistoryPage, type KeybindingsSnapshot, type LlmProviderSnapshot, type LlmProviderValidationResult, type ModelOptions, type ProviderCatalogEntry, type PushConfigSnapshot, type QueuedChatMessage, type StandaloneTranscriptExportCommandResult, type TranscriptEntry, type UpdateInstallResult, type UpdateSnapshot, type UserPromptEntry } from "../../shared/types"
+import { PROVIDERS, type AgentProvider, type AppSettingsPatch, type AppSettingsSnapshot, type AskUserQuestionAnswerMap, type ChatAttachment, type ChatDiffSnapshot, type ChatHistoryPage, type ClaudeAuthSettings, type KeybindingsSnapshot, type LlmProviderSnapshot, type LlmProviderValidationResult, type ModelOptions, type ProviderCatalogEntry, type PushConfigSnapshot, type QueuedChatMessage, type StandaloneTranscriptExportCommandResult, type TranscriptEntry, type UpdateInstallResult, type UpdateSnapshot, type UserPromptEntry } from "../../shared/types"
 import { NEW_CHAT_COMPOSER_ID, type ComposerState, useChatPreferencesStore } from "../stores/chatPreferencesStore"
 import { useRightSidebarStore } from "../stores/rightSidebarStore"
 import { useTerminalLayoutStore } from "../stores/terminalLayoutStore"
@@ -735,6 +735,8 @@ export interface KannaState {
   handleReadAppSettings: () => Promise<void>
   handleWriteAppSettings: (patch: AppSettingsPatch) => Promise<void>
   handleWriteCloudflareTunnel: (patch: Partial<CloudflareTunnelSettings>) => Promise<void>
+  handleWriteClaudeAuth: (patch: Partial<ClaudeAuthSettings>) => Promise<void>
+  handleTestOAuthToken: (token: string) => Promise<{ ok: boolean; error: string | null }>
   handleReadLlmProvider: () => Promise<void>
   handleWriteLlmProvider: (value: Pick<LlmProviderSnapshot, "provider" | "apiKey" | "model" | "baseUrl">) => Promise<void>
   handleValidateLlmProvider: (value: Pick<LlmProviderSnapshot, "provider" | "apiKey" | "model" | "baseUrl">) => Promise<LlmProviderValidationResult>
@@ -1048,6 +1050,30 @@ export function useKannaState(activeChatId: string | null): KannaState {
       throw error
     }
   }, [handleReadAppSettings, socket])
+
+  const handleWriteClaudeAuth = useCallback(async (patch: Partial<ClaudeAuthSettings>) => {
+    try {
+      useAppSettingsStore.getState().applyOptimisticPatch({ claudeAuth: patch })
+      const snapshot = await socket.command<AppSettingsSnapshot>({
+        type: "appSettings.setClaudeAuth",
+        patch,
+      })
+      setAppSettings(snapshot)
+      syncRuntimeStoresFromAppSettings(snapshot)
+      setCommandError(null)
+    } catch (error) {
+      setCommandError(error instanceof Error ? error.message : String(error))
+      await handleReadAppSettings()
+      throw error
+    }
+  }, [handleReadAppSettings, socket])
+
+  const handleTestOAuthToken = useCallback(async (token: string) => {
+    return await socket.command<{ ok: boolean; error: string | null }>({
+      type: "appSettings.testOAuthToken",
+      token,
+    })
+  }, [socket])
 
   const handleReadLlmProvider = useCallback(async () => {
     try {
@@ -2188,6 +2214,8 @@ export function useKannaState(activeChatId: string | null): KannaState {
     handleReadAppSettings,
     handleWriteAppSettings,
     handleWriteCloudflareTunnel,
+    handleWriteClaudeAuth,
+    handleTestOAuthToken,
     handleReadLlmProvider,
     handleWriteLlmProvider,
     handleValidateLlmProvider,
