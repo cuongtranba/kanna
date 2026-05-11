@@ -137,7 +137,7 @@ export function deriveSidebarData(
     }
   })
 
-  return { projectGroups }
+  return { projectGroups, stacks: stackSummaries(state) }
 }
 
 export function deriveLocalProjectsSnapshot(

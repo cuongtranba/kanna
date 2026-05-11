@@ -152,17 +152,14 @@ export function normalizeKeybindings(value: KeybindingsFile | null | undefined, 
 }
 
 function createDefaultSnapshot(filePath: string, warning: string | null = null): KeybindingsSnapshot {
+  const bindings = Object.fromEntries(
+    (Object.keys(DEFAULT_KEYBINDINGS) as KeybindingAction[]).map((action) => [
+      action,
+      [...DEFAULT_KEYBINDINGS[action]],
+    ])
+  ) as Record<KeybindingAction, string[]>
   return {
-    bindings: {
-      toggleEmbeddedTerminal: [...DEFAULT_KEYBINDINGS.toggleEmbeddedTerminal],
-      toggleRightSidebar: [...DEFAULT_KEYBINDINGS.toggleRightSidebar],
-      openInFinder: [...DEFAULT_KEYBINDINGS.openInFinder],
-      openInEditor: [...DEFAULT_KEYBINDINGS.openInEditor],
-      addSplitTerminal: [...DEFAULT_KEYBINDINGS.addSplitTerminal],
-      jumpToSidebarChat: [...DEFAULT_KEYBINDINGS.jumpToSidebarChat],
-      createChatInCurrentProject: [...DEFAULT_KEYBINDINGS.createChatInCurrentProject],
-      openAddProject: [...DEFAULT_KEYBINDINGS.openAddProject],
-    },
+    bindings,
     warning,
     filePathDisplay: formatDisplayPath(filePath),
   }

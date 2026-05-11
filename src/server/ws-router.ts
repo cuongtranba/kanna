@@ -32,6 +32,7 @@ import type {
   SkillUninstallResult,
 } from "../shared/types"
 import { importClaudeSessions } from "./claude-session-importer"
+import { listWorktrees } from "./worktree-store"
 import type { TunnelGateway } from "./cloudflare-tunnel/gateway"
 import type { PushManager } from "./push/push-manager"
 
@@ -1826,6 +1827,15 @@ export function createWsRouter({
           await store.removeProjectFromStack(command.stackId, command.projectId)
           send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
           await broadcastFilteredSnapshots({ includeSidebar: true })
+          return
+        }
+        case "stack.listWorktrees": {
+          const project = store.getProject(command.projectId)
+          if (!project) {
+            throw new Error("Project not found")
+          }
+          const worktrees = await listWorktrees(project.localPath)
+          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: { worktrees } })
           return
         }
       }

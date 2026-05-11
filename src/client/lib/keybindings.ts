@@ -9,6 +9,9 @@ export const KEYBINDING_ACTION_LABELS: Record<KeybindingAction, string> = {
   jumpToSidebarChat: "Jump To Sidebar Chat",
   createChatInCurrentProject: "New Chat In Current Project",
   openAddProject: "Open Add Project",
+  newStack: "New Stack",
+  newStackChat: "New Stack Chat",
+  jumpToStacks: "Jump To Stacks",
 }
 
 export function formatKeybindingInput(bindings: string[] | undefined) {
@@ -79,17 +82,14 @@ export function getBindingsForAction(
 }
 
 export function getResolvedKeybindings(snapshot: KeybindingsSnapshot | null): KeybindingsSnapshot {
+  const bindings = Object.fromEntries(
+    (Object.keys(DEFAULT_KEYBINDINGS) as KeybindingAction[]).map((action) => [
+      action,
+      snapshot?.bindings[action] ?? DEFAULT_KEYBINDINGS[action],
+    ])
+  ) as Record<KeybindingAction, string[]>
   return {
-    bindings: {
-      toggleEmbeddedTerminal: snapshot?.bindings.toggleEmbeddedTerminal ?? DEFAULT_KEYBINDINGS.toggleEmbeddedTerminal,
-      toggleRightSidebar: snapshot?.bindings.toggleRightSidebar ?? DEFAULT_KEYBINDINGS.toggleRightSidebar,
-      openInFinder: snapshot?.bindings.openInFinder ?? DEFAULT_KEYBINDINGS.openInFinder,
-      openInEditor: snapshot?.bindings.openInEditor ?? DEFAULT_KEYBINDINGS.openInEditor,
-      addSplitTerminal: snapshot?.bindings.addSplitTerminal ?? DEFAULT_KEYBINDINGS.addSplitTerminal,
-      jumpToSidebarChat: snapshot?.bindings.jumpToSidebarChat ?? DEFAULT_KEYBINDINGS.jumpToSidebarChat,
-      createChatInCurrentProject: snapshot?.bindings.createChatInCurrentProject ?? DEFAULT_KEYBINDINGS.createChatInCurrentProject,
-      openAddProject: snapshot?.bindings.openAddProject ?? DEFAULT_KEYBINDINGS.openAddProject,
-    },
+    bindings,
     warning: snapshot?.warning ?? null,
     filePathDisplay: snapshot?.filePathDisplay ?? "",
   }

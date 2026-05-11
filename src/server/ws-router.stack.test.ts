@@ -3,6 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import type { KeybindingsSnapshot } from "../shared/types"
+import type { ClientCommand } from "../shared/protocol"
 import { EventStore } from "./event-store"
 import { createWsRouter } from "./ws-router"
 
@@ -39,6 +40,9 @@ const DEFAULT_KEYBINDINGS_SNAPSHOT: KeybindingsSnapshot = {
     jumpToSidebarChat: ["cmd+alt"],
     createChatInCurrentProject: ["cmd+alt+n"],
     openAddProject: ["cmd+alt+o"],
+    newStack: ["cmd+alt+w"],
+    newStackChat: ["cmd+alt+shift+n"],
+    jumpToStacks: ["g s"],
   },
   warning: null,
   filePathDisplay: "~/.kanna/keybindings.json",
@@ -272,6 +276,11 @@ describe("ws-router stack commands", () => {
       { projectId: p1.id, worktreePath: "/tmp/stack-test-p1", role: "primary" },
       { projectId: p2.id, worktreePath: "/tmp/stack-test-p2", role: "additional" },
     ])
+  })
+
+  test("stack.listWorktrees is a valid ClientCommand", () => {
+    const cmd: ClientCommand = { type: "stack.listWorktrees", projectId: "any-id" }
+    expect(cmd.type).toBe("stack.listWorktrees")
   })
 
   test("chat.create rejects bindings violating invariants (e.g. no primary)", async () => {

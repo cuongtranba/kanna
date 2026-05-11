@@ -407,6 +407,20 @@ describe("read models", () => {
     expect(sidebar.projectGroups[0]?.chats.find((chat) => chat.chatId === "chat-draining")?.canFork).toBeUndefined()
   })
 
+  test("deriveSidebarData includes stack summaries", () => {
+    const state = createEmptyState()
+    state.stacksById.set("s1", {
+      id: "s1",
+      title: "Integration",
+      projectIds: ["p1", "p2"],
+      createdAt: 1,
+      updatedAt: 1,
+    })
+    const sidebar = deriveSidebarData(state, new Map())
+    expect(sidebar.stacks).toHaveLength(1)
+    expect(sidebar.stacks[0]?.title).toBe("Integration")
+  })
+
   test("passes slash commands from ChatRecord through to ChatSnapshot", () => {
     const slashCommands: SlashCommand[] = [
       { name: "review", description: "r", argumentHint: "<pr>" },

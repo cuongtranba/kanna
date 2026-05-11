@@ -293,6 +293,10 @@ function KannaLayout() {
       onOpenExternalPath={handleSidebarOpenExternalPath}
       onHideProject={handleSidebarHideProject}
       onReorderProjectGroups={handleSidebarReorderProjectGroups}
+      onCreateStack={state.handleCreateStack}
+      onRenameStack={state.handleRenameStack}
+      onRemoveStack={state.handleRemoveStack}
+      onCreateStackChat={state.handleCreateStackChat}
       editorLabel={state.editorLabel}
       updateSnapshot={state.updateSnapshot}
     />
@@ -325,6 +329,10 @@ function KannaLayout() {
     state.sidebarOpen,
     state.sidebarReady,
     state.updateSnapshot,
+    state.handleCreateStack,
+    state.handleRenameStack,
+    state.handleRemoveStack,
+    state.handleCreateStackChat,
   ])
 
   useEffect(() => {

@@ -2215,5 +2215,8 @@ function buildKeybindingPayload(source: Record<string, string>): Record<Keybindi
     jumpToSidebarChat: parseKeybindingInput(source.jumpToSidebarChat ?? ""),
     createChatInCurrentProject: parseKeybindingInput(source.createChatInCurrentProject ?? ""),
     openAddProject: parseKeybindingInput(source.openAddProject ?? ""),
+    newStack: parseKeybindingInput(source.newStack ?? ""),
+    newStackChat: parseKeybindingInput(source.newStackChat ?? ""),
+    jumpToStacks: parseKeybindingInput(source.jumpToStacks ?? ""),
   }
 }
