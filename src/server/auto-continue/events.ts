@@ -18,7 +18,7 @@ export type AutoContinueEvent =
       kind: "auto_continue_accepted"
       scheduledAt: number
       tz: string
-      source: "user" | "auto_setting"
+      source: "user" | "auto_setting" | "token_rotation"
       resetAt: number
       detectedAt: number
     })

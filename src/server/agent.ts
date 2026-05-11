@@ -780,6 +780,8 @@ function extractBackgroundTaskId(content: unknown): string | null {
   return null
 }
 
+const TOKEN_ROTATION_SCHEDULE_DELAY_MS = 100
+
 export class AgentCoordinator {
   private readonly store: EventStore
   private readonly onStateChange: (chatId?: string, options?: { immediate?: boolean }) => void
@@ -1853,9 +1855,9 @@ export class AgentCoordinator {
       ? {
           ...base,
           kind: "auto_continue_accepted",
-          scheduledAt: now + 100,
+          scheduledAt: now + TOKEN_ROTATION_SCHEDULE_DELAY_MS,
           tz: detection.tz,
-          source: "auto_setting",
+          source: "token_rotation",
           resetAt: detection.resetAt,
           detectedAt: now,
         }
@@ -1878,10 +1880,12 @@ export class AgentCoordinator {
           }
 
     await this.emitAutoContinueEvent(event)
-    await this.store.appendMessage(chatId, timestamped({
-      kind: "auto_continue_prompt",
-      scheduleId,
-    }))
+    if (!canRotate) {
+      await this.store.appendMessage(chatId, timestamped({
+        kind: "auto_continue_prompt",
+        scheduleId,
+      }))
+    }
 
     return true
   }
