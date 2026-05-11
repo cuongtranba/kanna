@@ -49,6 +49,8 @@
     "src/client/components/ui/animated-shiny-text.tsx",
     "src/client/components/chat-ui/BackgroundTasksIndicator.tsx",
     "src/client/components/chat-ui/BackgroundTasksDialog.tsx",
+    "src/client/components/chat-ui/OAuthTokenPoolCard.tsx",
+    "src/client/components/chat-ui/OAuthTokenPoolCard.test.tsx",
     "src/client/components/chat-ui/ChatInput.tsx",
     "src/client/components/chat-ui/sidebar/ChatRow.tsx",
     "src/client/components/chat-ui/sidebar/LocalProjectsSection.tsx",
