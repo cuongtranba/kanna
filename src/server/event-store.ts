@@ -12,6 +12,7 @@ import {
   type ProjectEvent,
   type QueuedMessageEvent,
   type SnapshotFile,
+  type StackRecord,
   type StoreEvent,
   type StoreState,
   type TurnEvent,
@@ -678,6 +679,47 @@ export class EventStore implements PushEventStore {
         if (!chat) break
         chat.pendingForkSessionToken = e.pendingForkSessionToken
         chat.updatedAt = e.timestamp
+        break
+      }
+      case "stack_added": {
+        const record: StackRecord = {
+          id: e.stackId,
+          title: e.title,
+          projectIds: [...e.projectIds],
+          createdAt: e.timestamp,
+          updatedAt: e.timestamp,
+        }
+        this.state.stacksById.set(record.id, record)
+        break
+      }
+      case "stack_removed": {
+        const stack = this.state.stacksById.get(e.stackId)
+        if (!stack) break
+        stack.deletedAt = e.timestamp
+        stack.updatedAt = e.timestamp
+        break
+      }
+      case "stack_renamed": {
+        const stack = this.state.stacksById.get(e.stackId)
+        if (!stack || stack.deletedAt) break
+        stack.title = e.title
+        stack.updatedAt = e.timestamp
+        break
+      }
+      case "stack_project_added": {
+        const stack = this.state.stacksById.get(e.stackId)
+        if (!stack || stack.deletedAt) break
+        if (stack.projectIds.includes(e.projectId)) break
+        stack.projectIds = [...stack.projectIds, e.projectId]
+        stack.updatedAt = e.timestamp
+        break
+      }
+      case "stack_project_removed": {
+        const stack = this.state.stacksById.get(e.stackId)
+        if (!stack || stack.deletedAt) break
+        const next = stack.projectIds.filter((id) => id !== e.projectId)
+        stack.projectIds = next
+        stack.updatedAt = e.timestamp
         break
       }
     }
