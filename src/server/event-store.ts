@@ -187,6 +187,7 @@ export class EventStore implements PushEventStore {
   private readonly schedulesLogPath: string
   private readonly tunnelLogPath: string
   private readonly pushLogPath: string
+  private readonly stacksLogPath: string
   private readonly transcriptsDir: string
   private readonly sidebarProjectOrderPath: string
   private legacyMessagesByChatId = new Map<string, TranscriptEntry[]>()
@@ -207,6 +208,7 @@ export class EventStore implements PushEventStore {
     this.schedulesLogPath = path.join(this.dataDir, "schedules.jsonl")
     this.tunnelLogPath = path.join(this.dataDir, "tunnels.jsonl")
     this.pushLogPath = path.join(this.dataDir, "push.jsonl")
+    this.stacksLogPath = path.join(this.dataDir, "stacks.jsonl")
     this.transcriptsDir = path.join(this.dataDir, "transcripts")
     this.sidebarProjectOrderPath = path.join(this.dataDir, SIDEBAR_PROJECT_ORDER_FILE)
   }
@@ -222,6 +224,7 @@ export class EventStore implements PushEventStore {
     await this.ensureFile(this.schedulesLogPath)
     await this.ensureFile(this.tunnelLogPath)
     await this.ensureFile(this.pushLogPath)
+    await this.ensureFile(this.stacksLogPath)
     await this.loadSnapshot()
     await this.replayLogs()
     await this.loadTunnelEvents()
@@ -252,6 +255,7 @@ export class EventStore implements PushEventStore {
       Bun.write(this.turnsLogPath, ""),
       Bun.write(this.schedulesLogPath, ""),
       Bun.write(this.tunnelLogPath, ""),
+      Bun.write(this.stacksLogPath, ""),
     ])
   }
 
@@ -312,6 +316,7 @@ export class EventStore implements PushEventStore {
     this.state.queuedMessagesByChatId.clear()
     this.state.sidebarProjectOrder = []
     this.state.autoContinueEventsByChatId.clear()
+    this.state.stacksById.clear()
     this.tunnelEventsByChatId.clear()
     this.sidebarProjectOrder = []
     this.legacySidebarProjectOrder = []
@@ -407,11 +412,12 @@ export class EventStore implements PushEventStore {
     if (this.storageReset) return
     const replayEvents = [
       ...await this.loadReplayEvents(this.projectsLogPath, 0),
-      ...await this.loadReplayEvents(this.chatsLogPath, 1),
-      ...await this.loadReplayEvents(this.messagesLogPath, 2),
-      ...await this.loadReplayEvents(this.queuedMessagesLogPath, 3),
-      ...await this.loadReplayEvents(this.turnsLogPath, 4),
-      ...await this.loadReplayEvents(this.schedulesLogPath, 5),
+      ...await this.loadReplayEvents(this.stacksLogPath, 1),
+      ...await this.loadReplayEvents(this.chatsLogPath, 2),
+      ...await this.loadReplayEvents(this.messagesLogPath, 3),
+      ...await this.loadReplayEvents(this.queuedMessagesLogPath, 4),
+      ...await this.loadReplayEvents(this.turnsLogPath, 5),
+      ...await this.loadReplayEvents(this.schedulesLogPath, 6),
     ]
     if (this.storageReset) return
 
