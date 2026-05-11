@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { mkdtemp, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
-import { AUTH_DEFAULTS, CLOUDFLARE_TUNNEL_DEFAULTS, PROTOCOL_VERSION, UPLOAD_DEFAULTS } from "../shared/types"
+import { AUTH_DEFAULTS, CLAUDE_AUTH_DEFAULTS, CLOUDFLARE_TUNNEL_DEFAULTS, PROTOCOL_VERSION, UPLOAD_DEFAULTS } from "../shared/types"
 import type { AppSettingsSnapshot, BackgroundTask, KeybindingsSnapshot, LlmProviderSnapshot, UpdateSnapshot } from "../shared/types"
 import { BackgroundTaskRegistry } from "./background-tasks"
 import { createEmptyState } from "./events"
@@ -72,6 +72,7 @@ const DEFAULT_APP_SETTINGS_SNAPSHOT: AppSettingsSnapshot = {
   analyticsEnabled: true,
   cloudflareTunnel: CLOUDFLARE_TUNNEL_DEFAULTS,
   auth: AUTH_DEFAULTS,
+  claudeAuth: CLAUDE_AUTH_DEFAULTS,
   browserSettingsMigrated: false,
   theme: "system",
   chatSoundPreference: "always",

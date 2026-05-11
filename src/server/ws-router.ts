@@ -20,7 +20,7 @@ import { writeStandaloneTranscriptExport } from "./standalone-export"
 import { TerminalManager } from "./terminal-manager"
 import type { UpdateManager } from "./update-manager"
 import { deriveChatSnapshot, deriveLocalProjectsSnapshot, deriveSidebarData } from "./read-models"
-import { AUTH_DEFAULTS, CLOUDFLARE_TUNNEL_DEFAULTS, UPLOAD_DEFAULTS } from "../shared/types"
+import { AUTH_DEFAULTS, CLAUDE_AUTH_DEFAULTS, CLOUDFLARE_TUNNEL_DEFAULTS, UPLOAD_DEFAULTS } from "../shared/types"
 import type {
   AppSettingsPatch,
   AppSettingsSnapshot,
@@ -130,7 +130,8 @@ interface CreateWsRouterArgs {
   agent: AgentCoordinator
   terminals: TerminalManager
   keybindings: KeybindingsManager
-  appSettings?: Pick<AppSettingsManager, "getSnapshot" | "write"> & Partial<Pick<AppSettingsManager, "setCloudflareTunnel" | "writePatch" | "onChange">>
+  appSettings?: Pick<AppSettingsManager, "getSnapshot" | "write">
+    & Partial<Pick<AppSettingsManager, "setCloudflareTunnel" | "setClaudeAuth" | "writePatch" | "onChange">>
   analytics?: AnalyticsReporter
   tunnelGateway?: TunnelGateway
   llmProvider?: {
@@ -509,6 +510,7 @@ export function createWsRouter({
     filePathDisplay: "~/.kanna/data/settings.json",
     cloudflareTunnel: CLOUDFLARE_TUNNEL_DEFAULTS,
     auth: AUTH_DEFAULTS,
+    claudeAuth: CLAUDE_AUTH_DEFAULTS,
     uploads: UPLOAD_DEFAULTS,
   }
   const mergeAppSettingsPatch = (snapshot: AppSettingsSnapshot, patch: AppSettingsPatch): AppSettingsSnapshot => ({
@@ -548,6 +550,9 @@ export function createWsRouter({
       ...snapshot.auth,
       ...patch.auth,
     },
+    claudeAuth: {
+      tokens: patch.claudeAuth?.tokens ?? snapshot.claudeAuth.tokens,
+    },
     uploads: {
       ...snapshot.uploads,
       ...patch.uploads,
@@ -571,6 +576,14 @@ export function createWsRouter({
     setCloudflareTunnel: async (patch: Partial<AppSettingsSnapshot["cloudflareTunnel"]>) => {
       if (appSettings?.setCloudflareTunnel) return await appSettings.setCloudflareTunnel(patch)
       fallbackAppSettingsSnapshot = mergeAppSettingsPatch(appSettings?.getSnapshot() ?? fallbackAppSettingsSnapshot, { cloudflareTunnel: patch })
+      return fallbackAppSettingsSnapshot
+    },
+    setClaudeAuth: async (patch: Partial<AppSettingsSnapshot["claudeAuth"]>) => {
+      if (appSettings?.setClaudeAuth) return await appSettings.setClaudeAuth(patch)
+      fallbackAppSettingsSnapshot = mergeAppSettingsPatch(
+        appSettings?.getSnapshot() ?? fallbackAppSettingsSnapshot,
+        { claudeAuth: patch },
+      )
       return fallbackAppSettingsSnapshot
     },
     onChange: (listener: (snapshot: AppSettingsSnapshot) => void) => appSettings?.onChange?.(listener) ?? (() => {}),
@@ -1239,6 +1252,17 @@ export function createWsRouter({
           send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: snapshot })
           return
         }
+        case "appSettings.setClaudeAuth": {
+          await resolvedAppSettings.setClaudeAuth(command.patch)
+          const snapshot = resolvedAppSettings.getSnapshot()
+          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: snapshot })
+          return
+        }
+        case "appSettings.testOAuthToken": {
+          const result = await testOAuthToken(command.token)
+          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result })
+          return
+        }
         case "settings.writeAppSettingsPatch": {
           const previousAnalyticsEnabled = resolvedAppSettings.getSnapshot().analyticsEnabled
           const snapshot = await resolvedAppSettings.writePatch(command.patch)
@@ -1879,5 +1903,31 @@ export function createWsRouter({
       disposeBgTasksUpdated()
       disposeBgTasksRemoved()
     },
+  }
+}
+
+async function testOAuthToken(token: string): Promise<{ ok: boolean; error: string | null }> {
+  const trimmed = typeof token === "string" ? token.trim() : ""
+  if (!trimmed) return { ok: false, error: "Token is empty" }
+  try {
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json",
+        "authorization": `Bearer ${trimmed}`,
+      },
+      body: JSON.stringify({
+        model: "claude-haiku-4-5",
+        max_tokens: 1,
+        messages: [{ role: "user", content: "ok" }],
+      }),
+    })
+    if (res.status === 401 || res.status === 403) return { ok: false, error: "Unauthorized" }
+    if (res.status === 429) return { ok: true, error: "Token valid but currently rate-limited" }
+    if (!res.ok) return { ok: false, error: `HTTP ${res.status}` }
+    return { ok: true, error: null }
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) }
   }
 }
