@@ -258,42 +258,9 @@ git commit -m "feat(stacks): add stacks.jsonl log path with init, replay, and cl
 **Files:**
 - Modify: `src/server/event-store.ts` (`applyEvent` method, ~line 472)
 
-**Step 1: Write the failing test first**
+**Important.** No separate apply-only test file. The apply behavior is exercised by the public-API method tests in Task 5. (Existing tests in `event-store.test.ts` already follow this pattern: they call `openProject` and assert via `getProject`/state queries, not via direct `applyEvent` access.) Task 4 is implementation-only; tests come in Task 5.
 
-Create `src/server/event-store.stack-apply.test.ts`:
-
-```ts
-import { describe, test, expect } from "bun:test"
-import { applyEventForTest, createInitialState } from "./test-helpers/store-replay"
-
-describe("applyEvent: stack_added", () => {
-  test("creates a stack with the given id, title, and member ids", () => {
-    const state = createInitialState()
-    applyEventForTest(state, {
-      v: 3,
-      type: "stack_added",
-      timestamp: 1000,
-      stackId: "s1",
-      title: "Backend + Frontend",
-      projectIds: ["p1", "p2"],
-    })
-    const stack = state.stacksById.get("s1")
-    expect(stack).toBeDefined()
-    expect(stack?.title).toBe("Backend + Frontend")
-    expect(stack?.projectIds).toEqual(["p1", "p2"])
-    expect(stack?.createdAt).toBe(1000)
-  })
-})
-```
-
-If `test-helpers/store-replay` does not export `applyEventForTest` / `createInitialState`, first add tiny helpers there that wrap the private `applyEvent` for test access. If `applyEvent` is private and there is no existing test helper, mark it `// @internal` and export a test-only function `__applyEventForTest` from `event-store.ts`. Prefer the helper pattern already used by sibling tests (search: `grep -n "applyEvent" src/server/*.test.ts`).
-
-**Step 2: Run the failing test**
-
-Run: `bun test src/server/event-store.stack-apply.test.ts`
-Expected: FAIL — `stack_added` case unhandled.
-
-**Step 3: Add the apply cases**
+**Step 1: Add the apply cases**
 
 Inside the `applyEvent` switch (~line 472), after the `sidebar_project_order_set` case, add:
 
@@ -343,31 +310,16 @@ case "stack_project_removed": {
 
 Import `StackRecord` from `./events` at the top of the file if not already imported.
 
-**Step 4: Add tests for each remaining case**
+**Step 2: Typecheck**
 
-Extend `event-store.stack-apply.test.ts`:
+Run: `bun x tsc --noEmit`
+Expected: clean.
 
-```ts
-test("stack_renamed updates title and updatedAt", () => { /* ... */ })
-test("stack_renamed on deleted stack is a no-op", () => { /* ... */ })
-test("stack_project_added appends a new project id", () => { /* ... */ })
-test("stack_project_added is idempotent for duplicates", () => { /* ... */ })
-test("stack_project_removed removes the project id", () => { /* ... */ })
-test("stack_removed marks the stack deleted; subsequent ops are no-ops", () => { /* ... */ })
-```
-
-Each test follows the same shape as Step 1.
-
-**Step 5: Run all the new tests**
-
-Run: `bun test src/server/event-store.stack-apply.test.ts`
-Expected: all pass.
-
-**Step 6: Commit**
+**Step 3: Commit**
 
 ```bash
-git add src/server/event-store.ts src/server/event-store.stack-apply.test.ts
-git commit -m "feat(stacks): apply stack events into store state (tested)"
+git add src/server/event-store.ts
+git commit -m "feat(stacks): apply stack events into store state"
 ```
 
 ---
@@ -375,6 +327,42 @@ git commit -m "feat(stacks): apply stack events into store state (tested)"
 ## Task 5: Add public store methods (TDD)
 
 Each sub-task here writes the test first, then the method. Five methods total. Group commits by method.
+
+**Test pattern.** Use the same shape as existing `event-store.test.ts`:
+
+```ts
+import { describe, test, expect, afterAll } from "bun:test"
+import { mkdtemp, rm } from "node:fs/promises"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
+import { EventStore } from "./event-store"
+
+const tempDirs: string[] = []
+afterAll(async () => {
+  await Promise.all(tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })))
+})
+
+async function createTempDataDir(): Promise<string> {
+  const dir = await mkdtemp(join(tmpdir(), "kanna-stack-test-"))
+  tempDirs.push(dir)
+  return dir
+}
+
+async function buildStoreWithProjects(paths: string[]): Promise<{ store: EventStore; projectIds: string[] }> {
+  const store = new EventStore(await createTempDataDir())
+  await store.initialize()
+  const projectIds: string[] = []
+  for (const p of paths) {
+    const project = await store.openProject(p, p)
+    projectIds.push(project.id)
+  }
+  return { store, projectIds }
+}
+```
+
+Use real local paths (e.g. `/tmp/p1`, `/tmp/p2`) — `openProject` does not require the dir to exist on disk for state-only tests.
+
+> If `EventStore` exposes a `dispose()` / shutdown method, call it in `afterAll`. Otherwise the `rm` in the cleanup is sufficient.
 
 ### 5a. `createStack(title, projectIds)`
 
@@ -386,31 +374,29 @@ Each sub-task here writes the test first, then the method. Five methods total. G
 
 ```ts
 test("createStack writes a stack_added event and returns the new stack", async () => {
-  const store = await buildTestStore({ projects: ["p1", "p2"] })
-  const stack = await store.createStack("Integration", ["p1", "p2"])
+  const { store, projectIds: [p1, p2] } = await buildStoreWithProjects(["/tmp/p1", "/tmp/p2"])
+  const stack = await store.createStack("Integration", [p1, p2])
   expect(stack.id).toMatch(/[0-9a-f-]{36}/u)
   expect(stack.title).toBe("Integration")
-  expect(stack.projectIds).toEqual(["p1", "p2"])
+  expect(stack.projectIds).toEqual([p1, p2])
   expect(store.getStack(stack.id)).toEqual(stack)
 })
 
 test("createStack rejects fewer than 2 projects", async () => {
-  const store = await buildTestStore({ projects: ["p1"] })
-  await expect(store.createStack("Solo", ["p1"])).rejects.toThrow(/at least 2 projects/u)
+  const { store, projectIds: [p1] } = await buildStoreWithProjects(["/tmp/p1"])
+  await expect(store.createStack("Solo", [p1])).rejects.toThrow(/at least 2 projects/u)
 })
 
 test("createStack rejects unknown projectId", async () => {
-  const store = await buildTestStore({ projects: ["p1", "p2"] })
-  await expect(store.createStack("X", ["p1", "ghost"])).rejects.toThrow(/Project not found/u)
+  const { store, projectIds: [p1] } = await buildStoreWithProjects(["/tmp/p1", "/tmp/p2"])
+  await expect(store.createStack("X", [p1, "ghost"])).rejects.toThrow(/Project not found/u)
 })
 
 test("createStack rejects duplicate projectIds in the input", async () => {
-  const store = await buildTestStore({ projects: ["p1", "p2"] })
-  await expect(store.createStack("X", ["p1", "p1"])).rejects.toThrow(/duplicate/u)
+  const { store, projectIds: [p1] } = await buildStoreWithProjects(["/tmp/p1", "/tmp/p2"])
+  await expect(store.createStack("X", [p1, p1])).rejects.toThrow(/duplicate/u)
 })
 ```
-
-`buildTestStore` is the existing helper used by other store tests. Find it via `grep -rn "buildTestStore\|createTestStore" src/server`.
 
 **Step 2: Run the failing tests**
 
@@ -634,20 +620,29 @@ git commit -m "feat(stacks): add removeProjectFromStack with min-2-members invar
 
 ```ts
 test("Replay produces identical state to live mutations", async () => {
-  const dir = await mkdtemp("kanna-stack-replay-")
-  const store1 = await buildStoreAt(dir, { projects: ["p1", "p2", "p3"] })
-  const s = await store1.createStack("X", ["p1", "p2"])
-  await store1.addProjectToStack(s.id, "p3")
-  await store1.renameStack(s.id, "Renamed")
-  await store1.removeProjectFromStack(s.id, "p1")
-  const liveStacks = store1.listStacks()
-  await store1.dispose?.()
+  const dir = await createTempDataDir()
 
-  const store2 = await buildStoreAt(dir, { projects: ["p1", "p2", "p3"] })
+  // Live mutations.
+  const store1 = new EventStore(dir)
+  await store1.initialize()
+  const pa = await store1.openProject("/tmp/a", "A")
+  const pb = await store1.openProject("/tmp/b", "B")
+  const pc = await store1.openProject("/tmp/c", "C")
+  const s = await store1.createStack("X", [pa.id, pb.id])
+  await store1.addProjectToStack(s.id, pc.id)
+  await store1.renameStack(s.id, "Renamed")
+  await store1.removeProjectFromStack(s.id, pa.id)
+  const liveStacks = store1.listStacks()
+
+  // Fresh store, same dir → replays the log.
+  const store2 = new EventStore(dir)
+  await store2.initialize()
   const replayed = store2.listStacks()
   expect(replayed).toEqual(liveStacks)
 })
 ```
+
+Note: this test reuses `createTempDataDir` defined in the file's top-level helper. If `EventStore` retains background timers or open file handles, a `store1.shutdown?.()` call may be needed before the second `initialize()`. Add it only if the test hangs or flakes; otherwise leave omitted.
 
 **Step 2: Run**
 
@@ -712,7 +707,16 @@ test("stack.removeProject routes to store.removeProjectFromStack and acks", asyn
 test("stack.create broadcasts the updated stacks list", async () => { /* ... */ })
 ```
 
-Use the existing test harness for `ws-router.ts` (see `ws-router.test.ts`).
+Test harness pattern (mirrors `ws-router.test.ts`):
+
+- Construct a real `EventStore` with `createTempDataDir()` and `await store.initialize()`. Open two projects with `store.openProject(...)`.
+- Pass the store to `createWsRouter({ store, ... })`. All other deps (agent, terminals, keybindings, etc.) can be stubbed with the same `as never` shapes used by existing tests; copy the minimal stubs from the `system.ping` test (`ws-router.test.ts:243`).
+- Use the existing `FakeWebSocket` class. Drive commands by calling `router.handleMessage(ws, JSON.stringify({ v: 1, type: "command", id, command: { type: "stack.create", title, projectIds } }))`.
+- Assert against `ws.sent` for the ack payload. Track broadcasts by counting `handleMessage` triggers; the broadcastFilteredSnapshots call lands in the snapshot subscription pipe.
+
+Do NOT mock the store — the tests should observe real `store.listStacks()` mutation, which catches both wiring and side-effect bugs.
+
+`resolvedAnalytics.track("stack_created")` requires the event name to be added to `src/server/analytics.ts`. Add it in the same commit. If `analytics.ts` enforces a closed union of event names, extend the union; if it accepts any string, no change needed.
 
 **Step 2: Run the failing tests**
 
@@ -782,20 +786,46 @@ git commit -m "feat(stacks): wire stack.* WebSocket commands to store methods"
 **Step 1: Failing test**
 
 ```ts
-test("stackSummaries returns active stacks with member counts in insertion order", async () => {
-  const store = await buildTestStore({ projects: ["p1", "p2", "p3"] })
-  await store.createStack("A", ["p1", "p2"])
-  await store.createStack("B", ["p2", "p3"])
-  const summaries = stackSummaries(store.getState())
+import { createEmptyState } from "./events"
+import { stackSummaries } from "./read-models"
+
+test("stackSummaries returns active stacks with member counts in insertion order", () => {
+  const state = createEmptyState()
+  state.stacksById.set("s1", {
+    id: "s1",
+    title: "A",
+    projectIds: ["p1", "p2"],
+    createdAt: 1,
+    updatedAt: 1,
+  })
+  state.stacksById.set("s2", {
+    id: "s2",
+    title: "B",
+    projectIds: ["p2", "p3"],
+    createdAt: 2,
+    updatedAt: 2,
+  })
+  const summaries = stackSummaries(state)
   expect(summaries).toHaveLength(2)
   expect(summaries[0]?.title).toBe("A")
   expect(summaries[0]?.memberCount).toBe(2)
 })
 
-test("stackSummaries excludes deleted stacks", async () => { /* ... */ })
+test("stackSummaries excludes deleted stacks", () => {
+  const state = createEmptyState()
+  state.stacksById.set("s1", {
+    id: "s1",
+    title: "Gone",
+    projectIds: ["p1", "p2"],
+    createdAt: 1,
+    updatedAt: 2,
+    deletedAt: 2,
+  })
+  expect(stackSummaries(state)).toEqual([])
+})
 ```
 
-If `read-models.ts` exposes a per-export pattern (one function per selector), follow that pattern. If it uses a single derived snapshot, fold `stackSummaries` into it.
+`read-models.ts` exports per-selector functions (see existing `deriveSidebarData`, `deriveChatSnapshot`, etc.). Follow that pattern: a free function that takes `StoreState` and returns the projection.
 
 **Step 2: Run**
 
