@@ -92,4 +92,11 @@ describe("StacksSection", () => {
     const html = renderSection([], projects)
     expect(html).toContain("disabled")
   })
+
+  test("each stack row has a menu button for stack actions", () => {
+    const stacks = [makeStack("s1", "My Stack", 2)]
+    const projects = [{ id: "p1", title: "Project A" }, { id: "p2", title: "Project B" }]
+    const html = renderSection(stacks, projects)
+    expect(html).toContain('aria-label="Stack actions"')
+  })
 })

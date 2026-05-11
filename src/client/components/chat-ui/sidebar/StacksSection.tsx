@@ -1,6 +1,7 @@
 import { type KeyboardEvent, type ReactNode } from "react"
-import { ChevronRight } from "lucide-react"
+import { ChevronRight, MoreHorizontal } from "lucide-react"
 import { Button } from "../../ui/button"
+import { Tooltip, TooltipContent, TooltipTrigger } from "../../ui/tooltip"
 import { cn } from "../../../lib/utils"
 import type { StackSummary, SidebarChatRow } from "../../../../shared/types"
 
@@ -20,7 +21,7 @@ export function StacksSection({
   expandedStackIds,
   onToggleExpanded,
   onOpenCreatePanel,
-  onOpenStackMenu: _onOpenStackMenu,
+  onOpenStackMenu,
   chats: _chats,
 }: StacksSectionProps): ReactNode {
   const canCreateStack = projects.length >= 2
@@ -39,16 +40,22 @@ export function StacksSection({
         <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
           Stacks
         </span>
-        <Button
-          variant="ghost"
-          size="sm"
-          type="button"
-          disabled={!canCreateStack}
-          title={canCreateStack ? undefined : "Register a second project to create a stack"}
-          onClick={onOpenCreatePanel}
-        >
-          +
-        </Button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="sm"
+              type="button"
+              disabled={!canCreateStack}
+              onClick={onOpenCreatePanel}
+            >
+              +
+            </Button>
+          </TooltipTrigger>
+          {!canCreateStack && (
+            <TooltipContent>Register a second project to create a stack</TooltipContent>
+          )}
+        </Tooltip>
       </div>
 
       {/* Stack list or empty state */}
@@ -85,6 +92,19 @@ export function StacksSection({
                   <span className="font-mono tabular-nums text-xs text-muted-foreground">
                     {stack.memberCount}
                   </span>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    aria-label="Stack actions"
+                    className="opacity-0 group-hover:opacity-100"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onOpenStackMenu(stack.id)
+                    }}
+                  >
+                    <MoreHorizontal className="size-3.5" />
+                  </Button>
                 </div>
 
                 {/* Expanded member list */}
