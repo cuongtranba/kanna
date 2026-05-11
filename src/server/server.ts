@@ -216,7 +216,11 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
 
   const oauthPool = new OAuthTokenPool(
     () => appSettings.getSnapshot().claudeAuth.tokens,
-    (id, patch) => { void appSettings.mutateTokenStatus(id, patch) },
+    (id, patch) => {
+      appSettings.mutateTokenStatus(id, patch).catch((err) => {
+        console.warn("[oauth-pool] token status write failed:", err)
+      })
+    },
   )
 
   let agent!: AgentCoordinator

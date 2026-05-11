@@ -790,6 +790,7 @@ export class AgentCoordinator {
   private readonly autoResumeByChat = new Map<string, boolean>()
   private readonly tunnelGateway: TunnelGateway | null
   private readonly backgroundTasks: BackgroundTaskRegistry | null
+  // @ts-expect-error TS6133 — consumed by Task 5 (pickActive integration). Remove this comment when Task 5 reads this.oauthPool.
   private readonly oauthPool: OAuthTokenPool | null
   private readonly pendingBashCalls = new Map<string, { command: string; chatId: string; isBg: boolean }>()
 
@@ -822,10 +823,6 @@ export class AgentCoordinator {
         this.codexManager.stopSession(task.chatId)
       },
     })
-  }
-
-  getOAuthPool(): OAuthTokenPool | null {
-    return this.oauthPool
   }
 
   setBackgroundErrorReporter(report: ((message: string) => void) | null) {
