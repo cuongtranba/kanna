@@ -10,7 +10,7 @@ export function PeerWorktreeStrip({ bindings, provider, onOpenPath }: PeerWorktr
   if (bindings.length <= 1) return null
 
   return (
-    <div className="flex items-center gap-3 px-3 py-0.5">
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-0.5">
       {bindings.map((binding) => {
         const label = binding.worktreePath.split("/").pop() ?? binding.worktreePath
         const isPrimary = binding.role === "primary"
