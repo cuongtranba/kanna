@@ -47,6 +47,7 @@ export interface StoreState {
   sidebarProjectOrder: string[]
   autoContinueEventsByChatId: Map<string, AutoContinueEvent[]>
   chatTimingsByChatId: Map<string, ChatTimingState>
+  stacksById: Map<string, StackRecord>
 }
 
 export interface SnapshotFile {
@@ -214,7 +215,53 @@ export type TurnEvent =
       pendingForkSessionToken: string | null
     }
 
-export type StoreEvent = ProjectEvent | ChatEvent | MessageEvent | QueuedMessageEvent | TurnEvent | AutoContinueEvent
+export type StackEvent =
+  | {
+      v: 3
+      type: "stack_added"
+      timestamp: number
+      stackId: string
+      title: string
+      projectIds: string[]    // ≥2 at creation; invariant enforced by the store, not the event
+    }
+  | {
+      v: 3
+      type: "stack_removed"
+      timestamp: number
+      stackId: string
+    }
+  | {
+      v: 3
+      type: "stack_renamed"
+      timestamp: number
+      stackId: string
+      title: string
+    }
+  | {
+      v: 3
+      type: "stack_project_added"
+      timestamp: number
+      stackId: string
+      projectId: string
+    }
+  | {
+      v: 3
+      type: "stack_project_removed"
+      timestamp: number
+      stackId: string
+      projectId: string
+    }
+
+export type StoreEvent = ProjectEvent | ChatEvent | MessageEvent | QueuedMessageEvent | TurnEvent | StackEvent | AutoContinueEvent
+
+export interface StackRecord {
+  id: string
+  title: string
+  projectIds: string[]
+  createdAt: number
+  updatedAt: number
+  deletedAt?: number
+}
 
 export function createEmptyState(): StoreState {
   return {
@@ -225,6 +272,7 @@ export function createEmptyState(): StoreState {
     sidebarProjectOrder: [],
     autoContinueEventsByChatId: new Map(),
     chatTimingsByChatId: new Map(),
+    stacksById: new Map(),
   }
 }
 

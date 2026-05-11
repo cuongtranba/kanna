@@ -122,6 +122,12 @@ function getReplayEventPriority(event: StoreEvent) {
     case "auto_continue_cancelled":
     case "auto_continue_fired":
       return 11
+    case "stack_added":
+    case "stack_removed":
+    case "stack_renamed":
+    case "stack_project_added":
+    case "stack_project_removed":
+      return 0
   }
 }
 
