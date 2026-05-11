@@ -1918,16 +1918,20 @@ async function testOAuthToken(token: string): Promise<{ ok: boolean; error: stri
         "authorization": `Bearer ${trimmed}`,
       },
       body: JSON.stringify({
-        model: "claude-haiku-4-5",
+        model: "claude-haiku-4-5-20251001",
         max_tokens: 1,
         messages: [{ role: "user", content: "ok" }],
       }),
+      signal: AbortSignal.timeout(10_000),
     })
     if (res.status === 401 || res.status === 403) return { ok: false, error: "Unauthorized" }
     if (res.status === 429) return { ok: true, error: "Token valid but currently rate-limited" }
     if (!res.ok) return { ok: false, error: `HTTP ${res.status}` }
     return { ok: true, error: null }
   } catch (err) {
+    if (err instanceof Error && err.name === "TimeoutError") {
+      return { ok: false, error: "Request timed out after 10s" }
+    }
     return { ok: false, error: err instanceof Error ? err.message : String(err) }
   }
 }
