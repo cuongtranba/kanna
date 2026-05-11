@@ -7,7 +7,7 @@ import { useIsMobile } from "../../hooks/useIsMobile"
 import { useNow } from "../../hooks/useNow"
 import { formatAge, formatStartedClock } from "../../lib/formatters"
 import { useBackgroundTasksStore } from "../../stores/backgroundTasksStore"
-import { Dialog, DialogBody, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog"
+import { Dialog, DialogContent, DialogTitle } from "../ui/dialog"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip"
 import { cn } from "../../lib/utils"
 
@@ -929,7 +929,7 @@ export function BackgroundTasksDialogBody({ tasks, onStop, graceMs = 3_000, vari
 
   return (
     <TooltipProvider>
-      <div>
+      <div className="flex flex-col h-full min-h-0">
         {/* Header section — mirrors DialogHeader layout */}
         <div className="flex flex-row items-center justify-between gap-4 shrink-0 p-4 border-b border-border">
           <h2 id={headingId} className="text-[18px] font-medium leading-none">
@@ -1026,7 +1026,7 @@ export function BackgroundTasksDialogView({ open, onOpenChange, tasks, onStop, g
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         className={cn(
-          "w-[min(720px,calc(100vw-2rem))]",
+          "w-[min(720px,calc(100vw-2rem))] p-0",
           mobileSheetClasses,
           variant === "mobile" && "data-[state=open]:slide-in-from-bottom data-[state=closed]:slide-out-to-bottom data-[state=open]:slide-in-from-left-0 data-[state=closed]:slide-out-to-left-0 data-[state=open]:slide-in-from-top-[0%] data-[state=closed]:slide-out-to-top-[0%]",
         )}
@@ -1034,20 +1034,10 @@ export function BackgroundTasksDialogView({ open, onOpenChange, tasks, onStop, g
         aria-labelledby={headingId}
         data-variant={variant}
       >
-        <DialogHeader className="flex-row items-center justify-between gap-4">
-          <DialogTitle id={headingId} className="text-[18px] font-medium leading-none">
-            Background tasks
-          </DialogTitle>
-          {tasks.length > 0 && (
-            <span className="text-xs text-muted-foreground font-sans tabular-nums flex-shrink-0 mr-6">
-              {tasks.length} running
-            </span>
-          )}
-        </DialogHeader>
-
-        <DialogBody className="pt-2">
-          <BackgroundTasksDialogBody tasks={tasks} onStop={onStop} graceMs={graceMs} variant={variant} />
-        </DialogBody>
+        <DialogTitle id={headingId} className="sr-only">
+          Background tasks
+        </DialogTitle>
+        <BackgroundTasksDialogBody tasks={tasks} onStop={onStop} graceMs={graceMs} variant={variant} />
       </DialogContent>
     </Dialog>
   )
