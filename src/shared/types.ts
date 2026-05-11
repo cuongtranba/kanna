@@ -439,6 +439,12 @@ export interface StackSummary {
   updatedAt: number
 }
 
+export interface StackBinding {
+  projectId: string
+  worktreePath: string                          // absolute, matches agent SDK cwd input
+  role: "primary" | "additional"
+}
+
 export interface SidebarChatRow {
   _id: string
   _creationTime: number
@@ -1204,6 +1210,14 @@ export interface SlashCommand {
   argumentHint: string
 }
 
+export interface ResolvedStackBinding {
+  projectId: string
+  projectTitle: string
+  worktreePath: string
+  role: "primary" | "additional"
+  projectStatus: "active" | "missing"
+}
+
 export interface ChatSnapshot {
   runtime: ChatRuntime
   queuedMessages: QueuedChatMessage[]
@@ -1216,6 +1230,7 @@ export interface ChatSnapshot {
   liveScheduleId: string | null
   tunnels: Record<string, CloudflareTunnelRecord>
   liveTunnelId: string | null
+  resolvedBindings?: ResolvedStackBinding[]
 }
 
 export interface ChatHistoryPage {

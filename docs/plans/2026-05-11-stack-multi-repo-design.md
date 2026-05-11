@@ -73,7 +73,7 @@ chat_created {
   stackId?: string
   stackBindings?: Array<{
     projectId: string
-    worktreeId: string
+    worktreePath: string
     role: "primary" | "additional"
   }>
 }
@@ -84,7 +84,7 @@ Invariants:
 - `stackId` set ⇔ `stackBindings` set and non-empty.
 - Exactly one `role: "primary"` per chat.
 - Every binding's `projectId` is a current member of the stack at chat-creation time.
-- Replay rule: chats without `stackId` resolve as today via `projectId` + `worktreeId`. No backfill event needed.
+- Replay rule: chats without `stackId` resolve as today via `projectId` + `worktreePath`. No backfill event needed.
 
 ### Server module — `src/server/stack-store.ts`
 
@@ -107,7 +107,7 @@ Pure event-sourced, mirrors the shape of `src/server/worktree-store.ts`. Test fi
 At every spawn site (today `agent.ts:662` and `agent.ts:1192`):
 
 1. If chat has no `stackBindings`, take the existing solo path. No change.
-2. Else, find the binding with `role: "primary"`. Resolve `{projectId, worktreeId}` to an absolute path via `worktree-store`. Use it as `cwd`.
+2. Else, find the binding with `role: "primary"`. Resolve `{projectId, worktreePath}` to an absolute path via `worktree-store`. Use it as `cwd`.
 3. Map the remaining bindings to absolute paths. Pass them as `additionalDirectories: string[]` to the Claude Agent SDK `query()` call (verified to exist in the SDK; see Section 3 below).
 4. Codex path: set `cwd` to the same primary path. Do not pass any extra root field; Codex App Server has no `additionalDirectories` equivalent. Cross-root writes surface as the native `grantRoot` approval per file change.
 5. Persist the resolved primary + peer paths in the spawn event for replay and debugging.
@@ -140,7 +140,7 @@ New commands:
 - `addStackProject { stackId, projectId }`
 - `removeStackProject { stackId, projectId }`
 
-`createChat` extended to accept optional `{ stackId, stackBindings }`. Validation: stack exists, every `projectId` is a current member, every `worktreeId` belongs to its project, exactly one primary.
+`createChat` extended to accept optional `{ stackId, stackBindings }`. Validation: stack exists, every `projectId` is a current member, every `worktreePath` belongs to its project, exactly one primary.
 
 ### SDK verification
 
@@ -288,3 +288,9 @@ src/client/components/chat-ui/ChatHeader.tsx   render PeerWorktreeStrip when res
 ## Open questions
 
 None blocking. P2 items above can be designed after Phase 3 ships and the peer-rebinding need is real, not speculative.
+
+## Phase 2 amendments (post-implementation)
+
+Phase 2 bound stacks by `worktreePath` rather than `worktreeId` because worktree state is not yet in the event store (the `feat/worktree-events` branch is plan-only). The chat snapshot exposes `resolvedBindings` with project title and active/missing status; worktree branch and dirty status are deferred to Phase 3 (UI fetches via `worktree-store` on demand). When `feat/worktree-events` lands, a follow-up migration can resolve paths to ids without breaking the on-disk event log (the `worktreePath` field stays as a stable secondary key).
+
+Architectural note carried from Phase 1: stack state lives inside `event-store.ts` alongside projects and chats, not in a separate `stack-store.ts` module. The phase plan corrected the design doc on this point.

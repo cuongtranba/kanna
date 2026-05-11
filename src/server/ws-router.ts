@@ -1363,7 +1363,10 @@ export function createWsRouter({
           break
         }
         case "chat.create": {
-          const chat = await store.createChat(command.projectId)
+          const chat = await store.createChat(command.projectId, {
+            stackId: command.stackId,
+            stackBindings: command.stackBindings,
+          })
           send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: { chatId: chat.id } })
           resolvedAnalytics.track("chat_created")
           await broadcastChatAndSidebar(chat.id)
