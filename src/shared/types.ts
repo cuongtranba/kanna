@@ -439,6 +439,12 @@ export interface StackSummary {
   updatedAt: number
 }
 
+export interface StackBinding {
+  projectId: string
+  worktreePath: string                          // absolute, matches agent SDK cwd input
+  role: "primary" | "additional"
+}
+
 export interface SidebarChatRow {
   _id: string
   _creationTime: number
