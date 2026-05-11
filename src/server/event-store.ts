@@ -12,6 +12,7 @@ import {
   type ProjectEvent,
   type QueuedMessageEvent,
   type SnapshotFile,
+  type StackEvent,
   type StackRecord,
   type StoreEvent,
   type StoreState,
@@ -861,6 +862,37 @@ export class EventStore implements PushEventStore {
       projectId,
     }
     await this.append(this.projectsLogPath, event)
+  }
+
+  async createStack(title: string, projectIds: string[]): Promise<StackRecord> {
+    const trimmed = title.trim()
+    if (trimmed === "") throw new Error("Stack title cannot be empty")
+    if (projectIds.length < 2) throw new Error("Stack requires at least 2 projects")
+    if (new Set(projectIds).size !== projectIds.length) throw new Error("Stack projectIds contain duplicates")
+    for (const projectId of projectIds) {
+      const project = this.state.projectsById.get(projectId)
+      if (!project || project.deletedAt) throw new Error(`Project not found: ${projectId}`)
+    }
+    const stackId = crypto.randomUUID()
+    const event: StackEvent = {
+      v: STORE_VERSION,
+      type: "stack_added",
+      timestamp: Date.now(),
+      stackId,
+      title: trimmed,
+      projectIds: [...projectIds],
+    }
+    await this.append(this.stacksLogPath, event)
+    return this.state.stacksById.get(stackId)!
+  }
+
+  getStack(stackId: string): StackRecord | null {
+    const stack = this.state.stacksById.get(stackId)
+    return stack && !stack.deletedAt ? stack : null
+  }
+
+  listStacks(): StackRecord[] {
+    return [...this.state.stacksById.values()].filter((s) => !s.deletedAt)
   }
 
   async setSidebarProjectOrder(projectIds: string[]) {

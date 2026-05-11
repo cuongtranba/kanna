@@ -1,0 +1,53 @@
+import { describe, test, expect, afterAll } from "bun:test"
+import { mkdtemp, rm } from "node:fs/promises"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
+import { EventStore } from "./event-store"
+
+const tempDirs: string[] = []
+afterAll(async () => {
+  await Promise.all(tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })))
+})
+
+async function createTempDataDir(): Promise<string> {
+  const dir = await mkdtemp(join(tmpdir(), "kanna-stack-test-"))
+  tempDirs.push(dir)
+  return dir
+}
+
+async function buildStoreWithProjects(paths: string[]): Promise<{ store: EventStore; projectIds: string[] }> {
+  const store = new EventStore(await createTempDataDir())
+  await store.initialize()
+  const projectIds: string[] = []
+  for (const p of paths) {
+    const project = await store.openProject(p, p)
+    projectIds.push(project.id)
+  }
+  return { store, projectIds }
+}
+
+describe("createStack", () => {
+  test("createStack writes a stack_added event and returns the new stack", async () => {
+    const { store, projectIds: [p1, p2] } = await buildStoreWithProjects(["/tmp/p1", "/tmp/p2"])
+    const stack = await store.createStack("Integration", [p1, p2])
+    expect(stack.id).toMatch(/[0-9a-f-]{36}/u)
+    expect(stack.title).toBe("Integration")
+    expect(stack.projectIds).toEqual([p1, p2])
+    expect(store.getStack(stack.id)).toEqual(stack)
+  })
+
+  test("createStack rejects fewer than 2 projects", async () => {
+    const { store, projectIds: [p1] } = await buildStoreWithProjects(["/tmp/p1"])
+    await expect(store.createStack("Solo", [p1])).rejects.toThrow(/at least 2 projects/u)
+  })
+
+  test("createStack rejects unknown projectId", async () => {
+    const { store, projectIds: [p1] } = await buildStoreWithProjects(["/tmp/p1", "/tmp/p2"])
+    await expect(store.createStack("X", [p1, "ghost"])).rejects.toThrow(/Project not found/u)
+  })
+
+  test("createStack rejects duplicate projectIds in the input", async () => {
+    const { store, projectIds: [p1] } = await buildStoreWithProjects(["/tmp/p1", "/tmp/p2"])
+    await expect(store.createStack("X", [p1, p1])).rejects.toThrow(/duplicate/u)
+  })
+})
