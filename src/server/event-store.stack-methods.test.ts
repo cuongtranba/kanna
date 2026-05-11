@@ -26,6 +26,33 @@ async function buildStoreWithProjects(paths: string[]): Promise<{ store: EventSt
   return { store, projectIds }
 }
 
+describe("addProjectToStack", () => {
+  test("addProjectToStack appends the project id", async () => {
+    const { store, projectIds: [p1, p2, p3] } = await buildStoreWithProjects(["/tmp/p1", "/tmp/p2", "/tmp/p3"])
+    const stack = await store.createStack("My Stack", [p1, p2])
+    await store.addProjectToStack(stack.id, p3)
+    expect(store.getStack(stack.id)?.projectIds).toEqual([p1, p2, p3])
+  })
+
+  test("addProjectToStack on unknown stack throws", async () => {
+    const { store, projectIds: [p1] } = await buildStoreWithProjects(["/tmp/p1"])
+    await expect(store.addProjectToStack("nonexistent-id", p1)).rejects.toThrow(/Stack not found/u)
+  })
+
+  test("addProjectToStack with unknown project throws", async () => {
+    const { store, projectIds: [p1, p2] } = await buildStoreWithProjects(["/tmp/p1", "/tmp/p2"])
+    const stack = await store.createStack("My Stack", [p1, p2])
+    await expect(store.addProjectToStack(stack.id, "ghost-project")).rejects.toThrow(/Project not found/u)
+  })
+
+  test("addProjectToStack with already-member project is idempotent", async () => {
+    const { store, projectIds: [p1, p2] } = await buildStoreWithProjects(["/tmp/p1", "/tmp/p2"])
+    const stack = await store.createStack("My Stack", [p1, p2])
+    await expect(store.addProjectToStack(stack.id, p1)).resolves.toBeUndefined()
+    expect(store.getStack(stack.id)?.projectIds).toEqual([p1, p2])
+  })
+})
+
 describe("removeStack", () => {
   test("removeStack marks the stack deleted; getStack returns null", async () => {
     const { store, projectIds: [p1, p2] } = await buildStoreWithProjects(["/tmp/p1", "/tmp/p2"])
