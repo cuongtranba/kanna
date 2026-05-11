@@ -283,6 +283,20 @@ export function deriveChatSnapshot(
   const { schedules, liveScheduleId } = deriveChatSchedules(autoContinueEvents, chat.id)
   const { tunnels, liveTunnelId } = deriveChatTunnels(getTunnelEvents(chat.id), chat.id)
 
+  const resolvedBindings = chat.stackBindings && chat.stackBindings.length > 0
+    ? chat.stackBindings.map((binding) => {
+        const bindingProject = state.projectsById.get(binding.projectId)
+        const projectStatus: "active" | "missing" = bindingProject && !bindingProject.deletedAt ? "active" : "missing"
+        return {
+          projectId: binding.projectId,
+          projectTitle: bindingProject?.title ?? "(missing)",
+          worktreePath: binding.worktreePath,
+          role: binding.role,
+          projectStatus,
+        }
+      })
+    : undefined
+
   return {
     runtime,
     queuedMessages: (state.queuedMessagesByChatId.get(chat.id) ?? []).map((entry) => ({
@@ -298,6 +312,7 @@ export function deriveChatSnapshot(
     liveScheduleId,
     tunnels,
     liveTunnelId,
+    ...(resolvedBindings !== undefined ? { resolvedBindings } : {}),
   }
 }
 
