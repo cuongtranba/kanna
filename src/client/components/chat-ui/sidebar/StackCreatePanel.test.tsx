@@ -105,4 +105,30 @@ describe("StackCreatePanel", () => {
     const cancelButtonTag = html.slice(lastCancelButtonStart, cancelIndex)
     expect(cancelButtonTag).toContain('type="button"')
   })
+
+  test("title input has aria-label", () => {
+    const html = renderPanel()
+    expect(html).toContain('aria-label="Stack name"')
+  })
+
+  test("selected chips have aria-pressed=true, unselected have aria-pressed=false", () => {
+    const html = renderPanel({
+      initialProjectIds: ["p1"],
+    })
+    // p1 chip (Project A) should have aria-pressed="true"
+    const p1Index = html.indexOf("Project A")
+    expect(p1Index).toBeGreaterThan(-1)
+    const beforeP1 = html.slice(0, p1Index)
+    const p1ButtonStart = beforeP1.lastIndexOf("<button")
+    const p1ChipTag = html.slice(p1ButtonStart, p1Index)
+    expect(p1ChipTag).toContain('aria-pressed="true"')
+
+    // p2 chip (Project B) should have aria-pressed="false"
+    const p2Index = html.indexOf("Project B")
+    expect(p2Index).toBeGreaterThan(-1)
+    const beforeP2 = html.slice(0, p2Index)
+    const p2ButtonStart = beforeP2.lastIndexOf("<button")
+    const p2ChipTag = html.slice(p2ButtonStart, p2Index)
+    expect(p2ChipTag).toContain('aria-pressed="false"')
+  })
 })

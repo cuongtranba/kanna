@@ -1,4 +1,4 @@
-import { useState, useCallback, type KeyboardEvent, type ReactNode } from "react"
+import { useState, useCallback, useRef, type KeyboardEvent, type FormEvent, type ReactNode } from "react"
 import { Button } from "../../ui/button"
 import { cn } from "../../../lib/utils"
 
@@ -23,6 +23,7 @@ export function StackCreatePanel({
   const [selectedIds, setSelectedIds] = useState<Set<string>>(
     new Set(initialProjectIds ?? [])
   )
+  const chipContainerRef = useRef<HTMLDivElement>(null)
 
   const hasEnoughProjects = projects.length >= 2
   const isSaveDisabled =
@@ -40,24 +41,27 @@ export function StackCreatePanel({
     })
   }, [])
 
-  const handleSubmit = useCallback(async () => {
+  // Fix 2: form submit handler receives FormEvent
+  const handleFormSubmit = useCallback(async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
     if (isSaveDisabled) return
     await onSubmit(title.trim(), Array.from(selectedIds))
   }, [isSaveDisabled, onSubmit, title, selectedIds])
 
-  const handleTitleKeyDown = useCallback(
-    (e: KeyboardEvent<HTMLInputElement>) => {
-      if (e.key === "Enter") {
-        void handleSubmit()
-      } else if (e.key === "Escape") {
+  // Fix 2: only handle Escape on the form wrapper (no double-fire with input)
+  const handleEscapeKey = useCallback(
+    (e: KeyboardEvent<HTMLFormElement>) => {
+      if (e.key === "Escape") {
+        e.preventDefault()
         onCancel()
       }
     },
-    [handleSubmit, onCancel]
+    [onCancel]
   )
 
-  const handleWrapperKeyDown = useCallback(
-    (e: KeyboardEvent<HTMLDivElement>) => {
+  // Fix 2: title input only needs Escape (Enter is handled natively by the form)
+  const handleTitleKeyDown = useCallback(
+    (e: KeyboardEvent<HTMLInputElement>) => {
       if (e.key === "Escape") {
         onCancel()
       }
@@ -65,31 +69,60 @@ export function StackCreatePanel({
     [onCancel]
   )
 
+  // Fix 3 & 4: chip keyboard handler — Cmd/Ctrl+Enter to submit, ArrowLeft/Right to navigate
+  const handleChipKeyDown = useCallback(
+    (e: KeyboardEvent<HTMLButtonElement>, index: number) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+        if (!isSaveDisabled) {
+          void onSubmit(title.trim(), Array.from(selectedIds))
+        }
+      } else if (e.key === "ArrowRight") {
+        const chips = chipContainerRef.current?.querySelectorAll("button")
+        if (chips) {
+          const next = chips[index + 1] as HTMLButtonElement | undefined
+          next?.focus()
+        }
+      } else if (e.key === "ArrowLeft") {
+        const chips = chipContainerRef.current?.querySelectorAll("button")
+        if (chips) {
+          const prev = chips[index - 1] as HTMLButtonElement | undefined
+          prev?.focus()
+        }
+      }
+    },
+    [isSaveDisabled, onSubmit, title, selectedIds]
+  )
+
   return (
-    <div
+    // Fix 1 & 2: root element is now <form>, handleWrapperKeyDown removed
+    <form
+      onSubmit={handleFormSubmit}
+      onKeyDown={handleEscapeKey}
       className="flex flex-col gap-2 px-2.5 py-2 border border-border rounded-lg bg-background"
-      onKeyDown={handleWrapperKeyDown}
     >
-      {/* Title input */}
+      {/* Title input — Fix 5: aria-label added */}
       <input
         type="text"
         value={title}
         onChange={(e) => setTitle(e.target.value)}
         onKeyDown={handleTitleKeyDown}
         placeholder="Stack name"
+        aria-label="Stack name"
         autoFocus
         className="w-full text-sm px-2 py-1 rounded border border-border bg-background focus:outline-none focus:ring-1 focus:ring-ring"
       />
 
       {/* Project chip list */}
-      <div className="flex flex-wrap gap-1">
-        {projects.map((project) => {
+      <div ref={chipContainerRef} className="flex flex-wrap gap-1">
+        {projects.map((project, index) => {
           const isSelected = selectedIds.has(project.id)
           return (
             <button
               key={project.id}
               type="button"
               onClick={() => toggleProject(project.id)}
+              onKeyDown={(e) => handleChipKeyDown(e, index)}
+              aria-pressed={isSelected}
               className={cn(
                 "rounded-full px-2 py-0.5 text-xs border transition-colors",
                 isSelected
@@ -116,7 +149,6 @@ export function StackCreatePanel({
           type="submit"
           size="sm"
           disabled={isSaveDisabled}
-          onClick={() => void handleSubmit()}
         >
           Save
         </Button>
@@ -129,6 +161,6 @@ export function StackCreatePanel({
           Cancel
         </Button>
       </div>
-    </div>
+    </form>
   )
 }
