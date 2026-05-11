@@ -115,7 +115,12 @@ export type ClientCommand =
       column?: number
       editor?: EditorOpenSettings
     }
-  | { type: "chat.create"; projectId: string }
+  | {
+      type: "chat.create"
+      projectId: string
+      stackId?: string
+      stackBindings?: Array<{ projectId: string; worktreePath: string; role: "primary" | "additional" }>
+    }
   | { type: "chat.fork"; chatId: string }
   | { type: "chat.rename"; chatId: string; title: string }
   | { type: "chat.archive"; chatId: string }

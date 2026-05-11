@@ -235,4 +235,72 @@ describe("ws-router stack commands", () => {
     expect(updated?.projectIds).not.toContain(p1.id)
     expect(updated?.projectIds).toHaveLength(2)
   })
+
+  test("chat.create with stack args persists bindings on the chat", async () => {
+    const { store, router, p1, p2 } = await buildRouterWithStore()
+    const ws = new FakeWebSocket()
+    router.handleOpen(ws as never)
+
+    const stack = await store.createStack("BindingStack", [p1.id, p2.id])
+
+    await router.handleMessage(
+      ws as never,
+      JSON.stringify({
+        v: 1,
+        type: "command",
+        id: "cmd-chatcreate",
+        command: {
+          type: "chat.create",
+          projectId: p1.id,
+          stackId: stack.id,
+          stackBindings: [
+            { projectId: p1.id, worktreePath: "/tmp/stack-test-p1", role: "primary" },
+            { projectId: p2.id, worktreePath: "/tmp/stack-test-p2", role: "additional" },
+          ],
+        },
+      })
+    )
+
+    const ack = ws.sent[0] as { v: number; type: string; id: string; result: { chatId: string } }
+    expect(ack.type).toBe("ack")
+    expect(ack.id).toBe("cmd-chatcreate")
+    expect(ack.result.chatId).toMatch(/[0-9a-f-]{36}/u)
+
+    const chat = store.getChat(ack.result.chatId)
+    expect(chat?.stackId).toBe(stack.id)
+    expect(chat?.stackBindings).toEqual([
+      { projectId: p1.id, worktreePath: "/tmp/stack-test-p1", role: "primary" },
+      { projectId: p2.id, worktreePath: "/tmp/stack-test-p2", role: "additional" },
+    ])
+  })
+
+  test("chat.create rejects bindings violating invariants (e.g. no primary)", async () => {
+    const { store, router, p1, p2 } = await buildRouterWithStore()
+    const ws = new FakeWebSocket()
+    router.handleOpen(ws as never)
+
+    const stack = await store.createStack("NoPrimaryStack", [p1.id, p2.id])
+
+    await router.handleMessage(
+      ws as never,
+      JSON.stringify({
+        v: 1,
+        type: "command",
+        id: "cmd-chatcreate-err",
+        command: {
+          type: "chat.create",
+          projectId: p1.id,
+          stackId: stack.id,
+          stackBindings: [
+            { projectId: p1.id, worktreePath: "/tmp/stack-test-p1", role: "additional" },
+            { projectId: p2.id, worktreePath: "/tmp/stack-test-p2", role: "additional" },
+          ],
+        },
+      })
+    )
+
+    const response = ws.sent[0] as { type: string; id: string }
+    expect(response.type).toBe("error")
+    expect(response.id).toBe("cmd-chatcreate-err")
+  })
 })
