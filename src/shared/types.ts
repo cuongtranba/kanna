@@ -558,22 +558,6 @@ export interface AppSettingsPatch {
   uploads?: Partial<UploadSettings>
 }
 
-export interface AppSettingsPatch {
-  analyticsEnabled?: boolean
-  browserSettingsMigrated?: boolean
-  theme?: AppThemePreference
-  chatSoundPreference?: ChatSoundPreference
-  chatSoundId?: ChatSoundId
-  terminal?: Partial<AppSettingsSnapshot["terminal"]>
-  editor?: Partial<AppSettingsSnapshot["editor"]>
-  defaultProvider?: DefaultProviderPreference
-  providerDefaults?: {
-    claude?: Partial<ProviderPreference<ClaudeModelOptions>>
-    codex?: Partial<ProviderPreference<CodexModelOptions>>
-  }
-  claudeAuth?: Partial<ClaudeAuthSettings>
-}
-
 export interface LlmProviderFile {
   provider?: LlmProviderKind
   apiKey?: string
