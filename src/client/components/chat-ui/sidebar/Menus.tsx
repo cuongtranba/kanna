@@ -1,5 +1,5 @@
 import type { ReactNode } from "react"
-import { Archive, Code, Copy, EyeOff, FolderOpen, Pencil, Split, Trash2, UserRoundPlus } from "lucide-react"
+import { Archive, Code, Copy, EyeOff, FolderOpen, Pencil, Split, Trash2, UserRoundPlus, Users } from "lucide-react"
 import {
   ContextMenu,
   ContextMenuContent,
@@ -162,6 +162,58 @@ export function ChatRowMenu({
         >
           <Trash2 className="h-3.5 w-3.5" />
           <span className="text-xs font-medium">Delete</span>
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
+  )
+}
+
+export function StackSectionMenu({
+  stackTitle,
+  onRename,
+  onEditMembers,
+  onDelete,
+  children,
+}: {
+  stackTitle: string
+  onRename: () => void
+  onEditMembers: () => void
+  onDelete: () => void
+  children: ReactNode
+}) {
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger asChild>
+        {children}
+      </ContextMenuTrigger>
+      <ContextMenuContent>
+        <ContextMenuItem
+          onSelect={(event) => {
+            event.preventDefault()
+            onRename()
+          }}
+        >
+          <Pencil className="h-3.5 w-3.5" />
+          <span className="text-xs font-medium">Rename</span>
+        </ContextMenuItem>
+        <ContextMenuItem
+          onSelect={(event) => {
+            event.preventDefault()
+            onEditMembers()
+          }}
+        >
+          <Users className="h-3.5 w-3.5" />
+          <span className="text-xs font-medium">Edit members</span>
+        </ContextMenuItem>
+        <ContextMenuItem
+          onSelect={(event) => {
+            event.preventDefault()
+            onDelete()
+          }}
+          className="text-destructive dark:text-red-400 hover:bg-destructive/10 focus:bg-destructive/10 dark:hover:bg-red-500/20 dark:focus:bg-red-500/20"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+          <span className="text-xs font-medium">Delete {stackTitle}</span>
         </ContextMenuItem>
       </ContextMenuContent>
     </ContextMenu>
