@@ -600,3 +600,90 @@ describe("stackSummaries", () => {
     expect(stackSummaries(state)).toEqual([])
   })
 })
+
+describe("deriveChatSnapshot resolvedBindings", () => {
+  function buildSnapshot(state: ReturnType<typeof createEmptyState>, chatId: string) {
+    return deriveChatSnapshot(
+      state,
+      new Map(),
+      new Set(),
+      new Set(),
+      chatId,
+      () => ({ messages: [], history: { hasOlder: false, olderCursor: null, recentLimit: 200 } }),
+      () => [],
+    )
+  }
+
+  function seedStackChat(opts: { p2Deleted?: boolean } = {}) {
+    const state = createEmptyState()
+    state.projectsById.set("p1", { id: "p1", localPath: "/p1", title: "Backend", createdAt: 1, updatedAt: 1 })
+    state.projectsById.set("p2", {
+      id: "p2",
+      localPath: "/p2",
+      title: "Frontend",
+      createdAt: 1,
+      updatedAt: 1,
+      ...(opts.p2Deleted ? { deletedAt: 2 } : {}),
+    })
+    state.chatsById.set("c1", {
+      id: "c1",
+      projectId: "p1",
+      title: "Integration",
+      createdAt: 1,
+      updatedAt: 1,
+      unread: false,
+      provider: "claude",
+      planMode: false,
+      sessionToken: null,
+      sourceHash: null,
+      lastTurnOutcome: null,
+      stackId: "s1",
+      stackBindings: [
+        { projectId: "p1", worktreePath: "/p1", role: "primary" },
+        { projectId: "p2", worktreePath: "/p2", role: "additional" },
+      ],
+    })
+    return state
+  }
+
+  test("includes resolvedBindings when chat has stackBindings", () => {
+    const state = seedStackChat()
+    const snapshot = buildSnapshot(state, "c1")
+    expect(snapshot?.resolvedBindings).toEqual([
+      { projectId: "p1", projectTitle: "Backend", worktreePath: "/p1", role: "primary", projectStatus: "active" },
+      { projectId: "p2", projectTitle: "Frontend", worktreePath: "/p2", role: "additional", projectStatus: "active" },
+    ])
+  })
+
+  test("marks deleted peer projects as projectStatus: missing", () => {
+    const state = seedStackChat({ p2Deleted: true })
+    const snapshot = buildSnapshot(state, "c1")
+    expect(snapshot?.resolvedBindings?.[1]).toEqual({
+      projectId: "p2",
+      projectTitle: "Frontend",
+      worktreePath: "/p2",
+      role: "additional",
+      projectStatus: "missing",
+    })
+  })
+
+  test("omits resolvedBindings on a solo chat", () => {
+    const state = createEmptyState()
+    state.projectsById.set("p1", { id: "p1", localPath: "/p1", title: "Solo", createdAt: 1, updatedAt: 1 })
+    state.chatsById.set("c1", {
+      id: "c1",
+      projectId: "p1",
+      title: "T",
+      createdAt: 1,
+      updatedAt: 1,
+      unread: false,
+      provider: "claude",
+      planMode: false,
+      sessionToken: null,
+      sourceHash: null,
+      lastTurnOutcome: null,
+    })
+    const snapshot = buildSnapshot(state, "c1")
+    expect(snapshot?.resolvedBindings).toBeUndefined()
+  })
+})
