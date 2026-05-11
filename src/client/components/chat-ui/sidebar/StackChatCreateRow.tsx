@@ -91,7 +91,7 @@ export function StackChatCreateRow({
               type="radio"
               name="primaryProject"
               value={project.id}
-              defaultChecked={isPrimary}
+              checked={isPrimary}
               onChange={() => setPrimaryProjectId(project.id)}
               aria-label={`Set ${project.title} as primary`}
             />
