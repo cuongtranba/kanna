@@ -37,6 +37,7 @@
     "src/client/lib/formatters.ts",
     "src/client/lib/pathUtils.ts",
     "src/client/lib/parseTranscript.ts",
+    "src/client/lib/oauthTokenMask.ts",
     "src/client/components/ui/button.tsx",
     "src/client/components/ui/card.tsx",
     "src/client/components/ui/dialog.tsx",
