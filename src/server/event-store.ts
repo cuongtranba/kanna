@@ -131,7 +131,7 @@ function getReplayEventPriority(event: StoreEvent): number {
       return 0
     default: {
       const _exhaustive: never = discriminator
-      return 0
+      throw new Error(`Unhandled replay event type: ${String(_exhaustive)}`)
     }
   }
 }
@@ -306,6 +306,11 @@ export class EventStore implements PushEventStore {
       if (parsed.autoContinueEvents?.length) {
         for (const entry of parsed.autoContinueEvents) {
           this.state.autoContinueEventsByChatId.set(entry.chatId, [...entry.events])
+        }
+      }
+      if (parsed.stacks?.length) {
+        for (const stack of parsed.stacks) {
+          this.state.stacksById.set(stack.id, { ...stack, projectIds: [...stack.projectIds] })
         }
       }
     } catch (error) {
@@ -1415,6 +1420,9 @@ export class EventStore implements PushEventStore {
         chatId,
         events: [...events],
       })),
+      stacks: [...this.state.stacksById.values()]
+        .filter((stack) => !stack.deletedAt)
+        .map((stack) => ({ ...stack, projectIds: [...stack.projectIds] })),
     }
   }
 
@@ -1428,6 +1436,7 @@ export class EventStore implements PushEventStore {
       Bun.write(this.queuedMessagesLogPath, ""),
       Bun.write(this.turnsLogPath, ""),
       Bun.write(this.schedulesLogPath, ""),
+      Bun.write(this.stacksLogPath, ""),
       // tunnels.jsonl is NOT compacted into the snapshot — it's left as-is
       // so that active tunnel state survives server restarts.
     ])
@@ -1472,6 +1481,7 @@ export class EventStore implements PushEventStore {
       Bun.file(this.queuedMessagesLogPath).size,
       Bun.file(this.turnsLogPath).size,
       Bun.file(this.schedulesLogPath).size,
+      Bun.file(this.stacksLogPath).size,
     ])
     return sizes.reduce((total, size) => total + size, 0) >= COMPACTION_THRESHOLD_BYTES
   }

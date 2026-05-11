@@ -59,6 +59,7 @@ export interface SnapshotFile {
   queuedMessages?: Array<{ chatId: string; entries: QueuedChatMessage[] }>
   messages?: Array<{ chatId: string; entries: TranscriptEntry[] }>
   autoContinueEvents?: Array<{ chatId: string; events: AutoContinueEvent[] }>
+  stacks?: StackRecord[]
 }
 
 export type ProjectEvent = {
