@@ -1837,27 +1837,45 @@ export class AgentCoordinator {
     const live = deriveChatSchedules(this.store.getAutoContinueEvents(chatId), chatId).liveScheduleId
     if (live !== null) return true
 
+    const session = this.claudeSessions.get(chatId)
+    if (this.oauthPool && session?.activeTokenId) {
+      this.oauthPool.markLimited(session.activeTokenId, detection.resetAt)
+    }
+    const rotationTarget = this.oauthPool?.pickActive() ?? null
+    const canRotate = rotationTarget !== null
+      && (!session?.activeTokenId || rotationTarget.id !== session.activeTokenId)
+
     const now = Date.now()
     const scheduleId = crypto.randomUUID()
     const base = { v: AUTO_CONTINUE_EVENT_VERSION, timestamp: now, chatId, scheduleId }
 
-    const event: AutoContinueEvent = this.resolveAutoResumeFor(chatId)
+    const event: AutoContinueEvent = canRotate
       ? {
           ...base,
           kind: "auto_continue_accepted",
-          scheduledAt: detection.resetAt,
+          scheduledAt: now + 100,
           tz: detection.tz,
           source: "auto_setting",
           resetAt: detection.resetAt,
           detectedAt: now,
         }
-      : {
-          ...base,
-          kind: "auto_continue_proposed",
-          detectedAt: now,
-          resetAt: detection.resetAt,
-          tz: detection.tz,
-        }
+      : this.resolveAutoResumeFor(chatId)
+        ? {
+            ...base,
+            kind: "auto_continue_accepted",
+            scheduledAt: detection.resetAt,
+            tz: detection.tz,
+            source: "auto_setting",
+            resetAt: detection.resetAt,
+            detectedAt: now,
+          }
+        : {
+            ...base,
+            kind: "auto_continue_proposed",
+            detectedAt: now,
+            resetAt: detection.resetAt,
+            tz: detection.tz,
+          }
 
     await this.emitAutoContinueEvent(event)
     await this.store.appendMessage(chatId, timestamped({
