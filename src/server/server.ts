@@ -29,6 +29,7 @@ import { deleteProjectUpload, inferAttachmentContentType, inferProjectFileConten
 import { getProjectUploadDir } from "./paths"
 import { listProjectPaths } from "./project-paths"
 import { ScheduleManager } from "./auto-continue/schedule-manager"
+import { OAuthTokenPool } from "./oauth-pool/oauth-token-pool"
 import { TunnelGateway } from "./cloudflare-tunnel/gateway"
 import { TunnelManager } from "./cloudflare-tunnel/tunnel-manager"
 import { TunnelLifecycle } from "./cloudflare-tunnel/lifecycle"
@@ -213,6 +214,11 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     broadcast: broadcastTunnel,
   })
 
+  const oauthPool = new OAuthTokenPool(
+    () => appSettings.getSnapshot().claudeAuth.tokens,
+    (id, patch) => { void appSettings.mutateTokenStatus(id, patch) },
+  )
+
   let agent!: AgentCoordinator
   const scheduleManager = new ScheduleManager({
     fire: async (chatId, scheduleId) => {
@@ -228,6 +234,7 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     analytics,
     tunnelGateway,
     backgroundTasks,
+    oauthPool,
     onStateChange: (chatId?: string, options?: { immediate?: boolean }) => {
       if (chatId) {
         if (options?.immediate) {

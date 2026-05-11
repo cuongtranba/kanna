@@ -38,6 +38,7 @@ import { deriveChatSchedules } from "./auto-continue/read-model"
 import type { TunnelGateway } from "./cloudflare-tunnel/gateway"
 import type { BackgroundTaskRegistry } from "./background-tasks"
 import type { TerminalManager } from "./terminal-manager"
+import { OAuthTokenPool } from "./oauth-pool/oauth-token-pool"
 
 const CLAUDE_TOOLSET = [
   "Skill",
@@ -134,6 +135,7 @@ interface AgentCoordinatorArgs {
   getAutoResumePreference?: () => boolean
   throwOnClaudeSessionStart?: boolean
   backgroundTasks?: BackgroundTaskRegistry
+  oauthPool?: OAuthTokenPool
 }
 
 interface SendToStartingProfile {
@@ -788,6 +790,7 @@ export class AgentCoordinator {
   private readonly autoResumeByChat = new Map<string, boolean>()
   private readonly tunnelGateway: TunnelGateway | null
   private readonly backgroundTasks: BackgroundTaskRegistry | null
+  private readonly oauthPool: OAuthTokenPool | null
   private readonly pendingBashCalls = new Map<string, { command: string; chatId: string; isBg: boolean }>()
 
   constructor(args: AgentCoordinatorArgs) {
@@ -807,6 +810,7 @@ export class AgentCoordinator {
     this.throwOnClaudeSessionStart = args.throwOnClaudeSessionStart ?? false
     this.tunnelGateway = args.tunnelGateway ?? null
     this.backgroundTasks = args.backgroundTasks ?? null
+    this.oauthPool = args.oauthPool ?? null
     this.backgroundTasks?.setStrategies({
       closeStream: async (task) => {
         await this.stopDraining(task.chatId)
@@ -818,6 +822,10 @@ export class AgentCoordinator {
         this.codexManager.stopSession(task.chatId)
       },
     })
+  }
+
+  getOAuthPool(): OAuthTokenPool | null {
+    return this.oauthPool
   }
 
   setBackgroundErrorReporter(report: ((message: string) => void) | null) {
