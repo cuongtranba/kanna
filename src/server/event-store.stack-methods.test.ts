@@ -26,6 +26,33 @@ async function buildStoreWithProjects(paths: string[]): Promise<{ store: EventSt
   return { store, projectIds }
 }
 
+describe("renameStack", () => {
+  test("renameStack updates the title and emits stack_renamed", async () => {
+    const { store, projectIds: [p1, p2] } = await buildStoreWithProjects(["/tmp/p1", "/tmp/p2"])
+    const stack = await store.createStack("Original", [p1, p2])
+    await store.renameStack(stack.id, "Updated")
+    expect(store.getStack(stack.id)?.title).toBe("Updated")
+  })
+
+  test("renameStack on unknown id throws", async () => {
+    const { store } = await buildStoreWithProjects(["/tmp/p1", "/tmp/p2"])
+    await expect(store.renameStack("nonexistent-id", "New Title")).rejects.toThrow(/Stack not found/u)
+  })
+
+  test("renameStack on deleted stack throws", async () => {
+    const { store, projectIds: [p1, p2] } = await buildStoreWithProjects(["/tmp/p1", "/tmp/p2"])
+    const stack = await store.createStack("To Delete", [p1, p2])
+    await store.removeStack(stack.id)
+    await expect(store.renameStack(stack.id, "New Title")).rejects.toThrow(/Stack not found/u)
+  })
+
+  test("renameStack with empty title throws", async () => {
+    const { store, projectIds: [p1, p2] } = await buildStoreWithProjects(["/tmp/p1", "/tmp/p2"])
+    const stack = await store.createStack("Valid", [p1, p2])
+    await expect(store.renameStack(stack.id, "  ")).rejects.toThrow(/empty/u)
+  })
+})
+
 describe("createStack", () => {
   test("createStack writes a stack_added event and returns the new stack", async () => {
     const { store, projectIds: [p1, p2] } = await buildStoreWithProjects(["/tmp/p1", "/tmp/p2"])

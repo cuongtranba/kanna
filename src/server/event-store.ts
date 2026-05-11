@@ -895,6 +895,35 @@ export class EventStore implements PushEventStore {
     return [...this.state.stacksById.values()].filter((s) => !s.deletedAt)
   }
 
+  async renameStack(stackId: string, title: string): Promise<void> {
+    const stack = this.state.stacksById.get(stackId)
+    if (!stack || stack.deletedAt) throw new Error("Stack not found")
+    const trimmed = title.trim()
+    if (trimmed === "") throw new Error("Stack title cannot be empty")
+    if (trimmed === stack.title) return
+    const event: StackEvent = {
+      v: STORE_VERSION,
+      type: "stack_renamed",
+      timestamp: Date.now(),
+      stackId,
+      title: trimmed,
+    }
+    await this.append(this.stacksLogPath, event)
+  }
+
+  async removeStack(stackId: string): Promise<void> {
+    const stack = this.state.stacksById.get(stackId)
+    if (!stack) throw new Error("Stack not found")
+    if (stack.deletedAt) return
+    const event: StackEvent = {
+      v: STORE_VERSION,
+      type: "stack_removed",
+      timestamp: Date.now(),
+      stackId,
+    }
+    await this.append(this.stacksLogPath, event)
+  }
+
   async setSidebarProjectOrder(projectIds: string[]) {
     const validProjectIds = projectIds.filter((projectId) => {
       const project = this.state.projectsById.get(projectId)
