@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.46.1](https://github.com/cuongtranba/kanna/compare/v0.46.0...v0.46.1) (2026-05-12)
+
+
+### Bug Fixes
+
+* **oauth-pool:** detect SDK-wrapped rate-limit and rotate tokens ([c0a30a9](https://github.com/cuongtranba/kanna/commit/c0a30a90122db3c15fd5c98a0c00d3e44b62f887))
+
 ## [0.46.0](https://github.com/cuongtranba/kanna/compare/v0.45.0...v0.46.0) (2026-05-11)
 
 
