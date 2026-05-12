@@ -178,6 +178,20 @@ function getSidebarProjectOrder(store: EventStore) {
     : []
 }
 
+// Stale-state command failures happen during normal client/server races
+// (e.g. the user steers a queued message that drained between snapshots).
+// They flood pm2 logs at console.error level; downgrade to console.log.
+const BENIGN_STALE_STATE_MESSAGES = [
+  /^Chat not found$/,
+  /^Queued message not found$/,
+  /^File is no longer changed: /,
+  /^Project not found$/,
+] as const
+
+export function isBenignStaleStateMessage(message: string): boolean {
+  return BENIGN_STALE_STATE_MESSAGES.some((pattern) => pattern.test(message))
+}
+
 function send(ws: ServerWebSocket<ClientState>, message: ServerEnvelope) {
   const payload = JSON.stringify(message)
   ws.send(payload)
@@ -1867,7 +1881,9 @@ export function createWsRouter({
       await broadcastSnapshots()
     } catch (error) {
       const messageText = error instanceof Error ? error.message : String(error)
-      console.error("[ws-router] command failed", {
+      const benign = isBenignStaleStateMessage(messageText)
+      const logger = benign ? console.log : console.error
+      logger("[ws-router] command failed", {
         id,
         type: command.type,
         message: messageText,

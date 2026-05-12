@@ -12,6 +12,7 @@ import {
   buildInstallSkillCommand,
   buildUninstallSkillCommand,
   createWsRouter,
+  isBenignStaleStateMessage,
   listInstalledSkills,
   parseInstalledSkillsLock,
 } from "./ws-router"
@@ -111,6 +112,21 @@ const DEFAULT_APP_SETTINGS_SNAPSHOT: AppSettingsSnapshot = {
   filePathDisplay: "~/.kanna/data/settings.json",
   uploads: UPLOAD_DEFAULTS,
 }
+
+describe("isBenignStaleStateMessage", () => {
+  test("matches known stale-state errors", () => {
+    expect(isBenignStaleStateMessage("Chat not found")).toBe(true)
+    expect(isBenignStaleStateMessage("Queued message not found")).toBe(true)
+    expect(isBenignStaleStateMessage("File is no longer changed: foo/bar.ts")).toBe(true)
+    expect(isBenignStaleStateMessage("Project not found")).toBe(true)
+  })
+
+  test("does not match unrelated errors", () => {
+    expect(isBenignStaleStateMessage("Exactly one primary binding required")).toBe(false)
+    expect(isBenignStaleStateMessage("")).toBe(false)
+    expect(isBenignStaleStateMessage("Chat not found, plus extra")).toBe(false)
+  })
+})
 
 describe("skills helpers", () => {
   test("parses installed global skills from a lock payload", () => {

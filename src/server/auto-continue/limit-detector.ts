@@ -8,6 +8,7 @@ export interface LimitDetection {
 export interface LimitDetector {
   detect(chatId: string, error: unknown): LimitDetection | null
   detectFromResultText?(chatId: string, text: string, nowMs?: number): LimitDetection | null
+  detectFromSdkRateLimitInfo?(chatId: string, info: unknown): LimitDetection | null
 }
 
 interface ErrorLike {
@@ -109,26 +110,60 @@ export class ClaudeLimitDetector implements LimitDetector {
       : null
     const isRateLimit = inner?.type === "rate_limit_error"
       || (error as ErrorLike | null)?.status === 429 && inner?.type === "rate_limit_error"
-    if (!isRateLimit) return null
 
-    const headers = extractHeaders(error)
-    const resetAt = parseIsoMillis(headers["anthropic-ratelimit-unified-reset"])
-      ?? parseIsoMillis(inner?.resets_at)
-      ?? parseIsoMillis(inner?.reset_at)
-    if (resetAt === null) return null
+    if (isRateLimit) {
+      const headers = extractHeaders(error)
+      const resetAt = parseIsoMillis(headers["anthropic-ratelimit-unified-reset"])
+        ?? parseIsoMillis(inner?.resets_at)
+        ?? parseIsoMillis(inner?.reset_at)
+      if (resetAt !== null) {
+        const tz = headers["x-anthropic-timezone"]
+          ?? (typeof inner?.timezone === "string" ? (inner.timezone as string) : null)
+          ?? "system"
+        return { chatId, resetAt, tz, raw: error }
+      }
+    }
 
-    const tz = headers["x-anthropic-timezone"]
-      ?? (typeof inner?.timezone === "string" ? (inner.timezone as string) : null)
-      ?? "system"
-
-    return { chatId, resetAt, tz, raw: error }
+    // Fallback: the Claude Code SDK rethrows CLI result errors as
+    // `Error("Claude Code returned an error result: <text>")`. Parse the
+    // text directly for "You've hit your limit · resets ..." / "usage limit
+    // reached|<unix>" forms.
+    const message = (error as ErrorLike | null)?.message
+    if (typeof message === "string") {
+      return this.detectFromResultText(chatId, message)
+    }
+    return null
   }
 
   detectFromResultText(chatId: string, text: string, nowMs: number = Date.now()): LimitDetection | null {
     const parsed = parseResetFromText(text, nowMs)
-    if (!parsed) return null
-    return { chatId, resetAt: parsed.resetAt, tz: parsed.tz, raw: text }
+    if (parsed) return { chatId, resetAt: parsed.resetAt, tz: parsed.tz, raw: text }
+    const pipe = parseClaudeUsageLimitPipe(text)
+    if (pipe !== null) return { chatId, resetAt: pipe, tz: "system", raw: text }
+    return null
   }
+
+  detectFromSdkRateLimitInfo(chatId: string, info: unknown): LimitDetection | null {
+    if (!info || typeof info !== "object") return null
+    const rec = info as Record<string, unknown>
+    if (rec.status !== "rejected") return null
+    const raw = rec.resetsAt
+    if (typeof raw !== "number" || !Number.isFinite(raw) || raw <= 0) return null
+    // SDK emits `resetsAt` as epoch seconds for claude.ai subscription limits;
+    // coerce to ms defensively (anything below year 5138 in ms is below 1e14).
+    const resetAt = raw < 1e12 ? Math.round(raw * 1000) : raw
+    return { chatId, resetAt, tz: "system", raw: info }
+  }
+}
+
+export function parseClaudeUsageLimitPipe(text: string): number | null {
+  // Claude CLI sometimes returns "Claude AI usage limit reached|<unix-seconds>".
+  if (typeof text !== "string") return null
+  const match = text.match(/usage limit reached\|(\d{9,13})/i)
+  if (!match) return null
+  const value = Number(match[1])
+  if (!Number.isFinite(value) || value <= 0) return null
+  return value < 1e12 ? value * 1000 : value
 }
 
 interface JsonRpcErrorLike {

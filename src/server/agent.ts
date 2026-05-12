@@ -501,11 +501,19 @@ async function* createClaudeHarnessStream(q: Query): AsyncGenerator<HarnessEvent
   let seenAssistantUsageIds = new Set<string>()
   let latestUsageSnapshot: ContextWindowUsageSnapshot | null = null
   let lastKnownContextWindow: number | undefined
+  const detector = new ClaudeLimitDetector()
 
   for await (const sdkMessage of q as AsyncIterable<any>) {
     const sessionToken = typeof sdkMessage.session_id === "string" ? sdkMessage.session_id : null
     if (sessionToken) {
       yield { type: "session_token", sessionToken }
+    }
+
+    if (sdkMessage?.type === "rate_limit_event") {
+      const detection = detector.detectFromSdkRateLimitInfo("", sdkMessage.rate_limit_info)
+      if (detection) {
+        yield { type: "rate_limit", rateLimit: { resetAt: detection.resetAt, tz: detection.tz } }
+      }
     }
 
     if (sdkMessage?.type === "assistant") {
@@ -1580,6 +1588,16 @@ export class AgentCoordinator {
           continue
         }
 
+        if (event.type === "rate_limit" && event.rateLimit) {
+          await this.handleLimitDetection(session.chatId, {
+            chatId: session.chatId,
+            resetAt: event.rateLimit.resetAt,
+            tz: event.rateLimit.tz,
+            raw: event,
+          })
+          continue
+        }
+
         if (!event.entry) continue
         await this.store.appendMessage(session.chatId, event.entry)
         this.trackBashToolEntry(session.chatId, event.entry)
@@ -1882,6 +1900,17 @@ export class AgentCoordinator {
     const rotationTarget = this.oauthPool?.pickActive() ?? null
     const canRotate = rotationTarget !== null
       && (!session?.activeTokenId || rotationTarget.id !== session.activeTokenId)
+
+    if (this.oauthPool) {
+      console.log("[oauth-pool] rate-limit detected", {
+        chatId,
+        markedLimitedTokenId: session?.activeTokenId ?? null,
+        resetAt: new Date(detection.resetAt).toISOString(),
+        tz: detection.tz,
+        nextTokenId: rotationTarget?.id ?? null,
+        canRotate,
+      })
+    }
 
     const now = Date.now()
     const scheduleId = crypto.randomUUID()

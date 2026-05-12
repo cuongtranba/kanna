@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { AgentCoordinator } from "./agent"
 import { OAuthTokenPool } from "./oauth-pool/oauth-token-pool"
+import type { HarnessEvent } from "./harness-types"
 import type { OAuthTokenEntry, SlashCommand, TranscriptEntry } from "../shared/types"
 import type { AutoContinueEvent } from "./auto-continue/events"
 import { AsyncEventQueue } from "./test-helpers/async-event-queue"
@@ -253,6 +254,81 @@ describe("AgentCoordinator OAuth rotation", () => {
       expect(acceptedEvents).toHaveLength(1)
       if (acceptedEvents[0]?.kind === "auto_continue_accepted") {
         expect(acceptedEvents[0].source).toBe("token_rotation")
+      } else {
+        throw new Error("Expected auto_continue_accepted event")
+      }
+    },
+    10_000,
+  )
+
+  test(
+    "SDK rate_limit_event in stream triggers rotation without error throw",
+    async () => {
+      let tokens: OAuthTokenEntry[] = [makeToken("a"), makeToken("b")]
+      const writeStatusCalls: Array<{ id: string; patch: unknown }> = []
+
+      const pool = new OAuthTokenPool(
+        () => tokens,
+        (id, patch) => {
+          writeStatusCalls.push({ id, patch })
+          tokens = tokens.map((t) => (t.id === id ? { ...t, ...patch } : t))
+        },
+      )
+
+      const events = new AsyncEventQueue<HarnessEvent>()
+      const resetAt = Date.now() + 60_000
+
+      const store = createFakeStore()
+      const coordinator = new AgentCoordinator({
+        store: store as never,
+        onStateChange: () => {},
+        startClaudeSession: async () => ({
+          provider: "claude",
+          stream: events,
+          getAccountInfo: async () => null,
+          interrupt: async () => {},
+          close: () => {},
+          setModel: async () => {},
+          setPermissionMode: async () => {},
+          getSupportedCommands: async () => [],
+          sendPrompt: async () => {
+            // Emit the SDK rate-limit event into the harness stream.
+            events.push({
+              type: "rate_limit",
+              rateLimit: { resetAt, tz: "system" },
+            })
+          },
+        }),
+        oauthPool: pool,
+      })
+
+      await coordinator.send({
+        type: "chat.send",
+        chatId: "chat-1",
+        provider: "claude",
+        content: "test",
+        model: "claude-opus-4-7",
+      })
+
+      await waitFor(
+        () =>
+          writeStatusCalls.some((c) => (c.patch as { status?: string }).status === "limited")
+          && store.autoContinueEvents.some((e) => e.kind === "auto_continue_accepted"),
+        4000,
+        "rate_limit event in stream marks token limited + emits auto_continue_accepted",
+      )
+
+      const limitedCall = writeStatusCalls.find(
+        (c) => (c.patch as { status?: string }).status === "limited",
+      )
+      expect(limitedCall!.id).toBe("a")
+      expect((limitedCall!.patch as { limitedUntil?: number }).limitedUntil).toBe(resetAt)
+
+      const accepted = store.getAutoContinueEvents("chat-1").find(
+        (e) => e.kind === "auto_continue_accepted",
+      )
+      if (accepted?.kind === "auto_continue_accepted") {
+        expect(accepted.source).toBe("token_rotation")
       } else {
         throw new Error("Expected auto_continue_accepted event")
       }

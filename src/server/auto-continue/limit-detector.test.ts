@@ -63,6 +63,26 @@ describe("ClaudeLimitDetector", () => {
     const err = anthropicError({ type: "error", error: { type: "overloaded_error" } })
     expect(detector.detect("c1", err)).toBeNull()
   })
+
+  test("detects SDK-wrapped CLI result-error text in Error.message", () => {
+    // Real format observed in pm2 logs from @anthropic-ai/claude-agent-sdk.
+    const now = Date.parse("2026-04-23T05:00:00Z")
+    const err = new Error("Claude Code returned an error result: You've hit your limit · resets 1:50pm (Asia/Saigon)")
+    const detection = (detector as ClaudeLimitDetector & {
+      detect(chatId: string, error: unknown, nowMs?: number): unknown
+    }).detect("c1", err)
+    expect(detection).not.toBeNull()
+    // detectFromResultText uses real Date.now(); the regex match is what we care about.
+    expect((detection as { tz: string }).tz).toBe("Asia/Saigon")
+    void now
+  })
+
+  test("detects pipe-format usage-limit text via wrapped error", () => {
+    const err = new Error("Claude Code returned an error result: Claude AI usage limit reached|1731384000")
+    const detection = detector.detect("c1", err)
+    expect(detection).not.toBeNull()
+    expect(detection!.resetAt).toBe(1731384000 * 1000)
+  })
 })
 
 const codex = new CodexLimitDetector()
@@ -149,5 +169,47 @@ describe("ClaudeLimitDetector.detectFromResultText", () => {
     expect(detection).not.toBeNull()
     expect(detection!.tz).toBe("Asia/Saigon")
     expect(new Date(detection!.resetAt).toISOString()).toBe("2026-04-23T07:00:00.000Z")
+  })
+
+  test("detects 'Claude AI usage limit reached|<unix-seconds>' form", () => {
+    const detection = detector.detectFromResultText("c1", "Claude AI usage limit reached|1731384000")
+    expect(detection).not.toBeNull()
+    expect(detection!.resetAt).toBe(1731384000 * 1000)
+    expect(detection!.tz).toBe("system")
+  })
+
+  test("detects 'usage limit reached|<unix-ms>' form (already-ms)", () => {
+    const detection = detector.detectFromResultText("c1", "usage limit reached|1731384000000")
+    expect(detection!.resetAt).toBe(1731384000000)
+  })
+})
+
+describe("ClaudeLimitDetector.detectFromSdkRateLimitInfo", () => {
+  test("returns null when status is not rejected", () => {
+    expect(detector.detectFromSdkRateLimitInfo("c1", { status: "allowed", resetsAt: 1731384000 })).toBeNull()
+    expect(detector.detectFromSdkRateLimitInfo("c1", { status: "allowed_warning", resetsAt: 1731384000 })).toBeNull()
+  })
+
+  test("returns null when resetsAt is missing or invalid", () => {
+    expect(detector.detectFromSdkRateLimitInfo("c1", { status: "rejected" })).toBeNull()
+    expect(detector.detectFromSdkRateLimitInfo("c1", { status: "rejected", resetsAt: 0 })).toBeNull()
+    expect(detector.detectFromSdkRateLimitInfo("c1", { status: "rejected", resetsAt: "soon" })).toBeNull()
+  })
+
+  test("coerces epoch-seconds resetsAt to ms", () => {
+    const detection = detector.detectFromSdkRateLimitInfo("c1", { status: "rejected", resetsAt: 1731384000 })
+    expect(detection).not.toBeNull()
+    expect(detection!.resetAt).toBe(1731384000 * 1000)
+    expect(detection!.tz).toBe("system")
+  })
+
+  test("passes through epoch-ms resetsAt unchanged", () => {
+    const detection = detector.detectFromSdkRateLimitInfo("c1", { status: "rejected", resetsAt: 1731384000000 })
+    expect(detection!.resetAt).toBe(1731384000000)
+  })
+
+  test("returns null for non-object input", () => {
+    expect(detector.detectFromSdkRateLimitInfo("c1", null)).toBeNull()
+    expect(detector.detectFromSdkRateLimitInfo("c1", "rejected")).toBeNull()
   })
 })

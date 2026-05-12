@@ -30,6 +30,7 @@ import { getProjectUploadDir } from "./paths"
 import { listProjectPaths } from "./project-paths"
 import { ScheduleManager } from "./auto-continue/schedule-manager"
 import { OAuthTokenPool } from "./oauth-pool/oauth-token-pool"
+import { setQuickResponseOAuthPool } from "./quick-response"
 import { TunnelGateway } from "./cloudflare-tunnel/gateway"
 import { TunnelManager } from "./cloudflare-tunnel/tunnel-manager"
 import { TunnelLifecycle } from "./cloudflare-tunnel/lifecycle"
@@ -222,6 +223,7 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
       })
     },
   )
+  setQuickResponseOAuthPool(oauthPool)
 
   let agent!: AgentCoordinator
   const scheduleManager = new ScheduleManager({

@@ -3,10 +3,29 @@ import { homedir } from "node:os"
 import OpenAI from "openai"
 import { getDataRootDir } from "../shared/branding"
 import type { LlmProviderSnapshot } from "../shared/types"
+import { ClaudeLimitDetector } from "./auto-continue/limit-detector"
 import { CodexAppServerManager } from "./codex-app-server"
 import { readLlmProviderSnapshot } from "./llm-provider"
+import type { OAuthTokenPool } from "./oauth-pool/oauth-token-pool"
 
-const CLAUDE_STRUCTURED_TIMEOUT_MS = 20_000
+let activeOAuthPool: OAuthTokenPool | null = null
+
+export function setQuickResponseOAuthPool(pool: OAuthTokenPool | null) {
+  activeOAuthPool = pool
+}
+
+const CLAUDE_STRUCTURED_TIMEOUT_MS = 60_000
+
+const CLAUDE_RATE_LIMIT_PATTERNS = [
+  /you'?ve hit your limit/i,
+  /rate.?limit/i,
+  /usage limit/i,
+  /resets? \d/i,
+] as const
+
+function isClaudeRateLimitMessage(message: string): boolean {
+  return CLAUDE_RATE_LIMIT_PATTERNS.some((pattern) => pattern.test(message))
+}
 
 // Env vars set by a parent Claude Code session. The Agent SDK refuses to
 // spawn a child Claude Code process when these are present ("Claude Code
@@ -116,6 +135,15 @@ function structuredOutputFromSdkMessage(message: unknown): unknown | null {
 }
 
 export async function runClaudeStructured(args: Omit<StructuredQuickResponseArgs<unknown>, "parse">): Promise<unknown | null> {
+  const pool = activeOAuthPool
+  const picked = pool?.pickActive() ?? null
+  if (picked && pool) pool.markUsed(picked.id)
+  const env = envWithoutParentClaudeCode(process.env)
+  if (picked) env.CLAUDE_CODE_OAUTH_TOKEN = picked.token
+
+  const detector = new ClaudeLimitDetector()
+  let detectedLimit: { resetAt: number; tz: string } | null = null
+
   const q = query({
     prompt: args.prompt,
     options: {
@@ -129,7 +157,7 @@ export async function runClaudeStructured(args: Omit<StructuredQuickResponseArgs
         type: "json_schema",
         schema: args.schema,
       },
-      env: envWithoutParentClaudeCode(process.env),
+      env,
     },
   })
 
@@ -137,6 +165,12 @@ export async function runClaudeStructured(args: Omit<StructuredQuickResponseArgs
     const result = await Promise.race<unknown | null>([
       (async () => {
         for await (const message of q) {
+          if (message && typeof message === "object" && (message as { type?: string }).type === "rate_limit_event") {
+            const detection = detector.detectFromSdkRateLimitInfo("", (message as { rate_limit_info?: unknown }).rate_limit_info)
+            if (detection) {
+              detectedLimit = { resetAt: detection.resetAt, tz: detection.tz }
+            }
+          }
           const structuredOutput = structuredOutputFromSdkMessage(message)
           if (structuredOutput !== null) {
             return structuredOutput
@@ -154,7 +188,19 @@ export async function runClaudeStructured(args: Omit<StructuredQuickResponseArgs
     return result
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error)
-    console.warn(`[quick-response] claude structured request failed: ${reason}`)
+    const errorLimit = detector.detectFromResultText("", reason)
+    const rateLimited = Boolean(detectedLimit) || errorLimit !== null || isClaudeRateLimitMessage(reason)
+    if (rateLimited) {
+      console.log(`[quick-response] claude rate-limited, falling back: ${reason}`)
+      if (picked && pool) {
+        const limit = detectedLimit ?? (errorLimit ? { resetAt: errorLimit.resetAt, tz: errorLimit.tz } : null)
+        // Fallback window when we can't parse the precise reset: 5 minutes.
+        const resetAt = limit?.resetAt ?? Date.now() + 5 * 60_000
+        pool.markLimited(picked.id, resetAt)
+      }
+    } else {
+      console.warn(`[quick-response] claude structured request failed: ${reason}`)
+    }
     return null
   } finally {
     try {
