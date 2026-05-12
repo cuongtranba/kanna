@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.46.0](https://github.com/cuongtranba/kanna/compare/v0.45.0...v0.46.0) (2026-05-11)
+
+
+### Features
+
+* OAuth token pool with automatic rotation on rate-limit ([#52](https://github.com/cuongtranba/kanna/issues/52)) ([219ecef](https://github.com/cuongtranba/kanna/commit/219ecefe4fb453525c6e4314413c976235e7806c))
+* **stacks:** Phase 1 — server, events, store, ws-router ([#48](https://github.com/cuongtranba/kanna/issues/48)) ([7abeff1](https://github.com/cuongtranba/kanna/commit/7abeff13a6a7293959d712a36b0480b5ea1e6787))
+* **stacks:** Phase 2 — chat bindings + agent spawn wiring ([#50](https://github.com/cuongtranba/kanna/issues/50)) ([2295fc8](https://github.com/cuongtranba/kanna/commit/2295fc80f2a24815e9263040ab731d91efce8cab))
+* **stacks:** Phase 3 — UI plan (draft, plan-only) ([#51](https://github.com/cuongtranba/kanna/issues/51)) ([4f52dac](https://github.com/cuongtranba/kanna/commit/4f52dace8ddc06f26c879b40a9b0151c0693031a))
+
+
+### Bug Fixes
+
+* **bg-tasks:** remove duplicate "Background tasks" header ([#53](https://github.com/cuongtranba/kanna/issues/53)) ([029c957](https://github.com/cuongtranba/kanna/commit/029c957f44208df6aa4e85ef7ea4e1a611a4c776))
+* **uploads:** raise Bun maxRequestBodySize to upload max ([#45](https://github.com/cuongtranba/kanna/issues/45)) ([68752f4](https://github.com/cuongtranba/kanna/commit/68752f4344c6ecf0dd6d760ef8aa238f4b2bfbf6))
+
 ## [0.45.0](https://github.com/cuongtranba/kanna/compare/v0.44.0...v0.45.0) (2026-05-10)
 
 
