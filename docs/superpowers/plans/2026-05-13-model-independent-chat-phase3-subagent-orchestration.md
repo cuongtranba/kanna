@@ -4,7 +4,7 @@
 
 **Goal:** Run subagents that were parsed in phase 2. Parallel fan-out on multi-mention (cap 4), depth-1 chained delegation, full error code surface, transcript projection. Native SDK `Agent` tool stays untouched as a separate primary-driven mechanism.
 
-**Architecture:** A new `SubagentOrchestrator` reads `subagentMentions` already stored on `message_appended` envelopes and spawns one provider session per mention. It uses phase 1's `buildHistoryPrimer` for `contextScope: "full-transcript"` and a new `extractPreviousAssistantReply` for the default scope. Each run emits `subagent_run_started/delta/completed/failed/cancelled` events; a new `subagentRuns: Map<runId, SubagentRunSnapshot>` field on the chat snapshot carries state to the client. Send-flow gates the primary turn: when at least one resolved subagent mention is present, the primary turn does NOT fire.
+**Architecture:** A new `SubagentOrchestrator` reads `subagentMentions` / `unknownSubagentMentions` already stored on `message_appended` envelopes and spawns one provider session per resolved mention. It uses phase 1's `buildHistoryPrimer` for `contextScope: "full-transcript"` and a new `extractPreviousAssistantReply` for the default scope. Each run emits `subagent_run_started/completed/failed/cancelled` events; `subagent_message_delta` is reduced for forward compatibility but live streaming is deferred until the provider-run contract supports chunks. A new `subagentRuns: Map<runId, SubagentRunSnapshot>` field on the chat snapshot carries state to the client. Send-flow gates the primary turn when any `@agent/...` mention is present, including unknown-only mentions.
 
 **Tech Stack:** TypeScript, Bun, React 19, Zustand, bun:test, JSONL event log.
 
@@ -22,7 +22,7 @@
 - `src/server/history-primer.ts` — add `extractPreviousAssistantReply`
 - `src/server/events.ts` — add 5 `subagent_run_*` event types; extend `StoreEvent`
 - `src/server/event-store.ts` — reducer for `subagentRuns` map; reply-on-replay
-- `src/server/agent.ts` — `send()` gates primary turn when resolved mentions present
+- `src/server/agent.ts` — `send()` gates primary turn when any `@agent/...` mention is present
 - `src/shared/types.ts` — `SubagentRunSnapshot`, `SubagentErrorCode`; extend `ChatSnapshot` with `subagentRuns`
 
 **Client (new + modify):**
@@ -64,7 +64,7 @@ export interface ProviderUsage {
 export interface SubagentRunSnapshot {
   runId: string
   chatId: string
-  subagentId: string
+  subagentId: string | null
   subagentName: string
   provider: AgentProvider
   model: string
@@ -122,7 +122,7 @@ export type SubagentRunEvent =
       timestamp: number
       chatId: string
       runId: string
-      subagentId: string
+      subagentId: string | null
       subagentName: string
       provider: AgentProvider
       model: string
@@ -683,7 +683,7 @@ export class SubagentOrchestrator {
         const runId = crypto.randomUUID()
         await this.deps.store.appendSubagentEvent({
           v: 3, type: "subagent_run_started", timestamp: this.now(), chatId: args.chatId, runId,
-          subagentId: "", subagentName: mention.name, provider: "claude", model: "",
+          subagentId: null, subagentName: mention.name, provider: "claude", model: "",
           parentUserMessageId: args.userMessageId, parentRunId: null, depth: 0,
         })
         await this.failRun(args.chatId, runId, "UNKNOWN_SUBAGENT", `Unknown subagent '${mention.name}'`)
@@ -928,40 +928,40 @@ test("send with no mentions starts primary turn as before", async () => {
   expect(primaryStart).toHaveBeenCalled()
 })
 
-test("send with only unknown-subagent mentions still skips primary", async () => {
+test("send with only unknown-subagent mentions does not start primary", async () => {
   const harness = await setupAgent({ subagents: [] })
   const primaryStart = harness.spyOnStartTurn()
   await harness.agent.send({ type: "chat.send", chatId: "c1", content: "hi @agent/nobody", provider: "claude" })
-  // Spec: orchestrator only fires for kind:"subagent". unknown still triggers a failed run but no primary turn? Per phase-3 spec: "primary does NOT fire" applies to any @agent/ mention. Confirm with code path; if unknown alone should trigger primary, adjust the test.
+  expect(primaryStart).not.toHaveBeenCalled()
+  const runs = Object.values(harness.store.getSubagentRuns("c1"))
+  expect(runs).toHaveLength(1)
+  expect(runs[0].status).toBe("failed")
+  expect(runs[0].error?.code).toBe("UNKNOWN_SUBAGENT")
 })
 ```
 
 Re-read the phase 3 spec for the exact gating rule. Spec text (§ Send-flow integration):
 
 ```
-if parsed.subagents.length > 0:
+if parsed.agent_mentions.length > 0:
    orchestrator.runMentionsForUserMessage(...)
    primary does NOT fire
 ```
 
-`parsed.subagents` = resolved-only. So unknown-only triggers an `UNKNOWN_SUBAGENT` failure event AND the primary turn fires. Update the gating in Step 2: check `resolvedMentions.length > 0`, but still run the orchestrator for unknown emissions even when primary fires:
+`agent_mentions` includes both resolved and unknown `@agent/...` mentions. Unknown-only messages still express a delegation intent; surface the `UNKNOWN_SUBAGENT` failure inline and do not silently fall through to the primary provider:
 
 ```ts
 const unknownMentions = parsedMentions.filter((m) => m.kind === "unknown-subagent")
-if (unknownMentions.length > 0 && resolvedMentions.length === 0) {
-  // Surface UNKNOWN_SUBAGENT failures, but proceed to primary turn
+if (resolvedMentions.length > 0 || unknownMentions.length > 0) {
   await this.subagentOrchestrator.runMentionsForUserMessage({
     chatId, userMessageId: this.getLastUserMessageId(chatId), mentions: parsedMentions,
   })
-}
-if (resolvedMentions.length > 0) {
-  await this.subagentOrchestrator.runMentionsForUserMessage({ /* ... */ })
   return { chatId }
 }
 // fall through to primary path
 ```
 
-Adjust the third test above to assert: primary IS called AND an UNKNOWN_SUBAGENT failed run exists.
+Adjust the third test above to assert: primary is not called and an `UNKNOWN_SUBAGENT` failed run exists.
 
 - [ ] **Step 4: Run tests**
 
@@ -972,7 +972,7 @@ Expected: PASS.
 
 ```bash
 git add src/server/agent.ts src/server/agent.test.ts src/server/subagent-orchestrator.ts
-git commit -m "feat(agent): route resolved @agent/ mentions to orchestrator"
+git commit -m "feat(agent): route @agent mentions to orchestrator"
 ```
 
 ---
@@ -1006,7 +1006,7 @@ export function SubagentMessage({ run, indentDepth }: SubagentMessageProps) {
         <Bot className="h-3.5 w-3.5" />
         <span>{run.subagentName}</span>
         <span className="opacity-60">{run.provider}/{run.model}</span>
-        {run.status === "running" && <span className="ml-auto inline-block animate-pulse">streaming…</span>}
+        {run.status === "running" && <span className="ml-auto inline-block animate-pulse">running...</span>}
       </header>
       {run.finalText && (
         <div className="mt-1 whitespace-pre-wrap text-sm">{run.finalText}</div>
@@ -1270,33 +1270,36 @@ git commit -m "test(chat-input): mention gating round-trips"
 
 ---
 
-## Task 12 — Streaming live updates
+## Task 12 — Buffered provider runs; streaming deferred
 
 **Files:**
-- Modify: `src/server/subagent-orchestrator.ts` (emit `subagent_message_delta` while streaming)
+- Modify: `src/server/subagent-orchestrator.ts` (document buffered run behavior)
 - Modify: provider-run helper
 
-- [ ] **Step 1: Stream deltas from provider into events**
+- [ ] **Step 1: Keep provider-run contract buffered**
 
-In `buildSubagentProviderRun`, the provider session yields incremental chunks (Claude `assistant` SDK frames, Codex deltas). For each chunk:
+Task 6 defines `ProviderRunStart.start(): Promise<{ text, usage }>` as a buffered contract. Keep phase 3 implementation on that contract: emit `subagent_run_started`, run the provider to completion, then emit `subagent_run_completed` with `finalContent`. Do not promise live `subagent_message_delta` events until the provider-run API is changed to support chunks.
+
+When streaming is added later, change the provider-run contract explicitly, for example:
 
 ```ts
-await store.appendSubagentEvent({
-  v: 3, type: "subagent_message_delta", timestamp: Date.now(), chatId, runId, content: chunkText,
-})
+interface ProviderRunStart {
+  start(args?: { onChunk?: (chunk: string) => Promise<void> }): Promise<{ text: string; usage?: ProviderUsage }>
+  cancel(): Promise<void>
+}
 ```
 
-The orchestrator already commits a `subagent_run_completed` event with the final aggregate `finalContent` once streaming finishes. The reducer (Task 3) handles concatenation for deltas and overwrite-with-final for completion.
+The reducer may keep `subagent_message_delta` support from Task 3 as forward-compatible event handling, but no phase-3 task should depend on providers yielding incremental chunks.
 
 - [ ] **Step 2: Manual smoke test**
 
-Run: `bun run dev`. Create a Claude subagent. Send `@agent/alpha summarize this conversation`. Observe the SubagentMessage row streaming text incrementally, then settling on final.
+Run: `bun run dev`. Create a Claude subagent. Send `@agent/alpha summarize this conversation`. Observe a running SubagentMessage row, then a completed row with final text.
 
 - [ ] **Step 3: Commit**
 
 ```bash
 git add src/server/subagent-orchestrator.ts
-git commit -m "feat(subagent-orchestrator): stream deltas live"
+git commit -m "docs(subagent-orchestrator): defer live streaming contract"
 ```
 
 ---
@@ -1323,16 +1326,16 @@ gh pr create --repo cuongtranba/kanna --base main --head plans/model-independent
 ## Summary
 - SubagentOrchestrator with parallel fan-out (cap 4), depth-1 chains, loop detection
 - 5 new durable events (subagent_run_*) reduced into subagentRuns map
-- Agent.send routes resolved @agent/ mentions to orchestrator; primary turn gated
+- Agent.send routes @agent/ mentions to orchestrator; primary turn gated for resolved and unknown-only mentions
 - SubagentMessage + SubagentErrorCard render runs grouped by user message; chained runs indented
 - Provider sessions are isolated (no read/write to chat.sessionTokensByProvider)
 
 ## Test plan
 - [ ] bun test
-- [ ] Send `@agent/alpha` — see streaming reply, no primary turn fires
+- [ ] Send `@agent/alpha` — see running row followed by final reply, no primary turn fires
 - [ ] Send `@agent/alpha @agent/beta` — see parallel siblings under same user message
 - [ ] Build alpha that mentions @agent/beta, beta mentions @agent/alpha — LOOP_DETECTED card
-- [ ] Send `@agent/missing` only — primary turn fires, UNKNOWN_SUBAGENT failure card shown
+- [ ] Send `@agent/missing` only — primary turn does not fire, UNKNOWN_SUBAGENT failure card shown
 EOF
 )"
 ```
@@ -1341,6 +1344,7 @@ EOF
 
 ## Open follow-ups (not v1)
 
+- Live `subagent_message_delta` streaming once `ProviderRunStart.start()` accepts an `onChunk` callback.
 - Per-subagent persistent session token caching (currently isolated per run).
 - Fan-out + primary synthesis (combine sibling outputs back into a primary reply).
 - `MAX_CHAIN_DEPTH=2` opt-in for advanced flows.
@@ -1356,6 +1360,6 @@ EOF
 - [ ] `parentRunId === null` runs render flat; chained runs render indented.
 - [ ] Sibling ordering: `startedAt` asc, `runId` asc tiebreak.
 - [ ] `MAX_PARALLEL = 4`, `MAX_CHAIN_DEPTH = 1`, `RUN_TIMEOUT_MS = 120_000`.
-- [ ] `UNKNOWN_SUBAGENT` failures emit a started+failed pair so the UI can render the error card.
-- [ ] Resolved mention gates primary turn; unknown-only does not.
+- [ ] `UNKNOWN_SUBAGENT` failures emit a started+failed pair with `subagentId: null` so the UI can render the error card.
+- [ ] Any `@agent/...` mention gates the primary turn, including unknown-only mentions.
 - [ ] `bun test` and `bun run check` pass.

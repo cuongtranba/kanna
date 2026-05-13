@@ -262,12 +262,21 @@ subagents: state.subagents,
 In `applyPatch` (line 503) — handle the optional ops:
 
 ```ts
+function isSubagentValidationError(error: unknown): error is SubagentValidationError {
+  return Boolean(
+    error
+    && typeof error === "object"
+    && "code" in error
+    && "message" in error
+  )
+}
+
 function applyPatch(state: AppSettingsState, patch: AppSettingsPatch): AppSettingsState {
   let nextSubagents = state.subagents
   if (patch.subagents?.create) {
     const input = patch.subagents.create
     const error = validateSubagentName(input.name, state.subagents.map((s) => ({ id: s.id, name: s.name })))
-    if (error) throw error
+    if (error) throw new SubagentValidationException(error)
     const now = Date.now()
     nextSubagents = [
       ...state.subagents,
@@ -287,12 +296,12 @@ function applyPatch(state: AppSettingsState, patch: AppSettingsPatch): AppSettin
   } else if (patch.subagents?.update) {
     const { id, patch: agentPatch } = patch.subagents.update
     const idx = state.subagents.findIndex((s) => s.id === id)
-    if (idx < 0) throw { code: "NOT_FOUND" as const, message: `Subagent ${id} not found` }
+    if (idx < 0) throw new SubagentValidationException({ code: "NOT_FOUND", message: `Subagent ${id} not found` })
     const existing = state.subagents[idx]
     const nextName = agentPatch.name != null ? agentPatch.name.trim() : existing.name
     if (agentPatch.name != null) {
       const error = validateSubagentName(nextName, state.subagents.map((s) => ({ id: s.id, name: s.name })), id)
-      if (error) throw error
+      if (error) throw new SubagentValidationException(error)
     }
     const merged: Subagent = {
       ...existing,
@@ -305,13 +314,36 @@ function applyPatch(state: AppSettingsState, patch: AppSettingsPatch): AppSettin
   } else if (patch.subagents?.delete) {
     nextSubagents = state.subagents.filter((s) => s.id !== patch.subagents!.delete!.id)
   }
-  // continue with existing return, adding subagents into the input object
+  const base = toFilePayload(state)
   return normalizeAppSettings({
-    ...toFilePayload(state),
-    ...patch,
+    ...base,
+    analyticsEnabled: patch.analyticsEnabled ?? base.analyticsEnabled,
+    terminal: patch.terminal ? { ...base.terminal, ...patch.terminal } : base.terminal,
+    editor: patch.editor ? { ...base.editor, ...patch.editor } : base.editor,
+    providerDefaults: patch.providerDefaults
+      ? { ...base.providerDefaults, ...patch.providerDefaults }
+      : base.providerDefaults,
+    cloudflareTunnel: patch.cloudflareTunnel
+      ? { ...base.cloudflareTunnel, ...patch.cloudflareTunnel }
+      : base.cloudflareTunnel,
+    auth: patch.auth ? { ...base.auth, ...patch.auth } : base.auth,
+    claudeAuth: patch.claudeAuth
+      ? { tokens: patch.claudeAuth.tokens ?? base.claudeAuth.tokens }
+      : base.claudeAuth,
+    uploads: patch.uploads ? { ...base.uploads, ...patch.uploads } : base.uploads,
     subagents: nextSubagents,
-    // ... existing terminal/editor/providerDefaults/etc nested merges
   }, /* filePath = */ undefined).payload
+}
+```
+
+Add a small exception wrapper near the validation helpers so validation failures are not confused with arbitrary runtime errors that happen to expose a `.code` property:
+
+```ts
+class SubagentValidationException extends Error {
+  constructor(readonly validationError: SubagentValidationError) {
+    super(validationError.message)
+    this.name = "SubagentValidationException"
+  }
 }
 ```
 
@@ -319,21 +351,18 @@ If `normalizeAppSettings` second arg defaults to `homedir()`-derived path, leave
 
 `crypto.randomUUID` is imported at line 1 already. ULID is not used — UUIDv4 is acceptable per consensus (spec uses "ULID" notionally; the only requirement is stability + uniqueness).
 
-- [ ] **Step 5: Add CRUD methods on `AppSettings`**
+- [ ] **Step 5: Add CRUD methods on `AppSettingsManager`**
 
-Add to the `AppSettings` class:
+Add to the existing `AppSettingsManager` class. Reuse `writePatch()` so persistence, watcher suppression, and `onChange` notification stay centralized:
 
 ```ts
 async createSubagent(input: SubagentInput): Promise<SubagentValidationError | Subagent> {
   try {
-    const next = applyPatch(this.state, { subagents: { create: input } })
-    this.state = next
-    await atomicWriteJson(this.filePath, `${JSON.stringify(toFilePayload(next), null, 2)}\n`)
-    this.emitSnapshot()
-    return next.subagents[next.subagents.length - 1]
+    const snapshot = await this.writePatch({ subagents: { create: input } })
+    return snapshot.subagents[snapshot.subagents.length - 1]
   } catch (error) {
-    if (error && typeof error === "object" && "code" in error) {
-      return error as SubagentValidationError
+    if (error instanceof SubagentValidationException) {
+      return error.validationError
     }
     throw error
   }
@@ -341,29 +370,23 @@ async createSubagent(input: SubagentInput): Promise<SubagentValidationError | Su
 
 async updateSubagent(id: string, patch: SubagentPatch): Promise<SubagentValidationError | Subagent> {
   try {
-    const next = applyPatch(this.state, { subagents: { update: { id, patch } } })
-    this.state = next
-    await atomicWriteJson(this.filePath, `${JSON.stringify(toFilePayload(next), null, 2)}\n`)
-    this.emitSnapshot()
-    const updated = next.subagents.find((s) => s.id === id)
+    const snapshot = await this.writePatch({ subagents: { update: { id, patch } } })
+    const updated = snapshot.subagents.find((s) => s.id === id)
     return updated ?? { code: "NOT_FOUND", message: `Subagent ${id} not found` }
   } catch (error) {
-    if (error && typeof error === "object" && "code" in error) {
-      return error as SubagentValidationError
+    if (error instanceof SubagentValidationException) {
+      return error.validationError
     }
     throw error
   }
 }
 
 async deleteSubagent(id: string): Promise<void> {
-  const next = applyPatch(this.state, { subagents: { delete: { id } } })
-  this.state = next
-  await atomicWriteJson(this.filePath, `${JSON.stringify(toFilePayload(next), null, 2)}\n`)
-  this.emitSnapshot()
+  await this.writePatch({ subagents: { delete: { id } } })
 }
 ```
 
-`emitSnapshot` is the existing mechanism that pushes `app-settings` snapshots over the subscription channel. Confirm its real name via: `grep -n 'emit' src/server/app-settings.ts`.
+The existing `writePatch()` calls `setState()`, which pushes snapshots to `onChange` subscribers; do not add a separate `emitSnapshot` path.
 
 - [ ] **Step 6: Commit (broken tests OK — added in Task 4)**
 
@@ -416,24 +439,35 @@ Wire `SubagentCommandResult` into the response map alongside other command respo
 
 - [ ] **Step 2: Implement the handlers in `ws-router`**
 
-Run: `grep -n 'appSettings\.' src/server/ws-router.ts | head -5` to locate the dispatch site. Add three sibling cases:
+Run: `grep -n 'settings.writeAppSettingsPatch' src/server/ws-router.ts` to locate the dispatch site. Add the CRUD methods to the `resolvedAppSettings` adapter, then add three sibling command cases:
 
 ```ts
 case "subagent.create": {
-  const result = await this.appSettings.createSubagent(command.input)
-  if ("code" in result) return { ok: false, error: result }
-  return { ok: true, subagent: result }
+  const result = await resolvedAppSettings.createSubagent(command.input)
+  if (isSubagentValidationError(result)) {
+    send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: { ok: false, error: result } })
+    return
+  }
+  send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: { ok: true, subagent: result } })
+  return
 }
 case "subagent.update": {
-  const result = await this.appSettings.updateSubagent(command.id, command.patch)
-  if ("code" in result) return { ok: false, error: result }
-  return { ok: true, subagent: result }
+  const result = await resolvedAppSettings.updateSubagent(command.id, command.patch)
+  if (isSubagentValidationError(result)) {
+    send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: { ok: false, error: result } })
+    return
+  }
+  send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: { ok: true, subagent: result } })
+  return
 }
 case "subagent.delete": {
-  await this.appSettings.deleteSubagent(command.id)
-  return { ok: true }
+  await resolvedAppSettings.deleteSubagent(command.id)
+  send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: { ok: true } })
+  return
 }
 ```
+
+For error cases, send `{ ok: false, error: result }` as the ack result before returning; keep the same style as the surrounding `ws-router` switch rather than returning raw objects from the case.
 
 - [ ] **Step 3: Typecheck**
 
@@ -950,7 +984,7 @@ This is a breaking signature change for the existing caller. The old `pickedPath
 - `src/client/components/chat-ui/ChatInput.tsx:312` — wrap the existing argument in `{ kind: "path", path: pickedPath }`.
 - `src/client/lib/mention-suggestions.test.ts` — same.
 
-Also update existing tests in `mention-suggestions.test.ts:38-78` to use the new shape and add at least one agent-branch test:
+Also update existing tests in `mention-suggestions.test.ts:38-78` to use the new shape. Keep the existing path-mention tests as regression coverage for cursor placement, and add at least one agent-branch test:
 
 ```ts
 test("inserts @agent/<name> with trailing space", () => {
@@ -1183,6 +1217,8 @@ git commit -m "feat(chat-input): mention picker renders Agents + Files sections"
 
 Add a `useMemo` in `ChatInput.tsx` that derives chips from `value`. Re-use the client-side regex — keep it identical to the server pattern:
 
+To keep the "server authoritative" contract honest, put the pattern in a tiny shared module (for example `src/shared/mention-pattern.ts`) and import it from both `src/server/mention-parser.ts` and `ChatInput.tsx`. The client still treats chips as UX hints only; the server parse result remains authoritative for send.
+
 ```tsx
 const subagents = useAppSettingsStore((s) => s.snapshot?.subagents ?? [])
 const chips = useMemo(() => {
@@ -1319,6 +1355,8 @@ function SubagentEditor({ initial, onCancel, onSave }: { initial?: Subagent; onC
         onModelChange={(_, next) => setModel(next)}
         onModelOptionChange={(change) => { /* reuse switch from ChatInput logic */ }}
       />
+      {/* Editing an existing subagent may keep provider fixed if modelOptions migration is not implemented.
+          If provider changes are enabled, reset model and modelOptions atomically to that provider's defaults. */}
       <Textarea placeholder="System prompt" value={systemPrompt} onChange={(e) => setSystemPrompt(e.target.value)} />
       <RadioGroup value={contextScope} onValueChange={(value: SubagentContextScope) => setContextScope(value)}>
         <RadioGroupItem value="previous-assistant-reply" label="Previous assistant reply only" />

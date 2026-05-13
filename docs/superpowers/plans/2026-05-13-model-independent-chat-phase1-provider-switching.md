@@ -155,8 +155,16 @@ for (const chat of parsed.chats) {
   } else if (typeof legacy.pendingForkSessionToken === "string" && chat.provider) {
     pendingForkSessionToken = { provider: chat.provider, token: legacy.pendingForkSessionToken }
   }
+  const {
+    sessionToken: _legacySessionToken,
+    pendingForkSessionToken: _legacyPendingForkSessionToken,
+    ...rest
+  } = chat as typeof chat & {
+    sessionToken?: string | null
+    pendingForkSessionToken?: string | null | { provider: AgentProvider; token: string }
+  }
   this.state.chatsById.set(chat.id, {
-    ...chat,
+    ...rest,
     unread: chat.unread ?? false,
     sessionTokensByProvider,
     pendingForkSessionToken,
@@ -164,7 +172,7 @@ for (const chat of parsed.chats) {
 }
 ```
 
-The cast at the end discards the legacy `sessionToken` field; the `as ChatRecord` is safe because we just constructed the required new shape.
+The destructure intentionally drops legacy scalar token fields from the runtime object; do not rely on `as ChatRecord` to remove fields at runtime.
 
 - [ ] **Step 2: Commit**
 
@@ -409,11 +417,10 @@ async setSessionTokenForProvider(
     provider,
   }
   await this.append(this.turnsLogPath, event)
-  this.applyEvent(event)
 }
 ```
 
-Note `applyEvent` is invoked here — review existing `setSessionToken` for the same pattern. If `append` already wires through `applyEvent` via a separate path, drop the extra call (read lines 800-810 in `event-store.ts` to confirm — look for `appliedEvents` flow).
+Keep the existing setter pattern: `append()` applies the event after writing the log (`event-store.ts:798-804`), so do not call `applyEvent` again.
 
 - [ ] **Step 2: Replace `setPendingForkSessionToken` with provider-aware**
 
@@ -675,7 +682,7 @@ if (pendingFork && sessionToken) {
 
 - [ ] **Step 2: Build + inject primer when needed**
 
-Before `startClaudeTurn` / `startCodexTurn` calls, compute the primer:
+Before `startClaudeTurn` / `startCodexTurn` calls, compute the primer from `existingMessages`, which was captured before appending the current user prompt. Do not call `this.store.getMessages(args.chatId)` here after `appendUserPrompt`, or the current request can appear once in the primer and again as the actual request:
 
 ```ts
 const shouldPrime = shouldInjectPrimer(
@@ -685,7 +692,7 @@ const shouldPrime = shouldInjectPrimer(
 )
 const primer = shouldPrime
   ? buildHistoryPrimer(
-      this.store.getMessages(args.chatId),
+      existingMessages,
       targetProvider,
       buildPromptText(args.content, args.attachments),
     )
@@ -693,7 +700,10 @@ const primer = shouldPrime
 const promptContent = primer ?? buildPromptText(args.content, args.attachments)
 ```
 
-Then pass `promptContent` instead of `buildPromptText(args.content, args.attachments)` to both `startClaudeTurn` and `codexManager.startTurn` content fields.
+Then use `promptContent` in the provider prompt send sites:
+
+- Claude: `session.session.sendPrompt(promptContent)` at the post-`startClaudeTurn` send point.
+- Codex: `codexManager.startTurn({ content: promptContent, ... })`.
 
 Imports at top of `agent.ts`:
 
@@ -729,18 +739,28 @@ if (event.type === "session_token" && event.sessionToken) {
 
 `session.provider` / `active.provider` already exist on those structs (lines 1278-1279 confirm `ActiveTurn` has `provider`).
 
-- [ ] **Step 4: Update `ensureSlashCommandsLoaded` (line 1008)**
+- [ ] **Step 4: Update clear-context token clearing**
+
+The exit-plan clear-context path currently calls `setSessionToken(command.chatId, null)`. Replace it with a provider-aware clear for the active turn:
+
+```ts
+await this.store.setSessionTokenForProvider(command.chatId, active.provider, null)
+```
+
+Keep the existing `context_cleared` transcript entry. This is what makes the next turn on the same provider prime from transcript history again.
+
+- [ ] **Step 5: Update `ensureSlashCommandsLoaded` (line 1008)**
 
 ```ts
 sessionToken: chat.sessionTokensByProvider.claude ?? null,
 ```
 
-- [ ] **Step 5: Typecheck**
+- [ ] **Step 6: Typecheck**
 
 Run: `bun run check 2>&1 | tail -20`
 Expected: no errors from `agent.ts`. Other files may still error — addressed in later tasks.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 git add src/server/agent.ts
@@ -1012,6 +1032,8 @@ Around line 987-1000:
 ```
 
 The `if (providerLocked)` branches inside the callbacks are dead — delete them.
+
+Before deleting, run `rg -n "activeProvider|providerLocked" src/client/components/chat-ui/ChatInput.tsx` and verify each usage is specifically a first-turn provider lock, not a separate "active turn is running" guard. Preserve any non-lock disabling behavior under a clearer name if found.
 
 - [ ] **Step 2: Remove `providerLocked` prop from `ChatPreferenceControls`**
 
