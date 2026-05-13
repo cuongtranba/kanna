@@ -883,12 +883,13 @@ export class EventStore implements PushEventStore {
     if (!project) {
       throw new Error("Project not found")
     }
+    const now = Date.now()
     const event: ProjectEvent = {
       v: STORE_VERSION,
       type: "project_star_set",
-      timestamp: Date.now(),
+      timestamp: now,
       projectId,
-      starredAt: starred ? Date.now() : null,
+      starredAt: starred ? now : null,
     }
     await this.append(this.projectsLogPath, event)
   }
