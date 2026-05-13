@@ -1944,6 +1944,21 @@ export class AgentCoordinator {
           }
 
     await this.emitAutoContinueEvent(event)
+    if (canRotate && session) {
+      // Tear down the session bound to the limited token so the next turn
+      // spawns a fresh subprocess with the rotated token's credentials.
+      // Without this, startClaudeTurn reuses the cached session and
+      // sendPrompt is routed to the still-limited token's subprocess.
+      session.session.close()
+      if (this.claudeSessions.get(chatId) === session) {
+        this.claudeSessions.delete(chatId)
+      }
+      const active = this.activeTurns.get(chatId)
+      if (active) {
+        await this.store.recordTurnFailed(chatId, "rate_limit")
+        this.activeTurns.delete(chatId)
+      }
+    }
     if (!canRotate) {
       await this.store.appendMessage(chatId, timestamped({
         kind: "auto_continue_prompt",

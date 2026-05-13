@@ -335,4 +335,89 @@ describe("AgentCoordinator OAuth rotation", () => {
     },
     10_000,
   )
+
+  test(
+    "fireAutoContinue after rotation spawns a fresh session bound to the rotated token",
+    async () => {
+      let tokens: OAuthTokenEntry[] = [makeToken("a"), makeToken("b")]
+      const writeStatusCalls: Array<{ id: string; patch: unknown }> = []
+
+      const pool = new OAuthTokenPool(
+        () => tokens,
+        (id, patch) => {
+          writeStatusCalls.push({ id, patch })
+          tokens = tokens.map((t) => (t.id === id ? { ...t, ...patch } : t))
+        },
+      )
+
+      const capturedOauthTokens: Array<string | null> = []
+      const closeCalls: number[] = []
+      let sessionCounter = 0
+      const resetAt = Date.now() + 60_000
+
+      const store = createFakeStore()
+      const coordinator = new AgentCoordinator({
+        store: store as never,
+        onStateChange: () => {},
+        startClaudeSession: async (args) => {
+          capturedOauthTokens.push(args.oauthToken)
+          const events = new AsyncEventQueue<HarnessEvent>()
+          const sessionIndex = sessionCounter++
+          return {
+            provider: "claude",
+            stream: events,
+            getAccountInfo: async () => null,
+            interrupt: async () => {},
+            close: () => { closeCalls.push(sessionIndex) },
+            setModel: async () => {},
+            setPermissionMode: async () => {},
+            getSupportedCommands: async () => [],
+            sendPrompt: async () => {
+              if (sessionIndex === 0) {
+                events.push({
+                  type: "rate_limit",
+                  rateLimit: { resetAt, tz: "system" },
+                })
+              }
+            },
+          }
+        },
+        oauthPool: pool,
+      })
+
+      await coordinator.send({
+        type: "chat.send",
+        chatId: "chat-1",
+        provider: "claude",
+        content: "test",
+        model: "claude-opus-4-7",
+      })
+
+      await waitFor(
+        () => store.autoContinueEvents.some((e) => e.kind === "auto_continue_accepted"),
+        4000,
+        "auto_continue_accepted emitted",
+      )
+
+      const accepted = store.getAutoContinueEvents("chat-1").find(
+        (e) => e.kind === "auto_continue_accepted",
+      )
+      if (accepted?.kind !== "auto_continue_accepted") {
+        throw new Error("Expected auto_continue_accepted event")
+      }
+
+      await coordinator.fireAutoContinue("chat-1", accepted.scheduleId)
+
+      await waitFor(
+        () => capturedOauthTokens.length >= 2,
+        4000,
+        "second session started after rotation",
+      )
+
+      expect(capturedOauthTokens[0]).toBe("sk-ant-a")
+      expect(capturedOauthTokens[1]).toBe("sk-ant-b")
+      expect(closeCalls).toContain(0)
+    },
+    10_000,
+  )
 })
