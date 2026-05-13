@@ -8,6 +8,7 @@ import { STORE_VERSION } from "../shared/types"
 import type { AutoContinueEvent } from "./auto-continue/events"
 import {
   type ChatEvent,
+  type ChatRecord,
   type ChatTimingState,
   type ProjectEvent,
   type QueuedMessageEvent,
@@ -284,10 +285,43 @@ export class EventStore implements PushEventStore {
         this.state.projectIdsByPath.set(project.localPath, project.id)
       }
       for (const chat of parsed.chats) {
+        const legacy = chat as unknown as {
+          sessionToken?: string | null
+          pendingForkSessionToken?: string | null | { provider: AgentProvider; token: string }
+          sessionTokensByProvider?: Partial<Record<AgentProvider, string | null>>
+        }
+        const sessionTokensByProvider: Partial<Record<AgentProvider, string | null>> =
+          legacy.sessionTokensByProvider
+            ? { ...legacy.sessionTokensByProvider }
+            : {}
+        if (
+          typeof legacy.sessionToken === "string"
+          && chat.provider
+          && sessionTokensByProvider[chat.provider] == null
+        ) {
+          sessionTokensByProvider[chat.provider] = legacy.sessionToken
+        }
+        let pendingForkSessionToken: ChatRecord["pendingForkSessionToken"] = null
+        const rawPending = legacy.pendingForkSessionToken
+        if (rawPending && typeof rawPending === "object" && "token" in rawPending) {
+          pendingForkSessionToken = rawPending as { provider: AgentProvider; token: string }
+        } else if (typeof rawPending === "string" && chat.provider) {
+          pendingForkSessionToken = { provider: chat.provider, token: rawPending }
+        }
+        const {
+          sessionToken: _legacySessionToken,
+          pendingForkSessionToken: _legacyPendingForkSessionToken,
+          sessionTokensByProvider: _legacyByProvider,
+          ...rest
+        } = legacy
+        void _legacySessionToken
+        void _legacyPendingForkSessionToken
+        void _legacyByProvider
         this.state.chatsById.set(chat.id, {
-          ...chat,
+          ...(rest as unknown as ChatRecord),
           unread: chat.unread ?? false,
-          pendingForkSessionToken: chat.pendingForkSessionToken ?? null,
+          sessionTokensByProvider,
+          pendingForkSessionToken,
         })
       }
       this.legacySidebarProjectOrder = normalizeSidebarProjectOrder(parsed.sidebarProjectOrder)
