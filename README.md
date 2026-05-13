@@ -293,7 +293,30 @@ bun link           # registers @cuongtran001/kanna → repo
 
 After this, `~/.bun/install/global/node_modules/@cuongtran001/kanna` is a symlink to your repo.
 
-### 2. (Migrating from launchd) Unload the old agent
+### 2. Create a named Cloudflare tunnel
+
+In the [Cloudflare Zero Trust dashboard](https://one.dash.cloudflare.com/) → **Networks → Tunnels → Create tunnel** (type: **Cloudflared**):
+
+1. Name the tunnel (e.g. `kanna`) and copy the **connector token** Cloudflare shows you. You will paste it as `KANNA_CLOUDFLARED_TOKEN` in the next step.
+2. Add a **public hostname** route: pick your subdomain (e.g. `kanna.example.com`) and point service to `HTTP` → `localhost:5174` (or whatever `--port` you plan to run). Kanna binds `127.0.0.1` automatically when `--cloudflared` is set, so the tunnel is the only ingress.
+3. Save. The hostname's TLS is terminated at Cloudflare's edge.
+
+### 3. Write `scripts/pm2.env` (untracked secrets)
+
+`scripts/deploy.sh` reads this file and passes the values to kanna as `--cloudflared <TOKEN> --password <PW>`. Without it, deploy launches kanna with no token and no password — kanna will then run as plain HTTP on localhost, **`trustProxy` will not auto-enable**, and every `/auth/login` POST through the tunnel will return **403** because the CSRF origin check compares the browser's `https://` Origin against the server's `http://` `req.url`.
+
+Create `scripts/pm2.env` (gitignored) with at least:
+
+```env
+KANNA_CLOUDFLARED_TOKEN=<paste the connector token from step 2>
+KANNA_PASSWORD=<a long random password>
+# Optional: pass through to spawned Claude Code agents
+# CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-...
+```
+
+Generate a strong password with `openssl rand -base64 24`.
+
+### 4. (Migrating from launchd) Unload the old agent
 
 If you previously ran Kanna under launchd, unload it once so pm2 can take over:
 
@@ -301,7 +324,7 @@ If you previously ran Kanna under launchd, unload it once so pm2 can take over:
 launchctl bootout gui/$(id -u)/io.silentium.kanna || true
 ```
 
-### 3. First deploy
+### 5. First deploy
 
 `scripts/deploy.sh` installs pm2 if missing, renders `scripts/pm2.config.cjs` from the template (via `envsubst` from `brew install gettext`), and starts the pm2 process:
 
@@ -315,7 +338,7 @@ pm2 logs kanna --lines 50
 
 The pm2 config sets `KANNA_RELOADER=pm2` and `KANNA_REPO_DIR=<repo>` so the in-app Update button triggers the pm2 reload pipeline (see next section). Override the pm2 process name with `KANNA_PM2_PROCESS_NAME` before running `./scripts/deploy.sh` if you need to run multiple instances.
 
-### 4. Redeploy / update
+### 6. Redeploy / update
 
 Two ways to ship a new build:
 
@@ -328,7 +351,20 @@ git pull
 ./scripts/deploy.sh
 ```
 
-### 5. Update strategies
+### 7. Troubleshooting: 403 on login
+
+If the login screen rejects the correct password with **403** behind a Cloudflare (or any HTTPS-terminating) tunnel, the server is running without `trustProxy` enabled. The CSRF origin check then compares the browser's `https://kanna.example.com` `Origin` against the local `http://127.0.0.1:<port>` `req.url` and rejects them as mismatched. Two ways to enable it:
+
+- **Recommended.** Pass `--cloudflared <TOKEN>` (or `--share`) on the kanna command line. Both flags auto-enable `trustProxy` and bind to `127.0.0.1`. With `scripts/pm2.env` populated, `scripts/deploy.sh` does this for you — verify with `pm2 logs kanna --lines 20` that the startup line includes `--cloudflared`.
+- **Running cloudflared separately?** Use `--cloudflared` on kanna anyway and let kanna spawn the tunnel; the standalone `cloudflared` daemon does not set `trustProxy` for you. (There is no standalone `--trust-proxy` CLI flag today.)
+
+Other things to check if the 403 persists:
+
+- Cloudflare tunnel **public hostname** points to `http://localhost:<KANNA_PORT>`, not `https://` — kanna terminates plain HTTP locally.
+- The public hostname's **TLS mode** is `Full` or `Flexible` (Cloudflare → Origin is HTTP), not `Full (strict)` against a self-signed origin.
+- No `Access` policy in front of the hostname is stripping or rewriting the `Origin` header.
+
+### 8. Update strategies
 
 The update mechanism is abstracted behind `UpdateChecker` + `UpdateReloader` interfaces in `src/server/update-strategy.ts`, selected at startup by `KANNA_RELOADER`:
 
