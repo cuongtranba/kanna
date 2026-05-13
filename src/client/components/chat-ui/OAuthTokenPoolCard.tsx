@@ -82,11 +82,13 @@ function StatusPill({ entry, now }: { entry: OAuthTokenEntry; now: number }) {
 function TokenRow({
   entry,
   now,
+  isCurrent,
   onRemove,
   onTest,
 }: {
   entry: OAuthTokenEntry
   now: number
+  isCurrent: boolean
   onRemove: () => void
   onTest: (token: string) => Promise<{ ok: boolean; error: string | null }>
 }) {
@@ -116,6 +118,11 @@ function TokenRow({
         <div className="flex items-center gap-3">
           <span className="text-sm font-medium text-foreground">{entry.label}</span>
           <code className="text-xs font-mono text-muted-foreground">{maskToken(entry.token)}</code>
+          {isCurrent && (
+            <span className="inline-flex items-center rounded-full border border-primary/40 bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-primary">
+              In use
+            </span>
+          )}
         </div>
         <div className="mt-0.5">
           <StatusPill entry={entry} now={now} />
@@ -236,6 +243,11 @@ export function OAuthTokenPoolCard({
 }: OAuthTokenPoolCardProps) {
   const now = nowProp ?? Date.now()
 
+  const currentId = tokens.reduce<OAuthTokenEntry | null>(
+    (m, t) => (t.lastUsedAt !== null && (m === null || t.lastUsedAt > (m.lastUsedAt ?? 0)) ? t : m),
+    null,
+  )?.id ?? null
+
   const handleRemove = (id: string) => {
     void onWrite({ tokens: tokens.filter((t) => t.id !== id) })
   }
@@ -247,6 +259,7 @@ export function OAuthTokenPoolCard({
           key={entry.id}
           entry={entry}
           now={now}
+          isCurrent={entry.id === currentId}
           onRemove={() => handleRemove(entry.id)}
           onTest={onTest}
         />

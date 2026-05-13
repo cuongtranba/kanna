@@ -161,6 +161,44 @@ describe("OAuthTokenPoolCard", () => {
     expect(removeCount).toBe(2)
   })
 
+  test("marks token with highest lastUsedAt as In use", () => {
+    const tokens = [
+      makeToken({ id: "a", label: "alpha", lastUsedAt: 100 }),
+      makeToken({ id: "b", label: "beta", lastUsedAt: 500 }),
+      makeToken({ id: "c", label: "gamma", lastUsedAt: 200 }),
+    ]
+    const html = renderToStaticMarkup(
+      <OAuthTokenPoolCard
+        tokens={tokens}
+        onWrite={async () => {}}
+        onTest={async () => ({ ok: true, error: null })}
+      />,
+    )
+    expect(html).toContain("In use")
+    const inUseIdx = html.indexOf("In use")
+    const betaIdx = html.indexOf("beta")
+    const alphaIdx = html.indexOf("alpha")
+    const gammaIdx = html.indexOf("gamma")
+    // "In use" badge must appear within beta's row segment (between beta and gamma)
+    expect(inUseIdx).toBeGreaterThan(betaIdx)
+    expect(inUseIdx).toBeLessThan(gammaIdx)
+    // alpha and gamma rows should not contain "In use" before them in their segment
+    expect(html.slice(alphaIdx, betaIdx)).not.toContain("In use")
+    expect(html.slice(gammaIdx)).not.toContain("In use")
+  })
+
+  test("no In use badge when all tokens have null lastUsedAt", () => {
+    const tokens = [makeToken({ id: "a" }), makeToken({ id: "b", label: "other" })]
+    const html = renderToStaticMarkup(
+      <OAuthTokenPoolCard
+        tokens={tokens}
+        onWrite={async () => {}}
+        onTest={async () => ({ ok: true, error: null })}
+      />,
+    )
+    expect(html).not.toContain("In use")
+  })
+
   test("tabular-nums class applied to countdown", () => {
     const limited = makeToken({ status: "limited", limitedUntil: 60_000 })
     const html = renderToStaticMarkup(
