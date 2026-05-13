@@ -311,6 +311,36 @@ test("subagent_run_* events build subagentRuns map", async () => {
   expect(runs[runId].status).toBe("completed")
   expect(runs[runId].finalText).toBe("hello world")
 })
+
+test("chat_deleted drops subagent runs; replay after deletion shows no runs", async () => {
+  // Guards against a subtle replay bug: if a chat is deleted and a NEW chat
+  // is later created with the SAME `chatId` (rare but possible if upstream
+  // ever reuses ids), the turns log still carries the old `subagent_run_*`
+  // events. The reducer must NOT resurrect them on the new chat.
+  const { dir } = await setupStoreWithChat()
+  const runId = "r-deleted"
+  await store.appendSubagentEvent({
+    v: 3, type: "subagent_run_started", timestamp: 1, chatId, runId,
+    subagentId: "s1", subagentName: "alpha", provider: "claude",
+    model: "claude-opus-4-7", parentUserMessageId: "u1", parentRunId: null, depth: 0,
+  })
+  await store.appendSubagentEvent({
+    v: 3, type: "subagent_run_completed", timestamp: 2, chatId, runId,
+    finalContent: "done",
+  })
+  // Delete the chat — reducer must drop subagentRunsByChatId[chatId].
+  await store.appendEvent({ v: 3, type: "chat_deleted", timestamp: 3, chatId })
+
+  const reloaded = new EventStore(dir)
+  await reloaded.ready()
+  expect(reloaded.getSubagentRuns(chatId)).toEqual({})
+
+  // Re-create with the same id (simulate a future chatId-reuse code path).
+  // The historical events must remain dormant: a fresh `chat_created` does
+  // not re-hydrate the prior run map.
+  await reloaded.appendEvent({ v: 3, type: "chat_created", timestamp: 4, chatId, title: "fresh" })
+  expect(reloaded.getSubagentRuns(chatId)).toEqual({})
+})
 ```
 
 Expose `getSubagentRuns(chatId)` on `EventStore`:
@@ -647,28 +677,58 @@ const DEFAULT_MAX_CHAIN_DEPTH = 1
 const DEFAULT_RUN_TIMEOUT_MS = 120_000
 
 export class SubagentOrchestrator {
-  private semaphoreCount = 0
-  private queue: Array<() => void> = []
+  // Counting semaphore. `permits` = currently available slots. When 0, callers
+  // park their `Promise.withResolvers()` resolver in `waiters` and a future
+  // `release()` pops the FIFO head. `cancelledChats` lets `chat_deleted` drain
+  // in-flight `acquire()` waiters so they reject instead of hanging forever.
+  private permits: number
+  private readonly waiters: Array<{ chatId: string; resolve: () => void; reject: (err: Error) => void }> = []
+  private readonly cancelledChats = new Set<string>()
 
-  constructor(private readonly deps: SubagentOrchestratorDeps) {}
+  constructor(private readonly deps: SubagentOrchestratorDeps) {
+    this.permits = this.maxParallel()
+  }
 
   private maxParallel() { return this.deps.maxParallel ?? DEFAULT_MAX_PARALLEL }
   private maxDepth() { return this.deps.maxChainDepth ?? DEFAULT_MAX_CHAIN_DEPTH }
   private timeoutMs() { return this.deps.runTimeoutMs ?? DEFAULT_RUN_TIMEOUT_MS }
   private now() { return this.deps.now?.() ?? Date.now() }
 
-  private async acquire(): Promise<void> {
-    if (this.semaphoreCount < this.maxParallel()) {
-      this.semaphoreCount += 1
+  private async acquire(chatId: string): Promise<void> {
+    if (this.cancelledChats.has(chatId)) {
+      throw new Error("CHAT_CANCELLED")
+    }
+    if (this.permits > 0) {
+      this.permits -= 1
       return
     }
-    await new Promise<void>((resolve) => this.queue.push(resolve))
-    this.semaphoreCount += 1
+    const { promise, resolve, reject } = Promise.withResolvers<void>()
+    this.waiters.push({ chatId, resolve, reject })
+    return promise
   }
   private release(): void {
-    this.semaphoreCount -= 1
-    const next = this.queue.shift()
-    next?.()
+    const next = this.waiters.shift()
+    if (next) {
+      next.resolve()
+      return
+    }
+    this.permits += 1
+  }
+
+  /**
+   * Drain queued waiters for a deleted chat. Called from the `chat_deleted`
+   * reducer-side hook in `EventStore`. In-flight `spawnRun` calls also check
+   * `cancelledChats` after `acquire()` resolves and short-circuit via the same
+   * `releaseSlot()` path so the permit pool stays balanced.
+   */
+  cancelChat(chatId: string): void {
+    this.cancelledChats.add(chatId)
+    for (let i = this.waiters.length - 1; i >= 0; i -= 1) {
+      const w = this.waiters[i]
+      if (w.chatId !== chatId) continue
+      this.waiters.splice(i, 1)
+      w.reject(new Error("CHAT_CANCELLED"))
+    }
   }
 
   async runMentionsForUserMessage(args: {
@@ -731,7 +791,19 @@ export class SubagentOrchestrator {
       parentUserMessageId: args.parentUserMessageId, parentRunId: args.parentRunId, depth: args.depth,
     })
 
-    await this.acquire()
+    try {
+      await this.acquire(args.chatId)
+    } catch (error) {
+      // CHAT_CANCELLED — chat was deleted while we waited for a slot.
+      await this.failRun(args.chatId, runId, "PROVIDER_ERROR", "Chat cancelled before run started")
+      return
+    }
+    if (this.cancelledChats.has(args.chatId)) {
+      // Cancelled between acquire() resolving and us reading the flag.
+      this.release()
+      await this.failRun(args.chatId, runId, "PROVIDER_ERROR", "Chat cancelled before run started")
+      return
+    }
     let released = false
     const releaseSlot = () => {
       if (released) return
@@ -807,6 +879,12 @@ export class SubagentOrchestrator {
           await this.failRun(args.chatId, childRunId, "DEPTH_EXCEEDED", `Chain depth ${childDepth} exceeds limit ${this.maxDepth()}`)
           continue
         }
+        // Loop detection is per-chain-path only: we only check the current
+        // ancestor list, not sibling fan-out paths. With MAX_CHAIN_DEPTH=1
+        // a sibling cycle (A->B and B->A) cannot manifest because each
+        // chain can only produce one child. If MAX_CHAIN_DEPTH ever rises
+        // (see "Open follow-ups": opt-in depth=2), this becomes a real loop
+        // and must switch to a global-visit set keyed by (chatId, runId).
         if ([...args.ancestorSubagentIds, args.subagent.id].includes(chainSubagent.id)) {
           const childRunId = crypto.randomUUID()
           await this.deps.store.appendSubagentEvent({
@@ -1171,6 +1249,17 @@ const childrenByParentRunId = useMemo(() => {
 In the message iteration loop, after rendering each user message row, render its associated subagent runs (and recursively children):
 
 ```tsx
+// Rendering policy for failed parents:
+// We render children unconditionally regardless of parent `status`. A failed
+// parent can still produce a partial `finalText` before the failure event
+// (e.g. PROVIDER_ERROR after some streamed output), and that text may have
+// triggered chained runs that the user needs to see. The failure card on
+// the parent row already signals the broken state; suppressing the subtree
+// would hide evidence the user needs to debug.
+//
+// Exception (future): if a parent fails with AUTH_REQUIRED or DEPTH_EXCEEDED
+// before any chained run was spawned, `children` is empty anyway, so the
+// subtree is naturally absent.
 function renderRunTree(run: SubagentRunSnapshot, depth: number): React.ReactNode {
   const children = childrenByParentRunId.get(run.runId) ?? []
   return (

@@ -565,6 +565,15 @@ Create `src/server/history-primer.ts`:
 ```ts
 import type { AgentProvider, TranscriptEntry } from "../shared/types"
 
+// Policy: renderEntry handles message-shaped TranscriptEntry kinds only
+// (user_prompt, assistant_text, tool_call). All other kinds — slash-command
+// echoes, errors, autocontinue markers, subagent events, etc. — are
+// intentionally omitted from the primer. Reason: cross-provider primer is a
+// context bridge, not a full transcript replay. If a new kind becomes
+// load-bearing for context, enumerate it in renderEntry below.
+// TODO: PRIMER_MAX_CHARS is provider-blind today; per-provider tuning + a
+// `primer_build` telemetry event (input chars, truncated bool, target
+// provider) are tracked as phase-1 follow-ups (see "Open follow-ups" section).
 export const PRIMER_MAX_CHARS = 60_000
 
 export function shouldInjectPrimer(
@@ -820,6 +829,25 @@ test("session_token_set carries provider on new write", async () => {
   await simulateClaudeTurn(agent, chatId, { sessionToken: "tok-claude-new" })
   const record = store.getChat(chatId)!
   expect(record.sessionTokensByProvider.claude).toBe("tok-claude-new")
+})
+
+test("pendingForkSessionToken is ignored when switching to a different provider", async () => {
+  // Forked from a Claude chat — pending fork is Claude-tagged.
+  const { agent, store, chatId } = await setupChatWithAssistantTurn({ provider: "claude" })
+  await store.setPendingForkSessionToken(chatId, { provider: "claude", token: "tok-claude-fork" })
+  // User immediately switches the composer to Codex on turn 1 (Codex slot was never seeded).
+  const startSpy = mockProviderStart(agent, "codex")
+  await agent.sendMessage({ chatId, provider: "codex", content: "switch over", model: "gpt-5.5" })
+  // Pending fork must NOT be consumed: target provider mismatch.
+  expect(startSpy.mock.calls[0][0].sessionToken).toBeNull()
+  expect(startSpy.mock.calls[0][0].forkSession).toBe(false)
+  // Codex slot is empty -> primer fires.
+  expect(startSpy.mock.calls[0][0].content).toContain("BEGIN PRIOR CONVERSATION")
+  // pendingFork remains set (still belongs to Claude, not consumed).
+  expect(store.getChat(chatId)!.pendingForkSessionToken).toEqual({
+    provider: "claude",
+    token: "tok-claude-fork",
+  })
 })
 ```
 

@@ -1278,6 +1278,47 @@ git commit -m "feat(chat-input): preview agent mention chips below textarea"
 **Files:**
 - Modify: `src/client/app/SettingsPage.tsx`
 - Modify: `src/client/app/SettingsPage.test.tsx` (extend)
+- Modify: `src/client/components/chat-ui/ChatPreferenceControls.tsx` (re-add narrow `providerSwitchDisabled` prop)
+
+- [ ] **Step 0: Re-introduce a narrow lock prop on `ChatPreferenceControls`**
+
+Phase 1 removed the legacy `providerLocked` prop because it was overloaded
+(chat-context first-turn lock vs. unrelated callers). The subagent editor
+needs a clean, single-purpose flag: when editing an existing subagent, the
+provider must stay fixed (`model` + `modelOptions` would be invalidated by a
+swap without a migration story).
+
+Add to `ChatPreferenceControls.tsx`:
+
+```ts
+interface ChatPreferenceControlsProps {
+  // ... existing props ...
+  /**
+   * Disables the provider select. Single-purpose: used by non-chat callers
+   * (e.g. `SubagentEditor`) that pin provider for the lifetime of the edit.
+   * Do NOT reuse this for chat first-turn locking — that concern was removed
+   * in phase 1.
+   */
+  providerSwitchDisabled?: boolean
+}
+```
+
+In the render path, OR `providerSwitchDisabled` into the existing select-disabled
+expression: `disabled={!onProviderChange || providerSwitchDisabled}`.
+
+Add a test in `ChatPreferenceControls.test.tsx`:
+
+```ts
+test("provider select is disabled when providerSwitchDisabled=true", () => {
+  render(<ChatPreferenceControls {...baseProps} providerSwitchDisabled />)
+  expect(screen.getByRole("combobox", { name: /provider/i })).toBeDisabled()
+})
+
+test("provider select is enabled when providerSwitchDisabled=false (default)", () => {
+  render(<ChatPreferenceControls {...baseProps} />)
+  expect(screen.getByRole("combobox", { name: /provider/i })).toBeEnabled()
+})
+```
 
 - [ ] **Step 1: Add Subagents section component**
 
@@ -1351,12 +1392,16 @@ function SubagentEditor({ initial, onCancel, onSave }: { initial?: Subagent; onC
         selectedProvider={provider}
         model={model}
         modelOptions={modelOptions}
+        // `providerSwitchDisabled` is the narrow lock prop reintroduced for
+        // non-chat contexts in phase 2 (see "Editor provider lock" below).
+        // When editing an existing subagent, swapping provider mid-edit would
+        // invalidate `model` + `modelOptions` without a migration story, so
+        // the select is disabled. Creation flow leaves it enabled.
+        providerSwitchDisabled={initial != null}
         onProviderChange={(next) => { setProvider(next); /* reset model + opts to defaults */ }}
         onModelChange={(_, next) => setModel(next)}
         onModelOptionChange={(change) => { /* reuse switch from ChatInput logic */ }}
       />
-      {/* Editing an existing subagent may keep provider fixed if modelOptions migration is not implemented.
-          If provider changes are enabled, reset model and modelOptions atomically to that provider's defaults. */}
       <Textarea placeholder="System prompt" value={systemPrompt} onChange={(e) => setSystemPrompt(e.target.value)} />
       <RadioGroup value={contextScope} onValueChange={(value: SubagentContextScope) => setContextScope(value)}>
         <RadioGroupItem value="previous-assistant-reply" label="Previous assistant reply only" />
