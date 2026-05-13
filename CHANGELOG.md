@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.48.0](https://github.com/cuongtranba/kanna/compare/v0.47.2...v0.48.0) (2026-05-13)
+
+
+### Features
+
+* **chat-navbar:** show worktree dir in branch label ([#69](https://github.com/cuongtranba/kanna/issues/69)) ([6dca7cc](https://github.com/cuongtranba/kanna/commit/6dca7cc70e3a950bf88713fe95add172ce00644e))
+* star projects in sidebar ([#74](https://github.com/cuongtranba/kanna/issues/74)) ([65c1b33](https://github.com/cuongtranba/kanna/commit/65c1b330b88c3c67157b8514b5fc3ae0e59efe60))
+* **tunnel:** replace bash-detector with agent-callable expose_port tool ([#70](https://github.com/cuongtranba/kanna/issues/70)) ([24c6233](https://github.com/cuongtranba/kanna/commit/24c6233f3e0594c8ab0543485a312b62661a936b))
+
+
+### Bug Fixes
+
+* **downloads:** render local-file markdown links as download cards ([#75](https://github.com/cuongtranba/kanna/issues/75)) ([67fb665](https://github.com/cuongtranba/kanna/commit/67fb6651788c5718bae2403e777c5db28d9e1667))
+* **oauth-pool:** tear down session on token rotation ([#72](https://github.com/cuongtranba/kanna/issues/72)) ([9f28a71](https://github.com/cuongtranba/kanna/commit/9f28a713bf78657cce14fbbc43cd22db806fb4f0))
+* **server:** serve arbitrary local files via /api/local-file ([#66](https://github.com/cuongtranba/kanna/issues/66)) ([dffbf01](https://github.com/cuongtranba/kanna/commit/dffbf0126b0faa49510dcda0a57eb7e7a1683e05))
+* **stacks:** render stack chats inside expanded stack section ([#71](https://github.com/cuongtranba/kanna/issues/71)) ([d00f6a5](https://github.com/cuongtranba/kanna/commit/d00f6a555a7e51f03e979c3cb235a3014869e93b))
+
 ## [0.47.2](https://github.com/cuongtranba/kanna/compare/v0.47.1...v0.47.2) (2026-05-13)
 
 
