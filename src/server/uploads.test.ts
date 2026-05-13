@@ -319,6 +319,46 @@ describe("uploads", () => {
     }
   })
 
+  test("serves arbitrary local files via /api/local-file", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "kanna-local-file-"))
+    tempDirs.push(dir)
+    const filePath = path.join(dir, "hello.png")
+    await Bun.write(filePath, Buffer.from(PNG_BASE64, "base64"))
+
+    const server = await startIsolatedServer({ port: 4316 })
+
+    try {
+      const url = `http://localhost:${server.port}/api/local-file?path=${encodeURIComponent(filePath)}`
+      const response = await fetch(url)
+      expect(response.status).toBe(200)
+      expect(response.headers.get("content-type")).toContain("image/")
+      const bytes = new Uint8Array(await response.arrayBuffer())
+      expect(bytes.length).toBeGreaterThan(0)
+    } finally {
+      await server.stop()
+    }
+  })
+
+  test("returns 404 for missing local files", async () => {
+    const server = await startIsolatedServer({ port: 4317 })
+    try {
+      const response = await fetch(`http://localhost:${server.port}/api/local-file?path=${encodeURIComponent("/no/such/file.png")}`)
+      expect(response.status).toBe(404)
+    } finally {
+      await server.stop()
+    }
+  })
+
+  test("rejects /api/local-file without path query parameter", async () => {
+    const server = await startIsolatedServer({ port: 4318 })
+    try {
+      const response = await fetch(`http://localhost:${server.port}/api/local-file`)
+      expect(response.status).toBe(400)
+    } finally {
+      await server.stop()
+    }
+  })
+
   test("infers text-friendly content types for previewable source files", () => {
     expect(inferAttachmentContentType("notes.txt")).toBe("text/plain; charset=utf-8")
     expect(inferAttachmentContentType("README.md")).toBe("text/markdown; charset=utf-8")

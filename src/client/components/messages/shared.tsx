@@ -32,7 +32,7 @@ import {
   Check,
 } from "lucide-react"
 import { cn } from "../../lib/utils"
-import { parseLocalFileLink } from "../../lib/pathUtils"
+import { isAbsoluteLocalFilePath, parseLocalFileLink, toLocalFileUrl } from "../../lib/pathUtils"
 import { useTranscriptRenderOptions } from "./render-context"
 
 export type OpenLocalLinkTarget = {
@@ -380,6 +380,11 @@ export const markdownComponents = {
       {children}
     </a>
   ),
+
+  img: ({ src, ...props }: ComponentPropsWithoutRef<"img">) => {
+    const resolved = typeof src === "string" && isAbsoluteLocalFilePath(src) ? toLocalFileUrl(src) : src
+    return <img src={resolved} {...props} />
+  },
 }
 
 export function createMarkdownComponents(options?: {
