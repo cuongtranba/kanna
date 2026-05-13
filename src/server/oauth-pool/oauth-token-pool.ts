@@ -47,4 +47,15 @@ export class OAuthTokenPool {
     const now = this.now()
     return tokens.every((t) => t.status === "limited" && t.limitedUntil !== null && t.limitedUntil > now)
   }
+
+  earliestUnlimit(): number | null {
+    const now = this.now()
+    let earliest: number | null = null
+    for (const t of this.readTokens()) {
+      if (t.status !== "limited") continue
+      if (t.limitedUntil === null || t.limitedUntil <= now) continue
+      if (earliest === null || t.limitedUntil < earliest) earliest = t.limitedUntil
+    }
+    return earliest
+  }
 }

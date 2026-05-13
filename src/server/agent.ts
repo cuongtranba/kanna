@@ -1588,6 +1588,9 @@ export class AgentCoordinator {
         }
 
         if (event.type === "rate_limit" && event.rateLimit) {
+          // Stale rate_limit events from a session that has already been
+          // rotated away must not trigger another rotation/continue.
+          if (this.claudeSessions.get(session.chatId) !== session) continue
           await this.handleLimitDetection(session.chatId, {
             chatId: session.chatId,
             resetAt: event.rateLimit.resetAt,
@@ -1915,6 +1918,15 @@ export class AgentCoordinator {
     const scheduleId = crypto.randomUUID()
     const base = { v: AUTO_CONTINUE_EVENT_VERSION, timestamp: now, chatId, scheduleId }
 
+    // When no rotation is possible, "wait until rate-limit clears" means waiting
+    // for the earliest token in the pool to become available again — not just
+    // the current detection's resetAt, which would over-shoot if another pool
+    // token has an earlier limitedUntil.
+    const earliestPoolUnlimit = this.oauthPool?.earliestUnlimit() ?? null
+    const waitUntil = earliestPoolUnlimit !== null
+      ? Math.min(detection.resetAt, earliestPoolUnlimit)
+      : detection.resetAt
+
     const event: AutoContinueEvent = canRotate
       ? {
           ...base,
@@ -1929,21 +1941,36 @@ export class AgentCoordinator {
         ? {
             ...base,
             kind: "auto_continue_accepted",
-            scheduledAt: detection.resetAt,
+            scheduledAt: waitUntil,
             tz: detection.tz,
             source: "auto_setting",
-            resetAt: detection.resetAt,
+            resetAt: waitUntil,
             detectedAt: now,
           }
         : {
             ...base,
             kind: "auto_continue_proposed",
             detectedAt: now,
-            resetAt: detection.resetAt,
+            resetAt: waitUntil,
             tz: detection.tz,
           }
 
     await this.emitAutoContinueEvent(event)
+    if (canRotate && session) {
+      // Tear down the session bound to the limited token so the next turn
+      // spawns a fresh subprocess with the rotated token's credentials.
+      // Without this, startClaudeTurn reuses the cached session and
+      // sendPrompt is routed to the still-limited token's subprocess.
+      session.session.close()
+      if (this.claudeSessions.get(chatId) === session) {
+        this.claudeSessions.delete(chatId)
+      }
+      const active = this.activeTurns.get(chatId)
+      if (active) {
+        await this.store.recordTurnFailed(chatId, "rate_limit")
+        this.activeTurns.delete(chatId)
+      }
+    }
     if (!canRotate) {
       await this.store.appendMessage(chatId, timestamped({
         kind: "auto_continue_prompt",
