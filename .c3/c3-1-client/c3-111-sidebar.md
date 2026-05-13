@@ -1,7 +1,7 @@
 ---
 id: c3-111
 c3-version: 4
-c3-seal: e63152c9a5e639c0a3c79ddb64526a448d488507c2c58cd5aed24491694c3ab7
+c3-seal: 5f07faa569c29efd4f95a08d7866162fffde5f0c611325d5c255d2cbdde1b35d
 title: sidebar
 type: component
 category: feature
@@ -10,6 +10,7 @@ goal: 'Render the project-first sidebar: grouped chats, live status dots, drag-t
 uses:
     - ref-cqrs-read-models
     - ref-zustand-store
+    - rule-zustand-store
 ---
 
 # sidebar
@@ -58,6 +59,7 @@ Renders the project-first navigation: project groups with their chats, live agen
 | --- | --- | --- | --- | --- |
 | ref-cqrs-read-models | ref | Read sidebarView projection, never raw events | must follow | Server owns derivation |
 | ref-zustand-store | ref | Persist drag-order locally with persist middleware | must follow | One sidebar store |
+| rule-zustand-store | rule | Compliance target added by c3x wire; refine what must be reviewed or complied with before handoff. | wired compliance target beats uncited local prose | Added by c3x wire for explicit compliance review. |
 
 ## Contract
 

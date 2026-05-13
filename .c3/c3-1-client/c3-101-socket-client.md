@@ -1,7 +1,7 @@
 ---
 id: c3-101
 c3-version: 4
-c3-seal: e9a53029c25f973ae7698f57b038206355278c83ddda31ff712db2c2066de1f3
+c3-seal: d77222bf967fcaef5c9e8e6b38f9ca652dfd94faf9e6f9ee5c2b3d8531c12854
 title: socket-client
 type: component
 category: foundation
@@ -10,6 +10,7 @@ goal: Maintain the single WebSocket to the backend, decode typed envelopes, and 
 uses:
     - ref-strong-typing
     - ref-ws-subscription
+    - rule-strong-typing
 ---
 
 # socket-client
@@ -58,6 +59,7 @@ Owns the browser-side WebSocket: opens it, reconnects with backoff, decodes inbo
 | --- | --- | --- | --- | --- |
 | ref-ws-subscription | ref | Single-WS, typed envelope, snapshot-push pattern | must follow | Pattern is the contract for this component |
 | ref-strong-typing | ref | No any on decoded envelopes | must follow | Decode through typed parser, not JSON.parse as any |
+| rule-strong-typing | rule | Compliance target added by c3x wire; refine what must be reviewed or complied with before handoff. | wired compliance target beats uncited local prose | Added by c3x wire for explicit compliance review. |
 
 ## Contract
 

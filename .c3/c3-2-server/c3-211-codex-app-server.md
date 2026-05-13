@@ -1,7 +1,7 @@
 ---
 id: c3-211
 c3-version: 4
-c3-seal: 1ead535df8ef33693b191c77ffc7345329db9b54870e39b075e7a50c5cd62f3d
+c3-seal: 0cb981682d6bb47a7da1a70c35c92c84bc9852286e5e7fb187cfd4713111aec8
 title: codex-app-server
 type: component
 category: feature
@@ -10,6 +10,7 @@ goal: 'Drive the Codex App Server over JSON-RPC: boot, run turns, translate Code
 uses:
     - ref-provider-adapter
     - ref-strong-typing
+    - rule-strong-typing
 ---
 
 # codex-app-server
@@ -57,6 +58,7 @@ Spawns the Codex App Server child process, speaks JSON-RPC, maps its event strea
 | --- | --- | --- | --- | --- |
 | ref-provider-adapter | ref | Adapter sits behind coordinator | must follow | No direct UI imports |
 | ref-strong-typing | ref | Typed JSON-RPC envelopes | must follow | No any in protocol |
+| rule-strong-typing | rule | Compliance target added by c3x wire; refine what must be reviewed or complied with before handoff. | wired compliance target beats uncited local prose | Added by c3x wire for explicit compliance review. |
 
 ## Contract
 

@@ -1,7 +1,7 @@
 ---
 id: c3-103
 c3-version: 4
-c3-seal: 3df29e442d4de52d6b103b61af2117a407e4e230ac218cf3a19a9edd6986816b
+c3-seal: 39d6a085b03d37a2f90e672090880b6a0102462b59d075ca23fb69d79f822553
 title: ui-primitives
 type: component
 category: foundation
@@ -9,6 +9,7 @@ parent: c3-1
 goal: 'Ship the low-level, brand-aligned UI primitives (Radix + shadcn derivatives: button, dialog, popover, scroll-area, tooltip, select, kbd, ...).'
 uses:
     - ref-strong-typing
+    - rule-strong-typing
 ---
 
 # ui-primitives
@@ -54,6 +55,7 @@ Hosts every shared UI primitive consumed by feature components: buttons, dialogs
 | Reference | Type | Governs | Precedence | Notes |
 | --- | --- | --- | --- | --- |
 | ref-strong-typing | ref | Typed forwardRef + Props discriminated unions | must follow | No any for HTML attribute spreading |
+| rule-strong-typing | rule | Compliance target added by c3x wire; refine what must be reviewed or complied with before handoff. | wired compliance target beats uncited local prose | Added by c3x wire for explicit compliance review. |
 
 ## Contract
 

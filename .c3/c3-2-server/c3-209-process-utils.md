@@ -1,7 +1,7 @@
 ---
 id: c3-209
 c3-version: 4
-c3-seal: ba28245eaf476748e276288af0e338395d5bda47f3bba5a3c5b458601102e2f6
+c3-seal: c80638fcbd96f3c35dc04fbb04a7124db1809b9d11ad1a3ce9b1399410443539
 title: process-utils
 type: component
 category: foundation
@@ -9,6 +9,7 @@ parent: c3-2
 goal: Provide helpers for spawning, signaling, and tearing down child processes (agents, terminals, tunnels).
 uses:
     - ref-strong-typing
+    - rule-strong-typing
 ---
 
 # process-utils
@@ -54,6 +55,7 @@ Wraps Bun's child-process APIs into typed helpers (spawn, signal, kill, drain st
 | Reference | Type | Governs | Precedence | Notes |
 | --- | --- | --- | --- | --- |
 | ref-strong-typing | ref | Typed child-process handles | must follow | No any for spawn options |
+| rule-strong-typing | rule | Compliance target added by c3x wire; refine what must be reviewed or complied with before handoff. | wired compliance target beats uncited local prose | Added by c3x wire for explicit compliance review. |
 
 ## Contract
 

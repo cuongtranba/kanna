@@ -62,9 +62,12 @@ c3-202:
 c3-203:
   - src/server/auth.test.ts
   - src/server/auth.ts
+  - src/server/oauth-pool/**/*.ts
 c3-204:
   - src/server/machine-name.ts
   - src/server/paths.ts
+  - src/server/project-paths.test.ts
+  - src/server/project-paths.ts
 c3-205:
   - src/server/events.ts
   - src/server/harness-types.ts
@@ -100,6 +103,15 @@ c3-213:
   - src/server/quick-response.ts
   - src/server/title-generation.live.test.ts
 c3-214:
+  - src/server/claude-session-importer.test.ts
+  - src/server/claude-session-importer.ts
+  - src/server/claude-session-mapper.test.ts
+  - src/server/claude-session-mapper.ts
+  - src/server/claude-session-parser.test.ts
+  - src/server/claude-session-parser.ts
+  - src/server/claude-session-scanner.test.ts
+  - src/server/claude-session-scanner.ts
+  - src/server/claude-session-types.ts
   - src/server/discovery.test.ts
   - src/server/discovery.ts
 c3-215:
@@ -108,6 +120,8 @@ c3-215:
 c3-216:
   - src/server/terminal-manager.test.ts
   - src/server/terminal-manager.ts
+  - src/server/terminal-pid-registry.test.ts
+  - src/server/terminal-pid-registry.ts
 c3-217:
   - src/server/uploads.test.ts
   - src/server/uploads.ts

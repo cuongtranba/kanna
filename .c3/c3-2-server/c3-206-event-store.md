@@ -1,7 +1,7 @@
 ---
 id: c3-206
 c3-version: 4
-c3-seal: 44a82a9c4a711b91ee427f32c95a07e42af82c1dcf68fc918058a2f740e0f85f
+c3-seal: 658a570e5f20b92994736d8cbf35fd64c189faa0008d52030a4da93e963d1623
 title: event-store
 type: component
 category: foundation
@@ -11,6 +11,7 @@ uses:
     - ref-colocated-bun-test
     - ref-event-sourcing
     - ref-local-first-data
+    - rule-colocated-bun-test
 ---
 
 # event-store
@@ -60,6 +61,7 @@ Owns the JSONL event log: append-only writes, in-order replay on boot, snapshot 
 | ref-event-sourcing | ref | Append-only log + snapshot strategy | must follow | One log per project |
 | ref-local-first-data | ref | Files under ~/.kanna/data | must follow | No remote replication |
 | ref-colocated-bun-test | ref | Tests live next to source | must follow | event-store.test.ts |
+| rule-colocated-bun-test | rule | Compliance target added by c3x wire; refine what must be reviewed or complied with before handoff. | wired compliance target beats uncited local prose | Added by c3x wire for explicit compliance review. |
 
 ## Contract
 

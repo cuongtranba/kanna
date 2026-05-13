@@ -1,7 +1,7 @@
 ---
 id: c3-116
 c3-version: 4
-c3-seal: afc4e9052a2f4779692b2f3929e3eda0609069ea95359bc583a80eac5d41ca88
+c3-seal: 178a7518b2bca5d1af8db97e78148f96cb31df67fb73c4d36375d7ae8296eb37
 title: settings-page
 type: component
 category: feature
@@ -10,6 +10,7 @@ goal: 'Expose user settings: provider keys, theme, keybindings, chat preferences
 uses:
     - ref-local-first-data
     - ref-zustand-store
+    - rule-zustand-store
 ---
 
 # settings-page
@@ -58,6 +59,7 @@ Surfaces user-facing configuration: provider API keys, theme, custom keybindings
 | --- | --- | --- | --- | --- |
 | ref-zustand-store | ref | Store-backed preferences with persist | must follow | One preferences store |
 | ref-local-first-data | ref | Local-only paths and keys | must follow | No cloud sync |
+| rule-zustand-store | rule | Compliance target added by c3x wire; refine what must be reviewed or complied with before handoff. | wired compliance target beats uncited local prose | Added by c3x wire for explicit compliance review. |
 
 ## Contract
 

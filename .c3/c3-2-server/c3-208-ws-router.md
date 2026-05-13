@@ -1,7 +1,7 @@
 ---
 id: c3-208
 c3-version: 4
-c3-seal: eac4caad28ef5d19d72182a4029a6842457af701c7ff2e37619ea42734b51659
+c3-seal: a8112da92510af7ebc56879041bf40feadef6584e77b24acd84ab3d036b0da47
 title: ws-router
 type: component
 category: foundation
@@ -11,6 +11,7 @@ uses:
     - ref-colocated-bun-test
     - ref-cqrs-read-models
     - ref-ws-subscription
+    - rule-colocated-bun-test
 ---
 
 # ws-router
@@ -60,6 +61,7 @@ Accepts upgraded WS sockets, decodes typed `ClientEnvelope` payloads, dispatches
 | ref-ws-subscription | ref | Single-WS, typed envelopes | must follow | No additional sockets |
 | ref-cqrs-read-models | ref | Only projections cross the wire | must follow | Raw events stay server-side |
 | ref-colocated-bun-test | ref | Tests next to router | must follow | ws-router.test.ts |
+| rule-colocated-bun-test | rule | Compliance target added by c3x wire; refine what must be reviewed or complied with before handoff. | wired compliance target beats uncited local prose | Added by c3x wire for explicit compliance review. |
 
 ## Contract
 

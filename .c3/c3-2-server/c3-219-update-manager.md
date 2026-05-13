@@ -1,7 +1,7 @@
 ---
 id: c3-219
 c3-version: 4
-c3-seal: fb3750a9bd0f9c431b29868624ed6100bd80bd01f021faa73c6b509def74d5e4
+c3-seal: 8c5c0a5231ff26e90e11e8f72f16c0a9e9df827ee6db9454c08a48ef9e2f5e17
 title: update-manager
 type: component
 category: feature
@@ -10,6 +10,7 @@ goal: Detect newer kanna-code versions, expose update state to the UI, and reloa
 uses:
     - ref-cqrs-read-models
     - ref-strong-typing
+    - rule-strong-typing
 ---
 
 # update-manager
@@ -57,6 +58,7 @@ Hosts the version-check loop, exposes typed update state via a projection, and t
 | --- | --- | --- | --- | --- |
 | ref-cqrs-read-models | ref | Update state projected over WS | must follow | Push, never pull |
 | ref-strong-typing | ref | Typed checker/reloader interfaces | must follow | No any, no globals |
+| rule-strong-typing | rule | Compliance target added by c3x wire; refine what must be reviewed or complied with before handoff. | wired compliance target beats uncited local prose | Added by c3x wire for explicit compliance review. |
 
 ## Contract
 

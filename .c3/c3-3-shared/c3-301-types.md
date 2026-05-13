@@ -1,7 +1,7 @@
 ---
 id: c3-301
 c3-version: 4
-c3-seal: b325f703b395fe33b9ea9ced23217932311ec8850e1e817b34133d362796a86a
+c3-seal: c02dd38e8e96c14e6117e0b89e5df36e34b50106f60009bcf584d0e4a05106ff
 title: types
 type: component
 category: foundation
@@ -9,6 +9,7 @@ parent: c3-3
 goal: Declare core domain types (projects, chats, turns, transcript entries, provider catalog shape) shared by client and server.
 uses:
     - ref-strong-typing
+    - rule-strong-typing
 ---
 
 # types
@@ -54,6 +55,7 @@ Defines the discriminated unions and structural types that cross the wire: proje
 | Reference | Type | Governs | Precedence | Notes |
 | --- | --- | --- | --- | --- |
 | ref-strong-typing | ref | All shared types are explicit | must follow | No any/unknown exports |
+| rule-strong-typing | rule | Compliance target added by c3x wire; refine what must be reviewed or complied with before handoff. | wired compliance target beats uncited local prose | Added by c3x wire for explicit compliance review. |
 
 ## Contract
 
