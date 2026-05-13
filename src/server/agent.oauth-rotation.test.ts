@@ -420,4 +420,91 @@ describe("AgentCoordinator OAuth rotation", () => {
     },
     10_000,
   )
+
+  test(
+    "repeated rate_limit events on a rotated-away session do not spam continues",
+    async () => {
+      let tokens: OAuthTokenEntry[] = [makeToken("a"), makeToken("b")]
+      const pool = new OAuthTokenPool(
+        () => tokens,
+        (id, patch) => {
+          tokens = tokens.map((t) => (t.id === id ? { ...t, ...patch } : t))
+        },
+      )
+
+      let firstStream: AsyncEventQueue<HarnessEvent> | null = null
+      let sessionCounter = 0
+      const resetAt = Date.now() + 60_000
+
+      const store = createFakeStore()
+      const coordinator = new AgentCoordinator({
+        store: store as never,
+        onStateChange: () => {},
+        startClaudeSession: async () => {
+          const events = new AsyncEventQueue<HarnessEvent>()
+          const sessionIndex = sessionCounter++
+          if (sessionIndex === 0) firstStream = events
+          return {
+            provider: "claude",
+            stream: events,
+            getAccountInfo: async () => null,
+            interrupt: async () => {},
+            close: () => {},
+            setModel: async () => {},
+            setPermissionMode: async () => {},
+            getSupportedCommands: async () => [],
+            sendPrompt: async () => {
+              if (sessionIndex === 0) {
+                events.push({
+                  type: "rate_limit",
+                  rateLimit: { resetAt, tz: "system" },
+                })
+              }
+            },
+          }
+        },
+        oauthPool: pool,
+      })
+
+      await coordinator.send({
+        type: "chat.send",
+        chatId: "chat-1",
+        provider: "claude",
+        content: "test",
+        model: "claude-opus-4-7",
+      })
+
+      await waitFor(
+        () => store.autoContinueEvents.some((e) => e.kind === "auto_continue_accepted"),
+        4000,
+        "first auto_continue_accepted emitted",
+      )
+
+      const firstAccepted = store.getAutoContinueEvents("chat-1").find(
+        (e) => e.kind === "auto_continue_accepted",
+      )
+      if (firstAccepted?.kind !== "auto_continue_accepted") {
+        throw new Error("expected accepted event")
+      }
+
+      // Simulate the SDK draining more rate_limit events from the now-rotated-away session.
+      // These must NOT trigger additional rotations or queued continues.
+      firstStream!.push({ type: "rate_limit", rateLimit: { resetAt, tz: "system" } })
+      firstStream!.push({ type: "rate_limit", rateLimit: { resetAt, tz: "system" } })
+
+      await coordinator.fireAutoContinue("chat-1", firstAccepted.scheduleId)
+
+      // Give the stale events time to drain.
+      await new Promise((resolve) => setTimeout(resolve, 50))
+
+      const acceptedEvents = store.getAutoContinueEvents("chat-1").filter(
+        (e) => e.kind === "auto_continue_accepted",
+      )
+      expect(acceptedEvents).toHaveLength(1)
+
+      const continueMessages = store.getQueuedMessages().filter((m) => m.content === "continue")
+      expect(continueMessages.length).toBeLessThanOrEqual(1)
+    },
+    10_000,
+  )
 })

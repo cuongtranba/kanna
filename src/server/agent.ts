@@ -1588,6 +1588,9 @@ export class AgentCoordinator {
         }
 
         if (event.type === "rate_limit" && event.rateLimit) {
+          // Stale rate_limit events from a session that has already been
+          // rotated away must not trigger another rotation/continue.
+          if (this.claudeSessions.get(session.chatId) !== session) continue
           await this.handleLimitDetection(session.chatId, {
             chatId: session.chatId,
             resetAt: event.rateLimit.resetAt,
