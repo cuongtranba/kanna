@@ -124,3 +124,53 @@ describe("OAuthTokenPool.allLimited", () => {
     expect(pool.allLimited()).toBe(false)
   })
 })
+
+describe("OAuthTokenPool.earliestUnlimit", () => {
+  test("returns null when pool is empty", () => {
+    const pool = new OAuthTokenPool(() => [], () => {}, () => 1000)
+    expect(pool.earliestUnlimit()).toBe(null)
+  })
+
+  test("returns null when no token is limited", () => {
+    const pool = new OAuthTokenPool(
+      () => [tok("a"), tok("b")],
+      () => {}, () => 1000,
+    )
+    expect(pool.earliestUnlimit()).toBe(null)
+  })
+
+  test("returns the smallest limitedUntil among future-limited tokens", () => {
+    const pool = new OAuthTokenPool(
+      () => [
+        tok("a", { status: "limited", limitedUntil: 5000 }),
+        tok("b", { status: "limited", limitedUntil: 3000 }),
+        tok("c", { status: "limited", limitedUntil: 7000 }),
+      ],
+      () => {}, () => 1000,
+    )
+    expect(pool.earliestUnlimit()).toBe(3000)
+  })
+
+  test("ignores limited tokens whose limitedUntil has already passed", () => {
+    const pool = new OAuthTokenPool(
+      () => [
+        tok("a", { status: "limited", limitedUntil: 500 }),
+        tok("b", { status: "limited", limitedUntil: 4000 }),
+      ],
+      () => {}, () => 1000,
+    )
+    expect(pool.earliestUnlimit()).toBe(4000)
+  })
+
+  test("ignores error and active tokens", () => {
+    const pool = new OAuthTokenPool(
+      () => [
+        tok("a", { status: "error" }),
+        tok("b"),
+        tok("c", { status: "limited", limitedUntil: 6000 }),
+      ],
+      () => {}, () => 1000,
+    )
+    expect(pool.earliestUnlimit()).toBe(6000)
+  })
+})

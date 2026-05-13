@@ -507,4 +507,91 @@ describe("AgentCoordinator OAuth rotation", () => {
     },
     10_000,
   )
+
+  test(
+    "when all tokens limited, scheduledAt is the earliest unlimit time across the pool",
+    async () => {
+      const aResetAt = Date.now() + 30_000  // Token A unlimits first
+      const bResetAt = Date.now() + 60_000  // Token B unlimits later
+
+      let tokens: OAuthTokenEntry[] = [makeToken("a"), makeToken("b")]
+      const pool = new OAuthTokenPool(
+        () => tokens,
+        (id, patch) => {
+          tokens = tokens.map((t) => (t.id === id ? { ...t, ...patch } : t))
+        },
+      )
+
+      let sessionCounter = 0
+      const store = createFakeStore()
+      const coordinator = new AgentCoordinator({
+        store: store as never,
+        onStateChange: () => {},
+        getAutoResumePreference: () => true,
+        startClaudeSession: async () => {
+          const events = new AsyncEventQueue<HarnessEvent>()
+          const sessionIndex = sessionCounter++
+          return {
+            provider: "claude",
+            stream: events,
+            getAccountInfo: async () => null,
+            interrupt: async () => {},
+            close: () => {},
+            setModel: async () => {},
+            setPermissionMode: async () => {},
+            getSupportedCommands: async () => [],
+            sendPrompt: async () => {
+              if (sessionIndex === 0) {
+                events.push({ type: "rate_limit", rateLimit: { resetAt: aResetAt, tz: "system" } })
+              } else if (sessionIndex === 1) {
+                events.push({ type: "rate_limit", rateLimit: { resetAt: bResetAt, tz: "system" } })
+              }
+            },
+          }
+        },
+        oauthPool: pool,
+      })
+
+      await coordinator.send({
+        type: "chat.send",
+        chatId: "chat-1",
+        provider: "claude",
+        content: "test",
+        model: "claude-opus-4-7",
+      })
+
+      await waitFor(
+        () => store.autoContinueEvents.some((e) => e.kind === "auto_continue_accepted"),
+        4000,
+        "first auto_continue_accepted",
+      )
+
+      const firstAccepted = store.getAutoContinueEvents("chat-1").find(
+        (e) => e.kind === "auto_continue_accepted",
+      )
+      if (firstAccepted?.kind !== "auto_continue_accepted") throw new Error("expected accepted")
+
+      await coordinator.fireAutoContinue("chat-1", firstAccepted.scheduleId)
+
+      // Wait for the second rate_limit (Token B) to produce another accepted event.
+      await waitFor(
+        () =>
+          store.autoContinueEvents.filter((e) => e.kind === "auto_continue_accepted").length >= 2,
+        4000,
+        "second auto_continue_accepted after Token B rate-limit",
+      )
+
+      const acceptedEvents = store.getAutoContinueEvents("chat-1").filter(
+        (e) => e.kind === "auto_continue_accepted",
+      )
+      const second = acceptedEvents[1]
+      if (second?.kind !== "auto_continue_accepted") throw new Error("expected second accepted")
+
+      // canRotate is false (both limited now), so scheduledAt should pick the
+      // earliest unlimit time across the pool — Token A — not the just-detected
+      // Token B reset.
+      expect(second.scheduledAt).toBe(aResetAt)
+    },
+    10_000,
+  )
 })

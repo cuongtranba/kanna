@@ -1918,6 +1918,15 @@ export class AgentCoordinator {
     const scheduleId = crypto.randomUUID()
     const base = { v: AUTO_CONTINUE_EVENT_VERSION, timestamp: now, chatId, scheduleId }
 
+    // When no rotation is possible, "wait until rate-limit clears" means waiting
+    // for the earliest token in the pool to become available again — not just
+    // the current detection's resetAt, which would over-shoot if another pool
+    // token has an earlier limitedUntil.
+    const earliestPoolUnlimit = this.oauthPool?.earliestUnlimit() ?? null
+    const waitUntil = earliestPoolUnlimit !== null
+      ? Math.min(detection.resetAt, earliestPoolUnlimit)
+      : detection.resetAt
+
     const event: AutoContinueEvent = canRotate
       ? {
           ...base,
@@ -1932,17 +1941,17 @@ export class AgentCoordinator {
         ? {
             ...base,
             kind: "auto_continue_accepted",
-            scheduledAt: detection.resetAt,
+            scheduledAt: waitUntil,
             tz: detection.tz,
             source: "auto_setting",
-            resetAt: detection.resetAt,
+            resetAt: waitUntil,
             detectedAt: now,
           }
         : {
             ...base,
             kind: "auto_continue_proposed",
             detectedAt: now,
-            resetAt: detection.resetAt,
+            resetAt: waitUntil,
             tz: detection.tz,
           }
 
