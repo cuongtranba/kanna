@@ -332,8 +332,16 @@ describe("uploads", () => {
       const response = await fetch(url)
       expect(response.status).toBe(200)
       expect(response.headers.get("content-type")).toContain("image/")
+      const contentLength = response.headers.get("content-length")
+      expect(contentLength).not.toBeNull()
+      expect(Number.parseInt(contentLength ?? "0", 10)).toBeGreaterThan(0)
       const bytes = new Uint8Array(await response.arrayBuffer())
       expect(bytes.length).toBeGreaterThan(0)
+
+      const headResponse = await fetch(url, { method: "HEAD" })
+      expect(headResponse.status).toBe(200)
+      expect(headResponse.headers.get("content-length")).toBe(contentLength)
+      expect(headResponse.headers.get("content-type")).toContain("image/")
     } finally {
       await server.stop()
     }

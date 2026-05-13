@@ -628,11 +628,13 @@ async function handleLocalFileContent(req: Request, url: URL) {
     return Response.json({ error: "Path must be absolute" }, { status: 400 })
   }
 
+  let fileSize = 0
   try {
     const info = await stat(absolutePath)
     if (!info.isFile()) {
       return Response.json({ error: "Not a file" }, { status: 404 })
     }
+    fileSize = info.size
   } catch {
     return Response.json({ error: "File not found" }, { status: 404 })
   }
@@ -642,6 +644,7 @@ async function handleLocalFileContent(req: Request, url: URL) {
   return new Response(req.method === "HEAD" ? null : file, {
     headers: {
       "Content-Type": inferProjectFileContentType(fileName, file.type),
+      "Content-Length": String(fileSize),
     },
   })
 }

@@ -32,7 +32,8 @@ import {
   Check,
 } from "lucide-react"
 import { cn } from "../../lib/utils"
-import { isAbsoluteLocalFilePath, parseLocalFileLink, toLocalFileUrl } from "../../lib/pathUtils"
+import { isAbsoluteLocalFilePath, parseLocalFileLink, shouldOpenLocalFileLinkInEditor, toLocalFileUrl } from "../../lib/pathUtils"
+import { LocalFileLinkCard } from "./LocalFileLinkCard"
 import { useTranscriptRenderOptions } from "./render-context"
 
 export type OpenLocalLinkTarget = {
@@ -405,6 +406,11 @@ export function createMarkdownComponents(options?: {
         )
       }
 
+      if (parsedLocalLink && !shouldOpenLocalFileLinkInEditor(parsedLocalLink.path)) {
+        const linkText = extractTextFromNode(children).trim()
+        return <LocalFileLinkCard path={parsedLocalLink.path} linkText={linkText || undefined} />
+      }
+
       return (
         <a
           className="transition-all underline decoration-2 text-logo decoration-logo/50 hover:text-logo/70 dark:text-logo dark:decoration-logo/70 dark:hover:text-logo/60 dark:hover:decoration-logo/40 "
@@ -439,6 +445,14 @@ export function createMarkdownComponents(options?: {
       )
     },
   }
+}
+
+function extractTextFromNode(node: ReactNode): string {
+  if (node === null || node === undefined || typeof node === "boolean") return ""
+  if (typeof node === "string" || typeof node === "number") return String(node)
+  if (Array.isArray(node)) return node.map(extractTextFromNode).join("")
+  if (isValidElement<{ children?: ReactNode }>(node)) return extractTextFromNode(node.props.children)
+  return ""
 }
 
 export const markdownWithHeadingsComponents = {

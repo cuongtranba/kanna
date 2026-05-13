@@ -61,6 +61,35 @@ describe("markdownComponents", () => {
     expect(html).not.toContain('target="_blank"')
   })
 
+  test("renders local file image links as a download card, not a raw anchor", () => {
+    const html = renderToStaticMarkup(
+      <Markdown
+        remarkPlugins={[remarkGfm]}
+        components={createMarkdownComponents({ onOpenLocalLink: () => {} })}
+      >
+        {"[chibi-cute.png](/Users/cuongtran/.kanna/outputs/chibi-cute.png)"}
+      </Markdown>
+    )
+
+    expect(html).toContain('data-testid="local-file-link"')
+    expect(html).toContain("chibi-cute.png")
+    expect(html).not.toContain('href="/Users/cuongtran/.kanna/outputs/chibi-cute.png"')
+  })
+
+  test("keeps editor-openable file links on the legacy anchor handler", () => {
+    const html = renderToStaticMarkup(
+      <Markdown
+        remarkPlugins={[remarkGfm]}
+        components={createMarkdownComponents({ onOpenLocalLink: () => {} })}
+      >
+        {"[App.tsx](/Users/jake/Projects/kanna/src/client/app/App.tsx)"}
+      </Markdown>
+    )
+
+    expect(html).not.toContain('data-testid="local-file-link"')
+    expect(html).toContain('href="/Users/jake/Projects/kanna/src/client/app/App.tsx"')
+  })
+
   test("renders local file links without browser target handling when provided by context", () => {
     const html = renderToStaticMarkup(
       <OpenLocalLinkProvider onOpenLocalLink={() => {}}>
