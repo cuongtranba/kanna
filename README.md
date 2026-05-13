@@ -61,7 +61,7 @@ That's it. Kanna opens in your browser at [`localhost:3210`](http://localhost:32
 - **Auto-generated titles** — chat titles generated in the background via Claude Haiku
 - **Session resumption** — resume agent sessions with full context preservation
 - **WebSocket-driven** — real-time subscription model with reactive state broadcasting
-- **Cloudflare tunnel auto-expose** — opt-in detector watches Bash tool stdout for listening ports and offers an inline "expose via Cloudflare" card per port; spawns `cloudflared tunnel --url` quick tunnels on demand
+- **Cloudflare tunnel via `expose_port` tool** — opt-in; the agent proactively calls the Kanna `expose_port` MCP tool with a port. In `always-ask` mode Kanna shows an inline "expose via Cloudflare" card for you to accept; in `auto-expose` mode `cloudflared tunnel --url` spawns immediately. Both modes are gated by the Cloudflare Tunnel setting
 
 ## Architecture
 

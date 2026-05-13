@@ -157,7 +157,7 @@ const cloudflareTunnelEnabledOptions = [
 
 const cloudflareTunnelModeOptions: { value: CloudflareTunnelMode; label: string }[] = [
   { value: "always-ask", label: "Always ask" },
-  { value: "auto-expose", label: "Auto-expose detected ports" },
+  { value: "auto-expose", label: "Auto-expose" },
 ]
 
 const QUICK_RESPONSE_PROVIDER_OPTIONS: Array<{ value: LlmProviderKind; label: string }> = [
@@ -1827,7 +1827,7 @@ export function SettingsPage() {
                         description={(
                           <>
                             <span>
-                              Automatically expose local ports via Cloudflare Tunnel when ports are detected in Claude&apos;s output. Requires{" "}
+                              When enabled, Claude can call the <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">expose_port</code> tool to expose a local port via Cloudflare Tunnel. The mode below controls whether each call requires your approval or is exposed automatically. Requires{" "}
                               <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">cloudflared</code>{" "}
                               to be installed.
                             </span>
@@ -1850,8 +1850,8 @@ export function SettingsPage() {
                       {tunnelSettings.enabled && (
                         <>
                           <SettingsRow
-                            title="Detection mode"
-                            description="Choose how Kanna responds when a port is detected in Claude's output."
+                            title="Tool mode"
+                            description="Always ask: each expose_port call shows an accept card. Auto-expose: expose_port calls spawn cloudflared immediately without prompting."
                           >
                             <SegmentedControl
                               value={tunnelSettings.mode}

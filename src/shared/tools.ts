@@ -12,6 +12,7 @@ import type {
 
 export const KANNA_MCP_SERVER_NAME = "kanna"
 export const OFFER_DOWNLOAD_TOOL_NAME = `mcp__${KANNA_MCP_SERVER_NAME}__offer_download`
+export const EXPOSE_PORT_TOOL_NAME = `mcp__${KANNA_MCP_SERVER_NAME}__expose_port`
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null

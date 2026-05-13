@@ -1,6 +1,6 @@
+import { randomUUID } from "node:crypto"
 import type { AppSettingsManager } from "../app-settings"
 import type { EventStore } from "../event-store"
-import { handleBashToolResult } from "./agent-integration"
 import type { CloudflareTunnelEvent } from "./events"
 import { CLOUDFLARE_TUNNEL_EVENT_VERSION } from "./events"
 import { TunnelLifecycle } from "./lifecycle"
@@ -16,6 +16,16 @@ export interface TunnelGatewayArgs {
   now?: () => number
 }
 
+export type ProposeOutcome =
+  | { status: "proposed"; tunnelId: string; port: number }
+  | { status: "auto_exposed"; tunnelId: string; port: number }
+  | { status: "already_live"; tunnelId: string; port: number; url: string | null }
+  | { status: "disabled" }
+  | { status: "invalid_port"; reason: string }
+
+const MIN_PORT = 1
+const MAX_PORT = 65535
+
 export class TunnelGateway {
   private readonly manager: TunnelManager
   private readonly lifecycle: TunnelLifecycle
@@ -23,7 +33,6 @@ export class TunnelGateway {
   private readonly store: EventStore
   private readonly broadcast: (chatId: string) => void
   private readonly now: () => number
-  // tunnelId → sourcePid for retry
   private readonly proposedSourcePid = new Map<string, number | null>()
 
   constructor(args: TunnelGatewayArgs) {
@@ -53,46 +62,58 @@ export class TunnelGateway {
     }
   }
 
-  async handleBashResult(args: { command: string; stdout: string; chatId: string; sourcePid: number | null }): Promise<void> {
+  async proposeFromTool(args: { chatId: string; port: number; sourcePid?: number | null }): Promise<ProposeOutcome> {
+    if (!Number.isInteger(args.port) || args.port < MIN_PORT || args.port > MAX_PORT) {
+      return { status: "invalid_port", reason: `port must be an integer in [${MIN_PORT}, ${MAX_PORT}]` }
+    }
     const snapshot = this.settings.getSnapshot()
-    const livePorts = this.collectLivePorts(args.chatId)
-    const skippedTunnels = new Set<string>()
-    await handleBashToolResult({
-      command: args.command,
-      stdout: args.stdout,
+    if (!snapshot.cloudflareTunnel.enabled) {
+      return { status: "disabled" }
+    }
+
+    const live = this.findLiveTunnelForPort(args.chatId, args.port)
+    if (live) {
+      return { status: "already_live", tunnelId: live.tunnelId, port: live.port, url: live.url }
+    }
+
+    const tunnelId = randomUUID()
+    const sourcePid = args.sourcePid ?? null
+    this.proposedSourcePid.set(tunnelId, sourcePid)
+    await this.persist({
+      v: CLOUDFLARE_TUNNEL_EVENT_VERSION,
+      kind: "tunnel_proposed",
+      timestamp: this.now(),
       chatId: args.chatId,
-      sourcePid: args.sourcePid,
-      settings: snapshot.cloudflareTunnel,
-      onEvent: (e: CloudflareTunnelEvent) => {
-        if (e.kind === "tunnel_proposed") {
-          if (livePorts.has(e.port)) {
-            skippedTunnels.add(e.tunnelId)
-            return
-          }
-          this.proposedSourcePid.set(e.tunnelId, e.sourcePid)
-        }
-        if (skippedTunnels.has(e.tunnelId)) return
-        void this.persist(e)
-      },
-      autoStart: async (a) => {
-        if (skippedTunnels.has(a.tunnelId)) return
-        await this.manager.start({ chatId: a.chatId, port: a.port, sourcePid: a.sourcePid, tunnelId: a.tunnelId })
-        this.lifecycle.watch(a.tunnelId, a.sourcePid)
-      },
-      now: this.now,
+      tunnelId,
+      port: args.port,
+      sourcePid,
     })
+
+    if (snapshot.cloudflareTunnel.mode === "auto-expose") {
+      await this.persist({
+        v: CLOUDFLARE_TUNNEL_EVENT_VERSION,
+        kind: "tunnel_accepted",
+        timestamp: this.now(),
+        chatId: args.chatId,
+        tunnelId,
+        source: "auto_setting",
+      })
+      await this.manager.start({ chatId: args.chatId, port: args.port, sourcePid, tunnelId })
+      this.lifecycle.watch(tunnelId, sourcePid)
+      return { status: "auto_exposed", tunnelId, port: args.port }
+    }
+
+    return { status: "proposed", tunnelId, port: args.port }
   }
 
-  private collectLivePorts(chatId: string): Set<number> {
-    const events = this.store.getTunnelEvents(chatId)
-    const projection = deriveChatTunnels(events, chatId)
-    const ports = new Set<number>()
+  private findLiveTunnelForPort(chatId: string, port: number): { tunnelId: string; port: number; url: string | null } | null {
+    const projection = deriveChatTunnels(this.store.getTunnelEvents(chatId), chatId)
     for (const record of Object.values(projection.tunnels)) {
-      if (record.state === "proposed" || record.state === "active") {
-        ports.add(record.port)
+      if ((record.state === "proposed" || record.state === "active") && record.port === port) {
+        return { tunnelId: record.tunnelId, port: record.port, url: record.url }
       }
     }
-    return ports
+    return null
   }
 
   async accept(chatId: string, tunnelId: string): Promise<void> {
@@ -116,8 +137,6 @@ export class TunnelGateway {
     this.lifecycle.unwatch(tunnelId)
     const record = deriveChatTunnels(this.store.getTunnelEvents(chatId), chatId).tunnels[tunnelId]
     if (record?.state === "proposed") {
-      // Tunnel was never started (user dismissed the proposal); manager has no
-      // process to kill, so emit tunnel_stopped here to retire the projection.
       this.proposedSourcePid.delete(tunnelId)
       await this.persist({
         v: CLOUDFLARE_TUNNEL_EVENT_VERSION,
@@ -133,7 +152,6 @@ export class TunnelGateway {
   }
 
   async retry(chatId: string, tunnelId: string): Promise<void> {
-    // For v1, retry just re-runs accept on the existing proposed record.
     await this.accept(chatId, tunnelId)
   }
 

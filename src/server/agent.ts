@@ -149,6 +149,8 @@ interface AgentCoordinatorArgs {
     forkSession: boolean
     oauthToken: string | null
     additionalDirectories?: string[]
+    chatId?: string
+    tunnelGateway?: TunnelGateway | null
     onToolRequest: (request: HarnessToolRequest) => Promise<unknown>
   }) => Promise<ClaudeSessionHandle>
   claudeLimitDetector?: LimitDetector
@@ -639,6 +641,8 @@ async function startClaudeSession(args: {
   forkSession: boolean
   oauthToken: string | null
   additionalDirectories?: string[]
+  chatId?: string
+  tunnelGateway?: TunnelGateway | null
   onToolRequest: (request: HarnessToolRequest) => Promise<unknown>
 }): Promise<ClaudeSessionHandle> {
   const canUseTool: CanUseTool = async (toolName, input, options) => {
@@ -716,6 +720,8 @@ async function startClaudeSession(args: {
         [KANNA_MCP_SERVER_NAME]: createKannaMcpServer({
           projectId: args.projectId,
           localPath: args.localPath,
+          chatId: args.chatId,
+          tunnelGateway: args.tunnelGateway ?? null,
         }),
       },
       systemPrompt: {
@@ -920,15 +926,6 @@ export class AgentCoordinator {
       if (!pending) return
       this.pendingBashCalls.delete(entry.toolId)
       const stdout = stringifyToolResultContent(entry.content)
-
-      if (this.tunnelGateway) {
-        void this.tunnelGateway.handleBashResult({
-          command: pending.command,
-          stdout,
-          chatId: pending.chatId,
-          sourcePid: null,
-        })
-      }
 
       if (pending.isBg && this.backgroundTasks) {
         const registryId = `bash:${entry.toolId}`
@@ -1387,6 +1384,8 @@ export class AgentCoordinator {
         forkSession: args.forkSession,
         oauthToken: picked?.token ?? null,
         additionalDirectories: args.additionalDirectories,
+        chatId: args.chatId,
+        tunnelGateway: this.tunnelGateway,
         onToolRequest: args.onToolRequest,
       })
 

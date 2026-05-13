@@ -224,7 +224,6 @@ describe("cloudflareTunnel normalization", () => {
     })
     const manager = new AppSettingsManager(filePath)
     await manager.initialize()
-    // Simulate analytics toggle — must NOT erase tunnel block
     await manager.write({ analyticsEnabled: false })
     const reloaded = await readAppSettingsSnapshot(filePath)
     expect(reloaded.cloudflareTunnel).toEqual({
