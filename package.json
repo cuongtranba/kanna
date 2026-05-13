@@ -48,7 +48,7 @@
     "prepublishOnly": "bun run build"
   },
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.126",
+    "@anthropic-ai/claude-agent-sdk": "^0.2.140",
     "@legendapp/list": "3.0.0-beta.44",
     "@pierre/diffs": "^1.1.12",
     "@radix-ui/react-context-menu": "^2.2.16",
