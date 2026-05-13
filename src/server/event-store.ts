@@ -8,6 +8,7 @@ import { STORE_VERSION } from "../shared/types"
 import type { AutoContinueEvent } from "./auto-continue/events"
 import {
   type ChatEvent,
+  type ChatRecord,
   type ChatTimingState,
   type ProjectEvent,
   type QueuedMessageEvent,
@@ -203,6 +204,7 @@ export class EventStore implements PushEventStore {
   private snapshotHasLegacyMessages = false
   private cachedTranscript: { chatId: string; entries: TranscriptEntry[] } | null = null
   private readonly tunnelEventsByChatId = new Map<string, CloudflareTunnelEvent[]>()
+  private replayChatProvider = new Map<string, AgentProvider | null>()
 
   constructor(dataDir = getDataDir(homedir())) {
     this.dataDir = dataDir
@@ -284,10 +286,43 @@ export class EventStore implements PushEventStore {
         this.state.projectIdsByPath.set(project.localPath, project.id)
       }
       for (const chat of parsed.chats) {
+        const legacy = chat as unknown as {
+          sessionToken?: string | null
+          pendingForkSessionToken?: string | null | { provider: AgentProvider; token: string }
+          sessionTokensByProvider?: Partial<Record<AgentProvider, string | null>>
+        }
+        const sessionTokensByProvider: Partial<Record<AgentProvider, string | null>> =
+          legacy.sessionTokensByProvider
+            ? { ...legacy.sessionTokensByProvider }
+            : {}
+        if (
+          typeof legacy.sessionToken === "string"
+          && chat.provider
+          && sessionTokensByProvider[chat.provider] == null
+        ) {
+          sessionTokensByProvider[chat.provider] = legacy.sessionToken
+        }
+        let pendingForkSessionToken: ChatRecord["pendingForkSessionToken"] = null
+        const rawPending = legacy.pendingForkSessionToken
+        if (rawPending && typeof rawPending === "object" && "token" in rawPending) {
+          pendingForkSessionToken = rawPending as { provider: AgentProvider; token: string }
+        } else if (typeof rawPending === "string" && chat.provider) {
+          pendingForkSessionToken = { provider: chat.provider, token: rawPending }
+        }
+        const {
+          sessionToken: _legacySessionToken,
+          pendingForkSessionToken: _legacyPendingForkSessionToken,
+          sessionTokensByProvider: _legacyByProvider,
+          ...rest
+        } = legacy
+        void _legacySessionToken
+        void _legacyPendingForkSessionToken
+        void _legacyByProvider
         this.state.chatsById.set(chat.id, {
-          ...chat,
+          ...(rest as unknown as ChatRecord),
           unread: chat.unread ?? false,
-          pendingForkSessionToken: chat.pendingForkSessionToken ?? null,
+          sessionTokensByProvider,
+          pendingForkSessionToken,
         })
       }
       this.legacySidebarProjectOrder = normalizeSidebarProjectOrder(parsed.sidebarProjectOrder)
@@ -443,6 +478,7 @@ export class EventStore implements PushEventStore {
       .forEach(({ event }) => {
         this.applyEvent(event)
       })
+    this.replayChatProvider.clear()
   }
 
   private async loadReplayEvents(filePath: string, sourceIndex: number): Promise<ParsedReplayEvent[]> {
@@ -537,7 +573,7 @@ export class EventStore implements PushEventStore {
         break
       }
       case "chat_created": {
-        const chat: import("./events").ChatRecord = {
+        const chat: ChatRecord = {
           id: e.chatId,
           projectId: e.projectId,
           title: e.title,
@@ -546,7 +582,7 @@ export class EventStore implements PushEventStore {
           unread: false,
           provider: null,
           planMode: false,
-          sessionToken: null,
+          sessionTokensByProvider: {},
           sourceHash: null,
           pendingForkSessionToken: null,
           hasMessages: false,
@@ -555,6 +591,7 @@ export class EventStore implements PushEventStore {
         if (e.stackId !== undefined) chat.stackId = e.stackId
         if (e.stackBindings !== undefined) chat.stackBindings = e.stackBindings.map((b) => ({ ...b }))
         this.state.chatsById.set(chat.id, chat)
+        this.replayChatProvider.set(e.chatId, null)
         this.updateTiming(e.chatId, e.timestamp, "idle")
         break
       }
@@ -594,6 +631,7 @@ export class EventStore implements PushEventStore {
         if (!chat) break
         chat.provider = e.provider
         chat.updatedAt = e.timestamp
+        this.replayChatProvider.set(e.chatId, e.provider)
         break
       }
       case "chat_plan_mode_set": {
@@ -687,7 +725,12 @@ export class EventStore implements PushEventStore {
       case "session_token_set": {
         const chat = this.state.chatsById.get(e.chatId)
         if (!chat) break
-        chat.sessionToken = e.sessionToken
+        const provider = e.provider ?? this.replayChatProvider.get(e.chatId) ?? chat.provider
+        if (!provider) break
+        chat.sessionTokensByProvider = {
+          ...chat.sessionTokensByProvider,
+          [provider]: e.sessionToken,
+        }
         chat.updatedAt = e.timestamp
         break
       }
@@ -701,7 +744,13 @@ export class EventStore implements PushEventStore {
       case "pending_fork_session_token_set": {
         const chat = this.state.chatsById.get(e.chatId)
         if (!chat) break
-        chat.pendingForkSessionToken = e.pendingForkSessionToken
+        if (e.pendingForkSessionToken == null) {
+          chat.pendingForkSessionToken = null
+        } else {
+          const provider = e.provider ?? this.replayChatProvider.get(e.chatId) ?? chat.provider
+          if (!provider) break
+          chat.pendingForkSessionToken = { provider, token: e.pendingForkSessionToken }
+        }
         chat.updatedAt = e.timestamp
         break
       }
@@ -1066,8 +1115,16 @@ export class EventStore implements PushEventStore {
 
   async forkChat(sourceChatId: string) {
     const sourceChat = this.requireChat(sourceChatId)
-    const sourceSessionToken = sourceChat.sessionToken ?? sourceChat.pendingForkSessionToken ?? null
-    if (!sourceChat.provider || !sourceSessionToken) {
+    const sourceProvider = sourceChat.provider
+    if (!sourceProvider) {
+      throw new Error("Chat cannot be forked")
+    }
+    const sourceSessionToken =
+      sourceChat.sessionTokensByProvider[sourceProvider]
+      ?? (sourceChat.pendingForkSessionToken?.provider === sourceProvider
+        ? sourceChat.pendingForkSessionToken.token
+        : null)
+    if (!sourceSessionToken) {
       throw new Error("Chat cannot be forked")
     }
 
@@ -1082,9 +1139,9 @@ export class EventStore implements PushEventStore {
       title: getForkedChatTitle(sourceChat.title),
     }
     await this.append(this.chatsLogPath, createEvent)
-    await this.setChatProvider(chatId, sourceChat.provider)
+    await this.setChatProvider(chatId, sourceProvider)
     await this.setPlanMode(chatId, sourceChat.planMode)
-    await this.setPendingForkSessionToken(chatId, sourceSessionToken)
+    await this.setPendingForkSessionToken(chatId, { provider: sourceProvider, token: sourceSessionToken })
 
     const sourceEntries = this.getMessages(sourceChatId)
     if (sourceEntries.length > 0) {
@@ -1352,15 +1409,20 @@ export class EventStore implements PushEventStore {
     await this.append(this.turnsLogPath, event)
   }
 
-  async setSessionToken(chatId: string, sessionToken: string | null) {
+  async setSessionTokenForProvider(
+    chatId: string,
+    provider: AgentProvider,
+    sessionToken: string | null,
+  ) {
     const chat = this.requireChat(chatId)
-    if (chat.sessionToken === sessionToken) return
+    if ((chat.sessionTokensByProvider[provider] ?? null) === sessionToken) return
     const event: TurnEvent = {
       v: STORE_VERSION,
       type: "session_token_set",
       timestamp: Date.now(),
       chatId,
       sessionToken,
+      provider,
     }
     await this.append(this.turnsLogPath, event)
   }
@@ -1385,15 +1447,25 @@ export class EventStore implements PushEventStore {
     await this.append(this.turnsLogPath, event)
   }
 
-  async setPendingForkSessionToken(chatId: string, pendingForkSessionToken: string | null) {
+  async setPendingForkSessionToken(
+    chatId: string,
+    value: { provider: AgentProvider; token: string } | null,
+  ) {
     const chat = this.requireChat(chatId)
-    if ((chat.pendingForkSessionToken ?? null) === pendingForkSessionToken) return
+    const current = chat.pendingForkSessionToken ?? null
+    const same =
+      (current == null && value == null)
+      || (current != null && value != null
+        && current.provider === value.provider
+        && current.token === value.token)
+    if (same) return
     const event: TurnEvent = {
       v: STORE_VERSION,
       type: "pending_fork_session_token_set",
       timestamp: Date.now(),
       chatId,
-      pendingForkSessionToken,
+      pendingForkSessionToken: value?.token ?? null,
+      provider: value?.provider,
     }
     await this.append(this.turnsLogPath, event)
   }

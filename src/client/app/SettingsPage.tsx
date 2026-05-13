@@ -1932,7 +1932,6 @@ export function SettingsPage() {
                           availableProviders={PROVIDERS}
                           selectedProvider="claude"
                           showProviderPicker={false}
-                          providerLocked
                           model={providerDefaults.claude.model}
                           modelOptions={providerDefaults.claude.modelOptions}
                           onModelChange={(_, model) => {
@@ -1963,7 +1962,6 @@ export function SettingsPage() {
                           availableProviders={PROVIDERS}
                           selectedProvider="codex"
                           showProviderPicker={false}
-                          providerLocked
                           model={providerDefaults.codex.model}
                           modelOptions={providerDefaults.codex.modelOptions}
                           onModelChange={(_, model) => {

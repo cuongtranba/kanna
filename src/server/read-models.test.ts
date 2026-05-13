@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test"
-import { deriveChatSnapshot, deriveLocalProjectsSnapshot, deriveSidebarData, deriveTimings, stackSummaries } from "./read-models"
+import { canForkChat, deriveChatSnapshot, deriveLocalProjectsSnapshot, deriveSidebarData, deriveTimings, stackSummaries } from "./read-models"
+import type { ChatRecord } from "./events"
 import { createEmptyState } from "./events"
-import type { SlashCommand } from "../shared/types"
+import type { AgentProvider, SlashCommand } from "../shared/types"
 
 describe("read models", () => {
   test("include provider data in sidebar rows", () => {
@@ -23,7 +24,7 @@ describe("read models", () => {
       unread: true,
       provider: "codex",
       planMode: false,
-      sessionToken: "thread-1",
+      sessionTokensByProvider: { codex: "thread-1" },
       sourceHash: null,
       lastTurnOutcome: null,
     })
@@ -56,7 +57,7 @@ describe("read models", () => {
       unread: false,
       provider: null,
       planMode: false,
-      sessionToken: null,
+      sessionTokensByProvider: {},
       sourceHash: null,
       lastTurnOutcome: null,
     })
@@ -70,7 +71,7 @@ describe("read models", () => {
       unread: false,
       provider: null,
       planMode: false,
-      sessionToken: null,
+      sessionTokensByProvider: {},
       sourceHash: null,
       lastTurnOutcome: null,
     })
@@ -100,7 +101,7 @@ describe("read models", () => {
       unread: false,
       provider: "claude",
       planMode: true,
-      sessionToken: "session-1",
+      sessionTokensByProvider: { claude: "session-1" },
       sourceHash: null,
       lastTurnOutcome: null,
     })
@@ -161,7 +162,7 @@ describe("read models", () => {
       unread: false,
       provider: "codex",
       planMode: false,
-      sessionToken: null,
+      sessionTokensByProvider: {},
       sourceHash: null,
       lastMessageAt: 100,
       lastTurnOutcome: null,
@@ -205,7 +206,7 @@ describe("read models", () => {
       unread: false,
       provider: "claude",
       planMode: false,
-      sessionToken: null,
+      sessionTokensByProvider: {},
       sourceHash: null,
       lastMessageAt: 100,
       lastTurnOutcome: null,
@@ -219,7 +220,7 @@ describe("read models", () => {
       unread: false,
       provider: "claude",
       planMode: false,
-      sessionToken: null,
+      sessionTokensByProvider: {},
       sourceHash: null,
       lastMessageAt: 200,
       lastTurnOutcome: null,
@@ -276,7 +277,7 @@ describe("read models", () => {
       unread: false,
       provider: "claude",
       planMode: false,
-      sessionToken: null,
+      sessionTokensByProvider: {},
       sourceHash: null,
       lastMessageAt: 1_000_000 - 60 * 60 * 1_000,
       lastTurnOutcome: null,
@@ -290,7 +291,7 @@ describe("read models", () => {
       unread: false,
       provider: "claude",
       planMode: false,
-      sessionToken: null,
+      sessionTokensByProvider: {},
       sourceHash: null,
       lastMessageAt: 1_000_000 - 26 * 60 * 60 * 1_000,
       lastTurnOutcome: null,
@@ -325,7 +326,7 @@ describe("read models", () => {
         unread: false,
         provider: "claude",
         planMode: false,
-        sessionToken: null,
+        sessionTokensByProvider: {},
         sourceHash: null,
         lastMessageAt: 1_000_000 - chatNumber * 60 * 1_000,
         lastTurnOutcome: null,
@@ -364,7 +365,7 @@ describe("read models", () => {
       unread: false,
       provider: "claude",
       planMode: false,
-      sessionToken: "session-active",
+      sessionTokensByProvider: { claude: "session-active" },
       sourceHash: null,
       lastTurnOutcome: null,
     })
@@ -377,9 +378,9 @@ describe("read models", () => {
       unread: false,
       provider: "claude",
       planMode: false,
-      sessionToken: null,
+      sessionTokensByProvider: {},
       sourceHash: null,
-      pendingForkSessionToken: "session-parent",
+      pendingForkSessionToken: { provider: "claude", token: "session-parent" },
       lastTurnOutcome: null,
     })
     state.chatsById.set("chat-draining", {
@@ -391,7 +392,7 @@ describe("read models", () => {
       unread: false,
       provider: "codex",
       planMode: false,
-      sessionToken: "thread-1",
+      sessionTokensByProvider: { codex: "thread-1" },
       sourceHash: null,
       lastTurnOutcome: null,
     })
@@ -520,7 +521,7 @@ describe("read models", () => {
       unread: false,
       provider: "claude",
       planMode: false,
-      sessionToken: null,
+      sessionTokensByProvider: {},
       sourceHash: null,
       lastTurnOutcome: null,
       slashCommands,
@@ -555,7 +556,7 @@ describe("deriveChatSnapshot schedules", () => {
     })
     state.chatsById.set("c1", {
       id: "c1", projectId: "p1", title: "Chat", createdAt: 0, updatedAt: 0,
-      unread: false, provider: null, planMode: false, sessionToken: null, sourceHash: null, lastTurnOutcome: null,
+      unread: false, provider: null, planMode: false, sessionTokensByProvider: {}, sourceHash: null, lastTurnOutcome: null,
     })
 
     const snapshot = deriveChatSnapshot(
@@ -578,7 +579,7 @@ describe("deriveChatSnapshot schedules", () => {
     })
     state.chatsById.set("c1", {
       id: "c1", projectId: "p1", title: "Chat", createdAt: 0, updatedAt: 0,
-      unread: false, provider: null, planMode: false, sessionToken: null, sourceHash: null, lastTurnOutcome: null,
+      unread: false, provider: null, planMode: false, sessionTokensByProvider: {}, sourceHash: null, lastTurnOutcome: null,
     })
     state.autoContinueEventsByChatId.set("c1", [{
       v: 3, kind: "auto_continue_proposed", timestamp: 1, chatId: "c1", scheduleId: "s1",
@@ -725,7 +726,7 @@ describe("deriveChatSnapshot resolvedBindings", () => {
       unread: false,
       provider: "claude",
       planMode: false,
-      sessionToken: null,
+      sessionTokensByProvider: {},
       sourceHash: null,
       lastTurnOutcome: null,
       stackId: "s1",
@@ -770,11 +771,64 @@ describe("deriveChatSnapshot resolvedBindings", () => {
       unread: false,
       provider: "claude",
       planMode: false,
-      sessionToken: null,
+      sessionTokensByProvider: {},
       sourceHash: null,
       lastTurnOutcome: null,
     })
     const snapshot = buildSnapshot(state, "c1")
     expect(snapshot?.resolvedBindings).toBeUndefined()
+  })
+})
+
+describe("canForkChat", () => {
+  function makeChat(overrides: Partial<ChatRecord>): ChatRecord {
+    return {
+      id: "c",
+      projectId: "p",
+      title: "t",
+      createdAt: 0,
+      updatedAt: 0,
+      unread: false,
+      provider: "claude" as AgentProvider,
+      planMode: false,
+      sessionTokensByProvider: {},
+      sourceHash: null,
+      pendingForkSessionToken: null,
+      lastTurnOutcome: null,
+      ...overrides,
+    }
+  }
+
+  test("true when current provider slot has a token", () => {
+    const chat = makeChat({ provider: "claude", sessionTokensByProvider: { claude: "x" } })
+    expect(canForkChat(chat, new Map(), new Set())).toBe(true)
+  })
+
+  test("true when pendingForkSessionToken matches current provider", () => {
+    const chat = makeChat({
+      provider: "claude",
+      sessionTokensByProvider: {},
+      pendingForkSessionToken: { provider: "claude", token: "x" },
+    })
+    expect(canForkChat(chat, new Map(), new Set())).toBe(true)
+  })
+
+  test("false when no tokens anywhere", () => {
+    const chat = makeChat({ provider: "claude", sessionTokensByProvider: {} })
+    expect(canForkChat(chat, new Map(), new Set())).toBe(false)
+  })
+
+  test("false when only another provider has a token", () => {
+    const chat = makeChat({ provider: "claude", sessionTokensByProvider: { codex: "x" } })
+    expect(canForkChat(chat, new Map(), new Set())).toBe(false)
+  })
+
+  test("false when pendingFork is for another provider", () => {
+    const chat = makeChat({
+      provider: "claude",
+      sessionTokensByProvider: {},
+      pendingForkSessionToken: { provider: "codex", token: "x" },
+    })
+    expect(canForkChat(chat, new Map(), new Set())).toBe(false)
   })
 })

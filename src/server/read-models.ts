@@ -31,13 +31,17 @@ function getSidebarChatSortTimestamp(chat: ChatRecord) {
   return chat.lastMessageAt ?? chat.createdAt
 }
 
-function canForkChat(
+export function canForkChat(
   chat: ChatRecord,
   activeStatuses: Map<string, KannaStatus>,
   drainingChatIds: Set<string>,
 ) {
   if (!chat.provider) return false
-  if (!chat.sessionToken && !chat.pendingForkSessionToken) return false
+  const hasCurrentProviderToken =
+    Boolean(chat.sessionTokensByProvider[chat.provider])
+    || (chat.pendingForkSessionToken?.provider === chat.provider
+      && Boolean(chat.pendingForkSessionToken.token))
+  if (!hasCurrentProviderToken) return false
   if (activeStatuses.has(chat.id)) return false
   if (drainingChatIds.has(chat.id)) return false
   return true
@@ -279,7 +283,7 @@ export function deriveChatSnapshot(
     isDraining: drainingChatIds.has(chat.id),
     provider: chat.provider,
     planMode: chat.planMode,
-    sessionToken: chat.sessionToken,
+    sessionTokensByProvider: { ...chat.sessionTokensByProvider },
     timings: deriveTimings(
       chat,
       state.chatTimingsByChatId.get(chat.id),

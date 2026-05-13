@@ -1216,7 +1216,7 @@ export interface ChatRuntime {
   isDraining: boolean
   provider: AgentProvider | null
   planMode: boolean
-  sessionToken: string | null
+  sessionTokensByProvider: Partial<Record<AgentProvider, string | null>>
   timings: ChatStateTimings
 }
 

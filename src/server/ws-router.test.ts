@@ -1155,7 +1155,7 @@ describe("ws-router", () => {
       unread: false,
       provider: null,
       planMode: false,
-      sessionToken: null,
+      sessionTokensByProvider: {},
       sourceHash: null,
       lastTurnOutcome: null,
     })
@@ -1272,7 +1272,7 @@ describe("ws-router", () => {
       unread: false,
       provider: null,
       planMode: false,
-      sessionToken: null,
+      sessionTokensByProvider: {},
       sourceHash: null,
       lastTurnOutcome: null,
     })
@@ -1360,7 +1360,7 @@ describe("ws-router", () => {
       unread: true,
       provider: null,
       planMode: false,
-      sessionToken: null,
+      sessionTokensByProvider: {},
       sourceHash: null,
       lastTurnOutcome: null,
     })
@@ -1610,7 +1610,7 @@ describe("ws-router", () => {
       unread: false,
       provider: "claude",
       planMode: false,
-      sessionToken: "session-1",
+      sessionTokensByProvider: { claude: "session-1" },
       sourceHash: null,
       pendingForkSessionToken: null,
       lastTurnOutcome: null,
@@ -1634,9 +1634,9 @@ describe("ws-router", () => {
             unread: false,
             provider: "claude",
             planMode: false,
-            sessionToken: null,
+            sessionTokensByProvider: {},
             sourceHash: null,
-            pendingForkSessionToken: "session-1",
+            pendingForkSessionToken: { provider: "claude", token: "session-1" },
             lastTurnOutcome: null,
           })
           return { chatId: "chat-fork-1" }
@@ -1746,7 +1746,7 @@ describe("ws-router", () => {
       unread: false,
       provider: null,
       planMode: false,
-      sessionToken: null,
+      sessionTokensByProvider: {},
       sourceHash: null,
       lastTurnOutcome: null,
     })
@@ -1830,7 +1830,7 @@ describe("ws-router", () => {
       unread: false,
       provider: null,
       planMode: false,
-      sessionToken: null,
+      sessionTokensByProvider: {},
       sourceHash: null,
       lastTurnOutcome: null,
     })
@@ -2170,7 +2170,7 @@ describe("ws-router", () => {
       unread: false,
       provider: null,
       planMode: false,
-      sessionToken: null,
+      sessionTokensByProvider: {},
       sourceHash: null,
       lastTurnOutcome: null,
     })
@@ -2272,7 +2272,7 @@ describe("ws-router", () => {
       unread: false,
       provider: null,
       planMode: false,
-      sessionToken: null,
+      sessionTokensByProvider: {},
       sourceHash: null,
       lastTurnOutcome: null,
     })

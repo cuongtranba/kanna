@@ -227,9 +227,8 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput({
   const previousProjectIdRef = useRef<string | null>(projectId ?? null)
   const latestChatIdRef = useRef<string | null>(chatId ?? null)
 
-  const providerLocked = activeProvider !== null
   const providerPrefs = getEffectiveComposerState(composerState, activeProvider, providerDefaults)
-  const selectedProvider = providerLocked ? activeProvider : composerState.provider
+  const selectedProvider = composerState.provider
   const slashCommands = useSlashCommands(chatId ?? null)
   const slashCommandsLoading = useSlashCommandsLoading(chatId ?? null)
   const [pickerIndex, setPickerIndex] = useState(0)
@@ -984,19 +983,13 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput({
           <ChatPreferenceControls
             availableProviders={availableProviders}
             selectedProvider={selectedProvider}
-            providerLocked={providerLocked}
             showCodexCliRequirementHints
             model={providerPrefs.model}
             modelOptions={providerPrefs.modelOptions}
             onProviderChange={(provider) => {
-              if (providerLocked) return
               resetChatComposerFromProvider(composerChatId, provider)
             }}
             onModelChange={(_, model) => {
-              if (providerLocked) {
-                updateComposerState((state) => withNormalizedContextWindow(state, model))
-                return
-              }
               setChatComposerModel(composerChatId, model)
             }}
             onModelOptionChange={(change) => {

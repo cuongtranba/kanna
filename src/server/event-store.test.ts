@@ -51,7 +51,7 @@ describe("EventStore", () => {
     const messagesLogPath = join(dataDir, "messages.jsonl")
     const chatId = "chat-1"
 
-    const snapshot: SnapshotFile = {
+    const snapshot = {
       v: 3,
       generatedAt: 10,
       projects: [{
@@ -80,7 +80,7 @@ describe("EventStore", () => {
           entry("user_prompt", 100, { content: "hello" }),
         ],
       }],
-    }
+    } as unknown as SnapshotFile
 
     await writeFile(snapshotPath, JSON.stringify(snapshot, null, 2), "utf8")
     await writeFile(messagesLogPath, `${JSON.stringify({
@@ -317,7 +317,7 @@ describe("EventStore", () => {
     const dataDir = await createTempDataDir()
     const snapshotPath = join(dataDir, "snapshot.json")
 
-    const snapshot: SnapshotFile = {
+    const snapshot = {
       v: 3,
       generatedAt: 10,
       projects: [{
@@ -340,7 +340,7 @@ describe("EventStore", () => {
         sourceHash: null,
         lastTurnOutcome: null,
       }],
-    }
+    } as unknown as SnapshotFile
 
     await writeFile(snapshotPath, JSON.stringify(snapshot, null, 2), "utf8")
 
@@ -526,7 +526,7 @@ describe("EventStore", () => {
     const source = await store.createChat(project.id)
     await store.setChatProvider(source.id, "claude")
     await store.setPlanMode(source.id, true)
-    await store.setSessionToken(source.id, "session-1")
+    await store.setSessionTokenForProvider(source.id, "claude", "session-1")
     await store.appendMessage(source.id, entry("user_prompt", source.createdAt + 1, { content: "analyze this" }))
     await store.appendMessage(source.id, entry("assistant_text", source.createdAt + 2, { text: "done" }))
 
@@ -536,8 +536,8 @@ describe("EventStore", () => {
     expect(forked.title).toBe("Fork: New Chat")
     expect(forked.provider).toBe("claude")
     expect(forked.planMode).toBe(true)
-    expect(forked.sessionToken).toBeNull()
-    expect(forked.pendingForkSessionToken).toBe("session-1")
+    expect(forked.sessionTokensByProvider).toEqual({})
+    expect(forked.pendingForkSessionToken).toEqual({ provider: "claude", token: "session-1" })
     expect(forked.lastTurnOutcome).toBeNull()
     expect(forked.lastMessageAt).toBeUndefined()
     expect(store.getMessages(forked.id)).toEqual(store.getMessages(source.id))
@@ -966,5 +966,104 @@ describe("project star", () => {
     await reloaded.initialize()
 
     expect(reloaded.getProject(project.id)!.starredAt).toBe(starredAtBefore)
+  })
+
+  test("legacy session_token_set attributes to chat.provider at replay time", async () => {
+    const dataDir = await createTempDataDir()
+    const projectId = "p1"
+    const chatId = "c1"
+    const now = 1_700_000_000_000
+    await writeFile(
+      join(dataDir, "projects.jsonl"),
+      `${JSON.stringify({ v: 3, type: "project_opened", timestamp: now, projectId, localPath: "/tmp/x", title: "x" })}\n`,
+      "utf8",
+    )
+    await writeFile(
+      join(dataDir, "chats.jsonl"),
+      [
+        { v: 3, type: "chat_created", timestamp: now + 1, chatId, projectId, title: "t" },
+        { v: 3, type: "chat_provider_set", timestamp: now + 2, chatId, provider: "claude" },
+        { v: 3, type: "chat_provider_set", timestamp: now + 4, chatId, provider: "codex" },
+      ].map((e) => JSON.stringify(e)).join("\n") + "\n",
+      "utf8",
+    )
+    await writeFile(
+      join(dataDir, "turns.jsonl"),
+      [
+        { v: 3, type: "session_token_set", timestamp: now + 3, chatId, sessionToken: "tok-claude-1" },
+        { v: 3, type: "session_token_set", timestamp: now + 5, chatId, sessionToken: "tok-codex-1" },
+      ].map((e) => JSON.stringify(e)).join("\n") + "\n",
+      "utf8",
+    )
+
+    const store = new EventStore(dataDir)
+    await store.initialize()
+
+    const record = store.getChat(chatId)!
+    expect(record.sessionTokensByProvider.claude).toBe("tok-claude-1")
+    expect(record.sessionTokensByProvider.codex).toBe("tok-codex-1")
+  })
+
+  test("session_token_set with explicit provider writes to that slot", async () => {
+    const dataDir = await createTempDataDir()
+    const projectId = "p1"
+    const chatId = "c1"
+    const now = 1_700_000_000_000
+    await writeFile(
+      join(dataDir, "projects.jsonl"),
+      `${JSON.stringify({ v: 3, type: "project_opened", timestamp: now, projectId, localPath: "/tmp/x", title: "x" })}\n`,
+      "utf8",
+    )
+    await writeFile(
+      join(dataDir, "chats.jsonl"),
+      [
+        { v: 3, type: "chat_created", timestamp: now + 1, chatId, projectId, title: "t" },
+        { v: 3, type: "chat_provider_set", timestamp: now + 2, chatId, provider: "claude" },
+      ].map((e) => JSON.stringify(e)).join("\n") + "\n",
+      "utf8",
+    )
+    await writeFile(
+      join(dataDir, "turns.jsonl"),
+      `${JSON.stringify({ v: 3, type: "session_token_set", timestamp: now + 3, chatId, sessionToken: "x-codex", provider: "codex" })}\n`,
+      "utf8",
+    )
+
+    const store = new EventStore(dataDir)
+    await store.initialize()
+
+    const record = store.getChat(chatId)!
+    expect(record.sessionTokensByProvider.codex).toBe("x-codex")
+    expect(record.sessionTokensByProvider.claude).toBeUndefined()
+  })
+
+  test("legacy pending_fork_session_token_set becomes provider-tagged via chat.provider", async () => {
+    const dataDir = await createTempDataDir()
+    const projectId = "p1"
+    const chatId = "c1"
+    const now = 1_700_000_000_000
+    await writeFile(
+      join(dataDir, "projects.jsonl"),
+      `${JSON.stringify({ v: 3, type: "project_opened", timestamp: now, projectId, localPath: "/tmp/x", title: "x" })}\n`,
+      "utf8",
+    )
+    await writeFile(
+      join(dataDir, "chats.jsonl"),
+      [
+        { v: 3, type: "chat_created", timestamp: now + 1, chatId, projectId, title: "t" },
+        { v: 3, type: "chat_provider_set", timestamp: now + 2, chatId, provider: "claude" },
+      ].map((e) => JSON.stringify(e)).join("\n") + "\n",
+      "utf8",
+    )
+    await writeFile(
+      join(dataDir, "turns.jsonl"),
+      `${JSON.stringify({ v: 3, type: "pending_fork_session_token_set", timestamp: now + 3, chatId, pendingForkSessionToken: "fork-tok" })}\n`,
+      "utf8",
+    )
+
+    const store = new EventStore(dataDir)
+    await store.initialize()
+
+    const record = store.getChat(chatId)!
+    expect(record.pendingForkSessionToken).toEqual({ provider: "claude", token: "fork-tok" })
   })
 })
