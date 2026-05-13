@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.47.1](https://github.com/cuongtranba/kanna/compare/v0.47.0...v0.47.1) (2026-05-13)
+
+
+### Bug Fixes
+
+* **stacks:** stack chat create row layout on narrow widths ([#57](https://github.com/cuongtranba/kanna/issues/57)) ([95d83be](https://github.com/cuongtranba/kanna/commit/95d83bebfb6fbe82a464efe7ce80d68c33dd8888))
+
 ## [0.47.0](https://github.com/cuongtranba/kanna/compare/v0.46.1...v0.47.0) (2026-05-13)
 
 
