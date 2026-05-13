@@ -24,6 +24,17 @@ import type { BackgroundTaskDiffEvent, BgTasksSnapshotData, EditorOpenSettings, 
 import { useBackgroundTasksStore } from "../stores/backgroundTasksStore"
 import { fireOrphanRecoveryToast } from "../lib/orphanToast"
 
+function shallowProviderTokenEquals(
+  a: Partial<Record<AgentProvider, string | null>>,
+  b: Partial<Record<AgentProvider, string | null>>,
+) {
+  const keys = new Set<string>([...Object.keys(a), ...Object.keys(b)])
+  for (const key of keys) {
+    if (a[key as AgentProvider] !== b[key as AgentProvider]) return false
+  }
+  return true
+}
+
 function sameRuntime(left: ChatSnapshot["runtime"] | null | undefined, right: ChatSnapshot["runtime"] | null | undefined) {
   if (left === right) return true
   if (!left || !right) return false
@@ -35,7 +46,7 @@ function sameRuntime(left: ChatSnapshot["runtime"] | null | undefined, right: Ch
     && left.isDraining === right.isDraining
     && left.provider === right.provider
     && left.planMode === right.planMode
-    && left.sessionToken === right.sessionToken
+    && shallowProviderTokenEquals(left.sessionTokensByProvider, right.sessionTokensByProvider)
 }
 
 function sameTranscriptEntries(left: ChatSnapshot["messages"] | null | undefined, right: ChatSnapshot["messages"] | null | undefined) {
