@@ -120,7 +120,7 @@ export async function importClaudeSessions(
     // Check if a chat already exists for this sessionId
     let existingChat: ChatRecord | undefined
     for (const chat of store.state.chatsById.values()) {
-      if (!chat.deletedAt && chat.sessionToken === session.sessionId) {
+      if (!chat.deletedAt && chat.sessionTokensByProvider.claude === session.sessionId) {
         existingChat = chat
         break
       }
@@ -173,7 +173,7 @@ export async function importClaudeSessions(
         await store.appendMessage(chat.id, entry)
       }
 
-      await store.setSessionToken(chat.id, session.sessionId)
+      await store.setSessionTokenForProvider(chat.id, "claude", session.sessionId)
       await store.setSourceHash(chat.id, session.sourceHash)
       imported += 1
       if (onProgress) onProgress({ scanned, imported })

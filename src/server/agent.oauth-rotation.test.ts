@@ -17,8 +17,9 @@ function createFakeStore() {
     provider: null as "claude" | "codex" | null,
     planMode: false,
     sessionToken: null as string | null,
+    sessionTokensByProvider: {} as Partial<Record<"claude" | "codex", string | null>>,
     slashCommands: undefined as SlashCommand[] | undefined,
-    pendingForkSessionToken: null as string | null,
+    pendingForkSessionToken: null as { provider: "claude" | "codex"; token: string } | null,
   }
   const project = {
     id: "project-1",
@@ -95,19 +96,28 @@ function createFakeStore() {
     async setSessionToken(_chatId: string, sessionToken: string | null) {
       chat.sessionToken = sessionToken
     },
-    async setPendingForkSessionToken(_chatId: string, pendingForkSessionToken: string | null) {
-      chat.pendingForkSessionToken = pendingForkSessionToken
+    async setSessionTokenForProvider(_chatId: string, provider: "claude" | "codex", sessionToken: string | null) {
+      chat.sessionTokensByProvider = { ...chat.sessionTokensByProvider, [provider]: sessionToken }
+      chat.sessionToken = sessionToken
+    },
+    async setPendingForkSessionToken(_chatId: string, value: { provider: "claude" | "codex"; token: string } | null) {
+      chat.pendingForkSessionToken = value
     },
     async createChat() {
       return chat
     },
     async forkChat() {
+      const pending = chat.provider
+        ? (chat.sessionTokensByProvider[chat.provider] ?? null)
+        : null
       return {
         ...chat,
         id: "chat-fork-1",
         title: "Fork: New Chat",
-        sessionToken: null,
-        pendingForkSessionToken: chat.sessionToken ?? chat.pendingForkSessionToken,
+        sessionTokensByProvider: {},
+        pendingForkSessionToken: pending && chat.provider
+          ? { provider: chat.provider, token: pending }
+          : chat.pendingForkSessionToken,
       }
     },
     async enqueueMessage(_chatId: string, message: {

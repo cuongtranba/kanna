@@ -60,7 +60,7 @@ describe("importClaudeSessions", () => {
 
       const chats = [...store.state.chatsById.values()].filter((c) => !c.deletedAt)
       expect(chats.length).toBe(1)
-      expect(chats[0].sessionToken).toBe("sess-aaa")
+      expect(chats[0].sessionTokensByProvider.claude).toBe("sess-aaa")
       expect(chats[0].provider).toBe("claude")
       expect(store.getMessages(chats[0].id).length).toBe(2)
     } finally {
