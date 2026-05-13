@@ -99,6 +99,26 @@ export function shouldOpenLocalFileLinkInEditor(filePath: string) {
 }
 
 
+const ABSOLUTE_LOCAL_PATH_PREFIXES = ["/Users/", "/home/", "/private/", "/tmp/", "/var/", "/opt/", "/root/"]
+
+export function isAbsoluteLocalFilePath(value: string): boolean {
+  if (!value) return false
+  if (value.startsWith("file://")) return true
+  return ABSOLUTE_LOCAL_PATH_PREFIXES.some((prefix) => value.startsWith(prefix))
+}
+
+export function toLocalFileUrl(value: string): string {
+  let absolute = value
+  if (absolute.startsWith("file://")) {
+    try {
+      absolute = decodeURIComponent(new URL(absolute).pathname)
+    } catch {
+      absolute = absolute.slice("file://".length)
+    }
+  }
+  return `/api/local-file?path=${encodeURIComponent(absolute)}`
+}
+
 /**
  * Strip workspace prefix for display.
  * e.g., "/home/user/workspace/src/foo.ts" → "src/foo.ts"

@@ -383,6 +383,11 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
             return projectFileContentResponse
           }
 
+          const localFileResponse = await handleLocalFileContent(req, url)
+          if (localFileResponse) {
+            return localFileResponse
+          }
+
           const projectPathsResponse = await handleProjectPaths(req, url, store)
           if (projectPathsResponse) {
             return projectPathsResponse
@@ -591,6 +596,52 @@ async function handleProjectFileContent(req: Request, url: URL, store: EventStor
   return new Response(file, {
     headers: {
       "Content-Type": inferProjectFileContentType(relativePath, file.type),
+    },
+  })
+}
+
+async function handleLocalFileContent(req: Request, url: URL) {
+  if (url.pathname !== "/api/local-file") {
+    return null
+  }
+
+  if (req.method !== "GET" && req.method !== "HEAD") {
+    return new Response(null, {
+      status: 405,
+      headers: { Allow: "GET, HEAD" },
+    })
+  }
+
+  const rawPath = url.searchParams.get("path")
+  if (!rawPath) {
+    return Response.json({ error: "path query parameter is required" }, { status: 400 })
+  }
+
+  let absolutePath: string
+  try {
+    absolutePath = path.resolve(rawPath)
+  } catch {
+    return Response.json({ error: "Invalid path" }, { status: 400 })
+  }
+
+  if (!path.isAbsolute(absolutePath)) {
+    return Response.json({ error: "Path must be absolute" }, { status: 400 })
+  }
+
+  try {
+    const info = await stat(absolutePath)
+    if (!info.isFile()) {
+      return Response.json({ error: "Not a file" }, { status: 404 })
+    }
+  } catch {
+    return Response.json({ error: "File not found" }, { status: 404 })
+  }
+
+  const file = Bun.file(absolutePath)
+  const fileName = path.basename(absolutePath)
+  return new Response(req.method === "HEAD" ? null : file, {
+    headers: {
+      "Content-Type": inferProjectFileContentType(fileName, file.type),
     },
   })
 }
