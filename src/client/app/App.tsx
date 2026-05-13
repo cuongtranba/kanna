@@ -297,6 +297,7 @@ function KannaLayout() {
       onRenameStack={state.handleRenameStack}
       onRemoveStack={state.handleRemoveStack}
       onCreateStackChat={state.handleCreateStackChat}
+      onListStackWorktrees={state.handleListStackWorktrees}
       editorLabel={state.editorLabel}
       updateSnapshot={state.updateSnapshot}
     />
@@ -333,6 +334,7 @@ function KannaLayout() {
     state.handleRenameStack,
     state.handleRemoveStack,
     state.handleCreateStackChat,
+    state.handleListStackWorktrees,
   ])
 
   useEffect(() => {

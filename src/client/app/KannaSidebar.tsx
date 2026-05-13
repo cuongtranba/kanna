@@ -12,8 +12,9 @@ import { ChatRow } from "../components/chat-ui/sidebar/ChatRow"
 import { LocalProjectsSection } from "../components/chat-ui/sidebar/LocalProjectsSection"
 import { StacksSection } from "../components/chat-ui/sidebar/StacksSection"
 import { StackCreatePanel } from "../components/chat-ui/sidebar/StackCreatePanel"
+import { StackChatCreateRow } from "../components/chat-ui/sidebar/StackChatCreateRow"
 import { getResolvedKeybindings } from "../lib/keybindings"
-import type { KeybindingsSnapshot, SidebarData, SidebarChatRow, StackBinding, UpdateSnapshot } from "../../shared/types"
+import type { GitWorktree, KeybindingsSnapshot, SidebarData, SidebarChatRow, StackBinding, UpdateSnapshot } from "../../shared/types"
 import type { SocketStatus } from "./socket"
 import {
   getSidebarJumpTargetIndex,
@@ -75,6 +76,7 @@ interface KannaSidebarProps {
   onRenameStack: (stackId: string, title: string) => void
   onRemoveStack: (stackId: string) => void
   onCreateStackChat: (primaryProjectId: string, stackId: string, stackBindings: StackBinding[]) => void
+  onListStackWorktrees: (projectId: string) => Promise<GitWorktree[]>
   editorLabel: string
   updateSnapshot: UpdateSnapshot | null
 }
@@ -109,7 +111,8 @@ function KannaSidebarImpl({
   onCreateStack,
   onRenameStack,
   onRemoveStack,
-  onCreateStackChat: _onCreateStackChat,
+  onCreateStackChat,
+  onListStackWorktrees,
   editorLabel,
   updateSnapshot,
 }: KannaSidebarProps) {
@@ -129,6 +132,9 @@ function KannaSidebarImpl({
   const [stackCreatePanelOpen, setStackCreatePanelOpen] = useState(false)
   const [stackEditId, setStackEditId] = useState<string | null>(null)
   const [stackDeleteConfirmId, setStackDeleteConfirmId] = useState<string | null>(null)
+  const [stackChatCreateId, setStackChatCreateId] = useState<string | null>(null)
+  const [stackChatWorktrees, setStackChatWorktrees] = useState<Map<string, GitWorktree[]>>(new Map())
+  const [stackChatLoading, setStackChatLoading] = useState(false)
   const resolvedKeybindings = useMemo(() => getResolvedKeybindings(keybindings), [keybindings])
   const visibleChats = useMemo(
     () => getVisibleSidebarChats(data.projectGroups, collapsedSections, expandedGroups),
@@ -144,6 +150,26 @@ function KannaSidebarImpl({
     () => data.projectGroups.map((group) => ({ id: group.groupKey, title: getPathBasename(group.localPath) })),
     [data.projectGroups]
   )
+
+  const handleStartStackChat = useCallback(async (stackId: string) => {
+    const stack = data.stacks.find((s) => s.id === stackId)
+    if (!stack) return
+    setStackChatCreateId(stackId)
+    setStackChatLoading(true)
+    try {
+      const entries = await Promise.all(
+        stack.projectIds.map(async (projectId) => [projectId, await onListStackWorktrees(projectId)] as const)
+      )
+      setStackChatWorktrees(new Map(entries))
+    } finally {
+      setStackChatLoading(false)
+    }
+  }, [data.stacks, onListStackWorktrees])
+
+  const closeStackChatCreate = useCallback(() => {
+    setStackChatCreateId(null)
+    setStackChatWorktrees(new Map())
+  }, [])
 
   const projectIdByPath = useMemo(
     () => new Map(data.projectGroups.map((group) => [group.localPath, group.groupKey])),
@@ -573,6 +599,27 @@ function KannaSidebarImpl({
               onOpenStackMenu={(stackId) => {
                 setStackEditId(stackId)
                 setStackCreatePanelOpen(true)
+              }}
+              onStartChat={(stackId) => { void handleStartStackChat(stackId) }}
+              renderChatCreate={(stack) => {
+                if (stack.id !== stackChatCreateId) return null
+                if (stackChatLoading) return <p className="text-xs text-muted-foreground">Loading worktrees…</p>
+                const rowProjects = stack.projectIds.map((pid) => ({
+                  id: pid,
+                  title: stackProjects.find((p) => p.id === pid)?.title ?? pid,
+                  worktrees: stackChatWorktrees.get(pid) ?? [],
+                }))
+                return (
+                  <StackChatCreateRow
+                    stack={stack}
+                    projects={rowProjects}
+                    onCreate={async ({ primaryProjectId, stackBindings }) => {
+                      onCreateStackChat(primaryProjectId, stack.id, stackBindings)
+                      closeStackChatCreate()
+                    }}
+                    onCancel={closeStackChatCreate}
+                  />
+                )
               }}
               chats={visibleChats.map((e) => e.chat)}
             />
