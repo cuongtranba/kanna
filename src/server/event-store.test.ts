@@ -967,4 +967,103 @@ describe("project star", () => {
 
     expect(reloaded.getProject(project.id)!.starredAt).toBe(starredAtBefore)
   })
+
+  test("legacy session_token_set attributes to chat.provider at replay time", async () => {
+    const dataDir = await createTempDataDir()
+    const projectId = "p1"
+    const chatId = "c1"
+    const now = 1_700_000_000_000
+    await writeFile(
+      join(dataDir, "projects.jsonl"),
+      `${JSON.stringify({ v: 3, type: "project_opened", timestamp: now, projectId, localPath: "/tmp/x", title: "x" })}\n`,
+      "utf8",
+    )
+    await writeFile(
+      join(dataDir, "chats.jsonl"),
+      [
+        { v: 3, type: "chat_created", timestamp: now + 1, chatId, projectId, title: "t" },
+        { v: 3, type: "chat_provider_set", timestamp: now + 2, chatId, provider: "claude" },
+        { v: 3, type: "chat_provider_set", timestamp: now + 4, chatId, provider: "codex" },
+      ].map((e) => JSON.stringify(e)).join("\n") + "\n",
+      "utf8",
+    )
+    await writeFile(
+      join(dataDir, "turns.jsonl"),
+      [
+        { v: 3, type: "session_token_set", timestamp: now + 3, chatId, sessionToken: "tok-claude-1" },
+        { v: 3, type: "session_token_set", timestamp: now + 5, chatId, sessionToken: "tok-codex-1" },
+      ].map((e) => JSON.stringify(e)).join("\n") + "\n",
+      "utf8",
+    )
+
+    const store = new EventStore(dataDir)
+    await store.initialize()
+
+    const record = store.getChat(chatId)!
+    expect(record.sessionTokensByProvider.claude).toBe("tok-claude-1")
+    expect(record.sessionTokensByProvider.codex).toBe("tok-codex-1")
+  })
+
+  test("session_token_set with explicit provider writes to that slot", async () => {
+    const dataDir = await createTempDataDir()
+    const projectId = "p1"
+    const chatId = "c1"
+    const now = 1_700_000_000_000
+    await writeFile(
+      join(dataDir, "projects.jsonl"),
+      `${JSON.stringify({ v: 3, type: "project_opened", timestamp: now, projectId, localPath: "/tmp/x", title: "x" })}\n`,
+      "utf8",
+    )
+    await writeFile(
+      join(dataDir, "chats.jsonl"),
+      [
+        { v: 3, type: "chat_created", timestamp: now + 1, chatId, projectId, title: "t" },
+        { v: 3, type: "chat_provider_set", timestamp: now + 2, chatId, provider: "claude" },
+      ].map((e) => JSON.stringify(e)).join("\n") + "\n",
+      "utf8",
+    )
+    await writeFile(
+      join(dataDir, "turns.jsonl"),
+      `${JSON.stringify({ v: 3, type: "session_token_set", timestamp: now + 3, chatId, sessionToken: "x-codex", provider: "codex" })}\n`,
+      "utf8",
+    )
+
+    const store = new EventStore(dataDir)
+    await store.initialize()
+
+    const record = store.getChat(chatId)!
+    expect(record.sessionTokensByProvider.codex).toBe("x-codex")
+    expect(record.sessionTokensByProvider.claude).toBeUndefined()
+  })
+
+  test("legacy pending_fork_session_token_set becomes provider-tagged via chat.provider", async () => {
+    const dataDir = await createTempDataDir()
+    const projectId = "p1"
+    const chatId = "c1"
+    const now = 1_700_000_000_000
+    await writeFile(
+      join(dataDir, "projects.jsonl"),
+      `${JSON.stringify({ v: 3, type: "project_opened", timestamp: now, projectId, localPath: "/tmp/x", title: "x" })}\n`,
+      "utf8",
+    )
+    await writeFile(
+      join(dataDir, "chats.jsonl"),
+      [
+        { v: 3, type: "chat_created", timestamp: now + 1, chatId, projectId, title: "t" },
+        { v: 3, type: "chat_provider_set", timestamp: now + 2, chatId, provider: "claude" },
+      ].map((e) => JSON.stringify(e)).join("\n") + "\n",
+      "utf8",
+    )
+    await writeFile(
+      join(dataDir, "turns.jsonl"),
+      `${JSON.stringify({ v: 3, type: "pending_fork_session_token_set", timestamp: now + 3, chatId, pendingForkSessionToken: "fork-tok" })}\n`,
+      "utf8",
+    )
+
+    const store = new EventStore(dataDir)
+    await store.initialize()
+
+    const record = store.getChat(chatId)!
+    expect(record.pendingForkSessionToken).toEqual({ provider: "claude", token: "fork-tok" })
+  })
 })
