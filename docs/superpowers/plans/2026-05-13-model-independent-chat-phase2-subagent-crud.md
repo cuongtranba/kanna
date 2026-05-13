@@ -1074,38 +1074,11 @@ export function MentionPicker({ paths, agents, activeIndex, loading, onSelect, o
       {showSectionHeaders && (
         <li className="px-3 py-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">Agents</li>
       )}
-      {rows.map((row, i) => {
-        if (row.kind === "agent") {
-          return (
-            <li
-              key={`agent:${row.item.id}`}
-              role="option"
-              aria-selected={i === activeIndex}
-              onMouseDown={(event) => { event.preventDefault(); onSelect(row) }}
-              onMouseEnter={() => onHoverIndex(i)}
-              className={cn(
-                "flex items-center gap-2 px-3 py-1.5 cursor-pointer text-sm",
-                i === activeIndex && "bg-accent text-accent-foreground",
-              )}
-            >
-              <AtSign className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-              <Bot className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-              <span className="font-mono truncate">agent/{row.item.name}</span>
-              {row.item.description && (
-                <span className="ml-2 truncate text-xs text-muted-foreground">{row.item.description}</span>
-              )}
-            </li>
-          )
-        }
-        if (i === agentsCount && showSectionHeaders) {
-          return (
-            <li key="files-header" className="px-3 py-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">Files</li>
-          )
-        }
-        const Icon = row.item.kind === "dir" ? Folder : FileText
+      {agents.map((agent, i) => {
+        const row = { kind: "agent" as const, item: agent }
         return (
           <li
-            key={`path:${row.item.path}`}
+            key={`agent:${agent.id}`}
             role="option"
             aria-selected={i === activeIndex}
             onMouseDown={(event) => { event.preventDefault(); onSelect(row) }}
@@ -1116,8 +1089,35 @@ export function MentionPicker({ paths, agents, activeIndex, loading, onSelect, o
             )}
           >
             <AtSign className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+            <Bot className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+            <span className="font-mono truncate">agent/{agent.name}</span>
+            {agent.description && (
+              <span className="ml-2 truncate text-xs text-muted-foreground">{agent.description}</span>
+            )}
+          </li>
+        )
+      })}
+      {showSectionHeaders && (
+        <li key="files-header" className="px-3 py-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">Files</li>
+      )}
+      {paths.map((pathItem, pathIndex) => {
+        const i = agentsCount + pathIndex
+        const row = { kind: "path" as const, item: pathItem }
+        const Icon = pathItem.kind === "dir" ? Folder : FileText
+        return (
+          <li
+            key={`path:${pathItem.path}`}
+            role="option"
+            aria-selected={i === activeIndex}
+            onMouseDown={(event) => { event.preventDefault(); onSelect(row) }}
+            onMouseEnter={() => onHoverIndex(i)}
+            className={cn(
+              "flex items-center gap-2 px-3 py-1.5 cursor-pointer text-sm",
+              i === activeIndex && "bg-accent text-accent-foreground",
+            )}
+          >
             <Icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-            <span className="font-mono truncate">{row.item.path}</span>
+            <span className="font-mono truncate">{pathItem.path}</span>
           </li>
         )
       })}
@@ -1126,7 +1126,7 @@ export function MentionPicker({ paths, agents, activeIndex, loading, onSelect, o
 }
 ```
 
-(Section-header insertion above is positional; if the active-index math gets tangled, hoist headers as fixed extras outside the index map and keep `rows` index-aligned.)
+Section headers are rendered outside the selectable row maps so they do not consume `activeIndex` and cannot replace the first file suggestion.
 
 - [ ] **Step 3: Wire in `ChatInput.tsx`**
 

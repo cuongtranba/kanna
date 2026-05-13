@@ -857,8 +857,13 @@ function canForkChat(
   drainingChatIds: Set<string>,
 ) {
   if (!chat.provider) return false
-  const hasAnyToken = Object.values(chat.sessionTokensByProvider).some(Boolean)
-  if (!hasAnyToken && chat.pendingForkSessionToken == null) return false
+  const hasCurrentProviderToken =
+    Boolean(chat.sessionTokensByProvider[chat.provider])
+    || (
+      chat.pendingForkSessionToken?.provider === chat.provider
+      && Boolean(chat.pendingForkSessionToken.token)
+    )
+  if (!hasCurrentProviderToken) return false
   if (activeStatuses.has(chat.id)) return false
   if (drainingChatIds.has(chat.id)) return false
   return true
@@ -890,8 +895,8 @@ Anywhere a test fixture builds a `ChatRecord` with `sessionToken: ...`, replace 
 - [ ] **Step 5: Add `canForkChat` tests**
 
 ```ts
-test("canForkChat returns true when any provider slot has a token", () => {
-  const chat = makeChat({ provider: "claude", sessionTokensByProvider: { codex: "x" } })
+test("canForkChat returns true when the current provider slot has a token", () => {
+  const chat = makeChat({ provider: "claude", sessionTokensByProvider: { claude: "x" } })
   expect(canForkChat(chat, new Map(), new Set())).toBe(true)
 })
 
@@ -906,6 +911,11 @@ test("canForkChat returns true when pendingForkSessionToken is set", () => {
 
 test("canForkChat returns false when no tokens anywhere", () => {
   const chat = makeChat({ provider: "claude", sessionTokensByProvider: {} })
+  expect(canForkChat(chat, new Map(), new Set())).toBe(false)
+})
+
+test("canForkChat returns false when only another provider has a token", () => {
+  const chat = makeChat({ provider: "claude", sessionTokensByProvider: { codex: "x" } })
   expect(canForkChat(chat, new Map(), new Set())).toBe(false)
 })
 ```
@@ -1147,6 +1157,6 @@ git push -u origin plans/model-independent-chat
 - [ ] Every reference to `chat.sessionToken` (server + client) eliminated except inside legacy snapshot/event projections.
 - [ ] `STORE_VERSION` unchanged (stays at 3).
 - [ ] `forkChat` writes `{ provider, token }` to pending fork.
-- [ ] `canForkChat` returns true when ANY slot has a token.
+- [ ] `canForkChat` returns true only when the current provider has a token or matching pending-fork token.
 - [ ] `buildHistoryPrimer` returns `null` for empty assistant history.
 - [ ] `bun test` and `bun run check` both pass.

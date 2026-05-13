@@ -732,6 +732,12 @@ export class SubagentOrchestrator {
     })
 
     await this.acquire()
+    let released = false
+    const releaseSlot = () => {
+      if (released) return
+      released = true
+      this.release()
+    }
     try {
       const transcript = this.deps.store.getMessages(args.chatId) as TranscriptEntry[]
       const primer = args.subagent.contextScope === "full-transcript"
@@ -751,10 +757,15 @@ export class SubagentOrchestrator {
       let finalText = ""
       let usage: { inputTokens?: number; outputTokens?: number } | undefined
       try {
+        let timeoutId: ReturnType<typeof setTimeout> | null = null
         const result = await Promise.race([
           runStart.start(),
-          new Promise<never>((_, reject) => setTimeout(() => reject(new Error("TIMEOUT")), this.timeoutMs())),
-        ])
+          new Promise<never>((_, reject) => {
+            timeoutId = setTimeout(() => reject(new Error("TIMEOUT")), this.timeoutMs())
+          }),
+        ]).finally(() => {
+          if (timeoutId) clearTimeout(timeoutId)
+        })
         finalText = result.text
         usage = result.usage
       } catch (error) {
@@ -772,6 +783,11 @@ export class SubagentOrchestrator {
         finalContent: finalText,
         usage,
       })
+
+      // Release the provider-run semaphore before processing chained mentions.
+      // Otherwise MAX_PARALLEL parent runs that all chain can deadlock waiting
+      // for child slots held by those same parents.
+      releaseSlot()
 
       // Chain
       const chainedMentions = parseMentions(finalText, this.deps.appSettings.snapshot().subagents)
@@ -812,7 +828,7 @@ export class SubagentOrchestrator {
         })
       }
     } finally {
-      this.release()
+      releaseSlot()
     }
   }
 
@@ -878,22 +894,25 @@ const chat = this.store.requireChat(chatId)
 const subagents = this.appSettings.snapshot().subagents
 const parsedMentions = parseMentions(command.content, subagents)
 const resolvedMentions = parsedMentions.filter((m) => m.kind === "subagent")
+const unknownMentions = parsedMentions.filter((m) => m.kind === "unknown-subagent")
 
-// Append user message with envelope (existing — done in Task 6 of Phase 2)
-await this.appendUserPromptMessage(chatId, command.content, command.attachments ?? [], parsedMentions)
-
-if (resolvedMentions.length > 0) {
-  // Subagent fan-out — primary does NOT fire
-  await this.subagentOrchestrator.runMentionsForUserMessage({
-    chatId,
-    userMessageId: this.getLastUserMessageId(chatId),
-    mentions: parsedMentions,
-  })
+if (this.activeTurns.has(chatId)) {
+  // Existing queue path must stay before appending a transcript entry.
+  // Queued prompts are appended later by dequeueAndStartQueuedMessage(... appendUserPrompt: true).
+  await this.enqueueMessage(chatId, command.content, command.attachments ?? [], command)
   return { chatId }
 }
 
-if (this.activeTurns.has(chatId)) {
-  // ... existing queue path (unchanged)
+// Append user message with envelope (existing — done in Task 6 of Phase 2)
+const userMessageId = await this.appendUserPromptMessage(chatId, command.content, command.attachments ?? [], parsedMentions)
+
+if (resolvedMentions.length > 0 || unknownMentions.length > 0) {
+  await this.subagentOrchestrator.runMentionsForUserMessage({
+    chatId,
+    userMessageId,
+    mentions: parsedMentions,
+  })
+  return { chatId }
 }
 
 // Phase 1 primary path (unchanged)
@@ -905,7 +924,7 @@ return { chatId }
 
 `appendUserPromptMessage` is whatever helper currently exists in `agent.ts` for the user-prompt insert; if not factored out, factor it now. Its job: build the `UserPromptEntry`, then call `store.appendMessage(chatId, entry, { subagentMentions, unknownSubagentMentions })`.
 
-`getLastUserMessageId` returns the `_id` of the just-appended entry. If no helper exists, capture the id at append-time and pass it through.
+Have `appendUserPromptMessage` return the `_id` of the just-appended entry and pass that `userMessageId` into the orchestrator. Avoid a later "last message" lookup because queued or concurrent state changes can make that ambiguous.
 
 - [ ] **Step 3: Test gating in agent**
 
@@ -954,7 +973,7 @@ if parsed.agent_mentions.length > 0:
 const unknownMentions = parsedMentions.filter((m) => m.kind === "unknown-subagent")
 if (resolvedMentions.length > 0 || unknownMentions.length > 0) {
   await this.subagentOrchestrator.runMentionsForUserMessage({
-    chatId, userMessageId: this.getLastUserMessageId(chatId), mentions: parsedMentions,
+    chatId, userMessageId, mentions: parsedMentions,
   })
   return { chatId }
 }
