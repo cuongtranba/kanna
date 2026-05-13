@@ -312,10 +312,12 @@ const SortableProjectGroup = memo(function SortableProjectGroup({
       {hasProjectMenu ? (
         <ProjectSectionMenu
           editorLabel={editorLabel}
+          starred={false}
           onCopyPath={() => onCopyPath?.(localPath)}
           onShowArchived={() => onShowArchivedProject?.(groupKey)}
           onOpenInFinder={() => onOpenExternalPath?.("open_finder", localPath)}
           onOpenInEditor={() => onOpenExternalPath?.("open_editor", localPath)}
+          onToggleStar={() => {}}
           onHide={() => onHideProject?.(groupKey)}
         >
           {header}

@@ -1,5 +1,5 @@
 import type { ReactNode } from "react"
-import { Archive, Code, Copy, EyeOff, FolderOpen, Pencil, Split, Trash2, UserRoundPlus, Users } from "lucide-react"
+import { Archive, Code, Copy, EyeOff, FolderOpen, Pencil, Split, Star, StarOff, Trash2, UserRoundPlus, Users } from "lucide-react"
 import {
   ContextMenu,
   ContextMenuContent,
@@ -9,18 +9,22 @@ import {
 
 export function ProjectSectionMenu({
   editorLabel,
+  starred,
   onCopyPath,
   onShowArchived,
   onOpenInFinder,
   onOpenInEditor,
+  onToggleStar,
   onHide,
   children,
 }: {
   editorLabel: string
+  starred: boolean
   onCopyPath: () => void
   onShowArchived: () => void
   onOpenInFinder: () => void
   onOpenInEditor: () => void
+  onToggleStar: () => void
   onHide: () => void
   children: ReactNode
 }) {
@@ -30,6 +34,15 @@ export function ProjectSectionMenu({
         {children}
       </ContextMenuTrigger>
       <ContextMenuContent>
+        <ContextMenuItem
+          onSelect={(event) => {
+            event.stopPropagation()
+            onToggleStar()
+          }}
+        >
+          {starred ? <StarOff className="h-3.5 w-3.5" /> : <Star className="h-3.5 w-3.5" />}
+          <span className="text-xs font-medium">{starred ? "Unstar project" : "Star project"}</span>
+        </ContextMenuItem>
         <ContextMenuItem
           onSelect={(event) => {
             event.stopPropagation()
