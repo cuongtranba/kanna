@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.49.0](https://github.com/cuongtranba/kanna/compare/v0.48.0...v0.49.0) (2026-05-13)
+
+
+### Features
+
+* model-independent chat phase 1 (provider-switching) ([#77](https://github.com/cuongtranba/kanna/issues/77)) ([075000b](https://github.com/cuongtranba/kanna/commit/075000be0201cc59194a76415213784cec0f6db1))
+* **sidebar:** add stack delete via dropdown + context menu ([#79](https://github.com/cuongtranba/kanna/issues/79)) ([f4843a1](https://github.com/cuongtranba/kanna/commit/f4843a1fc987cc05986fdfcb7fc276bb2c4a4702))
+
 ## [0.48.0](https://github.com/cuongtranba/kanna/compare/v0.47.2...v0.48.0) (2026-05-13)
 
 
