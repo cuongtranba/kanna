@@ -17,9 +17,9 @@ export interface ChatRecord {
   unread: boolean
   provider: AgentProvider | null
   planMode: boolean
-  sessionToken: string | null
+  sessionTokensByProvider: Partial<Record<AgentProvider, string | null>>
   sourceHash: string | null
-  pendingForkSessionToken?: string | null
+  pendingForkSessionToken?: { provider: AgentProvider; token: string } | null
   hasMessages?: boolean
   lastMessageAt?: number
   lastTurnOutcome: "success" | "failed" | "cancelled" | null
@@ -211,6 +211,7 @@ export type TurnEvent =
       timestamp: number
       chatId: string
       sessionToken: string | null
+      provider?: AgentProvider
     }
   | {
       v: 3
@@ -225,6 +226,7 @@ export type TurnEvent =
       timestamp: number
       chatId: string
       pendingForkSessionToken: string | null
+      provider?: AgentProvider
     }
 
 export type StackEvent =
