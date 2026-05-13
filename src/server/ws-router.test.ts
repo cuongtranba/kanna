@@ -1443,6 +1443,7 @@ describe("ws-router", () => {
       snapshot: {
         type: "sidebar",
         data: {
+          starredProjectGroups: [],
           projectGroups: [withSidebarGroupDefaults({
             groupKey: "project-1",
             localPath: "/tmp/project",
@@ -1469,6 +1470,7 @@ describe("ws-router", () => {
       snapshot: {
         type: "sidebar",
         data: {
+          starredProjectGroups: [],
           projectGroups: [withSidebarGroupDefaults({
             groupKey: "project-1",
             localPath: "/tmp/project",
@@ -1571,6 +1573,7 @@ describe("ws-router", () => {
       snapshot: {
         type: "sidebar",
         data: {
+          starredProjectGroups: [],
           projectGroups: [
             withSidebarGroupDefaults({
               groupKey: "project-1",
@@ -1690,6 +1693,7 @@ describe("ws-router", () => {
       snapshot: {
         type: "sidebar",
         data: {
+          starredProjectGroups: [],
           projectGroups: [withSidebarGroupDefaults({
             groupKey: "project-1",
             localPath: "/tmp/project",
@@ -1793,6 +1797,7 @@ describe("ws-router", () => {
       snapshot: {
         type: "sidebar",
         data: {
+          starredProjectGroups: [],
           projectGroups: [{
             ...withSidebarGroupDefaults({
               groupKey: "project-1",

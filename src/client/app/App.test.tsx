@@ -55,6 +55,7 @@ describe("auth boot helpers", () => {
 describe("getNotificationTitleCount", () => {
   test("counts unread chats and waiting-for-user chats", () => {
     expect(getNotificationTitleCount({
+      starredProjectGroups: [],
       projectGroups: [createProjectGroup([
           {
             _id: "chat-1",
@@ -97,6 +98,7 @@ describe("getNotificationTitleCount", () => {
 
 describe("chat sound helpers", () => {
   const previous = {
+    starredProjectGroups: [],
     projectGroups: [createProjectGroup([{
         _id: "chat-1",
         _creationTime: 1,
@@ -113,6 +115,7 @@ describe("chat sound helpers", () => {
 
   test("extracts unread and waiting notification state", () => {
     const snapshot = getChatNotificationSnapshot({
+      starredProjectGroups: [],
       projectGroups: [createProjectGroup([
           {
             _id: "chat-1",
@@ -150,6 +153,7 @@ describe("chat sound helpers", () => {
 
   test("plays per unread increment and new waiting chat", () => {
     expect(getChatSoundBurstCount(previous, {
+      starredProjectGroups: [],
       projectGroups: [createProjectGroup([
           {
             _id: "chat-1",
@@ -180,6 +184,7 @@ describe("chat sound helpers", () => {
 
   test("does not replay for an already-waiting chat", () => {
     const current = {
+      starredProjectGroups: [],
       projectGroups: [createProjectGroup([{
           _id: "chat-1",
           _creationTime: 1,

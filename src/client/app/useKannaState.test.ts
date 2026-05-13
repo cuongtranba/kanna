@@ -21,6 +21,7 @@ import type { ChatAttachment, ChatSnapshot, SidebarData, UserPromptEntry } from 
 
 function createSidebarData(): SidebarData {
   return {
+    starredProjectGroups: [],
     projectGroups: [
       {
         groupKey: "project-1",
