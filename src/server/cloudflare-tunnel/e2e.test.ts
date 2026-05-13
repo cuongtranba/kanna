@@ -63,7 +63,7 @@ describe("cloudflare tunnel e2e", () => {
       settingsPath,
       JSON.stringify({
         analyticsEnabled: false,
-        cloudflareTunnel: { enabled: true, cloudflaredPath: "cloudflared" },
+        cloudflareTunnel: { enabled: true, cloudflaredPath: "cloudflared", mode: "always-ask" },
       }),
     )
     appSettings = new AppSettingsManager(settingsPath)
@@ -191,5 +191,33 @@ describe("cloudflare tunnel e2e", () => {
     const outcome = await gateway.proposeFromTool({ chatId: "c1", port: 99999 })
     expect(outcome.status).toBe("invalid_port")
     expect(store.getTunnelEvents("c1")).toEqual([])
+  })
+
+  test("auto-expose mode triggers cloudflared without explicit accept", async () => {
+    await appSettings.setCloudflareTunnel({ mode: "auto-expose" })
+    const outcome = await gateway.proposeFromTool({ chatId: "c1", port: 5173 })
+    expect(outcome.status).toBe("auto_exposed")
+
+    await waitFor(
+      () => store.getTunnelEvents("c1").some((e) => e.kind === "tunnel_accepted"),
+      2000,
+      "tunnel_accepted event",
+    )
+
+    expect(pendingChildren).toHaveLength(1)
+    const accepted = store.getTunnelEvents("c1").find((e) => e.kind === "tunnel_accepted")
+    expect(accepted).toBeDefined()
+    if (accepted && accepted.kind === "tunnel_accepted") {
+      expect(accepted.source).toBe("auto_setting")
+    }
+  })
+
+  test("auto-expose mode returns already_live for same port without spawning twice", async () => {
+    await appSettings.setCloudflareTunnel({ mode: "auto-expose" })
+    const first = await gateway.proposeFromTool({ chatId: "c1", port: 5173 })
+    expect(first.status).toBe("auto_exposed")
+    const second = await gateway.proposeFromTool({ chatId: "c1", port: 5173 })
+    expect(second.status).toBe("already_live")
+    expect(pendingChildren).toHaveLength(1)
   })
 })

@@ -33,6 +33,7 @@ import {
   UPLOAD_MAX_FILE_SIZE_MB_MAX,
   UPLOAD_MAX_FILE_SIZE_MB_MIN,
   type AgentProvider,
+  type CloudflareTunnelMode,
   type CloudflareTunnelSettings,
   type InstalledSkillSummary,
   type KeybindingAction,
@@ -152,6 +153,11 @@ const analyticsOptions = [
 const cloudflareTunnelEnabledOptions = [
   { value: "disabled" as const, label: "Off" },
   { value: "enabled" as const, label: "On" },
+]
+
+const cloudflareTunnelModeOptions: { value: CloudflareTunnelMode; label: string }[] = [
+  { value: "always-ask", label: "Always ask" },
+  { value: "auto-expose", label: "Auto-expose" },
 ]
 
 const QUICK_RESPONSE_PROVIDER_OPTIONS: Array<{ value: LlmProviderKind; label: string }> = [
@@ -1821,7 +1827,7 @@ export function SettingsPage() {
                         description={(
                           <>
                             <span>
-                              When enabled, Claude can call the <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">expose_port</code> tool to propose a Cloudflare Tunnel for a local port. Each proposal is shown to you for accept/dismiss. Requires{" "}
+                              When enabled, Claude can call the <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">expose_port</code> tool to expose a local port via Cloudflare Tunnel. The mode below controls whether each call requires your approval or is exposed automatically. Requires{" "}
                               <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">cloudflared</code>{" "}
                               to be installed.
                             </span>
@@ -1843,6 +1849,19 @@ export function SettingsPage() {
                       </SettingsRow>
                       {tunnelSettings.enabled && (
                         <>
+                          <SettingsRow
+                            title="Tool mode"
+                            description="Always ask: each expose_port call shows an accept card. Auto-expose: expose_port calls spawn cloudflared immediately without prompting."
+                          >
+                            <SegmentedControl
+                              value={tunnelSettings.mode}
+                              onValueChange={(value) => {
+                                void handleTunnelPatch({ mode: value as CloudflareTunnelMode })
+                              }}
+                              options={cloudflareTunnelModeOptions}
+                              size="sm"
+                            />
+                          </SettingsRow>
                           <SettingsRow
                             title="cloudflared path"
                             description="Path to the cloudflared binary. Defaults to the one found on $PATH."

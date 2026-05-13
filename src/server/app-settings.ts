@@ -264,11 +264,16 @@ function normalizeCloudflareTunnel(value: unknown, warnings: string[]): Cloudfla
     warnings.push("cloudflareTunnel.cloudflaredPath must be a string")
   }
 
-  if (tunnelSource?.mode !== undefined) {
-    warnings.push(`cloudflareTunnel.mode is no longer supported; tunnels are always proposed via the expose_port tool`)
+  const rawMode = tunnelSource?.mode
+  const mode: CloudflareTunnelSettings["mode"] =
+    rawMode === "always-ask" || rawMode === "auto-expose"
+      ? rawMode
+      : CLOUDFLARE_TUNNEL_DEFAULTS.mode
+  if (tunnelSource?.mode !== undefined && rawMode !== "always-ask" && rawMode !== "auto-expose") {
+    warnings.push(`cloudflareTunnel.mode must be "always-ask" or "auto-expose"`)
   }
 
-  return { enabled, cloudflaredPath }
+  return { enabled, cloudflaredPath, mode }
 }
 
 function normalizeAuthSettings(value: unknown, warnings: string[]): AuthSettings {
@@ -622,6 +627,9 @@ export class AppSettingsManager {
   }
 
   async setCloudflareTunnel(patch: Partial<CloudflareTunnelSettings>) {
+    if (patch.mode !== undefined && patch.mode !== "always-ask" && patch.mode !== "auto-expose") {
+      throw new Error("Invalid cloudflareTunnel.mode")
+    }
     return this.writePatch({ cloudflareTunnel: patch })
   }
 

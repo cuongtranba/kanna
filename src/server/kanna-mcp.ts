@@ -97,7 +97,8 @@ Call this proactively right after you start a local dev server, preview server, 
 Skip calling for: one-off scripts that exit immediately, internal-only databases, processes that don't accept HTTP, or ports the user has explicitly said not to expose.
 
 Returns one of:
-- proposed: a confirmation card was shown to the user
+- proposed: a confirmation card was shown to the user (always-ask mode)
+- auto_exposed: the user enabled auto-expose; cloudflared has been spawned and a URL will appear in the tunnel card shortly
 - already_live: a tunnel for this port is already proposed or active in this chat
 - disabled: the user has not enabled Cloudflare Tunnel in settings
 - invalid_port: the port is outside the valid range

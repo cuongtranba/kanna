@@ -18,6 +18,7 @@ export interface TunnelGatewayArgs {
 
 export type ProposeOutcome =
   | { status: "proposed"; tunnelId: string; port: number }
+  | { status: "auto_exposed"; tunnelId: string; port: number }
   | { status: "already_live"; tunnelId: string; port: number; url: string | null }
   | { status: "disabled" }
   | { status: "invalid_port"; reason: string }
@@ -87,6 +88,21 @@ export class TunnelGateway {
       port: args.port,
       sourcePid,
     })
+
+    if (snapshot.cloudflareTunnel.mode === "auto-expose") {
+      await this.persist({
+        v: CLOUDFLARE_TUNNEL_EVENT_VERSION,
+        kind: "tunnel_accepted",
+        timestamp: this.now(),
+        chatId: args.chatId,
+        tunnelId,
+        source: "auto_setting",
+      })
+      await this.manager.start({ chatId: args.chatId, port: args.port, sourcePid, tunnelId })
+      this.lifecycle.watch(tunnelId, sourcePid)
+      return { status: "auto_exposed", tunnelId, port: args.port }
+    }
+
     return { status: "proposed", tunnelId, port: args.port }
   }
 

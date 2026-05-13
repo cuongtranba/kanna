@@ -6,7 +6,7 @@ title: cloudflare-tunnel
 type: component
 category: feature
 parent: c3-2
-goal: Let the agent proactively propose Cloudflare quick tunnels for local ports via the Kanna `expose_port` MCP tool; the user always accepts or dismisses each proposal.
+goal: Let the agent proactively propose Cloudflare quick tunnels for local ports via the Kanna `expose_port` MCP tool, gated by the Cloudflare Tunnel setting (`enabled` + `mode`: always-ask or auto-expose).
 uses:
     - ref-cqrs-read-models
     - ref-strong-typing
@@ -18,7 +18,7 @@ uses:
 
 ## Goal
 
-Let the agent proactively propose Cloudflare quick tunnels for local ports via the Kanna `expose_port` MCP tool; the user always accepts or dismisses each proposal.
+Let the agent proactively propose Cloudflare quick tunnels for local ports via the Kanna `expose_port` MCP tool. Each call is gated by the Cloudflare Tunnel setting: `enabled` toggles the tool on/off, and `mode` (`always-ask` | `auto-expose`) decides whether the user confirms each proposal or it spawns automatically.
 
 ## Parent Fit
 
@@ -41,7 +41,7 @@ Exposes a Kanna MCP tool (`mcp__kanna__expose_port`) that the agent calls proact
 | Precondition | cloudflareTunnel.enabled set true in settings | c3-222 |
 | Input — agent MCP tool | `expose_port` calls into TunnelGateway | c3-210 |
 | Input — process utils | Spawn cloudflared | c3-209 |
-| Input — settings store | Reads enabled + cloudflaredPath | c3-222 |
+| Input — settings store | Reads enabled + mode + cloudflaredPath | c3-222 |
 | Internal state | In-memory tunnel records (port, URL, lifecycle) | c3-223 |
 
 ## Business Flow
@@ -50,6 +50,7 @@ Exposes a Kanna MCP tool (`mcp__kanna__expose_port`) that the agent calls proact
 | --- | --- | --- |
 | Outcome | Users expose agent-started services without leaving Kanna | c3-2 |
 | Primary path | Agent calls `expose_port` → propose → user accepts → spawn tunnel | c3-208 |
+| Alternate — auto-expose | mode=auto-expose: propose + accept (source: "auto_setting") + spawn in one step; tool returns `auto_exposed` | c3-222 |
 | Alternate — already live | Duplicate proposal for same port returns `already_live` | c3-223 |
 | Alternate — disabled | Settings disabled returns `disabled`, no event | c3-222 |
 | Alternate — stop | User stop, source exit, chat close, server shutdown | c3-216 |
