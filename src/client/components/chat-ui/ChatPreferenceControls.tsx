@@ -142,7 +142,6 @@ interface ChatPreferenceControlsProps {
   availableProviders: ProviderCatalogEntry[]
   selectedProvider: AgentProvider
   showProviderPicker?: boolean
-  providerLocked?: boolean
   showCodexCliRequirementHints?: boolean
   model: string
   modelOptions: ClaudeModelOptions | CodexModelOptions
@@ -159,7 +158,6 @@ export function ChatPreferenceControls({
   availableProviders,
   selectedProvider,
   showProviderPicker = true,
-  providerLocked = false,
   showCodexCliRequirementHints = false,
   model,
   modelOptions,
@@ -185,7 +183,7 @@ export function ChatPreferenceControls({
     <div className={cn("flex md:justify-center items-center gap-0.5", className)}>
       {showProviderPicker ? (
         <InputPopover
-          disabled={providerLocked || !onProviderChange}
+          disabled={!onProviderChange}
           trigger={(
             <>
               <ProviderIcon className="h-3.5 w-3.5" />
