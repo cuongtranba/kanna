@@ -4,7 +4,7 @@
 
 **Goal:** Run subagents that were parsed in phase 2. Parallel fan-out on multi-mention (cap 4), depth-1 chained delegation, full error code surface, transcript projection. Native SDK `Agent` tool stays untouched as a separate primary-driven mechanism.
 
-**Architecture:** A new `SubagentOrchestrator` reads `subagentMentions` / `unknownSubagentMentions` already stored on `message_appended` envelopes and spawns one provider session per resolved mention. It uses phase 1's `buildHistoryPrimer` for `contextScope: "full-transcript"` and a new `extractPreviousAssistantReply` for the default scope. Each run emits `subagent_run_started/completed/failed/cancelled` events; `subagent_message_delta` is reduced for forward compatibility but live streaming is deferred until the provider-run contract supports chunks. A new `subagentRuns: Map<runId, SubagentRunSnapshot>` field on the chat snapshot carries state to the client. Send-flow gates the primary turn when any `@agent/...` mention is present, including unknown-only mentions.
+**Architecture:** A new `SubagentOrchestrator` reads `subagentMentions` / `unknownSubagentMentions` already stored on `message_appended` envelopes and spawns one provider session per resolved mention. It uses phase 1's `buildHistoryPrimer` for `contextScope: "full-transcript"` and a new `extractPreviousAssistantReply` for the default scope. Each run emits `subagent_run_started/completed/failed/cancelled` events and `subagent_message_delta` events for every assistant_text fragment produced by the provider session. `buildSubagentProviderRun` wraps the existing `HarnessTurn` abstraction so subagents stream through the same code path that primary turns already use. A `subagentRuns: Map<runId, SubagentRunSnapshot>` field on the chat snapshot carries state to the client, with `finalText` growing as deltas arrive and being overwritten with the canonical text on completion. Send-flow gates the primary turn when any `@agent/...` mention is present, including unknown-only mentions.
 
 **Tech Stack:** TypeScript, Bun, React 19, Zustand, bun:test, JSONL event log.
 
@@ -652,8 +652,15 @@ export interface ProviderRunStart {
   model: string
   systemPrompt: string
   preamble: string | null
-  // returns final assistant text and optional usage
-  start: () => Promise<{ text: string; usage?: { inputTokens?: number; outputTokens?: number } }>
+  /**
+   * Run the subagent against its provider. `onChunk` is called every time the
+   * provider yields a new assistant_text fragment (Claude SDK `assistant`
+   * messages, Codex `agentMessage` items). Caller uses this to emit
+   * `subagent_message_delta` events so the UI can render partial output
+   * before completion. Implementations MUST also return the full
+   * accumulated text in `text` for the final `subagent_run_completed` event.
+   */
+  start: (onChunk: (chunk: string) => void) => Promise<{ text: string; usage?: { inputTokens?: number; outputTokens?: number } }>
   // optional auth check
   authReady: () => Promise<boolean>
 }
@@ -830,8 +837,31 @@ export class SubagentOrchestrator {
       let usage: { inputTokens?: number; outputTokens?: number } | undefined
       try {
         let timeoutId: ReturnType<typeof setTimeout> | null = null
+        // Live streaming hook: every assistant_text fragment from the
+        // provider becomes a durable `subagent_message_delta` event. The
+        // reducer (Task 3) appends `e.content` onto the run's `finalText`,
+        // so any client reading the snapshot sees the run's text grow in
+        // real time. Errors thrown inside onChunk are deliberately
+        // swallowed and logged — a delta-write failure must not abort the
+        // provider run.
+        const onChunk = (chunk: string) => {
+          if (!chunk) return
+          this.deps.store
+            .appendSubagentEvent({
+              v: 3,
+              type: "subagent_message_delta",
+              timestamp: this.now(),
+              chatId: args.chatId,
+              runId,
+              content: chunk,
+            })
+            .catch((err) => {
+              // eslint-disable-next-line no-console
+              console.warn("subagent delta append failed", { chatId: args.chatId, runId, err })
+            })
+        }
         const result = await Promise.race([
-          runStart.start(),
+          runStart.start(onChunk),
           new Promise<never>((_, reject) => {
             timeoutId = setTimeout(() => reject(new Error("TIMEOUT")), this.timeoutMs())
           }),
@@ -956,12 +986,80 @@ this.subagentOrchestrator = new SubagentOrchestrator({
 })
 ```
 
-`buildSubagentProviderRun` is a helper to be defined alongside the orchestrator that converts a subagent + primer into a `ProviderRunStart`. It must:
-- For `claude`: spawn an ephemeral session via `startClaudeSessionFn` with `subagent.systemPrompt` as system; collect assistant text; close session; return final text.
-- For `codex`: similar, via `codexManager.startSession` + `startTurn`.
-- `authReady()`: query existing auth check (`this.appSettings.snapshot().claudeAuth` / `auth` for codex).
+`buildSubagentProviderRun` is a helper to be defined alongside the orchestrator that converts a subagent + primer into a `ProviderRunStart`. It must reuse the existing `HarnessTurn` abstraction (`src/server/harness-types.ts:14`) so the streaming contract matches the primary chat path.
 
-Implement `buildSubagentProviderRun` in `subagent-orchestrator.ts` (export it). Each provider call must use the subagent's own model + options — NOT the chat's. Sessions are isolated: do not write back to `chat.sessionTokensByProvider`.
+Pseudocode, including the streaming wire-up:
+
+```ts
+export function buildSubagentProviderRun(args: {
+  subagent: Subagent
+  chatId: string
+  primer: string | null
+  claudeStartFn: typeof startClaudeSession   // signature reused from agent.ts
+  codexManager: CodexAppServer
+}): ProviderRunStart {
+  const userText = args.primer == null ? "" : args.primer
+  return {
+    provider: args.subagent.provider,
+    model: args.subagent.model,
+    systemPrompt: args.subagent.systemPrompt,
+    preamble: args.primer,
+    authReady: async () => /* read app-settings auth for the run's provider */,
+    async start(onChunk) {
+      // 1. Spawn an ephemeral provider session (NEW handle each call).
+      //    Pass subagent.systemPrompt + subagent.model + subagent.modelOptions.
+      //    Do NOT pass any chat.sessionTokensByProvider value — isolation rule.
+      const turn: HarnessTurn = args.subagent.provider === "claude"
+        ? await args.claudeStartFn({
+            systemPrompt: args.subagent.systemPrompt,
+            model: args.subagent.model,
+            modelOptions: args.subagent.modelOptions,
+            initialPrompt: userText,
+            sessionToken: null,
+            forkSession: false,
+          })
+        : await args.codexManager.startTurn({
+            systemPrompt: args.subagent.systemPrompt,
+            model: args.subagent.model,
+            modelOptions: args.subagent.modelOptions,
+            initialPrompt: userText,
+            sessionToken: null,
+          })
+
+      // 2. Consume the unified HarnessTurn.stream. Each assistant_text entry
+      //    is one streamed fragment. Forward to onChunk so the orchestrator
+      //    can persist a subagent_message_delta event.
+      let accumulated = ""
+      let usage: { inputTokens?: number; outputTokens?: number } | undefined
+      try {
+        for await (const event of turn.stream) {
+          if (event.type !== "transcript" || !event.entry) continue
+          if (event.entry.kind === "assistant_text") {
+            const fragment = event.entry.text
+            accumulated += fragment
+            onChunk(fragment)
+            continue
+          }
+          if (event.entry.kind === "result") {
+            usage = event.entry.usage
+          }
+        }
+      } finally {
+        // Close the ephemeral session. Do NOT persist its sessionToken
+        // anywhere — each subagent run is independent.
+        turn.close()
+      }
+      return { text: accumulated, usage }
+    },
+  }
+}
+```
+
+Notes:
+- Each provider call uses the subagent's own model + options — NOT the chat's. Sessions are isolated: do not read or write `chat.sessionTokensByProvider`.
+- The `HarnessEvent` interface (`harness-types.ts`) already carries `{ type: "transcript", entry: TranscriptEntry }`; the stream contract is identical to the primary chat path consumed by `runClaudeSession` (`agent.ts:1576`) and Codex `runTurn` (`agent.ts:1726`).
+- `authReady()`: query existing auth check (`this.appSettings.snapshot().claudeAuth` / `auth` for codex).
+- If the underlying SDK starts emitting finer-grained `assistant_text_delta` entries in the future, the `for-await` loop picks them up automatically — no orchestrator changes needed.
 
 - [ ] **Step 2: Gate primary turn in `send()`**
 
@@ -1093,6 +1191,13 @@ interface SubagentMessageProps {
 }
 
 export function SubagentMessage({ run, indentDepth }: SubagentMessageProps) {
+  // `run.finalText` is populated incrementally by the reducer as
+  // subagent_message_delta events arrive (see Task 3, line 249), then
+  // overwritten with the canonical text on subagent_run_completed
+  // (line 258). The same field carries both streamed and final state —
+  // we just style it differently while still running so the user can tell
+  // the output is still arriving.
+  const isStreaming = run.status === "running" && !!run.finalText
   return (
     <div
       data-testid={`subagent-message:${run.runId}`}
@@ -1103,10 +1208,22 @@ export function SubagentMessage({ run, indentDepth }: SubagentMessageProps) {
         <Bot className="h-3.5 w-3.5" />
         <span>{run.subagentName}</span>
         <span className="opacity-60">{run.provider}/{run.model}</span>
-        {run.status === "running" && <span className="ml-auto inline-block animate-pulse">running...</span>}
+        {run.status === "running" && (
+          <span className="ml-auto inline-block animate-pulse">
+            {isStreaming ? "streaming..." : "running..."}
+          </span>
+        )}
       </header>
       {run.finalText && (
-        <div className="mt-1 whitespace-pre-wrap text-sm">{run.finalText}</div>
+        <div
+          className={cn(
+            "mt-1 whitespace-pre-wrap text-sm",
+            isStreaming && "text-foreground/80",
+          )}
+        >
+          {run.finalText}
+          {isStreaming && <span className="ml-0.5 inline-block w-2 animate-pulse">▍</span>}
+        </div>
       )}
       {run.status === "failed" && run.error && (
         <div className="mt-2">
@@ -1378,36 +1495,132 @@ git commit -m "test(chat-input): mention gating round-trips"
 
 ---
 
-## Task 12 — Buffered provider runs; streaming deferred
+## Task 12 — Live subagent streaming end-to-end
 
 **Files:**
-- Modify: `src/server/subagent-orchestrator.ts` (document buffered run behavior)
-- Modify: provider-run helper
+- Modify: `src/server/subagent-orchestrator.ts` (already wires `onChunk` per Task 6)
+- Modify: `src/server/subagent-orchestrator.test.ts` (streaming integration test)
+- Modify: `src/server/event-store.test.ts` (delta-then-complete reducer test)
+- Modify: `src/client/components/messages/SubagentMessage.test.tsx` (live UI states)
 
-- [ ] **Step 1: Keep provider-run contract buffered**
+Goal: every assistant_text fragment yielded by a subagent's provider session lands in the chat snapshot as a `subagent_message_delta` event within one event-loop tick of being produced. Users see the run's reply build up character-by-character (Claude SDK / Codex granularity), not as a single buffered drop.
 
-Task 6 defines `ProviderRunStart.start(): Promise<{ text, usage }>` as a buffered contract. Keep phase 3 implementation on that contract: emit `subagent_run_started`, run the provider to completion, then emit `subagent_run_completed` with `finalContent`. Do not promise live `subagent_message_delta` events until the provider-run API is changed to support chunks.
+- [ ] **Step 1: Streaming integration test in the orchestrator**
 
-When streaming is added later, change the provider-run contract explicitly, for example:
+Add to `src/server/subagent-orchestrator.test.ts`:
 
 ```ts
-interface ProviderRunStart {
-  start(args?: { onChunk?: (chunk: string) => Promise<void> }): Promise<{ text: string; usage?: ProviderUsage }>
-  cancel(): Promise<void>
-}
+test("provider chunks become subagent_message_delta events in order", async () => {
+  const harness = await setupOrchestrator()
+  const subagent = makeSubagent({ id: "sa-1", name: "alpha", provider: "claude" })
+  // Provider stub that yields three chunks then resolves.
+  harness.mockProviderRun({
+    async start(onChunk) {
+      onChunk("Hello ")
+      await Promise.resolve()
+      onChunk("world")
+      await Promise.resolve()
+      onChunk("!")
+      return { text: "Hello world!", usage: { inputTokens: 10, outputTokens: 3 } }
+    },
+    async authReady() { return true },
+  })
+
+  await harness.orchestrator.runMentionsForUserMessage({
+    chatId: "c1",
+    userMessageId: "u1",
+    mentions: [{ kind: "subagent", subagentId: "sa-1" }],
+  })
+
+  const deltas = harness.events("c1").filter((e) => e.type === "subagent_message_delta")
+  expect(deltas.map((e) => e.content)).toEqual(["Hello ", "world", "!"])
+
+  const completed = harness.events("c1").find((e) => e.type === "subagent_run_completed")!
+  expect(completed.finalContent).toBe("Hello world!")
+})
 ```
 
-The reducer may keep `subagent_message_delta` support from Task 3 as forward-compatible event handling, but no phase-3 task should depend on providers yielding incremental chunks.
+- [ ] **Step 2: Reducer test — deltas accumulate, completion overrides**
 
-- [ ] **Step 2: Manual smoke test**
+Add to `src/server/event-store.test.ts`:
 
-Run: `bun run dev`. Create a Claude subagent. Send `@agent/alpha summarize this conversation`. Observe a running SubagentMessage row, then a completed row with final text.
+```ts
+test("subagent_message_delta accumulates into finalText; run_completed sets canonical", async () => {
+  const { dir } = await setupStoreWithChat()
+  const runId = "r-stream"
+  await store.appendSubagentEvent({ v: 3, type: "subagent_run_started", timestamp: 1, chatId, runId, subagentId: "s1", subagentName: "alpha", provider: "claude", model: "claude-opus-4-7", parentUserMessageId: "u1", parentRunId: null, depth: 0 })
+  await store.appendSubagentEvent({ v: 3, type: "subagent_message_delta", timestamp: 2, chatId, runId, content: "Hello " })
+  await store.appendSubagentEvent({ v: 3, type: "subagent_message_delta", timestamp: 3, chatId, runId, content: "world" })
 
-- [ ] **Step 3: Commit**
+  // Mid-stream snapshot must show partial text and status=running.
+  const mid = store.getSubagentRuns(chatId)[runId]
+  expect(mid.status).toBe("running")
+  expect(mid.finalText).toBe("Hello world")
+
+  await store.appendSubagentEvent({ v: 3, type: "subagent_run_completed", timestamp: 4, chatId, runId, finalContent: "Hello world!" })
+
+  // After completion: status flips, canonical text replaces accumulator
+  // (covers the case where the canonical text differs from the sum of
+  // chunks, e.g. SDK adds a trailing newline only on the result message).
+  const done = store.getSubagentRuns(chatId)[runId]
+  expect(done.status).toBe("completed")
+  expect(done.finalText).toBe("Hello world!")
+
+  // Replay produces identical state.
+  const reloaded = new EventStore(dir)
+  await reloaded.ready()
+  expect(reloaded.getSubagentRuns(chatId)[runId].finalText).toBe("Hello world!")
+})
+```
+
+- [ ] **Step 3: UI test — partial text renders with streaming indicator**
+
+Add to `src/client/components/messages/SubagentMessage.test.tsx`:
+
+```tsx
+test("renders streaming chunks with cursor + 'streaming...' tag while running", () => {
+  const run = makeRunSnapshot({
+    runId: "r1", status: "running", finalText: "Partial output so far",
+  })
+  render(<SubagentMessage run={run} indentDepth={0} />)
+  expect(screen.getByText("Partial output so far")).toBeInTheDocument()
+  expect(screen.getByText(/streaming/i)).toBeInTheDocument()
+  // Caret is decorative but data-testid lets us prove it rendered:
+  expect(screen.getByText("▍")).toBeInTheDocument()
+})
+
+test("shows 'running...' (no caret) before any chunk arrives", () => {
+  const run = makeRunSnapshot({ runId: "r1", status: "running", finalText: null })
+  render(<SubagentMessage run={run} indentDepth={0} />)
+  expect(screen.getByText(/^running/i)).toBeInTheDocument()
+  expect(screen.queryByText("▍")).not.toBeInTheDocument()
+})
+
+test("after completion the caret disappears and 'streaming' label is gone", () => {
+  const run = makeRunSnapshot({ runId: "r1", status: "completed", finalText: "Done." })
+  render(<SubagentMessage run={run} indentDepth={0} />)
+  expect(screen.queryByText(/streaming|running/i)).not.toBeInTheDocument()
+  expect(screen.queryByText("▍")).not.toBeInTheDocument()
+  expect(screen.getByText("Done.")).toBeInTheDocument()
+})
+```
+
+- [ ] **Step 4: Run tests**
+
+Run: `bun test src/server/subagent-orchestrator.test.ts src/server/event-store.test.ts src/client/components/messages/SubagentMessage.test.tsx`
+Expected: PASS.
+
+- [ ] **Step 5: Manual smoke test**
+
+Run: `bun run dev`. Create a Claude subagent with a deliberately long reply prompt ("write a 300-word summary"). Send `@agent/alpha summarize this conversation`. Watch the SubagentMessage row: header should show `streaming...` with a blinking caret while text fills in line by line; once the provider emits its result message the header flips to no badge and the caret disappears.
+
+Acceptance: text grows visibly before the final completion event (not a single drop at the end). If you only see one drop, check that `buildSubagentProviderRun` is in fact awaiting the `HarnessTurn.stream` for-await loop and forwarding each `assistant_text` entry — providers buffering internally will collapse the user experience back to one chunk.
+
+- [ ] **Step 6: Commit**
 
 ```bash
-git add src/server/subagent-orchestrator.ts
-git commit -m "docs(subagent-orchestrator): defer live streaming contract"
+git add src/server/subagent-orchestrator.ts src/server/subagent-orchestrator.test.ts src/server/event-store.test.ts src/client/components/messages/SubagentMessage.tsx src/client/components/messages/SubagentMessage.test.tsx
+git commit -m "feat(subagent-orchestrator): live streaming of provider chunks to UI"
 ```
 
 ---
@@ -1434,14 +1647,15 @@ gh pr create --repo cuongtranba/kanna --base main --head plans/model-independent
 ## Summary
 - SubagentOrchestrator with parallel fan-out (cap 4), depth-1 chains, loop detection
 - 5 new durable events (subagent_run_*) reduced into subagentRuns map
+- Live streaming: every provider chunk emits subagent_message_delta; SubagentMessage shows partial output + caret + 'streaming...' badge while running
 - Agent.send routes @agent/ mentions to orchestrator; primary turn gated for resolved and unknown-only mentions
 - SubagentMessage + SubagentErrorCard render runs grouped by user message; chained runs indented
 - Provider sessions are isolated (no read/write to chat.sessionTokensByProvider)
 
 ## Test plan
 - [ ] bun test
-- [ ] Send `@agent/alpha` — see running row followed by final reply, no primary turn fires
-- [ ] Send `@agent/alpha @agent/beta` — see parallel siblings under same user message
+- [ ] Send `@agent/alpha` with a long-output prompt — row shows `streaming...` + caret, text grows incrementally, badge clears on completion
+- [ ] Send `@agent/alpha @agent/beta` — see parallel siblings under same user message, both streaming concurrently
 - [ ] Build alpha that mentions @agent/beta, beta mentions @agent/alpha — LOOP_DETECTED card
 - [ ] Send `@agent/missing` only — primary turn does not fire, UNKNOWN_SUBAGENT failure card shown
 EOF
@@ -1452,11 +1666,12 @@ EOF
 
 ## Open follow-ups (not v1)
 
-- Live `subagent_message_delta` streaming once `ProviderRunStart.start()` accepts an `onChunk` callback.
 - Per-subagent persistent session token caching (currently isolated per run).
 - Fan-out + primary synthesis (combine sibling outputs back into a primary reply).
-- `MAX_CHAIN_DEPTH=2` opt-in for advanced flows.
+- `MAX_CHAIN_DEPTH=2` opt-in for advanced flows (requires global-visit loop detection, not the current per-path scheme).
 - Retry button on error card actually triggers a new run (currently UI only).
+- Token usage (`run.usage.inputTokens` / `outputTokens`) surfaced in the `SubagentMessage` footer.
+- Cancel-run button per `SubagentMessage` row (orchestrator already supports per-chat cancellation; needs per-run scope).
 
 ---
 
@@ -1470,4 +1685,5 @@ EOF
 - [ ] `MAX_PARALLEL = 4`, `MAX_CHAIN_DEPTH = 1`, `RUN_TIMEOUT_MS = 120_000`.
 - [ ] `UNKNOWN_SUBAGENT` failures emit a started+failed pair with `subagentId: null` so the UI can render the error card.
 - [ ] Any `@agent/...` mention gates the primary turn, including unknown-only mentions.
+- [ ] Streaming: every provider chunk reaches the snapshot as `subagent_message_delta`; UI shows `streaming...` + caret while running and the final canonical text after `subagent_run_completed`.
 - [ ] `bun test` and `bun run check` pass.
