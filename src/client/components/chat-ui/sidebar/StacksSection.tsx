@@ -14,6 +14,7 @@ interface StacksSectionProps {
   onOpenStackMenu: (stackId: string) => void
   onStartChat?: (stackId: string) => void
   renderChatCreate?: (stack: StackSummary) => ReactNode
+  renderChatRow?: (chat: SidebarChatRow) => ReactNode
   chats: SidebarChatRow[]
 }
 
@@ -26,9 +27,18 @@ export function StacksSection({
   onOpenStackMenu,
   onStartChat,
   renderChatCreate,
-  chats: _chats,
+  renderChatRow,
+  chats,
 }: StacksSectionProps): ReactNode {
   const canCreateStack = projects.length >= 2
+
+  const chatsByStackId = new Map<string, SidebarChatRow[]>()
+  for (const chat of chats) {
+    if (!chat.stackId) continue
+    const existing = chatsByStackId.get(chat.stackId)
+    if (existing) existing.push(chat)
+    else chatsByStackId.set(chat.stackId, [chat])
+  }
 
   function handleRowKeyDown(stackId: string, e: KeyboardEvent<HTMLDivElement>) {
     if (e.key === "Enter" || e.key === " ") {
@@ -122,6 +132,11 @@ export function StacksSection({
                         {project.title}
                       </div>
                     ))}
+                    {renderChatRow && (chatsByStackId.get(stack.id) ?? []).length > 0 && (
+                      <div className="pl-3 mt-0.5 flex flex-col">
+                        {(chatsByStackId.get(stack.id) ?? []).map((chat) => renderChatRow(chat))}
+                      </div>
+                    )}
                     {onStartChat && (
                       <Button
                         type="button"

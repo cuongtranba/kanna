@@ -458,6 +458,7 @@ export interface SidebarChatRow {
   hasAutomation: boolean
   canFork?: boolean
   stateEnteredAt?: number
+  stackId?: string
 }
 
 export interface SidebarProjectGroup {
