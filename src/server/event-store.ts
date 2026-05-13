@@ -87,6 +87,7 @@ function getReplayEventPriority(event: StoreEvent): number {
     case "project_opened":
     case "project_removed":
     case "sidebar_project_order_set":
+    case "project_star_set":
       return 0
     case "chat_created":
       return 1
@@ -524,6 +525,17 @@ export class EventStore implements PushEventStore {
         this.state.sidebarProjectOrder = [...e.projectIds]
         break
       }
+      case "project_star_set": {
+        const project = this.state.projectsById.get(e.projectId)
+        if (!project) break
+        if (e.starredAt == null) {
+          delete project.starredAt
+        } else {
+          project.starredAt = e.starredAt
+        }
+        project.updatedAt = e.timestamp
+        break
+      }
       case "chat_created": {
         const chat: import("./events").ChatRecord = {
           id: e.chatId,
@@ -862,6 +874,21 @@ export class EventStore implements PushEventStore {
       type: "project_removed",
       timestamp: Date.now(),
       projectId,
+    }
+    await this.append(this.projectsLogPath, event)
+  }
+
+  async setProjectStar(projectId: string, starred: boolean) {
+    const project = this.getProject(projectId)
+    if (!project) {
+      throw new Error("Project not found")
+    }
+    const event: ProjectEvent = {
+      v: STORE_VERSION,
+      type: "project_star_set",
+      timestamp: Date.now(),
+      projectId,
+      starredAt: starred ? Date.now() : null,
     }
     await this.append(this.projectsLogPath, event)
   }
