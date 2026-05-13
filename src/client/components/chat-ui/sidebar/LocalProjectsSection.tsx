@@ -208,7 +208,7 @@ const SortableProjectGroup = memo(function SortableProjectGroup({
   const header = (
     <div
       className={cn(
-        "sticky top-0 bg-background dark:bg-card z-10 relative pl-1 pr-2 py-1.5 flex items-center gap-1 select-none",
+        "sticky top-0 bg-background dark:bg-card z-10 relative pl-2 pr-2 py-1 flex items-center gap-1 select-none",
         isDragging && "opacity-50"
       )}
     >
@@ -218,13 +218,13 @@ const SortableProjectGroup = memo(function SortableProjectGroup({
         aria-label="Drag to reorder project"
         title="Drag to reorder"
         className={cn(
-          "flex h-6 w-5 shrink-0 items-center justify-center rounded-sm text-muted-foreground/50 cursor-grab active:cursor-grabbing touch-none transition-opacity duration-150",
-          "opacity-60 md:opacity-0 md:group-hover/section:opacity-100",
+          "absolute left-0 top-1/2 -translate-y-1/2 flex h-6 w-4 items-center justify-center rounded-sm text-muted-foreground/60 cursor-grab active:cursor-grabbing touch-none transition-opacity duration-150",
+          "opacity-0 md:group-hover/section:opacity-100",
           isDragging && "opacity-100 cursor-grabbing"
         )}
         {...listeners}
       >
-        <GripVertical className="size-3.5" />
+        <GripVertical className="size-3" />
       </button>
       <button
         type="button"

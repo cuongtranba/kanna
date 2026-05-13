@@ -48,9 +48,9 @@ export function StacksSection({
   }
 
   return (
-    <div className="flex flex-col mb-4">
-      <div className="flex items-center justify-between px-2 pt-1 pb-2">
-        <span className="text-[13px] font-semibold text-foreground/70">
+    <div className="flex flex-col mb-3">
+      <div className="pl-2 pr-2 pt-2 pb-1 flex items-center gap-1">
+        <span className="flex-1 min-w-0 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
           Stacks
         </span>
         <Tooltip>
@@ -74,7 +74,7 @@ export function StacksSection({
       </div>
 
       {stacks.length === 0 ? (
-        <p className="px-2 pb-2 text-xs leading-relaxed text-muted-foreground">
+        <p className="pl-2 pr-2 pb-2 text-xs leading-relaxed text-muted-foreground">
           A stack groups projects so one chat can read and write across them. Add your first stack.
         </p>
       ) : (
@@ -85,24 +85,25 @@ export function StacksSection({
 
             return (
               <div key={stack.id}>
-                <div
-                  role="button"
-                  tabIndex={0}
-                  className={cn(
-                    "group flex w-full items-center gap-2 pl-2 pr-1 py-1.5 rounded-md text-left cursor-pointer transition-colors duration-150",
-                    "hover:bg-muted/40"
-                  )}
-                  onClick={() => onToggleExpanded(stack.id)}
-                  onKeyDown={(e) => handleRowKeyDown(stack.id, e)}
-                >
-                  <ChevronRight
-                    className={cn(
-                      "h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform duration-150 motion-reduce:transition-none",
-                      isExpanded && "rotate-90"
-                    )}
-                  />
-                  <span className="text-sm truncate flex-1 text-foreground">{stack.title}</span>
-                  <span className="text-[11px] tabular-nums text-muted-foreground px-1.5 py-0.5 rounded bg-muted/60">
+                <div className="group/section pl-2 pr-2 py-1 flex items-center gap-1 select-none">
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    className="flex items-center gap-1.5 min-w-0 flex-1 rounded-md py-0.5 text-left hover:bg-muted/30 transition-colors duration-150 cursor-pointer"
+                    onClick={() => onToggleExpanded(stack.id)}
+                    onKeyDown={(e) => handleRowKeyDown(stack.id, e)}
+                  >
+                    <ChevronRight
+                      className={cn(
+                        "size-3.5 shrink-0 text-muted-foreground transition-transform duration-150 motion-reduce:transition-none",
+                        isExpanded && "rotate-90"
+                      )}
+                    />
+                    <span className="truncate min-w-0 text-[13px] font-semibold text-foreground/80">
+                      {stack.title}
+                    </span>
+                  </div>
+                  <span className="text-[11px] tabular-nums text-muted-foreground px-1.5 py-0.5 rounded bg-muted/60 shrink-0">
                     {stack.memberCount}
                   </span>
                   <Button
@@ -110,7 +111,7 @@ export function StacksSection({
                     variant="ghost"
                     size="icon"
                     aria-label="Stack actions"
-                    className="size-6 rounded-sm opacity-0 group-hover:opacity-100 transition-opacity duration-150"
+                    className="size-6 rounded-sm opacity-0 group-hover/section:opacity-100 transition-opacity duration-150"
                     onClick={(e) => {
                       e.stopPropagation()
                       onOpenStackMenu(stack.id)
@@ -121,17 +122,17 @@ export function StacksSection({
                 </div>
 
                 {isExpanded && (
-                  <div className="flex flex-col pt-0.5 pb-1">
+                  <div className="flex flex-col gap-px pb-1">
                     {memberProjects.map((project) => (
                       <div
                         key={project.id}
-                        className="pl-7 py-1 text-xs text-muted-foreground"
+                        className="pl-[28px] pr-2 py-1 text-[13px] text-muted-foreground truncate"
                       >
                         {project.title}
                       </div>
                     ))}
                     {renderChatRow && (chatsByStackId.get(stack.id) ?? []).length > 0 && (
-                      <div className="pl-3 mt-0.5 flex flex-col">
+                      <div className="flex flex-col mt-0.5 pl-1">
                         {(chatsByStackId.get(stack.id) ?? []).map((chat) => renderChatRow(chat))}
                       </div>
                     )}
@@ -140,7 +141,7 @@ export function StacksSection({
                         type="button"
                         variant="ghost"
                         size="sm"
-                        className="ml-7 mt-1 self-start h-6 px-2 text-xs text-muted-foreground hover:text-foreground rounded-md"
+                        className="ml-[28px] mt-1 self-start h-6 px-2 text-xs text-muted-foreground hover:text-foreground rounded-md"
                         onClick={(e) => {
                           e.stopPropagation()
                           onStartChat(stack.id)
@@ -149,7 +150,7 @@ export function StacksSection({
                         <Plus className="size-3" /> New chat
                       </Button>
                     )}
-                    {renderChatCreate ? <div className="pl-7 pr-2 py-1">{renderChatCreate(stack)}</div> : null}
+                    {renderChatCreate ? <div className="pl-[28px] pr-2 py-1">{renderChatCreate(stack)}</div> : null}
                   </div>
                 )}
               </div>
