@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.47.2](https://github.com/cuongtranba/kanna/compare/v0.47.1...v0.47.2) (2026-05-13)
+
+
+### Bug Fixes
+
+* **app-settings:** atomic writes prevent OAuth token loss ([#60](https://github.com/cuongtranba/kanna/issues/60)) ([7619fb8](https://github.com/cuongtranba/kanna/commit/7619fb8e7c2d3ec30a1084704decb2db3dad9077))
+
 ## [0.47.1](https://github.com/cuongtranba/kanna/compare/v0.47.0...v0.47.1) (2026-05-13)
 
 
