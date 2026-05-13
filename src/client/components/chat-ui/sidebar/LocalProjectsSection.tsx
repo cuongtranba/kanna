@@ -1,5 +1,5 @@
 import { memo, type MouseEvent as ReactMouseEvent, type ReactNode, useMemo } from "react"
-import { ChevronRight, Loader2, MoreHorizontal, SquarePen } from "lucide-react"
+import { ChevronRight, GripVertical, Loader2, MoreHorizontal, SquarePen } from "lucide-react"
 import {
   DndContext,
   MouseSensor,
@@ -105,16 +105,16 @@ function EmptyProjectChatButton({
       disabled={disabled}
       title={!isConnected ? `Start ${APP_NAME} to connect` : "New Chat"}
       className={cn(
-        "group flex w-full items-center gap-2 pl-2.5 pr-0.5 py-0.5 rounded-lg text-left cursor-pointer border-border/0 hover:border-border hover:bg-muted/20 active:scale-[0.985] border transition-all",
-        "border-border/0 dark:hover:border-slate-400/10",
-        disabled && "cursor-not-allowed opacity-50 active:scale-100"
+        "group flex w-full items-center gap-2 pl-2 pr-1 py-1.5 rounded-md text-left cursor-pointer transition-colors duration-150",
+        "hover:bg-muted/40",
+        disabled && "cursor-not-allowed opacity-50"
       )}
       onClick={() => onNewLocalChat(localPath)}
     >
-      <span className="text-sm truncate flex-1 translate-y-[-0.5px] text-slate-500 dark:text-slate-400">
+      <span className="h-3.5 w-3.5 shrink-0" aria-hidden />
+      <span className="text-sm truncate flex-1 text-muted-foreground italic">
         New Chat
       </span>
-      <div className="h-7 w-6 mr-[2px] shrink-0" aria-hidden />
     </button>
   )
 }
@@ -204,31 +204,39 @@ const SortableProjectGroup = memo(function SortableProjectGroup({
 
   const header = (
     <div
-      ref={setActivatorNodeRef}
       className={cn(
-        "sticky top-0 bg-background dark:bg-card z-10 relative p-[10px] flex items-center justify-between",
-        "cursor-grab active:cursor-grabbing select-none touch-pan-y",
-        isDragging && "cursor-grabbing"
+        "sticky top-0 bg-background dark:bg-card z-10 relative pl-1 pr-2 py-1.5 flex items-center gap-1 select-none",
+        isDragging && "opacity-50"
       )}
-      onClick={() => onToggleSection(groupKey)}
-      {...listeners}
     >
-      <div className="flex items-center gap-2">
-        <span className="relative size-3.5 shrink-0 cursor-pointer">
-          <ChevronRight className={`translate-y-[1px] size-3.5 shrink-0 text-muted-foreground transition-all duration-200 ${!collapsedSections.has(groupKey) && 'rotate-90'}`} />
-
-          {/* {collapsedSections.has(groupKey) ? (
-            <ChevronRight className="translate-y-[1px] size-3.5 shrink-0 text-muted-foreground transition-all duration-200" />
-          ) : (
-            <>
-              <FolderOpen className="absolute inset-0 translate-y-[1px] size-3.5 shrink-0 text-muted-foreground transition-all duration-200 group-hover/section:opacity-0" />
-              <ChevronRight className="absolute inset-0 translate-y-[1px] size-3.5 shrink-0 rotate-90 text-muted-foreground opacity-0 transition-all duration-200 group-hover/section:opacity-100" />
-            </>
-          )} */}
-        </span>
+      <button
+        ref={setActivatorNodeRef}
+        type="button"
+        aria-label="Drag to reorder project"
+        title="Drag to reorder"
+        className={cn(
+          "flex h-6 w-5 shrink-0 items-center justify-center rounded-sm text-muted-foreground/50 cursor-grab active:cursor-grabbing touch-none transition-opacity duration-150",
+          "opacity-60 md:opacity-0 md:group-hover/section:opacity-100",
+          isDragging && "opacity-100 cursor-grabbing"
+        )}
+        {...listeners}
+      >
+        <GripVertical className="size-3.5" />
+      </button>
+      <button
+        type="button"
+        onClick={() => onToggleSection(groupKey)}
+        className="flex items-center gap-1.5 min-w-0 flex-1 rounded-md py-0.5 text-left hover:bg-muted/30 transition-colors duration-150"
+      >
+        <ChevronRight
+          className={cn(
+            "size-3.5 shrink-0 text-muted-foreground transition-transform duration-150 motion-reduce:transition-none",
+            !collapsedSections.has(groupKey) && "rotate-90"
+          )}
+        />
         <Tooltip>
           <TooltipTrigger asChild>
-            <span className="truncate max-w-[150px] whitespace-nowrap text-sm text-muted-foreground">
+            <span className="truncate min-w-0 text-[13px] font-semibold text-foreground/80">
               {getPathBasename(localPath)}
             </span>
           </TooltipTrigger>
@@ -236,19 +244,20 @@ const SortableProjectGroup = memo(function SortableProjectGroup({
             {localPath}
           </TooltipContent>
         </Tooltip>
-      </div>
+      </button>
       {(hasProjectMenu || onNewLocalChat) && (
-        <div className="absolute right-2 flex items-center gap-[1px] opacity-100 md:opacity-0 md:group-hover/section:opacity-100">
+        <div className="flex items-center gap-px opacity-100 md:opacity-0 md:group-hover/section:opacity-100 transition-opacity duration-150">
           {hasProjectMenu ? (
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-5.5 w-5.5 !rounded"
+                  className="size-6 rounded-sm text-muted-foreground hover:text-foreground"
                   onClick={openContextMenuFromButton}
+                  aria-label="Project options"
                 >
-                  <MoreHorizontal className="size-3.5 text-slate-500 dark:text-slate-400" />
+                  <MoreHorizontal className="size-3.5" />
                 </Button>
               </TooltipTrigger>
               <TooltipContent side="right" sideOffset={4}>
@@ -263,7 +272,7 @@ const SortableProjectGroup = memo(function SortableProjectGroup({
                   variant="ghost"
                   size="icon"
                   className={cn(
-                    "h-5.5 w-5.5 !rounded",
+                    "size-6 rounded-sm text-muted-foreground hover:text-foreground",
                     (!isConnected || startingLocalPath === localPath) && "opacity-50 cursor-not-allowed"
                   )}
                   disabled={!isConnected || startingLocalPath === localPath}
@@ -271,11 +280,12 @@ const SortableProjectGroup = memo(function SortableProjectGroup({
                     event.stopPropagation()
                     onNewLocalChat(localPath)
                   }}
+                  aria-label="New chat in this project"
                 >
                   {startingLocalPath === localPath ? (
-                    <Loader2 className="size-4 text-slate-500 dark:text-slate-400 animate-spin" />
+                    <Loader2 className="size-3.5 animate-spin" />
                   ) : (
-                    <SquarePen className="size-3.5 text-slate-500 dark:text-slate-400" />
+                    <SquarePen className="size-3.5" />
                   )}
                 </Button>
               </TooltipTrigger>
@@ -294,7 +304,7 @@ const SortableProjectGroup = memo(function SortableProjectGroup({
       ref={setNodeRef}
       style={style}
       className={cn(
-        "group/section",
+        "group/section mb-3",
         isDragging && "opacity-50 shadow-lg z-50 relative"
       )}
       {...attributes}
@@ -313,7 +323,7 @@ const SortableProjectGroup = memo(function SortableProjectGroup({
       ) : header}
 
       {!collapsedSections.has(groupKey) && (isEmptyProject ? Boolean(onNewLocalChat) : group.previewChats.length > 0 || hasMore) && (
-        <div className="space-y-[2px] mb-2 ">
+        <div className="flex flex-col gap-px pl-1">
           {isEmptyProject && onNewLocalChat ? (
             <EmptyProjectChatButton
               localPath={localPath}
@@ -327,18 +337,18 @@ const SortableProjectGroup = memo(function SortableProjectGroup({
               {hasMore && isExpanded ? (
                 <button
                   onClick={() => onToggleExpandedGroup(groupKey)}
-                  className="pl-2.5 py-1 text-xs text-muted-foreground/60 hover:text-foreground/60 transition-colors flex flex-row items-center gap-2 justify-center"
+                  className="ml-6 mt-1 self-start px-2 py-0.5 text-[11px] text-muted-foreground hover:text-foreground rounded-md transition-colors duration-150"
                 >
-                 Show less
+                  Show less
                 </button>
               ) : null}
               {isExpanded ? group.olderChats.map(renderChatRow) : null}
               {hasMore && !isExpanded ? (
                 <button
                   onClick={() => onToggleExpandedGroup(groupKey)}
-                  className="pl-2.5 py-1 text-xs text-muted-foreground/60 hover:text-foreground/60 transition-colors flex flex-row items-center gap-2 justify-center"
+                  className="ml-6 mt-1 self-start px-2 py-0.5 text-[11px] text-muted-foreground hover:text-foreground rounded-md transition-colors duration-150"
                 >
-                 Show more
+                  Show more
                 </button>
               ) : null}
             </>
