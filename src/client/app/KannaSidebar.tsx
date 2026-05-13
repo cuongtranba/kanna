@@ -638,6 +638,7 @@ function KannaSidebarImpl({
                 setStackEditId(stackId)
                 setStackCreatePanelOpen(true)
               }}
+              onDeleteStack={(stackId) => setStackDeleteConfirmId(stackId)}
               onStartChat={(stackId) => { void handleStartStackChat(stackId) }}
               renderChatCreate={(stack) => {
                 if (stack.id !== stackChatCreateId) return null
