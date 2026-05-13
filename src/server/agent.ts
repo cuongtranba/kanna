@@ -15,6 +15,7 @@ import type {
   TranscriptEntry,
 } from "../shared/types"
 import type { ChatRecord } from "./events"
+import { buildHistoryPrimer, shouldInjectPrimer } from "./history-primer"
 import { normalizeToolCall } from "../shared/tools"
 import type { ClientCommand } from "../shared/protocol"
 import { EventStore } from "./event-store"
@@ -1002,7 +1003,7 @@ export class AgentCoordinator {
           model: resolveClaudeApiModelId(defaultModel, defaultOptions.contextWindow),
           effort: defaultOptions.reasoningEffort,
           planMode: chat.planMode ?? false,
-          sessionToken: chat.sessionToken ?? null,
+          sessionToken: chat.sessionTokensByProvider.claude ?? null,
           forkSession: false,
           oauthToken: picked?.token ?? null,
           onToolRequest: async () => null,
@@ -1117,6 +1118,7 @@ export class AgentCoordinator {
     appendUserPrompt: boolean
     steered?: boolean
     autoContinue?: { scheduleId: string }
+    userClearedContext?: boolean
     profile?: SendToStartingProfile | null
   }) {
     logSendToStartingProfile(args.profile, "start_turn.begin", {
@@ -1207,6 +1209,22 @@ export class AgentCoordinator {
       })
     }
 
+    const targetProvider: AgentProvider = args.provider
+    const existingToken = chat.sessionTokensByProvider[targetProvider] ?? null
+    const pendingForkToken = chat.pendingForkSessionToken?.provider === targetProvider
+      ? chat.pendingForkSessionToken.token
+      : null
+    const shouldPrime = shouldInjectPrimer(
+      chat.sessionTokensByProvider,
+      targetProvider,
+      Boolean(args.userClearedContext),
+    )
+    const userPromptText = buildPromptText(args.content, args.attachments)
+    const primer = shouldPrime
+      ? buildHistoryPrimer(existingMessages, targetProvider, userPromptText)
+      : null
+    const promptContent = primer ?? userPromptText
+
     let turn: HarnessTurn
     if (args.provider === "claude") {
       logSendToStartingProfile(args.profile, "start_turn.provider_boot.begin", {
@@ -1223,8 +1241,8 @@ export class AgentCoordinator {
         model: args.model,
         effort: args.effort,
         planMode: args.planMode,
-        sessionToken: chat.pendingForkSessionToken ?? chat.sessionToken,
-        forkSession: Boolean(chat.pendingForkSessionToken),
+        sessionToken: pendingForkToken ?? existingToken,
+        forkSession: pendingForkToken != null,
         onToolRequest,
       })
       logSendToStartingProfile(args.profile, "start_turn.provider_boot.ready", {
@@ -1244,10 +1262,10 @@ export class AgentCoordinator {
         cwd: resolveSpawnPaths(chat, project.localPath).cwd,
         model: args.model,
         serviceTier: args.serviceTier,
-        sessionToken: chat.sessionToken,
-        pendingForkSessionToken: chat.pendingForkSessionToken,
+        sessionToken: existingToken,
+        pendingForkSessionToken: pendingForkToken,
       })
-      if (chat.pendingForkSessionToken && sessionToken) {
+      if (pendingForkToken && sessionToken) {
         await this.store.setPendingForkSessionToken(args.chatId, null)
       }
       logSendToStartingProfile(args.profile, "start_turn.session_ready", {
@@ -1257,7 +1275,7 @@ export class AgentCoordinator {
       })
       turn = await this.codexManager.startTurn({
         chatId: args.chatId,
-        content: buildPromptText(args.content, args.attachments),
+        content: promptContent,
         model: args.model,
         effort: args.effort as any,
         serviceTier: args.serviceTier,
@@ -1336,7 +1354,7 @@ export class AgentCoordinator {
         contentPreview: args.content.slice(0, 160),
         pendingPromptSeqs: [...session.pendingPromptSeqs],
       })
-      await session.session.sendPrompt(buildPromptText(args.content, args.attachments))
+      await session.session.sendPrompt(promptContent)
       logSendToStartingProfile(args.profile, "start_turn.claude_prompt_sent", {
         chatId: args.chatId,
       })
@@ -1563,7 +1581,13 @@ export class AgentCoordinator {
     if (!chat.provider) {
       throw new Error("Chat must have a provider before forking")
     }
-    if (!chat.sessionToken && !chat.pendingForkSessionToken) {
+    const currentProviderToken = chat.provider
+      ? chat.sessionTokensByProvider[chat.provider] ?? null
+      : null
+    const pendingForkForProvider = chat.pendingForkSessionToken?.provider === chat.provider
+      ? chat.pendingForkSessionToken.token
+      : null
+    if (!currentProviderToken && !pendingForkForProvider) {
       throw new Error("Chat has no session to fork")
     }
 
@@ -1582,7 +1606,7 @@ export class AgentCoordinator {
         }
         if (event.type === "session_token" && event.sessionToken) {
           session.sessionToken = event.sessionToken
-          await this.store.setSessionToken(session.chatId, event.sessionToken)
+          await this.store.setSessionTokenForProvider(session.chatId, "claude", event.sessionToken)
           this.emitStateChange(session.chatId)
           continue
         }
@@ -1610,7 +1634,7 @@ export class AgentCoordinator {
           if (
             chat?.pendingForkSessionToken
             && session.sessionToken
-            && session.sessionToken !== chat.pendingForkSessionToken
+            && session.sessionToken !== chat.pendingForkSessionToken.token
           ) {
             await this.store.setPendingForkSessionToken(session.chatId, null)
           }
@@ -1733,11 +1757,11 @@ export class AgentCoordinator {
         if (active.cancelRequested) break
 
         if (event.type === "session_token" && event.sessionToken) {
-          await this.store.setSessionToken(active.chatId, event.sessionToken)
+          await this.store.setSessionTokenForProvider(active.chatId, active.provider, event.sessionToken)
           const chat = this.store.getChat(active.chatId)
           if (
             chat?.pendingForkSessionToken
-            && event.sessionToken !== chat.pendingForkSessionToken
+            && event.sessionToken !== chat.pendingForkSessionToken.token
           ) {
             await this.store.setPendingForkSessionToken(active.chatId, null)
           }
@@ -2180,7 +2204,7 @@ export class AgentCoordinator {
         message?: string
       }
       if (result.confirmed && result.clearContext) {
-        await this.store.setSessionToken(command.chatId, null)
+        await this.store.setSessionTokenForProvider(command.chatId, active.provider, null)
         await this.store.appendMessage(command.chatId, timestamped({ kind: "context_cleared" }))
       }
 
