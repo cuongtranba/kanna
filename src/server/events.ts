@@ -3,6 +3,7 @@ import type { AutoContinueEvent } from "./auto-continue/events"
 
 export interface ProjectRecord extends ProjectSummary {
   deletedAt?: number
+  starredAt?: number
 }
 
 export interface ChatRecord {
@@ -81,6 +82,12 @@ export type ProjectEvent = {
   type: "sidebar_project_order_set"
   timestamp: number
   projectIds: string[]
+} | {
+  v: 3
+  type: "project_star_set"
+  timestamp: number
+  projectId: string
+  starredAt: number | null
 }
 
 export type ChatEvent =
