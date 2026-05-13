@@ -33,7 +33,6 @@ import {
   UPLOAD_MAX_FILE_SIZE_MB_MAX,
   UPLOAD_MAX_FILE_SIZE_MB_MIN,
   type AgentProvider,
-  type CloudflareTunnelMode,
   type CloudflareTunnelSettings,
   type InstalledSkillSummary,
   type KeybindingAction,
@@ -153,11 +152,6 @@ const analyticsOptions = [
 const cloudflareTunnelEnabledOptions = [
   { value: "disabled" as const, label: "Off" },
   { value: "enabled" as const, label: "On" },
-]
-
-const cloudflareTunnelModeOptions: { value: CloudflareTunnelMode; label: string }[] = [
-  { value: "always-ask", label: "Always ask" },
-  { value: "auto-expose", label: "Auto-expose detected ports" },
 ]
 
 const QUICK_RESPONSE_PROVIDER_OPTIONS: Array<{ value: LlmProviderKind; label: string }> = [
@@ -1827,7 +1821,7 @@ export function SettingsPage() {
                         description={(
                           <>
                             <span>
-                              Automatically expose local ports via Cloudflare Tunnel when ports are detected in Claude&apos;s output. Requires{" "}
+                              When enabled, Claude can call the <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">expose_port</code> tool to propose a Cloudflare Tunnel for a local port. Each proposal is shown to you for accept/dismiss. Requires{" "}
                               <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">cloudflared</code>{" "}
                               to be installed.
                             </span>
@@ -1849,19 +1843,6 @@ export function SettingsPage() {
                       </SettingsRow>
                       {tunnelSettings.enabled && (
                         <>
-                          <SettingsRow
-                            title="Detection mode"
-                            description="Choose how Kanna responds when a port is detected in Claude's output."
-                          >
-                            <SegmentedControl
-                              value={tunnelSettings.mode}
-                              onValueChange={(value) => {
-                                void handleTunnelPatch({ mode: value as CloudflareTunnelMode })
-                              }}
-                              options={cloudflareTunnelModeOptions}
-                              size="sm"
-                            />
-                          </SettingsRow>
                           <SettingsRow
                             title="cloudflared path"
                             description="Path to the cloudflared binary. Defaults to the one found on $PATH."

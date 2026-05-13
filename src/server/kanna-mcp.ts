@@ -4,10 +4,16 @@ import path from "node:path"
 import { stat } from "node:fs/promises"
 import { KANNA_MCP_SERVER_NAME } from "../shared/tools"
 import { inferProjectFileContentType } from "./uploads"
+import type { TunnelGateway } from "./cloudflare-tunnel/gateway"
 
 export interface OfferDownloadArgs {
   projectId: string
   localPath: string
+}
+
+export interface KannaMcpArgs extends OfferDownloadArgs {
+  chatId?: string
+  tunnelGateway?: TunnelGateway | null
 }
 
 export interface ResolvedOfferDownload {
@@ -84,7 +90,23 @@ Args:
 - label: optional human-readable label shown next to the download link
 `
 
-export function createKannaMcpServer(args: OfferDownloadArgs) {
+const EXPOSE_PORT_DESCRIPTION = `Propose a Cloudflare Tunnel for a local port so the user can share or test the running service from outside their machine.
+
+Call this proactively right after you start a local dev server, preview server, or any process that listens on a TCP port the user might want to expose. Pass the exact port the service is listening on. The user always sees a confirmation card in the Kanna chat UI and decides whether to accept; this tool only proposes — it never starts the tunnel itself.
+
+Skip calling for: one-off scripts that exit immediately, internal-only databases, processes that don't accept HTTP, or ports the user has explicitly said not to expose.
+
+Returns one of:
+- proposed: a confirmation card was shown to the user
+- already_live: a tunnel for this port is already proposed or active in this chat
+- disabled: the user has not enabled Cloudflare Tunnel in settings
+- invalid_port: the port is outside the valid range
+`
+
+export function createKannaMcpServer(args: KannaMcpArgs) {
+  const tunnelGateway = args.tunnelGateway ?? null
+  const chatId = args.chatId ?? null
+
   return createSdkMcpServer({
     name: KANNA_MCP_SERVER_NAME,
     tools: [
@@ -107,6 +129,35 @@ export function createKannaMcpServer(args: OfferDownloadArgs) {
             content: [{
               type: "text" as const,
               text: JSON.stringify({ kind: "download_offer", ...result.payload }),
+            }],
+          }
+        },
+      ),
+      tool(
+        "expose_port",
+        EXPOSE_PORT_DESCRIPTION,
+        {
+          port: z.number().int().min(1).max(65535).describe("Local TCP port the running service is listening on"),
+          reason: z.string().optional().describe("Brief description of the service (e.g. \"vite dev server\") shown to the user"),
+        },
+        async (input) => {
+          if (!tunnelGateway || !chatId) {
+            return {
+              content: [{ type: "text" as const, text: "expose_port is not available in this context" }],
+              isError: true,
+            }
+          }
+          const outcome = await tunnelGateway.proposeFromTool({ chatId, port: input.port })
+          if (outcome.status === "invalid_port") {
+            return {
+              content: [{ type: "text" as const, text: outcome.reason }],
+              isError: true,
+            }
+          }
+          return {
+            content: [{
+              type: "text" as const,
+              text: JSON.stringify({ kind: "expose_port_result", ...outcome, reason: input.reason ?? null }),
             }],
           }
         },

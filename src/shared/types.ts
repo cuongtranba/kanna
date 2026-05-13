@@ -1284,18 +1284,14 @@ export interface AutoContinuePromptEntry extends TranscriptEntryBase {
   scheduleId: string
 }
 
-export type CloudflareTunnelMode = "always-ask" | "auto-expose"
-
 export interface CloudflareTunnelSettings {
   enabled: boolean
   cloudflaredPath: string
-  mode: CloudflareTunnelMode
 }
 
 export const CLOUDFLARE_TUNNEL_DEFAULTS: CloudflareTunnelSettings = {
   enabled: false,
   cloudflaredPath: "cloudflared",
-  mode: "always-ask",
 }
 
 export type CloudflareTunnelState = "proposed" | "active" | "stopped" | "failed"

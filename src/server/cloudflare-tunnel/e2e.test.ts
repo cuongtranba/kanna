@@ -63,7 +63,7 @@ describe("cloudflare tunnel e2e", () => {
       settingsPath,
       JSON.stringify({
         analyticsEnabled: false,
-        cloudflareTunnel: { enabled: true, cloudflaredPath: "cloudflared", mode: "always-ask" },
+        cloudflareTunnel: { enabled: true, cloudflaredPath: "cloudflared" },
       }),
     )
     appSettings = new AppSettingsManager(settingsPath)
@@ -109,25 +109,16 @@ describe("cloudflare tunnel e2e", () => {
   })
 
   test("propose → accept → active → stop full flow", async () => {
-    await gateway.handleBashResult({
-      command: "bun run dev",
-      stdout: "Local: http://localhost:5173",
-      chatId: "c1",
-      sourcePid: null,
-    })
-
-    await waitFor(
-      () => store.getTunnelEvents("c1").some((e) => e.kind === "tunnel_proposed"),
-      2000,
-      "tunnel_proposed event",
-    )
+    const proposal = await gateway.proposeFromTool({ chatId: "c1", port: 5173 })
+    expect(proposal.status).toBe("proposed")
+    if (proposal.status !== "proposed") throw new Error("expected proposed outcome")
 
     const eventsAfterPropose = store.getTunnelEvents("c1")
-    expect(eventsAfterPropose.some((e) => e.kind === "tunnel_proposed")).toBe(true)
     const proposed = eventsAfterPropose.find((e) => e.kind === "tunnel_proposed")
     expect(proposed).toBeDefined()
     if (!proposed || proposed.kind !== "tunnel_proposed") throw new Error("no proposed event")
     expect(proposed.port).toBe(5173)
+    expect(proposed.tunnelId).toBe(proposal.tunnelId)
 
     await gateway.accept("c1", proposed.tunnelId)
     expect(pendingChildren).toHaveLength(1)
@@ -154,8 +145,7 @@ describe("cloudflare tunnel e2e", () => {
       "tunnel_stopped event",
     )
 
-    const eventsAfterStop = store.getTunnelEvents("c1")
-    const stopped = eventsAfterStop.find((e) => e.kind === "tunnel_stopped")
+    const stopped = store.getTunnelEvents("c1").find((e) => e.kind === "tunnel_stopped")
     expect(stopped).toBeDefined()
     if (stopped && stopped.kind === "tunnel_stopped") {
       expect(stopped.reason).toBe("user")
@@ -163,68 +153,43 @@ describe("cloudflare tunnel e2e", () => {
   })
 
   test("stop on proposed tunnel emits tunnel_stopped and clears liveTunnelId", async () => {
-    await gateway.handleBashResult({
-      command: "bun run dev",
-      stdout: "Local: http://localhost:5173",
-      chatId: "c1",
-      sourcePid: null,
-    })
+    const proposal = await gateway.proposeFromTool({ chatId: "c1", port: 5173 })
+    if (proposal.status !== "proposed") throw new Error("expected proposed outcome")
 
-    await waitFor(
-      () => store.getTunnelEvents("c1").some((e) => e.kind === "tunnel_proposed"),
-      2000,
-      "tunnel_proposed event",
-    )
-
-    const proposed = store.getTunnelEvents("c1").find((e) => e.kind === "tunnel_proposed")
-    if (!proposed || proposed.kind !== "tunnel_proposed") throw new Error("no proposed event")
-
-    expect(deriveChatTunnels(store.getTunnelEvents("c1"), "c1").liveTunnelId).toBe(proposed.tunnelId)
+    expect(deriveChatTunnels(store.getTunnelEvents("c1"), "c1").liveTunnelId).toBe(proposal.tunnelId)
     expect(pendingChildren).toHaveLength(0)
 
-    await gateway.stop("c1", proposed.tunnelId)
+    await gateway.stop("c1", proposal.tunnelId)
 
     const events = store.getTunnelEvents("c1")
     const stopped = events.find((e) => e.kind === "tunnel_stopped")
     expect(stopped).toBeDefined()
     if (stopped && stopped.kind === "tunnel_stopped") {
       expect(stopped.reason).toBe("user")
-      expect(stopped.tunnelId).toBe(proposed.tunnelId)
+      expect(stopped.tunnelId).toBe(proposal.tunnelId)
     }
     expect(deriveChatTunnels(events, "c1").liveTunnelId).toBeNull()
   })
 
-  test("disabled setting → no proposed event", async () => {
+  test("disabled setting → returns disabled, no proposed event", async () => {
     await appSettings.setCloudflareTunnel({ enabled: false })
-    await gateway.handleBashResult({
-      command: "bun run dev",
-      stdout: "Local: http://localhost:5173",
-      chatId: "c1",
-      sourcePid: null,
-    })
+    const outcome = await gateway.proposeFromTool({ chatId: "c1", port: 5173 })
+    expect(outcome.status).toBe("disabled")
     expect(store.getTunnelEvents("c1")).toEqual([])
   })
 
-  test("auto-expose mode triggers cloudflared without explicit accept", async () => {
-    await appSettings.setCloudflareTunnel({ mode: "auto-expose" })
-    await gateway.handleBashResult({
-      command: "bun run dev",
-      stdout: "Local: http://localhost:5173",
-      chatId: "c1",
-      sourcePid: null,
-    })
+  test("duplicate propose for live port returns already_live without new event", async () => {
+    const first = await gateway.proposeFromTool({ chatId: "c1", port: 5173 })
+    expect(first.status).toBe("proposed")
+    const second = await gateway.proposeFromTool({ chatId: "c1", port: 5173 })
+    expect(second.status).toBe("already_live")
+    const proposed = store.getTunnelEvents("c1").filter((e) => e.kind === "tunnel_proposed")
+    expect(proposed).toHaveLength(1)
+  })
 
-    await waitFor(
-      () => store.getTunnelEvents("c1").some((e) => e.kind === "tunnel_accepted"),
-      2000,
-      "tunnel_accepted event",
-    )
-
-    expect(pendingChildren).toHaveLength(1)
-    const accepted = store.getTunnelEvents("c1").find((e) => e.kind === "tunnel_accepted")
-    expect(accepted).toBeDefined()
-    if (accepted && accepted.kind === "tunnel_accepted") {
-      expect(accepted.source).toBe("auto_setting")
-    }
+  test("invalid port returns invalid_port", async () => {
+    const outcome = await gateway.proposeFromTool({ chatId: "c1", port: 99999 })
+    expect(outcome.status).toBe("invalid_port")
+    expect(store.getTunnelEvents("c1")).toEqual([])
   })
 })
