@@ -1378,6 +1378,12 @@ export function createWsRouter({
           resolvedAnalytics.track("project_removed")
           break
         }
+        case "project.setStar": {
+          await store.setProjectStar(command.projectId, command.starred)
+          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
+          await broadcastFilteredSnapshots({ includeSidebar: true })
+          return
+        }
         case "sidebar.reorderProjectGroups": {
           await store.setSidebarProjectOrder(command.projectIds)
           send(ws, { v: PROTOCOL_VERSION, type: "ack", id })

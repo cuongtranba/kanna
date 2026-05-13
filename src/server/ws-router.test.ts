@@ -2886,4 +2886,191 @@ describe("ws-router bg-tasks", () => {
       },
     ])
   })
+
+  test("project.setStar with starred:true sets starredAt to a positive number", async () => {
+    const state = createEmptyState()
+    const projectPath = await mkdtemp(path.join(tmpdir(), "kanna-router-star-"))
+    const setProjectStarCalls: Array<{ projectId: string; starred: boolean }> = []
+    let starredAt: number | undefined
+
+    try {
+      const router = createWsRouter({
+        store: {
+          state,
+          getProject: () => ({
+            id: "project-star-1",
+            localPath: projectPath,
+          }),
+          listChatsByProject: () => [],
+          setProjectStar: async (projectId: string, starred: boolean) => {
+            setProjectStarCalls.push({ projectId, starred })
+            starredAt = starred ? Date.now() : undefined
+          },
+        } as never,
+        agent: {
+          cancel: async () => {},
+          closeChat: async () => {},
+          getActiveStatuses: () => new Map(),
+          getDrainingChatIds: () => new Set(),
+          getWaitStartedAtByChatId: () => new Map(),
+        } as never,
+        analytics: {
+          track: () => {},
+          trackLaunch: () => {},
+        },
+        terminals: {
+          closeByCwd: () => {},
+          getSnapshot: () => null,
+          onEvent: () => () => {},
+        } as never,
+        keybindings: {
+          getSnapshot: () => DEFAULT_KEYBINDINGS_SNAPSHOT,
+          onChange: () => () => {},
+        } as never,
+        refreshDiscovery: async () => [],
+        getDiscoveredProjects: () => [],
+        machineDisplayName: "Local Machine",
+        updateManager: null,
+        pushManager: NOOP_PUSH_MANAGER,
+      })
+      const ws = new FakeWebSocket()
+
+      await router.handleMessage(
+        ws as never,
+        JSON.stringify({
+          v: 1,
+          type: "command",
+          id: "set-star-1",
+          command: { type: "project.setStar", projectId: "project-star-1", starred: true },
+        })
+      )
+
+      expect(setProjectStarCalls).toEqual([{ projectId: "project-star-1", starred: true }])
+      expect(starredAt).toBeGreaterThan(0)
+      expect(ws.sent[0]).toMatchObject({ type: "ack", id: "set-star-1" })
+    } finally {
+      await rm(projectPath, { recursive: true, force: true })
+    }
+  })
+
+  test("project.setStar with starred:false clears starredAt", async () => {
+    const state = createEmptyState()
+    const projectPath = await mkdtemp(path.join(tmpdir(), "kanna-router-star-"))
+    let starredAt: number | undefined = Date.now()
+
+    try {
+      const router = createWsRouter({
+        store: {
+          state,
+          getProject: () => ({
+            id: "project-star-2",
+            localPath: projectPath,
+          }),
+          listChatsByProject: () => [],
+          setProjectStar: async (_projectId: string, starred: boolean) => {
+            starredAt = starred ? Date.now() : undefined
+          },
+        } as never,
+        agent: {
+          cancel: async () => {},
+          closeChat: async () => {},
+          getActiveStatuses: () => new Map(),
+          getDrainingChatIds: () => new Set(),
+          getWaitStartedAtByChatId: () => new Map(),
+        } as never,
+        analytics: {
+          track: () => {},
+          trackLaunch: () => {},
+        },
+        terminals: {
+          closeByCwd: () => {},
+          getSnapshot: () => null,
+          onEvent: () => () => {},
+        } as never,
+        keybindings: {
+          getSnapshot: () => DEFAULT_KEYBINDINGS_SNAPSHOT,
+          onChange: () => () => {},
+        } as never,
+        refreshDiscovery: async () => [],
+        getDiscoveredProjects: () => [],
+        machineDisplayName: "Local Machine",
+        updateManager: null,
+        pushManager: NOOP_PUSH_MANAGER,
+      })
+      const ws = new FakeWebSocket()
+
+      await router.handleMessage(
+        ws as never,
+        JSON.stringify({
+          v: 1,
+          type: "command",
+          id: "set-star-2",
+          command: { type: "project.setStar", projectId: "project-star-2", starred: false },
+        })
+      )
+
+      expect(starredAt).toBeUndefined()
+      expect(ws.sent[0]).toMatchObject({ type: "ack", id: "set-star-2" })
+    } finally {
+      await rm(projectPath, { recursive: true, force: true })
+    }
+  })
+
+  test("project.setStar with unknown projectId sends error response", async () => {
+    const state = createEmptyState()
+    const projectPath = await mkdtemp(path.join(tmpdir(), "kanna-router-star-"))
+
+    try {
+      const router = createWsRouter({
+        store: {
+          state,
+          getProject: () => undefined,
+          listChatsByProject: () => [],
+          setProjectStar: async () => {
+            throw new Error("Project not found")
+          },
+        } as never,
+        agent: {
+          cancel: async () => {},
+          closeChat: async () => {},
+          getActiveStatuses: () => new Map(),
+          getDrainingChatIds: () => new Set(),
+          getWaitStartedAtByChatId: () => new Map(),
+        } as never,
+        analytics: {
+          track: () => {},
+          trackLaunch: () => {},
+        },
+        terminals: {
+          closeByCwd: () => {},
+          getSnapshot: () => null,
+          onEvent: () => () => {},
+        } as never,
+        keybindings: {
+          getSnapshot: () => DEFAULT_KEYBINDINGS_SNAPSHOT,
+          onChange: () => () => {},
+        } as never,
+        refreshDiscovery: async () => [],
+        getDiscoveredProjects: () => [],
+        machineDisplayName: "Local Machine",
+        updateManager: null,
+        pushManager: NOOP_PUSH_MANAGER,
+      })
+      const ws = new FakeWebSocket()
+
+      await router.handleMessage(
+        ws as never,
+        JSON.stringify({
+          v: 1,
+          type: "command",
+          id: "set-star-3",
+          command: { type: "project.setStar", projectId: "unknown-project", starred: true },
+        })
+      )
+
+      expect(ws.sent[0]).toMatchObject({ type: "error", id: "set-star-3", message: "Project not found" })
+    } finally {
+      await rm(projectPath, { recursive: true, force: true })
+    }
+  })
 })
