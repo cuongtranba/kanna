@@ -68,7 +68,13 @@ token resumes without re-injecting history.
 - `message_appended` (in `MessageEvent`) — NOT `chat_user_message_appended`.
 - `pending_fork_session_token_set` — gains optional `provider` field.
 
-Source: `src/server/events.ts:175-221`.
+These events stay at the current `STORE_VERSION = 3`. No version bump. A
+missing `provider` field on a replayed v3 event is attributed at replay
+time to the chat's then-current `provider` (anchored by the most recent
+`chat_provider_set` seen so far in the replay).
+
+Source: `src/server/events.ts:175-221`, `src/shared/types.ts:1`,
+`src/server/event-store.ts:276` (version filter).
 
 ### 3. Real file paths
 
@@ -135,24 +141,35 @@ Raise to 2 in a follow-up after observing real orchestration.
 
 Phase 1 migration touches:
 
-- `src/shared/types.ts:1216` — `ChatRecord.sessionToken` → `sessionTokensByProvider`.
-- `src/shared/types.ts:459` — `ChatSidebarItem.canFork` derivation.
+- `src/server/events.ts:8` — `ChatRecord.sessionToken: string | null`
+  (line 19) → `sessionTokensByProvider`. This is the **persisted** record.
+- `src/server/events.ts:21` — `ChatRecord.pendingForkSessionToken` → provider-tagged shape.
+- `src/shared/types.ts:1207` — `ChatRuntime.sessionToken` (line 1216) →
+  `sessionTokensByProvider`. This is the **runtime mirror sent to the
+  client**; missing it produces a broken read-model.
+- `src/shared/types.ts:1240` — `ChatSnapshot.runtime` carries the new
+  shape transitively via `ChatRuntime`; no extra field added.
+- `src/shared/types.ts:448` — `SidebarChatRow.canFork` derivation
+  (not `ChatSidebarItem`).
 - `src/server/read-models.ts:34` — `canForkChat` reads token presence.
 - `src/server/agent.ts:1229,1251,1567,1609,1737` — every read/write of
   `chat.sessionToken` / `chat.pendingForkSessionToken`.
 - `src/server/event-store.ts` — `session_token_set` /
   `pending_fork_session_token_set` reducers; replay-time provider attribution.
 - `src/server/events.ts:201-221` — add optional `provider` field to both
-  token events.
+  token events (no version bump).
 - `src/server/codex-app-server.ts:124,754,809` — Codex resume path with
   provider tag.
 - `src/server/claude-session-importer.ts` — Claude import path sets
   `sessionTokensByProvider.claude`.
-- `src/server/auth.ts`, `src/client/app/useKannaState.ts` — any caller that
-  passes `chat.sessionToken` to a provider.
+- `src/client/app/useKannaState.ts` — any caller that passes
+  `chat.sessionToken` to a provider.
 - `src/client/components/chat-ui/sidebar/Menus.tsx`,
   `src/client/components/chat-ui/sidebar/ChatRow.tsx` — sidebar fork
   affordance reads provider-aware token state.
+
+NOT in scope: `src/server/auth.ts` — uses auth-cookie session tokens
+(unrelated concept; overloaded name).
 
 `pendingForkSessionToken` itself becomes provider-tagged so a fork carries
 the right backend session per provider.

@@ -23,16 +23,10 @@ Claude ↔ Codex. Subagents (phases 2 + 3) build on this.
 
 ## Data model
 
-### `ChatRecord`
+### `ChatRecord` (persisted) — `src/server/events.ts:8`
 
-Defined in `src/shared/types.ts:1216`. Replace:
-
-```ts
-// before
-sessionToken: string | null
-```
-
-with:
+Line 19 (`sessionToken: string | null`) and line 21
+(`pendingForkSessionToken?: string | null`) become:
 
 ```ts
 // after
@@ -47,39 +41,58 @@ pendingForkSessionToken: {
 no longer a lock). `composerState.provider` is the source of truth for
 the next turn's target provider.
 
-### Event shape additions
+### `ChatRuntime` (runtime mirror sent to client) — `src/shared/types.ts:1207`
+
+Line 1216 (`sessionToken: string | null`) gets the same replacement.
+`ChatRuntime` is the client-facing read-model; missing this change
+breaks sidebar fork affordance and client state. `ChatSnapshot`
+(`src/shared/types.ts:1240`) carries the new shape transitively via its
+`runtime` field; no extra field added there.
+
+`sessionToken` occurrences in `src/shared/types.ts`:
+
+```
+1216:  sessionToken: string | null   // ChatRuntime — the only direct occurrence
+```
+
+All other client-visible chat state reads through `ChatRuntime` /
+`ChatSnapshot`, so updating these two types covers the read-model surface.
+
+### Event shape additions (no version bump)
 
 `src/server/events.ts:201-221` — add optional `provider` field to both
-token events. Bump `v` from 3 to 4 to mark the schema change.
+token events. **Keep `STORE_VERSION = 3`**. The store filters events by
+exact version (`src/server/event-store.ts:276,400,468`); a bump would
+reset every existing v3 chat log and wipe user history.
 
 ```ts
 | {
-    v: 4
+    v: 3
     type: "session_token_set"
     timestamp: number
     chatId: string
     sessionToken: string | null
-    provider?: AgentProvider  // new; required for v4 writes
+    provider?: AgentProvider  // new — set on all new writes; absent in legacy logs
   }
 | {
-    v: 4
+    v: 3
     type: "pending_fork_session_token_set"
     timestamp: number
     chatId: string
     pendingForkSessionToken: string | null
-    provider?: AgentProvider  // new; required for v4 writes
+    provider?: AgentProvider  // new — set on all new writes; absent in legacy logs
   }
 ```
 
 Replay rules:
 
-- **v4 event with `provider`** — write to
+- **Event with `provider` set** — write to
   `sessionTokensByProvider[provider]`.
-- **v3 event without `provider`** — attribute to the chat's current
-  `provider` as of that point in replay (legacy logs never observed a
-  cross-provider switch, so attribution is unambiguous).
-- **v3 fork event without `provider`** — attribute to chat's current
-  `provider` as well.
+- **Event without `provider`** — attribute to the chat's `provider` as of
+  that point in the replay, anchored by the most recent
+  `chat_provider_set` seen so far. Legacy logs never observed a
+  cross-provider switch, so attribution is unambiguous.
+- Same rule for `pending_fork_session_token_set`.
 
 `chat_provider_set` semantics relax: still fires on first turn (forward-
 compat for old clients), but subsequent provider changes are allowed and
@@ -144,24 +157,35 @@ context only; the actual request follows after the marker line.
 - Tool calls flatten via existing `parseTranscript.ts` summarizer.
   Binary attachments referenced by filename only.
 
-## Migration
+## Migration (replay-time attribution)
 
-On `event-store` load, for each chat:
+No transient `sessionToken?: string | null` field. The type change is
+clean — `ChatRecord` and `ChatRuntime` carry only
+`sessionTokensByProvider` and provider-tagged `pendingForkSessionToken`
+after this PR. Migration happens at replay time:
 
-1. If a legacy `chat.sessionToken` exists and `sessionTokensByProvider`
-   is empty/absent, set
-   `sessionTokensByProvider[chat.provider] = sessionToken`.
-2. If `chat.pendingForkSessionToken` exists as a bare string, wrap as
-   `{ provider: chat.provider, token: <string> }`.
-3. Drop legacy fields from the in-memory model after replay.
+1. Event-store replay processes every `session_token_set` and
+   `pending_fork_session_token_set` event in order.
+2. Each event without `provider` is attributed to the chat's then-current
+   `provider`, anchored by the most recent `chat_provider_set` reached so
+   far in the replay.
+3. The resulting in-memory `ChatRecord` has `sessionTokensByProvider`
+   populated correctly without any transient legacy field.
+4. The next snapshot write emits the new shape; from that point on, all
+   reads use `sessionTokensByProvider` directly.
 
-Disk format: legacy events stay on disk; their interpretation is governed
-by the v3 → v4 replay rules above.
+Legacy snapshot files (`SnapshotFile` with `v: 3` in
+`src/server/events.ts:55`) lose their `chat.sessionToken` /
+`chat.pendingForkSessionToken` fields after this change — the loader must
+read those legacy fields **only on a v3 snapshot file written before this
+PR** and project them into `sessionTokensByProvider` keyed by
+`chat.provider`. After the first new snapshot write, the legacy fields
+are gone from disk.
 
 Sidebar/fork:
 
 - `canForkChat` in `src/server/read-models.ts:34` updated to read
-  `Object.values(sessionTokensByProvider).some(Boolean) || pendingForkSessionToken`.
+  `Object.values(sessionTokensByProvider).some(Boolean) || pendingForkSessionToken != null`.
 - Fork flow in `src/server/agent.ts:1229` copies only the active
   provider's token into the new chat's pending fork slot, with provider
   tag attached.
@@ -187,7 +211,7 @@ User submits composer
        userText: composerState.text,
      })
        └─ on session_token_set returned by provider:
-            append `session_token_set { v: 4, provider: targetProvider, sessionToken }`
+            append `session_token_set { v: 3, provider: targetProvider, sessionToken }`
 ```
 
 `startTurnForChat` (in `src/server/agent.ts`) reads/writes the per-provider
@@ -230,9 +254,12 @@ Co-located per existing layout.
 
 `src/server/event-store.test.ts`:
 
-- Legacy v3 `session_token_set` (no `provider`) replays into
-  `sessionTokensByProvider[chat.provider]`.
-- v4 `session_token_set` writes to the named provider slot.
+- Legacy `session_token_set` (no `provider`) replays into
+  `sessionTokensByProvider[chat.provider]` via replay-time attribution.
+- New `session_token_set` (with `provider`) writes to the named provider
+  slot.
+- `STORE_VERSION` stays at 3; events with the new optional field still
+  match the version filter.
 - Replay of Claude → Codex → Claude sequence ends with both slots
   populated.
 - Legacy `pending_fork_session_token_set` migrates to provider-tagged
@@ -269,14 +296,15 @@ Co-located per existing layout.
 
 ## Risk + rollback
 
-- Token replay attribution is the highest-risk change. v3 logs are
-  read-only after migration; reducer guards against ambiguous attribution
-  by anchoring to the most recent `chat_provider_set` reached in replay
-  so far.
-- Rollback: revert this PR before any v4 events are written. Once a chat
-  has v4 events in its log, downgrading requires re-fanning v4 events
-  into their v3 equivalents per slot (lossy: drops alt-provider tokens).
-  Document this in the release notes.
+- Token replay attribution is the highest-risk change. Legacy events
+  (no `provider`) and new events (with `provider`) coexist in the same
+  v3 log indefinitely; the reducer anchors missing-provider attribution
+  to the most recent `chat_provider_set` reached so far in replay.
+- Rollback: revert this PR. Because `STORE_VERSION` is unchanged, v3
+  logs remain readable by the pre-change reducer — it will ignore the
+  new optional `provider` field and treat events as legacy single-token
+  writes, losing any alt-provider tokens that were captured after the
+  switch was enabled. Document this in release notes.
 
 ## Open items resolved
 

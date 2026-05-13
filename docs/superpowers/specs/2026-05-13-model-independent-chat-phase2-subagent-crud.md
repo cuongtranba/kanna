@@ -79,14 +79,20 @@ In `src/shared/types.ts`:
 
 ## Protocol changes
 
-`src/shared/protocol.ts` adds (WebSocket frames):
+Existing protocol uses dot-form command names (`chat.send`) and typed
+snapshots (`app-settings`). Subagents piggyback on the existing
+`app-settings` snapshot — no separate `subagent_list` frame.
 
-- `subagent_list` (server → client) — pushed when app-settings snapshot
-  changes; full list.
-- `subagent_create` (client → server) — `SubagentInput` payload.
-- `subagent_update` (client → server) — `{ id, patch: SubagentPatch }`.
-- `subagent_delete` (client → server) — `{ id }`.
-- Each server response includes typed validation errors when applicable.
+`src/shared/protocol.ts` adds:
+
+- `AppSettingsSnapshot.subagents: Subagent[]` — flows through the
+  existing snapshot channel; server pushes the full list whenever
+  app-settings changes.
+- Client commands (dot-form):
+  - `subagent.create` — `SubagentInput` payload.
+  - `subagent.update` — `{ id, patch: SubagentPatch }`.
+  - `subagent.delete` — `{ id }`.
+- Each command response includes typed validation errors when applicable.
 
 ## Mention parsing (consensus item 5)
 
@@ -116,9 +122,43 @@ Rules:
 - After `@agent/` matches are extracted, run existing path mention logic
   on the remaining text.
 
-Phase 2 wires the parser at message-receive time and stores the resolved
-`subagentMentions: Array<{ subagentId: string; raw: string }>` on the
-appended `message_appended` event payload. Phase 3 reads it.
+### Persisting mentions on `message_appended`
+
+Current `MessageEvent` shape (`src/server/events.ts:151-157`):
+
+```ts
+export type MessageEvent = {
+  v: 3
+  type: "message_appended"
+  timestamp: number
+  chatId: string
+  entry: TranscriptEntry
+}
+```
+
+Phase 2 extends the envelope (NOT `TranscriptEntry`) with optional
+routing metadata so transcript content stays a pure transcript:
+
+```ts
+export type MessageEvent = {
+  v: 3
+  type: "message_appended"
+  timestamp: number
+  chatId: string
+  entry: TranscriptEntry
+  subagentMentions?: Array<{ subagentId: string; raw: string }>
+  unknownSubagentMentions?: Array<{ name: string; raw: string }>
+}
+```
+
+Rationale: mentions are routing metadata for the orchestrator, not
+transcript content. Putting them on the envelope avoids touching
+`TranscriptEntry` (which is shared with the export viewer and the
+Claude session importer). Optional fields are absent on legacy events.
+`STORE_VERSION` stays at 3.
+
+Phase 3 reads `subagentMentions` to spawn runs; `unknownSubagentMentions`
+emits `subagent_run_failed { code: "UNKNOWN_SUBAGENT" }` for surface.
 
 ### Stale-id handling
 

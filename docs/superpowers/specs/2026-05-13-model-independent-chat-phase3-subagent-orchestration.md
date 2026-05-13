@@ -46,11 +46,12 @@ Attached to the chat snapshot as `subagentRuns: Map<runId, SubagentRunSnapshot>`
 ## Events
 
 Durable events live in `turns.jsonl` (consensus item 7). Transcript JSONL
-holds a derived projection only.
+holds a derived projection only. All new event types stay at the current
+`STORE_VERSION = 3` — no bump (see phase 1 §"Event shape additions").
 
 ```ts
 type SubagentRunStartedEvent = {
-  v: 4
+  v: 3
   type: "subagent_run_started"
   timestamp: number
   chatId: string
@@ -65,7 +66,7 @@ type SubagentRunStartedEvent = {
 }
 
 type SubagentMessageDeltaEvent = {
-  v: 4
+  v: 3
   type: "subagent_message_delta"
   timestamp: number
   chatId: string
@@ -74,7 +75,7 @@ type SubagentMessageDeltaEvent = {
 }
 
 type SubagentRunCompletedEvent = {
-  v: 4
+  v: 3
   type: "subagent_run_completed"
   timestamp: number
   chatId: string
@@ -84,7 +85,7 @@ type SubagentRunCompletedEvent = {
 }
 
 type SubagentRunFailedEvent = {
-  v: 4
+  v: 3
   type: "subagent_run_failed"
   timestamp: number
   chatId: string
@@ -93,7 +94,7 @@ type SubagentRunFailedEvent = {
 }
 
 type SubagentRunCancelledEvent = {
-  v: 4
+  v: 3
   type: "subagent_run_cancelled"
   timestamp: number
   chatId: string
@@ -289,8 +290,8 @@ History primer for primary turns (phase 1 builder) is reused for
 - Orchestrator is additive — phase 1 and phase 2 ship without it. Disable
   by feature flag if needed; mentions become no-ops (parsed + recorded,
   never executed).
-- New event types are v4; older clients ignore unknown events (existing
-  unknown-event handling renders "Unsupported event"). Forward-compat
-  preserved.
+- New event types stay at the current `STORE_VERSION = 3`; older clients
+  ignore unknown `type` values (existing unknown-event handling renders
+  "Unsupported event"). Forward-compat preserved.
 - Open follow-ups (not v1): per-subagent session token caching,
   fan-out + primary synthesis mode, `MAX_CHAIN_DEPTH=2`.
