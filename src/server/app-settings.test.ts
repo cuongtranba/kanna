@@ -330,5 +330,81 @@ describe("AppSettingsManager.setClaudeAuth", () => {
 
     mgr.dispose()
   })
+
+  test("reload race with partial JSON does not clobber in-memory tokens", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "kanna-settings-"))
+    const filePath = path.join(dir, "settings.json")
+    const mgr = new AppSettingsManager(filePath)
+    await mgr.initialize()
+
+    await mgr.setClaudeAuth({
+      tokens: [{
+        id: "t1", label: "prod", token: "sk-ant-abc",
+        status: "active", limitedUntil: null,
+        lastUsedAt: null, lastErrorAt: null, lastErrorMessage: null, addedAt: 100,
+      }],
+    })
+
+    // Simulate the watcher reading the file mid-write: file briefly contains
+    // truncated/partial JSON that JSON.parse rejects.
+    await writeFile(filePath, "{ \"claudeAuth\": { \"tokens\":", "utf8")
+
+    let caught: unknown = null
+    try {
+      await mgr.reload()
+    } catch (err) {
+      caught = err
+    }
+    expect(caught).toBeInstanceOf(SyntaxError)
+
+    // In-memory state must still hold the token; otherwise the next
+    // mutateTokenStatus would persist an empty token list and drop OAuth keys
+    // permanently.
+    expect(mgr.getSnapshot().claudeAuth.tokens).toHaveLength(1)
+    expect(mgr.getSnapshot().claudeAuth.tokens[0]?.token).toBe("sk-ant-abc")
+
+    mgr.dispose()
+  })
+
+  test("writes are atomic — no observer ever sees an empty/partial file", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "kanna-settings-"))
+    const filePath = path.join(dir, "settings.json")
+    const mgr = new AppSettingsManager(filePath)
+    await mgr.initialize()
+
+    // Seed initial tokens.
+    await mgr.setClaudeAuth({
+      tokens: [{
+        id: "t1", label: "prod", token: "sk-ant-abc",
+        status: "active", limitedUntil: null,
+        lastUsedAt: null, lastErrorAt: null, lastErrorMessage: null, addedAt: 100,
+      }],
+    })
+
+    // Race many mutateTokenStatus writes against repeated full-file reads.
+    // Every read must parse to valid JSON with the token present.
+    let stop = false
+    const reader = (async () => {
+      while (!stop) {
+        try {
+          const text = await readFile(filePath, "utf8")
+          const parsed = JSON.parse(text)
+          expect(parsed.claudeAuth.tokens[0]?.token).toBe("sk-ant-abc")
+        } catch (err) {
+          if ((err as NodeJS.ErrnoException)?.code === "ENOENT") continue
+          throw err
+        }
+      }
+    })()
+
+    for (let i = 0; i < 50; i++) {
+      await mgr.mutateTokenStatus("t1", { lastUsedAt: i })
+    }
+    stop = true
+    await reader
+
+    expect(mgr.getSnapshot().claudeAuth.tokens[0]?.token).toBe("sk-ant-abc")
+    mgr.dispose()
+  })
 })
 

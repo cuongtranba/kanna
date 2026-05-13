@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto"
 import { watch, type FSWatcher } from "node:fs"
-import { mkdir, readFile, writeFile } from "node:fs/promises"
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises"
 import { homedir } from "node:os"
 import path from "node:path"
 import { getSettingsFilePath, LOG_PREFIX } from "../shared/branding"
@@ -91,6 +91,12 @@ const MAX_TERMINAL_MIN_COLUMN_WIDTH = 900
 const DEFAULT_EDITOR_PRESET: EditorPreset = "cursor"
 const DEFAULT_CHAT_SOUND_PREFERENCE: ChatSoundPreference = "always"
 const DEFAULT_CHAT_SOUND_ID: ChatSoundId = "funk"
+
+async function atomicWriteJson(filePath: string, content: string) {
+  const tmpPath = `${filePath}.${process.pid}.${randomUUID()}.tmp`
+  await writeFile(tmpPath, content, "utf8")
+  await rename(tmpPath, filePath)
+}
 
 function formatDisplayPath(filePath: string) {
   const homePath = homedir()
@@ -573,6 +579,11 @@ export class AppSettingsManager {
   private watcher: FSWatcher | null = null
   private state: AppSettingsState
   private readonly listeners = new Set<(snapshot: AppSettingsSnapshot) => void>()
+  // Suppress watcher reload for a short window after our own writes, so a
+  // partial-read race cannot clobber in-memory state with normalized defaults
+  // (which would then be re-persisted on the next mutateTokenStatus call and
+  // permanently drop OAuth tokens, cloudflare config, etc.).
+  private suppressReloadUntil = 0
 
   constructor(filePath = getSettingsFilePath(homedir())) {
     this.filePath = filePath
@@ -581,7 +592,7 @@ export class AppSettingsManager {
 
   async initialize() {
     await mkdir(path.dirname(this.filePath), { recursive: true })
-    await this.reload({ persistNormalized: true })
+    await this.reload({ persistNormalized: true, allowDefaultsFallback: true })
     this.startWatching()
   }
 
@@ -606,7 +617,7 @@ export class AppSettingsManager {
     }
   }
 
-  async reload(options?: { persistNormalized?: boolean }) {
+  async reload(options?: { persistNormalized?: boolean; allowDefaultsFallback?: boolean }) {
     const nextState = await this.readState(options)
     this.setState(nextState)
   }
@@ -663,12 +674,13 @@ export class AppSettingsManager {
       filePathDisplay: formatDisplayPath(this.filePath),
     }
     await mkdir(path.dirname(this.filePath), { recursive: true })
-    await writeFile(this.filePath, `${JSON.stringify(toFilePayload(nextState), null, 2)}\n`, "utf8")
+    this.suppressReloadUntil = Date.now() + 500
+    await atomicWriteJson(this.filePath, `${JSON.stringify(toFilePayload(nextState), null, 2)}\n`)
     this.setState(nextState)
     return toSnapshot(nextState)
   }
 
-  private async readState(options?: { persistNormalized?: boolean }) {
+  private async readState(options?: { persistNormalized?: boolean; allowDefaultsFallback?: boolean }) {
     const file = Bun.file(this.filePath)
 
     try {
@@ -676,7 +688,8 @@ export class AppSettingsManager {
       const hasText = text.trim().length > 0
       const normalized = normalizeAppSettings(hasText ? JSON.parse(text) : undefined, this.filePath)
       if (options?.persistNormalized && (!hasText || normalized.shouldWrite)) {
-        await writeFile(this.filePath, `${JSON.stringify(toFilePayload(normalized.payload), null, 2)}\n`, "utf8")
+        this.suppressReloadUntil = Date.now() + 500
+        await atomicWriteJson(this.filePath, `${JSON.stringify(toFilePayload(normalized.payload), null, 2)}\n`)
       }
       return {
         ...normalized.payload,
@@ -687,9 +700,17 @@ export class AppSettingsManager {
         throw error
       }
 
+      // Only fall back to defaults at initialization. After init, a transient
+      // SyntaxError (mid-write read from another process, partial flush, etc.)
+      // must NOT clobber in-memory state — otherwise the next mutateTokenStatus
+      // call would persist those defaults and permanently drop user data.
+      if (!options?.allowDefaultsFallback) {
+        throw error
+      }
       const normalized = normalizeAppSettings(undefined, this.filePath)
       if (options?.persistNormalized) {
-        await writeFile(this.filePath, `${JSON.stringify(toFilePayload(normalized.payload), null, 2)}\n`, "utf8")
+        this.suppressReloadUntil = Date.now() + 500
+        await atomicWriteJson(this.filePath, `${JSON.stringify(toFilePayload(normalized.payload), null, 2)}\n`)
       }
       return {
         ...normalized.payload,
@@ -713,7 +734,14 @@ export class AppSettingsManager {
         if (filename && filename !== path.basename(this.filePath)) {
           return
         }
+        if (Date.now() < this.suppressReloadUntil) {
+          return
+        }
         void this.reload().catch((error: unknown) => {
+          if (error instanceof SyntaxError) {
+            console.warn(`${LOG_PREFIX} Ignoring transient invalid JSON in settings file; keeping in-memory state.`)
+            return
+          }
           console.warn(`${LOG_PREFIX} Failed to reload settings:`, error)
         })
       })
