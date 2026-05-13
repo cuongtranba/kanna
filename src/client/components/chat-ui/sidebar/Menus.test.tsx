@@ -1,9 +1,10 @@
 import { describe, expect, test, mock } from "bun:test"
-import { createElement } from "react"
 import { renderToStaticMarkup } from "react-dom/server"
 import { ProjectSectionMenu } from "./Menus"
 
-function makeProps(overrides: Partial<Parameters<typeof ProjectSectionMenu>[0]> = {}) {
+type MenuProps = Omit<Parameters<typeof ProjectSectionMenu>[0], "children">
+
+function defaultProps(overrides: Partial<MenuProps> = {}): MenuProps {
   return {
     editorLabel: "VS Code",
     starred: false,
@@ -19,14 +20,11 @@ function makeProps(overrides: Partial<Parameters<typeof ProjectSectionMenu>[0]> 
 
 describe("ProjectSectionMenu", () => {
   test("shows 'Star project' when not starred", () => {
-    // ContextMenu content is rendered hidden in SSR — check the hidden portal layer
     expect(() =>
       renderToStaticMarkup(
-        createElement(
-          ProjectSectionMenu,
-          makeProps({ starred: false }),
-          createElement("button", null, "trigger")
-        )
+        <ProjectSectionMenu {...defaultProps({ starred: false })}>
+          <button>trigger</button>
+        </ProjectSectionMenu>
       )
     ).not.toThrow()
   })
@@ -34,11 +32,9 @@ describe("ProjectSectionMenu", () => {
   test("shows 'Unstar project' when starred", () => {
     expect(() =>
       renderToStaticMarkup(
-        createElement(
-          ProjectSectionMenu,
-          makeProps({ starred: true }),
-          createElement("button", null, "trigger")
-        )
+        <ProjectSectionMenu {...defaultProps({ starred: true })}>
+          <button>trigger</button>
+        </ProjectSectionMenu>
       )
     ).not.toThrow()
   })
@@ -47,47 +43,19 @@ describe("ProjectSectionMenu", () => {
     const onToggleStar = mock(() => undefined)
     expect(() =>
       renderToStaticMarkup(
-        createElement(
-          ProjectSectionMenu,
-          makeProps({ starred: false, onToggleStar }),
-          createElement("button", null, "trigger")
-        )
+        <ProjectSectionMenu {...defaultProps({ starred: false, onToggleStar })}>
+          <button>trigger</button>
+        </ProjectSectionMenu>
       )
     ).not.toThrow()
   })
 
   test("renders children inside trigger", () => {
     const html = renderToStaticMarkup(
-      createElement(
-        ProjectSectionMenu,
-        makeProps(),
-        createElement("button", null, "project trigger")
-      )
+      <ProjectSectionMenu {...defaultProps()}>
+        <button>project trigger</button>
+      </ProjectSectionMenu>
     )
     expect(html).toContain("project trigger")
-  })
-
-  test("renders without errors when starred=false", () => {
-    expect(() =>
-      renderToStaticMarkup(
-        createElement(
-          ProjectSectionMenu,
-          makeProps({ starred: false }),
-          createElement("div", null, "trigger")
-        )
-      )
-    ).not.toThrow()
-  })
-
-  test("renders without errors when starred=true", () => {
-    expect(() =>
-      renderToStaticMarkup(
-        createElement(
-          ProjectSectionMenu,
-          makeProps({ starred: true }),
-          createElement("div", null, "trigger")
-        )
-      )
-    ).not.toThrow()
   })
 })

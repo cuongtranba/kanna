@@ -71,6 +71,7 @@ interface KannaSidebarProps {
   onCopyPath: (localPath: string) => void
   onOpenExternalPath: (action: "open_finder" | "open_editor", localPath: string) => void
   onHideProject: (projectId: string) => void
+  onToggleStar: (projectId: string, starred: boolean) => void
   onReorderProjectGroups: (projectIds: string[]) => void
   onCreateStack: (title: string, projectIds: string[]) => void
   onRenameStack: (stackId: string, title: string) => void
@@ -107,6 +108,7 @@ function KannaSidebarImpl({
   onCopyPath,
   onOpenExternalPath,
   onHideProject,
+  onToggleStar,
   onReorderProjectGroups,
   onCreateStack,
   onRenameStack,
@@ -147,19 +149,33 @@ function KannaSidebarImpl({
     return out
   }, [data.projectGroups])
 
-  const projectGroupsWithoutStackChats = useMemo(() => {
-    return data.projectGroups.map((group) => {
+  const stripStackChats = useCallback((groups: typeof data.projectGroups) => {
+    return groups.map((group) => {
       const chats = group.chats.filter((c) => !c.stackId)
       if (chats.length === group.chats.length) return group
       const previewChats = group.previewChats.filter((c) => !c.stackId)
       const olderChats = group.olderChats.filter((c) => !c.stackId)
       return { ...group, chats, previewChats, olderChats }
     })
-  }, [data.projectGroups])
+  }, [])
+
+  const starredProjectGroupsWithoutStackChats = useMemo(
+    () => stripStackChats(data.starredProjectGroups),
+    [data.starredProjectGroups, stripStackChats]
+  )
+
+  const projectGroupsWithoutStackChats = useMemo(
+    () => stripStackChats(data.projectGroups),
+    [data.projectGroups, stripStackChats]
+  )
 
   const visibleChats = useMemo(
-    () => getVisibleSidebarChats(projectGroupsWithoutStackChats, collapsedSections, expandedGroups),
-    [collapsedSections, projectGroupsWithoutStackChats, expandedGroups]
+    () => getVisibleSidebarChats(
+      [...starredProjectGroupsWithoutStackChats, ...projectGroupsWithoutStackChats],
+      collapsedSections,
+      expandedGroups
+    ),
+    [collapsedSections, starredProjectGroupsWithoutStackChats, projectGroupsWithoutStackChats, expandedGroups]
   )
   const visibleChatsRef = useRef(visibleChats)
   const visibleIndexByChatId = useMemo(
@@ -193,14 +209,14 @@ function KannaSidebarImpl({
   }, [])
 
   const projectIdByPath = useMemo(
-    () => new Map(data.projectGroups.map((group) => [group.localPath, group.groupKey])),
-    [data.projectGroups]
+    () => new Map([...data.starredProjectGroups, ...data.projectGroups].map((group) => [group.localPath, group.groupKey])),
+    [data.starredProjectGroups, data.projectGroups]
   )
 
   const activeVisibleCount = visibleChats.length
   const archivedProject = useMemo(
-    () => data.projectGroups.find((group) => group.groupKey === archivedProjectId) ?? null,
-    [archivedProjectId, data.projectGroups]
+    () => [...data.starredProjectGroups, ...data.projectGroups].find((group) => group.groupKey === archivedProjectId) ?? null,
+    [archivedProjectId, data.starredProjectGroups, data.projectGroups]
   )
 
   useEffect(() => {
@@ -210,7 +226,8 @@ function KannaSidebarImpl({
   useEffect(() => {
     setCollapsedSections((previous) => {
       const next = new Set<string>()
-      const projectKeys = new Set(data.projectGroups.map((group) => group.groupKey))
+      const allGroups = [...data.starredProjectGroups, ...data.projectGroups]
+      const projectKeys = new Set(allGroups.map((group) => group.groupKey))
       const initializedKeys = initializedCollapsedGroupKeysRef.current
 
       for (const key of previous) {
@@ -223,7 +240,7 @@ function KannaSidebarImpl({
         [...initializedKeys].filter((key) => projectKeys.has(key))
       )
 
-      for (const group of data.projectGroups) {
+      for (const group of allGroups) {
         if (initializedCollapsedGroupKeysRef.current.has(group.groupKey)) continue
         initializedCollapsedGroupKeysRef.current.add(group.groupKey)
         if (group.defaultCollapsed) {
@@ -237,7 +254,7 @@ function KannaSidebarImpl({
 
       return next
     })
-  }, [data.projectGroups])
+  }, [data.starredProjectGroups, data.projectGroups])
 
   const toggleSection = useCallback((key: string) => {
     setCollapsedSections((previous) => {
@@ -694,6 +711,35 @@ function KannaSidebarImpl({
               )
             })()}
 
+            {starredProjectGroupsWithoutStackChats.length > 0 && (
+              <>
+                <LocalProjectsSection
+                  projectGroups={starredProjectGroupsWithoutStackChats}
+                  editorLabel={editorLabel}
+                  collapsedSections={collapsedSections}
+                  expandedGroups={expandedGroups}
+                  onToggleSection={toggleSection}
+                  onToggleExpandedGroup={toggleExpandedGroup}
+                  renderChatRow={renderChatRow}
+                  onShowArchivedProject={setArchivedProjectId}
+                  onNewLocalChat={(localPath) => {
+                    const projectId = projectIdByPath.get(localPath)
+                    if (projectId) {
+                      onCreateChat(projectId)
+                    }
+                  }}
+                  onCopyPath={onCopyPath}
+                  onOpenExternalPath={onOpenExternalPath}
+                  onHideProject={onHideProject}
+                  onToggleStar={onToggleStar}
+                  isConnected={connectionStatus === "connected"}
+                />
+                {data.projectGroups.length > 0 && (
+                  <div className="mx-3 my-1 border-t border-border/50" />
+                )}
+              </>
+            )}
+
             <LocalProjectsSection
               projectGroups={projectGroupsWithoutStackChats}
               editorLabel={editorLabel}
@@ -713,6 +759,7 @@ function KannaSidebarImpl({
               onCopyPath={onCopyPath}
               onOpenExternalPath={onOpenExternalPath}
               onHideProject={onHideProject}
+              onToggleStar={onToggleStar}
               isConnected={connectionStatus === "connected"}
             />
           </div>

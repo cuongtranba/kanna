@@ -240,6 +240,9 @@ function KannaLayout() {
   const handleSidebarHideProject = useCallback((projectId: string) => {
     void state.handleHideProject(projectId)
   }, [state.handleHideProject])
+  const handleSidebarToggleProjectStar = useCallback((projectId: string, starred: boolean) => {
+    void state.handleToggleProjectStar(projectId, starred)
+  }, [state.handleToggleProjectStar])
   const handleSidebarReorderProjectGroups = useCallback((projectIds: string[]) => {
     void state.handleReorderProjectGroups(projectIds)
   }, [state.handleReorderProjectGroups])
@@ -292,6 +295,7 @@ function KannaLayout() {
       onCopyPath={handleSidebarCopyPath}
       onOpenExternalPath={handleSidebarOpenExternalPath}
       onHideProject={handleSidebarHideProject}
+      onToggleStar={handleSidebarToggleProjectStar}
       onReorderProjectGroups={handleSidebarReorderProjectGroups}
       onCreateStack={state.handleCreateStack}
       onRenameStack={state.handleRenameStack}
@@ -315,6 +319,7 @@ function KannaLayout() {
     handleSidebarShareChat,
     handleSidebarReorderProjectGroups,
     handleSidebarHideProject,
+    handleSidebarToggleProjectStar,
     showMobileOpenButton,
     state.activeChatId,
     state.activeProjectId,
