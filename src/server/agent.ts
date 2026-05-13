@@ -1036,8 +1036,7 @@ export class AgentCoordinator {
   }
 
   private resolveProvider(options: SendMessageOptions, currentProvider: AgentProvider | null) {
-    if (currentProvider) return currentProvider
-    return options.provider ?? "claude"
+    return options.provider ?? currentProvider ?? "claude"
   }
 
   private getProviderSettings(provider: AgentProvider, options: SendMessageOptions) {
@@ -1140,7 +1139,7 @@ export class AgentCoordinator {
       throw new Error("Chat is already running")
     }
 
-    if (!chat.provider) {
+    if (chat.provider !== args.provider) {
       await this.store.setChatProvider(args.chatId, args.provider)
       logSendToStartingProfile(args.profile, "start_turn.provider_set", {
         chatId: args.chatId,

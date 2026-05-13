@@ -1227,6 +1227,7 @@ describe("AgentCoordinator claude integration", () => {
     const store = createFakeStore()
     store.chat.provider = "claude"
     store.chat.sessionToken = "session-1"
+    store.chat.sessionTokensByProvider = { claude: "session-1" }
 
     const coordinator = new AgentCoordinator({
       store: store as never,
@@ -1653,7 +1654,7 @@ describe("AgentCoordinator claude integration", () => {
     const events = new AsyncEventQueue<any>()
     const store = createFakeStore()
     store.chat.provider = "claude"
-    store.chat.pendingForkSessionToken = "claude-parent-1"
+    store.chat.pendingForkSessionToken = { provider: "claude", token: "claude-parent-1" }
 
     const coordinator = new AgentCoordinator({
       store: store as never,
@@ -1718,6 +1719,168 @@ describe("AgentCoordinator claude integration", () => {
     }])
     expect(store.chat.pendingForkSessionToken).toBeNull()
     events.close()
+  })
+
+  test("primer injected when switching codex with no prior codex token", async () => {
+    const events = new AsyncEventQueue<any>()
+    const store = createFakeStore()
+    store.chat.provider = "claude"
+    store.chat.sessionTokensByProvider = { claude: "claude-tok" }
+    // Existing assistant reply so primer has content.
+    store.messages.push(timestamped({ kind: "user_prompt", content: "first" }))
+    store.messages.push(timestamped({ kind: "assistant_text", text: "first-reply" }))
+
+    const turnContent: string[] = []
+    const fakeCodexManager = {
+      async startSession() {},
+      async startTurn(args: { content: string }) {
+        turnContent.push(args.content)
+        async function* stream() {
+          yield { type: "session_token" as const, sessionToken: "codex-tok" }
+          yield {
+            type: "transcript" as const,
+            entry: timestamped({
+              kind: "result",
+              subtype: "success",
+              isError: false,
+              durationMs: 0,
+              result: "",
+            }),
+          }
+        }
+        return {
+          provider: "codex" as const,
+          stream: stream(),
+          interrupt: async () => {},
+          close: () => {},
+        }
+      },
+    }
+
+    const coordinator = new AgentCoordinator({
+      store: store as never,
+      onStateChange: () => {},
+      codexManager: fakeCodexManager as never,
+    })
+
+    await coordinator.send({
+      type: "chat.send",
+      chatId: "chat-1",
+      provider: "codex",
+      content: "continue please",
+    })
+
+    await waitFor(() => store.turnFinishedCount === 1)
+    expect(turnContent.length).toBe(1)
+    expect(turnContent[0]).toContain("BEGIN PRIOR CONVERSATION")
+    expect(turnContent[0]).toContain("first-reply")
+    expect(turnContent[0].endsWith("continue please")).toBe(true)
+    expect(store.chat.sessionTokensByProvider.codex).toBe("codex-tok")
+    expect(store.chat.sessionTokensByProvider.claude).toBe("claude-tok")
+    events.close()
+  })
+
+  test("no primer when target provider already has a token", async () => {
+    const store = createFakeStore()
+    store.chat.provider = "codex"
+    store.chat.sessionTokensByProvider = { codex: "codex-tok" }
+    store.messages.push(timestamped({ kind: "user_prompt", content: "first" }))
+    store.messages.push(timestamped({ kind: "assistant_text", text: "first-reply" }))
+
+    const turnContent: string[] = []
+    const fakeCodexManager = {
+      async startSession() {},
+      async startTurn(args: { content: string }) {
+        turnContent.push(args.content)
+        async function* stream() {
+          yield {
+            type: "transcript" as const,
+            entry: timestamped({
+              kind: "result",
+              subtype: "success",
+              isError: false,
+              durationMs: 0,
+              result: "",
+            }),
+          }
+        }
+        return {
+          provider: "codex" as const,
+          stream: stream(),
+          interrupt: async () => {},
+          close: () => {},
+        }
+      },
+    }
+
+    const coordinator = new AgentCoordinator({
+      store: store as never,
+      onStateChange: () => {},
+      codexManager: fakeCodexManager as never,
+    })
+
+    await coordinator.send({
+      type: "chat.send",
+      chatId: "chat-1",
+      provider: "codex",
+      content: "hi",
+    })
+
+    await waitFor(() => store.turnFinishedCount === 1)
+    expect(turnContent).toEqual(["hi"])
+  })
+
+  test("pendingForkSessionToken ignored when switching to a different provider", async () => {
+    const store = createFakeStore()
+    store.chat.provider = "claude"
+    store.chat.sessionTokensByProvider = { claude: "claude-tok" }
+    store.chat.pendingForkSessionToken = { provider: "claude", token: "claude-fork" }
+    store.messages.push(timestamped({ kind: "user_prompt", content: "first" }))
+    store.messages.push(timestamped({ kind: "assistant_text", text: "first-reply" }))
+
+    const sessionCalls: Array<{ sessionToken: string | null; pendingForkSessionToken: string | null }> = []
+    const fakeCodexManager = {
+      async startSession(args: { sessionToken: string | null; pendingForkSessionToken: string | null }) {
+        sessionCalls.push({ sessionToken: args.sessionToken, pendingForkSessionToken: args.pendingForkSessionToken })
+      },
+      async startTurn() {
+        async function* stream() {
+          yield {
+            type: "transcript" as const,
+            entry: timestamped({
+              kind: "result",
+              subtype: "success",
+              isError: false,
+              durationMs: 0,
+              result: "",
+            }),
+          }
+        }
+        return {
+          provider: "codex" as const,
+          stream: stream(),
+          interrupt: async () => {},
+          close: () => {},
+        }
+      },
+    }
+
+    const coordinator = new AgentCoordinator({
+      store: store as never,
+      onStateChange: () => {},
+      codexManager: fakeCodexManager as never,
+    })
+
+    await coordinator.send({
+      type: "chat.send",
+      chatId: "chat-1",
+      provider: "codex",
+      content: "switch over",
+    })
+
+    await waitFor(() => store.turnFinishedCount === 1)
+    expect(sessionCalls).toEqual([{ sessionToken: null, pendingForkSessionToken: null }])
+    expect(store.chat.pendingForkSessionToken).toEqual({ provider: "claude", token: "claude-fork" })
   })
 })
 
@@ -1865,8 +2028,9 @@ function createFakeStore() {
     provider: null as "claude" | "codex" | null,
     planMode: false,
     sessionToken: null as string | null,
+    sessionTokensByProvider: {} as Partial<Record<"claude" | "codex", string | null>>,
     slashCommands: undefined as SlashCommand[] | undefined,
-    pendingForkSessionToken: null as string | null,
+    pendingForkSessionToken: null as { provider: "claude" | "codex"; token: string } | null,
   }
   const project = {
     id: "project-1",
@@ -1933,19 +2097,28 @@ function createFakeStore() {
     async setSessionToken(_chatId: string, sessionToken: string | null) {
       chat.sessionToken = sessionToken
     },
-    async setPendingForkSessionToken(_chatId: string, pendingForkSessionToken: string | null) {
-      chat.pendingForkSessionToken = pendingForkSessionToken
+    async setSessionTokenForProvider(_chatId: string, provider: "claude" | "codex", sessionToken: string | null) {
+      chat.sessionTokensByProvider = { ...chat.sessionTokensByProvider, [provider]: sessionToken }
+      chat.sessionToken = sessionToken
+    },
+    async setPendingForkSessionToken(_chatId: string, value: { provider: "claude" | "codex"; token: string } | null) {
+      chat.pendingForkSessionToken = value
     },
     async createChat() {
       return chat
     },
     async forkChat() {
+      const pending = chat.provider
+        ? (chat.sessionTokensByProvider[chat.provider] ?? null)
+        : null
       return {
         ...chat,
         id: "chat-fork-1",
         title: "Fork: New Chat",
-        sessionToken: null,
-        pendingForkSessionToken: chat.sessionToken ?? chat.pendingForkSessionToken,
+        sessionTokensByProvider: {},
+        pendingForkSessionToken: pending && chat.provider
+          ? { provider: chat.provider, token: pending }
+          : chat.pendingForkSessionToken,
       }
     },
     async enqueueMessage(_chatId: string, message: any) {
