@@ -204,6 +204,7 @@ export class EventStore implements PushEventStore {
   private snapshotHasLegacyMessages = false
   private cachedTranscript: { chatId: string; entries: TranscriptEntry[] } | null = null
   private readonly tunnelEventsByChatId = new Map<string, CloudflareTunnelEvent[]>()
+  private replayChatProvider = new Map<string, AgentProvider | null>()
 
   constructor(dataDir = getDataDir(homedir())) {
     this.dataDir = dataDir
@@ -477,6 +478,7 @@ export class EventStore implements PushEventStore {
       .forEach(({ event }) => {
         this.applyEvent(event)
       })
+    this.replayChatProvider.clear()
   }
 
   private async loadReplayEvents(filePath: string, sourceIndex: number): Promise<ParsedReplayEvent[]> {
@@ -571,7 +573,7 @@ export class EventStore implements PushEventStore {
         break
       }
       case "chat_created": {
-        const chat: import("./events").ChatRecord = {
+        const chat: ChatRecord = {
           id: e.chatId,
           projectId: e.projectId,
           title: e.title,
@@ -580,7 +582,7 @@ export class EventStore implements PushEventStore {
           unread: false,
           provider: null,
           planMode: false,
-          sessionToken: null,
+          sessionTokensByProvider: {},
           sourceHash: null,
           pendingForkSessionToken: null,
           hasMessages: false,
@@ -589,6 +591,7 @@ export class EventStore implements PushEventStore {
         if (e.stackId !== undefined) chat.stackId = e.stackId
         if (e.stackBindings !== undefined) chat.stackBindings = e.stackBindings.map((b) => ({ ...b }))
         this.state.chatsById.set(chat.id, chat)
+        this.replayChatProvider.set(e.chatId, null)
         this.updateTiming(e.chatId, e.timestamp, "idle")
         break
       }
@@ -628,6 +631,7 @@ export class EventStore implements PushEventStore {
         if (!chat) break
         chat.provider = e.provider
         chat.updatedAt = e.timestamp
+        this.replayChatProvider.set(e.chatId, e.provider)
         break
       }
       case "chat_plan_mode_set": {
@@ -721,7 +725,12 @@ export class EventStore implements PushEventStore {
       case "session_token_set": {
         const chat = this.state.chatsById.get(e.chatId)
         if (!chat) break
-        chat.sessionToken = e.sessionToken
+        const provider = e.provider ?? this.replayChatProvider.get(e.chatId) ?? chat.provider
+        if (!provider) break
+        chat.sessionTokensByProvider = {
+          ...chat.sessionTokensByProvider,
+          [provider]: e.sessionToken,
+        }
         chat.updatedAt = e.timestamp
         break
       }
@@ -735,7 +744,13 @@ export class EventStore implements PushEventStore {
       case "pending_fork_session_token_set": {
         const chat = this.state.chatsById.get(e.chatId)
         if (!chat) break
-        chat.pendingForkSessionToken = e.pendingForkSessionToken
+        if (e.pendingForkSessionToken == null) {
+          chat.pendingForkSessionToken = null
+        } else {
+          const provider = e.provider ?? this.replayChatProvider.get(e.chatId) ?? chat.provider
+          if (!provider) break
+          chat.pendingForkSessionToken = { provider, token: e.pendingForkSessionToken }
+        }
         chat.updatedAt = e.timestamp
         break
       }
