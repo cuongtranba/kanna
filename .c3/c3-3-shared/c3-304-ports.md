@@ -1,7 +1,7 @@
 ---
 id: c3-304
 c3-version: 4
-c3-seal: 7f5e25d35669e8a640b98118303d5f17e067c1165098c223e40eeffbd2acbb83
+c3-seal: 867cf0e9907bec39192aeeaa7cecb62eca2c4a1148adb04b12a3616127febdcd
 title: ports
 type: component
 category: foundation
@@ -9,6 +9,7 @@ parent: c3-3
 goal: Centralize default ports and dev-mode port offsets (Vite client + Bun backend).
 uses:
     - ref-strong-typing
+    - rule-strong-typing
 ---
 
 # ports
@@ -54,6 +55,7 @@ Exports the canonical default ports and dev-mode offsets used by the CLI, Bun se
 | Reference | Type | Governs | Precedence | Notes |
 | --- | --- | --- | --- | --- |
 | ref-strong-typing | ref | Typed numeric constants | must follow | No magic literals |
+| rule-strong-typing | rule | Compliance target added by c3x wire; refine what must be reviewed or complied with before handoff. | wired compliance target beats uncited local prose | Added by c3x wire for explicit compliance review. |
 
 ## Contract
 

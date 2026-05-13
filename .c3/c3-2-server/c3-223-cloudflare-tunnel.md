@@ -1,7 +1,7 @@
 ---
 id: c3-223
 c3-version: 4
-c3-seal: 3db5593a61669b6847cb2d7d540d3144feaabd941b7387a44bc7a5695b758cad
+c3-seal: 02c6eb6575ce2e59f225ec1b3c420a09356509085e28925ee69085cb2411f9d9
 title: cloudflare-tunnel
 type: component
 category: feature
@@ -11,6 +11,7 @@ uses:
     - ref-cqrs-read-models
     - ref-strong-typing
     - ref-ws-subscription
+    - rule-strong-typing
 ---
 
 # cloudflare-tunnel
@@ -60,6 +61,7 @@ Hooks into the Bash tool result path, classifies whether stdout indicates a list
 | ref-cqrs-read-models | ref | Tunnel state projected over WS | must follow | Push, never pull |
 | ref-ws-subscription | ref | Reuses single-WS broadcast pipeline | must follow | No new push channel |
 | ref-strong-typing | ref | Typed event union + injected interfaces | must follow | No any in classifier or spawner |
+| rule-strong-typing | rule | Compliance target added by c3x wire; refine what must be reviewed or complied with before handoff. | wired compliance target beats uncited local prose | Added by c3x wire for explicit compliance review. |
 
 ## Contract
 

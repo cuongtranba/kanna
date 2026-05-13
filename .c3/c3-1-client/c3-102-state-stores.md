@@ -1,7 +1,7 @@
 ---
 id: c3-102
 c3-version: 4
-c3-seal: 36efe85c317a9c9a46be805f54d870c4861c64fdb59896abe6ca65f6f2be439c
+c3-seal: 5e661d21719b3fb4d50032fa771998f3882bade8f6849b8a034d616c25f91dc8
 title: state-stores
 type: component
 category: foundation
@@ -11,6 +11,9 @@ uses:
     - ref-colocated-bun-test
     - ref-strong-typing
     - ref-zustand-store
+    - rule-colocated-bun-test
+    - rule-strong-typing
+    - rule-zustand-store
 ---
 
 # state-stores
@@ -58,6 +61,9 @@ Owns the browser-side ephemeral state split into per-concern Zustand stores (cha
 | ref-zustand-store | ref | Per-concern store pattern, persist usage | must follow | Each store is one concern |
 | ref-strong-typing | ref | Typed selectors and setters | must follow | No any in slice types |
 | ref-colocated-bun-test | ref | *.test.ts next to source | must follow | Store tests live alongside |
+| rule-strong-typing | rule | All boundary state must be named-type, never any | rule wins on conflict | Enforces ref-strong-typing for store slices |
+| rule-colocated-bun-test | rule | Each store file must have a colocated <name>.test.ts | rule wins on conflict | Enforces ref-colocated-bun-test for store tests |
+| rule-zustand-store | rule | All stores must use create() + zustand/middleware persist, never custom localStorage | rule wins on conflict | Enforces ref-zustand-store at store-file shape |
 
 ## Contract
 

@@ -1,7 +1,7 @@
 ---
 id: c3-114
 c3-version: 4
-c3-seal: a0ca667727bd35ad713a879b3ec87988c028c6696bee77c143516873bdfb969e
+c3-seal: 73bcbf17ee76135ddef6e7f74e2ac26d9828d367bfbe46c5823ae5c7dfd557a2
 title: messages-renderer
 type: component
 category: feature
@@ -10,6 +10,7 @@ goal: Render each transcript entry kind (text, tool call, write_file, delete_fil
 uses:
     - ref-strong-typing
     - ref-tool-hydration
+    - rule-strong-typing
 ---
 
 # messages-renderer
@@ -58,6 +59,7 @@ Owns the per-kind UI for transcript entries — text, tool_use, tool_result, pla
 | --- | --- | --- | --- | --- |
 | ref-tool-hydration | ref | Branch by kind only, not provider | must follow | Provider-agnostic UI |
 | ref-strong-typing | ref | Exhaustive switch on entry union | must follow | Compile-time coverage |
+| rule-strong-typing | rule | Compliance target added by c3x wire; refine what must be reviewed or complied with before handoff. | wired compliance target beats uncited local prose | Added by c3x wire for explicit compliance review. |
 
 ## Contract
 

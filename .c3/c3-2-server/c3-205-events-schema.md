@@ -1,7 +1,7 @@
 ---
 id: c3-205
 c3-version: 4
-c3-seal: 78418f86fb9d4baf4aa1b30a443e5e463a3ef3d8ff1b60e19ed115a52b98b0d6
+c3-seal: a6c925ef4225f33956f524c36c2f4dbe75c354b361ff1443421e82405f8d2f05
 title: events-schema
 type: component
 category: foundation
@@ -10,6 +10,7 @@ goal: Define the typed event union (project/chat/message/turn) appended to JSONL
 uses:
     - ref-event-sourcing
     - ref-strong-typing
+    - rule-strong-typing
 ---
 
 # events-schema
@@ -56,6 +57,7 @@ Owns the discriminated union of every event written to the JSONL log: project ev
 | --- | --- | --- | --- | --- |
 | ref-event-sourcing | ref | Defines event vocabulary | must follow | One union per log line |
 | ref-strong-typing | ref | Discriminated unions per kind | must follow | No any in event payloads |
+| rule-strong-typing | rule | Compliance target added by c3x wire; refine what must be reviewed or complied with before handoff. | wired compliance target beats uncited local prose | Added by c3x wire for explicit compliance review. |
 
 ## Contract
 

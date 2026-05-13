@@ -1,7 +1,7 @@
 ---
 id: c3-210
 c3-version: 4
-c3-seal: 40effef66520308b8363da0b805fdefea2952c4c92c3a27ada87f595b2b06aca
+c3-seal: 7abb881e381c161e41280f940710232e4143b873458f190d8b78fdfef4240376
 title: agent-coordinator
 type: component
 category: feature
@@ -12,6 +12,7 @@ uses:
     - ref-event-sourcing
     - ref-provider-adapter
     - ref-tool-hydration
+    - rule-colocated-bun-test
 ---
 
 # agent-coordinator
@@ -62,6 +63,7 @@ Owns the agent turn lifecycle: receives `chat.send` commands, picks the provider
 | ref-event-sourcing | ref | Events written before broadcast | must follow | Log is source of truth |
 | ref-tool-hydration | ref | Tool calls normalized before persistence | must follow | Single hydration path |
 | ref-colocated-bun-test | ref | Tests live next to coordinator | must follow | agent-coordinator.test.ts |
+| rule-colocated-bun-test | rule | Compliance target added by c3x wire; refine what must be reviewed or complied with before handoff. | wired compliance target beats uncited local prose | Added by c3x wire for explicit compliance review. |
 
 ## Contract
 

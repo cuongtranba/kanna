@@ -1,7 +1,7 @@
 ---
 id: c3-303
 c3-version: 4
-c3-seal: 8be6c25e1e2bcacb7917db421b1a63722925e840ad04092633f2a4b1e8bc4491
+c3-seal: d365be9211ad9391fdaffb59e520a70e1cabf14ffae486e6a29cfbd96e506f14
 title: tools
 type: component
 category: foundation
@@ -11,6 +11,8 @@ uses:
     - ref-colocated-bun-test
     - ref-strong-typing
     - ref-tool-hydration
+    - rule-colocated-bun-test
+    - rule-strong-typing
 ---
 
 # tools
@@ -58,6 +60,8 @@ Hosts the hydration pipeline that turns raw provider tool-call inputs into a sin
 | ref-tool-hydration | ref | This module is the hydration pipeline | must follow | One pipeline, one source |
 | ref-strong-typing | ref | Discriminated tool-entry union | must follow | No any in handlers |
 | ref-colocated-bun-test | ref | Tests next to source | must follow | tools.test.ts |
+| rule-strong-typing | rule | All tool-entry boundary types must be named exports | rule wins on conflict | Enforces ref-strong-typing for the tools union |
+| rule-colocated-bun-test | rule | tools.test.ts must remain in src/shared next to tools.ts | rule wins on conflict | Enforces ref-colocated-bun-test for shared tests |
 
 ## Contract
 

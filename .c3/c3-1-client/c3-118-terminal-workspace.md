@@ -1,7 +1,7 @@
 ---
 id: c3-118
 c3-version: 4
-c3-seal: 98fb449b1873ff940478958bb5e470d16e8b1575fa62056fce65d500bed6609c
+c3-seal: ae80c9943ef2f3236c67075f626fe562f51944e9360398c8378cd2bbced01400
 title: terminal-workspace
 type: component
 category: feature
@@ -10,6 +10,7 @@ goal: Host the embedded xterm terminal panel with layout animation + resize + pr
 uses:
     - ref-ws-subscription
     - ref-zustand-store
+    - rule-zustand-store
 ---
 
 # terminal-workspace
@@ -58,6 +59,7 @@ Hosts the embedded xterm.js panel inside chat-page: bidirectional PTY streaming,
 | --- | --- | --- | --- | --- |
 | ref-ws-subscription | ref | Stream PTY over single WS | must follow | No separate connection |
 | ref-zustand-store | ref | Persist layout via store | must follow | One terminal store |
+| rule-zustand-store | rule | Compliance target added by c3x wire; refine what must be reviewed or complied with before handoff. | wired compliance target beats uncited local prose | Added by c3x wire for explicit compliance review. |
 
 ## Contract
 

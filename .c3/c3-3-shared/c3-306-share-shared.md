@@ -1,7 +1,7 @@
 ---
 id: c3-306
 c3-version: 4
-c3-seal: cea0287d003d73b105eb1f9a1996fceab274e25743a24a921a5616103a2f2754
+c3-seal: 40e667d02a2a23a938dc2685cb23708b714613e344016e82021387fdd61107a8
 title: share-shared
 type: component
 category: foundation
@@ -9,6 +9,7 @@ parent: c3-3
 goal: Expose share/tunnel types used on both client and server (QR payload, public URL shape).
 uses:
     - ref-strong-typing
+    - rule-strong-typing
 ---
 
 # share-shared
@@ -54,6 +55,7 @@ Holds the typed DTOs for the `--share` feature: public URL payload, QR-code payl
 | Reference | Type | Governs | Precedence | Notes |
 | --- | --- | --- | --- | --- |
 | ref-strong-typing | ref | Typed share DTOs | must follow | No any in payloads |
+| rule-strong-typing | rule | Compliance target added by c3x wire; refine what must be reviewed or complied with before handoff. | wired compliance target beats uncited local prose | Added by c3x wire for explicit compliance review. |
 
 ## Contract
 

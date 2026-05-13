@@ -1,7 +1,7 @@
 ---
 id: c3-115
 c3-version: 4
-c3-seal: 560603f17882ccf81a4d4e75759ada5e5b16d36065242942941b2fb4fba3095a
+c3-seal: c93db2b7848f0c198be85596cff8c6f2c86e891b106c7fe9f388b9e184ba2c25
 title: chat-ui-chrome
 type: component
 category: feature
@@ -10,6 +10,7 @@ goal: 'Provide the composer and chat chrome: input dock, provider/model/effort p
 uses:
     - ref-provider-adapter
     - ref-zustand-store
+    - rule-zustand-store
 ---
 
 # chat-ui-chrome
@@ -58,6 +59,7 @@ Owns the composer and surrounding chrome: textarea input, provider/model/effort 
 | --- | --- | --- | --- | --- |
 | ref-provider-adapter | ref | Use normalized catalog, not per-provider forms | must follow | One UI for all providers |
 | ref-zustand-store | ref | Persist pending input + preferences | must follow | Survives reload |
+| rule-zustand-store | rule | Compliance target added by c3x wire; refine what must be reviewed or complied with before handoff. | wired compliance target beats uncited local prose | Added by c3x wire for explicit compliance review. |
 
 ## Contract
 

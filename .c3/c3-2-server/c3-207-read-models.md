@@ -1,7 +1,7 @@
 ---
 id: c3-207
 c3-version: 4
-c3-seal: 223e63277159e91a029ab302694d5d75a128842a07704444607d745f7bf3264b
+c3-seal: 83a047ba307bc972cde8c504cf431b335c717a2fc4676ffbcc705dfbb7f462af
 title: read-models
 type: component
 category: foundation
@@ -10,6 +10,7 @@ goal: Project events into derived views (sidebar, chat, projects, discovery) tha
 uses:
     - ref-cqrs-read-models
     - ref-strong-typing
+    - rule-strong-typing
 ---
 
 # read-models
@@ -58,6 +59,7 @@ Subscribes to event-store appends, derives per-feature views (sidebar list, chat
 | --- | --- | --- | --- | --- |
 | ref-cqrs-read-models | ref | Project once, broadcast many | must follow | No cross-feature joins |
 | ref-strong-typing | ref | Typed view models | must follow | Discriminated by topic |
+| rule-strong-typing | rule | Compliance target added by c3x wire; refine what must be reviewed or complied with before handoff. | wired compliance target beats uncited local prose | Added by c3x wire for explicit compliance review. |
 
 ## Contract
 

@@ -1,7 +1,7 @@
 ---
 id: c3-302
 c3-version: 4
-c3-seal: 5376ee07f9b80b581cab039a45f5aa9e7fa3dec0bfb915676ae911d4a19cccab
+c3-seal: aa952cd5f176df00d11ddf8885ec33a65f29f19b54c3040cc8bb509232423331
 title: protocol
 type: component
 category: foundation
@@ -10,6 +10,7 @@ goal: Define WebSocket wire envelopes (WsInbound, WsOutbound, subscribe/command 
 uses:
     - ref-strong-typing
     - ref-ws-subscription
+    - rule-strong-typing
 ---
 
 # protocol
@@ -56,6 +57,7 @@ Holds the WS envelope discriminated unions: subscribe/unsubscribe/command kinds,
 | --- | --- | --- | --- | --- |
 | ref-ws-subscription | ref | Protocol is the contract for WS pattern | must follow | One vocabulary, both sides |
 | ref-strong-typing | ref | Discriminated unions over envelope kinds | must follow | No any in payload type |
+| rule-strong-typing | rule | Compliance target added by c3x wire; refine what must be reviewed or complied with before handoff. | wired compliance target beats uncited local prose | Added by c3x wire for explicit compliance review. |
 
 ## Contract
 
