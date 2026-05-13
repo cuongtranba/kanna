@@ -1,15 +1,12 @@
 import { memo } from "react"
-import { Archive, Loader2, Split } from "lucide-react"
+import { Archive, Split } from "lucide-react"
 import type { SidebarChatRow } from "../../../../shared/types"
-import { AnimatedShinyText } from "../../ui/animated-shiny-text"
 import { Button } from "../../ui/button"
 import { Kbd } from "../../ui/kbd"
 import { cn, normalizeChatId } from "../../../lib/utils"
 import { formatCompactDuration, formatLiveDuration } from "../../../lib/formatDuration"
-import { statusLabel, statusTone, statusToneClass } from "../../../lib/statusLabel"
+import { statusLabel } from "../../../lib/statusLabel"
 import { ChatRowMenu } from "./Menus"
-
-const loadingStatuses = new Set(["starting", "running"])
 
 interface Props {
   chat: SidebarChatRow
@@ -24,6 +21,36 @@ interface Props {
   onForkChat: (chatId: string) => void
   onArchiveChat: (chatId: string) => void
   onDeleteChat: (chatId: string) => void
+}
+
+type DotTone = "warning" | "info" | "success" | "destructive" | null
+
+function dotToneFor(chat: SidebarChatRow): DotTone {
+  if (chat.status === "running" || chat.status === "starting") return "warning"
+  if (chat.status === "waiting_for_user") return "info"
+  if (chat.status === "failed") return "destructive"
+  if (chat.unread) return "success"
+  return null
+}
+
+function dotBgClass(tone: DotTone): string {
+  switch (tone) {
+    case "warning": return "bg-warning"
+    case "info": return "bg-info"
+    case "success": return "bg-success"
+    case "destructive": return "bg-destructive"
+    default: return ""
+  }
+}
+
+function dotTextClass(tone: DotTone): string {
+  switch (tone) {
+    case "warning": return "text-warning"
+    case "info": return "text-info"
+    case "success": return "text-success"
+    case "destructive": return "text-destructive"
+    default: return "text-muted-foreground"
+  }
 }
 
 function ChatRowImpl({
@@ -48,69 +75,69 @@ function ChatRowImpl({
   const trailingLabel = showShortcutHint && shortcutHint ? shortcutHint : stampLabel
   const showShortcutKeycap = showShortcutHint && Boolean(shortcutHint)
   const normalizedChatId = normalizeChatId(chat.chatId)
+  const isActive = activeChatId === normalizedChatId
+
+  const tone = dotToneFor(chat)
+  const trailingSlotWidth = chat.canFork
+    ? "w-12"
+    : isLiveState
+      ? "w-12 md:w-20"
+      : "w-6 md:w-14"
 
   const row = (
     <div
       key={chat._id}
       data-chat-id={normalizedChatId}
       className={cn(
-        "group flex items-center gap-2 pl-2.5 pr-0.5 py-0.5 rounded-lg cursor-pointer border-border/0 hover:border-border hover:bg-muted/20 active:scale-[0.985] border transition-all",
-        activeChatId === normalizedChatId ? "bg-muted hover:bg-muted border-border" : "border-border/0 dark:hover:border-border/40 "
+        "group flex items-center gap-2 pl-2 pr-1 py-1.5 rounded-md cursor-pointer transition-colors duration-150",
+        isActive
+          ? "bg-muted"
+          : "hover:bg-muted/40"
       )}
       onClick={() => onSelectChat(chat.chatId)}
     >
-      {loadingStatuses.has(chat.status) ? (
-        <Loader2 className="size-3.5 flex-shrink-0 animate-spin text-logo" />
-      ) : chat.status === "waiting_for_user" ? (
-        <div className="relative ">
-          <div className=" rounded-full z-0 size-3.5 flex items-center justify-center ">
-            <div className="absolute rounded-full z-0 size-2.5 bg-info/80 animate-ping" />
-            <div className=" rounded-full z-0 size-2.5 bg-info ring-2 ring-muted/20 dark:ring-muted/50" />
-          </div>
-        </div>
-      ) : chat.unread ? (
-        <div className="relative ">
-          <div className=" rounded-full z-0 size-3.5 flex items-center justify-center ">
-            <div className="absolute rounded-full z-0 size-2.5 bg-success/80 animate-ping" />
-            <div className=" rounded-full z-0 size-2.5 bg-success ring-2 ring-muted/20 dark:ring-muted/50" />
-          </div>
-        </div>
-      ) : null}
-      <span className="text-sm truncate flex-1 translate-y-[-0.5px]">
-        {chat.status !== "idle" && chat.status !== "waiting_for_user" ? (
-          <AnimatedShinyText
-            animate={chat.status === "running"}
-            shimmerWidth={Math.max(20, chat.title.length * 3)}
-          >
-            {chat.title}
-          </AnimatedShinyText>
-        ) : 
-          chat.status !== 'idle' || activeChatId === normalizedChatId || chat.unread ? <span className="">{chat.title}</span> : <span className="text-slate-500 dark:text-slate-400">{chat.title}</span>
-        }
+      <span
+        className="relative flex h-3.5 w-3.5 shrink-0 items-center justify-center"
+        aria-hidden
+      >
+        {tone ? (
+          <span className={cn("h-2 w-2 rounded-full", dotBgClass(tone))} />
+        ) : null}
       </span>
-      <div className={cn("relative h-7 mr-[2px] shrink-0", chat.canFork ? "w-12" : isLiveState ? "w-20" : "w-6")}>
+      <span
+        className={cn(
+          "truncate flex-1 text-sm",
+          isActive ? "text-foreground font-medium" : "text-foreground/90",
+          chat.status === "idle" && !chat.unread && !isActive ? "text-muted-foreground" : ""
+        )}
+      >
+        {chat.title}
+      </span>
+      <div className={cn("relative h-6 shrink-0", trailingSlotWidth)}>
         {trailingLabel ? (
           showShortcutKeycap ? (
-            <span className="hidden md:flex absolute inset-0 items-center justify-end pr-0.5 text-[11px] text-foreground transition-opacity group-hover:opacity-0">
+            <span className="hidden md:flex absolute inset-0 items-center justify-end pr-0.5 text-[11px] text-foreground transition-opacity duration-150 group-hover:opacity-0">
               <Kbd className="h-4 min-w-4 rounded-sm border-border/50 bg-transparent px-1 text-[10px]">
                 {shortcutHint}
               </Kbd>
             </span>
           ) : (
-            <span className={cn(
-              "hidden md:flex absolute inset-0 items-center justify-end pr-1 text-[11px] tabular-nums opacity-80 transition-opacity group-hover:opacity-0",
-              isLiveState ? statusToneClass(statusTone(chat.status)) : "text-muted-foreground opacity-60"
-            )}>
+            <span
+              className={cn(
+                "hidden md:flex absolute inset-0 items-center justify-end pr-1 text-[11px] tabular-nums transition-opacity duration-150 group-hover:opacity-0 whitespace-nowrap",
+                isLiveState ? dotTextClass(tone) : "text-muted-foreground"
+              )}
+            >
               {trailingLabel}
             </span>
           )
         ) : null}
         <div
           className={cn(
-            "absolute inset-0 flex items-center justify-end gap-0 opacity-100 mr-[3px]",
+            "absolute inset-0 flex items-center justify-end gap-0 transition-opacity duration-150",
             trailingLabel
-              ? "md:opacity-0 md:group-hover:opacity-100"
-              : "opacity-100 md:opacity-0 md:group-hover:opacity-100"
+              ? "opacity-100 md:opacity-0 md:group-hover:opacity-100"
+              : "opacity-100"
           )}
         >
           {chat.canFork ? (

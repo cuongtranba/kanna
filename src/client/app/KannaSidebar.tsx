@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
-import { Download, Flower, Loader2, PanelLeft, X, Menu, Plus, Settings } from "lucide-react"
+import { Download, Flower, PanelLeft, X, Menu, Plus, Settings } from "lucide-react"
 import { useLocation, useNavigate } from "react-router-dom"
 import { APP_NAME } from "../../shared/branding"
 import { Button } from "../components/ui/button"
@@ -517,7 +517,7 @@ function KannaSidebarImpl({
               <PanelLeft className="absolute inset-0 h-4 w-4 sm:h-6 sm:w-6 text-muted-foreground transition-all duration-200 ease-out opacity-0 scale-0 group-hover/sidebar-collapse:opacity-100 group-hover/sidebar-collapse:scale-80 hover:opacity-50" />
             </button>
             <Flower className="h-5 w-5 sm:h-6 sm:w-6 text-logo md:hidden" />
-            <span className="font-logo text-base uppercase sm:text-md text-foreground">{APP_NAME}</span>
+            <span className="font-logo text-base sm:text-md text-foreground">{APP_NAME}</span>
           </div>
           <div className="flex items-center justify-self-end md:justify-self-auto">
             <Button
@@ -718,35 +718,30 @@ function KannaSidebarImpl({
           </div>
         </div>
 
-        <div className="border-t border-border p-2">
-            <button
+        <div className="border-t border-border">
+          <button
             type="button"
             onClick={() => {
               navigate("/settings/general")
               onClose()
             }}
             className={cn(
-              "w-full rounded-xl rounded-t-md border px-3 py-2 text-left transition-colors",
+              "w-full flex items-center gap-2 px-3 py-2.5 text-left transition-colors duration-150 rounded-none",
               isSettingsActive
-                ? "bg-muted border-border"
-                : "border-border/0 hover:bg-muted hover:border-border active:bg-muted/80"
+                ? "bg-muted"
+                : "hover:bg-muted/50"
             )}
           >
-            <div className="flex items- justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <Settings className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm">Settings</span>
-              </div>
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <span>{statusLabel}</span>
-                {isConnecting ? (
-                  <Loader2 className="h-2 w-2 animate-spin" />
-                ) : (
-                  <span className={cn("h-2 w-2 rounded-full", statusDotClass)} />
-                )}
-              </div>
-            </div>
+            <Settings className="h-4 w-4 shrink-0 text-muted-foreground" />
+            <span className="text-sm flex-1">Settings</span>
           </button>
+          <div className="flex items-center gap-2 px-3 pb-2.5 pt-0.5">
+            <span
+              className={cn("h-1.5 w-1.5 rounded-full shrink-0", statusDotClass)}
+              aria-hidden
+            />
+            <span className="text-[11px] text-muted-foreground tabular-nums">{statusLabel}</span>
+          </div>
         </div>
 
         <div
