@@ -72,6 +72,7 @@ export type ClientCommand =
   | { type: "project.create"; localPath: string; title: string }
   | { type: "sessions.importClaude" }
   | { type: "project.remove"; projectId: string }
+  | { type: "project.setStar"; projectId: string; starred: boolean }
   | { type: "sidebar.reorderProjectGroups"; projectIds: string[] }
   | { type: "project.readDiffPatch"; projectId: string; path: string }
   | { type: "stack.create"; title: string; projectIds: string[] }

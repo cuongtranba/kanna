@@ -752,6 +752,7 @@ export interface KannaState {
   handleOpenArchivedChat: (chatId: string) => Promise<void>
   handleDeleteChat: (chat: SidebarChatRow) => Promise<void>
   handleHideProject: (projectId: string) => Promise<void>
+  handleToggleProjectStar: (projectId: string, starred: boolean) => Promise<void>
   handleReorderProjectGroups: (projectIds: string[]) => Promise<void>
   stacks: StackSummary[]
   handleCreateStack: (title: string, projectIds: string[]) => Promise<void>
@@ -790,7 +791,7 @@ export function useKannaState(activeChatId: string | null): KannaState {
   const dialog = useAppDialog()
   const { resolvedTheme } = useTheme()
 
-  const [sidebarData, setSidebarData] = useState<SidebarData>({ projectGroups: [], stacks: [] })
+  const [sidebarData, setSidebarData] = useState<SidebarData>({ starredProjectGroups: [], projectGroups: [], stacks: [] })
   const [optimisticSidebarProjectOrder, setOptimisticSidebarProjectOrder] = useState<string[] | null>(null)
   const [localProjects, setLocalProjects] = useState<LocalProjectsSnapshot | null>(null)
   const [updateSnapshot, setUpdateSnapshot] = useState<UpdateSnapshot | null>(null)
@@ -1928,6 +1929,15 @@ export function useKannaState(activeChatId: string | null): KannaState {
     }
   }, [navigate, runtime?.projectId, socket])
 
+  const handleToggleProjectStar = useCallback(async (projectId: string, starred: boolean) => {
+    try {
+      await socket.command({ type: "project.setStar", projectId, starred })
+      setCommandError(null)
+    } catch (error) {
+      setCommandError(error instanceof Error ? error.message : String(error))
+    }
+  }, [socket])
+
   const handleReorderProjectGroups = useCallback(async (projectIds: string[]) => {
     setOptimisticSidebarProjectOrder(projectIds)
     try {
@@ -2322,6 +2332,7 @@ export function useKannaState(activeChatId: string | null): KannaState {
     handleOpenArchivedChat,
     handleDeleteChat,
     handleHideProject,
+    handleToggleProjectStar,
     handleReorderProjectGroups,
     stacks: resolvedSidebarData.stacks,
     handleCreateStack,

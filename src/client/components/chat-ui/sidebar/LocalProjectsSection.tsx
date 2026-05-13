@@ -1,5 +1,5 @@
 import { memo, type MouseEvent as ReactMouseEvent, type ReactNode, useMemo } from "react"
-import { ChevronRight, GripVertical, Loader2, MoreHorizontal, SquarePen } from "lucide-react"
+import { ChevronRight, GripVertical, Loader2, MoreHorizontal, SquarePen, Star } from "lucide-react"
 import {
   DndContext,
   MouseSensor,
@@ -41,6 +41,7 @@ interface Props {
   onCopyPath?: (localPath: string) => void
   onOpenExternalPath?: (action: "open_finder" | "open_editor", localPath: string) => void
   onHideProject?: (projectId: string) => void
+  onToggleStar?: (projectId: string, starred: boolean) => void
   onReorderGroups?: (newOrder: string[]) => void
   isConnected?: boolean
   startingLocalPath?: string | null
@@ -59,6 +60,7 @@ interface SortableProjectGroupProps {
   onCopyPath?: (localPath: string) => void
   onOpenExternalPath?: (action: "open_finder" | "open_editor", localPath: string) => void
   onHideProject?: (projectId: string) => void
+  onToggleStar?: (projectId: string, starred: boolean) => void
   isConnected?: boolean
   startingLocalPath?: string | null
 }
@@ -178,6 +180,7 @@ const SortableProjectGroup = memo(function SortableProjectGroup({
   onCopyPath,
   onOpenExternalPath,
   onHideProject,
+  onToggleStar,
   isConnected,
   startingLocalPath,
 }: SortableProjectGroupProps) {
@@ -245,6 +248,9 @@ const SortableProjectGroup = memo(function SortableProjectGroup({
           </TooltipContent>
         </Tooltip>
       </button>
+      {group.starredAt !== undefined && (
+        <Star className="size-3 shrink-0 fill-amber-400 text-amber-400" aria-label="Starred" />
+      )}
       {(hasProjectMenu || onNewLocalChat) && (
         <div className="flex items-center gap-px opacity-100 md:opacity-0 md:group-hover/section:opacity-100 transition-opacity duration-150">
           {hasProjectMenu ? (
@@ -312,10 +318,12 @@ const SortableProjectGroup = memo(function SortableProjectGroup({
       {hasProjectMenu ? (
         <ProjectSectionMenu
           editorLabel={editorLabel}
+          starred={group.starredAt !== undefined}
           onCopyPath={() => onCopyPath?.(localPath)}
           onShowArchived={() => onShowArchivedProject?.(groupKey)}
           onOpenInFinder={() => onOpenExternalPath?.("open_finder", localPath)}
           onOpenInEditor={() => onOpenExternalPath?.("open_editor", localPath)}
+          onToggleStar={() => onToggleStar?.(groupKey, group.starredAt === undefined)}
           onHide={() => onHideProject?.(groupKey)}
         >
           {header}
@@ -372,6 +380,7 @@ const LocalProjectsSectionImpl = function LocalProjectsSection({
   onCopyPath,
   onOpenExternalPath,
   onHideProject,
+  onToggleStar,
   onReorderGroups,
   isConnected,
   startingLocalPath,
@@ -453,6 +462,7 @@ const LocalProjectsSectionImpl = function LocalProjectsSection({
           onCopyPath={onCopyPath}
           onOpenExternalPath={onOpenExternalPath}
           onHideProject={onHideProject}
+          onToggleStar={onToggleStar}
           isConnected={isConnected}
           startingLocalPath={startingLocalPath}
         />

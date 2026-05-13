@@ -927,3 +927,44 @@ describe("ChatTimingState accumulator", () => {
     expect(t.cumulativeMs.idle).toBe(3000 + ACTIVE_SESSION_IDLE_GAP_MS)
   })
 })
+
+describe("project star", () => {
+  test("applies project_star_set with timestamp", async () => {
+    const dataDir = await createTempDataDir()
+    const store = new EventStore(dataDir)
+    await store.initialize()
+    const project = await store.openProject("/tmp/proj-a")
+
+    await store.setProjectStar(project.id, true)
+
+    const after = store.getProject(project.id)!
+    expect(after.starredAt).toBeGreaterThan(0)
+  })
+
+  test("applies project_star_set with null clears starredAt", async () => {
+    const dataDir = await createTempDataDir()
+    const store = new EventStore(dataDir)
+    await store.initialize()
+    const project = await store.openProject("/tmp/proj-a")
+    await store.setProjectStar(project.id, true)
+
+    await store.setProjectStar(project.id, false)
+
+    const after = store.getProject(project.id)!
+    expect(after.starredAt).toBeUndefined()
+  })
+
+  test("starredAt survives replay", async () => {
+    const dataDir = await createTempDataDir()
+    const store = new EventStore(dataDir)
+    await store.initialize()
+    const project = await store.openProject("/tmp/proj-a")
+    await store.setProjectStar(project.id, true)
+    const starredAtBefore = store.getProject(project.id)!.starredAt
+
+    const reloaded = new EventStore(dataDir)
+    await reloaded.initialize()
+
+    expect(reloaded.getProject(project.id)!.starredAt).toBe(starredAtBefore)
+  })
+})

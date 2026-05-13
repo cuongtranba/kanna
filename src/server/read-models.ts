@@ -122,7 +122,7 @@ export function deriveSidebarData(
       }))
   }
 
-  const projectGroups: SidebarProjectGroup[] = projects.map((project) => {
+  const allGroups: SidebarProjectGroup[] = projects.map((project) => {
     const chats = toSidebarChatRows(project, chatsByProjectId.get(project.id) ?? [])
     const archivedChats = toSidebarChatRows(project, archivedChatsByProjectId.get(project.id) ?? [])
     const { previewChats, olderChats } = getSidebarChatBuckets(chats, nowMs)
@@ -135,10 +135,20 @@ export function deriveSidebarData(
       olderChats,
       ...(archivedChats.length ? { archivedChats } : {}),
       defaultCollapsed: chats.every((chat) => !isSidebarChatRecent(chat, nowMs)),
+      ...(project.starredAt != null ? { starredAt: project.starredAt } : {}),
     }
   })
 
-  return { projectGroups, stacks: stackSummaries(state) }
+  const starredProjectGroups = allGroups
+    .filter((g) => g.starredAt != null)
+    .sort((a, b) => {
+      const diff = (b.starredAt ?? 0) - (a.starredAt ?? 0)
+      if (diff !== 0) return diff
+      return a.groupKey.localeCompare(b.groupKey)
+    })
+  const projectGroups = allGroups.filter((g) => g.starredAt == null)
+
+  return { starredProjectGroups, projectGroups, stacks: stackSummaries(state) }
 }
 
 export function deriveLocalProjectsSnapshot(

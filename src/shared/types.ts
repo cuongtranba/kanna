@@ -469,9 +469,11 @@ export interface SidebarProjectGroup {
   olderChats: SidebarChatRow[]
   archivedChats?: SidebarChatRow[]
   defaultCollapsed: boolean
+  starredAt?: number
 }
 
 export interface SidebarData {
+  starredProjectGroups: SidebarProjectGroup[]
   projectGroups: SidebarProjectGroup[]
   stacks: StackSummary[]
 }

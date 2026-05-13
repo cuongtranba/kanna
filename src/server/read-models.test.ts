@@ -407,6 +407,83 @@ describe("read models", () => {
     expect(sidebar.projectGroups[0]?.chats.find((chat) => chat.chatId === "chat-draining")?.canFork).toBeUndefined()
   })
 
+  test("partitions starred projects into starredProjectGroups sorted by starredAt desc, unstarred into projectGroups", () => {
+    const state = createEmptyState()
+    state.projectsById.set("p1", {
+      id: "p1",
+      localPath: "/tmp/p1",
+      title: "P1",
+      createdAt: 1,
+      updatedAt: 1,
+      starredAt: 1000,
+    })
+    state.projectsById.set("p2", {
+      id: "p2",
+      localPath: "/tmp/p2",
+      title: "P2",
+      createdAt: 2,
+      updatedAt: 2,
+    })
+    state.projectsById.set("p3", {
+      id: "p3",
+      localPath: "/tmp/p3",
+      title: "P3",
+      createdAt: 3,
+      updatedAt: 3,
+      starredAt: 2000,
+    })
+
+    const sidebar = deriveSidebarData(state, new Map())
+    expect(sidebar.starredProjectGroups.map((g) => g.groupKey)).toEqual(["p3", "p1"])
+    expect(sidebar.projectGroups.map((g) => g.groupKey)).toEqual(["p2"])
+  })
+
+  test("breaks starredProjectGroups ties by groupKey ascending", () => {
+    const state = createEmptyState()
+    state.projectsById.set("p2", {
+      id: "p2",
+      localPath: "/tmp/p2",
+      title: "P2",
+      createdAt: 2,
+      updatedAt: 2,
+      starredAt: 1000,
+    })
+    state.projectsById.set("p1", {
+      id: "p1",
+      localPath: "/tmp/p1",
+      title: "P1",
+      createdAt: 1,
+      updatedAt: 1,
+      starredAt: 1000,
+    })
+
+    const sidebar = deriveSidebarData(state, new Map())
+    expect(sidebar.starredProjectGroups.map((g) => g.groupKey)).toEqual(["p1", "p2"])
+  })
+
+  test("returns empty starredProjectGroups when no projects are starred", () => {
+    const state = createEmptyState()
+    state.projectsById.set("p1", {
+      id: "p1",
+      localPath: "/tmp/p1",
+      title: "P1",
+      createdAt: 1,
+      updatedAt: 1,
+    })
+    state.projectsById.set("p2", {
+      id: "p2",
+      localPath: "/tmp/p2",
+      title: "P2",
+      createdAt: 2,
+      updatedAt: 2,
+    })
+
+    const sidebar = deriveSidebarData(state, new Map())
+    expect(sidebar.starredProjectGroups).toEqual([])
+    expect(sidebar.projectGroups.map((g) => g.groupKey)).toContain("p1")
+    expect(sidebar.projectGroups.map((g) => g.groupKey)).toContain("p2")
+  })
+
   test("deriveSidebarData includes stack summaries", () => {
     const state = createEmptyState()
     state.stacksById.set("s1", {
