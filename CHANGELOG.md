@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.47.0](https://github.com/cuongtranba/kanna/compare/v0.46.1...v0.47.0) (2026-05-13)
+
+
+### Features
+
+* **stacks:** Phase 3 — sidebar UI, chat creation, peer strip ([#55](https://github.com/cuongtranba/kanna/issues/55)) ([0a680c1](https://github.com/cuongtranba/kanna/commit/0a680c119688a9c069e747c5087df96ebe461645))
+
 ## [0.46.1](https://github.com/cuongtranba/kanna/compare/v0.46.0...v0.46.1) (2026-05-12)
 
 
