@@ -51,7 +51,7 @@ describe("EventStore", () => {
     const messagesLogPath = join(dataDir, "messages.jsonl")
     const chatId = "chat-1"
 
-    const snapshot: SnapshotFile = {
+    const snapshot = {
       v: 3,
       generatedAt: 10,
       projects: [{
@@ -80,7 +80,7 @@ describe("EventStore", () => {
           entry("user_prompt", 100, { content: "hello" }),
         ],
       }],
-    }
+    } as unknown as SnapshotFile
 
     await writeFile(snapshotPath, JSON.stringify(snapshot, null, 2), "utf8")
     await writeFile(messagesLogPath, `${JSON.stringify({
@@ -317,7 +317,7 @@ describe("EventStore", () => {
     const dataDir = await createTempDataDir()
     const snapshotPath = join(dataDir, "snapshot.json")
 
-    const snapshot: SnapshotFile = {
+    const snapshot = {
       v: 3,
       generatedAt: 10,
       projects: [{
@@ -340,7 +340,7 @@ describe("EventStore", () => {
         sourceHash: null,
         lastTurnOutcome: null,
       }],
-    }
+    } as unknown as SnapshotFile
 
     await writeFile(snapshotPath, JSON.stringify(snapshot, null, 2), "utf8")
 
@@ -526,7 +526,7 @@ describe("EventStore", () => {
     const source = await store.createChat(project.id)
     await store.setChatProvider(source.id, "claude")
     await store.setPlanMode(source.id, true)
-    await store.setSessionToken(source.id, "session-1")
+    await store.setSessionTokenForProvider(source.id, "claude", "session-1")
     await store.appendMessage(source.id, entry("user_prompt", source.createdAt + 1, { content: "analyze this" }))
     await store.appendMessage(source.id, entry("assistant_text", source.createdAt + 2, { text: "done" }))
 
@@ -536,8 +536,8 @@ describe("EventStore", () => {
     expect(forked.title).toBe("Fork: New Chat")
     expect(forked.provider).toBe("claude")
     expect(forked.planMode).toBe(true)
-    expect(forked.sessionToken).toBeNull()
-    expect(forked.pendingForkSessionToken).toBe("session-1")
+    expect(forked.sessionTokensByProvider).toEqual({})
+    expect(forked.pendingForkSessionToken).toEqual({ provider: "claude", token: "session-1" })
     expect(forked.lastTurnOutcome).toBeNull()
     expect(forked.lastMessageAt).toBeUndefined()
     expect(store.getMessages(forked.id)).toEqual(store.getMessages(source.id))

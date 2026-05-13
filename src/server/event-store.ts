@@ -1115,8 +1115,16 @@ export class EventStore implements PushEventStore {
 
   async forkChat(sourceChatId: string) {
     const sourceChat = this.requireChat(sourceChatId)
-    const sourceSessionToken = sourceChat.sessionToken ?? sourceChat.pendingForkSessionToken ?? null
-    if (!sourceChat.provider || !sourceSessionToken) {
+    const sourceProvider = sourceChat.provider
+    if (!sourceProvider) {
+      throw new Error("Chat cannot be forked")
+    }
+    const sourceSessionToken =
+      sourceChat.sessionTokensByProvider[sourceProvider]
+      ?? (sourceChat.pendingForkSessionToken?.provider === sourceProvider
+        ? sourceChat.pendingForkSessionToken.token
+        : null)
+    if (!sourceSessionToken) {
       throw new Error("Chat cannot be forked")
     }
 
@@ -1131,9 +1139,9 @@ export class EventStore implements PushEventStore {
       title: getForkedChatTitle(sourceChat.title),
     }
     await this.append(this.chatsLogPath, createEvent)
-    await this.setChatProvider(chatId, sourceChat.provider)
+    await this.setChatProvider(chatId, sourceProvider)
     await this.setPlanMode(chatId, sourceChat.planMode)
-    await this.setPendingForkSessionToken(chatId, sourceSessionToken)
+    await this.setPendingForkSessionToken(chatId, { provider: sourceProvider, token: sourceSessionToken })
 
     const sourceEntries = this.getMessages(sourceChatId)
     if (sourceEntries.length > 0) {
@@ -1401,15 +1409,20 @@ export class EventStore implements PushEventStore {
     await this.append(this.turnsLogPath, event)
   }
 
-  async setSessionToken(chatId: string, sessionToken: string | null) {
+  async setSessionTokenForProvider(
+    chatId: string,
+    provider: AgentProvider,
+    sessionToken: string | null,
+  ) {
     const chat = this.requireChat(chatId)
-    if (chat.sessionToken === sessionToken) return
+    if ((chat.sessionTokensByProvider[provider] ?? null) === sessionToken) return
     const event: TurnEvent = {
       v: STORE_VERSION,
       type: "session_token_set",
       timestamp: Date.now(),
       chatId,
       sessionToken,
+      provider,
     }
     await this.append(this.turnsLogPath, event)
   }
@@ -1434,15 +1447,25 @@ export class EventStore implements PushEventStore {
     await this.append(this.turnsLogPath, event)
   }
 
-  async setPendingForkSessionToken(chatId: string, pendingForkSessionToken: string | null) {
+  async setPendingForkSessionToken(
+    chatId: string,
+    value: { provider: AgentProvider; token: string } | null,
+  ) {
     const chat = this.requireChat(chatId)
-    if ((chat.pendingForkSessionToken ?? null) === pendingForkSessionToken) return
+    const current = chat.pendingForkSessionToken ?? null
+    const same =
+      (current == null && value == null)
+      || (current != null && value != null
+        && current.provider === value.provider
+        && current.token === value.token)
+    if (same) return
     const event: TurnEvent = {
       v: STORE_VERSION,
       type: "pending_fork_session_token_set",
       timestamp: Date.now(),
       chatId,
-      pendingForkSessionToken,
+      pendingForkSessionToken: value?.token ?? null,
+      provider: value?.provider,
     }
     await this.append(this.turnsLogPath, event)
   }
