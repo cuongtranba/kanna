@@ -4,7 +4,7 @@
 
 **Goal:** Add user-configurable subagents to `app-settings.json` with full CRUD, and make `@agent/<name>` mention parsing server-authoritative. Phase 2 does NOT run subagents — it ships the data shape, settings UI, picker integration, and the parse + validate pipeline so phase 3 can plug the orchestrator in cleanly.
 
-**Architecture:** New `Subagent` array in `AppSettingsSnapshot`. CRUD via new `subagent.*` commands flowing through the existing `app-settings` snapshot channel. New server module `mention-parser.ts` is the single source of truth for `@agent/<name>` extraction; the client parses purely for picker UX. `MessageEvent` envelope gains optional `subagentMentions` and `unknownSubagentMentions` — `TranscriptEntry` is unchanged.
+**Architecture:** New `Subagent` array in `AppSettingsSnapshot`. CRUD via new `subagent.*` commands flowing through the existing `app-settings` snapshot channel. New server module `mention-parser.ts` is the single source of truth for `@agent/<name>` extraction; the client parses purely for picker UX. `UserPromptEntry` gains optional `subagentMentions` and `unknownSubagentMentions` fields so the server-authoritative parse result rides the existing transcript persistence path (`transcripts/<chatId>.jsonl`) with no new log file. Phase 3 reads these fields off replayed entries to drive the orchestrator.
 
 **Tech Stack:** TypeScript, Bun, React 19, Zustand, bun:test, JSONL event log, ULID.
 
@@ -22,7 +22,7 @@
 
 **Server (modify + new):**
 - `src/server/app-settings.ts` — extend file shape, normalization, validation, CRUD methods
-- `src/server/events.ts` — extend `MessageEvent` envelope with optional mention fields
+- `src/shared/types.ts` — extend `UserPromptEntry` with optional mention fields (replaces the abandoned `MessageEvent` envelope approach; see Task 6)
 - `src/server/mention-parser.ts` (new) — `parseMentions` + reserved-name guard
 - `src/server/mention-parser.test.ts` (new)
 - `src/server/ws-router.ts` — handle new commands (path inferred — confirm with `grep -n 'app-settings' src/server/ws-router.ts`)
@@ -739,110 +739,118 @@ git commit -m "feat(mention-parser): server-authoritative @agent/<name> parsing"
 
 ---
 
-## Task 6 — Extend `MessageEvent` envelope
+## Task 6 — Thread subagent mentions through `UserPromptEntry`
 
 **Files:**
-- Modify: `src/server/events.ts:151-157`
-- Modify: `src/server/event-store.ts` (around `message_appended` handler at line 608; and the append site for messages)
-- Modify: `src/server/agent.ts` (caller that appends `message_appended` for user prompts)
+- Modify: `src/shared/types.ts` (extend `UserPromptEntry` at line 808)
+- Modify: `src/server/agent.ts` (caller that appends user prompts)
 
-- [ ] **Step 1: Extend the type**
+> **Persistence-path note (matters for the executor).** Earlier drafts of
+> this task assumed `EventStore.appendMessage` writes a `MessageEvent`
+> envelope to `messagesLogPath` (`logs/messages.jsonl`). That is wrong on
+> the current main: `appendMessage` (`event-store.ts:1213-1239`) writes
+> the raw `TranscriptEntry` JSON to the per-chat `transcripts/<chatId>.jsonl`
+> file only. `messagesLogPath` is replay-only legacy — `loadReplayEvents`
+> still reads it (`event-store.ts:428`) but nothing in the live code path
+> writes there. Forcing a new write to `messagesLogPath` would either
+> double-store every prompt or split the persistence across two formats
+> and force a replay-merge problem we don't need. Solution: piggyback the
+> mention envelope onto the `UserPromptEntry` itself — the entry already
+> survives transcript replay, and the fields are opt-in so older entries
+> stay valid.
 
-Edit `src/server/events.ts:151`:
+- [ ] **Step 1: Extend `UserPromptEntry` with mention fields**
+
+Edit `src/shared/types.ts:808`:
 
 ```ts
-export type MessageEvent = {
-  v: 3
-  type: "message_appended"
-  timestamp: number
-  chatId: string
-  entry: TranscriptEntry
+export interface UserPromptEntry extends TranscriptEntryBase {
+  kind: "user_prompt"
+  content: string
+  attachments?: ChatAttachment[]
+  steered?: boolean
+  autoContinue?: { scheduleId: string }
+  // Server-authoritative parse result, snapshotted at send time so it
+  // survives replay and stays consistent if the subagent is renamed or
+  // deleted later. Phase 3 reads these to drive the orchestrator.
   subagentMentions?: Array<{ subagentId: string; raw: string }>
   unknownSubagentMentions?: Array<{ name: string; raw: string }>
 }
 ```
 
-- [ ] **Step 2: Replay handler unchanged (mention fields are no-ops in phase 2)**
+No change to `MessageEvent` in `events.ts` — the envelope rides inside `entry`.
 
-The `message_appended` handler at `event-store.ts:608` continues to push `e.entry` only. Phase 3 will consume `e.subagentMentions`.
+- [ ] **Step 2: Populate mentions at send time**
 
-- [ ] **Step 3: Append mentions at send time**
-
-Find the site that appends `message_appended` for user prompts. Run: `grep -n 'type: "message_appended"' src/server/*.ts`. It's typically in `agent.ts` near the start of `sendMessage`.
-
-Update the call to include mentions:
+In `agent.ts`, find the existing call that builds the user `TranscriptEntry` for `appendMessage` (search `kind: "user_prompt"`). Compute mentions before constructing the entry and embed them:
 
 ```ts
 import { parseMentions } from "./mention-parser"
 
 const subagents = this.appSettings.snapshot().subagents
 const parsed = parseMentions(args.content, subagents)
-const subagentMentions = parsed.filter((m): m is Extract<ParsedMention, { kind: "subagent" }> => m.kind === "subagent")
+const subagentMentions = parsed
+  .filter((m): m is Extract<ParsedMention, { kind: "subagent" }> => m.kind === "subagent")
   .map((m) => ({ subagentId: m.subagentId, raw: m.raw }))
-const unknownSubagentMentions = parsed.filter((m): m is Extract<ParsedMention, { kind: "unknown-subagent" }> => m.kind === "unknown-subagent")
+const unknownSubagentMentions = parsed
+  .filter((m): m is Extract<ParsedMention, { kind: "unknown-subagent" }> => m.kind === "unknown-subagent")
   .map((m) => ({ name: m.name, raw: m.raw }))
 
-await this.store.appendMessage(chatId, userEntry, {
-  subagentMentions: subagentMentions.length ? subagentMentions : undefined,
-  unknownSubagentMentions: unknownSubagentMentions.length ? unknownSubagentMentions : undefined,
-})
-```
-
-Extend `EventStore.appendMessage` signature if it doesn't already accept optional envelope metadata. Today's signature (search `appendMessage` in `event-store.ts`) likely takes `(chatId, entry)`. Replace with:
-
-```ts
-async appendMessage(
-  chatId: string,
-  entry: TranscriptEntry,
-  envelope?: Pick<MessageEvent, "subagentMentions" | "unknownSubagentMentions">,
-) {
-  // ... existing
-  const event: MessageEvent = {
-    v: STORE_VERSION,
-    type: "message_appended",
-    timestamp: Date.now(),
-    chatId,
-    entry,
-    ...envelope,
-  }
-  await this.append(this.messagesLogPath, event)
+const userEntry: UserPromptEntry = {
+  _id: crypto.randomUUID(),
+  kind: "user_prompt",
+  createdAt: Date.now(),
+  content: args.content,
+  attachments: args.attachments,
+  ...(subagentMentions.length > 0 ? { subagentMentions } : {}),
+  ...(unknownSubagentMentions.length > 0 ? { unknownSubagentMentions } : {}),
 }
+await this.store.appendMessage(chatId, userEntry)
 ```
 
-- [ ] **Step 4: Test envelope round-trip**
+`EventStore.appendMessage`'s signature stays `(chatId, entry)`; no envelope parameter, no new log file.
+
+- [ ] **Step 3: Test mention round-trip via transcript replay**
 
 Add to `src/server/event-store.test.ts`:
 
 ```ts
-test("message_appended carries subagentMentions through replay", async () => {
-  const { dir, store } = await freshStore()
-  await store.createProject({ localPath: "/tmp", title: "t" })
-  // ... existing fixture pattern; consult adjacent tests
-  await store.appendMessage(chatId, makeUserEntry("hi @agent/foo"), {
+test("UserPromptEntry.subagentMentions survives transcript replay", async () => {
+  const { dir, store, chatId } = await freshStoreWithChat()
+  const id = crypto.randomUUID()
+  await store.appendMessage(chatId, {
+    _id: id,
+    kind: "user_prompt",
+    createdAt: Date.now(),
+    content: "hi @agent/foo",
     subagentMentions: [{ subagentId: "foo-id", raw: "@agent/foo" }],
   })
+
   const reloaded = new EventStore(dir)
   await reloaded.ready()
-  // Read the raw turns log line and assert the envelope shape (mentions are not visible via snapshot today)
-  const messagesLog = await Bun.file(path.join(dir, "logs", "messages.jsonl")).text()
-  const lastLine = messagesLog.trim().split("\n").at(-1)!
-  const parsed = JSON.parse(lastLine)
-  expect(parsed.subagentMentions).toEqual([{ subagentId: "foo-id", raw: "@agent/foo" }])
+  const messages = reloaded.getMessages(chatId)
+  const userEntry = messages.find((m) => m._id === id)
+  expect(userEntry?.kind).toBe("user_prompt")
+  expect((userEntry as UserPromptEntry).subagentMentions).toEqual([
+    { subagentId: "foo-id", raw: "@agent/foo" },
+  ])
 })
 ```
 
-Reuse the helper pattern from existing event-store tests (`freshStore`, `makeUserEntry`). If unavailable, build inline.
+The assertion reads through `getMessages(chatId)` (which already drives the chat snapshot), not the raw log file — so the test stays robust against future internal storage changes.
 
-- [ ] **Step 5: Run tests, verify green**
+If `freshStoreWithChat` doesn't exist, reuse the pattern from neighboring tests in `event-store.test.ts`.
+
+- [ ] **Step 4: Run tests, verify green**
 
 Run: `bun test src/server/event-store.test.ts src/server/agent.test.ts`
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
-git add src/server/events.ts src/server/event-store.ts src/server/event-store.test.ts src/server/agent.ts
-git commit -m "feat(events): carry subagentMentions on message_appended envelope"
+git add src/shared/types.ts src/server/event-store.test.ts src/server/agent.ts
+git commit -m "feat(transcript): carry subagentMentions on UserPromptEntry"
 ```
 
 ---
@@ -1505,6 +1513,6 @@ EOF
 - [ ] `Subagent` type only declared once (in `src/shared/types.ts`); CRUD methods route through it.
 - [ ] Name validation runs both client-side (form) and server-side (`validateSubagentName`) with identical rules.
 - [ ] `applyMentionToInput` accepts both `path` and `agent` picks; existing path callers updated.
-- [ ] `MessageEvent` carries optional `subagentMentions` — `TranscriptEntry` is untouched.
+- [ ] `UserPromptEntry` carries optional `subagentMentions` + `unknownSubagentMentions`; `MessageEvent` shape is untouched; no new log file.
 - [ ] Phase 2 does NOT spawn any subagent runs (orchestrator hook deferred to phase 3).
 - [ ] `bun test` and `bun run check` pass.

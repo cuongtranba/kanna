@@ -4,7 +4,7 @@
 
 **Goal:** Run subagents that were parsed in phase 2. Parallel fan-out on multi-mention (cap 4), depth-1 chained delegation, full error code surface, transcript projection. Native SDK `Agent` tool stays untouched as a separate primary-driven mechanism.
 
-**Architecture:** A new `SubagentOrchestrator` reads `subagentMentions` / `unknownSubagentMentions` already stored on `message_appended` envelopes and spawns one provider session per resolved mention. It uses phase 1's `buildHistoryPrimer` for `contextScope: "full-transcript"` and a new `extractPreviousAssistantReply` for the default scope. Each run emits `subagent_run_started/completed/failed/cancelled` events and `subagent_message_delta` events for every assistant_text fragment produced by the provider session. `buildSubagentProviderRun` wraps the existing `HarnessTurn` abstraction so subagents stream through the same code path that primary turns already use. A `subagentRuns: Map<runId, SubagentRunSnapshot>` field on the chat snapshot carries state to the client, with `finalText` growing as deltas arrive and being overwritten with the canonical text on completion. Send-flow gates the primary turn when any `@agent/...` mention is present, including unknown-only mentions.
+**Architecture:** A new `SubagentOrchestrator` reads `subagentMentions` / `unknownSubagentMentions` already stored on the replayed `UserPromptEntry` (phase 2 Task 6) and spawns one provider session per resolved mention. It uses phase 1's `buildHistoryPrimer` for `contextScope: "full-transcript"` and a new `extractPreviousAssistantReply` for the default scope. Each run emits `subagent_run_started/completed/failed/cancelled` events and `subagent_message_delta` events for every assistant_text fragment produced by the provider session. `buildSubagentProviderRun` wraps the existing `HarnessTurn` abstraction so subagents stream through the same code path that primary turns already use. A `subagentRuns: Map<runId, SubagentRunSnapshot>` field on the chat snapshot carries state to the client, with `finalText` growing as deltas arrive and being overwritten with the canonical text on completion. Send-flow gates the primary turn when any `@agent/...` mention is present, including unknown-only mentions.
 
 **Tech Stack:** TypeScript, Bun, React 19, Zustand, bun:test, JSONL event log.
 
@@ -1079,7 +1079,8 @@ if (this.activeTurns.has(chatId)) {
   return { chatId }
 }
 
-// Append user message with envelope (existing — done in Task 6 of Phase 2)
+// Append user message; the entry already carries subagentMentions /
+// unknownSubagentMentions populated by phase 2 Task 6 (see UserPromptEntry).
 const userMessageId = await this.appendUserPromptMessage(chatId, command.content, command.attachments ?? [], parsedMentions)
 
 if (resolvedMentions.length > 0 || unknownMentions.length > 0) {
