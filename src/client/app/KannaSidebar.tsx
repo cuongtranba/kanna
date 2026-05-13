@@ -136,9 +136,30 @@ function KannaSidebarImpl({
   const [stackChatWorktrees, setStackChatWorktrees] = useState<Map<string, GitWorktree[]>>(new Map())
   const [stackChatLoading, setStackChatLoading] = useState(false)
   const resolvedKeybindings = useMemo(() => getResolvedKeybindings(keybindings), [keybindings])
+
+  const stackChats = useMemo(() => {
+    const out: SidebarChatRow[] = []
+    for (const group of data.projectGroups) {
+      for (const chat of group.chats) {
+        if (chat.stackId) out.push(chat)
+      }
+    }
+    return out
+  }, [data.projectGroups])
+
+  const projectGroupsWithoutStackChats = useMemo(() => {
+    return data.projectGroups.map((group) => {
+      const chats = group.chats.filter((c) => !c.stackId)
+      if (chats.length === group.chats.length) return group
+      const previewChats = group.previewChats.filter((c) => !c.stackId)
+      const olderChats = group.olderChats.filter((c) => !c.stackId)
+      return { ...group, chats, previewChats, olderChats }
+    })
+  }, [data.projectGroups])
+
   const visibleChats = useMemo(
-    () => getVisibleSidebarChats(data.projectGroups, collapsedSections, expandedGroups),
-    [collapsedSections, data.projectGroups, expandedGroups]
+    () => getVisibleSidebarChats(projectGroupsWithoutStackChats, collapsedSections, expandedGroups),
+    [collapsedSections, projectGroupsWithoutStackChats, expandedGroups]
   )
   const visibleChatsRef = useRef(visibleChats)
   const visibleIndexByChatId = useMemo(
@@ -621,7 +642,8 @@ function KannaSidebarImpl({
                   />
                 )
               }}
-              chats={visibleChats.map((e) => e.chat)}
+              renderChatRow={renderChatRow}
+              chats={stackChats}
             />
 
             {stackCreatePanelOpen && (
@@ -673,7 +695,7 @@ function KannaSidebarImpl({
             })()}
 
             <LocalProjectsSection
-              projectGroups={data.projectGroups}
+              projectGroups={projectGroupsWithoutStackChats}
               editorLabel={editorLabel}
               onReorderGroups={onReorderProjectGroups}
               collapsedSections={collapsedSections}

@@ -118,6 +118,7 @@ export function deriveSidebarData(
         hasAutomation: false,
         canFork: canForkChat(chat, activeStatuses, drainingChatIds) || undefined,
         stateEnteredAt: state.chatTimingsByChatId.get(chat.id)?.stateEnteredAt,
+        stackId: chat.stackId,
       }))
   }
 
