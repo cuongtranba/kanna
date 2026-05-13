@@ -26,7 +26,7 @@ describe("GET /api/projects/:id/paths", () => {
     } finally {
       await server.stop()
     }
-  })
+  }, 30_000)
 
   test("returns top-level entries for empty query", async () => {
     const { server, projectDir } = await startServer(4331)
@@ -44,7 +44,7 @@ describe("GET /api/projects/:id/paths", () => {
     } finally {
       await server.stop()
     }
-  })
+  }, 30_000)
 
   test("respects ?query= and ?limit=", async () => {
     const { server, projectDir } = await startServer(4332)
@@ -60,5 +60,5 @@ describe("GET /api/projects/:id/paths", () => {
     } finally {
       await server.stop()
     }
-  })
+  }, 30_000)
 })

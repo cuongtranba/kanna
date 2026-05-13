@@ -9,6 +9,7 @@ import { HotkeyTooltip, HotkeyTooltipContent, HotkeyTooltipTrigger, Tooltip, Too
 import { cn } from "../../lib/utils"
 import { formatCompactDuration, formatLiveDuration } from "../../lib/formatDuration"
 import { statusLabel, statusTone, statusToneClass } from "../../lib/statusLabel"
+import { branchLabel as computeBranchLabel } from "../../lib/branchLabel"
 import { OpenExternalSelect } from "../open-external-menu"
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from "../ui/context-menu"
 import { BackgroundTasksIndicator } from "./BackgroundTasksIndicator"
@@ -160,11 +161,7 @@ export function ChatNavbar({
   provider,
   onOpenPath = () => undefined,
 }: Props) {
-  const branchLabel = !hasGitRepo
-    ? "Setup Git"
-    : gitStatus === "unknown"
-      ? null
-      : (branchName ?? "Detached HEAD")
+  const branchLabel = computeBranchLabel({ hasGitRepo, gitStatus, localPath, branchName })
   const isMac = platform === "darwin"
 
   return (
