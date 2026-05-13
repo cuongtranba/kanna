@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { createElement } from "react"
+import React, { createElement } from "react"
 import { renderToStaticMarkup } from "react-dom/server"
 import type { StackSummary, SidebarChatRow } from "../../../../shared/types"
 import { TooltipProvider } from "../../ui/tooltip"
@@ -21,9 +21,11 @@ function renderSection(
   projects: Array<{ id: string; title: string }>,
   opts: {
     expandedStackIds?: Set<string>
+    onStartChat?: (stackId: string) => void
+    renderChatCreate?: (stack: StackSummary) => React.ReactNode
   } = {}
 ): string {
-  const { expandedStackIds = new Set<string>() } = opts
+  const { expandedStackIds = new Set<string>(), onStartChat, renderChatCreate } = opts
   return renderToStaticMarkup(
     createElement(
       TooltipProvider,
@@ -35,6 +37,8 @@ function renderSection(
         onToggleExpanded: () => undefined,
         onOpenCreatePanel: () => undefined,
         onOpenStackMenu: () => undefined,
+        onStartChat,
+        renderChatCreate,
         chats: [] as SidebarChatRow[],
       })
     )
@@ -98,5 +102,34 @@ describe("StacksSection", () => {
     const projects = [{ id: "p1", title: "Project A" }, { id: "p2", title: "Project B" }]
     const html = renderSection(stacks, projects)
     expect(html).toContain('aria-label="Stack actions"')
+  })
+
+  test("expanded stack with onStartChat shows '+ New chat' button", () => {
+    const stacks = [makeStack("s1", "My Stack", 2, ["p1", "p2"])]
+    const projects = [{ id: "p1", title: "Project A" }, { id: "p2", title: "Project B" }]
+    const html = renderSection(stacks, projects, {
+      expandedStackIds: new Set(["s1"]),
+      onStartChat: () => undefined,
+    })
+    expect(html).toContain("New chat")
+  })
+
+  test("renderChatCreate slot output appears under expanded stack", () => {
+    const stacks = [makeStack("s1", "My Stack", 2, ["p1", "p2"])]
+    const projects = [{ id: "p1", title: "Project A" }, { id: "p2", title: "Project B" }]
+    const html = renderSection(stacks, projects, {
+      expandedStackIds: new Set(["s1"]),
+      onStartChat: () => undefined,
+      renderChatCreate: () => createElement("div", { "data-testid": "chat-create-slot" }, "FORM"),
+    })
+    expect(html).toContain("chat-create-slot")
+    expect(html).toContain("FORM")
+  })
+
+  test("no '+ New chat' button when onStartChat is undefined", () => {
+    const stacks = [makeStack("s1", "My Stack", 2, ["p1", "p2"])]
+    const projects = [{ id: "p1", title: "Project A" }, { id: "p2", title: "Project B" }]
+    const html = renderSection(stacks, projects, { expandedStackIds: new Set(["s1"]) })
+    expect(html).not.toContain("New chat")
   })
 })

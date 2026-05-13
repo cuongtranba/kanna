@@ -1,5 +1,5 @@
 import { type KeyboardEvent, type ReactNode } from "react"
-import { ChevronRight, MoreHorizontal } from "lucide-react"
+import { ChevronRight, MoreHorizontal, Plus } from "lucide-react"
 import { Button } from "../../ui/button"
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../ui/tooltip"
 import { cn } from "../../../lib/utils"
@@ -12,6 +12,8 @@ interface StacksSectionProps {
   onToggleExpanded: (stackId: string) => void
   onOpenCreatePanel: () => void
   onOpenStackMenu: (stackId: string) => void
+  onStartChat?: (stackId: string) => void
+  renderChatCreate?: (stack: StackSummary) => ReactNode
   chats: SidebarChatRow[]
 }
 
@@ -22,6 +24,8 @@ export function StacksSection({
   onToggleExpanded,
   onOpenCreatePanel,
   onOpenStackMenu,
+  onStartChat,
+  renderChatCreate,
   chats: _chats,
 }: StacksSectionProps): ReactNode {
   const canCreateStack = projects.length >= 2
@@ -118,6 +122,21 @@ export function StacksSection({
                         {project.title}
                       </div>
                     ))}
+                    {onStartChat && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="ml-5 mt-0.5 self-start text-xs h-6 px-1.5 text-muted-foreground hover:text-foreground"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          onStartChat(stack.id)
+                        }}
+                      >
+                        <Plus className="size-3" /> New chat
+                      </Button>
+                    )}
+                    {renderChatCreate ? <div className="pl-5 pr-2.5 py-1">{renderChatCreate(stack)}</div> : null}
                   </div>
                 )}
               </div>
