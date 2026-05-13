@@ -1,410 +1,242 @@
-# Model-Independent Chat Sessions
+# Model-Independent Chat Sessions — Overview
 
 Date: 2026-05-13
-Status: Design
+Status: Design (revised after Claude + Codex review)
+
+This is the **overview** doc for removing the chat-provider lock and adding
+configurable subagents. Implementation is split into three phase specs;
+each ships independently:
+
+1. [Phase 1 — Provider-Independent Primary Chats](./2026-05-13-model-independent-chat-phase1-provider-switching.md)
+   Per-provider resume tokens, history primer rule, migration. Highest-risk
+   shared-state change. Ships value alone (Claude ↔ Codex switching mid-chat).
+2. [Phase 2 — Subagent CRUD & Mentions](./2026-05-13-model-independent-chat-phase2-subagent-crud.md)
+   `app-settings.json` storage, server-authoritative `@agent/<name>` parsing,
+   picker integration. Depends on phase 1.
+3. [Phase 3 — Subagent Orchestration & UI](./2026-05-13-model-independent-chat-phase3-subagent-orchestration.md)
+   `SubagentRunSnapshot` read model, parallel/chained execution, transcript
+   projection, error UI. Depends on phase 2.
+
+Only phase 1 is implementation-ready. Phases 2 and 3 stay as design docs
+until phase 1 ships.
 
 ## Goal
 
-Let a chat freely switch between providers and models at any point in its
-lifetime, and let the user invoke configurable subagents inline with `@`
-mentions. Today the first turn locks a chat to one provider; this design
-removes the lock and adds a subagent abstraction that supports cross-provider
-delegation.
+Let a chat freely switch between providers and models at any turn, and let
+users invoke configurable subagents inline via `@agent/<name>` mentions.
 
 ## Use cases
 
 1. Start a chat with Claude, switch to Codex on turn 5 — Codex sees the full
-   prior transcript and continues the conversation.
-2. Define a `code-reviewer` subagent (Codex, gpt-5, custom system prompt) in
+   prior transcript via a synthetic history primer.
+2. Switch back to Claude on turn 7 — Claude resumes its prior session token
+   without re-injecting the primer.
+3. Define a `code-reviewer` subagent (Codex, gpt-5, custom system prompt) in
    Settings. While chatting with Claude, write
-   `@agent/code-reviewer please review this diff` — Codex runs with the
-   subagent's config in an isolated context, posts its reply inline, and Claude
-   sees that reply on the next turn.
-3. Mention two subagents in one message — both run in parallel, each posts a
-   reply, and Claude sees both on its next turn.
-4. A subagent's reply mentions another subagent — that mention is parsed and
-   delegated (depth limit = 2, loop detection enabled).
+   `@agent/code-reviewer please review this diff` — Codex runs in an
+   isolated context, posts its reply inline.
+4. Mention two subagents in one message — both run in parallel.
+5. A subagent's reply mentions another subagent — depth-1 chain runs once.
+   Depth 2+ rejected with `DEPTH_EXCEEDED`.
 
 ## Non-goals
 
 - Replacing Claude SDK's native `Agent` tool. Primary models can still
-  self-delegate via the SDK's tool; that mechanism is untouched. This design
-  only adds Kanna-orchestrated, user-driven `@` routing.
-- Mid-turn interrupts. Switching models or sending a new `@` mention while a
-  turn is streaming does not interrupt the active turn; the change applies to
-  the next user-initiated turn.
-- Auto-summarization of large transcripts on primary switch. Initial design
-  injects raw history; summarization can be added later if token cost demands.
+  self-delegate via that tool; untouched by this design.
+- Mid-turn interrupts. Switching models mid-stream applies to the **next**
+  user-initiated turn.
+- Auto-summarization of large transcripts. Phase 1 uses a hard char/token
+  cap with a truncation marker; smarter summarization is future work.
 
-## Data model
+## Consensus decisions (from review aggregation)
 
-### Chat
+These decisions apply across all phases and override any conflicting prose
+in earlier revisions of this doc.
 
-The chat record gains per-provider session token storage and loses provider
-lock semantics.
+### 1. Primer rule is token-based, not provider-difference-based
+
+For a primary turn, pick `targetProvider`, read
+`chat.sessionTokensByProvider[targetProvider]`, and inject a history primer
+only when that token is **absent** OR when the user explicitly cleared
+context for that provider. Switching back to a provider with an existing
+token resumes without re-injecting history.
+
+### 2. Real event names
+
+- `session_token_set` (in `TurnEvent`, written to `turnsLogPath`) — NOT
+  `chat_session_token_set`. Gains optional `provider` field.
+- `message_appended` (in `MessageEvent`) — NOT `chat_user_message_appended`.
+- `pending_fork_session_token_set` — gains optional `provider` field.
+
+Source: `src/server/events.ts:175-221`.
+
+### 3. Real file paths
+
+- `src/client/components/chat-ui/ChatInput.tsx`
+- `src/client/components/chat-ui/MentionPicker.tsx`
+- `src/client/components/chat-ui/ChatPreferenceControls.tsx`
+- `src/client/app/SettingsPage.tsx`
+- `src/client/app/KannaTranscript.tsx`
+
+### 4. No seeded built-in subagents
+
+If primary provider is freely switchable, built-in `@agent/claude` /
+`@agent/codex` are redundant with primary switching. Drop seeded built-ins.
+Subagents start empty until the user creates one.
+
+### 5. Mention parsing is server-authoritative
+
+Client chips + picker are UX hints only. The server parses `@agent/<name>`
+from submitted content AND from chained subagent replies, validates against
+current app-settings, and reserves the `@agent/` namespace **before** file
+mention path resolution. Stale ids rejected with `UNKNOWN_SUBAGENT`.
+
+### 6. Mention + primary coexistence rule
+
+If a message contains `@agent/...`, subagents run; the primary turn does
+**not** auto-fire in v1. Reasons: deterministic ordering, prevents primary
+from answering before delegated review results exist. A "fan-out + primary
+synthesis" mode is a future flag, not v1.
+
+### 7. `SubagentRunSnapshot` is the single read model
 
 ```ts
-type Chat = {
-  // existing fields ...
-
-  // last-used provider; informational, no longer a lock
-  provider: AgentProvider | null
-
-  // per-provider resume tokens; switching swaps which one is active
-  sessionTokensByProvider: Partial<Record<AgentProvider, string | null>>
-
-  // existing pendingForkSessionToken kept for fork-from-history flow
-}
-```
-
-`chat.sessionToken` (legacy single field) is removed from the in-memory model
-once migration completes. On load, if the legacy field is present it is moved
-into `sessionTokensByProvider[chat.provider]` and dropped.
-
-### Subagent
-
-A new top-level entity stored in `app-settings.json`:
-
-```ts
-type Subagent = {
-  id: string           // ULID, stable
-  name: string         // user-visible, used in @agent/<name>; [a-z0-9_-]+
-  description?: string // shown in picker
+type SubagentRunSnapshot = {
+  runId: string
+  chatId: string
+  subagentId: string         // route by id, never by mutable name
+  subagentName: string       // display only, snapshot at run time
   provider: AgentProvider
   model: string
-  modelOptions: ClaudeModelOptions | CodexModelOptions
-  systemPrompt: string
-  builtin?: boolean    // seeded by Kanna, not user-deletable
-  contextScope: "previous-assistant-reply" | "full-transcript"
-}
-```
-
-Seeded built-ins on first load:
-
-- `claude` — provider=claude, default model, empty extra system prompt.
-- `codex` — provider=codex, default model, empty extra system prompt.
-
-Reserved name: `agent` (would collide with the `@agent/...` routing prefix).
-Names must be unique across user-defined subagents.
-
-### Per-turn message metadata
-
-`SendMessageOptions` and `QueuedChatMessage` gain optional fields:
-
-```ts
-{
-  // existing
-  provider?: AgentProvider
-  model?: string
-  modelOptions?: ModelOptions
-  planMode?: boolean
-
-  // new
-  subagentMentions?: Array<{ subagentId: string; chipText: string }>
-  subagentRunContext?: {
-    parentRunId: string | null  // null for user-triggered, set for chained
-    depth: number               // 0 for user-triggered, increments on chain
-    triggeringSubagentId: string | null
-  }
-}
-```
-
-A "subagent run" is a single execution of one subagent on one mention. It
-gets its own `runId` and is event-sourced independently of the primary turn.
-
-## Events
-
-### Modified
-
-- `chat_provider_set` — semantics relaxed. Still fires when chat first gets a
-  provider; replays continue to set `chat.provider`. No longer prevents
-  subsequent provider changes.
-- `chat_session_token_set` — gains optional `provider` field. New writes
-  always set it. During replay, an event without `provider` is attributed to
-  the chat's current `provider` as of that point in the replay (the prior
-  events have already set it). Legacy logs never observed a cross-provider
-  switch, so this attribution is unambiguous.
-
-### New
-
-```ts
-type SubagentRunStartedEvent = {
-  v: number
-  type: "subagent_run_started"
-  timestamp: number
-  chatId: string
-  runId: string
-  subagentId: string
+  status: "running" | "completed" | "failed" | "cancelled"
   parentUserMessageId: string
-  depth: number
   parentRunId: string | null
-}
-
-type SubagentMessageDeltaEvent = {
-  v: number
-  type: "subagent_message_delta"
-  timestamp: number
-  runId: string
-  content: string  // appended
-}
-
-type SubagentRunCompletedEvent = {
-  v: number
-  type: "subagent_run_completed"
-  timestamp: number
-  runId: string
-  finalContent: string
-  usage?: ProviderUsage
-}
-
-type SubagentRunFailedEvent = {
-  v: number
-  type: "subagent_run_failed"
-  timestamp: number
-  runId: string
-  error: { code: string; message: string }
+  depth: number              // 0 user-triggered, 1 chained
+  startedAt: number
+  finishedAt: number | null
+  finalText: string | null
+  error: { code: SubagentErrorCode; message: string } | null
+  usage: ProviderUsage | null
 }
 ```
 
-Subagent runs live in the same per-chat event log as primary turns and are
-reduced into a `subagentRuns: Map<runId, SubagentRun>` read model attached to
-the chat snapshot. The transcript projection orders them by `parentUserMessageId`
-+ start timestamp so the UI can group them under the triggering user message.
+Durable events live in `turns.jsonl` (same log family as session token
+events). Transcript JSONL holds a **derived projection** for display.
+Events own lifecycle; transcript projection owns display text. No
+dual-writing of authoritative state.
 
-Subagent CRUD is **not** event-sourced. `app-settings.json` is a JSON
-document persisted via the existing atomic-write helper
-(`src/server/app-settings.ts`); subagents are a new top-level array within
-that document. Reads return the full list; writes apply a CRUD operation
-and re-persist atomically. This matches the existing pattern for other
-app-settings fields.
+### 8. `MAX_CHAIN_DEPTH = 1` for v1
 
-## Send flow
+User-triggered runs are depth 0; one chained run at depth 1 is allowed;
+depth 2+ is rejected with `subagent_run_failed { code: "DEPTH_EXCEEDED" }`.
+Raise to 2 in a follow-up after observing real orchestration.
 
-```
-User submits composer
-  │
-  ├─ parseMentions(text) → { primaryText, fileMentions, subagentMentions }
-  │
-  ├─ Append `chat_user_message_appended` (existing) with primaryText +
-  │   subagentMentions metadata so it replays consistently.
-  │
-  ├─ If subagentMentions is empty:
-  │     enqueuePrimaryTurn(chatId, composerState)
-  │       └─ If composerState.provider !== chat.provider:
-  │            buildHistoryPrimer(chatId, targetProvider) →
-  │              one synthetic user message containing
-  │              "Previous conversation (provider=X):\n<rendered history>"
-  │            startTurnForChat({ ..., preamble: primer })
-  │       Else: existing path.
-  │
-  └─ Else:
-        For each mention (in mention order), in parallel up to MAX_PARALLEL=4:
-          spawnSubagentRun({
-            chatId,
-            subagentId,
-            parentUserMessageId: <appended user msg id>,
-            depth: 0,
-            parentRunId: null,
-            input: primaryText,
-            primer: subagent.contextScope === "full-transcript"
-              ? buildHistoryPrimer(chatId, subagent.provider)
-              : lastPrimaryAssistantReplyText(chatId)
-          })
-        Await all (with per-run timeouts).
+### 9. Migration touch points (full enumeration)
 
-        For each completed run:
-          parseMentions(run.finalContent) →
-            if subagentMentions.length > 0 AND depth < 2 AND no loop:
-              For each chained mention:
-                spawnSubagentRun({
-                  ...,
-                  parentRunId: run.runId,
-                  depth: 1,
-                  triggeringSubagentId: run.subagentId,
-                  input: run.finalContent,
-                })
+Phase 1 migration touches:
 
-        Primary turn does NOT auto-fire after subagent mentions. User decides
-        whether to send a follow-up to primary; when they do, the primary turn
-        sees the user message AND all completed subagent replies in its
-        injected history.
+- `src/shared/types.ts:1216` — `ChatRecord.sessionToken` → `sessionTokensByProvider`.
+- `src/shared/types.ts:459` — `ChatSidebarItem.canFork` derivation.
+- `src/server/read-models.ts:34` — `canForkChat` reads token presence.
+- `src/server/agent.ts:1229,1251,1567,1609,1737` — every read/write of
+  `chat.sessionToken` / `chat.pendingForkSessionToken`.
+- `src/server/event-store.ts` — `session_token_set` /
+  `pending_fork_session_token_set` reducers; replay-time provider attribution.
+- `src/server/events.ts:201-221` — add optional `provider` field to both
+  token events.
+- `src/server/codex-app-server.ts:124,754,809` — Codex resume path with
+  provider tag.
+- `src/server/claude-session-importer.ts` — Claude import path sets
+  `sessionTokensByProvider.claude`.
+- `src/server/auth.ts`, `src/client/app/useKannaState.ts` — any caller that
+  passes `chat.sessionToken` to a provider.
+- `src/client/components/chat-ui/sidebar/Menus.tsx`,
+  `src/client/components/chat-ui/sidebar/ChatRow.tsx` — sidebar fork
+  affordance reads provider-aware token state.
+
+`pendingForkSessionToken` itself becomes provider-tagged so a fork carries
+the right backend session per provider.
+
+### 10. Error code enum
+
+```ts
+type SubagentErrorCode =
+  | "AUTH_REQUIRED"     // provider creds missing / expired
+  | "UNKNOWN_SUBAGENT"  // mention references stale or missing id
+  | "LOOP_DETECTED"     // subagent id already in path
+  | "DEPTH_EXCEEDED"    // depth > MAX_CHAIN_DEPTH
+  | "TIMEOUT"           // per-run wall-clock cap exceeded
+  | "PROVIDER_ERROR"    // underlying provider call failed
 ```
 
-### History primer
+All failures surface as `subagent_run_failed` events AND inline error
+cards in the transcript (never silent).
 
-Used in two places: primary provider switch, and `contextScope: "full-transcript"`
-subagents.
+### 11. `previous-assistant-reply` extraction
 
-Rendered shape (single synthetic user message body):
+Last assistant text from primary turns only. Excludes subagent messages
+and excludes tool-call summaries unless no text exists in that reply.
+First-turn case (no prior assistant): **skip the primer**, pass user text
+only.
 
-```
-The following is the prior conversation in this chat. The first part is
-context only; the actual request follows after the marker line.
+### 12. App-settings name validation
 
---- BEGIN PRIOR CONVERSATION ---
-[user, 2026-05-13 14:02:11]
-<text>
+- Trim before validation.
+- Case-insensitive uniqueness across user-defined subagents.
+- Reject empty string, leading dot, `/`, and reserved names: `agent`,
+  `agents`.
+- Reject `[a-z0-9_-]` pattern violations.
 
-[assistant (claude, claude-opus-4-7), 2026-05-13 14:02:18]
-<text>
+### 13. History primer hard cap (v1, server-side)
 
-[subagent code-reviewer (codex, gpt-5), 2026-05-13 14:03:01]
-<text>
---- END PRIOR CONVERSATION ---
+Render newest transcript entries first up to a char budget (initial
+proposal: 60_000 chars, tunable per-provider). Include an explicit
+truncation marker `[... earlier conversation omitted ...]`. Log rendered
+size and truncation status to telemetry for tuning. UI warning is a
+follow-up.
 
-<actual user request goes here>
-```
+### 14. `MAX_PARALLEL = 4` overflow rule
 
-Tool calls are flattened to short textual summaries (existing
-`parseTranscript.ts` already produces a human-readable form; reuse). Binary
-attachments are referenced by filename, not embedded.
+Mentions 5+ in one message queue and run after the first batch completes.
+Never reject.
 
-### Loop detection
+### 15. `useMentionSuggestions` is split, not changed
 
-A run's "path" is the list of `subagentId`s from the original user message
-down through `parentRunId` chains. Before spawning a chained run, reject if
-its `subagentId` already appears in the path. Reject silently (log + emit a
-`subagent_run_failed` event with code `LOOP_DETECTED`).
+Current return type stays `{ items: ProjectPath[]; loading; error }`.
+Add a separate `useSubagentSuggestions` hook returning
+`{ items: Subagent[]; loading; error }`. `MentionPicker` merges results
+locally. No breaking change to existing callers.
 
-Depth hard-capped at 2 (a user mention is depth 0; one level of chain is
-depth 1; another level would be depth 2 and is blocked).
+### 16. Route by id, not mutable name
 
-## Cross-provider session isolation
+`@agent/<name>` is user-facing; the server resolves name → id at parse
+time. All stored references (events, queued messages, run snapshots) use
+`subagentId`. Renaming a subagent does not break in-flight or queued runs.
 
-Each provider keeps its own resume token under
-`chat.sessionTokensByProvider[provider]`. The agent layer reads/writes the
-token keyed by the **provider used for this turn**, not by the chat's
-last-used provider.
+### 17. Ordering tiebreak
 
-- Primary turn with Claude after Codex turns → reads
-  `sessionTokensByProvider.claude`. If null, this is Claude's first turn in
-  this chat from its perspective, so we pass the history primer as preamble.
-- Subagent run → always isolated. The subagent's invocation never resumes a
-  shared session token. (A future optimization could maintain a per-subagent
-  session token; out of scope for v1.)
+Sibling subagent runs under one user message order by
+`startedAt` ascending, then `runId` ascending. Equal `startedAt` is real
+on fast hardware.
 
-## Protocol additions
+### 18. App-settings work items
 
-WebSocket messages (Kanna's existing JSON-over-WS protocol):
+Touch the following in `src/server/app-settings.ts`:
 
-- `subagent_list` (server → client) — full list, pushed on app-settings
-  reactive snapshot.
-- `subagent_create` (client → server) — `{ name, description?, provider,
-  model, modelOptions, systemPrompt, contextScope }`.
-- `subagent_update` (client → server) — `{ id, …same fields }`.
-- `subagent_delete` (client → server) — `{ id }`. Refused if `builtin: true`.
-- `chat_send` — extended with optional `subagentMentions` array (parsed
-  client-side, validated server-side against subagent ids).
+- `AppSettingsFile` interface — add `subagents` array.
+- `normalizeAppSettings` — new per-entry normalizer + validation.
+- `toFilePayload`, `toSnapshot`, `toComparablePayload`, `applyPatch`.
+- `AppSettingsPatch` / `AppSettingsSnapshot` types in `src/shared/types.ts`.
+- New CRUD: `createSubagent`, `updateSubagent`, `deleteSubagent`.
+- Protocol additions in `src/shared/protocol.ts`.
 
-## UI
+## Phase-by-phase summary
 
-### Composer (`ChatInput.tsx`)
+| Phase | Scope | Ships independent value? |
+|-------|-------|---|
+| 1 | `sessionTokensByProvider`, primer rule, migration, fork-provider-tag | Yes — chat-level model switching |
+| 2 | Subagent CRUD in app-settings, server-authoritative mention parsing, picker | No — requires phase 1 for cross-provider subagents |
+| 3 | Orchestrator, `SubagentRunSnapshot`, parallel + chained runs, transcript UI | No — requires phase 2 |
 
-- Drop `providerLocked` constraint. `selectedProvider` always reflects
-  `composerState.provider`.
-- Active turn streaming: model selector remains interactive. Selection change
-  updates `composerState`; in-flight turn unaffected.
-- Below the textarea, render small chips for each parsed `@agent/<name>`
-  mention so the user sees which subagents will run before send. Chips are
-  read-only summaries computed from textarea content.
-
-### Picker (`MentionPicker.tsx` + `useMentionSuggestions`)
-
-- Hook returns `{ agents: Subagent[]; paths: ProjectPath[] }` filtered by the
-  current query (the text after `@`).
-- Picker renders two sections, **Agents** first when any match, **Files**
-  below. Section headers shown when both have results.
-- Selecting an agent inserts `@agent/<name> ` (trailing space). Selecting a
-  file keeps existing behavior.
-- Picker still triggers on the same `@` token rule defined by
-  `shouldShowMentionPicker`; no new sigil.
-
-### Settings (`SettingsPage.tsx`)
-
-New "Subagents" section between provider settings and existing sections.
-
-- List view: each subagent shows name, description, provider icon, model.
-- Built-in subagents marked with a lock icon and an "Edit copy" affordance.
-- Editor form:
-  - `name` (text, validated)
-  - `description` (text)
-  - `provider` (selector, reuses `ChatPreferenceControls` provider switch)
-  - `model` + `modelOptions` (reuses `ChatPreferenceControls`)
-  - `systemPrompt` (multiline)
-  - `contextScope` (radio: "Previous assistant reply only" /
-    "Full conversation transcript")
-
-### Transcript (`KannaTranscript.tsx`)
-
-- New message kind `SubagentMessage` rendered as an assistant-shaped message
-  with a header `{providerIcon} {subagentName}` and a subtle left border in
-  an accent color.
-- Multi-mention runs spawned by the same user message render as a sibling
-  group beneath that user message, ordered by start time.
-- Chained runs (parentRunId set) render indented one level under the
-  triggering subagent message.
-- Streaming indicator while a run is active. Failed runs render an inline
-  error card with the failure code.
-
-## Migration
-
-- On event-store load, for each chat:
-  - If legacy `sessionToken` exists and `sessionTokensByProvider` is empty,
-    set `sessionTokensByProvider[chat.provider] = sessionToken`.
-  - `chat.provider` retained as last-used hint.
-- On app-settings load:
-  - If `subagents` key absent, initialize with seeded built-ins.
-- Existing chats: switching provider works immediately after upgrade.
-  The first cross-provider turn after upgrade triggers a history primer.
-- Old client builds: server keeps emitting `chat_provider_set` on first turn
-  for forward-compat. Old clients ignore `subagent_*` events and render
-  unknown event kinds as "Unsupported event" (matching existing
-  unknown-event handling).
-
-## Testing
-
-Each item below maps to one or more co-located test files.
-
-- `event-store.test.ts` —
-  - Replay with new `subagent_run_*` events produces the expected
-    `subagentRuns` map and ordering.
-  - Legacy `chat_session_token_set` (no provider) migrates to the
-    chat's last-known provider.
-  - Provider switch after `chat_provider_set` does not throw and updates
-    `chat.provider`.
-- `agent.test.ts` —
-  - Primary turn after provider switch generates a history primer matching
-    snapshot.
-  - Subagent run uses subagent's provider/model/systemPrompt; does not
-    consume the chat's primary session token.
-  - Multi-mention spawns up to `MAX_PARALLEL` concurrently and queues the
-    rest.
-  - Loop detection: a subagent whose reply mentions itself does not
-    re-spawn; emits `subagent_run_failed` with code `LOOP_DETECTED`.
-  - Depth limit: a chain of depth 2 is rejected.
-- `mention-suggestions.test.ts` (rename or extend) —
-  - Query "code" returns both matching subagents and matching paths.
-  - Selecting an agent inserts `@agent/<name>` correctly into textarea.
-  - Subagent named `agent` rejected by settings validation; covered in
-    `subagent-validation.test.ts` (new).
-- `chatPreferencesStore.test.ts` —
-  - Provider switch on an existing chat updates `composerState.provider`
-    without losing per-provider model options.
-- `KannaTranscript.test.tsx` —
-  - Renders `SubagentMessage` grouped under the triggering user message.
-  - Renders chained runs indented under the parent run.
-- New `subagent-orchestrator.test.ts` —
-  - Parallel fan-out, history primer composition, parent/child wiring,
-    failure propagation.
-
-## Open questions
-
-1. Should subagent `modelOptions` include `planMode`? Current thinking: no
-   for v1 — subagents are short-lived helpers, plan mode adds review-loop
-   friction. Revisit if a user explicitly asks.
-2. Token budget warnings: should the composer warn when a history primer is
-   estimated to exceed the target provider's context window? Punt to a
-   follow-up; for v1 we trust providers' own truncation.
-3. Subagent cost accounting: emit usage per-run for the Settings page
-   accounting view? Yes — `SubagentRunCompletedEvent.usage` already carries
-   it; UI work is small but tracked as a follow-up.
+See phase docs for detailed contracts, data shapes, events, tests, and
+implementation order.
