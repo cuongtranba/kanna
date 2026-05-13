@@ -3,6 +3,7 @@ import { ChevronRight, MoreHorizontal, Plus } from "lucide-react"
 import { Button } from "../../ui/button"
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../ui/tooltip"
 import { cn } from "../../../lib/utils"
+import { StackActionsPopover, StackSectionMenu } from "./Menus"
 import type { StackSummary, SidebarChatRow } from "../../../../shared/types"
 
 interface StacksSectionProps {
@@ -12,6 +13,7 @@ interface StacksSectionProps {
   onToggleExpanded: (stackId: string) => void
   onOpenCreatePanel: () => void
   onOpenStackMenu: (stackId: string) => void
+  onDeleteStack?: (stackId: string) => void
   onStartChat?: (stackId: string) => void
   renderChatCreate?: (stack: StackSummary) => ReactNode
   renderChatRow?: (chat: SidebarChatRow) => ReactNode
@@ -25,6 +27,7 @@ export function StacksSection({
   onToggleExpanded,
   onOpenCreatePanel,
   onOpenStackMenu,
+  onDeleteStack,
   onStartChat,
   renderChatCreate,
   renderChatRow,
@@ -83,29 +86,47 @@ export function StacksSection({
             const isExpanded = expandedStackIds.has(stack.id)
             const memberProjects = projects.filter((p) => stack.projectIds.includes(p.id))
 
-            return (
-              <div key={stack.id}>
-                <div className="group/section pl-2 pr-2 py-1 flex items-center gap-1 select-none">
-                  <div
-                    role="button"
-                    tabIndex={0}
-                    className="flex items-center gap-1.5 min-w-0 flex-1 rounded-md py-0.5 text-left hover:bg-muted/30 transition-colors duration-150 cursor-pointer"
-                    onClick={() => onToggleExpanded(stack.id)}
-                    onKeyDown={(e) => handleRowKeyDown(stack.id, e)}
-                  >
-                    <ChevronRight
-                      className={cn(
-                        "size-3.5 shrink-0 text-muted-foreground transition-transform duration-150 motion-reduce:transition-none",
-                        isExpanded && "rotate-90"
-                      )}
-                    />
-                    <span className="truncate min-w-0 text-[13px] font-semibold text-foreground/80">
-                      {stack.title}
-                    </span>
-                  </div>
-                  <span className="text-[11px] tabular-nums text-muted-foreground px-1.5 py-0.5 rounded bg-muted/60 shrink-0">
-                    {stack.memberCount}
+            const headerRow = (
+              <div className="group/section pl-2 pr-2 py-1 flex items-center gap-1 select-none">
+                <div
+                  role="button"
+                  tabIndex={0}
+                  className="flex items-center gap-1.5 min-w-0 flex-1 rounded-md py-0.5 text-left hover:bg-muted/30 transition-colors duration-150 cursor-pointer"
+                  onClick={() => onToggleExpanded(stack.id)}
+                  onKeyDown={(e) => handleRowKeyDown(stack.id, e)}
+                >
+                  <ChevronRight
+                    className={cn(
+                      "size-3.5 shrink-0 text-muted-foreground transition-transform duration-150 motion-reduce:transition-none",
+                      isExpanded && "rotate-90"
+                    )}
+                  />
+                  <span className="truncate min-w-0 text-[13px] font-semibold text-foreground/80">
+                    {stack.title}
                   </span>
+                </div>
+                <span className="text-[11px] tabular-nums text-muted-foreground px-1.5 py-0.5 rounded bg-muted/60 shrink-0">
+                  {stack.memberCount}
+                </span>
+                {onDeleteStack ? (
+                  <StackActionsPopover
+                    stackTitle={stack.title}
+                    onRename={() => onOpenStackMenu(stack.id)}
+                    onEditMembers={() => onOpenStackMenu(stack.id)}
+                    onDelete={() => onDeleteStack(stack.id)}
+                  >
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      aria-label="Stack actions"
+                      className="size-6 rounded-sm opacity-0 group-hover/section:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100 transition-opacity duration-150"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <MoreHorizontal className="size-3.5" />
+                    </Button>
+                  </StackActionsPopover>
+                ) : (
                   <Button
                     type="button"
                     variant="ghost"
@@ -119,7 +140,24 @@ export function StacksSection({
                   >
                     <MoreHorizontal className="size-3.5" />
                   </Button>
-                </div>
+                )}
+              </div>
+            )
+
+            return (
+              <div key={stack.id}>
+                {onDeleteStack ? (
+                  <StackSectionMenu
+                    stackTitle={stack.title}
+                    onRename={() => onOpenStackMenu(stack.id)}
+                    onEditMembers={() => onOpenStackMenu(stack.id)}
+                    onDelete={() => onDeleteStack(stack.id)}
+                  >
+                    {headerRow}
+                  </StackSectionMenu>
+                ) : (
+                  headerRow
+                )}
 
                 {isExpanded && (
                   <div className="flex flex-col gap-px pb-1">
