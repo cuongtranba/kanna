@@ -86,4 +86,35 @@ describe("StackChatCreateRow", () => {
     const cancelButtonTag = html.slice(lastButtonStart, cancelIndex)
     expect(cancelButtonTag).toContain('type="button"')
   })
+
+  test("single-project stack hides the Primary radio cluster", () => {
+    const singleProjectStack: StackSummary = { ...STACK, projectIds: ["p1"], memberCount: 1 }
+    const html = renderToStaticMarkup(
+      createElement(StackChatCreateRow, {
+        stack: singleProjectStack,
+        projects: PROJECTS,
+        onCreate: noopAsync,
+        onCancel: () => undefined,
+      })
+    )
+    expect(html).toContain("Project Alpha")
+    expect(html).not.toContain('type="radio"')
+    expect(html).not.toContain(">Primary<")
+  })
+
+  test("project with a single worktree disables its select", () => {
+    const html = renderRow()
+    const betaIndex = html.indexOf("Project Beta")
+    const tail = html.slice(betaIndex)
+    const selectStart = tail.indexOf("<select")
+    const selectEnd = tail.indexOf(">", selectStart)
+    const selectTag = tail.slice(selectStart, selectEnd)
+    expect(selectTag).toContain("disabled")
+  })
+
+  test("default Create Chat button label is not the submitting variant", () => {
+    const html = renderRow()
+    expect(html).toContain("Create Chat")
+    expect(html).not.toContain("Creating")
+  })
 })
