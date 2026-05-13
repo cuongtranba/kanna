@@ -58,49 +58,57 @@ export function StackChatCreateRow({
     <form
       onSubmit={handleSubmit}
       onKeyDown={handleKeyDown}
-      className="flex flex-col gap-2 px-2.5 py-2 border border-border rounded-lg bg-background"
+      className="flex flex-col gap-3 px-3 py-3 border border-border rounded-lg bg-card"
     >
-      {filteredProjects.map((project) => {
-        const selectedPath = selectedWorktrees.get(project.id) ?? project.worktrees[0]?.path ?? ""
-        const isPrimary = project.id === primaryProjectId
+      <ul className="flex flex-col divide-y divide-border -my-1">
+        {filteredProjects.map((project) => {
+          const selectedPath = selectedWorktrees.get(project.id) ?? project.worktrees[0]?.path ?? ""
+          const isPrimary = project.id === primaryProjectId
 
-        return (
-          <div key={project.id} className="flex items-center gap-2 py-0.5">
-            <span className="text-sm flex-1">{project.title}</span>
+          return (
+            <li key={project.id} className="flex flex-col gap-1.5 py-2 min-w-0">
+              <div className="flex items-baseline justify-between gap-2 min-w-0">
+                <span className="text-[15px] font-semibold leading-snug truncate min-w-0">
+                  {project.title}
+                </span>
+                <label className="shrink-0 inline-flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer select-none">
+                  <input
+                    type="radio"
+                    name="primaryProject"
+                    value={project.id}
+                    checked={isPrimary}
+                    onChange={() => setPrimaryProjectId(project.id)}
+                    aria-label={`Set ${project.title} as primary`}
+                    className="accent-foreground"
+                  />
+                  <span className={isPrimary ? "text-foreground" : undefined}>Primary</span>
+                </label>
+              </div>
 
-            <select
-              value={selectedPath}
-              onChange={(e) => {
-                setSelectedWorktrees((prev) => {
-                  const next = new Map(prev)
-                  next.set(project.id, e.target.value)
-                  return next
-                })
-              }}
-              className="text-xs border border-border rounded px-1 py-0.5 bg-background"
-              aria-label={`Worktree for ${project.title}`}
-            >
-              {project.worktrees.map((wt) => (
-                <option key={wt.path} value={wt.path}>
-                  {wt.branch}
-                </option>
-              ))}
-            </select>
+              <select
+                value={selectedPath}
+                onChange={(e) => {
+                  setSelectedWorktrees((prev) => {
+                    const next = new Map(prev)
+                    next.set(project.id, e.target.value)
+                    return next
+                  })
+                }}
+                className="w-full text-xs font-mono tabular-nums border border-border rounded-md px-2 py-1.5 bg-background text-foreground truncate"
+                aria-label={`Worktree for ${project.title}`}
+              >
+                {project.worktrees.map((wt) => (
+                  <option key={wt.path} value={wt.path}>
+                    {wt.branch}
+                  </option>
+                ))}
+              </select>
+            </li>
+          )
+        })}
+      </ul>
 
-            <input
-              type="radio"
-              name="primaryProject"
-              value={project.id}
-              checked={isPrimary}
-              onChange={() => setPrimaryProjectId(project.id)}
-              aria-label={`Set ${project.title} as primary`}
-            />
-            <span className="text-xs text-muted-foreground">Primary</span>
-          </div>
-        )
-      })}
-
-      <div className="flex gap-2 pt-1">
+      <div className="flex gap-2">
         <Button type="submit" size="sm">
           Create Chat
         </Button>
