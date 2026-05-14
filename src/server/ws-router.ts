@@ -951,6 +951,17 @@ export function createWsRouter({
     }
   }
 
+  // timings.derivedAtMs = Date.now() on every call, making every snapshot unique
+  // and defeating signature-based dedup. Strip timings from the signature so that
+  // idle/finished chats are only sent once instead of on every broadcastSnapshots call.
+  function getStableChatSnapshotSignature(snapshot: Extract<ServerEnvelope, { type: "snapshot" }>["snapshot"]): string {
+    if (snapshot.type === "chat" && snapshot.data?.runtime) {
+      const { timings: _t, ...stableRuntime } = snapshot.data.runtime
+      return JSON.stringify({ type: snapshot.type, data: { ...snapshot.data, runtime: stableRuntime } })
+    }
+    return JSON.stringify(snapshot)
+  }
+
   async function pushSnapshots(
     ws: ServerWebSocket<ClientState>,
     options?: { skipPrune?: boolean; filter?: SnapshotBroadcastFilter; cache?: SnapshotComputationCache }
@@ -972,7 +983,7 @@ export function createWsRouter({
       if (envelope.type !== "snapshot") continue
       const signature = topic.type === "sidebar"
         ? getSidebarSnapshotCacheEntry(options?.cache).signature
-        : JSON.stringify(envelope.snapshot)
+        : getStableChatSnapshotSignature(envelope.snapshot)
       const signatureReadyAt = topic.type === "sidebar" ? createdAt : performance.now()
       if (snapshotSignatures.get(id) === signature) {
         skippedCount += 1
