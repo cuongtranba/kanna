@@ -2,11 +2,13 @@ import { describe, expect, test } from "bun:test"
 import {
   AgentCoordinator,
   buildAttachmentHintText,
+  buildCanUseTool,
   buildPromptText,
   maxClaudeContextWindowFromModelUsage,
   normalizeClaudeStreamMessage,
   normalizeClaudeUsageSnapshot,
 } from "./agent"
+import type { ToolCallbackService } from "./tool-callback"
 import { BackgroundTaskRegistry } from "./background-tasks"
 import type { HarnessTurn } from "./harness-types"
 import type { ChatAttachment, SlashCommand, TranscriptEntry } from "../shared/types"
@@ -3640,4 +3642,199 @@ describe("AgentCoordinator subagent mention gating", () => {
     // emitStateChange fires from onRunTerminal hook.
     expect(emits).toContain("chat-1")
   }, 10_000)
+})
+
+// ── canUseTool routing tests ───────────────────────────────────────────────────
+
+describe("buildCanUseTool", () => {
+  test("flag off: AskUserQuestion uses legacy onToolRequest path", async () => {
+    delete process.env.KANNA_MCP_TOOL_CALLBACKS
+
+    let onToolRequestCallCount = 0
+    let toolCallbackSubmitCallCount = 0
+
+    const stubOnToolRequest = async (_req: any) => {
+      onToolRequestCallCount++
+      return { answers: { q1: "legacy-answer" } }
+    }
+
+    const stubToolCallback: ToolCallbackService = {
+      submit: async () => {
+        toolCallbackSubmitCallCount++
+        return { status: "answered" as const, decision: { kind: "allow" as const, payload: { answers: { q1: "cb-answer" } } } }
+      },
+      answer: async () => {},
+      cancel: async () => {},
+      cancelAllForChat: async () => {},
+      cancelAllForSession: async () => {},
+      recoverOnStartup: async () => {},
+      tickTimeouts: async () => {},
+    }
+
+    const canUseTool = buildCanUseTool({
+      localPath: "/tmp/test",
+      chatId: "chat-1",
+      sessionToken: "sess-1",
+      onToolRequest: stubOnToolRequest,
+      toolCallback: stubToolCallback,
+    })
+
+    const result = await canUseTool(
+      "AskUserQuestion",
+      { questions: [{ id: "q1", question: "What color?" }] },
+      { toolUseID: "tool-use-1", signal: new AbortController().signal },
+    )
+
+    // Legacy path must be taken: onToolRequest called once, toolCallback NOT called
+    expect(onToolRequestCallCount).toBe(1)
+    expect(toolCallbackSubmitCallCount).toBe(0)
+    expect(result.behavior).toBe("allow")
+    if (result.behavior === "allow") {
+      expect((result.updatedInput as any).answers).toEqual({ q1: "legacy-answer" })
+    }
+  })
+
+  test("flag on + toolCallback present: AskUserQuestion routes through toolCallback.submit", async () => {
+    process.env.KANNA_MCP_TOOL_CALLBACKS = "1"
+    try {
+      let onToolRequestCallCount = 0
+      let toolCallbackSubmitCallCount = 0
+
+      const stubOnToolRequest = async (_req: any) => {
+        onToolRequestCallCount++
+        return { answers: { q1: "legacy-answer" } }
+      }
+
+      const stubToolCallback: ToolCallbackService = {
+        submit: async () => {
+          toolCallbackSubmitCallCount++
+          return {
+            status: "answered" as const,
+            decision: {
+              kind: "answer" as const,
+              payload: { questions: [{ id: "q1", question: "What color?" }], answers: { q1: ["blue"] } },
+            },
+          }
+        },
+        answer: async () => {},
+        cancel: async () => {},
+        cancelAllForChat: async () => {},
+        cancelAllForSession: async () => {},
+        recoverOnStartup: async () => {},
+        tickTimeouts: async () => {},
+      }
+
+      const canUseTool = buildCanUseTool({
+        localPath: "/tmp/test",
+        chatId: "chat-1",
+        sessionToken: "sess-1",
+        onToolRequest: stubOnToolRequest,
+        toolCallback: stubToolCallback,
+      })
+
+      const result = await canUseTool(
+        "AskUserQuestion",
+        { questions: [{ id: "q1", question: "What color?" }] },
+        { toolUseID: "tool-use-2", signal: new AbortController().signal },
+      )
+
+      // Flag-on path: toolCallback called once, legacy onToolRequest NOT called
+      expect(toolCallbackSubmitCallCount).toBe(1)
+      expect(onToolRequestCallCount).toBe(0)
+      expect(result.behavior).toBe("allow")
+      if (result.behavior === "allow") {
+        expect((result.updatedInput as any).answers).toEqual({ q1: ["blue"] })
+      }
+    } finally {
+      delete process.env.KANNA_MCP_TOOL_CALLBACKS
+    }
+  })
+
+  test("flag on + toolCallback present: toolCallback deny returns deny behavior", async () => {
+    process.env.KANNA_MCP_TOOL_CALLBACKS = "1"
+    try {
+      const stubToolCallback: ToolCallbackService = {
+        submit: async () => ({
+          status: "answered" as const,
+          decision: { kind: "deny" as const, reason: "not allowed by policy" },
+        }),
+        answer: async () => {},
+        cancel: async () => {},
+        cancelAllForChat: async () => {},
+        cancelAllForSession: async () => {},
+        recoverOnStartup: async () => {},
+        tickTimeouts: async () => {},
+      }
+
+      const canUseTool = buildCanUseTool({
+        localPath: "/tmp/test",
+        chatId: "chat-1",
+        sessionToken: "sess-1",
+        onToolRequest: async () => ({}),
+        toolCallback: stubToolCallback,
+      })
+
+      const result = await canUseTool(
+        "AskUserQuestion",
+        { questions: [{ id: "q1", question: "Proceed?" }] },
+        { toolUseID: "tool-use-3", signal: new AbortController().signal },
+      )
+
+      expect(result.behavior).toBe("deny")
+      if (result.behavior === "deny") {
+        expect(result.message).toBe("not allowed by policy")
+      }
+    } finally {
+      delete process.env.KANNA_MCP_TOOL_CALLBACKS
+    }
+  })
+
+  test("flag on but toolCallback absent: falls back to legacy onToolRequest", async () => {
+    process.env.KANNA_MCP_TOOL_CALLBACKS = "1"
+    try {
+      let onToolRequestCallCount = 0
+
+      const canUseTool = buildCanUseTool({
+        localPath: "/tmp/test",
+        chatId: "chat-1",
+        sessionToken: "sess-1",
+        onToolRequest: async (_req: any) => {
+          onToolRequestCallCount++
+          return { answers: { q1: "fallback-answer" } }
+        },
+        // toolCallback intentionally omitted
+      })
+
+      await canUseTool(
+        "AskUserQuestion",
+        { questions: [{ id: "q1", question: "Hello?" }] },
+        { toolUseID: "tool-use-4", signal: new AbortController().signal },
+      )
+
+      expect(onToolRequestCallCount).toBe(1)
+    } finally {
+      delete process.env.KANNA_MCP_TOOL_CALLBACKS
+    }
+  })
+
+  test("non-AskUserQuestion tool is always allowed regardless of flag", async () => {
+    process.env.KANNA_MCP_TOOL_CALLBACKS = "1"
+    try {
+      let onToolRequestCallCount = 0
+
+      const canUseTool = buildCanUseTool({
+        localPath: "/tmp/test",
+        chatId: "chat-1",
+        sessionToken: "sess-1",
+        onToolRequest: async () => { onToolRequestCallCount++; return null },
+      })
+
+      const result = await canUseTool("Bash", { command: "ls" }, { toolUseID: "tool-use-5", signal: new AbortController().signal })
+
+      expect(result.behavior).toBe("allow")
+      expect(onToolRequestCallCount).toBe(0)
+    } finally {
+      delete process.env.KANNA_MCP_TOOL_CALLBACKS
+    }
+  })
 })
