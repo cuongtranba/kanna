@@ -170,9 +170,11 @@ describe("buildSubagentProviderRun – Claude", () => {
     })
 
     const run = buildSubagentProviderRun(args)
-    await expect(
-      run.start(() => {}, () => {}),
-    ).rejects.toThrow("stream exploded")
+    let err: unknown = null
+    try {
+      await run.start(() => {}, () => {})
+    } catch (e) { err = e }
+    expect((err as Error)?.message).toBe("stream exploded")
 
     expect(sessionClosed).toBe(true)
   })
@@ -279,9 +281,11 @@ describe("buildSubagentProviderRun – Codex", () => {
     })
 
     const run = buildSubagentProviderRun(args)
-    await expect(
-      run.start(() => {}, () => {}),
-    ).rejects.toThrow("codex start turn failed")
+    let err: unknown = null
+    try {
+      await run.start(() => {}, () => {})
+    } catch (e) { err = e }
+    expect((err as Error)?.message).toBe("codex start turn failed")
 
     expect(calls).toEqual(["startSession", "startTurn", "stopSession:sub:run-fail"])
   })
