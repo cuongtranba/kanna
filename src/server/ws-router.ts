@@ -1539,6 +1539,9 @@ export function createWsRouter({
             await agent.cancelAutoContinue(command.chatId, scheduleId, "chat_deleted")
           }
           await agent.closeChat(command.chatId)
+          if (agent.toolCallbackService) {
+            await agent.toolCallbackService.cancelAllForChat(command.chatId, "chat_deleted")
+          }
           await store.deleteChat(command.chatId)
           send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
           resolvedAnalytics.track("chat_deleted")

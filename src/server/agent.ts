@@ -895,6 +895,9 @@ async function startClaudeSession(args: {
     close: () => {
       promptQueue.close()
       q.close()
+      if (args.toolCallback && args.sessionToken) {
+        void args.toolCallback.cancelAllForSession(args.sessionToken, "session_closed")
+      }
     },
   }
 }
