@@ -237,6 +237,31 @@ export class SubagentOrchestrator {
     }
   }
 
+  cancelRun(chatId: string, runId: string): void {
+    const state = this.runStateByRunId.get(runId)
+    if (!state) return
+    if (state.cancelled) return
+    if (state.chatId !== chatId) return
+    state.cancelled = true
+    // Cascade to running descendants. With current DEFAULT_MAX_CHAIN_DEPTH=1
+    // this is a no-op in practice (children spawn only after parent
+    // completes) but guards forward-compat with higher chain depths.
+    for (const childRunId of [...state.childRunIds]) {
+      this.cancelRun(chatId, childRunId)
+    }
+    if (state.pendingAcquire && state.permitWaiter) {
+      // Queued: splice waiter out of this.waiters FIRST so release() cannot
+      // grant us a permit we will never use, then reject the Promise.
+      const idx = this.waiters.findIndex((w) => w.resolve === state.permitWaiter!.resolve)
+      if (idx >= 0) this.waiters.splice(idx, 1)
+      const reject = state.permitWaiter.reject
+      state.permitWaiter = null
+      reject(new Error("USER_CANCELLED"))
+    } else {
+      state.abortController.abort()
+    }
+  }
+
   async runMentionsForUserMessage(args: {
     chatId: string
     userMessageId: string
