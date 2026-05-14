@@ -192,7 +192,7 @@ export class SubagentOrchestrator {
     this.runStateByRunId.get(runId)?.timeout?.resume()
   }
 
-  private async acquire(chatId: string): Promise<void> {
+  private async acquire(chatId: string, runId: string): Promise<void> {
     if (this.cancelledChats.has(chatId)) {
       throw new Error("CHAT_CANCELLED")
     }
@@ -201,8 +201,20 @@ export class SubagentOrchestrator {
       return
     }
     const { promise, resolve, reject } = Promise.withResolvers<void>()
+    const state = this.runStateByRunId.get(runId)
+    if (state) {
+      state.permitWaiter = { resolve, reject }
+    }
     this.waiters.push({ chatId, resolve, reject })
-    return promise
+    try {
+      await promise
+      this.permits -= 1
+    } finally {
+      if (state) {
+        state.permitWaiter = null
+        state.pendingAcquire = false
+      }
+    }
   }
 
   private release(): void {
@@ -312,15 +324,40 @@ export class SubagentOrchestrator {
       depth: args.depth,
     })
 
+    // Register RunState BEFORE acquire so cancelRun can find a queued run.
+    // The reducer marks the run as `status: "running"` from this event on,
+    // which is what the UI uses to show the X button.
+    const runState: RunState = {
+      chatId: args.chatId,
+      parentRunId: args.parentRunId,
+      childRunIds: new Set(),
+      abortController: new AbortController(),
+      timeout: null,
+      cancelled: false,
+      pendingAcquire: true,
+      permitWaiter: null,
+    }
+    this.runStateByRunId.set(runId, runState)
+    if (args.parentRunId != null) {
+      this.runStateByRunId.get(args.parentRunId)?.childRunIds.add(runId)
+    }
+
     try {
-      await this.acquire(args.chatId)
-    } catch {
-      await this.failRun(args.chatId, runId, "PROVIDER_ERROR", "Chat cancelled before run started")
+      await this.acquire(args.chatId, runId)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      const code: SubagentErrorCode = msg === "USER_CANCELLED" ? "USER_CANCELLED" : "PROVIDER_ERROR"
+      const message = msg === "USER_CANCELLED"
+        ? "Cancelled before run started"
+        : "Chat cancelled before run started"
+      await this.failRun(args.chatId, runId, code, message)
+      this.cleanupRunState(runId)
       return
     }
     if (this.cancelledChats.has(args.chatId)) {
       this.release()
       await this.failRun(args.chatId, runId, "PROVIDER_ERROR", "Chat cancelled before run started")
+      this.cleanupRunState(runId)
       return
     }
 
@@ -399,7 +436,7 @@ export class SubagentOrchestrator {
       const pausable = new PausableTimeout(this.timeoutMs(), () => {
         timeoutRejection.reject(new Error("TIMEOUT"))
       })
-      this.timeoutsByRun.set(runId, pausable)
+      runState.timeout = pausable
       pausable.start()
       try {
         const result = await Promise.race([
@@ -418,7 +455,7 @@ export class SubagentOrchestrator {
         return
       } finally {
         pausable.clear()
-        this.timeoutsByRun.delete(runId)
+        runState.timeout = null
       }
 
       await this.deps.store.appendSubagentEvent({
@@ -493,7 +530,18 @@ export class SubagentOrchestrator {
       }
     } finally {
       releaseSlot()
+      this.cleanupRunState(runId)
     }
+  }
+
+  private cleanupRunState(runId: string) {
+    const state = this.runStateByRunId.get(runId)
+    if (!state) return
+    state.timeout?.clear()
+    if (state.parentRunId != null) {
+      this.runStateByRunId.get(state.parentRunId)?.childRunIds.delete(runId)
+    }
+    this.runStateByRunId.delete(runId)
   }
 
   private async failRun(chatId: string, runId: string, code: SubagentErrorCode, message: string) {
