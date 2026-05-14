@@ -1,7 +1,7 @@
 # Claude PTY Driver — Design
 
 **Date:** 2026-05-14
-**Status:** Draft v14 — twelfth codex adversarial pass applied (sandbox split into separate claude vs tool-subprocess profiles to resolve the auth-vs-deny contradiction; credential coordinator added for concurrent same-account refresh safety), awaiting user review
+**Status:** Draft v15 — thirteenth codex adversarial pass applied (same-account PTYs serialized via `oauthPool.acquireExclusive` lease; credential version is composite inode+ctime+content-hash, not mtime; claude sandbox profile lists exact file allows with default-deny), awaiting user review
 **Author:** session-collaborative
 **Related code:** `src/server/agent.ts`, `src/server/terminal-manager.ts`, `src/server/harness-types.ts`, `src/server/kanna-mcp.ts`
 
@@ -254,14 +254,23 @@ This is the structural reason the credential-read deny does not contradict claud
 
 claude must be able to read+write its own `.credentials.json` for OAuth, read project files for in-process settings, and connect to the UDS for MCP. The profile for the claude process itself:
 
-**Allow:**
-- `file-read*` `file-write*` on `<spawnHome>/.claude/.credentials.json` (auth — and only this one file inside `~/.claude/`).
-- `file-read*` on `<spawnHome>/.claude/` (settings.local.json, settings.json) — non-credential subset.
-- `file-read*` `file-write*` on the workspace `cwd` and each `additionalDirectories` entry. Plus glob-deny overlays for `readPathDeny` / `writePathDeny` patterns inside those roots (e.g., workspace `.env`).
-- `network-outbound` to Anthropic API hosts only (Kanna binds the host allowlist from a static list). UDS connection to `<runtimeDir>/.../kanna-mcp.sock`.
-- `process-fork` `process-exec` for self-respawn. Forbidden for arbitrary external binaries (no `/bin/sh` exec) — claude's built-in `Bash` is already removed via `--tools`, so denying `process-exec` for non-claude paths catches any residual.
+**Default:** deny all filesystem access. Then explicit allows for **exact files only**, never directory-wide:
 
-**Deny everything else**, including the broader `<spawnHome>/.claude/**` outside the explicit credentials/settings files, all of `readPathDeny`, all of `<runtimeDir>/accounts/**` except the spawn's own home, etc.
+| Action | Exact path(s) |
+|---|---|
+| `file-read*` `file-write*` | `<spawnHome>/.claude/.credentials.json` |
+| `file-read*` | `<spawnHome>/.claude/settings.json` |
+| `file-read*` | `<spawnHome>/.claude/settings.local.json` |
+| `file-read*` `file-write*` | Workspace `cwd` (subtree) **minus** glob-deny overlays for `readPathDeny`/`writePathDeny`. |
+| `file-read*` `file-write*` | Each `additionalDirectories` entry (subtree) **minus** glob-deny overlays. |
+| `file-read*` | `<spawnHome>/.claude/projects/<sessionId>.jsonl` (claude's own transcript — needed for `--resume`). |
+| `network-outbound` | Anthropic API hosts only (static allowlist) + UDS at `<runtimeDir>/.../kanna-mcp.sock`. |
+| `process-fork` | self |
+| `process-exec` | `<resolved-claude-binary>` (self-respawn only); deny all other binaries |
+
+No directory-level allow on `<spawnHome>/.claude/**`. Every additional file claude needs (e.g., a future schema file) must be added to this explicit list.
+
+**Preflight sentinel for the claude profile** (in addition to the existing tool sentinel): write a decoy `<spawnHome>/.claude/decoy-must-deny.txt` and attempt to read it inside the claude profile during preflight. Read must be denied. Read of `<spawnHome>/.claude/.credentials.json` must succeed. Spawn fails closed on wrong outcome.
 
 Preflight sentinel **inside claude's sandbox** (separate from the existing "spawn sentinel" probe): boot a 200ms child of the sandbox that attempts to read `<spawnHome>/.claude/.credentials.json` (must succeed), a sibling account's HOME (must fail), and a `~/.ssh/id_rsa` (must fail). Spawn fails closed on any wrong outcome.
 
@@ -291,29 +300,50 @@ This sandbox is fresh per tool call and lives only for the lifetime of that subp
 
 ### Credential coordinator (concurrent refresh safety)
 
-Same account on two concurrent PTYs is a real race: both claude processes can attempt to refresh and write `.credentials.json`. Vanilla claude already handles two terminal windows on the same machine, but Kanna additionally syncs back to `oauthPool` — without coordination, the pool can persist a stale or partial token, or watcher events can be coalesced out of order.
+**Core decision: serialize same-account PTYs.** Kanna cannot synchronize the unmodified `claude` CLI's writes through a mutex it does not hold. The clean solution is to remove the race at the lifecycle layer: only one PTY per `accountId` runs at a time. Two simultaneous chats wanting the same account either share that one PTY (not possible — claude is a single-conversation process), wait for it to COOL, or claim a different account from the pool.
 
-**Coordinator (`account-home.ts`):**
+**Lifecycle rule** (in `ClaudeSessionLifecycle`):
 
-1. **Single shared HOME per account.** All concurrent PTYs for the same `accountId` use one HOME dir — never per-PTY copies for the same account, because claude expects a stable HOME and we cannot diverge auth state without breaking subscription billing.
-2. **Atomic write-rename.** Both claude (on its own refresh) and Kanna (when seeding the file pre-spawn) write via temp file in the same directory followed by `rename`. POSIX guarantees atomic replacement.
-3. **Versioned credential.** Kanna prepends a `_version: { mtime, seq, hash }` header to the `.credentials.json` file content. (If claude's schema rejects extra fields, the version is held in a sidecar `<spawnHome>/.claude/.credentials.version.json` with mode `0600` written atomically alongside, paired by hash of the credential file content.)
-4. **Per-account refresh lock.** Kanna keeps an in-memory `accountId → Mutex` map. The lock is acquired:
-   - When seeding `.credentials.json` from `oauthPool` before spawn.
-   - When the `fs.watch` handler sees a write event and is about to read+parse+update `oauthPool`.
-   The lock is held only across read+parse+validate+pool-update, never across PTY operations.
-5. **fs.watch handler rules.**
-   - On `change` event: acquire lock, stat file, if `mtime <= lastSeen.mtime` → skip (coalesced re-fire we already processed). Else read+parse. If parse fails → log + retry once after 50ms; on second failure, mark this account as `credential_corrupted` in pool and surface UI error.
-   - Compare-and-swap: pool update only succeeds if `pool.current[accountId].mtime === lastSeen.mtime`. If a newer mtime is in the pool already (e.g., Kanna wrote it just before claude's refresh), reconcile by taking the file-on-disk version as authoritative (claude is the OAuth source of truth) and overwriting the pool entry.
-   - On `rename` event (atomic replace): treat as a `change`. fs.watch on the directory is preferred to fs.watch on the file to survive the rename.
-6. **Readback before spawn.** Before each PTY spawn, Kanna acquires the lock and reads the on-disk credential file. If newer than the pool, sync pool. If absent or invalid, seed from pool. Then release the lock and proceed.
-7. **Process-exit readback.** On COOLING / PTY exit, do one final read-and-sync under the lock so any in-progress refresh isn't lost.
-8. **Coalesced-event safeguard.** If `fs.watch` reports an event but file content hash equals the last-known hash, ignore. If multiple events fire within 50ms, debounce to one.
-9. **Tests** (`account-home.test.ts`): two concurrent same-account PTYs racing refresh → final pool state matches on-disk state, no stale token; missed `change` event (simulated by suppressing one fs.watch fire) → next spawn's readback recovers; coalesced events → exactly one pool update; corrupt credential file → recoverable to pool-known-good; rename atomicity → no partial-read window observable by claude.
+- `oauthPool.acquireExclusive(chatId, preferredAccountId?)` returns `{ accountId, lease }`. The lease is held for the lifetime of the PTY (WARMING → IDLE → COOLING). No other PTY can acquire the same `accountId` while the lease is held.
+- If the only available account is leased, the second chat's spawn waits in a queue. UI shows "Waiting for account <name>" with the queue position.
+- If multiple accounts exist in the pool, `acquireExclusive` picks an unleased one. Rate-limit and sticky-by-chat rules still apply when ranking candidates.
+- Lease released when PTY enters COOLING. Kanna does a final read-and-sync (see "Readback") before release.
+
+This eliminates the same-account multi-writer problem at its root. The coordinator below only handles the **single-writer** case: claude refreshes its own token, Kanna observes the change to sync back to the pool.
+
+**Coordinator (`account-home.ts`) — single-writer model:**
+
+1. **Single shared HOME per account.** Always. No per-PTY copies.
+2. **Atomic seeding.** When Kanna seeds the credentials file pre-spawn (only when the file is missing or invalid), it writes via temp file in the same directory followed by `rename` (POSIX atomic replacement).
+3. **Versioned credential — composite version, not mtime alone.**
+   ```
+   credVersion = sha256(fileContents) || statInode || statCtimeNs
+   ```
+   - `sha256(fileContents)` distinguishes content changes even within the same mtime millisecond.
+   - `statInode` changes on atomic-rename replacement (POSIX gives the new file a new inode).
+   - `statCtimeNs` provides additional monotonicity where filesystems support nanosecond resolution.
+   The triple is collectively the credential version. `lastSeen.credVersion` is stored in `oauthPool`; CAS compares the full triple.
+4. **fs.watch handler rules (always read; mtime never gates).**
+   - Watch the **directory** (`<spawnHome>/.claude/`), not the file, so atomic-rename events are observed.
+   - On any `change`/`rename` event for `.credentials.json`: debounce 50ms, then unconditionally read the file (do not pre-stat to skip). Compute `credVersion`. If `credVersion === lastSeen.credVersion` → no-op (true coalesced re-fire). Else proceed.
+   - Parse + validate. On parse failure → wait 50ms, retry once (claude may be mid-rename). On second failure → mark this account `credential_corrupted` in pool, surface UI error, do not update pool.
+   - **CAS:** pool update succeeds only if `pool.current[accountId].credVersion === knownLastVersion` at the time we read the file. If the pool has a newer version (Kanna seeded since the last observation), take the file-on-disk as authoritative (claude is OAuth source of truth) and overwrite the pool entry. `lastSeen` advances to the new triple atomically with the pool update.
+5. **Readback before every spawn.** Even with lease serialization, the lease can be reclaimed across a Kanna restart. Before spawn, Kanna reads the on-disk credential, computes `credVersion`, and syncs the pool if it differs. If the file is missing or corrupt, seed from pool.
+6. **Readback at lease release (PTY COOLING).** Final read-and-sync under the lease so any in-progress refresh that fired right before COOLING is captured before release.
+7. **No coalesced-loss guarantee from fs.watch alone.** The lease-release readback is the safety net for any fs.watch event the kernel drops or coalesces.
+8. **Tests** (`account-home.test.ts`):
+   - **Lease serialization:** two chats request the same account → second waits; first releases (COOLING) → second acquires; pool state consistent throughout.
+   - **Same-mtime refresh:** two consecutive writes to `.credentials.json` within one mtime tick → composite version distinguishes them; pool sees both updates (or coalesces to the final state — never gets stuck on the older).
+   - **Missed fs.watch event:** simulate suppressed event for one refresh → lease-release readback recovers the missed update before next spawn.
+   - **Inode-change detection:** atomic-rename replacement → inode change observed; pool advances.
+   - **Corruption recovery:** truncate file mid-refresh → parse retry → second read succeeds; pool not corrupted.
+   - **Lease release on crash:** simulate Kanna crash with lease held → on restart, all leases for accounts whose pids no longer exist are released; pool readback re-synced before any new spawn.
 
 ### Concurrent multi-account safety
 
-Concurrent PTYs for **different** accounts run with independent HOMEs simultaneously. No race on the credentials file. Same-account concurrency handled by the credential coordinator above.
+Concurrent PTYs for **different** accounts run with independent HOMEs simultaneously. No race on the credentials file.
+
+Same-account concurrency is forbidden by `oauthPool.acquireExclusive`. Two chats wanting the same account either pick a different one or queue.
 
 ### Lifecycle
 
