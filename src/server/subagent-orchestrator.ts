@@ -93,6 +93,7 @@ export interface SubagentOrchestratorDeps {
     chatId: string
     primer: string | null
     runId: string
+    abortSignal: AbortSignal
   }) => ProviderRunStart
   /**
    * Called when a subagent run enters a terminal state (failed / completed /
@@ -385,6 +386,7 @@ export class SubagentOrchestrator {
           chatId: args.chatId,
           primer,
           runId,
+          abortSignal: runState.abortController.signal,
         })
       } catch (err) {
         // Defensive: startProviderRun is a synchronous factory but a real impl
@@ -443,16 +445,31 @@ export class SubagentOrchestrator {
       runState.timeout = pausable
       pausable.start()
       try {
-        const result = await Promise.race([
-          runStart.start(onChunk, onEntry),
-          timeoutRejection.promise,
-        ])
+        const abortRejection = createDeferred<never>()
+        const abortListener = () => abortRejection.reject(new Error("USER_CANCELLED"))
+        if (runState.abortController.signal.aborted) {
+          abortListener()
+        } else {
+          runState.abortController.signal.addEventListener("abort", abortListener, { once: true })
+        }
+        let result: { text: string; usage?: ProviderUsage }
+        try {
+          result = await Promise.race([
+            runStart.start(onChunk, onEntry),
+            timeoutRejection.promise,
+            abortRejection.promise,
+          ])
+        } finally {
+          runState.abortController.signal.removeEventListener("abort", abortListener)
+        }
         finalText = result.text
         usage = result.usage
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error)
         if (message === "TIMEOUT") {
           await this.failRun(args.chatId, runId, "TIMEOUT", `Run exceeded ${this.timeoutMs()}ms`)
+        } else if (message === "USER_CANCELLED" || runState.cancelled) {
+          await this.failRun(args.chatId, runId, "USER_CANCELLED", "Cancelled by user")
         } else {
           await this.failRun(args.chatId, runId, "PROVIDER_ERROR", message)
         }
@@ -460,6 +477,14 @@ export class SubagentOrchestrator {
       } finally {
         pausable.clear()
         runState.timeout = null
+      }
+
+      // Codex `stopSession` finishes the pending stream queue rather than
+      // rejecting — without this guard, a cancelled run can reach the
+      // success path.
+      if (runState.cancelled) {
+        await this.failRun(args.chatId, runId, "USER_CANCELLED", "Cancelled by user")
+        return
       }
 
       await this.deps.store.appendSubagentEvent({
