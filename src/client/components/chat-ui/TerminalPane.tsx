@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type MutableRefObject } from "react"
+import { useCallback, useEffect, useRef, useState, type MutableRefObject } from "react"
 import { SerializeAddon } from "@xterm/addon-serialize"
 import { WebLinksAddon } from "@xterm/addon-web-links"
 import { Terminal, type ITheme, type ITerminalOptions } from "@xterm/xterm"
@@ -259,7 +259,7 @@ export function TerminalPane({
   const [metadata, setMetadata] = useState<Pick<TerminalSnapshot, "cwd" | "shell" | "status" | "exitCode"> | null>(null)
   const [error, setError] = useState<string | null>(null)
   const terminalTheme = buildTerminalTheme(resolvedTheme === "dark" ? "dark" : "light")
-  const sendInput = (data: string) => {
+  const sendInput = useCallback((data: string) => {
     void socket.command({
       type: "terminal.input",
       terminalId,
@@ -270,16 +270,16 @@ export function TerminalPane({
     if (data.includes("\r") || data.includes("\n")) {
       onCommandSentRef.current?.()
     }
-  }
-  const sendResize = (cols: number, rows: number) => {
+  }, [socket, terminalId])
+  const sendResize = useCallback((cols: number, rows: number) => {
     void socket.command({
       type: "terminal.resize",
       terminalId,
       cols,
       rows,
     }).catch(() => {})
-  }
-  const scheduleResizeSync = () => {
+  }, [socket, terminalId])
+  const scheduleResizeSync = useCallback(() => {
     const sync = () => {
       const terminalInstance = terminalRef.current
       const element = containerRef.current
@@ -291,7 +291,7 @@ export function TerminalPane({
       sync()
       setTimeout(sync, 0)
     })
-  }
+  }, [sendResize])
 
   useEffect(() => {
     onCommandSentRef.current = onCommandSent
@@ -367,7 +367,7 @@ export function TerminalPane({
       terminal.dispose()
       terminalRef.current = null
     }
-  }, [scrollback, socket, terminalId, terminalTheme])
+  }, [scheduleResizeSync, scrollback, sendInput, sendResize, socket, terminalId, terminalTheme])
 
   useEffect(() => {
     const terminal = terminalRef.current
@@ -540,7 +540,7 @@ export function TerminalPane({
         }
       },
     })
-  }, [connectionStatus, projectId, scrollback, socket, terminalId])
+  }, [connectionStatus, projectId, scheduleResizeSync, scrollback, socket, terminalId])
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden pb-4">

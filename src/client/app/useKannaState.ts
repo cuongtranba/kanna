@@ -860,6 +860,12 @@ export function useKannaState(activeChatId: string | null): KannaState {
     () => applySidebarProjectOrder(sidebarData.projectGroups, optimisticSidebarProjectOrder),
     [optimisticSidebarProjectOrder, sidebarData.projectGroups]
   )
+  // Ref used only for logging inside the chat subscription effect so sidebarProjectGroups
+  // doesn't need to be in that effect's dep array (adding it would restart the subscription on every sidebar change).
+  const sidebarProjectGroupsForLogRef = useRef(sidebarProjectGroups)
+  useLayoutEffect(() => {
+    sidebarProjectGroupsForLogRef.current = sidebarProjectGroups
+  })
   const resolvedSidebarData = useMemo(
     () => (
       sidebarProjectGroups === sidebarData.projectGroups
@@ -1193,8 +1199,8 @@ export function useKannaState(activeChatId: string | null): KannaState {
     logKannaState("subscribing to chat", {
       subscriptionId,
       activeChatId,
-      sidebarProjectGroups: sidebarProjectGroups.length,
-      sidebarChatCount: sidebarProjectGroups.reduce((count, group) => count + group.chats.length, 0),
+      sidebarProjectGroups: sidebarProjectGroupsForLogRef.current.length,
+      sidebarChatCount: sidebarProjectGroupsForLogRef.current.reduce((count, group) => count + group.chats.length, 0),
     })
     setChatSnapshot(null)
     setChatReady(false)
@@ -1243,8 +1249,8 @@ export function useKannaState(activeChatId: string | null): KannaState {
       logKannaState("unsubscribing from chat", {
         subscriptionId,
         activeChatId,
-        sidebarProjectGroups: sidebarProjectGroups.length,
-        sidebarChatCount: sidebarProjectGroups.reduce((count, group) => count + group.chats.length, 0),
+        sidebarProjectGroups: sidebarProjectGroupsForLogRef.current.length,
+        sidebarChatCount: sidebarProjectGroupsForLogRef.current.reduce((count, group) => count + group.chats.length, 0),
       })
       unsubscribe()
     }

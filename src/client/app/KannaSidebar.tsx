@@ -14,7 +14,7 @@ import { StacksSection } from "../components/chat-ui/sidebar/StacksSection"
 import { StackCreatePanel } from "../components/chat-ui/sidebar/StackCreatePanel"
 import { StackChatCreateRow } from "../components/chat-ui/sidebar/StackChatCreateRow"
 import { getResolvedKeybindings } from "../lib/keybindings"
-import type { GitWorktree, KeybindingsSnapshot, SidebarData, SidebarChatRow, StackBinding, UpdateSnapshot } from "../../shared/types"
+import type { GitWorktree, KeybindingsSnapshot, SidebarData, SidebarChatRow, SidebarProjectGroup, StackBinding, UpdateSnapshot } from "../../shared/types"
 import type { SocketStatus } from "./socket"
 import {
   getSidebarJumpTargetIndex,
@@ -149,7 +149,7 @@ function KannaSidebarImpl({
     return out
   }, [data.projectGroups])
 
-  const stripStackChats = useCallback((groups: typeof data.projectGroups) => {
+  const stripStackChats = useCallback((groups: SidebarProjectGroup[]) => {
     return groups.map((group) => {
       const chats = group.chats.filter((c) => !c.stackId)
       if (chats.length === group.chats.length) return group

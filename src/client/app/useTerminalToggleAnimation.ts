@@ -202,7 +202,7 @@ export function useTerminalToggleAnimation({
     }
 
     animationFrameRef.current = window.requestAnimationFrame(step)
-  }, [projectId, shouldRenderTerminalLayout, showTerminalPane, terminalLayout.mainSizes])
+  }, [projectId, shouldRenderTerminalLayout, showTerminalPane, terminalLayout])
 
   useEffect(() => {
     if (shouldRenderTerminalLayout) return

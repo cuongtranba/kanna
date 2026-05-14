@@ -130,7 +130,7 @@ export function ToolCallMessage({ message, isLoading = false, localPath }: Props
       return message.input.subagentType || message.toolName
     }
     return message.toolName
-  }, [message.input, message.toolName, localPath])
+  }, [message.input, message.toolKind, message.toolName, localPath])
 
   const isAgent = useMemo(() => message.toolKind === "subagent_task", [message.toolKind])
   const description = useMemo(() => {

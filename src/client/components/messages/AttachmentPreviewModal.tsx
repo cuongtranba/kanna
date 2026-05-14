@@ -116,13 +116,7 @@ export function AttachmentPreviewModal({ attachment, onOpenChange }: Props) {
     return () => {
       cancelled = true
     }
-  }, [
-    attachment?.id,
-    attachment?.contentUrl,
-    attachment?.mimeType,
-    previewTarget?.kind,
-    previewTarget?.openInNewTab,
-  ])
+  }, [attachment, previewState?.status, previewTarget])
 
   async function handleCopyLink() {
     if (!absoluteContentUrl || typeof navigator === "undefined" || !navigator.clipboard?.writeText) {
