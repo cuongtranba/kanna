@@ -1,7 +1,7 @@
 # Claude PTY Driver — Design
 
 **Date:** 2026-05-14
-**Status:** Draft v17 — fifteenth codex adversarial pass applied (PID-reuse-safe lease recovery via persisted ProcessIdentity tuple + Linux pidfd preferred path), awaiting user review
+**Status:** Draft v18 — sixteenth codex adversarial pass applied (pidfd downgraded to within-process optimization; ProcessIdentity tuple is the sole restart-safe recovery mechanism), awaiting user review
 **Author:** session-collaborative
 **Related code:** `src/server/agent.ts`, `src/server/terminal-manager.ts`, `src/server/harness-types.ts`, `src/server/kanna-mcp.ts`
 
@@ -351,7 +351,7 @@ This sandbox is fresh per tool call and lives only for the lifetime of that subp
   2. Read live process identity for that PID (`/proc/<pid>/stat` on Linux, `ps -o lstart,comm,args` on macOS, or `pidfd_open` + `pidfd_send_signal` API where available).
   3. Compare **all** of: `startTimeNs`, `executablePath`, presence of `--session-id <sessionId>` in argv, and `pgid`. If **any** field mismatches → this PID has been reused by an unrelated process. Do **not** signal it. Log a warning, release the lease only after a conservative readback (no kill), and surface an operator warning ("Kanna could not verify the previous claude process for account <name>; if the previous session is still running, please terminate it manually before reusing this account").
   4. If all identity fields match → the original claude PTY is still alive. Send `SIGTERM` to the process group (`kill(-pgid, SIGTERM)`), wait 2s, then `SIGKILL` to the group, then `waitpid`, then post-exit readback + release.
-- Where available (Linux ≥5.3), Kanna uses `pidfd_open` at spawn time and stores the file descriptor across restart via `SCM_RIGHTS` to a persistence helper (or simply via re-spawn handoff). `pidfd` references the original kernel process identity and cannot be confused with a reused PID. This is the preferred path on Linux.
+- **`pidfd` is a within-process optimization only, not a restart-safe mechanism.** Where available (Linux ≥5.3), Kanna uses `pidfd_open` while alive to interact with the claude process — this eliminates the PID-reuse race for in-process signals and `waitpid`. The `pidfd` is **not** persisted, because a Kanna crash closes it and there is no general way to recover a kernel `pidfd` reference after the holding process exits. The `ProcessIdentity` tuple verification above is the canonical restart-safe path on all platforms. `pidfd` is purely a defense-in-depth optimization for the live process.
 
 This eliminates the same-account multi-writer problem at its root. The coordinator below only handles the **single-writer** case: claude refreshes its own token, Kanna observes the change to sync back to the pool.
 
@@ -380,7 +380,7 @@ This eliminates the same-account multi-writer problem at its root. The coordinat
    - **Refresh during COOLING:** simulate claude writing `.credentials.json` after `/exit` was sent but before process exit → post-exit readback captures it → pool reflects the late write before lease release.
    - **PID reuse after crash:** simulate Kanna crash with a persisted lease whose PID is later reused by an unrelated process (mock by fabricating a stale identity tuple while a fresh `sleep` runs at that PID). Assert: sweep detects identity mismatch, does **not** signal the foreign process, releases the lease conservatively, logs warning.
    - **Same-PID-and-identity recovery:** simulate Kanna crash where the original claude is still alive (identity matches). Assert: sweep kills the process group, post-exit readback, release.
-   - **Linux pidfd path:** when supported, pidfd-based identity check is used instead of starttime+argv tuple. Assert behavior equivalent.
+   - **Linux pidfd within-process path:** when supported, pidfd is used for live-process signal/wait calls; assert no PID-reuse race in those calls. Restart recovery still relies on the ProcessIdentity tuple regardless of pidfd availability.
    - **Same-mtime refresh:** two consecutive writes to `.credentials.json` within one mtime tick → composite version distinguishes them; pool sees both updates (or coalesces to the final state — never gets stuck on the older).
    - **Missed fs.watch event:** simulate suppressed event for one refresh → lease-release readback recovers the missed update before next spawn.
    - **Inode-change detection:** atomic-rename replacement → inode change observed; pool advances.
