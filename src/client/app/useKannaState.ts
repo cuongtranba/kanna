@@ -1287,7 +1287,6 @@ export function useKannaState(activeChatId: string | null): KannaState {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setSelectedProjectId(chatSnapshot.runtime.projectId)
     if (pendingChatId === chatSnapshot.runtime.chatId) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setPendingChatId(null)
     }
   }, [chatSnapshot, pendingChatId])
