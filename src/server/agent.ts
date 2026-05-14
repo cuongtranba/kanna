@@ -44,7 +44,8 @@ import type { BackgroundTaskRegistry } from "./background-tasks"
 import type { TerminalManager } from "./terminal-manager"
 import { OAuthTokenPool } from "./oauth-pool/oauth-token-pool"
 import { parseMentions, type ParsedMention } from "./mention-parser"
-import { SubagentOrchestrator } from "./subagent-orchestrator"
+import { SubagentOrchestrator, type ProviderRunStart } from "./subagent-orchestrator"
+import { buildSubagentProviderRun } from "./subagent-provider-run"
 
 export function resolveSpawnPaths(
   chat: Pick<ChatRecord, "id" | "stackBindings">,
@@ -174,6 +175,7 @@ interface AgentCoordinatorArgs {
   scheduleManager?: ScheduleManager
   getAutoResumePreference?: () => boolean
   getSubagents?: () => Subagent[]
+  getAppSettingsSnapshot?: () => { claudeAuth?: { authenticated?: boolean } | null }
   throwOnClaudeSessionStart?: boolean
   backgroundTasks?: BackgroundTaskRegistry
   oauthPool?: OAuthTokenPool
@@ -872,6 +874,7 @@ export class AgentCoordinator {
   private readonly scheduleManager: ScheduleManager | null
   private readonly getAutoResumePreference: () => boolean
   private readonly getSubagents: () => Subagent[]
+  private readonly getAppSettingsSnapshot: NonNullable<AgentCoordinatorArgs["getAppSettingsSnapshot"]>
   private readonly subagentOrchestrator: SubagentOrchestrator
   private readonly throwOnClaudeSessionStart: boolean
   private readonly autoResumeByChat = new Map<string, boolean>()
@@ -895,24 +898,11 @@ export class AgentCoordinator {
     this.scheduleManager = args.scheduleManager ?? null
     this.getAutoResumePreference = args.getAutoResumePreference ?? (() => false)
     this.getSubagents = args.getSubagents ?? (() => [])
+    this.getAppSettingsSnapshot = args.getAppSettingsSnapshot ?? (() => ({}))
     this.subagentOrchestrator = new SubagentOrchestrator({
       store: this.store,
       appSettings: { getSnapshot: () => ({ subagents: this.getSubagents() }) },
-      startProviderRun: ({ subagent }) => ({
-        // TEMPORARY: real wiring in Task 7 (buildSubagentProviderRunForChat).
-        // Returns a ProviderRunStart whose start() throws so the orchestrator's
-        // inner catch records it as PROVIDER_ERROR. This keeps phase 3 mention-
-        // gating tests passing (they only assert a run exists + primary doesn't
-        // fire) without leaving runs stuck in "running".
-        provider: subagent.provider,
-        model: subagent.model,
-        systemPrompt: subagent.systemPrompt,
-        preamble: null,
-        authReady: async () => true,
-        async start() {
-          throw new Error("buildSubagentProviderRun not yet wired (phase 4 task 7 pending)")
-        },
-      }),
+      startProviderRun: ({ subagent, chatId, primer, runId }) => this.buildSubagentProviderRunForChat({ subagent, chatId, primer, runId }),
     })
     this.throwOnClaudeSessionStart = args.throwOnClaudeSessionStart ?? false
     this.tunnelGateway = args.tunnelGateway ?? null
@@ -1640,6 +1630,80 @@ export class AgentCoordinator {
     )
     await this.store.appendMessage(chatId, entry)
     return entry._id
+  }
+
+  private buildSubagentProviderRunForChat(args: {
+    subagent: Subagent
+    chatId: string
+    primer: string | null
+    runId: string
+  }): ProviderRunStart {
+    const chat = this.store.requireChat(args.chatId)
+    const project = this.store.getProject(chat.projectId)
+    if (!project) throw new Error(`Project ${chat.projectId} not found for chat ${args.chatId}`)
+    const spawn = resolveSpawnPaths(chat, project.localPath)
+
+    const onToolRequest = async (request: HarnessToolRequest): Promise<unknown> => {
+      // V4 design pivot: subagents do NOT route AskUserQuestion / ExitPlanMode
+      // through the parent chat's pending-tool slot. Phase 3 gates the primary
+      // turn when @agent/ mentions exist, so `this.activeTurns.get(chatId)` has
+      // no entry — there is no UI slot to claim.
+      //
+      // Auto-deny by returning a synthetic answer the canUseTool wrapper at
+      // `agent.ts:676-707` knows how to handle:
+      //  - ask_user_question → fabricate an object-map answers keyed by question
+      //    id (or text fallback) so hydrateToolResult (`tools.ts:318-335`) reads
+      //    a well-formed tool_result. Subagents that need user input must use
+      //    the assistant_text channel ("please tell me X").
+      //  - exit_plan_mode → return { confirmed: false } so the wrapper emits
+      //    its standard deny message.
+      //
+      // Phase 5 follow-up: per-run pending-tool slot + UI forwarding events.
+      console.warn(`${LOG_PREFIX} subagent tool auto-denied`, {
+        chatId: args.chatId,
+        runId: args.runId,
+        toolKind: request.tool.toolKind,
+      })
+      if (request.tool.toolKind === "ask_user_question") {
+        const questions = (request.tool.input as { questions?: Array<{ id?: string; question?: string }> }).questions ?? []
+        const answers: Record<string, string[]> = {}
+        for (const q of questions) {
+          const key = q.id ?? q.question ?? `q${Object.keys(answers).length}`
+          answers[key] = ["[denied: subagents cannot ask the user; reply via assistant text]"]
+        }
+        return { questions, answers }
+      }
+      // exit_plan_mode
+      return {
+        confirmed: false,
+        message: "Subagents cannot exit plan mode in v4 (auto-denied).",
+      }
+    }
+
+    return buildSubagentProviderRun({
+      subagent: args.subagent,
+      chatId: args.chatId,
+      primer: args.primer,
+      runId: args.runId,
+      cwd: spawn.cwd,
+      additionalDirectories: spawn.additionalDirectories,
+      projectId: project.id,
+      startClaudeSession: this.startClaudeSessionFn,
+      codexManager: this.codexManager,
+      onToolRequest,
+      authReady: async (provider) => {
+        if (provider === "claude") {
+          const settings = this.getAppSettingsSnapshot()
+          return Boolean(settings.claudeAuth?.authenticated || this.oauthPool?.pickActive())
+        }
+        return true
+      },
+      pickOauthToken: () => {
+        const picked = this.oauthPool?.pickActive() ?? null
+        if (picked) this.oauthPool!.markUsed(picked.id)
+        return picked?.token ?? null
+      },
+    })
   }
 
   async enqueue(command: Extract<ClientCommand, { type: "message.enqueue" }>) {
