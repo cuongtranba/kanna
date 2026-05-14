@@ -145,6 +145,8 @@ function getReplayEventPriority(event: StoreEvent): number {
     case "subagent_tool_pending":
     case "subagent_tool_resolved":
       return 5
+    // tool_request_put shares priority 5 with subagent_* events; sourceIndex
+    // tie-break orders them (tool-requests has sourceIndex 7, turns has 5).
     case "tool_request_put":
       return 5
     case "tool_request_resolved":

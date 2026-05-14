@@ -1504,4 +1504,23 @@ describe("EventStore ToolRequest", () => {
     expect(got?.status).toBe("answered")
     expect(got?.decision?.kind).toBe("answer")
   })
+
+  test("putToolRequest survives restart via replay", async () => {
+    const dataDir = await createTempDataDir()
+    const store1 = new EventStore(dataDir)
+    await store1.initialize()
+    await store1.putToolRequest(fixtureToolRequest({ id: "persisted-id", chatId: "c-1" }))
+    await store1.resolveToolRequest("persisted-id", {
+      status: "answered",
+      decision: { kind: "answer", payload: { ok: true } },
+      resolvedAt: 5_000,
+    })
+
+    // Simulate restart: drop instance, create a new one against the same dataDir.
+    const store2 = new EventStore(dataDir)
+    await store2.initialize()
+    const replayed = await store2.getToolRequest("persisted-id")
+    expect(replayed?.status).toBe("answered")
+    expect(replayed?.decision?.payload).toEqual({ ok: true })
+  })
 })
