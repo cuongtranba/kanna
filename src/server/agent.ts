@@ -822,7 +822,10 @@ async function startClaudeSession(args: {
           projectId: args.projectId,
           localPath: args.localPath,
           chatId: args.chatId,
+          sessionId: args.sessionToken ?? undefined,
           tunnelGateway: args.tunnelGateway ?? null,
+          toolCallback: args.toolCallback,
+          chatPolicy: args.chatPolicy,
         }),
       },
       systemPrompt: args.systemPromptOverride != null
