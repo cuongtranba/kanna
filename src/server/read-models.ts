@@ -312,6 +312,11 @@ export function deriveChatSnapshot(
       })
     : undefined
 
+  const subagentRunsMap = state.subagentRunsByChatId.get(chat.id)
+  const subagentRuns: ChatSnapshot["subagentRuns"] = subagentRunsMap
+    ? Object.fromEntries(subagentRunsMap.entries())
+    : {}
+
   return {
     runtime,
     queuedMessages: (state.queuedMessagesByChatId.get(chat.id) ?? []).map((entry) => ({
@@ -327,6 +332,7 @@ export function deriveChatSnapshot(
     liveScheduleId,
     tunnels,
     liveTunnelId,
+    subagentRuns,
     ...(resolvedBindings !== undefined ? { resolvedBindings } : {}),
   }
 }

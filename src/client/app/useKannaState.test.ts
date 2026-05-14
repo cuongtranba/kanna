@@ -298,6 +298,7 @@ describe("getActiveChatSnapshot", () => {
       liveScheduleId: null,
       tunnels: {},
       liveTunnelId: null,
+      subagentRuns: {},
     }
 
     expect(getActiveChatSnapshot(snapshot, "chat-1")).toEqual(snapshot)
@@ -331,6 +332,7 @@ describe("getActiveChatSnapshot", () => {
       liveScheduleId: null,
       tunnels: {},
       liveTunnelId: null,
+      subagentRuns: {},
     }
 
     expect(getActiveChatSnapshot(snapshot, "chat-new")).toBeNull()
@@ -468,6 +470,7 @@ function createMinimalChatSnapshot(overrides: Partial<ChatSnapshot> = {}): ChatS
     liveScheduleId: null,
     tunnels: {},
     liveTunnelId: null,
+    subagentRuns: {},
     ...overrides,
   }
 }
