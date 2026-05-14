@@ -308,6 +308,10 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
       .then(() => router.broadcastSnapshots())
   }, STALE_EMPTY_CHAT_PRUNE_INTERVAL_MS)
 
+  const toolCallbackTickInterval = setInterval(() => {
+    void toolCallback.tickTimeouts()
+  }, 5_000)
+
   const distDir = options.distDir ?? path.join(import.meta.dir, "..", "..", "dist", "client")
 
   const MAX_PORT_ATTEMPTS = 20
@@ -447,6 +451,7 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     scheduleManager.shutdown()
     tunnelGateway.shutdown()
     clearInterval(staleEmptyChatPruneInterval)
+    clearInterval(toolCallbackTickInterval)
     for (const chatId of [...agent.activeTurns.keys()]) {
       await agent.cancel(chatId)
     }
