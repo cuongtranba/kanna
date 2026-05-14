@@ -1316,10 +1316,14 @@ export class EventStore implements PushEventStore {
       chatId,
     }
     await this.append(this.chatsLogPath, event)
-    const subagentResultsDir = path.join(
+    this.removeSubagentResultsDir(projectId, chatId)
+  }
+
+  private removeSubagentResultsDir(projectId: string, chatId: string) {
+    const dir = path.join(
       this.dataDir, "projects", projectId, "chats", chatId, "subagent-results",
     )
-    rm(subagentResultsDir, { recursive: true, force: true })
+    rm(dir, { recursive: true, force: true })
       .catch((err) => console.warn(`${LOG_PREFIX} subagent-results cleanup failed`, { chatId, err }))
   }
 
@@ -1381,6 +1385,7 @@ export class EventStore implements PushEventStore {
       if (this.cachedTranscript?.chatId === chat.id) {
         this.cachedTranscript = null
       }
+      this.removeSubagentResultsDir(chat.projectId, chat.id)
 
       prunedChatIds.push(chat.id)
     }
