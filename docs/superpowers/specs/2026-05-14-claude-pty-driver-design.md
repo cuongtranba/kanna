@@ -1,7 +1,7 @@
 # Claude PTY Driver — Design
 
 **Date:** 2026-05-14
-**Status:** Draft v3 — second codex adversarial pass applied (no bearer credential, MCP-routed gating), awaiting user review
+**Status:** Draft v4 — third codex adversarial pass applied (bash arg parsing + path deny lists + OS sandbox, third-party MCP fail-closed, idempotency binds args), awaiting user review
 **Author:** session-collaborative
 **Related code:** `src/server/agent.ts`, `src/server/terminal-manager.ts`, `src/server/harness-types.ts`, `src/server/kanna-mcp.ts`
 
@@ -188,7 +188,7 @@ These two tools are intercepted in the SDK driver via `canUseTool`, which routes
 
 The MCP tool implementation does **not** simply HTTP-POST and await. The contract is:
 
-1. **Request identity.** `toolRequestId = hex(HMAC_SHA256(serverSecret, chatId || sessionId || toolUseId))`. Deterministic across retries of the same `toolUseId`, opaque to the model. (Not a UUID.) Embed `chatId`, `sessionId`, `toolUseId`, `toolName`, `arguments`, `createdAt`.
+1. **Request identity.** `toolRequestId = hex(HMAC_SHA256(serverSecret, chatId || sessionId || toolUseId || toolName || canonicalArgsHash))`. Deterministic across retries of the **exact same call**, but any change in `toolName` or `arguments` produces a new id. `canonicalArgsHash = sha256(canonicalJson(arguments))` where canonical JSON sorts object keys, strips whitespace, and normalizes numerics. Embed `chatId`, `sessionId`, `toolUseId`, `toolName`, `arguments`, `canonicalArgsHash`, `createdAt`. Idempotent retry rule (rule 4) requires **all** of `toolUseId + toolName + canonicalArgsHash` to match; mismatched retries with a duplicate `toolUseId` fail closed with `{decision:"deny", reason:"argument_mismatch"}` and emit a security audit event.
 2. **Durable storage.** Persist the request to `EventStore` (same store that survives server restart) under key `pendingToolRequests[chatId][toolRequestId]` with status `pending`. The MCP tool body waits on a server-side promise keyed by `toolRequestId`.
 3. **Server-side state machine.** Server promotes the request through `pending → answered | timeout | canceled | session_closed`. Each terminal transition stores the final answer or reason and resolves all waiters with that result.
 4. **Timeout.** Default 600s (configurable). On timeout the request resolves with `{ error: "timeout" }`, MCP tool returns that to the model, model retries or proceeds. Timeout is **server-driven** — never depends on PTY responsiveness.
@@ -340,34 +340,74 @@ Lifecycle rules (apply to all gated calls):
 1. **Policy first.** `policy.evaluate(toolName, arguments, chatSettings)` returns `auto-allow | auto-deny | ask`. Auto verdicts resolve the request immediately without UI.
 2. **Server-driven timeout.** Default 600s. On timeout, resolve `{decision:"deny", reason:"timeout"}`.
 3. **Cancellation.** Resolved with `{decision:"deny", reason:"canceled"}` on: chat deleted, PTY COOLING, server shutdown, explicit UI cancel.
-4. **Idempotency.** Re-emitting a request for the same `toolUseId` returns the existing record (cached or pending). Never creates a duplicate UI prompt.
+4. **Idempotency.** Re-emitting a request for the same `(toolUseId, toolName, canonicalArgsHash)` returns the existing record (cached or pending). Never creates a duplicate UI prompt. A retry with the same `toolUseId` but mismatched `toolName` or `canonicalArgsHash` fails closed (rule above), is logged, and surfaces a user-visible warning. The model cannot "edit" an approved command by reusing its id.
 5. **Replay on reconnect.** On wake / refresh, server re-emits all `pending` requests for the chat to the UI from `EventStore`.
 6. **Server restart.** On startup, all `pending` requests fail closed → `{decision:"deny", reason:"server_restarted"}` unless a user-configurable "preserve pending across restart" flag is set (default off).
 
 ### Per-chat policy
 
-Stored in `EventStore.chatSettings.permissionPolicy`:
+Stored in `EventStore.chatSettings.permissionPolicy`. Defaults are intentionally conservative.
 
 ```
 {
   defaultAction: "ask" | "auto-allow" | "auto-deny",
-  denyList: [
-    { tool: "mcp__kanna__bash", pattern: "rm -rf|git push.*--force" },
-    { tool: "mcp__kanna__write", pattern: "^/etc/|^/usr/|^/System/" },
-    { tool: "mcp__kanna__webfetch", pattern: ".*" }   // user could block all egress
+  bash: {
+    autoAllowVerbs: ["ls","pwd","git status","git diff","git log"],
+    // Verbs that take no path / network argument. Used only if the parsed
+    // command consists entirely of one of these verbs and arguments that
+    // fail no read-path check. Any pipe, redirect, subshell, env-set,
+    // backtick, or `eval` short-circuits to "ask".
+  },
+  readPathDeny: [
+    "~/.ssh", "~/.aws", "~/.gcp", "~/.config/gh",
+    "~/.claude", "~/.kanna",
+    "~/Library/Keychains", "~/Library/Application Support/Code/User",
+    "/etc/shadow", "/etc/sudoers", "/private/etc/shadow",
+    "~/.npmrc", "~/.netrc", "~/.docker/config.json",
+    "**/.env", "**/.env.*", "**/credentials*", "**/*.pem", "**/*.key",
+    "**/id_rsa*", "**/id_ed25519*"
   ],
-  allowList: [
-    { tool: "mcp__kanna__bash", pattern: "^(ls|cat|rg|git status|git diff).*" }
+  writePathDeny: [
+    "/etc/**", "/usr/**", "/System/**", "/private/etc/**",
+    "~/.ssh/**", "~/.aws/**", "~/.config/gh/**",
+    "~/.claude/**", "~/.kanna/**",
+    ...readPathDeny
+  ],
+  toolDenyList: [
+    { tool: "mcp__kanna__bash", pattern: "rm\\s+-rf\\s+(/|~|\\$HOME)\\b" },
+    { tool: "mcp__kanna__bash", pattern: "git\\s+push\\b.*--force" },
+    { tool: "mcp__kanna__webfetch", pattern: ".*" }   // example user policy
   ]
 }
 ```
 
-Defaults shipped:
-- `defaultAction: "ask"` — every mutating call prompts the user.
-- Built-in denyList: `rm -rf /`, `git push -f` to non-fork remotes, writes to `/etc`, `/usr`, `/System`, `~/.ssh`, `~/.aws`, `~/.config/gh`, `~/.claude` (avoid wrapping breaking own auth).
-- Built-in allowList: read-only git commands, `ls`, `cat`, `pwd`, etc.
+#### Bash gating
 
-User can edit lists per-chat. "Auto-approve everything" is a single toggle that sets `defaultAction: "auto-allow"` and shows the red banner.
+`mcp__kanna__bash` does **not** auto-allow by regex prefix. Instead it parses the command line:
+
+1. Parse the command with a real shell-aware parser (e.g., `shell-quote` or `mvdan/sh` via FFI), not a regex. Reject and `ask` if parsing fails.
+2. Reject (`ask`) immediately on any of: pipe (`|`), redirect (`>`, `>>`, `<`), subshell `$(...)`, backticks, `eval`, `exec`, env-prefix (`FOO=bar cmd`), `&&`/`||`/`;` chains, glob-expansion of path args (e.g. `cat ~/.ssh/*`).
+3. The remaining canonicalized form is `verb arg1 arg2 …` with no shell features.
+4. For each path-shaped argument, normalize (`realpath` resolved against `cwd`). If the resolved path matches `readPathDeny` (or, for write-shaped verbs, `writePathDeny`), deny outright. **Do not auto-allow even for `cat`/`rg` if any path argument is in `readPathDeny`.**
+5. Auto-allow only when the verb is in `bash.autoAllowVerbs` AND no path argument matches a deny list AND the call has no flags that could change behavior in a hidden way (e.g., `rg --files-with-matches` is fine, but `rg --hyperlink-format` is `ask` for safety). Curated per-verb argument allowlists live alongside the verb list.
+6. Otherwise: `ask`.
+
+Result: `cat ~/.claude/.credentials.json`, `rg . ~/.ssh`, `cat $(echo ~/.ssh/id_rsa)` all path through to "ask" (in fact `cat ~/.claude/...` matches `readPathDeny` first → outright deny).
+
+#### Other tools
+
+- `mcp__kanna__edit` / `mcp__kanna__write`: target path is structured (not shell-parsed). Resolve against `cwd`, deny if outside workspace + `additionalDirectories`, deny if matches `writePathDeny`. Otherwise `ask` (or `auto-allow` if `defaultAction` is set).
+- `mcp__kanna__webfetch` / `mcp__kanna__websearch`: no auto-allow by default. User can add hosts to a per-chat allow list.
+- `Read` / `Glob` / `Grep` (CLI built-ins, still enabled): Kanna cannot intercept these. **Workaround:** the same `readPathDeny` is enforced by the `mcp__kanna__read_guard` tool, which the system prompt instructs the model to consult before reading sensitive paths. Belt-and-suspenders only — primary defense is sandboxing the spawn (see "Sandboxing" below).
+
+#### Sandboxing the spawn (defense-in-depth)
+
+For users on macOS, Kanna can launch `claude` under `sandbox-exec` with a profile that denies `read-file` for the deny-list directories. On Linux, `bwrap` with read-only bind-mounts for `$HOME` minus `~/.ssh`, `~/.aws`, etc. This makes deny enforcement OS-level even when the model bypasses our gating.
+
+- Opt-in setting `KANNA_PTY_SANDBOX=on` (default `on` on supported OSes, `off` on Windows for v1).
+- Documented as the only fully-effective gate against the CLI's built-in `Read` / `Glob` / `Grep`.
+
+User can edit lists per-chat. "Auto-approve everything" is a single toggle that sets `defaultAction: "auto-allow"` and shows the red banner. Even under auto-approve, `readPathDeny` and `writePathDeny` still apply — auto-approve cannot grant access to denied paths.
 
 ### Mode transitions fail closed
 
@@ -375,21 +415,29 @@ User can edit lists per-chat. "Auto-approve everything" is a single toggle that 
 - Changing other policy keys: hot-reload (no respawn) since policy is consulted per request.
 - Server crash mid-session: `defaultAction` reset to persisted value; pending requests resolved per "Server restart" rule above; banner re-displayed if `auto-allow` persisted.
 
+### Third-party MCP servers — fail closed
+
+User and project `.mcp.json` entries other than `kanna-mcp` are **not loaded by default** in PTY mode. The driver builds its `--mcp-config` from `kanna-mcp` only.
+
+To enable a third-party MCP server in PTY mode, the user must explicitly add it to `kanna.mcpAllowList` in app settings. When that list is non-empty:
+
+1. Phase-0 hook check must have passed (see "Optional belt-and-suspenders" below). If the hook does not fire under `--dangerously-skip-permissions`, spawn is **rejected** with an error: "Third-party MCP servers require the PreToolUse hook to be functional. Disable MCP allowlist or switch to SDK driver."
+2. The PreToolUse hook is registered and gates every call (Kanna-MCP and third-party). Spawn proceeds.
+3. The user-facing UI surfaces every third-party MCP server name and a list of its advertised tools at enable time, with a "I understand these run outside Kanna's structured gating" confirm.
+
+If the user has no third-party MCP servers (default), the hook is **not** required — `--tools` allowlist + `kanna-mcp`-only routing is the complete enforcement boundary.
+
 ### Optional belt-and-suspenders: PreToolUse hook
 
-If the phase-0 spike confirms `PreToolUse` hooks fire reliably (with full structured args, synchronous wait) in interactive mode, we additionally install a hook that veto-checks every tool call against the same `policy.evaluate`. This catches:
+If the phase-0 spike confirms `PreToolUse` hooks fire reliably (full structured args, synchronous wait, honored under `--dangerously-skip-permissions`), Kanna installs a hook that veto-checks every tool call against the same `policy.evaluate`. This is **required** if any third-party MCP server is allowlisted; otherwise it is purely defense-in-depth.
 
-- Tools we forgot to disable in `--tools` allowlist
-- User MCP servers (third-party) whose calls we want to gate
-- A future CLI version that re-enables a tool we thought we'd disabled
-
-If the spike fails, we ship without the hook. The MCP-routing gate is sufficient — the hook is purely defense-in-depth.
+If the spike fails AND the user has third-party MCP enabled, spawn is rejected as described above.
 
 ### What we still cannot fully gate (documented in user docs)
 
-- Tools added by **user-installed MCP servers** other than `kanna-mcp`. Without the hook, those run un-gated. Recommend: review `.mcp.json` before enabling PTY mode.
-- `Read`, `Glob`, `Grep`: read-only built-ins that stay enabled. Information disclosure within the project working dir is in-scope for an agent.
+- CLI built-in **`Read`** / **`Glob`** / **`Grep`** (read-only, kept enabled for usability). Information disclosure of credential paths is mitigated by `readPathDeny` enforced via OS sandboxing (`KANNA_PTY_SANDBOX=on`, default on for macOS/Linux). On Windows, these paths are not gated — Windows users see a UI warning.
 - File-system race conditions if user shells out from a still-enabled subprocess elsewhere on the system.
+- Long-running processes spawned by approved tool calls and inherited beyond the tool's lifetime. Documented limitation.
 
 ### Tests
 
@@ -465,6 +513,8 @@ The lifecycle wrapper is mounted between `AgentCoordinator` and the raw `startCl
 | `KANNA_PTY_IDLE_TIMEOUT_MS` | `600000` | 10 min idle → stop |
 | `KANNA_PTY_PREWARM_GRACE_MS` | `2000` | Cancel pre-warm if user moves on |
 | `KANNA_PTY_WARM_TIMEOUT_MS` | `30000` | Spawn timeout |
+| `KANNA_PTY_SANDBOX` | `on` (macOS/Linux), `off` (Win) | OS sandbox profile around `claude` spawn (denies reads of credential dirs) |
+| `KANNA_MCP_ALLOWLIST` | `""` (empty) | Comma-separated names of third-party MCP servers permitted. Empty = none. |
 | `CLAUDE_EXECUTABLE` | (auto) | Existing — path to `claude` binary |
 
 Also exposed in Kanna app settings UI (writes to user settings JSON).
@@ -507,7 +557,10 @@ Any new UI surface (badges, banners, settings toggle) is verified via `renderFor
 | JSONL replay duplicates or skips events on cold wake | Per-session `(byteOffset, lastEventId)` bookmark in `EventStore`, dedupe scan on truncation/rotation, atomic emit+advance, init event treated as control not transcript. See "Tail semantics". |
 | Permission gate depends on unproven hook behavior | Primary gate is `--tools` allowlist + kanna-mcp routing — no hook dependency. Hook is optional belt-and-suspenders. CLI cannot execute a tool we have not enabled. See "Permission enforcement". |
 | Built-in tools (Bash/Edit/Write) execute un-gated | Disabled at spawn via `--tools` allowlist. Model uses `mcp__kanna__*` replacements which Kanna gates synchronously with structured args. |
-| User MCP servers (3rd-party) bypass Kanna gating | Documented limitation. UI warns when third-party MCP server is configured in `.mcp.json`. Optional PreToolUse hook (if spike confirms it works) catches these. |
+| User MCP servers (3rd-party) bypass Kanna gating | Default fail-closed: only `kanna-mcp` is loaded. Third-party MCP requires explicit allowlist AND a functional PreToolUse hook; otherwise spawn refused. See "Third-party MCP servers — fail closed". |
+| Bash auto-allow leaks credentials (`cat ~/.claude/...`) | Bash is parsed (no regex prefix), `readPathDeny` resolved per arg, shell features (pipes/subshell/eval) downgrade to `ask`. `auto-allow` cannot override deny-list. OS sandbox (`sandbox-exec` / `bwrap`) is the secondary gate. |
+| ToolUseId replay with mutated args | Idempotency id binds to `(toolUseId, toolName, canonicalArgsHash)`; mismatch fails closed with `argument_mismatch` and emits audit event. |
+| CLI built-in `Read`/`Glob`/`Grep` read sensitive paths | OS-level sandbox (`KANNA_PTY_SANDBOX=on` default) denies file access to deny-list paths. Windows: documented limitation. |
 | Lifecycle bugs leak PTY processes (RSS exhaustion) | LRU cap + idle timeout + server shutdown fanout + `ps`-based reaper sweep on startup. Runtime dir cleanup on COOLING. |
 | Subagent feature uses `initialPrompt` + `systemPromptOverride` | Map to `--system-prompt` + send-prompt-then-exit-on-Stop. Covered by `driver.test.ts`. |
 | Loss of `oauthPool` multi-token rotation in PTY mode | Documented tradeoff. Pool still serves SDK driver. PTY = single subscription. |
@@ -520,7 +573,7 @@ Any new UI surface (badges, banners, settings toggle) is verified via `renderFor
 
 | Phase | Deliverable | Gate |
 |---|---|---|
-| 0 | Throwaway spike. Verify: (a) JSONL 1:1 fidelity with SDK events on 5 representative chats; (b) `--tools "Read Glob Grep mcp__kanna__*"` actually disables `Bash/Edit/Write` (assistant cannot invoke them); (c) `--mcp-config` over UDS works with `kanna-mcp`; (d) interactive PTY keeps subscription billing on a real Pro/Max account (check usage page); (e) `--resume` round-trips with a known `--session-id`. **Optional checks (do not block phase 1):** PreToolUse hook fires under `--dangerously-skip-permissions`; `SO_PEERCRED`/`LOCAL_PEERCRED` available under Bun. Capture results in `docs/superpowers/specs/2026-05-14-claude-pty-driver-spike.md` before opening phase 1. | (a)–(e) all green. If (b) fails: redesign — possibly fall back to wrapping the entire `claude` invocation in a sandbox. |
+| 0 | Throwaway spike. Verify: (a) JSONL 1:1 fidelity with SDK events on 5 representative chats; (b) `--tools "Read Glob Grep mcp__kanna__*"` actually disables `Bash/Edit/Write` (assistant cannot invoke them); (c) `--mcp-config` over UDS works with `kanna-mcp`; (d) interactive PTY keeps subscription billing on a real Pro/Max account (check usage page); (e) `--resume` round-trips with a known `--session-id`; (f) `sandbox-exec` (macOS) / `bwrap` (Linux) profile denies `~/.ssh` / `~/.claude` reads without breaking project work; (g) PreToolUse hook behavior under `--dangerously-skip-permissions` — captures the answer needed to gate third-party MCP support. Capture all results in `docs/superpowers/specs/2026-05-14-claude-pty-driver-spike.md` before opening phase 1. | (a)–(f) all green. If (b) fails: redesign. If (g) fails: spawn refuses to load any third-party MCP server until alternative gate ships. |
 | 1a | MCP tool refactor: new `mcp__kanna__bash/edit/write/webfetch/websearch` + move `ask_user_question` + `exit_plan_mode` into kanna-mcp. Unified durable approval protocol (`tool-callback.ts` + `permission-gate.ts`). Behind `KANNA_MCP_TOOL_CALLBACKS=1`. SDK driver opts in first and routes its `canUseTool` through `permission-gate.ts`. | `mcp-tool-callback.test.ts`, `permission-gate.test.ts` green. SDK driver still passes existing tests. |
 | 1b | `claude-pty/` module: PTY spawn, UDS server (callbacks only, no creds), runtime-dir, JSONL tail with bookmarks. Feature flag `KANNA_CLAUDE_DRIVER=pty`. Default stays `sdk`. | All unit tests pass. Manual smoke: chat works end-to-end with default `ask` policy and `mcp__kanna__*` tool routing. |
 | 2 | UI: driver toggle, status badges, per-chat unsafe opt-in flow with destructive-action confirm dialog, deny-list editor, lifecycle settings. | Manual QA: driver switch, unsafe toggle, deny-list match, cold→warm→active→idle→cooling cycle, server-restart resets unsafe. |
