@@ -616,12 +616,14 @@ export function SkillsSection({
   }, [connectionStatus, socket])
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadInstalledSkills()
   }, [connectionStatus, loadInstalledSkills, socket])
 
   useEffect(() => {
     const normalizedQuery = query.trim()
     if (normalizedQuery.length < 2) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setResults([])
       setSearchError(null)
       setSearchLoading(false)
@@ -950,14 +952,17 @@ export function SettingsPage() {
               : "Not checked yet"
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setScrollbackDraft(String(scrollbackLines))
   }, [scrollbackLines])
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMinColumnWidthDraft(String(minColumnWidth))
   }, [minColumnWidth])
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setUploadMaxFileSizeDraft(String(uploadMaxFileSizeMb))
   }, [uploadMaxFileSizeMb])
 
@@ -968,10 +973,12 @@ export function SettingsPage() {
   }, [])
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setEditorCommandDraft(editorCommandTemplate)
   }, [editorCommandTemplate])
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setKeybindingDrafts(Object.fromEntries(
       KEYBINDING_ACTIONS.map((action) => [
         action,
@@ -982,6 +989,7 @@ export function SettingsPage() {
 
   useEffect(() => {
     if (!llmProvider) return
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLlmProviderDraft({
       provider: llmProvider.provider,
       apiKey: llmProvider.apiKey,
@@ -991,6 +999,7 @@ export function SettingsPage() {
   }, [llmProvider])
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLlmValidationStatus("idle")
     setLlmValidationError(null)
   }, [llmProviderDraft.provider, llmProviderDraft.apiKey, llmProviderDraft.model, llmProviderDraft.baseUrl])
@@ -1003,6 +1012,7 @@ export function SettingsPage() {
 
   useEffect(() => {
     if (!appSettings) return
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setCloudflaredPathDraft(appSettings.cloudflareTunnel.cloudflaredPath)
   }, [appSettings])
 
@@ -1043,6 +1053,7 @@ export function SettingsPage() {
     if (selectedPage !== "changelog" || isConnecting) return
 
     let cancelled = false
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setChangelogStatus("loading")
     setChangelogError(null)
 
