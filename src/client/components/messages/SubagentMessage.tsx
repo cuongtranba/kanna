@@ -1,9 +1,10 @@
 import { Bot } from "lucide-react"
-import type { SubagentRunSnapshot } from "../../../shared/types"
+import type { AskUserQuestionAnswerMap, AskUserQuestionItem, SubagentRunSnapshot } from "../../../shared/types"
 import { processTranscriptMessages } from "../../lib/parseTranscript"
 import { cn } from "../../lib/utils"
 import { SubagentEntryRow } from "./SubagentEntryRow"
 import { SubagentErrorCard } from "./SubagentErrorCard"
+import { SubagentPendingToolCard } from "./SubagentPendingToolCard"
 
 interface SubagentMessageProps {
   run: SubagentRunSnapshot
@@ -11,9 +12,28 @@ interface SubagentMessageProps {
   localPath: string
   onOpenSettings?: () => void
   onRetry?: () => void
+  onSubagentAskUserQuestionSubmit?: (
+    runId: string,
+    toolUseId: string,
+    questions: AskUserQuestionItem[],
+    answers: AskUserQuestionAnswerMap,
+  ) => void
+  onSubagentExitPlanModeSubmit?: (
+    runId: string,
+    toolUseId: string,
+    response: { confirmed: boolean; clearContext?: boolean; message?: string },
+  ) => void
 }
 
-export function SubagentMessage({ run, indentDepth, localPath, onOpenSettings, onRetry }: SubagentMessageProps) {
+export function SubagentMessage({
+  run,
+  indentDepth,
+  localPath,
+  onOpenSettings,
+  onRetry,
+  onSubagentAskUserQuestionSubmit,
+  onSubagentExitPlanModeSubmit,
+}: SubagentMessageProps) {
   const messages = processTranscriptMessages(run.entries)
   const hasAnyText = messages.some((m) => m.kind === "assistant_text")
   const isStreaming = run.status === "running" && hasAnyText
@@ -40,6 +60,17 @@ export function SubagentMessage({ run, indentDepth, localPath, onOpenSettings, o
       {messages.map((m) => (
         <SubagentEntryRow key={m.id} message={m} localPath={localPath} />
       ))}
+      {run.pendingTool && (
+        <SubagentPendingToolCard
+          pendingTool={run.pendingTool}
+          onAskUserQuestionSubmit={(toolUseId, questions, answers) =>
+            onSubagentAskUserQuestionSubmit?.(run.runId, toolUseId, questions, answers)
+          }
+          onExitPlanModeSubmit={(toolUseId, response) =>
+            onSubagentExitPlanModeSubmit?.(run.runId, toolUseId, response)
+          }
+        />
+      )}
       {/* Backwards compatibility: if entries is empty (e.g. an old replayed run
           that only has finalText), still render finalText so the row is not blank. */}
       {messages.length === 0 && run.finalText && (
