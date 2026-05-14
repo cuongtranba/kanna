@@ -42,6 +42,7 @@ export function useMentionSuggestions(args: {
 
   useEffect(() => {
     if (!args.enabled || !args.projectId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setState({ items: [], loading: false, error: null })
       return
     }

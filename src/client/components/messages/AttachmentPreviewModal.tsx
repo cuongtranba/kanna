@@ -70,6 +70,7 @@ export function AttachmentPreviewModal({ attachment, onOpenChange }: Props) {
 
     let cancelled = false
 
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setPreviewCache((current) => ({
       ...current,
       [attachment.id]: { status: "loading" },

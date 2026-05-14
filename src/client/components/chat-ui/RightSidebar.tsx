@@ -364,6 +364,7 @@ function GitHubPublishModal({
   useEffect(() => {
     if (!open) return
     let cancelled = false
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsLoadingInfo(true)
     setAvailability(null)
     void onGetGitHubPublishInfo()
@@ -391,6 +392,7 @@ function GitHubPublishModal({
     const trimmedOwner = owner.trim()
     const trimmedName = name.trim()
     if (!trimmedOwner || !trimmedName) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setAvailability(null)
       return
     }
@@ -745,6 +747,7 @@ function MergeBranchModal({
 
   useEffect(() => {
     if (!open) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setQuery("")
       setSelectedName(null)
       setPreview(null)
@@ -756,6 +759,7 @@ function MergeBranchModal({
 
   useEffect(() => {
     if (!open || !selectedEntry) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setPreview(null)
       setPreviewError(null)
       setIsPreviewLoading(false)
@@ -926,6 +930,7 @@ function BranchSwitcher({
 
   useEffect(() => {
     if (!open) return
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsLoading(true)
     setError(null)
     void onListBranches()

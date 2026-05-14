@@ -14,7 +14,7 @@ or `--base main --head <branch>` to `gh pr create` to make the target explicit.
 
 # Lint
 
-`bun run lint` runs ESLint on `src/` with `--max-warnings=15`. CI runs it
+`bun run lint` runs ESLint on `src/` with `--max-warnings=0`. CI runs it
 before tests; merges blocked on lint errors AND on any warning count above
 the cap. The cap is a ratchet: when warnings drop, lower the cap in the
 same PR so they cannot creep back up. Plugin `react-hooks` (set 7+) enforces

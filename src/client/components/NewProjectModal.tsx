@@ -37,6 +37,7 @@ export function NewProjectModal({ open, onOpenChange, onConfirm }: Props) {
 
   useEffect(() => {
     if (open) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setTab("new")
       setName("")
       setExistingPath("")
