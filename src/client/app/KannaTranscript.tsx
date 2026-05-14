@@ -632,6 +632,17 @@ interface KannaTranscriptProps {
   onTunnelStop?: (tunnelId: string) => void | Promise<void>
   onTunnelRetry?: (tunnelId: string) => void | Promise<void>
   subagentRuns?: Record<string, SubagentRunSnapshot>
+  onSubagentAskUserQuestionSubmit?: (
+    runId: string,
+    toolUseId: string,
+    questions: AskUserQuestionItem[],
+    answers: AskUserQuestionAnswerMap,
+  ) => void
+  onSubagentExitPlanModeSubmit?: (
+    runId: string,
+    toolUseId: string,
+    response: { confirmed: boolean; clearContext?: boolean; message?: string },
+  ) => void
 }
 
 const EMPTY_SUBAGENT_RUNS: Record<string, SubagentRunSnapshot> = {}
@@ -641,12 +652,20 @@ function renderSubagentRunTree(
   depth: number,
   childrenByParentRunId: Map<string, SubagentRunSnapshot[]>,
   localPath: string,
+  onSubagentAskUserQuestionSubmit: ((runId: string, toolUseId: string, questions: AskUserQuestionItem[], answers: AskUserQuestionAnswerMap) => void) | undefined,
+  onSubagentExitPlanModeSubmit: ((runId: string, toolUseId: string, response: { confirmed: boolean; clearContext?: boolean; message?: string }) => void) | undefined,
 ): React.ReactNode {
   const children = childrenByParentRunId.get(run.runId) ?? []
   return (
     <React.Fragment key={run.runId}>
-      <SubagentMessage run={run} indentDepth={depth} localPath={localPath} />
-      {children.map((child) => renderSubagentRunTree(child, depth + 1, childrenByParentRunId, localPath))}
+      <SubagentMessage
+        run={run}
+        indentDepth={depth}
+        localPath={localPath}
+        onSubagentAskUserQuestionSubmit={onSubagentAskUserQuestionSubmit}
+        onSubagentExitPlanModeSubmit={onSubagentExitPlanModeSubmit}
+      />
+      {children.map((child) => renderSubagentRunTree(child, depth + 1, childrenByParentRunId, localPath, onSubagentAskUserQuestionSubmit, onSubagentExitPlanModeSubmit))}
     </React.Fragment>
   )
 }
@@ -773,6 +792,8 @@ function KannaTranscriptImpl({
   onTunnelStop: _onTunnelStop,
   onTunnelRetry: _onTunnelRetry,
   subagentRuns = EMPTY_SUBAGENT_RUNS,
+  onSubagentAskUserQuestionSubmit,
+  onSubagentExitPlanModeSubmit,
 }: KannaTranscriptProps) {
   const [toolGroupExpanded, setToolGroupExpanded] = useState<Record<string, boolean>>({})
   const rows = useMemo(() => buildResolvedTranscriptRows(messages, {
@@ -835,7 +856,7 @@ function KannaTranscriptImpl({
               onAutoContinueReschedule={onAutoContinueReschedule}
               onAutoContinueCancel={onAutoContinueCancel}
             />
-            {runsForRow.map((run) => renderSubagentRunTree(run, 0, childrenByParentRunId, localPath ?? ""))}
+            {runsForRow.map((run) => renderSubagentRunTree(run, 0, childrenByParentRunId, localPath ?? "", onSubagentAskUserQuestionSubmit, onSubagentExitPlanModeSubmit))}
           </div>
         )
       })}

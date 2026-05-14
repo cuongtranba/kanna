@@ -882,6 +882,10 @@ export class AgentCoordinator {
   private readonly backgroundTasks: BackgroundTaskRegistry | null
   private readonly oauthPool: OAuthTokenPool | null
   private readonly pendingBashCalls = new Map<string, { command: string; chatId: string; isBg: boolean }>()
+  private readonly subagentPendingResolvers = new Map<
+    string,
+    { resolve: (v: unknown) => void; reject: (e: Error) => void }
+  >()
 
   constructor(args: AgentCoordinatorArgs) {
     this.store = args.store
@@ -957,6 +961,10 @@ export class AgentCoordinator {
 
   private emitStateChange(chatId?: string, options?: { immediate?: boolean }) {
     this.onStateChange(chatId, options)
+  }
+
+  private subagentPendingKey(chatId: string, runId: string, toolUseId: string): string {
+    return `${chatId}::${runId}::${toolUseId}`
   }
 
   private trackBashToolEntry(chatId: string, entry: TranscriptEntry): void {
@@ -1076,6 +1084,7 @@ export class AgentCoordinator {
       claudeSession.session.close()
       this.claudeSessions.delete(chatId)
     }
+    this.oauthPool?.release(chatId)
     this.autoResumeByChat.delete(chatId)
     this.emitStateChange(chatId)
   }
@@ -1449,7 +1458,7 @@ export class AgentCoordinator {
         this.claudeSessions.delete(args.chatId)
       }
 
-      const picked = this.oauthPool?.pickActive() ?? null
+      const picked = this.oauthPool?.pickActive(args.chatId) ?? null
       if (picked) this.oauthPool!.markUsed(picked.id)
       const started = await this.startClaudeSessionFn({
         projectId: args.projectId,
@@ -1644,40 +1653,29 @@ export class AgentCoordinator {
     const spawn = resolveSpawnPaths(chat, project.localPath)
 
     const onToolRequest = async (request: HarnessToolRequest): Promise<unknown> => {
-      // V4 design pivot: subagents do NOT route AskUserQuestion / ExitPlanMode
-      // through the parent chat's pending-tool slot. Phase 3 gates the primary
-      // turn when @agent/ mentions exist, so `this.activeTurns.get(chatId)` has
-      // no entry — there is no UI slot to claim.
-      //
-      // Auto-deny by returning a synthetic answer the canUseTool wrapper at
-      // `agent.ts:676-707` knows how to handle:
-      //  - ask_user_question → fabricate an object-map answers keyed by question
-      //    id (or text fallback) so hydrateToolResult (`tools.ts:318-335`) reads
-      //    a well-formed tool_result. Subagents that need user input must use
-      //    the assistant_text channel ("please tell me X").
-      //  - exit_plan_mode → return { confirmed: false } so the wrapper emits
-      //    its standard deny message.
-      //
-      // Phase 5 follow-up: per-run pending-tool slot + UI forwarding events.
-      console.warn(`${LOG_PREFIX} subagent tool auto-denied`, {
+      if (request.tool.toolKind !== "ask_user_question"
+          && request.tool.toolKind !== "exit_plan_mode") {
+        // Non-interactive tools (bash, read, write, ...) — SDK handles
+        // them via canUseTool wrapper. No forwarding needed.
+        return null
+      }
+      const toolUseId = request.tool.toolId
+      const key = this.subagentPendingKey(args.chatId, args.runId, toolUseId)
+      await this.store.appendSubagentEvent({
+        v: 3,
+        type: "subagent_tool_pending",
+        timestamp: Date.now(),
         chatId: args.chatId,
         runId: args.runId,
+        toolUseId,
         toolKind: request.tool.toolKind,
+        input: request.tool.input,
       })
-      if (request.tool.toolKind === "ask_user_question") {
-        const questions = (request.tool.input as { questions?: Array<{ id?: string; question?: string }> }).questions ?? []
-        const answers: Record<string, string[]> = {}
-        for (const q of questions) {
-          const key = q.id ?? q.question ?? `q${Object.keys(answers).length}`
-          answers[key] = ["[denied: subagents cannot ask the user; reply via assistant text]"]
-        }
-        return { questions, answers }
-      }
-      // exit_plan_mode
-      return {
-        confirmed: false,
-        message: "Subagents cannot exit plan mode in v4 (auto-denied).",
-      }
+      this.emitStateChange(args.chatId)
+      this.subagentOrchestrator.notifySubagentToolPending(args.runId)
+      return await new Promise<unknown>((resolve, reject) => {
+        this.subagentPendingResolvers.set(key, { resolve, reject })
+      })
     }
 
     return buildSubagentProviderRun({
@@ -1702,6 +1700,10 @@ export class AgentCoordinator {
         return true
       },
       pickOauthToken: () => {
+        // Subagent runs aren't currently wired into the reservation lifecycle
+        // (no release on subagent completion), so pick without a reservation
+        // to avoid leaking. The chat-level rotation race this guards against
+        // is between top-level chat sessions, not subagent ephemerals.
         const picked = this.oauthPool?.pickActive() ?? null
         if (picked) this.oauthPool!.markUsed(picked.id)
         return picked?.token ?? null
@@ -2111,7 +2113,7 @@ export class AgentCoordinator {
     if (this.oauthPool && session?.activeTokenId) {
       this.oauthPool.markLimited(session.activeTokenId, detection.resetAt)
     }
-    const rotationTarget = this.oauthPool?.pickActive() ?? null
+    const rotationTarget = this.oauthPool?.pickActive(chatId) ?? null
     const canRotate = rotationTarget !== null
       && (!session?.activeTokenId || rotationTarget.id !== session.activeTokenId)
 
@@ -2415,6 +2417,28 @@ export class AgentCoordinator {
 
     pending.resolve(command.result)
 
+    this.emitStateChange(command.chatId)
+  }
+
+  async respondSubagentTool(command: Extract<ClientCommand, { type: "chat.respondSubagentTool" }>) {
+    const key = this.subagentPendingKey(command.chatId, command.runId, command.toolUseId)
+    const resolver = this.subagentPendingResolvers.get(key)
+    if (!resolver) {
+      throw new Error("No pending subagent tool")
+    }
+    this.subagentPendingResolvers.delete(key)
+    await this.store.appendSubagentEvent({
+      v: 3,
+      type: "subagent_tool_resolved",
+      timestamp: Date.now(),
+      chatId: command.chatId,
+      runId: command.runId,
+      toolUseId: command.toolUseId,
+      result: command.result,
+      resolution: "user",
+    })
+    this.subagentOrchestrator.notifySubagentToolResolved(command.runId)
+    resolver.resolve(command.result)
     this.emitStateChange(command.chatId)
   }
 }

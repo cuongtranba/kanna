@@ -101,6 +101,11 @@ export function processTranscriptMessages(entries: TranscriptEntry[]): HydratedT
           pendingCall.hydrated.result = hydrateToolResult(pendingCall.normalized, rawResult) as never
           pendingCall.hydrated.rawResult = rawResult
           pendingCall.hydrated.isError = entry.isError
+          // Phase 5: propagate persisted-on-disk metadata so renderers
+          // can surface "View full output" affordance on the tool call.
+          if (entry.persisted) {
+            pendingCall.hydrated.persisted = entry.persisted
+          }
         }
         break
       }

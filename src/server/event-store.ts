@@ -26,6 +26,7 @@ import { resolveLocalPath } from "./paths"
 import type { CloudflareTunnelEvent } from "./cloudflare-tunnel/events"
 import type { PushEvent, PushEventStore } from "./push/events"
 import { ACTIVE_SESSION_IDLE_GAP_MS } from "./read-models"
+import { capTranscriptEntry } from "./subagent-entry-cap"
 
 const COMPACTION_THRESHOLD_BYTES = 2 * 1024 * 1024
 const STALE_EMPTY_CHAT_MAX_AGE_MS = 30 * 60 * 1000
@@ -139,6 +140,8 @@ function getReplayEventPriority(event: StoreEvent): number {
     case "subagent_run_completed":
     case "subagent_run_failed":
     case "subagent_run_cancelled":
+    case "subagent_tool_pending":
+    case "subagent_tool_resolved":
       return 5
     default: {
       const _exhaustive: never = discriminator
@@ -825,6 +828,7 @@ export class EventStore implements PushEventStore {
           error: null,
           usage: null,
           entries: [],
+          pendingTool: null,
         })
         break
       }
@@ -882,6 +886,33 @@ export class EventStore implements PushEventStore {
         if (!run) break
         run.status = "cancelled"
         run.finishedAt = e.timestamp
+        break
+      }
+      case "subagent_tool_pending": {
+        const map = this.state.subagentRunsByChatId.get(e.chatId)
+        const run = map?.get(e.runId)
+        if (!run) break
+        run.pendingTool = {
+          toolUseId: e.toolUseId,
+          toolKind: e.toolKind,
+          input: e.input,
+          requestedAt: e.timestamp,
+        }
+        break
+      }
+      case "subagent_tool_resolved": {
+        const map = this.state.subagentRunsByChatId.get(e.chatId)
+        const run = map?.get(e.runId)
+        if (!run) break
+        run.pendingTool = null
+        const syntheticEntry: TranscriptEntry = {
+          kind: "tool_result",
+          _id: `${e.runId}:${e.toolUseId}:resolved`,
+          createdAt: e.timestamp,
+          toolId: e.toolUseId,
+          content: e.result,
+        }
+        run.entries.push(syntheticEntry)
         break
       }
     }
@@ -1274,7 +1305,8 @@ export class EventStore implements PushEventStore {
   }
 
   async deleteChat(chatId: string) {
-    this.requireChat(chatId)
+    const chat = this.requireChat(chatId)
+    const projectId = chat.projectId
     const event: ChatEvent = {
       v: STORE_VERSION,
       type: "chat_deleted",
@@ -1282,6 +1314,11 @@ export class EventStore implements PushEventStore {
       chatId,
     }
     await this.append(this.chatsLogPath, event)
+    const subagentResultsDir = path.join(
+      this.dataDir, "projects", projectId, "chats", chatId, "subagent-results",
+    )
+    rm(subagentResultsDir, { recursive: true, force: true })
+      .catch((err) => console.warn(`${LOG_PREFIX} subagent-results cleanup failed`, { chatId, err }))
   }
 
   async archiveChat(chatId: string) {
@@ -1503,6 +1540,21 @@ export class EventStore implements PushEventStore {
   }
 
   async appendSubagentEvent(event: SubagentRunEvent) {
+    if (event.type === "subagent_entry_appended" && event.entry.kind === "tool_result") {
+      const chat = this.state.chatsById.get(event.chatId)
+      if (chat) {
+        event = {
+          ...event,
+          entry: await capTranscriptEntry({
+            entry: event.entry,
+            chatId: event.chatId,
+            runId: event.runId,
+            projectId: chat.projectId,
+            kannaRoot: this.dataDir,
+          }),
+        }
+      }
+    }
     await this.append(this.turnsLogPath, event)
   }
 
@@ -1510,6 +1562,14 @@ export class EventStore implements PushEventStore {
     const map = this.state.subagentRunsByChatId.get(chatId)
     if (!map) return {}
     return Object.fromEntries(map.entries())
+  }
+
+  *runningSubagentRuns(): Iterable<SubagentRunSnapshot> {
+    for (const map of this.state.subagentRunsByChatId.values()) {
+      for (const run of map.values()) {
+        if (run.status === "running") yield run
+      }
+    }
   }
 
   async setSessionTokenForProvider(

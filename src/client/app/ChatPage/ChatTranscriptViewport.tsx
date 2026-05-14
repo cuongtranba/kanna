@@ -48,6 +48,8 @@ interface ChatTranscriptViewportProps {
   onOpenLocalLink: KannaState["handleOpenLocalLink"]
   onAskUserQuestionSubmit: KannaState["handleAskUserQuestion"]
   onExitPlanModeConfirm: KannaState["handleExitPlanMode"]
+  onSubagentAskUserQuestionSubmit?: KannaState["handleSubagentAskUserQuestion"]
+  onSubagentExitPlanModeSubmit?: KannaState["handleSubagentExitPlanMode"]
   schedules: Record<string, AutoContinueSchedule>
   onAutoContinueAccept: (scheduleId: string, scheduledAt: number) => void
   onAutoContinueReschedule: (scheduleId: string, scheduledAt: number) => void
@@ -92,6 +94,8 @@ export const ChatTranscriptViewport = memo(function ChatTranscriptViewport({
   onOpenLocalLink,
   onAskUserQuestionSubmit,
   onExitPlanModeConfirm,
+  onSubagentAskUserQuestionSubmit,
+  onSubagentExitPlanModeSubmit,
   schedules,
   onAutoContinueAccept,
   onAutoContinueReschedule,
@@ -171,11 +175,17 @@ export const ChatTranscriptViewport = memo(function ChatTranscriptViewport({
     const children = childrenByParentRunId.get(run.runId) ?? []
     return (
       <React.Fragment key={run.runId}>
-        <SubagentMessage run={run} indentDepth={depth} localPath={localPath ?? ""} />
+        <SubagentMessage
+          run={run}
+          indentDepth={depth}
+          localPath={localPath ?? ""}
+          onSubagentAskUserQuestionSubmit={onSubagentAskUserQuestionSubmit}
+          onSubagentExitPlanModeSubmit={onSubagentExitPlanModeSubmit}
+        />
         {children.map((child) => renderRunTree(child, depth + 1))}
       </React.Fragment>
     )
-  }, [childrenByParentRunId, localPath])
+  }, [childrenByParentRunId, localPath, onSubagentAskUserQuestionSubmit, onSubagentExitPlanModeSubmit])
 
   const handleToolGroupExpandedChange = useCallback((groupId: string, next: boolean) => {
     setToolGroupExpanded((current) => (

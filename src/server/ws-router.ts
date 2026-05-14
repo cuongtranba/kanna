@@ -1812,6 +1812,11 @@ export function createWsRouter({
           send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
           return
         }
+        case "chat.respondSubagentTool": {
+          await agent.respondSubagentTool(command)
+          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
+          return
+        }
         case "message.enqueue": {
           const result = await agent.enqueue(command)
           send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result })

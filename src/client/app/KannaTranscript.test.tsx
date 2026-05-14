@@ -615,6 +615,7 @@ function makeRun(over: Partial<SubagentRunSnapshot> & { runId: string; parentUse
     error: null,
     usage: null,
     entries: [],
+    pendingTool: null,
     ...over,
   }
 }

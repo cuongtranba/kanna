@@ -790,6 +790,17 @@ export interface KannaState {
     clearContext?: boolean,
     message?: string
   ) => Promise<void>
+  handleSubagentAskUserQuestion: (
+    runId: string,
+    toolUseId: string,
+    questions: AskUserQuestionItem[],
+    answers: AskUserQuestionAnswerMap,
+  ) => Promise<void>
+  handleSubagentExitPlanMode: (
+    runId: string,
+    toolUseId: string,
+    response: { confirmed: boolean; clearContext?: boolean; message?: string },
+  ) => Promise<void>
   handleExportStandalone: (chatId?: string | null) => Promise<StandaloneTranscriptExportCommandResult | null>
   handleCloseStandaloneShareDialog: () => void
   handleOpenStandaloneShareLink: () => void
@@ -2270,6 +2281,45 @@ export function useKannaState(activeChatId: string | null): KannaState {
     }
   }, [activeChatId, socket])
 
+  const handleSubagentAskUserQuestion = useCallback(async (
+    runId: string,
+    toolUseId: string,
+    questions: AskUserQuestionItem[],
+    answers: AskUserQuestionAnswerMap,
+  ) => {
+    if (!activeChatId) return
+    try {
+      await socket.command({
+        type: "chat.respondSubagentTool",
+        chatId: activeChatId,
+        runId,
+        toolUseId,
+        result: { questions, answers },
+      })
+    } catch (error) {
+      setCommandError(error instanceof Error ? error.message : String(error))
+    }
+  }, [activeChatId, socket])
+
+  const handleSubagentExitPlanMode = useCallback(async (
+    runId: string,
+    toolUseId: string,
+    response: { confirmed: boolean; clearContext?: boolean; message?: string },
+  ) => {
+    if (!activeChatId) return
+    try {
+      await socket.command({
+        type: "chat.respondSubagentTool",
+        chatId: activeChatId,
+        runId,
+        toolUseId,
+        result: response,
+      })
+    } catch (error) {
+      setCommandError(error instanceof Error ? error.message : String(error))
+    }
+  }, [activeChatId, socket])
+
   return {
     socket,
     activeChatId,
@@ -2361,6 +2411,8 @@ export function useKannaState(activeChatId: string | null): KannaState {
     handleCompose,
     handleAskUserQuestion,
     handleExitPlanMode,
+    handleSubagentAskUserQuestion,
+    handleSubagentExitPlanMode,
     handleExportStandalone,
     handleCloseStandaloneShareDialog,
     handleOpenStandaloneShareLink,

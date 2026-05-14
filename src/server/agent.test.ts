@@ -2207,6 +2207,9 @@ function createFakeStore() {
     getSubagentRuns() {
       return Object.fromEntries(this.subagentRuns.entries())
     },
+    *runningSubagentRuns() {
+      // Empty stub — fake store has no subagent runs; recoverInterruptedRuns is a no-op.
+    },
   }
 }
 
@@ -3320,9 +3323,9 @@ describe("AgentCoordinator subagent mention gating", () => {
     expect(runs[0].error?.code).toBe("UNKNOWN_SUBAGENT")
   })
 
-  test("subagent AskUserQuestion auto-denies with synthetic object-map answer", async () => {
+  test("subagent AskUserQuestion forwards via subagent_tool_pending and respondSubagentTool resolves it", async () => {
     const store = createFakeStore()
-    let capturedResult: unknown = null
+    let toolRequestPromise: Promise<unknown> | null = null
 
     const coordinator = new AgentCoordinator({
       store: store as never,
@@ -3330,23 +3333,23 @@ describe("AgentCoordinator subagent mention gating", () => {
       getSubagents: () => [makeSubagentRecord({ id: "sa-1", name: "alpha" })],
       getAppSettingsSnapshot: () => ({ claudeAuth: { authenticated: true } }),
       startClaudeSession: async (args) => {
-        // Call the onToolRequest with ask_user_question and capture the result
         const toolRequest = {
           tool: {
             kind: "tool" as const,
             toolKind: "ask_user_question" as const,
             toolName: "AskUserQuestion",
             toolId: "t1",
-            input: { questions: [{ id: "q1", question: "color?" }, { id: "q2", question: "size?" }] },
-            rawInput: { questions: [{ id: "q1", question: "color?" }, { id: "q2", question: "size?" }] },
+            input: { questions: [{ id: "q1", question: "color?" }] },
+            rawInput: { questions: [{ id: "q1", question: "color?" }] },
           },
         }
-        capturedResult = await args.onToolRequest(toolRequest)
-        // Return a ClaudeSessionHandle whose stream yields one assistant_text entry then closes
+        // Capture the promise — do NOT await; stream will block until it resolves
+        toolRequestPromise = args.onToolRequest(toolRequest)
         async function* stream() {
+          const result = await toolRequestPromise!
           yield {
             type: "transcript" as const,
-            entry: timestamped({ kind: "assistant_text", text: "ok" }),
+            entry: timestamped({ kind: "assistant_text", text: JSON.stringify(result) }),
           }
         }
         return {
@@ -3370,21 +3373,49 @@ describe("AgentCoordinator subagent mention gating", () => {
       model: "claude-opus-4-7",
     })
 
-    await waitFor(() => Object.values(store.getSubagentRuns()).some((r: any) => r.status === "completed"))
-    expect(capturedResult).toEqual({
-      questions: [{ id: "q1", question: "color?" }, { id: "q2", question: "size?" }],
-      answers: {
-        q1: ["[denied: subagents cannot ask the user; reply via assistant text]"],
-        q2: ["[denied: subagents cannot ask the user; reply via assistant text]"],
-      },
+    // Wait for the pending tool event to be appended by the orchestrator
+    await waitFor(() => store.subagentEvents.some((e: any) => e.type === "subagent_tool_pending"))
+
+    // The promise must still be pending (not yet resolved)
+    let resolvedEarly = false
+    void toolRequestPromise!.then(() => { resolvedEarly = true })
+    await Promise.resolve() // flush microtasks
+    expect(resolvedEarly).toBe(false)
+
+    // Verify appendSubagentEvent was called with the correct pending event
+    const pendingEvent = store.subagentEvents.find((e: any) => e.type === "subagent_tool_pending")
+    expect(pendingEvent).toMatchObject({
+      type: "subagent_tool_pending",
+      chatId: "chat-1",
+      toolUseId: "t1",
+      toolKind: "ask_user_question",
+      input: { questions: [{ id: "q1", question: "color?" }] },
     })
+
+    // Get the runId from the run_started event (getSubagentRuns has it keyed by runId)
+    const runId = Object.keys(store.getSubagentRuns())[0]
+    expect(runId).toBeDefined()
+
+    // Resolve via respondSubagentTool
+    await coordinator.respondSubagentTool({
+      type: "chat.respondSubagentTool",
+      chatId: "chat-1",
+      runId: runId!,
+      toolUseId: "t1",
+      result: { answers: { q1: ["red"] } },
+    })
+
+    const resolved = await toolRequestPromise!
+    expect(resolved).toEqual({ answers: { q1: ["red"] } })
+
+    await waitFor(() => Object.values(store.getSubagentRuns()).some((r: any) => r.status === "completed"))
     const runs = Object.values(store.getSubagentRuns()) as Array<{ status: string }>
     expect(runs[0]?.status).toBe("completed")
   }, 10_000)
 
-  test("subagent ExitPlanMode auto-denies with confirmed:false", async () => {
+  test("subagent ExitPlanMode forwards via subagent_tool_pending and respondSubagentTool resolves it", async () => {
     const store = createFakeStore()
-    let capturedResult: unknown = null
+    let toolRequestPromise: Promise<unknown> | null = null
 
     const coordinator = new AgentCoordinator({
       store: store as never,
@@ -3392,7 +3423,6 @@ describe("AgentCoordinator subagent mention gating", () => {
       getSubagents: () => [makeSubagentRecord({ id: "sa-1", name: "alpha" })],
       getAppSettingsSnapshot: () => ({ claudeAuth: { authenticated: true } }),
       startClaudeSession: async (args) => {
-        // Call the onToolRequest with exit_plan_mode and capture the result
         const toolRequest = {
           tool: {
             kind: "tool" as const,
@@ -3403,11 +3433,13 @@ describe("AgentCoordinator subagent mention gating", () => {
             rawInput: { plan: "do X" },
           },
         }
-        capturedResult = await args.onToolRequest(toolRequest)
+        // Capture the promise — do NOT await; stream will block until it resolves
+        toolRequestPromise = args.onToolRequest(toolRequest)
         async function* stream() {
+          const result = await toolRequestPromise!
           yield {
             type: "transcript" as const,
-            entry: timestamped({ kind: "assistant_text", text: "ok" }),
+            entry: timestamped({ kind: "assistant_text", text: JSON.stringify(result) }),
           }
         }
         return {
@@ -3431,11 +3463,42 @@ describe("AgentCoordinator subagent mention gating", () => {
       model: "claude-opus-4-7",
     })
 
-    await waitFor(() => Object.values(store.getSubagentRuns()).some((r: any) => r.status === "completed"))
-    expect(capturedResult).toMatchObject({
-      confirmed: false,
-      message: expect.stringContaining("auto-denied"),
+    // Wait for the pending tool event to be appended by the orchestrator
+    await waitFor(() => store.subagentEvents.some((e: any) => e.type === "subagent_tool_pending"))
+
+    // The promise must still be pending (not yet resolved)
+    let resolvedEarly = false
+    void toolRequestPromise!.then(() => { resolvedEarly = true })
+    await Promise.resolve() // flush microtasks
+    expect(resolvedEarly).toBe(false)
+
+    // Verify appendSubagentEvent was called with the correct pending event
+    const pendingEvent = store.subagentEvents.find((e: any) => e.type === "subagent_tool_pending")
+    expect(pendingEvent).toMatchObject({
+      type: "subagent_tool_pending",
+      chatId: "chat-1",
+      toolUseId: "t1",
+      toolKind: "exit_plan_mode",
+      input: { plan: "do X" },
     })
+
+    // Get the runId from the run_started event (getSubagentRuns has it keyed by runId)
+    const runId = Object.keys(store.getSubagentRuns())[0]
+    expect(runId).toBeDefined()
+
+    // Resolve via respondSubagentTool with confirmed:true
+    await coordinator.respondSubagentTool({
+      type: "chat.respondSubagentTool",
+      chatId: "chat-1",
+      runId: runId!,
+      toolUseId: "t1",
+      result: { confirmed: true },
+    })
+
+    const resolved = await toolRequestPromise!
+    expect(resolved).toEqual({ confirmed: true })
+
+    await waitFor(() => Object.values(store.getSubagentRuns()).some((r: any) => r.status === "completed"))
     const runs = Object.values(store.getSubagentRuns()) as Array<{ status: string }>
     expect(runs[0]?.status).toBe("completed")
   }, 10_000)
