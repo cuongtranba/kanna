@@ -1,6 +1,6 @@
 import { UserRound, X } from "lucide-react"
 import type { ProcessedToolCall } from "./types"
-import { MetaRow, MetaLabel, MetaCodeBlock, ExpandableRow, VerticalLineContainer, getToolIcon } from "./shared"
+import { MetaRow, MetaLabel, MetaCodeBlock, ExpandableRow, VerticalLineContainer, getToolIcon, LucideIconWrapper } from "./shared"
 import { useMemo } from "react"
 import { stripWorkspacePath } from "../../lib/pathUtils"
 import { AnimatedShinyText } from "../ui/animated-shiny-text"
@@ -256,9 +256,7 @@ export function ToolCallMessage({ message, isLoading = false, localPath }: Props
             if (isAgent) {
               return <UserRound className="size-4 text-muted-icon" />
             }
-            const Icon = getToolIcon(message.toolName)
-
-            return <Icon className="size-4 text-muted-icon" />
+            return <LucideIconWrapper icon={getToolIcon(message.toolName)} className="size-4 text-muted-icon" />
           })()}
         </div>
         <MetaLabel className="text-left transition-opacity duration-200 truncate">

@@ -96,6 +96,13 @@ export function getToolIcon(toolName: string): LucideIcon {
   return defaultToolIcon
 }
 
+// Stable wrapper for a dynamically-selected LucideIcon. Use this instead of
+// `const Icon = getX(...)` + `<Icon />` in render — the latter triggers the
+// react-hooks/static-components warning because the component type varies per call.
+export function LucideIconWrapper({ icon: Icon, className }: { icon: LucideIcon; className?: string }) {
+  return <Icon className={className} />
+}
+
 // Container for meta-style messages (system, tool, result)
 export function MetaRow({ children, className }: { children: ReactNode; className?: string }) {
   return (
