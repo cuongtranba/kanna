@@ -1,7 +1,7 @@
 # Claude PTY Driver — Design
 
 **Date:** 2026-05-14
-**Status:** Draft v13 — multi-account/`oauthPool` rotation restored via per-account isolated `$HOME`, awaiting user review and final codex pass
+**Status:** Draft v14 — twelfth codex adversarial pass applied (sandbox split into separate claude vs tool-subprocess profiles to resolve the auth-vs-deny contradiction; credential coordinator added for concurrent same-account refresh safety), awaiting user review
 **Author:** session-collaborative
 **Related code:** `src/server/agent.ts`, `src/server/terminal-manager.ts`, `src/server/harness-types.ts`, `src/server/kanna-mcp.ts`
 
@@ -238,21 +238,82 @@ Reuse the existing `oauthPool.acquire(chatId)` interface from the SDK driver:
 - macOS Keychain entries are user-scoped and would conflict across concurrent PTYs.
 - Per-account `$HOME` is the only clean isolation boundary.
 
-### Credential isolation under per-account HOME
+### Process model clarification (critical for sandbox correctness)
 
-The per-account HOME contains a real OAuth credential. Threats and mitigations:
+Three distinct sandbox scopes operate here:
+
+1. **Kanna server process.** Unsandboxed (or under whatever sandbox the user runs the Kanna binary in). Owns `oauthPool`, the kanna-mcp request router, the UDS socket, and is the parent of all PTY spawns and tool subprocesses.
+2. **`claude` PTY process** (and any descendants it spawns directly). Runs under the per-spawn `sandbox-exec` / `bwrap` profile.
+3. **Tool subprocesses** (e.g., the bash invocation produced by `mcp__kanna__bash`). Spawned by **Kanna**, not by claude. Receive their own per-tool sandbox profile derived from the chat's `readPathDeny` / `writePathDeny`. Critically, these are **not children of the claude process** because `kanna-mcp` runs inside Kanna server, not as a claude-launched subprocess. claude connects to `kanna-mcp` over the UDS configured by `--mcp-config`; the MCP server endpoint is the Kanna server.
+
+This means: claude's sandbox profile constrains what **claude itself** reads/writes for its own behavior (auth file, project `.claude/`, `.mcp.json`, slash-command files). It does **not** need to enforce credential deny against bash subprocesses, because those subprocesses do not run under claude's sandbox at all — they run under Kanna's separately-applied tool sandbox.
+
+This is the structural reason the credential-read deny does not contradict claude's own ability to read its credential file.
+
+### claude's own sandbox profile (per-spawn)
+
+claude must be able to read+write its own `.credentials.json` for OAuth, read project files for in-process settings, and connect to the UDS for MCP. The profile for the claude process itself:
+
+**Allow:**
+- `file-read*` `file-write*` on `<spawnHome>/.claude/.credentials.json` (auth — and only this one file inside `~/.claude/`).
+- `file-read*` on `<spawnHome>/.claude/` (settings.local.json, settings.json) — non-credential subset.
+- `file-read*` `file-write*` on the workspace `cwd` and each `additionalDirectories` entry. Plus glob-deny overlays for `readPathDeny` / `writePathDeny` patterns inside those roots (e.g., workspace `.env`).
+- `network-outbound` to Anthropic API hosts only (Kanna binds the host allowlist from a static list). UDS connection to `<runtimeDir>/.../kanna-mcp.sock`.
+- `process-fork` `process-exec` for self-respawn. Forbidden for arbitrary external binaries (no `/bin/sh` exec) — claude's built-in `Bash` is already removed via `--tools`, so denying `process-exec` for non-claude paths catches any residual.
+
+**Deny everything else**, including the broader `<spawnHome>/.claude/**` outside the explicit credentials/settings files, all of `readPathDeny`, all of `<runtimeDir>/accounts/**` except the spawn's own home, etc.
+
+Preflight sentinel **inside claude's sandbox** (separate from the existing "spawn sentinel" probe): boot a 200ms child of the sandbox that attempts to read `<spawnHome>/.claude/.credentials.json` (must succeed), a sibling account's HOME (must fail), and a `~/.ssh/id_rsa` (must fail). Spawn fails closed on any wrong outcome.
+
+### Tool-subprocess sandbox (per `mcp__kanna__bash` invocation)
+
+When `kanna-mcp` decides to run a bash command, it spawns a fresh subprocess from the Kanna server with **its own** sandbox profile, separate from claude's:
+
+- `file-read*` `file-write*` on workspace + `additionalDirectories`, minus glob-deny overlays for `readPathDeny` / `writePathDeny`.
+- **Deny everything under `<spawnHome>/.claude/**`** including the credentials file. The tool sandbox sees the per-account HOME as off-limits entirely. Bash cannot `cat <spawnHome>/.claude/.credentials.json` because the sandbox blocks it.
+- Deny `<runtimeDir>/accounts/**`.
+- Network: same Anthropic allowlist or fully disabled (configurable per chat).
+- No exec of binaries outside a curated allowlist (e.g. `/usr/bin/git`, `/usr/bin/node`, `/usr/bin/bun`).
+
+This sandbox is fresh per tool call and lives only for the lifetime of that subprocess. State changes (deny list edits, etc.) take effect immediately on next call.
+
+### Credential isolation under per-account HOME
 
 | Threat | Mitigation |
 |---|---|
-| `mcp__kanna__bash` reads `~/.claude/.credentials.json` | **Critical rule:** `readPathDeny` patterns starting with `~` resolve against the **spawned claude's `$HOME`**, not Kanna server's HOME. So `~/.claude/**` denies the spawn's per-account creds dir. Sandbox profile generator uses the same spawn-HOME resolution. |
-| `mcp__kanna__bash` reads via absolute path `<runtimeDir>/accounts/.../...` | `<runtimeDir>/accounts/**` added to `readPathDeny`. |
-| Account A's PTY reads Account B's credentials | Each account's HOME is mode `0700`. Sandbox profile (`sandbox-exec` macOS / `bwrap` Linux) restricts FS to `(workspace + additionalDirectories + spawnHome)`. Cross-account access at sibling paths is denied. |
-| Pool dir on disk | `<runtimeDir>/accounts/` is `0700` owned by Kanna's OS user; `.credentials.json` is `0600`; tokens in `oauthPool` held in-memory (or in Kanna's encrypted settings store), not committed to plain files unless required for spawn. |
+| `mcp__kanna__bash` reads `<spawnHome>/.claude/.credentials.json` | Tool-subprocess sandbox denies it. Bash never runs under claude's profile. Also blocked at the policy layer: `readPathDeny` `~/...` resolves to spawn HOME when evaluated for a tool call bound to that PTY. |
+| `mcp__kanna__bash` reads via absolute path `<runtimeDir>/accounts/.../...` | Same tool sandbox + `<runtimeDir>/accounts/**` in `readPathDeny`. |
+| Tool subprocess inherits creds via FD | Kanna explicitly closes all FDs before exec; bash starts with only stdin/stdout/stderr; no credential FD is ever shared with tool subprocesses. |
+| Account A's PTY reads Account B's HOME | claude's sandbox restricts FS to `(workspace + additionalDirectories + <spawnHome>)`. Sibling account dirs are outside the FS allowlist. |
+| `Read`/`Glob`/`Grep` built-ins read creds | Disabled in `--tools "mcp__kanna__*"`. `mcp__kanna__read` enforces `readPathDeny` per call. |
+| Pool dir on disk | `<runtimeDir>/accounts/` is `0700` owned by Kanna's OS user; each `<accountId>/` is `0700`; `.credentials.json` is `0600`; tokens in `oauthPool` held in memory or encrypted at rest. |
 | Stale account dirs across reboots | Reaper sweep on Kanna startup: dirs whose `accountId` is no longer in `oauthPool` deleted; dirs unbound for >30 days deleted. |
+
+### Credential coordinator (concurrent refresh safety)
+
+Same account on two concurrent PTYs is a real race: both claude processes can attempt to refresh and write `.credentials.json`. Vanilla claude already handles two terminal windows on the same machine, but Kanna additionally syncs back to `oauthPool` — without coordination, the pool can persist a stale or partial token, or watcher events can be coalesced out of order.
+
+**Coordinator (`account-home.ts`):**
+
+1. **Single shared HOME per account.** All concurrent PTYs for the same `accountId` use one HOME dir — never per-PTY copies for the same account, because claude expects a stable HOME and we cannot diverge auth state without breaking subscription billing.
+2. **Atomic write-rename.** Both claude (on its own refresh) and Kanna (when seeding the file pre-spawn) write via temp file in the same directory followed by `rename`. POSIX guarantees atomic replacement.
+3. **Versioned credential.** Kanna prepends a `_version: { mtime, seq, hash }` header to the `.credentials.json` file content. (If claude's schema rejects extra fields, the version is held in a sidecar `<spawnHome>/.claude/.credentials.version.json` with mode `0600` written atomically alongside, paired by hash of the credential file content.)
+4. **Per-account refresh lock.** Kanna keeps an in-memory `accountId → Mutex` map. The lock is acquired:
+   - When seeding `.credentials.json` from `oauthPool` before spawn.
+   - When the `fs.watch` handler sees a write event and is about to read+parse+update `oauthPool`.
+   The lock is held only across read+parse+validate+pool-update, never across PTY operations.
+5. **fs.watch handler rules.**
+   - On `change` event: acquire lock, stat file, if `mtime <= lastSeen.mtime` → skip (coalesced re-fire we already processed). Else read+parse. If parse fails → log + retry once after 50ms; on second failure, mark this account as `credential_corrupted` in pool and surface UI error.
+   - Compare-and-swap: pool update only succeeds if `pool.current[accountId].mtime === lastSeen.mtime`. If a newer mtime is in the pool already (e.g., Kanna wrote it just before claude's refresh), reconcile by taking the file-on-disk version as authoritative (claude is the OAuth source of truth) and overwriting the pool entry.
+   - On `rename` event (atomic replace): treat as a `change`. fs.watch on the directory is preferred to fs.watch on the file to survive the rename.
+6. **Readback before spawn.** Before each PTY spawn, Kanna acquires the lock and reads the on-disk credential file. If newer than the pool, sync pool. If absent or invalid, seed from pool. Then release the lock and proceed.
+7. **Process-exit readback.** On COOLING / PTY exit, do one final read-and-sync under the lock so any in-progress refresh isn't lost.
+8. **Coalesced-event safeguard.** If `fs.watch` reports an event but file content hash equals the last-known hash, ignore. If multiple events fire within 50ms, debounce to one.
+9. **Tests** (`account-home.test.ts`): two concurrent same-account PTYs racing refresh → final pool state matches on-disk state, no stale token; missed `change` event (simulated by suppressing one fs.watch fire) → next spawn's readback recovers; coalesced events → exactly one pool update; corrupt credential file → recoverable to pool-known-good; rename atomicity → no partial-read window observable by claude.
 
 ### Concurrent multi-account safety
 
-Concurrent PTYs for different accounts run with independent HOMEs simultaneously. No race on the credentials file. Same account on two concurrent PTYs is allowed (claude tolerates this); they share the same HOME and the same `.credentials.json`, with claude's own OAuth refresh logic handling concurrent renewal (it always has — multiple terminal windows on one machine is a supported pattern).
+Concurrent PTYs for **different** accounts run with independent HOMEs simultaneously. No race on the credentials file. Same-account concurrency handled by the credential coordinator above.
 
 ### Lifecycle
 
@@ -568,6 +629,15 @@ Result: `cat ~/.claude/.credentials.json`, `rg . ~/.ssh`, `cat $(echo ~/.ssh/id_
 #### Sandboxing the spawn (defense-in-depth on supported OS)
 
 OS-level sandboxing is **defense-in-depth**, not the primary safety gate. The primary gate is the `--tools "mcp__kanna__*"` allowlist plus per-call `readPathDeny` enforcement inside `mcp__kanna__read/glob/grep`. The sandbox catches: a CLI version that exposes a tool we forgot to disable, third-party MCP servers (when allowlisted), or a bug in `mcp__kanna__*` mis-handling a path. Kanna still treats it as a hard precondition on supported OSes for that defense-in-depth layer.
+
+Two profiles, two sandboxes (see "Process model clarification" for why both exist):
+
+| Profile | Applied to | Read allow | Read deny |
+|---|---|---|---|
+| **claude profile** | `claude` PTY process | Workspace + `additionalDirectories` (minus glob-deny overlays); `<spawnHome>/.claude/.credentials.json`; `<spawnHome>/.claude/settings*.json`; UDS socket. | Everything else, including the rest of `<spawnHome>/.claude/**`, every `readPathDeny` entry, `<runtimeDir>/accounts/**` (except own HOME), sibling account HOMEs. |
+| **tool-subprocess profile** | Each `mcp__kanna__bash` (or any kanna-mcp invocation that runs a child process) | Workspace + `additionalDirectories` (minus glob-deny overlays). | Everything else, **including `<spawnHome>/.claude/**` entirely** (no credential exception), all of `readPathDeny`, `<runtimeDir>/accounts/**`. Executable allowlist restricts which binaries can be exec'd. |
+
+The two profiles are generated together at PTY spawn and re-generated whenever sandbox-affecting state changes (already covered in "Mode transitions fail closed").
 
 **Implementation:**
 
