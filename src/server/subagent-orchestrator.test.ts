@@ -673,7 +673,6 @@ describe("SubagentOrchestrator", () => {
     const chat = await store.createChat(project.id)
 
     let signalCaptured: AbortSignal | null = null
-    let rejectCaptured: ((err: Error) => void) | null = null
 
     const orchestrator = new SubagentOrchestrator({
       store,
@@ -688,7 +687,6 @@ describe("SubagentOrchestrator", () => {
           authReady: async () => true,
           start: () =>
             new Promise<{ text: string }>((_resolve, reject) => {
-              rejectCaptured = reject
               abortSignal.addEventListener("abort", () => reject(new Error("USER_CANCELLED")), { once: true })
             }),
         }
@@ -710,7 +708,7 @@ describe("SubagentOrchestrator", () => {
 
     const run = Object.values(store.getSubagentRuns(chat.id))[0]
     orchestrator.cancelRun(chat.id, run.runId)
-    expect(signalCaptured?.aborted).toBe(true)
+    expect((signalCaptured as AbortSignal | null)?.aborted).toBe(true)
 
     // Wait for the failed event
     const cancelDeadline = Date.now() + 5000
