@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { EventEmitter } from "node:events"
 import { PassThrough } from "node:stream"
-import { CodexAppServerManager } from "./codex-app-server"
+import { CodexAppServerManager, type CodexSessionScope } from "./codex-app-server"
 import { BackgroundTaskRegistry } from "./background-tasks"
 
 class FakeCodexProcess extends EventEmitter {
@@ -1938,8 +1938,14 @@ describe("CodexAppServerManager — scope-keyed sessions", () => {
 
   test("startSession with empty sub: scope throws", async () => {
     const manager = new CodexAppServerManager({ spawnProcess: makeFakeSpawn() })
-    await expect(
-      manager.startSession({ chatId: "c1", scope: "sub:" as never, cwd: "/tmp", model: "gpt-5", sessionToken: null })
-    ).rejects.toThrow(/empty sub-id/)
+    const badScope = "sub:" as unknown as CodexSessionScope
+    let err: unknown = null
+    try {
+      await manager.startSession({ chatId: "c1", scope: badScope, cwd: "/tmp", model: "gpt-5", sessionToken: null })
+    } catch (e) {
+      err = e
+    }
+    expect(err).toBeInstanceOf(Error)
+    expect((err as Error).message).toMatch(/empty sub-id/)
   })
 })
