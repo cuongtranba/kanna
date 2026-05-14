@@ -62,8 +62,24 @@ interface RunState {
   parentRunId: string | null
   childRunIds: Set<string>
   abortController: AbortController
-  timeout: PausableTimeout
+  timeout: PausableTimeout | null  // null while still pending acquire
   cancelled: boolean
+  /**
+   * True between the run being registered (immediately after the
+   * subagent_run_started event is appended) and the moment acquire()
+   * returns successfully. While true, the run owns no permit and the
+   * cancel path must reject the waiter rather than aborting the
+   * provider stream (which hasn't started yet).
+   */
+  pendingAcquire: boolean
+  /**
+   * Set when the run enters the `waiters` queue inside acquire().
+   * cancelRun fires this to unblock the queued Promise. Cleared once
+   * the run has acquired a permit. If non-null, cancelRun also
+   * removes the corresponding entry from `this.waiters` so the
+   * permit is not double-allocated when release() shifts it.
+   */
+  permitWaiter: { resolve: () => void; reject: (e: Error) => void } | null
 }
 
 private readonly runStateByRunId = new Map<string, RunState>()
@@ -79,15 +95,23 @@ private readonly runStateByRunId = new Map<string, RunState>()
   must accept `cancelRun` even while the run is still waiting for a
   permit. The `RunState` is registered with a `pendingAcquire: true`
   flag and a `permitWaiterReject` slot wired into `acquire()`.
-- Modify `acquire()` to register a per-call `reject` handle on the
-  `RunState` so `cancelRun` can fire it. When a queued run is
-  cancelled, the `acquire()` Promise rejects with
-  `new Error("USER_CANCELLED")`, the existing catch in `spawnRun`
-  routes it through `failRun` with the new `USER_CANCELLED` code, and
-  the permit is never acquired (so no `releaseSlot` mismatch). The
-  `acquire()` reject path is the **only** way `subagent_run_started`
-  events for cancelled-while-queued runs become `subagent_run_failed`
-  events.
+- Extend `acquire(chatId, runId)` to accept the `runId` (was
+  previously only `chatId`). Inside `acquire`, before pushing onto
+  `this.waiters`, write the `{ resolve, reject }` pair onto
+  `runState.permitWaiter`. Push the waiter as today. When `acquire()`
+  resolves successfully (either fast-path or via shift), clear
+  `permitWaiter` and `pendingAcquire`. When it rejects (cancel /
+  cancelChat), `permitWaiter` is already cleared by the cancel path
+  before the reject fires.
+- `cancelRun` for a queued run does TWO things: splices the waiter
+  out of `this.waiters` (so future `release()` calls don't shift a
+  zombie entry) AND calls `reject(new Error("USER_CANCELLED"))`.
+  Order matters: splice first, then reject, so the rejection cannot
+  race against another `release()` mistakenly handing it a permit.
+- The existing catch in `spawnRun` routes the rejection through
+  `failRun("USER_CANCELLED", ...)`, the permit is never acquired (so
+  no `releaseSlot` mismatch), and the run state map entry is removed
+  via the existing terminal-cleanup path.
 - If `args.parentRunId != null`, look up the parent's `RunState` and
   add this `runId` to its `childRunIds`.
 - Plumb `runState.abortController.signal` into `startProviderRun` via
@@ -116,8 +140,15 @@ cancelRun(chatId: string, runId: string): void {
   for (const childRunId of [...state.childRunIds]) {
     this.cancelRun(chatId, childRunId)
   }
-  if (state.pendingAcquire && state.permitWaiterReject) {
-    state.permitWaiterReject(new Error("USER_CANCELLED"))
+  if (state.pendingAcquire && state.permitWaiter) {
+    // Queued run: splice waiter out of this.waiters first so a
+    // concurrent release() cannot grant us a permit we will never
+    // use, then reject the Promise.
+    const idx = this.waiters.findIndex((w) => w.resolve === state.permitWaiter!.resolve)
+    if (idx >= 0) this.waiters.splice(idx, 1)
+    const reject = state.permitWaiter.reject
+    state.permitWaiter = null
+    reject(new Error("USER_CANCELLED"))
   } else {
     state.abortController.abort()
   }
@@ -159,6 +190,17 @@ already-acquired runs to finish on their own.
   rather than rejecting it. To prevent a cancelled run leaking into
   the completed path, the orchestrator's post-`Promise.race` block
   re-checks `runState.cancelled` (see `spawnRun` changes above).
+- Extend the existing `onRunTerminal` handler that
+  `AgentCoordinator` wires into the orchestrator (added in PR #93)
+  so it ALSO calls `this.emitStateChange(chatId)` after rejecting
+  pending resolvers. This is the correct sync point because
+  `onRunTerminal` runs synchronously immediately after `failRun`
+  appends the `subagent_run_failed` event — so the emit happens
+  after the store has the new state, not before. It also covers
+  the multi-subagent fan-out case in `runMentionsForUserMessage`
+  where the current top-level `emitStateChange` waits for
+  `Promise.all` to finish.
+
 - New public method:
 
   ```ts
@@ -166,21 +208,11 @@ already-acquired runs to finish on their own.
     command: Extract<ClientCommand, { type: "chat.cancelSubagentRun" }>,
   ) {
     this.subagentOrchestrator.cancelRun(command.chatId, command.runId)
-    // failRun already calls onRunTerminal → rejectPendingResolversForRun,
-    // but state-change broadcasts in the multi-subagent fan-out path
-    // wait for Promise.all to finish. Emit immediately so the UI
-    // reflects the terminal status without waiting on siblings.
-    this.emitStateChange(command.chatId)
   }
   ```
 
-  `cancelRun` is synchronous and idempotent. The actual event append
-  + resolver rejection happens via the orchestrator's existing
-  `failRun` and `onRunTerminal` plumbing; the explicit
-  `emitStateChange` covers the case where cancellation happens during
-  the `Promise.all` over multiple subagent runs in
-  `runMentionsForUserMessage`, which only emits after the whole
-  batch resolves.
+  `cancelRun` is synchronous and idempotent. The state-change
+  broadcast happens via the extended `onRunTerminal` handler above.
 
 #### `src/server/ws-router.ts`
 
@@ -245,7 +277,7 @@ User clicks X on SubagentMessage(run-A in chat-1)
 | `command.chatId` does not match `state.chatId` | No-op. Sanity guard against accidental cross-chat cancel. |
 | Cancel during `pendingTool` wait | Abort fires; pending tool Promise rejects via existing `onRunTerminal` → `rejectPendingResolversForRun`. |
 | Cancel of grandparent that has children already completed | Children whose state was removed are not in the parent's `childRunIds` anymore — cascade is naturally bounded. |
-| Cancel during `acquire()` permit wait | `cancelRun` cannot reach `runStateByRunId` entry (not yet created). Use existing `cancelChat`-style permit-waiter rejection: not applicable since the user is cancelling a specific run that hasn't acquired yet. Cancel becomes a no-op until acquire completes. Acceptable — the run is queued, not actually running. |
+| Cancel during `acquire()` permit wait | `RunState` is registered BEFORE `acquire()` is called (see `spawnRun` changes), so `cancelRun` can find the entry. The cancel path splices the waiter out of `this.waiters` and rejects the queued Promise with `Error("USER_CANCELLED")`, which the existing `spawnRun` catch block routes through `failRun("USER_CANCELLED", ...)`. The permit is never acquired, so no `releaseSlot` mismatch. |
 
 ## Provider-specific abort semantics
 
@@ -299,11 +331,16 @@ as `USER_CANCELLED` because `state.cancelled` is already true.
 
 - New `SubagentErrorCode` value: `SubagentErrorCard.badgeText`
   (`src/client/components/messages/SubagentErrorCard.tsx`) currently
-  has no default case and explicitly handles each code, so adding a
-  new code WITHOUT a matching `badgeText` entry would render an
-  undefined badge. The plan must add a `USER_CANCELLED` case to
-  `badgeText` (and any other per-code copy switches) — confirmed
-  required, not optional. Copy: "Cancelled by you".
+  has no default case and explicitly handles each code. Two changes
+  are required, BOTH in this PR:
+  1. Add an explicit `USER_CANCELLED` case to `badgeText` and any
+     other per-code copy switches in `SubagentErrorCard`. Copy:
+     "Cancelled by you".
+  2. Add a `default` arm to `badgeText` returning a generic string
+     ("Error") so a future new code added without a matching switch
+     entry no longer renders an undefined badge. This is a small
+     defense-in-depth fix attached to this feature because it touches
+     the same surface; future code additions remain safe.
 - New event payload: none — reuses existing
   `subagent_run_failed` shape.
 - No `STORE_VERSION` bump required.
