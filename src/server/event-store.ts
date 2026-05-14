@@ -26,6 +26,7 @@ import { resolveLocalPath } from "./paths"
 import type { CloudflareTunnelEvent } from "./cloudflare-tunnel/events"
 import type { PushEvent, PushEventStore } from "./push/events"
 import { ACTIVE_SESSION_IDLE_GAP_MS } from "./read-models"
+import { capTranscriptEntry } from "./subagent-entry-cap"
 
 const COMPACTION_THRESHOLD_BYTES = 2 * 1024 * 1024
 const STALE_EMPTY_CHAT_MAX_AGE_MS = 30 * 60 * 1000
@@ -1529,6 +1530,21 @@ export class EventStore implements PushEventStore {
   }
 
   async appendSubagentEvent(event: SubagentRunEvent) {
+    if (event.type === "subagent_entry_appended" && event.entry.kind === "tool_result") {
+      const chat = this.state.chatsById.get(event.chatId)
+      if (chat) {
+        event = {
+          ...event,
+          entry: await capTranscriptEntry({
+            entry: event.entry,
+            chatId: event.chatId,
+            runId: event.runId,
+            projectId: chat.projectId,
+            kannaRoot: this.dataDir,
+          }),
+        }
+      }
+    }
     await this.append(this.turnsLogPath, event)
   }
 

@@ -979,6 +979,42 @@ describe("EventStore subagent runs", () => {
     expect(run.pendingTool?.toolUseId).toBe("tool-3")
     expect(run.pendingTool?.toolKind).toBe("ask_user_question")
   })
+
+  test("subagent_entry_appended caps tool_result over threshold", async () => {
+    const dataDir = await createTempDataDir()
+    const store = new EventStore(dataDir)
+    await store.initialize()
+    const project = await store.openProject("/tmp/p-cap")
+    const chat = await store.createChat(project.id)
+    const runId = "r-cap"
+    const base = chat.createdAt + 1
+    await store.appendSubagentEvent({
+      v: 3, type: "subagent_run_started", timestamp: base,
+      chatId: chat.id, runId, subagentId: "s1", subagentName: "alpha",
+      provider: "claude", model: "claude-opus-4-7",
+      parentUserMessageId: "u1", parentRunId: null, depth: 0,
+    })
+    const big = "z".repeat(60_000)
+    await store.appendSubagentEvent({
+      v: 3, type: "subagent_entry_appended", timestamp: base + 1,
+      chatId: chat.id, runId,
+      entry: {
+        kind: "tool_result",
+        _id: "e1",
+        createdAt: base + 1,
+        toolId: "tool-big",
+        content: big,
+      } as TranscriptEntry,
+    })
+    const run = store.getSubagentRuns(chat.id)[runId]
+    const last = run.entries[run.entries.length - 1] as { persisted?: { filePath: string; originalSize: number; truncated: true }; content: string }
+    expect(last.persisted).toBeDefined()
+    expect(last.persisted!.originalSize).toBe(big.length)
+    expect(last.persisted!.truncated).toBe(true)
+    expect(last.content).toContain("<persisted-output>")
+    const onDisk = await Bun.file(last.persisted!.filePath).text()
+    expect(onDisk).toBe(big)
+  })
 })
 
 describe("EventStore auto-continue schedules", () => {
