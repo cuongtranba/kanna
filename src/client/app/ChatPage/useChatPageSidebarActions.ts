@@ -45,6 +45,7 @@ export function useChatPageSidebarActions({
   const lastProjectGitRefreshProjectIdRef = useRef<string | null>(null)
   const activeChatIdRef = useRef<string | null>(state.activeChatId)
   const projectPathRef = useRef<string | null>(state.runtime?.localPath ?? state.navbarLocalPath ?? null)
+  const { handleOpenLocalLink, handleCopyPath, handleOpenExternalPath } = state
 
   useEffect(() => {
     activeChatIdRef.current = state.activeChatId
@@ -86,17 +87,17 @@ export function useChatPageSidebarActions({
   const handleOpenDiffFile = useCallback((filePath: string) => {
     const projectPath = projectPathRef.current
     const resolvedPath = resolveDiffFilePath(projectPath, filePath)
-    void state.handleOpenLocalLink({ path: resolvedPath }, "open_editor")
-  }, [state.handleOpenLocalLink])
+    void handleOpenLocalLink({ path: resolvedPath }, "open_editor")
+  }, [handleOpenLocalLink])
 
   const handleCopyDiffFilePath = useCallback((filePath: string) => {
     const projectPath = projectPathRef.current
-    void state.handleCopyPath(resolveDiffFilePath(projectPath, filePath))
-  }, [state.handleCopyPath])
+    void handleCopyPath(resolveDiffFilePath(projectPath, filePath))
+  }, [handleCopyPath])
 
   const handleCopyDiffRelativePath = useCallback((filePath: string) => {
-    void state.handleCopyPath(filePath)
-  }, [state.handleCopyPath])
+    void handleCopyPath(filePath)
+  }, [handleCopyPath])
 
   const handleLoadDiffPatch = useCallback(async (filePath: string) => {
     if (!projectId) {
@@ -201,8 +202,8 @@ export function useChatPageSidebarActions({
   }, [dialog, state.socket])
 
   const handleOpenDiffInFinder = useCallback((filePath: string) => {
-    void state.handleOpenExternalPath("open_finder", filePath)
-  }, [state.handleOpenExternalPath])
+    void handleOpenExternalPath("open_finder", filePath)
+  }, [handleOpenExternalPath])
 
   const handleCommitDiffs = useCallback(async (args: { paths: string[]; summary: string; description: string; mode: DiffCommitMode }) => {
     const chatId = activeChatIdRef.current
