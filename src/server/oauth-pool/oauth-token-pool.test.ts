@@ -174,3 +174,96 @@ describe("OAuthTokenPool.earliestUnlimit", () => {
     expect(pool.earliestUnlimit()).toBe(6000)
   })
 })
+
+describe("OAuthTokenPool reservations (concurrent sessions)", () => {
+  test("pickActive(chatId) skips tokens reserved by another chat", () => {
+    let store = [tok("a"), tok("b")]
+    const pool = new OAuthTokenPool(
+      () => store,
+      (id, patch) => { store = store.map((t) => t.id === id ? { ...t, ...patch } : t) },
+      () => 1000,
+    )
+    const first = pool.pickActive("chat-1")
+    expect(first?.id).toBe("a")
+    const second = pool.pickActive("chat-2")
+    expect(second?.id).toBe("b")
+    const third = pool.pickActive("chat-3")
+    expect(third).toBe(null)
+  })
+
+  test("pickActive(chatId) returns the same token if the same chat re-asks", () => {
+    let store = [tok("a"), tok("b")]
+    const pool = new OAuthTokenPool(
+      () => store,
+      (id, patch) => { store = store.map((t) => t.id === id ? { ...t, ...patch } : t) },
+      () => 1000,
+    )
+    expect(pool.pickActive("chat-1")?.id).toBe("a")
+    expect(pool.pickActive("chat-1")?.id).toBe("a")
+  })
+
+  test("release(chatId) frees the reservation for re-use", () => {
+    let store = [tok("a"), tok("b")]
+    const pool = new OAuthTokenPool(
+      () => store,
+      (id, patch) => { store = store.map((t) => t.id === id ? { ...t, ...patch } : t) },
+      () => 1000,
+    )
+    pool.pickActive("chat-1")
+    pool.pickActive("chat-2")
+    expect(pool.pickActive("chat-3")).toBe(null)
+    pool.release("chat-1")
+    expect(pool.pickActive("chat-3")?.id).toBe("a")
+  })
+
+  test("markLimited drops the reservation on the limited token", () => {
+    let store = [tok("a"), tok("b")]
+    const pool = new OAuthTokenPool(
+      () => store,
+      (id, patch) => { store = store.map((t) => t.id === id ? { ...t, ...patch } : t) },
+      () => 1000,
+    )
+    pool.pickActive("chat-1") // reserves a
+    pool.markLimited("a", 9999) // a now limited; reservation must drop
+    // chat-2 should still get b (a is limited, not reservation-blocking)
+    expect(pool.pickActive("chat-2")?.id).toBe("b")
+    // After b is also limited, chat-1 has nothing left.
+    pool.markLimited("b", 9999)
+    expect(pool.pickActive("chat-1")).toBe(null)
+  })
+
+  test("concurrent rate-limit hit on different tokens: each chat keeps own picks; no double-rotate", () => {
+    let store = [tok("a"), tok("b"), tok("c")]
+    const pool = new OAuthTokenPool(
+      () => store,
+      (id, patch) => { store = store.map((t) => t.id === id ? { ...t, ...patch } : t) },
+      () => 1000,
+    )
+    // Initial pick: chat-1=a, chat-2=b, c idle.
+    expect(pool.pickActive("chat-1")?.id).toBe("a")
+    expect(pool.pickActive("chat-2")?.id).toBe("b")
+    // Both hit rate-limit at the same time on their own token.
+    pool.markLimited("a", 9999)
+    pool.markLimited("b", 9999)
+    // Each tries to rotate. Reservations prevent both from claiming c.
+    const chat1Rot = pool.pickActive("chat-1")
+    const chat2Rot = pool.pickActive("chat-2")
+    const ids = [chat1Rot?.id, chat2Rot?.id].filter(Boolean)
+    expect(ids).toContain("c")
+    expect(ids.filter((id) => id === "c")).toHaveLength(1)
+  })
+
+  test("pickActive without chatId never claims a reservation", () => {
+    let store = [tok("a"), tok("b")]
+    const pool = new OAuthTokenPool(
+      () => store,
+      (id, patch) => { store = store.map((t) => t.id === id ? { ...t, ...patch } : t) },
+      () => 1000,
+    )
+    const first = pool.pickActive()
+    expect(first?.id).toBe("a")
+    // No reservation taken; another caller can still get a.
+    const second = pool.pickActive("chat-x")
+    expect(second?.id).toBe("a")
+  })
+})

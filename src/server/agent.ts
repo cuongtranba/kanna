@@ -1084,6 +1084,7 @@ export class AgentCoordinator {
       claudeSession.session.close()
       this.claudeSessions.delete(chatId)
     }
+    this.oauthPool?.release(chatId)
     this.autoResumeByChat.delete(chatId)
     this.emitStateChange(chatId)
   }
@@ -1457,7 +1458,7 @@ export class AgentCoordinator {
         this.claudeSessions.delete(args.chatId)
       }
 
-      const picked = this.oauthPool?.pickActive() ?? null
+      const picked = this.oauthPool?.pickActive(args.chatId) ?? null
       if (picked) this.oauthPool!.markUsed(picked.id)
       const started = await this.startClaudeSessionFn({
         projectId: args.projectId,
@@ -1699,6 +1700,10 @@ export class AgentCoordinator {
         return true
       },
       pickOauthToken: () => {
+        // Subagent runs aren't currently wired into the reservation lifecycle
+        // (no release on subagent completion), so pick without a reservation
+        // to avoid leaking. The chat-level rotation race this guards against
+        // is between top-level chat sessions, not subagent ephemerals.
         const picked = this.oauthPool?.pickActive() ?? null
         if (picked) this.oauthPool!.markUsed(picked.id)
         return picked?.token ?? null
@@ -2108,7 +2113,7 @@ export class AgentCoordinator {
     if (this.oauthPool && session?.activeTokenId) {
       this.oauthPool.markLimited(session.activeTokenId, detection.resetAt)
     }
-    const rotationTarget = this.oauthPool?.pickActive() ?? null
+    const rotationTarget = this.oauthPool?.pickActive(chatId) ?? null
     const canRotate = rotationTarget !== null
       && (!session?.activeTokenId || rotationTarget.id !== session.activeTokenId)
 
