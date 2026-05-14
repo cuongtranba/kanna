@@ -892,6 +892,93 @@ describe("EventStore subagent runs", () => {
     await reloaded.initialize()
     expect(reloaded.getSubagentRuns(chatId)[runId].usage?.outputTokens).toBe(9)
   })
+
+  test("subagent_tool_pending sets pendingTool on the run", async () => {
+    const dataDir = await createTempDataDir()
+    const store = new EventStore(dataDir)
+    await store.initialize()
+    const project = await store.openProject("/tmp/p-tool-pending")
+    const chat = await store.createChat(project.id)
+    const runId = "r-pending"
+    const base = chat.createdAt + 1
+    await store.appendSubagentEvent({
+      v: 3, type: "subagent_run_started", timestamp: base,
+      chatId: chat.id, runId, subagentId: "s1", subagentName: "alpha",
+      provider: "claude", model: "claude-opus-4-7",
+      parentUserMessageId: "u1", parentRunId: null, depth: 0,
+    })
+    await store.appendSubagentEvent({
+      v: 3, type: "subagent_tool_pending", timestamp: base + 5,
+      chatId: chat.id, runId, toolUseId: "tool-1",
+      toolKind: "ask_user_question",
+      input: { questions: [{ id: "q1", question: "ok?" }] },
+    })
+    const run = store.getSubagentRuns(chat.id)[runId]
+    expect(run.pendingTool).toEqual({
+      toolUseId: "tool-1",
+      toolKind: "ask_user_question",
+      input: { questions: [{ id: "q1", question: "ok?" }] },
+      requestedAt: base + 5,
+    })
+  })
+
+  test("subagent_tool_resolved clears pendingTool and appends synthetic tool_result entry", async () => {
+    const dataDir = await createTempDataDir()
+    const store = new EventStore(dataDir)
+    await store.initialize()
+    const project = await store.openProject("/tmp/p-tool-resolved")
+    const chat = await store.createChat(project.id)
+    const runId = "r-resolved"
+    const base = chat.createdAt + 1
+    await store.appendSubagentEvent({
+      v: 3, type: "subagent_run_started", timestamp: base,
+      chatId: chat.id, runId, subagentId: "s1", subagentName: "alpha",
+      provider: "claude", model: "claude-opus-4-7",
+      parentUserMessageId: "u1", parentRunId: null, depth: 0,
+    })
+    await store.appendSubagentEvent({
+      v: 3, type: "subagent_tool_pending", timestamp: base + 5,
+      chatId: chat.id, runId, toolUseId: "tool-2",
+      toolKind: "exit_plan_mode", input: {},
+    })
+    await store.appendSubagentEvent({
+      v: 3, type: "subagent_tool_resolved", timestamp: base + 10,
+      chatId: chat.id, runId, toolUseId: "tool-2",
+      result: { confirmed: true }, resolution: "user",
+    })
+    const run = store.getSubagentRuns(chat.id)[runId]
+    expect(run.pendingTool).toBeNull()
+    const last = run.entries[run.entries.length - 1]
+    expect(last.kind).toBe("tool_result")
+    expect((last as { toolId: string }).toolId).toBe("tool-2")
+    expect((last as { content: unknown }).content).toEqual({ confirmed: true })
+  })
+
+  test("subagent_tool_pending and resolved survive replay", async () => {
+    const dataDir = await createTempDataDir()
+    const store = new EventStore(dataDir)
+    await store.initialize()
+    const project = await store.openProject("/tmp/p-tool-replay")
+    const chat = await store.createChat(project.id)
+    const runId = "r-replay"
+    const base = chat.createdAt + 1
+    await store.appendSubagentEvent({
+      v: 3, type: "subagent_run_started", timestamp: base,
+      chatId: chat.id, runId, subagentId: "s1", subagentName: "alpha",
+      provider: "claude", model: "claude-opus-4-7",
+      parentUserMessageId: "u1", parentRunId: null, depth: 0,
+    })
+    await store.appendSubagentEvent({
+      v: 3, type: "subagent_tool_pending", timestamp: base + 5,
+      chatId: chat.id, runId, toolUseId: "tool-3",
+      toolKind: "ask_user_question", input: { questions: [] },
+    })
+    const reloaded = new EventStore(dataDir)
+    await reloaded.initialize()
+    const run = reloaded.getSubagentRuns(chat.id)[runId]
+    expect(run.pendingTool?.toolUseId).toBe("tool-3")
+    expect(run.pendingTool?.toolKind).toBe("ask_user_question")
+  })
 })
 
 describe("EventStore auto-continue schedules", () => {

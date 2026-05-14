@@ -887,6 +887,33 @@ export class EventStore implements PushEventStore {
         run.finishedAt = e.timestamp
         break
       }
+      case "subagent_tool_pending": {
+        const map = this.state.subagentRunsByChatId.get(e.chatId)
+        const run = map?.get(e.runId)
+        if (!run) break
+        run.pendingTool = {
+          toolUseId: e.toolUseId,
+          toolKind: e.toolKind,
+          input: e.input,
+          requestedAt: e.timestamp,
+        }
+        break
+      }
+      case "subagent_tool_resolved": {
+        const map = this.state.subagentRunsByChatId.get(e.chatId)
+        const run = map?.get(e.runId)
+        if (!run) break
+        run.pendingTool = null
+        const syntheticEntry: TranscriptEntry = {
+          kind: "tool_result",
+          _id: `${e.runId}:${e.toolUseId}:resolved`,
+          createdAt: e.timestamp,
+          toolId: e.toolUseId,
+          content: e.result,
+        }
+        run.entries.push(syntheticEntry)
+        break
+      }
     }
   }
 
