@@ -46,6 +46,7 @@ import { OAuthTokenPool } from "./oauth-pool/oauth-token-pool"
 import { parseMentions, type ParsedMention } from "./mention-parser"
 import { SubagentOrchestrator, type ProviderRunStart } from "./subagent-orchestrator"
 import { buildSubagentProviderRun } from "./subagent-provider-run"
+import type { ToolCallbackService } from "./tool-callback"
 
 export function resolveSpawnPaths(
   chat: Pick<ChatRecord, "id" | "stackBindings">,
@@ -179,6 +180,8 @@ interface AgentCoordinatorArgs {
   throwOnClaudeSessionStart?: boolean
   backgroundTasks?: BackgroundTaskRegistry
   oauthPool?: OAuthTokenPool
+  /** Populated on boot; will be consumed by canUseTool in Task 11. */
+  toolCallback?: ToolCallbackService
 }
 
 interface SendToStartingProfile {

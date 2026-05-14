@@ -243,3 +243,27 @@ export function createToolCallbackService(opts: ToolCallbackServiceArgs): ToolCa
 
   return svc
 }
+
+/**
+ * Creates a ToolCallbackService and immediately calls recoverOnStartup()
+ * to fail-close any pending tool requests left over from a previous server
+ * run.  KANNA_SERVER_SECRET should be set in the environment for stable
+ * HMAC ids within a process lifetime; if unset, a fresh random UUID is used
+ * (cross-restart idempotency is not required because recoverOnStartup()
+ * already closes all pending records).
+ */
+export async function initToolCallbackOnBoot(args: {
+  store: EventStore
+  serverSecret: string
+  now?: () => number
+  timeoutMs?: number
+}): Promise<ToolCallbackService> {
+  const svc = createToolCallbackService({
+    store: args.store,
+    serverSecret: args.serverSecret,
+    now: args.now ?? (() => Date.now()),
+    timeoutMs: args.timeoutMs ?? 600_000,
+  })
+  await svc.recoverOnStartup()
+  return svc
+}
