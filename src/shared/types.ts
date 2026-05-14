@@ -1,3 +1,6 @@
+import type { ToolRequestDecision, ToolRequestStatus } from "./permission-policy"
+export type { ToolRequestDecision, ToolRequestStatus }
+
 export const STORE_VERSION = 3 as const
 export const PROTOCOL_VERSION = 1 as const
 
@@ -1132,6 +1135,8 @@ export type TranscriptEntry =
   | ContextClearedEntry
   | InterruptedEntry
   | AutoContinuePromptEntry
+  | PendingToolRequestEntry
+  | ToolRequestResolvedEntry
 
 export interface HydratedToolCallBase<TKind extends string, TInput, TResult> {
   id: string
@@ -1424,6 +1429,18 @@ export interface AutoContinueSchedule {
 export interface AutoContinuePromptEntry extends TranscriptEntryBase {
   kind: "auto_continue_prompt"
   scheduleId: string
+}
+
+export interface PendingToolRequestEntry extends TranscriptEntryBase {
+  kind: "pending_tool_request"
+  toolRequestId: string
+}
+
+export interface ToolRequestResolvedEntry extends TranscriptEntryBase {
+  kind: "tool_request_resolved"
+  toolRequestId: string
+  status: ToolRequestStatus
+  decision?: ToolRequestDecision
 }
 
 export type CloudflareTunnelMode = "always-ask" | "auto-expose"
