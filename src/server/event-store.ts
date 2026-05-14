@@ -3,7 +3,7 @@ import { existsSync, readFileSync as readFileSyncImmediate } from "node:fs"
 import { homedir } from "node:os"
 import path from "node:path"
 import { getDataDir, LOG_PREFIX } from "../shared/branding"
-import type { AgentProvider, ChatHistoryPage, ChatHistorySnapshot, QueuedChatMessage, SlashCommand, StackBinding, TranscriptEntry } from "../shared/types"
+import type { AgentProvider, ChatHistoryPage, ChatHistorySnapshot, QueuedChatMessage, SlashCommand, StackBinding, SubagentRunSnapshot, TranscriptEntry } from "../shared/types"
 import { STORE_VERSION } from "../shared/types"
 import type { AutoContinueEvent } from "./auto-continue/events"
 import {
@@ -17,6 +17,7 @@ import {
   type StackRecord,
   type StoreEvent,
   type StoreState,
+  type SubagentRunEvent,
   type TurnEvent,
   cloneTranscriptEntries,
   createEmptyState,
@@ -132,6 +133,12 @@ function getReplayEventPriority(event: StoreEvent): number {
     case "stack_project_added":
     case "stack_project_removed":
       return 0
+    case "subagent_run_started":
+    case "subagent_message_delta":
+    case "subagent_run_completed":
+    case "subagent_run_failed":
+    case "subagent_run_cancelled":
+      return 5
     default: {
       const _exhaustive: never = discriminator
       throw new Error(`Unhandled replay event type: ${String(_exhaustive)}`)
@@ -592,6 +599,7 @@ export class EventStore implements PushEventStore {
         if (e.stackBindings !== undefined) chat.stackBindings = e.stackBindings.map((b) => ({ ...b }))
         this.state.chatsById.set(chat.id, chat)
         this.replayChatProvider.set(e.chatId, null)
+        this.state.subagentRunsByChatId.set(e.chatId, new Map())
         this.updateTiming(e.chatId, e.timestamp, "idle")
         break
       }
@@ -610,6 +618,7 @@ export class EventStore implements PushEventStore {
         this.state.queuedMessagesByChatId.delete(e.chatId)
         this.state.autoContinueEventsByChatId.delete(e.chatId)
         this.state.chatTimingsByChatId.delete(e.chatId)
+        this.state.subagentRunsByChatId.delete(e.chatId)
         break
       }
       case "chat_archived": {
@@ -793,6 +802,62 @@ export class EventStore implements PushEventStore {
         const next = stack.projectIds.filter((id) => id !== e.projectId)
         stack.projectIds = next
         stack.updatedAt = e.timestamp
+        break
+      }
+      case "subagent_run_started": {
+        const map = this.state.subagentRunsByChatId.get(e.chatId)
+        if (!map) break
+        map.set(e.runId, {
+          runId: e.runId,
+          chatId: e.chatId,
+          subagentId: e.subagentId,
+          subagentName: e.subagentName,
+          provider: e.provider,
+          model: e.model,
+          status: "running",
+          parentUserMessageId: e.parentUserMessageId,
+          parentRunId: e.parentRunId,
+          depth: e.depth,
+          startedAt: e.timestamp,
+          finishedAt: null,
+          finalText: null,
+          error: null,
+          usage: null,
+        })
+        break
+      }
+      case "subagent_message_delta": {
+        const map = this.state.subagentRunsByChatId.get(e.chatId)
+        const run = map?.get(e.runId)
+        if (!run) break
+        run.finalText = (run.finalText ?? "") + e.content
+        break
+      }
+      case "subagent_run_completed": {
+        const map = this.state.subagentRunsByChatId.get(e.chatId)
+        const run = map?.get(e.runId)
+        if (!run) break
+        run.status = "completed"
+        run.finishedAt = e.timestamp
+        run.finalText = e.finalContent
+        run.usage = e.usage ?? null
+        break
+      }
+      case "subagent_run_failed": {
+        const map = this.state.subagentRunsByChatId.get(e.chatId)
+        const run = map?.get(e.runId)
+        if (!run) break
+        run.status = "failed"
+        run.finishedAt = e.timestamp
+        run.error = e.error
+        break
+      }
+      case "subagent_run_cancelled": {
+        const map = this.state.subagentRunsByChatId.get(e.chatId)
+        const run = map?.get(e.runId)
+        if (!run) break
+        run.status = "cancelled"
+        run.finishedAt = e.timestamp
         break
       }
     }
@@ -1407,6 +1472,16 @@ export class EventStore implements PushEventStore {
       chatId,
     }
     await this.append(this.turnsLogPath, event)
+  }
+
+  async appendSubagentEvent(event: SubagentRunEvent) {
+    await this.append(this.turnsLogPath, event)
+  }
+
+  getSubagentRuns(chatId: string): Record<string, SubagentRunSnapshot> {
+    const map = this.state.subagentRunsByChatId.get(chatId)
+    if (!map) return {}
+    return Object.fromEntries(map.entries())
   }
 
   async setSessionTokenForProvider(

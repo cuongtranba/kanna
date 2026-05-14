@@ -657,6 +657,156 @@ describe("recordSessionCommandsLoaded", () => {
   })
 })
 
+describe("EventStore subagent runs", () => {
+  test("subagent_run_* events build subagentRuns map and survive replay", async () => {
+    const dataDir = await createTempDataDir()
+    const store = new EventStore(dataDir)
+    await store.initialize()
+    const project = await store.openProject("/tmp/p-sa")
+    const chat = await store.createChat(project.id)
+    const runId = "r1"
+    const base = chat.createdAt + 1
+
+    await store.appendSubagentEvent({
+      v: 3,
+      type: "subagent_run_started",
+      timestamp: base,
+      chatId: chat.id,
+      runId,
+      subagentId: "s1",
+      subagentName: "alpha",
+      provider: "claude",
+      model: "claude-opus-4-7",
+      parentUserMessageId: "u1",
+      parentRunId: null,
+      depth: 0,
+    })
+    await store.appendSubagentEvent({
+      v: 3,
+      type: "subagent_message_delta",
+      timestamp: base + 1,
+      chatId: chat.id,
+      runId,
+      content: "hello ",
+    })
+    await store.appendSubagentEvent({
+      v: 3,
+      type: "subagent_run_completed",
+      timestamp: base + 2,
+      chatId: chat.id,
+      runId,
+      finalContent: "hello world",
+    })
+
+    const reloaded = new EventStore(dataDir)
+    await reloaded.initialize()
+    const runs = reloaded.getSubagentRuns(chat.id)
+    expect(runs[runId].status).toBe("completed")
+    expect(runs[runId].finalText).toBe("hello world")
+  })
+
+  test("subagent_message_delta accumulates into finalText; run_completed sets canonical", async () => {
+    const dataDir = await createTempDataDir()
+    const store = new EventStore(dataDir)
+    await store.initialize()
+    const project = await store.openProject("/tmp/p-sa-stream")
+    const chat = await store.createChat(project.id)
+    const runId = "r-stream"
+    const base = chat.createdAt + 1
+
+    await store.appendSubagentEvent({
+      v: 3,
+      type: "subagent_run_started",
+      timestamp: base,
+      chatId: chat.id,
+      runId,
+      subagentId: "s1",
+      subagentName: "alpha",
+      provider: "claude",
+      model: "claude-opus-4-7",
+      parentUserMessageId: "u1",
+      parentRunId: null,
+      depth: 0,
+    })
+    await store.appendSubagentEvent({
+      v: 3,
+      type: "subagent_message_delta",
+      timestamp: base + 1,
+      chatId: chat.id,
+      runId,
+      content: "Hello ",
+    })
+    await store.appendSubagentEvent({
+      v: 3,
+      type: "subagent_message_delta",
+      timestamp: base + 2,
+      chatId: chat.id,
+      runId,
+      content: "world",
+    })
+
+    const mid = store.getSubagentRuns(chat.id)[runId]
+    expect(mid.status).toBe("running")
+    expect(mid.finalText).toBe("Hello world")
+
+    await store.appendSubagentEvent({
+      v: 3,
+      type: "subagent_run_completed",
+      timestamp: base + 3,
+      chatId: chat.id,
+      runId,
+      finalContent: "Hello world!",
+    })
+
+    const done = store.getSubagentRuns(chat.id)[runId]
+    expect(done.status).toBe("completed")
+    expect(done.finalText).toBe("Hello world!")
+
+    const reloaded = new EventStore(dataDir)
+    await reloaded.initialize()
+    expect(reloaded.getSubagentRuns(chat.id)[runId].finalText).toBe("Hello world!")
+  })
+
+  test("chat_deleted drops subagent runs; recreating chatId does not resurrect them", async () => {
+    const dataDir = await createTempDataDir()
+    const store = new EventStore(dataDir)
+    await store.initialize()
+    const project = await store.openProject("/tmp/p-sa-del")
+    const chat = await store.createChat(project.id)
+    const runId = "r-deleted"
+    const base = chat.createdAt + 1
+
+    await store.appendSubagentEvent({
+      v: 3,
+      type: "subagent_run_started",
+      timestamp: base,
+      chatId: chat.id,
+      runId,
+      subagentId: "s1",
+      subagentName: "alpha",
+      provider: "claude",
+      model: "claude-opus-4-7",
+      parentUserMessageId: "u1",
+      parentRunId: null,
+      depth: 0,
+    })
+    await store.appendSubagentEvent({
+      v: 3,
+      type: "subagent_run_completed",
+      timestamp: base + 1,
+      chatId: chat.id,
+      runId,
+      finalContent: "done",
+    })
+
+    await store.deleteChat(chat.id)
+
+    const reloaded = new EventStore(dataDir)
+    await reloaded.initialize()
+    expect(reloaded.getSubagentRuns(chat.id)).toEqual({})
+  })
+})
+
 describe("EventStore auto-continue schedules", () => {
   test("appends and replays AutoContinueEvent sequence", async () => {
     const dataDir = await createTempDataDir()
