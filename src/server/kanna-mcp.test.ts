@@ -2,7 +2,8 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test"
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises"
 import path from "node:path"
 import os from "node:os"
-import { resolveOfferDownload } from "./kanna-mcp"
+import { resolveOfferDownload, buildKannaMcpTools } from "./kanna-mcp"
+import { POLICY_DEFAULT } from "../shared/permission-policy"
 
 let tempRoot: string
 
@@ -87,4 +88,49 @@ describe("resolveOfferDownload", () => {
     if (!result.ok) throw new Error("expected ok")
     expect(result.payload.contentUrl.startsWith("/api/projects/proj%201%2Fextra/files/")).toBe(true)
   })
+})
+
+const makeArgs = (toolCallback?: Parameters<typeof buildKannaMcpTools>[0]["toolCallback"]) => ({
+  projectId: "p",
+  localPath: "/tmp",
+  chatId: "c",
+  sessionId: "s",
+  toolCallback,
+  chatPolicy: POLICY_DEFAULT,
+  tunnelGateway: null,
+})
+
+test("feature flag off → ask_user_question / exit_plan_mode NOT registered", () => {
+  delete process.env.KANNA_MCP_TOOL_CALLBACKS
+  const tools = buildKannaMcpTools(makeArgs(undefined))
+  const names = tools.map((t) => t.name)
+  expect(names).not.toContain("ask_user_question")
+  expect(names).not.toContain("exit_plan_mode")
+})
+
+test("feature flag on → tools registered when toolCallback present", () => {
+  process.env.KANNA_MCP_TOOL_CALLBACKS = "1"
+  const stub: Parameters<typeof buildKannaMcpTools>[0]["toolCallback"] = {
+    submit: async () => ({ status: "answered", decision: { kind: "deny" as const, reason: "test" } }),
+    answer: async () => {},
+    cancel: async () => {},
+    cancelAllForChat: async () => {},
+    cancelAllForSession: async () => {},
+    recoverOnStartup: async () => {},
+    tickTimeouts: async () => {},
+  }
+  const tools = buildKannaMcpTools(makeArgs(stub))
+  const names = tools.map((t) => t.name)
+  expect(names).toContain("ask_user_question")
+  expect(names).toContain("exit_plan_mode")
+  delete process.env.KANNA_MCP_TOOL_CALLBACKS
+})
+
+test("feature flag on but toolCallback absent → tools NOT registered", () => {
+  process.env.KANNA_MCP_TOOL_CALLBACKS = "1"
+  const tools = buildKannaMcpTools(makeArgs(undefined))
+  const names = tools.map((t) => t.name)
+  expect(names).not.toContain("ask_user_question")
+  expect(names).not.toContain("exit_plan_mode")
+  delete process.env.KANNA_MCP_TOOL_CALLBACKS
 })
