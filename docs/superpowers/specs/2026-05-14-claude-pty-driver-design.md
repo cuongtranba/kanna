@@ -1,7 +1,7 @@
 # Claude PTY Driver — Design
 
 **Date:** 2026-05-14
-**Status:** Draft v6 — fifth codex adversarial pass applied (workspace-secret deny enforced in sandbox; Windows references made consistent — fail-closed by default), awaiting user review
+**Status:** Draft v7 — sixth codex adversarial pass applied (Read/Glob/Grep removed from default --tools, MCP-routed reads check live readPathDeny per call; sandbox demoted to defense-in-depth; sandbox-affecting state changes trigger respawn), awaiting user review
 **Author:** session-collaborative
 **Related code:** `src/server/agent.ts`, `src/server/terminal-manager.ts`, `src/server/harness-types.ts`, `src/server/kanna-mcp.ts`
 
@@ -254,7 +254,7 @@ claude
   --permission-mode bypassPermissions                # we manage gating, not the CLI
   --dangerously-skip-permissions                     # avoid TUI prompts; kanna-mcp gates instead
 
-  --tools "Read Glob Grep mcp__kanna__*"             # disable risky built-ins; keep read-only + MCP
+  --tools "mcp__kanna__*"                            # MCP-only; all CLI built-ins disabled
   --add-dir <dir>...                                 # additionalDirectories
   --append-system-prompt <text>                      # Kanna guidance: "use mcp__kanna__bash/edit/write"
   --system-prompt <text>                             # ONLY for subagent (systemPromptOverride)
@@ -279,9 +279,13 @@ No bearer token. No FD-passed credentials. See "OAuth / subscription auth".
 
 ### Primary gate: replace built-ins with kanna-mcp shims
 
-The CLI's `--tools` flag accepts an allowlist of built-in tool names. We use it to **disable** the risky built-ins (`Bash`, `Edit`, `Write`, `WebFetch`, `WebSearch`) at spawn. Read-only tools (`Read`, `Glob`, `Grep`) stay enabled — they cannot mutate state and gating them adds latency without safety value.
+The CLI's `--tools` flag accepts an allowlist of built-in tool names. We use it to **disable every mutating and every read-capable built-in** at spawn — `Bash`, `Edit`, `Write`, `WebFetch`, `WebSearch`, **and also `Read`, `Glob`, `Grep`**. Default allowlist is `--tools "mcp__kanna__*"` (MCP only).
 
-For each disabled built-in we ship a kanna-mcp tool of the same semantic shape — `mcp__kanna__bash`, `mcp__kanna__edit`, `mcp__kanna__write`, `mcp__kanna__webfetch`, `mcp__kanna__websearch`. The Kanna system-prompt append instructs the model to use these in place of the missing built-ins.
+The reason read tools are also disabled: built-in `Read/Glob/Grep` cannot be intercepted by Kanna, so their accessible surface is whatever the OS sandbox profile captured **at spawn time**. New sensitive files appearing later in the session (e.g., the model approves a write that creates a `.env`) would be reachable until respawn. Routing reads through `mcp__kanna__*` makes every read check the live `readPathDeny` before returning content, eliminating that stale-sandbox class entirely.
+
+For each disabled built-in we ship a kanna-mcp tool of the same semantic shape — `mcp__kanna__bash`, `mcp__kanna__edit`, `mcp__kanna__write`, `mcp__kanna__webfetch`, `mcp__kanna__websearch`, `mcp__kanna__read`, `mcp__kanna__glob`, `mcp__kanna__grep`. The Kanna system-prompt append instructs the model to use these in place of the missing built-ins.
+
+The OS sandbox (next section) is retained as **defense-in-depth** only: it catches the rare cases where the CLI version exposes a built-in we forgot to disable, a third-party MCP server (when allowlisted) tries to escape, or a bug in `mcp__kanna__*` mis-handles a path. Safety does not depend on the sandbox being perfect; it depends on MCP routing.
 
 Because every mutating tool now flows through `kanna-mcp` (Kanna code), Kanna gets **synchronous pre-execution** veto power on every call, with full structured arguments (not regex-stripped). The same durable callback protocol used for `ask_user_question` extends here — every gated tool call becomes a `ToolRequest` in `EventStore` with id, timeout, cancel, replay, idempotency semantics (see "Callback protocol").
 
@@ -409,11 +413,11 @@ Result: `cat ~/.claude/.credentials.json`, `rg . ~/.ssh`, `cat $(echo ~/.ssh/id_
 
 - `mcp__kanna__edit` / `mcp__kanna__write`: target path is structured (not shell-parsed). Resolve against `cwd`, deny if outside workspace + `additionalDirectories`, deny if matches `writePathDeny`. Otherwise `ask` (or `auto-allow` if `defaultAction` is set).
 - `mcp__kanna__webfetch` / `mcp__kanna__websearch`: no auto-allow by default. User can add hosts to a per-chat allow list.
-- `Read` / `Glob` / `Grep` (CLI built-ins, still enabled): Kanna cannot intercept these. **Workaround:** the same `readPathDeny` is enforced by the `mcp__kanna__read_guard` tool, which the system prompt instructs the model to consult before reading sensitive paths. Belt-and-suspenders only — primary defense is sandboxing the spawn (see "Sandboxing" below).
+- `mcp__kanna__read` / `mcp__kanna__glob` / `mcp__kanna__grep`: replace the CLI built-ins. Resolve target paths against `cwd` + `additionalDirectories`, enforce `readPathDeny` per call (so newly-created secrets are also denied immediately), then read.
 
-#### Sandboxing the spawn (required on supported OS)
+#### Sandboxing the spawn (defense-in-depth on supported OS)
 
-OS-level sandboxing is the **only** effective gate against the CLI's still-enabled built-in `Read` / `Glob` / `Grep`. Kanna treats it as a hard precondition for `KANNA_CLAUDE_DRIVER=pty` on every supported platform.
+OS-level sandboxing is **defense-in-depth**, not the primary safety gate. The primary gate is the `--tools "mcp__kanna__*"` allowlist plus per-call `readPathDeny` enforcement inside `mcp__kanna__read/glob/grep`. The sandbox catches: a CLI version that exposes a tool we forgot to disable, third-party MCP servers (when allowlisted), or a bug in `mcp__kanna__*` mis-handling a path. Kanna still treats it as a hard precondition on supported OSes for that defense-in-depth layer.
 
 **Implementation:**
 
@@ -437,7 +441,7 @@ OS-level sandboxing is the **only** effective gate against the CLI's still-enabl
 5. Cache successful preflight result per `(OS-version, profile-hash, sentinel-set-hash)` for 24h.
 
 **Explicit override:**
-- `KANNA_PTY_SANDBOX=off` is recognized only on supported OSes and only when the user has acknowledged the unsafe-mode confirm dialog. When off: removes `Read`, `Glob`, `Grep` from `--tools` allowlist (model loses read tools entirely — `mcp__kanna__read_guard` is the only filesystem path), renders a global red banner, and disables auto-approve toggles. This is the only way to enable PTY without a sandbox; it is **not** silently permitted.
+- `KANNA_PTY_SANDBOX=off` is recognized only on supported OSes and only when the user has acknowledged the unsafe-mode confirm dialog. When off: `--tools` remains `"mcp__kanna__*"` (no built-in read tools — same as the on-mode default), renders a global red banner, and disables auto-approve toggles. Reads still go through `mcp__kanna__read/glob/grep` which apply `readPathDeny` per call. This is the only way to run PTY without OS sandboxing; it is **not** silently permitted.
 - `KANNA_PTY_SANDBOX=on` (default on macOS/Linux) is the supported mode.
 - On Windows, the env var alone is insufficient — the server-wide `unsafeWindowsPty` setting must also be true, see "Implementation: Windows" above.
 
@@ -452,14 +456,16 @@ Tests (`sandbox-preflight.test.ts`):
 - Cache invalidates on `profile-hash` or `sentinel-set-hash` change.
 - Windows default (no env override) → reject with `unsupported_platform`.
 - Windows with `KANNA_PTY_SANDBOX=off` but `unsafeWindowsPty=false` → reject.
-- Windows fully off-mode → spawn proceeds, `--tools` lacks `Read`, `Glob`, `Grep`.
+- Windows fully off-mode → spawn proceeds, `--tools` is `"mcp__kanna__*"` (built-ins remain disabled regardless of mode).
 
 User can edit lists per-chat. "Auto-approve everything" is a single toggle that sets `defaultAction: "auto-allow"` and shows the red banner. Even under auto-approve, `readPathDeny` and `writePathDeny` still apply — auto-approve cannot grant access to denied paths.
 
 ### Mode transitions fail closed
 
 - Changing `defaultAction` from `auto-allow` → anything else: kill PTY (COOLING), respawn. Any in-flight unresolved tool calls resolve as `deny: mode_changed`.
-- Changing other policy keys: hot-reload (no respawn) since policy is consulted per request.
+- **Sandbox-affecting state changes** — `readPathDeny`, `writePathDeny`, `additionalDirectories`, `bash.autoAllowVerbs`, `KANNA_PTY_SANDBOX`, `unsafeWindowsPty`, `KANNA_MCP_ALLOWLIST`: mark the live PTY's sandbox profile as stale and trigger respawn before the next user message. In-flight tool calls cancel with `{decision:"deny", reason:"sandbox_stale"}`. Preflight cache entry for the old `profile-hash` is invalidated immediately.
+- **New sensitive file detection.** Although safety does not depend on it (reads go through `mcp__kanna__read` which re-checks per call), Kanna maintains a low-priority `fs.watch` over workspace + `additionalDirectories` for any path matching `readPathDeny` globs. On match: mark sandbox stale, respawn before next user message. This ensures defense-in-depth sandbox is also up-to-date.
+- Other (non-sandbox-affecting) policy keys hot-reload — `toolDenyList`, `bash.autoAllowVerbs` per-verb argument allowlists, `defaultAction` for `ask` ↔ `auto-deny`: applied on next `policy.evaluate` call without respawn.
 - Server crash mid-session: `defaultAction` reset to persisted value; pending requests resolved per "Server restart" rule above; banner re-displayed if `auto-allow` persisted.
 
 ### Third-party MCP servers — fail closed
@@ -482,7 +488,7 @@ If the spike fails AND the user has third-party MCP enabled, spawn is rejected a
 
 ### What we still cannot fully gate (documented in user docs)
 
-- CLI built-in **`Read`** / **`Glob`** / **`Grep`** (read-only, kept enabled for usability on macOS/Linux). Information disclosure of credential paths is mitigated by `readPathDeny` enforced via OS sandboxing (`KANNA_PTY_SANDBOX=on`, default on for macOS/Linux, preflight fail-closed). On Windows: PTY refuses to spawn by default; the only path to run on Windows is the explicit off-mode (see "Sandboxing the spawn"), which strips `Read`/`Glob`/`Grep` from `--tools` so these built-ins are simply unavailable.
+- CLI built-in **`Read`** / **`Glob`** / **`Grep`** are **disabled in `--tools`** by default. Reads go through `mcp__kanna__read/glob/grep`, which apply live `readPathDeny` per call so newly-created secrets are denied immediately. OS sandboxing is defense-in-depth (not the primary gate).
 - File-system race conditions if user shells out from a still-enabled subprocess elsewhere on the system.
 - Long-running processes spawned by approved tool calls and inherited beyond the tool's lifetime. Documented limitation.
 
@@ -561,7 +567,7 @@ The lifecycle wrapper is mounted between `AgentCoordinator` and the raw `startCl
 | `KANNA_PTY_PREWARM_GRACE_MS` | `2000` | Cancel pre-warm if user moves on |
 | `KANNA_PTY_WARM_TIMEOUT_MS` | `30000` | Spawn timeout |
 | `KANNA_PTY_SANDBOX` | `on` (macOS/Linux); **Windows: PTY spawn refused entirely** unless explicit `off` env + `unsafeWindowsPty: true` app setting | OS sandbox profile around `claude` spawn (denies reads of credential dirs and workspace secrets). |
-| `unsafeWindowsPty` (app setting) | `false` | Windows-only escape hatch. Must be `true` AND `KANNA_PTY_SANDBOX=off` to enable PTY on Windows. Renders global red banner. Strips `Read`/`Glob`/`Grep` from `--tools`. |
+| `unsafeWindowsPty` (app setting) | `false` | Windows-only escape hatch. Must be `true` AND `KANNA_PTY_SANDBOX=off` to enable PTY on Windows. Renders global red banner. `--tools` is already `"mcp__kanna__*"` (no built-in read/write tools). |
 | `KANNA_MCP_ALLOWLIST` | `""` (empty) | Comma-separated names of third-party MCP servers permitted. Empty = none. |
 | `CLAUDE_EXECUTABLE` | (auto) | Existing — path to `claude` binary |
 
@@ -608,7 +614,8 @@ Any new UI surface (badges, banners, settings toggle) is verified via `renderFor
 | User MCP servers (3rd-party) bypass Kanna gating | Default fail-closed: only `kanna-mcp` is loaded. Third-party MCP requires explicit allowlist AND a functional PreToolUse hook; otherwise spawn refused. See "Third-party MCP servers — fail closed". |
 | Bash auto-allow leaks credentials (`cat ~/.claude/...`) | Bash is parsed (no regex prefix), `readPathDeny` resolved per arg, shell features (pipes/subshell/eval) downgrade to `ask`. `auto-allow` cannot override deny-list. OS sandbox (`sandbox-exec` / `bwrap`) is the secondary gate. |
 | ToolUseId replay with mutated args | Idempotency id binds to `(toolUseId, toolName, canonicalArgsHash)`; mismatch fails closed with `argument_mismatch` and emits audit event. |
-| CLI built-in `Read`/`Glob`/`Grep` read sensitive paths | OS-level sandbox (`KANNA_PTY_SANDBOX=on` default) denies file access to deny-list paths AND to glob-matched workspace secrets. Preflight sentinel covers both HOME and workspace credentials; spawn fails closed on any reachable sentinel. Windows: spawn refused by default; off-mode strips `Read`/`Glob`/`Grep` from `--tools`. |
+| CLI built-in `Read`/`Glob`/`Grep` read sensitive paths | `--tools "mcp__kanna__*"` removes built-ins entirely. Reads go through `mcp__kanna__read/glob/grep` which apply live `readPathDeny` per call (handles newly-created secrets). OS sandbox is defense-in-depth. Sandbox-affecting state changes trigger PTY respawn. |
+| Long-running warm PTY has stale sandbox after new sensitive files appear | (a) Primary: reads are not handled by the sandbox at all — `mcp__kanna__read` re-checks `readPathDeny` per call. (b) Defense-in-depth: `fs.watch` over readPathDeny glob matches triggers respawn-before-next-turn when a match appears. |
 | Lifecycle bugs leak PTY processes (RSS exhaustion) | LRU cap + idle timeout + server shutdown fanout + `ps`-based reaper sweep on startup. Runtime dir cleanup on COOLING. |
 | Subagent feature uses `initialPrompt` + `systemPromptOverride` | Map to `--system-prompt` + send-prompt-then-exit-on-Stop. Covered by `driver.test.ts`. |
 | Loss of `oauthPool` multi-token rotation in PTY mode | Documented tradeoff. Pool still serves SDK driver. PTY = single subscription. |
@@ -630,7 +637,7 @@ Any new UI surface (badges, banners, settings toggle) is verified via `renderFor
 
 ## Open questions
 
-1. **`--tools` allowlist semantics.** Confirm that `--tools "Read Glob Grep mcp__kanna__*"` truly removes `Bash/Edit/Write` from the assistant's available toolset (not just deprioritizes them). Spike-blocking.
+1. **`--tools` allowlist semantics.** Confirm that `--tools "mcp__kanna__*"` truly removes **every** CLI built-in (`Bash`, `Edit`, `Write`, `WebFetch`, `WebSearch`, `Read`, `Glob`, `Grep`) from the assistant's available toolset, not just deprioritizes them. Spike-blocking.
 2. **`/permissions` slash command interactivity.** Need a spike to confirm whether it can be driven by line input or requires arrow-key TUI nav. Since policy is now per-chat in `EventStore`, runtime changes mostly don't need to touch the CLI's mode — but verify for completeness.
 3. **`--remote-control` protocol.** Worth a spike to see if it offers a clean structured control channel that could replace the PTY entirely. Out of scope for v1.
 4. **Plugins / hooks parity.** SDK driver runs the user's `~/.claude/settings.json` hooks via `settingSources: ["user","project","local"]`. CLI does the same natively — verify end-to-end. PreToolUse-under-bypass is only required for the optional belt-and-suspenders gate; not gating.
