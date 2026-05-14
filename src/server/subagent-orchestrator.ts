@@ -199,6 +199,8 @@ export class SubagentOrchestrator {
     }
     if (this.permits > 0) {
       this.permits -= 1
+      const state = this.runStateByRunId.get(runId)
+      if (state) state.pendingAcquire = false
       return
     }
     const { promise, resolve, reject } = Promise.withResolvers<void>()
