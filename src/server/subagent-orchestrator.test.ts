@@ -369,8 +369,8 @@ describe("SubagentOrchestrator", () => {
       store: harness.store,
       appSettings: harness.appSettings,
       now: () => nowCounter++,
-      startProviderRun: ({ subagent, chatId, primer, runId }) => buildSubagentProviderRun({
-        subagent, chatId, primer, runId,
+      startProviderRun: ({ subagent, chatId, primer, runId, abortSignal }) => buildSubagentProviderRun({
+        subagent, chatId, primer, runId, abortSignal,
         cwd: "/tmp", projectId: "p1",
         startClaudeSession: async () => fakeSession,
         codexManager: {} as never,

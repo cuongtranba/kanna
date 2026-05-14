@@ -906,7 +906,7 @@ export class AgentCoordinator {
     this.subagentOrchestrator = new SubagentOrchestrator({
       store: this.store,
       appSettings: { getSnapshot: () => ({ subagents: this.getSubagents() }) },
-      startProviderRun: ({ subagent, chatId, primer, runId }) => this.buildSubagentProviderRunForChat({ subagent, chatId, primer, runId }),
+      startProviderRun: ({ subagent, chatId, primer, runId, abortSignal }) => this.buildSubagentProviderRunForChat({ subagent, chatId, primer, runId, abortSignal }),
       onRunTerminal: (chatId, runId) => this.rejectPendingResolversForRun(chatId, runId),
     })
     this.throwOnClaudeSessionStart = args.throwOnClaudeSessionStart ?? false
@@ -1665,6 +1665,7 @@ export class AgentCoordinator {
     chatId: string
     primer: string | null
     runId: string
+    abortSignal: AbortSignal
   }): ProviderRunStart {
     const chat = this.store.requireChat(args.chatId)
     const project = this.store.getProject(chat.projectId)
@@ -1709,6 +1710,7 @@ export class AgentCoordinator {
       chatId: args.chatId,
       primer: args.primer,
       runId: args.runId,
+      abortSignal: args.abortSignal,
       cwd: spawn.cwd,
       additionalDirectories: spawn.additionalDirectories,
       projectId: project.id,

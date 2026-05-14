@@ -20,6 +20,8 @@ export interface BuildSubagentProviderRunArgs {
   chatId: string
   primer: string | null
   runId: string
+  /** Abort signal from the run's AbortController; triggers cancellation of the provider session. */
+  abortSignal: AbortSignal
   /** Project cwd shared with the parent chat. */
   cwd: string
   additionalDirectories?: string[]
@@ -97,6 +99,7 @@ async function runClaudeSubagent(opts: {
     systemPromptOverride: args.subagent.systemPrompt,
     initialPrompt,
   })
+  args.abortSignal.addEventListener("abort", () => { session.interrupt() }, { once: true })
   try {
     return await drainHarnessTurn(session, onChunk, onEntry)
   } finally {
@@ -112,6 +115,7 @@ async function runCodexSubagent(opts: {
 }): Promise<{ text: string; usage?: ProviderUsage }> {
   const { args, initialPrompt, onChunk, onEntry } = opts
   const scope = `sub:${args.runId}` as const
+  args.abortSignal.addEventListener("abort", () => { args.codexManager.stopSession(args.chatId, scope) }, { once: true })
   await args.codexManager.startSession({
     chatId: args.chatId,
     scope,
