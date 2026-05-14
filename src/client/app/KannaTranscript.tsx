@@ -525,7 +525,6 @@ interface TranscriptToolGroupProps {
 
 const TranscriptToolGroup = memo(function TranscriptToolGroup({
   id,
-  startIndex,
   messages,
   isLoading,
   localPath,

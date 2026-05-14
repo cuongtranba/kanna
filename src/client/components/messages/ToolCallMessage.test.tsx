@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { renderToStaticMarkup } from "react-dom/server"
-import { ReadResultImages, ToolCallMessage } from "./ToolCallMessage"
+import { ReadResultImages } from "./ToolCallMessage"
 
 describe("ToolCallMessage", () => {
   test("renders read result image blocks as inline images", () => {
