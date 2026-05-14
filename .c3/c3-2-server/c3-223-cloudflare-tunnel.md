@@ -1,12 +1,11 @@
 ---
 id: c3-223
-c3-version: 4
-c3-seal: 02c6eb6575ce2e59f225ec1b3c420a09356509085e28925ee69085cb2411f9d9
+c3-seal: bd7bf4e9e01fb47581b4e618625ba8a2c00fb7a0fdddee117a46b4c4476e83ba
 title: cloudflare-tunnel
 type: component
 category: feature
 parent: c3-2
-goal: Let the agent proactively propose Cloudflare quick tunnels for local ports via the Kanna `expose_port` MCP tool, gated by the Cloudflare Tunnel setting (`enabled` + `mode`: always-ask or auto-expose).
+goal: 'Let the agent proactively propose Cloudflare quick tunnels for local ports via the Kanna `expose_port` MCP tool. Each call is gated by the Cloudflare Tunnel setting: `enabled` toggles the tool on/off, and `mode` (`always-ask` | `auto-expose`) decides whether the user confirms each proposal or it spawns automatically.'
 uses:
     - ref-cqrs-read-models
     - ref-strong-typing
@@ -39,7 +38,7 @@ Exposes a Kanna MCP tool (`mcp__kanna__expose_port`) that the agent calls proact
 | Aspect | Detail | Reference |
 | --- | --- | --- |
 | Precondition | cloudflareTunnel.enabled set true in settings | c3-222 |
-| Input — agent MCP tool | `expose_port` calls into TunnelGateway | c3-210 |
+| Input — agent MCP tool | expose_port calls into TunnelGateway | c3-210 |
 | Input — process utils | Spawn cloudflared | c3-209 |
 | Input — settings store | Reads enabled + mode + cloudflaredPath | c3-222 |
 | Internal state | In-memory tunnel records (port, URL, lifecycle) | c3-223 |
@@ -49,10 +48,10 @@ Exposes a Kanna MCP tool (`mcp__kanna__expose_port`) that the agent calls proact
 | Aspect | Detail | Reference |
 | --- | --- | --- |
 | Outcome | Users expose agent-started services without leaving Kanna | c3-2 |
-| Primary path | Agent calls `expose_port` → propose → user accepts → spawn tunnel | c3-208 |
-| Alternate — auto-expose | mode=auto-expose: propose + accept (source: "auto_setting") + spawn in one step; tool returns `auto_exposed` | c3-222 |
-| Alternate — already live | Duplicate proposal for same port returns `already_live` | c3-223 |
-| Alternate — disabled | Settings disabled returns `disabled`, no event | c3-222 |
+| Primary path | Agent calls expose_port → propose → user accepts → spawn tunnel | c3-208 |
+| Alternate — auto-expose | mode=auto-expose: propose + accept (source: "auto_setting") + spawn in one step; tool returns auto_exposed | c3-222 |
+| Alternate — already live | Duplicate proposal for same port returns already_live | c3-223 |
+| Alternate — disabled | Settings disabled returns disabled, no event | c3-222 |
 | Alternate — stop | User stop, source exit, chat close, server shutdown | c3-216 |
 
 ## Governance
@@ -70,7 +69,7 @@ Exposes a Kanna MCP tool (`mcp__kanna__expose_port`) that the agent calls proact
 | --- | --- | --- | --- | --- |
 | Tunnel projection | OUT | Adds tunnels + liveTunnelId to chat snapshot | c3-207 | src/server/cloudflare-tunnel/read-model.ts |
 | tunnel.accept/tunnel.stop/tunnel.retry | IN | Typed WS commands | c3-208 | src/server/cloudflare-tunnel/gateway.ts |
-| `expose_port` MCP tool | IN | Agent-callable tool that calls `TunnelGateway.proposeFromTool` | c3-210 | src/server/kanna-mcp.ts |
+| expose_port MCP tool | IN | Agent-callable tool that calls TunnelGateway.proposeFromTool | c3-210 | src/server/kanna-mcp.ts |
 
 ## Change Safety
 
@@ -78,7 +77,7 @@ Exposes a Kanna MCP tool (`mcp__kanna__expose_port`) that the agent calls proact
 | --- | --- | --- | --- |
 | Always-on regression | Default flips to enabled | Tunnels spawn without user consent | bun test src/server/cloudflare-tunnel/e2e.test.ts |
 | Tunnel leak after chat close | Lifecycle hook skipped | cloudflared lingers post-session | Manual chat-close smoke + grep src/server/cloudflare-tunnel/lifecycle.ts for cleanup |
-| Silent auto-accept regression | `accept` triggered without user action | tunnel_accepted with non-"user" source | grep `source: "user"` in src/server/cloudflare-tunnel/gateway.ts |
+| Silent auto-accept regression | accept triggered without user action | tunnel_accepted with non-"user" source | grep source: "user" in src/server/cloudflare-tunnel/gateway.ts |
 
 ## Derived Materials
 
@@ -88,5 +87,5 @@ Exposes a Kanna MCP tool (`mcp__kanna__expose_port`) that the agent calls proact
 | src/server/cloudflare-tunnel/read-model.ts | c3-223 Contract | Projection detail | src/server/cloudflare-tunnel/read-model.ts |
 | src/server/cloudflare-tunnel/tunnel-manager.ts | c3-223 Contract | Spawner detail | src/server/cloudflare-tunnel/tunnel-manager.ts |
 | src/server/cloudflare-tunnel/gateway.ts | c3-223 Contract | WS command + propose API | src/server/cloudflare-tunnel/gateway.ts |
-| src/server/kanna-mcp.ts | c3-223 Contract | `expose_port` MCP tool wiring | src/server/kanna-mcp.ts |
+| src/server/kanna-mcp.ts | c3-223 Contract | expose_port MCP tool wiring | src/server/kanna-mcp.ts |
 | src/server/cloudflare-tunnel/e2e.test.ts | c3-223 Contract | Integration test | src/server/cloudflare-tunnel/e2e.test.ts |
