@@ -1,7 +1,7 @@
 # Claude PTY Driver — Design
 
 **Date:** 2026-05-14
-**Status:** Draft v10 — ninth codex adversarial pass applied (allowlist preflight cache tightened: full suite on boot/binary/model-change, sentinel probe per user spawn, no time-based TTL), awaiting user review
+**Status:** Draft v11 — tenth codex adversarial pass applied (sentinel rotation covers all built-ins, not just Bash; auto-approve chats get full-suite sentinel; intro section reconciled with v10 cache model), awaiting user review
 **Author:** session-collaborative
 **Related code:** `src/server/agent.ts`, `src/server/terminal-manager.ts`, `src/server/harness-types.ts`, `src/server/kanna-mcp.ts`
 
@@ -319,11 +319,14 @@ Because every mutating tool now flows through `kanna-mcp` (Kanna code), Kanna ge
 
 This pattern's safety properties **do not depend** on `--dangerously-skip-permissions` behavior or on PreToolUse hooks. They do depend on `--tools` semantics — which is treated as an enforced runtime invariant, not a documentation assumption (see "Allowlist preflight" below).
 
-### Allowlist preflight (fail-closed, per CLI version)
+### Allowlist preflight (fail-closed, no time-based TTL)
 
-Before any user-facing PTY session spawn, Kanna runs an allowlist-verification probe suite and caches the result by `(claude-binary-sha256, tools-string)` for 7 days.
+The allowlist is verified continuously. The validation has two layers; see "Cache & invalidation" below for the precise rules. In summary:
 
-The suite consists of **N directed probes, one per disallowed built-in**, plus one positive-control probe. We do not rely on the model self-reporting which tools it has.
+- **Full directed-probe suite** runs at Kanna server boot and any time `binary-sha256`, `tools-string`, or observed `system.init.model` changes. Cache key includes `kannaProcessId`, so it never survives a restart.
+- **Per-spawn sentinel probes** run before every user-facing PTY spawn and cover **all** disallowed built-ins (see "Per-spawn sentinel" below). Any built-in observed as reachable invalidates the full-suite cache immediately and blocks further user-facing spawns until the full suite re-passes.
+
+The full suite consists of **N directed probes, one per disallowed built-in**, plus one positive-control probe. We do not rely on the model self-reporting which tools it has.
 
 #### Directed probes (one per built-in)
 
@@ -367,13 +370,22 @@ Allowlist semantics depend on local binary, `--tools` string, **and** server-sid
    - Force-refresh from app settings.
    Cache key: `(binary-sha256, tools-string, systemInitModel, kannaProcessId)`. Note `kannaProcessId` — cache does not survive server restart. Cost: N+1 subscription turns once per server boot.
 
-2. **Cheap sentinel probe** runs **before every user-facing PTY spawn**, except the one that just ran the full suite. The sentinel is one directed `Bash` probe (the highest-impact built-in). Outcomes:
-   - PASS: `mcp__kanna__probe_unavailable("Bash")` observed → user-facing PTY proceeds.
-   - FAIL — built-in reachable: any `tool_use` for `Bash` (or other disallowed built-in) → fail closed, invalidate full-suite cache for this `(binary, tools)`, trigger full-suite re-probe before any further spawn.
-   - FAIL — indeterminate (no signal in 1 turn): fail closed for this spawn; the user can retry, which re-runs the sentinel.
-   Cost: 1 subscription turn per user-facing PTY spawn (sub-second model time, single token-light prompt).
+2. **Per-spawn sentinel probes** run **before every user-facing PTY spawn**, except the one that just ran the full suite. The sentinel covers **all** disallowed built-ins on a strict rotation so no built-in is left unchecked for long.
 
-**Why the sentinel:** It's a tripwire for remote behavior drift. Even if Anthropic silently changes the planner to expose `Bash` under `--tools "mcp__kanna__*"`, the next user-facing spawn catches it before the user sees the PTY. The cost is one cheap turn per spawn; the alternative is a multi-day window of un-gated tool execution.
+   **Rotation strategy:** sentinel state stores a counter mod N (the number of disallowed built-ins). Each user-facing spawn runs **one** directed probe for the next built-in in rotation. After N spawns, every built-in has been freshly re-verified. The rotation cannot be skipped; the counter persists in memory across spawns and is checkpointed to `EventStore`.
+
+   **Tighter mode for `defaultAction: "auto-allow"` (red-banner) chats:** when the spawning chat is in auto-approve mode, the sentinel runs **all N** directed probes (the entire full suite, minus positive control) before the spawn, not just the rotation-next one. Cost: N subscription turns for that spawn (~8). Trade-off accepted because auto-approve chats run tools without user confirmation.
+
+   Outcomes per probe (same as full-suite rules):
+   - PASS: `mcp__kanna__probe_unavailable(<tool>)` observed → continue rotation.
+   - FAIL — built-in reachable: any `tool_use` for any disallowed built-in (not just the one being probed — defensive scan) → fail closed, invalidate full-suite cache, block further user-facing spawns until full suite re-runs and passes.
+   - FAIL — indeterminate (1 turn elapses without confirmation): fail closed for this spawn. The user can retry; retry re-runs the same rotation slot.
+
+   **Why rotate, not all-per-spawn-always?** Cost. Running 8 directed turns per user-facing spawn would add seconds of latency. Rotation gives complete coverage over N spawns while keeping per-spawn cost at one turn. If a probe fails, the full suite re-runs immediately, so the worst-case window of one un-rechecked built-in per single spawn is acceptable for non-auto-approve chats — and auto-approve chats run the full set.
+
+   Cost: 1 subscription turn per regular user-facing spawn; N turns per auto-approve spawn.
+
+**Why the sentinel:** It's a tripwire for remote behavior drift. Even if Anthropic silently changes the planner to expose a built-in under `--tools "mcp__kanna__*"`, the next user-facing spawn either catches it directly (rotation hits the affected tool) or any future spawn does (rotation completes a full cycle every N spawns). Any reachable built-in in any sentinel turn invalidates the entire cache.
 
 **Cache invalidation triggers:**
 - Server restart (process id changes).
