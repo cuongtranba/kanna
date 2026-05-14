@@ -622,6 +622,39 @@ describe("capTranscriptEntry", () => {
     expect(s.size).toBe(big.length)
   })
 
+  test("measures bytes not chars: multibyte content under threshold by chars but over by bytes is persisted", async () => {
+    // 4-byte UTF-8 char (emoji) repeated. char count = 20_000, byte count = 80_000.
+    // Threshold is 50_000 bytes — must persist.
+    const emoji = "\u{1F4A9}" // 4 bytes in UTF-8
+    const content = emoji.repeat(20_000)
+    const entry = makeEntry(content)
+    const out = await capTranscriptEntry({
+      entry, chatId: "c1", runId: "r1", projectId: "p1", kannaRoot,
+    })
+    const persisted = (out as { persisted?: { originalSize: number } }).persisted
+    expect(persisted).toBeDefined()
+    expect(persisted!.originalSize).toBe(Buffer.byteLength(content, "utf8"))
+  })
+
+  test("sanitizes toolId with path separators", async () => {
+    const big = "a".repeat(SUBAGENT_RESULT_THRESHOLD + 1)
+    const entry: TranscriptEntry = {
+      kind: "tool_result",
+      _id: "e1",
+      createdAt: 0,
+      toolId: "../../../etc/passwd",
+      content: big,
+    } as TranscriptEntry
+    const out = await capTranscriptEntry({
+      entry, chatId: "c1", runId: "r1", projectId: "p1", kannaRoot,
+    })
+    const filepath = (out as { persisted?: { filepath: string } }).persisted!.filepath
+    expect(filepath).toContain(path.join("subagent-results", "r1"))
+    expect(filepath).not.toContain("..")
+    expect(filepath).not.toContain("/etc/passwd")
+    expect(path.basename(filepath)).toMatch(/^[A-Za-z0-9_-]+\.txt$/)
+  })
+
   test("preview cuts at newline boundary within last 50% of limit", async () => {
     const head = "line\n".repeat(300)
     const tail = "z".repeat(SUBAGENT_RESULT_THRESHOLD)
@@ -654,6 +687,8 @@ import { mkdir, writeFile } from "node:fs/promises"
 import path from "node:path"
 import type { TranscriptEntry, ToolResultEntry } from "../shared/types"
 
+// Bytes (UTF-8), not chars. Matches claude-code's 50K char default in
+// spirit but enforced precisely against the byte size we serialize.
 export const SUBAGENT_RESULT_THRESHOLD = 50_000
 export const PREVIEW_SIZE = 2000
 const PERSISTED_OPEN_TAG = "<persisted-output>"
@@ -674,21 +709,35 @@ interface ContentSizeInfo {
 }
 
 function measureContent(content: unknown): ContentSizeInfo | null {
+  // Measure the BYTES we actually write to disk + ship through the
+  // JSONL event log. Char length under-counts multibyte content, and
+  // counting only text-block lengths while serializing the full array
+  // (incl. image / tool_reference blocks) misses real payload size.
   if (typeof content === "string") {
-    return { size: content.length, isJson: false, serialized: content }
+    return {
+      size: Buffer.byteLength(content, "utf8"),
+      isJson: false,
+      serialized: content,
+    }
   }
   if (Array.isArray(content)) {
-    const textSize = content.reduce<number>((sum, block) => {
-      if (block && typeof block === "object" && "type" in block && (block as { type: string }).type === "text") {
-        const t = (block as { text?: unknown }).text
-        return sum + (typeof t === "string" ? t.length : 0)
-      }
-      return sum
-    }, 0)
-    if (textSize === 0) return null
-    return { size: textSize, isJson: true, serialized: JSON.stringify(content, null, 2) }
+    const serialized = JSON.stringify(content, null, 2)
+    return {
+      size: Buffer.byteLength(serialized, "utf8"),
+      isJson: true,
+      serialized,
+    }
   }
   return null
+}
+
+function safeBasename(toolId: string): string {
+  // Tool IDs come from the SDK (typically UUID-ish) but defense-in-depth:
+  // if anything ever supplies a path separator, `..`, or non-printable
+  // char, the file write could escape `subagent-results/<runId>/`.
+  // Strip to [A-Za-z0-9_-], collapse, cap length.
+  const cleaned = toolId.replace(/[^a-zA-Z0-9_-]/g, "_").replace(/_+/g, "_").slice(0, 200)
+  return cleaned.length > 0 ? cleaned : "tool"
 }
 
 function buildPreview(serialized: string): { preview: string; hasMore: boolean } {
@@ -733,7 +782,7 @@ export async function capTranscriptEntry(args: CapArgs): Promise<TranscriptEntry
   const dir = dirFor(args)
   await mkdir(dir, { recursive: true })
   const ext = info.isJson ? "json" : "txt"
-  const filepath = path.join(dir, `${entry.toolId}.${ext}`)
+  const filepath = path.join(dir, `${safeBasename(entry.toolId)}.${ext}`)
   try {
     await writeFile(filepath, info.serialized, { encoding: "utf-8", flag: "wx" })
   } catch (err) {
@@ -1457,13 +1506,24 @@ earlier: `onAskUserQuestionSubmit` is passed in). No code change.
 
 - [ ] **Step 1: Implement component**
 
+Build a synthetic `HydratedToolCall` that matches the shape in
+`src/shared/types.ts:1125-1138` (`HydratedToolCallBase`). The
+`AskUserQuestionMessage` component reads `message.input.questions`
+(`AskUserQuestionMessage.tsx:152`), not `message.questions` — `input`
+must be a nested object.
+
 Create `src/client/components/messages/SubagentPendingToolCard.tsx`:
 
 ```tsx
-import type { AskUserQuestionAnswerMap, SubagentPendingTool } from "../../../shared/types"
+import type {
+  AskUserQuestionAnswerMap,
+  HydratedAskUserQuestionToolCall,
+  HydratedExitPlanModeToolCall,
+  SubagentPendingTool,
+} from "../../../shared/types"
 import { AskUserQuestionMessage } from "./AskUserQuestionMessage"
 import { ExitPlanModeMessage } from "./ExitPlanModeMessage"
-import type { ProcessedToolCall, AskUserQuestionItem } from "./types"
+import type { AskUserQuestionItem } from "./types"
 
 interface Props {
   pendingTool: SubagentPendingTool
@@ -1476,14 +1536,16 @@ interface Props {
 
 export function SubagentPendingToolCard({ pendingTool, onAskUserQuestionSubmit, onExitPlanModeSubmit }: Props) {
   if (pendingTool.toolKind === "ask_user_question") {
-    const input = pendingTool.input as { questions?: AskUserQuestionItem[] }
-    const message: Extract<ProcessedToolCall, { toolKind: "ask_user_question" }> = {
-      kind: "tool_call",
+    const rawInput = pendingTool.input as { questions?: AskUserQuestionItem[] }
+    const message: HydratedAskUserQuestionToolCall = {
       id: pendingTool.toolUseId,
+      kind: "tool",
       toolKind: "ask_user_question",
-      toolUseId: pendingTool.toolUseId,
-      questions: input.questions ?? [],
-    } as Extract<ProcessedToolCall, { toolKind: "ask_user_question" }>
+      toolName: "AskUserQuestion",
+      toolId: pendingTool.toolUseId,
+      input: { questions: rawInput.questions ?? [] },
+      timestamp: new Date(pendingTool.requestedAt).toISOString(),
+    }
     return (
       <div data-testid={`subagent-pending-tool:${pendingTool.toolUseId}`}>
         <div className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">
@@ -1498,14 +1560,16 @@ export function SubagentPendingToolCard({ pendingTool, onAskUserQuestionSubmit, 
     )
   }
   if (pendingTool.toolKind === "exit_plan_mode") {
-    const input = pendingTool.input as { plan?: string }
-    const message: Extract<ProcessedToolCall, { toolKind: "exit_plan_mode" }> = {
-      kind: "tool_call",
+    const rawInput = pendingTool.input as { plan?: string }
+    const message: HydratedExitPlanModeToolCall = {
       id: pendingTool.toolUseId,
+      kind: "tool",
       toolKind: "exit_plan_mode",
-      toolUseId: pendingTool.toolUseId,
-      plan: input.plan ?? "",
-    } as Extract<ProcessedToolCall, { toolKind: "exit_plan_mode" }>
+      toolName: "ExitPlanMode",
+      toolId: pendingTool.toolUseId,
+      input: { plan: rawInput.plan ?? "" },
+      timestamp: new Date(pendingTool.requestedAt).toISOString(),
+    }
     return (
       <div data-testid={`subagent-pending-tool:${pendingTool.toolUseId}`}>
         <div className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">
@@ -1523,10 +1587,10 @@ export function SubagentPendingToolCard({ pendingTool, onAskUserQuestionSubmit, 
 }
 ```
 
-The exact `ProcessedToolCall` discriminator shape lives in
-`src/client/components/messages/types.ts`. Read that file and adjust
-the `as` cast so it matches the real shape (id field name,
-required fields, etc.).
+Verify the input shapes by reading
+`src/shared/types.ts` lines 1140-1156 (`AskUserQuestionToolCall`,
+`ExitPlanModeToolCall`) — adjust if the actual input field names
+differ.
 
 - [ ] **Step 2: Run typecheck**
 
@@ -1694,51 +1758,129 @@ git commit -m "feat(client): wire chat.respondSubagentTool dispatch in KannaTran
 
 ---
 
-## Task 17 — `SubagentEntryRow` renders persisted tool_result
+## Task 17 — Propagate `persisted` through hydration + render affordance
+
+**Background:** `parseTranscript.ts:91-106` consumes raw `tool_result`
+entries INTO the preceding `tool_call`'s `result`/`rawResult` fields.
+The raw `persisted` field on the tool_result entry is dropped.
+`SubagentEntryRow` only sees the hydrated tool call (`kind: "tool"`),
+not the original tool_result. We must copy `persisted` onto the
+hydrated tool call so the renderer can find it.
 
 **Files:**
+- Modify: `src/shared/types.ts:1125-1138`
+  (`HydratedToolCallBase` — add `persisted` field)
+- Modify: `src/client/lib/parseTranscript.ts:91-106`
+  (hydration: copy `persisted` from tool_result entry)
 - Modify: `src/client/components/messages/SubagentEntryRow.tsx`
+  (render branch)
 
-- [ ] **Step 1: Read existing component**
+- [ ] **Step 1: Add `persisted` to `HydratedToolCallBase`**
+
+In `src/shared/types.ts:1125-1138` extend the base shape:
+
+```ts
+export interface HydratedToolCallBase<TKind extends string, TInput, TResult> {
+  id: string
+  messageId?: string
+  hidden?: boolean
+  kind: "tool"
+  toolKind: TKind
+  toolName: string
+  toolId: string
+  input: TInput
+  result?: TResult
+  rawResult?: unknown
+  isError?: boolean
+  /**
+   * Set when the underlying tool_result entry was persisted to disk
+   * via the subagent payload cap. Mirrored from
+   * ToolResultEntry.persisted during hydration.
+   */
+  persisted?: {
+    filepath: string
+    originalSize: number
+    isJson: boolean
+    truncated: true
+  }
+  timestamp: string
+}
+```
+
+- [ ] **Step 2: Copy `persisted` during hydration**
+
+In `src/client/lib/parseTranscript.ts:91-106`, inside the
+`case "tool_result":` block, after assigning `result`/`rawResult`:
+
+```ts
+      case "tool_result": {
+        const pendingCall = pendingToolCalls.get(entry.toolId)
+        if (pendingCall) {
+          const rawResult = (
+            pendingCall.normalized.toolKind === "ask_user_question" ||
+            pendingCall.normalized.toolKind === "exit_plan_mode"
+          )
+            ? getStructuredToolResultFromDebug(entry) ?? entry.content
+            : entry.content
+
+          pendingCall.hydrated.result = hydrateToolResult(pendingCall.normalized, rawResult) as never
+          pendingCall.hydrated.rawResult = rawResult
+          pendingCall.hydrated.isError = entry.isError
+          // Phase 5: propagate persisted-on-disk metadata so renderers
+          // can surface "View full output" affordance on the tool call.
+          if (entry.persisted) {
+            pendingCall.hydrated.persisted = entry.persisted
+          }
+        }
+        break
+      }
+```
+
+- [ ] **Step 3: Read existing SubagentEntryRow**
 
 ```bash
 sed -n '1,200p' src/client/components/messages/SubagentEntryRow.tsx
 ```
 
-Find the `tool_result` rendering branch.
+Locate the branch that renders `message.kind === "tool"` (or the
+catch-all that delegates to `ToolCallMessage`).
 
-- [ ] **Step 2: Add persisted rendering**
+- [ ] **Step 4: Render persisted affordance**
 
-Where the `tool_result` branch renders content, gate on
-`entry.persisted`:
+In `SubagentEntryRow.tsx`, at the start of the render for a
+hydrated tool message, gate on `message.persisted`:
 
 ```tsx
-{entry.kind === "tool_result" && entry.persisted ? (
-  <div className="rounded-md border border-border bg-muted/30 p-2 space-y-1 text-xs">
-    <div className="font-medium">
-      Output too large ({formatBytes(entry.persisted.originalSize)}) — saved to disk
+if (message.kind === "tool" && message.persisted) {
+  const stripped = stripPersistedTags(asString(message.rawResult ?? ""))
+  return (
+    <div className="rounded-md border border-border bg-muted/30 p-2 space-y-1 text-xs">
+      <div className="font-medium">
+        {message.toolName}: output too large ({formatBytes(message.persisted.originalSize)}) — saved to disk
+      </div>
+      <pre className="text-[11px] whitespace-pre-wrap overflow-hidden max-h-48">
+        {stripped}
+      </pre>
+      <a
+        href={`file://${message.persisted.filepath}`}
+        onClick={(e) => {
+          e.preventDefault()
+          openLocalFile(message.persisted!.filepath)
+        }}
+        className="text-blue-500 hover:underline"
+      >
+        View full output ({message.persisted.filepath})
+      </a>
     </div>
-    <pre className="text-[11px] whitespace-pre-wrap overflow-hidden max-h-48">
-      {stripPersistedTags(asString(entry.content))}
-    </pre>
-    <a
-      href={`file://${entry.persisted.filepath}`}
-      onClick={(e) => {
-        e.preventDefault()
-        // Reuse the existing local-file open path used by LocalFileLinkCard
-        openLocalFile(entry.persisted!.filepath)
-      }}
-      className="text-blue-500 hover:underline"
-    >
-      View full output ({entry.persisted.filepath})
-    </a>
-  </div>
-) : (
-  /* existing rendering */
-)}
+  )
+}
 ```
 
-Helpers (add at module top):
+Then fall through to the existing render path for non-persisted
+calls.
+
+Helpers (add at module top — they only exist if not already
+imported):
 
 ```tsx
 function formatBytes(n: number): string {
@@ -1758,28 +1900,31 @@ function stripPersistedTags(s: string): string {
 }
 ```
 
-For `openLocalFile`, look at how `LocalFileLinkCard.tsx` opens
-files:
+For `openLocalFile`, locate the existing local-file open path:
 
 ```bash
-grep -n "openLocalFile\\|fetch.*localfile\\|/api/file" src/client/components/messages/LocalFileLinkCard.tsx
+grep -rn "openLocalFile\\|/api/local-file\\|file://" src/client/components/messages/LocalFileLinkCard.tsx src/client/lib/
 ```
 
-and reuse the same approach.
+Reuse the same approach (likely a fetch to a server endpoint that
+streams the file). If no shared helper exists, call
+`mcp__kanna__offer_download` indirectly by emitting a markdown link
+the existing `LocalFileLinkCard` consumes — verify by reading how
+commit `67fb665` wired downloads.
 
-- [ ] **Step 3: Run typecheck**
+- [ ] **Step 5: Run typecheck and tests**
 
 ```bash
-bun run check
+bun run check && bun test src/client
 ```
 
 Expected: passes.
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add src/client/components/messages/SubagentEntryRow.tsx
-git commit -m "feat(client): render persisted tool_result with View Full Output"
+git add src/shared/types.ts src/client/lib/parseTranscript.ts src/client/components/messages/SubagentEntryRow.tsx
+git commit -m "feat(client): propagate persisted tool_result through hydration + render View Full Output"
 ```
 
 ---
@@ -1831,20 +1976,37 @@ describe("SubagentMessage pending tool", () => {
   })
 
   test("renders persisted tool_result with View Full Output link", () => {
+    // processTranscriptMessages folds tool_result INTO the preceding
+    // tool_call, propagating `persisted` onto the hydrated tool
+    // message (see Task 17). Test the same pairing the real flow
+    // produces.
     const run = makeRun({
-      entries: [{
-        kind: "tool_result",
-        _id: "e1",
-        createdAt: 0,
-        toolId: "tool-big",
-        content: "<persisted-output>\nOutput too large (60 KB)…",
-        persisted: {
-          filepath: "/tmp/foo.txt",
-          originalSize: 60_000,
-          isJson: false,
-          truncated: true,
-        },
-      } as TranscriptEntry],
+      entries: [
+        {
+          kind: "tool_call",
+          _id: "call-1",
+          createdAt: 0,
+          tool: {
+            toolKind: "bash",
+            toolName: "Bash",
+            toolId: "tool-big",
+            input: { command: "find /" },
+          },
+        } as TranscriptEntry,
+        {
+          kind: "tool_result",
+          _id: "e1",
+          createdAt: 0,
+          toolId: "tool-big",
+          content: "<persisted-output>\nOutput too large (60 KB)…",
+          persisted: {
+            filepath: "/tmp/foo.txt",
+            originalSize: 60_000,
+            isJson: false,
+            truncated: true,
+          },
+        } as TranscriptEntry,
+      ],
     })
     render(
       <SubagentMessage
