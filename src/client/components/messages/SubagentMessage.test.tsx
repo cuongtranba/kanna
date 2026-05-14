@@ -141,4 +141,98 @@ describe("SubagentMessage", () => {
     const html = renderToStaticMarkup(<SubagentMessage run={run} indentDepth={0} localPath="/tmp" />)
     expect(html).toContain("Legacy text only")
   })
+
+  test("renders AskUserQuestion pending card when pendingTool is set", () => {
+    const html = renderToStaticMarkup(
+      <SubagentMessage
+        run={makeRunSnapshot({
+          pendingTool: {
+            toolUseId: "t1",
+            toolKind: "ask_user_question",
+            input: {
+              questions: [
+                { id: "q1", question: "Confirm?", header: "Confirm", multiSelect: false, options: [{ label: "yes" }, { label: "no" }] },
+              ],
+            },
+            requestedAt: 1700000000000,
+          },
+        })}
+        indentDepth={0}
+        localPath="/tmp"
+        onSubagentAskUserQuestionSubmit={() => undefined}
+        onSubagentExitPlanModeSubmit={() => undefined}
+      />,
+    )
+    expect(html).toContain('data-testid="subagent-pending-tool:t1"')
+    expect(html).toContain("awaiting your response")
+    expect(html).toContain("Confirm?")
+  })
+
+  test("renders ExitPlanMode pending card when pendingTool is set", () => {
+    const html = renderToStaticMarkup(
+      <SubagentMessage
+        run={makeRunSnapshot({
+          pendingTool: {
+            toolUseId: "t2",
+            toolKind: "exit_plan_mode",
+            input: { plan: "Step 1: do thing" },
+            requestedAt: 1700000000000,
+          },
+        })}
+        indentDepth={0}
+        localPath="/tmp"
+        onSubagentAskUserQuestionSubmit={() => undefined}
+        onSubagentExitPlanModeSubmit={() => undefined}
+      />,
+    )
+    expect(html).toContain('data-testid="subagent-pending-tool:t2"')
+    expect(html).toContain("Step 1: do thing")
+  })
+
+  test("renders persisted tool_result with View Full Output link", () => {
+    // processTranscriptMessages folds tool_result INTO the preceding tool_call,
+    // propagating `persisted` onto the hydrated tool message. Test the same
+    // pairing the real flow produces.
+    const html = renderToStaticMarkup(
+      <SubagentMessage
+        run={makeRunSnapshot({
+          entries: [
+            {
+              _id: "call-1",
+              createdAt: 0,
+              kind: "tool_call",
+              messageId: "m1",
+              tool: {
+                kind: "tool",
+                toolKind: "bash",
+                toolName: "Bash",
+                toolId: "tool-big",
+                input: { command: "find /" },
+              },
+            } as TranscriptEntry,
+            {
+              _id: "e1",
+              createdAt: 0,
+              kind: "tool_result",
+              toolId: "tool-big",
+              content: "<persisted-output>\nOutput too large (60 KB)…\n</persisted-output>",
+              persisted: {
+                filePath: "/tmp/foo.txt",
+                originalSize: 60_000,
+                isJson: false,
+                truncated: true,
+              },
+            } as TranscriptEntry,
+          ],
+        })}
+        indentDepth={0}
+        localPath="/tmp"
+        onSubagentAskUserQuestionSubmit={() => undefined}
+        onSubagentExitPlanModeSubmit={() => undefined}
+      />,
+    )
+    expect(html).toContain("output too large")
+    expect(html).toContain("View full output")
+    expect(html).toContain("/tmp/foo.txt")
+  })
 })
