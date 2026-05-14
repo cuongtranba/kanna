@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { AgentProvider, TranscriptEntry } from "../shared/types"
-import { buildHistoryPrimer, PRIMER_MAX_CHARS, shouldInjectPrimer } from "./history-primer"
+import { buildHistoryPrimer, extractPreviousAssistantReply, PRIMER_MAX_CHARS, shouldInjectPrimer } from "./history-primer"
 
 function userEntry(text: string, createdAt: number): TranscriptEntry {
   return { _id: `u-${createdAt}`, kind: "user_prompt", createdAt, content: text }
@@ -56,5 +56,35 @@ describe("buildHistoryPrimer", () => {
     const primer = buildHistoryPrimer(entries, "codex" as AgentProvider, "tail")!
     expect(primer.length).toBeLessThanOrEqual(PRIMER_MAX_CHARS + 200)
     expect(primer).toContain("earlier conversation omitted")
+  })
+})
+
+describe("extractPreviousAssistantReply", () => {
+  test("returns null when no prior assistant reply", () => {
+    const entries: TranscriptEntry[] = [userEntry("hi", 1000)]
+    expect(extractPreviousAssistantReply(entries)).toBeNull()
+  })
+
+  test("returns last assistant text", () => {
+    const entries: TranscriptEntry[] = [
+      userEntry("hi", 1000),
+      assistantEntry("first reply", 1100),
+      userEntry("more", 1200),
+      assistantEntry("second reply", 1300),
+    ]
+    expect(extractPreviousAssistantReply(entries)).toBe("second reply")
+  })
+
+  test("falls back to tool call summary if reply has no text", () => {
+    const entries: TranscriptEntry[] = [
+      userEntry("run x", 1000),
+      {
+        _id: "t1",
+        kind: "tool_call",
+        createdAt: 1100,
+        tool: { kind: "tool", toolKind: "bash", toolName: "Bash", toolId: "x", input: { command: "ls" } },
+      } as unknown as TranscriptEntry,
+    ]
+    expect(extractPreviousAssistantReply(entries)).toBe("Bash: ls")
   })
 })
