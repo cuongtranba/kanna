@@ -53,7 +53,10 @@ export interface SubagentOrchestratorDeps {
 
 const DEFAULT_MAX_PARALLEL = 4
 const DEFAULT_MAX_CHAIN_DEPTH = 1
-const DEFAULT_RUN_TIMEOUT_MS = 120_000
+// Subagents now run with full toolset (Bash, Read, etc) so single turns may
+// take minutes. 600s matches the default Bash tool wall-clock cap. Tests still
+// override via SubagentOrchestratorDeps.runTimeoutMs.
+const DEFAULT_RUN_TIMEOUT_MS = 600_000
 
 export class SubagentOrchestrator {
   private permits: number
