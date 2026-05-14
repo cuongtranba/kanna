@@ -341,7 +341,7 @@ describe("SubagentOrchestrator", () => {
     const stream = (function () {
       const entries: TranscriptEntry[] = [
         { _id: "e1", createdAt: 1, kind: "assistant_text", text: "hi" } as TranscriptEntry,
-        { _id: "e2", createdAt: 2, kind: "result", subtype: "ok", isError: false,
+        { _id: "e2", createdAt: 2, kind: "result", subtype: "success", isError: false,
           result: "hi", durationMs: 10, costUsd: 0.001,
           usage: { inputTokens: 5, outputTokens: 1 } } as TranscriptEntry,
       ]
@@ -434,7 +434,7 @@ describe("SubagentOrchestrator", () => {
   test("PROVIDER_ERROR mid-run leaves accumulated entries on the run", async () => {
     const harness = await setupHarness({ subagents: [makeSubagent({ id: "sa-1", name: "alpha" })] })
     harness.mockProviderRun({
-      async start(onChunk, onEntry) {
+      async start(_onChunk, onEntry) {
         onEntry({ _id: "e1", createdAt: 1, kind: "assistant_text", text: "partial " } as TranscriptEntry)
         onEntry({ _id: "e2", createdAt: 2, kind: "tool_call",
           tool: { kind: "tool", toolKind: "bash", toolName: "Bash", toolId: "t1", input: { command: "ls" } },
