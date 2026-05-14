@@ -1,7 +1,7 @@
 # Claude PTY Driver — Design
 
 **Date:** 2026-05-14
-**Status:** Draft v15 — thirteenth codex adversarial pass applied (same-account PTYs serialized via `oauthPool.acquireExclusive` lease; credential version is composite inode+ctime+content-hash, not mtime; claude sandbox profile lists exact file allows with default-deny), awaiting user review
+**Status:** Draft v16 — fourteenth codex adversarial pass applied (transcript path made writable in claude sandbox; profile-specific preflight sentinels with opposite expectations for credential file; lease held until post-exit readback completes), awaiting user review
 **Author:** session-collaborative
 **Related code:** `src/server/agent.ts`, `src/server/terminal-manager.ts`, `src/server/harness-types.ts`, `src/server/kanna-mcp.ts`
 
@@ -263,16 +263,37 @@ claude must be able to read+write its own `.credentials.json` for OAuth, read pr
 | `file-read*` | `<spawnHome>/.claude/settings.local.json` |
 | `file-read*` `file-write*` | Workspace `cwd` (subtree) **minus** glob-deny overlays for `readPathDeny`/`writePathDeny`. |
 | `file-read*` `file-write*` | Each `additionalDirectories` entry (subtree) **minus** glob-deny overlays. |
-| `file-read*` | `<spawnHome>/.claude/projects/<sessionId>.jsonl` (claude's own transcript — needed for `--resume`). |
+| `file-read*` `file-write*` `file-create` | `<spawnHome>/.claude/projects/<encodedCwd>/<sessionId>.jsonl` (claude's transcript; must be writable and creatable, not just readable). |
+| `file-read*` `file-write*` `file-create` | Parent dir `<spawnHome>/.claude/projects/<encodedCwd>/` (create + list during transcript open) — directory traversal allow, but no read of arbitrary files inside; Kanna pre-creates the directory before spawn so the first append succeeds. |
 | `network-outbound` | Anthropic API hosts only (static allowlist) + UDS at `<runtimeDir>/.../kanna-mcp.sock`. |
 | `process-fork` | self |
 | `process-exec` | `<resolved-claude-binary>` (self-respawn only); deny all other binaries |
 
 No directory-level allow on `<spawnHome>/.claude/**`. Every additional file claude needs (e.g., a future schema file) must be added to this explicit list.
 
-**Preflight sentinel for the claude profile** (in addition to the existing tool sentinel): write a decoy `<spawnHome>/.claude/decoy-must-deny.txt` and attempt to read it inside the claude profile during preflight. Read must be denied. Read of `<spawnHome>/.claude/.credentials.json` must succeed. Spawn fails closed on wrong outcome.
+**Profile-specific preflight sentinels** (replace earlier blanket sentinel rule):
 
-Preflight sentinel **inside claude's sandbox** (separate from the existing "spawn sentinel" probe): boot a 200ms child of the sandbox that attempts to read `<spawnHome>/.claude/.credentials.json` (must succeed), a sibling account's HOME (must fail), and a `~/.ssh/id_rsa` (must fail). Spawn fails closed on any wrong outcome.
+*claude profile* — boot a 200ms child under the claude sandbox profile. Assertions:
+- Read of `<spawnHome>/.claude/.credentials.json` → **must succeed** (auth path).
+- Read of `<spawnHome>/.claude/settings.local.json` → **must succeed**.
+- Write to `<spawnHome>/.claude/projects/<encodedCwd>/preflight-marker.jsonl` (then delete) → **must succeed** (transcript writability).
+- Read of decoy `<spawnHome>/.claude/decoy-must-deny.txt` (pre-written by Kanna) → **must be denied**.
+- Read of sibling-account HOME → **must be denied**.
+- Read of `~/.ssh/id_rsa` → **must be denied**.
+
+*tool-subprocess profile* — boot a 200ms child under the tool sandbox profile. Assertions:
+- Read of `<spawnHome>/.claude/.credentials.json` → **must be denied** (no exception in this profile).
+- Read of `<spawnHome>/.claude/decoy-must-deny.txt` → **must be denied**.
+- Read of `<runtimeDir>/accounts/<otherAccountId>/.claude/.credentials.json` → **must be denied**.
+- Read of `~/.ssh/id_rsa`, `~/.aws/credentials` → **must be denied**.
+- Read of workspace-secret sentinel (`.env`, `*.pem`) → **must be denied**.
+- Read of workspace non-sensitive file → **must succeed** (sanity).
+
+Both preflight suites run before any user-facing PTY spawn. Any wrong outcome in either rejects the spawn.
+
+See "Profile-specific preflight sentinels" below for the full preflight assertion set under this profile. Summary: credential file readable + transcript writable + decoy in `.claude/` denied + sibling-account and SSH key denied. Any wrong outcome → spawn fails closed.
+
+Kanna **pre-creates** the transcript directory `<spawnHome>/.claude/projects/<encodedCwd>/` (mode `0700`) before spawn so the first JSONL append by claude has a parent directory it can write into without escalating sandbox grants.
 
 ### Tool-subprocess sandbox (per `mcp__kanna__bash` invocation)
 
@@ -304,10 +325,17 @@ This sandbox is fresh per tool call and lives only for the lifetime of that subp
 
 **Lifecycle rule** (in `ClaudeSessionLifecycle`):
 
-- `oauthPool.acquireExclusive(chatId, preferredAccountId?)` returns `{ accountId, lease }`. The lease is held for the lifetime of the PTY (WARMING → IDLE → COOLING). No other PTY can acquire the same `accountId` while the lease is held.
+- `oauthPool.acquireExclusive(chatId, preferredAccountId?)` returns `{ accountId, lease }`. The lease is held **from WARMING start until the claude OS process has fully exited (or been killed) AND a post-exit final readback has completed**. The lease does NOT release at COOLING entry — COOLING is when we send `/exit`; the claude process is still alive then and can still write `.credentials.json` until termination.
 - If the only available account is leased, the second chat's spawn waits in a queue. UI shows "Waiting for account <name>" with the queue position.
 - If multiple accounts exist in the pool, `acquireExclusive` picks an unleased one. Rate-limit and sticky-by-chat rules still apply when ranking candidates.
-- Lease released when PTY enters COOLING. Kanna does a final read-and-sync (see "Readback") before release.
+- **Lease release sequence:**
+  1. Trigger fires (idle timeout, eviction, etc.) → state → COOLING.
+  2. Send `/exit` to PTY. Start 2s timer.
+  3. Either claude exits cleanly or 2s elapses → `kill(pid, SIGTERM)` then `kill(pid, SIGKILL)` if still alive.
+  4. `await waitpid(pid)` — block until kernel confirms process is gone.
+  5. **Final readback**: read `.credentials.json` on disk, compute composite `credVersion`, CAS into `oauthPool`. Captures any refresh write that landed between final fs.watch and process exit.
+  6. Release lease. Queued chats for this account become eligible.
+- If Kanna crashes mid-lease: on restart, each lease record stores the claude pid. A startup sweep checks `kill(pid, 0)` — if process is gone, lease released after readback; if process is still alive (rare crash-without-PTY-cleanup), Kanna kills it before releasing.
 
 This eliminates the same-account multi-writer problem at its root. The coordinator below only handles the **single-writer** case: claude refreshes its own token, Kanna observes the change to sync back to the pool.
 
@@ -329,10 +357,11 @@ This eliminates the same-account multi-writer problem at its root. The coordinat
    - Parse + validate. On parse failure → wait 50ms, retry once (claude may be mid-rename). On second failure → mark this account `credential_corrupted` in pool, surface UI error, do not update pool.
    - **CAS:** pool update succeeds only if `pool.current[accountId].credVersion === knownLastVersion` at the time we read the file. If the pool has a newer version (Kanna seeded since the last observation), take the file-on-disk as authoritative (claude is OAuth source of truth) and overwrite the pool entry. `lastSeen` advances to the new triple atomically with the pool update.
 5. **Readback before every spawn.** Even with lease serialization, the lease can be reclaimed across a Kanna restart. Before spawn, Kanna reads the on-disk credential, computes `credVersion`, and syncs the pool if it differs. If the file is missing or corrupt, seed from pool.
-6. **Readback at lease release (PTY COOLING).** Final read-and-sync under the lease so any in-progress refresh that fired right before COOLING is captured before release.
+6. **Post-exit readback (final).** After `waitpid(pid)` confirms the claude process is gone (see "Lease release sequence" above), Kanna reads `.credentials.json` once more and CASes into pool. The lease is **not** released until this step completes. This is the authoritative final-state capture.
 7. **No coalesced-loss guarantee from fs.watch alone.** The lease-release readback is the safety net for any fs.watch event the kernel drops or coalesces.
 8. **Tests** (`account-home.test.ts`):
-   - **Lease serialization:** two chats request the same account → second waits; first releases (COOLING) → second acquires; pool state consistent throughout.
+   - **Lease serialization:** two chats request the same account → second waits; first PTY's process exits and post-exit readback completes → second acquires; pool state consistent throughout. Explicit assertion: second spawn does NOT start while first process is still alive in COOLING.
+   - **Refresh during COOLING:** simulate claude writing `.credentials.json` after `/exit` was sent but before process exit → post-exit readback captures it → pool reflects the late write before lease release.
    - **Same-mtime refresh:** two consecutive writes to `.credentials.json` within one mtime tick → composite version distinguishes them; pool sees both updates (or coalesces to the final state — never gets stuck on the older).
    - **Missed fs.watch event:** simulate suppressed event for one refresh → lease-release readback recovers the missed update before next spawn.
    - **Inode-change detection:** atomic-rename replacement → inode change observed; pool advances.
@@ -682,13 +711,10 @@ The two profiles are generated together at PTY spawn and re-generated whenever s
 **Fail-closed preflight (runs on every spawn, supported OS):**
 
 1. Resolve sandbox binary (`/usr/bin/sandbox-exec` macOS, `bwrap` Linux). Fail spawn if missing.
-2. Generate the deny-list profile from current `readPathDeny` + `writePathDeny`. Fail spawn if generation errors (e.g., unresolvable `~`).
+2. Generate **both** sandbox profiles (claude + tool-subprocess) from current `readPathDeny` + `writePathDeny`. Fail spawn if generation errors (e.g., unresolvable `~`).
 3. Walk workspace + `additionalDirectories` for glob matches of `readPathDeny` patterns. Fail spawn if the walk exceeds the bounded match cap (configurable, default 500).
-4. Boot the sandbox with a 200ms sentinel child that attempts to read each of:
-   - HOME credentials: `~/.claude/.credentials.json`, `~/.ssh/id_rsa`, `~/.aws/credentials`.
-   - Workspace credentials (generated on first preflight if absent, kept under `<runtimeDir>/sentinels/`): `<workspace>/.kanna-sentinel.env`, `<workspace>/kanna-sentinel.pem`, `<workspace>/credentials-kanna-sentinel.json`. These files contain random bytes Kanna uses solely to verify deny works.
-   The child writes results to a private pipe. Spawn proceeds only if **all** sentinel reads were denied. Any success → reject with `"Sandbox preflight failed: <path> reachable. Refusing to launch."`.
-5. Cache successful preflight result per `(OS-version, profile-hash, sentinel-set-hash)` for 24h.
+4. Run the **two** profile-specific preflight sentinel suites (see "Profile-specific preflight sentinels" under "claude's own sandbox profile"). Each suite has its own pass/deny rules; `~/.claude/.credentials.json` must be reachable under the claude profile but denied under the tool-subprocess profile. Spawn proceeds only if **both** suites' assertions all pass.
+5. Cache successful preflight result per `(OS-version, claudeProfileHash, toolProfileHash, sentinel-set-hash)`.
 
 **Explicit override:**
 - `KANNA_PTY_SANDBOX=off` is recognized only on supported OSes and only when the user has acknowledged the unsafe-mode confirm dialog. When off: `--tools` remains `"mcp__kanna__*"` (no built-in read tools — same as the on-mode default), renders a global red banner, and disables auto-approve toggles. Reads still go through `mcp__kanna__read/glob/grep` which apply `readPathDeny` per call. This is the only way to run PTY without OS sandboxing; it is **not** silently permitted.
@@ -698,10 +724,11 @@ The two profiles are generated together at PTY spawn and re-generated whenever s
 Tests (`sandbox-preflight.test.ts`):
 - Missing binary → reject.
 - Bad profile generation → reject.
-- HOME sentinel reachable → reject.
-- **Workspace sentinel** (`.env`, `*.pem`, `credentials*`) reachable → reject. Fixture sets up a real workspace with these files.
+- **claude profile**: credentials.json reachable → allow that assertion; credentials.json denied → reject (auth would fail). Decoy `.claude/decoy-must-deny.txt` reachable → reject. Transcript write to `<spawnHome>/.claude/projects/<encodedCwd>/preflight-marker.jsonl` succeeds → allow; denied → reject (JSONL tail would fail).
+- **tool-subprocess profile**: credentials.json denied → allow that assertion; credentials.json reachable → reject. Sibling-account credentials denied → allow; reachable → reject.
+- **Workspace sentinel** (`.env`, `*.pem`, `credentials*`) reachable under tool profile → reject. Fixture sets up a real workspace with these files.
 - Overflow of bounded glob walk → reject.
-- All sentinels denied → allow + cache.
+- All sentinels match expected → allow + cache.
 - Cache hit skips re-run.
 - Cache invalidates on `profile-hash` or `sentinel-set-hash` change.
 - Windows default (no env override) → reject with `unsupported_platform`.
