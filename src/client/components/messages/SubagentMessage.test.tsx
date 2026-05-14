@@ -237,19 +237,19 @@ describe("SubagentMessage", () => {
     expect(html).toContain("/tmp/foo.txt")
   })
 
-  test("renders X button while running and dispatches onCancelSubagentRun on click", () => {
-    let received: { chatId: string; runId: string } | null = null
+  test("renders X button while running with correct testid + aria-label", () => {
+    // Static markup can't simulate clicks; dispatch path is covered
+    // end-to-end by agent.test.ts cancelSubagentRun routing test.
     const html = renderToStaticMarkup(
       <SubagentMessage
         run={makeRunSnapshot({ status: "running", runId: "r-running", chatId: "c1" })}
         indentDepth={0}
         localPath="/tmp"
-        onCancelSubagentRun={(chatId, runId) => { received = { chatId, runId } }}
+        onCancelSubagentRun={() => undefined}
       />,
     )
     expect(html).toContain('data-testid="subagent-cancel:r-running"')
     expect(html).toContain('aria-label="Cancel subagent"')
-    void received
   })
 
   test("does not render X button when status is not running", () => {
