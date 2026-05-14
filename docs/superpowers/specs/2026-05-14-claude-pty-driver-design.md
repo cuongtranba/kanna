@@ -1,7 +1,7 @@
 # Claude PTY Driver — Design
 
 **Date:** 2026-05-14
-**Status:** Draft v5 — fourth codex adversarial pass applied (ToolRequest schema rebound to args, sandbox preflight fail-closed), awaiting user review
+**Status:** Draft v6 — fifth codex adversarial pass applied (workspace-secret deny enforced in sandbox; Windows references made consistent — fail-closed by default), awaiting user review
 **Author:** session-collaborative
 **Related code:** `src/server/agent.ts`, `src/server/terminal-manager.ts`, `src/server/harness-types.ts`, `src/server/kanna-mcp.ts`
 
@@ -416,22 +416,43 @@ Result: `cat ~/.claude/.credentials.json`, `rg . ~/.ssh`, `cat $(echo ~/.ssh/id_
 OS-level sandboxing is the **only** effective gate against the CLI's still-enabled built-in `Read` / `Glob` / `Grep`. Kanna treats it as a hard precondition for `KANNA_CLAUDE_DRIVER=pty` on every supported platform.
 
 **Implementation:**
-- macOS: `sandbox-exec -f <generated.sb>` wrapping the `claude` invocation. Profile denies `file-read*` for each path in `readPathDeny` and the workspace-relative `writePathDeny`. Profile is generated per-spawn so user-edited deny lists take effect.
-- Linux: `bwrap` with read-only bind-mounts over the workspace + `additionalDirectories` and explicit `--tmpfs` / `--bind-try /dev/null` overlays for each deny-list path inside `$HOME`.
-- Windows: not supported in v1. PTY driver refuses to spawn unless `KANNA_PTY_SANDBOX=off` is set explicitly **and** the user confirms an "unsafe Windows mode" toggle (separate from the per-chat `auto-approve` toggle, server-wide). This off mode renders a permanent unsafe banner across the whole app.
+
+- **macOS:** `sandbox-exec -f <generated.sb>` wrapping the `claude` invocation. Profile denies `file-read*` for:
+  - Every absolute path in `readPathDeny`.
+  - Every `readPathDeny` glob expanded across the workspace cwd AND each path in `additionalDirectories` (so workspace-relative `**/.env`, `**/credentials*`, `**/*.pem`, `**/*.key`, `**/id_rsa*`, `**/id_ed25519*` are denied wherever they live inside the agent's accessible roots).
+  - Every path in `writePathDeny` (covers `file-write*` and `file-read*`).
+  Profile is regenerated per-spawn so user-edited deny lists, new files added since last spawn, and updated `additionalDirectories` all take effect.
+- **Linux:** `bwrap` with read-only bind-mounts of the workspace + `additionalDirectories`, plus `--tmpfs` / `--bind-try /dev/null` overlays for **every** matched path: HOME credential dirs AND each file in the workspace/additionalDirectories matching a `readPathDeny` glob. Kanna runs a pre-spawn glob walk to enumerate matches and emits an overlay per match. Glob walk is bounded (max-files cap; reject spawn with "too many sensitive files in workspace, prune before launching" on overflow — better fail-closed than miss one).
+- **Windows:** unsupported in v1. PTY driver refuses to spawn by default. There is no `off` default. Allowing PTY on Windows requires the user to explicitly set BOTH (a) `KANNA_PTY_SANDBOX=off` env, AND (b) a server-wide `unsafeWindowsPty: true` toggle in app settings (with destructive-action confirm). When both are set, off-mode is active and additionally strips `Read`, `Glob`, `Grep` from `--tools` allowlist (model has only `mcp__kanna__*` for filesystem access via `mcp__kanna__read_guard`). A permanent global red banner renders across the whole app while off-mode is active.
 
 **Fail-closed preflight (runs on every spawn, supported OS):**
 
 1. Resolve sandbox binary (`/usr/bin/sandbox-exec` macOS, `bwrap` Linux). Fail spawn if missing.
 2. Generate the deny-list profile from current `readPathDeny` + `writePathDeny`. Fail spawn if generation errors (e.g., unresolvable `~`).
-3. Boot the sandbox with a 200ms sentinel child that attempts to read each of: `~/.claude/.credentials.json`, `~/.ssh/id_rsa`, `~/.aws/credentials`. The child writes the results to a private pipe Kanna reads. Spawn proceeds only if all three reads were denied. If any sentinel read succeeded, spawn is rejected with `"Sandbox preflight failed: <path> reachable. Refusing to launch."`.
-4. Cache successful preflight result per (OS-version, profile-hash) for 24h to avoid running it on every PTY spawn.
+3. Walk workspace + `additionalDirectories` for glob matches of `readPathDeny` patterns. Fail spawn if the walk exceeds the bounded match cap (configurable, default 500).
+4. Boot the sandbox with a 200ms sentinel child that attempts to read each of:
+   - HOME credentials: `~/.claude/.credentials.json`, `~/.ssh/id_rsa`, `~/.aws/credentials`.
+   - Workspace credentials (generated on first preflight if absent, kept under `<runtimeDir>/sentinels/`): `<workspace>/.kanna-sentinel.env`, `<workspace>/kanna-sentinel.pem`, `<workspace>/credentials-kanna-sentinel.json`. These files contain random bytes Kanna uses solely to verify deny works.
+   The child writes results to a private pipe. Spawn proceeds only if **all** sentinel reads were denied. Any success → reject with `"Sandbox preflight failed: <path> reachable. Refusing to launch."`.
+5. Cache successful preflight result per `(OS-version, profile-hash, sentinel-set-hash)` for 24h.
 
 **Explicit override:**
-- `KANNA_PTY_SANDBOX=off` is recognized but documented as **dangerous and unsupported**. When off, PTY spawn additionally removes `Read`, `Glob`, `Grep` from `--tools` allowlist (model loses read tools entirely — `mcp__kanna__read_guard` is the only path) and renders a global red banner. This is the only way to enable PTY without a sandbox; it is **not** silently permitted.
+- `KANNA_PTY_SANDBOX=off` is recognized only on supported OSes and only when the user has acknowledged the unsafe-mode confirm dialog. When off: removes `Read`, `Glob`, `Grep` from `--tools` allowlist (model loses read tools entirely — `mcp__kanna__read_guard` is the only filesystem path), renders a global red banner, and disables auto-approve toggles. This is the only way to enable PTY without a sandbox; it is **not** silently permitted.
 - `KANNA_PTY_SANDBOX=on` (default on macOS/Linux) is the supported mode.
+- On Windows, the env var alone is insufficient — the server-wide `unsafeWindowsPty` setting must also be true, see "Implementation: Windows" above.
 
-Tests (`sandbox-preflight.test.ts`): missing binary → reject, bad profile → reject, sentinel reachable → reject, all-denied → allow + cache, cache hit skips re-run, cache invalidates on profile-hash change.
+Tests (`sandbox-preflight.test.ts`):
+- Missing binary → reject.
+- Bad profile generation → reject.
+- HOME sentinel reachable → reject.
+- **Workspace sentinel** (`.env`, `*.pem`, `credentials*`) reachable → reject. Fixture sets up a real workspace with these files.
+- Overflow of bounded glob walk → reject.
+- All sentinels denied → allow + cache.
+- Cache hit skips re-run.
+- Cache invalidates on `profile-hash` or `sentinel-set-hash` change.
+- Windows default (no env override) → reject with `unsupported_platform`.
+- Windows with `KANNA_PTY_SANDBOX=off` but `unsafeWindowsPty=false` → reject.
+- Windows fully off-mode → spawn proceeds, `--tools` lacks `Read`, `Glob`, `Grep`.
 
 User can edit lists per-chat. "Auto-approve everything" is a single toggle that sets `defaultAction: "auto-allow"` and shows the red banner. Even under auto-approve, `readPathDeny` and `writePathDeny` still apply — auto-approve cannot grant access to denied paths.
 
@@ -461,7 +482,7 @@ If the spike fails AND the user has third-party MCP enabled, spawn is rejected a
 
 ### What we still cannot fully gate (documented in user docs)
 
-- CLI built-in **`Read`** / **`Glob`** / **`Grep`** (read-only, kept enabled for usability). Information disclosure of credential paths is mitigated by `readPathDeny` enforced via OS sandboxing (`KANNA_PTY_SANDBOX=on`, default on for macOS/Linux). On Windows, these paths are not gated — Windows users see a UI warning.
+- CLI built-in **`Read`** / **`Glob`** / **`Grep`** (read-only, kept enabled for usability on macOS/Linux). Information disclosure of credential paths is mitigated by `readPathDeny` enforced via OS sandboxing (`KANNA_PTY_SANDBOX=on`, default on for macOS/Linux, preflight fail-closed). On Windows: PTY refuses to spawn by default; the only path to run on Windows is the explicit off-mode (see "Sandboxing the spawn"), which strips `Read`/`Glob`/`Grep` from `--tools` so these built-ins are simply unavailable.
 - File-system race conditions if user shells out from a still-enabled subprocess elsewhere on the system.
 - Long-running processes spawned by approved tool calls and inherited beyond the tool's lifetime. Documented limitation.
 
@@ -539,7 +560,8 @@ The lifecycle wrapper is mounted between `AgentCoordinator` and the raw `startCl
 | `KANNA_PTY_IDLE_TIMEOUT_MS` | `600000` | 10 min idle → stop |
 | `KANNA_PTY_PREWARM_GRACE_MS` | `2000` | Cancel pre-warm if user moves on |
 | `KANNA_PTY_WARM_TIMEOUT_MS` | `30000` | Spawn timeout |
-| `KANNA_PTY_SANDBOX` | `on` (macOS/Linux), `off` (Win) | OS sandbox profile around `claude` spawn (denies reads of credential dirs) |
+| `KANNA_PTY_SANDBOX` | `on` (macOS/Linux); **Windows: PTY spawn refused entirely** unless explicit `off` env + `unsafeWindowsPty: true` app setting | OS sandbox profile around `claude` spawn (denies reads of credential dirs and workspace secrets). |
+| `unsafeWindowsPty` (app setting) | `false` | Windows-only escape hatch. Must be `true` AND `KANNA_PTY_SANDBOX=off` to enable PTY on Windows. Renders global red banner. Strips `Read`/`Glob`/`Grep` from `--tools`. |
 | `KANNA_MCP_ALLOWLIST` | `""` (empty) | Comma-separated names of third-party MCP servers permitted. Empty = none. |
 | `CLAUDE_EXECUTABLE` | (auto) | Existing — path to `claude` binary |
 
@@ -586,7 +608,7 @@ Any new UI surface (badges, banners, settings toggle) is verified via `renderFor
 | User MCP servers (3rd-party) bypass Kanna gating | Default fail-closed: only `kanna-mcp` is loaded. Third-party MCP requires explicit allowlist AND a functional PreToolUse hook; otherwise spawn refused. See "Third-party MCP servers — fail closed". |
 | Bash auto-allow leaks credentials (`cat ~/.claude/...`) | Bash is parsed (no regex prefix), `readPathDeny` resolved per arg, shell features (pipes/subshell/eval) downgrade to `ask`. `auto-allow` cannot override deny-list. OS sandbox (`sandbox-exec` / `bwrap`) is the secondary gate. |
 | ToolUseId replay with mutated args | Idempotency id binds to `(toolUseId, toolName, canonicalArgsHash)`; mismatch fails closed with `argument_mismatch` and emits audit event. |
-| CLI built-in `Read`/`Glob`/`Grep` read sensitive paths | OS-level sandbox (`KANNA_PTY_SANDBOX=on` default) denies file access to deny-list paths. Windows: documented limitation. |
+| CLI built-in `Read`/`Glob`/`Grep` read sensitive paths | OS-level sandbox (`KANNA_PTY_SANDBOX=on` default) denies file access to deny-list paths AND to glob-matched workspace secrets. Preflight sentinel covers both HOME and workspace credentials; spawn fails closed on any reachable sentinel. Windows: spawn refused by default; off-mode strips `Read`/`Glob`/`Grep` from `--tools`. |
 | Lifecycle bugs leak PTY processes (RSS exhaustion) | LRU cap + idle timeout + server shutdown fanout + `ps`-based reaper sweep on startup. Runtime dir cleanup on COOLING. |
 | Subagent feature uses `initialPrompt` + `systemPromptOverride` | Map to `--system-prompt` + send-prompt-then-exit-on-Stop. Covered by `driver.test.ts`. |
 | Loss of `oauthPool` multi-token rotation in PTY mode | Documented tradeoff. Pool still serves SDK driver. PTY = single subscription. |
