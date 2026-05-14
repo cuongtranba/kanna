@@ -21,6 +21,7 @@ function makeRunSnapshot(over: Partial<SubagentRunSnapshot> = {}): SubagentRunSn
     error: null,
     usage: null,
     entries: [],
+    pendingTool: null,
     ...over,
   }
 }

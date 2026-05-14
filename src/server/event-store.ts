@@ -825,6 +825,7 @@ export class EventStore implements PushEventStore {
           error: null,
           usage: null,
           entries: [],
+          pendingTool: null,
         })
         break
       }
