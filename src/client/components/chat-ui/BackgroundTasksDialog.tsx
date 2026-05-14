@@ -186,6 +186,8 @@ export const TaskRow = memo(function TaskRow({
     onConfirmEnd()
     // restore focus to stop button
     stopButtonRef.current?.focus()
+    // stopButtonRef is a stable ref object — intentionally excluded from deps per React convention.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [onConfirmEnd])
 
   const handleConfirmStop = useCallback(() => {
