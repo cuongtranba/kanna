@@ -904,6 +904,7 @@ export interface ResultEntry extends TranscriptEntryBase {
   durationMs: number
   result: string
   costUsd?: number
+  usage?: ProviderUsage
 }
 
 export interface StatusEntry extends TranscriptEntryBase {

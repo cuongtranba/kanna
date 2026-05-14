@@ -3,7 +3,7 @@ import { existsSync, readFileSync as readFileSyncImmediate } from "node:fs"
 import { homedir } from "node:os"
 import path from "node:path"
 import { getDataDir, LOG_PREFIX } from "../shared/branding"
-import type { AgentProvider, ChatHistoryPage, ChatHistorySnapshot, QueuedChatMessage, ResultEntry, SlashCommand, StackBinding, SubagentRunSnapshot, TranscriptEntry } from "../shared/types"
+import type { AgentProvider, ChatHistoryPage, ChatHistorySnapshot, QueuedChatMessage, SlashCommand, StackBinding, SubagentRunSnapshot, TranscriptEntry } from "../shared/types"
 import { STORE_VERSION } from "../shared/types"
 import type { AutoContinueEvent } from "./auto-continue/events"
 import {
@@ -843,9 +843,8 @@ export class EventStore implements PushEventStore {
         // If the entry carries usage (the SDK's terminal "result" message), mirror
         // it onto run.usage so callers can read it without scanning entries.
         if (e.entry.kind === "result") {
-          const resultEntry = e.entry as ResultEntry & { usage?: { inputTokens?: number; outputTokens?: number; cachedInputTokens?: number } }
-          const cost = resultEntry.costUsd
-          const usage = resultEntry.usage
+          const usage = e.entry.usage
+          const cost = e.entry.costUsd
           run.usage = {
             inputTokens: usage?.inputTokens,
             outputTokens: usage?.outputTokens,
