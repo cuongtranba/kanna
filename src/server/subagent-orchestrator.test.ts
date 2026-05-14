@@ -507,4 +507,38 @@ describe("SubagentOrchestrator", () => {
     expect(run.status).toBe("completed")
     expect(run.finalText).toBe("done after pause")
   }, 10_000)
+
+  test("recoverInterruptedRuns: marks runs with pendingTool as INTERRUPTED", async () => {
+    const dataDir = await createTempDataDir()
+    const store = new EventStore(dataDir)
+    await store.initialize()
+    const project = await store.openProject("/tmp/p-interrupted")
+    const chat = await store.createChat(project.id)
+    const runId = "r-interrupted"
+    const base = chat.createdAt + 1
+    await store.appendSubagentEvent({
+      v: 3, type: "subagent_run_started", timestamp: base,
+      chatId: chat.id, runId, subagentId: "s1", subagentName: "alpha",
+      provider: "claude", model: "claude-opus-4-7",
+      parentUserMessageId: "u1", parentRunId: null, depth: 0,
+    })
+    await store.appendSubagentEvent({
+      v: 3, type: "subagent_tool_pending", timestamp: base + 5,
+      chatId: chat.id, runId, toolUseId: "t1",
+      toolKind: "ask_user_question", input: {},
+    })
+    // Construct a fresh orchestrator (simulating restart with the pending state replayed)
+    const orchestrator = new SubagentOrchestrator({
+      store,
+      appSettings: { getSnapshot: () => ({ subagents: [] }) },
+      startProviderRun: () => { throw new Error("should not start during recovery") },
+    })
+    // Wait for the void recoverInterruptedRuns() to complete
+    await new Promise<void>((r) => setTimeout(r, 50))
+    const runs = store.getSubagentRuns(chat.id)
+    expect(runs[runId].status).toBe("failed")
+    expect(runs[runId].error?.code).toBe("INTERRUPTED")
+    // Reference unused variable to silence lint
+    void orchestrator
+  })
 })

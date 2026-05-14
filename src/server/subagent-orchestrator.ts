@@ -115,6 +115,30 @@ export class SubagentOrchestrator {
 
   constructor(private readonly deps: SubagentOrchestratorDeps) {
     this.permits = this.maxParallel()
+    void this.recoverInterruptedRuns()
+  }
+
+  private async recoverInterruptedRuns(): Promise<void> {
+    for (const run of this.deps.store.runningSubagentRuns()) {
+      if (run.pendingTool == null) continue
+      try {
+        await this.deps.store.appendSubagentEvent({
+          v: 3,
+          type: "subagent_run_failed",
+          timestamp: this.now(),
+          chatId: run.chatId,
+          runId: run.runId,
+          error: {
+            code: "INTERRUPTED",
+            message: "Server restart while subagent awaited tool response",
+          },
+        })
+      } catch (err) {
+        console.warn(`${LOG_PREFIX} interrupted-run recovery failed`, {
+          chatId: run.chatId, runId: run.runId, err,
+        })
+      }
+    }
   }
 
   private maxParallel() { return this.deps.maxParallel ?? DEFAULT_MAX_PARALLEL }

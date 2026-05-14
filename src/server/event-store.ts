@@ -1554,6 +1554,14 @@ export class EventStore implements PushEventStore {
     return Object.fromEntries(map.entries())
   }
 
+  *runningSubagentRuns(): Iterable<SubagentRunSnapshot> {
+    for (const map of this.state.subagentRunsByChatId.values()) {
+      for (const run of map.values()) {
+        if (run.status === "running") yield run
+      }
+    }
+  }
+
   async setSessionTokenForProvider(
     chatId: string,
     provider: AgentProvider,
