@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.50.0](https://github.com/cuongtranba/kanna/compare/v0.49.0...v0.50.0) (2026-05-14)
+
+
+### Features
+
+* model-independent chat phase 2 (subagent CRUD + [@agent](https://github.com/agent) mentions) ([#81](https://github.com/cuongtranba/kanna/issues/81)) ([07955a8](https://github.com/cuongtranba/kanna/commit/07955a81ad07f16a24bbf69f0c325a7f21999337))
+
 ## [0.49.0](https://github.com/cuongtranba/kanna/compare/v0.48.0...v0.49.0) (2026-05-13)
 
 
