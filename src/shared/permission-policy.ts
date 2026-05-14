@@ -101,7 +101,7 @@ export const POLICY_DEFAULT: ChatPermissionPolicy = {
     "**/.git/config",
   ],
   toolDenyList: [
-    { tool: "mcp__kanna__bash", pattern: "rm\\s+-rf\\s+(/|~|\\$HOME)\\b" },
+    { tool: "mcp__kanna__bash", pattern: "rm\\s+-rf\\s+(/|~|\\$HOME)(\\b|$|\\s)" },
     { tool: "mcp__kanna__bash", pattern: "git\\s+push\\b.*--force" },
   ],
   toolAllowList: [],
