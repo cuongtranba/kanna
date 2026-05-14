@@ -125,4 +125,41 @@ describe("tool-callback durable protocol", () => {
     const list = await store.listPendingToolRequests("chat-1")
     expect(list).toHaveLength(0)
   })
+
+  test("after timeout fires, a re-submit returns cached terminal result", async () => {
+    const { store } = await newTestStore()
+    let nowVal = 1_000
+    const svc = createToolCallbackService({
+      store, serverSecret: "secret", now: () => nowVal, timeoutMs: 100,
+    })
+    const first = svc.submit(baseInput)
+    nowVal = 1_000 + 200
+    await svc.tickTimeouts()
+    const firstRes = await first
+    expect(firstRes.status).toBe("timeout")
+
+    // Re-submit with identical args — must return the cached timeout, not a new pending.
+    const second = await svc.submit(baseInput)
+    expect(second.status).toBe("timeout")
+    expect(second.decision.kind).toBe("deny")
+    const pending = await store.listPendingToolRequests("chat-1")
+    expect(pending).toHaveLength(0)
+  })
+
+  test("arg_mismatch record is durably persisted before submit returns", async () => {
+    const { store } = await newTestStore()
+    const svc = createToolCallbackService({
+      store, serverSecret: "secret", now: () => 1_000, timeoutMs: 600_000,
+    })
+    void svc.submit(baseInput)
+    const list = await store.listPendingToolRequests("chat-1")
+    await svc.answer(list[0].id, { kind: "answer", payload: "ok" })
+
+    await svc.submit({ ...baseInput, args: { questions: [{ q: "diff" }] } })
+    // After await returns, mismatch record must be persisted in store.
+    const all = await store.scanAllToolRequests()
+    const mismatch = all.find((r) => r.status === "arg_mismatch")
+    expect(mismatch).toBeDefined()
+    expect(mismatch?.toolUseId).toBe("tu-1")
+  })
 })

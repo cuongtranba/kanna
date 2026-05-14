@@ -112,9 +112,8 @@ export function createToolCallbackService(opts: ToolCallbackServiceArgs): ToolCa
           resolvedAt: now,
           expiresAt: now,
         }
-        // Fire-and-forget persistence; result is returned synchronously.
-        void persistPut(mismatchReq)
-        return Promise.resolve({ status: "arg_mismatch", decision, mismatchReason: reason })
+        // Await persistence so a caller scanning the store after submit() sees the record.
+        return persistPut(mismatchReq).then(() => ({ status: "arg_mismatch" as const, decision, mismatchReason: reason }))
       }
 
       // ── Idempotency: check in-memory mirror (synchronous) ─────────────────
@@ -236,11 +235,7 @@ export function createToolCallbackService(opts: ToolCallbackServiceArgs): ToolCa
         if (list.length === 0) continue
         if (list[0].expiresAt > now) continue
         const decision: ToolRequestDecision = { kind: "deny", reason: "timeout" }
-        await opts.store.resolveToolRequest(id, {
-          status: "timeout",
-          decision,
-          resolvedAt: now,
-        })
+        await persistResolve(id, { status: "timeout", decision, resolvedAt: now })
         resolveWaiters(id, { status: "timeout", decision })
       }
     },
