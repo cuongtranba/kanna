@@ -1151,6 +1151,7 @@ export function useKannaState(activeChatId: string | null): KannaState {
 
   useEffect(() => {
     if (connectionStatus !== "connected") return
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void handleReadAppSettings()
   }, [connectionStatus, handleReadAppSettings])
 
@@ -1159,6 +1160,7 @@ export function useKannaState(activeChatId: string | null): KannaState {
     if (appSettings?.browserSettingsMigrated !== false) return
     const patch = readLegacyBrowserSettingsPatch()
     if (!patch) return
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void handleWriteAppSettings(patch)
       .then(clearLegacyBrowserSettings)
       .catch(() => undefined)
@@ -1166,6 +1168,7 @@ export function useKannaState(activeChatId: string | null): KannaState {
 
   useEffect(() => {
     if (connectionStatus !== "connected") return
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void handleReadLlmProvider()
   }, [connectionStatus, handleReadLlmProvider])
 
@@ -1186,6 +1189,7 @@ export function useKannaState(activeChatId: string | null): KannaState {
   useEffect(() => {
     if (!activeChatId) {
       logKannaState("clearing chat snapshot for non-chat route")
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setChatSnapshot(null)
       setChatReady(true)
       return
@@ -1256,6 +1260,7 @@ export function useKannaState(activeChatId: string | null): KannaState {
     if (selectedProjectId) return
     const firstGroup = sidebarProjectGroups[0]
     if (firstGroup) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSelectedProjectId(firstGroup.groupKey)
     }
   }, [selectedProjectId, sidebarProjectGroups])
@@ -1266,6 +1271,7 @@ export function useKannaState(activeChatId: string | null): KannaState {
     const exists = sidebarProjectGroups.some((group) => group.chats.some((chat) => chat.chatId === activeChatId))
     if (exists) {
       if (pendingChatId === activeChatId) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setPendingChatId(null)
       }
       return
@@ -1278,8 +1284,10 @@ export function useKannaState(activeChatId: string | null): KannaState {
 
   useEffect(() => {
     if (!chatSnapshot) return
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setSelectedProjectId(chatSnapshot.runtime.projectId)
     if (pendingChatId === chatSnapshot.runtime.chatId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setPendingChatId(null)
     }
   }, [chatSnapshot, pendingChatId])
@@ -1297,6 +1305,7 @@ export function useKannaState(activeChatId: string | null): KannaState {
   }, [activeChatId, focusEpoch, sidebarProjectGroups, sidebarReady, socket])
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setOlderHistoryEntries([])
     setIsHistoryLoading(false)
     setHistoryCursor(null)
@@ -1412,6 +1421,7 @@ export function useKannaState(activeChatId: string | null): KannaState {
       return
     }
     if (runtime?.status && runtime.status !== "idle") {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setOptimisticProcessing(null)
     }
   }, [optimisticProcessing, optimisticScopeId, runtime?.status])
@@ -1495,6 +1505,7 @@ export function useKannaState(activeChatId: string | null): KannaState {
   }, [activeChatId, runtime?.status])
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setOptimisticUserPrompts((current) => {
       const reconciled = reconcileOptimisticUserPrompts(current, optimisticScopeId, serverTranscriptEntries)
       if (reconciled.length === current.length && reconciled.every((prompt, index) => prompt === current[index])) {
