@@ -2,6 +2,7 @@ import type { HarnessToolRequest, HarnessTurn } from "./harness-types"
 import type { CodexAppServerManager } from "./codex-app-server"
 import type {
   AgentProvider,
+  CodexReasoningEffort,
   ProviderUsage,
   Subagent,
   TranscriptEntry,
@@ -22,6 +23,12 @@ export interface BuildSubagentProviderRunArgs {
   /** Project cwd shared with the parent chat. */
   cwd: string
   additionalDirectories?: string[]
+  /**
+   * Subset of `AgentCoordinatorArgs["startClaudeSession"]` (`agent.ts:148-172`).
+   * Subagents intentionally omit `tunnelGateway` — they don't tunnel-route.
+   * Structural typing accepts the canonical fn (which has the extra optional
+   * field) since the missing prop is optional from the canonical side.
+   */
   startClaudeSession: (args: {
     projectId: string
     localPath: string
@@ -119,7 +126,9 @@ async function runCodexSubagent(opts: {
       scope,
       content: initialPrompt,
       model: args.subagent.model,
-      effort: args.subagent.modelOptions?.reasoningEffort as never,
+      // modelOptions is ClaudeModelOptions | CodexModelOptions; runtime-narrowed
+      // by the outer provider check, but TS doesn't propagate that to modelOptions.
+      effort: args.subagent.modelOptions?.reasoningEffort as CodexReasoningEffort | undefined,
       serviceTier: undefined,
       planMode: false,
       onToolRequest: args.onToolRequest,
