@@ -1,7 +1,7 @@
 # Claude PTY Driver — Design
 
 **Date:** 2026-05-14
-**Status:** Draft v16 — fourteenth codex adversarial pass applied (transcript path made writable in claude sandbox; profile-specific preflight sentinels with opposite expectations for credential file; lease held until post-exit readback completes), awaiting user review
+**Status:** Draft v17 — fifteenth codex adversarial pass applied (PID-reuse-safe lease recovery via persisted ProcessIdentity tuple + Linux pidfd preferred path), awaiting user review
 **Author:** session-collaborative
 **Related code:** `src/server/agent.ts`, `src/server/terminal-manager.ts`, `src/server/harness-types.ts`, `src/server/kanna-mcp.ts`
 
@@ -335,7 +335,23 @@ This sandbox is fresh per tool call and lives only for the lifetime of that subp
   4. `await waitpid(pid)` — block until kernel confirms process is gone.
   5. **Final readback**: read `.credentials.json` on disk, compute composite `credVersion`, CAS into `oauthPool`. Captures any refresh write that landed between final fs.watch and process exit.
   6. Release lease. Queued chats for this account become eligible.
-- If Kanna crashes mid-lease: on restart, each lease record stores the claude pid. A startup sweep checks `kill(pid, 0)` — if process is gone, lease released after readback; if process is still alive (rare crash-without-PTY-cleanup), Kanna kills it before releasing.
+- **If Kanna crashes mid-lease — PID-reuse-safe recovery.** Each lease record persists a process-identity tuple, not just a PID:
+  ```
+  ProcessIdentity {
+    pid: number
+    startTimeNs: bigint      // /proc/<pid>/stat starttime (Linux) or kinfo_proc p_starttime (macOS)
+    executablePath: string   // resolved path of the claude binary at spawn
+    sessionId: string        // --session-id passed at spawn (also visible in argv)
+    pgid: number             // Kanna sets a fresh process group at spawn (setsid/setpgid)
+    accountId: string
+  }
+  ```
+  On startup sweep, for each persisted lease:
+  1. `kill(pid, 0)` — does a process by that PID exist? If not → process gone, proceed to final readback + release.
+  2. Read live process identity for that PID (`/proc/<pid>/stat` on Linux, `ps -o lstart,comm,args` on macOS, or `pidfd_open` + `pidfd_send_signal` API where available).
+  3. Compare **all** of: `startTimeNs`, `executablePath`, presence of `--session-id <sessionId>` in argv, and `pgid`. If **any** field mismatches → this PID has been reused by an unrelated process. Do **not** signal it. Log a warning, release the lease only after a conservative readback (no kill), and surface an operator warning ("Kanna could not verify the previous claude process for account <name>; if the previous session is still running, please terminate it manually before reusing this account").
+  4. If all identity fields match → the original claude PTY is still alive. Send `SIGTERM` to the process group (`kill(-pgid, SIGTERM)`), wait 2s, then `SIGKILL` to the group, then `waitpid`, then post-exit readback + release.
+- Where available (Linux ≥5.3), Kanna uses `pidfd_open` at spawn time and stores the file descriptor across restart via `SCM_RIGHTS` to a persistence helper (or simply via re-spawn handoff). `pidfd` references the original kernel process identity and cannot be confused with a reused PID. This is the preferred path on Linux.
 
 This eliminates the same-account multi-writer problem at its root. The coordinator below only handles the **single-writer** case: claude refreshes its own token, Kanna observes the change to sync back to the pool.
 
@@ -362,6 +378,9 @@ This eliminates the same-account multi-writer problem at its root. The coordinat
 8. **Tests** (`account-home.test.ts`):
    - **Lease serialization:** two chats request the same account → second waits; first PTY's process exits and post-exit readback completes → second acquires; pool state consistent throughout. Explicit assertion: second spawn does NOT start while first process is still alive in COOLING.
    - **Refresh during COOLING:** simulate claude writing `.credentials.json` after `/exit` was sent but before process exit → post-exit readback captures it → pool reflects the late write before lease release.
+   - **PID reuse after crash:** simulate Kanna crash with a persisted lease whose PID is later reused by an unrelated process (mock by fabricating a stale identity tuple while a fresh `sleep` runs at that PID). Assert: sweep detects identity mismatch, does **not** signal the foreign process, releases the lease conservatively, logs warning.
+   - **Same-PID-and-identity recovery:** simulate Kanna crash where the original claude is still alive (identity matches). Assert: sweep kills the process group, post-exit readback, release.
+   - **Linux pidfd path:** when supported, pidfd-based identity check is used instead of starttime+argv tuple. Assert behavior equivalent.
    - **Same-mtime refresh:** two consecutive writes to `.credentials.json` within one mtime tick → composite version distinguishes them; pool sees both updates (or coalesces to the final state — never gets stuck on the older).
    - **Missed fs.watch event:** simulate suppressed event for one refresh → lease-release readback recovers the missed update before next spawn.
    - **Inode-change detection:** atomic-rename replacement → inode change observed; pool advances.
