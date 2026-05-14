@@ -11,6 +11,55 @@ import type { EventStore } from "./event-store"
 import { buildHistoryPrimer, extractPreviousAssistantReply } from "./history-primer"
 import { parseMentions, type ParsedMention } from "./mention-parser"
 
+class PausableTimeout {
+  private remainingMs: number
+  private deadline: number | null = null
+  private handle: ReturnType<typeof setTimeout> | null = null
+  private onFire: () => void
+
+  constructor(totalMs: number, onFire: () => void) {
+    this.remainingMs = totalMs
+    this.onFire = onFire
+  }
+
+  start(now: number = Date.now()): void {
+    this.deadline = now + this.remainingMs
+    this.handle = setTimeout(this.onFire, this.remainingMs)
+  }
+
+  pause(now: number = Date.now()): void {
+    if (this.handle == null || this.deadline == null) return
+    clearTimeout(this.handle)
+    this.handle = null
+    this.remainingMs = Math.max(0, this.deadline - now)
+    this.deadline = null
+  }
+
+  resume(now: number = Date.now()): void {
+    if (this.handle != null) return
+    this.start(now)
+  }
+
+  clear(): void {
+    if (this.handle != null) clearTimeout(this.handle)
+    this.handle = null
+    this.deadline = null
+  }
+}
+
+interface Deferred<T> {
+  promise: Promise<T>
+  resolve: (value: T) => void
+  reject: (err: Error) => void
+}
+
+function createDeferred<T>(): Deferred<T> {
+  let resolve!: (value: T) => void
+  let reject!: (err: Error) => void
+  const promise = new Promise<T>((res, rej) => { resolve = res; reject = rej })
+  return { promise, resolve, reject }
+}
+
 export interface ProviderRunStart {
   provider: AgentProvider
   model: string
@@ -62,6 +111,7 @@ export class SubagentOrchestrator {
   private permits: number
   private readonly waiters: Array<{ chatId: string; resolve: () => void; reject: (err: Error) => void }> = []
   private readonly cancelledChats = new Set<string>()
+  private readonly timeoutsByRun = new Map<string, PausableTimeout>()
 
   constructor(private readonly deps: SubagentOrchestratorDeps) {
     this.permits = this.maxParallel()
@@ -74,6 +124,14 @@ export class SubagentOrchestrator {
 
   activePermitCount() {
     return this.maxParallel() - this.permits
+  }
+
+  notifySubagentToolPending(runId: string): void {
+    this.timeoutsByRun.get(runId)?.pause()
+  }
+
+  notifySubagentToolResolved(runId: string): void {
+    this.timeoutsByRun.get(runId)?.resume()
   }
 
   private async acquire(chatId: string): Promise<void> {
@@ -249,45 +307,46 @@ export class SubagentOrchestrator {
 
       let finalText = ""
       let usage: ProviderUsage | undefined
+      const onChunk = (chunk: string) => {
+        if (!chunk) return
+        this.deps.store
+          .appendSubagentEvent({
+            v: 3,
+            type: "subagent_message_delta",
+            timestamp: this.now(),
+            chatId: args.chatId,
+            runId,
+            content: chunk,
+          })
+          .catch((err) => {
+            console.warn(`${LOG_PREFIX} subagent delta append failed`, { chatId: args.chatId, runId, err })
+          })
+      }
+      const onEntry = (entry: TranscriptEntry) => {
+        this.deps.store
+          .appendSubagentEvent({
+            v: 3,
+            type: "subagent_entry_appended",
+            timestamp: this.now(),
+            chatId: args.chatId,
+            runId,
+            entry,
+          })
+          .catch((err) => {
+            console.warn(`${LOG_PREFIX} subagent entry append failed`, { chatId: args.chatId, runId, err })
+          })
+      }
+      const timeoutRejection = createDeferred<never>()
+      const pausable = new PausableTimeout(this.timeoutMs(), () => {
+        timeoutRejection.reject(new Error("TIMEOUT"))
+      })
+      this.timeoutsByRun.set(runId, pausable)
+      pausable.start()
       try {
-        let timeoutId: ReturnType<typeof setTimeout> | null = null
-        const onChunk = (chunk: string) => {
-          if (!chunk) return
-          this.deps.store
-            .appendSubagentEvent({
-              v: 3,
-              type: "subagent_message_delta",
-              timestamp: this.now(),
-              chatId: args.chatId,
-              runId,
-              content: chunk,
-            })
-            .catch((err) => {
-              console.warn(`${LOG_PREFIX} subagent delta append failed`, { chatId: args.chatId, runId, err })
-            })
-        }
-        const onEntry = (entry: TranscriptEntry) => {
-          this.deps.store
-            .appendSubagentEvent({
-              v: 3,
-              type: "subagent_entry_appended",
-              timestamp: this.now(),
-              chatId: args.chatId,
-              runId,
-              entry,
-            })
-            .catch((err) => {
-              console.warn(`${LOG_PREFIX} subagent entry append failed`, { chatId: args.chatId, runId, err })
-            })
-        }
         const result = await Promise.race([
           runStart.start(onChunk, onEntry),
-          new Promise<never>((_, reject) => {
-            timeoutId = setTimeout(() => reject(new Error("TIMEOUT")), this.timeoutMs())
-          }),
-        ]).finally(() => {
-          if (timeoutId) clearTimeout(timeoutId)
-        })
+          timeoutRejection.promise,
+        ])
         finalText = result.text
         usage = result.usage
       } catch (error) {
@@ -298,6 +357,9 @@ export class SubagentOrchestrator {
           await this.failRun(args.chatId, runId, "PROVIDER_ERROR", message)
         }
         return
+      } finally {
+        pausable.clear()
+        this.timeoutsByRun.delete(runId)
       }
 
       await this.deps.store.appendSubagentEvent({

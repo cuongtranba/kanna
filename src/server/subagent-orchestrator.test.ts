@@ -453,4 +453,58 @@ describe("SubagentOrchestrator", () => {
     expect(run.error?.code).toBe("PROVIDER_ERROR")
     expect(run.entries.map((e) => e.kind)).toEqual(["assistant_text", "tool_call"])
   })
+
+  test("timeout does not fire while paused via notifySubagentToolPending, resumes and completes", async () => {
+    const harness = await setupHarness({
+      subagents: [makeSubagent({ id: "sa-1", name: "alpha" })],
+      runTimeoutMs: 100,
+    })
+
+    // startDeferred controls when start() resolves
+    let startResolve!: (result: { text: string }) => void
+    const startDeferred = new Promise<{ text: string }>((resolve) => { startResolve = resolve })
+
+    // Capture the runId assigned to the spawned run
+    let capturedRunId: string | null = null
+    const origAppendSubagentEvent = harness.store.appendSubagentEvent.bind(harness.store)
+    harness.store.appendSubagentEvent = async (event) => {
+      if (event.type === "subagent_run_started") {
+        capturedRunId = event.runId
+      }
+      return origAppendSubagentEvent(event)
+    }
+
+    harness.mockProviderRun({
+      async start() { return startDeferred },
+      async authReady() { return true },
+    })
+
+    const runPromise = harness.orchestrator.runMentionsForUserMessage({
+      chatId: harness.chatId,
+      userMessageId: harness.userMessageId,
+      mentions: [{ kind: "subagent", subagentId: "sa-1", raw: "@agent/alpha" }],
+    })
+
+    // Wait for the run to start so capturedRunId is populated
+    await new Promise((r) => setTimeout(r, 10))
+    expect(capturedRunId).not.toBeNull()
+
+    // Pause the timeout — simulates a tool request being made
+    harness.orchestrator.notifySubagentToolPending(capturedRunId!)
+
+    // Wait well past the original 100ms timeout window
+    await new Promise((r) => setTimeout(r, 200))
+
+    // Resume the timeout — simulates tool response received
+    harness.orchestrator.notifySubagentToolResolved(capturedRunId!)
+
+    // Resolve the provider start — run should complete normally
+    startResolve({ text: "done after pause" })
+
+    await runPromise
+
+    const run = Object.values(harness.store.getSubagentRuns(harness.chatId))[0]
+    expect(run.status).toBe("completed")
+    expect(run.finalText).toBe("done after pause")
+  }, 10_000)
 })

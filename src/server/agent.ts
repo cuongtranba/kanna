@@ -1671,6 +1671,7 @@ export class AgentCoordinator {
         input: request.tool.input,
       })
       this.emitStateChange(args.chatId)
+      this.subagentOrchestrator.notifySubagentToolPending(args.runId)
       return await new Promise<unknown>((resolve, reject) => {
         this.subagentPendingResolvers.set(key, { resolve, reject })
       })
@@ -2431,6 +2432,7 @@ export class AgentCoordinator {
       result: command.result,
       resolution: "user",
     })
+    this.subagentOrchestrator.notifySubagentToolResolved(command.runId)
     resolver.resolve(command.result)
     this.emitStateChange(command.chatId)
   }
