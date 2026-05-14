@@ -1935,4 +1935,11 @@ describe("CodexAppServerManager — scope-keyed sessions", () => {
     manager.stopAll()
     expect(manager.activeSessionCount()).toBe(0)
   })
+
+  test("startSession with empty sub: scope throws", async () => {
+    const manager = new CodexAppServerManager({ spawnProcess: makeFakeSpawn() })
+    await expect(
+      manager.startSession({ chatId: "c1", scope: "sub:" as never, cwd: "/tmp", model: "gpt-5", sessionToken: null })
+    ).rejects.toThrow(/empty sub-id/)
+  })
 })

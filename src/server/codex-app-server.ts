@@ -745,6 +745,9 @@ export class CodexAppServerManager {
   private readonly backgroundTasks: BackgroundTaskRegistry | null
 
   private static keyFor(chatId: string, scope: CodexSessionScope = "main"): string {
+    if ((scope as string) === "sub:") {
+      throw new Error(`Invalid CodexSessionScope: empty sub-id (got "sub:")`)
+    }
     return `${chatId}::${scope}`
   }
 
