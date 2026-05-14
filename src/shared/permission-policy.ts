@@ -22,7 +22,8 @@ export interface BashGateConfig {
 
 export interface ToolRule {
   tool: string
-  pattern: string  // ECMAScript regex source
+  /** ECMAScript regex source — no delimiters or flags, passed to `new RegExp(pattern)`. */
+  pattern: string
 }
 
 export interface ChatPermissionPolicy {
@@ -72,6 +73,9 @@ export const POLICY_DEFAULT: ChatPermissionPolicy = {
     "~/Library/Keychains",
     "/etc/shadow",
     "/etc/sudoers",
+    "~/.gnupg",
+    "~/.gitconfig",
+    "**/.git/config",
     "~/.npmrc",
     "~/.netrc",
     "~/.docker/config.json",
@@ -92,6 +96,9 @@ export const POLICY_DEFAULT: ChatPermissionPolicy = {
     "~/.config/gh/**",
     "~/.claude/**",
     "~/.kanna/**",
+    "~/.gnupg/**",
+    "~/.gitconfig",
+    "**/.git/config",
   ],
   toolDenyList: [
     { tool: "mcp__kanna__bash", pattern: "rm\\s+-rf\\s+(/|~|\\$HOME)\\b" },

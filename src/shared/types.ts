@@ -1,5 +1,4 @@
 import type { ToolRequestDecision, ToolRequestStatus } from "./permission-policy"
-export type { ToolRequestDecision, ToolRequestStatus }
 
 export const STORE_VERSION = 3 as const
 export const PROTOCOL_VERSION = 1 as const
