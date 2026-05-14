@@ -1,4 +1,15 @@
-import type { AgentProvider, KannaStatus, ProjectSummary, QueuedChatMessage, SlashCommand, StackBinding, TranscriptEntry } from "../shared/types"
+import type {
+  AgentProvider,
+  KannaStatus,
+  ProjectSummary,
+  ProviderUsage,
+  QueuedChatMessage,
+  SlashCommand,
+  StackBinding,
+  SubagentErrorCode,
+  SubagentRunSnapshot,
+  TranscriptEntry,
+} from "../shared/types"
 import type { AutoContinueEvent } from "./auto-continue/events"
 
 export interface ProjectRecord extends ProjectSummary {
@@ -51,6 +62,7 @@ export interface StoreState {
   autoContinueEventsByChatId: Map<string, AutoContinueEvent[]>
   chatTimingsByChatId: Map<string, ChatTimingState>
   stacksById: Map<string, StackRecord>
+  subagentRunsByChatId: Map<string, Map<string, SubagentRunSnapshot>>
 }
 
 export interface SnapshotFile {
@@ -266,7 +278,55 @@ export type StackEvent =
       projectId: string
     }
 
-export type StoreEvent = ProjectEvent | ChatEvent | MessageEvent | QueuedMessageEvent | TurnEvent | StackEvent | AutoContinueEvent
+export type SubagentRunEvent =
+  | {
+      v: 3
+      type: "subagent_run_started"
+      timestamp: number
+      chatId: string
+      runId: string
+      subagentId: string | null
+      subagentName: string
+      provider: AgentProvider
+      model: string
+      parentUserMessageId: string
+      parentRunId: string | null
+      depth: number
+    }
+  | {
+      v: 3
+      type: "subagent_message_delta"
+      timestamp: number
+      chatId: string
+      runId: string
+      content: string
+    }
+  | {
+      v: 3
+      type: "subagent_run_completed"
+      timestamp: number
+      chatId: string
+      runId: string
+      finalContent: string
+      usage?: ProviderUsage
+    }
+  | {
+      v: 3
+      type: "subagent_run_failed"
+      timestamp: number
+      chatId: string
+      runId: string
+      error: { code: SubagentErrorCode; message: string }
+    }
+  | {
+      v: 3
+      type: "subagent_run_cancelled"
+      timestamp: number
+      chatId: string
+      runId: string
+    }
+
+export type StoreEvent = ProjectEvent | ChatEvent | MessageEvent | QueuedMessageEvent | TurnEvent | StackEvent | AutoContinueEvent | SubagentRunEvent
 
 export interface StackRecord {
   id: string
@@ -287,6 +347,7 @@ export function createEmptyState(): StoreState {
     autoContinueEventsByChatId: new Map(),
     chatTimingsByChatId: new Map(),
     stacksById: new Map(),
+    subagentRunsByChatId: new Map(),
   }
 }
 
