@@ -7,7 +7,7 @@ import type {
 } from "../shared/permission-policy"
 import { POLICY_TERMINAL_STATUSES } from "../shared/permission-policy"
 import { policy } from "./permission-gate"
-import { canonicalArgsHash } from "../shared/tools"
+import { canonicalArgsHash } from "./canonical-args"
 import type { EventStore } from "./event-store"
 
 export interface ToolCallbackServiceArgs {
