@@ -65,6 +65,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!settingsTheme || settingsTheme === theme) return
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setTheme(settingsTheme)
   }, [settingsTheme, theme])
 

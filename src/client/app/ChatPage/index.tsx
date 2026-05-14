@@ -58,6 +58,7 @@ function useEmptyStateTyping(showEmptyState: boolean, activeChatId: string | nul
   useEffect(() => {
     if (!showEmptyState) return
 
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setTypedEmptyStateText("")
     setIsEmptyStateTypingComplete(false)
 
@@ -752,6 +753,7 @@ export function ChatPage() {
   useEffect(() => {
     isAtEndRef.current = true
     clearShowScrollTimeout()
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setShowScrollToBottom(false)
   }, [clearShowScrollTimeout, state.activeChatId])
 

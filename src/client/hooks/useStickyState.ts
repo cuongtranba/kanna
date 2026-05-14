@@ -14,6 +14,7 @@ export function useStickyState<T extends HTMLElement>({
 
   useEffect(() => {
     if (disabled) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setIsStuck(false)
       return
     }
