@@ -12,6 +12,31 @@ PRs MUST target `cuongtranba/kanna`, never `jakemor/kanna`.
 `gh repo set-default cuongtranba/kanna` is set; always pass `--repo cuongtranba/kanna`
 or `--base main --head <branch>` to `gh pr create` to make the target explicit.
 
+# Lint
+
+`bun run lint` runs ESLint on `src/`. CI runs it before tests; merges blocked
+on lint errors. Warnings are allowed but visible — ratchet down over time.
+Plugin `react-hooks` (set 7+) enforces React 19 rules: `rules-of-hooks`,
+`purity`, `globals` are errors; `set-state-in-effect`, `refs`,
+`immutability`, `preserve-manual-memoization`, `exhaustive-deps` are warnings.
+
+# Render-loop regression checks
+
+When introducing a new `use*Store` selector or any React hook that derives
+collections, the selector MUST return a stable reference. Inline `?? []` or
+`?? {}` produces fresh refs each call and triggers React error #185
+(`Maximum update depth exceeded`). Pattern to use:
+
+```ts
+const EMPTY: Subagent[] = []
+useStore((state) => state.list ?? EMPTY)
+// or
+useStore(useShallow((state) => state.list ?? []))
+```
+
+Tests can mount a component with effects and assert no loop warnings via
+`renderForLoopCheck` in `src/client/lib/testing/`.
+
 # Tests
 
 `bun test` MUST pass locally before any push or PR. CI (`.github/workflows/test.yml`)

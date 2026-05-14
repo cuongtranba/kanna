@@ -129,7 +129,7 @@ export async function writeStandaloneTranscriptExport(
   await writeFileImpl(transcriptJsonPath, transcriptJson, "utf8")
   const shareSlug = buildStandaloneShareSlug(args.title || args.chatId, deps.shareSlugSuffix)
   const shareUrl = buildStandaloneShareUrl(sharePublicBaseUrl, shareSlug)
-  let uploadedFileCount = 0
+  let uploadedFileCount: number
 
   try {
     uploadedFileCount = await uploadStandaloneExportDirectory({

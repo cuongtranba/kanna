@@ -1119,10 +1119,7 @@ const BG_TASK_ROW_KEYFRAME = `
 }
 `
 
-let keyframeInjected = false
-
-if (typeof document !== "undefined" && !keyframeInjected) {
-  keyframeInjected = true
+if (typeof document !== "undefined") {
   const style = document.createElement("style")
   style.textContent = BG_TASK_ROW_KEYFRAME
   document.head.appendChild(style)

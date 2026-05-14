@@ -25,6 +25,6 @@ export function parseChildArgsEnv(value: string | undefined) {
     return parsed
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
-    throw new Error(`Invalid ${CLI_CHILD_ARGS_ENV_VAR}: ${message}`)
+    throw new Error(`Invalid ${CLI_CHILD_ARGS_ENV_VAR}: ${message}`, { cause: error })
   }
 }

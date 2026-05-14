@@ -261,6 +261,36 @@ function withChildClassName(node: MarkdownChildNode, className: string): Markdow
   })
 }
 
+function PreBlock({ children, ...props }: ComponentPropsWithoutRef<"pre">) {
+  const [copied, setCopied] = useState(false)
+  const textContent = extractText(children)
+
+  const handleCopy = async () => {
+    await navigator.clipboard.writeText(textContent)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  return (
+    <div className="relative overflow-x-auto max-w-full min-w-0 no-code-highlight group/pre">
+      <pre className="min-w-0 rounded-xl py-2.5 px-3.5 [.no-pre-highlight_&]:bg-background" {...props}>{children}</pre>
+      <Button
+        variant="ghost"
+        size="icon"
+        aria-label={copied ? "Copied" : "Copy code"}
+        className={cn(
+          "absolute top-[35px] -translate-y-[50%] -translate-x-[1px] rounded-md right-1.5 h-11 w-11 md:h-8 md:w-8 text-muted-foreground opacity-100 md:opacity-0 md:group-hover/pre:opacity-100 transition-opacity [@media(hover:none)]:!opacity-100",
+          !copied && "hover:text-foreground",
+          copied && "hover:!bg-transparent hover:!border-transparent"
+        )}
+        onClick={handleCopy}
+      >
+        {copied ? <Check className="h-4 w-4 text-success" /> : <Copy className="h-4 w-4" />}
+      </Button>
+    </div>
+  )
+}
+
 // Markdown component overrides
 export const markdownComponents = {
   h1: ({ children }: { children?: ReactNode }) => (
@@ -282,35 +312,7 @@ export const markdownComponents = {
     <h6 className="text-[16px] font-normal leading-tight mt-5 mb-3 first:mt-0 last:mb-0">{children}</h6>
   ),
 
-  pre: ({ children, ...props }: ComponentPropsWithoutRef<"pre">) => {
-    const [copied, setCopied] = useState(false)
-    const textContent = extractText(children)
-
-    const handleCopy = async () => {
-      await navigator.clipboard.writeText(textContent)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    }
-
-    return (
-      <div className="relative overflow-x-auto max-w-full min-w-0 no-code-highlight group/pre">
-        <pre className="min-w-0 rounded-xl py-2.5 px-3.5 [.no-pre-highlight_&]:bg-background" {...props}>{children}</pre>
-        <Button
-          variant="ghost"
-          size="icon"
-          aria-label={copied ? "Copied" : "Copy code"}
-          className={cn(
-            "absolute top-[35px] -translate-y-[50%] -translate-x-[1px] rounded-md right-1.5 h-11 w-11 md:h-8 md:w-8 text-muted-foreground opacity-100 md:opacity-0 md:group-hover/pre:opacity-100 transition-opacity [@media(hover:none)]:!opacity-100",
-            !copied && "hover:text-foreground",
-            copied && "hover:!bg-transparent hover:!border-transparent"
-          )}
-          onClick={handleCopy}
-        >
-          {copied ? <Check className="h-4 w-4 text-success" /> : <Copy className="h-4 w-4" />}
-        </Button>
-      </div>
-    )
-  },
+  pre: PreBlock,
 
   code: ({ children, className, ...props }: ComponentPropsWithoutRef<"code">) => {
     const isInline = !className
@@ -388,62 +390,71 @@ export const markdownComponents = {
   },
 }
 
+interface LocalLinkProps extends ComponentPropsWithoutRef<"a"> {
+  overrideOpenLocalLink?: OpenLocalLinkHandler
+}
+
+function LocalLink({ children, href, onClick, overrideOpenLocalLink, ...props }: LocalLinkProps) {
+  const contextOpenLocalLink = useContext(OpenLocalLinkContext)
+  const onOpenLocalLink = overrideOpenLocalLink ?? contextOpenLocalLink
+  const renderOptions = useTranscriptRenderOptions()
+  const parsedLocalLink = parseLocalFileLink(href)
+
+  if (parsedLocalLink && renderOptions.localLinkMode === "text") {
+    return (
+      <span className="transition-all underline decoration-2 text-logo decoration-logo/50">
+        {children}
+      </span>
+    )
+  }
+
+  if (parsedLocalLink && !shouldOpenLocalFileLinkInEditor(parsedLocalLink.path)) {
+    const linkText = extractTextFromNode(children).trim()
+    return <LocalFileLinkCard path={parsedLocalLink.path} linkText={linkText || undefined} />
+  }
+
+  return (
+    <a
+      className="transition-all underline decoration-2 text-logo decoration-logo/50 hover:text-logo/70 dark:text-logo dark:decoration-logo/70 dark:hover:text-logo/60 dark:hover:decoration-logo/40 "
+      href={href}
+      target={parsedLocalLink ? undefined : "_blank"}
+      rel={parsedLocalLink ? undefined : "noopener noreferrer"}
+      onClick={(event) => {
+        onClick?.(event)
+        if (event.defaultPrevented || !parsedLocalLink || onOpenLocalLink === defaultOpenLocalLink) return
+        event.preventDefault()
+        onOpenLocalLink({
+          ...parsedLocalLink,
+          clientX: event.clientX,
+          clientY: event.clientY,
+          trigger: "click",
+        })
+      }}
+      onContextMenu={(event) => {
+        if (!parsedLocalLink || onOpenLocalLink === defaultOpenLocalLink) return
+        event.preventDefault()
+        onOpenLocalLink({
+          ...parsedLocalLink,
+          clientX: event.clientX,
+          clientY: event.clientY,
+          trigger: "contextmenu",
+        })
+      }}
+      {...props}
+    >
+      {children}
+    </a>
+  )
+}
+
 export function createMarkdownComponents(options?: {
   onOpenLocalLink?: OpenLocalLinkHandler
 }) {
   return {
     ...markdownComponents,
-    a: ({ children, href, onClick, ...props }: ComponentPropsWithoutRef<"a">) => {
-      const onOpenLocalLink = options?.onOpenLocalLink ?? useContext(OpenLocalLinkContext)
-      const renderOptions = useTranscriptRenderOptions()
-      const parsedLocalLink = parseLocalFileLink(href)
-
-      if (parsedLocalLink && renderOptions.localLinkMode === "text") {
-        return (
-          <span className="transition-all underline decoration-2 text-logo decoration-logo/50">
-            {children}
-          </span>
-        )
-      }
-
-      if (parsedLocalLink && !shouldOpenLocalFileLinkInEditor(parsedLocalLink.path)) {
-        const linkText = extractTextFromNode(children).trim()
-        return <LocalFileLinkCard path={parsedLocalLink.path} linkText={linkText || undefined} />
-      }
-
-      return (
-        <a
-          className="transition-all underline decoration-2 text-logo decoration-logo/50 hover:text-logo/70 dark:text-logo dark:decoration-logo/70 dark:hover:text-logo/60 dark:hover:decoration-logo/40 "
-          href={href}
-          target={parsedLocalLink ? undefined : "_blank"}
-          rel={parsedLocalLink ? undefined : "noopener noreferrer"}
-          onClick={(event) => {
-            onClick?.(event)
-            if (event.defaultPrevented || !parsedLocalLink || onOpenLocalLink === defaultOpenLocalLink) return
-            event.preventDefault()
-            onOpenLocalLink({
-              ...parsedLocalLink,
-              clientX: event.clientX,
-              clientY: event.clientY,
-              trigger: "click",
-            })
-          }}
-          onContextMenu={(event) => {
-            if (!parsedLocalLink || onOpenLocalLink === defaultOpenLocalLink) return
-            event.preventDefault()
-            onOpenLocalLink({
-              ...parsedLocalLink,
-              clientX: event.clientX,
-              clientY: event.clientY,
-              trigger: "contextmenu",
-            })
-          }}
-          {...props}
-        >
-          {children}
-        </a>
-      )
-    },
+    a: (props: ComponentPropsWithoutRef<"a">) => (
+      <LocalLink {...props} overrideOpenLocalLink={options?.onOpenLocalLink} />
+    ),
   }
 }
 

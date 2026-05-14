@@ -60,7 +60,7 @@ export function uploadFile(args: UploadFileArgs): UploadHandle {
 
     xhr.addEventListener("load", () => {
       if (aborted) return
-      let payload: unknown = null
+      let payload: unknown
       try {
         payload = xhr.responseText ? JSON.parse(xhr.responseText) : null
       } catch {

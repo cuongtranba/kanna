@@ -628,7 +628,7 @@ async function handleLocalFileContent(req: Request, url: URL) {
     return Response.json({ error: "Path must be absolute" }, { status: 400 })
   }
 
-  let fileSize = 0
+  let fileSize: number
   try {
     const info = await stat(absolutePath)
     if (!info.isFile()) {

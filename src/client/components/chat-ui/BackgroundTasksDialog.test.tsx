@@ -1071,6 +1071,7 @@ describe("Connected BackgroundTasksDialog — useIsMobile drives mobile variant"
     try {
       let capturedValue: boolean | undefined
       function Probe() {
+        // eslint-disable-next-line react-hooks/globals
         capturedValue = useIsMobile()
         return null
       }
@@ -1097,6 +1098,7 @@ describe("Connected BackgroundTasksDialog — useIsMobile drives mobile variant"
     try {
       let capturedValue: boolean | undefined
       function Probe() {
+        // eslint-disable-next-line react-hooks/globals
         capturedValue = useIsMobile()
         return null
       }
