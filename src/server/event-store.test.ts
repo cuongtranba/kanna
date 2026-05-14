@@ -1524,3 +1524,68 @@ describe("EventStore ToolRequest", () => {
     expect(replayed?.decision?.payload).toEqual({ ok: true })
   })
 })
+
+describe("EventStore getRecentChatHistory pending replay", () => {
+  test("includes pending_tool_request synthetic entries for pending records", async () => {
+    const dataDir = await createTempDataDir()
+    const store = new EventStore(dataDir)
+    await store.initialize()
+
+    const project = await store.openProject("/tmp/project")
+    const chat = await store.createChat(project.id)
+
+    await store.putToolRequest(fixtureToolRequest({ id: "req-1", chatId: chat.id, createdAt: 5_000 }))
+
+    const { messages } = store.getRecentChatHistory(chat.id, 10)
+    const synthetic = messages.filter((m) => m.kind === "pending_tool_request")
+
+    expect(synthetic).toHaveLength(1)
+    expect(synthetic[0]).toMatchObject({
+      _id: "pending-tool-request-req-1",
+      createdAt: 5_000,
+      kind: "pending_tool_request",
+      toolRequestId: "req-1",
+    })
+  })
+
+  test("does NOT include resolved tool requests as synthetic entries", async () => {
+    const dataDir = await createTempDataDir()
+    const store = new EventStore(dataDir)
+    await store.initialize()
+
+    const project = await store.openProject("/tmp/project")
+    const chat = await store.createChat(project.id)
+
+    await store.putToolRequest(fixtureToolRequest({ id: "req-resolved", chatId: chat.id }))
+    await store.resolveToolRequest("req-resolved", {
+      status: "answered",
+      decision: { kind: "answer", payload: { ok: true } },
+      resolvedAt: 2_000,
+    })
+
+    const { messages } = store.getRecentChatHistory(chat.id, 10)
+    const synthetic = messages.filter((m) => m.kind === "pending_tool_request")
+
+    expect(synthetic).toHaveLength(0)
+  })
+
+  test("synthetic entry id is deterministic across calls", async () => {
+    const dataDir = await createTempDataDir()
+    const store = new EventStore(dataDir)
+    await store.initialize()
+
+    const project = await store.openProject("/tmp/project")
+    const chat = await store.createChat(project.id)
+
+    await store.putToolRequest(fixtureToolRequest({ id: "req-dedup", chatId: chat.id }))
+
+    const first = store.getRecentChatHistory(chat.id, 10)
+    const second = store.getRecentChatHistory(chat.id, 10)
+
+    const firstSynthetic = first.messages.filter((m) => m.kind === "pending_tool_request")
+    const secondSynthetic = second.messages.filter((m) => m.kind === "pending_tool_request")
+
+    expect(firstSynthetic[0]._id).toBe(secondSynthetic[0]._id)
+    expect(firstSynthetic[0]._id).toBe("pending-tool-request-req-dedup")
+  })
+})

@@ -186,14 +186,14 @@ export function createToolCallbackService(opts: ToolCallbackServiceArgs): ToolCa
     },
 
     async answer(id, decision) {
-      const existing = inMemory.get(id) ?? await opts.store.getToolRequest(id)
+      const existing = inMemory.get(id) ?? opts.store.getToolRequest(id)
       if (!existing || POLICY_TERMINAL_STATUSES.has(existing.status)) return
       await persistResolve(id, { status: "answered", decision, resolvedAt: opts.now() })
       resolveWaiters(id, { status: "answered", decision })
     },
 
     async cancel(id, reason) {
-      const existing = inMemory.get(id) ?? await opts.store.getToolRequest(id)
+      const existing = inMemory.get(id) ?? opts.store.getToolRequest(id)
       if (!existing || POLICY_TERMINAL_STATUSES.has(existing.status)) return
       const decision: ToolRequestDecision = { kind: "deny", reason: `canceled: ${reason}` }
       await persistResolve(id, { status: "canceled", decision, resolvedAt: opts.now() })
@@ -207,7 +207,7 @@ export function createToolCallbackService(opts: ToolCallbackServiceArgs): ToolCa
       for (const [id, req] of inMemory.entries()) {
         if (req.chatId === chatId && req.status === "pending") pendingIds.add(id)
       }
-      const storeList = await opts.store.listPendingToolRequests(chatId)
+      const storeList = opts.store.listPendingToolRequests(chatId)
       for (const req of storeList) pendingIds.add(req.id)
       for (const id of pendingIds) await svc.cancel(id, reason)
     },
@@ -215,13 +215,13 @@ export function createToolCallbackService(opts: ToolCallbackServiceArgs): ToolCa
     async cancelAllForSession(sessionId, reason) {
       const ids = Array.from(waiters.keys())
       for (const id of ids) {
-        const req = inMemory.get(id) ?? await opts.store.getToolRequest(id)
+        const req = inMemory.get(id) ?? opts.store.getToolRequest(id)
         if (req && req.sessionId === sessionId) await svc.cancel(id, reason)
       }
     },
 
     async recoverOnStartup() {
-      const all = await opts.store.scanAllToolRequests()
+      const all = opts.store.scanAllToolRequests()
       for (const req of all) {
         if (req.status !== "pending") continue
         const decision: ToolRequestDecision = { kind: "deny", reason: "server_restarted" }

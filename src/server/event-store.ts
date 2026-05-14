@@ -1784,10 +1784,18 @@ export class EventStore implements PushEventStore {
 
   getRecentChatHistory(chatId: string, recentLimit: number) {
     const page = this.getRecentMessagesPage(chatId, recentLimit)
+    const pending = this.listPendingToolRequests(chatId)
+    const pendingEntries: TranscriptEntry[] = pending.map((req) => ({
+      _id: `pending-tool-request-${req.id}`,
+      createdAt: req.createdAt,
+      kind: "pending_tool_request",
+      toolRequestId: req.id,
+    }))
+    const merged = [...page.messages, ...pendingEntries]
     return {
-      messages: page.messages,
+      messages: merged,
       history: getHistorySnapshot({
-        entries: page.messages,
+        entries: merged,
         hasOlder: page.hasOlder,
         olderCursor: page.olderCursor,
       }, recentLimit),
@@ -2019,12 +2027,12 @@ export class EventStore implements PushEventStore {
     } satisfies ToolRequestEvent)
   }
 
-  async getToolRequest(id: string): Promise<ToolRequest | null> {
+  getToolRequest(id: string): ToolRequest | null {
     const req = this.state.toolRequestsById.get(id)
     return req ? { ...req } : null
   }
 
-  async listPendingToolRequests(chatId: string): Promise<ToolRequest[]> {
+  listPendingToolRequests(chatId: string): ToolRequest[] {
     const out: ToolRequest[] = []
     for (const req of this.state.toolRequestsById.values()) {
       if (req.chatId !== chatId) continue
@@ -2065,7 +2073,7 @@ export class EventStore implements PushEventStore {
     } satisfies ToolRequestEvent)
   }
 
-  async scanAllToolRequests(): Promise<ToolRequest[]> {
+  scanAllToolRequests(): ToolRequest[] {
     return [...this.state.toolRequestsById.values()].map((req) => ({ ...req }))
   }
 }
