@@ -7,7 +7,7 @@ import { useMentionSuggestions, type ProjectPath } from "../../hooks/useMentionS
 import { useSubagentSuggestions } from "../../hooks/useSubagentSuggestions"
 import { useSlashCommands, useSlashCommandsLoading } from "../../hooks/useSlashCommands"
 import type { SlashCommand } from "../../../shared/types"
-import { ArrowUp, Paperclip } from "lucide-react"
+import { ArrowUp, Bot, Paperclip } from "lucide-react"
 import {
   type AgentProvider,
   type ChatAttachment,
@@ -34,6 +34,15 @@ import { AttachmentPreviewModal } from "../messages/AttachmentPreviewModal"
 import { classifyAttachmentPreview } from "../messages/attachmentPreview"
 import { overrideContextWindowMaxTokens, type ContextWindowSnapshot } from "../../lib/contextWindow"
 import { uploadFile, UploadAbortedError } from "../../lib/uploadFile"
+import { useAppSettingsStore } from "../../stores/appSettingsStore"
+import { createAgentMentionRegex } from "../../../shared/mention-pattern"
+import type { Subagent } from "../../../shared/types"
+
+const EMPTY_SUBAGENTS: Subagent[] = []
+
+type MentionChip =
+  | { kind: "ok"; label: string; id: string }
+  | { kind: "missing"; label: string }
 
 const MAX_FILES_PER_DROP = 50
 const MAX_CONCURRENT_UPLOADS = 3
@@ -281,6 +290,18 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput({
     ...subagentMentionState.items,
     ...mentionState.items.map((item) => ({ kind: "path" as const, path: item })),
   ], [mentionState.items, subagentMentionState.items])
+  const subagentsForChips = useAppSettingsStore((state) => state.settings?.subagents ?? EMPTY_SUBAGENTS)
+  const mentionChips = useMemo<MentionChip[]>(() => {
+    const byNameLower = new Map(subagentsForChips.map((subagent) => [subagent.name.toLowerCase(), subagent]))
+    const matches = [...value.matchAll(createAgentMentionRegex())]
+    return matches.map((match) => {
+      const name = match[2]
+      const hit = byNameLower.get(name.toLowerCase())
+      return hit
+        ? { kind: "ok" as const, label: hit.name, id: hit.id }
+        : { kind: "missing" as const, label: name }
+    })
+  }, [value, subagentsForChips])
   const mentionOpen =
     mentionTrigger.open &&
     !mentionDismissed &&
@@ -875,6 +896,25 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput({
     <div>
       <div className={cn("px-3 pt-0", isStandalone && "px-5")}>
         <div className="max-w-[840px] mx-auto rounded-[32px]">
+          {mentionChips.length > 0 ? (
+            <div className="flex flex-wrap gap-1 px-2 pt-2">
+              {mentionChips.map((chip, i) => (
+                <span
+                  key={`${chip.kind}:${chip.label}:${i}`}
+                  className={cn(
+                    "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs",
+                    chip.kind === "ok"
+                      ? "bg-accent text-accent-foreground"
+                      : "bg-destructive/15 text-destructive",
+                  )}
+                >
+                  <Bot className="h-3 w-3" />
+                  agent/{chip.label}
+                  {chip.kind === "missing" && <span className="ml-1 font-medium">unknown</span>}
+                </span>
+              ))}
+            </div>
+          ) : null}
           {attachments.length > 0 ? (
             <ScrollArea className="overflow-x-auto overflow-y-hidden whitespace-nowrap px-2 pb-2">
               <div className="flex items-end gap-2 pt-2">

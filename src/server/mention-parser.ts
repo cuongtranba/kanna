@@ -1,10 +1,9 @@
 import type { Subagent } from "../shared/types"
+import { createAgentMentionRegex } from "../shared/mention-pattern"
 
 export type ParsedMention =
   | { kind: "subagent"; subagentId: string; raw: string }
   | { kind: "unknown-subagent"; name: string; raw: string }
-
-const AGENT_MENTION_REGEX = /(^|[\s\n\t])@agent\/([a-z0-9_-]+)/gi
 
 export function parseMentions(text: string, subagents: Subagent[]): ParsedMention[] {
   const subagentsByName = new Map<string, Subagent>()
@@ -13,7 +12,7 @@ export function parseMentions(text: string, subagents: Subagent[]): ParsedMentio
   }
 
   const mentions: ParsedMention[] = []
-  for (const match of text.matchAll(AGENT_MENTION_REGEX)) {
+  for (const match of text.matchAll(createAgentMentionRegex())) {
     const name = match[2]
     if (!name) continue
     const raw = `@agent/${name}`
