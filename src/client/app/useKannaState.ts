@@ -1954,7 +1954,7 @@ export function useKannaState(activeChatId: string | null): KannaState {
     } catch (error) {
       setCommandError(error instanceof Error ? error.message : String(error))
     }
-  }, [navigate, runtime?.projectId, socket])
+  }, [navigate, runtime, socket])
 
   const handleToggleProjectStar = useCallback(async (projectId: string, starred: boolean) => {
     try {

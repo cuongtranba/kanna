@@ -176,7 +176,6 @@ describe("unsubscribePush", () => {
       sendToServer: async (id) => { told = id },
     })
     expect(unsubscribed).toBe(true)
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
     expect(told!).toBe("device-1")
   })
 })

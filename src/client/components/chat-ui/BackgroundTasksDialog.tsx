@@ -186,7 +186,7 @@ export const TaskRow = memo(function TaskRow({
     onConfirmEnd()
     // restore focus to stop button
     stopButtonRef.current?.focus()
-  }, [onConfirmEnd, stopButtonRef])
+  }, [onConfirmEnd])
 
   const handleConfirmStop = useCallback(() => {
     setStopState({ phase: "stopping", startedAt: Date.now() })
