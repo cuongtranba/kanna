@@ -139,6 +139,8 @@ function getReplayEventPriority(event: StoreEvent): number {
     case "subagent_run_completed":
     case "subagent_run_failed":
     case "subagent_run_cancelled":
+    case "subagent_tool_pending":
+    case "subagent_tool_resolved":
       return 5
     default: {
       const _exhaustive: never = discriminator

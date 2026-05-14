@@ -333,6 +333,26 @@ export type SubagentRunEvent =
       runId: string
       entry: TranscriptEntry
     }
+  | {
+      v: 3
+      type: "subagent_tool_pending"
+      timestamp: number
+      chatId: string
+      runId: string
+      toolUseId: string
+      toolKind: "ask_user_question" | "exit_plan_mode"
+      input: unknown
+    }
+  | {
+      v: 3
+      type: "subagent_tool_resolved"
+      timestamp: number
+      chatId: string
+      runId: string
+      toolUseId: string
+      result: unknown
+      resolution: "user" | "auto_deny" | "interrupted"
+    }
 
 export type StoreEvent = ProjectEvent | ChatEvent | MessageEvent | QueuedMessageEvent | TurnEvent | StackEvent | AutoContinueEvent | SubagentRunEvent
 
