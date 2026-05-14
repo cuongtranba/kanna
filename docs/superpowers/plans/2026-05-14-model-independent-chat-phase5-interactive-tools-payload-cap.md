@@ -144,7 +144,7 @@ export interface ToolResultEntry extends TranscriptEntryBase {
    * carries only a 2 KB preview wrapped in <persisted-output> tags.
    */
   persisted?: {
-    filepath: string
+    filePath: string
     originalSize: number
     isJson: boolean
     truncated: true
@@ -581,13 +581,13 @@ describe("capTranscriptEntry", () => {
       entry, chatId: "c1", runId: "r1", projectId: "p1", kannaRoot,
     })
     expect(out).not.toBe(entry)
-    const persisted = (out as { persisted?: { filepath: string; originalSize: number; isJson: boolean; truncated: true } }).persisted
+    const persisted = (out as { persisted?: { filePath: string; originalSize: number; isJson: boolean; truncated: true } }).persisted
     expect(persisted).toBeDefined()
     expect(persisted!.originalSize).toBe(big.length)
     expect(persisted!.isJson).toBe(false)
     expect(persisted!.truncated).toBe(true)
-    expect(persisted!.filepath.endsWith("tool-xyz.txt")).toBe(true)
-    const onDisk = await readFile(persisted!.filepath, "utf-8")
+    expect(persisted!.filePath.endsWith("tool-xyz.txt")).toBe(true)
+    const onDisk = await readFile(persisted!.filePath, "utf-8")
     expect(onDisk).toBe(big)
     const preview = (out as { content: string }).content
     expect(preview).toContain("<persisted-output>")
@@ -601,10 +601,10 @@ describe("capTranscriptEntry", () => {
     const out = await capTranscriptEntry({
       entry, chatId: "c1", runId: "r1", projectId: "p1", kannaRoot,
     })
-    const persisted = (out as { persisted?: { filepath: string; isJson: boolean } }).persisted
+    const persisted = (out as { persisted?: { filePath: string; isJson: boolean } }).persisted
     expect(persisted).toBeDefined()
     expect(persisted!.isJson).toBe(true)
-    expect(persisted!.filepath.endsWith("tool-xyz.json")).toBe(true)
+    expect(persisted!.filePath.endsWith("tool-xyz.json")).toBe(true)
   })
 
   test("idempotent: re-call with same toolUseId swallows EEXIST", async () => {
@@ -616,9 +616,9 @@ describe("capTranscriptEntry", () => {
     const out2 = await capTranscriptEntry({
       entry, chatId: "c1", runId: "r1", projectId: "p1", kannaRoot,
     })
-    expect((out1 as { persisted?: { filepath: string } }).persisted!.filepath)
-      .toBe((out2 as { persisted?: { filepath: string } }).persisted!.filepath)
-    const s = await stat((out1 as { persisted?: { filepath: string } }).persisted!.filepath)
+    expect((out1 as { persisted?: { filePath: string } }).persisted!.filePath)
+      .toBe((out2 as { persisted?: { filePath: string } }).persisted!.filePath)
+    const s = await stat((out1 as { persisted?: { filePath: string } }).persisted!.filePath)
     expect(s.size).toBe(big.length)
   })
 
@@ -648,11 +648,11 @@ describe("capTranscriptEntry", () => {
     const out = await capTranscriptEntry({
       entry, chatId: "c1", runId: "r1", projectId: "p1", kannaRoot,
     })
-    const filepath = (out as { persisted?: { filepath: string } }).persisted!.filepath
-    expect(filepath).toContain(path.join("subagent-results", "r1"))
-    expect(filepath).not.toContain("..")
-    expect(filepath).not.toContain("/etc/passwd")
-    expect(path.basename(filepath)).toMatch(/^[A-Za-z0-9_-]+\.txt$/)
+    const filePath = (out as { persisted?: { filePath: string } }).persisted!.filePath
+    expect(filePath).toContain(path.join("subagent-results", "r1"))
+    expect(filePath).not.toContain("..")
+    expect(filePath).not.toContain("/etc/passwd")
+    expect(path.basename(filePath)).toMatch(/^[A-Za-z0-9_-]+\.txt$/)
   })
 
   test("preview cuts at newline boundary within last 50% of limit", async () => {
@@ -756,9 +756,9 @@ function formatBytes(n: number): string {
   return `${(n / 1024 / 1024).toFixed(2)} MB`
 }
 
-function buildMessage(filepath: string, originalSize: number, preview: string, hasMore: boolean): string {
+function buildMessage(filePath: string, originalSize: number, preview: string, hasMore: boolean): string {
   let msg = `${PERSISTED_OPEN_TAG}\n`
-  msg += `Output too large (${formatBytes(originalSize)}). Full output saved to: ${filepath}\n\n`
+  msg += `Output too large (${formatBytes(originalSize)}). Full output saved to: ${filePath}\n\n`
   msg += `Preview (first ${formatBytes(PREVIEW_SIZE)}):\n`
   msg += preview
   msg += hasMore ? "\n...\n" : "\n"
@@ -782,20 +782,20 @@ export async function capTranscriptEntry(args: CapArgs): Promise<TranscriptEntry
   const dir = dirFor(args)
   await mkdir(dir, { recursive: true })
   const ext = info.isJson ? "json" : "txt"
-  const filepath = path.join(dir, `${safeBasename(entry.toolId)}.${ext}`)
+  const filePath = path.join(dir, `${safeBasename(entry.toolId)}.${ext}`)
   try {
-    await writeFile(filepath, info.serialized, { encoding: "utf-8", flag: "wx" })
+    await writeFile(filePath, info.serialized, { encoding: "utf-8", flag: "wx" })
   } catch (err) {
     const code = (err as NodeJS.ErrnoException).code
     if (code !== "EEXIST") throw err
   }
   const { preview, hasMore } = buildPreview(info.serialized)
-  const message = buildMessage(filepath, info.size, preview, hasMore)
+  const message = buildMessage(filePath, info.size, preview, hasMore)
   return {
     ...entry,
     content: message,
     persisted: {
-      filepath,
+      filePath,
       originalSize: info.size,
       isJson: info.isJson,
       truncated: true,
@@ -873,10 +873,10 @@ test("subagent_entry_appended caps tool_result over threshold", async () => {
     } as TranscriptEntry,
   })
   const run = store.getSubagentRuns(chatId)[runId]
-  const last = run.entries[run.entries.length - 1] as { persisted?: { filepath: string; originalSize: number } }
+  const last = run.entries[run.entries.length - 1] as { persisted?: { filePath: string; originalSize: number } }
   expect(last.persisted).toBeDefined()
   expect(last.persisted!.originalSize).toBe(big.length)
-  const onDisk = await Bun.file(last.persisted!.filepath).text()
+  const onDisk = await Bun.file(last.persisted!.filePath).text()
   expect(onDisk).toBe(big)
 })
 ```
@@ -1798,7 +1798,7 @@ export interface HydratedToolCallBase<TKind extends string, TInput, TResult> {
    * ToolResultEntry.persisted during hydration.
    */
   persisted?: {
-    filepath: string
+    filePath: string
     originalSize: number
     isJson: boolean
     truncated: true
@@ -1862,14 +1862,14 @@ if (message.kind === "tool" && message.persisted) {
         {stripped}
       </pre>
       <a
-        href={`file://${message.persisted.filepath}`}
+        href={`file://${message.persisted.filePath}`}
         onClick={(e) => {
           e.preventDefault()
-          openLocalFile(message.persisted!.filepath)
+          openLocalFile(message.persisted!.filePath)
         }}
         className="text-blue-500 hover:underline"
       >
-        View full output ({message.persisted.filepath})
+        View full output ({message.persisted.filePath})
       </a>
     </div>
   )
@@ -2000,7 +2000,7 @@ describe("SubagentMessage pending tool", () => {
           toolId: "tool-big",
           content: "<persisted-output>\nOutput too large (60 KB)…",
           persisted: {
-            filepath: "/tmp/foo.txt",
+            filePath: "/tmp/foo.txt",
             originalSize: 60_000,
             isJson: false,
             truncated: true,

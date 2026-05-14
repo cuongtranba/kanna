@@ -866,7 +866,7 @@ export interface ToolResultEntry extends TranscriptEntryBase {
    * carries only a 2 KB preview wrapped in <persisted-output> tags.
    */
   persisted?: {
-    filepath: string
+    filePath: string
     originalSize: number
     isJson: boolean
     truncated: true
@@ -1151,7 +1151,7 @@ export interface HydratedToolCallBase<TKind extends string, TInput, TResult> {
    * ToolResultEntry.persisted during hydration.
    */
   persisted?: {
-    filepath: string
+    filePath: string
     originalSize: number
     isJson: boolean
     truncated: true
