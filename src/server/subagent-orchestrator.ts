@@ -447,13 +447,15 @@ export class SubagentOrchestrator {
       try {
         const abortRejection = createDeferred<never>()
         const abortListener = () => abortRejection.reject(new Error("USER_CANCELLED"))
-        if (runState.abortController.signal.aborted) {
-          abortListener()
-        } else {
-          runState.abortController.signal.addEventListener("abort", abortListener, { once: true })
-        }
+        runState.abortController.signal.addEventListener("abort", abortListener, { once: true })
         let result: { text: string; usage?: ProviderUsage }
         try {
+          // Fast-path: if already aborted, fire listener synchronously so the
+          // race rejects on the next microtask. Doing this AFTER abortRejection.promise
+          // is passed to Promise.race ensures the rejection always has a handler.
+          if (runState.abortController.signal.aborted) {
+            abortListener()
+          }
           result = await Promise.race([
             runStart.start(onChunk, onEntry),
             timeoutRejection.promise,
