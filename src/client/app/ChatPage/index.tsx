@@ -39,7 +39,6 @@ import {
   EMPTY_STATE_TEXT,
   EMPTY_STATE_TYPING_INTERVAL_MS,
   hasFileDragTypes,
-  sameContextWindowSnapshot,
 } from "./utils"
 
 export {
@@ -439,6 +438,7 @@ function ChatWorkspace({
 
 export function ChatPage() {
   const state = useOutletContext<KannaState>()
+  const { handleCancel, handleOpenExternal } = state
   const dialog = useAppDialog()
   const layoutRootRef = useRef<HTMLDivElement>(null)
   const transcriptListRef = useRef<LegendListRef | null>(null)
@@ -473,16 +473,10 @@ export function ChatPage() {
   const editorPreset = useTerminalPreferencesStore((store) => store.editorPreset)
   const editorCommandTemplate = useTerminalPreferencesStore((store) => store.editorCommandTemplate)
   const resolvedKeybindings = useMemo(() => getResolvedKeybindings(state.keybindings), [state.keybindings])
-  const baseContextWindowSnapshotRef = useRef<ReturnType<typeof deriveLatestContextWindowSnapshot>>(null)
-  const contextWindowSnapshot = useMemo(() => {
-    const derivedSnapshot = deriveLatestContextWindowSnapshot(state.chatSnapshot?.messages ?? [])
-    const previousSnapshot = baseContextWindowSnapshotRef.current
-    if (sameContextWindowSnapshot(previousSnapshot, derivedSnapshot)) {
-      return previousSnapshot
-    }
-    baseContextWindowSnapshotRef.current = derivedSnapshot
-    return derivedSnapshot
-  }, [state.chatSnapshot?.messages])
+  const contextWindowSnapshot = useMemo(
+    () => deriveLatestContextWindowSnapshot(state.chatSnapshot?.messages ?? []),
+    [state.chatSnapshot?.messages]
+  )
 
   const hasTerminals = terminalLayout.terminals.length > 0
   const showTerminalPane = Boolean(projectId && terminalLayout.isVisible && hasTerminals)
@@ -660,13 +654,6 @@ export function ChatPage() {
     toggleRightSidebar(projectId)
   }, [dialog, handleInitializeGit, projectId, showRightSidebar, state.chatDiffSnapshot?.status, toggleRightSidebar])
 
-  const handleCancel = useCallback(() => {
-    void state.handleCancel()
-  }, [state.handleCancel])
-
-  const handleOpenExternal = useCallback<NonNullable<ComponentProps<typeof ChatNavbar>["onOpenExternal"]>>((action, editor) => {
-    void state.handleOpenExternal(action, editor)
-  }, [state.handleOpenExternal])
 
   const handleRemoveTerminal = useCallback((currentProjectId: string, terminalId: string) => {
     void state.socket.command({ type: "terminal.close", terminalId }).catch(() => {})
@@ -785,13 +772,13 @@ export function ChatPage() {
 
       if (actionMatchesEvent(resolvedKeybindings, "openInFinder", event)) {
         event.preventDefault()
-        void state.handleOpenExternal("open_finder")
+        void handleOpenExternal("open_finder")
         return
       }
 
       if (actionMatchesEvent(resolvedKeybindings, "openInEditor", event)) {
         event.preventDefault()
-        void state.handleOpenExternal("open_editor")
+        void handleOpenExternal("open_editor")
         return
       }
 
@@ -803,7 +790,7 @@ export function ChatPage() {
 
     window.addEventListener("keydown", handleGlobalKeydown)
     return () => window.removeEventListener("keydown", handleGlobalKeydown)
-  }, [addTerminal, handleToggleEmbeddedTerminal, handleToggleRightSidebar, projectId, resolvedKeybindings, state.handleOpenExternal])
+  }, [addTerminal, handleOpenExternal, handleToggleEmbeddedTerminal, handleToggleRightSidebar, projectId, resolvedKeybindings])
 
   useEffect(() => {
     function handleBgTasksShortcut(event: KeyboardEvent) {

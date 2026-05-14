@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type KeyboardEvent, type ReactNode } from "react"
+import { useCallback, useEffect, useMemo, useState, type KeyboardEvent, type ReactNode } from "react"
 import {
   BookText,
   Command,
@@ -591,7 +591,7 @@ export function SkillsSection({
   const [uninstallingSkillId, setUninstallingSkillId] = useState<string | null>(null)
   const [installMessages, setInstallMessages] = useState<Record<string, string>>({})
 
-  async function loadInstalledSkills() {
+  const loadInstalledSkills = useCallback(async () => {
     if (connectionStatus !== "connected") {
       setInstalledSkills([])
       setInstalledSkillIds(new Set())
@@ -613,11 +613,11 @@ export function SkillsSection({
     } finally {
       setInstalledLoading(false)
     }
-  }
+  }, [connectionStatus, socket])
 
   useEffect(() => {
     void loadInstalledSkills()
-  }, [connectionStatus, socket])
+  }, [connectionStatus, loadInstalledSkills, socket])
 
   useEffect(() => {
     const normalizedQuery = query.trim()

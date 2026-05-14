@@ -115,6 +115,7 @@ function PasswordScreen({
 function useAppAuthState() {
   const [state, setState] = useState<AppAuthState>({ status: "checking" })
   const retryTimeoutRef = useRef<number | null>(null)
+  const refreshRef = useRef<() => Promise<void>>(async () => { /* stable ref kept current by useLayoutEffect */ })
 
   const refresh = useCallback(async () => {
     if (retryTimeoutRef.current !== null) {
@@ -135,14 +136,14 @@ function useAppAuthState() {
       })
     } catch {
       retryTimeoutRef.current = window.setTimeout(() => {
-        void refresh()
+        void refreshRef.current()
       }, AUTH_STATUS_RETRY_DELAY_MS)
       return
     }
 
     if (shouldRetryAuthStatusRequest(response.ok)) {
       retryTimeoutRef.current = window.setTimeout(() => {
-        void refresh()
+        void refreshRef.current()
       }, AUTH_STATUS_RETRY_DELAY_MS)
       return
     }
@@ -150,6 +151,10 @@ function useAppAuthState() {
     const payload = await response.json() as Partial<AuthStatusResponse>
     setState(getAppAuthStateFromStatus(payload))
   }, [])
+
+  useLayoutEffect(() => {
+    refreshRef.current = refresh
+  })
 
   useEffect(() => {
     void refresh()
@@ -207,48 +212,64 @@ function KannaLayout() {
   const showMobileOpenButton = location.pathname === "/"
   const currentVersion = SDK_CLIENT_APP.split("/")[1] ?? "unknown"
   const previousSidebarDataRef = useRef<ReturnType<typeof useKannaState>["sidebarData"] | null>(null)
+  const {
+    handleCreateChat,
+    handleForkChat,
+    handleRenameChat,
+    handleShareChat,
+    handleArchiveChat,
+    handleOpenArchivedChat: stateHandleOpenArchivedChat,
+    openAddProjectModal,
+    handleDeleteChat,
+    handleCopyPath,
+    handleOpenExternalPath,
+    handleHideProject,
+    handleToggleProjectStar,
+    handleReorderProjectGroups,
+    importClaudeSessions,
+  } = state
   const handleSidebarCreateChat = useCallback((projectId: string) => {
-    void state.handleCreateChat(projectId)
-  }, [state.handleCreateChat])
-  const handleSidebarForkChat = useCallback((chat: Parameters<typeof state.handleForkChat>[0]) => {
-    void state.handleForkChat(chat)
-  }, [state.handleForkChat])
-  const handleSidebarRenameChat = useCallback((chat: Parameters<typeof state.handleRenameChat>[0]) => {
-    void state.handleRenameChat(chat)
-  }, [state.handleRenameChat])
+    void handleCreateChat(projectId)
+  }, [handleCreateChat])
+  const handleSidebarForkChat = useCallback((chat: Parameters<typeof handleForkChat>[0]) => {
+    void handleForkChat(chat)
+  }, [handleForkChat])
+  const handleSidebarRenameChat = useCallback((chat: Parameters<typeof handleRenameChat>[0]) => {
+    void handleRenameChat(chat)
+  }, [handleRenameChat])
   const handleSidebarShareChat = useCallback((chatId: string) => {
-    void state.handleShareChat(chatId)
-  }, [state.handleShareChat])
-  const handleSidebarArchiveChat = useCallback((chat: Parameters<typeof state.handleArchiveChat>[0]) => {
-    void state.handleArchiveChat(chat)
-  }, [state.handleArchiveChat])
+    void handleShareChat(chatId)
+  }, [handleShareChat])
+  const handleSidebarArchiveChat = useCallback((chat: Parameters<typeof handleArchiveChat>[0]) => {
+    void handleArchiveChat(chat)
+  }, [handleArchiveChat])
   const handleOpenArchivedChat = useCallback((chatId: string) => {
-    void state.handleOpenArchivedChat(chatId)
-  }, [state.handleOpenArchivedChat])
+    void stateHandleOpenArchivedChat(chatId)
+  }, [stateHandleOpenArchivedChat])
   const handleOpenAddProjectModal = useCallback(() => {
-    state.openAddProjectModal()
-  }, [state])
-  const handleSidebarDeleteChat = useCallback((chat: Parameters<typeof state.handleDeleteChat>[0]) => {
-    void state.handleDeleteChat(chat)
-  }, [state.handleDeleteChat])
+    openAddProjectModal()
+  }, [openAddProjectModal])
+  const handleSidebarDeleteChat = useCallback((chat: Parameters<typeof handleDeleteChat>[0]) => {
+    void handleDeleteChat(chat)
+  }, [handleDeleteChat])
   const handleSidebarCopyPath = useCallback((localPath: string) => {
-    void state.handleCopyPath(localPath)
-  }, [state.handleCopyPath])
+    void handleCopyPath(localPath)
+  }, [handleCopyPath])
   const handleSidebarOpenExternalPath = useCallback((action: "open_finder" | "open_editor", localPath: string) => {
-    void state.handleOpenExternalPath(action, localPath)
-  }, [state.handleOpenExternalPath])
+    void handleOpenExternalPath(action, localPath)
+  }, [handleOpenExternalPath])
   const handleSidebarHideProject = useCallback((projectId: string) => {
-    void state.handleHideProject(projectId)
-  }, [state.handleHideProject])
+    void handleHideProject(projectId)
+  }, [handleHideProject])
   const handleSidebarToggleProjectStar = useCallback((projectId: string, starred: boolean) => {
-    void state.handleToggleProjectStar(projectId, starred)
-  }, [state.handleToggleProjectStar])
+    void handleToggleProjectStar(projectId, starred)
+  }, [handleToggleProjectStar])
   const handleSidebarReorderProjectGroups = useCallback((projectIds: string[]) => {
-    void state.handleReorderProjectGroups(projectIds)
-  }, [state.handleReorderProjectGroups])
+    void handleReorderProjectGroups(projectIds)
+  }, [handleReorderProjectGroups])
   const handleImportClaudeSessions = useCallback(async () => {
     try {
-      const result = await state.importClaudeSessions()
+      const result = await importClaudeSessions()
       const parts = [
         `Imported ${result.imported}`,
         `updated ${result.updated}`,
@@ -267,7 +288,7 @@ function KannaLayout() {
         description: "See console for details.",
       })
     }
-  }, [dialog, state])
+  }, [dialog, importClaudeSessions])
   const sidebarElement = useMemo(() => (
     <KannaSidebar
       data={state.sidebarData}

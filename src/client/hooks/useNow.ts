@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useLayoutEffect, useRef, useState } from "react"
 
 /**
  * Returns the current timestamp (ms since epoch), updated on `intervalMs` cadence.
@@ -10,7 +10,9 @@ import { useEffect, useRef, useState } from "react"
 export function useNow(intervalMs = 1_000): number {
   const [now, setNow] = useState<number>(() => Date.now())
   const savedInterval = useRef(intervalMs)
-  savedInterval.current = intervalMs
+  useLayoutEffect(() => {
+    savedInterval.current = intervalMs
+  })
 
   useEffect(() => {
     const id = window.setInterval(() => {

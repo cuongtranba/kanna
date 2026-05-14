@@ -1,4 +1,4 @@
-import React, { memo, useCallback, useMemo, useRef, useState } from "react"
+import React, { memo, useCallback, useLayoutEffect, useMemo, useRef, useState } from "react"
 import type { AskUserQuestionItem, ProcessedToolCall } from "../components/messages/types"
 import { SubagentMessage } from "../components/messages/SubagentMessage"
 import type { SubagentRunSnapshot } from "../../shared/types"
@@ -332,11 +332,19 @@ export function useStableResolvedRows(rows: ResolvedTranscriptRow[]) {
     result: [],
   })
 
-  return useMemo(() => {
+  // Intentional: previousState.current is read in useMemo to implement stable row identity.
+  // The alternative would require setState in an effect (set-state-in-effect, deferred PR).
+  const result = useMemo(() => {
+    // eslint-disable-next-line react-hooks/refs
     const nextState = computeStableResolvedTranscriptRows(rows, previousState.current)
-    previousState.current = nextState
-    return nextState.result
+    return nextState
   }, [rows])
+
+  useLayoutEffect(() => {
+    previousState.current = result
+  })
+
+  return result.result
 }
 
 interface TranscriptSingleRowProps {

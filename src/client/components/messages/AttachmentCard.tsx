@@ -1,4 +1,4 @@
-import type { ReactNode } from "react"
+import { type ReactNode } from "react"
 import {
   File,
   FileArchive,
@@ -18,6 +18,7 @@ import type { ChatAttachment } from "../../../shared/types"
 import { cn } from "../../lib/utils"
 import { classifyAttachmentIcon, type AttachmentIconKind } from "./attachmentPreview"
 import { AttachmentUploadOverlay } from "./AttachmentUploadOverlay"
+import { LucideIconWrapper } from "./shared"
 
 type BaseAttachmentCardProps = {
   attachment: ChatAttachment
@@ -156,7 +157,7 @@ export function AttachmentFileCard({
   const inner = (
     <>
       <div className="flex min-h-10 min-w-10 items-center justify-center rounded-lg border border-border bg-muted text-muted-foreground">
-        <Icon className="size-5" />
+        <LucideIconWrapper icon={Icon} className="size-5" />
       </div>
       <div className="min-w-0">
         <div className={cn("max-w-[150px] truncate text-[13px] font-medium", isDisabled ? "text-muted-foreground line-through" : "text-foreground")}>
