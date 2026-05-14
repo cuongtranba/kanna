@@ -1,4 +1,5 @@
 import type { HydratedTranscriptMessage } from "../../../shared/types"
+import { toLocalFileUrl } from "../../lib/pathUtils"
 import { TextMessage } from "./TextMessage"
 import { ToolCallMessage } from "./ToolCallMessage"
 import { ResultMessage } from "./ResultMessage"
@@ -36,7 +37,7 @@ export function SubagentEntryRow({ message, localPath }: SubagentEntryRowProps) 
           {previewBody}
         </pre>
         <a
-          href={`file://${message.persisted.filePath}`}
+          href={toLocalFileUrl(message.persisted.filePath)}
           className="text-blue-500 hover:underline break-all"
           target="_blank"
           rel="noreferrer"

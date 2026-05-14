@@ -1207,10 +1207,10 @@ block with:
 ```ts
       let finalText = ""
       let usage: ProviderUsage | undefined
+      const timeoutRejection = createDeferred<never>()
       const pausable = new PausableTimeout(this.timeoutMs(), () => {
         timeoutRejection.reject(new Error("TIMEOUT"))
       })
-      const timeoutRejection = createDeferred<never>()
       this.timeoutsByRun.set(runId, pausable)
       pausable.start()
       try {
