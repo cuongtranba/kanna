@@ -76,6 +76,7 @@ function makeArgs(over: Partial<BuildSubagentProviderRunArgs> = {}): BuildSubage
     chatId: "chat-1",
     primer: "some primer",
     runId: "run-abc",
+    abortSignal: new AbortController().signal,
     cwd: "/tmp/project",
     additionalDirectories: [],
     startClaudeSession: async () => {

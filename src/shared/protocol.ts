@@ -240,6 +240,11 @@ export type ClientCommand =
   | { type: "chat.respondTool"; chatId: string; toolUseId: string; result: unknown }
   | { type: "chat.respondSubagentTool"; chatId: string; runId: string; toolUseId: string; result: unknown }
   | {
+      type: "chat.cancelSubagentRun"
+      chatId: string
+      runId: string
+    }
+  | {
       type: "message.enqueue"
       chatId: string
       content: string

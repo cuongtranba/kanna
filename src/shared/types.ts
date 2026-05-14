@@ -1327,6 +1327,7 @@ export type SubagentErrorCode =
   | "TIMEOUT"
   | "PROVIDER_ERROR"
   | "INTERRUPTED"
+  | "USER_CANCELLED"
 
 export type SubagentRunStatus = "running" | "completed" | "failed" | "cancelled"
 

@@ -643,6 +643,7 @@ interface KannaTranscriptProps {
     toolUseId: string,
     response: { confirmed: boolean; clearContext?: boolean; message?: string },
   ) => void
+  onCancelSubagentRun?: (chatId: string, runId: string) => void
 }
 
 const EMPTY_SUBAGENT_RUNS: Record<string, SubagentRunSnapshot> = {}
@@ -654,6 +655,7 @@ function renderSubagentRunTree(
   localPath: string,
   onSubagentAskUserQuestionSubmit: ((runId: string, toolUseId: string, questions: AskUserQuestionItem[], answers: AskUserQuestionAnswerMap) => void) | undefined,
   onSubagentExitPlanModeSubmit: ((runId: string, toolUseId: string, response: { confirmed: boolean; clearContext?: boolean; message?: string }) => void) | undefined,
+  onCancelSubagentRun: ((chatId: string, runId: string) => void) | undefined,
 ): React.ReactNode {
   const children = childrenByParentRunId.get(run.runId) ?? []
   return (
@@ -664,8 +666,9 @@ function renderSubagentRunTree(
         localPath={localPath}
         onSubagentAskUserQuestionSubmit={onSubagentAskUserQuestionSubmit}
         onSubagentExitPlanModeSubmit={onSubagentExitPlanModeSubmit}
+        onCancelSubagentRun={onCancelSubagentRun}
       />
-      {children.map((child) => renderSubagentRunTree(child, depth + 1, childrenByParentRunId, localPath, onSubagentAskUserQuestionSubmit, onSubagentExitPlanModeSubmit))}
+      {children.map((child) => renderSubagentRunTree(child, depth + 1, childrenByParentRunId, localPath, onSubagentAskUserQuestionSubmit, onSubagentExitPlanModeSubmit, onCancelSubagentRun))}
     </React.Fragment>
   )
 }
@@ -794,6 +797,7 @@ function KannaTranscriptImpl({
   subagentRuns = EMPTY_SUBAGENT_RUNS,
   onSubagentAskUserQuestionSubmit,
   onSubagentExitPlanModeSubmit,
+  onCancelSubagentRun,
 }: KannaTranscriptProps) {
   const [toolGroupExpanded, setToolGroupExpanded] = useState<Record<string, boolean>>({})
   const rows = useMemo(() => buildResolvedTranscriptRows(messages, {
@@ -856,7 +860,7 @@ function KannaTranscriptImpl({
               onAutoContinueReschedule={onAutoContinueReschedule}
               onAutoContinueCancel={onAutoContinueCancel}
             />
-            {runsForRow.map((run) => renderSubagentRunTree(run, 0, childrenByParentRunId, localPath ?? "", onSubagentAskUserQuestionSubmit, onSubagentExitPlanModeSubmit))}
+            {runsForRow.map((run) => renderSubagentRunTree(run, 0, childrenByParentRunId, localPath ?? "", onSubagentAskUserQuestionSubmit, onSubagentExitPlanModeSubmit, onCancelSubagentRun))}
           </div>
         )
       })}

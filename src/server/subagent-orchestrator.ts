@@ -93,6 +93,7 @@ export interface SubagentOrchestratorDeps {
     chatId: string
     primer: string | null
     runId: string
+    abortSignal: AbortSignal
   }) => ProviderRunStart
   /**
    * Called when a subagent run enters a terminal state (failed / completed /
@@ -115,11 +116,22 @@ const DEFAULT_MAX_CHAIN_DEPTH = 1
 // override via SubagentOrchestratorDeps.runTimeoutMs.
 const DEFAULT_RUN_TIMEOUT_MS = 600_000
 
+interface RunState {
+  chatId: string
+  parentRunId: string | null
+  childRunIds: Set<string>
+  abortController: AbortController
+  timeout: PausableTimeout | null
+  cancelled: boolean
+  pendingAcquire: boolean
+  permitWaiter: { resolve: () => void; reject: (e: Error) => void } | null
+}
+
 export class SubagentOrchestrator {
   private permits: number
   private readonly waiters: Array<{ chatId: string; resolve: () => void; reject: (err: Error) => void }> = []
   private readonly cancelledChats = new Set<string>()
-  private readonly timeoutsByRun = new Map<string, PausableTimeout>()
+  private readonly runStateByRunId = new Map<string, RunState>()
 
   private readonly recoveryPromise: Promise<void>
 
@@ -174,24 +186,38 @@ export class SubagentOrchestrator {
   }
 
   notifySubagentToolPending(runId: string): void {
-    this.timeoutsByRun.get(runId)?.pause()
+    this.runStateByRunId.get(runId)?.timeout?.pause()
   }
 
   notifySubagentToolResolved(runId: string): void {
-    this.timeoutsByRun.get(runId)?.resume()
+    this.runStateByRunId.get(runId)?.timeout?.resume()
   }
 
-  private async acquire(chatId: string): Promise<void> {
+  private async acquire(chatId: string, runId: string): Promise<void> {
     if (this.cancelledChats.has(chatId)) {
       throw new Error("CHAT_CANCELLED")
     }
     if (this.permits > 0) {
       this.permits -= 1
+      const state = this.runStateByRunId.get(runId)
+      if (state) state.pendingAcquire = false
       return
     }
     const { promise, resolve, reject } = Promise.withResolvers<void>()
+    const state = this.runStateByRunId.get(runId)
+    if (state) {
+      state.permitWaiter = { resolve, reject }
+    }
     this.waiters.push({ chatId, resolve, reject })
-    return promise
+    try {
+      await promise
+      this.permits -= 1
+    } finally {
+      if (state) {
+        state.permitWaiter = null
+        state.pendingAcquire = false
+      }
+    }
   }
 
   private release(): void {
@@ -210,6 +236,39 @@ export class SubagentOrchestrator {
       if (w.chatId !== chatId) continue
       this.waiters.splice(i, 1)
       w.reject(new Error("CHAT_CANCELLED"))
+    }
+    // Cancel every acquired/queued run in this chat. cancelRun is idempotent
+    // (re-cancellation no-op) and handles both queued and running states.
+    // Snapshot runIds first because cancelRun may mutate the map.
+    const runIds: string[] = []
+    for (const [runId, state] of this.runStateByRunId) {
+      if (state.chatId === chatId) runIds.push(runId)
+    }
+    for (const runId of runIds) this.cancelRun(chatId, runId)
+  }
+
+  cancelRun(chatId: string, runId: string): void {
+    const state = this.runStateByRunId.get(runId)
+    if (!state) return
+    if (state.cancelled) return
+    if (state.chatId !== chatId) return
+    state.cancelled = true
+    // Cascade to running descendants. With current DEFAULT_MAX_CHAIN_DEPTH=1
+    // this is a no-op in practice (children spawn only after parent
+    // completes) but guards forward-compat with higher chain depths.
+    for (const childRunId of [...state.childRunIds]) {
+      this.cancelRun(chatId, childRunId)
+    }
+    if (state.pendingAcquire && state.permitWaiter) {
+      // Queued: splice waiter out of this.waiters FIRST so release() cannot
+      // grant us a permit we will never use, then reject the Promise.
+      const idx = this.waiters.findIndex((w) => w.resolve === state.permitWaiter!.resolve)
+      if (idx >= 0) this.waiters.splice(idx, 1)
+      const reject = state.permitWaiter.reject
+      state.permitWaiter = null
+      reject(new Error("USER_CANCELLED"))
+    } else {
+      state.abortController.abort()
     }
   }
 
@@ -301,15 +360,40 @@ export class SubagentOrchestrator {
       depth: args.depth,
     })
 
+    // Register RunState BEFORE acquire so cancelRun can find a queued run.
+    // The reducer marks the run as `status: "running"` from this event on,
+    // which is what the UI uses to show the X button.
+    const runState: RunState = {
+      chatId: args.chatId,
+      parentRunId: args.parentRunId,
+      childRunIds: new Set(),
+      abortController: new AbortController(),
+      timeout: null,
+      cancelled: false,
+      pendingAcquire: true,
+      permitWaiter: null,
+    }
+    this.runStateByRunId.set(runId, runState)
+    if (args.parentRunId != null) {
+      this.runStateByRunId.get(args.parentRunId)?.childRunIds.add(runId)
+    }
+
     try {
-      await this.acquire(args.chatId)
-    } catch {
-      await this.failRun(args.chatId, runId, "PROVIDER_ERROR", "Chat cancelled before run started")
+      await this.acquire(args.chatId, runId)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      const code: SubagentErrorCode = msg === "USER_CANCELLED" ? "USER_CANCELLED" : "PROVIDER_ERROR"
+      const message = msg === "USER_CANCELLED"
+        ? "Cancelled before run started"
+        : "Chat cancelled before run started"
+      await this.failRun(args.chatId, runId, code, message)
+      this.cleanupRunState(runId)
       return
     }
     if (this.cancelledChats.has(args.chatId)) {
       this.release()
       await this.failRun(args.chatId, runId, "PROVIDER_ERROR", "Chat cancelled before run started")
+      this.cleanupRunState(runId)
       return
     }
 
@@ -337,6 +421,7 @@ export class SubagentOrchestrator {
           chatId: args.chatId,
           primer,
           runId,
+          abortSignal: runState.abortController.signal,
         })
       } catch (err) {
         // Defensive: startProviderRun is a synchronous factory but a real impl
@@ -345,11 +430,15 @@ export class SubagentOrchestrator {
         // as `running` forever (no failed/completed event ever appended).
         const msg = err instanceof Error ? err.message : String(err)
         await this.failRun(args.chatId, runId, "PROVIDER_ERROR", msg)
+        this.release()
+        this.cleanupRunState(runId)
         return
       }
 
       if (!(await runStart.authReady())) {
         await this.failRun(args.chatId, runId, "AUTH_REQUIRED", `Authentication required for ${args.subagent.provider}`)
+        this.release()
+        this.cleanupRunState(runId)
         return
       }
 
@@ -388,26 +477,51 @@ export class SubagentOrchestrator {
       const pausable = new PausableTimeout(this.timeoutMs(), () => {
         timeoutRejection.reject(new Error("TIMEOUT"))
       })
-      this.timeoutsByRun.set(runId, pausable)
+      runState.timeout = pausable
       pausable.start()
       try {
-        const result = await Promise.race([
-          runStart.start(onChunk, onEntry),
-          timeoutRejection.promise,
-        ])
+        const abortRejection = createDeferred<never>()
+        const abortListener = () => abortRejection.reject(new Error("USER_CANCELLED"))
+        runState.abortController.signal.addEventListener("abort", abortListener, { once: true })
+        let result: { text: string; usage?: ProviderUsage }
+        try {
+          // Fast-path: if already aborted, fire listener synchronously so the
+          // race rejects on the next microtask. Doing this AFTER abortRejection.promise
+          // is passed to Promise.race ensures the rejection always has a handler.
+          if (runState.abortController.signal.aborted) {
+            abortListener()
+          }
+          result = await Promise.race([
+            runStart.start(onChunk, onEntry),
+            timeoutRejection.promise,
+            abortRejection.promise,
+          ])
+        } finally {
+          runState.abortController.signal.removeEventListener("abort", abortListener)
+        }
         finalText = result.text
         usage = result.usage
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error)
         if (message === "TIMEOUT") {
           await this.failRun(args.chatId, runId, "TIMEOUT", `Run exceeded ${this.timeoutMs()}ms`)
+        } else if (message === "USER_CANCELLED" || runState.cancelled) {
+          await this.failRun(args.chatId, runId, "USER_CANCELLED", "Cancelled by user")
         } else {
           await this.failRun(args.chatId, runId, "PROVIDER_ERROR", message)
         }
         return
       } finally {
         pausable.clear()
-        this.timeoutsByRun.delete(runId)
+        runState.timeout = null
+      }
+
+      // Codex `stopSession` finishes the pending stream queue rather than
+      // rejecting — without this guard, a cancelled run can reach the
+      // success path.
+      if (runState.cancelled) {
+        await this.failRun(args.chatId, runId, "USER_CANCELLED", "Cancelled by user")
+        return
       }
 
       await this.deps.store.appendSubagentEvent({
@@ -482,7 +596,18 @@ export class SubagentOrchestrator {
       }
     } finally {
       releaseSlot()
+      this.cleanupRunState(runId)
     }
+  }
+
+  private cleanupRunState(runId: string) {
+    const state = this.runStateByRunId.get(runId)
+    if (!state) return
+    state.timeout?.clear()
+    if (state.parentRunId != null) {
+      this.runStateByRunId.get(state.parentRunId)?.childRunIds.delete(runId)
+    }
+    this.runStateByRunId.delete(runId)
   }
 
   private async failRun(chatId: string, runId: string, code: SubagentErrorCode, message: string) {

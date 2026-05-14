@@ -906,8 +906,14 @@ export class AgentCoordinator {
     this.subagentOrchestrator = new SubagentOrchestrator({
       store: this.store,
       appSettings: { getSnapshot: () => ({ subagents: this.getSubagents() }) },
-      startProviderRun: ({ subagent, chatId, primer, runId }) => this.buildSubagentProviderRunForChat({ subagent, chatId, primer, runId }),
-      onRunTerminal: (chatId, runId) => this.rejectPendingResolversForRun(chatId, runId),
+      startProviderRun: ({ subagent, chatId, primer, runId, abortSignal }) => this.buildSubagentProviderRunForChat({ subagent, chatId, primer, runId, abortSignal }),
+      onRunTerminal: (chatId, runId) => {
+        this.rejectPendingResolversForRun(chatId, runId)
+        // failRun appended the terminal event synchronously before invoking
+        // this hook, so the store already has the new state. Emit now so
+        // multi-subagent fan-outs do not have to wait for Promise.all.
+        this.emitStateChange(chatId)
+      },
     })
     this.throwOnClaudeSessionStart = args.throwOnClaudeSessionStart ?? false
     this.tunnelGateway = args.tunnelGateway ?? null
@@ -1665,6 +1671,7 @@ export class AgentCoordinator {
     chatId: string
     primer: string | null
     runId: string
+    abortSignal: AbortSignal
   }): ProviderRunStart {
     const chat = this.store.requireChat(args.chatId)
     const project = this.store.getProject(chat.projectId)
@@ -1709,6 +1716,7 @@ export class AgentCoordinator {
       chatId: args.chatId,
       primer: args.primer,
       runId: args.runId,
+      abortSignal: args.abortSignal,
       cwd: spawn.cwd,
       additionalDirectories: spawn.additionalDirectories,
       projectId: project.id,
@@ -2479,5 +2487,11 @@ export class AgentCoordinator {
     this.subagentOrchestrator.notifySubagentToolResolved(command.runId)
     resolver.resolve(command.result)
     this.emitStateChange(command.chatId)
+  }
+
+  async cancelSubagentRun(
+    command: Extract<ClientCommand, { type: "chat.cancelSubagentRun" }>,
+  ) {
+    this.subagentOrchestrator.cancelRun(command.chatId, command.runId)
   }
 }

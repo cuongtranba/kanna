@@ -369,8 +369,8 @@ describe("SubagentOrchestrator", () => {
       store: harness.store,
       appSettings: harness.appSettings,
       now: () => nowCounter++,
-      startProviderRun: ({ subagent, chatId, primer, runId }) => buildSubagentProviderRun({
-        subagent, chatId, primer, runId,
+      startProviderRun: ({ subagent, chatId, primer, runId, abortSignal }) => buildSubagentProviderRun({
+        subagent, chatId, primer, runId, abortSignal,
         cwd: "/tmp", projectId: "p1",
         startClaudeSession: async () => fakeSession,
         codexManager: {} as never,
@@ -617,4 +617,177 @@ describe("SubagentOrchestrator", () => {
     expect(failed).toBeDefined()
     expect(failed!.chatId).toBe(chat.id)
   }, 10_000)
+
+  test("cancelRun on a queued run rejects its acquire and appends USER_CANCELLED", async () => {
+    const h = await setupHarness({
+      subagents: [makeSubagent({ id: "sa-a", name: "alpha" }), makeSubagent({ id: "sa-b", name: "beta" })],
+      maxParallel: 1,
+    })
+    // Hold alpha so it keeps the single permit while beta is queued
+    h.holdReply("sa-a")
+    h.programReply("sa-b", "beta-reply")
+
+    void h.orchestrator.runMentionsForUserMessage({
+      chatId: h.chatId,
+      userMessageId: "u1",
+      mentions: [
+        { kind: "subagent", subagentId: "sa-a", raw: "@agent/alpha" },
+        { kind: "subagent", subagentId: "sa-b", raw: "@agent/beta" },
+      ],
+    })
+
+    // Wait for both runs to be registered in the store (started events)
+    const startDeadline = Date.now() + 2000
+    while (Date.now() < startDeadline) {
+      await new Promise((r) => setTimeout(r, 20))
+      const runs = Object.values(h.store.getSubagentRuns(h.chatId))
+      if (runs.length === 2) break
+    }
+    const runs = h.store.getSubagentRuns(h.chatId)
+    const beta = Object.values(runs).find((r) => r.subagentName === "beta")!
+    expect(beta).toBeDefined()
+    expect(beta.status).toBe("running") // queued runs read as running in store
+
+    // Cancel beta while it is queued waiting for a permit
+    h.orchestrator.cancelRun(h.chatId, beta.runId)
+
+    // Wait for beta's failed event
+    const cancelDeadline = Date.now() + 5000
+    let cancelled = h.store.getSubagentRuns(h.chatId)[beta.runId]
+    while (Date.now() < cancelDeadline && cancelled.status !== "failed") {
+      await new Promise((r) => setTimeout(r, 20))
+      cancelled = h.store.getSubagentRuns(h.chatId)[beta.runId]
+    }
+    expect(cancelled.status).toBe("failed")
+    expect(cancelled.error?.code).toBe("USER_CANCELLED")
+
+    // Unblock alpha so test teardown is clean
+    h.resolveReply("sa-a", "alpha-done")
+  }, 10_000)
+
+  test("cancelRun on a running run aborts the provider stream and appends USER_CANCELLED", async () => {
+    const dataDir = await createTempDataDir()
+    const store = new EventStore(dataDir)
+    await store.initialize()
+    const project = await store.openProject("/tmp/p-cancelrun")
+    const chat = await store.createChat(project.id)
+
+    let signalCaptured: AbortSignal | null = null
+
+    const orchestrator = new SubagentOrchestrator({
+      store,
+      appSettings: { getSnapshot: () => ({ subagents: [makeSubagent({ id: "sa-a", name: "alpha" })] }) },
+      startProviderRun: ({ abortSignal }): ProviderRunStart => {
+        signalCaptured = abortSignal
+        return {
+          provider: "claude",
+          model: "claude-opus-4-7",
+          systemPrompt: "",
+          preamble: null,
+          authReady: async () => true,
+          start: () =>
+            new Promise<{ text: string }>((_resolve, reject) => {
+              abortSignal.addEventListener("abort", () => reject(new Error("USER_CANCELLED")), { once: true })
+            }),
+        }
+      },
+    })
+
+    void orchestrator.runMentionsForUserMessage({
+      chatId: chat.id,
+      userMessageId: "u1",
+      mentions: [{ kind: "subagent", subagentId: "sa-a", raw: "@agent/alpha" }],
+    })
+
+    // Wait for the run to start and capture the abort signal
+    const startDeadline = Date.now() + 2000
+    while (Date.now() < startDeadline && signalCaptured === null) {
+      await new Promise((r) => setTimeout(r, 20))
+    }
+    expect(signalCaptured).not.toBeNull()
+
+    const run = Object.values(store.getSubagentRuns(chat.id))[0]
+    orchestrator.cancelRun(chat.id, run.runId)
+    expect((signalCaptured as AbortSignal | null)?.aborted).toBe(true)
+
+    // Wait for the failed event
+    const cancelDeadline = Date.now() + 5000
+    let cancelled = store.getSubagentRuns(chat.id)[run.runId]
+    while (Date.now() < cancelDeadline && cancelled.status !== "failed") {
+      await new Promise((r) => setTimeout(r, 20))
+      cancelled = store.getSubagentRuns(chat.id)[run.runId]
+    }
+    expect(store.getSubagentRuns(chat.id)[run.runId].error?.code).toBe("USER_CANCELLED")
+  }, 10_000)
+
+  test("cancelRun on an unknown runId is a no-op", () => {
+    const orchestrator = new SubagentOrchestrator({
+      store: { *runningSubagentRuns() {} } as never,
+      appSettings: { getSnapshot: () => ({ subagents: [] }) },
+      startProviderRun: () => { throw new Error("not used") },
+    })
+    expect(() => orchestrator.cancelRun("chat-x", "run-x")).not.toThrow()
+  })
+
+  test("cancelRun cascades through a 2-level chain (A → B → C)", async () => {
+    const alpha = makeSubagent({ id: "sa-a", name: "alpha" })
+    const beta = makeSubagent({ id: "sa-b", name: "beta" })
+    const gamma = makeSubagent({ id: "sa-c", name: "gamma" })
+    const h = await setupHarness({
+      subagents: [alpha, beta, gamma],
+      maxChainDepth: 2,
+      maxParallel: 3,
+    })
+
+    // alpha replies with @agent/beta; beta replies with @agent/gamma;
+    // both beta and gamma are put on hold so all three are in-flight together.
+    h.programReply("sa-a", "delegate to @agent/beta")
+    h.holdReply("sa-b")
+    h.holdReply("sa-c")
+
+    const runPromise = h.orchestrator.runMentionsForUserMessage({
+      chatId: h.chatId,
+      userMessageId: "u1",
+      mentions: [{ kind: "subagent", subagentId: "sa-a", raw: "@agent/alpha" }],
+    })
+
+    // Wait for alpha to complete and beta to start
+    const betaStartDeadline = Date.now() + 5000
+    while (Date.now() < betaStartDeadline) {
+      await new Promise((r) => setTimeout(r, 20))
+      const runs = Object.values(h.store.getSubagentRuns(h.chatId))
+      if (runs.some((r) => r.subagentName === "beta" && r.status === "running")) break
+    }
+    const runs = h.store.getSubagentRuns(h.chatId)
+    const betaRun = Object.values(runs).find((r) => r.subagentName === "beta")
+    expect(betaRun).toBeDefined()
+
+    // Now resolve beta so it returns @agent/gamma and gamma starts
+    h.resolveReply("sa-b", "delegate to @agent/gamma")
+
+    // Wait for gamma to start
+    const gammaStartDeadline = Date.now() + 5000
+    while (Date.now() < gammaStartDeadline) {
+      await new Promise((r) => setTimeout(r, 20))
+      const currentRuns = Object.values(h.store.getSubagentRuns(h.chatId))
+      if (currentRuns.some((r) => r.subagentName === "gamma" && r.status === "running")) break
+    }
+    const gammaRun = Object.values(h.store.getSubagentRuns(h.chatId)).find((r) => r.subagentName === "gamma")
+    expect(gammaRun).toBeDefined()
+
+    // Cancel gamma directly — should mark it USER_CANCELLED
+    h.orchestrator.cancelRun(h.chatId, gammaRun!.runId)
+
+    // Wait for gamma to fail with USER_CANCELLED
+    const cancelDeadline = Date.now() + 5000
+    while (Date.now() < cancelDeadline) {
+      await new Promise((r) => setTimeout(r, 20))
+      const g = h.store.getSubagentRuns(h.chatId)[gammaRun!.runId]
+      if (g && g.status === "failed") break
+    }
+    const finalGamma = h.store.getSubagentRuns(h.chatId)[gammaRun!.runId]
+    expect(finalGamma?.error?.code).toBe("USER_CANCELLED")
+
+    await runPromise
+  }, 30_000)
 })
