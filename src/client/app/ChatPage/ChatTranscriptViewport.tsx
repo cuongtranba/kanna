@@ -17,7 +17,9 @@ import {
   useStableResolvedRows,
 } from "../KannaTranscript"
 import type { KannaState } from "../useKannaState"
-import type { AutoContinueSchedule, CloudflareTunnelRecord } from "../../../shared/types"
+import type { AutoContinueSchedule, CloudflareTunnelRecord, SubagentRunSnapshot } from "../../../shared/types"
+import { SubagentMessage } from "../../components/messages/SubagentMessage"
+import React from "react"
 import { CloudflareTunnelCard } from "../../components/chat-ui/CloudflareTunnelCard"
 import {
   CHAT_NAVBAR_OFFSET_PX,
@@ -55,6 +57,7 @@ interface ChatTranscriptViewportProps {
   onTunnelAccept?: (tunnelId: string) => void | Promise<void>
   onTunnelStop?: (tunnelId: string) => void | Promise<void>
   onTunnelRetry?: (tunnelId: string) => void | Promise<void>
+  subagentRuns?: Record<string, SubagentRunSnapshot>
   showScrollButton: boolean
   onIsAtEndChange: (isAtEnd: boolean) => void
   scrollToBottom: () => void
@@ -98,6 +101,7 @@ export const ChatTranscriptViewport = memo(function ChatTranscriptViewport({
   onTunnelAccept,
   onTunnelStop,
   onTunnelRetry,
+  subagentRuns,
   showScrollButton,
   onIsAtEndChange,
   scrollToBottom,
@@ -141,6 +145,37 @@ export const ChatTranscriptViewport = memo(function ChatTranscriptViewport({
     })
     return () => window.cancelAnimationFrame(frameId)
   }, [listRef, onIsAtEndChange, resolvedRows.length])
+
+  const { runsByUserMessageId, childrenByParentRunId } = useMemo(() => {
+    const topByUser = new Map<string, SubagentRunSnapshot[]>()
+    const byParent = new Map<string, SubagentRunSnapshot[]>()
+    for (const run of Object.values(subagentRuns ?? {})) {
+      if (run.parentRunId === null) {
+        const list = topByUser.get(run.parentUserMessageId) ?? []
+        list.push(run)
+        topByUser.set(run.parentUserMessageId, list)
+      } else {
+        const list = byParent.get(run.parentRunId) ?? []
+        list.push(run)
+        byParent.set(run.parentRunId, list)
+      }
+    }
+    const cmp = (a: SubagentRunSnapshot, b: SubagentRunSnapshot) =>
+      a.startedAt - b.startedAt || a.runId.localeCompare(b.runId)
+    for (const list of topByUser.values()) list.sort(cmp)
+    for (const list of byParent.values()) list.sort(cmp)
+    return { runsByUserMessageId: topByUser, childrenByParentRunId: byParent }
+  }, [subagentRuns])
+
+  const renderRunTree = useCallback((run: SubagentRunSnapshot, depth: number): React.ReactNode => {
+    const children = childrenByParentRunId.get(run.runId) ?? []
+    return (
+      <React.Fragment key={run.runId}>
+        <SubagentMessage run={run} indentDepth={depth} />
+        {children.map((child) => renderRunTree(child, depth + 1))}
+      </React.Fragment>
+    )
+  }, [childrenByParentRunId])
 
   const handleToolGroupExpandedChange = useCallback((groupId: string, next: boolean) => {
     setToolGroupExpanded((current) => (
@@ -230,21 +265,28 @@ export const ChatTranscriptViewport = memo(function ChatTranscriptViewport({
     })
   }, [onOpenLocalLink])
 
-  const renderItem = useCallback(({ item }: { item: ResolvedTranscriptRow }) => (
-    <div className="mx-auto w-full max-w-[800px] pb-5" data-transcript-row-id={item.id}>
-      <KannaTranscriptRow
-        row={item}
-        toolGroupExpanded={item.kind === "tool-group" ? (toolGroupExpanded[item.id] ?? false) : undefined}
-        onToolGroupExpandedChange={handleToolGroupExpandedChange}
-        onAskUserQuestionSubmit={onAskUserQuestionSubmit}
-        onExitPlanModeConfirm={onExitPlanModeConfirm}
-        schedules={schedules}
-        onAutoContinueAccept={onAutoContinueAccept}
-        onAutoContinueReschedule={onAutoContinueReschedule}
-        onAutoContinueCancel={onAutoContinueCancel}
-      />
-    </div>
-  ), [handleToolGroupExpandedChange, onAskUserQuestionSubmit, onExitPlanModeConfirm, schedules, onAutoContinueAccept, onAutoContinueReschedule, onAutoContinueCancel, toolGroupExpanded])
+  const renderItem = useCallback(({ item }: { item: ResolvedTranscriptRow }) => {
+    const userMessageId = item.kind === "single" && item.message.kind === "user_prompt"
+      ? item.message.id
+      : null
+    const rowRuns = userMessageId ? runsByUserMessageId.get(userMessageId) ?? [] : []
+    return (
+      <div className="mx-auto w-full max-w-[800px] pb-5" data-transcript-row-id={item.id}>
+        <KannaTranscriptRow
+          row={item}
+          toolGroupExpanded={item.kind === "tool-group" ? (toolGroupExpanded[item.id] ?? false) : undefined}
+          onToolGroupExpandedChange={handleToolGroupExpandedChange}
+          onAskUserQuestionSubmit={onAskUserQuestionSubmit}
+          onExitPlanModeConfirm={onExitPlanModeConfirm}
+          schedules={schedules}
+          onAutoContinueAccept={onAutoContinueAccept}
+          onAutoContinueReschedule={onAutoContinueReschedule}
+          onAutoContinueCancel={onAutoContinueCancel}
+        />
+        {rowRuns.map((run) => renderRunTree(run, 0))}
+      </div>
+    )
+  }, [handleToolGroupExpandedChange, onAskUserQuestionSubmit, onExitPlanModeConfirm, schedules, onAutoContinueAccept, onAutoContinueReschedule, onAutoContinueCancel, toolGroupExpanded, runsByUserMessageId, renderRunTree])
 
   const listHeader = (
     <div className="mx-auto w-full max-w-[800px]" style={{ paddingTop: `${headerOffsetPx}px` }}>

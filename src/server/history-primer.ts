@@ -69,3 +69,22 @@ export function buildHistoryPrimer(
   const truncMarker = truncated ? "[... earlier conversation omitted ...]\n" : ""
   return `${header}${truncMarker}${selected.map((entry) => entry.text).join("")}${footer}${userText}`
 }
+
+export function extractPreviousAssistantReply(entries: TranscriptEntry[]): string | null {
+  for (let i = entries.length - 1; i >= 0; i -= 1) {
+    const entry = entries[i]
+    if (entry.kind === "assistant_text") return entry.text
+  }
+  for (let i = entries.length - 1; i >= 0; i -= 1) {
+    const entry = entries[i]
+    if (entry.kind !== "tool_call") continue
+    const tool = entry.tool
+    const input = (tool as { input?: unknown }).input
+    const cmd = input && typeof input === "object" && "command" in (input as Record<string, unknown>)
+      ? (input as { command?: string }).command ?? ""
+      : ""
+    const suffix = cmd ? `: ${cmd}` : ""
+    return `${tool.toolName}${suffix}`.trim()
+  }
+  return null
+}

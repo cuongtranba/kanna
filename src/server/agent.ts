@@ -19,6 +19,7 @@ import type { ChatRecord } from "./events"
 import { buildHistoryPrimer, shouldInjectPrimer } from "./history-primer"
 import { normalizeToolCall } from "../shared/tools"
 import type { ClientCommand } from "../shared/protocol"
+import { LOG_PREFIX } from "../shared/branding"
 import { EventStore } from "./event-store"
 import type { AnalyticsReporter } from "./analytics"
 import { NoopAnalyticsReporter } from "./analytics"
@@ -43,6 +44,8 @@ import type { BackgroundTaskRegistry } from "./background-tasks"
 import type { TerminalManager } from "./terminal-manager"
 import { OAuthTokenPool } from "./oauth-pool/oauth-token-pool"
 import { parseMentions, type ParsedMention } from "./mention-parser"
+import { SubagentOrchestrator } from "./subagent-orchestrator"
+import { buildSubagentProviderRun } from "./subagent-provider-run"
 
 export function resolveSpawnPaths(
   chat: Pick<ChatRecord, "id" | "stackBindings">,
@@ -842,6 +845,7 @@ export class AgentCoordinator {
   private readonly scheduleManager: ScheduleManager | null
   private readonly getAutoResumePreference: () => boolean
   private readonly getSubagents: () => Subagent[]
+  private readonly subagentOrchestrator: SubagentOrchestrator
   private readonly throwOnClaudeSessionStart: boolean
   private readonly autoResumeByChat = new Map<string, boolean>()
   private readonly tunnelGateway: TunnelGateway | null
@@ -864,6 +868,11 @@ export class AgentCoordinator {
     this.scheduleManager = args.scheduleManager ?? null
     this.getAutoResumePreference = args.getAutoResumePreference ?? (() => false)
     this.getSubagents = args.getSubagents ?? (() => [])
+    this.subagentOrchestrator = new SubagentOrchestrator({
+      store: this.store,
+      appSettings: { getSnapshot: () => ({ subagents: this.getSubagents() }) },
+      startProviderRun: ({ subagent, chatId, primer }) => buildSubagentProviderRun({ subagent, chatId, primer }),
+    })
     this.throwOnClaudeSessionStart = args.throwOnClaudeSessionStart ?? false
     this.tunnelGateway = args.tunnelGateway ?? null
     this.backgroundTasks = args.backgroundTasks ?? null
@@ -1515,6 +1524,32 @@ export class AgentCoordinator {
       return { chatId, queuedMessageId: queuedMessage.id, queued: true as const }
     }
 
+    const parsedMentions = parseMentions(command.content, this.getSubagents())
+    if (parsedMentions.length > 0) {
+      this.analytics.track("message_sent")
+      const userMessageId = await this.appendUserPromptForSubagentRun(
+        chatId,
+        command.content,
+        command.attachments ?? [],
+        parsedMentions,
+      )
+      logSendToStartingProfile(profile, "chat_send.subagent_routed", {
+        chatId,
+        userMessageId,
+        mentionCount: parsedMentions.length,
+      })
+      // Fire-and-forget: orchestrator runs are durable via the event log; the
+      // client observes progress through subagentRuns snapshot deltas. We
+      // intentionally do not await here so the WebSocket ack returns quickly.
+      void this.subagentOrchestrator
+        .runMentionsForUserMessage({ chatId, userMessageId, mentions: parsedMentions })
+        .then(() => this.emitStateChange(chatId))
+        .catch((err) => {
+          console.warn(`${LOG_PREFIX} subagent orchestrator failed`, { chatId, err })
+        })
+      return { chatId }
+    }
+
     const provider = this.resolveProvider(command, chat.provider)
     const settings = this.getProviderSettings(provider, command)
     this.analytics.track("message_sent")
@@ -1538,6 +1573,32 @@ export class AgentCoordinator {
     })
 
     return { chatId }
+  }
+
+  private async appendUserPromptForSubagentRun(
+    chatId: string,
+    content: string,
+    attachments: ChatAttachment[],
+    parsedMentions: ParsedMention[],
+  ): Promise<string> {
+    const subagentMentions = parsedMentions
+      .filter((mention): mention is Extract<ParsedMention, { kind: "subagent" }> => mention.kind === "subagent")
+      .map((mention) => ({ subagentId: mention.subagentId, raw: mention.raw }))
+    const unknownSubagentMentions = parsedMentions
+      .filter((mention): mention is Extract<ParsedMention, { kind: "unknown-subagent" }> => mention.kind === "unknown-subagent")
+      .map((mention) => ({ name: mention.name, raw: mention.raw }))
+    const entry = timestamped(
+      {
+        kind: "user_prompt",
+        content,
+        attachments,
+        ...(subagentMentions.length > 0 ? { subagentMentions } : {}),
+        ...(unknownSubagentMentions.length > 0 ? { unknownSubagentMentions } : {}),
+      },
+      Date.now(),
+    )
+    await this.store.appendMessage(chatId, entry)
+    return entry._id
   }
 
   async enqueue(command: Extract<ClientCommand, { type: "message.enqueue" }>) {

@@ -1296,6 +1296,41 @@ export interface ResolvedStackBinding {
   projectStatus: "active" | "missing"
 }
 
+export type SubagentErrorCode =
+  | "AUTH_REQUIRED"
+  | "UNKNOWN_SUBAGENT"
+  | "LOOP_DETECTED"
+  | "DEPTH_EXCEEDED"
+  | "TIMEOUT"
+  | "PROVIDER_ERROR"
+
+export type SubagentRunStatus = "running" | "completed" | "failed" | "cancelled"
+
+export interface ProviderUsage {
+  inputTokens?: number
+  outputTokens?: number
+  cachedInputTokens?: number
+  costUsd?: number
+}
+
+export interface SubagentRunSnapshot {
+  runId: string
+  chatId: string
+  subagentId: string | null
+  subagentName: string
+  provider: AgentProvider
+  model: string
+  status: SubagentRunStatus
+  parentUserMessageId: string
+  parentRunId: string | null
+  depth: number
+  startedAt: number
+  finishedAt: number | null
+  finalText: string | null
+  error: { code: SubagentErrorCode; message: string } | null
+  usage: ProviderUsage | null
+}
+
 export interface ChatSnapshot {
   runtime: ChatRuntime
   queuedMessages: QueuedChatMessage[]
@@ -1309,6 +1344,7 @@ export interface ChatSnapshot {
   tunnels: Record<string, CloudflareTunnelRecord>
   liveTunnelId: string | null
   resolvedBindings?: ResolvedStackBinding[]
+  subagentRuns: Record<string, SubagentRunSnapshot>
 }
 
 export interface ChatHistoryPage {
