@@ -1301,7 +1301,8 @@ export class EventStore implements PushEventStore {
   }
 
   async deleteChat(chatId: string) {
-    this.requireChat(chatId)
+    const chat = this.requireChat(chatId)
+    const projectId = chat.projectId
     const event: ChatEvent = {
       v: STORE_VERSION,
       type: "chat_deleted",
@@ -1309,6 +1310,11 @@ export class EventStore implements PushEventStore {
       chatId,
     }
     await this.append(this.chatsLogPath, event)
+    const subagentResultsDir = path.join(
+      this.dataDir, "projects", projectId, "chats", chatId, "subagent-results",
+    )
+    rm(subagentResultsDir, { recursive: true, force: true })
+      .catch((err) => console.warn(`${LOG_PREFIX} subagent-results cleanup failed`, { chatId, err }))
   }
 
   async archiveChat(chatId: string) {
