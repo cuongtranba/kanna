@@ -1,7 +1,7 @@
 # Claude PTY Driver — Design
 
 **Date:** 2026-05-14
-**Status:** Draft v12 — eleventh codex adversarial pass applied (sentinel rotation replaced with parallel all-N-built-ins suite on every spawn; stale 7d cache test removed; per-spawn-sentinel-always tests added), awaiting user review
+**Status:** Draft v13 — multi-account/`oauthPool` rotation restored via per-account isolated `$HOME`, awaiting user review and final codex pass
 **Author:** session-collaborative
 **Related code:** `src/server/agent.ts`, `src/server/terminal-manager.ts`, `src/server/harness-types.ts`, `src/server/kanna-mcp.ts`
 
@@ -61,7 +61,8 @@ src/server/claude-pty/
   ├── jsonl-to-event.ts    # JSONL line → HarnessEvent
   ├── frame-parser.ts      # minimal — only slash-cmd ACK detection
   ├── slash-commands.ts    # /model, /permissions, /exit
-  ├── auth.ts              # verify ~/.claude credentials present, reject ANTHROPIC_API_KEY
+  ├── auth.ts              # verify credentials present, reject ANTHROPIC_API_KEY
+  ├── account-home.ts      # per-account $HOME dirs, credential sync to/from oauthPool, reaper
   ├── allowlist-preflight.ts # probe --tools semantics, cache by binary-sha+tools-string
   ├── runtime-dir.ts       # per-session 0700 dir, cleanup on COOLING
   ├── uds-server.ts        # Unix-domain socket: kanna-mcp + optional hook callbacks
@@ -202,28 +203,75 @@ The MCP tool implementation does **not** simply HTTP-POST and await. The contrac
 
 This refactor lands behind feature flag `KANNA_MCP_TOOL_CALLBACKS=1` and is shipped **before** PTY driver phase 1 so both drivers exercise it.
 
-## OAuth / subscription auth (no helper, no bearer)
+## OAuth / subscription auth (no helper, no bearer; per-account HOME)
 
-**Design choice:** PTY driver does **not** ship an `apiKeyHelper`. There is no Kanna-controlled bearer token, no Unix-domain socket for credential delivery, and nothing for model-executed subprocesses to exfiltrate.
+**Design choice:** PTY driver does **not** ship an `apiKeyHelper`. There is no Kanna-controlled bearer token over UDS, and nothing for model-executed subprocesses to exfiltrate via FD inheritance.
 
-Rationale: any FD or file the helper can read is reachable from `Bash` subprocesses of the same `claude` process (they inherit FDs unless `FD_CLOEXEC` is set, and they run as the same uid). The only way to avoid that exfiltration class is to remove Kanna-mediated credentials from the PTY entirely.
+Auth happens through file-based credentials in an isolated `$HOME` per account, so `oauthPool` rotation is preserved.
 
-How auth works:
+### How auth works
 
-1. User runs `claude /login` (or `claude setup-token`) once — this is the standard subscription onboarding. OAuth tokens live in macOS Keychain / libsecret / Windows DPAPI, gated by the OS user account.
-2. PTY driver spawns `claude` with `ANTHROPIC_API_KEY` **unset** in env. `claude` reads its own keychain entry, attaches its own tokens, and rotates them via its built-in OAuth refresh.
-3. Kanna `oauthPool` is **not used** by the PTY driver. Pool stays for the SDK driver.
-4. On startup, PTY driver pre-flights: invoke `claude --print --output-format json "noop"` once in a scratch dir? No — that costs API credits. Instead, check that `~/.claude/.credentials.json` (or platform equivalent) exists and is recent. If missing, fail spawn with a clear "Please run `claude /login` first" error surfaced to the UI.
+1. User logs into one or more Claude accounts. Each `(accountId, oauthToken)` pair is held by Kanna's existing `oauthPool` (already used by SDK driver).
+2. Before spawn, Kanna picks `account = oauthPool.acquire(chatId)`. The chosen account dictates `$HOME` for this PTY:
+   ```
+   <runtimeDir>/accounts/<accountId>/
+     ├── .claude/
+     │   └── .credentials.json   # 0600, contents = oauthPool's current token for this account
+     └── (sandboxed)
+   ```
+3. PTY spawns with `HOME=<runtimeDir>/accounts/<accountId>` and `ANTHROPIC_API_KEY` unset. Claude reads `$HOME/.claude/.credentials.json` and uses the subscription path.
+4. `claude` rotates the access token within an account via its native OAuth refresh — Kanna does not interpose. When refresh produces a new access token, claude writes back to the same `.credentials.json`; Kanna treats that file as the source of truth for that account and syncs it back to `oauthPool` on file change (`fs.watch`).
+5. **Cross-account rotation** (rate-limit hit, admin rebalance, user switch) requires respawn — the new PTY uses a different `$HOME`. Cost ~1-2s cold spawn.
 
-Trade-offs:
+### Account selection policy
 
-| What we lose | Why acceptable |
+Reuse the existing `oauthPool.acquire(chatId)` interface from the SDK driver:
+
+- Sticky-by-chat by default — same chat keeps the same account unless rate-limited or explicitly switched.
+- Rate-limit detected in JSONL `system` event → `oauthPool.markRateLimited(account)` → next PTY for that chat acquires a different account.
+- User-visible "switch account" action in chat UI → COOLING + respawn with new account.
+- All accounts rate-limited → `oauthPool.acquire` returns null → UI shows "All accounts rate-limited until <resetAt>" instead of spawning.
+
+### Why `--add-account` / shared keychain doesn't work
+
+- `claude` only knows one default identity per `$HOME`. There's no documented multi-account selector.
+- macOS Keychain entries are user-scoped and would conflict across concurrent PTYs.
+- Per-account `$HOME` is the only clean isolation boundary.
+
+### Credential isolation under per-account HOME
+
+The per-account HOME contains a real OAuth credential. Threats and mitigations:
+
+| Threat | Mitigation |
 |---|---|
-| Multi-token rotation in `oauthPool` (rate-limit balancing across subscription tokens) | PTY mode is single-subscription single-user by definition. Pool was a SDK-only optimization. |
-| Centralized token revocation from Kanna | User can revoke via `claude /logout` natively. |
-| Knowledge of remaining quota in Kanna UI | Surfaceable via JSONL `system` events Anthropic includes (rate limit / remaining usage). |
+| `mcp__kanna__bash` reads `~/.claude/.credentials.json` | **Critical rule:** `readPathDeny` patterns starting with `~` resolve against the **spawned claude's `$HOME`**, not Kanna server's HOME. So `~/.claude/**` denies the spawn's per-account creds dir. Sandbox profile generator uses the same spawn-HOME resolution. |
+| `mcp__kanna__bash` reads via absolute path `<runtimeDir>/accounts/.../...` | `<runtimeDir>/accounts/**` added to `readPathDeny`. |
+| Account A's PTY reads Account B's credentials | Each account's HOME is mode `0700`. Sandbox profile (`sandbox-exec` macOS / `bwrap` Linux) restricts FS to `(workspace + additionalDirectories + spawnHome)`. Cross-account access at sibling paths is denied. |
+| Pool dir on disk | `<runtimeDir>/accounts/` is `0700` owned by Kanna's OS user; `.credentials.json` is `0600`; tokens in `oauthPool` held in-memory (or in Kanna's encrypted settings store), not committed to plain files unless required for spawn. |
+| Stale account dirs across reboots | Reaper sweep on Kanna startup: dirs whose `accountId` is no longer in `oauthPool` deleted; dirs unbound for >30 days deleted. |
 
-Settings injection (`.claude/settings.local.json` in per-session runtime dir, mode `0600`):
+### Concurrent multi-account safety
+
+Concurrent PTYs for different accounts run with independent HOMEs simultaneously. No race on the credentials file. Same account on two concurrent PTYs is allowed (claude tolerates this); they share the same HOME and the same `.credentials.json`, with claude's own OAuth refresh logic handling concurrent renewal (it always has — multiple terminal windows on one machine is a supported pattern).
+
+### Lifecycle
+
+- Account HOME created on first PTY spawn for that account.
+- Persisted across cold-wake / respawn within the same `(chatId, accountId)` binding.
+- Deleted on: chat deleted with no other chat referencing this account, account removed from pool, reaper sweep.
+- Sandbox profile invalidated and regenerated on each spawn (already covered in "Sandboxing the spawn").
+
+### What we still don't lose
+
+| What we keep | Note |
+|---|---|
+| Multi-token rotation in `oauthPool` | Restored. Each rotation = respawn with new HOME. |
+| Centralized account revocation | `oauthPool.removeAccount(id)` → reaper deletes HOME, in-flight PTY enters COOLING. |
+| Knowledge of remaining quota | JSONL `system` events Anthropic emits; `oauthPool.markRateLimited`. |
+
+### Settings injection (unchanged)
+
+`.claude/settings.local.json` in per-account HOME (`mode 0600`):
 
 ```json
 {
@@ -236,9 +284,13 @@ Settings injection (`.claude/settings.local.json` in per-session runtime dir, mo
 }
 ```
 
-No `apiKeyHelper` key. No oauth socket. Nothing for Bash to point at.
+No `apiKeyHelper` key. No oauth socket. Bash cannot reach the credential file by absolute or tilde path (deny list covers both).
 
-### Why the UDS / runtime dir still exists
+### Single-account fallback
+
+If `KANNA_PTY_OAUTH_POOL=off` (or pool is empty), PTY spawns with the user's native `~/.claude/` and behaves like a vanilla `claude` invocation. No rotation; one subscription only. Documented as the basic mode.
+
+### The UDS / runtime dir still exists
 
 For **tool callbacks only** — `ask_user_question`, `exit_plan_mode`, and (if hook gate selected) `PreToolUse` approvals. That socket carries no credentials, only request/response JSON for tool routing. Authentication is by `SO_PEERCRED` / `LOCAL_PEERCRED` peer-pid plus a request-bound nonce, not a long-lived bearer.
 
@@ -468,11 +520,15 @@ Stored in `EventStore.chatSettings.permissionPolicy`. Defaults are intentionally
     // backtick, or `eval` short-circuits to "ask".
   },
   readPathDeny: [
+    // `~` resolves against the SPAWNED claude's $HOME (per-account HOME in
+    // pool mode), NOT Kanna server's HOME. So `~/.claude/**` denies the
+    // per-account credential dir.
     "~/.ssh", "~/.aws", "~/.gcp", "~/.config/gh",
     "~/.claude", "~/.kanna",
     "~/Library/Keychains", "~/Library/Application Support/Code/User",
     "/etc/shadow", "/etc/sudoers", "/private/etc/shadow",
     "~/.npmrc", "~/.netrc", "~/.docker/config.json",
+    "<runtimeDir>/accounts/**",   // absolute-path deny for the pool root
     "**/.env", "**/.env.*", "**/credentials*", "**/*.pem", "**/*.key",
     "**/id_rsa*", "**/id_ed25519*"
   ],
@@ -661,8 +717,9 @@ The lifecycle wrapper is mounted between `AgentCoordinator` and the raw `startCl
 | `KANNA_PTY_PREWARM_GRACE_MS` | `2000` | Cancel pre-warm if user moves on |
 | `KANNA_PTY_WARM_TIMEOUT_MS` | `30000` | Spawn timeout |
 | `KANNA_PTY_SANDBOX` | `on` (macOS/Linux); **Windows: PTY spawn refused entirely** unless explicit `off` env + `unsafeWindowsPty: true` app setting | OS sandbox profile around `claude` spawn (denies reads of credential dirs and workspace secrets). |
-| `unsafeWindowsPty` (app setting) | `false` | Windows-only escape hatch. Must be `true` AND `KANNA_PTY_SANDBOX=off` to enable PTY on Windows. Renders global red banner. `--tools` is already `"mcp__kanna__*"` (no built-in read/write tools). |
+| `unsafeWindowsPty` (app setting) | `false` | Windows-only escape hatch. Must be `true` AND `KANNA_PTY_SANDBOX=off` to enable PTY on Windows. Renders global red banner. `--tools` is already `"mcp__kanna__*"` (no built-in read/write tools). Pool mode on Windows works (HOME override is platform-agnostic) but credential isolation has weaker FS-permissions guarantees on Windows; documented. |
 | `KANNA_MCP_ALLOWLIST` | `""` (empty) | Comma-separated names of third-party MCP servers permitted. Empty = none. |
+| `KANNA_PTY_OAUTH_POOL` | `on` | When `on`, per-account isolated `$HOME` enables multi-account rotation via `oauthPool`. When `off`, PTY uses user's native `~/.claude/` (no rotation). |
 | `CLAUDE_EXECUTABLE` | (auto) | Existing — path to `claude` binary |
 
 Also exposed in Kanna app settings UI (writes to user settings JSON).
@@ -713,7 +770,9 @@ Any new UI surface (badges, banners, settings toggle) is verified via `renderFor
 | Long-running warm PTY has stale sandbox after new sensitive files appear | (a) Primary: reads are not handled by the sandbox at all — `mcp__kanna__read` re-checks `readPathDeny` per call. (b) Defense-in-depth: `fs.watch` over readPathDeny glob matches triggers respawn-before-next-turn when a match appears. |
 | Lifecycle bugs leak PTY processes (RSS exhaustion) | LRU cap + idle timeout + server shutdown fanout + `ps`-based reaper sweep on startup. Runtime dir cleanup on COOLING. |
 | Subagent feature uses `initialPrompt` + `systemPromptOverride` | Map to `--system-prompt` + send-prompt-then-exit-on-Stop. Covered by `driver.test.ts`. |
-| Loss of `oauthPool` multi-token rotation in PTY mode | Documented tradeoff. Pool still serves SDK driver. PTY = single subscription. |
+| Loss of `oauthPool` multi-token rotation in PTY mode | **Restored.** Per-account isolated `$HOME` enables rotation. Cross-account switch = respawn (~1-2s). See "OAuth / subscription auth". |
+| Per-account credential file readable by `mcp__kanna__bash` / `Read` | `readPathDeny` `~/...` patterns resolve against spawn `$HOME`; absolute pool root `<runtimeDir>/accounts/**` also denied; OS sandbox profile uses spawn HOME. Tested by `account-home.test.ts` (probe attempts `cat ~/.claude/.credentials.json` in PTY → denied). |
+| Cross-account credential read | Each account HOME is `0700`; sandbox restricts spawn FS to its own HOME subtree. No path resolves to a sibling account. |
 | Anthropic clarifies ToS to disallow PTY wrapping | Feature flag stays off by default. Documented limitation. Remove if formally disallowed. |
 | `--remote-control` becomes an official structured channel | Driver lives behind same `ClaudeSessionHandle` interface — swap implementation, keep contract. |
 | `claude` JSONL schema changes between versions | Pin minimum `claude` version. Version-probe at spawn. Fail loud on unknown line types (log + skip line). |
