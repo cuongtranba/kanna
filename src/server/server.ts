@@ -241,6 +241,7 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     tunnelGateway,
     backgroundTasks,
     oauthPool,
+    getSubagents: () => appSettings.getSnapshot().subagents,
     onStateChange: (chatId?: string, options?: { immediate?: boolean }) => {
       if (chatId) {
         if (options?.immediate) {

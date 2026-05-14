@@ -28,11 +28,15 @@ export function applyMentionToInput(args: {
   value: string
   caret: number
   tokenStart: number
-  pickedPath: string
+  mention:
+    | { kind: "path"; path: string }
+    | { kind: "agent"; name: string }
 }): { value: string; caret: number } {
   const before = args.value.slice(0, args.tokenStart)
   const after = args.value.slice(args.caret)
-  const replacement = `@${args.pickedPath}`
+  const replacement = args.mention.kind === "agent"
+    ? `@agent/${args.mention.name}`
+    : `@${args.mention.path}`
   const nextValue = `${before}${replacement}${after}`
   const nextCaret = before.length + replacement.length
   return { value: nextValue, caret: nextCaret }

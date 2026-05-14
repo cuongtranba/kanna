@@ -1,9 +1,10 @@
 import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { SlashCommandPicker } from "./SlashCommandPicker"
-import { MentionPicker } from "./MentionPicker"
+import { MentionPicker, type MentionPickerItem } from "./MentionPicker"
 import { applyCommandToInput, filterCommands, shouldShowPicker } from "../../lib/slash-commands"
 import { applyMentionToInput, shouldShowMentionPicker } from "../../lib/mention-suggestions"
 import { useMentionSuggestions, type ProjectPath } from "../../hooks/useMentionSuggestions"
+import { useSubagentSuggestions } from "../../hooks/useSubagentSuggestions"
 import { useSlashCommands, useSlashCommandsLoading } from "../../hooks/useSlashCommands"
 import type { SlashCommand } from "../../../shared/types"
 import { ArrowUp, Paperclip } from "lucide-react"
@@ -272,11 +273,19 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput({
     query: mentionTrigger.query,
     enabled: mentionTrigger.open && !mentionDismissed,
   })
+  const subagentMentionState = useSubagentSuggestions({
+    query: mentionTrigger.query,
+    enabled: mentionTrigger.open && !mentionDismissed,
+  })
+  const mentionItems = useMemo<MentionPickerItem[]>(() => [
+    ...subagentMentionState.items,
+    ...mentionState.items.map((item) => ({ kind: "path" as const, path: item })),
+  ], [mentionState.items, subagentMentionState.items])
   const mentionOpen =
     mentionTrigger.open &&
     !mentionDismissed &&
     !pickerOpen &&
-    (mentionState.items.length > 0 || mentionState.loading)
+    (mentionItems.length > 0 || mentionState.loading)
 
   useEffect(() => {
     if (mentionOpen) setMentionIndex(0)
@@ -303,26 +312,46 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput({
     })
   }
 
-  function acceptMention(item: ProjectPath) {
+  function acceptMention(item: MentionPickerItem) {
+    if (item.kind === "agent") {
+      const { value: nextValue, caret: nextCaret } = applyMentionToInput({
+        value,
+        caret,
+        tokenStart: mentionTrigger.tokenStart,
+        mention: { kind: "agent", name: item.subagent.name },
+      })
+      setValue(nextValue)
+      if (chatId) setDraft(chatId, nextValue)
+      setMentionDismissed(true)
+      requestAnimationFrame(() => {
+        const el = textareaRef.current
+        if (!el) return
+        el.focus()
+        el.setSelectionRange(nextCaret, nextCaret)
+      })
+      return
+    }
+
     if (!projectId) {
       setMentionDismissed(true)
       return
     }
+    const pathItem: ProjectPath = item.path
     const { value: nextValue, caret: nextCaret } = applyMentionToInput({
       value,
       caret,
       tokenStart: mentionTrigger.tokenStart,
-      pickedPath: item.path,
+      mention: { kind: "path", path: pathItem.path },
     })
     setValue(nextValue)
     if (chatId) setDraft(chatId, nextValue)
 
-    const relativeForAttachment = item.path.endsWith("/") ? item.path.slice(0, -1) : item.path
+    const relativeForAttachment = pathItem.path.endsWith("/") ? pathItem.path.slice(0, -1) : pathItem.path
     const alreadyMentioned = attachments.some(
       (a) => a.kind === "mention" && a.relativePath === `./${relativeForAttachment}`,
     )
     if (!alreadyMentioned) {
-      const contentUrl = item.kind === "file"
+      const contentUrl = pathItem.kind === "file"
         ? `/api/projects/${projectId}/files/${encodeURIComponent(relativeForAttachment)}/content`
         : ""
       setAttachments((prev) => [
@@ -701,7 +730,7 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput({
       }
       if (event.key === "ArrowDown") {
         event.preventDefault()
-        setMentionIndex((i) => Math.min(mentionState.items.length - 1, i + 1))
+        setMentionIndex((i) => Math.min(mentionItems.length - 1, i + 1))
         return
       }
       if (event.key === "ArrowUp") {
@@ -711,7 +740,7 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput({
       }
       if (event.key === "Enter" || event.key === "Tab") {
         event.preventDefault()
-        const item = mentionState.items[mentionIndex]
+        const item = mentionItems[mentionIndex]
         if (item) acceptMention(item)
         return
       }
@@ -891,7 +920,7 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput({
             )}
             {mentionOpen && (
               <MentionPicker
-                items={mentionState.items}
+                items={mentionItems}
                 activeIndex={mentionIndex}
                 loading={mentionState.loading}
                 onSelect={acceptMention}

@@ -4,7 +4,7 @@ import { tmpdir } from "node:os"
 import path from "node:path"
 import { AUTH_DEFAULTS, CLAUDE_AUTH_DEFAULTS, CLOUDFLARE_TUNNEL_DEFAULTS, UPLOAD_DEFAULTS } from "../shared/types"
 import { AppSettingsManager, readAppSettingsSnapshot } from "./app-settings"
-import type { AppSettingsSnapshot } from "../shared/types"
+import type { AppSettingsSnapshot, SubagentInput } from "../shared/types"
 
 let tempDirs: string[] = []
 
@@ -65,6 +65,7 @@ function expectedSettingsSnapshot(filePath: string, overrides: Partial<AppSettin
     auth: AUTH_DEFAULTS,
     claudeAuth: CLAUDE_AUTH_DEFAULTS,
     uploads: UPLOAD_DEFAULTS,
+    subagents: [],
     ...overrides,
   }
 }
@@ -407,3 +408,106 @@ describe("AppSettingsManager.setClaudeAuth", () => {
   })
 })
 
+describe("subagent CRUD", () => {
+  function baseInput(overrides: Partial<SubagentInput> = {}): SubagentInput {
+    return {
+      name: "reviewer",
+      provider: "claude",
+      model: "claude-opus-4-7",
+      modelOptions: { reasoningEffort: "medium", contextWindow: "1m" },
+      systemPrompt: "You review changes.",
+      contextScope: "previous-assistant-reply",
+      ...overrides,
+    }
+  }
+
+  test("create returns the new subagent", async () => {
+    const filePath = await createTempFilePath()
+    const mgr = new AppSettingsManager(filePath)
+    await mgr.initialize()
+
+    const result = await mgr.createSubagent(baseInput())
+
+    expect("id" in result).toBe(true)
+    if (!("id" in result)) return
+    expect(result.name).toBe("reviewer")
+    expect(result.provider).toBe("claude")
+    expect(mgr.getSnapshot().subagents).toHaveLength(1)
+    mgr.dispose()
+  })
+
+  test("create rejects duplicate names case-insensitively", async () => {
+    const filePath = await createTempFilePath()
+    const mgr = new AppSettingsManager(filePath)
+    await mgr.initialize()
+
+    await mgr.createSubagent(baseInput({ name: "alpha" }))
+    const result = await mgr.createSubagent(baseInput({ name: "ALPHA" }))
+
+    expect("code" in result && result.code).toBe("DUPLICATE_NAME")
+    mgr.dispose()
+  })
+
+  test("create rejects reserved and invalid names", async () => {
+    const filePath = await createTempFilePath()
+    const mgr = new AppSettingsManager(filePath)
+    await mgr.initialize()
+
+    expect("code" in await mgr.createSubagent(baseInput({ name: "agent" }))).toBe(true)
+    expect(await mgr.createSubagent(baseInput({ name: "agent" }))).toMatchObject({ code: "RESERVED_NAME" })
+    expect(await mgr.createSubagent(baseInput({ name: "foo/bar" }))).toMatchObject({ code: "INVALID_CHAR" })
+    expect(await mgr.createSubagent(baseInput({ name: "   " }))).toMatchObject({ code: "EMPTY_NAME" })
+    expect(await mgr.createSubagent(baseInput({ name: ".hidden" }))).toMatchObject({ code: "INVALID_CHAR" })
+    mgr.dispose()
+  })
+
+  test("update renames and bumps updatedAt", async () => {
+    const filePath = await createTempFilePath()
+    const mgr = new AppSettingsManager(filePath)
+    await mgr.initialize()
+    const created = await mgr.createSubagent(baseInput({ name: "old" }))
+    if (!("id" in created)) throw new Error("setup failed")
+
+    const updated = await mgr.updateSubagent(created.id, { name: "new" })
+
+    expect("id" in updated).toBe(true)
+    if (!("id" in updated)) return
+    expect(updated.name).toBe("new")
+    expect(updated.updatedAt).toBeGreaterThanOrEqual(created.createdAt)
+    mgr.dispose()
+  })
+
+  test("update non-existent id returns NOT_FOUND", async () => {
+    const filePath = await createTempFilePath()
+    const mgr = new AppSettingsManager(filePath)
+    await mgr.initialize()
+
+    await expect(mgr.updateSubagent("nope", { name: "x" })).resolves.toMatchObject({ code: "NOT_FOUND" })
+    mgr.dispose()
+  })
+
+  test("delete is idempotent on missing id", async () => {
+    const filePath = await createTempFilePath()
+    const mgr = new AppSettingsManager(filePath)
+    await mgr.initialize()
+
+    await expect(mgr.deleteSubagent("nope")).resolves.toBeUndefined()
+    mgr.dispose()
+  })
+
+  test("CRUD round-trip survives reload", async () => {
+    const filePath = await createTempFilePath()
+    const mgr = new AppSettingsManager(filePath)
+    await mgr.initialize()
+    const created = await mgr.createSubagent(baseInput({ name: "x" }))
+    if (!("id" in created)) throw new Error("setup failed")
+    mgr.dispose()
+
+    const reloaded = new AppSettingsManager(filePath)
+    await reloaded.initialize()
+
+    expect(reloaded.getSnapshot().subagents).toHaveLength(1)
+    expect(reloaded.getSnapshot().subagents[0]?.id).toBe(created.id)
+    reloaded.dispose()
+  })
+})

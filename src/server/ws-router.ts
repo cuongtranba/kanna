@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto"
 import { readFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
@@ -30,6 +31,8 @@ import type {
   SkillInstallResult,
   SkillSearchSnapshot,
   SkillUninstallResult,
+  Subagent,
+  SubagentValidationError,
 } from "../shared/types"
 import { importClaudeSessions } from "./claude-session-importer"
 import { listWorktrees } from "./worktree-store"
@@ -132,7 +135,7 @@ interface CreateWsRouterArgs {
   terminals: TerminalManager
   keybindings: KeybindingsManager
   appSettings?: Pick<AppSettingsManager, "getSnapshot" | "write">
-    & Partial<Pick<AppSettingsManager, "setCloudflareTunnel" | "setClaudeAuth" | "writePatch" | "onChange">>
+    & Partial<Pick<AppSettingsManager, "setCloudflareTunnel" | "setClaudeAuth" | "writePatch" | "onChange" | "createSubagent" | "updateSubagent" | "deleteSubagent">>
   analytics?: AnalyticsReporter
   tunnelGateway?: TunnelGateway
   llmProvider?: {
@@ -196,6 +199,10 @@ function send(ws: ServerWebSocket<ClientState>, message: ServerEnvelope) {
   const payload = JSON.stringify(message)
   ws.send(payload)
   return payload.length
+}
+
+function isSubagentValidationError(value: Subagent | SubagentValidationError): value is SubagentValidationError {
+  return "code" in value && "message" in value
 }
 
 export function assertSafeSkillSource(source: string) {
@@ -527,52 +534,83 @@ export function createWsRouter({
     auth: AUTH_DEFAULTS,
     claudeAuth: CLAUDE_AUTH_DEFAULTS,
     uploads: UPLOAD_DEFAULTS,
+    subagents: [],
   }
-  const mergeAppSettingsPatch = (snapshot: AppSettingsSnapshot, patch: AppSettingsPatch): AppSettingsSnapshot => ({
-    ...snapshot,
-    ...patch,
-    terminal: {
-      ...snapshot.terminal,
-      ...patch.terminal,
-    },
-    editor: {
-      ...snapshot.editor,
-      ...patch.editor,
-    },
-    providerDefaults: {
-      claude: {
-        ...snapshot.providerDefaults.claude,
-        ...patch.providerDefaults?.claude,
-        modelOptions: {
-          ...snapshot.providerDefaults.claude.modelOptions,
-          ...patch.providerDefaults?.claude?.modelOptions,
+  const mergeAppSettingsPatch = (snapshot: AppSettingsSnapshot, patch: AppSettingsPatch): AppSettingsSnapshot => {
+    let subagents = snapshot.subagents
+    if (patch.subagents?.create) {
+      const now = Date.now()
+      subagents = [...subagents, {
+        id: randomUUID(),
+        ...patch.subagents.create,
+        name: patch.subagents.create.name.trim(),
+        createdAt: now,
+        updatedAt: now,
+      }]
+    } else if (patch.subagents?.update) {
+      subagents = subagents.map((subagent) => subagent.id === patch.subagents?.update?.id
+        ? {
+            ...subagent,
+            ...patch.subagents.update.patch,
+            name: patch.subagents.update.patch.name?.trim() ?? subagent.name,
+            description: patch.subagents.update.patch.description === null
+              ? undefined
+              : patch.subagents.update.patch.description ?? subagent.description,
+            modelOptions: { ...subagent.modelOptions, ...(patch.subagents.update.patch.modelOptions ?? {}) } as Subagent["modelOptions"],
+            updatedAt: Date.now(),
+          }
+        : subagent)
+    } else if (patch.subagents?.delete) {
+      subagents = subagents.filter((subagent) => subagent.id !== patch.subagents?.delete?.id)
+    }
+
+    return {
+      ...snapshot,
+      ...patch,
+      terminal: {
+        ...snapshot.terminal,
+        ...patch.terminal,
+      },
+      editor: {
+        ...snapshot.editor,
+        ...patch.editor,
+      },
+      providerDefaults: {
+        claude: {
+          ...snapshot.providerDefaults.claude,
+          ...patch.providerDefaults?.claude,
+          modelOptions: {
+            ...snapshot.providerDefaults.claude.modelOptions,
+            ...patch.providerDefaults?.claude?.modelOptions,
+          },
+        },
+        codex: {
+          ...snapshot.providerDefaults.codex,
+          ...patch.providerDefaults?.codex,
+          modelOptions: {
+            ...snapshot.providerDefaults.codex.modelOptions,
+            ...patch.providerDefaults?.codex?.modelOptions,
+          },
         },
       },
-      codex: {
-        ...snapshot.providerDefaults.codex,
-        ...patch.providerDefaults?.codex,
-        modelOptions: {
-          ...snapshot.providerDefaults.codex.modelOptions,
-          ...patch.providerDefaults?.codex?.modelOptions,
-        },
+      cloudflareTunnel: {
+        ...snapshot.cloudflareTunnel,
+        ...patch.cloudflareTunnel,
       },
-    },
-    cloudflareTunnel: {
-      ...snapshot.cloudflareTunnel,
-      ...patch.cloudflareTunnel,
-    },
-    auth: {
-      ...snapshot.auth,
-      ...patch.auth,
-    },
-    claudeAuth: {
-      tokens: patch.claudeAuth?.tokens ?? snapshot.claudeAuth.tokens,
-    },
-    uploads: {
-      ...snapshot.uploads,
-      ...patch.uploads,
-    },
-  })
+      auth: {
+        ...snapshot.auth,
+        ...patch.auth,
+      },
+      claudeAuth: {
+        tokens: patch.claudeAuth?.tokens ?? snapshot.claudeAuth.tokens,
+      },
+      uploads: {
+        ...snapshot.uploads,
+        ...patch.uploads,
+      },
+      subagents,
+    }
+  }
   const resolvedAppSettings = {
     getSnapshot: () => appSettings?.getSnapshot() ?? fallbackAppSettingsSnapshot,
     write: async (value: { analyticsEnabled: boolean }) => {
@@ -600,6 +638,20 @@ export function createWsRouter({
         { claudeAuth: patch },
       )
       return fallbackAppSettingsSnapshot
+    },
+    createSubagent: async (input: Parameters<AppSettingsManager["createSubagent"]>[0]) => {
+      if (appSettings?.createSubagent) return await appSettings.createSubagent(input)
+      const snapshot = await resolvedAppSettings.writePatch({ subagents: { create: input } })
+      return snapshot.subagents[snapshot.subagents.length - 1] ?? { code: "NOT_FOUND" as const, message: "Created subagent not found" }
+    },
+    updateSubagent: async (id: string, patch: Parameters<AppSettingsManager["updateSubagent"]>[1]) => {
+      if (appSettings?.updateSubagent) return await appSettings.updateSubagent(id, patch)
+      const snapshot = await resolvedAppSettings.writePatch({ subagents: { update: { id, patch } } })
+      return snapshot.subagents.find((subagent) => subagent.id === id) ?? { code: "NOT_FOUND" as const, message: `Subagent ${id} not found` }
+    },
+    deleteSubagent: async (id: string) => {
+      if (appSettings?.deleteSubagent) return await appSettings.deleteSubagent(id)
+      await resolvedAppSettings.writePatch({ subagents: { delete: { id } } })
     },
     onChange: (listener: (snapshot: AppSettingsSnapshot) => void) => appSettings?.onChange?.(listener) ?? (() => {}),
   }
@@ -1288,6 +1340,35 @@ export function createWsRouter({
           if (command.patch.analyticsEnabled !== undefined && !previousAnalyticsEnabled && snapshot.analyticsEnabled) {
             resolvedAnalytics.track("analytics_enabled")
           }
+          return
+        }
+        case "subagent.create": {
+          const result = await resolvedAppSettings.createSubagent(command.input)
+          send(ws, {
+            v: PROTOCOL_VERSION,
+            type: "ack",
+            id,
+            result: isSubagentValidationError(result)
+              ? { ok: false, error: result }
+              : { ok: true, subagent: result },
+          })
+          return
+        }
+        case "subagent.update": {
+          const result = await resolvedAppSettings.updateSubagent(command.id, command.patch)
+          send(ws, {
+            v: PROTOCOL_VERSION,
+            type: "ack",
+            id,
+            result: isSubagentValidationError(result)
+              ? { ok: false, error: result }
+              : { ok: true, subagent: result },
+          })
+          return
+        }
+        case "subagent.delete": {
+          await resolvedAppSettings.deleteSubagent(command.id)
+          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: { ok: true } })
           return
         }
         case "settings.readLlmProvider": {
