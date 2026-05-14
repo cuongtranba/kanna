@@ -41,6 +41,23 @@ export class OAuthTokenPool {
     this.writeStatus(id, { status: "error", lastErrorAt: this.now(), lastErrorMessage: message })
   }
 
+  /**
+   * Read-only probe: does the pool have at least one token currently usable
+   * (active, or limited-but-elapsed)? Unlike pickActive(), does NOT mutate
+   * `status` for elapsed-limited tokens. Use for preflight checks.
+   */
+  hasUsable(): boolean {
+    const now = this.now()
+    for (const t of this.readTokens()) {
+      if (t.status === "error") continue
+      if (t.status === "limited") {
+        if (t.limitedUntil !== null && t.limitedUntil > now) continue
+      }
+      return true
+    }
+    return false
+  }
+
   allLimited(): boolean {
     const tokens = this.readTokens()
     if (tokens.length === 0) return false

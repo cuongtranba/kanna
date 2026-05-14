@@ -325,6 +325,14 @@ export type SubagentRunEvent =
       chatId: string
       runId: string
     }
+  | {
+      v: 3
+      type: "subagent_entry_appended"
+      timestamp: number
+      chatId: string
+      runId: string
+      entry: TranscriptEntry
+    }
 
 export type StoreEvent = ProjectEvent | ChatEvent | MessageEvent | QueuedMessageEvent | TurnEvent | StackEvent | AutoContinueEvent | SubagentRunEvent
 

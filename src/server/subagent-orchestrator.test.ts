@@ -2,13 +2,14 @@ import { afterEach, describe, expect, test } from "bun:test"
 import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import type { ClaudeModelOptions, Subagent } from "../shared/types"
+import type { ClaudeModelOptions, Subagent, TranscriptEntry } from "../shared/types"
 import { EventStore } from "./event-store"
 import {
   SubagentOrchestrator,
   type OrchestratorAppSettings,
   type ProviderRunStart,
 } from "./subagent-orchestrator"
+import { buildSubagentProviderRun } from "./subagent-provider-run"
 
 const tempDirs: string[] = []
 
@@ -59,6 +60,7 @@ interface OrchestratorHarness {
   setAuthReady: (subagentId: string, ready: boolean) => void
   activeStarts: { value: number; max: number }
   pendingHolds: Map<string, (text: string) => void>
+  mockProviderRun: (override: Pick<ProviderRunStart, "start" | "authReady">) => void
 }
 
 async function setupHarness(opts: {
@@ -84,6 +86,8 @@ async function setupHarness(opts: {
   const activeStarts = { value: 0, max: 0 }
   const pendingHolds = new Map<string, (text: string) => void>()
 
+  let providerRunOverride: Pick<ProviderRunStart, "start" | "authReady"> | null = null
+
   let nowCounter = chat.createdAt + 1
   const orchestrator = new SubagentOrchestrator({
     store,
@@ -93,6 +97,16 @@ async function setupHarness(opts: {
     maxChainDepth: opts.maxChainDepth,
     runTimeoutMs: opts.runTimeoutMs,
     startProviderRun: ({ subagent }): ProviderRunStart => {
+      if (providerRunOverride) {
+        return {
+          provider: subagent.provider,
+          model: subagent.model,
+          systemPrompt: subagent.systemPrompt,
+          preamble: null,
+          authReady: providerRunOverride.authReady,
+          start: providerRunOverride.start,
+        }
+      }
       const prog = programs.get(subagent.id) ?? { authReady: true, reply: "" }
       return {
         provider: subagent.provider,
@@ -100,7 +114,7 @@ async function setupHarness(opts: {
         systemPrompt: subagent.systemPrompt,
         preamble: null,
         authReady: async () => prog.authReady ?? true,
-        async start(onChunk) {
+        async start(onChunk, _onEntry) {
           activeStarts.value += 1
           if (activeStarts.value > activeStarts.max) activeStarts.max = activeStarts.value
           try {
@@ -148,6 +162,9 @@ async function setupHarness(opts: {
     },
     activeStarts,
     pendingHolds,
+    mockProviderRun: (override) => {
+      providerRunOverride = override
+    },
   }
 }
 
@@ -293,5 +310,147 @@ describe("SubagentOrchestrator", () => {
     const run = Object.values(h.store.getSubagentRuns(h.chatId))[0]
     expect(run.status).toBe("completed")
     expect(run.finalText).toBe("Hello world!")
+  })
+
+  test("non-text TranscriptEntry from provider is persisted via subagent_entry_appended", async () => {
+    const harness = await setupHarness({ subagents: [makeSubagent({ id: "sa-1", name: "alpha" })] })
+    harness.mockProviderRun({
+      async start(onChunk, onEntry) {
+        onEntry({ _id: "e1", createdAt: 1, kind: "tool_call",
+          tool: { kind: "tool", toolKind: "bash", toolName: "Bash", toolId: "t1", input: { command: "ls" } },
+        } as TranscriptEntry)
+        onChunk("ok")
+        onEntry({ _id: "e2", createdAt: 2, kind: "assistant_text", text: "ok" } as TranscriptEntry)
+        return { text: "ok" }
+      },
+      async authReady() { return true },
+    })
+    await harness.orchestrator.runMentionsForUserMessage({
+      chatId: harness.chatId,
+      userMessageId: "u1",
+      mentions: [{ kind: "subagent", subagentId: "sa-1", raw: "@agent/alpha" }],
+    })
+    const run = Object.values(harness.store.getSubagentRuns(harness.chatId))[0]
+    expect(run.entries.map((e) => e.kind)).toEqual(["tool_call", "assistant_text"])
+    expect(run.finalText).toBe("ok")
+  })
+
+  test("e2e: claude subagent run emits started + entries + deltas + completed", async () => {
+    const harness = await setupHarness({ subagents: [makeSubagent({ id: "sa-1", name: "alpha", provider: "claude" })] })
+
+    const stream = (function () {
+      const entries: TranscriptEntry[] = [
+        { _id: "e1", createdAt: 1, kind: "assistant_text", text: "hi" } as TranscriptEntry,
+        { _id: "e2", createdAt: 2, kind: "result", subtype: "success", isError: false,
+          result: "hi", durationMs: 10, costUsd: 0.001,
+          usage: { inputTokens: 5, outputTokens: 1 } } as TranscriptEntry,
+      ]
+      return {
+        async *[Symbol.asyncIterator]() {
+          for (const entry of entries) yield { type: "transcript" as const, entry }
+        },
+      }
+    })()
+
+    const fakeSession = {
+      provider: "claude" as const,
+      stream,
+      interrupt: async () => {},
+      close: () => {},
+      sendPrompt: async () => {},
+      setModel: async () => {},
+      setPermissionMode: async () => {},
+      getSupportedCommands: async () => [],
+      getAccountInfo: async () => null,
+    }
+
+    let nowCounter = 1000
+    const orchestrator = new SubagentOrchestrator({
+      store: harness.store,
+      appSettings: harness.appSettings,
+      now: () => nowCounter++,
+      startProviderRun: ({ subagent, chatId, primer, runId }) => buildSubagentProviderRun({
+        subagent, chatId, primer, runId,
+        cwd: "/tmp", projectId: "p1",
+        startClaudeSession: async () => fakeSession,
+        codexManager: {} as never,
+        onToolRequest: async () => null,
+        authReady: async () => true,
+        pickOauthToken: () => null,
+      }),
+    })
+
+    await orchestrator.runMentionsForUserMessage({
+      chatId: harness.chatId,
+      userMessageId: harness.userMessageId,
+      mentions: [{ kind: "subagent", subagentId: "sa-1", raw: "@agent/alpha" }],
+    })
+
+    const run = Object.values(harness.store.getSubagentRuns(harness.chatId))[0]
+    expect(run.status).toBe("completed")
+    expect(run.finalText).toBe("hi")
+    expect(run.entries.map((e) => e.kind)).toEqual(["assistant_text", "result"])
+    expect(run.usage?.outputTokens).toBe(1)
+  })
+
+  test("chained subagent runs each carry their own entries[]", async () => {
+    const alpha = makeSubagent({ id: "sa-a", name: "alpha" })
+    const beta = makeSubagent({ id: "sa-b", name: "beta" })
+    const harness = await setupHarness({ subagents: [alpha, beta] })
+
+    let invocation = 0
+    harness.mockProviderRun({
+      async start(onChunk, onEntry) {
+        invocation += 1
+        if (invocation === 1) {
+          onChunk("delegate to @agent/beta")
+          onEntry({ _id: `e-a-${invocation}`, createdAt: 1, kind: "assistant_text", text: "delegate to @agent/beta" } as TranscriptEntry)
+          return { text: "delegate to @agent/beta" }
+        }
+        onChunk("beta-output")
+        onEntry({ _id: `e-b-${invocation}`, createdAt: 2, kind: "assistant_text", text: "beta-output" } as TranscriptEntry)
+        return { text: "beta-output" }
+      },
+      async authReady() { return true },
+    })
+
+    await harness.orchestrator.runMentionsForUserMessage({
+      chatId: harness.chatId,
+      userMessageId: harness.userMessageId,
+      mentions: [{ kind: "subagent", subagentId: "sa-a", raw: "@agent/alpha" }],
+    })
+
+    const runs = Object.values(harness.store.getSubagentRuns(harness.chatId))
+    expect(runs).toHaveLength(2)
+    const parent = runs.find((r) => r.subagentId === "sa-a")!
+    const child = runs.find((r) => r.subagentId === "sa-b")!
+    expect(parent.depth).toBe(0)
+    expect(child.depth).toBe(1)
+    expect(parent.entries.map((e) => e.kind)).toEqual(["assistant_text"])
+    expect(child.entries.map((e) => e.kind)).toEqual(["assistant_text"])
+    expect(child.parentRunId).toBe(parent.runId)
+  })
+
+  test("PROVIDER_ERROR mid-run leaves accumulated entries on the run", async () => {
+    const harness = await setupHarness({ subagents: [makeSubagent({ id: "sa-1", name: "alpha" })] })
+    harness.mockProviderRun({
+      async start(_onChunk, onEntry) {
+        onEntry({ _id: "e1", createdAt: 1, kind: "assistant_text", text: "partial " } as TranscriptEntry)
+        onEntry({ _id: "e2", createdAt: 2, kind: "tool_call",
+          tool: { kind: "tool", toolKind: "bash", toolName: "Bash", toolId: "t1", input: { command: "ls" } },
+        } as TranscriptEntry)
+        throw new Error("network died")
+      },
+      async authReady() { return true },
+    })
+    await harness.orchestrator.runMentionsForUserMessage({
+      chatId: harness.chatId,
+      userMessageId: harness.userMessageId,
+      mentions: [{ kind: "subagent", subagentId: "sa-1", raw: "@agent/alpha" }],
+    })
+    const run = Object.values(harness.store.getSubagentRuns(harness.chatId))[0]
+    expect(run.status).toBe("failed")
+    expect(run.error?.code).toBe("PROVIDER_ERROR")
+    expect(run.entries.map((e) => e.kind)).toEqual(["assistant_text", "tool_call"])
   })
 })

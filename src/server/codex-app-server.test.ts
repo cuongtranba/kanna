@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { EventEmitter } from "node:events"
 import { PassThrough } from "node:stream"
-import { CodexAppServerManager } from "./codex-app-server"
+import { CodexAppServerManager, type CodexSessionScope } from "./codex-app-server"
 import { BackgroundTaskRegistry } from "./background-tasks"
 
 class FakeCodexProcess extends EventEmitter {
@@ -1841,7 +1841,7 @@ describe("CodexAppServerManager", () => {
     })
 
     const tasks = registry.list()
-    const task = tasks.find((t) => t.id === "codex:chat-reg-1")
+    const task = tasks.find((t) => t.id === "codex:chat-reg-1:main")
     expect(task).toBeDefined()
     expect(task?.kind).toBe("codex_session")
     if (task?.kind === "codex_session") {
@@ -1876,10 +1876,76 @@ describe("CodexAppServerManager", () => {
       sessionToken: null,
     })
 
-    expect(registry.list().find((t) => t.id === "codex:chat-reg-2")).toBeDefined()
+    expect(registry.list().find((t) => t.id === "codex:chat-reg-2:main")).toBeDefined()
 
     manager.stopSession("chat-reg-2")
 
-    expect(registry.list().find((t) => t.id === "codex:chat-reg-2")).toBeUndefined()
+    expect(registry.list().find((t) => t.id === "codex:chat-reg-2:main")).toBeUndefined()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Helpers for scope-keyed session tests
+// ---------------------------------------------------------------------------
+
+function makeFakeSpawn() {
+  let counter = 0
+  return () => {
+    const id = ++counter
+    const process = new FakeCodexProcess((message, child) => {
+      if (message.method === "initialize") {
+        child.writeServerMessage({ id: message.id, result: { userAgent: "codex-test" } })
+      } else if (message.method === "thread/start") {
+        child.writeServerMessage({
+          id: message.id,
+          result: { thread: { id: `thread-${id}` }, model: "gpt-5", reasoningEffort: "high" },
+        })
+      }
+    })
+    return process as never
+  }
+}
+
+describe("CodexAppServerManager — scope-keyed sessions", () => {
+  test("startSession with different scopes creates parallel sessions for same chat", async () => {
+    const manager = new CodexAppServerManager({ spawnProcess: makeFakeSpawn() })
+    await manager.startSession({ chatId: "c1", scope: "main", cwd: "/tmp", model: "gpt-5", sessionToken: null })
+    await manager.startSession({ chatId: "c1", scope: "sub:r1", cwd: "/tmp", model: "gpt-5", sessionToken: null })
+    await manager.startSession({ chatId: "c1", scope: "sub:r2", cwd: "/tmp", model: "gpt-5", sessionToken: null })
+    expect(manager.activeSessionCount()).toBe(3)
+    manager.stopSession("c1", "sub:r1")
+    expect(manager.activeSessionCount()).toBe(2)
+    manager.stopSession("c1", "main")
+    expect(manager.activeSessionCount()).toBe(1)
+  })
+
+  test("startSession without scope defaults to main (back-compat)", async () => {
+    const manager = new CodexAppServerManager({ spawnProcess: makeFakeSpawn() })
+    await manager.startSession({ chatId: "c1", cwd: "/tmp", model: "gpt-5", sessionToken: null })
+    expect(manager.hasSession("c1", "main")).toBe(true)
+    expect(manager.hasSession("c1", "sub:nope")).toBe(false)
+  })
+
+  test("stopAll terminates every scoped session, not just main", async () => {
+    const manager = new CodexAppServerManager({ spawnProcess: makeFakeSpawn() })
+    await manager.startSession({ chatId: "c1", scope: "main", cwd: "/tmp", model: "gpt-5", sessionToken: null })
+    await manager.startSession({ chatId: "c1", scope: "sub:r1", cwd: "/tmp", model: "gpt-5", sessionToken: null })
+    await manager.startSession({ chatId: "c2", scope: "sub:r2", cwd: "/tmp", model: "gpt-5", sessionToken: null })
+    expect(manager.activeSessionCount()).toBe(3)
+    manager.stopAll()
+    expect(manager.activeSessionCount()).toBe(0)
+  })
+
+  test("startSession with empty sub: scope throws", async () => {
+    const manager = new CodexAppServerManager({ spawnProcess: makeFakeSpawn() })
+    const badScope = "sub:" as unknown as CodexSessionScope
+    let err: unknown = null
+    try {
+      await manager.startSession({ chatId: "c1", scope: badScope, cwd: "/tmp", model: "gpt-5", sessionToken: null })
+    } catch (e) {
+      err = e
+    }
+    expect(err).toBeInstanceOf(Error)
+    expect((err as Error).message).toMatch(/empty sub-id/)
   })
 })

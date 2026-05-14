@@ -171,11 +171,11 @@ export const ChatTranscriptViewport = memo(function ChatTranscriptViewport({
     const children = childrenByParentRunId.get(run.runId) ?? []
     return (
       <React.Fragment key={run.runId}>
-        <SubagentMessage run={run} indentDepth={depth} />
+        <SubagentMessage run={run} indentDepth={depth} localPath={localPath ?? ""} />
         {children.map((child) => renderRunTree(child, depth + 1))}
       </React.Fragment>
     )
-  }, [childrenByParentRunId])
+  }, [childrenByParentRunId, localPath])
 
   const handleToolGroupExpandedChange = useCallback((groupId: string, next: boolean) => {
     setToolGroupExpanded((current) => (

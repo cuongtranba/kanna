@@ -640,12 +640,13 @@ function renderSubagentRunTree(
   run: SubagentRunSnapshot,
   depth: number,
   childrenByParentRunId: Map<string, SubagentRunSnapshot[]>,
+  localPath: string,
 ): React.ReactNode {
   const children = childrenByParentRunId.get(run.runId) ?? []
   return (
     <React.Fragment key={run.runId}>
-      <SubagentMessage run={run} indentDepth={depth} />
-      {children.map((child) => renderSubagentRunTree(child, depth + 1, childrenByParentRunId))}
+      <SubagentMessage run={run} indentDepth={depth} localPath={localPath} />
+      {children.map((child) => renderSubagentRunTree(child, depth + 1, childrenByParentRunId, localPath))}
     </React.Fragment>
   )
 }
@@ -834,7 +835,7 @@ function KannaTranscriptImpl({
               onAutoContinueReschedule={onAutoContinueReschedule}
               onAutoContinueCancel={onAutoContinueCancel}
             />
-            {runsForRow.map((run) => renderSubagentRunTree(run, 0, childrenByParentRunId))}
+            {runsForRow.map((run) => renderSubagentRunTree(run, 0, childrenByParentRunId, localPath ?? ""))}
           </div>
         )
       })}

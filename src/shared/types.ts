@@ -904,6 +904,7 @@ export interface ResultEntry extends TranscriptEntryBase {
   durationMs: number
   result: string
   costUsd?: number
+  usage?: ProviderUsage
 }
 
 export interface StatusEntry extends TranscriptEntryBase {
@@ -1329,6 +1330,14 @@ export interface SubagentRunSnapshot {
   finalText: string | null
   error: { code: SubagentErrorCode; message: string } | null
   usage: ProviderUsage | null
+  /**
+   * Every TranscriptEntry the subagent produced, in arrival order. Includes
+   * tool_call, tool_result, system_init, account_info, result. assistant_text
+   * entries also live here in addition to being concatenated into finalText
+   * via subagent_message_delta — clients should prefer entries[] for rich
+   * rendering, finalText only as a quick text-only summary.
+   */
+  entries: TranscriptEntry[]
 }
 
 export interface ChatSnapshot {
@@ -1439,6 +1448,7 @@ export type BackgroundTask =
       kind: "codex_session"
       id: string
       chatId: string
+      scope?: "main" | `sub:${string}`   // optional for back-compat with pre-migration in-memory tasks
       pid: number | null
       startedAt: number
       lastOutput: string

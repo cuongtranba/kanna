@@ -3319,4 +3319,124 @@ describe("AgentCoordinator subagent mention gating", () => {
     expect(runs[0].status).toBe("failed")
     expect(runs[0].error?.code).toBe("UNKNOWN_SUBAGENT")
   })
+
+  test("subagent AskUserQuestion auto-denies with synthetic object-map answer", async () => {
+    const store = createFakeStore()
+    let capturedResult: unknown = null
+
+    const coordinator = new AgentCoordinator({
+      store: store as never,
+      onStateChange: () => {},
+      getSubagents: () => [makeSubagentRecord({ id: "sa-1", name: "alpha" })],
+      getAppSettingsSnapshot: () => ({ claudeAuth: { authenticated: true } }),
+      startClaudeSession: async (args) => {
+        // Call the onToolRequest with ask_user_question and capture the result
+        const toolRequest = {
+          tool: {
+            kind: "tool" as const,
+            toolKind: "ask_user_question" as const,
+            toolName: "AskUserQuestion",
+            toolId: "t1",
+            input: { questions: [{ id: "q1", question: "color?" }, { id: "q2", question: "size?" }] },
+            rawInput: { questions: [{ id: "q1", question: "color?" }, { id: "q2", question: "size?" }] },
+          },
+        }
+        capturedResult = await args.onToolRequest(toolRequest)
+        // Return a ClaudeSessionHandle whose stream yields one assistant_text entry then closes
+        async function* stream() {
+          yield {
+            type: "transcript" as const,
+            entry: timestamped({ kind: "assistant_text", text: "ok" }),
+          }
+        }
+        return {
+          provider: "claude" as const,
+          stream: stream(),
+          interrupt: async () => {},
+          close: () => {},
+          sendPrompt: async () => {},
+          setModel: async () => {},
+          setPermissionMode: async () => {},
+          getSupportedCommands: async () => [],
+        }
+      },
+    })
+
+    await coordinator.send({
+      type: "chat.send",
+      chatId: "chat-1",
+      provider: "claude",
+      content: "@agent/alpha",
+      model: "claude-opus-4-7",
+    })
+
+    await waitFor(() => Object.values(store.getSubagentRuns()).some((r: any) => r.status === "completed"))
+    expect(capturedResult).toEqual({
+      questions: [{ id: "q1", question: "color?" }, { id: "q2", question: "size?" }],
+      answers: {
+        q1: ["[denied: subagents cannot ask the user; reply via assistant text]"],
+        q2: ["[denied: subagents cannot ask the user; reply via assistant text]"],
+      },
+    })
+    const runs = Object.values(store.getSubagentRuns()) as Array<{ status: string }>
+    expect(runs[0]?.status).toBe("completed")
+  }, 10_000)
+
+  test("subagent ExitPlanMode auto-denies with confirmed:false", async () => {
+    const store = createFakeStore()
+    let capturedResult: unknown = null
+
+    const coordinator = new AgentCoordinator({
+      store: store as never,
+      onStateChange: () => {},
+      getSubagents: () => [makeSubagentRecord({ id: "sa-1", name: "alpha" })],
+      getAppSettingsSnapshot: () => ({ claudeAuth: { authenticated: true } }),
+      startClaudeSession: async (args) => {
+        // Call the onToolRequest with exit_plan_mode and capture the result
+        const toolRequest = {
+          tool: {
+            kind: "tool" as const,
+            toolKind: "exit_plan_mode" as const,
+            toolName: "ExitPlanMode",
+            toolId: "t1",
+            input: { plan: "do X" },
+            rawInput: { plan: "do X" },
+          },
+        }
+        capturedResult = await args.onToolRequest(toolRequest)
+        async function* stream() {
+          yield {
+            type: "transcript" as const,
+            entry: timestamped({ kind: "assistant_text", text: "ok" }),
+          }
+        }
+        return {
+          provider: "claude" as const,
+          stream: stream(),
+          interrupt: async () => {},
+          close: () => {},
+          sendPrompt: async () => {},
+          setModel: async () => {},
+          setPermissionMode: async () => {},
+          getSupportedCommands: async () => [],
+        }
+      },
+    })
+
+    await coordinator.send({
+      type: "chat.send",
+      chatId: "chat-1",
+      provider: "claude",
+      content: "@agent/alpha",
+      model: "claude-opus-4-7",
+    })
+
+    await waitFor(() => Object.values(store.getSubagentRuns()).some((r: any) => r.status === "completed"))
+    expect(capturedResult).toMatchObject({
+      confirmed: false,
+      message: expect.stringContaining("auto-denied"),
+    })
+    const runs = Object.values(store.getSubagentRuns()) as Array<{ status: string }>
+    expect(runs[0]?.status).toBe("completed")
+  }, 10_000)
 })
