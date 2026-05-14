@@ -11,6 +11,7 @@ import type {
   TranscriptEntry,
 } from "../shared/types"
 import type { AutoContinueEvent } from "./auto-continue/events"
+import type { ToolRequest, ToolRequestDecision, ToolRequestStatus } from "../shared/permission-policy"
 
 export interface ProjectRecord extends ProjectSummary {
   deletedAt?: number
@@ -63,6 +64,7 @@ export interface StoreState {
   chatTimingsByChatId: Map<string, ChatTimingState>
   stacksById: Map<string, StackRecord>
   subagentRunsByChatId: Map<string, Map<string, SubagentRunSnapshot>>
+  toolRequestsById: Map<string, ToolRequest>
 }
 
 export interface SnapshotFile {
@@ -354,7 +356,25 @@ export type SubagentRunEvent =
       resolution: "user" | "auto_deny" | "interrupted"
     }
 
-export type StoreEvent = ProjectEvent | ChatEvent | MessageEvent | QueuedMessageEvent | TurnEvent | StackEvent | AutoContinueEvent | SubagentRunEvent
+export type ToolRequestEvent =
+  | {
+      v: 3
+      type: "tool_request_put"
+      timestamp: number
+      request: ToolRequest
+    }
+  | {
+      v: 3
+      type: "tool_request_resolved"
+      timestamp: number
+      id: string
+      status: ToolRequestStatus
+      decision?: ToolRequestDecision
+      resolvedAt: number
+      mismatchReason?: string
+    }
+
+export type StoreEvent = ProjectEvent | ChatEvent | MessageEvent | QueuedMessageEvent | TurnEvent | StackEvent | AutoContinueEvent | SubagentRunEvent | ToolRequestEvent
 
 export interface StackRecord {
   id: string
@@ -376,6 +396,7 @@ export function createEmptyState(): StoreState {
     chatTimingsByChatId: new Map(),
     stacksById: new Map(),
     subagentRunsByChatId: new Map(),
+    toolRequestsById: new Map<string, ToolRequest>(),
   }
 }
 

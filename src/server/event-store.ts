@@ -18,10 +18,12 @@ import {
   type StoreEvent,
   type StoreState,
   type SubagentRunEvent,
+  type ToolRequestEvent,
   type TurnEvent,
   cloneTranscriptEntries,
   createEmptyState,
 } from "./events"
+import type { ToolRequest, ToolRequestDecision, ToolRequestStatus } from "../shared/permission-policy"
 import { resolveLocalPath } from "./paths"
 import type { CloudflareTunnelEvent } from "./cloudflare-tunnel/events"
 import type { PushEvent, PushEventStore } from "./push/events"
@@ -143,6 +145,10 @@ function getReplayEventPriority(event: StoreEvent): number {
     case "subagent_tool_pending":
     case "subagent_tool_resolved":
       return 5
+    case "tool_request_put":
+      return 5
+    case "tool_request_resolved":
+      return 6
     default: {
       const _exhaustive: never = discriminator
       throw new Error(`Unhandled replay event type: ${String(_exhaustive)}`)
@@ -207,6 +213,7 @@ export class EventStore implements PushEventStore {
   private readonly tunnelLogPath: string
   private readonly pushLogPath: string
   private readonly stacksLogPath: string
+  private readonly toolRequestsLogPath: string
   private readonly transcriptsDir: string
   private readonly sidebarProjectOrderPath: string
   private legacyMessagesByChatId = new Map<string, TranscriptEntry[]>()
@@ -229,6 +236,7 @@ export class EventStore implements PushEventStore {
     this.tunnelLogPath = path.join(this.dataDir, "tunnels.jsonl")
     this.pushLogPath = path.join(this.dataDir, "push.jsonl")
     this.stacksLogPath = path.join(this.dataDir, "stacks.jsonl")
+    this.toolRequestsLogPath = path.join(this.dataDir, "tool-requests.jsonl")
     this.transcriptsDir = path.join(this.dataDir, "transcripts")
     this.sidebarProjectOrderPath = path.join(this.dataDir, SIDEBAR_PROJECT_ORDER_FILE)
   }
@@ -245,6 +253,7 @@ export class EventStore implements PushEventStore {
     await this.ensureFile(this.tunnelLogPath)
     await this.ensureFile(this.pushLogPath)
     await this.ensureFile(this.stacksLogPath)
+    await this.ensureFile(this.toolRequestsLogPath)
     await this.loadSnapshot()
     await this.replayLogs()
     await this.loadTunnelEvents()
@@ -276,6 +285,7 @@ export class EventStore implements PushEventStore {
       Bun.write(this.schedulesLogPath, ""),
       Bun.write(this.tunnelLogPath, ""),
       Bun.write(this.stacksLogPath, ""),
+      Bun.write(this.toolRequestsLogPath, ""),
     ])
   }
 
@@ -476,6 +486,7 @@ export class EventStore implements PushEventStore {
       ...await this.loadReplayEvents(this.queuedMessagesLogPath, 4),
       ...await this.loadReplayEvents(this.turnsLogPath, 5),
       ...await this.loadReplayEvents(this.schedulesLogPath, 6),
+      ...await this.loadReplayEvents(this.toolRequestsLogPath, 7),
     ]
     if (this.storageReset) return
 
@@ -915,6 +926,22 @@ export class EventStore implements PushEventStore {
           content: e.result,
         }
         run.entries.push(syntheticEntry)
+        break
+      }
+      case "tool_request_put": {
+        this.state.toolRequestsById.set(e.request.id, { ...e.request })
+        break
+      }
+      case "tool_request_resolved": {
+        const existing = this.state.toolRequestsById.get(e.id)
+        if (!existing) break
+        this.state.toolRequestsById.set(e.id, {
+          ...existing,
+          status: e.status,
+          decision: e.decision ?? existing.decision,
+          resolvedAt: e.resolvedAt,
+          mismatchReason: e.mismatchReason,
+        })
         break
       }
     }
@@ -1845,6 +1872,11 @@ export class EventStore implements PushEventStore {
       Bun.write(this.stacksLogPath, ""),
       // tunnels.jsonl is NOT compacted into the snapshot — it's left as-is
       // so that active tunnel state survives server restarts.
+      // tool-requests.jsonl is NOT persisted to the snapshot. After compaction,
+      // in-memory state remains intact for the current process lifetime.
+      // On next server boot, tool-requests will be absent (fail-closed);
+      // Task 7 recoverOnStartup marks them session_closed.
+      Bun.write(this.toolRequestsLogPath, ""),
     ])
   }
 
@@ -1888,6 +1920,7 @@ export class EventStore implements PushEventStore {
       Bun.file(this.turnsLogPath).size,
       Bun.file(this.schedulesLogPath).size,
       Bun.file(this.stacksLogPath).size,
+      Bun.file(this.toolRequestsLogPath).size,
     ])
     return sizes.reduce((total, size) => total + size, 0) >= COMPACTION_THRESHOLD_BYTES
   }
@@ -1972,5 +2005,65 @@ export class EventStore implements PushEventStore {
       }
     }
     return events
+  }
+
+  async putToolRequest(req: ToolRequest): Promise<void> {
+    this.state.toolRequestsById.set(req.id, { ...req })
+    await this.append(this.toolRequestsLogPath, {
+      v: 3,
+      type: "tool_request_put",
+      timestamp: Date.now(),
+      request: req,
+    } satisfies ToolRequestEvent)
+  }
+
+  async getToolRequest(id: string): Promise<ToolRequest | null> {
+    const req = this.state.toolRequestsById.get(id)
+    return req ? { ...req } : null
+  }
+
+  async listPendingToolRequests(chatId: string): Promise<ToolRequest[]> {
+    const out: ToolRequest[] = []
+    for (const req of this.state.toolRequestsById.values()) {
+      if (req.chatId !== chatId) continue
+      if (req.status !== "pending") continue
+      out.push({ ...req })
+    }
+    return out
+  }
+
+  async resolveToolRequest(
+    id: string,
+    args: {
+      status: ToolRequestStatus
+      decision?: ToolRequestDecision
+      resolvedAt: number
+      mismatchReason?: string
+    },
+  ): Promise<void> {
+    const existing = this.state.toolRequestsById.get(id)
+    if (!existing) throw new Error(`resolveToolRequest: unknown id ${id}`)
+    const next: ToolRequest = {
+      ...existing,
+      status: args.status,
+      decision: args.decision ?? existing.decision,
+      resolvedAt: args.resolvedAt,
+      mismatchReason: args.mismatchReason,
+    }
+    this.state.toolRequestsById.set(id, next)
+    await this.append(this.toolRequestsLogPath, {
+      v: 3,
+      type: "tool_request_resolved",
+      timestamp: Date.now(),
+      id,
+      status: args.status,
+      decision: args.decision,
+      resolvedAt: args.resolvedAt,
+      mismatchReason: args.mismatchReason,
+    } satisfies ToolRequestEvent)
+  }
+
+  async scanAllToolRequests(): Promise<ToolRequest[]> {
+    return [...this.state.toolRequestsById.values()].map((req) => ({ ...req }))
   }
 }

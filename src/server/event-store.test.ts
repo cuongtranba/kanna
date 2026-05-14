@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test"
+import type { ToolRequest } from "../shared/permission-policy"
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import { existsSync } from "node:fs"
 import { join } from "node:path"
@@ -1448,5 +1449,59 @@ describe("project star", () => {
 
     const record = store.getChat(chatId)!
     expect(record.pendingForkSessionToken).toEqual({ provider: "claude", token: "fork-tok" })
+  })
+})
+
+function fixtureToolRequest(overrides: Partial<ToolRequest> = {}): ToolRequest {
+  return {
+    id: "id-1",
+    chatId: "chat-1",
+    sessionId: "sess-1",
+    toolUseId: "tu-1",
+    toolName: "ask_user_question",
+    arguments: { questions: [] },
+    canonicalArgsHash: "hash-1",
+    policyVerdict: "ask",
+    status: "pending",
+    createdAt: 1_000,
+    expiresAt: 1_000 + 600_000,
+    ...overrides,
+  }
+}
+
+describe("EventStore ToolRequest", () => {
+  test("putToolRequest then getToolRequest returns the same record", async () => {
+    const dataDir = await createTempDataDir()
+    const store = new EventStore(dataDir)
+    await store.initialize()
+    await store.putToolRequest(fixtureToolRequest())
+    const got = await store.getToolRequest("id-1")
+    expect(got?.toolUseId).toBe("tu-1")
+  })
+
+  test("listPendingToolRequests filters by chatId", async () => {
+    const dataDir = await createTempDataDir()
+    const store = new EventStore(dataDir)
+    await store.initialize()
+    await store.putToolRequest(fixtureToolRequest({ id: "a", chatId: "c1" }))
+    await store.putToolRequest(fixtureToolRequest({ id: "b", chatId: "c2" }))
+    await store.putToolRequest(fixtureToolRequest({ id: "c", chatId: "c1", status: "answered" }))
+    const pending = await store.listPendingToolRequests("c1")
+    expect(pending.map((r) => r.id).sort()).toEqual(["a"])
+  })
+
+  test("resolveToolRequest sets terminal status atomically", async () => {
+    const dataDir = await createTempDataDir()
+    const store = new EventStore(dataDir)
+    await store.initialize()
+    await store.putToolRequest(fixtureToolRequest())
+    await store.resolveToolRequest("id-1", {
+      status: "answered",
+      decision: { kind: "answer", payload: { ok: true } },
+      resolvedAt: 2_000,
+    })
+    const got = await store.getToolRequest("id-1")
+    expect(got?.status).toBe("answered")
+    expect(got?.decision?.kind).toBe("answer")
   })
 })
