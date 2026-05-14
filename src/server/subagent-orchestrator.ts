@@ -115,11 +115,22 @@ const DEFAULT_MAX_CHAIN_DEPTH = 1
 // override via SubagentOrchestratorDeps.runTimeoutMs.
 const DEFAULT_RUN_TIMEOUT_MS = 600_000
 
+interface RunState {
+  chatId: string
+  parentRunId: string | null
+  childRunIds: Set<string>
+  abortController: AbortController
+  timeout: PausableTimeout | null
+  cancelled: boolean
+  pendingAcquire: boolean
+  permitWaiter: { resolve: () => void; reject: (e: Error) => void } | null
+}
+
 export class SubagentOrchestrator {
   private permits: number
   private readonly waiters: Array<{ chatId: string; resolve: () => void; reject: (err: Error) => void }> = []
   private readonly cancelledChats = new Set<string>()
-  private readonly timeoutsByRun = new Map<string, PausableTimeout>()
+  private readonly runStateByRunId = new Map<string, RunState>()
 
   private readonly recoveryPromise: Promise<void>
 
@@ -174,11 +185,11 @@ export class SubagentOrchestrator {
   }
 
   notifySubagentToolPending(runId: string): void {
-    this.timeoutsByRun.get(runId)?.pause()
+    this.runStateByRunId.get(runId)?.timeout?.pause()
   }
 
   notifySubagentToolResolved(runId: string): void {
-    this.timeoutsByRun.get(runId)?.resume()
+    this.runStateByRunId.get(runId)?.timeout?.resume()
   }
 
   private async acquire(chatId: string): Promise<void> {
