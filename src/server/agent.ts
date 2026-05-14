@@ -899,7 +899,7 @@ export class AgentCoordinator {
     this.subagentOrchestrator = new SubagentOrchestrator({
       store: this.store,
       appSettings: { getSnapshot: () => ({ subagents: this.getSubagents() }) },
-      startProviderRun: ({ subagent, chatId, primer }) => buildSubagentProviderRun({ subagent, chatId, primer }),
+      startProviderRun: ({ subagent, chatId, primer, runId: _runId }) => buildSubagentProviderRun({ subagent, chatId, primer }),
     })
     this.throwOnClaudeSessionStart = args.throwOnClaudeSessionStart ?? false
     this.tunnelGateway = args.tunnelGateway ?? null

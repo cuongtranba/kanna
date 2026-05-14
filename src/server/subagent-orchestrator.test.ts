@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test"
 import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import type { ClaudeModelOptions, Subagent } from "../shared/types"
+import type { ClaudeModelOptions, Subagent, TranscriptEntry } from "../shared/types"
 import { EventStore } from "./event-store"
 import {
   SubagentOrchestrator,
@@ -59,6 +59,7 @@ interface OrchestratorHarness {
   setAuthReady: (subagentId: string, ready: boolean) => void
   activeStarts: { value: number; max: number }
   pendingHolds: Map<string, (text: string) => void>
+  mockProviderRun: (override: Pick<ProviderRunStart, "start" | "authReady">) => void
 }
 
 async function setupHarness(opts: {
@@ -84,6 +85,8 @@ async function setupHarness(opts: {
   const activeStarts = { value: 0, max: 0 }
   const pendingHolds = new Map<string, (text: string) => void>()
 
+  let providerRunOverride: Pick<ProviderRunStart, "start" | "authReady"> | null = null
+
   let nowCounter = chat.createdAt + 1
   const orchestrator = new SubagentOrchestrator({
     store,
@@ -93,6 +96,16 @@ async function setupHarness(opts: {
     maxChainDepth: opts.maxChainDepth,
     runTimeoutMs: opts.runTimeoutMs,
     startProviderRun: ({ subagent }): ProviderRunStart => {
+      if (providerRunOverride) {
+        return {
+          provider: subagent.provider,
+          model: subagent.model,
+          systemPrompt: subagent.systemPrompt,
+          preamble: null,
+          authReady: providerRunOverride.authReady,
+          start: providerRunOverride.start,
+        }
+      }
       const prog = programs.get(subagent.id) ?? { authReady: true, reply: "" }
       return {
         provider: subagent.provider,
@@ -100,7 +113,7 @@ async function setupHarness(opts: {
         systemPrompt: subagent.systemPrompt,
         preamble: null,
         authReady: async () => prog.authReady ?? true,
-        async start(onChunk) {
+        async start(onChunk, _onEntry) {
           activeStarts.value += 1
           if (activeStarts.value > activeStarts.max) activeStarts.max = activeStarts.value
           try {
@@ -148,6 +161,9 @@ async function setupHarness(opts: {
     },
     activeStarts,
     pendingHolds,
+    mockProviderRun: (override) => {
+      providerRunOverride = override
+    },
   }
 }
 
@@ -293,5 +309,28 @@ describe("SubagentOrchestrator", () => {
     const run = Object.values(h.store.getSubagentRuns(h.chatId))[0]
     expect(run.status).toBe("completed")
     expect(run.finalText).toBe("Hello world!")
+  })
+
+  test("non-text TranscriptEntry from provider is persisted via subagent_entry_appended", async () => {
+    const harness = await setupHarness({ subagents: [makeSubagent({ id: "sa-1", name: "alpha" })] })
+    harness.mockProviderRun({
+      async start(onChunk, onEntry) {
+        onEntry({ _id: "e1", createdAt: 1, kind: "tool_call",
+          tool: { kind: "tool", toolKind: "bash", toolName: "Bash", toolId: "t1", input: { command: "ls" } },
+        } as TranscriptEntry)
+        onChunk("ok")
+        onEntry({ _id: "e2", createdAt: 2, kind: "assistant_text", text: "ok" } as TranscriptEntry)
+        return { text: "ok" }
+      },
+      async authReady() { return true },
+    })
+    await harness.orchestrator.runMentionsForUserMessage({
+      chatId: harness.chatId,
+      userMessageId: "u1",
+      mentions: [{ kind: "subagent", subagentId: "sa-1", raw: "@agent/alpha" }],
+    })
+    const run = Object.values(harness.store.getSubagentRuns(harness.chatId))[0]
+    expect(run.entries.map((e) => e.kind)).toEqual(["tool_call", "assistant_text"])
+    expect(run.finalText).toBe("ok")
   })
 })

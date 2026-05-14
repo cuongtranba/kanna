@@ -16,7 +16,19 @@ export interface ProviderRunStart {
   model: string
   systemPrompt: string
   preamble: string | null
-  start: (onChunk: (chunk: string) => void) => Promise<{ text: string; usage?: ProviderUsage }>
+  /**
+   * Run the subagent against its provider.
+   *  - `onChunk(text)`: every assistant_text fragment, in order. Used to
+   *    persist `subagent_message_delta` events for streaming UI.
+   *  - `onEntry(entry)`: every TranscriptEntry — including the assistant_text
+   *    entries forwarded to onChunk, plus tool_call / tool_result / result.
+   *    Used to persist `subagent_entry_appended` events.
+   * Returns the final accumulated text + usage for the run_completed event.
+   */
+  start: (
+    onChunk: (chunk: string) => void,
+    onEntry: (entry: TranscriptEntry) => void,
+  ) => Promise<{ text: string; usage?: ProviderUsage }>
   authReady: () => Promise<boolean>
 }
 
@@ -31,6 +43,7 @@ export interface SubagentOrchestratorDeps {
     subagent: Subagent
     chatId: string
     primer: string | null
+    runId: string
   }) => ProviderRunStart
   now?: () => number
   maxParallel?: number
@@ -208,7 +221,12 @@ export class SubagentOrchestrator {
         primer = reply == null ? null : `Previous assistant reply:\n${reply}`
       }
 
-      const runStart = this.deps.startProviderRun({ subagent: args.subagent, chatId: args.chatId, primer })
+      const runStart = this.deps.startProviderRun({
+        subagent: args.subagent,
+        chatId: args.chatId,
+        primer,
+        runId,
+      })
 
       if (!(await runStart.authReady())) {
         await this.failRun(args.chatId, runId, "AUTH_REQUIRED", `Authentication required for ${args.subagent.provider}`)
@@ -234,8 +252,22 @@ export class SubagentOrchestrator {
               console.warn(`${LOG_PREFIX} subagent delta append failed`, { chatId: args.chatId, runId, err })
             })
         }
+        const onEntry = (entry: TranscriptEntry) => {
+          this.deps.store
+            .appendSubagentEvent({
+              v: 3,
+              type: "subagent_entry_appended",
+              timestamp: this.now(),
+              chatId: args.chatId,
+              runId,
+              entry,
+            })
+            .catch((err) => {
+              console.warn(`${LOG_PREFIX} subagent entry append failed`, { chatId: args.chatId, runId, err })
+            })
+        }
         const result = await Promise.race([
-          runStart.start(onChunk),
+          runStart.start(onChunk, onEntry),
           new Promise<never>((_, reject) => {
             timeoutId = setTimeout(() => reject(new Error("TIMEOUT")), this.timeoutMs())
           }),
