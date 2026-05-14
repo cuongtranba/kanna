@@ -16,6 +16,9 @@ import {
   listInstalledSkills,
   parseInstalledSkillsLock,
 } from "./ws-router"
+import { EventStore } from "./event-store"
+import { createToolCallbackService } from "./tool-callback"
+import { POLICY_DEFAULT } from "../shared/permission-policy"
 
 function withSidebarGroupDefaults(group: {
   groupKey: string
@@ -3120,4 +3123,91 @@ describe("ws-router bg-tasks", () => {
       await rm(projectPath, { recursive: true, force: true })
     }
   })
+})
+
+test("ws-router: chat.toolRequestAnswer resolves a pending tool request", async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), "kanna-ws-toolreq-"))
+  try {
+    const store = new EventStore(dir)
+    await store.initialize()
+
+    const toolCallbackSvc = createToolCallbackService({
+      store,
+      serverSecret: "test-secret",
+      now: () => 1_000,
+      timeoutMs: 600_000,
+    })
+
+    // Submit a request that requires user approval ("ask" verdict).
+    const pendingPromise = toolCallbackSvc.submit({
+      chatId: "chat-1",
+      sessionId: "sess-1",
+      toolUseId: "tu-1",
+      toolName: "ask_user_question",
+      args: { questions: [{ q: "ok?" }] },
+      chatPolicy: POLICY_DEFAULT,
+      cwd: "/tmp/project",
+    })
+
+    const pending = store.listPendingToolRequests("chat-1")
+    expect(pending).toHaveLength(1)
+    const toolRequestId = pending[0].id
+
+    const router = createWsRouter({
+      store: store as never,
+      agent: {
+        getActiveStatuses: () => new Map(),
+        getDrainingChatIds: () => new Set(),
+        getSlashCommandsLoadingChatIds: () => new Set(),
+        getWaitStartedAtByChatId: () => new Map(),
+        ensureSlashCommandsLoaded: async () => {},
+        toolCallbackService: toolCallbackSvc,
+      } as never,
+      terminals: {
+        getSnapshot: () => null,
+        onEvent: () => () => {},
+      } as never,
+      keybindings: {
+        getSnapshot: () => DEFAULT_KEYBINDINGS_SNAPSHOT,
+        onChange: () => () => {},
+      } as never,
+      refreshDiscovery: async () => [],
+      getDiscoveredProjects: () => [],
+      machineDisplayName: "Local Machine",
+      updateManager: null,
+      pushManager: NOOP_PUSH_MANAGER,
+    })
+
+    const ws = new FakeWebSocket()
+    router.handleOpen(ws as never)
+
+    await router.handleMessage(
+      ws as never,
+      JSON.stringify({
+        v: 1,
+        type: "command",
+        id: "tool-answer-1",
+        command: {
+          type: "chat.toolRequestAnswer",
+          chatId: "chat-1",
+          toolRequestId,
+          decision: { kind: "answer", payload: { ok: true } },
+        },
+      })
+    )
+
+    expect(ws.sent).toEqual([
+      { v: PROTOCOL_VERSION, type: "ack", id: "tool-answer-1" },
+    ])
+
+    // The pending submit() should have resolved with the answered decision.
+    const result = await pendingPromise
+    expect(result.status).toBe("answered")
+    expect(result.decision.payload).toEqual({ ok: true })
+
+    // The store record should reflect the answered status.
+    expect(store.getToolRequest(toolRequestId)?.status).toBe("answered")
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
 })

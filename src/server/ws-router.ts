@@ -1823,6 +1823,13 @@ export function createWsRouter({
           send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
           return
         }
+        case "chat.toolRequestAnswer": {
+          const toolCallbackSvc = agent.toolCallbackService
+          if (!toolCallbackSvc) throw new Error("tool callback service unavailable")
+          await toolCallbackSvc.answer(command.toolRequestId, command.decision)
+          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
+          return
+        }
         case "chat.respondSubagentTool": {
           await agent.respondSubagentTool(command)
           send(ws, { v: PROTOCOL_VERSION, type: "ack", id })

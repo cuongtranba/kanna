@@ -1053,6 +1053,10 @@ export class AgentCoordinator {
     return new Set(this.slashCommandsInFlight)
   }
 
+  get toolCallbackService(): ToolCallbackService | null {
+    return this.toolCallback
+  }
+
   private emitStateChange(chatId?: string, options?: { immediate?: boolean }) {
     this.onStateChange(chatId, options)
   }
