@@ -106,6 +106,7 @@ interface PendingTurn {
 
 interface SessionContext {
   chatId: string
+  scope: CodexSessionScope
   cwd: string
   child: CodexAppServerProcess
   pendingRequests: Map<CodexRequestId, PendingRequest<unknown>>
@@ -115,8 +116,11 @@ interface SessionContext {
   closed: boolean
 }
 
+export type CodexSessionScope = "main" | `sub:${string}`
+
 export interface StartCodexSessionArgs {
   chatId: string
+  scope?: CodexSessionScope
   cwd: string
   model: string
   serviceTier?: ServiceTier
@@ -126,6 +130,7 @@ export interface StartCodexSessionArgs {
 
 export interface StartCodexTurnArgs {
   chatId: string
+  scope?: CodexSessionScope
   model: string
   effort?: CodexReasoningEffort
   serviceTier?: ServiceTier
@@ -739,6 +744,10 @@ export class CodexAppServerManager {
   private readonly spawnProcess: SpawnCodexAppServer
   private readonly backgroundTasks: BackgroundTaskRegistry | null
 
+  private static keyFor(chatId: string, scope: CodexSessionScope = "main"): string {
+    return `${chatId}::${scope}`
+  }
+
   constructor(args: { spawnProcess?: SpawnCodexAppServer; backgroundTasks?: BackgroundTaskRegistry } = {}) {
     this.backgroundTasks = args.backgroundTasks ?? null
     this.spawnProcess = args.spawnProcess ?? ((cwd) =>
@@ -750,18 +759,21 @@ export class CodexAppServerManager {
   }
 
   async startSession(args: StartCodexSessionArgs) {
-    const existing = this.sessions.get(args.chatId)
+    const scope: CodexSessionScope = args.scope ?? "main"
+    const key = CodexAppServerManager.keyFor(args.chatId, scope)
+    const existing = this.sessions.get(key)
     if (existing && !existing.closed && existing.cwd === args.cwd && !args.pendingForkSessionToken) {
       return
     }
 
     if (existing) {
-      this.stopSession(args.chatId)
+      this.stopSession(args.chatId, scope)
     }
 
     const child = this.spawnProcess(args.cwd)
     const context: SessionContext = {
       chatId: args.chatId,
+      scope,
       cwd: args.cwd,
       child,
       pendingRequests: new Map(),
@@ -770,11 +782,12 @@ export class CodexAppServerManager {
       stderrLines: [],
       closed: false,
     }
-    this.sessions.set(args.chatId, context)
+    this.sessions.set(key, context)
     this.backgroundTasks?.register({
       kind: "codex_session",
-      id: `codex:${args.chatId}`,
+      id: `codex:${args.chatId}:${scope}`,
       chatId: args.chatId,
+      scope,
       pid: null,
       startedAt: Date.now(),
       lastOutput: "",
@@ -829,7 +842,7 @@ export class CodexAppServerManager {
         } satisfies ThreadResumeParams)
       } catch (error) {
         if (!isRecoverableResumeError(error)) {
-          this.stopSession(args.chatId)
+          this.stopSession(args.chatId, scope)
           throw error
         }
         response = await this.sendRequest<ThreadStartResponse>(context, "thread/start", threadParams)
@@ -843,7 +856,8 @@ export class CodexAppServerManager {
   }
 
   async startTurn(args: StartCodexTurnArgs): Promise<HarnessTurn> {
-    const context = this.requireSession(args.chatId)
+    const scope: CodexSessionScope = args.scope ?? "main"
+    const context = this.requireSession(args.chatId, scope)
     if (context.pendingTurn) {
       throw new Error("Codex turn is already running")
     }
@@ -972,13 +986,14 @@ export class CodexAppServerManager {
     }
   }
 
-  stopSession(chatId: string) {
-    const context = this.sessions.get(chatId)
+  stopSession(chatId: string, scope: CodexSessionScope = "main") {
+    const key = CodexAppServerManager.keyFor(chatId, scope)
+    const context = this.sessions.get(key)
     if (!context) return
     context.closed = true
     context.pendingTurn?.queue.finish()
-    this.sessions.delete(chatId)
-    this.backgroundTasks?.unregister(`codex:${chatId}`)
+    this.sessions.delete(key)
+    this.backgroundTasks?.unregister(`codex:${chatId}:${scope}`)
     try {
       context.child.kill("SIGKILL")
     } catch {
@@ -987,15 +1002,26 @@ export class CodexAppServerManager {
   }
 
   stopAll() {
-    for (const chatId of this.sessions.keys()) {
-      this.stopSession(chatId)
+    // Snapshot the values first because stopSession mutates the map.
+    const contexts = Array.from(this.sessions.values())
+    for (const ctx of contexts) {
+      this.stopSession(ctx.chatId, ctx.scope)
     }
   }
 
-  private requireSession(chatId: string) {
-    const context = this.sessions.get(chatId)
+  activeSessionCount(): number {
+    return this.sessions.size
+  }
+
+  hasSession(chatId: string, scope: CodexSessionScope = "main"): boolean {
+    return this.sessions.has(CodexAppServerManager.keyFor(chatId, scope))
+  }
+
+  private requireSession(chatId: string, scope: CodexSessionScope = "main"): SessionContext {
+    const key = CodexAppServerManager.keyFor(chatId, scope)
+    const context = this.sessions.get(key)
     if (!context || context.closed) {
-      throw new Error("Codex session not started")
+      throw new Error(`Codex session ${key} is not running`)
     }
     return context
   }

@@ -1439,6 +1439,7 @@ export type BackgroundTask =
       kind: "codex_session"
       id: string
       chatId: string
+      scope?: "main" | `sub:${string}`   // optional for back-compat with pre-migration in-memory tasks
       pid: number | null
       startedAt: number
       lastOutput: string

@@ -913,7 +913,7 @@ export class AgentCoordinator {
         this.terminalManager?.close(task.ptyId)
       },
       shutdownCodex: async (task) => {
-        this.codexManager.stopSession(task.chatId)
+        this.codexManager.stopSession(task.chatId, task.scope ?? "main")
       },
     })
   }
