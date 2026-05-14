@@ -39,6 +39,11 @@ import {
   type OAuthTokenEntry,
   type OAuthTokenStatus,
   type ProviderPreference,
+  type Subagent,
+  type SubagentContextScope,
+  type SubagentInput,
+  type SubagentPatch,
+  type SubagentValidationError,
   type UploadSettings,
 } from "../shared/types"
 
@@ -70,6 +75,7 @@ interface AppSettingsFile {
   auth?: unknown
   claudeAuth?: unknown
   uploads?: unknown
+  subagents?: unknown
 }
 
 interface AppSettingsState extends AppSettingsSnapshot {
@@ -91,6 +97,16 @@ const MAX_TERMINAL_MIN_COLUMN_WIDTH = 900
 const DEFAULT_EDITOR_PRESET: EditorPreset = "cursor"
 const DEFAULT_CHAT_SOUND_PREFERENCE: ChatSoundPreference = "always"
 const DEFAULT_CHAT_SOUND_ID: ChatSoundId = "funk"
+const SUBAGENT_NAME_REGEX = /^[a-z0-9_-]+$/
+const SUBAGENT_RESERVED_NAMES = new Set(["agent", "agents"])
+const SUBAGENT_NAME_MAX = 64
+
+class SubagentValidationException extends Error {
+  constructor(readonly validationError: SubagentValidationError) {
+    super(validationError.message)
+    this.name = "SubagentValidationException"
+  }
+}
 
 async function atomicWriteJson(filePath: string, content: string) {
   const tmpPath = `${filePath}.${process.pid}.${randomUUID()}.tmp`
@@ -324,6 +340,90 @@ function normalizeUploadSettings(value: unknown, warnings: string[]): UploadSett
   return { maxFileSizeMb }
 }
 
+function validateSubagentName(
+  rawName: string,
+  existingIds: { id: string; name: string }[],
+  ignoreId?: string,
+): SubagentValidationError | null {
+  const name = rawName.trim()
+  if (!name) return { code: "EMPTY_NAME", message: "Name is required" }
+  if (name.length > SUBAGENT_NAME_MAX) {
+    return { code: "TOO_LONG", message: `Name must be <= ${SUBAGENT_NAME_MAX} chars` }
+  }
+  if (name.startsWith(".") || name.includes("/")) {
+    return { code: "INVALID_CHAR", message: "Name cannot contain '/' or start with '.'" }
+  }
+  if (SUBAGENT_RESERVED_NAMES.has(name.toLowerCase())) {
+    return { code: "RESERVED_NAME", message: `'${name}' is reserved` }
+  }
+  const lower = name.toLowerCase()
+  for (const existing of existingIds) {
+    if (existing.id === ignoreId) continue
+    if (existing.name.toLowerCase() === lower) {
+      return { code: "DUPLICATE_NAME", message: `Name '${name}' already in use` }
+    }
+  }
+  if (!SUBAGENT_NAME_REGEX.test(name)) {
+    return { code: "INVALID_CHAR", message: "Name must match [a-z0-9_-]+" }
+  }
+  return null
+}
+
+function normalizeSubagentEntry(value: unknown, warnings: string[]): Subagent | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null
+  const source = value as Record<string, unknown>
+  if (typeof source.id !== "string" || !source.id.trim()) return null
+  if (typeof source.name !== "string") return null
+  const provider = source.provider === "claude" || source.provider === "codex" ? source.provider : null
+  if (!provider) {
+    warnings.push(`Subagent '${source.id}' has invalid provider; dropped`)
+    return null
+  }
+  const rawModelOptions = source.modelOptions && typeof source.modelOptions === "object" && !Array.isArray(source.modelOptions)
+    ? source.modelOptions as Record<string, unknown>
+    : {}
+  const model = provider === "claude"
+    ? normalizeClaudeModelId(typeof source.model === "string" ? source.model : undefined)
+    : normalizeCodexModelId(typeof source.model === "string" ? source.model : undefined)
+  const modelOptions = provider === "claude"
+    ? normalizeClaudePreference({ model, modelOptions: rawModelOptions }).modelOptions
+    : normalizeCodexPreference({ model, modelOptions: rawModelOptions }).modelOptions
+  const contextScope: SubagentContextScope =
+    source.contextScope === "full-transcript" ? "full-transcript" : "previous-assistant-reply"
+  return {
+    id: source.id.trim(),
+    name: source.name.trim(),
+    description: typeof source.description === "string" ? source.description : undefined,
+    provider,
+    model,
+    modelOptions,
+    systemPrompt: typeof source.systemPrompt === "string" ? source.systemPrompt : "",
+    contextScope,
+    createdAt: typeof source.createdAt === "number" && Number.isFinite(source.createdAt) ? source.createdAt : Date.now(),
+    updatedAt: typeof source.updatedAt === "number" && Number.isFinite(source.updatedAt) ? source.updatedAt : Date.now(),
+  }
+}
+
+function normalizeSubagents(value: unknown, warnings: string[]): Subagent[] {
+  if (value === undefined) return []
+  if (!Array.isArray(value)) {
+    warnings.push("subagents must be an array")
+    return []
+  }
+  const out: Subagent[] = []
+  for (const entry of value) {
+    const normalized = normalizeSubagentEntry(entry, warnings)
+    if (!normalized) continue
+    const error = validateSubagentName(normalized.name, out.map((s) => ({ id: s.id, name: s.name })))
+    if (error) {
+      warnings.push(`Subagent '${normalized.id}' rejected: ${error.message}`)
+      continue
+    }
+    out.push(normalized)
+  }
+  return out.sort((a, b) => a.createdAt - b.createdAt)
+}
+
 function normalizeOAuthTokenStatus(value: unknown): OAuthTokenStatus {
   return value === "limited" || value === "error" ? value : "active"
 }
@@ -388,6 +488,7 @@ function toFilePayload(state: AppSettingsState) {
     auth: state.auth,
     claudeAuth: state.claudeAuth,
     uploads: state.uploads,
+    subagents: state.subagents,
   }
 }
 
@@ -408,6 +509,7 @@ function toSnapshot(state: AppSettingsState): AppSettingsSnapshot {
     auth: state.auth,
     claudeAuth: state.claudeAuth,
     uploads: state.uploads,
+    subagents: state.subagents,
   }
 }
 
@@ -442,6 +544,7 @@ function normalizeAppSettings(
   const auth = normalizeAuthSettings(source?.auth, warnings)
   const claudeAuth = normalizeClaudeAuth(source?.claudeAuth, warnings)
   const uploads = normalizeUploadSettings(source?.uploads, warnings)
+  const subagents = normalizeSubagents(source?.subagents, warnings)
 
   const editorPreset = normalizeEditorPreset(source?.editor?.preset)
   const state: AppSettingsState = {
@@ -467,6 +570,7 @@ function normalizeAppSettings(
     auth,
     claudeAuth,
     uploads,
+    subagents,
   }
 
   const shouldWrite = JSON.stringify(source ? toComparablePayload(source) : null) !== JSON.stringify(toFilePayload(state))
@@ -497,10 +601,61 @@ function toComparablePayload(source: AppSettingsFile) {
     auth: source.auth,
     claudeAuth: source.claudeAuth,
     uploads: source.uploads,
+    subagents: source.subagents,
   }
 }
 
 function applyPatch(state: AppSettingsState, patch: AppSettingsPatch): AppSettingsState {
+  let nextSubagents = state.subagents
+  if (patch.subagents?.create) {
+    const input = patch.subagents.create
+    const error = validateSubagentName(input.name, state.subagents.map((s) => ({ id: s.id, name: s.name })))
+    if (error) throw new SubagentValidationException(error)
+    const now = Date.now()
+    nextSubagents = [
+      ...state.subagents,
+      {
+        id: randomUUID(),
+        name: input.name.trim(),
+        description: input.description?.trim() || undefined,
+        provider: input.provider,
+        model: input.model,
+        modelOptions: input.modelOptions,
+        systemPrompt: input.systemPrompt,
+        contextScope: input.contextScope,
+        createdAt: now,
+        updatedAt: now,
+      },
+    ]
+  } else if (patch.subagents?.update) {
+    const { id, patch: subagentPatch } = patch.subagents.update
+    const index = state.subagents.findIndex((subagent) => subagent.id === id)
+    if (index < 0) {
+      throw new SubagentValidationException({ code: "NOT_FOUND", message: `Subagent ${id} not found` })
+    }
+    const existing = state.subagents[index]
+    const nextName = subagentPatch.name !== undefined ? subagentPatch.name.trim() : existing.name
+    if (subagentPatch.name !== undefined) {
+      const error = validateSubagentName(nextName, state.subagents.map((s) => ({ id: s.id, name: s.name })), id)
+      if (error) throw new SubagentValidationException(error)
+    }
+    const merged: Subagent = {
+      ...existing,
+      ...subagentPatch,
+      name: nextName,
+      description: subagentPatch.description === null
+        ? undefined
+        : subagentPatch.description !== undefined
+          ? subagentPatch.description.trim() || undefined
+          : existing.description,
+      modelOptions: { ...existing.modelOptions, ...(subagentPatch.modelOptions ?? {}) } as Subagent["modelOptions"],
+      updatedAt: Date.now(),
+    }
+    nextSubagents = [...state.subagents.slice(0, index), merged, ...state.subagents.slice(index + 1)]
+  } else if (patch.subagents?.delete) {
+    nextSubagents = state.subagents.filter((subagent) => subagent.id !== patch.subagents?.delete?.id)
+  }
+
   return normalizeAppSettings({
     ...toFilePayload(state),
     ...patch,
@@ -545,6 +700,7 @@ function applyPatch(state: AppSettingsState, patch: AppSettingsPatch): AppSettin
       ...state.uploads,
       ...patch.uploads,
     },
+    subagents: nextSubagents,
   }, state.filePathDisplay).payload
 }
 
@@ -665,6 +821,36 @@ export class AppSettingsManager {
   async mutateTokenStatus(id: string, patch: StatusPatch) {
     const tokens = this.state.claudeAuth.tokens.map((t) => t.id === id ? { ...t, ...patch } : t)
     return this.setClaudeAuth({ tokens })
+  }
+
+  async createSubagent(input: SubagentInput): Promise<SubagentValidationError | Subagent> {
+    try {
+      const snapshot = await this.writePatch({ subagents: { create: input } })
+      return snapshot.subagents[snapshot.subagents.length - 1]
+        ?? { code: "NOT_FOUND", message: "Created subagent not found" }
+    } catch (error) {
+      if (error instanceof SubagentValidationException) {
+        return error.validationError
+      }
+      throw error
+    }
+  }
+
+  async updateSubagent(id: string, patch: SubagentPatch): Promise<SubagentValidationError | Subagent> {
+    try {
+      const snapshot = await this.writePatch({ subagents: { update: { id, patch } } })
+      return snapshot.subagents.find((subagent) => subagent.id === id)
+        ?? { code: "NOT_FOUND", message: `Subagent ${id} not found` }
+    } catch (error) {
+      if (error instanceof SubagentValidationException) {
+        return error.validationError
+      }
+      throw error
+    }
+  }
+
+  async deleteSubagent(id: string): Promise<void> {
+    await this.writePatch({ subagents: { delete: { id } } })
   }
 
   async writePatch(patch: AppSettingsPatch) {

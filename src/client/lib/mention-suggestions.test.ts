@@ -41,7 +41,7 @@ describe("applyMentionToInput", () => {
       value: "@src",
       caret: 4,
       tokenStart: 0,
-      pickedPath: "src/agent.ts",
+      mention: { kind: "path", path: "src/agent.ts" },
     })
     expect(result.value).toBe("@src/agent.ts")
     expect(result.caret).toBe("@src/agent.ts".length)
@@ -52,7 +52,7 @@ describe("applyMentionToInput", () => {
       value: "hi @src tail",
       caret: 7,
       tokenStart: 3,
-      pickedPath: "src/agent.ts",
+      mention: { kind: "path", path: "src/agent.ts" },
     })
     expect(result.value).toBe("hi @src/agent.ts tail")
     expect(result.caret).toBe("hi @src/agent.ts".length)
@@ -63,7 +63,7 @@ describe("applyMentionToInput", () => {
       value: "@",
       caret: 1,
       tokenStart: 0,
-      pickedPath: "README.md",
+      mention: { kind: "path", path: "README.md" },
     })
     expect(result.value).toBe("@README.md")
     expect(result.caret).toBe("@README.md".length)
@@ -74,9 +74,20 @@ describe("applyMentionToInput", () => {
       value: "@src",
       caret: 4,
       tokenStart: 0,
-      pickedPath: "src/",
+      mention: { kind: "path", path: "src/" },
     })
     expect(result.value).toBe("@src/")
     expect(result.caret).toBe("@src/".length)
+  })
+
+  test("replaces token with @agent/name", () => {
+    const result = applyMentionToInput({
+      value: "@agent/re",
+      caret: 9,
+      tokenStart: 0,
+      mention: { kind: "agent", name: "reviewer" },
+    })
+    expect(result.value).toBe("@agent/reviewer")
+    expect(result.caret).toBe("@agent/reviewer".length)
   })
 })

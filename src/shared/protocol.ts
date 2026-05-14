@@ -19,6 +19,10 @@ import type {
   SidebarData,
   StandaloneTranscriptAttachmentMode,
   StandaloneTranscriptExportResult,
+  Subagent,
+  SubagentInput,
+  SubagentPatch,
+  SubagentValidationError,
   UpdateSnapshot,
   EditorPreset,
 } from "./types"
@@ -65,6 +69,12 @@ export type BackgroundTaskDiffEvent =
   | { type: "bg-tasks.updated"; task: BackgroundTask }
   | { type: "bg-tasks.removed"; task: BackgroundTask }
 
+export type SubagentCommandResult =
+  | { ok: true; subagent: Subagent }
+  | { ok: false; error: SubagentValidationError }
+
+export type SubagentDeleteResult = { ok: true }
+
 export type WsEvent = TerminalEvent | BackgroundTaskDiffEvent
 
 export type ClientCommand =
@@ -93,6 +103,9 @@ export type ClientCommand =
   | { type: "appSettings.setClaudeAuth"; patch: Partial<ClaudeAuthSettings> }
   | { type: "appSettings.testOAuthToken"; token: string }
   | { type: "settings.writeAppSettingsPatch"; patch: AppSettingsPatch }
+  | { type: "subagent.create"; input: SubagentInput }
+  | { type: "subagent.update"; id: string; patch: SubagentPatch }
+  | { type: "subagent.delete"; id: string }
   | { type: "settings.readLlmProvider" }
   | { type: "skills.search"; query: string; limit?: number }
   | { type: "skills.install"; source: string; skillId: string }

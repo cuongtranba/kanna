@@ -198,6 +198,54 @@ export type ChatProviderPreferences = {
   codex: ProviderPreference<CodexModelOptions>
 }
 
+export type SubagentContextScope = "previous-assistant-reply" | "full-transcript"
+
+export interface Subagent {
+  id: string
+  name: string
+  description?: string
+  provider: AgentProvider
+  model: string
+  modelOptions: ClaudeModelOptions | CodexModelOptions
+  systemPrompt: string
+  contextScope: SubagentContextScope
+  createdAt: number
+  updatedAt: number
+}
+
+export interface SubagentInput {
+  name: string
+  description?: string
+  provider: AgentProvider
+  model: string
+  modelOptions: ClaudeModelOptions | CodexModelOptions
+  systemPrompt: string
+  contextScope: SubagentContextScope
+}
+
+export interface SubagentPatch {
+  name?: string
+  description?: string | null
+  provider?: AgentProvider
+  model?: string
+  modelOptions?: Partial<ClaudeModelOptions> | Partial<CodexModelOptions>
+  systemPrompt?: string
+  contextScope?: SubagentContextScope
+}
+
+export type SubagentValidationErrorCode =
+  | "EMPTY_NAME"
+  | "INVALID_CHAR"
+  | "RESERVED_NAME"
+  | "DUPLICATE_NAME"
+  | "TOO_LONG"
+  | "NOT_FOUND"
+
+export interface SubagentValidationError {
+  code: SubagentValidationErrorCode
+  message: string
+}
+
 export type ModelOptions = Partial<{
   [K in AgentProvider]: Partial<ProviderModelOptionsByProvider[K]>
 }>
@@ -564,6 +612,7 @@ export interface AppSettingsSnapshot {
   auth: AuthSettings
   claudeAuth: ClaudeAuthSettings
   uploads: UploadSettings
+  subagents: Subagent[]
 }
 
 export interface AppSettingsPatch {
@@ -583,6 +632,11 @@ export interface AppSettingsPatch {
   auth?: Partial<AuthSettings>
   claudeAuth?: Partial<ClaudeAuthSettings>
   uploads?: Partial<UploadSettings>
+  subagents?: {
+    create?: SubagentInput
+    update?: { id: string; patch: SubagentPatch }
+    delete?: { id: string }
+  }
 }
 
 export interface LlmProviderFile {
@@ -814,6 +868,8 @@ export interface UserPromptEntry extends TranscriptEntryBase {
   attachments?: ChatAttachment[]
   steered?: boolean
   autoContinue?: { scheduleId: string }
+  subagentMentions?: Array<{ subagentId: string; raw: string }>
+  unknownSubagentMentions?: Array<{ name: string; raw: string }>
 }
 
 export interface SystemInitEntry extends TranscriptEntryBase {

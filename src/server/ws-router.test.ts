@@ -111,6 +111,7 @@ const DEFAULT_APP_SETTINGS_SNAPSHOT: AppSettingsSnapshot = {
   warning: null,
   filePathDisplay: "~/.kanna/data/settings.json",
   uploads: UPLOAD_DEFAULTS,
+  subagents: [],
 }
 
 describe("isBenignStaleStateMessage", () => {

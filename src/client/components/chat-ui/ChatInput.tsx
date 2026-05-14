@@ -1,12 +1,13 @@
 import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { SlashCommandPicker } from "./SlashCommandPicker"
-import { MentionPicker } from "./MentionPicker"
+import { MentionPicker, type MentionPickerItem } from "./MentionPicker"
 import { applyCommandToInput, filterCommands, shouldShowPicker } from "../../lib/slash-commands"
 import { applyMentionToInput, shouldShowMentionPicker } from "../../lib/mention-suggestions"
 import { useMentionSuggestions, type ProjectPath } from "../../hooks/useMentionSuggestions"
+import { useSubagentSuggestions } from "../../hooks/useSubagentSuggestions"
 import { useSlashCommands, useSlashCommandsLoading } from "../../hooks/useSlashCommands"
 import type { SlashCommand } from "../../../shared/types"
-import { ArrowUp, Paperclip } from "lucide-react"
+import { ArrowUp, Bot, Paperclip } from "lucide-react"
 import {
   type AgentProvider,
   type ChatAttachment,
@@ -33,6 +34,15 @@ import { AttachmentPreviewModal } from "../messages/AttachmentPreviewModal"
 import { classifyAttachmentPreview } from "../messages/attachmentPreview"
 import { overrideContextWindowMaxTokens, type ContextWindowSnapshot } from "../../lib/contextWindow"
 import { uploadFile, UploadAbortedError } from "../../lib/uploadFile"
+import { useAppSettingsStore } from "../../stores/appSettingsStore"
+import { createAgentMentionRegex } from "../../../shared/mention-pattern"
+import type { Subagent } from "../../../shared/types"
+
+const EMPTY_SUBAGENTS: Subagent[] = []
+
+type MentionChip =
+  | { kind: "ok"; label: string; id: string }
+  | { kind: "missing"; label: string }
 
 const MAX_FILES_PER_DROP = 50
 const MAX_CONCURRENT_UPLOADS = 3
@@ -272,11 +282,31 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput({
     query: mentionTrigger.query,
     enabled: mentionTrigger.open && !mentionDismissed,
   })
+  const subagentMentionState = useSubagentSuggestions({
+    query: mentionTrigger.query,
+    enabled: mentionTrigger.open && !mentionDismissed,
+  })
+  const mentionItems = useMemo<MentionPickerItem[]>(() => [
+    ...subagentMentionState.items,
+    ...mentionState.items.map((item) => ({ kind: "path" as const, path: item })),
+  ], [mentionState.items, subagentMentionState.items])
+  const subagentsForChips = useAppSettingsStore((state) => state.settings?.subagents ?? EMPTY_SUBAGENTS)
+  const mentionChips = useMemo<MentionChip[]>(() => {
+    const byNameLower = new Map(subagentsForChips.map((subagent) => [subagent.name.toLowerCase(), subagent]))
+    const matches = [...value.matchAll(createAgentMentionRegex())]
+    return matches.map((match) => {
+      const name = match[2]
+      const hit = byNameLower.get(name.toLowerCase())
+      return hit
+        ? { kind: "ok" as const, label: hit.name, id: hit.id }
+        : { kind: "missing" as const, label: name }
+    })
+  }, [value, subagentsForChips])
   const mentionOpen =
     mentionTrigger.open &&
     !mentionDismissed &&
     !pickerOpen &&
-    (mentionState.items.length > 0 || mentionState.loading)
+    (mentionItems.length > 0 || mentionState.loading)
 
   useEffect(() => {
     if (mentionOpen) setMentionIndex(0)
@@ -303,26 +333,46 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput({
     })
   }
 
-  function acceptMention(item: ProjectPath) {
+  function acceptMention(item: MentionPickerItem) {
+    if (item.kind === "agent") {
+      const { value: nextValue, caret: nextCaret } = applyMentionToInput({
+        value,
+        caret,
+        tokenStart: mentionTrigger.tokenStart,
+        mention: { kind: "agent", name: item.subagent.name },
+      })
+      setValue(nextValue)
+      if (chatId) setDraft(chatId, nextValue)
+      setMentionDismissed(true)
+      requestAnimationFrame(() => {
+        const el = textareaRef.current
+        if (!el) return
+        el.focus()
+        el.setSelectionRange(nextCaret, nextCaret)
+      })
+      return
+    }
+
     if (!projectId) {
       setMentionDismissed(true)
       return
     }
+    const pathItem: ProjectPath = item.path
     const { value: nextValue, caret: nextCaret } = applyMentionToInput({
       value,
       caret,
       tokenStart: mentionTrigger.tokenStart,
-      pickedPath: item.path,
+      mention: { kind: "path", path: pathItem.path },
     })
     setValue(nextValue)
     if (chatId) setDraft(chatId, nextValue)
 
-    const relativeForAttachment = item.path.endsWith("/") ? item.path.slice(0, -1) : item.path
+    const relativeForAttachment = pathItem.path.endsWith("/") ? pathItem.path.slice(0, -1) : pathItem.path
     const alreadyMentioned = attachments.some(
       (a) => a.kind === "mention" && a.relativePath === `./${relativeForAttachment}`,
     )
     if (!alreadyMentioned) {
-      const contentUrl = item.kind === "file"
+      const contentUrl = pathItem.kind === "file"
         ? `/api/projects/${projectId}/files/${encodeURIComponent(relativeForAttachment)}/content`
         : ""
       setAttachments((prev) => [
@@ -701,7 +751,7 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput({
       }
       if (event.key === "ArrowDown") {
         event.preventDefault()
-        setMentionIndex((i) => Math.min(mentionState.items.length - 1, i + 1))
+        setMentionIndex((i) => Math.min(mentionItems.length - 1, i + 1))
         return
       }
       if (event.key === "ArrowUp") {
@@ -711,7 +761,7 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput({
       }
       if (event.key === "Enter" || event.key === "Tab") {
         event.preventDefault()
-        const item = mentionState.items[mentionIndex]
+        const item = mentionItems[mentionIndex]
         if (item) acceptMention(item)
         return
       }
@@ -846,6 +896,25 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput({
     <div>
       <div className={cn("px-3 pt-0", isStandalone && "px-5")}>
         <div className="max-w-[840px] mx-auto rounded-[32px]">
+          {mentionChips.length > 0 ? (
+            <div className="flex flex-wrap gap-1 px-2 pt-2">
+              {mentionChips.map((chip, i) => (
+                <span
+                  key={`${chip.kind}:${chip.label}:${i}`}
+                  className={cn(
+                    "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs",
+                    chip.kind === "ok"
+                      ? "bg-accent text-accent-foreground"
+                      : "bg-destructive/15 text-destructive",
+                  )}
+                >
+                  <Bot className="h-3 w-3" />
+                  agent/{chip.label}
+                  {chip.kind === "missing" && <span className="ml-1 font-medium">unknown</span>}
+                </span>
+              ))}
+            </div>
+          ) : null}
           {attachments.length > 0 ? (
             <ScrollArea className="overflow-x-auto overflow-y-hidden whitespace-nowrap px-2 pb-2">
               <div className="flex items-end gap-2 pt-2">
@@ -891,7 +960,7 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput({
             )}
             {mentionOpen && (
               <MentionPicker
-                items={mentionState.items}
+                items={mentionItems}
                 activeIndex={mentionIndex}
                 loading={mentionState.loading}
                 onSelect={acceptMention}

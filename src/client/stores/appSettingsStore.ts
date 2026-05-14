@@ -59,6 +59,7 @@ export function mergeAppSettingsPatch(
       ...settings.uploads,
       ...patch.uploads,
     },
+    subagents: settings.subagents,
   }
 }
 

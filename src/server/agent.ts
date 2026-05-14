@@ -12,6 +12,7 @@ import type {
   KannaStatus,
   QueuedChatMessage,
   SlashCommand,
+  Subagent,
   TranscriptEntry,
 } from "../shared/types"
 import type { ChatRecord } from "./events"
@@ -41,6 +42,7 @@ import type { TunnelGateway } from "./cloudflare-tunnel/gateway"
 import type { BackgroundTaskRegistry } from "./background-tasks"
 import type { TerminalManager } from "./terminal-manager"
 import { OAuthTokenPool } from "./oauth-pool/oauth-token-pool"
+import { parseMentions, type ParsedMention } from "./mention-parser"
 
 export function resolveSpawnPaths(
   chat: Pick<ChatRecord, "id" | "stackBindings">,
@@ -158,6 +160,7 @@ interface AgentCoordinatorArgs {
   codexLimitDetector?: LimitDetector
   scheduleManager?: ScheduleManager
   getAutoResumePreference?: () => boolean
+  getSubagents?: () => Subagent[]
   throwOnClaudeSessionStart?: boolean
   backgroundTasks?: BackgroundTaskRegistry
   oauthPool?: OAuthTokenPool
@@ -838,6 +841,7 @@ export class AgentCoordinator {
   private readonly codexLimitDetector: LimitDetector
   private readonly scheduleManager: ScheduleManager | null
   private readonly getAutoResumePreference: () => boolean
+  private readonly getSubagents: () => Subagent[]
   private readonly throwOnClaudeSessionStart: boolean
   private readonly autoResumeByChat = new Map<string, boolean>()
   private readonly tunnelGateway: TunnelGateway | null
@@ -859,6 +863,7 @@ export class AgentCoordinator {
     this.codexLimitDetector = args.codexLimitDetector ?? new CodexLimitDetector()
     this.scheduleManager = args.scheduleManager ?? null
     this.getAutoResumePreference = args.getAutoResumePreference ?? (() => false)
+    this.getSubagents = args.getSubagents ?? (() => [])
     this.throwOnClaudeSessionStart = args.throwOnClaudeSessionStart ?? false
     this.tunnelGateway = args.tunnelGateway ?? null
     this.backgroundTasks = args.backgroundTasks ?? null
@@ -1170,8 +1175,23 @@ export class AgentCoordinator {
     }
 
     if (args.appendUserPrompt) {
+      const parsedMentions = parseMentions(args.content, this.getSubagents())
+      const subagentMentions = parsedMentions
+        .filter((mention): mention is Extract<ParsedMention, { kind: "subagent" }> => mention.kind === "subagent")
+        .map((mention) => ({ subagentId: mention.subagentId, raw: mention.raw }))
+      const unknownSubagentMentions = parsedMentions
+        .filter((mention): mention is Extract<ParsedMention, { kind: "unknown-subagent" }> => mention.kind === "unknown-subagent")
+        .map((mention) => ({ name: mention.name, raw: mention.raw }))
       const userPromptEntry = timestamped(
-        { kind: "user_prompt", content: args.content, attachments: args.attachments, steered: args.steered, autoContinue: args.autoContinue },
+        {
+          kind: "user_prompt",
+          content: args.content,
+          attachments: args.attachments,
+          steered: args.steered,
+          autoContinue: args.autoContinue,
+          ...(subagentMentions.length > 0 ? { subagentMentions } : {}),
+          ...(unknownSubagentMentions.length > 0 ? { unknownSubagentMentions } : {}),
+        },
         Date.now()
       )
       await this.store.appendMessage(args.chatId, userPromptEntry)
