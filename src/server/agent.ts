@@ -2413,4 +2413,25 @@ export class AgentCoordinator {
 
     this.emitStateChange(command.chatId)
   }
+
+  async respondSubagentTool(command: Extract<ClientCommand, { type: "chat.respondSubagentTool" }>) {
+    const key = this.subagentPendingKey(command.chatId, command.runId, command.toolUseId)
+    const resolver = this.subagentPendingResolvers.get(key)
+    if (!resolver) {
+      throw new Error("No pending subagent tool")
+    }
+    this.subagentPendingResolvers.delete(key)
+    await this.store.appendSubagentEvent({
+      v: 3,
+      type: "subagent_tool_resolved",
+      timestamp: Date.now(),
+      chatId: command.chatId,
+      runId: command.runId,
+      toolUseId: command.toolUseId,
+      result: command.result,
+      resolution: "user",
+    })
+    resolver.resolve(command.result)
+    this.emitStateChange(command.chatId)
+  }
 }
