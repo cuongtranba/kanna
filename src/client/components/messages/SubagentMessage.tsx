@@ -1,4 +1,4 @@
-import { Bot } from "lucide-react"
+import { Bot, X } from "lucide-react"
 import type { AskUserQuestionAnswerMap, AskUserQuestionItem, SubagentRunSnapshot } from "../../../shared/types"
 import { processTranscriptMessages } from "../../lib/parseTranscript"
 import { cn } from "../../lib/utils"
@@ -23,6 +23,7 @@ interface SubagentMessageProps {
     toolUseId: string,
     response: { confirmed: boolean; clearContext?: boolean; message?: string },
   ) => void
+  onCancelSubagentRun?: (chatId: string, runId: string) => void
 }
 
 export function SubagentMessage({
@@ -33,6 +34,7 @@ export function SubagentMessage({
   onRetry,
   onSubagentAskUserQuestionSubmit,
   onSubagentExitPlanModeSubmit,
+  onCancelSubagentRun,
 }: SubagentMessageProps) {
   const messages = processTranscriptMessages(run.entries)
   const hasAnyText = messages.some((m) => m.kind === "assistant_text")
@@ -55,6 +57,17 @@ export function SubagentMessage({
           <span className="ml-auto inline-block animate-pulse">
             {isStreaming ? "streaming..." : "running..."}
           </span>
+        )}
+        {onCancelSubagentRun && run.status === "running" && (
+          <button
+            type="button"
+            data-testid={`subagent-cancel:${run.runId}`}
+            aria-label="Cancel subagent"
+            onClick={() => onCancelSubagentRun(run.chatId, run.runId)}
+            className="text-muted-foreground hover:text-foreground"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
         )}
       </header>
       {messages.map((m) => (

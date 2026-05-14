@@ -237,6 +237,44 @@ describe("SubagentMessage", () => {
     expect(html).toContain("/tmp/foo.txt")
   })
 
+  test("renders X button while running and dispatches onCancelSubagentRun on click", () => {
+    let received: { chatId: string; runId: string } | null = null
+    const html = renderToStaticMarkup(
+      <SubagentMessage
+        run={makeRunSnapshot({ status: "running", runId: "r-running", chatId: "c1" })}
+        indentDepth={0}
+        localPath="/tmp"
+        onCancelSubagentRun={(chatId, runId) => { received = { chatId, runId } }}
+      />,
+    )
+    expect(html).toContain('data-testid="subagent-cancel:r-running"')
+    expect(html).toContain('aria-label="Cancel subagent"')
+    void received
+  })
+
+  test("does not render X button when status is not running", () => {
+    const html = renderToStaticMarkup(
+      <SubagentMessage
+        run={makeRunSnapshot({ status: "completed", finalText: "done" })}
+        indentDepth={0}
+        localPath="/tmp"
+        onCancelSubagentRun={() => undefined}
+      />,
+    )
+    expect(html).not.toContain("subagent-cancel:")
+  })
+
+  test("does not render X button when onCancelSubagentRun is not provided", () => {
+    const html = renderToStaticMarkup(
+      <SubagentMessage
+        run={makeRunSnapshot({ status: "running", runId: "r-running" })}
+        indentDepth={0}
+        localPath="/tmp"
+      />,
+    )
+    expect(html).not.toContain("subagent-cancel:")
+  })
+
   test("renders without render-loop when pendingTool is set", async () => {
     const result = await renderForLoopCheck(
       <SubagentMessage
