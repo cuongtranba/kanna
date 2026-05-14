@@ -27,10 +27,11 @@ class FakeElement {
     }
   }
 
-  closest(selector: string) {
+  closest(selector: string): Element | null {
     const attributeMatch = selector.match(/^\[(.+)\]$/)
     if (!attributeMatch) return null
     const attribute = attributeMatch[1]
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
     let current: FakeElement | null = this
     while (current) {
       if (current.attributes.has(attribute)) return current as unknown as Element

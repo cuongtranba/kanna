@@ -197,7 +197,7 @@ export async function fetchTextPreview(url: string, limitBytes: number): Promise
     return { content: new TextDecoder().decode(bytes), truncated }
   } catch (error) {
     if (isPreviewTimeout(error)) {
-      throw new Error("Preview request timed out")
+      throw new Error("Preview request timed out", { cause: error })
     }
     throw error
   } finally {

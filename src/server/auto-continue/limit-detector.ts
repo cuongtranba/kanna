@@ -180,7 +180,7 @@ export class CodexLimitDetector implements LimitDetector {
     const isRateLimit = data?.code === "rate_limit" || rpc.code === -32001
     if (!isRateLimit) return null
 
-    let resetAt: number | null = null
+    let resetAt: number | null
     if (typeof data?.resets_at_ms === "number" && Number.isFinite(data.resets_at_ms)) {
       resetAt = data.resets_at_ms
     } else {

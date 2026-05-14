@@ -19,6 +19,7 @@ export function AutoContinueCard({ schedule, onAccept, onReschedule, onCancel }:
   const [editing, setEditing] = useState(false)
 
   const parsed = useMemo(() => parseLocal(draft, schedule.tz), [draft, schedule.tz])
+  // eslint-disable-next-line react-hooks/purity
   const isFuture = parsed !== null && parsed > Date.now()
   const inputInvalid = parsed === null ? "Use format dd/mm/yyyy hh:mm" :
     !isFuture ? "Time must be in the future" : null
@@ -33,6 +34,7 @@ export function AutoContinueCard({ schedule, onAccept, onReschedule, onCancel }:
   }
 
   if (schedule.state === "proposed") {
+    // eslint-disable-next-line react-hooks/purity
     const passed = schedule.resetAt <= Date.now()
     const actions: CardAction[] = [
       {

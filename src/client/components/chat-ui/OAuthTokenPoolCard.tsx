@@ -241,6 +241,7 @@ export function OAuthTokenPoolCard({
   onTest,
   now: nowProp,
 }: OAuthTokenPoolCardProps) {
+  // eslint-disable-next-line react-hooks/purity
   const now = nowProp ?? Date.now()
 
   const currentId = tokens.reduce<OAuthTokenEntry | null>(

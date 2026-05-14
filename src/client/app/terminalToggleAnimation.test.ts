@@ -16,7 +16,7 @@ describe("terminalToggleAnimation", () => {
 
     const midpoint = interpolateLayout([100, 0], [68, 32], 0.5)
     expect(midpoint[0]).toBeCloseTo(75.18203798328659, 5)
-    expect(midpoint[1]).toBeCloseTo(24.817962016713415, 5)
+    expect(midpoint[1]).toBeCloseTo(24.81796201671341, 5)
   })
 
   test("animates the first open after the project view is already mounted", () => {
