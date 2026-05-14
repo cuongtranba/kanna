@@ -3590,4 +3590,54 @@ describe("AgentCoordinator subagent mention gating", () => {
       result: { answers: {} },
     })
   })
+
+  test("cancelSubagentRun aborts a running subagent and broadcasts state change", async () => {
+    const store = createFakeStore()
+    const emits: string[] = []
+    const coordinator = new AgentCoordinator({
+      store: store as never,
+      onStateChange: (chatId) => { if (chatId) emits.push(chatId) },
+      getSubagents: () => [makeSubagentRecord({ id: "sa-1", name: "alpha" })],
+      getAppSettingsSnapshot: () => ({ claudeAuth: { authenticated: true } }),
+      startClaudeSession: async () => {
+        async function* stream() {
+          // Block indefinitely; the orchestrator's abort race resolves the
+          // run via USER_CANCELLED once cancelSubagentRun fires.
+          await new Promise<void>(() => {})
+          yield { type: "transcript" as const, entry: timestamped({ kind: "result", subtype: "success" as const }) }
+        }
+        return {
+          provider: "claude" as const,
+          stream: stream(),
+          interrupt: async () => {},
+          close: () => {},
+          sendPrompt: async () => {},
+          setModel: async () => {},
+          setPermissionMode: async () => {},
+          getSupportedCommands: async () => [],
+        }
+      },
+    })
+
+    await coordinator.send({
+      type: "chat.send",
+      chatId: "chat-1",
+      provider: "claude",
+      content: "@agent/alpha",
+      model: "claude-opus-4-7",
+    })
+    await waitFor(() => store.subagentEvents.some((e: any) => e.type === "subagent_run_started"))
+    const runId = Object.keys(store.getSubagentRuns())[0]!
+
+    await coordinator.cancelSubagentRun({
+      type: "chat.cancelSubagentRun",
+      chatId: "chat-1",
+      runId,
+    })
+    await waitFor(() => store.subagentEvents.some((e: any) =>
+      e.type === "subagent_run_failed" && e.runId === runId && e.error.code === "USER_CANCELLED",
+    ))
+    // emitStateChange fires from onRunTerminal hook.
+    expect(emits).toContain("chat-1")
+  }, 10_000)
 })

@@ -907,7 +907,13 @@ export class AgentCoordinator {
       store: this.store,
       appSettings: { getSnapshot: () => ({ subagents: this.getSubagents() }) },
       startProviderRun: ({ subagent, chatId, primer, runId, abortSignal }) => this.buildSubagentProviderRunForChat({ subagent, chatId, primer, runId, abortSignal }),
-      onRunTerminal: (chatId, runId) => this.rejectPendingResolversForRun(chatId, runId),
+      onRunTerminal: (chatId, runId) => {
+        this.rejectPendingResolversForRun(chatId, runId)
+        // failRun appended the terminal event synchronously before invoking
+        // this hook, so the store already has the new state. Emit now so
+        // multi-subagent fan-outs do not have to wait for Promise.all.
+        this.emitStateChange(chatId)
+      },
     })
     this.throwOnClaudeSessionStart = args.throwOnClaudeSessionStart ?? false
     this.tunnelGateway = args.tunnelGateway ?? null
@@ -2481,5 +2487,11 @@ export class AgentCoordinator {
     this.subagentOrchestrator.notifySubagentToolResolved(command.runId)
     resolver.resolve(command.result)
     this.emitStateChange(command.chatId)
+  }
+
+  async cancelSubagentRun(
+    command: Extract<ClientCommand, { type: "chat.cancelSubagentRun" }>,
+  ) {
+    this.subagentOrchestrator.cancelRun(command.chatId, command.runId)
   }
 }
