@@ -1,7 +1,7 @@
 # Claude PTY Driver — Design
 
 **Date:** 2026-05-14
-**Status:** Draft v9 — eighth codex adversarial pass applied (allowlist preflight replaced with per-built-in directed probes; indeterminate verdict fails closed; positive control prevents broken allowlists), awaiting user review
+**Status:** Draft v10 — ninth codex adversarial pass applied (allowlist preflight cache tightened: full suite on boot/binary/model-change, sentinel probe per user spawn, no time-based TTL), awaiting user review
 **Author:** session-collaborative
 **Related code:** `src/server/agent.ts`, `src/server/terminal-manager.ts`, `src/server/harness-types.ts`, `src/server/kanna-mcp.ts`
 
@@ -355,15 +355,35 @@ If **any** directed probe fails, the entire suite fails closed for this `(binary
 
 One probe spawns with the same flags and asks the model to call `mcp__kanna__probe_ack(value)` with a fixed argument. This confirms `mcp__kanna__*` tools are reachable (suite passes only if positive control also passes — protects against regressions where the allowlist becomes too restrictive and breaks our own tools).
 
-#### Cache & invalidation
+#### Cache & invalidation (short-lived; per-spawn sentinel)
 
-Cache record per `(binary-sha256, tools-string)`: `{ result, probedAt, claudeVersion, builtinsTested[], scratchPaths }`. TTL 7 days. Invalidated when:
-- Binary sha256 changes (CLI updated).
-- `--tools` string changes (e.g., off-mode adds/removes).
-- New Anthropic CHANGELOG entry detected for `claude-code` (Kanna can opportunistically check via the bundled binary's `--version` → release notes match).
+Allowlist semantics depend on local binary, `--tools` string, **and** server-side model/planner behavior that Anthropic can change without our binary changing. Caching is therefore conservative:
+
+**Two-layer verification:**
+
+1. **Full directed-probe suite** runs at:
+   - Kanna server boot (before the first user-facing PTY spawn of this process lifetime).
+   - First user-facing PTY spawn after `binary-sha256`, `tools-string`, or observed `system.init.model` changes.
+   - Force-refresh from app settings.
+   Cache key: `(binary-sha256, tools-string, systemInitModel, kannaProcessId)`. Note `kannaProcessId` — cache does not survive server restart. Cost: N+1 subscription turns once per server boot.
+
+2. **Cheap sentinel probe** runs **before every user-facing PTY spawn**, except the one that just ran the full suite. The sentinel is one directed `Bash` probe (the highest-impact built-in). Outcomes:
+   - PASS: `mcp__kanna__probe_unavailable("Bash")` observed → user-facing PTY proceeds.
+   - FAIL — built-in reachable: any `tool_use` for `Bash` (or other disallowed built-in) → fail closed, invalidate full-suite cache for this `(binary, tools)`, trigger full-suite re-probe before any further spawn.
+   - FAIL — indeterminate (no signal in 1 turn): fail closed for this spawn; the user can retry, which re-runs the sentinel.
+   Cost: 1 subscription turn per user-facing PTY spawn (sub-second model time, single token-light prompt).
+
+**Why the sentinel:** It's a tripwire for remote behavior drift. Even if Anthropic silently changes the planner to expose `Bash` under `--tools "mcp__kanna__*"`, the next user-facing spawn catches it before the user sees the PTY. The cost is one cheap turn per spawn; the alternative is a multi-day window of un-gated tool execution.
+
+**Cache invalidation triggers:**
+- Server restart (process id changes).
+- Binary sha256 changes.
+- `--tools` string changes.
+- Observed `system.init.model` from any prior spawn changes.
+- Sentinel probe ever fails — invalidates **immediately**, blocks further spawns until full suite re-runs and passes.
 - Force-refresh from app settings.
 
-The probe suite costs N+1 subscription-billed turns per CLI version per 7 days. Negligible.
+There is no time-based TTL. Either the process restarts (re-probe), the model version changes (re-probe), or the sentinel fails (re-probe). Otherwise the cached pass remains valid because we are continuously re-validating per spawn.
 
 #### Tests (`allowlist-preflight.test.ts`)
 
@@ -668,7 +688,7 @@ Any new UI surface (badges, banners, settings toggle) is verified via `renderFor
 | MCP tool callback deadlock turns | Durable per-tool-request state in `EventStore`, server-driven timeout, cancel on close/shutdown/respawn, idempotent retry by HMAC-SHA256 deterministic id. See "Callback protocol" + "Durable approval protocol (unified)". |
 | JSONL replay duplicates or skips events on cold wake | Per-session `(byteOffset, lastEventId)` bookmark in `EventStore`, dedupe scan on truncation/rotation, atomic emit+advance, init event treated as control not transcript. See "Tail semantics". |
 | Permission gate depends on unproven hook behavior | Primary gate is `--tools` allowlist + kanna-mcp routing — no hook dependency. Hook is optional belt-and-suspenders. CLI cannot execute a tool we have not enabled. See "Permission enforcement". |
-| `--tools` allowlist semantics change in future CLI version | **Runtime allowlist preflight** probes the bundled `claude` binary and fails closed if any built-in becomes invokable. Cache by `(binary-sha256, tools-string)`, 7-day TTL. See "Allowlist preflight". |
+| `--tools` allowlist semantics change (CLI version OR Anthropic server-side planner) | **Runtime allowlist preflight** runs a full directed-probe suite at server boot and a single cheap sentinel probe before every user-facing PTY spawn. Any built-in reachable invalidates the cache immediately and blocks further spawns until re-probe passes. See "Allowlist preflight". |
 | Built-in tools (Bash/Edit/Write) execute un-gated | Disabled at spawn via `--tools` allowlist. Model uses `mcp__kanna__*` replacements which Kanna gates synchronously with structured args. |
 | User MCP servers (3rd-party) bypass Kanna gating | Default fail-closed: only `kanna-mcp` is loaded. Third-party MCP requires explicit allowlist AND a functional PreToolUse hook; otherwise spawn refused. See "Third-party MCP servers — fail closed". |
 | Bash auto-allow leaks credentials (`cat ~/.claude/...`) | Bash is parsed (no regex prefix), `readPathDeny` resolved per arg, shell features (pipes/subshell/eval) downgrade to `ask`. `auto-allow` cannot override deny-list. OS sandbox (`sandbox-exec` / `bwrap`) is the secondary gate. |
