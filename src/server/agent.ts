@@ -907,6 +907,7 @@ export class AgentCoordinator {
       store: this.store,
       appSettings: { getSnapshot: () => ({ subagents: this.getSubagents() }) },
       startProviderRun: ({ subagent, chatId, primer, runId }) => this.buildSubagentProviderRunForChat({ subagent, chatId, primer, runId }),
+      onRunTerminal: (chatId, runId) => this.rejectPendingResolversForRun(chatId, runId),
     })
     this.throwOnClaudeSessionStart = args.throwOnClaudeSessionStart ?? false
     this.tunnelGateway = args.tunnelGateway ?? null
@@ -965,6 +966,24 @@ export class AgentCoordinator {
 
   private subagentPendingKey(chatId: string, runId: string, toolUseId: string): string {
     return `${chatId}::${runId}::${toolUseId}`
+  }
+
+  private rejectPendingResolvers(predicate: (key: string) => boolean, reason: string) {
+    for (const [key, resolver] of this.subagentPendingResolvers) {
+      if (!predicate(key)) continue
+      this.subagentPendingResolvers.delete(key)
+      resolver.reject(new Error(reason))
+    }
+  }
+
+  private rejectPendingResolversForChat(chatId: string) {
+    const prefix = `${chatId}::`
+    this.rejectPendingResolvers((k) => k.startsWith(prefix), "chat cancelled")
+  }
+
+  private rejectPendingResolversForRun(chatId: string, runId: string) {
+    const prefix = `${chatId}::${runId}::`
+    this.rejectPendingResolvers((k) => k.startsWith(prefix), "subagent run terminated")
   }
 
   private trackBashToolEntry(chatId: string, entry: TranscriptEntry): void {
@@ -1674,6 +1693,13 @@ export class AgentCoordinator {
       this.emitStateChange(args.chatId)
       this.subagentOrchestrator.notifySubagentToolPending(args.runId)
       return await new Promise<unknown>((resolve, reject) => {
+        // Defensive: if `canUseTool` somehow fires twice for the same
+        // (chatId, runId, toolUseId) — e.g. SDK retry — reject the previous
+        // resolver before overwriting so its Promise doesn't leak.
+        const existing = this.subagentPendingResolvers.get(key)
+        if (existing) {
+          existing.reject(new Error("superseded by retry"))
+        }
         this.subagentPendingResolvers.set(key, { resolve, reject })
       })
     }
@@ -2302,6 +2328,12 @@ export class AgentCoordinator {
     if (active.cancelRequested) return
     active.cancelRequested = true
 
+    // Reject any subagent canUseTool Promises waiting on a user response in
+    // this chat. Without this the SDK's `canUseTool` callback hangs forever,
+    // wedging the subagent session and leaking the resolver entry.
+    this.rejectPendingResolversForChat(chatId)
+    this.subagentOrchestrator.cancelChat(chatId)
+
     const pendingTool = active.pendingTool
     active.pendingTool = null
 
@@ -2424,7 +2456,11 @@ export class AgentCoordinator {
     const key = this.subagentPendingKey(command.chatId, command.runId, command.toolUseId)
     const resolver = this.subagentPendingResolvers.get(key)
     if (!resolver) {
-      throw new Error("No pending subagent tool")
+      // Idempotent: a double-submit (client retry, concurrent WS messages, or
+      // a response arriving after the run already terminated) should not
+      // surface a confusing error to the UI. Resolver-absent = already
+      // resolved or run died; nothing to do.
+      return
     }
     this.subagentPendingResolvers.delete(key)
     await this.store.appendSubagentEvent({

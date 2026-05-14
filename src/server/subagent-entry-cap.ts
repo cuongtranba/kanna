@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto"
 import { mkdir, writeFile } from "node:fs/promises"
 import path from "node:path"
 import type { TranscriptEntry, ToolResultEntry } from "../shared/types"
@@ -55,13 +56,30 @@ function safeBasename(toolId: string): string {
 }
 
 function buildPreview(serialized: string): { preview: string; hasMore: boolean } {
-  if (serialized.length <= PREVIEW_SIZE) {
+  // Operate on bytes, not chars: PREVIEW_SIZE is a byte budget so multibyte
+  // content (CJK, emoji, etc.) does not silently exceed it.
+  const buf = Buffer.from(serialized, "utf8")
+  if (buf.byteLength <= PREVIEW_SIZE) {
     return { preview: serialized, hasMore: false }
   }
-  const slice = serialized.slice(0, PREVIEW_SIZE)
-  const lastNewline = slice.lastIndexOf("\n")
-  const cut = lastNewline > PREVIEW_SIZE * 0.5 ? lastNewline : PREVIEW_SIZE
-  return { preview: serialized.slice(0, cut), hasMore: true }
+  // Take PREVIEW_SIZE bytes, then back off to the last valid UTF-8 boundary
+  // by re-decoding (slicing a Buffer can land mid-codepoint).
+  let cutBytes = PREVIEW_SIZE
+  let preview = buf.subarray(0, cutBytes).toString("utf8")
+  // toString("utf8") replaces invalid trailing bytes with U+FFFD; trim them.
+  while (preview.endsWith("�") && cutBytes > 0) {
+    cutBytes -= 1
+    preview = buf.subarray(0, cutBytes).toString("utf8")
+  }
+  const lastNewline = preview.lastIndexOf("\n")
+  if (lastNewline > preview.length * 0.5) {
+    preview = preview.slice(0, lastNewline)
+  }
+  return { preview, hasMore: true }
+}
+
+function shortContentHash(serialized: string): string {
+  return createHash("sha256").update(serialized).digest("hex").slice(0, 8)
 }
 
 function formatBytes(n: number): string {
@@ -96,11 +114,17 @@ export async function capTranscriptEntry(args: CapArgs): Promise<TranscriptEntry
   const dir = dirFor(args)
   await mkdir(dir, { recursive: true })
   const ext = info.isJson ? "json" : "txt"
-  const filePath = path.join(dir, `${safeBasename(entry.toolId)}.${ext}`)
+  // Include a short content hash in the filename so that two tool results
+  // sharing the same toolId (e.g. legacy / colliding IDs across runs) do not
+  // silently serve each other's payload via the wx-skip path below.
+  const hash = shortContentHash(info.serialized)
+  const filePath = path.join(dir, `${safeBasename(entry.toolId)}.${hash}.${ext}`)
   try {
     await writeFile(filePath, info.serialized, { encoding: "utf-8", flag: "wx" })
   } catch (err) {
     const code = (err as NodeJS.ErrnoException).code
+    // Same (toolId, content-hash) writing twice = identical content; safe to
+    // skip. Any other write error must surface.
     if (code !== "EEXIST") throw err
   }
   const { preview, hasMore } = buildPreview(info.serialized)

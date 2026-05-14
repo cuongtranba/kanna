@@ -94,6 +94,14 @@ export interface SubagentOrchestratorDeps {
     primer: string | null
     runId: string
   }) => ProviderRunStart
+  /**
+   * Called when a subagent run enters a terminal state (failed / completed /
+   * interrupted) so external resources keyed on (chatId, runId) — e.g. the
+   * `subagentPendingResolvers` map on AgentCoordinator — can be released.
+   * The SDK's `canUseTool` Promise must be rejected when the run dies, or it
+   * hangs forever and leaks. Optional for tests.
+   */
+  onRunTerminal?: (chatId: string, runId: string, reason: "failed" | "completed") => void
   now?: () => number
   maxParallel?: number
   maxChainDepth?: number
@@ -113,14 +121,27 @@ export class SubagentOrchestrator {
   private readonly cancelledChats = new Set<string>()
   private readonly timeoutsByRun = new Map<string, PausableTimeout>()
 
+  private readonly recoveryPromise: Promise<void>
+
   constructor(private readonly deps: SubagentOrchestratorDeps) {
     this.permits = this.maxParallel()
-    void this.recoverInterruptedRuns()
+    this.recoveryPromise = this.recoverInterruptedRuns()
+  }
+
+  /**
+   * Caller must `await` this before spawning new runs to ensure orphan
+   * `running` runs from a previous server lifetime have been failed first.
+   */
+  whenRecovered(): Promise<void> {
+    return this.recoveryPromise
   }
 
   private async recoverInterruptedRuns(): Promise<void> {
+    // Recover ALL `running` runs from the previous server lifetime, not just
+    // those mid-tool. A subagent crashed mid-bash (or mid-streaming) leaves
+    // its run in `running` forever otherwise, blocking the UI and leaking a
+    // permit until the server is restarted again with a fix.
     for (const run of this.deps.store.runningSubagentRuns()) {
-      if (run.pendingTool == null) continue
       try {
         await this.deps.store.appendSubagentEvent({
           v: 3,
@@ -130,7 +151,9 @@ export class SubagentOrchestrator {
           runId: run.runId,
           error: {
             code: "INTERRUPTED",
-            message: "Server restart while subagent awaited tool response",
+            message: run.pendingTool
+              ? "Server restart while subagent awaited tool response"
+              : "Server restart while subagent run was in progress",
           },
         })
       } catch (err) {
@@ -195,6 +218,7 @@ export class SubagentOrchestrator {
     userMessageId: string
     mentions: ParsedMention[]
   }): Promise<void> {
+    await this.recoveryPromise
     const subagents = this.deps.appSettings.getSnapshot().subagents
     const resolved: { mention: Extract<ParsedMention, { kind: "subagent" }>; subagent: Subagent }[] = []
 
@@ -395,6 +419,11 @@ export class SubagentOrchestrator {
         finalContent: finalText,
         usage,
       })
+      try {
+        this.deps.onRunTerminal?.(args.chatId, runId, "completed")
+      } catch (err) {
+        console.warn(`${LOG_PREFIX} onRunTerminal(completed) threw`, { chatId: args.chatId, runId, err })
+      }
 
       releaseSlot()
 
@@ -457,13 +486,26 @@ export class SubagentOrchestrator {
   }
 
   private async failRun(chatId: string, runId: string, code: SubagentErrorCode, message: string) {
-    await this.deps.store.appendSubagentEvent({
-      v: 3,
-      type: "subagent_run_failed",
-      timestamp: this.now(),
-      chatId,
-      runId,
-      error: { code, message },
-    })
+    try {
+      await this.deps.store.appendSubagentEvent({
+        v: 3,
+        type: "subagent_run_failed",
+        timestamp: this.now(),
+        chatId,
+        runId,
+        error: { code, message },
+      })
+    } catch (err) {
+      // Persisting the failure event must never throw out of failRun — it's
+      // called from `catch` and `finally` blocks where an unhandled rejection
+      // would leak the permit. Log and continue; the orchestrator will still
+      // notify the terminal callback below so the resolver map is cleaned up.
+      console.warn(`${LOG_PREFIX} failRun appendSubagentEvent threw`, { chatId, runId, code, err })
+    }
+    try {
+      this.deps.onRunTerminal?.(chatId, runId, "failed")
+    } catch (err) {
+      console.warn(`${LOG_PREFIX} onRunTerminal(failed) threw`, { chatId, runId, err })
+    }
   }
 }

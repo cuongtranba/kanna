@@ -60,7 +60,7 @@ describe("capTranscriptEntry", () => {
     expect(persisted!.originalSize).toBe(big.length)
     expect(persisted!.isJson).toBe(false)
     expect(persisted!.truncated).toBe(true)
-    expect(persisted!.filePath.endsWith("tool-xyz.txt")).toBe(true)
+    expect(path.basename(persisted!.filePath)).toMatch(/^tool-xyz\.[a-f0-9]{8}\.txt$/)
     const onDisk = await readFile(persisted!.filePath, "utf-8")
     expect(onDisk).toBe(big)
     const preview = (out as { content: string }).content
@@ -78,7 +78,7 @@ describe("capTranscriptEntry", () => {
     const persisted = (out as { persisted?: { filePath: string; isJson: boolean } }).persisted
     expect(persisted).toBeDefined()
     expect(persisted!.isJson).toBe(true)
-    expect(persisted!.filePath.endsWith("tool-xyz.json")).toBe(true)
+    expect(path.basename(persisted!.filePath)).toMatch(/^tool-xyz\.[a-f0-9]{8}\.json$/)
   })
 
   test("idempotent: re-call with same toolUseId swallows EEXIST", async () => {
@@ -124,7 +124,7 @@ describe("capTranscriptEntry", () => {
     expect(filePath).toContain(path.join("subagent-results", "r1"))
     expect(filePath).not.toContain("..")
     expect(filePath).not.toContain("/etc/passwd")
-    expect(path.basename(filePath)).toMatch(/^[A-Za-z0-9_-]+\.txt$/)
+    expect(path.basename(filePath)).toMatch(/^[A-Za-z0-9_-]+\.[a-f0-9]{8}\.txt$/)
   })
 
   test("preview cuts at newline boundary within last 50% of limit", async () => {
