@@ -538,6 +538,9 @@ describe("SubagentOrchestrator", () => {
     const runs = store.getSubagentRuns(chat.id)
     expect(runs[runId].status).toBe("failed")
     expect(runs[runId].error?.code).toBe("INTERRUPTED")
+    // After INTERRUPTED recovery, pendingTool must be cleared so UI does not
+    // render both the pending-response card and the error card simultaneously.
+    expect(runs[runId].pendingTool).toBeNull()
     // Reference unused variable to silence lint
     void orchestrator
   })

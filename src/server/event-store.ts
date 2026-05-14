@@ -878,6 +878,7 @@ export class EventStore implements PushEventStore {
         run.status = "failed"
         run.finishedAt = e.timestamp
         run.error = e.error
+        run.pendingTool = null
         break
       }
       case "subagent_run_cancelled": {
@@ -886,6 +887,7 @@ export class EventStore implements PushEventStore {
         if (!run) break
         run.status = "cancelled"
         run.finishedAt = e.timestamp
+        run.pendingTool = null
         break
       }
       case "subagent_tool_pending": {
