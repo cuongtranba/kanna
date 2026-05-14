@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { createElement } from "react"
 import { renderToStaticMarkup } from "react-dom/server"
 import { PROVIDERS } from "../../../shared/types"
+import { createAgentMentionRegex } from "../../../shared/mention-pattern"
 import { ChatInput, getClipboardImageFiles, trimTrailingPastedNewlines, willExceedAttachmentLimit } from "./ChatInput"
 
 function createClipboardItem(args: {
@@ -146,5 +147,33 @@ describe("mention picker wiring", () => {
       query: "src",
       tokenStart: 6,
     })
+  })
+})
+
+describe("agent mention pattern composer compatibility", () => {
+  test("plain text contains no agent mentions", () => {
+    const matches = Array.from("hello world".matchAll(createAgentMentionRegex()))
+    expect(matches).toHaveLength(0)
+  })
+
+  test("@agent/<name> in text matches the shared pattern", () => {
+    const matches = Array.from("hi @agent/alpha please review".matchAll(createAgentMentionRegex()))
+    expect(matches).toHaveLength(1)
+    expect(matches[0]?.[2]).toBe("alpha")
+  })
+
+  test("multiple @agent/<name> mentions all detected", () => {
+    const matches = Array.from("@agent/alpha @agent/beta".matchAll(createAgentMentionRegex()))
+    expect(matches.map((m) => m[2])).toEqual(["alpha", "beta"])
+  })
+
+  test("@agent/<name> without leading whitespace at start of string matches", () => {
+    const matches = Array.from("@agent/alpha".matchAll(createAgentMentionRegex()))
+    expect(matches).toHaveLength(1)
+  })
+
+  test("@agent/<name> inline mid-word does NOT match (server gate parity)", () => {
+    const matches = Array.from("foo@agent/alpha".matchAll(createAgentMentionRegex()))
+    expect(matches).toHaveLength(0)
   })
 })
