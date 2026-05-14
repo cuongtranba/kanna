@@ -10,6 +10,8 @@ export interface ToolHandlerContext {
 }
 
 export interface ToolHandlerResult {
+  // Index signature required to satisfy MCP CallToolResult shape
+  [key: string]: unknown
   content: { type: "text"; text: string }[]
   isError?: boolean
 }

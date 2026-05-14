@@ -1,4 +1,4 @@
-import { createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk"
+import { createSdkMcpServer, tool, type SdkMcpToolDefinition } from "@anthropic-ai/claude-agent-sdk"
 import { z } from "zod"
 import path from "node:path"
 import { stat } from "node:fs/promises"
@@ -113,14 +113,14 @@ Returns one of:
 - invalid_port: the port is outside the valid range
 `
 
-export function buildKannaMcpTools(args: KannaMcpArgs) {
+export function buildKannaMcpTools(args: KannaMcpArgs): SdkMcpToolDefinition<any>[] {
   const tunnelGateway = args.tunnelGateway ?? null
   const chatId = args.chatId ?? null
   const sessionId = args.sessionId ?? ""
   const chatPolicy = args.chatPolicy ?? POLICY_DEFAULT
   const cwd = args.localPath
 
-  const tools = [
+  const tools: SdkMcpToolDefinition<any>[] = [
     tool(
       "offer_download",
       OFFER_DOWNLOAD_DESCRIPTION,
