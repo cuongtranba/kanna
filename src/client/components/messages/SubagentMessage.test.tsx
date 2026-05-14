@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { renderToStaticMarkup } from "react-dom/server"
 import type { SubagentRunSnapshot, TranscriptEntry } from "../../../shared/types"
+import { renderForLoopCheck } from "../../lib/testing/renderForLoopCheck"
 import { SubagentMessage } from "./SubagentMessage"
 
 function makeRunSnapshot(over: Partial<SubagentRunSnapshot> = {}): SubagentRunSnapshot {
@@ -234,5 +235,30 @@ describe("SubagentMessage", () => {
     expect(html).toContain("output too large")
     expect(html).toContain("View full output")
     expect(html).toContain("/tmp/foo.txt")
+  })
+
+  test("renders without render-loop when pendingTool is set", async () => {
+    const result = await renderForLoopCheck(
+      <SubagentMessage
+        run={makeRunSnapshot({
+          pendingTool: {
+            toolUseId: "t-loop",
+            toolKind: "ask_user_question",
+            input: { questions: [{ id: "q1", question: "ok?" }] },
+            requestedAt: 1700000000000,
+          },
+        })}
+        indentDepth={0}
+        localPath="/tmp"
+        onSubagentAskUserQuestionSubmit={() => undefined}
+        onSubagentExitPlanModeSubmit={() => undefined}
+      />,
+    )
+    try {
+      expect(result.loopWarnings).toEqual([])
+      expect(result.thrown).toBeNull()
+    } finally {
+      await result.cleanup()
+    }
   })
 })
