@@ -82,7 +82,7 @@ export function StacksSection({
         </p>
       ) : (
         <div className="flex flex-col gap-px">
-          {stacks.map((stack) => {
+          {stacks.map((stack, index) => {
             const isExpanded = expandedStackIds.has(stack.id)
             const memberProjects = projects.filter((p) => stack.projectIds.includes(p.id))
 
@@ -146,6 +146,17 @@ export function StacksSection({
 
             return (
               <div key={stack.id}>
+                {index > 0 ? (
+                  <div
+                    aria-hidden
+                    data-testid="stack-separator"
+                    className="flex justify-center py-1.5 select-none"
+                  >
+                    <span className="text-[10px] tracking-[0.6em] text-muted-foreground/40 pl-[0.6em] leading-none">
+                      ✦ ✦ ✦
+                    </span>
+                  </div>
+                ) : null}
                 {onDeleteStack ? (
                   <StackSectionMenu
                     stackTitle={stack.title}

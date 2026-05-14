@@ -132,4 +132,25 @@ describe("StacksSection", () => {
     const html = renderSection(stacks, projects, { expandedStackIds: new Set(["s1"]) })
     expect(html).not.toContain("New chat")
   })
+
+  test("renders star asterism separator between adjacent stacks but not above the first", () => {
+    const stacks = [
+      makeStack("s1", "Alpha", 1),
+      makeStack("s2", "Beta", 1),
+      makeStack("s3", "Gamma", 1),
+    ]
+    const projects = [{ id: "p1", title: "P1" }, { id: "p2", title: "P2" }]
+    const html = renderSection(stacks, projects)
+    const separatorCount = (html.match(/data-testid="stack-separator"/g) ?? []).length
+    expect(separatorCount).toBe(2)
+    expect(html).toContain("✦ ✦ ✦")
+    expect(html).toContain('aria-hidden="true"')
+  })
+
+  test("no separator rendered when only one stack exists", () => {
+    const stacks = [makeStack("s1", "Solo", 1)]
+    const projects = [{ id: "p1", title: "P1" }, { id: "p2", title: "P2" }]
+    const html = renderSection(stacks, projects)
+    expect(html).not.toContain('data-testid="stack-separator"')
+  })
 })
