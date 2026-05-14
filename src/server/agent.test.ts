@@ -9,6 +9,8 @@ import {
   normalizeClaudeUsageSnapshot,
 } from "./agent"
 import type { ToolCallbackService } from "./tool-callback"
+import type { ChatPermissionPolicy } from "../shared/permission-policy"
+import { POLICY_DEFAULT } from "../shared/permission-policy"
 import { BackgroundTaskRegistry } from "./background-tasks"
 import type { HarnessTurn } from "./harness-types"
 import type { ChatAttachment, SlashCommand, TranscriptEntry } from "../shared/types"
@@ -3836,5 +3838,64 @@ describe("buildCanUseTool", () => {
     } finally {
       delete process.env.KANNA_MCP_TOOL_CALLBACKS
     }
+  })
+})
+
+// ── AgentCoordinator.chatPolicy plumbing ──────────────────────────────────────
+
+describe("AgentCoordinator chatPolicy plumbing", () => {
+  test("plumbs chatPolicy through to startClaudeSession", async () => {
+    const events = new AsyncEventQueue<any>()
+    let received: any = null
+
+    const customPolicy: ChatPermissionPolicy = {
+      ...POLICY_DEFAULT,
+      defaultAction: "auto-deny",
+    }
+
+    const store = createFakeStore()
+    const coordinator = new AgentCoordinator({
+      store: store as never,
+      onStateChange: () => {},
+      chatPolicy: customPolicy,
+      startClaudeSession: async (args) => {
+        received = args
+        return {
+          provider: "claude" as const,
+          stream: events,
+          getAccountInfo: async () => null,
+          interrupt: async () => {},
+          close: () => {},
+          sendPrompt: async () => {
+            events.push({
+              type: "transcript" as const,
+              entry: timestamped({
+                kind: "result",
+                subtype: "success",
+                isError: false,
+                durationMs: 0,
+                result: "done",
+              }),
+            })
+          },
+          setModel: async () => {},
+          setPermissionMode: async () => {},
+          getSupportedCommands: async () => [],
+        }
+      },
+    })
+
+    await coordinator.send({
+      type: "chat.send",
+      chatId: "chat-1",
+      provider: "claude",
+      content: "hello",
+      model: "claude-opus-4-1",
+    })
+    await waitFor(() => store.turnFinishedCount === 1)
+
+    expect(received?.chatPolicy?.defaultAction).toBe("auto-deny")
+
+    events.close()
   })
 })

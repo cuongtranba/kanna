@@ -188,6 +188,8 @@ interface AgentCoordinatorArgs {
   oauthPool?: OAuthTokenPool
   /** Populated on boot; will be consumed by canUseTool in Task 11. */
   toolCallback?: ToolCallbackService
+  /** Per-chat permission policy forwarded to startClaudeSession. Defaults to POLICY_DEFAULT if omitted. */
+  chatPolicy?: ChatPermissionPolicy
 }
 
 interface SendToStartingProfile {
@@ -960,6 +962,7 @@ export class AgentCoordinator {
   private readonly backgroundTasks: BackgroundTaskRegistry | null
   private readonly oauthPool: OAuthTokenPool | null
   private readonly toolCallback: ToolCallbackService | null
+  private readonly chatPolicy: ChatPermissionPolicy
   private readonly pendingBashCalls = new Map<string, { command: string; chatId: string; isBg: boolean }>()
   private readonly subagentPendingResolvers = new Map<
     string,
@@ -999,6 +1002,7 @@ export class AgentCoordinator {
     this.backgroundTasks = args.backgroundTasks ?? null
     this.oauthPool = args.oauthPool ?? null
     this.toolCallback = args.toolCallback ?? null
+    this.chatPolicy = args.chatPolicy ?? POLICY_DEFAULT
     this.backgroundTasks?.setStrategies({
       closeStream: async (task) => {
         await this.stopDraining(task.chatId)
@@ -1579,6 +1583,7 @@ export class AgentCoordinator {
         tunnelGateway: this.tunnelGateway,
         onToolRequest: args.onToolRequest,
         toolCallback: this.toolCallback ?? undefined,
+        chatPolicy: this.chatPolicy,
       })
 
       session = {
