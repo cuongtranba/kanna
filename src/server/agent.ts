@@ -765,7 +765,7 @@ async function startClaudeSession(args: {
         content: args.initialPrompt,
       },
       parent_tool_use_id: null,
-      session_id: args.sessionToken ?? "",
+      session_id: args.sessionToken ?? undefined,
     })
     promptQueue.close()
   }
