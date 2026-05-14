@@ -221,12 +221,23 @@ export class SubagentOrchestrator {
         primer = reply == null ? null : `Previous assistant reply:\n${reply}`
       }
 
-      const runStart = this.deps.startProviderRun({
-        subagent: args.subagent,
-        chatId: args.chatId,
-        primer,
-        runId,
-      })
+      let runStart: ProviderRunStart
+      try {
+        runStart = this.deps.startProviderRun({
+          subagent: args.subagent,
+          chatId: args.chatId,
+          primer,
+          runId,
+        })
+      } catch (err) {
+        // Defensive: startProviderRun is a synchronous factory but a real impl
+        // (buildSubagentProviderRunForChat in agent.ts) can throw if e.g. the
+        // chat's project lookup fails. Without this guard the run would leak
+        // as `running` forever (no failed/completed event ever appended).
+        const msg = err instanceof Error ? err.message : String(err)
+        await this.failRun(args.chatId, runId, "PROVIDER_ERROR", msg)
+        return
+      }
 
       if (!(await runStart.authReady())) {
         await this.failRun(args.chatId, runId, "AUTH_REQUIRED", `Authentication required for ${args.subagent.provider}`)

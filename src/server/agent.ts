@@ -1694,7 +1694,10 @@ export class AgentCoordinator {
       authReady: async (provider) => {
         if (provider === "claude") {
           const settings = this.getAppSettingsSnapshot()
-          return Boolean(settings.claudeAuth?.authenticated || this.oauthPool?.pickActive())
+          // Use hasUsable() (read-only) instead of pickActive() so the preflight
+          // check doesn't silently un-limit elapsed tokens before the actual
+          // pickOauthToken() call is made.
+          return Boolean(settings.claudeAuth?.authenticated || this.oauthPool?.hasUsable())
         }
         return true
       },
