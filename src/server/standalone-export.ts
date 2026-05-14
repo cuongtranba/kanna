@@ -383,7 +383,7 @@ function buildShareUploadUrl(baseUrl: string, shareSlug: string, relativePath: s
   return `${baseUrl.replace(/\/+$/u, "")}/${encodedSegments.join("/")}`
 }
 
-function getShareUploadCacheControl(relativePath: string) {
+function getShareUploadCacheControl(_relativePath: string) {
   return STANDALONE_SHARE_ASSET_CACHE_CONTROL
 }
 

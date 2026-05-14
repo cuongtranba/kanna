@@ -102,7 +102,6 @@ interface RightSidebarProps extends DiffFileActions {
   onSyncWithRemote: (action: "fetch" | "pull" | "push" | "publish") => Promise<unknown>
   onDiffRenderModeChange: (mode: DiffRenderMode) => void
   onWrapLinesChange: (wrap: boolean) => void
-  onClose: () => void
 }
 
 export function canIgnoreDiffFile(file: DiffFile) {
@@ -1446,7 +1445,6 @@ function RightSidebarImpl({
   onLoadPatch,
   onDiffRenderModeChange,
   onWrapLinesChange,
-  onClose,
 }: RightSidebarProps) {
   const fileActions: DiffFileActions = useMemo(() => ({
     onOpenFile,

@@ -11,7 +11,6 @@ interface ChatInputDockProps {
   activeChatId: string | null
   previousPrompt: string | null
   hasSelectedProject: boolean
-  runtimeStatus: string | null
   canCancel: boolean
   projectId: string | null
   activeProvider: "claude" | "codex" | null
@@ -29,7 +28,6 @@ export const ChatInputDock = memo(function ChatInputDock({
   activeChatId,
   previousPrompt,
   hasSelectedProject,
-  runtimeStatus,
   canCancel,
   projectId,
   activeProvider,

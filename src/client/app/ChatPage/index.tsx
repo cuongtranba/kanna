@@ -1010,7 +1010,6 @@ export function ChatPage() {
         activeChatId={state.activeChatId}
         previousPrompt={state.previousPrompt}
         hasSelectedProject={state.hasSelectedProject}
-        runtimeStatus={state.runtimeStatus}
         canCancel={state.canCancel}
         projectId={projectId}
         activeProvider={state.runtime?.provider ?? null}

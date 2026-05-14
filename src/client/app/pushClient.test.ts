@@ -104,7 +104,7 @@ describe("urlBase64ToUint8Array", () => {
 
 describe("subscribePush", () => {
   test("requests permission, registers SW, subscribes, calls server, returns id", async () => {
-    const subscribe = async (opts: { applicationServerKey: Uint8Array; userVisibleOnly: boolean }) => ({
+    const subscribe = async (_opts: { applicationServerKey: Uint8Array; userVisibleOnly: boolean }) => ({
       endpoint: "https://push.example/abc",
       toJSON: () => ({
         endpoint: "https://push.example/abc",
