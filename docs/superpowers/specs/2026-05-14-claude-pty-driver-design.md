@@ -1,7 +1,7 @@
 # Claude PTY Driver — Design
 
 **Date:** 2026-05-14
-**Status:** Draft v11 — tenth codex adversarial pass applied (sentinel rotation covers all built-ins, not just Bash; auto-approve chats get full-suite sentinel; intro section reconciled with v10 cache model), awaiting user review
+**Status:** Draft v12 — eleventh codex adversarial pass applied (sentinel rotation replaced with parallel all-N-built-ins suite on every spawn; stale 7d cache test removed; per-spawn-sentinel-always tests added), awaiting user review
 **Author:** session-collaborative
 **Related code:** `src/server/agent.ts`, `src/server/terminal-manager.ts`, `src/server/harness-types.ts`, `src/server/kanna-mcp.ts`
 
@@ -324,7 +324,7 @@ This pattern's safety properties **do not depend** on `--dangerously-skip-permis
 The allowlist is verified continuously. The validation has two layers; see "Cache & invalidation" below for the precise rules. In summary:
 
 - **Full directed-probe suite** runs at Kanna server boot and any time `binary-sha256`, `tools-string`, or observed `system.init.model` changes. Cache key includes `kannaProcessId`, so it never survives a restart.
-- **Per-spawn sentinel probes** run before every user-facing PTY spawn and cover **all** disallowed built-ins (see "Per-spawn sentinel" below). Any built-in observed as reachable invalidates the full-suite cache immediately and blocks further user-facing spawns until the full suite re-passes.
+- **Per-spawn sentinel suite** runs the full set of directed probes (one per disallowed built-in) before every user-facing PTY spawn. All N probes run in parallel; the sentinel passes only if every probe passes. Any built-in observed as reachable invalidates the full-suite cache immediately and blocks further user-facing spawns until the full suite re-passes.
 
 The full suite consists of **N directed probes, one per disallowed built-in**, plus one positive-control probe. We do not rely on the model self-reporting which tools it has.
 
@@ -370,22 +370,22 @@ Allowlist semantics depend on local binary, `--tools` string, **and** server-sid
    - Force-refresh from app settings.
    Cache key: `(binary-sha256, tools-string, systemInitModel, kannaProcessId)`. Note `kannaProcessId` — cache does not survive server restart. Cost: N+1 subscription turns once per server boot.
 
-2. **Per-spawn sentinel probes** run **before every user-facing PTY spawn**, except the one that just ran the full suite. The sentinel covers **all** disallowed built-ins on a strict rotation so no built-in is left unchecked for long.
+2. **Per-spawn sentinel suite** runs **before every user-facing PTY spawn**, except the one that just ran the full suite. The sentinel runs **all N** directed probes (one per disallowed built-in) in parallel. No rotation, no skipped built-ins.
 
-   **Rotation strategy:** sentinel state stores a counter mod N (the number of disallowed built-ins). Each user-facing spawn runs **one** directed probe for the next built-in in rotation. After N spawns, every built-in has been freshly re-verified. The rotation cannot be skipped; the counter persists in memory across spawns and is checkpointed to `EventStore`.
+   **Parallelization:** the N directed probe sessions are spawned concurrently in scratch dirs (each gets a distinct ephemeral `--session-id`, separate PTY, separate JSONL). They share the same `claude` binary so OS page cache makes second-and-later spawns very fast. Aggregate wall-clock latency is bounded by the slowest single probe turn (typically <2s), not the sum.
 
-   **Tighter mode for `defaultAction: "auto-allow"` (red-banner) chats:** when the spawning chat is in auto-approve mode, the sentinel runs **all N** directed probes (the entire full suite, minus positive control) before the spawn, not just the rotation-next one. Cost: N subscription turns for that spawn (~8). Trade-off accepted because auto-approve chats run tools without user confirmation.
+   Outcomes per probe:
+   - PASS: `mcp__kanna__probe_unavailable(<tool>)` observed → that probe passes.
+   - FAIL — built-in reachable: any `tool_use` for any disallowed built-in observed in any probe's JSONL (defensive: a `Bash`-targeted probe that triggers a `Write` call also fails) → entire sentinel fails closed, invalidate full-suite cache, block further user-facing spawns until full suite re-runs and passes.
+   - FAIL — indeterminate (1 turn elapses without `probe_unavailable` and without a built-in `tool_use`): that probe fails closed; the whole sentinel fails. Retry runs all N again.
 
-   Outcomes per probe (same as full-suite rules):
-   - PASS: `mcp__kanna__probe_unavailable(<tool>)` observed → continue rotation.
-   - FAIL — built-in reachable: any `tool_use` for any disallowed built-in (not just the one being probed — defensive scan) → fail closed, invalidate full-suite cache, block further user-facing spawns until full suite re-runs and passes.
-   - FAIL — indeterminate (1 turn elapses without confirmation): fail closed for this spawn. The user can retry; retry re-runs the same rotation slot.
+   Sentinel passes only if **every** directed probe passes.
 
-   **Why rotate, not all-per-spawn-always?** Cost. Running 8 directed turns per user-facing spawn would add seconds of latency. Rotation gives complete coverage over N spawns while keeping per-spawn cost at one turn. If a probe fails, the full suite re-runs immediately, so the worst-case window of one un-rechecked built-in per single spawn is acceptable for non-auto-approve chats — and auto-approve chats run the full set.
+   Cost: N parallel subscription turns per user-facing spawn (~8). Real-time latency is ~one turn (~1-3s) because they run in parallel. Subscription billing is per-turn, not per-second; this consumes a small constant of your subscription quota per spawn.
 
-   Cost: 1 subscription turn per regular user-facing spawn; N turns per auto-approve spawn.
+**Trade-off explicitly accepted in this spec:** higher per-spawn cost in exchange for closing the rotation-window security gap. Any deviation (e.g., back to rotation) requires a written security-tradeoff section approved by the user.
 
-**Why the sentinel:** It's a tripwire for remote behavior drift. Even if Anthropic silently changes the planner to expose a built-in under `--tools "mcp__kanna__*"`, the next user-facing spawn either catches it directly (rotation hits the affected tool) or any future spawn does (rotation completes a full cycle every N spawns). Any reachable built-in in any sentinel turn invalidates the entire cache.
+**Why the sentinel:** It's a tripwire for remote behavior drift. Even if Anthropic silently changes the planner to expose a built-in under `--tools "mcp__kanna__*"`, the next user-facing spawn catches it before the user sees the PTY. Coverage is total per spawn; the rotation gap is eliminated.
 
 **Cache invalidation triggers:**
 - Server restart (process id changes).
@@ -399,12 +399,16 @@ There is no time-based TTL. Either the process restarts (re-probe), the model ve
 
 #### Tests (`allowlist-preflight.test.ts`)
 
-- **End-to-end real-CLI** (gated `KANNA_PTY_E2E=1`): run the full suite against the actual bundled `claude` binary; assert pass.
-- **Per-built-in mock probe**: inject JSONL where the model produces a `Bash` (etc.) `tool_use` → assert fail closed.
-- **Indeterminate handling**: inject JSONL that produces text only, no tool_use → assert fail closed after 2 turns.
-- **Positive control regression**: probe MCP server registered but unreachable → assert fail (don't ship a broken allowlist).
-- **Cache hit**: second invocation within 7d → assert no spawn.
-- **Cache invalidation**: change binary sha or tools string → assert re-probe.
+- **End-to-end real-CLI** (gated `KANNA_PTY_E2E=1`): run the full directed suite against the actual bundled `claude` binary; assert pass.
+- **Per-built-in mock probe**: inject JSONL where the model produces a `Bash` / `Read` / `Write` / `Edit` / `Glob` / `Grep` / `WebFetch` / `WebSearch` `tool_use` → assert sentinel fails closed and full-suite cache is invalidated.
+- **Defensive cross-probe**: inject JSONL where a `Bash`-targeted probe surfaces an unrelated `Write` `tool_use` → assert fail closed.
+- **Indeterminate handling**: inject JSONL that produces text only, no tool_use → assert that probe fails closed (and therefore the sentinel fails).
+- **Positive control regression**: probe MCP server registered but unreachable → assert full suite fails (don't ship a broken allowlist).
+- **Boot-time full suite**: simulate Kanna process boot → assert full suite runs once before any user-facing spawn.
+- **Per-spawn sentinel always runs**: simulate two consecutive user-facing spawns within seconds of each other with all cache keys unchanged → assert the sentinel suite runs before the second spawn (no skip on "cache hit"). The full directed suite is allowed to be skipped (still cached); the sentinel never is.
+- **Cache key invalidation**: change `binary-sha256`, `tools-string`, observed `system.init.model`, or `kannaProcessId` → assert full suite re-runs.
+- **No time-based TTL**: simulate clock advance of 30 days with all cache keys unchanged → assert no time-driven invalidation (only keyed invalidation matters; the per-spawn sentinel is the live guard).
+- **Parallel sentinel correctness**: run all N probes concurrently against the same mock CLI fixture → assert per-probe verdicts isolated, aggregate fails on any single failure, aggregate passes only if all pass.
 
 If the spike (phase 0) finds that any directed probe cannot reliably force the model to attempt the built-in (e.g., the model refuses for unrelated reasons), we either: (a) sharpen the probe system prompt; (b) downgrade to "fail closed unless explicit pass from at least one indicative signal per built-in"; or (c) ship a stricter alternative — spawn under a sandbox that traps any `execve` of a tool process not on a whitelist. Decision recorded in the spike doc before phase 1.
 
@@ -700,7 +704,7 @@ Any new UI surface (badges, banners, settings toggle) is verified via `renderFor
 | MCP tool callback deadlock turns | Durable per-tool-request state in `EventStore`, server-driven timeout, cancel on close/shutdown/respawn, idempotent retry by HMAC-SHA256 deterministic id. See "Callback protocol" + "Durable approval protocol (unified)". |
 | JSONL replay duplicates or skips events on cold wake | Per-session `(byteOffset, lastEventId)` bookmark in `EventStore`, dedupe scan on truncation/rotation, atomic emit+advance, init event treated as control not transcript. See "Tail semantics". |
 | Permission gate depends on unproven hook behavior | Primary gate is `--tools` allowlist + kanna-mcp routing — no hook dependency. Hook is optional belt-and-suspenders. CLI cannot execute a tool we have not enabled. See "Permission enforcement". |
-| `--tools` allowlist semantics change (CLI version OR Anthropic server-side planner) | **Runtime allowlist preflight** runs a full directed-probe suite at server boot and a single cheap sentinel probe before every user-facing PTY spawn. Any built-in reachable invalidates the cache immediately and blocks further spawns until re-probe passes. See "Allowlist preflight". |
+| `--tools` allowlist semantics change (CLI version OR Anthropic server-side planner) | **Runtime allowlist preflight** runs a full directed-probe suite at server boot and the full sentinel suite (all N probes in parallel) before every user-facing PTY spawn. Any built-in reachable invalidates the cache immediately and blocks further spawns until re-probe passes. See "Allowlist preflight". |
 | Built-in tools (Bash/Edit/Write) execute un-gated | Disabled at spawn via `--tools` allowlist. Model uses `mcp__kanna__*` replacements which Kanna gates synchronously with structured args. |
 | User MCP servers (3rd-party) bypass Kanna gating | Default fail-closed: only `kanna-mcp` is loaded. Third-party MCP requires explicit allowlist AND a functional PreToolUse hook; otherwise spawn refused. See "Third-party MCP servers — fail closed". |
 | Bash auto-allow leaks credentials (`cat ~/.claude/...`) | Bash is parsed (no regex prefix), `readPathDeny` resolved per arg, shell features (pipes/subshell/eval) downgrade to `ask`. `auto-allow` cannot override deny-list. OS sandbox (`sandbox-exec` / `bwrap`) is the secondary gate. |
