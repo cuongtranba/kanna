@@ -1226,6 +1226,10 @@ export class EventStore implements PushEventStore {
       chatId,
       projectId: sourceChat.projectId,
       title: getForkedChatTitle(sourceChat.title),
+      ...(sourceChat.stackId !== undefined ? { stackId: sourceChat.stackId } : {}),
+      ...(sourceChat.stackBindings !== undefined
+        ? { stackBindings: sourceChat.stackBindings.map((b) => ({ ...b })) }
+        : {}),
     }
     await this.append(this.chatsLogPath, createEvent)
     await this.setChatProvider(chatId, sourceProvider)
@@ -1706,7 +1710,7 @@ export class EventStore implements PushEventStore {
   }
 
   async getLegacyTranscriptStats(): Promise<LegacyTranscriptStats> {
-    const messagesLogSize = await Bun.file(this.messagesLogPath).size
+    const messagesLogSize = Bun.file(this.messagesLogPath).size
     const sources: LegacyTranscriptStats["sources"] = []
     if (this.snapshotHasLegacyMessages) {
       sources.push("snapshot")

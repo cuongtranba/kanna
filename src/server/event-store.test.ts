@@ -543,6 +543,29 @@ describe("EventStore", () => {
     expect(store.getMessages(forked.id)).toEqual(store.getMessages(source.id))
   })
 
+  test("forking a stack chat preserves stack membership", async () => {
+    const dataDir = await createTempDataDir()
+    const store = new EventStore(dataDir)
+    await store.initialize()
+
+    const primary = await store.openProject("/tmp/primary")
+    const secondary = await store.openProject("/tmp/secondary")
+    const stack = await store.createStack("My Stack", [primary.id, secondary.id])
+    const bindings = [
+      { projectId: primary.id, role: "primary" as const, worktreePath: "/tmp/primary" },
+      { projectId: secondary.id, role: "additional" as const, worktreePath: "/tmp/secondary" },
+    ]
+    const source = await store.createChat(primary.id, { stackId: stack.id, stackBindings: bindings })
+    await store.setChatProvider(source.id, "claude")
+    await store.setSessionTokenForProvider(source.id, "claude", "session-stack")
+
+    const forked = await store.forkChat(source.id)
+
+    expect(forked.stackId).toBe(stack.id)
+    expect(forked.stackBindings).toEqual(bindings)
+    expect(forked.projectId).toBe(primary.id)
+  })
+
   test("reopening a removed project restores its existing chats", async () => {
     const dataDir = await createTempDataDir()
     const store = new EventStore(dataDir)
