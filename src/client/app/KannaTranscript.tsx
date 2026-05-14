@@ -1,5 +1,7 @@
 import React, { memo, useCallback, useMemo, useRef, useState } from "react"
 import type { AskUserQuestionItem, ProcessedToolCall } from "../components/messages/types"
+import { SubagentMessage } from "../components/messages/SubagentMessage"
+import type { SubagentRunSnapshot } from "../../shared/types"
 import type { AskUserQuestionAnswerMap, ChatAttachment, HydratedTranscriptMessage } from "../../shared/types"
 import { UserMessage } from "../components/messages/UserMessage"
 import { RawJsonMessage } from "../components/messages/RawJsonMessage"
@@ -629,6 +631,23 @@ interface KannaTranscriptProps {
   onTunnelAccept?: (tunnelId: string) => void | Promise<void>
   onTunnelStop?: (tunnelId: string) => void | Promise<void>
   onTunnelRetry?: (tunnelId: string) => void | Promise<void>
+  subagentRuns?: Record<string, SubagentRunSnapshot>
+}
+
+const EMPTY_SUBAGENT_RUNS: Record<string, SubagentRunSnapshot> = {}
+
+function renderSubagentRunTree(
+  run: SubagentRunSnapshot,
+  depth: number,
+  childrenByParentRunId: Map<string, SubagentRunSnapshot[]>,
+): React.ReactNode {
+  const children = childrenByParentRunId.get(run.runId) ?? []
+  return (
+    <React.Fragment key={run.runId}>
+      <SubagentMessage run={run} indentDepth={depth} />
+      {children.map((child) => renderSubagentRunTree(child, depth + 1, childrenByParentRunId))}
+    </React.Fragment>
+  )
 }
 
 interface KannaTranscriptRowProps {
@@ -752,6 +771,7 @@ function KannaTranscriptImpl({
   onTunnelAccept: _onTunnelAccept,  // reserved for future per-message tunnel rendering
   onTunnelStop: _onTunnelStop,
   onTunnelRetry: _onTunnelRetry,
+  subagentRuns = EMPTY_SUBAGENT_RUNS,
 }: KannaTranscriptProps) {
   const [toolGroupExpanded, setToolGroupExpanded] = useState<Record<string, boolean>>({})
   const rows = useMemo(() => buildResolvedTranscriptRows(messages, {
@@ -759,6 +779,27 @@ function KannaTranscriptImpl({
     localPath,
     latestToolIds,
   }), [isLoading, latestToolIds, localPath, messages])
+
+  const { runsByUserMessageId, childrenByParentRunId } = useMemo(() => {
+    const topByUser = new Map<string, SubagentRunSnapshot[]>()
+    const byParent = new Map<string, SubagentRunSnapshot[]>()
+    for (const run of Object.values(subagentRuns)) {
+      if (run.parentRunId === null) {
+        const list = topByUser.get(run.parentUserMessageId) ?? []
+        list.push(run)
+        topByUser.set(run.parentUserMessageId, list)
+      } else {
+        const list = byParent.get(run.parentRunId) ?? []
+        list.push(run)
+        byParent.set(run.parentRunId, list)
+      }
+    }
+    const cmp = (a: SubagentRunSnapshot, b: SubagentRunSnapshot) =>
+      a.startedAt - b.startedAt || a.runId.localeCompare(b.runId)
+    for (const list of topByUser.values()) list.sort(cmp)
+    for (const list of byParent.values()) list.sort(cmp)
+    return { runsByUserMessageId: topByUser, childrenByParentRunId: byParent }
+  }, [subagentRuns])
   const handleToolGroupExpandedChange = useCallback((groupId: string, next: boolean) => {
     setToolGroupExpanded((current) => (
       current[groupId] === next
@@ -772,24 +813,31 @@ function KannaTranscriptImpl({
 
   return (
     <OpenLocalLinkProvider onOpenLocalLink={onOpenLocalLink}>
-      {rows.map((row) => (
-        <div
-          key={row.id}
-          className="mx-auto max-w-[800px] pb-5"
-        >
-          <KannaTranscriptRow
-            row={row}
-            toolGroupExpanded={row.kind === "tool-group" ? (toolGroupExpanded[row.id] ?? false) : undefined}
-            onToolGroupExpandedChange={handleToolGroupExpandedChange}
-            onAskUserQuestionSubmit={onAskUserQuestionSubmit}
-            onExitPlanModeConfirm={onExitPlanModeConfirm}
-            schedules={schedules}
-            onAutoContinueAccept={onAutoContinueAccept}
-            onAutoContinueReschedule={onAutoContinueReschedule}
-            onAutoContinueCancel={onAutoContinueCancel}
-          />
-        </div>
-      ))}
+      {rows.map((row) => {
+        const userMessageId = row.kind === "single" && row.message.kind === "user_prompt"
+          ? row.message.id
+          : null
+        const runsForRow = userMessageId ? runsByUserMessageId.get(userMessageId) ?? [] : []
+        return (
+          <div
+            key={row.id}
+            className="mx-auto max-w-[800px] pb-5"
+          >
+            <KannaTranscriptRow
+              row={row}
+              toolGroupExpanded={row.kind === "tool-group" ? (toolGroupExpanded[row.id] ?? false) : undefined}
+              onToolGroupExpandedChange={handleToolGroupExpandedChange}
+              onAskUserQuestionSubmit={onAskUserQuestionSubmit}
+              onExitPlanModeConfirm={onExitPlanModeConfirm}
+              schedules={schedules}
+              onAutoContinueAccept={onAutoContinueAccept}
+              onAutoContinueReschedule={onAutoContinueReschedule}
+              onAutoContinueCancel={onAutoContinueCancel}
+            />
+            {runsForRow.map((run) => renderSubagentRunTree(run, 0, childrenByParentRunId))}
+          </div>
+        )
+      })}
     </OpenLocalLinkProvider>
   )
 }

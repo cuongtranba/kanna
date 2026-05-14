@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { renderToStaticMarkup } from "react-dom/server"
 import { CollapsedToolGroup } from "../components/messages/CollapsedToolGroup"
-import type { HydratedTranscriptMessage } from "../../shared/types"
+import type { HydratedTranscriptMessage, SubagentRunSnapshot } from "../../shared/types"
 import {
   buildResolvedTranscriptRows,
   computeStableResolvedTranscriptRows,
@@ -587,5 +587,96 @@ Please check the latest error first.`,
     const stableState = computeStableResolvedTranscriptRows(nextRows, previousState)
 
     expect(stableState.result[0]).toBe(previousRows[0])
+  })
+})
+
+function makeUserPrompt(id: string, content = "@agent/alpha"): HydratedTranscriptMessage {
+  return {
+    id,
+    kind: "user_prompt",
+    content,
+    timestamp: new Date().toISOString(),
+  }
+}
+
+function makeRun(over: Partial<SubagentRunSnapshot> & { runId: string; parentUserMessageId: string }): SubagentRunSnapshot {
+  return {
+    chatId: "c1",
+    subagentId: "sa-1",
+    subagentName: "alpha",
+    provider: "claude",
+    model: "claude-opus-4-7",
+    status: "completed",
+    parentRunId: null,
+    depth: 0,
+    startedAt: 1,
+    finishedAt: 2,
+    finalText: "done",
+    error: null,
+    usage: null,
+    ...over,
+  }
+}
+
+function renderTranscriptWithRuns(
+  messages: HydratedTranscriptMessage[],
+  subagentRuns: Record<string, SubagentRunSnapshot>,
+) {
+  return renderToStaticMarkup(
+    <KannaTranscript
+      messages={messages}
+      isLoading={false}
+      latestToolIds={{ AskUserQuestion: null, ExitPlanMode: null, TodoWrite: null }}
+      onOpenLocalLink={() => undefined}
+      onAskUserQuestionSubmit={() => undefined}
+      onExitPlanModeConfirm={() => undefined}
+      subagentRuns={subagentRuns}
+    />
+  )
+}
+
+describe("KannaTranscript subagent runs", () => {
+  test("renders subagent run row under triggering user message", () => {
+    const html = renderTranscriptWithRuns(
+      [makeUserPrompt("u1")],
+      { r1: makeRun({ runId: "r1", parentUserMessageId: "u1" }) },
+    )
+    expect(html).toContain("data-testid=\"subagent-message:r1\"")
+  })
+
+  test("renders chained runs indented under parent", () => {
+    const html = renderTranscriptWithRuns(
+      [makeUserPrompt("u1")],
+      {
+        r1: makeRun({ runId: "r1", parentUserMessageId: "u1", finalText: "@agent/beta" }),
+        r2: makeRun({
+          runId: "r2",
+          parentUserMessageId: "u1",
+          parentRunId: "r1",
+          depth: 1,
+          subagentId: "sa-2",
+          subagentName: "beta",
+          finalText: "child",
+        }),
+      },
+    )
+    expect(html).toContain("data-testid=\"subagent-message:r2\"")
+    expect(html).toContain("margin-left:24px")
+  })
+
+  test("renders error card for failed run", () => {
+    const html = renderTranscriptWithRuns(
+      [makeUserPrompt("u1")],
+      {
+        r1: makeRun({
+          runId: "r1",
+          parentUserMessageId: "u1",
+          status: "failed",
+          finalText: null,
+          error: { code: "TIMEOUT", message: "took too long" },
+        }),
+      },
+    )
+    expect(html).toContain("data-testid=\"subagent-error:r1\"")
   })
 })

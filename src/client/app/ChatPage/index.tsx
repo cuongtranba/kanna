@@ -984,6 +984,7 @@ export function ChatPage() {
           onTunnelAccept={sendTunnelAccept}
           onTunnelStop={sendTunnelStop}
           onTunnelRetry={sendTunnelRetry}
+          subagentRuns={state.chatSnapshot?.subagentRuns}
           showScrollButton={showScrollToBottom && state.messages.length > 0}
           onIsAtEndChange={onIsAtEndChange}
           scrollToBottom={() => scrollToTranscriptEnd(true)}
