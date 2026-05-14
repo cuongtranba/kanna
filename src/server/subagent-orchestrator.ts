@@ -393,11 +393,15 @@ export class SubagentOrchestrator {
         // as `running` forever (no failed/completed event ever appended).
         const msg = err instanceof Error ? err.message : String(err)
         await this.failRun(args.chatId, runId, "PROVIDER_ERROR", msg)
+        this.release()
+        this.cleanupRunState(runId)
         return
       }
 
       if (!(await runStart.authReady())) {
         await this.failRun(args.chatId, runId, "AUTH_REQUIRED", `Authentication required for ${args.subagent.provider}`)
+        this.release()
+        this.cleanupRunState(runId)
         return
       }
 
