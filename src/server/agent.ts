@@ -2315,6 +2315,15 @@ export class AgentCoordinator {
       this.clearDrainingStream(chatId)
     }
 
+    // Reject any subagent canUseTool Promises waiting on a user response in
+    // this chat, and signal the orchestrator. Both happen unconditionally —
+    // a chat may have no active main-turn (e.g. just an @mention with the
+    // main turn already ended) while subagents are still running. Without
+    // this, the SDK's canUseTool callback hangs forever, wedging the
+    // subagent session and leaking the resolver entry.
+    this.rejectPendingResolversForChat(chatId)
+    this.subagentOrchestrator.cancelChat(chatId)
+
     const active = this.activeTurns.get(chatId)
     if (!active) return
 
@@ -2327,12 +2336,6 @@ export class AgentCoordinator {
     // Guard against concurrent cancel() calls — only the first one does work.
     if (active.cancelRequested) return
     active.cancelRequested = true
-
-    // Reject any subagent canUseTool Promises waiting on a user response in
-    // this chat. Without this the SDK's `canUseTool` callback hangs forever,
-    // wedging the subagent session and leaking the resolver entry.
-    this.rejectPendingResolversForChat(chatId)
-    this.subagentOrchestrator.cancelChat(chatId)
 
     const pendingTool = active.pendingTool
     active.pendingTool = null

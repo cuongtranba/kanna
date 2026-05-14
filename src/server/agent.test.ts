@@ -3503,6 +3503,76 @@ describe("AgentCoordinator subagent mention gating", () => {
     expect(runs[0]?.status).toBe("completed")
   }, 10_000)
 
+  test("cancel(chatId) rejects pending subagent canUseTool Promises so the session does not hang", async () => {
+    const store = createFakeStore()
+    let toolRequestPromise: Promise<unknown> | null = null
+
+    const coordinator = new AgentCoordinator({
+      store: store as never,
+      onStateChange: () => {},
+      getSubagents: () => [makeSubagentRecord({ id: "sa-1", name: "alpha" })],
+      getAppSettingsSnapshot: () => ({ claudeAuth: { authenticated: true } }),
+      startClaudeSession: async (args) => {
+        const toolRequest = {
+          tool: {
+            kind: "tool" as const,
+            toolKind: "ask_user_question" as const,
+            toolName: "AskUserQuestion",
+            toolId: "t1",
+            input: { questions: [{ id: "q1", question: "still there?" }] },
+            rawInput: { questions: [{ id: "q1", question: "still there?" }] },
+          },
+        }
+        toolRequestPromise = args.onToolRequest(toolRequest)
+        async function* stream() {
+          // Block until the resolver Promise settles (resolves OR rejects).
+          // Without the cancel-rejection fix, this awaits forever and the
+          // test times out instead of asserting the rejection.
+          try {
+            await toolRequestPromise!
+          } catch {
+            // Expected on cancel; surface as a result so the stream closes
+            // cleanly and the harness can shut down.
+          }
+          yield { type: "transcript" as const, entry: timestamped({ kind: "result", subtype: "success" as const }) }
+        }
+        return {
+          provider: "claude" as const,
+          stream: stream(),
+          interrupt: async () => {},
+          close: () => {},
+          sendPrompt: async () => {},
+          setModel: async () => {},
+          setPermissionMode: async () => {},
+          getSupportedCommands: async () => [],
+        }
+      },
+    })
+
+    await coordinator.send({
+      type: "chat.send",
+      chatId: "chat-1",
+      provider: "claude",
+      content: "@agent/alpha",
+      model: "claude-opus-4-7",
+    })
+    await waitFor(() => store.subagentEvents.some((e: any) => e.type === "subagent_tool_pending"))
+
+    // Sanity: the Promise must be pending before cancel.
+    let settledEarly = false
+    void toolRequestPromise!.then(() => { settledEarly = true }, () => { settledEarly = true })
+    await Promise.resolve()
+    expect(settledEarly).toBe(false)
+
+    // Cancel the chat. Without the fix this leaves the resolver in the map
+    // forever and the SDK's canUseTool Promise hangs — wedging the session.
+    await coordinator.cancel("chat-1")
+
+    // The pending Promise must reject (or resolve to a sentinel) so the
+    // SDK harness can unwind.
+    await expect(toolRequestPromise!).rejects.toThrow()
+  }, 10_000)
+
   test("respondSubagentTool is idempotent when no resolver is pending", async () => {
     const store = createFakeStore()
     const coordinator = new AgentCoordinator({
