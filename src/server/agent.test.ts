@@ -2207,6 +2207,9 @@ function createFakeStore() {
     getSubagentRuns() {
       return Object.fromEntries(this.subagentRuns.entries())
     },
+    *runningSubagentRuns() {
+      // Empty stub — fake store has no subagent runs; recoverInterruptedRuns is a no-op.
+    },
   }
 }
 
