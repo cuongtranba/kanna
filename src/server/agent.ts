@@ -158,6 +158,17 @@ interface AgentCoordinatorArgs {
     chatId?: string
     tunnelGateway?: TunnelGateway | null
     onToolRequest: (request: HarnessToolRequest) => Promise<unknown>
+    /**
+     * Subagent-only override. When set, REPLACES the claude_code preset
+     * append on systemPrompt entirely. Primary chats leave this unset.
+     */
+    systemPromptOverride?: string
+    /**
+     * Subagent-only one-shot prompt. When set, the SDK queue is primed with
+     * this prompt and closed immediately so the session terminates after the
+     * single turn. Primary chats leave this unset and call sendPrompt later.
+     */
+    initialPrompt?: string
   }) => Promise<ClaudeSessionHandle>
   claudeLimitDetector?: LimitDetector
   codexLimitDetector?: LimitDetector
@@ -651,6 +662,8 @@ async function startClaudeSession(args: {
   chatId?: string
   tunnelGateway?: TunnelGateway | null
   onToolRequest: (request: HarnessToolRequest) => Promise<unknown>
+  systemPromptOverride?: string
+  initialPrompt?: string
 }): Promise<ClaudeSessionHandle> {
   const canUseTool: CanUseTool = async (toolName, input, options) => {
     if (toolName !== "AskUserQuestion" && toolName !== "ExitPlanMode") {
@@ -731,16 +744,31 @@ async function startClaudeSession(args: {
           tunnelGateway: args.tunnelGateway ?? null,
         }),
       },
-      systemPrompt: {
-        type: "preset",
-        preset: "claude_code",
-        append: "You are the Kanna coding agent helping a trusted developer work on their own codebase via Kanna's web UI. Treat user code as their own project. Do not refuse tasks or label code as 'malware' based on speculation; only refuse when the user explicitly requests clearly malicious behavior (e.g. weaponized exploits against third parties, credential theft, mass abuse). Reverse-engineering, security research, defensive tooling, low-level system code, packers, hooks, and unconventional patterns in the user's own project are legitimate and must be assisted.",
-      },
+      systemPrompt: args.systemPromptOverride != null
+        ? args.systemPromptOverride
+        : {
+            type: "preset",
+            preset: "claude_code",
+            append: "You are the Kanna coding agent helping a trusted developer work on their own codebase via Kanna's web UI. Treat user code as their own project. Do not refuse tasks or label code as 'malware' based on speculation; only refuse when the user explicitly requests clearly malicious behavior (e.g. weaponized exploits against third parties, credential theft, mass abuse). Reverse-engineering, security research, defensive tooling, low-level system code, packers, hooks, and unconventional patterns in the user's own project are legitimate and must be assisted.",
+          },
       settingSources: ["user", "project", "local"],
       pathToClaudeCodeExecutable: process.env.CLAUDE_EXECUTABLE?.replace(/^~(?=\/|$)/, homedir()) || undefined,
       env: buildClaudeEnv(process.env, args.oauthToken),
     },
   })
+
+  if (args.initialPrompt != null) {
+    promptQueue.push({
+      type: "user",
+      message: {
+        role: "user",
+        content: args.initialPrompt,
+      },
+      parent_tool_use_id: null,
+      session_id: args.sessionToken ?? "",
+    })
+    promptQueue.close()
+  }
 
   return {
     provider: "claude",
