@@ -1,7 +1,7 @@
 # Claude PTY Driver — Design
 
 **Date:** 2026-05-14
-**Status:** Draft v4 — third codex adversarial pass applied (bash arg parsing + path deny lists + OS sandbox, third-party MCP fail-closed, idempotency binds args), awaiting user review
+**Status:** Draft v5 — fourth codex adversarial pass applied (ToolRequest schema rebound to args, sandbox preflight fail-closed), awaiting user review
 **Author:** session-collaborative
 **Related code:** `src/server/agent.ts`, `src/server/terminal-manager.ts`, `src/server/harness-types.ts`, `src/server/kanna-mcp.ts`
 
@@ -320,20 +320,31 @@ This pattern's safety properties **do not depend** on `--dangerously-skip-permis
 
 ```
 ToolRequest {
-  id              // HMAC_SHA256(serverSecret, chatId || sessionId || toolUseId)
+  id                   // hex(HMAC_SHA256(serverSecret,
+                       //   chatId || sessionId || toolUseId || toolName || canonicalArgsHash))
   chatId
   sessionId
-  toolUseId       // CLI-assigned, identical across retries
+  toolUseId            // CLI-assigned; same id MUST coincide with same toolName + canonicalArgsHash
   toolName
-  arguments       // structured, full args (no truncation)
-  policyVerdict   // "auto-allow" | "auto-deny" | "ask"
-  status          // pending | answered | timeout | canceled | session_closed
-  decision?       // allow | deny | answer payload
+  arguments            // structured, full args (no truncation)
+  canonicalArgsHash    // sha256(canonicalJson(arguments)); persisted; never recomputed from the
+                       // arguments field on retry — compared verbatim against the new request's hash
+  policyVerdict        // "auto-allow" | "auto-deny" | "ask"
+  status               // pending | answered | timeout | canceled | session_closed | arg_mismatch
+  decision?            // allow | deny | answer payload
+  mismatchReason?      // populated when status = arg_mismatch; emits audit event
   createdAt
   resolvedAt?
   expiresAt
 }
 ```
+
+Phase-1 tests gate (`mcp-tool-callback.test.ts` and `permission-gate.test.ts`) explicitly cover:
+
+- Same `toolUseId` with identical `toolName` + `canonicalArgsHash` → idempotent (returns existing record).
+- Same `toolUseId` with **different** `toolName` → reject with `arg_mismatch`, audit event emitted, original record unchanged.
+- Same `toolUseId` with **different** `canonicalArgsHash` (any field mutated) → reject with `arg_mismatch`, audit event emitted.
+- Replay across a previously-answered record (terminal status) with mismatched args → reject with `arg_mismatch`; the prior allow decision is NOT applied.
 
 Lifecycle rules (apply to all gated calls):
 
@@ -400,12 +411,27 @@ Result: `cat ~/.claude/.credentials.json`, `rg . ~/.ssh`, `cat $(echo ~/.ssh/id_
 - `mcp__kanna__webfetch` / `mcp__kanna__websearch`: no auto-allow by default. User can add hosts to a per-chat allow list.
 - `Read` / `Glob` / `Grep` (CLI built-ins, still enabled): Kanna cannot intercept these. **Workaround:** the same `readPathDeny` is enforced by the `mcp__kanna__read_guard` tool, which the system prompt instructs the model to consult before reading sensitive paths. Belt-and-suspenders only — primary defense is sandboxing the spawn (see "Sandboxing" below).
 
-#### Sandboxing the spawn (defense-in-depth)
+#### Sandboxing the spawn (required on supported OS)
 
-For users on macOS, Kanna can launch `claude` under `sandbox-exec` with a profile that denies `read-file` for the deny-list directories. On Linux, `bwrap` with read-only bind-mounts for `$HOME` minus `~/.ssh`, `~/.aws`, etc. This makes deny enforcement OS-level even when the model bypasses our gating.
+OS-level sandboxing is the **only** effective gate against the CLI's still-enabled built-in `Read` / `Glob` / `Grep`. Kanna treats it as a hard precondition for `KANNA_CLAUDE_DRIVER=pty` on every supported platform.
 
-- Opt-in setting `KANNA_PTY_SANDBOX=on` (default `on` on supported OSes, `off` on Windows for v1).
-- Documented as the only fully-effective gate against the CLI's built-in `Read` / `Glob` / `Grep`.
+**Implementation:**
+- macOS: `sandbox-exec -f <generated.sb>` wrapping the `claude` invocation. Profile denies `file-read*` for each path in `readPathDeny` and the workspace-relative `writePathDeny`. Profile is generated per-spawn so user-edited deny lists take effect.
+- Linux: `bwrap` with read-only bind-mounts over the workspace + `additionalDirectories` and explicit `--tmpfs` / `--bind-try /dev/null` overlays for each deny-list path inside `$HOME`.
+- Windows: not supported in v1. PTY driver refuses to spawn unless `KANNA_PTY_SANDBOX=off` is set explicitly **and** the user confirms an "unsafe Windows mode" toggle (separate from the per-chat `auto-approve` toggle, server-wide). This off mode renders a permanent unsafe banner across the whole app.
+
+**Fail-closed preflight (runs on every spawn, supported OS):**
+
+1. Resolve sandbox binary (`/usr/bin/sandbox-exec` macOS, `bwrap` Linux). Fail spawn if missing.
+2. Generate the deny-list profile from current `readPathDeny` + `writePathDeny`. Fail spawn if generation errors (e.g., unresolvable `~`).
+3. Boot the sandbox with a 200ms sentinel child that attempts to read each of: `~/.claude/.credentials.json`, `~/.ssh/id_rsa`, `~/.aws/credentials`. The child writes the results to a private pipe Kanna reads. Spawn proceeds only if all three reads were denied. If any sentinel read succeeded, spawn is rejected with `"Sandbox preflight failed: <path> reachable. Refusing to launch."`.
+4. Cache successful preflight result per (OS-version, profile-hash) for 24h to avoid running it on every PTY spawn.
+
+**Explicit override:**
+- `KANNA_PTY_SANDBOX=off` is recognized but documented as **dangerous and unsupported**. When off, PTY spawn additionally removes `Read`, `Glob`, `Grep` from `--tools` allowlist (model loses read tools entirely — `mcp__kanna__read_guard` is the only path) and renders a global red banner. This is the only way to enable PTY without a sandbox; it is **not** silently permitted.
+- `KANNA_PTY_SANDBOX=on` (default on macOS/Linux) is the supported mode.
+
+Tests (`sandbox-preflight.test.ts`): missing binary → reject, bad profile → reject, sentinel reachable → reject, all-denied → allow + cache, cache hit skips re-run, cache invalidates on profile-hash change.
 
 User can edit lists per-chat. "Auto-approve everything" is a single toggle that sets `defaultAction: "auto-allow"` and shows the red banner. Even under auto-approve, `readPathDeny` and `writePathDeny` still apply — auto-approve cannot grant access to denied paths.
 
