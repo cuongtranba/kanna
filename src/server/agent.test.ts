@@ -2145,6 +2145,68 @@ function createFakeStore() {
     async removeQueuedMessage(_chatId: string, queuedMessageId: string) {
       this.queuedMessages = this.queuedMessages.filter((entry) => entry.id !== queuedMessageId)
     },
+    subagentEvents: [] as any[],
+    subagentRuns: new Map<string, any>(),
+    async appendSubagentEvent(event: any) {
+      this.subagentEvents.push(event)
+      const map = this.subagentRuns
+      switch (event.type) {
+        case "subagent_run_started":
+          map.set(event.runId, {
+            runId: event.runId,
+            chatId: event.chatId,
+            subagentId: event.subagentId,
+            subagentName: event.subagentName,
+            provider: event.provider,
+            model: event.model,
+            status: "running",
+            parentUserMessageId: event.parentUserMessageId,
+            parentRunId: event.parentRunId,
+            depth: event.depth,
+            startedAt: event.timestamp,
+            finishedAt: null,
+            finalText: null,
+            error: null,
+            usage: null,
+          })
+          break
+        case "subagent_message_delta": {
+          const run = map.get(event.runId)
+          if (run) run.finalText = (run.finalText ?? "") + event.content
+          break
+        }
+        case "subagent_run_completed": {
+          const run = map.get(event.runId)
+          if (run) {
+            run.status = "completed"
+            run.finishedAt = event.timestamp
+            run.finalText = event.finalContent
+            run.usage = event.usage ?? null
+          }
+          break
+        }
+        case "subagent_run_failed": {
+          const run = map.get(event.runId)
+          if (run) {
+            run.status = "failed"
+            run.finishedAt = event.timestamp
+            run.error = event.error
+          }
+          break
+        }
+        case "subagent_run_cancelled": {
+          const run = map.get(event.runId)
+          if (run) {
+            run.status = "cancelled"
+            run.finishedAt = event.timestamp
+          }
+          break
+        }
+      }
+    },
+    getSubagentRuns() {
+      return Object.fromEntries(this.subagentRuns.entries())
+    },
   }
 }
 
@@ -3181,5 +3243,80 @@ describe("parseBackgroundPid regex variants", () => {
     const task = registry.list()[0]
     if (task?.kind !== "bash_shell") throw new Error("unexpected task kind")
     expect(task.pid).toBeNull()
+  })
+})
+
+describe("AgentCoordinator subagent mention gating", () => {
+  function makeSubagentRecord(over: { id: string; name: string }) {
+    return {
+      id: over.id,
+      name: over.name,
+      provider: "claude" as const,
+      model: "claude-opus-4-7",
+      modelOptions: { reasoningEffort: "medium", contextWindow: "1m" } as never,
+      systemPrompt: "test",
+      contextScope: "previous-assistant-reply" as const,
+      createdAt: 1,
+      updatedAt: 1,
+    }
+  }
+
+  test("send with resolved @agent mention does NOT start primary turn", async () => {
+    const store = createFakeStore()
+    const startTurnCalls: unknown[] = []
+    const fakeCodexManager = {
+      async startSession() { startTurnCalls.push("session") },
+      async startTurn(): Promise<HarnessTurn> { startTurnCalls.push("turn"); throw new Error("primary turn should not start") },
+    }
+    const coordinator = new AgentCoordinator({
+      store: store as never,
+      onStateChange: () => {},
+      codexManager: fakeCodexManager as never,
+      getSubagents: () => [makeSubagentRecord({ id: "sa-1", name: "alpha" })],
+    })
+
+    await coordinator.send({
+      type: "chat.send",
+      chatId: "chat-1",
+      provider: "claude",
+      content: "hi @agent/alpha please review",
+      model: "claude-opus-4-7",
+    })
+
+    await waitFor(() => Object.keys(store.getSubagentRuns()).length > 0)
+    expect(startTurnCalls).toEqual([])
+    const runs = Object.values(store.getSubagentRuns())
+    expect(runs).toHaveLength(1)
+    expect(store.messages[0]?.kind).toBe("user_prompt")
+  })
+
+  test("send with only unknown-subagent mention emits UNKNOWN_SUBAGENT and skips primary", async () => {
+    const store = createFakeStore()
+    const startTurnCalls: unknown[] = []
+    const fakeCodexManager = {
+      async startSession() { startTurnCalls.push("session") },
+      async startTurn(): Promise<HarnessTurn> { startTurnCalls.push("turn"); throw new Error("primary should not start") },
+    }
+    const coordinator = new AgentCoordinator({
+      store: store as never,
+      onStateChange: () => {},
+      codexManager: fakeCodexManager as never,
+      getSubagents: () => [],
+    })
+
+    await coordinator.send({
+      type: "chat.send",
+      chatId: "chat-1",
+      provider: "claude",
+      content: "hi @agent/nobody",
+      model: "claude-opus-4-7",
+    })
+
+    await waitFor(() => Object.keys(store.getSubagentRuns()).length > 0)
+    expect(startTurnCalls).toEqual([])
+    const runs = Object.values(store.getSubagentRuns()) as Array<{ status: string; error: { code: string } | null }>
+    expect(runs).toHaveLength(1)
+    expect(runs[0].status).toBe("failed")
+    expect(runs[0].error?.code).toBe("UNKNOWN_SUBAGENT")
   })
 })
