@@ -237,6 +237,14 @@ export class SubagentOrchestrator {
       this.waiters.splice(i, 1)
       w.reject(new Error("CHAT_CANCELLED"))
     }
+    // Cancel every acquired/queued run in this chat. cancelRun is idempotent
+    // (re-cancellation no-op) and handles both queued and running states.
+    // Snapshot runIds first because cancelRun may mutate the map.
+    const runIds: string[] = []
+    for (const [runId, state] of this.runStateByRunId) {
+      if (state.chatId === chatId) runIds.push(runId)
+    }
+    for (const runId of runIds) this.cancelRun(chatId, runId)
   }
 
   cancelRun(chatId: string, runId: string): void {

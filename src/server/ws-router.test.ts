@@ -2494,6 +2494,47 @@ describe("ws-router", () => {
     expect(ws.sent).toContainEqual({ v: PROTOCOL_VERSION, type: "ack", id: "cancel-1" })
   })
 
+  test("dispatches chat.cancelSubagentRun to coordinator", async () => {
+    const calls: Array<{ type: string; chatId: string; runId: string }> = []
+    const { agent } = makeAutoContinueAgent({
+      cancelSubagentRun: async (cmd: { type: string; chatId: string; runId: string }) => {
+        calls.push(cmd)
+      },
+    })
+
+    const router = createWsRouter({
+      store: makeAutoContinueStore(createEmptyState()) as never,
+      agent: agent as never,
+      terminals: { getSnapshot: () => null, onEvent: () => () => {} } as never,
+      keybindings: { getSnapshot: () => DEFAULT_KEYBINDINGS_SNAPSHOT, onChange: () => () => {} } as never,
+      refreshDiscovery: async () => [],
+      getDiscoveredProjects: () => [],
+      machineDisplayName: "Local Machine",
+      updateManager: null,
+      pushManager: NOOP_PUSH_MANAGER,
+    })
+    const ws = new FakeWebSocket()
+
+    await router.handleMessage(
+      ws as never,
+      JSON.stringify({
+        v: 1,
+        type: "command",
+        id: "cancel-subagent-1",
+        command: {
+          type: "chat.cancelSubagentRun",
+          chatId: "chat-1",
+          runId: "run-42",
+        },
+      })
+    )
+
+    expect(calls).toHaveLength(1)
+    expect(calls[0]!.chatId).toBe("chat-1")
+    expect(calls[0]!.runId).toBe("run-42")
+    expect(ws.sent).toContainEqual({ v: PROTOCOL_VERSION, type: "ack", id: "cancel-subagent-1" })
+  })
+
   test("chat.delete cancels live schedules before closing chat", async () => {
     const cancelledScheduleIds: string[] = []
     const callOrder: string[] = []
