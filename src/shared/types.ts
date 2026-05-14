@@ -860,6 +860,17 @@ export interface ToolResultEntry extends TranscriptEntryBase {
   toolId: string
   content: unknown
   isError?: boolean
+  /**
+   * Set when the original content exceeded the subagent payload cap
+   * (50 KB) and the full content was written to disk. `content` then
+   * carries only a 2 KB preview wrapped in <persisted-output> tags.
+   */
+  persisted?: {
+    filepath: string
+    originalSize: number
+    isJson: boolean
+    truncated: true
+  }
 }
 
 export interface UserPromptEntry extends TranscriptEntryBase {
@@ -1134,6 +1145,17 @@ export interface HydratedToolCallBase<TKind extends string, TInput, TResult> {
   result?: TResult
   rawResult?: unknown
   isError?: boolean
+  /**
+   * Set when the underlying tool_result entry was persisted to disk
+   * via the subagent payload cap. Mirrored from
+   * ToolResultEntry.persisted during hydration.
+   */
+  persisted?: {
+    filepath: string
+    originalSize: number
+    isJson: boolean
+    truncated: true
+  }
   timestamp: string
 }
 
@@ -1304,6 +1326,7 @@ export type SubagentErrorCode =
   | "DEPTH_EXCEEDED"
   | "TIMEOUT"
   | "PROVIDER_ERROR"
+  | "INTERRUPTED"
 
 export type SubagentRunStatus = "running" | "completed" | "failed" | "cancelled"
 
@@ -1312,6 +1335,13 @@ export interface ProviderUsage {
   outputTokens?: number
   cachedInputTokens?: number
   costUsd?: number
+}
+
+export interface SubagentPendingTool {
+  toolUseId: string
+  toolKind: "ask_user_question" | "exit_plan_mode"
+  input: unknown
+  requestedAt: number
 }
 
 export interface SubagentRunSnapshot {
@@ -1338,6 +1368,13 @@ export interface SubagentRunSnapshot {
    * rendering, finalText only as a quick text-only summary.
    */
   entries: TranscriptEntry[]
+  /**
+   * Set while the subagent is awaiting a user response to an
+   * interactive tool call (AskUserQuestion / ExitPlanMode). Null
+   * otherwise. The orchestrator's wall-clock timeout is paused while
+   * this is non-null.
+   */
+  pendingTool: SubagentPendingTool | null
 }
 
 export interface ChatSnapshot {
