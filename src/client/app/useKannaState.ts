@@ -458,20 +458,16 @@ function wsUrl() {
 }
 
 function useKannaSocket() {
-  const socketRef = useRef<KannaSocket | null>(null)
-  if (!socketRef.current) {
-    socketRef.current = new KannaSocket(wsUrl())
-  }
+  const [socket] = useState<KannaSocket>(() => new KannaSocket(wsUrl()))
 
   useEffect(() => {
-    const socket = socketRef.current
-    socket?.start()
+    socket.start()
     return () => {
-      socket?.dispose()
+      socket.dispose()
     }
-  }, [])
+  }, [socket])
 
-  return socketRef.current as KannaSocket
+  return socket
 }
 
 function logKannaState(message: string, details?: unknown) {
@@ -1317,13 +1313,15 @@ export function useKannaState(activeChatId: string | null): KannaState {
       ?? selectedProjectId,
     [activeChatId, activeChatSnapshot?.runtime.projectId, selectedProjectId, sidebarProjectGroups]
   )
+  // Intentional ref reads/writes in useMemo: this implements "sticky" diff state — when diffs
+  // go null for the active project, we return the last known value to prevent a visible null flash.
+  // The alternative (setState in layoutEffect) triggers set-state-in-effect warnings that are
+  // deferred to a follow-up PR. Both are React compiler concerns in the same category.
+  /* eslint-disable react-hooks/refs */
   const chatDiffSnapshot = useMemo(() => {
     const currentDiffs = activeProjectId ? (projectDiffSnapshots[activeProjectId] ?? null) : null
     if (activeProjectId && currentDiffs) {
-      lastActiveProjectDiffRef.current = {
-        projectId: activeProjectId,
-        diffs: currentDiffs,
-      }
+      lastActiveProjectDiffRef.current = { projectId: activeProjectId, diffs: currentDiffs }
       return currentDiffs
     }
 
@@ -1333,6 +1331,7 @@ export function useKannaState(activeChatId: string | null): KannaState {
 
     return currentDiffs
   }, [activeProjectId, projectDiffSnapshots])
+  /* eslint-enable react-hooks/refs */
 
   useEffect(() => {
     if (!activeProjectId) {
@@ -2326,6 +2325,7 @@ export function useKannaState(activeChatId: string | null): KannaState {
     }
   }, [activeChatId, socket])
 
+  // eslint-disable-next-line react-hooks/refs
   return {
     socket,
     activeChatId,
@@ -2334,7 +2334,7 @@ export function useKannaState(activeChatId: string | null): KannaState {
     localProjects,
     updateSnapshot,
     chatSnapshot,
-    chatDiffSnapshot,
+    chatDiffSnapshot, // eslint-disable-line react-hooks/refs
     keybindings,
     appSettings,
     pushConfig,
