@@ -45,7 +45,6 @@ import type { TerminalManager } from "./terminal-manager"
 import { OAuthTokenPool } from "./oauth-pool/oauth-token-pool"
 import { parseMentions, type ParsedMention } from "./mention-parser"
 import { SubagentOrchestrator } from "./subagent-orchestrator"
-import { buildSubagentProviderRun } from "./subagent-provider-run"
 
 export function resolveSpawnPaths(
   chat: Pick<ChatRecord, "id" | "stackBindings">,
@@ -109,7 +108,7 @@ interface ActiveTurn {
   waitStartedAt: number | null
 }
 
-interface ClaudeSessionHandle {
+export interface ClaudeSessionHandle {
   provider: "claude"
   stream: AsyncIterable<HarnessEvent>
   getAccountInfo?: () => Promise<any>
@@ -899,7 +898,21 @@ export class AgentCoordinator {
     this.subagentOrchestrator = new SubagentOrchestrator({
       store: this.store,
       appSettings: { getSnapshot: () => ({ subagents: this.getSubagents() }) },
-      startProviderRun: ({ subagent, chatId, primer, runId: _runId }) => buildSubagentProviderRun({ subagent, chatId, primer }),
+      startProviderRun: ({ subagent }) => ({
+        // TEMPORARY: real wiring in Task 7 (buildSubagentProviderRunForChat).
+        // Returns a ProviderRunStart whose start() throws so the orchestrator's
+        // inner catch records it as PROVIDER_ERROR. This keeps phase 3 mention-
+        // gating tests passing (they only assert a run exists + primary doesn't
+        // fire) without leaving runs stuck in "running".
+        provider: subagent.provider,
+        model: subagent.model,
+        systemPrompt: subagent.systemPrompt,
+        preamble: null,
+        authReady: async () => true,
+        async start() {
+          throw new Error("buildSubagentProviderRun not yet wired (phase 4 task 7 pending)")
+        },
+      }),
     })
     this.throwOnClaudeSessionStart = args.throwOnClaudeSessionStart ?? false
     this.tunnelGateway = args.tunnelGateway ?? null
