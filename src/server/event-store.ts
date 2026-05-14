@@ -3,7 +3,7 @@ import { existsSync, readFileSync as readFileSyncImmediate } from "node:fs"
 import { homedir } from "node:os"
 import path from "node:path"
 import { getDataDir, LOG_PREFIX } from "../shared/branding"
-import type { AgentProvider, ChatHistoryPage, ChatHistorySnapshot, QueuedChatMessage, SlashCommand, StackBinding, SubagentRunSnapshot, TranscriptEntry } from "../shared/types"
+import type { AgentProvider, ChatHistoryPage, ChatHistorySnapshot, QueuedChatMessage, ResultEntry, SlashCommand, StackBinding, SubagentRunSnapshot, TranscriptEntry } from "../shared/types"
 import { STORE_VERSION } from "../shared/types"
 import type { AutoContinueEvent } from "./auto-continue/events"
 import {
@@ -135,6 +135,7 @@ function getReplayEventPriority(event: StoreEvent): number {
       return 0
     case "subagent_run_started":
     case "subagent_message_delta":
+    case "subagent_entry_appended":
     case "subagent_run_completed":
     case "subagent_run_failed":
     case "subagent_run_cancelled":
@@ -823,6 +824,7 @@ export class EventStore implements PushEventStore {
           finalText: null,
           error: null,
           usage: null,
+          entries: [],
         })
         break
       }
@@ -833,6 +835,26 @@ export class EventStore implements PushEventStore {
         run.finalText = (run.finalText ?? "") + e.content
         break
       }
+      case "subagent_entry_appended": {
+        const map = this.state.subagentRunsByChatId.get(e.chatId)
+        const run = map?.get(e.runId)
+        if (!run) break
+        run.entries.push(e.entry)
+        // If the entry carries usage (the SDK's terminal "result" message), mirror
+        // it onto run.usage so callers can read it without scanning entries.
+        if (e.entry.kind === "result") {
+          const resultEntry = e.entry as ResultEntry & { usage?: { inputTokens?: number; outputTokens?: number; cachedInputTokens?: number } }
+          const cost = resultEntry.costUsd
+          const usage = resultEntry.usage
+          run.usage = {
+            inputTokens: usage?.inputTokens,
+            outputTokens: usage?.outputTokens,
+            cachedInputTokens: usage?.cachedInputTokens,
+            costUsd: cost,
+          }
+        }
+        break
+      }
       case "subagent_run_completed": {
         const map = this.state.subagentRunsByChatId.get(e.chatId)
         const run = map?.get(e.runId)
@@ -840,7 +862,10 @@ export class EventStore implements PushEventStore {
         run.status = "completed"
         run.finishedAt = e.timestamp
         run.finalText = e.finalContent
-        run.usage = e.usage ?? null
+        // Merge: prefer e.usage if present, otherwise keep what subagent_entry_appended
+        // already mirrored. Otherwise null. Without this guard a streaming run
+        // whose completion event omits usage would silently erase it.
+        run.usage = e.usage ?? run.usage ?? null
         break
       }
       case "subagent_run_failed": {

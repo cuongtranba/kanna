@@ -657,6 +657,16 @@ describe("recordSessionCommandsLoaded", () => {
   })
 })
 
+async function setupStoreWithChat() {
+  const dir = await createTempDataDir()
+  const store = new EventStore(dir)
+  await store.initialize()
+  const project = await store.openProject("/tmp/p-setup")
+  const chat = await store.createChat(project.id)
+  const baseTs = chat.createdAt + 1
+  return { dir, store, chatId: chat.id, baseTs }
+}
+
 describe("EventStore subagent runs", () => {
   test("subagent_run_* events build subagentRuns map and survive replay", async () => {
     const dataDir = await createTempDataDir()
@@ -804,6 +814,83 @@ describe("EventStore subagent runs", () => {
     const reloaded = new EventStore(dataDir)
     await reloaded.initialize()
     expect(reloaded.getSubagentRuns(chat.id)).toEqual({})
+  })
+
+  test("subagent_entry_appended pushes onto run.entries; result entry mirrors usage", async () => {
+    const { dir, store, chatId, baseTs } = await setupStoreWithChat()
+    const runId = "r-entries"
+    await store.appendSubagentEvent({
+      v: 3, type: "subagent_run_started", timestamp: baseTs, chatId, runId,
+      subagentId: "s1", subagentName: "alpha", provider: "claude",
+      model: "claude-opus-4-7", parentUserMessageId: "u1", parentRunId: null, depth: 0,
+    })
+    await store.appendSubagentEvent({
+      v: 3, type: "subagent_entry_appended", timestamp: baseTs + 1, chatId, runId,
+      entry: {
+        _id: "e1", createdAt: baseTs + 1, kind: "tool_call",
+        tool: { kind: "tool", toolKind: "bash", toolName: "Bash", toolId: "t1", input: { command: "ls" } },
+      } as unknown as TranscriptEntry,
+    })
+    await store.appendSubagentEvent({
+      v: 3, type: "subagent_entry_appended", timestamp: baseTs + 2, chatId, runId,
+      entry: {
+        _id: "e2", createdAt: baseTs + 2, kind: "tool_result", toolId: "t1",
+        content: "file.txt\n", isError: false,
+      } as unknown as TranscriptEntry,
+    })
+    await store.appendSubagentEvent({
+      v: 3, type: "subagent_entry_appended", timestamp: baseTs + 3, chatId, runId,
+      entry: {
+        _id: "e3", createdAt: baseTs + 3, kind: "result", subtype: "success", isError: false,
+        result: "done", durationMs: 100, costUsd: 0.01,
+        usage: { inputTokens: 50, outputTokens: 7, cachedInputTokens: 0 },
+      } as unknown as TranscriptEntry,
+    })
+    await store.appendSubagentEvent({
+      v: 3, type: "subagent_run_completed", timestamp: baseTs + 4, chatId, runId,
+      finalContent: "file.txt",
+    })
+
+    const live = store.getSubagentRuns(chatId)[runId]
+    expect(live.entries).toHaveLength(3)
+    expect(live.entries[0].kind).toBe("tool_call")
+    expect(live.entries[1].kind).toBe("tool_result")
+    expect(live.entries[2].kind).toBe("result")
+    expect(live.usage).toEqual({ inputTokens: 50, outputTokens: 7, cachedInputTokens: 0, costUsd: 0.01 })
+
+    const reloaded = new EventStore(dir)
+    await reloaded.initialize()
+    const replayed = reloaded.getSubagentRuns(chatId)[runId]
+    expect(replayed.entries).toHaveLength(3)
+    expect(replayed.usage?.outputTokens).toBe(7)
+  })
+
+  test("subagent_run_completed without usage preserves usage from result entry", async () => {
+    const { dir, store, chatId, baseTs } = await setupStoreWithChat()
+    const runId = "r-merge"
+    await store.appendSubagentEvent({
+      v: 3, type: "subagent_run_started", timestamp: baseTs, chatId, runId,
+      subagentId: "s1", subagentName: "alpha", provider: "claude",
+      model: "claude-opus-4-7", parentUserMessageId: "u1", parentRunId: null, depth: 0,
+    })
+    await store.appendSubagentEvent({
+      v: 3, type: "subagent_entry_appended", timestamp: baseTs + 1, chatId, runId,
+      entry: {
+        _id: "e1", createdAt: baseTs + 1, kind: "result", subtype: "success", isError: false,
+        result: "done", durationMs: 10, costUsd: 0.001,
+        usage: { inputTokens: 99, outputTokens: 9 },
+      } as unknown as TranscriptEntry,
+    })
+    await store.appendSubagentEvent({
+      v: 3, type: "subagent_run_completed", timestamp: baseTs + 2, chatId, runId,
+      finalContent: "done",
+    })
+    const live = store.getSubagentRuns(chatId)[runId]
+    expect(live.usage?.outputTokens).toBe(9)
+
+    const reloaded = new EventStore(dir)
+    await reloaded.initialize()
+    expect(reloaded.getSubagentRuns(chatId)[runId].usage?.outputTokens).toBe(9)
   })
 })
 
