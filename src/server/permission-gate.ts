@@ -43,7 +43,7 @@ function parseSimpleBash(
   for (const t of tokens) {
     if (isShellOp(t)) return null  // pipe/redirect/subshell/glob/etc.
   }
-  const stringTokens = tokens as string[]
+  const stringTokens = tokens.filter((t): t is string => typeof t === "string")
   if (stringTokens.length === 0) return null
 
   let hadEnvPrefix = false
@@ -101,7 +101,7 @@ function pathMatchesDeny(absPath: string, deny: string[]): string | null {
 
 export const policy = {
   evaluate(args: EvaluateArgs): EvaluateResult {
-    // Bash-specific arg parsing.
+    // Bash path: single block handles all bash decisions.
     if (args.toolName === "mcp__kanna__bash") {
       const command = typeof args.args.command === "string" ? args.args.command : ""
       const parsed = parseSimpleBash(command, args.cwd, args.chatPolicy.bash.autoAllowVerbs)
@@ -117,8 +117,21 @@ export const policy = {
           return { verdict: "auto-deny", reason: `readPathDeny: ${denied}` }
         }
       }
+      // Deny-list applies to bash before auto-allow.
+      for (const rule of args.chatPolicy.toolDenyList) {
+        if (rule.tool !== args.toolName) continue
+        const re = new RegExp(rule.pattern)
+        if (re.test(argsToText(args.args))) {
+          return { verdict: "auto-deny", reason: `matched denylist: ${rule.pattern}` }
+        }
+      }
+      if (args.chatPolicy.bash.autoAllowVerbs.includes(parsed.verb)) {
+        return { verdict: "auto-allow", reason: `verb in autoAllowVerbs: ${parsed.verb}` }
+      }
+      return { verdict: "ask", reason: "bash verb not on autoAllowVerbs" }
     }
 
+    // Non-bash path: deny-list, allow-list, default.
     // 1. Deny list wins over everything.
     for (const rule of args.chatPolicy.toolDenyList) {
       if (rule.tool !== args.toolName) continue
@@ -128,17 +141,7 @@ export const policy = {
       }
     }
 
-    // 2. Bash auto-allow if verb is in autoAllowVerbs and no deny path
-    if (args.toolName === "mcp__kanna__bash") {
-      const command = typeof args.args.command === "string" ? args.args.command : ""
-      const parsed = parseSimpleBash(command, args.cwd, args.chatPolicy.bash.autoAllowVerbs)
-      if (parsed && args.chatPolicy.bash.autoAllowVerbs.includes(parsed.verb)) {
-        return { verdict: "auto-allow", reason: `verb in autoAllowVerbs: ${parsed.verb}` }
-      }
-      return { verdict: "ask", reason: "bash verb not on autoAllowVerbs" }
-    }
-
-    // 3. Allow list
+    // 2. Allow list
     for (const rule of args.chatPolicy.toolAllowList) {
       if (rule.tool !== args.toolName) continue
       const re = new RegExp(rule.pattern)
