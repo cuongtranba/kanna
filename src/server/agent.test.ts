@@ -3502,4 +3502,22 @@ describe("AgentCoordinator subagent mention gating", () => {
     const runs = Object.values(store.getSubagentRuns()) as Array<{ status: string }>
     expect(runs[0]?.status).toBe("completed")
   }, 10_000)
+
+  test("respondSubagentTool is idempotent when no resolver is pending", async () => {
+    const store = createFakeStore()
+    const coordinator = new AgentCoordinator({
+      store: store as never,
+      onStateChange: () => {},
+      getSubagents: () => [],
+      getAppSettingsSnapshot: () => ({ claudeAuth: { authenticated: true } }),
+    })
+    // No prior pending — must not throw.
+    await coordinator.respondSubagentTool({
+      type: "chat.respondSubagentTool",
+      chatId: "chat-1",
+      runId: "missing-run",
+      toolUseId: "t1",
+      result: { answers: {} },
+    })
+  })
 })

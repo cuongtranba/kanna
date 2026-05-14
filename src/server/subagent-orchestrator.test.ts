@@ -533,15 +533,88 @@ describe("SubagentOrchestrator", () => {
       appSettings: { getSnapshot: () => ({ subagents: [] }) },
       startProviderRun: () => { throw new Error("should not start during recovery") },
     })
-    // Wait for the void recoverInterruptedRuns() to complete
-    await new Promise<void>((r) => setTimeout(r, 50))
+    await orchestrator.whenRecovered()
     const runs = store.getSubagentRuns(chat.id)
     expect(runs[runId].status).toBe("failed")
     expect(runs[runId].error?.code).toBe("INTERRUPTED")
     // After INTERRUPTED recovery, pendingTool must be cleared so UI does not
     // render both the pending-response card and the error card simultaneously.
     expect(runs[runId].pendingTool).toBeNull()
-    // Reference unused variable to silence lint
-    void orchestrator
   })
+
+  test("recoverInterruptedRuns: marks running runs WITHOUT pendingTool as INTERRUPTED too", async () => {
+    const dataDir = await createTempDataDir()
+    const store = new EventStore(dataDir)
+    await store.initialize()
+    const project = await store.openProject("/tmp/p-orphan")
+    const chat = await store.createChat(project.id)
+    const runId = "r-orphan-running"
+    const base = chat.createdAt + 1
+    await store.appendSubagentEvent({
+      v: 3, type: "subagent_run_started", timestamp: base,
+      chatId: chat.id, runId, subagentId: "s1", subagentName: "alpha",
+      provider: "claude", model: "claude-opus-4-7",
+      parentUserMessageId: "u1", parentRunId: null, depth: 0,
+    })
+    // No subagent_tool_pending: the run was mid-bash or mid-streaming when
+    // the server died. Previously this case was skipped by the recovery
+    // guard, leaving the run pinned as `running` forever.
+    const orchestrator = new SubagentOrchestrator({
+      store,
+      appSettings: { getSnapshot: () => ({ subagents: [] }) },
+      startProviderRun: () => { throw new Error("should not start during recovery") },
+    })
+    await orchestrator.whenRecovered()
+    const runs = store.getSubagentRuns(chat.id)
+    expect(runs[runId].status).toBe("failed")
+    expect(runs[runId].error?.code).toBe("INTERRUPTED")
+  })
+
+  test("failRun invokes onRunTerminal callback so external resolvers are released", async () => {
+    const dataDir = await createTempDataDir()
+    const store = new EventStore(dataDir)
+    await store.initialize()
+    const project = await store.openProject("/tmp/p-terminal")
+    const chat = await store.createChat(project.id)
+    const runId = "r-terminal"
+    const base = chat.createdAt + 1
+    await store.appendSubagentEvent({
+      v: 3, type: "subagent_run_started", timestamp: base,
+      chatId: chat.id, runId, subagentId: "s1", subagentName: "alpha",
+      provider: "claude", model: "claude-opus-4-7",
+      parentUserMessageId: "u1", parentRunId: null, depth: 0,
+    })
+    const terminalCalls: Array<{ chatId: string; runId: string; reason: string }> = []
+    const orchestrator = new SubagentOrchestrator({
+      store,
+      appSettings: { getSnapshot: () => ({ subagents: [] }) },
+      startProviderRun: () => { throw new Error("not used") },
+      onRunTerminal: (chatId, rId, reason) => {
+        terminalCalls.push({ chatId, runId: rId, reason })
+      },
+    })
+    await orchestrator.whenRecovered()
+    // Recovery itself goes through appendSubagentEvent directly, not failRun.
+    // To exercise the onRunTerminal hook, simulate a run that fails via the
+    // public surface: start a run whose provider factory throws.
+    const failingOrchestrator = new SubagentOrchestrator({
+      store,
+      appSettings: {
+        getSnapshot: () => ({ subagents: [makeSubagent({ id: "s1", name: "alpha" })] }),
+      },
+      startProviderRun: () => { throw new Error("boom") },
+      onRunTerminal: (chatId, rId, reason) => {
+        terminalCalls.push({ chatId, runId: rId, reason })
+      },
+    })
+    await failingOrchestrator.whenRecovered()
+    await failingOrchestrator.runMentionsForUserMessage({
+      chatId: chat.id,
+      userMessageId: "u-fail",
+      mentions: [{ kind: "subagent", subagentId: "s1", raw: "@agent/alpha" }],
+    })
+    const failed = terminalCalls.find((c) => c.reason === "failed")
+    expect(failed).toBeDefined()
+    expect(failed!.chatId).toBe(chat.id)
+  }, 10_000)
 })
