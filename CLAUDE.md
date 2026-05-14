@@ -14,11 +14,13 @@ or `--base main --head <branch>` to `gh pr create` to make the target explicit.
 
 # Lint
 
-`bun run lint` runs ESLint on `src/`. CI runs it before tests; merges blocked
-on lint errors. Warnings are allowed but visible — ratchet down over time.
-Plugin `react-hooks` (set 7+) enforces React 19 rules: `rules-of-hooks`,
-`purity`, `globals` are errors; `set-state-in-effect`, `refs`,
-`immutability`, `preserve-manual-memoization`, `exhaustive-deps` are warnings.
+`bun run lint` runs ESLint on `src/` with `--max-warnings=37`. CI runs it
+before tests; merges blocked on lint errors AND on any warning count above
+the cap. The cap is a ratchet: when warnings drop, lower the cap in the
+same PR so they cannot creep back up. Plugin `react-hooks` (set 7+) enforces
+React 19 rules: `rules-of-hooks`, `purity`, `globals` are errors;
+`set-state-in-effect`, `refs`, `immutability`, `preserve-manual-memoization`,
+`exhaustive-deps` are warnings.
 
 # Render-loop regression checks
 
