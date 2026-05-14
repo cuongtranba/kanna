@@ -17,6 +17,9 @@ function badgeText(code: SubagentErrorCode) {
     case "DEPTH_EXCEEDED": return "Depth exceeded"
     case "TIMEOUT": return "Timeout"
     case "PROVIDER_ERROR": return "Provider error"
+    case "INTERRUPTED": return "Interrupted"
+    case "USER_CANCELLED": return "Cancelled by you"
+    default: return "Error"
   }
 }
 
