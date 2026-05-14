@@ -257,15 +257,22 @@ User clicks X on SubagentMessage(run-A in chat-1)
       1. lookup runState[A]; if missing or cancelled → noop
       2. mark state.cancelled = true
       3. for each runId in state.childRunIds: cancelRun(chatId, child) (recursive)
-      4. state.abortController.abort()
-  → spawnRun(A)'s Promise.race rejects with Error("USER_CANCELLED")
+      4. branch on lifecycle phase:
+         - if state.pendingAcquire && state.permitWaiter (queued):
+             splice waiter from this.waiters
+             clear state.permitWaiter
+             state.permitWaiter.reject(new Error("USER_CANCELLED"))
+         - else (already running):
+             state.abortController.abort()
+  → spawnRun(A)'s acquire() or Promise.race rejects with Error("USER_CANCELLED")
   → catch block matches "USER_CANCELLED" → failRun(..., "USER_CANCELLED", ...)
   → failRun appends subagent_run_failed { code: "USER_CANCELLED" }
   → failRun invokes deps.onRunTerminal(chatId, A, "failed")
   → AgentCoordinator.rejectPendingResolversForRun(chatId, A)
        rejects any canUseTool Promise so SDK unwinds
-  → finally block in spawnRun: clear timeout, remove from runStateByRunId,
-    drop from parent's childRunIds, releaseSlot()
+  → AgentCoordinator.onRunTerminal handler also calls this.emitStateChange(chatId)
+  → finally block in spawnRun: clear timeout (if registered), remove from runStateByRunId,
+    drop from parent's childRunIds, releaseSlot() only if a permit was held
 ```
 
 ## Error handling
@@ -304,7 +311,7 @@ as `USER_CANCELLED` because `state.cancelled` is already true.
 - `cancelRun` cascades through a 2-level chain (A → B → C). Cancelling
   A produces `USER_CANCELLED` events for B and C in order.
 - `cancelRun` on a completed run is a no-op (no extra event).
-- `cancelRun` on a run that has not yet acquired its permit is a no-op.
+- `cancelRun` on a queued run (registered but still waiting for a permit) splices the waiter out of `this.waiters`, rejects the queued Promise, and appends `subagent_run_failed { code: "USER_CANCELLED" }`. The permit count remains unchanged (it was never acquired).
 - `cancelRun` during `pendingTool` rejects the canUseTool Promise via
   the existing `onRunTerminal` hook (covered by adding a test mode
   that registers a fake resolver).
