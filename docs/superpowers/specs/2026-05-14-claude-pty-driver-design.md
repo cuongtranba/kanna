@@ -1,7 +1,7 @@
 # Claude PTY Driver — Design
 
 **Date:** 2026-05-14
-**Status:** Draft v7 — sixth codex adversarial pass applied (Read/Glob/Grep removed from default --tools, MCP-routed reads check live readPathDeny per call; sandbox demoted to defense-in-depth; sandbox-affecting state changes trigger respawn), awaiting user review
+**Status:** Draft v8 — seventh codex adversarial pass applied (`--tools` semantics enforced via runtime allowlist preflight with per-binary cache and fail-closed), awaiting user review
 **Author:** session-collaborative
 **Related code:** `src/server/agent.ts`, `src/server/terminal-manager.ts`, `src/server/harness-types.ts`, `src/server/kanna-mcp.ts`
 
@@ -62,6 +62,7 @@ src/server/claude-pty/
   ├── frame-parser.ts      # minimal — only slash-cmd ACK detection
   ├── slash-commands.ts    # /model, /permissions, /exit
   ├── auth.ts              # verify ~/.claude credentials present, reject ANTHROPIC_API_KEY
+  ├── allowlist-preflight.ts # probe --tools semantics, cache by binary-sha+tools-string
   ├── runtime-dir.ts       # per-session 0700 dir, cleanup on COOLING
   ├── uds-server.ts        # Unix-domain socket: kanna-mcp + optional hook callbacks
   ├── pretooluse-hook.ts   # OPTIONAL hook script (belt-and-suspenders)
@@ -316,7 +317,30 @@ Because every mutating tool now flows through `kanna-mcp` (Kanna code), Kanna ge
                        └─────────────────────┘
 ```
 
-This pattern's safety properties **do not depend** on `--dangerously-skip-permissions` behavior, on PreToolUse hooks, or on any CLI version-specific assumption. The CLI cannot execute a tool we have not enabled.
+This pattern's safety properties **do not depend** on `--dangerously-skip-permissions` behavior or on PreToolUse hooks. They do depend on `--tools` semantics — which is treated as an enforced runtime invariant, not a documentation assumption (see "Allowlist preflight" below).
+
+### Allowlist preflight (fail-closed, per CLI version)
+
+Before any user-facing PTY session spawn, Kanna runs an allowlist-verification probe and caches the result by `(claude-binary-sha256, tools-string)` for 7 days. The probe:
+
+1. Spawns `claude --session-id <ephemeral-uuid> --tools "mcp__kanna__*" --permission-mode bypassPermissions --dangerously-skip-permissions --mcp-config <probe-mcp-config> --no-update --append-system-prompt "<probe-system-prompt>"` in a scratch `cwd`.
+2. The probe system prompt instructs: "List every tool you can call, one name per line, no other text. Then call the tool named `mcp__kanna__probe_ack` with the same list as its `tools` argument."
+3. The probe MCP config registers a single `mcp__kanna__probe_ack` tool that simply records the `tools` argument and resolves.
+4. Kanna tails the JSONL for one assistant turn. Verification rules (all must pass):
+   - Every `tool_use` event in the JSONL has `name` starting with `mcp__kanna__`. **Any** other `name` (`Read`, `Glob`, `Grep`, `Bash`, `Edit`, `Write`, `WebFetch`, `WebSearch`, or unknown) → fail closed.
+   - The `tools` argument captured by `mcp__kanna__probe_ack` contains only `mcp__kanna__*` names.
+   - The assistant text listing contains only `mcp__kanna__*` names.
+   - Disallowed built-ins explicitly tested: `Read`, `Glob`, `Grep`, `Bash`, `Edit`, `Write`, `WebFetch`, `WebSearch`, plus any other tool name the spike captured from `claude --help`.
+5. The probe terminates the PTY immediately on first Stop event.
+6. On any failure or timeout (10s), preflight fails. PTY spawning is disabled for this `(binary-sha256, tools-string)` combination. User-facing error: "Claude CLI version <version> does not honor the `--tools` allowlist as expected. PTY driver disabled. Update Claude or use SDK driver."
+7. Cache record stores: `claudeBinarySha256`, `toolsString`, `probeResult: "pass" | "fail"`, `probedAt`, `claudeVersion`. On binary change or 7-day staleness, re-probe.
+8. The probe is **also** re-run whenever the `--tools` string changes (e.g., off-mode adds/removes flags), since semantics are flag-string-dependent.
+
+This makes allowlist semantics an enforced invariant, not documentation intent. If a future Claude version changes `--tools` behavior, the probe catches it before any user-facing spawn.
+
+The probe uses one subscription-billed turn per CLI version per 7 days. Cost is negligible.
+
+Tests (`allowlist-preflight.test.ts`): probe success → cache hit → spawn allowed; probe sees built-in `tool_use` → fail closed; probe timeout → fail closed; binary change invalidates cache; tools-string change invalidates cache; per-tool negative tests inject mock JSONL with each built-in tool name and assert fail-closed.
 
 ### Durable approval protocol (unified)
 
@@ -610,6 +634,7 @@ Any new UI surface (badges, banners, settings toggle) is verified via `renderFor
 | MCP tool callback deadlock turns | Durable per-tool-request state in `EventStore`, server-driven timeout, cancel on close/shutdown/respawn, idempotent retry by HMAC-SHA256 deterministic id. See "Callback protocol" + "Durable approval protocol (unified)". |
 | JSONL replay duplicates or skips events on cold wake | Per-session `(byteOffset, lastEventId)` bookmark in `EventStore`, dedupe scan on truncation/rotation, atomic emit+advance, init event treated as control not transcript. See "Tail semantics". |
 | Permission gate depends on unproven hook behavior | Primary gate is `--tools` allowlist + kanna-mcp routing — no hook dependency. Hook is optional belt-and-suspenders. CLI cannot execute a tool we have not enabled. See "Permission enforcement". |
+| `--tools` allowlist semantics change in future CLI version | **Runtime allowlist preflight** probes the bundled `claude` binary and fails closed if any built-in becomes invokable. Cache by `(binary-sha256, tools-string)`, 7-day TTL. See "Allowlist preflight". |
 | Built-in tools (Bash/Edit/Write) execute un-gated | Disabled at spawn via `--tools` allowlist. Model uses `mcp__kanna__*` replacements which Kanna gates synchronously with structured args. |
 | User MCP servers (3rd-party) bypass Kanna gating | Default fail-closed: only `kanna-mcp` is loaded. Third-party MCP requires explicit allowlist AND a functional PreToolUse hook; otherwise spawn refused. See "Third-party MCP servers — fail closed". |
 | Bash auto-allow leaks credentials (`cat ~/.claude/...`) | Bash is parsed (no regex prefix), `readPathDeny` resolved per arg, shell features (pipes/subshell/eval) downgrade to `ask`. `auto-allow` cannot override deny-list. OS sandbox (`sandbox-exec` / `bwrap`) is the secondary gate. |
@@ -628,7 +653,7 @@ Any new UI surface (badges, banners, settings toggle) is verified via `renderFor
 
 | Phase | Deliverable | Gate |
 |---|---|---|
-| 0 | Throwaway spike. Verify: (a) JSONL 1:1 fidelity with SDK events on 5 representative chats; (b) `--tools "Read Glob Grep mcp__kanna__*"` actually disables `Bash/Edit/Write` (assistant cannot invoke them); (c) `--mcp-config` over UDS works with `kanna-mcp`; (d) interactive PTY keeps subscription billing on a real Pro/Max account (check usage page); (e) `--resume` round-trips with a known `--session-id`; (f) `sandbox-exec` (macOS) / `bwrap` (Linux) profile denies `~/.ssh` / `~/.claude` reads without breaking project work; (g) PreToolUse hook behavior under `--dangerously-skip-permissions` — captures the answer needed to gate third-party MCP support. Capture all results in `docs/superpowers/specs/2026-05-14-claude-pty-driver-spike.md` before opening phase 1. | (a)–(f) all green. If (b) fails: redesign. If (g) fails: spawn refuses to load any third-party MCP server until alternative gate ships. |
+| 0 | Throwaway spike. Verify: (a) JSONL 1:1 fidelity with SDK events on 5 representative chats; (b) implement the allowlist preflight prototype against `--tools "mcp__kanna__*"` and confirm every built-in (`Bash`, `Edit`, `Write`, `WebFetch`, `WebSearch`, `Read`, `Glob`, `Grep`) is unavailable; (c) `--mcp-config` over UDS works with `kanna-mcp`; (d) interactive PTY keeps subscription billing on a real Pro/Max account (check usage page); (e) `--resume` round-trips with a known `--session-id`; (f) `sandbox-exec` (macOS) / `bwrap` (Linux) profile denies `~/.ssh` / `~/.claude` reads AND workspace-secret reads (`.env`, `*.pem`) without breaking project work; (g) PreToolUse hook behavior under `--dangerously-skip-permissions` — captures the answer needed to gate third-party MCP support. Capture all results in `docs/superpowers/specs/2026-05-14-claude-pty-driver-spike.md` before opening phase 1. | (a)–(f) all green. If (b) fails: redesign — possibly fall back to wrapping the entire `claude` invocation in a tighter sandbox or shipping a forked CLI. If (g) fails: spawn refuses to load any third-party MCP server until alternative gate ships. |
 | 1a | MCP tool refactor: new `mcp__kanna__bash/edit/write/webfetch/websearch` + move `ask_user_question` + `exit_plan_mode` into kanna-mcp. Unified durable approval protocol (`tool-callback.ts` + `permission-gate.ts`). Behind `KANNA_MCP_TOOL_CALLBACKS=1`. SDK driver opts in first and routes its `canUseTool` through `permission-gate.ts`. | `mcp-tool-callback.test.ts`, `permission-gate.test.ts` green. SDK driver still passes existing tests. |
 | 1b | `claude-pty/` module: PTY spawn, UDS server (callbacks only, no creds), runtime-dir, JSONL tail with bookmarks. Feature flag `KANNA_CLAUDE_DRIVER=pty`. Default stays `sdk`. | All unit tests pass. Manual smoke: chat works end-to-end with default `ask` policy and `mcp__kanna__*` tool routing. |
 | 2 | UI: driver toggle, status badges, per-chat unsafe opt-in flow with destructive-action confirm dialog, deny-list editor, lifecycle settings. | Manual QA: driver switch, unsafe toggle, deny-list match, cold→warm→active→idle→cooling cycle, server-restart resets unsafe. |
@@ -637,7 +662,7 @@ Any new UI surface (badges, banners, settings toggle) is verified via `renderFor
 
 ## Open questions
 
-1. **`--tools` allowlist semantics.** Confirm that `--tools "mcp__kanna__*"` truly removes **every** CLI built-in (`Bash`, `Edit`, `Write`, `WebFetch`, `WebSearch`, `Read`, `Glob`, `Grep`) from the assistant's available toolset, not just deprioritizes them. Spike-blocking.
+1. **`--tools` allowlist semantics.** Enforced via runtime allowlist preflight (see "Allowlist preflight"). The phase-0 spike captures the first known-good probe result for the bundled `claude` version, but ongoing correctness is a runtime invariant — not a one-time spike.
 2. **`/permissions` slash command interactivity.** Need a spike to confirm whether it can be driven by line input or requires arrow-key TUI nav. Since policy is now per-chat in `EventStore`, runtime changes mostly don't need to touch the CLI's mode — but verify for completeness.
 3. **`--remote-control` protocol.** Worth a spike to see if it offers a clean structured control channel that could replace the PTY entirely. Out of scope for v1.
 4. **Plugins / hooks parity.** SDK driver runs the user's `~/.claude/settings.json` hooks via `settingSources: ["user","project","local"]`. CLI does the same natively — verify end-to-end. PreToolUse-under-bypass is only required for the optional belt-and-suspenders gate; not gating.
