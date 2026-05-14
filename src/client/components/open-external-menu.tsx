@@ -168,6 +168,7 @@ export function OpenExternalSelect({
   const [lastValue, setLastValue] = useState<OpenAppValue>(fallbackValue)
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLastValue(normalizeOpenAppValue(window.localStorage.getItem(OPEN_SELECT_STORAGE_KEY), fallbackValue))
   }, [fallbackValue])
 

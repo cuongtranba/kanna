@@ -67,6 +67,7 @@ export function AppDialogProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (dialogState?.kind !== "prompt") return
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setInputValue(dialogState.options.initialValue ?? "")
     setTimeout(() => {
       inputRef.current?.focus()
