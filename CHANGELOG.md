@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.51.0](https://github.com/cuongtranba/kanna/compare/v0.50.0...v0.51.0) (2026-05-14)
+
+
+### Features
+
+* phase 3 subagent orchestration + UI ([#83](https://github.com/cuongtranba/kanna/issues/83)) ([bca45b9](https://github.com/cuongtranba/kanna/commit/bca45b9098b292373b54dcfd1e2bda5f05a3efe9))
+* phase 4 real provider integration for subagents ([#86](https://github.com/cuongtranba/kanna/issues/86)) ([52d22ce](https://github.com/cuongtranba/kanna/commit/52d22ce50335059cc52b3c8705e1608b573d8a70))
+* **sidebar:** asterism separator between stacks ([#85](https://github.com/cuongtranba/kanna/issues/85)) ([002f39e](https://github.com/cuongtranba/kanna/commit/002f39ecb73173ee1b0fbcfe5bd1a34eb264d8ca))
+
+
+### Bug Fixes
+
+* **event-store:** forkChat preserves stack membership ([#87](https://github.com/cuongtranba/kanna/issues/87)) ([7f76ac9](https://github.com/cuongtranba/kanna/commit/7f76ac94bdb1d3f7558b8cfc92ad8deed91d2c26))
+* **oauth-pool:** reserve token per chat to prevent concurrent rotation race ([#89](https://github.com/cuongtranba/kanna/issues/89)) ([686c6b8](https://github.com/cuongtranba/kanna/commit/686c6b8a7de31d02f31f85d52c1c00a6df1581c9))
+* **subagent:** clear pendingTool on terminal events + use /api/local-file ([#88](https://github.com/cuongtranba/kanna/issues/88)) ([e32db6f](https://github.com/cuongtranba/kanna/commit/e32db6fa264f5b5947bd524a3834fdce1890daa3))
+* **subagent:** resolver leaks, full restart recovery, harden cap ([#93](https://github.com/cuongtranba/kanna/issues/93)) ([7bb3d92](https://github.com/cuongtranba/kanna/commit/7bb3d923c84e012a2716aa428d624ec70c519c3a))
+* **ws-router:** strip timings from chat snapshot dedup signature ([#90](https://github.com/cuongtranba/kanna/issues/90)) ([ee3548a](https://github.com/cuongtranba/kanna/commit/ee3548a9ece5c4785aeaaed5e4d9de465fb00668))
+
 ## [0.50.0](https://github.com/cuongtranba/kanna/compare/v0.49.0...v0.50.0) (2026-05-14)
 
 
