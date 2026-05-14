@@ -60,6 +60,7 @@ interface ChatTranscriptViewportProps {
   onTunnelStop?: (tunnelId: string) => void | Promise<void>
   onTunnelRetry?: (tunnelId: string) => void | Promise<void>
   subagentRuns?: Record<string, SubagentRunSnapshot>
+  onCancelSubagentRun?: (chatId: string, runId: string) => void
   showScrollButton: boolean
   onIsAtEndChange: (isAtEnd: boolean) => void
   scrollToBottom: () => void
@@ -106,6 +107,7 @@ export const ChatTranscriptViewport = memo(function ChatTranscriptViewport({
   onTunnelStop,
   onTunnelRetry,
   subagentRuns,
+  onCancelSubagentRun,
   showScrollButton,
   onIsAtEndChange,
   scrollToBottom,
@@ -181,11 +183,12 @@ export const ChatTranscriptViewport = memo(function ChatTranscriptViewport({
           localPath={localPath ?? ""}
           onSubagentAskUserQuestionSubmit={onSubagentAskUserQuestionSubmit}
           onSubagentExitPlanModeSubmit={onSubagentExitPlanModeSubmit}
+          onCancelSubagentRun={onCancelSubagentRun}
         />
         {children.map((child) => renderRunTree(child, depth + 1))}
       </React.Fragment>
     )
-  }, [childrenByParentRunId, localPath, onSubagentAskUserQuestionSubmit, onSubagentExitPlanModeSubmit])
+  }, [childrenByParentRunId, localPath, onSubagentAskUserQuestionSubmit, onSubagentExitPlanModeSubmit, onCancelSubagentRun])
 
   const handleToolGroupExpandedChange = useCallback((groupId: string, next: boolean) => {
     setToolGroupExpanded((current) => (

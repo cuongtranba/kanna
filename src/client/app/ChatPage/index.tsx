@@ -754,6 +754,10 @@ export function ChatPage() {
     await state.socket.command({ type: "tunnel.retry", chatId, tunnelId })
   }, [state.activeChatId, state.socket])
 
+  const handleCancelSubagentRun = useCallback((chatId: string, runId: string) => {
+    void state.socket.command({ type: "chat.cancelSubagentRun", chatId, runId }).catch(() => {})
+  }, [state.socket])
+
   useEffect(() => {
     return () => clearShowScrollTimeout()
   }, [clearShowScrollTimeout])
@@ -987,6 +991,7 @@ export function ChatPage() {
           onTunnelStop={sendTunnelStop}
           onTunnelRetry={sendTunnelRetry}
           subagentRuns={state.chatSnapshot?.subagentRuns}
+          onCancelSubagentRun={handleCancelSubagentRun}
           showScrollButton={showScrollToBottom && state.messages.length > 0}
           onIsAtEndChange={onIsAtEndChange}
           scrollToBottom={() => scrollToTranscriptEnd(true)}
