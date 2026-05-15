@@ -19,6 +19,12 @@ export function parseJsonlLine(rawLine: string): HarnessEvent[] {
     events.push({ type: "session_token", sessionToken: message.session_id })
   }
 
+  if (message.type === "system" && message.subtype === "rate_limit") {
+    const resetAt = typeof message.resetAt === "number" ? message.resetAt : Date.now()
+    const tz = typeof message.tz === "string" ? message.tz : "UTC"
+    events.push({ type: "rate_limit", rateLimit: { resetAt, tz } })
+  }
+
   try {
     const entries = normalizeClaudeStreamMessage(parsed)
     for (const entry of entries) {
