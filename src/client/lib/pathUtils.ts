@@ -91,10 +91,17 @@ export function parseLocalFileLink(target: string | undefined | null): ParsedLoc
 }
 
 export function shouldOpenLocalFileLinkInEditor(filePath: string) {
-  const fileName = filePath.split(/[\\/]/).pop() ?? filePath
+  const segments = filePath.split(/[\\/]/)
+  while (segments.length > 0 && segments[segments.length - 1] === "") {
+    segments.pop()
+  }
+  const fileName = segments.length > 0 ? segments[segments.length - 1] : filePath
   if (EDITOR_OPEN_FILENAMES.has(fileName)) return true
   const extensionIndex = fileName.lastIndexOf(".")
-  const extension = extensionIndex >= 0 ? fileName.slice(extensionIndex).toLowerCase() : ""
+  if (extensionIndex < 0) {
+    return true
+  }
+  const extension = fileName.slice(extensionIndex).toLowerCase()
   return EDITOR_OPEN_EXTENSIONS.has(extension)
 }
 
