@@ -17,6 +17,11 @@ import type {
 } from "../shared/types"
 import type { ChatRecord } from "./events"
 import { buildHistoryPrimer, shouldInjectPrimer } from "./history-primer"
+import {
+  getLatestContextWindowUsage,
+  MAX_CONSECUTIVE_AUTOCOMPACT_FAILURES,
+  shouldProactivelyCompact,
+} from "./proactive-compact"
 import { normalizeToolCall } from "../shared/tools"
 import type { ClientCommand } from "../shared/protocol"
 import { LOG_PREFIX } from "../shared/branding"
@@ -112,6 +117,10 @@ interface ActiveTurn {
   clientTraceId?: string
   profilingStartedAt?: number
   waitStartedAt: number | null
+  // True when this turn was synthesised by Kanna to inject `/compact` before
+  // the user's real message. Used to update the per-chat compact circuit
+  // breaker on completion (reset on success, increment on failure).
+  proactiveCompactInjection?: boolean
 }
 
 export interface ClaudeSessionHandle {
@@ -970,6 +979,12 @@ export class AgentCoordinator {
   private readonly subagentOrchestrator: SubagentOrchestrator
   private readonly throwOnClaudeSessionStart: boolean
   private readonly autoResumeByChat = new Map<string, boolean>()
+  // Per-chat circuit breaker for proactive `/compact` injection. Increments on
+  // every compact attempt that fails (turn errored / cancelled) and resets on
+  // success. After MAX_CONSECUTIVE_AUTOCOMPACT_FAILURES, skip further proactive
+  // compacts on this chat so doomed sessions don't hammer the API on every
+  // turn (mirrors claude-code's autoCompact circuit breaker behaviour).
+  private readonly compactFailuresByChat = new Map<string, number>()
   private readonly tunnelGateway: TunnelGateway | null
   private readonly backgroundTasks: BackgroundTaskRegistry | null
   private readonly oauthPool: OAuthTokenPool | null
@@ -1754,6 +1769,52 @@ export class AgentCoordinator {
     const provider = this.resolveProvider(command, chat.provider)
     const settings = this.getProviderSettings(provider, command)
     this.analytics.track("message_sent")
+
+    // Proactive compact: if the latest usage snapshot crossed claude-code's
+    // auto-compact threshold, inject a synthetic `/compact` turn ahead of the
+    // user's real message. The user's prompt sits in the queue and runs after
+    // `/compact` produces its summary, so the next turn ships with a bounded
+    // history instead of looping on "Prompt is too long".
+    if (
+      provider === "claude"
+      && this.shouldInjectProactiveCompact(chatId, command.content)
+    ) {
+      const queuedMessage = await this.enqueueMessage(chatId, command.content, command.attachments ?? [], {
+        provider: command.provider,
+        model: command.model,
+        modelOptions: command.modelOptions,
+        effort: command.effort,
+        planMode: command.planMode,
+      })
+      await this.startTurnForChat({
+        chatId,
+        provider,
+        content: "/compact",
+        attachments: [],
+        model: settings.model,
+        effort: settings.effort,
+        serviceTier: settings.serviceTier,
+        planMode: settings.planMode,
+        // /compact is a slash command, not the user's actual message — don't
+        // persist a user_prompt transcript entry for it.
+        appendUserPrompt: false,
+        profile,
+      })
+      // Tag the active turn so the result handler can update the circuit
+      // breaker (reset on success / increment on failure).
+      const compactActive = this.activeTurns.get(chatId)
+      if (compactActive) compactActive.proactiveCompactInjection = true
+
+      logSendToStartingProfile(profile, "chat_send.proactive_compact_injected", {
+        chatId,
+        provider,
+        model: settings.model,
+        queuedUserMessageId: queuedMessage.id,
+      })
+
+      return { chatId, queuedMessageId: queuedMessage.id, queued: true as const }
+    }
+
     await this.startTurnForChat({
       chatId,
       provider,
@@ -1774,6 +1835,17 @@ export class AgentCoordinator {
     })
 
     return { chatId }
+  }
+
+  private shouldInjectProactiveCompact(chatId: string, content: string): boolean {
+    // Never recurse — if the user (or Kanna itself) is already sending a
+    // slash command, run it as-is. Compacting before `/clear` or another
+    // `/compact` would be wasted work.
+    if (content.trimStart().startsWith("/")) return false
+    const failures = this.compactFailuresByChat.get(chatId) ?? 0
+    if (failures >= MAX_CONSECUTIVE_AUTOCOMPACT_FAILURES) return false
+    const usage = getLatestContextWindowUsage(this.store.getMessages(chatId))
+    return shouldProactivelyCompact(usage)
   }
 
   private async appendUserPromptForSubagentRun(
@@ -2034,8 +2106,15 @@ export class AgentCoordinator {
             } else {
               await this.store.recordTurnFailed(session.chatId, resultText)
             }
+            if (active.proactiveCompactInjection) {
+              const next = (this.compactFailuresByChat.get(session.chatId) ?? 0) + 1
+              this.compactFailuresByChat.set(session.chatId, next)
+            }
           } else if (!active.cancelRequested) {
             await this.store.recordTurnFinished(session.chatId)
+            if (active.proactiveCompactInjection) {
+              this.compactFailuresByChat.delete(session.chatId)
+            }
           }
           this.activeTurns.delete(session.chatId)
           if (!active.cancelRequested) {
