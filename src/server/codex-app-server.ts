@@ -310,6 +310,20 @@ function renderPlanMarkdownFromSteps(steps: TurnPlanStep[]): string {
   }).join("\n")
 }
 
+const warnedUnknownItemTypes = new Set<string>()
+
+function warnUnknownItemType(item: ThreadItem) {
+  const type = (item as { type?: string }).type ?? "<missing>"
+  if (warnedUnknownItemTypes.has(type)) return
+  warnedUnknownItemTypes.add(type)
+  console.warn(`[codex-app-server] unknown ThreadItem type "${type}"; emitting generic tool placeholder. Update protocol bindings.`)
+}
+
+function fallbackToolNameForItem(item: ThreadItem): string {
+  const type = (item as { type?: string }).type ?? "Unknown"
+  return type.charAt(0).toUpperCase() + type.slice(1)
+}
+
 function dynamicContentToText(contentItems: DynamicToolCallOutputContentItem[] | null | undefined): string {
   if (!contentItems?.length) return ""
   return contentItems
@@ -575,6 +589,10 @@ function fileChangeToToolResults(item: Extract<ThreadItem, { type: "fileChange" 
 
 function itemToToolCalls(item: ThreadItem): TranscriptEntry[] {
   switch (item.type) {
+    case "userMessage":
+    case "reasoning":
+    case "agentMessage":
+      return []
     case "dynamicToolCall":
       return [genericDynamicToolCall(item.id, item.tool, dynamicToolPayload(item.arguments))]
     case "collabAgentToolCall":
@@ -641,13 +659,62 @@ function itemToToolCalls(item: ThreadItem): TranscriptEntry[] {
           rawInput: item as unknown as Record<string, unknown>,
         },
       })]
-    default:
-      return []
+    case "imageGeneration":
+      return [timestamped({
+        kind: "tool_call",
+        tool: {
+          kind: "tool",
+          toolKind: "unknown_tool",
+          toolName: "ImageGeneration",
+          toolId: item.id,
+          input: {
+            revisedPrompt: item.revisedPrompt ?? null,
+            status: item.status,
+          },
+          rawInput: item as unknown as Record<string, unknown>,
+        },
+      })]
+    case "imageView":
+      return [timestamped({
+        kind: "tool_call",
+        tool: {
+          kind: "tool",
+          toolKind: "unknown_tool",
+          toolName: "ImageView",
+          toolId: item.id,
+          input: {
+            path: item.path,
+          },
+          rawInput: item as unknown as Record<string, unknown>,
+        },
+      })]
+    default: {
+      warnUnknownItemType(item)
+      const record = item as unknown as Record<string, unknown>
+      const id = typeof record.id === "string" ? record.id : `unknown-${randomUUID()}`
+      return [timestamped({
+        kind: "tool_call",
+        tool: {
+          kind: "tool",
+          toolKind: "unknown_tool",
+          toolName: fallbackToolNameForItem(item),
+          toolId: id,
+          input: {
+            payload: record,
+          },
+          rawInput: record,
+        },
+      })]
+    }
   }
 }
 
 function itemToToolResults(item: ThreadItem): TranscriptEntry[] {
   switch (item.type) {
+    case "userMessage":
+    case "reasoning":
+    case "agentMessage":
+      return []
     case "dynamicToolCall":
       return [timestamped({
         kind: "tool_result",
@@ -693,8 +760,30 @@ function itemToToolResults(item: ThreadItem): TranscriptEntry[] {
         content: item.message,
         isError: true,
       })]
-    default:
-      return []
+    case "imageGeneration":
+      return [timestamped({
+        kind: "tool_result",
+        toolId: item.id,
+        content: item.savedPath
+          ? `Image generated: ${item.savedPath}`
+          : item.result || item,
+        isError: item.status === "failed",
+      })]
+    case "imageView":
+      return [timestamped({
+        kind: "tool_result",
+        toolId: item.id,
+        content: item.path,
+      })]
+    default: {
+      const record = item as unknown as Record<string, unknown>
+      const id = typeof record.id === "string" ? record.id : `unknown-${randomUUID()}`
+      return [timestamped({
+        kind: "tool_result",
+        toolId: id,
+        content: record,
+      })]
+    }
   }
 }
 
@@ -1311,6 +1400,9 @@ export class CodexAppServerManager {
 
   private handleItemCompleted(pendingTurn: PendingTurn, notification: ItemCompletedNotification) {
     if (notification.item.type === "agentMessage") {
+      if (!notification.item.text.trim()) {
+        return
+      }
       pendingTurn.queue.push({
         type: "transcript",
         entry: timestamped({

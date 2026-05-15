@@ -406,6 +406,21 @@ export interface ErrorItem {
   message: string
 }
 
+export interface ImageGenerationItem {
+  type: "imageGeneration"
+  id: string
+  status: string
+  revisedPrompt?: string | null
+  result: string
+  savedPath?: string | null
+}
+
+export interface ImageViewItem {
+  type: "imageView"
+  id: string
+  path: string
+}
+
 export type ThreadItem =
   | UserMessageItem
   | ReasoningItem
@@ -418,6 +433,8 @@ export type ThreadItem =
   | WebSearchItem
   | FileChangeItem
   | ErrorItem
+  | ImageGenerationItem
+  | ImageViewItem
 
 export interface ItemStartedNotification {
   item: ThreadItem

@@ -1882,6 +1882,232 @@ describe("CodexAppServerManager", () => {
 
     expect(registry.list().find((t) => t.id === "codex:chat-reg-2:main")).toBeUndefined()
   })
+
+  test("renders imageGeneration item as tool_call/tool_result", async () => {
+    const process = new FakeCodexProcess((message, child) => {
+      if (message.method === "initialize") {
+        child.writeServerMessage({ id: message.id, result: { userAgent: "codex-test" } })
+      } else if (message.method === "thread/start") {
+        child.writeServerMessage({
+          id: message.id,
+          result: { thread: { id: "thread-img" }, model: "gpt-5.4", reasoningEffort: "high" },
+        })
+      } else if (message.method === "turn/start") {
+        child.writeServerMessage({
+          id: message.id,
+          result: { turn: { id: "turn-img", status: "inProgress", error: null } },
+        })
+        child.writeServerMessage({
+          method: "item/started",
+          params: {
+            threadId: "thread-img",
+            turnId: "turn-img",
+            item: {
+              type: "imageGeneration",
+              id: "ig-1",
+              status: "inProgress",
+              revisedPrompt: "A tom and jerry cartoon",
+              result: "",
+            },
+          },
+        })
+        child.writeServerMessage({
+          method: "item/completed",
+          params: {
+            threadId: "thread-img",
+            turnId: "turn-img",
+            item: {
+              type: "imageGeneration",
+              id: "ig-1",
+              status: "completed",
+              revisedPrompt: "A tom and jerry cartoon",
+              result: "ig_07031bcd.png",
+              savedPath: "/Users/x/.codex/generated_images/019e/ig_07031bcd.png",
+            },
+          },
+        })
+        child.writeServerMessage({
+          method: "turn/completed",
+          params: {
+            threadId: "thread-img",
+            turn: { id: "turn-img", status: "completed", error: null },
+          },
+        })
+      }
+    })
+
+    const manager = new CodexAppServerManager({ spawnProcess: () => process as never })
+
+    await manager.startSession({
+      chatId: "chat-img",
+      cwd: "/tmp/project",
+      model: "gpt-5.4",
+      sessionToken: null,
+    })
+
+    const turn = await manager.startTurn({
+      chatId: "chat-img",
+      model: "gpt-5.4",
+      content: "draw tom and jerry",
+      planMode: false,
+      onToolRequest: async () => ({}),
+    })
+
+    const events = await collectStream(turn.stream)
+    const toolCalls = events.filter((event) => event.type === "transcript" && event.entry.kind === "tool_call")
+    const toolResults = events.filter((event) => event.type === "transcript" && event.entry.kind === "tool_result")
+
+    expect(toolCalls).toHaveLength(1)
+    expect(toolResults).toHaveLength(1)
+
+    const call = toolCalls[0]
+    if (call.entry.kind !== "tool_call") throw new Error("missing tool call")
+    expect(call.entry.tool.toolName).toBe("ImageGeneration")
+    expect(call.entry.tool.toolId).toBe("ig-1")
+
+    const result = toolResults[0]
+    if (result.entry.kind !== "tool_result") throw new Error("missing tool result")
+    expect(result.entry.toolId).toBe("ig-1")
+    expect(String(result.entry.content)).toContain("/ig_07031bcd.png")
+  })
+
+  test("emits placeholder tool_call for unknown ThreadItem types", async () => {
+    const process = new FakeCodexProcess((message, child) => {
+      if (message.method === "initialize") {
+        child.writeServerMessage({ id: message.id, result: { userAgent: "codex-test" } })
+      } else if (message.method === "thread/start") {
+        child.writeServerMessage({
+          id: message.id,
+          result: { thread: { id: "thread-unk" }, model: "gpt-5.4", reasoningEffort: "high" },
+        })
+      } else if (message.method === "turn/start") {
+        child.writeServerMessage({
+          id: message.id,
+          result: { turn: { id: "turn-unk", status: "inProgress", error: null } },
+        })
+        child.writeServerMessage({
+          method: "item/started",
+          params: {
+            threadId: "thread-unk",
+            turnId: "turn-unk",
+            item: {
+              type: "futureMysteryTool",
+              id: "fm-1",
+              detail: "totally new",
+            },
+          },
+        })
+        child.writeServerMessage({
+          method: "item/completed",
+          params: {
+            threadId: "thread-unk",
+            turnId: "turn-unk",
+            item: {
+              type: "futureMysteryTool",
+              id: "fm-1",
+              detail: "totally new",
+            },
+          },
+        })
+        child.writeServerMessage({
+          method: "turn/completed",
+          params: {
+            threadId: "thread-unk",
+            turn: { id: "turn-unk", status: "completed", error: null },
+          },
+        })
+      }
+    })
+
+    const manager = new CodexAppServerManager({ spawnProcess: () => process as never })
+    await manager.startSession({
+      chatId: "chat-unk",
+      cwd: "/tmp/project",
+      model: "gpt-5.4",
+      sessionToken: null,
+    })
+    const turn = await manager.startTurn({
+      chatId: "chat-unk",
+      model: "gpt-5.4",
+      content: "do something",
+      planMode: false,
+      onToolRequest: async () => ({}),
+    })
+
+    const events = await collectStream(turn.stream)
+    const toolCalls = events.filter((event) => event.type === "transcript" && event.entry.kind === "tool_call")
+    const toolResults = events.filter((event) => event.type === "transcript" && event.entry.kind === "tool_result")
+
+    expect(toolCalls).toHaveLength(1)
+    const call = toolCalls[0]
+    if (call.entry.kind !== "tool_call") throw new Error("missing tool call")
+    expect(call.entry.tool.toolKind).toBe("unknown_tool")
+    expect(call.entry.tool.toolName).toBe("FutureMysteryTool")
+    expect(call.entry.tool.toolId).toBe("fm-1")
+
+    expect(toolResults).toHaveLength(1)
+    const result = toolResults[0]
+    if (result.entry.kind !== "tool_result") throw new Error("missing tool result")
+    expect(result.entry.toolId).toBe("fm-1")
+  })
+
+  test("suppresses empty agentMessage so the turn does not finish silently with no text", async () => {
+    const process = new FakeCodexProcess((message, child) => {
+      if (message.method === "initialize") {
+        child.writeServerMessage({ id: message.id, result: { userAgent: "codex-test" } })
+      } else if (message.method === "thread/start") {
+        child.writeServerMessage({
+          id: message.id,
+          result: { thread: { id: "thread-empty" }, model: "gpt-5.4", reasoningEffort: "high" },
+        })
+      } else if (message.method === "turn/start") {
+        child.writeServerMessage({
+          id: message.id,
+          result: { turn: { id: "turn-empty", status: "inProgress", error: null } },
+        })
+        child.writeServerMessage({
+          method: "item/completed",
+          params: {
+            threadId: "thread-empty",
+            turnId: "turn-empty",
+            item: {
+              type: "agentMessage",
+              id: "am-1",
+              text: "",
+            },
+          },
+        })
+        child.writeServerMessage({
+          method: "turn/completed",
+          params: {
+            threadId: "thread-empty",
+            turn: { id: "turn-empty", status: "completed", error: null },
+          },
+        })
+      }
+    })
+
+    const manager = new CodexAppServerManager({ spawnProcess: () => process as never })
+    await manager.startSession({
+      chatId: "chat-empty",
+      cwd: "/tmp/project",
+      model: "gpt-5.4",
+      sessionToken: null,
+    })
+    const turn = await manager.startTurn({
+      chatId: "chat-empty",
+      model: "gpt-5.4",
+      content: "hi",
+      planMode: false,
+      onToolRequest: async () => ({}),
+    })
+
+    const events = await collectStream(turn.stream)
+    const assistantTexts = events.filter(
+      (event) => event.type === "transcript" && event.entry.kind === "assistant_text"
+    )
+    expect(assistantTexts).toHaveLength(0)
+  })
 })
 
 // ---------------------------------------------------------------------------
