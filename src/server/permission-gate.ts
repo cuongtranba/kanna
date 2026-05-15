@@ -101,9 +101,11 @@ function getPathArg(args: Record<string, unknown>): string | null {
 
 function pathMatchesDeny(absPath: string, deny: string[]): string | null {
   for (const pattern of deny) {
-    const expanded = pattern.startsWith("~")
+    let expanded = pattern.startsWith("~")
       ? path.join(homedir(), pattern.slice(1).replace(/^\//, ""))
       : pattern
+    // Normalize trailing slash so "/some/dir/" matches the same as "/some/dir"
+    if (expanded.endsWith("/") && expanded !== "/") expanded = expanded.slice(0, -1)
     const matchPattern = expanded.endsWith("/**") || expanded.includes("*")
       ? expanded
       : `${expanded}/**`

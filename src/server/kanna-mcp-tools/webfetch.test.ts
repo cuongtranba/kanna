@@ -52,4 +52,26 @@ describe("mcp__kanna__webfetch", () => {
       expect(result.isError).toBe(true)
     } finally { await cleanup() }
   }, 30_000)
+
+  test("rejects file:// URL → isError true", async () => {
+    const { store, dir, cleanup } = await newStore()
+    try {
+      const svc = createToolCallbackService({ store, serverSecret: "k", now: () => 1, timeoutMs: 600_000 })
+      const tool = createWebFetchTool({ toolCallback: svc })
+      const result = await tool.handler({ url: "file:///etc/passwd" }, ctx(dir))
+      expect(result.isError).toBe(true)
+      expect(result.content[0].text).toContain("scheme file: not allowed")
+    } finally { await cleanup() }
+  }, 30_000)
+
+  test("rejects cloud metadata URL → isError true", async () => {
+    const { store, dir, cleanup } = await newStore()
+    try {
+      const svc = createToolCallbackService({ store, serverSecret: "k", now: () => 1, timeoutMs: 600_000 })
+      const tool = createWebFetchTool({ toolCallback: svc })
+      const result = await tool.handler({ url: "http://169.254.169.254/latest/meta-data/" }, ctx(dir))
+      expect(result.isError).toBe(true)
+      expect(result.content[0].text).toContain("not externally reachable")
+    } finally { await cleanup() }
+  }, 30_000)
 })

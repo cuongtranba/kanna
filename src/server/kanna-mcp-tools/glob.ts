@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { readdir } from "node:fs/promises"
+import { readdir, lstat } from "node:fs/promises"
 import path from "node:path"
 import { homedir } from "node:os"
 import { minimatch } from "minimatch"
@@ -38,11 +38,19 @@ async function walkDir(root: string, results: string[]): Promise<void> {
   }
   for (const entry of entries) {
     if (results.length >= MAX_RESULTS) break
+    const full = path.join(root, entry.name)
     if (entry.isDirectory()) {
       if (SKIP_DIRS.has(entry.name)) continue
-      await walkDir(path.join(root, entry.name), results)
+      // Symlink guard: skip symlinked directories to prevent traversal loops
+      try {
+        const st = await lstat(full)
+        if (st.isSymbolicLink()) continue
+      } catch {
+        continue
+      }
+      await walkDir(full, results)
     } else {
-      results.push(path.join(root, entry.name))
+      results.push(full)
     }
   }
 }

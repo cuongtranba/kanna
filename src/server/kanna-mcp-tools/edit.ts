@@ -69,7 +69,9 @@ export function createEditTool(deps: { toolCallback: ToolCallbackService }): Edi
             }
           }
 
-          const updated = content.replace(input.oldString, input.newString)
+          // Use split/join instead of replace to avoid special replacement patterns
+          // ($&, $1, $$, $', $`) being interpreted in newString.
+          const updated = content.split(input.oldString).join(input.newString)
           try {
             await writeFile(resolved, updated, "utf8")
           } catch (err) {

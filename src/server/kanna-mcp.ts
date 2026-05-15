@@ -186,6 +186,14 @@ export function buildKannaMcpTools(args: KannaMcpArgs): SdkMcpToolDefinition<any
   if (process.env.KANNA_MCP_TOOL_CALLBACKS === "1" && args.toolCallback) {
     const askTool = createAskUserQuestionTool({ toolCallback: args.toolCallback })
     const exitPlanTool = createExitPlanModeTool({ toolCallback: args.toolCallback })
+    const readTool = createReadTool({ toolCallback: args.toolCallback })
+    const globTool = createGlobTool({ toolCallback: args.toolCallback })
+    const grepTool = createGrepTool({ toolCallback: args.toolCallback })
+    const bashTool = createBashTool({ toolCallback: args.toolCallback })
+    const editTool = createEditTool({ toolCallback: args.toolCallback })
+    const writeTool = createWriteTool({ toolCallback: args.toolCallback })
+    const webfetchTool = createWebFetchTool({ toolCallback: args.toolCallback })
+    const websearchTool = createWebSearchTool({ toolCallback: args.toolCallback })
 
     tools.push(
       tool(
@@ -221,17 +229,6 @@ export function buildKannaMcpTools(args: KannaMcpArgs): SdkMcpToolDefinition<any
         },
       ),
     )
-  }
-
-  if (process.env.KANNA_MCP_TOOL_CALLBACKS === "1" && args.toolCallback) {
-    const readTool = createReadTool({ toolCallback: args.toolCallback })
-    const globTool = createGlobTool({ toolCallback: args.toolCallback })
-    const grepTool = createGrepTool({ toolCallback: args.toolCallback })
-    const bashTool = createBashTool({ toolCallback: args.toolCallback })
-    const editTool = createEditTool({ toolCallback: args.toolCallback })
-    const writeTool = createWriteTool({ toolCallback: args.toolCallback })
-    const webfetchTool = createWebFetchTool({ toolCallback: args.toolCallback })
-    const websearchTool = createWebSearchTool({ toolCallback: args.toolCallback })
 
     function registerShim<I>(shim: {
       name: string

@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { readdir, readFile } from "node:fs/promises"
+import { readdir, readFile, lstat, stat } from "node:fs/promises"
 import path from "node:path"
 import { homedir } from "node:os"
 import type { ToolCallbackService } from "../tool-callback"
@@ -26,6 +26,7 @@ function resolvePath(p: string, cwd: string): string {
 
 const SKIP_DIRS = new Set(["node_modules", ".git"])
 const MAX_LINES = 500
+const MAX_FILE_SIZE = 1_000_000 // 1 MB
 
 async function grepDir(root: string, re: RegExp, results: string[]): Promise<void> {
   if (results.length >= MAX_LINES) return
@@ -40,8 +41,22 @@ async function grepDir(root: string, re: RegExp, results: string[]): Promise<voi
     const fullPath = path.join(root, entry.name)
     if (entry.isDirectory()) {
       if (SKIP_DIRS.has(entry.name)) continue
+      // Symlink guard: skip symlinked directories to prevent traversal loops
+      try {
+        const st = await lstat(fullPath)
+        if (st.isSymbolicLink()) continue
+      } catch {
+        continue
+      }
       await grepDir(fullPath, re, results)
     } else {
+      // Skip large files to prevent memory issues
+      try {
+        const fileStat = await stat(fullPath)
+        if (fileStat.size > MAX_FILE_SIZE) continue
+      } catch {
+        continue
+      }
       let content: string
       try {
         content = await readFile(fullPath, "utf8")
@@ -56,6 +71,13 @@ async function grepDir(root: string, re: RegExp, results: string[]): Promise<voi
       }
     }
   }
+}
+
+async function grepWithTimeout(root: string, re: RegExp, results: string[]): Promise<void> {
+  return await Promise.race([
+    grepDir(root, re, results),
+    new Promise<void>((_, reject) => setTimeout(() => reject(new Error("grep timeout 30s")), 30_000)),
+  ])
 }
 
 export function createGrepTool(deps: { toolCallback: ToolCallbackService }): GrepTool {
@@ -81,7 +103,15 @@ export function createGrepTool(deps: { toolCallback: ToolCallbackService }): Gre
           }
           const root = resolvePath(input.path, ctx.cwd)
           const results: string[] = []
-          await grepDir(root, re, results)
+          try {
+            await grepWithTimeout(root, re, results)
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err)
+            return {
+              content: [{ type: "text" as const, text: `grep error: ${msg}` }],
+              isError: true,
+            }
+          }
           return {
             content: [{ type: "text" as const, text: results.join("\n") }],
           }

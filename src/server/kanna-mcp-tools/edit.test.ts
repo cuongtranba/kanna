@@ -68,4 +68,22 @@ describe("mcp__kanna__edit", () => {
       expect(result.isError).toBe(true)
     } finally { await cleanup() }
   }, 30_000)
+
+  test("$ characters in newString are inserted literally", async () => {
+    const { store, dir, cleanup } = await newStore()
+    try {
+      const svc = createToolCallbackService({ store, serverSecret: "k", now: () => 1, timeoutMs: 600_000 })
+      const tool = createEditTool({ toolCallback: svc })
+      const filePath = path.join(dir, "dollar.txt")
+      await writeFile(filePath, "foo bar")
+      const result = await tool.handler(
+        { path: filePath, oldString: "foo", newString: "$&-literal" },
+        ctx(dir),
+      )
+      expect(result.isError).toBeFalsy()
+      const updated = await readFile(filePath, "utf8")
+      // Must contain literal "$&-literal", not "foo-literal"
+      expect(updated).toBe("$&-literal bar")
+    } finally { await cleanup() }
+  }, 30_000)
 })
