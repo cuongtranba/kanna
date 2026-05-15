@@ -8,6 +8,7 @@ import { createJsonlReader } from "./jsonl-reader"
 import { spawnPtyProcess } from "./pty-process"
 import { writeSlashCommand } from "./slash-commands"
 import { writeSpawnSettings } from "./settings-writer"
+import type { PreflightGate } from "./preflight/gate"
 import type { ClaudeSessionHandle } from "../agent"
 import type { HarnessEvent, HarnessToolRequest } from "../harness-types"
 import type { AccountInfo, SlashCommand } from "../../shared/types"
@@ -35,6 +36,7 @@ export interface StartClaudeSessionPtyArgs {
   initialPrompt?: string
   homeDir?: string
   env?: NodeJS.ProcessEnv
+  preflightGate?: PreflightGate
 }
 
 export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Promise<ClaudeSessionHandle> {
@@ -44,6 +46,14 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
   const auth = await verifyPtyAuth({ homeDir: home, env })
   if (!auth.ok) {
     throw new Error(auth.error)
+  }
+
+  if (args.preflightGate) {
+    const claudeBinAbs = env.CLAUDE_EXECUTABLE?.replace(/^~(?=\/|$)/, home) || "/usr/local/bin/claude"
+    const check = await args.preflightGate.canSpawn({ binaryPath: claudeBinAbs, model: args.model })
+    if (!check.ok) {
+      throw new Error(`PTY preflight failed: ${check.reason}`)
+    }
   }
 
   const spawnEnv: NodeJS.ProcessEnv = { ...env }
@@ -62,6 +72,7 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
   const cliArgs: string[] = [
     "--session-id", sessionId,
     "--model", args.model,
+    "--tools", "mcp__kanna__*",
     "--settings", settingsPath,
     "--no-update",
     "--permission-mode", args.planMode ? "plan" : "acceptEdits",

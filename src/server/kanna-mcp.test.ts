@@ -160,6 +160,7 @@ test("feature flag on → all 8 new mcp__kanna__* tools registered", () => {
     for (const n of ["read", "glob", "grep", "bash", "edit", "write", "webfetch", "websearch"]) {
       expect(names).toContain(n)
     }
+    expect(names).not.toContain("probe_unavailable")
   } finally {
     delete process.env.KANNA_MCP_TOOL_CALLBACKS
   }

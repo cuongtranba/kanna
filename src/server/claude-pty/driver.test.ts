@@ -56,6 +56,30 @@ describe("startClaudeSessionPTY", () => {
     }
   })
 
+  test("refuses to spawn when preflight gate returns not ok", async () => {
+    if (process.platform === "win32") return
+    const homeDir = await mkdtemp(path.join(tmpdir(), "kanna-pty-gate-"))
+    try {
+      await mkdir(path.join(homeDir, ".claude"), { recursive: true })
+      await writeFile(path.join(homeDir, ".claude", ".credentials.json"), "{}", "utf8")
+      await expect(
+        startClaudeSessionPTY({
+          chatId: "c", projectId: "p", localPath: homeDir,
+          model: "claude-sonnet-4-6",
+          planMode: false, forkSession: false,
+          oauthToken: null, sessionToken: null,
+          onToolRequest: async () => null,
+          homeDir,
+          env: {},
+          preflightGate: {
+            canSpawn: async () => ({ ok: false as const, reason: "built-in reachable: Bash" }),
+            invalidateAll: () => {},
+          },
+        }),
+      ).rejects.toThrow(/built-in reachable/)
+    } finally { await rm(homeDir, { recursive: true, force: true }) }
+  })
+
   test.skipIf(process.env.KANNA_PTY_E2E !== "1")(
     "E2E: spawn claude, send one prompt, observe one transcript event",
     async () => {
