@@ -4,6 +4,7 @@ import type {
   AskUserQuestionToolResult,
   ExitPlanModeToolResult,
   HydratedToolCall,
+  ImageGenerationToolResult,
   NormalizedToolCall,
   OfferDownloadToolResult,
   ReadFileToolResult,
@@ -359,6 +360,14 @@ export function hydrateToolResult(tool: NormalizedToolCall, raw: unknown): Hydra
         size: typeof record?.size === "number" ? record.size : 0,
         ...(typeof record?.mimeType === "string" ? { mimeType: record.mimeType } : {}),
       } satisfies OfferDownloadToolResult
+    }
+    case "image_generation": {
+      const record = asRecord(parsed)
+      return {
+        contentUrl: typeof record?.contentUrl === "string" ? record.contentUrl : "",
+        relativePath: typeof record?.relativePath === "string" ? record.relativePath : "",
+        fileName: typeof record?.fileName === "string" ? record.fileName : "",
+      } satisfies ImageGenerationToolResult
     }
     case "read_file":
       if (typeof parsed === "string") {

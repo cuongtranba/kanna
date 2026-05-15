@@ -836,6 +836,15 @@ export interface OfferDownloadToolResult {
   mimeType?: string
 }
 
+export interface ImageGenerationToolCall
+  extends ToolCallBase<"image_generation", { revisedPrompt?: string | null; status?: string }> { }
+
+export interface ImageGenerationToolResult {
+  contentUrl: string
+  relativePath: string
+  fileName: string
+}
+
 export interface UnknownToolCall
   extends ToolCallBase<"unknown_tool", { payload: Record<string, unknown> }> { }
 
@@ -855,6 +864,7 @@ export type NormalizedToolCall =
   | SubagentTaskToolCall
   | McpGenericToolCall
   | OfferDownloadToolCall
+  | ImageGenerationToolCall
   | UnknownToolCall
 
 export interface ToolResultEntry extends TranscriptEntryBase {
@@ -1236,6 +1246,9 @@ export type HydratedMcpGenericToolCall =
 export type HydratedOfferDownloadToolCall =
   HydratedToolCallBase<"offer_download", OfferDownloadToolCall["input"], OfferDownloadToolResult>
 
+export type HydratedImageGenerationToolCall =
+  HydratedToolCallBase<"image_generation", ImageGenerationToolCall["input"], ImageGenerationToolResult>
+
 export type HydratedUnknownToolCall =
   HydratedToolCallBase<"unknown_tool", UnknownToolCall["input"], unknown>
 
@@ -1255,6 +1268,7 @@ export type HydratedToolCall =
   | HydratedSubagentTaskToolCall
   | HydratedMcpGenericToolCall
   | HydratedOfferDownloadToolCall
+  | HydratedImageGenerationToolCall
   | HydratedUnknownToolCall
 
 export type HydratedTranscriptMessage =

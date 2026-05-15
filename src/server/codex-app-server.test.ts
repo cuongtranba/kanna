@@ -1941,6 +1941,7 @@ describe("CodexAppServerManager", () => {
     await manager.startSession({
       chatId: "chat-img",
       cwd: "/tmp/project",
+      projectId: "proj-img",
       model: "gpt-5.4",
       sessionToken: null,
     })
@@ -1963,12 +1964,116 @@ describe("CodexAppServerManager", () => {
     const call = toolCalls[0]
     if (call.entry.kind !== "tool_call") throw new Error("missing tool call")
     expect(call.entry.tool.toolName).toBe("ImageGeneration")
+    expect(call.entry.tool.toolKind).toBe("image_generation")
     expect(call.entry.tool.toolId).toBe("ig-1")
 
     const result = toolResults[0]
     if (result.entry.kind !== "tool_result") throw new Error("missing tool result")
     expect(result.entry.toolId).toBe("ig-1")
-    expect(String(result.entry.content)).toContain("/ig_07031bcd.png")
+    const content = result.entry.content as { contentUrl: string; relativePath: string; fileName: string }
+    expect(content.fileName).toBe("ig_07031bcd.png")
+    expect(content.relativePath).toBe("/Users/x/.codex/generated_images/019e/ig_07031bcd.png")
+    // Absolute path stored as-is; the URL still encodes via the project route.
+    expect(content.contentUrl).toContain("/api/projects/proj-img/files/")
+    expect(content.contentUrl).toContain("ig_07031bcd.png")
+  })
+
+  test("renders dynamicToolCall ImageGeneration with deferred call emission and project URL", async () => {
+    const process = new FakeCodexProcess((message, child) => {
+      if (message.method === "initialize") {
+        child.writeServerMessage({ id: message.id, result: { userAgent: "codex-test" } })
+      } else if (message.method === "thread/start") {
+        child.writeServerMessage({
+          id: message.id,
+          result: { thread: { id: "thread-dig" }, model: "gpt-5.4", reasoningEffort: "high" },
+        })
+      } else if (message.method === "turn/start") {
+        child.writeServerMessage({
+          id: message.id,
+          result: { turn: { id: "turn-dig", status: "inProgress", error: null } },
+        })
+        child.writeServerMessage({
+          method: "item/started",
+          params: {
+            threadId: "thread-dig",
+            turnId: "turn-dig",
+            item: {
+              type: "dynamicToolCall",
+              id: "dig-1",
+              tool: "ImageGeneration",
+              arguments: { revisedPrompt: null, status: "in_progress" },
+              status: "inProgress",
+            },
+          },
+        })
+        child.writeServerMessage({
+          method: "item/completed",
+          params: {
+            threadId: "thread-dig",
+            turnId: "turn-dig",
+            item: {
+              type: "dynamicToolCall",
+              id: "dig-1",
+              tool: "ImageGeneration",
+              arguments: { revisedPrompt: "Tom chasing Jerry through a kitchen", status: "completed" },
+              status: "completed",
+              success: true,
+              contentItems: [
+                { type: "inputText", text: "generated_images/019e/ig_abc.png" },
+              ],
+            },
+          },
+        })
+        child.writeServerMessage({
+          method: "turn/completed",
+          params: {
+            threadId: "thread-dig",
+            turn: { id: "turn-dig", status: "completed", error: null },
+          },
+        })
+      }
+    })
+
+    const manager = new CodexAppServerManager({ spawnProcess: () => process as never })
+
+    await manager.startSession({
+      chatId: "chat-dig",
+      cwd: "/tmp/project",
+      projectId: "proj-dig",
+      model: "gpt-5.4",
+      sessionToken: null,
+    })
+
+    const turn = await manager.startTurn({
+      chatId: "chat-dig",
+      model: "gpt-5.4",
+      content: "draw tom and jerry",
+      planMode: false,
+      onToolRequest: async () => ({}),
+    })
+
+    const events = await collectStream(turn.stream)
+    const toolCalls = events.filter((event) => event.type === "transcript" && event.entry.kind === "tool_call")
+    const toolResults = events.filter((event) => event.type === "transcript" && event.entry.kind === "tool_result")
+
+    expect(toolCalls).toHaveLength(1)
+    expect(toolResults).toHaveLength(1)
+
+    const call = toolCalls[0]
+    if (call.entry.kind !== "tool_call") throw new Error("missing tool call")
+    expect(call.entry.tool.toolKind).toBe("image_generation")
+    expect(call.entry.tool.toolName).toBe("ImageGeneration")
+    // Input is the COMPLETED args (revisedPrompt populated), not the in_progress placeholder.
+    const input = call.entry.tool.input as { revisedPrompt: string | null; status: string | undefined }
+    expect(input.revisedPrompt).toBe("Tom chasing Jerry through a kitchen")
+    expect(input.status).toBe("completed")
+
+    const result = toolResults[0]
+    if (result.entry.kind !== "tool_result") throw new Error("missing tool result")
+    const content = result.entry.content as { contentUrl: string; relativePath: string; fileName: string }
+    expect(content.relativePath).toBe("generated_images/019e/ig_abc.png")
+    expect(content.fileName).toBe("ig_abc.png")
+    expect(content.contentUrl).toBe("/api/projects/proj-dig/files/generated_images/019e/ig_abc.png/content")
   })
 
   test("emits placeholder tool_call for unknown ThreadItem types", async () => {

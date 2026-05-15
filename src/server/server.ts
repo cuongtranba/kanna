@@ -588,7 +588,7 @@ async function handleAttachmentContent(req: Request, url: URL, store: EventStore
 }
 
 async function handleProjectFileContent(req: Request, url: URL, store: EventStore) {
-  const match = url.pathname.match(/^\/api\/projects\/([^/]+)\/files\/([^/]+)\/content$/)
+  const match = url.pathname.match(/^\/api\/projects\/([^/]+)\/files\/(.+)\/content$/)
   if (!match) {
     return null
   }
