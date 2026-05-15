@@ -74,6 +74,21 @@ Limitations of P2 (this release):
   applies to `AskUserQuestion`/`ExitPlanMode` only.
 - macOS/Linux only.
 
+# Kanna-MCP Built-in Shims
+
+When `KANNA_MCP_TOOL_CALLBACKS=1`, kanna-mcp registers 8 additional tools
+that mirror Claude's built-ins: `mcp__kanna__{read, glob, grep, bash, edit,
+write, webfetch, websearch}`. They route through the durable approval
+protocol with the same path-deny rules as the bash tool from P1 (readPathDeny
+for `read`/`glob`/`grep`, writePathDeny for `edit`/`write`).
+
+These shims are inert until the PTY driver applies `--tools "mcp__kanna__*"`
+(P3b — landing in a follow-up PR). With the SDK driver (default), the model
+still uses its native built-ins and these shims sit unused.
+
+`websearch` is a stub that always returns `isError: true` — real web search
+needs an external API integration which is out of scope for P3a.
+
 # Tests
 
 `bun test` MUST pass locally before any push or PR. CI (`.github/workflows/test.yml`)
