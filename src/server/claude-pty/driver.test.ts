@@ -3,6 +3,7 @@ import { mkdtemp, rm, writeFile, mkdir } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { startClaudeSessionPTY } from "./driver"
+import type { HarnessEvent } from "../harness-types"
 
 describe("startClaudeSessionPTY", () => {
   test("auth precheck fails when credentials missing", async () => {
@@ -54,4 +55,45 @@ describe("startClaudeSessionPTY", () => {
       await rm(homeDir, { recursive: true, force: true })
     }
   })
+
+  test.skipIf(process.env.KANNA_PTY_E2E !== "1")(
+    "E2E: spawn claude, send one prompt, observe one transcript event",
+    async () => {
+      const dir = await mkdtemp(path.join(tmpdir(), "kanna-pty-e2e-"))
+      try {
+        const handle = await startClaudeSessionPTY({
+          chatId: "e2e",
+          projectId: "e2e",
+          localPath: dir,
+          model: "claude-haiku-4-5-20251001",
+          planMode: false,
+          forkSession: false,
+          oauthToken: null,
+          sessionToken: null,
+          onToolRequest: async () => null,
+        })
+        await handle.sendPrompt("Reply with exactly the word: ok")
+        const it = handle.stream[Symbol.asyncIterator]()
+        const start = Date.now()
+        let sawTranscript = false
+        while (Date.now() - start < 30_000) {
+          const next = await Promise.race([
+            it.next(),
+            new Promise<IteratorResult<HarnessEvent>>((r) =>
+              setTimeout(() => r({ value: undefined as unknown as HarnessEvent, done: false }), 500),
+            ),
+          ])
+          if (next.value?.type === "transcript") {
+            sawTranscript = true
+            break
+          }
+        }
+        expect(sawTranscript).toBe(true)
+        handle.close()
+      } finally {
+        await rm(dir, { recursive: true, force: true })
+      }
+    },
+    60_000,
+  )
 })
