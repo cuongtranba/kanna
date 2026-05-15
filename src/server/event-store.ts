@@ -23,7 +23,7 @@ import {
   cloneTranscriptEntries,
   createEmptyState,
 } from "./events"
-import type { ToolRequest, ToolRequestDecision, ToolRequestStatus } from "../shared/permission-policy"
+import type { ChatPermissionPolicyOverride, ToolRequest, ToolRequestDecision, ToolRequestStatus } from "../shared/permission-policy"
 import { resolveLocalPath } from "./paths"
 import type { CloudflareTunnelEvent } from "./cloudflare-tunnel/events"
 import type { PushEvent, PushEventStore } from "./push/events"
@@ -119,6 +119,7 @@ function getReplayEventPriority(event: StoreEvent): number {
       return 8
     case "chat_read_state_set":
     case "chat_source_hash_set":
+    case "chat_policy_override_set":
       return 9
     case "chat_deleted":
     case "chat_archived":
@@ -684,6 +685,13 @@ export class EventStore implements PushEventStore {
         const chat = this.state.chatsById.get(e.chatId)
         if (!chat) break
         chat.sourceHash = e.sourceHash
+        chat.updatedAt = e.timestamp
+        break
+      }
+      case "chat_policy_override_set": {
+        const chat = this.state.chatsById.get(e.chatId)
+        if (!chat) break
+        chat.policyOverride = e.policyOverride
         chat.updatedAt = e.timestamp
         break
       }
@@ -1486,6 +1494,18 @@ export class EventStore implements PushEventStore {
       timestamp: Date.now(),
       chatId,
       unread,
+    }
+    await this.append(this.chatsLogPath, event)
+  }
+
+  async setChatPolicyOverride(chatId: string, policyOverride: ChatPermissionPolicyOverride | null) {
+    this.requireChat(chatId)
+    const event: ChatEvent = {
+      v: STORE_VERSION,
+      type: "chat_policy_override_set",
+      timestamp: Date.now(),
+      chatId,
+      policyOverride,
     }
     await this.append(this.chatsLogPath, event)
   }

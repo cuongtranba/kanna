@@ -54,7 +54,7 @@ import { SubagentOrchestrator, type ProviderRunStart } from "./subagent-orchestr
 import { buildSubagentProviderRun } from "./subagent-provider-run"
 import type { ToolCallbackService } from "./tool-callback"
 import type { ChatPermissionPolicy } from "../shared/permission-policy"
-import { POLICY_DEFAULT } from "../shared/permission-policy"
+import { mergePolicyOverride, POLICY_DEFAULT } from "../shared/permission-policy"
 import { startClaudeSessionPTY, type StartClaudeSessionPtyArgs } from "./claude-pty/driver"
 import type { PreflightGate } from "./claude-pty/preflight/gate"
 
@@ -1147,6 +1147,25 @@ export class AgentCoordinator {
     return new Set(this.slashCommandsInFlight)
   }
 
+  /**
+   * Snapshot of live claude PTY session states per chat. Used by the
+   * sidebar badge selector. Chats not present are implicitly `cold`.
+   */
+  getClaudeSessionStates(): Map<string, "warming" | "active" | "idle"> {
+    const out = new Map<string, "warming" | "active" | "idle">()
+    const now = Date.now()
+    for (const [chatId, session] of this.claudeSessions) {
+      if (this.activeTurns.get(chatId)?.provider === "claude") {
+        out.set(chatId, "active")
+      } else if (now - session.lastUsedAt >= this.resolveClaudeIdleMs()) {
+        out.set(chatId, "idle")
+      } else {
+        out.set(chatId, "warming")
+      }
+    }
+    return out
+  }
+
   get toolCallbackService(): ToolCallbackService | null {
     return this.toolCallback
   }
@@ -1159,6 +1178,15 @@ export class AgentCoordinator {
     const fromSettings = this.getAppSettingsSnapshot().claudeDriver?.preference
     if (fromSettings === "pty" || fromSettings === "sdk") return fromSettings
     return process.env.KANNA_CLAUDE_DRIVER === "pty" ? "pty" : "sdk"
+  }
+
+  /**
+   * Resolves the effective ChatPermissionPolicy for a chat: starts from the
+   * coordinator-wide default, overlays the chat's persisted policyOverride.
+   */
+  private resolveChatPolicy(chatId: string): ChatPermissionPolicy {
+    const override = this.store.state.chatsById.get(chatId)?.policyOverride ?? null
+    return mergePolicyOverride(this.chatPolicy, override)
   }
 
   private resolveClaudeIdleMs(): number {
@@ -1798,7 +1826,7 @@ export class AgentCoordinator {
             tunnelGateway: this.tunnelGateway,
             onToolRequest: args.onToolRequest,
             toolCallback: this.toolCallback ?? undefined,
-            chatPolicy: this.chatPolicy,
+            chatPolicy: this.resolveChatPolicy(args.chatId),
           })
 
       session = {

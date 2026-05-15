@@ -3,6 +3,7 @@ import type {
   ChatRuntime,
   ChatSnapshot,
   ChatStateTimings,
+  ClaudeSessionLifecycleStatus,
   KannaStatus,
   LocalProjectsSnapshot,
   SidebarChatRow,
@@ -268,6 +269,7 @@ export function deriveChatSnapshot(
   getTunnelEvents: (chatId: string) => readonly CloudflareTunnelEvent[],
   waitStartedAtByChatId: Map<string, number> = new Map(),
   nowMs: number = Date.now(),
+  claudeSessionStates: Map<string, ClaudeSessionLifecycleStatus> = new Map(),
 ): ChatSnapshot | null {
   const chat = state.chatsById.get(chatId)
   if (!chat || chat.deletedAt) return null
@@ -291,6 +293,8 @@ export function deriveChatSnapshot(
       waitStartedAtByChatId.get(chat.id),
       nowMs,
     ),
+    policyOverride: chat.policyOverride ?? null,
+    sessionState: claudeSessionStates.get(chat.id) ?? "cold",
   }
 
   const transcript = getMessages(chat.id)

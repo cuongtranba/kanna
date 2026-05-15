@@ -954,6 +954,7 @@ export function createWsRouter({
           (chatId) => store.getTunnelEvents(chatId),
           agent.getWaitStartedAtByChatId(),
           Date.now(),
+          agent.getClaudeSessionStates?.() ?? new Map(),
         ),
       },
     }
@@ -1600,6 +1601,12 @@ export function createWsRouter({
         }
         case "chat.markRead": {
           await store.setChatReadState(command.chatId, false)
+          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
+          await broadcastChatAndSidebar(command.chatId)
+          return
+        }
+        case "chat.setPolicyOverride": {
+          await store.setChatPolicyOverride(command.chatId, command.policyOverride ?? null)
           send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
           await broadcastChatAndSidebar(command.chatId)
           return

@@ -1,4 +1,4 @@
-import type { ToolRequestDecision, ToolRequestStatus } from "./permission-policy"
+import type { ChatPermissionPolicyOverride, ToolRequestDecision, ToolRequestStatus } from "./permission-policy"
 
 export const STORE_VERSION = 3 as const
 export const PROTOCOL_VERSION = 1 as const
@@ -1362,6 +1362,10 @@ export interface ChatRuntime {
   planMode: boolean
   sessionTokensByProvider: Partial<Record<AgentProvider, string | null>>
   timings: ChatStateTimings
+  /** Per-chat permission policy overlay. Null means "use global defaults". */
+  policyOverride: ChatPermissionPolicyOverride | null
+  /** Current claude PTY session lifecycle state for this chat. `cold` when no live session. */
+  sessionState: ClaudeSessionLifecycleStatus
 }
 
 export interface ChatHistorySnapshot {
