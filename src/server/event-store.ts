@@ -219,6 +219,12 @@ export class EventStore implements PushEventStore {
   private readonly transcriptsDir: string
   private readonly sidebarProjectOrderPath: string
   private legacyMessagesByChatId = new Map<string, TranscriptEntry[]>()
+  // Track messageId per chat for dedupe in appendMessage. Populated lazily
+  // when transcripts are loaded from disk and on every append. Prevents
+  // duplicate persistence when the JSONL reader re-emits entries after a
+  // PTY respawn / server restart (Claude appends to the same JSONL via
+  // --resume; on cold-wake the reader starts at byte 0 and would re-emit).
+  private seenMessageIdsByChatId = new Map<string, Set<string>>()
   private legacySidebarProjectOrder: string[] = []
   private sidebarProjectOrder: string[] = []
   private snapshotHasLegacyMessages = false
@@ -1030,12 +1036,27 @@ export class EventStore implements PushEventStore {
     if (!text.trim()) return []
 
     const entries: TranscriptEntry[] = []
+    const seen = this.getSeenMessageIds(chatId)
     for (const rawLine of text.split("\n")) {
       const line = rawLine.trim()
       if (!line) continue
-      entries.push(JSON.parse(line) as TranscriptEntry)
+      const entry = JSON.parse(line) as TranscriptEntry
+      entries.push(entry)
+      const mid = (entry as { messageId?: string }).messageId
+      if (typeof mid === "string" && mid.length > 0) {
+        seen.add(mid)
+      }
     }
     return entries
+  }
+
+  private getSeenMessageIds(chatId: string): Set<string> {
+    let set = this.seenMessageIdsByChatId.get(chatId)
+    if (!set) {
+      set = new Set<string>()
+      this.seenMessageIdsByChatId.set(chatId, set)
+    }
+    return set
   }
 
   async openProject(localPath: string, title?: string) {
@@ -1477,6 +1498,24 @@ export class EventStore implements PushEventStore {
     this.writeChain = this.writeChain.then(async () => {
       const startedAt = performance.now()
       const queueDelayMs = Number((startedAt - queuedAt).toFixed(1))
+      // Dedupe by messageId: if a transcript entry from the same JSONL source
+      // message has already been appended, skip. Server-generated entries
+      // without messageId (e.g. interrupted, context_cleared) always append.
+      const mid = (entry as { messageId?: string }).messageId
+      if (typeof mid === "string" && mid.length > 0) {
+        // Ensure the transcript is loaded so the seen set is populated.
+        this.getMessages(chatId)
+        const seen = this.getSeenMessageIds(chatId)
+        if (seen.has(mid)) {
+          logSendToStartingProfile("event_store.append_message_dedup", {
+            chatId,
+            messageId: mid,
+            kind: entry.kind,
+          })
+          return
+        }
+        seen.add(mid)
+      }
       await mkdir(this.transcriptsDir, { recursive: true })
       const beforeAppendAt = performance.now()
       await appendFile(transcriptPath, payload, "utf8")
