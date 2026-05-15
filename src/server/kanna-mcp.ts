@@ -8,6 +8,14 @@ import { inferProjectFileContentType } from "./uploads"
 import type { TunnelGateway } from "./cloudflare-tunnel/gateway"
 import { createAskUserQuestionTool } from "./kanna-mcp-tools/ask-user-question"
 import { createExitPlanModeTool } from "./kanna-mcp-tools/exit-plan-mode"
+import { createReadTool } from "./kanna-mcp-tools/read"
+import { createGlobTool } from "./kanna-mcp-tools/glob"
+import { createGrepTool } from "./kanna-mcp-tools/grep"
+import { createBashTool } from "./kanna-mcp-tools/bash"
+import { createEditTool } from "./kanna-mcp-tools/edit"
+import { createWriteTool } from "./kanna-mcp-tools/write"
+import { createWebFetchTool } from "./kanna-mcp-tools/webfetch"
+import { createWebSearchTool } from "./kanna-mcp-tools/websearch"
 import type { ToolCallbackService } from "./tool-callback"
 import type { ChatPermissionPolicy } from "../shared/permission-policy"
 import { POLICY_DEFAULT } from "../shared/permission-policy"
@@ -213,6 +221,50 @@ export function buildKannaMcpTools(args: KannaMcpArgs): SdkMcpToolDefinition<any
         },
       ),
     )
+  }
+
+  if (process.env.KANNA_MCP_TOOL_CALLBACKS === "1" && args.toolCallback) {
+    const readTool = createReadTool({ toolCallback: args.toolCallback })
+    const globTool = createGlobTool({ toolCallback: args.toolCallback })
+    const grepTool = createGrepTool({ toolCallback: args.toolCallback })
+    const bashTool = createBashTool({ toolCallback: args.toolCallback })
+    const editTool = createEditTool({ toolCallback: args.toolCallback })
+    const writeTool = createWriteTool({ toolCallback: args.toolCallback })
+    const webfetchTool = createWebFetchTool({ toolCallback: args.toolCallback })
+    const websearchTool = createWebSearchTool({ toolCallback: args.toolCallback })
+
+    function registerShim<I>(shim: {
+      name: string
+      schema: { shape: Record<string, z.ZodTypeAny> }
+      handler: (input: I, ctx: import("./kanna-mcp-tools/tool-callback-shim").ToolHandlerContext) => Promise<import("./kanna-mcp-tools/tool-callback-shim").ToolHandlerResult>
+    }) {
+      tools.push(
+        tool(
+          shim.name,
+          `Kanna built-in replacement for ${shim.name}.`,
+          shim.schema.shape,
+          async (input, extra) => {
+            const requestId = (extra as { requestId?: string | number } | undefined)?.requestId
+            const toolUseId = requestId != null ? String(requestId) : randomUUID()
+            return await shim.handler(input as I, {
+              chatId: chatId ?? "",
+              sessionId,
+              toolUseId,
+              cwd,
+              chatPolicy,
+            })
+          },
+        ),
+      )
+    }
+    registerShim(readTool)
+    registerShim(globTool)
+    registerShim(grepTool)
+    registerShim(bashTool)
+    registerShim(editTool)
+    registerShim(writeTool)
+    registerShim(webfetchTool)
+    registerShim(websearchTool)
   }
 
   return tools
