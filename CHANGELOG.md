@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.52.0](https://github.com/cuongtranba/kanna/compare/v0.51.0...v0.52.0) (2026-05-15)
+
+
+### Features
+
+* **agent:** proactive /compact injection before context overflows ([#116](https://github.com/cuongtranba/kanna/issues/116)) ([1169e3e](https://github.com/cuongtranba/kanna/commit/1169e3e120946e8c0cfce5a76da6527e6b228356))
+* cancel individual subagent run ([#96](https://github.com/cuongtranba/kanna/issues/96)) ([b171ddf](https://github.com/cuongtranba/kanna/commit/b171ddf7cbf1b566b6df4aa0c82684364a29f704))
+* **claude-pty:** allowlist preflight + --tools flag (P3b) ([#110](https://github.com/cuongtranba/kanna/issues/110)) ([ba6b440](https://github.com/cuongtranba/kanna/commit/ba6b440ae53a6f47cd459d8e5d10750de04e246d))
+* **claude-pty:** Linux bwrap sandbox parity (P4.1) ([#112](https://github.com/cuongtranba/kanna/issues/112)) ([713c1da](https://github.com/cuongtranba/kanna/commit/713c1da25cbbd9c933434920994e6aabf67d4023))
+* **claude-pty:** macOS sandbox-exec wrapper (P4) ([#111](https://github.com/cuongtranba/kanna/issues/111)) ([b3a9e12](https://github.com/cuongtranba/kanna/commit/b3a9e1258c30057dce89f4aa6a68598948643f99))
+* **claude-pty:** OAuth pool rotation via CLAUDE_CODE_OAUTH_TOKEN (P5) ([#114](https://github.com/cuongtranba/kanna/issues/114)) ([65c1542](https://github.com/cuongtranba/kanna/commit/65c1542e4e371a5109c2565679a45ad8dd9c945a))
+* **claude-pty:** PTY core driver (P2 — flag off by default) ([#106](https://github.com/cuongtranba/kanna/issues/106)) ([0ece0ba](https://github.com/cuongtranba/kanna/commit/0ece0ba128c5fc16fd758e675a878f63f8b69095))
+* **kanna-mcp:** built-in tool shims (P3a — flag off by default) ([#107](https://github.com/cuongtranba/kanna/issues/107)) ([bbaed17](https://github.com/cuongtranba/kanna/commit/bbaed17c014bbe874b255aa871b1af5db1c2172b))
+* **mcp-tool-refactor:** durable approval protocol + permission-gate (P1 — flag off by default) ([#105](https://github.com/cuongtranba/kanna/issues/105)) ([d2b2cce](https://github.com/cuongtranba/kanna/commit/d2b2cce003191f5989520adfabeaea6a3de2a1eb))
+
+
+### Bug Fixes
+
+* **agent:** gate runClaudeSession finally activeTurn cleanup on isCurrentSession ([#115](https://github.com/cuongtranba/kanna/issues/115)) ([fad644a](https://github.com/cuongtranba/kanna/commit/fad644a87a2be63ebc7842cedea16621d7f39b0a))
+* **event-store:** dedupe appendMessage by messageId (JSONL replay safety) ([#109](https://github.com/cuongtranba/kanna/issues/109)) ([b6d5c01](https://github.com/cuongtranba/kanna/commit/b6d5c01e3e733d3b3e4a9bad2413b55099edff56))
+* **subagent:** cancel rejects pending resolvers even with no main turn ([#94](https://github.com/cuongtranba/kanna/issues/94)) ([9aac71d](https://github.com/cuongtranba/kanna/commit/9aac71dc226a62703568790bafd45974771c0167))
+* **tool-callback test:** flush background persists before tmpdir cleanup ([#113](https://github.com/cuongtranba/kanna/issues/113)) ([dd0387a](https://github.com/cuongtranba/kanna/commit/dd0387a06b16f2df7bae471aa81a0c9db2b7c951))
+
 ## [0.51.0](https://github.com/cuongtranba/kanna/compare/v0.50.0...v0.51.0) (2026-05-14)
 
 
