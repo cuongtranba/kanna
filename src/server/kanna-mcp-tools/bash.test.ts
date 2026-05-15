@@ -11,7 +11,13 @@ async function newStore() {
   const dir = await mkdtemp(path.join(tmpdir(), "kanna-mcp-bash-"))
   const store = new EventStore(dir)
   await store.initialize()
-  return { store, dir, cleanup: () => rm(dir, { recursive: true, force: true }) }
+  // Delay before removing dir so background persist tasks (fired by auto-allow/auto-deny)
+  // have time to complete before the tmpdir is removed.
+  const cleanup = async () => {
+    await new Promise<void>((r) => setTimeout(r, 50))
+    await rm(dir, { recursive: true, force: true })
+  }
+  return { store, dir, cleanup }
 }
 
 const ctx = (cwd: string) => ({
