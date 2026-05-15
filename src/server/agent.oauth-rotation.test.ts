@@ -816,4 +816,108 @@ describe("AgentCoordinator OAuth rotation", () => {
     },
     10_000,
   )
+
+  test(
+    "rotation→continue→prompt-too-long clears sessionToken end-to-end",
+    async () => {
+      let tokens: OAuthTokenEntry[] = [makeToken("a"), makeToken("b")]
+      const pool = new OAuthTokenPool(
+        () => tokens,
+        (id, patch) => {
+          tokens = tokens.map((t) => (t.id === id ? { ...t, ...patch } : t))
+        },
+      )
+
+      const store = createFakeStore()
+      store.chat.provider = "claude"
+      store.chat.sessionToken = "sess-huge"
+      store.chat.sessionTokensByProvider = { claude: "sess-huge" }
+
+      const resetAt = Date.now() + 60_000
+      let sessionCounter = 0
+      const sessionEventQueues: AsyncEventQueue<HarnessEvent>[] = []
+
+      const coordinator = new AgentCoordinator({
+        store: store as never,
+        onStateChange: () => {},
+        startClaudeSession: async () => {
+          const events = new AsyncEventQueue<HarnessEvent>()
+          const sessionIndex = sessionCounter++
+          sessionEventQueues.push(events)
+          return {
+            provider: "claude",
+            stream: events,
+            getAccountInfo: async () => null,
+            interrupt: async () => {},
+            close: () => { events.close() },
+            setModel: async () => {},
+            setPermissionMode: async () => {},
+            getSupportedCommands: async () => [],
+            sendPrompt: async () => {
+              if (sessionIndex === 0) {
+                events.push({ type: "rate_limit", rateLimit: { resetAt, tz: "system" } })
+              } else if (sessionIndex === 1) {
+                // Delay the prompt-too-long result so the previous session's
+                // finally block has time to run AFTER this session's
+                // activeTurn is registered. This reproduces the race where
+                // the closed session would wipe the new session's activeTurn
+                // before the new session's isError branch can clear the
+                // sessionToken — leaving the chat stuck in a loop.
+                setTimeout(() => {
+                  events.push({
+                    type: "transcript",
+                    entry: {
+                      _id: "prompt-too-long-result",
+                      createdAt: Date.now(),
+                      kind: "result",
+                      subtype: "error",
+                      isError: true,
+                      durationMs: 0,
+                      result: "Prompt is too long",
+                    } as TranscriptEntry,
+                  })
+                }, 100)
+              }
+            },
+          }
+        },
+        oauthPool: pool,
+      })
+
+      await coordinator.send({
+        type: "chat.send",
+        chatId: "chat-1",
+        provider: "claude",
+        content: "do something big",
+        model: "claude-opus-4-7",
+      })
+
+      await waitFor(
+        () => store.autoContinueEvents.some((e) => e.kind === "auto_continue_accepted"),
+        4000,
+        "rotation emitted auto_continue_accepted",
+      )
+
+      const accepted = store.getAutoContinueEvents("chat-1").find(
+        (e) => e.kind === "auto_continue_accepted",
+      )
+      if (accepted?.kind !== "auto_continue_accepted") throw new Error("expected accepted")
+
+      await coordinator.fireAutoContinue("chat-1", accepted.scheduleId)
+
+      // After rotation→continue→prompt-too-long, the new session's isError
+      // branch must run (activeTurn alive) to clear sessionToken so the next
+      // turn starts with bounded history.
+      await waitFor(
+        () => store.chat.sessionTokensByProvider.claude === null,
+        4000,
+        "sessionToken cleared after prompt-too-long on rotated session",
+      )
+
+      expect(
+        store.turnFailures.some((f) => f.reason === "Prompt is too long"),
+      ).toBe(true)
+    },
+    10_000,
+  )
 })

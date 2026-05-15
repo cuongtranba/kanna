@@ -1381,6 +1381,141 @@ describe("AgentCoordinator claude integration", () => {
     events.close()
   })
 
+  test("closes idle Claude sessions and resumes from the stored session token on the next turn", async () => {
+    const startSessionCalls: Array<{ sessionToken: string | null }> = []
+    const prompts: string[] = []
+    let closeCount = 0
+
+    const store = createFakeStore()
+    const coordinator = new AgentCoordinator({
+      store: store as never,
+      onStateChange: () => {},
+      claudeSessionLifecycle: { idleMs: 10, maxResidentSessions: 4, sweepIntervalMs: 0 },
+      startClaudeSession: async (args) => {
+        startSessionCalls.push({ sessionToken: args.sessionToken })
+        const events = new AsyncEventQueue<any>()
+        return {
+          provider: "claude",
+          stream: events,
+          getAccountInfo: async () => null,
+          interrupt: async () => {},
+          close: () => {
+            closeCount += 1
+            events.close()
+          },
+          setModel: async () => {},
+          setPermissionMode: async () => {},
+          getSupportedCommands: async () => [],
+          sendPrompt: async (content: string) => {
+            prompts.push(content)
+            if (prompts.length === 1) {
+              events.push({ type: "session_token" as const, sessionToken: "claude-session-1" })
+            }
+            events.push({
+              type: "transcript" as const,
+              entry: timestamped({
+                kind: "result",
+                subtype: "success",
+                isError: false,
+                durationMs: 0,
+                result: "done",
+              }),
+            })
+          },
+        }
+      },
+    })
+
+    await coordinator.send({
+      type: "chat.send",
+      chatId: "chat-1",
+      provider: "claude",
+      content: "first",
+      model: "claude-opus-4-1",
+    })
+    await waitFor(() => store.turnFinishedCount === 1)
+
+    const session = coordinator.claudeSessions.get("chat-1") as any
+    session.lastUsedAt = 0
+    ;(coordinator as any).sweepIdleClaudeSessions(100)
+
+    expect(coordinator.claudeSessions.has("chat-1")).toBe(false)
+    expect(closeCount).toBe(1)
+
+    await coordinator.send({
+      type: "chat.send",
+      chatId: "chat-1",
+      provider: "claude",
+      content: "second",
+      model: "claude-opus-4-1",
+    })
+    await waitFor(() => store.turnFinishedCount === 2)
+
+    expect(startSessionCalls).toEqual([
+      { sessionToken: null },
+      { sessionToken: "claude-session-1" },
+    ])
+    expect(prompts).toEqual(["first", "second"])
+
+    coordinator.dispose()
+  })
+
+  test("LRU lifecycle eviction keeps the protected Claude session", () => {
+    const store = createFakeStore()
+    const closed: string[] = []
+    const coordinator = new AgentCoordinator({
+      store: store as never,
+      onStateChange: () => {},
+      claudeSessionLifecycle: { idleMs: 10_000, maxResidentSessions: 2, sweepIntervalMs: 0 },
+      startClaudeSession: async () => {
+        throw new Error("not used")
+      },
+    })
+
+    function put(chatId: string, lastUsedAt: number) {
+      const events = new AsyncEventQueue<any>()
+      coordinator.claudeSessions.set(chatId, {
+        id: `state-${chatId}`,
+        chatId,
+        session: {
+          provider: "claude",
+          stream: events,
+          getAccountInfo: async () => null,
+          interrupt: async () => {},
+          close: () => {
+            closed.push(chatId)
+            events.close()
+          },
+          sendPrompt: async () => {},
+          setModel: async () => {},
+          setPermissionMode: async () => {},
+          getSupportedCommands: async () => [],
+        },
+        localPath: "/tmp/project",
+        additionalDirectories: [],
+        model: "claude-opus-4-1",
+        planMode: false,
+        sessionToken: null,
+        accountInfoLoaded: false,
+        nextPromptSeq: 0,
+        pendingPromptSeqs: [],
+        activeTokenId: null,
+        lastUsedAt,
+      } as any)
+    }
+
+    put("chat-old", 1)
+    put("chat-mid", 2)
+    put("chat-new", 3)
+
+    ;(coordinator as any).enforceClaudeSessionBudget("chat-new")
+
+    expect(closed).toEqual(["chat-old"])
+    expect([...coordinator.claudeSessions.keys()].sort()).toEqual(["chat-mid", "chat-new"])
+
+    coordinator.dispose()
+  })
+
   test("loads supported commands when a fresh Claude session starts", async () => {
     const events = new AsyncEventQueue<any>()
     const commandsFromSDK: SlashCommand[] = [
