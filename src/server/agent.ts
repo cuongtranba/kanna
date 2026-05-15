@@ -1595,6 +1595,7 @@ export class AgentCoordinator {
       const sessionToken = await this.codexManager.startSession({
         chatId: args.chatId,
         cwd: resolveSpawnPaths(chat, project.localPath).cwd,
+        projectId: project.id,
         model: args.model,
         serviceTier: args.serviceTier,
         sessionToken: existingToken,

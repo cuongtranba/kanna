@@ -108,6 +108,7 @@ interface SessionContext {
   chatId: string
   scope: CodexSessionScope
   cwd: string
+  projectId: string | null
   child: CodexAppServerProcess
   pendingRequests: Map<CodexRequestId, PendingRequest<unknown>>
   pendingTurn: PendingTurn | null
@@ -122,6 +123,7 @@ export interface StartCodexSessionArgs {
   chatId: string
   scope?: CodexSessionScope
   cwd: string
+  projectId?: string | null
   model: string
   serviceTier?: ServiceTier
   sessionToken: string | null
@@ -358,6 +360,74 @@ function genericDynamicToolCall(toolId: string, toolName: string, input: Record<
   })
 }
 
+export const IMAGE_GENERATION_TOOL_NAME = "ImageGeneration"
+
+function imageGenerationInputFromArgs(args: unknown): { revisedPrompt: string | null; status: string | undefined } {
+  const record = asRecord(args)
+  return {
+    revisedPrompt: typeof record?.revisedPrompt === "string" ? record.revisedPrompt : null,
+    status: typeof record?.status === "string" ? record.status : undefined,
+  }
+}
+
+function imageGenerationToolCallFromDynamic(item: Extract<ThreadItem, { type: "dynamicToolCall" }>): TranscriptEntry {
+  return timestamped({
+    kind: "tool_call",
+    tool: {
+      kind: "tool",
+      toolKind: "image_generation",
+      toolName: IMAGE_GENERATION_TOOL_NAME,
+      toolId: item.id,
+      input: imageGenerationInputFromArgs(item.arguments),
+      rawInput: (asRecord(item.arguments) ?? {}) as Record<string, unknown>,
+    },
+  })
+}
+
+function imageGenerationToolCallFromTyped(item: Extract<ThreadItem, { type: "imageGeneration" }>): TranscriptEntry {
+  return timestamped({
+    kind: "tool_call",
+    tool: {
+      kind: "tool",
+      toolKind: "image_generation",
+      toolName: IMAGE_GENERATION_TOOL_NAME,
+      toolId: item.id,
+      input: {
+        revisedPrompt: item.revisedPrompt ?? null,
+        status: item.status,
+      },
+      rawInput: item as unknown as Record<string, unknown>,
+    },
+  })
+}
+
+function relativePathFromContentItems(contentItems: DynamicToolCallOutputContentItem[] | null | undefined): string | null {
+  if (!contentItems?.length) return null
+  for (const entry of contentItems) {
+    if (entry.type !== "inputText" || typeof entry.text !== "string") continue
+    const text = entry.text.trim()
+    if (!text) continue
+    return text
+  }
+  return null
+}
+
+function buildImageGenerationResult(toolId: string, relativePath: string | null, projectId: string | null, isError: boolean): TranscriptEntry {
+  const rel = relativePath ?? ""
+  const fileName = rel ? rel.split("/").pop() ?? rel : ""
+  let contentUrl = ""
+  if (rel && projectId) {
+    const encodedPath = rel.split("/").map((segment) => encodeURIComponent(segment)).join("/")
+    contentUrl = `/api/projects/${encodeURIComponent(projectId)}/files/${encodedPath}/content`
+  }
+  return timestamped({
+    kind: "tool_result",
+    toolId,
+    content: { contentUrl, relativePath: rel, fileName },
+    isError,
+  })
+}
+
 function collabToolCall(item: CollabAgentToolCallItem): TranscriptEntry {
   return timestamped({
     kind: "tool_call",
@@ -587,13 +657,16 @@ function fileChangeToToolResults(item: Extract<ThreadItem, { type: "fileChange" 
   }))
 }
 
-function itemToToolCalls(item: ThreadItem): TranscriptEntry[] {
+function itemToToolCalls(item: ThreadItem, _projectId: string | null): TranscriptEntry[] {
   switch (item.type) {
     case "userMessage":
     case "reasoning":
     case "agentMessage":
       return []
     case "dynamicToolCall":
+      if (item.tool === IMAGE_GENERATION_TOOL_NAME) {
+        return [imageGenerationToolCallFromDynamic(item)]
+      }
       return [genericDynamicToolCall(item.id, item.tool, dynamicToolPayload(item.arguments))]
     case "collabAgentToolCall":
       return [collabToolCall(item)]
@@ -660,20 +733,7 @@ function itemToToolCalls(item: ThreadItem): TranscriptEntry[] {
         },
       })]
     case "imageGeneration":
-      return [timestamped({
-        kind: "tool_call",
-        tool: {
-          kind: "tool",
-          toolKind: "unknown_tool",
-          toolName: "ImageGeneration",
-          toolId: item.id,
-          input: {
-            revisedPrompt: item.revisedPrompt ?? null,
-            status: item.status,
-          },
-          rawInput: item as unknown as Record<string, unknown>,
-        },
-      })]
+      return [imageGenerationToolCallFromTyped(item)]
     case "imageView":
       return [timestamped({
         kind: "tool_call",
@@ -709,13 +769,17 @@ function itemToToolCalls(item: ThreadItem): TranscriptEntry[] {
   }
 }
 
-function itemToToolResults(item: ThreadItem): TranscriptEntry[] {
+function itemToToolResults(item: ThreadItem, projectId: string | null): TranscriptEntry[] {
   switch (item.type) {
     case "userMessage":
     case "reasoning":
     case "agentMessage":
       return []
     case "dynamicToolCall":
+      if (item.tool === IMAGE_GENERATION_TOOL_NAME) {
+        const isError = item.status === "failed" || item.success === false
+        return [buildImageGenerationResult(item.id, relativePathFromContentItems(item.contentItems), projectId, isError)]
+      }
       return [timestamped({
         kind: "tool_result",
         toolId: item.id,
@@ -760,15 +824,11 @@ function itemToToolResults(item: ThreadItem): TranscriptEntry[] {
         content: item.message,
         isError: true,
       })]
-    case "imageGeneration":
-      return [timestamped({
-        kind: "tool_result",
-        toolId: item.id,
-        content: item.savedPath
-          ? `Image generated: ${item.savedPath}`
-          : item.result || item,
-        isError: item.status === "failed",
-      })]
+    case "imageGeneration": {
+      const rel = item.savedPath ?? item.result ?? null
+      const isError = item.status === "failed"
+      return [buildImageGenerationResult(item.id, rel, projectId, isError)]
+    }
     case "imageView":
       return [timestamped({
         kind: "tool_result",
@@ -867,6 +927,7 @@ export class CodexAppServerManager {
       chatId: args.chatId,
       scope,
       cwd: args.cwd,
+      projectId: args.projectId ?? null,
       child,
       pendingRequests: new Map(),
       pendingTurn: null,
@@ -1343,10 +1404,10 @@ export class CodexAppServerManager {
         this.handlePlanUpdated(pendingTurn, notification.params)
         return
       case "item/started":
-        this.handleItemStarted(pendingTurn, notification.params)
+        this.handleItemStarted(context, pendingTurn, notification.params)
         return
       case "item/completed":
-        this.handleItemCompleted(pendingTurn, notification.params)
+        this.handleItemCompleted(context, pendingTurn, notification.params)
         return
       case "item/plan/delta":
         this.handlePlanDelta(pendingTurn, notification.params)
@@ -1365,7 +1426,7 @@ export class CodexAppServerManager {
     }
   }
 
-  private handleItemStarted(pendingTurn: PendingTurn, notification: ItemStartedNotification) {
+  private handleItemStarted(context: SessionContext, pendingTurn: PendingTurn, notification: ItemStartedNotification) {
     if (notification.item.type === "plan") {
       pendingTurn.planTextByItemId.set(notification.item.id, notification.item.text)
       pendingTurn.latestPlanText = notification.item.text
@@ -1389,7 +1450,13 @@ export class CodexAppServerManager {
       }
     }
 
-    const entries = itemToToolCalls(notification.item)
+    if (notification.item.type === "dynamicToolCall" && notification.item.tool === IMAGE_GENERATION_TOOL_NAME) {
+      // Defer ImageGeneration emission to item/completed — args at started are
+      // always {revisedPrompt: null, status: "in_progress"} which is uninformative.
+      return
+    }
+
+    const entries = itemToToolCalls(notification.item, context.projectId)
     for (const entry of entries) {
       if (entry.kind === "tool_call") {
         pendingTurn.startedToolIds.add(entry.tool.toolId)
@@ -1398,7 +1465,7 @@ export class CodexAppServerManager {
     }
   }
 
-  private handleItemCompleted(pendingTurn: PendingTurn, notification: ItemCompletedNotification) {
+  private handleItemCompleted(context: SessionContext, pendingTurn: PendingTurn, notification: ItemCompletedNotification) {
     if (notification.item.type === "agentMessage") {
       if (!notification.item.text.trim()) {
         return
@@ -1434,7 +1501,7 @@ export class CodexAppServerManager {
       return
     }
 
-    const startedEntries = itemToToolCalls(notification.item)
+    const startedEntries = itemToToolCalls(notification.item, context.projectId)
     for (const entry of startedEntries) {
       if (entry.kind !== "tool_call") {
         continue
@@ -1446,7 +1513,7 @@ export class CodexAppServerManager {
       pendingTurn.queue.push({ type: "transcript", entry })
     }
 
-    const resultEntries = itemToToolResults(notification.item)
+    const resultEntries = itemToToolResults(notification.item, context.projectId)
     for (const entry of resultEntries) {
       pendingTurn.queue.push({ type: "transcript", entry })
       if (notification.item.type === "webSearch" && entry.kind === "tool_result" && !entry.isError) {
