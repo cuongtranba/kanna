@@ -74,6 +74,13 @@ Limitations of P2 (this release):
   applies to `AskUserQuestion`/`ExitPlanMode` only.
 - macOS/Linux only.
 
+**OAuth pool rotation (P5):** PTY mode honors the same multi-token rotation
+the SDK driver uses. `AgentCoordinator` picks an active token from
+`OAuthTokenPool` per chat and the PTY driver injects it via the
+`CLAUDE_CODE_OAUTH_TOKEN` env var. Cross-platform: works on macOS
+(overrides Keychain lookup) and Linux (overrides `.credentials.json` read).
+No per-account `$HOME` directories required.
+
 **Architecture note:** PTY mode uses the on-disk JSONL transcript at
 `~/.claude/projects/<encoded-cwd>/<session-uuid>.jsonl` as the sole event
 source. The PTY is a subprocess holder + input channel only; output is
