@@ -11,7 +11,11 @@ async function newStore() {
   const dir = await mkdtemp(path.join(tmpdir(), "kanna-mcp-glob-"))
   const store = new EventStore(dir)
   await store.initialize()
-  return { store, dir, cleanup: () => rm(dir, { recursive: true, force: true }) }
+  const cleanup = async () => {
+    await new Promise<void>((r) => setTimeout(r, 50))
+    await rm(dir, { recursive: true, force: true })
+  }
+  return { store, dir, cleanup }
 }
 
 const ctx = (cwd: string) => ({
