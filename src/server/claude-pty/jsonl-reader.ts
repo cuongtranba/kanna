@@ -1,12 +1,17 @@
 import { watch } from "node:fs"
-import { open } from "node:fs/promises"
+import { open, stat } from "node:fs/promises"
 import path from "node:path"
 import type { HarnessEvent } from "../harness-types"
 import { parseJsonlLine } from "./jsonl-to-event"
-import { computeCompositeVersion, type CompositeVersion } from "./bookmark"
 
 export interface JsonlReader extends AsyncIterable<HarnessEvent> {
   close(): void
+}
+
+// Cheap bookmark: only inode + byte offset, no content hash.
+interface StatBookmark {
+  ino: bigint
+  byteOffset: number
 }
 
 export function createJsonlReader(args: { filePath: string }): JsonlReader {
@@ -14,7 +19,7 @@ export function createJsonlReader(args: { filePath: string }): JsonlReader {
   const dir = path.dirname(filePath)
   const baseName = path.basename(filePath)
 
-  let bookmark: CompositeVersion | null = null
+  let bookmark: StatBookmark | null = null
   let closed = false
   const queue: HarnessEvent[] = []
   // All concurrent next() calls share a single pending promise so that when
@@ -49,16 +54,23 @@ export function createJsonlReader(args: { filePath: string }): JsonlReader {
     if (closed || processing) return
     processing = true
     try {
-      const current = await computeCompositeVersion(filePath, 0)
-      if (!current) return
+      // Fix 4: use stat() for cheap inode+size check instead of hashing the entire file
+      let fileStat: { ino: bigint; size: bigint }
+      try {
+        const s = await stat(filePath, { bigint: true })
+        fileStat = { ino: s.ino, size: s.size }
+      } catch {
+        // File doesn't exist yet — nothing to read
+        return
+      }
 
       let startOffset = 0
-      if (bookmark && bookmark.inode === current.inode) {
+      if (bookmark && bookmark.ino === fileStat.ino) {
         // Same inode means same file — safe to resume from last byte position.
         // An append only grows the file, so the prefix we already read is unchanged.
         // If the current file size is less than our bookmark offset the file was
         // truncated; in that case reset and re-read from the start.
-        if (current.byteOffset >= bookmark.byteOffset) {
+        if (Number(fileStat.size) >= bookmark.byteOffset) {
           startOffset = bookmark.byteOffset
         } else {
           // Truncated — start over
@@ -86,7 +98,8 @@ export function createJsonlReader(args: { filePath: string }): JsonlReader {
             nl = partial.indexOf("\n")
           }
         }
-        bookmark = await computeCompositeVersion(filePath, pos)
+        // Update bookmark from stat ino + final byte position (no hash needed)
+        bookmark = { ino: fileStat.ino, byteOffset: pos }
       } finally {
         await fd.close()
       }

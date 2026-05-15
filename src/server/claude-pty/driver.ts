@@ -1,6 +1,6 @@
 import { homedir, tmpdir } from "node:os"
 import path from "node:path"
-import { mkdtemp } from "node:fs/promises"
+import { mkdtemp, rm } from "node:fs/promises"
 import { randomUUID } from "node:crypto"
 import { verifyPtyAuth } from "./auth"
 import { computeJsonlPath } from "./jsonl-path"
@@ -81,19 +81,23 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
     )
   }
 
+  // Fix 1+5: shared closed flag used by close(), iterator, and pty.exited watcher
+  let closed = false
   let pendingModelAck: { resolve: () => void } | null = null
   let cachedAccountInfo: AccountInfo | null = null
   const mergedQueue: HarnessEvent[] = []
   const mergedWaiters: Array<(r: IteratorResult<HarnessEvent>) => void> = []
 
+  // Fix 2: track all pending timers so close() can cancel them
+  const pendingTimers: Set<ReturnType<typeof setTimeout>> = new Set()
+
+  // Fix 3: safe type guard for accountInfo
   function pushMerged(ev: HarnessEvent) {
-    if (
-      ev.type === "transcript" &&
-      ev.entry &&
-      (ev.entry as { kind?: string }).kind === "account_info"
-    ) {
-      const entry = ev.entry as unknown as { accountInfo?: AccountInfo }
-      if (entry.accountInfo) cachedAccountInfo = entry.accountInfo
+    if (ev.type === "transcript" && ev.entry) {
+      const entry = ev.entry as { kind?: string; accountInfo?: unknown }
+      if (entry.kind === "account_info" && entry.accountInfo !== undefined) {
+        cachedAccountInfo = entry.accountInfo as AccountInfo
+      }
     }
     const w = mergedWaiters.shift()
     if (w) w({ value: ev, done: false })
@@ -113,12 +117,17 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
         pendingModelAck.resolve()
         pendingModelAck = null
       }
+      // Fix 6: locale-safe rate-limit date construction
       const rl = detectRateLimit(frame)
       if (rl) {
-        const resetAtMs = new Date(`${new Date().toDateString()} ${rl.resetAt} ${rl.tz}`).getTime()
-        if (!Number.isNaN(resetAtMs)) {
-          pushMerged({ type: "rate_limit", rateLimit: { resetAt: resetAtMs, tz: rl.tz } })
-        }
+        const now = new Date()
+        const [hh, mm] = rl.resetAt.split(":").map(Number)
+        const candidate = new Date(now)
+        candidate.setHours(hh, mm, 0, 0)
+        const resetAtMs = candidate.getTime() < now.getTime()
+          ? candidate.getTime() + 24 * 60 * 60 * 1000
+          : candidate.getTime()
+        pushMerged({ type: "rate_limit", rateLimit: { resetAt: resetAtMs, tz: rl.tz } })
       }
     },
   })
@@ -129,10 +138,31 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
     for await (const ev of reader) pushMerged(ev)
   })()
 
+  // Fix 5: observe pty.exited so a crash terminates the stream
+  void pty.exited.then(() => {
+    if (!closed) {
+      reader.close()
+      while (mergedWaiters.length > 0) {
+        const w = mergedWaiters.shift()
+        if (w) w({ value: undefined as unknown as HarnessEvent, done: true })
+      }
+    }
+  }).catch(() => {
+    // swallow — exited rejects are handled the same way
+    if (!closed) {
+      reader.close()
+      while (mergedWaiters.length > 0) {
+        const w = mergedWaiters.shift()
+        if (w) w({ value: undefined as unknown as HarnessEvent, done: true })
+      }
+    }
+  })
+
   if (args.initialPrompt) {
     await pty.sendInput(`${args.initialPrompt}\r`)
   }
 
+  // Fix 5: iterator returns done:true when closed and queue is empty
   const stream: AsyncIterable<HarnessEvent> = {
     [Symbol.asyncIterator]() {
       return {
@@ -140,6 +170,9 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
           if (mergedQueue.length > 0) {
             const ev = mergedQueue.shift()
             if (ev) return Promise.resolve({ value: ev, done: false })
+          }
+          if (closed) {
+            return Promise.resolve({ value: undefined as unknown as HarnessEvent, done: true })
           }
           return new Promise((resolve) => {
             mergedWaiters.push(resolve)
@@ -152,25 +185,31 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
   return {
     provider: "claude",
     stream,
+    // Fix 2: track timer for Ctrl-C send
     interrupt: async () => {
       await pty.sendInput("\x1b")
-      setTimeout(() => {
+      const t = setTimeout(() => {
+        pendingTimers.delete(t)
         void pty.sendInput("\x03")
       }, 1000)
+      pendingTimers.add(t)
     },
     sendPrompt: async (content) => {
       await pty.sendInput(`${content}\r`)
     },
+    // Fix 2: track model-ack timeout
     setModel: async (model) => {
       await writeSlashCommand(pty, "model", model)
       await new Promise<void>((resolve) => {
         pendingModelAck = { resolve }
-        setTimeout(() => {
+        const t = setTimeout(() => {
+          pendingTimers.delete(t)
           if (pendingModelAck) {
             pendingModelAck.resolve()
             pendingModelAck = null
           }
         }, 3000)
+        pendingTimers.add(t)
       })
     },
     setPermissionMode: async (_planMode) => {
@@ -178,12 +217,30 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
     },
     getSupportedCommands: async () => STATIC_SUPPORTED_COMMANDS,
     getAccountInfo: async () => cachedAccountInfo,
+    // Fix 1: close() guard, ordered teardown, runtimeDir cleanup
     close: () => {
-      void writeSlashCommand(pty, "exit")
-      setTimeout(() => {
-        pty.close()
-      }, 2000)
-      reader.close()
+      if (closed) return
+      closed = true
+      // Fix 2: cancel all pending timers before scheduling new ones
+      for (const t of pendingTimers) clearTimeout(t)
+      pendingTimers.clear()
+      void (async () => {
+        try { await writeSlashCommand(pty, "exit") } catch { /* swallow */ }
+        const timer = setTimeout(() => {
+          try { pty.close() } catch { /* swallow */ }
+        }, 2000)
+        try {
+          await pty.exited
+          clearTimeout(timer)
+        } catch { /* swallow */ }
+        reader.close()
+        try { await rm(runtimeDir, { recursive: true, force: true }) } catch { /* swallow */ }
+        // Drain any waiters that weren't resolved by pty.exited watcher
+        while (mergedWaiters.length > 0) {
+          const w = mergedWaiters.shift()
+          if (w) w({ value: undefined as unknown as HarnessEvent, done: true })
+        }
+      })()
     },
   }
 }
