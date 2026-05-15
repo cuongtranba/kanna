@@ -134,3 +134,33 @@ test("feature flag on but toolCallback absent → tools NOT registered", () => {
   expect(names).not.toContain("exit_plan_mode")
   delete process.env.KANNA_MCP_TOOL_CALLBACKS
 })
+
+test("feature flag on → all 8 new mcp__kanna__* tools registered", () => {
+  process.env.KANNA_MCP_TOOL_CALLBACKS = "1"
+  try {
+    const stub = {
+      submit: async () => ({ status: "answered", decision: { kind: "deny" } }),
+      answer: async () => {},
+      cancel: async () => {},
+      cancelAllForChat: async () => {},
+      cancelAllForSession: async () => {},
+      recoverOnStartup: async () => {},
+      tickTimeouts: async () => {},
+    }
+    const tools = buildKannaMcpTools({
+      projectId: "p",
+      localPath: "/tmp",
+      chatId: "c",
+      sessionId: "s",
+      toolCallback: stub as unknown as Parameters<typeof buildKannaMcpTools>[0]["toolCallback"],
+      chatPolicy: POLICY_DEFAULT,
+      tunnelGateway: null,
+    })
+    const names = tools.map((t) => t.name)
+    for (const n of ["read", "glob", "grep", "bash", "edit", "write", "webfetch", "websearch"]) {
+      expect(names).toContain(n)
+    }
+  } finally {
+    delete process.env.KANNA_MCP_TOOL_CALLBACKS
+  }
+})
