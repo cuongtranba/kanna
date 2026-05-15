@@ -425,7 +425,8 @@ function normalizeSubagents(value: unknown, warnings: string[]): Subagent[] {
 }
 
 function normalizeOAuthTokenStatus(value: unknown): OAuthTokenStatus {
-  return value === "limited" || value === "error" ? value : "active"
+  if (value === "limited" || value === "error" || value === "disabled") return value
+  return "active"
 }
 
 function normalizeTokenEntry(value: unknown, warnings: string[]): OAuthTokenEntry | null {

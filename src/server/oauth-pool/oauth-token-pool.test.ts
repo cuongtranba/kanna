@@ -68,6 +68,52 @@ describe("OAuthTokenPool.pickActive", () => {
     )
     expect(pool.pickActive()).toBe(null)
   })
+
+  test("skips disabled tokens", () => {
+    const pool = new OAuthTokenPool(
+      () => [tok("a", { status: "disabled" }), tok("b")],
+      () => {}, () => 1000,
+    )
+    expect(pool.pickActive()?.id).toBe("b")
+  })
+
+  test("returns null when all tokens are disabled", () => {
+    const pool = new OAuthTokenPool(
+      () => [tok("a", { status: "disabled" })],
+      () => {}, () => 1000,
+    )
+    expect(pool.pickActive()).toBe(null)
+  })
+})
+
+describe("OAuthTokenPool.markDisabled / markEnabled", () => {
+  test("markDisabled writes status=disabled and drops reservation", () => {
+    const updates: Array<{ id: string; patch: Partial<OAuthTokenEntry> }> = []
+    let store = [tok("a"), tok("b")]
+    const pool = new OAuthTokenPool(
+      () => store,
+      (id, patch) => {
+        updates.push({ id, patch })
+        store = store.map((t) => t.id === id ? { ...t, ...patch } : t)
+      },
+      () => 1000,
+    )
+    pool.pickActive("chat-1")
+    pool.markDisabled("a")
+    expect(updates.at(-1)).toEqual({ id: "a", patch: { status: "disabled" } })
+    expect(pool.pickActive("chat-2")?.id).toBe("b")
+  })
+
+  test("markEnabled writes status=active", () => {
+    const updates: Array<{ id: string; patch: Partial<OAuthTokenEntry> }> = []
+    const pool = new OAuthTokenPool(
+      () => [tok("a", { status: "disabled" })],
+      (id, patch) => { updates.push({ id, patch }) },
+      () => 1000,
+    )
+    pool.markEnabled("a")
+    expect(updates).toEqual([{ id: "a", patch: { status: "active" } }])
+  })
 })
 
 describe("OAuthTokenPool.markLimited", () => {
@@ -121,6 +167,31 @@ describe("OAuthTokenPool.allLimited", () => {
 
   test("false when pool is empty (caller should fall back to env)", () => {
     const pool = new OAuthTokenPool(() => [], () => {}, () => 1000)
+    expect(pool.allLimited()).toBe(false)
+  })
+
+  test("disabled tokens excluded from allLimited check", () => {
+    const poolAllLimited = new OAuthTokenPool(
+      () => [
+        tok("a", { status: "disabled" }),
+        tok("b", { status: "limited", limitedUntil: 9999 }),
+      ],
+      () => {}, () => 1000,
+    )
+    expect(poolAllLimited.allLimited()).toBe(true)
+
+    const poolNotLimited = new OAuthTokenPool(
+      () => [tok("a", { status: "disabled" }), tok("b")],
+      () => {}, () => 1000,
+    )
+    expect(poolNotLimited.allLimited()).toBe(false)
+  })
+
+  test("false when only disabled tokens exist", () => {
+    const pool = new OAuthTokenPool(
+      () => [tok("a", { status: "disabled" })],
+      () => {}, () => 1000,
+    )
     expect(pool.allLimited()).toBe(false)
   })
 })

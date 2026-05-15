@@ -20,7 +20,7 @@ export class OAuthTokenPool {
     const now = this.now()
     const candidates: OAuthTokenEntry[] = []
     for (const t of this.readTokens()) {
-      if (t.status === "error") continue
+      if (t.status === "error" || t.status === "disabled") continue
       const owner = this.reservedBy.get(t.id)
       if (owner !== undefined && owner !== reservedFor) continue
       if (t.status === "limited") {
@@ -68,6 +68,16 @@ export class OAuthTokenPool {
     this.writeStatus(id, { status: "error", lastErrorAt: this.now(), lastErrorMessage: message })
   }
 
+  markDisabled(id: string): void {
+    this.writeStatus(id, { status: "disabled" })
+    // Drop any reservation — a disabled token cannot serve sessions.
+    this.reservedBy.delete(id)
+  }
+
+  markEnabled(id: string): void {
+    this.writeStatus(id, { status: "active" })
+  }
+
   /**
    * Read-only probe: does the pool have at least one token currently usable
    * (active, or limited-but-elapsed)? Unlike pickActive(), does NOT mutate
@@ -76,7 +86,7 @@ export class OAuthTokenPool {
   hasUsable(): boolean {
     const now = this.now()
     for (const t of this.readTokens()) {
-      if (t.status === "error") continue
+      if (t.status === "error" || t.status === "disabled") continue
       if (t.status === "limited") {
         if (t.limitedUntil !== null && t.limitedUntil > now) continue
       }
@@ -86,10 +96,12 @@ export class OAuthTokenPool {
   }
 
   allLimited(): boolean {
-    const tokens = this.readTokens()
-    if (tokens.length === 0) return false
+    // Only considers non-disabled, non-error tokens — disabled accounts are
+    // intentionally excluded from the pool and do not affect rate-limit state.
+    const eligible = this.readTokens().filter((t) => t.status !== "disabled" && t.status !== "error")
+    if (eligible.length === 0) return false
     const now = this.now()
-    return tokens.every((t) => t.status === "limited" && t.limitedUntil !== null && t.limitedUntil > now)
+    return eligible.every((t) => t.status === "limited" && t.limitedUntil !== null && t.limitedUntil > now)
   }
 
   earliestUnlimit(): number | null {
