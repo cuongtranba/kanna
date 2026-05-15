@@ -74,6 +74,12 @@ Limitations of P2 (this release):
   applies to `AskUserQuestion`/`ExitPlanMode` only.
 - macOS/Linux only.
 
+**Architecture note:** PTY mode uses the on-disk JSONL transcript at
+`~/.claude/projects/<encoded-cwd>/<session-uuid>.jsonl` as the sole event
+source. The PTY is a subprocess holder + input channel only; output is
+drained, not parsed. Model switches, rate-limit signals, and permission
+changes all surface through JSONL.
+
 # Kanna-MCP Built-in Shims
 
 When `KANNA_MCP_TOOL_CALLBACKS=1`, kanna-mcp registers 8 additional tools
