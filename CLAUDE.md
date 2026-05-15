@@ -55,6 +55,25 @@ because `recoverOnStartup()` fail-closes all pending records on boot.
 Periodic `tickTimeouts` driver fires every 5s; default request timeout is
 600s. Pending requests time out as `{kind:"deny", reason:"timeout"}`.
 
+# Claude Driver Flag (KANNA_CLAUDE_DRIVER)
+
+Setting `KANNA_CLAUDE_DRIVER=pty` launches the `claude` CLI under a
+pseudo-terminal and tails the on-disk JSONL transcript instead of using
+the `@anthropic-ai/claude-agent-sdk` `query()` programmatic API. PTY mode
+preserves Pro/Max subscription billing; SDK mode bills at API rates.
+
+Default is `sdk` (no behaviour change). Requires `claude /login` to have
+been run once. `ANTHROPIC_API_KEY` must be unset (PTY mode refuses to
+spawn if it is set — would force API billing).
+
+Limitations of P2 (this release):
+- Single account, no rotation (account pool lands in a later phase).
+- No OS sandbox (defense-in-depth, later phase).
+- Built-in CLI tools (`Read`/`Bash`/etc.) enabled — not yet routed through
+  `kanna-mcp`. Permission gating from `KANNA_MCP_TOOL_CALLBACKS=1` still
+  applies to `AskUserQuestion`/`ExitPlanMode` only.
+- macOS/Linux only.
+
 # Tests
 
 `bun test` MUST pass locally before any push or PR. CI (`.github/workflows/test.yml`)
