@@ -1626,4 +1626,79 @@ describe("EventStore deleteChat prunes toolRequestsById", () => {
     expect(store.getToolRequest("req-a")).toBeNull()
     expect(store.getToolRequest("req-b")).not.toBeNull()
   })
+
+  test("appendMessage dedupes entries with same messageId (JSONL replay safety)", async () => {
+    const dataDir = await createTempDataDir()
+    const store = new EventStore(dataDir)
+    await store.initialize()
+
+    const project = await store.openProject("/tmp/project")
+    const chat = await store.createChat(project.id)
+
+    const baseEntry = {
+      _id: "first-id",
+      kind: "assistant_text" as const,
+      createdAt: 100,
+      text: "hello",
+      messageId: "claude-msg-1",
+    } as TranscriptEntry
+
+    await store.appendMessage(chat.id, baseEntry)
+    // Simulate JSONL re-emit with a fresh _id but same messageId.
+    await store.appendMessage(chat.id, { ...baseEntry, _id: "duplicate-id" } as TranscriptEntry)
+
+    const messages = store.getMessages(chat.id)
+    expect(messages).toHaveLength(1)
+    expect(messages[0]._id).toBe("first-id")
+  })
+
+  test("appendMessage does not dedupe entries without messageId", async () => {
+    const dataDir = await createTempDataDir()
+    const store = new EventStore(dataDir)
+    await store.initialize()
+
+    const project = await store.openProject("/tmp/project")
+    const chat = await store.createChat(project.id)
+
+    const e1 = { _id: "a", kind: "interrupted" as const, createdAt: 100 } as TranscriptEntry
+    const e2 = { _id: "b", kind: "interrupted" as const, createdAt: 200 } as TranscriptEntry
+
+    await store.appendMessage(chat.id, e1)
+    await store.appendMessage(chat.id, e2)
+
+    expect(store.getMessages(chat.id)).toHaveLength(2)
+  })
+
+  test("appendMessage dedupes across a fresh EventStore (replay populates seen set)", async () => {
+    const dataDir = await createTempDataDir()
+    const first = new EventStore(dataDir)
+    await first.initialize()
+
+    const project = await first.openProject("/tmp/project")
+    const chat = await first.createChat(project.id)
+
+    await first.appendMessage(chat.id, {
+      _id: "id-1",
+      kind: "assistant_text",
+      createdAt: 100,
+      text: "hello",
+      messageId: "claude-msg-1",
+    } as TranscriptEntry)
+
+    // New EventStore instance against the same dataDir simulates restart.
+    const second = new EventStore(dataDir)
+    await second.initialize()
+    // Force transcript load so seen set is populated.
+    expect(second.getMessages(chat.id)).toHaveLength(1)
+
+    await second.appendMessage(chat.id, {
+      _id: "id-2",
+      kind: "assistant_text",
+      createdAt: 200,
+      text: "hello",
+      messageId: "claude-msg-1",
+    } as TranscriptEntry)
+
+    expect(second.getMessages(chat.id)).toHaveLength(1)
+  })
 })
