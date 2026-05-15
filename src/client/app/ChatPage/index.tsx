@@ -968,6 +968,7 @@ export function ChatPage() {
           platform={state.localProjects?.machine.platform}
           onAskUserQuestionSubmit={state.handleAskUserQuestion}
           onExitPlanModeConfirm={state.handleExitPlanMode}
+          onToolRequestAnswer={state.handleToolRequestAnswer}
           onSubagentAskUserQuestionSubmit={state.handleSubagentAskUserQuestion}
           onSubagentExitPlanModeSubmit={state.handleSubagentExitPlanMode}
           schedules={state.chatSnapshot?.schedules ?? EMPTY_SCHEDULES}

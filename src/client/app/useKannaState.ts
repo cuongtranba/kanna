@@ -21,6 +21,7 @@ import { generateUUID } from "../lib/utils"
 import { canCancelStatus, getLatestToolIds, isProcessingStatus } from "./derived"
 import { KannaSocket, type SocketStatus } from "./socket"
 import type { BackgroundTaskDiffEvent, BgTasksSnapshotData, EditorOpenSettings, OpenExternalAction } from "../../shared/protocol"
+import type { ToolRequestDecision } from "../../shared/permission-policy"
 import { useBackgroundTasksStore } from "../stores/backgroundTasksStore"
 import { fireOrphanRecoveryToast } from "../lib/orphanToast"
 
@@ -801,6 +802,7 @@ export interface KannaState {
   handleCloseStandaloneShareDialog: () => void
   handleOpenStandaloneShareLink: () => void
   handleCopyStandaloneShareLink: () => Promise<boolean>
+  handleToolRequestAnswer: (toolRequestId: string, decision: ToolRequestDecision) => Promise<void>
 }
 
 export function useKannaState(activeChatId: string | null): KannaState {
@@ -2335,6 +2337,20 @@ export function useKannaState(activeChatId: string | null): KannaState {
     }
   }, [activeChatId, socket])
 
+  const handleToolRequestAnswer = useCallback(async (toolRequestId: string, decision: ToolRequestDecision) => {
+    if (!activeChatId) return
+    try {
+      await socket.command({
+        type: "chat.toolRequestAnswer",
+        chatId: activeChatId,
+        toolRequestId,
+        decision,
+      })
+    } catch (error) {
+      setCommandError(error instanceof Error ? error.message : String(error))
+    }
+  }, [activeChatId, socket])
+
   // eslint-disable-next-line react-hooks/refs
   return {
     socket,
@@ -2433,5 +2449,6 @@ export function useKannaState(activeChatId: string | null): KannaState {
     handleCloseStandaloneShareDialog,
     handleOpenStandaloneShareLink,
     handleCopyStandaloneShareLink,
+    handleToolRequestAnswer,
   }
 }

@@ -18,6 +18,7 @@ import {
 } from "../KannaTranscript"
 import type { KannaState } from "../useKannaState"
 import type { AutoContinueSchedule, CloudflareTunnelRecord, SubagentRunSnapshot } from "../../../shared/types"
+import type { ToolRequestDecision } from "../../../shared/permission-policy"
 import { SubagentMessage } from "../../components/messages/SubagentMessage"
 import React from "react"
 import { CloudflareTunnelCard } from "../../components/chat-ui/CloudflareTunnelCard"
@@ -48,6 +49,7 @@ interface ChatTranscriptViewportProps {
   onOpenLocalLink: KannaState["handleOpenLocalLink"]
   onAskUserQuestionSubmit: KannaState["handleAskUserQuestion"]
   onExitPlanModeConfirm: KannaState["handleExitPlanMode"]
+  onToolRequestAnswer?: (toolRequestId: string, decision: ToolRequestDecision) => void
   onSubagentAskUserQuestionSubmit?: KannaState["handleSubagentAskUserQuestion"]
   onSubagentExitPlanModeSubmit?: KannaState["handleSubagentExitPlanMode"]
   schedules: Record<string, AutoContinueSchedule>
@@ -95,6 +97,7 @@ export const ChatTranscriptViewport = memo(function ChatTranscriptViewport({
   onOpenLocalLink,
   onAskUserQuestionSubmit,
   onExitPlanModeConfirm,
+  onToolRequestAnswer,
   onSubagentAskUserQuestionSubmit,
   onSubagentExitPlanModeSubmit,
   schedules,
@@ -291,6 +294,7 @@ export const ChatTranscriptViewport = memo(function ChatTranscriptViewport({
           onToolGroupExpandedChange={handleToolGroupExpandedChange}
           onAskUserQuestionSubmit={onAskUserQuestionSubmit}
           onExitPlanModeConfirm={onExitPlanModeConfirm}
+          onToolRequestAnswer={onToolRequestAnswer}
           schedules={schedules}
           onAutoContinueAccept={onAutoContinueAccept}
           onAutoContinueReschedule={onAutoContinueReschedule}
@@ -299,7 +303,7 @@ export const ChatTranscriptViewport = memo(function ChatTranscriptViewport({
         {rowRuns.map((run) => renderRunTree(run, 0))}
       </div>
     )
-  }, [handleToolGroupExpandedChange, onAskUserQuestionSubmit, onExitPlanModeConfirm, schedules, onAutoContinueAccept, onAutoContinueReschedule, onAutoContinueCancel, toolGroupExpanded, runsByUserMessageId, renderRunTree])
+  }, [handleToolGroupExpandedChange, onAskUserQuestionSubmit, onExitPlanModeConfirm, onToolRequestAnswer, schedules, onAutoContinueAccept, onAutoContinueReschedule, onAutoContinueCancel, toolGroupExpanded, runsByUserMessageId, renderRunTree])
 
   const listHeader = (
     <div className="mx-auto w-full max-w-[800px]" style={{ paddingTop: `${headerOffsetPx}px` }}>

@@ -1790,6 +1790,8 @@ export class EventStore implements PushEventStore {
       createdAt: req.createdAt,
       kind: "pending_tool_request",
       toolRequestId: req.id,
+      toolName: req.toolName,
+      arguments: req.arguments,
     }))
     const merged = [...page.messages, ...pendingEntries]
     return {

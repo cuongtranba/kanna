@@ -1271,6 +1271,7 @@ export type HydratedTranscriptMessage =
   | ({ kind: "interrupted"; id: string; messageId?: string; timestamp: string; hidden?: boolean })
   | ({ kind: "unknown"; json: string; id: string; messageId?: string; timestamp: string; hidden?: boolean })
   | ({ kind: "auto_continue_prompt"; scheduleId: string; id: string; messageId?: string; timestamp: string; hidden?: boolean })
+  | ({ kind: "pending_tool_request"; toolRequestId: string; toolName: string; arguments: Record<string, unknown>; id: string; messageId?: string; timestamp: string; hidden?: boolean })
   | ({ id: string; messageId?: string; hidden?: boolean } & HydratedToolCall)
 
 export interface ChatTimingCumulativeMs {
@@ -1433,6 +1434,8 @@ export interface AutoContinuePromptEntry extends TranscriptEntryBase {
 export interface PendingToolRequestEntry extends TranscriptEntryBase {
   kind: "pending_tool_request"
   toolRequestId: string
+  toolName: string
+  arguments: Record<string, unknown>
 }
 
 export interface ToolRequestResolvedEntry extends TranscriptEntryBase {

@@ -1545,6 +1545,8 @@ describe("EventStore getRecentChatHistory pending replay", () => {
       createdAt: 5_000,
       kind: "pending_tool_request",
       toolRequestId: "req-1",
+      toolName: "ask_user_question",
+      arguments: { questions: [] },
     })
   })
 

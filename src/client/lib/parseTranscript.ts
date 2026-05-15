@@ -166,6 +166,18 @@ export function processTranscriptMessages(entries: TranscriptEntry[]): HydratedT
           scheduleId: entry.scheduleId,
         })
         break
+      case "pending_tool_request":
+        messages.push({
+          ...createBaseMessage(entry),
+          kind: "pending_tool_request",
+          toolRequestId: entry.toolRequestId,
+          toolName: entry.toolName,
+          arguments: entry.arguments,
+        })
+        break
+      case "tool_request_resolved":
+        // resolved entries are informational; drop them from the rendered transcript
+        break
       default:
         messages.push({
           ...createBaseMessage(entry),
