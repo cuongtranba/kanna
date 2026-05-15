@@ -370,10 +370,26 @@ The update mechanism is abstracted behind `UpdateChecker` + `UpdateReloader` int
 
 | `KANNA_RELOADER` | Check | Reload | Notes |
 |---|---|---|---|
-| unset / `supervisor` | npm registry for `@cuongtran001/kanna` | `bun install -g @cuongtran001/kanna@latest`, exit 76, supervisor respawns | Default. End-user path for `bunx kanna`. |
+| unset / `supervisor` | npm registry for `@cuongtran001/kanna` | `<pm> install -g @cuongtran001/kanna@latest`, exit 76, supervisor respawns | Default. End-user path. `<pm>` auto-detected: `bun`/`npm`/`pnpm`/`yarn`. Override via `KANNA_UPDATE_COMMAND`. |
 | `pm2` | `git fetch` + `HEAD` vs `origin/main` | `git pull --ff-only` → cond. `bun install` → `bun run build` → `pm2 reload` | Dev/self-host path. Requires `KANNA_REPO_DIR`. |
 
-To add another reload mechanism (e.g., docker, systemd), implement the two interfaces and branch inside `createUpdateStrategy`; no changes to `UpdateManager`, `server.ts`, or any client code are needed.
+**Host-agnostic supervisor mode.** When `KANNA_RELOADER` is unset (default), the in-app Update button works under any process host (pm2, systemd, docker, screen, plain shell) — the internal supervisor catches the child's exit-76 and respawns. The package manager used to install the new version is auto-detected from the running binary path:
+
+- `~/.bun/bin/kanna` → `bun install -g`
+- `~/.local/share/pnpm/kanna` (or any `pnpm/` path) → `pnpm add -g`
+- `~/.yarn/bin/kanna` (or any `.yarn/` path) → `yarn global add`
+- anything else (e.g. `/usr/local/bin/kanna`, `~/.npm-global/bin/kanna`) → `npm install -g`
+
+If the detected manager is not on `PATH`, kanna falls back through `bun → npm → pnpm → yarn`. To override the install command entirely — useful for custom installers, monorepo wrappers, docker pulls, ansible, etc. — set `KANNA_UPDATE_COMMAND`. Placeholders `{package}` and `{version}` are substituted; the result is executed via `sh -c`.
+
+```bash
+# Force npm regardless of detection
+KANNA_UPDATE_COMMAND="npm install -g {package}@{version}" pm2 start kanna
+# Custom: chain pre-install hook
+KANNA_UPDATE_COMMAND="my-deploy-hook && npm install -g {package}@{version}" kanna
+```
+
+To add another reload mechanism (e.g., docker, systemd) at the strategy layer, implement `UpdateChecker` + `UpdateReloader` and branch inside `createUpdateStrategy`; no changes to `UpdateManager`, `server.ts`, or any client code are needed.
 
 ## Star History
 

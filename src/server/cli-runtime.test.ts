@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test"
-import { compareVersions, classifyInstallVersionFailure, parseArgs, runCli } from "./cli-runtime"
+import { compareVersions, classifyInstallVersionFailure, parseArgs, resolveInstallCommand, runCli } from "./cli-runtime"
 import { CLI_SUPPRESS_OPEN_ONCE_ENV_VAR } from "./restart"
 
 const originalRuntimeProfile = process.env.KANNA_RUNTIME_PROFILE
@@ -258,6 +258,127 @@ describe("compareVersions", () => {
     expect(compareVersions("0.3.0", "0.3.0")).toBe(0)
     expect(compareVersions("0.3.0", "0.3.1")).toBe(-1)
     expect(compareVersions("1.0.0", "0.9.9")).toBe(1)
+  })
+})
+
+describe("resolveInstallCommand", () => {
+  const baseDeps = {
+    packageName: "@cuongtran001/kanna",
+    version: "1.2.3",
+  }
+
+  test("uses KANNA_UPDATE_COMMAND env override with {version} + {package} placeholders", () => {
+    const result = resolveInstallCommand({
+      ...baseDeps,
+      env: { KANNA_UPDATE_COMMAND: "npm install -g {package}@{version}" },
+      hasCommand: () => false,
+      binaryPath: undefined,
+    })
+    expect(result).toEqual({
+      kind: "ok",
+      installer: "custom",
+      plan: {
+        command: "sh",
+        args: ["-c", "npm install -g @cuongtran001/kanna@1.2.3"],
+      },
+    })
+  })
+
+  test("KANNA_UPDATE_COMMAND empty string falls through to detection", () => {
+    const result = resolveInstallCommand({
+      ...baseDeps,
+      env: { KANNA_UPDATE_COMMAND: "  " },
+      hasCommand: (c) => c === "npm",
+      binaryPath: "/usr/local/bin/kanna",
+    })
+    expect(result.kind).toBe("ok")
+    if (result.kind === "ok") expect(result.installer).toBe("npm")
+  })
+
+  test("detects bun installer when binary lives under .bun/", () => {
+    const result = resolveInstallCommand({
+      ...baseDeps,
+      env: {},
+      hasCommand: () => true,
+      binaryPath: "/Users/cuongtran/.bun/bin/kanna",
+    })
+    expect(result).toEqual({
+      kind: "ok",
+      installer: "bun",
+      plan: { command: "bun", args: ["install", "-g", "@cuongtran001/kanna@1.2.3"] },
+    })
+  })
+
+  test("detects pnpm installer when binary lives under pnpm path", () => {
+    const result = resolveInstallCommand({
+      ...baseDeps,
+      env: {},
+      hasCommand: () => true,
+      binaryPath: "/home/user/.local/share/pnpm/kanna",
+    })
+    expect(result).toEqual({
+      kind: "ok",
+      installer: "pnpm",
+      plan: { command: "pnpm", args: ["add", "-g", "@cuongtran001/kanna@1.2.3"] },
+    })
+  })
+
+  test("detects yarn installer when binary lives under .yarn/", () => {
+    const result = resolveInstallCommand({
+      ...baseDeps,
+      env: {},
+      hasCommand: () => true,
+      binaryPath: "/home/user/.yarn/bin/kanna",
+    })
+    expect(result).toEqual({
+      kind: "ok",
+      installer: "yarn",
+      plan: { command: "yarn", args: ["global", "add", "@cuongtran001/kanna@1.2.3"] },
+    })
+  })
+
+  test("falls back to npm for typical npm prefix paths", () => {
+    const result = resolveInstallCommand({
+      ...baseDeps,
+      env: {},
+      hasCommand: (c) => c === "npm",
+      binaryPath: "/usr/local/bin/kanna",
+    })
+    expect(result).toEqual({
+      kind: "ok",
+      installer: "npm",
+      plan: { command: "npm", args: ["install", "-g", "@cuongtran001/kanna@1.2.3"] },
+    })
+  })
+
+  test("falls back through priority list when detected installer not on PATH", () => {
+    const result = resolveInstallCommand({
+      ...baseDeps,
+      env: {},
+      hasCommand: (c) => c === "npm",
+      binaryPath: "/Users/cuongtran/.bun/bin/kanna",
+    })
+    expect(result.kind).toBe("ok")
+    if (result.kind === "ok") expect(result.installer).toBe("npm")
+  })
+
+  test("returns missing when no installer available", () => {
+    const result = resolveInstallCommand({
+      ...baseDeps,
+      env: {},
+      hasCommand: () => false,
+      binaryPath: "/usr/local/bin/kanna",
+    })
+    expect(result).toEqual({
+      kind: "missing",
+      result: {
+        ok: false,
+        errorCode: "command_missing",
+        userTitle: "Package manager not found",
+        userMessage:
+          "Kanna could not find npm, bun, pnpm, or yarn to install the update. Set KANNA_UPDATE_COMMAND to override.",
+      },
+    })
   })
 })
 

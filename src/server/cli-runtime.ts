@@ -374,17 +374,100 @@ export function classifyInstallVersionFailure(output: string): UpdateInstallAtte
   }
 }
 
-export function installPackageVersion(packageName: string, version: string) {
-  if (!hasCommand("bun")) {
+export type SupportedInstaller = "bun" | "npm" | "pnpm" | "yarn"
+
+export interface InstallCommandPlan {
+  command: string
+  args: string[]
+}
+
+export interface ResolveInstallCommandDeps {
+  packageName: string
+  version: string
+  env: NodeJS.ProcessEnv
+  hasCommand: (cmd: string) => boolean
+  binaryPath: string | undefined
+}
+
+export type ResolvedInstallCommand =
+  | { kind: "ok"; installer: SupportedInstaller | "custom"; plan: InstallCommandPlan }
+  | { kind: "missing"; result: UpdateInstallAttemptResult }
+
+const INSTALLER_PRIORITY: SupportedInstaller[] = ["bun", "npm", "pnpm", "yarn"]
+
+function detectInstallerFromPath(binaryPath: string | undefined): SupportedInstaller | null {
+  if (!binaryPath) return null
+  const lower = binaryPath.toLowerCase()
+  if (/[/\\]\.bun[/\\]/.test(lower)) return "bun"
+  if (/[/\\](?:\.local[/\\]share[/\\])?pnpm[/\\]/.test(lower)) return "pnpm"
+  if (/[/\\]\.yarn[/\\]/.test(lower)) return "yarn"
+  return null
+}
+
+function buildInstallerPlan(installer: SupportedInstaller, packageName: string, version: string): InstallCommandPlan {
+  const spec = `${packageName}@${version}`
+  switch (installer) {
+    case "bun":
+      return { command: "bun", args: ["install", "-g", spec] }
+    case "npm":
+      return { command: "npm", args: ["install", "-g", spec] }
+    case "pnpm":
+      return { command: "pnpm", args: ["add", "-g", spec] }
+    case "yarn":
+      return { command: "yarn", args: ["global", "add", spec] }
+  }
+}
+
+export function resolveInstallCommand(deps: ResolveInstallCommandDeps): ResolvedInstallCommand {
+  const override = deps.env.KANNA_UPDATE_COMMAND?.trim()
+  if (override) {
+    const substituted = override
+      .replaceAll("{version}", deps.version)
+      .replaceAll("{package}", deps.packageName)
     return {
-      ok: false,
-      errorCode: "command_missing",
-      userTitle: "Bun not found",
-      userMessage: "Kanna could not find Bun to install the update.",
-    } satisfies UpdateInstallAttemptResult
+      kind: "ok",
+      installer: "custom",
+      plan: { command: "sh", args: ["-c", substituted] },
+    }
   }
 
-  const result = spawnSync("bun", ["install", "-g", `${packageName}@${version}`], {
+  const detected = detectInstallerFromPath(deps.binaryPath)
+  if (detected && deps.hasCommand(detected)) {
+    return { kind: "ok", installer: detected, plan: buildInstallerPlan(detected, deps.packageName, deps.version) }
+  }
+
+  for (const installer of INSTALLER_PRIORITY) {
+    if (deps.hasCommand(installer)) {
+      return { kind: "ok", installer, plan: buildInstallerPlan(installer, deps.packageName, deps.version) }
+    }
+  }
+
+  return {
+    kind: "missing",
+    result: {
+      ok: false,
+      errorCode: "command_missing",
+      userTitle: "Package manager not found",
+      userMessage:
+        "Kanna could not find npm, bun, pnpm, or yarn to install the update. Set KANNA_UPDATE_COMMAND to override.",
+    },
+  }
+}
+
+export function installPackageVersion(packageName: string, version: string) {
+  const resolved = resolveInstallCommand({
+    packageName,
+    version,
+    env: process.env,
+    hasCommand,
+    binaryPath: process.argv[1],
+  })
+  if (resolved.kind === "missing") {
+    return resolved.result
+  }
+
+  const { command, args } = resolved.plan
+  const result = spawnSync(command, args, {
     stdio: ["ignore", "pipe", "pipe"],
     encoding: "utf8",
   })
