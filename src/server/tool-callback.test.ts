@@ -9,6 +9,9 @@ import { createToolCallbackService } from "./tool-callback"
 const tempDirs: string[] = []
 
 afterEach(async () => {
+  // Delay before rm so background persist tasks (fire-and-forget from auto-allow/auto-deny)
+  // complete before the tmpdir vanishes. Prevents ENOENT unhandled errors in full-suite runs.
+  await new Promise<void>((r) => setTimeout(r, 50))
   await Promise.all(tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })))
 })
 
