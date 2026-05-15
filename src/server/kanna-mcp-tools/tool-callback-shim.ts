@@ -21,7 +21,7 @@ export interface GatedToolCallArgs {
   toolName: string
   ctx: ToolHandlerContext
   args: Record<string, unknown>
-  formatAnswer: (payload: unknown) => ToolHandlerResult
+  formatAnswer: (payload: unknown) => ToolHandlerResult | Promise<ToolHandlerResult>
   formatDeny: (reason: string) => ToolHandlerResult
 }
 
@@ -36,7 +36,7 @@ export async function gatedToolCall(args: GatedToolCallArgs): Promise<ToolHandle
     cwd: args.ctx.cwd,
   })
   if (res.decision.kind === "allow" || res.decision.kind === "answer") {
-    return args.formatAnswer(res.decision.payload)
+    return await args.formatAnswer(res.decision.payload)
   }
   return args.formatDeny(res.decision.reason ?? "denied")
 }
