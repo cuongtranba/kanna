@@ -2249,6 +2249,13 @@ export class AgentCoordinator {
             }
           }
           this.activeTurns.delete(session.chatId)
+          // Turn-scoped reservation: release on turn end so other chats can
+          // claim the same token while this chat is idle. The next turn for
+          // this chat reuses the same claude session (no re-pick); the
+          // rotation race between in-flight turns is still serialized via
+          // markLimited/markError (both drop the reservation) and the
+          // atomic single-threaded pickActive(chatId) calls.
+          this.oauthPool?.release(session.chatId)
           if (!active.cancelRequested) {
             await this.maybeStartNextQueuedMessage(session.chatId)
           }
@@ -2424,6 +2431,14 @@ export class AgentCoordinator {
       }
       // Stream has fully ended — no longer draining.
       this.clearDrainingStream(active.chatId)
+      // Turn-scoped reservation: release so another chat can claim this
+      // token while this chat is idle. The rotation race between concurrent
+      // in-flight turns is still serialized — both startClaudeTurn and the
+      // pickActive() inside markLimited/markError run atomically in the JS
+      // event loop, and a token marked limited/errored already drops its
+      // reservation. The next turn for this chat reuses its existing claude
+      // session (no re-pick) or pickActive again if it needs a fresh one.
+      this.oauthPool?.release(active.chatId)
       this.emitStateChange(active.chatId)
 
       if (active.postToolFollowUp && !active.cancelRequested) {
