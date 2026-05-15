@@ -94,6 +94,14 @@ Override the probe model via `KANNA_PTY_PREFLIGHT_MODEL` (default
 `claude-haiku-4-5-20251001` for cost/speed). Real probes burn subscription
 turns; CI does not run them — unit tests cover the classifier + cache only.
 
+**OS sandbox (P4):** On macOS, every PTY spawn is wrapped with
+`/usr/bin/sandbox-exec -f <profile>`. The profile is generated per-spawn
+from `POLICY_DEFAULT.readPathDeny` + `writePathDeny`, denying file-read*
+and file-write* on those subpaths. Default behaviour on macOS is
+sandbox-on. Set `KANNA_PTY_SANDBOX=off` to skip (advanced users only —
+loses defense-in-depth against built-in tool credential reads). Linux
+`bwrap` support lands in P4.1. Windows: PTY refused per spec.
+
 # Kanna-MCP Built-in Shims
 
 When `KANNA_MCP_TOOL_CALLBACKS=1`, kanna-mcp registers 8 additional tools
