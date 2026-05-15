@@ -52,7 +52,7 @@ export function QueuedUserMessage({ message, onRemove, onSendNow }: QueuedUserMe
               type="button"
               variant="none"
               size="none"
-              className="opacity-0 scale-[0.1] group-hover:scale-[1.0] group-hover:opacity-100 !p-0.5 border rounded-full text-xs font-medium text-muted-foreground hover:text-foreground gap-0.5 absolute top-0 left-0 bg-background -translate-x-[28%] -translate-y-[28%]"
+              className="pointer-events-none opacity-0 scale-[0.1] group-hover:pointer-events-auto group-hover:scale-[1.0] group-hover:opacity-100 !p-0.5 border rounded-full text-xs font-medium text-muted-foreground hover:text-foreground gap-0.5 absolute top-0 left-0 bg-background -translate-x-[28%] -translate-y-[28%]"
               onClick={onRemove}
             >
               <X className="size-3"/>

@@ -2209,6 +2209,87 @@ describe("AgentCoordinator claude integration", () => {
     expect(prompts).toEqual(["/clear"])
     events.close()
   })
+
+  test("dequeue() refuses to remove queued message while proactive compact is running", async () => {
+    const events = new AsyncEventQueue<any>()
+    const prompts: string[] = []
+    let releaseCompact!: () => void
+    const compactGate = new Promise<void>((resolve) => { releaseCompact = resolve })
+
+    const store = createFakeStore()
+    store.chat.provider = "claude"
+    store.chat.sessionTokensByProvider = { claude: "sess-huge" }
+    store.messages.push(timestamped({
+      kind: "context_window_updated",
+      usage: { usedTokens: 180_000, maxTokens: 200_000, compactsAutomatically: false },
+    }))
+
+    const coordinator = new AgentCoordinator({
+      store: store as never,
+      onStateChange: () => {},
+      startClaudeSession: async () => ({
+        provider: "claude",
+        stream: events,
+        getAccountInfo: async () => null,
+        interrupt: async () => {},
+        close: () => {},
+        setModel: async () => {},
+        setPermissionMode: async () => {},
+        getSupportedCommands: async () => [],
+        sendPrompt: async (content: string) => {
+          prompts.push(content)
+          const pushResult = () => events.push({
+            type: "transcript" as const,
+            entry: timestamped({
+              kind: "result",
+              subtype: "success",
+              isError: false,
+              durationMs: 0,
+              result: content === "/compact" ? "compacted" : "done",
+            }),
+          })
+          // Hold the /compact turn open so we can probe dequeue() mid-flight.
+          // sendPrompt must still resolve so startTurnForChat returns; defer
+          // the result event until release.
+          if (content === "/compact") {
+            void compactGate.then(pushResult)
+            return
+          }
+          pushResult()
+        },
+      }),
+    })
+
+    const sendResult = await coordinator.send({
+      type: "chat.send",
+      chatId: "chat-1",
+      provider: "claude",
+      content: "user's real prompt",
+      model: "claude-opus-4-7",
+    })
+
+    expect(sendResult).toMatchObject({ queued: true })
+    expect(store.queuedMessages.length).toBe(1)
+    const queuedId = store.queuedMessages[0].id
+
+    await expect(
+      coordinator.dequeue({
+        type: "message.dequeue",
+        chatId: "chat-1",
+        queuedMessageId: queuedId,
+      })
+    ).rejects.toThrow(/compact is running/)
+
+    // Queued message must survive the rejected dequeue.
+    expect(store.queuedMessages.length).toBe(1)
+
+    releaseCompact()
+    await waitFor(() => prompts.length >= 2, 2000)
+    expect(prompts).toEqual(["/compact", "user's real prompt"])
+    expect(store.queuedMessages.length).toBe(0)
+
+    events.close()
+  })
 })
 
 describe("AgentCoordinator.ensureSlashCommandsLoaded", () => {
