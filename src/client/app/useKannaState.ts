@@ -21,7 +21,7 @@ import { generateUUID } from "../lib/utils"
 import { canCancelStatus, getLatestToolIds, isProcessingStatus } from "./derived"
 import { KannaSocket, type SocketStatus } from "./socket"
 import type { BackgroundTaskDiffEvent, BgTasksSnapshotData, EditorOpenSettings, OpenExternalAction } from "../../shared/protocol"
-import type { ToolRequestDecision } from "../../shared/permission-policy"
+import type { ChatPermissionPolicyOverride, ToolRequestDecision } from "../../shared/permission-policy"
 import { useBackgroundTasksStore } from "../stores/backgroundTasksStore"
 import { fireOrphanRecoveryToast } from "../lib/orphanToast"
 
@@ -757,6 +757,7 @@ export interface KannaState {
   handleForceReload: () => Promise<void>
   handleReadAppSettings: () => Promise<void>
   handleWriteAppSettings: (patch: AppSettingsPatch) => Promise<void>
+  handleSetChatPolicyOverride: (chatId: string, policyOverride: ChatPermissionPolicyOverride | null) => Promise<void>
   handleWriteCloudflareTunnel: (patch: Partial<CloudflareTunnelSettings>) => Promise<void>
   handleWriteClaudeAuth: (patch: Partial<ClaudeAuthSettings>) => Promise<void>
   handleTestOAuthToken: (token: string) => Promise<{ ok: boolean; error: string | null }>
@@ -1064,6 +1065,16 @@ export function useKannaState(activeChatId: string | null): KannaState {
     } catch (error) {
       useAppSettingsStore.getState().setHydrationStatus("error")
       setCommandError(error instanceof Error ? error.message : String(error))
+    }
+  }, [socket])
+
+  const handleSetChatPolicyOverride = useCallback(async (chatId: string, policyOverride: ChatPermissionPolicyOverride | null) => {
+    try {
+      await socket.command({ type: "chat.setPolicyOverride", chatId, policyOverride })
+      setCommandError(null)
+    } catch (error) {
+      setCommandError(error instanceof Error ? error.message : String(error))
+      throw error
     }
   }, [socket])
 
@@ -2407,6 +2418,7 @@ export function useKannaState(activeChatId: string | null): KannaState {
     handleForceReload,
     handleReadAppSettings,
     handleWriteAppSettings,
+    handleSetChatPolicyOverride,
     handleWriteCloudflareTunnel,
     handleWriteClaudeAuth,
     handleTestOAuthToken,

@@ -509,6 +509,10 @@ export interface SidebarChatRow {
   canFork?: boolean
   stateEnteredAt?: number
   stackId?: string
+  /** Live Claude PTY session lifecycle state for the sidebar badge. Missing implies "cold". */
+  sessionState?: ClaudeSessionLifecycleStatus
+  /** True when the chat has a non-null policyOverride. Missing implies false. */
+  hasPolicyOverride?: boolean
 }
 
 export interface SidebarProjectGroup {

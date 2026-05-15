@@ -37,9 +37,11 @@ function withSidebarGroupDefaults(group: {
     hasAutomation: boolean
   }>
 }) {
+  const chatsWithDefaults = group.chats.map((chat) => ({ sessionState: "cold" as const, hasPolicyOverride: false, ...chat }))
   return {
     ...group,
-    previewChats: group.chats,
+    chats: chatsWithDefaults,
+    previewChats: chatsWithDefaults,
     olderChats: [],
     defaultCollapsed: true,
   }

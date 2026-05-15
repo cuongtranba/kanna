@@ -76,10 +76,12 @@ export function deriveSidebarData(
     nowMs?: number
     sidebarProjectOrder?: string[]
     drainingChatIds?: Set<string>
+    claudeSessionStates?: Map<string, ClaudeSessionLifecycleStatus>
   }
 ): SidebarData {
   const nowMs = options?.nowMs ?? Date.now()
   const drainingChatIds = options?.drainingChatIds ?? new Set<string>()
+  const claudeSessionStates = options?.claudeSessionStates ?? new Map<string, ClaudeSessionLifecycleStatus>()
   const chatsByProjectId = new Map<string, ChatRecord[]>()
   const archivedChatsByProjectId = new Map<string, ChatRecord[]>()
   for (const chat of state.chatsById.values()) {
@@ -124,6 +126,8 @@ export function deriveSidebarData(
         canFork: canForkChat(chat, activeStatuses, drainingChatIds) || undefined,
         stateEnteredAt: state.chatTimingsByChatId.get(chat.id)?.stateEnteredAt,
         stackId: chat.stackId,
+        sessionState: claudeSessionStates.get(chat.id) ?? "cold",
+        hasPolicyOverride: chat.policyOverride != null,
       }))
   }
 

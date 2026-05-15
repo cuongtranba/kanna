@@ -1185,7 +1185,9 @@ export class AgentCoordinator {
    * coordinator-wide default, overlays the chat's persisted policyOverride.
    */
   private resolveChatPolicy(chatId: string): ChatPermissionPolicy {
-    const override = this.store.state.chatsById.get(chatId)?.policyOverride ?? null
+    // store.state may be absent in test fakes that don't implement the full
+    // EventStore — fall through to the global default policy in that case.
+    const override = this.store.state?.chatsById?.get(chatId)?.policyOverride ?? null
     return mergePolicyOverride(this.chatPolicy, override)
   }
 

@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { Navigate, Outlet, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom"
 import { Flower } from "lucide-react"
+import { ChatPolicyDialog } from "../components/chat-ui/ChatPolicyDialog"
 import { StandaloneShareDialog } from "../components/chat-ui/StandaloneShareDialog"
+import { POLICY_DEFAULT } from "../../shared/permission-policy"
 import { AppDialogProvider, useAppDialog } from "../components/ui/app-dialog"
 import { Button } from "../components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card"
@@ -290,6 +292,17 @@ function KannaLayout() {
       })
     }
   }, [dialog, importClaudeSessions])
+
+  const [permissionsChatId, setPermissionsChatId] = useState<string | null>(null)
+  const handleSidebarEditPermissions = useCallback((chatId: string) => {
+    setPermissionsChatId(chatId)
+    if (state.activeChatId !== chatId) {
+      navigate(`/chat/${chatId}`)
+    }
+  }, [navigate, state.activeChatId])
+  const permissionsChatTitle = state.chatSnapshot?.runtime.title ?? "Chat"
+  const permissionsCurrentOverride = state.chatSnapshot?.runtime.policyOverride ?? null
+
   const sidebarElement = useMemo(() => (
     <KannaSidebar
       data={state.sidebarData}
@@ -312,6 +325,7 @@ function KannaLayout() {
       onArchiveChat={handleSidebarArchiveChat}
       onOpenArchivedChat={handleOpenArchivedChat}
       onDeleteChat={handleSidebarDeleteChat}
+      onEditChatPermissions={handleSidebarEditPermissions}
       onOpenAddProjectModal={handleOpenAddProjectModal}
       onImportClaudeSessions={handleImportClaudeSessions}
       onCopyPath={handleSidebarCopyPath}
@@ -339,6 +353,7 @@ function KannaLayout() {
     handleSidebarOpenExternalPath,
     handleSidebarRenameChat,
     handleSidebarShareChat,
+    handleSidebarEditPermissions,
     handleSidebarReorderProjectGroups,
     handleSidebarHideProject,
     handleSidebarToggleProjectStar,
@@ -408,10 +423,25 @@ function KannaLayout() {
     void playChatNotificationSound(chatSoundId, burstCount).catch(() => undefined)
   }, [chatSoundId, chatSoundPreference, state.appSettings, state.sidebarData])
 
+  const ptyDriverActive = state.appSettings?.claudeDriver.preference === "pty"
+
   return (
     <div className="flex h-[100dvh] min-h-[100dvh] overflow-hidden">
       {sidebarElement}
-      <Outlet context={state} />
+      <div className="flex flex-1 flex-col overflow-hidden">
+        {ptyDriverActive ? (
+          <div
+            role="status"
+            className="flex items-center justify-center gap-2 border-b border-warning/40 bg-warning/10 px-3 py-1.5 text-xs text-warning-foreground"
+          >
+            <span className="font-medium">PTY driver active.</span>
+            <span className="text-warning-foreground/80">
+              Tools run under the `claude` CLI with subscription billing. Use a worktree for risky tasks.
+            </span>
+          </div>
+        ) : null}
+        <Outlet context={state} />
+      </div>
       <StandaloneShareDialog
         open={Boolean(state.standaloneShareUrl)}
         shareUrl={state.standaloneShareUrl ?? ""}
@@ -422,6 +452,18 @@ function KannaLayout() {
         }}
         onOpenLink={state.handleOpenStandaloneShareLink}
         onCopyLink={state.handleCopyStandaloneShareLink}
+      />
+      <ChatPolicyDialog
+        open={permissionsChatId != null && permissionsChatId === state.activeChatId}
+        chatTitle={permissionsChatTitle}
+        baseline={POLICY_DEFAULT}
+        current={permissionsCurrentOverride}
+        onCancel={() => setPermissionsChatId(null)}
+        onApply={(next) => {
+          if (!permissionsChatId) return
+          void state.handleSetChatPolicyOverride(permissionsChatId, next).catch(() => undefined)
+          setPermissionsChatId(null)
+        }}
       />
     </div>
   )

@@ -760,6 +760,7 @@ export function createWsRouter({
     const data = deriveSidebarData(store.state, agent.getActiveStatuses(), {
       sidebarProjectOrder: getSidebarProjectOrder(store),
       drainingChatIds: agent.getDrainingChatIds(),
+      claudeSessionStates: agent.getClaudeSessionStates?.(),
     })
     const observed = data.projectGroups.flatMap((group) =>
       group.chats.map((chat) => ({
