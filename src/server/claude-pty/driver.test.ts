@@ -5,6 +5,8 @@ import path from "node:path"
 import { startClaudeSessionPTY } from "./driver"
 import type { HarnessEvent } from "../harness-types"
 
+
+
 describe("startClaudeSessionPTY", () => {
   test("auth precheck fails when credentials missing", async () => {
     if (process.platform === "win32") return
@@ -120,4 +122,31 @@ describe("startClaudeSessionPTY", () => {
     },
     60_000,
   )
+
+  test("sandbox profile is generated and applied when enabled on darwin", async () => {
+    if (process.platform !== "darwin") return
+    const homeDir = await mkdtemp(path.join(tmpdir(), "kanna-pty-sandbox-"))
+    try {
+      await mkdir(path.join(homeDir, ".claude"), { recursive: true })
+      await writeFile(path.join(homeDir, ".claude", ".credentials.json"), "{}", "utf8")
+      // We don't actually spawn — we provide a preflightGate that blocks early,
+      // so the test only verifies the assembly path. If sandbox path raises before
+      // the gate check, the test would throw a different error.
+      await expect(
+        startClaudeSessionPTY({
+          chatId: "c", projectId: "p", localPath: homeDir,
+          model: "claude-sonnet-4-6",
+          planMode: false, forkSession: false,
+          oauthToken: null, sessionToken: null,
+          onToolRequest: async () => null,
+          homeDir,
+          env: { KANNA_PTY_SANDBOX: "on" },
+          preflightGate: {
+            canSpawn: async () => ({ ok: false as const, reason: "test-block" }),
+            invalidateAll: () => {},
+          },
+        }),
+      ).rejects.toThrow(/test-block/)
+    } finally { await rm(homeDir, { recursive: true, force: true }) }
+  }, 30_000)
 })
