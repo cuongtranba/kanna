@@ -2067,19 +2067,24 @@ export class AgentCoordinator {
         }
       }
     } finally {
-      // Only clear the chat's session slot if it still points at us. A cancel
-      // followed by an immediate steer can install a fresh session under the
-      // same chatId before this finally runs; deleting unconditionally would
-      // wipe the new session.
-      if (this.claudeSessions.get(session.chatId) === session) {
+      // Only clear chat state if it still points at us. A cancel-then-steer,
+      // or an oauth-pool rotation that closes this session and schedules an
+      // auto-continue, can install a fresh session (and activeTurn) under
+      // the same chatId before this finally runs; wiping either
+      // unconditionally would break the fresh session's bookkeeping and
+      // leave its stream running headless (no isError branch fires →
+      // sessionToken never cleared → next turn loops with the same
+      // too-large --resume context).
+      const isCurrentSession = this.claudeSessions.get(session.chatId) === session
+      if (isCurrentSession) {
         this.claudeSessions.delete(session.chatId)
-      }
-      const active = this.activeTurns.get(session.chatId)
-      if (active?.provider === "claude") {
-        if (active.cancelRequested && !active.cancelRecorded) {
-          await this.store.recordTurnCancelled(session.chatId)
+        const active = this.activeTurns.get(session.chatId)
+        if (active?.provider === "claude") {
+          if (active.cancelRequested && !active.cancelRecorded) {
+            await this.store.recordTurnCancelled(session.chatId)
+          }
+          this.activeTurns.delete(session.chatId)
         }
-        this.activeTurns.delete(session.chatId)
       }
       session.session.close()
       this.emitStateChange(session.chatId)
