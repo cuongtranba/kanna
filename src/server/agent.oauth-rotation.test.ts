@@ -607,4 +607,213 @@ describe("AgentCoordinator OAuth rotation", () => {
     },
     10_000,
   )
+
+  test(
+    "startClaudeTurn refuses to spawn when pool has tokens but none usable",
+    async () => {
+      // All tokens errored — pickActive returns null, hasAnyToken stays true.
+      // Without the guard the SDK would spawn with `oauthToken: null`, env
+      // would have no CLAUDE_CODE_OAUTH_TOKEN, and the CLI would fall back
+      // to the user's keychain (typically expired) → opaque 401 loop.
+      const tokens: OAuthTokenEntry[] = [
+        makeToken("a", { status: "error", lastErrorMessage: "401" }),
+        makeToken("b", { status: "error", lastErrorMessage: "401" }),
+      ]
+      const pool = new OAuthTokenPool(() => tokens, () => {})
+
+      let spawnAttempts = 0
+      const store = createFakeStore()
+      const coordinator = new AgentCoordinator({
+        store: store as never,
+        onStateChange: () => {},
+        startClaudeSession: async () => {
+          spawnAttempts += 1
+          throw new Error("should not reach SDK spawn")
+        },
+        oauthPool: pool,
+      })
+
+      let caught: Error | null = null
+      try {
+        await coordinator.send({
+          type: "chat.send",
+          chatId: "chat-1",
+          provider: "claude",
+          content: "test",
+          model: "claude-opus-4-7",
+        })
+      } catch (error) {
+        caught = error as Error
+      }
+
+      // The pool guard must throw before any SDK spawn is attempted,
+      // and the error must clearly identify the cause to the caller
+      // (ws-router) for surfacing to the user.
+      expect(spawnAttempts).toBe(0)
+      expect(caught).not.toBe(null)
+      expect(caught!.message).toMatch(/All OAuth tokens are unavailable/i)
+    },
+    10_000,
+  )
+
+  test(
+    "401 isError result marks token errored and rotates to next pool token",
+    async () => {
+      let tokens: OAuthTokenEntry[] = [makeToken("a"), makeToken("b")]
+      const writeStatusCalls: Array<{ id: string; patch: unknown }> = []
+
+      const pool = new OAuthTokenPool(
+        () => tokens,
+        (id, patch) => {
+          writeStatusCalls.push({ id, patch })
+          tokens = tokens.map((t) => (t.id === id ? { ...t, ...patch } : t))
+        },
+      )
+
+      const events = new AsyncEventQueue<HarnessEvent>()
+      const store = createFakeStore()
+      const coordinator = new AgentCoordinator({
+        store: store as never,
+        onStateChange: () => {},
+        startClaudeSession: async () => ({
+          provider: "claude",
+          stream: events,
+          getAccountInfo: async () => null,
+          interrupt: async () => {},
+          close: () => {},
+          setModel: async () => {},
+          setPermissionMode: async () => {},
+          getSupportedCommands: async () => [],
+          sendPrompt: async () => {
+            // Emit a CLI-shaped 401 result entry into the harness stream.
+            events.push({
+              type: "transcript",
+              entry: {
+                _id: "result-1",
+                createdAt: Date.now(),
+                kind: "result",
+                subtype: "error",
+                isError: true,
+                durationMs: 100,
+                result: "Failed to authenticate. API Error: 401 Invalid authentication credentials",
+              } as never,
+            })
+          },
+        }),
+        oauthPool: pool,
+      })
+
+      await coordinator.send({
+        type: "chat.send",
+        chatId: "chat-1",
+        provider: "claude",
+        content: "test",
+        model: "claude-opus-4-7",
+      })
+
+      await waitFor(
+        () =>
+          writeStatusCalls.some((c) => (c.patch as { status?: string }).status === "error")
+          && store.autoContinueEvents.some((e) => e.kind === "auto_continue_accepted"),
+        4000,
+        "401 detected → token marked error + auto_continue_accepted",
+      )
+
+      // Token "a" (the spawned-with token) must be marked errored.
+      const erroredCall = writeStatusCalls.find(
+        (c) => (c.patch as { status?: string }).status === "error",
+      )
+      expect(erroredCall?.id).toBe("a")
+      expect((erroredCall!.patch as { lastErrorMessage?: string }).lastErrorMessage)
+        .toMatch(/Failed to authenticate/i)
+
+      // Rotation event must be emitted with source "token_rotation"
+      // pointing at the alternative token.
+      const accepted = store.getAutoContinueEvents("chat-1").find(
+        (e) => e.kind === "auto_continue_accepted",
+      )
+      if (accepted?.kind !== "auto_continue_accepted") {
+        throw new Error("Expected auto_continue_accepted from auth-error rotation")
+      }
+      expect(accepted.source).toBe("token_rotation")
+    },
+    10_000,
+  )
+
+  test(
+    "401 with no rotation target emits auto_continue_proposed (manual recovery)",
+    async () => {
+      // Single token in the pool — when it 401s and gets marked errored,
+      // pickActive() returns null. The agent must surface a proposed
+      // recovery event instead of looping silently.
+      let tokens: OAuthTokenEntry[] = [makeToken("a")]
+      const writeStatusCalls: Array<{ id: string; patch: unknown }> = []
+
+      const pool = new OAuthTokenPool(
+        () => tokens,
+        (id, patch) => {
+          writeStatusCalls.push({ id, patch })
+          tokens = tokens.map((t) => (t.id === id ? { ...t, ...patch } : t))
+        },
+      )
+
+      const events = new AsyncEventQueue<HarnessEvent>()
+      const store = createFakeStore()
+      const coordinator = new AgentCoordinator({
+        store: store as never,
+        onStateChange: () => {},
+        startClaudeSession: async () => ({
+          provider: "claude",
+          stream: events,
+          getAccountInfo: async () => null,
+          interrupt: async () => {},
+          close: () => {},
+          setModel: async () => {},
+          setPermissionMode: async () => {},
+          getSupportedCommands: async () => [],
+          sendPrompt: async () => {
+            events.push({
+              type: "transcript",
+              entry: {
+                _id: "result-1",
+                createdAt: Date.now(),
+                kind: "result",
+                subtype: "error",
+                isError: true,
+                durationMs: 100,
+                result: "Failed to authenticate. API Error: 401 Invalid authentication credentials",
+              } as never,
+            })
+          },
+        }),
+        oauthPool: pool,
+      })
+
+      await coordinator.send({
+        type: "chat.send",
+        chatId: "chat-1",
+        provider: "claude",
+        content: "test",
+        model: "claude-opus-4-7",
+      })
+
+      await waitFor(
+        () => store.autoContinueEvents.some((e) => e.kind === "auto_continue_proposed"),
+        4000,
+        "no rotation target → auto_continue_proposed emitted",
+      )
+
+      const erroredCall = writeStatusCalls.find(
+        (c) => (c.patch as { status?: string }).status === "error",
+      )
+      expect(erroredCall?.id).toBe("a")
+
+      // No accepted event — the chat cannot continue without manual fix.
+      const accepted = store.getAutoContinueEvents("chat-1").filter(
+        (e) => e.kind === "auto_continue_accepted",
+      )
+      expect(accepted).toHaveLength(0)
+    },
+    10_000,
+  )
 })

@@ -79,6 +79,17 @@ export class OAuthTokenPool {
   }
 
   /**
+   * Read-only: does the pool contain any token entries at all, regardless
+   * of status? Distinguishes "user opted into pool auth but all tokens are
+   * unusable right now" (refuse spawn — avoid silent keychain fallback that
+   * returns 401 against an expired login) from "user has not configured
+   * pool, allow CLI keychain fallback".
+   */
+  hasAnyToken(): boolean {
+    return this.readTokens().length > 0
+  }
+
+  /**
    * Read-only probe: does the pool have at least one token currently usable
    * (active, or limited-but-elapsed)? Unlike pickActive(), does NOT mutate
    * `status` for elapsed-limited tokens. Use for preflight checks.

@@ -42,6 +42,7 @@ import { resolveClaudeApiModelId } from "../shared/types"
 import { fallbackTitleFromMessage } from "./generate-title"
 import { AUTO_CONTINUE_EVENT_VERSION, type AutoContinueEvent } from "./auto-continue/events"
 import { ClaudeLimitDetector, CodexLimitDetector, type LimitDetection, type LimitDetector } from "./auto-continue/limit-detector"
+import { ClaudeAuthErrorDetector, type AuthErrorDetection } from "./auto-continue/auth-error-detector"
 import type { ScheduleManager } from "./auto-continue/schedule-manager"
 import { deriveChatSchedules } from "./auto-continue/read-model"
 import type { TunnelGateway } from "./cloudflare-tunnel/gateway"
@@ -972,6 +973,7 @@ export class AgentCoordinator {
   private readonly slashCommandsInFlight = new Set<string>()
   private readonly claudeLimitDetector: LimitDetector
   private readonly codexLimitDetector: LimitDetector
+  private readonly claudeAuthErrorDetector: ClaudeAuthErrorDetector
   private readonly scheduleManager: ScheduleManager | null
   private readonly getAutoResumePreference: () => boolean
   private readonly getSubagents: () => Subagent[]
@@ -1010,6 +1012,7 @@ export class AgentCoordinator {
     this.startClaudeSessionPTYFn = args.startClaudeSessionPTY ?? startClaudeSessionPTY
     this.claudeLimitDetector = args.claudeLimitDetector ?? new ClaudeLimitDetector()
     this.codexLimitDetector = args.codexLimitDetector ?? new CodexLimitDetector()
+    this.claudeAuthErrorDetector = new ClaudeAuthErrorDetector()
     this.scheduleManager = args.scheduleManager ?? null
     this.getAutoResumePreference = args.getAutoResumePreference ?? (() => false)
     this.getSubagents = args.getSubagents ?? (() => [])
@@ -1192,6 +1195,13 @@ export class AgentCoordinator {
         const defaultModel = normalizeServerModel("claude")
         const defaultOptions = normalizeClaudeModelOptions(defaultModel)
         const picked = this.oauthPool?.pickActive() ?? null
+        // Skip the ephemeral spawn entirely when the pool has tokens but
+        // nothing is usable — avoids 401 against the CLI's keychain fallback
+        // and an opaque "supportedCommands failed" warning. Slash commands
+        // will load on the next turn once a token is available.
+        if (this.oauthPool && this.oauthPool.hasAnyToken() && !picked) {
+          return
+        }
         if (picked) this.oauthPool!.markUsed(picked.id)
         const usePtyEphemeral = process.env.KANNA_CLAUDE_DRIVER === "pty"
         const ephemeral = usePtyEphemeral
@@ -1617,6 +1627,17 @@ export class AgentCoordinator {
       }
 
       const picked = this.oauthPool?.pickActive(args.chatId) ?? null
+      // If the pool is populated but every token is currently unusable
+      // (limited/error/disabled/reserved), refuse to spawn rather than let
+      // the CLI fall back to its keychain auth — that path serves whichever
+      // login the user last ran `claude /login` with, which is typically
+      // expired in a pool-managed setup and produces opaque 401 loops.
+      if (this.oauthPool && this.oauthPool.hasAnyToken() && !picked) {
+        throw new Error(
+          "All OAuth tokens are unavailable (rate-limited, errored, or in use). "
+          + "Add a token, wait for the limit to reset, or close other active chats."
+        )
+      }
       if (picked) this.oauthPool!.markUsed(picked.id)
       const usePty = process.env.KANNA_CLAUDE_DRIVER === "pty"
       const started = usePty
@@ -1947,6 +1968,12 @@ export class AgentCoordinator {
         // to avoid leaking. The chat-level rotation race this guards against
         // is between top-level chat sessions, not subagent ephemerals.
         const picked = this.oauthPool?.pickActive() ?? null
+        if (this.oauthPool && this.oauthPool.hasAnyToken() && !picked) {
+          throw new Error(
+            "All OAuth tokens are unavailable for subagent run "
+            + "(rate-limited, errored, or in use)."
+          )
+        }
         if (picked) this.oauthPool!.markUsed(picked.id)
         return picked?.token ?? null
       },
@@ -2096,13 +2123,20 @@ export class AgentCoordinator {
           active.hasFinalResult = true
           if (event.entry.isError) {
             const resultText = event.entry.result || "Turn failed"
+            const debugRaw = typeof (event.entry as { debugRaw?: unknown }).debugRaw === "string"
+              ? (event.entry as { debugRaw: string }).debugRaw
+              : ""
             const detection = this.claudeLimitDetector.detectFromResultText?.(session.chatId, resultText) ?? null
+            const authDetection = this.claudeAuthErrorDetector.detectFromResultText(session.chatId, resultText)
+              ?? this.claudeAuthErrorDetector.detectFromResultText(session.chatId, debugRaw)
             let handled = false
             if (detection) {
               handled = await this.handleLimitDetection(session.chatId, detection)
+            } else if (authDetection) {
+              handled = await this.handleAuthFailure(session, authDetection)
             }
             if (handled) {
-              await this.store.recordTurnFailed(session.chatId, "rate_limit")
+              await this.store.recordTurnFailed(session.chatId, detection ? "rate_limit" : "auth_error")
             } else {
               await this.store.recordTurnFailed(session.chatId, resultText)
             }
@@ -2127,7 +2161,14 @@ export class AgentCoordinator {
     } catch (error) {
       const active = this.activeTurns.get(session.chatId)
       if (active && !active.cancelRequested) {
-        const handled = await this.handleLimitError(session.chatId, this.claudeLimitDetector, error)
+        const limitHandled = await this.handleLimitError(session.chatId, this.claudeLimitDetector, error)
+        const authDetection = limitHandled
+          ? null
+          : this.claudeAuthErrorDetector.detect(session.chatId, error)
+        const authHandled = authDetection
+          ? await this.handleAuthFailure(session, authDetection)
+          : false
+        const handled = limitHandled || authHandled
         if (!handled) {
           const message = error instanceof Error ? error.message : String(error)
           await this.store.appendMessage(
@@ -2142,7 +2183,7 @@ export class AgentCoordinator {
           )
           await this.store.recordTurnFailed(session.chatId, message)
         } else {
-          await this.store.recordTurnFailed(session.chatId, "rate_limit")
+          await this.store.recordTurnFailed(session.chatId, limitHandled ? "rate_limit" : "auth_error")
         }
       }
     } finally {
@@ -2436,6 +2477,93 @@ export class AgentCoordinator {
       const active = this.activeTurns.get(chatId)
       if (active) {
         await this.store.recordTurnFailed(chatId, "rate_limit")
+        this.activeTurns.delete(chatId)
+      }
+    }
+    if (!canRotate) {
+      await this.store.appendMessage(chatId, timestamped({
+        kind: "auto_continue_prompt",
+        scheduleId,
+      }))
+    }
+
+    return true
+  }
+
+  /**
+   * Handle an OAuth 401 / authentication failure on a live Claude session:
+   *   1. Mark the offending token as `error` in the pool so subsequent
+   *      pickActive() calls skip it.
+   *   2. Try to rotate to another usable token. If one exists, tear down
+   *      the dead session and schedule an immediate auto-continue with
+   *      source `token_rotation` (mirrors the rate-limit rotation path).
+   *   3. If no rotation target exists, surface an auto_continue_proposed
+   *      event so the UI can prompt the user to fix their token pool
+   *      instead of looping silently.
+   *
+   * Returns true when the failure was handled (rotated or proposed),
+   * false otherwise (caller logs the raw error).
+   */
+  private async handleAuthFailure(
+    session: ClaudeSessionState,
+    detection: AuthErrorDetection,
+  ): Promise<boolean> {
+    const chatId = session.chatId
+    const live = deriveChatSchedules(this.store.getAutoContinueEvents(chatId), chatId).liveScheduleId
+    if (live !== null) return true
+
+    if (this.oauthPool && session.activeTokenId) {
+      this.oauthPool.markError(session.activeTokenId, detection.reason)
+    }
+    const rotationTarget = this.oauthPool?.pickActive(chatId) ?? null
+    const canRotate = rotationTarget !== null
+      && (!session.activeTokenId || rotationTarget.id !== session.activeTokenId)
+
+    if (this.oauthPool) {
+      console.log("[oauth-pool] auth-error detected", {
+        chatId,
+        markedErrorTokenId: session.activeTokenId ?? null,
+        reason: detection.reason,
+        nextTokenId: rotationTarget?.id ?? null,
+        canRotate,
+      })
+    }
+
+    const now = Date.now()
+    const scheduleId = crypto.randomUUID()
+    const base = { v: AUTO_CONTINUE_EVENT_VERSION, timestamp: now, chatId, scheduleId }
+
+    // Auth errors mean the token is dead, not throttled — rotate
+    // immediately when possible, no wait window.
+    const event: AutoContinueEvent = canRotate
+      ? {
+          ...base,
+          kind: "auto_continue_accepted",
+          scheduledAt: now + TOKEN_ROTATION_SCHEDULE_DELAY_MS,
+          tz: "system",
+          source: "token_rotation",
+          resetAt: now,
+          detectedAt: now,
+        }
+      : {
+          ...base,
+          kind: "auto_continue_proposed",
+          detectedAt: now,
+          resetAt: now,
+          tz: "system",
+        }
+
+    await this.emitAutoContinueEvent(event)
+    if (canRotate) {
+      // Tear down the session bound to the dead token so the next turn
+      // spawns a fresh subprocess with the rotated token in env.
+      session.session.close()
+      if (this.claudeSessions.get(chatId) === session) {
+        this.claudeSessions.delete(chatId)
+      }
+      const active = this.activeTurns.get(chatId)
+      if (active) {
+        await this.store.recordTurnFailed(chatId, "auth_error")
         this.activeTurns.delete(chatId)
       }
     }
