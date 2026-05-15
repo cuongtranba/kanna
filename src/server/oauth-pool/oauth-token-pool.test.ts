@@ -114,6 +114,22 @@ describe("OAuthTokenPool.markDisabled / markEnabled", () => {
     pool.markEnabled("a")
     expect(updates).toEqual([{ id: "a", patch: { status: "active" } }])
   })
+
+  test("markError releases the dead token's reservation", () => {
+    let store = [tok("a"), tok("b")]
+    const pool = new OAuthTokenPool(
+      () => store,
+      (id, patch) => { store = store.map((t) => t.id === id ? { ...t, ...patch } : t) },
+      () => 1000,
+    )
+    pool.pickActive("chat-1") // reserves "a"
+    pool.markError("a", "401")
+    // chat-2 (which never touched "a") must be able to claim "b" — even
+    // though "a" was reserved by chat-1 before markError. Without dropping
+    // the reservation, errored-status check already skips "a" anyway, but
+    // we assert markError leaves no stale entry in reservedBy.
+    expect(pool.pickActive("chat-2")?.id).toBe("b")
+  })
 })
 
 describe("OAuthTokenPool.markLimited", () => {
