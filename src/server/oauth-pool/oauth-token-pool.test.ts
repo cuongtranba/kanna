@@ -287,6 +287,22 @@ describe("OAuthTokenPool reservations (concurrent sessions)", () => {
     expect(pool.pickActive("chat-3")?.id).toBe("a")
   })
 
+  test("markError drops the reservation so the chat can rotate to another active token", () => {
+    let store = [tok("a"), tok("b")]
+    const pool = new OAuthTokenPool(
+      () => store,
+      (id, patch) => { store = store.map((t) => t.id === id ? { ...t, ...patch } : t) },
+      () => 1000,
+    )
+    pool.pickActive("chat-1") // reserves a
+    pool.markError("a", "Failed to authenticate. API Error: 401 Invalid authentication credentials")
+    // Same chat must now be able to pick a fresh token (a is errored + reservation cleared).
+    expect(pool.pickActive("chat-1")?.id).toBe("b")
+    // a stays out of the pool until manually re-enabled.
+    expect(store.find((t) => t.id === "a")?.status).toBe("error")
+    expect(store.find((t) => t.id === "a")?.lastErrorMessage).toContain("Invalid authentication credentials")
+  })
+
   test("markLimited drops the reservation on the limited token", () => {
     let store = [tok("a"), tok("b")]
     const pool = new OAuthTokenPool(

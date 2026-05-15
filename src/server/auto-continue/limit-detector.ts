@@ -5,10 +5,35 @@ export interface LimitDetection {
   raw: unknown
 }
 
+export interface AuthErrorDetection {
+  chatId: string
+  message: string
+  raw: unknown
+}
+
 export interface LimitDetector {
   detect(chatId: string, error: unknown): LimitDetection | null
   detectFromResultText?(chatId: string, text: string, nowMs?: number): LimitDetection | null
   detectFromSdkRateLimitInfo?(chatId: string, info: unknown): LimitDetection | null
+  detectAuthErrorFromResultText?(chatId: string, text: string): AuthErrorDetection | null
+  detectAuthErrorFromError?(chatId: string, error: unknown): AuthErrorDetection | null
+}
+
+// Patterns that indicate Anthropic rejected the OAuth token itself rather
+// than throttling the account. These surface as `Failed to authenticate.
+// API Error: 401` from the claude binary's result envelope or as
+// `authentication_error` JSON from the API. Kept distinct from rate-limit
+// handling because the right response is "drop this token from the pool"
+// (markError) and try a different account, not "wait for reset".
+const CLAUDE_AUTH_ERROR_PATTERNS: RegExp[] = [
+  /Failed to authenticate\.\s*API Error:\s*401/i,
+  /authentication_error/i,
+  /Invalid authentication credentials/i,
+]
+
+export function isClaudeAuthErrorText(text: unknown): boolean {
+  if (typeof text !== "string" || text.length === 0) return false
+  return CLAUDE_AUTH_ERROR_PATTERNS.some((rx) => rx.test(text))
 }
 
 interface ErrorLike {
@@ -140,6 +165,26 @@ export class ClaudeLimitDetector implements LimitDetector {
     if (parsed) return { chatId, resetAt: parsed.resetAt, tz: parsed.tz, raw: text }
     const pipe = parseClaudeUsageLimitPipe(text)
     if (pipe !== null) return { chatId, resetAt: pipe, tz: "system", raw: text }
+    return null
+  }
+
+  detectAuthErrorFromResultText(chatId: string, text: string): AuthErrorDetection | null {
+    if (!isClaudeAuthErrorText(text)) return null
+    return { chatId, message: text, raw: text }
+  }
+
+  detectAuthErrorFromError(chatId: string, error: unknown): AuthErrorDetection | null {
+    if (!error || typeof error !== "object") return null
+    const status = (error as ErrorLike).status
+    const message = (error as ErrorLike).message
+    const body = parseBody(error)
+    const inner = body && typeof body.error === "object" && body.error !== null
+      ? (body.error as Record<string, unknown>)
+      : null
+    const innerType = typeof inner?.type === "string" ? inner.type : null
+    if (status === 401 || innerType === "authentication_error" || isClaudeAuthErrorText(message)) {
+      return { chatId, message: typeof message === "string" ? message : "401 authentication_error", raw: error }
+    }
     return null
   }
 

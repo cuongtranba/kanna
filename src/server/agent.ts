@@ -41,7 +41,13 @@ import {
 import { resolveClaudeApiModelId } from "../shared/types"
 import { fallbackTitleFromMessage } from "./generate-title"
 import { AUTO_CONTINUE_EVENT_VERSION, type AutoContinueEvent } from "./auto-continue/events"
-import { ClaudeLimitDetector, CodexLimitDetector, type LimitDetection, type LimitDetector } from "./auto-continue/limit-detector"
+import {
+  ClaudeLimitDetector,
+  CodexLimitDetector,
+  type AuthErrorDetection,
+  type LimitDetection,
+  type LimitDetector,
+} from "./auto-continue/limit-detector"
 import type { ScheduleManager } from "./auto-continue/schedule-manager"
 import { deriveChatSchedules } from "./auto-continue/read-model"
 import type { TunnelGateway } from "./cloudflare-tunnel/gateway"
@@ -2098,11 +2104,20 @@ export class AgentCoordinator {
             const resultText = event.entry.result || "Turn failed"
             const detection = this.claudeLimitDetector.detectFromResultText?.(session.chatId, resultText) ?? null
             let handled = false
+            let handledKind: "rate_limit" | "auth_error" | null = null
             if (detection) {
               handled = await this.handleLimitDetection(session.chatId, detection)
+              if (handled) handledKind = "rate_limit"
             }
-            if (handled) {
-              await this.store.recordTurnFailed(session.chatId, "rate_limit")
+            if (!handled) {
+              const authDetection = this.claudeLimitDetector.detectAuthErrorFromResultText?.(session.chatId, resultText) ?? null
+              if (authDetection) {
+                handled = await this.handleAuthErrorDetection(session.chatId, authDetection)
+                if (handled) handledKind = "auth_error"
+              }
+            }
+            if (handled && handledKind !== null) {
+              await this.store.recordTurnFailed(session.chatId, handledKind)
             } else {
               await this.store.recordTurnFailed(session.chatId, resultText)
             }
@@ -2127,7 +2142,10 @@ export class AgentCoordinator {
     } catch (error) {
       const active = this.activeTurns.get(session.chatId)
       if (active && !active.cancelRequested) {
-        const handled = await this.handleLimitError(session.chatId, this.claudeLimitDetector, error)
+        let handled = await this.handleLimitError(session.chatId, this.claudeLimitDetector, error)
+        if (!handled) {
+          handled = await this.handleAuthError(session.chatId, this.claudeLimitDetector, error)
+        }
         if (!handled) {
           const message = error instanceof Error ? error.message : String(error)
           await this.store.appendMessage(
@@ -2357,6 +2375,80 @@ export class AgentCoordinator {
     const detection = detector.detect(chatId, error)
     if (!detection) return false
     return this.handleLimitDetection(chatId, detection)
+  }
+
+  private async handleAuthError(chatId: string, detector: LimitDetector, error: unknown): Promise<boolean> {
+    const detection = detector.detectAuthErrorFromError?.(chatId, error) ?? null
+    if (!detection) return false
+    return this.handleAuthErrorDetection(chatId, detection)
+  }
+
+  // 401 / authentication_error from the claude binary means the OAuth token
+  // was rejected by Anthropic — different from a rate-limit. Mark the token
+  // `error` (drops the chat's reservation as a side-effect), try to rotate
+  // to another active token from the pool, tear down the bound session, and
+  // emit an auto_continue_accepted so the chat picks up the rotated token
+  // on the next prompt without the user re-typing.
+  private async handleAuthErrorDetection(chatId: string, detection: AuthErrorDetection): Promise<boolean> {
+    const live = deriveChatSchedules(this.store.getAutoContinueEvents(chatId), chatId).liveScheduleId
+    if (live !== null) return true
+
+    const session = this.claudeSessions.get(chatId)
+    const failedTokenId = session?.activeTokenId ?? null
+    if (this.oauthPool && failedTokenId) {
+      this.oauthPool.markError(failedTokenId, detection.message)
+    }
+    const rotationTarget = this.oauthPool?.pickActive(chatId) ?? null
+    const canRotate = rotationTarget !== null
+      && (!failedTokenId || rotationTarget.id !== failedTokenId)
+
+    if (this.oauthPool) {
+      console.log("[oauth-pool] auth-error detected", {
+        chatId,
+        markedErrorTokenId: failedTokenId,
+        nextTokenId: rotationTarget?.id ?? null,
+        canRotate,
+      })
+    }
+
+    if (!canRotate) {
+      // No other usable token. Tear down the bound session so the user gets
+      // a clean failure surface instead of a stuck chat, but do not propose
+      // auto-resume — the token will not recover on its own.
+      if (session) {
+        session.session.close()
+        if (this.claudeSessions.get(chatId) === session) {
+          this.claudeSessions.delete(chatId)
+        }
+      }
+      return false
+    }
+
+    const now = Date.now()
+    const scheduleId = crypto.randomUUID()
+    const base = { v: AUTO_CONTINUE_EVENT_VERSION, timestamp: now, chatId, scheduleId }
+    const event: AutoContinueEvent = {
+      ...base,
+      kind: "auto_continue_accepted",
+      scheduledAt: now + TOKEN_ROTATION_SCHEDULE_DELAY_MS,
+      tz: "system",
+      source: "token_rotation",
+      resetAt: now,
+      detectedAt: now,
+    }
+    await this.emitAutoContinueEvent(event)
+    if (session) {
+      session.session.close()
+      if (this.claudeSessions.get(chatId) === session) {
+        this.claudeSessions.delete(chatId)
+      }
+      const active = this.activeTurns.get(chatId)
+      if (active) {
+        await this.store.recordTurnFailed(chatId, "auth_error")
+        this.activeTurns.delete(chatId)
+      }
+    }
+    return true
   }
 
   private async handleLimitDetection(chatId: string, detection: LimitDetection): Promise<boolean> {

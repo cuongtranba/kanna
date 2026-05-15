@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { ClaudeLimitDetector, CodexLimitDetector, parseResetFromText } from "./limit-detector"
+import { ClaudeLimitDetector, CodexLimitDetector, isClaudeAuthErrorText, parseResetFromText } from "./limit-detector"
 
 const detector = new ClaudeLimitDetector()
 
@@ -211,5 +211,53 @@ describe("ClaudeLimitDetector.detectFromSdkRateLimitInfo", () => {
   test("returns null for non-object input", () => {
     expect(detector.detectFromSdkRateLimitInfo("c1", null)).toBeNull()
     expect(detector.detectFromSdkRateLimitInfo("c1", "rejected")).toBeNull()
+  })
+})
+
+describe("ClaudeLimitDetector auth-error path", () => {
+  test("isClaudeAuthErrorText matches the claude CLI 401 envelope", () => {
+    expect(isClaudeAuthErrorText("Failed to authenticate. API Error: 401 Invalid authentication credentials")).toBe(true)
+    expect(isClaudeAuthErrorText("Invalid authentication credentials")).toBe(true)
+    expect(isClaudeAuthErrorText('{"type":"error","error":{"type":"authentication_error"}}')).toBe(true)
+  })
+
+  test("isClaudeAuthErrorText does NOT match rate-limit text", () => {
+    expect(isClaudeAuthErrorText("You've hit your limit · resets 4:30pm (Asia/Saigon)")).toBe(false)
+    expect(isClaudeAuthErrorText("Claude AI usage limit reached|1700000000")).toBe(false)
+    expect(isClaudeAuthErrorText("")).toBe(false)
+    expect(isClaudeAuthErrorText(undefined)).toBe(false)
+  })
+
+  test("detectAuthErrorFromResultText returns a detection for the claude 401 envelope", () => {
+    const text = "Failed to authenticate. API Error: 401 Invalid authentication credentials"
+    const det = detector.detectAuthErrorFromResultText("c1", text)
+    expect(det).not.toBeNull()
+    expect(det!.chatId).toBe("c1")
+    expect(det!.message).toBe(text)
+  })
+
+  test("detectAuthErrorFromResultText does NOT match rate-limit text (regression: 401 != rate-limit)", () => {
+    expect(detector.detectAuthErrorFromResultText("c1", "You've hit your limit · resets 4:30pm (Asia/Saigon)")).toBeNull()
+    expect(detector.detectAuthErrorFromResultText("c1", "Claude AI usage limit reached|1700000000")).toBeNull()
+  })
+
+  test("detectFromResultText still returns null for the 401 envelope so the limit path does not eat it", () => {
+    expect(detector.detectFromResultText("c1", "Failed to authenticate. API Error: 401 Invalid authentication credentials")).toBeNull()
+  })
+
+  test("detectAuthErrorFromError matches an Error with status=401", () => {
+    const err = Object.assign(new Error('{"type":"error","error":{"type":"authentication_error","message":"Invalid authentication credentials"}}'), {
+      status: 401,
+    })
+    const det = detector.detectAuthErrorFromError("c1", err)
+    expect(det).not.toBeNull()
+    expect(det!.chatId).toBe("c1")
+  })
+
+  test("detectAuthErrorFromError returns null for a 429 rate-limit Error (regression guard)", () => {
+    const err = Object.assign(new Error('{"type":"error","error":{"type":"rate_limit_error","message":"hit your limit"}}'), {
+      status: 429,
+    })
+    expect(detector.detectAuthErrorFromError("c1", err)).toBeNull()
   })
 })
