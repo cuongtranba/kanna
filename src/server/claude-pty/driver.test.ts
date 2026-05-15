@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { mkdtemp, rm, writeFile, mkdir } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
-import { startClaudeSessionPTY } from "./driver"
+import { startClaudeSessionPTY, buildPtyEnv } from "./driver"
 import type { HarnessEvent } from "../harness-types"
 
 
@@ -149,4 +149,44 @@ describe("startClaudeSessionPTY", () => {
       ).rejects.toThrow(/test-block/)
     } finally { await rm(homeDir, { recursive: true, force: true }) }
   }, 30_000)
+})
+
+describe("buildPtyEnv", () => {
+  test("sets CLAUDE_CODE_OAUTH_TOKEN when oauthToken present", () => {
+    const env = buildPtyEnv({
+      baseEnv: {},
+      homeDir: "/tmp/home",
+      oauthToken: "sk-ant-oat-test",
+    })
+    expect(env.CLAUDE_CODE_OAUTH_TOKEN).toBe("sk-ant-oat-test")
+    expect(env.HOME).toBe("/tmp/home")
+    expect(env.TERM).toBe("xterm-256color")
+  })
+
+  test("omits CLAUDE_CODE_OAUTH_TOKEN when oauthToken null", () => {
+    const env = buildPtyEnv({
+      baseEnv: {},
+      homeDir: "/tmp/home",
+      oauthToken: null,
+    })
+    expect(env.CLAUDE_CODE_OAUTH_TOKEN).toBeUndefined()
+  })
+
+  test("omits CLAUDE_CODE_OAUTH_TOKEN when oauthToken empty string", () => {
+    const env = buildPtyEnv({
+      baseEnv: {},
+      homeDir: "/tmp/home",
+      oauthToken: "",
+    })
+    expect(env.CLAUDE_CODE_OAUTH_TOKEN).toBeUndefined()
+  })
+
+  test("strips ANTHROPIC_API_KEY defensively", () => {
+    const env = buildPtyEnv({
+      baseEnv: { ANTHROPIC_API_KEY: "should-be-removed" },
+      homeDir: "/tmp/home",
+      oauthToken: null,
+    })
+    expect(env.ANTHROPIC_API_KEY).toBeUndefined()
+  })
 })
