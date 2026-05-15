@@ -10,6 +10,7 @@ import {
   getUiUpdateReadinessPath,
   getUserPromptSignature,
   getUiUpdateRestartReconnectAction,
+  pruneOptimisticOnQueuedAck,
   reconcileOptimisticUserPrompts,
   resolveComposeIntent,
   sameChatSnapshotCore,
@@ -443,6 +444,35 @@ describe("optimistic user prompts", () => {
       "chat-1",
       [createUserPrompt("server-1", "same")],
     )).toEqual([optimisticPrompt])
+  })
+
+  describe("pruneOptimisticOnQueuedAck", () => {
+    const makePrompt = (id: string) => ({
+      id,
+      scopeId: "chat-1",
+      signature: getUserPromptSignature("hi"),
+      requiredMatchCount: 1,
+      entry: createUserPrompt(`optimistic:${id}`, "hi"),
+    })
+
+    test("drops optimistic with matching id when server queued the message", () => {
+      const a = makePrompt("opt-1")
+      const b = makePrompt("opt-2")
+      expect(pruneOptimisticOnQueuedAck([a, b], "opt-1", { queued: true })).toEqual([b])
+    })
+
+    test("returns input unchanged when ack is not queued", () => {
+      const a = makePrompt("opt-1")
+      const prompts = [a]
+      expect(pruneOptimisticOnQueuedAck(prompts, "opt-1", { queued: false })).toBe(prompts)
+      expect(pruneOptimisticOnQueuedAck(prompts, "opt-1", {})).toBe(prompts)
+    })
+
+    test("returns input unchanged when no optimistic id matches", () => {
+      const a = makePrompt("opt-1")
+      const prompts = [a]
+      expect(pruneOptimisticOnQueuedAck(prompts, "opt-missing", { queued: true })).toBe(prompts)
+    })
   })
 })
 

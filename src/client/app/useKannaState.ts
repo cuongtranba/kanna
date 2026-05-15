@@ -404,6 +404,21 @@ export function reconcileOptimisticUserPrompts(
   })
 }
 
+// Proactive `/compact` injection (server-side) queues the user's real message
+// instead of running it. The server response carries `queued: true` so the
+// client can drop its optimistic user_prompt — the message will render via the
+// queue panel until the post-compact dequeue persists a real user_prompt and
+// reconcileOptimisticUserPrompts takes over.
+export function pruneOptimisticOnQueuedAck(
+  optimisticPrompts: OptimisticUserPrompt[],
+  optimisticId: string,
+  ack: { queued?: boolean },
+): OptimisticUserPrompt[] {
+  if (!ack.queued) return optimisticPrompts
+  if (!optimisticPrompts.some((prompt) => prompt.id === optimisticId)) return optimisticPrompts
+  return optimisticPrompts.filter((prompt) => prompt.id !== optimisticId)
+}
+
 const INITIAL_CHAT_RECENT_LIMIT = 200
 const CHAT_HISTORY_PAGE_SIZE = 500
 
@@ -1797,7 +1812,7 @@ export function useKannaState(activeChatId: string | null): KannaState {
       }
 
       const autoResumeOnRateLimit = usePreferencesStore.getState().autoResumeOnRateLimit
-      const result = await socket.command<{ chatId?: string }>({
+      const result = await socket.command<{ chatId?: string; queuedMessageId?: string; queued?: boolean }>({
         type: "chat.send",
         chatId: activeChatId ?? undefined,
         projectId: activeChatId ? undefined : projectId ?? undefined,
@@ -1812,16 +1827,27 @@ export function useKannaState(activeChatId: string | null): KannaState {
       })
       sendTrace.ackAt = performance.now()
       sendTrace.serverChatId = result.chatId ?? sendTrace.serverChatId
-      setOptimisticProcessing((current) => {
-        if (!current) return current
-        const nextScopeId = !activeChatId && result.chatId ? result.chatId : current.scopeId
-        return {
-          scopeId: nextScopeId,
-          ackedAt: performance.now(),
-        }
-      })
+
+      // Server queued the message (e.g. proactive `/compact` injected ahead of
+      // the user's prompt). Drop the optimistic user_prompt so the queue panel
+      // is the only render source until the post-compact dequeue persists a
+      // real user_prompt.
+      if (result.queued) {
+        setOptimisticUserPrompts((current) => pruneOptimisticOnQueuedAck(current, optimisticId, { queued: true }))
+        setOptimisticProcessing(null)
+      } else {
+        setOptimisticProcessing((current) => {
+          if (!current) return current
+          const nextScopeId = !activeChatId && result.chatId ? result.chatId : current.scopeId
+          return {
+            scopeId: nextScopeId,
+            ackedAt: performance.now(),
+          }
+        })
+      }
       logSendToStartingTrace(sendTrace, "chat_send_ack_received", {
         resultChatId: result.chatId ?? null,
+        queued: result.queued ?? false,
       })
 
       if (!activeChatId && result.chatId) {
