@@ -76,6 +76,13 @@ describe("shouldOpenLocalFileLinkInEditor", () => {
     expect(shouldOpenLocalFileLinkInEditor("/Users/jake/Projects/kanna/report.docx")).toBe(false)
     expect(shouldOpenLocalFileLinkInEditor("/Users/jake/Projects/kanna/archive.zip")).toBe(false)
   })
+
+  test("treats extension-less paths (directories, LICENSE, etc.) as editor links", () => {
+    expect(shouldOpenLocalFileLinkInEditor("/Users/jake/Projects/pvs-core/backend-core")).toBe(true)
+    expect(shouldOpenLocalFileLinkInEditor("/Users/jake/Projects/pvs-core/backend-core/cmd")).toBe(true)
+    expect(shouldOpenLocalFileLinkInEditor("/Users/jake/Projects/pvs-core/backend-core/")).toBe(true)
+    expect(shouldOpenLocalFileLinkInEditor("/Users/jake/Projects/kanna/LICENSE")).toBe(true)
+  })
 })
 
 describe("isAbsoluteLocalFilePath", () => {
