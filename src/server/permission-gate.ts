@@ -120,7 +120,13 @@ export const policy = {
       // Deny-list applies to bash before auto-allow.
       for (const rule of args.chatPolicy.toolDenyList) {
         if (rule.tool !== args.toolName) continue
-        const re = new RegExp(rule.pattern)
+        let re: RegExp
+        try {
+          re = new RegExp(rule.pattern)
+        } catch {
+          console.warn(`[permission-gate] invalid regex pattern: ${rule.pattern}`)
+          continue
+        }
         if (re.test(argsToText(args.args))) {
           return { verdict: "auto-deny", reason: `matched denylist: ${rule.pattern}` }
         }
@@ -135,7 +141,13 @@ export const policy = {
     // 1. Deny list wins over everything.
     for (const rule of args.chatPolicy.toolDenyList) {
       if (rule.tool !== args.toolName) continue
-      const re = new RegExp(rule.pattern)
+      let re: RegExp
+      try {
+        re = new RegExp(rule.pattern)
+      } catch {
+        console.warn(`[permission-gate] invalid regex pattern: ${rule.pattern}`)
+        continue
+      }
       if (re.test(argsToText(args.args))) {
         return { verdict: "auto-deny", reason: `matched denylist: ${rule.pattern}` }
       }
@@ -144,7 +156,13 @@ export const policy = {
     // 2. Allow list
     for (const rule of args.chatPolicy.toolAllowList) {
       if (rule.tool !== args.toolName) continue
-      const re = new RegExp(rule.pattern)
+      let re: RegExp
+      try {
+        re = new RegExp(rule.pattern)
+      } catch {
+        console.warn(`[permission-gate] invalid regex pattern: ${rule.pattern}`)
+        continue
+      }
       if (re.test(argsToText(args.args))) {
         return { verdict: "auto-allow", reason: `matched allowlist: ${rule.pattern}` }
       }

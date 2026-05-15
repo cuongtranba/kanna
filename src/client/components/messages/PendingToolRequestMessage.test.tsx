@@ -113,6 +113,109 @@ describe("PendingToolRequestMessage — ask_user_question", () => {
   })
 })
 
+// ── multiSelect ─────────────────────────────────────────────────────────────
+
+describe("PendingToolRequestMessage — multiSelect question", () => {
+  function makeMultiSelectEntry(): PendingToolRequestHydrated {
+    return makeEntry({
+      arguments: {
+        questions: [
+          {
+            id: "q-multi",
+            question: "Pick all that apply",
+            multiSelect: true,
+            options: [
+              { label: "Alpha" },
+              { label: "Beta" },
+              { label: "Gamma" },
+            ],
+          },
+        ],
+      },
+    })
+  }
+
+  test("clicking two options toggles both into selected state without submitting", async () => {
+    const onAnswer = mock((_id: string, _decision: ToolRequestDecision) => undefined)
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+
+    await act(async () => {
+      createRoot(container).render(
+        <PendingToolRequestMessage entry={makeMultiSelectEntry()} onAnswer={onAnswer} />,
+      )
+    })
+
+    const getBtn = (label: string) =>
+      Array.from(container.querySelectorAll("button")).find(
+        (btn) => btn.textContent?.trim() === label,
+      )
+
+    // Click Alpha
+    await act(async () => {
+      getBtn("Alpha")!.click()
+    })
+    // onAnswer should NOT be called yet (multi-select waits for Submit).
+    expect(onAnswer).toHaveBeenCalledTimes(0)
+
+    // Click Beta
+    await act(async () => {
+      getBtn("Beta")!.click()
+    })
+    expect(onAnswer).toHaveBeenCalledTimes(0)
+
+    // Click Submit
+    await act(async () => {
+      getBtn("Submit")!.click()
+    })
+
+    expect(onAnswer).toHaveBeenCalledTimes(1)
+    const [calledId, decision] = onAnswer.mock.calls[0]!
+    expect(calledId).toBe("req-1")
+    expect(decision.kind).toBe("answer")
+    const answers = (decision.payload as { questions: unknown[]; answers: Record<string, string[]> }).answers
+    expect(answers["q-multi"]).toContain("Alpha")
+    expect(answers["q-multi"]).toContain("Beta")
+    expect(answers["q-multi"]).not.toContain("Gamma")
+
+    container.remove()
+  })
+
+  test("clicking a selected option in multiSelect deselects it", async () => {
+    const onAnswer = mock((_id: string, _decision: ToolRequestDecision) => undefined)
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+
+    await act(async () => {
+      createRoot(container).render(
+        <PendingToolRequestMessage entry={makeMultiSelectEntry()} onAnswer={onAnswer} />,
+      )
+    })
+
+    const getBtn = (label: string) =>
+      Array.from(container.querySelectorAll("button")).find(
+        (btn) => btn.textContent?.trim() === label,
+      )
+
+    // Select then deselect Alpha
+    await act(async () => { getBtn("Alpha")!.click() })
+    await act(async () => { getBtn("Alpha")!.click() })
+
+    // Select Beta
+    await act(async () => { getBtn("Beta")!.click() })
+
+    await act(async () => { getBtn("Submit")!.click() })
+
+    expect(onAnswer).toHaveBeenCalledTimes(1)
+    const [, decision] = onAnswer.mock.calls[0]!
+    const answers = (decision.payload as { questions: unknown[]; answers: Record<string, string[]> }).answers
+    expect(answers["q-multi"]).not.toContain("Alpha")
+    expect(answers["q-multi"]).toContain("Beta")
+
+    container.remove()
+  })
+})
+
 // ── exit_plan_mode ───────────────────────────────────────────────────────────
 
 describe("PendingToolRequestMessage — exit_plan_mode", () => {

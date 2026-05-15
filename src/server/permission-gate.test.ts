@@ -139,3 +139,53 @@ describe("bash arg parsing", () => {
     expect(v.verdict).toBe("ask")
   })
 })
+
+describe("regex try/catch guard", () => {
+  test("malformed pattern in bash denyList → skipped, returns default verdict instead of throwing", () => {
+    const result = policy.evaluate({
+      toolName: "mcp__kanna__bash",
+      args: { command: "ls" },
+      chatPolicy: {
+        ...POLICY_DEFAULT,
+        toolDenyList: [
+          { tool: "mcp__kanna__bash", pattern: "[" }, // invalid regex
+        ],
+      },
+      cwd: "/tmp/project",
+    })
+    // Should not throw — malformed pattern skipped, falls through to auto-allow for "ls".
+    expect(result.verdict).toBe("auto-allow")
+  })
+
+  test("malformed pattern in non-bash denyList → skipped, returns default verdict instead of throwing", () => {
+    const result = policy.evaluate({
+      toolName: "mcp__kanna__webfetch",
+      args: { url: "https://example.com" },
+      chatPolicy: {
+        ...POLICY_DEFAULT,
+        toolDenyList: [
+          { tool: "mcp__kanna__webfetch", pattern: "[" }, // invalid regex
+        ],
+        defaultAction: "auto-allow",
+      },
+      cwd: "/tmp/project",
+    })
+    expect(result.verdict).toBe("auto-allow")
+  })
+
+  test("malformed pattern in non-bash allowList → skipped, falls to default action", () => {
+    const result = policy.evaluate({
+      toolName: "mcp__kanna__webfetch",
+      args: { url: "https://example.com" },
+      chatPolicy: {
+        ...POLICY_DEFAULT,
+        toolAllowList: [
+          { tool: "mcp__kanna__webfetch", pattern: "[" }, // invalid regex
+        ],
+        defaultAction: "ask",
+      },
+      cwd: "/tmp/project",
+    })
+    expect(result.verdict).toBe("ask")
+  })
+})

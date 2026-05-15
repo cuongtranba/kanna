@@ -1591,3 +1591,39 @@ describe("EventStore getRecentChatHistory pending replay", () => {
     expect(firstSynthetic[0]._id).toBe("pending-tool-request-req-dedup")
   })
 })
+
+describe("EventStore deleteChat prunes toolRequestsById", () => {
+  test("after putToolRequest + deleteChat, getToolRequest returns null for that chat's requests", async () => {
+    const dataDir = await createTempDataDir()
+    const store = new EventStore(dataDir)
+    await store.initialize()
+
+    const project = await store.openProject("/tmp/project")
+    const chat = await store.createChat(project.id)
+
+    await store.putToolRequest(fixtureToolRequest({ id: "req-to-prune", chatId: chat.id }))
+    expect(store.getToolRequest("req-to-prune")).not.toBeNull()
+
+    await store.deleteChat(chat.id)
+
+    expect(store.getToolRequest("req-to-prune")).toBeNull()
+  })
+
+  test("deleteChat only prunes tool requests for the deleted chat", async () => {
+    const dataDir = await createTempDataDir()
+    const store = new EventStore(dataDir)
+    await store.initialize()
+
+    const project = await store.openProject("/tmp/project")
+    const chatA = await store.createChat(project.id)
+    const chatB = await store.createChat(project.id)
+
+    await store.putToolRequest(fixtureToolRequest({ id: "req-a", chatId: chatA.id }))
+    await store.putToolRequest(fixtureToolRequest({ id: "req-b", chatId: chatB.id }))
+
+    await store.deleteChat(chatA.id)
+
+    expect(store.getToolRequest("req-a")).toBeNull()
+    expect(store.getToolRequest("req-b")).not.toBeNull()
+  })
+})

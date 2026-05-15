@@ -30,6 +30,7 @@ export interface ChatPermissionPolicy {
   defaultAction: "ask" | "auto-allow" | "auto-deny"
   bash: BashGateConfig
   readPathDeny: string[]
+  /** Reserved for write-path enforcement in P2 PTY mode. Not consulted by the current bash gate. */
   writePathDeny: string[]
   toolDenyList: ToolRule[]
   toolAllowList: ToolRule[]

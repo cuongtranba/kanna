@@ -29,7 +29,15 @@ function AskUserQuestionPending({
 
   function handleOptionClick(question: AskUserQuestionItem, label: string) {
     const key = getKey(question)
-    setAnswers((prev) => ({ ...prev, [key]: [label] }))
+    if (question.multiSelect) {
+      setAnswers((prev) => {
+        const current = prev[key] ?? []
+        const next = current.includes(label) ? current.filter((s) => s !== label) : [...current, label]
+        return { ...prev, [key]: next }
+      })
+    } else {
+      setAnswers((prev) => ({ ...prev, [key]: [label] }))
+    }
   }
 
   function handleSubmit() {
@@ -54,7 +62,7 @@ function AskUserQuestionPending({
       </div>
       {questions.map((question, qi) => {
         const key = getKey(question)
-        const selected = answers[key]?.[0]
+        const selectedLabels = answers[key] ?? []
         const isLast = qi === questions.length - 1
         return (
           <div
@@ -69,7 +77,7 @@ function AskUserQuestionPending({
                     key={opt.label}
                     onClick={() => handleOptionClick(question, opt.label)}
                     className={`rounded-full border px-3 py-1 text-xs transition-colors ${
-                      selected === opt.label
+                      selectedLabels.includes(opt.label)
                         ? "border-foreground bg-foreground text-background"
                         : "border-border bg-background text-foreground hover:bg-muted"
                     }`}

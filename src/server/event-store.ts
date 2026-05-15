@@ -1345,6 +1345,11 @@ export class EventStore implements PushEventStore {
       chatId,
     }
     await this.append(this.chatsLogPath, event)
+    for (const [id, req] of this.state.toolRequestsById) {
+      if (req.chatId === chatId) {
+        this.state.toolRequestsById.delete(id)
+      }
+    }
     await this.removeSubagentResultsDir(projectId, chatId)
   }
 

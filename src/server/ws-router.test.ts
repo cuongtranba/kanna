@@ -3125,6 +3125,260 @@ describe("ws-router bg-tasks", () => {
   })
 })
 
+test("ws-router: chat.toolRequestAnswer broadcasts chat snapshot after answering", async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), "kanna-ws-toolreq-broadcast-"))
+  try {
+    const store = new EventStore(dir)
+    await store.initialize()
+
+    const project = await store.openProject("/tmp/project")
+    const chat = await store.createChat(project.id)
+
+    const toolCallbackSvc = createToolCallbackService({
+      store,
+      serverSecret: "test-secret",
+      now: () => 1_000,
+      timeoutMs: 600_000,
+    })
+
+    const pendingPromise = toolCallbackSvc.submit({
+      chatId: chat.id,
+      sessionId: "sess-1",
+      toolUseId: "tu-broadcast",
+      toolName: "ask_user_question",
+      args: { questions: [{ q: "broadcast?" }] },
+      chatPolicy: POLICY_DEFAULT,
+      cwd: "/tmp/project",
+    })
+
+    const pending = store.listPendingToolRequests(chat.id)
+    expect(pending).toHaveLength(1)
+    const toolRequestId = pending[0].id
+
+    const router = createWsRouter({
+      store: store as never,
+      agent: {
+        getActiveStatuses: () => new Map(),
+        getDrainingChatIds: () => new Set(),
+        getSlashCommandsLoadingChatIds: () => new Set(),
+        getWaitStartedAtByChatId: () => new Map(),
+        ensureSlashCommandsLoaded: async () => {},
+        toolCallbackService: toolCallbackSvc,
+      } as never,
+      terminals: {
+        getSnapshot: () => null,
+        onEvent: () => () => {},
+      } as never,
+      keybindings: {
+        getSnapshot: () => DEFAULT_KEYBINDINGS_SNAPSHOT,
+        onChange: () => () => {},
+      } as never,
+      refreshDiscovery: async () => [],
+      getDiscoveredProjects: () => [],
+      machineDisplayName: "Local Machine",
+      updateManager: null,
+      pushManager: NOOP_PUSH_MANAGER,
+    })
+
+    const ws = new FakeWebSocket()
+    router.handleOpen(ws as never)
+    // Subscribe to the chat to receive broadcast snapshots.
+    ws.data.subscriptions.set("chat-sub-1", { type: "chat", chatId: chat.id })
+
+    await router.handleMessage(
+      ws as never,
+      JSON.stringify({
+        v: 1,
+        type: "command",
+        id: "tool-answer-broadcast",
+        command: {
+          type: "chat.toolRequestAnswer",
+          chatId: chat.id,
+          toolRequestId,
+          decision: { kind: "answer", payload: { ok: true } },
+        },
+      })
+    )
+
+    // Ack followed by a chat snapshot from broadcastChatAndSidebar.
+    expect(ws.sent).toHaveLength(2)
+    const ack = ws.sent[0] as { type: string; id: string }
+    expect(ack.type).toBe("ack")
+    expect(ack.id).toBe("tool-answer-broadcast")
+    const snap = ws.sent[1] as { type: string; snapshot: { type: string } }
+    expect(snap.type).toBe("snapshot")
+    expect(snap.snapshot.type).toBe("chat")
+
+    await pendingPromise
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+test("ws-router: chat.toolRequestAnswer throws when toolRequestId belongs to different chat", async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), "kanna-ws-toolreq-ownership-"))
+  try {
+    const store = new EventStore(dir)
+    await store.initialize()
+
+    const toolCallbackSvc = createToolCallbackService({
+      store,
+      serverSecret: "test-secret",
+      now: () => 1_000,
+      timeoutMs: 600_000,
+    })
+
+    const pendingPromise = toolCallbackSvc.submit({
+      chatId: "chat-owner",
+      sessionId: "sess-1",
+      toolUseId: "tu-ownership",
+      toolName: "ask_user_question",
+      args: { questions: [] },
+      chatPolicy: POLICY_DEFAULT,
+      cwd: "/tmp/project",
+    })
+
+    const pending = store.listPendingToolRequests("chat-owner")
+    expect(pending).toHaveLength(1)
+    const toolRequestId = pending[0].id
+
+    const router = createWsRouter({
+      store: store as never,
+      agent: {
+        getActiveStatuses: () => new Map(),
+        getDrainingChatIds: () => new Set(),
+        getSlashCommandsLoadingChatIds: () => new Set(),
+        getWaitStartedAtByChatId: () => new Map(),
+        ensureSlashCommandsLoaded: async () => {},
+        toolCallbackService: toolCallbackSvc,
+      } as never,
+      terminals: {
+        getSnapshot: () => null,
+        onEvent: () => () => {},
+      } as never,
+      keybindings: {
+        getSnapshot: () => DEFAULT_KEYBINDINGS_SNAPSHOT,
+        onChange: () => () => {},
+      } as never,
+      refreshDiscovery: async () => [],
+      getDiscoveredProjects: () => [],
+      machineDisplayName: "Local Machine",
+      updateManager: null,
+      pushManager: NOOP_PUSH_MANAGER,
+    })
+
+    const ws = new FakeWebSocket()
+    router.handleOpen(ws as never)
+
+    // Send with wrong chatId — "chat-attacker" instead of "chat-owner".
+    await router.handleMessage(
+      ws as never,
+      JSON.stringify({
+        v: 1,
+        type: "command",
+        id: "tool-answer-wrong-chat",
+        command: {
+          type: "chat.toolRequestAnswer",
+          chatId: "chat-attacker",
+          toolRequestId,
+          decision: { kind: "allow" },
+        },
+      })
+    )
+
+    expect(ws.sent[0]).toMatchObject({ type: "error", id: "tool-answer-wrong-chat" })
+    const errMsg = (ws.sent[0] as { message: string }).message
+    expect(errMsg).toContain("does not belong to this chat")
+
+    // Cancel the pending promise to avoid unresolved promise warning.
+    await toolCallbackSvc.cancel(toolRequestId, "test_done")
+    await pendingPromise
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+test("ws-router: chat.toolRequestAnswer throws on invalid decision.kind", async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), "kanna-ws-toolreq-kind-"))
+  try {
+    const store = new EventStore(dir)
+    await store.initialize()
+
+    const toolCallbackSvc = createToolCallbackService({
+      store,
+      serverSecret: "test-secret",
+      now: () => 1_000,
+      timeoutMs: 600_000,
+    })
+
+    const pendingPromise = toolCallbackSvc.submit({
+      chatId: "chat-kind",
+      sessionId: "sess-1",
+      toolUseId: "tu-kind",
+      toolName: "ask_user_question",
+      args: { questions: [] },
+      chatPolicy: POLICY_DEFAULT,
+      cwd: "/tmp/project",
+    })
+
+    const pending = store.listPendingToolRequests("chat-kind")
+    expect(pending).toHaveLength(1)
+    const toolRequestId = pending[0].id
+
+    const router = createWsRouter({
+      store: store as never,
+      agent: {
+        getActiveStatuses: () => new Map(),
+        getDrainingChatIds: () => new Set(),
+        getSlashCommandsLoadingChatIds: () => new Set(),
+        getWaitStartedAtByChatId: () => new Map(),
+        ensureSlashCommandsLoaded: async () => {},
+        toolCallbackService: toolCallbackSvc,
+      } as never,
+      terminals: {
+        getSnapshot: () => null,
+        onEvent: () => () => {},
+      } as never,
+      keybindings: {
+        getSnapshot: () => DEFAULT_KEYBINDINGS_SNAPSHOT,
+        onChange: () => () => {},
+      } as never,
+      refreshDiscovery: async () => [],
+      getDiscoveredProjects: () => [],
+      machineDisplayName: "Local Machine",
+      updateManager: null,
+      pushManager: NOOP_PUSH_MANAGER,
+    })
+
+    const ws = new FakeWebSocket()
+    router.handleOpen(ws as never)
+
+    await router.handleMessage(
+      ws as never,
+      JSON.stringify({
+        v: 1,
+        type: "command",
+        id: "tool-answer-bad-kind",
+        command: {
+          type: "chat.toolRequestAnswer",
+          chatId: "chat-kind",
+          toolRequestId,
+          decision: { kind: "hack" },
+        },
+      })
+    )
+
+    expect(ws.sent[0]).toMatchObject({ type: "error", id: "tool-answer-bad-kind" })
+    const errMsg = (ws.sent[0] as { message: string }).message
+    expect(errMsg).toContain("Invalid tool request decision kind")
+
+    await toolCallbackSvc.cancel(toolRequestId, "test_done")
+    await pendingPromise
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
 test("ws-router: chat.toolRequestAnswer resolves a pending tool request", async () => {
   const dir = await mkdtemp(path.join(tmpdir(), "kanna-ws-toolreq-"))
   try {

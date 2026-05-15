@@ -1829,8 +1829,17 @@ export function createWsRouter({
         case "chat.toolRequestAnswer": {
           const toolCallbackSvc = agent.toolCallbackService
           if (!toolCallbackSvc) throw new Error("tool callback service unavailable")
+          const validKinds = new Set(["allow", "deny", "answer"])
+          if (typeof command.decision !== "object" || command.decision === null || !validKinds.has((command.decision as { kind?: string }).kind ?? "")) {
+            throw new Error("Invalid tool request decision kind")
+          }
+          const existing = store.getToolRequest(command.toolRequestId)
+          if (!existing || existing.chatId !== command.chatId) {
+            throw new Error("Tool request does not belong to this chat")
+          }
           await toolCallbackSvc.answer(command.toolRequestId, command.decision)
           send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
+          await broadcastChatAndSidebar(command.chatId)
           return
         }
         case "chat.respondSubagentTool": {
