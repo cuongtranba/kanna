@@ -2133,6 +2133,15 @@ export class AgentCoordinator {
       throw new Error("Queued message not found")
     }
 
+    // Refuse to drop the queued message while a Kanna-injected `/compact`
+    // turn is running. The compact was triggered specifically to make room
+    // for this queued message; auto-draining it after compact completes
+    // would silently lose user intent and waste the compact spend.
+    const active = this.activeTurns.get(command.chatId)
+    if (active?.proactiveCompactInjection) {
+      throw new Error("Cannot remove queued message while compact is running")
+    }
+
     await this.store.removeQueuedMessage(command.chatId, command.queuedMessageId)
   }
 
