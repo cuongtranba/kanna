@@ -39,4 +39,14 @@ describe("verifyPtyAuth", () => {
       expect(result.error).toContain("ANTHROPIC_API_KEY")
     }
   })
+
+  test("ok when CLAUDE_CODE_OAUTH_TOKEN is set (pool rotation env var)", async () => {
+    await mkdir(path.join(homeDir, ".claude"), { recursive: true })
+    await writeFile(path.join(homeDir, ".claude", ".credentials.json"), "{}", "utf8")
+    const result = await verifyPtyAuth({
+      homeDir,
+      env: { CLAUDE_CODE_OAUTH_TOKEN: "sk-ant-oat-..." },
+    })
+    expect(result.ok).toBe(true)
+  })
 })

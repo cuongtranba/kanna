@@ -42,6 +42,22 @@ export interface StartClaudeSessionPtyArgs {
   preflightGate?: PreflightGate
 }
 
+export function buildPtyEnv(args: {
+  baseEnv: NodeJS.ProcessEnv
+  homeDir: string
+  oauthToken: string | null
+}): NodeJS.ProcessEnv {
+  const spawnEnv: NodeJS.ProcessEnv = { ...args.baseEnv }
+  delete spawnEnv.ANTHROPIC_API_KEY
+  spawnEnv.TERM = "xterm-256color"
+  spawnEnv.NO_COLOR = "0"
+  spawnEnv.HOME = args.homeDir
+  if (args.oauthToken && args.oauthToken.length > 0) {
+    spawnEnv.CLAUDE_CODE_OAUTH_TOKEN = args.oauthToken
+  }
+  return spawnEnv
+}
+
 export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Promise<ClaudeSessionHandle> {
   const home = args.homeDir ?? homedir()
   const env = args.env ?? process.env
@@ -59,11 +75,11 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
     }
   }
 
-  const spawnEnv: NodeJS.ProcessEnv = { ...env }
-  delete spawnEnv.ANTHROPIC_API_KEY
-  spawnEnv.TERM = "xterm-256color"
-  spawnEnv.NO_COLOR = "0"
-  spawnEnv.HOME = home
+  const spawnEnv = buildPtyEnv({
+    baseEnv: env,
+    homeDir: home,
+    oauthToken: args.oauthToken,
+  })
 
   const sessionId = args.sessionToken ?? randomUUID()
   const jsonlPath = computeJsonlPath({ homeDir: home, cwd: args.localPath, sessionId })
