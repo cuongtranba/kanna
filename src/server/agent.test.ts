@@ -1891,6 +1891,176 @@ describe("AgentCoordinator claude integration", () => {
     expect(sessionCalls).toEqual([{ sessionToken: null, pendingForkSessionToken: null }])
     expect(store.chat.pendingForkSessionToken).toEqual({ provider: "claude", token: "claude-fork" })
   })
+
+  test("send() injects /compact ahead of the user's message when usage crosses the auto-compact threshold", async () => {
+    const events = new AsyncEventQueue<any>()
+    const prompts: string[] = []
+
+    const store = createFakeStore()
+    store.chat.provider = "claude"
+    store.chat.sessionToken = "sess-huge"
+    store.chat.sessionTokensByProvider = { claude: "sess-huge" }
+    // Seed a usage snapshot that sits above the auto-compact threshold so
+    // the next send() must inject /compact first.
+    store.messages.push(timestamped({
+      kind: "context_window_updated",
+      usage: { usedTokens: 180_000, maxTokens: 200_000, compactsAutomatically: false },
+    }))
+
+    const coordinator = new AgentCoordinator({
+      store: store as never,
+      onStateChange: () => {},
+      startClaudeSession: async () => ({
+        provider: "claude",
+        stream: events,
+        getAccountInfo: async () => null,
+        interrupt: async () => {},
+        close: () => {},
+        setModel: async () => {},
+        setPermissionMode: async () => {},
+        getSupportedCommands: async () => [],
+        sendPrompt: async (content: string) => {
+          prompts.push(content)
+          // Emit a successful result so the turn ends and any queued message
+          // (the user's real prompt) dequeues + runs.
+          events.push({
+            type: "transcript" as const,
+            entry: timestamped({
+              kind: "result",
+              subtype: "success",
+              isError: false,
+              durationMs: 0,
+              result: prompts.length === 1 ? "compacted" : "done",
+            }),
+          })
+        },
+      }),
+    })
+
+    await coordinator.send({
+      type: "chat.send",
+      chatId: "chat-1",
+      provider: "claude",
+      content: "now refactor the auth module",
+      model: "claude-opus-4-7",
+    })
+
+    await waitFor(() => prompts.length >= 2, 2000)
+
+    expect(prompts[0]).toBe("/compact")
+    expect(prompts[1]).toBe("now refactor the auth module")
+    // User's original prompt was queued during compact, then dequeued by
+    // maybeStartNextQueuedMessage after /compact succeeded.
+    expect(store.queuedMessages.length).toBe(0)
+
+    events.close()
+  })
+
+  test("send() does NOT inject /compact when usage is below threshold", async () => {
+    const events = new AsyncEventQueue<any>()
+    const prompts: string[] = []
+
+    const store = createFakeStore()
+    store.chat.provider = "claude"
+    store.messages.push(timestamped({
+      kind: "context_window_updated",
+      usage: { usedTokens: 50_000, maxTokens: 200_000, compactsAutomatically: false },
+    }))
+
+    const coordinator = new AgentCoordinator({
+      store: store as never,
+      onStateChange: () => {},
+      startClaudeSession: async () => ({
+        provider: "claude",
+        stream: events,
+        getAccountInfo: async () => null,
+        interrupt: async () => {},
+        close: () => {},
+        setModel: async () => {},
+        setPermissionMode: async () => {},
+        getSupportedCommands: async () => [],
+        sendPrompt: async (content: string) => {
+          prompts.push(content)
+          events.push({
+            type: "transcript" as const,
+            entry: timestamped({
+              kind: "result",
+              subtype: "success",
+              isError: false,
+              durationMs: 0,
+              result: "done",
+            }),
+          })
+        },
+      }),
+    })
+
+    await coordinator.send({
+      type: "chat.send",
+      chatId: "chat-1",
+      provider: "claude",
+      content: "hello",
+      model: "claude-opus-4-7",
+    })
+
+    await waitFor(() => store.turnFinishedCount === 1, 2000)
+
+    expect(prompts).toEqual(["hello"])
+    events.close()
+  })
+
+  test("send() does NOT recursively compact when user's content is itself a slash command", async () => {
+    const events = new AsyncEventQueue<any>()
+    const prompts: string[] = []
+
+    const store = createFakeStore()
+    store.chat.provider = "claude"
+    store.messages.push(timestamped({
+      kind: "context_window_updated",
+      usage: { usedTokens: 180_000, maxTokens: 200_000, compactsAutomatically: false },
+    }))
+
+    const coordinator = new AgentCoordinator({
+      store: store as never,
+      onStateChange: () => {},
+      startClaudeSession: async () => ({
+        provider: "claude",
+        stream: events,
+        getAccountInfo: async () => null,
+        interrupt: async () => {},
+        close: () => {},
+        setModel: async () => {},
+        setPermissionMode: async () => {},
+        getSupportedCommands: async () => [],
+        sendPrompt: async (content: string) => {
+          prompts.push(content)
+          events.push({
+            type: "transcript" as const,
+            entry: timestamped({
+              kind: "result",
+              subtype: "success",
+              isError: false,
+              durationMs: 0,
+              result: "done",
+            }),
+          })
+        },
+      }),
+    })
+
+    await coordinator.send({
+      type: "chat.send",
+      chatId: "chat-1",
+      provider: "claude",
+      content: "/clear",
+      model: "claude-opus-4-7",
+    })
+
+    await waitFor(() => store.turnFinishedCount === 1, 2000)
+
+    expect(prompts).toEqual(["/clear"])
+    events.close()
+  })
 })
 
 describe("AgentCoordinator.ensureSlashCommandsLoaded", () => {
