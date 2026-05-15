@@ -49,6 +49,7 @@ import { buildSubagentProviderRun } from "./subagent-provider-run"
 import type { ToolCallbackService } from "./tool-callback"
 import type { ChatPermissionPolicy } from "../shared/permission-policy"
 import { POLICY_DEFAULT } from "../shared/permission-policy"
+import { startClaudeSessionPTY, type StartClaudeSessionPtyArgs } from "./claude-pty/driver"
 
 export function resolveSpawnPaths(
   chat: Pick<ChatRecord, "id" | "stackBindings">,
@@ -177,6 +178,7 @@ interface AgentCoordinatorArgs {
     /** Per-chat permission policy. Defaults to POLICY_DEFAULT if omitted. */
     chatPolicy?: ChatPermissionPolicy
   }) => Promise<ClaudeSessionHandle>
+  startClaudeSessionPTY?: (args: StartClaudeSessionPtyArgs) => Promise<ClaudeSessionHandle>
   claudeLimitDetector?: LimitDetector
   codexLimitDetector?: LimitDetector
   scheduleManager?: ScheduleManager
@@ -950,6 +952,7 @@ export class AgentCoordinator {
   private readonly terminalManager: TerminalManager | null
   private readonly generateTitle: (messageContent: string, cwd: string) => Promise<GenerateChatTitleResult>
   private readonly startClaudeSessionFn: NonNullable<AgentCoordinatorArgs["startClaudeSession"]>
+  private readonly startClaudeSessionPTYFn: (args: StartClaudeSessionPtyArgs) => Promise<ClaudeSessionHandle>
   private reportBackgroundError: ((message: string) => void) | null = null
   readonly activeTurns = new Map<string, ActiveTurn>()
   readonly drainingStreams = new Map<string, { turn: HarnessTurn }>()
@@ -985,6 +988,7 @@ export class AgentCoordinator {
     this.terminalManager = args.terminalManager ?? null
     this.generateTitle = args.generateTitle ?? generateTitleForChatDetailed
     this.startClaudeSessionFn = args.startClaudeSession ?? startClaudeSession
+    this.startClaudeSessionPTYFn = args.startClaudeSessionPTY ?? startClaudeSessionPTY
     this.claudeLimitDetector = args.claudeLimitDetector ?? new ClaudeLimitDetector()
     this.codexLimitDetector = args.codexLimitDetector ?? new CodexLimitDetector()
     this.scheduleManager = args.scheduleManager ?? null
@@ -1169,17 +1173,31 @@ export class AgentCoordinator {
         const defaultOptions = normalizeClaudeModelOptions(defaultModel)
         const picked = this.oauthPool?.pickActive() ?? null
         if (picked) this.oauthPool!.markUsed(picked.id)
-        const ephemeral = await this.startClaudeSessionFn({
-          projectId: project.id,
-          localPath: project.localPath,
-          model: resolveClaudeApiModelId(defaultModel, defaultOptions.contextWindow),
-          effort: defaultOptions.reasoningEffort,
-          planMode: chat.planMode ?? false,
-          sessionToken: chat.sessionTokensByProvider.claude ?? null,
-          forkSession: false,
-          oauthToken: picked?.token ?? null,
-          onToolRequest: async () => null,
-        })
+        const usePtyEphemeral = process.env.KANNA_CLAUDE_DRIVER === "pty"
+        const ephemeral = usePtyEphemeral
+          ? await this.startClaudeSessionPTYFn({
+              chatId,
+              projectId: project.id,
+              localPath: project.localPath,
+              model: resolveClaudeApiModelId(defaultModel, defaultOptions.contextWindow),
+              effort: defaultOptions.reasoningEffort,
+              planMode: chat.planMode ?? false,
+              sessionToken: chat.sessionTokensByProvider.claude ?? null,
+              forkSession: false,
+              oauthToken: picked?.token ?? null,
+              onToolRequest: async () => null,
+            })
+          : await this.startClaudeSessionFn({
+              projectId: project.id,
+              localPath: project.localPath,
+              model: resolveClaudeApiModelId(defaultModel, defaultOptions.contextWindow),
+              effort: defaultOptions.reasoningEffort,
+              planMode: chat.planMode ?? false,
+              sessionToken: chat.sessionTokensByProvider.claude ?? null,
+              forkSession: false,
+              oauthToken: picked?.token ?? null,
+              onToolRequest: async () => null,
+            })
         try {
           commands = await ephemeral.getSupportedCommands()
         } finally {
@@ -1579,22 +1597,37 @@ export class AgentCoordinator {
 
       const picked = this.oauthPool?.pickActive(args.chatId) ?? null
       if (picked) this.oauthPool!.markUsed(picked.id)
-      const started = await this.startClaudeSessionFn({
-        projectId: args.projectId,
-        localPath: args.localPath,
-        model: args.model,
-        effort: args.effort,
-        planMode: args.planMode,
-        sessionToken: args.sessionToken,
-        forkSession: args.forkSession,
-        oauthToken: picked?.token ?? null,
-        additionalDirectories: args.additionalDirectories,
-        chatId: args.chatId,
-        tunnelGateway: this.tunnelGateway,
-        onToolRequest: args.onToolRequest,
-        toolCallback: this.toolCallback ?? undefined,
-        chatPolicy: this.chatPolicy,
-      })
+      const usePty = process.env.KANNA_CLAUDE_DRIVER === "pty"
+      const started = usePty
+        ? await this.startClaudeSessionPTYFn({
+            chatId: args.chatId,
+            projectId: args.projectId,
+            localPath: args.localPath,
+            model: args.model,
+            effort: args.effort,
+            planMode: args.planMode,
+            sessionToken: args.sessionToken,
+            forkSession: args.forkSession,
+            oauthToken: picked?.token ?? null,
+            additionalDirectories: args.additionalDirectories,
+            onToolRequest: args.onToolRequest,
+          })
+        : await this.startClaudeSessionFn({
+            projectId: args.projectId,
+            localPath: args.localPath,
+            model: args.model,
+            effort: args.effort,
+            planMode: args.planMode,
+            sessionToken: args.sessionToken,
+            forkSession: args.forkSession,
+            oauthToken: picked?.token ?? null,
+            additionalDirectories: args.additionalDirectories,
+            chatId: args.chatId,
+            tunnelGateway: this.tunnelGateway,
+            onToolRequest: args.onToolRequest,
+            toolCallback: this.toolCallback ?? undefined,
+            chatPolicy: this.chatPolicy,
+          })
 
       session = {
         id: crypto.randomUUID(),

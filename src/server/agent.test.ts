@@ -3966,3 +3966,69 @@ describe("AgentCoordinator chatPolicy plumbing", () => {
     events.close()
   })
 })
+
+// ── AgentCoordinator PTY driver selection ──────────────────────────────────────
+
+describe("AgentCoordinator PTY driver selection", () => {
+  test("AgentCoordinator selects PTY driver when KANNA_CLAUDE_DRIVER=pty", async () => {
+    process.env.KANNA_CLAUDE_DRIVER = "pty"
+    try {
+      const events = new AsyncEventQueue<any>()
+      let sdkCalls = 0
+      let ptyCalls = 0
+
+      const fakeSession = {
+        provider: "claude" as const,
+        stream: events,
+        getAccountInfo: async () => null,
+        interrupt: async () => {},
+        close: () => {},
+        sendPrompt: async () => {
+          events.push({
+            type: "transcript" as const,
+            entry: timestamped({
+              kind: "result",
+              subtype: "success",
+              isError: false,
+              durationMs: 0,
+              result: "done",
+            }),
+          })
+        },
+        setModel: async () => {},
+        setPermissionMode: async () => {},
+        getSupportedCommands: async () => [],
+      }
+
+      const store = createFakeStore()
+      const coordinator = new AgentCoordinator({
+        store: store as never,
+        onStateChange: () => {},
+        startClaudeSession: async (_args) => {
+          sdkCalls++
+          return fakeSession
+        },
+        startClaudeSessionPTY: async (_args) => {
+          ptyCalls++
+          return fakeSession
+        },
+      })
+
+      await coordinator.send({
+        type: "chat.send",
+        chatId: "chat-1",
+        provider: "claude",
+        content: "hello",
+        model: "claude-opus-4-1",
+      })
+      await waitFor(() => store.turnFinishedCount === 1)
+
+      expect(ptyCalls).toBe(1)
+      expect(sdkCalls).toBe(0)
+
+      events.close()
+    } finally {
+      delete process.env.KANNA_CLAUDE_DRIVER
+    }
+  })
+})
