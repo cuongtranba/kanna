@@ -196,6 +196,24 @@ describe("OAuthTokenPool.allLimited", () => {
   })
 })
 
+describe("OAuthTokenPool.hasAnyToken", () => {
+  test("false when pool is empty", () => {
+    const pool = new OAuthTokenPool(() => [], () => {}, () => 1000)
+    expect(pool.hasAnyToken()).toBe(false)
+  })
+
+  test("true when pool has any token regardless of status", () => {
+    const cases: Array<OAuthTokenEntry["status"]> = ["active", "limited", "error", "disabled"]
+    for (const status of cases) {
+      const pool = new OAuthTokenPool(
+        () => [tok("a", { status, limitedUntil: status === "limited" ? 9_999 : null })],
+        () => {}, () => 1000,
+      )
+      expect(pool.hasAnyToken()).toBe(true)
+    }
+  })
+})
+
 describe("OAuthTokenPool.earliestUnlimit", () => {
   test("returns null when pool is empty", () => {
     const pool = new OAuthTokenPool(() => [], () => {}, () => 1000)

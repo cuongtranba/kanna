@@ -3,6 +3,7 @@ import { homedir } from "node:os"
 import OpenAI from "openai"
 import { getDataRootDir } from "../shared/branding"
 import type { LlmProviderSnapshot } from "../shared/types"
+import { ClaudeAuthErrorDetector } from "./auto-continue/auth-error-detector"
 import { ClaudeLimitDetector } from "./auto-continue/limit-detector"
 import { CodexAppServerManager } from "./codex-app-server"
 import { readLlmProviderSnapshot } from "./llm-provider"
@@ -137,6 +138,14 @@ function structuredOutputFromSdkMessage(message: unknown): unknown | null {
 export async function runClaudeStructured(args: Omit<StructuredQuickResponseArgs<unknown>, "parse">): Promise<unknown | null> {
   const pool = activeOAuthPool
   const picked = pool?.pickActive() ?? null
+  // Refuse to spawn when the pool has tokens but none are currently usable
+  // (all reserved, limited, errored, or disabled). Without this, env-less
+  // spawn would silently fall back to the CLI keychain auth path which
+  // typically holds a stale `claude /login` token → opaque 401 loops.
+  if (pool && pool.hasAnyToken() && !picked) {
+    console.warn("[quick-response] no usable OAuth token in pool; skipping claude provider")
+    return null
+  }
   if (picked && pool) pool.markUsed(picked.id)
   const env = envWithoutParentClaudeCode(process.env)
   if (picked) env.CLAUDE_CODE_OAUTH_TOKEN = picked.token
@@ -199,7 +208,17 @@ export async function runClaudeStructured(args: Omit<StructuredQuickResponseArgs
         pool.markLimited(picked.id, resetAt)
       }
     } else {
-      console.warn(`[quick-response] claude structured request failed: ${reason}`)
+      const authDetection = new ClaudeAuthErrorDetector().detect("", error)
+      if (authDetection && picked && pool) {
+        // Token rejected by Anthropic (401). Mark it errored so the next
+        // pickActive() skips it — otherwise quick-response would keep
+        // selecting the same dead token by lastUsedAt ordering and burn
+        // every subsequent call on the same 401.
+        console.warn(`[quick-response] claude auth error, marking token ${picked.id} errored: ${reason}`)
+        pool.markError(picked.id, authDetection.reason)
+      } else {
+        console.warn(`[quick-response] claude structured request failed: ${reason}`)
+      }
     }
     return null
   } finally {

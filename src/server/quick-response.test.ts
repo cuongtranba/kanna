@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import { fallbackTitleFromMessage, generateTitleForChat, generateTitleForChatDetailed } from "./generate-title"
-import { envWithoutParentClaudeCode, getQuickResponseWorkspace, QuickResponseAdapter } from "./quick-response"
+import { envWithoutParentClaudeCode, getQuickResponseWorkspace, QuickResponseAdapter, runClaudeStructured, setQuickResponseOAuthPool } from "./quick-response"
+import { OAuthTokenPool } from "./oauth-pool/oauth-token-pool"
+import type { OAuthTokenEntry } from "../shared/types"
 
 describe("QuickResponseAdapter", () => {
   test("returns the SDK structured result when configured and it validates", async () => {
@@ -480,3 +482,35 @@ describe("envWithoutParentClaudeCode", () => {
     expect(input.CLAUDECODE).toBe("1")
   })
 })
+
+describe("runClaudeStructured pool guard", () => {
+  test("refuses to spawn (returns null) when pool has tokens but none usable", async () => {
+    // All tokens errored → pickActive returns null, hasAnyToken returns true.
+    // Without the guard, the SDK would spawn the CLI with no token in env
+    // and fall back to the user's keychain login (typically expired),
+    // producing opaque 401 loops instead of a quick provider fallthrough.
+    const erroredToken: OAuthTokenEntry = {
+      id: "a", label: "a", token: "sk-ant-bad",
+      status: "error", limitedUntil: null,
+      lastUsedAt: null, lastErrorAt: 0, lastErrorMessage: "401",
+      addedAt: 0,
+    }
+    const pool = new OAuthTokenPool(() => [erroredToken], () => {}, () => 1000)
+    setQuickResponseOAuthPool(pool)
+    try {
+      const start = Date.now()
+      const result = await runClaudeStructured({
+        cwd: "/tmp",
+        task: "test",
+        prompt: "hi",
+        schema: { type: "object", properties: { x: { type: "string" } }, required: ["x"], additionalProperties: false },
+      })
+      // Must return null immediately — no Claude binary spawn.
+      expect(result).toBe(null)
+      expect(Date.now() - start).toBeLessThan(500)
+    } finally {
+      setQuickResponseOAuthPool(null)
+    }
+  })
+})
+
