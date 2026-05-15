@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.53.0](https://github.com/cuongtranba/kanna/compare/v0.52.0...v0.53.0) (2026-05-15)
+
+
+### Features
+
+* **oauth-pool:** add disabled token status to exclude accounts from pool ([#117](https://github.com/cuongtranba/kanna/issues/117)) ([1fb43ae](https://github.com/cuongtranba/kanna/commit/1fb43ae04b2e7e76282f83864fbdacf7e734cf86))
+* **update:** host-agnostic install with detection + KANNA_UPDATE_COMMAND override ([#119](https://github.com/cuongtranba/kanna/issues/119)) ([e9e66b2](https://github.com/cuongtranba/kanna/commit/e9e66b2d62b34751efacdc2b818db6733c986964))
+
+
+### Bug Fixes
+
+* **oauth-pool:** refuse spawn + rotate on 401 to stop keychain-fallback 401 loop ([#123](https://github.com/cuongtranba/kanna/issues/123)) ([99662fc](https://github.com/cuongtranba/kanna/commit/99662fca8cac12e53eaa8fc8019472ea73e5800c))
+
 ## [0.52.0](https://github.com/cuongtranba/kanna/compare/v0.51.0...v0.52.0) (2026-05-15)
 
 
