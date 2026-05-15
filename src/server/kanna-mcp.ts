@@ -1,10 +1,16 @@
-import { createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk"
+import { createSdkMcpServer, tool, type SdkMcpToolDefinition } from "@anthropic-ai/claude-agent-sdk"
 import { z } from "zod"
 import path from "node:path"
 import { stat } from "node:fs/promises"
+import { randomUUID } from "node:crypto"
 import { KANNA_MCP_SERVER_NAME } from "../shared/tools"
 import { inferProjectFileContentType } from "./uploads"
 import type { TunnelGateway } from "./cloudflare-tunnel/gateway"
+import { createAskUserQuestionTool } from "./kanna-mcp-tools/ask-user-question"
+import { createExitPlanModeTool } from "./kanna-mcp-tools/exit-plan-mode"
+import type { ToolCallbackService } from "./tool-callback"
+import type { ChatPermissionPolicy } from "../shared/permission-policy"
+import { POLICY_DEFAULT } from "../shared/permission-policy"
 
 export interface OfferDownloadArgs {
   projectId: string
@@ -13,7 +19,10 @@ export interface OfferDownloadArgs {
 
 export interface KannaMcpArgs extends OfferDownloadArgs {
   chatId?: string
+  sessionId?: string
   tunnelGateway?: TunnelGateway | null
+  toolCallback?: ToolCallbackService
+  chatPolicy?: ChatPermissionPolicy
 }
 
 export interface ResolvedOfferDownload {
@@ -104,65 +113,114 @@ Returns one of:
 - invalid_port: the port is outside the valid range
 `
 
-export function createKannaMcpServer(args: KannaMcpArgs) {
+export function buildKannaMcpTools(args: KannaMcpArgs): SdkMcpToolDefinition<any>[] {
   const tunnelGateway = args.tunnelGateway ?? null
   const chatId = args.chatId ?? null
+  const sessionId = args.sessionId ?? ""
+  const chatPolicy = args.chatPolicy ?? POLICY_DEFAULT
+  const cwd = args.localPath
 
+  const tools: SdkMcpToolDefinition<any>[] = [
+    tool(
+      "offer_download",
+      OFFER_DOWNLOAD_DESCRIPTION,
+      {
+        path: z.string().describe("Workspace-relative path to the file to offer for download"),
+        label: z.string().optional().describe("Optional human-readable label for the download link"),
+      },
+      async (input) => {
+        const result = await resolveOfferDownload(args, input)
+        if (!result.ok) {
+          return {
+            content: [{ type: "text" as const, text: result.error }],
+            isError: true,
+          }
+        }
+        return {
+          content: [{
+            type: "text" as const,
+            text: JSON.stringify({ kind: "download_offer", ...result.payload }),
+          }],
+        }
+      },
+    ),
+    tool(
+      "expose_port",
+      EXPOSE_PORT_DESCRIPTION,
+      {
+        port: z.number().int().min(1).max(65535).describe("Local TCP port the running service is listening on"),
+        reason: z.string().optional().describe("Brief description of the service (e.g. \"vite dev server\") shown to the user"),
+      },
+      async (input) => {
+        if (!tunnelGateway || !chatId) {
+          return {
+            content: [{ type: "text" as const, text: "expose_port is not available in this context" }],
+            isError: true,
+          }
+        }
+        const outcome = await tunnelGateway.proposeFromTool({ chatId, port: input.port })
+        if (outcome.status === "invalid_port") {
+          return {
+            content: [{ type: "text" as const, text: outcome.reason }],
+            isError: true,
+          }
+        }
+        return {
+          content: [{
+            type: "text" as const,
+            text: JSON.stringify({ kind: "expose_port_result", ...outcome, reason: input.reason ?? null }),
+          }],
+        }
+      },
+    ),
+  ]
+
+  if (process.env.KANNA_MCP_TOOL_CALLBACKS === "1" && args.toolCallback) {
+    const askTool = createAskUserQuestionTool({ toolCallback: args.toolCallback })
+    const exitPlanTool = createExitPlanModeTool({ toolCallback: args.toolCallback })
+
+    tools.push(
+      tool(
+        askTool.name,
+        "Ask the user a question with multiple choice answers",
+        askTool.schema.shape,
+        async (input, extra) => {
+          const requestId = (extra as { requestId?: string | number } | undefined)?.requestId
+          const toolUseId = requestId != null ? String(requestId) : randomUUID()
+          return await askTool.handler(input, {
+            chatId: chatId ?? "",
+            sessionId,
+            toolUseId,
+            cwd,
+            chatPolicy,
+          })
+        },
+      ),
+      tool(
+        exitPlanTool.name,
+        "Submit a plan for user approval before continuing",
+        exitPlanTool.schema.shape,
+        async (input, extra) => {
+          const requestId = (extra as { requestId?: string | number } | undefined)?.requestId
+          const toolUseId = requestId != null ? String(requestId) : randomUUID()
+          return await exitPlanTool.handler(input, {
+            chatId: chatId ?? "",
+            sessionId,
+            toolUseId,
+            cwd,
+            chatPolicy,
+          })
+        },
+      ),
+    )
+  }
+
+  return tools
+}
+
+export function createKannaMcpServer(args: KannaMcpArgs) {
   return createSdkMcpServer({
     name: KANNA_MCP_SERVER_NAME,
-    tools: [
-      tool(
-        "offer_download",
-        OFFER_DOWNLOAD_DESCRIPTION,
-        {
-          path: z.string().describe("Workspace-relative path to the file to offer for download"),
-          label: z.string().optional().describe("Optional human-readable label for the download link"),
-        },
-        async (input) => {
-          const result = await resolveOfferDownload(args, input)
-          if (!result.ok) {
-            return {
-              content: [{ type: "text" as const, text: result.error }],
-              isError: true,
-            }
-          }
-          return {
-            content: [{
-              type: "text" as const,
-              text: JSON.stringify({ kind: "download_offer", ...result.payload }),
-            }],
-          }
-        },
-      ),
-      tool(
-        "expose_port",
-        EXPOSE_PORT_DESCRIPTION,
-        {
-          port: z.number().int().min(1).max(65535).describe("Local TCP port the running service is listening on"),
-          reason: z.string().optional().describe("Brief description of the service (e.g. \"vite dev server\") shown to the user"),
-        },
-        async (input) => {
-          if (!tunnelGateway || !chatId) {
-            return {
-              content: [{ type: "text" as const, text: "expose_port is not available in this context" }],
-              isError: true,
-            }
-          }
-          const outcome = await tunnelGateway.proposeFromTool({ chatId, port: input.port })
-          if (outcome.status === "invalid_port") {
-            return {
-              content: [{ type: "text" as const, text: outcome.reason }],
-              isError: true,
-            }
-          }
-          return {
-            content: [{
-              type: "text" as const,
-              text: JSON.stringify({ kind: "expose_port_result", ...outcome, reason: input.reason ?? null }),
-            }],
-          }
-        },
-      ),
-    ],
+    tools: buildKannaMcpTools(args),
   })
 }

@@ -39,6 +39,22 @@ useStore(useShallow((state) => state.list ?? []))
 Tests can mount a component with effects and assert no loop warnings via
 `renderForLoopCheck` in `src/client/lib/testing/`.
 
+# Tool Callback Feature Flag (KANNA_MCP_TOOL_CALLBACKS)
+
+Setting `KANNA_MCP_TOOL_CALLBACKS=1` routes `AskUserQuestion` and
+`ExitPlanMode` through the durable approval protocol in
+`src/server/tool-callback.ts`. Pending requests survive server restart
+(resolved as `session_closed` fail-closed on boot) and are replayed to the
+client on reconnect as `pending_tool_request` transcript entries. Default is
+off; the SDK driver uses the legacy `canUseTool` → `onToolRequest` path.
+
+Optional `KANNA_SERVER_SECRET` env var stabilises HMAC tool-request ids
+across the process lifetime. Cross-restart idempotency does not matter
+because `recoverOnStartup()` fail-closes all pending records on boot.
+
+Periodic `tickTimeouts` driver fires every 5s; default request timeout is
+600s. Pending requests time out as `{kind:"deny", reason:"timeout"}`.
+
 # Tests
 
 `bun test` MUST pass locally before any push or PR. CI (`.github/workflows/test.yml`)

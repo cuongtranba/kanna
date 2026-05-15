@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test"
+import type { ToolRequest } from "../shared/permission-policy"
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import { existsSync } from "node:fs"
 import { join } from "node:path"
@@ -1448,5 +1449,181 @@ describe("project star", () => {
 
     const record = store.getChat(chatId)!
     expect(record.pendingForkSessionToken).toEqual({ provider: "claude", token: "fork-tok" })
+  })
+})
+
+function fixtureToolRequest(overrides: Partial<ToolRequest> = {}): ToolRequest {
+  return {
+    id: "id-1",
+    chatId: "chat-1",
+    sessionId: "sess-1",
+    toolUseId: "tu-1",
+    toolName: "ask_user_question",
+    arguments: { questions: [] },
+    canonicalArgsHash: "hash-1",
+    policyVerdict: "ask",
+    status: "pending",
+    createdAt: 1_000,
+    expiresAt: 1_000 + 600_000,
+    ...overrides,
+  }
+}
+
+describe("EventStore ToolRequest", () => {
+  test("putToolRequest then getToolRequest returns the same record", async () => {
+    const dataDir = await createTempDataDir()
+    const store = new EventStore(dataDir)
+    await store.initialize()
+    await store.putToolRequest(fixtureToolRequest())
+    const got = await store.getToolRequest("id-1")
+    expect(got?.toolUseId).toBe("tu-1")
+  })
+
+  test("listPendingToolRequests filters by chatId", async () => {
+    const dataDir = await createTempDataDir()
+    const store = new EventStore(dataDir)
+    await store.initialize()
+    await store.putToolRequest(fixtureToolRequest({ id: "a", chatId: "c1" }))
+    await store.putToolRequest(fixtureToolRequest({ id: "b", chatId: "c2" }))
+    await store.putToolRequest(fixtureToolRequest({ id: "c", chatId: "c1", status: "answered" }))
+    const pending = await store.listPendingToolRequests("c1")
+    expect(pending.map((r) => r.id).sort()).toEqual(["a"])
+  })
+
+  test("resolveToolRequest sets terminal status atomically", async () => {
+    const dataDir = await createTempDataDir()
+    const store = new EventStore(dataDir)
+    await store.initialize()
+    await store.putToolRequest(fixtureToolRequest())
+    await store.resolveToolRequest("id-1", {
+      status: "answered",
+      decision: { kind: "answer", payload: { ok: true } },
+      resolvedAt: 2_000,
+    })
+    const got = await store.getToolRequest("id-1")
+    expect(got?.status).toBe("answered")
+    expect(got?.decision?.kind).toBe("answer")
+  })
+
+  test("putToolRequest survives restart via replay", async () => {
+    const dataDir = await createTempDataDir()
+    const store1 = new EventStore(dataDir)
+    await store1.initialize()
+    await store1.putToolRequest(fixtureToolRequest({ id: "persisted-id", chatId: "c-1" }))
+    await store1.resolveToolRequest("persisted-id", {
+      status: "answered",
+      decision: { kind: "answer", payload: { ok: true } },
+      resolvedAt: 5_000,
+    })
+
+    // Simulate restart: drop instance, create a new one against the same dataDir.
+    const store2 = new EventStore(dataDir)
+    await store2.initialize()
+    const replayed = await store2.getToolRequest("persisted-id")
+    expect(replayed?.status).toBe("answered")
+    expect(replayed?.decision?.payload).toEqual({ ok: true })
+  })
+})
+
+describe("EventStore getRecentChatHistory pending replay", () => {
+  test("includes pending_tool_request synthetic entries for pending records", async () => {
+    const dataDir = await createTempDataDir()
+    const store = new EventStore(dataDir)
+    await store.initialize()
+
+    const project = await store.openProject("/tmp/project")
+    const chat = await store.createChat(project.id)
+
+    await store.putToolRequest(fixtureToolRequest({ id: "req-1", chatId: chat.id, createdAt: 5_000 }))
+
+    const { messages } = store.getRecentChatHistory(chat.id, 10)
+    const synthetic = messages.filter((m) => m.kind === "pending_tool_request")
+
+    expect(synthetic).toHaveLength(1)
+    expect(synthetic[0]).toMatchObject({
+      _id: "pending-tool-request-req-1",
+      createdAt: 5_000,
+      kind: "pending_tool_request",
+      toolRequestId: "req-1",
+      toolName: "ask_user_question",
+      arguments: { questions: [] },
+    })
+  })
+
+  test("does NOT include resolved tool requests as synthetic entries", async () => {
+    const dataDir = await createTempDataDir()
+    const store = new EventStore(dataDir)
+    await store.initialize()
+
+    const project = await store.openProject("/tmp/project")
+    const chat = await store.createChat(project.id)
+
+    await store.putToolRequest(fixtureToolRequest({ id: "req-resolved", chatId: chat.id }))
+    await store.resolveToolRequest("req-resolved", {
+      status: "answered",
+      decision: { kind: "answer", payload: { ok: true } },
+      resolvedAt: 2_000,
+    })
+
+    const { messages } = store.getRecentChatHistory(chat.id, 10)
+    const synthetic = messages.filter((m) => m.kind === "pending_tool_request")
+
+    expect(synthetic).toHaveLength(0)
+  })
+
+  test("synthetic entry id is deterministic across calls", async () => {
+    const dataDir = await createTempDataDir()
+    const store = new EventStore(dataDir)
+    await store.initialize()
+
+    const project = await store.openProject("/tmp/project")
+    const chat = await store.createChat(project.id)
+
+    await store.putToolRequest(fixtureToolRequest({ id: "req-dedup", chatId: chat.id }))
+
+    const first = store.getRecentChatHistory(chat.id, 10)
+    const second = store.getRecentChatHistory(chat.id, 10)
+
+    const firstSynthetic = first.messages.filter((m) => m.kind === "pending_tool_request")
+    const secondSynthetic = second.messages.filter((m) => m.kind === "pending_tool_request")
+
+    expect(firstSynthetic[0]._id).toBe(secondSynthetic[0]._id)
+    expect(firstSynthetic[0]._id).toBe("pending-tool-request-req-dedup")
+  })
+})
+
+describe("EventStore deleteChat prunes toolRequestsById", () => {
+  test("after putToolRequest + deleteChat, getToolRequest returns null for that chat's requests", async () => {
+    const dataDir = await createTempDataDir()
+    const store = new EventStore(dataDir)
+    await store.initialize()
+
+    const project = await store.openProject("/tmp/project")
+    const chat = await store.createChat(project.id)
+
+    await store.putToolRequest(fixtureToolRequest({ id: "req-to-prune", chatId: chat.id }))
+    expect(store.getToolRequest("req-to-prune")).not.toBeNull()
+
+    await store.deleteChat(chat.id)
+
+    expect(store.getToolRequest("req-to-prune")).toBeNull()
+  })
+
+  test("deleteChat only prunes tool requests for the deleted chat", async () => {
+    const dataDir = await createTempDataDir()
+    const store = new EventStore(dataDir)
+    await store.initialize()
+
+    const project = await store.openProject("/tmp/project")
+    const chatA = await store.createChat(project.id)
+    const chatB = await store.createChat(project.id)
+
+    await store.putToolRequest(fixtureToolRequest({ id: "req-a", chatId: chatA.id }))
+    await store.putToolRequest(fixtureToolRequest({ id: "req-b", chatId: chatB.id }))
+
+    await store.deleteChat(chatA.id)
+
+    expect(store.getToolRequest("req-a")).toBeNull()
+    expect(store.getToolRequest("req-b")).not.toBeNull()
   })
 })

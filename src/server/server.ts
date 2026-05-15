@@ -36,6 +36,7 @@ import { TunnelManager } from "./cloudflare-tunnel/tunnel-manager"
 import { TunnelLifecycle } from "./cloudflare-tunnel/lifecycle"
 import { BackgroundTaskRegistry } from "./background-tasks"
 import { subscribeOrphanPersistence, recoverOrphans } from "./orphan-persistence"
+import { initToolCallbackOnBoot, type ToolCallbackService } from "./tool-callback"
 
 function resolveCloudflaredPath(settingsPath: string): string {
   if (settingsPath !== CLOUDFLARE_TUNNEL_DEFAULTS.cloudflaredPath) {
@@ -122,6 +123,15 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
   const diffStore = new DiffStore(store.dataDir)
   const machineDisplayName = getMachineDisplayName()
   await store.initialize()
+  // Initialize tool-callback service; recoverOnStartup() fail-closes any
+  // pending tool requests left over from a previous server run.
+  // KANNA_SERVER_SECRET stabilises HMAC ids across the process lifetime.
+  // If unset, a fresh UUID is used — acceptable because recoverOnStartup()
+  // already clears all pending records on every restart.
+  const toolCallback: ToolCallbackService = await initToolCallbackOnBoot({
+    store,
+    serverSecret: process.env.KANNA_SERVER_SECRET ?? crypto.randomUUID(),
+  })
   const vapid = await loadOrGenerateVapidKeys(store.dataDir)
   const pushManager = new PushManager({
     store,
@@ -241,6 +251,7 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     tunnelGateway,
     backgroundTasks,
     oauthPool,
+    toolCallback,
     getSubagents: () => appSettings.getSnapshot().subagents,
     onStateChange: (chatId?: string, options?: { immediate?: boolean }) => {
       if (chatId) {
@@ -296,6 +307,10 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     void router.pruneStaleEmptyChats()
       .then(() => router.broadcastSnapshots())
   }, STALE_EMPTY_CHAT_PRUNE_INTERVAL_MS)
+
+  const toolCallbackTickInterval = setInterval(() => {
+    void toolCallback.tickTimeouts()
+  }, 5_000)
 
   const distDir = options.distDir ?? path.join(import.meta.dir, "..", "..", "dist", "client")
 
@@ -436,6 +451,7 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     scheduleManager.shutdown()
     tunnelGateway.shutdown()
     clearInterval(staleEmptyChatPruneInterval)
+    clearInterval(toolCallbackTickInterval)
     for (const chatId of [...agent.activeTurns.keys()]) {
       await agent.cancel(chatId)
     }

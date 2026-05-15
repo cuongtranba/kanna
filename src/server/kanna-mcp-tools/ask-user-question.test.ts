@@ -1,0 +1,73 @@
+import { describe, expect, test } from "bun:test"
+import { mkdtemp, rm } from "node:fs/promises"
+import { tmpdir } from "node:os"
+import path from "node:path"
+import { POLICY_DEFAULT } from "../../shared/permission-policy"
+import { EventStore } from "../event-store"
+import { createToolCallbackService } from "../tool-callback"
+import { createAskUserQuestionTool } from "./ask-user-question"
+
+async function newStore() {
+  const dir = await mkdtemp(path.join(tmpdir(), "kanna-mcp-aq-"))
+  const store = new EventStore(dir)
+  await store.initialize()
+  return { store, dir, cleanup: () => rm(dir, { recursive: true, force: true }) }
+}
+
+const handlerCtx = () => ({
+  chatId: "c1",
+  sessionId: "s1",
+  toolUseId: "tu1",
+  cwd: "/tmp",
+  chatPolicy: POLICY_DEFAULT,
+})
+
+describe("mcp__kanna__ask_user_question", () => {
+  test("calls policy.evaluate then routes to tool-callback", async () => {
+    const { store, cleanup } = await newStore()
+    try {
+      const svc = createToolCallbackService({
+        store, serverSecret: "k", now: () => 1, timeoutMs: 600_000,
+      })
+      const tool = createAskUserQuestionTool({ toolCallback: svc })
+      const inputArgs = {
+        questions: [{
+          text: "ok?",
+          header: "OK",
+          options: [{ label: "yes", description: "" }, { label: "no", description: "" }],
+          multiSelect: false,
+        }],
+      }
+      const promise = tool.handler(inputArgs, handlerCtx())
+      const pending = await store.listPendingToolRequests("c1")
+      expect(pending).toHaveLength(1)
+      await svc.answer(pending[0].id, { kind: "answer", payload: { answers: { "ok?": "yes" } } })
+      const result = await promise
+      expect(result.content[0].type).toBe("text")
+      expect(JSON.parse(result.content[0].text).answers).toEqual({ "ok?": "yes" })
+      expect(result.isError).toBeFalsy()
+    } finally { await cleanup() }
+  })
+
+  test("auto-deny → returns isError true", async () => {
+    const { store, cleanup } = await newStore()
+    try {
+      const svc = createToolCallbackService({
+        store, serverSecret: "k", now: () => 1, timeoutMs: 600_000,
+      })
+      const tool = createAskUserQuestionTool({ toolCallback: svc })
+      const result = await tool.handler(
+        {
+          questions: [{
+            text: "x",
+            header: "X",
+            options: [{ label: "a", description: "" }, { label: "b", description: "" }],
+            multiSelect: false,
+          }],
+        },
+        { ...handlerCtx(), chatPolicy: { ...POLICY_DEFAULT, defaultAction: "auto-deny" } },
+      )
+      expect(result.isError).toBe(true)
+    } finally { await cleanup() }
+  })
+})

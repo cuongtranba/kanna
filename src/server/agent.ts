@@ -46,6 +46,9 @@ import { OAuthTokenPool } from "./oauth-pool/oauth-token-pool"
 import { parseMentions, type ParsedMention } from "./mention-parser"
 import { SubagentOrchestrator, type ProviderRunStart } from "./subagent-orchestrator"
 import { buildSubagentProviderRun } from "./subagent-provider-run"
+import type { ToolCallbackService } from "./tool-callback"
+import type { ChatPermissionPolicy } from "../shared/permission-policy"
+import { POLICY_DEFAULT } from "../shared/permission-policy"
 
 export function resolveSpawnPaths(
   chat: Pick<ChatRecord, "id" | "stackBindings">,
@@ -169,6 +172,10 @@ interface AgentCoordinatorArgs {
      * single turn. Primary chats leave this unset and call sendPrompt later.
      */
     initialPrompt?: string
+    /** Routes AskUserQuestion/ExitPlanMode through tool-callback when KANNA_MCP_TOOL_CALLBACKS=1. */
+    toolCallback?: ToolCallbackService
+    /** Per-chat permission policy. Defaults to POLICY_DEFAULT if omitted. */
+    chatPolicy?: ChatPermissionPolicy
   }) => Promise<ClaudeSessionHandle>
   claudeLimitDetector?: LimitDetector
   codexLimitDetector?: LimitDetector
@@ -179,6 +186,10 @@ interface AgentCoordinatorArgs {
   throwOnClaudeSessionStart?: boolean
   backgroundTasks?: BackgroundTaskRegistry
   oauthPool?: OAuthTokenPool
+  /** Populated on boot; will be consumed by canUseTool in Task 11. */
+  toolCallback?: ToolCallbackService
+  /** Per-chat permission policy forwarded to startClaudeSession. Defaults to POLICY_DEFAULT if omitted. */
+  chatPolicy?: ChatPermissionPolicy
 }
 
 interface SendToStartingProfile {
@@ -642,6 +653,117 @@ class AsyncMessageQueue<T> implements AsyncIterable<T> {
   }
 }
 
+/** Args for the `buildCanUseTool` helper — exposed for unit testing. */
+export interface BuildCanUseToolArgs {
+  localPath: string
+  chatId?: string
+  sessionToken?: string | null
+  onToolRequest: (request: HarnessToolRequest) => Promise<unknown>
+  toolCallback?: ToolCallbackService
+  chatPolicy?: ChatPermissionPolicy
+}
+
+/**
+ * Builds the `canUseTool` callback passed to the SDK `query()`.
+ * Exported so unit tests can exercise the dual-routing logic without
+ * going through the full `startClaudeSession` factory.
+ */
+export function buildCanUseTool(args: BuildCanUseToolArgs): CanUseTool {
+  return async (toolName, input, options) => {
+    if (toolName !== "AskUserQuestion" && toolName !== "ExitPlanMode") {
+      return { behavior: "allow", updatedInput: input }
+    }
+
+    const tool = normalizeToolCall({
+      toolName,
+      toolId: options.toolUseID,
+      input: (input ?? {}) as Record<string, unknown>,
+    })
+
+    if (tool.toolKind !== "ask_user_question" && tool.toolKind !== "exit_plan_mode") {
+      return { behavior: "deny", message: "Unsupported tool request" }
+    }
+
+    // ── Flag-on path: route through tool-callback ──────────────────────────
+    if (process.env.KANNA_MCP_TOOL_CALLBACKS === "1" && args.toolCallback) {
+      const result = await args.toolCallback.submit({
+        chatId: args.chatId ?? "",
+        sessionId: args.sessionToken ?? "",
+        toolUseId: options.toolUseID,
+        toolName: `mcp__kanna__${tool.toolKind}`,
+        args: (tool.rawInput ?? {}) as Record<string, unknown>,
+        chatPolicy: args.chatPolicy ?? POLICY_DEFAULT,
+        cwd: args.localPath,
+      })
+
+      if (result.decision.kind === "deny") {
+        return { behavior: "deny", message: result.decision.reason ?? "denied" }
+      }
+
+      const payload = (result.decision.payload && typeof result.decision.payload === "object")
+        ? result.decision.payload as Record<string, unknown>
+        : {}
+
+      if (tool.toolKind === "ask_user_question") {
+        return {
+          behavior: "allow",
+          updatedInput: {
+            ...(tool.rawInput ?? {}),
+            questions: payload.questions ?? tool.input.questions,
+            answers: payload.answers ?? result.decision.payload,
+          },
+        } satisfies PermissionResult
+      }
+
+      // exit_plan_mode
+      if (payload.confirmed) {
+        return {
+          behavior: "allow",
+          updatedInput: { ...(tool.rawInput ?? {}), ...payload },
+        } satisfies PermissionResult
+      }
+
+      return {
+        behavior: "deny",
+        message: typeof payload.message === "string"
+          ? `User wants to suggest edits to the plan: ${payload.message}`
+          : "User wants to suggest edits to the plan before approving.",
+      } satisfies PermissionResult
+    }
+
+    // ── Legacy path (flag off OR toolCallback not provided) ────────────────
+    const result = await args.onToolRequest({ tool })
+
+    if (tool.toolKind === "ask_user_question") {
+      const record = result && typeof result === "object" ? result as Record<string, unknown> : {}
+      return {
+        behavior: "allow",
+        updatedInput: {
+          ...(tool.rawInput ?? {}),
+          questions: record.questions ?? tool.input.questions,
+          answers: record.answers ?? result,
+        },
+      } satisfies PermissionResult
+    }
+
+    const record = result && typeof result === "object" ? result as Record<string, unknown> : {}
+    const confirmed = Boolean(record.confirmed)
+    if (confirmed) {
+      return {
+        behavior: "allow",
+        updatedInput: { ...(tool.rawInput ?? {}), ...record },
+      } satisfies PermissionResult
+    }
+
+    return {
+      behavior: "deny",
+      message: typeof record.message === "string"
+        ? `User wants to suggest edits to the plan: ${record.message}`
+        : "User wants to suggest edits to the plan before approving.",
+    } satisfies PermissionResult
+  }
+}
+
 export function buildClaudeEnv(baseEnv: NodeJS.ProcessEnv, oauthToken: string | null): NodeJS.ProcessEnv {
   const { CLAUDECODE: _unused, ...rest } = baseEnv
   // Empty string is treated the same as null. Blank tokens are rejected at persistence time
@@ -665,61 +787,19 @@ async function startClaudeSession(args: {
   onToolRequest: (request: HarnessToolRequest) => Promise<unknown>
   systemPromptOverride?: string
   initialPrompt?: string
+  /** Routes AskUserQuestion/ExitPlanMode through tool-callback when KANNA_MCP_TOOL_CALLBACKS=1. */
+  toolCallback?: ToolCallbackService
+  /** Per-chat permission policy. Defaults to POLICY_DEFAULT if omitted. */
+  chatPolicy?: ChatPermissionPolicy
 }): Promise<ClaudeSessionHandle> {
-  const canUseTool: CanUseTool = async (toolName, input, options) => {
-    if (toolName !== "AskUserQuestion" && toolName !== "ExitPlanMode") {
-      return {
-        behavior: "allow",
-        updatedInput: input,
-      }
-    }
-
-    const tool = normalizeToolCall({
-      toolName,
-      toolId: options.toolUseID,
-      input: (input ?? {}) as Record<string, unknown>,
-    })
-
-    if (tool.toolKind !== "ask_user_question" && tool.toolKind !== "exit_plan_mode") {
-      return {
-        behavior: "deny",
-        message: "Unsupported tool request",
-      }
-    }
-
-    const result = await args.onToolRequest({ tool })
-
-    if (tool.toolKind === "ask_user_question") {
-      const record = result && typeof result === "object" ? result as Record<string, unknown> : {}
-      return {
-        behavior: "allow",
-        updatedInput: {
-          ...(tool.rawInput ?? {}),
-          questions: record.questions ?? tool.input.questions,
-          answers: record.answers ?? result,
-        },
-      } satisfies PermissionResult
-    }
-
-    const record = result && typeof result === "object" ? result as Record<string, unknown> : {}
-    const confirmed = Boolean(record.confirmed)
-    if (confirmed) {
-      return {
-        behavior: "allow",
-        updatedInput: {
-          ...(tool.rawInput ?? {}),
-          ...record,
-        },
-      } satisfies PermissionResult
-    }
-
-    return {
-      behavior: "deny",
-      message: typeof record.message === "string"
-        ? `User wants to suggest edits to the plan: ${record.message}`
-        : "User wants to suggest edits to the plan before approving.",
-    } satisfies PermissionResult
-  }
+  const canUseTool = buildCanUseTool({
+    localPath: args.localPath,
+    chatId: args.chatId,
+    sessionToken: args.sessionToken,
+    onToolRequest: args.onToolRequest,
+    toolCallback: args.toolCallback,
+    chatPolicy: args.chatPolicy,
+  })
 
   const promptQueue = new AsyncMessageQueue<SDKUserMessage>()
 
@@ -742,7 +822,10 @@ async function startClaudeSession(args: {
           projectId: args.projectId,
           localPath: args.localPath,
           chatId: args.chatId,
+          sessionId: args.sessionToken ?? undefined,
           tunnelGateway: args.tunnelGateway ?? null,
+          toolCallback: args.toolCallback,
+          chatPolicy: args.chatPolicy,
         }),
       },
       systemPrompt: args.systemPromptOverride != null
@@ -812,6 +895,9 @@ async function startClaudeSession(args: {
     close: () => {
       promptQueue.close()
       q.close()
+      if (args.toolCallback && args.sessionToken) {
+        void args.toolCallback.cancelAllForSession(args.sessionToken, "session_closed")
+      }
     },
   }
 }
@@ -881,6 +967,8 @@ export class AgentCoordinator {
   private readonly tunnelGateway: TunnelGateway | null
   private readonly backgroundTasks: BackgroundTaskRegistry | null
   private readonly oauthPool: OAuthTokenPool | null
+  private readonly toolCallback: ToolCallbackService | null
+  private readonly chatPolicy: ChatPermissionPolicy
   private readonly pendingBashCalls = new Map<string, { command: string; chatId: string; isBg: boolean }>()
   private readonly subagentPendingResolvers = new Map<
     string,
@@ -919,6 +1007,8 @@ export class AgentCoordinator {
     this.tunnelGateway = args.tunnelGateway ?? null
     this.backgroundTasks = args.backgroundTasks ?? null
     this.oauthPool = args.oauthPool ?? null
+    this.toolCallback = args.toolCallback ?? null
+    this.chatPolicy = args.chatPolicy ?? POLICY_DEFAULT
     this.backgroundTasks?.setStrategies({
       closeStream: async (task) => {
         await this.stopDraining(task.chatId)
@@ -964,6 +1054,10 @@ export class AgentCoordinator {
 
   getSlashCommandsLoadingChatIds(): Set<string> {
     return new Set(this.slashCommandsInFlight)
+  }
+
+  get toolCallbackService(): ToolCallbackService | null {
+    return this.toolCallback
   }
 
   private emitStateChange(chatId?: string, options?: { immediate?: boolean }) {
@@ -1498,6 +1592,8 @@ export class AgentCoordinator {
         chatId: args.chatId,
         tunnelGateway: this.tunnelGateway,
         onToolRequest: args.onToolRequest,
+        toolCallback: this.toolCallback ?? undefined,
+        chatPolicy: this.chatPolicy,
       })
 
       session = {

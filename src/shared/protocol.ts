@@ -26,6 +26,7 @@ import type {
   UpdateSnapshot,
   EditorPreset,
 } from "./types"
+import type { ToolRequestDecision } from "./permission-policy"
 
 export type { EditorPreset }
 
@@ -238,6 +239,12 @@ export type ClientCommand =
     }
   | { type: "chat.loadHistory"; chatId: string; beforeCursor: string; limit: number }
   | { type: "chat.respondTool"; chatId: string; toolUseId: string; result: unknown }
+  | {
+      type: "chat.toolRequestAnswer"
+      chatId: string
+      toolRequestId: string
+      decision: ToolRequestDecision
+    }
   | { type: "chat.respondSubagentTool"; chatId: string; runId: string; toolUseId: string; result: unknown }
   | {
       type: "chat.cancelSubagentRun"

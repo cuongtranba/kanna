@@ -21,8 +21,10 @@ import { StatusMessage } from "../components/messages/StatusMessage"
 import { CollapsedToolGroup } from "../components/messages/CollapsedToolGroup"
 import { OpenLocalLinkProvider, type OpenLocalLinkTarget } from "../components/messages/shared"
 import { AutoContinueCard } from "../components/chat-ui/AutoContinueCard"
+import { PendingToolRequestMessage } from "../components/messages/PendingToolRequestMessage"
 import { CHAT_SELECTION_ZONE_ATTRIBUTE } from "./chatFocusPolicy"
 import type { AutoContinueSchedule } from "../../shared/types"
+import type { ToolRequestDecision } from "../../shared/permission-policy"
 
 const SPECIAL_TOOL_NAMES = new Set(["AskUserQuestion", "ExitPlanMode", "TodoWrite"])
 
@@ -275,6 +277,10 @@ function sameMessage(left: HydratedTranscriptMessage, right: HydratedTranscriptM
     // schedule state changes propagate via outer comparator's prev.schedules !== next.schedules check (line 681)
     case "auto_continue_prompt":
       return right.kind === "auto_continue_prompt" && left.scheduleId === right.scheduleId
+    case "pending_tool_request":
+      return right.kind === "pending_tool_request"
+        && left.toolRequestId === right.toolRequestId
+        && left.toolName === right.toolName
   }
 }
 
@@ -347,6 +353,8 @@ export function useStableResolvedRows(rows: ResolvedTranscriptRow[]) {
   return result.result
 }
 
+const NOOP_TOOL_REQUEST_ANSWER = (_toolRequestId: string, _decision: ToolRequestDecision): void => {}
+
 interface TranscriptSingleRowProps {
   message: HydratedTranscriptMessage
   index: number
@@ -365,6 +373,7 @@ interface TranscriptSingleRowProps {
     answers: AskUserQuestionAnswerMap
   ) => void
   onExitPlanModeConfirm: (toolUseId: string, confirmed: boolean, clearContext?: boolean, message?: string) => void
+  onToolRequestAnswer?: (toolRequestId: string, decision: ToolRequestDecision) => void
   schedules: Record<string, AutoContinueSchedule>
   onAutoContinueAccept: (scheduleId: string, scheduledAt: number) => void
   onAutoContinueReschedule: (scheduleId: string, scheduledAt: number) => void
@@ -385,6 +394,7 @@ const TranscriptSingleRow = memo(function TranscriptSingleRow({
   isFinalStatus,
   onAskUserQuestionSubmit,
   onExitPlanModeConfirm,
+  onToolRequestAnswer = NOOP_TOOL_REQUEST_ANSWER,
   schedules,
   onAutoContinueAccept,
   onAutoContinueReschedule,
@@ -487,6 +497,15 @@ const TranscriptSingleRow = memo(function TranscriptSingleRow({
       case "status":
         rendered = isFinalStatus ? <StatusMessage key={message.id} message={message} /> : null
         break
+      case "pending_tool_request":
+        rendered = (
+          <PendingToolRequestMessage
+            key={message.id}
+            entry={message}
+            onAnswer={onToolRequestAnswer}
+          />
+        )
+        break
     }
   }
 
@@ -514,6 +533,7 @@ const TranscriptSingleRow = memo(function TranscriptSingleRow({
   && prev.isFinalStatus === next.isFinalStatus
   && prev.onAskUserQuestionSubmit === next.onAskUserQuestionSubmit
   && prev.onExitPlanModeConfirm === next.onExitPlanModeConfirm
+  && prev.onToolRequestAnswer === next.onToolRequestAnswer
   && prev.schedules === next.schedules
   && prev.onAutoContinueAccept === next.onAutoContinueAccept
   && prev.onAutoContinueReschedule === next.onAutoContinueReschedule
@@ -631,6 +651,7 @@ interface KannaTranscriptProps {
     answers: AskUserQuestionAnswerMap
   ) => void
   onExitPlanModeConfirm: (toolUseId: string, confirmed: boolean, clearContext?: boolean, message?: string) => void
+  onToolRequestAnswer?: (toolRequestId: string, decision: ToolRequestDecision) => void
   schedules?: Record<string, AutoContinueSchedule>
   onAutoContinueAccept?: (scheduleId: string, scheduledAt: number) => void
   onAutoContinueReschedule?: (scheduleId: string, scheduledAt: number) => void
@@ -690,6 +711,7 @@ interface KannaTranscriptRowProps {
     answers: AskUserQuestionAnswerMap
   ) => void
   onExitPlanModeConfirm: (toolUseId: string, confirmed: boolean, clearContext?: boolean, message?: string) => void
+  onToolRequestAnswer?: (toolRequestId: string, decision: ToolRequestDecision) => void
   schedules: Record<string, AutoContinueSchedule>
   onAutoContinueAccept: (scheduleId: string, scheduledAt: number) => void
   onAutoContinueReschedule: (scheduleId: string, scheduledAt: number) => void
@@ -702,6 +724,7 @@ export const KannaTranscriptRow = memo(function KannaTranscriptRow({
   onToolGroupExpandedChange,
   onAskUserQuestionSubmit,
   onExitPlanModeConfirm,
+  onToolRequestAnswer,
   schedules,
   onAutoContinueAccept,
   onAutoContinueReschedule,
@@ -736,6 +759,7 @@ export const KannaTranscriptRow = memo(function KannaTranscriptRow({
       isFinalStatus={row.isFinalStatus}
       onAskUserQuestionSubmit={onAskUserQuestionSubmit}
       onExitPlanModeConfirm={onExitPlanModeConfirm}
+      onToolRequestAnswer={onToolRequestAnswer}
       schedules={schedules}
       onAutoContinueAccept={onAutoContinueAccept}
       onAutoContinueReschedule={onAutoContinueReschedule}
@@ -747,6 +771,7 @@ export const KannaTranscriptRow = memo(function KannaTranscriptRow({
   if (prev.onToolGroupExpandedChange !== next.onToolGroupExpandedChange) return false
   if (prev.onAskUserQuestionSubmit !== next.onAskUserQuestionSubmit) return false
   if (prev.onExitPlanModeConfirm !== next.onExitPlanModeConfirm) return false
+  if (prev.onToolRequestAnswer !== next.onToolRequestAnswer) return false
   if (prev.schedules !== next.schedules) return false
   if (prev.onAutoContinueAccept !== next.onAutoContinueAccept) return false
   if (prev.onAutoContinueReschedule !== next.onAutoContinueReschedule) return false
@@ -794,6 +819,7 @@ function KannaTranscriptImpl({
   onOpenLocalLink,
   onAskUserQuestionSubmit,
   onExitPlanModeConfirm,
+  onToolRequestAnswer = NOOP_TOOL_REQUEST_ANSWER,
   schedules = EMPTY_SCHEDULES,
   onAutoContinueAccept = NOOP_ACCEPT,
   onAutoContinueReschedule = NOOP_RESCHEDULE,
@@ -862,6 +888,7 @@ function KannaTranscriptImpl({
               onToolGroupExpandedChange={handleToolGroupExpandedChange}
               onAskUserQuestionSubmit={onAskUserQuestionSubmit}
               onExitPlanModeConfirm={onExitPlanModeConfirm}
+              onToolRequestAnswer={onToolRequestAnswer}
               schedules={schedules}
               onAutoContinueAccept={onAutoContinueAccept}
               onAutoContinueReschedule={onAutoContinueReschedule}

@@ -1,0 +1,952 @@
+# Claude PTY Driver — Design
+
+**Date:** 2026-05-14
+**Status:** Draft v18 — sixteenth codex adversarial pass applied (pidfd downgraded to within-process optimization; ProcessIdentity tuple is the sole restart-safe recovery mechanism), awaiting user review
+**Author:** session-collaborative
+**Related code:** `src/server/agent.ts`, `src/server/terminal-manager.ts`, `src/server/harness-types.ts`, `src/server/kanna-mcp.ts`
+
+## Motivation
+
+Anthropic is moving the `@anthropic-ai/claude-agent-sdk` and `claude -p` (print mode) to API-metered pricing. Kanna currently uses `query()` from the SDK, which means existing Pro/Max subscribers will be billed per token instead of their flat subscription rate.
+
+Only the interactive `claude` CLI session (running with OAuth keychain auth, no `ANTHROPIC_API_KEY`) continues to use subscription billing.
+
+This spec describes adding a second driver behind Kanna's existing `ClaudeSessionHandle` interface that spawns `claude` interactively over a pseudo-terminal (PTY), reads the structured session transcript from disk, and exposes the same event stream the SDK driver produces.
+
+## Goals
+
+- Drop-in replacement for the SDK driver. Same `ClaudeSessionHandle` contract.
+- Preserve Pro/Max subscription billing for users on those plans.
+- Maintain feature parity with current SDK-driven flow (model switching, plan mode, MCP tools, subagents, attachments, slash commands, resume, fork).
+- Lazy lifecycle: idle sessions stop, focused chats spawn or wake.
+
+## Non-goals
+
+- Replace the SDK driver. Both drivers live behind a feature flag (`KANNA_CLAUDE_DRIVER=sdk|pty`, default `sdk`).
+- 100% byte-identical event streams. Some details (precise spinner state, partial-token streaming cadence) may differ.
+- Multi-tenant subscription sharing. Designed for single-user-on-own-machine, matching Anthropic Max ToS.
+- Codex provider port — a separate spec if needed.
+
+## Architecture
+
+### Driver selection
+
+```
+ws-router → AgentCoordinator
+              │
+              ▼
+       startClaudeSession (injected fn, returns ClaudeSessionHandle)
+              │
+       ┌──────┴──────────────┐
+       │                     │
+  startClaudeSDK (existing)  startClaudeSessionPTY (new)
+                                   │
+                            ┌──────┼────────────────────┐
+                            ▼      ▼                    ▼
+                    Bun.Terminal   JSONL tail      Slash/control
+                    (input + TTY)  (~/.claude/...) (model, perm, exit)
+                            │      │                    │
+                            └──────┴────────────────────┘
+                                       claude process
+                                       (OAuth, --session-id, --dangerously-skip-permissions)
+```
+
+### Module layout (new files)
+
+```
+src/server/claude-pty/
+  ├── driver.ts            # startClaudeSessionPTY → ClaudeSessionHandle
+  ├── pty-process.ts       # Bun.Terminal + Bun.spawn wrapper
+  ├── jsonl-reader.ts      # tail w/ (byteOffset,lastEventId) bookmark + dedupe
+  ├── jsonl-to-event.ts    # JSONL line → HarnessEvent
+  ├── frame-parser.ts      # minimal — only slash-cmd ACK detection
+  ├── slash-commands.ts    # /model, /permissions, /exit
+  ├── auth.ts              # verify credentials present, reject ANTHROPIC_API_KEY
+  ├── account-home.ts      # per-account $HOME dirs, credential sync to/from oauthPool, reaper
+  ├── allowlist-preflight.ts # probe --tools semantics, cache by binary-sha+tools-string
+  ├── runtime-dir.ts       # per-session 0700 dir, cleanup on COOLING
+  ├── uds-server.ts        # Unix-domain socket: kanna-mcp + optional hook callbacks
+  ├── pretooluse-hook.ts   # OPTIONAL hook script (belt-and-suspenders)
+  ├── permission-gate.ts   # policy.evaluate + deny/allow lists + durable ToolRequest store
+  ├── tool-callback.ts     # unified durable approval protocol
+  ├── lifecycle.ts         # ClaudeSessionLifecycle (lazy spawn, idle stop, LRU)
+  └── *.test.ts
+
+src/server/kanna-mcp/                              # extended
+  ├── tools/bash.ts        # mcp__kanna__bash (replaces CLI Bash)
+  ├── tools/edit.ts        # mcp__kanna__edit
+  ├── tools/write.ts       # mcp__kanna__write
+  ├── tools/webfetch.ts    # mcp__kanna__webfetch
+  ├── tools/websearch.ts   # mcp__kanna__websearch
+  ├── tools/ask-user-question.ts
+  ├── tools/exit-plan-mode.ts
+  └── tools/*.test.ts
+```
+
+Note: the new `mcp__kanna__bash/edit/write/...` MCP tools are usable by **both drivers**. The SDK driver also routes through them once the refactor lands. `canUseTool` in the SDK driver becomes a thin pass-through to `policy.evaluate` over the same `permission-gate.ts`. Single source of truth.
+
+`AgentCoordinator` and `ws-router` are unchanged. Only the injected factory differs.
+
+### Output path: JSONL transcript tail (primary)
+
+Claude Code writes every event for an interactive session to:
+
+```
+~/.claude/projects/<encoded-cwd>/<session-uuid>.jsonl
+```
+
+Each line is a JSON object. Types:
+
+- `{ type: "system", subtype: "init", session_id, model, ... }`
+- `{ type: "user", message: { content: [...] } }`
+- `{ type: "assistant", message: { content: [{type:"text"|"tool_use"|"thinking"}] } }`
+- `{ type: "tool_result", tool_use_id, content }`
+
+We control `<session-uuid>` via `--session-id <uuid>`, so we know the exact file path before spawning.
+
+### Tail semantics (cold-wake-safe)
+
+Naive "watch and read from EOF" is wrong: cold-resume must observe the new `system.init` line but must **not** re-emit historical messages already persisted in `EventStore`. Naive "read from byte 0" floods the UI with duplicates.
+
+Contract:
+
+1. **Per-session bookmark.** `EventStore` keeps a record per `sessionId` containing `{ filePath, byteOffset, lastEventId, lastEventHash }`. Updated transactionally after every successful emit.
+2. **Event ID source.** Each JSONL line carries a `uuid` / `message.id` (CLI standard). For lines lacking an ID (rare — `system` subtypes), we derive `lineHash = sha256(rawBytes)`. The pair `(byteOffset, eventId|lineHash)` is the dedupe key.
+3. **Spawn-then-tail order.** Before `Bun.spawn`, we record the bookmark we plan to start from (offset + lastEventId from prior session or `null` for new). After spawn, the reader stats the file:
+   - If file does not exist yet → poll up to `KANNA_PTY_WARM_TIMEOUT_MS` for creation.
+   - If size < `byteOffset` → file was truncated/rotated. Re-scan from byte 0 in dedupe mode (emit only events whose ID is not in `EventStore`).
+   - Otherwise → seek to `byteOffset`, read forward.
+4. **Init event handling.** On every spawn we expect exactly one `system.init`. The reader treats it as a control event (updates `accountInfo`, `sessionToken`) without producing a duplicate transcript entry — its idempotency is checked by `sessionId + spawnEpoch` (not by ID, since the CLI may regenerate it on `--resume`).
+5. **Atomic emit + bookmark advance.** Each event is appended to `EventStore` and the bookmark advanced in the same transaction. Crash between emit and advance is handled by the dedupe pass on next start.
+6. **Fork handling.** `--fork-session` creates a new JSONL with a new UUID. New bookmark row created; old row archived but kept for back-reference. `EventStore.forkChat` (already exists, see commit `7f76ac9`) is extended to copy bookmark state.
+7. **Reader lifetime.** Lives for the whole `IDLE+ACTIVE` window. Continues watching during prompt sends. Tears down on `COOLING`, persisting final bookmark before exit.
+8. **Race: spawn writes init before watcher registers.** Reader pre-registers the watcher and pre-stats the file before sending the first PTY byte. If the file appears between pre-stat and watch registration, the next read covers it.
+9. **Tests.** `jsonl-tail.test.ts` covers: cold wake (no duplicates), spawn from empty bookmark, mid-stream crash recovery, file truncation, file rotation, init replay on resume, fork copy, watcher race.
+
+Each parsed line maps to an existing `HarnessEvent` (`transcript` / `session_token` / `rate_limit`) and is yielded into the `AsyncIterable<HarnessEvent>` consumed by `AgentCoordinator`.
+
+### PTY role: input + TTY presence
+
+The PTY is used only for:
+
+1. Holding a real TTY open so `claude` runs in interactive mode and uses subscription billing.
+2. Sending user prompts (`proc.write(text + "\r")`).
+3. Sending slash commands (`/model`, `/permissions`, `/exit`).
+4. Sending Esc to interrupt.
+
+Output bytes from the PTY are fed to a `@xterm/headless` instance for minimal slash-command-ACK detection only. We do **not** scrape assistant text or tool calls from the TUI — that all comes from JSONL.
+
+### Settings file written per session
+
+At spawn we write `.claude/settings.local.json` in the chat's working dir:
+
+```json
+{
+  "tui": "default",
+  "syntaxHighlightingDisabled": true,
+  "showThinkingSummaries": true,
+  "spinnerTipsEnabled": false,
+  "showTurnDuration": false
+}
+```
+
+This switches the TUI to main-screen append mode (simpler PTY parsing for ACKs) and suppresses cosmetic noise.
+
+## Control plane
+
+| `ClaudeSessionHandle` method | PTY action | Wait condition |
+|---|---|---|
+| `sendPrompt(text)` | `proc.write(text + "\r")` — relies on CLI's built-in input queue if turn in progress | new `user` line in JSONL |
+| `interrupt()` | `proc.write("\x1b")` (Esc). Second Esc within 1s if still busy. | next assistant Stop in JSONL or 2s timeout |
+| `setModel(m)` | `proc.write("/model " + m + "\r")` | TUI scrapes "Model:" confirmation OR next JSONL `system` event |
+| `setPermissionMode(planMode)` | If toggling: restart PTY with `--permission-mode plan` / `bypassPermissions` and `--resume`. Slash flow `/permissions` is interactive and not reliably scriptable. | new session_init JSONL event |
+| `getAccountInfo()` | Return cached value parsed from JSONL `system.init` at startup | n/a |
+| `getSupportedCommands()` | Scrape `/help` output once at startup, cache. Static fallback list if scrape fails. | startup |
+| `close()` | `proc.write("/exit\r")`, kill after 2s if still running | proc exit |
+
+### Prompt queueing
+
+`claude` CLI has a built-in input queue: typing while the assistant is working enqueues the next message for delivery at turn end. We rely on this — `sendPrompt` always writes immediately, no server-side queue.
+
+Server tracks "queued" status by comparing prompt-send time against the last JSONL Stop event. UI shows a "queued" badge until the matching `user` line appears in JSONL.
+
+### Steered messages (mid-turn)
+
+Current SDK behavior wraps mid-turn user messages in `STEERED_MESSAGE_PREFIX`. In PTY mode the CLI's built-in queue delivers them after the current turn ends — there is no mid-turn injection. This is documented as a tradeoff; in practice the delay is sub-second to seconds depending on turn length.
+
+### Attachments
+
+- Text and file attachments: existing `buildPromptText` injection works unchanged.
+- File paths: prefer `@path` syntax (CLI native) when path exists on disk; fall back to the existing `<kanna-attachments>` hint block.
+- Image attachments: image saved to chat dir by Kanna (already happens), referenced via `@path`. No clipboard paste over PTY.
+
+## Special-case tools: `ask_user_question` and `exit_plan_mode`
+
+These two tools are intercepted in the SDK driver via `canUseTool`, which routes them through `HarnessToolRequest` to the Kanna UI for user response.
+
+`canUseTool` does not exist in interactive mode. We refactor both tools to live inside `kanna-mcp` (the MCP server Kanna already injects). The same MCP-routed implementation is used by the SDK driver — the SDK's `canUseTool` continues only to enforce the dangerous-tool deny-list (in PTY mode that role is taken by the per-chat unsafe gate; see "Permission enforcement").
+
+### Callback protocol (durable, idempotent, fail-closed)
+
+The MCP tool implementation does **not** simply HTTP-POST and await. The contract is:
+
+1. **Request identity.** `toolRequestId = hex(HMAC_SHA256(serverSecret, chatId || sessionId || toolUseId || toolName || canonicalArgsHash))`. Deterministic across retries of the **exact same call**, but any change in `toolName` or `arguments` produces a new id. `canonicalArgsHash = sha256(canonicalJson(arguments))` where canonical JSON sorts object keys, strips whitespace, and normalizes numerics. Embed `chatId`, `sessionId`, `toolUseId`, `toolName`, `arguments`, `canonicalArgsHash`, `createdAt`. Idempotent retry rule (rule 4) requires **all** of `toolUseId + toolName + canonicalArgsHash` to match; mismatched retries with a duplicate `toolUseId` fail closed with `{decision:"deny", reason:"argument_mismatch"}` and emit a security audit event.
+2. **Durable storage.** Persist the request to `EventStore` (same store that survives server restart) under key `pendingToolRequests[chatId][toolRequestId]` with status `pending`. The MCP tool body waits on a server-side promise keyed by `toolRequestId`.
+3. **Server-side state machine.** Server promotes the request through `pending → answered | timeout | canceled | session_closed`. Each terminal transition stores the final answer or reason and resolves all waiters with that result.
+4. **Timeout.** Default 600s (configurable). On timeout the request resolves with `{ error: "timeout" }`, MCP tool returns that to the model, model retries or proceeds. Timeout is **server-driven** — never depends on PTY responsiveness.
+5. **Cancellation.** Server cancels the request and resolves with `{ error: "canceled" }` on: chat deleted, PTY shutdown (any state transition to COOLING), explicit user cancel from UI, server shutdown (cancellations flushed before exit).
+6. **Idempotency.** If the model retries `tool_use` with the same `toolUseId`, MCP body computes the same `toolRequestId`. If a stored terminal answer exists, return it without re-prompting the UI. If `pending`, attach a new waiter to the existing promise.
+7. **Reconnect / resume.** On wake from COLD, server re-emits pending requests to the UI from `EventStore` so the user sees "still waiting on this tool". The MCP-side waiter on the new PTY's `toolUseId` resolves from the same store key once the user answers (resume preserves toolUseId via `--resume`).
+8. **Auth.** MCP→server callbacks go over a **Unix-domain socket** (`<runtimeDir>/kanna-mcp.sock`, mode `0600`) — not a TCP port. Per-PTY ephemeral token (32-byte random, in-memory only, rotated each spawn) bound to `(chatId, sessionId, pid)` is sent in a request header. Server validates header + accepts that connecting peer's pid via `SO_PEERCRED` (Linux) / `LOCAL_PEERCRED` (macOS).
+9. **UI surface.** Pending tool requests render in the chat thread as a blocking card with cancel button. Status badge on chat row shows ⏸ until resolved.
+10. **Tests.** `mcp-tool-callback.test.ts` covers: timeout, cancel-on-close, cancel-on-shutdown, idempotent retry, resume-with-pending, duplicate toolUseId.
+
+This refactor lands behind feature flag `KANNA_MCP_TOOL_CALLBACKS=1` and is shipped **before** PTY driver phase 1 so both drivers exercise it.
+
+## OAuth / subscription auth (no helper, no bearer; per-account HOME)
+
+**Design choice:** PTY driver does **not** ship an `apiKeyHelper`. There is no Kanna-controlled bearer token over UDS, and nothing for model-executed subprocesses to exfiltrate via FD inheritance.
+
+Auth happens through file-based credentials in an isolated `$HOME` per account, so `oauthPool` rotation is preserved.
+
+### How auth works
+
+1. User logs into one or more Claude accounts. Each `(accountId, oauthToken)` pair is held by Kanna's existing `oauthPool` (already used by SDK driver).
+2. Before spawn, Kanna picks `account = oauthPool.acquire(chatId)`. The chosen account dictates `$HOME` for this PTY:
+   ```
+   <runtimeDir>/accounts/<accountId>/
+     ├── .claude/
+     │   └── .credentials.json   # 0600, contents = oauthPool's current token for this account
+     └── (sandboxed)
+   ```
+3. PTY spawns with `HOME=<runtimeDir>/accounts/<accountId>` and `ANTHROPIC_API_KEY` unset. Claude reads `$HOME/.claude/.credentials.json` and uses the subscription path.
+4. `claude` rotates the access token within an account via its native OAuth refresh — Kanna does not interpose. When refresh produces a new access token, claude writes back to the same `.credentials.json`; Kanna treats that file as the source of truth for that account and syncs it back to `oauthPool` on file change (`fs.watch`).
+5. **Cross-account rotation** (rate-limit hit, admin rebalance, user switch) requires respawn — the new PTY uses a different `$HOME`. Cost ~1-2s cold spawn.
+
+### Account selection policy
+
+Reuse the existing `oauthPool.acquire(chatId)` interface from the SDK driver:
+
+- Sticky-by-chat by default — same chat keeps the same account unless rate-limited or explicitly switched.
+- Rate-limit detected in JSONL `system` event → `oauthPool.markRateLimited(account)` → next PTY for that chat acquires a different account.
+- User-visible "switch account" action in chat UI → COOLING + respawn with new account.
+- All accounts rate-limited → `oauthPool.acquire` returns null → UI shows "All accounts rate-limited until <resetAt>" instead of spawning.
+
+### Why `--add-account` / shared keychain doesn't work
+
+- `claude` only knows one default identity per `$HOME`. There's no documented multi-account selector.
+- macOS Keychain entries are user-scoped and would conflict across concurrent PTYs.
+- Per-account `$HOME` is the only clean isolation boundary.
+
+### Process model clarification (critical for sandbox correctness)
+
+Three distinct sandbox scopes operate here:
+
+1. **Kanna server process.** Unsandboxed (or under whatever sandbox the user runs the Kanna binary in). Owns `oauthPool`, the kanna-mcp request router, the UDS socket, and is the parent of all PTY spawns and tool subprocesses.
+2. **`claude` PTY process** (and any descendants it spawns directly). Runs under the per-spawn `sandbox-exec` / `bwrap` profile.
+3. **Tool subprocesses** (e.g., the bash invocation produced by `mcp__kanna__bash`). Spawned by **Kanna**, not by claude. Receive their own per-tool sandbox profile derived from the chat's `readPathDeny` / `writePathDeny`. Critically, these are **not children of the claude process** because `kanna-mcp` runs inside Kanna server, not as a claude-launched subprocess. claude connects to `kanna-mcp` over the UDS configured by `--mcp-config`; the MCP server endpoint is the Kanna server.
+
+This means: claude's sandbox profile constrains what **claude itself** reads/writes for its own behavior (auth file, project `.claude/`, `.mcp.json`, slash-command files). It does **not** need to enforce credential deny against bash subprocesses, because those subprocesses do not run under claude's sandbox at all — they run under Kanna's separately-applied tool sandbox.
+
+This is the structural reason the credential-read deny does not contradict claude's own ability to read its credential file.
+
+### claude's own sandbox profile (per-spawn)
+
+claude must be able to read+write its own `.credentials.json` for OAuth, read project files for in-process settings, and connect to the UDS for MCP. The profile for the claude process itself:
+
+**Default:** deny all filesystem access. Then explicit allows for **exact files only**, never directory-wide:
+
+| Action | Exact path(s) |
+|---|---|
+| `file-read*` `file-write*` | `<spawnHome>/.claude/.credentials.json` |
+| `file-read*` | `<spawnHome>/.claude/settings.json` |
+| `file-read*` | `<spawnHome>/.claude/settings.local.json` |
+| `file-read*` `file-write*` | Workspace `cwd` (subtree) **minus** glob-deny overlays for `readPathDeny`/`writePathDeny`. |
+| `file-read*` `file-write*` | Each `additionalDirectories` entry (subtree) **minus** glob-deny overlays. |
+| `file-read*` `file-write*` `file-create` | `<spawnHome>/.claude/projects/<encodedCwd>/<sessionId>.jsonl` (claude's transcript; must be writable and creatable, not just readable). |
+| `file-read*` `file-write*` `file-create` | Parent dir `<spawnHome>/.claude/projects/<encodedCwd>/` (create + list during transcript open) — directory traversal allow, but no read of arbitrary files inside; Kanna pre-creates the directory before spawn so the first append succeeds. |
+| `network-outbound` | Anthropic API hosts only (static allowlist) + UDS at `<runtimeDir>/.../kanna-mcp.sock`. |
+| `process-fork` | self |
+| `process-exec` | `<resolved-claude-binary>` (self-respawn only); deny all other binaries |
+
+No directory-level allow on `<spawnHome>/.claude/**`. Every additional file claude needs (e.g., a future schema file) must be added to this explicit list.
+
+**Profile-specific preflight sentinels** (replace earlier blanket sentinel rule):
+
+*claude profile* — boot a 200ms child under the claude sandbox profile. Assertions:
+- Read of `<spawnHome>/.claude/.credentials.json` → **must succeed** (auth path).
+- Read of `<spawnHome>/.claude/settings.local.json` → **must succeed**.
+- Write to `<spawnHome>/.claude/projects/<encodedCwd>/preflight-marker.jsonl` (then delete) → **must succeed** (transcript writability).
+- Read of decoy `<spawnHome>/.claude/decoy-must-deny.txt` (pre-written by Kanna) → **must be denied**.
+- Read of sibling-account HOME → **must be denied**.
+- Read of `~/.ssh/id_rsa` → **must be denied**.
+
+*tool-subprocess profile* — boot a 200ms child under the tool sandbox profile. Assertions:
+- Read of `<spawnHome>/.claude/.credentials.json` → **must be denied** (no exception in this profile).
+- Read of `<spawnHome>/.claude/decoy-must-deny.txt` → **must be denied**.
+- Read of `<runtimeDir>/accounts/<otherAccountId>/.claude/.credentials.json` → **must be denied**.
+- Read of `~/.ssh/id_rsa`, `~/.aws/credentials` → **must be denied**.
+- Read of workspace-secret sentinel (`.env`, `*.pem`) → **must be denied**.
+- Read of workspace non-sensitive file → **must succeed** (sanity).
+
+Both preflight suites run before any user-facing PTY spawn. Any wrong outcome in either rejects the spawn.
+
+See "Profile-specific preflight sentinels" below for the full preflight assertion set under this profile. Summary: credential file readable + transcript writable + decoy in `.claude/` denied + sibling-account and SSH key denied. Any wrong outcome → spawn fails closed.
+
+Kanna **pre-creates** the transcript directory `<spawnHome>/.claude/projects/<encodedCwd>/` (mode `0700`) before spawn so the first JSONL append by claude has a parent directory it can write into without escalating sandbox grants.
+
+### Tool-subprocess sandbox (per `mcp__kanna__bash` invocation)
+
+When `kanna-mcp` decides to run a bash command, it spawns a fresh subprocess from the Kanna server with **its own** sandbox profile, separate from claude's:
+
+- `file-read*` `file-write*` on workspace + `additionalDirectories`, minus glob-deny overlays for `readPathDeny` / `writePathDeny`.
+- **Deny everything under `<spawnHome>/.claude/**`** including the credentials file. The tool sandbox sees the per-account HOME as off-limits entirely. Bash cannot `cat <spawnHome>/.claude/.credentials.json` because the sandbox blocks it.
+- Deny `<runtimeDir>/accounts/**`.
+- Network: same Anthropic allowlist or fully disabled (configurable per chat).
+- No exec of binaries outside a curated allowlist (e.g. `/usr/bin/git`, `/usr/bin/node`, `/usr/bin/bun`).
+
+This sandbox is fresh per tool call and lives only for the lifetime of that subprocess. State changes (deny list edits, etc.) take effect immediately on next call.
+
+### Credential isolation under per-account HOME
+
+| Threat | Mitigation |
+|---|---|
+| `mcp__kanna__bash` reads `<spawnHome>/.claude/.credentials.json` | Tool-subprocess sandbox denies it. Bash never runs under claude's profile. Also blocked at the policy layer: `readPathDeny` `~/...` resolves to spawn HOME when evaluated for a tool call bound to that PTY. |
+| `mcp__kanna__bash` reads via absolute path `<runtimeDir>/accounts/.../...` | Same tool sandbox + `<runtimeDir>/accounts/**` in `readPathDeny`. |
+| Tool subprocess inherits creds via FD | Kanna explicitly closes all FDs before exec; bash starts with only stdin/stdout/stderr; no credential FD is ever shared with tool subprocesses. |
+| Account A's PTY reads Account B's HOME | claude's sandbox restricts FS to `(workspace + additionalDirectories + <spawnHome>)`. Sibling account dirs are outside the FS allowlist. |
+| `Read`/`Glob`/`Grep` built-ins read creds | Disabled in `--tools "mcp__kanna__*"`. `mcp__kanna__read` enforces `readPathDeny` per call. |
+| Pool dir on disk | `<runtimeDir>/accounts/` is `0700` owned by Kanna's OS user; each `<accountId>/` is `0700`; `.credentials.json` is `0600`; tokens in `oauthPool` held in memory or encrypted at rest. |
+| Stale account dirs across reboots | Reaper sweep on Kanna startup: dirs whose `accountId` is no longer in `oauthPool` deleted; dirs unbound for >30 days deleted. |
+
+### Credential coordinator (concurrent refresh safety)
+
+**Core decision: serialize same-account PTYs.** Kanna cannot synchronize the unmodified `claude` CLI's writes through a mutex it does not hold. The clean solution is to remove the race at the lifecycle layer: only one PTY per `accountId` runs at a time. Two simultaneous chats wanting the same account either share that one PTY (not possible — claude is a single-conversation process), wait for it to COOL, or claim a different account from the pool.
+
+**Lifecycle rule** (in `ClaudeSessionLifecycle`):
+
+- `oauthPool.acquireExclusive(chatId, preferredAccountId?)` returns `{ accountId, lease }`. The lease is held **from WARMING start until the claude OS process has fully exited (or been killed) AND a post-exit final readback has completed**. The lease does NOT release at COOLING entry — COOLING is when we send `/exit`; the claude process is still alive then and can still write `.credentials.json` until termination.
+- If the only available account is leased, the second chat's spawn waits in a queue. UI shows "Waiting for account <name>" with the queue position.
+- If multiple accounts exist in the pool, `acquireExclusive` picks an unleased one. Rate-limit and sticky-by-chat rules still apply when ranking candidates.
+- **Lease release sequence:**
+  1. Trigger fires (idle timeout, eviction, etc.) → state → COOLING.
+  2. Send `/exit` to PTY. Start 2s timer.
+  3. Either claude exits cleanly or 2s elapses → `kill(pid, SIGTERM)` then `kill(pid, SIGKILL)` if still alive.
+  4. `await waitpid(pid)` — block until kernel confirms process is gone.
+  5. **Final readback**: read `.credentials.json` on disk, compute composite `credVersion`, CAS into `oauthPool`. Captures any refresh write that landed between final fs.watch and process exit.
+  6. Release lease. Queued chats for this account become eligible.
+- **If Kanna crashes mid-lease — PID-reuse-safe recovery.** Each lease record persists a process-identity tuple, not just a PID:
+  ```
+  ProcessIdentity {
+    pid: number
+    startTimeNs: bigint      // /proc/<pid>/stat starttime (Linux) or kinfo_proc p_starttime (macOS)
+    executablePath: string   // resolved path of the claude binary at spawn
+    sessionId: string        // --session-id passed at spawn (also visible in argv)
+    pgid: number             // Kanna sets a fresh process group at spawn (setsid/setpgid)
+    accountId: string
+  }
+  ```
+  On startup sweep, for each persisted lease:
+  1. `kill(pid, 0)` — does a process by that PID exist? If not → process gone, proceed to final readback + release.
+  2. Read live process identity for that PID (`/proc/<pid>/stat` on Linux, `ps -o lstart,comm,args` on macOS, or `pidfd_open` + `pidfd_send_signal` API where available).
+  3. Compare **all** of: `startTimeNs`, `executablePath`, presence of `--session-id <sessionId>` in argv, and `pgid`. If **any** field mismatches → this PID has been reused by an unrelated process. Do **not** signal it. Log a warning, release the lease only after a conservative readback (no kill), and surface an operator warning ("Kanna could not verify the previous claude process for account <name>; if the previous session is still running, please terminate it manually before reusing this account").
+  4. If all identity fields match → the original claude PTY is still alive. Send `SIGTERM` to the process group (`kill(-pgid, SIGTERM)`), wait 2s, then `SIGKILL` to the group, then `waitpid`, then post-exit readback + release.
+- **`pidfd` is a within-process optimization only, not a restart-safe mechanism.** Where available (Linux ≥5.3), Kanna uses `pidfd_open` while alive to interact with the claude process — this eliminates the PID-reuse race for in-process signals and `waitpid`. The `pidfd` is **not** persisted, because a Kanna crash closes it and there is no general way to recover a kernel `pidfd` reference after the holding process exits. The `ProcessIdentity` tuple verification above is the canonical restart-safe path on all platforms. `pidfd` is purely a defense-in-depth optimization for the live process.
+
+This eliminates the same-account multi-writer problem at its root. The coordinator below only handles the **single-writer** case: claude refreshes its own token, Kanna observes the change to sync back to the pool.
+
+**Coordinator (`account-home.ts`) — single-writer model:**
+
+1. **Single shared HOME per account.** Always. No per-PTY copies.
+2. **Atomic seeding.** When Kanna seeds the credentials file pre-spawn (only when the file is missing or invalid), it writes via temp file in the same directory followed by `rename` (POSIX atomic replacement).
+3. **Versioned credential — composite version, not mtime alone.**
+   ```
+   credVersion = sha256(fileContents) || statInode || statCtimeNs
+   ```
+   - `sha256(fileContents)` distinguishes content changes even within the same mtime millisecond.
+   - `statInode` changes on atomic-rename replacement (POSIX gives the new file a new inode).
+   - `statCtimeNs` provides additional monotonicity where filesystems support nanosecond resolution.
+   The triple is collectively the credential version. `lastSeen.credVersion` is stored in `oauthPool`; CAS compares the full triple.
+4. **fs.watch handler rules (always read; mtime never gates).**
+   - Watch the **directory** (`<spawnHome>/.claude/`), not the file, so atomic-rename events are observed.
+   - On any `change`/`rename` event for `.credentials.json`: debounce 50ms, then unconditionally read the file (do not pre-stat to skip). Compute `credVersion`. If `credVersion === lastSeen.credVersion` → no-op (true coalesced re-fire). Else proceed.
+   - Parse + validate. On parse failure → wait 50ms, retry once (claude may be mid-rename). On second failure → mark this account `credential_corrupted` in pool, surface UI error, do not update pool.
+   - **CAS:** pool update succeeds only if `pool.current[accountId].credVersion === knownLastVersion` at the time we read the file. If the pool has a newer version (Kanna seeded since the last observation), take the file-on-disk as authoritative (claude is OAuth source of truth) and overwrite the pool entry. `lastSeen` advances to the new triple atomically with the pool update.
+5. **Readback before every spawn.** Even with lease serialization, the lease can be reclaimed across a Kanna restart. Before spawn, Kanna reads the on-disk credential, computes `credVersion`, and syncs the pool if it differs. If the file is missing or corrupt, seed from pool.
+6. **Post-exit readback (final).** After `waitpid(pid)` confirms the claude process is gone (see "Lease release sequence" above), Kanna reads `.credentials.json` once more and CASes into pool. The lease is **not** released until this step completes. This is the authoritative final-state capture.
+7. **No coalesced-loss guarantee from fs.watch alone.** The lease-release readback is the safety net for any fs.watch event the kernel drops or coalesces.
+8. **Tests** (`account-home.test.ts`):
+   - **Lease serialization:** two chats request the same account → second waits; first PTY's process exits and post-exit readback completes → second acquires; pool state consistent throughout. Explicit assertion: second spawn does NOT start while first process is still alive in COOLING.
+   - **Refresh during COOLING:** simulate claude writing `.credentials.json` after `/exit` was sent but before process exit → post-exit readback captures it → pool reflects the late write before lease release.
+   - **PID reuse after crash:** simulate Kanna crash with a persisted lease whose PID is later reused by an unrelated process (mock by fabricating a stale identity tuple while a fresh `sleep` runs at that PID). Assert: sweep detects identity mismatch, does **not** signal the foreign process, releases the lease conservatively, logs warning.
+   - **Same-PID-and-identity recovery:** simulate Kanna crash where the original claude is still alive (identity matches). Assert: sweep kills the process group, post-exit readback, release.
+   - **Linux pidfd within-process path:** when supported, pidfd is used for live-process signal/wait calls; assert no PID-reuse race in those calls. Restart recovery still relies on the ProcessIdentity tuple regardless of pidfd availability.
+   - **Same-mtime refresh:** two consecutive writes to `.credentials.json` within one mtime tick → composite version distinguishes them; pool sees both updates (or coalesces to the final state — never gets stuck on the older).
+   - **Missed fs.watch event:** simulate suppressed event for one refresh → lease-release readback recovers the missed update before next spawn.
+   - **Inode-change detection:** atomic-rename replacement → inode change observed; pool advances.
+   - **Corruption recovery:** truncate file mid-refresh → parse retry → second read succeeds; pool not corrupted.
+   - **Lease release on crash:** simulate Kanna crash with lease held → on restart, all leases for accounts whose pids no longer exist are released; pool readback re-synced before any new spawn.
+
+### Concurrent multi-account safety
+
+Concurrent PTYs for **different** accounts run with independent HOMEs simultaneously. No race on the credentials file.
+
+Same-account concurrency is forbidden by `oauthPool.acquireExclusive`. Two chats wanting the same account either pick a different one or queue.
+
+### Lifecycle
+
+- Account HOME created on first PTY spawn for that account.
+- Persisted across cold-wake / respawn within the same `(chatId, accountId)` binding.
+- Deleted on: chat deleted with no other chat referencing this account, account removed from pool, reaper sweep.
+- Sandbox profile invalidated and regenerated on each spawn (already covered in "Sandboxing the spawn").
+
+### What we still don't lose
+
+| What we keep | Note |
+|---|---|
+| Multi-token rotation in `oauthPool` | Restored. Each rotation = respawn with new HOME. |
+| Centralized account revocation | `oauthPool.removeAccount(id)` → reaper deletes HOME, in-flight PTY enters COOLING. |
+| Knowledge of remaining quota | JSONL `system` events Anthropic emits; `oauthPool.markRateLimited`. |
+
+### Settings injection (unchanged)
+
+`.claude/settings.local.json` in per-account HOME (`mode 0600`):
+
+```json
+{
+  "tui": "default",
+  "syntaxHighlightingDisabled": true,
+  "showThinkingSummaries": true,
+  "spinnerTipsEnabled": false,
+  "showTurnDuration": false,
+  "hooks": { "PreToolUse": [/* see Permission enforcement, only if hook approach selected */] }
+}
+```
+
+No `apiKeyHelper` key. No oauth socket. Bash cannot reach the credential file by absolute or tilde path (deny list covers both).
+
+### Single-account fallback
+
+If `KANNA_PTY_OAUTH_POOL=off` (or pool is empty), PTY spawns with the user's native `~/.claude/` and behaves like a vanilla `claude` invocation. No rotation; one subscription only. Documented as the basic mode.
+
+### The UDS / runtime dir still exists
+
+For **tool callbacks only** — `ask_user_question`, `exit_plan_mode`, and (if hook gate selected) `PreToolUse` approvals. That socket carries no credentials, only request/response JSON for tool routing. Authentication is by `SO_PEERCRED` / `LOCAL_PEERCRED` peer-pid plus a request-bound nonce, not a long-lived bearer.
+
+## Spawn flags
+
+```
+claude
+  --session-id <uuid>                                # we generate, used to locate JSONL
+  --resume <uuid>                                    # only if reattaching to existing
+  --fork-session                                     # if user requested fork
+  --model <model>
+  --effort <low|medium|high|max>
+
+  --permission-mode bypassPermissions                # we manage gating, not the CLI
+  --dangerously-skip-permissions                     # avoid TUI prompts; kanna-mcp gates instead
+
+  --tools "mcp__kanna__*"                            # MCP-only; all CLI built-ins disabled
+  --add-dir <dir>...                                 # additionalDirectories
+  --append-system-prompt <text>                      # Kanna guidance: "use mcp__kanna__bash/edit/write"
+  --system-prompt <text>                             # ONLY for subagent (systemPromptOverride)
+  --mcp-config <runtimeDir>/mcp-config.json          # kanna-mcp config (UDS endpoint, no creds)
+  --settings <runtimeDir>/settings.local.json        # tui mode, optional PreToolUse hook
+  --no-update                                        # never block on updater prompt
+```
+
+The `--dangerously-skip-permissions` flag is safe to use here because Kanna has removed every CLI tool that could mutate state from the allowlist. The only risky tools remaining are MCP tools, which Kanna gates synchronously before execution.
+
+Env:
+
+- Strip `ANTHROPIC_API_KEY` (forces API billing).
+- Keep `TERM=xterm-256color`, `NO_COLOR=0`.
+- `KANNA_PTY_SESSION=<sessionId>` for `kanna-mcp` to identify which chat it serves.
+
+No bearer token. No FD-passed credentials. See "OAuth / subscription auth".
+
+## Permission enforcement (fail-closed, MCP-primary)
+
+`canUseTool` does not exist in interactive mode. PTY mode replaces it with a **routing-based** gate, not a hook-based gate. Hooks are optional belt-and-suspenders.
+
+### Primary gate: replace built-ins with kanna-mcp shims
+
+The CLI's `--tools` flag accepts an allowlist of built-in tool names. We use it to **disable every mutating and every read-capable built-in** at spawn — `Bash`, `Edit`, `Write`, `WebFetch`, `WebSearch`, **and also `Read`, `Glob`, `Grep`**. Default allowlist is `--tools "mcp__kanna__*"` (MCP only).
+
+The reason read tools are also disabled: built-in `Read/Glob/Grep` cannot be intercepted by Kanna, so their accessible surface is whatever the OS sandbox profile captured **at spawn time**. New sensitive files appearing later in the session (e.g., the model approves a write that creates a `.env`) would be reachable until respawn. Routing reads through `mcp__kanna__*` makes every read check the live `readPathDeny` before returning content, eliminating that stale-sandbox class entirely.
+
+For each disabled built-in we ship a kanna-mcp tool of the same semantic shape — `mcp__kanna__bash`, `mcp__kanna__edit`, `mcp__kanna__write`, `mcp__kanna__webfetch`, `mcp__kanna__websearch`, `mcp__kanna__read`, `mcp__kanna__glob`, `mcp__kanna__grep`. The Kanna system-prompt append instructs the model to use these in place of the missing built-ins.
+
+The OS sandbox (next section) is retained as **defense-in-depth** only: it catches the rare cases where the CLI version exposes a built-in we forgot to disable, a third-party MCP server (when allowlisted) tries to escape, or a bug in `mcp__kanna__*` mis-handles a path. Safety does not depend on the sandbox being perfect; it depends on MCP routing.
+
+Because every mutating tool now flows through `kanna-mcp` (Kanna code), Kanna gets **synchronous pre-execution** veto power on every call, with full structured arguments (not regex-stripped). The same durable callback protocol used for `ask_user_question` extends here — every gated tool call becomes a `ToolRequest` in `EventStore` with id, timeout, cancel, replay, idempotency semantics (see "Callback protocol").
+
+```
+                       ┌─────────────────────┐
+                       │  claude (PTY)       │
+                       │  --tools allowlist  │
+                       │  (no Bash, Edit,    │
+                       │   Write, WebFetch)  │
+                       └──────────┬──────────┘
+                                  │ tool_use mcp__kanna__bash {...}
+                                  ▼
+                       ┌─────────────────────┐
+                       │  kanna-mcp          │
+                       │  (Kanna process)    │
+                       │                     │
+                       │  policy.allow(...)? │──no──▶ return { error: "denied" }
+                       │       │             │
+                       │      yes            │
+                       │       ▼             │
+                       │  emit ToolRequest   │──── UI awaits user
+                       │  await durable      │              │
+                       │  resolution         │◀─── allow ───┘
+                       │       │             │
+                       │       ▼             │
+                       │  execute via        │
+                       │  Bun.spawn / fs / … │
+                       └─────────────────────┘
+```
+
+This pattern's safety properties **do not depend** on `--dangerously-skip-permissions` behavior or on PreToolUse hooks. They do depend on `--tools` semantics — which is treated as an enforced runtime invariant, not a documentation assumption (see "Allowlist preflight" below).
+
+### Allowlist preflight (fail-closed, no time-based TTL)
+
+The allowlist is verified continuously. The validation has two layers; see "Cache & invalidation" below for the precise rules. In summary:
+
+- **Full directed-probe suite** runs at Kanna server boot and any time `binary-sha256`, `tools-string`, or observed `system.init.model` changes. Cache key includes `kannaProcessId`, so it never survives a restart.
+- **Per-spawn sentinel suite** runs the full set of directed probes (one per disallowed built-in) before every user-facing PTY spawn. All N probes run in parallel; the sentinel passes only if every probe passes. Any built-in observed as reachable invalidates the full-suite cache immediately and blocks further user-facing spawns until the full suite re-passes.
+
+The full suite consists of **N directed probes, one per disallowed built-in**, plus one positive-control probe. We do not rely on the model self-reporting which tools it has.
+
+#### Directed probes (one per built-in)
+
+For each disallowed built-in tool `T` in `{Bash, Edit, Write, Read, Glob, Grep, WebFetch, WebSearch}` (and any future built-ins enumerated from `claude --help`):
+
+1. Pre-stage scratch state appropriate to `T`. Examples:
+   - `Read`: write `<scratch>/kanna-probe-read.txt` containing the random marker `<probe-secret-A>`.
+   - `Glob`: scatter `<scratch>/{a,b,c}.probe` files.
+   - `Grep`: write a file containing `<probe-secret-B>`.
+   - `Write`: target path `<scratch>/kanna-probe-write.txt` (must not exist).
+   - `Edit`: write `<scratch>/kanna-probe-edit.txt` with known content.
+   - `Bash`: prompt requires `echo <probe-secret-C>` invocation.
+   - `WebFetch`: a single-shot local HTTP URL Kanna serves on a random port that returns `<probe-secret-D>`.
+   - `WebSearch`: prompt requires a search for the unique nonce `<probe-secret-E>`.
+2. Spawn `claude` with the production flags (`--tools "mcp__kanna__*"`, `--dangerously-skip-permissions`, etc.) and an `--append-system-prompt` that pressures the model to invoke `T`:
+   - "You MUST use the `<T>` tool with these arguments to complete this task. Do not use any MCP tool. If `<T>` is unavailable, immediately call `mcp__kanna__probe_unavailable` and pass the tool name as the `tool` argument."
+3. The probe MCP config registers two tools:
+   - `mcp__kanna__probe_unavailable(tool)` — records that the model could not find `T`.
+   - `mcp__kanna__probe_observed(tool)` — never advertised; presence in JSONL `tool_use` would indicate spec drift.
+4. Tail JSONL for up to 2 assistant turns. Outcomes:
+   - **PASS**: any `tool_use` for `mcp__kanna__probe_unavailable` referencing `T` AND no `tool_use` for `T`. The model confirmed `T` is unavailable.
+   - **FAIL — built-in reachable**: any `tool_use` event with `name === T` (or any other disallowed built-in). The CLI ignored the allowlist.
+   - **FAIL — indeterminate**: two turns elapse without either a `probe_unavailable` call referencing `T` or a `tool_use` for `T`. We cannot confirm absence, so fail closed.
+5. Terminate the PTY after the verdict.
+
+If **any** directed probe fails, the entire suite fails closed for this `(binary-sha256, tools-string)`.
+
+#### Positive control
+
+One probe spawns with the same flags and asks the model to call `mcp__kanna__probe_ack(value)` with a fixed argument. This confirms `mcp__kanna__*` tools are reachable (suite passes only if positive control also passes — protects against regressions where the allowlist becomes too restrictive and breaks our own tools).
+
+#### Cache & invalidation (short-lived; per-spawn sentinel)
+
+Allowlist semantics depend on local binary, `--tools` string, **and** server-side model/planner behavior that Anthropic can change without our binary changing. Caching is therefore conservative:
+
+**Two-layer verification:**
+
+1. **Full directed-probe suite** runs at:
+   - Kanna server boot (before the first user-facing PTY spawn of this process lifetime).
+   - First user-facing PTY spawn after `binary-sha256`, `tools-string`, or observed `system.init.model` changes.
+   - Force-refresh from app settings.
+   Cache key: `(binary-sha256, tools-string, systemInitModel, kannaProcessId)`. Note `kannaProcessId` — cache does not survive server restart. Cost: N+1 subscription turns once per server boot.
+
+2. **Per-spawn sentinel suite** runs **before every user-facing PTY spawn**, except the one that just ran the full suite. The sentinel runs **all N** directed probes (one per disallowed built-in) in parallel. No rotation, no skipped built-ins.
+
+   **Parallelization:** the N directed probe sessions are spawned concurrently in scratch dirs (each gets a distinct ephemeral `--session-id`, separate PTY, separate JSONL). They share the same `claude` binary so OS page cache makes second-and-later spawns very fast. Aggregate wall-clock latency is bounded by the slowest single probe turn (typically <2s), not the sum.
+
+   Outcomes per probe:
+   - PASS: `mcp__kanna__probe_unavailable(<tool>)` observed → that probe passes.
+   - FAIL — built-in reachable: any `tool_use` for any disallowed built-in observed in any probe's JSONL (defensive: a `Bash`-targeted probe that triggers a `Write` call also fails) → entire sentinel fails closed, invalidate full-suite cache, block further user-facing spawns until full suite re-runs and passes.
+   - FAIL — indeterminate (1 turn elapses without `probe_unavailable` and without a built-in `tool_use`): that probe fails closed; the whole sentinel fails. Retry runs all N again.
+
+   Sentinel passes only if **every** directed probe passes.
+
+   Cost: N parallel subscription turns per user-facing spawn (~8). Real-time latency is ~one turn (~1-3s) because they run in parallel. Subscription billing is per-turn, not per-second; this consumes a small constant of your subscription quota per spawn.
+
+**Trade-off explicitly accepted in this spec:** higher per-spawn cost in exchange for closing the rotation-window security gap. Any deviation (e.g., back to rotation) requires a written security-tradeoff section approved by the user.
+
+**Why the sentinel:** It's a tripwire for remote behavior drift. Even if Anthropic silently changes the planner to expose a built-in under `--tools "mcp__kanna__*"`, the next user-facing spawn catches it before the user sees the PTY. Coverage is total per spawn; the rotation gap is eliminated.
+
+**Cache invalidation triggers:**
+- Server restart (process id changes).
+- Binary sha256 changes.
+- `--tools` string changes.
+- Observed `system.init.model` from any prior spawn changes.
+- Sentinel probe ever fails — invalidates **immediately**, blocks further spawns until full suite re-runs and passes.
+- Force-refresh from app settings.
+
+There is no time-based TTL. Either the process restarts (re-probe), the model version changes (re-probe), or the sentinel fails (re-probe). Otherwise the cached pass remains valid because we are continuously re-validating per spawn.
+
+#### Tests (`allowlist-preflight.test.ts`)
+
+- **End-to-end real-CLI** (gated `KANNA_PTY_E2E=1`): run the full directed suite against the actual bundled `claude` binary; assert pass.
+- **Per-built-in mock probe**: inject JSONL where the model produces a `Bash` / `Read` / `Write` / `Edit` / `Glob` / `Grep` / `WebFetch` / `WebSearch` `tool_use` → assert sentinel fails closed and full-suite cache is invalidated.
+- **Defensive cross-probe**: inject JSONL where a `Bash`-targeted probe surfaces an unrelated `Write` `tool_use` → assert fail closed.
+- **Indeterminate handling**: inject JSONL that produces text only, no tool_use → assert that probe fails closed (and therefore the sentinel fails).
+- **Positive control regression**: probe MCP server registered but unreachable → assert full suite fails (don't ship a broken allowlist).
+- **Boot-time full suite**: simulate Kanna process boot → assert full suite runs once before any user-facing spawn.
+- **Per-spawn sentinel always runs**: simulate two consecutive user-facing spawns within seconds of each other with all cache keys unchanged → assert the sentinel suite runs before the second spawn (no skip on "cache hit"). The full directed suite is allowed to be skipped (still cached); the sentinel never is.
+- **Cache key invalidation**: change `binary-sha256`, `tools-string`, observed `system.init.model`, or `kannaProcessId` → assert full suite re-runs.
+- **No time-based TTL**: simulate clock advance of 30 days with all cache keys unchanged → assert no time-driven invalidation (only keyed invalidation matters; the per-spawn sentinel is the live guard).
+- **Parallel sentinel correctness**: run all N probes concurrently against the same mock CLI fixture → assert per-probe verdicts isolated, aggregate fails on any single failure, aggregate passes only if all pass.
+
+If the spike (phase 0) finds that any directed probe cannot reliably force the model to attempt the built-in (e.g., the model refuses for unrelated reasons), we either: (a) sharpen the probe system prompt; (b) downgrade to "fail closed unless explicit pass from at least one indicative signal per built-in"; or (c) ship a stricter alternative — spawn under a sandbox that traps any `execve` of a tool process not on a whitelist. Decision recorded in the spike doc before phase 1.
+
+### Durable approval protocol (unified)
+
+`ask_user_question`, `exit_plan_mode`, and every gated MCP tool call use one shared protocol. Field shape:
+
+```
+ToolRequest {
+  id                   // hex(HMAC_SHA256(serverSecret,
+                       //   chatId || sessionId || toolUseId || toolName || canonicalArgsHash))
+  chatId
+  sessionId
+  toolUseId            // CLI-assigned; same id MUST coincide with same toolName + canonicalArgsHash
+  toolName
+  arguments            // structured, full args (no truncation)
+  canonicalArgsHash    // sha256(canonicalJson(arguments)); persisted; never recomputed from the
+                       // arguments field on retry — compared verbatim against the new request's hash
+  policyVerdict        // "auto-allow" | "auto-deny" | "ask"
+  status               // pending | answered | timeout | canceled | session_closed | arg_mismatch
+  decision?            // allow | deny | answer payload
+  mismatchReason?      // populated when status = arg_mismatch; emits audit event
+  createdAt
+  resolvedAt?
+  expiresAt
+}
+```
+
+Phase-1 tests gate (`mcp-tool-callback.test.ts` and `permission-gate.test.ts`) explicitly cover:
+
+- Same `toolUseId` with identical `toolName` + `canonicalArgsHash` → idempotent (returns existing record).
+- Same `toolUseId` with **different** `toolName` → reject with `arg_mismatch`, audit event emitted, original record unchanged.
+- Same `toolUseId` with **different** `canonicalArgsHash` (any field mutated) → reject with `arg_mismatch`, audit event emitted.
+- Replay across a previously-answered record (terminal status) with mismatched args → reject with `arg_mismatch`; the prior allow decision is NOT applied.
+
+Lifecycle rules (apply to all gated calls):
+
+1. **Policy first.** `policy.evaluate(toolName, arguments, chatSettings)` returns `auto-allow | auto-deny | ask`. Auto verdicts resolve the request immediately without UI.
+2. **Server-driven timeout.** Default 600s. On timeout, resolve `{decision:"deny", reason:"timeout"}`.
+3. **Cancellation.** Resolved with `{decision:"deny", reason:"canceled"}` on: chat deleted, PTY COOLING, server shutdown, explicit UI cancel.
+4. **Idempotency.** Re-emitting a request for the same `(toolUseId, toolName, canonicalArgsHash)` returns the existing record (cached or pending). Never creates a duplicate UI prompt. A retry with the same `toolUseId` but mismatched `toolName` or `canonicalArgsHash` fails closed (rule above), is logged, and surfaces a user-visible warning. The model cannot "edit" an approved command by reusing its id.
+5. **Replay on reconnect.** On wake / refresh, server re-emits all `pending` requests for the chat to the UI from `EventStore`.
+6. **Server restart.** On startup, all `pending` requests fail closed → `{decision:"deny", reason:"server_restarted"}` unless a user-configurable "preserve pending across restart" flag is set (default off).
+
+### Per-chat policy
+
+Stored in `EventStore.chatSettings.permissionPolicy`. Defaults are intentionally conservative.
+
+```
+{
+  defaultAction: "ask" | "auto-allow" | "auto-deny",
+  bash: {
+    autoAllowVerbs: ["ls","pwd","git status","git diff","git log"],
+    // Verbs that take no path / network argument. Used only if the parsed
+    // command consists entirely of one of these verbs and arguments that
+    // fail no read-path check. Any pipe, redirect, subshell, env-set,
+    // backtick, or `eval` short-circuits to "ask".
+  },
+  readPathDeny: [
+    // `~` resolves against the SPAWNED claude's $HOME (per-account HOME in
+    // pool mode), NOT Kanna server's HOME. So `~/.claude/**` denies the
+    // per-account credential dir.
+    "~/.ssh", "~/.aws", "~/.gcp", "~/.config/gh",
+    "~/.claude", "~/.kanna",
+    "~/Library/Keychains", "~/Library/Application Support/Code/User",
+    "/etc/shadow", "/etc/sudoers", "/private/etc/shadow",
+    "~/.npmrc", "~/.netrc", "~/.docker/config.json",
+    "<runtimeDir>/accounts/**",   // absolute-path deny for the pool root
+    "**/.env", "**/.env.*", "**/credentials*", "**/*.pem", "**/*.key",
+    "**/id_rsa*", "**/id_ed25519*"
+  ],
+  writePathDeny: [
+    "/etc/**", "/usr/**", "/System/**", "/private/etc/**",
+    "~/.ssh/**", "~/.aws/**", "~/.config/gh/**",
+    "~/.claude/**", "~/.kanna/**",
+    ...readPathDeny
+  ],
+  toolDenyList: [
+    { tool: "mcp__kanna__bash", pattern: "rm\\s+-rf\\s+(/|~|\\$HOME)\\b" },
+    { tool: "mcp__kanna__bash", pattern: "git\\s+push\\b.*--force" },
+    { tool: "mcp__kanna__webfetch", pattern: ".*" }   // example user policy
+  ]
+}
+```
+
+#### Bash gating
+
+`mcp__kanna__bash` does **not** auto-allow by regex prefix. Instead it parses the command line:
+
+1. Parse the command with a real shell-aware parser (e.g., `shell-quote` or `mvdan/sh` via FFI), not a regex. Reject and `ask` if parsing fails.
+2. Reject (`ask`) immediately on any of: pipe (`|`), redirect (`>`, `>>`, `<`), subshell `$(...)`, backticks, `eval`, `exec`, env-prefix (`FOO=bar cmd`), `&&`/`||`/`;` chains, glob-expansion of path args (e.g. `cat ~/.ssh/*`).
+3. The remaining canonicalized form is `verb arg1 arg2 …` with no shell features.
+4. For each path-shaped argument, normalize (`realpath` resolved against `cwd`). If the resolved path matches `readPathDeny` (or, for write-shaped verbs, `writePathDeny`), deny outright. **Do not auto-allow even for `cat`/`rg` if any path argument is in `readPathDeny`.**
+5. Auto-allow only when the verb is in `bash.autoAllowVerbs` AND no path argument matches a deny list AND the call has no flags that could change behavior in a hidden way (e.g., `rg --files-with-matches` is fine, but `rg --hyperlink-format` is `ask` for safety). Curated per-verb argument allowlists live alongside the verb list.
+6. Otherwise: `ask`.
+
+Result: `cat ~/.claude/.credentials.json`, `rg . ~/.ssh`, `cat $(echo ~/.ssh/id_rsa)` all path through to "ask" (in fact `cat ~/.claude/...` matches `readPathDeny` first → outright deny).
+
+#### Other tools
+
+- `mcp__kanna__edit` / `mcp__kanna__write`: target path is structured (not shell-parsed). Resolve against `cwd`, deny if outside workspace + `additionalDirectories`, deny if matches `writePathDeny`. Otherwise `ask` (or `auto-allow` if `defaultAction` is set).
+- `mcp__kanna__webfetch` / `mcp__kanna__websearch`: no auto-allow by default. User can add hosts to a per-chat allow list.
+- `mcp__kanna__read` / `mcp__kanna__glob` / `mcp__kanna__grep`: replace the CLI built-ins. Resolve target paths against `cwd` + `additionalDirectories`, enforce `readPathDeny` per call (so newly-created secrets are also denied immediately), then read.
+
+#### Sandboxing the spawn (defense-in-depth on supported OS)
+
+OS-level sandboxing is **defense-in-depth**, not the primary safety gate. The primary gate is the `--tools "mcp__kanna__*"` allowlist plus per-call `readPathDeny` enforcement inside `mcp__kanna__read/glob/grep`. The sandbox catches: a CLI version that exposes a tool we forgot to disable, third-party MCP servers (when allowlisted), or a bug in `mcp__kanna__*` mis-handling a path. Kanna still treats it as a hard precondition on supported OSes for that defense-in-depth layer.
+
+Two profiles, two sandboxes (see "Process model clarification" for why both exist):
+
+| Profile | Applied to | Read allow | Read deny |
+|---|---|---|---|
+| **claude profile** | `claude` PTY process | Workspace + `additionalDirectories` (minus glob-deny overlays); `<spawnHome>/.claude/.credentials.json`; `<spawnHome>/.claude/settings*.json`; UDS socket. | Everything else, including the rest of `<spawnHome>/.claude/**`, every `readPathDeny` entry, `<runtimeDir>/accounts/**` (except own HOME), sibling account HOMEs. |
+| **tool-subprocess profile** | Each `mcp__kanna__bash` (or any kanna-mcp invocation that runs a child process) | Workspace + `additionalDirectories` (minus glob-deny overlays). | Everything else, **including `<spawnHome>/.claude/**` entirely** (no credential exception), all of `readPathDeny`, `<runtimeDir>/accounts/**`. Executable allowlist restricts which binaries can be exec'd. |
+
+The two profiles are generated together at PTY spawn and re-generated whenever sandbox-affecting state changes (already covered in "Mode transitions fail closed").
+
+**Implementation:**
+
+- **macOS:** `sandbox-exec -f <generated.sb>` wrapping the `claude` invocation. Profile denies `file-read*` for:
+  - Every absolute path in `readPathDeny`.
+  - Every `readPathDeny` glob expanded across the workspace cwd AND each path in `additionalDirectories` (so workspace-relative `**/.env`, `**/credentials*`, `**/*.pem`, `**/*.key`, `**/id_rsa*`, `**/id_ed25519*` are denied wherever they live inside the agent's accessible roots).
+  - Every path in `writePathDeny` (covers `file-write*` and `file-read*`).
+  Profile is regenerated per-spawn so user-edited deny lists, new files added since last spawn, and updated `additionalDirectories` all take effect.
+- **Linux:** `bwrap` with read-only bind-mounts of the workspace + `additionalDirectories`, plus `--tmpfs` / `--bind-try /dev/null` overlays for **every** matched path: HOME credential dirs AND each file in the workspace/additionalDirectories matching a `readPathDeny` glob. Kanna runs a pre-spawn glob walk to enumerate matches and emits an overlay per match. Glob walk is bounded (max-files cap; reject spawn with "too many sensitive files in workspace, prune before launching" on overflow — better fail-closed than miss one).
+- **Windows:** unsupported in v1. PTY driver refuses to spawn by default. There is no `off` default. Allowing PTY on Windows requires the user to explicitly set BOTH (a) `KANNA_PTY_SANDBOX=off` env, AND (b) a server-wide `unsafeWindowsPty: true` toggle in app settings (with destructive-action confirm). When both are set, off-mode is active and additionally strips `Read`, `Glob`, `Grep` from `--tools` allowlist (model has only `mcp__kanna__*` for filesystem access via `mcp__kanna__read_guard`). A permanent global red banner renders across the whole app while off-mode is active.
+
+**Fail-closed preflight (runs on every spawn, supported OS):**
+
+1. Resolve sandbox binary (`/usr/bin/sandbox-exec` macOS, `bwrap` Linux). Fail spawn if missing.
+2. Generate **both** sandbox profiles (claude + tool-subprocess) from current `readPathDeny` + `writePathDeny`. Fail spawn if generation errors (e.g., unresolvable `~`).
+3. Walk workspace + `additionalDirectories` for glob matches of `readPathDeny` patterns. Fail spawn if the walk exceeds the bounded match cap (configurable, default 500).
+4. Run the **two** profile-specific preflight sentinel suites (see "Profile-specific preflight sentinels" under "claude's own sandbox profile"). Each suite has its own pass/deny rules; `~/.claude/.credentials.json` must be reachable under the claude profile but denied under the tool-subprocess profile. Spawn proceeds only if **both** suites' assertions all pass.
+5. Cache successful preflight result per `(OS-version, claudeProfileHash, toolProfileHash, sentinel-set-hash)`.
+
+**Explicit override:**
+- `KANNA_PTY_SANDBOX=off` is recognized only on supported OSes and only when the user has acknowledged the unsafe-mode confirm dialog. When off: `--tools` remains `"mcp__kanna__*"` (no built-in read tools — same as the on-mode default), renders a global red banner, and disables auto-approve toggles. Reads still go through `mcp__kanna__read/glob/grep` which apply `readPathDeny` per call. This is the only way to run PTY without OS sandboxing; it is **not** silently permitted.
+- `KANNA_PTY_SANDBOX=on` (default on macOS/Linux) is the supported mode.
+- On Windows, the env var alone is insufficient — the server-wide `unsafeWindowsPty` setting must also be true, see "Implementation: Windows" above.
+
+Tests (`sandbox-preflight.test.ts`):
+- Missing binary → reject.
+- Bad profile generation → reject.
+- **claude profile**: credentials.json reachable → allow that assertion; credentials.json denied → reject (auth would fail). Decoy `.claude/decoy-must-deny.txt` reachable → reject. Transcript write to `<spawnHome>/.claude/projects/<encodedCwd>/preflight-marker.jsonl` succeeds → allow; denied → reject (JSONL tail would fail).
+- **tool-subprocess profile**: credentials.json denied → allow that assertion; credentials.json reachable → reject. Sibling-account credentials denied → allow; reachable → reject.
+- **Workspace sentinel** (`.env`, `*.pem`, `credentials*`) reachable under tool profile → reject. Fixture sets up a real workspace with these files.
+- Overflow of bounded glob walk → reject.
+- All sentinels match expected → allow + cache.
+- Cache hit skips re-run.
+- Cache invalidates on `profile-hash` or `sentinel-set-hash` change.
+- Windows default (no env override) → reject with `unsupported_platform`.
+- Windows with `KANNA_PTY_SANDBOX=off` but `unsafeWindowsPty=false` → reject.
+- Windows fully off-mode → spawn proceeds, `--tools` is `"mcp__kanna__*"` (built-ins remain disabled regardless of mode).
+
+User can edit lists per-chat. "Auto-approve everything" is a single toggle that sets `defaultAction: "auto-allow"` and shows the red banner. Even under auto-approve, `readPathDeny` and `writePathDeny` still apply — auto-approve cannot grant access to denied paths.
+
+### Mode transitions fail closed
+
+- Changing `defaultAction` from `auto-allow` → anything else: kill PTY (COOLING), respawn. Any in-flight unresolved tool calls resolve as `deny: mode_changed`.
+- **Sandbox-affecting state changes** — `readPathDeny`, `writePathDeny`, `additionalDirectories`, `bash.autoAllowVerbs`, `KANNA_PTY_SANDBOX`, `unsafeWindowsPty`, `KANNA_MCP_ALLOWLIST`: mark the live PTY's sandbox profile as stale and trigger respawn before the next user message. In-flight tool calls cancel with `{decision:"deny", reason:"sandbox_stale"}`. Preflight cache entry for the old `profile-hash` is invalidated immediately.
+- **New sensitive file detection.** Although safety does not depend on it (reads go through `mcp__kanna__read` which re-checks per call), Kanna maintains a low-priority `fs.watch` over workspace + `additionalDirectories` for any path matching `readPathDeny` globs. On match: mark sandbox stale, respawn before next user message. This ensures defense-in-depth sandbox is also up-to-date.
+- Other (non-sandbox-affecting) policy keys hot-reload — `toolDenyList`, `bash.autoAllowVerbs` per-verb argument allowlists, `defaultAction` for `ask` ↔ `auto-deny`: applied on next `policy.evaluate` call without respawn.
+- Server crash mid-session: `defaultAction` reset to persisted value; pending requests resolved per "Server restart" rule above; banner re-displayed if `auto-allow` persisted.
+
+### Third-party MCP servers — fail closed
+
+User and project `.mcp.json` entries other than `kanna-mcp` are **not loaded by default** in PTY mode. The driver builds its `--mcp-config` from `kanna-mcp` only.
+
+To enable a third-party MCP server in PTY mode, the user must explicitly add it to `kanna.mcpAllowList` in app settings. When that list is non-empty:
+
+1. Phase-0 hook check must have passed (see "Optional belt-and-suspenders" below). If the hook does not fire under `--dangerously-skip-permissions`, spawn is **rejected** with an error: "Third-party MCP servers require the PreToolUse hook to be functional. Disable MCP allowlist or switch to SDK driver."
+2. The PreToolUse hook is registered and gates every call (Kanna-MCP and third-party). Spawn proceeds.
+3. The user-facing UI surfaces every third-party MCP server name and a list of its advertised tools at enable time, with a "I understand these run outside Kanna's structured gating" confirm.
+
+If the user has no third-party MCP servers (default), the hook is **not** required — `--tools` allowlist + `kanna-mcp`-only routing is the complete enforcement boundary.
+
+### Optional belt-and-suspenders: PreToolUse hook
+
+If the phase-0 spike confirms `PreToolUse` hooks fire reliably (full structured args, synchronous wait, honored under `--dangerously-skip-permissions`), Kanna installs a hook that veto-checks every tool call against the same `policy.evaluate`. This is **required** if any third-party MCP server is allowlisted; otherwise it is purely defense-in-depth.
+
+If the spike fails AND the user has third-party MCP enabled, spawn is rejected as described above.
+
+### What we still cannot fully gate (documented in user docs)
+
+- CLI built-in **`Read`** / **`Glob`** / **`Grep`** are **disabled in `--tools`** by default. Reads go through `mcp__kanna__read/glob/grep`, which apply live `readPathDeny` per call so newly-created secrets are denied immediately. OS sandboxing is defense-in-depth (not the primary gate).
+- File-system race conditions if user shells out from a still-enabled subprocess elsewhere on the system.
+- Long-running processes spawned by approved tool calls and inherited beyond the tool's lifetime. Documented limitation.
+
+### Tests
+
+`permission-gate.test.ts` covers: policy `auto-allow` / `auto-deny` / `ask`, denyList match, allowList match, timeout → deny, cancel-on-shutdown → deny, idempotent retry, server-restart fail-closed, mode change → kill + cancel pending, MCP server-side enforcement when CLI tries disabled built-in (assert tool call returns "not enabled").
+
+## Lifecycle
+
+Each PTY costs ~150MB RSS. We lazy-spawn and idle-stop.
+
+### State machine (per chat)
+
+- **COLD**: no process. Conversation history rendered from JSONL on disk plus Kanna's `EventStore`.
+- **WARMING**: spawn in flight.
+- **IDLE**: process running, no active turn, no queued prompts. Idle timer counting down.
+- **ACTIVE**: turn in flight or queue non-empty.
+- **COOLING**: `/exit` sent, awaiting proc exit. Force kill after 2s.
+
+### Transitions
+
+| Trigger | Transition |
+|---|---|
+| User focuses chat tab | COLD → WARMING (pre-spawn) |
+| User navigates away within `KANNA_PTY_PREWARM_GRACE_MS` | WARMING canceled → COLD |
+| `WARMING` exceeds `KANNA_PTY_WARM_TIMEOUT_MS` | WARMING → COLD (error surfaced) |
+| User sends message | COLD → WARMING → ACTIVE, or IDLE → ACTIVE |
+| JSONL Stop + queue empty | ACTIVE → IDLE, idle timer starts |
+| Idle timer fires (`KANNA_PTY_IDLE_TIMEOUT_MS`, default 600000) | IDLE → COOLING |
+| LRU cap exceeded (`KANNA_PTY_MAX_CONCURRENT`, default 5) | oldest IDLE → COOLING |
+| Chat deleted | any → COOLING |
+| Server shutdown | all → COOLING (parallel) |
+
+### Wake = `--resume <stored-uuid>`
+
+When transitioning COLD → WARMING for an existing chat, we pass `--session-id <stored-uuid>` and `--resume <stored-uuid>`. Full conversation context is restored from on-disk JSONL. Cold start cost ~1-2s.
+
+### UI surfacing
+
+- Sidebar chat row badge: ● active (green), ○ idle (gray), ◐ warming (spinner), unfilled = cold.
+- Tooltip on cold rows: "Session paused — opens when you click."
+- Settings panel: "Auto-stop idle sessions after N min" slider; "Max concurrent sessions" input.
+- Banner when driver = pty: "Tools are auto-approved in PTY mode — use a worktree for risky tasks."
+
+### `ClaudeSessionLifecycle` module
+
+```ts
+class ClaudeSessionLifecycle {
+  private states: Map<string, LifecycleState>
+  constructor(args: {
+    spawn: (chatId: string) => Promise<ClaudeSessionHandle>
+    maxConcurrent: number
+    idleTimeoutMs: number
+    prewarmGraceMs: number
+    warmTimeoutMs: number
+  })
+  onFocus(chatId: string): void
+  onBlur(chatId: string): void
+  onPromptSent(chatId: string): void
+  onTurnComplete(chatId: string): void
+  getOrSpawn(chatId: string): Promise<ClaudeSessionHandle>
+  shutdown(chatId: string, reason: string): Promise<void>
+  // tick() called every 30s to enforce idle/LRU rules
+}
+```
+
+The lifecycle wrapper is mounted between `AgentCoordinator` and the raw `startClaudeSessionPTY` factory. The SDK driver does not need it (SDK calls are stateless and cheap), but the same wrapper can be used optionally for symmetry.
+
+## Configuration
+
+| Env var | Default | Purpose |
+|---|---|---|
+| `KANNA_CLAUDE_DRIVER` | `sdk` | `sdk` or `pty` |
+| `KANNA_PTY_MAX_CONCURRENT` | `5` | LRU cap |
+| `KANNA_PTY_IDLE_TIMEOUT_MS` | `600000` | 10 min idle → stop |
+| `KANNA_PTY_PREWARM_GRACE_MS` | `2000` | Cancel pre-warm if user moves on |
+| `KANNA_PTY_WARM_TIMEOUT_MS` | `30000` | Spawn timeout |
+| `KANNA_PTY_SANDBOX` | `on` (macOS/Linux); **Windows: PTY spawn refused entirely** unless explicit `off` env + `unsafeWindowsPty: true` app setting | OS sandbox profile around `claude` spawn (denies reads of credential dirs and workspace secrets). |
+| `unsafeWindowsPty` (app setting) | `false` | Windows-only escape hatch. Must be `true` AND `KANNA_PTY_SANDBOX=off` to enable PTY on Windows. Renders global red banner. `--tools` is already `"mcp__kanna__*"` (no built-in read/write tools). Pool mode on Windows works (HOME override is platform-agnostic) but credential isolation has weaker FS-permissions guarantees on Windows; documented. |
+| `KANNA_MCP_ALLOWLIST` | `""` (empty) | Comma-separated names of third-party MCP servers permitted. Empty = none. |
+| `KANNA_PTY_OAUTH_POOL` | `on` | When `on`, per-account isolated `$HOME` enables multi-account rotation via `oauthPool`. When `off`, PTY uses user's native `~/.claude/` (no rotation). |
+| `CLAUDE_EXECUTABLE` | (auto) | Existing — path to `claude` binary |
+
+Also exposed in Kanna app settings UI (writes to user settings JSON).
+
+## Testing
+
+### Unit (no real `claude` spawn)
+
+| Suite | Coverage |
+|---|---|
+| `jsonl-reader.test.ts` | tail reader: append handling, file rotation, partial line buffering |
+| `jsonl-to-event.test.ts` | each JSONL type → correct `HarnessEvent` |
+| `frame-parser.test.ts` | slash ACK detection (model switch, rate-limit banner) |
+| `pty-process.test.ts` | mock `Bun.Terminal`, assert write sequences for each method |
+| `driver.test.ts` | wire mocked PTY + mocked JSONL tail → assert `ClaudeSessionHandle` contract |
+| `auth.test.ts` | env-without-key + keychain present → ok; env-with-key → throws |
+| `lifecycle.test.ts` | state transitions, idle timer, LRU eviction, pre-warm cancellation |
+| `api-key-helper.test.ts` | helper script generation + endpoint contract |
+
+Fixtures: captured JSONL from a real session in `test/fixtures/claude-pty/*.jsonl`. Replayed deterministically, no Anthropic network calls.
+
+### Integration (gated, `KANNA_PTY_E2E=1`, local only)
+
+Spawn real `claude` in scratch dir. Send 3 prompts (text, Read tool, Bash tool). Assert event stream over WebSocket matches expected shape. Skipped in CI (no OAuth keychain).
+
+### Regression coverage
+
+Existing `agent.test.ts` / `ws-router.test.ts` cover coordinator-level invariants by injecting the PTY factory in place of the SDK factory.
+
+### Render-loop check
+
+Any new UI surface (badges, banners, settings toggle) is verified via `renderForLoopCheck` per `CLAUDE.md` to avoid React error #185.
+
+## Risks
+
+| Risk | Mitigation |
+|---|---|
+| OAuth credential exfil via FD inheritance to Bash subprocesses | **No Kanna bearer exists.** PTY uses `claude`'s native keychain auth. No `apiKeyHelper`, no FD-passed token, no UDS oauth endpoint. See "OAuth / subscription auth". |
+| MCP tool callback deadlock turns | Durable per-tool-request state in `EventStore`, server-driven timeout, cancel on close/shutdown/respawn, idempotent retry by HMAC-SHA256 deterministic id. See "Callback protocol" + "Durable approval protocol (unified)". |
+| JSONL replay duplicates or skips events on cold wake | Per-session `(byteOffset, lastEventId)` bookmark in `EventStore`, dedupe scan on truncation/rotation, atomic emit+advance, init event treated as control not transcript. See "Tail semantics". |
+| Permission gate depends on unproven hook behavior | Primary gate is `--tools` allowlist + kanna-mcp routing — no hook dependency. Hook is optional belt-and-suspenders. CLI cannot execute a tool we have not enabled. See "Permission enforcement". |
+| `--tools` allowlist semantics change (CLI version OR Anthropic server-side planner) | **Runtime allowlist preflight** runs a full directed-probe suite at server boot and the full sentinel suite (all N probes in parallel) before every user-facing PTY spawn. Any built-in reachable invalidates the cache immediately and blocks further spawns until re-probe passes. See "Allowlist preflight". |
+| Built-in tools (Bash/Edit/Write) execute un-gated | Disabled at spawn via `--tools` allowlist. Model uses `mcp__kanna__*` replacements which Kanna gates synchronously with structured args. |
+| User MCP servers (3rd-party) bypass Kanna gating | Default fail-closed: only `kanna-mcp` is loaded. Third-party MCP requires explicit allowlist AND a functional PreToolUse hook; otherwise spawn refused. See "Third-party MCP servers — fail closed". |
+| Bash auto-allow leaks credentials (`cat ~/.claude/...`) | Bash is parsed (no regex prefix), `readPathDeny` resolved per arg, shell features (pipes/subshell/eval) downgrade to `ask`. `auto-allow` cannot override deny-list. OS sandbox (`sandbox-exec` / `bwrap`) is the secondary gate. |
+| ToolUseId replay with mutated args | Idempotency id binds to `(toolUseId, toolName, canonicalArgsHash)`; mismatch fails closed with `argument_mismatch` and emits audit event. |
+| CLI built-in `Read`/`Glob`/`Grep` read sensitive paths | `--tools "mcp__kanna__*"` removes built-ins entirely. Reads go through `mcp__kanna__read/glob/grep` which apply live `readPathDeny` per call (handles newly-created secrets). OS sandbox is defense-in-depth. Sandbox-affecting state changes trigger PTY respawn. |
+| Long-running warm PTY has stale sandbox after new sensitive files appear | (a) Primary: reads are not handled by the sandbox at all — `mcp__kanna__read` re-checks `readPathDeny` per call. (b) Defense-in-depth: `fs.watch` over readPathDeny glob matches triggers respawn-before-next-turn when a match appears. |
+| Lifecycle bugs leak PTY processes (RSS exhaustion) | LRU cap + idle timeout + server shutdown fanout + `ps`-based reaper sweep on startup. Runtime dir cleanup on COOLING. |
+| Subagent feature uses `initialPrompt` + `systemPromptOverride` | Map to `--system-prompt` + send-prompt-then-exit-on-Stop. Covered by `driver.test.ts`. |
+| Loss of `oauthPool` multi-token rotation in PTY mode | **Restored.** Per-account isolated `$HOME` enables rotation. Cross-account switch = respawn (~1-2s). See "OAuth / subscription auth". |
+| Per-account credential file readable by `mcp__kanna__bash` / `Read` | `readPathDeny` `~/...` patterns resolve against spawn `$HOME`; absolute pool root `<runtimeDir>/accounts/**` also denied; OS sandbox profile uses spawn HOME. Tested by `account-home.test.ts` (probe attempts `cat ~/.claude/.credentials.json` in PTY → denied). |
+| Cross-account credential read | Each account HOME is `0700`; sandbox restricts spawn FS to its own HOME subtree. No path resolves to a sibling account. |
+| Anthropic clarifies ToS to disallow PTY wrapping | Feature flag stays off by default. Documented limitation. Remove if formally disallowed. |
+| `--remote-control` becomes an official structured channel | Driver lives behind same `ClaudeSessionHandle` interface — swap implementation, keep contract. |
+| `claude` JSONL schema changes between versions | Pin minimum `claude` version. Version-probe at spawn. Fail loud on unknown line types (log + skip line). |
+| Slash command names change | Same: version pin + integration test runs on supported versions. |
+
+## Rollout
+
+| Phase | Deliverable | Gate |
+|---|---|---|
+| 0 | Throwaway spike. Verify: (a) JSONL 1:1 fidelity with SDK events on 5 representative chats; (b) implement the allowlist preflight prototype against `--tools "mcp__kanna__*"` and confirm every built-in (`Bash`, `Edit`, `Write`, `WebFetch`, `WebSearch`, `Read`, `Glob`, `Grep`) is unavailable; (c) `--mcp-config` over UDS works with `kanna-mcp`; (d) interactive PTY keeps subscription billing on a real Pro/Max account (check usage page); (e) `--resume` round-trips with a known `--session-id`; (f) `sandbox-exec` (macOS) / `bwrap` (Linux) profile denies `~/.ssh` / `~/.claude` reads AND workspace-secret reads (`.env`, `*.pem`) without breaking project work; (g) PreToolUse hook behavior under `--dangerously-skip-permissions` — captures the answer needed to gate third-party MCP support. Capture all results in `docs/superpowers/specs/2026-05-14-claude-pty-driver-spike.md` before opening phase 1. | (a)–(f) all green. If (b) fails: redesign — possibly fall back to wrapping the entire `claude` invocation in a tighter sandbox or shipping a forked CLI. If (g) fails: spawn refuses to load any third-party MCP server until alternative gate ships. |
+| 1a | MCP tool refactor: new `mcp__kanna__bash/edit/write/webfetch/websearch` + move `ask_user_question` + `exit_plan_mode` into kanna-mcp. Unified durable approval protocol (`tool-callback.ts` + `permission-gate.ts`). Behind `KANNA_MCP_TOOL_CALLBACKS=1`. SDK driver opts in first and routes its `canUseTool` through `permission-gate.ts`. | `mcp-tool-callback.test.ts`, `permission-gate.test.ts` green. SDK driver still passes existing tests. |
+| 1b | `claude-pty/` module: PTY spawn, UDS server (callbacks only, no creds), runtime-dir, JSONL tail with bookmarks. Feature flag `KANNA_CLAUDE_DRIVER=pty`. Default stays `sdk`. | All unit tests pass. Manual smoke: chat works end-to-end with default `ask` policy and `mcp__kanna__*` tool routing. |
+| 2 | UI: driver toggle, status badges, per-chat unsafe opt-in flow with destructive-action confirm dialog, deny-list editor, lifecycle settings. | Manual QA: driver switch, unsafe toggle, deny-list match, cold→warm→active→idle→cooling cycle, server-restart resets unsafe. |
+| 3 | Integration test gated by `KANNA_PTY_E2E=1`. Public docs page explaining tradeoffs, ToS caveat, single-user-only, security model. | Docs reviewed. |
+| 4 | Default flip considered only after Anthropic SDK pricing announcement lands and PTY mode has ≥2 weeks soak in real use. | n/a |
+
+## Open questions
+
+1. **`--tools` allowlist semantics.** Enforced via runtime allowlist preflight (see "Allowlist preflight"). The phase-0 spike captures the first known-good probe result for the bundled `claude` version, but ongoing correctness is a runtime invariant — not a one-time spike.
+2. **`/permissions` slash command interactivity.** Need a spike to confirm whether it can be driven by line input or requires arrow-key TUI nav. Since policy is now per-chat in `EventStore`, runtime changes mostly don't need to touch the CLI's mode — but verify for completeness.
+3. **`--remote-control` protocol.** Worth a spike to see if it offers a clean structured control channel that could replace the PTY entirely. Out of scope for v1.
+4. **Plugins / hooks parity.** SDK driver runs the user's `~/.claude/settings.json` hooks via `settingSources: ["user","project","local"]`. CLI does the same natively — verify end-to-end. PreToolUse-under-bypass is only required for the optional belt-and-suspenders gate; not gating.
+5. **Image attachment fallback.** `@path` works for files Kanna already saves to disk. Verify CLI accepts the path syntax for image files and renders them to the model.
+6. **`mcp__kanna__bash` shell semantics.** Decide: implement via `Bun.spawn` with the same env/cwd as the PTY's working directory? Stream stdout to UI live? Match Claude Code's built-in `Bash` exactly so the model doesn't notice the swap. Spike output capture cadence (line-buffered vs frame-debounced) and stdin handling.
+
+## Spec self-review notes
+
+- No placeholders / TODOs remain.
+- Internal consistency: control plane methods match audit table match testing matrix.
+- Scope: focused on one driver swap + lifecycle. Subagent + MCP tool refactor are required dependencies, called out as such.
+- Ambiguity: `interrupt()` semantics around single vs double Esc are flagged as needing implementation-phase verification, not left for the reader to guess.
