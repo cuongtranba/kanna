@@ -1,6 +1,6 @@
 import { homedir, tmpdir } from "node:os"
 import path from "node:path"
-import { mkdtemp, rm, writeFile } from "node:fs/promises"
+import { mkdtemp, rm } from "node:fs/promises"
 import { randomUUID } from "node:crypto"
 import { verifyPtyAuth } from "./auth"
 import { computeJsonlPath } from "./jsonl-path"
@@ -8,8 +8,7 @@ import { createJsonlReader } from "./jsonl-reader"
 import { spawnPtyProcess } from "./pty-process"
 import { writeSlashCommand } from "./slash-commands"
 import { writeSpawnSettings } from "./settings-writer"
-import { isSandboxEnabled } from "./sandbox/platform"
-import { generateMacosProfile } from "./sandbox/profile-macos"
+import { isSandboxEnabledAsync } from "./sandbox/platform"
 import { wrapWithSandbox } from "./sandbox/wrap"
 import { POLICY_DEFAULT } from "../../shared/permission-policy"
 import type { PreflightGate } from "./preflight/gate"
@@ -72,13 +71,7 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
   const runtimeDir = await mkdtemp(path.join(tmpdir(), `kanna-pty-${sessionId.slice(0, 8)}-`))
   const { settingsPath } = await writeSpawnSettings({ runtimeDir })
 
-  const sandboxOn = isSandboxEnabled({ platform: process.platform, env: env.KANNA_PTY_SANDBOX })
-  let sandboxProfilePath: string | null = null
-  if (sandboxOn) {
-    const profileBody = generateMacosProfile({ policy: POLICY_DEFAULT, homeDir: home })
-    sandboxProfilePath = path.join(runtimeDir, "claude-sandbox.sb")
-    await writeFile(sandboxProfilePath, profileBody, "utf8")
-  }
+  const sandboxOn = await isSandboxEnabledAsync({ platform: process.platform, env: env.KANNA_PTY_SANDBOX })
 
   const claudeBin = env.CLAUDE_EXECUTABLE?.replace(/^~(?=\/|$)/, home) ?? "claude"
   const cliArgs: string[] = [
@@ -132,15 +125,15 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
     else mergedQueue.push(ev)
   }
 
-  const wrapped = sandboxProfilePath
-    ? wrapWithSandbox({
-        platform: process.platform,
-        enabled: sandboxOn,
-        profilePath: sandboxProfilePath,
-        command: claudeBin,
-        args: cliArgs,
-      })
-    : { command: claudeBin, args: cliArgs }
+  const wrapped = await wrapWithSandbox({
+    platform: process.platform,
+    enabled: sandboxOn,
+    policy: POLICY_DEFAULT,
+    homeDir: home,
+    runtimeDir,
+    command: claudeBin,
+    args: cliArgs,
+  })
 
   const pty = await spawnPtyProcess({
     command: wrapped.command,
