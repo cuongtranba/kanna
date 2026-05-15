@@ -66,6 +66,10 @@ export class OAuthTokenPool {
 
   markError(id: string, message: string): void {
     this.writeStatus(id, { status: "error", lastErrorAt: this.now(), lastErrorMessage: message })
+    // Drop any reservation — an errored token cannot serve sessions.
+    // Mirrors markLimited / markDisabled so the owning chat can immediately
+    // re-pick a different token via pickActive() without an explicit release.
+    this.reservedBy.delete(id)
   }
 
   markDisabled(id: string): void {
