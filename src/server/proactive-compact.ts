@@ -20,11 +20,28 @@ export function getEffectiveContextWindow(
   return Math.max(0, maxContextWindow - reserved)
 }
 
+// Mirrors upstream claude-code's CLAUDE_AUTOCOMPACT_PCT_OVERRIDE env knob.
+// Returns a percentage in (0, 100], or undefined when unset/invalid. The
+// override can only LOWER the trigger (fire earlier); upstream caps it at the
+// default threshold via Math.min in kP_().
+export function getAutoCompactPctOverride(env: NodeJS.ProcessEnv = process.env): number | undefined {
+  const raw = env.CLAUDE_AUTOCOMPACT_PCT_OVERRIDE
+  if (!raw) return undefined
+  const pct = Number.parseFloat(raw)
+  if (!Number.isFinite(pct) || pct <= 0 || pct > 100) return undefined
+  return pct
+}
+
 export function getAutoCompactThreshold(
   maxContextWindow: number,
   maxOutputTokens: number = MAX_OUTPUT_TOKENS_FOR_SUMMARY,
+  env: NodeJS.ProcessEnv = process.env,
 ): number {
-  return Math.max(0, getEffectiveContextWindow(maxContextWindow, maxOutputTokens) - AUTOCOMPACT_BUFFER_TOKENS)
+  const effective = getEffectiveContextWindow(maxContextWindow, maxOutputTokens)
+  const defaultThreshold = Math.max(0, effective - AUTOCOMPACT_BUFFER_TOKENS)
+  const pct = getAutoCompactPctOverride(env)
+  if (pct === undefined) return defaultThreshold
+  return Math.min(Math.floor(effective * (pct / 100)), defaultThreshold)
 }
 
 export function shouldProactivelyCompact(

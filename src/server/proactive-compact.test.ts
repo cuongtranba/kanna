@@ -3,6 +3,7 @@ import type { TranscriptEntry } from "../shared/types"
 import {
   AUTOCOMPACT_BUFFER_TOKENS,
   MAX_OUTPUT_TOKENS_FOR_SUMMARY,
+  getAutoCompactPctOverride,
   getAutoCompactThreshold,
   getEffectiveContextWindow,
   getLatestContextWindowUsage,
@@ -41,6 +42,43 @@ describe("proactive-compact thresholds", () => {
     expect(getEffectiveContextWindow(5_000)).toBe(0)
     expect(getAutoCompactThreshold(5_000)).toBe(0)
   })
+
+  test("1M context window threshold matches upstream ry8(): window - 20k - 13k", () => {
+    expect(getAutoCompactThreshold(1_000_000))
+      .toBe(1_000_000 - MAX_OUTPUT_TOKENS_FOR_SUMMARY - AUTOCOMPACT_BUFFER_TOKENS)
+  })
+})
+
+describe("CLAUDE_AUTOCOMPACT_PCT_OVERRIDE", () => {
+  test("unset → undefined", () => {
+    expect(getAutoCompactPctOverride({})).toBeUndefined()
+  })
+
+  test("non-numeric / out-of-range → undefined (mirrors upstream guard)", () => {
+    expect(getAutoCompactPctOverride({ CLAUDE_AUTOCOMPACT_PCT_OVERRIDE: "abc" })).toBeUndefined()
+    expect(getAutoCompactPctOverride({ CLAUDE_AUTOCOMPACT_PCT_OVERRIDE: "0" })).toBeUndefined()
+    expect(getAutoCompactPctOverride({ CLAUDE_AUTOCOMPACT_PCT_OVERRIDE: "-5" })).toBeUndefined()
+    expect(getAutoCompactPctOverride({ CLAUDE_AUTOCOMPACT_PCT_OVERRIDE: "101" })).toBeUndefined()
+  })
+
+  test("valid pct parsed", () => {
+    expect(getAutoCompactPctOverride({ CLAUDE_AUTOCOMPACT_PCT_OVERRIDE: "70" })).toBe(70)
+    expect(getAutoCompactPctOverride({ CLAUDE_AUTOCOMPACT_PCT_OVERRIDE: "100" })).toBe(100)
+  })
+
+  test("pct override caps below default threshold (upstream Math.min)", () => {
+    // 200k window: default threshold = 167_000. pct=70 of 180_000 effective = 126_000.
+    // min(126_000, 167_000) = 126_000.
+    const env = { CLAUDE_AUTOCOMPACT_PCT_OVERRIDE: "70" }
+    expect(getAutoCompactThreshold(200_000, MAX_OUTPUT_TOKENS_FOR_SUMMARY, env))
+      .toBe(Math.floor(180_000 * 0.7))
+  })
+
+  test("pct=100 yields the default threshold (override can only lower)", () => {
+    const env = { CLAUDE_AUTOCOMPACT_PCT_OVERRIDE: "100" }
+    expect(getAutoCompactThreshold(200_000, MAX_OUTPUT_TOKENS_FOR_SUMMARY, env))
+      .toBe(getAutoCompactThreshold(200_000, MAX_OUTPUT_TOKENS_FOR_SUMMARY, {}))
+  })
 })
 
 describe("shouldProactivelyCompact", () => {
@@ -65,6 +103,25 @@ describe("shouldProactivelyCompact", () => {
     expect(
       shouldProactivelyCompact({ usedTokens: 180_000, maxTokens: 200_000 }),
     ).toBe(true)
+  })
+
+  test("1M window: 200k used is well below threshold (regression for SDK#238)", () => {
+    // Pre-fix: SDK reported contextWindow=200_000 even on 1m beta → threshold=167k
+    // → compacted at ~17% of real 1M window. With maxTokens correctly seeded
+    // from the [1m] model id, 200k used is far below the 967k threshold.
+    expect(
+      shouldProactivelyCompact({ usedTokens: 200_000, maxTokens: 1_000_000 }),
+    ).toBe(false)
+  })
+
+  test("1M window: fires at correct upstream threshold", () => {
+    const threshold = getAutoCompactThreshold(1_000_000)
+    expect(
+      shouldProactivelyCompact({ usedTokens: threshold, maxTokens: 1_000_000 }),
+    ).toBe(true)
+    expect(
+      shouldProactivelyCompact({ usedTokens: threshold - 1, maxTokens: 1_000_000 }),
+    ).toBe(false)
   })
 
   test("returns false when maxTokens missing or zero", () => {
