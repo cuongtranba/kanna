@@ -10,6 +10,7 @@ import {
   maxClaudeContextWindowFromModelUsage,
   normalizeClaudeStreamMessage,
   normalizeClaudeUsageSnapshot,
+  parseConfiguredContextWindowFromModelId,
 } from "./agent"
 import { EventStore } from "./event-store"
 import { createToolCallbackService } from "./tool-callback"
@@ -107,6 +108,18 @@ describe("normalizeClaudeStreamMessage", () => {
         contextWindow: 1_000_000,
       },
     })).toBe(1_000_000)
+  })
+
+  describe("parseConfiguredContextWindowFromModelId", () => {
+    test("returns 1_000_000 for [1m] suffix", () => {
+      expect(parseConfiguredContextWindowFromModelId("claude-opus-4-6[1m]")).toBe(1_000_000)
+      expect(parseConfiguredContextWindowFromModelId("claude-sonnet-4-7[1m]")).toBe(1_000_000)
+    })
+
+    test("returns undefined without [1m] suffix so SDK-reported value wins", () => {
+      expect(parseConfiguredContextWindowFromModelId("claude-opus-4-6")).toBeUndefined()
+      expect(parseConfiguredContextWindowFromModelId("claude-sonnet-4-7")).toBeUndefined()
+    })
   })
 })
 

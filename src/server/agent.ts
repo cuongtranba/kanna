@@ -418,6 +418,15 @@ export function maxClaudeContextWindowFromModelUsage(modelUsage: unknown): numbe
   return maxContextWindow
 }
 
+// The SDK's `result.modelUsage[*].contextWindow` can lie: it reports 200_000 even
+// when the user opted into the 1M beta via the `[1m]` model id suffix
+// (claude-agent-sdk-typescript#238). Without this hint, proactive-compact would
+// trip at 167k tokens — ~17% of the real 1M window — and compact far too often.
+// We derive the configured window from the SDK model id and use it as a floor.
+export function parseConfiguredContextWindowFromModelId(modelId: string): number | undefined {
+  return modelId.endsWith("[1m]") ? 1_000_000 : undefined
+}
+
 function getClaudeAssistantMessageUsageId(message: any): string | null {
   if (typeof message?.message?.id === "string" && message.message.id) {
     return message.message.id
@@ -544,10 +553,13 @@ export function normalizeClaudeStreamMessage(message: any): TranscriptEntry[] {
   return []
 }
 
-async function* createClaudeHarnessStream(q: Query): AsyncGenerator<HarnessEvent> {
+async function* createClaudeHarnessStream(
+  q: Query,
+  configuredContextWindow?: number,
+): AsyncGenerator<HarnessEvent> {
   let seenAssistantUsageIds = new Set<string>()
   let latestUsageSnapshot: ContextWindowUsageSnapshot | null = null
-  let lastKnownContextWindow: number | undefined
+  let lastKnownContextWindow: number | undefined = configuredContextWindow
   const detector = new ClaudeLimitDetector()
 
   for await (const sdkMessage of q as AsyncIterable<any>) {
@@ -581,19 +593,21 @@ async function* createClaudeHarnessStream(q: Query): AsyncGenerator<HarnessEvent
 
     if (sdkMessage?.type === "result") {
       const resultContextWindow = maxClaudeContextWindowFromModelUsage(sdkMessage.modelUsage)
+      // Never let SDK lower the configured window — see comment on
+      // parseConfiguredContextWindowFromModelId for the 1M beta footgun.
       if (resultContextWindow !== undefined) {
-        lastKnownContextWindow = resultContextWindow
+        lastKnownContextWindow = Math.max(lastKnownContextWindow ?? 0, resultContextWindow)
       }
 
       const accumulatedUsage = normalizeClaudeUsageSnapshot(
         sdkMessage.usage,
-        resultContextWindow ?? lastKnownContextWindow,
+        lastKnownContextWindow,
       )
       const finalUsage = latestUsageSnapshot
         ? {
             ...latestUsageSnapshot,
-            ...(typeof (resultContextWindow ?? lastKnownContextWindow) === "number"
-              ? { maxTokens: resultContextWindow ?? lastKnownContextWindow }
+            ...(typeof lastKnownContextWindow === "number"
+              ? { maxTokens: lastKnownContextWindow }
               : {}),
             ...(accumulatedUsage && accumulatedUsage.usedTokens > latestUsageSnapshot.usedTokens
               ? { totalProcessedTokens: accumulatedUsage.usedTokens }
@@ -871,7 +885,7 @@ async function startClaudeSession(args: {
 
   return {
     provider: "claude",
-    stream: createClaudeHarnessStream(q),
+    stream: createClaudeHarnessStream(q, parseConfiguredContextWindowFromModelId(args.model)),
     getAccountInfo: async () => {
       try {
         return await q.accountInfo()
