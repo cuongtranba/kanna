@@ -211,4 +211,35 @@ describe("OAuthTokenPoolCard", () => {
     )
     expect(html).toContain("tabular-nums")
   })
+
+  test("renders Disabled pill for disabled tokens", () => {
+    const html = renderToStaticMarkup(
+      <OAuthTokenPoolCard
+        tokens={[makeToken({ status: "disabled" })]}
+        onWrite={async () => {}}
+        onTest={async () => ({ ok: true, error: null })}
+      />,
+    )
+    expect(html).toContain("Disabled")
+  })
+
+  test("renders Enable button for disabled, Disable button for active", () => {
+    const disabledHtml = renderToStaticMarkup(
+      <OAuthTokenPoolCard
+        tokens={[makeToken({ status: "disabled" })]}
+        onWrite={async () => {}}
+        onTest={async () => ({ ok: true, error: null })}
+      />,
+    )
+    expect(disabledHtml).toContain('aria-label="Enable"')
+
+    const activeHtml = renderToStaticMarkup(
+      <OAuthTokenPoolCard
+        tokens={[makeToken({ status: "active" })]}
+        onWrite={async () => {}}
+        onTest={async () => ({ ok: true, error: null })}
+      />,
+    )
+    expect(activeHtml).toContain('aria-label="Disable"')
+  })
 })

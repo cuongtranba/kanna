@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { Trash2, FlaskConical } from "lucide-react"
+import { Trash2, FlaskConical, Power, PowerOff } from "lucide-react"
 import type { ClaudeAuthSettings, OAuthTokenEntry } from "../../../shared/types"
 import { maskToken } from "../../lib/oauthTokenMask"
 import { Input } from "../ui/input"
@@ -57,6 +57,15 @@ function StatusPill({ entry, now }: { entry: OAuthTokenEntry; now: number }) {
     )
   }
 
+  if (entry.status === "disabled") {
+    return (
+      <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground/60">
+        <span className="size-1.5 rounded-full bg-muted-foreground/30" aria-hidden="true" />
+        Disabled
+      </span>
+    )
+  }
+
   // error
   const message = entry.lastErrorMessage ?? "Unknown error"
   return (
@@ -84,12 +93,14 @@ function TokenRow({
   now,
   isCurrent,
   onRemove,
+  onToggleDisabled,
   onTest,
 }: {
   entry: OAuthTokenEntry
   now: number
   isCurrent: boolean
   onRemove: () => void
+  onToggleDisabled: () => void
   onTest: (token: string) => Promise<{ ok: boolean; error: string | null }>
 }) {
   const [testResult, setTestResult] = useState<string | null>(null)
@@ -111,12 +122,14 @@ function TokenRow({
     }
   }
 
+  const isDisabled = entry.status === "disabled"
+
   return (
     <div className="flex items-center justify-between gap-3 border-t border-border py-3">
       {/* left: label + masked token + status */}
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-3">
-          <span className="text-sm font-medium text-foreground">{entry.label}</span>
+          <span className={`text-sm font-medium ${isDisabled ? "text-muted-foreground/60" : "text-foreground"}`}>{entry.label}</span>
           <code className="text-xs font-mono text-muted-foreground">{maskToken(entry.token)}</code>
           {isCurrent && (
             <span className="inline-flex items-center rounded-full border border-primary/40 bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-primary">
@@ -138,12 +151,30 @@ function TokenRow({
           type="button"
           aria-label="Test"
           onClick={handleTest}
-          disabled={testing}
+          disabled={testing || isDisabled}
           className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
         >
           <FlaskConical className="size-3" aria-hidden="true" />
           Test
         </button>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                aria-label={isDisabled ? "Enable" : "Disable"}
+                onClick={onToggleDisabled}
+                className="rounded p-1 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                {isDisabled
+                  ? <Power className="size-3.5" aria-hidden="true" />
+                  : <PowerOff className="size-3.5" aria-hidden="true" />}
+                <span className="sr-only">{isDisabled ? "Enable" : "Disable"}</span>
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>{isDisabled ? "Enable" : "Disable"}</TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
         <button
           type="button"
           aria-label="Remove"
@@ -253,6 +284,16 @@ export function OAuthTokenPoolCard({
     void onWrite({ tokens: tokens.filter((t) => t.id !== id) })
   }
 
+  const handleToggleDisabled = (id: string) => {
+    void onWrite({
+      tokens: tokens.map((t) =>
+        t.id === id
+          ? { ...t, status: t.status === "disabled" ? "active" : "disabled" }
+          : t,
+      ),
+    })
+  }
+
   return (
     <div>
       {tokens.map((entry) => (
@@ -262,6 +303,7 @@ export function OAuthTokenPoolCard({
           now={now}
           isCurrent={entry.id === currentId}
           onRemove={() => handleRemove(entry.id)}
+          onToggleDisabled={() => handleToggleDisabled(entry.id)}
           onTest={onTest}
         />
       ))}
