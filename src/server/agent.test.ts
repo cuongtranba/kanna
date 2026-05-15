@@ -1,4 +1,7 @@
 import { describe, expect, test } from "bun:test"
+import { mkdtemp, rm } from "node:fs/promises"
+import { tmpdir } from "node:os"
+import path from "node:path"
 import {
   AgentCoordinator,
   buildAttachmentHintText,
@@ -8,6 +11,8 @@ import {
   normalizeClaudeStreamMessage,
   normalizeClaudeUsageSnapshot,
 } from "./agent"
+import { EventStore } from "./event-store"
+import { createToolCallbackService } from "./tool-callback"
 import type { ToolCallbackService } from "./tool-callback"
 import type { ChatPermissionPolicy } from "../shared/permission-policy"
 import { POLICY_DEFAULT } from "../shared/permission-policy"
@@ -3835,6 +3840,68 @@ describe("buildCanUseTool", () => {
 
       expect(result.behavior).toBe("allow")
       expect(onToolRequestCallCount).toBe(0)
+    } finally {
+      delete process.env.KANNA_MCP_TOOL_CALLBACKS
+    }
+  })
+
+  test("E2E: KANNA_MCP_TOOL_CALLBACKS=1 — AskUserQuestion routes through tool-callback and SDK receives updated input via answer", async () => {
+    process.env.KANNA_MCP_TOOL_CALLBACKS = "1"
+    try {
+      // Real EventStore + real ToolCallbackService + real buildCanUseTool.
+      const tempDir = await mkdtemp(path.join(tmpdir(), "kanna-e2e-"))
+      const store = new EventStore(tempDir)
+      await store.initialize()
+      const svc = createToolCallbackService({
+        store,
+        serverSecret: "e2e-secret",
+        now: () => 1_000,
+        timeoutMs: 600_000,
+      })
+
+      const canUseTool = buildCanUseTool({
+        localPath: "/tmp/project",
+        chatId: "c-1",
+        sessionToken: "s-1",
+        // Legacy callback should NOT fire on flag-on path.
+        onToolRequest: async () => { throw new Error("legacy path called unexpectedly") },
+        toolCallback: svc,
+        chatPolicy: POLICY_DEFAULT,
+      })
+
+      const askUserQuestionInput = {
+        questions: [{
+          text: "Pick option",
+          header: "Pick",
+          options: [
+            { label: "a", description: "" },
+            { label: "b", description: "" },
+          ],
+          multiSelect: false,
+        }],
+      }
+
+      // Kick off the canUseTool call (pending, awaits external answer).
+      const resultPromise = canUseTool("AskUserQuestion", askUserQuestionInput, {
+        toolUseID: "tu-e2e",
+        suggestions: [],
+        signal: new AbortController().signal,
+      } as any)
+
+      // Find the pending record and answer it.
+      const pending = store.listPendingToolRequests("c-1")
+      expect(pending).toHaveLength(1)
+      await svc.answer(pending[0].id, {
+        kind: "answer",
+        payload: { answers: { "Pick option": "a" } },
+      })
+
+      const result = await resultPromise
+      expect(result.behavior).toBe("allow")
+      const updatedInput = (result as Extract<typeof result, { behavior: "allow" }>).updatedInput as Record<string, unknown>
+      expect(updatedInput.answers).toEqual({ "Pick option": "a" })
+
+      await rm(tempDir, { recursive: true, force: true })
     } finally {
       delete process.env.KANNA_MCP_TOOL_CALLBACKS
     }
