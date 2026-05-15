@@ -94,13 +94,19 @@ Override the probe model via `KANNA_PTY_PREFLIGHT_MODEL` (default
 `claude-haiku-4-5-20251001` for cost/speed). Real probes burn subscription
 turns; CI does not run them — unit tests cover the classifier + cache only.
 
-**OS sandbox (P4):** On macOS, every PTY spawn is wrapped with
-`/usr/bin/sandbox-exec -f <profile>`. The profile is generated per-spawn
-from `POLICY_DEFAULT.readPathDeny` + `writePathDeny`, denying file-read*
-and file-write* on those subpaths. Default behaviour on macOS is
-sandbox-on. Set `KANNA_PTY_SANDBOX=off` to skip (advanced users only —
-loses defense-in-depth against built-in tool credential reads). Linux
-`bwrap` support lands in P4.1. Windows: PTY refused per spec.
+**OS sandbox (P4 + P4.1):** Every PTY spawn is wrapped with an OS-level
+sandbox when supported:
+- macOS: `/usr/bin/sandbox-exec -f <profile.sb>`. Profile generated per
+  spawn from `POLICY_DEFAULT.readPathDeny` + `writePathDeny`. Default on.
+- Linux: `/usr/bin/bwrap <flags> claude ...`. Each deny entry becomes
+  `--tmpfs <path>` (replaces the path with an empty in-memory filesystem).
+  Default on **only when `bwrap` is installed** (`apt install bubblewrap` /
+  `pacman -S bubblewrap` / `dnf install bubblewrap`). If absent, sandbox
+  silently disables — set `KANNA_PTY_SANDBOX=off` to suppress the gap.
+- Windows: PTY refused per spec.
+
+Set `KANNA_PTY_SANDBOX=off` to skip (advanced users, loses defense-in-depth
+against built-in tool credential reads).
 
 # Kanna-MCP Built-in Shims
 

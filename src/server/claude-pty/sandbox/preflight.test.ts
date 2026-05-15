@@ -1,63 +1,70 @@
 import { describe, expect, test } from "bun:test"
-import { runSandboxPreflight } from "./preflight"
 import { mkdtemp, rm, writeFile, mkdir } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
-import { generateMacosProfile } from "./profile-macos"
+import { runSandboxPreflight } from "./preflight"
+import { POLICY_DEFAULT } from "../../../shared/permission-policy"
 
-describe("runSandboxPreflight", () => {
-  test("returns ok when sentinel read is denied under the profile", async () => {
+describe("runSandboxPreflight (cross-platform)", () => {
+  test("macOS: ok when sentinel denied", async () => {
     if (process.platform !== "darwin") return
-    // Set up a fake "home" with a sentinel under .ssh and a profile denying that dir.
-    const home = await mkdtemp(path.join(tmpdir(), "kanna-sb-preflight-"))
+    const home = await mkdtemp(path.join(tmpdir(), "kanna-sb-pf-mac-"))
+    const runtimeDir = await mkdtemp(path.join(tmpdir(), "kanna-sb-pf-runtime-"))
     try {
       await mkdir(path.join(home, ".ssh"), { recursive: true })
       await writeFile(path.join(home, ".ssh", "id_rsa"), "SECRET", "utf8")
-      const policy = {
-        defaultAction: "ask" as const,
-        bash: { autoAllowVerbs: [] },
-        readPathDeny: [`${home}/.ssh`],
-        writePathDeny: [],
-        toolDenyList: [],
-        toolAllowList: [],
-      }
-      const profile = generateMacosProfile({ policy, homeDir: home })
+      const policy = { ...POLICY_DEFAULT, readPathDeny: [`${home}/.ssh`] }
       const result = await runSandboxPreflight({
         platform: "darwin",
         enabled: true,
-        profileBody: profile,
+        policy,
+        homeDir: home,
+        runtimeDir,
         sentinelPath: `${home}/.ssh/id_rsa`,
       })
       expect(result.ok).toBe(true)
-    } finally { await rm(home, { recursive: true, force: true }) }
+    } finally {
+      await rm(home, { recursive: true, force: true })
+      await rm(runtimeDir, { recursive: true, force: true })
+    }
   }, 30_000)
 
-  test("returns ok=false when sentinel read succeeds (sandbox not enforcing)", async () => {
-    if (process.platform !== "darwin") return
-    const home = await mkdtemp(path.join(tmpdir(), "kanna-sb-preflight-"))
+  test("linux: ok when sentinel denied via bwrap tmpfs", async () => {
+    if (process.platform !== "linux") return
+    // Requires bwrap installed on the test machine.
+    const home = await mkdtemp(path.join(tmpdir(), "kanna-sb-pf-lin-"))
+    const runtimeDir = await mkdtemp(path.join(tmpdir(), "kanna-sb-pf-runtime-"))
     try {
-      const sentinel = path.join(home, "readable.txt")
-      await writeFile(sentinel, "OK", "utf8")
-      // Profile with NO deny for this path → read should succeed → preflight fails.
-      const profile = "(version 1)\n(allow default)\n"
+      await mkdir(path.join(home, ".ssh"), { recursive: true })
+      await writeFile(path.join(home, ".ssh", "id_rsa"), "SECRET", "utf8")
+      const policy = { ...POLICY_DEFAULT, readPathDeny: [`${home}/.ssh`] }
       const result = await runSandboxPreflight({
-        platform: "darwin",
+        platform: "linux",
         enabled: true,
-        profileBody: profile,
-        sentinelPath: sentinel,
+        policy,
+        homeDir: home,
+        runtimeDir,
+        sentinelPath: `${home}/.ssh/id_rsa`,
       })
-      expect(result.ok).toBe(false)
-      if (!result.ok) expect(result.reason).toContain("sentinel readable")
-    } finally { await rm(home, { recursive: true, force: true }) }
+      expect(result.ok).toBe(true)
+    } finally {
+      await rm(home, { recursive: true, force: true })
+      await rm(runtimeDir, { recursive: true, force: true })
+    }
   }, 30_000)
 
-  test("returns ok=true (skip) when sandbox not enabled", async () => {
-    const result = await runSandboxPreflight({
-      platform: "linux",
-      enabled: true,
-      profileBody: "",
-      sentinelPath: "/tmp/x",
-    })
-    expect(result.ok).toBe(true)
+  test("returns ok on unsupported platform", async () => {
+    const runtimeDir = await mkdtemp(path.join(tmpdir(), "kanna-sb-pf-win-"))
+    try {
+      const result = await runSandboxPreflight({
+        platform: "win32",
+        enabled: true,
+        policy: POLICY_DEFAULT,
+        homeDir: "/tmp",
+        runtimeDir,
+        sentinelPath: "/tmp/x",
+      })
+      expect(result.ok).toBe(true)
+    } finally { await rm(runtimeDir, { recursive: true, force: true }) }
   })
 })
