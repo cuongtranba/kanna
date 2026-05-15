@@ -8,7 +8,6 @@ import { createJsonlReader } from "./jsonl-reader"
 import { spawnPtyProcess } from "./pty-process"
 import { writeSlashCommand } from "./slash-commands"
 import { writeSpawnSettings } from "./settings-writer"
-import { detectModelSwitch, detectRateLimit } from "./frame-parser"
 import type { ClaudeSessionHandle } from "../agent"
 import type { HarnessEvent, HarnessToolRequest } from "../harness-types"
 import type { AccountInfo, SlashCommand } from "../../shared/types"
@@ -83,7 +82,7 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
 
   // Fix 1+5: shared closed flag used by close(), iterator, and pty.exited watcher
   let closed = false
-  let pendingModelAck: { resolve: () => void } | null = null
+  let pendingModelSwitch: { model: string; resolve: () => void; timer: ReturnType<typeof setTimeout> } | null = null
   let cachedAccountInfo: AccountInfo | null = null
   const mergedQueue: HarnessEvent[] = []
   const mergedWaiters: Array<(r: IteratorResult<HarnessEvent>) => void> = []
@@ -94,9 +93,15 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
   // Fix 3: safe type guard for accountInfo
   function pushMerged(ev: HarnessEvent) {
     if (ev.type === "transcript" && ev.entry) {
-      const entry = ev.entry as { kind?: string; accountInfo?: unknown }
+      const entry = ev.entry as { kind?: string; accountInfo?: unknown; model?: string }
       if (entry.kind === "account_info" && entry.accountInfo !== undefined) {
         cachedAccountInfo = entry.accountInfo as AccountInfo
+      }
+      if (pendingModelSwitch && entry.kind === "system_init" && typeof entry.model === "string" && entry.model === pendingModelSwitch.model) {
+        clearTimeout(pendingModelSwitch.timer)
+        pendingTimers.delete(pendingModelSwitch.timer)
+        pendingModelSwitch.resolve()
+        pendingModelSwitch = null
       }
     }
     const w = mergedWaiters.shift()
@@ -111,25 +116,6 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
     env: spawnEnv,
     cols: 120,
     rows: 40,
-    onOutput: () => {
-      const frame = pty.serializer.serialize()
-      if (pendingModelAck && detectModelSwitch(frame)) {
-        pendingModelAck.resolve()
-        pendingModelAck = null
-      }
-      // Fix 6: locale-safe rate-limit date construction
-      const rl = detectRateLimit(frame)
-      if (rl) {
-        const now = new Date()
-        const [hh, mm] = rl.resetAt.split(":").map(Number)
-        const candidate = new Date(now)
-        candidate.setHours(hh, mm, 0, 0)
-        const resetAtMs = candidate.getTime() < now.getTime()
-          ? candidate.getTime() + 24 * 60 * 60 * 1000
-          : candidate.getTime()
-        pushMerged({ type: "rate_limit", rateLimit: { resetAt: resetAtMs, tz: rl.tz } })
-      }
-    },
   })
 
   const reader = createJsonlReader({ filePath: jsonlPath })
@@ -197,19 +183,18 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
     sendPrompt: async (content) => {
       await pty.sendInput(`${content}\r`)
     },
-    // Fix 2: track model-ack timeout
     setModel: async (model) => {
       await writeSlashCommand(pty, "model", model)
       await new Promise<void>((resolve) => {
-        pendingModelAck = { resolve }
-        const t = setTimeout(() => {
-          pendingTimers.delete(t)
-          if (pendingModelAck) {
-            pendingModelAck.resolve()
-            pendingModelAck = null
+        const timer = setTimeout(() => {
+          if (pendingModelSwitch && pendingModelSwitch.model === model) {
+            pendingTimers.delete(pendingModelSwitch.timer)
+            pendingModelSwitch.resolve()
+            pendingModelSwitch = null
           }
-        }, 3000)
-        pendingTimers.add(t)
+        }, 10_000)
+        pendingTimers.add(timer)
+        pendingModelSwitch = { model, resolve: () => { pendingTimers.delete(timer); resolve() }, timer }
       })
     },
     setPermissionMode: async (_planMode) => {
@@ -224,6 +209,10 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
       // Fix 2: cancel all pending timers before scheduling new ones
       for (const t of pendingTimers) clearTimeout(t)
       pendingTimers.clear()
+      if (pendingModelSwitch) {
+        pendingModelSwitch.resolve()
+        pendingModelSwitch = null
+      }
       void (async () => {
         try { await writeSlashCommand(pty, "exit") } catch { /* swallow */ }
         const timer = setTimeout(() => {

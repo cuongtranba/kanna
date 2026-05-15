@@ -1,11 +1,6 @@
-import { Terminal } from "@xterm/headless"
-import { SerializeAddon } from "@xterm/addon-serialize"
-
 export interface PtyProcess {
   sendInput(data: string): Promise<void>
   resize(cols: number, rows: number): void
-  headless: Terminal
-  serializer: SerializeAddon
   exited: Promise<number>
   close(): void
 }
@@ -28,18 +23,15 @@ export async function spawnPtyProcess(opts: SpawnPtyProcessArgs): Promise<PtyPro
   const cols = opts.cols ?? 120
   const rows = opts.rows ?? 40
 
-  const headless = new Terminal({ cols, rows, scrollback: 4000, allowProposedApi: true })
-  const serializer = new SerializeAddon()
-  headless.loadAddon(serializer)
-
   const terminal = new Bun.Terminal({
     cols,
     rows,
     name: "xterm-256color",
     data: (_t, data) => {
-      const chunk = Buffer.from(data).toString("utf8")
-      headless.write(chunk)
-      opts.onOutput?.(chunk)
+      if (opts.onOutput) {
+        const chunk = Buffer.from(data).toString("utf8")
+        opts.onOutput(chunk)
+      }
     },
   })
 
@@ -50,32 +42,12 @@ export async function spawnPtyProcess(opts: SpawnPtyProcessArgs): Promise<PtyPro
   })
 
   return {
-    async sendInput(data) {
-      terminal.write(data)
-    },
-    resize(newCols, newRows) {
-      terminal.resize(newCols, newRows)
-      headless.resize(newCols, newRows)
-    },
-    headless,
-    serializer,
+    async sendInput(data) { terminal.write(data) },
+    resize(newCols, newRows) { terminal.resize(newCols, newRows) },
     exited: proc.exited,
     close() {
-      try {
-        terminal.close()
-      } catch {
-        /* swallow */
-      }
-      try {
-        headless.dispose()
-      } catch {
-        /* swallow */
-      }
-      try {
-        proc.kill()
-      } catch {
-        /* swallow */
-      }
+      try { terminal.close() } catch { /* swallow */ }
+      try { proc.kill() } catch { /* swallow */ }
     },
   }
 }
