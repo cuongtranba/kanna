@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test"
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
-import { AUTH_DEFAULTS, CLAUDE_AUTH_DEFAULTS, CLOUDFLARE_TUNNEL_DEFAULTS, UPLOAD_DEFAULTS } from "../shared/types"
+import { AUTH_DEFAULTS, CLAUDE_AUTH_DEFAULTS, CLAUDE_DRIVER_DEFAULTS, CLAUDE_PTY_LIFECYCLE_DEFAULTS, CLOUDFLARE_TUNNEL_DEFAULTS, UPLOAD_DEFAULTS } from "../shared/types"
 import { AppSettingsManager, readAppSettingsSnapshot } from "./app-settings"
 import type { AppSettingsSnapshot, SubagentInput } from "../shared/types"
 
@@ -66,6 +66,7 @@ function expectedSettingsSnapshot(filePath: string, overrides: Partial<AppSettin
     claudeAuth: CLAUDE_AUTH_DEFAULTS,
     uploads: UPLOAD_DEFAULTS,
     subagents: [],
+    claudeDriver: { ...CLAUDE_DRIVER_DEFAULTS, lifecycle: { ...CLAUDE_PTY_LIFECYCLE_DEFAULTS } },
     ...overrides,
   }
 }
@@ -509,5 +510,76 @@ describe("subagent CRUD", () => {
     expect(reloaded.getSnapshot().subagents).toHaveLength(1)
     expect(reloaded.getSnapshot().subagents[0]?.id).toBe(created.id)
     reloaded.dispose()
+  })
+})
+
+describe("claudeDriver settings", () => {
+  test("defaults to sdk + default lifecycle when file missing", async () => {
+    const filePath = await createTempFilePath()
+    const snapshot = await readAppSettingsSnapshot(filePath)
+    expect(snapshot.claudeDriver.preference).toBe("sdk")
+    expect(snapshot.claudeDriver.lifecycle.idleTimeoutMs).toBe(600_000)
+    expect(snapshot.claudeDriver.lifecycle.maxConcurrent).toBe(4)
+  })
+
+  test("setClaudeDriver persists preference + lifecycle", async () => {
+    const filePath = await createTempFilePath()
+    const mgr = new AppSettingsManager(filePath)
+    await mgr.initialize()
+    await mgr.setClaudeDriver({
+      preference: "pty",
+      lifecycle: { idleTimeoutMs: 900_000, maxConcurrent: 2 },
+    })
+    expect(mgr.getSnapshot().claudeDriver).toEqual({
+      preference: "pty",
+      lifecycle: { idleTimeoutMs: 900_000, maxConcurrent: 2 },
+    })
+    mgr.dispose()
+
+    const reloaded = new AppSettingsManager(filePath)
+    await reloaded.initialize()
+    expect(reloaded.getSnapshot().claudeDriver.preference).toBe("pty")
+    expect(reloaded.getSnapshot().claudeDriver.lifecycle.idleTimeoutMs).toBe(900_000)
+    expect(reloaded.getSnapshot().claudeDriver.lifecycle.maxConcurrent).toBe(2)
+    reloaded.dispose()
+  })
+
+  test("setClaudeDriver rejects out-of-range idleTimeoutMs", async () => {
+    const filePath = await createTempFilePath()
+    const mgr = new AppSettingsManager(filePath)
+    await mgr.initialize()
+    await expect(mgr.setClaudeDriver({ lifecycle: { idleTimeoutMs: 100 } })).rejects.toThrow(/idleTimeoutMs/)
+    await expect(mgr.setClaudeDriver({ lifecycle: { idleTimeoutMs: 999_999_999 } })).rejects.toThrow(/idleTimeoutMs/)
+    mgr.dispose()
+  })
+
+  test("setClaudeDriver rejects out-of-range maxConcurrent", async () => {
+    const filePath = await createTempFilePath()
+    const mgr = new AppSettingsManager(filePath)
+    await mgr.initialize()
+    await expect(mgr.setClaudeDriver({ lifecycle: { maxConcurrent: 0 } })).rejects.toThrow(/maxConcurrent/)
+    await expect(mgr.setClaudeDriver({ lifecycle: { maxConcurrent: 99 } })).rejects.toThrow(/maxConcurrent/)
+    mgr.dispose()
+  })
+
+  test("setClaudeDriver rejects invalid preference", async () => {
+    const filePath = await createTempFilePath()
+    const mgr = new AppSettingsManager(filePath)
+    await mgr.initialize()
+    await expect(
+      mgr.setClaudeDriver({ preference: "garbage" as unknown as "sdk" }),
+    ).rejects.toThrow(/preference/)
+    mgr.dispose()
+  })
+
+  test("normalizer clamps and warns on bad values in file", async () => {
+    const filePath = await writeSettingsFile({
+      claudeDriver: { preference: "pty", lifecycle: { idleTimeoutMs: 10, maxConcurrent: 50 } },
+    })
+    const snapshot = await readAppSettingsSnapshot(filePath)
+    expect(snapshot.claudeDriver.preference).toBe("pty")
+    expect(snapshot.claudeDriver.lifecycle.idleTimeoutMs).toBe(60_000)
+    expect(snapshot.claudeDriver.lifecycle.maxConcurrent).toBe(16)
+    expect(snapshot.warning).toMatch(/idleTimeoutMs/)
   })
 })

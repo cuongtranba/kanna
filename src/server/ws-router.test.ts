@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { mkdtemp, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
-import { AUTH_DEFAULTS, CLAUDE_AUTH_DEFAULTS, CLOUDFLARE_TUNNEL_DEFAULTS, PROTOCOL_VERSION, UPLOAD_DEFAULTS } from "../shared/types"
+import { AUTH_DEFAULTS, CLAUDE_AUTH_DEFAULTS, CLAUDE_DRIVER_DEFAULTS, CLAUDE_PTY_LIFECYCLE_DEFAULTS, CLOUDFLARE_TUNNEL_DEFAULTS, PROTOCOL_VERSION, UPLOAD_DEFAULTS } from "../shared/types"
 import type { AppSettingsSnapshot, BackgroundTask, KeybindingsSnapshot, LlmProviderSnapshot, UpdateSnapshot } from "../shared/types"
 import { BackgroundTaskRegistry } from "./background-tasks"
 import { createEmptyState } from "./events"
@@ -115,6 +115,7 @@ const DEFAULT_APP_SETTINGS_SNAPSHOT: AppSettingsSnapshot = {
   filePathDisplay: "~/.kanna/data/settings.json",
   uploads: UPLOAD_DEFAULTS,
   subagents: [],
+  claudeDriver: { ...CLAUDE_DRIVER_DEFAULTS, lifecycle: { ...CLAUDE_PTY_LIFECYCLE_DEFAULTS } },
 }
 
 describe("isBenignStaleStateMessage", () => {

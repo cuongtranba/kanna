@@ -38,7 +38,7 @@ import {
   normalizeCodexModelOptions,
   normalizeServerModel,
 } from "./provider-catalog"
-import { resolveClaudeApiModelId } from "../shared/types"
+import { resolveClaudeApiModelId, type ClaudeDriverPreference } from "../shared/types"
 import { fallbackTitleFromMessage } from "./generate-title"
 import { AUTO_CONTINUE_EVENT_VERSION, type AutoContinueEvent } from "./auto-continue/events"
 import { ClaudeLimitDetector, CodexLimitDetector, type LimitDetection, type LimitDetector } from "./auto-continue/limit-detector"
@@ -202,7 +202,13 @@ interface AgentCoordinatorArgs {
   scheduleManager?: ScheduleManager
   getAutoResumePreference?: () => boolean
   getSubagents?: () => Subagent[]
-  getAppSettingsSnapshot?: () => { claudeAuth?: { authenticated?: boolean } | null }
+  getAppSettingsSnapshot?: () => {
+    claudeAuth?: { authenticated?: boolean } | null
+    claudeDriver?: {
+      preference?: ClaudeDriverPreference
+      lifecycle?: { idleTimeoutMs?: number; maxConcurrent?: number }
+    }
+  }
   throwOnClaudeSessionStart?: boolean
   backgroundTasks?: BackgroundTaskRegistry
   oauthPool?: OAuthTokenPool
@@ -1149,10 +1155,32 @@ export class AgentCoordinator {
     this.onStateChange(chatId, options)
   }
 
+  private resolveClaudeDriverPreference(): ClaudeDriverPreference {
+    const fromSettings = this.getAppSettingsSnapshot().claudeDriver?.preference
+    if (fromSettings === "pty" || fromSettings === "sdk") return fromSettings
+    return process.env.KANNA_CLAUDE_DRIVER === "pty" ? "pty" : "sdk"
+  }
+
+  private resolveClaudeIdleMs(): number {
+    const fromSettings = this.getAppSettingsSnapshot().claudeDriver?.lifecycle?.idleTimeoutMs
+    if (typeof fromSettings === "number" && Number.isFinite(fromSettings) && fromSettings > 0) {
+      return Math.round(fromSettings)
+    }
+    return this.claudeSessionLifecycle.idleMs
+  }
+
+  private resolveClaudeMaxResident(): number {
+    const fromSettings = this.getAppSettingsSnapshot().claudeDriver?.lifecycle?.maxConcurrent
+    if (typeof fromSettings === "number" && Number.isFinite(fromSettings) && fromSettings > 0) {
+      return Math.round(fromSettings)
+    }
+    return this.claudeSessionLifecycle.maxResidentSessions
+  }
+
   private isClaudeSessionIdle(chatId: string, session: ClaudeSessionState, now = Date.now()): boolean {
     if (this.activeTurns.get(chatId)?.provider === "claude") return false
     if (session.pendingPromptSeqs.length > 0) return false
-    return now - session.lastUsedAt >= this.claudeSessionLifecycle.idleMs
+    return now - session.lastUsedAt >= this.resolveClaudeIdleMs()
   }
 
   private closeClaudeSession(chatId: string, session: ClaudeSessionState): void {
@@ -1172,7 +1200,7 @@ export class AgentCoordinator {
   }
 
   private enforceClaudeSessionBudget(protectedChatId?: string): void {
-    const max = this.claudeSessionLifecycle.maxResidentSessions
+    const max = this.resolveClaudeMaxResident()
     if (max <= 0 || this.claudeSessions.size <= max) return
 
     const candidates = [...this.claudeSessions.entries()]
@@ -1304,7 +1332,7 @@ export class AgentCoordinator {
           return
         }
         if (picked) this.oauthPool!.markUsed(picked.id)
-        const usePtyEphemeral = process.env.KANNA_CLAUDE_DRIVER === "pty"
+        const usePtyEphemeral = this.resolveClaudeDriverPreference() === "pty"
         const ephemeral = usePtyEphemeral
           ? await this.startClaudeSessionPTYFn({
               chatId,
@@ -1740,7 +1768,7 @@ export class AgentCoordinator {
         )
       }
       if (picked) this.oauthPool!.markUsed(picked.id)
-      const usePty = process.env.KANNA_CLAUDE_DRIVER === "pty"
+      const usePty = this.resolveClaudeDriverPreference() === "pty"
       const started = usePty
         ? await this.startClaudeSessionPTYFn({
             chatId: args.chatId,
