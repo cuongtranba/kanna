@@ -80,6 +80,20 @@ source. The PTY is a subprocess holder + input channel only; output is
 drained, not parsed. Model switches, rate-limit signals, and permission
 changes all surface through JSONL.
 
+**Allowlist preflight (P3b):** When `KANNA_CLAUDE_DRIVER=pty`, every PTY
+spawn passes through `claude-pty/preflight/gate.ts`. The gate computes a
+sha256 of the `claude` binary, looks up a cached probe-suite result for
+`(binarySha256, tools-string, model)`, and on cache miss runs 8 directed
+probes (one per disallowed built-in: Bash/Edit/Write/Read/Glob/Grep/
+WebFetch/WebSearch). Each probe spawns claude with `--tools "mcp__kanna__*"`
+and a system prompt pressuring the model to invoke that built-in or call
+`mcp__kanna__probe_unavailable`. If any built-in is reachable → spawn
+refused with `"built-in reachable: <names>"`. Cache TTL: 24 h.
+
+Override the probe model via `KANNA_PTY_PREFLIGHT_MODEL` (default
+`claude-haiku-4-5-20251001` for cost/speed). Real probes burn subscription
+turns; CI does not run them — unit tests cover the classifier + cache only.
+
 # Kanna-MCP Built-in Shims
 
 When `KANNA_MCP_TOOL_CALLBACKS=1`, kanna-mcp registers 8 additional tools
