@@ -84,6 +84,21 @@ function parseSimpleBash(
   return { verb, paths, hadEnvPrefix }
 }
 
+const READ_PATH_TOOLS = new Set([
+  "mcp__kanna__read",
+  "mcp__kanna__glob",
+  "mcp__kanna__grep",
+])
+const WRITE_PATH_TOOLS = new Set([
+  "mcp__kanna__write",
+  "mcp__kanna__edit",
+])
+
+function getPathArg(args: Record<string, unknown>): string | null {
+  if (typeof args.path === "string") return args.path
+  return null
+}
+
 function pathMatchesDeny(absPath: string, deny: string[]): string | null {
   for (const pattern of deny) {
     const expanded = pattern.startsWith("~")
@@ -101,6 +116,33 @@ function pathMatchesDeny(absPath: string, deny: string[]): string | null {
 
 export const policy = {
   evaluate(args: EvaluateArgs): EvaluateResult {
+    if (READ_PATH_TOOLS.has(args.toolName)) {
+      const p = getPathArg(args.args)
+      if (p !== null) {
+        const expanded = p.startsWith("~")
+          ? path.join(homedir(), p.slice(1).replace(/^\//, ""))
+          : p
+        const resolved = path.resolve(args.cwd, expanded)
+        const denied = pathMatchesDeny(resolved, args.chatPolicy.readPathDeny)
+        if (denied) {
+          return { verdict: "auto-deny", reason: `readPathDeny: ${denied}` }
+        }
+      }
+    }
+    if (WRITE_PATH_TOOLS.has(args.toolName)) {
+      const p = getPathArg(args.args)
+      if (p !== null) {
+        const expanded = p.startsWith("~")
+          ? path.join(homedir(), p.slice(1).replace(/^\//, ""))
+          : p
+        const resolved = path.resolve(args.cwd, expanded)
+        const deniedW = pathMatchesDeny(resolved, args.chatPolicy.writePathDeny)
+        const deniedR = pathMatchesDeny(resolved, args.chatPolicy.readPathDeny)
+        if (deniedW) return { verdict: "auto-deny", reason: `writePathDeny: ${deniedW}` }
+        if (deniedR) return { verdict: "auto-deny", reason: `readPathDeny: ${deniedR}` }
+      }
+    }
+
     // Bash path: single block handles all bash decisions.
     if (args.toolName === "mcp__kanna__bash") {
       const command = typeof args.args.command === "string" ? args.args.command : ""

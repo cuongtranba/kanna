@@ -140,6 +140,61 @@ describe("bash arg parsing", () => {
   })
 })
 
+describe("path-deny for read/edit/write tools", () => {
+  test("mcp__kanna__read path in readPathDeny → auto-deny", () => {
+    const v = policy.evaluate({
+      toolName: "mcp__kanna__read",
+      args: { path: "~/.ssh/id_rsa" },
+      chatPolicy: POLICY_DEFAULT,
+      cwd: "/tmp/project",
+    })
+    expect(v.verdict).toBe("auto-deny")
+    expect(v.reason).toContain("readPathDeny")
+  })
+
+  test("mcp__kanna__read non-sensitive path → falls through to default", () => {
+    const v = policy.evaluate({
+      toolName: "mcp__kanna__read",
+      args: { path: "/tmp/project/src/foo.ts" },
+      chatPolicy: POLICY_DEFAULT,
+      cwd: "/tmp/project",
+    })
+    expect(v.verdict).toBe("ask")
+  })
+
+  test("mcp__kanna__write path in writePathDeny → auto-deny", () => {
+    const v = policy.evaluate({
+      toolName: "mcp__kanna__write",
+      args: { path: "/etc/passwd", content: "x" },
+      chatPolicy: POLICY_DEFAULT,
+      cwd: "/tmp/project",
+    })
+    expect(v.verdict).toBe("auto-deny")
+    expect(v.reason).toContain("writePathDeny")
+  })
+
+  test("mcp__kanna__edit path in writePathDeny → auto-deny", () => {
+    const v = policy.evaluate({
+      toolName: "mcp__kanna__edit",
+      args: { path: "~/.aws/credentials", oldString: "a", newString: "b" },
+      chatPolicy: POLICY_DEFAULT,
+      cwd: "/tmp/project",
+    })
+    expect(v.verdict).toBe("auto-deny")
+    expect(v.reason).toContain("writePathDeny")
+  })
+
+  test("mcp__kanna__glob with deny-matching path → auto-deny", () => {
+    const v = policy.evaluate({
+      toolName: "mcp__kanna__glob",
+      args: { path: "~/.ssh/" },
+      chatPolicy: POLICY_DEFAULT,
+      cwd: "/tmp/project",
+    })
+    expect(v.verdict).toBe("auto-deny")
+  })
+})
+
 describe("regex try/catch guard", () => {
   test("malformed pattern in bash denyList → skipped, returns default verdict instead of throwing", () => {
     const result = policy.evaluate({

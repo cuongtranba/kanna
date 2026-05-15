@@ -30,7 +30,7 @@ export interface ChatPermissionPolicy {
   defaultAction: "ask" | "auto-allow" | "auto-deny"
   bash: BashGateConfig
   readPathDeny: string[]
-  /** Reserved for write-path enforcement in P2 PTY mode. Not consulted by the current bash gate. */
+  /** Paths the model cannot write or edit. Enforced for mcp__kanna__write and mcp__kanna__edit. */
   writePathDeny: string[]
   toolDenyList: ToolRule[]
   toolAllowList: ToolRule[]
