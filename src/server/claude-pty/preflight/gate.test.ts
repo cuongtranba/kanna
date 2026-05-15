@@ -12,10 +12,32 @@ async function fixtureBinary(contents: string): Promise<{ filePath: string; clea
   return { filePath: f, cleanup: () => rm(dir, { recursive: true, force: true }) }
 }
 
-const PASS_PROBES: ProbeResult[] = [{ kind: "pass", builtin: "Bash", evidence: "probe_unavailable" }]
+const PASS_PROBES: ProbeResult[] = [{ kind: "pass", builtin: "Bash", evidence: "no_builtin_tool_use_in_assistant_turn" }]
 const FAIL_PROBES: ProbeResult[] = [{ kind: "fail", builtin: "Bash", evidence: "tool_use:Bash" }]
 
 describe("preflight gate", () => {
+  test("concurrent canSpawn calls share a single suite run", async () => {
+    const { filePath, cleanup } = await fixtureBinary("v5")
+    try {
+      let suiteCalls = 0
+      let resolveSuite: ((probes: ProbeResult[]) => void) | undefined
+      const gate = createPreflightGate({
+        toolsString: "mcp__kanna__*",
+        now: () => 0,
+        runSuite: () => {
+          suiteCalls++
+          return new Promise<ProbeResult[]>((r) => { resolveSuite = r })
+        },
+      })
+      const p1 = gate.canSpawn({ binaryPath: filePath, model: "m" })
+      const p2 = gate.canSpawn({ binaryPath: filePath, model: "m" })
+      await new Promise((r) => setTimeout(r, 10))
+      if (resolveSuite) (resolveSuite as (probes: ProbeResult[]) => void)(PASS_PROBES)
+      await p1; await p2
+      expect(suiteCalls).toBe(1)
+    } finally { await cleanup() }
+  })
+
   test("cache miss + suite passes → ok and caches", async () => {
     const { filePath, cleanup } = await fixtureBinary("v1")
     try {

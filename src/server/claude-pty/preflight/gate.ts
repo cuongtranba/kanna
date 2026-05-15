@@ -1,4 +1,4 @@
-import type { ProbeResult, SuiteResult } from "./types"
+import type { AllowlistCacheKey, ProbeResult, SuiteResult } from "./types"
 import { aggregateProbes } from "./suite"
 import { createPreflightCache, type PreflightCache } from "./cache"
 import { computeBinarySha256 } from "./binary-fingerprint"
@@ -22,6 +22,11 @@ export interface PreflightGate {
 
 export function createPreflightGate(opts: PreflightGateArgs): PreflightGate {
   const cache = opts.cache ?? createPreflightCache({ now: opts.now })
+  const inflight = new Map<string, Promise<ProbeResult[]>>()
+
+  function keyHash(k: AllowlistCacheKey): string {
+    return `${k.binarySha256}|${k.toolsString}|${k.systemInitModel}`
+  }
 
   return {
     async canSpawn(args) {
@@ -38,7 +43,14 @@ export function createPreflightGate(opts: PreflightGateArgs): PreflightGate {
       if (cached && cached.verdict !== "pass") {
         return { ok: false, reason: summarizeFailure(cached.probes) }
       }
-      const probes = await opts.runSuite()
+      const inflightKey = keyHash(key)
+      let promise = inflight.get(inflightKey)
+      if (!promise) {
+        promise = opts.runSuite()
+        inflight.set(inflightKey, promise)
+        promise.finally(() => inflight.delete(inflightKey))
+      }
+      const probes = await promise
       const verdict = aggregateProbes(probes).verdict
       const result: SuiteResult = { key, verdict, probes, probedAt: opts.now() }
       cache.put(result)

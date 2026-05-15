@@ -16,7 +16,6 @@ import { createEditTool } from "./kanna-mcp-tools/edit"
 import { createWriteTool } from "./kanna-mcp-tools/write"
 import { createWebFetchTool } from "./kanna-mcp-tools/webfetch"
 import { createWebSearchTool } from "./kanna-mcp-tools/websearch"
-import { createProbeUnavailableTool } from "./kanna-mcp-tools/probe-unavailable"
 import type { ToolCallbackService } from "./tool-callback"
 import type { ChatPermissionPolicy } from "../shared/permission-policy"
 import { POLICY_DEFAULT } from "../shared/permission-policy"
@@ -255,7 +254,6 @@ export function buildKannaMcpTools(args: KannaMcpArgs): SdkMcpToolDefinition<any
         ),
       )
     }
-    const probeUnavailableTool = createProbeUnavailableTool({ toolCallback: args.toolCallback })
     registerShim(readTool)
     registerShim(globTool)
     registerShim(grepTool)
@@ -264,7 +262,6 @@ export function buildKannaMcpTools(args: KannaMcpArgs): SdkMcpToolDefinition<any
     registerShim(writeTool)
     registerShim(webfetchTool)
     registerShim(websearchTool)
-    registerShim(probeUnavailableTool)
   }
 
   return tools

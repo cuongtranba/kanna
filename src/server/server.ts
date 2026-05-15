@@ -1,5 +1,6 @@
 import path from "node:path"
 import { stat } from "node:fs/promises"
+import { homedir } from "node:os"
 import { bin as cloudflaredBin } from "cloudflared"
 import { APP_NAME, getRuntimeProfile } from "../shared/branding"
 import { CLOUDFLARE_TUNNEL_DEFAULTS, UPLOAD_MAX_FILE_SIZE_MB_MAX, type ChatAttachment } from "../shared/types"
@@ -140,7 +141,7 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
         now: () => Date.now(),
         runSuite: async () => {
           const claudeBin = (process.env.CLAUDE_EXECUTABLE ?? "/usr/local/bin/claude")
-            .replace(/^~(?=\/|$)/, process.env.HOME ?? "")
+            .replace(/^~(?=\/|$)/, homedir())
           return await runFullSuite({
             claudeBin,
             model: process.env.KANNA_PTY_PREFLIGHT_MODEL ?? "claude-haiku-4-5-20251001",

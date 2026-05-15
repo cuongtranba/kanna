@@ -2,22 +2,19 @@ import { describe, expect, test } from "bun:test"
 import { classifyProbeFromJsonlLines } from "./probe"
 
 describe("classifyProbeFromJsonlLines", () => {
-  test("pass when probe_unavailable tool_use for the target builtin", () => {
+  test("pass when assistant turn has text only (no tool_use)", () => {
     const lines = [
       JSON.stringify({
         type: "assistant",
         message: {
           role: "assistant",
-          content: [{
-            type: "tool_use",
-            id: "x", name: "mcp__kanna__probe_unavailable",
-            input: { tool: "Bash" },
-          }],
+          content: [{ type: "text", text: "Bash is not available to me." }],
         },
       }),
     ]
     const r = classifyProbeFromJsonlLines("Bash", lines)
     expect(r.kind).toBe("pass")
+    if (r.kind === "pass") expect(r.evidence).toBe("no_builtin_tool_use_in_assistant_turn")
   })
 
   test("fail when target builtin tool_use observed", () => {
@@ -49,18 +46,13 @@ describe("classifyProbeFromJsonlLines", () => {
     expect(r.kind).toBe("fail")
   })
 
-  test("indeterminate when no probe_unavailable and no built-in tool_use", () => {
+  test("indeterminate when no assistant turn", () => {
     const lines = [
-      JSON.stringify({
-        type: "assistant",
-        message: {
-          role: "assistant",
-          content: [{ type: "text", text: "I cannot do that." }],
-        },
-      }),
+      JSON.stringify({ type: "system", subtype: "init", session_id: "s", model: "x" }),
     ]
     const r = classifyProbeFromJsonlLines("Bash", lines)
     expect(r.kind).toBe("indeterminate")
+    if (r.kind === "indeterminate") expect(r.reason).toContain("no assistant turn")
   })
 
   test("ignores unrelated system/init events", () => {

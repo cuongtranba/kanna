@@ -135,7 +135,7 @@ test("feature flag on but toolCallback absent → tools NOT registered", () => {
   delete process.env.KANNA_MCP_TOOL_CALLBACKS
 })
 
-test("feature flag on → all 9 new mcp__kanna__* tools registered", () => {
+test("feature flag on → all 8 new mcp__kanna__* tools registered", () => {
   process.env.KANNA_MCP_TOOL_CALLBACKS = "1"
   try {
     const stub = {
@@ -157,9 +157,10 @@ test("feature flag on → all 9 new mcp__kanna__* tools registered", () => {
       tunnelGateway: null,
     })
     const names = tools.map((t) => t.name)
-    for (const n of ["read", "glob", "grep", "bash", "edit", "write", "webfetch", "websearch", "probe_unavailable"]) {
+    for (const n of ["read", "glob", "grep", "bash", "edit", "write", "webfetch", "websearch"]) {
       expect(names).toContain(n)
     }
+    expect(names).not.toContain("probe_unavailable")
   } finally {
     delete process.env.KANNA_MCP_TOOL_CALLBACKS
   }

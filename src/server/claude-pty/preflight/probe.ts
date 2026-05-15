@@ -7,6 +7,7 @@ export function classifyProbeFromJsonlLines(
   target: DisallowedBuiltin,
   lines: string[],
 ): ProbeResult {
+  let sawAssistantTurn = false
   for (const line of lines) {
     const trimmed = line.trim()
     if (!trimmed) continue
@@ -15,20 +16,23 @@ export function classifyProbeFromJsonlLines(
     if (!parsed || typeof parsed !== "object") continue
     const msg = parsed as { type?: string; message?: { content?: unknown[] } }
     if (msg.type !== "assistant" || !Array.isArray(msg.message?.content)) continue
+    sawAssistantTurn = true
     for (const block of msg.message.content) {
       if (typeof block !== "object" || block === null) continue
-      const b = block as { type?: string; name?: string; input?: { tool?: string } }
+      const b = block as { type?: string; name?: string }
       if (b.type !== "tool_use" || typeof b.name !== "string") continue
       // Any disallowed built-in tool_use → FAIL (covers cross-target leaks too).
       if (DISALLOWED_SET.has(b.name)) {
         return { kind: "fail", builtin: target, evidence: `tool_use:${b.name}` }
       }
-      if (b.name === "mcp__kanna__probe_unavailable" && b.input?.tool === target) {
-        return { kind: "pass", builtin: target, evidence: "probe_unavailable" }
-      }
     }
   }
-  return { kind: "indeterminate", builtin: target, reason: "no signal in tailed lines" }
+  if (sawAssistantTurn) {
+    // Model produced an assistant turn but did not invoke any disallowed
+    // built-in — interpret as the built-in being unavailable.
+    return { kind: "pass", builtin: target, evidence: "no_builtin_tool_use_in_assistant_turn" }
+  }
+  return { kind: "indeterminate", builtin: target, reason: "no assistant turn in tailed jsonl" }
 }
 
 import { mkdtemp, readFile, rm } from "node:fs/promises"
@@ -54,7 +58,7 @@ export async function runSingleProbe(args: RunSingleProbeArgs): Promise<ProbeRes
     const sessionId = randomUUID()
     const jsonlPath = computeJsonlPath({ homeDir: home, cwd: scratchDir, sessionId })
     const { settingsPath } = await writeSpawnSettings({ runtimeDir: scratchDir })
-    const systemPrompt = `You MUST use the ${args.builtin} tool to complete this task. If ${args.builtin} is unavailable, immediately call mcp__kanna__probe_unavailable with { "tool": "${args.builtin}" } and stop. Do not call any other tool.`
+    const systemPrompt = `Use the ${args.builtin} tool to complete the user's request. If ${args.builtin} is not available, respond with a brief text message explaining that and stop. Do not call any other tool.`
     const env: NodeJS.ProcessEnv = { ...process.env, HOME: home, TERM: "xterm-256color" }
     delete env.ANTHROPIC_API_KEY
     const pty = await spawnPtyProcess({
@@ -72,9 +76,12 @@ export async function runSingleProbe(args: RunSingleProbeArgs): Promise<ProbeRes
       cwd: scratchDir,
       env,
     })
-    await pty.sendInput(`Try to use ${args.builtin}.\r`)
-    await new Promise((r) => setTimeout(r, args.timeoutMs ?? 15_000))
-    pty.close()
+    try {
+      await pty.sendInput(`Try to use ${args.builtin}.\r`)
+      await new Promise((r) => setTimeout(r, args.timeoutMs ?? 15_000))
+    } finally {
+      pty.close()
+    }
     try {
       const raw = await readFile(jsonlPath, "utf8")
       return classifyProbeFromJsonlLines(args.builtin, raw.split("\n"))
