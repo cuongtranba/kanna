@@ -150,6 +150,13 @@ interface ClaudeSessionState {
   nextPromptSeq: number
   pendingPromptSeqs: number[]
   activeTokenId: string | null
+  lastUsedAt: number
+}
+
+interface ClaudeSessionLifecycleOptions {
+  idleMs: number
+  maxResidentSessions: number
+  sweepIntervalMs: number
 }
 
 interface AgentCoordinatorArgs {
@@ -205,6 +212,8 @@ interface AgentCoordinatorArgs {
   preflightGate?: PreflightGate
   /** Per-chat permission policy forwarded to startClaudeSession. Defaults to POLICY_DEFAULT if omitted. */
   chatPolicy?: ChatPermissionPolicy
+  /** Claude subprocess lifecycle tuning. Defaults are conservative and may be overridden in tests. */
+  claudeSessionLifecycle?: Partial<ClaudeSessionLifecycleOptions>
 }
 
 interface SendToStartingProfile {
@@ -246,6 +255,11 @@ function timestamped<T extends Omit<TranscriptEntry, "_id" | "createdAt">>(
     createdAt,
     ...entry,
   } as TranscriptEntry
+}
+
+function isPromptTooLongMessage(message: string): boolean {
+  return /\bprompt\b.*\btoo\s+long\b/i.test(message)
+    || /\bprompt\b.*\btoo\s+large\b/i.test(message)
 }
 
 function stringFromUnknown(value: unknown) {
@@ -956,6 +970,15 @@ function extractBackgroundTaskId(content: unknown): string | null {
 }
 
 const TOKEN_ROTATION_SCHEDULE_DELAY_MS = 100
+const DEFAULT_CLAUDE_SESSION_IDLE_MS = 10 * 60 * 1000
+const DEFAULT_CLAUDE_SESSION_MAX_RESIDENT = 4
+const DEFAULT_CLAUDE_SESSION_SWEEP_INTERVAL_MS = 60 * 1000
+
+function positiveIntegerFromEnv(value: string | undefined, fallback: number): number {
+  if (value === undefined || value.trim() === "") return fallback
+  const parsed = Number(value)
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback
+}
 
 export class AgentCoordinator {
   private readonly store: EventStore
@@ -993,6 +1016,8 @@ export class AgentCoordinator {
   private readonly toolCallback: ToolCallbackService | null
   private readonly preflightGate: PreflightGate | null
   private readonly chatPolicy: ChatPermissionPolicy
+  private readonly claudeSessionLifecycle: ClaudeSessionLifecycleOptions
+  private readonly claudeSessionSweepTimer: ReturnType<typeof setInterval> | null
   private readonly pendingBashCalls = new Map<string, { command: string; chatId: string; isBg: boolean }>()
   private readonly subagentPendingResolvers = new Map<
     string,
@@ -1036,6 +1061,18 @@ export class AgentCoordinator {
     this.toolCallback = args.toolCallback ?? null
     this.preflightGate = args.preflightGate ?? null
     this.chatPolicy = args.chatPolicy ?? POLICY_DEFAULT
+    this.claudeSessionLifecycle = {
+      idleMs: args.claudeSessionLifecycle?.idleMs
+        ?? positiveIntegerFromEnv(process.env.KANNA_CLAUDE_SESSION_IDLE_MS, DEFAULT_CLAUDE_SESSION_IDLE_MS),
+      maxResidentSessions: args.claudeSessionLifecycle?.maxResidentSessions
+        ?? positiveIntegerFromEnv(process.env.KANNA_CLAUDE_SESSION_MAX_RESIDENT, DEFAULT_CLAUDE_SESSION_MAX_RESIDENT),
+      sweepIntervalMs: args.claudeSessionLifecycle?.sweepIntervalMs
+        ?? positiveIntegerFromEnv(process.env.KANNA_CLAUDE_SESSION_SWEEP_INTERVAL_MS, DEFAULT_CLAUDE_SESSION_SWEEP_INTERVAL_MS),
+    }
+    this.claudeSessionSweepTimer = this.claudeSessionLifecycle.sweepIntervalMs > 0
+      ? setInterval(() => { this.sweepIdleClaudeSessions() }, this.claudeSessionLifecycle.sweepIntervalMs)
+      : null
+    this.claudeSessionSweepTimer?.unref?.()
     this.backgroundTasks?.setStrategies({
       closeStream: async (task) => {
         await this.stopDraining(task.chatId)
@@ -1051,6 +1088,13 @@ export class AgentCoordinator {
 
   setBackgroundErrorReporter(report: ((message: string) => void) | null) {
     this.reportBackgroundError = report
+  }
+
+  dispose() {
+    if (this.claudeSessionSweepTimer) clearInterval(this.claudeSessionSweepTimer)
+    for (const [chatId, session] of [...this.claudeSessions.entries()]) {
+      this.closeClaudeSession(chatId, session)
+    }
   }
 
   getActiveStatuses() {
@@ -1089,6 +1133,49 @@ export class AgentCoordinator {
 
   private emitStateChange(chatId?: string, options?: { immediate?: boolean }) {
     this.onStateChange(chatId, options)
+  }
+
+  private isClaudeSessionIdle(chatId: string, session: ClaudeSessionState, now = Date.now()): boolean {
+    if (this.activeTurns.get(chatId)?.provider === "claude") return false
+    if (session.pendingPromptSeqs.length > 0) return false
+    return now - session.lastUsedAt >= this.claudeSessionLifecycle.idleMs
+  }
+
+  private closeClaudeSession(chatId: string, session: ClaudeSessionState): void {
+    if (this.claudeSessions.get(chatId) === session) {
+      this.claudeSessions.delete(chatId)
+    }
+    this.oauthPool?.release(chatId)
+    session.session.close()
+  }
+
+  private sweepIdleClaudeSessions(now = Date.now()): void {
+    for (const [chatId, session] of [...this.claudeSessions.entries()]) {
+      if (!this.isClaudeSessionIdle(chatId, session, now)) continue
+      this.closeClaudeSession(chatId, session)
+      this.emitStateChange(chatId)
+    }
+  }
+
+  private enforceClaudeSessionBudget(protectedChatId?: string): void {
+    const max = this.claudeSessionLifecycle.maxResidentSessions
+    if (max <= 0 || this.claudeSessions.size <= max) return
+
+    const candidates = [...this.claudeSessions.entries()]
+      .filter(([chatId, session]) => (
+        chatId !== protectedChatId
+        && !this.activeTurns.has(chatId)
+        && session.pendingPromptSeqs.length === 0
+      ))
+      .sort((a, b) => a[1].lastUsedAt - b[1].lastUsedAt)
+
+    while (this.claudeSessions.size > max && candidates.length > 0) {
+      const next = candidates.shift()
+      if (!next) break
+      const [chatId, session] = next
+      this.closeClaudeSession(chatId, session)
+      this.emitStateChange(chatId)
+    }
   }
 
   private subagentPendingKey(chatId: string, runId: string, toolUseId: string): string {
@@ -1249,10 +1336,8 @@ export class AgentCoordinator {
     await this.stopDraining(chatId)
     const claudeSession = this.claudeSessions.get(chatId)
     if (claudeSession) {
-      claudeSession.session.close()
-      this.claudeSessions.delete(chatId)
+      this.closeClaudeSession(chatId, claudeSession)
     }
-    this.oauthPool?.release(chatId)
     this.autoResumeByChat.delete(chatId)
     this.emitStateChange(chatId)
   }
@@ -1591,6 +1676,7 @@ export class AgentCoordinator {
         pendingPromptSeqs: [...session.pendingPromptSeqs],
       })
       await session.session.sendPrompt(promptContent)
+      session.lastUsedAt = Date.now()
       logSendToStartingProfile(args.profile, "start_turn.claude_prompt_sent", {
         chatId: args.chatId,
       })
@@ -1622,10 +1708,10 @@ export class AgentCoordinator {
       session.additionalDirectories.join("|") !== (args.additionalDirectories ?? []).join("|")
     ) {
       if (session) {
-        session.session.close()
-        this.claudeSessions.delete(args.chatId)
+        this.closeClaudeSession(args.chatId, session)
       }
 
+      this.enforceClaudeSessionBudget(args.chatId)
       const picked = this.oauthPool?.pickActive(args.chatId) ?? null
       // If the pool is populated but every token is currently unusable
       // (limited/error/disabled/reserved), refuse to spawn rather than let
@@ -1686,8 +1772,10 @@ export class AgentCoordinator {
         nextPromptSeq: 0,
         pendingPromptSeqs: [],
         activeTokenId: picked?.id ?? null,
+        lastUsedAt: Date.now(),
       }
       this.claudeSessions.set(args.chatId, session)
+      this.enforceClaudeSessionBudget(args.chatId)
       void this.runClaudeSession(session)
       void (async () => {
         try {
@@ -1699,6 +1787,7 @@ export class AgentCoordinator {
         }
       })()
     } else {
+      session.lastUsedAt = Date.now()
       if (session.model !== args.model) {
         await session.session.setModel(args.model)
         session.model = args.model
@@ -2080,10 +2169,12 @@ export class AgentCoordinator {
             tz: event.rateLimit.tz,
             raw: event,
           })
+          if (this.claudeSessions.get(session.chatId) !== session) break
           continue
         }
 
         if (!event.entry) continue
+        if (this.claudeSessions.get(session.chatId) !== session) break
         await this.store.appendMessage(session.chatId, event.entry)
         this.trackBashToolEntry(session.chatId, event.entry)
         const active = this.activeTurns.get(session.chatId)
@@ -2108,6 +2199,9 @@ export class AgentCoordinator {
         const completedClaudePromptSeq = event.entry.kind === "result" || event.entry.kind === "interrupted"
           ? (session.pendingPromptSeqs.shift() ?? null)
           : null
+        if (completedClaudePromptSeq !== null) {
+          session.lastUsedAt = Date.now()
+        }
 
         logClaudeSteer("claude_event", {
           chatId: session.chatId,
@@ -2137,6 +2231,10 @@ export class AgentCoordinator {
             }
             if (handled) {
               await this.store.recordTurnFailed(session.chatId, detection ? "rate_limit" : "auth_error")
+            } else if (isPromptTooLongMessage(resultText)) {
+              await this.store.recordTurnFailed(session.chatId, resultText)
+              this.closeClaudeSession(session.chatId, session)
+              await this.store.setSessionTokenForProvider(session.chatId, "claude", null)
             } else {
               await this.store.recordTurnFailed(session.chatId, resultText)
             }
@@ -2182,6 +2280,10 @@ export class AgentCoordinator {
             })
           )
           await this.store.recordTurnFailed(session.chatId, message)
+          if (isPromptTooLongMessage(message)) {
+            this.closeClaudeSession(session.chatId, session)
+            await this.store.setSessionTokenForProvider(session.chatId, "claude", null)
+          }
         } else {
           await this.store.recordTurnFailed(session.chatId, limitHandled ? "rate_limit" : "auth_error")
         }
@@ -2198,6 +2300,7 @@ export class AgentCoordinator {
       const isCurrentSession = this.claudeSessions.get(session.chatId) === session
       if (isCurrentSession) {
         this.claudeSessions.delete(session.chatId)
+        this.oauthPool?.release(session.chatId)
         const active = this.activeTurns.get(session.chatId)
         if (active?.provider === "claude") {
           if (active.cancelRequested && !active.cancelRecorded) {
@@ -2470,10 +2573,7 @@ export class AgentCoordinator {
       // spawns a fresh subprocess with the rotated token's credentials.
       // Without this, startClaudeTurn reuses the cached session and
       // sendPrompt is routed to the still-limited token's subprocess.
-      session.session.close()
-      if (this.claudeSessions.get(chatId) === session) {
-        this.claudeSessions.delete(chatId)
-      }
+      this.closeClaudeSession(chatId, session)
       const active = this.activeTurns.get(chatId)
       if (active) {
         await this.store.recordTurnFailed(chatId, "rate_limit")
