@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.54.0](https://github.com/cuongtranba/kanna/compare/v0.53.0...v0.54.0) (2026-05-15)
+
+
+### Features
+
+* **claude-pty:** session lifecycle + prompt-too-long recovery (P6) ([#122](https://github.com/cuongtranba/kanna/issues/122)) ([9239751](https://github.com/cuongtranba/kanna/commit/9239751d5af721c7807572e454c9e40228f25605))
+
+
+### Bug Fixes
+
+* **codex:** surface image generation + unknown ThreadItems, suppress empty agent messages ([#125](https://github.com/cuongtranba/kanna/issues/125)) ([4130ba9](https://github.com/cuongtranba/kanna/commit/4130ba93d49d98138241a68a66a8798bf73f6af8))
+* **oauth-pool:** release token reservation on turn end so idle chats stop blocking ([#128](https://github.com/cuongtranba/kanna/issues/128)) ([086d60d](https://github.com/cuongtranba/kanna/commit/086d60da07199f8307071839fb946278729d6f24))
+* **tests:** force NODE_ENV=test via bunfig preload to load React dev bundle ([#127](https://github.com/cuongtranba/kanna/issues/127)) ([b38d32f](https://github.com/cuongtranba/kanna/commit/b38d32f036ecd0d502b10311990c2db18276fafc))
+
 ## [0.53.0](https://github.com/cuongtranba/kanna/compare/v0.52.0...v0.53.0) (2026-05-15)
 
 
