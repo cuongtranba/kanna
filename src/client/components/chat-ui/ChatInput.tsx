@@ -743,6 +743,8 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput({
   }
 
   function handleKeyDown(event: React.KeyboardEvent) {
+    if (event.nativeEvent.isComposing || event.keyCode === 229) return
+
     if (mentionOpen) {
       if (event.key === "Escape") {
         event.preventDefault()
