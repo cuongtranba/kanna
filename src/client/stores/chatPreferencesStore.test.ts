@@ -84,7 +84,7 @@ describe("migrateChatPreferencesState", () => {
       providerDefaults: {
         claude: {
           model: "haiku",
-          modelOptions: { reasoningEffort: "low", contextWindow: "1m" as never },
+          modelOptions: { reasoningEffort: "low", contextWindow: "1m" },
           planMode: false,
         },
       },
@@ -92,7 +92,7 @@ describe("migrateChatPreferencesState", () => {
         chatA: {
           provider: "claude",
           model: "haiku",
-          modelOptions: { reasoningEffort: "high", contextWindow: "1m" as never },
+          modelOptions: { reasoningEffort: "high", contextWindow: "1m" },
           planMode: false,
         },
       },
@@ -355,6 +355,101 @@ describe("chat preference store", () => {
     })
 
     expect(useChatPreferencesStore.getState().getComposerState("chat-existing").provider).toBe("claude")
+  })
+
+  test("applyServerDefaults drops the stale new-chat composer when provider defaults change", () => {
+    useChatPreferencesStore.setState({
+      ...INITIAL_STATE,
+      defaultProvider: "claude",
+      chatStates: {
+        "chat-a": {
+          provider: "codex",
+          model: "gpt-5.3-codex",
+          modelOptions: { reasoningEffort: "minimal", fastMode: true },
+          planMode: true,
+        },
+        [NEW_CHAT_COMPOSER_ID]: {
+          provider: "claude",
+          model: "claude-opus-4-7",
+          modelOptions: { reasoningEffort: "high", contextWindow: "200k" },
+          planMode: false,
+        },
+      },
+    })
+
+    useChatPreferencesStore.getState().applyServerDefaults("claude", {
+      claude: {
+        model: "claude-sonnet-4-6",
+        modelOptions: { reasoningEffort: "low", contextWindow: "1m" },
+        planMode: true,
+      },
+      codex: { ...INITIAL_STATE.providerDefaults.codex },
+    })
+
+    expect(useChatPreferencesStore.getState().getComposerState(NEW_CHAT_COMPOSER_ID)).toEqual({
+      provider: "claude",
+      model: "claude-sonnet-4-6",
+      modelOptions: { reasoningEffort: "low", contextWindow: "1m" },
+      planMode: true,
+    })
+    expect(useChatPreferencesStore.getState().getComposerState("chat-a")).toEqual({
+      provider: "codex",
+      model: "gpt-5.3-codex",
+      modelOptions: { reasoningEffort: "minimal", fastMode: true },
+      planMode: true,
+    })
+  })
+
+  test("applyServerDefaults drops the stale new-chat composer when default provider changes", () => {
+    useChatPreferencesStore.setState({
+      ...INITIAL_STATE,
+      defaultProvider: "claude",
+      chatStates: {
+        [NEW_CHAT_COMPOSER_ID]: {
+          provider: "claude",
+          model: "claude-opus-4-7",
+          modelOptions: { reasoningEffort: "high", contextWindow: "200k" },
+          planMode: false,
+        },
+      },
+    })
+
+    useChatPreferencesStore.getState().applyServerDefaults("codex", {
+      ...INITIAL_STATE.providerDefaults,
+    })
+
+    expect(useChatPreferencesStore.getState().getComposerState(NEW_CHAT_COMPOSER_ID)).toEqual({
+      provider: "codex",
+      model: INITIAL_STATE.providerDefaults.codex.model,
+      modelOptions: { ...INITIAL_STATE.providerDefaults.codex.modelOptions },
+      planMode: INITIAL_STATE.providerDefaults.codex.planMode,
+    })
+  })
+
+  test("applyServerDefaults preserves the new-chat composer when defaults are unchanged", () => {
+    useChatPreferencesStore.setState({
+      ...INITIAL_STATE,
+      defaultProvider: "last_used",
+      chatStates: {
+        [NEW_CHAT_COMPOSER_ID]: {
+          provider: "codex",
+          model: "gpt-5.3-codex",
+          modelOptions: { reasoningEffort: "low", fastMode: false },
+          planMode: true,
+        },
+      },
+    })
+
+    useChatPreferencesStore.getState().applyServerDefaults("last_used", {
+      ...INITIAL_STATE.providerDefaults,
+    })
+
+    expect(useChatPreferencesStore.getState().getComposerState(NEW_CHAT_COMPOSER_ID)).toEqual({
+      provider: "codex",
+      model: "gpt-5.3-codex",
+      modelOptions: { reasoningEffort: "low", fastMode: false },
+      planMode: true,
+    })
   })
 
   test("initializeComposerForChat with last_used copies the provided source state", () => {
