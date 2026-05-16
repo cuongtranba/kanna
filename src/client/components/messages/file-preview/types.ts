@@ -23,7 +23,7 @@ export function toPreviewSourceFromAttachment(
 ): PreviewSource {
   return {
     id: attachment.id,
-    contentUrl: attachment.contentUrl ?? "",
+    contentUrl: attachment.contentUrl,
     displayName: attachment.displayName,
     fileName: attachment.displayName,
     relativePath: attachment.relativePath,

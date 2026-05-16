@@ -27,7 +27,7 @@ describe("toPreviewSourceFromAttachment", () => {
     })
   })
 
-  test("falls back to displayName for fileName when missing", () => {
+  test("derives fileName from displayName", () => {
     const source = toPreviewSourceFromAttachment(
       { id: "x", kind: "file", displayName: "doc.txt", mimeType: "text/plain", size: 0, contentUrl: "/u" } as ChatAttachment,
       "local_file_link",
