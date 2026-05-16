@@ -31,6 +31,7 @@ import {
   Copy,
   Check,
 } from "lucide-react"
+import remarkGfm from "remark-gfm"
 import { cn } from "../../lib/utils"
 import { isAbsoluteLocalFilePath, parseLocalFileLink, shouldOpenLocalFileLinkInEditor, toLocalFileUrl } from "../../lib/pathUtils"
 import { LocalFileLinkCard } from "./LocalFileLinkCard"
@@ -464,6 +465,13 @@ export function createMarkdownComponents(options?: {
     ),
   }
 }
+
+// Stable references shared by every markdown message. Allocating these inline
+// per render hands react-markdown new `components`/`remarkPlugins` identities
+// every time, forcing a full re-parse of the markdown AST for every mounted
+// transcript row — which freezes the main thread on long mobile conversations.
+export const defaultRemarkPlugins = [remarkGfm]
+export const defaultMarkdownComponents = createMarkdownComponents()
 
 function extractTextFromNode(node: ReactNode): string {
   if (node === null || node === undefined || typeof node === "boolean") return ""
