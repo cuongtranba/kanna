@@ -418,6 +418,35 @@ export function normalizeClaudeUsageSnapshot(
   }
 }
 
+// Resolve the single `context_window_updated` snapshot emitted at end of a
+// turn. `latestUsageSnapshot` is the last per-`assistant`-message usage — a
+// single-request view, the real live context size. `accumulatedUsage` is
+// derived from SDK `result.usage`, which is CUMULATIVE: it re-counts
+// `cache_read_input_tokens` on every tool round-trip, so its `usedTokens`
+// balloons to millions on long turns.
+//
+// The cumulative figure must never become `usedTokens` — proactive-compact
+// reads `usedTokens` and would trip far below the real threshold, then the
+// no-assistant-usage compact turn would re-inflate and force a second
+// compact (the double-compact bug). So cumulative only ever enriches
+// `totalProcessedTokens`. When no per-assistant snapshot exists (compact /
+// system turns), return null: the caller skips emission and proactive-compact
+// falls back to the prior live snapshot (or a compact_boundary → no compact).
+export function resolveFinalTurnUsage(
+  latestUsageSnapshot: ContextWindowUsageSnapshot | null,
+  accumulatedUsage: ContextWindowUsageSnapshot | null,
+  lastKnownContextWindow: number | undefined,
+): ContextWindowUsageSnapshot | null {
+  if (!latestUsageSnapshot) return null
+  return {
+    ...latestUsageSnapshot,
+    ...(typeof lastKnownContextWindow === "number" ? { maxTokens: lastKnownContextWindow } : {}),
+    ...(accumulatedUsage && accumulatedUsage.usedTokens > latestUsageSnapshot.usedTokens
+      ? { totalProcessedTokens: accumulatedUsage.usedTokens }
+      : {}),
+  }
+}
+
 export function maxClaudeContextWindowFromModelUsage(modelUsage: unknown): number | undefined {
   const record = asRecord(modelUsage)
   if (!record) return undefined
@@ -617,17 +646,11 @@ async function* createClaudeHarnessStream(
         sdkMessage.usage,
         lastKnownContextWindow,
       )
-      const finalUsage = latestUsageSnapshot
-        ? {
-            ...latestUsageSnapshot,
-            ...(typeof lastKnownContextWindow === "number"
-              ? { maxTokens: lastKnownContextWindow }
-              : {}),
-            ...(accumulatedUsage && accumulatedUsage.usedTokens > latestUsageSnapshot.usedTokens
-              ? { totalProcessedTokens: accumulatedUsage.usedTokens }
-              : {}),
-          }
-        : accumulatedUsage
+      const finalUsage = resolveFinalTurnUsage(
+        latestUsageSnapshot,
+        accumulatedUsage,
+        lastKnownContextWindow,
+      )
 
       if (finalUsage) {
         yield {
