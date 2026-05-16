@@ -467,6 +467,14 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
   })
 
   const shutdown = async () => {
+    // Dispose the fs.watch-backed managers FIRST, before any await. bun keeps a
+    // single shared inotify "File Watcher" thread alive for any open fs.watch;
+    // if a watcher is still open when the process ends, bun blocks joining that
+    // thread and the process hangs until SIGKILL. The awaits below (agent.cancel,
+    // auth.dispose) can throw or stall under load, so disposing here guarantees
+    // the watchers close even if the rest of shutdown fails.
+    appSettings.dispose()
+    keybindings.dispose()
     // Clear the debounce timer for orphan persistence so no straggler writes fire
     // after the process starts shutting down.
     unsubOrphanPersistence()
@@ -479,8 +487,6 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     }
     router.dispose()
     await auth?.dispose()
-    appSettings.dispose()
-    keybindings.dispose()
     terminals.closeAll()
     await store.snapshotAndTruncateLogs()
     server.stop(true)
