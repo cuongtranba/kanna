@@ -57,13 +57,28 @@ describe("FilePreviewSheet smoke", () => {
 t("pointerdown on drag handle then pointermove dy>120 + pointerup → onOpenChange(false)", async () => {
   const onOpenChange = (() => { let v = true; return { call: (next: boolean) => { v = next }, get: () => v } })()
   const container = document.createElement("div")
+  // Clean up any stale portals from prior renders
+  document.body.querySelectorAll('[aria-label="Drag down to close"]').forEach((el) => {
+    el.closest('[role="dialog"]')?.parentElement?.remove()
+  })
   document.body.appendChild(container)
   const root = createRoot(container)
+  // Render SheetBody directly inside Dialog (no portal) so the handle lands in container
   await act(async () => {
-    root.render(<FilePreviewSheet source={SRC} open onOpenChange={(next: boolean) => onOpenChange.call(next)} />)
+    root.render(
+      <Dialog open>
+        <SheetBody source={SRC} onClose={() => onOpenChange.call(false)} />
+      </Dialog>
+    )
   })
-  const handle = document.body.querySelector('[aria-label="Drag down to close"]') as HTMLElement
-  e2(handle).not.toBeNull()
+  // Handle is inside container, not a portal — query there first, fall back to body
+  const allHandles = [
+    ...Array.from(container.querySelectorAll('[aria-label="Drag down to close"]')),
+    ...Array.from(document.body.querySelectorAll('[aria-label="Drag down to close"]')),
+  ]
+  const handle = allHandles[allHandles.length - 1] as HTMLElement | undefined
+  e2(handle).toBeDefined()
+  if (!handle) return
   await act(async () => {
     handle.dispatchEvent(new PointerEvent("pointerdown", { clientY: 100, pointerId: 1, bubbles: true }))
     handle.dispatchEvent(new PointerEvent("pointermove", { clientY: 300, pointerId: 1, bubbles: true }))
