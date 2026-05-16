@@ -120,7 +120,7 @@ function pickBody(source: PreviewSource): React.ComponentType<{ source: PreviewS
     size: source.size ?? 0,
     contentUrl: source.contentUrl,
     relativePath: source.relativePath ?? "",
-    absolutePath: source.relativePath ?? "",
+    absolutePath: "",
   }
   const iconKind = classifyAttachmentIcon(attachmentLike)
   if (iconKind === "image") return ImageBody
@@ -145,7 +145,7 @@ function describeMeta(source: PreviewSource): string {
     size: source.size ?? 0,
     contentUrl: source.contentUrl,
     relativePath: source.relativePath ?? "",
-    absolutePath: source.relativePath ?? "",
+    absolutePath: "",
   }
   const iconKind = classifyAttachmentIcon(attachmentLike)
   const label = friendlyMimeLabel(iconKind, source.mimeType)

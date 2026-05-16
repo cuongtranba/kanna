@@ -20,7 +20,7 @@ export function InlinePreviewCard({ source, onOpen, variant }: Props) {
     size: source.size ?? 0,
     contentUrl: source.contentUrl,
     relativePath: source.relativePath ?? "",
-    absolutePath: source.relativePath ?? "",
+    absolutePath: "",
   }
   const iconKind = classifyAttachmentIcon(attachmentLike)
   const friendlyType = friendlyMimeLabel(iconKind, source.mimeType)
