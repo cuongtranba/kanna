@@ -26,6 +26,7 @@ jobs:
       - run: bun run build
 
       - name: Run tests
-        run: timeout --foreground --signal=SIGTERM --kill-after=10 180 bun test --timeout 30000
+        run: timeout --foreground --signal=SIGTERM --kill-after=10 420 bash scripts/ci-test-with-hang-diagnostics.sh
         env:
           GIT_TERMINAL_PROMPT: "0"
+          HANG_AFTER: "170"
