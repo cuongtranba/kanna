@@ -212,6 +212,25 @@ export function normalizeProviderDefaults(value?: {
   }
 }
 
+function claudeModelOptionsEqual(a: ClaudeModelOptions, b: ClaudeModelOptions) {
+  return a.reasoningEffort === b.reasoningEffort && a.contextWindow === b.contextWindow
+}
+
+function codexModelOptionsEqual(a: CodexModelOptions, b: CodexModelOptions) {
+  return a.reasoningEffort === b.reasoningEffort && a.fastMode === b.fastMode
+}
+
+function providerDefaultsEqual(a: ChatProviderPreferences, b: ChatProviderPreferences) {
+  return (
+    a.claude.model === b.claude.model
+    && a.claude.planMode === b.claude.planMode
+    && claudeModelOptionsEqual(a.claude.modelOptions, b.claude.modelOptions)
+    && a.codex.model === b.codex.model
+    && a.codex.planMode === b.codex.planMode
+    && codexModelOptionsEqual(a.codex.modelOptions, b.codex.modelOptions)
+  )
+}
+
 function logChatPreferences(message: string, details?: unknown) {
   if (details === undefined) {
     console.info(`[chat-preferences] ${message}`)
@@ -393,6 +412,10 @@ interface ChatPreferencesState {
   chatStates: Record<string, ComposerState>
   legacyComposerState: ComposerState | null
   setDefaultProvider: (provider: DefaultProviderPreference) => void
+  applyServerDefaults: (
+    defaultProvider: DefaultProviderPreference,
+    providerDefaults: ChatProviderPreferences
+  ) => void
   setProviderDefaultModel: (provider: AgentProvider, model: string) => void
   setProviderDefaultModelOptions: <TProvider extends AgentProvider>(
     provider: TProvider,
@@ -455,6 +478,17 @@ export const useChatPreferencesStore = create<ChatPreferencesState>()(
       planMode: false,
     },
     setDefaultProvider: (defaultProvider) => set({ defaultProvider }),
+      applyServerDefaults: (defaultProvider, providerDefaults) =>
+        set((state) => {
+          const unchanged =
+            state.defaultProvider === defaultProvider
+            && providerDefaultsEqual(state.providerDefaults, providerDefaults)
+          if (unchanged) {
+            return { defaultProvider, providerDefaults }
+          }
+          const { [NEW_CHAT_COMPOSER_ID]: _staleNewChat, ...remainingChatStates } = state.chatStates
+          return { defaultProvider, providerDefaults, chatStates: remainingChatStates }
+        }),
       setProviderDefaultModel: (provider, model) =>
         set((state) => ({
           providerDefaults: {
