@@ -123,7 +123,7 @@ describe("EventStore", () => {
     const chat = await store.createChat(project.id)
     await store.appendMessage(chat.id, entry("user_prompt", 200, { content: "hello" }))
     await store.appendMessage(chat.id, entry("assistant_text", 201, { content: "world" }))
-    await store.compact()
+    await store.snapshotAndTruncateLogs()
 
     expect(store.getMessages(chat.id)).toEqual([
       entry("user_prompt", 200, { content: "hello" }),
@@ -227,7 +227,7 @@ describe("EventStore", () => {
     await store.recordTurnCancelled(chat.id)
     expect(store.getChat(chat.id)?.unread).toBe(true)
 
-    await store.compact()
+    await store.snapshotAndTruncateLogs()
 
     const reloaded = new EventStore(dataDir)
     await reloaded.initialize()
@@ -363,7 +363,7 @@ describe("EventStore", () => {
     expect(store.getSidebarProjectOrder()).toEqual([second.id, first.id])
     expect(JSON.parse(await readFile(join(dataDir, "sidebar-order.json"), "utf8"))).toEqual([second.id, first.id])
 
-    await store.compact()
+    await store.snapshotAndTruncateLogs()
 
     const snapshot = JSON.parse(await readFile(join(dataDir, "snapshot.json"), "utf8")) as SnapshotFile
     expect(snapshot.sidebarProjectOrder).toBeUndefined()
@@ -672,7 +672,7 @@ describe("recordSessionCommandsLoaded", () => {
       { name: "help", description: "Show help", argumentHint: "" },
     ]
     await store.recordSessionCommandsLoaded(chat.id, commands)
-    await store.compact()
+    await store.snapshotAndTruncateLogs()
 
     const reloaded = new EventStore(dataDir)
     await reloaded.initialize()
@@ -1101,7 +1101,7 @@ describe("EventStore auto-continue schedules", () => {
       tz: "Asia/Saigon",
 
     })
-    await store.compact()
+    await store.snapshotAndTruncateLogs()
 
     const rehydrated = new EventStore(dataDir)
     await rehydrated.initialize()
@@ -1700,5 +1700,25 @@ describe("EventStore deleteChat prunes toolRequestsById", () => {
     } as TranscriptEntry)
 
     expect(second.getMessages(chat.id)).toHaveLength(1)
+  })
+
+  test("compactFailureCount defaults to 0 and survives a restart", async () => {
+    const dataDir = await createTempDataDir()
+    const store = new EventStore(dataDir)
+    await store.initialize()
+    const project = await store.openProject("/tmp/project")
+    const chat = await store.createChat(project.id)
+
+    expect(store.getChat(chat.id)?.compactFailureCount ?? 0).toBe(0)
+
+    await store.setCompactFailureCount(chat.id, 2)
+    expect(store.getChat(chat.id)?.compactFailureCount).toBe(2)
+
+    const reloaded = new EventStore(dataDir)
+    await reloaded.initialize()
+    expect(reloaded.getChat(chat.id)?.compactFailureCount).toBe(2)
+
+    await reloaded.setCompactFailureCount(chat.id, 0)
+    expect(reloaded.getChat(chat.id)?.compactFailureCount).toBe(0)
   })
 })

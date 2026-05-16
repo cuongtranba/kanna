@@ -482,7 +482,7 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     appSettings.dispose()
     keybindings.dispose()
     terminals.closeAll()
-    await store.compact()
+    await store.snapshotAndTruncateLogs()
     server.stop(true)
   }
 

@@ -8,6 +8,11 @@ import type { ContextWindowUsageSnapshot, TranscriptEntry } from "../shared/type
 // Kanna therefore reads the latest `context_window_updated` usage snapshot
 // and injects a synthetic `/compact` prompt before the user's real turn
 // when usage crosses the same threshold the CLI would have tripped.
+//
+// PIN: these three values are hand-mirrored from upstream and have no
+// runtime link to it. proactive-compact.test.ts ("upstream constant pins")
+// locks each value so any edit fails CI, forcing a conscious re-check
+// against the upstream file above before the trigger point can move.
 export const MAX_OUTPUT_TOKENS_FOR_SUMMARY = 20_000
 export const AUTOCOMPACT_BUFFER_TOKENS = 13_000
 export const MAX_CONSECUTIVE_AUTOCOMPACT_FAILURES = 3
