@@ -886,8 +886,10 @@ export interface OfferDownloadToolResult {
   mimeType?: string
 }
 
+export type ImageGenerationStatus = "in_progress" | "completed" | "failed"
+
 export interface ImageGenerationToolCall
-  extends ToolCallBase<"image_generation", { revisedPrompt?: string | null; status?: string }> { }
+  extends ToolCallBase<"image_generation", { revisedPrompt: string | null; status: ImageGenerationStatus }> { }
 
 export interface ImageGenerationToolResult {
   contentUrl: string

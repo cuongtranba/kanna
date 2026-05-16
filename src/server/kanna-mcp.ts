@@ -4,6 +4,7 @@ import path from "node:path"
 import { stat } from "node:fs/promises"
 import { randomUUID } from "node:crypto"
 import { KANNA_MCP_SERVER_NAME } from "../shared/tools"
+import { buildProjectFileContentUrl } from "../shared/projectFileUrl"
 import { inferProjectFileContentType } from "./uploads"
 import type { TunnelGateway } from "./cloudflare-tunnel/gateway"
 import { createAskUserQuestionTool } from "./kanna-mcp-tools/ask-user-question"
@@ -79,16 +80,16 @@ export async function resolveOfferDownload(
   }
 
   const fileName = path.posix.basename(relativePath)
-  const encodedPath = relativePath
-    .split("/")
-    .map((segment) => encodeURIComponent(segment))
-    .join("/")
   const mimeType = inferProjectFileContentType(fileName)
+  const contentUrl = buildProjectFileContentUrl(args.projectId, relativePath)
+  if (!contentUrl) {
+    return { ok: false, error: "Failed to build project file URL" }
+  }
 
   return {
     ok: true,
     payload: {
-      contentUrl: `/api/projects/${encodeURIComponent(args.projectId)}/files/${encodedPath}/content`,
+      contentUrl,
       relativePath,
       fileName,
       displayName: input.label?.trim() || fileName,
