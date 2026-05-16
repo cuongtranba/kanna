@@ -3,7 +3,8 @@ import type { ChatAttachment } from "../../../shared/types"
 import { middleTruncate } from "../../lib/middleTruncate"
 import { toLocalFileUrl } from "../../lib/pathUtils"
 import { AttachmentFileCard, formatAttachmentSize } from "./AttachmentCard"
-import { AttachmentPreviewModal } from "./AttachmentPreviewModal"
+import { FilePreviewSheet } from "./file-preview/FilePreviewSheet"
+import { toPreviewSourceFromAttachment } from "./file-preview/types"
 import { classifyAttachmentIcon, classifyAttachmentPreview, friendlyMimeLabel } from "./attachmentPreview"
 
 type ProbeState =
@@ -115,9 +116,10 @@ export function LocalFileLinkCard({ path, linkText }: Props) {
             ariaLabel={ariaLabelParts.join(", ")}
           />
         </span>
-        <AttachmentPreviewModal
-          attachment={previewOpen ? attachment : null}
-          onOpenChange={(open) => setPreviewOpen(open)}
+        <FilePreviewSheet
+          source={previewOpen ? toPreviewSourceFromAttachment(attachment, "local_file_link") : null}
+          open={previewOpen}
+          onOpenChange={setPreviewOpen}
         />
       </>
     )
