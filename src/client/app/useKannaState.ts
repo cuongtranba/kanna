@@ -1729,28 +1729,6 @@ export function useKannaState(activeChatId: string | null): KannaState {
     options?: { provider?: AgentProvider; model?: string; modelOptions?: ModelOptions; planMode?: boolean; attachments?: import("../../shared/types").ChatAttachment[] }
   ) => {
     const attachments = options?.attachments ?? []
-    if (activeChatId && isProcessing) {
-      try {
-        const autoResumeOnRateLimit = usePreferencesStore.getState().autoResumeOnRateLimit
-        await socket.command<{ queuedMessageId: string }>({
-          type: "message.enqueue",
-          chatId: activeChatId,
-          content,
-          attachments,
-          provider: options?.provider,
-          model: options?.model,
-          modelOptions: options?.modelOptions,
-          planMode: options?.planMode,
-          autoResumeOnRateLimit,
-        })
-        setCommandError(null)
-        return
-      } catch (error) {
-        setCommandError(error instanceof Error ? error.message : String(error))
-        throw error
-      }
-    }
-
     const optimisticId = generateUUID()
     const clientTraceId = generateUUID()
     const signature = getUserPromptSignature(content, attachments)
@@ -1828,10 +1806,6 @@ export function useKannaState(activeChatId: string | null): KannaState {
       sendTrace.ackAt = performance.now()
       sendTrace.serverChatId = result.chatId ?? sendTrace.serverChatId
 
-      // Server queued the message (e.g. proactive `/compact` injected ahead of
-      // the user's prompt). Drop the optimistic user_prompt so the queue panel
-      // is the only render source until the post-compact dequeue persists a
-      // real user_prompt.
       if (result.queued) {
         setOptimisticUserPrompts((current) => pruneOptimisticOnQueuedAck(current, optimisticId, { queued: true }))
         setOptimisticProcessing(null)
@@ -1873,7 +1847,7 @@ export function useKannaState(activeChatId: string | null): KannaState {
       setCommandError(error instanceof Error ? error.message : String(error))
       throw error
     }
-  }, [activeChatId, fallbackLocalProjectPath, isProcessing, navigate, optimisticUserPrompts, selectedProjectId, serverTranscriptEntries, sidebarProjectGroups, socket])
+  }, [activeChatId, fallbackLocalProjectPath, navigate, optimisticUserPrompts, selectedProjectId, serverTranscriptEntries, sidebarProjectGroups, socket])
 
   const handleSteerQueuedMessage = useCallback(async (queuedMessageId: string) => {
     if (!activeChatId) return
