@@ -251,6 +251,90 @@ export const ChatTranscriptViewport = memo(function ChatTranscriptViewport({
     }
   }, [activeChatId, handleScroll, listRef, resolvedRows.length])
 
+  // LegendList's maintainVisibleContentPosition corrects scroll position by
+  // calling scrollBy() whenever an off-screen row's measured height differs
+  // from its estimate. On a long chat that happens every frame of a drag, and
+  // a programmatic scrollBy mid-gesture aborts native touch momentum on iOS/
+  // Android — making long chats impossible to scroll by touch (desktop wheel
+  // is unaffected). Suppress only those corrections while a finger gesture
+  // (including its inertia) owns the scroll; MVCP stays fully enabled for
+  // non-touch updates like history loads and new messages.
+  useEffect(() => {
+    let cleanup: (() => void) | undefined
+    const frameId = window.requestAnimationFrame(() => {
+      const scrollNode = listRef.current?.getScrollableNode?.()
+      if (!(scrollNode instanceof HTMLElement)) {
+        return
+      }
+
+      const nativeScrollBy = scrollNode.scrollBy
+      if (typeof nativeScrollBy !== "function") {
+        return
+      }
+      const boundScrollBy = nativeScrollBy.bind(scrollNode) as typeof scrollNode.scrollBy
+
+      let gestureActive = false
+      let settleTimer: number | undefined
+
+      const armSettle = () => {
+        if (settleTimer !== undefined) {
+          window.clearTimeout(settleTimer)
+        }
+        settleTimer = window.setTimeout(() => {
+          settleTimer = undefined
+          gestureActive = false
+        }, 120)
+      }
+
+      const guardedScrollBy = ((...args: unknown[]): void => {
+        if (gestureActive) {
+          return
+        }
+        ;(boundScrollBy as (...rest: unknown[]) => void)(...args)
+      }) as unknown as typeof scrollNode.scrollBy
+      scrollNode.scrollBy = guardedScrollBy
+
+      const onTouchStart = () => {
+        if (settleTimer !== undefined) {
+          window.clearTimeout(settleTimer)
+          settleTimer = undefined
+        }
+        gestureActive = true
+      }
+      const onTouchEnd = () => {
+        armSettle()
+      }
+      const onScrollWhileGesturing = () => {
+        if (gestureActive) {
+          armSettle()
+        }
+      }
+
+      scrollNode.addEventListener("touchstart", onTouchStart, { passive: true })
+      scrollNode.addEventListener("touchend", onTouchEnd, { passive: true })
+      scrollNode.addEventListener("touchcancel", onTouchEnd, { passive: true })
+      scrollNode.addEventListener("scroll", onScrollWhileGesturing, { passive: true })
+
+      cleanup = () => {
+        if (settleTimer !== undefined) {
+          window.clearTimeout(settleTimer)
+        }
+        scrollNode.removeEventListener("touchstart", onTouchStart)
+        scrollNode.removeEventListener("touchend", onTouchEnd)
+        scrollNode.removeEventListener("touchcancel", onTouchEnd)
+        scrollNode.removeEventListener("scroll", onScrollWhileGesturing)
+        if (scrollNode.scrollBy === guardedScrollBy) {
+          Reflect.deleteProperty(scrollNode, "scrollBy")
+        }
+      }
+    })
+
+    return () => {
+      window.cancelAnimationFrame(frameId)
+      cleanup?.()
+    }
+  }, [activeChatId, listRef, resolvedRows.length])
+
   const handleStartReached = useCallback(() => {
     if (isHistoryLoading || !hasOlderHistory) {
       return
