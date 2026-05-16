@@ -91,7 +91,15 @@ async function createSession(terminalId: string) {
   manager.write(terminalId, "printf '__KANNA_READY__\\n'\r")
   // Wait for the actual command output (the bare string on its own line: __KANNA_READY__\r\n)
   // rather than the terminal echo of the input (which also contains __KANNA_READY__ inside quotes).
-  await waitFor(() => output.includes("__KANNA_READY__\r\n"), SHELL_START_TIMEOUT_MS)
+  // On a loaded runner the shell can miss the 5s window; close() here so the
+  // throw does not leak a live shell + PTY (the caller's try/finally has not
+  // started yet, so it would never reap it otherwise).
+  try {
+    await waitFor(() => output.includes("__KANNA_READY__\r\n"), SHELL_START_TIMEOUT_MS)
+  } catch (error) {
+    manager.close(terminalId)
+    throw error
+  }
 
   return {
     manager,
@@ -433,20 +441,26 @@ describeIfSupported("TerminalManager", () => {
       }
     })
 
-    manager.createTerminal({
-      projectPath: tempProjectPath,
-      terminalId,
-      cols: 80,
-      rows: 24,
-      scrollback: 1_000,
-    })
-    manager.write(terminalId, "printf '__KANNA_READY__\\n'\r")
-    await waitFor(() => output.includes("__KANNA_READY__\r\n"), SHELL_START_TIMEOUT_MS)
+    try {
+      manager.createTerminal({
+        projectPath: tempProjectPath,
+        terminalId,
+        cols: 80,
+        rows: 24,
+        scrollback: 1_000,
+      })
+      manager.write(terminalId, "printf '__KANNA_READY__\\n'\r")
+      await waitFor(() => output.includes("__KANNA_READY__\r\n"), SHELL_START_TIMEOUT_MS)
 
-    expect(registry.list().find((t) => t.id === `pty:${terminalId}`)).toBeDefined()
+      expect(registry.list().find((t) => t.id === `pty:${terminalId}`)).toBeDefined()
 
-    manager.close(terminalId)
-    expect(registry.list().find((t) => t.id === `pty:${terminalId}`)).toBeUndefined()
+      manager.close(terminalId)
+      expect(registry.list().find((t) => t.id === `pty:${terminalId}`)).toBeUndefined()
+    } finally {
+      // close() is idempotent; guarantees the shell + PTY are reaped even if
+      // the ready-wait times out before the explicit close above.
+      manager.close(terminalId)
+    }
   })
 
   test("unregisters terminal_pty entry from BackgroundTaskRegistry on natural exit", async () => {
