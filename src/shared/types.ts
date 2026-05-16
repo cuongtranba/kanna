@@ -1,4 +1,4 @@
-import type { ToolRequestDecision, ToolRequestStatus } from "./permission-policy"
+import type { ChatPermissionPolicyOverride, ToolRequestDecision, ToolRequestStatus } from "./permission-policy"
 
 export const STORE_VERSION = 3 as const
 export const PROTOCOL_VERSION = 1 as const
@@ -509,6 +509,10 @@ export interface SidebarChatRow {
   canFork?: boolean
   stateEnteredAt?: number
   stackId?: string
+  /** Live Claude PTY session lifecycle state for the sidebar badge. Missing implies "cold". */
+  sessionState?: ClaudeSessionLifecycleStatus
+  /** True when the chat has a non-null policyOverride. Missing implies false. */
+  hasPolicyOverride?: boolean
 }
 
 export interface SidebarProjectGroup {
@@ -592,6 +596,47 @@ export const UPLOAD_DEFAULTS: UploadSettings = {
 export const UPLOAD_MAX_FILE_SIZE_MB_MIN = 1
 export const UPLOAD_MAX_FILE_SIZE_MB_MAX = 2048
 
+export type ClaudeDriverPreference = "sdk" | "pty"
+
+export const CLAUDE_DRIVER_VALUES: readonly ClaudeDriverPreference[] = ["sdk", "pty"]
+
+export function isClaudeDriverPreference(value: unknown): value is ClaudeDriverPreference {
+  return value === "sdk" || value === "pty"
+}
+
+export interface ClaudePtyLifecycleSettings {
+  idleTimeoutMs: number
+  maxConcurrent: number
+}
+
+export const CLAUDE_PTY_LIFECYCLE_DEFAULTS: ClaudePtyLifecycleSettings = {
+  idleTimeoutMs: 600_000,
+  maxConcurrent: 4,
+}
+
+export const CLAUDE_PTY_IDLE_TIMEOUT_MS_MIN = 60_000
+export const CLAUDE_PTY_IDLE_TIMEOUT_MS_MAX = 3_600_000
+export const CLAUDE_PTY_MAX_CONCURRENT_MIN = 1
+export const CLAUDE_PTY_MAX_CONCURRENT_MAX = 16
+
+export interface ClaudeDriverSettings {
+  preference: ClaudeDriverPreference
+  lifecycle: ClaudePtyLifecycleSettings
+}
+
+export const CLAUDE_DRIVER_DEFAULTS: ClaudeDriverSettings = {
+  preference: "sdk",
+  lifecycle: { ...CLAUDE_PTY_LIFECYCLE_DEFAULTS },
+}
+
+export type ClaudeSessionLifecycleStatus = "cold" | "warming" | "active" | "idle" | "cooling"
+
+export interface ChatSessionStateSnapshot {
+  chatId: string
+  state: ClaudeSessionLifecycleStatus
+  updatedAt: number
+}
+
 export interface AppSettingsSnapshot {
   analyticsEnabled: boolean
   browserSettingsMigrated: boolean
@@ -615,6 +660,7 @@ export interface AppSettingsSnapshot {
   claudeAuth: ClaudeAuthSettings
   uploads: UploadSettings
   subagents: Subagent[]
+  claudeDriver: ClaudeDriverSettings
 }
 
 export interface AppSettingsPatch {
@@ -638,6 +684,10 @@ export interface AppSettingsPatch {
     create?: SubagentInput
     update?: { id: string; patch: SubagentPatch }
     delete?: { id: string }
+  }
+  claudeDriver?: {
+    preference?: ClaudeDriverPreference
+    lifecycle?: Partial<ClaudePtyLifecycleSettings>
   }
 }
 
@@ -1316,6 +1366,10 @@ export interface ChatRuntime {
   planMode: boolean
   sessionTokensByProvider: Partial<Record<AgentProvider, string | null>>
   timings: ChatStateTimings
+  /** Per-chat permission policy overlay. Null means "use global defaults". */
+  policyOverride: ChatPermissionPolicyOverride | null
+  /** Current claude PTY session lifecycle state for this chat. `cold` when no live session. */
+  sessionState: ClaudeSessionLifecycleStatus
 }
 
 export interface ChatHistorySnapshot {

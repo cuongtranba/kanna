@@ -21,7 +21,7 @@ import { writeStandaloneTranscriptExport } from "./standalone-export"
 import { TerminalManager } from "./terminal-manager"
 import type { UpdateManager } from "./update-manager"
 import { deriveChatSnapshot, deriveLocalProjectsSnapshot, deriveSidebarData } from "./read-models"
-import { AUTH_DEFAULTS, CLAUDE_AUTH_DEFAULTS, CLOUDFLARE_TUNNEL_DEFAULTS, UPLOAD_DEFAULTS } from "../shared/types"
+import { AUTH_DEFAULTS, CLAUDE_AUTH_DEFAULTS, CLAUDE_DRIVER_DEFAULTS, CLAUDE_PTY_LIFECYCLE_DEFAULTS, CLOUDFLARE_TUNNEL_DEFAULTS, UPLOAD_DEFAULTS } from "../shared/types"
 import type {
   AppSettingsPatch,
   AppSettingsSnapshot,
@@ -535,6 +535,7 @@ export function createWsRouter({
     claudeAuth: CLAUDE_AUTH_DEFAULTS,
     uploads: UPLOAD_DEFAULTS,
     subagents: [],
+    claudeDriver: { ...CLAUDE_DRIVER_DEFAULTS, lifecycle: { ...CLAUDE_PTY_LIFECYCLE_DEFAULTS } },
   }
   const mergeAppSettingsPatch = (snapshot: AppSettingsSnapshot, patch: AppSettingsPatch): AppSettingsSnapshot => {
     let subagents = snapshot.subagents
@@ -609,6 +610,13 @@ export function createWsRouter({
         ...patch.uploads,
       },
       subagents,
+      claudeDriver: {
+        preference: patch.claudeDriver?.preference ?? snapshot.claudeDriver.preference,
+        lifecycle: {
+          ...snapshot.claudeDriver.lifecycle,
+          ...patch.claudeDriver?.lifecycle,
+        },
+      },
     }
   }
   const resolvedAppSettings = {
@@ -752,6 +760,7 @@ export function createWsRouter({
     const data = deriveSidebarData(store.state, agent.getActiveStatuses(), {
       sidebarProjectOrder: getSidebarProjectOrder(store),
       drainingChatIds: agent.getDrainingChatIds(),
+      claudeSessionStates: agent.getClaudeSessionStates?.(),
     })
     const observed = data.projectGroups.flatMap((group) =>
       group.chats.map((chat) => ({
@@ -946,6 +955,7 @@ export function createWsRouter({
           (chatId) => store.getTunnelEvents(chatId),
           agent.getWaitStartedAtByChatId(),
           Date.now(),
+          agent.getClaudeSessionStates?.() ?? new Map(),
         ),
       },
     }
@@ -1592,6 +1602,12 @@ export function createWsRouter({
         }
         case "chat.markRead": {
           await store.setChatReadState(command.chatId, false)
+          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
+          await broadcastChatAndSidebar(command.chatId)
+          return
+        }
+        case "chat.setPolicyOverride": {
+          await store.setChatPolicyOverride(command.chatId, command.policyOverride ?? null)
           send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
           await broadcastChatAndSidebar(command.chatId)
           return

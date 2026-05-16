@@ -38,7 +38,7 @@ import {
   normalizeCodexModelOptions,
   normalizeServerModel,
 } from "./provider-catalog"
-import { resolveClaudeApiModelId } from "../shared/types"
+import { resolveClaudeApiModelId, type ClaudeDriverPreference } from "../shared/types"
 import { fallbackTitleFromMessage } from "./generate-title"
 import { AUTO_CONTINUE_EVENT_VERSION, type AutoContinueEvent } from "./auto-continue/events"
 import { ClaudeLimitDetector, CodexLimitDetector, type LimitDetection, type LimitDetector } from "./auto-continue/limit-detector"
@@ -54,7 +54,7 @@ import { SubagentOrchestrator, type ProviderRunStart } from "./subagent-orchestr
 import { buildSubagentProviderRun } from "./subagent-provider-run"
 import type { ToolCallbackService } from "./tool-callback"
 import type { ChatPermissionPolicy } from "../shared/permission-policy"
-import { POLICY_DEFAULT } from "../shared/permission-policy"
+import { mergePolicyOverride, POLICY_DEFAULT } from "../shared/permission-policy"
 import { startClaudeSessionPTY, type StartClaudeSessionPtyArgs } from "./claude-pty/driver"
 import type { PreflightGate } from "./claude-pty/preflight/gate"
 
@@ -202,7 +202,13 @@ interface AgentCoordinatorArgs {
   scheduleManager?: ScheduleManager
   getAutoResumePreference?: () => boolean
   getSubagents?: () => Subagent[]
-  getAppSettingsSnapshot?: () => { claudeAuth?: { authenticated?: boolean } | null }
+  getAppSettingsSnapshot?: () => {
+    claudeAuth?: { authenticated?: boolean } | null
+    claudeDriver?: {
+      preference?: ClaudeDriverPreference
+      lifecycle?: { idleTimeoutMs?: number; maxConcurrent?: number }
+    }
+  }
   throwOnClaudeSessionStart?: boolean
   backgroundTasks?: BackgroundTaskRegistry
   oauthPool?: OAuthTokenPool
@@ -1141,6 +1147,25 @@ export class AgentCoordinator {
     return new Set(this.slashCommandsInFlight)
   }
 
+  /**
+   * Snapshot of live claude PTY session states per chat. Used by the
+   * sidebar badge selector. Chats not present are implicitly `cold`.
+   */
+  getClaudeSessionStates(): Map<string, "warming" | "active" | "idle"> {
+    const out = new Map<string, "warming" | "active" | "idle">()
+    const now = Date.now()
+    for (const [chatId, session] of this.claudeSessions) {
+      if (this.activeTurns.get(chatId)?.provider === "claude") {
+        out.set(chatId, "active")
+      } else if (now - session.lastUsedAt >= this.resolveClaudeIdleMs()) {
+        out.set(chatId, "idle")
+      } else {
+        out.set(chatId, "warming")
+      }
+    }
+    return out
+  }
+
   get toolCallbackService(): ToolCallbackService | null {
     return this.toolCallback
   }
@@ -1149,10 +1174,43 @@ export class AgentCoordinator {
     this.onStateChange(chatId, options)
   }
 
+  private resolveClaudeDriverPreference(): ClaudeDriverPreference {
+    const fromSettings = this.getAppSettingsSnapshot().claudeDriver?.preference
+    if (fromSettings === "pty" || fromSettings === "sdk") return fromSettings
+    return process.env.KANNA_CLAUDE_DRIVER === "pty" ? "pty" : "sdk"
+  }
+
+  /**
+   * Resolves the effective ChatPermissionPolicy for a chat: starts from the
+   * coordinator-wide default, overlays the chat's persisted policyOverride.
+   */
+  private resolveChatPolicy(chatId: string): ChatPermissionPolicy {
+    // store.state may be absent in test fakes that don't implement the full
+    // EventStore — fall through to the global default policy in that case.
+    const override = this.store.state?.chatsById?.get(chatId)?.policyOverride ?? null
+    return mergePolicyOverride(this.chatPolicy, override)
+  }
+
+  private resolveClaudeIdleMs(): number {
+    const fromSettings = this.getAppSettingsSnapshot().claudeDriver?.lifecycle?.idleTimeoutMs
+    if (typeof fromSettings === "number" && Number.isFinite(fromSettings) && fromSettings > 0) {
+      return Math.round(fromSettings)
+    }
+    return this.claudeSessionLifecycle.idleMs
+  }
+
+  private resolveClaudeMaxResident(): number {
+    const fromSettings = this.getAppSettingsSnapshot().claudeDriver?.lifecycle?.maxConcurrent
+    if (typeof fromSettings === "number" && Number.isFinite(fromSettings) && fromSettings > 0) {
+      return Math.round(fromSettings)
+    }
+    return this.claudeSessionLifecycle.maxResidentSessions
+  }
+
   private isClaudeSessionIdle(chatId: string, session: ClaudeSessionState, now = Date.now()): boolean {
     if (this.activeTurns.get(chatId)?.provider === "claude") return false
     if (session.pendingPromptSeqs.length > 0) return false
-    return now - session.lastUsedAt >= this.claudeSessionLifecycle.idleMs
+    return now - session.lastUsedAt >= this.resolveClaudeIdleMs()
   }
 
   private closeClaudeSession(chatId: string, session: ClaudeSessionState): void {
@@ -1172,7 +1230,7 @@ export class AgentCoordinator {
   }
 
   private enforceClaudeSessionBudget(protectedChatId?: string): void {
-    const max = this.claudeSessionLifecycle.maxResidentSessions
+    const max = this.resolveClaudeMaxResident()
     if (max <= 0 || this.claudeSessions.size <= max) return
 
     const candidates = [...this.claudeSessions.entries()]
@@ -1304,7 +1362,7 @@ export class AgentCoordinator {
           return
         }
         if (picked) this.oauthPool!.markUsed(picked.id)
-        const usePtyEphemeral = process.env.KANNA_CLAUDE_DRIVER === "pty"
+        const usePtyEphemeral = this.resolveClaudeDriverPreference() === "pty"
         const ephemeral = usePtyEphemeral
           ? await this.startClaudeSessionPTYFn({
               chatId,
@@ -1740,7 +1798,7 @@ export class AgentCoordinator {
         )
       }
       if (picked) this.oauthPool!.markUsed(picked.id)
-      const usePty = process.env.KANNA_CLAUDE_DRIVER === "pty"
+      const usePty = this.resolveClaudeDriverPreference() === "pty"
       const started = usePty
         ? await this.startClaudeSessionPTYFn({
             chatId: args.chatId,
@@ -1770,7 +1828,7 @@ export class AgentCoordinator {
             tunnelGateway: this.tunnelGateway,
             onToolRequest: args.onToolRequest,
             toolCallback: this.toolCallback ?? undefined,
-            chatPolicy: this.chatPolicy,
+            chatPolicy: this.resolveChatPolicy(args.chatId),
           })
 
       session = {

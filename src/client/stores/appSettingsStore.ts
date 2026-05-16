@@ -60,6 +60,13 @@ export function mergeAppSettingsPatch(
       ...patch.uploads,
     },
     subagents: settings.subagents,
+    claudeDriver: {
+      preference: patch.claudeDriver?.preference ?? settings.claudeDriver.preference,
+      lifecycle: {
+        ...settings.claudeDriver.lifecycle,
+        ...patch.claudeDriver?.lifecycle,
+      },
+    },
   }
 }
 
