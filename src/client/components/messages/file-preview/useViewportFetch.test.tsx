@@ -1,6 +1,7 @@
 import "../../../lib/testing/setupHappyDom"
 import { describe, expect, test, beforeEach, afterEach, mock } from "bun:test"
-import { useRef } from "react"
+import { useRef, act } from "react"
+import { createRoot } from "react-dom/client"
 import { renderForLoopCheck } from "../../../lib/testing/renderForLoopCheck"
 import { useViewportFetch, __clearViewportFetchCacheForTests, type ViewportFetchResult } from "./useViewportFetch"
 
@@ -62,7 +63,7 @@ describe("useViewportFetch", () => {
     await result.cleanup()
   })
 
-  test("resets state to idle when cacheKey switches to an uncached key", async () => {
+  test("resets state to idle when cacheKey switches to an uncached key on the same mounted root", async () => {
     function KeySwitchingHarness({ cacheKey, probe }: { cacheKey: string; probe: (s: ViewportFetchResult<string>) => void }) {
       const ref = useRef<HTMLDivElement>(null)
       const state = useViewportFetch({
@@ -77,14 +78,28 @@ describe("useViewportFetch", () => {
 
     const states: ViewportFetchResult<string>[] = []
     const probe = mock((s: ViewportFetchResult<string>) => states.push(s))
-    const first = await renderForLoopCheck(<KeySwitchingHarness cacheKey="k1" probe={probe} />)
-    expect(first.loopWarnings).toEqual([])
-    await first.cleanup()
 
-    const second = await renderForLoopCheck(<KeySwitchingHarness cacheKey="k2" probe={probe} />)
-    expect(second.loopWarnings).toEqual([])
-    expect(states[states.length - 1]?.data).toBe(null)
-    expect(states[states.length - 1]?.state).toBe("idle")
-    await second.cleanup()
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    try {
+      await act(async () => {
+        root.render(<KeySwitchingHarness cacheKey="k1" probe={probe} />)
+      })
+      const afterK1 = states[states.length - 1]
+      expect(afterK1?.state).toBe("idle")
+
+      await act(async () => {
+        root.render(<KeySwitchingHarness cacheKey="k2" probe={probe} />)
+      })
+      const afterK2 = states[states.length - 1]
+      expect(afterK2?.data).toBe(null)
+      expect(afterK2?.state).toBe("idle")
+    } finally {
+      await act(async () => {
+        root.unmount()
+      })
+      container.remove()
+    }
   })
 })
