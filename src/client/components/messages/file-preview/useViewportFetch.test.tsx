@@ -2,12 +2,13 @@ import "../../../lib/testing/setupHappyDom"
 import { describe, expect, test, beforeEach, afterEach, mock } from "bun:test"
 import { useRef } from "react"
 import { renderForLoopCheck } from "../../../lib/testing/renderForLoopCheck"
-import { useViewportFetch, type ViewportFetchResult } from "./useViewportFetch"
+import { useViewportFetch, __clearViewportFetchCacheForTests, type ViewportFetchResult } from "./useViewportFetch"
 
 type IOEntry = Partial<IntersectionObserverEntry> & { isIntersecting: boolean; target: Element }
 let observerCallbacks: Array<(entries: IOEntry[]) => void> = []
 
 beforeEach(() => {
+  __clearViewportFetchCacheForTests()
   observerCallbacks = []
   ;(globalThis as unknown as { IntersectionObserver: unknown }).IntersectionObserver =
     class FakeIO {
@@ -39,7 +40,7 @@ function Harness({ probe }: { probe: (state: ViewportFetchResult<string>) => voi
 }
 
 describe("useViewportFetch", () => {
-  test("starts idle, transitions loading then ready on intersection", async () => {
+  test("starts idle before intersection", async () => {
     const states: Array<{ state: string }> = []
     const probe = mock((s: ViewportFetchResult<string>) => {
       states.push({ state: s.state })

@@ -19,16 +19,17 @@ interface Options<T> {
 const snippetCache = new Map<string, unknown>()
 
 export function useViewportFetch<T>(opts: Options<T>): ViewportFetchResult<T> {
-  const cached = snippetCache.get(opts.cacheKey) as T | undefined
+  const { cacheKey, enabled, ref, fetcher, rootMargin } = opts
+  const cached = snippetCache.get(cacheKey) as T | undefined
   const [state, setState] = useState<ViewportFetchState>(cached !== undefined ? "ready" : "idle")
   const [data, setData] = useState<T | null>(cached !== undefined ? cached : null)
   const [error, setError] = useState<Error | null>(null)
   const controllerRef = useRef<AbortController | null>(null)
 
   useEffect(() => {
-    if (!opts.enabled) return
+    if (!enabled) return
     if (cached !== undefined) return
-    const element = opts.ref.current
+    const element = ref.current
     if (!element) return
     if (typeof IntersectionObserver === "undefined") return
 
@@ -42,10 +43,10 @@ export function useViewportFetch<T>(opts: Options<T>): ViewportFetchResult<T> {
           const controller = new AbortController()
           controllerRef.current = controller
           setState("loading")
-          opts.fetcher(controller.signal)
+          fetcher(controller.signal)
             .then((value) => {
               if (cancelled) return
-              snippetCache.set(opts.cacheKey, value)
+              snippetCache.set(cacheKey, value)
               setData(value)
               setState("ready")
             })
@@ -57,7 +58,7 @@ export function useViewportFetch<T>(opts: Options<T>): ViewportFetchResult<T> {
           break
         }
       },
-      { rootMargin: opts.rootMargin ?? "200px" },
+      { rootMargin: rootMargin ?? "200px" },
     )
     io.observe(element)
 
@@ -67,7 +68,7 @@ export function useViewportFetch<T>(opts: Options<T>): ViewportFetchResult<T> {
       controllerRef.current?.abort()
       controllerRef.current = null
     }
-  }, [cached, opts])
+  }, [cached, cacheKey, enabled, ref, fetcher, rootMargin])
 
   return useMemo(() => ({ state, data, error }), [state, data, error])
 }
