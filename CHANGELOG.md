@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.55.1](https://github.com/cuongtranba/kanna/compare/v0.55.0...v0.55.1) (2026-05-16)
+
+
+### Bug Fixes
+
+* **ci:diag:** capture stuck-process stack when bun test hangs ([#141](https://github.com/cuongtranba/kanna/issues/141)) ([4d83e9c](https://github.com/cuongtranba/kanna/commit/4d83e9cc25cd519aef38e522ca353f9287ad858b))
+
 ## [0.55.0](https://github.com/cuongtranba/kanna/compare/v0.54.0...v0.55.0) (2026-05-16)
 
 
