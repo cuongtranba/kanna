@@ -495,8 +495,8 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput({
   }, [chatId])
 
   useEffect(() => {
-    initializeComposerForChat(composerChatId)
-  }, [composerChatId, initializeComposerForChat])
+    initializeComposerForChat(composerChatId, { providerHint: activeProvider })
+  }, [composerChatId, initializeComposerForChat, activeProvider])
 
   useEffect(() => {
     uploadGenerationRef.current += 1
