@@ -7,10 +7,12 @@ import type {
   AskUserQuestionItem,
   CodexReasoningEffort,
   ContextWindowUsageSnapshot,
+  ImageGenerationStatus,
   ServiceTier,
   TodoItem,
   TranscriptEntry,
 } from "../shared/types"
+import { buildProjectFileContentUrl } from "../shared/projectFileUrl"
 import type { HarnessEvent, HarnessToolRequest, HarnessTurn } from "./harness-types"
 import {
   type CollabAgentToolCallItem,
@@ -362,15 +364,25 @@ function genericDynamicToolCall(toolId: string, toolName: string, input: Record<
 
 export const IMAGE_GENERATION_TOOL_NAME = "ImageGeneration"
 
-function imageGenerationInputFromArgs(args: unknown): { revisedPrompt: string | null; status: string | undefined } {
+// Dynamic tools whose `item/started` payload carries placeholder args; emission
+// must wait for `item/completed` so the UI sees the real revisedPrompt/status.
+export const DEFERRED_DYNAMIC_TOOLS: ReadonlySet<string> = new Set([IMAGE_GENERATION_TOOL_NAME])
+
+function normalizeImageGenerationStatus(raw: unknown): ImageGenerationStatus {
+  if (raw === "completed" || raw === "failed") return raw
+  return "in_progress"
+}
+
+function imageGenerationInputFromArgs(args: unknown): { revisedPrompt: string | null; status: ImageGenerationStatus } {
   const record = asRecord(args)
   return {
     revisedPrompt: typeof record?.revisedPrompt === "string" ? record.revisedPrompt : null,
-    status: typeof record?.status === "string" ? record.status : undefined,
+    status: normalizeImageGenerationStatus(record?.status),
   }
 }
 
 function imageGenerationToolCallFromDynamic(item: Extract<ThreadItem, { type: "dynamicToolCall" }>): TranscriptEntry {
+  const input = imageGenerationInputFromArgs(item.arguments)
   return timestamped({
     kind: "tool_call",
     tool: {
@@ -378,13 +390,17 @@ function imageGenerationToolCallFromDynamic(item: Extract<ThreadItem, { type: "d
       toolKind: "image_generation",
       toolName: IMAGE_GENERATION_TOOL_NAME,
       toolId: item.id,
-      input: imageGenerationInputFromArgs(item.arguments),
-      rawInput: (asRecord(item.arguments) ?? {}) as Record<string, unknown>,
+      input,
+      rawInput: input,
     },
   })
 }
 
 function imageGenerationToolCallFromTyped(item: Extract<ThreadItem, { type: "imageGeneration" }>): TranscriptEntry {
+  const input = {
+    revisedPrompt: item.revisedPrompt ?? null,
+    status: normalizeImageGenerationStatus(item.status),
+  }
   return timestamped({
     kind: "tool_call",
     tool: {
@@ -392,11 +408,8 @@ function imageGenerationToolCallFromTyped(item: Extract<ThreadItem, { type: "ima
       toolKind: "image_generation",
       toolName: IMAGE_GENERATION_TOOL_NAME,
       toolId: item.id,
-      input: {
-        revisedPrompt: item.revisedPrompt ?? null,
-        status: item.status,
-      },
-      rawInput: item as unknown as Record<string, unknown>,
+      input,
+      rawInput: input,
     },
   })
 }
@@ -412,14 +425,18 @@ function relativePathFromContentItems(contentItems: DynamicToolCallOutputContent
   return null
 }
 
-function buildImageGenerationResult(toolId: string, relativePath: string | null, projectId: string | null, isError: boolean): TranscriptEntry {
+function buildImageGenerationResult(
+  toolId: string,
+  relativePath: string | null,
+  projectId: string | null,
+  upstreamError: boolean,
+): TranscriptEntry {
   const rel = relativePath ?? ""
   const fileName = rel ? rel.split("/").pop() ?? rel : ""
-  let contentUrl = ""
-  if (rel && projectId) {
-    const encodedPath = rel.split("/").map((segment) => encodeURIComponent(segment)).join("/")
-    contentUrl = `/api/projects/${encodeURIComponent(projectId)}/files/${encodedPath}/content`
-  }
+  const contentUrl = buildProjectFileContentUrl(projectId, rel) ?? ""
+  // No URL means the renderer cannot display anything useful — surface as an
+  // error so the UI shows the error branch instead of silent "no content".
+  const isError = upstreamError || !contentUrl
   return timestamped({
     kind: "tool_result",
     toolId,
@@ -1450,9 +1467,9 @@ export class CodexAppServerManager {
       }
     }
 
-    if (notification.item.type === "dynamicToolCall" && notification.item.tool === IMAGE_GENERATION_TOOL_NAME) {
-      // Defer ImageGeneration emission to item/completed — args at started are
-      // always {revisedPrompt: null, status: "in_progress"} which is uninformative.
+    if (notification.item.type === "dynamicToolCall" && DEFERRED_DYNAMIC_TOOLS.has(notification.item.tool)) {
+      // Defer emission to item/completed — `started` args carry placeholders
+      // (e.g. ImageGeneration's `{revisedPrompt:null, status:"in_progress"}`).
       return
     }
 
