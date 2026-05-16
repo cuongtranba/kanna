@@ -84,7 +84,7 @@ describe("migrateChatPreferencesState", () => {
       providerDefaults: {
         claude: {
           model: "haiku",
-          modelOptions: { reasoningEffort: "low", contextWindow: "1m" as never },
+          modelOptions: { reasoningEffort: "low", contextWindow: "1m" },
           planMode: false,
         },
       },
@@ -92,7 +92,7 @@ describe("migrateChatPreferencesState", () => {
         chatA: {
           provider: "claude",
           model: "haiku",
-          modelOptions: { reasoningEffort: "high", contextWindow: "1m" as never },
+          modelOptions: { reasoningEffort: "high", contextWindow: "1m" },
           planMode: false,
         },
       },

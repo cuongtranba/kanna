@@ -85,10 +85,10 @@ type PersistedComposerState =
     planMode?: boolean
   }
 
-type PersistedChatPreferencesState = Pick<
-  ChatPreferencesState,
-  "defaultProvider" | "providerDefaults" | "chatStates" | "legacyComposerState"
-> & LegacyPersistedChatPreferencesState
+type PersistedChatPreferencesState = LegacyPersistedChatPreferencesState & {
+  chatStates?: Record<string, PersistedComposerState>
+  legacyComposerState?: PersistedComposerState
+}
 
 export function normalizeDefaultProvider(value?: string): DefaultProviderPreference {
   if (value === "claude" || value === "codex") return value
