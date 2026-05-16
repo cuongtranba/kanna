@@ -135,20 +135,21 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     store,
     serverSecret: process.env.KANNA_SERVER_SECRET ?? crypto.randomUUID(),
   })
-  const preflightGate = process.env.KANNA_CLAUDE_DRIVER === "pty"
-    ? createPreflightGate({
-        toolsString: "mcp__kanna__*",
-        now: () => Date.now(),
-        runSuite: async () => {
-          const claudeBin = (process.env.CLAUDE_EXECUTABLE ?? "/usr/local/bin/claude")
-            .replace(/^~(?=\/|$)/, homedir())
-          return await runFullSuite({
-            claudeBin,
-            model: process.env.KANNA_PTY_PREFLIGHT_MODEL ?? "claude-haiku-4-5-20251001",
-          })
-        },
+  // Preflight gate is always created so the user can flip the PTY driver
+  // toggle in Settings without restarting the server. Gate runs only on PTY
+  // spawn — no cost when SDK driver is selected.
+  const preflightGate = createPreflightGate({
+    toolsString: "mcp__kanna__*",
+    now: () => Date.now(),
+    runSuite: async () => {
+      const claudeBin = (process.env.CLAUDE_EXECUTABLE ?? "/usr/local/bin/claude")
+        .replace(/^~(?=\/|$)/, homedir())
+      return await runFullSuite({
+        claudeBin,
+        model: process.env.KANNA_PTY_PREFLIGHT_MODEL ?? "claude-haiku-4-5-20251001",
       })
-    : undefined
+    },
+  })
   const vapid = await loadOrGenerateVapidKeys(store.dataDir)
   const pushManager = new PushManager({
     store,
@@ -271,6 +272,9 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     toolCallback,
     preflightGate,
     getSubagents: () => appSettings.getSnapshot().subagents,
+    getAppSettingsSnapshot: () => ({
+      claudeDriver: appSettings.getSnapshot().claudeDriver,
+    }),
     onStateChange: (chatId?: string, options?: { immediate?: boolean }) => {
       if (chatId) {
         if (options?.immediate) {
@@ -463,6 +467,14 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
   })
 
   const shutdown = async () => {
+    // Dispose the fs.watch-backed managers FIRST, before any await. bun keeps a
+    // single shared inotify "File Watcher" thread alive for any open fs.watch;
+    // if a watcher is still open when the process ends, bun blocks joining that
+    // thread and the process hangs until SIGKILL. The awaits below (agent.cancel,
+    // auth.dispose) can throw or stall under load, so disposing here guarantees
+    // the watchers close even if the rest of shutdown fails.
+    appSettings.dispose()
+    keybindings.dispose()
     // Clear the debounce timer for orphan persistence so no straggler writes fire
     // after the process starts shutting down.
     unsubOrphanPersistence()
@@ -475,10 +487,8 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     }
     router.dispose()
     await auth?.dispose()
-    appSettings.dispose()
-    keybindings.dispose()
     terminals.closeAll()
-    await store.compact()
+    await store.snapshotAndTruncateLogs()
     server.stop(true)
   }
 

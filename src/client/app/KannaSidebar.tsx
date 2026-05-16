@@ -66,6 +66,7 @@ interface KannaSidebarProps {
   onArchiveChat: (chat: SidebarChatRow) => void
   onOpenArchivedChat: (chatId: string) => void
   onDeleteChat: (chat: SidebarChatRow) => void
+  onEditChatPermissions?: (chatId: string) => void
   onOpenAddProjectModal: () => void
   onImportClaudeSessions?: () => Promise<void>
   onCopyPath: (localPath: string) => void
@@ -103,6 +104,7 @@ function KannaSidebarImpl({
   onArchiveChat,
   onOpenArchivedChat,
   onDeleteChat,
+  onEditChatPermissions,
   onOpenAddProjectModal,
   onImportClaudeSessions,
   onCopyPath,
@@ -298,9 +300,10 @@ function KannaSidebarImpl({
         onForkChat={() => onForkChat(chat)}
         onArchiveChat={() => onArchiveChat(chat)}
         onDeleteChat={() => onDeleteChat(chat)}
+        onEditPermissions={onEditChatPermissions}
       />
     )
-  }, [activeChatId, navigate, nowMs, onArchiveChat, onClose, onDeleteChat, onForkChat, onOpenExternalPath, onRenameChat, onShareChat, resolvedKeybindings, showNumberJumpHints, visibleIndexByChatId])
+  }, [activeChatId, navigate, nowMs, onArchiveChat, onClose, onDeleteChat, onEditChatPermissions, onForkChat, onOpenExternalPath, onRenameChat, onShareChat, resolvedKeybindings, showNumberJumpHints, visibleIndexByChatId])
 
   useEffect(() => {
     const intervalId = window.setInterval(() => {

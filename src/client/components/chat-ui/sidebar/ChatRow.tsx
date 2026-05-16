@@ -1,6 +1,6 @@
 import { memo } from "react"
-import { Archive, Split } from "lucide-react"
-import type { SidebarChatRow } from "../../../../shared/types"
+import { Archive, ShieldAlert, Split } from "lucide-react"
+import type { ClaudeSessionLifecycleStatus, SidebarChatRow } from "../../../../shared/types"
 import { Button } from "../../ui/button"
 import { Kbd } from "../../ui/kbd"
 import { cn, normalizeChatId } from "../../../lib/utils"
@@ -21,6 +21,7 @@ interface Props {
   onForkChat: (chatId: string) => void
   onArchiveChat: (chatId: string) => void
   onDeleteChat: (chatId: string) => void
+  onEditPermissions?: (chatId: string) => void
 }
 
 type DotTone = "warning" | "info" | "success" | "destructive" | null
@@ -53,6 +54,18 @@ function dotTextClass(tone: DotTone): string {
   }
 }
 
+function sessionStateBadge(state: ClaudeSessionLifecycleStatus | undefined): { glyph: string; tone: string; title: string } | null {
+  switch (state) {
+    case "active": return { glyph: "●", tone: "text-success", title: "Claude PTY session active" }
+    case "warming": return { glyph: "◐", tone: "text-warning", title: "Claude PTY session warming" }
+    case "idle": return { glyph: "○", tone: "text-muted-foreground", title: "Claude PTY session idle" }
+    case "cooling": return { glyph: "◌", tone: "text-muted-foreground", title: "Claude PTY session cooling down" }
+    case "cold":
+    default:
+      return null
+  }
+}
+
 function ChatRowImpl({
   chat,
   activeChatId,
@@ -66,6 +79,7 @@ function ChatRowImpl({
   onForkChat,
   onArchiveChat,
   onDeleteChat,
+  onEditPermissions,
 }: Props) {
   const isLiveState = (chat.status === "running" || chat.status === "waiting_for_user") && chat.stateEnteredAt != null
   const stampLabel = isLiveState && chat.stateEnteredAt != null
@@ -104,6 +118,24 @@ function ChatRowImpl({
           <span className={cn("h-2 w-2 rounded-full", dotBgClass(tone))} />
         ) : null}
       </span>
+      {(() => {
+        const badge = sessionStateBadge(chat.sessionState)
+        return badge ? (
+          <span
+            className={cn("shrink-0 text-[10px] leading-none", badge.tone)}
+            title={badge.title}
+            aria-label={badge.title}
+          >
+            {badge.glyph}
+          </span>
+        ) : null
+      })()}
+      {chat.hasPolicyOverride ? (
+        <ShieldAlert
+          className="size-3 shrink-0 text-warning"
+          aria-label="Per-chat permission override active"
+        />
+      ) : null}
       <span
         className={cn(
           "truncate flex-1 text-sm",
@@ -180,6 +212,7 @@ function ChatRowImpl({
       onFork={() => onForkChat(chat.chatId)}
       onArchive={() => onArchiveChat(chat.chatId)}
       onDelete={() => onDeleteChat(chat.chatId)}
+      onEditPermissions={onEditPermissions ? () => onEditPermissions(chat.chatId) : undefined}
     >
       {row}
     </ChatRowMenu>

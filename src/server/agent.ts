@@ -38,7 +38,7 @@ import {
   normalizeCodexModelOptions,
   normalizeServerModel,
 } from "./provider-catalog"
-import { resolveClaudeApiModelId } from "../shared/types"
+import { resolveClaudeApiModelId, type ClaudeDriverPreference } from "../shared/types"
 import { fallbackTitleFromMessage } from "./generate-title"
 import { AUTO_CONTINUE_EVENT_VERSION, type AutoContinueEvent } from "./auto-continue/events"
 import { ClaudeLimitDetector, CodexLimitDetector, type LimitDetection, type LimitDetector } from "./auto-continue/limit-detector"
@@ -54,7 +54,7 @@ import { SubagentOrchestrator, type ProviderRunStart } from "./subagent-orchestr
 import { buildSubagentProviderRun } from "./subagent-provider-run"
 import type { ToolCallbackService } from "./tool-callback"
 import type { ChatPermissionPolicy } from "../shared/permission-policy"
-import { POLICY_DEFAULT } from "../shared/permission-policy"
+import { mergePolicyOverride, POLICY_DEFAULT } from "../shared/permission-policy"
 import { startClaudeSessionPTY, type StartClaudeSessionPtyArgs } from "./claude-pty/driver"
 import type { PreflightGate } from "./claude-pty/preflight/gate"
 
@@ -202,7 +202,13 @@ interface AgentCoordinatorArgs {
   scheduleManager?: ScheduleManager
   getAutoResumePreference?: () => boolean
   getSubagents?: () => Subagent[]
-  getAppSettingsSnapshot?: () => { claudeAuth?: { authenticated?: boolean } | null }
+  getAppSettingsSnapshot?: () => {
+    claudeAuth?: { authenticated?: boolean } | null
+    claudeDriver?: {
+      preference?: ClaudeDriverPreference
+      lifecycle?: { idleTimeoutMs?: number; maxConcurrent?: number }
+    }
+  }
   throwOnClaudeSessionStart?: boolean
   backgroundTasks?: BackgroundTaskRegistry
   oauthPool?: OAuthTokenPool
@@ -525,6 +531,13 @@ export function normalizeClaudeStreamMessage(message: any): TranscriptEntry[] {
     return entries
   }
 
+  // No `result.subtype === "compaction"` branch by design: Kanna never relies
+  // on the SDK's in-loop auto-compact. The SDK `query()` driver spawns a fresh
+  // subprocess per turn and never enters claude-code's REPL loop, so that
+  // compaction stop is unreachable here (see proactive-compact.ts). Context
+  // compaction is instead driven by Kanna injecting a native `/compact` turn
+  // and surfaces purely as the `system/compact_boundary` message handled
+  // below — not as a result subtype.
   if (message.type === "result") {
     if (message.subtype === "cancelled") {
       return [timestamped({ kind: "interrupted", messageId, debugRaw })]
@@ -1018,12 +1031,13 @@ export class AgentCoordinator {
   private readonly subagentOrchestrator: SubagentOrchestrator
   private readonly throwOnClaudeSessionStart: boolean
   private readonly autoResumeByChat = new Map<string, boolean>()
-  // Per-chat circuit breaker for proactive `/compact` injection. Increments on
-  // every compact attempt that fails (turn errored / cancelled) and resets on
-  // success. After MAX_CONSECUTIVE_AUTOCOMPACT_FAILURES, skip further proactive
+  // Per-chat circuit breaker for proactive `/compact` injection lives in the
+  // persisted ChatRecord (`compactFailureCount`): increments on every compact
+  // attempt that fails (turn errored / cancelled) and resets on success.
+  // After MAX_CONSECUTIVE_AUTOCOMPACT_FAILURES, skip further proactive
   // compacts on this chat so doomed sessions don't hammer the API on every
-  // turn (mirrors claude-code's autoCompact circuit breaker behaviour).
-  private readonly compactFailuresByChat = new Map<string, number>()
+  // turn (mirrors claude-code's autoCompact circuit breaker). Persisting it
+  // means a server restart cannot reset a doomed chat's breaker to 0.
   private readonly tunnelGateway: TunnelGateway | null
   private readonly backgroundTasks: BackgroundTaskRegistry | null
   private readonly oauthPool: OAuthTokenPool | null
@@ -1141,6 +1155,25 @@ export class AgentCoordinator {
     return new Set(this.slashCommandsInFlight)
   }
 
+  /**
+   * Snapshot of live claude PTY session states per chat. Used by the
+   * sidebar badge selector. Chats not present are implicitly `cold`.
+   */
+  getClaudeSessionStates(): Map<string, "warming" | "active" | "idle"> {
+    const out = new Map<string, "warming" | "active" | "idle">()
+    const now = Date.now()
+    for (const [chatId, session] of this.claudeSessions) {
+      if (this.activeTurns.get(chatId)?.provider === "claude") {
+        out.set(chatId, "active")
+      } else if (now - session.lastUsedAt >= this.resolveClaudeIdleMs()) {
+        out.set(chatId, "idle")
+      } else {
+        out.set(chatId, "warming")
+      }
+    }
+    return out
+  }
+
   get toolCallbackService(): ToolCallbackService | null {
     return this.toolCallback
   }
@@ -1149,10 +1182,43 @@ export class AgentCoordinator {
     this.onStateChange(chatId, options)
   }
 
+  private resolveClaudeDriverPreference(): ClaudeDriverPreference {
+    const fromSettings = this.getAppSettingsSnapshot().claudeDriver?.preference
+    if (fromSettings === "pty" || fromSettings === "sdk") return fromSettings
+    return process.env.KANNA_CLAUDE_DRIVER === "pty" ? "pty" : "sdk"
+  }
+
+  /**
+   * Resolves the effective ChatPermissionPolicy for a chat: starts from the
+   * coordinator-wide default, overlays the chat's persisted policyOverride.
+   */
+  private resolveChatPolicy(chatId: string): ChatPermissionPolicy {
+    // store.state may be absent in test fakes that don't implement the full
+    // EventStore — fall through to the global default policy in that case.
+    const override = this.store.state?.chatsById?.get(chatId)?.policyOverride ?? null
+    return mergePolicyOverride(this.chatPolicy, override)
+  }
+
+  private resolveClaudeIdleMs(): number {
+    const fromSettings = this.getAppSettingsSnapshot().claudeDriver?.lifecycle?.idleTimeoutMs
+    if (typeof fromSettings === "number" && Number.isFinite(fromSettings) && fromSettings > 0) {
+      return Math.round(fromSettings)
+    }
+    return this.claudeSessionLifecycle.idleMs
+  }
+
+  private resolveClaudeMaxResident(): number {
+    const fromSettings = this.getAppSettingsSnapshot().claudeDriver?.lifecycle?.maxConcurrent
+    if (typeof fromSettings === "number" && Number.isFinite(fromSettings) && fromSettings > 0) {
+      return Math.round(fromSettings)
+    }
+    return this.claudeSessionLifecycle.maxResidentSessions
+  }
+
   private isClaudeSessionIdle(chatId: string, session: ClaudeSessionState, now = Date.now()): boolean {
     if (this.activeTurns.get(chatId)?.provider === "claude") return false
     if (session.pendingPromptSeqs.length > 0) return false
-    return now - session.lastUsedAt >= this.claudeSessionLifecycle.idleMs
+    return now - session.lastUsedAt >= this.resolveClaudeIdleMs()
   }
 
   private closeClaudeSession(chatId: string, session: ClaudeSessionState): void {
@@ -1172,7 +1238,7 @@ export class AgentCoordinator {
   }
 
   private enforceClaudeSessionBudget(protectedChatId?: string): void {
-    const max = this.claudeSessionLifecycle.maxResidentSessions
+    const max = this.resolveClaudeMaxResident()
     if (max <= 0 || this.claudeSessions.size <= max) return
 
     const candidates = [...this.claudeSessions.entries()]
@@ -1304,7 +1370,7 @@ export class AgentCoordinator {
           return
         }
         if (picked) this.oauthPool!.markUsed(picked.id)
-        const usePtyEphemeral = process.env.KANNA_CLAUDE_DRIVER === "pty"
+        const usePtyEphemeral = this.resolveClaudeDriverPreference() === "pty"
         const ephemeral = usePtyEphemeral
           ? await this.startClaudeSessionPTYFn({
               chatId,
@@ -1740,7 +1806,7 @@ export class AgentCoordinator {
         )
       }
       if (picked) this.oauthPool!.markUsed(picked.id)
-      const usePty = process.env.KANNA_CLAUDE_DRIVER === "pty"
+      const usePty = this.resolveClaudeDriverPreference() === "pty"
       const started = usePty
         ? await this.startClaudeSessionPTYFn({
             chatId: args.chatId,
@@ -1770,7 +1836,7 @@ export class AgentCoordinator {
             tunnelGateway: this.tunnelGateway,
             onToolRequest: args.onToolRequest,
             toolCallback: this.toolCallback ?? undefined,
-            chatPolicy: this.chatPolicy,
+            chatPolicy: this.resolveChatPolicy(args.chatId),
           })
 
       session = {
@@ -1967,7 +2033,7 @@ export class AgentCoordinator {
     // slash command, run it as-is. Compacting before `/clear` or another
     // `/compact` would be wasted work.
     if (content.trimStart().startsWith("/")) return false
-    const failures = this.compactFailuresByChat.get(chatId) ?? 0
+    const failures = this.store.getChat(chatId)?.compactFailureCount ?? 0
     if (failures >= MAX_CONSECUTIVE_AUTOCOMPACT_FAILURES) return false
     const usage = getLatestContextWindowUsage(this.store.getMessages(chatId))
     return shouldProactivelyCompact(usage)
@@ -2263,13 +2329,13 @@ export class AgentCoordinator {
               await this.store.recordTurnFailed(session.chatId, resultText)
             }
             if (active.proactiveCompactInjection) {
-              const next = (this.compactFailuresByChat.get(session.chatId) ?? 0) + 1
-              this.compactFailuresByChat.set(session.chatId, next)
+              const prev = this.store.getChat(session.chatId)?.compactFailureCount ?? 0
+              await this.store.setCompactFailureCount(session.chatId, prev + 1)
             }
           } else if (!active.cancelRequested) {
             await this.store.recordTurnFinished(session.chatId)
             if (active.proactiveCompactInjection) {
-              this.compactFailuresByChat.delete(session.chatId)
+              await this.store.setCompactFailureCount(session.chatId, 0)
             }
           }
           this.activeTurns.delete(session.chatId)

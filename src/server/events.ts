@@ -11,7 +11,7 @@ import type {
   TranscriptEntry,
 } from "../shared/types"
 import type { AutoContinueEvent } from "./auto-continue/events"
-import type { ToolRequest, ToolRequestDecision, ToolRequestStatus } from "../shared/permission-policy"
+import type { ChatPermissionPolicyOverride, ToolRequest, ToolRequestDecision, ToolRequestStatus } from "../shared/permission-policy"
 
 export interface ProjectRecord extends ProjectSummary {
   deletedAt?: number
@@ -38,6 +38,11 @@ export interface ChatRecord {
   slashCommands?: SlashCommand[]
   stackId?: string
   stackBindings?: StackBinding[]
+  /** Per-chat permission policy overlay; merges over the global defaults. */
+  policyOverride?: ChatPermissionPolicyOverride | null
+  // Consecutive failed proactive `/compact` injections. Persisted so the
+  // circuit breaker survives a server restart instead of resetting to 0.
+  compactFailureCount?: number
 }
 
 export interface ChatTimingState {
@@ -167,6 +172,20 @@ export type ChatEvent =
       timestamp: number
       chatId: string
       sourceHash: string | null
+    }
+  | {
+      v: 3
+      type: "chat_policy_override_set"
+      timestamp: number
+      chatId: string
+      policyOverride: ChatPermissionPolicyOverride | null
+    }
+  | {
+      v: 3
+      type: "chat_compact_failures_set"
+      timestamp: number
+      chatId: string
+      compactFailureCount: number
     }
 
 export type MessageEvent = {

@@ -36,6 +36,33 @@ export interface ChatPermissionPolicy {
   toolAllowList: ToolRule[]
 }
 
+/**
+ * Per-chat policy override. Only set fields override the global policy
+ * defaults. Persisted on `ChatRecord.policyOverride` and merged in
+ * `AgentCoordinator` before forwarding to the session.
+ *
+ * `readPathDeny` / `writePathDeny` REPLACE the default list when provided
+ * (so the user can both add and remove entries deliberately).
+ */
+export interface ChatPermissionPolicyOverride {
+  defaultAction?: ChatPermissionPolicy["defaultAction"]
+  readPathDeny?: string[]
+  writePathDeny?: string[]
+}
+
+export function mergePolicyOverride(
+  base: ChatPermissionPolicy,
+  override: ChatPermissionPolicyOverride | null | undefined,
+): ChatPermissionPolicy {
+  if (!override) return base
+  return {
+    ...base,
+    defaultAction: override.defaultAction ?? base.defaultAction,
+    readPathDeny: override.readPathDeny ?? base.readPathDeny,
+    writePathDeny: override.writePathDeny ?? base.writePathDeny,
+  }
+}
+
 export interface ToolRequestDecision {
   kind: "allow" | "deny" | "answer"
   payload?: unknown

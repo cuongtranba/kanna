@@ -3,6 +3,7 @@ import type {
   ChatRuntime,
   ChatSnapshot,
   ChatStateTimings,
+  ClaudeSessionLifecycleStatus,
   KannaStatus,
   LocalProjectsSnapshot,
   SidebarChatRow,
@@ -75,10 +76,12 @@ export function deriveSidebarData(
     nowMs?: number
     sidebarProjectOrder?: string[]
     drainingChatIds?: Set<string>
+    claudeSessionStates?: Map<string, ClaudeSessionLifecycleStatus>
   }
 ): SidebarData {
   const nowMs = options?.nowMs ?? Date.now()
   const drainingChatIds = options?.drainingChatIds ?? new Set<string>()
+  const claudeSessionStates = options?.claudeSessionStates ?? new Map<string, ClaudeSessionLifecycleStatus>()
   const chatsByProjectId = new Map<string, ChatRecord[]>()
   const archivedChatsByProjectId = new Map<string, ChatRecord[]>()
   for (const chat of state.chatsById.values()) {
@@ -123,6 +126,8 @@ export function deriveSidebarData(
         canFork: canForkChat(chat, activeStatuses, drainingChatIds) || undefined,
         stateEnteredAt: state.chatTimingsByChatId.get(chat.id)?.stateEnteredAt,
         stackId: chat.stackId,
+        sessionState: claudeSessionStates.get(chat.id) ?? "cold",
+        hasPolicyOverride: chat.policyOverride != null,
       }))
   }
 
@@ -268,6 +273,7 @@ export function deriveChatSnapshot(
   getTunnelEvents: (chatId: string) => readonly CloudflareTunnelEvent[],
   waitStartedAtByChatId: Map<string, number> = new Map(),
   nowMs: number = Date.now(),
+  claudeSessionStates: Map<string, ClaudeSessionLifecycleStatus> = new Map(),
 ): ChatSnapshot | null {
   const chat = state.chatsById.get(chatId)
   if (!chat || chat.deletedAt) return null
@@ -291,6 +297,8 @@ export function deriveChatSnapshot(
       waitStartedAtByChatId.get(chat.id),
       nowMs,
     ),
+    policyOverride: chat.policyOverride ?? null,
+    sessionState: claudeSessionStates.get(chat.id) ?? "cold",
   }
 
   const transcript = getMessages(chat.id)

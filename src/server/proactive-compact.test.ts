@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import type { TranscriptEntry } from "../shared/types"
 import {
   AUTOCOMPACT_BUFFER_TOKENS,
+  MAX_CONSECUTIVE_AUTOCOMPACT_FAILURES,
   MAX_OUTPUT_TOKENS_FOR_SUMMARY,
   getAutoCompactPctOverride,
   getAutoCompactThreshold,
@@ -165,5 +166,50 @@ describe("getLatestContextWindowUsage", () => {
       usageEntry(40_000, 200_000, 3),
     ]
     expect(getLatestContextWindowUsage(messages)?.usedTokens).toBe(40_000)
+  })
+})
+
+// Upstream-sync lock. These constants are hand-mirrored from
+// anthropics/claude-code src/services/compact/autoCompact.ts. If upstream
+// changes them, Kanna's proactive trigger silently drifts from the CLI's
+// real auto-compact point. This test fails on any local edit, forcing a
+// conscious re-check against upstream before the value can move.
+describe("upstream constant pins", () => {
+  test("MAX_OUTPUT_TOKENS_FOR_SUMMARY matches upstream", () => {
+    expect(MAX_OUTPUT_TOKENS_FOR_SUMMARY).toBe(20_000)
+  })
+
+  test("AUTOCOMPACT_BUFFER_TOKENS matches upstream", () => {
+    expect(AUTOCOMPACT_BUFFER_TOKENS).toBe(13_000)
+  })
+
+  test("MAX_CONSECUTIVE_AUTOCOMPACT_FAILURES matches upstream", () => {
+    expect(MAX_CONSECUTIVE_AUTOCOMPACT_FAILURES).toBe(3)
+  })
+})
+
+// Cache-token misfire guard. The trigger keys off the snapshot's
+// `usedTokens` (the real in-context size). Prompt-cache growth surfaces in
+// `cachedInputTokens`, NOT `usedTokens`, so a cache-heavy turn must never
+// trip a compact on its own; only true context growth may.
+describe("cache tokens do not drive the trigger", () => {
+  test("huge cachedInputTokens with low usedTokens does NOT trigger", () => {
+    const usage = {
+      usedTokens: 10_000,
+      maxTokens: 200_000,
+      cachedInputTokens: 950_000,
+      compactsAutomatically: false,
+    }
+    expect(shouldProactivelyCompact(usage)).toBe(false)
+  })
+
+  test("usedTokens above threshold triggers regardless of cache size", () => {
+    const usage = {
+      usedTokens: 180_000,
+      maxTokens: 200_000,
+      cachedInputTokens: 0,
+      compactsAutomatically: false,
+    }
+    expect(shouldProactivelyCompact(usage)).toBe(true)
   })
 })

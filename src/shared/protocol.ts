@@ -26,7 +26,7 @@ import type {
   UpdateSnapshot,
   EditorPreset,
 } from "./types"
-import type { ToolRequestDecision } from "./permission-policy"
+import type { ChatPermissionPolicyOverride, ToolRequestDecision } from "./permission-policy"
 
 export type { EditorPreset }
 
@@ -147,6 +147,7 @@ export type ClientCommand =
   | { type: "chat.delete"; chatId: string }
   | { type: "chat.setDraftProtection"; chatIds: string[] }
   | { type: "chat.markRead"; chatId: string }
+  | { type: "chat.setPolicyOverride"; chatId: string; policyOverride: ChatPermissionPolicyOverride | null }
   | {
       type: "chat.send"
       chatId?: string

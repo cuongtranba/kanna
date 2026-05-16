@@ -23,14 +23,14 @@ import {
   cloneTranscriptEntries,
   createEmptyState,
 } from "./events"
-import type { ToolRequest, ToolRequestDecision, ToolRequestStatus } from "../shared/permission-policy"
+import type { ChatPermissionPolicyOverride, ToolRequest, ToolRequestDecision, ToolRequestStatus } from "../shared/permission-policy"
 import { resolveLocalPath } from "./paths"
 import type { CloudflareTunnelEvent } from "./cloudflare-tunnel/events"
 import type { PushEvent, PushEventStore } from "./push/events"
 import { ACTIVE_SESSION_IDLE_GAP_MS } from "./read-models"
 import { capTranscriptEntry } from "./subagent-entry-cap"
 
-const COMPACTION_THRESHOLD_BYTES = 2 * 1024 * 1024
+const SNAPSHOT_THRESHOLD_BYTES = 2 * 1024 * 1024
 const STALE_EMPTY_CHAT_MAX_AGE_MS = 30 * 60 * 1000
 const SIDEBAR_PROJECT_ORDER_FILE = "sidebar-order.json"
 
@@ -119,6 +119,8 @@ function getReplayEventPriority(event: StoreEvent): number {
       return 8
     case "chat_read_state_set":
     case "chat_source_hash_set":
+    case "chat_policy_override_set":
+    case "chat_compact_failures_set":
       return 9
     case "chat_deleted":
     case "chat_archived":
@@ -266,8 +268,8 @@ export class EventStore implements PushEventStore {
     await this.replayLogs()
     await this.loadTunnelEvents()
     await this.loadSidebarProjectOrder()
-    if (!(await this.hasLegacyTranscriptData()) && await this.shouldCompact()) {
-      await this.compact()
+    if (!(await this.hasLegacyTranscriptData()) && await this.shouldSnapshotLogs()) {
+      await this.snapshotAndTruncateLogs()
     }
   }
 
@@ -684,6 +686,20 @@ export class EventStore implements PushEventStore {
         const chat = this.state.chatsById.get(e.chatId)
         if (!chat) break
         chat.sourceHash = e.sourceHash
+        chat.updatedAt = e.timestamp
+        break
+      }
+      case "chat_policy_override_set": {
+        const chat = this.state.chatsById.get(e.chatId)
+        if (!chat) break
+        chat.policyOverride = e.policyOverride
+        chat.updatedAt = e.timestamp
+        break
+      }
+      case "chat_compact_failures_set": {
+        const chat = this.state.chatsById.get(e.chatId)
+        if (!chat) break
+        chat.compactFailureCount = e.compactFailureCount
         chat.updatedAt = e.timestamp
         break
       }
@@ -1477,6 +1493,19 @@ export class EventStore implements PushEventStore {
     await this.append(this.chatsLogPath, event)
   }
 
+  async setCompactFailureCount(chatId: string, compactFailureCount: number) {
+    const chat = this.requireChat(chatId)
+    if ((chat.compactFailureCount ?? 0) === compactFailureCount) return
+    const event: ChatEvent = {
+      v: STORE_VERSION,
+      type: "chat_compact_failures_set",
+      timestamp: Date.now(),
+      chatId,
+      compactFailureCount,
+    }
+    await this.append(this.chatsLogPath, event)
+  }
+
   async setChatReadState(chatId: string, unread: boolean) {
     const chat = this.requireChat(chatId)
     if (chat.unread === unread) return
@@ -1486,6 +1515,18 @@ export class EventStore implements PushEventStore {
       timestamp: Date.now(),
       chatId,
       unread,
+    }
+    await this.append(this.chatsLogPath, event)
+  }
+
+  async setChatPolicyOverride(chatId: string, policyOverride: ChatPermissionPolicyOverride | null) {
+    this.requireChat(chatId)
+    const event: ChatEvent = {
+      v: STORE_VERSION,
+      type: "chat_policy_override_set",
+      timestamp: Date.now(),
+      chatId,
+      policyOverride,
     }
     await this.append(this.chatsLogPath, event)
   }
@@ -1915,7 +1956,7 @@ export class EventStore implements PushEventStore {
     }
   }
 
-  async compact() {
+  async snapshotAndTruncateLogs() {
     const snapshot = this.createSnapshot()
     await Bun.write(this.snapshotPath, JSON.stringify(snapshot, null, 2))
     await Promise.all([
@@ -1961,13 +2002,13 @@ export class EventStore implements PushEventStore {
     }
 
     this.clearLegacyTranscriptState()
-    await this.compact()
+    await this.snapshotAndTruncateLogs()
     this.cachedTranscript = null
     onProgress?.(`${LOG_PREFIX} transcript migration complete`)
     return true
   }
 
-  private async shouldCompact() {
+  private async shouldSnapshotLogs() {
     const sizes = await Promise.all([
       Bun.file(this.projectsLogPath).size,
       Bun.file(this.chatsLogPath).size,
@@ -1978,7 +2019,7 @@ export class EventStore implements PushEventStore {
       Bun.file(this.stacksLogPath).size,
       Bun.file(this.toolRequestsLogPath).size,
     ])
-    return sizes.reduce((total, size) => total + size, 0) >= COMPACTION_THRESHOLD_BYTES
+    return sizes.reduce((total, size) => total + size, 0) >= SNAPSHOT_THRESHOLD_BYTES
   }
 
   async appendAutoContinueEvent(event: AutoContinueEvent) {

@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react"
-import { Archive, Code, Copy, EyeOff, FolderOpen, Pencil, Split, Star, StarOff, Trash2, UserRoundPlus, Users } from "lucide-react"
+import { Archive, Code, Copy, EyeOff, FolderOpen, Pencil, ShieldAlert, Split, Star, StarOff, Trash2, UserRoundPlus, Users } from "lucide-react"
 import {
   ContextMenu,
   ContextMenuContent,
@@ -103,6 +103,7 @@ export function ChatRowMenu({
   onFork,
   onArchive,
   onDelete,
+  onEditPermissions,
   children,
 }: {
   canFork?: boolean
@@ -112,6 +113,7 @@ export function ChatRowMenu({
   onFork: () => void
   onArchive: () => void
   onDelete: () => void
+  onEditPermissions?: () => void
   children: ReactNode
 }) {
   return (
@@ -158,6 +160,17 @@ export function ChatRowMenu({
           <Split className="h-3.5 w-3.5" />
           <span className="text-xs font-medium">Fork</span>
         </ContextMenuItem>
+        {onEditPermissions ? (
+          <ContextMenuItem
+            onSelect={(event) => {
+              event.preventDefault()
+              onEditPermissions()
+            }}
+          >
+            <ShieldAlert className="h-3.5 w-3.5" />
+            <span className="text-xs font-medium">Permissions…</span>
+          </ContextMenuItem>
+        ) : null}
         <ContextMenuItem
           onSelect={(event) => {
             event.preventDefault()

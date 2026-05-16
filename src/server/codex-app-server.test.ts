@@ -2076,6 +2076,77 @@ describe("CodexAppServerManager", () => {
     expect(content.contentUrl).toBe("/api/projects/proj-dig/files/generated_images/019e/ig_abc.png/content")
   })
 
+  test("marks ImageGeneration result as error when projectId is missing", async () => {
+    const process = new FakeCodexProcess((message, child) => {
+      if (message.method === "initialize") {
+        child.writeServerMessage({ id: message.id, result: { userAgent: "codex-test" } })
+      } else if (message.method === "thread/start") {
+        child.writeServerMessage({
+          id: message.id,
+          result: { thread: { id: "thread-noproj" }, model: "gpt-5.4", reasoningEffort: "high" },
+        })
+      } else if (message.method === "turn/start") {
+        child.writeServerMessage({
+          id: message.id,
+          result: { turn: { id: "turn-noproj", status: "inProgress", error: null } },
+        })
+        child.writeServerMessage({
+          method: "item/completed",
+          params: {
+            threadId: "thread-noproj",
+            turnId: "turn-noproj",
+            item: {
+              type: "dynamicToolCall",
+              id: "dig-np",
+              tool: "ImageGeneration",
+              arguments: { revisedPrompt: "no project case", status: "completed" },
+              status: "completed",
+              success: true,
+              contentItems: [
+                { type: "inputText", text: "generated_images/np.png" },
+              ],
+            },
+          },
+        })
+        child.writeServerMessage({
+          method: "turn/completed",
+          params: {
+            threadId: "thread-noproj",
+            turn: { id: "turn-noproj", status: "completed", error: null },
+          },
+        })
+      }
+    })
+
+    const manager = new CodexAppServerManager({ spawnProcess: () => process as never })
+
+    await manager.startSession({
+      chatId: "chat-noproj",
+      cwd: "/tmp/project",
+      projectId: null,
+      model: "gpt-5.4",
+      sessionToken: null,
+    })
+
+    const turn = await manager.startTurn({
+      chatId: "chat-noproj",
+      model: "gpt-5.4",
+      content: "draw something",
+      planMode: false,
+      onToolRequest: async () => ({}),
+    })
+
+    const events = await collectStream(turn.stream)
+    const toolResults = events.filter((event) => event.type === "transcript" && event.entry.kind === "tool_result")
+    expect(toolResults).toHaveLength(1)
+    const result = toolResults[0]
+    if (result.entry.kind !== "tool_result") throw new Error("missing tool result")
+    expect(result.entry.isError).toBe(true)
+    const content = result.entry.content as { contentUrl: string; relativePath: string; fileName: string }
+    expect(content.contentUrl).toBe("")
+    expect(content.relativePath).toBe("generated_images/np.png")
+  })
+
   test("emits placeholder tool_call for unknown ThreadItem types", async () => {
     const process = new FakeCodexProcess((message, child) => {
       if (message.method === "initialize") {

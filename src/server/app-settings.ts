@@ -9,9 +9,16 @@ import {
   AUTH_SESSION_MAX_AGE_DAYS_MAX,
   AUTH_SESSION_MAX_AGE_DAYS_MIN,
   CLAUDE_AUTH_DEFAULTS,
+  CLAUDE_DRIVER_DEFAULTS,
+  CLAUDE_PTY_IDLE_TIMEOUT_MS_MAX,
+  CLAUDE_PTY_IDLE_TIMEOUT_MS_MIN,
+  CLAUDE_PTY_LIFECYCLE_DEFAULTS,
+  CLAUDE_PTY_MAX_CONCURRENT_MAX,
+  CLAUDE_PTY_MAX_CONCURRENT_MIN,
   CLOUDFLARE_TUNNEL_DEFAULTS,
   DEFAULT_CLAUDE_MODEL_OPTIONS,
   DEFAULT_CODEX_MODEL_OPTIONS,
+  isClaudeDriverPreference,
   isClaudeReasoningEffort,
   isCodexReasoningEffort,
   normalizeClaudeContextWindow,
@@ -31,7 +38,10 @@ import {
   type ChatSoundId,
   type ChatSoundPreference,
   type ClaudeAuthSettings,
+  type ClaudeDriverPreference,
+  type ClaudeDriverSettings,
   type ClaudeModelOptions,
+  type ClaudePtyLifecycleSettings,
   type CloudflareTunnelSettings,
   type CodexModelOptions,
   type DefaultProviderPreference,
@@ -76,6 +86,7 @@ interface AppSettingsFile {
   claudeAuth?: unknown
   uploads?: unknown
   subagents?: unknown
+  claudeDriver?: unknown
 }
 
 interface AppSettingsState extends AppSettingsSnapshot {
@@ -454,6 +465,62 @@ function normalizeTokenEntry(value: unknown, warnings: string[]): OAuthTokenEntr
   }
 }
 
+function normalizeClaudePtyLifecycle(value: unknown, warnings: string[]): ClaudePtyLifecycleSettings {
+  const source = value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null
+  if (value !== undefined && !source) {
+    warnings.push("claudeDriver.lifecycle must be an object")
+  }
+  const idleRaw = source?.idleTimeoutMs
+  let idleTimeoutMs = CLAUDE_PTY_LIFECYCLE_DEFAULTS.idleTimeoutMs
+  if (idleRaw !== undefined) {
+    if (typeof idleRaw !== "number" || !Number.isFinite(idleRaw)) {
+      warnings.push("claudeDriver.lifecycle.idleTimeoutMs must be a number")
+    } else if (idleRaw < CLAUDE_PTY_IDLE_TIMEOUT_MS_MIN || idleRaw > CLAUDE_PTY_IDLE_TIMEOUT_MS_MAX) {
+      warnings.push(
+        `claudeDriver.lifecycle.idleTimeoutMs must be between ${CLAUDE_PTY_IDLE_TIMEOUT_MS_MIN} and ${CLAUDE_PTY_IDLE_TIMEOUT_MS_MAX}`,
+      )
+      idleTimeoutMs = clampNumber(idleRaw, CLAUDE_PTY_LIFECYCLE_DEFAULTS.idleTimeoutMs, CLAUDE_PTY_IDLE_TIMEOUT_MS_MIN, CLAUDE_PTY_IDLE_TIMEOUT_MS_MAX)
+    } else {
+      idleTimeoutMs = Math.round(idleRaw)
+    }
+  }
+  const maxRaw = source?.maxConcurrent
+  let maxConcurrent = CLAUDE_PTY_LIFECYCLE_DEFAULTS.maxConcurrent
+  if (maxRaw !== undefined) {
+    if (typeof maxRaw !== "number" || !Number.isFinite(maxRaw)) {
+      warnings.push("claudeDriver.lifecycle.maxConcurrent must be a number")
+    } else if (maxRaw < CLAUDE_PTY_MAX_CONCURRENT_MIN || maxRaw > CLAUDE_PTY_MAX_CONCURRENT_MAX) {
+      warnings.push(
+        `claudeDriver.lifecycle.maxConcurrent must be between ${CLAUDE_PTY_MAX_CONCURRENT_MIN} and ${CLAUDE_PTY_MAX_CONCURRENT_MAX}`,
+      )
+      maxConcurrent = clampNumber(maxRaw, CLAUDE_PTY_LIFECYCLE_DEFAULTS.maxConcurrent, CLAUDE_PTY_MAX_CONCURRENT_MIN, CLAUDE_PTY_MAX_CONCURRENT_MAX)
+    } else {
+      maxConcurrent = Math.round(maxRaw)
+    }
+  }
+  return { idleTimeoutMs, maxConcurrent }
+}
+
+function normalizeClaudeDriverSettings(value: unknown, warnings: string[]): ClaudeDriverSettings {
+  const source = value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null
+  if (value !== undefined && !source) {
+    warnings.push("claudeDriver must be an object")
+    return { ...CLAUDE_DRIVER_DEFAULTS, lifecycle: { ...CLAUDE_PTY_LIFECYCLE_DEFAULTS } }
+  }
+  const preference: ClaudeDriverPreference = isClaudeDriverPreference(source?.preference)
+    ? source.preference
+    : CLAUDE_DRIVER_DEFAULTS.preference
+  if (source?.preference !== undefined && !isClaudeDriverPreference(source.preference)) {
+    warnings.push(`claudeDriver.preference must be "sdk" or "pty"`)
+  }
+  const lifecycle = normalizeClaudePtyLifecycle(source?.lifecycle, warnings)
+  return { preference, lifecycle }
+}
+
 function normalizeClaudeAuth(value: unknown, warnings: string[]): ClaudeAuthSettings {
   if (value === undefined) return { ...CLAUDE_AUTH_DEFAULTS }
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -490,6 +557,7 @@ function toFilePayload(state: AppSettingsState) {
     claudeAuth: state.claudeAuth,
     uploads: state.uploads,
     subagents: state.subagents,
+    claudeDriver: state.claudeDriver,
   }
 }
 
@@ -511,6 +579,7 @@ function toSnapshot(state: AppSettingsState): AppSettingsSnapshot {
     claudeAuth: state.claudeAuth,
     uploads: state.uploads,
     subagents: state.subagents,
+    claudeDriver: state.claudeDriver,
   }
 }
 
@@ -546,6 +615,7 @@ function normalizeAppSettings(
   const claudeAuth = normalizeClaudeAuth(source?.claudeAuth, warnings)
   const uploads = normalizeUploadSettings(source?.uploads, warnings)
   const subagents = normalizeSubagents(source?.subagents, warnings)
+  const claudeDriver = normalizeClaudeDriverSettings(source?.claudeDriver, warnings)
 
   const editorPreset = normalizeEditorPreset(source?.editor?.preset)
   const state: AppSettingsState = {
@@ -572,6 +642,7 @@ function normalizeAppSettings(
     claudeAuth,
     uploads,
     subagents,
+    claudeDriver,
   }
 
   const shouldWrite = JSON.stringify(source ? toComparablePayload(source) : null) !== JSON.stringify(toFilePayload(state))
@@ -603,6 +674,7 @@ function toComparablePayload(source: AppSettingsFile) {
     claudeAuth: source.claudeAuth,
     uploads: source.uploads,
     subagents: source.subagents,
+    claudeDriver: source.claudeDriver,
   }
 }
 
@@ -702,6 +774,13 @@ function applyPatch(state: AppSettingsState, patch: AppSettingsPatch): AppSettin
       ...patch.uploads,
     },
     subagents: nextSubagents,
+    claudeDriver: {
+      preference: patch.claudeDriver?.preference ?? state.claudeDriver.preference,
+      lifecycle: {
+        ...state.claudeDriver.lifecycle,
+        ...patch.claudeDriver?.lifecycle,
+      },
+    },
   }, state.filePathDisplay).payload
 }
 
@@ -810,6 +889,27 @@ export class AppSettingsManager {
       }
     }
     return this.writePatch({ uploads: patch })
+  }
+
+  async setClaudeDriver(patch: { preference?: ClaudeDriverPreference; lifecycle?: Partial<ClaudePtyLifecycleSettings> }) {
+    if (patch.preference !== undefined && !isClaudeDriverPreference(patch.preference)) {
+      throw new Error(`claudeDriver.preference must be "sdk" or "pty"`)
+    }
+    if (patch.lifecycle?.idleTimeoutMs !== undefined) {
+      const value = patch.lifecycle.idleTimeoutMs
+      if (typeof value !== "number" || !Number.isFinite(value)
+        || value < CLAUDE_PTY_IDLE_TIMEOUT_MS_MIN || value > CLAUDE_PTY_IDLE_TIMEOUT_MS_MAX) {
+        throw new Error(`claudeDriver.lifecycle.idleTimeoutMs must be between ${CLAUDE_PTY_IDLE_TIMEOUT_MS_MIN} and ${CLAUDE_PTY_IDLE_TIMEOUT_MS_MAX}`)
+      }
+    }
+    if (patch.lifecycle?.maxConcurrent !== undefined) {
+      const value = patch.lifecycle.maxConcurrent
+      if (typeof value !== "number" || !Number.isFinite(value)
+        || value < CLAUDE_PTY_MAX_CONCURRENT_MIN || value > CLAUDE_PTY_MAX_CONCURRENT_MAX) {
+        throw new Error(`claudeDriver.lifecycle.maxConcurrent must be between ${CLAUDE_PTY_MAX_CONCURRENT_MIN} and ${CLAUDE_PTY_MAX_CONCURRENT_MAX}`)
+      }
+    }
+    return this.writePatch({ claudeDriver: patch })
   }
 
   async setClaudeAuth(patch: Partial<ClaudeAuthSettings>) {

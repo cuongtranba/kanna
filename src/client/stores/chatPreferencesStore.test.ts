@@ -301,6 +301,62 @@ describe("chat preference store", () => {
     })
   })
 
+  test("initializeComposerForChat respects providerHint over defaults and source state", () => {
+    useChatPreferencesStore.setState({
+      ...INITIAL_STATE,
+      defaultProvider: "last_used",
+      providerDefaults: {
+        ...INITIAL_STATE.providerDefaults,
+        codex: {
+          model: "gpt-5.3-codex",
+          modelOptions: { reasoningEffort: "low", fastMode: false },
+          planMode: false,
+        },
+      },
+      chatStates: {
+        [NEW_CHAT_COMPOSER_ID]: {
+          provider: "claude",
+          model: "claude-opus-4-7",
+          modelOptions: { reasoningEffort: "max", contextWindow: "1m" },
+          planMode: false,
+        },
+      },
+    })
+
+    const sourceState = useChatPreferencesStore.getState().getComposerState(NEW_CHAT_COMPOSER_ID)
+    useChatPreferencesStore.getState().initializeComposerForChat("chat-restored", {
+      sourceState,
+      providerHint: "codex",
+    })
+
+    expect(useChatPreferencesStore.getState().getComposerState("chat-restored")).toEqual({
+      provider: "codex",
+      model: "gpt-5.3-codex",
+      modelOptions: { reasoningEffort: "low", fastMode: false },
+      planMode: false,
+    })
+  })
+
+  test("initializeComposerForChat ignores providerHint when chat already initialized", () => {
+    useChatPreferencesStore.setState({
+      ...INITIAL_STATE,
+      chatStates: {
+        "chat-existing": {
+          provider: "claude",
+          model: "claude-opus-4-7",
+          modelOptions: { reasoningEffort: "max", contextWindow: "1m" },
+          planMode: false,
+        },
+      },
+    })
+
+    useChatPreferencesStore.getState().initializeComposerForChat("chat-existing", {
+      providerHint: "codex",
+    })
+
+    expect(useChatPreferencesStore.getState().getComposerState("chat-existing").provider).toBe("claude")
+  })
+
   test("initializeComposerForChat with last_used copies the provided source state", () => {
     useChatPreferencesStore.setState({
       ...INITIAL_STATE,

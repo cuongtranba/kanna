@@ -21,7 +21,7 @@ import { generateUUID } from "../lib/utils"
 import { canCancelStatus, getLatestToolIds, isProcessingStatus } from "./derived"
 import { KannaSocket, type SocketStatus } from "./socket"
 import type { BackgroundTaskDiffEvent, BgTasksSnapshotData, EditorOpenSettings, OpenExternalAction } from "../../shared/protocol"
-import type { ToolRequestDecision } from "../../shared/permission-policy"
+import type { ChatPermissionPolicyOverride, ToolRequestDecision } from "../../shared/permission-policy"
 import { useBackgroundTasksStore } from "../stores/backgroundTasksStore"
 import { fireOrphanRecoveryToast } from "../lib/orphanToast"
 
@@ -757,6 +757,7 @@ export interface KannaState {
   handleForceReload: () => Promise<void>
   handleReadAppSettings: () => Promise<void>
   handleWriteAppSettings: (patch: AppSettingsPatch) => Promise<void>
+  handleSetChatPolicyOverride: (chatId: string, policyOverride: ChatPermissionPolicyOverride | null) => Promise<void>
   handleWriteCloudflareTunnel: (patch: Partial<CloudflareTunnelSettings>) => Promise<void>
   handleWriteClaudeAuth: (patch: Partial<ClaudeAuthSettings>) => Promise<void>
   handleTestOAuthToken: (token: string) => Promise<{ ok: boolean; error: string | null }>
@@ -1064,6 +1065,16 @@ export function useKannaState(activeChatId: string | null): KannaState {
     } catch (error) {
       useAppSettingsStore.getState().setHydrationStatus("error")
       setCommandError(error instanceof Error ? error.message : String(error))
+    }
+  }, [socket])
+
+  const handleSetChatPolicyOverride = useCallback(async (chatId: string, policyOverride: ChatPermissionPolicyOverride | null) => {
+    try {
+      await socket.command({ type: "chat.setPolicyOverride", chatId, policyOverride })
+      setCommandError(null)
+    } catch (error) {
+      setCommandError(error instanceof Error ? error.message : String(error))
+      throw error
     }
   }, [socket])
 
@@ -1729,28 +1740,6 @@ export function useKannaState(activeChatId: string | null): KannaState {
     options?: { provider?: AgentProvider; model?: string; modelOptions?: ModelOptions; planMode?: boolean; attachments?: import("../../shared/types").ChatAttachment[] }
   ) => {
     const attachments = options?.attachments ?? []
-    if (activeChatId && isProcessing) {
-      try {
-        const autoResumeOnRateLimit = usePreferencesStore.getState().autoResumeOnRateLimit
-        await socket.command<{ queuedMessageId: string }>({
-          type: "message.enqueue",
-          chatId: activeChatId,
-          content,
-          attachments,
-          provider: options?.provider,
-          model: options?.model,
-          modelOptions: options?.modelOptions,
-          planMode: options?.planMode,
-          autoResumeOnRateLimit,
-        })
-        setCommandError(null)
-        return
-      } catch (error) {
-        setCommandError(error instanceof Error ? error.message : String(error))
-        throw error
-      }
-    }
-
     const optimisticId = generateUUID()
     const clientTraceId = generateUUID()
     const signature = getUserPromptSignature(content, attachments)
@@ -1828,10 +1817,6 @@ export function useKannaState(activeChatId: string | null): KannaState {
       sendTrace.ackAt = performance.now()
       sendTrace.serverChatId = result.chatId ?? sendTrace.serverChatId
 
-      // Server queued the message (e.g. proactive `/compact` injected ahead of
-      // the user's prompt). Drop the optimistic user_prompt so the queue panel
-      // is the only render source until the post-compact dequeue persists a
-      // real user_prompt.
       if (result.queued) {
         setOptimisticUserPrompts((current) => pruneOptimisticOnQueuedAck(current, optimisticId, { queued: true }))
         setOptimisticProcessing(null)
@@ -1873,7 +1858,7 @@ export function useKannaState(activeChatId: string | null): KannaState {
       setCommandError(error instanceof Error ? error.message : String(error))
       throw error
     }
-  }, [activeChatId, fallbackLocalProjectPath, isProcessing, navigate, optimisticUserPrompts, selectedProjectId, serverTranscriptEntries, sidebarProjectGroups, socket])
+  }, [activeChatId, fallbackLocalProjectPath, navigate, optimisticUserPrompts, selectedProjectId, serverTranscriptEntries, sidebarProjectGroups, socket])
 
   const handleSteerQueuedMessage = useCallback(async (queuedMessageId: string) => {
     if (!activeChatId) return
@@ -2433,6 +2418,7 @@ export function useKannaState(activeChatId: string | null): KannaState {
     handleForceReload,
     handleReadAppSettings,
     handleWriteAppSettings,
+    handleSetChatPolicyOverride,
     handleWriteCloudflareTunnel,
     handleWriteClaudeAuth,
     handleTestOAuthToken,
