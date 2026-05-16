@@ -6,16 +6,13 @@ import { StackSectionMenu } from "./Menus"
 describe("StackSectionMenu", () => {
   test("StackSectionMenu renders children inside trigger", () => {
     const html = renderToStaticMarkup(
-      createElement(
-        StackSectionMenu,
-        {
-          stackTitle: "My Stack",
-          onRename: () => undefined,
-          onEditMembers: () => undefined,
-          onDelete: () => undefined,
-        },
-        createElement("button", null, "Stack row")
-      )
+      createElement(StackSectionMenu, {
+        stackTitle: "My Stack",
+        onRename: () => undefined,
+        onEditMembers: () => undefined,
+        onDelete: () => undefined,
+        children: createElement("button", null, "Stack row"),
+      })
     )
 
     expect(html).toContain("Stack row")
@@ -24,16 +21,13 @@ describe("StackSectionMenu", () => {
   test("StackSectionMenu renders without errors when all props provided", () => {
     expect(() =>
       renderToStaticMarkup(
-        createElement(
-          StackSectionMenu,
-          {
-            stackTitle: "My Stack",
-            onRename: () => undefined,
-            onEditMembers: () => undefined,
-            onDelete: () => undefined,
-          },
-          createElement("button", null, "Stack row")
-        )
+        createElement(StackSectionMenu, {
+          stackTitle: "My Stack",
+          onRename: () => undefined,
+          onEditMembers: () => undefined,
+          onDelete: () => undefined,
+          children: createElement("button", null, "Stack row"),
+        })
       )
     ).not.toThrow()
   })
@@ -41,16 +35,13 @@ describe("StackSectionMenu", () => {
   test("StackSectionMenu accepts onRename, onEditMembers, onDelete callbacks", () => {
     expect(() =>
       renderToStaticMarkup(
-        createElement(
-          StackSectionMenu,
-          {
-            stackTitle: "Another Stack",
-            onRename: () => undefined,
-            onEditMembers: () => undefined,
-            onDelete: () => undefined,
-          },
-          createElement("div", null, "trigger")
-        )
+        createElement(StackSectionMenu, {
+          stackTitle: "Another Stack",
+          onRename: () => undefined,
+          onEditMembers: () => undefined,
+          onDelete: () => undefined,
+          children: createElement("div", null, "trigger"),
+        })
       )
     ).not.toThrow()
   })

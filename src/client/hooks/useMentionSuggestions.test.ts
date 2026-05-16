@@ -9,7 +9,7 @@ afterEach(() => {
 
 describe("fetchProjectPaths", () => {
   test("requests the expected URL and returns paths", async () => {
-    let receivedUrl: string | null = null
+    let receivedUrl: string | null = null as string | null
     globalThis.fetch = (async (input: RequestInfo | URL) => {
       receivedUrl = typeof input === "string" ? input : input.toString()
       return new Response(
@@ -24,7 +24,7 @@ describe("fetchProjectPaths", () => {
   })
 
   test("escapes query", async () => {
-    let receivedUrl: string | null = null
+    let receivedUrl: string | null = null as string | null
     globalThis.fetch = (async (input: RequestInfo | URL) => {
       receivedUrl = typeof input === "string" ? input : input.toString()
       return new Response(JSON.stringify({ paths: [] }), { headers: { "Content-Type": "application/json" } })
@@ -35,7 +35,7 @@ describe("fetchProjectPaths", () => {
   })
 
   test("returns empty array on non-ok response", async () => {
-    globalThis.fetch = (async () => new Response("{}", { status: 500 })) as typeof fetch
+    globalThis.fetch = (async () => new Response("{}", { status: 500 })) as unknown as typeof fetch
     const result = await fetchProjectPaths({ projectId: "p1", query: "x", signal: new AbortController().signal })
     expect(result).toEqual([])
   })

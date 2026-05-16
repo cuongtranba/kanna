@@ -6,7 +6,12 @@ import {
   overrideContextWindowMaxTokens,
 } from "./contextWindow"
 
-function entry(partial: Omit<TranscriptEntry, "_id" | "createdAt">, createdAt = Date.now()): TranscriptEntry {
+type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never
+
+function entry(
+  partial: DistributiveOmit<TranscriptEntry, "_id" | "createdAt">,
+  createdAt = Date.now(),
+): TranscriptEntry {
   return {
     _id: crypto.randomUUID(),
     createdAt,
