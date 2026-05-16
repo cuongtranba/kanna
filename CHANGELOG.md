@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.55.0](https://github.com/cuongtranba/kanna/compare/v0.54.0...v0.55.0) (2026-05-16)
+
+
+### Features
+
+* **claude-pty:** P7 — driver toggle, lifecycle, sidebar badges, per-chat permissions ([#135](https://github.com/cuongtranba/kanna/issues/135)) ([1742ea7](https://github.com/cuongtranba/kanna/commit/1742ea775e419adfb43f01514557e6fc57241529))
+
+
+### Bug Fixes
+
+* **chat:** seed composer provider from server snapshot on session reload ([#137](https://github.com/cuongtranba/kanna/issues/137)) ([9019c50](https://github.com/cuongtranba/kanna/commit/9019c509786b13153680dbd2342c39db46b17d06))
+* **chat:** server-authoritative routing kills duplicate queued bubble ([#136](https://github.com/cuongtranba/kanna/issues/136)) ([5354454](https://github.com/cuongtranba/kanna/commit/535445437a7d08dde652c2b39b9a91bf71755bd8))
+* **codex:** render ImageGeneration inline with project URL and populated prompt ([#132](https://github.com/cuongtranba/kanna/issues/132)) ([a9d4c39](https://github.com/cuongtranba/kanna/commit/a9d4c3911729984201b498acce32eead1f5263d2))
+* **compact:** persist proactive-compact circuit breaker + harden audit gaps ([#139](https://github.com/cuongtranba/kanna/issues/139)) ([81ed65b](https://github.com/cuongtranba/kanna/commit/81ed65b3db05a96134d4335ad2b32a56f48cb051))
+* **compact:** protect queued message from accidental dequeue mid-compact ([#134](https://github.com/cuongtranba/kanna/issues/134)) ([e1c0c73](https://github.com/cuongtranba/kanna/commit/e1c0c73b79f770483fbdd509ae64d13646650959))
+* **compact:** seed maxTokens from [1m] model id to stop premature compact ([#131](https://github.com/cuongtranba/kanna/issues/131)) ([1f7bc42](https://github.com/cuongtranba/kanna/commit/1f7bc42a483c5d8b65a5eb074c14c25422e4c0b4))
+* **image-gen:** tighten types, fix silent error, dedupe URL builder ([#138](https://github.com/cuongtranba/kanna/issues/138)) ([890ad71](https://github.com/cuongtranba/kanna/commit/890ad716ccf15b3484c3ad6192ae0b8feeb7b3d2))
+* **local-file-link:** treat extension-less paths as editor links ([#129](https://github.com/cuongtranba/kanna/issues/129)) ([8a0c867](https://github.com/cuongtranba/kanna/commit/8a0c867d857f50374d9836988870e2decddebb59))
+* **useKannaState:** drop optimistic user_prompt when chat.send acks queued ([#133](https://github.com/cuongtranba/kanna/issues/133)) ([554b492](https://github.com/cuongtranba/kanna/commit/554b492bcee57f70a41fcf5f6573052ffc345b4e))
+
 ## [0.54.0](https://github.com/cuongtranba/kanna/compare/v0.53.0...v0.54.0) (2026-05-15)
 
 
