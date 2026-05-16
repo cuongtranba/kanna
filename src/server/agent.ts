@@ -531,6 +531,13 @@ export function normalizeClaudeStreamMessage(message: any): TranscriptEntry[] {
     return entries
   }
 
+  // No `result.subtype === "compaction"` branch by design: Kanna never relies
+  // on the SDK's in-loop auto-compact. The SDK `query()` driver spawns a fresh
+  // subprocess per turn and never enters claude-code's REPL loop, so that
+  // compaction stop is unreachable here (see proactive-compact.ts). Context
+  // compaction is instead driven by Kanna injecting a native `/compact` turn
+  // and surfaces purely as the `system/compact_boundary` message handled
+  // below — not as a result subtype.
   if (message.type === "result") {
     if (message.subtype === "cancelled") {
       return [timestamped({ kind: "interrupted", messageId, debugRaw })]
@@ -1024,12 +1031,13 @@ export class AgentCoordinator {
   private readonly subagentOrchestrator: SubagentOrchestrator
   private readonly throwOnClaudeSessionStart: boolean
   private readonly autoResumeByChat = new Map<string, boolean>()
-  // Per-chat circuit breaker for proactive `/compact` injection. Increments on
-  // every compact attempt that fails (turn errored / cancelled) and resets on
-  // success. After MAX_CONSECUTIVE_AUTOCOMPACT_FAILURES, skip further proactive
+  // Per-chat circuit breaker for proactive `/compact` injection lives in the
+  // persisted ChatRecord (`compactFailureCount`): increments on every compact
+  // attempt that fails (turn errored / cancelled) and resets on success.
+  // After MAX_CONSECUTIVE_AUTOCOMPACT_FAILURES, skip further proactive
   // compacts on this chat so doomed sessions don't hammer the API on every
-  // turn (mirrors claude-code's autoCompact circuit breaker behaviour).
-  private readonly compactFailuresByChat = new Map<string, number>()
+  // turn (mirrors claude-code's autoCompact circuit breaker). Persisting it
+  // means a server restart cannot reset a doomed chat's breaker to 0.
   private readonly tunnelGateway: TunnelGateway | null
   private readonly backgroundTasks: BackgroundTaskRegistry | null
   private readonly oauthPool: OAuthTokenPool | null
@@ -2025,7 +2033,7 @@ export class AgentCoordinator {
     // slash command, run it as-is. Compacting before `/clear` or another
     // `/compact` would be wasted work.
     if (content.trimStart().startsWith("/")) return false
-    const failures = this.compactFailuresByChat.get(chatId) ?? 0
+    const failures = this.store.getChat(chatId)?.compactFailureCount ?? 0
     if (failures >= MAX_CONSECUTIVE_AUTOCOMPACT_FAILURES) return false
     const usage = getLatestContextWindowUsage(this.store.getMessages(chatId))
     return shouldProactivelyCompact(usage)
@@ -2321,13 +2329,13 @@ export class AgentCoordinator {
               await this.store.recordTurnFailed(session.chatId, resultText)
             }
             if (active.proactiveCompactInjection) {
-              const next = (this.compactFailuresByChat.get(session.chatId) ?? 0) + 1
-              this.compactFailuresByChat.set(session.chatId, next)
+              const prev = this.store.getChat(session.chatId)?.compactFailureCount ?? 0
+              await this.store.setCompactFailureCount(session.chatId, prev + 1)
             }
           } else if (!active.cancelRequested) {
             await this.store.recordTurnFinished(session.chatId)
             if (active.proactiveCompactInjection) {
-              this.compactFailuresByChat.delete(session.chatId)
+              await this.store.setCompactFailureCount(session.chatId, 0)
             }
           }
           this.activeTurns.delete(session.chatId)

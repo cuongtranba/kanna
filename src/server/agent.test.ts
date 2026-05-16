@@ -2157,6 +2157,63 @@ describe("AgentCoordinator claude integration", () => {
     events.close()
   })
 
+  test("send() does NOT inject /compact when the persisted failure breaker is tripped", async () => {
+    const events = new AsyncEventQueue<any>()
+    const prompts: string[] = []
+
+    const store = createFakeStore()
+    store.chat.provider = "claude"
+    // Usage is above the auto-compact threshold, so the ONLY thing that can
+    // suppress injection is the persisted circuit breaker on the chat record
+    // (mirrors a doomed chat whose breaker survived a server restart).
+    store.chat.compactFailureCount = 3
+    store.messages.push(timestamped({
+      kind: "context_window_updated",
+      usage: { usedTokens: 180_000, maxTokens: 200_000, compactsAutomatically: false },
+    }))
+
+    const coordinator = new AgentCoordinator({
+      store: store as never,
+      onStateChange: () => {},
+      startClaudeSession: async () => ({
+        provider: "claude",
+        stream: events,
+        getAccountInfo: async () => null,
+        interrupt: async () => {},
+        close: () => {},
+        setModel: async () => {},
+        setPermissionMode: async () => {},
+        getSupportedCommands: async () => [],
+        sendPrompt: async (content: string) => {
+          prompts.push(content)
+          events.push({
+            type: "transcript" as const,
+            entry: timestamped({
+              kind: "result",
+              subtype: "success",
+              isError: false,
+              durationMs: 0,
+              result: "done",
+            }),
+          })
+        },
+      }),
+    })
+
+    await coordinator.send({
+      type: "chat.send",
+      chatId: "chat-1",
+      provider: "claude",
+      content: "hello",
+      model: "claude-opus-4-7",
+    })
+
+    await waitFor(() => store.turnFinishedCount === 1, 2000)
+
+    expect(prompts).toEqual(["hello"])
+    events.close()
+  })
+
   test("send() does NOT recursively compact when user's content is itself a slash command", async () => {
     const events = new AsyncEventQueue<any>()
     const prompts: string[] = []
@@ -2439,6 +2496,7 @@ function createFakeStore() {
     sessionTokensByProvider: {} as Partial<Record<"claude" | "codex", string | null>>,
     slashCommands: undefined as SlashCommand[] | undefined,
     pendingForkSessionToken: null as { provider: "claude" | "codex"; token: string } | null,
+    compactFailureCount: 0,
   }
   const project = {
     id: "project-1",
@@ -2474,6 +2532,9 @@ function createFakeStore() {
     },
     async setPlanMode(_chatId: string, planMode: boolean) {
       chat.planMode = planMode
+    },
+    async setCompactFailureCount(_chatId: string, count: number) {
+      chat.compactFailureCount = count
     },
     async renameChat(_chatId: string, title: string) {
       chat.title = title
