@@ -54,6 +54,46 @@ describe("classifyAttachmentPreview", () => {
     expect(target.kind).toBe("text")
     expect(target.openInNewTab).toBe(false)
   })
+
+  test("routes audio mime to in-sheet audio preview", () => {
+    const target = classifyAttachmentPreview(makeAttachment({
+      displayName: "clip.mp3",
+      mimeType: "audio/mpeg",
+    }))
+
+    expect(target.kind).toBe("audio")
+    expect(target.openInNewTab).toBe(false)
+  })
+
+  test("routes audio by extension when mime is generic", () => {
+    const target = classifyAttachmentPreview(makeAttachment({
+      displayName: "voice.wav",
+      mimeType: "application/octet-stream",
+    }))
+
+    expect(target.kind).toBe("audio")
+    expect(target.openInNewTab).toBe(false)
+  })
+
+  test("routes video mime to in-sheet video preview", () => {
+    const target = classifyAttachmentPreview(makeAttachment({
+      displayName: "clip.mp4",
+      mimeType: "video/mp4",
+    }))
+
+    expect(target.kind).toBe("video")
+    expect(target.openInNewTab).toBe(false)
+  })
+
+  test("routes video by extension when mime is generic", () => {
+    const target = classifyAttachmentPreview(makeAttachment({
+      displayName: "clip.webm",
+      mimeType: "application/octet-stream",
+    }))
+
+    expect(target.kind).toBe("video")
+    expect(target.openInNewTab).toBe(false)
+  })
 })
 
 describe("parseDelimitedPreview", () => {

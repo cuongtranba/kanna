@@ -36,6 +36,8 @@ export type AttachmentPreviewKind =
   | "text"
   | "json"
   | "table"
+  | "audio"
+  | "video"
   | "external"
 
 export interface AttachmentPreviewTarget {
@@ -76,6 +78,12 @@ export function classifyAttachmentPreview(attachment: ChatAttachment): Attachmen
   }
   if (mimeType === "text/csv" || mimeType === "text/tab-separated-values") {
     return { kind: "table", openInNewTab: false }
+  }
+  if (mimeType.startsWith("audio/") || AUDIO_EXTENSIONS.has(extension)) {
+    return { kind: "audio", openInNewTab: false }
+  }
+  if (mimeType.startsWith("video/") || VIDEO_EXTENSIONS.has(extension)) {
+    return { kind: "video", openInNewTab: false }
   }
   if (mimeType.startsWith("text/")) {
     return { kind: "text", openInNewTab: false }

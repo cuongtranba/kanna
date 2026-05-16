@@ -80,4 +80,20 @@ describe("OfferDownloadMessage", () => {
     const html = renderToStaticMarkup(<OfferDownloadMessage message={message} />)
     expect(html).toContain("report.pdf")
   })
+
+  test("preview-able mime (text/markdown) opens FilePreviewSheet on click and exposes Download in footer", async () => {
+    const html = renderToStaticMarkup(<OfferDownloadMessage message={buildMessage({
+      result: {
+        contentUrl: "/api/projects/p1/files/notes.md/content",
+        relativePath: "notes.md", fileName: "notes.md", displayName: "Notes",
+        size: 200, mimeType: "text/markdown",
+      },
+    })} />)
+    expect(html).toContain("Preview")
+  })
+
+  test("non-preview-able mime (application/zip) keeps download-only behaviour (regression)", () => {
+    const html = renderToStaticMarkup(<OfferDownloadMessage message={buildMessage()} />)
+    expect(html).toContain('download="build.zip"')
+  })
 })

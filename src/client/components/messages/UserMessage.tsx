@@ -5,7 +5,8 @@ import remarkGfm from "remark-gfm"
 import { createMarkdownComponents } from "./shared"
 import { classifyAttachmentPreview } from "./attachmentPreview"
 import { AttachmentFileCard, AttachmentImageCard } from "./AttachmentCard"
-import { AttachmentPreviewModal } from "./AttachmentPreviewModal"
+import { FilePreviewSheet } from "./file-preview/FilePreviewSheet"
+import { toPreviewSourceFromAttachment, type PreviewSource } from "./file-preview/types"
 import { Zap } from "lucide-react"
 import { useTranscriptRenderOptions } from "./render-context"
 
@@ -43,6 +44,9 @@ export function UserMessage({ content, attachments = [], steered = false, autoCo
     [attachments, shouldShowImagePlaceholders],
   )
   const selectedAttachment = attachments.find((attachment) => attachment.id === selectedAttachmentId) ?? null
+  const selectedSource: PreviewSource | null = selectedAttachment
+    ? toPreviewSourceFromAttachment(selectedAttachment, "user_attachment")
+    : null
 
   function handleAttachmentClick(attachment: ChatAttachment) {
     if (!canInteractWithAttachments || !attachment.contentUrl) {
@@ -102,7 +106,11 @@ export function UserMessage({ content, attachments = [], steered = false, autoCo
           <span className="text-xs text-muted-foreground opacity-70">auto-sent</span>
         ) : null}
       </div>
-      <AttachmentPreviewModal attachment={selectedAttachment} onOpenChange={(open) => !open && setSelectedAttachmentId(null)} />
+      <FilePreviewSheet
+        source={selectedSource}
+        open={selectedSource !== null}
+        onOpenChange={(open) => !open && setSelectedAttachmentId(null)}
+      />
     </>
   )
 }

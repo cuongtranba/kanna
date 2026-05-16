@@ -1,4 +1,8 @@
+import { useState } from "react"
 import type { HydratedImageGenerationToolCall } from "../../../shared/types"
+import { InlinePreviewCard } from "./file-preview/InlinePreviewCard"
+import { FilePreviewSheet } from "./file-preview/FilePreviewSheet"
+import type { PreviewSource } from "./file-preview/types"
 
 interface Props {
   message: HydratedImageGenerationToolCall
@@ -7,8 +11,9 @@ interface Props {
 export function ImageGenerationMessage({ message }: Props) {
   const { status, revisedPrompt } = message.input
   const result = message.result
-  const contentUrl = result?.contentUrl ?? ""
+  const contentUrl = result?.contentUrl
   const hasFailed = message.isError || status === "failed"
+  const [open, setOpen] = useState(false)
 
   if (!hasFailed && !result && status === "in_progress") {
     return (
@@ -22,7 +27,7 @@ export function ImageGenerationMessage({ message }: Props) {
     )
   }
 
-  if (hasFailed || !contentUrl) {
+  if (hasFailed || !result || !contentUrl) {
     return (
       <div
         className="flex flex-col gap-1 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm"
@@ -34,19 +39,24 @@ export function ImageGenerationMessage({ message }: Props) {
     )
   }
 
+  const source: PreviewSource = {
+    id: `image-gen-${message.toolId}`,
+    contentUrl,
+    displayName: result.fileName,
+    fileName: result.fileName,
+    relativePath: result.relativePath,
+    mimeType: "image/png",
+    origin: "image_generation",
+    altText: revisedPrompt ?? undefined,
+  }
+
   return (
     <figure className="flex flex-col gap-2" data-testid="image-generation">
-      <a href={contentUrl} target="_blank" rel="noreferrer">
-        <img
-          src={contentUrl}
-          alt={revisedPrompt ?? result?.fileName ?? "Generated image"}
-          className="max-w-full rounded-md border border-border/40"
-          loading="lazy"
-        />
-      </a>
+      <InlinePreviewCard source={source} onOpen={() => setOpen(true)} variant="expanded" />
       {revisedPrompt ? (
         <figcaption className="text-xs text-muted-foreground italic">{revisedPrompt}</figcaption>
       ) : null}
+      <FilePreviewSheet source={open ? source : null} open={open} onOpenChange={setOpen} />
     </figure>
   )
 }
