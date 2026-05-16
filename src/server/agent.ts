@@ -1592,9 +1592,17 @@ export class AgentCoordinator {
     }
 
     const onToolRequest = async (request: HarnessToolRequest): Promise<unknown> => {
-      const active = this.activeTurns.get(args.chatId)
+      let active = this.activeTurns.get(args.chatId)
       if (!active) {
-        throw new Error("Chat turn ended unexpectedly")
+        // The prior turn's `result` event already deleted the activeTurn, but
+        // the Claude SDK fired another `canUseTool` — happens when the SDK
+        // self-resumes after a background task notification. Re-promote a
+        // minimal activeTurn from the live session so the question renders
+        // instead of failing with "Chat turn ended unexpectedly".
+        active = this.recreateActiveTurnFromSession(args)
+        if (!active) {
+          throw new Error("Chat turn ended unexpectedly")
+        }
       }
 
       active.status = "waiting_for_user"
@@ -1765,6 +1773,48 @@ export class AgentCoordinator {
     }
 
     void this.runTurn(active)
+  }
+
+  private recreateActiveTurnFromSession(args: {
+    chatId: string
+    provider: AgentProvider
+    model: string
+    effort?: string
+    serviceTier?: "fast"
+    planMode: boolean
+    clientTraceId?: string
+  }): ActiveTurn | undefined {
+    if (args.provider !== "claude") return undefined
+    const session = this.claudeSessions.get(args.chatId)
+    if (!session) return undefined
+
+    const ghostTurn: HarnessTurn = {
+      provider: "claude",
+      stream: { async *[Symbol.asyncIterator]() {} },
+      getAccountInfo: session.session.getAccountInfo,
+      interrupt: session.session.interrupt,
+      close: () => {},
+    }
+
+    const active: ActiveTurn = {
+      chatId: args.chatId,
+      provider: args.provider,
+      turn: ghostTurn,
+      model: session.model,
+      effort: session.effort,
+      serviceTier: args.serviceTier,
+      planMode: session.planMode,
+      status: "waiting_for_user",
+      pendingTool: null,
+      postToolFollowUp: null,
+      hasFinalResult: false,
+      cancelRequested: false,
+      cancelRecorded: false,
+      clientTraceId: args.clientTraceId,
+      waitStartedAt: null,
+    }
+    this.activeTurns.set(args.chatId, active)
+    return active
   }
 
   private async startClaudeTurn(args: {

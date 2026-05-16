@@ -4492,3 +4492,124 @@ describe("AgentCoordinator PTY driver selection", () => {
     }
   })
 })
+
+// ── Late tool request (SDK self-resume) regression ─────────────────────────────
+
+describe("AgentCoordinator late tool request", () => {
+  test("onToolRequest fired after result event re-promotes activeTurn instead of throwing", async () => {
+    const events = new AsyncEventQueue<any>()
+    const store = createFakeStore()
+    let capturedOnToolRequest: ((request: any) => Promise<unknown>) | null = null
+
+    const coordinator = new AgentCoordinator({
+      store: store as never,
+      onStateChange: () => {},
+      startClaudeSession: async (args) => {
+        capturedOnToolRequest = args.onToolRequest
+        return {
+          provider: "claude",
+          stream: events,
+          getAccountInfo: async () => null,
+          interrupt: async () => {},
+          close: () => {},
+          setModel: async () => {},
+          setPermissionMode: async () => {},
+          getSupportedCommands: async () => [],
+          sendPrompt: async () => {
+            events.push({
+              type: "transcript" as const,
+              entry: timestamped({
+                kind: "system_init",
+                provider: "claude",
+                model: "claude-opus-4-7",
+                tools: [],
+                agents: [],
+                slashCommands: [],
+                mcpServers: [],
+              }),
+            })
+            events.push({
+              type: "transcript" as const,
+              entry: timestamped({
+                kind: "result",
+                subtype: "success",
+                isError: false,
+                durationMs: 100,
+                result: "",
+              }),
+            })
+          },
+        }
+      },
+    })
+
+    await coordinator.send({
+      type: "chat.send",
+      chatId: "chat-1",
+      provider: "claude",
+      content: "hello",
+      model: "claude-opus-4-7",
+    })
+
+    await waitFor(() => store.turnFinishedCount === 1)
+    expect(coordinator.activeTurns.has("chat-1")).toBe(false)
+    expect(capturedOnToolRequest).not.toBeNull()
+
+    const lateRequest = {
+      tool: {
+        kind: "tool" as const,
+        toolKind: "ask_user_question" as const,
+        toolName: "AskUserQuestion",
+        toolId: "t-late",
+        input: {
+          questions: [
+            {
+              text: "Merge?",
+              header: "merge",
+              options: [
+                { label: "yes", description: "merge it" },
+                { label: "no", description: "hold" },
+              ],
+              multiSelect: false,
+            },
+          ],
+        },
+        rawInput: {
+          questions: [
+            {
+              text: "Merge?",
+              header: "merge",
+              options: [
+                { label: "yes", description: "merge it" },
+                { label: "no", description: "hold" },
+              ],
+              multiSelect: false,
+            },
+          ],
+        },
+      },
+    }
+
+    const lateRequestPromise = capturedOnToolRequest!(lateRequest)
+    let rejected = false
+    void lateRequestPromise.catch(() => {
+      rejected = true
+    })
+
+    await waitFor(() => coordinator.activeTurns.get("chat-1")?.pendingTool?.toolUseId === "t-late")
+    expect(rejected).toBe(false)
+    expect(coordinator.activeTurns.get("chat-1")?.status).toBe("waiting_for_user")
+
+    await coordinator.respondTool({
+      type: "chat.respondTool",
+      chatId: "chat-1",
+      toolUseId: "t-late",
+      result: { answers: { 0: ["yes"] } },
+    })
+
+    const resolved = await lateRequestPromise
+    expect(resolved).toEqual({ answers: { 0: ["yes"] } })
+
+    events.close()
+  })
+})
