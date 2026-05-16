@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.56.2](https://github.com/cuongtranba/kanna/compare/v0.56.1...v0.56.2) (2026-05-16)
+
+
+### Bug Fixes
+
+* **chat-preferences:** persist composer state + use providerDefaults for new chat ([#155](https://github.com/cuongtranba/kanna/issues/155)) ([54aa3e0](https://github.com/cuongtranba/kanna/commit/54aa3e0562158d965c80d4426ca90ab6489d2d10))
+
 ## [0.56.1](https://github.com/cuongtranba/kanna/compare/v0.56.0...v0.56.1) (2026-05-16)
 
 
