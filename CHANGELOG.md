@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.56.0](https://github.com/cuongtranba/kanna/compare/v0.55.3...v0.56.0) (2026-05-16)
+
+
+### Features
+
+* **file-preview:** mobile-first universal file preview sheet ([#143](https://github.com/cuongtranba/kanna/issues/143)) ([181e60a](https://github.com/cuongtranba/kanna/commit/181e60aca9877815da7fb95b84a9183889a593cd))
+
+
+### Bug Fixes
+
+* **agent:** recreate activeTurn on late canUseTool from SDK self-resume ([#148](https://github.com/cuongtranba/kanna/issues/148)) ([4114fc7](https://github.com/cuongtranba/kanna/commit/4114fc7c99944ee0e0f11a4dc8b5e4140d3c7a88))
+
 ## [0.55.3](https://github.com/cuongtranba/kanna/compare/v0.55.2...v0.55.3) (2026-05-16)
 
 
