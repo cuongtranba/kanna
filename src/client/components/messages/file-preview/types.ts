@@ -15,6 +15,7 @@ export interface PreviewSource {
   mimeType: string
   size?: number
   origin: PreviewOrigin
+  altText?: string
 }
 
 export function toPreviewSourceFromAttachment(

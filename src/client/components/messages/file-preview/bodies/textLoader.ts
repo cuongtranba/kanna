@@ -9,8 +9,13 @@ export type TextLoadState =
 
 const bodyCache = new Map<string, TextLoadState>()
 
+function cacheKeyFor(source: PreviewSource): string {
+  return `${source.id}|${source.contentUrl}|${source.size ?? 0}`
+}
+
 export function useTextBodyContent(source: PreviewSource): TextLoadState {
-  const cached = bodyCache.get(source.id)
+  const cacheKey = cacheKeyFor(source)
+  const cached = bodyCache.get(cacheKey)
   const [state, setState] = useState<TextLoadState>(cached ?? { status: "loading" })
 
   useEffect(() => {
@@ -20,20 +25,20 @@ export function useTextBodyContent(source: PreviewSource): TextLoadState {
       .then((res) => {
         if (cancelled) return
         const next: TextLoadState = { status: "ready", content: res.content, truncated: res.truncated }
-        bodyCache.set(source.id, next)
+        bodyCache.set(cacheKey, next)
         setState(next)
       })
       .catch((err: unknown) => {
         if (cancelled) return
         const msg = err instanceof Error ? err.message : "Unable to load preview."
         const next: TextLoadState = { status: "error", message: msg }
-        bodyCache.set(source.id, next)
+        bodyCache.set(cacheKey, next)
         setState(next)
       })
     return () => {
       cancelled = true
     }
-  }, [cached, source.contentUrl, source.id])
+  }, [cached, cacheKey, source.contentUrl])
 
   return state
 }

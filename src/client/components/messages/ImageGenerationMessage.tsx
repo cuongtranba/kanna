@@ -53,6 +53,7 @@ export function ImageGenerationMessage({ message }: Props) {
     relativePath: result.relativePath,
     mimeType: "image/png",
     origin: "image_generation",
+    altText: revisedPrompt ?? undefined,
   }
 
   return (

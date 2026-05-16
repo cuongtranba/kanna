@@ -12,7 +12,7 @@ describe("PdfBody", () => {
   test("renders iframe with sandbox attribute on desktop class wrapper", () => {
     const html = renderToStaticMarkup(<PdfBody source={SRC} />)
     expect(html).toContain('src="/u/x.pdf"')
-    expect(html).toContain('sandbox="allow-same-origin allow-scripts"')
+    expect(html).toContain('sandbox=""')
     expect(html).toContain("Open PDF externally")
   })
 })

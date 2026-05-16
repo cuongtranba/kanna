@@ -1,4 +1,4 @@
-import { useRef } from "react"
+import { useCallback, useRef } from "react"
 import type { ChatAttachment } from "../../../../shared/types"
 import { AttachmentFileCard, formatAttachmentSize } from "../AttachmentCard"
 import { classifyAttachmentIcon, friendlyMimeLabel, fetchTextPreview } from "../attachmentPreview"
@@ -36,7 +36,7 @@ export function InlinePreviewCard({ source, onOpen, variant }: Props) {
       >
         <img
           src={source.contentUrl}
-          alt={source.displayName}
+          alt={source.altText ?? source.displayName}
           loading="lazy"
           className="max-h-64 w-auto max-w-full object-contain"
         />
@@ -89,15 +89,20 @@ const SnippetCard = function SnippetCardImpl({
   sizeLabel: string | null
 }) {
   const ref = useRef<HTMLButtonElement>(null)
+  const contentUrl = source.contentUrl
+  const fetcher = useCallback(
+    async (signal: AbortSignal) => {
+      const res = await fetchTextPreview(contentUrl, 4096)
+      if (signal.aborted) throw new Error("aborted")
+      return res.content.slice(0, 200)
+    },
+    [contentUrl],
+  )
   const result = useViewportFetch<string>({
     ref,
     enabled: true,
     cacheKey: `snippet:${source.id}`,
-    fetcher: async (signal) => {
-      const res = await fetchTextPreview(source.contentUrl, 4096)
-      if (signal.aborted) throw new Error("aborted")
-      return res.content.slice(0, 200)
-    },
+    fetcher,
   })
   const snippet = result.state === "ready" && typeof result.data === "string" ? result.data : ""
   return (

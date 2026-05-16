@@ -6,7 +6,7 @@ export function PdfBody({ source }: { source: PreviewSource }) {
       <iframe
         src={source.contentUrl}
         title={source.displayName}
-        sandbox="allow-same-origin allow-scripts"
+        sandbox=""
         className="hidden md:block h-[75dvh] w-full rounded-xl border border-border bg-background"
       />
       <a

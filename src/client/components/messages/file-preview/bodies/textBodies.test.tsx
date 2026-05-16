@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server"
 import { TextBody } from "./TextBody"
 import { JsonBody } from "./JsonBody"
 import { MarkdownBody } from "./MarkdownBody"
+import { __clearTextBodyCacheForTests } from "./textLoader"
 import type { PreviewSource } from "../types"
 
 const makeSrc = (mime: string, name: string): PreviewSource => ({
@@ -12,6 +13,7 @@ const makeSrc = (mime: string, name: string): PreviewSource => ({
 })
 
 beforeEach(() => {
+  __clearTextBodyCacheForTests()
   ;(globalThis as { fetch?: unknown }).fetch = mock(async () => new Response("hello world"))
 })
 afterEach(() => {
