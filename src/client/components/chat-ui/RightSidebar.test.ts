@@ -1,8 +1,12 @@
-import { describe, expect, mock, test } from "bun:test"
+import { describe, expect, test } from "bun:test"
 import { createElement } from "react"
 import { renderToStaticMarkup } from "react-dom/server"
 import { RightSidebar, canIgnoreDiffFile, canIgnoreDiffFolder, shouldLoadDiffPatchNow } from "./RightSidebar"
 import { TooltipProvider } from "../ui/tooltip"
+
+const unusedAsyncHandler = async (): Promise<never> => {
+  throw new Error("handler not exercised in static-markup test")
+}
 
 describe("RightSidebar", () => {
   test("loads missing patches for expanded rows", () => {
@@ -95,15 +99,20 @@ describe("RightSidebar", () => {
         onCopyFilePath: () => {},
         onCopyRelativePath: () => {},
         onLoadPatch: async () => "",
-        onListBranches: async () => ({ recent: [], local: [], remote: [], pullRequests: [], pullRequestsStatus: "unavailable" }),
+        onListBranches: async () => ({ recent: [], local: [], remote: [], pullRequests: [], pullRequestsStatus: "unavailable" as const }),
         onCheckoutBranch: async () => {},
         onCreateBranch: async () => {},
         onGenerateCommitMessage: async () => ({ subject: "", body: "" }),
+        onPreviewMergeBranch: unusedAsyncHandler,
+        onMergeBranch: unusedAsyncHandler,
+        onInitializeGit: unusedAsyncHandler,
+        onGetGitHubPublishInfo: unusedAsyncHandler,
+        onCheckGitHubRepoAvailability: unusedAsyncHandler,
+        onSetupGitHub: unusedAsyncHandler,
         onCommit: async () => null,
         onSyncWithRemote: async () => null,
         onDiffRenderModeChange: () => {},
         onWrapLinesChange: () => {},
-        onClose: () => {},
       })
     ))
 
@@ -114,7 +123,6 @@ describe("RightSidebar", () => {
   })
 
   test("defaults to changes when there are file changes", () => {
-    const onClose = mock(() => {})
     const markup = renderToStaticMarkup(createElement(
       TooltipProvider,
       null,
@@ -149,15 +157,20 @@ describe("RightSidebar", () => {
         onCopyFilePath: () => {},
         onCopyRelativePath: () => {},
         onLoadPatch: async () => "",
-        onListBranches: async () => ({ recent: [], local: [], remote: [], pullRequests: [], pullRequestsStatus: "unavailable" }),
+        onListBranches: async () => ({ recent: [], local: [], remote: [], pullRequests: [], pullRequestsStatus: "unavailable" as const }),
         onCheckoutBranch: async () => {},
         onCreateBranch: async () => {},
         onGenerateCommitMessage: async () => ({ subject: "", body: "" }),
+        onPreviewMergeBranch: unusedAsyncHandler,
+        onMergeBranch: unusedAsyncHandler,
+        onInitializeGit: unusedAsyncHandler,
+        onGetGitHubPublishInfo: unusedAsyncHandler,
+        onCheckGitHubRepoAvailability: unusedAsyncHandler,
+        onSetupGitHub: unusedAsyncHandler,
         onCommit: async () => null,
         onSyncWithRemote: async () => null,
         onDiffRenderModeChange: () => {},
         onWrapLinesChange: () => {},
-        onClose,
       })
     ))
 
@@ -169,7 +182,6 @@ describe("RightSidebar", () => {
   })
 
   test("renders the branch switcher affordance", () => {
-    const onClose = mock(() => {})
     const markup = renderToStaticMarkup(createElement(
       TooltipProvider,
       null,
@@ -187,15 +199,20 @@ describe("RightSidebar", () => {
         onCopyFilePath: () => {},
         onCopyRelativePath: () => {},
         onLoadPatch: async () => "",
-        onListBranches: async () => ({ recent: [], local: [], remote: [], pullRequests: [], pullRequestsStatus: "unavailable" }),
+        onListBranches: async () => ({ recent: [], local: [], remote: [], pullRequests: [], pullRequestsStatus: "unavailable" as const }),
         onCheckoutBranch: async () => {},
         onCreateBranch: async () => {},
         onGenerateCommitMessage: async () => ({ subject: "", body: "" }),
+        onPreviewMergeBranch: unusedAsyncHandler,
+        onMergeBranch: unusedAsyncHandler,
+        onInitializeGit: unusedAsyncHandler,
+        onGetGitHubPublishInfo: unusedAsyncHandler,
+        onCheckGitHubRepoAvailability: unusedAsyncHandler,
+        onSetupGitHub: unusedAsyncHandler,
         onCommit: async () => null,
         onSyncWithRemote: async () => null,
         onDiffRenderModeChange: () => {},
         onWrapLinesChange: () => {},
-        onClose,
       })
     ))
 
@@ -227,15 +244,20 @@ describe("RightSidebar", () => {
         onCopyFilePath: () => {},
         onCopyRelativePath: () => {},
         onLoadPatch: async () => "",
-        onListBranches: async () => ({ recent: [], local: [], remote: [], pullRequests: [], pullRequestsStatus: "unavailable" }),
+        onListBranches: async () => ({ recent: [], local: [], remote: [], pullRequests: [], pullRequestsStatus: "unavailable" as const }),
         onCheckoutBranch: async () => {},
         onCreateBranch: async () => {},
         onGenerateCommitMessage: async () => ({ subject: "", body: "" }),
+        onPreviewMergeBranch: unusedAsyncHandler,
+        onMergeBranch: unusedAsyncHandler,
+        onInitializeGit: unusedAsyncHandler,
+        onGetGitHubPublishInfo: unusedAsyncHandler,
+        onCheckGitHubRepoAvailability: unusedAsyncHandler,
+        onSetupGitHub: unusedAsyncHandler,
         onCommit: async () => null,
         onSyncWithRemote: async () => null,
         onDiffRenderModeChange: () => {},
         onWrapLinesChange: () => {},
-        onClose: () => {},
       })
     ))
 
@@ -270,15 +292,20 @@ describe("RightSidebar", () => {
         onCopyFilePath: () => {},
         onCopyRelativePath: () => {},
         onLoadPatch: async () => "",
-        onListBranches: async () => ({ recent: [], local: [], remote: [], pullRequests: [], pullRequestsStatus: "unavailable" }),
+        onListBranches: async () => ({ recent: [], local: [], remote: [], pullRequests: [], pullRequestsStatus: "unavailable" as const }),
         onCheckoutBranch: async () => {},
         onCreateBranch: async () => {},
         onGenerateCommitMessage: async () => ({ subject: "", body: "" }),
+        onPreviewMergeBranch: unusedAsyncHandler,
+        onMergeBranch: unusedAsyncHandler,
+        onInitializeGit: unusedAsyncHandler,
+        onGetGitHubPublishInfo: unusedAsyncHandler,
+        onCheckGitHubRepoAvailability: unusedAsyncHandler,
+        onSetupGitHub: unusedAsyncHandler,
         onCommit: async () => null,
         onSyncWithRemote: async () => null,
         onDiffRenderModeChange: () => {},
         onWrapLinesChange: () => {},
-        onClose: () => {},
       })
     ))
 

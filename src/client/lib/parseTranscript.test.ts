@@ -3,7 +3,9 @@ import { processTranscriptMessages } from "./parseTranscript"
 import { getLatestToolIds } from "../app/derived"
 import type { TranscriptEntry } from "../../shared/types"
 
-function entry(partial: Omit<TranscriptEntry, "_id" | "createdAt">): TranscriptEntry {
+type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never
+
+function entry(partial: DistributiveOmit<TranscriptEntry, "_id" | "createdAt">): TranscriptEntry {
   return {
     _id: crypto.randomUUID(),
     createdAt: Date.now(),
