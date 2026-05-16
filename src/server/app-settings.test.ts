@@ -526,50 +526,51 @@ describe("claudeDriver settings", () => {
     const filePath = await createTempFilePath()
     const mgr = new AppSettingsManager(filePath)
     await mgr.initialize()
-    await mgr.setClaudeDriver({
-      preference: "pty",
-      lifecycle: { idleTimeoutMs: 900_000, maxConcurrent: 2 },
-    })
-    expect(mgr.getSnapshot().claudeDriver).toEqual({
-      preference: "pty",
-      lifecycle: { idleTimeoutMs: 900_000, maxConcurrent: 2 },
-    })
-    mgr.dispose()
+    try {
+      await mgr.setClaudeDriver({
+        preference: "pty",
+        lifecycle: { idleTimeoutMs: 900_000, maxConcurrent: 2 },
+      })
+      expect(mgr.getSnapshot().claudeDriver).toEqual({
+        preference: "pty",
+        lifecycle: { idleTimeoutMs: 900_000, maxConcurrent: 2 },
+      })
+    } finally {
+      mgr.dispose()
+    }
 
     const reloaded = new AppSettingsManager(filePath)
     await reloaded.initialize()
-    expect(reloaded.getSnapshot().claudeDriver.preference).toBe("pty")
-    expect(reloaded.getSnapshot().claudeDriver.lifecycle.idleTimeoutMs).toBe(900_000)
-    expect(reloaded.getSnapshot().claudeDriver.lifecycle.maxConcurrent).toBe(2)
-    reloaded.dispose()
+    try {
+      expect(reloaded.getSnapshot().claudeDriver.preference).toBe("pty")
+      expect(reloaded.getSnapshot().claudeDriver.lifecycle.idleTimeoutMs).toBe(900_000)
+      expect(reloaded.getSnapshot().claudeDriver.lifecycle.maxConcurrent).toBe(2)
+    } finally {
+      reloaded.dispose()
+    }
   })
 
+  // Validation-only tests skip initialize()/dispose() — setClaudeDriver throws
+  // synchronously before reaching writePatch, so no watcher or file I/O is
+  // needed. Avoids leaking inotify handles on Linux CI when rm -rf runs in
+  // afterEach.
   test("setClaudeDriver rejects out-of-range idleTimeoutMs", async () => {
-    const filePath = await createTempFilePath()
-    const mgr = new AppSettingsManager(filePath)
-    await mgr.initialize()
+    const mgr = new AppSettingsManager(path.join(tmpdir(), "kanna-settings-unused.json"))
     await expect(mgr.setClaudeDriver({ lifecycle: { idleTimeoutMs: 100 } })).rejects.toThrow(/idleTimeoutMs/)
     await expect(mgr.setClaudeDriver({ lifecycle: { idleTimeoutMs: 999_999_999 } })).rejects.toThrow(/idleTimeoutMs/)
-    mgr.dispose()
   })
 
   test("setClaudeDriver rejects out-of-range maxConcurrent", async () => {
-    const filePath = await createTempFilePath()
-    const mgr = new AppSettingsManager(filePath)
-    await mgr.initialize()
+    const mgr = new AppSettingsManager(path.join(tmpdir(), "kanna-settings-unused.json"))
     await expect(mgr.setClaudeDriver({ lifecycle: { maxConcurrent: 0 } })).rejects.toThrow(/maxConcurrent/)
     await expect(mgr.setClaudeDriver({ lifecycle: { maxConcurrent: 99 } })).rejects.toThrow(/maxConcurrent/)
-    mgr.dispose()
   })
 
   test("setClaudeDriver rejects invalid preference", async () => {
-    const filePath = await createTempFilePath()
-    const mgr = new AppSettingsManager(filePath)
-    await mgr.initialize()
+    const mgr = new AppSettingsManager(path.join(tmpdir(), "kanna-settings-unused.json"))
     await expect(
       mgr.setClaudeDriver({ preference: "garbage" as unknown as "sdk" }),
     ).rejects.toThrow(/preference/)
-    mgr.dispose()
   })
 
   test("normalizer clamps and warns on bad values in file", async () => {
