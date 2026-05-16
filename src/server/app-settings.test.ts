@@ -7,11 +7,21 @@ import { AppSettingsManager, readAppSettingsSnapshot } from "./app-settings"
 import type { AppSettingsSnapshot, SubagentInput } from "../shared/types"
 
 let tempDirs: string[] = []
+let activeManagers: AppSettingsManager[] = []
 
 afterEach(async () => {
+  for (const mgr of activeManagers) {
+    mgr.dispose()
+  }
+  activeManagers = []
   await Promise.all(tempDirs.map((dir) => rm(dir, { recursive: true, force: true })))
   tempDirs = []
 })
+
+function trackManager(manager: AppSettingsManager): AppSettingsManager {
+  activeManagers.push(manager)
+  return manager
+}
 
 async function createTempFilePath() {
   const dir = await mkdtemp(path.join(tmpdir(), "kanna-settings-"))
@@ -92,7 +102,7 @@ describe("readAppSettingsSnapshot", () => {
 describe("AppSettingsManager", () => {
   test("creates a settings file with analytics enabled and a stable anonymous id", async () => {
     const filePath = await createTempFilePath()
-    const manager = new AppSettingsManager(filePath)
+    const manager = trackManager(new AppSettingsManager(filePath))
 
     await manager.initialize()
 
@@ -109,7 +119,7 @@ describe("AppSettingsManager", () => {
 
   test("writes analyticsEnabled without replacing the stored user id", async () => {
     const filePath = await createTempFilePath()
-    const manager = new AppSettingsManager(filePath)
+    const manager = trackManager(new AppSettingsManager(filePath))
 
     await manager.initialize()
     const initialPayload = JSON.parse(await readFile(filePath, "utf8")) as {
@@ -132,7 +142,7 @@ describe("AppSettingsManager", () => {
 
   test("patches expanded settings without replacing the stored user id", async () => {
     const filePath = await createTempFilePath()
-    const manager = new AppSettingsManager(filePath)
+    const manager = trackManager(new AppSettingsManager(filePath))
 
     await manager.initialize()
     const initialPayload = JSON.parse(await readFile(filePath, "utf8")) as {
@@ -208,7 +218,7 @@ describe("cloudflareTunnel normalization", () => {
 
   test("setCloudflareTunnel persists patch to disk and round-trips through readAppSettingsSnapshot", async () => {
     const filePath = await writeSettingsFile({ analyticsEnabled: true })
-    const manager = new AppSettingsManager(filePath)
+    const manager = trackManager(new AppSettingsManager(filePath))
     await manager.initialize()
     await manager.setCloudflareTunnel({ enabled: true, mode: "auto-expose" })
     const reloaded = await readAppSettingsSnapshot(filePath)
@@ -224,7 +234,7 @@ describe("cloudflareTunnel normalization", () => {
       analyticsEnabled: true,
       cloudflareTunnel: { enabled: true, cloudflaredPath: "/opt/cloudflared", mode: "auto-expose" },
     })
-    const manager = new AppSettingsManager(filePath)
+    const manager = trackManager(new AppSettingsManager(filePath))
     await manager.initialize()
     await manager.write({ analyticsEnabled: false })
     const reloaded = await readAppSettingsSnapshot(filePath)
@@ -265,7 +275,7 @@ describe("uploads normalization", () => {
 
   test("setUploads persists patch and round-trips through readAppSettingsSnapshot", async () => {
     const filePath = await writeSettingsFile({ analyticsEnabled: true })
-    const manager = new AppSettingsManager(filePath)
+    const manager = trackManager(new AppSettingsManager(filePath))
     await manager.initialize()
     await manager.setUploads({ maxFileSizeMb: 500 })
     const reloaded = await readAppSettingsSnapshot(filePath)
@@ -275,7 +285,7 @@ describe("uploads normalization", () => {
 
   test("setUploads throws on invalid value", async () => {
     const filePath = await createTempFilePath()
-    const manager = new AppSettingsManager(filePath)
+    const manager = trackManager(new AppSettingsManager(filePath))
     await manager.initialize()
     let lowError: unknown
     try { await manager.setUploads({ maxFileSizeMb: 0 }) } catch (error) { lowError = error }
@@ -291,7 +301,7 @@ describe("AppSettingsManager.setClaudeAuth", () => {
   test("persists tokens and round-trips", async () => {
     const dir = await mkdtemp(path.join(tmpdir(), "kanna-settings-"))
     const filePath = path.join(dir, "settings.json")
-    const mgr = new AppSettingsManager(filePath)
+    const mgr = trackManager(new AppSettingsManager(filePath))
     await mgr.initialize()
 
     const snapshot = await mgr.setClaudeAuth({
@@ -313,7 +323,7 @@ describe("AppSettingsManager.setClaudeAuth", () => {
   test("mutateTokenStatus updates one field without disturbing others", async () => {
     const dir = await mkdtemp(path.join(tmpdir(), "kanna-settings-"))
     const filePath = path.join(dir, "settings.json")
-    const mgr = new AppSettingsManager(filePath)
+    const mgr = trackManager(new AppSettingsManager(filePath))
     await mgr.initialize()
 
     await mgr.setClaudeAuth({
@@ -335,7 +345,7 @@ describe("AppSettingsManager.setClaudeAuth", () => {
   test("reload race with partial JSON does not clobber in-memory tokens", async () => {
     const dir = await mkdtemp(path.join(tmpdir(), "kanna-settings-"))
     const filePath = path.join(dir, "settings.json")
-    const mgr = new AppSettingsManager(filePath)
+    const mgr = trackManager(new AppSettingsManager(filePath))
     await mgr.initialize()
 
     await mgr.setClaudeAuth({
@@ -370,7 +380,7 @@ describe("AppSettingsManager.setClaudeAuth", () => {
   test("writes are atomic — no observer ever sees an empty/partial file", async () => {
     const dir = await mkdtemp(path.join(tmpdir(), "kanna-settings-"))
     const filePath = path.join(dir, "settings.json")
-    const mgr = new AppSettingsManager(filePath)
+    const mgr = trackManager(new AppSettingsManager(filePath))
     await mgr.initialize()
 
     // Seed initial tokens.
@@ -424,7 +434,7 @@ describe("subagent CRUD", () => {
 
   test("create returns the new subagent", async () => {
     const filePath = await createTempFilePath()
-    const mgr = new AppSettingsManager(filePath)
+    const mgr = trackManager(new AppSettingsManager(filePath))
     await mgr.initialize()
 
     const result = await mgr.createSubagent(baseInput())
@@ -439,7 +449,7 @@ describe("subagent CRUD", () => {
 
   test("create rejects duplicate names case-insensitively", async () => {
     const filePath = await createTempFilePath()
-    const mgr = new AppSettingsManager(filePath)
+    const mgr = trackManager(new AppSettingsManager(filePath))
     await mgr.initialize()
 
     await mgr.createSubagent(baseInput({ name: "alpha" }))
@@ -451,7 +461,7 @@ describe("subagent CRUD", () => {
 
   test("create rejects reserved and invalid names", async () => {
     const filePath = await createTempFilePath()
-    const mgr = new AppSettingsManager(filePath)
+    const mgr = trackManager(new AppSettingsManager(filePath))
     await mgr.initialize()
 
     expect("code" in await mgr.createSubagent(baseInput({ name: "agent" }))).toBe(true)
@@ -464,7 +474,7 @@ describe("subagent CRUD", () => {
 
   test("update renames and bumps updatedAt", async () => {
     const filePath = await createTempFilePath()
-    const mgr = new AppSettingsManager(filePath)
+    const mgr = trackManager(new AppSettingsManager(filePath))
     await mgr.initialize()
     const created = await mgr.createSubagent(baseInput({ name: "old" }))
     if (!("id" in created)) throw new Error("setup failed")
@@ -480,7 +490,7 @@ describe("subagent CRUD", () => {
 
   test("update non-existent id returns NOT_FOUND", async () => {
     const filePath = await createTempFilePath()
-    const mgr = new AppSettingsManager(filePath)
+    const mgr = trackManager(new AppSettingsManager(filePath))
     await mgr.initialize()
 
     await expect(mgr.updateSubagent("nope", { name: "x" })).resolves.toMatchObject({ code: "NOT_FOUND" })
@@ -489,7 +499,7 @@ describe("subagent CRUD", () => {
 
   test("delete is idempotent on missing id", async () => {
     const filePath = await createTempFilePath()
-    const mgr = new AppSettingsManager(filePath)
+    const mgr = trackManager(new AppSettingsManager(filePath))
     await mgr.initialize()
 
     await expect(mgr.deleteSubagent("nope")).resolves.toBeUndefined()
@@ -498,13 +508,13 @@ describe("subagent CRUD", () => {
 
   test("CRUD round-trip survives reload", async () => {
     const filePath = await createTempFilePath()
-    const mgr = new AppSettingsManager(filePath)
+    const mgr = trackManager(new AppSettingsManager(filePath))
     await mgr.initialize()
     const created = await mgr.createSubagent(baseInput({ name: "x" }))
     if (!("id" in created)) throw new Error("setup failed")
     mgr.dispose()
 
-    const reloaded = new AppSettingsManager(filePath)
+    const reloaded = trackManager(new AppSettingsManager(filePath))
     await reloaded.initialize()
 
     expect(reloaded.getSnapshot().subagents).toHaveLength(1)
@@ -524,7 +534,7 @@ describe("claudeDriver settings", () => {
 
   test("setClaudeDriver persists preference + lifecycle", async () => {
     const filePath = await createTempFilePath()
-    const mgr = new AppSettingsManager(filePath)
+    const mgr = trackManager(new AppSettingsManager(filePath))
     await mgr.initialize()
     try {
       await mgr.setClaudeDriver({
@@ -539,7 +549,7 @@ describe("claudeDriver settings", () => {
       mgr.dispose()
     }
 
-    const reloaded = new AppSettingsManager(filePath)
+    const reloaded = trackManager(new AppSettingsManager(filePath))
     await reloaded.initialize()
     try {
       expect(reloaded.getSnapshot().claudeDriver.preference).toBe("pty")
@@ -555,19 +565,19 @@ describe("claudeDriver settings", () => {
   // needed. Avoids leaking inotify handles on Linux CI when rm -rf runs in
   // afterEach.
   test("setClaudeDriver rejects out-of-range idleTimeoutMs", async () => {
-    const mgr = new AppSettingsManager(path.join(tmpdir(), "kanna-settings-unused.json"))
+    const mgr = trackManager(new AppSettingsManager(path.join(tmpdir(), "kanna-settings-unused.json")))
     await expect(mgr.setClaudeDriver({ lifecycle: { idleTimeoutMs: 100 } })).rejects.toThrow(/idleTimeoutMs/)
     await expect(mgr.setClaudeDriver({ lifecycle: { idleTimeoutMs: 999_999_999 } })).rejects.toThrow(/idleTimeoutMs/)
   })
 
   test("setClaudeDriver rejects out-of-range maxConcurrent", async () => {
-    const mgr = new AppSettingsManager(path.join(tmpdir(), "kanna-settings-unused.json"))
+    const mgr = trackManager(new AppSettingsManager(path.join(tmpdir(), "kanna-settings-unused.json")))
     await expect(mgr.setClaudeDriver({ lifecycle: { maxConcurrent: 0 } })).rejects.toThrow(/maxConcurrent/)
     await expect(mgr.setClaudeDriver({ lifecycle: { maxConcurrent: 99 } })).rejects.toThrow(/maxConcurrent/)
   })
 
   test("setClaudeDriver rejects invalid preference", async () => {
-    const mgr = new AppSettingsManager(path.join(tmpdir(), "kanna-settings-unused.json"))
+    const mgr = trackManager(new AppSettingsManager(path.join(tmpdir(), "kanna-settings-unused.json")))
     await expect(
       mgr.setClaudeDriver({ preference: "garbage" as unknown as "sdk" }),
     ).rejects.toThrow(/preference/)
