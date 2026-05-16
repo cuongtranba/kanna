@@ -336,7 +336,12 @@ function createComposerStateForNewChat(args: {
   providerDefaults: ChatProviderPreferences
   sourceState?: ComposerState | null
   legacyComposerState?: ComposerState | null
+  providerHint?: AgentProvider | null
 }): ComposerState {
+  if (args.providerHint) {
+    return composerFromProviderDefaults(args.providerHint, args.providerDefaults)
+  }
+
   if (args.defaultProvider === "last_used") {
     if (args.sourceState) {
       return cloneComposerState(args.sourceState)
@@ -395,7 +400,10 @@ interface ChatPreferencesState {
   ) => void
   setProviderDefaultPlanMode: (provider: AgentProvider, planMode: boolean) => void
   getComposerState: (chatId: string) => ComposerState
-  initializeComposerForChat: (chatId: string, options?: { sourceState?: ComposerState | null }) => void
+  initializeComposerForChat: (
+    chatId: string,
+    options?: { sourceState?: ComposerState | null; providerHint?: AgentProvider | null }
+  ) => void
   setComposerState: (chatId: string, composerState: ComposerState) => void
   setChatComposerProvider: (chatId: string, provider: AgentProvider) => void
   setChatComposerModel: (chatId: string, model: string) => void
@@ -505,6 +513,7 @@ export const useChatPreferencesStore = create<ChatPreferencesState>()(
             providerDefaults: state.providerDefaults,
             sourceState: options?.sourceState,
             legacyComposerState: state.legacyComposerState,
+            providerHint: options?.providerHint,
           })
 
           logChatPreferences("initializeComposerForChat", { chatId, composerState })
