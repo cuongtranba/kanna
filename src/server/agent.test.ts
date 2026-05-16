@@ -11,6 +11,7 @@ import {
   normalizeClaudeStreamMessage,
   normalizeClaudeUsageSnapshot,
   parseConfiguredContextWindowFromModelId,
+  resolveFinalTurnUsage,
 } from "./agent"
 import { EventStore } from "./event-store"
 import { createToolCallbackService } from "./tool-callback"
@@ -119,6 +120,55 @@ describe("normalizeClaudeStreamMessage", () => {
     test("returns undefined without [1m] suffix so SDK-reported value wins", () => {
       expect(parseConfiguredContextWindowFromModelId("claude-opus-4-6")).toBeUndefined()
       expect(parseConfiguredContextWindowFromModelId("claude-sonnet-4-7")).toBeUndefined()
+    })
+  })
+
+  describe("resolveFinalTurnUsage", () => {
+    test("keeps usedTokens at the live per-request size and routes cumulative to totalProcessedTokens", () => {
+      const live = normalizeClaudeUsageSnapshot({
+        input_tokens: 4,
+        cache_read_input_tokens: 150_000,
+        output_tokens: 800,
+      })
+      const cumulative = normalizeClaudeUsageSnapshot({
+        input_tokens: 4,
+        cache_read_input_tokens: 4_596_128,
+        output_tokens: 28_107,
+      })
+      const final = resolveFinalTurnUsage(live, cumulative, 1_000_000)
+      expect(final?.usedTokens).toBe(150_804)
+      expect(final?.totalProcessedTokens).toBe(4_624_239)
+      expect(final?.maxTokens).toBe(1_000_000)
+    })
+
+    test("returns null when no per-assistant snapshot exists so cumulative result.usage never leaks into usedTokens", () => {
+      // Compact/system turns carry no `assistant` usage; SDK `result.usage` is
+      // cumulative (sums cache reads per tool round-trip). Emitting it as
+      // usedTokens previously inflated the proactive-compact input to millions
+      // and forced a second, spurious compact.
+      const cumulative = normalizeClaudeUsageSnapshot({
+        input_tokens: 4,
+        cache_read_input_tokens: 4_596_128,
+        output_tokens: 28_107,
+      })
+      expect(cumulative?.usedTokens).toBeGreaterThan(1_000_000)
+      expect(resolveFinalTurnUsage(null, cumulative, 1_000_000)).toBeNull()
+    })
+
+    test("returns null when neither snapshot is available", () => {
+      expect(resolveFinalTurnUsage(null, null, 1_000_000)).toBeNull()
+    })
+
+    test("omits totalProcessedTokens when cumulative does not exceed the live snapshot", () => {
+      const live = normalizeClaudeUsageSnapshot({
+        input_tokens: 10,
+        cache_read_input_tokens: 5_000,
+        output_tokens: 200,
+      })
+      const final = resolveFinalTurnUsage(live, live, 200_000)
+      expect(final?.usedTokens).toBe(5_210)
+      expect(final?.totalProcessedTokens).toBeUndefined()
+      expect(final?.maxTokens).toBe(200_000)
     })
   })
 })
