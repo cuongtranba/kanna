@@ -119,7 +119,13 @@ async function listGitFiles(localPath: string): Promise<string[] | null> {
 
 async function runGit(cwd: string, args: string[]): Promise<string[] | null> {
   try {
-    const proc = spawn(["git", ...args], { cwd, stdout: "pipe", stderr: "pipe" })
+    const proc = spawn(["git", ...args], {
+      cwd,
+      stdout: "pipe",
+      stderr: "pipe",
+      stdin: "ignore",
+      env: { ...process.env, GIT_TERMINAL_PROMPT: "0" },
+    })
     const stdout = await new Response(proc.stdout).text()
     const exitCode = await proc.exited
     if (exitCode !== 0) return null

@@ -38,7 +38,9 @@ jobs:
 
       - run: bun run build
 
-      - run: bun test
+      - run: bun test --timeout 30000
+        env:
+          GIT_TERMINAL_PROMPT: "0"
 
       - uses: actions/setup-node@v4
         with:
