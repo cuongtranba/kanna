@@ -47,6 +47,13 @@ export {
   shouldAutoFollowTranscriptResize,
 } from "./utils"
 
+// `min-h-0` is load-bearing: this div is a flex item, and a flex item's
+// automatic min-height is its content size. Without it, a long transcript
+// expands this root past 100dvh, cascading down to the LegendList scroll
+// container (clientHeight === scrollHeight) so it can no longer scroll —
+// most visible on phones. Do not drop min-h-0.
+export const CHAT_PAGE_LAYOUT_ROOT_CLASS = "flex-1 flex flex-col min-h-0 min-w-0 relative"
+
 const TERMINAL_TOGGLE_DURATION_STYLE: CSSProperties = {
   "--terminal-toggle-duration": `${TERMINAL_TOGGLE_ANIMATION_DURATION_MS}ms`,
 } as CSSProperties
@@ -1105,7 +1112,7 @@ export function ChatPage() {
   ])
 
   return (
-    <div ref={layoutRootRef} className="flex-1 flex flex-col min-w-0 relative">
+    <div ref={layoutRootRef} className={CHAT_PAGE_LAYOUT_ROOT_CLASS}>
       <BackgroundTasksDialog
         open={bgTasksOpen}
         onOpenChange={(open) => {

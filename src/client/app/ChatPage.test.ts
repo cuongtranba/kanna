@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import {
+  CHAT_PAGE_LAYOUT_ROOT_CLASS,
   getIgnoreFolderEntryFromDiffPath,
   hasFileDragTypes,
   shouldUseMobileRightSidebarOverlay,
@@ -41,6 +42,25 @@ describe("shouldAutoFollowTranscriptResize", () => {
 
   test("stops forcing auto-follow after the selection window expires", () => {
     expect(shouldAutoFollowTranscriptResize(true, 2_000, 2_000)).toBe(false)
+  })
+})
+
+describe("CHAT_PAGE_LAYOUT_ROOT_CLASS", () => {
+  const classes = CHAT_PAGE_LAYOUT_ROOT_CLASS.split(/\s+/)
+
+  // Regression: a flex item's automatic min-height is its content size, so
+  // without min-h-0 a long transcript expands the layout root past 100dvh.
+  // That makes the LegendList scroll container clientHeight === scrollHeight,
+  // killing scroll (most visible on mobile). Keep min-h-0.
+  test("constrains vertical size so the transcript can scroll", () => {
+    expect(classes).toContain("min-h-0")
+  })
+
+  test("keeps the flex column shell intact", () => {
+    expect(classes).toContain("flex")
+    expect(classes).toContain("flex-col")
+    expect(classes).toContain("flex-1")
+    expect(classes).toContain("min-w-0")
   })
 })
 
