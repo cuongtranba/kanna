@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.55.3](https://github.com/cuongtranba/kanna/compare/v0.55.2...v0.55.3) (2026-05-16)
+
+
+### Bug Fixes
+
+* **server:** dispose fs.watch managers before fallible shutdown awaits ([#146](https://github.com/cuongtranba/kanna/issues/146)) ([9460481](https://github.com/cuongtranba/kanna/commit/9460481145898b469605d4fd687b05dc6f242121))
+
 ## [0.55.2](https://github.com/cuongtranba/kanna/compare/v0.55.1...v0.55.2) (2026-05-16)
 
 
