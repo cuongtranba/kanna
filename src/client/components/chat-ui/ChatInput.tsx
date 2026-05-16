@@ -30,7 +30,8 @@ import { CHAT_INPUT_ATTRIBUTE, focusNextChatInput } from "../../app/chatFocusPol
 import { ChatPreferenceControls } from "./ChatPreferenceControls"
 import { ContextWindowMeter } from "./ContextWindowMeter"
 import { AttachmentFileCard, AttachmentImageCard } from "../messages/AttachmentCard"
-import { AttachmentPreviewModal } from "../messages/AttachmentPreviewModal"
+import { FilePreviewSheet } from "../messages/file-preview/FilePreviewSheet"
+import { toPreviewSourceFromAttachment } from "../messages/file-preview/types"
 import { classifyAttachmentPreview } from "../messages/attachmentPreview"
 import { overrideContextWindowMaxTokens, type ContextWindowSnapshot } from "../../lib/contextWindow"
 import { uploadFile, UploadAbortedError } from "../../lib/uploadFile"
@@ -1103,7 +1104,11 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput({
         ) : null}
       </div>
 
-      <AttachmentPreviewModal attachment={selectedAttachment} onOpenChange={(open) => !open && setSelectedAttachmentId(null)} />
+      <FilePreviewSheet
+        source={selectedAttachment ? toPreviewSourceFromAttachment(selectedAttachment, "user_attachment") : null}
+        open={selectedAttachment !== null}
+        onOpenChange={(open) => !open && setSelectedAttachmentId(null)}
+      />
     </div>
   )
 })

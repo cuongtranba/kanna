@@ -19,7 +19,8 @@ import { cn } from "../../lib/utils"
 import { useDiffCommitStore } from "../../stores/diffCommitStore"
 import { useRightSidebarStore } from "../../stores/rightSidebarStore"
 import { AttachmentFileCard, AttachmentImageCard } from "../messages/AttachmentCard"
-import { AttachmentPreviewModal } from "../messages/AttachmentPreviewModal"
+import { FilePreviewSheet } from "../messages/file-preview/FilePreviewSheet"
+import { toPreviewSourceFromAttachment } from "../messages/file-preview/types"
 import { classifyAttachmentPreview } from "../messages/attachmentPreview"
 import { Button } from "../ui/button"
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger } from "../ui/context-menu"
@@ -1341,8 +1342,13 @@ function DiffFileCard({
               )}
             </div>
           ) : null}
-          <AttachmentPreviewModal
-            attachment={previewAttachment && selectedAttachmentId === previewAttachment.id ? previewAttachment : null}
+          <FilePreviewSheet
+            source={
+              previewAttachment && selectedAttachmentId === previewAttachment.id
+                ? toPreviewSourceFromAttachment(previewAttachment, "user_attachment")
+                : null
+            }
+            open={previewAttachment !== null && selectedAttachmentId === previewAttachment.id}
             onOpenChange={(open) => !open && setSelectedAttachmentId(null)}
           />
         </div>
