@@ -1,8 +1,7 @@
-import { useMemo, useState } from "react"
+import { memo, useMemo, useState } from "react"
 import type { ChatAttachment } from "../../../shared/types"
 import Markdown from "react-markdown"
-import remarkGfm from "remark-gfm"
-import { createMarkdownComponents } from "./shared"
+import { defaultMarkdownComponents, defaultRemarkPlugins } from "./shared"
 import { classifyAttachmentPreview } from "./attachmentPreview"
 import { AttachmentFileCard, AttachmentImageCard } from "./AttachmentCard"
 import { FilePreviewSheet } from "./file-preview/FilePreviewSheet"
@@ -29,7 +28,7 @@ function parseSystemMessage(content: string) {
   }
 }
 
-export function UserMessage({ content, attachments = [], steered = false, autoContinue }: Props) {
+export const UserMessage = memo(function UserMessage({ content, attachments = [], steered = false, autoContinue }: Props) {
   const [selectedAttachmentId, setSelectedAttachmentId] = useState<string | null>(null)
   const renderOptions = useTranscriptRenderOptions()
   const parsedContent = useMemo(() => parseSystemMessage(content), [content])
@@ -98,7 +97,7 @@ export function UserMessage({ content, attachments = [], steered = false, autoCo
               />
             ) : null}
             <div className="min-w-0 flex-1 rounded-[20px] border border-border bg-muted px-3.5 py-1.5 text-primary prose prose-sm prose-invert [&_p]:whitespace-pre-line">
-              <Markdown remarkPlugins={[remarkGfm]} components={createMarkdownComponents()}>{parsedContent.body}</Markdown>
+              <Markdown remarkPlugins={defaultRemarkPlugins} components={defaultMarkdownComponents}>{parsedContent.body}</Markdown>
             </div>
           </div>
         ) : null}
@@ -113,4 +112,4 @@ export function UserMessage({ content, attachments = [], steered = false, autoCo
       />
     </>
   )
-}
+})
