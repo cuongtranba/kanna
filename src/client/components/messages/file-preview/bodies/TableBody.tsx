@@ -15,8 +15,17 @@ type State =
 
 const cache = new Map<string, State>()
 
+export function __clearTableBodyCacheForTests() {
+  cache.clear()
+}
+
+function cacheKeyFor(source: PreviewSource): string {
+  return `${source.id}|${source.contentUrl}|${source.size ?? 0}|${source.mimeType}`
+}
+
 export function TableBody({ source }: { source: PreviewSource }) {
-  const cached = cache.get(source.id)
+  const cacheKey = cacheKeyFor(source)
+  const cached = cache.get(cacheKey)
   const [state, setState] = useState<State>(cached ?? { status: "loading" })
 
   useEffect(() => {
@@ -27,17 +36,17 @@ export function TableBody({ source }: { source: PreviewSource }) {
       .then((res) => {
         if (cancelled) return
         const next: State = { status: "ready", table: parseDelimitedPreview(res.content, delimiter), truncated: res.truncated }
-        cache.set(source.id, next)
+        cache.set(cacheKey, next)
         setState(next)
       })
       .catch((err: unknown) => {
         if (cancelled) return
         const next: State = { status: "error", message: err instanceof Error ? err.message : "Unable to load preview." }
-        cache.set(source.id, next)
+        cache.set(cacheKey, next)
         setState(next)
       })
     return () => { cancelled = true }
-  }, [cached, source.contentUrl, source.id, source.mimeType])
+  }, [cached, cacheKey, source.contentUrl, source.mimeType])
 
   if (state.status === "loading") {
     return <div className="p-4 text-sm text-muted-foreground"><table className="sr-only" /> Loading…</div>

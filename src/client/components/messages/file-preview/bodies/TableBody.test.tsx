@@ -1,10 +1,11 @@
 import "../../../../lib/testing/setupHappyDom"
 import { describe, expect, test, mock, beforeEach, afterEach } from "bun:test"
 import { renderToStaticMarkup } from "react-dom/server"
-import { TableBody } from "./TableBody"
+import { TableBody, __clearTableBodyCacheForTests } from "./TableBody"
 import type { PreviewSource } from "../types"
 
 beforeEach(() => {
+  __clearTableBodyCacheForTests()
   ;(globalThis as { fetch?: unknown }).fetch = mock(async () => new Response("a,b\n1,2"))
 })
 afterEach(() => {

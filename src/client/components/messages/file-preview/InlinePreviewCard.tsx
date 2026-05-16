@@ -101,7 +101,7 @@ const SnippetCard = function SnippetCardImpl({
   const result = useViewportFetch<string>({
     ref,
     enabled: true,
-    cacheKey: `snippet:${source.id}`,
+    cacheKey: `snippet:${source.id}|${source.contentUrl}|${source.size ?? 0}`,
     fetcher,
   })
   const snippet = result.state === "ready" && typeof result.data === "string" ? result.data : ""
