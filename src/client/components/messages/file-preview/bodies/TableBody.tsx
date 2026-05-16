@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import {
   TABLE_PREVIEW_COLUMN_LIMIT,
   TEXT_PREVIEW_LIMIT_BYTES,
@@ -28,6 +28,9 @@ export function TableBody({ source }: { source: PreviewSource }) {
   const cached = cache.get(cacheKey)
   const [state, setState] = useState<State>(cached ?? { status: "loading" })
   const [lastKey, setLastKey] = useState(cacheKey)
+  const currentKeyRef = useRef(cacheKey)
+  // eslint-disable-next-line react-hooks/refs -- intentional render-time sync write so async fetch completion (which can fire between render and commit) sees the latest key and refuses to overwrite state for a stale key.
+  currentKeyRef.current = cacheKey
 
   if (lastKey !== cacheKey) {
     setLastKey(cacheKey)
@@ -38,17 +41,18 @@ export function TableBody({ source }: { source: PreviewSource }) {
     if (cached && cached.status !== "loading") return
     const delimiter = source.mimeType === "text/tab-separated-values" ? "\t" : ","
     let cancelled = false
+    const myKey = cacheKey
     fetchTextPreview(source.contentUrl, TEXT_PREVIEW_LIMIT_BYTES)
       .then((res) => {
-        if (cancelled) return
+        if (cancelled || currentKeyRef.current !== myKey) return
         const next: State = { status: "ready", table: parseDelimitedPreview(res.content, delimiter), truncated: res.truncated }
-        cache.set(cacheKey, next)
+        cache.set(myKey, next)
         setState(next)
       })
       .catch((err: unknown) => {
-        if (cancelled) return
+        if (cancelled || currentKeyRef.current !== myKey) return
         const next: State = { status: "error", message: err instanceof Error ? err.message : "Unable to load preview." }
-        cache.set(cacheKey, next)
+        cache.set(myKey, next)
         setState(next)
       })
     return () => { cancelled = true }

@@ -61,4 +61,30 @@ describe("useViewportFetch", () => {
     }
     await result.cleanup()
   })
+
+  test("resets state to idle when cacheKey switches to an uncached key", async () => {
+    function KeySwitchingHarness({ cacheKey, probe }: { cacheKey: string; probe: (s: ViewportFetchResult<string>) => void }) {
+      const ref = useRef<HTMLDivElement>(null)
+      const state = useViewportFetch({
+        ref,
+        enabled: true,
+        fetcher: async () => `payload-${cacheKey}`,
+        cacheKey,
+      })
+      probe(state)
+      return <div ref={ref} />
+    }
+
+    const states: ViewportFetchResult<string>[] = []
+    const probe = mock((s: ViewportFetchResult<string>) => states.push(s))
+    const first = await renderForLoopCheck(<KeySwitchingHarness cacheKey="k1" probe={probe} />)
+    expect(first.loopWarnings).toEqual([])
+    await first.cleanup()
+
+    const second = await renderForLoopCheck(<KeySwitchingHarness cacheKey="k2" probe={probe} />)
+    expect(second.loopWarnings).toEqual([])
+    expect(states[states.length - 1]?.data).toBe(null)
+    expect(states[states.length - 1]?.state).toBe("idle")
+    await second.cleanup()
+  })
 })

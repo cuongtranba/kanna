@@ -23,35 +23,30 @@ export function CodeBody({ source }: { source: PreviewSource }) {
   const highlightKey = shouldHighlight
     ? `${source.id}|${source.contentUrl}|${source.size ?? 0}|${state.content.length}`
     : null
-  const [highlighted, setHighlighted] = useState<string | null>(null)
-  const [lastHighlightKey, setLastHighlightKey] = useState<string | null>(highlightKey)
-
-  if (lastHighlightKey !== highlightKey) {
-    setLastHighlightKey(highlightKey)
-    setHighlighted(null)
-  }
+  const [highlighted, setHighlighted] = useState<{ key: string; html: string } | null>(null)
 
   useEffect(() => {
-    if (!shouldHighlight || state.status !== "ready") return
+    if (!shouldHighlight || state.status !== "ready" || highlightKey === null) return
     let cancelled = false
+    const myKey = highlightKey
     import("shiki")
       .then(async (mod) => {
         if (cancelled) return
         const html = await mod.codeToHtml(state.content, { lang: extToLang(source.fileName), theme: "github-dark" })
-        if (!cancelled) setHighlighted(html)
+        if (!cancelled) setHighlighted({ key: myKey, html })
       })
       .catch(() => {
         if (typeof console !== "undefined") console.warn("[file-preview] Shiki unavailable; falling back to plain text")
       })
     return () => { cancelled = true }
-  }, [shouldHighlight, state, source.fileName])
+  }, [shouldHighlight, highlightKey, state, source.fileName])
 
   if (state.status === "loading") return <div className="p-4 text-sm text-muted-foreground"><pre className="sr-only" /> Loading…</div>
   if (state.status === "error") return <div className="p-4 text-sm text-destructive"><pre className="sr-only" /> {state.message}</div>
 
-  if (highlighted) {
+  if (highlighted && highlighted.key === highlightKey) {
     return (
-      <div className="overflow-auto p-3 text-xs" dangerouslySetInnerHTML={{ __html: highlighted }} />
+      <div className="overflow-auto p-3 text-xs" dangerouslySetInnerHTML={{ __html: highlighted.html }} />
     )
   }
   return (

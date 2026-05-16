@@ -26,6 +26,9 @@ export function useViewportFetch<T>(opts: Options<T>): ViewportFetchResult<T> {
   const [error, setError] = useState<Error | null>(null)
   const [lastKey, setLastKey] = useState(cacheKey)
   const controllerRef = useRef<AbortController | null>(null)
+  const currentKeyRef = useRef(cacheKey)
+  // eslint-disable-next-line react-hooks/refs -- intentional render-time sync write so async fetch completion (which can fire between render and commit) sees the latest key and refuses to overwrite state for a stale key.
+  currentKeyRef.current = cacheKey
 
   if (lastKey !== cacheKey) {
     setLastKey(cacheKey)
@@ -43,6 +46,7 @@ export function useViewportFetch<T>(opts: Options<T>): ViewportFetchResult<T> {
     if (typeof IntersectionObserver === "undefined") return
 
     let cancelled = false
+    const myKey = cacheKey
     const io = new IntersectionObserver(
       (entries) => {
         for (const entry of entries) {
@@ -54,13 +58,13 @@ export function useViewportFetch<T>(opts: Options<T>): ViewportFetchResult<T> {
           setState("loading")
           fetcher(controller.signal)
             .then((value) => {
-              if (cancelled) return
-              snippetCache.set(cacheKey, value)
+              if (cancelled || currentKeyRef.current !== myKey) return
+              snippetCache.set(myKey, value)
               setData(value)
               setState("ready")
             })
             .catch((err: unknown) => {
-              if (cancelled || controller.signal.aborted) return
+              if (cancelled || controller.signal.aborted || currentKeyRef.current !== myKey) return
               setError(err instanceof Error ? err : new Error(String(err)))
               setState("error")
             })
