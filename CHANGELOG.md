@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.56.3](https://github.com/cuongtranba/kanna/compare/v0.56.2...v0.56.3) (2026-05-16)
+
+
+### Performance Improvements
+
+* **transcript:** stabilize markdown props + memoize message components ([#157](https://github.com/cuongtranba/kanna/issues/157)) ([6ed1531](https://github.com/cuongtranba/kanna/commit/6ed153168686afc6d05fc2f858adcdadbec4209f))
+
 ## [0.56.2](https://github.com/cuongtranba/kanna/compare/v0.56.1...v0.56.2) (2026-05-16)
 
 
