@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.56.4](https://github.com/cuongtranba/kanna/compare/v0.56.3...v0.56.4) (2026-05-16)
+
+
+### Bug Fixes
+
+* **chat:** transcript not scrollable on mobile for long conversations ([#159](https://github.com/cuongtranba/kanna/issues/159)) ([22b273b](https://github.com/cuongtranba/kanna/commit/22b273b90301bef85df8c7b02b693c34bea2e4f1))
+
 ## [0.56.3](https://github.com/cuongtranba/kanna/compare/v0.56.2...v0.56.3) (2026-05-16)
 
 
