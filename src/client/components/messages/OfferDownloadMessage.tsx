@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react"
 import type { ChatAttachment, HydratedOfferDownloadToolCall } from "../../../shared/types"
 import { AttachmentFileCard, formatAttachmentSize } from "./AttachmentCard"
-import { classifyAttachmentIcon, friendlyMimeLabel } from "./attachmentPreview"
+import { classifyAttachmentIcon, classifyAttachmentPreview, friendlyMimeLabel } from "./attachmentPreview"
+import { FilePreviewSheet } from "./file-preview/FilePreviewSheet"
+import { toPreviewSourceFromAttachment } from "./file-preview/types"
 
 interface Props {
   message: HydratedOfferDownloadToolCall
@@ -13,6 +15,7 @@ export function OfferDownloadMessage({ message }: Props) {
   const result = message.result
   const contentUrl = result?.contentUrl
   const [state, setState] = useState<ProbeState>("idle")
+  const [previewOpen, setPreviewOpen] = useState(false)
 
   useEffect(() => {
     if (!contentUrl) return
@@ -22,15 +25,11 @@ export function OfferDownloadMessage({ message }: Props) {
         if (controller.signal.aborted) return
         setState(response.ok ? "ready" : "missing")
       })
-      .catch(() => {
-        // Network errors leave the chip optimistic; only 404-class responses mark missing.
-      })
+      .catch(() => {})
     return () => controller.abort()
   }, [contentUrl])
 
-  if (!result || !contentUrl) {
-    return null
-  }
+  if (!result || !contentUrl) return null
 
   const attachment: ChatAttachment = {
     id: `offer-download-${message.toolId}`,
@@ -49,33 +48,43 @@ export function OfferDownloadMessage({ message }: Props) {
   const meta = (
     <>
       {friendlyType}
-      {sizeLabel ? (
-        <>
-          {" · "}
-          <span className="tabular-nums">{sizeLabel}</span>
-        </>
-      ) : null}
+      {sizeLabel ? <> · <span className="tabular-nums">{sizeLabel}</span></> : null}
     </>
   )
-
-  const ariaLabelParts = [
-    "Download",
-    attachment.displayName,
-    friendlyType,
-    sizeLabel,
-  ].filter(Boolean) as string[]
 
   if (state === "missing") {
     return (
       <div className="flex" data-testid="offer-download-link">
-        <AttachmentFileCard
-          attachment={attachment}
-          disabledReason="File no longer available"
-        />
+        <AttachmentFileCard attachment={attachment} disabledReason="File no longer available" />
       </div>
     )
   }
 
+  const previewTarget = classifyAttachmentPreview(attachment)
+  const canPreview = !previewTarget.openInNewTab
+
+  if (canPreview) {
+    const ariaLabel = `Preview ${attachment.displayName}, ${friendlyType}${sizeLabel ? `, ${sizeLabel}` : ""}`
+    return (
+      <>
+        <div className="flex" data-testid="offer-download-link">
+          <AttachmentFileCard
+            attachment={attachment}
+            onClick={() => setPreviewOpen(true)}
+            meta={meta}
+            ariaLabel={ariaLabel}
+          />
+        </div>
+        <FilePreviewSheet
+          source={previewOpen ? toPreviewSourceFromAttachment(attachment, "offer_download") : null}
+          open={previewOpen}
+          onOpenChange={setPreviewOpen}
+        />
+      </>
+    )
+  }
+
+  const ariaLabelParts = ["Download", attachment.displayName, friendlyType, sizeLabel].filter(Boolean) as string[]
   return (
     <div className="flex" data-testid="offer-download-link">
       <AttachmentFileCard
