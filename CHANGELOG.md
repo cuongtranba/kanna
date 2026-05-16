@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.56.1](https://github.com/cuongtranba/kanna/compare/v0.56.0...v0.56.1) (2026-05-16)
+
+
+### Bug Fixes
+
+* **chat-preferences:** refresh new-chat composer when settings change ([#151](https://github.com/cuongtranba/kanna/issues/151)) ([ad7c3ac](https://github.com/cuongtranba/kanna/commit/ad7c3acd91efd437607f4c2617d5969d34d2a4bf))
+* **compact:** stop cumulative result.usage leaking into usedTokens ([#152](https://github.com/cuongtranba/kanna/issues/152)) ([3007810](https://github.com/cuongtranba/kanna/commit/30078108852aed9b147479b73cbba04e00271613))
+
 ## [0.56.0](https://github.com/cuongtranba/kanna/compare/v0.55.3...v0.56.0) (2026-05-16)
 
 
