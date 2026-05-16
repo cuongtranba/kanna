@@ -1,4 +1,5 @@
 import { create } from "zustand"
+import { persist } from "zustand/middleware"
 import {
   DEFAULT_CLAUDE_MODEL_OPTIONS,
   DEFAULT_CODEX_MODEL_OPTIONS,
@@ -366,10 +367,6 @@ function createComposerStateForNewChat(args: {
       return cloneComposerState(args.sourceState)
     }
 
-    if (args.legacyComposerState) {
-      return cloneComposerState(args.legacyComposerState)
-    }
-
     return composerFromProviderDefaults("claude", args.providerDefaults)
   }
 
@@ -467,7 +464,8 @@ export function migrateChatPreferencesState(
 }
 
 export const useChatPreferencesStore = create<ChatPreferencesState>()(
-  (set, get) => ({
+  persist(
+    (set, get) => ({
     defaultProvider: "last_used",
     providerDefaults: createDefaultProviderDefaults(),
     chatStates: {},
@@ -640,5 +638,14 @@ export const useChatPreferencesStore = create<ChatPreferencesState>()(
             [chatId]: composerFromProviderDefaults(provider, state.providerDefaults),
           },
         })),
-  })
+    }),
+    {
+      name: "chat-preferences-state",
+      version: 1,
+      partialize: (state) => ({
+        chatStates: state.chatStates,
+        legacyComposerState: state.legacyComposerState,
+      }),
+    }
+  )
 )

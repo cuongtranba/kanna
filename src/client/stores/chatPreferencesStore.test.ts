@@ -452,6 +452,29 @@ describe("chat preference store", () => {
     })
   })
 
+  test("new chat composer prefers server provider defaults over hardcoded legacy state when last_used", () => {
+    useChatPreferencesStore.setState({
+      ...INITIAL_STATE,
+      defaultProvider: "last_used",
+      chatStates: {},
+      providerDefaults: {
+        ...INITIAL_STATE.providerDefaults,
+        claude: {
+          model: "claude-opus-4-7",
+          modelOptions: { reasoningEffort: "high", contextWindow: "1m" },
+          planMode: false,
+        },
+      },
+    })
+
+    expect(useChatPreferencesStore.getState().getComposerState(NEW_CHAT_COMPOSER_ID)).toEqual({
+      provider: "claude",
+      model: "claude-opus-4-7",
+      modelOptions: { reasoningEffort: "high", contextWindow: "1m" },
+      planMode: false,
+    })
+  })
+
   test("initializeComposerForChat with last_used copies the provided source state", () => {
     useChatPreferencesStore.setState({
       ...INITIAL_STATE,
