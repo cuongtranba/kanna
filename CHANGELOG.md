@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.55.2](https://github.com/cuongtranba/kanna/compare/v0.55.1...v0.55.2) (2026-05-16)
+
+
+### Bug Fixes
+
+* **test:** dispose AppSettingsManager FSWatchers via centralized afterEach ([#144](https://github.com/cuongtranba/kanna/issues/144)) ([9b7c0be](https://github.com/cuongtranba/kanna/commit/9b7c0be4717167b1c5208db63c8a2c172fe6f91f))
+
 ## [0.55.1](https://github.com/cuongtranba/kanna/compare/v0.55.0...v0.55.1) (2026-05-16)
 
 
