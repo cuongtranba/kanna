@@ -25,19 +25,7 @@ jobs:
 
       - run: bun run build
 
-      - name: Run tests with hard timeout (debug hang)
-        run: |
-          set +e
-          timeout --foreground --signal=SIGTERM --kill-after=10 180 \
-            bun test --timeout 30000 2>&1 | tee /tmp/test.log
-          code=${PIPESTATUS[0]}
-          echo "---bun test exit code: $code---"
-          echo "---last 200 lines of test log---"
-          tail -200 /tmp/test.log || true
-          if [ "$code" = "124" ] || [ "$code" = "137" ]; then
-            echo "::error::Test step hung (killed by timeout)"
-            exit 1
-          fi
-          exit $code
+      - name: Run tests
+        run: timeout --foreground --signal=SIGTERM --kill-after=10 180 bun test --timeout 30000
         env:
           GIT_TERMINAL_PROMPT: "0"

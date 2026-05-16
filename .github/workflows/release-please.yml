@@ -38,7 +38,8 @@ jobs:
 
       - run: bun run build
 
-      - run: bun test --timeout 30000
+      - name: Run tests
+        run: timeout --foreground --signal=SIGTERM --kill-after=10 180 bun test --timeout 30000
         env:
           GIT_TERMINAL_PROMPT: "0"
 
