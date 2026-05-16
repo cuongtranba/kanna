@@ -1,0 +1,93 @@
+name: Sync Upstream
+
+on:
+  schedule:
+    # Mondays 03:00 UTC (10:00 ICT)
+    - cron: "0 3 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+env:
+  UPSTREAM_REPO: jakemor/kanna
+  UPSTREAM_BRANCH: main
+  SYNC_BRANCH: sync-upstream-main
+  BASE_BRANCH: main
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Add upstream remote
+        run: git remote add upstream https://github.com/${{ env.UPSTREAM_REPO }}.git
+
+      - name: Fetch upstream
+        run: git fetch upstream ${{ env.UPSTREAM_BRANCH }}
+
+      - name: Check if sync needed
+        id: check
+        run: |
+          BEHIND_COUNT=$(git rev-list --count ${{ env.BASE_BRANCH }}..upstream/${{ env.UPSTREAM_BRANCH }})
+          echo "behind=$BEHIND_COUNT" >> "$GITHUB_OUTPUT"
+          if [ "$BEHIND_COUNT" = "0" ]; then
+            echo "Already up to date with upstream."
+          else
+            echo "Fork is $BEHIND_COUNT commits behind upstream/${{ env.UPSTREAM_BRANCH }}."
+          fi
+
+      - name: Push sync branch
+        if: steps.check.outputs.behind != '0'
+        run: |
+          git push origin upstream/${{ env.UPSTREAM_BRANCH }}:refs/heads/${{ env.SYNC_BRANCH }} --force
+
+      - name: Open or update PR
+        if: steps.check.outputs.behind != '0'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          UPSTREAM_HEAD=$(git rev-parse --short upstream/${{ env.UPSTREAM_BRANCH }})
+          TITLE="chore: sync with upstream ${{ env.UPSTREAM_REPO }}@${UPSTREAM_HEAD}"
+          BODY=$(cat <<EOF
+          Auto-generated sync PR.
+
+          - Upstream: \`${{ env.UPSTREAM_REPO }}@${UPSTREAM_HEAD}\`
+          - Commits ahead: ${{ steps.check.outputs.behind }}
+
+          ## :warning: MUST use "Create a merge commit" — do NOT squash
+
+          Squash collapses upstream commits into one fork SHA, so GitHub keeps
+          showing the fork as "N commits behind upstream" forever. A merge
+          commit preserves upstream's commit graph and the "behind" counter
+          drops to 0.
+
+          Resolve conflicts locally if needed:
+          \`\`\`bash
+          gh pr checkout <pr-number>
+          git merge ${{ env.BASE_BRANCH }}
+          # resolve, then push
+          \`\`\`
+          EOF
+          )
+          # Check if PR already exists for this branch
+          PR_NUMBER=$(gh pr list --head ${{ env.SYNC_BRANCH }} --base ${{ env.BASE_BRANCH }} --state open --json number --jq '.[0].number // empty')
+          # Ensure label exists (idempotent)
+          gh label create merge-commit-required --color FBCA04 --description "Merge with merge-commit, NOT squash" 2>/dev/null || true
+          if [ -n "$PR_NUMBER" ]; then
+            echo "Updating existing PR #$PR_NUMBER"
+            gh pr edit "$PR_NUMBER" --title "$TITLE" --body "$BODY" --add-label merge-commit-required
+          else
+            echo "Creating new PR"
+            gh pr create --base ${{ env.BASE_BRANCH }} --head ${{ env.SYNC_BRANCH }} --title "$TITLE" --body "$BODY" --label merge-commit-required
+          fi

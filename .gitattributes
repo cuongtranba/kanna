@@ -1,0 +1,8 @@
+# Fork-only files: always keep fork version on merge with upstream.
+# Requires one-time setup: bun run scripts/setup-sync.sh
+package.json merge=ours
+.release-please-manifest.json merge=ours
+release-please-config.json merge=ours
+.github/workflows/release-please.yml merge=ours
+.github/workflows/sync-upstream.yml merge=ours
+CLAUDE.md merge=ours
