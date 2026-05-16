@@ -2,7 +2,7 @@ import "../../../lib/testing/setupHappyDom"
 import { describe, expect, test, beforeEach, afterEach, mock } from "bun:test"
 import { useRef } from "react"
 import { renderForLoopCheck } from "../../../lib/testing/renderForLoopCheck"
-import { useViewportFetch } from "./useViewportFetch"
+import { useViewportFetch, type ViewportFetchResult } from "./useViewportFetch"
 
 type IOEntry = Partial<IntersectionObserverEntry> & { isIntersecting: boolean; target: Element }
 let observerCallbacks: Array<(entries: IOEntry[]) => void> = []
@@ -26,7 +26,7 @@ afterEach(() => {
   delete (globalThis as { IntersectionObserver?: unknown }).IntersectionObserver
 })
 
-function Harness({ probe }: { probe: (state: unknown) => void }) {
+function Harness({ probe }: { probe: (state: ViewportFetchResult<string>) => void }) {
   const ref = useRef<HTMLDivElement>(null)
   const state = useViewportFetch({
     ref,
@@ -41,7 +41,7 @@ function Harness({ probe }: { probe: (state: unknown) => void }) {
 describe("useViewportFetch", () => {
   test("starts idle, transitions loading then ready on intersection", async () => {
     const states: Array<{ state: string }> = []
-    const probe = mock((s: { state: string }) => {
+    const probe = mock((s: ViewportFetchResult<string>) => {
       states.push({ state: s.state })
     })
     const result = await renderForLoopCheck(<Harness probe={probe} />)
@@ -51,8 +51,8 @@ describe("useViewportFetch", () => {
   })
 
   test("returns memo-stable object across renders with same state", async () => {
-    const refs: unknown[] = []
-    const probe = mock((s: unknown) => refs.push(s))
+    const refs: ViewportFetchResult<string>[] = []
+    const probe = mock((s: ViewportFetchResult<string>) => refs.push(s))
     const result = await renderForLoopCheck(<Harness probe={probe} />)
     expect(result.loopWarnings).toEqual([])
     if (refs.length >= 2) {
