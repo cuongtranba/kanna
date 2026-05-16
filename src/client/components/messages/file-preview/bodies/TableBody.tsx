@@ -27,6 +27,12 @@ export function TableBody({ source }: { source: PreviewSource }) {
   const cacheKey = cacheKeyFor(source)
   const cached = cache.get(cacheKey)
   const [state, setState] = useState<State>(cached ?? { status: "loading" })
+  const [lastKey, setLastKey] = useState(cacheKey)
+
+  if (lastKey !== cacheKey) {
+    setLastKey(cacheKey)
+    setState(cache.get(cacheKey) ?? { status: "loading" })
+  }
 
   useEffect(() => {
     if (cached && cached.status !== "loading") return

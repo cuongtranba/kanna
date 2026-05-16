@@ -24,7 +24,16 @@ export function useViewportFetch<T>(opts: Options<T>): ViewportFetchResult<T> {
   const [state, setState] = useState<ViewportFetchState>(cached !== undefined ? "ready" : "idle")
   const [data, setData] = useState<T | null>(cached !== undefined ? cached : null)
   const [error, setError] = useState<Error | null>(null)
+  const [lastKey, setLastKey] = useState(cacheKey)
   const controllerRef = useRef<AbortController | null>(null)
+
+  if (lastKey !== cacheKey) {
+    setLastKey(cacheKey)
+    const fresh = snippetCache.get(cacheKey) as T | undefined
+    setState(fresh !== undefined ? "ready" : "idle")
+    setData(fresh !== undefined ? fresh : null)
+    setError(null)
+  }
 
   useEffect(() => {
     if (!enabled) return

@@ -19,11 +19,20 @@ function extToLang(name: string): string {
 
 export function CodeBody({ source }: { source: PreviewSource }) {
   const state = useTextBodyContent(source)
+  const shouldHighlight = state.status === "ready" && state.content.length <= SHIKI_SIZE_CEILING
+  const highlightKey = shouldHighlight
+    ? `${source.id}|${source.contentUrl}|${source.size ?? 0}|${state.content.length}`
+    : null
   const [highlighted, setHighlighted] = useState<string | null>(null)
+  const [lastHighlightKey, setLastHighlightKey] = useState<string | null>(highlightKey)
+
+  if (lastHighlightKey !== highlightKey) {
+    setLastHighlightKey(highlightKey)
+    setHighlighted(null)
+  }
 
   useEffect(() => {
-    if (state.status !== "ready") return
-    if (state.content.length > SHIKI_SIZE_CEILING) return
+    if (!shouldHighlight || state.status !== "ready") return
     let cancelled = false
     import("shiki")
       .then(async (mod) => {
@@ -35,7 +44,7 @@ export function CodeBody({ source }: { source: PreviewSource }) {
         if (typeof console !== "undefined") console.warn("[file-preview] Shiki unavailable; falling back to plain text")
       })
     return () => { cancelled = true }
-  }, [state, source.fileName])
+  }, [shouldHighlight, state, source.fileName])
 
   if (state.status === "loading") return <div className="p-4 text-sm text-muted-foreground"><pre className="sr-only" /> Loading…</div>
   if (state.status === "error") return <div className="p-4 text-sm text-destructive"><pre className="sr-only" /> {state.message}</div>

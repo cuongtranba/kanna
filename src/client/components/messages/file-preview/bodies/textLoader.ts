@@ -17,6 +17,12 @@ export function useTextBodyContent(source: PreviewSource): TextLoadState {
   const cacheKey = cacheKeyFor(source)
   const cached = bodyCache.get(cacheKey)
   const [state, setState] = useState<TextLoadState>(cached ?? { status: "loading" })
+  const [lastKey, setLastKey] = useState(cacheKey)
+
+  if (lastKey !== cacheKey) {
+    setLastKey(cacheKey)
+    setState(bodyCache.get(cacheKey) ?? { status: "loading" })
+  }
 
   useEffect(() => {
     if (cached && cached.status !== "loading") return
