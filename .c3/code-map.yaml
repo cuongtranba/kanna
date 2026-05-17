@@ -88,6 +88,16 @@ c3-209:
 c3-210:
   - src/server/agent.test.ts
   - src/server/agent.ts
+  - src/server/history-primer.test.ts
+  - src/server/history-primer.ts
+  - src/server/mention-parser.test.ts
+  - src/server/mention-parser.ts
+  - src/server/subagent-entry-cap.test.ts
+  - src/server/subagent-entry-cap.ts
+  - src/server/subagent-orchestrator.test.ts
+  - src/server/subagent-orchestrator.ts
+  - src/server/subagent-provider-run.test.ts
+  - src/server/subagent-provider-run.ts
 c3-211:
   - src/server/codex-app-server-protocol.ts
   - src/server/codex-app-server.test.ts
