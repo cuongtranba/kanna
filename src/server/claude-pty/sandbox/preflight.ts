@@ -41,8 +41,8 @@ export async function runSandboxPreflight(args: SandboxPreflightArgs): Promise<S
   }
 
   if (args.platform === "linux") {
-    const bwrapArgv = generateBwrapArgs({ policy: args.policy, homeDir: args.homeDir })
-    const code = await spawnExitCode("/usr/bin/bwrap", [...bwrapArgv, "/bin/cat", args.sentinelPath])
+    const { argv } = generateBwrapArgs({ policy: args.policy, homeDir: args.homeDir })
+    const code = await spawnExitCode("/usr/bin/bwrap", [...argv, "/bin/cat", args.sentinelPath])
     if (code === 0) {
       return { ok: false, reason: `sentinel readable under bwrap: ${args.sentinelPath}` }
     }

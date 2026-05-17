@@ -44,6 +44,28 @@ describe("generateMacosProfile", () => {
     expect(match).not.toBeNull()
   })
 
+  test("strips control chars (newline/CR/tab) so a crafted path cannot inject profile clauses", () => {
+    const profile = generateMacosProfile({
+      policy: {
+        ...POLICY,
+        readPathDeny: ['/tmp/evil\n(allow file-read* (subpath "/"))'],
+        writePathDeny: [],
+      },
+      homeDir: "/Users/u",
+    })
+    // The newline must be stripped: the whole crafted path collapses onto a
+    // single deny line with the inner quotes backslash-escaped, so the
+    // injected `(allow ...)` can never become a top-level clause.
+    const denyLines = profile.split("\n").filter((l) => l.startsWith("(deny"))
+    expect(denyLines).toHaveLength(1)
+    // No line is the bare injected allow clause.
+    expect(profile.split("\n")).not.toContain(`(allow file-read* (subpath "/"))`)
+    // The injected text only survives inside an escaped string literal.
+    expect(denyLines[0]).toContain('\\"/\\"')
+    // No raw control char anywhere in the generated profile.
+    expect(/[\x00-\x08\x0b\x0c\x0e-\x1f]/.test(profile)).toBe(false)
+  })
+
   test("skips empty deny lists", () => {
     const empty = generateMacosProfile({
       policy: { ...POLICY, readPathDeny: [], writePathDeny: [] },
