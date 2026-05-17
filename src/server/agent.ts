@@ -610,7 +610,7 @@ export function normalizeClaudeStreamMessage(message: any): TranscriptEntry[] {
   return []
 }
 
-async function* createClaudeHarnessStream(
+export async function* createClaudeHarnessStream(
   q: Query,
   configuredContextWindow?: number,
 ): AsyncGenerator<HarnessEvent> {
