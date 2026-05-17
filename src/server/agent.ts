@@ -1245,11 +1245,27 @@ export class AgentCoordinator {
     return now - session.lastUsedAt >= this.resolveClaudeIdleMs()
   }
 
-  private closeClaudeSession(chatId: string, session: ClaudeSessionState): void {
+  /**
+   * Tear down a Claude session and (by default) release the OAuth-pool
+   * reservation owned by the chat.
+   *
+   * `keepReservation: true` — used by rate-limit / auth-error rotation
+   * paths that have ALREADY claimed a fresh token via `pickActive(chatId)`
+   * before calling close. Without this flag, `release(chatId)` would
+   * scan reservedBy for `owner === chatId` and drop the *new* token the
+   * rotation just claimed, leaking the rotation's reservation (audit #9d).
+   */
+  private closeClaudeSession(
+    chatId: string,
+    session: ClaudeSessionState,
+    opts?: { keepReservation?: boolean },
+  ): void {
     if (this.claudeSessions.get(chatId) === session) {
       this.claudeSessions.delete(chatId)
     }
-    this.oauthPool?.release(chatId)
+    if (!opts?.keepReservation) {
+      this.oauthPool?.release(chatId)
+    }
     session.session.close()
   }
 
@@ -2794,7 +2810,11 @@ export class AgentCoordinator {
       // spawns a fresh subprocess with the rotated token's credentials.
       // Without this, startClaudeTurn reuses the cached session and
       // sendPrompt is routed to the still-limited token's subprocess.
-      this.closeClaudeSession(chatId, session)
+      // keepReservation: true — the `pickActive(chatId)` above already
+      // claimed `rotationTarget` under this chatId; the default `release`
+      // path would scan reservedBy for owner===chatId and drop it,
+      // leaking the rotation's reservation (audit #9d).
+      this.closeClaudeSession(chatId, session, { keepReservation: true })
       const active = this.activeTurns.get(chatId)
       if (active) {
         await this.store.recordTurnFailed(chatId, "rate_limit")
@@ -2878,10 +2898,12 @@ export class AgentCoordinator {
     if (canRotate) {
       // Tear down the session bound to the dead token so the next turn
       // spawns a fresh subprocess with the rotated token in env.
-      session.session.close()
-      if (this.claudeSessions.get(chatId) === session) {
-        this.claudeSessions.delete(chatId)
-      }
+      // keepReservation: true — `pickActive(chatId)` above already claimed
+      // the rotation target under this chatId. The previous inline close +
+      // delete pair sidestepped `closeClaudeSession` to avoid the
+      // accidental release; route through the helper now that release is
+      // opt-out, for symmetry with the rate-limit rotation path.
+      this.closeClaudeSession(chatId, session, { keepReservation: true })
       const active = this.activeTurns.get(chatId)
       if (active) {
         await this.store.recordTurnFailed(chatId, "auth_error")
