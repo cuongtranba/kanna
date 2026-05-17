@@ -76,22 +76,27 @@ Default is `sdk` (no behaviour change). Requires `claude /login` to have
 been run once. `ANTHROPIC_API_KEY` must be unset (PTY mode refuses to
 spawn if it is set — would force API billing).
 
-Limitations of P2 (this release):
-- Single account, no rotation (account pool lands in a later phase).
-- No OS sandbox (defense-in-depth, later phase).
-- Built-in CLI tools (`Read`/`Bash`/etc.) enabled — not yet routed through
-  `kanna-mcp`. Permission gating from `KANNA_MCP_TOOL_CALLBACKS=1` still
-  applies to `AskUserQuestion`/`ExitPlanMode` only.
-- macOS/Linux only.
+Platform support: macOS / Linux only.
 
-**Parity gaps vs SDK driver** — tracked in #162 (umbrella #163). Until those
-land, the following diverge from the SDK path:
+**Remaining parity gaps vs SDK driver** (closed phases tracked in #162;
+umbrella #163):
 - `setPermissionMode(planMode)` at runtime is a warn-only no-op — blocked
   on Claude CLI exposing a runtime switch
   (anthropics/claude-code#59891). Restart the session to flip plan-mode.
-- `getSupportedCommands()` returns a static four-command list (C2 —
-  Claude CLI exposes no slash-command list flag; needs a `/help`-parse
-  spike, cosmetic).
+- `getSupportedCommands()` returns a static four-command list. Phase 6
+  spike confirmed `claude --help` has no slash-command listing flag and
+  the CLI exposes no `--print '/help'` mode that prints a structured
+  list; a live `/help` parser needs an authenticated ephemeral session
+  per chat (cosmetic, deferred).
+
+**SDK ↔ PTY equivalence (Phase 6):** `src/server/claude-pty/parity-matrix.test.ts`
+drives both `createClaudeHarnessStream` (SDK) and
+`createJsonlEventParser` (PTY) with the same SDK-message fixtures and
+asserts identical `HarnessEvent` sequences after normalising volatile
+fields. Covers: simple turn, SDK-native `rate_limit_event`,
+prompt-too-long isError result, assistant usage-id dedup, 1M
+context-window floor, per-message `session_token`, and `compact_boundary`
+turns. Regression guard for future driver edits.
 
 **Subagent + prompt + account parity (Phase 5):**
 - D6 — Claude subagents route through the PTY driver when

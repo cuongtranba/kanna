@@ -1,0 +1,201 @@
+import { describe, expect, test } from "bun:test"
+import type { Query } from "@anthropic-ai/claude-agent-sdk"
+import { createClaudeHarnessStream } from "../agent"
+import { createJsonlEventParser } from "./jsonl-to-event"
+import type { HarnessEvent } from "../harness-types"
+
+/**
+ * Phase 6 — SDK ↔ PTY HarnessEvent equivalence matrix.
+ *
+ * Drives both paths with the same Claude-SDK message fixtures and
+ * asserts they emit the same `HarnessEvent` sequence (after stripping
+ * volatile fields like `_id` and `createdAt`). The claude CLI mirrors
+ * SDKMessage shapes into the JSONL transcript verbatim, so a single
+ * fixture stands in for both:
+ * - SDK path: yielded from a fake `Query` iterable into
+ *   `createClaudeHarnessStream`.
+ * - PTY path: serialized to JSON and fed to `createJsonlEventParser`
+ *   one line per message.
+ */
+
+function fakeQuery(messages: unknown[]): Query {
+  const q = (async function* () {
+    for (const m of messages) yield m as never
+  })()
+  return q as unknown as Query
+}
+
+function normalize(events: HarnessEvent[]): unknown[] {
+  return events.map((ev) => {
+    if (ev.type === "transcript") {
+      const { _id: _i, createdAt: _c, ...rest } = ev.entry as unknown as Record<string, unknown> & {
+        _id?: string
+        createdAt?: number
+      }
+      return { type: ev.type, entry: rest }
+    }
+    return ev
+  })
+}
+
+async function collectSdk(messages: unknown[], configuredContextWindow?: number): Promise<HarnessEvent[]> {
+  const events: HarnessEvent[] = []
+  for await (const ev of createClaudeHarnessStream(fakeQuery(messages), configuredContextWindow)) {
+    events.push(ev)
+  }
+  return events
+}
+
+function collectPty(messages: unknown[], configuredContextWindow?: number): HarnessEvent[] {
+  const parser = createJsonlEventParser({ configuredContextWindow })
+  const out: HarnessEvent[] = []
+  for (const m of messages) {
+    for (const ev of parser.parse(JSON.stringify(m))) out.push(ev)
+  }
+  return out
+}
+
+async function assertSameEvents(messages: unknown[], configuredContextWindow?: number): Promise<void> {
+  const sdk = await collectSdk(messages, configuredContextWindow)
+  const pty = collectPty(messages, configuredContextWindow)
+  expect(normalize(pty)).toEqual(normalize(sdk))
+}
+
+describe("SDK ↔ PTY HarnessEvent equivalence matrix", () => {
+  test("simple turn: system/init → assistant → result", async () => {
+    await assertSameEvents([
+      {
+        type: "system",
+        subtype: "init",
+        session_id: "sess-1",
+        model: "claude-sonnet-4-6",
+        tools: [],
+        mcp_servers: [],
+        slash_commands: [],
+        cwd: "/tmp",
+        permissionMode: "acceptEdits",
+        apiKeySource: "none",
+        claude_code_version: "0.0.0",
+        output_style: "default",
+        skills: [],
+        plugins: [],
+        uuid: "u1",
+      },
+      {
+        type: "assistant",
+        session_id: "sess-1",
+        message: {
+          id: "msg-1",
+          role: "assistant",
+          content: [{ type: "text", text: "hi" }],
+        },
+        usage: { input_tokens: 100, output_tokens: 25 },
+        uuid: "u2",
+      },
+      {
+        type: "result",
+        subtype: "success",
+        session_id: "sess-1",
+        result: "done",
+        is_error: false,
+        duration_ms: 500,
+        usage: { input_tokens: 100, output_tokens: 25 },
+        modelUsage: { "claude-sonnet-4-6": { contextWindow: 200000 } },
+        uuid: "u3",
+      },
+    ])
+  })
+
+  test("rate_limit_event (SDK-native shape)", async () => {
+    await assertSameEvents([
+      {
+        type: "rate_limit_event",
+        session_id: "sess-rl",
+        rate_limit_info: { status: "rejected", resetsAt: 1_748_800_000 },
+      },
+    ])
+  })
+
+  test("prompt-too-long error result", async () => {
+    await assertSameEvents([
+      {
+        type: "result",
+        subtype: "error",
+        session_id: "sess-err",
+        is_error: true,
+        result: "prompt is too long",
+        duration_ms: 0,
+        uuid: "u-err",
+      },
+    ])
+  })
+
+  test("multiple assistant messages dedupe on usage id (same id seen twice)", async () => {
+    await assertSameEvents([
+      {
+        type: "assistant",
+        session_id: "sess-d",
+        message: { id: "dup", role: "assistant", content: [{ type: "text", text: "a" }] },
+        usage: { input_tokens: 10, output_tokens: 3 },
+      },
+      {
+        type: "assistant",
+        session_id: "sess-d",
+        message: { id: "dup", role: "assistant", content: [{ type: "text", text: "a" }] },
+        usage: { input_tokens: 10, output_tokens: 3 },
+      },
+    ])
+  })
+
+  test("1M context window floor preserved against modelUsage.contextWindow=200k", async () => {
+    await assertSameEvents(
+      [
+        {
+          type: "assistant",
+          session_id: "sess-1m",
+          message: { id: "msg-1m", role: "assistant", content: [{ type: "text", text: "x" }] },
+          usage: { input_tokens: 100, output_tokens: 50 },
+        },
+        {
+          type: "result",
+          subtype: "success",
+          session_id: "sess-1m",
+          is_error: false,
+          duration_ms: 500,
+          usage: { input_tokens: 100, output_tokens: 50 },
+          modelUsage: { "claude-sonnet-4-6": { contextWindow: 200000 } },
+        },
+      ],
+      1_000_000,
+    )
+  })
+
+  test("session_token emitted from every message carrying session_id", async () => {
+    await assertSameEvents([
+      { type: "system", subtype: "init", session_id: "a", model: "m", tools: [], mcp_servers: [], slash_commands: [], cwd: "/", permissionMode: "acceptEdits", apiKeySource: "none", claude_code_version: "0", output_style: "d", skills: [], plugins: [], uuid: "1" },
+      { type: "assistant", session_id: "a", message: { id: "m1", role: "assistant", content: [] } },
+      { type: "result", subtype: "success", session_id: "a", is_error: false, duration_ms: 0, uuid: "r" },
+    ])
+  })
+
+  test("compact_boundary turn does not produce phantom context_window_updated", async () => {
+    await assertSameEvents([
+      {
+        type: "system",
+        subtype: "compact_boundary",
+        session_id: "sess-c",
+        compact_metadata: { trigger: "auto", pre_tokens: 50000 },
+        uuid: "cb",
+      },
+      {
+        type: "result",
+        subtype: "success",
+        session_id: "sess-c",
+        is_error: false,
+        duration_ms: 100,
+        usage: { input_tokens: 1000, cache_read_input_tokens: 49000, output_tokens: 0 },
+        uuid: "r-c",
+      },
+    ])
+  })
+})
