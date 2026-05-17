@@ -25,8 +25,15 @@ function resolveReal(p: string): string {
 }
 
 function escapeForScheme(s: string): string {
-  // sandbox-exec DSL is TinyScheme. Strings cannot contain unescaped quotes or backslashes.
-  return s.replace(/\\/g, "\\\\").replace(/"/g, '\\"')
+  // sandbox-exec DSL is TinyScheme. Strings cannot contain unescaped quotes
+  // or backslashes; a literal newline/CR would terminate the string and let
+  // the remainder of a crafted deny path inject arbitrary profile clauses.
+  // Strip C0 control chars + DEL (incl. \n \r \t) — no legitimate filesystem
+  // deny path contains them.
+  return s
+    .replace(/[\x00-\x1f\x7f]/g, "")
+    .replace(/\\/g, "\\\\")
+    .replace(/"/g, '\\"')
 }
 
 function denyEntry(action: string, raw: string, homeDir: string): string {

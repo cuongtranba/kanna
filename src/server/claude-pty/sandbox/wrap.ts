@@ -36,10 +36,21 @@ export async function wrapWithSandbox(opts: WrapArgs): Promise<WrapResult> {
     }
   }
   if (opts.platform === "linux") {
-    const bwrapArgv = generateBwrapArgs({ policy: opts.policy, homeDir: opts.homeDir })
+    const { argv, unmountableGlobs } = generateBwrapArgs({
+      policy: opts.policy,
+      homeDir: opts.homeDir,
+    })
+    if (unmountableGlobs.length > 0) {
+      console.warn(
+        "[claude-pty/sandbox] bwrap cannot tmpfs glob deny patterns "
+        + `(${unmountableGlobs.join(", ")}); these are enforced by the `
+        + "kanna-mcp tool-callback layer (permission-gate minimatch), not "
+        + "the OS sandbox. Literal credential dirs remain tmpfs-protected.",
+      )
+    }
     return {
       command: BWRAP,
-      args: [...bwrapArgv, opts.command, ...opts.args],
+      args: [...argv, opts.command, ...opts.args],
     }
   }
   return { command: opts.command, args: opts.args }

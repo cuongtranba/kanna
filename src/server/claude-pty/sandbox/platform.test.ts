@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { isSandboxSupported, isSandboxEnabled, isSandboxEnabledAsync } from "./platform"
+import { isSandboxSupported, isSandboxEnabledAsync } from "./platform"
 import { resetBwrapCacheForTest } from "./detect"
 
 describe("isSandboxSupported", () => {
@@ -11,21 +11,6 @@ describe("isSandboxSupported", () => {
   })
   test("false on win32", () => {
     expect(isSandboxSupported("win32")).toBe(false)
-  })
-})
-
-describe("isSandboxEnabled", () => {
-  test("respects KANNA_PTY_SANDBOX=off explicit override", () => {
-    expect(isSandboxEnabled({ platform: "darwin", env: "off" })).toBe(false)
-  })
-  test("defaults on for supported platform when env unset", () => {
-    expect(isSandboxEnabled({ platform: "darwin", env: undefined })).toBe(true)
-  })
-  test("defaults on for supported platform with env=on", () => {
-    expect(isSandboxEnabled({ platform: "darwin", env: "on" })).toBe(true)
-  })
-  test("false on unsupported platform regardless of env", () => {
-    expect(isSandboxEnabled({ platform: "win32", env: "on" })).toBe(false)
   })
 })
 
