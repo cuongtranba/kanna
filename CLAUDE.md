@@ -86,16 +86,26 @@ Limitations of P2 (this release):
 
 **Parity gaps vs SDK driver** — tracked in #162 (umbrella #163). Until those
 land, the following diverge from the SDK path:
-- No `context_window_updated`, `rate_limit_event`, or per-message
-  `session_token` events.
 - Crashes / OAuth failures complete silently (no isError result, no
   rotation / retry).
-- `setPermissionMode(planMode)` at runtime is a no-op — blocked on Claude
-  CLI exposing a runtime switch (anthropics/claude-code#59891).
+- `setPermissionMode(planMode)` at runtime is a warn-only no-op — blocked
+  on Claude CLI exposing a runtime switch
+  (anthropics/claude-code#59891). Restart the session to flip plan-mode.
 - Claude subagents always route through the SDK driver, even when
   `KANNA_CLAUDE_DRIVER=pty`. Subagent turns still bill at API rates.
 - `getAccountInfo()` returns `null`; `getSupportedCommands()` returns a
   static four-command list.
+
+**JSONL event parity (Phase 3):** PTY mode uses a stateful
+`createJsonlEventParser` (one per session) that mirrors the SDK driver's
+`createClaudeHarnessStream`. Emits `session_token` for every JSONL line
+carrying a `session_id`, `rate_limit` events from both
+`rate_limit_event` (SDK-native) and `system/rate_limit` (legacy) shapes,
+and `context_window_updated` transcript entries per assistant message
+plus a final turn-end entry derived from `result.modelUsage`. The
+configured-window floor (`parseConfiguredContextWindowFromModelId` —
+1M for `[1m]` models) is preserved against `modelUsage.contextWindow`
+under-reports.
 
 **Kanna MCP server (Phase 2):** PTY mode now starts an in-process HTTP
 MCP server bound to loopback (`127.0.0.1:<ephemeral>`) for every PTY
