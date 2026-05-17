@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.57.3](https://github.com/cuongtranba/kanna/compare/v0.57.2...v0.57.3) (2026-05-17)
+
+
+### Miscellaneous Chores
+
+* release 0.57.3 to publish reverted baseline to npm ([#190](https://github.com/cuongtranba/kanna/issues/190)) ([5dd8b88](https://github.com/cuongtranba/kanna/commit/5dd8b884921079df6115eef74c2f4f2b1a37f3e7))
+
 ## [0.57.2](https://github.com/cuongtranba/kanna/compare/v0.57.1...v0.57.2) (2026-05-17)
 
 
