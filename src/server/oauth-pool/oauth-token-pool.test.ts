@@ -372,3 +372,134 @@ describe("OAuthTokenPool reservations (concurrent sessions)", () => {
     expect(second?.id).toBe("a")
   })
 })
+
+describe("OAuthTokenPool.hasUsable (TOCTOU parity with pickActive)", () => {
+  test("respects reservations: a token reserved by chat-A is NOT usable from chat-B", () => {
+    let store = [tok("a")]
+    const pool = new OAuthTokenPool(
+      () => store,
+      (id, patch) => { store = store.map((t) => t.id === id ? { ...t, ...patch } : t) },
+      () => 1000,
+    )
+    pool.pickActive("chat-A")
+    expect(pool.hasUsable("chat-B")).toBe(false)
+    // Owner sees their own reservation as usable.
+    expect(pool.hasUsable("chat-A")).toBe(true)
+  })
+
+  test("returns false when every token is reserved elsewhere", () => {
+    let store = [tok("a"), tok("b")]
+    const pool = new OAuthTokenPool(
+      () => store,
+      (id, patch) => { store = store.map((t) => t.id === id ? { ...t, ...patch } : t) },
+      () => 1000,
+    )
+    pool.pickActive("chat-A")
+    pool.pickActive("chat-B")
+    expect(pool.hasUsable("chat-C")).toBe(false)
+    // And the matching pickActive agrees — TOCTOU gap closed.
+    expect(pool.pickActive("chat-C")).toBeNull()
+  })
+
+  test("does NOT mutate status for elapsed-limited tokens (read-only)", () => {
+    const writes: Array<{ id: string; patch: unknown }> = []
+    let now = 1000
+    const store = [tok("a", { status: "limited", limitedUntil: 500 })]
+    const pool = new OAuthTokenPool(
+      () => store,
+      (id, patch) => { writes.push({ id, patch }) },
+      () => now,
+    )
+    expect(pool.hasUsable()).toBe(true)
+    expect(writes).toEqual([])
+    // pickActive does revive on commit, hasUsable does not.
+    pool.pickActive("chat-A")
+    expect(writes.length).toBeGreaterThan(0)
+  })
+})
+
+describe("OAuthTokenPool.pickEphemeral", () => {
+  test("returns null when no tokens", () => {
+    const pool = new OAuthTokenPool(() => [], () => {}, () => 1000)
+    expect(pool.pickEphemeral()).toBeNull()
+  })
+
+  test("two concurrent ephemerals get DIFFERENT tokens (no shared pick)", () => {
+    let store = [tok("a"), tok("b")]
+    const pool = new OAuthTokenPool(
+      () => store,
+      (id, patch) => { store = store.map((t) => t.id === id ? { ...t, ...patch } : t) },
+      () => 1000,
+    )
+    const lease1 = pool.pickEphemeral()
+    const lease2 = pool.pickEphemeral()
+    expect(lease1?.token.id).toBeDefined()
+    expect(lease2?.token.id).toBeDefined()
+    expect(lease1?.token.id).not.toBe(lease2?.token.id)
+  })
+
+  test("only-one-token pool → second concurrent ephemeral returns null until first releases", () => {
+    let store = [tok("a")]
+    const pool = new OAuthTokenPool(
+      () => store,
+      (id, patch) => { store = store.map((t) => t.id === id ? { ...t, ...patch } : t) },
+      () => 1000,
+    )
+    const lease1 = pool.pickEphemeral()
+    expect(lease1?.token.id).toBe("a")
+    expect(pool.pickEphemeral()).toBeNull()
+    lease1?.release()
+    expect(pool.pickEphemeral()?.token.id).toBe("a")
+  })
+
+  test("release() is idempotent", () => {
+    let store = [tok("a")]
+    const pool = new OAuthTokenPool(
+      () => store,
+      (id, patch) => { store = store.map((t) => t.id === id ? { ...t, ...patch } : t) },
+      () => 1000,
+    )
+    const lease = pool.pickEphemeral()
+    lease?.release()
+    lease?.release() // no throw, no spurious reservation re-cleanup
+    expect(pool.pickEphemeral()?.token.id).toBe("a")
+  })
+
+  test("ephemeral lease does not block a chat-bound pickActive for a DIFFERENT token", () => {
+    let store = [tok("a"), tok("b")]
+    const pool = new OAuthTokenPool(
+      () => store,
+      (id, patch) => { store = store.map((t) => t.id === id ? { ...t, ...patch } : t) },
+      () => 1000,
+    )
+    const lease = pool.pickEphemeral()
+    const otherTokenId = lease?.token.id === "a" ? "b" : "a"
+    expect(pool.pickActive("chat-A")?.id).toBe(otherTokenId)
+  })
+})
+
+describe("OAuthTokenPool.pickActive (pure read loop, deferred revival)", () => {
+  test("does NOT call writeStatus on tokens it ultimately does not pick", () => {
+    // Two elapsed-limited tokens. pickActive should pick exactly ONE (LRU)
+    // and only emit ONE revival writeStatus — the previous implementation
+    // wrote status for every elapsed candidate inside the read loop.
+    const writes: Array<{ id: string; patch: unknown }> = []
+    const store = [
+      tok("a", { status: "limited", limitedUntil: 500, lastUsedAt: 100 }),
+      tok("b", { status: "limited", limitedUntil: 500, lastUsedAt: 200 }),
+    ]
+    const pool = new OAuthTokenPool(
+      () => store,
+      (id, patch) => { writes.push({ id, patch }) },
+      () => 1000,
+    )
+    const picked = pool.pickActive("chat-A")
+    expect(picked?.id).toBe("a") // older lastUsedAt
+    const revivals = writes.filter((w) => {
+      const p = w.patch as { status?: string }
+      return p.status === "active"
+    })
+    expect(revivals).toHaveLength(1)
+    expect(revivals[0].id).toBe("a")
+  })
+})
