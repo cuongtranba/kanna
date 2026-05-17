@@ -12,7 +12,7 @@ import type {
   TodoItem,
   TranscriptEntry,
 } from "../shared/types"
-import { buildProjectFileContentUrl } from "../shared/projectFileUrl"
+import { buildContentUrlForFilePath } from "../shared/projectFileUrl"
 import type { HarnessEvent, HarnessToolRequest, HarnessTurn } from "./harness-types"
 import {
   type CollabAgentToolCallItem,
@@ -433,7 +433,7 @@ function buildImageGenerationResult(
 ): TranscriptEntry {
   const rel = relativePath ?? ""
   const fileName = rel ? rel.split("/").pop() ?? rel : ""
-  const contentUrl = buildProjectFileContentUrl(projectId, rel) ?? ""
+  const contentUrl = buildContentUrlForFilePath(projectId, rel) ?? ""
   // No URL means the renderer cannot display anything useful — surface as an
   // error so the UI shows the error branch instead of silent "no content".
   const isError = upstreamError || !contentUrl

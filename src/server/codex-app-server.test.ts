@@ -1973,9 +1973,12 @@ describe("CodexAppServerManager", () => {
     const content = result.entry.content as { contentUrl: string; relativePath: string; fileName: string }
     expect(content.fileName).toBe("ig_07031bcd.png")
     expect(content.relativePath).toBe("/Users/x/.codex/generated_images/019e/ig_07031bcd.png")
-    // Absolute path stored as-is; the URL still encodes via the project route.
-    expect(content.contentUrl).toContain("/api/projects/proj-img/files/")
-    expect(content.contentUrl).toContain("ig_07031bcd.png")
+    // Codex stores generated images at absolute paths outside the project; the URL
+    // must route through /api/local-file rather than the project-files endpoint,
+    // which rejects absolute paths and produces a malformed double-slash URL.
+    expect(content.contentUrl).toBe(
+      "/api/local-file?path=%2FUsers%2Fx%2F.codex%2Fgenerated_images%2F019e%2Fig_07031bcd.png",
+    )
   })
 
   test("renders dynamicToolCall ImageGeneration with deferred call emission and project URL", async () => {
