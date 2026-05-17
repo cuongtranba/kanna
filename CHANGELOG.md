@@ -1,5 +1,32 @@
 # Changelog
 
+## [0.57.0](https://github.com/cuongtranba/kanna/compare/v0.56.4...v0.57.0) (2026-05-17)
+
+
+### Features
+
+* **pty:** D4 partial — runtime /plan enter via slash command ([#174](https://github.com/cuongtranba/kanna/issues/174)) ([f9ab062](https://github.com/cuongtranba/kanna/commit/f9ab062837d9135e97b31bc584d4d11591ba5bfc))
+* **pty:** phase 1 parity wiring (B2 + B5) ([#164](https://github.com/cuongtranba/kanna/issues/164)) ([3781119](https://github.com/cuongtranba/kanna/commit/3781119ae70cf3b754da6f013ef9ac5e8207cc7e))
+* **pty:** phase 2 — register kanna MCP server in PTY (B3 + B6) ([#168](https://github.com/cuongtranba/kanna/issues/168)) ([aa37c86](https://github.com/cuongtranba/kanna/commit/aa37c86717cd3d5bb8bd4ea3bd4f798470c7919e))
+* **pty:** phase 3 — JSONL event parity (D1 + D2 + D3 + D4) ([#169](https://github.com/cuongtranba/kanna/issues/169)) ([f90384d](https://github.com/cuongtranba/kanna/commit/f90384dee08d457770d00c1505cdb412586a1195))
+* **pty:** phase 4 — failure handling parity (B4 + D5 + D7) ([#170](https://github.com/cuongtranba/kanna/issues/170)) ([85a685d](https://github.com/cuongtranba/kanna/commit/85a685d7138609af9a576663a76cd8843e05b31f))
+* **pty:** phase 5 — subagent routing + shared prompt + account (D6 + D8 + C1) ([#171](https://github.com/cuongtranba/kanna/issues/171)) ([0fa777d](https://github.com/cuongtranba/kanna/commit/0fa777d7b8f988ed6514f5b47c9211c335e1b3c8))
+* **pty:** phase 6 — SDK ↔ PTY equivalence matrix + doc sweep ([#172](https://github.com/cuongtranba/kanna/issues/172)) ([043d82c](https://github.com/cuongtranba/kanna/commit/043d82cf6516752ae707e6272801df2aeb460434))
+* **settings:** subagent CRUD UI ([#166](https://github.com/cuongtranba/kanna/issues/166)) ([0f094ab](https://github.com/cuongtranba/kanna/commit/0f094ab7870fb311a84ec17b080923045923fe3a))
+* **skills:** add kanna-debug skill for transcript-driven debugging ([f6df21a](https://github.com/cuongtranba/kanna/commit/f6df21afbb27a5c4e41c7ac9b6ae9c7b946a00e6))
+
+
+### Bug Fixes
+
+* **agent:** preserve rotation reservation in closeClaudeSession ([#179](https://github.com/cuongtranba/kanna/issues/179)) ([102270c](https://github.com/cuongtranba/kanna/commit/102270c7f8e7b934e0ce2a40588a7f9529987224))
+* **chat-ui:** prevent iOS cursor-jump during hold-space cursor drag ([#180](https://github.com/cuongtranba/kanna/issues/180)) ([cf28ff0](https://github.com/cuongtranba/kanna/commit/cf28ff0ebf2730d54e306bf1927b1a61848b3b7a))
+* **codex:** serve absolute-path generated images via /api/local-file ([#167](https://github.com/cuongtranba/kanna/issues/167)) ([61aa1de](https://github.com/cuongtranba/kanna/commit/61aa1de077404a2009ace01a46043c3d06452eb1))
+* **oauth-pool:** TOCTOU-safe hasUsable, ephemeral lease, pure read loop ([#177](https://github.com/cuongtranba/kanna/issues/177)) ([561e074](https://github.com/cuongtranba/kanna/commit/561e074c4a1b313d29036009bc4847d013c72792))
+* **pty/preflight:** fail-closed on throw, real invalidateAll, contract-versioned cache, poll vs sleep ([#176](https://github.com/cuongtranba/kanna/issues/176)) ([575011e](https://github.com/cuongtranba/kanna/commit/575011eee6c5ddd957808e489a184d8232a77b5e))
+* **pty/preflight:** narrow TOCTOU window by re-verifying binary sha256 before spawn ([#178](https://github.com/cuongtranba/kanna/issues/178)) ([0404680](https://github.com/cuongtranba/kanna/commit/0404680e9a4c148874c075af6ddb697d5bd2c7dc))
+* **pty/sandbox:** symlink resolution, glob surfacing, injection + signal ([#175](https://github.com/cuongtranba/kanna/issues/175)) ([378797f](https://github.com/cuongtranba/kanna/commit/378797f5578456410a002b0afc300918df416940))
+* **pty:** drop credentials.json requirement when OAuth-pool token supplied ([#173](https://github.com/cuongtranba/kanna/issues/173)) ([6dc8f37](https://github.com/cuongtranba/kanna/commit/6dc8f37e8c3327f77f1a6bc09584b0c4954115b3))
+
 ## [0.56.4](https://github.com/cuongtranba/kanna/compare/v0.56.3...v0.56.4) (2026-05-16)
 
 
