@@ -1,0 +1,634 @@
+import * as React from "react"
+import { useCallback, useMemo, useState } from "react"
+import { Bot, Plus } from "lucide-react"
+import { Button } from "../components/ui/button"
+import { Input } from "../components/ui/input"
+import { SegmentedControl } from "../components/ui/segmented-control"
+import { Textarea } from "../components/ui/textarea"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../components/ui/select"
+import { cn } from "../lib/utils"
+import {
+  CLAUDE_CONTEXT_WINDOW_OPTIONS,
+  CLAUDE_REASONING_OPTIONS,
+  CODEX_REASONING_OPTIONS,
+  DEFAULT_CLAUDE_MODEL_OPTIONS,
+  DEFAULT_CODEX_MODEL_OPTIONS,
+  getProviderCatalog,
+  isClaudeContextWindow,
+  isClaudeReasoningEffort,
+  isCodexReasoningEffort,
+  type AgentProvider,
+  type ChatProviderPreferences,
+  type ClaudeContextWindow,
+  type ClaudeModelOptions,
+  type ClaudeReasoningEffort,
+  type CodexModelOptions,
+  type CodexReasoningEffort,
+  type Subagent,
+  type SubagentContextScope,
+  type SubagentInput,
+  type SubagentValidationError,
+  type SubagentValidationErrorCode,
+} from "../../shared/types"
+import type { SubagentCommandResult } from "../../shared/protocol"
+
+export interface SubagentsSectionHandlers {
+  onCreate: (input: SubagentInput) => Promise<SubagentCommandResult>
+  onUpdate: (id: string, patch: SubagentInput) => Promise<SubagentCommandResult>
+  onDelete: (id: string) => Promise<void>
+}
+
+export type SubagentsEditingState =
+  | { kind: "list" }
+  | { kind: "create" }
+  | { kind: "edit"; id: string }
+
+interface SubagentsSectionProps {
+  subagents: Subagent[]
+  providerDefaults: ChatProviderPreferences
+  editing: SubagentsEditingState
+  onSelect: (id: string) => void
+  onStartCreate: () => void
+  onCancelEditing: () => void
+  handlers: SubagentsSectionHandlers
+}
+
+export function SubagentsSection(props: SubagentsSectionProps) {
+  const editing = props.editing
+  const selected = useMemo(() => {
+    if (editing.kind !== "edit") return null
+    return props.subagents.find((s) => s.id === editing.id) ?? null
+  }, [editing, props.subagents])
+
+  const formMode = editing.kind
+  const isFormOpen = formMode !== "list"
+  const hideListRail = isFormOpen && props.subagents.length === 0
+
+  return (
+    <div className="flex flex-col gap-6 md:flex-row md:items-start md:gap-8">
+      {hideListRail ? null : (
+        <SubagentList
+          subagents={props.subagents}
+          editing={props.editing}
+          onSelect={props.onSelect}
+          onStartCreate={props.onStartCreate}
+        />
+      )}
+      {!isFormOpen ? null : (
+        <SubagentForm
+          key={formMode === "edit" ? selected?.id ?? "edit" : "create"}
+          mode={formMode}
+          subject={formMode === "edit" ? selected : null}
+          providerDefaults={props.providerDefaults}
+          handlers={props.handlers}
+          onCancelEditing={props.onCancelEditing}
+        />
+      )}
+    </div>
+  )
+}
+
+function SubagentList(props: {
+  subagents: Subagent[]
+  editing: SubagentsEditingState
+  onSelect: (id: string) => void
+  onStartCreate: () => void
+}) {
+  const selectedId = props.editing.kind === "edit" ? props.editing.id : null
+  if (props.subagents.length === 0) {
+    return (
+      <aside className="flex w-full flex-col items-start gap-3 md:w-64">
+        <p className="text-sm font-medium text-foreground">No subagents yet</p>
+        <p className="text-sm text-muted-foreground">
+          Define reusable personas, then mention them in chat with @agent/&lt;name&gt;.
+        </p>
+        <Button variant="default" size="sm" onClick={props.onStartCreate}>
+          <Plus className="mr-1.5 size-4" /> Create subagent
+        </Button>
+      </aside>
+    )
+  }
+  return (
+    <aside className="flex w-full flex-col gap-2 md:w-64">
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-medium text-foreground">Subagents</h3>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={props.onStartCreate}
+          data-testid="subagent-create"
+        >
+          <Plus className="size-4" />
+          <span className="sr-only">Create subagent</span>
+        </Button>
+      </div>
+      <ul className="flex flex-col gap-0.5">
+        {props.subagents.map((subagent) => (
+          <li key={subagent.id}>
+            <button
+              type="button"
+              data-testid={`subagent-row:${subagent.id}`}
+              onClick={() => props.onSelect(subagent.id)}
+              className={cn(
+                "flex w-full flex-col items-start gap-0.5 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-muted",
+                selectedId === subagent.id && "bg-muted",
+              )}
+            >
+              <span className="flex w-full items-center justify-between gap-2">
+                <span className="text-sm font-medium text-foreground truncate">
+                  {subagent.name}
+                </span>
+                <ProviderChip provider={subagent.provider} />
+              </span>
+              <span className="text-xs text-muted-foreground">
+                {subagent.contextScope === "previous-assistant-reply"
+                  ? "Last reply"
+                  : "Full transcript"}
+              </span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </aside>
+  )
+}
+
+function ProviderChip({ provider }: { provider: AgentProvider }) {
+  const label = getProviderCatalog(provider).label
+  return (
+    <span className="inline-flex items-center gap-1 rounded border border-border bg-card px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+      <Bot className="size-3" /> {label}
+    </span>
+  )
+}
+
+interface SubagentFormProps {
+  mode: "create" | "edit"
+  subject: Subagent | null
+  providerDefaults: ChatProviderPreferences
+  handlers: SubagentsSectionHandlers
+  onCancelEditing: () => void
+}
+
+const PROVIDER_OPTIONS = [
+  { value: "claude" as const, label: "Claude" },
+  { value: "codex" as const, label: "Codex" },
+]
+
+const CONTEXT_SCOPE_OPTIONS = [
+  { value: "previous-assistant-reply" as const, label: "Last reply" },
+  { value: "full-transcript" as const, label: "Full transcript" },
+]
+
+function SubagentForm(props: SubagentFormProps) {
+  const baseline = useMemo<SubagentInput>(() => {
+    if (props.mode === "edit" && props.subject) return toSubagentInput(props.subject)
+    return createDefaultSubagentDraft("claude", props.providerDefaults)
+  }, [props.mode, props.subject, props.providerDefaults])
+
+  const [draft, setDraft] = useState<SubagentInput>(baseline)
+  const [error, setError] = useState<{ field: SubagentFieldKey; message: string } | null>(null)
+  const [pending, setPending] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+
+  const nameError = error?.field === "name" ? error.message : null
+  const generalError = error?.field === "general" ? error.message : null
+  const isDirty = isSubagentDraftDirty(draft, baseline)
+  const canSave = draft.name.trim().length > 0 && (props.mode === "create" || isDirty)
+
+  function patchDraft(patch: Partial<SubagentInput>) {
+    setDraft((prev) => ({ ...prev, ...patch }))
+    if (error?.field === "name" && "name" in patch) {
+      setError(null)
+    }
+  }
+
+  function handleProviderChange(provider: AgentProvider) {
+    if (provider === draft.provider) return
+    const defaults = createDefaultSubagentDraft(provider, props.providerDefaults)
+    setDraft((prev) => ({
+      ...prev,
+      provider,
+      model: defaults.model,
+      modelOptions: defaults.modelOptions,
+    }))
+  }
+
+  function handleClaudeReasoning(value: ClaudeReasoningEffort) {
+    if (draft.provider !== "claude") return
+    setDraft((prev) => ({
+      ...prev,
+      modelOptions: { ...(prev.modelOptions as ClaudeModelOptions), reasoningEffort: value },
+    }))
+  }
+
+  function handleClaudeContextWindow(value: ClaudeContextWindow) {
+    if (draft.provider !== "claude") return
+    setDraft((prev) => ({
+      ...prev,
+      modelOptions: { ...(prev.modelOptions as ClaudeModelOptions), contextWindow: value },
+    }))
+  }
+
+  function handleCodexReasoning(value: CodexReasoningEffort) {
+    if (draft.provider !== "codex") return
+    setDraft((prev) => ({
+      ...prev,
+      modelOptions: { ...(prev.modelOptions as CodexModelOptions), reasoningEffort: value },
+    }))
+  }
+
+  async function handleSubmit() {
+    if (!canSave || pending) return
+    setPending(true)
+    setError(null)
+    try {
+      const result =
+        props.mode === "create"
+          ? await props.handlers.onCreate(draft)
+          : await props.handlers.onUpdate(props.subject!.id, draft)
+      if (!result.ok) {
+        setError(mapSubagentValidationError(result.error))
+      }
+    } finally {
+      setPending(false)
+    }
+  }
+
+  async function handleDelete() {
+    if (props.mode !== "edit" || !props.subject) return
+    if (!confirmDelete) {
+      setConfirmDelete(true)
+      return
+    }
+    setPending(true)
+    try {
+      await props.handlers.onDelete(props.subject.id)
+    } finally {
+      setPending(false)
+      setConfirmDelete(false)
+    }
+  }
+
+  const claudeOptions = draft.provider === "claude" ? draft.modelOptions as ClaudeModelOptions : null
+  const codexOptions = draft.provider === "codex" ? draft.modelOptions as CodexModelOptions : null
+  const providerCatalog = getProviderCatalog(draft.provider)
+
+  return (
+    <section className="flex w-full flex-1 flex-col gap-4">
+      <header className="flex flex-col gap-1">
+        <h3 className="text-base font-medium text-foreground">
+          {props.mode === "create" ? "New subagent" : draft.name || "Subagent"}
+        </h3>
+        <p className="text-sm text-muted-foreground">
+          Mention with <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">@agent/{draft.name || "<name>"}</code> in chat.
+        </p>
+      </header>
+
+      {generalError ? (
+        <div className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+          {generalError}
+        </div>
+      ) : null}
+
+      <FormRow label="Name" hint={nameError} hintTone={nameError ? "destructive" : "muted"}>
+        <Input
+          data-testid="subagent-form-name"
+          value={draft.name}
+          onChange={(event) => patchDraft({ name: sanitizeSubagentNameInput(event.target.value) })}
+          maxLength={SUBAGENT_NAME_MAX}
+          placeholder="reviewer"
+          className="font-mono"
+        />
+      </FormRow>
+
+      <FormRow label="Description" hint="Optional. Shown next to the name.">
+        <Input
+          data-testid="subagent-form-description"
+          value={draft.description ?? ""}
+          onChange={(event) => patchDraft({ description: event.target.value })}
+          placeholder="Reviews diffs against the repo style"
+        />
+      </FormRow>
+
+      <FormRow label="Provider">
+        <SegmentedControl
+          value={draft.provider}
+          onValueChange={(value) => handleProviderChange(value as AgentProvider)}
+          options={PROVIDER_OPTIONS}
+          size="sm"
+        />
+      </FormRow>
+
+      <FormRow label="Model">
+        <Select
+          value={draft.model}
+          onValueChange={(value) => patchDraft({ model: value })}
+        >
+          <SelectTrigger data-testid="subagent-form-model" className="w-full md:w-72">
+            <SelectValue placeholder="Select a model" />
+          </SelectTrigger>
+          <SelectContent>
+            {providerCatalog.models.map((model) => (
+              <SelectItem key={model.id} value={model.id}>{model.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </FormRow>
+
+      {claudeOptions ? (
+        <>
+          <FormRow label="Reasoning effort">
+            <SegmentedControl
+              value={claudeOptions.reasoningEffort}
+              onValueChange={(value) => {
+                if (isClaudeReasoningEffort(value)) handleClaudeReasoning(value)
+              }}
+              options={CLAUDE_REASONING_OPTIONS.map((option) => ({ value: option.id, label: option.label }))}
+              size="sm"
+            />
+          </FormRow>
+          <FormRow label="Context window">
+            <SegmentedControl
+              value={claudeOptions.contextWindow}
+              onValueChange={(value) => {
+                if (isClaudeContextWindow(value)) handleClaudeContextWindow(value)
+              }}
+              options={CLAUDE_CONTEXT_WINDOW_OPTIONS.map((option) => ({ value: option.id, label: option.label }))}
+              size="sm"
+            />
+          </FormRow>
+        </>
+      ) : null}
+
+      {codexOptions ? (
+        <FormRow label="Reasoning effort">
+          <SegmentedControl
+            value={codexOptions.reasoningEffort}
+            onValueChange={(value) => {
+              if (isCodexReasoningEffort(value)) handleCodexReasoning(value)
+            }}
+            options={CODEX_REASONING_OPTIONS.map((option) => ({ value: option.id, label: option.label }))}
+            size="sm"
+          />
+        </FormRow>
+      ) : null}
+
+      <FormRow label="Context scope">
+        <SegmentedControl
+          value={draft.contextScope}
+          onValueChange={(value) => patchDraft({ contextScope: value as SubagentContextScope })}
+          options={CONTEXT_SCOPE_OPTIONS}
+          size="sm"
+        />
+      </FormRow>
+
+      <FormRow label="System prompt" hint="What this persona should focus on. Plain text.">
+        <Textarea
+          data-testid="subagent-form-system-prompt"
+          value={draft.systemPrompt}
+          onChange={(event) => patchDraft({ systemPrompt: event.target.value })}
+          placeholder="You are a careful code reviewer..."
+          rows={6}
+          className="min-h-32"
+        />
+      </FormRow>
+
+      <footer className="flex flex-wrap items-center justify-end gap-2 pt-2">
+        <Button variant="ghost" size="sm" onClick={props.onCancelEditing}>Cancel</Button>
+        {props.mode === "edit" ? (
+          <Button
+            variant="destructive"
+            size="sm"
+            data-testid="subagent-form-delete"
+            disabled={pending}
+            onClick={handleDelete}
+          >
+            {confirmDelete ? "Confirm delete" : "Delete"}
+          </Button>
+        ) : null}
+        <Button
+          variant="default"
+          size="sm"
+          data-testid="subagent-form-save"
+          disabled={!canSave || pending}
+          onClick={handleSubmit}
+        >
+          {pending ? "Saving…" : "Save"}
+        </Button>
+      </footer>
+    </section>
+  )
+}
+
+function FormRow(props: {
+  label: string
+  hint?: string | null
+  hintTone?: "muted" | "destructive"
+  children: React.ReactNode
+}) {
+  return (
+    <div className="grid gap-1.5">
+      <span className="text-xs font-medium text-foreground">{props.label}</span>
+      {props.children}
+      {props.hint ? (
+        <span
+          className={cn(
+            "text-xs",
+            props.hintTone === "destructive" ? "text-destructive" : "text-muted-foreground",
+          )}
+        >
+          {props.hint}
+        </span>
+      ) : null}
+    </div>
+  )
+}
+
+// ── SettingsPage wiring ──────────────────────────────────────────────────────
+import type { KannaState } from "./useKannaState"
+import { useAppSettingsStore } from "../stores/appSettingsStore"
+
+const EMPTY_SUBAGENTS: Subagent[] = []
+
+const FALLBACK_PROVIDER_PREFS: ChatProviderPreferences = {
+  claude: {
+    model: getProviderCatalog("claude").defaultModel,
+    modelOptions: { ...DEFAULT_CLAUDE_MODEL_OPTIONS },
+    planMode: false,
+  },
+  codex: {
+    model: getProviderCatalog("codex").defaultModel,
+    modelOptions: { ...DEFAULT_CODEX_MODEL_OPTIONS },
+    planMode: false,
+  },
+}
+
+export function SubagentsSettingsBranch(props: {
+  state: Pick<KannaState, "socket" | "appSettings">
+}) {
+  const subagents = useAppSettingsStore(
+    (store) => store.settings?.subagents ?? EMPTY_SUBAGENTS,
+  )
+  const providerDefaults = useAppSettingsStore(
+    (store) => store.settings?.providerDefaults ?? FALLBACK_PROVIDER_PREFS,
+  )
+
+  const [editing, setEditing] = useState<SubagentsEditingState>({ kind: "list" })
+
+  const handlers = useMemo<SubagentsSectionHandlers>(
+    () => ({
+      onCreate: async (input) => {
+        const result = await props.state.socket.command<SubagentCommandResult>({
+          type: "subagent.create",
+          input,
+        })
+        if (result.ok) setEditing({ kind: "edit", id: result.subagent.id })
+        return result
+      },
+      onUpdate: async (id, input) => {
+        const result = await props.state.socket.command<SubagentCommandResult>({
+          type: "subagent.update",
+          id,
+          patch: input,
+        })
+        return result
+      },
+      onDelete: async (id) => {
+        await props.state.socket.command({ type: "subagent.delete", id })
+        setEditing({ kind: "list" })
+      },
+    }),
+    [props.state.socket],
+  )
+
+  const handleSelect = useCallback((id: string) => {
+    setEditing({ kind: "edit", id })
+  }, [])
+
+  const handleStartCreate = useCallback(() => {
+    setEditing({ kind: "create" })
+  }, [])
+
+  const handleCancelEditing = useCallback(() => {
+    setEditing({ kind: "list" })
+  }, [])
+
+  return (
+    <div className="px-6 py-6">
+      <SubagentsSection
+        subagents={subagents}
+        providerDefaults={providerDefaults}
+        editing={editing}
+        onSelect={handleSelect}
+        onStartCreate={handleStartCreate}
+        onCancelEditing={handleCancelEditing}
+        handlers={handlers}
+      />
+    </div>
+  )
+}
+
+export const SUBAGENT_NAME_MAX = 64
+
+const NAME_FIELD_CODES = new Set<SubagentValidationErrorCode>([
+  "EMPTY_NAME",
+  "INVALID_CHAR",
+  "RESERVED_NAME",
+  "DUPLICATE_NAME",
+  "TOO_LONG",
+])
+
+export type SubagentFieldKey = "name" | "general"
+
+export interface SubagentFieldError {
+  field: SubagentFieldKey
+  message: string
+}
+
+export function createDefaultSubagentDraft(
+  provider: AgentProvider,
+  providerDefaults: ChatProviderPreferences | undefined,
+): SubagentInput {
+  if (provider === "claude") {
+    const preference = providerDefaults?.claude
+    const model = preference?.model ?? getProviderCatalog("claude").defaultModel
+    const modelOptions: ClaudeModelOptions =
+      preference?.modelOptions ?? { ...DEFAULT_CLAUDE_MODEL_OPTIONS }
+    return {
+      name: "",
+      provider,
+      model,
+      modelOptions: { ...modelOptions },
+      systemPrompt: "",
+      contextScope: "previous-assistant-reply",
+    }
+  }
+  const preference = providerDefaults?.codex
+  const model = preference?.model ?? getProviderCatalog("codex").defaultModel
+  const modelOptions: CodexModelOptions =
+    preference?.modelOptions ?? { ...DEFAULT_CODEX_MODEL_OPTIONS }
+  return {
+    name: "",
+    provider,
+    model,
+    modelOptions: { ...modelOptions },
+    systemPrompt: "",
+    contextScope: "previous-assistant-reply",
+  }
+}
+
+export function toSubagentInput(subagent: Subagent): SubagentInput {
+  return {
+    name: subagent.name,
+    description: subagent.description,
+    provider: subagent.provider,
+    model: subagent.model,
+    modelOptions: subagent.modelOptions,
+    systemPrompt: subagent.systemPrompt,
+    contextScope: subagent.contextScope,
+  }
+}
+
+export function isSubagentDraftDirty(draft: SubagentInput, baseline: SubagentInput): boolean {
+  if (draft.name !== baseline.name) return true
+  if ((draft.description ?? "") !== (baseline.description ?? "")) return true
+  if (draft.provider !== baseline.provider) return true
+  if (draft.model !== baseline.model) return true
+  if (draft.systemPrompt !== baseline.systemPrompt) return true
+  if (draft.contextScope !== baseline.contextScope) return true
+  return !shallowEqualModelOptions(draft.modelOptions, baseline.modelOptions)
+}
+
+function shallowEqualModelOptions(
+  a: ClaudeModelOptions | CodexModelOptions,
+  b: ClaudeModelOptions | CodexModelOptions,
+): boolean {
+  const ra = a as unknown as Record<string, unknown>
+  const rb = b as unknown as Record<string, unknown>
+  const keys = new Set([...Object.keys(ra), ...Object.keys(rb)])
+  for (const key of keys) {
+    if (ra[key] !== rb[key]) return false
+  }
+  return true
+}
+
+export function mapSubagentValidationError(error: SubagentValidationError): SubagentFieldError {
+  if (NAME_FIELD_CODES.has(error.code)) {
+    return { field: "name", message: error.message }
+  }
+  return { field: "general", message: error.message }
+}
+
+export function sanitizeSubagentNameInput(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, "-")
+    .slice(0, SUBAGENT_NAME_MAX)
+}
