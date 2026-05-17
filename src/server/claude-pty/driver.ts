@@ -12,6 +12,7 @@ import { isSandboxEnabledAsync } from "./sandbox/platform"
 import { wrapWithSandbox } from "./sandbox/wrap"
 import { POLICY_DEFAULT } from "../../shared/permission-policy"
 import { startKannaMcpHttpServer, buildMcpConfigJson, type KannaMcpHttpHandle } from "../kanna-mcp-http"
+import { parseConfiguredContextWindowFromModelId } from "../agent"
 import type { PreflightGate } from "./preflight/gate"
 import type { ClaudeSessionHandle } from "../agent"
 import type { HarnessEvent, HarnessToolRequest } from "../harness-types"
@@ -228,7 +229,10 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
     throw err
   }
 
-  const reader = createJsonlReader({ filePath: jsonlPath })
+  const reader = createJsonlReader({
+    filePath: jsonlPath,
+    configuredContextWindow: parseConfiguredContextWindowFromModelId(args.model),
+  })
 
   void (async () => {
     for await (const ev of reader) pushMerged(ev)
@@ -308,7 +312,17 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
       })
     },
     setPermissionMode: async (_planMode) => {
-      await writeSlashCommand(pty, "permissions")
+      // D4 — Claude CLI exposes no runtime switch equivalent to the SDK's
+      // q.setPermissionMode("plan" | "acceptEdits"). Filed upstream as
+      // anthropics/claude-code#59891. Previous implementation sent
+      // `/permissions` which only opens the interactive menu — it does
+      // NOT actually change the mode, and gave the false impression the
+      // toggle worked. No-op + warn until upstream lands; callers should
+      // restart the session to flip plan-mode under PTY.
+      console.warn(
+        "[claude-pty] setPermissionMode at runtime is unsupported in PTY mode "
+        + "(awaiting anthropics/claude-code#59891). Restart the session to flip plan-mode.",
+      )
     },
     getSupportedCommands: async () => STATIC_SUPPORTED_COMMANDS,
     getAccountInfo: async () => cachedAccountInfo,

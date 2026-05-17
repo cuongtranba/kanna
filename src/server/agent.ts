@@ -252,7 +252,7 @@ interface SendMessageOptions {
   autoContinue?: { scheduleId: string }
 }
 
-function timestamped<T extends Omit<TranscriptEntry, "_id" | "createdAt">>(
+export function timestamped<T extends Omit<TranscriptEntry, "_id" | "createdAt">>(
   entry: T,
   createdAt = Date.now()
 ): TranscriptEntry {
@@ -476,7 +476,7 @@ export function parseConfiguredContextWindowFromModelId(modelId: string): number
   return modelId.endsWith("[1m]") ? 1_000_000 : undefined
 }
 
-function getClaudeAssistantMessageUsageId(message: any): string | null {
+export function getClaudeAssistantMessageUsageId(message: any): string | null {
   if (typeof message?.message?.id === "string" && message.message.id) {
     return message.message.id
   }

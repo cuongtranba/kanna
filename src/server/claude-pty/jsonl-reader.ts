@@ -2,7 +2,7 @@ import { watch } from "node:fs"
 import { open, stat } from "node:fs/promises"
 import path from "node:path"
 import type { HarnessEvent } from "../harness-types"
-import { parseJsonlLine } from "./jsonl-to-event"
+import { createJsonlEventParser } from "./jsonl-to-event"
 
 export interface JsonlReader extends AsyncIterable<HarnessEvent> {
   close(): void
@@ -14,10 +14,15 @@ interface StatBookmark {
   byteOffset: number
 }
 
-export function createJsonlReader(args: { filePath: string }): JsonlReader {
+export function createJsonlReader(args: {
+  filePath: string
+  /** Configured context-window floor passed to the stateful parser (for `[1m]` models). */
+  configuredContextWindow?: number
+}): JsonlReader {
   const filePath = args.filePath
   const dir = path.dirname(filePath)
   const baseName = path.basename(filePath)
+  const parser = createJsonlEventParser({ configuredContextWindow: args.configuredContextWindow })
 
   let bookmark: StatBookmark | null = null
   let closed = false
@@ -94,7 +99,7 @@ export function createJsonlReader(args: { filePath: string }): JsonlReader {
           while (nl !== -1) {
             const line = partial.slice(0, nl)
             partial = partial.slice(nl + 1)
-            for (const ev of parseJsonlLine(line)) deliver(ev)
+            for (const ev of parser.parse(line)) deliver(ev)
             nl = partial.indexOf("\n")
           }
         }
