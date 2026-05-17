@@ -84,4 +84,60 @@ describe("preflight gate", () => {
       expect(suiteCalls).toBe(2)
     } finally { await cA(); await cB() }
   })
+
+  test("suite throw → fail-closed (not ok), not an unhandled rejection", async () => {
+    const { filePath, cleanup } = await fixtureBinary("v6")
+    try {
+      const gate = createPreflightGate({
+        toolsString: "mcp__kanna__*",
+        now: () => 0,
+        runSuite: async () => { throw new Error("spawn EACCES") },
+      })
+      const r = await gate.canSpawn({ binaryPath: filePath, model: "m" })
+      expect(r.ok).toBe(false)
+      if (!r.ok) {
+        expect(r.reason).toContain("fail-closed")
+        expect(r.reason).toContain("spawn EACCES")
+      }
+    } finally { await cleanup() }
+  })
+
+  test("suite throw is not cached → next call re-probes", async () => {
+    const { filePath, cleanup } = await fixtureBinary("v7")
+    try {
+      let calls = 0
+      const gate = createPreflightGate({
+        toolsString: "mcp__kanna__*",
+        now: () => 0,
+        runSuite: async () => {
+          calls++
+          if (calls === 1) throw new Error("transient")
+          return PASS_PROBES
+        },
+      })
+      const r1 = await gate.canSpawn({ binaryPath: filePath, model: "m" })
+      expect(r1.ok).toBe(false)
+      const r2 = await gate.canSpawn({ binaryPath: filePath, model: "m" })
+      expect(r2.ok).toBe(true)
+      expect(calls).toBe(2)
+    } finally { await cleanup() }
+  })
+
+  test("invalidateAll() forces a re-probe on the next canSpawn", async () => {
+    const { filePath, cleanup } = await fixtureBinary("v8")
+    try {
+      let calls = 0
+      const gate = createPreflightGate({
+        toolsString: "mcp__kanna__*",
+        now: () => 0,
+        runSuite: async () => { calls++; return PASS_PROBES },
+      })
+      await gate.canSpawn({ binaryPath: filePath, model: "m" })
+      await gate.canSpawn({ binaryPath: filePath, model: "m" })
+      expect(calls).toBe(1) // cached
+      gate.invalidateAll()
+      await gate.canSpawn({ binaryPath: filePath, model: "m" })
+      expect(calls).toBe(2) // re-probed after wipe
+    } finally { await cleanup() }
+  })
 })

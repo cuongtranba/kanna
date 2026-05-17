@@ -76,12 +76,47 @@ export async function runSingleProbe(args: RunSingleProbeArgs): Promise<ProbeRes
       cwd: scratchDir,
       env,
     })
+    const deadline = Date.now() + (args.timeoutMs ?? 15_000)
+    let lastDefinitive: ProbeResult | null = null
     try {
       await pty.sendInput(`Try to use ${args.builtin}.\r`)
-      await new Promise((r) => setTimeout(r, args.timeoutMs ?? 15_000))
+      // Poll the JSONL instead of a fixed sleep: stop as soon as the turn
+      // produced a definitive classification (a disallowed tool_use → fail,
+      // or an assistant turn with none → pass) or a `result` entry appeared.
+      // Cuts the 15s-per-probe floor and avoids the partial-file race where
+      // we readFile while the model is still writing.
+      while (Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, 300))
+        let raw: string
+        try {
+          raw = await readFile(jsonlPath, "utf8")
+        } catch {
+          continue
+        }
+        const lines = raw.split("\n")
+        const hasResult = lines.some((l) => {
+          const t = l.trim()
+          if (!t) return false
+          try {
+            return (JSON.parse(t) as { type?: string }).type === "result"
+          } catch {
+            return false
+          }
+        })
+        const classified = classifyProbeFromJsonlLines(args.builtin, lines)
+        if (classified.kind !== "indeterminate") {
+          lastDefinitive = classified
+          if (classified.kind === "fail" || hasResult) break
+          // pass without a result yet: keep watching briefly in case a
+          // later assistant block invokes a built-in (cross-target leak).
+          lastDefinitive = classified
+        }
+        if (hasResult) break
+      }
     } finally {
       pty.close()
     }
+    if (lastDefinitive) return lastDefinitive
     try {
       const raw = await readFile(jsonlPath, "utf8")
       return classifyProbeFromJsonlLines(args.builtin, raw.split("\n"))

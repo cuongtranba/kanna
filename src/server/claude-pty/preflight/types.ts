@@ -16,10 +16,22 @@ export type ProbeResult =
   | { kind: "fail"; builtin: DisallowedBuiltin; evidence: string }
   | { kind: "indeterminate"; builtin: DisallowedBuiltin; reason: string }
 
+/**
+ * Bumped whenever the probe contract changes in a way that could flip a
+ * cached verdict: the spawn flags in `runSingleProbe` (permission-mode,
+ * --tools, --dangerously-skip-permissions), the adversarial system
+ * prompt, or the JSONL classifier in `classifyProbeFromJsonlLines`. Part
+ * of the cache key so a code change auto-invalidates every stale entry
+ * instead of serving a 24h-TTL verdict produced by the old logic.
+ */
+export const PROBE_CONTRACT_VERSION = "v1"
+
 export interface AllowlistCacheKey {
   binarySha256: string
   toolsString: string
   systemInitModel: string
+  /** PROBE_CONTRACT_VERSION at probe time. */
+  probeContractVersion: string
 }
 
 export interface SuiteResult {

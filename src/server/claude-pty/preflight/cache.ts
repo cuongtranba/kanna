@@ -3,13 +3,15 @@ import type { AllowlistCacheKey, SuiteResult } from "./types"
 const TTL_MS = 24 * 60 * 60 * 1000
 
 function keyToString(k: AllowlistCacheKey): string {
-  return `${k.binarySha256}|${k.toolsString}|${k.systemInitModel}`
+  return `${k.binarySha256}|${k.toolsString}|${k.systemInitModel}|${k.probeContractVersion}`
 }
 
 export interface PreflightCache {
   get(key: AllowlistCacheKey): SuiteResult | null
   put(result: SuiteResult): void
   invalidate(key: AllowlistCacheKey): void
+  /** Drop every cached verdict. Used by gate.invalidateAll() after a binary/config change or suspected compromise. */
+  clear(): void
 }
 
 export function createPreflightCache(opts: { now: () => number; ttlMs?: number }): PreflightCache {
@@ -31,6 +33,9 @@ export function createPreflightCache(opts: { now: () => number; ttlMs?: number }
     },
     invalidate(key) {
       map.delete(keyToString(key))
+    },
+    clear() {
+      map.clear()
     },
   }
 }

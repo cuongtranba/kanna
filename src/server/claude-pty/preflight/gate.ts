@@ -1,4 +1,5 @@
 import type { AllowlistCacheKey, ProbeResult, SuiteResult } from "./types"
+import { PROBE_CONTRACT_VERSION } from "./types"
 import { aggregateProbes } from "./suite"
 import { createPreflightCache, type PreflightCache } from "./cache"
 import { computeBinarySha256 } from "./binary-fingerprint"
@@ -25,16 +26,17 @@ export function createPreflightGate(opts: PreflightGateArgs): PreflightGate {
   const inflight = new Map<string, Promise<ProbeResult[]>>()
 
   function keyHash(k: AllowlistCacheKey): string {
-    return `${k.binarySha256}|${k.toolsString}|${k.systemInitModel}`
+    return `${k.binarySha256}|${k.toolsString}|${k.systemInitModel}|${k.probeContractVersion}`
   }
 
   return {
     async canSpawn(args) {
       const binarySha256 = await computeBinarySha256(args.binaryPath)
-      const key = {
+      const key: AllowlistCacheKey = {
         binarySha256,
         toolsString: opts.toolsString,
         systemInitModel: args.model,
+        probeContractVersion: PROBE_CONTRACT_VERSION,
       }
       const cached = cache.get(key)
       if (cached && cached.verdict === "pass") {
@@ -48,9 +50,25 @@ export function createPreflightGate(opts: PreflightGateArgs): PreflightGate {
       if (!promise) {
         promise = opts.runSuite()
         inflight.set(inflightKey, promise)
-        promise.finally(() => inflight.delete(inflightKey))
+        // Settle handler doubles as the only consumer of the promise's
+        // rejection so a thrown suite does not surface as an unhandled
+        // rejection; the caller's own `await promise` in the try/catch
+        // below is what actually drives the fail-closed path.
+        const settle = () => inflight.delete(inflightKey)
+        promise.then(settle, settle)
       }
-      const probes = await promise
+      let probes: ProbeResult[]
+      try {
+        probes = await promise
+      } catch (err) {
+        // FAIL-CLOSED: a thrown suite (spawn error, fs failure, probe
+        // crash) must refuse the spawn, not propagate an unhandled
+        // rejection that the caller might treat as "no error → allow".
+        // Not cached: the next spawn re-probes (transient failures should
+        // not pin a 24h refusal).
+        const reason = err instanceof Error ? err.message : String(err)
+        return { ok: false, reason: `preflight suite error (fail-closed): ${reason}` }
+      }
       const verdict = aggregateProbes(probes).verdict
       const result: SuiteResult = { key, verdict, probes, probedAt: opts.now() }
       cache.put(result)
@@ -58,10 +76,7 @@ export function createPreflightGate(opts: PreflightGateArgs): PreflightGate {
       return { ok: false, reason: summarizeFailure(probes) }
     },
     invalidateAll() {
-      // Recreate the closure's cache by clearing the underlying map.
-      // We do this by replacing the entry — but the cache exposes only invalidate(key).
-      // For P3b we don't need a global wipe; document that callers should re-run canSpawn
-      // and let TTL expire stale entries. Leaving this as a stub satisfies the interface.
+      cache.clear()
     },
   }
 }

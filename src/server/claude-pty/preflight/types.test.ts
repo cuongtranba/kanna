@@ -18,18 +18,20 @@ describe("preflight types", () => {
     expect(ind.kind).toBe("indeterminate")
   })
 
-  test("AllowlistCacheKey requires all three fields", () => {
+  test("AllowlistCacheKey requires binary/tools/model/contract fields", () => {
     const k: AllowlistCacheKey = {
       binarySha256: "abc",
       toolsString: "mcp__kanna__*",
       systemInitModel: "claude-opus-4-7",
+      probeContractVersion: "v1",
     }
     expect(k.binarySha256).toBe("abc")
+    expect(k.probeContractVersion).toBe("v1")
   })
 
   test("SuiteResult includes timestamp and per-probe outcomes", () => {
     const s: SuiteResult = {
-      key: { binarySha256: "x", toolsString: "y", systemInitModel: "z" },
+      key: { binarySha256: "x", toolsString: "y", systemInitModel: "z", probeContractVersion: "v1" },
       verdict: "pass",
       probes: [],
       probedAt: 100,

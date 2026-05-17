@@ -3,7 +3,7 @@ import { createPreflightCache } from "./cache"
 import type { SuiteResult } from "./types"
 
 const baseSuiteResult: SuiteResult = {
-  key: { binarySha256: "sha-a", toolsString: "mcp__kanna__*", systemInitModel: "m1" },
+  key: { binarySha256: "sha-a", toolsString: "mcp__kanna__*", systemInitModel: "m1", probeContractVersion: "v1" },
   verdict: "pass",
   probes: [],
   probedAt: 0,
@@ -12,7 +12,7 @@ const baseSuiteResult: SuiteResult = {
 describe("preflight cache", () => {
   test("get returns null when key missing", () => {
     const c = createPreflightCache({ now: () => 0 })
-    expect(c.get({ binarySha256: "x", toolsString: "y", systemInitModel: "z" })).toBeNull()
+    expect(c.get({ binarySha256: "x", toolsString: "y", systemInitModel: "z", probeContractVersion: "v1" })).toBeNull()
   })
 
   test("put then get returns the cached result", () => {
@@ -40,6 +40,21 @@ describe("preflight cache", () => {
   test("different binarySha256 → different entry", () => {
     const c = createPreflightCache({ now: () => 0 })
     c.put(baseSuiteResult)
+    expect(c.get({ ...baseSuiteResult.key, binarySha256: "sha-b" })).toBeNull()
+  })
+
+  test("different probeContractVersion → different entry (stale logic auto-invalidated)", () => {
+    const c = createPreflightCache({ now: () => 0 })
+    c.put(baseSuiteResult)
+    expect(c.get({ ...baseSuiteResult.key, probeContractVersion: "v2" })).toBeNull()
+  })
+
+  test("clear() drops every entry", () => {
+    const c = createPreflightCache({ now: () => 0 })
+    c.put(baseSuiteResult)
+    c.put({ ...baseSuiteResult, key: { ...baseSuiteResult.key, binarySha256: "sha-b" } })
+    c.clear()
+    expect(c.get(baseSuiteResult.key)).toBeNull()
     expect(c.get({ ...baseSuiteResult.key, binarySha256: "sha-b" })).toBeNull()
   })
 })
