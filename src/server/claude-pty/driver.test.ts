@@ -272,4 +272,18 @@ describe("buildPtyCliArgs", () => {
     const idx = args.indexOf("--system-prompt")
     expect(args[idx + 1]).toBe("custom prompt body")
   })
+
+  test("--mcp-config + --strict-mcp-config appended when path provided", () => {
+    const args = buildPtyCliArgs({ ...baseInput, mcpConfigPath: "/tmp/mcp-config.json" })
+    const idx = args.indexOf("--mcp-config")
+    expect(idx).toBeGreaterThan(-1)
+    expect(args[idx + 1]).toBe("/tmp/mcp-config.json")
+    expect(args).toContain("--strict-mcp-config")
+  })
+
+  test("--mcp-config omitted when path absent", () => {
+    const args = buildPtyCliArgs(baseInput)
+    expect(args).not.toContain("--mcp-config")
+    expect(args).not.toContain("--strict-mcp-config")
+  })
 })

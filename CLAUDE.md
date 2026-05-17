@@ -86,8 +86,6 @@ Limitations of P2 (this release):
 
 **Parity gaps vs SDK driver** — tracked in #162 (umbrella #163). Until those
 land, the following diverge from the SDK path:
-- `AskUserQuestion` / `ExitPlanMode` do not route through `toolCallback` or
-  `onToolRequest`; `mcp__kanna__*` shims are not registered with the CLI.
 - No `context_window_updated`, `rate_limit_event`, or per-message
   `session_token` events.
 - Crashes / OAuth failures complete silently (no isError result, no
@@ -98,6 +96,19 @@ land, the following diverge from the SDK path:
   `KANNA_CLAUDE_DRIVER=pty`. Subagent turns still bill at API rates.
 - `getAccountInfo()` returns `null`; `getSupportedCommands()` returns a
   static four-command list.
+
+**Kanna MCP server (Phase 2):** PTY mode now starts an in-process HTTP
+MCP server bound to loopback (`127.0.0.1:<ephemeral>`) for every PTY
+spawn. The claude CLI subprocess connects via `--mcp-config <file>` with
+a per-spawn random Bearer token in the `Authorization` header.
+`--strict-mcp-config` is set so the CLI ignores any user-side MCP config.
+This exposes the same tool surface the SDK driver gets via
+`createSdkMcpServer`: `offer_download`, `expose_port`, and when
+`KANNA_MCP_TOOL_CALLBACKS=1` the eight built-in shims plus
+`ask_user_question` / `exit_plan_mode`. `toolCallback`,
+`tunnelGateway`, and `chatPolicy` live in the parent process so no IPC
+serialization is needed. Server is torn down on `close()` along with
+`toolCallback.cancelAllForSession(sessionId, "session_closed")`.
 
 **OAuth pool rotation (P5):** PTY mode honors the same multi-token rotation
 the SDK driver uses. `AgentCoordinator` picks an active token from
