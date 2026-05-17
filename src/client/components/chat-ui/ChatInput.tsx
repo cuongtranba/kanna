@@ -19,7 +19,7 @@ import {
   normalizeClaudeContextWindow,
   resolveClaudeContextWindowTokens,
 } from "../../../shared/types"
-import { Button, buttonVariants } from "../ui/button"
+import { Button } from "../ui/button"
 import { Textarea } from "../ui/textarea"
 import { ScrollArea } from "../ui/scroll-area"
 import { cn } from "../../lib/utils"
@@ -259,6 +259,7 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput({
   const selectedProvider = composerState.provider
   const slashCommands = useSlashCommands(chatId ?? null)
   const slashCommandsLoading = useSlashCommandsLoading(chatId ?? null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const [pickerIndex, setPickerIndex] = useState(0)
   const [pickerDismissed, setPickerDismissed] = useState(false)
   const [caretVersion, setCaretVersion] = useState(0)
@@ -1020,30 +1021,38 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput({
                 onHoverIndex={setMentionIndex}
               />
             )}
-            <label
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
               aria-label="Add attachment"
-              className={cn(
-                buttonVariants({ variant: "ghost", size: "icon" }),
-                "relative flex-shrink-0 ml-1 mb-1 h-11 w-11 rounded-full text-muted-foreground hover:text-foreground",
-                disabled && "pointer-events-none opacity-50",
-              )}
+              disabled={disabled}
+              // iOS Safari scrolls the document when a tap transfers focus to
+              // a <input type="file"> (even when opacity:0). Keep the textarea
+              // focused via preventDefault on pointerdown, then trigger the
+              // hidden file input programmatically from the click handler.
+              onPointerDown={(event) => event.preventDefault()}
+              onClick={() => fileInputRef.current?.click()}
+              className="relative flex-shrink-0 ml-1 mb-1 h-11 w-11 rounded-full text-muted-foreground hover:text-foreground"
             >
               <Paperclip className="h-5 w-5" />
-              <input
-                type="file"
-                multiple
-                disabled={disabled}
-                aria-label="Add attachment"
-                className="absolute inset-0 cursor-pointer opacity-0"
-                onChange={(event) => {
-                  const files = [...(event.target.files ?? [])]
-                  if (files.length > 0) {
-                    enqueueFiles(files)
-                  }
-                  event.target.value = ""
-                }}
-              />
-            </label>
+            </Button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              disabled={disabled}
+              tabIndex={-1}
+              aria-hidden="true"
+              className="sr-only"
+              onChange={(event) => {
+                const files = [...(event.target.files ?? [])]
+                if (files.length > 0) {
+                  enqueueFiles(files)
+                }
+                event.target.value = ""
+              }}
+            />
             <Textarea
               ref={setTextareaRefs}
               placeholder="Build something..."
