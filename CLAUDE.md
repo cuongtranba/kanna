@@ -84,6 +84,21 @@ Limitations of P2 (this release):
   applies to `AskUserQuestion`/`ExitPlanMode` only.
 - macOS/Linux only.
 
+**Parity gaps vs SDK driver** — tracked in #162 (umbrella #163). Until those
+land, the following diverge from the SDK path:
+- `AskUserQuestion` / `ExitPlanMode` do not route through `toolCallback` or
+  `onToolRequest`; `mcp__kanna__*` shims are not registered with the CLI.
+- No `context_window_updated`, `rate_limit_event`, or per-message
+  `session_token` events.
+- Crashes / OAuth failures complete silently (no isError result, no
+  rotation / retry).
+- `setPermissionMode(planMode)` at runtime is a no-op — blocked on Claude
+  CLI exposing a runtime switch (anthropics/claude-code#59891).
+- Claude subagents always route through the SDK driver, even when
+  `KANNA_CLAUDE_DRIVER=pty`. Subagent turns still bill at API rates.
+- `getAccountInfo()` returns `null`; `getSupportedCommands()` returns a
+  static four-command list.
+
 **OAuth pool rotation (P5):** PTY mode honors the same multi-token rotation
 the SDK driver uses. `AgentCoordinator` picks an active token from
 `OAuthTokenPool` per chat and the PTY driver injects it via the

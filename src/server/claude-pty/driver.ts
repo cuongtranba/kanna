@@ -15,6 +15,9 @@ import type { PreflightGate } from "./preflight/gate"
 import type { ClaudeSessionHandle } from "../agent"
 import type { HarnessEvent, HarnessToolRequest } from "../harness-types"
 import type { AccountInfo, SlashCommand } from "../../shared/types"
+import type { ToolCallbackService } from "../tool-callback"
+import type { TunnelGateway } from "../cloudflare-tunnel/gateway"
+import type { ChatPermissionPolicy } from "../../shared/permission-policy"
 
 const STATIC_SUPPORTED_COMMANDS: SlashCommand[] = [
   { name: "/model", description: "Switch model", argumentHint: "model name" },
@@ -40,6 +43,50 @@ export interface StartClaudeSessionPtyArgs {
   homeDir?: string
   env?: NodeJS.ProcessEnv
   preflightGate?: PreflightGate
+  /** Routes AskUserQuestion/ExitPlanMode through durable approval when KANNA_MCP_TOOL_CALLBACKS=1. Threaded for Phase 2 MCP wiring; unused today. */
+  toolCallback?: ToolCallbackService
+  /** Tunnel gateway for kanna-mcp expose_port. Threaded for Phase 2 MCP wiring; unused today. */
+  tunnelGateway?: TunnelGateway | null
+  /** Per-chat permission policy for kanna-mcp built-in shims. Threaded for Phase 2; unused today. */
+  chatPolicy?: ChatPermissionPolicy
+}
+
+export interface BuildPtyCliArgsInput {
+  sessionId: string
+  model: string
+  effort?: string
+  planMode: boolean
+  settingsPath: string
+  sessionToken: string | null
+  forkSession: boolean
+  additionalDirectories?: string[]
+  systemPromptOverride?: string
+}
+
+export function buildPtyCliArgs(args: BuildPtyCliArgsInput): string[] {
+  const cliArgs: string[] = [
+    "--session-id", args.sessionId,
+    "--model", args.model,
+    "--tools", "mcp__kanna__*",
+    "--settings", args.settingsPath,
+    "--no-update",
+    "--permission-mode", args.planMode ? "plan" : "acceptEdits",
+  ]
+  if (args.effort && args.effort.length > 0) cliArgs.push("--effort", args.effort)
+  if (args.sessionToken) cliArgs.push("--resume", args.sessionToken)
+  if (args.forkSession) cliArgs.push("--fork-session")
+  if (args.additionalDirectories) {
+    for (const dir of args.additionalDirectories) cliArgs.push("--add-dir", dir)
+  }
+  if (args.systemPromptOverride) {
+    cliArgs.push("--system-prompt", args.systemPromptOverride)
+  } else {
+    cliArgs.push(
+      "--append-system-prompt",
+      "You are the Kanna coding agent helping a trusted developer work on their own codebase via Kanna's web UI.",
+    )
+  }
+  return cliArgs
 }
 
 export function buildPtyEnv(args: {
@@ -90,27 +137,17 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
   const sandboxOn = await isSandboxEnabledAsync({ platform: process.platform, env: env.KANNA_PTY_SANDBOX })
 
   const claudeBin = env.CLAUDE_EXECUTABLE?.replace(/^~(?=\/|$)/, home) ?? "claude"
-  const cliArgs: string[] = [
-    "--session-id", sessionId,
-    "--model", args.model,
-    "--tools", "mcp__kanna__*",
-    "--settings", settingsPath,
-    "--no-update",
-    "--permission-mode", args.planMode ? "plan" : "acceptEdits",
-  ]
-  if (args.sessionToken) cliArgs.push("--resume", args.sessionToken)
-  if (args.forkSession) cliArgs.push("--fork-session")
-  if (args.additionalDirectories) {
-    for (const dir of args.additionalDirectories) cliArgs.push("--add-dir", dir)
-  }
-  if (args.systemPromptOverride) {
-    cliArgs.push("--system-prompt", args.systemPromptOverride)
-  } else {
-    cliArgs.push(
-      "--append-system-prompt",
-      "You are the Kanna coding agent helping a trusted developer work on their own codebase via Kanna's web UI.",
-    )
-  }
+  const cliArgs = buildPtyCliArgs({
+    sessionId,
+    model: args.model,
+    effort: args.effort,
+    planMode: args.planMode,
+    settingsPath,
+    sessionToken: args.sessionToken,
+    forkSession: args.forkSession,
+    additionalDirectories: args.additionalDirectories,
+    systemPromptOverride: args.systemPromptOverride,
+  })
 
   // Fix 1+5: shared closed flag used by close(), iterator, and pty.exited watcher
   let closed = false

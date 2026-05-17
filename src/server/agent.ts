@@ -1894,6 +1894,9 @@ export class AgentCoordinator {
             additionalDirectories: args.additionalDirectories,
             onToolRequest: args.onToolRequest,
             preflightGate: this.preflightGate ?? undefined,
+            toolCallback: this.toolCallback ?? undefined,
+            tunnelGateway: this.tunnelGateway,
+            chatPolicy: this.resolveChatPolicy(args.chatId),
           })
         : await this.startClaudeSessionFn({
             projectId: args.projectId,

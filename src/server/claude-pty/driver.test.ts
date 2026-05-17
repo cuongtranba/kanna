@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { mkdtemp, rm, writeFile, mkdir } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
-import { startClaudeSessionPTY, buildPtyEnv } from "./driver"
+import { startClaudeSessionPTY, buildPtyEnv, buildPtyCliArgs } from "./driver"
 import type { HarnessEvent } from "../harness-types"
 
 
@@ -188,5 +188,88 @@ describe("buildPtyEnv", () => {
       oauthToken: null,
     })
     expect(env.ANTHROPIC_API_KEY).toBeUndefined()
+  })
+})
+
+describe("buildPtyCliArgs", () => {
+  const baseInput = {
+    sessionId: "sess-123",
+    model: "claude-sonnet-4-6",
+    planMode: false,
+    settingsPath: "/tmp/settings.json",
+    sessionToken: null,
+    forkSession: false,
+  }
+
+  test("emits required base flags", () => {
+    const args = buildPtyCliArgs(baseInput)
+    expect(args).toContain("--session-id")
+    expect(args).toContain("sess-123")
+    expect(args).toContain("--model")
+    expect(args).toContain("claude-sonnet-4-6")
+    expect(args).toContain("--tools")
+    expect(args).toContain("mcp__kanna__*")
+    expect(args).toContain("--settings")
+    expect(args).toContain("/tmp/settings.json")
+    expect(args).toContain("--no-update")
+    expect(args).toContain("--permission-mode")
+    expect(args).toContain("acceptEdits")
+  })
+
+  test("plan mode picks 'plan' permission", () => {
+    const args = buildPtyCliArgs({ ...baseInput, planMode: true })
+    const idx = args.indexOf("--permission-mode")
+    expect(args[idx + 1]).toBe("plan")
+  })
+
+  test("--effort omitted when undefined", () => {
+    const args = buildPtyCliArgs(baseInput)
+    expect(args).not.toContain("--effort")
+  })
+
+  test("--effort omitted when empty string", () => {
+    const args = buildPtyCliArgs({ ...baseInput, effort: "" })
+    expect(args).not.toContain("--effort")
+  })
+
+  test("--effort appended when provided", () => {
+    const args = buildPtyCliArgs({ ...baseInput, effort: "high" })
+    const idx = args.indexOf("--effort")
+    expect(idx).toBeGreaterThan(-1)
+    expect(args[idx + 1]).toBe("high")
+  })
+
+  test("--resume appended when sessionToken present", () => {
+    const args = buildPtyCliArgs({ ...baseInput, sessionToken: "tok-abc" })
+    const idx = args.indexOf("--resume")
+    expect(args[idx + 1]).toBe("tok-abc")
+  })
+
+  test("--fork-session flag when forkSession true", () => {
+    const args = buildPtyCliArgs({ ...baseInput, forkSession: true })
+    expect(args).toContain("--fork-session")
+  })
+
+  test("--add-dir per additional directory", () => {
+    const args = buildPtyCliArgs({ ...baseInput, additionalDirectories: ["/a", "/b"] })
+    const addDirs = args.reduce<string[]>((acc, val, i) => {
+      if (val === "--add-dir") acc.push(args[i + 1])
+      return acc
+    }, [])
+    expect(addDirs).toEqual(["/a", "/b"])
+  })
+
+  test("default appended kanna system prompt when no override", () => {
+    const args = buildPtyCliArgs(baseInput)
+    const idx = args.indexOf("--append-system-prompt")
+    expect(idx).toBeGreaterThan(-1)
+    expect(args[idx + 1]).toContain("Kanna coding agent")
+  })
+
+  test("--system-prompt override replaces default append", () => {
+    const args = buildPtyCliArgs({ ...baseInput, systemPromptOverride: "custom prompt body" })
+    expect(args).not.toContain("--append-system-prompt")
+    const idx = args.indexOf("--system-prompt")
+    expect(args[idx + 1]).toBe("custom prompt body")
   })
 })
