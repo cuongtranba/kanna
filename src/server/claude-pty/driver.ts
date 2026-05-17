@@ -13,6 +13,7 @@ import { wrapWithSandbox } from "./sandbox/wrap"
 import { POLICY_DEFAULT } from "../../shared/permission-policy"
 import { startKannaMcpHttpServer, buildMcpConfigJson, type KannaMcpHttpHandle } from "../kanna-mcp-http"
 import { parseConfiguredContextWindowFromModelId, timestamped } from "../agent"
+import { KANNA_SYSTEM_PROMPT_APPEND } from "../../shared/kanna-system-prompt"
 import type { PreflightGate } from "./preflight/gate"
 import type { ClaudeSessionHandle } from "../agent"
 import type { HarnessEvent, HarnessToolRequest } from "../harness-types"
@@ -59,6 +60,27 @@ export interface StartClaudeSessionPtyArgs {
    * closing its prompt queue after a single subagent prompt. Default false.
    */
   oneShot?: boolean
+  /**
+   * C1 — label of the OAuth-pool token the coordinator picked for this
+   * spawn. The claude CLI never writes account info to the JSONL
+   * transcript (confirmed: `SDKSystemMessage` has no account fields,
+   * `q.accountInfo()` is an SDK-only API). PTY mode surfaces the
+   * user-configured token label so the UI can still show which account
+   * the chat is running under, instead of returning null forever.
+   */
+  oauthLabel?: string
+}
+
+/**
+ * C1 — derive an AccountInfo from the picked OAuth-pool token label.
+ * The claude CLI never emits account info to the JSONL transcript, so
+ * the user-configured token label is the only account signal PTY has.
+ * Returns null when no label (single-account / no-pool setups) so the
+ * UI falls back instead of showing a bogus account chip.
+ */
+export function deriveAccountInfoFromLabel(label?: string): AccountInfo | null {
+  if (!label || label.length === 0) return null
+  return { organization: label, tokenSource: "kanna-oauth-pool" }
 }
 
 /** B4 — bounded ring buffer for PTY output so a crash/OAuth-failure exit can synthesize an isError result from the tail. */
@@ -112,10 +134,7 @@ export function buildPtyCliArgs(args: BuildPtyCliArgsInput): string[] {
   if (args.systemPromptOverride) {
     cliArgs.push("--system-prompt", args.systemPromptOverride)
   } else {
-    cliArgs.push(
-      "--append-system-prompt",
-      "You are the Kanna coding agent helping a trusted developer work on their own codebase via Kanna's web UI.",
-    )
+    cliArgs.push("--append-system-prompt", KANNA_SYSTEM_PROMPT_APPEND)
   }
   return cliArgs
 }
@@ -199,7 +218,10 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
   // Fix 1+5: shared closed flag used by close(), iterator, and pty.exited watcher
   let closed = false
   let pendingModelSwitch: { model: string; resolve: () => void; timer: ReturnType<typeof setTimeout> } | null = null
-  let cachedAccountInfo: AccountInfo | null = null
+  // C1 — seed AccountInfo from the picked OAuth-pool token label. A later
+  // JSONL `account_info` entry (none exists today) would override via
+  // pushMerged; until then this is the only account signal PTY has.
+  let cachedAccountInfo: AccountInfo | null = deriveAccountInfoFromLabel(args.oauthLabel)
   // B4 — track whether the turn produced a `result` entry. If the process
   // exits without one (silent crash / OAuth failure / preflight kill), we
   // synthesize an isError result so agent.ts can run auth/rate detection

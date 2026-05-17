@@ -89,10 +89,25 @@ land, the following diverge from the SDK path:
 - `setPermissionMode(planMode)` at runtime is a warn-only no-op — blocked
   on Claude CLI exposing a runtime switch
   (anthropics/claude-code#59891). Restart the session to flip plan-mode.
-- Claude subagents always route through the SDK driver, even when
-  `KANNA_CLAUDE_DRIVER=pty`. Subagent turns still bill at API rates.
-- `getAccountInfo()` returns `null`; `getSupportedCommands()` returns a
-  static four-command list.
+- `getSupportedCommands()` returns a static four-command list (C2 —
+  Claude CLI exposes no slash-command list flag; needs a `/help`-parse
+  spike, cosmetic).
+
+**Subagent + prompt + account parity (Phase 5):**
+- D6 — Claude subagents route through the PTY driver when
+  `KANNA_CLAUDE_DRIVER=pty` (subscription billing), via
+  `buildClaudeSubagentStarter()` which adapts the SDK-shaped starter to
+  `StartClaudeSessionPtyArgs` and sets `oneShot: true` so the REPL closes
+  after the single turn (Phase 4 D7). SDK fallback when the flag is unset.
+- D8 — Both drivers now append the single shared
+  `KANNA_SYSTEM_PROMPT_APPEND` constant (`src/shared/kanna-system-prompt.ts`).
+  PTY previously sent a one-sentence stub that diverged refusal behaviour.
+- C1 — The claude CLI never writes account info to the JSONL transcript
+  (confirmed: `SDKSystemMessage` has no account fields; `q.accountInfo()`
+  is an SDK-only API). PTY instead derives `AccountInfo` from the picked
+  OAuth-pool token label: `{organization: <label>, tokenSource:
+  "kanna-oauth-pool"}`. Returns `null` (UI fallback) when no pool token
+  is configured.
 
 **Failure handling (Phase 4):** Every PTY spawn captures terminal output
 into a 256 KB ring buffer. If the process exits without ever emitting a
