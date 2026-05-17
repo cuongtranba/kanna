@@ -43,6 +43,8 @@ c3-115:
 c3-116:
   - src/client/app/SettingsPage.test.tsx
   - src/client/app/SettingsPage.tsx
+  - src/client/app/SubagentsSection.test.tsx
+  - src/client/app/SubagentsSection.tsx
 c3-117:
   - src/client/app/LocalProjectsPage.tsx
   - src/client/components/NewProjectModal.tsx

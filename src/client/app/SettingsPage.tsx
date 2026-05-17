@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type KeyboardEvent, type ReactNode } from "react"
 import {
   BookText,
+  Bot,
   Command,
   Code,
   ExternalLink,
@@ -52,6 +53,7 @@ import {
   type UpdateSnapshot,
 } from "../../shared/types"
 import { markdownComponents } from "../components/messages/shared"
+import { SubagentsSettingsBranch } from "./SubagentsSection"
 import { ChatPreferenceControls } from "../components/chat-ui/ChatPreferenceControls"
 import { OAuthTokenPoolCard } from "../components/chat-ui/OAuthTokenPoolCard"
 import { EDITOR_OPTIONS, EditorIcon } from "../components/editor-icons"
@@ -116,6 +118,12 @@ const sidebarItems = [
     label: "Providers",
     icon: MessageSquareQuote,
     subtitle: "Manage the default chat provider and saved model defaults for Claude Code and Codex.",
+  },
+  {
+    id: "subagents",
+    label: "Subagents",
+    icon: Bot,
+    subtitle: "Define reusable agent personas. Mention them in chat with @agent/<name>.",
   },
   {
     id: "keybindings",
@@ -2245,6 +2253,8 @@ export function SettingsPage() {
                   </div>
                 ) : selectedPage === "skills" ? (
                   <SkillsSection state={state} />
+                ) : selectedPage === "subagents" ? (
+                  <SubagentsSettingsBranch state={state} />
                 ) : (
                   <ChangelogSection
                     status={changelogStatus}

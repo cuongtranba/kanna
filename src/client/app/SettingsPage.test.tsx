@@ -139,6 +139,7 @@ describe("resolveSettingsSectionId", () => {
     expect(resolveSettingsSectionId("changelog")).toBe("changelog")
     expect(resolveSettingsSectionId("keybindings")).toBe("keybindings")
     expect(resolveSettingsSectionId("skills")).toBe("skills")
+    expect(resolveSettingsSectionId("subagents")).toBe("subagents")
   })
 
   test("rejects unknown settings sections", () => {
