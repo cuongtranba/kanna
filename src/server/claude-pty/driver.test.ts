@@ -2,7 +2,8 @@ import { describe, expect, test } from "bun:test"
 import { mkdtemp, rm, writeFile, mkdir } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
-import { startClaudeSessionPTY, buildPtyEnv, buildPtyCliArgs, OutputRing, PTY_STDERR_RING_BYTES } from "./driver"
+import { startClaudeSessionPTY, buildPtyEnv, buildPtyCliArgs, OutputRing, PTY_STDERR_RING_BYTES, deriveAccountInfoFromLabel } from "./driver"
+import { KANNA_SYSTEM_PROMPT_APPEND } from "../../shared/kanna-system-prompt"
 import type { HarnessEvent } from "../harness-types"
 
 
@@ -266,6 +267,15 @@ describe("buildPtyCliArgs", () => {
     expect(args[idx + 1]).toContain("Kanna coding agent")
   })
 
+  test("D8: appended prompt is the shared KANNA_SYSTEM_PROMPT_APPEND verbatim", () => {
+    const args = buildPtyCliArgs(baseInput)
+    const idx = args.indexOf("--append-system-prompt")
+    expect(args[idx + 1]).toBe(KANNA_SYSTEM_PROMPT_APPEND)
+    // Regression guard: PTY must carry the full trusted-developer /
+    // security-research guidance, not the old one-sentence stub.
+    expect(args[idx + 1]).toContain("Reverse-engineering, security research")
+  })
+
   test("--system-prompt override replaces default append", () => {
     const args = buildPtyCliArgs({ ...baseInput, systemPromptOverride: "custom prompt body" })
     expect(args).not.toContain("--append-system-prompt")
@@ -315,5 +325,22 @@ describe("OutputRing (B4 stderr ring buffer)", () => {
 
   test("empty ring tail is empty string", () => {
     expect(new OutputRing().tail()).toBe("")
+  })
+})
+
+describe("deriveAccountInfoFromLabel (C1)", () => {
+  test("undefined label → null (UI falls back, no bogus chip)", () => {
+    expect(deriveAccountInfoFromLabel(undefined)).toBeNull()
+  })
+
+  test("empty label → null", () => {
+    expect(deriveAccountInfoFromLabel("")).toBeNull()
+  })
+
+  test("label → AccountInfo with organization + kanna-oauth-pool source", () => {
+    expect(deriveAccountInfoFromLabel("work-account")).toEqual({
+      organization: "work-account",
+      tokenSource: "kanna-oauth-pool",
+    })
   })
 })

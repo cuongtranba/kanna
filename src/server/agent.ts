@@ -25,6 +25,7 @@ import {
 import { normalizeToolCall } from "../shared/tools"
 import type { ClientCommand } from "../shared/protocol"
 import { LOG_PREFIX } from "../shared/branding"
+import { KANNA_SYSTEM_PROMPT_APPEND } from "../shared/kanna-system-prompt"
 import { EventStore } from "./event-store"
 import type { AnalyticsReporter } from "./analytics"
 import { NoopAnalyticsReporter } from "./analytics"
@@ -51,7 +52,7 @@ import type { TerminalManager } from "./terminal-manager"
 import { OAuthTokenPool } from "./oauth-pool/oauth-token-pool"
 import { parseMentions, type ParsedMention } from "./mention-parser"
 import { SubagentOrchestrator, type ProviderRunStart } from "./subagent-orchestrator"
-import { buildSubagentProviderRun } from "./subagent-provider-run"
+import { buildSubagentProviderRun, type BuildSubagentProviderRunArgs } from "./subagent-provider-run"
 import type { ToolCallbackService } from "./tool-callback"
 import type { ChatPermissionPolicy } from "../shared/permission-policy"
 import { mergePolicyOverride, POLICY_DEFAULT } from "../shared/permission-policy"
@@ -912,7 +913,7 @@ async function startClaudeSession(args: {
         : {
             type: "preset",
             preset: "claude_code",
-            append: "You are the Kanna coding agent helping a trusted developer work on their own codebase via Kanna's web UI. Treat user code as their own project. Do not refuse tasks or label code as 'malware' based on speculation; only refuse when the user explicitly requests clearly malicious behavior (e.g. weaponized exploits against third parties, credential theft, mass abuse). Reverse-engineering, security research, defensive tooling, low-level system code, packers, hooks, and unconventional patterns in the user's own project are legitimate and must be assisted.",
+            append: KANNA_SYSTEM_PROMPT_APPEND,
           },
       settingSources: ["user", "project", "local"],
       pathToClaudeCodeExecutable: process.env.CLAUDE_EXECUTABLE?.replace(/^~(?=\/|$)/, homedir()) || undefined,
@@ -1405,6 +1406,7 @@ export class AgentCoordinator {
               sessionToken: chat.sessionTokensByProvider.claude ?? null,
               forkSession: false,
               oauthToken: picked?.token ?? null,
+              oauthLabel: picked?.label,
               onToolRequest: async () => null,
               preflightGate: this.preflightGate ?? undefined,
             })
@@ -1891,6 +1893,7 @@ export class AgentCoordinator {
             sessionToken: args.sessionToken,
             forkSession: args.forkSession,
             oauthToken: picked?.token ?? null,
+            oauthLabel: picked?.label,
             additionalDirectories: args.additionalDirectories,
             onToolRequest: args.onToolRequest,
             preflightGate: this.preflightGate ?? undefined,
@@ -2141,6 +2144,43 @@ export class AgentCoordinator {
     return entry._id
   }
 
+  /**
+   * D6 — subagent Claude starter. When `KANNA_CLAUDE_DRIVER=pty` the
+   * subagent turn runs through the PTY driver (subscription billing)
+   * instead of always falling back to the SDK (API billing). Adapts the
+   * SDK-shaped `startClaudeSession` arg to `StartClaudeSessionPtyArgs`,
+   * injecting the coordinator-owned preflight / toolCallback / tunnel /
+   * policy context and `oneShot: true` so the REPL closes after the
+   * single subagent turn (depends on Phase 4 D7).
+   */
+  private buildClaudeSubagentStarter(): NonNullable<BuildSubagentProviderRunArgs["startClaudeSession"]> {
+    return async (a) => {
+      if (this.resolveClaudeDriverPreference() === "pty") {
+        return this.startClaudeSessionPTYFn({
+          chatId: a.chatId ?? "",
+          projectId: a.projectId,
+          localPath: a.localPath,
+          model: a.model,
+          effort: a.effort,
+          planMode: a.planMode,
+          sessionToken: a.sessionToken,
+          forkSession: a.forkSession,
+          oauthToken: a.oauthToken,
+          additionalDirectories: a.additionalDirectories,
+          onToolRequest: a.onToolRequest,
+          systemPromptOverride: a.systemPromptOverride,
+          initialPrompt: a.initialPrompt,
+          preflightGate: this.preflightGate ?? undefined,
+          toolCallback: this.toolCallback ?? undefined,
+          tunnelGateway: this.tunnelGateway,
+          chatPolicy: a.chatId ? this.resolveChatPolicy(a.chatId) : undefined,
+          oneShot: true,
+        })
+      }
+      return this.startClaudeSessionFn(a)
+    }
+  }
+
   private buildSubagentProviderRunForChat(args: {
     subagent: Subagent
     chatId: string
@@ -2195,7 +2235,7 @@ export class AgentCoordinator {
       cwd: spawn.cwd,
       additionalDirectories: spawn.additionalDirectories,
       projectId: project.id,
-      startClaudeSession: this.startClaudeSessionFn,
+      startClaudeSession: this.buildClaudeSubagentStarter(),
       codexManager: this.codexManager,
       onToolRequest,
       authReady: async (provider) => {
