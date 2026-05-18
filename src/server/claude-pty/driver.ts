@@ -263,20 +263,27 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
 
   const runtimeDir = await mkdtemp(path.join(tmpdir(), `kanna-pty-${sessionId.slice(0, 8)}-`))
 
-  const startMcp = args.startKannaMcpHttpServer ?? startKannaMcpHttpServer
-  const mcpHandle: KannaMcpHttpHandle = await startMcp({
-    args: {
-      projectId: args.projectId,
-      localPath: args.localPath,
-      chatId: args.chatId,
-      sessionId,
-      tunnelGateway: args.tunnelGateway ?? null,
-      toolCallback: args.toolCallback,
-      chatPolicy: args.chatPolicy,
-    },
-  })
   const mcpConfigPath = path.join(runtimeDir, "mcp-config.json")
-  await writeFile(mcpConfigPath, buildMcpConfigJson(mcpHandle), { encoding: "utf8", mode: 0o600 })
+  let mcpHandle: KannaMcpHttpHandle
+  const startMcp = args.startKannaMcpHttpServer ?? startKannaMcpHttpServer
+  try {
+    mcpHandle = await startMcp({
+      args: {
+        projectId: args.projectId,
+        localPath: args.localPath,
+        chatId: args.chatId,
+        sessionId,
+        tunnelGateway: args.tunnelGateway ?? null,
+        toolCallback: args.toolCallback,
+        chatPolicy: args.chatPolicy,
+      },
+    })
+    await writeFile(mcpConfigPath, buildMcpConfigJson(mcpHandle), { encoding: "utf8", mode: 0o600 })
+  } catch (err) {
+    try { await (mcpHandle! as KannaMcpHttpHandle | undefined)?.close() } catch { /* swallow */ }
+    try { await rm(runtimeDir, { recursive: true, force: true }) } catch { /* swallow */ }
+    throw err
+  }
 
   const claudeBin = claudeBinAbs
   const cliArgs = buildPtyCliArgs({
@@ -292,12 +299,23 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
   })
 
   let closed = false
+  let cleanedUp = false
   let cachedAccountInfo: AccountInfo | null = deriveAccountInfoFromLabel(args.oauthLabel)
   let sawResultEntry = false
   let cachedSlashCommands: SlashCommand[] | null = null
   const stderrRing = new OutputRing()
   const mergedQueue: HarnessEvent[] = []
   const mergedWaiters: Array<(r: IteratorResult<HarnessEvent>) => void> = []
+
+  async function cleanupResources() {
+    if (cleanedUp) return
+    cleanedUp = true
+    if (args.toolCallback) {
+      try { await args.toolCallback.cancelAllForSession(sessionId, "session_closed") } catch { /* swallow */ }
+    }
+    try { await mcpHandle.close() } catch { /* swallow */ }
+    try { await rm(runtimeDir, { recursive: true, force: true }) } catch { /* swallow */ }
+  }
 
   function pushMerged(ev: HarnessEvent) {
     if (ev.type === "transcript" && ev.entry) {
@@ -338,6 +356,8 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
     if (oneShotClosing || closed) return
     oneShotClosing = true
     try { proc?.stdin?.end() } catch { /* swallow */ }
+    try { await proc?.exited } catch { /* swallow */ }
+    await cleanupResources()
   }
 
   let proc: SpawnedProcess
@@ -469,6 +489,7 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
         }),
       })
     }
+    void cleanupResources()
     while (mergedWaiters.length > 0) {
       const w = mergedWaiters.shift()
       if (w) w({ value: undefined as unknown as HarnessEvent, done: true })
@@ -480,6 +501,7 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
     .catch(() => drainTerminate(null))
 
   async function writeJsonLine(obj: Record<string, unknown>) {
+    if (closed) throw new Error("session closed")
     if (!proc.stdin) throw new Error("claude PTY stdin not available")
     const line = JSON.stringify(obj) + "\n"
     proc.stdin.write(line)
@@ -575,20 +597,19 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
         try {
           proc?.stdin?.end()
         } catch { /* swallow */ }
-        const timer = setTimeout(() => {
+        const sigkillTimer = { ref: null as ReturnType<typeof setTimeout> | null }
+        const termTimer = setTimeout(() => {
           try { proc.kill("SIGTERM") } catch { /* swallow */ }
+          sigkillTimer.ref = setTimeout(() => {
+            try { proc.kill("SIGKILL") } catch { /* swallow */ }
+          }, 3000)
         }, 2000)
         try {
           await proc.exited
-          clearTimeout(timer)
+          clearTimeout(termTimer)
+          if (sigkillTimer.ref !== null) clearTimeout(sigkillTimer.ref)
         } catch { /* swallow */ }
-        if (args.toolCallback) {
-          try {
-            await args.toolCallback.cancelAllForSession(sessionId, "session_closed")
-          } catch { /* swallow */ }
-        }
-        try { await mcpHandle.close() } catch { /* swallow */ }
-        try { await rm(runtimeDir, { recursive: true, force: true }) } catch { /* swallow */ }
+        await cleanupResources()
         while (mergedWaiters.length > 0) {
           const w = mergedWaiters.shift()
           if (w) w({ value: undefined as unknown as HarnessEvent, done: true })

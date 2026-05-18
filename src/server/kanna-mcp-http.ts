@@ -70,13 +70,18 @@ export async function startKannaMcpHttpServer(
     })
   })
 
-  await new Promise<void>((resolve, reject) => {
-    httpServer.once("error", reject)
-    httpServer.listen(port, host, () => {
-      httpServer.off("error", reject)
-      resolve()
+  try {
+    await new Promise<void>((resolve, reject) => {
+      httpServer.once("error", reject)
+      httpServer.listen(port, host, () => {
+        httpServer.off("error", reject)
+        resolve()
+      })
     })
-  })
+  } catch (err) {
+    try { await transport.close() } catch { /* swallow */ }
+    throw err
+  }
 
   const address = httpServer.address() as AddressInfo
   const url = `http://${host}:${address.port}/mcp`
