@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import type { ClaudeModelOptions, Subagent, TranscriptEntry } from "../shared/types"
 import type { HarnessEvent, HarnessTurn, HarnessToolRequest } from "./harness-types"
 import type { StartCodexSessionArgs, CodexSessionScope } from "./codex-app-server"
-import { buildSubagentProviderRun, type BuildSubagentProviderRunArgs } from "./subagent-provider-run"
+import { buildSubagentProviderRun, composeInitialPrompt, type BuildSubagentProviderRunArgs } from "./subagent-provider-run"
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -75,6 +75,7 @@ function makeArgs(over: Partial<BuildSubagentProviderRunArgs> = {}): BuildSubage
     subagent: makeSubagent(),
     chatId: "chat-1",
     primer: "some primer",
+    userInstruction: null,
     runId: "run-abc",
     abortSignal: new AbortController().signal,
     cwd: "/tmp/project",
@@ -96,6 +97,39 @@ function makeArgs(over: Partial<BuildSubagentProviderRunArgs> = {}): BuildSubage
     ...over,
   }
 }
+
+// ---------------------------------------------------------------------------
+// composeInitialPrompt
+// ---------------------------------------------------------------------------
+
+describe("composeInitialPrompt", () => {
+  const subagent = makeSubagent({ name: "reviewer" })
+
+  test("instruction + primer → instruction rendered above primer", () => {
+    const prompt = composeInitialPrompt(subagent, "Previous reply text", "review my code")
+    expect(prompt).toBe("User asked: review my code\n\nPrevious reply text")
+  })
+
+  test("instruction only → no primer block", () => {
+    const prompt = composeInitialPrompt(subagent, null, "review my code")
+    expect(prompt).toBe("User asked: review my code")
+  })
+
+  test("primer only → preserved (legacy behaviour)", () => {
+    const prompt = composeInitialPrompt(subagent, "Previous reply text", null)
+    expect(prompt).toBe("Previous reply text")
+  })
+
+  test("neither → fallback hint mentions subagent name", () => {
+    const prompt = composeInitialPrompt(subagent, null, null)
+    expect(prompt).toContain("@agent/reviewer")
+  })
+
+  test("whitespace-only instruction treated as missing", () => {
+    const prompt = composeInitialPrompt(subagent, "primer", "   \n\t  ")
+    expect(prompt).toBe("primer")
+  })
+})
 
 // ---------------------------------------------------------------------------
 // Claude tests
