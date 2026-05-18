@@ -72,13 +72,7 @@ pseudo-terminal and tails the on-disk JSONL transcript instead of using
 the `@anthropic-ai/claude-agent-sdk` `query()` programmatic API. PTY mode
 preserves Pro/Max subscription billing; SDK mode bills at API rates.
 
-Default is `sdk` (no behaviour change). Authenticate via **either**
-`claude /login` (populates `~/.claude/.credentials.json`) **or** an
-OAuth-pool token configured in Kanna settings — `CLAUDE_CODE_OAUTH_TOKEN`
-silently overrides the keychain / credentials.json lookup at CLI
-startup (anthropics/claude-code#16238), so OAuth-pool-only deployments
-do not need a local credentials file. `ANTHROPIC_API_KEY` must be unset
-(PTY mode refuses to spawn if it is set — would force API billing).
+Default is `sdk` (no behaviour change). Authentication requires an OAuth-pool token configured in Kanna settings; the token is injected via `CLAUDE_CODE_OAUTH_TOKEN`. The local `claude /login` keychain path is not supported in this deployment. `ANTHROPIC_API_KEY` must be unset (PTY mode refuses to spawn if it is set — would force API billing).
 
 Platform support: macOS / Linux only.
 
@@ -163,9 +157,7 @@ serialization is needed. Server is torn down on `close()` along with
 **OAuth pool rotation (P5):** PTY mode honors the same multi-token rotation
 the SDK driver uses. `AgentCoordinator` picks an active token from
 `OAuthTokenPool` per chat and the PTY driver injects it via the
-`CLAUDE_CODE_OAUTH_TOKEN` env var. Cross-platform: works on macOS
-(overrides Keychain lookup) and Linux (overrides `.credentials.json` read).
-No per-account `$HOME` directories required.
+`CLAUDE_CODE_OAUTH_TOKEN` env var. No per-account `$HOME` directories or local `.credentials.json` files required.
 
 **Architecture note:** PTY mode uses the on-disk JSONL transcript at
 `~/.claude/projects/<encoded-cwd>/<session-uuid>.jsonl` as the sole event

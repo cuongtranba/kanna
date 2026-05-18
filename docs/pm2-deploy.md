@@ -136,4 +136,4 @@ The pm2 process keeps the same env and args; only the binary on disk changes.
      $HOME/node_modules/@anthropic-ai/claude-agent-sdk-darwin-arm64/claude \
      -p "hi" --model claude-haiku-4-5-20251001
    ```
-   A real reply confirms the token is valid; a 401 means the token was revoked and must be re-minted from `claude /login`.
+   A real reply confirms the token is valid; a 401 means the token was revoked and must be re-minted via the OAuth pool flow in Kanna settings.

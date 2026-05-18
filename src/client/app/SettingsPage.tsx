@@ -1988,7 +1988,7 @@ export function SettingsPage() {
 
                     <SettingsRow
                       title="Claude driver"
-                      description='SDK uses the @anthropic-ai/claude-agent-sdk programmatic API (billed at API rates). PTY launches the `claude` CLI under a pseudo-terminal — preserves Pro/Max subscription billing. Requires `claude /login` to have been run once and ANTHROPIC_API_KEY to be unset. macOS/Linux only.'
+                      description='SDK uses the @anthropic-ai/claude-agent-sdk programmatic API (billed at API rates). PTY launches the `claude` CLI under a pseudo-terminal — preserves Pro/Max subscription billing. Requires an OAuth-pool token configured in Kanna settings and ANTHROPIC_API_KEY to be unset. macOS/Linux only.'
                     >
                       <SegmentedControl
                         value={claudeDriverPreference}

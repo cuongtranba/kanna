@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { mkdtemp, rm, writeFile, mkdir } from "node:fs/promises"
+import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { startClaudeSessionPTY, buildPtyEnv, buildPtyCliArgs, OutputRing, PTY_STDERR_RING_BYTES, deriveAccountInfoFromLabel, planModeRuntimeAction, PLAN_MODE_EXIT_UNSUPPORTED } from "./driver"
@@ -13,8 +13,9 @@ describe("startClaudeSessionPTY", () => {
     if (process.platform === "win32") return
     const homeDir = await mkdtemp(path.join(tmpdir(), "kanna-pty-driver-"))
     try {
-      await expect(
-        startClaudeSessionPTY({
+      let err: unknown
+      try {
+        await startClaudeSessionPTY({
           chatId: "c",
           projectId: "p",
           localPath: "/tmp",
@@ -26,8 +27,12 @@ describe("startClaudeSessionPTY", () => {
           onToolRequest: async () => null,
           homeDir,
           env: {},
-        }),
-      ).rejects.toThrow(/claude \/login/)
+        })
+      } catch (e) {
+        err = e
+      }
+      expect(err).toBeInstanceOf(Error)
+      expect((err as Error).message).toMatch(/OAuth pool token/)
     } finally {
       await rm(homeDir, { recursive: true, force: true })
     }
@@ -37,23 +42,26 @@ describe("startClaudeSessionPTY", () => {
     if (process.platform === "win32") return
     const homeDir = await mkdtemp(path.join(tmpdir(), "kanna-pty-driver-"))
     try {
-      await mkdir(path.join(homeDir, ".claude"), { recursive: true })
-      await writeFile(path.join(homeDir, ".claude", ".credentials.json"), "{}", "utf8")
-      await expect(
-        startClaudeSessionPTY({
+      let err: unknown
+      try {
+        await startClaudeSessionPTY({
           chatId: "c",
           projectId: "p",
           localPath: "/tmp",
           model: "claude-sonnet-4-6",
           planMode: false,
           forkSession: false,
-          oauthToken: null,
+          oauthToken: "sk-ant-oat-x",
           sessionToken: null,
           onToolRequest: async () => null,
           homeDir,
           env: { ANTHROPIC_API_KEY: "sk-x" },
-        }),
-      ).rejects.toThrow(/ANTHROPIC_API_KEY/)
+        })
+      } catch (e) {
+        err = e
+      }
+      expect(err).toBeInstanceOf(Error)
+      expect((err as Error).message).toMatch(/ANTHROPIC_API_KEY/)
     } finally {
       await rm(homeDir, { recursive: true, force: true })
     }
