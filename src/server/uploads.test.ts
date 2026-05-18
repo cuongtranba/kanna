@@ -177,7 +177,67 @@ describe("uploads", () => {
 
       const response = await fetch(`http://localhost:${server.port}${attachment.contentUrl}`, { method: "POST" })
       expect(response.status).toBe(405)
-      expect(response.headers.get("allow")).toBe("GET")
+      expect(response.headers.get("allow")).toBe("GET, HEAD")
+    } finally {
+      await server.stop()
+    }
+  })
+
+  test("HEAD probe on attachment content returns 200 with Content-Length and empty body", async () => {
+    const projectDir = await mkdtemp(path.join(tmpdir(), "kanna-project-head-upload-"))
+    tempDirs.push(projectDir)
+
+    const server = await startIsolatedServer({ port: 4322 })
+
+    try {
+      const project = await server.store.openProject(projectDir, "Project")
+      const attachment = await persistProjectUpload({
+        projectId: project.id,
+        localPath: projectDir,
+        fileName: "hello.txt",
+        bytes: new TextEncoder().encode("hello from upload"),
+        fallbackMimeType: "text/plain",
+      })
+
+      const response = await fetch(`http://localhost:${server.port}${attachment.contentUrl}`, { method: "HEAD" })
+      expect(response.status).toBe(200)
+      expect(response.headers.get("content-type")).toBe("text/plain; charset=utf-8")
+      expect(response.headers.get("content-length")).toBe(String("hello from upload".length))
+      expect(await response.text()).toBe("")
+    } finally {
+      await server.stop()
+    }
+  })
+
+  test("serves project file content through GET and HEAD", async () => {
+    const projectDir = await mkdtemp(path.join(tmpdir(), "kanna-project-file-content-"))
+    tempDirs.push(projectDir)
+
+    const server = await startIsolatedServer({ port: 4323 })
+
+    try {
+      const project = await server.store.openProject(projectDir, "Project")
+      const relPath = "docs/readme.txt"
+      const body = "project file body"
+      await Bun.write(path.join(projectDir, relPath), body)
+
+      const contentUrl = `/api/projects/${project.id}/files/${relPath}/content`
+
+      const getResponse = await fetch(`http://localhost:${server.port}${contentUrl}`)
+      expect(getResponse.status).toBe(200)
+      expect(getResponse.headers.get("content-type")).toBe("text/plain; charset=utf-8")
+      expect(getResponse.headers.get("content-length")).toBe(String(body.length))
+      expect(await getResponse.text()).toBe(body)
+
+      const headResponse = await fetch(`http://localhost:${server.port}${contentUrl}`, { method: "HEAD" })
+      expect(headResponse.status).toBe(200)
+      expect(headResponse.headers.get("content-type")).toBe("text/plain; charset=utf-8")
+      expect(headResponse.headers.get("content-length")).toBe(String(body.length))
+      expect(await headResponse.text()).toBe("")
+
+      const postResponse = await fetch(`http://localhost:${server.port}${contentUrl}`, { method: "POST" })
+      expect(postResponse.status).toBe(405)
+      expect(postResponse.headers.get("allow")).toBe("GET, HEAD")
     } finally {
       await server.stop()
     }

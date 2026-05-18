@@ -560,11 +560,11 @@ async function handleAttachmentContent(req: Request, url: URL, store: EventStore
     return null
   }
 
-  if (req.method !== "GET") {
+  if (req.method !== "GET" && req.method !== "HEAD") {
     return new Response(null, {
       status: 405,
       headers: {
-        Allow: "GET",
+        Allow: "GET, HEAD",
       },
     })
   }
@@ -581,18 +581,21 @@ async function handleAttachmentContent(req: Request, url: URL, store: EventStore
 
   const filePath = path.join(getProjectUploadDir(project.localPath), storedName)
   const file = Bun.file(filePath)
+  let fileSize: number
   try {
     const info = await stat(filePath)
     if (!info.isFile()) {
       return Response.json({ error: "Attachment not found" }, { status: 404 })
     }
+    fileSize = info.size
   } catch {
     return Response.json({ error: "Attachment not found" }, { status: 404 })
   }
 
-  return new Response(file, {
+  return new Response(req.method === "HEAD" ? null : file, {
     headers: {
       "Content-Type": inferAttachmentContentType(storedName, file.type),
+      "Content-Length": String(fileSize),
     },
   })
 }
@@ -603,11 +606,11 @@ async function handleProjectFileContent(req: Request, url: URL, store: EventStor
     return null
   }
 
-  if (req.method !== "GET") {
+  if (req.method !== "GET" && req.method !== "HEAD") {
     return new Response(null, {
       status: 405,
       headers: {
-        Allow: "GET",
+        Allow: "GET, HEAD",
       },
     })
   }
@@ -629,18 +632,21 @@ async function handleProjectFileContent(req: Request, url: URL, store: EventStor
   }
 
   const file = Bun.file(filePath)
+  let fileSize: number
   try {
     const info = await stat(filePath)
     if (!info.isFile()) {
       return Response.json({ error: "File not found" }, { status: 404 })
     }
+    fileSize = info.size
   } catch {
     return Response.json({ error: "File not found" }, { status: 404 })
   }
 
-  return new Response(file, {
+  return new Response(req.method === "HEAD" ? null : file, {
     headers: {
       "Content-Type": inferProjectFileContentType(relativePath, file.type),
+      "Content-Length": String(fileSize),
     },
   })
 }
