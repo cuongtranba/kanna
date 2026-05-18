@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.61.2](https://github.com/cuongtranba/kanna/compare/v0.61.1...v0.61.2) (2026-05-18)
+
+
+### Bug Fixes
+
+* **permission-gate:** force ask for mcp__kanna__ask_user_question / exit_plan_mode ([#217](https://github.com/cuongtranba/kanna/issues/217)) ([941f92f](https://github.com/cuongtranba/kanna/commit/941f92f19f159fba83c07e94abf62d85adb4a438)), closes [#215](https://github.com/cuongtranba/kanna/issues/215)
+
 ## [0.61.1](https://github.com/cuongtranba/kanna/compare/v0.61.0...v0.61.1) (2026-05-18)
 
 
