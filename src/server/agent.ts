@@ -1514,6 +1514,40 @@ export class AgentCoordinator {
   private async dequeueAndStartQueuedMessage(chatId: string, queuedMessage: QueuedChatMessage, options?: { steered?: boolean }) {
     await this.store.removeQueuedMessage(chatId, queuedMessage.id)
     const chat = this.store.requireChat(chatId)
+
+    // B4 — A message queued while another turn was active may carry
+    // `@agent/<name>` mentions that the send-path short-circuit
+    // (chat_send route at agent.ts:2081) would have routed to the
+    // orchestrator. Re-parse on dequeue so the queued message still
+    // triggers subagent runs instead of silently running as a normal
+    // main-provider turn. Steered messages are user-edited replays of a
+    // previous turn — we re-inject them verbatim and do not route as
+    // new mentions.
+    if (!options?.steered) {
+      const parsedMentions = parseMentions(queuedMessage.content, this.getSubagents())
+      if (parsedMentions.length > 0) {
+        this.analytics.track("message_sent")
+        const userMessageId = await this.appendUserPromptForSubagentRun(
+          chatId,
+          queuedMessage.content,
+          queuedMessage.attachments,
+          parsedMentions,
+        )
+        void this.subagentOrchestrator
+          .runMentionsForUserMessage({
+            chatId,
+            userMessageId,
+            mentions: parsedMentions,
+            userContent: queuedMessage.content,
+          })
+          .then(() => this.emitStateChange(chatId))
+          .catch((err) => {
+            console.warn(`${LOG_PREFIX} subagent orchestrator (dequeued mention) failed`, { chatId, err })
+          })
+        return
+      }
+    }
+
     const provider = this.resolveProvider(queuedMessage, chat.provider)
     const settings = this.getProviderSettings(provider, queuedMessage)
     await this.startTurnForChat({

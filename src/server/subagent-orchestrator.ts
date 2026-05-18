@@ -217,8 +217,11 @@ export class SubagentOrchestrator {
     }
     this.waiters.push({ chatId, resolve, reject })
     try {
+      // `release()` hands a permit to the next waiter by resolving its
+      // promise without incrementing this.permits — the permit transfers
+      // in-place. Decrementing here would double-charge the handoff and
+      // permanently leak one parallel slot per waiter (B1).
       await promise
-      this.permits -= 1
     } finally {
       if (state) {
         state.permitWaiter = null
@@ -294,6 +297,11 @@ export class SubagentOrchestrator {
     userContent?: string
   }): Promise<void> {
     const userContent = args.userContent ?? ""
+    // A new mention batch from this chat means the user is asking for fresh
+    // work — clear any "cancelled" marker left over from a prior cancelChat
+    // call (B3). Without this, every subagent in a chat that has ever been
+    // cancelled would fail before start until process restart.
+    this.cancelledChats.delete(args.chatId)
     await this.recoveryPromise
     const subagents = this.deps.appSettings.getSnapshot().subagents
     const resolved: { mention: Extract<ParsedMention, { kind: "subagent" }>; subagent: Subagent }[] = []
@@ -414,18 +422,18 @@ export class SubagentOrchestrator {
       this.cleanupRunState(runId)
       return
     }
-    if (this.cancelledChats.has(args.chatId)) {
-      this.release()
-      await this.failRun(args.chatId, runId, "PROVIDER_ERROR", "Chat cancelled before run started")
-      this.cleanupRunState(runId)
-      return
-    }
-
     let released = false
     const releaseSlot = () => {
       if (released) return
       released = true
       this.release()
+    }
+
+    if (this.cancelledChats.has(args.chatId)) {
+      releaseSlot()
+      await this.failRun(args.chatId, runId, "PROVIDER_ERROR", "Chat cancelled before run started")
+      this.cleanupRunState(runId)
+      return
     }
 
     try {
@@ -455,14 +463,17 @@ export class SubagentOrchestrator {
         // as `running` forever (no failed/completed event ever appended).
         const msg = err instanceof Error ? err.message : String(err)
         await this.failRun(args.chatId, runId, "PROVIDER_ERROR", msg)
-        this.release()
+        // releaseSlot — outer `finally` would re-release if we called raw
+        // `this.release()` here (B2). releaseSlot is idempotent via the
+        // `released` flag so the finally is a no-op.
+        releaseSlot()
         this.cleanupRunState(runId)
         return
       }
 
       if (!(await runStart.authReady())) {
         await this.failRun(args.chatId, runId, "AUTH_REQUIRED", `Authentication required for ${args.subagent.provider}`)
-        this.release()
+        releaseSlot()
         this.cleanupRunState(runId)
         return
       }
@@ -500,7 +511,16 @@ export class SubagentOrchestrator {
       }
       const timeoutRejection = createDeferred<never>()
       const pausable = new PausableTimeout(this.timeoutMs(), () => {
+        // Race-rejection ORDER MATTERS. Reject TIMEOUT before aborting so
+        // `Promise.race` resolves with the TIMEOUT error and the catch
+        // branch records `failRun TIMEOUT` instead of `USER_CANCELLED`.
+        // Then abort the controller to tear down the underlying provider
+        // session — `buildSubagentProviderRun` wires
+        // `session.interrupt()` / `codexManager.stopSession()` to this
+        // signal, without which a timed-out run keeps streaming and
+        // pollutes the event log (B5).
         timeoutRejection.reject(new Error("TIMEOUT"))
+        runState.abortController.abort()
       })
       runState.timeout = pausable
       pausable.start()

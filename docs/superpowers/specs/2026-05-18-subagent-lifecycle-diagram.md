@@ -342,22 +342,19 @@ These properties should hold; cite the line on a violation.
 
 ---
 
-## 11. Known correctness bugs (pending fix)
+## 11. Known correctness bugs
 
-Independent review (`codex-rescue`, 2026-05-18) surfaced these. None are
-introduced by PR #196 — all pre-date this lifecycle work — but they
-materially affect the flow this doc describes.
+Independent review (`codex-rescue`, 2026-05-18) surfaced five P1 issues.
+All pre-date the lifecycle work. **B1–B5 fixed in follow-up PR (this
+section preserved as a regression-grep target).**
 
-| # | Severity | Locus | Symptom |
-|---|----------|-------|---------|
-| B1 | P1 | `subagent-orchestrator.ts:218-227, 230-237` | Permit "leak" on waiter handoff. `acquire()` decrements `permits` after a waiter is resolved while `release()` did not increment for the handoff. Net effect: every waiter transfer permanently loses one parallel slot. Eventually `permits ≤ 0` forever and all runs queue indefinitely. |
-| B2 | P1 | `subagent-orchestrator.ts:458, 465` and outer `finally` at 623-625 | Double-release. Both `PROVIDER_ERROR` early-return and `AUTH_REQUIRED` early-return call `this.release()` raw without flipping the `released` flag; the outer `finally releaseSlot()` then releases again. Allows concurrency above `DEFAULT_MAX_PARALLEL`. |
-| B3 | P1 | `subagent-orchestrator.ts:140, 240` | `cancelledChats` is monotonic — added on `cancelChat`, never cleared. After a user ever cancels a chat, every future `@agent/<name>` in that chat fails before start with `CHAT_CANCELLED` / `PROVIDER_ERROR` until process restart. |
-| B4 | P1 | `agent.ts:2068-2079` | When a turn is already active, the incoming chat.send is enqueued *before* `parseMentions` runs. Dequeue path `maybeStartNextQueuedMessage → dequeueAndStartQueuedMessage → startTurnForChat` does not re-check for mentions, so the queued message runs as a normal main-provider turn — bypassing the subagent-routing short-circuit. |
-| B5 | P1 | `subagent-orchestrator.ts:502-504` (timeout) vs `subagent-provider-run.ts:102, 118` (abort listener) | `PausableTimeout`'s `onFire` only rejects the race promise; it does not call `runState.abortController.abort()`. The provider session keeps streaming after the run is marked `failed{TIMEOUT}`, polluting the event log with post-terminal `subagent_message_delta` / `_entry_appended` events and leaking the provider session. |
-
-These are tracked for a follow-up PR; do not assume the diagrams above
-are robust to all failure modes until B1-B5 land.
+| # | Status | Locus | Symptom | Fix |
+|---|--------|-------|---------|-----|
+| B1 | **fixed** | `subagent-orchestrator.ts:acquire/release` | Permit "leak" on waiter handoff: `acquire()` decremented `permits` after a waiter resolved while `release()` did not increment for the handoff. Every waiter transfer permanently lost one parallel slot. | Removed waiter-side decrement; `release()` transfers the permit in-place. Regression test `B1 — permit is not double-counted on waiter handoff`. |
+| B2 | **fixed** | `subagent-orchestrator.ts:spawnRun` | Double-release. `PROVIDER_ERROR` and `AUTH_REQUIRED` early-returns called raw `this.release()` then the outer `finally releaseSlot()` released again, allowing concurrency above `DEFAULT_MAX_PARALLEL`. | Moved `releaseSlot` declaration above all early-return paths and replaced raw `release()` calls with the idempotent `releaseSlot()`. Regression test `B2 — startProviderRun throw does not double-release the slot`. |
+| B3 | **fixed** | `subagent-orchestrator.ts:cancelChat / cancelledChats` | `cancelledChats` was monotonic — added on `cancelChat`, never cleared. After a user once cancelled a chat, every future `@agent/<name>` in that chat failed before start until process restart. | `runMentionsForUserMessage` clears the chatId from `cancelledChats` on entry, scoping the cancellation marker to the in-flight batch only. Regression test `B3 — cancelChat does not block a future mention batch in the same chat`. |
+| B4 | **fixed** | `agent.ts:dequeueAndStartQueuedMessage` | When a turn was already active, the incoming send was queued *before* `parseMentions` ran. Dequeue path did not re-check for mentions, so the message ran as a normal main-provider turn — bypassing the subagent-routing short-circuit. | `dequeueAndStartQueuedMessage` re-parses mentions (skipped for steered replays) and routes through the orchestrator when present. |
+| B5 | **fixed** | `subagent-orchestrator.ts:PausableTimeout.onFire` | TIMEOUT only rejected the race promise; the provider session kept streaming, polluting the event log with post-terminal events and leaking the underlying session. | Timeout callback now rejects TIMEOUT first (race-order matters so the terminal code stays `TIMEOUT`, not `USER_CANCELLED`), then aborts `runState.abortController` so the provider session.interrupt / codexManager.stopSession fires. Regression test `B5 — TIMEOUT aborts the runState abortController`. |
 
 ## 12. Known limitations / TODO seeds
 
