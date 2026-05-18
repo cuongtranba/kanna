@@ -13,6 +13,7 @@ import type {
   TranscriptEntry,
 } from "../shared/types"
 import { buildContentUrlForFilePath } from "../shared/projectFileUrl"
+import { relocateExternalFileIntoProject } from "../shared/projectFileRelocation"
 import type { HarnessEvent, HarnessToolRequest, HarnessTurn } from "./harness-types"
 import {
   type CollabAgentToolCallItem,
@@ -786,7 +787,7 @@ function itemToToolCalls(item: ThreadItem, _projectId: string | null): Transcrip
   }
 }
 
-function itemToToolResults(item: ThreadItem, projectId: string | null): TranscriptEntry[] {
+function itemToToolResults(item: ThreadItem, projectId: string | null, cwd: string): TranscriptEntry[] {
   switch (item.type) {
     case "userMessage":
     case "reasoning":
@@ -795,7 +796,9 @@ function itemToToolResults(item: ThreadItem, projectId: string | null): Transcri
     case "dynamicToolCall":
       if (item.tool === IMAGE_GENERATION_TOOL_NAME) {
         const isError = item.status === "failed" || item.success === false
-        return [buildImageGenerationResult(item.id, relativePathFromContentItems(item.contentItems), projectId, isError)]
+        const rawRel = relativePathFromContentItems(item.contentItems)
+        const resolvedRel = rawRel ? relocateExternalFileIntoProject(rawRel, cwd).relativePath : rawRel
+        return [buildImageGenerationResult(item.id, resolvedRel, projectId, isError)]
       }
       return [timestamped({
         kind: "tool_result",
@@ -843,8 +846,9 @@ function itemToToolResults(item: ThreadItem, projectId: string | null): Transcri
       })]
     case "imageGeneration": {
       const rel = item.savedPath ?? item.result ?? null
+      const resolvedRel = rel ? relocateExternalFileIntoProject(rel, cwd).relativePath : rel
       const isError = item.status === "failed"
-      return [buildImageGenerationResult(item.id, rel, projectId, isError)]
+      return [buildImageGenerationResult(item.id, resolvedRel, projectId, isError)]
     }
     case "imageView":
       return [timestamped({
@@ -1530,7 +1534,7 @@ export class CodexAppServerManager {
       pendingTurn.queue.push({ type: "transcript", entry })
     }
 
-    const resultEntries = itemToToolResults(notification.item, context.projectId)
+    const resultEntries = itemToToolResults(notification.item, context.projectId, context.cwd)
     for (const entry of resultEntries) {
       pendingTurn.queue.push({ type: "transcript", entry })
       if (notification.item.type === "webSearch" && entry.kind === "tool_result" && !entry.isError) {

@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test"
 import { EventEmitter } from "node:events"
 import { PassThrough } from "node:stream"
+import { mkdtempSync, rmSync, writeFileSync, existsSync, readFileSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 import { CodexAppServerManager, type CodexSessionScope } from "./codex-app-server"
 import { BackgroundTaskRegistry } from "./background-tasks"
 
@@ -2077,6 +2080,92 @@ describe("CodexAppServerManager", () => {
     expect(content.relativePath).toBe("generated_images/019e/ig_abc.png")
     expect(content.fileName).toBe("ig_abc.png")
     expect(content.contentUrl).toBe("/api/projects/proj-dig/files/generated_images/019e/ig_abc.png/content")
+  })
+
+  test("relocates ImageGeneration absolute path outside project into .kanna/outputs", async () => {
+    const projectRoot = mkdtempSync(join(tmpdir(), "kanna-codex-project-"))
+    const externalRoot = mkdtempSync(join(tmpdir(), "kanna-codex-external-"))
+    const externalImage = join(externalRoot, "ig_xyz.png")
+    writeFileSync(externalImage, "fake-png-bytes")
+
+    try {
+      const process = new FakeCodexProcess((message, child) => {
+        if (message.method === "initialize") {
+          child.writeServerMessage({ id: message.id, result: { userAgent: "codex-test" } })
+        } else if (message.method === "thread/start") {
+          child.writeServerMessage({
+            id: message.id,
+            result: { thread: { id: "thread-ext" }, model: "gpt-5.4", reasoningEffort: "high" },
+          })
+        } else if (message.method === "turn/start") {
+          child.writeServerMessage({
+            id: message.id,
+            result: { turn: { id: "turn-ext", status: "inProgress", error: null } },
+          })
+          child.writeServerMessage({
+            method: "item/completed",
+            params: {
+              threadId: "thread-ext",
+              turnId: "turn-ext",
+              item: {
+                type: "dynamicToolCall",
+                id: "dig-ext",
+                tool: "ImageGeneration",
+                arguments: { revisedPrompt: "cat", status: "completed" },
+                status: "completed",
+                success: true,
+                contentItems: [
+                  { type: "inputText", text: externalImage },
+                ],
+              },
+            },
+          })
+          child.writeServerMessage({
+            method: "turn/completed",
+            params: {
+              threadId: "thread-ext",
+              turn: { id: "turn-ext", status: "completed", error: null },
+            },
+          })
+        }
+      })
+
+      const manager = new CodexAppServerManager({ spawnProcess: () => process as never })
+
+      await manager.startSession({
+        chatId: "chat-ext",
+        cwd: projectRoot,
+        projectId: "proj-ext",
+        model: "gpt-5.4",
+        sessionToken: null,
+      })
+
+      const turn = await manager.startTurn({
+        chatId: "chat-ext",
+        model: "gpt-5.4",
+        content: "draw cat",
+        planMode: false,
+        onToolRequest: async () => ({}),
+      })
+
+      const events = await collectStream(turn.stream)
+      const toolResults = events.filter((event) => event.type === "transcript" && event.entry.kind === "tool_result")
+      expect(toolResults).toHaveLength(1)
+
+      const result = toolResults[0]
+      if (result.entry.kind !== "tool_result") throw new Error("missing tool result")
+      const content = result.entry.content as { contentUrl: string; relativePath: string; fileName: string }
+      expect(content.relativePath).toBe(".kanna/outputs/ig_xyz.png")
+      expect(content.fileName).toBe("ig_xyz.png")
+      expect(content.contentUrl).toBe("/api/projects/proj-ext/files/.kanna/outputs/ig_xyz.png/content")
+
+      const copiedAbs = join(projectRoot, ".kanna/outputs/ig_xyz.png")
+      expect(existsSync(copiedAbs)).toBe(true)
+      expect(readFileSync(copiedAbs, "utf8")).toBe("fake-png-bytes")
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true })
+      rmSync(externalRoot, { recursive: true, force: true })
+    }
   })
 
   test("marks ImageGeneration result as error when projectId is missing", async () => {
