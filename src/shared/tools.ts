@@ -39,7 +39,29 @@ export function normalizeToolCall(args: {
         },
         rawInput: input,
       }
+    case "mcp__kanna__ask_user_question": {
+      // MCP shim schema uses `text` for the question body; SDK native uses
+      // `question`. Normalise to AskUserQuestionItem so renderers and answer
+      // key generation work identically regardless of which path fired.
+      const questions: AskUserQuestionItem[] = Array.isArray(input.questions)
+        ? (input.questions as Record<string, unknown>[]).map((q) => ({
+            question: typeof q.text === "string" ? q.text : String(q.text ?? ""),
+            header: typeof q.header === "string" ? q.header : undefined,
+            options: Array.isArray(q.options) ? q.options as AskUserQuestionItem["options"] : undefined,
+            multiSelect: typeof q.multiSelect === "boolean" ? q.multiSelect : false,
+          }))
+        : []
+      return {
+        kind: "tool",
+        toolKind: "ask_user_question",
+        toolName,
+        toolId,
+        input: { questions },
+        rawInput: input,
+      }
+    }
     case "ExitPlanMode":
+    case "mcp__kanna__exit_plan_mode":
       return {
         kind: "tool",
         toolKind: "exit_plan_mode",
