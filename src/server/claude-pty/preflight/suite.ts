@@ -29,5 +29,13 @@ export async function runFullSuite(args: RunSuiteArgs): Promise<ProbeResult[]> {
     homeDir: args.homeDir,
     timeoutMs: args.timeoutMs,
   }))
-  return await Promise.all(probeArgs.map(runSingleProbe))
+  // Sequential, not parallel: 8 concurrent spawns thrashed the OAuth pool
+  // (each probe burns one turn) and overran the per-probe timeout because
+  // SessionStart hook startup cost piled on top. Sequential keeps each
+  // probe in a clean window; result still cached for 24 h after first run.
+  const results: ProbeResult[] = []
+  for (const probe of probeArgs) {
+    results.push(await runSingleProbe(probe))
+  }
+  return results
 }

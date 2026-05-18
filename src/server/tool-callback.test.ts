@@ -92,6 +92,35 @@ describe("tool-callback durable protocol", () => {
     expect(res.mismatchReason).toContain("canonicalArgsHash")
   })
 
+  test("same toolUseId across different chats does NOT trip arg_mismatch", async () => {
+    // Regression: claude CLI generates toolUseId starting at "1" per session,
+    // so toolUseId="2" recurs in every new chat. Keying seenToolUseIds by
+    // toolUseId alone treated those as retries of the first chat and denied
+    // every tool call after the first chat ever made one.
+    const { store } = await newTestStore()
+    const svc = createToolCallbackService({
+      store, serverSecret: "secret", now: () => 1_000, timeoutMs: 600_000,
+    })
+    void svc.submit({ ...baseInput, chatId: "chat-A", sessionId: "sess-A", toolUseId: "2" })
+    const listA = await store.listPendingToolRequests("chat-A")
+    await svc.answer(listA[0].id, { kind: "answer", payload: "ok" })
+
+    // Different chat, same toolUseId, different args — must not deny.
+    const second = svc.submit({
+      ...baseInput,
+      chatId: "chat-B",
+      sessionId: "sess-B",
+      toolUseId: "2",
+      args: { questions: [{ q: "from chat B" }] },
+    })
+    const listB = await store.listPendingToolRequests("chat-B")
+    expect(listB).toHaveLength(1)
+    await svc.answer(listB[0].id, { kind: "answer", payload: "B-ok" })
+    const res = await second
+    expect(res.status).toBe("answered")
+    expect(res.decision.payload).toBe("B-ok")
+  })
+
   test("cancelAllForChat resolves all pending as canceled", async () => {
     const { store } = await newTestStore()
     const svc = createToolCallbackService({

@@ -432,11 +432,16 @@ function KannaLayout() {
         {ptyDriverActive ? (
           <div
             role="status"
-            className="flex items-center justify-center gap-2 border-b border-warning/40 bg-warning/10 px-3 py-1.5 text-xs text-warning-foreground"
+            className="flex items-center justify-center gap-2 border-b border-warning/30 bg-warning/[0.06] px-3 py-1.5 text-xs"
           >
-            <span className="font-medium">PTY driver active.</span>
-            <span className="text-warning-foreground/80">
-              Tools run under the `claude` CLI with subscription billing. Use a worktree for risky tasks.
+            <span
+              aria-hidden="true"
+              className="inline-block size-1.5 rounded-full"
+              style={{ backgroundColor: "var(--warning)" }}
+            />
+            <span className="font-medium text-foreground">PTY driver active.</span>
+            <span className="text-muted-foreground">
+              Tools run under the <code className="font-mono">claude</code> CLI with subscription billing. Use a worktree for risky tasks.
             </span>
           </div>
         ) : null}

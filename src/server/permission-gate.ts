@@ -146,22 +146,17 @@ export const policy = {
     }
 
     // Bash path: single block handles all bash decisions.
+    // Path-deny + tool-deny always run; the only thing chatPolicy.defaultAction
+    // changes is the fallback for "didn't hit a deny rule and didn't hit the
+    // verb allowlist". For personal-use (defaultAction: auto-allow) that's
+    // auto-allow; for shared sessions (defaultAction: ask) it's ask.
     if (args.toolName === "mcp__kanna__bash") {
       const command = typeof args.args.command === "string" ? args.args.command : ""
       const parsed = parseSimpleBash(command, args.cwd, args.chatPolicy.bash.autoAllowVerbs)
-      if (!parsed) {
-        return { verdict: "ask", reason: "bash command uses shell features" }
-      }
-      if (parsed.hadEnvPrefix) {
-        return { verdict: "ask", reason: "bash command has env prefix" }
-      }
-      for (const p of parsed.paths) {
-        const denied = pathMatchesDeny(p, args.chatPolicy.readPathDeny)
-        if (denied) {
-          return { verdict: "auto-deny", reason: `readPathDeny: ${denied}` }
-        }
-      }
-      // Deny-list applies to bash before auto-allow.
+      const fallback: PolicyVerdict = args.chatPolicy.defaultAction === "ask"
+        ? "ask"
+        : args.chatPolicy.defaultAction
+      // Deny-list applies regardless of shell-feature parsing.
       for (const rule of args.chatPolicy.toolDenyList) {
         if (rule.tool !== args.toolName) continue
         let re: RegExp
@@ -175,10 +170,22 @@ export const policy = {
           return { verdict: "auto-deny", reason: `matched denylist: ${rule.pattern}` }
         }
       }
+      if (!parsed) {
+        return { verdict: fallback, reason: "bash command uses shell features" }
+      }
+      if (parsed.hadEnvPrefix) {
+        return { verdict: fallback, reason: "bash command has env prefix" }
+      }
+      for (const p of parsed.paths) {
+        const denied = pathMatchesDeny(p, args.chatPolicy.readPathDeny)
+        if (denied) {
+          return { verdict: "auto-deny", reason: `readPathDeny: ${denied}` }
+        }
+      }
       if (args.chatPolicy.bash.autoAllowVerbs.includes(parsed.verb)) {
         return { verdict: "auto-allow", reason: `verb in autoAllowVerbs: ${parsed.verb}` }
       }
-      return { verdict: "ask", reason: "bash verb not on autoAllowVerbs" }
+      return { verdict: fallback, reason: "bash verb not on autoAllowVerbs" }
     }
 
     // Non-bash path: deny-list, allow-list, default.

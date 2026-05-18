@@ -35,12 +35,10 @@ export function classifyProbeFromJsonlLines(
   return { kind: "indeterminate", builtin: target, reason: "no assistant turn in tailed jsonl" }
 }
 
-import { mkdtemp, readFile, rm } from "node:fs/promises"
+import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir, homedir } from "node:os"
 import path from "node:path"
 import { randomUUID } from "node:crypto"
-import { spawnPtyProcess } from "../pty-process"
-import { computeJsonlPath } from "../jsonl-path"
 import { writeSpawnSettings } from "../settings-writer"
 
 export interface RunSingleProbeArgs {
@@ -51,78 +49,84 @@ export interface RunSingleProbeArgs {
   timeoutMs?: number
 }
 
+/**
+ * Spawn a one-shot `claude --print` probe in stream-json mode and classify
+ * its assistant output. Same protocol as the main driver: stdin/stdout JSON
+ * lines, no TUI keystrokes. Classification scans every `assistant` line for
+ * a `tool_use` block — a disallowed built-in fires `fail`, an assistant turn
+ * with none fires `pass`, no assistant turn at all fires `indeterminate`.
+ */
 export async function runSingleProbe(args: RunSingleProbeArgs): Promise<ProbeResult> {
   const home = args.homeDir ?? homedir()
   const scratchDir = await mkdtemp(path.join(tmpdir(), `kanna-probe-${args.builtin}-`))
   try {
     const sessionId = randomUUID()
-    const jsonlPath = computeJsonlPath({ homeDir: home, cwd: scratchDir, sessionId })
     const { settingsPath } = await writeSpawnSettings({ runtimeDir: scratchDir })
     const systemPrompt = `Use the ${args.builtin} tool to complete the user's request. If ${args.builtin} is not available, respond with a brief text message explaining that and stop. Do not call any other tool.`
-    const env: NodeJS.ProcessEnv = { ...process.env, HOME: home, TERM: "xterm-256color" }
+    const env: NodeJS.ProcessEnv = { ...process.env, HOME: home, DISABLE_AUTOUPDATER: "1" }
     delete env.ANTHROPIC_API_KEY
-    const pty = await spawnPtyProcess({
-      command: args.claudeBin,
-      args: [
+    const proc = Bun.spawn(
+      [
+        args.claudeBin,
+        "--print",
+        "--output-format=stream-json",
+        "--input-format=stream-json",
+        "--verbose",
         "--session-id", sessionId,
         "--model", args.model,
         "--settings", settingsPath,
         "--tools", "mcp__kanna__*",
         "--permission-mode", "bypassPermissions",
         "--dangerously-skip-permissions",
-        "--no-update",
         "--system-prompt", systemPrompt,
       ],
-      cwd: scratchDir,
-      env,
-    })
-    const deadline = Date.now() + (args.timeoutMs ?? 15_000)
-    let lastDefinitive: ProbeResult | null = null
+      {
+        cwd: scratchDir,
+        env,
+        stdin: "pipe",
+        stdout: "pipe",
+        stderr: "pipe",
+      },
+    )
+    const stdin = proc.stdin as unknown as { write: (data: string) => number; flush?: () => void; end: () => void } | null
     try {
-      await pty.sendInput(`Try to use ${args.builtin}.\r`)
-      // Poll the JSONL instead of a fixed sleep: stop as soon as the turn
-      // produced a definitive classification (a disallowed tool_use → fail,
-      // or an assistant turn with none → pass) or a `result` entry appeared.
-      // Cuts the 15s-per-probe floor and avoids the partial-file race where
-      // we readFile while the model is still writing.
-      while (Date.now() < deadline) {
-        await new Promise((r) => setTimeout(r, 300))
-        let raw: string
-        try {
-          raw = await readFile(jsonlPath, "utf8")
-        } catch {
-          continue
-        }
-        const lines = raw.split("\n")
-        const hasResult = lines.some((l) => {
-          const t = l.trim()
-          if (!t) return false
-          try {
-            return (JSON.parse(t) as { type?: string }).type === "result"
-          } catch {
-            return false
-          }
-        })
-        const classified = classifyProbeFromJsonlLines(args.builtin, lines)
-        if (classified.kind !== "indeterminate") {
-          lastDefinitive = classified
-          if (classified.kind === "fail" || hasResult) break
-          // pass without a result yet: keep watching briefly in case a
-          // later assistant block invokes a built-in (cross-target leak).
-          lastDefinitive = classified
-        }
-        if (hasResult) break
-      }
-    } finally {
-      pty.close()
-    }
-    if (lastDefinitive) return lastDefinitive
-    try {
-      const raw = await readFile(jsonlPath, "utf8")
-      return classifyProbeFromJsonlLines(args.builtin, raw.split("\n"))
+      const userMsg = JSON.stringify({
+        type: "user",
+        message: { role: "user", content: `Try to use ${args.builtin}.` },
+        parent_tool_use_id: null,
+      }) + "\n"
+      stdin?.write(userMsg)
+      stdin?.flush?.()
+      stdin?.end()
     } catch {
-      return { kind: "indeterminate", builtin: args.builtin, reason: "no jsonl produced" }
+      try { proc.kill() } catch { /* swallow */ }
+      return { kind: "indeterminate", builtin: args.builtin, reason: "stdin write failed" }
     }
+
+    const lines: string[] = []
+    const decoder = new TextDecoder()
+    let buffer = ""
+    const reader = (proc.stdout as unknown as ReadableStream<Uint8Array>).getReader()
+    const deadline = Date.now() + (args.timeoutMs ?? 45_000)
+    const timeoutHandle = setTimeout(() => { try { proc.kill() } catch { /* swallow */ } }, Math.max(0, deadline - Date.now()))
+    try {
+      while (true) {
+        const { value, done } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
+        const parts = buffer.split("\n")
+        buffer = parts.pop() ?? ""
+        for (const part of parts) {
+          if (part.trim()) lines.push(part)
+        }
+      }
+      if (buffer.trim()) lines.push(buffer)
+    } finally {
+      clearTimeout(timeoutHandle)
+      try { reader.releaseLock() } catch { /* swallow */ }
+      try { await proc.exited } catch { /* swallow */ }
+    }
+    return classifyProbeFromJsonlLines(args.builtin, lines)
   } finally {
     await rm(scratchDir, { recursive: true, force: true })
   }

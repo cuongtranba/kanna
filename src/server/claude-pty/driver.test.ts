@@ -3,7 +3,6 @@ import { mkdtemp, rm, writeFile, mkdir } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { startClaudeSessionPTY, buildPtyEnv, buildPtyCliArgs, OutputRing, PTY_STDERR_RING_BYTES, deriveAccountInfoFromLabel, planModeRuntimeAction, PLAN_MODE_EXIT_UNSUPPORTED } from "./driver"
-import { formatSlashCommand } from "./slash-commands"
 import { KANNA_SYSTEM_PROMPT_APPEND } from "../../shared/kanna-system-prompt"
 import type { HarnessEvent } from "../harness-types"
 
@@ -60,29 +59,9 @@ describe("startClaudeSessionPTY", () => {
     }
   })
 
-  test("refuses to spawn when preflight gate returns not ok", async () => {
-    if (process.platform === "win32") return
-    const homeDir = await mkdtemp(path.join(tmpdir(), "kanna-pty-gate-"))
-    try {
-      await mkdir(path.join(homeDir, ".claude"), { recursive: true })
-      await writeFile(path.join(homeDir, ".claude", ".credentials.json"), "{}", "utf8")
-      await expect(
-        startClaudeSessionPTY({
-          chatId: "c", projectId: "p", localPath: homeDir,
-          model: "claude-sonnet-4-6",
-          planMode: false, forkSession: false,
-          oauthToken: null, sessionToken: null,
-          onToolRequest: async () => null,
-          homeDir,
-          env: {},
-          preflightGate: {
-            canSpawn: async () => ({ ok: false as const, reason: "built-in reachable: Bash" }),
-            invalidateAll: () => {},
-          },
-        }),
-      ).rejects.toThrow(/built-in reachable/)
-    } finally { await rm(homeDir, { recursive: true, force: true }) }
-  })
+  // Preflight gate removed: kanna trusts the claude CLI as the source of
+  // truth for tool execution. The PreflightGate arg is still accepted on the
+  // driver interface (back-compat with callers) but is never invoked.
 
   test.skipIf(process.env.KANNA_PTY_E2E !== "1")(
     "E2E: spawn claude, send one prompt, observe one transcript event",
@@ -125,32 +104,8 @@ describe("startClaudeSessionPTY", () => {
     60_000,
   )
 
-  test("sandbox profile is generated and applied when enabled on darwin", async () => {
-    if (process.platform !== "darwin") return
-    const homeDir = await mkdtemp(path.join(tmpdir(), "kanna-pty-sandbox-"))
-    try {
-      await mkdir(path.join(homeDir, ".claude"), { recursive: true })
-      await writeFile(path.join(homeDir, ".claude", ".credentials.json"), "{}", "utf8")
-      // We don't actually spawn — we provide a preflightGate that blocks early,
-      // so the test only verifies the assembly path. If sandbox path raises before
-      // the gate check, the test would throw a different error.
-      await expect(
-        startClaudeSessionPTY({
-          chatId: "c", projectId: "p", localPath: homeDir,
-          model: "claude-sonnet-4-6",
-          planMode: false, forkSession: false,
-          oauthToken: null, sessionToken: null,
-          onToolRequest: async () => null,
-          homeDir,
-          env: { KANNA_PTY_SANDBOX: "on" },
-          preflightGate: {
-            canSpawn: async () => ({ ok: false as const, reason: "test-block" }),
-            invalidateAll: () => {},
-          },
-        }),
-      ).rejects.toThrow(/test-block/)
-    } finally { await rm(homeDir, { recursive: true, force: true }) }
-  }, 30_000)
+  // OS sandbox wrap removed: kanna trusts the claude CLI as the source of
+  // truth and runs it directly under the kanna server's own process boundary.
 })
 
 describe("buildPtyEnv", () => {
@@ -162,7 +117,7 @@ describe("buildPtyEnv", () => {
     })
     expect(env.CLAUDE_CODE_OAUTH_TOKEN).toBe("sk-ant-oat-test")
     expect(env.HOME).toBe("/tmp/home")
-    expect(env.TERM).toBe("xterm-256color")
+    expect(env.DISABLE_AUTOUPDATER).toBe("1")
   })
 
   test("omits CLAUDE_CODE_OAUTH_TOKEN when oauthToken null", () => {
@@ -198,7 +153,6 @@ describe("buildPtyCliArgs", () => {
     sessionId: "sess-123",
     model: "claude-sonnet-4-6",
     planMode: false,
-    settingsPath: "/tmp/settings.json",
     sessionToken: null,
     forkSession: false,
   }
@@ -209,13 +163,36 @@ describe("buildPtyCliArgs", () => {
     expect(args).toContain("sess-123")
     expect(args).toContain("--model")
     expect(args).toContain("claude-sonnet-4-6")
-    expect(args).toContain("--tools")
-    expect(args).toContain("mcp__kanna__*")
-    expect(args).toContain("--settings")
-    expect(args).toContain("/tmp/settings.json")
-    expect(args).toContain("--no-update")
+    expect(args).not.toContain("--no-update")
     expect(args).toContain("--permission-mode")
     expect(args).toContain("acceptEdits")
+  })
+
+  test("does NOT restrict tools — model uses claude built-ins", () => {
+    const args = buildPtyCliArgs(baseInput)
+    expect(args).not.toContain("--tools")
+    expect(args).not.toContain("mcp__kanna__*")
+  })
+
+  test("loads user/project/local setting sources (no --settings override)", () => {
+    const args = buildPtyCliArgs(baseInput)
+    expect(args).not.toContain("--settings")
+    const idx = args.indexOf("--setting-sources")
+    expect(idx).toBeGreaterThan(-1)
+    expect(args[idx + 1]).toBe("user,project,local")
+  })
+
+  test("emits stream-json driver flags (--print + I/O format + verbose)", () => {
+    const args = buildPtyCliArgs(baseInput)
+    expect(args).toContain("--print")
+    expect(args).toContain("--output-format=stream-json")
+    expect(args).toContain("--input-format=stream-json")
+    expect(args).toContain("--verbose")
+  })
+
+  test("emits --dangerously-skip-permissions (personal-use bypass)", () => {
+    const args = buildPtyCliArgs(baseInput)
+    expect(args).toContain("--dangerously-skip-permissions")
   })
 
   test("plan mode picks 'plan' permission", () => {
@@ -241,15 +218,33 @@ describe("buildPtyCliArgs", () => {
     expect(args[idx + 1]).toBe("high")
   })
 
-  test("--resume appended when sessionToken present", () => {
+  test("resume mode: --resume only, no --session-id (claude rejects both together)", () => {
     const args = buildPtyCliArgs({ ...baseInput, sessionToken: "tok-abc" })
+    expect(args).not.toContain("--session-id")
+    expect(args).not.toContain("--fork-session")
     const idx = args.indexOf("--resume")
+    expect(idx).toBeGreaterThan(-1)
     expect(args[idx + 1]).toBe("tok-abc")
   })
 
-  test("--fork-session flag when forkSession true", () => {
-    const args = buildPtyCliArgs({ ...baseInput, forkSession: true })
+  test("new-session mode (no token, no fork): --session-id, no --resume", () => {
+    const args = buildPtyCliArgs(baseInput)
+    expect(args).not.toContain("--resume")
+    expect(args).not.toContain("--fork-session")
+    const idx = args.indexOf("--session-id")
+    expect(idx).toBeGreaterThan(-1)
+    expect(args[idx + 1]).toBe("sess-123")
+  })
+
+  test("fork mode: --session-id + --resume + --fork-session all three", () => {
+    const args = buildPtyCliArgs({ ...baseInput, sessionToken: "tok-abc", forkSession: true })
     expect(args).toContain("--fork-session")
+    const sid = args.indexOf("--session-id")
+    expect(sid).toBeGreaterThan(-1)
+    expect(args[sid + 1]).toBe("sess-123")
+    const resume = args.indexOf("--resume")
+    expect(resume).toBeGreaterThan(-1)
+    expect(args[resume + 1]).toBe("tok-abc")
   })
 
   test("--add-dir per additional directory", () => {
@@ -284,18 +279,17 @@ describe("buildPtyCliArgs", () => {
     expect(args[idx + 1]).toBe("custom prompt body")
   })
 
-  test("--mcp-config + --strict-mcp-config appended when path provided", () => {
+  test("--mcp-config appended without --strict-mcp-config (user MCPs merge with kanna's)", () => {
     const args = buildPtyCliArgs({ ...baseInput, mcpConfigPath: "/tmp/mcp-config.json" })
     const idx = args.indexOf("--mcp-config")
     expect(idx).toBeGreaterThan(-1)
     expect(args[idx + 1]).toBe("/tmp/mcp-config.json")
-    expect(args).toContain("--strict-mcp-config")
+    expect(args).not.toContain("--strict-mcp-config")
   })
 
   test("--mcp-config omitted when path absent", () => {
     const args = buildPtyCliArgs(baseInput)
     expect(args).not.toContain("--mcp-config")
-    expect(args).not.toContain("--strict-mcp-config")
   })
 })
 
@@ -346,23 +340,18 @@ describe("deriveAccountInfoFromLabel (C1)", () => {
   })
 })
 
-describe("planModeRuntimeAction (D4 partial)", () => {
-  test("planMode=true → /plan slash command (real enter-plan)", () => {
+describe("planModeRuntimeAction (stream-json control_request)", () => {
+  test("planMode=true → control_request set_permission_mode=plan", () => {
     const action = planModeRuntimeAction(true)
-    expect(action).toEqual({ kind: "slash", command: "plan" })
+    expect(action.kind).toBe("control")
+    if (action.kind !== "control") throw new Error("expected control action")
+    expect(action.request).toEqual({ type: "set_permission_mode", mode: "plan" })
   })
 
-  test("the slash command formats to the REPL line `/plan\\r`", () => {
-    const action = planModeRuntimeAction(true)
-    if (action.kind !== "slash") throw new Error("expected slash action")
-    expect(formatSlashCommand(action.command)).toBe("/plan\r")
-  })
-
-  test("planMode=false → warn (no slash exits plan mode)", () => {
+  test("planMode=false → warn (stream-json mode has no leave-plan)", () => {
     const action = planModeRuntimeAction(false)
     expect(action.kind).toBe("warn")
     if (action.kind !== "warn") throw new Error("expected warn action")
     expect(action.message).toBe(PLAN_MODE_EXIT_UNSUPPORTED)
-    expect(action.message).toContain("anthropics/claude-code#59891")
   })
 })

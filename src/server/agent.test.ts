@@ -4663,3 +4663,37 @@ describe("AgentCoordinator late tool request", () => {
     events.close()
   })
 })
+
+describe("AgentCoordinator turn-start failure recording", () => {
+  test("records turn_failed and clears activeTurn when startClaudeSession throws", async () => {
+    const store = createFakeStore()
+    store.chat.provider = "claude"
+    const consoleError = console.error
+    console.error = () => {}
+    try {
+      const coordinator = new AgentCoordinator({
+        store: store as never,
+        onStateChange: () => {},
+        startClaudeSession: async () => {
+          throw new Error("simulated spawn failure")
+        },
+      })
+
+      await expect(
+        coordinator.send({
+          type: "chat.send",
+          chatId: "chat-1",
+          provider: "claude",
+          content: "hi",
+        }),
+      ).rejects.toThrow(/simulated spawn failure/)
+
+      expect(store.turnFailedCount).toBe(1)
+      expect(store.turnFailures[0]?.chatId).toBe("chat-1")
+      expect(store.turnFailures[0]?.reason).toContain("simulated spawn failure")
+      expect(store.messages[0]?.kind).toBe("user_prompt")
+    } finally {
+      console.error = consoleError
+    }
+  })
+})
