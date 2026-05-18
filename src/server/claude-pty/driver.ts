@@ -585,15 +585,14 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
     provider: "claude",
     stream,
     interrupt: async () => {
-      try {
-        await writeJsonLine({
-          type: "control_request",
-          request_id: randomUUID(),
-          request: { type: "interrupt" },
-        })
-      } catch {
-        try { proc.kill("SIGINT") } catch { /* swallow */ }
-      }
+      // Send SIGINT to the claude subprocess. control_request type=interrupt
+      // is not reliably honored by `claude --print --input-format=stream-json`
+      // (and stdin is a pipe, not a TTY, so writing 0x03 also does nothing).
+      // SIGINT terminates the CLI; the caller is expected to follow with
+      // `close()` to drain resources, and the next turn will respawn via
+      // `--resume <sessionToken>`. SIGTERM/SIGKILL escalation lives in
+      // `close()`.
+      try { proc.kill("SIGINT") } catch { /* swallow */ }
     },
     sendPrompt: async (content) => {
       await writeJsonLine({

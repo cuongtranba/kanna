@@ -2415,7 +2415,7 @@ export class AgentCoordinator {
     })
 
     if (this.activeTurns.has(command.chatId)) {
-      await this.cancel(command.chatId, { hideInterrupted: true })
+      await this.cancel(command.chatId, { hideInterrupted: true, skipQueueDrain: true })
     }
 
     logClaudeSteer("steer_after_cancel", {
@@ -3125,7 +3125,7 @@ export class AgentCoordinator {
       .sort()
   }
 
-  async cancel(chatId: string, options?: { hideInterrupted?: boolean }) {
+  async cancel(chatId: string, options?: { hideInterrupted?: boolean; skipQueueDrain?: boolean }) {
     // Also clean up any draining stream for this chat.
     const draining = this.drainingStreams.get(chatId)
     if (draining) {
@@ -3214,6 +3214,31 @@ export class AgentCoordinator {
       // interrupt() failed — force close
     }
     active.turn.close()
+
+    // For Claude under the PTY driver, `active.turn` is a ghost facade over
+    // the long-lived `claudeSessions` entry and its `close()` is a no-op.
+    // The PTY driver's `interrupt()` sends SIGINT which terminates the CLI,
+    // so the underlying session is dead — drop it from the map so the next
+    // turn respawns a fresh `claude --resume <sessionToken>` (preserves
+    // transcript context). For the SDK driver, `interrupt()` is honored
+    // in-band without killing the worker, so reuse is still valid.
+    if (active.provider === "claude" && this.resolveClaudeDriverPreference() === "pty") {
+      const session = this.claudeSessions.get(chatId)
+      if (session) {
+        this.closeClaudeSession(chatId, session)
+      }
+    }
+
+    // Drain the queue. A queued message must auto-start after cancel; the
+    // result-success branch in runClaudeSession is the only other place this
+    // is called, and it can never fire for a cancelled turn (active has been
+    // deleted above before the result event arrives).
+    //
+    // `skipQueueDrain` is passed by callers that handle dequeue themselves
+    // (e.g. `steer`, which dequeues the head message with the steer wrapper).
+    if (!options?.skipQueueDrain) {
+      await this.maybeStartNextQueuedMessage(chatId)
+    }
   }
 
   async respondTool(command: Extract<ClientCommand, { type: "chat.respondTool" }>) {
