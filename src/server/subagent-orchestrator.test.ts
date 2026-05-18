@@ -782,6 +782,136 @@ describe("SubagentOrchestrator", () => {
     expect(() => orchestrator.cancelRun("chat-x", "run-x")).not.toThrow()
   })
 
+  // ── Regression suite for B1–B5 (codex review 2026-05-18) ──
+
+  test("B1 — permit is not double-counted on waiter handoff", async () => {
+    const subagents = [1, 2, 3].map((i) => makeSubagent({ id: `sa-${i}`, name: `a${i}` }))
+    const h = await setupHarness({ subagents, maxParallel: 1 })
+
+    // 3 runs serialized through 1 permit. Each holds, then we resolve in order.
+    for (const s of subagents) h.holdReply(s.id)
+
+    const promise = h.orchestrator.runMentionsForUserMessage({
+      chatId: h.chatId,
+      userMessageId: h.userMessageId,
+      mentions: subagents.map((s) => ({ kind: "subagent" as const, subagentId: s.id, raw: `@agent/${s.name}` })),
+    })
+
+    // Drain serially.
+    for (const s of subagents) {
+      const deadline = Date.now() + 2000
+      while (Date.now() < deadline && !h.pendingHolds.has(s.id)) {
+        await new Promise((r) => setTimeout(r, 10))
+      }
+      h.resolveReply(s.id, "ok")
+    }
+
+    await promise
+    // After every run completes, the permit count must equal the starting cap.
+    // B1: without the fix, each waiter handoff leaked one slot — permits
+    // would be 1 - 3 = -2 here, and activePermitCount would be 3 instead of 0.
+    expect(h.orchestrator.activePermitCount()).toBe(0)
+    expect(h.activeStarts.max).toBe(1)
+  })
+
+  test("B2 — startProviderRun throw does not double-release the slot", async () => {
+    const h = await setupHarness({ subagents: [makeSubagent({})], maxParallel: 1 })
+
+    // Override startProviderRun to throw synchronously — exercises the
+    // PROVIDER_ERROR early-return path that used to call raw release().
+    const realDeps = (h.orchestrator as unknown as {
+      deps: { startProviderRun: (a: { subagent: { id: string } }) => unknown }
+    }).deps
+    realDeps.startProviderRun = () => { throw new Error("synthetic provider boot failure") }
+
+    await h.orchestrator.runMentionsForUserMessage({
+      chatId: h.chatId,
+      userMessageId: h.userMessageId,
+      mentions: [{ kind: "subagent", subagentId: "sa-1", raw: "@agent/alpha" }],
+    })
+
+    // The failed early-return must have released exactly one slot. With the
+    // bug present, the outer finally would release again → activePermitCount
+    // would go negative (or, equivalently, permits would grow above the cap).
+    expect(h.orchestrator.activePermitCount()).toBe(0)
+  })
+
+  test("B3 — cancelChat does not block a future mention batch in the same chat", async () => {
+    const h = await setupHarness({ subagents: [makeSubagent({})] })
+
+    // First batch: run + complete normally.
+    h.programReply("sa-1", "first ok")
+    await h.orchestrator.runMentionsForUserMessage({
+      chatId: h.chatId,
+      userMessageId: "u1",
+      mentions: [{ kind: "subagent", subagentId: "sa-1", raw: "@agent/alpha" }],
+    })
+
+    // User cancels chat after the run completed. Before the B3 fix this
+    // permanently added the chatId to cancelledChats, so the next batch
+    // failed at acquire() time with "Chat cancelled before run started".
+    h.orchestrator.cancelChat(h.chatId)
+
+    // Second batch must run successfully.
+    h.programReply("sa-1", "second ok")
+    await h.orchestrator.runMentionsForUserMessage({
+      chatId: h.chatId,
+      userMessageId: "u2",
+      mentions: [{ kind: "subagent", subagentId: "sa-1", raw: "@agent/alpha" }],
+    })
+
+    const runs = Object.values(h.store.getSubagentRuns(h.chatId))
+    const second = runs.find((r) => r.parentUserMessageId === "u2")
+    expect(second).toBeDefined()
+    expect(second?.status).toBe("completed")
+    expect(second?.finalText).toBe("second ok")
+  })
+
+  test("B5 — TIMEOUT aborts the runState abortController", async () => {
+    const subagent = makeSubagent({})
+    const h = await setupHarness({ subagents: [subagent], runTimeoutMs: 50 })
+
+    const abortedRef: { value: boolean } = { value: false }
+    h.mockProviderRun({
+      authReady: async () => true,
+      start: () =>
+        new Promise<{ text: string }>((_resolve, reject) => {
+          // The orchestrator does not pass abortSignal to the mock start()
+          // wrapper — read it off runStateByRunId once the run exists. This
+          // mirrors how `runClaudeSubagent` consumes args.abortSignal in
+          // real code.
+          const wait = () => {
+            const runIds = Object.keys(h.store.getSubagentRuns(h.chatId))
+            const runId = runIds[0]
+            const rs = (h.orchestrator as unknown as {
+              runStateByRunId: Map<string, { abortController: AbortController }>
+            }).runStateByRunId
+            const state = rs.get(runId)
+            if (!state) {
+              setTimeout(wait, 5)
+              return
+            }
+            state.abortController.signal.addEventListener("abort", () => {
+              abortedRef.value = true
+              reject(new Error("aborted from test mock"))
+            }, { once: true })
+          }
+          setTimeout(wait, 5)
+        }),
+    })
+
+    await h.orchestrator.runMentionsForUserMessage({
+      chatId: h.chatId,
+      userMessageId: h.userMessageId,
+      mentions: [{ kind: "subagent", subagentId: subagent.id, raw: `@agent/${subagent.name}` }],
+    })
+
+    const run = Object.values(h.store.getSubagentRuns(h.chatId))[0]
+    expect(run.status).toBe("failed")
+    expect(run.error?.code).toBe("TIMEOUT")
+    expect(abortedRef.value).toBe(true)
+  }, 5_000)
+
   test("cancelRun cascades through a 2-level chain (A → B → C)", async () => {
     const alpha = makeSubagent({ id: "sa-a", name: "alpha" })
     const beta = makeSubagent({ id: "sa-b", name: "beta" })
