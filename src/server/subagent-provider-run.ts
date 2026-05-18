@@ -19,6 +19,14 @@ export interface BuildSubagentProviderRunArgs {
   subagent: Subagent
   chatId: string
   primer: string | null
+  /**
+   * The instruction that triggered this run — the user's typed message when
+   * spawned from a `@agent/<name>` mention, the parent agent's reply text for
+   * chained mentions, or null when no instruction is available (e.g. a
+   * background trigger). Always rendered above the primer so the subagent
+   * sees the request before the context.
+   */
+  userInstruction: string | null
   runId: string
   /** Abort signal from the run's AbortController; triggers cancellation of the provider session. */
   abortSignal: AbortSignal
@@ -64,7 +72,7 @@ export function buildSubagentProviderRun(args: BuildSubagentProviderRunArgs): Pr
     preamble: args.primer,
     authReady: async () => args.authReady(args.subagent.provider),
     async start(onChunk, onEntry) {
-      const initialPrompt = composeInitialPrompt(args.subagent, args.primer)
+      const initialPrompt = composeInitialPrompt(args.subagent, args.primer, args.userInstruction)
       if (args.subagent.provider === "claude") {
         return runClaudeSubagent({ args, initialPrompt, onChunk, onEntry })
       }
@@ -73,8 +81,19 @@ export function buildSubagentProviderRun(args: BuildSubagentProviderRunArgs): Pr
   }
 }
 
-function composeInitialPrompt(subagent: Subagent, primer: string | null): string {
-  return primer ?? `(no prior context — proceed based on your system prompt and the @agent/${subagent.name} mention)`
+export function composeInitialPrompt(
+  subagent: Subagent,
+  primer: string | null,
+  userInstruction: string | null,
+): string {
+  const instruction = userInstruction?.trim() ?? ""
+  const primerText = primer?.trim() ?? ""
+  if (instruction && primerText) {
+    return `User asked: ${instruction}\n\n${primerText}`
+  }
+  if (instruction) return `User asked: ${instruction}`
+  if (primerText) return primerText
+  return `(no prior context — proceed based on your system prompt and the @agent/${subagent.name} mention)`
 }
 
 async function runClaudeSubagent(opts: {

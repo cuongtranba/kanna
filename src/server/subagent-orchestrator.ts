@@ -92,6 +92,13 @@ export interface SubagentOrchestratorDeps {
     subagent: Subagent
     chatId: string
     primer: string | null
+    /**
+     * Instruction text shown to the subagent above the primer — user's own
+     * message for direct mentions, parent agent's reply for chained mentions,
+     * or null when unavailable. Used by composeInitialPrompt to ensure the
+     * subagent sees the request, not only the prior context.
+     */
+    userInstruction: string | null
     runId: string
     abortSignal: AbortSignal
   }) => ProviderRunStart
@@ -276,7 +283,17 @@ export class SubagentOrchestrator {
     chatId: string
     userMessageId: string
     mentions: ParsedMention[]
+    /**
+     * The text accompanying the @agent mention. For user-triggered runs this
+     * is the user's typed message. For main-Claude-triggered runs this is the
+     * assistant's reply text. Passed through to the subagent's initial prompt
+     * so the run sees the request, not just the prior context primer. Default
+     * "" preserves prior call-site semantics (primer-only) in tests that
+     * haven't been migrated.
+     */
+    userContent?: string
   }): Promise<void> {
+    const userContent = args.userContent ?? ""
     await this.recoveryPromise
     const subagents = this.deps.appSettings.getSnapshot().subagents
     const resolved: { mention: Extract<ParsedMention, { kind: "subagent" }>; subagent: Subagent }[] = []
@@ -332,6 +349,7 @@ export class SubagentOrchestrator {
         parentRunId: null,
         depth: 0,
         ancestorSubagentIds: [],
+        userInstruction: userContent,
       })
     ))
   }
@@ -343,6 +361,12 @@ export class SubagentOrchestrator {
     parentRunId: string | null
     depth: number
     ancestorSubagentIds: string[]
+    /**
+     * Instruction the spawn was triggered by — user's typed text for top-level
+     * runs, parent agent's full reply for chained runs. Forwarded to the
+     * provider run so composeInitialPrompt can render it above the primer.
+     */
+    userInstruction: string
   }): Promise<void> {
     const runId = crypto.randomUUID()
     await this.deps.store.appendSubagentEvent({
@@ -420,6 +444,7 @@ export class SubagentOrchestrator {
           subagent: args.subagent,
           chatId: args.chatId,
           primer,
+          userInstruction: args.userInstruction.length > 0 ? args.userInstruction : null,
           runId,
           abortSignal: runState.abortController.signal,
         })
@@ -592,6 +617,7 @@ export class SubagentOrchestrator {
           parentRunId: runId,
           depth: childDepth,
           ancestorSubagentIds: [...args.ancestorSubagentIds, args.subagent.id],
+          userInstruction: finalText,
         })
       }
     } finally {

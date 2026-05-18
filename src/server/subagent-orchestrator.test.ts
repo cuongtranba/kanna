@@ -185,6 +185,59 @@ describe("SubagentOrchestrator", () => {
     expect(runs[0].finalText).toBe("hello")
   })
 
+  test("forwards userContent to provider run as userInstruction", async () => {
+    const h = await setupHarness({ subagents: [makeSubagent({})] })
+    let captured: string | null | undefined
+    h.mockProviderRun({
+      authReady: async () => true,
+      start: async () => ({ text: "" }),
+    })
+    const realDeps = (h.orchestrator as unknown as {
+      deps: { startProviderRun: (a: { userInstruction: string | null }) => unknown }
+    }).deps
+    const original = realDeps.startProviderRun
+    realDeps.startProviderRun = (spawnArgs) => {
+      captured = spawnArgs.userInstruction
+      return original(spawnArgs as Parameters<typeof original>[0])
+    }
+    await h.orchestrator.runMentionsForUserMessage({
+      chatId: h.chatId,
+      userMessageId: h.userMessageId,
+      mentions: [{ kind: "subagent", subagentId: "sa-1", raw: "@agent/alpha" }],
+      userContent: "review my code",
+    })
+    expect(captured).toBe("review my code")
+  })
+
+  test("chain mention forwards parent finalText as child userInstruction", async () => {
+    const subagents = [
+      makeSubagent({ id: "sa-1", name: "alpha" }),
+      makeSubagent({ id: "sa-2", name: "beta" }),
+    ]
+    const h = await setupHarness({ subagents, maxChainDepth: 2 })
+    h.programReply("sa-1", "delegating to @agent/beta now")
+    h.programReply("sa-2", "child done")
+    const captured: Array<{ id: string; userInstruction: string | null }> = []
+    const realDeps = (h.orchestrator as unknown as {
+      deps: { startProviderRun: (a: { subagent: { id: string }; userInstruction: string | null }) => unknown }
+    }).deps
+    const original = realDeps.startProviderRun
+    realDeps.startProviderRun = (spawnArgs) => {
+      captured.push({ id: spawnArgs.subagent.id, userInstruction: spawnArgs.userInstruction })
+      return original(spawnArgs as Parameters<typeof original>[0])
+    }
+    await h.orchestrator.runMentionsForUserMessage({
+      chatId: h.chatId,
+      userMessageId: h.userMessageId,
+      mentions: [{ kind: "subagent", subagentId: "sa-1", raw: "@agent/alpha" }],
+      userContent: "kick things off",
+    })
+    expect(captured).toEqual([
+      { id: "sa-1", userInstruction: "kick things off" },
+      { id: "sa-2", userInstruction: "delegating to @agent/beta now" },
+    ])
+  })
+
   test("UNKNOWN_SUBAGENT emitted for unknown-subagent mention", async () => {
     const h = await setupHarness({ subagents: [] })
     await h.orchestrator.runMentionsForUserMessage({
@@ -369,8 +422,8 @@ describe("SubagentOrchestrator", () => {
       store: harness.store,
       appSettings: harness.appSettings,
       now: () => nowCounter++,
-      startProviderRun: ({ subagent, chatId, primer, runId, abortSignal }) => buildSubagentProviderRun({
-        subagent, chatId, primer, runId, abortSignal,
+      startProviderRun: ({ subagent, chatId, primer, userInstruction, runId, abortSignal }) => buildSubagentProviderRun({
+        subagent, chatId, primer, userInstruction, runId, abortSignal,
         cwd: "/tmp", projectId: "p1",
         startClaudeSession: async () => fakeSession,
         codexManager: {} as never,

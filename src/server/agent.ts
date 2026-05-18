@@ -123,6 +123,14 @@ interface ActiveTurn {
   // the user's real message. Used to update the per-chat compact circuit
   // breaker on completion (reset on success, increment on failure).
   proactiveCompactInjection?: boolean
+  // _id of the user_prompt entry that triggered this turn (when appended on
+  // this turn). Used to attribute main-Claude-initiated subagent runs to the
+  // originating user message.
+  userMessageId: string | null
+  // Concatenated assistant_text emitted during this turn. Scanned for
+  // `@agent/<name>` mentions on `result` so main Claude can delegate to a
+  // subagent by writing the mention in its reply.
+  assistantTextAccum: string
 }
 
 export interface ClaudeSessionHandle {
@@ -1097,7 +1105,7 @@ export class AgentCoordinator {
     this.subagentOrchestrator = new SubagentOrchestrator({
       store: this.store,
       appSettings: { getSnapshot: () => ({ subagents: this.getSubagents() }) },
-      startProviderRun: ({ subagent, chatId, primer, runId, abortSignal }) => this.buildSubagentProviderRunForChat({ subagent, chatId, primer, runId, abortSignal }),
+      startProviderRun: ({ subagent, chatId, primer, userInstruction, runId, abortSignal }) => this.buildSubagentProviderRunForChat({ subagent, chatId, primer, userInstruction, runId, abortSignal }),
       onRunTerminal: (chatId, runId) => {
         this.rejectPendingResolversForRun(chatId, runId)
         // failRun appended the terminal event synchronously before invoking
@@ -1581,6 +1589,7 @@ export class AgentCoordinator {
       throw new Error("Project not found")
     }
 
+    let appendedUserMessageId: string | null = null
     if (args.appendUserPrompt) {
       const parsedMentions = parseMentions(args.content, this.getSubagents())
       const subagentMentions = parsedMentions
@@ -1602,6 +1611,7 @@ export class AgentCoordinator {
         Date.now()
       )
       await this.store.appendMessage(args.chatId, userPromptEntry)
+      appendedUserMessageId = userPromptEntry._id
       logSendToStartingProfile(args.profile, "start_turn.user_prompt_appended", {
         chatId: args.chatId,
         entryId: userPromptEntry._id,
@@ -1741,6 +1751,8 @@ export class AgentCoordinator {
       clientTraceId: args.profile?.traceId,
       profilingStartedAt: args.profile?.startedAt,
       waitStartedAt: null,
+      userMessageId: appendedUserMessageId ?? this.findLastUserMessageId(args.chatId),
+      assistantTextAccum: "",
     }
     this.activeTurns.set(args.chatId, active)
     logSendToStartingProfile(args.profile, "start_turn.active_turn_registered", {
@@ -1837,9 +1849,49 @@ export class AgentCoordinator {
       cancelRecorded: false,
       clientTraceId: args.clientTraceId,
       waitStartedAt: null,
+      userMessageId: this.findLastUserMessageId(args.chatId),
+      assistantTextAccum: "",
     }
     this.activeTurns.set(args.chatId, active)
     return active
+  }
+
+  private findLastUserMessageId(chatId: string): string | null {
+    const messages = this.store.getMessages(chatId) as TranscriptEntry[]
+    for (let i = messages.length - 1; i >= 0; i -= 1) {
+      const entry = messages[i]
+      if (entry.kind === "user_prompt") return entry._id
+    }
+    return null
+  }
+
+  /**
+   * Scans the just-completed main turn's assistant text for `@agent/<name>`
+   * mentions. Each known mention spawns a fresh subagent run attributed to
+   * the user message that triggered this turn. Runs are dispatched
+   * fire-and-forget — the orchestrator persists progress via the event log.
+   * Skipped when no userMessageId is known (defensive: orchestrator requires
+   * one to attribute the run, and we should not silently drop work).
+   */
+  private dispatchAssistantMentions(chatId: string, active: ActiveTurn): void {
+    const text = active.assistantTextAccum
+    if (!text) return
+    const mentions = parseMentions(text, this.getSubagents())
+    if (mentions.length === 0) return
+    const userMessageId = active.userMessageId
+    if (!userMessageId) {
+      console.warn(
+        `${LOG_PREFIX} skipping assistant mentions — no userMessageId on active turn`,
+        { chatId, mentionCount: mentions.length },
+      )
+      return
+    }
+    void this.subagentOrchestrator
+      .runMentionsForUserMessage({ chatId, userMessageId, mentions, userContent: text })
+      .then(() => this.emitStateChange(chatId))
+      .catch((err) => {
+        console.warn(`${LOG_PREFIX} subagent orchestrator (assistant mentions) failed`, { chatId, err })
+      })
   }
 
   private async startClaudeTurn(args: {
@@ -2028,7 +2080,7 @@ export class AgentCoordinator {
       // client observes progress through subagentRuns snapshot deltas. We
       // intentionally do not await here so the WebSocket ack returns quickly.
       void this.subagentOrchestrator
-        .runMentionsForUserMessage({ chatId, userMessageId, mentions: parsedMentions })
+        .runMentionsForUserMessage({ chatId, userMessageId, mentions: parsedMentions, userContent: command.content })
         .then(() => this.emitStateChange(chatId))
         .catch((err) => {
           console.warn(`${LOG_PREFIX} subagent orchestrator failed`, { chatId, err })
@@ -2185,6 +2237,7 @@ export class AgentCoordinator {
     subagent: Subagent
     chatId: string
     primer: string | null
+    userInstruction: string | null
     runId: string
     abortSignal: AbortSignal
   }): ProviderRunStart {
@@ -2230,6 +2283,7 @@ export class AgentCoordinator {
       subagent: args.subagent,
       chatId: args.chatId,
       primer: args.primer,
+      userInstruction: args.userInstruction,
       runId: args.runId,
       abortSignal: args.abortSignal,
       cwd: spawn.cwd,
@@ -2384,6 +2438,9 @@ export class AgentCoordinator {
         await this.store.appendMessage(session.chatId, event.entry)
         this.trackBashToolEntry(session.chatId, event.entry)
         const active = this.activeTurns.get(session.chatId)
+        if (event.entry.kind === "assistant_text" && active) {
+          active.assistantTextAccum += event.entry.text
+        }
         if (event.entry.kind === "system_init" && active) {
           active.status = "running"
           const chat = this.store.getChat(session.chatId)
@@ -2450,6 +2507,7 @@ export class AgentCoordinator {
             }
           } else if (!active.cancelRequested) {
             await this.store.recordTurnFinished(session.chatId)
+            this.dispatchAssistantMentions(session.chatId, active)
             if (active.proactiveCompactInjection) {
               await this.store.setCompactFailureCount(session.chatId, 0)
             }
@@ -2574,6 +2632,9 @@ export class AgentCoordinator {
         await this.store.appendMessage(active.chatId, event.entry)
         this.trackBashToolEntry(active.chatId, event.entry)
 
+        if (event.entry.kind === "assistant_text") {
+          active.assistantTextAccum += event.entry.text
+        }
         if (event.entry.kind === "system_init") {
           active.status = "running"
         }
@@ -2584,6 +2645,7 @@ export class AgentCoordinator {
             await this.store.recordTurnFailed(active.chatId, event.entry.result || "Turn failed")
           } else if (!active.cancelRequested) {
             await this.store.recordTurnFinished(active.chatId)
+            this.dispatchAssistantMentions(active.chatId, active)
           }
           // Remove from activeTurns as soon as the result arrives so the UI
           // transitions to idle immediately. The stream may still be open
