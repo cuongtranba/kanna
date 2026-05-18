@@ -753,7 +753,7 @@ export interface KannaState {
   handleOpenLocalProject: (localPath: string) => Promise<void>
   handleCreateProject: (project: ProjectRequest) => Promise<void>
   handleCheckForUpdates: (options?: { force?: boolean }) => Promise<void>
-  handleInstallUpdate: () => Promise<void>
+  handleInstallUpdate: (version?: string) => Promise<void>
   handleForceReload: () => Promise<void>
   handleReadAppSettings: () => Promise<void>
   handleWriteAppSettings: (patch: AppSettingsPatch) => Promise<void>
@@ -1659,9 +1659,9 @@ export function useKannaState(activeChatId: string | null): KannaState {
     }
   }, [socket])
 
-  const handleInstallUpdate = useCallback(async () => {
+  const handleInstallUpdate = useCallback(async (version?: string) => {
     try {
-      const result = await socket.command<UpdateInstallResult>({ type: "update.install" })
+      const result = await socket.command<UpdateInstallResult>({ type: "update.install", version })
       if (!result.ok) {
         clearUiUpdateRestartPhase()
         setCommandError(null)

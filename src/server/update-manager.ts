@@ -98,10 +98,11 @@ export class UpdateManager {
     return { ok: true, action: "restart", errorCode: null, userTitle: null, userMessage: null }
   }
 
-  async installUpdate(): Promise<UpdateInstallResult> {
+  async installUpdate(options: { version?: string } = {}): Promise<UpdateInstallResult> {
+    const targetVersion = options.version?.trim() || undefined
     if (this.deps.devMode) {
       this.deps.trackEvent?.("update_installed", {
-        latest_version: this.snapshot.latestVersion,
+        latest_version: targetVersion ?? this.snapshot.latestVersion,
       })
       this.setSnapshot({ ...this.snapshot, status: "updating", error: null, reloadRequestedAt: null })
       this.setSnapshot({
@@ -116,7 +117,7 @@ export class UpdateManager {
 
     if (this.snapshot.status === "updating" || this.snapshot.status === "restart_pending") {
       return {
-        ok: this.snapshot.updateAvailable,
+        ok: Boolean(targetVersion) || this.snapshot.updateAvailable,
         action: "restart",
         errorCode: null,
         userTitle: null,
@@ -126,7 +127,7 @@ export class UpdateManager {
 
     if (this.installPromise) return this.installPromise
 
-    const installPromise = this.runInstall()
+    const installPromise = this.runInstall(targetVersion)
     this.installPromise = installPromise
     try {
       return await installPromise
@@ -168,8 +169,8 @@ export class UpdateManager {
     }
   }
 
-  private async runInstall(): Promise<UpdateInstallResult> {
-    if (!this.snapshot.updateAvailable) {
+  private async runInstall(targetVersion?: string): Promise<UpdateInstallResult> {
+    if (!targetVersion && !this.snapshot.updateAvailable) {
       const snapshot = await this.checkForUpdates({ force: true })
       if (!snapshot.updateAvailable) {
         return { ok: false, action: "restart", errorCode: null, userTitle: null, userMessage: null }
@@ -179,7 +180,7 @@ export class UpdateManager {
     this.setSnapshot({ ...this.snapshot, status: "updating", error: null, reloadRequestedAt: null })
 
     try {
-      await this.deps.reloader.reload()
+      await this.deps.reloader.reload(targetVersion)
     } catch (error) {
       const installError = error instanceof UpdateInstallError ? error : null
       const message = error instanceof Error ? error.message : String(error)
@@ -190,7 +191,7 @@ export class UpdateManager {
         reloadRequestedAt: null,
       })
       this.deps.trackEvent?.("update_failed", {
-        latest_version: null,
+        latest_version: targetVersion ?? null,
       })
       return {
         ok: false,
@@ -201,16 +202,17 @@ export class UpdateManager {
       }
     }
 
+    const installedVersion = targetVersion ?? this.snapshot.latestVersion ?? this.snapshot.currentVersion
     this.setSnapshot({
       ...this.snapshot,
-      currentVersion: this.snapshot.latestVersion ?? this.snapshot.currentVersion,
+      currentVersion: installedVersion.replace(/^v/i, ""),
       status: "restart_pending",
       updateAvailable: false,
       error: null,
       reloadRequestedAt: Date.now(),
     })
     this.deps.trackEvent?.("update_installed", {
-      latest_version: this.snapshot.latestVersion,
+      latest_version: targetVersion ?? this.snapshot.latestVersion,
     })
     return { ok: true, action: "restart", errorCode: null, userTitle: null, userMessage: null }
   }

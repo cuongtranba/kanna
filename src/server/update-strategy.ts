@@ -8,7 +8,7 @@ export interface UpdateChecker {
 }
 
 export interface UpdateReloader {
-  reload(): Promise<void>
+  reload(version?: string): Promise<void>
 }
 
 export interface NpmCheckerDeps {
@@ -35,19 +35,20 @@ export interface SupervisorExitReloaderDeps {
 export class SupervisorExitReloader implements UpdateReloader {
   constructor(private deps: SupervisorExitReloaderDeps) {}
 
-  async reload() {
-    const version = this.deps.targetVersion()
-    if (!version) {
+  async reload(version?: string) {
+    const targetRaw = version ?? this.deps.targetVersion()
+    if (!targetRaw) {
       throw new UpdateInstallError(
         "Unable to determine target version.",
         "install_failed",
         "Update failed",
       )
     }
-    const result = this.deps.installVersion(PACKAGE_NAME, version)
+    const target = targetRaw.trim().replace(/^v/i, "")
+    const result = this.deps.installVersion(PACKAGE_NAME, target)
     if (!result.ok) {
       throw new UpdateInstallError(
-        result.userMessage ?? "Unable to install the latest version.",
+        result.userMessage ?? `Unable to install version ${target}.`,
         result.errorCode,
         result.userTitle,
       )
@@ -96,7 +97,14 @@ export interface Pm2ReloaderDeps {
 export class Pm2Reloader implements UpdateReloader {
   constructor(private deps: Pm2ReloaderDeps) {}
 
-  async reload() {
+  async reload(version?: string) {
+    if (version) {
+      throw new UpdateInstallError(
+        "Installing a specific version is not supported in pm2 reloader mode.",
+        "install_failed",
+        "Version pin not supported",
+      )
+    }
     await this.step("git pull", ["git", "pull", "--ff-only"])
     if (await this.deps.lockfileChanged()) {
       await this.step("bun install", ["bun", "install"])

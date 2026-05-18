@@ -262,6 +262,27 @@ export async function loadChangelog(options?: { force?: boolean; fetchImpl?: Fet
   return releases
 }
 
+export function compareSemverTags(a: string, b: string): number {
+  const parse = (value: string) =>
+    value
+      .trim()
+      .replace(/^v/i, "")
+      .split("-")[0]
+      .split(".")
+      .map((part) => Number.parseInt(part, 10))
+      .filter((part) => Number.isFinite(part))
+  const aParts = parse(a)
+  const bParts = parse(b)
+  const length = Math.max(aParts.length, bParts.length)
+  for (let index = 0; index < length; index += 1) {
+    const left = aParts[index] ?? 0
+    const right = bParts[index] ?? 0
+    if (left === right) continue
+    return left < right ? -1 : 1
+  }
+  return 0
+}
+
 export function formatPublishedDate(value: string | null) {
   if (!value) return "Unpublished"
 
@@ -292,7 +313,7 @@ export function ChangelogSection({
   onRetry: () => void
   updateSnapshot: UpdateSnapshot | null
   currentVersion: string
-  onInstallUpdate: () => void
+  onInstallUpdate: (version?: string) => void
   onCheckForUpdates: () => void
   onForceReload: () => void
 }) {
@@ -432,16 +453,22 @@ export function ChangelogSection({
                   ) : null}
                   
                 
-                  { isLatestRelease && canInstallUpdate  ? (
+                  { !isCurrentRelease && (isLatestRelease ? canInstallUpdate : true) ? (
                   <SettingsHeaderButton
                     variant="default"
                     className=""
-                    onClick={onInstallUpdate}
+                    onClick={() => onInstallUpdate(release.tag_name)}
                     disabled={isUpdating}
                   >
                     <div className="flex flex-row items-center justify-center gap-2">
                     <DownloadCloud className="size-4"/>
-                    {isUpdating ? "Updating…" : "Update"}
+                    {isUpdating
+                      ? "Installing…"
+                      : isLatestRelease
+                        ? "Update"
+                        : compareSemverTags(normalizedTag, normalizedCurrentVersion) < 0
+                          ? "Rollback"
+                          : "Install"}
                     </div>
                   </SettingsHeaderButton>
                 ) : null}
@@ -2264,8 +2291,8 @@ export function SettingsPage() {
                     onRetry={retryChangelog}
                     updateSnapshot={updateSnapshot}
                     currentVersion={appVersion}
-                    onInstallUpdate={() => {
-                      void state.handleInstallUpdate()
+                    onInstallUpdate={(version) => {
+                      void state.handleInstallUpdate(version)
                     }}
                     onCheckForUpdates={() => {
                       void state.handleCheckForUpdates({ force: true })

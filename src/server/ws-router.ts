@@ -1287,7 +1287,7 @@ export function createWsRouter({
           if (!updateManager) {
             throw new Error("Update manager unavailable.")
           }
-          const result = await updateManager.installUpdate()
+          const result = await updateManager.installUpdate({ version: command.version })
           send(ws, {
             v: PROTOCOL_VERSION,
             type: "ack",

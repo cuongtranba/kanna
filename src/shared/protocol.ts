@@ -94,7 +94,7 @@ export type ClientCommand =
   | { type: "stack.listWorktrees"; projectId: string }
   | { type: "system.ping" }
   | { type: "update.check"; force?: boolean }
-  | { type: "update.install" }
+  | { type: "update.install"; version?: string }
   | { type: "update.reload" }
   | { type: "settings.readKeybindings" }
   | { type: "settings.writeKeybindings"; bindings: KeybindingsSnapshot["bindings"] }
