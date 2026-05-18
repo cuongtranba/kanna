@@ -1290,6 +1290,87 @@ describe("AgentCoordinator codex integration", () => {
     expect(discardedResult.content).toEqual({ discarded: true })
     expect(startTurnCalls).toEqual(["plan this"])
   })
+
+  test("cancel() drains the queue: a follow-up queued message auto-starts after stop", async () => {
+    let releaseInterrupt!: () => void
+    const interrupted = new Promise<void>((resolve) => {
+      releaseInterrupt = resolve
+    })
+    const startTurnCalls: string[] = []
+
+    const fakeCodexManager = {
+      async startSession() {},
+      async startTurn(args: { content: string }): Promise<HarnessTurn> {
+        startTurnCalls.push(args.content)
+        async function* stream() {
+          yield {
+            type: "transcript" as const,
+            entry: timestamped({
+              kind: "system_init",
+              provider: "codex",
+              model: "gpt-5.4",
+              tools: [],
+              agents: [],
+              slashCommands: [],
+              mcpServers: [],
+            }),
+          }
+          if (startTurnCalls.length === 1) {
+            // First turn hangs until interrupted by cancel().
+            await interrupted
+            return
+          }
+          // Second turn (auto-started from the queue) completes immediately.
+          yield {
+            type: "transcript" as const,
+            entry: timestamped({
+              kind: "result",
+              subtype: "success",
+              isError: false,
+              durationMs: 0,
+              result: "ok",
+            }),
+          }
+        }
+        return {
+          provider: "codex",
+          stream: stream(),
+          interrupt: async () => { releaseInterrupt() },
+          close: () => {},
+        }
+      },
+    }
+
+    const store = createFakeStore()
+    const coordinator = new AgentCoordinator({
+      store: store as never,
+      onStateChange: () => {},
+      codexManager: fakeCodexManager as never,
+    })
+
+    await coordinator.send({
+      type: "chat.send",
+      chatId: "chat-1",
+      provider: "codex",
+      content: "first prompt",
+    })
+
+    await waitFor(() => coordinator.getActiveStatuses().get("chat-1") === "running")
+
+    await coordinator.enqueue({
+      type: "message.enqueue",
+      chatId: "chat-1",
+      content: "queued follow up",
+    })
+    expect(store.queuedMessages).toHaveLength(1)
+
+    await coordinator.cancel("chat-1")
+
+    // The queued message must have been consumed and started as the second turn.
+    await waitFor(() => startTurnCalls.length === 2)
+    expect(startTurnCalls).toEqual(["first prompt", "queued follow up"])
+    expect(store.queuedMessages).toHaveLength(0)
+  })
 })
 
 describe("AgentCoordinator claude integration", () => {
