@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.60.0](https://github.com/cuongtranba/kanna/compare/v0.59.0...v0.60.0) (2026-05-18)
+
+
+### Features
+
+* **ui:** full-app loading overlay during redeploy/update restart ([#207](https://github.com/cuongtranba/kanna/issues/207)) ([c967cf2](https://github.com/cuongtranba/kanna/commit/c967cf21e0b733f06ea2d34f982f8e80ecb96a67))
+* **update:** install any release from changelog UI ([#208](https://github.com/cuongtranba/kanna/issues/208)) ([8fd44e9](https://github.com/cuongtranba/kanna/commit/8fd44e9cdf91fe21b8686081b3dbfb38a549ff6b))
+
 ## [0.59.0](https://github.com/cuongtranba/kanna/compare/v0.58.0...v0.59.0) (2026-05-18)
 
 
