@@ -85,6 +85,54 @@ describe("PendingToolRequestMessage — ask_user_question", () => {
     container.remove()
   })
 
+  test("MCP shim `text` field maps to question — answer keys use question body, not 'undefined'", async () => {
+    const onAnswer = mock((_id: string, _decision: ToolRequestDecision) => undefined)
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+
+    // Real-world payload from mcp__kanna__ask_user_question: items use
+    // `text` field (per its zod schema) instead of `question`.
+    const entry: PendingToolRequestHydrated = makeEntry({
+      arguments: {
+        questions: [
+          {
+            text: "Favorite language?",
+            header: "Lang",
+            options: [
+              { label: "TypeScript", description: "Typed JS" },
+              { label: "Go", description: "Simple, fast" },
+            ],
+            multiSelect: false,
+          },
+        ],
+      },
+    })
+
+    await act(async () => {
+      createRoot(container).render(
+        <PendingToolRequestMessage entry={entry} onAnswer={onAnswer} />,
+      )
+    })
+
+    expect(container.textContent).toContain("Favorite language?")
+
+    const goBtn = Array.from(container.querySelectorAll("button"))
+      .find((b) => b.textContent?.trim() === "Go")
+    await act(async () => { goBtn!.click() })
+
+    const submitBtn = Array.from(container.querySelectorAll("button"))
+      .find((b) => b.textContent?.trim() === "Submit")
+    await act(async () => { submitBtn!.click() })
+
+    expect(onAnswer).toHaveBeenCalledTimes(1)
+    const [, decision] = onAnswer.mock.calls[0]!
+    expect(decision.kind).toBe("answer")
+    const answers = (decision.payload as { answers: Record<string, string[]> }).answers
+    expect(answers).not.toHaveProperty("undefined")
+    expect(answers["Favorite language?"]).toEqual(["Go"])
+    container.remove()
+  })
+
   test("Cancel button calls onAnswer with deny decision", async () => {
     const onAnswer = mock((_id: string, _decision: ToolRequestDecision) => undefined)
     const container = document.createElement("div")
