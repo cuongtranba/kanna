@@ -453,7 +453,7 @@ export function ChangelogSection({
                   ) : null}
                   
                 
-                  { !isCurrentRelease && (isLatestRelease ? canInstallUpdate : true) ? (
+                  { (isLatestRelease && canInstallUpdate) || (!isLatestRelease && !isCurrentRelease) ? (
                   <SettingsHeaderButton
                     variant="default"
                     className=""
@@ -462,10 +462,10 @@ export function ChangelogSection({
                   >
                     <div className="flex flex-row items-center justify-center gap-2">
                     <DownloadCloud className="size-4"/>
-                    {isUpdating
-                      ? "Installing…"
-                      : isLatestRelease
-                        ? "Update"
+                    {isLatestRelease
+                      ? (isUpdating ? "Updating…" : "Update")
+                      : isUpdating
+                        ? "Installing…"
                         : compareSemverTags(normalizedTag, normalizedCurrentVersion) < 0
                           ? "Rollback"
                           : "Install"}
