@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.57.5](https://github.com/cuongtranba/kanna/compare/v0.57.4...v0.57.5) (2026-05-18)
+
+
+### Bug Fixes
+
+* **server:** allow HEAD on /api/projects/:id/{files,uploads}/*/content ([#194](https://github.com/cuongtranba/kanna/issues/194)) ([330f33a](https://github.com/cuongtranba/kanna/commit/330f33a3adfa00e66889f263c1fa992ef95ddd71))
+
 ## [0.57.4](https://github.com/cuongtranba/kanna/compare/v0.57.3...v0.57.4) (2026-05-17)
 
 
