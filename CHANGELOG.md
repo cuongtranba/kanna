@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.61.3](https://github.com/cuongtranba/kanna/compare/v0.61.2...v0.61.3) (2026-05-18)
+
+
+### Bug Fixes
+
+* **claude-pty:** SIGINT on stop, drain queue after cancel ([#220](https://github.com/cuongtranba/kanna/issues/220)) ([f5a76ff](https://github.com/cuongtranba/kanna/commit/f5a76ff1d40e956e95a26d818172c19e2b6d436a))
+* **tools:** normalize mcp__kanna__ask_user_question text→question field ([#222](https://github.com/cuongtranba/kanna/issues/222)) ([b11741d](https://github.com/cuongtranba/kanna/commit/b11741dbd1ec604adf4f41d8d05a540db04e7747))
+
 ## [0.61.2](https://github.com/cuongtranba/kanna/compare/v0.61.1...v0.61.2) (2026-05-18)
 
 
