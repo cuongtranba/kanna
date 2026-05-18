@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.61.0](https://github.com/cuongtranba/kanna/compare/v0.60.0...v0.61.0) (2026-05-18)
+
+
+### Features
+
+* **codex:** auto-relocate ImageGeneration outputs into project ([#210](https://github.com/cuongtranba/kanna/issues/210)) ([d1fb494](https://github.com/cuongtranba/kanna/commit/d1fb494b664882ec58b9ab39773ab7469f77ed05))
+
+
+### Bug Fixes
+
+* **settings/subagents:** remove duplicate copy in empty state and list ([#212](https://github.com/cuongtranba/kanna/issues/212)) ([55510cb](https://github.com/cuongtranba/kanna/commit/55510cbc8ef50bf3e62f03e641098d3e0e051450))
+
 ## [0.60.0](https://github.com/cuongtranba/kanna/compare/v0.59.0...v0.60.0) (2026-05-18)
 
 
