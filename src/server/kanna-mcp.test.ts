@@ -165,3 +165,49 @@ test("feature flag on → all 8 new mcp__kanna__* tools registered", () => {
     delete process.env.KANNA_MCP_TOOL_CALLBACKS
   }
 })
+
+// ── Issue #215: PTY forces interactive shims without the env flag ──────────
+
+const callbackStub = (): Parameters<typeof buildKannaMcpTools>[0]["toolCallback"] => ({
+  submit: async () => ({ status: "answered", decision: { kind: "deny" as const, reason: "test" } }),
+  answer: async () => {},
+  cancel: async () => {},
+  cancelAllForChat: async () => {},
+  cancelAllForSession: async () => {},
+  recoverOnStartup: async () => {},
+  tickTimeouts: async () => {},
+})
+
+test("forceInteractiveToolCallbacks → ask_user_question / exit_plan_mode registered with env flag UNSET", () => {
+  delete process.env.KANNA_MCP_TOOL_CALLBACKS
+  const tools = buildKannaMcpTools({
+    ...makeArgs(callbackStub()),
+    forceInteractiveToolCallbacks: true,
+  })
+  const names = tools.map((t) => t.name)
+  expect(names).toContain("ask_user_question")
+  expect(names).toContain("exit_plan_mode")
+})
+
+test("forceInteractiveToolCallbacks does NOT register the 8 built-in shims (env flag UNSET)", () => {
+  delete process.env.KANNA_MCP_TOOL_CALLBACKS
+  const tools = buildKannaMcpTools({
+    ...makeArgs(callbackStub()),
+    forceInteractiveToolCallbacks: true,
+  })
+  const names = tools.map((t) => t.name)
+  for (const n of ["read", "glob", "grep", "bash", "edit", "write", "webfetch", "websearch"]) {
+    expect(names).not.toContain(n)
+  }
+})
+
+test("forceInteractiveToolCallbacks but toolCallback absent → nothing registered (fail-safe)", () => {
+  delete process.env.KANNA_MCP_TOOL_CALLBACKS
+  const tools = buildKannaMcpTools({
+    ...makeArgs(undefined),
+    forceInteractiveToolCallbacks: true,
+  })
+  const names = tools.map((t) => t.name)
+  expect(names).not.toContain("ask_user_question")
+  expect(names).not.toContain("exit_plan_mode")
+})

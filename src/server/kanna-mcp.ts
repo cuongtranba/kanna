@@ -56,6 +56,14 @@ export interface KannaMcpArgs extends OfferDownloadArgs {
   subagentOrchestrator?: SubagentOrchestrator
   /** Required alongside `subagentOrchestrator`. Defaults to a stub returning null when omitted. */
   delegationContext?: KannaMcpDelegationContext
+  /**
+   * Forces the `ask_user_question` / `exit_plan_mode` shims to register
+   * even when `KANNA_MCP_TOOL_CALLBACKS` is unset. The PTY driver sets
+   * this because the durable approval protocol is the only host path
+   * for interactive tools under PTY (no `canUseTool` hook). Does NOT
+   * register the 8 built-in shims — those stay gated on the env flag.
+   */
+  forceInteractiveToolCallbacks?: boolean
 }
 
 export interface ResolvedOfferDownload {
@@ -242,17 +250,23 @@ export function buildKannaMcpTools(args: KannaMcpArgs): SdkMcpToolDefinition<any
     ),
   ]
 
-  if (process.env.KANNA_MCP_TOOL_CALLBACKS === "1" && args.toolCallback) {
+  // Two independent gates:
+  //  • interactive (ask_user_question / exit_plan_mode): on when the env
+  //    flag is set OR the caller forces it. The PTY driver forces it
+  //    because the durable approval protocol is the only host path for
+  //    interactive tools under PTY (no canUseTool hook). See issue #215.
+  //  • built-in shims (read/glob/grep/bash/edit/write/webfetch/websearch):
+  //    gated on the env flag ONLY. Never force-registered — under PTY they
+  //    would duplicate the native CLI built-ins and route every bash/edit
+  //    through an approval prompt, contradicting --dangerously-skip-permissions.
+  const envCallbacksEnabled = process.env.KANNA_MCP_TOOL_CALLBACKS === "1"
+  const interactiveEnabled =
+    (envCallbacksEnabled || args.forceInteractiveToolCallbacks === true) && Boolean(args.toolCallback)
+  const builtinShimsEnabled = envCallbacksEnabled && Boolean(args.toolCallback)
+
+  if (interactiveEnabled && args.toolCallback) {
     const askTool = createAskUserQuestionTool({ toolCallback: args.toolCallback })
     const exitPlanTool = createExitPlanModeTool({ toolCallback: args.toolCallback })
-    const readTool = createReadTool({ toolCallback: args.toolCallback })
-    const globTool = createGlobTool({ toolCallback: args.toolCallback })
-    const grepTool = createGrepTool({ toolCallback: args.toolCallback })
-    const bashTool = createBashTool({ toolCallback: args.toolCallback })
-    const editTool = createEditTool({ toolCallback: args.toolCallback })
-    const writeTool = createWriteTool({ toolCallback: args.toolCallback })
-    const webfetchTool = createWebFetchTool({ toolCallback: args.toolCallback })
-    const websearchTool = createWebSearchTool({ toolCallback: args.toolCallback })
 
     tools.push(
       tool(
@@ -288,6 +302,17 @@ export function buildKannaMcpTools(args: KannaMcpArgs): SdkMcpToolDefinition<any
         },
       ),
     )
+  }
+
+  if (builtinShimsEnabled && args.toolCallback) {
+    const readTool = createReadTool({ toolCallback: args.toolCallback })
+    const globTool = createGlobTool({ toolCallback: args.toolCallback })
+    const grepTool = createGrepTool({ toolCallback: args.toolCallback })
+    const bashTool = createBashTool({ toolCallback: args.toolCallback })
+    const editTool = createEditTool({ toolCallback: args.toolCallback })
+    const writeTool = createWriteTool({ toolCallback: args.toolCallback })
+    const webfetchTool = createWebFetchTool({ toolCallback: args.toolCallback })
+    const websearchTool = createWebSearchTool({ toolCallback: args.toolCallback })
 
     function registerShim<I>(shim: {
       name: string

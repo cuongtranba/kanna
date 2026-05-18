@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
-import { startClaudeSessionPTY, buildPtyEnv, buildPtyCliArgs, OutputRing, PTY_STDERR_RING_BYTES, deriveAccountInfoFromLabel, planModeRuntimeAction, PLAN_MODE_EXIT_UNSUPPORTED } from "./driver"
+import { startClaudeSessionPTY, buildPtyEnv, buildPtyCliArgs, OutputRing, PTY_STDERR_RING_BYTES, PTY_DISALLOWED_NATIVE_TOOLS, deriveAccountInfoFromLabel, planModeRuntimeAction, PLAN_MODE_EXIT_UNSUPPORTED } from "./driver"
 import { KANNA_SYSTEM_PROMPT_APPEND } from "../../shared/kanna-system-prompt"
 import type { HarnessEvent } from "../harness-types"
 
@@ -307,6 +307,33 @@ describe("buildPtyCliArgs", () => {
   test("--mcp-config omitted when path absent", () => {
     const args = buildPtyCliArgs(baseInput)
     expect(args).not.toContain("--mcp-config")
+  })
+
+  // ── Issue #215: disallow native AskUserQuestion/ExitPlanMode under PTY ────
+
+  test("disallows native AskUserQuestion + ExitPlanMode (forces the mcp__kanna__ shims)", () => {
+    const args = buildPtyCliArgs(baseInput)
+    const idx = args.indexOf("--disallowedTools")
+    expect(idx).toBeGreaterThan(-1)
+    expect(args.slice(idx + 1)).toEqual(["AskUserQuestion", "ExitPlanMode"])
+    expect(PTY_DISALLOWED_NATIVE_TOOLS).toEqual(["AskUserQuestion", "ExitPlanMode"])
+    // EnterPlanMode is intentionally NOT disallowed (no user round-trip;
+    // SDK canUseTool never intercepts it — keeps SDK↔PTY parity).
+    expect(args).not.toContain("EnterPlanMode")
+  })
+
+  test("--disallowedTools is last so its variadic args cannot swallow another flag", () => {
+    const args = buildPtyCliArgs({ ...baseInput, mcpConfigPath: "/tmp/mcp-config.json" })
+    const idx = args.indexOf("--disallowedTools")
+    expect(idx).toBe(args.length - PTY_DISALLOWED_NATIVE_TOOLS.length - 1)
+  })
+
+  test("--disallowedTools coexists with --append-system-prompt (index assertion still holds)", () => {
+    const args = buildPtyCliArgs(baseInput)
+    const idx = args.indexOf("--append-system-prompt")
+    expect(idx).toBeGreaterThan(-1)
+    expect(args[idx + 1]).toBe(KANNA_SYSTEM_PROMPT_APPEND)
+    expect(args).toContain("--disallowedTools")
   })
 })
 

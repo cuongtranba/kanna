@@ -58,6 +58,19 @@ Setting `KANNA_MCP_TOOL_CALLBACKS=1` routes `AskUserQuestion` and
 client on reconnect as `pending_tool_request` transcript entries. Default is
 off; the SDK driver uses the legacy `canUseTool` → `onToolRequest` path.
 
+**PTY exception (issue #215):** under `KANNA_CLAUDE_DRIVER=pty` the
+`ask_user_question` / `exit_plan_mode` shims are **always registered**
+regardless of this flag — the PTY driver passes
+`forceInteractiveToolCallbacks: true` to `buildKannaMcpTools` because
+PTY has no `canUseTool` hook (the durable approval protocol is the only
+host path). The PTY CLI args also include
+`--disallowedTools AskUserQuestion ExitPlanMode` so the model cannot
+pick the native built-ins (which the CLI auto-rejects with
+`is_error: "Answer questions?"`, mis-read as a user cancel). The flag
+still **exclusively** gates the 8 built-in shims
+(`read/glob/grep/bash/edit/write/webfetch/websearch`) and the SDK
+driver's `canUseTool` routing — those are never force-enabled under PTY.
+
 Optional `KANNA_SERVER_SECRET` env var stabilises HMAC tool-request ids
 across the process lifetime. Cross-restart idempotency does not matter
 because `recoverOnStartup()` fail-closes all pending records on boot.
@@ -75,6 +88,14 @@ preserves Pro/Max subscription billing; SDK mode bills at API rates.
 Default is `sdk` (no behaviour change). Authentication requires an OAuth-pool token configured in Kanna settings; the token is injected via `CLAUDE_CODE_OAUTH_TOKEN`. The local `claude /login` keychain path is not supported in this deployment. `ANTHROPIC_API_KEY` must be unset (PTY mode refuses to spawn if it is set — would force API billing).
 
 Platform support: macOS / Linux only.
+
+**AskUserQuestion / ExitPlanMode (issue #215 — CLOSED):** PTY now
+reaches parity. The driver disallows the native built-ins
+(`--disallowedTools AskUserQuestion ExitPlanMode`) and force-registers
+the `mcp__kanna__ask_user_question` / `mcp__kanna__exit_plan_mode`
+shims, which route through the durable approval protocol to the UI —
+active regardless of `KANNA_MCP_TOOL_CALLBACKS`. See the Tool Callback
+Feature Flag section for the full wiring.
 
 **Remaining parity gaps vs SDK driver** (closed phases tracked in #162;
 umbrella #163):

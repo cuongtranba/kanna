@@ -122,6 +122,20 @@ export class OutputRing {
   }
 }
 
+/**
+ * Native CLI built-ins removed from the model's context under PTY (issue
+ * #215). The SDK driver intercepts these via the `canUseTool` hook
+ * (`buildCanUseTool` in agent.ts); PTY has no such hook, so the CLI
+ * auto-rejects them with `is_error: "Answer questions?"` and the model
+ * mis-reads it as a user cancel. Disallowing the natives forces the model
+ * onto the `mcp__kanna__ask_user_question` / `mcp__kanna__exit_plan_mode`
+ * shims, which the PTY driver always registers (forceInteractiveToolCallbacks)
+ * and which route through the durable approval protocol to the UI.
+ * `EnterPlanMode` is intentionally excluded — it has no user round-trip and
+ * the SDK hook never intercepts it, so leaving it native preserves parity.
+ */
+export const PTY_DISALLOWED_NATIVE_TOOLS = ["AskUserQuestion", "ExitPlanMode"] as const
+
 export interface BuildPtyCliArgsInput {
   sessionId: string
   model: string
@@ -192,6 +206,10 @@ export function buildPtyCliArgs(args: BuildPtyCliArgsInput): string[] {
   } else {
     cliArgs.push("--append-system-prompt", args.systemPromptAppend ?? KANNA_SYSTEM_PROMPT_APPEND)
   }
+  // `--disallowedTools` is variadic in the claude CLI (space-separated tool
+  // strings as separate argv — code.claude.com/docs/en/cli-reference). Push
+  // it LAST so it cannot greedily swallow a subsequent flag value.
+  cliArgs.push("--disallowedTools", ...PTY_DISALLOWED_NATIVE_TOOLS)
   return cliArgs
 }
 
@@ -293,6 +311,12 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
         chatPolicy: args.chatPolicy,
         subagentOrchestrator: args.subagentOrchestrator,
         delegationContext: args.delegationContext,
+        // PTY has no canUseTool hook — the durable approval protocol is the
+        // only host path for AskUserQuestion/ExitPlanMode. Force the shims
+        // on regardless of KANNA_MCP_TOOL_CALLBACKS (issue #215). Paired
+        // with --disallowedTools AskUserQuestion ExitPlanMode above so the
+        // model uses the shim instead of the auto-rejected native built-in.
+        forceInteractiveToolCallbacks: true,
       },
     })
     await writeFile(mcpConfigPath, buildMcpConfigJson(mcpHandle), { encoding: "utf8", mode: 0o600 })
