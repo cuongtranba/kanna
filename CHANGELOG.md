@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.59.0](https://github.com/cuongtranba/kanna/compare/v0.58.0...v0.59.0) (2026-05-18)
+
+
+### Features
+
+* **subagent:** main agent delegates via mcp__kanna__delegate_subagent ([#205](https://github.com/cuongtranba/kanna/issues/205)) ([47466dc](https://github.com/cuongtranba/kanna/commit/47466dc7aff848baf0fc22d89a14149ee1c30148))
+* **ui:** centralize app bootstrap loading state ([#206](https://github.com/cuongtranba/kanna/issues/206)) ([b4ada0e](https://github.com/cuongtranba/kanna/commit/b4ada0ef1504fad5c53471ceecdf016b2127a97b))
+
+
+### Bug Fixes
+
+* **pty:** close mcp/tmp/tool-callbacks on every exit path ([#201](https://github.com/cuongtranba/kanna/issues/201)) ([26a13b8](https://github.com/cuongtranba/kanna/commit/26a13b8004b93bcafe2803f6ed442cd7e8fc61de))
+* **subagent:** inherit parent chat's OAuth-pool reservation ([#204](https://github.com/cuongtranba/kanna/issues/204)) ([007ece2](https://github.com/cuongtranba/kanna/commit/007ece27d2dcf4dc78ede815fd2bd9c0b2d9b79a))
+
 ## [0.58.0](https://github.com/cuongtranba/kanna/compare/v0.57.5...v0.58.0) (2026-05-18)
 
 
