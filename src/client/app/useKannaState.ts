@@ -1691,6 +1691,7 @@ export function useKannaState(activeChatId: string | null): KannaState {
   }, [socket])
 
   const handleInstallUpdate = useCallback(async (version?: string) => {
+    markUiRestartPhase("awaiting_disconnect")
     try {
       const result = await socket.command<UpdateInstallResult>({ type: "update.install", version })
       if (!result.ok) {
@@ -1709,9 +1710,6 @@ export function useKannaState(activeChatId: string | null): KannaState {
         return
       }
 
-      if (result.ok && result.action === "restart") {
-        markUiRestartPhase("awaiting_disconnect")
-      }
       setCommandError(null)
     } catch (error) {
       clearUiRestartPhase()
@@ -1720,6 +1718,7 @@ export function useKannaState(activeChatId: string | null): KannaState {
   }, [clearUiRestartPhase, dialog, markUiRestartPhase, socket])
 
   const handleForceReload = useCallback(async () => {
+    markUiRestartPhase("awaiting_disconnect")
     try {
       const result = await socket.command<UpdateInstallResult>({ type: "update.reload" })
       if (!result.ok) {
@@ -1738,7 +1737,6 @@ export function useKannaState(activeChatId: string | null): KannaState {
         return
       }
 
-      markUiRestartPhase("awaiting_disconnect")
       setCommandError(null)
     } catch (error) {
       clearUiRestartPhase()

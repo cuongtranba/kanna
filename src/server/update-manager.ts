@@ -202,12 +202,9 @@ export class UpdateManager {
       }
     }
 
-    const installedVersion = targetVersion ?? this.snapshot.latestVersion ?? this.snapshot.currentVersion
     this.setSnapshot({
       ...this.snapshot,
-      currentVersion: installedVersion.replace(/^v/i, ""),
       status: "restart_pending",
-      updateAvailable: false,
       error: null,
       reloadRequestedAt: Date.now(),
     })

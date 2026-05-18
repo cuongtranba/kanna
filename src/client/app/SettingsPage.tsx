@@ -296,6 +296,8 @@ export function formatPublishedDate(value: string | null) {
   }).format(parsed)
 }
 
+const REDEPLOY_PENDING_KEY = "__redeploy__"
+
 export function ChangelogSection({
   status,
   releases,
@@ -313,17 +315,39 @@ export function ChangelogSection({
   onRetry: () => void
   updateSnapshot: UpdateSnapshot | null
   currentVersion: string
-  onInstallUpdate: (version?: string) => void
+  onInstallUpdate: (version?: string) => Promise<void> | void
   onCheckForUpdates: () => void
-  onForceReload: () => void
+  onForceReload: () => Promise<void> | void
 }) {
+  const [pendingAction, setPendingAction] = useState<string | null>(null)
   const latestVersion = updateSnapshot?.latestVersion ?? releases[0]?.tag_name ?? "Unknown"
   const currentVersionLabel = updateSnapshot?.currentVersion ?? currentVersion
   const isChecking = updateSnapshot?.status === "checking"
-  const isUpdating = updateSnapshot?.status === "updating" || updateSnapshot?.status === "restart_pending"
+  const snapshotUpdating = updateSnapshot?.status === "updating" || updateSnapshot?.status === "restart_pending"
+  const isUpdating = snapshotUpdating || pendingAction !== null
   const canInstallUpdate = updateSnapshot?.updateAvailable === true
   const normalizedLatestVersion = latestVersion.replace(/^v/i, "")
   const normalizedCurrentVersion = currentVersionLabel.replace(/^v/i, "")
+
+  const handleInstallClick = useCallback(async (tag: string) => {
+    setPendingAction(tag)
+    try {
+      await onInstallUpdate(tag)
+    } finally {
+      setPendingAction(null)
+    }
+  }, [onInstallUpdate])
+
+  const handleRedeployClick = useCallback(async () => {
+    setPendingAction(REDEPLOY_PENDING_KEY)
+    try {
+      await onForceReload()
+    } finally {
+      setPendingAction(null)
+    }
+  }, [onForceReload])
+
+  const redeployPending = pendingAction === REDEPLOY_PENDING_KEY || snapshotUpdating
 
   return (
     <div className="space-y-4">
@@ -369,17 +393,31 @@ export function ChangelogSection({
         <div className="flex justify-end gap-2">
           <SettingsHeaderButton
             variant="outline"
-            onClick={onForceReload}
+            onClick={() => { void handleRedeployClick() }}
             disabled={isUpdating}
           >
-            {isUpdating ? "Re-deploying…" : "Re-deploy"}
+            {redeployPending ? (
+              <span className="flex items-center gap-2">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                Re-deploying…
+              </span>
+            ) : (
+              "Re-deploy"
+            )}
           </SettingsHeaderButton>
           <SettingsHeaderButton
             variant="outline"
             onClick={onCheckForUpdates}
             disabled={isChecking || isUpdating}
           >
-            {isChecking ? "Checking…" : "Check for updates"}
+            {isChecking ? (
+              <span className="flex items-center gap-2">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                Checking…
+              </span>
+            ) : (
+              "Check for updates"
+            )}
           </SettingsHeaderButton>
         </div>
       ) : null}
@@ -453,25 +491,36 @@ export function ChangelogSection({
                   ) : null}
                   
                 
-                  { (isLatestRelease && canInstallUpdate) || (!isLatestRelease && !isCurrentRelease) ? (
-                  <SettingsHeaderButton
-                    variant="default"
-                    className=""
-                    onClick={() => onInstallUpdate(release.tag_name)}
-                    disabled={isUpdating}
-                  >
-                    <div className="flex flex-row items-center justify-center gap-2">
-                    <DownloadCloud className="size-4"/>
-                    {isLatestRelease
-                      ? (isUpdating ? "Updating…" : "Update")
-                      : isUpdating
-                        ? "Installing…"
-                        : compareSemverTags(normalizedTag, normalizedCurrentVersion) < 0
-                          ? "Rollback"
-                          : "Install"}
-                    </div>
-                  </SettingsHeaderButton>
-                ) : null}
+                  { (isLatestRelease && canInstallUpdate) || (!isLatestRelease && !isCurrentRelease) ? (() => {
+                    const rowPending = pendingAction === release.tag_name || (snapshotUpdating && pendingAction === null)
+                    const actionLabel = isLatestRelease
+                      ? "Update"
+                      : compareSemverTags(normalizedTag, normalizedCurrentVersion) < 0
+                        ? "Rollback"
+                        : "Install"
+                    const pendingLabel = isLatestRelease
+                      ? "Updating…"
+                      : compareSemverTags(normalizedTag, normalizedCurrentVersion) < 0
+                        ? "Rolling back…"
+                        : "Installing…"
+                    return (
+                      <SettingsHeaderButton
+                        variant="default"
+                        className=""
+                        onClick={() => { void handleInstallClick(release.tag_name) }}
+                        disabled={isUpdating}
+                      >
+                        <div className="flex flex-row items-center justify-center gap-2">
+                          {rowPending ? (
+                            <Loader2 className="size-4 animate-spin" />
+                          ) : (
+                            <DownloadCloud className="size-4" />
+                          )}
+                          {rowPending ? pendingLabel : actionLabel}
+                        </div>
+                      </SettingsHeaderButton>
+                    )
+                  })() : null}
               </div>
             
              
@@ -2291,15 +2340,11 @@ export function SettingsPage() {
                     onRetry={retryChangelog}
                     updateSnapshot={updateSnapshot}
                     currentVersion={appVersion}
-                    onInstallUpdate={(version) => {
-                      void state.handleInstallUpdate(version)
-                    }}
+                    onInstallUpdate={(version) => state.handleInstallUpdate(version)}
                     onCheckForUpdates={() => {
                       void state.handleCheckForUpdates({ force: true })
                     }}
-                    onForceReload={() => {
-                      void state.handleForceReload()
-                    }}
+                    onForceReload={() => state.handleForceReload()}
                   />
                 )}
               </div>
