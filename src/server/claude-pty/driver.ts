@@ -228,7 +228,7 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
     claudeExecutable: env.CLAUDE_EXECUTABLE ?? null,
   })
 
-  const auth = await verifyPtyAuth({ homeDir: home, env, oauthToken: args.oauthToken })
+  const auth = await verifyPtyAuth({ env, oauthToken: args.oauthToken })
   if (!auth.ok) {
     console.error("[kanna/pty] verifyPtyAuth failed", {
       chatId: args.chatId,

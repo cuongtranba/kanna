@@ -141,7 +141,7 @@ export async function runClaudeStructured(args: Omit<StructuredQuickResponseArgs
   // Refuse to spawn when the pool has tokens but none are currently usable
   // (all reserved, limited, errored, or disabled). Without this, env-less
   // spawn would silently fall back to the CLI keychain auth path which
-  // typically holds a stale `claude /login` token → opaque 401 loops.
+  // typically holds a stale or unrelated token → opaque 401 loops.
   if (pool && pool.hasAnyToken() && !picked) {
     console.warn("[quick-response] no usable OAuth token in pool; skipping claude provider")
     return null

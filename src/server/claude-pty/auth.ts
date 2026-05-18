@@ -1,6 +1,3 @@
-import { stat } from "node:fs/promises"
-import path from "node:path"
-
 export type VerifyPtyAuthResult =
   | { ok: true }
   | { ok: false; error: string }
@@ -12,22 +9,12 @@ export type VerifyPtyAuthResult =
  * subscription billing via OAuth; an API key would silently flip the CLI
  * back to API billing.
  *
- * Either of the following authenticates the spawn:
- * - A non-empty `oauthToken` arg, which the driver injects via
- *   `CLAUDE_CODE_OAUTH_TOKEN`. Per the upstream docs, that env var
- *   silently overrides `~/.claude/.credentials.json` and the macOS
- *   keychain (anthropics/claude-code#16238), so no on-disk credentials
- *   file is needed in that mode.
- * - An existing `~/.claude/.credentials.json` produced by a prior
- *   interactive `claude /login`.
- *
- * Either path lets the CLI subprocess complete OAuth without an
- * interactive browser handshake. Requiring `.credentials.json` even
- * when a token is supplied blocks Kanna OAuth-pool-only deployments
- * (CI runners, ephemeral VMs).
+ * OAuth-pool token is the only supported auth path. Supply a non-empty
+ * `oauthToken` arg; the driver injects it via `CLAUDE_CODE_OAUTH_TOKEN`.
+ * No on-disk credentials file (`~/.claude/.credentials.json`) is consulted.
+ * The local `claude /login` keychain path is not supported.
  */
 export async function verifyPtyAuth(args: {
-  homeDir: string
   env: NodeJS.ProcessEnv
   oauthToken?: string | null
 }): Promise<VerifyPtyAuthResult> {
@@ -40,14 +27,8 @@ export async function verifyPtyAuth(args: {
   if (typeof args.oauthToken === "string" && args.oauthToken.length > 0) {
     return { ok: true }
   }
-  const credentialsPath = path.join(args.homeDir, ".claude", ".credentials.json")
-  try {
-    await stat(credentialsPath)
-  } catch {
-    return {
-      ok: false,
-      error: `No Claude credentials available. Either supply an OAuth pool token in Kanna settings or run \`claude /login\` to create ${credentialsPath}.`,
-    }
+  return {
+    ok: false,
+    error: "No OAuth pool token supplied. PTY mode requires an OAuth-pool token configured in Kanna settings; the local `claude /login` keychain path is not supported.",
   }
-  return { ok: true }
 }

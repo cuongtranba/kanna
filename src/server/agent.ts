@@ -2032,7 +2032,7 @@ export class AgentCoordinator {
       // If the pool is populated but every token is currently unusable
       // (limited/error/disabled/reserved), refuse to spawn rather than let
       // the CLI fall back to its keychain auth — that path serves whichever
-      // login the user last ran `claude /login` with, which is typically
+      // login the CLI binary's keychain holds, which is typically
       // expired in a pool-managed setup and produces opaque 401 loops.
       if (this.oauthPool && this.oauthPool.hasAnyToken() && !picked) {
         throw new Error(
