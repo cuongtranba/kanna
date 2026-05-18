@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react"
 import type { SlashCommand } from "../../../shared/types"
 import { cn } from "../../lib/utils"
+import { normalizeCommandName } from "../../lib/slash-commands"
 
 interface SlashCommandPickerProps {
   items: SlashCommand[]
@@ -78,7 +79,7 @@ export function SlashCommandPicker({ items, activeIndex, loading, onSelect, onHo
           )}
         >
           <div className="flex min-w-0 items-baseline gap-2">
-            <span className="font-mono break-all sm:whitespace-nowrap sm:break-normal">/{cmd.name}</span>
+            <span className="font-mono break-all sm:whitespace-nowrap sm:break-normal">/{normalizeCommandName(cmd.name)}</span>
             {cmd.argumentHint ? (
               <span className="shrink-0 font-mono text-xs text-muted-foreground whitespace-nowrap">
                 {cmd.argumentHint}

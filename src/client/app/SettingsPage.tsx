@@ -2043,6 +2043,7 @@ export function SettingsPage() {
                         </div>
                       </div>
                     </SettingsRow>
+
                     <SettingsRow
                       title="Default Provider"
                       description="The default harness used for new chats before a provider is locked by an existing session."

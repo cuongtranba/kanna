@@ -237,4 +237,5 @@ describe("createJsonlEventParser", () => {
     })))
     expect(types[0]).toBe("session_token")
   })
+
 })

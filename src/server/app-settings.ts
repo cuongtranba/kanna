@@ -509,7 +509,10 @@ function normalizeClaudeDriverSettings(value: unknown, warnings: string[]): Clau
     : null
   if (value !== undefined && !source) {
     warnings.push("claudeDriver must be an object")
-    return { ...CLAUDE_DRIVER_DEFAULTS, lifecycle: { ...CLAUDE_PTY_LIFECYCLE_DEFAULTS } }
+    return {
+      ...CLAUDE_DRIVER_DEFAULTS,
+      lifecycle: { ...CLAUDE_PTY_LIFECYCLE_DEFAULTS },
+    }
   }
   const preference: ClaudeDriverPreference = isClaudeDriverPreference(source?.preference)
     ? source.preference
@@ -891,7 +894,10 @@ export class AppSettingsManager {
     return this.writePatch({ uploads: patch })
   }
 
-  async setClaudeDriver(patch: { preference?: ClaudeDriverPreference; lifecycle?: Partial<ClaudePtyLifecycleSettings> }) {
+  async setClaudeDriver(patch: {
+    preference?: ClaudeDriverPreference
+    lifecycle?: Partial<ClaudePtyLifecycleSettings>
+  }) {
     if (patch.preference !== undefined && !isClaudeDriverPreference(patch.preference)) {
       throw new Error(`claudeDriver.preference must be "sdk" or "pty"`)
     }

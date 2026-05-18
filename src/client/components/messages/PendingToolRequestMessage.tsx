@@ -169,23 +169,50 @@ function ExitPlanModePending({
 function GenericPending({
   toolRequestId,
   toolName,
+  args,
   onAnswer,
 }: {
   toolRequestId: string
   toolName: string
+  args: Record<string, unknown>
   onAnswer: (toolRequestId: string, decision: ToolRequestDecision) => void
 }) {
+  // Short, single-line preview of the most descriptive arg so the user can
+  // tell what they're approving without expanding raw JSON. Falls back to
+  // the JSON itself for tools we don't have a curated key for.
+  const previewKey = (["command", "path", "url", "pattern", "query"] as const).find(
+    (k) => typeof args[k] === "string" && (args[k] as string).length > 0,
+  )
+  const preview = previewKey
+    ? (args[previewKey] as string)
+    : JSON.stringify(args)
   return (
-    <div className="flex items-center gap-3 rounded-2xl border border-border bg-background px-4 py-3 text-sm">
-      <span className="text-muted-foreground flex-1">
-        Pending tool: <span className="font-mono text-foreground">{toolName}</span>
-      </span>
-      <button
-        className="text-xs text-muted-foreground underline hover:text-foreground transition-colors"
-        onClick={() => onAnswer(toolRequestId, { kind: "deny", reason: "user_canceled" })}
-      >
-        Cancel
-      </button>
+    <div className="rounded-2xl border border-border bg-background px-4 py-3 text-sm">
+      <div className="flex items-baseline gap-2">
+        <span className="text-muted-foreground shrink-0">Pending tool:</span>
+        <span className="font-mono text-foreground">{toolName}</span>
+      </div>
+      {preview ? (
+        <pre className="mt-1 max-h-32 overflow-auto whitespace-pre-wrap break-all font-mono text-xs text-muted-foreground">
+          {preview}
+        </pre>
+      ) : null}
+      <div className="mt-3 flex items-center justify-end gap-2">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => onAnswer(toolRequestId, { kind: "deny", reason: "user_canceled" })}
+        >
+          Deny
+        </Button>
+        <Button
+          variant="default"
+          size="sm"
+          onClick={() => onAnswer(toolRequestId, { kind: "allow" })}
+        >
+          Allow
+        </Button>
+      </div>
     </div>
   )
 }
@@ -221,6 +248,7 @@ export function PendingToolRequestMessage({ entry, onAnswer }: Props) {
     <GenericPending
       toolRequestId={toolRequestId}
       toolName={toolName}
+      args={args}
       onAnswer={onAnswer}
     />
   )

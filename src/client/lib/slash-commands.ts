@@ -2,6 +2,17 @@ import type { SlashCommand } from "../../shared/types"
 
 const SLASH_TOKEN_PATTERN = /^\/(\S*)$/
 
+/**
+ * Strip any leading `/` from a slash-command name. Canonical form (claude's
+ * own system_init.slash_commands wire format) has no prefix slash; the UI
+ * adds it. Older kanna chat records sometimes persisted names that already
+ * carried a `/`, which then double-rendered as `//clear`. Normalising at
+ * display + replacement time tolerates both shapes.
+ */
+export function normalizeCommandName(name: string): string {
+  return name.replace(/^\/+/, "")
+}
+
 export function applyCommandToInput(args: {
   value: string
   caret: number
@@ -14,7 +25,8 @@ export function applyCommandToInput(args: {
   if (!match) return { value, caret }
   const tokenLength = match[0].length
   const before = upToCaret.slice(0, upToCaret.length - tokenLength)
-  const replacement = command.argumentHint ? `/${command.name} ` : `/${command.name}`
+  const cleanName = normalizeCommandName(command.name)
+  const replacement = command.argumentHint ? `/${cleanName} ` : `/${cleanName}`
   const nextValue = `${before}${replacement}${afterCaret}`
   const nextCaret = before.length + replacement.length
   return { value: nextValue, caret: nextCaret }

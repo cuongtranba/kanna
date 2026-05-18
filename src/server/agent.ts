@@ -15,7 +15,7 @@ import type {
   Subagent,
   TranscriptEntry,
 } from "../shared/types"
-import type { ChatRecord } from "./events"
+import type { ChatRecord, ProjectRecord } from "./events"
 import { buildHistoryPrimer, shouldInjectPrimer } from "./history-primer"
 import {
   getLatestContextWindowUsage,
@@ -1672,6 +1672,64 @@ export class AgentCoordinator {
       chatId: args.chatId,
     })
 
+    try {
+      await this.startTurnAfterTurnStarted({
+        args,
+        chat,
+        project,
+        existingMessages,
+        shouldGenerateTitle,
+        optimisticTitle,
+        appendedUserMessageId,
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      console.error(`${LOG_PREFIX} startTurnForChat failed after turn_started`, {
+        chatId: args.chatId,
+        provider: args.provider,
+        model: args.model,
+        planMode: args.planMode,
+        error: message,
+        stack: error instanceof Error ? error.stack : undefined,
+      })
+      try {
+        await this.store.recordTurnFailed(args.chatId, message)
+      } catch (recordErr) {
+        console.error(`${LOG_PREFIX} recordTurnFailed also failed`, {
+          chatId: args.chatId,
+          recordErr: recordErr instanceof Error ? recordErr.message : String(recordErr),
+        })
+      }
+      this.activeTurns.delete(args.chatId)
+      this.emitStateChange(args.chatId, { immediate: true })
+      throw error
+    }
+  }
+
+  private async startTurnAfterTurnStarted(ctx: {
+    args: {
+      chatId: string
+      provider: AgentProvider
+      content: string
+      attachments: ChatAttachment[]
+      model: string
+      effort?: string
+      serviceTier?: "fast"
+      planMode: boolean
+      appendUserPrompt: boolean
+      steered?: boolean
+      autoContinue?: { scheduleId: string }
+      userClearedContext?: boolean
+      profile?: SendToStartingProfile | null
+    }
+    chat: ChatRecord
+    project: ProjectRecord
+    existingMessages: TranscriptEntry[]
+    shouldGenerateTitle: boolean
+    optimisticTitle: string | null
+    appendedUserMessageId: string | null
+  }): Promise<void> {
+    const { args, chat, project, existingMessages, shouldGenerateTitle, optimisticTitle, appendedUserMessageId } = ctx
     if (shouldGenerateTitle) {
       void this.generateTitleInBackground(args.chatId, args.content, project.localPath, optimisticTitle ?? "New Chat")
     }
@@ -2500,6 +2558,20 @@ export class AgentCoordinator {
             && session.sessionToken !== chat.pendingForkSessionToken.token
           ) {
             await this.store.setPendingForkSessionToken(session.chatId, null)
+          }
+          // Refresh the chat's slashCommands from the live system_init list
+          // every spawn. The cold-start `getSupportedCommands()` call right
+          // after spawn often returns the static fallback because system_init
+          // hadn't arrived yet; this overwrites that with the canonical list
+          // (skills + plugins + built-ins, no `/` prefix).
+          if (Array.isArray((event.entry as { slashCommands?: unknown }).slashCommands)) {
+            const names = (event.entry as { slashCommands: string[] }).slashCommands
+            const commands: SlashCommand[] = names.map((name) => ({
+              name,
+              description: "",
+              argumentHint: "",
+            }))
+            await this.store.recordSessionCommandsLoaded(session.chatId, commands)
           }
           logClaudeSteer("claude_event_system_init", {
             chatId: session.chatId,

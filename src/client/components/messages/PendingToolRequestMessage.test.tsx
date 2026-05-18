@@ -300,7 +300,7 @@ describe("PendingToolRequestMessage — exit_plan_mode", () => {
 // ── generic fallback ─────────────────────────────────────────────────────────
 
 describe("PendingToolRequestMessage — generic fallback", () => {
-  test("renders tool name and Cancel link for unknown tool", async () => {
+  test("renders tool name + Allow / Deny buttons for unknown tool", async () => {
     const entry = makeEntry({
       toolName: "mcp__kanna__expose_port",
       arguments: { port: 3000 },
@@ -316,7 +316,59 @@ describe("PendingToolRequestMessage — generic fallback", () => {
     })
 
     expect(container.textContent).toContain("mcp__kanna__expose_port")
-    expect(container.textContent).toContain("Cancel")
+    expect(container.textContent).toContain("Allow")
+    expect(container.textContent).toContain("Deny")
+    container.remove()
+  })
+
+  test("Allow button resolves with kind:allow", async () => {
+    const entry = makeEntry({
+      toolName: "mcp__kanna__bash",
+      arguments: { command: "echo hi" },
+    })
+    const onAnswer = mock((_id: string, _decision: ToolRequestDecision) => undefined)
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+
+    await act(async () => {
+      createRoot(container).render(
+        <PendingToolRequestMessage entry={entry} onAnswer={onAnswer} />,
+      )
+    })
+
+    const allowBtn = Array.from(container.querySelectorAll("button"))
+      .find((b) => b.textContent?.trim() === "Allow")
+    expect(allowBtn).toBeDefined()
+    await act(async () => {
+      allowBtn?.click()
+    })
+    expect(onAnswer).toHaveBeenCalledTimes(1)
+    expect(onAnswer.mock.calls[0]?.[1]).toEqual({ kind: "allow" })
+    container.remove()
+  })
+
+  test("Deny button resolves with kind:deny + user_canceled reason", async () => {
+    const entry = makeEntry({
+      toolName: "mcp__kanna__bash",
+      arguments: { command: "echo hi" },
+    })
+    const onAnswer = mock((_id: string, _decision: ToolRequestDecision) => undefined)
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+
+    await act(async () => {
+      createRoot(container).render(
+        <PendingToolRequestMessage entry={entry} onAnswer={onAnswer} />,
+      )
+    })
+
+    const denyBtn = Array.from(container.querySelectorAll("button"))
+      .find((b) => b.textContent?.trim() === "Deny")
+    expect(denyBtn).toBeDefined()
+    await act(async () => {
+      denyBtn?.click()
+    })
+    expect(onAnswer.mock.calls[0]?.[1]).toEqual({ kind: "deny", reason: "user_canceled" })
     container.remove()
   })
 })

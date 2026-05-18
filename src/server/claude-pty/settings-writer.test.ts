@@ -14,6 +14,7 @@ describe("writeSpawnSettings", () => {
       const parsed = JSON.parse(raw)
       expect(parsed.spinnerTipsEnabled).toBe(false)
       expect(parsed.showTurnDuration).toBe(false)
+      expect(parsed.permissions?.allow).toContain("mcp__kanna__*")
     } finally {
       await rm(dir, { recursive: true, force: true })
     }

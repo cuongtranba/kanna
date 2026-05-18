@@ -1,6 +1,5 @@
 import path from "node:path"
 import { stat } from "node:fs/promises"
-import { homedir } from "node:os"
 import { bin as cloudflaredBin } from "cloudflared"
 import { APP_NAME, getRuntimeProfile } from "../shared/branding"
 import { CLOUDFLARE_TUNNEL_DEFAULTS, UPLOAD_MAX_FILE_SIZE_MB_MAX, type ChatAttachment } from "../shared/types"
@@ -11,6 +10,7 @@ import { EventStore } from "./event-store"
 import { PushManager, realWebPushSender } from "./push/push-manager"
 import { loadOrGenerateVapidKeys } from "./push/vapid"
 import { AgentCoordinator } from "./agent"
+import { POLICY_DEFAULT } from "../shared/permission-policy"
 import type { LimitDetector } from "./auto-continue/limit-detector"
 import { KannaAnalyticsReporter } from "./analytics"
 import { AppSettingsManager } from "./app-settings"
@@ -38,8 +38,6 @@ import { TunnelLifecycle } from "./cloudflare-tunnel/lifecycle"
 import { BackgroundTaskRegistry } from "./background-tasks"
 import { subscribeOrphanPersistence, recoverOrphans } from "./orphan-persistence"
 import { initToolCallbackOnBoot, type ToolCallbackService } from "./tool-callback"
-import { createPreflightGate } from "./claude-pty/preflight/gate"
-import { runFullSuite } from "./claude-pty/preflight/suite"
 
 function resolveCloudflaredPath(settingsPath: string): string {
   if (settingsPath !== CLOUDFLARE_TUNNEL_DEFAULTS.cloudflaredPath) {
@@ -135,21 +133,6 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     store,
     serverSecret: process.env.KANNA_SERVER_SECRET ?? crypto.randomUUID(),
   })
-  // Preflight gate is always created so the user can flip the PTY driver
-  // toggle in Settings without restarting the server. Gate runs only on PTY
-  // spawn — no cost when SDK driver is selected.
-  const preflightGate = createPreflightGate({
-    toolsString: "mcp__kanna__*",
-    now: () => Date.now(),
-    runSuite: async () => {
-      const claudeBin = (process.env.CLAUDE_EXECUTABLE ?? "/usr/local/bin/claude")
-        .replace(/^~(?=\/|$)/, homedir())
-      return await runFullSuite({
-        claudeBin,
-        model: process.env.KANNA_PTY_PREFLIGHT_MODEL ?? "claude-haiku-4-5-20251001",
-      })
-    },
-  })
   const vapid = await loadOrGenerateVapidKeys(store.dataDir)
   const pushManager = new PushManager({
     store,
@@ -178,6 +161,13 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
   const keybindings = new KeybindingsManager()
   const appSettings = new AppSettingsManager(path.join(store.dataDir, "settings.json"))
   await appSettings.initialize()
+
+  // PTY preflight gate + OS sandbox + mcp tool-callback shims are gone:
+  // kanna trusts the claude CLI as the source of truth for tool execution.
+  // The driver spawns claude directly with `--dangerously-skip-permissions`
+  // and no `--tools` / `--strict-mcp-config` restrictions, so user's installed
+  // skills, slash commands, plugins, MCP servers, and agents all load
+  // alongside kanna's own MCP (offer_download / expose_port / lsp).
   await keybindings.initialize()
   const auth = options.password
     ? createAuthManager(options.password, {
@@ -270,7 +260,16 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     backgroundTasks,
     oauthPool,
     toolCallback,
-    preflightGate,
+    // Kanna is a personal-use tool on the developer's own machine. Tool calls
+    // auto-allow at the kanna gate layer (the claude CLI itself runs with
+    // `--dangerously-skip-permissions` so it doesn't gate either). The
+    // POLICY_DEFAULT path-deny + tool-deny rules still apply for kanna's own
+    // MCP tools (offer_download, expose_port, lsp) — those are the only
+    // requests that ever reach the kanna gate now.
+    chatPolicy: {
+      ...POLICY_DEFAULT,
+      defaultAction: "auto-allow",
+    },
     getSubagents: () => appSettings.getSnapshot().subagents,
     getAppSettingsSnapshot: () => ({
       claudeDriver: appSettings.getSnapshot().claudeDriver,
