@@ -68,11 +68,15 @@ export function SubagentsSection(props: SubagentsSectionProps) {
 
   const formMode = editing.kind
   const isFormOpen = formMode !== "list"
-  const hideListRail = isFormOpen && props.subagents.length === 0
+  const isEmpty = props.subagents.length === 0
+
+  if (isEmpty && !isFormOpen) {
+    return <SubagentEmptyState onStartCreate={props.onStartCreate} />
+  }
 
   return (
     <div className="flex flex-col gap-6 md:flex-row md:items-start md:gap-8">
-      {hideListRail ? null : (
+      {isEmpty ? null : (
         <SubagentList
           subagents={props.subagents}
           editing={props.editing}
@@ -80,7 +84,7 @@ export function SubagentsSection(props: SubagentsSectionProps) {
           onStartCreate={props.onStartCreate}
         />
       )}
-      {!isFormOpen ? null : (
+      {isFormOpen ? (
         <SubagentForm
           key={formMode === "edit" ? selected?.id ?? "edit" : "create"}
           mode={formMode}
@@ -89,7 +93,34 @@ export function SubagentsSection(props: SubagentsSectionProps) {
           handlers={props.handlers}
           onCancelEditing={props.onCancelEditing}
         />
+      ) : (
+        <SubagentDetailPlaceholder />
       )}
+    </div>
+  )
+}
+
+function SubagentEmptyState(props: { onStartCreate: () => void }) {
+  return (
+    <div
+      className="flex w-full flex-col items-center gap-4 rounded-lg border border-dashed border-border px-6 py-14 text-center"
+      data-testid="subagent-empty"
+    >
+      <div className="flex size-10 items-center justify-center rounded-full bg-muted text-muted-foreground">
+        <Bot className="size-5" aria-hidden />
+      </div>
+      <p className="text-sm font-medium text-foreground">No subagents yet</p>
+      <Button variant="default" size="sm" onClick={props.onStartCreate}>
+        <Plus className="mr-1.5 size-4" /> Create subagent
+      </Button>
+    </div>
+  )
+}
+
+function SubagentDetailPlaceholder() {
+  return (
+    <div className="hidden flex-1 items-center justify-center rounded-lg border border-dashed border-border px-6 py-12 text-center text-sm text-muted-foreground md:flex">
+      Select a subagent to edit, or create a new one.
     </div>
   )
 }
@@ -101,23 +132,15 @@ function SubagentList(props: {
   onStartCreate: () => void
 }) {
   const selectedId = props.editing.kind === "edit" ? props.editing.id : null
-  if (props.subagents.length === 0) {
-    return (
-      <aside className="flex w-full flex-col items-start gap-3 md:w-64">
-        <p className="text-sm font-medium text-foreground">No subagents yet</p>
-        <p className="text-sm text-muted-foreground">
-          Define reusable personas, then mention them in chat with @agent/&lt;name&gt;.
-        </p>
-        <Button variant="default" size="sm" onClick={props.onStartCreate}>
-          <Plus className="mr-1.5 size-4" /> Create subagent
-        </Button>
-      </aside>
-    )
-  }
   return (
-    <aside className="flex w-full flex-col gap-2 md:w-64">
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-medium text-foreground">Subagents</h3>
+    <aside className="flex w-full flex-col gap-2 md:w-64 md:flex-shrink-0">
+      <div className="flex items-center justify-between gap-2">
+        <span
+          className="text-xs font-medium uppercase tracking-wide text-muted-foreground"
+          style={{ fontVariantNumeric: "tabular-nums" }}
+        >
+          {props.subagents.length} {props.subagents.length === 1 ? "agent" : "agents"}
+        </span>
         <Button
           variant="ghost"
           size="sm"
@@ -129,31 +152,36 @@ function SubagentList(props: {
         </Button>
       </div>
       <ul className="flex flex-col gap-0.5">
-        {props.subagents.map((subagent) => (
-          <li key={subagent.id}>
-            <button
-              type="button"
-              data-testid={`subagent-row:${subagent.id}`}
-              onClick={() => props.onSelect(subagent.id)}
-              className={cn(
-                "flex w-full flex-col items-start gap-0.5 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-muted",
-                selectedId === subagent.id && "bg-muted",
-              )}
-            >
-              <span className="flex w-full items-center justify-between gap-2">
-                <span className="text-sm font-medium text-foreground truncate">
-                  {subagent.name}
+        {props.subagents.map((subagent) => {
+          const secondary =
+            subagent.description?.trim() ||
+            (subagent.contextScope === "previous-assistant-reply"
+              ? "Last reply"
+              : "Full transcript")
+          return (
+            <li key={subagent.id}>
+              <button
+                type="button"
+                data-testid={`subagent-row:${subagent.id}`}
+                onClick={() => props.onSelect(subagent.id)}
+                className={cn(
+                  "flex w-full flex-col items-start gap-0.5 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-muted",
+                  selectedId === subagent.id && "bg-muted",
+                )}
+              >
+                <span className="flex w-full items-center justify-between gap-2">
+                  <span className="truncate text-sm font-medium text-foreground">
+                    {subagent.name}
+                  </span>
+                  <ProviderChip provider={subagent.provider} />
                 </span>
-                <ProviderChip provider={subagent.provider} />
-              </span>
-              <span className="text-xs text-muted-foreground">
-                {subagent.contextScope === "previous-assistant-reply"
-                  ? "Last reply"
-                  : "Full transcript"}
-              </span>
-            </button>
-          </li>
-        ))}
+                <span className="w-full truncate text-xs text-muted-foreground">
+                  {secondary}
+                </span>
+              </button>
+            </li>
+          )
+        })}
       </ul>
     </aside>
   )
