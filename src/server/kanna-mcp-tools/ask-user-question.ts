@@ -32,9 +32,15 @@ export function createAskUserQuestionTool(deps: { toolCallback: ToolCallbackServ
         toolName: "mcp__kanna__ask_user_question",
         ctx,
         args: input as unknown as Record<string, unknown>,
-        formatAnswer: (payload) => ({
-          content: [{ type: "text" as const, text: JSON.stringify(payload) }],
-        }),
+        formatAnswer: (payload) => {
+          // JSON.stringify(undefined) returns undefined, which yields an
+          // invalid MCP CallToolResult. The policy gate forces "ask" for
+          // interactive tools, but guard the boundary anyway.
+          const text = payload === undefined ? "{}" : JSON.stringify(payload)
+          return {
+            content: [{ type: "text" as const, text }],
+          }
+        },
         formatDeny: (reason) => ({
           content: [{ type: "text" as const, text: `Denied: ${reason}` }],
           isError: true,

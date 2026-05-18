@@ -93,6 +93,14 @@ const WRITE_PATH_TOOLS = new Set([
   "mcp__kanna__write",
   "mcp__kanna__edit",
 ])
+// Interactive tools whose return value IS the user's input. They have no
+// meaningful auto-allow path — the only valid resolution is an explicit
+// answer from the user. Auto-allowing them produces an undefined payload
+// and a malformed MCP CallToolResult.
+const INTERACTIVE_TOOLS = new Set([
+  "mcp__kanna__ask_user_question",
+  "mcp__kanna__exit_plan_mode",
+])
 
 function getPathArg(args: Record<string, unknown>): string | null {
   if (typeof args.path === "string") return args.path
@@ -118,6 +126,18 @@ function pathMatchesDeny(absPath: string, deny: string[]): string | null {
 
 export const policy = {
   evaluate(args: EvaluateArgs): EvaluateResult {
+    const result = evaluateInner(args)
+    // Interactive tools have no meaningful "allow" — their result IS the
+    // user's input. Downgrade auto-allow to ask so the UI prompts.
+    // Auto-deny is preserved (an explicit lockdown should still apply).
+    if (INTERACTIVE_TOOLS.has(args.toolName) && result.verdict === "auto-allow") {
+      return { verdict: "ask", reason: "interactive tool requires user input" }
+    }
+    return result
+  },
+}
+
+function evaluateInner(args: EvaluateArgs): EvaluateResult {
     if (READ_PATH_TOOLS.has(args.toolName)) {
       const p = getPathArg(args.args)
       if (p !== null) {
@@ -221,5 +241,4 @@ export const policy = {
 
     // 4. Default action.
     return { verdict: args.chatPolicy.defaultAction === "ask" ? "ask" : args.chatPolicy.defaultAction }
-  },
 }

@@ -43,6 +43,37 @@ describe("policy.evaluate basics", () => {
     })
     expect(verdict.verdict).toBe("auto-deny")
   })
+
+  test("ask_user_question with defaultAction auto-allow → downgraded to ask", () => {
+    const verdict = policy.evaluate({
+      toolName: "mcp__kanna__ask_user_question",
+      args: { questions: [] },
+      chatPolicy: { ...POLICY_DEFAULT, defaultAction: "auto-allow" },
+      cwd: "/tmp",
+    })
+    expect(verdict.verdict).toBe("ask")
+    expect(verdict.reason).toContain("interactive")
+  })
+
+  test("exit_plan_mode with defaultAction auto-allow → downgraded to ask", () => {
+    const verdict = policy.evaluate({
+      toolName: "mcp__kanna__exit_plan_mode",
+      args: { plan: "do stuff" },
+      chatPolicy: { ...POLICY_DEFAULT, defaultAction: "auto-allow" },
+      cwd: "/tmp",
+    })
+    expect(verdict.verdict).toBe("ask")
+  })
+
+  test("ask_user_question with defaultAction auto-deny stays auto-deny (lockdown honored)", () => {
+    const verdict = policy.evaluate({
+      toolName: "mcp__kanna__ask_user_question",
+      args: { questions: [] },
+      chatPolicy: { ...POLICY_DEFAULT, defaultAction: "auto-deny" },
+      cwd: "/tmp",
+    })
+    expect(verdict.verdict).toBe("auto-deny")
+  })
 })
 
 describe("bash arg parsing", () => {
