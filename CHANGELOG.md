@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.58.0](https://github.com/cuongtranba/kanna/compare/v0.57.5...v0.58.0) (2026-05-18)
+
+
+### Features
+
+* **pty:** switch to --print stream-json + trust claude as source of truth ([#200](https://github.com/cuongtranba/kanna/issues/200)) ([ca62112](https://github.com/cuongtranba/kanna/commit/ca621122f39b22609d89782287dbcb8548ff164d))
+
+
+### Bug Fixes
+
+* **subagent:** close 5 P1 concurrency / routing bugs (B1–B5) ([#199](https://github.com/cuongtranba/kanna/issues/199)) ([0775d69](https://github.com/cuongtranba/kanna/commit/0775d6948b63fc9c8629d97b059381fcf53c805b))
+* **subagent:** forward user instruction + scan main reply for mentions ([#196](https://github.com/cuongtranba/kanna/issues/196)) ([0745f78](https://github.com/cuongtranba/kanna/commit/0745f78ac0dd19c153056c1cbec6ee9935e83e1b))
+
 ## [0.57.5](https://github.com/cuongtranba/kanna/compare/v0.57.4...v0.57.5) (2026-05-18)
 
 
