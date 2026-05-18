@@ -22,6 +22,49 @@ describe("normalizeToolCall", () => {
     expect(tool.input.questions[0]?.question).toBe("Which runtime?")
   })
 
+  test("mcp__kanna__ask_user_question maps text→question so answer keys are correct", () => {
+    const tool = normalizeToolCall({
+      toolName: "mcp__kanna__ask_user_question",
+      toolId: "tool-mcp-1",
+      input: {
+        questions: [
+          {
+            text: "Favorite language?",
+            header: "Lang",
+            options: [{ label: "Go", description: "Fast" }, { label: "TS", description: "Typed" }],
+            multiSelect: false,
+          },
+          {
+            text: "Daily editor?",
+            header: "Editor",
+            options: [{ label: "VSCode", description: "" }, { label: "Neovim", description: "" }],
+            multiSelect: false,
+          },
+        ],
+      },
+    })
+
+    expect(tool.toolKind).toBe("ask_user_question")
+    if (tool.toolKind !== "ask_user_question") throw new Error("unexpected tool kind")
+    expect(tool.input.questions).toHaveLength(2)
+    expect(tool.input.questions[0]?.question).toBe("Favorite language?")
+    expect(tool.input.questions[1]?.question).toBe("Daily editor?")
+    expect(tool.input.questions[0]?.header).toBe("Lang")
+    expect(tool.input.questions[0]?.multiSelect).toBe(false)
+  })
+
+  test("mcp__kanna__exit_plan_mode normalizes same as ExitPlanMode", () => {
+    const tool = normalizeToolCall({
+      toolName: "mcp__kanna__exit_plan_mode",
+      toolId: "tool-epm-1",
+      input: { plan: "Step 1: do thing" },
+    })
+
+    expect(tool.toolKind).toBe("exit_plan_mode")
+    if (tool.toolKind !== "exit_plan_mode") throw new Error("unexpected tool kind")
+    expect(tool.input.plan).toBe("Step 1: do thing")
+  })
+
   test("maps Bash snake_case input to camelCase", () => {
     const tool = normalizeToolCall({
       toolName: "Bash",
