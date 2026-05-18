@@ -19,6 +19,7 @@ import { KannaSidebar } from "./KannaSidebar"
 import { ChatPage } from "./ChatPage"
 import { LocalProjectsPage } from "./LocalProjectsPage"
 import { SettingsPage } from "./SettingsPage"
+import { AppBootstrap } from "./AppBootstrap"
 import { useKannaState } from "./useKannaState"
 import type { AppSettingsSnapshot } from "../../shared/types"
 
@@ -308,7 +309,6 @@ function KannaLayout() {
       data={state.sidebarData}
       activeChatId={state.activeChatId}
       connectionStatus={state.connectionStatus}
-      ready={state.sidebarReady}
       open={state.sidebarOpen}
       collapsed={state.sidebarCollapsed}
       showMobileOpenButton={showMobileOpenButton}
@@ -370,7 +370,6 @@ function KannaLayout() {
     state.sidebarCollapsed,
     state.sidebarData,
     state.sidebarOpen,
-    state.sidebarReady,
     state.updateSnapshot,
     state.handleCreateStack,
     state.handleRenameStack,
@@ -425,6 +424,10 @@ function KannaLayout() {
 
   const ptyDriverActive = state.appSettings?.claudeDriver.preference === "pty"
 
+  if (!state.sidebarReady) {
+    return <AppBootstrap label="Connecting to workspace" />
+  }
+
   return (
     <div className="flex h-[100dvh] min-h-[100dvh] overflow-hidden">
       {sidebarElement}
@@ -478,11 +481,7 @@ export function App() {
   const auth = useAppAuthState()
 
   if (auth.state.status === "checking") {
-    return (
-      <div className="flex min-h-[100dvh] items-center justify-center bg-background text-sm text-muted-foreground">
-        Checking session…
-      </div>
-    )
+    return <AppBootstrap label="Checking session" />
   }
 
   if (auth.state.status === "locked") {

@@ -488,6 +488,7 @@
 
 @theme inline {
   --animate-shiny-pulse: shiny-pulse 1.6s ease-in-out infinite;
+  --animate-kanna-bootstrap-sweep: kanna-bootstrap-sweep 1.4s cubic-bezier(0.22, 1, 0.36, 1) infinite;
 
   @keyframes shiny-pulse {
     0%, 100% {
@@ -496,6 +497,26 @@
 
     50% {
       opacity: 1;
+    }
+  }
+
+  @keyframes kanna-bootstrap-sweep {
+    0% {
+      transform: translateX(-100%);
+      opacity: 0;
+    }
+
+    20% {
+      opacity: 1;
+    }
+
+    80% {
+      opacity: 1;
+    }
+
+    100% {
+      transform: translateX(400%);
+      opacity: 0;
     }
   }
 }

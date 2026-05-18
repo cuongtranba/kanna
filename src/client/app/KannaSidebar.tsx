@@ -49,7 +49,6 @@ interface KannaSidebarProps {
   data: SidebarData
   activeChatId: string | null
   connectionStatus: SocketStatus
-  ready: boolean
   open: boolean
   collapsed: boolean
   showMobileOpenButton: boolean
@@ -87,7 +86,6 @@ function KannaSidebarImpl({
   data,
   activeChatId,
   connectionStatus,
-  ready,
   open,
   collapsed,
   showMobileOpenButton,
@@ -464,7 +462,7 @@ function KannaSidebarImpl({
   const isLocalProjectsActive = location.pathname === "/"
   const isSettingsActive = location.pathname.startsWith("/settings")
   const isUtilityPageActive = isLocalProjectsActive || isSettingsActive
-  const isConnecting = connectionStatus === "connecting" || !ready
+  const isConnecting = connectionStatus === "connecting"
   const statusLabel = isConnecting ? "Connecting" : connectionStatus === "connected" ? "Connected" : "Disconnected"
   const statusDotClass = connectionStatus === "connected" ? "bg-success" : "bg-warning"
   const showDevBadge = updateSnapshot
@@ -599,30 +597,7 @@ function KannaSidebarImpl({
           }}
         >
           <div className="p-[7px]">
-            {!hasVisibleChats && isConnecting ? (
-              <div className="space-y-5 px-1 pt-3">
-                {[0, 1, 2].map((section) => (
-                  <div key={section} className="space-y-2 animate-pulse">
-                    <div className="h-4 w-28 rounded bg-muted" />
-                    <div className="space-y-1">
-                      {[0, 1, 2].map((row) => (
-                        <div key={row} className="flex items-center gap-2 rounded-md px-3 py-2">
-                          <div className="h-3.5 w-3.5 rounded-full bg-muted" />
-                          <div
-                            className={cn(
-                              "h-3.5 rounded bg-muted",
-                              row === 0 ? "w-32" : row === 1 ? "w-40" : "w-28"
-                            )}
-                          />
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : null}
-
-            {!hasVisibleChats && !isConnecting && data.projectGroups.length === 0 ? (
+            {!hasVisibleChats && data.projectGroups.length === 0 ? (
               <p className="text-sm text-muted-foreground p-2 mt-6 text-center">No conversations yet</p>
             ) : null}
 
