@@ -72,7 +72,11 @@ export function MermaidDiagram({ source }: { source: string }) {
     return <MermaidFallbackCodeBlock source={source} />
   }
   if (state.status === "loading") {
-    return <MermaidFallbackCodeBlock source={source} />
+    return (
+      <div className="relative group/mermaid">
+        <MermaidFallbackCodeBlock source={source} />
+      </div>
+    )
   }
 
   if (showSource) {
