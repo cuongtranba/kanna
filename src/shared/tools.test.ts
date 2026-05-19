@@ -132,6 +132,43 @@ describe("hydrateToolResult", () => {
     expect(result).toEqual({ answers: { runtime: ["bun", "node"] } })
   })
 
+  test("hydrates mcp__kanna__ask_user_question result through CallToolResult envelope", () => {
+    const tool = normalizeToolCall({
+      toolName: "mcp__kanna__ask_user_question",
+      toolId: "tool-mcp",
+      input: { questions: [{ text: "Lang?", header: "L", options: [], multiSelect: false }] },
+    })
+
+    // MCP shim wraps the answers JSON inside a CallToolResult envelope.
+    const envelope = {
+      content: [{
+        type: "text",
+        text: JSON.stringify({
+          questions: [{ question: "Lang?", header: "L", options: [], multiSelect: false }],
+          answers: { "Lang?": ["Rust"] },
+        }),
+      }],
+    }
+
+    const result = hydrateToolResult(tool, envelope)
+    expect(result).toEqual({ answers: { "Lang?": ["Rust"] } })
+  })
+
+  test("hydrates mcp__kanna__exit_plan_mode through envelope", () => {
+    const tool = normalizeToolCall({
+      toolName: "mcp__kanna__exit_plan_mode",
+      toolId: "tool-mcp-epm",
+      input: { plan: "..." },
+    })
+
+    const envelope = {
+      content: [{ type: "text", text: JSON.stringify({ confirmed: true }) }],
+    }
+
+    const result = hydrateToolResult(tool, envelope)
+    expect(result).toEqual({ confirmed: true, clearContext: undefined, message: undefined })
+  })
+
   test("hydrates ExitPlanMode decisions", () => {
     const tool = normalizeToolCall({
       toolName: "ExitPlanMode",
