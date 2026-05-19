@@ -6,6 +6,7 @@ import { randomUUID } from "node:crypto"
 import { KANNA_MCP_SERVER_NAME } from "../shared/tools"
 import { buildProjectFileContentUrl } from "../shared/projectFileUrl"
 import { inferProjectFileContentType } from "./uploads"
+import type { TranscriptEntry } from "../shared/types"
 import type { TunnelGateway } from "./cloudflare-tunnel/gateway"
 import { createAskUserQuestionTool } from "./kanna-mcp-tools/ask-user-question"
 import { createExitPlanModeTool } from "./kanna-mcp-tools/exit-plan-mode"
@@ -154,6 +155,52 @@ Returns one of:
 - invalid_port: the port is outside the valid range
 `
 
+/**
+ * Adapt the SDK MCP `extra` argument into a per-entry callback that emits
+ * `notifications/progress` for each persisted subagent transcript entry.
+ *
+ * The Claude CLI MCP client arms a transport-error watchdog (`armedAt`)
+ * on any control-channel error and, after 90s without recovery, drops
+ * the in-flight tool call with `"transport dropped mid-call; response
+ * for tool X was lost"`. The progress callback on the CLI side resets
+ * `armedAt = 0`, so a single notification every few seconds keeps a
+ * multi-minute `delegate_subagent` call alive even if the underlying
+ * transport blips. Returns `undefined` (no-op) when the caller did not
+ * supply a `progressToken` or the MCP runtime did not expose
+ * `sendNotification`.
+ */
+export function buildDelegateProgressEmitter(
+  extra: unknown,
+): ((entry: TranscriptEntry) => void) | undefined {
+  if (extra == null || typeof extra !== "object") return undefined
+  const meta = (extra as { _meta?: { progressToken?: string | number } })._meta
+  const progressToken = meta?.progressToken
+  if (progressToken === undefined) return undefined
+  const sendNotification = (extra as {
+    sendNotification?: (notification: {
+      method: string
+      params: Record<string, unknown>
+    }) => Promise<void>
+  }).sendNotification
+  if (typeof sendNotification !== "function") return undefined
+  let progress = 0
+  return (entry) => {
+    progress += 1
+    sendNotification({
+      method: "notifications/progress",
+      params: {
+        progressToken,
+        progress,
+        message: entry.kind === "tool_call"
+          ? `tool_call:${entry.tool.toolName}`
+          : entry.kind,
+      },
+    }).catch(() => {
+      /* notification is advisory; drop on send failure */
+    })
+  }
+}
+
 function buildDelegateSubagentToolList(args: {
   orchestrator?: SubagentOrchestrator
   delegationContext?: KannaMcpDelegationContext
@@ -168,7 +215,8 @@ function buildDelegateSubagentToolList(args: {
       delegate.name,
       DELEGATE_SUBAGENT_DESCRIPTION,
       delegate.schema.shape,
-      async (input) => {
+      async (input, extra) => {
+        const onEntry = buildDelegateProgressEmitter(extra)
         const handlerCtx: DelegateSubagentContext = {
           chatId,
           parentSubagentId: ctx.parentSubagentId,
@@ -176,6 +224,7 @@ function buildDelegateSubagentToolList(args: {
           ancestorSubagentIds: ctx.ancestorSubagentIds,
           depth: ctx.depth,
           getParentUserMessageId: ctx.getParentUserMessageId,
+          onEntry,
         }
         return await delegate.handler(input, handlerCtx)
       },

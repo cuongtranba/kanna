@@ -2,7 +2,8 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test"
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises"
 import path from "node:path"
 import os from "node:os"
-import { resolveOfferDownload, buildKannaMcpTools } from "./kanna-mcp"
+import type { TranscriptEntry } from "../shared/types"
+import { buildDelegateProgressEmitter, buildKannaMcpTools, resolveOfferDownload } from "./kanna-mcp"
 import { POLICY_DEFAULT } from "../shared/permission-policy"
 
 let tempRoot: string
@@ -210,4 +211,62 @@ test("forceInteractiveToolCallbacks but toolCallback absent → nothing register
   const names = tools.map((t) => t.name)
   expect(names).not.toContain("ask_user_question")
   expect(names).not.toContain("exit_plan_mode")
+})
+
+describe("buildDelegateProgressEmitter", () => {
+  function makeEntry(over: Partial<TranscriptEntry> = {}): TranscriptEntry {
+    return { _id: "e1", createdAt: 1, kind: "assistant_text", text: "x", ...over } as TranscriptEntry
+  }
+
+  test("returns undefined when extra is null / not an object", () => {
+    expect(buildDelegateProgressEmitter(null)).toBeUndefined()
+    expect(buildDelegateProgressEmitter(undefined)).toBeUndefined()
+    expect(buildDelegateProgressEmitter("nope")).toBeUndefined()
+  })
+
+  test("returns undefined when progressToken is missing", () => {
+    const sendNotification = async () => undefined
+    expect(buildDelegateProgressEmitter({ sendNotification })).toBeUndefined()
+    expect(buildDelegateProgressEmitter({ _meta: {}, sendNotification })).toBeUndefined()
+  })
+
+  test("returns undefined when sendNotification is missing", () => {
+    expect(buildDelegateProgressEmitter({ _meta: { progressToken: 42 } })).toBeUndefined()
+  })
+
+  test("emits notifications/progress with incrementing progress on each entry", async () => {
+    const sent: Array<{ method: string; params: Record<string, unknown> }> = []
+    const emit = buildDelegateProgressEmitter({
+      _meta: { progressToken: "tok-1" },
+      sendNotification: async (n: { method: string; params: Record<string, unknown> }) => {
+        sent.push(n)
+      },
+    })
+    expect(emit).toBeDefined()
+    emit!(makeEntry())
+    emit!(makeEntry({
+      kind: "tool_call",
+      tool: { kind: "tool", toolKind: "bash", toolName: "Bash", toolId: "t1", input: { command: "ls" } },
+    } as TranscriptEntry))
+    await new Promise((r) => setTimeout(r, 5))
+    expect(sent).toHaveLength(2)
+    expect(sent[0].method).toBe("notifications/progress")
+    expect(sent[0].params.progressToken).toBe("tok-1")
+    expect(sent[0].params.progress).toBe(1)
+    expect(sent[1].params.progress).toBe(2)
+    expect(sent[1].params.message).toBe("tool_call:Bash")
+  })
+
+  test("swallows sendNotification rejections so they do not break the run", async () => {
+    const emit = buildDelegateProgressEmitter({
+      _meta: { progressToken: 7 },
+      sendNotification: async () => {
+        throw new Error("transport gone")
+      },
+    })
+    expect(emit).toBeDefined()
+    // Should not throw synchronously and the unhandled rejection is swallowed by .catch().
+    expect(() => emit!(makeEntry())).not.toThrow()
+    await new Promise((r) => setTimeout(r, 5))
+  })
 })

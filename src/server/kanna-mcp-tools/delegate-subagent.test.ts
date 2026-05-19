@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import type { TranscriptEntry } from "../../shared/types"
 import type { SubagentOrchestrator } from "../subagent-orchestrator"
 import type { DelegationOutcome } from "../subagent-orchestrator"
 import { createDelegateSubagentTool } from "./delegate-subagent"
@@ -12,13 +13,19 @@ interface DelegateCall {
   depth: number
   subagentId: string
   prompt: string
+  onEntry?: (entry: TranscriptEntry) => void
 }
 
-function makeFakeOrchestrator(outcome: DelegationOutcome) {
+function makeFakeOrchestrator(outcome: DelegationOutcome, options: { fireEntries?: TranscriptEntry[] } = {}) {
   const calls: DelegateCall[] = []
   const fake = {
     async delegateRun(args: DelegateCall) {
       calls.push(args)
+      if (options.fireEntries && args.onEntry) {
+        for (const entry of options.fireEntries) {
+          args.onEntry(entry)
+        }
+      }
       return outcome
     },
   } as unknown as SubagentOrchestrator
@@ -56,6 +63,7 @@ describe("createDelegateSubagentTool", () => {
       depth: 0,
       subagentId: "sa-1",
       prompt: "do the thing",
+      onEntry: undefined,
     })
     expect(result.isError).toBeFalsy()
     const payload = JSON.parse(result.content[0].text)
@@ -116,5 +124,32 @@ describe("createDelegateSubagentTool", () => {
       ancestorSubagentIds: ["sa-a", "sa-b"],
       depth: 2,
     })
+  })
+
+  test("forwards onEntry from context to orchestrator.delegateRun so progress notifications can flow", async () => {
+    const seenEntries: TranscriptEntry[] = []
+    const onEntry = (e: TranscriptEntry) => { seenEntries.push(e) }
+    const fakeEntries: TranscriptEntry[] = [
+      { _id: "e1", createdAt: 1, kind: "assistant_text", text: "hi" },
+      {
+        _id: "e2",
+        createdAt: 2,
+        kind: "tool_call",
+        tool: { kind: "tool", toolKind: "bash", toolName: "Bash", toolId: "t1", input: { command: "ls" } },
+      },
+    ]
+    const { fake, calls } = makeFakeOrchestrator(
+      { status: "completed", runId: "r", text: "done" },
+      { fireEntries: fakeEntries },
+    )
+    const tool = createDelegateSubagentTool({ orchestrator: fake })
+    await tool.handler(
+      { subagent_id: "sa-1", prompt: "p" },
+      { ...baseCtx(), onEntry },
+    )
+    expect(calls[0].onEntry).toBe(onEntry)
+    expect(seenEntries).toHaveLength(2)
+    expect(seenEntries[0].kind).toBe("assistant_text")
+    expect(seenEntries[1].kind).toBe("tool_call")
   })
 })

@@ -1045,6 +1045,60 @@ describe("SubagentOrchestrator", () => {
       expect(outcome.errorCode).toBe("LOOP_DETECTED")
     })
 
+    test("forwards every persisted entry to args.onEntry so MCP progress notifications can flow", async () => {
+      const h = await setupHarness({ subagents: [makeSubagent({})] })
+      h.mockProviderRun({
+        authReady: async () => true,
+        async start(_onChunk, onEntry) {
+          onEntry({ _id: "e1", createdAt: 1, kind: "assistant_text", text: "partial" } as TranscriptEntry)
+          onEntry({
+            _id: "e2",
+            createdAt: 2,
+            kind: "tool_call",
+            tool: { kind: "tool", toolKind: "bash", toolName: "Bash", toolId: "t1", input: { command: "ls" } },
+          } as TranscriptEntry)
+          return { text: "done" }
+        },
+      })
+      const observed: string[] = []
+      const outcome = await h.orchestrator.delegateRun({
+        chatId: h.chatId,
+        parentUserMessageId: h.userMessageId,
+        parentRunId: null,
+        parentSubagentId: null,
+        ancestorSubagentIds: [],
+        depth: 0,
+        subagentId: "sa-1",
+        prompt: "go",
+        onEntry: (e) => { observed.push(e.kind) },
+      })
+      expect(outcome.status).toBe("completed")
+      expect(observed).toEqual(["assistant_text", "tool_call"])
+    })
+
+    test("an onEntry that throws is logged but does not break the run", async () => {
+      const h = await setupHarness({ subagents: [makeSubagent({})] })
+      h.mockProviderRun({
+        authReady: async () => true,
+        async start(_onChunk, onEntry) {
+          onEntry({ _id: "e1", createdAt: 1, kind: "assistant_text", text: "hi" } as TranscriptEntry)
+          return { text: "ok" }
+        },
+      })
+      const outcome = await h.orchestrator.delegateRun({
+        chatId: h.chatId,
+        parentUserMessageId: h.userMessageId,
+        parentRunId: null,
+        parentSubagentId: null,
+        ancestorSubagentIds: [],
+        depth: 0,
+        subagentId: "sa-1",
+        prompt: "go",
+        onEntry: () => { throw new Error("listener boom") },
+      })
+      expect(outcome.status).toBe("completed")
+    })
+
     test("propagates PROVIDER_ERROR when the provider stream throws", async () => {
       const h = await setupHarness({ subagents: [makeSubagent({})] })
       h.programs.set("sa-1", { authReady: true, error: "provider boom" })

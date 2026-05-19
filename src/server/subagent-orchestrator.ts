@@ -396,6 +396,14 @@ export class SubagentOrchestrator {
     depth: number
     subagentId: string
     prompt: string
+    /**
+     * Optional per-entry sink. Called once for each persisted
+     * `subagent_entry_appended` event while the run is in flight. Used by
+     * the MCP `delegate_subagent` tool to emit `notifications/progress`
+     * so the CLI's transport-error watchdog cannot declare the call lost
+     * on long-running subagent runs.
+     */
+    onEntry?: (entry: TranscriptEntry) => void
   }): Promise<DelegationOutcome> {
     await this.recoveryPromise
     const subagent = this.deps.appSettings
@@ -473,6 +481,7 @@ export class SubagentOrchestrator {
       depth: args.depth,
       ancestorSubagentIds: args.ancestorSubagentIds,
       userInstruction: args.prompt,
+      onEntry: args.onEntry,
     })
   }
 
@@ -489,6 +498,8 @@ export class SubagentOrchestrator {
      * provider run so composeInitialPrompt can render it above the primer.
      */
     userInstruction: string
+    /** External per-entry sink (see {@link delegateRun}). */
+    onEntry?: (entry: TranscriptEntry) => void
   }): Promise<DelegationOutcome> {
     const runId = crypto.randomUUID()
     await this.deps.store.appendSubagentEvent({
@@ -612,6 +623,7 @@ export class SubagentOrchestrator {
             console.warn(`${LOG_PREFIX} subagent delta append failed`, { chatId: args.chatId, runId, err })
           })
       }
+      const externalOnEntry = args.onEntry
       const onEntry = (entry: TranscriptEntry) => {
         this.deps.store
           .appendSubagentEvent({
@@ -625,6 +637,13 @@ export class SubagentOrchestrator {
           .catch((err) => {
             console.warn(`${LOG_PREFIX} subagent entry append failed`, { chatId: args.chatId, runId, err })
           })
+        if (externalOnEntry) {
+          try {
+            externalOnEntry(entry)
+          } catch (err) {
+            console.warn(`${LOG_PREFIX} external onEntry threw`, { chatId: args.chatId, runId, err })
+          }
+        }
       }
       const timeoutRejection = createDeferred<never>()
       const pausable = new PausableTimeout(this.timeoutMs(), () => {

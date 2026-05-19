@@ -1,4 +1,5 @@
 import { z } from "zod"
+import type { TranscriptEntry } from "../../shared/types"
 import type { SubagentOrchestrator } from "../subagent-orchestrator"
 
 const InputSchema = z.object({
@@ -28,6 +29,15 @@ export interface DelegateSubagentContext {
    * than fabricating a parent.
    */
   getParentUserMessageId: () => string | null
+  /**
+   * Optional per-entry callback. Each persisted subagent transcript entry
+   * (tool_call, tool_result, assistant_text, …) is forwarded here while
+   * the run is in flight. Wired by `kanna-mcp.ts` to emit MCP
+   * `notifications/progress` so the CLI's transport-error watchdog
+   * resets its `armedAt` timer and does not declare the call lost on
+   * long-running subagent runs.
+   */
+  onEntry?: (entry: TranscriptEntry) => void
 }
 
 export interface DelegateSubagentTool {
@@ -68,6 +78,7 @@ export function createDelegateSubagentTool(deps: {
         depth: ctx.depth,
         subagentId: input.subagent_id,
         prompt: input.prompt,
+        onEntry: ctx.onEntry,
       })
       if (outcome.status === "completed") {
         return {
