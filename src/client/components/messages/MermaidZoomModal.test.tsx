@@ -26,6 +26,7 @@ describe("MermaidZoomModal", () => {
     )
     const dialog = document.querySelector('[role="dialog"]') as HTMLElement
     expect(dialog).not.toBeNull()
+    expect(dialog.getAttribute("aria-label")).toBe("Diagram zoom view")
     expect(dialog.innerHTML).toContain("data-mermaid")
     const close = document.querySelector('[aria-label="Close"]') as HTMLButtonElement
     expect(close).not.toBeNull()

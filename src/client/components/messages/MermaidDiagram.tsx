@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from "react"
+import { useCallback, useEffect, useId, useState } from "react"
 import { Check, Code2, Copy, Maximize2 } from "lucide-react"
 import { Button } from "../ui/button"
 import { cn } from "../../lib/utils"
@@ -40,6 +40,8 @@ export function MermaidDiagram({ source }: { source: string }) {
   const [showSource, setShowSource] = useState(false)
   const [zoomOpen, setZoomOpen] = useState(false)
   const [copied, setCopied] = useState(false)
+
+  const closeZoom = useCallback(() => setZoomOpen(false), [])
 
   const handleCopy = async () => {
     await navigator.clipboard.writeText(source)
@@ -107,7 +109,7 @@ export function MermaidDiagram({ source }: { source: string }) {
         onZoom={() => setZoomOpen(true)}
       />
       {zoomOpen && (
-        <MermaidZoomModal svg={state.svg} onClose={() => setZoomOpen(false)} />
+        <MermaidZoomModal svg={state.svg} onClose={closeZoom} />
       )}
     </div>
   )

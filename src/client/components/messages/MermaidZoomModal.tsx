@@ -35,6 +35,7 @@ export function MermaidZoomModal({ svg, onClose }: Props) {
       className="fixed inset-0 z-[100] flex flex-col bg-background/95"
       role="dialog"
       aria-modal="true"
+      aria-label="Diagram zoom view"
     >
       <div className="flex justify-end gap-1 p-2">
         <Button variant="ghost" size="icon" aria-label="Zoom out"
