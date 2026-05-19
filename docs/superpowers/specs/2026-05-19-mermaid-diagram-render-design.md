@@ -108,10 +108,15 @@ appears on hover on desktop, always visible on touch):
 2. **View-source toggle** — toggles between the rendered SVG and the raw
    source rendered as the normal code block. Local `useState` boolean.
 3. **Zoom / pan** — click opens a modal showing the SVG with
-   CSS-transform pan + wheel/pinch zoom. Lightweight (portal +
-   transform); no new heavy dependency. Component:
-   `MermaidZoomModal.tsx` (new, co-located) or an inline portal — final
-   shape decided in the plan.
+   CSS-transform pan + zoom. Lightweight (portal + transform); no new
+   heavy dependency. Component: `MermaidZoomModal.tsx` (new, co-located).
+
+   > **Implemented scope (2026-05-19):** zoom via explicit
+   > buttons (in/out/reset) + pointer-drag pan + Esc/close. Wheel and
+   > pinch zoom are an **accepted known gap** — buttons cover the need;
+   > wheel/pinch deferred as a non-blocking follow-up (YAGNI for v1).
+   > The dialog has `role="dialog"`, `aria-modal="true"`, and
+   > `aria-label="Diagram zoom view"` (WCAG 4.1.2).
 
 ### `src/client/components/messages/shared.tsx` (modify)
 
