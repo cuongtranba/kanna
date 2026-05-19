@@ -99,8 +99,8 @@ describe("PendingToolRequestMessage — ask_user_question", () => {
             text: "Favorite language?",
             header: "Lang",
             options: [
-              { label: "TypeScript", description: "Typed JS" },
-              { label: "Go", description: "Simple, fast" },
+              { label: "TypeScript", description: "" },
+              { label: "Go", description: "" },
             ],
             multiSelect: false,
           },
