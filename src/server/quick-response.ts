@@ -137,12 +137,17 @@ function structuredOutputFromSdkMessage(message: unknown): unknown | null {
 
 export async function runClaudeStructured(args: Omit<StructuredQuickResponseArgs<unknown>, "parse">): Promise<unknown | null> {
   const pool = activeOAuthPool
-  const picked = pool?.pickActive() ?? null
+  // Reserve under a synthetic ephemeral key so concurrent quick-response
+  // calls cannot all be handed the same lowest-lastUsedAt token. The lease
+  // is released in the finally below (audit #2).
+  const lease = pool?.pickEphemeral() ?? null
+  const picked = lease?.token ?? null
   // Refuse to spawn when the pool has tokens but none are currently usable
   // (all reserved, limited, errored, or disabled). Without this, env-less
   // spawn would silently fall back to the CLI keychain auth path which
   // typically holds a stale or unrelated token → opaque 401 loops.
   if (pool && pool.hasAnyToken() && !picked) {
+    lease?.release()
     console.warn("[quick-response] no usable OAuth token in pool; skipping claude provider")
     return null
   }
@@ -222,6 +227,7 @@ export async function runClaudeStructured(args: Omit<StructuredQuickResponseArgs
     }
     return null
   } finally {
+    lease?.release()
     try {
       q.close()
     } catch {

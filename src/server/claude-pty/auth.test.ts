@@ -20,22 +20,19 @@ describe("verifyPtyAuth", () => {
     expect(result.ok).toBe(false)
   })
 
-  test("oauthToken does NOT bypass ANTHROPIC_API_KEY rejection", async () => {
+  test("ANTHROPIC_API_KEY in parent env does not block when oauthToken supplied (stripped by buildPtyEnv)", async () => {
     const result = await verifyPtyAuth({
       env: { ANTHROPIC_API_KEY: "sk-x" },
       oauthToken: "sk-ant-oat-abc",
     })
-    expect(result.ok).toBe(false)
-    if (!result.ok) {
-      expect(result.error).toContain("ANTHROPIC_API_KEY")
-    }
+    expect(result.ok).toBe(true)
   })
 
-  test("error when ANTHROPIC_API_KEY is set", async () => {
+  test("ANTHROPIC_API_KEY alone never satisfies auth — OAuth token still required", async () => {
     const result = await verifyPtyAuth({ env: { ANTHROPIC_API_KEY: "sk-x" } })
     expect(result.ok).toBe(false)
     if (!result.ok) {
-      expect(result.error).toContain("ANTHROPIC_API_KEY")
+      expect(result.error).toContain("OAuth pool token")
     }
   })
 })

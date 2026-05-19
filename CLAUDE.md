@@ -85,7 +85,7 @@ pseudo-terminal and tails the on-disk JSONL transcript instead of using
 the `@anthropic-ai/claude-agent-sdk` `query()` programmatic API. PTY mode
 preserves Pro/Max subscription billing; SDK mode bills at API rates.
 
-Default is `sdk` (no behaviour change). Authentication requires an OAuth-pool token configured in Kanna settings; the token is injected via `CLAUDE_CODE_OAUTH_TOKEN`. The local `claude /login` keychain path is not supported in this deployment. `ANTHROPIC_API_KEY` must be unset (PTY mode refuses to spawn if it is set — would force API billing).
+Default is `sdk` (no behaviour change). Authentication requires an OAuth-pool token configured in Kanna settings; the token is injected via `CLAUDE_CODE_OAUTH_TOKEN`. The local `claude /login` keychain path is not supported in this deployment. PTY mode is OAuth-only and NEVER uses an API key: `buildPtyEnv` unconditionally strips `ANTHROPIC_API_KEY` from the spawned child env, so a key left in the parent environment is harmless — it does not block the spawn and cannot force API billing. `verifyPtyAuth` only requires the OAuth-pool token.
 
 Platform support: macOS / Linux only.
 

@@ -38,34 +38,11 @@ describe("startClaudeSessionPTY", () => {
     }
   })
 
-  test("auth precheck fails when ANTHROPIC_API_KEY is set", async () => {
-    if (process.platform === "win32") return
-    const homeDir = await mkdtemp(path.join(tmpdir(), "kanna-pty-driver-"))
-    try {
-      let err: unknown
-      try {
-        await startClaudeSessionPTY({
-          chatId: "c",
-          projectId: "p",
-          localPath: "/tmp",
-          model: "claude-sonnet-4-6",
-          planMode: false,
-          forkSession: false,
-          oauthToken: "sk-ant-oat-x",
-          sessionToken: null,
-          onToolRequest: async () => null,
-          homeDir,
-          env: { ANTHROPIC_API_KEY: "sk-x" },
-        })
-      } catch (e) {
-        err = e
-      }
-      expect(err).toBeInstanceOf(Error)
-      expect((err as Error).message).toMatch(/ANTHROPIC_API_KEY/)
-    } finally {
-      await rm(homeDir, { recursive: true, force: true })
-    }
-  })
+  // ANTHROPIC_API_KEY in the parent env no longer fails the auth precheck:
+  // PTY mode is OAuth-only and buildPtyEnv unconditionally strips the key
+  // from the child env, so the CLI can never bill API. Coverage moved to
+  // auth.test.ts ("ANTHROPIC_API_KEY in parent env does not block ...") and
+  // the "strips ANTHROPIC_API_KEY defensively" buildPtyEnv test below.
 
   // Preflight gate removed: kanna trusts the claude CLI as the source of
   // truth for tool execution. The PreflightGate arg is still accepted on the

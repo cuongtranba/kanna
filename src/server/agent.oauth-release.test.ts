@@ -189,4 +189,96 @@ describe("OAuth pool reservation lifetime", () => {
       "reservation released after turn finished",
     )
   }, 10_000)
+
+  test("rotation pin survives turn end — a concurrent chat cannot steal the rotated token", async () => {
+    // Regression for audit #1: on a rate-limit the failure handler marks the
+    // active token limited and pins the replacement under the same chatId for
+    // the scheduled auto-continue to reuse. The turn-end release MUST skip
+    // that pinned token — otherwise a concurrent chat picks it during the
+    // TOKEN_ROTATION_SCHEDULE_DELAY_MS gap and the rotation re-spawns on a
+    // token someone else now owns.
+    let tokens: OAuthTokenEntry[] = [makeToken("a"), makeToken("b")]
+    const pool = new OAuthTokenPool(
+      () => tokens,
+      (id, patch) => {
+        tokens = tokens.map((t) => (t.id === id ? { ...t, ...patch } : t))
+      },
+    )
+
+    const capturedOauthTokens: Array<string | null> = []
+    const resetSeconds = Math.floor((Date.now() + 60 * 60_000) / 1000)
+    const store = createFakeStore()
+    const coordinator = new AgentCoordinator({
+      store: store as never,
+      onStateChange: () => {},
+      startClaudeSession: async (args) => {
+        capturedOauthTokens.push(args.oauthToken)
+        const events = new AsyncEventQueue<HarnessEvent>()
+        return {
+          provider: "claude",
+          stream: events,
+          getAccountInfo: async () => null,
+          interrupt: async () => {},
+          close: () => {},
+          setModel: async () => {},
+          setPermissionMode: async () => {},
+          getSupportedCommands: async () => [],
+          sendPrompt: async () => {
+            events.push({
+              type: "transcript",
+              entry: {
+                _id: "result-1",
+                createdAt: Date.now(),
+                kind: "result",
+                subtype: "error",
+                isError: true,
+                durationMs: 100,
+                result: `Claude AI usage limit reached|${resetSeconds}`,
+              } as never,
+            })
+            events.close()
+          },
+        }
+      },
+      oauthPool: pool,
+    })
+
+    await coordinator.send({
+      type: "chat.send",
+      chatId: "chat-1",
+      provider: "claude",
+      content: "test",
+      model: "claude-opus-4-7",
+    })
+
+    await waitFor(
+      () => store.autoContinueEvents.some(
+        (e) => e.kind === "auto_continue_accepted" && e.source === "token_rotation",
+      ),
+      4000,
+      "token_rotation auto_continue emitted",
+    )
+
+    // First session was spawned on token "a".
+    if (capturedOauthTokens[0] !== "sk-ant-a") {
+      throw new Error(`expected first spawn on token a, got ${capturedOauthTokens[0]}`)
+    }
+
+    // Give runClaudeSession's finally a tick to run after the stream closed.
+    await waitFor(() => capturedOauthTokens.length >= 1, 2000, "first session settled")
+
+    // Token "a" is limited. Token "b" is the rotation target pinned under
+    // chat-1. A different chat MUST NOT be able to claim "b" (or "a").
+    const stolen = pool.pickActive("chat-other")
+    if (stolen !== null) {
+      throw new Error(`concurrent chat stole token ${stolen.id} — rotation pin leaked`)
+    }
+
+    // chat-1 still owns the rotation target so the scheduled auto-continue
+    // re-spawns on "b".
+    const owned = pool.pickActive("chat-1")
+    if (owned?.id !== "b") {
+      throw new Error(`expected chat-1 to still own rotated token b, got ${owned?.id ?? "null"}`)
+    }
+  }, 10_000)
 })

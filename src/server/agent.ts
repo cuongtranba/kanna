@@ -1437,49 +1437,58 @@ export class AgentCoordinator {
       } else {
         const defaultModel = normalizeServerModel("claude")
         const defaultOptions = normalizeClaudeModelOptions(defaultModel)
-        const picked = this.oauthPool?.pickActive() ?? null
+        // Ephemeral spawn: reserve under a synthetic key so two concurrent
+        // ensureSlashCommandsLoaded calls (different chats) cannot be handed
+        // the same token by lastUsedAt ordering. The lease MUST be released
+        // once the throwaway session closes (audit #2).
+        const lease = this.oauthPool?.pickEphemeral() ?? null
         // Skip the ephemeral spawn entirely when the pool has tokens but
         // nothing is usable — avoids 401 against the CLI's keychain fallback
         // and an opaque "supportedCommands failed" warning. Slash commands
         // will load on the next turn once a token is available.
-        if (this.oauthPool && this.oauthPool.hasAnyToken() && !picked) {
+        if (this.oauthPool && this.oauthPool.hasAnyToken() && !lease) {
           return
         }
+        const picked = lease?.token ?? null
         if (picked) this.oauthPool!.markUsed(picked.id)
         const usePtyEphemeral = this.resolveClaudeDriverPreference() === "pty"
         const ephemeralSystemPromptAppend = buildKannaSystemPromptAppend(this.getSubagents())
-        const ephemeral = usePtyEphemeral
-          ? await this.startClaudeSessionPTYFn({
-              chatId,
-              projectId: project.id,
-              localPath: project.localPath,
-              model: resolveClaudeApiModelId(defaultModel, defaultOptions.contextWindow),
-              effort: defaultOptions.reasoningEffort,
-              planMode: chat.planMode ?? false,
-              sessionToken: chat.sessionTokensByProvider.claude ?? null,
-              forkSession: false,
-              oauthToken: picked?.token ?? null,
-              oauthLabel: picked?.label,
-              onToolRequest: async () => null,
-              systemPromptAppend: ephemeralSystemPromptAppend,
-              preflightGate: this.preflightGate ?? undefined,
-            })
-          : await this.startClaudeSessionFn({
-              projectId: project.id,
-              localPath: project.localPath,
-              model: resolveClaudeApiModelId(defaultModel, defaultOptions.contextWindow),
-              effort: defaultOptions.reasoningEffort,
-              planMode: chat.planMode ?? false,
-              sessionToken: chat.sessionTokensByProvider.claude ?? null,
-              forkSession: false,
-              oauthToken: picked?.token ?? null,
-              onToolRequest: async () => null,
-              systemPromptAppend: ephemeralSystemPromptAppend,
-            })
         try {
-          commands = await ephemeral.getSupportedCommands()
+          const ephemeral = usePtyEphemeral
+            ? await this.startClaudeSessionPTYFn({
+                chatId,
+                projectId: project.id,
+                localPath: project.localPath,
+                model: resolveClaudeApiModelId(defaultModel, defaultOptions.contextWindow),
+                effort: defaultOptions.reasoningEffort,
+                planMode: chat.planMode ?? false,
+                sessionToken: chat.sessionTokensByProvider.claude ?? null,
+                forkSession: false,
+                oauthToken: picked?.token ?? null,
+                oauthLabel: picked?.label,
+                onToolRequest: async () => null,
+                systemPromptAppend: ephemeralSystemPromptAppend,
+                preflightGate: this.preflightGate ?? undefined,
+              })
+            : await this.startClaudeSessionFn({
+                projectId: project.id,
+                localPath: project.localPath,
+                model: resolveClaudeApiModelId(defaultModel, defaultOptions.contextWindow),
+                effort: defaultOptions.reasoningEffort,
+                planMode: chat.planMode ?? false,
+                sessionToken: chat.sessionTokensByProvider.claude ?? null,
+                forkSession: false,
+                oauthToken: picked?.token ?? null,
+                onToolRequest: async () => null,
+                systemPromptAppend: ephemeralSystemPromptAppend,
+              })
+          try {
+            commands = await ephemeral.getSupportedCommands()
+          } finally {
+            ephemeral.close()
+          }
         } finally {
-          ephemeral.close()
+          lease?.release()
         }
       }
       await this.store.recordSessionCommandsLoaded(chatId, commands)
@@ -2556,6 +2565,16 @@ export class AgentCoordinator {
 
         if (event.entry.kind === "result" && active && completedClaudePromptSeq === (active.claudePromptSeq ?? null)) {
           active.hasFinalResult = true
+          // True once a rate-limit / auth-error was routed through
+          // handleLimitDetection / handleAuthFailure. Those paths already
+          // marked the failed token limited/errored (dropping its
+          // reservation) and, when a rotation target exists, pinned the
+          // replacement token under this chatId for the scheduled
+          // auto-continue to reuse. The turn-scoped release below MUST be
+          // skipped in that case — otherwise it drops the freshly-pinned
+          // rotation token and a concurrent chat can steal it before
+          // fireAutoContinue spawns the replacement session (audit #1).
+          let failureHandled = false
           if (event.entry.isError) {
             const resultText = event.entry.result || "Turn failed"
             const debugRaw = typeof (event.entry as { debugRaw?: unknown }).debugRaw === "string"
@@ -2570,6 +2589,7 @@ export class AgentCoordinator {
             } else if (authDetection) {
               handled = await this.handleAuthFailure(session, authDetection)
             }
+            failureHandled = handled
             if (handled) {
               await this.store.recordTurnFailed(session.chatId, detection ? "rate_limit" : "auth_error")
             } else if (isPromptTooLongMessage(resultText)) {
@@ -2596,7 +2616,14 @@ export class AgentCoordinator {
           // rotation race between in-flight turns is still serialized via
           // markLimited/markError (both drop the reservation) and the
           // atomic single-threaded pickActive(chatId) calls.
-          this.oauthPool?.release(session.chatId)
+          //
+          // Skip when a rotation handled the failure: the rotation already
+          // pinned the replacement token under this chatId and the
+          // scheduled auto-continue (TOKEN_ROTATION_SCHEDULE_DELAY_MS later)
+          // depends on that pin still being held.
+          if (!failureHandled) {
+            this.oauthPool?.release(session.chatId)
+          }
           if (!active.cancelRequested) {
             await this.maybeStartNextQueuedMessage(session.chatId)
           }
