@@ -2,6 +2,7 @@ import "../../lib/testing/setupHappyDom"
 import { describe, expect, test, mock, afterEach } from "bun:test"
 import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
+import { renderForLoopCheck } from "../../lib/testing/renderForLoopCheck"
 
 let lastInitTheme: string | null = null
 let themeValue: "light" | "dark" = "light"
@@ -29,6 +30,7 @@ afterEach(async () => {
   container?.remove()
   root = null
   container = null
+  themeValue = "light"
 })
 
 async function renderAndSettle(node: React.ReactElement) {
@@ -59,7 +61,6 @@ describe("MermaidDiagram", () => {
     themeValue = "dark"
     await renderAndSettle(<MermaidDiagram source={"graph TD\nA-->B"} />)
     expect(lastInitTheme).toBe("dark")
-    themeValue = "light"
   })
 
   test("passes mermaid theme 'default' when resolvedTheme is light", async () => {
@@ -89,5 +90,12 @@ describe("MermaidDiagram", () => {
     expect(zoom).not.toBeNull()
     await act(async () => { zoom.click() })
     expect(document.querySelector('[role="dialog"]')).not.toBeNull()
+  })
+
+  test("does not trigger a React render loop", async () => {
+    const result = await renderForLoopCheck(<MermaidDiagram source={"graph TD\nA-->B"} />)
+    await result.cleanup()
+    expect(result.loopWarnings).toEqual([])
+    expect(result.thrown).toBeNull()
   })
 })
