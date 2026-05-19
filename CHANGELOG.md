@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.63.0](https://github.com/cuongtranba/kanna/compare/v0.62.0...v0.63.0) (2026-05-19)
+
+
+### Features
+
+* **subagent:** reactive activity label from latest entries ([#231](https://github.com/cuongtranba/kanna/issues/231)) ([08a41a5](https://github.com/cuongtranba/kanna/commit/08a41a58e23642a55b34b3786a1339219a6fe3f8))
+* **subagent:** rich activity labels + MCP progress notifications ([#234](https://github.com/cuongtranba/kanna/issues/234)) ([493ef87](https://github.com/cuongtranba/kanna/commit/493ef87e809d09594c210e2f2f52475bef510f82))
+
 ## [0.62.0](https://github.com/cuongtranba/kanna/compare/v0.61.5...v0.62.0) (2026-05-19)
 
 
