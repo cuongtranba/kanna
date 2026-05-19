@@ -4,8 +4,7 @@ import type { AskUserQuestionAnswerMap, AskUserQuestionItem, AskUserQuestionOpti
 import { cn } from "../../lib/utils"
 import { Button } from "../ui/button"
 
-// ─── QuestionCard, OptionContent, Checkbox, OptionRow — copied verbatim from
-// AskUserQuestionMessage.tsx lines 17–138 ────────────────────────────────────
+// ─── Slide-card sub-components (module-private) ─────────────────────────────
 
 function QuestionCard({
   question,
