@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.65.1](https://github.com/cuongtranba/kanna/compare/v0.65.0...v0.65.1) (2026-05-19)
+
+
+### Bug Fixes
+
+* **client:** include subagentRuns in chat-snapshot dedup compare ([#245](https://github.com/cuongtranba/kanna/issues/245)) ([76d7b45](https://github.com/cuongtranba/kanna/commit/76d7b4586d5705234983339996d9f77f52b2e463))
+* **oauth-pool:** persist refusal as transcript result entry ([#248](https://github.com/cuongtranba/kanna/issues/248)) ([adbf02d](https://github.com/cuongtranba/kanna/commit/adbf02d8a5f5f5d4ed7c7338117050c0fcf2aad2))
+
 ## [0.65.0](https://github.com/cuongtranba/kanna/compare/v0.64.0...v0.65.0) (2026-05-19)
 
 
