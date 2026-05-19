@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.65.0](https://github.com/cuongtranba/kanna/compare/v0.64.0...v0.65.0) (2026-05-19)
+
+
+### Features
+
+* **messages:** render mermaid diagrams in transcript markdown ([#242](https://github.com/cuongtranba/kanna/issues/242)) ([c606355](https://github.com/cuongtranba/kanna/commit/c606355c6330175f6ccf170afdc228a90aeea943))
+
+
+### Bug Fixes
+
+* **event-store:** decouple subagent live progress from global writeChain ([#244](https://github.com/cuongtranba/kanna/issues/244)) ([21ea6e9](https://github.com/cuongtranba/kanna/commit/21ea6e9aefe497fcd66984bbbdbdf1346145faae))
+
 ## [0.64.0](https://github.com/cuongtranba/kanna/compare/v0.63.0...v0.64.0) (2026-05-19)
 
 
