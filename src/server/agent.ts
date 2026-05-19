@@ -1053,6 +1053,19 @@ function positiveIntegerFromEnv(value: string | undefined, fallback: number): nu
   return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback
 }
 
+// Thrown by Claude spawn paths when the OAuth pool has tokens but every one
+// is currently unusable (rate-limited, errored, disabled, or reserved by
+// another chat). `startTurnForChat` catches this and persists `message` as a
+// `result` transcript entry instead of letting it surface as an ephemeral
+// commandError that gets wiped by the next chat snapshot tick.
+export class OAuthPoolUnavailableError extends Error {
+  readonly kind = "oauth_pool_unavailable" as const
+  constructor(message: string) {
+    super(message)
+    this.name = "OAuthPoolUnavailableError"
+  }
+}
+
 export class AgentCoordinator {
   private readonly store: EventStore
   private readonly onStateChange: (chatId?: string, options?: { immediate?: boolean }) => void
@@ -1745,6 +1758,7 @@ export class AgentCoordinator {
       })
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
+      const isOAuthRefusal = error instanceof OAuthPoolUnavailableError
       console.error(`${LOG_PREFIX} startTurnForChat failed after turn_started`, {
         chatId: args.chatId,
         provider: args.provider,
@@ -1752,7 +1766,32 @@ export class AgentCoordinator {
         planMode: args.planMode,
         error: message,
         stack: error instanceof Error ? error.stack : undefined,
+        kind: isOAuthRefusal ? "oauth_pool_unavailable" : "unknown",
       })
+      // OAuth-pool refusal: persist the formatted refusal (with chat-link
+      // markdown produced by `buildPoolUnavailableMessage`) as a `result`
+      // transcript entry so the UI's transcript renders it inline and
+      // durably, instead of relying on the ephemeral commandError banner
+      // that gets wiped by the next chat snapshot tick.
+      if (isOAuthRefusal) {
+        try {
+          await this.store.appendMessage(
+            args.chatId,
+            timestamped({
+              kind: "result",
+              subtype: "error",
+              isError: true,
+              durationMs: 0,
+              result: message,
+            })
+          )
+        } catch (appendErr) {
+          console.error(`${LOG_PREFIX} append refusal result entry failed`, {
+            chatId: args.chatId,
+            appendErr: appendErr instanceof Error ? appendErr.message : String(appendErr),
+          })
+        }
+      }
       try {
         await this.store.recordTurnFailed(args.chatId, message)
       } catch (recordErr) {
@@ -1763,6 +1802,12 @@ export class AgentCoordinator {
       }
       this.activeTurns.delete(args.chatId)
       this.emitStateChange(args.chatId, { immediate: true })
+      // Swallow refusals — the transcript entry above is the user-facing
+      // signal. Re-throwing would surface a transient commandError banner
+      // that races with snapshot ticks and visibly flickers (see #235).
+      if (isOAuthRefusal) {
+        return
+      }
       throw error
     }
   }
@@ -2065,7 +2110,7 @@ export class AgentCoordinator {
       // login the CLI binary's keychain holds, which is typically
       // expired in a pool-managed setup and produces opaque 401 loops.
       if (this.oauthPool && this.oauthPool.hasAnyToken() && !picked) {
-        throw new Error(this.buildPoolUnavailableMessage(args.chatId, ""))
+        throw new OAuthPoolUnavailableError(this.buildPoolUnavailableMessage(args.chatId, ""))
       }
       if (picked) this.oauthPool!.markUsed(picked.id)
       const usePty = this.resolveClaudeDriverPreference() === "pty"
@@ -2432,7 +2477,7 @@ export class AgentCoordinator {
         // bound to the parent's close path — no separate subagent release.
         const picked = this.oauthPool?.pickActive(args.chatId) ?? null
         if (this.oauthPool && this.oauthPool.hasAnyToken() && !picked) {
-          throw new Error(this.buildPoolUnavailableMessage(args.chatId, " for subagent run"))
+          throw new OAuthPoolUnavailableError(this.buildPoolUnavailableMessage(args.chatId, " for subagent run"))
         }
         if (picked) this.oauthPool!.markUsed(picked.id)
         return picked?.token ?? null
