@@ -339,7 +339,11 @@ export function hydrateToolResult(tool: NormalizedToolCall, raw: unknown): Hydra
 
   switch (tool.toolKind) {
     case "ask_user_question": {
-      const record = asRecord(parsed)
+      // MCP shim returns CallToolResult shape ({content: [{type:"text", text:"<JSON>"}]}).
+      // Peel envelope when present so we can read the real {questions, answers} payload.
+      const innerText = extractMcpTextContent(parsed)
+      const payload = innerText !== null ? parseJsonValue(innerText) : parsed
+      const record = asRecord(payload)
       const answers = asRecord(record?.answers) ?? (record ? record : {})
       return {
         answers: Object.fromEntries(
@@ -360,7 +364,9 @@ export function hydrateToolResult(tool: NormalizedToolCall, raw: unknown): Hydra
       } satisfies AskUserQuestionToolResult
     }
     case "exit_plan_mode": {
-      const record = asRecord(parsed)
+      const innerText = extractMcpTextContent(parsed)
+      const payload = innerText !== null ? parseJsonValue(innerText) : parsed
+      const record = asRecord(payload)
       return {
         confirmed: typeof record?.confirmed === "boolean" ? record.confirmed : undefined,
         clearContext: typeof record?.clearContext === "boolean" ? record.clearContext : undefined,
