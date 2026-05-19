@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.61.5](https://github.com/cuongtranba/kanna/compare/v0.61.4...v0.61.5) (2026-05-19)
+
+
+### Bug Fixes
+
+* **tools:** peel MCP CallToolResult envelope when hydrating ask_user_question ([#225](https://github.com/cuongtranba/kanna/issues/225)) ([fc106c1](https://github.com/cuongtranba/kanna/commit/fc106c1f0c4ca369b18493dfc4b56ae3bc1fcc0a))
+
 ## [0.61.4](https://github.com/cuongtranba/kanna/compare/v0.61.3...v0.61.4) (2026-05-18)
 
 
