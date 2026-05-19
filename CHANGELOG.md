@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.64.0](https://github.com/cuongtranba/kanna/compare/v0.63.0...v0.64.0) (2026-05-19)
+
+
+### Features
+
+* **oauth-pool:** name contested chat in token-unavailable refusal ([#235](https://github.com/cuongtranba/kanna/issues/235)) ([eef731b](https://github.com/cuongtranba/kanna/commit/eef731bccd2301aad12bcc6dfa8a32f113a723a8))
+* **subagent:** live UI broadcast + pending tool loading state ([#237](https://github.com/cuongtranba/kanna/issues/237)) ([65969ed](https://github.com/cuongtranba/kanna/commit/65969eda3382ae480d1b8e2bf968fdeb26c0d2e5))
+
+
+### Bug Fixes
+
+* **ui:** align PTY driver banner with floating sidebar chrome ([#239](https://github.com/cuongtranba/kanna/issues/239)) ([855b80d](https://github.com/cuongtranba/kanna/commit/855b80d5221bd0572a1e78ad18ab92c83b62077a))
+
 ## [0.63.0](https://github.com/cuongtranba/kanna/compare/v0.62.0...v0.63.0) (2026-05-19)
 
 
