@@ -275,6 +275,104 @@ describe("SubagentMessage", () => {
     expect(html).not.toContain("subagent-cancel:")
   })
 
+  test("activity label shows 'running bash...' when latest tool_call is bash and unresolved", () => {
+    const html = renderToStaticMarkup(
+      <SubagentMessage
+        run={makeRunSnapshot({
+          status: "running",
+          entries: [
+            {
+              _id: "e1",
+              createdAt: 1,
+              kind: "tool_call",
+              tool: { kind: "tool", toolKind: "bash", toolName: "Bash", toolId: "t1", input: { command: "ls" } },
+            } as TranscriptEntry,
+          ],
+        })}
+        indentDepth={0}
+        localPath="/tmp"
+      />,
+    )
+    expect(html).toContain("running bash...")
+  })
+
+  test("activity label falls back to 'streaming...' once tool_call is resolved and text streams", () => {
+    const html = renderToStaticMarkup(
+      <SubagentMessage
+        run={makeRunSnapshot({
+          status: "running",
+          entries: [
+            {
+              _id: "e1",
+              createdAt: 1,
+              kind: "tool_call",
+              tool: { kind: "tool", toolKind: "read_file", toolName: "Read", toolId: "t1", input: { filePath: "/x" } },
+            } as TranscriptEntry,
+            { _id: "e2", createdAt: 2, kind: "tool_result", toolId: "t1", content: "ok" } as TranscriptEntry,
+            { _id: "e3", createdAt: 3, kind: "assistant_text", text: "hi" } as TranscriptEntry,
+          ],
+        })}
+        indentDepth={0}
+        localPath="/tmp"
+      />,
+    )
+    expect(html).toContain("streaming...")
+    expect(html).not.toContain("reading file...")
+  })
+
+  test("activity label shows 'reading file...' for read_file tool_call", () => {
+    const html = renderToStaticMarkup(
+      <SubagentMessage
+        run={makeRunSnapshot({
+          status: "running",
+          entries: [
+            {
+              _id: "e1",
+              createdAt: 1,
+              kind: "tool_call",
+              tool: { kind: "tool", toolKind: "read_file", toolName: "Read", toolId: "t1", input: { filePath: "/x" } },
+            } as TranscriptEntry,
+          ],
+        })}
+        indentDepth={0}
+        localPath="/tmp"
+      />,
+    )
+    expect(html).toContain("reading file...")
+  })
+
+  test("activity label shows 'waiting for input...' when pendingTool is set", () => {
+    const html = renderToStaticMarkup(
+      <SubagentMessage
+        run={makeRunSnapshot({
+          status: "running",
+          pendingTool: {
+            toolUseId: "t1",
+            toolKind: "ask_user_question",
+            input: { questions: [{ id: "q1", question: "ok?" }] },
+            requestedAt: 1700000000000,
+          },
+        })}
+        indentDepth={0}
+        localPath="/tmp"
+        onSubagentAskUserQuestionSubmit={() => undefined}
+        onSubagentExitPlanModeSubmit={() => undefined}
+      />,
+    )
+    expect(html).toContain("waiting for input...")
+  })
+
+  test("activity label emits stable testid for run", () => {
+    const html = renderToStaticMarkup(
+      <SubagentMessage
+        run={makeRunSnapshot({ status: "running", runId: "r-act" })}
+        indentDepth={0}
+        localPath="/tmp"
+      />,
+    )
+    expect(html).toContain('data-testid="subagent-activity:r-act"')
+  })
+
   test("renders without render-loop when pendingTool is set", async () => {
     const result = await renderForLoopCheck(
       <SubagentMessage

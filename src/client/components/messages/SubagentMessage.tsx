@@ -1,10 +1,73 @@
 import { Bot, X } from "lucide-react"
-import type { AskUserQuestionAnswerMap, AskUserQuestionItem, SubagentRunSnapshot } from "../../../shared/types"
+import type {
+  AskUserQuestionAnswerMap,
+  AskUserQuestionItem,
+  NormalizedToolCall,
+  SubagentRunSnapshot,
+} from "../../../shared/types"
 import { processTranscriptMessages } from "../../lib/parseTranscript"
 import { cn } from "../../lib/utils"
 import { SubagentEntryRow } from "./SubagentEntryRow"
 import { SubagentErrorCard } from "./SubagentErrorCard"
 import { SubagentPendingToolCard } from "./SubagentPendingToolCard"
+
+function toolActivityLabel(tool: NormalizedToolCall): string {
+  switch (tool.toolKind) {
+    case "bash":
+      return "running bash..."
+    case "read_file":
+      return "reading file..."
+    case "write_file":
+      return "writing file..."
+    case "edit_file":
+      return "editing file..."
+    case "delete_file":
+      return "deleting file..."
+    case "glob":
+      return "globbing..."
+    case "grep":
+      return "grepping..."
+    case "web_search":
+      return "searching web..."
+    case "todo_write":
+      return "updating todos..."
+    case "skill":
+      return "running skill..."
+    case "subagent_task":
+      return "delegating..."
+    case "ask_user_question":
+      return "asking..."
+    case "exit_plan_mode":
+      return "presenting plan..."
+    case "offer_download":
+      return "preparing download..."
+    case "image_generation":
+      return "generating image..."
+    case "mcp_generic":
+      return `calling ${tool.input.tool}...`
+    case "unknown_tool":
+      return `running ${tool.toolName}...`
+    default:
+      return "running..."
+  }
+}
+
+function deriveSubagentActivity(run: SubagentRunSnapshot): string {
+  if (run.pendingTool) return "waiting for input..."
+  const entries = run.entries
+  const resolved = new Set<string>()
+  for (let i = entries.length - 1; i >= 0; i--) {
+    const e = entries[i]
+    if (e.kind === "tool_result") {
+      resolved.add(e.toolId)
+    } else if (e.kind === "tool_call" && !resolved.has(e.tool.toolId)) {
+      return toolActivityLabel(e.tool)
+    }
+  }
+  const last = entries[entries.length - 1]
+  if (last?.kind === "assistant_text") return "streaming..."
+  return "running..."
+}
 
 interface SubagentMessageProps {
   run: SubagentRunSnapshot
@@ -39,6 +102,7 @@ export function SubagentMessage({
   const messages = processTranscriptMessages(run.entries)
   const hasAnyText = messages.some((m) => m.kind === "assistant_text")
   const isStreaming = run.status === "running" && hasAnyText
+  const activityLabel = run.status === "running" ? deriveSubagentActivity(run) : ""
 
   return (
     <div
@@ -54,8 +118,11 @@ export function SubagentMessage({
           <span className="opacity-60">· {run.usage.inputTokens ?? 0}↑ {run.usage.outputTokens}↓</span>
         )}
         {run.status === "running" && (
-          <span className="ml-auto inline-block animate-pulse">
-            {isStreaming ? "streaming..." : "running..."}
+          <span
+            data-testid={`subagent-activity:${run.runId}`}
+            className="ml-auto inline-block animate-pulse"
+          >
+            {activityLabel}
           </span>
         )}
         {onCancelSubagentRun && run.status === "running" && (
