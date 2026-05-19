@@ -1,6 +1,6 @@
-import { afterEach, describe, expect, test } from "bun:test"
+import { afterEach, describe, expect, spyOn, test } from "bun:test"
 import type { ToolRequest } from "../shared/permission-policy"
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import { existsSync } from "node:fs"
 import { join } from "node:path"
 import { tmpdir } from "node:os"
@@ -1002,6 +1002,95 @@ describe("EventStore subagent runs", () => {
     const run = reloaded.getSubagentRuns(chat.id)[runId]
     expect(run.pendingTool?.toolUseId).toBe("tool-3")
     expect(run.pendingTool?.toolKind).toBe("ask_user_question")
+  })
+
+  // --- ADR adr-20260519-subagent-live-progress-decouple: scoped sync-apply ---
+
+  test("subagent event is visible in-memory synchronously before writeChain settles", async () => {
+    const { store, chatId, baseTs } = await setupStoreWithChat()
+    const runId = "r-sync-vis"
+    await store.appendSubagentEvent({
+      v: 3, type: "subagent_run_started", timestamp: baseTs, chatId, runId,
+      subagentId: "s1", subagentName: "alpha", provider: "claude",
+      model: "claude-opus-4-7", parentUserMessageId: "u1", parentRunId: null, depth: 0,
+    })
+
+    // Fire without await — in-memory must update synchronously (before any disk I/O)
+    void store.appendSubagentEvent({
+      v: 3, type: "subagent_entry_appended", timestamp: baseTs + 1, chatId, runId,
+      entry: {
+        _id: "e-sync", createdAt: baseTs + 1, kind: "assistant_text",
+        text: "hello", messageId: "m-sync",
+      } as unknown as TranscriptEntry,
+    })
+
+    const run = store.getSubagentRuns(chatId)[runId]
+    expect(run.entries).toHaveLength(1)
+    expect(run.entries[0]._id).toBe("e-sync")
+  })
+
+  test("multiple appendSubagentEvent calls do not duplicate entries", async () => {
+    const { store, chatId, baseTs } = await setupStoreWithChat()
+    const runId = "r-no-dup"
+    await store.appendSubagentEvent({
+      v: 3, type: "subagent_run_started", timestamp: baseTs, chatId, runId,
+      subagentId: "s1", subagentName: "alpha", provider: "claude",
+      model: "claude-opus-4-7", parentUserMessageId: "u1", parentRunId: null, depth: 0,
+    })
+
+    const N = 4
+    for (let i = 0; i < N; i++) {
+      await store.appendSubagentEvent({
+        v: 3, type: "subagent_entry_appended", timestamp: baseTs + 1 + i, chatId, runId,
+        entry: {
+          _id: `e-dup-${i}`, createdAt: baseTs + 1 + i, kind: "assistant_text",
+          text: `msg ${i}`, messageId: `m-dup-${i}`,
+        } as unknown as TranscriptEntry,
+      })
+    }
+
+    const run = store.getSubagentRuns(chatId)[runId]
+    expect(run.entries).toHaveLength(N)
+    for (let i = 0; i < N; i++) {
+      expect(run.entries[i]._id).toBe(`e-dup-${i}`)
+    }
+  })
+
+  test("disk write failure logs error but in-memory state remains advanced", async () => {
+    const { dir, store, chatId, baseTs } = await setupStoreWithChat()
+    const runId = "r-disk-fail"
+    await store.appendSubagentEvent({
+      v: 3, type: "subagent_run_started", timestamp: baseTs, chatId, runId,
+      subagentId: "s1", subagentName: "alpha", provider: "claude",
+      model: "claude-opus-4-7", parentUserMessageId: "u1", parentRunId: null, depth: 0,
+    })
+
+    // Replace turns.jsonl with a directory so appendFile fails
+    const turnsLogPath = join(dir, "turns.jsonl")
+    await rm(turnsLogPath)
+    await mkdir(turnsLogPath)
+
+    const errorSpy = spyOn(console, "error").mockImplementation(() => {})
+    try {
+      // Pre-fix: appendSubagentEvent throws (awaits failing writeChain)
+      // Post-fix: resolves immediately; disk error is caught asynchronously
+      await store.appendSubagentEvent({
+        v: 3, type: "subagent_entry_appended", timestamp: baseTs + 1, chatId, runId,
+        entry: {
+          _id: "e-fail", createdAt: baseTs + 1, kind: "assistant_text",
+          text: "will this appear?", messageId: "m-fail",
+        } as unknown as TranscriptEntry,
+      }).catch(() => {/* pre-fix: swallow rejection so test can assert in-mem */})
+
+      // Let any async disk work (and its .catch) settle
+      await new Promise<void>((resolve) => setTimeout(resolve, 20))
+
+      const run = store.getSubagentRuns(chatId)[runId]
+      expect(run.entries).toHaveLength(1)
+      expect(run.entries[0]._id).toBe("e-fail")
+    } finally {
+      errorSpy.mockRestore()
+    }
   })
 
   test("subagent_entry_appended caps tool_result over threshold", async () => {

@@ -1,7 +1,7 @@
 ---
 id: c3-210
 c3-version: 4
-c3-seal: 3f0856bae602f868a1c902ff9e73ac2164cdb1f48e147acda9abf59ffdd11a6c
+c3-seal: 95ffb0aacb7de96ebe8deb58db9550b33e0ac4dcf2cc21be1e13b1223a24f275
 title: agent-coordinator
 type: component
 category: feature
@@ -52,6 +52,7 @@ Owns the agent turn lifecycle: receives `chat.send` commands, picks the provider
 | --- | --- | --- |
 | Outcome | UI streams a coherent turn from any supported provider | c3-101 |
 | Primary path | chat.send → start session → stream events → finalize turn | c3-208 |
+| Subagent live progress | onEntry fires onRunProgress directly (not chained on write chain) so UI updates synchronously with in-memory state; onChunk fires trailing-edge throttled (~100ms) onRunProgress for streaming text visibility. See adr-20260519-subagent-live-progress-decouple. | c3-207 |
 | Alternate — cancel | chat.cancel propagates to provider | c3-211 |
 | Alternate — resume | Resume reuses live session if available | c3-211 |
 | Failure — provider error | Emits typed failure event; surfaces to client | c3-205 |

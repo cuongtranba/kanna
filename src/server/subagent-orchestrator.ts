@@ -621,6 +621,10 @@ export class SubagentOrchestrator {
 
       let finalText = ""
       let usage: ProviderUsage | undefined
+      // Trailing-edge throttle handle for chunk-driven progress broadcasts.
+      let chunkProgressTimer: ReturnType<typeof setTimeout> | null = null
+      const CHUNK_PROGRESS_THROTTLE_MS = 100
+
       const onChunk = (chunk: string) => {
         if (!chunk) return
         this.deps.store
@@ -635,6 +639,13 @@ export class SubagentOrchestrator {
           .catch((err) => {
             console.warn(`${LOG_PREFIX} subagent delta append failed`, { chatId: args.chatId, runId, err })
           })
+        // Trailing-edge throttle: fire progress after a quiet window so
+        // streamed assistant text becomes visible incrementally in the UI.
+        if (chunkProgressTimer !== null) clearTimeout(chunkProgressTimer)
+        chunkProgressTimer = setTimeout(() => {
+          chunkProgressTimer = null
+          this.deps.onRunProgress?.(args.chatId, runId)
+        }, CHUNK_PROGRESS_THROTTLE_MS)
       }
       const externalOnEntry = args.onEntry
       const onEntry = (entry: TranscriptEntry) => {
@@ -647,14 +658,12 @@ export class SubagentOrchestrator {
             runId,
             entry,
           })
-          .then(() => {
-            // Fire AFTER the append's writeChain resolves so the broadcast
-            // snapshots in-memory state that already includes this entry.
-            this.deps.onRunProgress?.(args.chatId, runId)
-          })
           .catch((err) => {
             console.warn(`${LOG_PREFIX} subagent entry append failed`, { chatId: args.chatId, runId, err })
           })
+        // Fire immediately — applyEvent now runs synchronously in appendSubagentEvent
+        // so the broadcast snapshot already includes this entry.
+        this.deps.onRunProgress?.(args.chatId, runId)
         if (externalOnEntry) {
           try {
             externalOnEntry(entry)
@@ -714,6 +723,13 @@ export class SubagentOrchestrator {
       } finally {
         pausable.clear()
         runState.timeout = null
+        if (chunkProgressTimer !== null) {
+          // Flush any pending chunk-driven progress immediately at run end
+          // so the final streamed text is always broadcast before completion.
+          clearTimeout(chunkProgressTimer)
+          chunkProgressTimer = null
+          this.deps.onRunProgress?.(args.chatId, runId)
+        }
       }
 
       // Codex `stopSession` finishes the pending stream queue rather than

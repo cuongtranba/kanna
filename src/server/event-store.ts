@@ -1029,6 +1029,14 @@ export class EventStore implements PushEventStore {
     chat.updatedAt = Math.max(chat.updatedAt, entry.createdAt)
   }
 
+  private enqueueDiskAppend(filePath: string, payload: string): void {
+    this.writeChain = this.writeChain
+      .then(() => appendFile(filePath, payload, "utf8"))
+      .catch((err) => {
+        console.error("[event-store] subagent disk append failed:", err)
+      })
+  }
+
   private append<TEvent extends StoreEvent>(filePath: string, event: TEvent) {
     const payload = `${JSON.stringify(event)}\n`
     this.writeChain = this.writeChain.then(async () => {
@@ -1679,7 +1687,11 @@ export class EventStore implements PushEventStore {
         }
       }
     }
-    await this.append(this.turnsLogPath, event)
+    // Apply in-memory synchronously so the UI sees the update immediately,
+    // decoupled from disk I/O backlog on writeChain (scoped to ephemeral
+    // subagent_* events only — structural events keep strict append→apply ordering).
+    this.applyEvent(event)
+    this.enqueueDiskAppend(this.turnsLogPath, `${JSON.stringify(event)}\n`)
   }
 
   getSubagentRuns(chatId: string): Record<string, SubagentRunSnapshot> {

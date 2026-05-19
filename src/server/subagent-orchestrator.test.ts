@@ -1168,6 +1168,97 @@ describe("SubagentOrchestrator", () => {
       expect(h.terminalCalls).toEqual([{ chatId: h.chatId, runId, reason: "completed" }])
     })
 
+    // --- ADR adr-20260519-subagent-live-progress-decouple: orchestrator wiring ---
+
+    test("onEntry fires onRunProgress directly without awaiting appendSubagentEvent settlement", async () => {
+      const h = await setupHarness({ subagents: [makeSubagent({})] })
+
+      // Wrap appendSubagentEvent so subagent_entry_appended returns a never-settling
+      // promise — simulates a saturated writeChain that drains long after onEntry returns.
+      // Other event types (run_started, run_completed) resolve normally so delegateRun
+      // can complete without timing out.
+      const original = h.store.appendSubagentEvent.bind(h.store)
+      h.store.appendSubagentEvent = async (event) => {
+        await original(event)
+        if (event.type === "subagent_entry_appended") {
+          // Never-settling promise simulates a saturated disk write queue.
+          return new Promise<void>(() => {})
+        }
+      }
+
+      let progressCountInsideStart = 0
+      h.mockProviderRun({
+        authReady: async () => true,
+        async start(_onChunk, onEntry) {
+          const beforeCount = h.progressCalls.length
+          // onEntry is synchronous from the orchestrator's perspective.
+          onEntry({
+            _id: "e1", createdAt: 1, kind: "assistant_text",
+            text: "working", messageId: "m1",
+          } as TranscriptEntry)
+          // If onRunProgress is chained on the never-settling promise → 0.
+          // If onRunProgress is called directly → 1.
+          progressCountInsideStart = h.progressCalls.length - beforeCount
+          return { text: "done" }
+        },
+      })
+
+      await h.orchestrator.delegateRun({
+        chatId: h.chatId,
+        parentUserMessageId: h.userMessageId,
+        parentRunId: null,
+        parentSubagentId: null,
+        ancestorSubagentIds: [],
+        depth: 0,
+        subagentId: "sa-1",
+        prompt: "go",
+      })
+
+      expect(progressCountInsideStart).toBe(1)
+    })
+
+    test("onChunk triggers throttled onRunProgress; streaming text visible after throttle window", async () => {
+      const h = await setupHarness({ subagents: [makeSubagent({})] })
+
+      const runStartProgress = { value: 0 }
+      h.mockProviderRun({
+        authReady: async () => true,
+        async start(onChunk, _onEntry) {
+          onChunk("Hello ")
+          onChunk("world")
+          onChunk("!")
+          return { text: "Hello world!" }
+        },
+      })
+
+      const outcome = await h.orchestrator.delegateRun({
+        chatId: h.chatId,
+        parentUserMessageId: h.userMessageId,
+        parentRunId: null,
+        parentSubagentId: null,
+        ancestorSubagentIds: [],
+        depth: 0,
+        subagentId: "sa-1",
+        prompt: "go",
+      })
+      runStartProgress.value = 1 // always 1 call for run_started
+
+      // Let the trailing-edge throttle fire (implementation uses ~100ms window).
+      await new Promise<void>((resolve) => setTimeout(resolve, 250))
+
+      expect(outcome.status).toBe("completed")
+      if (outcome.status !== "completed") throw new Error("unreachable")
+
+      // At least one chunk-driven progress call must have fired beyond run_started.
+      // Pre-fix: no chunk progress → progressCalls.length === 1 (only run_started).
+      // Post-fix: trailing-edge throttle fires → progressCalls.length >= 2.
+      expect(h.progressCalls.length).toBeGreaterThanOrEqual(2)
+
+      // Final text must be fully assembled after the run.
+      const run = h.store.getSubagentRuns(h.chatId)[outcome.runId]
+      expect(run.finalText).toBe("Hello world!")
+    })
+
     test("fires onRunProgress for run start even when the run fails before any entry", async () => {
       const h = await setupHarness({ subagents: [makeSubagent({})] })
       h.programs.set("sa-1", { authReady: true, error: "boom" })

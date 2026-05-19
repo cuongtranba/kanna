@@ -1,7 +1,7 @@
 ---
 id: c3-206
 c3-version: 4
-c3-seal: 658a570e5f20b92994736d8cbf35fd64c189faa0008d52030a4da93e963d1623
+c3-seal: 53b5fc2b9ef2492a08a4e5d13f15d0feae8a86d0383b99a08062f992e43ca7e4
 title: event-store
 type: component
 category: foundation
@@ -50,9 +50,10 @@ Owns the JSONL event log: append-only writes, in-order replay on boot, snapshot 
 | --- | --- | --- |
 | Outcome | Authoritative state survives restarts and compaction | c3-2 |
 | Primary path | Append → fsync → notify subscribers | c3-207 |
+| Override — subagent ephemeral | subagent_* events apply in-memory synchronously then enqueue a disk-only append (no second applyEvent in the chain callback); disk failure caught and logged, in-memory state remains advanced. Durable/structural events keep strict Append→fsync→notify. See adr-20260519-subagent-live-progress-decouple. | c3-206 |
 | Alternate — replay | Boot replay rebuilds state from log + snapshot | c3-206 |
 | Alternate — compact | Snapshot taken when log > 2 MB | c3-206 |
-| Failure — write error | Surface to caller; log not advanced | c3-205 |
+| Failure — write error | Surface to caller; log not advanced (structural events). Subagent ephemeral events: disk failure logged via .catch; in-memory already advanced. | c3-205 |
 
 ## Governance
 
