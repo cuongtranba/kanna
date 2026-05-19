@@ -49,7 +49,6 @@ export function MermaidDiagram({ source }: { source: string }) {
 
   useEffect(() => {
     let cancelled = false
-    setState({ status: "loading" })
     loadMermaid()
       .then(async (mermaid) => {
         mermaid.initialize({
