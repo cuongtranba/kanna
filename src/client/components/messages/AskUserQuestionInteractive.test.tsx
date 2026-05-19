@@ -195,3 +195,115 @@ describe("AskUserQuestionInteractive — slide nav", () => {
     container.remove()
   })
 })
+
+describe("AskUserQuestionInteractive — multi-select", () => {
+  test("multi-select picks toggle without auto-advance; Submit fires with array", async () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const onSubmit = mock((_a: AskUserQuestionAnswerMap) => undefined)
+    const questions: AskUserQuestionItem[] = [{
+      question: "Pick many",
+      multiSelect: true,
+      options: [
+        { label: "Alpha", description: "" },
+        { label: "Beta", description: "" },
+        { label: "Gamma", description: "" },
+      ],
+    }]
+
+    await act(async () => {
+      createRoot(container).render(
+        <AskUserQuestionInteractive questions={questions} onSubmit={onSubmit} />,
+      )
+    })
+
+    const getBtn = (label: string) =>
+      Array.from(container.querySelectorAll("button")).find((b) => b.textContent?.trim() === label)
+
+    await act(async () => { getBtn("Alpha")!.click() })
+    await act(async () => { getBtn("Beta")!.click() })
+    // No auto-advance.
+    expect(onSubmit).toHaveBeenCalledTimes(0)
+
+    await act(async () => { getBtn("Submit")!.click() })
+    expect(onSubmit.mock.calls[0]![0]["Pick many"]).toContain("Alpha")
+    expect(onSubmit.mock.calls[0]![0]["Pick many"]).toContain("Beta")
+    expect(onSubmit.mock.calls[0]![0]["Pick many"]).not.toContain("Gamma")
+    container.remove()
+  })
+})
+
+// React 19 + HappyDOM: set the input value via the native HTMLInputElement prototype
+// setter (bypassing React's instance-level value tracker so the old and new values
+// differ), then trigger React's polyfill-path change detection with focus + keydown.
+//
+// Background: in Bun's test runner react-dom is evaluated before HappyDOM finishes
+// installing `oninput` on document, so React's `isInputEventSupported` flag is false
+// at module-init time.  With that flag false, React uses the polyfill path
+// (`getTargetInstForInputEventPolyfill`) which watches for keydown/keyup events on the
+// focused element and calls `updateValueIfChanged`.  Calling `input.focus()` fires
+// `focusin` which sets React's `activeElementInst$1`; the subsequent keydown then
+// compares React's tracked value ("") with the DOM value (our new string) and fires
+// `onChange`.  No fiber introspection required.
+function setInputValue(input: HTMLInputElement, value: string): void {
+  const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!.set!
+  nativeSetter.call(input, value)
+  input.focus()
+  input.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true }))
+}
+
+describe("AskUserQuestionInteractive — Other input", () => {
+  test("typing in Other input then Submit produces answer with the typed value", async () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const onSubmit = mock((_a: AskUserQuestionAnswerMap) => undefined)
+
+    await act(async () => {
+      createRoot(container).render(
+        <AskUserQuestionInteractive questions={singleQuestion()} onSubmit={onSubmit} />,
+      )
+    })
+
+    const input = container.querySelector("input[type=text]") as HTMLInputElement
+    expect(input).toBeDefined()
+    await act(async () => {
+      setInputValue(input, "Custom answer")
+    })
+
+    const submitBtn = Array.from(container.querySelectorAll("button"))
+      .find((b) => b.textContent?.trim() === "Submit")
+    await act(async () => { submitBtn!.click() })
+
+    expect(onSubmit.mock.calls[0]![0]).toEqual({ "Pick one": ["Custom answer"] })
+    container.remove()
+  })
+
+  test("free-text-only question (no options) submits the typed value", async () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const onSubmit = mock((_a: AskUserQuestionAnswerMap) => undefined)
+    const questions: AskUserQuestionItem[] = [{
+      question: "Anything?",
+      multiSelect: false,
+    }]
+
+    await act(async () => {
+      createRoot(container).render(
+        <AskUserQuestionInteractive questions={questions} onSubmit={onSubmit} />,
+      )
+    })
+
+    expect(container.querySelectorAll("button").length).toBeLessThan(3) // no option buttons, only Submit
+    const input = container.querySelector("input[type=text]") as HTMLInputElement
+    await act(async () => {
+      setInputValue(input, "freeform")
+    })
+
+    const submitBtn = Array.from(container.querySelectorAll("button"))
+      .find((b) => b.textContent?.trim() === "Submit")
+    await act(async () => { submitBtn!.click() })
+
+    expect(onSubmit.mock.calls[0]![0]).toEqual({ "Anything?": ["freeform"] })
+    container.remove()
+  })
+})
