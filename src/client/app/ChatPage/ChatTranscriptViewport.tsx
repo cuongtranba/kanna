@@ -1,4 +1,5 @@
 import { LegendList, type LegendListRef } from "@legendapp/list/react"
+import { Link } from "react-router-dom"
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { ArrowDown, Flower, Upload } from "lucide-react"
 import { AnimatedShinyText } from "../../components/ui/animated-shiny-text"
@@ -27,6 +28,32 @@ import {
   EMPTY_STATE_TEXT,
 } from "./utils"
 import type { EditorPreset } from "../../../shared/protocol"
+
+// Parse server-formatted error strings that embed chat references as
+// markdown links (`[title](/chat/<uuid>)`) and render the `/chat/<id>` ones as
+// clickable react-router links. Plain text segments stay untouched.
+const CHAT_LINK_RE = /\[([^\]]+)\]\(\/chat\/([0-9a-fA-F][0-9a-fA-F-]{7,})\)/g
+function renderCommandErrorBody(text: string): React.ReactNode {
+  const parts: React.ReactNode[] = []
+  let lastIndex = 0
+  let key = 0
+  CHAT_LINK_RE.lastIndex = 0
+  for (let match = CHAT_LINK_RE.exec(text); match !== null; match = CHAT_LINK_RE.exec(text)) {
+    if (match.index > lastIndex) parts.push(text.slice(lastIndex, match.index))
+    parts.push(
+      <Link
+        key={`link-${key++}`}
+        to={`/chat/${match[2]}`}
+        className="underline decoration-destructive/40 hover:decoration-destructive"
+      >
+        {match[1]}
+      </Link>
+    )
+    lastIndex = match.index + match[0].length
+  }
+  if (lastIndex < text.length) parts.push(text.slice(lastIndex))
+  return parts.length === 0 ? text : parts
+}
 
 interface ChatTranscriptViewportProps {
   activeChatId: string | null
@@ -350,8 +377,8 @@ export const ChatTranscriptViewport = memo(function ChatTranscriptViewport({
         <DrainingIndicator onStop={() => void onStopDraining()} />
       ) : null}
       {commandError ? (
-        <div className="rounded-xl border border-destructive/20 bg-destructive/5 px-4 py-3 text-sm text-destructive">
-          {commandError}
+        <div className="rounded-xl border border-destructive/20 bg-destructive/5 px-4 py-3 text-sm text-destructive whitespace-pre-wrap">
+          {renderCommandErrorBody(commandError)}
         </div>
       ) : null}
     </div>
