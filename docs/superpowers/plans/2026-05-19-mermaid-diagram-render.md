@@ -575,8 +575,12 @@ describe("MermaidZoomModal", () => {
     await render(
       <MermaidZoomModal svg={'<svg data-mermaid="1">X</svg>'} onClose={() => { closed = true }} />
     )
-    expect(container!.innerHTML).toContain("data-mermaid")
-    const close = container!.querySelector('[aria-label="Close"]') as HTMLButtonElement
+    // MermaidZoomModal createPortal()s into document.body, so the rendered
+    // content is OUTSIDE `container`. Assert document-scoped.
+    const dialog = document.querySelector('[role="dialog"]') as HTMLElement
+    expect(dialog).not.toBeNull()
+    expect(dialog.innerHTML).toContain("data-mermaid")
+    const close = document.querySelector('[aria-label="Close"]') as HTMLButtonElement
     expect(close).not.toBeNull()
     await act(async () => { close.click() })
     expect(closed).toBe(true)
@@ -584,14 +588,19 @@ describe("MermaidZoomModal", () => {
 
   test("zoom-in button increases scale (svg wrapper transform changes)", async () => {
     await render(<MermaidZoomModal svg={'<svg data-mermaid="1">X</svg>'} onClose={() => {}} />)
-    const stage = container!.querySelector('[data-mermaid-stage]') as HTMLElement
+    const stage = document.querySelector('[data-mermaid-stage]') as HTMLElement
+    expect(stage).not.toBeNull()
     const before = stage.style.transform
-    const zoomIn = container!.querySelector('[aria-label="Zoom in"]') as HTMLButtonElement
+    const zoomIn = document.querySelector('[aria-label="Zoom in"]') as HTMLButtonElement
     await act(async () => { zoomIn.click() })
     expect(stage.style.transform).not.toBe(before)
   })
 })
 ```
+
+> **Plan correction (applied 2026-05-19):** the two tests above originally
+> queried `container` but `MermaidZoomModal` portals into `document.body`,
+> so the modal renders outside `container`. Assertions are document-scoped.
 
 - [ ] **Step 2: Run test to verify it fails**
 
