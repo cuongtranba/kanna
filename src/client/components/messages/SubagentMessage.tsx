@@ -5,36 +5,58 @@ import type {
   NormalizedToolCall,
   SubagentRunSnapshot,
 } from "../../../shared/types"
+import { formatBashCommandTitle } from "../../lib/formatters"
 import { processTranscriptMessages } from "../../lib/parseTranscript"
+import { stripWorkspacePath } from "../../lib/pathUtils"
 import { cn } from "../../lib/utils"
 import { SubagentEntryRow } from "./SubagentEntryRow"
 import { SubagentErrorCard } from "./SubagentErrorCard"
 import { SubagentPendingToolCard } from "./SubagentPendingToolCard"
 
-function toolActivityLabel(tool: NormalizedToolCall): string {
+const ACTIVITY_MAX_LEN = 40
+
+function truncateActivity(s: string, n = ACTIVITY_MAX_LEN): string {
+  if (s.length <= n) return s
+  return `${s.slice(0, n - 1)}…`
+}
+
+function toolActivityLabel(tool: NormalizedToolCall, localPath: string): string {
   switch (tool.toolKind) {
-    case "bash":
-      return "running bash..."
-    case "read_file":
-      return "reading file..."
-    case "write_file":
-      return "writing file..."
-    case "edit_file":
-      return "editing file..."
-    case "delete_file":
-      return "deleting file..."
+    case "bash": {
+      const title = tool.input.description
+        || (tool.input.command ? formatBashCommandTitle(tool.input.command) : "")
+      return title ? `$ ${truncateActivity(title)}` : "running bash..."
+    }
+    case "read_file": {
+      const p = stripWorkspacePath(tool.input.filePath, localPath)
+      return p ? `reading ${truncateActivity(p)}` : "reading file..."
+    }
+    case "write_file": {
+      const p = stripWorkspacePath(tool.input.filePath, localPath)
+      return p ? `writing ${truncateActivity(p)}` : "writing file..."
+    }
+    case "edit_file": {
+      const p = stripWorkspacePath(tool.input.filePath, localPath)
+      return p ? `editing ${truncateActivity(p)}` : "editing file..."
+    }
+    case "delete_file": {
+      const p = stripWorkspacePath(tool.input.filePath, localPath)
+      return p ? `deleting ${truncateActivity(p)}` : "deleting file..."
+    }
     case "glob":
-      return "globbing..."
+      return tool.input.pattern ? `globbing ${truncateActivity(tool.input.pattern)}` : "globbing..."
     case "grep":
-      return "grepping..."
+      return tool.input.pattern ? `grepping ${truncateActivity(tool.input.pattern)}` : "grepping..."
     case "web_search":
-      return "searching web..."
+      return tool.input.query ? `searching: ${truncateActivity(tool.input.query)}` : "searching web..."
+    case "skill":
+      return tool.input.skill ? `skill ${truncateActivity(tool.input.skill)}` : "running skill..."
     case "todo_write":
       return "updating todos..."
-    case "skill":
-      return "running skill..."
     case "subagent_task":
-      return "delegating..."
+      return tool.input.subagentType
+        ? `delegating ${truncateActivity(tool.input.subagentType)}`
+        : "delegating..."
     case "ask_user_question":
       return "asking..."
     case "exit_plan_mode":
@@ -44,15 +66,15 @@ function toolActivityLabel(tool: NormalizedToolCall): string {
     case "image_generation":
       return "generating image..."
     case "mcp_generic":
-      return `calling ${tool.input.tool}...`
+      return truncateActivity(`${tool.input.server}.${tool.input.tool}`)
     case "unknown_tool":
-      return `running ${tool.toolName}...`
+      return `running ${truncateActivity(tool.toolName)}`
     default:
       return "running..."
   }
 }
 
-function deriveSubagentActivity(run: SubagentRunSnapshot): string {
+function deriveSubagentActivity(run: SubagentRunSnapshot, localPath: string): string {
   if (run.pendingTool) return "waiting for input..."
   const entries = run.entries
   const resolved = new Set<string>()
@@ -61,7 +83,7 @@ function deriveSubagentActivity(run: SubagentRunSnapshot): string {
     if (e.kind === "tool_result") {
       resolved.add(e.toolId)
     } else if (e.kind === "tool_call" && !resolved.has(e.tool.toolId)) {
-      return toolActivityLabel(e.tool)
+      return toolActivityLabel(e.tool, localPath)
     }
   }
   const last = entries[entries.length - 1]
@@ -102,7 +124,7 @@ export function SubagentMessage({
   const messages = processTranscriptMessages(run.entries)
   const hasAnyText = messages.some((m) => m.kind === "assistant_text")
   const isStreaming = run.status === "running" && hasAnyText
-  const activityLabel = run.status === "running" ? deriveSubagentActivity(run) : ""
+  const activityLabel = run.status === "running" ? deriveSubagentActivity(run, localPath) : ""
 
   return (
     <div

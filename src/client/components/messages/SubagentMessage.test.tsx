@@ -275,7 +275,7 @@ describe("SubagentMessage", () => {
     expect(html).not.toContain("subagent-cancel:")
   })
 
-  test("activity label shows 'running bash...' when latest tool_call is bash and unresolved", () => {
+  test("activity label shows '$ <cmd-title>' when latest tool_call is bash with command", () => {
     const html = renderToStaticMarkup(
       <SubagentMessage
         run={makeRunSnapshot({
@@ -285,7 +285,55 @@ describe("SubagentMessage", () => {
               _id: "e1",
               createdAt: 1,
               kind: "tool_call",
-              tool: { kind: "tool", toolKind: "bash", toolName: "Bash", toolId: "t1", input: { command: "ls" } },
+              tool: { kind: "tool", toolKind: "bash", toolName: "Bash", toolId: "t1", input: { command: "ls -la" } },
+            } as TranscriptEntry,
+          ],
+        })}
+        indentDepth={0}
+        localPath="/tmp"
+      />,
+    )
+    expect(html).toContain("$ ls -la")
+  })
+
+  test("activity label prefers bash description over command", () => {
+    const html = renderToStaticMarkup(
+      <SubagentMessage
+        run={makeRunSnapshot({
+          status: "running",
+          entries: [
+            {
+              _id: "e1",
+              createdAt: 1,
+              kind: "tool_call",
+              tool: {
+                kind: "tool",
+                toolKind: "bash",
+                toolName: "Bash",
+                toolId: "t1",
+                input: { command: "ls -la", description: "List files" },
+              },
+            } as TranscriptEntry,
+          ],
+        })}
+        indentDepth={0}
+        localPath="/tmp"
+      />,
+    )
+    expect(html).toContain("$ List files")
+  })
+
+  test("activity label falls back to 'running bash...' when command missing", () => {
+    const html = renderToStaticMarkup(
+      <SubagentMessage
+        run={makeRunSnapshot({
+          status: "running",
+          entries: [
+            {
+              _id: "e1",
+              createdAt: 1,
+              kind: "tool_call",
+              tool: { kind: "tool", toolKind: "bash", toolName: "Bash", toolId: "t1", input: { command: "" } },
             } as TranscriptEntry,
           ],
         })}
@@ -306,7 +354,7 @@ describe("SubagentMessage", () => {
               _id: "e1",
               createdAt: 1,
               kind: "tool_call",
-              tool: { kind: "tool", toolKind: "read_file", toolName: "Read", toolId: "t1", input: { filePath: "/x" } },
+              tool: { kind: "tool", toolKind: "read_file", toolName: "Read", toolId: "t1", input: { filePath: "/tmp/foo.ts" } },
             } as TranscriptEntry,
             { _id: "e2", createdAt: 2, kind: "tool_result", toolId: "t1", content: "ok" } as TranscriptEntry,
             { _id: "e3", createdAt: 3, kind: "assistant_text", text: "hi" } as TranscriptEntry,
@@ -317,10 +365,10 @@ describe("SubagentMessage", () => {
       />,
     )
     expect(html).toContain("streaming...")
-    expect(html).not.toContain("reading file...")
+    expect(html).not.toContain("reading ")
   })
 
-  test("activity label shows 'reading file...' for read_file tool_call", () => {
+  test("activity label shows 'reading <stripped-path>' for read_file tool_call", () => {
     const html = renderToStaticMarkup(
       <SubagentMessage
         run={makeRunSnapshot({
@@ -330,7 +378,13 @@ describe("SubagentMessage", () => {
               _id: "e1",
               createdAt: 1,
               kind: "tool_call",
-              tool: { kind: "tool", toolKind: "read_file", toolName: "Read", toolId: "t1", input: { filePath: "/x" } },
+              tool: {
+                kind: "tool",
+                toolKind: "read_file",
+                toolName: "Read",
+                toolId: "t1",
+                input: { filePath: "/tmp/src/foo.ts" },
+              },
             } as TranscriptEntry,
           ],
         })}
@@ -338,7 +392,138 @@ describe("SubagentMessage", () => {
         localPath="/tmp"
       />,
     )
-    expect(html).toContain("reading file...")
+    expect(html).toContain("reading src/foo.ts")
+  })
+
+  test("activity label shows 'editing <stripped-path>' for edit_file tool_call", () => {
+    const html = renderToStaticMarkup(
+      <SubagentMessage
+        run={makeRunSnapshot({
+          status: "running",
+          entries: [
+            {
+              _id: "e1",
+              createdAt: 1,
+              kind: "tool_call",
+              tool: {
+                kind: "tool",
+                toolKind: "edit_file",
+                toolName: "Edit",
+                toolId: "t1",
+                input: { filePath: "/tmp/src/bar.ts", oldString: "a", newString: "b" },
+              },
+            } as TranscriptEntry,
+          ],
+        })}
+        indentDepth={0}
+        localPath="/tmp"
+      />,
+    )
+    expect(html).toContain("editing src/bar.ts")
+  })
+
+  test("activity label shows 'grepping <pattern>' for grep tool_call", () => {
+    const html = renderToStaticMarkup(
+      <SubagentMessage
+        run={makeRunSnapshot({
+          status: "running",
+          entries: [
+            {
+              _id: "e1",
+              createdAt: 1,
+              kind: "tool_call",
+              tool: {
+                kind: "tool",
+                toolKind: "grep",
+                toolName: "Grep",
+                toolId: "t1",
+                input: { pattern: "TODO" },
+              },
+            } as TranscriptEntry,
+          ],
+        })}
+        indentDepth={0}
+        localPath="/tmp"
+      />,
+    )
+    expect(html).toContain("grepping TODO")
+  })
+
+  test("activity label shows 'globbing <pattern>' for glob tool_call", () => {
+    const html = renderToStaticMarkup(
+      <SubagentMessage
+        run={makeRunSnapshot({
+          status: "running",
+          entries: [
+            {
+              _id: "e1",
+              createdAt: 1,
+              kind: "tool_call",
+              tool: {
+                kind: "tool",
+                toolKind: "glob",
+                toolName: "Glob",
+                toolId: "t1",
+                input: { pattern: "**/*.ts" },
+              },
+            } as TranscriptEntry,
+          ],
+        })}
+        indentDepth={0}
+        localPath="/tmp"
+      />,
+    )
+    expect(html).toContain("globbing **/*.ts")
+  })
+
+  test("activity label shows '<server>.<tool>' for mcp_generic tool_call", () => {
+    const html = renderToStaticMarkup(
+      <SubagentMessage
+        run={makeRunSnapshot({
+          status: "running",
+          entries: [
+            {
+              _id: "e1",
+              createdAt: 1,
+              kind: "tool_call",
+              tool: {
+                kind: "tool",
+                toolKind: "mcp_generic",
+                toolName: "mcp__kanna__expose_port",
+                toolId: "t1",
+                input: { server: "kanna", tool: "expose_port", payload: {} },
+              },
+            } as TranscriptEntry,
+          ],
+        })}
+        indentDepth={0}
+        localPath="/tmp"
+      />,
+    )
+    expect(html).toContain("kanna.expose_port")
+  })
+
+  test("activity label truncates long paths with ellipsis", () => {
+    const longPath = "/tmp/very/deeply/nested/directory/structure/with/many/segments/file.ts"
+    const html = renderToStaticMarkup(
+      <SubagentMessage
+        run={makeRunSnapshot({
+          status: "running",
+          entries: [
+            {
+              _id: "e1",
+              createdAt: 1,
+              kind: "tool_call",
+              tool: { kind: "tool", toolKind: "read_file", toolName: "Read", toolId: "t1", input: { filePath: longPath } },
+            } as TranscriptEntry,
+          ],
+        })}
+        indentDepth={0}
+        localPath="/tmp"
+      />,
+    )
+    expect(html).toContain("reading ")
+    expect(html).toContain("…")
   })
 
   test("activity label shows 'waiting for input...' when pendingTool is set", () => {
