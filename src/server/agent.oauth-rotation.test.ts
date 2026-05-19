@@ -633,25 +633,33 @@ describe("AgentCoordinator OAuth rotation", () => {
         oauthPool: pool,
       })
 
-      let caught: Error | null = null
-      try {
-        await coordinator.send({
-          type: "chat.send",
-          chatId: "chat-1",
-          provider: "claude",
-          content: "test",
-          model: "claude-opus-4-7",
-        })
-      } catch (error) {
-        caught = error as Error
-      }
+      // chat.send should resolve OK — the refusal is persisted to the
+      // transcript as a `result` entry instead of bubbling up as a thrown
+      // error that would show only briefly in commandError before the
+      // next snapshot tick clears it.
+      const result = await coordinator.send({
+        type: "chat.send",
+        chatId: "chat-1",
+        provider: "claude",
+        content: "test",
+        model: "claude-opus-4-7",
+      })
 
-      // The pool guard must throw before any SDK spawn is attempted,
-      // and the error must clearly identify the cause to the caller
-      // (ws-router) for surfacing to the user.
       expect(spawnAttempts).toBe(0)
-      expect(caught).not.toBe(null)
-      expect(caught!.message).toMatch(/All OAuth tokens are unavailable/i)
+      expect(result.chatId).toBe("chat-1")
+
+      // Transcript must contain the durable refusal entry.
+      const refusalEntries = store.messages.filter(
+        (entry) => entry.kind === "result" && entry.subtype === "error",
+      )
+      expect(refusalEntries).toHaveLength(1)
+      const refusal = refusalEntries[0] as Extract<TranscriptEntry, { kind: "result" }>
+      expect(refusal.isError).toBe(true)
+      expect(refusal.result).toMatch(/All OAuth tokens are unavailable/i)
+
+      // recordTurnFailed still fires so the activeTurn is cleaned up and
+      // runtime status flips back to idle.
+      expect(store.turnFailedCount).toBe(1)
     },
     10_000,
   )

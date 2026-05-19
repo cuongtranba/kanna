@@ -49,7 +49,7 @@ Maintains an in-memory reservation index plus token state machine over the OAuth
 | Outcome | Claude turns run on the right subscription account; rate-limit on one token rotates to the next without user intervention | c3-210 |
 | Primary path | pickActive(chatId) → markUsed → spawn subprocess with CLAUDE_CODE_OAUTH_TOKEN | c3-210 |
 | Alternate — rotation | Rate-limit/auth-error detected → markLimited/markError drops reservation → pickActive picks next → token_rotation auto_continue event | c3-210 |
-| Failure — refusal | No usable token + pool non-empty → throw with describeUnavailability output; banner names the contested chat as /chat/<id> link | c3-112 |
+| Failure — refusal | No usable token + pool non-empty → `OAuthPoolUnavailableError` is caught in `startTurnForChat` and persisted to the chat transcript as a `kind:"result", subtype:"error"` entry whose `result` body is the describeUnavailability output (chat references rendered as `/chat/<id>` markdown links). Replaces the prior `throw` → commandError banner path, which flickered when the next snapshot tick wiped commandError. | c3-114 |
 
 ## Governance
 
@@ -81,7 +81,7 @@ Maintains an in-memory reservation index plus token state machine over the OAuth
 | Same token handed to two chats | Edits to isEligible/reservedBy semantics break the owner check | New chat returns a token already bound to another running chat | bun test src/server/oauth-pool/ + smoke 2 concurrent chats |
 | TOCTOU between hasUsable preflight and pickActive | Eligibility predicate diverges between read-only and mutating paths | Refusal banner appears but pickActive would succeed (or vice versa) | bun test src/server/oauth-pool/ — hasUsable/pickActive parity tests |
 | Expired-limited token never revived | revive logic skipped post-sort | Token remains limited past limitedUntil and never picked again | bun test src/server/oauth-pool/ — revive test |
-| Refusal banner loses chat reference | describeUnavailability output format changes, agent.ts buildPoolUnavailableMessage drift | UI commandError banner missing /chat/<id> link | bun test src/server/oauth-pool/ + manual refusal smoke (3 tokens, 2 limited, 1 reserved) |
+| Refusal transcript entry loses chat reference | describeUnavailability output format changes, agent.ts buildPoolUnavailableMessage drift, or renderChatLinks regex drift | ResultMessage error body missing /chat/<id> link | bun test src/server/oauth-pool/ + src/client/components/messages/ResultMessage.test.tsx + manual refusal smoke (3 tokens, 2 limited, 1 reserved) |
 | Reservation pinned across restart | reservedBy persisted (it must not be) | Restart cannot pick any token until manual fix | reservedBy lives in memory only — confirmed by private readonly reservedBy = new Map(...) in oauth-token-pool.ts |
 
 ## Derived Materials
@@ -90,5 +90,5 @@ Maintains an in-memory reservation index plus token state machine over the OAuth
 | --- | --- | --- | --- |
 | src/server/oauth-pool/oauth-token-pool.ts | c3-224 Contract | Internal data structures may evolve as long as Contract surfaces hold | src/server/oauth-pool/oauth-token-pool.ts |
 | src/server/oauth-pool/oauth-token-pool.test.ts | c3-224 Change Safety | Test names may evolve; coverage of state machine + reservation + describeUnavailability must remain | src/server/oauth-pool/oauth-token-pool.test.ts |
-| agent.ts buildPoolUnavailableMessage | c3-224 Contract (describeUnavailability surface) | Wording may evolve; markdown chat-link format title is fixed (UI parser) | src/server/agent.ts buildPoolUnavailableMessage |
-| ChatTranscriptViewport renderCommandErrorBody | c3-224 Contract (describeUnavailability surface) | Regex may evolve; must keep accepting /chat/<uuid> link form | src/client/app/ChatPage/ChatTranscriptViewport.tsx |
+| agent.ts buildPoolUnavailableMessage + OAuthPoolUnavailableError | c3-224 Contract (describeUnavailability surface) | Wording may evolve; markdown chat-link format title is fixed (UI parser); error class identity is used by startTurnForChat catch to switch on refusal vs other failures | src/server/agent.ts buildPoolUnavailableMessage, OAuthPoolUnavailableError |
+| renderChatLinks helper + ResultMessage error body | c3-224 Contract (describeUnavailability surface) | Regex may evolve; must keep accepting /chat/<uuid> link form | src/client/components/messages/renderChatLinks.tsx, src/client/components/messages/ResultMessage.tsx, src/client/app/ChatPage/ChatTranscriptViewport.tsx |
