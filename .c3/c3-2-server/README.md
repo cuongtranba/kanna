@@ -1,7 +1,7 @@
 ---
 id: c3-2
 c3-version: 4
-c3-seal: 9aca67b6a0ccb399e0d91ae0202929564488d9c7f678c28f06750e1fc2c3a488
+c3-seal: dcfc11295214fb52b71f43fe3a5b88727c1880e146406efd0e2b091a5ed75ed8
 title: Server
 type: container
 boundary: service
@@ -50,3 +50,4 @@ Run the local Bun backend: serve HTTP+WebSocket on localhost, coordinate Claude 
 | c3-221 | external-open | feature | implemented | Open URLs/files in external apps |
 | c3-222 | keybindings | feature | implemented | Persist user keybindings |
 | c3-223 | cloudflare-tunnel | feature | implemented | Detect dev-server ports and expose via cloudflared quick tunnels |
+| c3-224 | oauth-token-pool | feature | implemented | Multi-account OAuth token pool: per-chat reservation, rate-limit/auth-error rotation, refusal classifier |

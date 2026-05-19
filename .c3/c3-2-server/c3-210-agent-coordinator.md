@@ -1,7 +1,7 @@
 ---
 id: c3-210
 c3-version: 4
-c3-seal: 7abb881e381c161e41280f940710232e4143b873458f190d8b78fdfef4240376
+c3-seal: 3f0856bae602f868a1c902ff9e73ac2164cdb1f48e147acda9abf59ffdd11a6c
 title: agent-coordinator
 type: component
 category: feature
@@ -44,6 +44,7 @@ Owns the agent turn lifecycle: receives `chat.send` commands, picks the provider
 | Input — event store | Appends transcript events | c3-206 |
 | Input — tool hydration | Normalizes tool entries before persistence | c3-303 |
 | Input — process utils | Spawns/cancels child processes | c3-209 |
+| Input — oauth token pool | Picks per-chat Claude OAuth token; rotates on rate-limit/auth-error; supplies refusal classifier | c3-224 |
 
 ## Business Flow
 
@@ -63,7 +64,7 @@ Owns the agent turn lifecycle: receives `chat.send` commands, picks the provider
 | ref-event-sourcing | ref | Events written before broadcast | must follow | Log is source of truth |
 | ref-tool-hydration | ref | Tool calls normalized before persistence | must follow | Single hydration path |
 | ref-colocated-bun-test | ref | Tests live next to coordinator | must follow | agent-coordinator.test.ts |
-| rule-colocated-bun-test | rule | Compliance target added by c3x wire; refine what must be reviewed or complied with before handoff. | wired compliance target beats uncited local prose | Added by c3x wire for explicit compliance review. |
+| rule-colocated-bun-test | rule | Coordinator test suites enforce colocated-bun-test rule | must follow | agent.*.test.ts colocated with agent.ts |
 
 ## Contract
 

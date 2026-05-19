@@ -64,7 +64,6 @@ c3-202:
 c3-203:
   - src/server/auth.test.ts
   - src/server/auth.ts
-  - src/server/oauth-pool/**/*.ts
 c3-204:
   - src/server/machine-name.ts
   - src/server/paths.ts
@@ -156,6 +155,8 @@ c3-222:
   - src/server/keybindings.ts
 c3-223:
   - src/server/cloudflare-tunnel/**/*.ts
+c3-224:
+  - src/server/oauth-pool/**/*.ts
 c3-301:
   - src/shared/types.ts
 c3-302:
