@@ -9,6 +9,10 @@
 </p>
 
 <p align="center">
+  <em>Community fork of <a href="https://github.com/jakemor/kanna">jakemor/kanna</a> — kept in sync with upstream and extended with subscription-billing PTY mode, OAuth token pooling, multi-provider chat (Claude + Codex), subagent orchestration, durable tool-approval protocol, in-app self-update, and more.</em>
+</p>
+
+<p align="center">
   <a href="https://www.npmjs.com/package/@cuongtran001/kanna"><img src="https://img.shields.io/npm/v/@cuongtran001/kanna.svg?style=flat&colorA=18181b&colorB=f472b6" alt="npm version" /></a>
   <a href="https://www.npmjs.com/package/@cuongtran001/kanna"><img src="https://img.shields.io/npm/dm/@cuongtran001/kanna.svg?style=flat&colorA=18181b&colorB=f472b6" alt="npm downloads" /></a>
   <a href="https://github.com/cuongtranba/kanna/actions/workflows/release-please.yml"><img src="https://github.com/cuongtranba/kanna/actions/workflows/release-please.yml/badge.svg?branch=main" alt="Release Please" /></a>
@@ -26,6 +30,23 @@
 </p>
 
 <br />
+
+## About this fork
+
+Kanna started life as [jakemor/kanna](https://github.com/jakemor/kanna) — a clean web UI for the Claude Code CLI. This fork (`@cuongtran001/kanna`) tracks upstream and layers on features needed for heavier day-to-day use, multi-account billing, and self-hosting.
+
+**Headline additions vs. upstream:**
+
+- **Subscription-billing PTY driver** (`KANNA_CLAUDE_DRIVER=pty`) — runs the `claude` CLI under a pseudo-terminal so Pro/Max plans are charged instead of API rates. Includes JSONL event parity with the SDK driver, macOS `sandbox-exec` / Linux `bwrap` sandboxing, allowlist preflight probes, and failure-mode parity.
+- **OAuth token pool** — register multiple Claude OAuth tokens; Kanna rotates across them per chat with automatic fallover on rate-limit and an explicit disabled state.
+- **Multi-provider chat** — switch between Claude and Codex (OpenAI) from the composer with per-provider model + reasoning-effort controls and Codex fast mode.
+- **Subagent orchestration** — first-class subagent CRUD, `@agent/` mentions, parallel runs, live activity labels, MCP progress notifications, and `mcp__kanna__delegate_subagent` so the main agent itself can delegate.
+- **Durable tool-approval protocol** (`KANNA_MCP_TOOL_CALLBACKS=1`) — pending `AskUserQuestion` / `ExitPlanMode` / built-in shims survive server restart and replay to the client on reconnect.
+- **Cloudflare `expose_port` MCP tool** — agent-callable port exposure with always-ask or auto-expose modes, replacing bash-output sniffing.
+- **In-app self-update** — one-click pull/rebuild/reload with a host-agnostic supervisor (works under pm2, systemd, docker, plain shell) or direct pm2 reload; install any prior release straight from the changelog UI.
+- **Git worktree isolation** per chat, **bulk import** of existing `~/.claude/projects/` sessions, **proactive context compaction**, **password gate** for HTTP/WS/API, **PWA / mobile layout**, **mermaid rendering** in transcripts, **standalone HTML transcript export**, and **customizable keybindings**.
+
+See the full inventory in [Features](#features) below.
 
 ## Quickstart
 
