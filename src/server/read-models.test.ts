@@ -548,6 +548,51 @@ describe("read models", () => {
   })
 })
 
+describe("deriveChatSnapshot subagent immutability", () => {
+  test("entries array is cloned per snapshot so later state mutations do not grow earlier snapshots", () => {
+    const state = createEmptyState()
+    state.projectsById.set("p1", {
+      id: "p1", localPath: "/tmp/p", title: "P", createdAt: 1, updatedAt: 1,
+    })
+    state.projectIdsByPath.set("/tmp/p", "p1")
+    state.chatsById.set("c1", {
+      id: "c1", projectId: "p1", title: "C", createdAt: 1, updatedAt: 1,
+      unread: false, provider: "claude", planMode: false,
+      sessionTokensByProvider: {}, sourceHash: null, lastTurnOutcome: null,
+    })
+
+    type SubagentRunSnapshot = Parameters<typeof state.subagentRunsByChatId.set>[1] extends Map<string, infer V> ? V : never
+    const run = {
+      runId: "r1", chatId: "c1", subagentId: "s1", subagentName: "alpha",
+      provider: "claude" as const, model: "claude-opus-4-7", status: "running" as const,
+      parentUserMessageId: "u1", parentRunId: null, depth: 0,
+      startedAt: 1000, finishedAt: null, finalText: null, error: null, usage: null,
+      entries: [
+        { _id: "e1", createdAt: 1, kind: "assistant_text", text: "a", messageId: "m1" },
+      ],
+      pendingTool: null,
+    } as unknown as SubagentRunSnapshot
+    const runMap = new Map<string, SubagentRunSnapshot>([["r1", run]])
+    state.subagentRunsByChatId.set("c1", runMap)
+
+    const snap1 = deriveChatSnapshot(
+      state, new Map(), new Set(), new Set(), "c1",
+      () => ({ messages: [], history: { hasOlder: false, olderCursor: null, recentLimit: 200 } }),
+      () => []
+    )
+    const capturedEntries = snap1!.subagentRuns["r1"]!.entries
+    expect(capturedEntries).toHaveLength(1)
+
+    // Simulate reducer push (event-store does run.entries.push(entry) in place)
+    ;(run.entries as unknown[]).push({ _id: "e2", createdAt: 2, kind: "assistant_text", text: "b", messageId: "m2" })
+
+    // The earlier snapshot's entries snapshot MUST remain length=1 — clients
+    // depend on this to detect "did anything change" via length comparison.
+    expect(capturedEntries).toHaveLength(1)
+    expect(run.entries).toHaveLength(2)
+  })
+})
+
 describe("deriveChatSnapshot schedules", () => {
   test("empty schedules produces empty map and null live id", () => {
     const state = createEmptyState()
