@@ -503,3 +503,48 @@ describe("OAuthTokenPool.pickActive (pure read loop, deferred revival)", () => {
     expect(revivals[0].id).toBe("a")
   })
 })
+
+describe("OAuthTokenPool.describeUnavailability", () => {
+  test("classifies each token by reason for the calling chat", () => {
+    const pool = new OAuthTokenPool(
+      () => [
+        tok("a", { label: "personal", status: "limited", limitedUntil: 5000 }),
+        tok("b", { label: "company", status: "limited", limitedUntil: 6000 }),
+        tok("c", { label: "Phong" }),
+        tok("d", { label: "old", status: "error", lastErrorMessage: "401" }),
+        tok("e", { label: "off", status: "disabled" }),
+      ],
+      () => {}, () => 1000,
+    )
+    // pin Phong to a different chat
+    pool.pickActive("chat-other")
+    const result = pool.describeUnavailability("chat-new")
+    const byId = new Map(result.map((r) => [r.tokenId, r]))
+    expect(byId.get("a")).toEqual({ tokenId: "a", label: "personal", reason: "limited", until: 5000 })
+    expect(byId.get("b")).toEqual({ tokenId: "b", label: "company", reason: "limited", until: 6000 })
+    expect(byId.get("c")).toEqual({ tokenId: "c", label: "Phong", reason: "reserved", byChatId: "chat-other", ownedBySelf: false })
+    expect(byId.get("d")).toEqual({ tokenId: "d", label: "old", reason: "error", message: "401" })
+    expect(byId.get("e")).toEqual({ tokenId: "e", label: "off", reason: "disabled" })
+  })
+
+  test("marks expired-limited tokens as available", () => {
+    const pool = new OAuthTokenPool(
+      () => [tok("a", { label: "x", status: "limited", limitedUntil: 500 })],
+      () => {}, () => 1000,
+    )
+    expect(pool.describeUnavailability("chat-new")).toEqual([
+      { tokenId: "a", label: "x", reason: "available" },
+    ])
+  })
+
+  test("reservation owned by self is reported as available", () => {
+    const pool = new OAuthTokenPool(
+      () => [tok("a", { label: "x" })],
+      () => {}, () => 1000,
+    )
+    pool.pickActive("chat-self")
+    expect(pool.describeUnavailability("chat-self")).toEqual([
+      { tokenId: "a", label: "x", reason: "available" },
+    ])
+  })
+})

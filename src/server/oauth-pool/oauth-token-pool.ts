@@ -4,6 +4,13 @@ export type TokenStatusPatch = Partial<Pick<OAuthTokenEntry,
   "status" | "limitedUntil" | "lastUsedAt" | "lastErrorAt" | "lastErrorMessage"
 >>
 
+export type TokenUnavailability =
+  | { tokenId: string; label: string; reason: "available" }
+  | { tokenId: string; label: string; reason: "limited"; until: number }
+  | { tokenId: string; label: string; reason: "reserved"; byChatId: string; ownedBySelf: boolean }
+  | { tokenId: string; label: string; reason: "error"; message: string | null }
+  | { tokenId: string; label: string; reason: "disabled" }
+
 /**
  * Handle returned by `pickEphemeral()`. Callers MUST invoke `release()`
  * when the ephemeral run completes (success or failure) so the
@@ -172,6 +179,39 @@ export class OAuthTokenPool {
     if (eligible.length === 0) return false
     const now = this.now()
     return eligible.every((t) => t.status === "limited" && t.limitedUntil !== null && t.limitedUntil > now)
+  }
+
+  /**
+   * Per-token reason why this token is unusable by `reservedFor` right now.
+   * Returns one entry per token in the pool, used by callers to build a
+   * concrete refusal error ("Phong is in use by chat 'feature work'") instead
+   * of the generic "all tokens unavailable" string.
+   */
+  describeUnavailability(reservedFor?: string): TokenUnavailability[] {
+    const now = this.now()
+    const out: TokenUnavailability[] = []
+    for (const t of this.readTokens()) {
+      const base = { tokenId: t.id, label: t.label }
+      if (t.status === "disabled") {
+        out.push({ ...base, reason: "disabled" })
+        continue
+      }
+      if (t.status === "error") {
+        out.push({ ...base, reason: "error", message: t.lastErrorMessage ?? null })
+        continue
+      }
+      const owner = this.reservedBy.get(t.id)
+      if (owner !== undefined && owner !== reservedFor) {
+        out.push({ ...base, reason: "reserved", byChatId: owner, ownedBySelf: false })
+        continue
+      }
+      if (t.status === "limited" && t.limitedUntil !== null && t.limitedUntil > now) {
+        out.push({ ...base, reason: "limited", until: t.limitedUntil })
+        continue
+      }
+      out.push({ ...base, reason: "available" })
+    }
+    return out
   }
 
   earliestUnlimit(): number | null {

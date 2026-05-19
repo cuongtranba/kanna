@@ -1334,6 +1334,47 @@ export class AgentCoordinator {
     }
   }
 
+  /**
+   * Format a refusal message when `pickActive(chatId)` returned null but the
+   * pool has tokens. Names the offending tokens so the user knows which
+   * chat to close or which token to add a quota to, instead of seeing the
+   * generic "all tokens unavailable" line that doesn't say what's holding
+   * them. `scopeSuffix` lets the subagent path tag its variant.
+   */
+  private buildPoolUnavailableMessage(reservedFor: string, scopeSuffix: string): string {
+    const pool = this.oauthPool
+    if (!pool) {
+      return `All OAuth tokens are unavailable${scopeSuffix} (rate-limited, errored, or in use).`
+    }
+    const now = Date.now()
+    const fmtTime = (ms: number) => {
+      const mins = Math.max(0, Math.round((ms - now) / 60_000))
+      if (mins < 60) return `${mins}m`
+      const h = Math.floor(mins / 60)
+      const m = mins % 60
+      return m === 0 ? `${h}h` : `${h}h${m}m`
+    }
+    const lines: string[] = []
+    for (const u of pool.describeUnavailability(reservedFor)) {
+      if (u.reason === "available") continue
+      const label = u.label || u.tokenId.slice(0, 8)
+      if (u.reason === "limited") {
+        lines.push(`  - ${label}: rate-limited (~${fmtTime(u.until)} remaining)`)
+      } else if (u.reason === "reserved") {
+        const chat = this.store.getChat(u.byChatId)
+        const title = chat?.title || `chat ${u.byChatId.slice(0, 8)}`
+        lines.push(`  - ${label}: in use by [${title}](/chat/${u.byChatId})`)
+      } else if (u.reason === "error") {
+        lines.push(`  - ${label}: errored${u.message ? ` (${u.message})` : ""}`)
+      } else if (u.reason === "disabled") {
+        lines.push(`  - ${label}: disabled`)
+      }
+    }
+    const header = `All OAuth tokens are unavailable${scopeSuffix}:`
+    const footer = "Close the chat holding a contested token, wait for the rate-limit to reset, or add another token."
+    return [header, ...lines, footer].join("\n")
+  }
+
   private subagentPendingKey(chatId: string, runId: string, toolUseId: string): string {
     return `${chatId}::${runId}::${toolUseId}`
   }
@@ -2015,10 +2056,7 @@ export class AgentCoordinator {
       // login the CLI binary's keychain holds, which is typically
       // expired in a pool-managed setup and produces opaque 401 loops.
       if (this.oauthPool && this.oauthPool.hasAnyToken() && !picked) {
-        throw new Error(
-          "All OAuth tokens are unavailable (rate-limited, errored, or in use). "
-          + "Add a token, wait for the limit to reset, or close other active chats."
-        )
+        throw new Error(this.buildPoolUnavailableMessage(args.chatId, ""))
       }
       if (picked) this.oauthPool!.markUsed(picked.id)
       const usePty = this.resolveClaudeDriverPreference() === "pty"
@@ -2385,10 +2423,7 @@ export class AgentCoordinator {
         // bound to the parent's close path — no separate subagent release.
         const picked = this.oauthPool?.pickActive(args.chatId) ?? null
         if (this.oauthPool && this.oauthPool.hasAnyToken() && !picked) {
-          throw new Error(
-            "All OAuth tokens are unavailable for subagent run "
-            + "(rate-limited, errored, or in use)."
-          )
+          throw new Error(this.buildPoolUnavailableMessage(args.chatId, " for subagent run"))
         }
         if (picked) this.oauthPool!.markUsed(picked.id)
         return picked?.token ?? null
