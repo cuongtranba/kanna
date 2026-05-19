@@ -299,6 +299,14 @@ function PreBlock({ children, ...props }: ComponentPropsWithoutRef<"pre">) {
   )
 }
 
+export function MermaidFallbackCodeBlock({ source }: { source: string }) {
+  return (
+    <PreBlock>
+      <code className="block text-xs whitespace-pre language-mermaid">{source}</code>
+    </PreBlock>
+  )
+}
+
 // Markdown component overrides
 export const markdownComponents = {
   h1: ({ children }: { children?: ReactNode }) => (

@@ -2,7 +2,16 @@ import { describe, expect, test } from "bun:test"
 import { renderToStaticMarkup } from "react-dom/server"
 import Markdown from "react-markdown"
 import remarkGfm from "remark-gfm"
-import { createMarkdownComponents, markdownComponents, OpenLocalLinkProvider } from "./shared"
+import { createMarkdownComponents, markdownComponents, MermaidFallbackCodeBlock, OpenLocalLinkProvider } from "./shared"
+
+test("MermaidFallbackCodeBlock renders source inside a pre/code block", () => {
+  const html = renderToStaticMarkup(
+    <MermaidFallbackCodeBlock source={"graph TD\nA-->B"} />
+  )
+  expect(html).toContain("<pre")
+  expect(html).toContain("graph TD")
+  expect(html).toContain("A--&gt;B")
+})
 
 describe("markdownComponents", () => {
   test("renders markdown headings with transcript-specific sizes and no bold weight", () => {
