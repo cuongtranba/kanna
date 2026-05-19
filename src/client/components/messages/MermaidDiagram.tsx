@@ -4,6 +4,7 @@ import { Button } from "../ui/button"
 import { cn } from "../../lib/utils"
 import { useTheme } from "../../hooks/useTheme"
 import { MermaidFallbackCodeBlock } from "./shared"
+import { MermaidZoomModal } from "./MermaidZoomModal"
 
 interface MermaidModule {
   initialize: (config: {
@@ -37,6 +38,7 @@ export function MermaidDiagram({ source }: { source: string }) {
   const rawId = useId()
   const domId = `mermaid-${rawId.replace(/[^a-zA-Z0-9_-]/g, "")}`
   const [showSource, setShowSource] = useState(false)
+  const [zoomOpen, setZoomOpen] = useState(false)
   const [copied, setCopied] = useState(false)
 
   const handleCopy = async () => {
@@ -99,8 +101,11 @@ export function MermaidDiagram({ source }: { source: string }) {
         onToggleSource={() => setShowSource((v) => !v)}
         onCopy={handleCopy}
         copied={copied}
-        onZoom={undefined}
+        onZoom={() => setZoomOpen(true)}
       />
+      {zoomOpen && (
+        <MermaidZoomModal svg={state.svg} onClose={() => setZoomOpen(false)} />
+      )}
     </div>
   )
 }

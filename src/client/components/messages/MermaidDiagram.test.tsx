@@ -82,4 +82,12 @@ describe("MermaidDiagram", () => {
     await renderAndSettle(<MermaidDiagram source={"graph TD\nA-->B"} />)
     expect(container!.querySelector('[aria-label="Copy diagram source"]')).not.toBeNull()
   })
+
+  test("opens the zoom modal from the zoom control", async () => {
+    await renderAndSettle(<MermaidDiagram source={"graph TD\nA-->B"} />)
+    const zoom = container!.querySelector('[aria-label="Zoom diagram"]') as HTMLButtonElement
+    expect(zoom).not.toBeNull()
+    await act(async () => { zoom.click() })
+    expect(document.querySelector('[role="dialog"]')).not.toBeNull()
+  })
 })
