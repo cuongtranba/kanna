@@ -307,3 +307,57 @@ describe("AskUserQuestionInteractive — Other input", () => {
     container.remove()
   })
 })
+
+describe("AskUserQuestionInteractive — onCancel + edges", () => {
+  test("onCancel undefined hides Cancel button", async () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const onSubmit = mock((_a: AskUserQuestionAnswerMap) => undefined)
+
+    await act(async () => {
+      createRoot(container).render(
+        <AskUserQuestionInteractive questions={singleQuestion()} onSubmit={onSubmit} />,
+      )
+    })
+
+    expect(Array.from(container.querySelectorAll("button")).some((b) => b.textContent?.trim() === "Cancel")).toBe(false)
+    container.remove()
+  })
+
+  test("onCancel supplied: Cancel button calls it without invoking onSubmit", async () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const onSubmit = mock((_a: AskUserQuestionAnswerMap) => undefined)
+    const onCancel = mock(() => undefined)
+
+    await act(async () => {
+      createRoot(container).render(
+        <AskUserQuestionInteractive questions={singleQuestion()} onSubmit={onSubmit} onCancel={onCancel} />,
+      )
+    })
+
+    const cancelBtn = Array.from(container.querySelectorAll("button"))
+      .find((b) => b.textContent?.trim() === "Cancel")
+    expect(cancelBtn).toBeDefined()
+    await act(async () => { cancelBtn!.click() })
+
+    expect(onCancel).toHaveBeenCalledTimes(1)
+    expect(onSubmit).toHaveBeenCalledTimes(0)
+    container.remove()
+  })
+
+  test("questions=[] renders nothing", async () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const onSubmit = mock((_a: AskUserQuestionAnswerMap) => undefined)
+
+    await act(async () => {
+      createRoot(container).render(
+        <AskUserQuestionInteractive questions={[]} onSubmit={onSubmit} />,
+      )
+    })
+
+    expect(container.textContent).toBe("")
+    container.remove()
+  })
+})
