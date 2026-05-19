@@ -67,4 +67,19 @@ describe("MermaidDiagram", () => {
     await renderAndSettle(<MermaidDiagram source={"graph TD\nA-->B"} />)
     expect(lastInitTheme).toBe("default")
   })
+
+  test("view-source toggle swaps rendered SVG for raw source", async () => {
+    await renderAndSettle(<MermaidDiagram source={"graph TD\nA-->B"} />)
+    expect(container!.innerHTML).toContain("data-mermaid")
+    const toggle = container!.querySelector('[aria-label="View diagram source"]') as HTMLButtonElement
+    expect(toggle).not.toBeNull()
+    await act(async () => { toggle.click() })
+    expect(container!.innerHTML).toContain("<pre")
+    expect(container!.innerHTML).not.toContain("data-mermaid")
+  })
+
+  test("has a copy-source control", async () => {
+    await renderAndSettle(<MermaidDiagram source={"graph TD\nA-->B"} />)
+    expect(container!.querySelector('[aria-label="Copy diagram source"]')).not.toBeNull()
+  })
 })

@@ -1,4 +1,7 @@
 import { useEffect, useId, useState } from "react"
+import { Check, Code2, Copy, Maximize2 } from "lucide-react"
+import { Button } from "../ui/button"
+import { cn } from "../../lib/utils"
 import { useTheme } from "../../hooks/useTheme"
 import { MermaidFallbackCodeBlock } from "./shared"
 
@@ -33,6 +36,14 @@ export function MermaidDiagram({ source }: { source: string }) {
   const [state, setState] = useState<RenderState>({ status: "loading" })
   const rawId = useId()
   const domId = `mermaid-${rawId.replace(/[^a-zA-Z0-9_-]/g, "")}`
+  const [showSource, setShowSource] = useState(false)
+  const [copied, setCopied] = useState(false)
+
+  const handleCopy = async () => {
+    await navigator.clipboard.writeText(source)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -61,10 +72,87 @@ export function MermaidDiagram({ source }: { source: string }) {
   if (state.status === "loading") {
     return <MermaidFallbackCodeBlock source={source} />
   }
+
+  if (showSource) {
+    return (
+      <div className="relative group/mermaid">
+        <MermaidFallbackCodeBlock source={source} />
+        <MermaidControls
+          showSource={showSource}
+          onToggleSource={() => setShowSource((v) => !v)}
+          onCopy={handleCopy}
+          copied={copied}
+          onZoom={undefined}
+        />
+      </div>
+    )
+  }
+
   return (
-    <div
-      className="my-3 flex justify-center overflow-x-auto"
-      dangerouslySetInnerHTML={{ __html: state.svg }}
-    />
+    <div className="relative group/mermaid my-3">
+      <div
+        className="flex justify-center overflow-x-auto"
+        dangerouslySetInnerHTML={{ __html: state.svg }}
+      />
+      <MermaidControls
+        showSource={showSource}
+        onToggleSource={() => setShowSource((v) => !v)}
+        onCopy={handleCopy}
+        copied={copied}
+        onZoom={undefined}
+      />
+    </div>
+  )
+}
+
+function MermaidControls({
+  showSource,
+  onToggleSource,
+  onCopy,
+  copied,
+  onZoom,
+}: {
+  showSource: boolean
+  onToggleSource: () => void
+  onCopy: () => void
+  copied: boolean
+  onZoom?: () => void
+}) {
+  return (
+    <div className="absolute top-1.5 right-1.5 flex gap-1 opacity-100 md:opacity-0 md:group-hover/mermaid:opacity-100 transition-opacity [@media(hover:none)]:!opacity-100">
+      {onZoom && !showSource && (
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label="Zoom diagram"
+          className="h-8 w-8 rounded-md text-muted-foreground hover:text-foreground"
+          onClick={onZoom}
+        >
+          <Maximize2 className="h-4 w-4" />
+        </Button>
+      )}
+      <Button
+        variant="ghost"
+        size="icon"
+        aria-label={showSource ? "View rendered diagram" : "View diagram source"}
+        className="h-8 w-8 rounded-md text-muted-foreground hover:text-foreground"
+        onClick={onToggleSource}
+      >
+        <Code2 className="h-4 w-4" />
+      </Button>
+      <Button
+        variant="ghost"
+        size="icon"
+        aria-label={copied ? "Copied" : "Copy diagram source"}
+        className={cn(
+          "h-8 w-8 rounded-md text-muted-foreground",
+          !copied && "hover:text-foreground",
+          copied && "hover:!bg-transparent"
+        )}
+        onClick={onCopy}
+      >
+        {copied ? <Check className="h-4 w-4 text-success" /> : <Copy className="h-4 w-4" />}
+      </Button>
+    </div>
   )
 }
