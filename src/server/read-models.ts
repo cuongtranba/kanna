@@ -321,8 +321,14 @@ export function deriveChatSnapshot(
     : undefined
 
   const subagentRunsMap = state.subagentRunsByChatId.get(chat.id)
+  // Clone each run + its entries array so the snapshot is immutable. The
+  // reducer mutates `run.entries.push(...)` in place; without this clone every
+  // snapshot would share the same growing array, defeating client-side
+  // structural-compare dedup (sameChatSnapshotCore → sameSubagentRuns).
   const subagentRuns: ChatSnapshot["subagentRuns"] = subagentRunsMap
-    ? Object.fromEntries(subagentRunsMap.entries())
+    ? Object.fromEntries(
+        Array.from(subagentRunsMap.entries(), ([id, run]) => [id, { ...run, entries: [...run.entries] }]),
+      )
     : {}
 
   return {

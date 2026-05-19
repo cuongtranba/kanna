@@ -200,6 +200,29 @@ function sameTunnels(left: Record<string, CloudflareTunnelRecord> | null | undef
   })
 }
 
+function sameSubagentRuns(
+  left: ChatSnapshot["subagentRuns"] | null | undefined,
+  right: ChatSnapshot["subagentRuns"] | null | undefined,
+) {
+  if (left === right) return true
+  if (!left || !right) return false
+  const leftKeys = Object.keys(left)
+  const rightKeys = Object.keys(right)
+  if (leftKeys.length !== rightKeys.length) return false
+  return leftKeys.every((key) => {
+    const l = left[key]
+    const r = right[key]
+    if (!l || !r) return false
+    return l.status === r.status
+      && l.entries.length === r.entries.length
+      && (l.finalText ?? "") === (r.finalText ?? "")
+      && (l.pendingTool?.toolUseId ?? null) === (r.pendingTool?.toolUseId ?? null)
+      && (l.usage?.outputTokens ?? null) === (r.usage?.outputTokens ?? null)
+      && l.finishedAt === r.finishedAt
+      && (l.error?.code ?? null) === (r.error?.code ?? null)
+  })
+}
+
 export function sameChatSnapshotCore(left: ChatSnapshot | null, right: ChatSnapshot | null) {
   if (left === right) return true
   if (!left || !right) return false
@@ -212,6 +235,7 @@ export function sameChatSnapshotCore(left: ChatSnapshot | null, right: ChatSnaps
     && left.liveScheduleId === right.liveScheduleId
     && sameTunnels(left.tunnels, right.tunnels)
     && left.liveTunnelId === right.liveTunnelId
+    && sameSubagentRuns(left.subagentRuns, right.subagentRuns)
 }
 
 function mergeTranscriptEntries(olderHistoryEntries: TranscriptEntry[], recentEntries: TranscriptEntry[]) {
