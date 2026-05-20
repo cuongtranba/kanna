@@ -84,17 +84,3 @@
   font-weight: 600;
   font-display: swap;
 }
-
-/* Tabular numerics on reference tables */
-.sl-markdown-content table tbody td:first-child code,
-.sl-markdown-content table tbody td:nth-child(2) {
-  font-variant-numeric: tabular-nums;
-}
-
-/* Hero accent treatment */
-.hero h1 {
-  background: linear-gradient(135deg, var(--sl-color-text) 0%, var(--sl-color-accent) 100%);
-  background-clip: text;
-  -webkit-background-clip: text;
-  color: transparent;
-}
