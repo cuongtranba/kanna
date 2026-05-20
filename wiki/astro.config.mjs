@@ -17,7 +17,7 @@ export default defineConfig({
       social: {
         github: 'https://github.com/cuongtranba/kanna',
       },
-      // Full sidebar enabled for existing pages; guides/reference/changelog added in Task 23
+      // Reference/changelog added after Tasks 14-16 create those pages
       sidebar: [
         {
           label: 'Getting Started',
@@ -35,6 +35,14 @@ export default defineConfig({
             { label: 'Projects & Sessions', slug: 'features/projects-sessions' },
             { label: 'Advanced', slug: 'features/advanced' },
             { label: 'Security & Sandboxing', slug: 'features/security-sandboxing' },
+          ],
+        },
+        {
+          label: 'Guides',
+          items: [
+            { label: 'User Guide', autogenerate: { directory: 'guides/user' } },
+            { label: 'Contributing', autogenerate: { directory: 'guides/contributing' } },
+            { label: 'Ops & Self-Host', autogenerate: { directory: 'guides/ops' } },
           ],
         },
       ],
