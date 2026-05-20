@@ -195,3 +195,18 @@
 .hero .tagline {
   color: var(--sl-color-gray-3);
 }
+
+/* Home page renders its own H1 inside <HomeHero>; suppress Starlight's
+   auto-injected page-title h1 (id="_top") for any page that mounts the
+   custom hero. Other pages continue to render the title normally. */
+body:has(.home-hero) h1#_top {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
