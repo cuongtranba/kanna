@@ -1,31 +1,42 @@
-/* Kanna theme — mirrors src/index.css tokens for visual parity with the app. */
+/* Kanna theme — mirrors src/index.css tokens for visual parity with the app.
 
-:root {
-  /* Light mode — Kanna :root tokens.
-     gray-3/gray-4 carry secondary text (Footer, PageSidebar, EditLink),
-     so they must meet WCAG AA on paper. Margin-gray + a darker step
-     hit 4.81:1 and 9.13:1 respectively. */
-  --sl-color-white: oklch(99.5% 0.003 13);
-  --sl-color-gray-1: oklch(96% 0.005 13);
-  --sl-color-gray-2: oklch(91% 0.008 13);
-  --sl-color-gray-3: oklch(55% 0.013 13);
-  --sl-color-gray-4: oklch(40% 0.013 13);
-  --sl-color-gray-5: oklch(26% 0.01 13);
-  --sl-color-gray-6: oklch(20% 0.01 13);
-  --sl-color-black: oklch(16% 0.01 13);
+   Starlight is dark-first: its props.css puts dark defaults under :root and
+   light overrides under :root[data-theme='light']. We must follow the same
+   cascade so our tokens win at equal specificity. Light tokens authored
+   under a plain :root selector get overridden by Starlight's
+   :root[data-theme='light'] rules and the page falls through to the
+   default blue accent. */
 
+:root,
+::backdrop {
+  /* Dark mode — Kanna .dark tokens. Gray ramp follows Starlight's intent:
+     gray-1 closest to foreground, gray-6 closest to background. Secondary
+     text (Footer / PageSidebar / EditLink) reads from gray-3, so it must
+     clear WCAG AA against Inkstone — 6.76:1 with margin-gray-dark. */
+  --sl-color-white: oklch(98% 0.003 13);
+  --sl-color-gray-1: oklch(91% 0.008 13);
+  --sl-color-gray-2: oklch(82% 0.008 13);
+  --sl-color-gray-3: oklch(70% 0.012 13);
+  --sl-color-gray-4: oklch(55% 0.01 13);
+  --sl-color-gray-5: oklch(29% 0.008 13);
+  --sl-color-gray-6: oklch(23% 0.01 13);
+  --sl-color-black: oklch(20% 0.01 13);
+
+  --sl-color-accent-low: oklch(26% 0.01 13);
   --sl-color-accent: oklch(71.2% 0.194 13.428);
-  --sl-color-accent-high: oklch(56% 0.18 13);
-  --sl-color-accent-low: oklch(96% 0.005 13);
+  --sl-color-accent-high: oklch(80% 0.18 13);
 
-  --sl-color-text: oklch(16% 0.01 13);
-  --sl-color-text-accent: oklch(56% 0.18 13);
-  --sl-color-bg: oklch(99.5% 0.003 13);
-  --sl-color-bg-nav: oklch(99.5% 0.003 13);
-  --sl-color-bg-sidebar: oklch(99.5% 0.003 13);
-  --sl-color-bg-inline-code: oklch(96% 0.005 13);
-  --sl-color-hairline: oklch(91% 0.008 13);
-  --sl-color-hairline-light: oklch(91% 0.008 13);
+  --sl-color-text: var(--sl-color-white);
+  --sl-color-text-accent: var(--sl-color-accent);
+  --sl-color-text-invert: oklch(20% 0.01 13);
+  --sl-color-bg: var(--sl-color-black);
+  --sl-color-bg-nav: var(--sl-color-bg);
+  --sl-color-bg-sidebar: var(--sl-color-bg);
+  --sl-color-bg-inline-code: var(--sl-color-gray-6);
+  --sl-color-bg-accent: var(--sl-color-accent);
+  --sl-color-hairline: var(--sl-color-gray-5);
+  --sl-color-hairline-light: var(--sl-color-gray-5);
+  --sl-color-hairline-shade: var(--sl-color-gray-6);
 
   --sl-font: "Body", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
     "Helvetica Neue", Arial, sans-serif;
@@ -36,32 +47,34 @@
   --sl-radius-lg: 0.5rem;
 }
 
-:root[data-theme='dark'] {
-  /* Dark mode — Kanna .dark tokens. Same WCAG AA constraint as light:
-     gray-3/gray-4 are secondary-text tiers, so they must be lighter than
-     muted-icon. Margin-gray-dark + a brighter step hit 6.76:1 and
-     10.36:1 on Inkstone. */
-  --sl-color-white: oklch(98% 0.003 13);
-  --sl-color-gray-1: oklch(26% 0.01 13);
-  --sl-color-gray-2: oklch(29% 0.008 13);
-  --sl-color-gray-3: oklch(70% 0.012 13);
-  --sl-color-gray-4: oklch(82% 0.008 13);
-  --sl-color-gray-5: oklch(91% 0.008 13);
-  --sl-color-gray-6: oklch(98% 0.003 13);
-  --sl-color-black: oklch(20% 0.01 13);
+:root[data-theme='light'],
+[data-theme='light'] ::backdrop {
+  /* Light mode — Kanna :root tokens. Same gray ramp intent inverted:
+     gray-1 darkest (closest to foreground ink), gray-7 lightest (closest
+     to paper). gray-3 carries secondary text on paper at 9.13:1; gray-4
+     carries lighter muted text at 4.81:1. Both clear WCAG AA. */
+  --sl-color-white: oklch(16% 0.01 13);
+  --sl-color-gray-1: oklch(20% 0.01 13);
+  --sl-color-gray-2: oklch(26% 0.01 13);
+  --sl-color-gray-3: oklch(40% 0.013 13);
+  --sl-color-gray-4: oklch(55% 0.013 13);
+  --sl-color-gray-5: oklch(82% 0.008 13);
+  --sl-color-gray-6: oklch(91% 0.008 13);
+  --sl-color-gray-7: oklch(96% 0.005 13);
+  --sl-color-black: oklch(99.5% 0.003 13);
 
+  --sl-color-accent-high: oklch(56% 0.18 13);
   --sl-color-accent: oklch(71.2% 0.194 13.428);
-  --sl-color-accent-high: oklch(80% 0.18 13);
-  --sl-color-accent-low: oklch(26% 0.01 13);
+  --sl-color-accent-low: oklch(96% 0.005 13);
 
-  --sl-color-text: oklch(98% 0.003 13);
-  --sl-color-text-accent: oklch(71.2% 0.194 13.428);
-  --sl-color-bg: oklch(20% 0.01 13);
-  --sl-color-bg-nav: oklch(20% 0.01 13);
-  --sl-color-bg-sidebar: oklch(20% 0.01 13);
-  --sl-color-bg-inline-code: oklch(26% 0.01 13);
-  --sl-color-hairline: oklch(29% 0.008 13);
-  --sl-color-hairline-light: oklch(29% 0.008 13);
+  --sl-color-text-accent: var(--sl-color-accent-high);
+  --sl-color-text-invert: oklch(16% 0.01 13);
+  --sl-color-bg-nav: var(--sl-color-gray-7);
+  --sl-color-bg-sidebar: var(--sl-color-bg);
+  --sl-color-bg-inline-code: var(--sl-color-gray-6);
+  --sl-color-bg-accent: var(--sl-color-accent);
+  --sl-color-hairline-light: var(--sl-color-gray-6);
+  --sl-color-hairline-shade: var(--sl-color-gray-6);
 }
 
 /* Use "Body" font from main app if available, otherwise system fallback. */
@@ -89,4 +102,11 @@
   src: url("/fonts/body-semibold.woff2") format("woff2");
   font-weight: 600;
   font-display: swap;
+}
+
+/* Starlight Hero tagline defaults to --sl-color-gray-2, which sits too
+   close to the page background in both themes. Promote it to gray-3,
+   our secondary-text tier (AA-clearing on paper and Inkstone). */
+.hero .tagline {
+  color: var(--sl-color-gray-3);
 }
