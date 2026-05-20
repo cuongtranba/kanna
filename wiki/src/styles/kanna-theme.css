@@ -1,14 +1,17 @@
 /* Kanna theme — mirrors src/index.css tokens for visual parity with the app. */
 
 :root {
-  /* Light mode — Kanna :root tokens */
+  /* Light mode — Kanna :root tokens.
+     gray-3/gray-4 carry secondary text (Footer, PageSidebar, EditLink),
+     so they must meet WCAG AA on paper. Margin-gray + a darker step
+     hit 4.81:1 and 9.13:1 respectively. */
   --sl-color-white: oklch(99.5% 0.003 13);
   --sl-color-gray-1: oklch(96% 0.005 13);
   --sl-color-gray-2: oklch(91% 0.008 13);
-  --sl-color-gray-3: oklch(82% 0.008 13);
-  --sl-color-gray-4: oklch(70% 0.012 13);
-  --sl-color-gray-5: oklch(55% 0.013 13);
-  --sl-color-gray-6: oklch(26% 0.01 13);
+  --sl-color-gray-3: oklch(55% 0.013 13);
+  --sl-color-gray-4: oklch(40% 0.013 13);
+  --sl-color-gray-5: oklch(26% 0.01 13);
+  --sl-color-gray-6: oklch(20% 0.01 13);
   --sl-color-black: oklch(16% 0.01 13);
 
   --sl-color-accent: oklch(71.2% 0.194 13.428);
@@ -34,13 +37,16 @@
 }
 
 :root[data-theme='dark'] {
-  /* Dark mode — Kanna .dark tokens */
+  /* Dark mode — Kanna .dark tokens. Same WCAG AA constraint as light:
+     gray-3/gray-4 are secondary-text tiers, so they must be lighter than
+     muted-icon. Margin-gray-dark + a brighter step hit 6.76:1 and
+     10.36:1 on Inkstone. */
   --sl-color-white: oklch(98% 0.003 13);
   --sl-color-gray-1: oklch(26% 0.01 13);
   --sl-color-gray-2: oklch(29% 0.008 13);
-  --sl-color-gray-3: oklch(55% 0.01 13);
-  --sl-color-gray-4: oklch(70% 0.012 13);
-  --sl-color-gray-5: oklch(85% 0.008 13);
+  --sl-color-gray-3: oklch(70% 0.012 13);
+  --sl-color-gray-4: oklch(82% 0.008 13);
+  --sl-color-gray-5: oklch(91% 0.008 13);
   --sl-color-gray-6: oklch(98% 0.003 13);
   --sl-color-black: oklch(20% 0.01 13);
 
