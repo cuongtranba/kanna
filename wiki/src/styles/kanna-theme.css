@@ -1,42 +1,77 @@
-/* Kanna theme — mirrors src/index.css tokens for visual parity with the app.
+/* Kanna theme — values sourced from src/index.css (the canonical token
+   definition for the Kanna app). The two token blocks below carry the
+   exact OKLCH values from the .dark and :root blocks of src/index.css;
+   keep them in sync when src/index.css changes.
 
-   Starlight is dark-first: its props.css puts dark defaults under :root and
-   light overrides under :root[data-theme='light']. We must follow the same
-   cascade so our tokens win at equal specificity. Light tokens authored
-   under a plain :root selector get overridden by Starlight's
-   :root[data-theme='light'] rules and the page falls through to the
-   default blue accent. */
+   Cascade note: Starlight is dark-first (node_modules/@astrojs/starlight/
+   style/props.css authors :root = dark defaults and
+   :root[data-theme='light'] = light overrides). The wiki theme follows
+   that same convention so our overrides win at equal specificity.
+   The Kanna app uses .dark on <html> for dark mode; the wiki uses
+   [data-theme='dark']. Both selectors apply the same values so a Kanna
+   React component dropped into the wiki would render identically. */
+
+/* ---- Dark tokens (= Kanna app .dark block in src/index.css) ---- */
 
 :root,
 ::backdrop {
-  /* Dark mode — Kanna .dark tokens. Gray ramp follows Starlight's intent:
-     gray-1 closest to foreground, gray-6 closest to background. Secondary
-     text (Footer / PageSidebar / EditLink) reads from gray-3, so it must
-     clear WCAG AA against Inkstone — 6.76:1 with margin-gray-dark. */
-  --sl-color-white: oklch(98% 0.003 13);
+  --background: oklch(20% 0.01 13);
+  --foreground: oklch(98% 0.003 13);
+  --card: oklch(23% 0.01 13);
+  --card-foreground: oklch(98% 0.003 13);
+  --popover: oklch(20% 0.01 13);
+  --popover-foreground: oklch(98% 0.003 13);
+  --primary: oklch(98% 0.003 13);
+  --primary-foreground: oklch(18% 0.01 13);
+  --secondary: oklch(26% 0.01 13);
+  --secondary-foreground: oklch(98% 0.003 13);
+  --muted: oklch(25% 0.01 13);
+  --muted-foreground: oklch(70% 0.012 13);
+  --accent: oklch(26% 0.01 13);
+  --accent-foreground: oklch(98% 0.003 13);
+  --destructive: var(--logo);
+  --destructive-foreground: var(--background);
+  --destructive-text: var(--destructive);
+  --border: oklch(29% 0.008 13);
+  --input: oklch(26% 0.01 13);
+  --ring: oklch(85% 0.008 13);
+  --radius: 0.5rem;
+  --muted-icon: oklch(55% 0.01 13);
+  --logo: oklch(71.2% 0.194 13.428);
+  --success: oklch(72% 0.14 155);
+  --success-foreground: oklch(15% 0.02 155);
+  --warning: oklch(80% 0.13 78);
+  --warning-foreground: oklch(20% 0.03 78);
+  --info: oklch(72% 0.12 235);
+  --info-foreground: oklch(15% 0.02 235);
+
+  /* Starlight slot aliases (dark). gray-3 carries Footer / PageSidebar /
+     EditLink secondary text — must clear WCAG AA against --background.
+     muted-foreground (oklch 70%) on Inkstone is 6.76:1. */
+  --sl-color-white: var(--foreground);
   --sl-color-gray-1: oklch(91% 0.008 13);
   --sl-color-gray-2: oklch(82% 0.008 13);
-  --sl-color-gray-3: oklch(70% 0.012 13);
-  --sl-color-gray-4: oklch(55% 0.01 13);
-  --sl-color-gray-5: oklch(29% 0.008 13);
-  --sl-color-gray-6: oklch(23% 0.01 13);
-  --sl-color-black: oklch(20% 0.01 13);
+  --sl-color-gray-3: var(--muted-foreground);
+  --sl-color-gray-4: var(--muted-icon);
+  --sl-color-gray-5: var(--border);
+  --sl-color-gray-6: var(--card);
+  --sl-color-black: var(--background);
 
-  --sl-color-accent-low: oklch(26% 0.01 13);
-  --sl-color-accent: oklch(71.2% 0.194 13.428);
+  --sl-color-accent-low: var(--secondary);
+  --sl-color-accent: var(--logo);
   --sl-color-accent-high: oklch(80% 0.18 13);
 
-  --sl-color-text: var(--sl-color-white);
-  --sl-color-text-accent: var(--sl-color-accent);
-  --sl-color-text-invert: oklch(20% 0.01 13);
-  --sl-color-bg: var(--sl-color-black);
-  --sl-color-bg-nav: var(--sl-color-bg);
-  --sl-color-bg-sidebar: var(--sl-color-bg);
-  --sl-color-bg-inline-code: var(--sl-color-gray-6);
-  --sl-color-bg-accent: var(--sl-color-accent);
-  --sl-color-hairline: var(--sl-color-gray-5);
-  --sl-color-hairline-light: var(--sl-color-gray-5);
-  --sl-color-hairline-shade: var(--sl-color-gray-6);
+  --sl-color-text: var(--foreground);
+  --sl-color-text-accent: var(--logo);
+  --sl-color-text-invert: var(--background);
+  --sl-color-bg: var(--background);
+  --sl-color-bg-nav: var(--background);
+  --sl-color-bg-sidebar: var(--background);
+  --sl-color-bg-inline-code: var(--card);
+  --sl-color-bg-accent: var(--logo);
+  --sl-color-hairline: var(--border);
+  --sl-color-hairline-light: var(--border);
+  --sl-color-hairline-shade: var(--card);
 
   --sl-font: "Body", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
     "Helvetica Neue", Arial, sans-serif;
@@ -44,40 +79,90 @@
 
   --sl-radius-sm: 0.25rem;
   --sl-radius-md: 0.375rem;
-  --sl-radius-lg: 0.5rem;
+  --sl-radius-lg: var(--radius);
 }
+
+/* Mirror data-theme='dark' onto the .dark class so Kanna components
+   dropped into the wiki render in their app-native dark mode. */
+.dark {
+  --background: oklch(20% 0.01 13);
+  --foreground: oklch(98% 0.003 13);
+  --card: oklch(23% 0.01 13);
+  --card-foreground: oklch(98% 0.003 13);
+  --popover: oklch(20% 0.01 13);
+  --popover-foreground: oklch(98% 0.003 13);
+  --primary: oklch(98% 0.003 13);
+  --primary-foreground: oklch(18% 0.01 13);
+  --secondary: oklch(26% 0.01 13);
+  --secondary-foreground: oklch(98% 0.003 13);
+  --muted: oklch(25% 0.01 13);
+  --muted-foreground: oklch(70% 0.012 13);
+  --accent: oklch(26% 0.01 13);
+  --accent-foreground: oklch(98% 0.003 13);
+  --destructive: var(--logo);
+  --destructive-foreground: var(--background);
+  --destructive-text: var(--destructive);
+  --border: oklch(29% 0.008 13);
+  --input: oklch(26% 0.01 13);
+  --ring: oklch(85% 0.008 13);
+  --muted-icon: oklch(55% 0.01 13);
+}
+
+/* ---- Light tokens (= Kanna app :root block in src/index.css) ---- */
 
 :root[data-theme='light'],
 [data-theme='light'] ::backdrop {
-  /* Light mode — Kanna :root tokens. Same gray ramp intent inverted:
-     gray-1 darkest (closest to foreground ink), gray-7 lightest (closest
-     to paper). gray-3 carries secondary text on paper at 9.13:1; gray-4
-     carries lighter muted text at 4.81:1. Both clear WCAG AA. */
-  --sl-color-white: oklch(16% 0.01 13);
+  --background: oklch(99.5% 0.003 13);
+  --foreground: oklch(16% 0.01 13);
+  --card: oklch(99.5% 0.003 13);
+  --card-foreground: oklch(16% 0.01 13);
+  --popover: oklch(99.5% 0.003 13);
+  --popover-foreground: oklch(16% 0.01 13);
+  --primary: oklch(20% 0.012 13);
+  --primary-foreground: oklch(98% 0.005 13);
+  --secondary: oklch(96% 0.005 13);
+  --secondary-foreground: oklch(18% 0.01 13);
+  --muted: oklch(97% 0.005 13);
+  --muted-foreground: oklch(55% 0.013 13);
+  --accent: oklch(96% 0.005 13);
+  --accent-foreground: oklch(18% 0.01 13);
+  --destructive: var(--logo);
+  --destructive-foreground: oklch(98% 0.005 13);
+  --destructive-text: oklch(56% 0.18 13);
+  --border: oklch(91% 0.008 13);
+  --input: oklch(91% 0.008 13);
+  --ring: oklch(18% 0.01 13);
+  --muted-icon: oklch(82% 0.008 13);
+
+  /* Starlight slot aliases (light). gray ramp inverts — gray-1 darkest
+     (foreground ink), gray-7 lightest (paper). gray-3 must clear AA on
+     paper for Footer / PageSidebar / EditLink. oklch(40%) hits 9.13:1. */
+  --sl-color-white: var(--foreground);
   --sl-color-gray-1: oklch(20% 0.01 13);
   --sl-color-gray-2: oklch(26% 0.01 13);
   --sl-color-gray-3: oklch(40% 0.013 13);
-  --sl-color-gray-4: oklch(55% 0.013 13);
-  --sl-color-gray-5: oklch(82% 0.008 13);
-  --sl-color-gray-6: oklch(91% 0.008 13);
-  --sl-color-gray-7: oklch(96% 0.005 13);
-  --sl-color-black: oklch(99.5% 0.003 13);
+  --sl-color-gray-4: var(--muted-foreground);
+  --sl-color-gray-5: var(--muted-icon);
+  --sl-color-gray-6: var(--border);
+  --sl-color-gray-7: var(--secondary);
+  --sl-color-black: var(--background);
 
-  --sl-color-accent-high: oklch(56% 0.18 13);
-  --sl-color-accent: oklch(71.2% 0.194 13.428);
-  --sl-color-accent-low: oklch(96% 0.005 13);
+  --sl-color-accent-high: var(--destructive-text);
+  --sl-color-accent: var(--logo);
+  --sl-color-accent-low: var(--secondary);
 
-  --sl-color-text-accent: var(--sl-color-accent-high);
-  --sl-color-text-invert: oklch(16% 0.01 13);
-  --sl-color-bg-nav: var(--sl-color-gray-7);
-  --sl-color-bg-sidebar: var(--sl-color-bg);
-  --sl-color-bg-inline-code: var(--sl-color-gray-6);
-  --sl-color-bg-accent: var(--sl-color-accent);
-  --sl-color-hairline-light: var(--sl-color-gray-6);
-  --sl-color-hairline-shade: var(--sl-color-gray-6);
+  --sl-color-text-accent: var(--destructive-text);
+  --sl-color-text-invert: var(--foreground);
+  --sl-color-bg-nav: var(--secondary);
+  --sl-color-bg-sidebar: var(--background);
+  --sl-color-bg-inline-code: var(--border);
+  --sl-color-bg-accent: var(--logo);
+  --sl-color-hairline-light: var(--border);
+  --sl-color-hairline-shade: var(--border);
 }
 
-/* Use "Body" font from main app if available, otherwise system fallback. */
+/* ---- Body font (matches @font-face declarations in src/index.css) ---- */
+
 @font-face {
   font-family: "Body";
   src: url("/fonts/body-regular.woff2") format("woff2");
@@ -104,9 +189,9 @@
   font-display: swap;
 }
 
-/* Starlight Hero tagline defaults to --sl-color-gray-2, which sits too
-   close to the page background in both themes. Promote it to gray-3,
-   our secondary-text tier (AA-clearing on paper and Inkstone). */
+/* Starlight Hero tagline defaults to --sl-color-gray-2 which sits too
+   close to --background in both themes. Promote to gray-3 (secondary
+   text tier) so it clears WCAG AA in both modes. */
 .hero .tagline {
   color: var(--sl-color-gray-3);
 }
