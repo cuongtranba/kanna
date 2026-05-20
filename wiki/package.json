@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "prebuild": "bun run scripts/prepare-changelog.ts",
     "dev": "astro dev",
     "build": "astro build",
     "preview": "astro preview",

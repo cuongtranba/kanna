@@ -17,7 +17,6 @@ export default defineConfig({
       social: {
         github: 'https://github.com/cuongtranba/kanna',
       },
-      // Reference/changelog added after Tasks 14-16 create those pages
       sidebar: [
         {
           label: 'Getting Started',
@@ -44,6 +43,17 @@ export default defineConfig({
             { label: 'Contributing', autogenerate: { directory: 'guides/contributing' } },
             { label: 'Ops & Self-Host', autogenerate: { directory: 'guides/ops' } },
           ],
+        },
+        {
+          label: 'Reference',
+          items: [
+            { label: 'Env Vars', slug: 'reference/env-vars' },
+            { label: 'Keybindings', slug: 'reference/keybindings' },
+          ],
+        },
+        {
+          label: 'Changelog',
+          slug: 'changelog',
         },
       ],
     }),
