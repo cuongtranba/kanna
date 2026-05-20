@@ -1,0 +1,19 @@
+---
+title: Environment Variables
+description: All KANNA_* env vars with defaults and descriptions.
+---
+
+import EnvVarTable from '../../../components/EnvVarTable.astro'
+import { envVars } from './env-vars-data'
+
+Every `KANNA_*` env var Kanna reads, auto-extracted from source.
+
+<EnvVarTable vars={envVars} />
+
+To regenerate this table after adding a new env var:
+
+```bash
+cd wiki && bun run scripts/extract-env-vars.ts
+```
+
+Hand-curated descriptions live in `wiki/scripts/extract-env-vars.ts` under `DESCRIPTIONS`. Vars with no description are flagged in the table.
