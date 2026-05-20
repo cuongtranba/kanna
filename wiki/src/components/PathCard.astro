@@ -1,0 +1,58 @@
+---
+interface Props {
+  title: string
+  description: string
+  href: string
+  icon?: string
+}
+const { title, description, href, icon } = Astro.props
+---
+
+<a href={href} class="path-card">
+  {icon && <span class="path-card-icon">{icon}</span>}
+  <div class="path-card-body">
+    <h3>{title}</h3>
+    <p>{description}</p>
+  </div>
+  <span class="path-card-arrow">→</span>
+</a>
+
+<style>
+  .path-card {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1.25rem 1.5rem;
+    border: 1px solid var(--sl-color-hairline);
+    border-radius: var(--sl-radius-lg);
+    background: var(--sl-color-bg);
+    color: var(--sl-color-text);
+    text-decoration: none;
+    transition: border-color 200ms ease, transform 200ms ease;
+  }
+  .path-card:hover {
+    border-color: var(--sl-color-accent);
+    transform: translateY(-2px);
+  }
+  .path-card-icon {
+    font-size: 2rem;
+    line-height: 1;
+  }
+  .path-card-body {
+    flex: 1;
+  }
+  .path-card h3 {
+    margin: 0 0 0.25rem;
+    font-size: 1.1rem;
+    font-weight: 600;
+  }
+  .path-card p {
+    margin: 0;
+    color: var(--sl-color-gray-4);
+    font-size: 0.95rem;
+  }
+  .path-card-arrow {
+    color: var(--sl-color-accent);
+    font-size: 1.25rem;
+  }
+</style>

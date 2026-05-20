@@ -1,0 +1,29 @@
+---
+interface Props {
+  light: string
+  dark: string
+  alt: string
+  width?: number
+}
+const { light, dark, alt, width = 1200 } = Astro.props
+---
+
+<picture class="screenshot">
+  <source media="(prefers-color-scheme: dark)" srcset={dark} />
+  <img src={light} alt={alt} width={width} loading="lazy" />
+</picture>
+
+<style>
+  .screenshot {
+    display: block;
+    margin: 1.5rem 0;
+    border: 1px solid var(--sl-color-hairline);
+    border-radius: var(--sl-radius-lg);
+    overflow: hidden;
+  }
+  .screenshot img {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+</style>
