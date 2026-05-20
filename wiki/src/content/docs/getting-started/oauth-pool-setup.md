@@ -22,8 +22,8 @@ Kanna's OAuth pool lets you register one or more Claude OAuth tokens. Kanna rota
 5. Save
 
 <Screenshot
-  light="/screenshots/light/oauth-pool.png"
-  dark="/screenshots/dark/oauth-pool.png"
+  light="/screenshots/light/settings-providers.png"
+  dark="/screenshots/dark/settings-providers.png"
   alt="OAuth pool admin modal"
 />
 

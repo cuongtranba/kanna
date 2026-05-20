@@ -20,8 +20,8 @@ Tool calls render hydrated with collapsible groups. File diffs render inline. Pl
 File diffs and commit diffs render directly in the transcript — no need to switch contexts.
 
 <Screenshot
-  light="/screenshots/light/transcript-diff.png"
-  dark="/screenshots/dark/transcript-diff.png"
+  light="/screenshots/light/transcript-tool-call.png"
+  dark="/screenshots/dark/transcript-tool-call.png"
   alt="Inline diff viewer"
 />
 
@@ -30,8 +30,8 @@ File diffs and commit diffs render directly in the transcript — no need to swi
 Per-project xterm terminal in a resizable side panel. macOS and Linux only.
 
 <Screenshot
-  light="/screenshots/light/terminal-panel.png"
-  dark="/screenshots/dark/terminal-panel.png"
+  light="/screenshots/light/chat-transcript.png"
+  dark="/screenshots/dark/chat-transcript.png"
   alt="Embedded xterm terminal panel"
 />
 
@@ -40,8 +40,8 @@ Per-project xterm terminal in a resizable side panel. macOS and Linux only.
 The composer offers in-place pickers for slash commands, file mentions, and subagent mentions.
 
 <Screenshot
-  light="/screenshots/light/composer-mention.png"
-  dark="/screenshots/dark/composer-mention.png"
+  light="/screenshots/light/composer.png"
+  dark="/screenshots/dark/composer.png"
   alt="@-mention picker open in composer"
 />
 
@@ -50,8 +50,8 @@ The composer offers in-place pickers for slash commands, file mentions, and suba
 The agent proposes a plan, and Kanna shows a structured approval dialog before any tool runs. Routes through Kanna's durable approval protocol — see [Security & Sandboxing](/features/security-sandboxing/).
 
 <Screenshot
-  light="/screenshots/light/plan-mode.png"
-  dark="/screenshots/dark/plan-mode.png"
+  light="/screenshots/light/composer.png"
+  dark="/screenshots/dark/composer.png"
   alt="Plan-mode approval dialog"
 />
 
@@ -60,8 +60,8 @@ The agent proposes a plan, and Kanna shows a structured approval dialog before a
 `@agent/<name>` is a hint to the main agent. The main agent decides whether to delegate via `mcp__kanna__delegate_subagent`. Runs are tracked live.
 
 <Screenshot
-  light="/screenshots/light/subagent-run.png"
-  dark="/screenshots/dark/subagent-run.png"
+  light="/screenshots/light/chat-subagent.png"
+  dark="/screenshots/dark/chat-subagent.png"
   alt="Live subagent activity label"
 />
 
@@ -80,8 +80,8 @@ Optionally continue a turn automatically when the agent stops short. Toggleable 
 A context-window meter shows usage near the threshold. Kanna runs automatic transcript compaction before limits are hit.
 
 <Screenshot
-  light="/screenshots/light/compaction-meter.png"
-  dark="/screenshots/dark/compaction-meter.png"
+  light="/screenshots/light/chat-transcript.png"
+  dark="/screenshots/dark/chat-transcript.png"
   alt="Context-window meter near threshold"
 />
 

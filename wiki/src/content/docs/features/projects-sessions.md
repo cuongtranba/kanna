@@ -28,8 +28,8 @@ Kanna auto-discovers projects from both Claude (`~/.claude/projects/`) and Codex
 One-click import of existing `~/.claude/projects/` sessions with full transcript. Seamless resume via the Claude Agent SDK.
 
 <Screenshot
-  light="/screenshots/light/bulk-import.png"
-  dark="/screenshots/dark/bulk-import.png"
+  light="/screenshots/light/sidebar-projects.png"
+  dark="/screenshots/dark/sidebar-projects.png"
   alt="Claude session bulk import modal"
 />
 

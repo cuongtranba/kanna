@@ -12,8 +12,8 @@ Kanna supports two providers — Claude and Codex (OpenAI) — switchable per-ch
 The composer's provider button lets you pick between Claude and Codex. Each provider exposes its own model list and reasoning controls.
 
 <Screenshot
-  light="/screenshots/light/provider-switch.png"
-  dark="/screenshots/dark/provider-switch.png"
+  light="/screenshots/light/settings-providers.png"
+  dark="/screenshots/dark/settings-providers.png"
   alt="Composer provider/model picker"
 />
 

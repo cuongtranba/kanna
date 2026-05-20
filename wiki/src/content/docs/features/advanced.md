@@ -10,8 +10,8 @@ import Screenshot from '../../../components/Screenshot.astro'
 One-click pull/rebuild/reload from the UI. Works under pm2, systemd, docker, or plain shell via a host-agnostic supervisor. Install any prior release straight from the changelog UI.
 
 <Screenshot
-  light="/screenshots/light/self-update.png"
-  dark="/screenshots/dark/self-update.png"
+  light="/screenshots/light/settings-general.png"
+  dark="/screenshots/dark/settings-general.png"
   alt="In-app self-update UI"
 />
 
@@ -20,8 +20,8 @@ One-click pull/rebuild/reload from the UI. Works under pm2, systemd, docker, or 
 The agent can call `mcp__kanna__expose_port` to surface a localhost port via a Cloudflare quick tunnel. Always-ask or auto-expose modes, configurable per-project.
 
 <Screenshot
-  light="/screenshots/light/expose-port-prompt.png"
-  dark="/screenshots/dark/expose-port-prompt.png"
+  light="/screenshots/light/settings-general.png"
+  dark="/screenshots/dark/settings-general.png"
   alt="Expose-port approval dialog"
 />
 
