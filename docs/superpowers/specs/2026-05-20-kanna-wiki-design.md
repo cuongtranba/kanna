@@ -13,7 +13,7 @@ Build a public documentation site for Kanna that serves three audiences simultan
 2. **Power users** — PTY mode, OAuth pool, subagents, advanced flags
 3. **Contributors** — architecture (C3), PR rules, dev workflow, ops/self-host
 
-Site published at **https://kanna.lowbit.link** via GitHub Pages with custom domain.
+Site published at **https://kanna-wiki.lowbit.link** via GitHub Pages with custom domain.
 
 ## 2. Goals & Non-Goals
 
@@ -45,7 +45,7 @@ Site published at **https://kanna.lowbit.link** via GitHub Pages with custom dom
 | Hosting | GitHub Pages | Free, native integration |
 | Deploy | `actions/deploy-pages@v4` (artifact upload) | Current GH-recommended path; no `gh-pages` branch clutter |
 | Screenshots | agent-browser (Playwright-based) driving `localhost:3210` | One-shot capture, PNGs committed |
-| Domain | `kanna.lowbit.link` (custom) | User-owned, branded |
+| Domain | `kanna-wiki.lowbit.link` (custom) | User-owned, branded |
 | Package manager | Bun (`wiki/` is isolated workspace, own `package.json`) | Matches main repo tooling |
 
 ## 4. Site Map
@@ -85,10 +85,10 @@ Landing page uses three "path cards" routing visitors to their audience. Sidebar
 ```
 wiki/
   package.json                       Starlight + Astro + Pagefind deps
-  astro.config.mjs                   site: 'https://kanna.lowbit.link', base: '/', sidebar config
+  astro.config.mjs                   site: 'https://kanna-wiki.lowbit.link', base: '/', sidebar config
   tsconfig.json
   public/
-    CNAME                            Single line: kanna.lowbit.link
+    CNAME                            Single line: kanna-wiki.lowbit.link
   scripts/
     seed-demo.ts                     Spin demo Kanna w/ KANNA_HOME=tmpdir, seed fixtures
     capture.ts                       agent-browser → localhost:3210, write PNGs
@@ -257,9 +257,9 @@ Only triggers on `wiki/**` or workflow file changes. Avoids re-deploy on every `
 
 ### Custom domain — one-time setup
 
-- DNS provider for `lowbit.link`: add CNAME record `kanna` → `cuongtranba.github.io`
+- DNS provider for `lowbit.link`: add CNAME record `kanna-wiki` → `cuongtranba.github.io`
 - GitHub repo Settings → Pages → Source = "GitHub Actions"
-- GitHub repo Settings → Pages → Custom domain = `kanna.lowbit.link`
+- GitHub repo Settings → Pages → Custom domain = `kanna-wiki.lowbit.link`
 - Check "Enforce HTTPS" (after cert provisions, typically a few minutes)
 - HTTPS via Let's Encrypt, auto-provisioned by GitHub
 
@@ -270,7 +270,7 @@ Only triggers on `wiki/**` or workflow file changes. Avoids re-deploy on every `
 ```js
 // astro.config.mjs
 export default defineConfig({
-  site: 'https://kanna.lowbit.link',
+  site: 'https://kanna-wiki.lowbit.link',
   base: '/',           // root, not /kanna, because custom domain
   integrations: [starlight({ /* sidebar, theme, etc. */ })],
 })
@@ -319,7 +319,7 @@ One PR containing:
 3. Screenshot pipeline scripts + captured PNGs
 4. `.github/workflows/wiki-deploy.yml`
 5. CLAUDE.md update — add "Wiki" section pointing at `wiki/` and the regenerate-screenshots command
-6. README.md addition — link to `https://kanna.lowbit.link`
+6. README.md addition — link to `https://kanna-wiki.lowbit.link`
 
 Reviewer should:
 - Verify visual consistency with Kanna app (impeccable pass done by author beforehand)
@@ -329,5 +329,5 @@ Reviewer should:
 
 Post-merge:
 - Configure GitHub Pages settings + DNS as described in §8
-- Verify https://kanna.lowbit.link resolves
+- Verify https://kanna-wiki.lowbit.link resolves
 - Verify Pagefind search works on production
