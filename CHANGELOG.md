@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.67.0](https://github.com/cuongtranba/kanna/compare/v0.66.1...v0.67.0) (2026-05-20)
+
+
+### Features
+
+* **messages:** surface OAuth key in chat AccountInfoMessage ([#254](https://github.com/cuongtranba/kanna/issues/254)) ([e24ec3e](https://github.com/cuongtranba/kanna/commit/e24ec3e6c2ad96bfd65d12d420b25e26f30042d8))
+
 ## [0.66.1](https://github.com/cuongtranba/kanna/compare/v0.66.0...v0.66.1) (2026-05-20)
 
 
