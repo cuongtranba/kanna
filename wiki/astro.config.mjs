@@ -8,11 +8,10 @@ export default defineConfig({
     starlight({
       title: 'Kanna',
       description: 'A beautiful web UI for the Claude Code & Codex CLIs',
-      // TODO: re-add logo in Task 2
-      // logo: {
-      //   src: './src/assets/logo.svg',
-      //   replacesTitle: false,
-      // },
+      logo: {
+        src: './src/assets/logo.svg',
+        replacesTitle: false,
+      },
       customCss: ['./src/styles/kanna-theme.css'],
       // social format for Starlight 0.30.x: object map of icon -> URL
       social: {
