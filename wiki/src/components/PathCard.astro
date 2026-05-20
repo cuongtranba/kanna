@@ -14,7 +14,7 @@ const { title, description, href, icon } = Astro.props
     <h3>{title}</h3>
     <p>{description}</p>
   </div>
-  <span class="path-card-arrow">→</span>
+  <span class="path-card-arrow" aria-hidden="true">→</span>
 </a>
 
 <style>
@@ -30,9 +30,11 @@ const { title, description, href, icon } = Astro.props
     text-decoration: none;
     transition: border-color 200ms ease, transform 200ms ease;
   }
-  .path-card:hover {
+  .path-card:is(:hover, :focus-visible) {
     border-color: var(--sl-color-accent);
     transform: translateY(-2px);
+    outline: 2px solid var(--sl-color-accent);
+    outline-offset: 2px;
   }
   .path-card-icon {
     font-size: 2rem;

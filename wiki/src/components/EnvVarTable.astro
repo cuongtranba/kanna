@@ -12,7 +12,7 @@ const { vars } = Astro.props
 
 <table class="env-var-table">
   <thead>
-    <tr><th>Variable</th><th>Default</th><th>Description</th></tr>
+    <tr><th scope="col">Variable</th><th scope="col">Default</th><th scope="col">Description</th></tr>
   </thead>
   <tbody>
     {vars.map(v => (
