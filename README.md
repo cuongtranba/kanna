@@ -19,6 +19,10 @@
   <a href="https://github.com/cuongtranba/kanna/blob/main/LICENSE"><img src="https://img.shields.io/npm/l/@cuongtran001/kanna.svg?style=flat&colorA=18181b&colorB=f472b6" alt="license" /></a>
 </p>
 
+<p align="center">
+  📖 <strong>Docs:</strong> <a href="https://kanna-wiki.lowbit.link">kanna-wiki.lowbit.link</a>
+</p>
+
 <br />
 
 <p align="center">
