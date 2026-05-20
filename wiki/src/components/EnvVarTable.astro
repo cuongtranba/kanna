@@ -1,0 +1,45 @@
+---
+interface EnvVar {
+  name: string
+  default: string
+  description: string
+}
+interface Props {
+  vars: EnvVar[]
+}
+const { vars } = Astro.props
+---
+
+<table class="env-var-table">
+  <thead>
+    <tr><th scope="col">Variable</th><th scope="col">Default</th><th scope="col">Description</th></tr>
+  </thead>
+  <tbody>
+    {vars.map(v => (
+      <tr>
+        <td><code>{v.name}</code></td>
+        <td><code>{v.default}</code></td>
+        <td>{v.description}</td>
+      </tr>
+    ))}
+  </tbody>
+</table>
+
+<style>
+  .env-var-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1rem 0;
+    font-size: 0.9rem;
+  }
+  .env-var-table th,
+  .env-var-table td {
+    text-align: left;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--sl-color-hairline);
+    vertical-align: top;
+  }
+  .env-var-table code {
+    font-variant-numeric: tabular-nums;
+  }
+</style>

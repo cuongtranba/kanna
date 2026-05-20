@@ -1,0 +1,4 @@
+{
+  "extends": "astro/tsconfigs/strict",
+  "include": ["**/*.ts", "**/*.tsx", "**/*.astro", "scripts/**/*.ts"]
+}

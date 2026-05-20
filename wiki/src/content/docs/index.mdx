@@ -1,0 +1,56 @@
+---
+title: Kanna
+description: A beautiful web UI for the Claude Code & Codex CLIs
+template: splash
+hero:
+  tagline: A beautiful web UI for the Claude Code & Codex CLIs. OAuth-pool subscription billing, durable approvals, subagent orchestration, and more.
+  image:
+    file: ../../assets/logo.svg
+  actions:
+    - text: Install
+      link: /getting-started/install/
+      icon: right-arrow
+      variant: primary
+    - text: View on GitHub
+      link: https://github.com/cuongtranba/kanna
+      icon: external
+      variant: minimal
+---
+
+import PathCard from '../../components/PathCard.astro'
+import FeatureGrid from '../../components/FeatureGrid.astro'
+
+## Pick your path
+
+<FeatureGrid>
+  <PathCard
+    title="New User"
+    description="Install Kanna and send your first chat in under five minutes."
+    href="/getting-started/install/"
+    icon="🚀"
+  />
+  <PathCard
+    title="Power User"
+    description="PTY subscription billing, OAuth pool rotation, subagent orchestration, plan mode."
+    href="/features/providers-models/"
+    icon="⚡"
+  />
+  <PathCard
+    title="Contributor"
+    description="Architecture (C3), PR rules, lint cap ratchet, test discipline, dev workflow."
+    href="/guides/contributing/overview/"
+    icon="🛠"
+  />
+</FeatureGrid>
+
+## What is Kanna
+
+Kanna is a community fork of [jakemor/kanna](https://github.com/jakemor/kanna) that tracks upstream
+and layers on features for heavier day-to-day use, multi-account billing, and self-hosting.
+
+- **Subscription-billing PTY driver** — runs the `claude` CLI under a pseudo-terminal so Pro/Max plans are charged instead of API rates
+- **OAuth token pool** — multiple Claude OAuth tokens with automatic rotation and fallover
+- **Multi-provider chat** — Claude + Codex (OpenAI) with per-provider model controls
+- **Subagent orchestration** — first-class subagents, `@agent/` mentions, parallel runs, MCP `delegate_subagent`
+- **Durable tool-approval protocol** — pending approvals survive server restart
+- **In-app self-update** — one-click pull/rebuild/reload

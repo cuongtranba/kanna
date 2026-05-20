@@ -283,3 +283,28 @@ When a test spawns `git` or other subprocesses, ensure the spawn sets
 `stdin: "ignore"` and `GIT_TERMINAL_PROMPT=0` so a hung credential prompt
 cannot exhaust the test timeout. Also give it an explicit timeout
 (`test(name, fn, 30_000)`) — the 5s Bun default is too tight for CI runners.
+
+# Wiki
+
+Public docs site lives in `wiki/` (Astro Starlight) and is deployed to
+https://kanna-wiki.lowbit.link on every push to `main` that touches `wiki/**`.
+
+Regenerate screenshots:
+
+```bash
+bash wiki/scripts/capture-all.sh
+```
+
+This spawns a seeded demo Kanna under a tmpdir `KANNA_HOME`, captures all
+~32 PNGs via Playwright, and writes them to `wiki/public/screenshots/`.
+Commit the PNGs.
+
+Regenerate env-var reference table:
+
+```bash
+cd wiki && bun run scripts/extract-env-vars.ts
+```
+
+Wiki is isolated from the main repo build — its own `package.json`, own
+`node_modules`. `bun run lint` and `bun test` at the repo root do NOT touch
+`wiki/`.
