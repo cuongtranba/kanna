@@ -1,0 +1,120 @@
+---
+interface Props {
+  index: string
+  title: string
+  reverse?: boolean
+  screenshotDark?: string
+  screenshotLight?: string
+  screenshotAlt?: string
+}
+const {
+  index,
+  title,
+  reverse = false,
+  screenshotDark,
+  screenshotLight,
+  screenshotAlt = '',
+} = Astro.props
+---
+
+<section class:list={["narrative", { reverse }]}>
+  <div class="narrative-copy">
+    <h2><span class="index" aria-hidden="true">{index}</span>{title}</h2>
+    <div class="prose"><slot /></div>
+  </div>
+  {screenshotDark && screenshotLight ? (
+    <figure class="narrative-shot">
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset={screenshotDark} />
+        <img src={screenshotLight} alt={screenshotAlt} loading="lazy" />
+      </picture>
+    </figure>
+  ) : null}
+</section>
+
+<style>
+  .narrative {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: clamp(1.5rem, 3vw, 2.5rem);
+    align-items: center;
+    padding-block: clamp(3rem, 7vw, 5.5rem);
+    border-block-end: 1px solid var(--sl-color-hairline);
+  }
+
+  @media (min-width: 60rem) {
+    .narrative {
+      grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+    }
+    .narrative.reverse .narrative-copy {
+      order: 2;
+    }
+    .narrative.reverse .narrative-shot {
+      order: 1;
+    }
+  }
+
+  .narrative h2 {
+    font-size: clamp(1.6rem, 2.4vw, 2.1rem);
+    line-height: 1.15;
+    letter-spacing: -0.02em;
+    margin: 0 0 1rem;
+    font-weight: 600;
+    color: var(--foreground);
+    border: 0;
+    padding: 0;
+    display: flex;
+    align-items: baseline;
+    gap: 0.85rem;
+  }
+
+  .narrative h2 .index {
+    font-family: var(--sl-font-mono);
+    font-size: 0.85rem;
+    color: var(--muted-foreground);
+    font-weight: 400;
+    letter-spacing: 0;
+    font-feature-settings: 'tnum';
+  }
+
+  .prose {
+    color: var(--foreground);
+    font-size: 1rem;
+    line-height: 1.65;
+    max-width: 58ch;
+  }
+  .prose :global(p) {
+    margin-block: 0 0.85rem;
+  }
+  .prose :global(p:last-child) {
+    margin-block-end: 0;
+  }
+  .prose :global(a) {
+    color: var(--sl-color-text-accent);
+  }
+  .prose :global(strong) {
+    color: var(--foreground);
+    font-weight: 600;
+  }
+  .prose :global(code) {
+    font-family: var(--sl-font-mono);
+    font-size: 0.875em;
+    background: var(--sl-color-bg-inline-code);
+    padding: 0.1em 0.4em;
+    border-radius: 0.25rem;
+  }
+
+  .narrative-shot {
+    margin: 0;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    background: var(--card);
+  }
+
+  .narrative-shot img {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+</style>

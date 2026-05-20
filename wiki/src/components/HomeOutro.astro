@@ -1,0 +1,60 @@
+---
+const sections: { label: string; href: string }[] = [
+  { label: 'Install', href: '/getting-started/install/' },
+  { label: 'OAuth pool setup', href: '/getting-started/oauth-pool-setup/' },
+  { label: 'Sandbox and approvals', href: '/features/security-sandboxing/' },
+  { label: 'Contribute', href: '/guides/contributing/overview/' },
+]
+---
+
+<section class="home-outro">
+  <p>
+    Kanna is a community fork of
+    <a href="https://github.com/jakemor/kanna" rel="noopener">jakemor/kanna</a>
+    that tracks upstream and layers on subscription-billing PTY, OAuth pool
+    rotation, durable approvals, and subagent orchestration. macOS and Linux.
+    Self-hosted.
+  </p>
+  <p class="outro-links">
+    {sections.map((s, i) => (
+      <>
+        {i > 0 && <span aria-hidden="true">·</span>}
+        <a href={s.href}>{s.label}</a>
+      </>
+    ))}
+  </p>
+</section>
+
+<style>
+  .home-outro {
+    padding-block: clamp(2.5rem, 5vw, 4rem);
+    max-width: 60ch;
+  }
+  .home-outro p {
+    color: var(--muted-foreground);
+    line-height: 1.65;
+    margin: 0 0 1.25rem;
+  }
+  .home-outro p:last-child {
+    margin-bottom: 0;
+  }
+  .home-outro a {
+    color: var(--sl-color-text-accent);
+    text-decoration: none;
+    border-bottom: 1px solid transparent;
+    transition: border-color 150ms ease-out;
+  }
+  .home-outro a:is(:hover, :focus-visible) {
+    border-bottom-color: var(--sl-color-text-accent);
+  }
+  .outro-links {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem;
+    font-size: 0.95rem;
+  }
+  .outro-links span {
+    color: var(--border);
+  }
+</style>

@@ -1,0 +1,153 @@
+---
+interface Props {
+  title: string
+  lede: string
+  install: string
+  primaryHref: string
+  secondaryHref: string
+  screenshotDark: string
+  screenshotLight: string
+  screenshotAlt: string
+}
+const {
+  title,
+  lede,
+  install,
+  primaryHref,
+  secondaryHref,
+  screenshotDark,
+  screenshotLight,
+  screenshotAlt,
+} = Astro.props
+---
+
+<section class="home-hero">
+  <div class="home-hero-copy">
+    <h1>{title}</h1>
+    <p class="lede">{lede}</p>
+    <pre class="install" aria-label="Install command"><code><span class="prompt">$</span> {install}</code></pre>
+    <div class="actions">
+      <a class="action-primary" href={primaryHref}>Install guide</a>
+      <a class="action-secondary" href={secondaryHref} rel="noopener">View on GitHub <span aria-hidden="true">↗</span></a>
+    </div>
+  </div>
+  <figure class="home-hero-shot">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset={screenshotDark} />
+      <img src={screenshotLight} alt={screenshotAlt} width="1280" height="900" loading="eager" />
+    </picture>
+  </figure>
+</section>
+
+<style>
+  .home-hero {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: clamp(2rem, 4vw, 3.5rem);
+    align-items: center;
+    padding-block: clamp(2.5rem, 6vw, 5rem);
+    border-block-end: 1px solid var(--sl-color-hairline);
+  }
+
+  @media (min-width: 60rem) {
+    .home-hero {
+      grid-template-columns: minmax(0, 7fr) minmax(0, 9fr);
+    }
+  }
+
+  .home-hero-copy h1 {
+    font-size: clamp(2.5rem, 5.5vw, 4rem);
+    line-height: 1.02;
+    letter-spacing: -0.03em;
+    margin: 0 0 1rem;
+    font-weight: 700;
+    color: var(--foreground);
+  }
+
+  .lede {
+    font-size: clamp(1.05rem, 1.4vw, 1.25rem);
+    line-height: 1.5;
+    color: var(--muted-foreground);
+    margin: 0 0 1.5rem;
+    max-width: 36ch;
+  }
+
+  .install {
+    margin: 0 0 1.75rem;
+    padding: 0.75rem 1rem;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    font-family: var(--sl-font-mono);
+    font-size: 0.95rem;
+    color: var(--foreground);
+    overflow-x: auto;
+  }
+  .install code {
+    background: transparent;
+    padding: 0;
+    font-family: inherit;
+    font-size: inherit;
+  }
+  .install .prompt {
+    color: var(--logo);
+    margin-inline-end: 0.5rem;
+    user-select: none;
+  }
+
+  .actions {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+    flex-wrap: wrap;
+  }
+
+  a.action-primary {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.625rem 1.25rem;
+    border-radius: 999px;
+    background: var(--logo);
+    /* Inkstone — pinned dark in both themes because --logo is a fixed
+       coral. White on coral fails AA (2.64:1); dark hits 6.95:1. */
+    color: oklch(16% 0.01 13);
+    font-weight: 600;
+    font-size: 0.95rem;
+    text-decoration: none;
+    transition: filter 150ms ease-out;
+  }
+  a.action-primary:is(:hover, :focus-visible) {
+    filter: brightness(1.05);
+  }
+
+  a.action-secondary {
+    color: var(--foreground);
+    text-decoration: none;
+    font-weight: 500;
+    font-size: 0.95rem;
+    border-bottom: 1px solid var(--border);
+    padding-block-end: 1px;
+    transition: border-color 150ms ease-out;
+  }
+  a.action-secondary:is(:hover, :focus-visible) {
+    border-bottom-color: var(--logo);
+  }
+
+  .home-hero-shot {
+    margin: 0;
+    border-radius: var(--radius);
+    overflow: hidden;
+    box-shadow: 0 1px 0 var(--border), 0 24px 48px -24px hsla(13, 30%, 4%, 0.35);
+    border: 1px solid var(--border);
+    background: var(--card);
+  }
+  :root[data-theme='light'] .home-hero-shot {
+    box-shadow: 0 1px 0 var(--border), 0 24px 48px -28px hsla(13, 20%, 50%, 0.25);
+  }
+
+  .home-hero-shot img {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+</style>

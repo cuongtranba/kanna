@@ -1,56 +1,85 @@
 ---
 title: Kanna
-description: A beautiful web UI for the Claude Code & Codex CLIs
+description: A web UI for the Claude Code and Codex CLIs. Long sessions, many projects, no chrome.
 template: splash
-hero:
-  tagline: A beautiful web UI for the Claude Code & Codex CLIs. OAuth-pool subscription billing, durable approvals, subagent orchestration, and more.
-  image:
-    file: ../../assets/logo.svg
-  actions:
-    - text: Install
-      link: /getting-started/install/
-      icon: right-arrow
-      variant: primary
-    - text: View on GitHub
-      link: https://github.com/cuongtranba/kanna
-      icon: external
-      variant: minimal
+pagefind: false
 ---
 
-import PathCard from '../../components/PathCard.astro'
-import FeatureGrid from '../../components/FeatureGrid.astro'
+import HomeHero from '../../components/HomeHero.astro'
+import Narrative from '../../components/Narrative.astro'
+import HomeOutro from '../../components/HomeOutro.astro'
 
-## Pick your path
+<HomeHero
+  title="Run agents like documents, not log files."
+  lede="A web UI for the Claude Code and Codex CLIs, built for long sessions across many projects. Subscription billing, OAuth pool rotation, subagent orchestration, durable approvals. No dashboard chrome."
+  install="bun install -g @cuongtran001/kanna"
+  primaryHref="/getting-started/install/"
+  secondaryHref="https://github.com/cuongtranba/kanna"
+  screenshotDark="/screenshots/dark/transcript-tool-call.png"
+  screenshotLight="/screenshots/light/transcript-tool-call.png"
+  screenshotAlt="Kanna chat transcript with an expanded tool call group"
+/>
 
-<FeatureGrid>
-  <PathCard
-    title="New User"
-    description="Install Kanna and send your first chat in under five minutes."
-    href="/getting-started/install/"
-    icon="🚀"
-  />
-  <PathCard
-    title="Power User"
-    description="PTY subscription billing, OAuth pool rotation, subagent orchestration, plan mode."
-    href="/features/providers-models/"
-    icon="⚡"
-  />
-  <PathCard
-    title="Contributor"
-    description="Architecture (C3), PR rules, lint cap ratchet, test discipline, dev workflow."
-    href="/guides/contributing/overview/"
-    icon="🛠"
-  />
-</FeatureGrid>
+<Narrative
+  index="01"
+  title="Pro and Max plans bill the right way."
+  screenshotDark="/screenshots/dark/settings-providers.png"
+  screenshotLight="/screenshots/light/settings-providers.png"
+  screenshotAlt="OAuth pool configuration in Kanna settings"
+>
+  Setting `KANNA_CLAUDE_DRIVER=pty` launches the `claude` CLI under a
+  pseudo-terminal and parses its stdout stream line by line. Your
+  subscription is charged, not the API. Register one OAuth token, or
+  several, and Kanna rotates per chat with automatic fallover on rate
+  limits.
 
-## What is Kanna
+  Codex sits beside Claude in the same composer. Switch provider
+  mid-chat; previous turns stay where they are.
+</Narrative>
 
-Kanna is a community fork of [jakemor/kanna](https://github.com/jakemor/kanna) that tracks upstream
-and layers on features for heavier day-to-day use, multi-account billing, and self-hosting.
+<Narrative
+  index="02"
+  title="Subagents that report back."
+  reverse
+  screenshotDark="/screenshots/dark/chat-subagent.png"
+  screenshotLight="/screenshots/light/chat-subagent.png"
+  screenshotAlt="Live subagent delegation inside a Kanna chat"
+>
+  Configure named subagents with their own system prompts and tool
+  surfaces. The main agent decides when to delegate, calls
+  `mcp__kanna__delegate_subagent`, and synthesizes the reply back into
+  its own turn. Cycle detection and depth limits run on every
+  delegation. Live progress bubbles up to the transcript without a
+  separate window.
+</Narrative>
 
-- **Subscription-billing PTY driver** — runs the `claude` CLI under a pseudo-terminal so Pro/Max plans are charged instead of API rates
-- **OAuth token pool** — multiple Claude OAuth tokens with automatic rotation and fallover
-- **Multi-provider chat** — Claude + Codex (OpenAI) with per-provider model controls
-- **Subagent orchestration** — first-class subagents, `@agent/` mentions, parallel runs, MCP `delegate_subagent`
-- **Durable tool-approval protocol** — pending approvals survive server restart
-- **In-app self-update** — one-click pull/rebuild/reload
+<Narrative
+  index="03"
+  title="A transcript you can audit."
+  screenshotDark="/screenshots/dark/chat-transcript.png"
+  screenshotLight="/screenshots/light/chat-transcript.png"
+  screenshotAlt="Kanna chat transcript with tool calls and inline diffs"
+>
+  Tool calls render hydrated with collapsible groups. File diffs show
+  inline. Plan-mode and `AskUserQuestion` prompts route through a
+  durable approval protocol, so pending requests survive server
+  restarts and replay on reconnect. Context compaction happens
+  proactively, before the window closes around you.
+</Narrative>
+
+<Narrative
+  index="04"
+  title="Projects up front, chats below."
+  reverse
+  screenshotDark="/screenshots/dark/sidebar-projects.png"
+  screenshotLight="/screenshots/light/sidebar-projects.png"
+  screenshotAlt="Kanna sidebar grouped by project"
+>
+  Chats live under projects with live status (idle, running, waiting,
+  failed). Kanna auto-discovers projects from your local Claude and
+  Codex history. Bulk-import existing sessions with one click, run any
+  chat in an isolated git worktree, resume work with the full
+  transcript intact.
+</Narrative>
+
+<HomeOutro />
