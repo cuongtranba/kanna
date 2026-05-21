@@ -1,7 +1,7 @@
 ---
 id: c3-2
 c3-version: 4
-c3-seal: 41f1df95442bc11aedd6819e48513c7d23151d8b19784a8d0d07ac60f8b1748d
+c3-seal: f2e68a171e3dfe14b580f204d7cf1572ba7d2c031f3c025c59359bb200f7e5c9
 title: Server
 type: container
 boundary: service
@@ -20,6 +20,8 @@ Run the local Bun backend: serve HTTP+WebSocket on localhost, coordinate Claude 
 - Own the authoritative event log and derived read models; every state mutation lands as a JSONL event first.
 - Accept WebSocket subscriptions and commands; push fresh snapshots on every change.
 - Drive multi-provider agent turns (Claude Agent SDK, Claude CLI under PTY, Codex App Server) through a single coordinator.
+- Host the in-process loopback MCP server for `mcp__kanna__*` shims and route interactive tool requests through a durable approval protocol that survives restart.
+- Detect rate-limit / auth-error turn endings and auto-resume the chat at the right wake-up moment without user intervention.
 - Discover local projects, manage terminals and uploads, operate share tunnels.
 - Gate network access (auth), supervise its own CLI lifecycle, and refuse to leave localhost unless explicitly asked.
 
@@ -52,3 +54,5 @@ Run the local Bun backend: serve HTTP+WebSocket on localhost, coordinate Claude 
 | c3-223 | cloudflare-tunnel | feature | implemented | Detect dev-server ports and expose via cloudflared quick tunnels |
 | c3-224 | oauth-token-pool | feature | implemented | Multi-account OAuth token pool: per-chat reservation, rate-limit/auth-error rotation, refusal classifier |
 | c3-225 | claude-pty-driver | feature | implemented | Claude CLI PTY transport: parse subprocess stdout JSONL into normalized events, preserve subscription billing |
+| c3-226 | kanna-mcp-host | feature | implemented | Loopback MCP server + built-in shims + durable approval protocol + path-deny |
+| c3-227 | auto-continue | feature | implemented | Detect rate-limit / auth-error endings, schedule retries, replay queued prompts |
