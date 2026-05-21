@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.68.1](https://github.com/cuongtranba/kanna/compare/v0.68.0...v0.68.1) (2026-05-21)
+
+
+### Bug Fixes
+
+* **claude-pty:** PID registry JSONL discovery + cross-talk hardening ([#271](https://github.com/cuongtranba/kanna/issues/271)) ([9b5bbf8](https://github.com/cuongtranba/kanna/commit/9b5bbf87ff672be45ebd533c4119f5bc787c3f50))
+* **cli-supervisor:** skip self-update after UI-triggered restart so rollback sticks ([#269](https://github.com/cuongtranba/kanna/issues/269)) ([91d1415](https://github.com/cuongtranba/kanna/commit/91d141510917add042c13a9995b9cd17674ff57c))
+
 ## [0.68.0](https://github.com/cuongtranba/kanna/compare/v0.67.0...v0.68.0) (2026-05-21)
 
 
