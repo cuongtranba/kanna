@@ -13,7 +13,7 @@ import { createJsonlEventParser } from "./jsonl-to-event"
 import { OutputRing, OUTPUT_RING_DEFAULT_BYTES } from "./output-ring"
 import { createSmokeTestGate, createFileSmokeTestCache, buildLiveSmokeProbe, type SmokeTestGate } from "./smoke-test"
 import { computeBinarySha256 } from "./preflight/binary-fingerprint"
-import { spawnPtyProcess as defaultSpawnPtyProcess, type PtyProcess } from "./pty-process"
+import { spawnPtyProcess as defaultSpawnPtyProcess, type PtyProcess, type SpawnPtyProcessArgs } from "./pty-process"
 import { waitForTuiReady, dismissTrustDialogIfPresent, sendUserPrompt, sendExitCommand } from "./tui-control"
 import { startTranscriptStream } from "./tui-source"
 import { computeJsonlPath, computeProjectDir } from "./jsonl-path"
@@ -76,7 +76,9 @@ export interface StartClaudeSessionPtyArgs {
   /** Optional smoke-test gate override (used by tests to inject a fake gate). */
   smokeTestGate?: SmokeTestGate
   /** Optional PTY spawn override (used by tests to inject a fake PTY). */
-  spawnPtyProcess?: typeof defaultSpawnPtyProcess
+  spawnPtyProcess?: (args: SpawnPtyProcessArgs) => Promise<PtyProcess>
+  /** Optional transcript stream factory override (used by tests). */
+  startTranscriptStreamFn?: typeof startTranscriptStream
   /**
    * One-shot semantics: after the first `result` entry, close stdin so
    * the subprocess exits. Mirrors the SDK driver's prompt-queue close
@@ -105,10 +107,13 @@ export function deriveAccountInfoFromOauth(args: { label?: string; oauthKeyMaske
   return info
 }
 
+/** VT100 Shift+Tab sequence sent to exit plan mode (one press cycles back to acceptEdits). */
+export const SHIFT_TAB_KEY = "\x1b[Z"
+
 export const PLAN_MODE_EXIT_UNSUPPORTED =
-  "[claude-pty] leaving plan mode at runtime is unsupported in TUI mode "
-  + "(no slash command exits plan; the only exit is the Shift+Tab TUI cycle "
-  + "whose keypress count depends on unobservable TUI state). Restart the session to return to acceptEdits."
+  "[claude-pty] cannot exit plan mode: driver-tracked plan mode is inactive "
+  + "(plan mode may have been toggled externally via Shift+Tab). "
+  + "Restart the session to return to acceptEdits."
 
 /** Backward-compat re-exports — callers that import from driver.ts continue to work. */
 export const PTY_STDERR_RING_BYTES = OUTPUT_RING_DEFAULT_BYTES
@@ -326,6 +331,7 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
   let cachedAccountInfo: AccountInfo | null = deriveAccountInfoFromOauth({ label: args.oauthLabel, oauthKeyMasked: args.oauthKeyMasked })
   let sawResultEntry = false
   let cachedSlashCommands: SlashCommand[] | null = null
+  let localPlanModeActive = args.planMode
   const mergedQueue: HarnessEvent[] = []
   const mergedWaiters: Array<(r: IteratorResult<HarnessEvent>) => void> = []
 
@@ -426,7 +432,8 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
   const knownFilePath = args.sessionToken && !args.forkSession
     ? computeJsonlPath({ homeDir: home, cwd: args.localPath, sessionId: args.sessionToken })
     : undefined
-  const transcriptStream = await startTranscriptStream({
+  const startStream = args.startTranscriptStreamFn ?? startTranscriptStream
+  const transcriptStream = await startStream({
     projectDir,
     knownFilePath,
     pollMode: (args.env ?? process.env).KANNA_PTY_TRANSCRIPT_WATCH === "poll",
@@ -551,8 +558,20 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
     },
     setPermissionMode: async (planMode) => {
       if (planMode) {
-        try { await pty.sendInput("/plan\r") } catch (err) {
+        try {
+          await pty.sendInput("/plan\r")
+          localPlanModeActive = true
+        } catch (err) {
           console.warn("[kanna/pty] /plan slash command failed", err)
+        }
+        return
+      }
+      if (localPlanModeActive) {
+        try {
+          await pty.sendInput(SHIFT_TAB_KEY)
+          localPlanModeActive = false
+        } catch (err) {
+          console.warn("[kanna/pty] Shift+Tab exit-plan failed", err)
         }
         return
       }

@@ -2,7 +2,9 @@ import { describe, expect, test } from "bun:test"
 import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
-import { startClaudeSessionPTY, buildPtyEnv, buildPtyCliArgs, OutputRing, PTY_STDERR_RING_BYTES, PTY_DISALLOWED_NATIVE_TOOLS, deriveAccountInfoFromOauth, PLAN_MODE_EXIT_UNSUPPORTED } from "./driver"
+import { startClaudeSessionPTY, buildPtyEnv, buildPtyCliArgs, OutputRing, PTY_STDERR_RING_BYTES, PTY_DISALLOWED_NATIVE_TOOLS, deriveAccountInfoFromOauth, PLAN_MODE_EXIT_UNSUPPORTED, SHIFT_TAB_KEY } from "./driver"
+import type { TranscriptStream } from "./tui-source"
+import type { PtyProcess, SpawnPtyProcessArgs } from "./pty-process"
 import { KANNA_SYSTEM_PROMPT_APPEND } from "../../shared/kanna-system-prompt"
 import type { HarnessEvent } from "../harness-types"
 
@@ -451,8 +453,129 @@ describe("deriveAccountInfoFromOauth (C1)", () => {
   })
 })
 
-describe("PLAN_MODE_EXIT_UNSUPPORTED (TUI mode message)", () => {
-  test("PLAN_MODE_EXIT_UNSUPPORTED references TUI mode", () => {
-    expect(PLAN_MODE_EXIT_UNSUPPORTED).toContain("TUI mode")
+describe("PLAN_MODE_EXIT_UNSUPPORTED (state-unknown warning)", () => {
+  test("PLAN_MODE_EXIT_UNSUPPORTED references plan mode and acceptEdits", () => {
+    expect(PLAN_MODE_EXIT_UNSUPPORTED).toContain("plan mode")
+    expect(PLAN_MODE_EXIT_UNSUPPORTED).toContain("acceptEdits")
   })
+})
+
+describe("SHIFT_TAB_KEY constant", () => {
+  test("is the VT100 Shift+Tab sequence", () => {
+    expect(SHIFT_TAB_KEY).toBe("\x1b[Z")
+  })
+})
+
+// ── F1: setPermissionMode — plan mode exit via Shift+Tab ────────────────────
+
+async function makeTestHandle(opts?: { planMode?: boolean }) {
+  const homeDir = await mkdtemp(path.join(tmpdir(), "kanna-pm-"))
+  const sentInputs: string[] = []
+  let exitResolve!: (code: number) => void
+  const exited = new Promise<number>((r) => { exitResolve = r })
+
+  const fakePty: PtyProcess = {
+    async sendInput(data) { sentInputs.push(data) },
+    resize() {},
+    exited,
+    close() { exitResolve(0) },
+  }
+
+  const fakeSpawn = async (spawnArgs: SpawnPtyProcessArgs): Promise<PtyProcess> => {
+    spawnArgs.onOutput?.("❯ ")
+    return fakePty
+  }
+
+  const fakeSmoke: import("./smoke-test").SmokeTestGate = {
+    async canSpawn() { return { ok: true } },
+  }
+
+  const neverStream: TranscriptStream = {
+    lines: {
+      [Symbol.asyncIterator]() {
+        return { next(): Promise<IteratorResult<string, undefined>> { return new Promise(() => {}) } }
+      },
+    },
+    filePath: new Promise<string>(() => {}),
+    close() {},
+  }
+
+  const handle = await startClaudeSessionPTY({
+    chatId: "test", projectId: "test", localPath: homeDir,
+    model: "claude-haiku-4-5-20251001",
+    planMode: opts?.planMode ?? false,
+    forkSession: false,
+    oauthToken: "test-token",
+    sessionToken: null,
+    onToolRequest: async () => null,
+    homeDir,
+    env: {
+      HOME: homeDir,
+      CLAUDE_CODE_OAUTH_TOKEN: "test-token",
+      KANNA_PTY_TRUST_DISMISS: "disabled",
+      CLAUDE_EXECUTABLE: "/bin/sh",
+    },
+    spawnPtyProcess: fakeSpawn,
+    startKannaMcpHttpServer: async () => ({ url: "http://127.0.0.1:0/mcp", bearerToken: "test", close: async () => {} }),
+    startTranscriptStreamFn: async () => neverStream,
+    smokeTestGate: fakeSmoke,
+  })
+
+  return {
+    handle,
+    sentInputs,
+    async cleanup() {
+      exitResolve(0)
+      handle.close()
+      await rm(homeDir, { recursive: true, force: true })
+    },
+  }
+}
+
+describe("setPermissionMode (F1 — plan mode exit)", () => {
+  test("setPermissionMode(true) sends /plan\\r and tracks state", async () => {
+    if (process.platform === "win32") return
+    const { handle, sentInputs, cleanup } = await makeTestHandle()
+    try {
+      await handle.setPermissionMode(true)
+      expect(sentInputs).toContain("/plan\r")
+    } finally {
+      await cleanup()
+    }
+  }, 10_000)
+
+  test("setPermissionMode(false) after true sends Shift+Tab \\x1b[Z", async () => {
+    if (process.platform === "win32") return
+    const { handle, sentInputs, cleanup } = await makeTestHandle()
+    try {
+      await handle.setPermissionMode(true)
+      sentInputs.length = 0
+      await handle.setPermissionMode(false)
+      expect(sentInputs).toContain(SHIFT_TAB_KEY)
+    } finally {
+      await cleanup()
+    }
+  }, 10_000)
+
+  test("setPermissionMode(false) when started with planMode:true sends Shift+Tab", async () => {
+    if (process.platform === "win32") return
+    const { handle, sentInputs, cleanup } = await makeTestHandle({ planMode: true })
+    try {
+      await handle.setPermissionMode(false)
+      expect(sentInputs).toContain(SHIFT_TAB_KEY)
+    } finally {
+      await cleanup()
+    }
+  }, 10_000)
+
+  test("setPermissionMode(false) without prior entry does NOT send Shift+Tab", async () => {
+    if (process.platform === "win32") return
+    const { handle, sentInputs, cleanup } = await makeTestHandle()
+    try {
+      await handle.setPermissionMode(false)
+      expect(sentInputs).not.toContain(SHIFT_TAB_KEY)
+    } finally {
+      await cleanup()
+    }
+  }, 10_000)
 })
