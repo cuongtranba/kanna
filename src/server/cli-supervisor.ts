@@ -93,7 +93,15 @@ while (true) {
       lastStartupUpdateRestart = isStartupUpdate
     }
 
-    suppressOpenOnNextChild = isUiUpdateRestart(result.code, result.signal)
+    const uiRestart = isUiUpdateRestart(result.code, result.signal)
+    if (uiRestart) {
+      // User explicitly picked a version via the UI (update, rollback, or
+      // install of an arbitrary release). Skip the next self-update so the
+      // child boots on the chosen version instead of re-upgrading to npm
+      // `latest` (which would silently undo a rollback).
+      skipUpdateOnNextChild = true
+    }
+    suppressOpenOnNextChild = uiRestart
     console.log(`${LOG_PREFIX} supervisor restarting ${CLI_COMMAND} in the same terminal session`)
     continue
   }
