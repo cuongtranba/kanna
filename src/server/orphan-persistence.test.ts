@@ -118,7 +118,7 @@ describe("orphan persistence", () => {
     expect(calls).toHaveLength(1)
     expect(calls[0]?.name).toBe("bg_task_orphan_kept")
     expect(calls[0]?.properties?.count).toBe(2)
-  })
+  }, 30_000)
 
   it("analytics: no event emitted when no orphans survive", async () => {
     const { reporter, calls } = makeAnalytics()

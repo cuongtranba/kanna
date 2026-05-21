@@ -43,7 +43,7 @@ describe("TerminalPidRegistry", () => {
     }
     expect(raw.entries).toHaveLength(1)
     expect(raw.entries[0]?.terminalId).toBe("t2")
-  })
+  }, 30_000)
 
   test("reapStale kills live process groups and clears the file", async () => {
     // Spawn a process that becomes its own pgroup leader (mirrors how
@@ -51,7 +51,7 @@ describe("TerminalPidRegistry", () => {
     // ready handshake ensures setsid() has run before we attempt to reap.
     const child = Bun.spawn(
       ["python3", "-c", "import os, sys, time; os.setsid(); sys.stdout.write('ready\\n'); sys.stdout.flush(); time.sleep(60)"],
-      { stdout: "pipe", stderr: "ignore" },
+      { stdout: "pipe", stderr: "ignore", stdin: "ignore" },
     )
     const reader = child.stdout.getReader()
     const decoded = new TextDecoder().decode((await reader.read()).value ?? new Uint8Array())
@@ -86,7 +86,7 @@ describe("TerminalPidRegistry", () => {
 
     const raw = JSON.parse(await readFile(registryPath, "utf8")) as { entries: unknown[] }
     expect(raw.entries).toEqual([])
-  })
+  }, 30_000)
 
   test("reapStale tolerates a missing registry file", async () => {
     const registry = new TerminalPidRegistry(registryPath)

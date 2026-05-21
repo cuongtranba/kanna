@@ -4,6 +4,7 @@ import {
   sendExitCommand,
   dismissTrustDialogIfPresent,
   waitForTuiReady,
+  waitForTuiReadyWithTrustDismiss,
   TRUST_DIALOG_MARKER,
   TUI_READY_MARKER,
 } from "./tui-control"
@@ -93,5 +94,106 @@ describe("waitForTuiReady", () => {
 
   test("exported TUI_READY_MARKER is the input-box prompt", () => {
     expect(TUI_READY_MARKER).toBe("❯ ")
+  })
+
+  test("returns 'marker' when TUI renders ❯ with \\x1b[1C instead of space", async () => {
+    const ring = new OutputRing()
+    // Real TUI output: space after ❯ is cursor-forward-1, not a literal space
+    ring.append("❯\x1b[1C")
+    const result = await waitForTuiReady(ring, { hardCapMs: 1000, pollMs: 10 })
+    expect(result).toBe("marker")
+  })
+
+  test("returns 'marker' when TUI renders ❯ followed by U+00A0 (non-breaking space)", async () => {
+    const ring = new OutputRing()
+    // Real TUI output: ❯ is followed by NBSP (U+00A0), not a regular space
+    ring.append("❯ ")
+    const result = await waitForTuiReady(ring, { hardCapMs: 1000, pollMs: 10 })
+    expect(result).toBe("marker")
+  })
+})
+
+describe("dismissTrustDialogIfPresent (ANSI-encoded ring)", () => {
+  test("detects trust dialog when words separated by \\x1b[1C (TUI rendering)", async () => {
+    const pty = fakePty()
+    const ring = new OutputRing()
+    // Real TUI output: spaces rendered as cursor-forward-1 escape sequences
+    ring.append("\x1b[1C❯\x1b[1C1.\x1b[1CYes,\x1b[1CI\x1b[1Ctrust\x1b[1Cthis\x1b[1Cfolder\r\n")
+    const dismissed = await dismissTrustDialogIfPresent(pty, ring)
+    expect(dismissed).toBe(true)
+    expect(pty.sent).toEqual(["\r"])
+  })
+
+  test("does not false-trigger on plain text without trust marker", async () => {
+    const pty = fakePty()
+    const ring = new OutputRing()
+    ring.append("\x1b[1CWelcome\x1b[1Cback!\x1b[0m❯ ")
+    const dismissed = await dismissTrustDialogIfPresent(pty, ring)
+    expect(dismissed).toBe(false)
+    expect(pty.sent).toEqual([])
+  })
+})
+
+describe("waitForTuiReadyWithTrustDismiss", () => {
+  test("returns 'ready' immediately when input box already present", async () => {
+    const pty = fakePty()
+    const ring = new OutputRing()
+    ring.append("❯ ")
+    const result = await waitForTuiReadyWithTrustDismiss(pty, ring, { hardCapMs: 500, pollMs: 10 })
+    expect(result).toBe("ready")
+    expect(pty.sent).toEqual([])
+  })
+
+  test("dismisses ANSI trust dialog then resolves when input box appears", async () => {
+    const pty = fakePty()
+    const ring = new OutputRing()
+    // Trust dialog with ANSI-encoded text appears first
+    ring.append("\x1b[1Ctrust\x1b[1Cthis\x1b[1Cfolder")
+    // After 50ms simulate TUI loading: input box appears after dismiss sends \r
+    setTimeout(() => ring.append("❯ "), 80)
+    const result = await waitForTuiReadyWithTrustDismiss(pty, ring, { hardCapMs: 1000, pollMs: 10 })
+    expect(result).toBe("ready")
+    expect(pty.sent).toContain("\r")
+  })
+
+  test("returns 'timeout' when neither marker appears", async () => {
+    const pty = fakePty()
+    const ring = new OutputRing()
+    const result = await waitForTuiReadyWithTrustDismiss(pty, ring, { hardCapMs: 150, pollMs: 10 })
+    expect(result).toBe("timeout")
+    expect(pty.sent).toEqual([])
+  })
+
+  test("returns 'ready' when TUI renders ❯ with \\x1b[1C (ANSI cursor-forward)", async () => {
+    const pty = fakePty()
+    const ring = new OutputRing()
+    ring.append("❯\x1b[1C")
+    const result = await waitForTuiReadyWithTrustDismiss(pty, ring, { hardCapMs: 500, pollMs: 10 })
+    expect(result).toBe("ready")
+    expect(pty.sent).toEqual([])
+  })
+
+  test("does not false-trigger on trust dialog's own ❯ selection cursor", async () => {
+    // Trust dialog renders "❯ 1. Yes, I trust this folder" as ANSI:
+    // "❯\x1b[1C1.\x1b[1CYes,...trust\x1b[1Cthis\x1b[1Cfolder"
+    // stripAnsi gives "❯ 1. Yes, I trust this folder" which contains "❯ "
+    // → must NOT trigger "ready" while trust dialog is present
+    const pty = fakePty()
+    const ring = new OutputRing()
+    ring.append("\x1b[1C❯\x1b[1C1.\x1b[1CYes,\x1b[1CI\x1b[1Ctrust\x1b[1Cthis\x1b[1Cfolder\r\n")
+    setTimeout(() => ring.append("❯\x1b[1C"), 80)
+    const result = await waitForTuiReadyWithTrustDismiss(pty, ring, { hardCapMs: 1000, pollMs: 10 })
+    expect(result).toBe("ready")
+    expect(pty.sent).toContain("\r")
+  })
+
+  test("dismisses trust dialog only once even if marker persists in ring", async () => {
+    const pty = fakePty()
+    const ring = new OutputRing()
+    ring.append("\x1b[1Ctrust\x1b[1Cthis\x1b[1Cfolder")
+    setTimeout(() => ring.append("❯ "), 80)
+    await waitForTuiReadyWithTrustDismiss(pty, ring, { hardCapMs: 1000, pollMs: 10 })
+    // \r should appear exactly once (dismiss sent once, not repeated each poll)
+    expect(pty.sent.filter((s) => s === "\r")).toHaveLength(1)
   })
 })

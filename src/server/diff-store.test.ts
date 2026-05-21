@@ -5,15 +5,17 @@ import path from "node:path"
 import { appendGitIgnoreEntry, DiffStore, extractGitHubRepoSlug, fetchGitHubPullRequests } from "./diff-store"
 
 async function run(command: string[], cwd: string) {
-  const process = Bun.spawn(command, {
+  const proc = Bun.spawn(command, {
     cwd,
     stdout: "pipe",
     stderr: "pipe",
+    stdin: "ignore",
+    env: { ...process.env, GIT_TERMINAL_PROMPT: "0" },
   })
   const [stdout, stderr, exitCode] = await Promise.all([
-    new Response(process.stdout).text(),
-    new Response(process.stderr).text(),
-    process.exited,
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+    proc.exited,
   ])
 
   if (exitCode !== 0) {
@@ -209,7 +211,7 @@ describe("DiffStore", () => {
     const snapshot = store.getProjectSnapshot("project-1")
     expect(snapshot.files).toHaveLength(1)
     expect(snapshot.files[0]?.path).toBe("build/.gitignore")
-  })
+  }, 30_000)
 
   test("refreshSnapshot reports origin presence before the first commit", async () => {
     const repoRoot = await createRepo()

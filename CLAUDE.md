@@ -139,13 +139,15 @@ approval protocol to the UI — active regardless of `KANNA_MCP_TOOL_CALLBACKS`.
 See the Tool Callback Feature Flag section for full wiring.
 
 **setPermissionMode:** Asymmetric.
-- ENTER plan (`planMode === true`) sends the `/plan` slash command via
-  `pty.sendInput("/plan\r")`.
-- EXIT plan (`planMode === false`) is warn-only — no slash command leaves
-  plan mode, and the only exit is the relative Shift+Tab TUI cycle whose
-  keypress count depends on unobservable TUI state. Restart the session
-  to return to acceptEdits. Tracked: anthropics/claude-code#59891.
-  Closing this gap is deferred (spec F1).
+- ENTER plan (`planMode === true`) sends `/plan\r` and sets an internal
+  `localPlanModeActive = true` flag.
+- EXIT plan (`planMode === false`) sends `SHIFT_TAB_KEY` (`\x1b[Z`, one
+  Shift+Tab press) and clears the flag **when `localPlanModeActive` is
+  true** — covers the common case where the driver entered plan mode.
+  If the flag is false (plan mode toggled externally via Shift+Tab in the
+  UI), a warning is logged and no keypress is sent. Restart the session
+  to return to acceptEdits from an unknown state. Tracked:
+  anthropics/claude-code#59891.
 
 **setModel:** Sends `/model <name>\r` via the slash command (no stream-json
 control_request envelope in TUI mode).
@@ -153,8 +155,10 @@ control_request envelope in TUI mode).
 **interrupt:** Sends `Ctrl+C` (0x03) via PTY stdin — TUI claude treats this
 as an interactive interrupt, cancelling the current turn.
 
-**getSupportedCommands():** Static four-command list. Live `/help` parsing
-is deferred (spec F2).
+**getSupportedCommands():** Returns the live slash-command list from the
+spawned claude's `system_init` JSONL entry once a session is active.
+Falls back to a static four-command list (`model`, `exit`, `clear`, `help`)
+before first spawn (cold-start gap).
 
 **SDK ↔ PTY equivalence (Phase 6):** `src/server/claude-pty/parity-matrix.test.ts`
 drives both `createClaudeHarnessStream` (SDK) and `createJsonlEventParser`

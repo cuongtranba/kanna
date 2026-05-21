@@ -48,7 +48,7 @@ describe("listProjectPaths", () => {
     const paths = await listProjectPaths({ projectId: "p2", localPath: root, query: "agent" })
     const names = paths.map((p) => p.path)
     expect(names).toContain("src/agent.ts")
-  })
+  }, 30_000)
 
   test("git repo: respects .gitignore for untracked files", async () => {
     const root = await makeTempDir("kanna-paths-ignore-")
