@@ -205,6 +205,8 @@ async function drainHarnessTurn(
 ): Promise<{ text: string; usage?: ProviderUsage }> {
   let accumulated = ""
   let usage: ProviderUsage | undefined
+  let sawResult = false
+  let sawError = false
   for await (const event of turn.stream) {
     if (event.type !== "transcript" || !event.entry) continue
     onEntry(event.entry)
@@ -214,6 +216,8 @@ async function drainHarnessTurn(
       onChunk(fragment)
     } else if (event.entry.kind === "result") {
       const e = event.entry
+      sawResult = true
+      if (e.isError) sawError = true
       usage = {
         inputTokens: e.usage?.inputTokens,
         outputTokens: e.usage?.outputTokens,
@@ -222,5 +226,16 @@ async function drainHarnessTurn(
       }
     }
   }
+  // Log how the drain ended so post-mortem investigation can distinguish:
+  //   • clean completion (sawResult + no error)
+  //   • PTY exit synth error (sawResult + isError) — process died mid-turn
+  //   • premature stream close (no result at all) — orchestrator close or
+  //     driver bug; partial text is the only evidence
+  console.log("[kanna/subagent] drainHarnessTurn finished", {
+    accumulatedChars: accumulated.length,
+    sawResult,
+    sawError,
+    hasUsage: Boolean(usage),
+  })
   return { text: accumulated, usage }
 }

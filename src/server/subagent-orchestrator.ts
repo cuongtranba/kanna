@@ -495,7 +495,7 @@ export class SubagentOrchestrator {
         `Subagent ${subagent.name} already in ancestor chain`,
       )
     }
-    return await this.spawnRun({
+    const outcome = await this.spawnRun({
       subagent,
       chatId: args.chatId,
       parentUserMessageId: args.parentUserMessageId,
@@ -505,6 +505,20 @@ export class SubagentOrchestrator {
       userInstruction: args.prompt,
       onEntry: args.onEntry,
     })
+    // Trace point: this is the return that flows back through the MCP
+    // `delegate_subagent` tool to the parent claude as its tool_result.
+    // If the parent appears to hang after this point, the bug is on the
+    // MCP shim or the parent PTY side, not in the orchestrator.
+    console.log("[kanna/subagent] delegateRun outcome", {
+      chatId: args.chatId,
+      subagentId: args.subagentId,
+      parentRunId: args.parentRunId,
+      depth: args.depth,
+      status: outcome.status,
+      errorCode: outcome.status === "failed" ? outcome.errorCode : undefined,
+      textChars: outcome.status === "completed" ? outcome.text.length : undefined,
+    })
+    return outcome
   }
 
   private async spawnRun(args: {
@@ -843,6 +857,7 @@ export class SubagentOrchestrator {
     code: SubagentErrorCode,
     message: string,
   ): Promise<DelegationOutcome> {
+    console.warn(`${LOG_PREFIX} subagent run failed`, { chatId, runId, code, message })
     try {
       await this.deps.store.appendSubagentEvent({
         v: 3,
