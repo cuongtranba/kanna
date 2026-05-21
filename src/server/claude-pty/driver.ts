@@ -174,20 +174,18 @@ export function buildPtyCliArgs(args: BuildPtyCliArgsInput): string[] {
     "--dangerously-skip-permissions",
   ]
   // TUI mode session handling:
-  //   • New session (no sessionToken)                  → --session-id <args.sessionId> (force claude to use kanna's UUID)
+  //   • New session (no sessionToken)                  → no --session-id (TUI ignores it; claude generates its own UUID)
   //   • Resume existing session (sessionToken set)     → --resume <token>
   //   • Fork existing session (sessionToken + fork)    → --session-id <newUuid> --resume <token> --fork-session
   //
-  // For new sessions we pass --session-id so kanna knows the exact JSONL
-  // path up-front (knownFilePath = <sessionId>.jsonl). Without it, claude
-  // generates its own UUID and kanna's findLatestTranscript races against
-  // stale JSONLs from prior sessions in the same project dir.
+  // Interactive TUI claude ignores `--session-id` for new sessions and
+  // always generates its own UUID. Watcher uses an mtime filter on the
+  // project dir instead — only JSONLs created at or after spawn start are
+  // candidates, so stale JSONLs from prior sessions cannot win the race.
   if (args.sessionToken && !args.forkSession) {
     cliArgs.push("--resume", args.sessionToken)
   } else if (args.sessionToken && args.forkSession) {
     cliArgs.push("--session-id", args.sessionId, "--resume", args.sessionToken, "--fork-session")
-  } else {
-    cliArgs.push("--session-id", args.sessionId)
   }
   if (args.mcpConfigPath) {
     cliArgs.push("--mcp-config", args.mcpConfigPath, "--strict-mcp-config")
@@ -439,18 +437,21 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
 
   // Open transcript-file event stream.
   const projectDir = computeProjectDir({ homeDir: home, cwd: args.localPath })
-  // knownFilePath: for resume (sessionToken set, no fork) use sessionToken's
-  // JSONL; for new sessions and forks use the freshly-assigned sessionId
-  // (passed to claude via --session-id above) so the watcher locks onto the
-  // exact file claude will create, avoiding a race with stale JSONLs from
-  // prior sessions in the same project dir.
+  // knownFilePath: only known up-front when resuming (we know the
+  // sessionToken). For new sessions interactive TUI claude generates its
+  // own UUID and ignores `--session-id`, so the path is unknown — fall
+  // back to discovery via `findLatestTranscript` with an mtime floor at
+  // spawn-start time to filter out stale JSONLs from prior sessions in
+  // the same project dir.
   const knownFilePath = args.sessionToken && !args.forkSession
     ? computeJsonlPath({ homeDir: home, cwd: args.localPath, sessionId: args.sessionToken })
-    : computeJsonlPath({ homeDir: home, cwd: args.localPath, sessionId })
+    : undefined
+  const spawnStartedAtMs = Date.now()
   const startStream = args.startTranscriptStreamFn ?? startTranscriptStream
   const transcriptStream = await startStream({
     projectDir,
     knownFilePath,
+    minMtimeMs: spawnStartedAtMs,
     pollMode: (args.env ?? process.env).KANNA_PTY_TRANSCRIPT_WATCH === "poll",
   })
 

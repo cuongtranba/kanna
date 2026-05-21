@@ -97,8 +97,14 @@ export async function sendUserPrompt(pty: PtyProcess, text: string): Promise<voi
   // handler as "newline within the input box", not "submit prompt", so the
   // prompt sits in the input area and the model never makes an API call.
   // Matches the canon/shannon reference impl: tmux paste-buffer + C-m.
+  //
+  // Multi-line pastes get collapsed by claude TUI into a "[Pasted text #N
+  // +X lines]" reference; the TUI then needs a clear separation between
+  // the paste-end marker and the Enter keystroke or the \r gets absorbed
+  // into the paste buffer instead of submitting. 200 ms post-paste delay +
+  // a second \r after another 50 ms covers both cases.
   await pty.sendInput(`\x1b[200~${text}\x1b[201~`)
-  await new Promise((r) => setTimeout(r, 50))
+  await new Promise((r) => setTimeout(r, 200))
   await pty.sendInput("\r")
 }
 

@@ -2,7 +2,10 @@ import { readdir, stat, open } from "node:fs/promises"
 import { existsSync, watch } from "node:fs"
 import path from "node:path"
 
-export async function findLatestTranscript(projectDir: string): Promise<string | null> {
+export async function findLatestTranscript(
+  projectDir: string,
+  opts: { minMtimeMs?: number } = {},
+): Promise<string | null> {
   if (!existsSync(projectDir)) return null
   let entries: string[]
   try {
@@ -12,12 +15,18 @@ export async function findLatestTranscript(projectDir: string): Promise<string |
   }
   const jsonlNames = entries.filter((n) => n.endsWith(".jsonl"))
   if (jsonlNames.length === 0) return null
+  const floor = opts.minMtimeMs ?? 0
   let bestPath: string | null = null
   let bestMtime = 0
   for (const name of jsonlNames) {
     const full = path.join(projectDir, name)
     try {
       const s = await stat(full)
+      // Skip stale JSONLs from prior sessions in the same project dir.
+      // Without this floor, kanna's watcher locks onto the most-recently-
+      // touched OLD transcript while claude is still in the middle of
+      // creating its new one — events from the new session are lost.
+      if (s.mtimeMs < floor) continue
       if (s.mtimeMs > bestMtime) {
         bestMtime = s.mtimeMs
         bestPath = full
@@ -38,6 +47,13 @@ export interface TranscriptStream {
 export interface StartTranscriptStreamArgs {
   projectDir: string
   knownFilePath?: string
+  /**
+   * Mtime floor (ms) for JSONL discovery. When `knownFilePath` is unset,
+   * `findLatestTranscript` filters out files older than this — set to
+   * spawn-start time so stale JSONLs from prior sessions in the same
+   * project dir cannot win the race.
+   */
+  minMtimeMs?: number
   pollMode?: boolean
   pollIntervalMs?: number
   firstFileTimeoutMs?: number
@@ -112,7 +128,8 @@ export async function startTranscriptStream(args: StartTranscriptStreamArgs): Pr
   async function locateFirstFile(): Promise<string> {
     if (args.knownFilePath) return args.knownFilePath
     const timeoutMs = args.firstFileTimeoutMs ?? DEFAULT_FIRST_FILE_TIMEOUT_MS
-    const existing = await findLatestTranscript(args.projectDir)
+    const findOpts = { minMtimeMs: args.minMtimeMs }
+    const existing = await findLatestTranscript(args.projectDir, findOpts)
     if (existing) return existing
     return new Promise<string>((resolve, reject) => {
       const start = Date.now()
@@ -128,7 +145,7 @@ export async function startTranscriptStream(args: StartTranscriptStreamArgs): Pr
           reject(new Error(`transcript file did not appear in ${timeoutMs}ms under ${args.projectDir}`))
           return
         }
-        const found = await findLatestTranscript(args.projectDir)
+        const found = await findLatestTranscript(args.projectDir, findOpts)
         if (found) {
           clearInterval(timer)
           resolve(found)

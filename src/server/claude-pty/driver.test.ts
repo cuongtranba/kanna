@@ -248,13 +248,12 @@ describe("buildPtyCliArgs TUI mode", () => {
     expect(args).toContain("--dangerously-skip-permissions")
   })
 
-  test("new sessions include --session-id <args.sessionId> (lets kanna know exact JSONL path)", () => {
+  test("new sessions omit --session-id (interactive TUI ignores it; mtime filter handles JSONL discovery)", () => {
     const args = buildPtyCliArgs({
       sessionId: "s1", model: "m", planMode: false,
       sessionToken: null, forkSession: false,
     })
-    expect(args).toContain("--session-id")
-    expect(args).toContain("s1")
+    expect(args).not.toContain("--session-id")
     expect(args).not.toContain("--resume")
   })
 
@@ -359,13 +358,11 @@ describe("buildPtyCliArgs", () => {
     expect(args[idx + 1]).toBe("tok-abc")
   })
 
-  test("new-session mode (no token, no fork): --session-id <args.sessionId>, no --resume, no --fork-session", () => {
+  test("new-session mode (no token, no fork): no --session-id, no --resume, no --fork-session", () => {
     const args = buildPtyCliArgs(baseInput)
     expect(args).not.toContain("--resume")
     expect(args).not.toContain("--fork-session")
-    const sid = args.indexOf("--session-id")
-    expect(sid).toBeGreaterThan(-1)
-    expect(args[sid + 1]).toBe(baseInput.sessionId)
+    expect(args).not.toContain("--session-id")
   })
 
   test("fork mode: --session-id + --resume + --fork-session all three", () => {

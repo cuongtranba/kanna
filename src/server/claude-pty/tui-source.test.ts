@@ -47,6 +47,26 @@ describe("findLatestTranscript", () => {
     const result = await findLatestTranscript(path.join(workHome, "no-such-dir"))
     expect(result).toBeNull()
   })
+
+  test("minMtimeMs filter skips JSONLs older than the floor", async () => {
+    const stale = path.join(projectDir, "stale.jsonl")
+    const fresh = path.join(projectDir, "fresh.jsonl")
+    await writeFile(stale, "{}\n")
+    await new Promise((r) => setTimeout(r, 20))
+    const floor = Date.now()
+    await new Promise((r) => setTimeout(r, 20))
+    await writeFile(fresh, "{}\n")
+    const result = await findLatestTranscript(projectDir, { minMtimeMs: floor })
+    expect(result).toBe(fresh)
+  })
+
+  test("minMtimeMs returns null when every JSONL is older than the floor", async () => {
+    const a = path.join(projectDir, "a.jsonl")
+    await writeFile(a, "{}\n")
+    await new Promise((r) => setTimeout(r, 20))
+    const result = await findLatestTranscript(projectDir, { minMtimeMs: Date.now() })
+    expect(result).toBeNull()
+  })
 })
 
 describe("startTranscriptStream (dir-watch)", () => {
