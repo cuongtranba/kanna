@@ -76,16 +76,24 @@ export interface StartClaudeSessionPtyArgs {
   oneShot?: boolean
   /** Label of the OAuth-pool token. Surfaces in AccountInfo since the CLI doesn't emit account info in stream-json. */
   oauthLabel?: string
+  /** Masked OAuth-pool token (e.g. `sk-ant-oat01...XXXX`). Computed by AgentCoordinator; never the raw token. */
+  oauthKeyMasked?: string
 }
 
 /**
- * Derive an AccountInfo from the picked OAuth-pool token label.
- * The claude CLI never emits account info in stream-json, so the
- * user-configured token label is the only account signal PTY has.
+ * Derive an AccountInfo from the picked OAuth-pool token. The claude CLI
+ * never emits account info in stream-json, so the user-configured token
+ * label and the coordinator-computed masked key are the only account
+ * signals PTY has.
  */
-export function deriveAccountInfoFromLabel(label?: string): AccountInfo | null {
-  if (!label || label.length === 0) return null
-  return { organization: label, tokenSource: "kanna-oauth-pool" }
+export function deriveAccountInfoFromOauth(args: { label?: string; oauthKeyMasked?: string }): AccountInfo | null {
+  const hasLabel = Boolean(args.label && args.label.length > 0)
+  const hasMasked = Boolean(args.oauthKeyMasked && args.oauthKeyMasked.length > 0)
+  if (!hasLabel && !hasMasked) return null
+  const info: AccountInfo = { tokenSource: "kanna-oauth-pool" }
+  if (hasLabel) info.organization = args.label
+  if (hasMasked) info.oauthKeyMasked = args.oauthKeyMasked
+  return info
 }
 
 export const PLAN_MODE_EXIT_UNSUPPORTED =
@@ -342,7 +350,7 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
 
   let closed = false
   let cleanedUp = false
-  let cachedAccountInfo: AccountInfo | null = deriveAccountInfoFromLabel(args.oauthLabel)
+  let cachedAccountInfo: AccountInfo | null = deriveAccountInfoFromOauth({ label: args.oauthLabel, oauthKeyMasked: args.oauthKeyMasked })
   let sawResultEntry = false
   let cachedSlashCommands: SlashCommand[] | null = null
   const stderrRing = new OutputRing()

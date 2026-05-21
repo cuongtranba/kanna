@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
-import { startClaudeSessionPTY, buildPtyEnv, buildPtyCliArgs, OutputRing, PTY_STDERR_RING_BYTES, PTY_DISALLOWED_NATIVE_TOOLS, deriveAccountInfoFromLabel, planModeRuntimeAction, PLAN_MODE_EXIT_UNSUPPORTED } from "./driver"
+import { startClaudeSessionPTY, buildPtyEnv, buildPtyCliArgs, OutputRing, PTY_STDERR_RING_BYTES, PTY_DISALLOWED_NATIVE_TOOLS, deriveAccountInfoFromOauth, planModeRuntimeAction, PLAN_MODE_EXIT_UNSUPPORTED } from "./driver"
 import { KANNA_SYSTEM_PROMPT_APPEND } from "../../shared/kanna-system-prompt"
 import type { HarnessEvent } from "../harness-types"
 
@@ -344,18 +344,33 @@ describe("OutputRing (B4 stderr ring buffer)", () => {
   })
 })
 
-describe("deriveAccountInfoFromLabel (C1)", () => {
-  test("undefined label → null (UI falls back, no bogus chip)", () => {
-    expect(deriveAccountInfoFromLabel(undefined)).toBeNull()
+describe("deriveAccountInfoFromOauth (C1)", () => {
+  test("no label and no masked key → null (UI falls back, no bogus chip)", () => {
+    expect(deriveAccountInfoFromOauth({})).toBeNull()
   })
 
-  test("empty label → null", () => {
-    expect(deriveAccountInfoFromLabel("")).toBeNull()
+  test("empty label and empty masked → null", () => {
+    expect(deriveAccountInfoFromOauth({ label: "", oauthKeyMasked: "" })).toBeNull()
   })
 
-  test("label → AccountInfo with organization + kanna-oauth-pool source", () => {
-    expect(deriveAccountInfoFromLabel("work-account")).toEqual({
+  test("label only → AccountInfo with organization + kanna-oauth-pool source", () => {
+    expect(deriveAccountInfoFromOauth({ label: "work-account" })).toEqual({
       organization: "work-account",
+      tokenSource: "kanna-oauth-pool",
+    })
+  })
+
+  test("masked key only → AccountInfo with oauthKeyMasked + kanna-oauth-pool source", () => {
+    expect(deriveAccountInfoFromOauth({ oauthKeyMasked: "sk-ant-oat01...1234" })).toEqual({
+      oauthKeyMasked: "sk-ant-oat01...1234",
+      tokenSource: "kanna-oauth-pool",
+    })
+  })
+
+  test("label + masked → AccountInfo with both fields", () => {
+    expect(deriveAccountInfoFromOauth({ label: "work-account", oauthKeyMasked: "sk-ant-oat01...1234" })).toEqual({
+      organization: "work-account",
+      oauthKeyMasked: "sk-ant-oat01...1234",
       tokenSource: "kanna-oauth-pool",
     })
   })

@@ -50,6 +50,7 @@ import type { TunnelGateway } from "./cloudflare-tunnel/gateway"
 import type { BackgroundTaskRegistry } from "./background-tasks"
 import type { TerminalManager } from "./terminal-manager"
 import { OAuthTokenPool } from "./oauth-pool/oauth-token-pool"
+import { maskOauthKey } from "../shared/mask-oauth-key"
 import { parseMentions, type ParsedMention } from "./mention-parser"
 import { SubagentOrchestrator, type ProviderRunStart } from "./subagent-orchestrator"
 import { buildSubagentProviderRun, type BuildSubagentProviderRunArgs } from "./subagent-provider-run"
@@ -155,6 +156,7 @@ interface ClaudeSessionState {
   nextPromptSeq: number
   pendingPromptSeqs: number[]
   activeTokenId: string | null
+  oauthKeyMasked: string | null
   lastUsedAt: number
 }
 
@@ -1529,6 +1531,7 @@ export class AgentCoordinator {
                 forkSession: false,
                 oauthToken: picked?.token ?? null,
                 oauthLabel: picked?.label,
+                oauthKeyMasked: picked ? maskOauthKey(picked.token) : undefined,
                 onToolRequest: async () => null,
                 systemPromptAppend: ephemeralSystemPromptAppend,
                 preflightGate: this.preflightGate ?? undefined,
@@ -1982,16 +1985,20 @@ export class AgentCoordinator {
       void turn.getAccountInfo()
         .then(async (accountInfo) => {
           if (!accountInfo) return
+          let augmented = accountInfo
           if (args.provider === "claude") {
             const session = this.claudeSessions.get(args.chatId)
             if (session) {
               if (session.accountInfoLoaded) return
               session.accountInfoLoaded = true
+              if (session.oauthKeyMasked && !accountInfo.oauthKeyMasked) {
+                augmented = { ...accountInfo, oauthKeyMasked: session.oauthKeyMasked }
+              }
             } else {
               return
             }
           }
-          await this.store.appendMessage(args.chatId, timestamped({ kind: "account_info", accountInfo }))
+          await this.store.appendMessage(args.chatId, timestamped({ kind: "account_info", accountInfo: augmented }))
           this.emitStateChange(args.chatId)
         })
         .catch(() => undefined)
@@ -2135,6 +2142,7 @@ export class AgentCoordinator {
             forkSession: args.forkSession,
             oauthToken: picked?.token ?? null,
             oauthLabel: picked?.label,
+            oauthKeyMasked: picked ? maskOauthKey(picked.token) : undefined,
             additionalDirectories: args.additionalDirectories,
             onToolRequest: args.onToolRequest,
             systemPromptAppend,
@@ -2179,6 +2187,7 @@ export class AgentCoordinator {
         nextPromptSeq: 0,
         pendingPromptSeqs: [],
         activeTokenId: picked?.id ?? null,
+        oauthKeyMasked: picked ? maskOauthKey(picked.token) : null,
         lastUsedAt: Date.now(),
       }
       this.claudeSessions.set(args.chatId, session)

@@ -21,8 +21,8 @@ function describeSource(tokenSource?: string, apiKeySource?: string): string | n
 }
 
 export function AccountInfoMessage({ message }: Props) {
-  const { organization, tokenSource, apiKeySource, subscriptionType, email } = message.accountInfo
-  const primaryKey = organization ?? email ?? "Unknown account"
+  const { organization, tokenSource, apiKeySource, subscriptionType, email, oauthKeyMasked } = message.accountInfo
+  const primaryKey = oauthKeyMasked ?? organization ?? email ?? "Unknown account"
   const sourceLabel = describeSource(tokenSource, apiKeySource)
   const [expanded, setExpanded] = useState(false)
 
@@ -85,7 +85,7 @@ export function AccountInfoMessage({ message }: Props) {
                     <dd className="font-mono break-all text-foreground/90">{email}</dd>
                   </>
                 ) : null}
-                {organization && organization !== primaryKey ? (
+                {organization ? (
                   <>
                     <dt className="text-muted-foreground">Organization</dt>
                     <dd className="text-foreground/90">{organization}</dd>

@@ -792,6 +792,7 @@ export interface AccountInfo {
   subscriptionType?: string
   tokenSource?: string
   apiKeySource?: string
+  oauthKeyMasked?: string
 }
 
 export interface AskUserQuestionOption {
