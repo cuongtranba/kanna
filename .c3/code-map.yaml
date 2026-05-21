@@ -4,10 +4,13 @@ c3-101:
 c3-102:
   - src/client/stores/**/*.ts
 c3-103:
+  - _exclude:src/client/lib/testing/**
+  - src/client/components/editor-icons.tsx
   - src/client/components/ui/**/*.tsx
 c3-110:
   - src/client/app/App.test.tsx
   - src/client/app/App.tsx
+  - src/client/app/AppBootstrap.tsx
   - src/client/app/PageHeader.tsx
   - src/client/app/chatFocusPolicy.test.ts
   - src/client/app/chatFocusPolicy.ts
@@ -40,11 +43,13 @@ c3-114:
 c3-115:
   - src/client/components/chat-ui/**/*.ts
   - src/client/components/chat-ui/**/*.tsx
+  - src/client/components/open-external-menu.tsx
 c3-116:
   - src/client/app/SettingsPage.test.tsx
   - src/client/app/SettingsPage.tsx
   - src/client/app/SubagentsSection.test.tsx
   - src/client/app/SubagentsSection.tsx
+  - src/client/components/settings/**/*.tsx
 c3-117:
   - src/client/app/LocalProjectsPage.tsx
   - src/client/components/NewProjectModal.tsx
@@ -160,8 +165,31 @@ c3-224:
   - src/server/oauth-pool/**/*.ts
 c3-225:
   - src/server/claude-pty/**
+c3-226:
+  - src/server/kanna-mcp-http.test.ts
+  - src/server/kanna-mcp-http.ts
+  - src/server/kanna-mcp-tools/**/*.ts
+  - src/server/kanna-mcp.test.ts
+  - src/server/kanna-mcp.ts
+  - src/server/permission-gate.test.ts
+  - src/server/permission-gate.ts
+  - src/server/tool-callback.ts
+c3-227:
+  - src/server/auto-continue/**/*.ts
 c3-301:
+  - src/shared/analytics.ts
+  - src/shared/kanna-system-prompt.test.ts
   - src/shared/kanna-system-prompt.ts
+  - src/shared/mask-oauth-key.test.ts
+  - src/shared/mask-oauth-key.ts
+  - src/shared/mention-pattern.ts
+  - src/shared/permission-policy.test.ts
+  - src/shared/permission-policy.ts
+  - src/shared/projectFileRelocation.test.ts
+  - src/shared/projectFileRelocation.ts
+  - src/shared/projectFileUrl.test.ts
+  - src/shared/projectFileUrl.ts
+  - src/shared/types.test.ts
   - src/shared/types.ts
 c3-302:
   - src/shared/protocol.ts
