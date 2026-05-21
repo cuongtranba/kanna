@@ -174,13 +174,20 @@ export function buildPtyCliArgs(args: BuildPtyCliArgsInput): string[] {
     "--dangerously-skip-permissions",
   ]
   // TUI mode session handling:
-  //   • New session (no sessionToken)                  → no --session-id (claude generates its own UUID)
+  //   • New session (no sessionToken)                  → --session-id <args.sessionId> (force claude to use kanna's UUID)
   //   • Resume existing session (sessionToken set)     → --resume <token>
   //   • Fork existing session (sessionToken + fork)    → --session-id <newUuid> --resume <token> --fork-session
+  //
+  // For new sessions we pass --session-id so kanna knows the exact JSONL
+  // path up-front (knownFilePath = <sessionId>.jsonl). Without it, claude
+  // generates its own UUID and kanna's findLatestTranscript races against
+  // stale JSONLs from prior sessions in the same project dir.
   if (args.sessionToken && !args.forkSession) {
     cliArgs.push("--resume", args.sessionToken)
   } else if (args.sessionToken && args.forkSession) {
     cliArgs.push("--session-id", args.sessionId, "--resume", args.sessionToken, "--fork-session")
+  } else {
+    cliArgs.push("--session-id", args.sessionId)
   }
   if (args.mcpConfigPath) {
     cliArgs.push("--mcp-config", args.mcpConfigPath, "--strict-mcp-config")
@@ -432,9 +439,14 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
 
   // Open transcript-file event stream.
   const projectDir = computeProjectDir({ homeDir: home, cwd: args.localPath })
+  // knownFilePath: for resume (sessionToken set, no fork) use sessionToken's
+  // JSONL; for new sessions and forks use the freshly-assigned sessionId
+  // (passed to claude via --session-id above) so the watcher locks onto the
+  // exact file claude will create, avoiding a race with stale JSONLs from
+  // prior sessions in the same project dir.
   const knownFilePath = args.sessionToken && !args.forkSession
     ? computeJsonlPath({ homeDir: home, cwd: args.localPath, sessionId: args.sessionToken })
-    : undefined
+    : computeJsonlPath({ homeDir: home, cwd: args.localPath, sessionId })
   const startStream = args.startTranscriptStreamFn ?? startTranscriptStream
   const transcriptStream = await startStream({
     projectDir,

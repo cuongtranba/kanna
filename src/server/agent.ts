@@ -605,6 +605,29 @@ export function normalizeClaudeStreamMessage(message: any): TranscriptEntry[] {
     return [timestamped({ kind: "status", messageId, status: message.status, debugRaw })]
   }
 
+  // Interactive TUI claude never writes a `type: "result"` row — it writes
+  // `system/turn_duration` instead (per canon/shannon research). Synthesize a
+  // turn-end `result` so the agent loop and UI see the turn complete.
+  if (message.type === "system" && message.subtype === "turn_duration") {
+    const durationMs = typeof message.durationMs === "number"
+      ? message.durationMs
+      : typeof message.duration_ms === "number"
+        ? message.duration_ms
+        : 0
+    return [
+      timestamped({
+        kind: "result",
+        messageId,
+        subtype: "success",
+        isError: false,
+        durationMs,
+        result: "",
+        costUsd: undefined,
+        debugRaw,
+      }),
+    ]
+  }
+
   if (message.type === "system" && message.subtype === "compact_boundary") {
     return [timestamped({ kind: "compact_boundary", messageId, debugRaw })]
   }

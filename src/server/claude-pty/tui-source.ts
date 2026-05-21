@@ -209,13 +209,21 @@ export async function waitForResultEntry(
       try {
         for await (const line of stream.lines) {
           if (settled) return
-          let parsed: { type?: string; error?: string; isApiErrorMessage?: boolean; apiErrorStatus?: number }
+          let parsed: { type?: string; subtype?: string; error?: string; isApiErrorMessage?: boolean; apiErrorStatus?: number }
           try { parsed = JSON.parse(line) as typeof parsed } catch { continue }
-          if (parsed.type === "result") {
+          // Two completion markers:
+          //   - `type: "result"` — SDK / `claude -p` output (one-shot)
+          //   - `type: "system", subtype: "turn_duration"` — interactive TUI
+          //     turn end (interactive mode never writes a `result` row).
+          // Reference: canon/index.ts:711 turnDurationMsFromRows.
+          const isTurnEnd =
+            parsed.type === "result" ||
+            (parsed.type === "system" && parsed.subtype === "turn_duration")
+          if (isTurnEnd) {
             settled = true
             if (timer) clearTimeout(timer)
             if (opts.signal) opts.signal.removeEventListener("abort", onAbort)
-            resolve({ rawLine: line, parsed: { type: parsed.type } })
+            resolve({ rawLine: line, parsed: { type: parsed.type ?? "result" } })
             return
           }
           // Rate-limit responses (HTTP 429) arrive as assistant messages rather

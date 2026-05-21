@@ -73,12 +73,12 @@ export function buildLiveSmokeProbe(args: BuildLiveSmokeProbeArgs): SmokeTestPro
       "--model", args.model,
       "--permission-mode", "acceptEdits",
       "--dangerously-skip-permissions",
-      "--strict-mcp-config",
       "--disallowedTools", "Bash",
     ]
     const spawnEnv: NodeJS.ProcessEnv = { ...process.env }
     delete spawnEnv.ANTHROPIC_API_KEY
     spawnEnv.HOME = args.homeDir
+    spawnEnv.DISABLE_AUTOUPDATER = "1"
     spawnEnv.CLAUDE_CODE_OAUTH_TOKEN = args.oauthToken
     const pty = await spawnPty({
       command: args.claudeBinPath,
@@ -91,15 +91,12 @@ export function buildLiveSmokeProbe(args: BuildLiveSmokeProbeArgs): SmokeTestPro
     try {
       await waitForTuiReadyWithTrustDismiss(pty, ring, { hardCapMs: 15_000 })
       const projectDir = computeProjectDir({ homeDir: args.homeDir, cwd: tmpCwd })
-      // Start watching the transcript directory before sending the prompt.
-      // The JSONL file is created by claude at session-init (before any user
-      // turn), so awaiting stream.filePath confirms the API connection is live
-      // and prevents sending the probe prompt before claude is ready to process
-      // it (which would silently drop the turn and cause a transcript timeout).
+      // Start watching before sending so the watcher is in place when claude
+      // creates the JSONL after the first user turn.
       const stream = await startTranscriptStream({ projectDir, firstFileTimeoutMs: 20_000 })
       try {
-        const filePath = await stream.filePath
         await sendUserPrompt(pty, "Run the command ls -la /tmp using the Bash tool now. Just do it.")
+        const filePath = await stream.filePath
         await waitForResultEntry(stream, { timeoutMs: 30_000 })
         const raw = await readFile(filePath, "utf8")
         for (const line of raw.split("\n")) {

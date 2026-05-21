@@ -91,7 +91,15 @@ export async function waitForTuiReadyWithTrustDismiss(
 }
 
 export async function sendUserPrompt(pty: PtyProcess, text: string): Promise<void> {
-  await pty.sendInput(text + "\r")
+  // Bracketed paste (\x1b[200~...\x1b[201~) tells the TUI "this is pasted
+  // text, do not interpret control chars" — then a separate \r is treated as
+  // "submit". Combined `text + "\r"` is interpreted by claude's TUI input
+  // handler as "newline within the input box", not "submit prompt", so the
+  // prompt sits in the input area and the model never makes an API call.
+  // Matches the canon/shannon reference impl: tmux paste-buffer + C-m.
+  await pty.sendInput(`\x1b[200~${text}\x1b[201~`)
+  await new Promise((r) => setTimeout(r, 50))
+  await pty.sendInput("\r")
 }
 
 export async function sendExitCommand(pty: PtyProcess): Promise<void> {

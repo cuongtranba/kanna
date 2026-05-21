@@ -23,16 +23,16 @@ function fakePty(): PtyProcess & { sent: string[] } {
 }
 
 describe("sendUserPrompt", () => {
-  test("writes text + carriage return", async () => {
+  test("writes bracketed-paste wrapped text then separate carriage return", async () => {
     const pty = fakePty()
     await sendUserPrompt(pty, "say hi")
-    expect(pty.sent).toEqual(["say hi\r"])
+    expect(pty.sent).toEqual(["\x1b[200~say hi\x1b[201~", "\r"])
   })
 
-  test("empty string still sends carriage return", async () => {
+  test("empty string still emits paste markers + separate carriage return", async () => {
     const pty = fakePty()
     await sendUserPrompt(pty, "")
-    expect(pty.sent).toEqual(["\r"])
+    expect(pty.sent).toEqual(["\x1b[200~\x1b[201~", "\r"])
   })
 })
 
