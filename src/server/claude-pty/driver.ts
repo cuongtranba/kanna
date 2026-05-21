@@ -14,6 +14,7 @@ import { OutputRing, OUTPUT_RING_DEFAULT_BYTES } from "./output-ring"
 import { createSmokeTestGate, createFileSmokeTestCache, buildLiveSmokeProbe, type SmokeTestGate } from "./smoke-test"
 import { computeBinarySha256 } from "./preflight/binary-fingerprint"
 import { spawnPtyProcess as defaultSpawnPtyProcess, type PtyProcess, type SpawnPtyProcessArgs } from "./pty-process"
+import type { ClaudePtyRegistry } from "./pid-registry"
 import { waitForTuiReady, waitForTuiReadyWithTrustDismiss, sendUserPrompt, sendExitCommand } from "./tui-control"
 import { startTranscriptStream } from "./tui-source"
 import { computeJsonlPath, computeProjectDir } from "./jsonl-path"
@@ -89,6 +90,13 @@ export interface StartClaudeSessionPtyArgs {
   oauthLabel?: string
   /** Masked OAuth-pool token (e.g. `sk-ant-oat01...XXXX`). Computed by AgentCoordinator; never the raw token. */
   oauthKeyMasked?: string
+  /**
+   * Optional on-disk registry of claude PTY children so a non-graceful
+   * server crash can reap orphan processes on the next boot. When set,
+   * the driver registers the spawn's pid + runtimeDir before sending the
+   * first prompt and unregisters during cleanup.
+   */
+  ptyRegistry?: ClaudePtyRegistry
 }
 
 /**
@@ -356,6 +364,13 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
     try { await rm(runtimeDir, { recursive: true, force: true }) } catch (err) {
       console.warn("[kanna/pty] runtimeDir cleanup failed", { chatId: args.chatId, runtimeDir, err })
     }
+    if (args.ptyRegistry) {
+      try { await args.ptyRegistry.unregister(sessionId) } catch (err) {
+        // A stale entry on disk only matters across server restarts — log
+        // for observability but do not fail cleanup.
+        console.warn("[kanna/pty] ptyRegistry.unregister failed", { chatId: args.chatId, sessionId, err })
+      }
+    }
   }
 
   function pushMerged(ev: HarnessEvent) {
@@ -411,7 +426,23 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
       env: spawnEnv,
       onOutput: (chunk) => { ring.append(chunk) },
     })
-    console.log("[kanna/pty] pty spawned", { chatId: args.chatId, sessionId })
+    console.log("[kanna/pty] pty spawned", { chatId: args.chatId, sessionId, pid: pty.pid })
+    // Record the live PTY in the on-disk registry so a non-graceful
+    // server crash can reap this orphan on the next boot. Persistence is
+    // best-effort — failure to write must not block the spawn.
+    if (args.ptyRegistry) {
+      try {
+        await args.ptyRegistry.register({
+          chatId: args.chatId,
+          sessionId,
+          pid: pty.pid,
+          cwd: args.localPath,
+          runtimeDir,
+        })
+      } catch (err) {
+        console.warn("[kanna/pty] ptyRegistry.register failed (orphan reap on crash disabled for this session)", { chatId: args.chatId, sessionId, err })
+      }
+    }
   } catch (err) {
     console.error("[kanna/pty] spawn failed", {
       chatId: args.chatId,

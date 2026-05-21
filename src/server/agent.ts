@@ -236,6 +236,8 @@ interface AgentCoordinatorArgs {
   chatPolicy?: ChatPermissionPolicy
   /** Claude subprocess lifecycle tuning. Defaults are conservative and may be overridden in tests. */
   claudeSessionLifecycle?: Partial<ClaudeSessionLifecycleOptions>
+  /** On-disk registry of claude PTY children for crash-orphan reap on next boot. Forwarded to every PTY spawn. */
+  claudePtyRegistry?: import("./claude-pty/pid-registry").ClaudePtyRegistry
 }
 
 interface SendToStartingProfile {
@@ -1131,6 +1133,7 @@ export class AgentCoordinator {
   private readonly chatPolicy: ChatPermissionPolicy
   private readonly claudeSessionLifecycle: ClaudeSessionLifecycleOptions
   private readonly claudeSessionSweepTimer: ReturnType<typeof setInterval> | null
+  private readonly claudePtyRegistry: import("./claude-pty/pid-registry").ClaudePtyRegistry | null
   private readonly pendingBashCalls = new Map<string, { command: string; chatId: string; isBg: boolean }>()
   private readonly subagentPendingResolvers = new Map<
     string,
@@ -1204,6 +1207,7 @@ export class AgentCoordinator {
       ? setInterval(() => { this.sweepIdleClaudeSessions() }, this.claudeSessionLifecycle.sweepIntervalMs)
       : null
     this.claudeSessionSweepTimer?.unref?.()
+    this.claudePtyRegistry = args.claudePtyRegistry ?? null
     this.backgroundTasks?.setStrategies({
       closeStream: async (task) => {
         await this.stopDraining(task.chatId)
@@ -1555,6 +1559,7 @@ export class AgentCoordinator {
                 oauthKeyMasked: picked ? maskOauthKey(picked.token) : undefined,
                 onToolRequest: async () => null,
                 systemPromptAppend: ephemeralSystemPromptAppend,
+                ptyRegistry: this.claudePtyRegistry ?? undefined,
                   })
             : await this.startClaudeSessionFn({
                 projectId: project.id,
@@ -2183,6 +2188,7 @@ export class AgentCoordinator {
               toolCallback: this.toolCallback ?? undefined,
               tunnelGateway: this.tunnelGateway,
               chatPolicy: this.resolveChatPolicy(args.chatId),
+              ptyRegistry: this.claudePtyRegistry ?? undefined,
             })
           : await this.startClaudeSessionFn({
               projectId: args.projectId,
@@ -2424,6 +2430,7 @@ export class AgentCoordinator {
           tunnelGateway: this.tunnelGateway,
           chatPolicy: a.chatId ? this.resolveChatPolicy(a.chatId) : undefined,
           oneShot: true,
+          ptyRegistry: this.claudePtyRegistry ?? undefined,
         })
       }
       return this.startClaudeSessionFn(a)

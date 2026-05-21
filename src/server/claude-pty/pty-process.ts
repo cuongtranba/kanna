@@ -1,4 +1,6 @@
 export interface PtyProcess {
+  /** OS pid of the spawned child (== pgid because Bun.Terminal setsid). */
+  pid: number
   sendInput(data: string): Promise<void>
   resize(cols: number, rows: number): void
   exited: Promise<number>
@@ -48,6 +50,7 @@ export async function spawnPtyProcess(opts: SpawnPtyProcessArgs): Promise<PtyPro
   })
 
   return {
+    pid: proc.pid,
     async sendInput(data) { terminal.write(data) },
     resize(newCols, newRows) { terminal.resize(newCols, newRows) },
     exited: proc.exited,

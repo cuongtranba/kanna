@@ -15,6 +15,7 @@ function fakePty(): PtyProcess & { sent: string[] } {
   const sent: string[] = []
   return {
     sent,
+    pid: 99997,
     async sendInput(data: string) { sent.push(data) },
     resize() { /* noop */ },
     exited: new Promise<number>(() => { /* never */ }),

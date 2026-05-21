@@ -21,6 +21,7 @@ import { readLlmProviderSnapshot, validateLlmProviderCredentials, writeLlmProvid
 import { getMachineDisplayName } from "./machine-name"
 import { TerminalManager } from "./terminal-manager"
 import { TerminalPidRegistry } from "./terminal-pid-registry"
+import { ClaudePtyRegistry } from "./claude-pty/pid-registry"
 import { UpdateManager } from "./update-manager"
 import type { UpdateInstallAttemptResult } from "./cli-runtime"
 import { compareVersions } from "./cli-runtime"
@@ -158,6 +159,11 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
   if (reapedTerminals.length > 0) {
     console.log(`[kanna] reaped ${reapedTerminals.length} orphan terminal process group(s) from previous run`)
   }
+  const claudePtyRegistry = new ClaudePtyRegistry(path.join(store.dataDir, "claude-pty.json"))
+  const reapedClaudePty = await claudePtyRegistry.reapStale()
+  if (reapedClaudePty.length > 0) {
+    console.log(`[kanna] reaped ${reapedClaudePty.length} orphan claude PTY process group(s) from previous run`)
+  }
   const keybindings = new KeybindingsManager()
   const appSettings = new AppSettingsManager(path.join(store.dataDir, "settings.json"))
   await appSettings.initialize()
@@ -260,6 +266,7 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     backgroundTasks,
     oauthPool,
     toolCallback,
+    claudePtyRegistry,
     // Kanna is a personal-use tool on the developer's own machine. Tool calls
     // auto-allow at the kanna gate layer (the claude CLI itself runs with
     // `--dangerously-skip-permissions` so it doesn't gate either). The

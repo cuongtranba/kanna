@@ -542,6 +542,7 @@ async function makeTestHandle(opts?: { planMode?: boolean }) {
   const exited = new Promise<number>((r) => { exitResolve = r })
 
   const fakePty: PtyProcess = {
+    pid: 99999,
     async sendInput(data) { sentInputs.push(data) },
     resize() {},
     exited,
@@ -656,6 +657,7 @@ describe("session close escalation (graceful → SIGTERM → SIGKILL)", () => {
     let exitResolve!: (code: number) => void
     const exited = new Promise<number>((r) => { exitResolve = r })
     const stubbornPty: PtyProcess = {
+      pid: 99998,
       async sendInput() { /* swallow */ },
       resize() {},
       exited,
