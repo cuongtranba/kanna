@@ -2,7 +2,8 @@ import { describe, expect, test } from "bun:test"
 import type { ClaudeModelOptions, Subagent, TranscriptEntry } from "../shared/types"
 import type { HarnessEvent, HarnessTurn, HarnessToolRequest } from "./harness-types"
 import type { StartCodexSessionArgs, CodexSessionScope } from "./codex-app-server"
-import { buildSubagentProviderRun, composeInitialPrompt, type BuildSubagentProviderRunArgs } from "./subagent-provider-run"
+import { buildSubagentProviderRun, composeInitialPrompt, composeSubagentSystemPrompt, type BuildSubagentProviderRunArgs } from "./subagent-provider-run"
+import type { StartCodexTurnArgs } from "./codex-app-server"
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -132,6 +133,30 @@ describe("composeInitialPrompt", () => {
 })
 
 // ---------------------------------------------------------------------------
+// composeSubagentSystemPrompt
+// ---------------------------------------------------------------------------
+
+describe("composeSubagentSystemPrompt", () => {
+  test("returns the subagent prompt unchanged when no global text", () => {
+    expect(composeSubagentSystemPrompt("You are alpha.")).toBe("You are alpha.")
+  })
+
+  test("returns the subagent prompt unchanged when global text is whitespace", () => {
+    expect(composeSubagentSystemPrompt("You are alpha.", "   \n  ")).toBe("You are alpha.")
+  })
+
+  test("appends a Project instructions block after the subagent prompt", () => {
+    const out = composeSubagentSystemPrompt("You are alpha.", "Always TDD.")
+    expect(out).toBe("You are alpha.\n\n## Project instructions\n\nAlways TDD.")
+  })
+
+  test("emits only the project block when subagent prompt is empty", () => {
+    const out = composeSubagentSystemPrompt("", "Always TDD.")
+    expect(out).toBe("## Project instructions\n\nAlways TDD.")
+  })
+})
+
+// ---------------------------------------------------------------------------
 // Claude tests
 // ---------------------------------------------------------------------------
 
@@ -173,6 +198,51 @@ describe("buildSubagentProviderRun – Claude", () => {
     expect(result.usage?.outputTokens).toBe(5)
     expect(result.usage?.costUsd).toBe(0.001)
     expect(sessionClosed).toBe(true)
+  })
+
+  test("composes globalPromptAppend into systemPromptOverride", async () => {
+    let captured: { systemPromptOverride?: string } | undefined
+    const args = makeArgs({
+      globalPromptAppend: "Always TDD.",
+      startClaudeSession: async (sessionArgs) => {
+        captured = sessionArgs
+        return {
+          provider: "claude" as const,
+          stream: makeHarnessTurn([]).stream,
+          interrupt: async () => {},
+          close: () => {},
+          sendPrompt: async () => {},
+          setModel: async () => {},
+          setPermissionMode: async () => {},
+          getSupportedCommands: async () => [],
+        }
+      },
+    })
+    const run = buildSubagentProviderRun(args)
+    await run.start(() => {}, () => {})
+    expect(captured?.systemPromptOverride).toBe("You are alpha.\n\n## Project instructions\n\nAlways TDD.")
+  })
+
+  test("leaves systemPromptOverride untouched when no globalPromptAppend", async () => {
+    let captured: { systemPromptOverride?: string } | undefined
+    const args = makeArgs({
+      startClaudeSession: async (sessionArgs) => {
+        captured = sessionArgs
+        return {
+          provider: "claude" as const,
+          stream: makeHarnessTurn([]).stream,
+          interrupt: async () => {},
+          close: () => {},
+          sendPrompt: async () => {},
+          setModel: async () => {},
+          setPermissionMode: async () => {},
+          getSupportedCommands: async () => [],
+        }
+      },
+    })
+    const run = buildSubagentProviderRun(args)
+    await run.start(() => {}, () => {})
+    expect(captured?.systemPromptOverride).toBe("You are alpha.")
   })
 
   test("authReady=false causes authReady() to return false (orchestrator gates)", async () => {
@@ -295,6 +365,45 @@ describe("buildSubagentProviderRun – Codex", () => {
     expect(result.text).toBe("codex reply")
     expect(startedScope).toBe("sub:run-xyz")
     expect(calls).toEqual(["startSession", "startTurn", "stopSession:sub:run-xyz"])
+  })
+
+  test("passes globalPromptAppend through as developer_instructions when set", async () => {
+    let captured: StartCodexTurnArgs | undefined
+    const args = makeArgs({
+      subagent: makeSubagent({ provider: "codex", model: "gpt-5.5" }),
+      runId: "run-di",
+      globalPromptAppend: "Be terse.",
+      codexManager: {
+        startSession: async () => {},
+        startTurn: async (turnArgs: StartCodexTurnArgs) => {
+          captured = turnArgs
+          return makeHarnessTurn([makeTextEvent("ok")])
+        },
+        stopSession: () => {},
+      } as unknown as BuildSubagentProviderRunArgs["codexManager"],
+    })
+    const run = buildSubagentProviderRun(args)
+    await run.start(() => {}, () => {})
+    expect(captured?.developerInstructions).toBe("Be terse.")
+  })
+
+  test("omits developer_instructions when globalPromptAppend missing", async () => {
+    let captured: StartCodexTurnArgs | undefined
+    const args = makeArgs({
+      subagent: makeSubagent({ provider: "codex", model: "gpt-5.5" }),
+      runId: "run-no-di",
+      codexManager: {
+        startSession: async () => {},
+        startTurn: async (turnArgs: StartCodexTurnArgs) => {
+          captured = turnArgs
+          return makeHarnessTurn([makeTextEvent("ok")])
+        },
+        stopSession: () => {},
+      } as unknown as BuildSubagentProviderRunArgs["codexManager"],
+    })
+    const run = buildSubagentProviderRun(args)
+    await run.start(() => {}, () => {})
+    expect(captured?.developerInstructions).toBeUndefined()
   })
 
   test("stopSession runs even when startTurn throws", async () => {

@@ -35,6 +35,7 @@ import {
   DEFAULT_KEYBINDINGS,
   DEFAULT_OPENAI_SDK_MODEL,
   DEFAULT_OPENROUTER_SDK_MODEL,
+  GLOBAL_PROMPT_APPEND_MAX_CHARS,
   PROVIDERS,
   UPLOAD_DEFAULTS,
   UPLOAD_MAX_FILE_SIZE_MB_MAX,
@@ -124,6 +125,12 @@ const sidebarItems = [
     label: "Subagents",
     icon: Bot,
     subtitle: "Define reusable agent personas. Mention them in chat with @agent/<name>.",
+  },
+  {
+    id: "instructions",
+    label: "Instructions",
+    icon: MessageSquareQuote,
+    subtitle: "Global instructions appended to every Claude and Codex turn (main + subagents).",
   },
   {
     id: "keybindings",
@@ -952,6 +959,83 @@ export function AutoResumeToggleSection({
 
 export function CloudflareTunnelSectionTitle() {
   return <span>Cloudflare Tunnel</span>
+}
+
+export function GlobalInstructionsSection({ state }: { state: KannaState }) {
+  const persisted = state.appSettings?.globalPromptAppend ?? ""
+  const [draft, setDraft] = useState(persisted)
+  const [persistedAtMount, setPersistedAtMount] = useState(persisted)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  if (persisted !== persistedAtMount) {
+    // External update (initial hydration, watcher reload, save round-trip) —
+    // resync the draft. Unsaved local edits intentionally lose to the latest
+    // server value to match every other section in this page.
+    setPersistedAtMount(persisted)
+    setDraft(persisted)
+  }
+
+  const trimmed = draft.replace(/\s+$/u, "")
+  const overCap = trimmed.length > GLOBAL_PROMPT_APPEND_MAX_CHARS
+  const dirty = trimmed !== persisted
+  const saveDisabled = saving || overCap || !dirty
+
+  const onSave = useCallback(async () => {
+    if (saveDisabled) return
+    setError(null)
+    setSaving(true)
+    try {
+      await state.handleWriteAppSettings({ globalPromptAppend: trimmed })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setSaving(false)
+    }
+  }, [saveDisabled, state, trimmed])
+
+  return (
+    <div className="border-b border-border">
+      <SettingsRow
+        title="Global Instructions"
+        description="Appended to every Claude and Codex turn — including subagent turns. Kanna does not read CLAUDE.md or AGENTS.md from disk; paste your global instructions here. Leave blank to disable."
+        bordered={false}
+        alignStart
+      >
+        <div className="flex w-full flex-col gap-2 md:w-[420px]">
+          <textarea
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            placeholder="e.g. Always write tests before implementation. Prefer Tailwind classes over inline styles."
+            rows={8}
+            aria-label="Global instructions"
+            className={cn(
+              "min-h-[160px] w-full resize-y rounded-md border bg-background px-3 py-2 text-sm shadow-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50",
+              overCap ? "border-destructive" : "border-input",
+            )}
+            disabled={saving}
+          />
+          <div className="flex items-center justify-between text-xs">
+            <span className={overCap ? "text-destructive" : "text-muted-foreground"}>
+              {trimmed.length} / {GLOBAL_PROMPT_APPEND_MAX_CHARS} characters
+              {overCap ? " — over limit" : ""}
+            </span>
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => { void onSave() }}
+              disabled={saveDisabled}
+            >
+              {saving ? "Saving…" : dirty ? "Save" : "Saved"}
+            </Button>
+          </div>
+          {error ? (
+            <div className="text-xs text-destructive">{error}</div>
+          ) : null}
+        </div>
+      </SettingsRow>
+    </div>
+  )
 }
 
 export function SettingsPage() {
@@ -2332,6 +2416,8 @@ export function SettingsPage() {
                   <SkillsSection state={state} />
                 ) : selectedPage === "subagents" ? (
                   <SubagentsSettingsBranch state={state} />
+                ) : selectedPage === "instructions" ? (
+                  <GlobalInstructionsSection state={state} />
                 ) : (
                   <ChangelogSection
                     status={changelogStatus}

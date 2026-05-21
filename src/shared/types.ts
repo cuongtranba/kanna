@@ -596,6 +596,8 @@ export const UPLOAD_DEFAULTS: UploadSettings = {
 export const UPLOAD_MAX_FILE_SIZE_MB_MIN = 1
 export const UPLOAD_MAX_FILE_SIZE_MB_MAX = 2048
 
+export const GLOBAL_PROMPT_APPEND_MAX_CHARS = 8_000
+
 export type ClaudeDriverPreference = "sdk" | "pty"
 
 export const CLAUDE_DRIVER_VALUES: readonly ClaudeDriverPreference[] = ["sdk", "pty"]
@@ -661,6 +663,7 @@ export interface AppSettingsSnapshot {
   uploads: UploadSettings
   subagents: Subagent[]
   claudeDriver: ClaudeDriverSettings
+  globalPromptAppend: string
 }
 
 export interface AppSettingsPatch {
@@ -689,6 +692,7 @@ export interface AppSettingsPatch {
     preference?: ClaudeDriverPreference
     lifecycle?: Partial<ClaudePtyLifecycleSettings>
   }
+  globalPromptAppend?: string
 }
 
 export interface LlmProviderFile {

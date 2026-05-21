@@ -70,6 +70,13 @@ export interface BuildSubagentProviderRunArgs {
   /** Picks an oauth token for Claude runs, or null. Subagents share the primary pool. */
   pickOauthToken: () => string | null
   projectId: string
+  /**
+   * Optional user-authored global instructions (from app settings).
+   * Appended to the subagent's own `systemPrompt` for Claude runs and sent as
+   * `developer_instructions` for Codex runs so subagent turns inherit the
+   * same project-wide guidance as the main turn.
+   */
+  globalPromptAppend?: string
 }
 
 export function buildSubagentProviderRun(args: BuildSubagentProviderRunArgs): ProviderRunStart {
@@ -87,6 +94,24 @@ export function buildSubagentProviderRun(args: BuildSubagentProviderRunArgs): Pr
       return runCodexSubagent({ args, initialPrompt, onChunk, onEntry })
     },
   }
+}
+
+/**
+ * Build the Claude subagent's `systemPromptOverride`. Subagent prompts replace
+ * the kanna system prompt entirely (the Claude SDK has no `append` channel for
+ * an override), so the global instructions must be folded in here to keep
+ * subagent turns aligned with main-turn behavior.
+ */
+export function composeSubagentSystemPrompt(
+  subagentSystemPrompt: string,
+  globalPromptAppend?: string,
+): string {
+  const extra = globalPromptAppend?.trim() ?? ""
+  if (!extra) return subagentSystemPrompt
+  const baseText = subagentSystemPrompt.trimEnd()
+  return baseText
+    ? `${baseText}\n\n## Project instructions\n\n${extra}`
+    : `## Project instructions\n\n${extra}`
 }
 
 export function composeInitialPrompt(
@@ -123,7 +148,7 @@ async function runClaudeSubagent(opts: {
     oauthToken: args.pickOauthToken(),
     chatId: args.chatId,
     onToolRequest: args.onToolRequest,
-    systemPromptOverride: args.subagent.systemPrompt,
+    systemPromptOverride: composeSubagentSystemPrompt(args.subagent.systemPrompt, args.globalPromptAppend),
     initialPrompt,
     subagentOrchestrator: args.subagentOrchestrator,
     delegationContext: args.delegationContext,
@@ -165,6 +190,7 @@ async function runCodexSubagent(opts: {
       serviceTier: undefined,
       planMode: false,
       onToolRequest: args.onToolRequest,
+      developerInstructions: args.globalPromptAppend,
     })
     return await drainHarnessTurn(turn, onChunk, onEntry)
   } finally {

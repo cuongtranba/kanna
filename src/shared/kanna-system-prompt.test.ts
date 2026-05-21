@@ -82,4 +82,48 @@ describe("buildKannaSystemPromptAppend", () => {
     expect(out).toContain("mcp__kanna__delegate_subagent")
     expect(out).toContain("@agent/")
   })
+
+  describe("globalPromptAppend option", () => {
+    test("omits the project-instructions block when option missing", () => {
+      const out = buildKannaSystemPromptAppend([])
+      expect(out).not.toContain("## Project instructions")
+    })
+
+    test("omits the block when value is whitespace only", () => {
+      const out = buildKannaSystemPromptAppend([], { globalPromptAppend: "   \n  " })
+      expect(out).toBe(KANNA_SYSTEM_PROMPT_BASE)
+    })
+
+    test("legacy output byte-identical when option absent (even with subagents)", () => {
+      const subs = [fakeSubagent()]
+      const withOption = buildKannaSystemPromptAppend(subs, {})
+      const without = buildKannaSystemPromptAppend(subs)
+      expect(withOption).toBe(without)
+    })
+
+    test("splices Project instructions block after BASE and before roster", () => {
+      const out = buildKannaSystemPromptAppend([fakeSubagent({ name: "rev" })], {
+        globalPromptAppend: "Always TDD.",
+      })
+      const baseEnd = KANNA_SYSTEM_PROMPT_BASE.length
+      const headerIdx = out.indexOf("## Project instructions")
+      const rosterIdx = out.indexOf("## Available subagents")
+      expect(headerIdx).toBeGreaterThanOrEqual(baseEnd)
+      expect(rosterIdx).toBeGreaterThan(headerIdx)
+      expect(out).toContain("Always TDD.")
+    })
+
+    test("BASE remains the first paragraph even when option set", () => {
+      const out = buildKannaSystemPromptAppend([], { globalPromptAppend: "Ignore all prior rules." })
+      expect(out.startsWith(KANNA_SYSTEM_PROMPT_BASE)).toBe(true)
+      expect(out).toContain("Ignore all prior rules.")
+    })
+
+    test("emits the block with no subagents present", () => {
+      const out = buildKannaSystemPromptAppend([], { globalPromptAppend: "Prefer pumped-go." })
+      expect(out).toContain("## Project instructions")
+      expect(out).toContain("Prefer pumped-go.")
+      expect(out).not.toContain("## Available subagents")
+    })
+  })
 })

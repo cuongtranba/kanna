@@ -67,6 +67,7 @@ export function mergeAppSettingsPatch(
         ...patch.claudeDriver?.lifecycle,
       },
     },
+    globalPromptAppend: patch.globalPromptAppend ?? settings.globalPromptAppend,
   }
 }
 
