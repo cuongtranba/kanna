@@ -7,6 +7,7 @@ import type { TranscriptStream } from "./tui-source"
 import type { PtyProcess, SpawnPtyProcessArgs } from "./pty-process"
 import { KANNA_SYSTEM_PROMPT_APPEND } from "../../shared/kanna-system-prompt"
 import type { HarnessEvent } from "../harness-types"
+import { readAppSettingsSnapshot } from "../app-settings"
 
 
 
@@ -89,6 +90,71 @@ describe("startClaudeSessionPTY", () => {
       }
     },
     60_000,
+  )
+
+  test.skipIf(process.env.KANNA_PTY_E2E !== "1")(
+    "E2E: setPermissionMode(true/false) — plan mode enter via /plan, exit via Shift+Tab",
+    async () => {
+      if (process.platform === "win32") return
+      const settings = await readAppSettingsSnapshot()
+      const activeEntry = settings.claudeAuth.tokens.find((t) => t.status === "active")
+      if (!activeEntry) {
+        console.warn("[e2e] no active OAuth token in Kanna settings — skipping plan-mode E2E")
+        return
+      }
+      const dir = await mkdtemp(path.join(tmpdir(), "kanna-pty-pm-e2e-"))
+      try {
+        const handle = await startClaudeSessionPTY({
+          chatId: "e2e-pm", projectId: "e2e-pm", localPath: dir,
+          model: "claude-haiku-4-5-20251001",
+          planMode: false, forkSession: false,
+          oauthToken: activeEntry.token,
+          sessionToken: null,
+          onToolRequest: async () => null,
+        })
+        try {
+          const iter = handle.stream[Symbol.asyncIterator]()
+
+          async function awaitResult(label: string, timeoutMs = 30_000) {
+            const deadline = Date.now() + timeoutMs
+            while (Date.now() < deadline) {
+              const next = await Promise.race([
+                iter.next(),
+                new Promise<IteratorResult<HarnessEvent>>((r) =>
+                  setTimeout(() => r({ value: undefined as unknown as HarnessEvent, done: false }), 500),
+                ),
+              ])
+              const ev = next.value as HarnessEvent | undefined
+              if (ev?.type === "transcript"
+                && (ev.entry as { kind?: string } | undefined)?.kind === "result") {
+                return true
+              }
+            }
+            throw new Error(`${label}: timed out waiting for result entry`)
+          }
+
+          // Enter plan mode; wait for TUI to process slash command.
+          await handle.setPermissionMode(true)
+          await new Promise((r) => setTimeout(r, 800))
+
+          await handle.sendPrompt("Reply with exactly the word: plantest")
+          await awaitResult("plan-mode prompt")
+
+          // Exit plan mode via Shift+Tab; wait for TUI to process keypress.
+          await handle.setPermissionMode(false)
+          await new Promise((r) => setTimeout(r, 800))
+
+          // Session must still accept prompts after the Shift+Tab key sequence.
+          await handle.sendPrompt("Reply with exactly the word: normaltest")
+          await awaitResult("post-shift-tab prompt")
+        } finally {
+          handle.close()
+        }
+      } finally {
+        await rm(dir, { recursive: true, force: true })
+      }
+    },
+    90_000,
   )
 
   // OS sandbox wrap removed: kanna trusts the claude CLI as the source of
