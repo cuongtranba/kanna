@@ -1,3 +1,7 @@
+import { mkdir, readFile, writeFile as writeFileFs, rm } from "node:fs/promises"
+import { existsSync } from "node:fs"
+import path from "node:path"
+
 export type SmokeTestProbeFn = () => Promise<"pass" | "fail">
 
 export interface SmokeTestCacheEntry {
@@ -42,6 +46,33 @@ export function createSmokeTestGate(args: SmokeTestGateArgs): SmokeTestGate {
       await cache.set(key, { result: probeResult, ts: currentTs })
       if (probeResult === "pass") return { ok: true }
       return { ok: false, reason: "smoke test FAIL: claude invoked a disallowedTool — refusing spawn" }
+    },
+  }
+}
+
+export function createFileSmokeTestCache(args: { cacheDir: string }): SmokeTestCache {
+  const dir = args.cacheDir
+  const fileFor = (key: string) => path.join(dir, `${key.replace(/[^a-z0-9._-]/gi, "_")}.json`)
+  return {
+    async get(key) {
+      const fp = fileFor(key)
+      if (!existsSync(fp)) return null
+      try {
+        const raw = await readFile(fp, "utf8")
+        const parsed = JSON.parse(raw) as SmokeTestCacheEntry
+        if (parsed.result !== "pass" && parsed.result !== "fail") return null
+        if (typeof parsed.ts !== "number") return null
+        return parsed
+      } catch {
+        return null
+      }
+    },
+    async set(key, entry) {
+      await mkdir(dir, { recursive: true })
+      await writeFileFs(fileFor(key), JSON.stringify(entry), { encoding: "utf8", mode: 0o600 })
+    },
+    async invalidate() {
+      try { await rm(dir, { recursive: true, force: true }) } catch { /* swallow */ }
     },
   }
 }

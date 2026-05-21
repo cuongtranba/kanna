@@ -11,6 +11,8 @@ import { KANNA_SYSTEM_PROMPT_APPEND } from "../../shared/kanna-system-prompt"
 import { resolveClaudeBinary } from "./resolve-binary"
 import { createJsonlEventParser } from "./jsonl-to-event"
 import { OutputRing, OUTPUT_RING_DEFAULT_BYTES } from "./output-ring"
+import { createSmokeTestGate, createFileSmokeTestCache, type SmokeTestGate } from "./smoke-test"
+import { computeBinarySha256 } from "./preflight/binary-fingerprint"
 import type { ClaudeSessionHandle } from "../agent"
 import type { HarnessEvent, HarnessToolRequest } from "../harness-types"
 import type { AccountInfo, SlashCommand } from "../../shared/types"
@@ -67,6 +69,8 @@ export interface StartClaudeSessionPtyArgs {
   delegationContext?: KannaMcpDelegationContext
   /** Optional override used by tests to inject a fake HTTP MCP starter. */
   startKannaMcpHttpServer?: typeof startKannaMcpHttpServer
+  /** Optional smoke-test gate override (used by tests to inject a fake gate). */
+  smokeTestGate?: SmokeTestGate
   /**
    * One-shot semantics: after the first `result` entry, close stdin so
    * the subprocess exits. Mirrors the SDK driver's prompt-queue close
@@ -251,6 +255,19 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
     source: resolved.source,
   })
   const claudeBinAbs = resolved.path
+
+  const binarySha256 = await computeBinarySha256(claudeBinAbs)
+  const smokeGate = args.smokeTestGate ?? createSmokeTestGate({
+    probe: async () => "pass",  // placeholder until buildLiveSmokeProbe lands in 6.5
+    cache: createFileSmokeTestCache({ cacheDir: path.join(home, ".kanna", "cache", "smoke-test") }),
+    ttlMs: 24 * 3600 * 1000,
+    now: () => Date.now(),
+  })
+  const smoke = await smokeGate.canSpawn({ binarySha256, model: args.model })
+  if (!smoke.ok) {
+    console.error("[kanna/pty] smoke-test refused spawn", { chatId: args.chatId, reason: smoke.reason })
+    throw new Error(`PTY smoke-test refused spawn: ${smoke.reason}`)
+  }
 
   const spawnEnv = buildPtyEnv({
     baseEnv: env,

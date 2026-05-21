@@ -93,6 +93,22 @@ describe("startClaudeSessionPTY", () => {
   // truth and runs it directly under the kanna server's own process boundary.
 })
 
+describe("startClaudeSessionPTY smoke-test gate", () => {
+  test("refuses spawn when gate returns ok:false", async () => {
+    const failingGate: import("./smoke-test").SmokeTestGate = {
+      async canSpawn() { return { ok: false, reason: "disallowedTools regression" } },
+    }
+    await expect(startClaudeSessionPTY({
+      chatId: "c1", projectId: "p1", localPath: "/tmp",
+      model: "claude-opus-4-7", planMode: false, forkSession: false,
+      oauthToken: "test-token", sessionToken: null,
+      onToolRequest: async () => null,
+      smokeTestGate: failingGate,
+      env: { HOME: "/tmp", CLAUDE_CODE_OAUTH_TOKEN: "test-token" },
+    })).rejects.toThrow(/smoke-test refused/i)
+  })
+})
+
 describe("buildPtyEnv", () => {
   test("sets CLAUDE_CODE_OAUTH_TOKEN when oauthToken present", () => {
     const env = buildPtyEnv({

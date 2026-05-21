@@ -2,7 +2,7 @@ import { describe, expect, test, beforeEach, afterEach } from "bun:test"
 import { mkdtemp, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
-import { createSmokeTestGate, type SmokeTestProbeFn, type SmokeTestCache } from "./smoke-test"
+import { createSmokeTestGate, createFileSmokeTestCache, type SmokeTestProbeFn, type SmokeTestCache } from "./smoke-test"
 
 let workHome: string
 
@@ -82,5 +82,29 @@ describe("createSmokeTestGate", () => {
     nowMs += 2000
     await gate.canSpawn({ binarySha256: "eee", model: "m1" })
     expect(probeRan).toBe(1)
+  })
+})
+
+describe("createFileSmokeTestCache", () => {
+  test("round-trips an entry through disk", async () => {
+    const dir = path.join(workHome, "smoke-cache")
+    const cache = createFileSmokeTestCache({ cacheDir: dir })
+    await cache.set("abc|m1", { result: "pass", ts: 1234 })
+    const got = await cache.get("abc|m1")
+    expect(got).toEqual({ result: "pass", ts: 1234 })
+  })
+
+  test("returns null on missing key", async () => {
+    const cache = createFileSmokeTestCache({ cacheDir: path.join(workHome, "smoke-cache-2") })
+    const got = await cache.get("missing|m1")
+    expect(got).toBeNull()
+  })
+
+  test("invalidate wipes the dir", async () => {
+    const dir = path.join(workHome, "smoke-cache-3")
+    const cache = createFileSmokeTestCache({ cacheDir: dir })
+    await cache.set("xxx|m", { result: "pass", ts: 1 })
+    await cache.invalidate()
+    expect(await cache.get("xxx|m")).toBeNull()
   })
 })
