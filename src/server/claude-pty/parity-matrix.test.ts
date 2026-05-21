@@ -1,7 +1,11 @@
 import { describe, expect, test } from "bun:test"
+import { mkdtemp, rm, writeFile, appendFile, mkdir } from "node:fs/promises"
+import { tmpdir } from "node:os"
+import path from "node:path"
 import type { Query } from "@anthropic-ai/claude-agent-sdk"
 import { createClaudeHarnessStream } from "../agent"
 import { createJsonlEventParser } from "./jsonl-to-event"
+import { startTranscriptStream } from "./tui-source"
 import type { HarnessEvent } from "../harness-types"
 
 /**
@@ -46,18 +50,40 @@ async function collectSdk(messages: unknown[], configuredContextWindow?: number)
   return events
 }
 
-function collectPty(messages: unknown[], configuredContextWindow?: number): HarnessEvent[] {
+async function ptyEventsViaTranscriptStream(messages: unknown[], configuredContextWindow?: number): Promise<HarnessEvent[]> {
+  const tmpDir = await mkdtemp(path.join(tmpdir(), "kanna-parity-"))
+  const projectDir = path.join(tmpDir, "projects", "fake")
+  await mkdir(projectDir, { recursive: true })
+  const filePath = path.join(projectDir, "fixture.jsonl")
+  await writeFile(filePath, "")
+  const stream = await startTranscriptStream({ projectDir, knownFilePath: filePath, firstFileTimeoutMs: 2000 })
   const parser = createJsonlEventParser({ configuredContextWindow })
-  const out: HarnessEvent[] = []
-  for (const m of messages) {
-    for (const ev of parser.parse(JSON.stringify(m))) out.push(ev)
-  }
-  return out
+  const events: HarnessEvent[] = []
+  const writeAll = (async () => {
+    for (const m of messages) {
+      await appendFile(filePath, JSON.stringify(m) + "\n")
+      await new Promise<void>((r) => setTimeout(r, 30))
+    }
+    await appendFile(filePath, '{"type":"__parity_sentinel__"}\n')
+  })()
+  const collectDone = (async () => {
+    for await (const line of stream.lines) {
+      let parsed: { type?: string }
+      try { parsed = JSON.parse(line) as { type?: string } } catch { continue }
+      if (parsed.type === "__parity_sentinel__") break
+      for (const ev of parser.parse(line)) events.push(ev)
+    }
+  })()
+  await writeAll
+  await collectDone
+  stream.close()
+  await rm(tmpDir, { recursive: true, force: true })
+  return events
 }
 
 async function assertSameEvents(messages: unknown[], configuredContextWindow?: number): Promise<void> {
   const sdk = await collectSdk(messages, configuredContextWindow)
-  const pty = collectPty(messages, configuredContextWindow)
+  const pty = await ptyEventsViaTranscriptStream(messages, configuredContextWindow)
   expect(normalize(pty)).toEqual(normalize(sdk))
 }
 

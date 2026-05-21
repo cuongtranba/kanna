@@ -1,15 +1,22 @@
+import { realpathSync } from "node:fs"
+import { mkdtemp, rm } from "node:fs/promises"
+import { homedir, tmpdir } from "node:os"
+import path from "node:path"
 import { describe, expect, test } from "bun:test"
-import { computeJsonlPath, encodeCwd } from "./jsonl-path"
+import { computeJsonlPath, computeProjectDir, encodeCwd } from "./jsonl-path"
 
 describe("encodeCwd", () => {
   test("absolute path: replaces / with -", () => {
-    expect(encodeCwd("/Users/cuongtran")).toBe("-Users-cuongtran")
+    const expected = homedir().replace(/\//g, "-").replace(/\./g, "-")
+    expect(encodeCwd(homedir())).toBe(expected)
   })
   test("absolute path with trailing slash: trims it", () => {
-    expect(encodeCwd("/Users/cuongtran/")).toBe("-Users-cuongtran")
+    const expected = homedir().replace(/\//g, "-").replace(/\./g, "-")
+    expect(encodeCwd(homedir() + "/")).toBe(expected)
   })
   test("nested path", () => {
-    expect(encodeCwd("/Users/cuongtran/Desktop/repo/kanna")).toBe("-Users-cuongtran-Desktop-repo-kanna")
+    const expected = process.cwd().replace(/\//g, "-").replace(/\./g, "-")
+    expect(encodeCwd(process.cwd())).toBe(expected)
   })
   test("root path", () => {
     expect(encodeCwd("/")).toBe("-")
@@ -17,12 +24,72 @@ describe("encodeCwd", () => {
 })
 
 describe("computeJsonlPath", () => {
-  test("combines homeDir + encoded cwd + session uuid", () => {
-    const result = computeJsonlPath({
-      homeDir: "/home/u",
-      cwd: "/Users/cuongtran",
-      sessionId: "abc-123",
-    })
-    expect(result).toBe("/home/u/.claude/projects/-Users-cuongtran/abc-123.jsonl")
+  test("combines homeDir + encoded cwd + session uuid", async () => {
+    const tmp = await mkdtemp(path.join(tmpdir(), "kanna-jsonlpath-"))
+    try {
+      const realPath = realpathSync(tmp)
+      const encodedCwd = realPath.replace(/\//g, "-").replace(/\./g, "-")
+      const result = computeJsonlPath({
+        homeDir: "/home/u",
+        cwd: tmp,
+        sessionId: "abc-123",
+      })
+      expect(result).toBe(`/home/u/.claude/projects/${encodedCwd}/abc-123.jsonl`)
+    } finally {
+      await rm(tmp, { recursive: true, force: true })
+    }
+  })
+})
+
+describe("encodeCwd realpath + dot replacement", () => {
+  test("resolves macOS /var -> /private/var symlink", async () => {
+    const tmp = await mkdtemp(path.join(tmpdir(), "kanna-encodecwd-"))
+    try {
+      const encoded = encodeCwd(tmp)
+      const realPath = realpathSync(tmp)
+      const expectedEncoded = realPath.replace(/\//g, "-").replace(/\./g, "-")
+      expect(encoded).toBe(expectedEncoded)
+    } finally {
+      await rm(tmp, { recursive: true, force: true })
+    }
+  })
+
+  test("replaces dots with dashes in segment names", async () => {
+    // mkdtemp ensures the directory exists so realpathSync succeeds
+    const tmp = await mkdtemp(path.join(tmpdir(), "kanna.dot-test-"))
+    try {
+      const encoded = encodeCwd(tmp)
+      expect(encoded).not.toContain(".")
+      // The "kanna.dot-test-XXXX" segment dot must be replaced
+      expect(encoded).toContain("kanna-dot-test-")
+    } finally {
+      await rm(tmp, { recursive: true, force: true })
+    }
+  })
+
+  test("trailing slash trimmed before encoding", () => {
+    const a = encodeCwd("/etc/")
+    const b = encodeCwd("/etc")
+    expect(a).toBe(b)
+  })
+
+  test("root / encodes to single dash", () => {
+    const result = encodeCwd("/")
+    expect(result).toBe("-")
+  })
+
+})
+
+describe("computeProjectDir", () => {
+  test("returns .claude/projects/<encodedCwd> path", async () => {
+    const tmp = await mkdtemp(path.join(tmpdir(), "kanna-projdir-"))
+    try {
+      const realPath = realpathSync(tmp)
+      const encodedCwd = realPath.replace(/\//g, "-").replace(/\./g, "-")
+      const result = computeProjectDir({ homeDir: "/home/user", cwd: tmp })
+      expect(result).toBe(`/home/user/.claude/projects/${encodedCwd}`)
+    } finally {
+      await rm(tmp, { recursive: true, force: true })
+    }
   })
 })
