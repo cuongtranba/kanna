@@ -93,7 +93,7 @@ describe("startTranscriptStream (dir-watch)", () => {
     const iter = stream.lines[Symbol.asyncIterator]()
     let resolved = false
     // Capture the first pending promise — it should not resolve yet (partial line)
-    const firstPromise = iter.next().then((r) => { resolved = true; return r })
+    const firstPromise = iter.next().then((r: IteratorResult<string>) => { resolved = true; return r })
     await new Promise((r) => setTimeout(r, 200))
     expect(resolved).toBe(false)
     // Overwrite the file with a complete line — poller should pick it up
