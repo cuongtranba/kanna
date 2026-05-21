@@ -492,6 +492,12 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
     knownFilePath,
     minMtimeMs: spawnStartedAtMs,
     pollMode: (args.env ?? process.env).KANNA_PTY_TRANSCRIPT_WATCH === "poll",
+    // Race-free discovery via claude's per-PID session registry at
+    // `${home}/.claude/sessions/<pid>.json`. Falls back to the mtime
+    // heuristic if the registry file does not appear in time (older
+    // claude versions, broken HOME, etc).
+    claudeChildPid: pty.pid,
+    homeDir: home,
   })
 
   const parser = createJsonlEventParser({

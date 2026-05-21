@@ -1,6 +1,8 @@
 import { readdir, stat, open } from "node:fs/promises"
 import { existsSync, watch } from "node:fs"
 import path from "node:path"
+import { awaitClaudeSessionForPid } from "./claude-session-registry"
+import { computeJsonlPath } from "./jsonl-path"
 
 export async function findLatestTranscript(
   projectDir: string,
@@ -48,19 +50,37 @@ export interface StartTranscriptStreamArgs {
   projectDir: string
   knownFilePath?: string
   /**
-   * Mtime floor (ms) for JSONL discovery. When `knownFilePath` is unset,
+   * Mtime floor (ms) for JSONL discovery. When `knownFilePath` is unset
+   * AND the session-registry lookup (via `claudeChildPid`) fails,
    * `findLatestTranscript` filters out files older than this — set to
    * spawn-start time so stale JSONLs from prior sessions in the same
-   * project dir cannot win the race.
+   * project dir cannot win the race. The registry lookup, when it
+   * succeeds, makes this floor moot.
    */
   minMtimeMs?: number
   pollMode?: boolean
   pollIntervalMs?: number
   firstFileTimeoutMs?: number
+  /**
+   * Live PID of the spawned `claude` child. When set together with
+   * `homeDir`, `locateFirstFile` first polls `${homeDir}/.claude/sessions/<pid>.json`
+   * (claude-code's own per-PID registry) to obtain the real session UUID,
+   * then computes the JSONL path directly. This is race-free under
+   * concurrent claude spawns sharing the same projectDir — the legacy
+   * mtime heuristic can pick the wrong file when other claude TUIs run
+   * in the same cwd. Falls back to `findLatestTranscript` if the
+   * registry file does not appear within `sessionRegistryTimeoutMs`.
+   */
+  claudeChildPid?: number
+  homeDir?: string
+  sessionRegistryTimeoutMs?: number
+  sessionRegistryPollMs?: number
 }
 
 const DEFAULT_FIRST_FILE_TIMEOUT_MS = 20_000
 const DEFAULT_POLL_INTERVAL_MS = 50
+const DEFAULT_SESSION_REGISTRY_TIMEOUT_MS = 2_000
+const DEFAULT_SESSION_REGISTRY_POLL_MS = 20
 
 export async function startTranscriptStream(args: StartTranscriptStreamArgs): Promise<TranscriptStream> {
   const lineQueue: string[] = []
@@ -127,6 +147,36 @@ export async function startTranscriptStream(args: StartTranscriptStreamArgs): Pr
 
   async function locateFirstFile(): Promise<string> {
     if (args.knownFilePath) return args.knownFilePath
+    // Preferred path: read claude's per-PID session file to learn the real
+    // session UUID, then compute the JSONL path directly. Race-free.
+    if (args.claudeChildPid && args.homeDir) {
+      const entry = await awaitClaudeSessionForPid({
+        homeDir: args.homeDir,
+        pid: args.claudeChildPid,
+        timeoutMs: args.sessionRegistryTimeoutMs ?? DEFAULT_SESSION_REGISTRY_TIMEOUT_MS,
+        pollIntervalMs: args.sessionRegistryPollMs ?? DEFAULT_SESSION_REGISTRY_POLL_MS,
+      })
+      if (entry) {
+        const computed = computeJsonlPath({
+          homeDir: args.homeDir,
+          cwd: entry.cwd,
+          sessionId: entry.sessionId,
+        })
+        // Wait for the JSONL file itself — claude registers the PID file
+        // before it actually creates the JSONL on first prompt commit.
+        const jsonlDeadline = Date.now() + (args.firstFileTimeoutMs ?? DEFAULT_FIRST_FILE_TIMEOUT_MS)
+        const jsonlPollMs = args.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS
+        while (!closed) {
+          if (existsSync(computed)) return computed
+          if (Date.now() >= jsonlDeadline) break
+          await new Promise((r) => setTimeout(r, jsonlPollMs))
+        }
+        if (closed) throw new Error("transcript stream closed before first file appeared")
+        // Fall through to legacy discovery if the JSONL did not appear in
+        // time — this is unexpected (registry lived but file did not) but
+        // keeps behaviour safe.
+      }
+    }
     const timeoutMs = args.firstFileTimeoutMs ?? DEFAULT_FIRST_FILE_TIMEOUT_MS
     const findOpts = { minMtimeMs: args.minMtimeMs }
     const existing = await findLatestTranscript(args.projectDir, findOpts)

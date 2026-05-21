@@ -78,6 +78,25 @@ describe("encodeCwd realpath + dot replacement", () => {
     expect(result).toBe("-")
   })
 
+  test("replaces underscore with dash (claude sanitizePath parity)", async () => {
+    const tmp = await mkdtemp(path.join(tmpdir(), "kanna_under_"))
+    try {
+      const encoded = encodeCwd(tmp)
+      expect(encoded).not.toContain("_")
+    } finally {
+      await rm(tmp, { recursive: true, force: true })
+    }
+  })
+
+  test("encoded segment matches /[^a-zA-Z0-9-]/ never present", async () => {
+    const tmp = await mkdtemp(path.join(tmpdir(), "kanna-charset-"))
+    try {
+      const encoded = encodeCwd(tmp)
+      expect(encoded).toMatch(/^[a-zA-Z0-9-]+$/)
+    } finally {
+      await rm(tmp, { recursive: true, force: true })
+    }
+  })
 })
 
 describe("computeProjectDir", () => {
