@@ -2380,7 +2380,6 @@ export class AgentCoordinator {
           initialPrompt: a.initialPrompt,
           subagentOrchestrator: a.subagentOrchestrator,
           delegationContext: a.delegationContext,
-          preflightGate: this.preflightGate ?? undefined,
           toolCallback: this.toolCallback ?? undefined,
           tunnelGateway: this.tunnelGateway,
           chatPolicy: a.chatId ? this.resolveChatPolicy(a.chatId) : undefined,
