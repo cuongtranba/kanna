@@ -11,6 +11,7 @@ import { KANNA_SYSTEM_PROMPT_APPEND } from "../../shared/kanna-system-prompt"
 import type { PreflightGate } from "./preflight/gate"
 import { resolveClaudeBinary } from "./resolve-binary"
 import { createJsonlEventParser } from "./jsonl-to-event"
+import { OutputRing, OUTPUT_RING_DEFAULT_BYTES } from "./output-ring"
 import type { ClaudeSessionHandle } from "../agent"
 import type { HarnessEvent, HarnessToolRequest } from "../harness-types"
 import type { AccountInfo, SlashCommand } from "../../shared/types"
@@ -97,38 +98,13 @@ export function deriveAccountInfoFromOauth(args: { label?: string; oauthKeyMaske
 }
 
 export const PLAN_MODE_EXIT_UNSUPPORTED =
-  "[claude-pty] leaving plan mode at runtime is unsupported in stream-json mode "
-  + "(no control request leaves plan mode). Restart the session to return to acceptEdits."
+  "[claude-pty] leaving plan mode at runtime is unsupported in TUI mode "
+  + "(no slash command exits plan; the only exit is the Shift+Tab TUI cycle "
+  + "whose keypress count depends on unobservable TUI state). Restart the session to return to acceptEdits."
 
-export type PlanModeRuntimeAction =
-  | { kind: "control"; request: Record<string, unknown> }
-  | { kind: "warn"; message: string }
-
-export function planModeRuntimeAction(planMode: boolean): PlanModeRuntimeAction {
-  if (planMode) {
-    return {
-      kind: "control",
-      request: { type: "set_permission_mode", mode: "plan" },
-    }
-  }
-  return { kind: "warn", message: PLAN_MODE_EXIT_UNSUPPORTED }
-}
-
-/** Bounded ring buffer for stderr so a crash/OAuth-failure exit can synthesize an isError result from the tail. */
-export const PTY_STDERR_RING_BYTES = 256 * 1024
-
-export class OutputRing {
-  private buf = ""
-  append(chunk: string): void {
-    this.buf += chunk
-    if (this.buf.length > PTY_STDERR_RING_BYTES) {
-      this.buf = this.buf.slice(this.buf.length - PTY_STDERR_RING_BYTES)
-    }
-  }
-  tail(): string {
-    return this.buf
-  }
-}
+/** Backward-compat re-exports — callers that import from driver.ts continue to work. */
+export const PTY_STDERR_RING_BYTES = OUTPUT_RING_DEFAULT_BYTES
+export { OutputRing }
 
 /**
  * Native CLI built-ins removed from the model's context under PTY (issue
@@ -159,51 +135,42 @@ export interface BuildPtyCliArgsInput {
 }
 
 /**
- * Build claude CLI args for stream-json driver mode.
+ * Build claude CLI args for TUI driver mode.
  *
- * Kanna trusts the claude CLI as the source of truth for tool execution and
- * stays out of the way of user setup:
+ * Kanna spawns the claude CLI under a real PTY and watches the on-disk
+ * transcript JSONL file as the event source. The CLI runs interactively
+ * with `--dangerously-skip-permissions` so tool calls are auto-approved.
  *
- *   • No `--tools` restriction — model uses claude's full built-in surface.
- *   • No `--strict-mcp-config` — user's own MCP servers (~/.claude/settings.json,
- *     plugin mcp_servers.json, etc.) are loaded alongside kanna's MCP.
- *   • No `--settings <kanna-spawn-file>` — `--setting-sources user,project,local`
- *     instead, so the user's installed skills, slash commands, plugins, agents,
- *     and project / local settings layers all load normally.
- *   • `--dangerously-skip-permissions` — auto-run tools because the CLI's own
- *     interactive permission prompt cannot render under `--print` mode (no TTY).
- *
- * Kanna only contributes its own MCP server (`offer_download`, `expose_port`,
- * `lsp`) so the model can drive the kanna UI; everything else is the user's.
+ *   • No `--print` / `--output-format` / `--input-format` / `--verbose` —
+ *     TUI mode does NOT use the stream-json headless transport.
+ *   • No `--session-id` for new sessions — TUI claude generates its own UUID
+ *     on first prompt; kanna identifies the session via the transcript file.
+ *   • `--strict-mcp-config` — CLI ignores user MCP config; kanna provides
+ *     its own via `--mcp-config` so the MCP surface is fully controlled.
+ *   • `--setting-sources user,project,local` — user's installed skills,
+ *     slash commands, plugins, agents, and project / local settings layers
+ *     all load normally.
+ *   • `--dangerously-skip-permissions` — auto-run tools because the CLI's
+ *     own interactive permission prompt is not routed through kanna's UI.
  */
 export function buildPtyCliArgs(args: BuildPtyCliArgsInput): string[] {
   const cliArgs: string[] = [
-    "--print",
-    "--output-format=stream-json",
-    "--input-format=stream-json",
-    "--verbose",
     "--model", args.model,
     "--setting-sources", "user,project,local",
     "--permission-mode", args.planMode ? "plan" : "acceptEdits",
     "--dangerously-skip-permissions",
   ]
-  // claude CLI rejects `--session-id <id>` whenever it is paired with
-  // `--resume <id>` unless `--fork-session` is also set:
-  //   "--session-id can only be used with --continue or --resume if
-  //    --fork-session is also specified."
-  // Translate kanna's intent → CLI flags:
-  //   • New session (no sessionToken)                  → --session-id <newUuid>
+  // TUI mode session handling:
+  //   • New session (no sessionToken)                  → no --session-id (claude generates its own UUID)
   //   • Resume existing session (sessionToken set)     → --resume <token>
   //   • Fork existing session (sessionToken + fork)    → --session-id <newUuid> --resume <token> --fork-session
   if (args.sessionToken && !args.forkSession) {
     cliArgs.push("--resume", args.sessionToken)
   } else if (args.sessionToken && args.forkSession) {
     cliArgs.push("--session-id", args.sessionId, "--resume", args.sessionToken, "--fork-session")
-  } else {
-    cliArgs.push("--session-id", args.sessionId)
   }
   if (args.mcpConfigPath) {
-    cliArgs.push("--mcp-config", args.mcpConfigPath)
+    cliArgs.push("--mcp-config", args.mcpConfigPath, "--strict-mcp-config")
   }
   if (args.effort && args.effort.length > 0) cliArgs.push("--effort", args.effort)
   if (args.additionalDirectories) {

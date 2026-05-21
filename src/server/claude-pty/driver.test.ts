@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
-import { startClaudeSessionPTY, buildPtyEnv, buildPtyCliArgs, OutputRing, PTY_STDERR_RING_BYTES, PTY_DISALLOWED_NATIVE_TOOLS, deriveAccountInfoFromOauth, planModeRuntimeAction, PLAN_MODE_EXIT_UNSUPPORTED } from "./driver"
+import { startClaudeSessionPTY, buildPtyEnv, buildPtyCliArgs, OutputRing, PTY_STDERR_RING_BYTES, PTY_DISALLOWED_NATIVE_TOOLS, deriveAccountInfoFromOauth, PLAN_MODE_EXIT_UNSUPPORTED } from "./driver"
 import { KANNA_SYSTEM_PROMPT_APPEND } from "../../shared/kanna-system-prompt"
 import type { HarnessEvent } from "../harness-types"
 
@@ -133,6 +133,77 @@ describe("buildPtyEnv", () => {
   })
 })
 
+describe("buildPtyCliArgs TUI mode", () => {
+  test("does NOT include --print", () => {
+    const args = buildPtyCliArgs({
+      sessionId: "s1", model: "m", planMode: false,
+      sessionToken: null, forkSession: false,
+    })
+    expect(args).not.toContain("--print")
+  })
+
+  test("does NOT include --output-format / --input-format / --verbose", () => {
+    const args = buildPtyCliArgs({
+      sessionId: "s1", model: "m", planMode: false,
+      sessionToken: null, forkSession: false,
+    })
+    expect(args.find((a) => a.startsWith("--output-format"))).toBeUndefined()
+    expect(args.find((a) => a.startsWith("--input-format"))).toBeUndefined()
+    expect(args).not.toContain("--verbose")
+  })
+
+  test("includes core TUI args", () => {
+    const args = buildPtyCliArgs({
+      sessionId: "s1", model: "claude-opus-4-7", planMode: false,
+      sessionToken: null, forkSession: false,
+    })
+    expect(args).toContain("--model")
+    expect(args).toContain("claude-opus-4-7")
+    expect(args).toContain("--permission-mode")
+    expect(args).toContain("acceptEdits")
+    expect(args).toContain("--dangerously-skip-permissions")
+  })
+
+  test("does NOT include --session-id for new sessions", () => {
+    const args = buildPtyCliArgs({
+      sessionId: "s1", model: "m", planMode: false,
+      sessionToken: null, forkSession: false,
+    })
+    expect(args).not.toContain("--session-id")
+  })
+
+  test("resume passes --resume <token> without --session-id", () => {
+    const args = buildPtyCliArgs({
+      sessionId: "s1", model: "m", planMode: false,
+      sessionToken: "tok-abc", forkSession: false,
+    })
+    expect(args).toContain("--resume")
+    expect(args).toContain("tok-abc")
+    expect(args).not.toContain("--session-id")
+    expect(args).not.toContain("--fork-session")
+  })
+
+  test("fork passes --session-id + --resume + --fork-session", () => {
+    const args = buildPtyCliArgs({
+      sessionId: "fork-uuid", model: "m", planMode: false,
+      sessionToken: "old-tok", forkSession: true,
+    })
+    expect(args).toContain("--session-id")
+    expect(args).toContain("fork-uuid")
+    expect(args).toContain("--resume")
+    expect(args).toContain("old-tok")
+    expect(args).toContain("--fork-session")
+  })
+
+  test("plan mode uses plan permission mode", () => {
+    const args = buildPtyCliArgs({
+      sessionId: "s1", model: "m", planMode: true,
+      sessionToken: null, forkSession: false,
+    })
+    expect(args).toContain("plan")
+  })
+})
+
 describe("buildPtyCliArgs", () => {
   const baseInput = {
     sessionId: "sess-123",
@@ -144,8 +215,6 @@ describe("buildPtyCliArgs", () => {
 
   test("emits required base flags", () => {
     const args = buildPtyCliArgs(baseInput)
-    expect(args).toContain("--session-id")
-    expect(args).toContain("sess-123")
     expect(args).toContain("--model")
     expect(args).toContain("claude-sonnet-4-6")
     expect(args).not.toContain("--no-update")
@@ -165,14 +234,6 @@ describe("buildPtyCliArgs", () => {
     const idx = args.indexOf("--setting-sources")
     expect(idx).toBeGreaterThan(-1)
     expect(args[idx + 1]).toBe("user,project,local")
-  })
-
-  test("emits stream-json driver flags (--print + I/O format + verbose)", () => {
-    const args = buildPtyCliArgs(baseInput)
-    expect(args).toContain("--print")
-    expect(args).toContain("--output-format=stream-json")
-    expect(args).toContain("--input-format=stream-json")
-    expect(args).toContain("--verbose")
   })
 
   test("emits --dangerously-skip-permissions (personal-use bypass)", () => {
@@ -212,13 +273,11 @@ describe("buildPtyCliArgs", () => {
     expect(args[idx + 1]).toBe("tok-abc")
   })
 
-  test("new-session mode (no token, no fork): --session-id, no --resume", () => {
+  test("new-session mode (no token, no fork): no --session-id, no --resume", () => {
     const args = buildPtyCliArgs(baseInput)
     expect(args).not.toContain("--resume")
     expect(args).not.toContain("--fork-session")
-    const idx = args.indexOf("--session-id")
-    expect(idx).toBeGreaterThan(-1)
-    expect(args[idx + 1]).toBe("sess-123")
+    expect(args).not.toContain("--session-id")
   })
 
   test("fork mode: --session-id + --resume + --fork-session all three", () => {
@@ -273,12 +332,12 @@ describe("buildPtyCliArgs", () => {
     expect(args[idx + 1]).toBe("custom prompt body")
   })
 
-  test("--mcp-config appended without --strict-mcp-config (user MCPs merge with kanna's)", () => {
+  test("--mcp-config appended WITH --strict-mcp-config (TUI mode: strict so CLI ignores user MCP config)", () => {
     const args = buildPtyCliArgs({ ...baseInput, mcpConfigPath: "/tmp/mcp-config.json" })
     const idx = args.indexOf("--mcp-config")
     expect(idx).toBeGreaterThan(-1)
     expect(args[idx + 1]).toBe("/tmp/mcp-config.json")
-    expect(args).not.toContain("--strict-mcp-config")
+    expect(args).toContain("--strict-mcp-config")
   })
 
   test("--mcp-config omitted when path absent", () => {
@@ -376,18 +435,8 @@ describe("deriveAccountInfoFromOauth (C1)", () => {
   })
 })
 
-describe("planModeRuntimeAction (stream-json control_request)", () => {
-  test("planMode=true → control_request set_permission_mode=plan", () => {
-    const action = planModeRuntimeAction(true)
-    expect(action.kind).toBe("control")
-    if (action.kind !== "control") throw new Error("expected control action")
-    expect(action.request).toEqual({ type: "set_permission_mode", mode: "plan" })
-  })
-
-  test("planMode=false → warn (stream-json mode has no leave-plan)", () => {
-    const action = planModeRuntimeAction(false)
-    expect(action.kind).toBe("warn")
-    if (action.kind !== "warn") throw new Error("expected warn action")
-    expect(action.message).toBe(PLAN_MODE_EXIT_UNSUPPORTED)
+describe("PLAN_MODE_EXIT_UNSUPPORTED (TUI mode message)", () => {
+  test("PLAN_MODE_EXIT_UNSUPPORTED references TUI mode", () => {
+    expect(PLAN_MODE_EXIT_UNSUPPORTED).toContain("TUI mode")
   })
 })
