@@ -209,13 +209,25 @@ export async function waitForResultEntry(
       try {
         for await (const line of stream.lines) {
           if (settled) return
-          let parsed: { type?: string }
-          try { parsed = JSON.parse(line) as { type?: string } } catch { continue }
+          let parsed: { type?: string; error?: string; isApiErrorMessage?: boolean; apiErrorStatus?: number }
+          try { parsed = JSON.parse(line) as typeof parsed } catch { continue }
           if (parsed.type === "result") {
             settled = true
             if (timer) clearTimeout(timer)
             if (opts.signal) opts.signal.removeEventListener("abort", onAbort)
             resolve({ rawLine: line, parsed: { type: parsed.type } })
+            return
+          }
+          // Rate-limit responses (HTTP 429) arrive as assistant messages rather
+          // than result entries — surface them immediately so callers can
+          // distinguish a transient limit from a structural probe failure.
+          if (parsed.type === "assistant" && parsed.isApiErrorMessage && parsed.apiErrorStatus === 429) {
+            settled = true
+            if (timer) clearTimeout(timer)
+            if (opts.signal) opts.signal.removeEventListener("abort", onAbort)
+            const rlErr = new Error("rate_limited") as Error & { code: string }
+            rlErr.code = "rate_limited"
+            reject(rlErr)
             return
           }
         }

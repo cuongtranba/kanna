@@ -14,7 +14,7 @@ import { OutputRing, OUTPUT_RING_DEFAULT_BYTES } from "./output-ring"
 import { createSmokeTestGate, createFileSmokeTestCache, buildLiveSmokeProbe, type SmokeTestGate } from "./smoke-test"
 import { computeBinarySha256 } from "./preflight/binary-fingerprint"
 import { spawnPtyProcess as defaultSpawnPtyProcess, type PtyProcess, type SpawnPtyProcessArgs } from "./pty-process"
-import { waitForTuiReady, dismissTrustDialogIfPresent, sendUserPrompt, sendExitCommand } from "./tui-control"
+import { waitForTuiReady, waitForTuiReadyWithTrustDismiss, sendUserPrompt, sendExitCommand } from "./tui-control"
 import { startTranscriptStream } from "./tui-source"
 import { computeJsonlPath, computeProjectDir } from "./jsonl-path"
 import type { ClaudeSessionHandle } from "../agent"
@@ -410,20 +410,23 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
     throw err
   }
 
-  // Wait for TUI to render its input box.
+  // Wait for TUI to render its input box, dismissing the trust dialog if
+  // present. The combined helper handles the ANSI-encoded trust dialog text
+  // and keeps polling until the real "❯ " input box appears after dismiss.
   const tuiReadyMs = Number((args.env ?? process.env).KANNA_PTY_TUI_BOOT_MS ?? 3000)
-  const readyResult = await waitForTuiReady(ring, { hardCapMs: tuiReadyMs })
-  if (readyResult === "timeout") {
-    console.warn("[kanna/pty] TUI ready marker not detected within hard cap", { chatId: args.chatId, hardCapMs: tuiReadyMs })
-  }
-
-  // Dismiss trust dialog if present (first spawn per cwd only).
   const trustDismiss = (args.env ?? process.env).KANNA_PTY_TRUST_DISMISS ?? "enabled"
   if (trustDismiss !== "disabled") {
-    const dismissed = await dismissTrustDialogIfPresent(pty, ring)
-    if (dismissed) {
-      console.log("[kanna/pty] trust dialog dismissed", { chatId: args.chatId })
-      await new Promise((r) => setTimeout(r, 500))
+    // +5 s over the base cap to absorb trust-dialog dismiss + project reload.
+    const readyResult = await waitForTuiReadyWithTrustDismiss(pty, ring, { hardCapMs: tuiReadyMs + 5_000 })
+    if (readyResult === "timeout") {
+      console.warn("[kanna/pty] TUI ready marker not detected after trust dismiss", { chatId: args.chatId, hardCapMs: tuiReadyMs + 5_000 })
+    } else {
+      console.log("[kanna/pty] TUI ready", { chatId: args.chatId })
+    }
+  } else {
+    const readyResult = await waitForTuiReady(ring, { hardCapMs: tuiReadyMs })
+    if (readyResult === "timeout") {
+      console.warn("[kanna/pty] TUI ready marker not detected within hard cap", { chatId: args.chatId, hardCapMs: tuiReadyMs })
     }
   }
 

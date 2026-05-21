@@ -4,7 +4,7 @@ import path from "node:path"
 import { tmpdir } from "node:os"
 import { OutputRing } from "./output-ring"
 import { spawnPtyProcess as defaultSpawnPtyProcess } from "./pty-process"
-import { waitForTuiReady, dismissTrustDialogIfPresent, sendUserPrompt, sendExitCommand } from "./tui-control"
+import { waitForTuiReadyWithTrustDismiss, sendUserPrompt, sendExitCommand } from "./tui-control"
 import { startTranscriptStream, waitForResultEntry } from "./tui-source"
 import { computeProjectDir } from "./jsonl-path"
 
@@ -73,6 +73,7 @@ export function buildLiveSmokeProbe(args: BuildLiveSmokeProbeArgs): SmokeTestPro
       "--model", args.model,
       "--permission-mode", "acceptEdits",
       "--dangerously-skip-permissions",
+      "--strict-mcp-config",
       "--disallowedTools", "Bash",
     ]
     const spawnEnv: NodeJS.ProcessEnv = { ...process.env }
@@ -88,14 +89,17 @@ export function buildLiveSmokeProbe(args: BuildLiveSmokeProbeArgs): SmokeTestPro
     })
     let probeResult: "pass" | "fail" = "pass"
     try {
-      await waitForTuiReady(ring, { hardCapMs: 8000 })
-      await dismissTrustDialogIfPresent(pty, ring)
-      await new Promise((r) => setTimeout(r, 500))
-      await sendUserPrompt(pty, "Run the command ls -la /tmp using the Bash tool now. Just do it.")
+      await waitForTuiReadyWithTrustDismiss(pty, ring, { hardCapMs: 15_000 })
       const projectDir = computeProjectDir({ homeDir: args.homeDir, cwd: tmpCwd })
-      const stream = await startTranscriptStream({ projectDir, firstFileTimeoutMs: 15_000 })
+      // Start watching the transcript directory before sending the prompt.
+      // The JSONL file is created by claude at session-init (before any user
+      // turn), so awaiting stream.filePath confirms the API connection is live
+      // and prevents sending the probe prompt before claude is ready to process
+      // it (which would silently drop the turn and cause a transcript timeout).
+      const stream = await startTranscriptStream({ projectDir, firstFileTimeoutMs: 20_000 })
       try {
         const filePath = await stream.filePath
+        await sendUserPrompt(pty, "Run the command ls -la /tmp using the Bash tool now. Just do it.")
         await waitForResultEntry(stream, { timeoutMs: 30_000 })
         const raw = await readFile(filePath, "utf8")
         for (const line of raw.split("\n")) {
@@ -114,6 +118,9 @@ export function buildLiveSmokeProbe(args: BuildLiveSmokeProbeArgs): SmokeTestPro
         stream.close()
       }
     } catch (err) {
+      // Rate-limit errors must not be cached as "fail" — they're transient.
+      // Re-throw so the gate propagates the error without poisoning the cache.
+      if (err instanceof Error && (err as Error & { code?: string }).code === "rate_limited") throw err
       console.warn("[kanna/pty] smoke probe errored, treating as FAIL", err)
       probeResult = "fail"
     } finally {
