@@ -1,5 +1,5 @@
 import { describe, expect, test, beforeEach, afterEach } from "bun:test"
-import { mkdtemp, rm, writeFile, mkdir } from "node:fs/promises"
+import { mkdtemp, rm, writeFile, mkdir, appendFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import {
@@ -7,6 +7,7 @@ import {
   startTranscriptStream,
   waitForResultEntry,
 } from "./tui-source"
+import { encodeCwd } from "./jsonl-path"
 
 let workHome: string
 let projectDir: string
@@ -158,6 +159,132 @@ describe("startTranscriptStream (poll-mode)", () => {
     expect(first.value).toBe('{"type":"polled"}')
     stream.close()
   }, 5000)
+})
+
+describe("startTranscriptStream (registry resolution)", () => {
+  // Regression: claude-code's per-pid session registry pins the JSONL path
+  // to the live child. When the registry-resolved JSONL never appears (e.g.
+  // claude was spawned but no prompt sent), older builds fell back to the
+  // newest mtime in the project dir — which is another concurrent chat's
+  // JSONL. That caused cross-session transcript bleed. The fix removed the
+  // fallback: registry path is authoritative, poll until close.
+  test("registry resolves but JSONL missing — never falls back to other JSONL in same dir", async () => {
+    const pid = 99001
+    // Real cwd dir so `encodeCwd` (which realpaths) doesn't ENOENT.
+    const realCwd = await mkdtemp(path.join(workHome, "real-cwd-"))
+    const encoded = encodeCwd(realCwd)
+    const ownProjectDir = path.join(workHome, ".claude", "projects", encoded)
+    await mkdir(ownProjectDir, { recursive: true })
+    const sessionsDir = path.join(workHome, ".claude", "sessions")
+    await mkdir(sessionsDir, { recursive: true })
+    const ownSessionId = "our-session-aaaaaaaaaa"
+    await writeFile(
+      path.join(sessionsDir, `${pid}.json`),
+      JSON.stringify({ pid, sessionId: ownSessionId, cwd: realCwd, kind: "interactive", startedAt: Date.now() }),
+    )
+    // Tempt the bug: drop a NEWER unrelated JSONL into the same project dir.
+    // Under the old mtime fallback this would have been picked up after
+    // `firstFileTimeoutMs` elapsed with no own-JSONL present.
+    const strangerFile = path.join(ownProjectDir, "stranger-session.jsonl")
+    await writeFile(strangerFile, '{"type":"assistant","message":{"content":[{"type":"text","text":"NOT OURS"}]}}\n')
+
+    const stream = await startTranscriptStream({
+      projectDir: ownProjectDir,
+      homeDir: workHome,
+      claudeChildPid: pid,
+      sessionRegistryTimeoutMs: 300,
+      firstFileTimeoutMs: 200,
+      pollIntervalMs: 20,
+    })
+
+    // filePath must NOT resolve to the stranger file even after timeouts.
+    const beforeWrite = await Promise.race([
+      stream.filePath.then((fp) => ({ kind: "resolved" as const, fp })),
+      new Promise<{ kind: "pending" }>((r) => setTimeout(() => r({ kind: "pending" }), 600)),
+    ])
+    expect(beforeWrite.kind).toBe("pending")
+
+    // Now the registry-pointed JSONL appears — filePath should resolve to it.
+    const ownFile = path.join(ownProjectDir, `${ownSessionId}.jsonl`)
+    await writeFile(ownFile, '{"type":"assistant","message":{"content":[{"type":"text","text":"ours"}]}}\n')
+    const resolved = await stream.filePath
+    expect(resolved).toBe(ownFile)
+    expect(resolved).not.toBe(strangerFile)
+    stream.close()
+  }, 5000)
+
+  test("registry resolves with existing JSONL — returns registry path immediately", async () => {
+    const pid = 99002
+    const realCwd = await mkdtemp(path.join(workHome, "real-cwd-"))
+    const encoded = encodeCwd(realCwd)
+    const ownProjectDir = path.join(workHome, ".claude", "projects", encoded)
+    await mkdir(ownProjectDir, { recursive: true })
+    const sessionsDir = path.join(workHome, ".claude", "sessions")
+    await mkdir(sessionsDir, { recursive: true })
+    const ownSessionId = "our-session-bbbbbbbbbb"
+    const ownFile = path.join(ownProjectDir, `${ownSessionId}.jsonl`)
+    await writeFile(ownFile, "{}\n")
+    await writeFile(
+      path.join(sessionsDir, `${pid}.json`),
+      JSON.stringify({ pid, sessionId: ownSessionId, cwd: realCwd, kind: "interactive", startedAt: Date.now() }),
+    )
+    // Newer stranger JSONL must not win — registry path is authoritative.
+    await new Promise((r) => setTimeout(r, 20))
+    await writeFile(path.join(ownProjectDir, "stranger.jsonl"), "{}\n")
+
+    const stream = await startTranscriptStream({
+      projectDir: ownProjectDir,
+      homeDir: workHome,
+      claudeChildPid: pid,
+    })
+    const resolved = await stream.filePath
+    expect(resolved).toBe(ownFile)
+    stream.close()
+  }, 5000)
+})
+
+describe("startTranscriptStream (safety-net poll vs fs.watch drops)", () => {
+  // Regression: fs.watch on macOS/FSEvents was observed to coalesce or drop
+  // events when claude appended `assistant` + `system/turn_duration` rows in
+  // rapid succession at the end of a turn — Kanna's stream would silently
+  // stop reading at ~52k bytes while the JSONL grew to ~55k. The safety-net
+  // poll runs alongside fs.watch and guarantees eventual delivery.
+  test("appends made after stream setup are delivered even with no further watcher fires", async () => {
+    const filePath = path.join(projectDir, "watched.jsonl")
+    await writeFile(filePath, '{"type":"system","subtype":"init"}\n')
+    const stream = await startTranscriptStream({
+      projectDir,
+      knownFilePath: filePath,
+      firstFileTimeoutMs: 500,
+    })
+    const iter = stream.lines[Symbol.asyncIterator]()
+    const first = await iter.next()
+    expect(first.value).toContain('"system"')
+
+    // Append multiple rows AFTER the watcher is set up. On a buggy build
+    // where fs.watch drops the second/third append, the safety-net poll
+    // (fires every 500 ms) must still pick them up within the test
+    // timeout.
+    await appendFile(filePath, '{"type":"assistant","message":{"content":[{"type":"text","text":"a"}]}}\n')
+    await appendFile(filePath, '{"type":"assistant","message":{"content":[{"type":"text","text":"b"}]}}\n')
+    await appendFile(filePath, '{"type":"system","subtype":"turn_duration","durationMs":42}\n')
+
+    const collected: string[] = []
+    const deadline = Date.now() + 2_000
+    while (collected.length < 3 && Date.now() < deadline) {
+      const nxt = await Promise.race([
+        iter.next(),
+        new Promise<{ value: undefined; done: true }>((r) => setTimeout(() => r({ value: undefined, done: true }), 1_500)),
+      ])
+      if (nxt.done) break
+      collected.push(nxt.value)
+    }
+    expect(collected.length).toBe(3)
+    expect(collected[0]).toContain('"a"')
+    expect(collected[1]).toContain('"b"')
+    expect(collected[2]).toContain("turn_duration")
+    stream.close()
+  }, 8000)
 })
 
 describe("waitForResultEntry", () => {

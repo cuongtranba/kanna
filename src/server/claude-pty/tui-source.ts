@@ -81,6 +81,7 @@ const DEFAULT_FIRST_FILE_TIMEOUT_MS = 20_000
 const DEFAULT_POLL_INTERVAL_MS = 50
 const DEFAULT_SESSION_REGISTRY_TIMEOUT_MS = 2_000
 const DEFAULT_SESSION_REGISTRY_POLL_MS = 20
+const DEFAULT_SAFETY_POLL_MS = 500
 
 export async function startTranscriptStream(args: StartTranscriptStreamArgs): Promise<TranscriptStream> {
   const lineQueue: string[] = []
@@ -141,6 +142,12 @@ export async function startTranscriptStream(args: StartTranscriptStreamArgs): Pr
         const interval = args.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS
         pollTimer = setInterval(() => { void readNewBytes(filePath) }, interval)
       }
+      // Safety-net poll alongside fs.watch: macOS FSEvents was observed to
+      // coalesce or drop events when claude appended several lines in rapid
+      // succession at turn end (final `assistant` + `system/turn_duration`
+      // rows silently lost). The watcher handles low-latency streaming;
+      // this poll guarantees eventual delivery within DEFAULT_SAFETY_POLL_MS.
+      pollTimer = setInterval(() => { void readNewBytes(filePath) }, DEFAULT_SAFETY_POLL_MS)
     }
     void readNewBytes(filePath)
   }
@@ -162,19 +169,18 @@ export async function startTranscriptStream(args: StartTranscriptStreamArgs): Pr
           cwd: entry.cwd,
           sessionId: entry.sessionId,
         })
-        // Wait for the JSONL file itself — claude registers the PID file
-        // before it actually creates the JSONL on first prompt commit.
-        const jsonlDeadline = Date.now() + (args.firstFileTimeoutMs ?? DEFAULT_FIRST_FILE_TIMEOUT_MS)
+        // Registry resolved: the JSONL path is AUTHORITATIVE for this
+        // child pid. Poll existsSync until close. Do NOT fall back to
+        // mtime — when the registry-resolved JSONL never appears (e.g.
+        // claude was spawned but no prompt was ever sent), mtime
+        // discovery silently picks the newest unrelated JSONL in the
+        // shared project dir, causing cross-session transcript bleed.
         const jsonlPollMs = args.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS
         while (!closed) {
           if (existsSync(computed)) return computed
-          if (Date.now() >= jsonlDeadline) break
           await new Promise((r) => setTimeout(r, jsonlPollMs))
         }
-        if (closed) throw new Error("transcript stream closed before first file appeared")
-        // Fall through to legacy discovery if the JSONL did not appear in
-        // time — this is unexpected (registry lived but file did not) but
-        // keeps behaviour safe.
+        throw new Error("transcript stream closed before registry-resolved JSONL appeared")
       }
     }
     const timeoutMs = args.firstFileTimeoutMs ?? DEFAULT_FIRST_FILE_TIMEOUT_MS
