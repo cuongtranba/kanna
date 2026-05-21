@@ -80,147 +80,131 @@ Periodic `tickTimeouts` driver fires every 5s; default request timeout is
 
 # Claude Driver Flag (KANNA_CLAUDE_DRIVER)
 
-Setting `KANNA_CLAUDE_DRIVER=pty` launches the `claude` CLI under a
-pseudo-terminal and parses the CLI's stdout JSONL stream line-by-line
-instead of using the `@anthropic-ai/claude-agent-sdk` `query()`
-programmatic API. PTY mode preserves Pro/Max subscription billing; SDK
-mode bills at API rates.
+Setting `KANNA_CLAUDE_DRIVER=pty` launches the `claude` CLI **interactively**
+under a Bun.Terminal pseudo-terminal (Shannon-style) and tails the on-disk
+transcript JSONL at `~/.claude/projects/<encoded-cwd>/<session-uuid>.jsonl`
+as the sole event source. Input is sent as raw text + `\r` (no JSONL
+envelopes). PTY mode preserves Pro/Max subscription billing; SDK mode
+bills at API rates.
 
-Default is `sdk` (no behaviour change). Authentication requires an OAuth-pool token configured in Kanna settings; the token is injected via `CLAUDE_CODE_OAUTH_TOKEN`. The local `claude /login` keychain path is not supported in this deployment. PTY mode is OAuth-only and NEVER uses an API key: `buildPtyEnv` unconditionally strips `ANTHROPIC_API_KEY` from the spawned child env, so a key left in the parent environment is harmless — it does not block the spawn and cannot force API billing. `verifyPtyAuth` only requires the OAuth-pool token.
+Default is `sdk` (no behaviour change). Authentication requires an OAuth-pool
+token configured in Kanna settings; the token is injected via
+`CLAUDE_CODE_OAUTH_TOKEN`. The local `claude /login` keychain path is not
+supported in this deployment. PTY mode is OAuth-only and NEVER uses an API
+key: `buildPtyEnv` unconditionally strips `ANTHROPIC_API_KEY` from the
+spawned child env. `verifyPtyAuth` only requires the OAuth-pool token.
 
 Platform support: macOS / Linux only.
 
-**AskUserQuestion / ExitPlanMode (issue #215 — CLOSED):** PTY now
-reaches parity. The driver disallows the native built-ins
-(`--disallowedTools AskUserQuestion ExitPlanMode`) and force-registers
-the `mcp__kanna__ask_user_question` / `mcp__kanna__exit_plan_mode`
-shims, which route through the durable approval protocol to the UI —
-active regardless of `KANNA_MCP_TOOL_CALLBACKS`. See the Tool Callback
-Feature Flag section for the full wiring.
+**Encoded cwd path:** Claude resolves the cwd to its real path
+(`fs.realpathSync` — macOS `/var` → `/private/var`), then replaces both
+`/` and `.` with `-`. `src/server/claude-pty/jsonl-path.ts`
+(`encodeCwd`, `computeJsonlPath`, `computeProjectDir`) matches this
+behaviour exactly. Mismatch = transcript file never found.
 
-**Remaining parity gaps vs SDK driver** (closed phases tracked in #162;
-umbrella #163):
-- `setPermissionMode(planMode)` is now asymmetric, not a full no-op:
-  ENTER plan (`planMode === true`) sends the `/plan` slash command — a
-  real, deterministic runtime mode change (`/plan` "enters plan mode
-  directly from the prompt", code.claude.com/docs/en/commands). EXIT
-  plan (`planMode === false`) is still warn-only: no slash command
-  leaves plan mode, and the only exit is the relative Shift+Tab TUI
-  cycle whose keypress count depends on unobservable TUI state (PTY
-  drains output unparsed). Restart the session to return to acceptEdits.
-  Tracked: anthropics/claude-code#59891.
-- `getSupportedCommands()` returns a static four-command list. Phase 6
-  spike confirmed `claude --help` has no slash-command listing flag and
-  the CLI exposes no `--print '/help'` mode that prints a structured
-  list; a live `/help` parser needs an authenticated ephemeral session
-  per chat (cosmetic, deferred).
+**Trust dialog:** TUI claude prompts "Quick safety check: Is this a project
+you created or one you trust?" on every previously-unseen cwd. The driver
+detects the marker in the PTY output ring buffer and sends `\r` to accept
+"Yes, I trust this folder" (the default-highlighted option). Trust persists
+across spawns in the same cwd, so the dismiss cost amortises. Set
+`KANNA_PTY_TRUST_DISMISS=disabled` to bypass detection (escape hatch if
+Anthropic changes the dialog wording).
+
+**TUI ready signal:** Driver polls the output ring for the input-box marker
+`❯ ` before sending the first prompt. Hard cap defaults to 3000 ms
+(`KANNA_PTY_TUI_BOOT_MS`).
+
+**Transcript watch:** `tui-source.ts` uses `fs.watch` by default; set
+`KANNA_PTY_TRANSCRIPT_WATCH=poll` to force 50 ms polling (for unreliable
+filesystems like NFS / CIFS).
+
+**oneShot subagent close:** After the first `result` transcript entry on a
+one-shot run (Claude subagent), the driver sends `/exit\r` to gracefully
+close the REPL, awaits `pty.exited` with 5 s grace, then escalates SIGTERM →
+SIGKILL on hang. Matches the SDK driver's prompt-queue close semantics.
+
+**Smoke test (replaces preflight P3b):** Every spawn passes through a
+single TUI probe that verifies `--disallowedTools Bash` is honored.
+Cached 24 h per (binarySha256, model) under
+`${HOME}/.kanna/cache/smoke-test/`. PASS unlocks spawn; FAIL refuses
+with a clear reason that surfaces through the existing spawn-error
+path. The 8-probe preflight gate is removed (`KANNA_PTY_PREFLIGHT_MODEL`
+no longer consulted).
+
+**AskUserQuestion / ExitPlanMode (issue #215 — CLOSED):** Driver disallows
+the native built-ins (`--disallowedTools AskUserQuestion ExitPlanMode`)
+and force-registers the `mcp__kanna__ask_user_question` /
+`mcp__kanna__exit_plan_mode` shims, which route through the durable
+approval protocol to the UI — active regardless of `KANNA_MCP_TOOL_CALLBACKS`.
+See the Tool Callback Feature Flag section for full wiring.
+
+**setPermissionMode:** Asymmetric.
+- ENTER plan (`planMode === true`) sends the `/plan` slash command via
+  `pty.sendInput("/plan\r")`.
+- EXIT plan (`planMode === false`) is warn-only — no slash command leaves
+  plan mode, and the only exit is the relative Shift+Tab TUI cycle whose
+  keypress count depends on unobservable TUI state. Restart the session
+  to return to acceptEdits. Tracked: anthropics/claude-code#59891.
+  Closing this gap is deferred (spec F1).
+
+**setModel:** Sends `/model <name>\r` via the slash command (no stream-json
+control_request envelope in TUI mode).
+
+**interrupt:** Sends `Ctrl+C` (0x03) via PTY stdin — TUI claude treats this
+as an interactive interrupt, cancelling the current turn.
+
+**getSupportedCommands():** Static four-command list. Live `/help` parsing
+is deferred (spec F2).
 
 **SDK ↔ PTY equivalence (Phase 6):** `src/server/claude-pty/parity-matrix.test.ts`
-drives both `createClaudeHarnessStream` (SDK) and
-`createJsonlEventParser` (PTY) with the same SDK-message fixtures and
-asserts identical `HarnessEvent` sequences after normalising volatile
-fields. Covers: simple turn, SDK-native `rate_limit_event`,
-prompt-too-long isError result, assistant usage-id dedup, 1M
-context-window floor, per-message `session_token`, and `compact_boundary`
-turns. Regression guard for future driver edits.
+drives both `createClaudeHarnessStream` (SDK) and `createJsonlEventParser`
+fed via `startTranscriptStream` (PTY) with the same SDK-message fixtures and
+asserts identical `HarnessEvent` sequences. Covers the original 7 cases
+unchanged.
 
-**Subagent + prompt + account parity (Phase 5):**
-- D6 — Claude subagents route through the PTY driver when
-  `KANNA_CLAUDE_DRIVER=pty` (subscription billing), via
-  `buildClaudeSubagentStarter()` which adapts the SDK-shaped starter to
-  `StartClaudeSessionPtyArgs` and sets `oneShot: true` so the REPL closes
-  after the single turn (Phase 4 D7). SDK fallback when the flag is unset.
-- D8 — Both drivers now append the single shared
-  `KANNA_SYSTEM_PROMPT_APPEND` constant (`src/shared/kanna-system-prompt.ts`).
-  PTY previously sent a one-sentence stub that diverged refusal behaviour.
-- C1 — The claude CLI never writes account info to the JSONL transcript
-  (confirmed: `SDKSystemMessage` has no account fields; `q.accountInfo()`
-  is an SDK-only API). PTY instead derives `AccountInfo` from the picked
-  OAuth-pool token label: `{organization: <label>, tokenSource:
-  "kanna-oauth-pool"}`. Returns `null` (UI fallback) when no pool token
-  is configured.
+**Subagent + prompt + account parity (Phase 5):** unchanged from prior
+phases — `buildClaudeSubagentStarter` adapts the SDK-shaped starter to
+`StartClaudeSessionPtyArgs` with `oneShot: true`; both drivers append
+the shared `KANNA_SYSTEM_PROMPT_APPEND`; PTY derives `AccountInfo` from
+the picked OAuth-pool token label + masked key.
 
-**Failure handling (Phase 4):** Every PTY spawn captures terminal output
-into a 256 KB ring buffer. If the process exits without ever emitting a
-`result` transcript entry (silent crash, OAuth failure, preflight kill),
-the driver synthesizes a `{kind:"result", subtype:"error",
-isError:true}` entry from the output tail before draining the stream
-`done`. This feeds the same `detectFromResultText` / auth-error
-detection + rotation/retry path in `agent.ts` that the SDK driver gets
-from thrown stream errors. A clean exit that already produced a `result`
-does not synthesize. The `oneShot` arg (used by one-turn subagent
-sessions) gracefully closes the REPL after the first `result` entry,
-mirroring the SDK driver closing its prompt queue.
+**Failure handling:** Every PTY spawn captures terminal output into a 256 KB
+ring buffer (`OutputRing` in `output-ring.ts`). Failure synthesis on silent
+exit, auth detection (`401`, "Please run /login", "Not logged in"), and
+trust-dialog detection all read from this ring. Synthesised error events
+feed the same `detectFromResultText` / OAuth-pool rotation path in
+`agent.ts` the SDK driver uses.
 
-**JSONL event parity (Phase 3):** PTY mode uses a stateful
-`createJsonlEventParser` (one per session) that mirrors the SDK driver's
-`createClaudeHarnessStream`. Emits `session_token` for every JSONL line
-carrying a `session_id`, `rate_limit` events from both
-`rate_limit_event` (SDK-native) and `system/rate_limit` (legacy) shapes,
-and `context_window_updated` transcript entries per assistant message
-plus a final turn-end entry derived from `result.modelUsage`. The
-configured-window floor (`parseConfiguredContextWindowFromModelId` —
-1M for `[1m]` models) is preserved against `modelUsage.contextWindow`
-under-reports.
-
-**Kanna MCP server (Phase 2):** PTY mode now starts an in-process HTTP
-MCP server bound to loopback (`127.0.0.1:<ephemeral>`) for every PTY
-spawn. The claude CLI subprocess connects via `--mcp-config <file>` with
-a per-spawn random Bearer token in the `Authorization` header.
-`--strict-mcp-config` is set so the CLI ignores any user-side MCP config.
-This exposes the same tool surface the SDK driver gets via
-`createSdkMcpServer`: `offer_download`, `expose_port`, and when
-`KANNA_MCP_TOOL_CALLBACKS=1` the eight built-in shims plus
-`ask_user_question` / `exit_plan_mode`. `toolCallback`,
-`tunnelGateway`, and `chatPolicy` live in the parent process so no IPC
-serialization is needed. Server is torn down on `close()` along with
-`toolCallback.cancelAllForSession(sessionId, "session_closed")`.
+**Architecture note:** PTY mode parses the on-disk transcript JSONL file
+as the sole event source — `src/server/claude-pty/tui-source.ts`
+(`startTranscriptStream`) watches `~/.claude/projects/<encoded-cwd>/`
+for the file claude creates on first user prompt, then follows it via
+`fs.watch` (or polling under `KANNA_PTY_TRANSCRIPT_WATCH=poll`).
+`driver.ts` is a thin coordinator: spawn (via `pty-process.ts`
+`spawnPtyProcess` + Bun.Terminal) → trust dismiss → first-prompt send →
+pipe transcript lines into `createJsonlEventParser` → emit HarnessEvents.
+Nothing reads the PTY stdout for events; the output ring only powers
+trust detection + failure synth. Spawn-time `--mcp-config` still wires
+the kanna-mcp loopback HTTP server (Phase 2) unchanged.
 
 **OAuth pool rotation (P5):** PTY mode honors the same multi-token rotation
 the SDK driver uses. `AgentCoordinator` picks an active token from
 `OAuthTokenPool` per chat and the PTY driver injects it via the
-`CLAUDE_CODE_OAUTH_TOKEN` env var. No per-account `$HOME` directories or local `.credentials.json` files required.
+`CLAUDE_CODE_OAUTH_TOKEN` env var. Auth failures (401 detected in the
+output ring) synthesise an `oauth_invalid_token` result event that feeds
+the same rotation/retry path the SDK driver uses on thrown stream errors.
 
-**Architecture note:** PTY mode parses the `claude` CLI subprocess
-**stdout** as the sole event source. `driver.ts` `pumpStdout` reads the
-stdout `ReadableStream` via `reader.read()` (event-driven, no poll
-interval / `fs.watch` / file-tail loop / sleep), splits on `\n`, and
-feeds each line to `createJsonlEventParser`. The PTY supplies the
-subprocess + input channel; its stdout IS parsed (not drained). Model
-switches, rate-limit signals, and permission changes all surface through
-this stdout JSONL stream. Nothing reads the on-disk transcript at
-`~/.claude/projects/<encoded-cwd>/<session-uuid>.jsonl` —
-`claude-pty/jsonl-path.ts` (`computeJsonlPath`/`encodeCwd`) has zero
-production callers (referenced only by its own test) and is currently
-dead code.
+**Env vars (PTY-specific):**
+- `KANNA_CLAUDE_DRIVER=sdk|pty` — driver selector (default `sdk`).
+- `KANNA_MCP_TOOL_CALLBACKS=1` — route built-in shims through durable approval.
+- `KANNA_PTY_TRUST_DISMISS=enabled|disabled` — trust-dialog dismiss (default `enabled`).
+- `KANNA_PTY_TUI_BOOT_MS=3000` — hard cap on TUI-ready wait (default `3000`).
+- `KANNA_PTY_TRANSCRIPT_WATCH=fs|poll` — transcript watch mode (default `fs`).
+- `CLAUDE_CODE_OAUTH_TOKEN` — set by driver from pool, NOT a user env var.
 
-**Allowlist preflight (P3b):** When `KANNA_CLAUDE_DRIVER=pty`, every PTY
-spawn passes through `claude-pty/preflight/gate.ts`. The gate computes a
-sha256 of the `claude` binary, looks up a cached probe-suite result for
-`(binarySha256, tools-string, model)`, and on cache miss runs 8 directed
-probes (one per disallowed built-in: Bash/Edit/Write/Read/Glob/Grep/
-WebFetch/WebSearch). Each probe spawns claude with `--tools "mcp__kanna__*"`
-and a system prompt pressuring the model to invoke that built-in or call
-`mcp__kanna__probe_unavailable`. If any built-in is reachable → spawn
-refused with `"built-in reachable: <names>"`. Cache TTL: 24 h.
-
-Override the probe model via `KANNA_PTY_PREFLIGHT_MODEL` (default
-`claude-haiku-4-5-20251001` for cost/speed). Real probes burn subscription
-turns; CI does not run them — unit tests cover the classifier + cache only.
-
-**OS sandbox (P4 + P4.1):** Every PTY spawn is wrapped with an OS-level
-sandbox when supported:
-- macOS: `/usr/bin/sandbox-exec -f <profile.sb>`. Profile generated per
-  spawn from `POLICY_DEFAULT.readPathDeny` + `writePathDeny`. Default on.
-- Linux: `/usr/bin/bwrap <flags> claude ...`. Each deny entry becomes
-  `--tmpfs <path>` (replaces the path with an empty in-memory filesystem).
-  Default on **only when `bwrap` is installed** (`apt install bubblewrap` /
-  `pacman -S bubblewrap` / `dnf install bubblewrap`). If absent, sandbox
-  silently disables — set `KANNA_PTY_SANDBOX=off` to suppress the gap.
-- Windows: PTY refused per spec.
-
-Set `KANNA_PTY_SANDBOX=off` to skip (advanced users, loses defense-in-depth
-against built-in tool credential reads).
+Removed in this version (no longer consulted):
+- `KANNA_PTY_PREFLIGHT_MODEL` — preflight gone, replaced by smoke-test.
+- `KANNA_PTY_SANDBOX` — sandbox already removed in a prior change; flag now inert.
 
 # Kanna-MCP Built-in Shims
 

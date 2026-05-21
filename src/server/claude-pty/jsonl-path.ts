@@ -1,8 +1,18 @@
+import { realpathSync } from "node:fs"
 import path from "node:path"
 
 export function encodeCwd(cwd: string): string {
-  const trimmed = cwd.endsWith("/") && cwd !== "/" ? cwd.slice(0, -1) : cwd
-  return trimmed.replace(/\//g, "-")
+  // Throws ENOENT if cwd is missing — callers guarantee an existing directory.
+  const real = realpathSync(cwd)
+  const trimmed = real.endsWith("/") && real !== "/" ? real.slice(0, -1) : real
+  return trimmed.replace(/\//g, "-").replace(/\./g, "-")
+}
+
+export function computeProjectDir(args: {
+  homeDir: string
+  cwd: string
+}): string {
+  return path.join(args.homeDir, ".claude", "projects", encodeCwd(args.cwd))
 }
 
 export function computeJsonlPath(args: {
@@ -11,10 +21,7 @@ export function computeJsonlPath(args: {
   sessionId: string
 }): string {
   return path.join(
-    args.homeDir,
-    ".claude",
-    "projects",
-    encodeCwd(args.cwd),
+    computeProjectDir({ homeDir: args.homeDir, cwd: args.cwd }),
     `${args.sessionId}.jsonl`,
   )
 }

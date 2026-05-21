@@ -8,9 +8,15 @@ import type { KannaMcpDelegationContext } from "../kanna-mcp"
 import type { SubagentOrchestrator } from "../subagent-orchestrator"
 import { parseConfiguredContextWindowFromModelId, timestamped } from "../agent"
 import { KANNA_SYSTEM_PROMPT_APPEND } from "../../shared/kanna-system-prompt"
-import type { PreflightGate } from "./preflight/gate"
 import { resolveClaudeBinary } from "./resolve-binary"
 import { createJsonlEventParser } from "./jsonl-to-event"
+import { OutputRing, OUTPUT_RING_DEFAULT_BYTES } from "./output-ring"
+import { createSmokeTestGate, createFileSmokeTestCache, buildLiveSmokeProbe, type SmokeTestGate } from "./smoke-test"
+import { computeBinarySha256 } from "./preflight/binary-fingerprint"
+import { spawnPtyProcess as defaultSpawnPtyProcess, type PtyProcess } from "./pty-process"
+import { waitForTuiReady, dismissTrustDialogIfPresent, sendUserPrompt, sendExitCommand } from "./tui-control"
+import { startTranscriptStream } from "./tui-source"
+import { computeJsonlPath, computeProjectDir } from "./jsonl-path"
 import type { ClaudeSessionHandle } from "../agent"
 import type { HarnessEvent, HarnessToolRequest } from "../harness-types"
 import type { AccountInfo, SlashCommand } from "../../shared/types"
@@ -55,7 +61,6 @@ export interface StartClaudeSessionPtyArgs {
   initialPrompt?: string
   homeDir?: string
   env?: NodeJS.ProcessEnv
-  preflightGate?: PreflightGate
   /** Routes AskUserQuestion/ExitPlanMode + built-in shims through durable approval when KANNA_MCP_TOOL_CALLBACKS=1. */
   toolCallback?: ToolCallbackService
   /** Tunnel gateway for kanna-mcp expose_port. */
@@ -68,6 +73,10 @@ export interface StartClaudeSessionPtyArgs {
   delegationContext?: KannaMcpDelegationContext
   /** Optional override used by tests to inject a fake HTTP MCP starter. */
   startKannaMcpHttpServer?: typeof startKannaMcpHttpServer
+  /** Optional smoke-test gate override (used by tests to inject a fake gate). */
+  smokeTestGate?: SmokeTestGate
+  /** Optional PTY spawn override (used by tests to inject a fake PTY). */
+  spawnPtyProcess?: typeof defaultSpawnPtyProcess
   /**
    * One-shot semantics: after the first `result` entry, close stdin so
    * the subprocess exits. Mirrors the SDK driver's prompt-queue close
@@ -97,38 +106,13 @@ export function deriveAccountInfoFromOauth(args: { label?: string; oauthKeyMaske
 }
 
 export const PLAN_MODE_EXIT_UNSUPPORTED =
-  "[claude-pty] leaving plan mode at runtime is unsupported in stream-json mode "
-  + "(no control request leaves plan mode). Restart the session to return to acceptEdits."
+  "[claude-pty] leaving plan mode at runtime is unsupported in TUI mode "
+  + "(no slash command exits plan; the only exit is the Shift+Tab TUI cycle "
+  + "whose keypress count depends on unobservable TUI state). Restart the session to return to acceptEdits."
 
-export type PlanModeRuntimeAction =
-  | { kind: "control"; request: Record<string, unknown> }
-  | { kind: "warn"; message: string }
-
-export function planModeRuntimeAction(planMode: boolean): PlanModeRuntimeAction {
-  if (planMode) {
-    return {
-      kind: "control",
-      request: { type: "set_permission_mode", mode: "plan" },
-    }
-  }
-  return { kind: "warn", message: PLAN_MODE_EXIT_UNSUPPORTED }
-}
-
-/** Bounded ring buffer for stderr so a crash/OAuth-failure exit can synthesize an isError result from the tail. */
-export const PTY_STDERR_RING_BYTES = 256 * 1024
-
-export class OutputRing {
-  private buf = ""
-  append(chunk: string): void {
-    this.buf += chunk
-    if (this.buf.length > PTY_STDERR_RING_BYTES) {
-      this.buf = this.buf.slice(this.buf.length - PTY_STDERR_RING_BYTES)
-    }
-  }
-  tail(): string {
-    return this.buf
-  }
-}
+/** Backward-compat re-exports — callers that import from driver.ts continue to work. */
+export const PTY_STDERR_RING_BYTES = OUTPUT_RING_DEFAULT_BYTES
+export { OutputRing }
 
 /**
  * Native CLI built-ins removed from the model's context under PTY (issue
@@ -159,51 +143,42 @@ export interface BuildPtyCliArgsInput {
 }
 
 /**
- * Build claude CLI args for stream-json driver mode.
+ * Build claude CLI args for TUI driver mode.
  *
- * Kanna trusts the claude CLI as the source of truth for tool execution and
- * stays out of the way of user setup:
+ * Kanna spawns the claude CLI under a real PTY and watches the on-disk
+ * transcript JSONL file as the event source. The CLI runs interactively
+ * with `--dangerously-skip-permissions` so tool calls are auto-approved.
  *
- *   • No `--tools` restriction — model uses claude's full built-in surface.
- *   • No `--strict-mcp-config` — user's own MCP servers (~/.claude/settings.json,
- *     plugin mcp_servers.json, etc.) are loaded alongside kanna's MCP.
- *   • No `--settings <kanna-spawn-file>` — `--setting-sources user,project,local`
- *     instead, so the user's installed skills, slash commands, plugins, agents,
- *     and project / local settings layers all load normally.
- *   • `--dangerously-skip-permissions` — auto-run tools because the CLI's own
- *     interactive permission prompt cannot render under `--print` mode (no TTY).
- *
- * Kanna only contributes its own MCP server (`offer_download`, `expose_port`,
- * `lsp`) so the model can drive the kanna UI; everything else is the user's.
+ *   • No `--print` / `--output-format` / `--input-format` / `--verbose` —
+ *     TUI mode does NOT use the stream-json headless transport.
+ *   • No `--session-id` for new sessions — TUI claude generates its own UUID
+ *     on first prompt; kanna identifies the session via the transcript file.
+ *   • `--strict-mcp-config` — CLI ignores user MCP config; kanna provides
+ *     its own via `--mcp-config` so the MCP surface is fully controlled.
+ *   • `--setting-sources user,project,local` — user's installed skills,
+ *     slash commands, plugins, agents, and project / local settings layers
+ *     all load normally.
+ *   • `--dangerously-skip-permissions` — auto-run tools because the CLI's
+ *     own interactive permission prompt is not routed through kanna's UI.
  */
 export function buildPtyCliArgs(args: BuildPtyCliArgsInput): string[] {
   const cliArgs: string[] = [
-    "--print",
-    "--output-format=stream-json",
-    "--input-format=stream-json",
-    "--verbose",
     "--model", args.model,
     "--setting-sources", "user,project,local",
     "--permission-mode", args.planMode ? "plan" : "acceptEdits",
     "--dangerously-skip-permissions",
   ]
-  // claude CLI rejects `--session-id <id>` whenever it is paired with
-  // `--resume <id>` unless `--fork-session` is also set:
-  //   "--session-id can only be used with --continue or --resume if
-  //    --fork-session is also specified."
-  // Translate kanna's intent → CLI flags:
-  //   • New session (no sessionToken)                  → --session-id <newUuid>
+  // TUI mode session handling:
+  //   • New session (no sessionToken)                  → no --session-id (claude generates its own UUID)
   //   • Resume existing session (sessionToken set)     → --resume <token>
   //   • Fork existing session (sessionToken + fork)    → --session-id <newUuid> --resume <token> --fork-session
   if (args.sessionToken && !args.forkSession) {
     cliArgs.push("--resume", args.sessionToken)
   } else if (args.sessionToken && args.forkSession) {
     cliArgs.push("--session-id", args.sessionId, "--resume", args.sessionToken, "--fork-session")
-  } else {
-    cliArgs.push("--session-id", args.sessionId)
   }
   if (args.mcpConfigPath) {
-    cliArgs.push("--mcp-config", args.mcpConfigPath)
+    cliArgs.push("--mcp-config", args.mcpConfigPath, "--strict-mcp-config")
   }
   if (args.effort && args.effort.length > 0) cliArgs.push("--effort", args.effort)
   if (args.additionalDirectories) {
@@ -236,19 +211,6 @@ export function buildPtyEnv(args: {
   return spawnEnv
 }
 
-interface StdinWriter {
-  write(data: string | Uint8Array): void
-  end(): void
-}
-
-interface SpawnedProcess {
-  stdin: StdinWriter | null
-  stdout: ReadableStream<Uint8Array>
-  stderr: ReadableStream<Uint8Array>
-  exited: Promise<number>
-  kill: (signal?: number | NodeJS.Signals) => void
-}
-
 export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Promise<ClaudeSessionHandle> {
   const home = args.homeDir ?? homedir()
   const env = args.env ?? process.env
@@ -262,7 +224,6 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
     forkSession: args.forkSession,
     hasOauthToken: Boolean(args.oauthToken),
     oauthLabel: args.oauthLabel ?? null,
-    hasPreflightGate: Boolean(args.preflightGate),
     sandboxEnvOverride: env.KANNA_PTY_SANDBOX ?? null,
     platform: process.platform,
     anthropicApiKeySet: Boolean(env.ANTHROPIC_API_KEY),
@@ -288,11 +249,23 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
   })
   const claudeBinAbs = resolved.path
 
-  // Preflight gate + OS sandbox removed: kanna trusts the claude CLI as the
-  // source of truth for tool execution. No probe-based allowlist check, no
-  // sandbox-exec / bwrap wrap. The claude binary runs directly under the
-  // kanna server's own process boundary.
-  void args.preflightGate
+  const binarySha256 = await computeBinarySha256(claudeBinAbs)
+  const smokeGate = args.smokeTestGate ?? createSmokeTestGate({
+    probe: buildLiveSmokeProbe({
+      claudeBinPath: claudeBinAbs,
+      model: args.model,
+      oauthToken: args.oauthToken ?? "",
+      homeDir: home,
+    }),
+    cache: createFileSmokeTestCache({ cacheDir: path.join(home, ".kanna", "cache", "smoke-test") }),
+    ttlMs: 24 * 3600 * 1000,
+    now: () => Date.now(),
+  })
+  const smoke = await smokeGate.canSpawn({ binarySha256, model: args.model })
+  if (!smoke.ok) {
+    console.error("[kanna/pty] smoke-test refused spawn", { chatId: args.chatId, reason: smoke.reason })
+    throw new Error(`PTY smoke-test refused spawn: ${smoke.reason}`)
+  }
 
   const spawnEnv = buildPtyEnv({
     baseEnv: env,
@@ -353,7 +326,6 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
   let cachedAccountInfo: AccountInfo | null = deriveAccountInfoFromOauth({ label: args.oauthLabel, oauthKeyMasked: args.oauthKeyMasked })
   let sawResultEntry = false
   let cachedSlashCommands: SlashCommand[] | null = null
-  const stderrRing = new OutputRing()
   const mergedQueue: HarnessEvent[] = []
   const mergedWaiters: Array<(r: IteratorResult<HarnessEvent>) => void> = []
 
@@ -402,116 +374,83 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
   }
 
   let oneShotClosing = false
-  async function oneShotClose() {
-    if (oneShotClosing || closed) return
-    oneShotClosing = true
-    try { proc?.stdin?.end() } catch { /* swallow */ }
-    try { await proc?.exited } catch { /* swallow */ }
-    await cleanupResources()
-  }
+  // pty is declared before use; assigned in the spawn try-block below.
+  let pty: PtyProcess
 
-  let proc: SpawnedProcess
+  const ring = new OutputRing()
+  const spawnPty = args.spawnPtyProcess ?? defaultSpawnPtyProcess
   try {
     console.log("[kanna/pty] spawn begin", {
       chatId: args.chatId,
       command: claudeBin,
       cwd: args.localPath,
-      argCount: cliArgs.length,
     })
-    const subprocess = Bun.spawn([claudeBin, ...cliArgs], {
+    pty = await spawnPty({
+      command: claudeBin,
+      args: cliArgs,
       cwd: args.localPath,
       env: spawnEnv,
-      stdin: "pipe",
-      stdout: "pipe",
-      stderr: "pipe",
+      onOutput: (chunk) => { ring.append(chunk) },
     })
-    const sink = subprocess.stdin as unknown as { write: (data: string | Uint8Array) => number; end: () => void; flush?: () => void } | null
-    proc = {
-      stdin: sink
-        ? {
-            write: (data) => { sink.write(data); sink.flush?.() },
-            end: () => { try { sink.end() } catch { /* swallow */ } },
-          }
-        : null,
-      stdout: subprocess.stdout as unknown as ReadableStream<Uint8Array>,
-      stderr: subprocess.stderr as unknown as ReadableStream<Uint8Array>,
-      exited: subprocess.exited,
-      kill: (sig) => subprocess.kill(sig as number | undefined),
-    }
-    console.log("[kanna/pty] proc spawned", {
-      chatId: args.chatId,
-      sessionId,
-    })
+    console.log("[kanna/pty] pty spawned", { chatId: args.chatId, sessionId })
   } catch (err) {
-    console.error("[kanna/pty] sandbox-wrap or spawn failed", {
+    console.error("[kanna/pty] spawn failed", {
       chatId: args.chatId,
       sessionId,
       error: err instanceof Error ? err.message : String(err),
-      stack: err instanceof Error ? err.stack : undefined,
     })
     try { await mcpHandle.close() } catch { /* swallow */ }
     try { await rm(runtimeDir, { recursive: true, force: true }) } catch { /* swallow */ }
     throw err
   }
 
+  // Wait for TUI to render its input box.
+  const tuiReadyMs = Number((args.env ?? process.env).KANNA_PTY_TUI_BOOT_MS ?? 3000)
+  const readyResult = await waitForTuiReady(ring, { hardCapMs: tuiReadyMs })
+  if (readyResult === "timeout") {
+    console.warn("[kanna/pty] TUI ready marker not detected within hard cap", { chatId: args.chatId, hardCapMs: tuiReadyMs })
+  }
+
+  // Dismiss trust dialog if present (first spawn per cwd only).
+  const trustDismiss = (args.env ?? process.env).KANNA_PTY_TRUST_DISMISS ?? "enabled"
+  if (trustDismiss !== "disabled") {
+    const dismissed = await dismissTrustDialogIfPresent(pty, ring)
+    if (dismissed) {
+      console.log("[kanna/pty] trust dialog dismissed", { chatId: args.chatId })
+      await new Promise((r) => setTimeout(r, 500))
+    }
+  }
+
+  // Open transcript-file event stream.
+  const projectDir = computeProjectDir({ homeDir: home, cwd: args.localPath })
+  const knownFilePath = args.sessionToken && !args.forkSession
+    ? computeJsonlPath({ homeDir: home, cwd: args.localPath, sessionId: args.sessionToken })
+    : undefined
+  const transcriptStream = await startTranscriptStream({
+    projectDir,
+    knownFilePath,
+    pollMode: (args.env ?? process.env).KANNA_PTY_TRANSCRIPT_WATCH === "poll",
+  })
+
   const parser = createJsonlEventParser({
     configuredContextWindow: parseConfiguredContextWindowFromModelId(args.model),
   })
 
-  async function pumpStdout(stream: ReadableStream<Uint8Array>) {
-    const decoder = new TextDecoder()
-    const reader = stream.getReader()
-    let buffer = ""
+  // Pipe transcript JSONL lines through the parser into the merged event queue.
+  void (async () => {
     try {
-      while (true) {
-        const { value, done } = await reader.read()
-        if (done) break
-        buffer += decoder.decode(value, { stream: true })
-        const lines = buffer.split("\n")
-        buffer = lines.pop() ?? ""
-        for (const line of lines) {
-          const trimmed = line.trim()
-          if (!trimmed) continue
-          try {
-            const events = parser.parse(trimmed)
-            for (const ev of events) pushMerged(ev)
-          } catch (err) {
-            console.warn("[kanna/pty] parser threw on line", err)
-          }
+      for await (const line of transcriptStream.lines) {
+        try {
+          const events = parser.parse(line)
+          for (const ev of events) pushMerged(ev)
+        } catch (err) {
+          console.warn("[kanna/pty] parser threw on line", err)
         }
       }
-      const tail = buffer.trim()
-      if (tail) {
-        try {
-          const events = parser.parse(tail)
-          for (const ev of events) pushMerged(ev)
-        } catch { /* swallow */ }
-      }
-    } finally {
-      try { reader.releaseLock() } catch { /* swallow */ }
+    } catch (err) {
+      console.warn("[kanna/pty] transcript stream errored", err)
     }
-  }
-
-  async function pumpStderr(stream: ReadableStream<Uint8Array>) {
-    const decoder = new TextDecoder()
-    const reader = stream.getReader()
-    try {
-      while (true) {
-        const { value, done } = await reader.read()
-        if (done) break
-        stderrRing.append(decoder.decode(value, { stream: true }))
-      }
-    } finally {
-      try { reader.releaseLock() } catch { /* swallow */ }
-    }
-  }
-
-  void pumpStdout(proc.stdout).catch((err) => {
-    console.warn("[kanna/pty] stdout pump threw", err)
-  })
-  void pumpStderr(proc.stderr).catch((err) => {
-    console.warn("[kanna/pty] stderr pump threw", err)
-  })
+  })()
 
   function drainTerminate(exitCode: number | null) {
     if (closed || oneShotClosing) {
@@ -522,7 +461,7 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
       return
     }
     if (!sawResultEntry) {
-      const tail = stderrRing.tail().trim()
+      const tail = ring.tail().trim()
       const codeNote = exitCode === null ? "signal" : `exit code ${exitCode}`
       const resultText = tail.length > 0
         ? tail
@@ -546,25 +485,22 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
     }
   }
 
-  void proc.exited
+  void pty.exited
     .then((code) => drainTerminate(typeof code === "number" ? code : null))
     .catch(() => drainTerminate(null))
 
-  async function writeJsonLine(obj: Record<string, unknown>) {
-    if (closed) throw new Error("session closed")
-    if (!proc.stdin) throw new Error("claude PTY stdin not available")
-    const line = JSON.stringify(obj) + "\n"
-    proc.stdin.write(line)
+  async function oneShotClose() {
+    if (oneShotClosing || closed) return
+    oneShotClosing = true
+    try { await sendExitCommand(pty) } catch { /* swallow */ }
+    try { await pty.exited } catch { /* swallow */ }
+    try { transcriptStream.close() } catch { /* swallow */ }
+    await cleanupResources()
   }
 
   if (args.initialPrompt) {
     try {
-      await writeJsonLine({
-        type: "user",
-        message: { role: "user", content: args.initialPrompt },
-        parent_tool_use_id: null,
-        session_id: args.sessionToken ?? undefined,
-      })
+      await sendUserPrompt(pty, args.initialPrompt)
     } catch (err) {
       console.warn("[kanna/pty] initialPrompt write failed", err)
     }
@@ -593,49 +529,34 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
     provider: "claude",
     stream,
     interrupt: async () => {
-      // Send SIGINT to the claude subprocess. control_request type=interrupt
-      // is not reliably honored by `claude --print --input-format=stream-json`
-      // (and stdin is a pipe, not a TTY, so writing 0x03 also does nothing).
-      // SIGINT terminates the CLI; the caller is expected to follow with
-      // `close()` to drain resources, and the next turn will respawn via
-      // `--resume <sessionToken>`. SIGTERM/SIGKILL escalation lives in
-      // `close()`.
-      try { proc.kill("SIGINT") } catch { /* swallow */ }
+      try { await pty.sendInput("\x03") } catch { /* swallow */ }
     },
     sendPrompt: async (content) => {
-      await writeJsonLine({
-        type: "user",
-        message: { role: "user", content },
-        parent_tool_use_id: null,
-        session_id: args.sessionToken ?? undefined,
-      })
+      const text = typeof content === "string"
+        ? content
+        : Array.isArray(content)
+          ? (content as Array<{ type?: string; text?: string }>)
+              .filter((c) => c.type === "text")
+              .map((c) => c.text ?? "")
+              .join("\n")
+          : String(content)
+      await sendUserPrompt(pty, text)
     },
     setModel: async (model) => {
       try {
-        await writeJsonLine({
-          type: "control_request",
-          request_id: randomUUID(),
-          request: { type: "set_model", model },
-        })
+        await pty.sendInput(`/model ${model}\r`)
       } catch (err) {
-        console.warn("[kanna/pty] setModel control_request failed", err)
+        console.warn("[kanna/pty] setModel via /model slash command failed", err)
       }
     },
     setPermissionMode: async (planMode) => {
-      const action = planModeRuntimeAction(planMode)
-      if (action.kind === "control") {
-        try {
-          await writeJsonLine({
-            type: "control_request",
-            request_id: randomUUID(),
-            request: action.request,
-          })
-        } catch (err) {
-          console.warn("[kanna/pty] setPermissionMode control_request failed", err)
+      if (planMode) {
+        try { await pty.sendInput("/plan\r") } catch (err) {
+          console.warn("[kanna/pty] /plan slash command failed", err)
         }
         return
       }
-      console.warn(action.message)
+      console.warn(PLAN_MODE_EXIT_UNSUPPORTED)
     },
     getSupportedCommands: async () => cachedSlashCommands ?? STATIC_SUPPORTED_COMMANDS,
     getAccountInfo: async () => cachedAccountInfo,
@@ -643,21 +564,20 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
       if (closed) return
       closed = true
       void (async () => {
-        try {
-          proc?.stdin?.end()
-        } catch { /* swallow */ }
+        try { await sendExitCommand(pty) } catch { /* swallow */ }
         const sigkillTimer = { ref: null as ReturnType<typeof setTimeout> | null }
         const termTimer = setTimeout(() => {
-          try { proc.kill("SIGTERM") } catch { /* swallow */ }
+          try { pty.close() } catch { /* swallow */ }
           sigkillTimer.ref = setTimeout(() => {
-            try { proc.kill("SIGKILL") } catch { /* swallow */ }
+            try { pty.close() } catch { /* swallow */ }
           }, 3000)
         }, 2000)
         try {
-          await proc.exited
+          await pty.exited
           clearTimeout(termTimer)
           if (sigkillTimer.ref !== null) clearTimeout(sigkillTimer.ref)
         } catch { /* swallow */ }
+        try { transcriptStream.close() } catch { /* swallow */ }
         await cleanupResources()
         while (mergedWaiters.length > 0) {
           const w = mergedWaiters.shift()
