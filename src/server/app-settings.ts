@@ -18,6 +18,7 @@ import {
   CLOUDFLARE_TUNNEL_DEFAULTS,
   DEFAULT_CLAUDE_MODEL_OPTIONS,
   DEFAULT_CODEX_MODEL_OPTIONS,
+  GLOBAL_PROMPT_APPEND_MAX_CHARS,
   isClaudeDriverPreference,
   isClaudeReasoningEffort,
   isCodexReasoningEffort,
@@ -87,6 +88,7 @@ interface AppSettingsFile {
   uploads?: unknown
   subagents?: unknown
   claudeDriver?: unknown
+  globalPromptAppend?: unknown
 }
 
 interface AppSettingsState extends AppSettingsSnapshot {
@@ -524,6 +526,20 @@ function normalizeClaudeDriverSettings(value: unknown, warnings: string[]): Clau
   return { preference, lifecycle }
 }
 
+function normalizeGlobalPromptAppend(value: unknown, warnings: string[]): string {
+  if (value === undefined || value === null) return ""
+  if (typeof value !== "string") {
+    warnings.push("globalPromptAppend must be a string")
+    return ""
+  }
+  const trimmed = value.replace(/\s+$/u, "")
+  if (trimmed.length > GLOBAL_PROMPT_APPEND_MAX_CHARS) {
+    warnings.push(`globalPromptAppend must be ${GLOBAL_PROMPT_APPEND_MAX_CHARS} chars or fewer`)
+    return trimmed.slice(0, GLOBAL_PROMPT_APPEND_MAX_CHARS)
+  }
+  return trimmed
+}
+
 function normalizeClaudeAuth(value: unknown, warnings: string[]): ClaudeAuthSettings {
   if (value === undefined) return { ...CLAUDE_AUTH_DEFAULTS }
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -561,6 +577,7 @@ function toFilePayload(state: AppSettingsState) {
     uploads: state.uploads,
     subagents: state.subagents,
     claudeDriver: state.claudeDriver,
+    globalPromptAppend: state.globalPromptAppend,
   }
 }
 
@@ -583,6 +600,7 @@ function toSnapshot(state: AppSettingsState): AppSettingsSnapshot {
     uploads: state.uploads,
     subagents: state.subagents,
     claudeDriver: state.claudeDriver,
+    globalPromptAppend: state.globalPromptAppend,
   }
 }
 
@@ -619,6 +637,7 @@ function normalizeAppSettings(
   const uploads = normalizeUploadSettings(source?.uploads, warnings)
   const subagents = normalizeSubagents(source?.subagents, warnings)
   const claudeDriver = normalizeClaudeDriverSettings(source?.claudeDriver, warnings)
+  const globalPromptAppend = normalizeGlobalPromptAppend(source?.globalPromptAppend, warnings)
 
   const editorPreset = normalizeEditorPreset(source?.editor?.preset)
   const state: AppSettingsState = {
@@ -646,6 +665,7 @@ function normalizeAppSettings(
     uploads,
     subagents,
     claudeDriver,
+    globalPromptAppend,
   }
 
   const shouldWrite = JSON.stringify(source ? toComparablePayload(source) : null) !== JSON.stringify(toFilePayload(state))
@@ -678,6 +698,9 @@ function toComparablePayload(source: AppSettingsFile) {
     uploads: source.uploads,
     subagents: source.subagents,
     claudeDriver: source.claudeDriver,
+    globalPromptAppend: typeof source.globalPromptAppend === "string"
+      ? source.globalPromptAppend.replace(/\s+$/u, "")
+      : source.globalPromptAppend,
   }
 }
 
@@ -784,6 +807,7 @@ function applyPatch(state: AppSettingsState, patch: AppSettingsPatch): AppSettin
         ...patch.claudeDriver?.lifecycle,
       },
     },
+    globalPromptAppend: patch.globalPromptAppend ?? state.globalPromptAppend,
   }, state.filePathDisplay).payload
 }
 
@@ -916,6 +940,16 @@ export class AppSettingsManager {
       }
     }
     return this.writePatch({ claudeDriver: patch })
+  }
+
+  async setGlobalPromptAppend(text: string) {
+    if (typeof text !== "string") {
+      throw new Error("globalPromptAppend must be a string")
+    }
+    if (text.length > GLOBAL_PROMPT_APPEND_MAX_CHARS) {
+      throw new Error(`globalPromptAppend must be ${GLOBAL_PROMPT_APPEND_MAX_CHARS} chars or fewer`)
+    }
+    return this.writePatch({ globalPromptAppend: text })
   }
 
   async setClaudeAuth(patch: Partial<ClaudeAuthSettings>) {

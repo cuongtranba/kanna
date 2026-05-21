@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test"
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
-import { AUTH_DEFAULTS, CLAUDE_AUTH_DEFAULTS, CLAUDE_DRIVER_DEFAULTS, CLAUDE_PTY_LIFECYCLE_DEFAULTS, CLOUDFLARE_TUNNEL_DEFAULTS, UPLOAD_DEFAULTS } from "../shared/types"
+import { AUTH_DEFAULTS, CLAUDE_AUTH_DEFAULTS, CLAUDE_DRIVER_DEFAULTS, CLAUDE_PTY_LIFECYCLE_DEFAULTS, CLOUDFLARE_TUNNEL_DEFAULTS, GLOBAL_PROMPT_APPEND_MAX_CHARS, UPLOAD_DEFAULTS } from "../shared/types"
 import { AppSettingsManager, readAppSettingsSnapshot } from "./app-settings"
 import type { AppSettingsSnapshot, SubagentInput } from "../shared/types"
 
@@ -77,6 +77,7 @@ function expectedSettingsSnapshot(filePath: string, overrides: Partial<AppSettin
     uploads: UPLOAD_DEFAULTS,
     subagents: [],
     claudeDriver: { ...CLAUDE_DRIVER_DEFAULTS, lifecycle: { ...CLAUDE_PTY_LIFECYCLE_DEFAULTS } },
+    globalPromptAppend: "",
     ...overrides,
   }
 }
@@ -592,5 +593,54 @@ describe("claudeDriver settings", () => {
     expect(snapshot.claudeDriver.lifecycle.idleTimeoutMs).toBe(60_000)
     expect(snapshot.claudeDriver.lifecycle.maxConcurrent).toBe(16)
     expect(snapshot.warning).toMatch(/idleTimeoutMs/)
+  })
+})
+
+describe("globalPromptAppend", () => {
+  test("defaults to empty string when missing", async () => {
+    const filePath = await createTempFilePath()
+    const snapshot = await readAppSettingsSnapshot(filePath)
+    expect(snapshot.globalPromptAppend).toBe("")
+  })
+
+  test("trims trailing whitespace and persists", async () => {
+    const filePath = await writeSettingsFile({ globalPromptAppend: "Use TDD always.   \n\n" })
+    const snapshot = await readAppSettingsSnapshot(filePath)
+    expect(snapshot.globalPromptAppend).toBe("Use TDD always.")
+  })
+
+  test("truncates and warns when over the hard cap", async () => {
+    const overflow = "x".repeat(GLOBAL_PROMPT_APPEND_MAX_CHARS + 50)
+    const filePath = await writeSettingsFile({ globalPromptAppend: overflow })
+    const snapshot = await readAppSettingsSnapshot(filePath)
+    expect(snapshot.globalPromptAppend).toHaveLength(GLOBAL_PROMPT_APPEND_MAX_CHARS)
+    expect(snapshot.warning).toMatch(/globalPromptAppend/)
+  })
+
+  test("rejects non-string values and warns", async () => {
+    const filePath = await writeSettingsFile({ globalPromptAppend: 42 })
+    const snapshot = await readAppSettingsSnapshot(filePath)
+    expect(snapshot.globalPromptAppend).toBe("")
+    expect(snapshot.warning).toMatch(/globalPromptAppend must be a string/)
+  })
+
+  test("setGlobalPromptAppend round-trips through patch and disk", async () => {
+    const filePath = await createTempFilePath()
+    const mgr = trackManager(new AppSettingsManager(filePath))
+    await mgr.initialize()
+    const next = await mgr.setGlobalPromptAppend("Be concise.")
+    expect(next.globalPromptAppend).toBe("Be concise.")
+    const reloaded = await readAppSettingsSnapshot(filePath)
+    expect(reloaded.globalPromptAppend).toBe("Be concise.")
+    mgr.dispose()
+  })
+
+  test("setGlobalPromptAppend rejects oversize input at the setter", async () => {
+    const filePath = await createTempFilePath()
+    const mgr = trackManager(new AppSettingsManager(filePath))
+    await mgr.initialize()
+    const overflow = "x".repeat(GLOBAL_PROMPT_APPEND_MAX_CHARS + 1)
+    await expect(mgr.setGlobalPromptAppend(overflow)).rejects.toThrow(/globalPromptAppend/)
+    mgr.dispose()
   })
 })

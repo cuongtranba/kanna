@@ -226,6 +226,7 @@ interface AgentCoordinatorArgs {
       preference?: ClaudeDriverPreference
       lifecycle?: { idleTimeoutMs?: number; maxConcurrent?: number }
     }
+    globalPromptAppend?: string
   }
   throwOnClaudeSessionStart?: boolean
   backgroundTasks?: BackgroundTaskRegistry
@@ -1517,7 +1518,9 @@ export class AgentCoordinator {
         const picked = lease?.token ?? null
         if (picked) this.oauthPool!.markUsed(picked.id)
         const usePtyEphemeral = this.resolveClaudeDriverPreference() === "pty"
-        const ephemeralSystemPromptAppend = buildKannaSystemPromptAppend(this.getSubagents())
+        const ephemeralSystemPromptAppend = buildKannaSystemPromptAppend(this.getSubagents(), {
+          globalPromptAppend: this.getAppSettingsSnapshot().globalPromptAppend,
+        })
         try {
           const ephemeral = usePtyEphemeral
             ? await this.startClaudeSessionPTYFn({
@@ -1943,6 +1946,7 @@ export class AgentCoordinator {
         serviceTier: args.serviceTier,
         planMode: args.planMode,
         onToolRequest,
+        developerInstructions: this.getAppSettingsSnapshot().globalPromptAppend,
       })
       logSendToStartingProfile(args.profile, "start_turn.provider_boot.ready", {
         chatId: args.chatId,
@@ -2121,7 +2125,9 @@ export class AgentCoordinator {
       }
       if (picked) this.oauthPool!.markUsed(picked.id)
       const usePty = this.resolveClaudeDriverPreference() === "pty"
-      const systemPromptAppend = buildKannaSystemPromptAppend(this.getSubagents())
+      const systemPromptAppend = buildKannaSystemPromptAppend(this.getSubagents(), {
+        globalPromptAppend: this.getAppSettingsSnapshot().globalPromptAppend,
+      })
       const chatIdForCtx = args.chatId
       const delegationContext: KannaMcpDelegationContext = {
         parentSubagentId: null,
@@ -2468,6 +2474,7 @@ export class AgentCoordinator {
       delegationContext,
       codexManager: this.codexManager,
       onToolRequest,
+      globalPromptAppend: this.getAppSettingsSnapshot().globalPromptAppend,
       authReady: async (provider) => {
         if (provider === "claude") {
           const settings = this.getAppSettingsSnapshot()

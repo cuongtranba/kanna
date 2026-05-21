@@ -2443,3 +2443,126 @@ describe("CodexAppServerManager — scope-keyed sessions", () => {
     expect((err as Error).message).toMatch(/empty sub-id/)
   })
 })
+
+describe("CodexAppServerManager developer_instructions", () => {
+  function makeProcessAndStart(): { process: FakeCodexProcess; manager: CodexAppServerManager } {
+    const process = new FakeCodexProcess((message, child) => {
+      if (message.method === "initialize") {
+        child.writeServerMessage({ id: message.id, result: { userAgent: "codex-test" } })
+      } else if (message.method === "thread/start") {
+        child.writeServerMessage({
+          id: message.id,
+          result: { thread: { id: "thread-di" }, model: "gpt-5.5", reasoningEffort: "high" },
+        })
+      } else if (message.method === "turn/start") {
+        child.writeServerMessage({
+          id: message.id,
+          result: { turn: { id: "turn-di", status: "completed", error: null } },
+        })
+        child.writeServerMessage({
+          method: "turn/completed",
+          params: {
+            threadId: "thread-di",
+            turn: { id: "turn-di", status: "completed", error: null },
+          },
+        })
+      }
+    })
+    const manager = new CodexAppServerManager({ spawnProcess: () => process as never })
+    return { process, manager }
+  }
+
+  type TurnStartMessage = {
+    method: "turn/start"
+    params: {
+      collaborationMode?: { settings?: { developer_instructions?: string | null } }
+    }
+  }
+
+  function lastTurnStart(process: FakeCodexProcess): TurnStartMessage | undefined {
+    return process.messages.find((m: any) => m.method === "turn/start") as TurnStartMessage | undefined
+  }
+
+  test("forwards developer_instructions verbatim on turn/start", async () => {
+    const { process, manager } = makeProcessAndStart()
+    await manager.startSession({
+      chatId: "chat-di",
+      cwd: "/tmp/project",
+      model: "gpt-5.5",
+      serviceTier: "fast",
+      sessionToken: null,
+    })
+    const turn = await manager.startTurn({
+      chatId: "chat-di",
+      model: "gpt-5.5",
+      content: "go",
+      planMode: false,
+      developerInstructions: "Prefer pumped-go.",
+      onToolRequest: async () => ({}),
+    })
+    await collectStream(turn.stream)
+    expect(lastTurnStart(process)?.params.collaborationMode?.settings?.developer_instructions).toBe("Prefer pumped-go.")
+  })
+
+  test("sends null when developerInstructions omitted", async () => {
+    const { process, manager } = makeProcessAndStart()
+    await manager.startSession({
+      chatId: "chat-di",
+      cwd: "/tmp/project",
+      model: "gpt-5.5",
+      serviceTier: "fast",
+      sessionToken: null,
+    })
+    const turn = await manager.startTurn({
+      chatId: "chat-di",
+      model: "gpt-5.5",
+      content: "go",
+      planMode: false,
+      onToolRequest: async () => ({}),
+    })
+    await collectStream(turn.stream)
+    expect(lastTurnStart(process)?.params.collaborationMode?.settings?.developer_instructions).toBeNull()
+  })
+
+  test("sends null when developerInstructions is whitespace-only", async () => {
+    const { process, manager } = makeProcessAndStart()
+    await manager.startSession({
+      chatId: "chat-di",
+      cwd: "/tmp/project",
+      model: "gpt-5.5",
+      serviceTier: "fast",
+      sessionToken: null,
+    })
+    const turn = await manager.startTurn({
+      chatId: "chat-di",
+      model: "gpt-5.5",
+      content: "go",
+      planMode: false,
+      developerInstructions: "   \n  ",
+      onToolRequest: async () => ({}),
+    })
+    await collectStream(turn.stream)
+    expect(lastTurnStart(process)?.params.collaborationMode?.settings?.developer_instructions).toBeNull()
+  })
+
+  test("trims surrounding whitespace before forwarding", async () => {
+    const { process, manager } = makeProcessAndStart()
+    await manager.startSession({
+      chatId: "chat-di",
+      cwd: "/tmp/project",
+      model: "gpt-5.5",
+      serviceTier: "fast",
+      sessionToken: null,
+    })
+    const turn = await manager.startTurn({
+      chatId: "chat-di",
+      model: "gpt-5.5",
+      content: "go",
+      planMode: false,
+      developerInstructions: "  Be concise.  \n",
+      onToolRequest: async () => ({}),
+    })
+    await collectStream(turn.stream)
+    expect(lastTurnStart(process)?.params.collaborationMode?.settings?.developer_instructions).toBe("Be concise.")
+  })
+})

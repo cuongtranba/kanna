@@ -143,6 +143,12 @@ export interface StartCodexTurnArgs {
   planMode: boolean
   onToolRequest: (request: HarnessToolRequest) => Promise<unknown>
   onApprovalRequest?: PendingTurn["onApprovalRequest"]
+  /**
+   * Forwarded into `collaborationMode.settings.developer_instructions` on
+   * `turn/start`. Empty / whitespace-only sends `null` (Codex-native absent).
+   * Mirrors the Claude `--append-system-prompt` channel for global prompts.
+   */
+  developerInstructions?: string
 }
 
 export interface GenerateStructuredArgs {
@@ -1080,7 +1086,9 @@ export class CodexAppServerManager {
           settings: {
             model: args.model,
             reasoning_effort: null,
-            developer_instructions: null,
+            developer_instructions: args.developerInstructions?.trim()
+              ? args.developerInstructions.trim()
+              : null,
           },
         },
       } satisfies TurnStartParams)
