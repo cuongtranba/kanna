@@ -506,15 +506,26 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
           const events = parser.parse(line)
           for (const ev of events) pushMerged(ev)
         } catch (err) {
-          console.warn("[kanna/pty] parser threw on line", err)
+          console.warn("[kanna/pty] parser threw on line", { chatId: args.chatId, sessionId, err })
         }
       }
+      console.log("[kanna/pty] transcript stream ended", { chatId: args.chatId, sessionId })
     } catch (err) {
-      console.warn("[kanna/pty] transcript stream errored", err)
+      console.warn("[kanna/pty] transcript stream errored", { chatId: args.chatId, sessionId, err })
     }
   })()
 
   function drainTerminate(exitCode: number | null) {
+    console.log("[kanna/pty] drainTerminate", {
+      chatId: args.chatId,
+      sessionId,
+      exitCode,
+      closed,
+      oneShotClosing,
+      sawResultEntry,
+      oneShot: Boolean(args.oneShot),
+      waitersAwaitingEvent: mergedWaiters.length,
+    })
     if (closed || oneShotClosing) {
       while (mergedWaiters.length > 0) {
         const w = mergedWaiters.shift()
@@ -528,6 +539,12 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
       const resultText = tail.length > 0
         ? tail
         : `claude PTY process exited (${codeNote}) before producing a result.`
+      console.warn("[kanna/pty] synthesizing error-result for early PTY exit (no turn_duration / result row seen)", {
+        chatId: args.chatId,
+        sessionId,
+        exitCode,
+        ringTailBytes: tail.length,
+      })
       pushMerged({
         type: "transcript",
         entry: timestamped({
@@ -548,16 +565,26 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
   }
 
   void pty.exited
-    .then((code) => drainTerminate(typeof code === "number" ? code : null))
-    .catch(() => drainTerminate(null))
+    .then((code) => {
+      console.log("[kanna/pty] pty.exited resolved", { chatId: args.chatId, sessionId, pid: pty.pid, code })
+      drainTerminate(typeof code === "number" ? code : null)
+    })
+    .catch((err) => {
+      console.warn("[kanna/pty] pty.exited rejected", { chatId: args.chatId, sessionId, pid: pty.pid, err })
+      drainTerminate(null)
+    })
 
   async function oneShotClose() {
     if (oneShotClosing || closed) return
     oneShotClosing = true
-    try { await sendExitCommand(pty) } catch { /* swallow */ }
+    console.log("[kanna/pty] oneShotClose start", { chatId: args.chatId, sessionId, sawResultEntry })
+    try { await sendExitCommand(pty) } catch (err) {
+      console.warn("[kanna/pty] oneShotClose sendExitCommand failed", { chatId: args.chatId, sessionId, err })
+    }
     try { await pty.exited } catch { /* swallow */ }
     try { transcriptStream.close() } catch { /* swallow */ }
     await cleanupResources()
+    console.log("[kanna/pty] oneShotClose finished", { chatId: args.chatId, sessionId })
   }
 
   if (args.initialPrompt) {

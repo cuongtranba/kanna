@@ -2808,6 +2808,21 @@ export class AgentCoordinator {
         }
       }
     } finally {
+      const active = this.activeTurns.get(session.chatId)
+      const isCurrentSession = this.claudeSessions.get(session.chatId) === session
+      // Trace point: stream-end-without-final-result is the hang signature.
+      // If `hasActiveTurn=true` && `hasFinalResult=false` && this fires,
+      // the user will see "still running" forever unless we fail-close.
+      console.log("[kanna/agent] runClaudeSession stream ended", {
+        chatId: session.chatId,
+        sessionId: session.id,
+        sessionToken: session.sessionToken,
+        isCurrentSession,
+        hasActiveTurn: Boolean(active),
+        activeStatus: active?.status,
+        cancelRequested: active?.cancelRequested,
+        hasFinalResult: active?.hasFinalResult,
+      })
       // Only clear chat state if it still points at us. A cancel-then-steer,
       // or an oauth-pool rotation that closes this session and schedules an
       // auto-continue, can install a fresh session (and activeTurn) under
@@ -2816,14 +2831,19 @@ export class AgentCoordinator {
       // leave its stream running headless (no isError branch fires →
       // sessionToken never cleared → next turn loops with the same
       // too-large --resume context).
-      const isCurrentSession = this.claudeSessions.get(session.chatId) === session
       if (isCurrentSession) {
         this.claudeSessions.delete(session.chatId)
         this.oauthPool?.release(session.chatId)
-        const active = this.activeTurns.get(session.chatId)
         if (active?.provider === "claude") {
           if (active.cancelRequested && !active.cancelRecorded) {
             await this.store.recordTurnCancelled(session.chatId)
+          } else if (!active.hasFinalResult) {
+            // Stream ended without any terminal result event (PTY died,
+            // SDK transport dropped, etc). Fail-close the turn so the UI
+            // stops showing "running" forever. Without this the chat is
+            // wedged until the user manually clicks Stop or reloads.
+            console.warn("[kanna/agent] stream ended with no final result — recording turn failure", { chatId: session.chatId, sessionId: session.id })
+            await this.store.recordTurnFailed(session.chatId, "session stream ended without a result")
           }
           this.activeTurns.delete(session.chatId)
         }
