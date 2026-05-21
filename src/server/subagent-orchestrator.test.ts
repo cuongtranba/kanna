@@ -877,6 +877,29 @@ describe("SubagentOrchestrator", () => {
     expect(second?.finalText).toBe("second ok")
   })
 
+  test("clearChatCancellation lets a subsequent delegateRun succeed after a prior cancelChat", async () => {
+    const h = await setupHarness({ subagents: [makeSubagent({ id: "sa-1" })] })
+
+    h.orchestrator.cancelChat(h.chatId)
+    // Without clearChatCancellation, delegateRun would fail at the
+    // cancelledChats gate with "Chat cancelled before run started".
+    h.orchestrator.clearChatCancellation(h.chatId)
+
+    h.programReply("sa-1", "delegated ok")
+    const outcome = await h.orchestrator.delegateRun({
+      chatId: h.chatId,
+      parentUserMessageId: "u1",
+      parentRunId: null,
+      parentSubagentId: null,
+      ancestorSubagentIds: [],
+      depth: 0,
+      subagentId: "sa-1",
+      prompt: "review please",
+    })
+
+    expect(outcome.status).toBe("completed")
+  })
+
   test("B5 — TIMEOUT aborts the runState abortController", async () => {
     const subagent = makeSubagent({})
     const h = await setupHarness({ subagents: [subagent], runTimeoutMs: 50 })

@@ -95,7 +95,7 @@ export function buildLiveSmokeProbe(args: BuildLiveSmokeProbeArgs): SmokeTestPro
       // creates the JSONL after the first user turn.
       const stream = await startTranscriptStream({ projectDir, firstFileTimeoutMs: 20_000 })
       try {
-        await sendUserPrompt(pty, "Run the command ls -la /tmp using the Bash tool now. Just do it.")
+        await sendUserPrompt(pty, ring, "Run the command ls -la /tmp using the Bash tool now. Just do it.")
         const filePath = await stream.filePath
         await waitForResultEntry(stream, { timeoutMs: 30_000 })
         const raw = await readFile(filePath, "utf8")

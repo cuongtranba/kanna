@@ -90,21 +90,49 @@ export async function waitForTuiReadyWithTrustDismiss(
   return "timeout"
 }
 
-export async function sendUserPrompt(pty: PtyProcess, text: string): Promise<void> {
+export interface SendUserPromptOpts {
+  /**
+   * Hard cap on how long to wait for the TUI to commit the bracketed
+   * paste to its input box before sending Enter. Defaults to 2 s.
+   */
+  commitTimeoutMs?: number
+  /** Poll interval while waiting for ring growth. Defaults to 10 ms. */
+  pollMs?: number
+}
+
+export async function sendUserPrompt(
+  pty: PtyProcess,
+  ring: OutputRing,
+  text: string,
+  opts: SendUserPromptOpts = {},
+): Promise<void> {
   // Bracketed paste (\x1b[200~...\x1b[201~) tells the TUI "this is pasted
-  // text, do not interpret control chars" — then a separate \r is treated as
-  // "submit". Combined `text + "\r"` is interpreted by claude's TUI input
-  // handler as "newline within the input box", not "submit prompt", so the
-  // prompt sits in the input area and the model never makes an API call.
-  // Matches the canon/shannon reference impl: tmux paste-buffer + C-m.
+  // text, do not interpret control chars" so newlines in `text` don't
+  // submit prematurely. The follow-up \r is the actual "submit" key.
   //
-  // Multi-line pastes get collapsed by claude TUI into a "[Pasted text #N
-  // +X lines]" reference; the TUI then needs a clear separation between
-  // the paste-end marker and the Enter keystroke or the \r gets absorbed
-  // into the paste buffer instead of submitting. 200 ms post-paste delay +
-  // a second \r after another 50 ms covers both cases.
+  // The catch: claude's TUI processes bracketed paste asynchronously —
+  // multi-line pastes get collapsed into a "[Pasted text #N +X lines]"
+  // reference, and the input box rendering happens AFTER the paste-end
+  // marker is consumed. If we send \r before that rendering completes,
+  // the keystroke is absorbed into the still-open paste buffer instead
+  // of being treated as submit. A fixed-time sleep here is a brittle
+  // timing hack — system load, model effort settings, and PTY scheduling
+  // all shift the window.
+  //
+  // Adaptive fix: snapshot the output ring length, write the paste,
+  // then wait until the ring GROWS (i.e. the TUI rendered something in
+  // response to the paste) before sending Enter. The grow signal is
+  // deterministic — if it never arrives within commitTimeoutMs we fall
+  // through and send Enter anyway, matching prior timeout behaviour.
+  const commitTimeoutMs = opts.commitTimeoutMs ?? 2_000
+  const pollMs = opts.pollMs ?? 10
+  const baseline = ring.tail().length
   await pty.sendInput(`\x1b[200~${text}\x1b[201~`)
-  await new Promise((r) => setTimeout(r, 200))
+  const deadline = Date.now() + commitTimeoutMs
+  while (Date.now() < deadline) {
+    if (ring.tail().length > baseline) break
+    await new Promise((r) => setTimeout(r, pollMs))
+  }
   await pty.sendInput("\r")
 }
 

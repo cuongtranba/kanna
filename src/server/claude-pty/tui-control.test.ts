@@ -23,16 +23,31 @@ function fakePty(): PtyProcess & { sent: string[] } {
 }
 
 describe("sendUserPrompt", () => {
-  test("writes bracketed-paste wrapped text then separate carriage return", async () => {
+  test("writes bracketed-paste wrapped text then separate carriage return once ring grows", async () => {
     const pty = fakePty()
-    await sendUserPrompt(pty, "say hi")
+    const ring = new OutputRing()
+    // Simulate the TUI rendering the paste preview shortly after the paste write.
+    setTimeout(() => ring.append("[Pasted text #1 +56 lines]"), 5)
+    await sendUserPrompt(pty, ring, "say hi", { commitTimeoutMs: 500, pollMs: 1 })
     expect(pty.sent).toEqual(["\x1b[200~say hi\x1b[201~", "\r"])
   })
 
-  test("empty string still emits paste markers + separate carriage return", async () => {
+  test("empty string still emits paste markers + carriage return after commit", async () => {
     const pty = fakePty()
-    await sendUserPrompt(pty, "")
+    const ring = new OutputRing()
+    setTimeout(() => ring.append("x"), 5)
+    await sendUserPrompt(pty, ring, "", { commitTimeoutMs: 500, pollMs: 1 })
     expect(pty.sent).toEqual(["\x1b[200~\x1b[201~", "\r"])
+  })
+
+  test("sends Enter after commitTimeoutMs even if the ring never grows (degraded fallback)", async () => {
+    const pty = fakePty()
+    const ring = new OutputRing() // never grows
+    const start = Date.now()
+    await sendUserPrompt(pty, ring, "no echo", { commitTimeoutMs: 50, pollMs: 5 })
+    const elapsed = Date.now() - start
+    expect(pty.sent).toEqual(["\x1b[200~no echo\x1b[201~", "\r"])
+    expect(elapsed).toBeGreaterThanOrEqual(45)
   })
 })
 

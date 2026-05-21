@@ -523,7 +523,7 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
 
   if (args.initialPrompt) {
     try {
-      await sendUserPrompt(pty, args.initialPrompt)
+      await sendUserPrompt(pty, ring, args.initialPrompt)
     } catch (err) {
       console.warn("[kanna/pty] initialPrompt write failed", err)
     }
@@ -563,7 +563,7 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
               .map((c) => c.text ?? "")
               .join("\n")
           : String(content)
-      await sendUserPrompt(pty, text)
+      await sendUserPrompt(pty, ring, text)
     },
     setModel: async (model) => {
       try {
