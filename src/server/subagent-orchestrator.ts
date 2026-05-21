@@ -266,6 +266,16 @@ export class SubagentOrchestrator {
     this.permits += 1
   }
 
+  /**
+   * Clear the sticky cancel marker for a chat. Call this at the start of
+   * each new user turn so a previous cancelChat() does not poison every
+   * subsequent `delegateRun` with "Chat cancelled before run started"
+   * forever (B3 + delegate_subagent path).
+   */
+  clearChatCancellation(chatId: string): void {
+    this.cancelledChats.delete(chatId)
+  }
+
   cancelChat(chatId: string): void {
     this.cancelledChats.add(chatId)
     for (let i = this.waiters.length - 1; i >= 0; i -= 1) {

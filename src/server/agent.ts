@@ -1701,6 +1701,13 @@ export class AgentCoordinator {
       this.clearDrainingStream(args.chatId)
     }
 
+    // A new user turn implicitly clears any prior cancellation marker —
+    // otherwise a Stop-then-resend cycle wedges every delegate_subagent
+    // call in this chat with "Chat cancelled before run started" until
+    // process restart. Mirrors the clear already done by
+    // runMentionsForUserMessage for the @mention path.
+    this.subagentOrchestrator.clearChatCancellation(args.chatId)
+
     const chat = this.store.requireChat(args.chatId)
     if (this.activeTurns.has(args.chatId)) {
       throw new Error("Chat is already running")
