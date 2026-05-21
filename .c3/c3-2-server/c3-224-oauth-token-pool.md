@@ -1,6 +1,6 @@
 ---
 id: c3-224
-c3-seal: 6737595faf724cc0cacb69cb474932d81f2b742f860c2815b81d6d016f368f30
+c3-seal: e0157a3a18ed369376bbc46f6339401e7c4416f7150e8d24ba1227be8c70b150
 title: oauth-token-pool
 type: component
 category: feature
@@ -49,7 +49,7 @@ Maintains an in-memory reservation index plus token state machine over the OAuth
 | Outcome | Claude turns run on the right subscription account; rate-limit on one token rotates to the next without user intervention | c3-210 |
 | Primary path | pickActive(chatId) → markUsed → spawn subprocess with CLAUDE_CODE_OAUTH_TOKEN | c3-210 |
 | Alternate — rotation | Rate-limit/auth-error detected → markLimited/markError drops reservation → pickActive picks next → token_rotation auto_continue event | c3-210 |
-| Failure — refusal | No usable token + pool non-empty → `OAuthPoolUnavailableError` is caught in `startTurnForChat` and persisted to the chat transcript as a `kind:"result", subtype:"error"` entry whose `result` body is the describeUnavailability output (chat references rendered as `/chat/<id>` markdown links). Replaces the prior `throw` → commandError banner path, which flickered when the next snapshot tick wiped commandError. | c3-114 |
+| Failure — refusal | No usable token + pool non-empty → OAuthPoolUnavailableError is caught in startTurnForChat and persisted to the chat transcript as a kind:"result", subtype:"error" entry whose result body is the describeUnavailability output (chat references rendered as /chat/<id> markdown links). Replaces the prior throw → commandError banner path, which flickered when the next snapshot tick wiped commandError. | c3-114 |
 
 ## Governance
 
