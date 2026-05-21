@@ -11,7 +11,7 @@ import { KANNA_SYSTEM_PROMPT_APPEND } from "../../shared/kanna-system-prompt"
 import { resolveClaudeBinary } from "./resolve-binary"
 import { createJsonlEventParser } from "./jsonl-to-event"
 import { OutputRing, OUTPUT_RING_DEFAULT_BYTES } from "./output-ring"
-import { createSmokeTestGate, createFileSmokeTestCache, type SmokeTestGate } from "./smoke-test"
+import { createSmokeTestGate, createFileSmokeTestCache, buildLiveSmokeProbe, type SmokeTestGate } from "./smoke-test"
 import { computeBinarySha256 } from "./preflight/binary-fingerprint"
 import { spawnPtyProcess as defaultSpawnPtyProcess, type PtyProcess } from "./pty-process"
 import { waitForTuiReady, dismissTrustDialogIfPresent, sendUserPrompt, sendExitCommand } from "./tui-control"
@@ -251,7 +251,12 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
 
   const binarySha256 = await computeBinarySha256(claudeBinAbs)
   const smokeGate = args.smokeTestGate ?? createSmokeTestGate({
-    probe: async () => "pass",  // placeholder until buildLiveSmokeProbe lands in 6.5
+    probe: buildLiveSmokeProbe({
+      claudeBinPath: claudeBinAbs,
+      model: args.model,
+      oauthToken: args.oauthToken ?? "",
+      homeDir: home,
+    }),
     cache: createFileSmokeTestCache({ cacheDir: path.join(home, ".kanna", "cache", "smoke-test") }),
     ttlMs: 24 * 3600 * 1000,
     now: () => Date.now(),
