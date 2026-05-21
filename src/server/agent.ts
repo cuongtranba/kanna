@@ -58,7 +58,6 @@ import type { ToolCallbackService } from "./tool-callback"
 import type { ChatPermissionPolicy } from "../shared/permission-policy"
 import { mergePolicyOverride, POLICY_DEFAULT } from "../shared/permission-policy"
 import { startClaudeSessionPTY, type StartClaudeSessionPtyArgs } from "./claude-pty/driver"
-import type { PreflightGate } from "./claude-pty/preflight/gate"
 
 export function resolveSpawnPaths(
   chat: Pick<ChatRecord, "id" | "stackBindings">,
@@ -233,8 +232,6 @@ interface AgentCoordinatorArgs {
   oauthPool?: OAuthTokenPool
   /** Populated on boot; will be consumed by canUseTool in Task 11. */
   toolCallback?: ToolCallbackService
-  /** Preflight gate for PTY spawn — only active when KANNA_CLAUDE_DRIVER=pty. */
-  preflightGate?: PreflightGate
   /** Per-chat permission policy forwarded to startClaudeSession. Defaults to POLICY_DEFAULT if omitted. */
   chatPolicy?: ChatPermissionPolicy
   /** Claude subprocess lifecycle tuning. Defaults are conservative and may be overridden in tests. */
@@ -1108,7 +1105,6 @@ export class AgentCoordinator {
   private readonly backgroundTasks: BackgroundTaskRegistry | null
   private readonly oauthPool: OAuthTokenPool | null
   private readonly toolCallback: ToolCallbackService | null
-  private readonly preflightGate: PreflightGate | null
   private readonly chatPolicy: ChatPermissionPolicy
   private readonly claudeSessionLifecycle: ClaudeSessionLifecycleOptions
   private readonly claudeSessionSweepTimer: ReturnType<typeof setInterval> | null
@@ -1172,7 +1168,6 @@ export class AgentCoordinator {
     this.backgroundTasks = args.backgroundTasks ?? null
     this.oauthPool = args.oauthPool ?? null
     this.toolCallback = args.toolCallback ?? null
-    this.preflightGate = args.preflightGate ?? null
     this.chatPolicy = args.chatPolicy ?? POLICY_DEFAULT
     this.claudeSessionLifecycle = {
       idleMs: args.claudeSessionLifecycle?.idleMs
@@ -1537,8 +1532,7 @@ export class AgentCoordinator {
                 oauthKeyMasked: picked ? maskOauthKey(picked.token) : undefined,
                 onToolRequest: async () => null,
                 systemPromptAppend: ephemeralSystemPromptAppend,
-                preflightGate: this.preflightGate ?? undefined,
-              })
+                  })
             : await this.startClaudeSessionFn({
                 projectId: project.id,
                 localPath: project.localPath,
@@ -2154,7 +2148,6 @@ export class AgentCoordinator {
             systemPromptAppend,
             subagentOrchestrator: this.subagentOrchestrator,
             delegationContext,
-            preflightGate: this.preflightGate ?? undefined,
             toolCallback: this.toolCallback ?? undefined,
             tunnelGateway: this.tunnelGateway,
             chatPolicy: this.resolveChatPolicy(args.chatId),

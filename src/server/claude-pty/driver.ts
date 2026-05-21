@@ -8,7 +8,6 @@ import type { KannaMcpDelegationContext } from "../kanna-mcp"
 import type { SubagentOrchestrator } from "../subagent-orchestrator"
 import { parseConfiguredContextWindowFromModelId, timestamped } from "../agent"
 import { KANNA_SYSTEM_PROMPT_APPEND } from "../../shared/kanna-system-prompt"
-import type { PreflightGate } from "./preflight/gate"
 import { resolveClaudeBinary } from "./resolve-binary"
 import { createJsonlEventParser } from "./jsonl-to-event"
 import { OutputRing, OUTPUT_RING_DEFAULT_BYTES } from "./output-ring"
@@ -56,7 +55,6 @@ export interface StartClaudeSessionPtyArgs {
   initialPrompt?: string
   homeDir?: string
   env?: NodeJS.ProcessEnv
-  preflightGate?: PreflightGate
   /** Routes AskUserQuestion/ExitPlanMode + built-in shims through durable approval when KANNA_MCP_TOOL_CALLBACKS=1. */
   toolCallback?: ToolCallbackService
   /** Tunnel gateway for kanna-mcp expose_port. */
@@ -229,7 +227,6 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
     forkSession: args.forkSession,
     hasOauthToken: Boolean(args.oauthToken),
     oauthLabel: args.oauthLabel ?? null,
-    hasPreflightGate: Boolean(args.preflightGate),
     sandboxEnvOverride: env.KANNA_PTY_SANDBOX ?? null,
     platform: process.platform,
     anthropicApiKeySet: Boolean(env.ANTHROPIC_API_KEY),
@@ -254,12 +251,6 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
     source: resolved.source,
   })
   const claudeBinAbs = resolved.path
-
-  // Preflight gate + OS sandbox removed: kanna trusts the claude CLI as the
-  // source of truth for tool execution. No probe-based allowlist check, no
-  // sandbox-exec / bwrap wrap. The claude binary runs directly under the
-  // kanna server's own process boundary.
-  void args.preflightGate
 
   const spawnEnv = buildPtyEnv({
     baseEnv: env,
