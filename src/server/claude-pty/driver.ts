@@ -20,7 +20,7 @@ import { startTranscriptStream } from "./tui-source"
 import { computeJsonlPath, computeProjectDir } from "./jsonl-path"
 import type { ClaudeSessionHandle } from "../agent"
 import type { HarnessEvent, HarnessToolRequest } from "../harness-types"
-import type { AccountInfo, SlashCommand } from "../../shared/types"
+import type { AccountInfo, McpServerConfig, SlashCommand } from "../../shared/types"
 import type { ToolCallbackService } from "../tool-callback"
 import type { TunnelGateway } from "../cloudflare-tunnel/gateway"
 import type { ChatPermissionPolicy } from "../../shared/permission-policy"
@@ -72,6 +72,8 @@ export interface StartClaudeSessionPtyArgs {
   subagentOrchestrator?: SubagentOrchestrator
   /** Per-spawn delegation context (depth / ancestor chain / parentUserMessageId resolver). */
   delegationContext?: KannaMcpDelegationContext
+  /** Enabled user-defined MCP servers, written into mcp-config.json. */
+  customMcpServers?: readonly McpServerConfig[]
   /** Optional override used by tests to inject a fake HTTP MCP starter. */
   startKannaMcpHttpServer?: typeof startKannaMcpHttpServer
   /** Optional smoke-test gate override (used by tests to inject a fake gate). */
@@ -318,7 +320,11 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
         forceInteractiveToolCallbacks: true,
       },
     })
-    await writeFile(mcpConfigPath, buildMcpConfigJson(mcpHandle), { encoding: "utf8", mode: 0o600 })
+    await writeFile(
+      mcpConfigPath,
+      buildMcpConfigJson(mcpHandle, args.customMcpServers ?? []),
+      { encoding: "utf8", mode: 0o600 },
+    )
   } catch (err) {
     try { await (mcpHandle! as KannaMcpHttpHandle | undefined)?.close() } catch { /* swallow */ }
     try { await rm(runtimeDir, { recursive: true, force: true }) } catch { /* swallow */ }
