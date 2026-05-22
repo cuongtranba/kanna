@@ -225,6 +225,41 @@ still uses its native built-ins and these shims sit unused.
 `websearch` is a stub that always returns `isError: true` — real web search
 needs an external API integration which is out of scope for P3a.
 
+# Custom MCP Servers
+
+Users register MCP servers via Settings → "MCP servers". Entries persist
+in `settings.json` under `customMcpServers` (file mode 0600) and are
+merged into both Claude drivers at chat spawn time:
+
+- **SDK driver** (`agent.ts`): `buildUserMcpServers` maps each enabled
+  entry to the SDK's per-transport config and merges it into the
+  `mcpServers` map passed to `query()` alongside `mcp__kanna__*`.
+- **PTY driver** (`kanna-mcp-http.ts:buildMcpConfigJson` +
+  `claude-pty/driver.ts`): entries serialize into the same
+  `mcp-config.json` the driver hands to `--strict-mcp-config`. Kanna
+  settings remain the single source of truth; `~/.claude.json` stays
+  ignored.
+
+User MCP tool calls auto-allow (`canUseTool` already returns
+`{ behavior: "allow" }` for any tool that isn't `AskUserQuestion` /
+`ExitPlanMode`, which includes every `mcp__<name>__*` whose `<name>`
+isn't `kanna`). Trust model: if the user installed it, they trust it.
+
+Supported transports: `stdio`, `http`, `sse`, `ws`. Reserved name:
+`kanna`. Names match `^[a-zA-Z][a-zA-Z0-9_-]{0,31}$` and form the tool
+prefix `mcp__<name>__<tool>`.
+
+**Connect-test:** on create/update, `ws-router.ts` fires a fire-and-
+forget `validateMcpServer` (`src/server/mcp-validator.ts`, 10s timeout,
+list-tools probe) and persists `lastTest` on the entry. The UI shows a
+per-row status pill plus a manual "Test" button that drives the
+explicit `settings.testMcpServer` RPC.
+
+**Boundary rule:** user MCP server names MUST NOT equal
+`KANNA_MCP_SERVER_NAME`. Enforced by both `validateMcpShape`
+(`app-settings.ts`) and `buildUserMcpServers` / `buildMcpConfigJson`
+filters (belt-and-suspenders).
+
 # Subagent Delegation (Anthropic Task-tool pattern)
 
 The main agent is always in the loop. `@agent/<name>` in chat input is a

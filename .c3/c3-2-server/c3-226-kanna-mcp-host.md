@@ -109,3 +109,23 @@ the approval protocol clears.
 | src/server/kanna-mcp-tools/**/*.ts | Contract (each shim implements one MCP tool) | Per-tool argument shape | src/server/kanna-mcp-tools/ |
 | src/server/tool-callback.ts | Contract (durable approval protocol) | Persistence backend detail | src/server/tool-callback.ts |
 | src/server/permission-gate.ts | Contract (path deny enforcement) | Allow-list detail | src/server/permission-gate.ts |
+
+## Custom MCP Servers
+
+User-registered MCP servers are stored on `AppSettingsSnapshot.customMcpServers`
+(`src/shared/app-settings.ts`) and merged into both drivers at chat spawn time.
+The SDK driver (`src/server/agent.ts` `buildUserMcpServers`) maps each enabled
+entry to the SDK per-transport config and appends it to the `mcpServers` map
+alongside `mcp__kanna__*`. The PTY driver reads the same entries via
+`buildMcpConfigJson` in `src/server/kanna-mcp-http.ts`, which serializes them
+into the `mcp-config.json` handed to `--strict-mcp-config`; `src/server/claude-pty/driver.ts`
+passes the resulting config path to the CLI spawn unchanged.
+
+Key boundary crossings:
+- `src/shared/app-settings.ts` ↔ `src/server/kanna-mcp-http.ts` — settings shape → PTY MCP config JSON
+- `src/shared/app-settings.ts` ↔ `src/server/agent.ts` — settings shape → SDK mcpServers map
+- `src/server/kanna-mcp-http.ts` ↔ `src/server/claude-pty/driver.ts` — config file path passed at spawn
+
+The reserved name `kanna` is enforced at storage (`validateMcpShape`),
+SDK driver (`buildUserMcpServers` filter), and PTY driver (`buildMcpConfigJson`
+filter) — belt-and-suspenders; see rule-mcp-name-reserved.
