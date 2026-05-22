@@ -51,6 +51,8 @@ import {
   type DefaultProviderPreference,
   type EditorPreset,
   type McpServerConfig,
+  type McpServerTestResult,
+  type McpServerTransport,
   type OAuthTokenEntry,
   type OAuthTokenStatus,
   type ProviderPreference,
@@ -118,6 +120,7 @@ const DEFAULT_CHAT_SOUND_ID: ChatSoundId = "funk"
 const SUBAGENT_NAME_REGEX = /^[a-z0-9_-]+$/
 const SUBAGENT_RESERVED_NAMES = new Set(["agent", "agents"])
 const SUBAGENT_NAME_MAX = 64
+const MCP_VALID_TRANSPORTS = new Set<McpServerTransport>(["stdio", "http", "sse", "ws"])
 
 class SubagentValidationException extends Error {
   constructor(readonly validationError: SubagentValidationError) {
@@ -442,6 +445,111 @@ function normalizeSubagents(value: unknown, warnings: string[]): Subagent[] {
   return out.sort((a, b) => a.createdAt - b.createdAt)
 }
 
+function normalizeStringMap(value: unknown): Record<string, string> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {}
+  const out: Record<string, string> = {}
+  for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+    if (typeof k !== "string" || k.length === 0) continue
+    out[k] = typeof v === "string" ? v : String(v ?? "")
+  }
+  return out
+}
+
+function normalizeMcpTestResult(value: unknown): McpServerTestResult {
+  if (!value || typeof value !== "object") return { status: "untested" }
+  const v = value as Record<string, unknown>
+  switch (v.status) {
+    case "pending":
+      return { status: "pending", startedAt: typeof v.startedAt === "string" ? v.startedAt : new Date().toISOString() }
+    case "ok":
+      return {
+        status: "ok",
+        testedAt: typeof v.testedAt === "string" ? v.testedAt : new Date().toISOString(),
+        toolCount: typeof v.toolCount === "number" ? v.toolCount : 0,
+      }
+    case "error":
+      return {
+        status: "error",
+        testedAt: typeof v.testedAt === "string" ? v.testedAt : new Date().toISOString(),
+        message: typeof v.message === "string" ? v.message : "unknown error",
+      }
+    default:
+      return { status: "untested" }
+  }
+}
+
+function normalizeMcpEntry(value: unknown, warnings: string[]): McpServerConfig | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null
+  const src = value as Record<string, unknown>
+  const id = typeof src.id === "string" && src.id.length > 0 ? src.id : null
+  const name = typeof src.name === "string" ? src.name : null
+  const transport = src.transport
+  if (!id || !name || typeof transport !== "string") {
+    warnings.push(`MCP entry rejected: missing id/name/transport`)
+    return null
+  }
+  if (!MCP_VALID_TRANSPORTS.has(transport as McpServerTransport)) {
+    warnings.push(`MCP entry '${id}' rejected: unknown transport ${transport}`)
+    return null
+  }
+  const base = {
+    id,
+    name,
+    enabled: src.enabled !== false,
+    createdAt: typeof src.createdAt === "string" ? src.createdAt : new Date().toISOString(),
+    updatedAt: typeof src.updatedAt === "string" ? src.updatedAt : new Date().toISOString(),
+    lastTest: normalizeMcpTestResult(src.lastTest),
+  }
+  if (transport === "stdio") {
+    const command = typeof src.command === "string" && src.command.trim().length > 0 ? src.command : null
+    if (!command) {
+      warnings.push(`MCP entry '${id}' rejected: stdio command missing`)
+      return null
+    }
+    const args = Array.isArray(src.args) ? src.args.filter((a): a is string => typeof a === "string") : []
+    return {
+      ...base,
+      transport: "stdio",
+      command,
+      args,
+      env: normalizeStringMap(src.env),
+      cwd: typeof src.cwd === "string" && src.cwd.length > 0 ? src.cwd : undefined,
+    }
+  }
+  const url = typeof src.url === "string" ? src.url : null
+  if (!url) {
+    warnings.push(`MCP entry '${id}' rejected: url missing`)
+    return null
+  }
+  return {
+    ...base,
+    transport: transport as "http" | "sse" | "ws",
+    url,
+    headers: normalizeStringMap(src.headers),
+  }
+}
+
+function normalizeMcpServers(value: unknown, warnings: string[]): McpServerConfig[] {
+  if (value === undefined) return []
+  if (!Array.isArray(value)) {
+    warnings.push("customMcpServers must be an array")
+    return []
+  }
+  const out: McpServerConfig[] = []
+  const seenNames = new Set<string>()
+  for (const entry of value) {
+    const normalized = normalizeMcpEntry(entry, warnings)
+    if (!normalized) continue
+    if (seenNames.has(normalized.name)) {
+      warnings.push(`MCP entry '${normalized.id}' rejected: duplicate name '${normalized.name}'`)
+      continue
+    }
+    seenNames.add(normalized.name)
+    out.push(normalized)
+  }
+  return out
+}
+
 function normalizeOAuthTokenStatus(value: unknown): OAuthTokenStatus {
   if (value === "limited" || value === "error" || value === "disabled") return value
   return "active"
@@ -714,9 +822,7 @@ function normalizeAppSettings(
     claudeAuth,
     uploads,
     subagents,
-    customMcpServers: Array.isArray(source?.customMcpServers)
-      ? (source.customMcpServers as McpServerConfig[])
-      : [],
+    customMcpServers: normalizeMcpServers(source?.customMcpServers, warnings),
     claudeDriver,
     globalPromptAppend,
   }

@@ -597,6 +597,108 @@ describe("claudeDriver settings", () => {
   })
 })
 
+describe("customMcpServers — load + normalize", () => {
+  test("customMcpServers defaults to empty array on fresh store", async () => {
+    const filePath = await createTempFilePath()
+    const mgr = trackManager(new AppSettingsManager(filePath))
+    await mgr.initialize()
+    expect(mgr.getSnapshot().customMcpServers).toEqual([])
+    mgr.dispose()
+  })
+
+  test("customMcpServers normalizes valid stdio entry from disk", async () => {
+    const filePath = await writeSettingsFile({
+      customMcpServers: [
+        {
+          id: "11111111-1111-1111-1111-111111111111",
+          name: "fs",
+          enabled: true,
+          createdAt: "2026-05-22T00:00:00.000Z",
+          updatedAt: "2026-05-22T00:00:00.000Z",
+          lastTest: { status: "untested" },
+          transport: "stdio",
+          command: "/usr/local/bin/mcp-filesystem",
+          args: ["/tmp"],
+          env: {},
+        },
+      ],
+    })
+    const mgr = trackManager(new AppSettingsManager(filePath))
+    await mgr.initialize()
+    const list = mgr.getSnapshot().customMcpServers
+    expect(list).toHaveLength(1)
+    expect(list[0]?.name).toBe("fs")
+    if (list[0]?.transport === "stdio") {
+      expect(list[0].command).toBe("/usr/local/bin/mcp-filesystem")
+    } else {
+      throw new Error("expected stdio")
+    }
+    mgr.dispose()
+  })
+
+  test("customMcpServers drops malformed entries with warning", async () => {
+    const filePath = await writeSettingsFile({
+      customMcpServers: [
+        { id: "x", name: "bad", transport: "stdio" }, // missing command
+        "not-an-object",
+      ],
+    })
+    const mgr = trackManager(new AppSettingsManager(filePath))
+    await mgr.initialize()
+    expect(mgr.getSnapshot().customMcpServers).toEqual([])
+    mgr.dispose()
+  })
+
+  test("customMcpServers normalizes http entry with headers", async () => {
+    const filePath = await writeSettingsFile({
+      customMcpServers: [
+        {
+          id: "22222222-2222-2222-2222-222222222222",
+          name: "remote",
+          enabled: true,
+          createdAt: "2026-05-22T00:00:00.000Z",
+          updatedAt: "2026-05-22T00:00:00.000Z",
+          lastTest: { status: "untested" },
+          transport: "http",
+          url: "https://example.com/mcp",
+          headers: { "x-api-key": "abc" },
+        },
+      ],
+    })
+    const mgr = trackManager(new AppSettingsManager(filePath))
+    await mgr.initialize()
+    const list = mgr.getSnapshot().customMcpServers
+    expect(list).toHaveLength(1)
+    if (list[0]?.transport !== "stdio") {
+      expect(list[0]?.url).toBe("https://example.com/mcp")
+      expect(list[0]?.headers).toEqual({ "x-api-key": "abc" })
+    } else throw new Error("expected http")
+    mgr.dispose()
+  })
+
+  test("customMcpServers dedups duplicate names", async () => {
+    const filePath = await writeSettingsFile({
+      customMcpServers: [
+        {
+          id: "a", name: "fs", enabled: true,
+          createdAt: "", updatedAt: "", lastTest: { status: "untested" },
+          transport: "stdio", command: "/bin/a", args: [], env: {},
+        },
+        {
+          id: "b", name: "fs", enabled: true,
+          createdAt: "", updatedAt: "", lastTest: { status: "untested" },
+          transport: "stdio", command: "/bin/b", args: [], env: {},
+        },
+      ],
+    })
+    const mgr = trackManager(new AppSettingsManager(filePath))
+    await mgr.initialize()
+    expect(mgr.getSnapshot().customMcpServers).toHaveLength(1)
+    expect(mgr.getSnapshot().customMcpServers[0]?.id).toBe("a")
+    mgr.dispose()
+  })
+})
+
 describe("globalPromptAppend", () => {
   test("defaults to empty string when missing", async () => {
     const filePath = await createTempFilePath()
