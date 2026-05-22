@@ -38,6 +38,7 @@ import { importClaudeSessions } from "./claude-session-importer"
 import { listWorktrees } from "./worktree-store"
 import type { TunnelGateway } from "./cloudflare-tunnel/gateway"
 import type { PushManager } from "./push/push-manager"
+import { validateMcpServer } from "./mcp-validator"
 
 const DEFAULT_CHAT_RECENT_LIMIT = 200
 const SKILL_AGENT_ALIASES = ["universal", "claude-code"] as const
@@ -1394,6 +1395,44 @@ export function createWsRouter({
         case "subagent.delete": {
           await resolvedAppSettings.deleteSubagent(command.id)
           send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: { ok: true } })
+          return
+        }
+        case "settings.testMcpServer": {
+          const snapshot = resolvedAppSettings.getSnapshot()
+          const entry = snapshot.customMcpServers.find((s) => s.id === command.id)
+          if (!entry) {
+            send(ws, {
+              v: PROTOCOL_VERSION,
+              type: "ack",
+              id,
+              result: {
+                ok: false,
+                message: "MCP server not found",
+                lastTest: { status: "error", testedAt: new Date().toISOString(), message: "not found" } as const,
+              },
+            })
+            return
+          }
+          // Mark pending so the UI sees a spinner while we connect.
+          await resolvedAppSettings.writePatch({
+            customMcpServers: {
+              setTestResult: { id: entry.id, result: { status: "pending", startedAt: new Date().toISOString() } },
+            },
+          })
+          const lastTest = await validateMcpServer(entry)
+          await resolvedAppSettings.writePatch({
+            customMcpServers: { setTestResult: { id: entry.id, result: lastTest } },
+          })
+          send(ws, {
+            v: PROTOCOL_VERSION,
+            type: "ack",
+            id,
+            result: {
+              ok: lastTest.status === "ok",
+              message: lastTest.status === "error" ? lastTest.message : undefined,
+              lastTest,
+            },
+          })
           return
         }
         case "settings.readLlmProvider": {

@@ -107,6 +107,7 @@ export type ClientCommand =
   | { type: "subagent.create"; input: SubagentInput }
   | { type: "subagent.update"; id: string; patch: SubagentPatch }
   | { type: "subagent.delete"; id: string }
+  | { type: "settings.testMcpServer"; id: string }
   | { type: "settings.readLlmProvider" }
   | { type: "skills.search"; query: string; limit?: number }
   | { type: "skills.install"; source: string; skillId: string }
