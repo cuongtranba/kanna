@@ -3508,10 +3508,24 @@ function makeAppSettingsStub(initial?: Partial<AppSettingsSnapshot>) {
             : { transport: input.transport, url: input.url, headers: input.headers ?? {} }),
         } as McpServerConfig
         snapshot = { ...snapshot, customMcpServers: [...snapshot.customMcpServers, entry] }
+      } else if (patch.customMcpServers?.update) {
+        const { id, patch: p } = patch.customMcpServers.update
+        snapshot = {
+          ...snapshot,
+          customMcpServers: snapshot.customMcpServers.map((s) =>
+            s.id === id ? ({ ...s, ...p, updatedAt: new Date().toISOString() } as McpServerConfig) : s,
+          ),
+        }
       } else if (patch.customMcpServers?.delete) {
         snapshot = {
           ...snapshot,
           customMcpServers: snapshot.customMcpServers.filter((s) => s.id !== patch.customMcpServers?.delete?.id),
+        }
+      } else if (patch.customMcpServers?.setEnabled) {
+        const { id, enabled } = patch.customMcpServers.setEnabled
+        snapshot = {
+          ...snapshot,
+          customMcpServers: snapshot.customMcpServers.map((s) => (s.id === id ? { ...s, enabled } : s)),
         }
       } else if (patch.customMcpServers?.setTestResult) {
         const { id, result } = patch.customMcpServers.setTestResult
@@ -3690,9 +3704,212 @@ describe("settings.writeAppSettingsPatch customMcpServers", () => {
     expect(ack.type).toBe("ack")
     expect(ack.id).toBe("patch-create-1")
 
-    const snap = appSettings.getSnapshot()
-    expect(snap.customMcpServers).toHaveLength(1)
-    expect(snap.customMcpServers[0]!.name).toBe("my-server")
-    expect(snap.customMcpServers[0]!.lastTest.status).toBe("untested")
+    // Use the ack result (snapshot captured before auto-test runs) to check the initial state.
+    expect(ack.result.customMcpServers).toHaveLength(1)
+    expect(ack.result.customMcpServers[0]!.name).toBe("my-server")
+    // At ack time the entry is freshly created — lastTest is untested before auto-test fires.
+    expect(ack.result.customMcpServers[0]!.lastTest.status).toBe("untested")
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Auto-test on create / update
+// ---------------------------------------------------------------------------
+
+async function waitForLastTest(
+  settings: { getSnapshot(): { customMcpServers: McpServerConfig[] } },
+  id: string,
+  predicate: (lt: McpServerTestResult) => boolean,
+  timeoutMs = 5_000,
+): Promise<McpServerTestResult> {
+  const start = Date.now()
+  while (Date.now() - start < timeoutMs) {
+    const entry = settings.getSnapshot().customMcpServers.find((s) => s.id === id)
+    if (entry && predicate(entry.lastTest)) return entry.lastTest
+    await new Promise((r) => setTimeout(r, 25))
+  }
+  throw new Error("waitForLastTest: timeout")
+}
+
+describe("settings.writeAppSettingsPatch auto-test", () => {
+  test("auto-test fires after create: lastTest transitions from untested → pending → error", async () => {
+    const appSettings = makeAppSettingsStub()
+    const router = makeTestRouter(appSettings)
+    const ws = new FakeWebSocket()
+    router.handleOpen(ws as never)
+
+    // 1) Send writeAppSettingsPatch.customMcpServers.create with command: "/does/not/exist"
+    await router.handleMessage(
+      ws as never,
+      JSON.stringify({
+        v: 1,
+        type: "command",
+        id: "auto-create-1",
+        command: {
+          type: "settings.writeAppSettingsPatch",
+          patch: {
+            customMcpServers: {
+              create: {
+                name: "auto-test-server",
+                transport: "stdio",
+                command: "/does/not/exist",
+                args: [],
+                env: {},
+              },
+            },
+          },
+        },
+      }),
+    )
+
+    // 2) Wait for ack (auto-test is fire-and-forget, runs after).
+    const ack = ws.sent[ws.sent.length - 1] as { type: string; id: string }
+    expect(ack.type).toBe("ack")
+    expect(ack.id).toBe("auto-create-1")
+
+    const entryId = appSettings.getSnapshot().customMcpServers[0]!.id
+
+    // 3) Poll until lastTest.status !== "untested" AND lastTest.status !== "pending".
+    const lastTest = await waitForLastTest(
+      appSettings,
+      entryId,
+      (lt) => lt.status !== "untested" && lt.status !== "pending",
+      5_000,
+    )
+
+    // 4) Assert lastTest.status === "error" and message lowercase contains "command not found".
+    expect(lastTest.status).toBe("error")
+    expect((lastTest as { status: "error"; message: string }).message.toLowerCase()).toContain("command not found")
+  }, 10_000)
+
+  test("auto-test fires after update: lastTest is updated to new validator result", async () => {
+    const appSettings = makeAppSettingsStub()
+    const router = makeTestRouter(appSettings)
+    const ws = new FakeWebSocket()
+    router.handleOpen(ws as never)
+
+    // Create an entry first (auto-test fires, ignore it).
+    await router.handleMessage(
+      ws as never,
+      JSON.stringify({
+        v: 1,
+        type: "command",
+        id: "auto-update-create",
+        command: {
+          type: "settings.writeAppSettingsPatch",
+          patch: {
+            customMcpServers: {
+              create: {
+                name: "updatable-server",
+                transport: "stdio",
+                command: "/does/not/exist",
+                args: [],
+                env: {},
+              },
+            },
+          },
+        },
+      }),
+    )
+
+    const entryId = appSettings.getSnapshot().customMcpServers[0]!.id
+
+    // Wait until first test finishes.
+    await waitForLastTest(appSettings, entryId, (lt) => lt.status !== "untested" && lt.status !== "pending", 5_000)
+
+    // Then update with a new command — should re-fire.
+    await router.handleMessage(
+      ws as never,
+      JSON.stringify({
+        v: 1,
+        type: "command",
+        id: "auto-update-patch",
+        command: {
+          type: "settings.writeAppSettingsPatch",
+          patch: {
+            customMcpServers: {
+              update: {
+                id: entryId,
+                patch: { command: "/also/does/not/exist" },
+              },
+            },
+          },
+        },
+      }),
+    )
+
+    // Wait until the second result lands (status goes back through pending → error).
+    const lastTest = await waitForLastTest(
+      appSettings,
+      entryId,
+      (lt) => lt.status !== "untested" && lt.status !== "pending",
+      5_000,
+    )
+
+    // Assert lastTest.status === "error" with new message.
+    expect(lastTest.status).toBe("error")
+    expect((lastTest as { status: "error"; message: string }).message.toLowerCase()).toContain("command not found")
+  }, 15_000)
+
+  test("auto-test does NOT fire on setEnabled or setTestResult", async () => {
+    const appSettings = makeAppSettingsStub()
+    const router = makeTestRouter(appSettings)
+    const ws = new FakeWebSocket()
+    router.handleOpen(ws as never)
+
+    // Create an entry (with command that gives a known error fast).
+    await router.handleMessage(
+      ws as never,
+      JSON.stringify({
+        v: 1,
+        type: "command",
+        id: "no-fire-create",
+        command: {
+          type: "settings.writeAppSettingsPatch",
+          patch: {
+            customMcpServers: {
+              create: {
+                name: "no-refire-server",
+                transport: "stdio",
+                command: "/does/not/exist",
+                args: [],
+                env: {},
+              },
+            },
+          },
+        },
+      }),
+    )
+
+    const entryId = appSettings.getSnapshot().customMcpServers[0]!.id
+
+    // Wait for first lastTest to finish.
+    await waitForLastTest(appSettings, entryId, (lt) => lt.status !== "untested" && lt.status !== "pending", 5_000)
+
+    // Capture lastTest snapshot.
+    const capturedLastTest = appSettings.getSnapshot().customMcpServers.find((s) => s.id === entryId)!.lastTest
+
+    // Send setEnabled patch.
+    await router.handleMessage(
+      ws as never,
+      JSON.stringify({
+        v: 1,
+        type: "command",
+        id: "no-fire-setenabled",
+        command: {
+          type: "settings.writeAppSettingsPatch",
+          patch: {
+            customMcpServers: { setEnabled: { id: entryId, enabled: false } },
+          },
+        },
+      }),
+    )
+
+    // Wait ~200ms (no test should fire).
+    await new Promise((r) => setTimeout(r, 200))
+
+    // Assert lastTest still equals the captured value.
+    const currentLastTest = appSettings.getSnapshot().customMcpServers.find((s) => s.id === entryId)!.lastTest
+    expect(currentLastTest).toEqual(capturedLastTest)
   })
 })

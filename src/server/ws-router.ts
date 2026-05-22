@@ -1360,6 +1360,25 @@ export function createWsRouter({
           const previousAnalyticsEnabled = resolvedAppSettings.getSnapshot().analyticsEnabled
           const snapshot = await resolvedAppSettings.writePatch(command.patch)
           send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: snapshot })
+
+          // Fire-and-forget auto-test for newly created or updated MCP server.
+          const targetId = (() => {
+            const ops = command.patch.customMcpServers
+            if (!ops) return null
+            if (ops.update) return ops.update.id
+            if (ops.create) {
+              // The created entry is the one with no prior match by name —
+              // simplest: pick the entry with the latest createdAt.
+              const list = snapshot.customMcpServers
+              if (list.length === 0) return null
+              return list.reduce((latest, e) => (e.createdAt > latest.createdAt ? e : latest), list[0]!).id
+            }
+            return null
+          })()
+          if (targetId) {
+            void runMcpAutoTest(targetId, resolvedAppSettings)
+          }
+
           if (command.patch.analyticsEnabled !== undefined && previousAnalyticsEnabled && !snapshot.analyticsEnabled) {
             resolvedAnalytics.track("analytics_disabled")
           }
@@ -2179,5 +2198,25 @@ async function testOAuthToken(token: string): Promise<{ ok: boolean; error: stri
       return { ok: false, error: "Request timed out after 10s" }
     }
     return { ok: false, error: err instanceof Error ? err.message : String(err) }
+  }
+}
+
+async function runMcpAutoTest(
+  id: string,
+  appSettings: { getSnapshot(): AppSettingsSnapshot; writePatch(p: AppSettingsPatch): Promise<unknown> },
+): Promise<void> {
+  try {
+    const entry = appSettings.getSnapshot().customMcpServers.find((s) => s.id === id)
+    if (!entry) return
+    await appSettings.writePatch({
+      customMcpServers: {
+        setTestResult: { id, result: { status: "pending", startedAt: new Date().toISOString() } },
+      },
+    })
+    const result = await validateMcpServer(entry)
+    await appSettings.writePatch({ customMcpServers: { setTestResult: { id, result } } })
+  } catch (err) {
+    // Auto-test must never throw; log + swallow.
+    console.warn("[kanna/ws-router] runMcpAutoTest failed", err)
   }
 }
