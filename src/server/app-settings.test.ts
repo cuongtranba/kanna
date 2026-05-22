@@ -699,6 +699,199 @@ describe("customMcpServers — load + normalize", () => {
   })
 })
 
+describe("customMcpServers — CRUD patches", () => {
+  test("create stdio entry succeeds and persists defaults", async () => {
+    const filePath = await createTempFilePath()
+    const mgr = trackManager(new AppSettingsManager(filePath))
+    await mgr.initialize()
+    await mgr.writePatch({
+      customMcpServers: {
+        create: { name: "fs", transport: "stdio", command: "/usr/local/bin/mcp-filesystem", args: [], env: {} },
+      },
+    })
+    const list = mgr.getSnapshot().customMcpServers
+    expect(list).toHaveLength(1)
+    expect(list[0]?.name).toBe("fs")
+    expect(list[0]?.enabled).toBe(true)
+    expect(list[0]?.lastTest.status).toBe("untested")
+    expect(list[0]?.id).toMatch(/^[0-9a-f-]{36}$/)
+    mgr.dispose()
+  })
+
+  test("create rejects reserved name 'kanna'", async () => {
+    const filePath = await createTempFilePath()
+    const mgr = trackManager(new AppSettingsManager(filePath))
+    await mgr.initialize()
+    await expect(mgr.writePatch({
+      customMcpServers: {
+        create: { name: "kanna", transport: "stdio", command: "/bin/x", args: [], env: {} },
+      },
+    })).rejects.toMatchObject({ validationError: { code: "RESERVED_NAME" } })
+    mgr.dispose()
+  })
+
+  test("create rejects duplicate name", async () => {
+    const filePath = await createTempFilePath()
+    const mgr = trackManager(new AppSettingsManager(filePath))
+    await mgr.initialize()
+    await mgr.writePatch({
+      customMcpServers: { create: { name: "fs", transport: "stdio", command: "/bin/a", args: [], env: {} } },
+    })
+    await expect(mgr.writePatch({
+      customMcpServers: { create: { name: "fs", transport: "stdio", command: "/bin/b", args: [], env: {} } },
+    })).rejects.toMatchObject({ validationError: { code: "DUPLICATE_NAME" } })
+    mgr.dispose()
+  })
+
+  test("create rejects bad slug", async () => {
+    const filePath = await createTempFilePath()
+    const mgr = trackManager(new AppSettingsManager(filePath))
+    await mgr.initialize()
+    await expect(mgr.writePatch({
+      customMcpServers: { create: { name: "Has Space", transport: "stdio", command: "/bin/x", args: [], env: {} } },
+    })).rejects.toMatchObject({ validationError: { code: "INVALID_NAME" } })
+    mgr.dispose()
+  })
+
+  test("create stdio without command rejected", async () => {
+    const filePath = await createTempFilePath()
+    const mgr = trackManager(new AppSettingsManager(filePath))
+    await mgr.initialize()
+    await expect(mgr.writePatch({
+      customMcpServers: { create: { name: "fs", transport: "stdio", command: "", args: [], env: {} } },
+    })).rejects.toMatchObject({ validationError: { code: "MISSING_COMMAND" } })
+    mgr.dispose()
+  })
+
+  test("create http with bad URL scheme rejected", async () => {
+    const filePath = await createTempFilePath()
+    const mgr = trackManager(new AppSettingsManager(filePath))
+    await mgr.initialize()
+    await expect(mgr.writePatch({
+      customMcpServers: { create: { name: "remote", transport: "http", url: "ws://example.com/mcp", headers: {} } },
+    })).rejects.toMatchObject({ validationError: { code: "INVALID_URL" } })
+    mgr.dispose()
+  })
+
+  test("create ws with ws:// scheme accepted", async () => {
+    const filePath = await createTempFilePath()
+    const mgr = trackManager(new AppSettingsManager(filePath))
+    await mgr.initialize()
+    await mgr.writePatch({
+      customMcpServers: { create: { name: "wsx", transport: "ws", url: "wss://example.com/mcp", headers: {} } },
+    })
+    expect(mgr.getSnapshot().customMcpServers).toHaveLength(1)
+    mgr.dispose()
+  })
+
+  test("create ws with http:// scheme rejected", async () => {
+    const filePath = await createTempFilePath()
+    const mgr = trackManager(new AppSettingsManager(filePath))
+    await mgr.initialize()
+    await expect(mgr.writePatch({
+      customMcpServers: { create: { name: "wsx", transport: "ws", url: "http://example.com/mcp", headers: {} } },
+    })).rejects.toMatchObject({ validationError: { code: "INVALID_URL" } })
+    mgr.dispose()
+  })
+
+  test("update patches existing entry", async () => {
+    const filePath = await createTempFilePath()
+    const mgr = trackManager(new AppSettingsManager(filePath))
+    await mgr.initialize()
+    await mgr.writePatch({
+      customMcpServers: { create: { name: "fs", transport: "stdio", command: "/bin/a", args: [], env: {} } },
+    })
+    const id = mgr.getSnapshot().customMcpServers[0]!.id
+    await mgr.writePatch({
+      customMcpServers: { update: { id, patch: { name: "filesystem" } } },
+    })
+    expect(mgr.getSnapshot().customMcpServers[0]?.name).toBe("filesystem")
+    mgr.dispose()
+  })
+
+  test("update on missing id rejected with NOT_FOUND", async () => {
+    const filePath = await createTempFilePath()
+    const mgr = trackManager(new AppSettingsManager(filePath))
+    await mgr.initialize()
+    await expect(mgr.writePatch({
+      customMcpServers: { update: { id: "nope", patch: { name: "x" } } },
+    })).rejects.toMatchObject({ validationError: { code: "NOT_FOUND" } })
+    mgr.dispose()
+  })
+
+  test("setEnabled flips flag", async () => {
+    const filePath = await createTempFilePath()
+    const mgr = trackManager(new AppSettingsManager(filePath))
+    await mgr.initialize()
+    await mgr.writePatch({
+      customMcpServers: { create: { name: "fs", transport: "stdio", command: "/bin/a", args: [], env: {} } },
+    })
+    const id = mgr.getSnapshot().customMcpServers[0]!.id
+    const before = mgr.getSnapshot().customMcpServers[0]!.updatedAt
+    await new Promise((r) => setTimeout(r, 5))
+    await mgr.writePatch({ customMcpServers: { setEnabled: { id, enabled: false } } })
+    expect(mgr.getSnapshot().customMcpServers[0]?.enabled).toBe(false)
+    const after = mgr.getSnapshot().customMcpServers[0]!.updatedAt
+    expect(after).not.toBe(before)
+    expect(after >= before).toBe(true)
+    mgr.dispose()
+  })
+
+  test("setTestResult persists status", async () => {
+    const filePath = await createTempFilePath()
+    const mgr = trackManager(new AppSettingsManager(filePath))
+    await mgr.initialize()
+    await mgr.writePatch({
+      customMcpServers: { create: { name: "fs", transport: "stdio", command: "/bin/a", args: [], env: {} } },
+    })
+    const id = mgr.getSnapshot().customMcpServers[0]!.id
+    await mgr.writePatch({
+      customMcpServers: {
+        setTestResult: {
+          id,
+          result: { status: "ok", testedAt: "2026-05-22T00:00:00Z", toolCount: 5 },
+        },
+      },
+    })
+    expect(mgr.getSnapshot().customMcpServers[0]?.lastTest).toEqual({
+      status: "ok", testedAt: "2026-05-22T00:00:00Z", toolCount: 5,
+    })
+    mgr.dispose()
+  })
+
+  test("delete removes entry; idempotent on missing id", async () => {
+    const filePath = await createTempFilePath()
+    const mgr = trackManager(new AppSettingsManager(filePath))
+    await mgr.initialize()
+    await mgr.writePatch({
+      customMcpServers: { create: { name: "fs", transport: "stdio", command: "/bin/a", args: [], env: {} } },
+    })
+    const id = mgr.getSnapshot().customMcpServers[0]!.id
+    await mgr.writePatch({ customMcpServers: { delete: { id } } })
+    expect(mgr.getSnapshot().customMcpServers).toEqual([])
+    await mgr.writePatch({ customMcpServers: { delete: { id: "nope" } } })
+    expect(mgr.getSnapshot().customMcpServers).toEqual([])
+    mgr.dispose()
+  })
+
+  test("CRUD round-trip survives reload", async () => {
+    const filePath = await createTempFilePath()
+    const mgr = trackManager(new AppSettingsManager(filePath))
+    await mgr.initialize()
+    await mgr.writePatch({
+      customMcpServers: { create: { name: "fs", transport: "stdio", command: "/bin/a", args: [], env: {} } },
+    })
+    const id = mgr.getSnapshot().customMcpServers[0]!.id
+    mgr.dispose()
+
+    const reloaded = trackManager(new AppSettingsManager(filePath))
+    await reloaded.initialize()
+    expect(reloaded.getSnapshot().customMcpServers).toHaveLength(1)
+    expect(reloaded.getSnapshot().customMcpServers[0]?.id).toBe(id)
+    reloaded.dispose()
+  })
+})
+
 describe("globalPromptAppend", () => {
   test("defaults to empty string when missing", async () => {
     const filePath = await createTempFilePath()
