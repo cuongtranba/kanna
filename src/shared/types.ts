@@ -572,14 +572,26 @@ export interface OAuthTokenEntry {
   lastErrorAt: number | null
   lastErrorMessage: string | null
   addedAt: number
+  // Per-token concurrent-chat cap. When omitted, the pool falls back to
+  // ClaudeAuthSettings.concurrencyDefault. Default 1 preserves the
+  // historical 1-token-per-chat invariant. Range
+  // [OAUTH_TOKEN_MAX_CONCURRENT_MIN, OAUTH_TOKEN_MAX_CONCURRENT_MAX].
+  maxConcurrent?: number
 }
 
 export interface ClaudeAuthSettings {
   tokens: OAuthTokenEntry[]
+  // Pool-wide default applied to tokens whose maxConcurrent is omitted.
+  concurrencyDefault: number
 }
+
+export const OAUTH_TOKEN_MAX_CONCURRENT_MIN = 1
+export const OAUTH_TOKEN_MAX_CONCURRENT_MAX = 5
+export const OAUTH_TOKEN_CONCURRENCY_DEFAULT = 1
 
 export const CLAUDE_AUTH_DEFAULTS: ClaudeAuthSettings = {
   tokens: [],
+  concurrencyDefault: OAUTH_TOKEN_CONCURRENCY_DEFAULT,
 }
 
 export const OAUTH_TOKEN_LABEL_MAX = 64

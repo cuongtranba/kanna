@@ -39,6 +39,14 @@ export interface SmokeTestGate {
 
 export function createSmokeTestGate(args: SmokeTestGateArgs): SmokeTestGate {
   const { probe, cache, ttlMs, now } = args
+  // Per-(binarySha256, model) singleflight. Under
+  // adr-20260522-oauth-token-share-cap a single OAuth token may back N
+  // concurrent PTY spawns; on cold cache they would each fire an
+  // independent claude TUI probe against Anthropic on the same token,
+  // which is the easiest way to provoke a concurrent-stream 429 right at
+  // boot. Collapse concurrent probe calls onto a shared promise so only
+  // one live probe runs per (binary, model).
+  const inFlight = new Map<string, Promise<{ ok: true } | { ok: false; reason: string }>>()
   return {
     async canSpawn(spawnArgs: CanSpawnArgs) {
       const key = `${spawnArgs.binarySha256}|${spawnArgs.model}`
@@ -48,10 +56,20 @@ export function createSmokeTestGate(args: SmokeTestGateArgs): SmokeTestGate {
         if (cached.result === "pass") return { ok: true }
         return { ok: false, reason: "cached smoke test FAIL: --disallowedTools not enforced for this claude binary + model" }
       }
-      const probeResult = await probe()
-      await cache.set(key, { result: probeResult, ts: currentTs })
-      if (probeResult === "pass") return { ok: true }
-      return { ok: false, reason: "smoke test FAIL: claude invoked a disallowedTool — refusing spawn" }
+      const existing = inFlight.get(key)
+      if (existing) return existing
+      const run = (async () => {
+        const probeResult = await probe()
+        await cache.set(key, { result: probeResult, ts: now() })
+        if (probeResult === "pass") return { ok: true } as const
+        return { ok: false, reason: "smoke test FAIL: claude invoked a disallowedTool — refusing spawn" } as const
+      })()
+      inFlight.set(key, run)
+      try {
+        return await run
+      } finally {
+        inFlight.delete(key)
+      }
     },
   }
 }

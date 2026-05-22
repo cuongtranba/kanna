@@ -1,6 +1,6 @@
 ---
 id: c3-224
-c3-seal: e0157a3a18ed369376bbc46f6339401e7c4416f7150e8d24ba1227be8c70b150
+c3-seal: e4fa6708633805800ee0f94fe0a5b76f0520ff50a1ef935a26af876b22ada94b
 title: oauth-token-pool
 type: component
 category: feature
@@ -31,7 +31,7 @@ Own the multi-token Anthropic OAuth pool: pick the right token per chat turn, pr
 
 ## Purpose
 
-Maintains an in-memory reservation index plus token state machine over the OAuth tokens persisted in app settings under `claudeAuth.tokens`. Selects the least-recently-used eligible token for each spawn via `pickActive(chatId)`, auto-revives tokens whose `limitedUntil` has elapsed, drops the reservation on `markLimited`/`markError`/`markDisabled` so the owning chat can rotate without an explicit release, and classifies why each token is unusable via `describeUnavailability(chatId)` for the refusal UI. Non-goals: the OAuth login flow itself (handled in settings UI), the launch-password gate (c3-203), persistent token storage (delegated to app-settings under c3-204/c3-206 boundary), event sourcing — pool state is settings-backed by design because tokens are user secrets, not derivable from the event log.
+Maintains an in-memory refcounted reservation index (Map<tokenId, Set<chatId>>) plus the token state machine over the OAuth tokens persisted in app settings under `claudeAuth.tokens`. Selects an eligible token for each spawn via `pickActive(chatId)` with cap-aware spread-load semantics: per-token `maxConcurrent` (1–5) admits up to N concurrent chats on the same token, defaulting to `ClaudeAuthSettings.concurrencyDefault` when omitted. Owners are returned to the rotation layer in `agent.ts` via `takeStaleOwners(id)` before `markLimited` / `markError` so the layer can drive a deduped, staggered respawn for every shared owner (per `adr-20260522-oauth-token-share-cap`). Classifies why each token is unusable via `describeUnavailability(chatId)` for the refusal UI, naming every chat in the multi-owner case. Non-goals: the OAuth login flow itself (handled in settings UI), the launch-password gate (c3-203), persistent token storage (delegated to app-settings under c3-204 / c3-206 boundary), event sourcing — pool state is settings-backed by design because tokens are user secrets, not derivable from the event log.
 
 ## Foundational Flow
 
@@ -65,23 +65,27 @@ Maintains an in-memory reservation index plus token state machine over the OAuth
 
 | Surface | Direction | Contract | Boundary | Evidence |
 | --- | --- | --- | --- | --- |
-| pickActive(reservedFor?) | OUT | Returns LRU-eligible token for caller, binds reservation, revives expired-limited tokens; null when none eligible | c3-210 | src/server/oauth-pool/oauth-token-pool.ts |
-| pickEphemeral() | OUT | Returns EphemeralLease under synthetic key so concurrent ephemeral callers do not collide; caller MUST release() | c3-213 | src/server/oauth-pool/oauth-token-pool.ts |
-| markLimited(id, resetAt) | IN | Marks token limited until resetAt; drops reservation so chat can re-pick | c3-210 | src/server/oauth-pool/oauth-token-pool.ts |
-| markError(id, message) | IN | Marks token errored (401); drops reservation; persists message | c3-210 | src/server/oauth-pool/oauth-token-pool.ts |
-| markUsed(id) / markDisabled / markEnabled | IN | Update lastUsedAt / status transitions | c3-116 | src/server/oauth-pool/oauth-token-pool.ts |
-| release(reservedFor) | IN | Explicit drop of reservation when chat session closes | c3-210 | src/server/oauth-pool/oauth-token-pool.ts |
-| describeUnavailability(reservedFor?) | OUT | Returns per-token TokenUnavailability reasons so callers can build concrete refusals | c3-210 | src/server/oauth-pool/oauth-token-pool.ts |
-| hasAnyToken / hasUsable / allLimited / earliestUnlimit | OUT | Read-only probes for spawn-gate, schedule, and refusal logic | c3-210 | src/server/oauth-pool/oauth-token-pool.ts |
+| pickActive(reservedFor?) | OUT | Returns the LRU-eligible token for caller, binds reservation under refcounted Set<chatId>. A token admits up to tokenCap(token) distinct chats (per-token maxConcurrent or ClaudeAuthSettings.concurrencyDefault, clamped to [1,5]). Re-entrant pickActive returns the caller's already-owned token; otherwise spreads load by owner-count ASC then LRU. Revives expired-limited tokens. Null when none eligible. | c3-210 | src/server/oauth-pool/oauth-token-pool.ts |
+| pickEphemeral() | OUT | Returns EphemeralLease under synthetic key so concurrent ephemeral callers (quick-response, subagent oneShot) do not collide. Counts against the picked token's cap; release() frees the slot. | c3-213 | src/server/oauth-pool/oauth-token-pool.ts |
+| markLimited(id, resetAt) | IN | Marks token limited until resetAt; clears the local owner set. Caller MUST invoke takeStaleOwners(id) BEFORE markLimited to drive coordinated rotation for all shared owners. | c3-210 | src/server/oauth-pool/oauth-token-pool.ts |
+| markError(id, message) | IN | Marks token errored (401); clears the local owner set. Same takeStaleOwners precondition as markLimited. | c3-210 | src/server/oauth-pool/oauth-token-pool.ts |
+| markUsed(id) / markDisabled / markEnabled | IN | Update lastUsedAt / status transitions. markDisabled clears the owner set. | c3-116 | src/server/oauth-pool/oauth-token-pool.ts |
+| takeStaleOwners(id) | OUT | Returns the current owner list for a token and clears it. Called by the rotation layer immediately before mark{Limited,Error} so it learns every chat sharing the now-dead token and can stagger their respawns. | c3-210 | src/server/oauth-pool/oauth-token-pool.ts |
+| release(reservedFor) | IN | Drops the caller from every token's owner set; deletes a set entry when empty. Refcounted across cap-shared tokens. | c3-210 | src/server/oauth-pool/oauth-token-pool.ts |
+| describeUnavailability(reservedFor?) | OUT | Returns per-token TokenUnavailability reasons. When at cap, reason "reserved" carries byChatIds: string[] (the full owner list) and ownedBySelf for self-aware UI. | c3-210 | src/server/oauth-pool/oauth-token-pool.ts |
+| hasAnyToken / hasUsable / allLimited / earliestUnlimit | OUT | Read-only probes for spawn-gate, schedule, and refusal logic. hasUsable honors the same cap-aware eligibility predicate as pickActive (TOCTOU closed). | c3-210 | src/server/oauth-pool/oauth-token-pool.ts |
 
 ## Change Safety
 
 | Risk | Trigger | Detection | Required Verification |
 | --- | --- | --- | --- |
-| Same token handed to two chats | Edits to isEligible/reservedBy semantics break the owner check | New chat returns a token already bound to another running chat | bun test src/server/oauth-pool/ + smoke 2 concurrent chats |
-| TOCTOU between hasUsable preflight and pickActive | Eligibility predicate diverges between read-only and mutating paths | Refusal banner appears but pickActive would succeed (or vice versa) | bun test src/server/oauth-pool/ — hasUsable/pickActive parity tests |
-| Expired-limited token never revived | revive logic skipped post-sort | Token remains limited past limitedUntil and never picked again | bun test src/server/oauth-pool/ — revive test |
-| Refusal transcript entry loses chat reference | describeUnavailability output format changes, agent.ts buildPoolUnavailableMessage drift, or renderChatLinks regex drift | ResultMessage error body missing /chat/<id> link | bun test src/server/oauth-pool/ + src/client/components/messages/ResultMessage.test.tsx + manual refusal smoke (3 tokens, 2 limited, 1 reserved) |
+| Cap exceeded by concurrent picks | Edits to isEligible / pickActive admit more than tokenCap(token) chats | New chat returns a token already at cap | bun test src/server/oauth-pool/oauth-token-pool.test.ts (cap-admit + cap-reject cases) |
+| TOCTOU between hasUsable preflight and pickActive | Eligibility predicate diverges between read-only and mutating paths under cap-aware logic | Refusal banner appears but pickActive would succeed (or vice versa) | bun test src/server/oauth-pool/oauth-token-pool.test.ts — hasUsable/pickActive parity tests |
+| Expired-limited token never revived | Revive logic skipped post-sort | Token remains limited past limitedUntil and never picked again | bun test src/server/oauth-pool/oauth-token-pool.test.ts — revive test |
+| Refcount leak — release frees a slot still in use by another chat | release(chatId) clobbers entire Set instead of removing the single chat | A shared token reports fewer owners than reality; cap admits over the limit | bun test src/server/oauth-pool/oauth-token-pool.test.ts — release refcount case |
+| Rotation herd when N owners simultaneously detect limit/401 on shared token | acquireRotationSlot in agent.ts does not dedupe within TOKEN_ROTATION_DEDUPE_WINDOW_MS or skips stagger application | All N respawns fire at once; PTY cold-boot stampede; second pickActive on same chatId double-claims | Existing bun test src/server/agent.oauth-rotation.test.ts + manual smoke (cap=2 on one token, force 401, observe staggered respawn) |
+| PTY smoke-probe race on cold cache | smoke-test.ts singleflight removed or keyed wrong | Two concurrent probes hit Anthropic on the same OAuth token at boot — 429 cascade | bun test src/server/claude-pty/smoke-test.test.ts — singleflight collapse case |
+| Refusal transcript entry loses chat reference | describeUnavailability output format changes, agent.ts buildPoolUnavailableMessage drift, or renderChatLinks regex drift | ResultMessage error body missing /chat/<id> links for the multi-owner case | bun test src/server/oauth-pool/ + src/client/components/messages/ResultMessage.test.tsx |
 | Reservation pinned across restart | reservedBy persisted (it must not be) | Restart cannot pick any token until manual fix | reservedBy lives in memory only — confirmed by private readonly reservedBy = new Map(...) in oauth-token-pool.ts |
 
 ## Derived Materials

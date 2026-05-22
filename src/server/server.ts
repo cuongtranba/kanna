@@ -246,6 +246,8 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
         console.warn("[oauth-pool] token status write failed:", err)
       })
     },
+    Date.now,
+    () => appSettings.getSnapshot().claudeAuth.concurrencyDefault,
   )
   setQuickResponseOAuthPool(oauthPool)
 

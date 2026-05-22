@@ -536,6 +536,7 @@ export function createWsRouter({
     uploads: UPLOAD_DEFAULTS,
     subagents: [],
     claudeDriver: { ...CLAUDE_DRIVER_DEFAULTS, lifecycle: { ...CLAUDE_PTY_LIFECYCLE_DEFAULTS } },
+    globalPromptAppend: "",
   }
   const mergeAppSettingsPatch = (snapshot: AppSettingsSnapshot, patch: AppSettingsPatch): AppSettingsSnapshot => {
     let subagents = snapshot.subagents
@@ -604,6 +605,7 @@ export function createWsRouter({
       },
       claudeAuth: {
         tokens: patch.claudeAuth?.tokens ?? snapshot.claudeAuth.tokens,
+        concurrencyDefault: patch.claudeAuth?.concurrencyDefault ?? snapshot.claudeAuth.concurrencyDefault,
       },
       uploads: {
         ...snapshot.uploads,

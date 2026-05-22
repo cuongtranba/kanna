@@ -7,7 +7,7 @@ export type TokenStatusPatch = Partial<Pick<OAuthTokenEntry,
 export type TokenUnavailability =
   | { tokenId: string; label: string; reason: "available" }
   | { tokenId: string; label: string; reason: "limited"; until: number }
-  | { tokenId: string; label: string; reason: "reserved"; byChatId: string; ownedBySelf: boolean }
+  | { tokenId: string; label: string; reason: "reserved"; byChatIds: string[]; ownedBySelf: boolean }
   | { tokenId: string; label: string; reason: "error"; message: string | null }
   | { tokenId: string; label: string; reason: "disabled" }
 
@@ -21,11 +21,16 @@ export interface EphemeralLease {
   release(): void
 }
 
+const ABSOLUTE_MIN_CAP = 1
+const ABSOLUTE_MAX_CAP = 5
+
 export class OAuthTokenPool {
-  // tokenId -> chatId currently bound to that token. Prevents two
-  // concurrent sessions from being assigned the same OAuth token, including
-  // the rotation race when both sessions hit a rate-limit at once.
-  private readonly reservedBy = new Map<string, string>()
+  // tokenId -> set of chat ids currently bound to that token. A token may
+  // be bound by up to `tokenCap(token)` chats concurrently (see ADR
+  // adr-20260522-oauth-token-share-cap). Sharing is opt-in per token via
+  // OAuthTokenEntry.maxConcurrent; pool-wide default comes from
+  // ClaudeAuthSettings.concurrencyDefault via the readGlobalCap closure.
+  private readonly reservedBy = new Map<string, Set<string>>()
 
   // Monotonic counter for synthetic ephemeral reservation keys.
   private ephemeralSeq = 0
@@ -34,7 +39,23 @@ export class OAuthTokenPool {
     private readonly readTokens: () => OAuthTokenEntry[],
     private readonly writeStatus: (id: string, patch: TokenStatusPatch) => void,
     private readonly now: () => number = Date.now,
+    private readonly readGlobalCap: () => number = () => ABSOLUTE_MIN_CAP,
   ) {}
+
+  private tokenCap(t: OAuthTokenEntry): number {
+    const raw = typeof t.maxConcurrent === "number" && Number.isFinite(t.maxConcurrent)
+      ? t.maxConcurrent
+      : this.readGlobalCap()
+    if (!Number.isFinite(raw)) return ABSOLUTE_MIN_CAP
+    const rounded = Math.round(raw)
+    if (rounded < ABSOLUTE_MIN_CAP) return ABSOLUTE_MIN_CAP
+    if (rounded > ABSOLUTE_MAX_CAP) return ABSOLUTE_MAX_CAP
+    return rounded
+  }
+
+  private getOwners(tokenId: string): Set<string> {
+    return this.reservedBy.get(tokenId) ?? new Set()
+  }
 
   /**
    * Returns true iff the token is eligible at `now` for a caller with the
@@ -44,8 +65,9 @@ export class OAuthTokenPool {
    */
   private isEligible(t: OAuthTokenEntry, now: number, reservedFor: string | undefined): boolean {
     if (t.status === "error" || t.status === "disabled") return false
-    const owner = this.reservedBy.get(t.id)
-    if (owner !== undefined && owner !== reservedFor) return false
+    const owners = this.getOwners(t.id)
+    const reentrant = reservedFor !== undefined && owners.has(reservedFor)
+    if (!reentrant && owners.size >= this.tokenCap(t)) return false
     if (t.status === "limited") {
       if (t.limitedUntil !== null && t.limitedUntil > now) return false
     }
@@ -66,7 +88,27 @@ export class OAuthTokenPool {
       candidates.push(t)
     }
     if (candidates.length === 0) return null
-    candidates.sort((a, b) => (a.lastUsedAt ?? 0) - (b.lastUsedAt ?? 0))
+    // Re-entrant call: if the caller already owns one of the eligible
+    // tokens, return that one. Avoids churn on repeated pickActive(chatId)
+    // calls from the same chat that today expect a stable answer.
+    if (reservedFor !== undefined) {
+      const owned = candidates.find((t) => this.getOwners(t.id).has(reservedFor))
+      if (owned) {
+        if (owned.status === "limited") {
+          this.writeStatus(owned.id, { status: "active", limitedUntil: null })
+          return { ...owned, status: "active", limitedUntil: null }
+        }
+        return owned
+      }
+    }
+    // Spread load before stacking: prefer the token with the smallest
+    // current owner count, then break ties by least-recently-used.
+    candidates.sort((a, b) => {
+      const oa = this.getOwners(a.id).size
+      const ob = this.getOwners(b.id).size
+      if (oa !== ob) return oa - ob
+      return (a.lastUsedAt ?? 0) - (b.lastUsedAt ?? 0)
+    })
     const picked = candidates[0]
     if (picked.status === "limited") {
       this.writeStatus(picked.id, { status: "active", limitedUntil: null })
@@ -75,10 +117,13 @@ export class OAuthTokenPool {
       ? { ...picked, status: "active", limitedUntil: null }
       : picked
     if (reservedFor !== undefined) {
-      // A chat owns at most one token at a time — drop any prior reservation
-      // before binding to the new one.
-      this.releaseInternal(reservedFor)
-      this.reservedBy.set(result.id, reservedFor)
+      // A chat owns at most one token at a time across the pool — drop the
+      // caller from any other token's owner set before binding to the new
+      // one, but DO NOT clobber other owners of the picked token.
+      this.removeOwnerExcept(reservedFor, result.id)
+      const owners = this.reservedBy.get(result.id) ?? new Set<string>()
+      owners.add(reservedFor)
+      this.reservedBy.set(result.id, owners)
     }
     return result
   }
@@ -111,15 +156,29 @@ export class OAuthTokenPool {
   }
 
   private releaseInternal(reservedFor: string): void {
-    for (const [tokenId, owner] of this.reservedBy) {
-      if (owner === reservedFor) this.reservedBy.delete(tokenId)
+    for (const [tokenId, owners] of this.reservedBy) {
+      if (owners.delete(reservedFor) && owners.size === 0) {
+        this.reservedBy.delete(tokenId)
+      }
+    }
+  }
+
+  private removeOwnerExcept(reservedFor: string, exceptTokenId: string): void {
+    for (const [tokenId, owners] of this.reservedBy) {
+      if (tokenId === exceptTokenId) continue
+      if (owners.delete(reservedFor) && owners.size === 0) {
+        this.reservedBy.delete(tokenId)
+      }
     }
   }
 
   markLimited(id: string, resetAt: number): void {
     this.writeStatus(id, { status: "limited", limitedUntil: resetAt })
-    // A limited token cannot serve any session — drop any reservation so the
-    // owning chat can re-pick a different token without an explicit release.
+    // Limited token cannot serve any session. The rotation layer in
+    // agent.ts must call takeStaleOwners(id) BEFORE invoking markLimited
+    // so it learns which chats need a coordinated re-pick. We then clear
+    // the local reservation set so subsequent pickActive() does not see
+    // stale owners for the limited token.
     this.reservedBy.delete(id)
   }
 
@@ -129,20 +188,35 @@ export class OAuthTokenPool {
 
   markError(id: string, message: string): void {
     this.writeStatus(id, { status: "error", lastErrorAt: this.now(), lastErrorMessage: message })
-    // Drop any reservation — an errored token cannot serve sessions.
-    // Mirrors markLimited / markDisabled so the owning chat can immediately
-    // re-pick a different token via pickActive() without an explicit release.
+    // Drop reservations — an errored token cannot serve sessions. The
+    // rotation layer must call takeStaleOwners(id) BEFORE markError for
+    // coordinated re-pick.
     this.reservedBy.delete(id)
   }
 
   markDisabled(id: string): void {
     this.writeStatus(id, { status: "disabled" })
-    // Drop any reservation — a disabled token cannot serve sessions.
     this.reservedBy.delete(id)
   }
 
   markEnabled(id: string): void {
     this.writeStatus(id, { status: "active" })
+  }
+
+  /**
+   * Returns and clears the owner set associated with a token. The
+   * rotation layer in agent.ts calls this immediately BEFORE markLimited
+   * / markError so it learns which chats were sharing the token and can
+   * drive a coordinated, deduped, staggered re-pick for each. Mirrors
+   * release(chatId) lifetime semantics: a removed owner is no longer
+   * counted against the token's cap.
+   */
+  takeStaleOwners(id: string): string[] {
+    const owners = this.reservedBy.get(id)
+    if (!owners || owners.size === 0) return []
+    const out = [...owners]
+    this.reservedBy.delete(id)
+    return out
   }
 
   /**
@@ -184,7 +258,7 @@ export class OAuthTokenPool {
   /**
    * Per-token reason why this token is unusable by `reservedFor` right now.
    * Returns one entry per token in the pool, used by callers to build a
-   * concrete refusal error ("Phong is in use by chat 'feature work'") instead
+   * concrete refusal error ("Phong is in use by N chats") instead
    * of the generic "all tokens unavailable" string.
    */
   describeUnavailability(reservedFor?: string): TokenUnavailability[] {
@@ -200,9 +274,11 @@ export class OAuthTokenPool {
         out.push({ ...base, reason: "error", message: t.lastErrorMessage ?? null })
         continue
       }
-      const owner = this.reservedBy.get(t.id)
-      if (owner !== undefined && owner !== reservedFor) {
-        out.push({ ...base, reason: "reserved", byChatId: owner, ownedBySelf: false })
+      const owners = this.getOwners(t.id)
+      const ownedBySelf = reservedFor !== undefined && owners.has(reservedFor)
+      const atCap = owners.size >= this.tokenCap(t)
+      if (atCap && !ownedBySelf) {
+        out.push({ ...base, reason: "reserved", byChatIds: [...owners], ownedBySelf })
         continue
       }
       if (t.status === "limited" && t.limitedUntil !== null && t.limitedUntil > now) {

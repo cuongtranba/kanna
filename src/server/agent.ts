@@ -1090,6 +1090,16 @@ function extractBackgroundTaskId(content: unknown): string | null {
 }
 
 const TOKEN_ROTATION_SCHEDULE_DELAY_MS = 100
+// When a single OAuth token is shared by N chats (per
+// adr-20260522-oauth-token-share-cap), all N chats can detect the same
+// rate-limit / auth-error simultaneously. Each respawn (esp. under PTY) is
+// expensive; offset them by this many ms per additional victim so the cold-
+// boot herd spreads across roughly a second instead of stampeding.
+const TOKEN_ROTATION_HERD_STAGGER_MS = 250
+// Dedupe window for repeat rotation events on the same tokenId. Within this
+// window, secondary detectors only increment the stagger counter; they do
+// not double-mark the pool or double-pick a fresh target via pickActive().
+const TOKEN_ROTATION_DEDUPE_WINDOW_MS = 5_000
 const DEFAULT_CLAUDE_SESSION_IDLE_MS = 10 * 60 * 1000
 const DEFAULT_CLAUDE_SESSION_MAX_RESIDENT = 4
 const DEFAULT_CLAUDE_SESSION_SWEEP_INTERVAL_MS = 60 * 1000
@@ -1141,6 +1151,12 @@ export class AgentCoordinator {
   }
   private readonly throwOnClaudeSessionStart: boolean
   private readonly autoResumeByChat = new Map<string, boolean>()
+  // Per-tokenId rotation dedupe state. When a shared OAuth token throws
+  // limit/auth-error against N chats simultaneously, only the first chat
+  // pays the cost of marking the pool + picking a fresh target; subsequent
+  // chats within TOKEN_ROTATION_DEDUPE_WINDOW_MS reuse the dedupe slot to
+  // stagger their respawns by TOKEN_ROTATION_HERD_STAGGER_MS each.
+  private readonly tokenRotationDedupe = new Map<string, { firstSeenAt: number; staggerCount: number }>()
   // Per-chat circuit breaker for proactive `/compact` injection lives in the
   // persisted ChatRecord (`compactFailureCount`): increments on every compact
   // attempt that fails (turn errored / cancelled) and resets on success.
@@ -1430,9 +1446,13 @@ export class AgentCoordinator {
       if (u.reason === "limited") {
         lines.push(`  - ${label}: rate-limited (~${fmtTime(u.until)} remaining)`)
       } else if (u.reason === "reserved") {
-        const chat = this.store.getChat(u.byChatId)
-        const title = chat?.title || `chat ${u.byChatId.slice(0, 8)}`
-        lines.push(`  - ${label}: in use by [${title}](/chat/${u.byChatId})`)
+        const refs = u.byChatIds.map((id) => {
+          const chat = this.store.getChat(id)
+          const title = chat?.title || `chat ${id.slice(0, 8)}`
+          return `[${title}](/chat/${id})`
+        })
+        const joined = refs.length === 0 ? "another chat" : refs.join(", ")
+        lines.push(`  - ${label}: in use by ${joined}`)
       } else if (u.reason === "error") {
         lines.push(`  - ${label}: errored${u.message ? ` (${u.message})` : ""}`)
       } else if (u.reason === "disabled") {
@@ -3066,6 +3086,26 @@ export class AgentCoordinator {
     if (scheduledAt <= Date.now()) throw new Error("scheduledAt must be in the future")
   }
 
+  /**
+   * Returns the additional scheduling delay (ms) for a respawn caused by a
+   * rotation event on `tokenId`. The first detector in a
+   * TOKEN_ROTATION_DEDUPE_WINDOW_MS window gets 0; each later detector gets
+   * an additional TOKEN_ROTATION_HERD_STAGGER_MS so PTY cold-boots spread
+   * out instead of stampeding. Also reports whether this caller is the
+   * first detector (used to skip duplicate markLimited/markError calls).
+   */
+  private acquireRotationSlot(tokenId: string | null): { extraDelayMs: number; isFirst: boolean } {
+    if (!tokenId) return { extraDelayMs: 0, isFirst: true }
+    const now = Date.now()
+    const existing = this.tokenRotationDedupe.get(tokenId)
+    if (!existing || now - existing.firstSeenAt > TOKEN_ROTATION_DEDUPE_WINDOW_MS) {
+      this.tokenRotationDedupe.set(tokenId, { firstSeenAt: now, staggerCount: 0 })
+      return { extraDelayMs: 0, isFirst: true }
+    }
+    existing.staggerCount += 1
+    return { extraDelayMs: existing.staggerCount * TOKEN_ROTATION_HERD_STAGGER_MS, isFirst: false }
+  }
+
   private async handleLimitError(chatId: string, detector: LimitDetector, error: unknown): Promise<boolean> {
     const detection = detector.detect(chatId, error)
     if (!detection) return false
@@ -3077,21 +3117,24 @@ export class AgentCoordinator {
     if (live !== null) return true
 
     const session = this.claudeSessions.get(chatId)
-    if (this.oauthPool && session?.activeTokenId) {
-      this.oauthPool.markLimited(session.activeTokenId, detection.resetAt)
+    const limitedTokenId = session?.activeTokenId ?? null
+    const slot = this.acquireRotationSlot(limitedTokenId)
+    if (this.oauthPool && limitedTokenId && slot.isFirst) {
+      this.oauthPool.markLimited(limitedTokenId, detection.resetAt)
     }
     const rotationTarget = this.oauthPool?.pickActive(chatId) ?? null
     const canRotate = rotationTarget !== null
-      && (!session?.activeTokenId || rotationTarget.id !== session.activeTokenId)
+      && (!limitedTokenId || rotationTarget.id !== limitedTokenId)
 
     if (this.oauthPool) {
       console.log("[oauth-pool] rate-limit detected", {
         chatId,
-        markedLimitedTokenId: session?.activeTokenId ?? null,
+        markedLimitedTokenId: limitedTokenId,
         resetAt: new Date(detection.resetAt).toISOString(),
         tz: detection.tz,
         nextTokenId: rotationTarget?.id ?? null,
         canRotate,
+        herdSlot: slot,
       })
     }
 
@@ -3112,7 +3155,7 @@ export class AgentCoordinator {
       ? {
           ...base,
           kind: "auto_continue_accepted",
-          scheduledAt: now + TOKEN_ROTATION_SCHEDULE_DELAY_MS,
+          scheduledAt: now + TOKEN_ROTATION_SCHEDULE_DELAY_MS + slot.extraDelayMs,
           tz: detection.tz,
           source: "token_rotation",
           resetAt: detection.resetAt,
@@ -3185,20 +3228,23 @@ export class AgentCoordinator {
     const live = deriveChatSchedules(this.store.getAutoContinueEvents(chatId), chatId).liveScheduleId
     if (live !== null) return true
 
-    if (this.oauthPool && session.activeTokenId) {
-      this.oauthPool.markError(session.activeTokenId, detection.reason)
+    const erroredTokenId = session.activeTokenId
+    const slot = this.acquireRotationSlot(erroredTokenId)
+    if (this.oauthPool && erroredTokenId && slot.isFirst) {
+      this.oauthPool.markError(erroredTokenId, detection.reason)
     }
     const rotationTarget = this.oauthPool?.pickActive(chatId) ?? null
     const canRotate = rotationTarget !== null
-      && (!session.activeTokenId || rotationTarget.id !== session.activeTokenId)
+      && (!erroredTokenId || rotationTarget.id !== erroredTokenId)
 
     if (this.oauthPool) {
       console.log("[oauth-pool] auth-error detected", {
         chatId,
-        markedErrorTokenId: session.activeTokenId ?? null,
+        markedErrorTokenId: erroredTokenId,
         reason: detection.reason,
         nextTokenId: rotationTarget?.id ?? null,
         canRotate,
+        herdSlot: slot,
       })
     }
 
@@ -3212,7 +3258,7 @@ export class AgentCoordinator {
       ? {
           ...base,
           kind: "auto_continue_accepted",
-          scheduledAt: now + TOKEN_ROTATION_SCHEDULE_DELAY_MS,
+          scheduledAt: now + TOKEN_ROTATION_SCHEDULE_DELAY_MS + slot.extraDelayMs,
           tz: "system",
           source: "token_rotation",
           resetAt: now,

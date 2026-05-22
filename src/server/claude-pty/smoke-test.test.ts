@@ -85,6 +85,70 @@ describe("createSmokeTestGate", () => {
   })
 })
 
+describe("createSmokeTestGate singleflight (adr-20260522-oauth-token-share-cap)", () => {
+  test("concurrent canSpawn calls on same (sha,model) collapse to one probe", async () => {
+    let probeStartCount = 0
+    const resolvers: Array<(r: "pass" | "fail") => void> = []
+    const probe: SmokeTestProbeFn = () => {
+      probeStartCount += 1
+      return new Promise<"pass" | "fail">((r) => { resolvers.push(r) })
+    }
+    const cache = inMemoryCache()
+    const gate = createSmokeTestGate({ probe, cache, ttlMs: 24 * 3600 * 1000, now: () => Date.now() })
+
+    const results = [
+      gate.canSpawn({ binarySha256: "fff", model: "m1" }),
+      gate.canSpawn({ binarySha256: "fff", model: "m1" }),
+      gate.canSpawn({ binarySha256: "fff", model: "m1" }),
+      gate.canSpawn({ binarySha256: "fff", model: "m1" }),
+      gate.canSpawn({ binarySha256: "fff", model: "m1" }),
+    ]
+    // Give the event loop one tick so each promise registers with inFlight.
+    await Promise.resolve()
+    expect(probeStartCount).toBe(1)
+    expect(resolvers).toHaveLength(1)
+    resolvers[0]("pass")
+    const resolved = await Promise.all(results)
+    for (const r of resolved) expect(r.ok).toBe(true)
+    expect(probeStartCount).toBe(1)
+  })
+
+  test("after a probe resolves, future cache-miss callers run a fresh probe", async () => {
+    let probeStartCount = 0
+    const probe: SmokeTestProbeFn = async () => { probeStartCount += 1; return "pass" }
+    const cache: SmokeTestCache = {
+      // Read-only cache: every get returns null so the gate must probe each time.
+      async get() { return null },
+      async set() { /* discard */ },
+      async invalidate() { /* noop */ },
+    }
+    const gate = createSmokeTestGate({ probe, cache, ttlMs: 24 * 3600 * 1000, now: () => Date.now() })
+    await gate.canSpawn({ binarySha256: "ggg", model: "m1" })
+    await gate.canSpawn({ binarySha256: "ggg", model: "m1" })
+    // Two sequential cache-miss calls → two probes (singleflight only collapses concurrent ones).
+    expect(probeStartCount).toBe(2)
+  })
+
+  test("singleflight is keyed by (sha,model) — different keys probe independently", async () => {
+    let probeStartCount = 0
+    const resolvers: Array<(r: "pass" | "fail") => void> = []
+    const probe: SmokeTestProbeFn = () => {
+      probeStartCount += 1
+      return new Promise<"pass" | "fail">((r) => { resolvers.push(r) })
+    }
+    const cache = inMemoryCache()
+    const gate = createSmokeTestGate({ probe, cache, ttlMs: 24 * 3600 * 1000, now: () => Date.now() })
+    const a = gate.canSpawn({ binarySha256: "hhh", model: "m1" })
+    const b = gate.canSpawn({ binarySha256: "hhh", model: "m2" })
+    await Promise.resolve()
+    expect(probeStartCount).toBe(2)
+    expect(resolvers).toHaveLength(2)
+    resolvers[0]("pass")
+    resolvers[1]("pass")
+    await Promise.all([a, b])
+  })
+})
+
 describe("createFileSmokeTestCache", () => {
   test("round-trips an entry through disk", async () => {
     const dir = path.join(workHome, "smoke-cache")

@@ -1,6 +1,12 @@
 import { useState } from "react"
 import { Trash2, FlaskConical, Power, PowerOff } from "lucide-react"
-import type { ClaudeAuthSettings, OAuthTokenEntry } from "../../../shared/types"
+import {
+  type ClaudeAuthSettings,
+  type OAuthTokenEntry,
+  OAUTH_TOKEN_CONCURRENCY_DEFAULT,
+  OAUTH_TOKEN_MAX_CONCURRENT_MAX,
+  OAUTH_TOKEN_MAX_CONCURRENT_MIN,
+} from "../../../shared/types"
 import { maskToken } from "../../lib/oauthTokenMask"
 import { Input } from "../ui/input"
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "../ui/tooltip"
@@ -22,10 +28,19 @@ function formatLimitedUntil(msUntilReset: number): string {
 
 export interface OAuthTokenPoolCardProps {
   tokens: OAuthTokenEntry[]
+  concurrencyDefault: number
   onWrite: (patch: Partial<ClaudeAuthSettings>) => Promise<void>
   onTest: (token: string) => Promise<{ ok: boolean; error: string | null }>
   /** Timestamp override for test determinism; defaults to Date.now() at render. */
   now?: number
+}
+
+function clampCap(raw: number): number {
+  if (!Number.isFinite(raw)) return OAUTH_TOKEN_CONCURRENCY_DEFAULT
+  const r = Math.round(raw)
+  if (r < OAUTH_TOKEN_MAX_CONCURRENT_MIN) return OAUTH_TOKEN_MAX_CONCURRENT_MIN
+  if (r > OAUTH_TOKEN_MAX_CONCURRENT_MAX) return OAUTH_TOKEN_MAX_CONCURRENT_MAX
+  return r
 }
 
 // ─── status pill ─────────────────────────────────────────────────────────────
@@ -92,16 +107,20 @@ function TokenRow({
   entry,
   now,
   isCurrent,
+  concurrencyDefault,
   onRemove,
   onToggleDisabled,
   onTest,
+  onChangeMaxConcurrent,
 }: {
   entry: OAuthTokenEntry
   now: number
   isCurrent: boolean
+  concurrencyDefault: number
   onRemove: () => void
   onToggleDisabled: () => void
   onTest: (token: string) => Promise<{ ok: boolean; error: string | null }>
+  onChangeMaxConcurrent: (id: string, value: number) => void
 }) {
   const [testResult, setTestResult] = useState<string | null>(null)
   const [testing, setTesting] = useState(false)
@@ -123,6 +142,7 @@ function TokenRow({
   }
 
   const isDisabled = entry.status === "disabled"
+  const effectiveCap = entry.maxConcurrent ?? concurrencyDefault
 
   return (
     <div className="flex items-center justify-between gap-3 border-t border-border py-3">
@@ -144,6 +164,19 @@ function TokenRow({
 
       {/* right: transient test result + action buttons */}
       <div className="flex shrink-0 items-center gap-2">
+        <label className="inline-flex items-center gap-1 text-xs text-muted-foreground" title="Maximum concurrent chats sharing this OAuth token. Higher = risks Anthropic rate limits.">
+          <span>Concurrent</span>
+          <Input
+            type="number"
+            value={effectiveCap}
+            onChange={(e) => onChangeMaxConcurrent(entry.id, clampCap(Number(e.target.value)))}
+            min={OAUTH_TOKEN_MAX_CONCURRENT_MIN}
+            max={OAUTH_TOKEN_MAX_CONCURRENT_MAX}
+            aria-label="Max concurrent chats"
+            className="h-7 w-14 text-xs"
+            disabled={isDisabled}
+          />
+        </label>
         {testResult !== null && (
           <span className="text-xs text-muted-foreground">{testResult}</span>
         )}
@@ -268,6 +301,7 @@ function AddTokenForm({
 
 export function OAuthTokenPoolCard({
   tokens,
+  concurrencyDefault,
   onWrite,
   onTest,
   now: nowProp,
@@ -294,17 +328,46 @@ export function OAuthTokenPoolCard({
     })
   }
 
+  const handleChangeMaxConcurrent = (id: string, value: number) => {
+    void onWrite({
+      tokens: tokens.map((t) =>
+        t.id === id ? { ...t, maxConcurrent: value } : t,
+      ),
+    })
+  }
+
+  const handleChangeGlobalDefault = (value: number) => {
+    void onWrite({ concurrencyDefault: clampCap(value) })
+  }
+
   return (
     <div>
+      <div className="flex items-center justify-between gap-3 pb-3">
+        <label className="flex flex-col gap-0.5 text-sm" title="Default concurrent-chat cap applied to any OAuth token whose row does not override it. Sharing across N chats burns Anthropic quota and risks 429s.">
+          <span className="font-medium text-foreground">Default concurrency per token</span>
+          <span className="text-xs text-muted-foreground">Cap for tokens without an explicit per-row override. Range {OAUTH_TOKEN_MAX_CONCURRENT_MIN}–{OAUTH_TOKEN_MAX_CONCURRENT_MAX}.</span>
+        </label>
+        <Input
+          type="number"
+          value={concurrencyDefault}
+          onChange={(e) => handleChangeGlobalDefault(Number(e.target.value))}
+          min={OAUTH_TOKEN_MAX_CONCURRENT_MIN}
+          max={OAUTH_TOKEN_MAX_CONCURRENT_MAX}
+          aria-label="Default concurrency per token"
+          className="h-8 w-16 text-sm"
+        />
+      </div>
       {tokens.map((entry) => (
         <TokenRow
           key={entry.id}
           entry={entry}
           now={now}
           isCurrent={entry.id === currentId}
+          concurrencyDefault={concurrencyDefault}
           onRemove={() => handleRemove(entry.id)}
           onToggleDisabled={() => handleToggleDisabled(entry.id)}
           onTest={onTest}
+          onChangeMaxConcurrent={handleChangeMaxConcurrent}
         />
       ))}
 

@@ -118,6 +118,7 @@ const DEFAULT_APP_SETTINGS_SNAPSHOT: AppSettingsSnapshot = {
   uploads: UPLOAD_DEFAULTS,
   subagents: [],
   claudeDriver: { ...CLAUDE_DRIVER_DEFAULTS, lifecycle: { ...CLAUDE_PTY_LIFECYCLE_DEFAULTS } },
+  globalPromptAppend: "",
 }
 
 describe("isBenignStaleStateMessage", () => {

@@ -25,7 +25,10 @@ import {
   normalizeClaudeContextWindow,
   normalizeClaudeModelId,
   normalizeCodexModelId,
+  OAUTH_TOKEN_CONCURRENCY_DEFAULT,
   OAUTH_TOKEN_LABEL_MAX,
+  OAUTH_TOKEN_MAX_CONCURRENT_MAX,
+  OAUTH_TOKEN_MAX_CONCURRENT_MIN,
   OAUTH_TOKEN_VALUE_MAX,
   supportsClaudeMaxReasoningEffort,
   UPLOAD_DEFAULTS,
@@ -454,6 +457,27 @@ function normalizeTokenEntry(value: unknown, warnings: string[]): OAuthTokenEntr
   const label = typeof src.label === "string" && src.label.trim()
     ? src.label.trim().slice(0, OAUTH_TOKEN_LABEL_MAX)
     : id
+  let maxConcurrent: number | undefined
+  if (src.maxConcurrent !== undefined) {
+    if (typeof src.maxConcurrent !== "number" || !Number.isFinite(src.maxConcurrent)) {
+      warnings.push("claudeAuth.tokens entry maxConcurrent must be a number")
+    } else if (
+      src.maxConcurrent < OAUTH_TOKEN_MAX_CONCURRENT_MIN
+      || src.maxConcurrent > OAUTH_TOKEN_MAX_CONCURRENT_MAX
+    ) {
+      warnings.push(
+        `claudeAuth.tokens entry maxConcurrent must be between ${OAUTH_TOKEN_MAX_CONCURRENT_MIN} and ${OAUTH_TOKEN_MAX_CONCURRENT_MAX}`,
+      )
+      maxConcurrent = clampNumber(
+        src.maxConcurrent,
+        OAUTH_TOKEN_CONCURRENCY_DEFAULT,
+        OAUTH_TOKEN_MAX_CONCURRENT_MIN,
+        OAUTH_TOKEN_MAX_CONCURRENT_MAX,
+      )
+    } else {
+      maxConcurrent = Math.round(src.maxConcurrent)
+    }
+  }
   return {
     id,
     label,
@@ -464,6 +488,7 @@ function normalizeTokenEntry(value: unknown, warnings: string[]): OAuthTokenEntr
     lastErrorAt: typeof src.lastErrorAt === "number" && Number.isFinite(src.lastErrorAt) ? src.lastErrorAt : null,
     lastErrorMessage: typeof src.lastErrorMessage === "string" ? src.lastErrorMessage : null,
     addedAt: typeof src.addedAt === "number" && Number.isFinite(src.addedAt) ? src.addedAt : Date.now(),
+    ...(maxConcurrent !== undefined ? { maxConcurrent } : {}),
   }
 }
 
@@ -546,7 +571,7 @@ function normalizeClaudeAuth(value: unknown, warnings: string[]): ClaudeAuthSett
     warnings.push("claudeAuth must be an object")
     return { ...CLAUDE_AUTH_DEFAULTS }
   }
-  const src = value as { tokens?: unknown }
+  const src = value as { tokens?: unknown; concurrencyDefault?: unknown }
   if (src.tokens !== undefined && !Array.isArray(src.tokens)) {
     warnings.push("claudeAuth.tokens must be an array")
     return { ...CLAUDE_AUTH_DEFAULTS }
@@ -556,7 +581,28 @@ function normalizeClaudeAuth(value: unknown, warnings: string[]): ClaudeAuthSett
     const entry = normalizeTokenEntry(raw, warnings)
     if (entry) tokens.push(entry)
   }
-  return { tokens }
+  let concurrencyDefault = OAUTH_TOKEN_CONCURRENCY_DEFAULT
+  if (src.concurrencyDefault !== undefined) {
+    if (typeof src.concurrencyDefault !== "number" || !Number.isFinite(src.concurrencyDefault)) {
+      warnings.push("claudeAuth.concurrencyDefault must be a number")
+    } else if (
+      src.concurrencyDefault < OAUTH_TOKEN_MAX_CONCURRENT_MIN
+      || src.concurrencyDefault > OAUTH_TOKEN_MAX_CONCURRENT_MAX
+    ) {
+      warnings.push(
+        `claudeAuth.concurrencyDefault must be between ${OAUTH_TOKEN_MAX_CONCURRENT_MIN} and ${OAUTH_TOKEN_MAX_CONCURRENT_MAX}`,
+      )
+      concurrencyDefault = clampNumber(
+        src.concurrencyDefault,
+        OAUTH_TOKEN_CONCURRENCY_DEFAULT,
+        OAUTH_TOKEN_MAX_CONCURRENT_MIN,
+        OAUTH_TOKEN_MAX_CONCURRENT_MAX,
+      )
+    } else {
+      concurrencyDefault = Math.round(src.concurrencyDefault)
+    }
+  }
+  return { tokens, concurrencyDefault }
 }
 
 function toFilePayload(state: AppSettingsState) {
@@ -794,6 +840,7 @@ function applyPatch(state: AppSettingsState, patch: AppSettingsPatch): AppSettin
     },
     claudeAuth: {
       tokens: patch.claudeAuth?.tokens ?? state.claudeAuth.tokens,
+      concurrencyDefault: patch.claudeAuth?.concurrencyDefault ?? state.claudeAuth.concurrencyDefault,
     },
     uploads: {
       ...state.uploads,
@@ -955,6 +1002,17 @@ export class AppSettingsManager {
   async setClaudeAuth(patch: Partial<ClaudeAuthSettings>) {
     if (patch.tokens !== undefined && !Array.isArray(patch.tokens)) {
       throw new Error("claudeAuth.tokens must be an array")
+    }
+    if (patch.concurrencyDefault !== undefined) {
+      const v = patch.concurrencyDefault
+      if (typeof v !== "number" || !Number.isFinite(v)) {
+        throw new Error("claudeAuth.concurrencyDefault must be a number")
+      }
+      if (v < OAUTH_TOKEN_MAX_CONCURRENT_MIN || v > OAUTH_TOKEN_MAX_CONCURRENT_MAX) {
+        throw new Error(
+          `claudeAuth.concurrencyDefault must be between ${OAUTH_TOKEN_MAX_CONCURRENT_MIN} and ${OAUTH_TOKEN_MAX_CONCURRENT_MAX}`,
+        )
+      }
     }
     return this.writePatch({ claudeAuth: patch })
   }

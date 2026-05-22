@@ -50,6 +50,7 @@ export function mergeAppSettingsPatch(
     },
     claudeAuth: {
       tokens: patch.claudeAuth?.tokens ?? settings.claudeAuth.tokens,
+      concurrencyDefault: patch.claudeAuth?.concurrencyDefault ?? settings.claudeAuth.concurrencyDefault,
     },
     auth: {
       ...settings.auth,

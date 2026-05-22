@@ -522,7 +522,7 @@ describe("OAuthTokenPool.describeUnavailability", () => {
     const byId = new Map(result.map((r) => [r.tokenId, r]))
     expect(byId.get("a")).toEqual({ tokenId: "a", label: "personal", reason: "limited", until: 5000 })
     expect(byId.get("b")).toEqual({ tokenId: "b", label: "company", reason: "limited", until: 6000 })
-    expect(byId.get("c")).toEqual({ tokenId: "c", label: "Phong", reason: "reserved", byChatId: "chat-other", ownedBySelf: false })
+    expect(byId.get("c")).toEqual({ tokenId: "c", label: "Phong", reason: "reserved", byChatIds: ["chat-other"], ownedBySelf: false })
     expect(byId.get("d")).toEqual({ tokenId: "d", label: "old", reason: "error", message: "401" })
     expect(byId.get("e")).toEqual({ tokenId: "e", label: "off", reason: "disabled" })
   })
@@ -546,5 +546,116 @@ describe("OAuthTokenPool.describeUnavailability", () => {
     expect(pool.describeUnavailability("chat-self")).toEqual([
       { tokenId: "a", label: "x", reason: "available" },
     ])
+  })
+})
+
+describe("OAuthTokenPool concurrency cap (adr-20260522-oauth-token-share-cap)", () => {
+  test("per-token maxConcurrent=2 admits two chats, blocks third", () => {
+    const pool = new OAuthTokenPool(
+      () => [tok("a", { maxConcurrent: 2 })],
+      () => {}, () => 1000,
+    )
+    expect(pool.pickActive("chat-1")?.id).toBe("a")
+    expect(pool.pickActive("chat-2")?.id).toBe("a")
+    expect(pool.pickActive("chat-3")).toBe(null)
+  })
+
+  test("release of one shared owner frees a cap slot", () => {
+    const pool = new OAuthTokenPool(
+      () => [tok("a", { maxConcurrent: 2 })],
+      () => {}, () => 1000,
+    )
+    pool.pickActive("chat-1")
+    pool.pickActive("chat-2")
+    expect(pool.pickActive("chat-3")).toBe(null)
+    pool.release("chat-1")
+    expect(pool.pickActive("chat-3")?.id).toBe("a")
+    // chat-2 still owns it, so chat-1 cannot crash-overcommit
+    pool.release("chat-3")
+    expect(pool.describeUnavailability("chat-4")).toEqual([
+      { tokenId: "a", label: "a", reason: "available" },
+    ])
+  })
+
+  test("global default cap applies when token omits maxConcurrent", () => {
+    const pool = new OAuthTokenPool(
+      () => [tok("a")],
+      () => {}, () => 1000,
+      () => 3, // global cap = 3
+    )
+    expect(pool.pickActive("c1")?.id).toBe("a")
+    expect(pool.pickActive("c2")?.id).toBe("a")
+    expect(pool.pickActive("c3")?.id).toBe("a")
+    expect(pool.pickActive("c4")).toBe(null)
+  })
+
+  test("per-token maxConcurrent overrides global default", () => {
+    const pool = new OAuthTokenPool(
+      () => [tok("a", { maxConcurrent: 1 }), tok("b", { maxConcurrent: 2 })],
+      () => {}, () => 1000,
+      () => 5,
+    )
+    // a (cap=1) and b (cap=2) both available; a wins LRU but cap=1 means
+    // chat-2 falls through to b.
+    expect(pool.pickActive("chat-1")?.id).toBe("a")
+    expect(pool.pickActive("chat-2")?.id).toBe("b")
+    expect(pool.pickActive("chat-3")?.id).toBe("b")
+    expect(pool.pickActive("chat-4")).toBe(null)
+  })
+
+  test("pickActive spreads load by owner count before LRU tiebreaker", () => {
+    const pool = new OAuthTokenPool(
+      () => [tok("a", { maxConcurrent: 2, lastUsedAt: 1 }), tok("b", { maxConcurrent: 2, lastUsedAt: 2 })],
+      () => {}, () => 1000,
+    )
+    // a is LRU-first. chat-1 picks a. chat-2 should pick b (owner count
+    // 0 < a's 1), not stack on a.
+    expect(pool.pickActive("chat-1")?.id).toBe("a")
+    expect(pool.pickActive("chat-2")?.id).toBe("b")
+  })
+
+  test("release scans all sets — refcount semantics", () => {
+    const pool = new OAuthTokenPool(
+      () => [tok("a", { maxConcurrent: 3 })],
+      () => {}, () => 1000,
+    )
+    pool.pickActive("c1")
+    pool.pickActive("c2")
+    pool.pickActive("c3")
+    pool.release("c2")
+    // c1, c3 still own the token; new chat blocked because 2/3.
+    // Add a new chat (c4) — should fit since 1 slot free.
+    expect(pool.pickActive("c4")?.id).toBe("a")
+    // Now 3/3 again, c5 blocked.
+    expect(pool.pickActive("c5")).toBe(null)
+  })
+
+  test("takeStaleOwners returns and clears the owner set", () => {
+    const pool = new OAuthTokenPool(
+      () => [tok("a", { maxConcurrent: 2 })],
+      () => {}, () => 1000,
+    )
+    pool.pickActive("chat-1")
+    pool.pickActive("chat-2")
+    const taken = pool.takeStaleOwners("a").sort()
+    expect(taken).toEqual(["chat-1", "chat-2"])
+    // Owners cleared — token immediately available again.
+    expect(pool.pickActive("chat-3")?.id).toBe("a")
+  })
+
+  test("describeUnavailability lists all owners when token at cap", () => {
+    const pool = new OAuthTokenPool(
+      () => [tok("a", { label: "shared", maxConcurrent: 2 })],
+      () => {}, () => 1000,
+    )
+    pool.pickActive("chat-1")
+    pool.pickActive("chat-2")
+    const result = pool.describeUnavailability("chat-3")
+    expect(result).toHaveLength(1)
+    const entry = result[0]
+    expect(entry.reason).toBe("reserved")
+    if (entry.reason !== "reserved") return
+    expect(entry.byChatIds.sort()).toEqual(["chat-1", "chat-2"])
+    expect(entry.ownedBySelf).toBe(false)
   })
 })

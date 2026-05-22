@@ -22,6 +22,7 @@ describe("OAuthTokenPoolCard", () => {
   test("renders empty state with the inline add form", () => {
     const html = renderToStaticMarkup(
       <OAuthTokenPoolCard
+        concurrencyDefault={1}
         tokens={[]}
         onWrite={async () => {}}
         onTest={async () => ({ ok: true, error: null })}
@@ -35,6 +36,7 @@ describe("OAuthTokenPoolCard", () => {
   test("renders one row per token with masked value and label", () => {
     const html = renderToStaticMarkup(
       <OAuthTokenPoolCard
+        concurrencyDefault={1}
         tokens={[makeToken()]}
         onWrite={async () => {}}
         onTest={async () => ({ ok: true, error: null })}
@@ -47,6 +49,7 @@ describe("OAuthTokenPoolCard", () => {
   test("renders Active pill for active tokens", () => {
     const html = renderToStaticMarkup(
       <OAuthTokenPoolCard
+        concurrencyDefault={1}
         tokens={[makeToken({ status: "active" })]}
         onWrite={async () => {}}
         onTest={async () => ({ ok: true, error: null })}
@@ -59,6 +62,7 @@ describe("OAuthTokenPoolCard", () => {
     const limited = makeToken({ status: "limited", limitedUntil: 60_000 })
     const html = renderToStaticMarkup(
       <OAuthTokenPoolCard
+        concurrencyDefault={1}
         tokens={[limited]}
         now={0}
         onWrite={async () => {}}
@@ -73,6 +77,7 @@ describe("OAuthTokenPoolCard", () => {
     const errToken = makeToken({ status: "error", lastErrorMessage: "rate limit exceeded" })
     const html = renderToStaticMarkup(
       <OAuthTokenPoolCard
+        concurrencyDefault={1}
         tokens={[errToken]}
         onWrite={async () => {}}
         onTest={async () => ({ ok: true, error: null })}
@@ -85,6 +90,7 @@ describe("OAuthTokenPoolCard", () => {
   test("Add button is present and disabled when inputs are blank", () => {
     const html = renderToStaticMarkup(
       <OAuthTokenPoolCard
+        concurrencyDefault={1}
         tokens={[]}
         onWrite={async () => {}}
         onTest={async () => ({ ok: true, error: null })}
@@ -99,6 +105,7 @@ describe("OAuthTokenPoolCard", () => {
   test("renders Test and Remove buttons for each token row", () => {
     const html = renderToStaticMarkup(
       <OAuthTokenPoolCard
+        concurrencyDefault={1}
         tokens={[makeToken()]}
         onWrite={async () => {}}
         onTest={async () => ({ ok: true, error: null })}
@@ -116,6 +123,7 @@ describe("OAuthTokenPoolCard", () => {
     ]
     const html = renderToStaticMarkup(
       <OAuthTokenPoolCard
+        concurrencyDefault={1}
         tokens={tokens}
         onWrite={async () => {}}
         onTest={async () => ({ ok: true, error: null })}
@@ -139,6 +147,7 @@ describe("OAuthTokenPoolCard", () => {
     // Render to ensure no errors
     const html = renderToStaticMarkup(
       <OAuthTokenPoolCard
+        concurrencyDefault={1}
         tokens={[]}
         onWrite={onWrite}
         onTest={async () => ({ ok: true, error: null })}
@@ -151,6 +160,7 @@ describe("OAuthTokenPoolCard", () => {
     const onWrite = mock(async () => {})
     const html = renderToStaticMarkup(
       <OAuthTokenPoolCard
+        concurrencyDefault={1}
         tokens={[makeToken({ id: "a" }), makeToken({ id: "b", label: "other" })]}
         onWrite={onWrite}
         onTest={async () => ({ ok: true, error: null })}
@@ -169,6 +179,7 @@ describe("OAuthTokenPoolCard", () => {
     ]
     const html = renderToStaticMarkup(
       <OAuthTokenPoolCard
+        concurrencyDefault={1}
         tokens={tokens}
         onWrite={async () => {}}
         onTest={async () => ({ ok: true, error: null })}
@@ -191,6 +202,7 @@ describe("OAuthTokenPoolCard", () => {
     const tokens = [makeToken({ id: "a" }), makeToken({ id: "b", label: "other" })]
     const html = renderToStaticMarkup(
       <OAuthTokenPoolCard
+        concurrencyDefault={1}
         tokens={tokens}
         onWrite={async () => {}}
         onTest={async () => ({ ok: true, error: null })}
@@ -203,6 +215,7 @@ describe("OAuthTokenPoolCard", () => {
     const limited = makeToken({ status: "limited", limitedUntil: 60_000 })
     const html = renderToStaticMarkup(
       <OAuthTokenPoolCard
+        concurrencyDefault={1}
         tokens={[limited]}
         now={0}
         onWrite={async () => {}}
@@ -215,6 +228,7 @@ describe("OAuthTokenPoolCard", () => {
   test("renders Disabled pill for disabled tokens", () => {
     const html = renderToStaticMarkup(
       <OAuthTokenPoolCard
+        concurrencyDefault={1}
         tokens={[makeToken({ status: "disabled" })]}
         onWrite={async () => {}}
         onTest={async () => ({ ok: true, error: null })}
@@ -226,6 +240,7 @@ describe("OAuthTokenPoolCard", () => {
   test("renders Enable button for disabled, Disable button for active", () => {
     const disabledHtml = renderToStaticMarkup(
       <OAuthTokenPoolCard
+        concurrencyDefault={1}
         tokens={[makeToken({ status: "disabled" })]}
         onWrite={async () => {}}
         onTest={async () => ({ ok: true, error: null })}
@@ -235,6 +250,7 @@ describe("OAuthTokenPoolCard", () => {
 
     const activeHtml = renderToStaticMarkup(
       <OAuthTokenPoolCard
+        concurrencyDefault={1}
         tokens={[makeToken({ status: "active" })]}
         onWrite={async () => {}}
         onTest={async () => ({ ok: true, error: null })}

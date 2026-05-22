@@ -2140,6 +2140,7 @@ export function SettingsPage() {
                       <div className="w-full md:w-[420px]">
                         <OAuthTokenPoolCard
                           tokens={appSettings?.claudeAuth.tokens ?? []}
+                          concurrencyDefault={appSettings?.claudeAuth.concurrencyDefault ?? 1}
                           onWrite={handleWriteClaudeAuth}
                           onTest={handleTestOAuthToken}
                         />
