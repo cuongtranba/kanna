@@ -6,6 +6,7 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import type { SdkMcpToolDefinition } from "@anthropic-ai/claude-agent-sdk"
 import { KANNA_MCP_SERVER_NAME } from "../shared/tools"
 import { buildKannaMcpTools, type KannaMcpArgs } from "./kanna-mcp"
+import type { McpServerConfig } from "../shared/types"
 
 export interface KannaMcpHttpHandle {
   /** Full URL including path the claude CLI must POST/GET against. */
@@ -139,17 +140,45 @@ function registerToolOnMcpServer(
  * Builds the --mcp-config JSON string the PTY driver passes to the claude
  * CLI. Encodes the HTTP MCP server URL + bearer token under the kanna
  * server name so the model sees tools as `mcp__kanna__<name>`.
+ *
+ * Optional `userServers` merges enabled user-configured MCP entries into
+ * the JSON. Disabled entries and any whose name collides with
+ * KANNA_MCP_SERVER_NAME are silently dropped.
  */
-export function buildMcpConfigJson(handle: { url: string; bearerToken: string }): string {
-  return JSON.stringify({
-    mcpServers: {
-      [KANNA_MCP_SERVER_NAME]: {
-        type: "http",
-        url: handle.url,
-        headers: {
-          Authorization: `Bearer ${handle.bearerToken}`,
-        },
+export function buildMcpConfigJson(
+  handle: { url: string; bearerToken: string },
+  userServers: readonly McpServerConfig[] = [],
+): string {
+  const mcpServers: Record<string, unknown> = {
+    [KANNA_MCP_SERVER_NAME]: {
+      type: "http",
+      url: handle.url,
+      headers: {
+        Authorization: `Bearer ${handle.bearerToken}`,
       },
     },
-  })
+  }
+  for (const s of userServers) {
+    if (!s.enabled) continue
+    if (s.name === KANNA_MCP_SERVER_NAME) continue
+    mcpServers[s.name] = toClaudeCliMcpEntry(s)
+  }
+  return JSON.stringify({ mcpServers })
+}
+
+function toClaudeCliMcpEntry(s: McpServerConfig): Record<string, unknown> {
+  if (s.transport === "stdio") {
+    return {
+      type: "stdio",
+      command: s.command,
+      args: s.args,
+      env: s.env,
+      ...(s.cwd ? { cwd: s.cwd } : {}),
+    }
+  }
+  return {
+    type: s.transport,
+    url: s.url,
+    headers: s.headers,
+  }
 }
