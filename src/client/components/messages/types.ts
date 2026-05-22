@@ -11,6 +11,11 @@ export type ProcessedTextMessage = Extract<
   { kind: "assistant_text" }
 >
 
+export type ProcessedApiErrorMessage = Extract<
+  import("../../../shared/types").HydratedTranscriptMessage,
+  { kind: "api_error" }
+>
+
 export type ProcessedSystemMessage = Extract<
   import("../../../shared/types").HydratedTranscriptMessage,
   { kind: "system_init" }

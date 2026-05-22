@@ -8,6 +8,7 @@ import { RawJsonMessage } from "../components/messages/RawJsonMessage"
 import { SystemMessage } from "../components/messages/SystemMessage"
 import { AccountInfoMessage } from "../components/messages/AccountInfoMessage"
 import { TextMessage } from "../components/messages/TextMessage"
+import { ApiErrorMessage } from "../components/messages/ApiErrorMessage"
 import { AskUserQuestionMessage } from "../components/messages/AskUserQuestionMessage"
 import { ExitPlanModeMessage } from "../components/messages/ExitPlanModeMessage"
 import { TodoWriteMessage } from "../components/messages/TodoWriteMessage"
@@ -247,6 +248,11 @@ function sameMessage(left: HydratedTranscriptMessage, right: HydratedTranscriptM
       return right.kind === "account_info" && JSON.stringify(left.accountInfo) === JSON.stringify(right.accountInfo)
     case "assistant_text":
       return right.kind === "assistant_text" && left.text === right.text
+    case "api_error":
+      return right.kind === "api_error"
+        && left.status === right.status
+        && left.text === right.text
+        && left.requestId === right.requestId
     case "tool":
       return right.kind === "tool"
         && left.toolKind === right.toolKind
@@ -439,6 +445,9 @@ const TranscriptSingleRow = memo(function TranscriptSingleRow({
         break
       case "assistant_text":
         rendered = <TextMessage key={message.id} message={message} />
+        break
+      case "api_error":
+        rendered = <ApiErrorMessage key={message.id} message={message} />
         break
       case "tool":
         if (message.isError) {
