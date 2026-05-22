@@ -7,6 +7,7 @@ import {
   buildAttachmentHintText,
   buildCanUseTool,
   buildPromptText,
+  buildUserMcpServers,
   maxClaudeContextWindowFromModelUsage,
   normalizeClaudeStreamMessage,
   normalizeClaudeUsageSnapshot,
@@ -20,7 +21,7 @@ import type { ChatPermissionPolicy } from "../shared/permission-policy"
 import { POLICY_DEFAULT } from "../shared/permission-policy"
 import { BackgroundTaskRegistry } from "./background-tasks"
 import type { HarnessTurn } from "./harness-types"
-import type { ChatAttachment, SlashCommand, TranscriptEntry } from "../shared/types"
+import type { ChatAttachment, McpServerConfig, SlashCommand, TranscriptEntry } from "../shared/types"
 import type { AutoContinueEvent } from "./auto-continue/events"
 import { AsyncEventQueue } from "./test-helpers/async-event-queue"
 import { waitFor } from "./test-helpers/wait-for"
@@ -4820,5 +4821,68 @@ describe("AgentCoordinator turn-start failure recording", () => {
     } finally {
       console.error = consoleError
     }
+  })
+})
+
+describe("buildUserMcpServers", () => {
+  test("maps stdio entry to SDK shape", () => {
+    const cfg: McpServerConfig = {
+      id: "1", name: "fs", enabled: true,
+      createdAt: "", updatedAt: "", lastTest: { status: "untested" },
+      transport: "stdio", command: "/bin/ls", args: [], env: { A: "1" },
+    }
+    expect(buildUserMcpServers([cfg])).toEqual({
+      fs: { type: "stdio", command: "/bin/ls", args: [], env: { A: "1" } },
+    })
+  })
+
+  test("stdio with cwd includes cwd", () => {
+    const cfg: McpServerConfig = {
+      id: "1", name: "fs", enabled: true,
+      createdAt: "", updatedAt: "", lastTest: { status: "untested" },
+      transport: "stdio", command: "/bin/ls", args: [], env: {}, cwd: "/tmp",
+    }
+    expect(buildUserMcpServers([cfg]).fs).toMatchObject({ cwd: "/tmp" })
+  })
+
+  test("maps http entry", () => {
+    const cfg: McpServerConfig = {
+      id: "1", name: "remote", enabled: true,
+      createdAt: "", updatedAt: "", lastTest: { status: "untested" },
+      transport: "http", url: "https://example.com/mcp", headers: { K: "v" },
+    }
+    expect(buildUserMcpServers([cfg]).remote).toEqual({
+      type: "http", url: "https://example.com/mcp", headers: { K: "v" },
+    })
+  })
+
+  test("maps sse and ws entries", () => {
+    const cfgs: McpServerConfig[] = [
+      { id: "s", name: "events", enabled: true, createdAt: "", updatedAt: "", lastTest: { status: "untested" },
+        transport: "sse", url: "https://e.com/sse", headers: {} },
+      { id: "w", name: "wsx", enabled: true, createdAt: "", updatedAt: "", lastTest: { status: "untested" },
+        transport: "ws", url: "wss://e.com/ws", headers: {} },
+    ]
+    const out = buildUserMcpServers(cfgs)
+    expect(out.events.type).toBe("sse")
+    expect(out.wsx.type).toBe("ws")
+  })
+
+  test("filters disabled entries", () => {
+    const cfg: McpServerConfig = {
+      id: "1", name: "fs", enabled: false,
+      createdAt: "", updatedAt: "", lastTest: { status: "untested" },
+      transport: "stdio", command: "x", args: [], env: {},
+    }
+    expect(buildUserMcpServers([cfg])).toEqual({})
+  })
+
+  test("filters 'kanna' name collision", () => {
+    const cfg: McpServerConfig = {
+      id: "1", name: "kanna", enabled: true,
+      createdAt: "", updatedAt: "", lastTest: { status: "untested" },
+      transport: "stdio", command: "x", args: [], env: {},
+    }
+    expect(buildUserMcpServers([cfg])).toEqual({})
   })
 })
