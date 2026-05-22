@@ -214,6 +214,8 @@ async function drainHarnessTurn(
       const fragment = event.entry.text
       accumulated += fragment
       onChunk(fragment)
+    } else if (event.entry.kind === "api_error") {
+      sawError = true
     } else if (event.entry.kind === "result") {
       const e = event.entry
       sawResult = true

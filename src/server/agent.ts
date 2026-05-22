@@ -527,6 +527,28 @@ export function normalizeClaudeStreamMessage(message: any): TranscriptEntry[] {
   }
 
   if (message.type === "assistant" && Array.isArray(message.message?.content)) {
+    if (message.isApiErrorMessage === true || message.message?.model === "<synthetic>") {
+      const joinedText = message.message.content
+        .filter((c: { type?: string; text?: string }) => c.type === "text" && typeof c.text === "string")
+        .map((c: { text: string }) => c.text)
+        .join("")
+      const statusFromField = typeof message.apiErrorStatus === "number" ? message.apiErrorStatus : undefined
+      const statusFromText = (() => {
+        const match = /API Error:\s*(\d{3})/i.exec(joinedText)
+        return match ? Number.parseInt(match[1], 10) : undefined
+      })()
+      const requestId = typeof message.request_id === "string"
+        ? message.request_id
+        : (typeof message.requestId === "string" ? message.requestId : undefined)
+      return [timestamped({
+        kind: "api_error",
+        messageId,
+        status: statusFromField ?? statusFromText ?? 0,
+        text: joinedText,
+        requestId,
+        debugRaw,
+      })]
+    }
     const entries: TranscriptEntry[] = []
     for (const content of message.message.content) {
       if (content.type === "text" && typeof content.text === "string") {

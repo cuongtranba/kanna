@@ -171,6 +171,63 @@ describe("normalizeClaudeStreamMessage", () => {
       expect(final?.maxTokens).toBe(200_000)
     })
   })
+
+  describe("API error synthetic messages", () => {
+    test("emits api_error entry when isApiErrorMessage is set", () => {
+      const entries = normalizeClaudeStreamMessage({
+        type: "assistant",
+        uuid: "msg-err-1",
+        isApiErrorMessage: true,
+        apiErrorStatus: 529,
+        request_id: "req_abc123",
+        message: {
+          model: "<synthetic>",
+          content: [
+            {
+              type: "text",
+              text: "API Error: 529 Overloaded. This is a server-side issue, usually temporary — try again in a moment. If it persists, check status.claude.com.",
+            },
+          ],
+        },
+      })
+      expect(entries).toHaveLength(1)
+      const entry = entries[0]
+      expect(entry.kind).toBe("api_error")
+      if (entry.kind !== "api_error") throw new Error("expected api_error")
+      expect(entry.status).toBe(529)
+      expect(entry.text).toContain("API Error: 529 Overloaded")
+      expect(entry.requestId).toBe("req_abc123")
+    })
+
+    test("parses status from text when apiErrorStatus is missing", () => {
+      const entries = normalizeClaudeStreamMessage({
+        type: "assistant",
+        uuid: "msg-err-2",
+        message: {
+          model: "<synthetic>",
+          content: [{ type: "text", text: "API Error: 429 Rate limit exceeded." }],
+        },
+      })
+      expect(entries).toHaveLength(1)
+      const entry = entries[0]
+      expect(entry.kind).toBe("api_error")
+      if (entry.kind !== "api_error") throw new Error("expected api_error")
+      expect(entry.status).toBe(429)
+    })
+
+    test("regular assistant text is unaffected", () => {
+      const entries = normalizeClaudeStreamMessage({
+        type: "assistant",
+        uuid: "msg-ok-1",
+        message: {
+          model: "claude-opus-4",
+          content: [{ type: "text", text: "Hello from the model." }],
+        },
+      })
+      expect(entries).toHaveLength(1)
+      expect(entries[0].kind).toBe("assistant_text")
+    })
+  })
 })
 
 describe("attachment prompt helpers", () => {
