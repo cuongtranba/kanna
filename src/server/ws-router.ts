@@ -535,6 +535,7 @@ export function createWsRouter({
     claudeAuth: CLAUDE_AUTH_DEFAULTS,
     uploads: UPLOAD_DEFAULTS,
     subagents: [],
+    customMcpServers: [],
     claudeDriver: { ...CLAUDE_DRIVER_DEFAULTS, lifecycle: { ...CLAUDE_PTY_LIFECYCLE_DEFAULTS } },
     globalPromptAppend: "",
   }
@@ -612,6 +613,7 @@ export function createWsRouter({
         ...patch.uploads,
       },
       subagents,
+      customMcpServers: snapshot.customMcpServers,
       claudeDriver: {
         preference: patch.claudeDriver?.preference ?? snapshot.claudeDriver.preference,
         lifecycle: {

@@ -117,6 +117,7 @@ const DEFAULT_APP_SETTINGS_SNAPSHOT: AppSettingsSnapshot = {
   filePathDisplay: "~/.kanna/data/settings.json",
   uploads: UPLOAD_DEFAULTS,
   subagents: [],
+  customMcpServers: [],
   claudeDriver: { ...CLAUDE_DRIVER_DEFAULTS, lifecycle: { ...CLAUDE_PTY_LIFECYCLE_DEFAULTS } },
   globalPromptAppend: "",
 }

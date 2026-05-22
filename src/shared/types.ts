@@ -248,6 +248,72 @@ export interface SubagentValidationError {
   message: string
 }
 
+export type McpServerTransport = "stdio" | "http" | "sse" | "ws"
+
+export type McpServerTestResult =
+  | { status: "untested" }
+  | { status: "pending"; startedAt: string }
+  | { status: "ok"; testedAt: string; toolCount: number }
+  | { status: "error"; testedAt: string; message: string }
+
+interface McpServerBase {
+  id: string
+  name: string
+  enabled: boolean
+  createdAt: string
+  updatedAt: string
+  lastTest: McpServerTestResult
+}
+
+export interface McpServerStdioFields {
+  transport: "stdio"
+  command: string
+  args: string[]
+  env: Record<string, string>
+  cwd?: string
+}
+
+export interface McpServerNetworkFields {
+  transport: "http" | "sse" | "ws"
+  url: string
+  headers: Record<string, string>
+}
+
+export type McpServerConfig =
+  | (McpServerBase & McpServerStdioFields)
+  | (McpServerBase & McpServerNetworkFields)
+
+export type McpServerInput =
+  | (McpServerStdioFields & { name: string; enabled?: boolean })
+  | (McpServerNetworkFields & { name: string; enabled?: boolean })
+
+export type McpServerPatch = Partial<{
+  name: string
+  enabled: boolean
+  transport: McpServerTransport
+  command: string
+  args: string[]
+  env: Record<string, string>
+  cwd: string | undefined
+  url: string
+  headers: Record<string, string>
+}>
+
+export interface McpValidationError {
+  code:
+    | "INVALID_NAME"
+    | "DUPLICATE_NAME"
+    | "RESERVED_NAME"
+    | "INVALID_TRANSPORT"
+    | "MISSING_COMMAND"
+    | "INVALID_URL"
+    | "INVALID_HEADER_KEY"
+    | "INVALID_ENV_KEY"
+    | "NOT_FOUND"
+  field?: string
+  message: string
+}
+
 export type ModelOptions = Partial<{
   [K in AgentProvider]: Partial<ProviderModelOptionsByProvider[K]>
 }>
@@ -674,6 +740,7 @@ export interface AppSettingsSnapshot {
   claudeAuth: ClaudeAuthSettings
   uploads: UploadSettings
   subagents: Subagent[]
+  customMcpServers: McpServerConfig[]
   claudeDriver: ClaudeDriverSettings
   globalPromptAppend: string
 }
@@ -699,6 +766,13 @@ export interface AppSettingsPatch {
     create?: SubagentInput
     update?: { id: string; patch: SubagentPatch }
     delete?: { id: string }
+  }
+  customMcpServers?: {
+    create?: McpServerInput
+    update?: { id: string; patch: McpServerPatch }
+    delete?: { id: string }
+    setEnabled?: { id: string; enabled: boolean }
+    setTestResult?: { id: string; result: McpServerTestResult }
   }
   claudeDriver?: {
     preference?: ClaudeDriverPreference

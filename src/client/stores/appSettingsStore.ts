@@ -61,6 +61,7 @@ export function mergeAppSettingsPatch(
       ...patch.uploads,
     },
     subagents: settings.subagents,
+    customMcpServers: settings.customMcpServers,
     claudeDriver: {
       preference: patch.claudeDriver?.preference ?? settings.claudeDriver.preference,
       lifecycle: {

@@ -76,6 +76,7 @@ function expectedSettingsSnapshot(filePath: string, overrides: Partial<AppSettin
     claudeAuth: CLAUDE_AUTH_DEFAULTS,
     uploads: UPLOAD_DEFAULTS,
     subagents: [],
+    customMcpServers: [],
     claudeDriver: { ...CLAUDE_DRIVER_DEFAULTS, lifecycle: { ...CLAUDE_PTY_LIFECYCLE_DEFAULTS } },
     globalPromptAppend: "",
     ...overrides,

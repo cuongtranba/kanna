@@ -50,6 +50,7 @@ import {
   type CodexModelOptions,
   type DefaultProviderPreference,
   type EditorPreset,
+  type McpServerConfig,
   type OAuthTokenEntry,
   type OAuthTokenStatus,
   type ProviderPreference,
@@ -90,6 +91,7 @@ interface AppSettingsFile {
   claudeAuth?: unknown
   uploads?: unknown
   subagents?: unknown
+  customMcpServers?: unknown
   claudeDriver?: unknown
   globalPromptAppend?: unknown
 }
@@ -622,6 +624,7 @@ function toFilePayload(state: AppSettingsState) {
     claudeAuth: state.claudeAuth,
     uploads: state.uploads,
     subagents: state.subagents,
+    customMcpServers: state.customMcpServers,
     claudeDriver: state.claudeDriver,
     globalPromptAppend: state.globalPromptAppend,
   }
@@ -645,6 +648,7 @@ function toSnapshot(state: AppSettingsState): AppSettingsSnapshot {
     claudeAuth: state.claudeAuth,
     uploads: state.uploads,
     subagents: state.subagents,
+    customMcpServers: state.customMcpServers,
     claudeDriver: state.claudeDriver,
     globalPromptAppend: state.globalPromptAppend,
   }
@@ -710,6 +714,9 @@ function normalizeAppSettings(
     claudeAuth,
     uploads,
     subagents,
+    customMcpServers: Array.isArray(source?.customMcpServers)
+      ? (source.customMcpServers as McpServerConfig[])
+      : [],
     claudeDriver,
     globalPromptAppend,
   }
@@ -743,6 +750,7 @@ function toComparablePayload(source: AppSettingsFile) {
     claudeAuth: source.claudeAuth,
     uploads: source.uploads,
     subagents: source.subagents,
+    customMcpServers: source.customMcpServers,
     claudeDriver: source.claudeDriver,
     globalPromptAppend: typeof source.globalPromptAppend === "string"
       ? source.globalPromptAppend.replace(/\s+$/u, "")
