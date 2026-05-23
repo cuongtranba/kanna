@@ -90,6 +90,24 @@ export default tseslint.config(
             "Bun globals (Bun.spawn, Bun.$, Bun.file) are server-only. Move the module into src/server/** or depend on an injected port instead.",
         },
       ],
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: "NewExpression[callee.name='Database']",
+          message:
+            "Direct SQLite/DB construction is server-only. Move into src/server/** or inject a port instead.",
+        },
+        {
+          selector: "CallExpression[callee.object.name='process'][callee.property.name='exit']",
+          message:
+            "process.exit kills the runtime; not allowed in shared/client. Throw a typed error and let the entry point decide.",
+        },
+        {
+          selector: "MemberExpression[object.name='process'][property.name='env']",
+          message:
+            "process.env reads at module load are not portable to the client bundle. Inject the value through a typed config object.",
+        },
+      ],
     },
   },
 )
