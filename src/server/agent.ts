@@ -6,6 +6,7 @@ import type {
   AgentProvider,
   ChatAttachment,
   ContextWindowUsageSnapshot,
+  McpServerConfig,
   ModelOptions,
   NormalizedToolCall,
   PendingToolSnapshot,
@@ -58,6 +59,38 @@ import type { ToolCallbackService } from "./tool-callback"
 import type { ChatPermissionPolicy } from "../shared/permission-policy"
 import { mergePolicyOverride, POLICY_DEFAULT } from "../shared/permission-policy"
 import { startClaudeSessionPTY, type StartClaudeSessionPtyArgs } from "./claude-pty/driver"
+
+type SdkMcpEntry =
+  | { type: "stdio"; command: string; args: string[]; env: Record<string, string>; cwd?: string }
+  | { type: "http"; url: string; headers: Record<string, string> }
+  | { type: "sse"; url: string; headers: Record<string, string> }
+  | { type: "ws"; url: string; headers: Record<string, string> }
+
+export function buildUserMcpServers(
+  servers: readonly McpServerConfig[],
+): Record<string, SdkMcpEntry> {
+  const out: Record<string, SdkMcpEntry> = {}
+  for (const s of servers) {
+    if (!s.enabled) continue
+    if (s.name === KANNA_MCP_SERVER_NAME) continue
+    if (s.transport === "stdio") {
+      out[s.name] = {
+        type: "stdio",
+        command: s.command,
+        args: s.args,
+        env: s.env,
+        ...(s.cwd ? { cwd: s.cwd } : {}),
+      }
+    } else {
+      out[s.name] = {
+        type: s.transport,
+        url: s.url,
+        headers: s.headers,
+      }
+    }
+  }
+  return out
+}
 
 export function resolveSpawnPaths(
   chat: Pick<ChatRecord, "id" | "stackBindings">,
@@ -212,6 +245,8 @@ interface AgentCoordinatorArgs {
     toolCallback?: ToolCallbackService
     /** Per-chat permission policy. Defaults to POLICY_DEFAULT if omitted. */
     chatPolicy?: ChatPermissionPolicy
+    /** Enabled user MCP servers, merged into the SDK's mcpServers map. */
+    customMcpServers?: readonly McpServerConfig[]
   }) => Promise<ClaudeSessionHandle>
   startClaudeSessionPTY?: (args: StartClaudeSessionPtyArgs) => Promise<ClaudeSessionHandle>
   claudeLimitDetector?: LimitDetector
@@ -226,6 +261,7 @@ interface AgentCoordinatorArgs {
       lifecycle?: { idleTimeoutMs?: number; maxConcurrent?: number }
     }
     globalPromptAppend?: string
+    customMcpServers?: readonly McpServerConfig[]
   }
   throwOnClaudeSessionStart?: boolean
   backgroundTasks?: BackgroundTaskRegistry
@@ -938,6 +974,8 @@ async function startClaudeSession(args: {
   subagentOrchestrator?: SubagentOrchestrator
   /** Per-spawn delegation context (depth / ancestor chain / parentUserMessageId resolver). */
   delegationContext?: KannaMcpDelegationContext
+  /** Enabled user MCP servers, merged into the SDK's mcpServers map. */
+  customMcpServers?: readonly McpServerConfig[]
 }): Promise<ClaudeSessionHandle> {
   const canUseTool = buildCanUseTool({
     localPath: args.localPath,
@@ -976,6 +1014,7 @@ async function startClaudeSession(args: {
           subagentOrchestrator: args.subagentOrchestrator,
           delegationContext: args.delegationContext,
         }),
+        ...buildUserMcpServers(args.customMcpServers ?? []),
       },
       systemPrompt: args.systemPromptOverride != null
         ? args.systemPromptOverride
@@ -1333,6 +1372,13 @@ export class AgentCoordinator {
     return process.env.KANNA_CLAUDE_DRIVER === "pty" ? "pty" : "sdk"
   }
 
+  private getEnabledCustomMcpServers(): readonly McpServerConfig[] {
+    const snap = this.getAppSettingsSnapshot()
+    const list = (snap as { customMcpServers?: readonly McpServerConfig[] }).customMcpServers
+    if (!Array.isArray(list)) return []
+    return list.filter((s) => s.enabled)
+  }
+
   /**
    * Resolves the effective ChatPermissionPolicy for a chat: starts from the
    * coordinator-wide default, overlays the chat's persisted policyOverride.
@@ -1602,6 +1648,7 @@ export class AgentCoordinator {
                 onToolRequest: async () => null,
                 systemPromptAppend: ephemeralSystemPromptAppend,
                 ptyRegistry: this.claudePtyRegistry ?? undefined,
+                customMcpServers: this.getEnabledCustomMcpServers(),
                   })
             : await this.startClaudeSessionFn({
                 projectId: project.id,
@@ -1614,6 +1661,7 @@ export class AgentCoordinator {
                 oauthToken: picked?.token ?? null,
                 onToolRequest: async () => null,
                 systemPromptAppend: ephemeralSystemPromptAppend,
+                customMcpServers: this.getEnabledCustomMcpServers(),
               })
           try {
             commands = await ephemeral.getSupportedCommands()
@@ -2231,6 +2279,7 @@ export class AgentCoordinator {
               tunnelGateway: this.tunnelGateway,
               chatPolicy: this.resolveChatPolicy(args.chatId),
               ptyRegistry: this.claudePtyRegistry ?? undefined,
+              customMcpServers: this.getEnabledCustomMcpServers(),
             })
           : await this.startClaudeSessionFn({
               projectId: args.projectId,
@@ -2250,6 +2299,7 @@ export class AgentCoordinator {
               delegationContext,
               toolCallback: this.toolCallback ?? undefined,
               chatPolicy: this.resolveChatPolicy(args.chatId),
+              customMcpServers: this.getEnabledCustomMcpServers(),
             })
       } catch (err) {
         // Spawn failed before we registered the session — release the OAuth
@@ -2473,9 +2523,10 @@ export class AgentCoordinator {
           chatPolicy: a.chatId ? this.resolveChatPolicy(a.chatId) : undefined,
           oneShot: true,
           ptyRegistry: this.claudePtyRegistry ?? undefined,
+          customMcpServers: this.getEnabledCustomMcpServers(),
         })
       }
-      return this.startClaudeSessionFn(a)
+      return this.startClaudeSessionFn({ ...a, customMcpServers: this.getEnabledCustomMcpServers() })
     }
   }
 

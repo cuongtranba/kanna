@@ -1,9 +1,8 @@
 import { randomUUID } from "node:crypto"
-import { watch, type FSWatcher } from "node:fs"
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises"
 import { homedir } from "node:os"
 import path from "node:path"
-import { getSettingsFilePath, LOG_PREFIX } from "../shared/branding"
+import { getSettingsFilePath } from "../shared/branding"
 import {
   AUTH_DEFAULTS,
   AUTH_SESSION_MAX_AGE_DAYS_MAX,
@@ -50,6 +49,12 @@ import {
   type CodexModelOptions,
   type DefaultProviderPreference,
   type EditorPreset,
+  type McpServerConfig,
+  type McpServerInput,
+  type McpServerPatch,
+  type McpServerTestResult,
+  type McpServerTransport,
+  type McpValidationError,
   type OAuthTokenEntry,
   type OAuthTokenStatus,
   type ProviderPreference,
@@ -90,6 +95,7 @@ interface AppSettingsFile {
   claudeAuth?: unknown
   uploads?: unknown
   subagents?: unknown
+  customMcpServers?: unknown
   claudeDriver?: unknown
   globalPromptAppend?: unknown
 }
@@ -116,11 +122,21 @@ const DEFAULT_CHAT_SOUND_ID: ChatSoundId = "funk"
 const SUBAGENT_NAME_REGEX = /^[a-z0-9_-]+$/
 const SUBAGENT_RESERVED_NAMES = new Set(["agent", "agents"])
 const SUBAGENT_NAME_MAX = 64
+const MCP_VALID_TRANSPORTS = new Set<McpServerTransport>(["stdio", "http", "sse", "ws"])
+const MCP_NAME_REGEX = /^[a-zA-Z][a-zA-Z0-9_-]{0,31}$/
+const MCP_RESERVED_NAMES = new Set(["kanna"])
 
 class SubagentValidationException extends Error {
   constructor(readonly validationError: SubagentValidationError) {
     super(validationError.message)
     this.name = "SubagentValidationException"
+  }
+}
+
+class McpValidationException extends Error {
+  constructor(readonly validationError: McpValidationError) {
+    super(validationError.message)
+    this.name = "McpValidationException"
   }
 }
 
@@ -440,6 +456,111 @@ function normalizeSubagents(value: unknown, warnings: string[]): Subagent[] {
   return out.sort((a, b) => a.createdAt - b.createdAt)
 }
 
+function normalizeStringMap(value: unknown): Record<string, string> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {}
+  const out: Record<string, string> = {}
+  for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+    if (typeof k !== "string" || k.length === 0) continue
+    out[k] = typeof v === "string" ? v : String(v ?? "")
+  }
+  return out
+}
+
+function normalizeMcpTestResult(value: unknown): McpServerTestResult {
+  if (!value || typeof value !== "object") return { status: "untested" }
+  const v = value as Record<string, unknown>
+  switch (v.status) {
+    case "pending":
+      return { status: "pending", startedAt: typeof v.startedAt === "string" ? v.startedAt : new Date().toISOString() }
+    case "ok":
+      return {
+        status: "ok",
+        testedAt: typeof v.testedAt === "string" ? v.testedAt : new Date().toISOString(),
+        toolCount: typeof v.toolCount === "number" ? v.toolCount : 0,
+      }
+    case "error":
+      return {
+        status: "error",
+        testedAt: typeof v.testedAt === "string" ? v.testedAt : new Date().toISOString(),
+        message: typeof v.message === "string" ? v.message : "unknown error",
+      }
+    default:
+      return { status: "untested" }
+  }
+}
+
+function normalizeMcpEntry(value: unknown, warnings: string[]): McpServerConfig | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null
+  const src = value as Record<string, unknown>
+  const id = typeof src.id === "string" && src.id.length > 0 ? src.id : null
+  const name = typeof src.name === "string" ? src.name : null
+  const transport = src.transport
+  if (!id || !name || typeof transport !== "string") {
+    warnings.push(`MCP entry rejected: missing id/name/transport`)
+    return null
+  }
+  if (!MCP_VALID_TRANSPORTS.has(transport as McpServerTransport)) {
+    warnings.push(`MCP entry '${id}' rejected: unknown transport ${transport}`)
+    return null
+  }
+  const base = {
+    id,
+    name,
+    enabled: src.enabled !== false,
+    createdAt: typeof src.createdAt === "string" ? src.createdAt : new Date().toISOString(),
+    updatedAt: typeof src.updatedAt === "string" ? src.updatedAt : new Date().toISOString(),
+    lastTest: normalizeMcpTestResult(src.lastTest),
+  }
+  if (transport === "stdio") {
+    const command = typeof src.command === "string" && src.command.trim().length > 0 ? src.command : null
+    if (!command) {
+      warnings.push(`MCP entry '${id}' rejected: stdio command missing`)
+      return null
+    }
+    const args = Array.isArray(src.args) ? src.args.filter((a): a is string => typeof a === "string") : []
+    return {
+      ...base,
+      transport: "stdio",
+      command,
+      args,
+      env: normalizeStringMap(src.env),
+      cwd: typeof src.cwd === "string" && src.cwd.length > 0 ? src.cwd : undefined,
+    }
+  }
+  const url = typeof src.url === "string" ? src.url : null
+  if (!url) {
+    warnings.push(`MCP entry '${id}' rejected: url missing`)
+    return null
+  }
+  return {
+    ...base,
+    transport: transport as "http" | "sse" | "ws",
+    url,
+    headers: normalizeStringMap(src.headers),
+  }
+}
+
+function normalizeMcpServers(value: unknown, warnings: string[]): McpServerConfig[] {
+  if (value === undefined) return []
+  if (!Array.isArray(value)) {
+    warnings.push("customMcpServers must be an array")
+    return []
+  }
+  const out: McpServerConfig[] = []
+  const seenNames = new Set<string>()
+  for (const entry of value) {
+    const normalized = normalizeMcpEntry(entry, warnings)
+    if (!normalized) continue
+    if (seenNames.has(normalized.name)) {
+      warnings.push(`MCP entry '${normalized.id}' rejected: duplicate name '${normalized.name}'`)
+      continue
+    }
+    seenNames.add(normalized.name)
+    out.push(normalized)
+  }
+  return out
+}
+
 function normalizeOAuthTokenStatus(value: unknown): OAuthTokenStatus {
   if (value === "limited" || value === "error" || value === "disabled") return value
   return "active"
@@ -622,6 +743,7 @@ function toFilePayload(state: AppSettingsState) {
     claudeAuth: state.claudeAuth,
     uploads: state.uploads,
     subagents: state.subagents,
+    customMcpServers: state.customMcpServers,
     claudeDriver: state.claudeDriver,
     globalPromptAppend: state.globalPromptAppend,
   }
@@ -645,6 +767,7 @@ function toSnapshot(state: AppSettingsState): AppSettingsSnapshot {
     claudeAuth: state.claudeAuth,
     uploads: state.uploads,
     subagents: state.subagents,
+    customMcpServers: state.customMcpServers,
     claudeDriver: state.claudeDriver,
     globalPromptAppend: state.globalPromptAppend,
   }
@@ -710,6 +833,7 @@ function normalizeAppSettings(
     claudeAuth,
     uploads,
     subagents,
+    customMcpServers: normalizeMcpServers(source?.customMcpServers, warnings),
     claudeDriver,
     globalPromptAppend,
   }
@@ -743,10 +867,129 @@ function toComparablePayload(source: AppSettingsFile) {
     claudeAuth: source.claudeAuth,
     uploads: source.uploads,
     subagents: source.subagents,
+    customMcpServers: source.customMcpServers,
     claudeDriver: source.claudeDriver,
     globalPromptAppend: typeof source.globalPromptAppend === "string"
       ? source.globalPromptAppend.replace(/\s+$/u, "")
       : source.globalPromptAppend,
+  }
+}
+
+function validateMcpName(
+  name: string,
+  others: Array<{ id: string; name: string }>,
+  ignoreId?: string,
+): McpValidationError | null {
+  if (!MCP_NAME_REGEX.test(name)) {
+    return { code: "INVALID_NAME", field: "name", message: `name must match ${MCP_NAME_REGEX}` }
+  }
+  if (MCP_RESERVED_NAMES.has(name)) {
+    return { code: "RESERVED_NAME", field: "name", message: `name '${name}' is reserved` }
+  }
+  for (const other of others) {
+    if (other.id !== ignoreId && other.name === name) {
+      return { code: "DUPLICATE_NAME", field: "name", message: `name '${name}' already exists` }
+    }
+  }
+  return null
+}
+
+function validateMcpUrl(url: string, transport: "http" | "sse" | "ws"): McpValidationError | null {
+  try {
+    const u = new URL(url)
+    const allowed = transport === "ws" ? new Set(["ws:", "wss:"]) : new Set(["http:", "https:"])
+    if (!allowed.has(u.protocol)) {
+      return { code: "INVALID_URL", field: "url", message: `expected ${transport === "ws" ? "ws(s)://" : "http(s)://"} URL` }
+    }
+    return null
+  } catch {
+    return { code: "INVALID_URL", field: "url", message: "URL is malformed" }
+  }
+}
+
+function validateMcpShape(
+  entry: McpServerConfig,
+  others: Array<{ id: string; name: string }>,
+): McpValidationError | null {
+  const nameErr = validateMcpName(entry.name, others, entry.id)
+  if (nameErr) return nameErr
+  if (entry.transport === "stdio") {
+    if (!entry.command || entry.command.trim().length === 0) {
+      return { code: "MISSING_COMMAND", field: "command", message: "stdio requires non-empty command" }
+    }
+    for (const k of Object.keys(entry.env)) {
+      if (k.trim().length === 0) {
+        return { code: "INVALID_ENV_KEY", field: "env", message: "env keys must be non-empty" }
+      }
+    }
+  } else {
+    const urlErr = validateMcpUrl(entry.url, entry.transport)
+    if (urlErr) return urlErr
+    for (const k of Object.keys(entry.headers)) {
+      if (k.trim().length === 0) {
+        return { code: "INVALID_HEADER_KEY", field: "headers", message: "header keys must be non-empty" }
+      }
+    }
+  }
+  return null
+}
+
+function buildMcpFromInput(input: McpServerInput): McpServerConfig {
+  const now = new Date().toISOString()
+  const base = {
+    id: randomUUID(),
+    name: input.name.trim(),
+    enabled: input.enabled !== false,
+    createdAt: now,
+    updatedAt: now,
+    lastTest: { status: "untested" } as McpServerTestResult,
+  }
+  if (input.transport === "stdio") {
+    return {
+      ...base,
+      transport: "stdio",
+      command: input.command,
+      args: input.args ?? [],
+      env: input.env ?? {},
+      cwd: input.cwd,
+    }
+  }
+  return {
+    ...base,
+    transport: input.transport,
+    url: input.url,
+    headers: input.headers ?? {},
+  }
+}
+
+function applyMcpPatch(existing: McpServerConfig, patch: McpServerPatch): McpServerConfig {
+  const now = new Date().toISOString()
+  const nextName = patch.name !== undefined ? patch.name.trim() : existing.name
+  const nextEnabled = patch.enabled !== undefined ? patch.enabled : existing.enabled
+  const transport = patch.transport ?? existing.transport
+  const shared = {
+    id: existing.id,
+    name: nextName,
+    enabled: nextEnabled,
+    createdAt: existing.createdAt,
+    updatedAt: now,
+    lastTest: existing.lastTest,
+  }
+  if (transport === "stdio") {
+    return {
+      ...shared,
+      transport: "stdio",
+      command: patch.command ?? (existing.transport === "stdio" ? existing.command : ""),
+      args: patch.args ?? (existing.transport === "stdio" ? existing.args : []),
+      env: patch.env ?? (existing.transport === "stdio" ? existing.env : {}),
+      cwd: patch.cwd !== undefined ? patch.cwd : existing.transport === "stdio" ? existing.cwd : undefined,
+    }
+  }
+  return {
+    ...shared,
+    transport,
+    url: patch.url ?? (existing.transport !== "stdio" ? existing.url : ""),
+    headers: patch.headers ?? (existing.transport !== "stdio" ? existing.headers : {}),
   }
 }
 
@@ -801,6 +1044,41 @@ function applyPatch(state: AppSettingsState, patch: AppSettingsPatch): AppSettin
     nextSubagents = state.subagents.filter((subagent) => subagent.id !== patch.subagents?.delete?.id)
   }
 
+  let nextMcpServers = state.customMcpServers
+  if (patch.customMcpServers?.create) {
+    const entry = buildMcpFromInput(patch.customMcpServers.create)
+    const error = validateMcpShape(entry, state.customMcpServers.map((s) => ({ id: s.id, name: s.name })))
+    if (error) throw new McpValidationException(error)
+    nextMcpServers = [...state.customMcpServers, entry]
+  } else if (patch.customMcpServers?.update) {
+    const { id, patch: mcpPatch } = patch.customMcpServers.update
+    const idx = state.customMcpServers.findIndex((s) => s.id === id)
+    if (idx < 0) throw new McpValidationException({ code: "NOT_FOUND", message: `MCP server ${id} not found` })
+    const updated = applyMcpPatch(state.customMcpServers[idx]!, mcpPatch)
+    const error = validateMcpShape(
+      updated,
+      state.customMcpServers.map((s) => ({ id: s.id, name: s.name })),
+    )
+    if (error) throw new McpValidationException(error)
+    nextMcpServers = [
+      ...state.customMcpServers.slice(0, idx),
+      updated,
+      ...state.customMcpServers.slice(idx + 1),
+    ]
+  } else if (patch.customMcpServers?.delete) {
+    nextMcpServers = state.customMcpServers.filter((s) => s.id !== patch.customMcpServers!.delete!.id)
+  } else if (patch.customMcpServers?.setEnabled) {
+    const { id, enabled } = patch.customMcpServers.setEnabled
+    nextMcpServers = state.customMcpServers.map((s) =>
+      s.id === id ? { ...s, enabled, updatedAt: new Date().toISOString() } : s,
+    )
+  } else if (patch.customMcpServers?.setTestResult) {
+    const { id, result } = patch.customMcpServers.setTestResult
+    nextMcpServers = state.customMcpServers.map((s) =>
+      s.id === id ? { ...s, lastTest: result, updatedAt: new Date().toISOString() } : s,
+    )
+  }
+
   return normalizeAppSettings({
     ...toFilePayload(state),
     ...patch,
@@ -847,6 +1125,7 @@ function applyPatch(state: AppSettingsState, patch: AppSettingsPatch): AppSettin
       ...patch.uploads,
     },
     subagents: nextSubagents,
+    customMcpServers: nextMcpServers,
     claudeDriver: {
       preference: patch.claudeDriver?.preference ?? state.claudeDriver.preference,
       lifecycle: {
@@ -886,14 +1165,8 @@ export async function readAppSettingsSnapshot(filePath = getSettingsFilePath(hom
 
 export class AppSettingsManager {
   readonly filePath: string
-  private watcher: FSWatcher | null = null
   private state: AppSettingsState
   private readonly listeners = new Set<(snapshot: AppSettingsSnapshot) => void>()
-  // Suppress watcher reload for a short window after our own writes, so a
-  // partial-read race cannot clobber in-memory state with normalized defaults
-  // (which would then be re-persisted on the next mutateTokenStatus call and
-  // permanently drop OAuth tokens, cloudflare config, etc.).
-  private suppressReloadUntil = 0
 
   constructor(filePath = getSettingsFilePath(homedir())) {
     this.filePath = filePath
@@ -903,12 +1176,9 @@ export class AppSettingsManager {
   async initialize() {
     await mkdir(path.dirname(this.filePath), { recursive: true })
     await this.reload({ persistNormalized: true, allowDefaultsFallback: true })
-    this.startWatching()
   }
 
   dispose() {
-    this.watcher?.close()
-    this.watcher = null
     this.listeners.clear()
   }
 
@@ -1059,7 +1329,6 @@ export class AppSettingsManager {
       filePathDisplay: formatDisplayPath(this.filePath),
     }
     await mkdir(path.dirname(this.filePath), { recursive: true })
-    this.suppressReloadUntil = Date.now() + 500
     await atomicWriteJson(this.filePath, `${JSON.stringify(toFilePayload(nextState), null, 2)}\n`)
     this.setState(nextState)
     return toSnapshot(nextState)
@@ -1073,8 +1342,7 @@ export class AppSettingsManager {
       const hasText = text.trim().length > 0
       const normalized = normalizeAppSettings(hasText ? JSON.parse(text) : undefined, this.filePath)
       if (options?.persistNormalized && (!hasText || normalized.shouldWrite)) {
-        this.suppressReloadUntil = Date.now() + 500
-        await atomicWriteJson(this.filePath, `${JSON.stringify(toFilePayload(normalized.payload), null, 2)}\n`)
+            await atomicWriteJson(this.filePath, `${JSON.stringify(toFilePayload(normalized.payload), null, 2)}\n`)
       }
       return {
         ...normalized.payload,
@@ -1094,8 +1362,7 @@ export class AppSettingsManager {
       }
       const normalized = normalizeAppSettings(undefined, this.filePath)
       if (options?.persistNormalized) {
-        this.suppressReloadUntil = Date.now() + 500
-        await atomicWriteJson(this.filePath, `${JSON.stringify(toFilePayload(normalized.payload), null, 2)}\n`)
+            await atomicWriteJson(this.filePath, `${JSON.stringify(toFilePayload(normalized.payload), null, 2)}\n`)
       }
       return {
         ...normalized.payload,
@@ -1112,27 +1379,4 @@ export class AppSettingsManager {
     }
   }
 
-  private startWatching() {
-    this.watcher?.close()
-    try {
-      this.watcher = watch(path.dirname(this.filePath), { persistent: false }, (_eventType, filename) => {
-        if (filename && filename !== path.basename(this.filePath)) {
-          return
-        }
-        if (Date.now() < this.suppressReloadUntil) {
-          return
-        }
-        void this.reload().catch((error: unknown) => {
-          if (error instanceof SyntaxError) {
-            console.warn(`${LOG_PREFIX} Ignoring transient invalid JSON in settings file; keeping in-memory state.`)
-            return
-          }
-          console.warn(`${LOG_PREFIX} Failed to reload settings:`, error)
-        })
-      })
-    } catch (error) {
-      console.warn(`${LOG_PREFIX} Failed to watch settings file:`, error)
-      this.watcher = null
-    }
-  }
 }

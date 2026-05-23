@@ -801,6 +801,7 @@ export interface KannaState {
   handleForceReload: () => Promise<void>
   handleReadAppSettings: () => Promise<void>
   handleWriteAppSettings: (patch: AppSettingsPatch) => Promise<void>
+  handleTestMcpServer: (id: string) => Promise<void>
   handleSetChatPolicyOverride: (chatId: string, policyOverride: ChatPermissionPolicyOverride | null) => Promise<void>
   handleWriteCloudflareTunnel: (patch: Partial<CloudflareTunnelSettings>) => Promise<void>
   handleWriteClaudeAuth: (patch: Partial<ClaudeAuthSettings>) => Promise<void>
@@ -1149,6 +1150,19 @@ export function useKannaState(activeChatId: string | null): KannaState {
       throw error
     }
   }, [handleReadAppSettings, socket])
+
+  const handleTestMcpServer = useCallback(async (id: string) => {
+    try {
+      await socket.command({ type: "settings.testMcpServer", id })
+      // Server already persists lastTest into the snapshot and will broadcast
+      // the updated snapshot via the existing settings push. No optimistic
+      // store mutation needed — the UI re-renders when the snapshot lands.
+      setCommandError(null)
+    } catch (error) {
+      setCommandError(error instanceof Error ? error.message : String(error))
+      throw error
+    }
+  }, [socket])
 
   const handleWriteCloudflareTunnel = useCallback(async (patch: Partial<CloudflareTunnelSettings>) => {
     try {
@@ -2475,6 +2489,7 @@ export function useKannaState(activeChatId: string | null): KannaState {
     handleForceReload,
     handleReadAppSettings,
     handleWriteAppSettings,
+    handleTestMcpServer,
     handleSetChatPolicyOverride,
     handleWriteCloudflareTunnel,
     handleWriteClaudeAuth,

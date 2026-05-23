@@ -1,5 +1,5 @@
 import { create } from "zustand"
-import type { AppSettingsPatch, AppSettingsSnapshot } from "../../shared/types"
+import type { AppSettingsPatch, AppSettingsSnapshot, McpServerConfig } from "../../shared/types"
 
 type AppSettingsHydrationStatus = "idle" | "loading" | "ready" | "error"
 
@@ -61,6 +61,7 @@ export function mergeAppSettingsPatch(
       ...patch.uploads,
     },
     subagents: settings.subagents,
+    customMcpServers: settings.customMcpServers,
     claudeDriver: {
       preference: patch.claudeDriver?.preference ?? settings.claudeDriver.preference,
       lifecycle: {
@@ -82,3 +83,8 @@ export const useAppSettingsStore = create<AppSettingsStoreState>()((set) => ({
       settings: state.settings ? mergeAppSettingsPatch(state.settings, patch) : state.settings,
     })),
 }))
+
+const EMPTY_MCP_SERVERS: readonly McpServerConfig[] = []
+
+export const selectCustomMcpServers = (state: AppSettingsStoreState): readonly McpServerConfig[] =>
+  state.settings?.customMcpServers ?? EMPTY_MCP_SERVERS

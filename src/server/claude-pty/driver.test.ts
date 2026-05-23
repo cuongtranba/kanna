@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { mkdtemp, rm } from "node:fs/promises"
+import { mkdtemp, readdir, readFile, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { startClaudeSessionPTY, buildPtyEnv, buildPtyCliArgs, OutputRing, PTY_STDERR_RING_BYTES, PTY_DISALLOWED_NATIVE_TOOLS, deriveAccountInfoFromOauth, PLAN_MODE_EXIT_UNSUPPORTED, SHIFT_TAB_KEY } from "./driver"
@@ -8,6 +8,7 @@ import type { PtyProcess, SpawnPtyProcessArgs } from "./pty-process"
 import { KANNA_SYSTEM_PROMPT_APPEND } from "../../shared/kanna-system-prompt"
 import type { HarnessEvent } from "../harness-types"
 import { readAppSettingsSnapshot } from "../app-settings"
+import type { McpServerConfig } from "../../shared/types"
 
 
 
@@ -643,6 +644,134 @@ describe("setPermissionMode (F1 — plan mode exit)", () => {
     try {
       await handle.setPermissionMode(false)
       expect(sentInputs).not.toContain(SHIFT_TAB_KEY)
+    } finally {
+      await cleanup()
+    }
+  }, 10_000)
+})
+
+// ── Task 6: customMcpServers wired through PTY mcp-config.json ────────────────
+
+/**
+ * Helper to boot a PTY session and return the written mcp-config.json.
+ * Uses the same fake-spawn / fake-smoke / never-stream harness as makeTestHandle.
+ * Passes a known sessionToken so we can find the runtimeDir by prefix scan.
+ */
+async function spawnAndReadMcpConfig(opts: {
+  sessionToken: string
+  customMcpServers?: readonly McpServerConfig[]
+}): Promise<{ parsed: { mcpServers: Record<string, unknown> }; cleanup: () => Promise<void> }> {
+  const homeDir = await mkdtemp(path.join(tmpdir(), "kanna-t6-mcp-"))
+  let exitResolve!: (code: number) => void
+  const exited = new Promise<number>((r) => { exitResolve = r })
+
+  const fakePty: PtyProcess = {
+    pid: 88888,
+    async sendInput() { /* swallow */ },
+    resize() {},
+    exited,
+    close() { exitResolve(0) },
+    kill() { exitResolve(137) },
+  }
+  const fakeSpawn = async (spawnArgs: SpawnPtyProcessArgs): Promise<PtyProcess> => {
+    spawnArgs.onOutput?.("❯ ")
+    return fakePty
+  }
+  const fakeSmoke: import("./smoke-test").SmokeTestGate = {
+    async canSpawn() { return { ok: true } },
+  }
+  const neverStream: TranscriptStream = {
+    lines: {
+      [Symbol.asyncIterator]() {
+        return { next(): Promise<IteratorResult<string, undefined>> { return new Promise(() => {}) } }
+      },
+    },
+    filePath: new Promise<string>(() => {}),
+    close() {},
+  }
+
+  const handle = await startClaudeSessionPTY({
+    chatId: "t6-test", projectId: "test", localPath: homeDir,
+    model: "claude-haiku-4-5-20251001",
+    planMode: false, forkSession: false,
+    oauthToken: "test-token", sessionToken: opts.sessionToken,
+    onToolRequest: async () => null,
+    homeDir,
+    env: {
+      HOME: homeDir,
+      CLAUDE_CODE_OAUTH_TOKEN: "test-token",
+      KANNA_PTY_TRUST_DISMISS: "disabled",
+      CLAUDE_EXECUTABLE: "/bin/sh",
+    },
+    customMcpServers: opts.customMcpServers,
+    spawnPtyProcess: fakeSpawn,
+    startKannaMcpHttpServer: async () => ({ url: "http://127.0.0.1:0/mcp", bearerToken: "test", close: async () => {} }),
+    startTranscriptStreamFn: async () => neverStream,
+    smokeTestGate: fakeSmoke,
+  })
+
+  // Locate the runtimeDir: mkdtemp creates `kanna-pty-<first8ofSessionId>-XXXX`
+  const prefix = `kanna-pty-${opts.sessionToken.slice(0, 8)}-`
+  const osTmp = tmpdir()
+  const entries = await readdir(osTmp)
+  const runtimeDirName = entries.find((e) => e.startsWith(prefix))
+  if (!runtimeDirName) {
+    throw new Error(`Could not find runtimeDir with prefix ${prefix} in ${osTmp}`)
+  }
+  const mcpConfigPath = path.join(osTmp, runtimeDirName, "mcp-config.json")
+  const raw = await readFile(mcpConfigPath, "utf8")
+  const parsed = JSON.parse(raw) as { mcpServers: Record<string, unknown> }
+
+  return {
+    parsed,
+    async cleanup() {
+      exitResolve(0)
+      handle.close()
+      await rm(homeDir, { recursive: true, force: true })
+      await rm(path.join(osTmp, runtimeDirName), { recursive: true, force: true })
+    },
+  }
+}
+
+describe("PTY customMcpServers wiring (Task 6)", () => {
+  test("mcp-config.json includes enabled user customMcpServers", async () => {
+    if (process.platform === "win32") return
+    const userServer: McpServerConfig = {
+      id: "u1", name: "fs-tool", enabled: true,
+      createdAt: "", updatedAt: "", lastTest: { status: "untested" },
+      transport: "stdio", command: "/bin/ls", args: [], env: {},
+    }
+    const { parsed, cleanup } = await spawnAndReadMcpConfig({
+      sessionToken: "t6-inc-001",
+      customMcpServers: [userServer],
+    })
+    try {
+      expect(parsed.mcpServers["fs-tool"]).toBeDefined()
+      expect((parsed.mcpServers["fs-tool"] as { type: string }).type).toBe("stdio")
+    } finally {
+      await cleanup()
+    }
+  }, 10_000)
+
+  test("mcp-config.json omits disabled customMcpServers", async () => {
+    if (process.platform === "win32") return
+    const enabled: McpServerConfig = {
+      id: "u2", name: "enabled-srv", enabled: true,
+      createdAt: "", updatedAt: "", lastTest: { status: "untested" },
+      transport: "stdio", command: "/bin/echo", args: [], env: {},
+    }
+    const disabled: McpServerConfig = {
+      id: "u3", name: "disabled-srv", enabled: false,
+      createdAt: "", updatedAt: "", lastTest: { status: "untested" },
+      transport: "stdio", command: "/bin/false", args: [], env: {},
+    }
+    const { parsed, cleanup } = await spawnAndReadMcpConfig({
+      sessionToken: "t6-omit-001",
+      customMcpServers: [enabled, disabled],
+    })
+    try {
+      expect(parsed.mcpServers["enabled-srv"]).toBeDefined()
+      expect(parsed.mcpServers["disabled-srv"]).toBeUndefined()
     } finally {
       await cleanup()
     }

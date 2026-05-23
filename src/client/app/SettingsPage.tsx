@@ -11,6 +11,7 @@ import {
   Monitor,
   Moon,
   MessageSquareQuote,
+  Plug,
   Search,
   Settings2,
   Sun,
@@ -55,6 +56,7 @@ import {
 } from "../../shared/types"
 import { markdownComponents } from "../components/messages/shared"
 import { SubagentsSettingsBranch } from "./SubagentsSection"
+import { McpServersSettingsBranch } from "./McpServersSection"
 import { ChatPreferenceControls } from "../components/chat-ui/ChatPreferenceControls"
 import { OAuthTokenPoolCard } from "../components/chat-ui/OAuthTokenPoolCard"
 import { EDITOR_OPTIONS, EditorIcon } from "../components/editor-icons"
@@ -125,6 +127,12 @@ const sidebarItems = [
     label: "Subagents",
     icon: Bot,
     subtitle: "Define reusable agent personas. Mention them in chat with @agent/<name>.",
+  },
+  {
+    id: "mcp-servers",
+    label: "MCP servers",
+    icon: Plug,
+    subtitle: "Install custom MCP servers (stdio, http, sse, ws) and connect-test them.",
   },
   {
     id: "instructions",
@@ -2417,6 +2425,8 @@ export function SettingsPage() {
                   <SkillsSection state={state} />
                 ) : selectedPage === "subagents" ? (
                   <SubagentsSettingsBranch state={state} />
+                ) : selectedPage === "mcp-servers" ? (
+                  <McpServersSettingsBranch state={state} />
                 ) : selectedPage === "instructions" ? (
                   <GlobalInstructionsSection state={state} />
                 ) : (

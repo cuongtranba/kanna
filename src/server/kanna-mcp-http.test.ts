@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { startKannaMcpHttpServer, buildMcpConfigJson } from "./kanna-mcp-http"
+import type { McpServerConfig } from "../shared/types"
 
 const baseArgs = {
   projectId: "proj-test",
@@ -118,5 +119,94 @@ describe("buildMcpConfigJson", () => {
     expect(parsed.mcpServers.kanna.type).toBe("http")
     expect(parsed.mcpServers.kanna.url).toBe("http://127.0.0.1:55555/mcp")
     expect(parsed.mcpServers.kanna.headers.Authorization).toBe("Bearer abcdef0123456789")
+  })
+})
+
+const HANDLE = { url: "http://127.0.0.1:1234/mcp", bearerToken: "tok" }
+
+function stdio(name: string, command = "/bin/ls", enabled = true): McpServerConfig {
+  return {
+    id: name,
+    name,
+    enabled,
+    createdAt: "", updatedAt: "",
+    lastTest: { status: "untested" },
+    transport: "stdio",
+    command,
+    args: ["-la"],
+    env: { FOO: "bar" },
+  }
+}
+
+describe("buildMcpConfigJson — user servers", () => {
+  test("no user servers keeps just kanna", () => {
+    const json = JSON.parse(buildMcpConfigJson(HANDLE))
+    expect(Object.keys(json.mcpServers)).toEqual(["kanna"])
+  })
+
+  test("stdio user entry included with correct shape", () => {
+    const json = JSON.parse(buildMcpConfigJson(HANDLE, [stdio("fs")]))
+    expect(json.mcpServers.fs).toEqual({
+      type: "stdio",
+      command: "/bin/ls",
+      args: ["-la"],
+      env: { FOO: "bar" },
+    })
+  })
+
+  test("stdio with cwd includes cwd", () => {
+    const cfg: McpServerConfig = { ...stdio("fs"), cwd: "/tmp/work" } as McpServerConfig
+    const json = JSON.parse(buildMcpConfigJson(HANDLE, [cfg]))
+    expect(json.mcpServers.fs.cwd).toBe("/tmp/work")
+  })
+
+  test("disabled entries dropped", () => {
+    const json = JSON.parse(buildMcpConfigJson(HANDLE, [stdio("fs", "/bin/ls", false)]))
+    expect(json.mcpServers.fs).toBeUndefined()
+  })
+
+  test("collision with KANNA_MCP_SERVER_NAME filtered", () => {
+    const json = JSON.parse(buildMcpConfigJson(HANDLE, [stdio("kanna")]))
+    expect(Object.keys(json.mcpServers)).toEqual(["kanna"])
+    expect(json.mcpServers.kanna.url).toBe("http://127.0.0.1:1234/mcp")
+  })
+
+  test("http user entry passes headers", () => {
+    const cfg: McpServerConfig = {
+      id: "x", name: "remote", enabled: true,
+      createdAt: "", updatedAt: "", lastTest: { status: "untested" },
+      transport: "http", url: "https://api.example.com/mcp", headers: { "x-key": "secret" },
+    }
+    const json = JSON.parse(buildMcpConfigJson(HANDLE, [cfg]))
+    expect(json.mcpServers.remote).toEqual({
+      type: "http",
+      url: "https://api.example.com/mcp",
+      headers: { "x-key": "secret" },
+    })
+  })
+
+  test("sse user entry uses type: sse", () => {
+    const cfg: McpServerConfig = {
+      id: "s", name: "events", enabled: true,
+      createdAt: "", updatedAt: "", lastTest: { status: "untested" },
+      transport: "sse", url: "https://example.com/sse", headers: {},
+    }
+    const json = JSON.parse(buildMcpConfigJson(HANDLE, [cfg]))
+    expect(json.mcpServers.events.type).toBe("sse")
+  })
+
+  test("ws user entry uses type: ws", () => {
+    const cfg: McpServerConfig = {
+      id: "w", name: "wsx", enabled: true,
+      createdAt: "", updatedAt: "", lastTest: { status: "untested" },
+      transport: "ws", url: "wss://example.com/ws", headers: {},
+    }
+    const json = JSON.parse(buildMcpConfigJson(HANDLE, [cfg]))
+    expect(json.mcpServers.wsx.type).toBe("ws")
+  })
+
+  test("multiple servers preserved in order", () => {
+    const json = JSON.parse(buildMcpConfigJson(HANDLE, [stdio("a"), stdio("b"), stdio("c")]))
+    expect(Object.keys(json.mcpServers)).toEqual(["kanna", "a", "b", "c"])
   })
 })
