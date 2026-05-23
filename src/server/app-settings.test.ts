@@ -10,11 +10,24 @@ let tempDirs: string[] = []
 let activeManagers: AppSettingsManager[] = []
 
 afterEach(async () => {
+  const t0 = Date.now()
+  console.error(`[afterEach] start managers=${activeManagers.length} tempDirs=${tempDirs.length}`)
   for (const mgr of activeManagers) {
     mgr.dispose()
   }
+  console.error(`[afterEach] disposed ${Date.now() - t0}ms`)
   activeManagers = []
-  await Promise.all(tempDirs.map((dir) => rm(dir, { recursive: true, force: true })))
+  await Promise.all(tempDirs.map(async (dir) => {
+    const r0 = Date.now()
+    try {
+      await rm(dir, { recursive: true, force: true })
+      console.error(`[afterEach] rm ${dir} ${Date.now() - r0}ms`)
+    } catch (e) {
+      console.error(`[afterEach] rm ${dir} threw after ${Date.now() - r0}ms`, e)
+      throw e
+    }
+  }))
+  console.error(`[afterEach] done ${Date.now() - t0}ms`)
   tempDirs = []
 })
 
