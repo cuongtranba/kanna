@@ -92,7 +92,7 @@ export function SheetBody({ source, onClose }: { source: PreviewSource; onClose:
         <DialogTitle className="truncate text-base">{source.displayName}</DialogTitle>
         <DialogDescription className="truncate text-xs">{meta}</DialogDescription>
       </div>
-      <div key={source.id} className="min-h-0 flex-1 overflow-auto" role="region" aria-label="File preview">
+      <div key={source.id} className="min-h-0 flex-1 overflow-y-auto overscroll-contain touch-pan-y [-webkit-overflow-scrolling:touch]" role="region" aria-label="File preview">
         {createElement(pickBody(source), { source })}
       </div>
       <div className="flex items-center justify-end gap-2 border-t border-border px-4 py-3">
