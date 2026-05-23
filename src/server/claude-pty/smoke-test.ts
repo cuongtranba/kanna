@@ -6,7 +6,7 @@ import { OutputRing } from "./output-ring"
 import { spawnPtyProcess as defaultSpawnPtyProcess } from "./pty-process.adapter"
 import { waitForTuiReadyWithTrustDismiss, sendUserPrompt, sendExitCommand } from "./tui-control"
 import { startTranscriptStream, waitForResultEntry } from "./tui-source"
-import { computeProjectDir } from "./jsonl-path"
+import { computeProjectDir } from "./jsonl-path.adapter"
 
 export type SmokeTestProbeFn = () => Promise<"pass" | "fail">
 

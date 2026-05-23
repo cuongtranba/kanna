@@ -9,7 +9,7 @@ import {
   isAlive,
   recoverOrphans,
   type PersistedTask,
-} from "./orphan-persistence"
+} from "./orphan-persistence.adapter"
 import { BackgroundTaskRegistry } from "./background-tasks"
 import type { AnalyticsReporter } from "./analytics"
 

@@ -5,7 +5,7 @@ import { Terminal } from "@xterm/headless"
 import { SerializeAddon } from "@xterm/addon-serialize"
 import type { TerminalEvent, TerminalSnapshot } from "../shared/protocol"
 import type { BackgroundTaskRegistry } from "./background-tasks"
-import type { TerminalPidRegistry } from "./terminal-pid-registry"
+import type { TerminalPidRegistry } from "./terminal-pid-registry.adapter"
 
 const DEFAULT_COLS = 80
 const DEFAULT_ROWS = 24

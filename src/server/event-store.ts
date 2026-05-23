@@ -28,7 +28,7 @@ import { resolveLocalPath } from "./paths"
 import type { CloudflareTunnelEvent } from "./cloudflare-tunnel/events"
 import type { PushEvent, PushEventStore } from "./push/events"
 import { ACTIVE_SESSION_IDLE_GAP_MS } from "./read-models"
-import { capTranscriptEntry } from "./subagent-entry-cap"
+import { capTranscriptEntry } from "./subagent-entry-cap.adapter"
 
 const SNAPSHOT_THRESHOLD_BYTES = 2 * 1024 * 1024
 const STALE_EMPTY_CHAT_MAX_AGE_MS = 30 * 60 * 1000

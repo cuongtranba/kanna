@@ -17,7 +17,7 @@ import { spawnPtyProcess as defaultSpawnPtyProcess, type PtyProcess, type SpawnP
 import type { ClaudePtyRegistry } from "./pid-registry"
 import { waitForTuiReady, waitForTuiReadyWithTrustDismiss, sendUserPrompt, sendExitCommand } from "./tui-control"
 import { startTranscriptStream } from "./tui-source"
-import { computeJsonlPath, computeProjectDir } from "./jsonl-path"
+import { computeJsonlPath, computeProjectDir } from "./jsonl-path.adapter"
 import type { ClaudeSessionHandle } from "../agent"
 import type { HarnessEvent, HarnessToolRequest } from "../harness-types"
 import type { AccountInfo, McpServerConfig, SlashCommand } from "../../shared/types"

@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test"
 import { mkdtemp, mkdir, rm, writeFile, readFile, access } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { relocateExternalFileIntoProject, RELOCATED_OUTPUT_DIR } from "./projectFileRelocation"
+import { relocateExternalFileIntoProject, RELOCATED_OUTPUT_DIR } from "./projectFileRelocation.adapter"
 
 describe("relocateExternalFileIntoProject", () => {
   let projectRoot: string
