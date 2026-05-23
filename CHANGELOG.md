@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.73.1](https://github.com/cuongtranba/kanna/compare/v0.73.0...v0.73.1) (2026-05-23)
+
+
+### Bug Fixes
+
+* **pty:** bound transcript poll + quiet-period TUI ready gate ([#311](https://github.com/cuongtranba/kanna/issues/311)) ([e4b3bed](https://github.com/cuongtranba/kanna/commit/e4b3bed6ccafb8ecdacdac4bbd852b852b3caf0e))
+
 ## [0.73.0](https://github.com/cuongtranba/kanna/compare/v0.72.0...v0.73.0) (2026-05-23)
 
 
