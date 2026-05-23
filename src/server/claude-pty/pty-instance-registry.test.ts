@@ -122,6 +122,45 @@ describe("PtyInstanceRegistry", () => {
     expect(events.map((e) => e.type)).toEqual(["removed"])
   })
 
+  test("exitedTtlMs: entry auto-removed after TTL when phase becomes exited", async () => {
+    const registry = createPtyInstanceRegistry({ coalesceMs: 0, exitedTtlMs: 30 })
+    registry.upsert("c1", baseline({ phase: "ready" }))
+    const events: PtyInstanceDelta[] = []
+    registry.subscribe((d) => events.push(d))
+    registry.upsert("c1", { phase: "exited", exitedAt: 2_000 })
+    expect(events.map((e) => e.type)).toEqual(["updated"])
+    expect(registry.snapshot()).toHaveLength(1)
+    await new Promise((r) => setTimeout(r, 60))
+    expect(events.map((e) => e.type)).toEqual(["updated", "removed"])
+    expect(registry.snapshot()).toEqual([])
+  })
+
+  test("exitedTtlMs: prune cancelled if phase moves away from exited before TTL", async () => {
+    const registry = createPtyInstanceRegistry({ coalesceMs: 0, exitedTtlMs: 30 })
+    registry.upsert("c1", baseline({ phase: "exited", exitedAt: 1_000 }))
+    registry.upsert("c1", { phase: "ready", exitedAt: null })
+    await new Promise((r) => setTimeout(r, 60))
+    expect(registry.snapshot()).toHaveLength(1)
+    expect(registry.snapshot()[0]!.phase).toBe("ready")
+  })
+
+  test("exitedTtlMs: 0 disables auto-prune", async () => {
+    const registry = createPtyInstanceRegistry({ coalesceMs: 0, exitedTtlMs: 0 })
+    registry.upsert("c1", baseline({ phase: "exited", exitedAt: 1_000 }))
+    await new Promise((r) => setTimeout(r, 30))
+    expect(registry.snapshot()).toHaveLength(1)
+  })
+
+  test("exitedTtlMs: manual remove cancels pending prune", async () => {
+    const registry = createPtyInstanceRegistry({ coalesceMs: 0, exitedTtlMs: 30 })
+    registry.upsert("c1", baseline({ phase: "exited", exitedAt: 1_000 }))
+    const events: PtyInstanceDelta[] = []
+    registry.subscribe((d) => events.push(d))
+    registry.remove("c1")
+    await new Promise((r) => setTimeout(r, 60))
+    expect(events.map((e) => e.type)).toEqual(["removed"])
+  })
+
   test("subscribe replay seeds listener with current state", () => {
     const registry = createPtyInstanceRegistry({ coalesceMs: 0 })
     registry.upsert("c1", baseline())

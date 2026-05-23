@@ -48,6 +48,37 @@ describe("ptyInstancesStore", () => {
     expect(store.getState().instances).toHaveLength(0)
   })
 
+  test("applySnapshot drops exited entries", () => {
+    const store = createPtyInstancesStore()
+    store.getState().applySnapshot([
+      instance("c1", { phase: "ready" }),
+      instance("c2", { phase: "exited" }),
+      instance("c3", { phase: "streaming" }),
+    ])
+    const ids = store.getState().instances.map((i) => i.chatId)
+    expect(ids).toEqual(["c1", "c3"])
+  })
+
+  test("applyDiff added with exited phase is ignored", () => {
+    const store = createPtyInstancesStore()
+    store.getState().applyDiff({ op: "added", instance: instance("c1", { phase: "exited" }) })
+    expect(store.getState().instances).toHaveLength(0)
+  })
+
+  test("applyDiff updated transitioning to exited removes entry", () => {
+    const store = createPtyInstancesStore()
+    store.getState().applyDiff({ op: "added", instance: instance("c1", { phase: "ready" }) })
+    expect(store.getState().instances).toHaveLength(1)
+    store.getState().applyDiff({ op: "updated", instance: instance("c1", { phase: "exited" }) })
+    expect(store.getState().instances).toHaveLength(0)
+  })
+
+  test("applyDiff updated for unknown live entry inserts it", () => {
+    const store = createPtyInstancesStore()
+    store.getState().applyDiff({ op: "updated", instance: instance("c1", { phase: "ready" }) })
+    expect(store.getState().instances).toHaveLength(1)
+  })
+
   test("popover toggles", () => {
     const store = createPtyInstancesStore()
     store.getState().togglePopover()

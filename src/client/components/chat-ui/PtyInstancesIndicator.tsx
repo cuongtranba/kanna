@@ -222,7 +222,7 @@ export function PtyInstancesIndicatorView({
             claude pty instances
           </h3>
           <span className="text-[10px] font-mono text-muted-foreground tabular-nums">
-            {liveCount} live · {instances.length} tracked
+            {liveCount} live
           </span>
         </div>
         {instances.length === 0 ? (
