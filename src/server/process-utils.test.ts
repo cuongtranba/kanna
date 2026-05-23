@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { spawnDetached } from "./process-utils"
+import { spawnDetached } from "./process-utils.adapter"
 
 describe("spawnDetached", () => {
   test("rejects when the command does not exist", async () => {

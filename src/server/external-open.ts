@@ -3,7 +3,7 @@ import path from "node:path"
 import process from "node:process"
 import type { ClientCommand, EditorOpenSettings, EditorPreset } from "../shared/protocol"
 import { resolveLocalPath } from "./paths"
-import { canOpenMacApp, hasCommand, spawnDetached } from "./process-utils"
+import { canOpenMacApp, hasCommand, spawnDetached } from "./process-utils.adapter"
 
 type OpenExternalCommand = Extract<ClientCommand, { type: "system.openExternal" }>
 
