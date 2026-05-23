@@ -72,9 +72,9 @@ export function TableBody({ source }: { source: PreviewSource }) {
     table.truncatedColumns ? `Showing first ${TABLE_PREVIEW_COLUMN_LIMIT} of ${table.columnCount} columns.` : null,
   ].filter(Boolean)
   return (
-    <div className="space-y-2 overflow-auto p-3">
+    <div className="space-y-2 p-3">
       {notices.length ? <div className="rounded-xl border border-border bg-background px-3 py-2 text-xs text-muted-foreground">{notices.join(" ")}</div> : null}
-      <div className="max-h-[70dvh] overflow-auto rounded-xl border border-border bg-background">
+      <div className="overflow-x-auto rounded-xl border border-border bg-background">
         <table className="min-w-full border-collapse text-xs">
           {header ? (
             <thead className="sticky top-0 bg-muted">

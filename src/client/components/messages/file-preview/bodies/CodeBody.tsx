@@ -46,11 +46,11 @@ export function CodeBody({ source }: { source: PreviewSource }) {
 
   if (highlighted && highlighted.key === highlightKey) {
     return (
-      <div className="overflow-auto p-3 text-xs" dangerouslySetInnerHTML={{ __html: highlighted.html }} />
+      <div className="overflow-x-auto p-3 text-xs" dangerouslySetInnerHTML={{ __html: highlighted.html }} />
     )
   }
   return (
-    <div className="space-y-2 overflow-auto p-3">
+    <div className="space-y-2 p-3">
       {state.truncated ? <div className="rounded-xl border border-border bg-background px-3 py-2 text-xs text-muted-foreground">Preview truncated to 1024 KB.</div> : null}
       <pre className="whitespace-pre-wrap break-words rounded-xl border border-border bg-background p-3 text-xs">{state.content}</pre>
     </div>
