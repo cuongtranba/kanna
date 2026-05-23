@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { mkdtempSync, symlinkSync, mkdirSync, realpathSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
-import { generateBwrapArgs } from "./profile-linux"
+import { generateBwrapArgs } from "./profile-linux.adapter"
 
 // Resolve a path the same way generateBwrapArgs does (symlink-aware, with
 // walk-up fallback for non-existent paths). On macOS test machines /etc is

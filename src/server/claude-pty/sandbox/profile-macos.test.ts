@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { realpathSync } from "node:fs"
 import path from "node:path"
-import { generateMacosProfile } from "./profile-macos"
+import { generateMacosProfile } from "./profile-macos.adapter"
 
 // Resolve paths the same way the profile generator does — /etc is /private/etc on macOS.
 function r(p: string): string {

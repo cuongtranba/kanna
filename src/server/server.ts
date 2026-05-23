@@ -10,7 +10,7 @@ import {
 } from "../shared/types"
 import type { ShareMode } from "../shared/share"
 import { createAuthManager } from "./auth"
-import { createAuthSessionStore } from "./auth-session-store"
+import { createAuthSessionStore } from "./auth-session-store.adapter"
 import { EventStore } from "./event-store"
 import { PushManager, realWebPushSender } from "./push/push-manager"
 import { loadOrGenerateVapidKeys } from "./push/vapid.adapter"
