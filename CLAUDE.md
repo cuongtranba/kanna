@@ -32,6 +32,72 @@ React 19 rules: `rules-of-hooks`, `purity`, `globals` are errors;
 `set-state-in-effect`, `refs`, `immutability`, `preserve-manual-memoization`,
 `exhaustive-deps` are warnings.
 
+# Side-Effect Lint (ports-and-adapters seal)
+
+Two-tier enforcement keeps side effects (`node:fs`, `chokidar`,
+`bun:sqlite`/`better-sqlite3`/`pg`, `node:child_process`,
+`node:http`/`https`, `Bun.spawn`/`Bun.$`/`Bun.file`, `new Database`,
+`process.exit`, `process.env`) out of pure layers and tracked in the
+server layer.
+
+**Pure layers (`src/shared/**` + `src/client/**`) — sealed at `error`.**
+`no-restricted-imports` + `no-restricted-globals` + `no-restricted-syntax`
+in `eslint.config.js` make every flagged import / global / call fail
+`bun run lint`. Browser-native `fetch` is intentionally allowed. There
+is no escape valve; do not add `eslint-disable` comments. If new IO is
+required, put it in `src/server/**` and inject the result through a
+typed parameter.
+
+**Server layer (`src/server/**` production code) — ratcheted at `warn`.**
+`eslint.ratchet.config.js` extends the base config with a warn-severity
+override scoped to `src/server/**`. `scripts/lint-ratchet.ts` runs that
+config in JSON mode, counts ratcheted warnings, and fails CI when the
+count exceeds the baseline recorded in `.lintratchet.json`. `bun run
+lint:ratchet` is wired into `.github/workflows/test.yml` between
+`bun run lint` and `bun run build`. Exempt globs (no ratchet counting):
+`*.test.ts(x)`, `__fixtures__/**`, `adapters/**`, `**/*.adapter.ts`.
+
+**`.adapter.ts` filename convention.** Any file whose single
+responsibility is to perform the side effect on behalf of a port
+interface MUST be suffixed `.adapter.ts` and colocated next to its
+port. Examples already on main: `storage/fs-storage.adapter.ts`,
+`claude-pty/pty-process.adapter.ts`,
+`claude-pty/jsonl-path.adapter.ts`, `machine-name.adapter.ts`,
+`terminal-pid-registry.adapter.ts`, `subagent-entry-cap.adapter.ts`,
+`orphan-persistence.adapter.ts`, `projectFileRelocation.adapter.ts`.
+Mixed-concern modules (domain logic + IO) do NOT get the suffix until
+their IO is extracted into a sibling adapter.
+
+**Burn-down workflow** (lowers `.lintratchet.json` total):
+1. Pick a component with ratcheted warnings (`bunx eslint --config
+   eslint.ratchet.config.js src/server` to list them).
+2. Either rename the file to `*.adapter.ts` (if it is already a
+   leaf-IO module) or extract its IO into a new sibling
+   `*.adapter.ts` behind a typed port interface.
+3. Update consumers — including dynamic `await import("...")` calls,
+   not just static `from "..."` imports. `grep -rn '"\./<name>"' src`
+   to confirm coverage before committing.
+4. Run `bun run lint:ratchet -- --update` to regenerate
+   `.lintratchet.json`. Commit the new file alongside the refactor in
+   the same PR.
+5. Verify the targeted component's tests pass before pushing. Past
+   regressions (dropped count + green local lint + failed CI) came
+   from missed dynamic imports — `bun test src/server/<glob>` is the
+   gate.
+
+**End-state flip.** When `.lintratchet.json` total reaches 0:
+1. Move the ratcheted `no-restricted-imports`/`no-restricted-globals`
+   rules from `eslint.ratchet.config.js` into the main
+   `eslint.config.js` server override at `error` severity.
+2. Delete `eslint.ratchet.config.js`, `scripts/lint-ratchet.ts`,
+   `.lintratchet.json`, the `lint:ratchet` script in `package.json`,
+   and the CI step. The seal is then enforced entirely by built-in
+   ESLint.
+
+Authored across PRs #283 (pure-layer seal), #285 (paths-config
+purify), #286 (call-site selectors), #287 (ratchet infrastructure),
+#288 / #289 / #290 / #291 (initial burn-down 90 → 75).
+
 # Render-loop regression checks
 
 When introducing a new `use*Store` selector or any React hook that derives
