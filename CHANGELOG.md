@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.72.0](https://github.com/cuongtranba/kanna/compare/v0.71.0...v0.72.0) (2026-05-23)
+
+
+### Features
+
+* **mobile:** swipe to open/close sidebar ([#306](https://github.com/cuongtranba/kanna/issues/306)) ([3000d58](https://github.com/cuongtranba/kanna/commit/3000d589f4aadb9071f868be4af4abd65cd76f83))
+
 ## [0.71.0](https://github.com/cuongtranba/kanna/compare/v0.70.0...v0.71.0) (2026-05-23)
 
 
