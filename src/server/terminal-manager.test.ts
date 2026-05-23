@@ -169,7 +169,7 @@ describeIfSupported("TerminalManager", () => {
   test("registers terminal pids and unregisters on close", async () => {
     const terminalId = "terminal-pid-registry-wiring"
     const registryPath = path.join(tempProjectPath, "terminals.json")
-    const { TerminalPidRegistry } = await import("./terminal-pid-registry")
+    const { TerminalPidRegistry } = await import("./terminal-pid-registry.adapter")
     const registry = new TerminalPidRegistry(registryPath)
 
     async function readEntries(): Promise<Array<{ terminalId: string; pid: number }>> {
