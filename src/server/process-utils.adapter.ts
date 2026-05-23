@@ -46,6 +46,37 @@ export function canOpenMacApp(appName: string) {
   return result.status === 0
 }
 
+export interface SpawnSyncResult {
+  status: number | null
+  stdout: string
+  stderr: string
+}
+
+export function spawnSyncCapture(command: string, args: string[]): SpawnSyncResult {
+  const result = spawnSync(command, args, { stdio: ["ignore", "pipe", "pipe"], encoding: "utf8" })
+  return {
+    status: result.status,
+    stdout: result.stdout ?? "",
+    stderr: result.stderr ?? "",
+  }
+}
+
+export function sleep(ms: number): Promise<void> {
+  return Bun.sleep(ms)
+}
+
+export async function spawnPsCommand(pid: number): Promise<string> {
+  const proc = Bun.spawn({
+    cmd: ["ps", "-p", String(pid), "-o", "command="],
+    stdin: "ignore",
+    stdout: "pipe",
+    stderr: "ignore",
+  })
+  const out = (await new Response(proc.stdout).text()).trim()
+  await proc.exited
+  return out
+}
+
 export async function spawnCapture(command: string, args: string[], cwd: string): Promise<{ stdout: string; stderr: string; exitCode: number }> {
   const proc = Bun.spawn({ cmd: [command, ...args], cwd, stdout: "pipe", stderr: "pipe" })
   const [stdout, stderr, exitCode] = await Promise.all([

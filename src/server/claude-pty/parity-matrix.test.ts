@@ -5,7 +5,7 @@ import path from "node:path"
 import type { Query } from "@anthropic-ai/claude-agent-sdk"
 import { createClaudeHarnessStream } from "../agent"
 import { createJsonlEventParser } from "./jsonl-to-event"
-import { startTranscriptStream } from "./tui-source"
+import { startTranscriptStream } from "./tui-source.adapter"
 import type { HarnessEvent } from "../harness-types"
 
 /**

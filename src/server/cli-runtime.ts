@@ -1,6 +1,5 @@
 import process from "node:process"
-import { spawnSync } from "node:child_process"
-import { hasCommand, spawnDetached } from "./process-utils.adapter"
+import { hasCommand, spawnDetached, spawnSyncCapture } from "./process-utils.adapter"
 import { APP_NAME, CLI_COMMAND, getDataDirDisplay, LOG_PREFIX, PACKAGE_NAME } from "../shared/branding"
 import type { ShareMode } from "../shared/share"
 import { assertNoHostOverride, getShareCliFlag, isShareEnabled, isTokenShareMode } from "../shared/share"
@@ -467,12 +466,8 @@ export function installPackageVersion(packageName: string, version: string) {
   }
 
   const { command, args } = resolved.plan
-  const result = spawnSync(command, args, {
-    stdio: ["ignore", "pipe", "pipe"],
-    encoding: "utf8",
-  })
-  const stdout = result.stdout ?? ""
-  const stderr = result.stderr ?? ""
+  const result = spawnSyncCapture(command, args)
+  const { stdout, stderr } = result
   if (stdout) process.stdout.write(stdout)
   if (stderr) process.stderr.write(stderr)
   if (result.status === 0) {

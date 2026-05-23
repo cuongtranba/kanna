@@ -1,7 +1,13 @@
 import { randomUUID } from "node:crypto"
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises"
 import { homedir } from "node:os"
 import path from "node:path"
+import {
+  mkdirRecursive,
+  readBunFileText,
+  readTextFileOrThrow,
+  renameFile,
+  writeTextFileUtf8,
+} from "./app-settings-io.adapter"
 import { getSettingsFilePath } from "../shared/branding"
 import {
   AUTH_DEFAULTS,
@@ -142,8 +148,8 @@ class McpValidationException extends Error {
 
 async function atomicWriteJson(filePath: string, content: string) {
   const tmpPath = `${filePath}.${process.pid}.${randomUUID()}.tmp`
-  await writeFile(tmpPath, content, "utf8")
-  await rename(tmpPath, filePath)
+  await writeTextFileUtf8(tmpPath, content)
+  await renameFile(tmpPath, filePath)
 }
 
 function formatDisplayPath(filePath: string) {
@@ -1139,7 +1145,7 @@ function applyPatch(state: AppSettingsState, patch: AppSettingsPatch): AppSettin
 
 export async function readAppSettingsSnapshot(filePath = getSettingsFilePath(homedir())) {
   try {
-    const text = await readFile(filePath, "utf8")
+    const text = await readTextFileOrThrow(filePath)
     if (!text.trim()) {
       const normalized = normalizeAppSettings(undefined, filePath)
       return {
@@ -1174,7 +1180,7 @@ export class AppSettingsManager {
   }
 
   async initialize() {
-    await mkdir(path.dirname(this.filePath), { recursive: true })
+    await mkdirRecursive(path.dirname(this.filePath))
     await this.reload({ persistNormalized: true, allowDefaultsFallback: true })
   }
 
@@ -1328,17 +1334,15 @@ export class AppSettingsManager {
       warning: null,
       filePathDisplay: formatDisplayPath(this.filePath),
     }
-    await mkdir(path.dirname(this.filePath), { recursive: true })
+    await mkdirRecursive(path.dirname(this.filePath))
     await atomicWriteJson(this.filePath, `${JSON.stringify(toFilePayload(nextState), null, 2)}\n`)
     this.setState(nextState)
     return toSnapshot(nextState)
   }
 
   private async readState(options?: { persistNormalized?: boolean; allowDefaultsFallback?: boolean }) {
-    const file = Bun.file(this.filePath)
-
     try {
-      const text = await file.text()
+      const text = await readBunFileText(this.filePath)
       const hasText = text.trim().length > 0
       const normalized = normalizeAppSettings(hasText ? JSON.parse(text) : undefined, this.filePath)
       if (options?.persistNormalized && (!hasText || normalized.shouldWrite)) {

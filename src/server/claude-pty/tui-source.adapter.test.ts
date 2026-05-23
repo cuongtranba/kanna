@@ -6,7 +6,7 @@ import {
   findLatestTranscript,
   startTranscriptStream,
   waitForResultEntry,
-} from "./tui-source"
+} from "./tui-source.adapter"
 import { encodeCwd } from "./jsonl-path.adapter"
 
 let workHome: string

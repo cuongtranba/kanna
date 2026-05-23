@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import type { TranscriptEntry } from "../shared/types"
-import { writeStandaloneTranscriptExport } from "./standalone-export"
+import { writeStandaloneTranscriptExport } from "./standalone-export.adapter"
 
 const tempDirs: string[] = []
 

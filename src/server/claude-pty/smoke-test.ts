@@ -1,11 +1,16 @@
-import { mkdir, mkdtemp, readFile, writeFile as writeFileFs, rm } from "node:fs/promises"
-import { existsSync } from "node:fs"
 import path from "node:path"
-import { tmpdir } from "node:os"
+import {
+  fileExists,
+  makeTempCwd,
+  mkdirRecursive,
+  readTextFile,
+  rmDirRecursive,
+  writeFile0600,
+} from "./smoke-test-io.adapter"
 import { OutputRing } from "./output-ring"
 import { spawnPtyProcess as defaultSpawnPtyProcess } from "./pty-process.adapter"
 import { waitForTuiReadyWithTrustDismiss, sendUserPrompt, sendExitCommand } from "./tui-control"
-import { startTranscriptStream, waitForResultEntry } from "./tui-source"
+import { startTranscriptStream, waitForResultEntry } from "./tui-source.adapter"
 import { computeProjectDir } from "./jsonl-path.adapter"
 
 export type SmokeTestProbeFn = () => Promise<"pass" | "fail">
@@ -85,7 +90,7 @@ export interface BuildLiveSmokeProbeArgs {
 export function buildLiveSmokeProbe(args: BuildLiveSmokeProbeArgs): SmokeTestProbeFn {
   const spawnPty = args.spawnPtyProcess ?? defaultSpawnPtyProcess
   return async () => {
-    const tmpCwd = await mkdtemp(path.join(tmpdir(), "kanna-smoke-cwd-"))
+    const tmpCwd = await makeTempCwd("kanna-smoke-cwd-")
     const ring = new OutputRing()
     const cliArgs = [
       "--model", args.model,
@@ -116,7 +121,7 @@ export function buildLiveSmokeProbe(args: BuildLiveSmokeProbeArgs): SmokeTestPro
         await sendUserPrompt(pty, ring, "Run the command ls -la /tmp using the Bash tool now. Just do it.")
         const filePath = await stream.filePath
         await waitForResultEntry(stream, { timeoutMs: 30_000 })
-        const raw = await readFile(filePath, "utf8")
+        const raw = await readTextFile(filePath)
         for (const line of raw.split("\n")) {
           if (!line.trim()) continue
           let parsed: { message?: { content?: Array<{ type?: string; name?: string }> } }
@@ -141,7 +146,7 @@ export function buildLiveSmokeProbe(args: BuildLiveSmokeProbeArgs): SmokeTestPro
     } finally {
       try { await sendExitCommand(pty) } catch { /* swallow */ }
       try { pty.close() } catch { /* swallow */ }
-      try { await rm(tmpCwd, { recursive: true, force: true }) } catch { /* swallow */ }
+      try { await rmDirRecursive(tmpCwd) } catch { /* swallow */ }
     }
     return probeResult
   }
@@ -153,9 +158,9 @@ export function createFileSmokeTestCache(args: { cacheDir: string }): SmokeTestC
   return {
     async get(key) {
       const fp = fileFor(key)
-      if (!existsSync(fp)) return null
+      if (!fileExists(fp)) return null
       try {
-        const raw = await readFile(fp, "utf8")
+        const raw = await readTextFile(fp)
         const parsed = JSON.parse(raw) as SmokeTestCacheEntry
         if (parsed.result !== "pass" && parsed.result !== "fail") return null
         if (typeof parsed.ts !== "number") return null
@@ -165,11 +170,11 @@ export function createFileSmokeTestCache(args: { cacheDir: string }): SmokeTestC
       }
     },
     async set(key, entry) {
-      await mkdir(dir, { recursive: true })
-      await writeFileFs(fileFor(key), JSON.stringify(entry), { encoding: "utf8", mode: 0o600 })
+      await mkdirRecursive(dir)
+      await writeFile0600(fileFor(key), JSON.stringify(entry))
     },
     async invalidate() {
-      try { await rm(dir, { recursive: true, force: true }) } catch { /* swallow */ }
+      try { await rmDirRecursive(dir) } catch { /* swallow */ }
     },
   }
 }

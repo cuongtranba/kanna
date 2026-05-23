@@ -1,6 +1,5 @@
-import http from "node:http"
 import { randomBytes, randomUUID } from "node:crypto"
-import type { AddressInfo } from "node:net"
+import { closeHttpServer, createHttpServer, listen, type HttpIncomingMessage } from "./http-server.adapter"
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js"
 import type { SdkMcpToolDefinition } from "@anthropic-ai/claude-agent-sdk"
@@ -56,7 +55,7 @@ export async function startKannaMcpHttpServer(
   })
   await mcp.connect(transport)
 
-  const httpServer = http.createServer((req, res) => {
+  const httpServer = createHttpServer((req, res) => {
     if (!authorize(req, bearerToken)) {
       res.statusCode = 401
       res.setHeader("WWW-Authenticate", "Bearer")
@@ -71,20 +70,14 @@ export async function startKannaMcpHttpServer(
     })
   })
 
+  let address
   try {
-    await new Promise<void>((resolve, reject) => {
-      httpServer.once("error", reject)
-      httpServer.listen(port, host, () => {
-        httpServer.off("error", reject)
-        resolve()
-      })
-    })
+    address = await listen(httpServer, port, host)
   } catch (err) {
     try { await transport.close() } catch { /* swallow */ }
     throw err
   }
 
-  const address = httpServer.address() as AddressInfo
   const url = `http://${host}:${address.port}/mcp`
 
   let closed = false
@@ -96,13 +89,13 @@ export async function startKannaMcpHttpServer(
     } catch {
       /* swallow */
     }
-    await new Promise<void>((resolve) => httpServer.close(() => resolve()))
+    await closeHttpServer(httpServer)
   }
 
   return { url, bearerToken, close }
 }
 
-function authorize(req: http.IncomingMessage, bearerToken: string): boolean {
+function authorize(req: HttpIncomingMessage, bearerToken: string): boolean {
   const header = req.headers.authorization
   if (!header || typeof header !== "string") return false
   const prefix = "Bearer "

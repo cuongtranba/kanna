@@ -1,7 +1,11 @@
 import path from "node:path"
-import { readdir } from "node:fs/promises"
-import { existsSync, statSync, type Dirent } from "node:fs"
-import { spawn } from "bun"
+import {
+  pathExists,
+  readDirEntries,
+  runGitCapture,
+  statMtimeMsOrNull,
+  type DirEntry,
+} from "./project-paths-io.adapter"
 
 export interface ProjectPath {
   path: string
@@ -49,7 +53,7 @@ export async function listProjectPaths(args: {
 
 async function listTopLevelEntries(localPath: string, limit: number): Promise<ProjectPath[]> {
   try {
-    const entries = await readdir(localPath, { withFileTypes: true })
+    const entries = await readDirEntries(localPath)
     const result: ProjectPath[] = []
     for (const e of entries) {
       if (DEFAULT_WALK_EXCLUDES.has(e.name)) continue
@@ -88,7 +92,7 @@ async function getOrBuildCache(projectId: string, localPath: string): Promise<Ca
 function getGitIndexMtime(localPath: string): number | null {
   const indexPath = path.join(localPath, ".git", "index")
   try {
-    return statSync(indexPath).mtimeMs
+    return statMtimeMsOrNull(indexPath)
   } catch {
     return null
   }
@@ -102,7 +106,7 @@ async function buildCacheEntry(localPath: string): Promise<Pick<CacheEntry, "fil
 }
 
 async function listGitFiles(localPath: string): Promise<string[] | null> {
-  if (!existsSync(path.join(localPath, ".git"))) return null
+  if (!pathExists(path.join(localPath, ".git"))) return null
 
   const tracked = await runGit(localPath, ["-c", "core.quotepath=false", "ls-files"])
   if (tracked === null) return null
@@ -118,21 +122,9 @@ async function listGitFiles(localPath: string): Promise<string[] | null> {
 }
 
 async function runGit(cwd: string, args: string[]): Promise<string[] | null> {
-  try {
-    const proc = spawn(["git", ...args], {
-      cwd,
-      stdout: "pipe",
-      stderr: "pipe",
-      stdin: "ignore",
-      env: { ...process.env, GIT_TERMINAL_PROMPT: "0" },
-    })
-    const stdout = await new Response(proc.stdout).text()
-    const exitCode = await proc.exited
-    if (exitCode !== 0) return null
-    return stdout.split("\n").filter(Boolean)
-  } catch {
-    return null
-  }
+  const result = await runGitCapture(cwd, args, { ...process.env, GIT_TERMINAL_PROMPT: "0" })
+  if (!result || result.exitCode !== 0) return null
+  return result.stdout.split("\n").filter(Boolean)
 }
 
 async function walkDirectory(root: string): Promise<string[]> {
@@ -141,9 +133,9 @@ async function walkDirectory(root: string): Promise<string[]> {
   while (queue.length > 0 && out.length < MAX_WALK_ENTRIES) {
     const rel = queue.shift()!
     const abs = path.join(root, rel)
-    let entries: Dirent<string>[]
+    let entries: DirEntry[]
     try {
-      entries = await readdir(abs, { withFileTypes: true })
+      entries = await readDirEntries(abs) as DirEntry[]
     } catch {
       continue
     }

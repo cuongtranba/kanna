@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto"
-import { readFile } from "node:fs/promises"
+import { readTextFileOrThrow, spawnCommandCapture } from "./ws-router-io.adapter"
 import os from "node:os"
 import path from "node:path"
 import type { ServerWebSocket } from "bun"
@@ -18,7 +18,7 @@ import { openExternal } from "./external-open"
 import { KeybindingsManager } from "./keybindings"
 import { resolveLocalPath } from "./paths"
 import { ensureProjectDirectory } from "./project-directory.adapter"
-import { writeStandaloneTranscriptExport } from "./standalone-export"
+import { writeStandaloneTranscriptExport } from "./standalone-export.adapter"
 import { TerminalManager } from "./terminal-manager"
 import type { UpdateManager } from "./update-manager"
 import { deriveChatSnapshot, deriveLocalProjectsSnapshot, deriveSidebarData } from "./read-models"
@@ -270,7 +270,7 @@ export function parseInstalledSkillsLock(parsed: unknown, lockFilePath: string):
 
 export async function listInstalledSkills(lockFilePath = getGlobalSkillLockPath()): Promise<InstalledSkillsSnapshot> {
   try {
-    return parseInstalledSkillsLock(JSON.parse(await readFile(lockFilePath, "utf8")), lockFilePath)
+    return parseInstalledSkillsLock(JSON.parse(await readTextFileOrThrow(lockFilePath)), lockFilePath)
   } catch {
     return {
       lockFilePath,
@@ -360,21 +360,10 @@ export function buildUninstallSkillCommand(skillId: string) {
 
 async function runSkillCommand(command: string[]) {
   const cwd = os.homedir()
-  const subprocess = Bun.spawn(command, {
-    cwd,
-    stdout: "pipe",
-    stderr: "pipe",
-    env: {
-      ...process.env,
-      DISABLE_TELEMETRY: process.env.DISABLE_TELEMETRY ?? "1",
-    },
+  const { stdout, stderr, exitCode } = await spawnCommandCapture(command, cwd, {
+    ...process.env,
+    DISABLE_TELEMETRY: process.env.DISABLE_TELEMETRY ?? "1",
   })
-
-  const [stdout, stderr, exitCode] = await Promise.all([
-    new Response(subprocess.stdout).text(),
-    new Response(subprocess.stderr).text(),
-    subprocess.exited,
-  ])
 
   if (exitCode !== 0) {
     throw new Error(stderr.trim() || stdout.trim() || `skills CLI exited with code ${exitCode}.`)
