@@ -2,7 +2,12 @@ import path from "node:path"
 import { stat } from "node:fs/promises"
 import { bin as cloudflaredBin } from "cloudflared"
 import { APP_NAME, getRuntimeProfile } from "../shared/branding"
-import { CLOUDFLARE_TUNNEL_DEFAULTS, UPLOAD_MAX_FILE_SIZE_MB_MAX, type ChatAttachment } from "../shared/types"
+import {
+  CLOUDFLARE_TUNNEL_DEFAULTS,
+  UPLOAD_MAX_FILE_SIZE_MB_MAX,
+  type AppSettingsSnapshot,
+  type ChatAttachment,
+} from "../shared/types"
 import type { ShareMode } from "../shared/share"
 import { createAuthManager } from "./auth"
 import { createAuthSessionStore } from "./auth-session-store"
@@ -45,6 +50,27 @@ function resolveCloudflaredPath(settingsPath: string): string {
     return settingsPath
   }
   return cloudflaredBin
+}
+
+/**
+ * Subset of {@link AppSettingsSnapshot} the {@link AgentCoordinator} consumes.
+ *
+ * Extracted so the wiring is testable: a previous inline lambda silently
+ * dropped `globalPromptAppend`, which left the user-authored "Project
+ * instructions" block out of every spawn's `--append-system-prompt`. The
+ * accompanying test in `server.test.ts` pins every consumed field so a future
+ * edit cannot regress the contract again.
+ */
+export interface AgentAppSettingsView {
+  claudeDriver: AppSettingsSnapshot["claudeDriver"]
+  globalPromptAppend: AppSettingsSnapshot["globalPromptAppend"]
+}
+
+export function buildAgentAppSettingsView(snapshot: AppSettingsSnapshot): AgentAppSettingsView {
+  return {
+    claudeDriver: snapshot.claudeDriver,
+    globalPromptAppend: snapshot.globalPromptAppend,
+  }
 }
 
 const MAX_UPLOAD_FILES = 50
@@ -280,9 +306,7 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
       defaultAction: "auto-allow",
     },
     getSubagents: () => appSettings.getSnapshot().subagents,
-    getAppSettingsSnapshot: () => ({
-      claudeDriver: appSettings.getSnapshot().claudeDriver,
-    }),
+    getAppSettingsSnapshot: () => buildAgentAppSettingsView(appSettings.getSnapshot()),
     onStateChange: (chatId?: string, options?: { immediate?: boolean }) => {
       if (chatId) {
         if (options?.immediate) {
