@@ -27,6 +27,7 @@ import type {
   EditorPreset,
 } from "./types"
 import type { ChatPermissionPolicyOverride, ToolRequestDecision } from "./permission-policy"
+import type { PtyInstanceDelta, PtyInstancesSnapshot } from "./pty-instance"
 
 export type { EditorPreset }
 
@@ -46,6 +47,7 @@ export type SubscriptionTopic =
   | { type: "project-git"; projectId: string }
   | { type: "terminal"; terminalId: string }
   | { type: "bg-tasks" }
+  | { type: "pty-instances" }
 
 export interface TerminalSnapshot {
   terminalId: string
@@ -76,7 +78,12 @@ export type SubagentCommandResult =
 
 export type SubagentDeleteResult = { ok: true }
 
-export type WsEvent = TerminalEvent | BackgroundTaskDiffEvent
+export type PtyInstancesEvent =
+  | { type: "pty-instances.added"; instance: Extract<PtyInstanceDelta, { type: "added" }>["instance"] }
+  | { type: "pty-instances.updated"; instance: Extract<PtyInstanceDelta, { type: "updated" }>["instance"] }
+  | { type: "pty-instances.removed"; chatId: string }
+
+export type WsEvent = TerminalEvent | BackgroundTaskDiffEvent | PtyInstancesEvent
 
 export type ClientCommand =
   | { type: "project.open"; localPath: string }
@@ -284,6 +291,8 @@ export type ClientCommand =
   | { type: "terminal.input"; terminalId: string; data: string }
   | { type: "terminal.resize"; terminalId: string; cols: number; rows: number }
   | { type: "terminal.close"; terminalId: string }
+  | { type: "pty.cancel"; chatId: string }
+  | { type: "pty.kill"; chatId: string }
   | { type: "push.identifyDevice"; pushDeviceId: string | null }
   | { type: "push.subscribe"; subscription: PushSubscribeRequestPayload; label: string; userAgent: string }
   | { type: "push.unsubscribe"; pushDeviceId: string }
@@ -317,6 +326,7 @@ export type ServerSnapshot =
   | { type: "project-git"; data: ChatDiffSnapshot | null }
   | { type: "terminal"; data: TerminalSnapshot | null }
   | { type: "bg-tasks"; data: BgTasksSnapshotData }
+  | { type: "pty-instances"; data: PtyInstancesSnapshot }
 
 export type ServerEnvelope =
   | { v: 1; type: "snapshot"; id: string; snapshot: ServerSnapshot }

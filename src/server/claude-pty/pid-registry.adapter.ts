@@ -124,7 +124,7 @@ function isValidEntry(value: unknown): value is ClaudePtyEntry {
   )
 }
 
-function killPgroup(pid: number) {
+export function killPgroup(pid: number) {
   if (process.platform === "win32") return
   if (!Number.isFinite(pid) || pid <= 0) return
   try {

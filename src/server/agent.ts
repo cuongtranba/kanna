@@ -274,6 +274,8 @@ interface AgentCoordinatorArgs {
   claudeSessionLifecycle?: Partial<ClaudeSessionLifecycleOptions>
   /** On-disk registry of claude PTY children for crash-orphan reap on next boot. Forwarded to every PTY spawn. */
   claudePtyRegistry?: import("./claude-pty/pid-registry.adapter").ClaudePtyRegistry
+  /** In-memory live-status registry surfaced to the UI. Forwarded to every PTY spawn. */
+  ptyInstanceRegistry?: import("./claude-pty/pty-instance-registry").PtyInstanceRegistry
 }
 
 interface SendToStartingProfile {
@@ -1211,6 +1213,7 @@ export class AgentCoordinator {
   private readonly claudeSessionLifecycle: ClaudeSessionLifecycleOptions
   private readonly claudeSessionSweepTimer: ReturnType<typeof setInterval> | null
   private readonly claudePtyRegistry: import("./claude-pty/pid-registry.adapter").ClaudePtyRegistry | null
+  private readonly ptyInstanceRegistry: import("./claude-pty/pty-instance-registry").PtyInstanceRegistry | null
   private readonly pendingBashCalls = new Map<string, { command: string; chatId: string; isBg: boolean }>()
   private readonly subagentPendingResolvers = new Map<
     string,
@@ -1285,6 +1288,7 @@ export class AgentCoordinator {
       : null
     this.claudeSessionSweepTimer?.unref?.()
     this.claudePtyRegistry = args.claudePtyRegistry ?? null
+    this.ptyInstanceRegistry = args.ptyInstanceRegistry ?? null
     this.backgroundTasks?.setStrategies({
       closeStream: async (task) => {
         await this.stopDraining(task.chatId)
@@ -1648,6 +1652,7 @@ export class AgentCoordinator {
                 onToolRequest: async () => null,
                 systemPromptAppend: ephemeralSystemPromptAppend,
                 ptyRegistry: this.claudePtyRegistry ?? undefined,
+                ptyInstanceRegistry: this.ptyInstanceRegistry ?? undefined,
                 customMcpServers: this.getEnabledCustomMcpServers(),
                   })
             : await this.startClaudeSessionFn({
@@ -2279,6 +2284,7 @@ export class AgentCoordinator {
               tunnelGateway: this.tunnelGateway,
               chatPolicy: this.resolveChatPolicy(args.chatId),
               ptyRegistry: this.claudePtyRegistry ?? undefined,
+                ptyInstanceRegistry: this.ptyInstanceRegistry ?? undefined,
               customMcpServers: this.getEnabledCustomMcpServers(),
             })
           : await this.startClaudeSessionFn({
@@ -2523,6 +2529,7 @@ export class AgentCoordinator {
           chatPolicy: a.chatId ? this.resolveChatPolicy(a.chatId) : undefined,
           oneShot: true,
           ptyRegistry: this.claudePtyRegistry ?? undefined,
+                ptyInstanceRegistry: this.ptyInstanceRegistry ?? undefined,
           customMcpServers: this.getEnabledCustomMcpServers(),
         })
       }
@@ -3433,6 +3440,20 @@ export class AgentCoordinator {
       .filter((s) => s.state === "proposed" || s.state === "scheduled")
       .map((s) => s.scheduleId)
       .sort()
+  }
+
+  async killPtyInstance(chatId: string): Promise<void> {
+    const instance = this.ptyInstanceRegistry?.snapshot().find((entry) => entry.chatId === chatId)
+    if (!instance || instance.pid === null) {
+      throw new Error("No live PTY instance for chat")
+    }
+    const { killPgroup } = await import("./claude-pty/pid-registry.adapter")
+    killPgroup(instance.pid)
+    this.ptyInstanceRegistry?.upsert(chatId, {
+      phase: "exited",
+      exitedAt: Date.now(),
+      lastEventAt: Date.now(),
+    })
   }
 
   async cancel(chatId: string, options?: { hideInterrupted?: boolean; skipQueueDrain?: boolean }) {

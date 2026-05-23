@@ -4,7 +4,9 @@ import os from "node:os"
 import path from "node:path"
 import type { ServerWebSocket } from "bun"
 import { PROTOCOL_VERSION } from "../shared/types"
-import type { BackgroundTaskDiffEvent, BgTasksSnapshotData, ClientEnvelope, ServerEnvelope, SubscriptionTopic } from "../shared/protocol"
+import type { BackgroundTaskDiffEvent, BgTasksSnapshotData, ClientEnvelope, PtyInstancesEvent, ServerEnvelope, SubscriptionTopic } from "../shared/protocol"
+import type { PtyInstanceDelta } from "../shared/pty-instance"
+import type { PtyInstanceRegistry } from "./claude-pty/pty-instance-registry"
 import { isClientEnvelope } from "../shared/protocol"
 import type { BackgroundTaskRegistry } from "./background-tasks"
 import type { AgentCoordinator } from "./agent"
@@ -156,6 +158,8 @@ interface CreateWsRouterArgs {
    * bg-tasks snapshot so the client can show a one-time toast.
    */
   bootOrphanRecoveryCount?: number
+  ptyInstances?: PtyInstanceRegistry
+  killPtyInstance?: (chatId: string) => Promise<{ ok: boolean; error?: string }>
 }
 
 interface SnapshotBroadcastFilter {
@@ -422,6 +426,8 @@ export function createWsRouter({
   pushManager,
   backgroundTasks,
   bootOrphanRecoveryCount,
+  ptyInstances,
+  killPtyInstance,
 }: CreateWsRouterArgs) {
   const sockets = new Set<ServerWebSocket<ClientState>>()
   let pendingBroadcastTimer: ReturnType<typeof setTimeout> | null = null
@@ -913,6 +919,18 @@ export function createWsRouter({
       }
     }
 
+    if (topic.type === "pty-instances") {
+      return {
+        v: PROTOCOL_VERSION,
+        type: "snapshot",
+        id,
+        snapshot: {
+          type: "pty-instances",
+          data: { instances: ptyInstances?.snapshot() ?? [] },
+        },
+      }
+    }
+
     if (topic.type === "bg-tasks") {
       const orphanRecoveryCount =
         !orphanCountDelivered && bootOrphanRecoveryCount != null && bootOrphanRecoveryCount > 0
@@ -1242,6 +1260,25 @@ export function createWsRouter({
 
   const disposeBgTasksRemoved = backgroundTasks?.on("removed", (task) => {
     pushBgTasksDiffEvent({ type: "bg-tasks.removed", task })
+  }) ?? (() => {})
+
+  function pushPtyInstancesEvent(event: PtyInstancesEvent) {
+    for (const ws of sockets) {
+      for (const [id, topic] of ws.data.subscriptions.entries()) {
+        if (topic.type !== "pty-instances") continue
+        send(ws, { v: PROTOCOL_VERSION, type: "event", id, event })
+      }
+    }
+  }
+
+  const disposePtyInstances: () => void = ptyInstances?.subscribe((delta: PtyInstanceDelta) => {
+    if (delta.type === "added") {
+      pushPtyInstancesEvent({ type: "pty-instances.added", instance: delta.instance })
+    } else if (delta.type === "updated") {
+      pushPtyInstancesEvent({ type: "pty-instances.updated", instance: delta.instance })
+    } else {
+      pushPtyInstancesEvent({ type: "pty-instances.removed", chatId: delta.chatId })
+    }
   }) ?? (() => {})
 
   agent.setBackgroundErrorReporter?.(broadcastError)
@@ -2018,6 +2055,34 @@ export function createWsRouter({
           send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
           return
         }
+        case "pty.cancel": {
+          try {
+            await agent.cancel(command.chatId)
+            send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: { ok: true } })
+          } catch (err) {
+            send(ws, {
+              v: PROTOCOL_VERSION,
+              type: "ack",
+              id,
+              result: { ok: false, error: err instanceof Error ? err.message : String(err) },
+            })
+          }
+          return
+        }
+        case "pty.kill": {
+          if (!killPtyInstance) {
+            send(ws, {
+              v: PROTOCOL_VERSION,
+              type: "ack",
+              id,
+              result: { ok: false, error: "pty kill not available" },
+            })
+            return
+          }
+          const result = await killPtyInstance(command.chatId)
+          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result })
+          return
+        }
         case "bg-tasks.stop": {
           if (!backgroundTasks) {
             send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: { ok: false, error: "background tasks unavailable" } })
@@ -2157,6 +2222,7 @@ export function createWsRouter({
       disposeBgTasksAdded()
       disposeBgTasksUpdated()
       disposeBgTasksRemoved()
+      disposePtyInstances()
     },
   }
 }

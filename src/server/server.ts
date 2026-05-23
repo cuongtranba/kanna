@@ -28,6 +28,7 @@ import { getMachineDisplayName } from "./machine-name.adapter"
 import { TerminalManager } from "./terminal-manager"
 import { TerminalPidRegistry } from "./terminal-pid-registry.adapter"
 import { ClaudePtyRegistry } from "./claude-pty/pid-registry.adapter"
+import { createPtyInstanceRegistry } from "./claude-pty/pty-instance-registry"
 import { UpdateManager } from "./update-manager"
 import type { UpdateInstallAttemptResult } from "./cli-runtime"
 import { compareVersions } from "./cli-runtime"
@@ -187,6 +188,7 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     console.log(`[kanna] reaped ${reapedTerminals.length} orphan terminal process group(s) from previous run`)
   }
   const claudePtyRegistry = new ClaudePtyRegistry(path.join(store.dataDir, "claude-pty.json"))
+  const ptyInstanceRegistry = createPtyInstanceRegistry()
   const reapedClaudePty = await claudePtyRegistry.reapStale()
   if (reapedClaudePty.length > 0) {
     console.log(`[kanna] reaped ${reapedClaudePty.length} orphan claude PTY process group(s) from previous run`)
@@ -296,6 +298,7 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     oauthPool,
     toolCallback,
     claudePtyRegistry,
+    ptyInstanceRegistry,
     // Kanna is a personal-use tool on the developer's own machine. Tool calls
     // auto-allow at the kanna gate layer (the claude CLI itself runs with
     // `--dangerously-skip-permissions` so it doesn't gate either). The
@@ -349,6 +352,15 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     pushManager,
     backgroundTasks,
     bootOrphanRecoveryCount,
+    ptyInstances: ptyInstanceRegistry,
+    killPtyInstance: async (chatId: string) => {
+      try {
+        await agent.killPtyInstance(chatId)
+        return { ok: true }
+      } catch (err) {
+        return { ok: false, error: err instanceof Error ? err.message : String(err) }
+      }
+    },
   })
   scheduleManager.rehydrate(
     store.listAutoContinueChats().flatMap((chatId) => store.getAutoContinueEvents(chatId))
