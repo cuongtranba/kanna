@@ -273,7 +273,7 @@ interface AgentCoordinatorArgs {
   /** Claude subprocess lifecycle tuning. Defaults are conservative and may be overridden in tests. */
   claudeSessionLifecycle?: Partial<ClaudeSessionLifecycleOptions>
   /** On-disk registry of claude PTY children for crash-orphan reap on next boot. Forwarded to every PTY spawn. */
-  claudePtyRegistry?: import("./claude-pty/pid-registry").ClaudePtyRegistry
+  claudePtyRegistry?: import("./claude-pty/pid-registry.adapter").ClaudePtyRegistry
 }
 
 interface SendToStartingProfile {
@@ -1210,7 +1210,7 @@ export class AgentCoordinator {
   private readonly chatPolicy: ChatPermissionPolicy
   private readonly claudeSessionLifecycle: ClaudeSessionLifecycleOptions
   private readonly claudeSessionSweepTimer: ReturnType<typeof setInterval> | null
-  private readonly claudePtyRegistry: import("./claude-pty/pid-registry").ClaudePtyRegistry | null
+  private readonly claudePtyRegistry: import("./claude-pty/pid-registry.adapter").ClaudePtyRegistry | null
   private readonly pendingBashCalls = new Map<string, { command: string; chatId: string; isBg: boolean }>()
   private readonly subagentPendingResolvers = new Map<
     string,

@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { mkdirSync, mkdtempSync, writeFileSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
-import { scanClaudeSessions } from "./claude-session-scanner"
+import { scanClaudeSessions } from "./claude-session-scanner.adapter"
 
 function makeTempClaudeHome(): { home: string; cleanup: () => void } {
   const home = mkdtempSync(path.join(tmpdir(), "kanna-claude-home-"))

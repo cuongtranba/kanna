@@ -9,7 +9,7 @@ import type { CloudflareTunnelEvent } from "./events"
 import { TunnelGateway } from "./gateway"
 import { TunnelLifecycle } from "./lifecycle"
 import { deriveChatTunnels } from "./read-model"
-import { TunnelManager, type ChildHandle } from "./tunnel-manager"
+import { TunnelManager, type ChildHandle } from "./tunnel-manager.adapter"
 
 interface FakeChild extends ChildHandle {
   emitStdout: (chunk: string) => void

@@ -6,7 +6,7 @@ import {
   awaitClaudeSessionForPid,
   computeClaudeSessionFilePath,
   readClaudeSessionByPid,
-} from "./claude-session-registry"
+} from "./claude-session-registry.adapter"
 
 function makeHome(): string {
   return mkdtempSync(path.join(tmpdir(), "kanna-csr-"))

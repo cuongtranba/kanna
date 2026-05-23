@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { computeBinarySha256 } from "./binary-fingerprint"
+import { computeBinarySha256 } from "./binary-fingerprint.adapter"
 import { mkdtemp, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"

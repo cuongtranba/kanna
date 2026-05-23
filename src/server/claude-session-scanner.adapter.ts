@@ -2,7 +2,7 @@ import { existsSync, readdirSync } from "node:fs"
 import { homedir } from "node:os"
 import path from "node:path"
 import type { ParsedClaudeSession } from "./claude-session-types"
-import { parseClaudeSessionFile } from "./claude-session-parser"
+import { parseClaudeSessionFile } from "./claude-session-parser.adapter"
 
 export function scanClaudeSessions(homeDir: string = homedir()): ParsedClaudeSession[] {
   const projectsDir = path.join(homeDir, ".claude", "projects")

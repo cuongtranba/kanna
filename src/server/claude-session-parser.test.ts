@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import path from "node:path"
-import { parseClaudeSessionFile } from "./claude-session-parser"
+import { parseClaudeSessionFile } from "./claude-session-parser.adapter"
 
 const FIXTURE_DIR = path.join(__dirname, "__fixtures__")
 

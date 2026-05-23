@@ -7,7 +7,7 @@ import {
   CodexProjectDiscoveryAdapter,
   discoverProjects,
   type ProjectDiscoveryAdapter,
-} from "./discovery"
+} from "./discovery.adapter"
 
 const tempDirs: string[] = []
 

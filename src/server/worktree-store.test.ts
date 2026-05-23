@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { join } from "node:path"
 import { git, makeTempRepo } from "./test-helpers/worktree-repo"
-import { parseWorktreeList, listWorktrees, addWorktree, isDirty, removeWorktree, slugifyBranchForPath, resolveDefaultWorktreePath } from "./worktree-store"
+import { parseWorktreeList, listWorktrees, addWorktree, isDirty, removeWorktree, slugifyBranchForPath, resolveDefaultWorktreePath } from "./worktree-store.adapter"
 import { writeFileSync } from "node:fs"
 
 describe("parseWorktreeList", () => {

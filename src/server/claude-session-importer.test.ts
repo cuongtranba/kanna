@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
-import { importClaudeSessions } from "./claude-session-importer"
+import { importClaudeSessions } from "./claude-session-importer.adapter"
 import { createTestEventStore } from "./storage/test-helpers"
 
 function fresh() {

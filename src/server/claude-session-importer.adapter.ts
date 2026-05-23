@@ -3,7 +3,7 @@ import { homedir } from "node:os"
 import type { EventStore } from "./event-store"
 import type { ChatRecord } from "./events"
 import { mapClaudeRecordsToEntries } from "./claude-session-mapper"
-import { scanClaudeSessions } from "./claude-session-scanner"
+import { scanClaudeSessions } from "./claude-session-scanner.adapter"
 import type { ParsedClaudeSession } from "./claude-session-types"
 
 export interface ImportClaudeSessionsResult {

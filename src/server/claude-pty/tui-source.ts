@@ -1,7 +1,7 @@
 import { readdir, stat, open } from "node:fs/promises"
 import { existsSync, watch } from "node:fs"
 import path from "node:path"
-import { awaitClaudeSessionForPid } from "./claude-session-registry"
+import { awaitClaudeSessionForPid } from "./claude-session-registry.adapter"
 import { computeJsonlPath } from "./jsonl-path.adapter"
 
 export async function findLatestTranscript(

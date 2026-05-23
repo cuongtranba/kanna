@@ -1,5 +1,5 @@
 import { describe, expect, mock, test } from "bun:test"
-import { TunnelManager, type SpawnFn, type ChildHandle } from "./tunnel-manager"
+import { TunnelManager, type SpawnFn, type ChildHandle } from "./tunnel-manager.adapter"
 import type { CloudflareTunnelEvent } from "./events"
 
 interface FakeChild extends ChildHandle {

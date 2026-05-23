@@ -5,7 +5,7 @@ import type { CloudflareTunnelEvent } from "./events"
 import { CLOUDFLARE_TUNNEL_EVENT_VERSION } from "./events"
 import { TunnelLifecycle } from "./lifecycle"
 import { deriveChatTunnels } from "./read-model"
-import { TunnelManager } from "./tunnel-manager"
+import { TunnelManager } from "./tunnel-manager.adapter"
 
 export interface TunnelGatewayArgs {
   manager: TunnelManager
