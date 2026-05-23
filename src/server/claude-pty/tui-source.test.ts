@@ -7,7 +7,7 @@ import {
   startTranscriptStream,
   waitForResultEntry,
 } from "./tui-source"
-import { encodeCwd } from "./jsonl-path"
+import { encodeCwd } from "./jsonl-path.adapter"
 
 let workHome: string
 let projectDir: string

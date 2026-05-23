@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test"
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
-import { TerminalPidRegistry } from "./terminal-pid-registry"
+import { TerminalPidRegistry } from "./terminal-pid-registry.adapter"
 
 let tempDir = ""
 let registryPath = ""

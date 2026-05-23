@@ -3,7 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises"
 import { homedir, tmpdir } from "node:os"
 import path from "node:path"
 import { describe, expect, test } from "bun:test"
-import { computeJsonlPath, computeProjectDir, encodeCwd } from "./jsonl-path"
+import { computeJsonlPath, computeProjectDir, encodeCwd } from "./jsonl-path.adapter"
 
 describe("encodeCwd", () => {
   test("absolute path: replaces / with -", () => {
