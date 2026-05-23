@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test"
 import { mkdtemp, rm, stat, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { ensureProjectDirectory } from "./project-directory"
+import { ensureProjectDirectory } from "./project-directory.adapter"
 
 describe("ensureProjectDirectory", () => {
   let root: string
