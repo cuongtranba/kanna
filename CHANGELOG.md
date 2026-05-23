@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.74.0](https://github.com/cuongtranba/kanna/compare/v0.73.1...v0.74.0) (2026-05-23)
+
+
+### Features
+
+* **pty:** hide exited instances from status panel + TTL prune ([#313](https://github.com/cuongtranba/kanna/issues/313)) ([2efb78e](https://github.com/cuongtranba/kanna/commit/2efb78e54012b6ecd055a1f2570b704024dfaab2))
+* remove background tasks panel and related code ([#315](https://github.com/cuongtranba/kanna/issues/315)) ([a59079c](https://github.com/cuongtranba/kanna/commit/a59079c937c72e1e39c8d16b5b11dda0032cd5dd))
+
 ## [0.73.1](https://github.com/cuongtranba/kanna/compare/v0.73.0...v0.73.1) (2026-05-23)
 
 
