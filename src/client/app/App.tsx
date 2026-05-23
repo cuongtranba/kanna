@@ -22,6 +22,7 @@ import { LocalProjectsPage } from "./LocalProjectsPage"
 import { SettingsPage } from "./SettingsPage"
 import { AppBootstrap } from "./AppBootstrap"
 import { useKannaState } from "./useKannaState"
+import { useSidebarSwipeGesture } from "./sidebarSwipeGesture"
 import type { AppSettingsSnapshot } from "../../shared/types"
 
 const VERSION_SEEN_STORAGE_KEY = "kanna:last-seen-version"
@@ -216,6 +217,11 @@ function KannaLayout() {
   const chatSoundId = useChatSoundPreferencesStore((store) => store.chatSoundId)
   const showMobileOpenButton = location.pathname === "/"
   const currentVersion = SDK_CLIENT_APP.split("/")[1] ?? "unknown"
+  useSidebarSwipeGesture({
+    sidebarOpen: state.sidebarOpen,
+    onOpen: state.openSidebar,
+    onClose: state.closeSidebar,
+  })
   const previousSidebarDataRef = useRef<ReturnType<typeof useKannaState>["sidebarData"] | null>(null)
   const {
     handleCreateChat,
