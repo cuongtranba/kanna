@@ -15,6 +15,7 @@ import { createSmokeTestGate, createFileSmokeTestCache, buildLiveSmokeProbe, typ
 import { computeBinarySha256 } from "./preflight/binary-fingerprint.adapter"
 import { spawnPtyProcess as defaultSpawnPtyProcess, type PtyProcess, type SpawnPtyProcessArgs } from "./pty-process.adapter"
 import type { ClaudePtyRegistry } from "./pid-registry.adapter"
+import type { PtyInstanceRegistry } from "./pty-instance-registry"
 import { waitForTuiReady, waitForTuiReadyWithTrustDismiss, sendUserPrompt, sendExitCommand } from "./tui-control"
 import { startTranscriptStream } from "./tui-source.adapter"
 import { computeJsonlPath, computeProjectDir } from "./jsonl-path.adapter"
@@ -99,6 +100,12 @@ export interface StartClaudeSessionPtyArgs {
    * first prompt and unregisters during cleanup.
    */
   ptyRegistry?: ClaudePtyRegistry
+  /**
+   * Optional in-memory live-status registry surfaced to the client UI.
+   * Driver upserts phase transitions; ws-router fans deltas out to
+   * subscribed sockets.
+   */
+  ptyInstanceRegistry?: PtyInstanceRegistry
 }
 
 /**
@@ -250,6 +257,18 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
     claudeExecutable: env.CLAUDE_EXECUTABLE ?? null,
   })
 
+  const spawnStartedAt = Date.now()
+  args.ptyInstanceRegistry?.upsert(args.chatId, {
+    cwd: args.localPath,
+    model: args.model,
+    accountLabel: args.oauthLabel ?? null,
+    oauthMasked: args.oauthKeyMasked ?? null,
+    phase: "spawning",
+    startedAt: spawnStartedAt,
+    lastEventAt: spawnStartedAt,
+    planMode: args.planMode,
+  })
+
   const auth = await verifyPtyAuth({ env, oauthToken: args.oauthToken })
   if (!auth.ok) {
     console.error("[kanna/pty] verifyPtyAuth failed", {
@@ -357,6 +376,11 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
   async function cleanupResources() {
     if (cleanedUp) return
     cleanedUp = true
+    args.ptyInstanceRegistry?.upsert(args.chatId, {
+      phase: "exited",
+      exitedAt: Date.now(),
+      lastEventAt: Date.now(),
+    })
     if (args.toolCallback) {
       try { await args.toolCallback.cancelAllForSession(sessionId, "session_closed") } catch (err) {
         console.warn("[kanna/pty] toolCallback.cancelAllForSession failed", { chatId: args.chatId, sessionId, err })
@@ -433,6 +457,12 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
       onOutput: (chunk) => { ring.append(chunk) },
     })
     console.log("[kanna/pty] pty spawned", { chatId: args.chatId, sessionId, pid: pty.pid })
+    args.ptyInstanceRegistry?.upsert(args.chatId, {
+      sessionId,
+      pid: pty.pid,
+      phase: "trust-dialog",
+      lastEventAt: Date.now(),
+    })
     // Record the live PTY in the on-disk registry so a non-graceful
     // server crash can reap this orphan on the next boot. Persistence is
     // best-effort — failure to write must not block the spawn.
@@ -479,6 +509,11 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
       console.warn("[kanna/pty] TUI ready marker not detected within hard cap", { chatId: args.chatId, hardCapMs: tuiReadyMs })
     }
   }
+
+  args.ptyInstanceRegistry?.upsert(args.chatId, {
+    phase: "ready",
+    lastEventAt: Date.now(),
+  })
 
   // Open transcript-file event stream.
   const projectDir = computeProjectDir({ homeDir: home, cwd: args.localPath })

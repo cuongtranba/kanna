@@ -20,9 +20,11 @@ import { processTranscriptMessages } from "../lib/parseTranscript"
 import { generateUUID } from "../lib/utils"
 import { canCancelStatus, getLatestToolIds, isProcessingStatus } from "./derived"
 import { KannaSocket, type SocketStatus } from "./socket"
-import type { BackgroundTaskDiffEvent, BgTasksSnapshotData, EditorOpenSettings, OpenExternalAction } from "../../shared/protocol"
+import type { BackgroundTaskDiffEvent, BgTasksSnapshotData, EditorOpenSettings, OpenExternalAction, PtyInstancesEvent } from "../../shared/protocol"
+import type { PtyInstancesSnapshot } from "../../shared/pty-instance"
 import type { ChatPermissionPolicyOverride, ToolRequestDecision } from "../../shared/permission-policy"
 import { useBackgroundTasksStore } from "../stores/backgroundTasksStore"
+import { usePtyInstancesStore } from "../stores/ptyInstancesStore"
 import { fireOrphanRecoveryToast } from "../lib/orphanToast"
 
 function shallowProviderTokenEquals(
@@ -1086,6 +1088,24 @@ export function useKannaState(activeChatId: string | null): KannaState {
     return socket.subscribe<PushConfigSnapshot>({ type: "push-config" }, (snapshot) => {
       setPushConfig(snapshot)
     })
+  }, [socket])
+
+  useEffect(() => {
+    return socket.subscribe<PtyInstancesSnapshot, PtyInstancesEvent>(
+      { type: "pty-instances" },
+      (snapshot) => {
+        usePtyInstancesStore.getState().applySnapshot(snapshot.instances)
+      },
+      (event) => {
+        if (event.type === "pty-instances.added") {
+          usePtyInstancesStore.getState().applyDiff({ op: "added", instance: event.instance })
+        } else if (event.type === "pty-instances.updated") {
+          usePtyInstancesStore.getState().applyDiff({ op: "updated", instance: event.instance })
+        } else {
+          usePtyInstancesStore.getState().applyDiff({ op: "removed", chatId: event.chatId })
+        }
+      },
+    )
   }, [socket])
 
   useEffect(() => {

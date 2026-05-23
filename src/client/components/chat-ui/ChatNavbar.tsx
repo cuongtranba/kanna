@@ -13,6 +13,8 @@ import { branchLabel as computeBranchLabel } from "../../lib/branchLabel"
 import { OpenExternalSelect } from "../open-external-menu"
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from "../ui/context-menu"
 import { BackgroundTasksIndicator } from "./BackgroundTasksIndicator"
+import { PtyInstancesIndicator } from "./PtyInstancesIndicator"
+import type { KannaSocket } from "../../app/socket"
 
 function openContextMenuFromButton(event: ReactMouseEvent<HTMLButtonElement>) {
   event.preventDefault()
@@ -127,6 +129,8 @@ interface Props {
   resolvedBindings?: ResolvedStackBinding[]
   provider?: AgentProvider | null
   onOpenPath?: (path: string) => void
+  socket?: KannaSocket
+  onOpenPtyChat?: (chatId: string) => void
 }
 
 export function ChatNavbar({
@@ -160,6 +164,8 @@ export function ChatNavbar({
   resolvedBindings,
   provider,
   onOpenPath = () => undefined,
+  socket,
+  onOpenPtyChat,
 }: Props) {
   const branchLabel = computeBranchLabel({ hasGitRepo, gitStatus, localPath, branchName })
   const isMac = platform === "darwin"
@@ -267,6 +273,10 @@ export function ChatNavbar({
             <BackgroundTasksIndicator onOpen={onOpenBgTasks} />
           </div>
         ) : null}
+
+        <div className="flex items-center flex-shrink-0 border border-border rounded-2xl backdrop-blur-lg">
+          <PtyInstancesIndicator socket={socket} onOpenChat={onOpenPtyChat} />
+        </div>
 
         {localPath && (onOpenExternal || onToggleEmbeddedTerminal || onToggleRightSidebar || onExportTranscript) ? (
           <div className="flex items-center gap-2 flex-shrink-0">

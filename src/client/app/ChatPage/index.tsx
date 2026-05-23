@@ -1,7 +1,7 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentProps, type CSSProperties, type DragEvent, type ReactNode, type RefObject } from "react"
 import { type LegendListRef } from "@legendapp/list/react"
 import type { GroupImperativeHandle } from "react-resizable-panels"
-import { useOutletContext } from "react-router-dom"
+import { useNavigate, useOutletContext } from "react-router-dom"
 import type { ChatInputHandle } from "../../components/chat-ui/ChatInput"
 import { ChatNavbar } from "../../components/chat-ui/ChatNavbar"
 import { RightSidebar } from "../../components/chat-ui/RightSidebar"
@@ -461,6 +461,10 @@ export function ChatPage() {
   const handleOpenBgTasks = useCallback(() => {
     useBackgroundTasksStore.getState().toggleDialog()
   }, [])
+  const navigate = useNavigate()
+  const handleOpenPtyChat = useCallback((chatId: string) => {
+    navigate(`/chat/${chatId}`)
+  }, [navigate])
   const showEmptyState = state.messages.length === 0 && state.runtime?.title === "New Chat"
   const projectId = state.activeProjectId
   const projectTerminalLayout = useTerminalLayoutStore((store) => (projectId ? store.projects[projectId] : undefined))
@@ -950,6 +954,8 @@ export function ChatPage() {
           timings={state.runtime?.timings}
           status={state.runtime?.status}
           onOpenBgTasks={handleOpenBgTasks}
+          socket={state.socket}
+          onOpenPtyChat={handleOpenPtyChat}
         />
         <ChatTranscriptViewport
           activeChatId={state.activeChatId}
