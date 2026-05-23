@@ -1,5 +1,6 @@
 import type { BackgroundTask } from "../shared/types"
 import type { AnalyticsReporter } from "./analytics"
+import { sleep, spawnPsCommand } from "./process-utils.adapter"
 
 export type { BackgroundTask }
 
@@ -53,21 +54,14 @@ async function waitForExit(pid: number, timeoutMs: number): Promise<boolean> {
       if (code === "ESRCH") return true
       // EPERM and other codes mean the process still exists; keep polling.
     }
-    await Bun.sleep(50)
+    await sleep(50)
   }
   return false
 }
 
 async function verifyComm(pid: number, expectedCommand: string): Promise<boolean> {
   try {
-    const proc = Bun.spawn({
-      cmd: ["ps", "-p", String(pid), "-o", "command="],
-      stdin: "ignore",
-      stdout: "pipe",
-      stderr: "ignore",
-    })
-    const out = (await new Response(proc.stdout).text()).trim()
-    await proc.exited
+    const out = await spawnPsCommand(pid)
     if (!out) return false
     const cmdToken = expectedCommand.split(/\s+/)[0] ?? ""
     if (!cmdToken) return true

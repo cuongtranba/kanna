@@ -1,5 +1,6 @@
 import process from "node:process"
 import { LOG_PREFIX } from "../shared/branding"
+import { getBunVersion, loadPackageVersion } from "./cli-bootstrap.adapter"
 import {
   fetchLatestPackageVersion,
   installPackageVersion,
@@ -9,16 +10,14 @@ import {
 import { CLI_STARTUP_UPDATE_RESTART_EXIT_CODE, CLI_UI_UPDATE_RESTART_EXIT_CODE } from "./restart"
 import { startKannaServer } from "./server"
 
-// Read version from package.json at the package root
-const pkg = await Bun.file(new URL("../../package.json", import.meta.url)).json()
-const VERSION: string = pkg.version ?? "0.0.0"
+const VERSION: string = await loadPackageVersion()
 
 const argv = process.argv.slice(2)
 let resolveExitAction: ((action: "ui_restart" | "exit") => void) | null = null
 
 const result = await runCli(argv, {
   version: VERSION,
-  bunVersion: Bun.version,
+  bunVersion: getBunVersion(),
   startServer: async (options) => {
     const started = await startKannaServer(options)
     if (started.updateManager && options.update) {
