@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { mkdtemp, rm, readFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
-import { writeSpawnSettings } from "./settings-writer"
+import { writeSpawnSettings } from "./settings-writer.adapter"
 
 describe("writeSpawnSettings", () => {
   test("writes per-spawn settings with claimed keys", async () => {

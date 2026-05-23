@@ -1,4 +1,4 @@
-import { detectBwrap } from "./detect"
+import { detectBwrap } from "./detect.adapter"
 
 /**
  * Whether sandbox availability is *statically* known for the platform.

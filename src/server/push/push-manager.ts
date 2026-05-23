@@ -6,7 +6,7 @@ import type {
   PushTransitionKind,
 } from "../../shared/types"
 import type { PushEvent, PushEventStore } from "./events"
-import type { VapidKeypair } from "./vapid"
+import type { VapidKeypair } from "./vapid.adapter"
 
 // Re-exported for Task 8+ consumers (transition detection, payload building).
 export type { PushPayload, PushTransitionKind } from "../../shared/types"

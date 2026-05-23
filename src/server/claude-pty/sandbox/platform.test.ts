@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { isSandboxSupported, isSandboxEnabledAsync } from "./platform"
-import { resetBwrapCacheForTest } from "./detect"
+import { resetBwrapCacheForTest } from "./detect.adapter"
 
 describe("isSandboxSupported", () => {
   test("true on darwin", () => {

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { detectBwrap, resetBwrapCacheForTest } from "./detect"
+import { detectBwrap, resetBwrapCacheForTest } from "./detect.adapter"
 
 describe("detectBwrap", () => {
   test("returns boolean (real platform check)", async () => {

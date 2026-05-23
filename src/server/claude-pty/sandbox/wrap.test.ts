@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { mkdtemp, rm, readFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
-import { wrapWithSandbox } from "./wrap"
+import { wrapWithSandbox } from "./wrap.adapter"
 import { POLICY_DEFAULT } from "../../../shared/permission-policy"
 
 describe("wrapWithSandbox (async dispatch)", () => {
