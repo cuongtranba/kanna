@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.73.0](https://github.com/cuongtranba/kanna/compare/v0.72.0...v0.73.0) (2026-05-23)
+
+
+### Features
+
+* **pty:** live status panel + cancel/kill actions ([#309](https://github.com/cuongtranba/kanna/issues/309)) ([e077d7a](https://github.com/cuongtranba/kanna/commit/e077d7a86639a8f9d60183f3ac26421757e465ec))
+
 ## [0.72.0](https://github.com/cuongtranba/kanna/compare/v0.71.0...v0.72.0) (2026-05-23)
 
 
