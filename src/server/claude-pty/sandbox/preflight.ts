@@ -2,8 +2,8 @@ import { spawn } from "node:child_process"
 import { writeFile } from "node:fs/promises"
 import path from "node:path"
 import type { ChatPermissionPolicy } from "../../../shared/permission-policy"
-import { generateMacosProfile } from "./profile-macos"
-import { generateBwrapArgs } from "./profile-linux"
+import { generateMacosProfile } from "./profile-macos.adapter"
+import { generateBwrapArgs } from "./profile-linux.adapter"
 
 export interface SandboxPreflightArgs {
   platform: NodeJS.Platform

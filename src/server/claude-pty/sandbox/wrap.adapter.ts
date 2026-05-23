@@ -1,8 +1,8 @@
 import path from "node:path"
 import { writeFile } from "node:fs/promises"
 import type { ChatPermissionPolicy } from "../../../shared/permission-policy"
-import { generateMacosProfile } from "./profile-macos"
-import { generateBwrapArgs } from "./profile-linux"
+import { generateMacosProfile } from "./profile-macos.adapter"
+import { generateBwrapArgs } from "./profile-linux.adapter"
 
 const SANDBOX_EXEC = "/usr/bin/sandbox-exec"
 const BWRAP = "/usr/bin/bwrap"

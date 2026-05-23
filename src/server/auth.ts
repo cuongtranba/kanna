@@ -1,5 +1,5 @@
 import { randomBytes, timingSafeEqual } from "node:crypto"
-import type { AuthSessionStore } from "./auth-session-store"
+import type { AuthSessionStore } from "./auth-session-store.adapter"
 
 const SESSION_COOKIE_NAME = "kanna_session"
 const TOUCH_THROTTLE_MS = 60 * 1000
