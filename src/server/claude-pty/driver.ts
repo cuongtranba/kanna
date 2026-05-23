@@ -494,17 +494,19 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
   // present. The combined helper handles the ANSI-encoded trust dialog text
   // and keeps polling until the real "❯ " input box appears after dismiss.
   const tuiReadyMs = Number((args.env ?? process.env).KANNA_PTY_TUI_BOOT_MS ?? 3000)
+  const tuiReadyQuietRaw = (args.env ?? process.env).KANNA_PTY_TUI_READY_QUIET_MS
+  const tuiReadyQuietMs = tuiReadyQuietRaw !== undefined ? Number(tuiReadyQuietRaw) : undefined
   const trustDismiss = (args.env ?? process.env).KANNA_PTY_TRUST_DISMISS ?? "enabled"
   if (trustDismiss !== "disabled") {
     // +5 s over the base cap to absorb trust-dialog dismiss + project reload.
-    const readyResult = await waitForTuiReadyWithTrustDismiss(pty, ring, { hardCapMs: tuiReadyMs + 5_000 })
+    const readyResult = await waitForTuiReadyWithTrustDismiss(pty, ring, { hardCapMs: tuiReadyMs + 5_000, quietPeriodMs: tuiReadyQuietMs })
     if (readyResult === "timeout") {
       console.warn("[kanna/pty] TUI ready marker not detected after trust dismiss", { chatId: args.chatId, hardCapMs: tuiReadyMs + 5_000 })
     } else {
       console.log("[kanna/pty] TUI ready", { chatId: args.chatId })
     }
   } else {
-    const readyResult = await waitForTuiReady(ring, { hardCapMs: tuiReadyMs })
+    const readyResult = await waitForTuiReady(ring, { hardCapMs: tuiReadyMs, quietPeriodMs: tuiReadyQuietMs })
     if (readyResult === "timeout") {
       console.warn("[kanna/pty] TUI ready marker not detected within hard cap", { chatId: args.chatId, hardCapMs: tuiReadyMs })
     }

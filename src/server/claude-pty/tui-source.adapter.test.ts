@@ -193,13 +193,18 @@ describe("startTranscriptStream (registry resolution)", () => {
       homeDir: workHome,
       claudeChildPid: pid,
       sessionRegistryTimeoutMs: 300,
-      firstFileTimeoutMs: 200,
+      // High timeout so the registry-poll timeout cannot fire during the
+      // 600 ms pending check below — this test guards bleed isolation, not
+      // timeout behaviour (covered separately).
+      firstFileTimeoutMs: 5_000,
       pollIntervalMs: 20,
     })
 
     // filePath must NOT resolve to the stranger file even after timeouts.
     const beforeWrite = await Promise.race([
-      stream.filePath.then((fp) => ({ kind: "resolved" as const, fp })),
+      stream.filePath
+        .then((fp) => ({ kind: "resolved" as const, fp }))
+        .catch((err: Error) => ({ kind: "rejected" as const, err })),
       new Promise<{ kind: "pending" }>((r) => setTimeout(() => r({ kind: "pending" }), 600)),
     ])
     expect(beforeWrite.kind).toBe("pending")
@@ -210,6 +215,43 @@ describe("startTranscriptStream (registry resolution)", () => {
     const resolved = await stream.filePath
     expect(resolved).toBe(ownFile)
     expect(resolved).not.toBe(strangerFile)
+    stream.close()
+  }, 5000)
+
+  // Regression: when claude TUI rendered the input box but the first prompt
+  // never reached it (input-handler mount race, splash banner swallow, etc.),
+  // the registry-resolved JSONL was never created and the driver waited
+  // forever inside locateFirstFile. firstFileTimeoutMs now bounds that wait;
+  // the rejection surfaces as a failure event and the user can retry instead
+  // of seeing a wedged session.
+  test("registry resolved but JSONL never appears — filePath rejects after firstFileTimeoutMs", async () => {
+    const pid = 99003
+    const realCwd = await mkdtemp(path.join(workHome, "real-cwd-"))
+    const encoded = encodeCwd(realCwd)
+    const ownProjectDir = path.join(workHome, ".claude", "projects", encoded)
+    await mkdir(ownProjectDir, { recursive: true })
+    const sessionsDir = path.join(workHome, ".claude", "sessions")
+    await mkdir(sessionsDir, { recursive: true })
+    const ownSessionId = "our-session-cccccccccc"
+    await writeFile(
+      path.join(sessionsDir, `${pid}.json`),
+      JSON.stringify({ pid, sessionId: ownSessionId, cwd: realCwd, kind: "interactive", startedAt: Date.now() }),
+    )
+
+    const stream = await startTranscriptStream({
+      projectDir: ownProjectDir,
+      homeDir: workHome,
+      claudeChildPid: pid,
+      sessionRegistryTimeoutMs: 300,
+      firstFileTimeoutMs: 150,
+      pollIntervalMs: 20,
+    })
+
+    const start = Date.now()
+    await expect(stream.filePath).rejects.toThrow(/did not appear in 150ms/)
+    const elapsed = Date.now() - start
+    // Allow scheduler slack but ensure we did not wait orders of magnitude longer.
+    expect(elapsed).toBeLessThan(1_500)
     stream.close()
   }, 5000)
 

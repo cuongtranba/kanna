@@ -4,6 +4,13 @@ import type { OutputRing } from "./output-ring"
 export const TRUST_DIALOG_MARKER = "trust this folder"
 export const TUI_READY_MARKER = "❯ "
 export const TUI_READY_HARD_CAP_DEFAULT_MS = 3000
+// Quiet-period gate: after first ❯ marker hit, the TUI may still be in the
+// middle of rendering (splash → cwd line → MCP spinner → input frame). The
+// marker can leak from a transient render before Ink mounts the keyboard
+// handler. Waiting for the output ring to stay quiet for this long after the
+// marker is the cheapest proxy for "input handler attached and ready". Drops
+// the race where the first prompt lands during splash and gets discarded.
+export const TUI_READY_QUIET_DEFAULT_MS = 300
 
 // Strip VT100/ANSI escape sequences and normalize non-breaking spaces so
 // plain-text markers can be matched against raw PTY output. The TUI renders:
@@ -19,6 +26,7 @@ function stripAnsi(s: string): string {
 export interface WaitForTuiReadyOpts {
   hardCapMs?: number
   pollMs?: number
+  quietPeriodMs?: number
 }
 
 export async function waitForTuiReady(
@@ -27,11 +35,39 @@ export async function waitForTuiReady(
 ): Promise<"marker" | "timeout"> {
   const hardCapMs = opts.hardCapMs ?? TUI_READY_HARD_CAP_DEFAULT_MS
   const pollMs = opts.pollMs ?? 50
+  const quietPeriodMs = opts.quietPeriodMs ?? TUI_READY_QUIET_DEFAULT_MS
   const start = Date.now()
   while (true) {
-    if (stripAnsi(ring.tail()).includes(TUI_READY_MARKER)) return "marker"
+    if (stripAnsi(ring.tail()).includes(TUI_READY_MARKER)) {
+      await waitForRingQuiet(ring, { quietMs: quietPeriodMs, pollMs, deadline: start + hardCapMs })
+      return "marker"
+    }
     if (Date.now() - start >= hardCapMs) return "timeout"
     await new Promise((r) => setTimeout(r, pollMs))
+  }
+}
+
+/**
+ * After the ❯ marker first appears, wait until the ring stays the same size
+ * for `quietMs` straight — that is the cheapest proxy for "TUI render queue
+ * drained, Ink keyboard handler mounted". If the deadline is reached first,
+ * return early (best-effort: we did see the marker). Polls every `pollMs`.
+ */
+async function waitForRingQuiet(
+  ring: OutputRing,
+  opts: { quietMs: number; pollMs: number; deadline: number },
+): Promise<void> {
+  if (opts.quietMs <= 0) return
+  let lastLength = ring.tail().length
+  let quietStart = Date.now()
+  while (Date.now() - quietStart < opts.quietMs) {
+    if (Date.now() >= opts.deadline) return
+    await new Promise((r) => setTimeout(r, opts.pollMs))
+    const currentLength = ring.tail().length
+    if (currentLength !== lastLength) {
+      lastLength = currentLength
+      quietStart = Date.now()
+    }
   }
 }
 
@@ -49,6 +85,7 @@ export async function dismissTrustDialogIfPresent(
 export interface WaitForTuiReadyWithTrustDismissOpts {
   hardCapMs?: number
   pollMs?: number
+  quietPeriodMs?: number
 }
 
 /**
@@ -67,6 +104,7 @@ export async function waitForTuiReadyWithTrustDismiss(
 ): Promise<"ready" | "timeout"> {
   const hardCapMs = opts.hardCapMs ?? 15_000
   const pollMs = opts.pollMs ?? 50
+  const quietPeriodMs = opts.quietPeriodMs ?? TUI_READY_QUIET_DEFAULT_MS
   const start = Date.now()
   let trustDismissed = false
   // After dismissing the trust dialog, only match the ready marker against
@@ -83,7 +121,10 @@ export async function waitForTuiReadyWithTrustDismiss(
       trustDismissed = true
     } else {
       const checkWindow = trustDismissed ? raw.slice(postDismissOffset) : raw
-      if (stripAnsi(checkWindow).includes(TUI_READY_MARKER)) return "ready"
+      if (stripAnsi(checkWindow).includes(TUI_READY_MARKER)) {
+        await waitForRingQuiet(ring, { quietMs: quietPeriodMs, pollMs, deadline: start + hardCapMs })
+        return "ready"
+      }
     }
     await new Promise((r) => setTimeout(r, pollMs))
   }

@@ -170,14 +170,24 @@ export async function startTranscriptStream(args: StartTranscriptStreamArgs): Pr
           sessionId: entry.sessionId,
         })
         // Registry resolved: the JSONL path is AUTHORITATIVE for this
-        // child pid. Poll existsSync until close. Do NOT fall back to
-        // mtime — when the registry-resolved JSONL never appears (e.g.
-        // claude was spawned but no prompt was ever sent), mtime
+        // child pid. Poll existsSync until close or timeout. Do NOT fall
+        // back to mtime — when the registry-resolved JSONL never appears
+        // (e.g. claude was spawned but no prompt was ever sent), mtime
         // discovery silently picks the newest unrelated JSONL in the
         // shared project dir, causing cross-session transcript bleed.
+        // Without a timeout, a missed first prompt wedges the driver
+        // forever; bound the wait by firstFileTimeoutMs so the caller
+        // can surface a failure event and the user can retry.
         const jsonlPollMs = args.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS
+        const jsonlTimeoutMs = args.firstFileTimeoutMs ?? DEFAULT_FIRST_FILE_TIMEOUT_MS
+        const jsonlPollStart = Date.now()
         while (!closed) {
           if (existsSync(computed)) return computed
+          if (Date.now() - jsonlPollStart > jsonlTimeoutMs) {
+            throw new Error(
+              `registry-resolved JSONL ${computed} did not appear in ${jsonlTimeoutMs}ms (claude TUI likely missed first prompt)`,
+            )
+          }
           await new Promise((r) => setTimeout(r, jsonlPollMs))
         }
         throw new Error("transcript stream closed before registry-resolved JSONL appeared")

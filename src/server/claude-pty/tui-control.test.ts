@@ -89,13 +89,13 @@ describe("waitForTuiReady", () => {
   test("returns 'marker' when ringbuf already contains the input-box marker", async () => {
     const ring = new OutputRing()
     ring.append("❯ ")
-    const result = await waitForTuiReady(ring, { hardCapMs: 1000, pollMs: 10 })
+    const result = await waitForTuiReady(ring, { hardCapMs: 1000, pollMs: 10, quietPeriodMs: 0 })
     expect(result).toBe("marker")
   })
 
   test("returns 'timeout' when no marker appears within hardCapMs", async () => {
     const ring = new OutputRing()
-    const result = await waitForTuiReady(ring, { hardCapMs: 200, pollMs: 10 })
+    const result = await waitForTuiReady(ring, { hardCapMs: 200, pollMs: 10, quietPeriodMs: 0 })
     expect(result).toBe("timeout")
   })
 
@@ -103,10 +103,42 @@ describe("waitForTuiReady", () => {
     const ring = new OutputRing()
     setTimeout(() => ring.append("❯ "), 50)
     const start = Date.now()
-    const result = await waitForTuiReady(ring, { hardCapMs: 1000, pollMs: 10 })
+    const result = await waitForTuiReady(ring, { hardCapMs: 1000, pollMs: 10, quietPeriodMs: 0 })
     const elapsed = Date.now() - start
     expect(result).toBe("marker")
     expect(elapsed).toBeLessThan(300)
+  })
+
+  // Regression: claude TUI v2.1.146 leaks `❯ ` during splash/trust/MCP render
+  // before Ink mounts the keyboard handler. Returning "marker" on first hit
+  // makes the driver send the first prompt into a TUI that discards stdin.
+  // The quiet-period gate waits for ring growth to settle as a proxy for
+  // "input handler attached" — drops the race that causes PTY chats to hang
+  // with no transcript file ever created.
+  test("waits for ring to stay quiet for quietPeriodMs after marker hit", async () => {
+    const ring = new OutputRing()
+    ring.append("splash banner ❯ ")
+    // Keep appending bytes for 200 ms after the marker first appears — the
+    // gate must NOT resolve while the TUI is still rendering.
+    const interval = setInterval(() => ring.append("."), 30)
+    setTimeout(() => clearInterval(interval), 200)
+    const start = Date.now()
+    const result = await waitForTuiReady(ring, { hardCapMs: 2000, pollMs: 10, quietPeriodMs: 150 })
+    const elapsed = Date.now() - start
+    expect(result).toBe("marker")
+    // Render bursts (200 ms) + quiet period (150 ms) = at least 350 ms.
+    expect(elapsed).toBeGreaterThanOrEqual(300)
+  })
+
+  test("resolves immediately when ring stays quiet from the start", async () => {
+    const ring = new OutputRing()
+    ring.append("❯ ")
+    const start = Date.now()
+    const result = await waitForTuiReady(ring, { hardCapMs: 2000, pollMs: 10, quietPeriodMs: 80 })
+    const elapsed = Date.now() - start
+    expect(result).toBe("marker")
+    expect(elapsed).toBeGreaterThanOrEqual(70)
+    expect(elapsed).toBeLessThan(250)
   })
 
   test("exported TUI_READY_MARKER is the input-box prompt", () => {
@@ -212,5 +244,29 @@ describe("waitForTuiReadyWithTrustDismiss", () => {
     await waitForTuiReadyWithTrustDismiss(pty, ring, { hardCapMs: 1000, pollMs: 10 })
     // \r should appear exactly once (dismiss sent once, not repeated each poll)
     expect(pty.sent.filter((s) => s === "\r")).toHaveLength(1)
+  })
+
+  // Regression: same race as waitForTuiReady — after trust dismiss the input
+  // box marker can render before Ink's keyboard handler mounts. Quiet-period
+  // gate must apply on this path too so prompts don't land into a discarding
+  // TUI under load.
+  test("waits for ring to stay quiet for quietPeriodMs after post-dismiss marker hit", async () => {
+    const pty = fakePty()
+    const ring = new OutputRing()
+    ring.append("\x1b[1Ctrust\x1b[1Cthis\x1b[1Cfolder")
+    // After dismiss, marker arrives at t=50, then more bytes for 200 ms.
+    setTimeout(() => ring.append("❯ "), 50)
+    const interval = setInterval(() => ring.append("."), 30)
+    setTimeout(() => clearInterval(interval), 250)
+    const start = Date.now()
+    const result = await waitForTuiReadyWithTrustDismiss(pty, ring, {
+      hardCapMs: 2000,
+      pollMs: 10,
+      quietPeriodMs: 150,
+    })
+    const elapsed = Date.now() - start
+    expect(result).toBe("ready")
+    // Bursts end ~250 ms + quiet 150 ms.
+    expect(elapsed).toBeGreaterThanOrEqual(350)
   })
 })
