@@ -1,9 +1,14 @@
-import { watch, type FSWatcher } from "node:fs"
-import { mkdir, readFile, writeFile } from "node:fs/promises"
 import { homedir } from "node:os"
 import path from "node:path"
 import { getKeybindingsFilePath, LOG_PREFIX } from "../shared/branding"
 import { DEFAULT_KEYBINDINGS, type KeybindingAction, type KeybindingsSnapshot } from "../shared/types"
+import {
+  ensureKeybindingsFile,
+  readKeybindingsFile,
+  watchKeybindingsDirectory,
+  writeKeybindingsFile,
+  type KeybindingsWatcher,
+} from "./keybindings-store.adapter"
 
 const KEYBINDING_ACTIONS = Object.keys(DEFAULT_KEYBINDINGS) as KeybindingAction[]
 
@@ -11,7 +16,7 @@ type KeybindingsFile = Partial<Record<KeybindingAction, unknown>>
 
 export class KeybindingsManager {
   readonly filePath: string
-  private watcher: FSWatcher | null = null
+  private watcher: KeybindingsWatcher | null = null
   private snapshot: KeybindingsSnapshot
   private readonly listeners = new Set<(snapshot: KeybindingsSnapshot) => void>()
 
@@ -21,11 +26,7 @@ export class KeybindingsManager {
   }
 
   async initialize() {
-    await mkdir(path.dirname(this.filePath), { recursive: true })
-    const file = Bun.file(this.filePath)
-    if (!(await file.exists())) {
-      await writeFile(this.filePath, `${JSON.stringify(DEFAULT_KEYBINDINGS, null, 2)}\n`, "utf8")
-    }
+    await ensureKeybindingsFile(this.filePath, `${JSON.stringify(DEFAULT_KEYBINDINGS, null, 2)}\n`)
     await this.reload()
     this.startWatching()
   }
@@ -54,8 +55,7 @@ export class KeybindingsManager {
 
   async write(bindings: Partial<Record<KeybindingAction, string[]>>) {
     const nextSnapshot = normalizeKeybindings(bindings, this.filePath)
-    await mkdir(path.dirname(this.filePath), { recursive: true })
-    await writeFile(this.filePath, `${JSON.stringify(nextSnapshot.bindings, null, 2)}\n`, "utf8")
+    await writeKeybindingsFile(this.filePath, `${JSON.stringify(nextSnapshot.bindings, null, 2)}\n`)
     this.setSnapshot(nextSnapshot)
     return nextSnapshot
   }
@@ -69,39 +69,33 @@ export class KeybindingsManager {
 
   private startWatching() {
     this.watcher?.close()
-    try {
-      this.watcher = watch(path.dirname(this.filePath), { persistent: false }, (_eventType, filename) => {
-        if (filename && filename !== path.basename(this.filePath)) {
-          return
-        }
-        void this.reload().catch((error: unknown) => {
-          console.warn(`${LOG_PREFIX} Failed to reload keybindings:`, error)
-        })
+    const next = watchKeybindingsDirectory(this.filePath, () => {
+      void this.reload().catch((error: unknown) => {
+        console.warn(`${LOG_PREFIX} Failed to reload keybindings:`, error)
       })
-    } catch (error) {
-      console.warn(`${LOG_PREFIX} Failed to watch keybindings file:`, error)
-      this.watcher = null
+    })
+    if (!next) {
+      console.warn(`${LOG_PREFIX} Failed to watch keybindings file`)
     }
+    this.watcher = next
   }
 }
 
 export async function readKeybindingsSnapshot(filePath: string) {
+  const presence = await readKeybindingsFile(filePath)
+  if (presence.text === null) {
+    return createDefaultSnapshot(filePath)
+  }
+  if (!presence.text.trim()) {
+    return createDefaultSnapshot(filePath, "Keybindings file was empty. Using defaults.")
+  }
   try {
-    const text = await readFile(filePath, "utf8")
-    if (!text.trim()) {
-      return createDefaultSnapshot(filePath, "Keybindings file was empty. Using defaults.")
-    }
-    const parsed = JSON.parse(text) as KeybindingsFile
+    const parsed = JSON.parse(presence.text) as KeybindingsFile
     return normalizeKeybindings(parsed, filePath)
   } catch (error) {
-    if ((error as NodeJS.ErrnoException)?.code === "ENOENT") {
-      return createDefaultSnapshot(filePath)
-    }
-
     if (error instanceof SyntaxError) {
       return createDefaultSnapshot(filePath, "Keybindings file is invalid JSON. Using defaults.")
     }
-
     throw error
   }
 }
