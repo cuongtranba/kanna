@@ -5,7 +5,7 @@ import path from "node:path"
 import { POLICY_DEFAULT } from "../../shared/permission-policy"
 import { createToolCallbackService } from "../tool-callback"
 import { createTestEventStore } from "../storage/test-helpers"
-import { createGlobTool } from "./glob"
+import { createGlobTool } from "./glob.adapter"
 
 async function newStore() {
   const dir = await mkdtemp(path.join(tmpdir(), "kanna-mcp-glob-"))

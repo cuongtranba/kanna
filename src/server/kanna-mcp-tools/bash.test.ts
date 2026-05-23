@@ -5,7 +5,7 @@ import path from "node:path"
 import { POLICY_DEFAULT } from "../../shared/permission-policy"
 import { createTestEventStore } from "../storage/test-helpers"
 import { createToolCallbackService } from "../tool-callback"
-import { createBashTool } from "./bash"
+import { createBashTool } from "./bash.adapter"
 
 async function newStore() {
   const dir = await mkdtemp(path.join(tmpdir(), "kanna-mcp-bash-"))
