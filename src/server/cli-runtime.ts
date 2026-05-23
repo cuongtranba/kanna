@@ -1,6 +1,6 @@
 import process from "node:process"
 import { spawnSync } from "node:child_process"
-import { hasCommand, spawnDetached } from "./process-utils"
+import { hasCommand, spawnDetached } from "./process-utils.adapter"
 import { APP_NAME, CLI_COMMAND, getDataDirDisplay, LOG_PREFIX, PACKAGE_NAME } from "../shared/branding"
 import type { ShareMode } from "../shared/share"
 import { assertNoHostOverride, getShareCliFlag, isShareEnabled, isTokenShareMode } from "../shared/share"

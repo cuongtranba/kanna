@@ -34,6 +34,7 @@ export default [
       "src/server/**/*.test.ts",
       "src/server/**/*.test.tsx",
       "src/server/__fixtures__/**",
+      "src/server/test-helpers/**",
       "src/server/adapters/**",
       "src/server/**/*.adapter.ts",
     ],
