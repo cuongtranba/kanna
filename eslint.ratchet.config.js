@@ -35,6 +35,7 @@ export default [
       "src/server/**/*.test.tsx",
       "src/server/__fixtures__/**",
       "src/server/adapters/**",
+      "src/server/**/*.adapter.ts",
     ],
     rules: {
       "no-restricted-imports": ["warn", { patterns: RESTRICTED_IMPORT_PATTERNS }],

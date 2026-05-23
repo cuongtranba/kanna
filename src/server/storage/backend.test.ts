@@ -3,7 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import type { StorageBackend } from "./backend"
-import { FsStorageBackend } from "./fs-storage"
+import { FsStorageBackend } from "./fs-storage.adapter"
 import { InMemoryStorageBackend } from "./in-memory-storage"
 
 interface Harness {
