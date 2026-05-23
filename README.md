@@ -122,31 +122,99 @@ That's it. Kanna opens in your browser at [`localhost:3210`](http://localhost:32
 
 ## Architecture
 
-```
-Browser (React + Zustand)
-    ↕  WebSocket
-Bun Server (HTTP + WS)
-    ├── Auth ───────────── optional password gate (HTTP/WS/API)
-    ├── WSRouter ───────── subscription & command routing
-    ├── AgentCoordinator ─ multi-provider turn management
-    ├── ProviderCatalog ── provider/model/effort normalization
-    ├── QuickResponse ──── structured queries with provider fallback
-    ├── EventStore ─────── append-only JSONL + snapshot compaction
-    ├── ReadModels ─────── derived views (sidebar, chat, projects)
-    ├── DiffStore ──────── per-chat diff hydration
-    ├── TerminalManager ── PTY sessions for the embedded terminal
-    ├── Uploads ────────── drag-drop attachment intake
-    ├── Discovery ──────── scan Claude/Codex local history
-    ├── Push ───────────── web-push notifications
-    ├── Share / Tunnel ─── trycloudflare + cloudflared
-    └── UpdateManager ──── self-update + reload strategy
-    ↕  stdio / PTY
-Claude Agent SDK · Claude CLI (PTY) · Codex App Server
-    ↕
-Local File System (~/.kanna/data/, project dirs)
+```mermaid
+flowchart LR
+    Browser["Browser<br/>React + Zustand"]
+
+    subgraph Server["Bun Server (src/server/**)"]
+        direction TB
+        WS["WSRouter<br/>subscriptions + commands"]
+        Auth["Auth gate"]
+        Agent["AgentCoordinator<br/>multi-provider turns"]
+        ES["EventStore<br/>append-only JSONL + snapshots"]
+        RM["ReadModels<br/>derived views"]
+        Diff["DiffStore"]
+        Term["TerminalManager"]
+        Up["Uploads"]
+        Disc["Discovery"]
+        Push["Push"]
+        Tun["Share / Tunnel"]
+        Upd["UpdateManager"]
+
+        subgraph Adapters["*.adapter.ts (IO seal exempt)"]
+            direction LR
+            FsA["fs / chokidar"]
+            DbA["bun:sqlite / pg"]
+            SpA["Bun.spawn / child_process"]
+            HtA["node:http / fetch"]
+            PtyA["Bun.Terminal (PTY)"]
+        end
+
+        WS --> Agent
+        WS --> ES
+        WS --> RM
+        Agent --> ES
+        Agent -.spawn.-> SpA
+        Agent -.spawn.-> PtyA
+        ES -.fs.-> FsA
+        Diff -.fs+spawn.-> SpA
+        Diff -.fs.-> FsA
+        Term -.pty.-> PtyA
+        Up -.fs.-> FsA
+        Disc -.fs.-> FsA
+        Tun -.spawn+http.-> SpA
+        Tun -.http.-> HtA
+        Upd -.spawn.-> SpA
+    end
+
+    subgraph Shared["src/shared/** (pure)"]
+        Proto["protocol types"]
+        Types["domain types"]
+    end
+
+    subgraph External["External processes"]
+        CC["Claude Agent SDK / claude CLI (PTY)"]
+        CX["Codex App Server"]
+        FS["Local FS<br/>~/.kanna/data/, project dirs"]
+    end
+
+    Browser <-->|WebSocket| WS
+    Browser -.types.-> Shared
+    Server -.types.-> Shared
+
+    SpA --> CC
+    SpA --> CX
+    PtyA --> CC
+    FsA --> FS
 ```
 
+**Layer rules (lint-enforced, see [CLAUDE.md](./CLAUDE.md#side-effect-lint-ports-and-adapters-seal)):**
+
+- `src/shared/**` + `src/client/**` — pure. ESLint `no-restricted-imports` errors on `node:fs`, `bun:sqlite`, `node:child_process`, `node:http`, `Bun.spawn`, `Bun.file`, `Bun.serve`, …
+- `src/server/**` production — also sealed at `error`. Side-effect call sites only allowed inside files matching `**/*.adapter.ts` (or the legacy `src/server/adapters/**` dir).
+- Mixed-concern modules extract their IO into a sibling `*-io.adapter.ts` and import through it.
+
 **Key patterns:** Event sourcing for all state mutations. CQRS with separate write (event log) and read (derived snapshots) paths. Reactive broadcasting — subscribers get pushed fresh snapshots on every state change. Multi-provider agent coordination with tool gating for user-approval flows. Provider-agnostic transcript hydration for unified rendering.
+
+### Workflow: adding code that touches IO
+
+```mermaid
+flowchart TD
+    Start(["You need fs / spawn / http / DB / Bun globals"]) --> Layer{"Which layer?"}
+    Layer -->|src/shared or src/client| Reject["ESLint errors at CI"]
+    Reject --> Move["Move the module to src/server/**<br/>or inject through a typed parameter"]
+    Move --> Server
+    Layer -->|src/server| Server{"File responsibility?"}
+    Server -->|leaf IO wrapper| RenameAdapter["Name it foo.adapter.ts<br/>(exempt from seal)"]
+    Server -->|mixed domain + IO| SiblingAdapter["Extract calls into foo-io.adapter.ts<br/>keep domain logic in foo.ts<br/>import helpers from the adapter"]
+    Server -->|domain only| Port["Take a typed port parameter<br/>provided by caller's adapter"]
+    RenameAdapter --> Lint["bun run lint"]
+    SiblingAdapter --> Lint
+    Port --> Lint
+    Lint --> CI(["CI: lint + tests + build"])
+```
+
+For the longer story (90 → 0 burndown, ratchet pipeline retired in PR #303) see the **Side-Effect Lint** section of `CLAUDE.md`.
 
 ## Requirements
 
