@@ -13,7 +13,7 @@ import type {
   TranscriptEntry,
 } from "../shared/types"
 import { buildContentUrlForFilePath } from "../shared/projectFileUrl"
-import { relocateExternalFileIntoProject } from "../shared/projectFileRelocation"
+import { relocateExternalFileIntoProject } from "./projectFileRelocation"
 import type { HarnessEvent, HarnessToolRequest, HarnessTurn } from "./harness-types"
 import {
   type CollabAgentToolCallItem,

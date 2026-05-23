@@ -57,4 +57,39 @@ export default tseslint.config(
       "no-case-declarations": "off",
     },
   },
+  {
+    files: ["src/shared/**/*.{ts,tsx}", "src/client/**/*.{ts,tsx}"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["fs", "fs/*", "node:fs", "node:fs/*", "chokidar"],
+              message:
+                "Side-effect IO not allowed in src/shared or src/client. Move the module into src/server/** or depend on an injected port instead.",
+            },
+            {
+              group: ["bun:sqlite", "better-sqlite3", "pg"],
+              message:
+                "Database clients are server-only. Move the module into src/server/** or depend on an injected port instead.",
+            },
+            {
+              group: ["child_process", "node:child_process", "node:http", "node:https", "http", "https"],
+              message:
+                "Process spawn / raw http is server-only. Move the module into src/server/** or depend on an injected port instead.",
+            },
+          ],
+        },
+      ],
+      "no-restricted-globals": [
+        "error",
+        {
+          name: "Bun",
+          message:
+            "Bun globals (Bun.spawn, Bun.$, Bun.file) are server-only. Move the module into src/server/** or depend on an injected port instead.",
+        },
+      ],
+    },
+  },
 )
