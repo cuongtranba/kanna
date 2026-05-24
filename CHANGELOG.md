@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.76.0](https://github.com/cuongtranba/kanna/compare/v0.75.0...v0.76.0) (2026-05-24)
+
+
+### Features
+
+* **share:** read-only public session share ([#318](https://github.com/cuongtranba/kanna/issues/318)) ([c7a7245](https://github.com/cuongtranba/kanna/commit/c7a7245fcd21cc869c352c8a9a7d88b5a8749784))
+
 ## [0.75.0](https://github.com/cuongtranba/kanna/compare/v0.74.0...v0.75.0) (2026-05-24)
 
 
