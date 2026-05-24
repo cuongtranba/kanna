@@ -1,5 +1,6 @@
 import { type MouseEvent as ReactMouseEvent } from "react"
 import { Check, Flower, GitBranch, Loader2, Menu, MoreHorizontal, PanelLeft, PanelRight, SquarePen, Terminal, UserRoundPlus } from "lucide-react"
+import { ShareButton } from "../share/ShareButton"
 import type { EditorOpenSettings, EditorPreset, OpenExternalAction } from "../../../shared/protocol"
 import type { AgentProvider, ChatStateTimings, KannaStatus, ResolvedStackBinding } from "../../../shared/types"
 import { PeerWorktreeStrip } from "./PeerWorktreeStrip"
@@ -129,6 +130,9 @@ interface Props {
   onOpenPath?: (path: string) => void
   socket?: KannaSocket
   onOpenPtyChat?: (chatId: string) => void
+  onOpenSharePopover?: (chatId: string) => void
+  shareTunnelUp?: boolean
+  currentChatId?: string
 }
 
 export function ChatNavbar({
@@ -163,6 +167,9 @@ export function ChatNavbar({
   onOpenPath = () => undefined,
   socket,
   onOpenPtyChat,
+  onOpenSharePopover,
+  shareTunnelUp,
+  currentChatId,
 }: Props) {
   const branchLabel = computeBranchLabel({ hasGitRepo, gitStatus, localPath, branchName })
   const isMac = platform === "darwin"
@@ -335,6 +342,13 @@ export function ChatNavbar({
                       <UserRoundPlus strokeWidth={2} className="h-4.5" />
                     )}
                   </Button>
+                ) : null}
+                {onOpenSharePopover && currentChatId ? (
+                  <ShareButton
+                    chatId={currentChatId}
+                    tunnelUp={shareTunnelUp ?? false}
+                    onOpenPopover={onOpenSharePopover}
+                  />
                 ) : null}
                 {onToggleRightSidebar ? (
                   <HotkeyTooltip>
