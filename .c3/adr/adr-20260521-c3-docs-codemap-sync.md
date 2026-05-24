@@ -1,6 +1,6 @@
 ---
 id: adr-20260521-c3-docs-codemap-sync
-c3-seal: 35bccd579e7e317b92058feeb5a084907e0f7592fae93cbf22a7dddbb04eaaa1
+c3-seal: f235da4233d63abe8c360928298c3a3ea9115b3e44b644ddc647321e22380f4f
 title: c3-docs-codemap-sync
 type: adr
 goal: |-
@@ -82,9 +82,9 @@ model under `src/server/auto-continue/**`. Cite `ref-event-sourcing`,
 `src/shared/projectFileRelocation.{ts,test.ts}`,
 `src/shared/projectFileUrl.{ts,test.ts}`, `src/shared/analytics.ts`
 
-5. Add `_exclude` for `src/client/lib/testing/**` (test plumbing, not
+1. Add `_exclude` for `src/client/lib/testing/**` (test plumbing, not
 feature code) — codemap append with `_exclude` prefix per c3x convention.
-6. Run `c3x check` until clean; mark ADR `accepted` then `implemented`.
+2. Run `c3x check` until clean; mark ADR `accepted` then `implemented`.
 
 This is preferred over piecemeal ADRs because every drift item shares a
 single root cause (audit catch-up after MCP host + auto-continue features

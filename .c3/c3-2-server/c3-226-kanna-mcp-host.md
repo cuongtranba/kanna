@@ -1,6 +1,6 @@
 ---
 id: c3-226
-c3-seal: bdac5d739b280376837548e3b0aa0f0ae6f500ecc0e1033805c4c67f812bb499
+c3-seal: 3a44cd5aa1af1f953d09ce1e61b8be8264f5327c9eda32810544adba72d37eed
 title: kanna-mcp-host
 type: component
 category: feature
@@ -122,6 +122,7 @@ into the `mcp-config.json` handed to `--strict-mcp-config`; `src/server/claude-p
 passes the resulting config path to the CLI spawn unchanged.
 
 Key boundary crossings:
+
 - `src/shared/app-settings.ts` ↔ `src/server/kanna-mcp-http.ts` — settings shape → PTY MCP config JSON
 - `src/shared/app-settings.ts` ↔ `src/server/agent.ts` — settings shape → SDK mcpServers map
 - `src/server/kanna-mcp-http.ts` ↔ `src/server/claude-pty/driver.ts` — config file path passed at spawn

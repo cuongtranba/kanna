@@ -1,8 +1,13 @@
 ---
 id: rule-mcp-name-reserved
+c3-seal: b2f0e61c6e33a09512d44846f04e15ae5339e248f3cf6528192e986c971ca015
 title: mcp-name-reserved
 type: rule
-goal: User MCP server names registered in `customMcpServers` must never equal `KANNA_MCP_SERVER_NAME` ("kanna"). Enforced at storage, SDK driver, and PTY driver so the Kanna-internal MCP tool surface is never shadowed or overwritten by a user-supplied server.
+goal: |-
+    User MCP server names registered in `customMcpServers` must never equal
+    `KANNA_MCP_SERVER_NAME` ("kanna"). Enforced at storage, SDK driver, and PTY
+    driver so the Kanna-internal MCP tool surface is never shadowed or overwritten
+    by a user-supplied server.
 ---
 
 # mcp-name-reserved
@@ -51,9 +56,9 @@ export function buildUserMcpServers(servers: McpServerConfig[]): McpServersMap {
 
 | Anti-Pattern | Correct | Why Wrong Here |
 | --- | --- | --- |
-| Skip name check in `buildUserMcpServers` because `validateMcpShape` already rejects it | Keep the filter in all three sites | Defense-in-depth: storage validation can be bypassed by direct DB writes or migration gaps |
-| Allow `kanna` name and rely on merge-order to win | Reject at each boundary | If user server wins the merge, `mcp__kanna__*` shims disappear from Claude's tool list |
-| Only enforce at the API route level | Enforce at storage + both driver build functions | Driver functions receive deserialized `AppSettingsSnapshot`; they must not trust that storage already validated |
+| Skip name check in buildUserMcpServers because validateMcpShape already rejects it | Keep the filter in all three sites | Defense-in-depth: storage validation can be bypassed by direct DB writes or migration gaps |
+| Allow kanna name and rely on merge-order to win | Reject at each boundary | If user server wins the merge, mcp__kanna__* shims disappear from Claude's tool list |
+| Only enforce at the API route level | Enforce at storage + both driver build functions | Driver functions receive deserialized AppSettingsSnapshot; they must not trust that storage already validated |
 
 ## Scope
 
