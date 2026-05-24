@@ -44,6 +44,22 @@ function formatUptime(startedAt: number, exitedAt: number | null): string {
   return `${h}h ${m % 60}m`
 }
 
+export function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  const kb = bytes / 1024
+  if (kb < 1024) return `${kb.toFixed(0)} KB`
+  const mb = kb / 1024
+  if (mb < 1024) return `${mb.toFixed(0)} MB`
+  const gb = mb / 1024
+  return `${gb.toFixed(1)} GB`
+}
+
+export function formatPercent(pct: number): string {
+  if (pct >= 100) return `${pct.toFixed(0)}%`
+  if (pct >= 10) return `${pct.toFixed(1)}%`
+  return `${pct.toFixed(1)}%`
+}
+
 interface RowProps {
   instance: PtyInstanceState
   onOpenChat: (chatId: string) => void
@@ -67,7 +83,7 @@ function StatusPill({ phase }: { phase: PtyInstancePhase }) {
   )
 }
 
-function PtyInstanceRow({ instance, onOpenChat, onCancel, onKill }: RowProps) {
+export function PtyInstanceRow({ instance, onOpenChat, onCancel, onKill }: RowProps) {
   const [confirmKill, setConfirmKill] = useState(false)
 
   const handleKillClick = useCallback(() => {
@@ -122,6 +138,22 @@ function PtyInstanceRow({ instance, onOpenChat, onCancel, onKill }: RowProps) {
             <span style={{ color: instance.smokeTest === "pass" ? PHASE_COLOR.ready : PHASE_COLOR.exited }}>
               {instance.smokeTest}
             </span>
+          </div>
+        ) : null}
+        {instance.rssBytes !== null ? (
+          <div className="truncate col-span-2" title="Resident memory (current · peak across session)">
+            <span className="text-foreground/40">mem</span> {formatBytes(instance.rssBytes)}
+            {instance.rssPeakBytes !== null && instance.rssPeakBytes > instance.rssBytes ? (
+              <span className="text-foreground/30"> · peak {formatBytes(instance.rssPeakBytes)}</span>
+            ) : null}
+          </div>
+        ) : null}
+        {instance.cpuPercent !== null ? (
+          <div className="truncate col-span-2" title="CPU usage % across process tree (current · peak; >100% = multi-core)">
+            <span className="text-foreground/40">cpu</span> {formatPercent(instance.cpuPercent)}
+            {instance.cpuPeakPercent !== null && instance.cpuPeakPercent > instance.cpuPercent ? (
+              <span className="text-foreground/30"> · peak {formatPercent(instance.cpuPeakPercent)}</span>
+            ) : null}
           </div>
         ) : null}
       </div>

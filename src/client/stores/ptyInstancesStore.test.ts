@@ -22,6 +22,10 @@ function instance(chatId: string, overrides: Partial<PtyInstanceState> = {}): Pt
     outputRingTail: null,
     exitedAt: null,
     exitCode: null,
+    rssBytes: null,
+    rssPeakBytes: null,
+    cpuPercent: null,
+    cpuPeakPercent: null,
     ...overrides,
   }
 }

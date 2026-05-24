@@ -1,6 +1,6 @@
 ---
 id: c3-225
-c3-seal: 9037069a342d5ce0f4a598447ba0a3bb771290c80787d06321dbaf425feb862a
+c3-seal: 6476a0ae8f63a3a49b0b78232fe4db0d886727ba437a42aa0b7f07773ea44100
 title: claude-pty-driver
 type: component
 category: feature
@@ -86,6 +86,7 @@ separate cleanup ADR.
 | Start PTY session | IN | Spawn sandboxed claude child for a chat/subagent turn | c3-210 | src/server/claude-pty/driver.ts |
 | HarnessEvent stream | OUT | Normalized events parsed from CLI stdout JSONL — the SOLE event source; on-disk transcript is never read | c3-210 | src/server/claude-pty/driver.ts:453 |
 | stdin prompt channel | IN | Prompt/turn input written to subprocess stdin; REPL closed on oneShot/close | c3-210 | src/server/claude-pty/driver.ts |
+| Live-status registry upserts | OUT | Driver upserts PtyInstanceState (phase, pid, model, account, rssBytes, rssPeakBytes, cpuPercent, cpuPeakPercent) into PtyInstanceRegistry; ws-router fans deltas to subscribed clients. Resource sampler ticks every 2 s (configurable via memorySamplerIntervalMs) using sampleProcessTreeUsage which shells one ps -A -o pid=,ppid=,rss=,pcpu= per tick and sums RSS + CPU% across child + descendants; interval cleared on cleanupResources | c3-102 | src/server/claude-pty/pty-instance-registry.ts, src/server/claude-pty/pty-memory-sampler.adapter.ts, src/server/claude-pty/driver.ts |
 
 ## Change Safety
 
@@ -101,4 +102,6 @@ separate cleanup ADR.
 | --- | --- | --- | --- |
 | src/server/claude-pty/driver.ts | Contract | Spawn/sandbox/oneShot detail | src/server/claude-pty/driver.ts |
 | src/server/claude-pty/jsonl-to-event.ts | Contract | Parser state-machine detail | src/server/claude-pty/jsonl-to-event.ts |
+| src/server/claude-pty/pty-memory-sampler.adapter.ts | Contract | ps invocation + parse + tree-RSS sum; ports-and-adapters seal exemption | src/server/claude-pty/pty-memory-sampler.adapter.ts |
 | src/server/claude-pty/driver.test.ts | Change Safety | Test cases per surface | src/server/claude-pty/driver.test.ts |
+| src/server/claude-pty/pty-memory-sampler.adapter.test.ts | Change Safety | Parser + tree-collect + integration coverage for sampler | src/server/claude-pty/pty-memory-sampler.adapter.test.ts |
