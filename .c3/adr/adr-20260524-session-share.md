@@ -1,10 +1,10 @@
 ---
 id: adr-20260524-session-share
-c3-seal: 5655238631a83ca6881978a9f9a4af2ab028caedb7f21dbd4a98b67d8053dd9a
+c3-seal: aaee8ed4065044c56de52cb47dc9e221c981423e85d8bf785c8d46be8b20b9de
 title: session-share
 type: adr
 goal: Introduce a read-only session-share capability (c3-228) that lets owners mint a time-limited token URL for a finished Kanna chat, enabling teammates to view the full transcript without a Kanna login or write access.
-status: accepted
+status: implemented
 date: "2026-05-24"
 ---
 
