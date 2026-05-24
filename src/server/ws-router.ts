@@ -519,6 +519,7 @@ export function createWsRouter({
     customMcpServers: [],
     claudeDriver: { ...CLAUDE_DRIVER_DEFAULTS, lifecycle: { ...CLAUDE_PTY_LIFECYCLE_DEFAULTS } },
     globalPromptAppend: "",
+    shareDefaultTtlHours: 24,
   }
   const mergeAppSettingsPatch = (snapshot: AppSettingsSnapshot, patch: AppSettingsPatch): AppSettingsSnapshot => {
     let subagents = snapshot.subagents

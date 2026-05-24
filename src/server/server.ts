@@ -275,8 +275,7 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     snapshotStore,
     buildSnapshot: (chatId) => buildChatSnapshot(snapshotSources, chatId),
     getTunnelBaseUrl: () => sessionShareTunnelBaseUrl,
-    // TODO(Task 10): replace cast once AppSettingsSnapshot has shareDefaultTtlHours
-    getDefaultTtlHours: () => (appSettings.getSnapshot() as AppSettingsSnapshot & { shareDefaultTtlHours?: number }).shareDefaultTtlHours ?? 24,
+    getDefaultTtlHours: () => appSettings.getSnapshot().shareDefaultTtlHours,
     owner: () => "owner",
   })
   const snapshotSweepHandle = startSnapshotSweep(sessionShareService, 24 * 60 * 60 * 1000)
