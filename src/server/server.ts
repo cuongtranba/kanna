@@ -48,6 +48,7 @@ import { SessionShareService } from "./session-share"
 import { SnapshotStore } from "./session-share/snapshot-store.adapter"
 import { handleShareRequest } from "./session-share/http-routes"
 import { buildChatSnapshot, type SnapshotSources } from "./session-share/snapshot-builder"
+import { startSnapshotSweep } from "./session-share/sweep"
 import type {
   ChatSnapshotMessage,
   AttachmentManifestEntry,
@@ -278,6 +279,7 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     getDefaultTtlHours: () => (appSettings.getSnapshot() as AppSettingsSnapshot & { shareDefaultTtlHours?: number }).shareDefaultTtlHours ?? 24,
     owner: () => "owner",
   })
+  const snapshotSweepHandle = startSnapshotSweep(sessionShareService, 24 * 60 * 60 * 1000)
 
   // PTY preflight gate + OS sandbox + mcp tool-callback shims are gone:
   // kanna trusts the claude CLI as the source of truth for tool execution.
@@ -594,6 +596,7 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     keybindings.dispose()
     scheduleManager.shutdown()
     tunnelGateway.shutdown()
+    snapshotSweepHandle.stop()
     clearInterval(staleEmptyChatPruneInterval)
     clearInterval(toolCallbackTickInterval)
     for (const chatId of [...agent.activeTurns.keys()]) {
