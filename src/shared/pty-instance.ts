@@ -27,6 +27,8 @@ export interface PtyInstanceState {
   outputRingTail: string | null
   exitedAt: number | null
   exitCode: number | null
+  rssBytes: number | null
+  rssPeakBytes: number | null
 }
 
 export type PtyInstanceDelta =

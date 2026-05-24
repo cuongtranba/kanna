@@ -16,6 +16,7 @@ import { computeBinarySha256 } from "./preflight/binary-fingerprint.adapter"
 import { spawnPtyProcess as defaultSpawnPtyProcess, type PtyProcess, type SpawnPtyProcessArgs } from "./pty-process.adapter"
 import type { ClaudePtyRegistry } from "./pid-registry.adapter"
 import type { PtyInstanceRegistry } from "./pty-instance-registry"
+import { sampleProcessTreeRssBytes as defaultSampleProcessTreeRssBytes } from "./pty-memory-sampler.adapter"
 import { waitForTuiReady, waitForTuiReadyWithTrustDismiss, sendUserPrompt, sendExitCommand } from "./tui-control"
 import { startTranscriptStream } from "./tui-source.adapter"
 import { computeJsonlPath, computeProjectDir } from "./jsonl-path.adapter"
@@ -106,6 +107,10 @@ export interface StartClaudeSessionPtyArgs {
    * subscribed sockets.
    */
   ptyInstanceRegistry?: PtyInstanceRegistry
+  /** Optional sampler override (tests inject deterministic byte values). */
+  sampleProcessTreeRssBytes?: (pid: number) => Promise<number | null>
+  /** Optional poll-interval override (ms). Defaults to 2000. */
+  memorySamplerIntervalMs?: number
 }
 
 /**
@@ -376,6 +381,7 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
   async function cleanupResources() {
     if (cleanedUp) return
     cleanedUp = true
+    stopMemorySampler()
     args.ptyInstanceRegistry?.upsert(args.chatId, {
       phase: "exited",
       exitedAt: Date.now(),
@@ -441,6 +447,38 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
   // pty is declared before use; assigned in the spawn try-block below.
   let pty: PtyProcess
 
+  let memorySamplerHandle: ReturnType<typeof setInterval> | null = null
+  let rssPeakBytes = 0
+
+  function stopMemorySampler(): void {
+    if (memorySamplerHandle !== null) {
+      clearInterval(memorySamplerHandle)
+      memorySamplerHandle = null
+    }
+  }
+
+  function startMemorySampler(rootPid: number): void {
+    if (memorySamplerHandle !== null) return
+    const sampler = args.sampleProcessTreeRssBytes ?? defaultSampleProcessTreeRssBytes
+    const intervalMs = args.memorySamplerIntervalMs ?? 2000
+    const tick = async (): Promise<void> => {
+      let rssBytes: number | null
+      try {
+        rssBytes = await sampler(rootPid)
+      } catch {
+        rssBytes = null
+      }
+      if (rssBytes === null) return
+      if (rssBytes > rssPeakBytes) rssPeakBytes = rssBytes
+      args.ptyInstanceRegistry?.upsert(args.chatId, {
+        rssBytes,
+        rssPeakBytes,
+      })
+    }
+    memorySamplerHandle = setInterval(() => { void tick() }, intervalMs)
+    void tick()
+  }
+
   const ring = new OutputRing()
   const spawnPty = args.spawnPtyProcess ?? defaultSpawnPtyProcess
   try {
@@ -463,6 +501,7 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
       phase: "trust-dialog",
       lastEventAt: Date.now(),
     })
+    startMemorySampler(pty.pid)
     // Record the live PTY in the on-disk registry so a non-graceful
     // server crash can reap this orphan on the next boot. Persistence is
     // best-effort — failure to write must not block the spawn.
