@@ -54,6 +54,12 @@ export function formatBytes(bytes: number): string {
   return `${gb.toFixed(1)} GB`
 }
 
+export function formatPercent(pct: number): string {
+  if (pct >= 100) return `${pct.toFixed(0)}%`
+  if (pct >= 10) return `${pct.toFixed(1)}%`
+  return `${pct.toFixed(1)}%`
+}
+
 interface RowProps {
   instance: PtyInstanceState
   onOpenChat: (chatId: string) => void
@@ -135,10 +141,18 @@ export function PtyInstanceRow({ instance, onOpenChat, onCancel, onKill }: RowPr
           </div>
         ) : null}
         {instance.rssBytes !== null ? (
-          <div className="truncate col-span-2" title={`Resident memory (current · peak across session)`}>
+          <div className="truncate col-span-2" title="Resident memory (current · peak across session)">
             <span className="text-foreground/40">mem</span> {formatBytes(instance.rssBytes)}
             {instance.rssPeakBytes !== null && instance.rssPeakBytes > instance.rssBytes ? (
               <span className="text-foreground/30"> · peak {formatBytes(instance.rssPeakBytes)}</span>
+            ) : null}
+          </div>
+        ) : null}
+        {instance.cpuPercent !== null ? (
+          <div className="truncate col-span-2" title="CPU usage % across process tree (current · peak; >100% = multi-core)">
+            <span className="text-foreground/40">cpu</span> {formatPercent(instance.cpuPercent)}
+            {instance.cpuPeakPercent !== null && instance.cpuPeakPercent > instance.cpuPercent ? (
+              <span className="text-foreground/30"> · peak {formatPercent(instance.cpuPeakPercent)}</span>
             ) : null}
           </div>
         ) : null}

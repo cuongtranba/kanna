@@ -29,6 +29,8 @@ export interface PtyInstanceState {
   exitCode: number | null
   rssBytes: number | null
   rssPeakBytes: number | null
+  cpuPercent: number | null
+  cpuPeakPercent: number | null
 }
 
 export type PtyInstanceDelta =

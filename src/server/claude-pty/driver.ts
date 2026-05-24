@@ -16,7 +16,7 @@ import { computeBinarySha256 } from "./preflight/binary-fingerprint.adapter"
 import { spawnPtyProcess as defaultSpawnPtyProcess, type PtyProcess, type SpawnPtyProcessArgs } from "./pty-process.adapter"
 import type { ClaudePtyRegistry } from "./pid-registry.adapter"
 import type { PtyInstanceRegistry } from "./pty-instance-registry"
-import { sampleProcessTreeRssBytes as defaultSampleProcessTreeRssBytes } from "./pty-memory-sampler.adapter"
+import { sampleProcessTreeUsage as defaultSampleProcessTreeUsage, type ProcessTreeSample } from "./pty-memory-sampler.adapter"
 import { waitForTuiReady, waitForTuiReadyWithTrustDismiss, sendUserPrompt, sendExitCommand } from "./tui-control"
 import { startTranscriptStream } from "./tui-source.adapter"
 import { computeJsonlPath, computeProjectDir } from "./jsonl-path.adapter"
@@ -107,8 +107,8 @@ export interface StartClaudeSessionPtyArgs {
    * subscribed sockets.
    */
   ptyInstanceRegistry?: PtyInstanceRegistry
-  /** Optional sampler override (tests inject deterministic byte values). */
-  sampleProcessTreeRssBytes?: (pid: number) => Promise<number | null>
+  /** Optional sampler override (tests inject deterministic values). */
+  sampleProcessTreeUsage?: (pid: number) => Promise<ProcessTreeSample | null>
   /** Optional poll-interval override (ms). Defaults to 2000. */
   memorySamplerIntervalMs?: number
 }
@@ -449,6 +449,7 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
 
   let memorySamplerHandle: ReturnType<typeof setInterval> | null = null
   let rssPeakBytes = 0
+  let cpuPeakPercent = 0
 
   function stopMemorySampler(): void {
     if (memorySamplerHandle !== null) {
@@ -459,20 +460,23 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
 
   function startMemorySampler(rootPid: number): void {
     if (memorySamplerHandle !== null) return
-    const sampler = args.sampleProcessTreeRssBytes ?? defaultSampleProcessTreeRssBytes
+    const sampler = args.sampleProcessTreeUsage ?? defaultSampleProcessTreeUsage
     const intervalMs = args.memorySamplerIntervalMs ?? 2000
     const tick = async (): Promise<void> => {
-      let rssBytes: number | null
+      let sample: ProcessTreeSample | null
       try {
-        rssBytes = await sampler(rootPid)
+        sample = await sampler(rootPid)
       } catch {
-        rssBytes = null
+        sample = null
       }
-      if (rssBytes === null) return
-      if (rssBytes > rssPeakBytes) rssPeakBytes = rssBytes
+      if (sample === null) return
+      if (sample.rssBytes > rssPeakBytes) rssPeakBytes = sample.rssBytes
+      if (sample.cpuPercent > cpuPeakPercent) cpuPeakPercent = sample.cpuPercent
       args.ptyInstanceRegistry?.upsert(args.chatId, {
-        rssBytes,
+        rssBytes: sample.rssBytes,
         rssPeakBytes,
+        cpuPercent: sample.cpuPercent,
+        cpuPeakPercent,
       })
     }
     memorySamplerHandle = setInterval(() => { void tick() }, intervalMs)

@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { createElement } from "react"
 import { renderToStaticMarkup } from "react-dom/server"
 import type { PtyInstanceState } from "../../../shared/pty-instance"
-import { formatBytes, PtyInstanceRow } from "./PtyInstancesIndicator"
+import { formatBytes, formatPercent, PtyInstanceRow } from "./PtyInstancesIndicator"
 import { TooltipProvider } from "../ui/tooltip"
 
 function baseInstance(overrides: Partial<PtyInstanceState> = {}): PtyInstanceState {
@@ -27,6 +27,8 @@ function baseInstance(overrides: Partial<PtyInstanceState> = {}): PtyInstanceSta
     exitCode: null,
     rssBytes: null,
     rssPeakBytes: null,
+    cpuPercent: null,
+    cpuPeakPercent: null,
     ...overrides,
   }
 }
@@ -66,6 +68,22 @@ describe("formatBytes", () => {
   })
 })
 
+describe("formatPercent", () => {
+  test("renders sub-10% with one decimal", () => {
+    expect(formatPercent(0)).toBe("0.0%")
+    expect(formatPercent(5.234)).toBe("5.2%")
+  })
+
+  test("renders 10..99 with one decimal", () => {
+    expect(formatPercent(42.78)).toBe("42.8%")
+  })
+
+  test("renders >=100 without decimals (multi-core)", () => {
+    expect(formatPercent(180.4)).toBe("180%")
+    expect(formatPercent(800)).toBe("800%")
+  })
+})
+
 describe("PtyInstancesIndicatorView mem cell", () => {
   test("hides mem cell when rssBytes is null", () => {
     const html = render(baseInstance())
@@ -86,5 +104,25 @@ describe("PtyInstancesIndicatorView mem cell", () => {
     }))
     expect(html).toContain("120 MB")
     expect(html).toContain("peak 250 MB")
+  })
+})
+
+describe("PtyInstancesIndicatorView cpu cell", () => {
+  test("hides cpu cell when cpuPercent is null", () => {
+    const html = render(baseInstance())
+    expect(html).not.toContain(">cpu<")
+  })
+
+  test("renders cpu cell with current %, no peak when equal", () => {
+    const html = render(baseInstance({ cpuPercent: 42.3, cpuPeakPercent: 42.3 }))
+    expect(html).toContain(">cpu<")
+    expect(html).toContain("42.3%")
+    expect(html).not.toContain("peak 42")
+  })
+
+  test("renders peak suffix when peak exceeds current", () => {
+    const html = render(baseInstance({ cpuPercent: 35.0, cpuPeakPercent: 180.0 }))
+    expect(html).toContain("35.0%")
+    expect(html).toContain("peak 180%")
   })
 })

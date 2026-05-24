@@ -3,40 +3,40 @@ import process from "node:process"
 import {
   collectTreePids,
   parsePsOutput,
-  sampleProcessTreeRssBytes,
-  sumTreeRssBytes,
+  sampleProcessTreeUsage,
+  sumTreeUsage,
   type PsProcessRow,
 } from "./pty-memory-sampler.adapter"
 
 describe("parsePsOutput", () => {
-  test("parses normal ps output (BSD/macOS style)", () => {
+  test("parses normal ps output with pid/ppid/rss/pcpu", () => {
     const out = [
-      "    1     0    1024",
-      "  100     1    2048",
-      "  101   100    4096",
+      "    1     0    1024   0.0",
+      "  100     1    2048   5.2",
+      "  101   100    4096  12.5",
       "",
-      "  102   100    8192",
+      "  102   100    8192  99.9",
     ].join("\n")
     expect(parsePsOutput(out)).toEqual([
-      { pid: 1, ppid: 0, rssKb: 1024 },
-      { pid: 100, ppid: 1, rssKb: 2048 },
-      { pid: 101, ppid: 100, rssKb: 4096 },
-      { pid: 102, ppid: 100, rssKb: 8192 },
+      { pid: 1, ppid: 0, rssKb: 1024, cpuPercent: 0.0 },
+      { pid: 100, ppid: 1, rssKb: 2048, cpuPercent: 5.2 },
+      { pid: 101, ppid: 100, rssKb: 4096, cpuPercent: 12.5 },
+      { pid: 102, ppid: 100, rssKb: 8192, cpuPercent: 99.9 },
     ])
   })
 
   test("skips malformed rows without throwing", () => {
     const out = [
-      "100 1 1024",
+      "100 1 1024 3.0",
       "garbage line here",
-      "abc def ghi",
-      "200 1 2048",
+      "abc def ghi jkl",
+      "200 1 2048 7.5",
       " ",
-      "300 1",
+      "300 1 100",
     ].join("\n")
     expect(parsePsOutput(out)).toEqual([
-      { pid: 100, ppid: 1, rssKb: 1024 },
-      { pid: 200, ppid: 1, rssKb: 2048 },
+      { pid: 100, ppid: 1, rssKb: 1024, cpuPercent: 3.0 },
+      { pid: 200, ppid: 1, rssKb: 2048, cpuPercent: 7.5 },
     ])
   })
 
@@ -48,56 +48,56 @@ describe("parsePsOutput", () => {
 
 describe("collectTreePids", () => {
   const rows: PsProcessRow[] = [
-    { pid: 1, ppid: 0, rssKb: 0 },
-    { pid: 100, ppid: 1, rssKb: 0 },
-    { pid: 101, ppid: 100, rssKb: 0 },
-    { pid: 102, ppid: 100, rssKb: 0 },
-    { pid: 103, ppid: 101, rssKb: 0 },
-    { pid: 200, ppid: 1, rssKb: 0 },
+    { pid: 1, ppid: 0, rssKb: 0, cpuPercent: 0 },
+    { pid: 100, ppid: 1, rssKb: 0, cpuPercent: 0 },
+    { pid: 101, ppid: 100, rssKb: 0, cpuPercent: 0 },
+    { pid: 102, ppid: 100, rssKb: 0, cpuPercent: 0 },
+    { pid: 103, ppid: 101, rssKb: 0, cpuPercent: 0 },
+    { pid: 200, ppid: 1, rssKb: 0, cpuPercent: 0 },
   ]
 
   test("collects root + descendants transitively", () => {
-    const tree = collectTreePids(rows, 100)
-    expect(tree).toEqual(new Set([100, 101, 102, 103]))
+    expect(collectTreePids(rows, 100)).toEqual(new Set([100, 101, 102, 103]))
   })
 
   test("returns only root when no children", () => {
-    const tree = collectTreePids(rows, 200)
-    expect(tree).toEqual(new Set([200]))
+    expect(collectTreePids(rows, 200)).toEqual(new Set([200]))
   })
 
   test("returns only root when root absent from rows", () => {
-    const tree = collectTreePids(rows, 999)
-    expect(tree).toEqual(new Set([999]))
+    expect(collectTreePids(rows, 999)).toEqual(new Set([999]))
   })
 })
 
-describe("sumTreeRssBytes", () => {
+describe("sumTreeUsage", () => {
   const rows: PsProcessRow[] = [
-    { pid: 1, ppid: 0, rssKb: 100 },
-    { pid: 100, ppid: 1, rssKb: 200 },
-    { pid: 101, ppid: 100, rssKb: 300 },
+    { pid: 1, ppid: 0, rssKb: 100, cpuPercent: 1.0 },
+    { pid: 100, ppid: 1, rssKb: 200, cpuPercent: 25.0 },
+    { pid: 101, ppid: 100, rssKb: 300, cpuPercent: 50.5 },
   ]
 
-  test("sums rss for pids in tree, converts kb -> bytes", () => {
+  test("sums rss (kb->bytes) + cpu for pids in tree", () => {
     const tree = new Set<number>([100, 101])
-    expect(sumTreeRssBytes(rows, tree)).toBe((200 + 300) * 1024)
+    expect(sumTreeUsage(rows, tree)).toEqual({
+      rssBytes: (200 + 300) * 1024,
+      cpuPercent: 25.0 + 50.5,
+    })
   })
 
-  test("returns 0 for empty tree", () => {
-    expect(sumTreeRssBytes(rows, new Set())).toBe(0)
+  test("returns zeros for empty tree", () => {
+    expect(sumTreeUsage(rows, new Set())).toEqual({ rssBytes: 0, cpuPercent: 0 })
   })
 })
 
-describe("sampleProcessTreeRssBytes", () => {
-  test("returns positive bytes for current process", async () => {
-    const bytes = await sampleProcessTreeRssBytes(process.pid)
-    expect(bytes).not.toBeNull()
-    expect(bytes as number).toBeGreaterThan(0)
+describe("sampleProcessTreeUsage", () => {
+  test("returns positive rss + finite cpu for current process", async () => {
+    const sample = await sampleProcessTreeUsage(process.pid)
+    expect(sample).not.toBeNull()
+    expect(sample?.rssBytes).toBeGreaterThan(0)
+    expect(Number.isFinite(sample?.cpuPercent ?? Number.NaN)).toBe(true)
   }, 5_000)
 
   test("returns null for pid that does not exist", async () => {
-    const bytes = await sampleProcessTreeRssBytes(2_147_483_646)
-    expect(bytes).toBeNull()
+    expect(await sampleProcessTreeUsage(2_147_483_646)).toBeNull()
   }, 5_000)
 })

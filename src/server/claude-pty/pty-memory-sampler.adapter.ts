@@ -9,6 +9,12 @@ export interface PsProcessRow {
   pid: number
   ppid: number
   rssKb: number
+  cpuPercent: number
+}
+
+export interface ProcessTreeSample {
+  rssBytes: number
+  cpuPercent: number
 }
 
 export function parsePsOutput(stdout: string): PsProcessRow[] {
@@ -17,12 +23,13 @@ export function parsePsOutput(stdout: string): PsProcessRow[] {
     const line = rawLine.trim()
     if (!line) continue
     const parts = line.split(/\s+/)
-    if (parts.length < 3) continue
+    if (parts.length < 4) continue
     const pid = Number(parts[0])
     const ppid = Number(parts[1])
     const rssKb = Number(parts[2])
-    if (!Number.isFinite(pid) || !Number.isFinite(ppid) || !Number.isFinite(rssKb)) continue
-    rows.push({ pid, ppid, rssKb })
+    const cpuPercent = Number(parts[3])
+    if (!Number.isFinite(pid) || !Number.isFinite(ppid) || !Number.isFinite(rssKb) || !Number.isFinite(cpuPercent)) continue
+    rows.push({ pid, ppid, rssKb, cpuPercent })
   }
   return rows
 }
@@ -49,18 +56,21 @@ export function collectTreePids(rows: readonly PsProcessRow[], rootPid: number):
   return tree
 }
 
-export function sumTreeRssBytes(rows: readonly PsProcessRow[], tree: ReadonlySet<number>): number {
+export function sumTreeUsage(rows: readonly PsProcessRow[], tree: ReadonlySet<number>): ProcessTreeSample {
   let totalKb = 0
+  let totalCpu = 0
   for (const row of rows) {
-    if (tree.has(row.pid)) totalKb += row.rssKb
+    if (!tree.has(row.pid)) continue
+    totalKb += row.rssKb
+    totalCpu += row.cpuPercent
   }
-  return totalKb * 1024
+  return { rssBytes: totalKb * 1024, cpuPercent: totalCpu }
 }
 
-export async function sampleProcessTreeRssBytes(rootPid: number): Promise<number | null> {
+export async function sampleProcessTreeUsage(rootPid: number): Promise<ProcessTreeSample | null> {
   let stdout: string
   try {
-    const result = await execFileAsync("ps", ["-A", "-o", "pid=,ppid=,rss="], {
+    const result = await execFileAsync("ps", ["-A", "-o", "pid=,ppid=,rss=,pcpu="], {
       timeout: PS_TIMEOUT_MS,
       maxBuffer: 4 * 1024 * 1024,
     })
@@ -71,5 +81,5 @@ export async function sampleProcessTreeRssBytes(rootPid: number): Promise<number
   const rows = parsePsOutput(stdout)
   if (!rows.some((r) => r.pid === rootPid)) return null
   const tree = collectTreePids(rows, rootPid)
-  return sumTreeRssBytes(rows, tree)
+  return sumTreeUsage(rows, tree)
 }
