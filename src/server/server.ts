@@ -433,6 +433,7 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
         return { ok: false, error: err instanceof Error ? err.message : String(err) }
       }
     },
+    sessionShare: sessionShareService,
   })
   scheduleManager.rehydrate(
     store.listAutoContinueChats().flatMap((chatId) => store.getAutoContinueEvents(chatId))
