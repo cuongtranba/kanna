@@ -19,7 +19,6 @@ import { openExternal } from "./external-open"
 import { KeybindingsManager } from "./keybindings"
 import { resolveLocalPath } from "./paths"
 import { ensureProjectDirectory } from "./project-directory.adapter"
-import { writeStandaloneTranscriptExport } from "./standalone-export.adapter"
 import { TerminalManager } from "./terminal-manager"
 import type { UpdateManager } from "./update-manager"
 import { deriveChatSnapshot, deriveLocalProjectsSnapshot, deriveSidebarData } from "./read-models"
@@ -1845,19 +1844,6 @@ export function createWsRouter({
         case "chat.stopDraining": {
           await agent.stopDraining(command.chatId)
           send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
-          return
-        }
-        case "chat.exportStandalone": {
-          const { chat, project } = resolveChatProject(command.chatId)
-          const result = await writeStandaloneTranscriptExport({
-            chatId: chat.id,
-            title: chat.title,
-            localPath: project.localPath,
-            theme: command.theme,
-            attachmentMode: command.attachmentMode,
-            messages: store.getMessages(command.chatId),
-          })
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result })
           return
         }
         case "chat.loadHistory": {

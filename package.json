@@ -27,18 +27,15 @@
     "bin/",
     "src/server/",
     "src/shared/",
-    "dist/client/",
-    "dist/export-viewer/"
+    "dist/client/"
   ],
   "engines": {
     "bun": ">=1.3.11"
   },
   "scripts": {
-    "build": "bun run build:client && bun run build:export-viewer",
+    "build": "bun run build:client",
     "build:client": "vite build",
-    "build:export-viewer": "vite build --config vite.export-viewer.config.ts",
-    "prepare:export-viewer-release-assets": "bun run ./scripts/prepare-export-viewer-release-assets.ts",
-    "check": "tsc --noEmit && bun run lint && bun run build:client && bun run build:export-viewer",
+    "check": "tsc --noEmit && bun run lint && bun run build:client",
     "lint": "eslint src/ --max-warnings=0",
     "dev": "bun run ./scripts/dev.ts",
     "dev:client": "vite --host 0.0.0.0 --port 5174",

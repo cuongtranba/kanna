@@ -954,10 +954,6 @@ export function ChatPage() {
           rightSidebarVisible={showRightSidebar}
           onToggleRightSidebar={projectId ? handleToggleRightSidebar : undefined}
           onOpenExternal={handleOpenExternal}
-          onExportTranscript={state.activeChatId ? () => void state.handleShareChat(state.activeChatId) : undefined}
-          canExportTranscript={Boolean(state.activeChatId) && !state.isExportingStandalone}
-          isExportingTranscript={state.isExportingStandalone}
-          exportTranscriptComplete={state.standaloneShareComplete}
           editorPreset={editorPreset}
           editorCommandTemplate={editorCommandTemplate}
           platform={state.localProjects?.machine.platform}

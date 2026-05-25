@@ -32,15 +32,14 @@ export const UserMessage = memo(function UserMessage({ content, attachments = []
   const [selectedAttachmentId, setSelectedAttachmentId] = useState<string | null>(null)
   const renderOptions = useTranscriptRenderOptions()
   const parsedContent = useMemo(() => parseSystemMessage(content), [content])
-  const shouldShowImagePlaceholders = renderOptions.attachmentMode === "metadata"
-  const canInteractWithAttachments = !renderOptions.readonly || renderOptions.attachmentMode === "bundle"
+  const canInteractWithAttachments = !renderOptions.readonly
   const imageAttachments = useMemo(
-    () => attachments.filter((attachment) => attachment.kind === "image" && (attachment.contentUrl || shouldShowImagePlaceholders)),
-    [attachments, shouldShowImagePlaceholders],
+    () => attachments.filter((attachment) => attachment.kind === "image" && attachment.contentUrl),
+    [attachments],
   )
   const fileAttachments = useMemo(
-    () => attachments.filter((attachment) => attachment.kind !== "image" || (!attachment.contentUrl && !shouldShowImagePlaceholders)),
-    [attachments, shouldShowImagePlaceholders],
+    () => attachments.filter((attachment) => attachment.kind !== "image" || !attachment.contentUrl),
+    [attachments],
   )
   const selectedAttachment = attachments.find((attachment) => attachment.id === selectedAttachmentId) ?? null
   const selectedSource: PreviewSource | null = selectedAttachment

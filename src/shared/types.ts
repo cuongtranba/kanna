@@ -14,8 +14,6 @@ export const DEFAULT_OPENAI_SDK_MODEL = "gpt-5.4-mini"
 export const DEFAULT_OPENROUTER_SDK_MODEL = "moonshotai/kimi-k2.5:nitro"
 
 export type AttachmentKind = "image" | "file" | "mention"
-export type StandaloneTranscriptAttachmentMode = "metadata" | "bundle"
-export type StandaloneTranscriptTheme = "light" | "dark"
 
 export interface SkillSearchResult {
   id: string
@@ -76,46 +74,6 @@ export interface ChatAttachment {
   mimeType: string
   size: number
 }
-
-export interface StandaloneTranscriptBundle {
-  version: 1
-  chatId: string
-  title: string
-  localPath: string
-  exportedAt: string
-  viewerVersion: string
-  theme: StandaloneTranscriptTheme
-  attachmentMode: StandaloneTranscriptAttachmentMode
-  messages: TranscriptEntry[]
-}
-
-export interface StandaloneTranscriptExportResult {
-  ok: true
-  outputDir: string
-  indexHtmlPath: string
-  transcriptJsonPath: string
-  attachmentMode: StandaloneTranscriptAttachmentMode
-  totalAttachmentCount: number
-  bundledAttachmentCount: number
-  shareSlug: string
-  shareUrl: string
-  uploadedFileCount: number
-}
-
-export interface StandaloneTranscriptExportFailureResult {
-  ok: false
-  error: string
-  outputDir: string
-  transcriptJsonPath: string
-  transcriptFileName: string
-  transcriptJson: string
-  shareSlug: string
-  shareUrl: string
-}
-
-export type StandaloneTranscriptExportCommandResult =
-  | StandaloneTranscriptExportResult
-  | StandaloneTranscriptExportFailureResult
 
 export interface QueuedChatMessage {
   id: string
