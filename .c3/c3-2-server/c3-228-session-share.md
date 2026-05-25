@@ -36,8 +36,8 @@ Owns the complete lifecycle of a read-only session share: receive mint request f
 
 | Aspect | Detail | Reference |
 | --- | --- | --- |
-| Precondition | Cloudflare tunnel active (c3-218/c3-223); server running; chat has at least one event | c3-218 |
-| Input — ws-router | share.mint WsEnvelope carrying chatId and requestedTtlHours | c3-208 |
+| Precondition | Server running; chat has at least one event. Public reachability is a deployment concern, not a runtime gate. | c3-206 |
+| Input — ws-router | share.mint WsEnvelope carrying chatId and requestedTtlHours; mint receives originHost captured at WS upgrade and uses it as the base URL | c3-208 |
 | Input — event-store | Replayed event log for the target chat | c3-206 |
 | Input — read-models | Chat title, transcript entries, metadata from projection | c3-207 |
 | Input — paths-config | ~/.kanna/shares/ directory resolved at boot | c3-204 |
@@ -49,8 +49,7 @@ Owns the complete lifecycle of a read-only session share: receive mint request f
 | Aspect | Detail | Reference |
 | --- | --- | --- |
 | Outcome | Owner receives a URL they can paste to any browser; recipient sees a frozen read-only transcript | c3-2 |
-| Primary path | ws share.mint → build snapshot → write file (mode 0600) → append share.token_minted → return tunnel URL | c3-208 |
-| Alternate — NO_TUNNEL | No active tunnel: return error envelope NO_TUNNEL; no file written, no event appended | c3-218 |
+| Primary path | ws share.mint → build snapshot → write file (mode 0600) → append share.token_minted → return `${originHost}/share/<token>` | c3-208 |
 | Alternate — sweep expiry | TTL cron fires → load share projection → for each expired token: delete file + append share.token_expired | c3-228 |
 | Alternate — startup replay | On boot, replay shares JSONL; any token past TTL is expired immediately (fail-closed) | c3-206 |
 | Failure — snapshot read error | File missing or corrupt on GET: return 404 | c3-228 |
@@ -65,13 +64,14 @@ Owns the complete lifecycle of a read-only session share: receive mint request f
 | ref-cqrs-read-models | ref | Share lookup reads from in-memory projection rebuilt from shares log | must follow | No direct disk scan for token lookup |
 | ref-side-effect-adapter | ref | All fs reads/writes in snapshot-store.adapter.ts only | must follow | No direct fs calls in service or route |
 | ref-strong-typing | ref | ShareSnapshot, ShareToken, share event payloads — no any | must follow | tsc strict enforced |
-| adr-20260524-session-share | adr | Full decision record including affected topology and compliance | governs this component | Accepted |
+| adr-20260524-session-share | adr | Original decision record. Tunnel precondition row superseded by adr-20260525-share-decouple-tunnel. | governs this component | Accepted |
+| adr-20260525-share-decouple-tunnel | adr | Removes the cloudflared-tunnel precondition: mint accepts a `baseUrl` argument supplied by the ws-router from the WS upgrade request origin. | governs this component | Implemented |
 
 ## Contract
 
 | Surface | Direction | Contract | Boundary | Evidence |
 | --- | --- | --- | --- | --- |
-| mintShare(chatId, ttlHours) | IN | Builds snapshot, persists file, appends event, returns share URL or NO_TUNNEL error | c3-208 | src/server/session-share/session-share-service.ts |
+| mintShare(chatId, ttlHours, baseUrl) | IN | Builds snapshot, persists file, appends event, returns `${baseUrl}/share/<token>`. Caller (ws-router) passes the request origin captured at WS upgrade. | c3-208 | src/server/session-share/session-share-service.ts |
 | GET /share/:token | IN | Returns frozen ShareSnapshot JSON if valid; 404 if unknown; 410 if expired | c3-202 | src/server/session-share/share-route.ts |
 | sweepExpired() | IN | Appends share.token_expired and deletes file for each token past TTL | internal timer | src/server/session-share/snapshot-sweep.ts |
 | snapshot-store adapter | IN/OUT | readSnapshot(token), writeSnapshot(token, data), deleteSnapshot(token) | c3-204 | src/server/session-share/snapshot-store.adapter.ts |
