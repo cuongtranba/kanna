@@ -2,7 +2,6 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { Navigate, Outlet, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom"
 import { Flower } from "lucide-react"
 import { ChatPolicyDialog } from "../components/chat-ui/ChatPolicyDialog"
-import { StandaloneShareDialog } from "../components/chat-ui/StandaloneShareDialog"
 import { POLICY_DEFAULT } from "../../shared/permission-policy"
 import { AppDialogProvider, useAppDialog } from "../components/ui/app-dialog"
 import { Button } from "../components/ui/button"
@@ -227,7 +226,6 @@ function KannaLayout() {
     handleCreateChat,
     handleForkChat,
     handleRenameChat,
-    handleShareChat,
     handleArchiveChat,
     handleOpenArchivedChat: stateHandleOpenArchivedChat,
     openAddProjectModal,
@@ -248,9 +246,6 @@ function KannaLayout() {
   const handleSidebarRenameChat = useCallback((chat: Parameters<typeof handleRenameChat>[0]) => {
     void handleRenameChat(chat)
   }, [handleRenameChat])
-  const handleSidebarShareChat = useCallback((chatId: string) => {
-    void handleShareChat(chatId)
-  }, [handleShareChat])
   const handleSidebarArchiveChat = useCallback((chat: Parameters<typeof handleArchiveChat>[0]) => {
     void handleArchiveChat(chat)
   }, [handleArchiveChat])
@@ -328,7 +323,6 @@ function KannaLayout() {
       currentProjectId={state.activeProjectId}
       keybindings={state.keybindings}
       onRenameChat={handleSidebarRenameChat}
-      onShareChat={handleSidebarShareChat}
       onArchiveChat={handleSidebarArchiveChat}
       onOpenArchivedChat={handleOpenArchivedChat}
       onDeleteChat={handleSidebarDeleteChat}
@@ -359,7 +353,6 @@ function KannaLayout() {
     handleSidebarForkChat,
     handleSidebarOpenExternalPath,
     handleSidebarRenameChat,
-    handleSidebarShareChat,
     handleSidebarEditPermissions,
     handleSidebarReorderProjectGroups,
     handleSidebarHideProject,
@@ -455,17 +448,6 @@ function KannaLayout() {
           <Outlet context={state} />
         </div>
       </div>
-      <StandaloneShareDialog
-        open={Boolean(state.standaloneShareUrl)}
-        shareUrl={state.standaloneShareUrl ?? ""}
-        onOpenChange={(open) => {
-          if (!open) {
-            state.handleCloseStandaloneShareDialog()
-          }
-        }}
-        onOpenLink={state.handleOpenStandaloneShareLink}
-        onCopyLink={state.handleCopyStandaloneShareLink}
-      />
       <ChatPolicyDialog
         open={permissionsChatId != null && permissionsChatId === state.activeChatId}
         chatTitle={permissionsChatTitle}

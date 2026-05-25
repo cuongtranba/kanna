@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react"
-import { Archive, Code, Copy, EyeOff, FolderOpen, Pencil, ShieldAlert, Split, Star, StarOff, Trash2, UserRoundPlus, Users } from "lucide-react"
+import { Archive, Code, Copy, EyeOff, FolderOpen, Pencil, ShieldAlert, Split, Star, StarOff, Trash2, Users } from "lucide-react"
 import {
   ContextMenu,
   ContextMenuContent,
@@ -98,7 +98,6 @@ export function ProjectSectionMenu({
 export function ChatRowMenu({
   canFork,
   onRename,
-  onShare,
   onOpenInFinder,
   onFork,
   onArchive,
@@ -108,7 +107,6 @@ export function ChatRowMenu({
 }: {
   canFork?: boolean
   onRename: () => void
-  onShare: () => void
   onOpenInFinder: () => void
   onFork: () => void
   onArchive: () => void
@@ -130,15 +128,6 @@ export function ChatRowMenu({
         >
           <Pencil className="h-3.5 w-3.5" />
           <span className="text-xs font-medium">Rename</span>
-        </ContextMenuItem>
-        <ContextMenuItem
-          onSelect={(event) => {
-            event.preventDefault()
-            onShare()
-          }}
-        >
-          <UserRoundPlus className="h-3.5 w-3.5" />
-          <span className="text-xs font-medium">Share</span>
         </ContextMenuItem>
         <ContextMenuItem
           onSelect={(event) => {

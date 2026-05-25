@@ -16,7 +16,6 @@ interface Props {
   showShortcutHint?: boolean
   onSelectChat: (chatId: string) => void
   onRenameChat: (chatId: string) => void
-  onShareChat: (chatId: string) => void
   onOpenInFinder: (localPath: string) => void
   onForkChat: (chatId: string) => void
   onArchiveChat: (chatId: string) => void
@@ -74,7 +73,6 @@ function ChatRowImpl({
   showShortcutHint = false,
   onSelectChat,
   onRenameChat,
-  onShareChat,
   onOpenInFinder,
   onForkChat,
   onArchiveChat,
@@ -207,7 +205,6 @@ function ChatRowImpl({
     <ChatRowMenu
       canFork={chat.canFork}
       onRename={() => onRenameChat(chat.chatId)}
-      onShare={() => onShareChat(chat.chatId)}
       onOpenInFinder={() => onOpenInFinder(chat.localPath)}
       onFork={() => onForkChat(chat.chatId)}
       onArchive={() => onArchiveChat(chat.chatId)}

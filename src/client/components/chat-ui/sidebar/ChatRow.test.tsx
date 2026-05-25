@@ -24,7 +24,6 @@ describe("ChatRow", () => {
         nowMs={60_000}
         onSelectChat={() => undefined}
         onRenameChat={() => undefined}
-        onShareChat={() => undefined}
         onOpenInFinder={() => undefined}
         onForkChat={() => undefined}
         onArchiveChat={() => undefined}
@@ -43,7 +42,6 @@ describe("ChatRow", () => {
         nowMs={60_000}
         onSelectChat={() => undefined}
         onRenameChat={() => undefined}
-        onShareChat={() => undefined}
         onOpenInFinder={() => undefined}
         onForkChat={() => undefined}
         onArchiveChat={() => undefined}
@@ -62,7 +60,6 @@ describe("ChatRow", () => {
         nowMs={60_000}
         onSelectChat={() => undefined}
         onRenameChat={() => undefined}
-        onShareChat={() => undefined}
         onOpenInFinder={() => undefined}
         onForkChat={() => undefined}
         onArchiveChat={() => undefined}
@@ -84,7 +81,6 @@ describe("ChatRow", () => {
         showShortcutHint
         onSelectChat={() => undefined}
         onRenameChat={() => undefined}
-        onShareChat={() => undefined}
         onOpenInFinder={() => undefined}
         onForkChat={() => undefined}
         onArchiveChat={() => undefined}
@@ -105,7 +101,6 @@ describe("ChatRow", () => {
         nowMs={12_000}
         onSelectChat={() => undefined}
         onRenameChat={() => undefined}
-        onShareChat={() => undefined}
         onOpenInFinder={() => undefined}
         onForkChat={() => undefined}
         onArchiveChat={() => undefined}
@@ -128,7 +123,6 @@ describe("ChatRow", () => {
         nowMs={30_000}
         onSelectChat={() => undefined}
         onRenameChat={() => undefined}
-        onShareChat={() => undefined}
         onOpenInFinder={() => undefined}
         onForkChat={() => undefined}
         onArchiveChat={() => undefined}
@@ -147,7 +141,6 @@ describe("ChatRow", () => {
         nowMs={60_000}
         onSelectChat={() => undefined}
         onRenameChat={() => undefined}
-        onShareChat={() => undefined}
         onOpenInFinder={() => undefined}
         onForkChat={() => undefined}
         onArchiveChat={() => undefined}
