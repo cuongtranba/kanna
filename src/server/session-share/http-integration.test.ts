@@ -33,12 +33,11 @@ describe("mint → GET /share/<token> integration", () => {
         events: new FakeStore(),
         snapshotStore: store,
         buildSnapshot: () => snap,
-        getTunnelBaseUrl: () => "https://tunnel.example",
         getDefaultTtlHours: () => 24,
         now: () => 1_000,
         owner: () => "o",
       })
-      const mint = await svc.mintToken({ chatId: "c1" })
+      const mint = await svc.mintToken({ chatId: "c1" }, "https://tunnel.example")
       expect(mint.ok).toBe(true)
       if (!mint.ok) throw new Error("mint failed")
       const res = await handleShareRequest(
@@ -63,12 +62,11 @@ describe("mint → GET /share/<token> integration", () => {
         events: new FakeStore(),
         snapshotStore: store,
         buildSnapshot: () => snap,
-        getTunnelBaseUrl: () => "https://tunnel.example",
         getDefaultTtlHours: () => 24,
         now: () => 1_000,
         owner: () => "o",
       })
-      const mint = await svc.mintToken({ chatId: "c1" })
+      const mint = await svc.mintToken({ chatId: "c1" }, "https://tunnel.example")
       if (!mint.ok) throw new Error("mint failed")
       const revoke = await svc.revokeToken({ tokenId: mint.data.summary.tokenId })
       expect(revoke.ok).toBe(true)

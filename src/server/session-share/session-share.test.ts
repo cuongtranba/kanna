@@ -33,28 +33,24 @@ beforeEach(() => {
     events,
     snapshotStore: store,
     buildSnapshot: () => snapshot,
-    getTunnelBaseUrl: () => "https://x.trycloudflare.com",
     getDefaultTtlHours: () => 24,
     now: () => 1_000_000,
     owner: () => "owner",
   })
 })
+
+const BASE = "https://x.trycloudflare.com"
 afterEach(() => rmSync(dir, { recursive: true, force: true }))
 
 describe("SessionShareService", () => {
-  test("mintToken returns NO_TUNNEL when base URL missing", async () => {
-    service = new SessionShareService({
-      events, snapshotStore: store, buildSnapshot: () => snapshot,
-      getTunnelBaseUrl: () => null, getDefaultTtlHours: () => 24,
-      now: () => 1, owner: () => "owner",
-    })
-    const r = await service.mintToken({ chatId: "c1" })
-    expect(r.ok).toBe(false)
-    if (!r.ok) expect(r.error.kind).toBe("no_tunnel")
+  test("mintToken with empty base URL still succeeds with relative URL", async () => {
+    const r = await service.mintToken({ chatId: "c1" }, "")
+    expect(r.ok).toBe(true)
+    if (r.ok) expect(r.data.summary.url.startsWith("/share/")).toBe(true)
   })
 
   test("mintToken success appends event and writes snapshot", async () => {
-    const r = await service.mintToken({ chatId: "c1" })
+    const r = await service.mintToken({ chatId: "c1" }, BASE)
     expect(r.ok).toBe(true)
     expect(events.events.length).toBe(1)
     if (r.ok) {
@@ -67,7 +63,7 @@ describe("SessionShareService", () => {
   })
 
   test("revokeToken appends event and deletes file", async () => {
-    const mint = await service.mintToken({ chatId: "c1" })
+    const mint = await service.mintToken({ chatId: "c1" }, BASE)
     if (!mint.ok) throw new Error("expected mint to succeed")
     const r = await service.revokeToken({ tokenId: mint.data.summary.tokenId })
     expect(r.ok).toBe(true)
@@ -81,7 +77,7 @@ describe("SessionShareService", () => {
   })
 
   test("getShare returns expired when past expiresAt", async () => {
-    const mint = await service.mintToken({ chatId: "c1", ttlHours: 0 })
+    const mint = await service.mintToken({ chatId: "c1", ttlHours: 0 }, BASE)
     expect(mint.ok).toBe(true)
     if (!mint.ok) throw new Error("expected mint to succeed")
     const r = await service.getShare(mint.data.summary.tokenId, 1_000_000 + 60_000)
@@ -96,7 +92,7 @@ describe("SessionShareService", () => {
   })
 
   test("getShare hit returns snapshot", async () => {
-    const mint = await service.mintToken({ chatId: "c1" })
+    const mint = await service.mintToken({ chatId: "c1" }, BASE)
     if (!mint.ok) throw new Error("mint failed")
     const r = await service.getShare(mint.data.summary.tokenId, 1_000_001)
     expect(r.ok).toBe(true)
@@ -104,19 +100,19 @@ describe("SessionShareService", () => {
   })
 
   test("listSharesForChat surfaces active + revoked", async () => {
-    const m1 = await service.mintToken({ chatId: "c1" })
-    const m2 = await service.mintToken({ chatId: "c1" })
+    const m1 = await service.mintToken({ chatId: "c1" }, BASE)
+    const m2 = await service.mintToken({ chatId: "c1" }, BASE)
     expect(m1.ok && m2.ok).toBe(true)
     if (!m1.ok || !m2.ok) return
     await service.revokeToken({ tokenId: m1.data.summary.tokenId })
-    const list = service.listSharesForChat("c1")
+    const list = service.listSharesForChat("c1", BASE)
     expect(list.length).toBe(2)
     expect(list.find(s => s.tokenId === m1.data.summary.tokenId)?.revoked).toBe(true)
     expect(list.find(s => s.tokenId === m2.data.summary.tokenId)?.revoked).toBe(false)
   })
 
   test("runSweep deletes snapshots whose tokens expired", async () => {
-    const m = await service.mintToken({ chatId: "c1", ttlHours: 0 })
+    const m = await service.mintToken({ chatId: "c1", ttlHours: 0 }, BASE)
     if (!m.ok) throw new Error("mint failed")
     const removed = await service.runSweep(1_000_000 + 60_000)
     expect(removed).toBe(1)
@@ -132,10 +128,10 @@ describe("SessionShareService", () => {
     }
     service = new SessionShareService({
       events, snapshotStore: store, buildSnapshot: () => huge,
-      getTunnelBaseUrl: () => "https://x", getDefaultTtlHours: () => 24,
+      getDefaultTtlHours: () => 24,
       now: () => 1, owner: () => "owner",
     })
-    const r = await service.mintToken({ chatId: "c1" })
+    const r = await service.mintToken({ chatId: "c1" }, BASE)
     expect(r.ok).toBe(false)
     if (!r.ok) expect(r.error.kind).toBe("snapshot_too_large")
   })

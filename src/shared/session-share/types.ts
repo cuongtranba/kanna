@@ -30,7 +30,6 @@ export interface ChatSnapshot {
 }
 
 export type ShareError =
-  | { kind: "no_tunnel" }
   | { kind: "chat_not_found"; chatId: string }
   | { kind: "snapshot_too_large"; sizeBytes: number }
   | { kind: "snapshot_write_failed"; message: string }
@@ -40,7 +39,6 @@ export type ShareError =
   | { kind: "snapshot_read_failed"; message: string }
 
 const SHARE_ERROR_KINDS = new Set<ShareError["kind"]>([
-  "no_tunnel",
   "chat_not_found",
   "snapshot_too_large",
   "snapshot_write_failed",

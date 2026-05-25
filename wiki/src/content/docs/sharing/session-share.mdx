@@ -1,16 +1,17 @@
 ---
 title: Read-only session share
-description: Mint a public Cloudflare-tunnel URL that lets anyone view a Kanna chat as a frozen snapshot.
+description: Mint a public URL that lets anyone view a Kanna chat as a frozen snapshot.
 ---
 
-The Share button in a chat's header creates a public read-only link that anyone with the URL can open. The link points at your local Kanna over the same Cloudflare tunnel you've already enabled — Kanna does not host the snapshot anywhere else.
+The Share button in a chat's header creates a public read-only link that anyone with the URL can open. The link uses whatever origin you used to reach your Kanna instance — `https://kanna.lowbit.link`, a Cloudflare tunnel, a custom domain, even `http://localhost:3210` for in-network sharing — Kanna does not host the snapshot anywhere else.
 
 ## How it works
 
 - The server projects the current event log into a frozen JSON snapshot.
 - The snapshot is stored under `~/.kanna/shares/<token>.json` (file mode `0600`).
-- The URL is `<your-tunnel>/share/<token>`. The 256-bit token is the credential.
+- The URL is `<your-origin>/share/<token>`, where `<your-origin>` is the scheme + host of the request that minted it. The 256-bit token is the credential.
 - Viewers see the chat transcript, tool calls, diffs, and terminal output. They cannot send messages.
+- **Public reachability is a deployment concern.** Kanna will happily mint a `http://localhost:3210/share/<token>` URL if that's how you're hitting the server — recipients outside your network won't be able to open it. To make share URLs work for outside recipients, run Kanna behind a Cloudflare tunnel, deploy it to a reachable VPS, or expose a port.
 
 ## Lifecycle
 

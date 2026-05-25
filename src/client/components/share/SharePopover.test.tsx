@@ -19,7 +19,6 @@ const MOCK_SUMMARY: ShareSummary = {
 
 async function mountBody(props: {
   chatId: string
-  tunnelUp: boolean
   shares: readonly ShareSummary[]
   onMint?: (chatId: string) => Promise<void>
   onRevoke?: (tokenId: string) => Promise<void>
@@ -31,7 +30,6 @@ async function mountBody(props: {
     root.render(
       createElement(SharePopoverBody, {
         chatId: props.chatId,
-        tunnelUp: props.tunnelUp,
         shares: props.shares,
         now: FIXED_NOW,
         onMint: props.onMint ?? (async () => { /* noop */ }),
@@ -50,12 +48,12 @@ describe("SharePopoverBody", () => {
     document.body.innerHTML = ""
   })
 
-  test("shows NO_TUNNEL CTA when tunnel is down", async () => {
-    const { container, cleanup } = await mountBody({ chatId: "c1", tunnelUp: false, shares: [] })
+  test("renders Create share link button when no shares exist", async () => {
+    const { container, cleanup } = await mountBody({ chatId: "c1", shares: [] })
     try {
       const html = container.innerHTML
-      expect(html).toContain("tunnel")
-      expect(html).not.toContain("Create share link")
+      expect(html).toContain("Create share link")
+      expect(html).toContain("No active share links")
     } finally {
       cleanup()
     }
@@ -65,7 +63,6 @@ describe("SharePopoverBody", () => {
     const calls: string[] = []
     const { container, cleanup } = await mountBody({
       chatId: "c1",
-      tunnelUp: true,
       shares: [],
       onMint: async (chatId: string) => { calls.push(chatId) },
     })
@@ -84,7 +81,6 @@ describe("SharePopoverBody", () => {
   test("Renders active share with copy + revoke + expiry text", async () => {
     const { container, cleanup } = await mountBody({
       chatId: "c1",
-      tunnelUp: true,
       shares: [MOCK_SUMMARY],
     })
     try {
@@ -102,7 +98,6 @@ describe("SharePopoverBody", () => {
     const calls: string[] = []
     const { container, cleanup } = await mountBody({
       chatId: "c1",
-      tunnelUp: true,
       shares: [MOCK_SUMMARY],
       onRevoke: async (tokenId: string) => { calls.push(tokenId) },
     })

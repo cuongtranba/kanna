@@ -25,7 +25,6 @@ export interface SessionShareDeps {
   events: ShareEventSink
   snapshotStore: SnapshotStore
   buildSnapshot: (chatId: string) => ChatSnapshot
-  getTunnelBaseUrl: () => string | null
   getDefaultTtlHours: () => number
   now?: () => number
   owner: () => string
@@ -46,10 +45,7 @@ export class SessionShareService {
     this.projection = buildShareProjection(deps.events.getShareEvents())
   }
 
-  async mintToken(req: MintRequest): Promise<Result<MintResponse>> {
-    const base = this.deps.getTunnelBaseUrl()
-    if (!base) return { ok: false, error: { kind: "no_tunnel" } }
-
+  async mintToken(req: MintRequest, baseUrl: string): Promise<Result<MintResponse>> {
     let snapshot: ChatSnapshot
     try {
       snapshot = this.deps.buildSnapshot(req.chatId)
@@ -92,7 +88,7 @@ export class SessionShareService {
     const summary: ShareSummary = {
       tokenId,
       chatId: req.chatId,
-      url: `${base.replace(/\/$/, "")}/share/${tokenId}`,
+      url: formatShareUrl(baseUrl, tokenId),
       expiresAt,
       createdAt,
       revoked: false,
@@ -130,15 +126,14 @@ export class SessionShareService {
     return { ok: true, data: { snapshot } }
   }
 
-  listSharesForChat(chatId: string): ShareSummary[] {
-    const base = this.deps.getTunnelBaseUrl() ?? ""
+  listSharesForChat(chatId: string, baseUrl: string): ShareSummary[] {
     const out: ShareSummary[] = []
     for (const record of this.projection.values()) {
       if (record.chatId !== chatId) continue
       out.push({
         tokenId: record.tokenId,
         chatId: record.chatId,
-        url: base ? `${base.replace(/\/$/, "")}/share/${record.tokenId}` : "",
+        url: formatShareUrl(baseUrl, record.tokenId),
         expiresAt: record.expiresAt,
         createdAt: record.createdAt,
         revoked: record.revoked,
@@ -157,4 +152,9 @@ export class SessionShareService {
     }
     return removed
   }
+}
+
+function formatShareUrl(baseUrl: string, tokenId: string): string {
+  const trimmed = baseUrl.replace(/\/$/, "")
+  return `${trimmed}/share/${tokenId}`
 }

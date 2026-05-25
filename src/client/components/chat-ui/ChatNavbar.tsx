@@ -101,7 +101,6 @@ interface Props {
   onOpenPath?: (path: string) => void
   socket?: KannaSocket
   onOpenPtyChat?: (chatId: string) => void
-  shareTunnelUp?: boolean
   currentChatId?: string
   shareShares?: readonly ShareSummary[]
   onShareMint?: (chatId: string) => Promise<void>
@@ -136,7 +135,6 @@ export function ChatNavbar({
   onOpenPath = () => undefined,
   socket,
   onOpenPtyChat,
-  shareTunnelUp,
   currentChatId,
   shareShares,
   onShareMint,
@@ -292,14 +290,12 @@ export function ChatNavbar({
                 {currentChatId && onShareMint && onShareRevoke ? (
                   <SharePopover
                     chatId={currentChatId}
-                    tunnelUp={shareTunnelUp ?? false}
                     shares={shareShares ?? []}
                     open={sharePopoverOpen}
                     onOpenChange={setSharePopoverOpen}
                     trigger={
                       <ShareButton
                         chatId={currentChatId}
-                        tunnelUp={shareTunnelUp ?? false}
                         onOpenPopover={() => setSharePopoverOpen(true)}
                       />
                     }

@@ -61,9 +61,14 @@ import type {
   ToolResultEntry,
 } from "../shared/types"
 
-let sessionShareTunnelBaseUrl: string | null = null
-export function setSessionShareTunnelBaseUrl(url: string | null) {
-  sessionShareTunnelBaseUrl = url
+function deriveOriginFromUpgrade(req: Request, url: URL): string {
+  const forwardedProto = req.headers.get("x-forwarded-proto")
+  const forwardedHost = req.headers.get("x-forwarded-host")
+  const hostHeader = req.headers.get("host")
+  const host = forwardedHost ?? hostHeader ?? url.host
+  if (!host) return ""
+  const scheme = forwardedProto ?? (url.protocol === "wss:" || url.protocol === "https:" ? "https" : "http")
+  return `${scheme}://${host}`
 }
 
 function resolveCloudflaredPath(settingsPath: string): string {
@@ -274,7 +279,6 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     events: store,
     snapshotStore,
     buildSnapshot: (chatId) => buildChatSnapshot(snapshotSources, chatId),
-    getTunnelBaseUrl: () => sessionShareTunnelBaseUrl,
     getDefaultTtlHours: () => appSettings.getSnapshot().shareDefaultTtlHours,
     owner: () => "owner",
   })
@@ -511,6 +515,7 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
               data: {
                 subscriptions: new Map(),
                 snapshotSignatures: new Map(),
+                originHost: deriveOriginFromUpgrade(req, url),
               },
             })
             return upgraded ? undefined : new Response("WebSocket upgrade failed", { status: 400 })
