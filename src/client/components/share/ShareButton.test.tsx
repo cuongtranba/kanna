@@ -7,7 +7,7 @@ import "../../lib/testing/setupHappyDom"
 import { TooltipProvider } from "../ui/tooltip"
 import { ShareButton } from "./ShareButton"
 
-function renderHtml(props: { chatId: string; tunnelUp: boolean }): string {
+function renderHtml(props: { chatId: string }): string {
   return renderToStaticMarkup(
     createElement(TooltipProvider, null,
       createElement(ShareButton, { ...props, onOpenPopover: () => {} }),
@@ -16,18 +16,10 @@ function renderHtml(props: { chatId: string; tunnelUp: boolean }): string {
 }
 
 describe("ShareButton", () => {
-  test("renders Share label and is enabled when tunnel up", () => {
-    const html = renderHtml({ chatId: "c1", tunnelUp: true })
+  test("renders Share label and is always enabled", () => {
+    const html = renderHtml({ chatId: "c1" })
     expect(html).toContain("aria-label=\"Public link\"")
-    // React renders disabled boolean as disabled="" — should not be present when enabled
     expect(html).not.toContain("disabled=\"\"")
-  })
-
-  test("is disabled when tunnel down", () => {
-    const html = renderHtml({ chatId: "c1", tunnelUp: false })
-    expect(html).toContain("aria-label=\"Public link\"")
-    // React renders disabled boolean as disabled="" attribute
-    expect(html).toContain("disabled=\"\"")
   })
 
   test("click calls onOpenPopover with chatId", async () => {
@@ -41,7 +33,6 @@ describe("ShareButton", () => {
           createElement(TooltipProvider, null,
             createElement(ShareButton, {
               chatId: "c1",
-              tunnelUp: true,
               onOpenPopover: (id: string) => { calls.push(id) },
             }),
           ),

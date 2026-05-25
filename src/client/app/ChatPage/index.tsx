@@ -753,12 +753,6 @@ export function ChatPage() {
     void state.socket.command({ type: "chat.cancelSubagentRun", chatId, runId }).catch(() => {})
   }, [state.socket])
 
-  // Share popover: derive tunnel-up status from the live tunnel record
-  const liveTunnelRecord = state.chatSnapshot?.liveTunnelId
-    ? state.chatSnapshot.tunnels[state.chatSnapshot.liveTunnelId]
-    : undefined
-  const shareTunnelUp = liveTunnelRecord?.state === "active"
-
   const shareShares = useShareStore((s) => s.listForChat(state.activeChatId ?? ""))
   const addShare = useShareStore((s) => s.addShare)
   const removeShare = useShareStore((s) => s.removeShare)
@@ -969,7 +963,6 @@ export function ChatPage() {
           socket={state.socket}
           onOpenPtyChat={handleOpenPtyChat}
           currentChatId={state.activeChatId ?? undefined}
-          shareTunnelUp={shareTunnelUp}
           shareShares={shareShares}
           onShareMint={handleShareMint}
           onShareRevoke={handleShareRevoke}

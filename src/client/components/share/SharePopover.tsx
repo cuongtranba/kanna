@@ -6,7 +6,6 @@ import type { ShareSummary } from "../../../shared/session-share/types"
 
 export interface SharePopoverProps {
   chatId: string
-  tunnelUp: boolean
   shares: readonly ShareSummary[]
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -26,7 +25,6 @@ function relativeExpiry(expiresAt: number, now: number): string {
 
 export interface SharePopoverBodyProps {
   chatId: string
-  tunnelUp: boolean
   shares: readonly ShareSummary[]
   now: number
   onMint: (chatId: string) => Promise<void>
@@ -37,14 +35,6 @@ export function SharePopoverBody(props: SharePopoverBodyProps) {
   const [busy, setBusy] = useState(false)
   const activeShares = props.shares.filter((s) => !s.revoked)
 
-  if (!props.tunnelUp) {
-    return (
-      <div className="space-y-2 text-sm">
-        <p>Start a Cloudflare tunnel to enable public read-only sharing of this chat.</p>
-        <a className="underline" href="/?settings=cloudflare-tunnel">Open tunnel settings</a>
-      </div>
-    )
-  }
   return (
     <>
       <Button
@@ -103,7 +93,6 @@ export function SharePopover(props: SharePopoverProps) {
       <PopoverContent align="end" className="w-96 p-4 space-y-3">
         <SharePopoverBody
           chatId={props.chatId}
-          tunnelUp={props.tunnelUp}
           shares={props.shares}
           now={now}
           onMint={props.onMint}

@@ -125,6 +125,7 @@ export interface ClientState {
   snapshotSignatures: Map<string, string>
   protectedDraftChatIds?: Set<string>
   pushDeviceId?: string | null
+  originHost?: string
 }
 
 interface CreateWsRouterArgs {
@@ -2053,10 +2054,10 @@ export function createWsRouter({
         }
         case "share.mint": {
           if (!sessionShare) {
-            send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: { ok: false, error: { kind: "no_tunnel" } } })
+            send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: { ok: false, error: { kind: "snapshot_write_failed", message: "session-share service unavailable" } } })
             return
           }
-          const r = await sessionShare.mintToken(command.payload)
+          const r = await sessionShare.mintToken(command.payload, ws.data.originHost ?? "")
           const result: ShareCommandResult = r.ok
             ? { ok: true, kind: "mint", data: r.data }
             : { ok: false, error: r.error }
@@ -2080,7 +2081,7 @@ export function createWsRouter({
             send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: { ok: true, kind: "list", data: { shares: [] } } })
             return
           }
-          const shares = sessionShare.listSharesForChat(command.payload.chatId)
+          const shares = sessionShare.listSharesForChat(command.payload.chatId, ws.data.originHost ?? "")
           send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: { ok: true, kind: "list", data: { shares } } })
           return
         }
