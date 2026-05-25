@@ -131,6 +131,7 @@ export function isPublicSharePath(url: string): boolean {
   }
   return pathname.startsWith("/share/")
     || pathname === "/share"
+    || pathname.startsWith("/api/share/")
     || pathname.startsWith("/assets/share-view/")
 }
 

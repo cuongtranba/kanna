@@ -293,12 +293,7 @@ export function ChatNavbar({
                     shares={shareShares ?? []}
                     open={sharePopoverOpen}
                     onOpenChange={setSharePopoverOpen}
-                    trigger={
-                      <ShareButton
-                        chatId={currentChatId}
-                        onOpenPopover={() => setSharePopoverOpen(true)}
-                      />
-                    }
+                    trigger={<ShareButton />}
                     onMint={onShareMint}
                     onRevoke={onShareRevoke}
                   />

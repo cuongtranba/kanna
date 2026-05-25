@@ -46,7 +46,7 @@ import { TunnelLifecycle } from "./cloudflare-tunnel/lifecycle"
 import { initToolCallbackOnBoot, type ToolCallbackService } from "./tool-callback"
 import { SessionShareService } from "./session-share"
 import { SnapshotStore } from "./session-share/snapshot-store.adapter"
-import { handleShareRequest } from "./session-share/http-routes"
+import { handleShareApiRequest } from "./session-share/http-routes"
 import { buildChatSnapshot, type SnapshotSources } from "./session-share/snapshot-builder"
 import { startSnapshotSweep } from "./session-share/sweep"
 import type {
@@ -483,8 +483,8 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
               : Response.json({ ok: true })
           }
 
-          if (url.pathname.startsWith("/share/")) {
-            return handleShareRequest(req, sessionShareService)
+          if (url.pathname.startsWith("/api/share/")) {
+            return handleShareApiRequest(req, sessionShareService)
           }
 
           if (auth) {

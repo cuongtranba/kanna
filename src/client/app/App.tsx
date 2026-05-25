@@ -20,6 +20,7 @@ import { ChatPage } from "./ChatPage"
 import { LocalProjectsPage } from "./LocalProjectsPage"
 import { SettingsPage } from "./SettingsPage"
 import { AppBootstrap } from "./AppBootstrap"
+import { SharePage } from "./share-view/SharePage"
 import { useKannaState } from "./useKannaState"
 import { useSidebarSwipeGesture } from "./sidebarSwipeGesture"
 import type { AppSettingsSnapshot } from "../../shared/types"
@@ -464,7 +465,7 @@ function KannaLayout() {
   )
 }
 
-export function App() {
+function AuthedApp() {
   const auth = useAppAuthState()
 
   if (auth.state.status === "checking") {
@@ -476,15 +477,24 @@ export function App() {
   }
 
   return (
+    <Routes>
+      <Route element={<KannaLayout />}>
+        <Route path="/" element={<LocalProjectsPage />} />
+        <Route path="/settings" element={<Navigate to="/settings/general" replace />} />
+        <Route path="/settings/:sectionId" element={<SettingsPage />} />
+        <Route path="/chat/:chatId" element={<ChatPage />} />
+      </Route>
+    </Routes>
+  )
+}
+
+export function App() {
+  return (
     <TooltipProvider>
       <AppDialogProvider>
         <Routes>
-          <Route element={<KannaLayout />}>
-            <Route path="/" element={<LocalProjectsPage />} />
-            <Route path="/settings" element={<Navigate to="/settings/general" replace />} />
-            <Route path="/settings/:sectionId" element={<SettingsPage />} />
-            <Route path="/chat/:chatId" element={<ChatPage />} />
-          </Route>
+          <Route path="/share/:token" element={<SharePage />} />
+          <Route path="*" element={<AuthedApp />} />
         </Routes>
         <Toaster />
       </AppDialogProvider>

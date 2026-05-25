@@ -4,25 +4,16 @@ import { renderToStaticMarkup } from "react-dom/server"
 import { act } from "react"
 import { createRoot } from "react-dom/client"
 import "../../lib/testing/setupHappyDom"
-import { TooltipProvider } from "../ui/tooltip"
 import { ShareButton } from "./ShareButton"
 
-function renderHtml(props: { chatId: string }): string {
-  return renderToStaticMarkup(
-    createElement(TooltipProvider, null,
-      createElement(ShareButton, { ...props, onOpenPopover: () => {} }),
-    ),
-  )
-}
-
 describe("ShareButton", () => {
-  test("renders Share label and is always enabled", () => {
-    const html = renderHtml({ chatId: "c1" })
+  test("renders Public link label and is enabled by default", () => {
+    const html = renderToStaticMarkup(createElement(ShareButton))
     expect(html).toContain("aria-label=\"Public link\"")
     expect(html).not.toContain("disabled=\"\"")
   })
 
-  test("click calls onOpenPopover with chatId", async () => {
+  test("click invokes onClick handler", async () => {
     const calls: string[] = []
     const container = document.createElement("div")
     document.body.appendChild(container)
@@ -30,12 +21,9 @@ describe("ShareButton", () => {
       await act(async () => {
         const root = createRoot(container)
         root.render(
-          createElement(TooltipProvider, null,
-            createElement(ShareButton, {
-              chatId: "c1",
-              onOpenPopover: (id: string) => { calls.push(id) },
-            }),
-          ),
+          createElement(ShareButton, {
+            onClick: () => { calls.push("clicked") },
+          }),
         )
       })
       const btn = container.querySelector("button[aria-label='Public link']") as HTMLButtonElement
@@ -43,7 +31,7 @@ describe("ShareButton", () => {
       await act(async () => {
         btn.click()
       })
-      expect(calls).toEqual(["c1"])
+      expect(calls).toEqual(["clicked"])
     } finally {
       container.remove()
     }

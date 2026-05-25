@@ -6,7 +6,7 @@ import { SessionShareService, type ShareEventSink } from "./index"
 import type { ShareEvent } from "./share-projection"
 import { SnapshotStore } from "./snapshot-store.adapter"
 import { CHAT_SNAPSHOT_VERSION, type ChatSnapshot } from "../../shared/session-share/types"
-import { handleShareRequest } from "./http-routes"
+import { handleShareApiRequest } from "./http-routes"
 
 class FakeStore implements ShareEventSink {
   events: ShareEvent[] = []
@@ -24,8 +24,8 @@ const snap: ChatSnapshot = {
   attachmentsManifest: [],
 }
 
-describe("mint → GET /share/<token> integration", () => {
-  test("full round-trip returns HTML 200 containing the snapshot JSON", async () => {
+describe("mint → GET /api/share/<token> integration", () => {
+  test("full round-trip returns JSON 200 with snapshot payload", async () => {
     const dir = mkdtempSync(join(tmpdir(), "share-int-"))
     try {
       const store = new SnapshotStore(dir)
@@ -40,15 +40,15 @@ describe("mint → GET /share/<token> integration", () => {
       const mint = await svc.mintToken({ chatId: "c1" }, "https://tunnel.example")
       expect(mint.ok).toBe(true)
       if (!mint.ok) throw new Error("mint failed")
-      const res = await handleShareRequest(
-        new Request(`http://x/share/${mint.data.summary.tokenId}`),
+      const res = await handleShareApiRequest(
+        new Request(`http://x/api/share/${mint.data.summary.tokenId}`),
         svc,
       )
       expect(res.status).toBe(200)
-      const body = await res.text()
-      expect(body).toContain(`"title":"T"`)
-      expect(body).toContain(`"text":"hi"`)
-      expect(body).toContain(`"text":"hello"`)
+      const body = await res.json() as { ok: true; snapshot: ChatSnapshot }
+      expect(body.ok).toBe(true)
+      expect(body.snapshot.chatMeta.title).toBe("T")
+      expect(body.snapshot.messages).toHaveLength(2)
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }
@@ -70,8 +70,8 @@ describe("mint → GET /share/<token> integration", () => {
       if (!mint.ok) throw new Error("mint failed")
       const revoke = await svc.revokeToken({ tokenId: mint.data.summary.tokenId })
       expect(revoke.ok).toBe(true)
-      const res = await handleShareRequest(
-        new Request(`http://x/share/${mint.data.summary.tokenId}`),
+      const res = await handleShareApiRequest(
+        new Request(`http://x/api/share/${mint.data.summary.tokenId}`),
         svc,
       )
       expect(res.status).toBe(410)
