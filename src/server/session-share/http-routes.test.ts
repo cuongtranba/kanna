@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test"
-import { handleShareRequest } from "./http-routes"
+import { handleShareApiRequest } from "./http-routes"
 import { CHAT_SNAPSHOT_VERSION, type ChatSnapshot } from "../../shared/session-share/types"
 import type { Result } from "./index"
+
+const TOKEN = "a".repeat(40)
 
 const snap: ChatSnapshot = {
   version: CHAT_SNAPSHOT_VERSION,
@@ -10,38 +12,40 @@ const snap: ChatSnapshot = {
 }
 
 function service(impl: (tokenId: string) => Promise<Result<{ snapshot: ChatSnapshot }>>) {
-  return { getShare: impl } as Parameters<typeof handleShareRequest>[1]
+  return { getShare: impl } as Parameters<typeof handleShareApiRequest>[1]
 }
 
-describe("handleShareRequest", () => {
-  test("200 returns inline HTML containing the snapshot JSON", async () => {
-    const r = await handleShareRequest(new Request("http://x/share/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"), service(async () => ({ ok: true, data: { snapshot: snap } })))
+describe("handleShareApiRequest", () => {
+  test("200 returns JSON snapshot envelope", async () => {
+    const r = await handleShareApiRequest(new Request(`http://x/api/share/${TOKEN}`), service(async () => ({ ok: true, data: { snapshot: snap } })))
     expect(r.status).toBe(200)
-    expect(r.headers.get("content-type")).toMatch(/text\/html/)
-    const body = await r.text()
-    expect(body).toContain("\"version\":1")
-    expect(body).toContain("share-view")
+    expect(r.headers.get("content-type")).toMatch(/application\/json/)
+    const body = await r.json() as { ok: true; snapshot: ChatSnapshot }
+    expect(body.ok).toBe(true)
+    expect(body.snapshot.chatMeta.id).toBe("c1")
   })
 
   test("404 on not_found", async () => {
-    const r = await handleShareRequest(new Request("http://x/share/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"), service(async () => ({ ok: false, error: { kind: "not_found" } })))
+    const r = await handleShareApiRequest(new Request(`http://x/api/share/${TOKEN}`), service(async () => ({ ok: false, error: { kind: "not_found" } })))
     expect(r.status).toBe(404)
+    const body = await r.json() as { ok: false; error: { kind: string } }
+    expect(body.error.kind).toBe("not_found")
   })
 
   test("410 on revoked + expired", async () => {
-    const r1 = await handleShareRequest(new Request("http://x/share/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"), service(async () => ({ ok: false, error: { kind: "revoked" } })))
-    const r2 = await handleShareRequest(new Request("http://x/share/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"), service(async () => ({ ok: false, error: { kind: "expired", expiredAt: 1 } })))
+    const r1 = await handleShareApiRequest(new Request(`http://x/api/share/${TOKEN}`), service(async () => ({ ok: false, error: { kind: "revoked" } })))
+    const r2 = await handleShareApiRequest(new Request(`http://x/api/share/${TOKEN}`), service(async () => ({ ok: false, error: { kind: "expired", expiredAt: 1 } })))
     expect(r1.status).toBe(410)
     expect(r2.status).toBe(410)
   })
 
   test("500 on snapshot_read_failed", async () => {
-    const r = await handleShareRequest(new Request("http://x/share/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"), service(async () => ({ ok: false, error: { kind: "snapshot_read_failed", message: "boom" } })))
+    const r = await handleShareApiRequest(new Request(`http://x/api/share/${TOKEN}`), service(async () => ({ ok: false, error: { kind: "snapshot_read_failed", message: "boom" } })))
     expect(r.status).toBe(500)
   })
 
-  test("404 when path doesn't match /share/:token", async () => {
-    const r = await handleShareRequest(new Request("http://x/share/"), service(async () => ({ ok: true, data: { snapshot: snap } })))
+  test("404 when path doesn't match /api/share/:token", async () => {
+    const r = await handleShareApiRequest(new Request("http://x/api/share/"), service(async () => ({ ok: true, data: { snapshot: snap } })))
     expect(r.status).toBe(404)
   })
 })
