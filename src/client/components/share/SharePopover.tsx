@@ -2,6 +2,7 @@ import { useMemo, useState } from "react"
 import { Copy, Link2Off } from "lucide-react"
 import { Button } from "../ui/button"
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover"
+import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip"
 import type { ShareSummary } from "../../../shared/session-share/types"
 
 export interface SharePopoverProps {
@@ -88,17 +89,22 @@ export function SharePopover(props: SharePopoverProps) {
   // eslint-disable-next-line react-hooks/purity
   const now = useMemo(() => Date.now(), [props.open]) // eslint-disable-line react-hooks/exhaustive-deps
   return (
-    <Popover open={props.open} onOpenChange={props.onOpenChange}>
-      <PopoverTrigger asChild>{props.trigger}</PopoverTrigger>
-      <PopoverContent align="end" className="w-96 p-4 space-y-3">
-        <SharePopoverBody
-          chatId={props.chatId}
-          shares={props.shares}
-          now={now}
-          onMint={props.onMint}
-          onRevoke={props.onRevoke}
-        />
-      </PopoverContent>
-    </Popover>
+    <Tooltip>
+      <Popover open={props.open} onOpenChange={props.onOpenChange}>
+        <TooltipTrigger asChild>
+          <PopoverTrigger asChild>{props.trigger}</PopoverTrigger>
+        </TooltipTrigger>
+        <PopoverContent align="end" className="w-96 p-4 space-y-3">
+          <SharePopoverBody
+            chatId={props.chatId}
+            shares={props.shares}
+            now={now}
+            onMint={props.onMint}
+            onRevoke={props.onRevoke}
+          />
+        </PopoverContent>
+      </Popover>
+      <TooltipContent side="bottom">Mint a public read-only link</TooltipContent>
+    </Tooltip>
   )
 }

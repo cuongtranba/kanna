@@ -1,9 +1,11 @@
 import { beforeEach, describe, expect, test } from "bun:test"
-import { createElement } from "react"
+import { createElement, useState } from "react"
 import { act } from "react"
 import { createRoot } from "react-dom/client"
 import "../../lib/testing/setupHappyDom"
-import { SharePopoverBody } from "./SharePopover"
+import { TooltipProvider } from "../ui/tooltip"
+import { SharePopover, SharePopoverBody } from "./SharePopover"
+import { ShareButton } from "./ShareButton"
 import type { ShareSummary } from "../../../shared/session-share/types"
 
 const FIXED_NOW = 1_700_000_000_000
@@ -91,6 +93,42 @@ describe("SharePopoverBody", () => {
       expect(html).toContain("Expires in")
     } finally {
       cleanup()
+    }
+  })
+
+  test("Trigger click toggles popover open (regression: asChild composition)", async () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    try {
+      let openState = false
+      const setOpen = (next: boolean) => { openState = next }
+      function Harness() {
+        const [open, setOpenInner] = useState(false)
+        return createElement(SharePopover, {
+          chatId: "c1",
+          shares: [],
+          open,
+          onOpenChange: (next: boolean) => {
+            setOpenInner(next)
+            setOpen(next)
+          },
+          trigger: createElement(ShareButton),
+          onMint: async () => { /* noop */ },
+          onRevoke: async () => { /* noop */ },
+        })
+      }
+      await act(async () => {
+        const root = createRoot(container)
+        root.render(createElement(TooltipProvider, null, createElement(Harness)))
+      })
+      const btn = container.querySelector("button[aria-label='Public link']") as HTMLButtonElement | null
+      expect(btn).not.toBeNull()
+      await act(async () => {
+        btn!.click()
+      })
+      expect(openState).toBe(true)
+    } finally {
+      container.remove()
     }
   })
 
