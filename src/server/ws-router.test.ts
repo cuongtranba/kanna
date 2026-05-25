@@ -3584,7 +3584,7 @@ describe("settings.writeAppSettingsPatch auto-test", () => {
       JSON.stringify({ v: 1, type: "command", id: "mint-1", command: { type: "share.mint", payload: { chatId: "chat-1" } } }),
     )
 
-    expect(ws.sent).toEqual([{ v: PROTOCOL_VERSION, type: "ack", id: "mint-1", result: mintResult }])
+    expect(ws.sent).toEqual([{ v: PROTOCOL_VERSION, type: "ack", id: "mint-1", result: { ok: true, kind: "mint", data: mintResult.data } }])
   })
 
   test("share.revoke command dispatches to sessionShare.revokeToken", async () => {
@@ -3612,7 +3612,7 @@ describe("settings.writeAppSettingsPatch auto-test", () => {
       JSON.stringify({ v: 1, type: "command", id: "revoke-1", command: { type: "share.revoke", payload: { tokenId: "tok-2" } } }),
     )
 
-    expect(ws.sent).toEqual([{ v: PROTOCOL_VERSION, type: "ack", id: "revoke-1", result: revokeResult }])
+    expect(ws.sent).toEqual([{ v: PROTOCOL_VERSION, type: "ack", id: "revoke-1", result: { ok: true, kind: "revoke", data: revokeResult.data } }])
   })
 
   test("share.list returns shares from sessionShare.listSharesForChat", async () => {
@@ -3640,6 +3640,6 @@ describe("settings.writeAppSettingsPatch auto-test", () => {
       JSON.stringify({ v: 1, type: "command", id: "list-1", command: { type: "share.list", payload: { chatId: "chat-3" } } }),
     )
 
-    expect(ws.sent).toEqual([{ v: PROTOCOL_VERSION, type: "ack", id: "list-1", result: { ok: true, data: { shares } } }])
+    expect(ws.sent).toEqual([{ v: PROTOCOL_VERSION, type: "ack", id: "list-1", result: { ok: true, kind: "list", data: { shares } } }])
   })
 })

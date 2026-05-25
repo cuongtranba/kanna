@@ -41,6 +41,7 @@ import type { TunnelGateway } from "./cloudflare-tunnel/gateway"
 import type { PushManager } from "./push/push-manager"
 import { validateMcpServer } from "./mcp-validator"
 import type { SessionShareService } from "./session-share"
+import type { ShareCommandResult } from "../shared/session-share/protocol"
 
 const DEFAULT_CHAT_RECENT_LIMIT = 200
 const SKILL_AGENT_ALIASES = ["universal", "claude-code"] as const
@@ -2057,7 +2058,10 @@ export function createWsRouter({
             return
           }
           const r = await sessionShare.mintToken(command.payload, ws.data.originHost ?? "")
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: r })
+          const result: ShareCommandResult = r.ok
+            ? { ok: true, kind: "mint", data: r.data }
+            : { ok: false, error: r.error }
+          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result })
           return
         }
         case "share.revoke": {
@@ -2066,16 +2070,19 @@ export function createWsRouter({
             return
           }
           const r = await sessionShare.revokeToken(command.payload)
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: r })
+          const result: ShareCommandResult = r.ok
+            ? { ok: true, kind: "revoke", data: r.data }
+            : { ok: false, error: r.error }
+          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result })
           return
         }
         case "share.list": {
           if (!sessionShare) {
-            send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: { ok: true, data: { shares: [] } } })
+            send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: { ok: true, kind: "list", data: { shares: [] } } })
             return
           }
           const shares = sessionShare.listSharesForChat(command.payload.chatId, ws.data.originHost ?? "")
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: { ok: true, data: { shares } } })
+          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: { ok: true, kind: "list", data: { shares } } })
           return
         }
       }
