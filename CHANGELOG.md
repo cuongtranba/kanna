@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.77.1](https://github.com/cuongtranba/kanna/compare/v0.77.0...v0.77.1) (2026-05-25)
+
+
+### Bug Fixes
+
+* **share:** include kind discriminant in share.* ws responses ([#323](https://github.com/cuongtranba/kanna/issues/323)) ([a115854](https://github.com/cuongtranba/kanna/commit/a1158541b42813fc675543179442230d63710a67))
+
 ## [0.77.0](https://github.com/cuongtranba/kanna/compare/v0.76.0...v0.77.0) (2026-05-25)
 
 
