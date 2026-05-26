@@ -34,6 +34,28 @@ describe("AskUserQuestionInteractive — basic render", () => {
     expect(container.textContent).toContain("Beta")
     container.remove()
   })
+
+  test("renders the question header above the question text when provided", async () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const onSubmit = mock((_a: AskUserQuestionAnswerMap) => undefined)
+    const questions: AskUserQuestionItem[] = [{
+      question: "Pick one",
+      header: "Section 5 approval",
+      multiSelect: false,
+      options: [{ label: "Alpha", description: "" }],
+    }]
+
+    await act(async () => {
+      createRoot(container).render(
+        <AskUserQuestionInteractive questions={questions} onSubmit={onSubmit} />,
+      )
+    })
+
+    expect(container.textContent).toContain("Section 5 approval")
+    expect(container.textContent).toContain("Pick one")
+    container.remove()
+  })
 })
 
 describe("AskUserQuestionInteractive — single-select submit", () => {

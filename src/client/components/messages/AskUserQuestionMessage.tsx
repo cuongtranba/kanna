@@ -46,22 +46,40 @@ export function AskUserQuestionMessage({ message, onSubmit, isLatest }: Props) {
           {questions.map((question, index) => {
             const answerValue = displayAnswers[getQuestionKey(question)] || displayAnswers[question.question] || []
             const isLast = index === questions.length - 1
+            const selectedDescriptions = question.options
+              ? answerValue
+                .map((label) => question.options?.find((option) => option.label === label)?.description)
+                .filter((value): value is string => !!value)
+              : []
 
             return (
               <div
                 key={getQuestionKey(question)}
                 className={cn(
-                  "w-full p-3 pt-2.5 pl-4 pr-5 bg-background flex items-center justify-between gap-3",
+                  "w-full p-3 pt-2.5 pl-4 pr-5 bg-background flex items-start justify-between gap-3",
                   !isLast && "border-b border-border"
                 )}
               >
-                <div className="text-sm text-pretty">{question.question}</div>
-                {answerValue.length > 0 && <div className="text-sm font-medium text-right max-w-[50%] text-pretty">{answerValue.join(", ")}</div>}
-                {answerValue.length === 0 && (
-                  <div className="text-sm font-medium text-right italic">
-                    {isDiscarded ? "Discarded" : "No Response"}
-                  </div>
-                )}
+                <div className="flex-1 min-w-0">
+                  {question.header && (
+                    <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground text-pretty">{question.header}</div>
+                  )}
+                  <div className="text-sm text-pretty">{question.question}</div>
+                </div>
+                <div className="max-w-[50%] text-right">
+                  {answerValue.length > 0 ? (
+                    <>
+                      <div className="text-sm font-medium text-pretty">{answerValue.join(", ")}</div>
+                      {selectedDescriptions.length > 0 && (
+                        <div className="text-xs text-muted-foreground mt-0.5 text-pretty">{selectedDescriptions.join(" · ")}</div>
+                      )}
+                    </>
+                  ) : (
+                    <div className="text-sm font-medium italic">
+                      {isDiscarded ? "Discarded" : "No Response"}
+                    </div>
+                  )}
+                </div>
               </div>
             )
           })}
@@ -82,11 +100,16 @@ export function AskUserQuestionMessage({ message, onSubmit, isLatest }: Props) {
             <div
               key={getQuestionKey(question)}
               className={cn(
-                "w-full p-3 pt-2.5 pl-4 pr-5 bg-background flex items-center justify-between gap-3",
+                "w-full p-3 pt-2.5 pl-4 pr-5 bg-background flex items-start justify-between gap-3",
                 index < questions.length - 1 && "border-b border-border",
               )}
             >
-              <div className="text-sm text-pretty">{question.question}</div>
+              <div className="flex-1 min-w-0">
+                {question.header && (
+                  <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground text-pretty">{question.header}</div>
+                )}
+                <div className="text-sm text-pretty">{question.question}</div>
+              </div>
               <div className="max-w-[50%] text-right text-xs text-muted-foreground text-pretty">
                 {question.options?.map((option) => option.label).join(", ") || "Freeform response"}
               </div>

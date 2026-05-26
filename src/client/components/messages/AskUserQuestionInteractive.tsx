@@ -8,35 +8,45 @@ import { Button } from "../ui/button"
 
 function QuestionCard({
   question,
+  header,
   currentIndex,
   totalQuestions,
   onBack,
   children
 }: {
   question: string
+  header?: string
   currentIndex: number
   totalQuestions: number
   onBack?: () => void
   children: React.ReactNode
 }) {
   const showBackButton = onBack && currentIndex > 0
+  const hasMeta = showBackButton || totalQuestions > 1 || !!header
 
   return (
     <div className="rounded-2xl border border-border overflow-hidden">
       <div className="relative">
-        <h3 className="font-medium text-foreground text-sm p-3 px-4 bg-card border-b border-border text-foreground flex flex-row items-center gap-2">
-          {showBackButton ? (
-            <button
-              onClick={onBack}
-              className=" text-muted-foreground hover:opacity-60 transition-all flex items-center"
-            >
-              <ChevronLeft className="h-4 w-4 -ml-0.5" strokeWidth={3} />
-            </button>
-          ) : totalQuestions > 1 ? (
-            <span className="font-bold text-muted-foreground whitespace-nowrap">{currentIndex + 1} of {totalQuestions}</span>
-          ) : null}
-          {question}
-        </h3>
+        <div className="p-3 px-4 bg-card border-b border-border">
+          {hasMeta && (
+            <div className="flex flex-row items-center gap-2 mb-1">
+              {showBackButton ? (
+                <button
+                  onClick={onBack}
+                  className="text-muted-foreground hover:opacity-60 transition-all flex items-center"
+                >
+                  <ChevronLeft className="h-4 w-4 -ml-0.5" strokeWidth={3} />
+                </button>
+              ) : totalQuestions > 1 ? (
+                <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground whitespace-nowrap">{currentIndex + 1} of {totalQuestions}</span>
+              ) : null}
+              {header ? (
+                <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground text-pretty">{header}</span>
+              ) : null}
+            </div>
+          )}
+          <h3 className="font-medium text-foreground text-sm text-pretty">{question}</h3>
+        </div>
         {/* Progress bar */}
         {totalQuestions > 1 && (
           <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-border">
@@ -238,6 +248,7 @@ export function AskUserQuestionInteractive(
     <div className="w-full space-y-3">
       <QuestionCard
         question={currentQuestion.question}
+        header={currentQuestion.header}
         currentIndex={currentIndex}
         totalQuestions={questions.length}
         onBack={currentIndex > 0 ? handleBack : undefined}
