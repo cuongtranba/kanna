@@ -80,7 +80,7 @@ export function SheetBody({ source, onClose }: { source: PreviewSource; onClose:
   const handleDownload = useCallback(() => downloadFile(source), [source])
 
   return (
-    <div className="flex h-full max-h-full flex-col" style={dy > 0 ? { transform: `translateY(${dy}px)`, transition: "none" } : undefined}>
+    <div className="flex min-h-0 flex-1 flex-col" style={dy > 0 ? { transform: `translateY(${dy}px)`, transition: "none" } : undefined}>
       <div
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
