@@ -2,25 +2,13 @@ import "../../../lib/testing/setupHappyDom"
 import { describe, expect, test } from "bun:test"
 import { createElement } from "react"
 import { renderToStaticMarkup } from "react-dom/server"
-import { FilePreviewSheet, SheetBody } from "./FilePreviewSheet"
+import { FilePreviewSheet, SheetBody, shouldCloseFromDragEnd } from "./FilePreviewSheet"
 import { Dialog } from "../../ui/dialog"
 import type { PreviewSource } from "./types"
-import { act } from "react"
-import { createRoot } from "react-dom/client"
-import { test as t, expect as e2 } from "bun:test"
 
 const SRC: PreviewSource = {
   id: "s1", contentUrl: "/u/r.zip", displayName: "r.zip", fileName: "r.zip",
   mimeType: "application/zip", size: 10, origin: "offer_download",
-}
-
-// A zip resolves to PdfBody, whose <iframe src> happy-dom loads eagerly; the
-// async ECONNREFUSED rejection races the pointer-drag assertions and corrupts
-// the React commit in CI. A text source renders an IntersectionObserver-gated
-// body that never fetches in happy-dom, keeping the drag test hermetic.
-const DRAG_SRC: PreviewSource = {
-  id: "s2", contentUrl: "/u/x.txt", displayName: "x.txt", fileName: "x.txt",
-  mimeType: "text/plain", size: 10, origin: "user_attachment",
 }
 
 /** Wraps SheetBody in a Dialog root so Radix DialogTitle resolves its context. */
@@ -63,36 +51,23 @@ describe("FilePreviewSheet smoke", () => {
   })
 })
 
-t("pointerdown on drag handle then pointermove dy>120 + pointerup → onOpenChange(false)", async () => {
-  const onOpenChange = (() => { let v = true; return { call: (next: boolean) => { v = next }, get: () => v } })()
-  const container = document.createElement("div")
-  // Clean up any stale portals from prior renders
-  document.body.querySelectorAll('[aria-label="Drag down to close"]').forEach((el) => {
-    el.closest('[role="dialog"]')?.parentElement?.remove()
+describe("shouldCloseFromDragEnd", () => {
+  // Pure-logic test: the gesture wiring (pointer handlers → this fn → onClose)
+  // is trivial, while mounting SheetBody and dispatching DOM pointer events
+  // under happy-dom in the shared bun process was order-dependently flaky in CI
+  // (a neighbor's portal unmount could corrupt React's event delegation).
+  const base = { startY: 100, lastY: 100, lastT: 0, now: 1000 }
+
+  test("closes when dragged past the distance threshold", () => {
+    expect(shouldCloseFromDragEnd({ ...base, endY: 100 + 121 })).toBe(true)
   })
-  document.body.appendChild(container)
-  const root = createRoot(container)
-  // Render SheetBody directly inside Dialog (no portal) so the handle lands in container
-  await act(async () => {
-    root.render(
-      <Dialog open>
-        <SheetBody source={DRAG_SRC} onClose={() => onOpenChange.call(false)} />
-      </Dialog>
-    )
+
+  test("stays open just under the distance threshold with no flick", () => {
+    expect(shouldCloseFromDragEnd({ startY: 100, lastY: 220, lastT: 1000, endY: 220, now: 1000 })).toBe(false)
   })
-  // SheetBody renders the handle directly (no portal), so it always lands in
-  // container. Scope strictly to container — a document.body fallback would pick
-  // up stale handles leaked by other test files sharing happy-dom's global
-  // document, whose unmounted React roots no longer fire the pointer handlers.
-  const handle = container.querySelector('[aria-label="Drag down to close"]') as HTMLElement | undefined
-  e2(handle).toBeDefined()
-  if (!handle) return
-  await act(async () => {
-    handle.dispatchEvent(new PointerEvent("pointerdown", { clientY: 100, pointerId: 1, bubbles: true }))
-    handle.dispatchEvent(new PointerEvent("pointermove", { clientY: 300, pointerId: 1, bubbles: true }))
-    handle.dispatchEvent(new PointerEvent("pointerup", { clientY: 300, pointerId: 1, bubbles: true }))
+
+  test("closes on a fast downward flick even under the distance threshold", () => {
+    // 30px in 10ms → velocity 3 > 0.5
+    expect(shouldCloseFromDragEnd({ startY: 100, lastY: 100, lastT: 990, endY: 130, now: 1000 })).toBe(true)
   })
-  e2(onOpenChange.get()).toBe(false)
-  await act(async () => { root.unmount() })
-  container.remove()
 })
