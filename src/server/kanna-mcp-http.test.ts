@@ -136,6 +136,36 @@ describe("buildMcpConfigJson", () => {
   })
 })
 
+describe("startKannaMcpHttpServer channel surface", () => {
+  const channelArgs = {
+    projectId: "p1",
+    localPath: "/tmp",
+    chatId: "c1",
+    sessionId: "s1",
+    tunnelGateway: null,
+    forceInteractiveToolCallbacks: true,
+  } as unknown as Parameters<typeof startKannaMcpHttpServer>[0]["args"]
+
+  test("handle exposes pushChannelPrompt + channelClientReady", async () => {
+    const handle = await startKannaMcpHttpServer({ args: channelArgs, port: 0 })
+    try {
+      expect(typeof handle.pushChannelPrompt).toBe("function")
+      expect(handle.channelClientReady).toBeInstanceOf(Promise)
+    } finally {
+      await handle.close()
+    }
+  })
+
+  test("pushChannelPrompt does not throw before a client connects (no-op safe)", async () => {
+    const handle = await startKannaMcpHttpServer({ args: channelArgs, port: 0 })
+    try {
+      await handle.pushChannelPrompt("hello")
+    } finally {
+      await handle.close()
+    }
+  })
+})
+
 const HANDLE = { url: "http://127.0.0.1:1234/mcp", bearerToken: "tok" }
 
 function stdio(name: string, command = "/bin/ls", enabled = true): McpServerConfig {

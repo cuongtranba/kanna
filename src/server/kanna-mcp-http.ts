@@ -33,6 +33,10 @@ export interface KannaMcpHttpHandle {
   bearerToken: string
   /** Tear down HTTP listener + MCP transport. Idempotent. */
   close: () => Promise<void>
+  /** Resolves once the claude MCP client completes the initialize handshake. */
+  channelClientReady: Promise<void>
+  /** Push a prompt into the live claude session via the channel capability. */
+  pushChannelPrompt: (content: string, meta?: Record<string, unknown>) => Promise<void>
 }
 
 export interface StartKannaMcpHttpServerOptions {
@@ -59,10 +63,17 @@ export async function startKannaMcpHttpServer(
   const host = opts.host ?? "127.0.0.1"
   const port = opts.port ?? 0
 
-  const mcp = new McpServer({
-    name: KANNA_MCP_SERVER_NAME,
-    version: "1.0.0",
-  })
+  const mcp = new McpServer(
+    { name: KANNA_MCP_SERVER_NAME, version: "1.0.0" },
+    {
+      capabilities: {
+        experimental: {
+          "claude/channel": {},
+          "claude/channel/permission": {},
+        },
+      },
+    },
+  )
 
   const tools = buildKannaMcpTools(opts.args)
   for (const def of tools) {
@@ -73,6 +84,29 @@ export async function startKannaMcpHttpServer(
     sessionIdGenerator: () => randomUUID(),
   })
   await mcp.connect(transport)
+
+  let resolveReady: () => void = () => {}
+  const channelClientReady = new Promise<void>((resolve) => {
+    resolveReady = resolve
+  })
+  mcp.server.oninitialized = () => {
+    resolveReady()
+  }
+
+  const pushChannelPrompt = async (
+    content: string,
+    meta: Record<string, unknown> = {},
+  ): Promise<void> => {
+    const notification = buildChannelNotification(content, meta)
+    try {
+      await mcp.server.notification(
+        notification as Parameters<typeof mcp.server.notification>[0],
+      )
+    } catch (err) {
+      // Before a client connects there is no peer; swallow that case.
+      if (mcp.isConnected()) throw err
+    }
+  }
 
   const httpServer = createHttpServer((req, res) => {
     if (!authorize(req, bearerToken)) {
@@ -111,7 +145,7 @@ export async function startKannaMcpHttpServer(
     await closeHttpServer(httpServer)
   }
 
-  return { url, bearerToken, close }
+  return { url, bearerToken, close, channelClientReady, pushChannelPrompt }
 }
 
 function authorize(req: HttpIncomingMessage, bearerToken: string): boolean {
