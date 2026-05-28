@@ -313,4 +313,18 @@ describe("waitForTuiReadyDismissingDialogs", () => {
     const res = await waitForTuiReadyDismissingDialogs(pty, ring, { hardCapMs: 60, pollMs: 5 })
     expect(res).toBe("timeout")
   })
+  test("does not return ready on the trust dialog's leftover ❯ before the dev dialog appears", async () => {
+    const pty = fakePty()
+    const ring = new OutputRing()
+    // Trust dialog with its own "❯ 1. Yes, I trust this folder" line.
+    ring.append("Is this a project you trust this folder? ❯ 1. Yes, I trust this folder")
+    // Dev-channels dialog appears LATER (after trust is dismissed), with its own ❯ line.
+    setTimeout(() => ring.append(" WARNING for local channel development only ❯ 1. I am using this for local development"), 15)
+    // The real input box appears only after the dev dialog is dismissed.
+    setTimeout(() => ring.append("\n❯ "), 40)
+    const res = await waitForTuiReadyDismissingDialogs(pty, ring, { hardCapMs: 2000, pollMs: 2 })
+    expect(res).toBe("marker")
+    // Must have dismissed BOTH dialogs (2 carriage returns), not bailed early after trust.
+    expect(pty.sent.filter((s) => s === "\r").length).toBe(2)
+  })
 })

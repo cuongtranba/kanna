@@ -153,21 +153,28 @@ export async function waitForTuiReadyDismissingDialogs(
   const start = Date.now()
   let trustDone = false
   let devDone = false
+  // Only search for the input-box marker in content added AFTER the last
+  // dialog dismissal. Both dialogs render their own "❯ <option>" lines that
+  // strip to "❯ ..." and would otherwise false-trigger TUI_READY_MARKER.
+  let postDismissOffset = 0
   while (Date.now() - start < hardCapMs) {
-    const view = stripAnsi(ring.tail())
+    const raw = ring.tail()
+    const view = stripAnsi(raw)
     if (!trustDone && view.includes(TRUST_DIALOG_MARKER)) {
+      postDismissOffset = raw.length
       await pty.sendInput("\r")
       trustDone = true
       await new Promise((r) => setTimeout(r, pollMs))
       continue
     }
     if (!devDone && view.includes(DEV_CHANNELS_DIALOG_MARKER)) {
+      postDismissOffset = raw.length
       await pty.sendInput("\r")
       devDone = true
       await new Promise((r) => setTimeout(r, pollMs))
       continue
     }
-    if (view.includes(TUI_READY_MARKER) && (devDone || !view.includes(DEV_CHANNELS_DIALOG_MARKER))) {
+    if (devDone && stripAnsi(raw.slice(postDismissOffset)).includes(TUI_READY_MARKER)) {
       return "marker"
     }
     await new Promise((r) => setTimeout(r, pollMs))

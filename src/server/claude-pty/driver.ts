@@ -742,6 +742,7 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
       // multi-line truncation bug. Surface a clear spawn failure instead.
       const message = err instanceof Error ? err.message : String(err)
       console.error("[kanna/pty] channel delivery failed; failing spawn (no paste fallback)", { chatId: args.chatId, sessionId, error: message })
+      try { transcriptStream.close() } catch { /* swallow */ }
       try { pty.close() } catch { /* swallow */ }
       try { await mcpHandle.close() } catch { /* swallow */ }
       try { await removeRuntimeDir(runtimeDir) } catch { /* swallow */ }
