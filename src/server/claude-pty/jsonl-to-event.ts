@@ -30,6 +30,16 @@ export function createJsonlEventParser(opts: CreateJsonlEventParserOptions = {})
   let latestUsageSnapshot: ContextWindowUsageSnapshot | null = null
   let lastKnownContextWindow: number | undefined = opts.configuredContextWindow
   const detector = new ClaudeLimitDetector()
+  // Track turn-boundary state to filter Claude Code's background auto-wake
+  // turns. After a real turn ends, `useQueueProcessor` (claude-code/src/hooks/
+  // useQueueProcessor.ts) may auto-spawn a follow-up turn by injecting a
+  // synthetic `<task-notification>` user message with `isMeta:true`. Kanna
+  // never issued a `chat_send` for this turn, so its `result` MUST NOT
+  // consume a `pendingPromptSeq` (would steal a real user turn's seq) or
+  // alter Kanna's turn lifecycle. Mid-turn `isMeta:true` injections
+  // (FileReadTool metadata, token-budget continuation) appear AFTER an
+  // assistant message and are NOT auto-wakes — their final result is real.
+  let turnState: "between" | "inTurn" | "inAutoWake" = "between"
 
   return {
     parse(rawLine: string): HarnessEvent[] {
@@ -50,6 +60,32 @@ export function createJsonlEventParser(opts: CreateJsonlEventParserOptions = {})
       // pending prompt seq and finalize the user turn early, and a sidechain
       // session_id would clobber the parent chat's claude session token.
       if (message.isSidechain === true) return []
+
+      // Auto-wake detection — see turnState comment above.
+      const isResultLine = message.type === "result"
+        || (message.type === "system" && message.subtype === "turn_duration")
+      if (message.type === "user") {
+        if (message.isMeta === true && turnState === "between") {
+          turnState = "inAutoWake"
+          return []
+        }
+        if (message.isMeta !== true) {
+          turnState = "inTurn"
+        }
+        // Mid-turn isMeta user (turnState === "inTurn") falls through — emit
+        // normally; downstream consumers already handle synthetic user lines.
+      } else if (message.type === "assistant" && turnState === "between") {
+        // Defensive: assistant without a preceding user line — treat as the
+        // start of a real turn so the upcoming result is emitted.
+        turnState = "inTurn"
+      } else if (isResultLine) {
+        if (turnState === "inAutoWake") {
+          turnState = "between"
+          return []
+        }
+        turnState = "between"
+      }
+
       const events: HarnessEvent[] = []
 
       // D3 — emit session_token for any message carrying a session_id, not
