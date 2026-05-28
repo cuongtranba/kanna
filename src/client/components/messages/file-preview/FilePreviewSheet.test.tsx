@@ -14,6 +14,15 @@ const SRC: PreviewSource = {
   mimeType: "application/zip", size: 10, origin: "offer_download",
 }
 
+// A zip resolves to PdfBody, whose <iframe src> happy-dom loads eagerly; the
+// async ECONNREFUSED rejection races the pointer-drag assertions and corrupts
+// the React commit in CI. A text source renders an IntersectionObserver-gated
+// body that never fetches in happy-dom, keeping the drag test hermetic.
+const DRAG_SRC: PreviewSource = {
+  id: "s2", contentUrl: "/u/x.txt", displayName: "x.txt", fileName: "x.txt",
+  mimeType: "text/plain", size: 10, origin: "user_attachment",
+}
+
 /** Wraps SheetBody in a Dialog root so Radix DialogTitle resolves its context. */
 function renderSheetBody(source: PreviewSource) {
   return renderToStaticMarkup(
@@ -67,7 +76,7 @@ t("pointerdown on drag handle then pointermove dy>120 + pointerup → onOpenChan
   await act(async () => {
     root.render(
       <Dialog open>
-        <SheetBody source={SRC} onClose={() => onOpenChange.call(false)} />
+        <SheetBody source={DRAG_SRC} onClose={() => onOpenChange.call(false)} />
       </Dialog>
     )
   })
