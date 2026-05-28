@@ -598,7 +598,7 @@ async function makeTestHandle(opts?: { planMode?: boolean }) {
       CLAUDE_EXECUTABLE: "/bin/sh",
     },
     spawnPtyProcess: fakeSpawn,
-    startKannaMcpHttpServer: async () => ({ url: "http://127.0.0.1:0/mcp", bearerToken: "test", close: async () => {} }),
+    startKannaMcpHttpServer: async () => ({ url: "http://127.0.0.1:0/mcp", bearerToken: "test", close: async () => {}, channelClientReady: Promise.resolve(), pushChannelPrompt: async () => {} }),
     startTranscriptStreamFn: async () => neverStream,
     smokeTestGate: fakeSmoke,
   })
@@ -717,7 +717,7 @@ async function spawnAndReadMcpConfig(opts: {
     },
     customMcpServers: opts.customMcpServers,
     spawnPtyProcess: fakeSpawn,
-    startKannaMcpHttpServer: async () => ({ url: "http://127.0.0.1:0/mcp", bearerToken: "test", close: async () => {} }),
+    startKannaMcpHttpServer: async () => ({ url: "http://127.0.0.1:0/mcp", bearerToken: "test", close: async () => {}, channelClientReady: Promise.resolve(), pushChannelPrompt: async () => {} }),
     startTranscriptStreamFn: async () => neverStream,
     smokeTestGate: fakeSmoke,
   })
@@ -816,7 +816,7 @@ describe("session close escalation (graceful → SIGTERM → SIGKILL)", () => {
         homeDir: tmp,
         env: { HOME: tmp, CLAUDE_CODE_OAUTH_TOKEN: "test-token", KANNA_PTY_TRUST_DISMISS: "disabled", CLAUDE_EXECUTABLE: "/bin/sh" },
         spawnPtyProcess: async (s) => { s.onOutput?.("❯ "); return stubbornPty },
-        startKannaMcpHttpServer: async () => ({ url: "http://127.0.0.1:0/mcp", bearerToken: "t", close: async () => {} }),
+        startKannaMcpHttpServer: async () => ({ url: "http://127.0.0.1:0/mcp", bearerToken: "t", close: async () => {}, channelClientReady: Promise.resolve(), pushChannelPrompt: async () => {} }),
         startTranscriptStreamFn: async () => ({
           lines: { [Symbol.asyncIterator]() { return { next(): Promise<IteratorResult<string, undefined>> { return new Promise(() => {}) } } } },
           filePath: new Promise<string>(() => {}),
@@ -835,5 +835,66 @@ describe("session close escalation (graceful → SIGTERM → SIGKILL)", () => {
     } finally {
       await rm(tmp, { recursive: true, force: true })
     }
+  }, 10_000)
+})
+
+describe("channel-delivery (Task 5)", () => {
+  test("oneShot channel delivery pushes initialPrompt via channel, not paste", async () => {
+    if (process.platform === "win32") return
+    const pushed: string[] = []
+    const ptyWrites: string[] = []
+    const fakeHandle = {
+      url: "http://127.0.0.1:1/mcp", bearerToken: "t", close: async () => {},
+      channelClientReady: Promise.resolve(),
+      pushChannelPrompt: async (c: string) => { pushed.push(c) },
+    }
+    const fakePty = { pid: 11111, sendInput: async (d: string) => { ptyWrites.push(d) }, resize() {}, exited: new Promise<number>(() => {}), close: () => {}, kill: () => {} } as unknown as PtyProcess
+    const handle = await startClaudeSessionPTY({
+      chatId: "c1", projectId: "p1", localPath: "/tmp",
+      model: "claude-sonnet-4-6", planMode: false, forkSession: false,
+      oauthToken: "sk-ant-oat01-x", sessionToken: null,
+      systemPromptOverride: "You are a subagent.",
+      initialPrompt: "FULL MULTILINE PROMPT\nline2\nline3",
+      oneShot: true,
+      onToolRequest: async () => null,
+      env: { ...process.env, KANNA_PTY_TRUST_DISMISS: "disabled", KANNA_PTY_CHANNEL_DELIVERY: "enabled", KANNA_PTY_TUI_BOOT_MS: "10" },
+      startKannaMcpHttpServer: (async () => fakeHandle) as never,
+      spawnPtyProcess: (async () => fakePty) as never,
+      startTranscriptStreamFn: (async () => ({ lines: (async function* () {})(), filePath: Promise.resolve("/tmp/x.jsonl"), close: () => {} })) as never,
+      smokeTestGate: { canSpawn: async () => ({ ok: true }) },
+    })
+    await new Promise((r) => setTimeout(r, 100))
+    expect(pushed).toEqual(["FULL MULTILINE PROMPT\nline2\nline3"])
+    expect(ptyWrites.join("")).not.toContain("FULL MULTILINE PROMPT")
+    try { if (handle.interrupt) await handle.interrupt() } catch { /* */ }
+  }, 10_000)
+
+  test("oneShot channel delivery fails fast when client never ready (no paste fallback)", async () => {
+    if (process.platform === "win32") return
+    const ptyWrites: string[] = []
+    let closed = false
+    const fakeHandle = {
+      url: "http://127.0.0.1:1/mcp", bearerToken: "t", close: async () => {},
+      channelClientReady: new Promise<void>(() => {}),
+      pushChannelPrompt: async () => {},
+    }
+    const fakePty = { pid: 22222, sendInput: async (d: string) => { ptyWrites.push(d) }, resize() {}, exited: new Promise<number>(() => {}), close: () => { closed = true }, kill: () => {} } as unknown as PtyProcess
+    const promise = startClaudeSessionPTY({
+      chatId: "c1", projectId: "p1", localPath: "/tmp",
+      model: "claude-sonnet-4-6", planMode: false, forkSession: false,
+      oauthToken: "sk-ant-oat01-x", sessionToken: null,
+      systemPromptOverride: "You are a subagent.",
+      initialPrompt: "FULL MULTILINE PROMPT\nline2",
+      oneShot: true,
+      onToolRequest: async () => null,
+      env: { ...process.env, KANNA_PTY_TRUST_DISMISS: "disabled", KANNA_PTY_CHANNEL_DELIVERY: "enabled", KANNA_PTY_TUI_BOOT_MS: "10", KANNA_PTY_CHANNEL_READY_TIMEOUT_MS: "30" },
+      startKannaMcpHttpServer: (async () => fakeHandle) as never,
+      spawnPtyProcess: (async () => fakePty) as never,
+      startTranscriptStreamFn: (async () => ({ lines: (async function* () {})(), filePath: Promise.resolve("/tmp/x.jsonl"), close: () => {} })) as never,
+      smokeTestGate: { canSpawn: async () => ({ ok: true }) },
+    })
+    await expect(promise).rejects.toThrow(/channel/i)
+    expect(ptyWrites.join("")).not.toContain("FULL MULTILINE PROMPT")
+    expect(closed).toBe(true)
   }, 10_000)
 })
