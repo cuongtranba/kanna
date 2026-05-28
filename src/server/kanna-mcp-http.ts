@@ -7,6 +7,25 @@ import { KANNA_MCP_SERVER_NAME } from "../shared/tools"
 import { buildKannaMcpTools, type KannaMcpArgs } from "./kanna-mcp"
 import type { McpServerConfig } from "../shared/types"
 
+export interface ChannelNotification {
+  method: "notifications/claude/channel"
+  params: { content: string; meta: Record<string, unknown> }
+}
+
+/**
+ * Builds the channel push payload. `source` is pinned to the kanna server
+ * name so claude tags the injected prompt `<channel source="kanna">`.
+ */
+export function buildChannelNotification(
+  content: string,
+  meta: Record<string, unknown> = {},
+): ChannelNotification {
+  return {
+    method: "notifications/claude/channel",
+    params: { content, meta: { source: KANNA_MCP_SERVER_NAME, ...meta } },
+  }
+}
+
 export interface KannaMcpHttpHandle {
   /** Full URL including path the claude CLI must POST/GET against. */
   url: string

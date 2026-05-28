@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { startKannaMcpHttpServer, buildMcpConfigJson } from "./kanna-mcp-http"
+import { startKannaMcpHttpServer, buildMcpConfigJson, buildChannelNotification } from "./kanna-mcp-http"
 import type { McpServerConfig } from "../shared/types"
 
 const baseArgs = {
@@ -106,6 +106,20 @@ describe("startKannaMcpHttpServer", () => {
     const handle = await startKannaMcpHttpServer({ args: baseArgs })
     await handle.close()
     await handle.close()
+  })
+})
+
+describe("buildChannelNotification", () => {
+  test("builds a notifications/claude/channel payload with kanna source", () => {
+    const n = buildChannelNotification("do the thing")
+    expect(n.method).toBe("notifications/claude/channel")
+    expect(n.params.content).toBe("do the thing")
+    expect(n.params.meta).toEqual({ source: "kanna" })
+  })
+
+  test("merges extra meta but keeps source=kanna", () => {
+    const n = buildChannelNotification("x", { eventType: "delegate" })
+    expect(n.params.meta).toEqual({ source: "kanna", eventType: "delegate" })
   })
 })
 
