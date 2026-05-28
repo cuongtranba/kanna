@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.77.3](https://github.com/cuongtranba/kanna/compare/v0.77.2...v0.77.3) (2026-05-28)
+
+
+### Bug Fixes
+
+* **file-preview:** bound scroll region inside dialog for long content ([#330](https://github.com/cuongtranba/kanna/issues/330)) ([5d12c76](https://github.com/cuongtranba/kanna/commit/5d12c76d83d0c19384ec8bacafda6ffe8099a36e))
+* **pty:** ignore sidechain + background auto-wake lines in transcript parser ([#332](https://github.com/cuongtranba/kanna/issues/332)) ([216392b](https://github.com/cuongtranba/kanna/commit/216392b5ae8175682ed8ae11a083d4fb4cf51a75))
+* **share:** style share-view with Tailwind + shared markdown components ([#327](https://github.com/cuongtranba/kanna/issues/327)) ([3305bb3](https://github.com/cuongtranba/kanna/commit/3305bb3291a02676c54b88c49eda65c3aec5d44a))
+* **ui:** surface question header + chosen option description in ask-user-question card ([#329](https://github.com/cuongtranba/kanna/issues/329)) ([fd9acb4](https://github.com/cuongtranba/kanna/commit/fd9acb4d265a2f3c071e7b2e91feb056e8033645))
+
 ## [0.77.2](https://github.com/cuongtranba/kanna/compare/v0.77.1...v0.77.2) (2026-05-25)
 
 
