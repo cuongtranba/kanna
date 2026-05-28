@@ -61,6 +61,16 @@ describe("parseJsonlLine", () => {
     const rl = events.find((e) => e.type === "rate_limit")
     expect(rl).toBeUndefined()
   })
+
+  test("sidechain (subagent) line → no events", () => {
+    const line = JSON.stringify({
+      type: "assistant",
+      isSidechain: true,
+      session_id: "sub-sess",
+      message: { role: "assistant", content: [{ type: "text", text: "subagent thinking" }] },
+    })
+    expect(parseJsonlLine(line)).toEqual([])
+  })
 })
 
 describe("createJsonlEventParser", () => {
@@ -236,6 +246,59 @@ describe("createJsonlEventParser", () => {
       session_id: "sess-X",
     })))
     expect(types[0]).toBe("session_token")
+  })
+
+  // A Task subagent writes its own messages into the parent transcript with
+  // isSidechain:true. They must never reach the main turn stream: a sidechain
+  // `result` (or its TUI `turn_duration` synth) would shift the parent's
+  // pending prompt seq and finalize the user turn early (UI flips idle while
+  // the main turn is still streaming); a sidechain session_id would clobber
+  // the parent chat's claude session token.
+  test("sidechain result → no transcript result entry and no session_token", () => {
+    const parser = createJsonlEventParser()
+    const line = JSON.stringify({
+      type: "result",
+      isSidechain: true,
+      session_id: "sub-sess",
+      subtype: "success",
+      result: "subagent done",
+      isError: false,
+      duration_ms: 1000,
+    })
+    const events = parser.parse(line)
+    expect(events).toEqual([])
+  })
+
+  test("sidechain turn_duration → no synthesized result entry", () => {
+    const parser = createJsonlEventParser()
+    const line = JSON.stringify({
+      type: "system",
+      subtype: "turn_duration",
+      isSidechain: true,
+      session_id: "sub-sess",
+      durationMs: 1234,
+    })
+    const events = parser.parse(line)
+    const resultEntries = events.filter(
+      (e) => e.type === "transcript" && (e.entry as { kind?: string }).kind === "result",
+    )
+    expect(resultEntries).toEqual([])
+    expect(events.find((e) => e.type === "session_token")).toBeUndefined()
+  })
+
+  test("non-sidechain turn_duration still synthesizes a result (regression guard)", () => {
+    const parser = createJsonlEventParser()
+    const line = JSON.stringify({
+      type: "system",
+      subtype: "turn_duration",
+      session_id: "main-sess",
+      durationMs: 1234,
+    })
+    const events = parser.parse(line)
+    const resultEntries = events.filter(
+      (e) => e.type === "transcript" && (e.entry as { kind?: string }).kind === "result",
+    )
+    expect(resultEntries).toHaveLength(1)
   })
 
 })

@@ -44,6 +44,12 @@ export function createJsonlEventParser(opts: CreateJsonlEventParserOptions = {})
       }
       if (!parsed || typeof parsed !== "object") return []
       const message = parsed as Record<string, unknown>
+      // Task subagents write their messages into the parent transcript with
+      // isSidechain:true. They are not part of the main turn: a sidechain
+      // `result` (or its TUI `turn_duration` synth) would shift the parent's
+      // pending prompt seq and finalize the user turn early, and a sidechain
+      // session_id would clobber the parent chat's claude session token.
+      if (message.isSidechain === true) return []
       const events: HarnessEvent[] = []
 
       // D3 — emit session_token for any message carrying a session_id, not
@@ -149,6 +155,8 @@ export function parseJsonlLine(rawLine: string): HarnessEvent[] {
   }
   if (!parsed || typeof parsed !== "object") return []
   const message = parsed as Record<string, unknown>
+  // Sidechain (Task subagent) lines never belong to the main turn stream.
+  if (message.isSidechain === true) return []
   const events: HarnessEvent[] = []
 
   if (message.type === "system" && message.subtype === "init" && typeof message.session_id === "string") {
