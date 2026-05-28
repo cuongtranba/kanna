@@ -457,6 +457,18 @@ describe("buildPtyCliArgs", () => {
     expect(args[idx + 1]).toBe(KANNA_SYSTEM_PROMPT_APPEND)
     expect(args).toContain("--disallowedTools")
   })
+
+  test("adds --dangerously-load-development-channels server:<name> when channelServerName set", () => {
+    const args = buildPtyCliArgs({ ...baseInput, channelServerName: "kanna" })
+    const i = args.indexOf("--dangerously-load-development-channels")
+    expect(i).toBeGreaterThan(-1)
+    expect(args[i + 1]).toBe("server:kanna")
+  })
+
+  test("omits the dev-channels flag when channelServerName absent", () => {
+    const args = buildPtyCliArgs(baseInput)
+    expect(args).not.toContain("--dangerously-load-development-channels")
+  })
 })
 
 describe("OutputRing (B4 stderr ring buffer)", () => {

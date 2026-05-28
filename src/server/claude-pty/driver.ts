@@ -167,6 +167,9 @@ export interface BuildPtyCliArgsInput {
   systemPromptAppend?: string
   /** Absolute path to kanna's own mcp-config JSON. Merged with user's MCP configs (no --strict-mcp-config). */
   mcpConfigPath?: string
+  /** When set, registers this MCP server as a dev channel so the host can
+   *  push prompts via notifications/claude/channel (subagent one-shot only). */
+  channelServerName?: string
 }
 
 /**
@@ -220,6 +223,12 @@ export function buildPtyCliArgs(args: BuildPtyCliArgsInput): string[] {
     cliArgs.push("--system-prompt", args.systemPromptOverride)
   } else {
     cliArgs.push("--append-system-prompt", args.systemPromptAppend ?? KANNA_SYSTEM_PROMPT_APPEND)
+  }
+  if (args.channelServerName) {
+    cliArgs.push(
+      "--dangerously-load-development-channels",
+      `server:${args.channelServerName}`,
+    )
   }
   // `--disallowedTools` is variadic in the claude CLI (space-separated tool
   // strings as separate argv — code.claude.com/docs/en/cli-reference). Push
