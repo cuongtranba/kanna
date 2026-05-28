@@ -42,6 +42,25 @@ export function FilePreviewSheet({ source, open, onOpenChange }: Props) {
   )
 }
 
+const DRAG_CLOSE_DISTANCE_PX = 120
+const DRAG_CLOSE_VELOCITY = 0.5
+
+interface DragEnd {
+  startY: number
+  lastY: number
+  lastT: number
+  endY: number
+  now: number
+}
+
+/** Pure decision for the drag-to-close gesture: close on far drag or fast flick. */
+export function shouldCloseFromDragEnd({ startY, lastY, lastT, endY, now }: DragEnd): boolean {
+  const dyFinal = endY - startY
+  const dt = Math.max(1, now - lastT)
+  const velocity = (endY - lastY) / dt
+  return dyFinal > DRAG_CLOSE_DISTANCE_PX || velocity > DRAG_CLOSE_VELOCITY
+}
+
 export function SheetBody({ source, onClose }: { source: PreviewSource; onClose: () => void }) {
   const meta = describeMeta(source)
   const [dy, setDy] = useState(0)
@@ -66,10 +85,7 @@ export function SheetBody({ source, onClose }: { source: PreviewSource; onClose:
     startRef.current = null
     try { event.currentTarget.releasePointerCapture(event.pointerId) } catch {}
     if (!start) return
-    const dyFinal = event.clientY - start.y
-    const dt = Math.max(1, Date.now() - start.lastT)
-    const v = (event.clientY - start.lastY) / dt
-    if (dyFinal > 120 || v > 0.5) {
+    if (shouldCloseFromDragEnd({ startY: start.y, lastY: start.lastY, lastT: start.lastT, endY: event.clientY, now: Date.now() })) {
       onClose()
     } else {
       setDy(0)
