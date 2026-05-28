@@ -71,12 +71,11 @@ t("pointerdown on drag handle then pointermove dy>120 + pointerup → onOpenChan
       </Dialog>
     )
   })
-  // Handle is inside container, not a portal — query there first, fall back to body
-  const allHandles = [
-    ...Array.from(container.querySelectorAll('[aria-label="Drag down to close"]')),
-    ...Array.from(document.body.querySelectorAll('[aria-label="Drag down to close"]')),
-  ]
-  const handle = allHandles[allHandles.length - 1] as HTMLElement | undefined
+  // SheetBody renders the handle directly (no portal), so it always lands in
+  // container. Scope strictly to container — a document.body fallback would pick
+  // up stale handles leaked by other test files sharing happy-dom's global
+  // document, whose unmounted React roots no longer fire the pointer handlers.
+  const handle = container.querySelector('[aria-label="Drag down to close"]') as HTMLElement | undefined
   e2(handle).toBeDefined()
   if (!handle) return
   await act(async () => {
