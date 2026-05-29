@@ -1,6 +1,6 @@
 ---
 id: adr-20260519-pty-driver-stdout-event-source
-c3-seal: 82717bceabaf563fa841afe9d524d7f819ed0dbed42a49a5097c5c859cd17a35
+c3-seal: d494ed5f63653d33df6c326ec73f3abc807dd8fa0d30b420de17e110f5d9c6f2
 title: pty-driver-stdout-event-source
 type: adr
 goal: |-
@@ -13,7 +13,7 @@ goal: |-
     ref, and record that `claude-pty/jsonl-path.ts` is dead code. This ADR
     authorizes the C3 charting + the parallel correction of the stale
     CLAUDE.md "Architecture note", not any production code change.
-status: implemented
+status: superseded
 date: "2026-05-19"
 ---
 

@@ -1,6 +1,6 @@
 ---
 id: c3-228
-c3-seal: c075f58df754a05ab3df66fb992f5f745a6990105e0d5d1b73ad54a7dd5b9079
+c3-seal: 85f21fe26e141d712e5b5cdee8e13f0b953d932de7bd8ccac2af945c424a1bdb
 title: session-share
 type: component
 category: feature
@@ -49,7 +49,7 @@ Owns the complete lifecycle of a read-only session share: receive mint request f
 | Aspect | Detail | Reference |
 | --- | --- | --- |
 | Outcome | Owner receives a URL they can paste to any browser; recipient sees a frozen read-only transcript | c3-2 |
-| Primary path | ws share.mint → build snapshot → write file (mode 0600) → append share.token_minted → return `${originHost}/share/<token>` | c3-208 |
+| Primary path | ws share.mint → build snapshot → write file (mode 0600) → append share.token_minted → return ${originHost}/share/<token> | c3-208 |
 | Alternate — sweep expiry | TTL cron fires → load share projection → for each expired token: delete file + append share.token_expired | c3-228 |
 | Alternate — startup replay | On boot, replay shares JSONL; any token past TTL is expired immediately (fail-closed) | c3-206 |
 | Failure — snapshot read error | File missing or corrupt on GET: return 404 | c3-228 |
@@ -65,13 +65,13 @@ Owns the complete lifecycle of a read-only session share: receive mint request f
 | ref-side-effect-adapter | ref | All fs reads/writes in snapshot-store.adapter.ts only | must follow | No direct fs calls in service or route |
 | ref-strong-typing | ref | ShareSnapshot, ShareToken, share event payloads — no any | must follow | tsc strict enforced |
 | adr-20260524-session-share | adr | Original decision record. Tunnel precondition row superseded by adr-20260525-share-decouple-tunnel. | governs this component | Accepted |
-| adr-20260525-share-decouple-tunnel | adr | Removes the cloudflared-tunnel precondition: mint accepts a `baseUrl` argument supplied by the ws-router from the WS upgrade request origin. | governs this component | Implemented |
+| adr-20260525-share-decouple-tunnel | adr | Removes the cloudflared-tunnel precondition: mint accepts a baseUrl argument supplied by the ws-router from the WS upgrade request origin. | governs this component | Implemented |
 
 ## Contract
 
 | Surface | Direction | Contract | Boundary | Evidence |
 | --- | --- | --- | --- | --- |
-| mintShare(chatId, ttlHours, baseUrl) | IN | Builds snapshot, persists file, appends event, returns `${baseUrl}/share/<token>`. Caller (ws-router) passes the request origin captured at WS upgrade. | c3-208 | src/server/session-share/session-share-service.ts |
+| mintShare(chatId, ttlHours, baseUrl) | IN | Builds snapshot, persists file, appends event, returns ${baseUrl}/share/<token>. Caller (ws-router) passes the request origin captured at WS upgrade. | c3-208 | src/server/session-share/session-share-service.ts |
 | GET /share/:token | IN | Returns frozen ShareSnapshot JSON if valid; 404 if unknown; 410 if expired | c3-202 | src/server/session-share/share-route.ts |
 | sweepExpired() | IN | Appends share.token_expired and deletes file for each token past TTL | internal timer | src/server/session-share/snapshot-sweep.ts |
 | snapshot-store adapter | IN/OUT | readSnapshot(token), writeSnapshot(token, data), deleteSnapshot(token) | c3-204 | src/server/session-share/snapshot-store.adapter.ts |
