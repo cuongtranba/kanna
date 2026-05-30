@@ -2,6 +2,9 @@ import type { PtyProcess } from "./pty-process.adapter"
 import type { OutputRing } from "./output-ring"
 
 export const TRUST_DIALOG_MARKER = "trust this folder"
+// DevChannelsDialog (from --dangerously-load-development-channels). Default
+// Select option "I am using this for local development" — accept with \r.
+export const DEV_CHANNELS_DIALOG_MARKER = "local channel development"
 export const TUI_READY_MARKER = "❯ "
 export const TUI_READY_HARD_CAP_DEFAULT_MS = 3000
 // Quiet-period gate: after first ❯ marker hit, the TUI may still be in the
@@ -82,6 +85,15 @@ export async function dismissTrustDialogIfPresent(
   return true
 }
 
+export async function dismissDevChannelsDialogIfPresent(
+  pty: PtyProcess,
+  ring: OutputRing,
+): Promise<boolean> {
+  if (!stripAnsi(ring.tail()).includes(DEV_CHANNELS_DIALOG_MARKER)) return false
+  await pty.sendInput("\r")
+  return true
+}
+
 export interface WaitForTuiReadyWithTrustDismissOpts {
   hardCapMs?: number
   pollMs?: number
@@ -125,6 +137,45 @@ export async function waitForTuiReadyWithTrustDismiss(
         await waitForRingQuiet(ring, { quietMs: quietPeriodMs, pollMs, deadline: start + hardCapMs })
         return "ready"
       }
+    }
+    await new Promise((r) => setTimeout(r, pollMs))
+  }
+  return "timeout"
+}
+
+export async function waitForTuiReadyDismissingDialogs(
+  pty: PtyProcess,
+  ring: OutputRing,
+  opts: { hardCapMs?: number; pollMs?: number } = {},
+): Promise<"marker" | "timeout"> {
+  const hardCapMs = opts.hardCapMs ?? TUI_READY_HARD_CAP_DEFAULT_MS + 5_000
+  const pollMs = opts.pollMs ?? 50
+  const start = Date.now()
+  let trustDone = false
+  let devDone = false
+  // Only search for the input-box marker in content added AFTER the last
+  // dialog dismissal. Both dialogs render their own "❯ <option>" lines that
+  // strip to "❯ ..." and would otherwise false-trigger TUI_READY_MARKER.
+  let postDismissOffset = 0
+  while (Date.now() - start < hardCapMs) {
+    const raw = ring.tail()
+    const view = stripAnsi(raw)
+    if (!trustDone && view.includes(TRUST_DIALOG_MARKER)) {
+      postDismissOffset = raw.length
+      await pty.sendInput("\r")
+      trustDone = true
+      await new Promise((r) => setTimeout(r, pollMs))
+      continue
+    }
+    if (!devDone && view.includes(DEV_CHANNELS_DIALOG_MARKER)) {
+      postDismissOffset = raw.length
+      await pty.sendInput("\r")
+      devDone = true
+      await new Promise((r) => setTimeout(r, pollMs))
+      continue
+    }
+    if (devDone && stripAnsi(raw.slice(postDismissOffset)).includes(TUI_READY_MARKER)) {
+      return "marker"
     }
     await new Promise((r) => setTimeout(r, pollMs))
   }

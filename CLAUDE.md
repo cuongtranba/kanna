@@ -242,6 +242,18 @@ the same rotation/retry path the SDK driver uses on thrown stream errors.
 - `KANNA_PTY_TUI_BOOT_MS=3000` — hard cap on TUI-ready wait (default `3000`).
 - `KANNA_PTY_TRANSCRIPT_WATCH=fs|poll` — transcript watch mode (default `fs`).
 - `CLAUDE_CODE_OAUTH_TOKEN` — set by driver from pool, NOT a user env var.
+- `KANNA_PTY_CHANNEL_DELIVERY=enabled|disabled` — for one-shot (subagent) PTY
+  spawns, deliver the prompt via a `notifications/claude/channel` push instead
+  of typing it into the TUI (default `enabled`). Avoids the multi-line
+  bracketed-paste collapse that silently truncated subagent prompts. Requires
+  the account's channel feature enabled. Fail-fast: if the channel client is
+  not ready within `KANNA_PTY_CHANNEL_READY_TIMEOUT_MS` the spawn fails with a
+  clear error — there is NO silent paste fallback. Set `disabled` to revert
+  subagent spawns to the legacy paste path. Adds
+  `--dangerously-load-development-channels server:kanna` to subagent spawns and
+  appends channel framing to the subagent system prompt.
+- `KANNA_PTY_CHANNEL_READY_TIMEOUT_MS=15000` — channel client-ready timeout
+  before a subagent spawn fails fast (default `15000`).
 
 Removed in this version (no longer consulted):
 - `KANNA_PTY_PREFLIGHT_MODEL` — preflight gone, replaced by smoke-test.

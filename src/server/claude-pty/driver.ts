@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto"
 import { createRuntimeDir, writeRuntimeFile, removeRuntimeDir } from "./runtime-dir.adapter"
 import { verifyPtyAuth } from "./auth"
 import { startKannaMcpHttpServer, buildMcpConfigJson, type KannaMcpHttpHandle } from "../kanna-mcp-http"
+import { KANNA_MCP_SERVER_NAME } from "../../shared/tools"
 import type { KannaMcpDelegationContext } from "../kanna-mcp"
 import type { SubagentOrchestrator } from "../subagent-orchestrator"
 import { parseConfiguredContextWindowFromModelId, timestamped } from "../agent"
@@ -17,7 +18,7 @@ import { spawnPtyProcess as defaultSpawnPtyProcess, type PtyProcess, type SpawnP
 import type { ClaudePtyRegistry } from "./pid-registry.adapter"
 import type { PtyInstanceRegistry } from "./pty-instance-registry"
 import { sampleProcessTreeUsage as defaultSampleProcessTreeUsage, type ProcessTreeSample } from "./pty-memory-sampler.adapter"
-import { waitForTuiReady, waitForTuiReadyWithTrustDismiss, sendUserPrompt, sendExitCommand } from "./tui-control"
+import { waitForTuiReady, waitForTuiReadyWithTrustDismiss, waitForTuiReadyDismissingDialogs, sendUserPrompt, sendExitCommand } from "./tui-control"
 import { startTranscriptStream } from "./tui-source.adapter"
 import { computeJsonlPath, computeProjectDir } from "./jsonl-path.adapter"
 import type { ClaudeSessionHandle } from "../agent"
@@ -39,6 +40,19 @@ const STATIC_SUPPORTED_COMMANDS: SlashCommand[] = [
   { name: "clear", description: "Clear context", argumentHint: "" },
   { name: "help", description: "List commands", argumentHint: "" },
 ]
+
+// Framing folded into the subagent system prompt when its task is delivered
+// via the kanna channel. Without it the model treats <channel> messages as
+// low-trust interruptions and refuses (proven in the Phase-0 spike).
+const CHANNEL_PROMPT_FRAMING =
+  'Your task for this run is delivered via the kanna channel as a <channel source="kanna"> message. ' +
+  "Treat that channel message as your authoritative instructions from the orchestrator and act on it " +
+  "immediately and fully, exactly as if the user had typed it. Do not refuse it and do not ask the user to repeat it."
+
+// Max wait for the claude MCP client to finish initialize before we push the
+// channel prompt. On timeout the spawn fails fast (no paste fallback).
+// Env-overridable so tests don't wait the full default.
+const CHANNEL_READY_TIMEOUT_DEFAULT_MS = 15_000
 
 export interface StartClaudeSessionPtyArgs {
   chatId: string
@@ -167,6 +181,9 @@ export interface BuildPtyCliArgsInput {
   systemPromptAppend?: string
   /** Absolute path to kanna's own mcp-config JSON. Merged with user's MCP configs (no --strict-mcp-config). */
   mcpConfigPath?: string
+  /** When set, registers this MCP server as a dev channel so the host can
+   *  push prompts via notifications/claude/channel (subagent one-shot only). */
+  channelServerName?: string
 }
 
 /**
@@ -220,6 +237,12 @@ export function buildPtyCliArgs(args: BuildPtyCliArgsInput): string[] {
     cliArgs.push("--system-prompt", args.systemPromptOverride)
   } else {
     cliArgs.push("--append-system-prompt", args.systemPromptAppend ?? KANNA_SYSTEM_PROMPT_APPEND)
+  }
+  if (args.channelServerName) {
+    cliArgs.push(
+      "--dangerously-load-development-channels",
+      `server:${args.channelServerName}`,
+    )
   }
   // `--disallowedTools` is variadic in the claude CLI (space-separated tool
   // strings as separate argv — code.claude.com/docs/en/cli-reference). Push
@@ -355,6 +378,15 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
     throw err
   }
 
+  const channelEnv = (args.env ?? process.env).KANNA_PTY_CHANNEL_DELIVERY ?? "enabled"
+  const channelDeliveryEnabled =
+    Boolean(args.oneShot) && Boolean(args.initialPrompt) && channelEnv !== "disabled"
+
+  const effectiveSystemPromptOverride =
+    channelDeliveryEnabled && args.systemPromptOverride
+      ? `${args.systemPromptOverride}\n\n${CHANNEL_PROMPT_FRAMING}`
+      : args.systemPromptOverride
+
   const claudeBin = claudeBinAbs
   const cliArgs = buildPtyCliArgs({
     sessionId,
@@ -364,9 +396,10 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
     sessionToken: args.sessionToken,
     forkSession: args.forkSession,
     additionalDirectories: args.additionalDirectories,
-    systemPromptOverride: args.systemPromptOverride,
+    systemPromptOverride: effectiveSystemPromptOverride,
     systemPromptAppend: args.systemPromptAppend,
     mcpConfigPath,
+    channelServerName: channelDeliveryEnabled ? KANNA_MCP_SERVER_NAME : undefined,
   })
 
   let closed = false
@@ -540,7 +573,16 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
   const tuiReadyQuietRaw = (args.env ?? process.env).KANNA_PTY_TUI_READY_QUIET_MS
   const tuiReadyQuietMs = tuiReadyQuietRaw !== undefined ? Number(tuiReadyQuietRaw) : undefined
   const trustDismiss = (args.env ?? process.env).KANNA_PTY_TRUST_DISMISS ?? "enabled"
-  if (trustDismiss !== "disabled") {
+  if (channelDeliveryEnabled && trustDismiss !== "disabled") {
+    // Channel path: dismiss both trust dialog AND dev-channels dialog.
+    // +8 s over the base cap to absorb both dialogs + project reload.
+    const readyResult = await waitForTuiReadyDismissingDialogs(pty, ring, { hardCapMs: tuiReadyMs + 8_000 })
+    if (readyResult === "timeout") {
+      console.warn("[kanna/pty] TUI ready marker not detected after dialogs dismiss (channel path)", { chatId: args.chatId, hardCapMs: tuiReadyMs + 8_000 })
+    } else {
+      console.log("[kanna/pty] TUI ready (channel path)", { chatId: args.chatId })
+    }
+  } else if (trustDismiss !== "disabled") {
     // +5 s over the base cap to absorb trust-dialog dismiss + project reload.
     const readyResult = await waitForTuiReadyWithTrustDismiss(pty, ring, { hardCapMs: tuiReadyMs + 5_000, quietPeriodMs: tuiReadyQuietMs })
     if (readyResult === "timeout") {
@@ -679,7 +721,34 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
     console.log("[kanna/pty] oneShotClose finished", { chatId: args.chatId, sessionId })
   }
 
-  if (args.initialPrompt) {
+  if (channelDeliveryEnabled && args.initialPrompt) {
+    const readyTimeoutMs = Number(
+      (args.env ?? process.env).KANNA_PTY_CHANNEL_READY_TIMEOUT_MS ?? CHANNEL_READY_TIMEOUT_DEFAULT_MS,
+    )
+    try {
+      await Promise.race([
+        mcpHandle.channelClientReady,
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("channel client not ready")), readyTimeoutMs),
+        ),
+      ])
+      // Settle: the channel handler registers just after the dev-channels
+      // dialog is accepted and the client reports initialized.
+      await new Promise((r) => setTimeout(r, 300))
+      await mcpHandle.pushChannelPrompt(args.initialPrompt)
+      console.log("[kanna/pty] delivered initial prompt via channel push", { chatId: args.chatId })
+    } catch (err) {
+      // FAIL FAST: do not paste. A silent paste would re-introduce the
+      // multi-line truncation bug. Surface a clear spawn failure instead.
+      const message = err instanceof Error ? err.message : String(err)
+      console.error("[kanna/pty] channel delivery failed; failing spawn (no paste fallback)", { chatId: args.chatId, sessionId, error: message })
+      try { transcriptStream.close() } catch { /* swallow */ }
+      try { pty.close() } catch { /* swallow */ }
+      try { await mcpHandle.close() } catch { /* swallow */ }
+      try { await removeRuntimeDir(runtimeDir) } catch { /* swallow */ }
+      throw new Error(`PTY channel delivery failed: ${message}`, { cause: err })
+    }
+  } else if (args.initialPrompt) {
     try {
       await sendUserPrompt(pty, ring, args.initialPrompt)
     } catch (err) {

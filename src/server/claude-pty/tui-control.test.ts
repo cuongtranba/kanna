@@ -3,10 +3,13 @@ import {
   sendUserPrompt,
   sendExitCommand,
   dismissTrustDialogIfPresent,
+  dismissDevChannelsDialogIfPresent,
   waitForTuiReady,
   waitForTuiReadyWithTrustDismiss,
+  waitForTuiReadyDismissingDialogs,
   TRUST_DIALOG_MARKER,
   TUI_READY_MARKER,
+  DEV_CHANNELS_DIALOG_MARKER,
 } from "./tui-control"
 import { OutputRing } from "./output-ring"
 import type { PtyProcess } from "./pty-process.adapter"
@@ -236,6 +239,28 @@ describe("waitForTuiReadyWithTrustDismiss", () => {
     expect(pty.sent).toContain("\r")
   })
 
+describe("dismissDevChannelsDialogIfPresent", () => {
+  test("sends carriage return when ring contains the dev-channels marker", async () => {
+    const pty = fakePty()
+    const ring = new OutputRing()
+    ring.append("WARNING: Loading development channels ... for local channel development only")
+    const dismissed = await dismissDevChannelsDialogIfPresent(pty, ring)
+    expect(dismissed).toBe(true)
+    expect(pty.sent).toEqual(["\r"])
+  })
+  test("does nothing when the marker is absent", async () => {
+    const pty = fakePty()
+    const ring = new OutputRing()
+    ring.append("some unrelated output")
+    const dismissed = await dismissDevChannelsDialogIfPresent(pty, ring)
+    expect(dismissed).toBe(false)
+    expect(pty.sent).toEqual([])
+  })
+  test("DEV_CHANNELS_DIALOG_MARKER is the substring matched", () => {
+    expect("for local channel development only").toContain(DEV_CHANNELS_DIALOG_MARKER)
+  })
+})
+
   test("dismisses trust dialog only once even if marker persists in ring", async () => {
     const pty = fakePty()
     const ring = new OutputRing()
@@ -268,5 +293,38 @@ describe("waitForTuiReadyWithTrustDismiss", () => {
     expect(result).toBe("ready")
     // Bursts end ~250 ms + quiet 150 ms.
     expect(elapsed).toBeGreaterThanOrEqual(350)
+  })
+})
+
+describe("waitForTuiReadyDismissingDialogs", () => {
+  test("dismisses trust + dev dialogs, returns 'marker' once ❯ is clean", async () => {
+    const pty = fakePty()
+    const ring = new OutputRing()
+    ring.append("Is this a project you trust this folder?")
+    setTimeout(() => ring.append(" for local channel development only ❯ 1. I am using this for local development"), 5)
+    setTimeout(() => ring.append("\n❯ "), 25)
+    const res = await waitForTuiReadyDismissingDialogs(pty, ring, { hardCapMs: 1000, pollMs: 2 })
+    expect(res).toBe("marker")
+    expect(pty.sent.filter((s) => s === "\r").length).toBeGreaterThanOrEqual(2)
+  })
+  test("returns 'timeout' if the input box never becomes clean", async () => {
+    const pty = fakePty()
+    const ring = new OutputRing()
+    const res = await waitForTuiReadyDismissingDialogs(pty, ring, { hardCapMs: 60, pollMs: 5 })
+    expect(res).toBe("timeout")
+  })
+  test("does not return ready on the trust dialog's leftover ❯ before the dev dialog appears", async () => {
+    const pty = fakePty()
+    const ring = new OutputRing()
+    // Trust dialog with its own "❯ 1. Yes, I trust this folder" line.
+    ring.append("Is this a project you trust this folder? ❯ 1. Yes, I trust this folder")
+    // Dev-channels dialog appears LATER (after trust is dismissed), with its own ❯ line.
+    setTimeout(() => ring.append(" WARNING for local channel development only ❯ 1. I am using this for local development"), 15)
+    // The real input box appears only after the dev dialog is dismissed.
+    setTimeout(() => ring.append("\n❯ "), 40)
+    const res = await waitForTuiReadyDismissingDialogs(pty, ring, { hardCapMs: 2000, pollMs: 2 })
+    expect(res).toBe("marker")
+    // Must have dismissed BOTH dialogs (2 carriage returns), not bailed early after trust.
+    expect(pty.sent.filter((s) => s === "\r").length).toBe(2)
   })
 })

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { startKannaMcpHttpServer, buildMcpConfigJson } from "./kanna-mcp-http"
+import { startKannaMcpHttpServer, buildMcpConfigJson, buildChannelNotification } from "./kanna-mcp-http"
 import type { McpServerConfig } from "../shared/types"
 
 const baseArgs = {
@@ -109,6 +109,20 @@ describe("startKannaMcpHttpServer", () => {
   })
 })
 
+describe("buildChannelNotification", () => {
+  test("builds a notifications/claude/channel payload with kanna source", () => {
+    const n = buildChannelNotification("do the thing")
+    expect(n.method).toBe("notifications/claude/channel")
+    expect(n.params.content).toBe("do the thing")
+    expect(n.params.meta).toEqual({ source: "kanna" })
+  })
+
+  test("merges extra meta but keeps source=kanna", () => {
+    const n = buildChannelNotification("x", { eventType: "delegate" })
+    expect(n.params.meta).toEqual({ source: "kanna", eventType: "delegate" })
+  })
+})
+
 describe("buildMcpConfigJson", () => {
   test("encodes http MCP server config with Bearer header", () => {
     const json = buildMcpConfigJson({
@@ -119,6 +133,36 @@ describe("buildMcpConfigJson", () => {
     expect(parsed.mcpServers.kanna.type).toBe("http")
     expect(parsed.mcpServers.kanna.url).toBe("http://127.0.0.1:55555/mcp")
     expect(parsed.mcpServers.kanna.headers.Authorization).toBe("Bearer abcdef0123456789")
+  })
+})
+
+describe("startKannaMcpHttpServer channel surface", () => {
+  const channelArgs = {
+    projectId: "p1",
+    localPath: "/tmp",
+    chatId: "c1",
+    sessionId: "s1",
+    tunnelGateway: null,
+    forceInteractiveToolCallbacks: true,
+  } as unknown as Parameters<typeof startKannaMcpHttpServer>[0]["args"]
+
+  test("handle exposes pushChannelPrompt + channelClientReady", async () => {
+    const handle = await startKannaMcpHttpServer({ args: channelArgs, port: 0 })
+    try {
+      expect(typeof handle.pushChannelPrompt).toBe("function")
+      expect(handle.channelClientReady).toBeInstanceOf(Promise)
+    } finally {
+      await handle.close()
+    }
+  })
+
+  test("pushChannelPrompt does not throw before a client connects (no-op safe)", async () => {
+    const handle = await startKannaMcpHttpServer({ args: channelArgs, port: 0 })
+    try {
+      await handle.pushChannelPrompt("hello")
+    } finally {
+      await handle.close()
+    }
   })
 })
 
