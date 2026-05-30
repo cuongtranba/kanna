@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import type { ClaudeModelOptions, Subagent, TranscriptEntry } from "../shared/types"
 import type { HarnessEvent, HarnessTurn, HarnessToolRequest } from "./harness-types"
 import type { StartCodexSessionArgs, CodexSessionScope } from "./codex-app-server"
-import { buildSubagentProviderRun, composeInitialPrompt, composeSubagentSystemPrompt, type BuildSubagentProviderRunArgs } from "./subagent-provider-run"
+import { buildSubagentProviderRun, composeInitialPrompt, composeSubagentSystemPrompt, drainOneTurn, type BuildSubagentProviderRunArgs } from "./subagent-provider-run"
 import type { StartCodexTurnArgs } from "./codex-app-server"
 
 // ---------------------------------------------------------------------------
@@ -432,5 +432,169 @@ describe("buildSubagentProviderRun – Codex", () => {
     expect((err as Error)?.message).toBe("codex start turn failed")
 
     expect(calls).toEqual(["startSession", "startTurn", "stopSession:sub:run-fail"])
+  })
+})
+
+// ---------------------------------------------------------------------------
+// drainOneTurn
+// ---------------------------------------------------------------------------
+
+describe("drainOneTurn", () => {
+  test("returns text at first result and leaves iterator open", async () => {
+    // Build minimally-valid TranscriptEntry fixtures via cast (test file is lint-exempt)
+    const events: HarnessEvent[] = [
+      {
+        type: "transcript",
+        entry: { _id: "e1", createdAt: 1, kind: "assistant_text", text: "hello " } as TranscriptEntry,
+      },
+      {
+        type: "transcript",
+        entry: { _id: "e2", createdAt: 2, kind: "assistant_text", text: "world" } as TranscriptEntry,
+      },
+      {
+        type: "transcript",
+        entry: {
+          _id: "e3",
+          createdAt: 3,
+          kind: "result",
+          subtype: "success",
+          isError: false,
+          durationMs: 10,
+          result: "done",
+        } as TranscriptEntry,
+      },
+      // This event belongs to a second turn — drainOneTurn must NOT consume it
+      {
+        type: "transcript",
+        entry: { _id: "e4", createdAt: 4, kind: "assistant_text", text: "TURN2" } as TranscriptEntry,
+      },
+    ]
+
+    let i = 0
+    const it: AsyncIterator<HarnessEvent> = {
+      async next() {
+        if (i < events.length) return { value: events[i++] as HarnessEvent, done: false }
+        return { value: undefined as never, done: true }
+      },
+    }
+
+    const chunks: string[] = []
+    const entries: TranscriptEntry[] = []
+    const out = await drainOneTurn(it, (c) => chunks.push(c), (e) => entries.push(e))
+
+    expect(out.text).toBe("hello world")
+    expect(chunks).toEqual(["hello ", "world"])
+    expect(out.sawResult).toBe(true)
+    expect(out.sawError).toBe(false)
+
+    // Iterator is still open — TURN2 event must still be consumable
+    const next = await it.next()
+    expect((next.value as HarnessEvent).entry?.kind).toBe("assistant_text")
+    expect(
+      ((next.value as HarnessEvent).entry as { kind: "assistant_text"; text: string } & TranscriptEntry).text,
+    ).toBe("TURN2")
+  })
+
+  test("propagates usage fields from result entry", async () => {
+    const events: HarnessEvent[] = [
+      {
+        type: "transcript",
+        entry: {
+          _id: "r1",
+          createdAt: 1,
+          kind: "result",
+          subtype: "success",
+          isError: false,
+          durationMs: 50,
+          result: "ok",
+          costUsd: 0.042,
+          usage: { inputTokens: 10, outputTokens: 5, cachedInputTokens: 2 },
+        } as TranscriptEntry,
+      },
+    ]
+    let i = 0
+    const it: AsyncIterator<HarnessEvent> = {
+      async next() {
+        if (i < events.length) return { value: events[i++] as HarnessEvent, done: false }
+        return { value: undefined as never, done: true }
+      },
+    }
+    const out = await drainOneTurn(it, () => {}, () => {})
+    expect(out.usage?.inputTokens).toBe(10)
+    expect(out.usage?.outputTokens).toBe(5)
+    expect(out.usage?.cachedInputTokens).toBe(2)
+    expect(out.usage?.costUsd).toBe(0.042)
+    expect(out.sawResult).toBe(true)
+  })
+
+  test("sets sawError when api_error entry is received", async () => {
+    const events: HarnessEvent[] = [
+      {
+        type: "transcript",
+        entry: {
+          _id: "ae1",
+          createdAt: 1,
+          kind: "api_error",
+          status: 500,
+          text: "internal server error",
+        } as TranscriptEntry,
+      },
+      {
+        type: "transcript",
+        entry: {
+          _id: "r2",
+          createdAt: 2,
+          kind: "result",
+          subtype: "error",
+          isError: true,
+          durationMs: 10,
+          result: "failed",
+        } as TranscriptEntry,
+      },
+    ]
+    let i = 0
+    const it: AsyncIterator<HarnessEvent> = {
+      async next() {
+        if (i < events.length) return { value: events[i++] as HarnessEvent, done: false }
+        return { value: undefined as never, done: true }
+      },
+    }
+    const out = await drainOneTurn(it, () => {}, () => {})
+    expect(out.sawError).toBe(true)
+    expect(out.sawResult).toBe(true)
+  })
+
+  test("skips non-transcript events", async () => {
+    const events: HarnessEvent[] = [
+      { type: "session_token", sessionToken: "tok123" },
+      {
+        type: "transcript",
+        entry: { _id: "t1", createdAt: 1, kind: "assistant_text", text: "hi" } as TranscriptEntry,
+      },
+      {
+        type: "transcript",
+        entry: {
+          _id: "r3",
+          createdAt: 2,
+          kind: "result",
+          subtype: "success",
+          isError: false,
+          durationMs: 5,
+          result: "ok",
+        } as TranscriptEntry,
+      },
+    ]
+    let i = 0
+    const it: AsyncIterator<HarnessEvent> = {
+      async next() {
+        if (i < events.length) return { value: events[i++] as HarnessEvent, done: false }
+        return { value: undefined as never, done: true }
+      },
+    }
+    const chunks: string[] = []
+    const out = await drainOneTurn(it, (c) => chunks.push(c), () => {})
+    expect(chunks).toEqual(["hi"])
+    expect(out.text).toBe("hi")
+    expect(out.sawResult).toBe(true)
   })
 })

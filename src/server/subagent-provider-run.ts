@@ -1,4 +1,4 @@
-import type { HarnessToolRequest, HarnessTurn } from "./harness-types"
+import type { HarnessEvent, HarnessToolRequest, HarnessTurn } from "./harness-types"
 import type { CodexAppServerManager } from "./codex-app-server"
 import type {
   AgentProvider,
@@ -198,16 +198,28 @@ async function runCodexSubagent(opts: {
   }
 }
 
-async function drainHarnessTurn(
-  turn: HarnessTurn,
+/**
+ * Drain exactly ONE turn from a persistent async iterator, stopping at the
+ * first `result` entry. The iterator is left open so callers can resume on
+ * the next turn (multi-turn keep-alive). For one-shot drains the driver
+ * closes the stream right after the result, so the early-break is equivalent.
+ *
+ * Exported so multi-turn callers can drain turns independently over a shared
+ * iterator without consuming the whole stream.
+ */
+export async function drainOneTurn(
+  iterator: AsyncIterator<HarnessEvent>,
   onChunk: (chunk: string) => void,
   onEntry: (entry: TranscriptEntry) => void,
-): Promise<{ text: string; usage?: ProviderUsage }> {
+): Promise<{ text: string; usage?: ProviderUsage; sawResult: boolean; sawError: boolean }> {
   let accumulated = ""
   let usage: ProviderUsage | undefined
   let sawResult = false
   let sawError = false
-  for await (const event of turn.stream) {
+  while (true) {
+    const next = await iterator.next()
+    if (next.done) break
+    const event = next.value
     if (event.type !== "transcript" || !event.entry) continue
     onEntry(event.entry)
     if (event.entry.kind === "assistant_text") {
@@ -226,18 +238,29 @@ async function drainHarnessTurn(
         cachedInputTokens: e.usage?.cachedInputTokens,
         costUsd: e.costUsd,
       }
+      break // stop at end of THIS turn; leave iterator open for next turn
     }
   }
+  return { text: accumulated, usage, sawResult, sawError }
+}
+
+async function drainHarnessTurn(
+  turn: HarnessTurn,
+  onChunk: (chunk: string) => void,
+  onEntry: (entry: TranscriptEntry) => void,
+): Promise<{ text: string; usage?: ProviderUsage }> {
+  const iterator = turn.stream[Symbol.asyncIterator]()
+  const { text, usage, sawResult, sawError } = await drainOneTurn(iterator, onChunk, onEntry)
   // Log how the drain ended so post-mortem investigation can distinguish:
   //   • clean completion (sawResult + no error)
   //   • PTY exit synth error (sawResult + isError) — process died mid-turn
   //   • premature stream close (no result at all) — orchestrator close or
   //     driver bug; partial text is the only evidence
   console.log("[kanna/subagent] drainHarnessTurn finished", {
-    accumulatedChars: accumulated.length,
+    accumulatedChars: text.length,
     sawResult,
     sawError,
     hasUsage: Boolean(usage),
   })
-  return { text: accumulated, usage }
+  return { text, usage }
 }
