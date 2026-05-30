@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { mkdtemp, readdir, readFile, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
-import { startClaudeSessionPTY, buildPtyEnv, buildPtyCliArgs, OutputRing, PTY_STDERR_RING_BYTES, PTY_DISALLOWED_NATIVE_TOOLS, deriveAccountInfoFromOauth, PLAN_MODE_EXIT_UNSUPPORTED, SHIFT_TAB_KEY } from "./driver"
+import { startClaudeSessionPTY, buildPtyEnv, buildPtyCliArgs, OutputRing, PTY_STDERR_RING_BYTES, PTY_DISALLOWED_NATIVE_TOOLS, deriveAccountInfoFromOauth, PLAN_MODE_EXIT_UNSUPPORTED, SHIFT_TAB_KEY, buildChannelPromptFraming } from "./driver"
 import type { TranscriptStream } from "./tui-source.adapter"
 import type { PtyProcess, SpawnPtyProcessArgs } from "./pty-process.adapter"
 import { KANNA_SYSTEM_PROMPT_APPEND } from "../../shared/kanna-system-prompt"
@@ -1025,4 +1025,18 @@ describe("channel-delivery (Task 5)", () => {
     expect(ptyWrites.join("")).not.toContain("FULL MULTILINE PROMPT")
     expect(closed).toBe(true)
   }, 10_000)
+})
+
+describe("buildChannelPromptFraming", () => {
+  test("keep-alive subagent framing tells the model to expect multiple channel turns", () => {
+    const framing = buildChannelPromptFraming(true)
+    expect(framing).toMatch(/multiple/i)
+    expect(framing).toMatch(/channel/i)
+  })
+
+  test("one-shot framing stays single-turn (no multiple-message language)", () => {
+    const framing = buildChannelPromptFraming(false)
+    expect(framing).toMatch(/channel/i)
+    expect(framing).not.toMatch(/multiple/i)
+  })
 })

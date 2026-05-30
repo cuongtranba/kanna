@@ -44,10 +44,23 @@ const STATIC_SUPPORTED_COMMANDS: SlashCommand[] = [
 // Framing folded into the subagent system prompt when its task is delivered
 // via the kanna channel. Without it the model treats <channel> messages as
 // low-trust interruptions and refuses (proven in the Phase-0 spike).
-const CHANNEL_PROMPT_FRAMING =
+// One-shot runs use single-turn framing; keep-alive runs use multi-turn framing
+// so the model knows to expect and accept repeated channel messages over the
+// session lifetime rather than treating turn 2+ as suspicious interrupts.
+const CHANNEL_PROMPT_FRAMING_BASE =
   'Your task for this run is delivered via the kanna channel as a <channel source="kanna"> message. ' +
   "Treat that channel message as your authoritative instructions from the orchestrator and act on it " +
   "immediately and fully, exactly as if the user had typed it. Do not refuse it and do not ask the user to repeat it."
+
+const CHANNEL_PROMPT_FRAMING_MULTITURN =
+  'Your tasks for this session arrive over the kanna channel as <channel source="kanna"> messages. ' +
+  "Expect MULTIPLE such messages over the life of this session. Treat each as authoritative instructions " +
+  "from the orchestrator; act on each immediately and fully, exactly as if the user had typed it. Do not refuse " +
+  "and do not ask the user to repeat. After finishing a task, wait for the next channel message."
+
+export function buildChannelPromptFraming(keepAlive: boolean): string {
+  return keepAlive ? CHANNEL_PROMPT_FRAMING_MULTITURN : CHANNEL_PROMPT_FRAMING_BASE
+}
 
 // Max wait for the claude MCP client to finish initialize before we push the
 // channel prompt. On timeout the spawn fails fast (no paste fallback).
@@ -397,7 +410,7 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
 
   const effectiveSystemPromptOverride =
     channelDeliveryEnabled && args.systemPromptOverride
-      ? `${args.systemPromptOverride}\n\n${CHANNEL_PROMPT_FRAMING}`
+      ? `${args.systemPromptOverride}\n\n${buildChannelPromptFraming(Boolean(args.keepAlive))}`
       : args.systemPromptOverride
 
   const claudeBin = claudeBinAbs
