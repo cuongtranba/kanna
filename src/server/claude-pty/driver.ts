@@ -54,6 +54,13 @@ const CHANNEL_PROMPT_FRAMING =
 // Env-overridable so tests don't wait the full default.
 const CHANNEL_READY_TIMEOUT_DEFAULT_MS = 15_000
 
+/**
+ * After a keep-alive turn's result, the REPL needs a beat to finish rendering
+ * the assistant block and return to the `❯` idle prompt before the next
+ * channel push enqueues. 300ms empirically clears this on tested models.
+ */
+const CHANNEL_REPL_IDLE_BEAT_MS = 300
+
 export interface StartClaudeSessionPtyArgs {
   chatId: string
   projectId: string
@@ -829,11 +836,11 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
     },
     getSupportedCommands: async () => cachedSlashCommands ?? STATIC_SUPPORTED_COMMANDS,
     getAccountInfo: async () => cachedAccountInfo,
-    pushChannelPrompt: channelDeliveryEnabled
+    pushChannelPrompt: (channelDeliveryEnabled && args.keepAlive)
       ? async (text: string) => {
           // Ready promise already resolved during turn-1 delivery; settle a
           // beat so the REPL is back at idle before the next enqueue.
-          await new Promise((r) => setTimeout(r, 300))
+          await new Promise((r) => setTimeout(r, CHANNEL_REPL_IDLE_BEAT_MS))
           await mcpHandle.pushChannelPrompt(text)
         }
       : undefined,

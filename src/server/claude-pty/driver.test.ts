@@ -846,7 +846,6 @@ describe("keep-alive (Task 1)", () => {
 
     // Controllable transcript lines emitter: we resolve this to send a JSONL line.
     let emitLine!: (line: string) => void
-    let endStream!: () => void
     const lineQueue: string[] = []
     const lineWaiters: Array<(r: IteratorResult<string>) => void> = []
     function notifyLine(line: string) {
@@ -855,11 +854,7 @@ describe("keep-alive (Task 1)", () => {
       else lineQueue.push(line)
     }
     emitLine = notifyLine
-    endStream = () => {
-      const w = lineWaiters.shift()
-      if (w) w({ value: undefined as unknown as string, done: true })
-    }
-    const controlledStream = {
+    const controlledStream: TranscriptStream = {
       lines: {
         [Symbol.asyncIterator]() {
           return {
@@ -874,7 +869,10 @@ describe("keep-alive (Task 1)", () => {
         },
       },
       filePath: Promise.resolve("/tmp/x.jsonl"),
-      close: () => { endStream() },
+      close: () => {
+        const w = lineWaiters.shift()
+        if (w) w({ value: undefined as unknown as string, done: true })
+      },
     }
 
     const fakePty = {
@@ -930,6 +928,40 @@ describe("keep-alive (Task 1)", () => {
     await handle.pushChannelPrompt!("turn two")
     expect(pushed).toEqual(["turn one", "turn two"])
 
+    handle.close()
+  }, 10_000)
+
+  test("keepAlive omitted on oneShot: handle.pushChannelPrompt is undefined", async () => {
+    if (process.platform === "win32") return
+    const fakePty = {
+      pid: 44444,
+      sendInput: async () => {},
+      resize() {},
+      exited: new Promise<number>(() => {}),
+      close: () => {},
+      kill: () => {},
+    } as unknown as PtyProcess
+    const fakeHandle = {
+      url: "http://127.0.0.1:1/mcp", bearerToken: "t", close: async () => {},
+      channelClientReady: Promise.resolve(),
+      pushChannelPrompt: async () => {},
+    }
+    const handle = await startClaudeSessionPTY({
+      chatId: "ka-neg", projectId: "p1", localPath: "/tmp",
+      model: "claude-sonnet-4-6", planMode: false, forkSession: false,
+      oauthToken: "sk-ant-oat01-x", sessionToken: null,
+      systemPromptOverride: "You are a subagent.",
+      initialPrompt: "hello",
+      oneShot: true,
+      // keepAlive intentionally omitted
+      onToolRequest: async () => null,
+      env: { ...process.env, KANNA_PTY_TRUST_DISMISS: "disabled", KANNA_PTY_CHANNEL_DELIVERY: "enabled", KANNA_PTY_TUI_BOOT_MS: "10" },
+      startKannaMcpHttpServer: (async () => fakeHandle) as never,
+      spawnPtyProcess: (async () => fakePty) as never,
+      startTranscriptStreamFn: (async () => ({ lines: (async function* () {})(), filePath: Promise.resolve("/tmp/x.jsonl"), close: () => {} })) as never,
+      smokeTestGate: { canSpawn: async () => ({ ok: true }) },
+    })
+    expect(handle.pushChannelPrompt).toBeUndefined()
     handle.close()
   }, 10_000)
 })
