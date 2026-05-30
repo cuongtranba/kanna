@@ -1,6 +1,6 @@
 ---
 id: c3-225
-c3-seal: 259f2a14162cc41b850478098d92b71db3a64a475050ef244a033414632239cc
+c3-seal: d1b1eb79896b1525055a4a73b292fcda20fc8b8ec02c223e6a2de9c8e3cfa7b7
 title: claude-pty-driver
 type: component
 category: feature
@@ -77,6 +77,7 @@ Owns the Claude CLI PTY transport: spawns the `claude` subprocess (after the smo
 | HarnessEvent stream | OUT | Normalized events parsed from the on-disk transcript JSONL — the SOLE event source; stdout is never the event source | c3-210 | src/server/claude-pty/tui-source.adapter.ts, src/server/claude-pty/driver.ts |
 | TUI prompt input | IN | Interactive sessions: prompt written to PTY via tui-control.sendUserPrompt bracketed paste + \r; REPL closed on oneShot/close | c3-210 | src/server/claude-pty/tui-control.ts, src/server/claude-pty/driver.ts |
 | Channel prompt push | IN | One-shot subagent sessions: full prompt delivered via kanna-mcp notifications/claude/channel push after channelClientReady resolves; bracketed paste path is bypassed for one-shot. Gated by KANNA_PTY_CHANNEL_DELIVERY (default enabled); KANNA_PTY_CHANNEL_READY_TIMEOUT_MS bounds readiness wait; fail-fast (no paste fallback) on timeout | c3-226 | src/server/claude-pty/driver.ts, src/server/kanna-mcp-http.ts, src/server/claude-pty/channel-notification.ts |
+| Keep-alive multi-turn | IN/OUT | When StartClaudeSessionPtyArgs.keepAlive is set, the first result does NOT trigger oneShotClose so the REPL stays open; the handle exposes pushChannelPrompt(text) to deliver subsequent turns via the same channel push (after a short REPL idle beat). buildChannelPromptFraming(keepAlive) appends plural channel framing so the model expects multiple channel messages over the session. Drives c3-210 LiveTurnSource turns | c3-210 | src/server/claude-pty/driver.ts |
 | Dev-channels CLI flag | OUT | One-shot spawns append --dangerously-load-development-channels server:kanna so the channel handler registers in the spawned claude | c3-226 | src/server/claude-pty/pty-cli-args.ts |
 | Live-status registry upserts | OUT | Driver upserts PtyInstanceState (phase, pid, model, account, rssBytes, rssPeakBytes, cpuPercent, cpuPeakPercent) into PtyInstanceRegistry; ws-router fans deltas to subscribed clients. Resource sampler ticks every 2 s (configurable via memorySamplerIntervalMs) using sampleProcessTreeUsage which shells one ps -A -o pid=,ppid=,rss=,pcpu= per tick and sums RSS + CPU% across child + descendants; interval cleared on cleanupResources | c3-102 | src/server/claude-pty/pty-instance-registry.ts, src/server/claude-pty/pty-memory-sampler.adapter.ts, src/server/claude-pty/driver.ts |
 

@@ -346,6 +346,63 @@ the main model then synthesizes it into its own response.
   `user_prompt` entries for UI badges and analytics. The assistant-text
   mention scan and the `chat_send` / dequeue short-circuits are removed.
 
+## Keep-Alive Multi-Turn Subagents (claude-PTY only)
+
+`delegate_subagent({ subagent_id, prompt, keep_alive: true })` keeps the
+subagent's PTY claude REPL open after the first `result` instead of sending
+`/exit`. The main agent then drives further turns into the SAME warm
+process — no re-spawn, no re-trust, warm cache. Star topology preserved:
+the main agent is always the one calling these tools.
+
+- **Transport:** each turn is a kanna channel push (`pushChannelPrompt`, the
+  same MCP-notification transport shipped in PR #333) followed by draining
+  the persistent `HarnessEvent` stream until the next synthesized
+  `kind:"result"` event. Interactive TUI claude writes `system/turn_duration`
+  (not `type:"result"`) per turn; `normalizeClaudeStreamMessage`
+  (`agent.ts`) synthesizes one `kind:"result"` per `turn_duration`, so a
+  per-turn drain (`drainOneTurn` in `subagent-provider-run.ts`) returns once
+  per turn and leaves the iterator open.
+- **Driver:** `StartClaudeSessionPtyArgs.keepAlive` suppresses
+  `oneShotClose()` on the first result and exposes
+  `pushChannelPrompt` on the handle (`claude-pty/driver.ts`). Keep-alive
+  REQUIRES channel delivery — a keep-alive run with no `pushChannelPrompt`
+  fails closed. The subagent system prompt gets the plural channel framing
+  (`buildChannelPromptFraming(true)`) so the model expects multiple channel
+  messages over the session and does not treat turn 2+ as a suspicious
+  interrupt.
+- **Provider run:** `runClaudeSubagent` drains turn 1, then returns a
+  `LiveTurnSource` (`runTurn(prompt, onChunk, onEntry)` + `close()`) via the
+  widened `ProviderRunStart.start(onChunk, onEntry, { keepAlive })`. Codex is
+  out of scope — keep-alive is claude-PTY only; the MCP layer rejects
+  `keep_alive` for non-claude subagents.
+- **Orchestrator:** a `liveSessions` registry (keyed by `runId`) holds each
+  warm session. Turn 1 runs through the normal `spawnRun` plumbing (permit,
+  RunState, timeout, abort, events) but on completion registers a
+  `LiveSession` instead of cleaning up; the RunState stays registered so
+  cancel can reach it. Follow-up turns: `sendToLiveRun(runId, prompt)`.
+  Teardown: `closeLiveRun(chatId, runId, reason)`.
+- **Permit model:** an idle live session holds NO parallel permit. Each
+  active turn (`spawnRun` turn 1, and each `sendToLiveRun`) acquires a permit
+  for its drain and releases it after. Two orthogonal limits — permits =
+  concurrent active turns; `KANNA_SUBAGENT_MAX_LIVE` = live processes.
+- **Lifecycle bounds:** idle sessions are auto-closed after
+  `KANNA_SUBAGENT_IDLE_TIMEOUT_MS` (default 300000), reset on each turn. Live
+  process count is capped per chat by `KANNA_SUBAGENT_MAX_LIVE` (default 5) —
+  over cap, `delegate_subagent({keep_alive:true})` fails `CAP_EXCEEDED`
+  (no LRU eviction; an LRU session might be in use). `cancelChat` /
+  `cancelRun` cascade-close all live sessions for the chat/run.
+- **MCP tools** (registered under the same `subagentOrchestrator &&
+  delegationContext` guard as `delegate_subagent`):
+  - `delegate_subagent({ ..., keep_alive })` — turn 1; on completion appends
+    `[run_id: ...]` to the reply so the model learns the handle.
+  - `send_subagent_message({ run_id, prompt })` — drives a follow-up turn;
+    blocks until that turn finishes; `NO_LIVE_SESSION` if unknown.
+  - `close_subagent({ run_id })` — tears down + frees the process.
+- **Env vars:** `KANNA_SUBAGENT_MAX_LIVE` (default 5),
+  `KANNA_SUBAGENT_IDLE_TIMEOUT_MS` (default 300000) — both wired into the
+  orchestrator deps at `AgentCoordinator` construction (`agent.ts`); the
+  orchestrator itself reads only its deps (side-effect seal).
+
 # Tests
 
 `bun test` MUST pass locally before any push or PR. CI (`.github/workflows/test.yml`)

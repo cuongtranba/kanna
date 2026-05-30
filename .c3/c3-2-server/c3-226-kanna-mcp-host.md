@@ -1,6 +1,6 @@
 ---
 id: c3-226
-c3-seal: 38effb45f0618a357f52d1c98daf9b6fb8aba149a8e754d8dbbeb63c3d18c91f
+c3-seal: 77928aae8501049d497c453b5c3ac087edb0c5b2ed9d001ec0fc81c85563c64b
 title: kanna-mcp-host
 type: component
 category: feature
@@ -91,6 +91,9 @@ the approval protocol clears.
 | Durable approval protocol | IN/OUT | Register pending request → push to UI → await resolution; survives process restart | c3-208 | src/server/tool-callback.ts |
 | Path deny enforcement | IN | readPathDeny + writePathDeny reject paths outside allowed roots before shim execution | c3-204 | src/server/permission-gate.ts |
 | Channel notification push | OUT | McpServer declares experimental capabilities claude/channel + claude/channel/permission; exposes pushChannelPrompt(content) which sends a single notifications/claude/channel notification, and channelClientReady which resolves when the spawned claude has acknowledged channel registration. Used by one-shot subagent PTY spawns (c3-225) to deliver the initial prompt without typing it into the TUI | c3-225 | src/server/kanna-mcp-http.ts, src/server/claude-pty/channel-notification.ts |
+| delegate_subagent keep_alive param | OUT | keep_alive boolean on delegate_subagent. When true and the target is a Claude subagent, the run stays live and the reply text carries the live run_id; non-claude targets return isError. Routes to c3-210 delegateRun with keepAlive | c3-210 | src/server/kanna-mcp.ts, src/server/kanna-mcp-tools/delegate-subagent.ts |
+| send_subagent_message tool | OUT | Takes run_id plus prompt, drives one follow-up turn into a live keep-alive session, blocks until that turn finishes, returns the subagent reply text or isError NO_LIVE_SESSION. Routes to c3-210 sendToLiveRun | c3-210 | src/server/kanna-mcp.ts |
+| close_subagent tool | OUT | Takes run_id, closes a live keep-alive session and frees its process. Routes to c3-210 closeLiveRun | c3-210 | src/server/kanna-mcp.ts |
 
 ## Change Safety
 

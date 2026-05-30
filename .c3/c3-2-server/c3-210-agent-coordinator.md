@@ -1,7 +1,7 @@
 ---
 id: c3-210
 c3-version: 4
-c3-seal: 95ffb0aacb7de96ebe8deb58db9550b33e0ac4dcf2cc21be1e13b1223a24f275
+c3-seal: 677581a9ce0a0456c154c06409291d44197752df752d6742835e443e188e1202
 title: agent-coordinator
 type: component
 category: feature
@@ -74,6 +74,11 @@ Owns the agent turn lifecycle: receives `chat.send` commands, picks the provider
 | runTurn(command) | IN | Drives a single turn from chat.send | c3-208 | src/server/agent-coordinator.ts |
 | Transcript events | OUT | Append-only typed events | c3-206 | src/server/agent-coordinator.ts |
 | Cancel callback | IN | Propagates cancel to provider | c3-211 | src/server/agent-coordinator.ts |
+| delegateRun({keepAlive?}) | IN | Runs subagent turn 1; on keepAlive completion registers a live session (no /exit) and returns runId; over KANNA_SUBAGENT_MAX_LIVE per chat fails CAP_EXCEEDED | c3-226 | src/server/subagent-orchestrator.ts |
+| sendToLiveRun(runId, prompt) | IN | Drives a follow-up turn into a warm keep-alive session via channel push; acquires a permit for the turn only; NO_LIVE_SESSION if unknown | c3-226 | src/server/subagent-orchestrator.ts |
+| closeLiveRun(chatId, runId, reason) | IN | Tears down a live session (close REPL, cleanup RunState, onRunTerminal); also driven by idle timeout + cancel cascade | c3-226 | src/server/subagent-orchestrator.ts |
+| LiveTurnSource | OUT | Provider-run handle returned after keep-alive turn 1 — runTurn (push + drain one turn) + close; keeps the persistent HarnessEvent iterator open | c3-225 | src/server/subagent-provider-run.ts |
+| findSubagent(id) | IN | Snapshot lookup used by the MCP host to reject keep_alive for non-claude subagents | c3-226 | src/server/subagent-orchestrator.ts |
 
 ## Change Safety
 
