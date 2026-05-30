@@ -9,6 +9,9 @@ const InputSchema = z.object({
   prompt: z.string().min(1).describe(
     "Self-contained instructions for the subagent. Distill the relevant chat context, state the goal, list constraints, and end with the concrete deliverable you need back. The subagent does not see your chat history.",
   ),
+  keep_alive: z.boolean().optional().describe(
+    "Keep the subagent session alive after the first turn for follow-up prompts via send_subagent_message. Claude subagents only.",
+  ),
 })
 
 export type DelegateSubagentInput = z.infer<typeof InputSchema>
@@ -79,6 +82,7 @@ export function createDelegateSubagentTool(deps: {
         subagentId: input.subagent_id,
         prompt: input.prompt,
         onEntry: ctx.onEntry,
+        keepAlive: input.keep_alive,
       })
       if (outcome.status === "completed") {
         return {

@@ -5,6 +5,8 @@ import os from "node:os"
 import type { TranscriptEntry } from "../shared/types"
 import { buildDelegateProgressEmitter, buildKannaMcpTools, resolveOfferDownload } from "./kanna-mcp"
 import { POLICY_DEFAULT } from "../shared/permission-policy"
+import type { SubagentOrchestrator } from "./subagent-orchestrator"
+import type { KannaMcpDelegationContext } from "./kanna-mcp"
 
 let tempRoot: string
 
@@ -268,5 +270,139 @@ describe("buildDelegateProgressEmitter", () => {
     // Should not throw synchronously and the unhandled rejection is swallowed by .catch().
     expect(() => emit!(makeEntry())).not.toThrow()
     await new Promise((r) => setTimeout(r, 5))
+  })
+})
+
+// ── keep_alive / send_subagent_message / close_subagent ───────────────────
+
+interface FakeOrchestratorState {
+  lastDelegate: {
+    subagentId: string
+    prompt: string
+    keepAlive: boolean | undefined
+  } | null
+  lastSend: { runId: string; prompt: string } | null
+  lastClose: { chatId: string; runId: string; reason: string } | null
+}
+
+function buildKannaMcpForTest(opts: { withDelegation: boolean }): {
+  tools: Map<string, { handler: (input: Record<string, unknown>) => Promise<{ content: Array<{ type: string; text: string }>; isError?: boolean }> }>
+  fakeOrch: FakeOrchestratorState
+} {
+  const state: FakeOrchestratorState = {
+    lastDelegate: null,
+    lastSend: null,
+    lastClose: null,
+  }
+  const fakeOrchestrator: Pick<SubagentOrchestrator, "delegateRun" | "sendToLiveRun" | "closeLiveRun" | "findSubagent"> = {
+    findSubagent: (id: string) => {
+      if (id === "s1") return { id: "s1", name: "Agent S1", provider: "claude" as const, model: "claude-3-5-sonnet", systemPrompt: "", description: "", contextScope: "previous-assistant-reply" as const, createdAt: 0, updatedAt: 0, modelOptions: { reasoningEffort: "low" as const, contextWindow: "200k" as const } }
+      if (id === "s2-notclaude") return { id: "s2-notclaude", name: "Agent S2", provider: "codex" as const, model: "gpt-4o", systemPrompt: "", description: "", contextScope: "previous-assistant-reply" as const, createdAt: 0, updatedAt: 0, modelOptions: { reasoningEffort: "medium" as const, fastMode: false } }
+      return undefined
+    },
+    delegateRun: async (args) => {
+      state.lastDelegate = {
+        subagentId: args.subagentId,
+        prompt: args.prompt,
+        keepAlive: args.keepAlive,
+      }
+      return { status: "completed" as const, runId: "run-42", text: "done" }
+    },
+    sendToLiveRun: async (runId, prompt) => {
+      state.lastSend = { runId, prompt }
+      return { status: "completed" as const, runId, text: "follow-up reply" }
+    },
+    closeLiveRun: async (chatId, runId, reason) => {
+      state.lastClose = { chatId, runId, reason }
+    },
+  }
+
+  const delegationContext: KannaMcpDelegationContext = {
+    parentSubagentId: null,
+    parentRunId: null,
+    ancestorSubagentIds: [],
+    depth: 0,
+    getParentUserMessageId: () => "msg-1",
+  }
+
+  const rawTools = buildKannaMcpTools({
+    projectId: "p",
+    localPath: "/tmp",
+    chatId: "chat-test",
+    sessionId: "s",
+    chatPolicy: POLICY_DEFAULT,
+    tunnelGateway: null,
+    ...(opts.withDelegation
+      ? {
+          subagentOrchestrator: fakeOrchestrator as unknown as SubagentOrchestrator,
+          delegationContext,
+        }
+      : {}),
+  })
+
+  const toolMap = new Map<string, { handler: (input: Record<string, unknown>) => Promise<{ content: Array<{ type: string; text: string }>; isError?: boolean }> }>()
+  for (const t of rawTools) {
+    toolMap.set(t.name, { handler: (input) => (t as { handler: (i: Record<string, unknown>, extra: unknown) => Promise<{ content: Array<{ type: string; text: string }>; isError?: boolean }> }).handler(input, undefined) })
+  }
+  return { tools: toolMap, fakeOrch: state }
+}
+
+describe("keep_alive delegate + send_subagent_message + close_subagent", () => {
+  test("delegate_subagent accepts keep_alive and returns run_id; send/close registered", async () => {
+    const { tools, fakeOrch } = buildKannaMcpForTest({ withDelegation: true })
+    expect(tools.has("delegate_subagent")).toBe(true)
+    expect(tools.has("send_subagent_message")).toBe(true)
+    expect(tools.has("close_subagent")).toBe(true)
+
+    const res = await tools.get("delegate_subagent")!.handler({ subagent_id: "s1", prompt: "go", keep_alive: true })
+    expect(fakeOrch.lastDelegate?.keepAlive).toBe(true)
+    expect(res.content[0].text).toMatch(/run_id/)
+  })
+
+  test("delegate_subagent without keep_alive does not append run_id hint", async () => {
+    const { tools } = buildKannaMcpForTest({ withDelegation: true })
+    const res = await tools.get("delegate_subagent")!.handler({ subagent_id: "s1", prompt: "go" })
+    expect(res.isError).toBeUndefined()
+    const parsed = JSON.parse(res.content[0].text) as { status: string; run_id: string }
+    expect(parsed.status).toBe("completed")
+    // No keep-alive hint appended (text is just the JSON)
+    expect(res.content[0].text).not.toContain("session kept alive")
+  })
+
+  test("delegate_subagent with keep_alive=true appends session hint", async () => {
+    const { tools } = buildKannaMcpForTest({ withDelegation: true })
+    const res = await tools.get("delegate_subagent")!.handler({ subagent_id: "s1", prompt: "go", keep_alive: true })
+    expect(res.content[0].text).toContain("session kept alive")
+    expect(res.content[0].text).toContain("run-42")
+  })
+
+  test("delegate_subagent rejects keep_alive for non-claude subagents", async () => {
+    const { tools } = buildKannaMcpForTest({ withDelegation: true })
+    const res = await tools.get("delegate_subagent")!.handler({ subagent_id: "s2-notclaude", prompt: "go", keep_alive: true })
+    expect(res.isError).toBe(true)
+    expect(res.content[0].text).toContain("Claude subagents")
+  })
+
+  test("send_subagent_message forwards to orchestrator and returns text", async () => {
+    const { tools, fakeOrch } = buildKannaMcpForTest({ withDelegation: true })
+    const res = await tools.get("send_subagent_message")!.handler({ run_id: "run-42", prompt: "next step" })
+    expect(fakeOrch.lastSend?.runId).toBe("run-42")
+    expect(fakeOrch.lastSend?.prompt).toBe("next step")
+    expect(res.content[0].text).toBe("follow-up reply")
+  })
+
+  test("close_subagent calls orchestrator.closeLiveRun with explicit reason", async () => {
+    const { tools, fakeOrch } = buildKannaMcpForTest({ withDelegation: true })
+    const res = await tools.get("close_subagent")!.handler({ run_id: "run-42" })
+    expect(fakeOrch.lastClose?.runId).toBe("run-42")
+    expect(fakeOrch.lastClose?.reason).toBe("explicit")
+    expect(res.content[0].text).toContain("run-42")
+  })
+
+  test("send/close NOT registered without delegation context", () => {
+    const { tools } = buildKannaMcpForTest({ withDelegation: false })
+    expect(tools.has("delegate_subagent")).toBe(false)
+    expect(tools.has("send_subagent_message")).toBe(false)
+    expect(tools.has("close_subagent")).toBe(false)
   })
 })

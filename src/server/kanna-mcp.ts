@@ -207,13 +207,25 @@ function buildDelegateSubagentToolList(args: {
   if (!args.orchestrator || !args.delegationContext || !args.chatId) return []
   const ctx = args.delegationContext
   const chatId = args.chatId
-  const delegate = createDelegateSubagentTool({ orchestrator: args.orchestrator })
+  const orchestrator = args.orchestrator
+  const delegate = createDelegateSubagentTool({ orchestrator })
+
   return [
     tool(
       delegate.name,
       DELEGATE_SUBAGENT_DESCRIPTION,
       delegate.schema.shape,
       async (input, extra) => {
+        // Reject keep_alive for non-claude subagents before delegating.
+        if (input.keep_alive) {
+          const subagent = orchestrator.findSubagent(input.subagent_id)
+          if (subagent && subagent.provider !== "claude") {
+            return {
+              isError: true as const,
+              content: [{ type: "text" as const, text: "keep_alive is only supported for Claude subagents" }],
+            }
+          }
+        }
         const onEntry = buildDelegateProgressEmitter(extra)
         const handlerCtx: DelegateSubagentContext = {
           chatId,
@@ -224,7 +236,52 @@ function buildDelegateSubagentToolList(args: {
           getParentUserMessageId: ctx.getParentUserMessageId,
           onEntry,
         }
-        return await delegate.handler(input, handlerCtx)
+        const result = await delegate.handler(input, handlerCtx)
+        // When keep_alive was requested and the run completed, append the
+        // session-keep-alive hint so the model learns the run_id and knows
+        // how to drive follow-up turns.
+        if (input.keep_alive && !result.isError && result.content.length > 0) {
+          const parsed = (() => {
+            try { return JSON.parse(result.content[0].text) as { status?: string; run_id?: string } } catch { return null }
+          })()
+          if (parsed?.status === "completed" && parsed.run_id) {
+            const hint = `\n\n[run_id: ${parsed.run_id}] — session kept alive; use send_subagent_message({run_id, prompt}) for more turns, close_subagent({run_id}) when done.`
+            return {
+              ...result,
+              content: [{ type: "text" as const, text: result.content[0].text + hint }],
+            }
+          }
+        }
+        return result
+      },
+    ),
+    tool(
+      "send_subagent_message",
+      "Send a follow-up turn to a live subagent session started with delegate_subagent({keep_alive:true}). Blocks until that turn finishes; returns the subagent's reply.",
+      {
+        run_id: z.string().describe("run_id returned by delegate_subagent when keep_alive was true"),
+        prompt: z.string().min(1).describe("Follow-up instructions for the subagent"),
+      },
+      async (input) => {
+        const outcome = await orchestrator.sendToLiveRun(input.run_id, input.prompt)
+        if (outcome.status === "failed") {
+          return {
+            isError: true as const,
+            content: [{ type: "text" as const, text: `${outcome.errorCode}: ${outcome.errorMessage}` }],
+          }
+        }
+        return { content: [{ type: "text" as const, text: outcome.text }] }
+      },
+    ),
+    tool(
+      "close_subagent",
+      "Close a live subagent session and free its process. Call when you no longer need follow-up turns.",
+      {
+        run_id: z.string().describe("run_id returned by delegate_subagent when keep_alive was true"),
+      },
+      async (input) => {
+        await orchestrator.closeLiveRun(chatId, input.run_id, "explicit")
+        return { content: [{ type: "text" as const, text: `closed ${input.run_id}` }] }
       },
     ),
   ]

@@ -259,6 +259,14 @@ export class SubagentOrchestrator {
   /** Test-only accessor: number of currently registered live sessions. */
   liveSessionCount() { return this.liveSessions.size }
 
+  /**
+   * Look up a subagent by id from the current settings snapshot.
+   * Used by kanna-mcp to validate provider constraints before delegating.
+   */
+  findSubagent(id: string): Subagent | undefined {
+    return this.deps.appSettings.getSnapshot().subagents.find((s) => s.id === id)
+  }
+
   activePermitCount() {
     return this.maxParallel() - this.permits
   }
