@@ -362,6 +362,15 @@ the main agent is always the one calling these tools.
   (`agent.ts`) synthesizes one `kind:"result"` per `turn_duration`, so a
   per-turn drain (`drainOneTurn` in `subagent-provider-run.ts`) returns once
   per turn and leaves the iterator open.
+- **Auto-wake filter exemption (do NOT remove):** a channel push lands in the
+  transcript as a `user isMeta:true` line at a turn boundary, which the
+  `jsonl-to-event.ts` auto-wake filter (added in 216392b to drop CC's own
+  `<task-notification>` background wakes) would otherwise eat — dropping the
+  synthesized `result` and hanging `drainOneTurn` forever. The parser detects
+  the `<channel source="kanna">` tag (`userMessageContainsKannaChannel`) and
+  treats those lines as real turns. Genuine `<task-notification>` wakes stay
+  filtered. Unit fakes emit `kind:"result"` directly and bypass this path, so
+  this invariant is only covered by the parser tests + the real-OAuth e2e.
 - **Driver:** `StartClaudeSessionPtyArgs.keepAlive` suppresses
   `oneShotClose()` on the first result and exposes
   `pushChannelPrompt` on the handle (`claude-pty/driver.ts`). Keep-alive
