@@ -1393,6 +1393,18 @@ describe("SubagentOrchestrator", () => {
       expect(out.status === "failed" && out.errorCode).toBe("NO_LIVE_SESSION")
     })
 
+    test("cancelChat closes live sessions for the chat", async () => {
+      const { live } = makeLiveTurnSource()
+      const h = await setupHarness({ subagents: [makeSubagent({})] })
+      const orch = makeOrchestrator(h, live)
+      const d = await orch.delegateRun(baseArgs(h))
+      expect(d.status).toBe("completed")
+      expect(orch.liveSessionCount()).toBe(1)
+      orch.cancelChat(h.chatId)
+      await Promise.resolve()
+      expect(orch.liveSessionCount()).toBe(0)
+    })
+
     test("delegateRun keep_alive past cap fails CAP_EXCEEDED", async () => {
       const { live: live1 } = makeLiveTurnSource()
       const { live: live2 } = makeLiveTurnSource()

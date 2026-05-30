@@ -336,6 +336,13 @@ export class SubagentOrchestrator {
       if (state.chatId === chatId) runIds.push(runId)
     }
     for (const runId of runIds) this.cancelRun(chatId, runId)
+    // Belt-and-suspenders: close any live sessions for this chat that may not
+    // have had a RunState entry (e.g. if cleanupRunState was already called).
+    // closeLiveRun is idempotent (early-returns if not in map), so calling it
+    // again for sessions already handled by cancelRun above is safe.
+    for (const s of [...this.liveSessions.values()]) {
+      if (s.chatId === chatId) void this.closeLiveRun(chatId, s.runId, "cancel")
+    }
   }
 
   cancelRun(chatId: string, runId: string): void {
@@ -360,6 +367,9 @@ export class SubagentOrchestrator {
       reject(new Error("USER_CANCELLED"))
     } else {
       state.abortController.abort()
+    }
+    if (this.liveSessions.has(runId)) {
+      void this.closeLiveRun(chatId, runId, "cancel")
     }
   }
 
