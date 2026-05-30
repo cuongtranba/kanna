@@ -7,6 +7,7 @@ import type { EventStore } from "./event-store"
 import { createTestEventStore } from "./storage/test-helpers"
 import {
   SubagentOrchestrator,
+  type LiveTurnSource,
   type OrchestratorAppSettings,
   type ProviderRunStart,
 } from "./subagent-orchestrator"
@@ -71,6 +72,7 @@ async function setupHarness(opts: {
   maxParallel?: number
   maxChainDepth?: number
   runTimeoutMs?: number
+  maxLive?: number
 }): Promise<OrchestratorHarness> {
   const dataDir = await createTempDataDir()
   const store = createTestEventStore(dataDir)
@@ -102,6 +104,7 @@ async function setupHarness(opts: {
     maxParallel: opts.maxParallel,
     maxChainDepth: opts.maxChainDepth,
     runTimeoutMs: opts.runTimeoutMs,
+    maxLive: opts.maxLive,
     onRunProgress: (chatId, runId) => { progressCalls.push({ chatId, runId }) },
     onRunTerminal: (chatId, runId, reason) => { terminalCalls.push({ chatId, runId, reason }) },
     startProviderRun: ({ subagent }): ProviderRunStart => {
@@ -1303,6 +1306,80 @@ describe("SubagentOrchestrator", () => {
       expect(h.terminalCalls).toEqual([
         { chatId: h.chatId, runId: outcome.runId, reason: "failed" },
       ])
+    })
+
+    // ── keep_alive tests ──
+
+    function makeLiveTurnSource(): { live: LiveTurnSource; closed: { value: boolean } } {
+      const closed = { value: false }
+      const live: LiveTurnSource = {
+        async runTurn(prompt, _onChunk, _onEntry) { return { text: `echo:${prompt}` } },
+        async close() { closed.value = true },
+      }
+      return { live, closed }
+    }
+
+    test("delegateRun keep_alive registers a live session and returns runId", async () => {
+      const { live } = makeLiveTurnSource()
+      const h = await setupHarness({ subagents: [makeSubagent({})] })
+      h.mockProviderRun({
+        authReady: async () => true,
+        async start(_onChunk, _onEntry, _opts) { return { text: "turn1", live } },
+      })
+      const out = await h.orchestrator.delegateRun({
+        chatId: h.chatId,
+        parentUserMessageId: h.userMessageId,
+        parentRunId: null,
+        parentSubagentId: null,
+        ancestorSubagentIds: [],
+        depth: 0,
+        subagentId: "sa-1",
+        prompt: "start session",
+        keepAlive: true,
+      })
+      expect(out.status).toBe("completed")
+      expect(h.orchestrator.liveSessionCount()).toBe(1)
+    })
+
+    test("delegateRun keep_alive past cap fails CAP_EXCEEDED", async () => {
+      const { live: live1 } = makeLiveTurnSource()
+      const { live: live2 } = makeLiveTurnSource()
+      let callCount = 0
+      const h = await setupHarness({ subagents: [makeSubagent({})], maxLive: 1 })
+      h.mockProviderRun({
+        authReady: async () => true,
+        async start(_onChunk, _onEntry, _opts) {
+          callCount += 1
+          return { text: "turn1", live: callCount === 1 ? live1 : live2 }
+        },
+      })
+      const out1 = await h.orchestrator.delegateRun({
+        chatId: h.chatId,
+        parentUserMessageId: h.userMessageId,
+        parentRunId: null,
+        parentSubagentId: null,
+        ancestorSubagentIds: [],
+        depth: 0,
+        subagentId: "sa-1",
+        prompt: "first",
+        keepAlive: true,
+      })
+      expect(out1.status).toBe("completed")
+      expect(h.orchestrator.liveSessionCount()).toBe(1)
+
+      const out2 = await h.orchestrator.delegateRun({
+        chatId: h.chatId,
+        parentUserMessageId: h.userMessageId,
+        parentRunId: null,
+        parentSubagentId: null,
+        ancestorSubagentIds: [],
+        depth: 0,
+        subagentId: "sa-1",
+        prompt: "second",
+        keepAlive: true,
+      })
+      expect(out2.status).toBe("failed")
+      expect(out2.status === "failed" && out2.errorCode).toBe("CAP_EXCEEDED")
     })
   })
 })

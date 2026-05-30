@@ -1471,6 +1471,7 @@ export type SubagentErrorCode =
   | "PROVIDER_ERROR"
   | "INTERRUPTED"
   | "USER_CANCELLED"
+  | "CAP_EXCEEDED"
 
 export type SubagentRunStatus = "running" | "completed" | "failed" | "cancelled"
 

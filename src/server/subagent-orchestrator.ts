@@ -149,10 +149,21 @@ export interface SubagentOrchestratorDeps {
   maxParallel?: number
   maxChainDepth?: number
   runTimeoutMs?: number
+  /** Maximum number of live (keep-alive) sessions per chat. Default 5. */
+  maxLive?: number
+  /**
+   * Idle timeout in ms before a live session is auto-closed. Default 300_000.
+   * Env-var wiring (KANNA_SUBAGENT_IDLE_TIMEOUT_MS) is done at the
+   * dep-construction site (agent.ts); not read here to stay within the
+   * side-effect seal.
+   */
+  liveIdleTimeoutMs?: number
 }
 
 const DEFAULT_MAX_PARALLEL = 4
 const DEFAULT_MAX_CHAIN_DEPTH = 1
+const DEFAULT_MAX_LIVE = 5
+const DEFAULT_LIVE_IDLE_TIMEOUT_MS = 300_000
 
 /**
  * Terminal outcome of a single subagent run, surfaced to callers that
@@ -166,6 +177,16 @@ export type DelegationOutcome =
 // take minutes. 600s matches the default Bash tool wall-clock cap. Tests still
 // override via SubagentOrchestratorDeps.runTimeoutMs.
 const DEFAULT_RUN_TIMEOUT_MS = 600_000
+
+interface LiveSession {
+  chatId: string
+  runId: string
+  subagentId: string
+  parentRunId: string | null
+  live: LiveTurnSource
+  idleTimer: ReturnType<typeof setTimeout> | null
+  lastActivity: number
+}
 
 interface RunState {
   chatId: string
@@ -183,6 +204,7 @@ export class SubagentOrchestrator {
   private readonly waiters: Array<{ chatId: string; resolve: () => void; reject: (err: Error) => void }> = []
   private readonly cancelledChats = new Set<string>()
   private readonly runStateByRunId = new Map<string, RunState>()
+  private readonly liveSessions = new Map<string, LiveSession>()
 
   private readonly recoveryPromise: Promise<void>
 
@@ -231,6 +253,11 @@ export class SubagentOrchestrator {
   private maxDepth() { return this.deps.maxChainDepth ?? DEFAULT_MAX_CHAIN_DEPTH }
   private timeoutMs() { return this.deps.runTimeoutMs ?? DEFAULT_RUN_TIMEOUT_MS }
   private now() { return this.deps.now?.() ?? Date.now() }
+  private maxLive() { return this.deps.maxLive ?? DEFAULT_MAX_LIVE }
+  private idleTimeoutMs() { return this.deps.liveIdleTimeoutMs ?? DEFAULT_LIVE_IDLE_TIMEOUT_MS }
+
+  /** Test-only accessor: number of currently registered live sessions. */
+  liveSessionCount() { return this.liveSessions.size }
 
   activePermitCount() {
     return this.maxParallel() - this.permits
@@ -443,6 +470,14 @@ export class SubagentOrchestrator {
      * on long-running subagent runs.
      */
     onEntry?: (entry: TranscriptEntry) => void
+    /**
+     * When true, requests that the provider keep the session alive after
+     * the first turn and returns a LiveTurnSource for subsequent turns.
+     * The live session is registered in `liveSessions` and the permit is
+     * released after the first turn (idle sessions hold no permit).
+     * Over `maxLive` live sessions per chat → CAP_EXCEEDED.
+     */
+    keepAlive?: boolean
   }): Promise<DelegationOutcome> {
     await this.recoveryPromise
     const subagent = this.deps.appSettings
@@ -512,6 +547,18 @@ export class SubagentOrchestrator {
         `Subagent ${subagent.name} already in ancestor chain`,
       )
     }
+    if (args.keepAlive) {
+      const liveForChat = [...this.liveSessions.values()].filter((s) => s.chatId === args.chatId).length
+      if (liveForChat >= this.maxLive()) {
+        const runId = crypto.randomUUID()
+        return await this.failRun(
+          args.chatId,
+          runId,
+          "CAP_EXCEEDED",
+          `Live session cap of ${this.maxLive()} reached for chat ${args.chatId}`,
+        )
+      }
+    }
     const outcome = await this.spawnRun({
       subagent,
       chatId: args.chatId,
@@ -521,6 +568,7 @@ export class SubagentOrchestrator {
       ancestorSubagentIds: args.ancestorSubagentIds,
       userInstruction: args.prompt,
       onEntry: args.onEntry,
+      keepAlive: args.keepAlive,
     })
     // Trace point: this is the return that flows back through the MCP
     // `delegate_subagent` tool to the parent claude as its tool_result.
@@ -553,6 +601,8 @@ export class SubagentOrchestrator {
     userInstruction: string
     /** External per-entry sink (see {@link delegateRun}). */
     onEntry?: (entry: TranscriptEntry) => void
+    /** When true, passes keepAlive to the provider run and registers a LiveSession on success. */
+    keepAlive?: boolean
   }): Promise<DelegationOutcome> {
     const runId = crypto.randomUUID()
     await this.deps.store.appendSubagentEvent({
@@ -662,6 +712,7 @@ export class SubagentOrchestrator {
 
       let finalText = ""
       let usage: ProviderUsage | undefined
+      let liveHandle: LiveTurnSource | undefined
       // Trailing-edge throttle handle for chunk-driven progress broadcasts.
       let chunkProgressTimer: ReturnType<typeof setTimeout> | null = null
       const CHUNK_PROGRESS_THROTTLE_MS = 100
@@ -732,7 +783,7 @@ export class SubagentOrchestrator {
         const abortRejection = createDeferred<never>()
         const abortListener = () => abortRejection.reject(new Error("USER_CANCELLED"))
         runState.abortController.signal.addEventListener("abort", abortListener, { once: true })
-        let result: { text: string; usage?: ProviderUsage }
+        let result: { text: string; usage?: ProviderUsage; live?: LiveTurnSource }
         try {
           // Fast-path: if already aborted, fire listener synchronously so the
           // race rejects on the next microtask. Doing this AFTER abortRejection.promise
@@ -741,7 +792,7 @@ export class SubagentOrchestrator {
             abortListener()
           }
           result = await Promise.race([
-            runStart.start(onChunk, onEntry),
+            runStart.start(onChunk, onEntry, { keepAlive: args.keepAlive }),
             timeoutRejection.promise,
             abortRejection.promise,
           ])
@@ -750,6 +801,7 @@ export class SubagentOrchestrator {
         }
         finalText = result.text
         usage = result.usage
+        liveHandle = result.live
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error)
         let outcome: DelegationOutcome
@@ -851,11 +903,49 @@ export class SubagentOrchestrator {
           userInstruction: finalText,
         })
       }
+      if (args.keepAlive && liveHandle) {
+        const session: LiveSession = {
+          chatId: args.chatId,
+          runId,
+          subagentId: args.subagent.id,
+          parentRunId: args.parentRunId,
+          live: liveHandle,
+          idleTimer: null,
+          lastActivity: this.now(),
+        }
+        this.liveSessions.set(runId, session)
+        this.armIdleTimer(runId)
+        return { status: "completed", runId, text: finalText }
+      }
       return { status: "completed", runId, text: finalText }
     } finally {
       releaseSlot()
-      this.cleanupRunState(runId)
+      if (!this.liveSessions.has(runId)) this.cleanupRunState(runId)
     }
+  }
+
+  private armIdleTimer(runId: string): void {
+    const s = this.liveSessions.get(runId)
+    if (!s) return
+    if (s.idleTimer) clearTimeout(s.idleTimer)
+    s.idleTimer = setTimeout(() => { void this.closeLiveRun(s.chatId, runId, "idle_timeout") }, this.idleTimeoutMs())
+  }
+
+  /**
+   * Close a live session and clean up its resources.
+   * Stub for Task 4 — Task 5 will expand the body with full event emission
+   * and external notification. Signature is final so Task 5 only adds body.
+   */
+  private async closeLiveRun(
+    _chatId: string,
+    runId: string,
+    _reason: "explicit" | "idle_timeout" | "error" | "cancel",
+  ): Promise<void> {
+    const s = this.liveSessions.get(runId)
+    if (!s) return
+    this.liveSessions.delete(runId)
+    if (s.idleTimer) { clearTimeout(s.idleTimer); s.idleTimer = null }
+    try { await s.live.close() } catch { /* ignore */ }
   }
 
   private cleanupRunState(runId: string) {
