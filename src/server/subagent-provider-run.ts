@@ -8,7 +8,7 @@ import type {
   TranscriptEntry,
 } from "../shared/types"
 import type { ClaudeSessionHandle } from "./agent"
-import type { ProviderRunStart } from "./subagent-orchestrator"
+import type { LiveTurnSource, ProviderRunStart } from "./subagent-orchestrator"
 import type { SubagentOrchestrator } from "./subagent-orchestrator"
 import type { KannaMcpDelegationContext } from "./kanna-mcp"
 
@@ -86,10 +86,11 @@ export function buildSubagentProviderRun(args: BuildSubagentProviderRunArgs): Pr
     systemPrompt: args.subagent.systemPrompt,
     preamble: args.primer,
     authReady: async () => args.authReady(args.subagent.provider),
-    async start(onChunk, onEntry) {
+    async start(onChunk, onEntry, opts) {
       const initialPrompt = composeInitialPrompt(args.subagent, args.primer, args.userInstruction)
+      const keepAlive = Boolean(opts?.keepAlive) && args.subagent.provider === "claude"
       if (args.subagent.provider === "claude") {
-        return runClaudeSubagent({ args, initialPrompt, onChunk, onEntry })
+        return runClaudeSubagent({ args, initialPrompt, onChunk, onEntry, keepAlive })
       }
       return runCodexSubagent({ args, initialPrompt, onChunk, onEntry })
     },
@@ -134,8 +135,9 @@ async function runClaudeSubagent(opts: {
   initialPrompt: string
   onChunk: (chunk: string) => void
   onEntry: (entry: TranscriptEntry) => void
-}): Promise<{ text: string; usage?: ProviderUsage }> {
-  const { args, initialPrompt, onChunk, onEntry } = opts
+  keepAlive: boolean
+}): Promise<{ text: string; usage?: ProviderUsage; live?: LiveTurnSource }> {
+  const { args, initialPrompt, onChunk, onEntry, keepAlive } = opts
   const session = await args.startClaudeSession({
     projectId: args.projectId,
     localPath: args.cwd,
@@ -154,11 +156,47 @@ async function runClaudeSubagent(opts: {
     delegationContext: args.delegationContext,
   })
   args.abortSignal.addEventListener("abort", () => { session.interrupt() }, { once: true })
-  try {
-    return await drainHarnessTurn(session, onChunk, onEntry)
-  } finally {
-    session.close()
+
+  if (!keepAlive) {
+    // One-shot path: drain fully and always close.
+    try {
+      return await drainHarnessTurn(session, onChunk, onEntry)
+    } finally {
+      session.close()
+    }
   }
+
+  // Keep-alive path: drain turn 1, leave iterator open, build LiveTurnSource.
+  const iterator = session.stream[Symbol.asyncIterator]()
+  let first: { text: string; usage?: ProviderUsage; sawResult: boolean; sawError: boolean }
+  try {
+    first = await drainOneTurn(iterator, onChunk, onEntry)
+  } catch (err) {
+    session.close()
+    throw err
+  }
+
+  if (!session.pushChannelPrompt) {
+    session.close()
+    throw new Error(
+      "keep-alive requires channel delivery (pushChannelPrompt missing) — cannot drive turn 2+",
+    )
+  }
+
+  const pushChannelPrompt = session.pushChannelPrompt
+
+  const live: LiveTurnSource = {
+    async runTurn(prompt, oc, oe) {
+      await pushChannelPrompt(prompt)
+      const result = await drainOneTurn(iterator, oc, oe)
+      return { text: result.text, usage: result.usage }
+    },
+    async close() {
+      try { session.close() } catch { /* ignore */ }
+    },
+  }
+
+  return { text: first.text, usage: first.usage, live }
 }
 
 async function runCodexSubagent(opts: {

@@ -436,6 +436,134 @@ describe("buildSubagentProviderRun – Codex", () => {
 })
 
 // ---------------------------------------------------------------------------
+// keep-alive / LiveTurnSource
+// ---------------------------------------------------------------------------
+
+describe("buildSubagentProviderRun – keep-alive Claude", () => {
+  test("keep-alive claude run returns a live source that drives turn 2", async () => {
+    // A simple push-queue that lets the test feed events into the stream
+    // in sync with what the implementation requests.
+    const queue: Array<{ resolve: (r: IteratorResult<HarnessEvent>) => void }> = []
+    const pending: HarnessEvent[] = []
+    let done = false
+
+    async function nextFromQueue(): Promise<IteratorResult<HarnessEvent>> {
+      if (pending.length > 0) {
+        return { value: pending.shift()!, done: false }
+      }
+      if (done) return { value: undefined as never, done: true }
+      return new Promise<IteratorResult<HarnessEvent>>((resolve) => {
+        queue.push({ resolve })
+      })
+    }
+
+    function pushEvent(ev: HarnessEvent) {
+      if (queue.length > 0) {
+        queue.shift()!.resolve({ value: ev, done: false })
+      } else {
+        pending.push(ev)
+      }
+    }
+
+    const feedableStream: AsyncIterable<HarnessEvent> = {
+      [Symbol.asyncIterator]() {
+        return { next: nextFromQueue }
+      },
+    }
+
+    const pushed: string[] = []
+    let closed = false
+
+    const args = makeArgs({
+      startClaudeSession: async () => ({
+        provider: "claude" as const,
+        stream: feedableStream,
+        interrupt: async () => {},
+        close: () => { closed = true },
+        sendPrompt: async () => {},
+        setModel: async () => {},
+        setPermissionMode: async () => {},
+        getSupportedCommands: async () => [],
+        pushChannelPrompt: async (text: string) => {
+          pushed.push(text)
+          // Feed a reply for this prompt and then a result
+          pushEvent(makeTextEvent(`r:${text}`))
+          pushEvent(makeResultEvent())
+        },
+      }),
+    })
+
+    // Pre-feed turn-1 events BEFORE calling start so the iterator sees them
+    pushEvent(makeTextEvent("t1"))
+    pushEvent(makeResultEvent())
+
+    const run = buildSubagentProviderRun(args)
+    const first = await run.start(() => {}, () => {}, { keepAlive: true })
+
+    expect(first.text).toBe("t1")
+    expect(first.live).toBeDefined()
+
+    const second = await first.live!.runTurn("hi", () => {}, () => {})
+    expect(pushed).toEqual(["hi"])
+    expect(second.text).toBe("r:hi")
+
+    await first.live!.close()
+    expect(closed).toBe(true)
+  })
+
+  test("keep-alive without pushChannelPrompt fails closed and closes session", async () => {
+    let sessionClosed = false
+
+    const args = makeArgs({
+      startClaudeSession: async () => ({
+        provider: "claude" as const,
+        stream: makeHarnessTurn([makeTextEvent("t1"), makeResultEvent()]).stream,
+        interrupt: async () => {},
+        close: () => { sessionClosed = true },
+        sendPrompt: async () => {},
+        setModel: async () => {},
+        setPermissionMode: async () => {},
+        getSupportedCommands: async () => [],
+        // no pushChannelPrompt — keep-alive must fail closed
+      }),
+    })
+
+    const run = buildSubagentProviderRun(args)
+    let err: unknown = null
+    try {
+      await run.start(() => {}, () => {}, { keepAlive: true })
+    } catch (e) {
+      err = e
+    }
+    expect((err as Error)?.message).toContain("pushChannelPrompt missing")
+    expect(sessionClosed).toBe(true)
+  })
+
+  test("keepAlive:false preserves one-shot semantics (session closed after run)", async () => {
+    let sessionClosed = false
+
+    const args = makeArgs({
+      startClaudeSession: async () => ({
+        provider: "claude" as const,
+        stream: makeHarnessTurn([makeTextEvent("one-shot"), makeResultEvent()]).stream,
+        interrupt: async () => {},
+        close: () => { sessionClosed = true },
+        sendPrompt: async () => {},
+        setModel: async () => {},
+        setPermissionMode: async () => {},
+        getSupportedCommands: async () => [],
+      }),
+    })
+
+    const run = buildSubagentProviderRun(args)
+    const result = await run.start(() => {}, () => {}, { keepAlive: false })
+    expect(result.text).toBe("one-shot")
+    expect(result.live).toBeUndefined()
+    expect(sessionClosed).toBe(true)
+  })
+})
+
+// ---------------------------------------------------------------------------
 // drainOneTurn
 // ---------------------------------------------------------------------------
 

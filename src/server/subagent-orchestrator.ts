@@ -60,6 +60,19 @@ function createDeferred<T>(): Deferred<T> {
   return { promise, resolve, reject }
 }
 
+/**
+ * Returned by a keep-alive provider run after its FIRST turn completes. Lets
+ * the orchestrator push further turns into the same warm session and close it.
+ */
+export interface LiveTurnSource {
+  runTurn(
+    prompt: string,
+    onChunk: (c: string) => void,
+    onEntry: (e: TranscriptEntry) => void,
+  ): Promise<{ text: string; usage?: ProviderUsage }>
+  close(): Promise<void>
+}
+
 export interface ProviderRunStart {
   provider: AgentProvider
   model: string
@@ -72,12 +85,16 @@ export interface ProviderRunStart {
    *  - `onEntry(entry)`: every TranscriptEntry — including the assistant_text
    *    entries forwarded to onChunk, plus tool_call / tool_result / result.
    *    Used to persist `subagent_entry_appended` events.
-   * Returns the final accumulated text + usage for the run_completed event.
+   *  - `opts.keepAlive`: when true and provider is "claude", leaves the
+   *    session open and returns `live` for driving subsequent turns.
+   * Returns the final accumulated text + usage for the run_completed event,
+   * plus an optional `live` handle when keep-alive was requested.
    */
   start: (
     onChunk: (chunk: string) => void,
     onEntry: (entry: TranscriptEntry) => void,
-  ) => Promise<{ text: string; usage?: ProviderUsage }>
+    opts?: { keepAlive?: boolean },
+  ) => Promise<{ text: string; usage?: ProviderUsage; live?: LiveTurnSource }>
   authReady: () => Promise<boolean>
 }
 
