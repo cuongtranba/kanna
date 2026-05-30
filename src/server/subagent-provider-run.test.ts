@@ -440,6 +440,17 @@ describe("buildSubagentProviderRun – Codex", () => {
 // ---------------------------------------------------------------------------
 
 describe("drainOneTurn", () => {
+  /** Returns a single AsyncIterator that advances through events on each next() call. */
+  function makeIterator(events: HarnessEvent[]): AsyncIterator<HarnessEvent> {
+    let i = 0
+    return {
+      async next() {
+        if (i < events.length) return { value: events[i++] as HarnessEvent, done: false }
+        return { value: undefined as never, done: true }
+      },
+    }
+  }
+
   test("returns text at first result and leaves iterator open", async () => {
     // Build minimally-valid TranscriptEntry fixtures via cast (test file is lint-exempt)
     const events: HarnessEvent[] = [
@@ -470,14 +481,7 @@ describe("drainOneTurn", () => {
       },
     ]
 
-    let i = 0
-    const it: AsyncIterator<HarnessEvent> = {
-      async next() {
-        if (i < events.length) return { value: events[i++] as HarnessEvent, done: false }
-        return { value: undefined as never, done: true }
-      },
-    }
-
+    const it = makeIterator(events)
     const chunks: string[] = []
     const entries: TranscriptEntry[] = []
     const out = await drainOneTurn(it, (c) => chunks.push(c), (e) => entries.push(e))
@@ -487,7 +491,8 @@ describe("drainOneTurn", () => {
     expect(out.sawResult).toBe(true)
     expect(out.sawError).toBe(false)
 
-    // Iterator is still open — TURN2 event must still be consumable
+    // Iterator is still open — TURN2 event must still be consumable.
+    // makeIterator returns the same object, so .next() resumes from where drain stopped.
     const next = await it.next()
     expect((next.value as HarnessEvent).entry?.kind).toBe("assistant_text")
     expect(
@@ -496,7 +501,7 @@ describe("drainOneTurn", () => {
   })
 
   test("propagates usage fields from result entry", async () => {
-    const events: HarnessEvent[] = [
+    const it = makeIterator([
       {
         type: "transcript",
         entry: {
@@ -511,14 +516,7 @@ describe("drainOneTurn", () => {
           usage: { inputTokens: 10, outputTokens: 5, cachedInputTokens: 2 },
         } as TranscriptEntry,
       },
-    ]
-    let i = 0
-    const it: AsyncIterator<HarnessEvent> = {
-      async next() {
-        if (i < events.length) return { value: events[i++] as HarnessEvent, done: false }
-        return { value: undefined as never, done: true }
-      },
-    }
+    ])
     const out = await drainOneTurn(it, () => {}, () => {})
     expect(out.usage?.inputTokens).toBe(10)
     expect(out.usage?.outputTokens).toBe(5)
@@ -528,7 +526,7 @@ describe("drainOneTurn", () => {
   })
 
   test("sets sawError when api_error entry is received", async () => {
-    const events: HarnessEvent[] = [
+    const it = makeIterator([
       {
         type: "transcript",
         entry: {
@@ -551,21 +549,14 @@ describe("drainOneTurn", () => {
           result: "failed",
         } as TranscriptEntry,
       },
-    ]
-    let i = 0
-    const it: AsyncIterator<HarnessEvent> = {
-      async next() {
-        if (i < events.length) return { value: events[i++] as HarnessEvent, done: false }
-        return { value: undefined as never, done: true }
-      },
-    }
+    ])
     const out = await drainOneTurn(it, () => {}, () => {})
     expect(out.sawError).toBe(true)
     expect(out.sawResult).toBe(true)
   })
 
   test("skips non-transcript events", async () => {
-    const events: HarnessEvent[] = [
+    const it = makeIterator([
       { type: "session_token", sessionToken: "tok123" },
       {
         type: "transcript",
@@ -583,18 +574,44 @@ describe("drainOneTurn", () => {
           result: "ok",
         } as TranscriptEntry,
       },
-    ]
-    let i = 0
-    const it: AsyncIterator<HarnessEvent> = {
-      async next() {
-        if (i < events.length) return { value: events[i++] as HarnessEvent, done: false }
-        return { value: undefined as never, done: true }
-      },
-    }
+    ])
     const chunks: string[] = []
     const out = await drainOneTurn(it, (c) => chunks.push(c), () => {})
     expect(chunks).toEqual(["hi"])
     expect(out.text).toBe("hi")
     expect(out.sawResult).toBe(true)
+  })
+
+  test("empty/premature-close: done before any result → not a successful turn", async () => {
+    // An iterator that closes immediately (e.g. driver crashed before sending result).
+    // Multi-turn callers depend on sawResult===false to detect this condition.
+    const it = makeIterator([])
+    const out = await drainOneTurn(it, () => {}, () => {})
+    expect(out.text).toBe("")
+    expect(out.usage).toBeUndefined()
+    expect(out.sawResult).toBe(false)
+    expect(out.sawError).toBe(false)
+  })
+
+  test("result with isError:true (no preceding api_error) sets sawError via result branch", async () => {
+    // PTY-synth error path: the driver synthesises a result entry with isError:true
+    // directly, without emitting a separate api_error entry first.
+    const it = makeIterator([
+      {
+        type: "transcript",
+        entry: {
+          _id: "synth1",
+          createdAt: 1,
+          kind: "result",
+          subtype: "error",
+          isError: true,
+          durationMs: 0,
+          result: "process died",
+        } as TranscriptEntry,
+      },
+    ])
+    const out = await drainOneTurn(it, () => {}, () => {})
+    expect(out.sawResult).toBe(true)
+    expect(out.sawError).toBe(true)
   })
 })
