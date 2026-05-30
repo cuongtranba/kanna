@@ -9,6 +9,28 @@ import {
   timestamped,
 } from "../agent"
 import { ClaudeLimitDetector } from "./../auto-continue/limit-detector"
+import { KANNA_MCP_SERVER_NAME } from "../../shared/tools"
+
+// Keep-alive subagent turns are delivered via a kanna channel push, which
+// claude records as a `user isMeta:true` line tagged with this marker. Such a
+// line is a real turn the main agent issued, NOT a background auto-wake.
+const KANNA_CHANNEL_TAG = `<channel source="${KANNA_MCP_SERVER_NAME}"`
+
+function userMessageContainsKannaChannel(message: Record<string, unknown>): boolean {
+  const inner = message.message
+  if (!inner || typeof inner !== "object") return false
+  const content = (inner as { content?: unknown }).content
+  if (typeof content === "string") return content.includes(KANNA_CHANNEL_TAG)
+  if (Array.isArray(content)) {
+    for (const block of content) {
+      if (block && typeof block === "object") {
+        const text = (block as { text?: unknown }).text
+        if (typeof text === "string" && text.includes(KANNA_CHANNEL_TAG)) return true
+      }
+    }
+  }
+  return false
+}
 
 export interface JsonlEventParser {
   /** Parse one JSONL line; returns zero or more harness events. Stateful — updates internal usage / context-window tracking across calls. */
@@ -65,11 +87,15 @@ export function createJsonlEventParser(opts: CreateJsonlEventParserOptions = {})
       const isResultLine = message.type === "result"
         || (message.type === "system" && message.subtype === "turn_duration")
       if (message.type === "user") {
-        if (message.isMeta === true && turnState === "between") {
+        // A kanna channel push is a real turn (keep-alive multi-turn), even
+        // though it arrives isMeta:true at a turn boundary. Only genuine
+        // background auto-wakes (no kanna tag) get filtered.
+        const isKannaChannelPush = userMessageContainsKannaChannel(message)
+        if (message.isMeta === true && turnState === "between" && !isKannaChannelPush) {
           turnState = "inAutoWake"
           return []
         }
-        if (message.isMeta !== true) {
+        if (message.isMeta !== true || isKannaChannelPush) {
           turnState = "inTurn"
         }
         // Mid-turn isMeta user (turnState === "inTurn") falls through — emit

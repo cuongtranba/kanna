@@ -433,4 +433,94 @@ describe("createJsonlEventParser", () => {
       expect(transcript.length).toBeGreaterThan(0)
     })
   })
+
+  // Keep-alive multi-turn subagents deliver EVERY turn (including turn 1) via a
+  // kanna channel push, which lands in the transcript as a `user isMeta:true`
+  // line whose content carries the `<channel source="kanna">` tag. Those lines
+  // arrive at a turn boundary (turnState === "between") and would be
+  // misclassified as background auto-wakes by the filter above, dropping the
+  // synthesized turn-end result and hanging `drainOneTurn` forever. A kanna
+  // channel push IS a real turn the main agent issued, so it must be exempted —
+  // genuine `<task-notification>` auto-wakes (no kanna tag) stay filtered.
+  describe("keep-alive channel-push exemption", () => {
+    function makeChannelUser(content: string): string {
+      return JSON.stringify({
+        type: "user",
+        isMeta: true,
+        message: { role: "user", content },
+      })
+    }
+    function makeChannelUserBlocks(text: string): string {
+      return JSON.stringify({
+        type: "user",
+        isMeta: true,
+        message: { role: "user", content: [{ type: "text", text }] },
+      })
+    }
+    function makeAssistant(text: string): string {
+      return JSON.stringify({
+        type: "assistant",
+        message: { role: "assistant", content: [{ type: "text", text }] },
+      })
+    }
+    function makeMetaUser(content: string): string {
+      return JSON.stringify({
+        type: "user",
+        isMeta: true,
+        message: { role: "user", content },
+      })
+    }
+    function makeTurnDuration(): string {
+      return JSON.stringify({
+        type: "system",
+        subtype: "turn_duration",
+        session_id: "main-sess",
+        durationMs: 100,
+      })
+    }
+    function resultEntries(events: HarnessEvent[]) {
+      return events.filter(
+        (e) => e.type === "transcript" && (e.entry as { kind?: string }).kind === "result",
+      )
+    }
+
+    test("turn 1: channel push at boundary is NOT an auto-wake — its result emits", () => {
+      const parser = createJsonlEventParser()
+      // Keep-alive turn 1 opens at the between-turns boundary via channel push.
+      parser.parse(makeChannelUser('<channel source="kanna">do the task</channel>'))
+      parser.parse(makeAssistant("DONE"))
+      const events = parser.parse(makeTurnDuration())
+      expect(resultEntries(events).length).toBeGreaterThan(0)
+    })
+
+    test("turn 2: a second channel push after turn 1 also emits its result", () => {
+      const parser = createJsonlEventParser()
+      parser.parse(makeChannelUser('<channel source="kanna">turn one</channel>'))
+      parser.parse(makeAssistant("DONE A"))
+      expect(resultEntries(parser.parse(makeTurnDuration())).length).toBeGreaterThan(0)
+      // Follow-up turn — another channel push at the new boundary.
+      parser.parse(makeChannelUser('<channel source="kanna">turn two</channel>'))
+      parser.parse(makeAssistant("DONE B"))
+      expect(resultEntries(parser.parse(makeTurnDuration())).length).toBeGreaterThan(0)
+    })
+
+    test("channel push with array content blocks is also exempted", () => {
+      const parser = createJsonlEventParser()
+      parser.parse(makeChannelUserBlocks('<channel source="kanna">block form</channel>'))
+      parser.parse(makeAssistant("DONE"))
+      expect(resultEntries(parser.parse(makeTurnDuration())).length).toBeGreaterThan(0)
+    })
+
+    test("regression: a genuine task-notification wake after a channel turn is still dropped", () => {
+      const parser = createJsonlEventParser()
+      // Real channel-push turn.
+      parser.parse(makeChannelUser('<channel source="kanna">turn one</channel>'))
+      parser.parse(makeAssistant("DONE"))
+      expect(resultEntries(parser.parse(makeTurnDuration())).length).toBeGreaterThan(0)
+      // Claude Code's own background auto-wake (no kanna tag) must stay filtered.
+      parser.parse(makeMetaUser("<task-notification>bash done</task-notification>"))
+      parser.parse(makeAssistant("ack"))
+      expect(resultEntries(parser.parse(makeTurnDuration()))).toEqual([])
+    })
+  })
 })
