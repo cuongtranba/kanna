@@ -3,6 +3,7 @@ import { createKannaMcpServer, type KannaMcpDelegationContext } from "./kanna-mc
 import { KANNA_MCP_SERVER_NAME } from "../shared/tools"
 import { homedir } from "node:os"
 import type {
+  AccountInfo,
   AgentProvider,
   ChatAttachment,
   ContextWindowUsageSnapshot,
@@ -163,13 +164,15 @@ interface ActiveTurn {
 export interface ClaudeSessionHandle {
   provider: "claude"
   stream: AsyncIterable<HarnessEvent>
-  getAccountInfo?: () => Promise<any>
+  getAccountInfo?: () => Promise<AccountInfo | null>
   interrupt: () => Promise<void>
   close: () => void
   sendPrompt: (content: string) => Promise<void>
   setModel: (model: string) => Promise<void>
   setPermissionMode: (planMode: boolean) => Promise<void>
   getSupportedCommands: () => Promise<SlashCommand[]>
+  /** Present only for keep-alive channel-delivery sessions; drives turn 2+. */
+  pushChannelPrompt?: (text: string) => Promise<void>
 }
 
 interface ClaudeSessionState {

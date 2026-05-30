@@ -104,6 +104,12 @@ export interface StartClaudeSessionPtyArgs {
    * for single-turn subagent runs.
    */
   oneShot?: boolean
+  /**
+   * Keep-alive multi-turn. Only meaningful with `oneShot && channel delivery`.
+   * When true, the first `result` does NOT trigger `oneShotClose()` — the REPL
+   * stays open so further turns can be delivered via `pushChannelPrompt`.
+   */
+  keepAlive?: boolean
   /** Label of the OAuth-pool token. Surfaces in AccountInfo since the CLI doesn't emit account info in stream-json. */
   oauthLabel?: string
   /** Masked OAuth-pool token (e.g. `sk-ant-oat01...XXXX`). Computed by AgentCoordinator; never the raw token. */
@@ -469,6 +475,7 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
 
     if (
       args.oneShot
+      && !args.keepAlive
       && ev.type === "transcript"
       && (ev.entry as { kind?: string } | undefined)?.kind === "result"
     ) {
@@ -822,6 +829,14 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
     },
     getSupportedCommands: async () => cachedSlashCommands ?? STATIC_SUPPORTED_COMMANDS,
     getAccountInfo: async () => cachedAccountInfo,
+    pushChannelPrompt: channelDeliveryEnabled
+      ? async (text: string) => {
+          // Ready promise already resolved during turn-1 delivery; settle a
+          // beat so the REPL is back at idle before the next enqueue.
+          await new Promise((r) => setTimeout(r, 300))
+          await mcpHandle.pushChannelPrompt(text)
+        }
+      : undefined,
     close: () => {
       if (closed) return
       closed = true
