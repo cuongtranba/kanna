@@ -1472,6 +1472,7 @@ export type SubagentErrorCode =
   | "INTERRUPTED"
   | "USER_CANCELLED"
   | "CAP_EXCEEDED"
+  | "NO_LIVE_SESSION"
 
 export type SubagentRunStatus = "running" | "completed" | "failed" | "cancelled"
 

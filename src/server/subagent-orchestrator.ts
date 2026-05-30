@@ -932,20 +932,117 @@ export class SubagentOrchestrator {
   }
 
   /**
-   * Close a live session and clean up its resources.
-   * Stub for Task 4 — Task 5 will expand the body with full event emission
-   * and external notification. Signature is final so Task 5 only adds body.
+   * Send a follow-up prompt to an existing live (keep-alive) session.
+   * Acquires a permit for the duration of the turn, then releases it so
+   * idle sessions hold no permit between turns.
    */
-  private async closeLiveRun(
-    _chatId: string,
+  async sendToLiveRun(runId: string, prompt: string): Promise<DelegationOutcome> {
+    const session = this.liveSessions.get(runId)
+    if (!session) {
+      return { status: "failed", runId, errorCode: "NO_LIVE_SESSION", errorMessage: `No live subagent session ${runId}` }
+    }
+    // Pause idle timer while the turn is in flight.
+    if (session.idleTimer) { clearTimeout(session.idleTimer); session.idleTimer = null }
+
+    await this.acquire(session.chatId, runId)
+    let released = false
+    const releaseSlot = () => {
+      if (released) return
+      released = true
+      this.release()
+    }
+    try {
+      // Build inline sinks equivalent to those in spawnRun so events are
+      // persisted identically for follow-up turns. These capture turn-local
+      // mutable state (chunkProgressTimer) so they cannot be shared across
+      // concurrent turns on the same session.
+      const { chatId } = session
+      let chunkProgressTimer: ReturnType<typeof setTimeout> | null = null
+      const CHUNK_PROGRESS_THROTTLE_MS = 100
+
+      const onChunk = (chunk: string) => {
+        if (!chunk) return
+        this.deps.store
+          .appendSubagentEvent({
+            v: 3,
+            type: "subagent_message_delta",
+            timestamp: this.now(),
+            chatId,
+            runId,
+            content: chunk,
+          })
+          .catch((err) => {
+            console.warn(`${LOG_PREFIX} sendToLiveRun delta append failed`, { chatId, runId, err })
+          })
+        if (chunkProgressTimer !== null) clearTimeout(chunkProgressTimer)
+        chunkProgressTimer = setTimeout(() => {
+          chunkProgressTimer = null
+          this.deps.onRunProgress?.(chatId, runId)
+        }, CHUNK_PROGRESS_THROTTLE_MS)
+      }
+
+      const onEntry = (entry: TranscriptEntry) => {
+        this.deps.store
+          .appendSubagentEvent({
+            v: 3,
+            type: "subagent_entry_appended",
+            timestamp: this.now(),
+            chatId,
+            runId,
+            entry,
+          })
+          .catch((err) => {
+            console.warn(`${LOG_PREFIX} sendToLiveRun entry append failed`, { chatId, runId, err })
+          })
+        this.deps.onRunProgress?.(chatId, runId)
+      }
+
+      let turn: { text: string; usage?: ProviderUsage }
+      try {
+        turn = await session.live.runTurn(prompt, onChunk, onEntry)
+      } finally {
+        if (chunkProgressTimer !== null) {
+          clearTimeout(chunkProgressTimer)
+          chunkProgressTimer = null
+          this.deps.onRunProgress?.(session.chatId, runId)
+        }
+      }
+
+      session.lastActivity = this.now()
+      this.armIdleTimer(runId)
+      return { status: "completed", runId, text: turn.text }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      await this.closeLiveRun(session.chatId, runId, "error")
+      return { status: "failed", runId, errorCode: "PROVIDER_ERROR", errorMessage: message }
+    } finally {
+      releaseSlot()
+    }
+  }
+
+  /**
+   * Close a live session and clean up its resources. Makes the session
+   * ineligible for further turns, clears the idle timer, closes the
+   * underlying LiveTurnSource, cleans up RunState, and notifies the
+   * terminal callback so external resolvers (e.g. subagentPendingResolvers
+   * on AgentCoordinator) are released.
+   */
+  async closeLiveRun(
+    chatId: string,
     runId: string,
-    _reason: "explicit" | "idle_timeout" | "error" | "cancel",
+    reason: "explicit" | "idle_timeout" | "error" | "cancel",
   ): Promise<void> {
     const s = this.liveSessions.get(runId)
     if (!s) return
     this.liveSessions.delete(runId)
     if (s.idleTimer) { clearTimeout(s.idleTimer); s.idleTimer = null }
-    try { await s.live.close() } catch { /* ignore */ }
+    try { await s.live.close() } catch (err) {
+      console.warn(`${LOG_PREFIX} live close failed`, { chatId, runId, reason, err })
+    }
+    this.cleanupRunState(runId)
+    try { this.deps.onRunTerminal?.(chatId, runId, "completed") } catch (err) {
+      console.warn(`${LOG_PREFIX} onRunTerminal(completed) threw in closeLiveRun`, { chatId, runId, err })
+    }
   }
 
   private cleanupRunState(runId: string) {

@@ -1341,6 +1341,58 @@ describe("SubagentOrchestrator", () => {
       expect(h.orchestrator.liveSessionCount()).toBe(1)
     })
 
+    // ── Task 5: sendToLiveRun + closeLiveRun ──
+
+    function makeOrchestrator(h: Awaited<ReturnType<typeof setupHarness>>, live: LiveTurnSource) {
+      h.mockProviderRun({
+        authReady: async () => true,
+        async start(_onChunk, _onEntry, _opts) { return { text: "turn1", live } },
+      })
+      return h.orchestrator
+    }
+
+    function baseArgs(h: Awaited<ReturnType<typeof setupHarness>>) {
+      return {
+        chatId: h.chatId,
+        parentUserMessageId: h.userMessageId,
+        parentRunId: null as string | null,
+        parentSubagentId: null as string | null,
+        ancestorSubagentIds: [] as string[],
+        depth: 0,
+        subagentId: "sa-1",
+        prompt: "start session",
+        keepAlive: true,
+      }
+    }
+
+    test("sendToLiveRun drives a follow-up turn and resets idle timer", async () => {
+      const { live } = makeLiveTurnSource()
+      const h = await setupHarness({ subagents: [makeSubagent({})] })
+      const orch = makeOrchestrator(h, live)
+      const d = await orch.delegateRun(baseArgs(h))
+      expect(d.status).toBe("completed")
+      const out = await orch.sendToLiveRun(d.runId, "second turn")
+      expect(out.status).toBe("completed")
+      expect(out.status === "completed" && out.text).toContain("second")
+      expect(orch.liveSessionCount()).toBe(1) // still alive
+    })
+
+    test("closeLiveRun tears down + deregisters", async () => {
+      const { live } = makeLiveTurnSource()
+      const h = await setupHarness({ subagents: [makeSubagent({})] })
+      const orch = makeOrchestrator(h, live)
+      const d = await orch.delegateRun(baseArgs(h))
+      expect(d.status).toBe("completed")
+      await orch.closeLiveRun(h.chatId, d.runId, "explicit")
+      expect(orch.liveSessionCount()).toBe(0)
+    })
+
+    test("sendToLiveRun on unknown run fails NO_LIVE_SESSION", async () => {
+      const h = await setupHarness({ subagents: [makeSubagent({})] })
+      const out = await h.orchestrator.sendToLiveRun("nope", "x")
+      expect(out.status === "failed" && out.errorCode).toBe("NO_LIVE_SESSION")
+    })
+
     test("delegateRun keep_alive past cap fails CAP_EXCEEDED", async () => {
       const { live: live1 } = makeLiveTurnSource()
       const { live: live2 } = makeLiveTurnSource()
