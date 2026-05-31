@@ -599,6 +599,27 @@ function makeUserPrompt(id: string, content = "@agent/alpha"): HydratedTranscrip
   }
 }
 
+function makeAssistantText(id: string, text: string): HydratedTranscriptMessage {
+  return {
+    id,
+    kind: "assistant_text",
+    text,
+    timestamp: new Date().toISOString(),
+  } as unknown as HydratedTranscriptMessage
+}
+
+function makeDelegateTool(toolId: string, subagentId = "sa-1"): HydratedTranscriptMessage {
+  return {
+    id: toolId,
+    kind: "tool",
+    toolKind: "mcp_generic",
+    toolName: "mcp__kanna__delegate_subagent",
+    toolId,
+    input: { server: "kanna", tool: "delegate_subagent", payload: { subagent_id: subagentId, prompt: "go" } },
+    timestamp: new Date().toISOString(),
+  } as unknown as HydratedTranscriptMessage
+}
+
 function makeRun(over: Partial<SubagentRunSnapshot> & { runId: string; parentUserMessageId: string }): SubagentRunSnapshot {
   return {
     chatId: "c1",
@@ -638,19 +659,24 @@ function renderTranscriptWithRuns(
 }
 
 describe("KannaTranscript subagent runs", () => {
-  test("renders subagent run row under triggering user message", () => {
+  test("renders subagent run row anchored after the delegate tool call, not the user prompt", () => {
     const html = renderTranscriptWithRuns(
-      [makeUserPrompt("u1")],
-      { r1: makeRun({ runId: "r1", parentUserMessageId: "u1" }) },
+      [makeUserPrompt("u1"), makeAssistantText("a1", "BEFORE_DELEGATE_MARKER"), makeDelegateTool("d1", "sa-1")],
+      { r1: makeRun({ runId: "r1", parentUserMessageId: "u1", subagentId: "sa-1" }) },
     )
     expect(html).toContain("data-testid=\"subagent-message:r1\"")
+    // Run must render after the delegate call (below the marker), not at the
+    // top under the user prompt.
+    expect(html.indexOf("data-testid=\"subagent-message:r1\"")).toBeGreaterThan(
+      html.indexOf("BEFORE_DELEGATE_MARKER"),
+    )
   })
 
   test("renders chained runs indented under parent", () => {
     const html = renderTranscriptWithRuns(
-      [makeUserPrompt("u1")],
+      [makeUserPrompt("u1"), makeDelegateTool("d1", "sa-1")],
       {
-        r1: makeRun({ runId: "r1", parentUserMessageId: "u1", finalText: "@agent/beta" }),
+        r1: makeRun({ runId: "r1", parentUserMessageId: "u1", subagentId: "sa-1", finalText: "@agent/beta" }),
         r2: makeRun({
           runId: "r2",
           parentUserMessageId: "u1",
@@ -668,11 +694,12 @@ describe("KannaTranscript subagent runs", () => {
 
   test("renders error card for failed run", () => {
     const html = renderTranscriptWithRuns(
-      [makeUserPrompt("u1")],
+      [makeUserPrompt("u1"), makeDelegateTool("d1", "sa-1")],
       {
         r1: makeRun({
           runId: "r1",
           parentUserMessageId: "u1",
+          subagentId: "sa-1",
           status: "failed",
           finalText: null,
           error: { code: "TIMEOUT", message: "took too long" },
@@ -680,5 +707,27 @@ describe("KannaTranscript subagent runs", () => {
       },
     )
     expect(html).toContain("data-testid=\"subagent-error:r1\"")
+  })
+
+  test("anchors each delegate to its own run by subagent_id and sequence", () => {
+    const html = renderTranscriptWithRuns(
+      [
+        makeUserPrompt("u1"),
+        makeDelegateTool("d1", "sa-1"),
+        makeAssistantText("a1", "BETWEEN_DELEGATES_MARKER"),
+        makeDelegateTool("d2", "sa-2"),
+      ],
+      {
+        r1: makeRun({ runId: "r1", parentUserMessageId: "u1", subagentId: "sa-1", startedAt: 1 }),
+        r2: makeRun({ runId: "r2", parentUserMessageId: "u1", subagentId: "sa-2", startedAt: 2 }),
+      },
+    )
+    // r1 (sa-1) renders before the marker; r2 (sa-2) renders after it.
+    expect(html.indexOf("data-testid=\"subagent-message:r1\"")).toBeLessThan(
+      html.indexOf("BETWEEN_DELEGATES_MARKER"),
+    )
+    expect(html.indexOf("data-testid=\"subagent-message:r2\"")).toBeGreaterThan(
+      html.indexOf("BETWEEN_DELEGATES_MARKER"),
+    )
   })
 })
