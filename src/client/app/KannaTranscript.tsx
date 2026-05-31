@@ -27,8 +27,14 @@ import { PendingToolRequestMessage } from "../components/messages/PendingToolReq
 import { CHAT_SELECTION_ZONE_ATTRIBUTE } from "./chatFocusPolicy"
 import type { AutoContinueSchedule } from "../../shared/types"
 import type { ToolRequestDecision } from "../../shared/permission-policy"
+import {
+  DELEGATE_SUBAGENT_TOOL_NAME,
+  extractDelegateCalls,
+  matchRunsToDelegateCalls,
+  reportOrphanRuns,
+} from "./subagent-run-placement"
 
-const SPECIAL_TOOL_NAMES = new Set(["AskUserQuestion", "ExitPlanMode", "TodoWrite"])
+const SPECIAL_TOOL_NAMES = new Set(["AskUserQuestion", "ExitPlanMode", "TodoWrite", DELEGATE_SUBAGENT_TOOL_NAME])
 
 export type TranscriptRenderItem =
   | { type: "single"; message: HydratedTranscriptMessage; index: number }
@@ -853,14 +859,12 @@ function KannaTranscriptImpl({
     latestToolIds,
   }), [isLoading, latestToolIds, localPath, messages])
 
-  const { runsByUserMessageId, childrenByParentRunId } = useMemo(() => {
-    const topByUser = new Map<string, SubagentRunSnapshot[]>()
+  const { matchedRunsByToolId, childrenByParentRunId } = useMemo(() => {
+    const topLevel: SubagentRunSnapshot[] = []
     const byParent = new Map<string, SubagentRunSnapshot[]>()
     for (const run of Object.values(subagentRuns)) {
       if (run.parentRunId === null) {
-        const list = topByUser.get(run.parentUserMessageId) ?? []
-        list.push(run)
-        topByUser.set(run.parentUserMessageId, list)
+        topLevel.push(run)
       } else {
         const list = byParent.get(run.parentRunId) ?? []
         list.push(run)
@@ -869,10 +873,11 @@ function KannaTranscriptImpl({
     }
     const cmp = (a: SubagentRunSnapshot, b: SubagentRunSnapshot) =>
       a.startedAt - b.startedAt || a.runId.localeCompare(b.runId)
-    for (const list of topByUser.values()) list.sort(cmp)
     for (const list of byParent.values()) list.sort(cmp)
-    return { runsByUserMessageId: topByUser, childrenByParentRunId: byParent }
-  }, [subagentRuns])
+    const { matched, orphans } = matchRunsToDelegateCalls(extractDelegateCalls(messages), topLevel)
+    reportOrphanRuns(orphans, Boolean(import.meta.env.DEV))
+    return { matchedRunsByToolId: matched, childrenByParentRunId: byParent }
+  }, [subagentRuns, messages])
   const handleToolGroupExpandedChange = useCallback((groupId: string, next: boolean) => {
     setToolGroupExpanded((current) => (
       current[groupId] === next
@@ -887,10 +892,12 @@ function KannaTranscriptImpl({
   return (
     <OpenLocalLinkProvider onOpenLocalLink={onOpenLocalLink}>
       {rows.map((row) => {
-        const userMessageId = row.kind === "single" && row.message.kind === "user_prompt"
-          ? row.message.id
+        const delegateToolId = row.kind === "single"
+          && row.message.kind === "tool"
+          && row.message.toolName === DELEGATE_SUBAGENT_TOOL_NAME
+          ? row.message.toolId
           : null
-        const runsForRow = userMessageId ? runsByUserMessageId.get(userMessageId) ?? [] : []
+        const matchedRun = delegateToolId ? matchedRunsByToolId.get(delegateToolId) : undefined
         return (
           <div
             key={row.id}
@@ -908,7 +915,7 @@ function KannaTranscriptImpl({
               onAutoContinueReschedule={onAutoContinueReschedule}
               onAutoContinueCancel={onAutoContinueCancel}
             />
-            {runsForRow.map((run) => renderSubagentRunTree(run, 0, childrenByParentRunId, localPath ?? "", onSubagentAskUserQuestionSubmit, onSubagentExitPlanModeSubmit, onCancelSubagentRun))}
+            {matchedRun ? renderSubagentRunTree(matchedRun, 0, childrenByParentRunId, localPath ?? "", onSubagentAskUserQuestionSubmit, onSubagentExitPlanModeSubmit, onCancelSubagentRun) : null}
           </div>
         )
       })}
