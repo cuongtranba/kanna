@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.80.0](https://github.com/cuongtranba/kanna/compare/v0.79.0...v0.80.0) (2026-05-31)
+
+
+### Features
+
+* **transcript:** anchor subagent runs under their delegate_subagent call ([#339](https://github.com/cuongtranba/kanna/issues/339)) ([8e5e445](https://github.com/cuongtranba/kanna/commit/8e5e4451c31f7bf625e2c4200791c03d2002ea66))
+
 ## [0.79.0](https://github.com/cuongtranba/kanna/compare/v0.78.0...v0.79.0) (2026-05-30)
 
 
