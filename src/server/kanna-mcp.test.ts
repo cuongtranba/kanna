@@ -118,9 +118,7 @@ test("feature flag on → tools registered when toolCallback present", () => {
     answer: async () => {},
     cancel: async () => {},
     cancelAllForChat: async () => {},
-    cancelAllForSession: async () => {},
     recoverOnStartup: async () => {},
-    tickTimeouts: async () => {},
   }
   const tools = buildKannaMcpTools(makeArgs(stub))
   const names = tools.map((t) => t.name)
@@ -146,9 +144,7 @@ test("feature flag on → all 8 new mcp__kanna__* tools registered", () => {
       answer: async () => {},
       cancel: async () => {},
       cancelAllForChat: async () => {},
-      cancelAllForSession: async () => {},
       recoverOnStartup: async () => {},
-      tickTimeouts: async () => {},
     }
     const tools = buildKannaMcpTools({
       projectId: "p",
@@ -176,9 +172,7 @@ const callbackStub = (): Parameters<typeof buildKannaMcpTools>[0]["toolCallback"
   answer: async () => {},
   cancel: async () => {},
   cancelAllForChat: async () => {},
-  cancelAllForSession: async () => {},
   recoverOnStartup: async () => {},
-  tickTimeouts: async () => {},
 })
 
 test("forceInteractiveToolCallbacks → ask_user_question / exit_plan_mode registered with env flag UNSET", () => {

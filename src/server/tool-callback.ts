@@ -14,7 +14,14 @@ export interface ToolCallbackServiceArgs {
   store: EventStore
   serverSecret: string
   now: () => number
-  timeoutMs: number
+  /**
+   * Fires after any persisted state change (submit creates pending, answer /
+   * cancel / cancelAllForChat resolves pending). The server wires this to
+   * router.scheduleChatStateBroadcast so the UI sees a new pending_tool_request
+   * the moment the model emits the tool call, instead of waiting for the next
+   * unrelated broadcast to flush the read model.
+   */
+  onStateChange?: (chatId: string) => void
 }
 
 export interface ToolCallbackSubmitArgs {
@@ -38,15 +45,18 @@ export interface ToolCallbackService {
   answer(id: string, decision: ToolRequestDecision): Promise<void>
   cancel(id: string, reason: string): Promise<void>
   cancelAllForChat(chatId: string, reason: string): Promise<void>
-  cancelAllForSession(sessionId: string, reason: string): Promise<void>
   recoverOnStartup(): Promise<void>
-  tickTimeouts(): Promise<void>
 }
+
+// Sentinel: the durable approval protocol no longer enforces a wall-clock
+// timeout on ask-style pending records. Match upstream Claude Code (CLI),
+// which blocks the turn until the user answers or explicitly cancels. The
+// field stays in the persisted shape for read-model compatibility.
+const NEVER_EXPIRES = Number.MAX_SAFE_INTEGER
 
 export function createToolCallbackService(opts: ToolCallbackServiceArgs): ToolCallbackService {
   interface PendingWaiter {
     resolve: (r: ToolCallbackResult) => void
-    expiresAt: number
   }
   const waiters = new Map<string, PendingWaiter[]>()
   // Tracks the canonical (toolName, canonicalArgsHash) per (chatId, sessionId,
@@ -74,9 +84,19 @@ export function createToolCallbackService(opts: ToolCallbackServiceArgs): ToolCa
     for (const w of ws) w.resolve(result)
   }
 
+  function notify(chatId: string) {
+    if (!opts.onStateChange) return
+    try {
+      opts.onStateChange(chatId)
+    } catch (err) {
+      console.warn("[tool-callback] onStateChange threw", err)
+    }
+  }
+
   async function persistPut(req: ToolRequest): Promise<void> {
     inMemory.set(req.id, { ...req })
     await opts.store.putToolRequest(req)
+    notify(req.chatId)
   }
 
   async function persistResolve(
@@ -88,6 +108,7 @@ export function createToolCallbackService(opts: ToolCallbackServiceArgs): ToolCa
       inMemory.set(id, { ...existing, ...update })
     }
     await opts.store.resolveToolRequest(id, update)
+    if (existing) notify(existing.chatId)
   }
 
   const svc: ToolCallbackService = {
@@ -134,7 +155,7 @@ export function createToolCallbackService(opts: ToolCallbackServiceArgs): ToolCa
         // Already pending — attach a new waiter.
         return new Promise<ToolCallbackResult>((resolve) => {
           const list = waiters.get(id) ?? []
-          list.push({ resolve, expiresAt: existing.expiresAt })
+          list.push({ resolve })
           waiters.set(id, list)
         })
       }
@@ -147,7 +168,6 @@ export function createToolCallbackService(opts: ToolCallbackServiceArgs): ToolCa
         cwd: args.cwd,
       })
       const now = opts.now()
-      const expiresAt = now + opts.timeoutMs
       const req: ToolRequest = {
         id,
         chatId: args.chatId,
@@ -159,7 +179,7 @@ export function createToolCallbackService(opts: ToolCallbackServiceArgs): ToolCa
         policyVerdict: verdict.verdict,
         status: "pending",
         createdAt: now,
-        expiresAt,
+        expiresAt: NEVER_EXPIRES,
       }
 
       // Register synchronously so subsequent calls within the same tick see it.
@@ -172,7 +192,8 @@ export function createToolCallbackService(opts: ToolCallbackServiceArgs): ToolCa
           : { kind: "deny", reason: verdict.reason }
         const resolvedReq: ToolRequest = { ...req, status: "answered", decision, resolvedAt: now }
         inMemory.set(id, resolvedReq)
-        // Persist in background; caller gets immediate result.
+        // Persist in background; caller gets immediate result. No broadcast —
+        // auto-resolved tool calls never show as a pending prompt to the user.
         void (async () => {
           await opts.store.putToolRequest(req)
           await opts.store.resolveToolRequest(id, { status: "answered", decision, resolvedAt: now })
@@ -180,13 +201,15 @@ export function createToolCallbackService(opts: ToolCallbackServiceArgs): ToolCa
         return Promise.resolve({ status: "answered", decision })
       }
 
-      // "ask" verdict → persist then wait for external answer.
+      // "ask" verdict → persist then wait for external answer. Broadcast
+      // synchronously after the JSONL append so the UI gets the
+      // pending_tool_request snapshot the moment the model emits the call.
       const pendingPromise = new Promise<ToolCallbackResult>((resolve) => {
         const list = waiters.get(id) ?? []
-        list.push({ resolve, expiresAt })
+        list.push({ resolve })
         waiters.set(id, list)
       })
-      void opts.store.putToolRequest(req)
+      void persistPut(req)
       return pendingPromise
     },
 
@@ -217,31 +240,12 @@ export function createToolCallbackService(opts: ToolCallbackServiceArgs): ToolCa
       for (const id of pendingIds) await svc.cancel(id, reason)
     },
 
-    async cancelAllForSession(sessionId, reason) {
-      const ids = Array.from(waiters.keys())
-      for (const id of ids) {
-        const req = inMemory.get(id) ?? opts.store.getToolRequest(id)
-        if (req && req.sessionId === sessionId) await svc.cancel(id, reason)
-      }
-    },
-
     async recoverOnStartup() {
       const all = opts.store.scanAllToolRequests()
       for (const req of all) {
         if (req.status !== "pending") continue
         const decision: ToolRequestDecision = { kind: "deny", reason: "server_restarted" }
         await persistResolve(req.id, { status: "session_closed", decision, resolvedAt: opts.now() })
-      }
-    },
-
-    async tickTimeouts() {
-      const now = opts.now()
-      for (const [id, list] of waiters.entries()) {
-        if (list.length === 0) continue
-        if (list[0].expiresAt > now) continue
-        const decision: ToolRequestDecision = { kind: "deny", reason: "timeout" }
-        await persistResolve(id, { status: "timeout", decision, resolvedAt: now })
-        resolveWaiters(id, { status: "timeout", decision })
       }
     },
   }
@@ -261,13 +265,13 @@ export async function initToolCallbackOnBoot(args: {
   store: EventStore
   serverSecret: string
   now?: () => number
-  timeoutMs?: number
+  onStateChange?: (chatId: string) => void
 }): Promise<ToolCallbackService> {
   const svc = createToolCallbackService({
     store: args.store,
     serverSecret: args.serverSecret,
     now: args.now ?? (() => Date.now()),
-    timeoutMs: args.timeoutMs ?? 600_000,
+    onStateChange: args.onStateChange,
   })
   await svc.recoverOnStartup()
   return svc

@@ -30,7 +30,7 @@ describe("mcp__kanna__grep", () => {
   test("finds lines matching pattern across multiple files", async () => {
     const { store, dir, cleanup } = await newStore()
     try {
-      const svc = createToolCallbackService({ store, serverSecret: "k", now: () => 1, timeoutMs: 600_000 })
+      const svc = createToolCallbackService({ store, serverSecret: "k", now: () => 1 })
       const tool = createGrepTool({ toolCallback: svc })
 
       // Use a dedicated search dir separate from the event store dir
@@ -53,7 +53,7 @@ describe("mcp__kanna__grep", () => {
   test("path in readPathDeny → isError true", async () => {
     const { store, dir, cleanup } = await newStore()
     try {
-      const svc = createToolCallbackService({ store, serverSecret: "k", now: () => 1, timeoutMs: 600_000 })
+      const svc = createToolCallbackService({ store, serverSecret: "k", now: () => 1 })
       const tool = createGrepTool({ toolCallback: svc })
       const result = await tool.handler({ path: "~/.ssh", pattern: "KEY" }, ctx(dir))
       expect(result.isError).toBe(true)

@@ -1840,6 +1840,14 @@ export function createWsRouter({
         }
         case "chat.cancel": {
           await agent.cancel(command.chatId)
+          // Resolve any open ask-style tool-callback prompts for this chat
+          // so the model's tool_use does not hang on a stranded pending. The
+          // session-close path no longer fires this cascade because it also
+          // ran on transparent respawns (rotation / idle sweep) — see
+          // makeClaudeSessionHandle.close() in agent.ts.
+          if (agent.toolCallbackService) {
+            await agent.toolCallbackService.cancelAllForChat(command.chatId, "chat_cancelled")
+          }
           send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
           return
         }

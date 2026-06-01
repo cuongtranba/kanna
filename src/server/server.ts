@@ -182,9 +182,17 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
   // KANNA_SERVER_SECRET stabilises HMAC ids across the process lifetime.
   // If unset, a fresh UUID is used — acceptable because recoverOnStartup()
   // already clears all pending records on every restart.
+  //
+  // onStateChange is wired to router.scheduleChatStateBroadcast through a
+  // deferred holder because the router is not yet created at this point;
+  // the holder gets populated below once createWsRouter returns. Until then
+  // the callback is a no-op, which is the correct behaviour for the
+  // recoverOnStartup pass (no connected client to broadcast to anyway).
+  let broadcastChatState: ((chatId: string) => void) | null = null
   const toolCallback: ToolCallbackService = await initToolCallbackOnBoot({
     store,
     serverSecret: process.env.KANNA_SERVER_SECRET ?? crypto.randomUUID(),
+    onStateChange: (chatId) => broadcastChatState?.(chatId),
   })
   const vapid = await loadOrGenerateVapidKeys(store.dataDir)
   const pushManager = new PushManager({
@@ -439,6 +447,14 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     },
     sessionShare: sessionShareService,
   })
+  // Wire the deferred tool-callback broadcast holder now that the router
+  // exists. Every subsequent submit/answer/cancel/cancelAllForChat fires
+  // a chat-state broadcast so the UI sees pending_tool_request the moment
+  // the model emits the call (previously the broadcast only fired on the
+  // next unrelated event, leaving prompts invisible).
+  broadcastChatState = (chatId: string) => {
+    router.scheduleChatStateBroadcast(chatId)
+  }
   scheduleManager.rehydrate(
     store.listAutoContinueChats().flatMap((chatId) => store.getAutoContinueEvents(chatId))
   )
@@ -448,10 +464,6 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     void router.pruneStaleEmptyChats()
       .then(() => router.broadcastSnapshots())
   }, STALE_EMPTY_CHAT_PRUNE_INTERVAL_MS)
-
-  const toolCallbackTickInterval = setInterval(() => {
-    void toolCallback.tickTimeouts()
-  }, 5_000)
 
   const distDir = options.distDir ?? path.join(import.meta.dir, "..", "..", "dist", "client")
 
@@ -603,7 +615,6 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     tunnelGateway.shutdown()
     snapshotSweepHandle.stop()
     clearInterval(staleEmptyChatPruneInterval)
-    clearInterval(toolCallbackTickInterval)
     for (const chatId of [...agent.activeTurns.keys()]) {
       await agent.cancel(chatId)
     }

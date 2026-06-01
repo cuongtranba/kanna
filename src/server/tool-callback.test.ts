@@ -37,7 +37,7 @@ describe("tool-callback durable protocol", () => {
   test("auto-deny short-circuits with deny decision", async () => {
     const { store } = await newTestStore()
     const svc = createToolCallbackService({
-      store, serverSecret: "secret", now: () => 1_000, timeoutMs: 600_000,
+      store, serverSecret: "secret", now: () => 1_000,
     })
     const res = await svc.submit({
       ...baseInput,
@@ -51,9 +51,11 @@ describe("tool-callback durable protocol", () => {
   test("ask verdict creates pending record and awaits answer()", async () => {
     const { store } = await newTestStore()
     const svc = createToolCallbackService({
-      store, serverSecret: "secret", now: () => 1_000, timeoutMs: 600_000,
+      store, serverSecret: "secret", now: () => 1_000,
     })
     const pending = svc.submit(baseInput)
+    // Wait one microtask flush so the fire-and-forget persistPut resolves.
+    await new Promise<void>((r) => setTimeout(r, 0))
     const list = await store.listPendingToolRequests("chat-1")
     expect(list).toHaveLength(1)
     await svc.answer(list[0].id, { kind: "answer", payload: { answer: "yes" } })
@@ -65,10 +67,11 @@ describe("tool-callback durable protocol", () => {
   test("idempotent retry returns same decision without duplicating UI prompt", async () => {
     const { store } = await newTestStore()
     const svc = createToolCallbackService({
-      store, serverSecret: "secret", now: () => 1_000, timeoutMs: 600_000,
+      store, serverSecret: "secret", now: () => 1_000,
     })
     const first = svc.submit(baseInput)
     const second = svc.submit(baseInput)
+    await new Promise<void>((r) => setTimeout(r, 0))
     expect(await store.listPendingToolRequests("chat-1")).toHaveLength(1)
     const list = await store.listPendingToolRequests("chat-1")
     await svc.answer(list[0].id, { kind: "answer", payload: 1 })
@@ -79,9 +82,10 @@ describe("tool-callback durable protocol", () => {
   test("same toolUseId with mutated args → arg_mismatch fail closed", async () => {
     const { store } = await newTestStore()
     const svc = createToolCallbackService({
-      store, serverSecret: "secret", now: () => 1_000, timeoutMs: 600_000,
+      store, serverSecret: "secret", now: () => 1_000,
     })
     void svc.submit(baseInput)
+    await new Promise<void>((r) => setTimeout(r, 0))
     const list = await store.listPendingToolRequests("chat-1")
     await svc.answer(list[0].id, { kind: "answer", payload: "first" })
 
@@ -99,9 +103,10 @@ describe("tool-callback durable protocol", () => {
     // every tool call after the first chat ever made one.
     const { store } = await newTestStore()
     const svc = createToolCallbackService({
-      store, serverSecret: "secret", now: () => 1_000, timeoutMs: 600_000,
+      store, serverSecret: "secret", now: () => 1_000,
     })
     void svc.submit({ ...baseInput, chatId: "chat-A", sessionId: "sess-A", toolUseId: "2" })
+    await new Promise<void>((r) => setTimeout(r, 0))
     const listA = await store.listPendingToolRequests("chat-A")
     await svc.answer(listA[0].id, { kind: "answer", payload: "ok" })
 
@@ -113,6 +118,7 @@ describe("tool-callback durable protocol", () => {
       toolUseId: "2",
       args: { questions: [{ q: "from chat B" }] },
     })
+    await new Promise<void>((r) => setTimeout(r, 0))
     const listB = await store.listPendingToolRequests("chat-B")
     expect(listB).toHaveLength(1)
     await svc.answer(listB[0].id, { kind: "answer", payload: "B-ok" })
@@ -124,66 +130,114 @@ describe("tool-callback durable protocol", () => {
   test("cancelAllForChat resolves all pending as canceled", async () => {
     const { store } = await newTestStore()
     const svc = createToolCallbackService({
-      store, serverSecret: "secret", now: () => 1_000, timeoutMs: 600_000,
+      store, serverSecret: "secret", now: () => 1_000,
     })
     const p = svc.submit(baseInput)
+    await new Promise<void>((r) => setTimeout(r, 0))
     await svc.cancelAllForChat("chat-1", "PTY shutdown")
     const res = await p
     expect(res.status).toBe("canceled")
   })
 
-  test("timeout resolves pending as timeout/deny", async () => {
+  test("pending records never auto-expire (timeout removed to match upstream Claude Code)", async () => {
+    // Used to be a 600s wall-clock timeout fed by a 5s ticker; removed
+    // because (a) upstream Claude Code has no timeout on its AskUserQuestion
+    // built-in and (b) the timeout silently masked the bigger broadcast bug
+    // as a "drop" — pendings that were never visible to the UI just denied
+    // after 10 min instead of waiting forever for an answer. Resolution
+    // now only comes from explicit answer / cancel / cancelAllForChat /
+    // recoverOnStartup paths.
     const { store } = await newTestStore()
     let nowVal = 1_000
     const svc = createToolCallbackService({
-      store, serverSecret: "secret", now: () => nowVal, timeoutMs: 100,
+      store, serverSecret: "secret", now: () => nowVal,
     })
     const p = svc.submit(baseInput)
-    nowVal = 1_000 + 200
-    await svc.tickTimeouts()
+    await new Promise<void>((r) => setTimeout(r, 0))
+    nowVal = 1_000 + 24 * 60 * 60 * 1000 // jump 24h
+    // No tick / poll; pending must still be open.
+    const list = await store.listPendingToolRequests("chat-1")
+    expect(list).toHaveLength(1)
+    // Resolve cleanly so the test does not leak.
+    await svc.cancel(list[0].id, "test-cleanup")
     const res = await p
-    expect(res.status).toBe("timeout")
-    expect(res.decision.kind).toBe("deny")
+    expect(res.status).toBe("canceled")
   })
 
   test("server-restart resolves persisted pending as session_closed", async () => {
     const { store } = await newTestStore()
-    const svc1 = createToolCallbackService({ store, serverSecret: "secret", now: () => 1_000, timeoutMs: 600_000 })
+    const svc1 = createToolCallbackService({ store, serverSecret: "secret", now: () => 1_000 })
     void svc1.submit(baseInput)
+    await new Promise<void>((r) => setTimeout(r, 0))
     // Simulate restart: build a fresh service against the SAME store.
     // (in production a new EventStore would also replay; for this test re-use the same store)
-    const svc2 = createToolCallbackService({ store, serverSecret: "secret", now: () => 2_000, timeoutMs: 600_000 })
+    const svc2 = createToolCallbackService({ store, serverSecret: "secret", now: () => 2_000 })
     await svc2.recoverOnStartup()
     const list = await store.listPendingToolRequests("chat-1")
     expect(list).toHaveLength(0)
   })
 
-  test("after timeout fires, a re-submit returns cached terminal result", async () => {
+  test("onStateChange fires on submit (ask), answer, cancel, and cancelAllForChat", async () => {
+    // Regression for the missing live-broadcast bug: previously the UI only
+    // saw a new pending_tool_request when an unrelated event flushed the
+    // read model. Now every persisted state change triggers a chat-state
+    // broadcast.
     const { store } = await newTestStore()
-    let nowVal = 1_000
+    const events: string[] = []
     const svc = createToolCallbackService({
-      store, serverSecret: "secret", now: () => nowVal, timeoutMs: 100,
+      store, serverSecret: "secret", now: () => 1_000,
+      onStateChange: (chatId) => events.push(chatId),
     })
-    const first = svc.submit(baseInput)
-    nowVal = 1_000 + 200
-    await svc.tickTimeouts()
-    const firstRes = await first
-    expect(firstRes.status).toBe("timeout")
 
-    // Re-submit with identical args — must return the cached timeout, not a new pending.
-    const second = await svc.submit(baseInput)
-    expect(second.status).toBe("timeout")
-    expect(second.decision.kind).toBe("deny")
-    const pending = await store.listPendingToolRequests("chat-1")
-    expect(pending).toHaveLength(0)
+    // submit (ask verdict) → 1 event
+    const p1 = svc.submit(baseInput)
+    await new Promise<void>((r) => setTimeout(r, 0))
+    expect(events).toEqual(["chat-1"])
+
+    // answer → 1 event
+    const list1 = await store.listPendingToolRequests("chat-1")
+    await svc.answer(list1[0].id, { kind: "answer", payload: "y" })
+    await p1
+    expect(events).toEqual(["chat-1", "chat-1"])
+
+    // submit + cancel → 2 more events
+    const p2 = svc.submit({ ...baseInput, toolUseId: "tu-2" })
+    await new Promise<void>((r) => setTimeout(r, 0))
+    const list2 = await store.listPendingToolRequests("chat-1")
+    await svc.cancel(list2[0].id, "manual")
+    await p2
+    expect(events.length).toBe(4)
+
+    // submit + cancelAllForChat → 2 more events (put + resolve)
+    void svc.submit({ ...baseInput, toolUseId: "tu-3" })
+    await new Promise<void>((r) => setTimeout(r, 0))
+    await svc.cancelAllForChat("chat-1", "chat_cancelled")
+    expect(events.length).toBe(6)
+    expect(events.every((c) => c === "chat-1")).toBe(true)
+  })
+
+  test("onStateChange does NOT fire for auto-allow / auto-deny (no visible pending)", async () => {
+    const { store } = await newTestStore()
+    const events: string[] = []
+    const svc = createToolCallbackService({
+      store, serverSecret: "secret", now: () => 1_000,
+      onStateChange: (chatId) => events.push(chatId),
+    })
+    await svc.submit({
+      ...baseInput,
+      toolName: "mcp__kanna__bash",
+      args: { command: "rm -rf /" },
+    })
+    expect(events).toEqual([])
   })
 
   test("arg_mismatch record is durably persisted before submit returns", async () => {
     const { store } = await newTestStore()
     const svc = createToolCallbackService({
-      store, serverSecret: "secret", now: () => 1_000, timeoutMs: 600_000,
+      store, serverSecret: "secret", now: () => 1_000,
     })
     void svc.submit(baseInput)
+    await new Promise<void>((r) => setTimeout(r, 0))
     const list = await store.listPendingToolRequests("chat-1")
     await svc.answer(list[0].id, { kind: "answer", payload: "ok" })
 
