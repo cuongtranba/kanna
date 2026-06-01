@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.81.0](https://github.com/cuongtranba/kanna/compare/v0.80.0...v0.81.0) (2026-06-01)
+
+
+### Features
+
+* **chat-ui:** show session token total pill in composer ([#341](https://github.com/cuongtranba/kanna/issues/341)) ([23872d9](https://github.com/cuongtranba/kanna/commit/23872d99ee48539340f51ada184b8cd679690997))
+
+
+### Bug Fixes
+
+* **tool-callback:** live broadcast + stop cancel-on-rotation + drop ask timeout ([#343](https://github.com/cuongtranba/kanna/issues/343)) ([0af2ff8](https://github.com/cuongtranba/kanna/commit/0af2ff837b4e0a575af57d18d281898a5872205e))
+
 ## [0.80.0](https://github.com/cuongtranba/kanna/compare/v0.79.0...v0.80.0) (2026-05-31)
 
 
