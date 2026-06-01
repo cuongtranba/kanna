@@ -36,7 +36,7 @@ describe("mcp__kanna__webfetch", () => {
       },
     })
     try {
-      const svc = createToolCallbackService({ store, serverSecret: "k", now: () => 1, timeoutMs: 600_000 })
+      const svc = createToolCallbackService({ store, serverSecret: "k", now: () => 1 })
       const tool = createWebFetchTool({ toolCallback: svc })
       const result = await tool.handler({ url: `http://localhost:${server.port}/` }, ctx(dir))
       expect(result.isError).toBeFalsy()
@@ -50,7 +50,7 @@ describe("mcp__kanna__webfetch", () => {
   test("bad URL → isError true", async () => {
     const { store, dir, cleanup } = await newStore()
     try {
-      const svc = createToolCallbackService({ store, serverSecret: "k", now: () => 1, timeoutMs: 600_000 })
+      const svc = createToolCallbackService({ store, serverSecret: "k", now: () => 1 })
       const tool = createWebFetchTool({ toolCallback: svc })
       const result = await tool.handler({ url: "not-a-url" }, ctx(dir))
       expect(result.isError).toBe(true)
@@ -60,7 +60,7 @@ describe("mcp__kanna__webfetch", () => {
   test("rejects file:// URL → isError true", async () => {
     const { store, dir, cleanup } = await newStore()
     try {
-      const svc = createToolCallbackService({ store, serverSecret: "k", now: () => 1, timeoutMs: 600_000 })
+      const svc = createToolCallbackService({ store, serverSecret: "k", now: () => 1 })
       const tool = createWebFetchTool({ toolCallback: svc })
       const result = await tool.handler({ url: "file:///etc/passwd" }, ctx(dir))
       expect(result.isError).toBe(true)
@@ -71,7 +71,7 @@ describe("mcp__kanna__webfetch", () => {
   test("rejects cloud metadata URL → isError true", async () => {
     const { store, dir, cleanup } = await newStore()
     try {
-      const svc = createToolCallbackService({ store, serverSecret: "k", now: () => 1, timeoutMs: 600_000 })
+      const svc = createToolCallbackService({ store, serverSecret: "k", now: () => 1 })
       const tool = createWebFetchTool({ toolCallback: svc })
       const result = await tool.handler({ url: "http://169.254.169.254/latest/meta-data/" }, ctx(dir))
       expect(result.isError).toBe(true)

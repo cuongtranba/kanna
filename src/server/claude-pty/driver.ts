@@ -446,11 +446,12 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
       exitedAt: Date.now(),
       lastEventAt: Date.now(),
     })
-    if (args.toolCallback) {
-      try { await args.toolCallback.cancelAllForSession(sessionId, "session_closed") } catch (err) {
-        console.warn("[kanna/pty] toolCallback.cancelAllForSession failed", { chatId: args.chatId, sessionId, err })
-      }
-    }
+    // PTY teardown no longer cancels pending tool-callback records. close()
+    // also fires on transparent rotation / idle sweep where the model's
+    // turn is still live; denying mid-prompt asks was the source of the
+    // "ask_user_question dropped" UX bug. Pendings now resolve only via
+    // explicit chat.cancel / chat.delete (cancelAllForChat in ws-router)
+    // or recoverOnStartup fail-close on the next server boot.
     try { await mcpHandle.close() } catch (err) {
       // Logged because a swallowed mcpHandle close error means the loopback
       // HTTP server may still be listening — a real resource leak.

@@ -3753,9 +3753,7 @@ describe("buildCanUseTool", () => {
       answer: async () => {},
       cancel: async () => {},
       cancelAllForChat: async () => {},
-      cancelAllForSession: async () => {},
       recoverOnStartup: async () => {},
-      tickTimeouts: async () => {},
     }
 
     const canUseTool = buildCanUseTool({
@@ -3806,9 +3804,7 @@ describe("buildCanUseTool", () => {
         answer: async () => {},
         cancel: async () => {},
         cancelAllForChat: async () => {},
-        cancelAllForSession: async () => {},
         recoverOnStartup: async () => {},
-        tickTimeouts: async () => {},
       }
 
       const canUseTool = buildCanUseTool({
@@ -3848,9 +3844,7 @@ describe("buildCanUseTool", () => {
         answer: async () => {},
         cancel: async () => {},
         cancelAllForChat: async () => {},
-        cancelAllForSession: async () => {},
         recoverOnStartup: async () => {},
-        tickTimeouts: async () => {},
       }
 
       const canUseTool = buildCanUseTool({
@@ -3936,7 +3930,6 @@ describe("buildCanUseTool", () => {
         store,
         serverSecret: "e2e-secret",
         now: () => 1_000,
-        timeoutMs: 600_000,
       })
 
       const canUseTool = buildCanUseTool({

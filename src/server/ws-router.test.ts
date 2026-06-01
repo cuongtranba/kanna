@@ -2790,7 +2790,6 @@ test("ws-router: chat.toolRequestAnswer broadcasts chat snapshot after answering
       store,
       serverSecret: "test-secret",
       now: () => 1_000,
-      timeoutMs: 600_000,
     })
 
     const pendingPromise = toolCallbackSvc.submit({
@@ -2877,7 +2876,6 @@ test("ws-router: chat.toolRequestAnswer throws when toolRequestId belongs to dif
       store,
       serverSecret: "test-secret",
       now: () => 1_000,
-      timeoutMs: 600_000,
     })
 
     const pendingPromise = toolCallbackSvc.submit({
@@ -2960,7 +2958,6 @@ test("ws-router: chat.toolRequestAnswer throws on invalid decision.kind", async 
       store,
       serverSecret: "test-secret",
       now: () => 1_000,
-      timeoutMs: 600_000,
     })
 
     const pendingPromise = toolCallbackSvc.submit({
@@ -3041,7 +3038,6 @@ test("ws-router: chat.toolRequestAnswer resolves a pending tool request", async 
       store,
       serverSecret: "test-secret",
       now: () => 1_000,
-      timeoutMs: 600_000,
     })
 
     // Submit a request that requires user approval ("ask" verdict).

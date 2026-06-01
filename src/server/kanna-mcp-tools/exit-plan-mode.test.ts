@@ -31,7 +31,7 @@ describe("mcp__kanna__exit_plan_mode", () => {
     const { store, cleanup } = await newStore()
     try {
       const svc = createToolCallbackService({
-        store, serverSecret: "k", now: () => 1, timeoutMs: 600_000,
+        store, serverSecret: "k", now: () => 1,
       })
       const tool = createExitPlanModeTool({ toolCallback: svc })
       const promise = tool.handler({ plan: "do x" }, handlerCtx())
@@ -47,7 +47,7 @@ describe("mcp__kanna__exit_plan_mode", () => {
     const { store, cleanup } = await newStore()
     try {
       const svc = createToolCallbackService({
-        store, serverSecret: "k", now: () => 1, timeoutMs: 600_000,
+        store, serverSecret: "k", now: () => 1,
       })
       const tool = createExitPlanModeTool({ toolCallback: svc })
       const promise = tool.handler({ plan: "do x" }, handlerCtx())

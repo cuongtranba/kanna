@@ -30,7 +30,7 @@ describe("mcp__kanna__edit", () => {
   test("exact replace works", async () => {
     const { store, dir, cleanup } = await newStore()
     try {
-      const svc = createToolCallbackService({ store, serverSecret: "k", now: () => 1, timeoutMs: 600_000 })
+      const svc = createToolCallbackService({ store, serverSecret: "k", now: () => 1 })
       const tool = createEditTool({ toolCallback: svc })
       const filePath = path.join(dir, "target.txt")
       await writeFile(filePath, "hello world\nfoo bar")
@@ -47,7 +47,7 @@ describe("mcp__kanna__edit", () => {
   test("oldString not found → isError", async () => {
     const { store, dir, cleanup } = await newStore()
     try {
-      const svc = createToolCallbackService({ store, serverSecret: "k", now: () => 1, timeoutMs: 600_000 })
+      const svc = createToolCallbackService({ store, serverSecret: "k", now: () => 1 })
       const tool = createEditTool({ toolCallback: svc })
       const filePath = path.join(dir, "target.txt")
       await writeFile(filePath, "hello world")
@@ -63,7 +63,7 @@ describe("mcp__kanna__edit", () => {
   test("path in writePathDeny → isError", async () => {
     const { store, dir, cleanup } = await newStore()
     try {
-      const svc = createToolCallbackService({ store, serverSecret: "k", now: () => 1, timeoutMs: 600_000 })
+      const svc = createToolCallbackService({ store, serverSecret: "k", now: () => 1 })
       const tool = createEditTool({ toolCallback: svc })
       const result = await tool.handler(
         { path: "~/.ssh/config", oldString: "Host", newString: "Host2" },
@@ -76,7 +76,7 @@ describe("mcp__kanna__edit", () => {
   test("$ characters in newString are inserted literally", async () => {
     const { store, dir, cleanup } = await newStore()
     try {
-      const svc = createToolCallbackService({ store, serverSecret: "k", now: () => 1, timeoutMs: 600_000 })
+      const svc = createToolCallbackService({ store, serverSecret: "k", now: () => 1 })
       const tool = createEditTool({ toolCallback: svc })
       const filePath = path.join(dir, "dollar.txt")
       await writeFile(filePath, "foo bar")

@@ -1068,9 +1068,12 @@ async function startClaudeSession(args: {
     close: () => {
       promptQueue.close()
       q.close()
-      if (args.toolCallback && args.sessionToken) {
-        void args.toolCallback.cancelAllForSession(args.sessionToken, "session_closed")
-      }
+      // Do NOT cancel pending tool-callback records here. close() also fires
+      // on token rotation and idle-session sweep — both of which preserve
+      // the model's logical turn (it will resume / re-emit). Denying
+      // mid-turn used to mask the question prompt as a silent drop. Pending
+      // records are now reaped by the explicit chat.cancel / chat.delete
+      // paths in ws-router.ts and by recoverOnStartup on server boot.
     },
   }
 }

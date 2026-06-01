@@ -30,7 +30,7 @@ describe("mcp__kanna__websearch", () => {
   test("always returns isError + message contains 'unavailable'", async () => {
     const { store, dir, cleanup } = await newStore()
     try {
-      const svc = createToolCallbackService({ store, serverSecret: "k", now: () => 1, timeoutMs: 600_000 })
+      const svc = createToolCallbackService({ store, serverSecret: "k", now: () => 1 })
       const tool = createWebSearchTool({ toolCallback: svc })
       const result = await tool.handler({ query: "some search query" }, ctx(dir))
       expect(result.isError).toBe(true)
