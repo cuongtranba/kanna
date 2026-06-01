@@ -77,6 +77,39 @@ export function overrideContextWindowMaxTokens(
   )
 }
 
+export interface SessionTokenSummary {
+  input: number
+  output: number
+  cached: number
+  cacheHitPercentage: number | null
+}
+
+export function computeSessionTokenSummary(
+  snapshot: ContextWindowSnapshot | null,
+): SessionTokenSummary | null {
+  if (!snapshot) return null
+
+  const input = toNonNegative(snapshot.inputTokens)
+  const output = toNonNegative(snapshot.outputTokens)
+  const cached = toNonNegative(snapshot.cachedInputTokens)
+
+  if (input === 0 && output === 0 && cached === 0) {
+    return null
+  }
+
+  const billedAndCached = input + cached
+  const cacheHitPercentage = billedAndCached > 0
+    ? (cached / billedAndCached) * 100
+    : null
+
+  return { input, output, cached, cacheHitPercentage }
+}
+
+function toNonNegative(value: number | undefined): number {
+  if (value === undefined || !Number.isFinite(value) || value < 0) return 0
+  return value
+}
+
 export function formatContextWindowTokens(value: number | null | undefined): string {
   if (value === null || value === undefined || !Number.isFinite(value)) {
     return "0"

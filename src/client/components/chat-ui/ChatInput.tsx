@@ -29,6 +29,7 @@ import { NEW_CHAT_COMPOSER_ID, type ComposerState, useChatPreferencesStore } fro
 import { CHAT_INPUT_ATTRIBUTE, focusNextChatInput } from "../../app/chatFocusPolicy"
 import { ChatPreferenceControls } from "./ChatPreferenceControls"
 import { ContextWindowMeter } from "./ContextWindowMeter"
+import { SessionTokenPill } from "./SessionTokenPill"
 import { AttachmentFileCard, AttachmentImageCard } from "../messages/AttachmentCard"
 import { FilePreviewSheet } from "../messages/file-preview/FilePreviewSheet"
 import { toPreviewSourceFromAttachment } from "../messages/file-preview/types"
@@ -1121,7 +1122,8 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput({
             className="max-w-[840px] mx-auto"
           />
           {activeContextWindow ? (
-            <div className="flex items-center md:hidden mx-[13px]">
+            <div className="flex items-center md:hidden mx-[13px] gap-2">
+              <SessionTokenPill usage={activeContextWindow} />
               <ContextWindowMeter usage={activeContextWindow} />
             </div>
           ) : null}
@@ -1131,6 +1133,11 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput({
         {activeContextWindow ? (
           <div className="absolute right-[29px] top-1/2 translate-x-1/2 -translate-y-1/2 hidden md:block">
             <ContextWindowMeter usage={activeContextWindow} />
+          </div>
+        ) : null}
+        {activeContextWindow ? (
+          <div className="absolute right-[58px] top-1/2 -translate-y-1/2 hidden md:block">
+            <SessionTokenPill usage={activeContextWindow} />
           </div>
         ) : null}
       </div>
