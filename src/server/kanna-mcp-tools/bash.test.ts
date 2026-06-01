@@ -32,7 +32,7 @@ describe("mcp__kanna__bash", () => {
   test("auto-allowed verb (pwd) → stdout contains cwd, no isError", async () => {
     const { store, dir, cleanup } = await newStore()
     try {
-      const svc = createToolCallbackService({ store, serverSecret: "k", now: () => 1, timeoutMs: 600_000 })
+      const svc = createToolCallbackService({ store, serverSecret: "k", now: () => 1 })
       const tool = createBashTool({ toolCallback: svc })
       const result = await tool.handler({ command: "pwd" }, ctx(dir))
       expect(result.isError).toBeFalsy()
@@ -47,7 +47,7 @@ describe("mcp__kanna__bash", () => {
   test("toolDenyList match (rm -rf /) → isError true", async () => {
     const { store, dir, cleanup } = await newStore()
     try {
-      const svc = createToolCallbackService({ store, serverSecret: "k", now: () => 1, timeoutMs: 600_000 })
+      const svc = createToolCallbackService({ store, serverSecret: "k", now: () => 1 })
       const tool = createBashTool({ toolCallback: svc })
       const result = await tool.handler({ command: "rm -rf /" }, ctx(dir))
       expect(result.isError).toBe(true)

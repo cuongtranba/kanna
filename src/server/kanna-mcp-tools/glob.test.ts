@@ -30,7 +30,7 @@ describe("mcp__kanna__glob", () => {
   test("*.ts pattern → returns matching files only", async () => {
     const { store, dir, cleanup } = await newStore()
     try {
-      const svc = createToolCallbackService({ store, serverSecret: "k", now: () => 1, timeoutMs: 600_000 })
+      const svc = createToolCallbackService({ store, serverSecret: "k", now: () => 1 })
       const tool = createGlobTool({ toolCallback: svc })
 
       // Create a mix of .ts and .txt files
@@ -52,7 +52,7 @@ describe("mcp__kanna__glob", () => {
   test("path in readPathDeny → isError true", async () => {
     const { store, dir, cleanup } = await newStore()
     try {
-      const svc = createToolCallbackService({ store, serverSecret: "k", now: () => 1, timeoutMs: 600_000 })
+      const svc = createToolCallbackService({ store, serverSecret: "k", now: () => 1 })
       const tool = createGlobTool({ toolCallback: svc })
       const result = await tool.handler({ path: "~/.ssh", pattern: "*.pem" }, ctx(dir))
       expect(result.isError).toBe(true)

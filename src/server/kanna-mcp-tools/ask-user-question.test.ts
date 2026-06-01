@@ -31,7 +31,7 @@ describe("mcp__kanna__ask_user_question", () => {
     const { store, cleanup } = await newStore()
     try {
       const svc = createToolCallbackService({
-        store, serverSecret: "k", now: () => 1, timeoutMs: 600_000,
+        store, serverSecret: "k", now: () => 1,
       })
       const tool = createAskUserQuestionTool({ toolCallback: svc })
       const inputArgs = {
@@ -60,7 +60,7 @@ describe("mcp__kanna__ask_user_question", () => {
     const { store, cleanup } = await newStore()
     try {
       const svc = createToolCallbackService({
-        store, serverSecret: "k", now: () => 1, timeoutMs: 600_000,
+        store, serverSecret: "k", now: () => 1,
       })
       const tool = createAskUserQuestionTool({ toolCallback: svc })
       const promise = tool.handler(
@@ -94,7 +94,7 @@ describe("mcp__kanna__ask_user_question", () => {
     const { store, cleanup } = await newStore()
     try {
       const svc = createToolCallbackService({
-        store, serverSecret: "k", now: () => 1, timeoutMs: 600_000,
+        store, serverSecret: "k", now: () => 1,
       })
       const tool = createAskUserQuestionTool({ toolCallback: svc })
       const promise = tool.handler(

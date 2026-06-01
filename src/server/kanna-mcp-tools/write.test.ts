@@ -30,7 +30,7 @@ describe("mcp__kanna__write", () => {
   test("writes file content", async () => {
     const { store, dir, cleanup } = await newStore()
     try {
-      const svc = createToolCallbackService({ store, serverSecret: "k", now: () => 1, timeoutMs: 600_000 })
+      const svc = createToolCallbackService({ store, serverSecret: "k", now: () => 1 })
       const tool = createWriteTool({ toolCallback: svc })
       const filePath = path.join(dir, "subdir", "output.txt")
       const result = await tool.handler({ path: filePath, content: "written content" }, ctx(dir))
@@ -43,7 +43,7 @@ describe("mcp__kanna__write", () => {
   test("path in writePathDeny → isError", async () => {
     const { store, dir, cleanup } = await newStore()
     try {
-      const svc = createToolCallbackService({ store, serverSecret: "k", now: () => 1, timeoutMs: 600_000 })
+      const svc = createToolCallbackService({ store, serverSecret: "k", now: () => 1 })
       const tool = createWriteTool({ toolCallback: svc })
       const result = await tool.handler({ path: "~/.ssh/authorized_keys", content: "key data" }, ctx(dir))
       expect(result.isError).toBe(true)

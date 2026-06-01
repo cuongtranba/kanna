@@ -30,7 +30,7 @@ describe("mcp__kanna__read", () => {
   test("reads existing file → content in result, no isError", async () => {
     const { store, dir, cleanup } = await newStore()
     try {
-      const svc = createToolCallbackService({ store, serverSecret: "k", now: () => 1, timeoutMs: 600_000 })
+      const svc = createToolCallbackService({ store, serverSecret: "k", now: () => 1 })
       const tool = createReadTool({ toolCallback: svc })
       const filePath = path.join(dir, "hello.txt")
       await writeFile(filePath, "hello world")
@@ -43,7 +43,7 @@ describe("mcp__kanna__read", () => {
   test("path in readPathDeny (~/.ssh/id_rsa) → isError true", async () => {
     const { store, dir, cleanup } = await newStore()
     try {
-      const svc = createToolCallbackService({ store, serverSecret: "k", now: () => 1, timeoutMs: 600_000 })
+      const svc = createToolCallbackService({ store, serverSecret: "k", now: () => 1 })
       const tool = createReadTool({ toolCallback: svc })
       const result = await tool.handler({ path: "~/.ssh/id_rsa" }, ctx(dir))
       expect(result.isError).toBe(true)
@@ -53,7 +53,7 @@ describe("mcp__kanna__read", () => {
   test("missing file → isError true", async () => {
     const { store, dir, cleanup } = await newStore()
     try {
-      const svc = createToolCallbackService({ store, serverSecret: "k", now: () => 1, timeoutMs: 600_000 })
+      const svc = createToolCallbackService({ store, serverSecret: "k", now: () => 1 })
       const tool = createReadTool({ toolCallback: svc })
       const result = await tool.handler({ path: path.join(dir, "does-not-exist.txt") }, ctx(dir))
       expect(result.isError).toBe(true)
