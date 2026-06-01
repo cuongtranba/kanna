@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import type { TranscriptEntry } from "../../shared/types"
 import {
+  computeSessionTokenSummary,
   deriveLatestContextWindowSnapshot,
   formatContextWindowTokens,
   overrideContextWindowMaxTokens,
@@ -49,6 +50,75 @@ describe("formatContextWindowTokens", () => {
     expect(formatContextWindowTokens(1400)).toBe("1.4k")
     expect(formatContextWindowTokens(14_000)).toBe("14k")
     expect(formatContextWindowTokens(1_400_000)).toBe("1.4m")
+  })
+})
+
+describe("computeSessionTokenSummary", () => {
+  test("returns null when snapshot is null", () => {
+    expect(computeSessionTokenSummary(null)).toBeNull()
+  })
+
+  test("returns null when all usage fields are zero or missing", () => {
+    const snapshot = deriveLatestContextWindowSnapshot([
+      entry({ kind: "context_window_updated", usage: { usedTokens: 10, compactsAutomatically: false } }),
+    ])
+    expect(computeSessionTokenSummary(snapshot)).toBeNull()
+  })
+
+  test("aggregates input/output/cached and computes cache hit", () => {
+    const snapshot = deriveLatestContextWindowSnapshot([
+      entry({
+        kind: "context_window_updated",
+        usage: {
+          usedTokens: 50_000,
+          inputTokens: 30_000,
+          outputTokens: 8_000,
+          cachedInputTokens: 270_000,
+          compactsAutomatically: false,
+        },
+      }),
+    ])
+
+    const summary = computeSessionTokenSummary(snapshot)
+    expect(summary).not.toBeNull()
+    expect(summary?.input).toBe(30_000)
+    expect(summary?.output).toBe(8_000)
+    expect(summary?.cached).toBe(270_000)
+    expect(summary?.cacheHitPercentage).toBeCloseTo(90, 5)
+  })
+
+  test("returns null cache hit when both input and cache are zero", () => {
+    const snapshot = deriveLatestContextWindowSnapshot([
+      entry({
+        kind: "context_window_updated",
+        usage: {
+          usedTokens: 100,
+          outputTokens: 100,
+          compactsAutomatically: false,
+        },
+      }),
+    ])
+    const summary = computeSessionTokenSummary(snapshot)
+    expect(summary?.cacheHitPercentage).toBeNull()
+  })
+
+  test("clamps negative or non-finite fields to zero", () => {
+    const snapshot = deriveLatestContextWindowSnapshot([
+      entry({
+        kind: "context_window_updated",
+        usage: {
+          usedTokens: 500,
+          inputTokens: -10,
+          outputTokens: Number.NaN,
+          cachedInputTokens: 100,
+          compactsAutomatically: false,
+        },
+      }),
+    ])
+    const summary = computeSessionTokenSummary(snapshot)
+    expect(summary?.input).toBe(0)
+    expect(summary?.output).toBe(0)
+    expect(summary?.cached).toBe(100)
   })
 })
 
