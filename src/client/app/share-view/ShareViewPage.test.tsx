@@ -56,6 +56,21 @@ describe("ShareViewPage", () => {
     }
   })
 
+  test("root main is its own scroll container (global body overflow is hidden)", async () => {
+    const { container, cleanup } = await mountShareViewPage(snap)
+    try {
+      const main = container.querySelector("main")
+      expect(main).not.toBeNull()
+      const cls = main?.className ?? ""
+      // The app pins html/body/#root to height:100% overflow:hidden, so the
+      // share page must scroll itself rather than relying on document scroll.
+      expect(cls).toContain("h-[100dvh]")
+      expect(cls).toContain("overflow-y-auto")
+    } finally {
+      cleanup()
+    }
+  })
+
   test("renders omitted placeholder for omitted messages", async () => {
     const omittedSnap: ChatSnapshot = {
       ...snap,
