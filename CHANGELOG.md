@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.81.2](https://github.com/cuongtranba/kanna/compare/v0.81.1...v0.81.2) (2026-06-02)
+
+
+### Bug Fixes
+
+* **share:** make share page scroll on overflow (mobile-safe) ([#347](https://github.com/cuongtranba/kanna/issues/347)) ([539b8e8](https://github.com/cuongtranba/kanna/commit/539b8e84fc9b83154f18a429bbc2a5f8e266d6c8))
+
 ## [0.81.1](https://github.com/cuongtranba/kanna/compare/v0.81.0...v0.81.1) (2026-06-02)
 
 
