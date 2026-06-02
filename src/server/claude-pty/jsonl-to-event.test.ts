@@ -189,6 +189,35 @@ describe("createJsonlEventParser", () => {
     expect(secondCtx).toHaveLength(0)
   })
 
+  test("D1: on-disk transcript nests usage under message.usage → context_window_updated", () => {
+    const parser = createJsonlEventParser()
+    // Claude's on-disk transcript nests the Anthropic message (id, content AND
+    // usage) under `.message`, unlike the SDK stream-json shape which keeps
+    // `usage` at the top level. The parser must read the nested location or it
+    // emits nothing for every real interactive session.
+    const line = JSON.stringify({
+      type: "assistant",
+      message: {
+        id: "msg-nested-1",
+        role: "assistant",
+        content: [{ type: "text", text: "hi" }],
+        usage: {
+          input_tokens: 14334,
+          cache_creation_input_tokens: 15367,
+          cache_read_input_tokens: 17117,
+          output_tokens: 435,
+        },
+      },
+    })
+    const events = parser.parse(line)
+    const ctxEvents = events.filter(
+      (e) => e.type === "transcript" && (e.entry as { kind?: string }).kind === "context_window_updated",
+    )
+    expect(ctxEvents).toHaveLength(1)
+    const usage = (ctxEvents[0] as { entry: { usage: { usedTokens: number } } }).entry.usage
+    expect(usage.usedTokens).toBe(14334 + 15367 + 17117 + 435)
+  })
+
   test("D1: result message after assistant emits final context_window_updated", () => {
     const parser = createJsonlEventParser()
     parser.parse(JSON.stringify({

@@ -143,8 +143,13 @@ export function createJsonlEventParser(opts: CreateJsonlEventParserOptions = {})
       // D1 — assistant message usage delta → context_window_updated.
       if (message.type === "assistant") {
         const usageId = getClaudeAssistantMessageUsageId(message)
+        // Claude's on-disk transcript nests the Anthropic message — id, content
+        // AND usage — under `.message`. The SDK stream-json shape keeps `usage`
+        // at the top level. Prefer the nested location (real interactive
+        // sessions) and fall back to the flat one (SDK fixtures / parity).
+        const innerMessage = (message as { message?: { usage?: unknown } }).message
         const usageSnapshot = normalizeClaudeUsageSnapshot(
-          (message as { usage?: unknown }).usage,
+          innerMessage?.usage ?? (message as { usage?: unknown }).usage,
           lastKnownContextWindow,
         )
         if (usageId && usageSnapshot && !seenAssistantUsageIds.has(usageId)) {
