@@ -26,7 +26,7 @@ export function SessionTokenPill({ usage, className }: SessionTokenPillProps) {
           type="button"
           aria-label={buildAriaLabel(summary, cacheLabel)}
           className={cn(
-            "inline-flex items-center gap-1.5 rounded-full bg-muted px-2.5 py-0.5 text-[11px] text-muted-foreground transition-opacity hover:opacity-85",
+            "inline-flex cursor-default items-center gap-1.5 rounded-md bg-muted/30 px-2 py-0.5 text-xs tabular-nums text-muted-foreground",
             className,
           )}
         >
@@ -67,7 +67,7 @@ function Stat({ label, value }: { label: string; value: string }) {
 }
 
 function Separator() {
-  return <span aria-hidden="true" className="h-2.5 w-px bg-border" />
+  return <span aria-hidden="true" className="text-muted-foreground/50">·</span>
 }
 
 function Row({ label, value }: { label: string; value: string }) {
