@@ -1372,6 +1372,14 @@ export type HydratedOfferDownloadToolCall =
 export type HydratedImageGenerationToolCall =
   HydratedToolCallBase<"image_generation", ImageGenerationToolCall["input"], ImageGenerationToolResult>
 
+export interface WorkflowToolResult {
+  taskId?: string
+  text: string
+}
+
+export type HydratedWorkflowToolCall =
+  HydratedToolCallBase<"workflow", WorkflowToolCall["input"], WorkflowToolResult>
+
 export type HydratedUnknownToolCall =
   HydratedToolCallBase<"unknown_tool", UnknownToolCall["input"], unknown>
 
@@ -1392,6 +1400,7 @@ export type HydratedToolCall =
   | HydratedMcpGenericToolCall
   | HydratedOfferDownloadToolCall
   | HydratedImageGenerationToolCall
+  | HydratedWorkflowToolCall
   | HydratedUnknownToolCall
 
 export type HydratedTranscriptMessage =

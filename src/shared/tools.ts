@@ -9,6 +9,7 @@ import type {
   OfferDownloadToolResult,
   ReadFileToolResult,
   TodoItem,
+  WorkflowToolResult,
 } from "./types"
 
 export const KANNA_MCP_SERVER_NAME = "kanna"
@@ -418,6 +419,14 @@ export function hydrateToolResult(tool: NormalizedToolCall, raw: unknown): Hydra
         relativePath: typeof record?.relativePath === "string" ? record.relativePath : "",
         fileName: typeof record?.fileName === "string" ? record.fileName : "",
       } satisfies ImageGenerationToolResult
+    }
+    case "workflow": {
+      const text = typeof raw === "string" ? raw : ""
+      const taskId = text.match(/Task ID:\s*(\S+)/)?.[1]
+      return {
+        taskId,
+        text,
+      } satisfies WorkflowToolResult
     }
     case "read_file":
       if (typeof parsed === "string") {
