@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.82.1](https://github.com/cuongtranba/kanna/compare/v0.82.0...v0.82.1) (2026-06-03)
+
+
+### Bug Fixes
+
+* **agent:** keep PTY session alive while a background workflow is running ([#359](https://github.com/cuongtranba/kanna/issues/359)) ([8e7af80](https://github.com/cuongtranba/kanna/commit/8e7af80ee3b1fff0249bd7f4226d659e7ccaa281))
+
 ## [0.82.0](https://github.com/cuongtranba/kanna/compare/v0.81.3...v0.82.0) (2026-06-03)
 
 
