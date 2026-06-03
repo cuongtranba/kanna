@@ -21,9 +21,13 @@ function isWfDir(name: string): boolean { return name.startsWith("wf_") }
  * (`<session>/workflows`); the live dirs are its `../subagents/workflows`
  * sibling. Returns [] if the sibling does not exist yet.
  */
+/** The sibling live-run-dir root for a registered sidecar `workflows` dir. */
+export function liveRunRoot(workflowsDir: string): string {
+  return join(dirname(workflowsDir), "subagents", basename(workflowsDir))
+}
+
 export function listWorkflowRunDirs(workflowsDir: string): WorkflowRunDirInfo[] {
-  const sessionDir = dirname(workflowsDir)
-  const liveRoot = join(sessionDir, "subagents", basename(workflowsDir))
+  const liveRoot = liveRunRoot(workflowsDir)
   if (!existsSync(liveRoot)) return []
   let names: string[]
   try { names = readdirSync(liveRoot) } catch { return [] }
@@ -71,6 +75,17 @@ function nearestExistingAncestor(dir: string): string | null {
     cur = parent
   }
   return null
+}
+
+/**
+ * Watch the live run-dir root (`subagents/workflows`) so a newly-launched run
+ * (which writes NO sidecar until termination) pushes a snapshot promptly. Same
+ * parent-arming as watchWorkflowDir — the sibling appears lazily on first run.
+ */
+export function watchWorkflowRunDirs(
+  workflowsDir: string, onChange: () => void, opts?: { debounceMs?: number },
+): () => void {
+  return watchWorkflowDir(liveRunRoot(workflowsDir), onChange, opts)
 }
 
 export function watchWorkflowDir(
