@@ -138,6 +138,6 @@ export function toRunSummary(run: WorkflowRun): WorkflowRunSummary {
     totalTokens: run.totalTokens,
     totalToolCalls: run.totalToolCalls,
     phases: run.phases,
-    agents: run.agents.map(({ promptPreview, lastToolSummary, ...keep }) => keep),
+    agents: run.agents.map(({ promptPreview: _promptPreview, lastToolSummary: _lastToolSummary, ...keep }) => keep),
   }
 }
