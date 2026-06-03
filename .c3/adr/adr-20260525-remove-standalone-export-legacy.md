@@ -1,6 +1,6 @@
 ---
 id: adr-20260525-remove-standalone-export-legacy
-c3-seal: 1b178540cf30dd00795f4a4e2207b2c564469b379018d0229ad9aa5f50c17d9f
+c3-seal: 27e98c3e130b233cdd553951e982b438394161d8ed79108eec25e2d558667db4
 title: remove-standalone-export-legacy
 type: adr
 goal: 'Remove the legacy `chat.exportStandalone` code path — the upstream-`kanna.sh`-upload "Share chat" flow inherited from `jakemor/kanna` — from server, shared protocol, and client. The path is broken on this fork (returns `"No release viewer assets were found for 0.76.0."` because upstream only publishes viewer assets for `0.40.0` against `jakemor/kanna` releases, not against `cuongtranba/kanna`) and is fully superseded by the working session-share feature owned by `c3-228 session-share`. Outcome: a single share UX in the chat navbar (the `ShareButton` popover from `c3-228`), no orphaned upstream-upload code, no dead `StandaloneShareDialog`, no dead WS RPC, no dead types in `src/shared/types.ts`.'
@@ -60,7 +60,7 @@ Delete the entire legacy code path in this PR. Server side: remove `src/server/s
 | useKannaState prune | Remove handleExportStandalone, handleShareChat, handleCloseStandaloneShareDialog, handleCopyStandaloneShareLink, handleOpenStandaloneShareLink, the three setIsExportingStandalone/setStandaloneShareUrl/setStandaloneShareComplete state fields, the StandaloneTranscriptExportCommandResult import, the downloadTextFile helper, and all corresponding entries in the returned snapshot object | src/client/app/useKannaState.ts |
 | ChatNavbar prune | Remove the onExportTranscript / canExportTranscript / isExportingTranscript / exportTranscriptComplete prop quartet from both the compact dropdown variant (lines 37-49, 79-95) and the main toolbar variant (lines 114-117, 153-156, 286-308, 331-352) of src/client/components/chat-ui/ChatNavbar.tsx | src/client/components/chat-ui/ChatNavbar.tsx |
 | ChatPage prop prune | Remove the onExportTranscript/canExportTranscript/isExportingTranscript/exportTranscriptComplete quartet passed at src/client/app/ChatPage/index.tsx:957-960 | src/client/app/ChatPage/index.tsx |
-| Verification | bun run lint + bun test src/server/ws-router + bun test src/server/session-share + bun test src/client/components/share + git grep -E 'exportStandalone|StandaloneShare|standalone-export|onExportTranscript|handleShareChat|handleExportStandalone|isExportingStandalone|standaloneShareUrl|standaloneShareComplete' src/ returns no matches | run after deletion |
+| Verification | bun run lint + bun test src/server/ws-router + bun test src/server/session-share + bun test src/client/components/share + git grep -E 'exportStandalone | StandaloneShare |
 
 ## Underlay C3 Changes
 
@@ -93,11 +93,11 @@ Delete the entire legacy code path in this PR. Server side: remove `src/server/s
 
 | Risk | Mitigation | Verification |
 | --- | --- | --- |
-| Hidden caller of chat.exportStandalone outside useKannaState (e.g., a keyboard shortcut, a CLI script, a test fixture) breaks silently | Final git grep sweep for every removed identifier across src/, scripts/, tests/, and CLAUDE.md surfaces | git grep -E 'exportStandalone|StandaloneShare|standalone-export|onExportTranscript|handleShareChat|handleExportStandalone|isExportingStandalone|standaloneShareUrl|standaloneShareComplete' src/ scripts/ wiki/ returns empty |
+| Hidden caller of chat.exportStandalone outside useKannaState (e.g., a keyboard shortcut, a CLI script, a test fixture) breaks silently | Final git grep sweep for every removed identifier across src/, scripts/, tests/, and CLAUDE.md surfaces | git grep -E 'exportStandalone |
 | Removing downloadTextFile breaks a non-share consumer | Pre-deletion grep confirms downloadTextFile has exactly one caller (the deleted code path) | grep -rn 'downloadTextFile' src/ returns only the to-be-deleted call site |
 | WsCommand ack.result union narrowing breaks a runtime branch | bun run lint flags any narrow on the removed type; bun test covers the ack path | bun run lint && bun test both pass |
-| User press of keyboard shortcut previously bound to handleShareChat does nothing | Audit useKeyboardShortcuts callers in App.tsx; either remap to ShareButton trigger or drop the binding | grep -n 'handleShareChat|share' src/client/app/use-keyboard-shortcuts.ts (or equivalent) reviewed in the diff |
-| Stale doc references to "Share chat" upload flow in wiki/ or docs/ | Sweep wiki/** and docs/** for legacy phrasing | grep -rn 'kanna.sh|exportStandalone|standalone-export' wiki/ docs/ reviewed and either removed or replaced with session-share reference |
+| User press of keyboard shortcut previously bound to handleShareChat does nothing | Audit useKeyboardShortcuts callers in App.tsx; either remap to ShareButton trigger or drop the binding | grep -n 'handleShareChat |
+| Stale doc references to "Share chat" upload flow in wiki/ or docs/ | Sweep wiki/** and docs/** for legacy phrasing | grep -rn 'kanna.sh |
 
 ## Verification
 
@@ -107,7 +107,7 @@ Delete the entire legacy code path in this PR. Server side: remove `src/server/s
 | bun test src/server/ws-router.test.ts | all pass |
 | bun test src/server/session-share/ | all pass (no regression to surviving share path) |
 | bun test src/client/components/share/ | all pass |
-| git grep -E 'exportStandalone|StandaloneShare|standalone-export|onExportTranscript|handleShareChat|handleExportStandalone|isExportingStandalone|standaloneShareUrl|standaloneShareComplete|downloadTextFile' src/ | empty output |
+| git grep -E 'exportStandalone | StandaloneShare |
 | Manual: open running Kanna, navigate to a chat, confirm exactly one share affordance (the ShareButton popover) is visible in the navbar | one button only |
 | Manual: click ShareButton, mint a token, open the public URL in a private window, confirm read-only transcript renders | snapshot served at /share/<token> |
 | c3x check | PASS |

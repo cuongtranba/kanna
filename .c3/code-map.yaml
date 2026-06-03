@@ -178,6 +178,16 @@ c3-226:
   - src/server/tool-callback.ts
 c3-227:
   - src/server/auto-continue/**/*.ts
+c3-229:
+  - src/client/app/WorkflowsSection.tsx
+  - src/client/components/messages/WorkflowMessage.tsx
+  - src/client/stores/workflowsStore.ts
+  - src/server/workflow-registry.test.ts
+  - src/server/workflow-registry.ts
+  - src/server/workflow-watch-io.adapter.test.ts
+  - src/server/workflow-watch-io.adapter.ts
+  - src/shared/workflow-types.test.ts
+  - src/shared/workflow-types.ts
 c3-301:
   - src/shared/analytics.ts
   - src/shared/kanna-system-prompt.test.ts
