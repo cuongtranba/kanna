@@ -149,6 +149,12 @@ export interface StartClaudeSessionPtyArgs {
    * subscribed sockets.
    */
   ptyInstanceRegistry?: PtyInstanceRegistry
+  /**
+   * Optional registry for workflow runs. When set, the driver registers
+   * the chat's workflows dir once the transcript file path is known and
+   * unregisters on cleanup.
+   */
+  workflowRegistry?: import("../workflow-registry").WorkflowRegistry
   /** Optional sampler override (tests inject deterministic values). */
   sampleProcessTreeUsage?: (pid: number) => Promise<ProcessTreeSample | null>
   /** Optional poll-interval override (ms). Defaults to 2000. */
@@ -464,6 +470,7 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
 
   let closed = false
   let cleanedUp = false
+  let workflowRegistrationCancelled = false
   let cachedAccountInfo: AccountInfo | null = deriveAccountInfoFromOauth({ label: args.oauthLabel, oauthKeyMasked: args.oauthKeyMasked })
   let sawResultEntry = false
   let cachedSlashCommands: SlashCommand[] | null = null
@@ -501,6 +508,8 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
         console.warn("[kanna/pty] ptyRegistry.unregister failed", { chatId: args.chatId, sessionId, err })
       }
     }
+    workflowRegistrationCancelled = true
+    args.workflowRegistry?.unregister(args.chatId)
   }
 
   function pushMerged(ev: HarnessEvent) {
@@ -689,6 +698,22 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
     claudeChildPid: pty.pid,
     homeDir: home,
   })
+
+  // Once the transcript file is discovered, register the workflows dir with the
+  // workflow registry. The actual session UUID (used by Claude for the on-disk
+  // subdir) is embedded in the JSONL path — it is NOT `sessionId` (which is
+  // kanna's internal spawn id). We derive it as: basename(filePath, '.jsonl').
+  if (args.workflowRegistry) {
+    const registry = args.workflowRegistry
+    const chatId = args.chatId
+    void transcriptStream.filePath.then((filePath) => {
+      const sessionUUID = path.basename(filePath, ".jsonl")
+      const workflowsDir = path.join(projectDir, sessionUUID, "workflows")
+      if (!workflowRegistrationCancelled) registry.register(chatId, workflowsDir)
+    }).catch((err) => {
+      console.warn("[kanna/pty] workflowRegistry.register skipped: transcript file not found", { chatId: args.chatId, err })
+    })
+  }
 
   const parser = createJsonlEventParser({
     configuredContextWindow: parseConfiguredContextWindowFromModelId(args.model),

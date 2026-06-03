@@ -9,6 +9,7 @@ import type {
   OfferDownloadToolResult,
   ReadFileToolResult,
   TodoItem,
+  WorkflowToolResult,
 } from "./types"
 
 export const KANNA_MCP_SERVER_NAME = "kanna"
@@ -18,6 +19,12 @@ export const EXPOSE_PORT_TOOL_NAME = `mcp__${KANNA_MCP_SERVER_NAME}__expose_port
 function asRecord(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null
   return value as Record<string, unknown>
+}
+
+function parseWorkflowMeta(script: string): { name?: string; description?: string } {
+  const name = script.match(/name\s*:\s*['"]([^'"]+)['"]/)?.[1]
+  const description = script.match(/description\s*:\s*['"]([^'"]+)['"]/)?.[1]
+  return { name, description }
 }
 
 export function normalizeToolCall(args: {
@@ -179,6 +186,22 @@ export function normalizeToolCall(args: {
         },
         rawInput: input,
       }
+    case "Workflow": {
+      const script = typeof input.script === "string" ? input.script : ""
+      const meta = parseWorkflowMeta(script)
+      return {
+        kind: "tool",
+        toolKind: "workflow",
+        toolName,
+        toolId,
+        input: {
+          name: meta.name,
+          description: meta.description,
+          scriptPath: typeof input.scriptPath === "string" ? input.scriptPath : undefined,
+        },
+        rawInput: input,
+      }
+    }
   }
 
   if (toolName === OFFER_DOWNLOAD_TOOL_NAME) {
@@ -396,6 +419,14 @@ export function hydrateToolResult(tool: NormalizedToolCall, raw: unknown): Hydra
         relativePath: typeof record?.relativePath === "string" ? record.relativePath : "",
         fileName: typeof record?.fileName === "string" ? record.fileName : "",
       } satisfies ImageGenerationToolResult
+    }
+    case "workflow": {
+      const text = typeof raw === "string" ? raw : ""
+      const taskId = text.match(/Task ID:\s*(\S+)/)?.[1]
+      return {
+        taskId,
+        text,
+      } satisfies WorkflowToolResult
     }
     case "read_file":
       if (typeof parsed === "string") {

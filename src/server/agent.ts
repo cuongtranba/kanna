@@ -292,6 +292,8 @@ interface AgentCoordinatorArgs {
   claudePtyRegistry?: import("./claude-pty/pid-registry.adapter").ClaudePtyRegistry
   /** In-memory live-status registry surfaced to the UI. Forwarded to every PTY spawn. */
   ptyInstanceRegistry?: import("./claude-pty/pty-instance-registry").PtyInstanceRegistry
+  /** Registry of workflow runs per chat, populated by PTY driver from the on-disk workflows dir. */
+  workflowRegistry?: import("./workflow-registry").WorkflowRegistry
 }
 
 interface SendToStartingProfile {
@@ -1192,6 +1194,7 @@ export class AgentCoordinator {
   private readonly claudeSessionSweepTimer: ReturnType<typeof setInterval> | null
   private readonly claudePtyRegistry: import("./claude-pty/pid-registry.adapter").ClaudePtyRegistry | null
   private readonly ptyInstanceRegistry: import("./claude-pty/pty-instance-registry").PtyInstanceRegistry | null
+  private readonly workflowRegistry: import("./workflow-registry").WorkflowRegistry | null
   private readonly subagentPendingResolvers = new Map<
     string,
     { resolve: (v: unknown) => void; reject: (e: Error) => void }
@@ -1266,6 +1269,7 @@ export class AgentCoordinator {
     this.claudeSessionSweepTimer?.unref?.()
     this.claudePtyRegistry = args.claudePtyRegistry ?? null
     this.ptyInstanceRegistry = args.ptyInstanceRegistry ?? null
+    this.workflowRegistry = args.workflowRegistry ?? null
   }
 
   setBackgroundErrorReporter(report: ((message: string) => void) | null) {
@@ -1582,6 +1586,7 @@ export class AgentCoordinator {
                 systemPromptAppend: ephemeralSystemPromptAppend,
                 ptyRegistry: this.claudePtyRegistry ?? undefined,
                 ptyInstanceRegistry: this.ptyInstanceRegistry ?? undefined,
+                workflowRegistry: this.workflowRegistry ?? undefined,
                 customMcpServers: this.getEnabledCustomMcpServers(),
                   })
             : await this.startClaudeSessionFn({
@@ -2225,6 +2230,7 @@ export class AgentCoordinator {
               chatPolicy: this.resolveChatPolicy(args.chatId),
               ptyRegistry: this.claudePtyRegistry ?? undefined,
                 ptyInstanceRegistry: this.ptyInstanceRegistry ?? undefined,
+              workflowRegistry: this.workflowRegistry ?? undefined,
               customMcpServers: this.getEnabledCustomMcpServers(),
             })
           : await this.startClaudeSessionFn({
@@ -2473,6 +2479,7 @@ export class AgentCoordinator {
           oneShot: true,
           ptyRegistry: this.claudePtyRegistry ?? undefined,
                 ptyInstanceRegistry: this.ptyInstanceRegistry ?? undefined,
+          workflowRegistry: this.workflowRegistry ?? undefined,
           customMcpServers: this.getEnabledCustomMcpServers(),
         })
       }

@@ -959,6 +959,9 @@ export interface ImageGenerationToolResult {
 export interface UnknownToolCall
   extends ToolCallBase<"unknown_tool", { payload: Record<string, unknown> }> { }
 
+export interface WorkflowToolCall
+  extends ToolCallBase<"workflow", { name?: string; description?: string; scriptPath?: string }> { }
+
 export type NormalizedToolCall =
   | AskUserQuestionToolCall
   | ExitPlanModeToolCall
@@ -976,6 +979,7 @@ export type NormalizedToolCall =
   | McpGenericToolCall
   | OfferDownloadToolCall
   | ImageGenerationToolCall
+  | WorkflowToolCall
   | UnknownToolCall
 
 export interface ToolResultEntry extends TranscriptEntryBase {
@@ -1376,6 +1380,14 @@ export type HydratedOfferDownloadToolCall =
 export type HydratedImageGenerationToolCall =
   HydratedToolCallBase<"image_generation", ImageGenerationToolCall["input"], ImageGenerationToolResult>
 
+export interface WorkflowToolResult {
+  taskId?: string
+  text: string
+}
+
+export type HydratedWorkflowToolCall =
+  HydratedToolCallBase<"workflow", WorkflowToolCall["input"], WorkflowToolResult>
+
 export type HydratedUnknownToolCall =
   HydratedToolCallBase<"unknown_tool", UnknownToolCall["input"], unknown>
 
@@ -1396,6 +1408,7 @@ export type HydratedToolCall =
   | HydratedMcpGenericToolCall
   | HydratedOfferDownloadToolCall
   | HydratedImageGenerationToolCall
+  | HydratedWorkflowToolCall
   | HydratedUnknownToolCall
 
 export type HydratedTranscriptMessage =

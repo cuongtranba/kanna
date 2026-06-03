@@ -23,6 +23,8 @@ import type { EditorOpenSettings, OpenExternalAction, PtyInstancesEvent } from "
 import type { PtyInstancesSnapshot } from "../../shared/pty-instance"
 import type { ChatPermissionPolicyOverride, ToolRequestDecision } from "../../shared/permission-policy"
 import { usePtyInstancesStore } from "../stores/ptyInstancesStore"
+import { useWorkflowsStore } from "../stores/workflowsStore"
+import type { WorkflowsSnapshot } from "../../shared/protocol"
 
 function shallowProviderTokenEquals(
   a: Partial<Record<AgentProvider, string | null>>,
@@ -1320,6 +1322,13 @@ export function useKannaState(activeChatId: string | null): KannaState {
       })
       unsubscribe()
     }
+  }, [activeChatId, socket])
+
+  useEffect(() => {
+    if (!activeChatId) return
+    return socket.subscribe<WorkflowsSnapshot>({ type: "workflows", chatId: activeChatId }, (snapshot) => {
+      useWorkflowsStore.getState().setRuns(snapshot.chatId, snapshot.runs)
+    })
   }, [activeChatId, socket])
 
   useEffect(() => {

@@ -26,6 +26,7 @@ import type {
 } from "./types"
 import type { ChatPermissionPolicyOverride, ToolRequestDecision } from "./permission-policy"
 import type { PtyInstanceDelta, PtyInstancesSnapshot } from "./pty-instance"
+import type { WorkflowRunSummary } from "./workflow-types"
 
 export type { EditorPreset }
 
@@ -45,6 +46,7 @@ export type SubscriptionTopic =
   | { type: "project-git"; projectId: string }
   | { type: "terminal"; terminalId: string }
   | { type: "pty-instances" }
+  | { type: "workflows"; chatId: string }
 
 export interface TerminalSnapshot {
   terminalId: string
@@ -74,6 +76,11 @@ export type PtyInstancesEvent =
   | { type: "pty-instances.added"; instance: Extract<PtyInstanceDelta, { type: "added" }>["instance"] }
   | { type: "pty-instances.updated"; instance: Extract<PtyInstanceDelta, { type: "updated" }>["instance"] }
   | { type: "pty-instances.removed"; chatId: string }
+
+export interface WorkflowsSnapshot {
+  chatId: string
+  runs: WorkflowRunSummary[]
+}
 
 export type WsEvent = TerminalEvent | PtyInstancesEvent
 
@@ -246,6 +253,7 @@ export type ClientCommand =
       chatId: string
       runId: string
     }
+  | { type: "workflows.getRun"; chatId: string; runId: string }
   | {
       type: "message.enqueue"
       chatId: string
@@ -306,6 +314,7 @@ export type ServerSnapshot =
   | { type: "project-git"; data: ChatDiffSnapshot | null }
   | { type: "terminal"; data: TerminalSnapshot | null }
   | { type: "pty-instances"; data: PtyInstancesSnapshot }
+  | { type: "workflows"; data: WorkflowsSnapshot }
 
 export type ServerEnvelope =
   | { v: 1; type: "snapshot"; id: string; snapshot: ServerSnapshot }

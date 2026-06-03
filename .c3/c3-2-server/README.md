@@ -1,7 +1,7 @@
 ---
 id: c3-2
 c3-version: 4
-c3-seal: 77a295340869a9cf6519b456f34c49ce91deb4e50e78cd714df5db481ba3adc7
+c3-seal: ce52f697e8fc91213a7525615acb4ff3cce2bc9dfff381e7bae3bf8b48680ff4
 title: Server
 type: container
 boundary: service
@@ -57,3 +57,4 @@ Run the local Bun backend: serve HTTP+WebSocket on localhost, coordinate Claude 
 | c3-226 | kanna-mcp-host | feature | implemented | Loopback MCP server + built-in shims + durable approval protocol + path-deny |
 | c3-227 | auto-continue | feature | implemented | Detect rate-limit / auth-error endings, schedule retries, replay queued prompts |
 | c3-228 | session-share | feature | planned | Mint read-only share tokens for finished chats; serve frozen snapshots at /share/:token without auth |
+| c3-229 | workflow-status | feature | planned | Disk-watch sidecar read-model for PTY workflow runs; WorkflowRegistry + WorkflowsSnapshot WS topic |

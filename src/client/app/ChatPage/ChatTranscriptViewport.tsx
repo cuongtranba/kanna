@@ -28,6 +28,8 @@ import {
   EMPTY_STATE_TEXT,
 } from "./utils"
 import type { EditorPreset } from "../../../shared/protocol"
+import type { WorkflowRun, WorkflowRunSummary } from "../../../shared/workflow-types"
+import { WorkflowsSectionWithDetail } from "../WorkflowsSection"
 
 interface ChatTranscriptViewportProps {
   activeChatId: string | null
@@ -64,6 +66,8 @@ interface ChatTranscriptViewportProps {
   onTunnelRetry?: (tunnelId: string) => void | Promise<void>
   subagentRuns?: Record<string, SubagentRunSnapshot>
   onCancelSubagentRun?: (chatId: string, runId: string) => void
+  workflowRuns?: WorkflowRunSummary[]
+  getWorkflowRunDetail?: (runId: string) => Promise<WorkflowRun | null>
   showScrollButton: boolean
   onIsAtEndChange: (isAtEnd: boolean) => void
   scrollToBottom: () => void
@@ -112,6 +116,8 @@ export const ChatTranscriptViewport = memo(function ChatTranscriptViewport({
   onTunnelRetry,
   subagentRuns,
   onCancelSubagentRun,
+  workflowRuns,
+  getWorkflowRunDetail,
   showScrollButton,
   onIsAtEndChange,
   scrollToBottom,
@@ -300,11 +306,12 @@ export const ChatTranscriptViewport = memo(function ChatTranscriptViewport({
           onAutoContinueAccept={onAutoContinueAccept}
           onAutoContinueReschedule={onAutoContinueReschedule}
           onAutoContinueCancel={onAutoContinueCancel}
+          chatId={activeChatId ?? undefined}
         />
         {rowRuns.map((run) => renderRunTree(run, 0))}
       </div>
     )
-  }, [handleToolGroupExpandedChange, onAskUserQuestionSubmit, onExitPlanModeConfirm, onToolRequestAnswer, schedules, onAutoContinueAccept, onAutoContinueReschedule, onAutoContinueCancel, toolGroupExpanded, runsByUserMessageId, renderRunTree])
+  }, [handleToolGroupExpandedChange, onAskUserQuestionSubmit, onExitPlanModeConfirm, onToolRequestAnswer, schedules, onAutoContinueAccept, onAutoContinueReschedule, onAutoContinueCancel, toolGroupExpanded, runsByUserMessageId, renderRunTree, activeChatId])
 
   const listHeader = (
     <div className="mx-auto w-full max-w-[800px]" style={{ paddingTop: `${headerOffsetPx}px` }}>
@@ -327,6 +334,14 @@ export const ChatTranscriptViewport = memo(function ChatTranscriptViewport({
 
   const listFooter = (
     <div className="mx-auto w-full max-w-[800px]">
+      {workflowRuns && workflowRuns.length > 0 && getWorkflowRunDetail ? (
+        <div className="pb-5">
+          <WorkflowsSectionWithDetail
+            runs={workflowRuns}
+            getRunDetail={getWorkflowRunDetail}
+          />
+        </div>
+      ) : null}
       {liveTunnelRecord && onTunnelAccept && onTunnelStop && onTunnelRetry && (
         <div className="pb-5">
           <CloudflareTunnelCard

@@ -1,6 +1,6 @@
 ---
 id: adr-20260529-pty-transcript-watch-event-source
-c3-seal: dbe8ac6a7dfdc508e88ca9b3f7d7689dd4fd3e8c51a2468234e76f46d3854d1a
+c3-seal: 8a13043789995c20a4a952bd83ae64d56f9bfb07ccfa47616056956e63bd899c
 title: pty-transcript-watch-event-source
 type: adr
 goal: Authoritatively record that the PTY Claude driver's runtime event source is the **on-disk transcript JSONL** (`~/.claude/projects/<encoded-cwd>/<session-uuid>.jsonl`) tailed via `fs.watch` (or polling), not the subprocess stdout stream. Supersede `adr-20260519-pty-driver-stdout-event-source` and update `c3-225-claude-pty-driver` so its Purpose, Foundational Flow, Contract, and Change Safety match production code. Record `jsonl-path.ts` (`computeJsonlPath`/`encodeCwd`) as **live** code with multiple production callers, removing the prior "dead code" claim.
@@ -68,7 +68,7 @@ This codifies the de-facto state, so `c3x check` passes and future edits do not 
 | Surface | Behavior | Evidence |
 | --- | --- | --- |
 | c3x check | Validates seal + structure after the rewrite | c3x check exits clean |
-| grep -rn "pumpStdout|proc.stdout" src/server/claude-pty | Returns zero matches in production | shell command |
+| grep -rn "pumpStdout | proc.stdout" src/server/claude-pty | Returns zero matches in production |
 | bun test src/server/claude-pty/driver.test.ts | Driver test still green under transcript-watch model | bun test run |
 
 ## Alternatives Considered
@@ -92,5 +92,5 @@ This codifies the de-facto state, so `c3x check` passes and future edits do not 
 | Check | Result |
 | --- | --- |
 | c3x check | exits clean, no BROKEN_SEAL / drift |
-| grep -rn "pumpStdout|proc.stdout" src/server/claude-pty | grep -v test | zero production matches |
+| grep -rn "pumpStdout | proc.stdout" src/server/claude-pty |
 | c3x read c3-225 | shows transcript-watch event source, no stdout pump |

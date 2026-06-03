@@ -306,4 +306,35 @@ describe("hydrateToolResult", () => {
       ],
     })
   })
+
+  test("normalizes Workflow tool call to workflow toolKind (inline script meta)", () => {
+    const r = normalizeToolCall({
+      toolName: "Workflow", toolId: "t1",
+      input: { script: "export const meta = {\n  name: 'sonar-fix',\n  description: 'fix sonar',\n}" },
+    })
+    expect(r.toolKind).toBe("workflow")
+    if (r.toolKind === "workflow") {
+      expect(r.input.name).toBe("sonar-fix")
+      expect(r.input.description).toBe("fix sonar")
+    }
+  })
+
+  test("normalizes Workflow tool call with scriptPath only", () => {
+    const r = normalizeToolCall({ toolName: "Workflow", toolId: "t2", input: { scriptPath: "/p/.wf.mjs" } })
+    expect(r.toolKind).toBe("workflow")
+    if (r.toolKind === "workflow") expect(r.input.scriptPath).toBe("/p/.wf.mjs")
+  })
+})
+
+describe("hydrateToolResult — Workflow", () => {
+  test("hydrates Workflow result: extracts taskId from launch text", () => {
+    const tool = normalizeToolCall({ toolName: "Workflow", toolId: "t1", input: { scriptPath: "/p/.wf.mjs" } })
+    const result = hydrateToolResult(tool, "Workflow launched in background. Task ID: wcxjintdj\nSummary: fix sonar")
+    expect(result).toBeDefined()
+    // taskId must be a structured field on the result object — not just present in raw text
+    expect(result).not.toBe("Workflow launched in background. Task ID: wcxjintdj\nSummary: fix sonar")
+    expect(typeof result).toBe("object")
+    const r = result as Record<string, unknown>
+    expect(r.taskId).toBe("wcxjintdj")
+  })
 })
