@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test"
-import { mkdtempSync, writeFileSync, rmSync } from "node:fs"
+import { mkdtempSync, writeFileSync, rmSync, mkdirSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { readWorkflowDir, watchWorkflowDir } from "./workflow-watch-io.adapter"
@@ -29,6 +29,18 @@ describe("workflow-watch-io.adapter", () => {
     const items = readWorkflowDir(d)
     expect(items.map((i) => i.runId)).toEqual(["wf_ok"])
   })
+
+  test("arms when the workflows dir is created AFTER watch starts (watches parent)", async () => {
+    const base = tmp()                      // exists
+    const dir = join(base, "workflows")     // does NOT exist yet
+    let calls = 0
+    const dispose = watchWorkflowDir(dir, () => { calls += 1 }, { debounceMs: 20 })
+    mkdirSync(dir)
+    writeFileSync(join(dir, "wf_a.json"), "{}")
+    await new Promise((r) => setTimeout(r, 200))
+    expect(calls).toBeGreaterThanOrEqual(1)
+    dispose()
+  }, 5000)
 
   test("watchWorkflowDir fires (debounced) on a new file, dispose stops it", async () => {
     const d = tmp()
