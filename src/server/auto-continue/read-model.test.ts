@@ -38,6 +38,31 @@ describe("deriveChatSchedules", () => {
     expect(result.liveScheduleId).toBeNull()
   })
 
+  test("agent_wakeup accepted event carries prompt onto the schedule", () => {
+    const wake: AutoContinueEvent = {
+      v: 3,
+      kind: "auto_continue_accepted",
+      timestamp: 2_000,
+      chatId: "c1",
+      scheduleId: "s1",
+      scheduledAt: 12_000,
+      tz: "system",
+      source: "agent_wakeup",
+      resetAt: 12_000,
+      detectedAt: 2_000,
+      prompt: "resume the sonar sweep",
+    }
+    const result = deriveChatSchedules([wake], "c1")
+    expect(result.schedules["s1"].state).toBe("scheduled")
+    expect(result.schedules["s1"].prompt).toBe("resume the sonar sweep")
+    expect(result.liveScheduleId).toBe("s1")
+  })
+
+  test("provider-failure accepted event leaves prompt undefined", () => {
+    const result = deriveChatSchedules([accepted("c1", "s1")], "c1")
+    expect(result.schedules["s1"].prompt).toBeUndefined()
+  })
+
   test("proposed event yields state=proposed with liveScheduleId set", () => {
     const result = deriveChatSchedules([proposed("c1", "s1")])
     expect(result.schedules["s1"].state).toBe("proposed")

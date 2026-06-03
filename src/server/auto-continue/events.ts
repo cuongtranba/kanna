@@ -1,5 +1,20 @@
 export const AUTO_CONTINUE_EVENT_VERSION = 3 as const
 
+/**
+ * Why a schedule was accepted.
+ *  - `user` / `auto_setting` / `token_rotation` — provider-failure resume
+ *    (rate-limit, auth-error). Fire the literal `"continue"`.
+ *  - `agent_wakeup` — the model called `ScheduleWakeup`; replay its prompt.
+ *  - `pending_workflow` — turn ended with a background Workflow still running;
+ *    re-enter to harvest results.
+ */
+export type AutoContinueSource =
+  | "user"
+  | "auto_setting"
+  | "token_rotation"
+  | "agent_wakeup"
+  | "pending_workflow"
+
 interface AutoContinueEventBase {
   v: typeof AUTO_CONTINUE_EVENT_VERSION
   timestamp: number
@@ -18,9 +33,15 @@ export type AutoContinueEvent =
       kind: "auto_continue_accepted"
       scheduledAt: number
       tz: string
-      source: "user" | "auto_setting" | "token_rotation"
+      source: AutoContinueSource
       resetAt: number
       detectedAt: number
+      /**
+       * Prompt to replay when this schedule fires. Present only for
+       * agent-driven wakes (`agent_wakeup`, `pending_workflow`); provider-
+       * failure schedules omit it and fire the literal `"continue"`.
+       */
+      prompt?: string
     })
   | (AutoContinueEventBase & {
       kind: "auto_continue_rescheduled"

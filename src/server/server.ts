@@ -61,6 +61,13 @@ import type {
   ToolResultEntry,
 } from "../shared/types"
 
+/** Parse a positive-integer env var, falling back to `fallback` on unset/invalid/<=0. */
+function parsePositiveIntEnv(raw: string | undefined, fallback: number): number {
+  if (raw === undefined) return fallback
+  const n = Number.parseInt(raw, 10)
+  return Number.isFinite(n) && n > 0 ? n : fallback
+}
+
 function deriveOriginFromUpgrade(req: Request, url: URL): string {
   const forwardedProto = req.headers.get("x-forwarded-proto")
   const forwardedHost = req.headers.get("x-forwarded-host")
@@ -390,6 +397,8 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
   agent = new AgentCoordinator({
     store,
     scheduleManager,
+    maxAgentWakes: parsePositiveIntEnv(process.env.KANNA_MAX_AGENT_WAKES, 25),
+    pendingWorkflowPollMs: parsePositiveIntEnv(process.env.KANNA_PENDING_WORKFLOW_POLL_MS, 120_000),
     claudeLimitDetector: options.agentOverrides?.claudeLimitDetector,
     codexLimitDetector: options.agentOverrides?.codexLimitDetector,
     throwOnClaudeSessionStart: options.agentOverrides?.throwOnClaudeSessionStart,
