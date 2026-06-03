@@ -1,6 +1,6 @@
 ---
 id: c3-226
-c3-seal: d4436e2bc2307d55f5957efa304677f799111e70344eca1603d00bfc00346261
+c3-seal: d7870fc861e8bb32b6a3419e83ab7589feabb155cc50386e131eb0b45b732c2d
 title: kanna-mcp-host
 type: component
 category: feature
@@ -95,6 +95,7 @@ the approval protocol clears.
 | delegate_subagent keep_alive param | OUT | keep_alive boolean on delegate_subagent. When true and the target is a Claude subagent, the run stays live and the reply text carries the live run_id; non-claude targets return isError. Routes to c3-210 delegateRun with keepAlive | c3-210 | src/server/kanna-mcp.ts, src/server/kanna-mcp-tools/delegate-subagent.ts |
 | send_subagent_message tool | OUT | Takes run_id plus prompt, drives one follow-up turn into a live keep-alive session, blocks until that turn finishes, returns the subagent reply text or isError NO_LIVE_SESSION. Routes to c3-210 sendToLiveRun | c3-210 | src/server/kanna-mcp.ts |
 | close_subagent tool | OUT | Takes run_id, closes a live keep-alive session and frees its process. Routes to c3-210 closeLiveRun | c3-210 | src/server/kanna-mcp.ts |
+| schedule_wakeup tool | OUT | Takes delay_seconds plus prompt, arms a Kanna-owned agent_wakeup schedule via c3-210 scheduleAgentWakeup, returns the schedule_id or isError when the per-chat runaway cap is reached. Registered only when a scheduleWakeup callback is supplied, mirroring the delegate_subagent guard. Replaces the native ScheduleWakeup the PTY driver disallows | c3-227 | src/server/kanna-mcp.ts |
 
 ## Change Safety
 

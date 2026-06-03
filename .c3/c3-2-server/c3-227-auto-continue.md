@@ -1,6 +1,6 @@
 ---
 id: c3-227
-c3-seal: f441bd961fdff8ce9b783fb8e26d749a6607d94d1e1d3a7916c2aa762e56640f
+c3-seal: cf8bdf5d73b8a9a93354021d117d7e9596e2b522db9e55e89f1c0eac0829397e
 title: auto-continue
 type: component
 category: feature
@@ -87,7 +87,8 @@ subscribe to and the WS router fans out.
 | --- | --- | --- | --- | --- |
 | Auto-continue events | OUT | auto_continue_scheduled, auto_continue_triggered, auto_continue_cancelled typed events on the JSONL log | c3-205 | src/server/auto-continue/events.ts |
 | Schedule read-model | OUT | {chatId, wakeAt, reason} snapshots projected from the event log | c3-207 | src/server/auto-continue/read-model.ts |
-| Trigger new turn | OUT | On wake, call the agent coordinator's "start turn" with the queued user prompt | c3-210 | src/server/auto-continue/schedule-manager.ts |
+| Trigger new turn | OUT | On wake, call the agent coordinator's "start turn"; replay the schedule prompt for agent wakes or the queued user prompt for provider-failure resume | c3-210 | src/server/auto-continue/schedule-manager.ts |
+| Arm agent wake | IN | AgentCoordinator.scheduleAgentWakeup arms an agent_wakeup or pending_workflow schedule and returns null past the per-chat runaway cap | c3-210 | src/server/agent.ts |
 | Cancel signal | IN | UI cancels via auto_continue_cancel command on the WS router | c3-208 | src/server/auto-continue/schedule-manager.ts |
 
 ## Change Safety
