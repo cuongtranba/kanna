@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.81.3](https://github.com/cuongtranba/kanna/compare/v0.81.2...v0.81.3) (2026-06-03)
+
+
+### Bug Fixes
+
+* **chat-ui:** align session token readout with flat toolbar ([#349](https://github.com/cuongtranba/kanna/issues/349)) ([53a8e98](https://github.com/cuongtranba/kanna/commit/53a8e986207b2c30d74373634de4a3a4d0767174))
+* **mcp:** forward customMcpServers through agent settings view ([#353](https://github.com/cuongtranba/kanna/issues/353)) ([7efa965](https://github.com/cuongtranba/kanna/commit/7efa965b8f889cad7537a4aa51c66f751dbf1292))
+* **mcp:** keep loopback MCP transport alive across idle gaps ([#351](https://github.com/cuongtranba/kanna/issues/351)) ([22f8bec](https://github.com/cuongtranba/kanna/commit/22f8bec92e6dafdbaeeaaa58ff7f200d3f95900c))
+* **pty:** cannot fork PTY-created conversations (session id collision) ([#352](https://github.com/cuongtranba/kanna/issues/352)) ([4b3852e](https://github.com/cuongtranba/kanna/commit/4b3852e22b7f10074ab6998ad4d981748e9020e9))
+
 ## [0.81.2](https://github.com/cuongtranba/kanna/compare/v0.81.1...v0.81.2) (2026-06-02)
 
 
