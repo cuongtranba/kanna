@@ -61,14 +61,18 @@ function synthRunningRun(runId: string, startTime: number): WorkflowRun {
 
 function basenameAfterSlash(p: string | undefined): string | undefined {
   if (!p) return undefined
-  const i = p.lastIndexOf("/")
-  const out = i < 0 ? p : p.slice(i + 1)
+  // Strip trailing slash so "/repo/pkg/x/" still yields "x", not "".
+  const trimmed = p.replace(/\/+$/, "")
+  if (!trimmed) return undefined
+  const i = trimmed.lastIndexOf("/")
+  const out = i < 0 ? trimmed : trimmed.slice(i + 1)
   return out || undefined
 }
 
 function buildAgentsFromJournal(entries: WorkflowJournalEntry[]): WorkflowAgentProgress[] {
   const out = new Map<string, WorkflowAgentProgress>()
   for (const e of entries) {
+    if (!e.agentId) continue // defensive: drop entries with blank/missing agentId
     if (!out.has(e.agentId)) {
       out.set(e.agentId, { index: out.size + 1, label: "agent", agentId: e.agentId, state: "running" })
     }
