@@ -108,6 +108,8 @@ export interface StartClaudeSessionPtyArgs {
   subagentOrchestrator?: SubagentOrchestrator
   /** Per-spawn delegation context (depth / ancestor chain / parentUserMessageId resolver). */
   delegationContext?: KannaMcpDelegationContext
+  /** Backs the `schedule_wakeup` MCP tool. Omit to hide the tool from the model. */
+  scheduleWakeup?: (a: { delayMs: number; prompt: string }) => Promise<string | null>
   /** Enabled user-defined MCP servers, written into mcp-config.json. */
   customMcpServers?: readonly McpServerConfig[]
   /** Optional override used by tests to inject a fake HTTP MCP starter. */
@@ -198,8 +200,17 @@ export { OutputRing }
  * and which route through the durable approval protocol to the UI.
  * `EnterPlanMode` is intentionally excluded — it has no user round-trip and
  * the SDK hook never intercepts it, so leaving it native preserves parity.
+ *
+ * `ScheduleWakeup` is disallowed for the same reason: the native CLI wake is
+ * a dead-letter under Kanna's spawn model (the fire lands as an isMeta:true
+ * transcript line that `jsonl-to-event.ts` drops, and the in-memory cron dies
+ * on restart). Kanna force-registers `mcp__kanna__schedule_wakeup` instead,
+ * which owns the timer via the event-sourced ScheduleManager. The shim is only
+ * registered when a `scheduleWakeup` callback is supplied (main chats), so
+ * subagent spawns simply lose the no-op native tool — which is correct, they
+ * should not self-schedule. See adr-20260603-agent-self-scheduled-wake.
  */
-export const PTY_DISALLOWED_NATIVE_TOOLS = ["AskUserQuestion", "ExitPlanMode"] as const
+export const PTY_DISALLOWED_NATIVE_TOOLS = ["AskUserQuestion", "ExitPlanMode", "ScheduleWakeup"] as const
 
 export interface BuildPtyCliArgsInput {
   sessionId: string
@@ -413,6 +424,7 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
         chatPolicy: args.chatPolicy,
         subagentOrchestrator: args.subagentOrchestrator,
         delegationContext: args.delegationContext,
+        scheduleWakeup: args.scheduleWakeup,
         // PTY has no canUseTool hook — the durable approval protocol is the
         // only host path for AskUserQuestion/ExitPlanMode. Force the shims
         // on regardless of KANNA_MCP_TOOL_CALLBACKS (issue #215). Paired

@@ -400,3 +400,50 @@ describe("keep_alive delegate + send_subagent_message + close_subagent", () => {
     expect(tools.has("close_subagent")).toBe(false)
   })
 })
+
+describe("schedule_wakeup tool", () => {
+  const baseArgs = {
+    projectId: "p",
+    localPath: "/tmp",
+    chatId: "c",
+    sessionId: "s",
+    chatPolicy: POLICY_DEFAULT,
+    tunnelGateway: null,
+  } as const
+
+  function toolMap(tools: ReturnType<typeof buildKannaMcpTools>) {
+    const m = new Map<string, { handler: (i: Record<string, unknown>) => Promise<{ content: Array<{ type: string; text: string }>; isError?: boolean }> }>()
+    for (const t of tools) {
+      m.set(t.name, { handler: (i) => (t as { handler: (x: Record<string, unknown>, e: unknown) => Promise<{ content: Array<{ type: string; text: string }>; isError?: boolean }> }).handler(i, undefined) })
+    }
+    return m
+  }
+
+  test("hidden when no scheduleWakeup callback supplied", () => {
+    const tools = buildKannaMcpTools({ ...baseArgs })
+    expect(tools.map((t) => t.name)).not.toContain("schedule_wakeup")
+  })
+
+  test("registered and forwards delay+prompt; returns schedule_id", async () => {
+    const calls: Array<{ delayMs: number; prompt: string }> = []
+    const tools = toolMap(buildKannaMcpTools({
+      ...baseArgs,
+      scheduleWakeup: async (a) => { calls.push(a); return "sched-xyz" },
+    }))
+    expect(tools.has("schedule_wakeup")).toBe(true)
+    const res = await tools.get("schedule_wakeup")!.handler({ delay_seconds: 90, prompt: "resume sweep" })
+    expect(calls[0]).toEqual({ delayMs: 90_000, prompt: "resume sweep" })
+    expect(res.isError).toBeUndefined()
+    expect(res.content[0].text).toContain("sched-xyz")
+  })
+
+  test("cap reached (callback returns null) → isError with guidance", async () => {
+    const tools = toolMap(buildKannaMcpTools({
+      ...baseArgs,
+      scheduleWakeup: async () => null,
+    }))
+    const res = await tools.get("schedule_wakeup")!.handler({ delay_seconds: 5, prompt: "again" })
+    expect(res.isError).toBe(true)
+    expect(res.content[0].text).toContain("cap")
+  })
+})

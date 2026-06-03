@@ -1050,6 +1050,14 @@ export interface ResultEntry extends TranscriptEntryBase {
   result: string
   costUsd?: number
   usage?: ProviderUsage
+  /**
+   * Number of background Workflow tasks still running when this turn ended
+   * (from claude-code's `turn_duration` frame). When > 0 the coordinator arms
+   * a pending-workflow wake so the agent re-enters to harvest results instead
+   * of going idle. Absent/0 on normal turns.
+   * See adr-20260603-agent-self-scheduled-wake.
+   */
+  pendingWorkflowCount?: number
 }
 
 export interface StatusEntry extends TranscriptEntryBase {
@@ -1577,6 +1585,12 @@ export interface AutoContinueSchedule {
   tz: string
   resetAt: number
   detectedAt: number
+  /**
+   * Prompt replayed when an agent-driven wake (`agent_wakeup` /
+   * `pending_workflow`) fires. Absent on provider-failure schedules, which
+   * fire the literal `"continue"`.
+   */
+  prompt?: string
 }
 
 export interface AutoContinuePromptEntry extends TranscriptEntryBase {

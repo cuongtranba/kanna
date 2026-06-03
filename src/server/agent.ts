@@ -247,12 +247,29 @@ interface AgentCoordinatorArgs {
     chatPolicy?: ChatPermissionPolicy
     /** Enabled user MCP servers, merged into the SDK's mcpServers map. */
     customMcpServers?: readonly McpServerConfig[]
+    /** Backs the `schedule_wakeup` MCP tool. Omit to hide the tool. */
+    scheduleWakeup?: (a: { delayMs: number; prompt: string }) => Promise<string | null>
   }) => Promise<ClaudeSessionHandle>
   startClaudeSessionPTY?: (args: StartClaudeSessionPtyArgs) => Promise<ClaudeSessionHandle>
   claudeLimitDetector?: LimitDetector
   codexLimitDetector?: LimitDetector
   scheduleManager?: ScheduleManager
   getAutoResumePreference?: () => boolean
+  /**
+   * Max consecutive agent-driven wakes (`ScheduleWakeup` / pending-workflow)
+   * per chat before Kanna refuses to arm another — runaway-loop guard so a
+   * self-scheduling agent cannot burn OAuth quota indefinitely. The chain
+   * resets on any real (non-auto-continue) user message. Default 25.
+   */
+  maxAgentWakes?: number
+  /**
+   * Delay (ms) for the pending-workflow harvest wake armed when a turn ends
+   * with a background Workflow still running. Kanna gets no mid-flight
+   * completion signal, so the wake replays a "check your background work"
+   * prompt after this delay; the model harvests or re-schedules. Default
+   * 120000 (2 min). Bounded by `maxAgentWakes`.
+   */
+  pendingWorkflowPollMs?: number
   getSubagents?: () => Subagent[]
   getAppSettingsSnapshot?: () => {
     claudeAuth?: { authenticated?: boolean } | null
@@ -661,6 +678,9 @@ export function normalizeClaudeStreamMessage(message: any): TranscriptEntry[] {
       : typeof message.duration_ms === "number"
         ? message.duration_ms
         : 0
+    const pendingWorkflowCount = typeof message.pendingWorkflowCount === "number"
+      ? message.pendingWorkflowCount
+      : undefined
     return [
       timestamped({
         kind: "result",
@@ -670,6 +690,7 @@ export function normalizeClaudeStreamMessage(message: any): TranscriptEntry[] {
         durationMs,
         result: "",
         costUsd: undefined,
+        ...(pendingWorkflowCount !== undefined ? { pendingWorkflowCount } : {}),
         debugRaw,
       }),
     ]
@@ -961,6 +982,8 @@ async function startClaudeSession(args: {
   subagentOrchestrator?: SubagentOrchestrator
   /** Per-spawn delegation context (depth / ancestor chain / parentUserMessageId resolver). */
   delegationContext?: KannaMcpDelegationContext
+  /** Backs the `schedule_wakeup` MCP tool. Omit to hide the tool. */
+  scheduleWakeup?: (a: { delayMs: number; prompt: string }) => Promise<string | null>
   /** Enabled user MCP servers, merged into the SDK's mcpServers map. */
   customMcpServers?: readonly McpServerConfig[]
 }): Promise<ClaudeSessionHandle> {
@@ -1000,6 +1023,7 @@ async function startClaudeSession(args: {
           chatPolicy: args.chatPolicy,
           subagentOrchestrator: args.subagentOrchestrator,
           delegationContext: args.delegationContext,
+          scheduleWakeup: args.scheduleWakeup,
         }),
         ...buildUserMcpServers(args.customMcpServers ?? []),
       },
@@ -1141,6 +1165,14 @@ export class AgentCoordinator {
   }
   private readonly throwOnClaudeSessionStart: boolean
   private readonly autoResumeByChat = new Map<string, boolean>()
+  // Per-chat consecutive agent-wake counter (runaway-loop guard). Incremented
+  // on each scheduleAgentWakeup; reset to 0 when a real user message enqueues
+  // (enqueueMessage without an autoContinue option). In-memory by design — a
+  // server restart resetting the chain is acceptable (restart also breaks any
+  // runaway loop) and avoids threading a counter through the event log.
+  private readonly agentWakeChainByChat = new Map<string, number>()
+  private readonly maxAgentWakes: number
+  private readonly pendingWorkflowPollMs: number
   // Per-tokenId rotation dedupe state. When a shared OAuth token throws
   // limit/auth-error against N chats simultaneously, only the first chat
   // pays the cost of marking the pool + picking a fresh target; subsequent
@@ -1181,6 +1213,8 @@ export class AgentCoordinator {
     this.claudeAuthErrorDetector = new ClaudeAuthErrorDetector()
     this.scheduleManager = args.scheduleManager ?? null
     this.getAutoResumePreference = args.getAutoResumePreference ?? (() => false)
+    this.maxAgentWakes = args.maxAgentWakes ?? 25
+    this.pendingWorkflowPollMs = args.pendingWorkflowPollMs ?? 120_000
     this.getSubagents = args.getSubagents ?? (() => [])
     this.getAppSettingsSnapshot = args.getAppSettingsSnapshot ?? (() => ({}))
     this.subagentOrchestrator = new SubagentOrchestrator({
@@ -1713,6 +1747,14 @@ export class AgentCoordinator {
       throw new Error("Chat is already running")
     }
 
+    // A real human turn (appendUserPrompt, not an auto-continue replay) breaks
+    // any agent-wake chain: the user is back in the loop, so the runaway-loop
+    // budget (`maxAgentWakes`) resets. Auto-continue fires carry `autoContinue`
+    // and must NOT reset, or the cap could never trip.
+    if (args.appendUserPrompt && !args.autoContinue) {
+      this.agentWakeChainByChat.delete(args.chatId)
+    }
+
     if (chat.provider !== args.provider) {
       await this.store.setChatProvider(args.chatId, args.provider)
       logSendToStartingProfile(args.profile, "start_turn.provider_set", {
@@ -2180,6 +2222,9 @@ export class AgentCoordinator {
               systemPromptAppend,
               subagentOrchestrator: this.subagentOrchestrator,
               delegationContext,
+              scheduleWakeup: (a) => this.scheduleAgentWakeup({
+                chatId: chatIdForCtx, delayMs: a.delayMs, prompt: a.prompt, source: "agent_wakeup",
+              }),
               toolCallback: this.toolCallback ?? undefined,
               tunnelGateway: this.tunnelGateway,
               chatPolicy: this.resolveChatPolicy(args.chatId),
@@ -2204,6 +2249,9 @@ export class AgentCoordinator {
               systemPromptAppend,
               subagentOrchestrator: this.subagentOrchestrator,
               delegationContext,
+              scheduleWakeup: (a) => this.scheduleAgentWakeup({
+                chatId: chatIdForCtx, delayMs: a.delayMs, prompt: a.prompt, source: "agent_wakeup",
+              }),
               toolCallback: this.toolCallback ?? undefined,
               chatPolicy: this.resolveChatPolicy(args.chatId),
               customMcpServers: this.getEnabledCustomMcpServers(),
@@ -2753,6 +2801,7 @@ export class AgentCoordinator {
             if (active.proactiveCompactInjection) {
               await this.store.setCompactFailureCount(session.chatId, 0)
             }
+            await this.maybeArmPendingWorkflowWake(session.chatId, event.entry)
           }
           this.activeTurns.delete(session.chatId)
           // Turn-scoped reservation: release on turn end so other chats can
@@ -3250,6 +3299,12 @@ export class AgentCoordinator {
   async fireAutoContinue(chatId: string, scheduleId: string) {
     if (!this.store.getChat(chatId)) return
 
+    // Agent-driven wakes (`agent_wakeup` / `pending_workflow`) carry the prompt
+    // the model asked to resume with; provider-failure schedules carry none and
+    // fall back to the literal "continue".
+    const schedule = this.getChatSchedule(chatId, scheduleId)
+    const promptToReplay = schedule?.prompt ?? "continue"
+
     const event: AutoContinueEvent = {
       v: AUTO_CONTINUE_EVENT_VERSION,
       kind: "auto_continue_fired",
@@ -3259,7 +3314,7 @@ export class AgentCoordinator {
     }
     try {
       await this.store.appendAutoContinueEvent(event)
-      await this.enqueueMessage(chatId, "continue", [], { autoContinue: { scheduleId } })
+      await this.enqueueMessage(chatId, promptToReplay, [], { autoContinue: { scheduleId } })
       await this.maybeStartNextQueuedMessage(chatId)
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
@@ -3322,6 +3377,78 @@ export class AgentCoordinator {
       chatId,
       scheduleId,
       reason,
+    })
+  }
+
+  /**
+   * Arm a Kanna-owned wake for an agent-driven signal — the model calling
+   * `ScheduleWakeup` (`source: "agent_wakeup"`) or a turn ending with a
+   * background Workflow still running (`source: "pending_workflow"`). Routes
+   * through the same event-sourced `ScheduleManager` as provider-failure
+   * resume, so it survives restart and obeys the cancel cascade. The native
+   * claude-code wake cannot work under Kanna's spawn model (the fire lands as
+   * an `isMeta:true` line that `jsonl-to-event.ts` drops), so Kanna owns it.
+   * See adr-20260603-agent-self-scheduled-wake.
+   *
+   * Returns the new `scheduleId`, or `null` when the per-chat runaway-loop cap
+   * (`maxAgentWakes`) is reached — the caller surfaces that to the model.
+   */
+  async scheduleAgentWakeup(args: {
+    chatId: string
+    delayMs: number
+    prompt: string
+    source: "agent_wakeup" | "pending_workflow"
+  }): Promise<string | null> {
+    const { chatId, delayMs, prompt, source } = args
+    if (!this.store.getChat(chatId)) throw new Error("Chat not found")
+
+    const chainLength = this.agentWakeChainByChat.get(chatId) ?? 0
+    if (chainLength >= this.maxAgentWakes) return null
+
+    const now = Date.now()
+    const scheduledAt = now + Math.max(0, delayMs)
+    const scheduleId = crypto.randomUUID()
+    await this.emitAutoContinueEvent({
+      v: AUTO_CONTINUE_EVENT_VERSION,
+      kind: "auto_continue_accepted",
+      timestamp: now,
+      chatId,
+      scheduleId,
+      scheduledAt,
+      tz: "system",
+      source,
+      resetAt: scheduledAt,
+      detectedAt: now,
+      prompt,
+    })
+    this.agentWakeChainByChat.set(chatId, chainLength + 1)
+    return scheduleId
+  }
+
+  /**
+   * When a turn ends with a background Workflow still running, arm a single
+   * Kanna-owned wake so the agent re-enters to harvest results instead of
+   * going idle (the reported failure mode: a Workflow launched, the turn
+   * ended with `pendingWorkflowCount: 1`, and the chat sat idle forever).
+   * Kanna gets no mid-flight completion signal, so the replayed prompt asks
+   * the model to check its background work; if still running, the model can
+   * call `schedule_wakeup` to wait longer. The runaway cap bounds the poll.
+   * No-op when the count is absent/0 or a schedule is already live.
+   */
+  private async maybeArmPendingWorkflowWake(chatId: string, entry: TranscriptEntry): Promise<void> {
+    if (entry.kind !== "result") return
+    const count = entry.pendingWorkflowCount ?? 0
+    if (count <= 0) return
+    const live = deriveChatSchedules(this.store.getAutoContinueEvents(chatId), chatId).liveScheduleId
+    if (live !== null) return
+    await this.scheduleAgentWakeup({
+      chatId,
+      delayMs: this.pendingWorkflowPollMs,
+      prompt:
+        `A background Workflow was still running when your last turn ended `
+        + `(${count} pending). Check its result/output now and continue. If it is `
+        + `still running, call schedule_wakeup to wait longer rather than ending idle.`,
+      source: "pending_workflow",
     })
   }
 

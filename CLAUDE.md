@@ -412,6 +412,47 @@ the main agent is always the one calling these tools.
   orchestrator deps at `AgentCoordinator` construction (`agent.ts`); the
   orchestrator itself reads only its deps (side-effect seal).
 
+# Agent Self-Scheduled Wake (KANNA_MAX_AGENT_WAKES, KANNA_PENDING_WORKFLOW_POLL_MS)
+
+Kanna owns the timer for agent-driven chat re-entry. The native claude-code
+`ScheduleWakeup` / `/loop` cron cannot drive a re-entry under Kanna's spawn
+model: a fire lands in the transcript as an `isMeta:true` user line, which
+`jsonl-to-event.ts` deliberately drops as a background auto-wake, and the
+CLI's in-memory cron dies on restart. So both agent-wake paths route through
+the existing event-sourced `auto-continue` `ScheduleManager` (survives restart
+via event replay, obeys the cancel cascade). See
+`adr-20260603-agent-self-scheduled-wake`.
+
+- **`ScheduleWakeup` interception (Part A).** The PTY driver disallows the
+  native tool (`PTY_DISALLOWED_NATIVE_TOOLS` now includes `ScheduleWakeup`,
+  same #215 pattern as AskUserQuestion/ExitPlanMode) and force-registers
+  `mcp__kanna__schedule_wakeup`, which calls
+  `AgentCoordinator.scheduleAgentWakeup({source:"agent_wakeup"})`. The shim is
+  registered only when a `scheduleWakeup` callback is supplied (main chats);
+  subagent spawns lose the no-op native tool by design. On fire,
+  `fireAutoContinue` replays the schedule's `prompt` instead of the literal
+  `"continue"` (the prompt rides on `auto_continue_accepted.prompt`).
+
+- **Pending-workflow harvest (Part B).** When a turn ends with a background
+  Workflow still running, claude-code's `turn_duration` frame carries
+  `pendingWorkflowCount`. `normalizeClaudeStreamMessage` surfaces it onto the
+  `result` entry; `maybeArmPendingWorkflowWake` arms a single
+  `source:"pending_workflow"` wake (no double-arm if a schedule is already
+  live). Kanna has no mid-flight completion signal, so the replayed prompt
+  asks the model to check its background work and call `schedule_wakeup` again
+  if it is still running.
+
+- **Runaway-loop cap.** `KANNA_MAX_AGENT_WAKES` (default 25) bounds consecutive
+  agent wakes per chat; the in-memory chain counter resets when a real
+  (non-auto-continue) user turn starts in `startTurnForChat`. Over cap,
+  `scheduleAgentWakeup` returns `null` and `schedule_wakeup` surfaces an
+  `isError` with guidance.
+
+- **Env vars:** `KANNA_MAX_AGENT_WAKES` (default 25),
+  `KANNA_PENDING_WORKFLOW_POLL_MS` (default 120000) — both parsed in
+  `server.ts` and passed to `AgentCoordinator`; the coordinator reads only its
+  args (side-effect seal).
+
 # Tests
 
 `bun test` MUST pass locally before any push or PR. CI (`.github/workflows/test.yml`)
