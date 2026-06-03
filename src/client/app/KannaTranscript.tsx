@@ -391,6 +391,7 @@ interface TranscriptSingleRowProps {
   onAutoContinueAccept: (scheduleId: string, scheduledAt: number) => void
   onAutoContinueReschedule: (scheduleId: string, scheduledAt: number) => void
   onAutoContinueCancel: (scheduleId: string) => void
+  chatId?: string
 }
 
 const TranscriptSingleRow = memo(function TranscriptSingleRow({
@@ -412,6 +413,7 @@ const TranscriptSingleRow = memo(function TranscriptSingleRow({
   onAutoContinueAccept,
   onAutoContinueReschedule,
   onAutoContinueCancel,
+  chatId,
 }: TranscriptSingleRowProps) {
   let rendered: React.ReactNode = null
 
@@ -457,7 +459,7 @@ const TranscriptSingleRow = memo(function TranscriptSingleRow({
         break
       case "tool":
         if (message.isError) {
-          rendered = <ToolCallMessage key={message.id} message={message} isLoading={isLoading} localPath={localPath} />
+          rendered = <ToolCallMessage key={message.id} message={message} isLoading={isLoading} localPath={localPath} chatId={chatId} />
           break
         }
         if (message.toolKind === "ask_user_question") {
@@ -494,7 +496,7 @@ const TranscriptSingleRow = memo(function TranscriptSingleRow({
           rendered = <ImageGenerationMessage key={message.id} message={message} />
           break
         }
-        rendered = <ToolCallMessage key={message.id} message={message} isLoading={isLoading} localPath={localPath} />
+        rendered = <ToolCallMessage key={message.id} message={message} isLoading={isLoading} localPath={localPath} chatId={chatId} />
         break
       case "result":
         rendered = hideResult ? null : <ResultMessage key={message.id} message={message} />
@@ -558,6 +560,7 @@ const TranscriptSingleRow = memo(function TranscriptSingleRow({
   && prev.onAutoContinueAccept === next.onAutoContinueAccept
   && prev.onAutoContinueReschedule === next.onAutoContinueReschedule
   && prev.onAutoContinueCancel === next.onAutoContinueCancel
+  && prev.chatId === next.chatId
   && sameMessage(prev.message, next.message)
 ))
 
@@ -569,6 +572,7 @@ interface TranscriptToolGroupProps {
   localPath?: string
   expanded: boolean
   onExpandedChange: (groupId: string, next: boolean) => void
+  chatId?: string
 }
 
 const TranscriptToolGroup = memo(function TranscriptToolGroup({
@@ -578,6 +582,7 @@ const TranscriptToolGroup = memo(function TranscriptToolGroup({
   localPath,
   expanded,
   onExpandedChange,
+  chatId,
 }: TranscriptToolGroupProps) {
   return (
     <div
@@ -590,6 +595,7 @@ const TranscriptToolGroup = memo(function TranscriptToolGroup({
         localPath={localPath}
         expanded={expanded}
         onExpandedChange={(next) => onExpandedChange(id, next)}
+        chatId={chatId}
       />
     </div>
   )
@@ -600,6 +606,7 @@ const TranscriptToolGroup = memo(function TranscriptToolGroup({
   && prev.localPath === next.localPath
   && prev.expanded === next.expanded
   && prev.onExpandedChange === next.onExpandedChange
+  && prev.chatId === next.chatId
   && prev.messages.length === next.messages.length
   && prev.messages.every((message, index) => sameMessage(message, next.messages[index]!))
 ))
@@ -665,6 +672,7 @@ interface KannaTranscriptProps {
   localPath?: string
   latestToolIds: Record<string, string | null>
   onOpenLocalLink: (target: OpenLocalLinkTarget) => void
+  chatId?: string
   onAskUserQuestionSubmit: (
     toolUseId: string,
     questions: AskUserQuestionItem[],
@@ -736,6 +744,7 @@ interface KannaTranscriptRowProps {
   onAutoContinueAccept: (scheduleId: string, scheduledAt: number) => void
   onAutoContinueReschedule: (scheduleId: string, scheduledAt: number) => void
   onAutoContinueCancel: (scheduleId: string) => void
+  chatId?: string
 }
 
 export const KannaTranscriptRow = memo(function KannaTranscriptRow({
@@ -749,6 +758,7 @@ export const KannaTranscriptRow = memo(function KannaTranscriptRow({
   onAutoContinueAccept,
   onAutoContinueReschedule,
   onAutoContinueCancel,
+  chatId,
 }: KannaTranscriptRowProps) {
   if (row.kind === "tool-group") {
     return (
@@ -760,6 +770,7 @@ export const KannaTranscriptRow = memo(function KannaTranscriptRow({
         localPath={row.localPath}
         expanded={toolGroupExpanded ?? false}
         onExpandedChange={onToolGroupExpandedChange}
+        chatId={chatId}
       />
     )
   }
@@ -784,6 +795,7 @@ export const KannaTranscriptRow = memo(function KannaTranscriptRow({
       onAutoContinueAccept={onAutoContinueAccept}
       onAutoContinueReschedule={onAutoContinueReschedule}
       onAutoContinueCancel={onAutoContinueCancel}
+      chatId={chatId}
     />
   )
 }, (prev, next) => {
@@ -796,6 +808,7 @@ export const KannaTranscriptRow = memo(function KannaTranscriptRow({
   if (prev.onAutoContinueAccept !== next.onAutoContinueAccept) return false
   if (prev.onAutoContinueReschedule !== next.onAutoContinueReschedule) return false
   if (prev.onAutoContinueCancel !== next.onAutoContinueCancel) return false
+  if (prev.chatId !== next.chatId) return false
   if (prev.row.kind !== next.row.kind) return false
   if (prev.row.id !== next.row.id) return false
 
@@ -837,6 +850,7 @@ function KannaTranscriptImpl({
   localPath,
   latestToolIds,
   onOpenLocalLink,
+  chatId,
   onAskUserQuestionSubmit,
   onExitPlanModeConfirm,
   onToolRequestAnswer = NOOP_TOOL_REQUEST_ANSWER,
@@ -914,6 +928,7 @@ function KannaTranscriptImpl({
               onAutoContinueAccept={onAutoContinueAccept}
               onAutoContinueReschedule={onAutoContinueReschedule}
               onAutoContinueCancel={onAutoContinueCancel}
+              chatId={chatId}
             />
             {matchedRun ? renderSubagentRunTree(matchedRun, 0, childrenByParentRunId, localPath ?? "", onSubagentAskUserQuestionSubmit, onSubagentExitPlanModeSubmit, onCancelSubagentRun) : null}
           </div>

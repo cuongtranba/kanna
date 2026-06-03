@@ -306,6 +306,7 @@ export const ChatTranscriptViewport = memo(function ChatTranscriptViewport({
           onAutoContinueAccept={onAutoContinueAccept}
           onAutoContinueReschedule={onAutoContinueReschedule}
           onAutoContinueCancel={onAutoContinueCancel}
+          chatId={activeChatId ?? undefined}
         />
         {rowRuns.map((run) => renderRunTree(run, 0))}
       </div>

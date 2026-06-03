@@ -62,9 +62,10 @@ interface Props {
   localPath?: string | null
   expanded: boolean
   onExpandedChange: (next: boolean) => void
+  chatId?: string
 }
 
-export function CollapsedToolGroup({ messages, isLoading, localPath, expanded, onExpandedChange }: Props) {
+export function CollapsedToolGroup({ messages, isLoading, localPath, expanded, onExpandedChange, chatId }: Props) {
   const label = useMemo(() => getToolGroupLabel(messages), [messages])
 
   // Check if any tool in the group is still in progress
@@ -101,6 +102,7 @@ export function CollapsedToolGroup({ messages, isLoading, localPath, expanded, o
                 message={msg as ProcessedToolCall}
                 isLoading={isLoading}
                 localPath={localPath}
+                chatId={chatId}
               />
             ))}
             {messages.length > 5 && (
