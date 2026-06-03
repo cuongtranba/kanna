@@ -103,6 +103,21 @@ describe("createJsonlEventParser", () => {
     expect(events.find((e) => e.type === "session_token")).toBeUndefined()
   })
 
+  // Real on-disk transcript lines use camelCase `sessionId`; only SDK
+  // stream-json fixtures use snake_case `session_id`. The parser must accept
+  // both, otherwise PTY chats never persist a session token and the fork
+  // button stays disabled (canForkChat → false).
+  test("D3: emits session_token for camelCase sessionId (real transcript shape)", () => {
+    const parser = createJsonlEventParser()
+    const realLine = JSON.stringify({
+      type: "assistant",
+      sessionId: "real-sess-1",
+      message: { id: "msg-9", role: "assistant", content: [{ type: "text", text: "hi" }] },
+    })
+    const events = parser.parse(realLine)
+    expect(events.find((e) => e.type === "session_token")?.sessionToken).toBe("real-sess-1")
+  })
+
   test("D2: SDK-native rate_limit_event message → rate_limit event via detector", () => {
     const parser = createJsonlEventParser()
     const line = JSON.stringify({

@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { mkdtemp, readdir, readFile, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
-import { startClaudeSessionPTY, buildPtyEnv, buildPtyCliArgs, OutputRing, PTY_STDERR_RING_BYTES, PTY_DISALLOWED_NATIVE_TOOLS, deriveAccountInfoFromOauth, PLAN_MODE_EXIT_UNSUPPORTED, SHIFT_TAB_KEY, buildChannelPromptFraming } from "./driver"
+import { startClaudeSessionPTY, buildPtyEnv, buildPtyCliArgs, resolveSpawnSessionId, OutputRing, PTY_STDERR_RING_BYTES, PTY_DISALLOWED_NATIVE_TOOLS, deriveAccountInfoFromOauth, PLAN_MODE_EXIT_UNSUPPORTED, SHIFT_TAB_KEY, buildChannelPromptFraming } from "./driver"
 import type { TranscriptStream } from "./tui-source.adapter"
 import type { PtyProcess, SpawnPtyProcessArgs } from "./pty-process.adapter"
 import { KANNA_SYSTEM_PROMPT_APPEND } from "../../shared/kanna-system-prompt"
@@ -11,6 +11,21 @@ import { readAppSettingsSnapshot } from "../app-settings"
 import type { McpServerConfig } from "../../shared/types"
 
 
+
+describe("resolveSpawnSessionId", () => {
+  test("resume reuses the session token as the session id", () => {
+    expect(resolveSpawnSessionId({ sessionToken: "tok-abc", forkSession: false }, () => "fresh")).toBe("tok-abc")
+  })
+
+  test("new session (no token) gets a fresh id", () => {
+    expect(resolveSpawnSessionId({ sessionToken: null, forkSession: false }, () => "fresh")).toBe("fresh")
+  })
+
+  test("fork gets a fresh id distinct from the source token (collision would make claude refuse the fork)", () => {
+    expect(resolveSpawnSessionId({ sessionToken: "old-tok", forkSession: true }, () => "fresh")).toBe("fresh")
+    expect(resolveSpawnSessionId({ sessionToken: "old-tok", forkSession: true }, () => "fresh")).not.toBe("old-tok")
+  })
+})
 
 describe("startClaudeSessionPTY", () => {
   test("auth precheck fails when credentials missing", async () => {

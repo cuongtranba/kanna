@@ -277,6 +277,25 @@ export function buildPtyCliArgs(args: BuildPtyCliArgsInput): string[] {
   return cliArgs
 }
 
+/**
+ * Resolve the UUID the spawn runs under.
+ *   - new session (no token)     → fresh uuid (claude generates its own anyway)
+ *   - resume (token, no fork)     → reuse the token so the transcript path is known up-front
+ *   - fork (token + forkSession)  → MUST be a FRESH uuid, distinct from the source token.
+ *
+ * Forking with `sessionId === sessionToken` emits
+ * `--session-id <tok> --resume <tok> --fork-session`, collides the new fork id
+ * with the source session, and claude refuses the fork — so PTY-created
+ * conversations could not be forked. Always mint a new id for forks.
+ */
+export function resolveSpawnSessionId(
+  args: { sessionToken: string | null; forkSession: boolean },
+  newId: () => string = randomUUID,
+): string {
+  if (args.forkSession) return newId()
+  return args.sessionToken ?? newId()
+}
+
 export function buildPtyEnv(args: {
   baseEnv: NodeJS.ProcessEnv
   homeDir: string
@@ -366,7 +385,10 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
     oauthToken: args.oauthToken,
   })
 
-  const sessionId = args.sessionToken ?? randomUUID()
+  const sessionId = resolveSpawnSessionId({
+    sessionToken: args.sessionToken,
+    forkSession: args.forkSession,
+  })
 
   const runtimeDir = await createRuntimeDir(`kanna-pty-${sessionId.slice(0, 8)}-`)
 
