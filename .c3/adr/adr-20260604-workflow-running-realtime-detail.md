@@ -1,10 +1,10 @@
 ---
 id: adr-20260604-workflow-running-realtime-detail
-c3-seal: 3c1292134fd4fbe01684ea661df55d789f1d3ce37ed4f3be29c3072acc218713
+c3-seal: 056a6033604d64c095593addbdfefd45f3dea6c9b36eabc390ce3cd6b1c0cda8
 title: workflow-running-realtime-detail
 type: adr
 goal: Make the workflow drill-in dialog show live per-agent state for a still-running workflow by parsing the small `subagents/workflows/<runId>/journal.jsonl` server-side in `WorkflowRegistry.getRun`, and have the client re-fetch on each `workflows` snapshot push without a loading flash.
-status: accepted
+status: implemented
 date: "2026-06-04"
 ---
 
