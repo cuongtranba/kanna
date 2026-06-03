@@ -458,6 +458,7 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
 
   let closed = false
   let cleanedUp = false
+  let workflowRegistrationCancelled = false
   let cachedAccountInfo: AccountInfo | null = deriveAccountInfoFromOauth({ label: args.oauthLabel, oauthKeyMasked: args.oauthKeyMasked })
   let sawResultEntry = false
   let cachedSlashCommands: SlashCommand[] | null = null
@@ -495,6 +496,7 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
         console.warn("[kanna/pty] ptyRegistry.unregister failed", { chatId: args.chatId, sessionId, err })
       }
     }
+    workflowRegistrationCancelled = true
     args.workflowRegistry?.unregister(args.chatId)
   }
 
@@ -695,7 +697,7 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
     void transcriptStream.filePath.then((filePath) => {
       const sessionUUID = path.basename(filePath, ".jsonl")
       const workflowsDir = path.join(projectDir, sessionUUID, "workflows")
-      registry.register(chatId, workflowsDir)
+      if (!workflowRegistrationCancelled) registry.register(chatId, workflowsDir)
     }).catch((err) => {
       console.warn("[kanna/pty] workflowRegistry.register skipped: transcript file not found", { chatId: args.chatId, err })
     })
