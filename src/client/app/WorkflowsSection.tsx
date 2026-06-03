@@ -1,4 +1,3 @@
-import * as React from "react"
 import { useCallback, useState } from "react"
 import { Activity } from "lucide-react"
 import { cn } from "../lib/utils"
@@ -190,7 +189,7 @@ function agentStateTone(state: string): WorkflowStatusTone {
 export function WorkflowRunDetailDialog({ run, open, onClose }: WorkflowRunDetailDialogProps) {
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) onClose() }}>
-      <DialogContent size="lg">
+      <DialogContent size="lg" aria-describedby={undefined}>
         <DialogHeader>
           <DialogTitle>
             {run ? (run.workflowName ?? run.runId) : "Workflow run"}

@@ -2,8 +2,8 @@ import { describe, expect, mock, test } from "bun:test"
 import { act } from "react"
 import { createRoot } from "react-dom/client"
 import "../lib/testing/setupHappyDom"
-import { WorkflowsSection } from "./WorkflowsSection"
-import type { WorkflowRunSummary } from "../../shared/workflow-types"
+import { WorkflowsSection, WorkflowsSectionWithDetail } from "./WorkflowsSection"
+import type { WorkflowRun, WorkflowRunSummary } from "../../shared/workflow-types"
 import { renderForLoopCheck } from "../lib/testing/renderForLoopCheck"
 
 function makeRun(over: Partial<WorkflowRunSummary> = {}): WorkflowRunSummary {
@@ -131,5 +131,69 @@ describe("WorkflowsSection — render-loop safety", () => {
     )
     expect(result.loopWarnings).toEqual([])
     await result.cleanup()
+  })
+})
+
+// ── WorkflowsSectionWithDetail — drill-in ─────────────────────────────────────
+
+function makeFullRun(over: Partial<WorkflowRun> = {}): WorkflowRun {
+  return {
+    runId: "run-full",
+    workflowName: "deploy",
+    status: "completed",
+    startTime: 1000,
+    durationMs: 60_000,
+    agentCount: 2,
+    totalTokens: 2000,
+    totalToolCalls: 8,
+    phases: [{ title: "Compile" }, { title: "Deploy" }],
+    agents: [
+      {
+        index: 0,
+        label: "compiler",
+        state: "completed",
+        model: "claude-sonnet-4-6",
+        lastToolName: "bash",
+        tokens: 1000,
+        toolCalls: 5,
+      },
+    ],
+    summary: "Build succeeded.",
+    error: null,
+    result: null,
+    ...over,
+  }
+}
+
+describe("WorkflowsSectionWithDetail — drill-in", () => {
+  test("clicking a row calls getRunDetail with the run id and shows detail", async () => {
+    const fullRun = makeFullRun()
+    const getRunDetail = mock(async (_runId: string): Promise<WorkflowRun | null> => fullRun)
+
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    await act(async () => {
+      createRoot(container).render(
+        <WorkflowsSectionWithDetail
+          runs={[makeRun({ runId: "run-full", workflowName: "deploy" })]}
+          getRunDetail={getRunDetail}
+        />,
+      )
+    })
+
+    const row = container.querySelector<HTMLButtonElement>("[data-testid='workflow-row:run-full']")
+    expect(row).toBeDefined()
+
+    await act(async () => { row!.click() })
+    // getRunDetail should have been invoked with the run id
+    expect(getRunDetail).toHaveBeenCalledWith("run-full")
+
+    // After the async detail resolves, the agent tree should appear in the dialog
+    // Radix Dialog renders into a portal (document.body), not the container
+    await act(async () => {})
+    expect(document.body.textContent).toContain("compiler")
+    expect(document.body.textContent).toContain("Build succeeded.")
+
+    container.remove()
   })
 })
