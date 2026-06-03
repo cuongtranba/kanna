@@ -3481,9 +3481,11 @@ export class AgentCoordinator {
       chatId,
       delayMs: this.pendingWorkflowPollMs,
       prompt:
-        `A background Workflow was still running when your last turn ended `
-        + `(${count} pending). Check its result/output now and continue. If it is `
-        + `still running, call schedule_wakeup to wait longer rather than ending idle.`,
+        `A background Workflow was running when your last turn ended (${count} pending). `
+        + `Harvest from the working tree, not a pinned task-output path (the run's process `
+        + `may have been recycled): check git status/diff for the files agents changed, `
+        + `build-verify and commit the good ones, revert failures. If the workflow is still `
+        + `running, call schedule_wakeup to wait longer rather than ending idle.`,
       source: "pending_workflow",
     })
   }
