@@ -247,6 +247,8 @@ interface AgentCoordinatorArgs {
     chatPolicy?: ChatPermissionPolicy
     /** Enabled user MCP servers, merged into the SDK's mcpServers map. */
     customMcpServers?: readonly McpServerConfig[]
+    /** Backs the `schedule_wakeup` MCP tool. Omit to hide the tool. */
+    scheduleWakeup?: (a: { delayMs: number; prompt: string }) => Promise<string | null>
   }) => Promise<ClaudeSessionHandle>
   startClaudeSessionPTY?: (args: StartClaudeSessionPtyArgs) => Promise<ClaudeSessionHandle>
   claudeLimitDetector?: LimitDetector
@@ -966,6 +968,8 @@ async function startClaudeSession(args: {
   subagentOrchestrator?: SubagentOrchestrator
   /** Per-spawn delegation context (depth / ancestor chain / parentUserMessageId resolver). */
   delegationContext?: KannaMcpDelegationContext
+  /** Backs the `schedule_wakeup` MCP tool. Omit to hide the tool. */
+  scheduleWakeup?: (a: { delayMs: number; prompt: string }) => Promise<string | null>
   /** Enabled user MCP servers, merged into the SDK's mcpServers map. */
   customMcpServers?: readonly McpServerConfig[]
 }): Promise<ClaudeSessionHandle> {
@@ -1005,6 +1009,7 @@ async function startClaudeSession(args: {
           chatPolicy: args.chatPolicy,
           subagentOrchestrator: args.subagentOrchestrator,
           delegationContext: args.delegationContext,
+          scheduleWakeup: args.scheduleWakeup,
         }),
         ...buildUserMcpServers(args.customMcpServers ?? []),
       },
@@ -2198,6 +2203,9 @@ export class AgentCoordinator {
               systemPromptAppend,
               subagentOrchestrator: this.subagentOrchestrator,
               delegationContext,
+              scheduleWakeup: (a) => this.scheduleAgentWakeup({
+                chatId: chatIdForCtx, delayMs: a.delayMs, prompt: a.prompt, source: "agent_wakeup",
+              }),
               toolCallback: this.toolCallback ?? undefined,
               tunnelGateway: this.tunnelGateway,
               chatPolicy: this.resolveChatPolicy(args.chatId),
@@ -2221,6 +2229,9 @@ export class AgentCoordinator {
               systemPromptAppend,
               subagentOrchestrator: this.subagentOrchestrator,
               delegationContext,
+              scheduleWakeup: (a) => this.scheduleAgentWakeup({
+                chatId: chatIdForCtx, delayMs: a.delayMs, prompt: a.prompt, source: "agent_wakeup",
+              }),
               toolCallback: this.toolCallback ?? undefined,
               chatPolicy: this.resolveChatPolicy(args.chatId),
               customMcpServers: this.getEnabledCustomMcpServers(),
