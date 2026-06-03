@@ -253,6 +253,13 @@ interface AgentCoordinatorArgs {
   codexLimitDetector?: LimitDetector
   scheduleManager?: ScheduleManager
   getAutoResumePreference?: () => boolean
+  /**
+   * Max consecutive agent-driven wakes (`ScheduleWakeup` / pending-workflow)
+   * per chat before Kanna refuses to arm another — runaway-loop guard so a
+   * self-scheduling agent cannot burn OAuth quota indefinitely. The chain
+   * resets on any real (non-auto-continue) user message. Default 25.
+   */
+  maxAgentWakes?: number
   getSubagents?: () => Subagent[]
   getAppSettingsSnapshot?: () => {
     claudeAuth?: { authenticated?: boolean } | null
@@ -1139,6 +1146,13 @@ export class AgentCoordinator {
   }
   private readonly throwOnClaudeSessionStart: boolean
   private readonly autoResumeByChat = new Map<string, boolean>()
+  // Per-chat consecutive agent-wake counter (runaway-loop guard). Incremented
+  // on each scheduleAgentWakeup; reset to 0 when a real user message enqueues
+  // (enqueueMessage without an autoContinue option). In-memory by design — a
+  // server restart resetting the chain is acceptable (restart also breaks any
+  // runaway loop) and avoids threading a counter through the event log.
+  private readonly agentWakeChainByChat = new Map<string, number>()
+  private readonly maxAgentWakes: number
   // Per-tokenId rotation dedupe state. When a shared OAuth token throws
   // limit/auth-error against N chats simultaneously, only the first chat
   // pays the cost of marking the pool + picking a fresh target; subsequent
@@ -1178,6 +1192,7 @@ export class AgentCoordinator {
     this.claudeAuthErrorDetector = new ClaudeAuthErrorDetector()
     this.scheduleManager = args.scheduleManager ?? null
     this.getAutoResumePreference = args.getAutoResumePreference ?? (() => false)
+    this.maxAgentWakes = args.maxAgentWakes ?? 25
     this.getSubagents = args.getSubagents ?? (() => [])
     this.getAppSettingsSnapshot = args.getAppSettingsSnapshot ?? (() => ({}))
     this.subagentOrchestrator = new SubagentOrchestrator({
@@ -1706,6 +1721,14 @@ export class AgentCoordinator {
     const chat = this.store.requireChat(args.chatId)
     if (this.activeTurns.has(args.chatId)) {
       throw new Error("Chat is already running")
+    }
+
+    // A real human turn (appendUserPrompt, not an auto-continue replay) breaks
+    // any agent-wake chain: the user is back in the loop, so the runaway-loop
+    // budget (`maxAgentWakes`) resets. Auto-continue fires carry `autoContinue`
+    // and must NOT reset, or the cap could never trip.
+    if (args.appendUserPrompt && !args.autoContinue) {
+      this.agentWakeChainByChat.delete(args.chatId)
     }
 
     if (chat.provider !== args.provider) {
@@ -3243,6 +3266,12 @@ export class AgentCoordinator {
   async fireAutoContinue(chatId: string, scheduleId: string) {
     if (!this.store.getChat(chatId)) return
 
+    // Agent-driven wakes (`agent_wakeup` / `pending_workflow`) carry the prompt
+    // the model asked to resume with; provider-failure schedules carry none and
+    // fall back to the literal "continue".
+    const schedule = this.getChatSchedule(chatId, scheduleId)
+    const promptToReplay = schedule?.prompt ?? "continue"
+
     const event: AutoContinueEvent = {
       v: AUTO_CONTINUE_EVENT_VERSION,
       kind: "auto_continue_fired",
@@ -3252,7 +3281,7 @@ export class AgentCoordinator {
     }
     try {
       await this.store.appendAutoContinueEvent(event)
-      await this.enqueueMessage(chatId, "continue", [], { autoContinue: { scheduleId } })
+      await this.enqueueMessage(chatId, promptToReplay, [], { autoContinue: { scheduleId } })
       await this.maybeStartNextQueuedMessage(chatId)
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
@@ -3316,6 +3345,51 @@ export class AgentCoordinator {
       scheduleId,
       reason,
     })
+  }
+
+  /**
+   * Arm a Kanna-owned wake for an agent-driven signal — the model calling
+   * `ScheduleWakeup` (`source: "agent_wakeup"`) or a turn ending with a
+   * background Workflow still running (`source: "pending_workflow"`). Routes
+   * through the same event-sourced `ScheduleManager` as provider-failure
+   * resume, so it survives restart and obeys the cancel cascade. The native
+   * claude-code wake cannot work under Kanna's spawn model (the fire lands as
+   * an `isMeta:true` line that `jsonl-to-event.ts` drops), so Kanna owns it.
+   * See adr-20260603-agent-self-scheduled-wake.
+   *
+   * Returns the new `scheduleId`, or `null` when the per-chat runaway-loop cap
+   * (`maxAgentWakes`) is reached — the caller surfaces that to the model.
+   */
+  async scheduleAgentWakeup(args: {
+    chatId: string
+    delayMs: number
+    prompt: string
+    source: "agent_wakeup" | "pending_workflow"
+  }): Promise<string | null> {
+    const { chatId, delayMs, prompt, source } = args
+    if (!this.store.getChat(chatId)) throw new Error("Chat not found")
+
+    const chainLength = this.agentWakeChainByChat.get(chatId) ?? 0
+    if (chainLength >= this.maxAgentWakes) return null
+
+    const now = Date.now()
+    const scheduledAt = now + Math.max(0, delayMs)
+    const scheduleId = crypto.randomUUID()
+    await this.emitAutoContinueEvent({
+      v: AUTO_CONTINUE_EVENT_VERSION,
+      kind: "auto_continue_accepted",
+      timestamp: now,
+      chatId,
+      scheduleId,
+      scheduledAt,
+      tz: "system",
+      source,
+      resetAt: scheduledAt,
+      detectedAt: now,
+      prompt,
+    })
+    this.agentWakeChainByChat.set(chatId, chainLength + 1)
+    return scheduleId
   }
 
   listLiveSchedules(chatId: string): string[] {

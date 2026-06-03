@@ -1564,6 +1564,12 @@ export interface AutoContinueSchedule {
   tz: string
   resetAt: number
   detectedAt: number
+  /**
+   * Prompt replayed when an agent-driven wake (`agent_wakeup` /
+   * `pending_workflow`) fires. Absent on provider-failure schedules, which
+   * fire the literal `"continue"`.
+   */
+  prompt?: string
 }
 
 export interface AutoContinuePromptEntry extends TranscriptEntryBase {

@@ -3084,6 +3084,98 @@ describe("AgentCoordinator auto-continue firing", () => {
   })
 })
 
+describe("AgentCoordinator.scheduleAgentWakeup", () => {
+  test("arms an agent_wakeup schedule carrying the prompt and a future scheduledAt", async () => {
+    const store = createFakeStore()
+    const coordinator = new AgentCoordinator({
+      store: store as never,
+      onStateChange: () => {},
+      startClaudeSession: async () => { throw new Error("not needed") },
+    })
+
+    const before = Date.now()
+    const scheduleId = await coordinator.scheduleAgentWakeup({
+      chatId: "chat-1",
+      delayMs: 1_500,
+      prompt: "resume the sweep",
+      source: "agent_wakeup",
+    })
+    expect(scheduleId).not.toBeNull()
+
+    const events = store.getAutoContinueEvents("chat-1")
+    expect(events).toHaveLength(1)
+    const ev = events[0]
+    expect(ev.kind).toBe("auto_continue_accepted")
+    if (ev.kind === "auto_continue_accepted") {
+      expect(ev.source).toBe("agent_wakeup")
+      expect(ev.prompt).toBe("resume the sweep")
+      expect(ev.scheduledAt).toBeGreaterThanOrEqual(before + 1_500)
+    }
+  })
+
+  test("runaway-loop cap: returns null past maxAgentWakes; a real user message resets the chain", async () => {
+    const store = createFakeStore()
+    const coordinator = new AgentCoordinator({
+      store: store as never,
+      onStateChange: () => {},
+      maxAgentWakes: 2,
+      startClaudeSession: async () => { throw new Error("not needed") },
+    })
+
+    const wake = () => coordinator.scheduleAgentWakeup({
+      chatId: "chat-1", delayMs: 1_000, prompt: "again", source: "agent_wakeup",
+    })
+
+    expect(await wake()).not.toBeNull()
+    expect(await wake()).not.toBeNull()
+    expect(await wake()).toBeNull() // capped
+
+    // A real (non-auto-continue) user send resets the chain.
+    await coordinator.send({
+      type: "chat.send",
+      chatId: "chat-1",
+      provider: "claude",
+      content: "human back in the loop",
+      model: "claude-opus-4-5",
+    }).catch(() => {}) // provider start throws in this minimal harness; the reset happens at enqueue
+
+    expect(await wake()).not.toBeNull() // chain reset → armed again
+  })
+})
+
+describe("AgentCoordinator.fireAutoContinue prompt replay", () => {
+  test("replays the agent_wakeup schedule's prompt instead of the literal 'continue'", async () => {
+    const store = { ...createFakeStore(), getQueuedMessages: () => [] }
+    const coordinator = new AgentCoordinator({
+      store: store as never,
+      onStateChange: () => {},
+      startClaudeSession: async () => { throw new Error("not needed") },
+    })
+
+    const scheduleId = "wake-1"
+    const acceptedEvent: AutoContinueEvent = {
+      v: 3,
+      kind: "auto_continue_accepted",
+      timestamp: Date.now(),
+      chatId: "chat-1",
+      scheduleId,
+      scheduledAt: Date.now() + 1_000,
+      tz: "system",
+      source: "agent_wakeup",
+      resetAt: Date.now() + 1_000,
+      detectedAt: Date.now(),
+      prompt: "harvest the workflow results",
+    }
+    await store.appendAutoContinueEvent(acceptedEvent)
+
+    await coordinator.fireAutoContinue("chat-1", scheduleId)
+
+    const enqueued = store.queuedMessages.filter((m) => m.autoContinue?.scheduleId === scheduleId)
+    expect(enqueued).toHaveLength(1)
+    expect(enqueued[0].content).toBe("harvest the workflow results")
+  })
+})
+
 // ── AgentCoordinator: acceptAutoContinue / rescheduleAutoContinue / cancelAutoContinue / listLiveSchedules ──
 
 // Minimal coordinator factory for Task 14 auto-continue tests; intentionally omits
