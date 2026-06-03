@@ -1,16 +1,21 @@
-import { UserRound, X } from "lucide-react"
+import { GitBranch, UserRound, X } from "lucide-react"
 import type { ProcessedToolCall } from "./types"
 import { MetaRow, MetaLabel, MetaCodeBlock, ExpandableRow, VerticalLineContainer, getToolIcon, LucideIconWrapper } from "./shared"
 import { useMemo } from "react"
+import { useShallow } from "zustand/react/shallow"
 import { stripWorkspacePath } from "../../lib/pathUtils"
 import { AnimatedShinyText } from "../ui/animated-shiny-text"
 import { formatBashCommandTitle, toTitleCase } from "../../lib/formatters"
 import { FileContentView } from "./FileContentView"
+import { WorkflowMessage } from "./WorkflowMessage"
+import { useWorkflowsStore, selectRuns } from "../../stores/workflowsStore"
+import type { WorkflowToolResult } from "../../../shared/types"
 
 interface Props {
   message: ProcessedToolCall
   isLoading?: boolean
   localPath?: string | null
+  chatId?: string
 }
 
 type ReadImageBlock = {
@@ -83,9 +88,12 @@ export function ReadResultImages({ images }: { images: ReadonlyArray<ReadImageBl
   )
 }
 
-export function ToolCallMessage({ message, isLoading = false, localPath }: Props) {
+export function ToolCallMessage({ message, isLoading = false, localPath, chatId = "" }: Props) {
   const hasResult = message.result !== undefined
   const showLoadingState = !hasResult && isLoading
+
+  // Must be called unconditionally at the top — Rules of Hooks
+  const workflowRuns = useWorkflowsStore(useShallow(selectRuns(chatId)))
 
   const name = useMemo(() => {
     if (message.toolKind === "skill") {
@@ -128,6 +136,9 @@ export function ToolCallMessage({ message, isLoading = false, localPath }: Props
     }
     if (message.toolKind === "subagent_task") {
       return message.input.subagentType || message.toolName
+    }
+    if (message.toolKind === "workflow") {
+      return message.input.name ?? "Workflow"
     }
     return message.toolName
   }, [message.input, message.toolKind, message.toolName, localPath])
@@ -248,25 +259,45 @@ export function ToolCallMessage({ message, isLoading = false, localPath }: Props
         }
       >
 
-        <div className={`w-5 h-5 relative flex items-center justify-center`}>
-          {(() => {
-            if (message.isError) {
-              return <X className="size-4 text-destructive" />
-            }
-            if (isAgent) {
-              return <UserRound className="size-4 text-muted-icon" />
-            }
-            return <LucideIconWrapper icon={getToolIcon(message.toolName)} className="size-4 text-muted-icon" />
-          })()}
-        </div>
-        <MetaLabel className="text-left transition-opacity duration-200 truncate">
-          <AnimatedShinyText
-            animate={showLoadingState}
-            shimmerWidth={Math.max(20, ((description || name)?.length ?? 33) * 3)}
-          >
-            {description || name}
-          </AnimatedShinyText>
-        </MetaLabel>
+        {message.toolKind === "workflow" && !message.isError ? (
+          (() => {
+            const hydratedResult = message.result as WorkflowToolResult | undefined
+            const taskId = hydratedResult?.taskId
+            const run = taskId ? workflowRuns.find((r) => r.taskId === taskId) : undefined
+            return (
+              <WorkflowMessage
+                name={message.input.name}
+                description={message.input.description}
+                run={run}
+              />
+            )
+          })()
+        ) : (
+          <>
+            <div className={`w-5 h-5 relative flex items-center justify-center`}>
+              {(() => {
+                if (message.isError) {
+                  return <X className="size-4 text-destructive" />
+                }
+                if (isAgent) {
+                  return <UserRound className="size-4 text-muted-icon" />
+                }
+                if (message.toolKind === "workflow") {
+                  return <GitBranch className="size-4 text-muted-icon" />
+                }
+                return <LucideIconWrapper icon={getToolIcon(message.toolName)} className="size-4 text-muted-icon" />
+              })()}
+            </div>
+            <MetaLabel className="text-left transition-opacity duration-200 truncate">
+              <AnimatedShinyText
+                animate={showLoadingState}
+                shimmerWidth={Math.max(20, ((description || name)?.length ?? 33) * 3)}
+              >
+                {description || name}
+              </AnimatedShinyText>
+            </MetaLabel>
+          </>
+        )}
 
 
 

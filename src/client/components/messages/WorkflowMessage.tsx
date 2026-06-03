@@ -1,6 +1,6 @@
 import { GitBranch } from "lucide-react"
 import { cn } from "../../lib/utils"
-import type { WorkflowRunSummary, WorkflowStatus } from "../../../../shared/workflow-types"
+import type { WorkflowRunSummary, WorkflowStatus } from "../../../shared/workflow-types"
 
 interface Props {
   name?: string
