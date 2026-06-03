@@ -90,12 +90,19 @@ function resolveCloudflaredPath(settingsPath: string): string {
 export interface AgentAppSettingsView {
   claudeDriver: AppSettingsSnapshot["claudeDriver"]
   globalPromptAppend: AppSettingsSnapshot["globalPromptAppend"]
+  customMcpServers: AppSettingsSnapshot["customMcpServers"]
 }
 
 export function buildAgentAppSettingsView(snapshot: AppSettingsSnapshot): AgentAppSettingsView {
   return {
     claudeDriver: snapshot.claudeDriver,
     globalPromptAppend: snapshot.globalPromptAppend,
+    // MUST forward customMcpServers: AgentCoordinator.getEnabledCustomMcpServers
+    // reads this off the view, and when it is absent returns [] for every
+    // spawn — silently dropping all user-configured MCP servers (context7 etc.)
+    // from both Claude drivers. Same failure class as the globalPromptAppend
+    // regression above. See server.test.ts guard.
+    customMcpServers: snapshot.customMcpServers,
   }
 }
 

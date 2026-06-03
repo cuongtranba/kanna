@@ -7,6 +7,7 @@ import {
   CLOUDFLARE_TUNNEL_DEFAULTS,
   UPLOAD_DEFAULTS,
   type AppSettingsSnapshot,
+  type McpServerConfig,
 } from "../shared/types"
 import { buildAgentAppSettingsView } from "./server"
 
@@ -87,10 +88,35 @@ describe("buildAgentAppSettingsView", () => {
     expect(view.globalPromptAppend).toBe("")
   })
 
+  // Regression guard for the bug where `buildAgentAppSettingsView` dropped
+  // `customMcpServers`. The missing field made `getEnabledCustomMcpServers()`
+  // see `undefined`, fall through its `Array.isArray` guard, and return `[]`
+  // for EVERY spawn — so no user-configured MCP server (context7 etc.) ever
+  // reached either Claude driver, even though the UI persisted it and the
+  // connect-test (which reads the full snapshot directly) passed. Anyone
+  // shrinking the view in the future must update both the type and this
+  // assertion together.
+  test("forwards customMcpServers so both drivers receive the user's MCP entries", () => {
+    const context7: McpServerConfig = {
+      id: "mcp-context7",
+      name: "context7",
+      enabled: true,
+      createdAt: "2026-06-03T00:00:00.000Z",
+      updatedAt: "2026-06-03T00:00:00.000Z",
+      lastTest: { status: "ok", testedAt: "2026-06-03T00:00:00.000Z", toolCount: 2 },
+      transport: "stdio",
+      command: "npx",
+      args: ["-y", "@upstash/context7-mcp"],
+      env: {},
+    }
+    const view = buildAgentAppSettingsView(makeSnapshot({ customMcpServers: [context7] }))
+    expect(view.customMcpServers).toEqual([context7])
+  })
+
   // Pin the exact shape: a future edit that adds keys must opt in here,
   // and one that removes a consumed key fails loudly.
   test("returns exactly the keys the AgentCoordinator consumes", () => {
     const view = buildAgentAppSettingsView(makeSnapshot())
-    expect(Object.keys(view).sort()).toEqual(["claudeDriver", "globalPromptAppend"])
+    expect(Object.keys(view).sort()).toEqual(["claudeDriver", "customMcpServers", "globalPromptAppend"])
   })
 })
