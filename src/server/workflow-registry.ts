@@ -103,7 +103,19 @@ export function createWorkflowRegistry(deps: WorkflowRegistryDeps): WorkflowRegi
       return [...merged.values()].sort(byNewest).map(toRunSummary)
     },
     getRun(chatId, runId) {
-      return entries.get(chatId)?.runs.get(runId) ?? null
+      const entry = entries.get(chatId)
+      if (!entry) return null
+      const sidecar = entry.runs.get(runId)
+      if (sidecar) return sidecar
+      // Mirror snapshot(): an in-flight run has no sidecar yet, so synthesize a
+      // running run from its live dir. Without this, the drill-in dialog fetches
+      // null for a running row and flickers open→closed.
+      if (deps.listRunDirs) {
+        const floor = Date.now() - SNAPSHOT_LIVE_WINDOW_MS
+        const live = deps.listRunDirs(entry.dir).find((r) => r.runId === runId && r.newestMtimeMs >= floor)
+        if (live) return synthRunningRun(runId, live.newestMtimeMs)
+      }
+      return null
     },
     hasActiveRun(chatId, freshnessMs, now) {
       const entry = entries.get(chatId)
