@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.82.2](https://github.com/cuongtranba/kanna/compare/v0.82.1...v0.82.2) (2026-06-03)
+
+
+### Bug Fixes
+
+* **agent:** real workflow liveness via live run dir (corrects [#359](https://github.com/cuongtranba/kanna/issues/359) no-op) ([#361](https://github.com/cuongtranba/kanna/issues/361)) ([9707062](https://github.com/cuongtranba/kanna/commit/970706234ce75915d16e8f6f992449535391ae07))
+
 ## [0.82.1](https://github.com/cuongtranba/kanna/compare/v0.82.0...v0.82.1) (2026-06-03)
 
 
