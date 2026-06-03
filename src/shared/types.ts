@@ -959,6 +959,9 @@ export interface ImageGenerationToolResult {
 export interface UnknownToolCall
   extends ToolCallBase<"unknown_tool", { payload: Record<string, unknown> }> { }
 
+export interface WorkflowToolCall
+  extends ToolCallBase<"workflow", { name?: string; description?: string; scriptPath?: string }> { }
+
 export type NormalizedToolCall =
   | AskUserQuestionToolCall
   | ExitPlanModeToolCall
@@ -976,6 +979,7 @@ export type NormalizedToolCall =
   | McpGenericToolCall
   | OfferDownloadToolCall
   | ImageGenerationToolCall
+  | WorkflowToolCall
   | UnknownToolCall
 
 export interface ToolResultEntry extends TranscriptEntryBase {

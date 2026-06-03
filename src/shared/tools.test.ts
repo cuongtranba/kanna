@@ -306,4 +306,22 @@ describe("hydrateToolResult", () => {
       ],
     })
   })
+
+  test("normalizes Workflow tool call to workflow toolKind (inline script meta)", () => {
+    const r = normalizeToolCall({
+      toolName: "Workflow", toolId: "t1",
+      input: { script: "export const meta = {\n  name: 'sonar-fix',\n  description: 'fix sonar',\n}" },
+    })
+    expect(r.toolKind).toBe("workflow")
+    if (r.toolKind === "workflow") {
+      expect(r.input.name).toBe("sonar-fix")
+      expect(r.input.description).toBe("fix sonar")
+    }
+  })
+
+  test("normalizes Workflow tool call with scriptPath only", () => {
+    const r = normalizeToolCall({ toolName: "Workflow", toolId: "t2", input: { scriptPath: "/p/.wf.mjs" } })
+    expect(r.toolKind).toBe("workflow")
+    if (r.toolKind === "workflow") expect(r.input.scriptPath).toBe("/p/.wf.mjs")
+  })
 })

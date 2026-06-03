@@ -20,6 +20,12 @@ function asRecord(value: unknown): Record<string, unknown> | null {
   return value as Record<string, unknown>
 }
 
+function parseWorkflowMeta(script: string): { name?: string; description?: string } {
+  const name = script.match(/name\s*:\s*['"]([^'"]+)['"]/)?.[1]
+  const description = script.match(/description\s*:\s*['"]([^'"]+)['"]/)?.[1]
+  return { name, description }
+}
+
 export function normalizeToolCall(args: {
   toolName: string
   toolId: string
@@ -179,6 +185,22 @@ export function normalizeToolCall(args: {
         },
         rawInput: input,
       }
+    case "Workflow": {
+      const script = typeof input.script === "string" ? input.script : ""
+      const meta = parseWorkflowMeta(script)
+      return {
+        kind: "tool",
+        toolKind: "workflow",
+        toolName,
+        toolId,
+        input: {
+          name: meta.name,
+          description: meta.description,
+          scriptPath: typeof input.scriptPath === "string" ? input.scriptPath : undefined,
+        },
+        rawInput: input,
+      }
+    }
   }
 
   if (toolName === OFFER_DOWNLOAD_TOOL_NAME) {
