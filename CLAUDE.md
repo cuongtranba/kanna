@@ -453,6 +453,50 @@ via event replay, obeys the cancel cascade). See
   `server.ts` and passed to `AgentCoordinator`; the coordinator reads only its
   args (side-effect seal).
 
+# Workflow Status Panel (PTY disk-watch, read-only)
+
+Surfaces Claude Code's native `Workflow` tool (dynamic multi-agent
+orchestration) in the UI: a per-chat panel listing every run with live status +
+drill-in progress, plus an inline transcript card on the launch. **PTY driver
+only, read-only.** Complementary to "Agent Self-Scheduled Wake" — that keeps the
+*agent* re-entering while a workflow runs; this *displays* the workflow.
+
+**Why disk-watch, not the event stream.** The PTY transcript JSONL (PTY's sole
+event source) carries the `Workflow` tool_use launch but **no**
+`task_started`/`task_updated`/`tool_progress` lifecycle lines — those flow only
+through the SDK live stream-json channel, which PTY never reads. Claude instead
+writes a complete, self-updating sidecar per run:
+`~/.claude/projects/<encoded-cwd>/<session-uuid>/workflows/wf_<runId>.json`
+(`runId`, `taskId`, `workflowName`, `status`, `agentCount`, `totalTokens`,
+`phases[]`, `workflowProgress[]` per-agent tree, `result`/`error`/`summary`).
+`taskId` joins a run to the transcript's `Task ID: X` launch text.
+
+**Independent read-model (does NOT violate c3-225).** The watcher feeds a sibling
+read-model, never the transcript/turn event pipeline (same spirit as reading
+subagent files). See `adr-20260603-workflow-disk-watch-read-model`.
+
+- **Adapter** `src/server/workflow-watch-io.adapter.ts` — the only IO; lists +
+  reads `wf_*.json`, `fs.watch` with ~250 ms debounce, and **re-arms via the
+  nearest existing ancestor** when `workflows/` doesn't exist yet (Claude
+  creates it lazily on the first Workflow call, after registration).
+- **Registry** `src/server/workflow-registry.ts` — per-chat watch + parse
+  (one defensive choke-point `parseWorkflowRunFile`) + `snapshot()` (light,
+  heavy fields stripped) + `getRun()` (full) + `subscribe()`. Mirrors
+  `PtyInstanceRegistry`. IO injected (side-effect seal).
+- **Driver** registers `<projectDir>/<claude-uuid>/workflows` derived from the
+  resolved `transcriptStream.filePath` basename (Claude mints its OWN session
+  UUID and ignores `--session-id` on new sessions, so kanna's `sessionId` is
+  NOT the dir name). A `workflowRegistrationCancelled` flag prevents a late
+  `register()` after `cleanupResources` `unregister()` on fast-failing spawns.
+- **Transport** WS topic `{type:"workflows", chatId}` → `workflowRunsUpdated`
+  snapshot push (mirrors `pty-instances`); `workflows.getRun` command for the
+  heavy drill-in payload.
+- **Client** `workflowsStore` (stable `EMPTY` ref), `WorkflowsSection` panel
+  (mirrors `SubagentsSection`), `WorkflowMessage` transcript card (live pill
+  joined by `taskId` once `chatId` is threaded through the transcript rows).
+
+Out of scope: SDK driver, global cross-chat view, stop/relaunch.
+
 # Tests
 
 `bun test` MUST pass locally before any push or PR. CI (`.github/workflows/test.yml`)
