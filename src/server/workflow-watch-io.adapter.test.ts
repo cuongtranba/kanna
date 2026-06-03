@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test"
 import { mkdtempSync, writeFileSync, rmSync, mkdirSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import type { WorkflowJournalEntry } from "./workflow-watch-io.adapter"
 import { listWorkflowRunDirs, readWorkflowDir, readWorkflowRunJournal, watchWorkflowDir } from "./workflow-watch-io.adapter"
 
 const dirs: string[] = []
@@ -117,7 +118,7 @@ describe("workflow-watch-io.adapter", () => {
     )
 
     const entries = readWorkflowRunJournal(join(session, "workflows"), "wf_b")
-    expect(entries.map((e) => e.agentId)).toEqual(["b1"])
+    expect(entries.map((e: WorkflowJournalEntry) => e.agentId)).toEqual(["b1"])
 
     expect(readWorkflowRunJournal(join(session, "workflows"), "wf_missing")).toEqual([])
   })
