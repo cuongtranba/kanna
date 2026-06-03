@@ -3346,6 +3346,9 @@ describe("AgentCoordinator pending-workflow harvest wake", () => {
     if (events[0].kind === "auto_continue_accepted") {
       expect(events[0].source).toBe("pending_workflow")
       expect(events[0].prompt).toContain("background Workflow")
+      // path-agnostic: steer harvest to the working tree, not a pinned output path
+      expect(events[0].prompt).toContain("working tree")
+      expect(events[0].prompt).not.toContain("/tasks/")
     }
   })
 
