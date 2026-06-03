@@ -1,13 +1,14 @@
 ---
 id: c3-210
 c3-version: 4
-c3-seal: 677581a9ce0a0456c154c06409291d44197752df752d6742835e443e188e1202
+c3-seal: a596727ab20c5c0c03592aead2ee06f349aef950cf04de1f8ff3fe2bb729d6f4
 title: agent-coordinator
 type: component
 category: feature
 parent: c3-2
 goal: 'Drive turn lifecycle across providers: start/cancel/resume Claude + Codex sessions, emit normalized transcript events.'
 uses:
+    - c3-229
     - ref-colocated-bun-test
     - ref-event-sourcing
     - ref-provider-adapter
@@ -66,6 +67,7 @@ Owns the agent turn lifecycle: receives `chat.send` commands, picks the provider
 | ref-tool-hydration | ref | Tool calls normalized before persistence | must follow | Single hydration path |
 | ref-colocated-bun-test | ref | Tests live next to coordinator | must follow | agent-coordinator.test.ts |
 | rule-colocated-bun-test | rule | Coordinator test suites enforce colocated-bun-test rule | must follow | agent.*.test.ts colocated with agent.ts |
+| c3-229 | ref | Compliance target added by c3x wire; refine what must be reviewed or complied with before handoff. | wired compliance target beats uncited local prose | Added by c3x wire for explicit compliance review. |
 
 ## Contract
 

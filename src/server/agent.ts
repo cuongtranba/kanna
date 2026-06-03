@@ -1118,6 +1118,10 @@ const TOKEN_ROTATION_DEDUPE_WINDOW_MS = 5_000
 const DEFAULT_CLAUDE_SESSION_IDLE_MS = 10 * 60 * 1000
 const DEFAULT_CLAUDE_SESSION_MAX_RESIDENT = 4
 const DEFAULT_CLAUDE_SESSION_SWEEP_INTERVAL_MS = 60 * 1000
+// Agent wakes are clamped to one idle window minus this buffer so a re-entry
+// always lands before the idle reaper closes the PTY (see scheduleAgentWakeup).
+const WAKE_GUARD_BUFFER_MS = 60 * 1000
+const WAKE_GUARD_MIN_DELAY_MS = 30 * 1000
 
 function positiveIntegerFromEnv(value: string | undefined, fallback: number): number {
   if (value === undefined || value.trim() === "") return fallback
@@ -1381,16 +1385,22 @@ export class AgentCoordinator {
   }
 
   /**
-   * True when the chat is hosting an in-flight background Workflow (a run the
-   * #358 disk-watch registry reports as `status: "running"`). A live workflow
-   * runs inside the warm PTY claude process but registers no activeTurn,
-   * pendingPromptSeq, or lastUsedAt bump, so without this signal the idle
-   * reaper / budget enforcer would tear the process down mid-run and abort the
-   * workflow. The sidecar status is written terminal on abort/exit, so a dead
-   * run never strands a session in a false `running` state.
+   * True when the chat is hosting an in-flight background Workflow. A live
+   * workflow runs inside the warm PTY claude process but registers no
+   * activeTurn, pendingPromptSeq, or lastUsedAt bump, so without this signal
+   * the idle reaper / budget enforcer would tear the process down mid-run and
+   * abort the workflow.
+   *
+   * Liveness comes from the registry's live-run-dir probe, NOT the terminal
+   * `wf_<runId>.json` sidecar: Claude only flushes that sidecar at/near
+   * termination, so a sidecar-only check is blind for the entire run (the
+   * window the guard must cover). `hasActiveRun` reads the live
+   * `subagents/workflows/wf_*` transcript dirs (written from second one) and
+   * requires activity within one idle window so a stalled/crashed run still
+   * eventually reaps.
    */
   private hasLiveWorkflow(chatId: string): boolean {
-    return this.workflowRegistry?.snapshot(chatId).some((run) => run.status === "running") ?? false
+    return this.workflowRegistry?.hasActiveRun(chatId, this.resolveClaudeIdleMs(), Date.now()) ?? false
   }
 
   private isClaudeSessionIdle(chatId: string, session: ClaudeSessionState, now = Date.now()): boolean {
@@ -3414,11 +3424,22 @@ export class AgentCoordinator {
     prompt: string
     source: "agent_wakeup" | "pending_workflow"
   }): Promise<string | null> {
-    const { chatId, delayMs, prompt, source } = args
+    const { chatId, prompt, source } = args
     if (!this.store.getChat(chatId)) throw new Error("Chat not found")
 
     const chainLength = this.agentWakeChainByChat.get(chatId) ?? 0
     if (chainLength >= this.maxAgentWakes) return null
+
+    // Belt for the workflow-liveness guard: a wake must re-enter the chat
+    // BEFORE the idle reaper closes the PTY, else a long model-chosen delay
+    // (the #357 harvest prompt tells the model to "wait longer", so it sets
+    // ~1200s) outlives the ~600s idle window and the workflow is killed in the
+    // gap. Clamp the delay to one idle window minus a guard buffer so a turn
+    // always resets the idle clock first. The primary defense is
+    // `hasLiveWorkflow`; this guarantees liveness even if the file probe misses.
+    const idleMs = this.resolveClaudeIdleMs()
+    const maxDelayMs = Math.max(WAKE_GUARD_MIN_DELAY_MS, idleMs - WAKE_GUARD_BUFFER_MS)
+    const delayMs = Math.min(args.delayMs, maxDelayMs)
 
     const now = Date.now()
     const scheduledAt = now + Math.max(0, delayMs)

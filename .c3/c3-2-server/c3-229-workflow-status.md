@@ -1,6 +1,6 @@
 ---
 id: c3-229
-c3-seal: d285fa085d03b67b8a1586b7c439025bae4d57d3b77a7178a955f17189b682aa
+c3-seal: 7f8d54031da447cd0cdcda41c524bb37f2566a8fd16aaa609c9d86a71ce913ee
 title: workflow-status
 type: component
 category: feature
@@ -88,6 +88,8 @@ Owns the workflow sidecar read-model lifecycle: receives `watch(chatId, dir)` / 
 | WorkflowRegistry.unwatch(chatId) | IN | Tear down all fs.watch handles for the chat; idempotent if chatId not registered | c3-225 | src/server/workflow-registry.ts |
 | WorkflowRegistry.getSnapshot(chatId) | OUT | Return current WorkflowsSnapshot for the chat (empty snapshot if not registered) | c3-208 | src/server/workflow-registry.ts |
 | WorkflowRegistry.getRun(chatId, runId) | OUT | Return single WorkflowRunSummary or null | c3-208 | src/server/workflow-registry.ts |
+| WorkflowRegistry.hasActiveRun(chatId, freshnessMs, now) | OUT | True when a live run dir (subagents/workflows/wf_*) saw activity within freshnessMs AND has no terminal sidecar yet; the in-run liveness signal for the idle reaper / budget enforcer | c3-210 | src/server/workflow-registry.ts |
+| listWorkflowRunDirs(workflowsDir) | OUT | Adapter: list live run dirs subagents/workflows/wf_* with newest file mtime; the live signal Claude writes from second one (unlike the terminal sidecar) | c3-210 | src/server/workflow-watch-io.adapter.ts |
 | WorkflowRegistry.subscribe(chatId, cb) | IN/OUT | Register callback invoked on every snapshot change; returns unsubscribe fn | c3-208 | src/server/workflow-registry.ts |
 | WorkflowsSnapshot WS push | OUT | Typed envelope for WS push on the workflows topic | c3-302 | src/shared/workflow-types.ts |
 | workflow ToolKind | OUT | Normalized hydrated transcript entry for Workflow tool_use dispatched to WorkflowMessage.tsx | c3-303 | src/shared/tools.ts |
