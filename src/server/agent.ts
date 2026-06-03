@@ -262,6 +262,14 @@ interface AgentCoordinatorArgs {
    * resets on any real (non-auto-continue) user message. Default 25.
    */
   maxAgentWakes?: number
+  /**
+   * Delay (ms) for the pending-workflow harvest wake armed when a turn ends
+   * with a background Workflow still running. Kanna gets no mid-flight
+   * completion signal, so the wake replays a "check your background work"
+   * prompt after this delay; the model harvests or re-schedules. Default
+   * 120000 (2 min). Bounded by `maxAgentWakes`.
+   */
+  pendingWorkflowPollMs?: number
   getSubagents?: () => Subagent[]
   getAppSettingsSnapshot?: () => {
     claudeAuth?: { authenticated?: boolean } | null
@@ -668,6 +676,9 @@ export function normalizeClaudeStreamMessage(message: any): TranscriptEntry[] {
       : typeof message.duration_ms === "number"
         ? message.duration_ms
         : 0
+    const pendingWorkflowCount = typeof message.pendingWorkflowCount === "number"
+      ? message.pendingWorkflowCount
+      : undefined
     return [
       timestamped({
         kind: "result",
@@ -677,6 +688,7 @@ export function normalizeClaudeStreamMessage(message: any): TranscriptEntry[] {
         durationMs,
         result: "",
         costUsd: undefined,
+        ...(pendingWorkflowCount !== undefined ? { pendingWorkflowCount } : {}),
         debugRaw,
       }),
     ]
@@ -1158,6 +1170,7 @@ export class AgentCoordinator {
   // runaway loop) and avoids threading a counter through the event log.
   private readonly agentWakeChainByChat = new Map<string, number>()
   private readonly maxAgentWakes: number
+  private readonly pendingWorkflowPollMs: number
   // Per-tokenId rotation dedupe state. When a shared OAuth token throws
   // limit/auth-error against N chats simultaneously, only the first chat
   // pays the cost of marking the pool + picking a fresh target; subsequent
@@ -1198,6 +1211,7 @@ export class AgentCoordinator {
     this.scheduleManager = args.scheduleManager ?? null
     this.getAutoResumePreference = args.getAutoResumePreference ?? (() => false)
     this.maxAgentWakes = args.maxAgentWakes ?? 25
+    this.pendingWorkflowPollMs = args.pendingWorkflowPollMs ?? 120_000
     this.getSubagents = args.getSubagents ?? (() => [])
     this.getAppSettingsSnapshot = args.getAppSettingsSnapshot ?? (() => ({}))
     this.subagentOrchestrator = new SubagentOrchestrator({
@@ -2780,6 +2794,7 @@ export class AgentCoordinator {
             if (active.proactiveCompactInjection) {
               await this.store.setCompactFailureCount(session.chatId, 0)
             }
+            await this.maybeArmPendingWorkflowWake(session.chatId, event.entry)
           }
           this.activeTurns.delete(session.chatId)
           // Turn-scoped reservation: release on turn end so other chats can
@@ -3401,6 +3416,33 @@ export class AgentCoordinator {
     })
     this.agentWakeChainByChat.set(chatId, chainLength + 1)
     return scheduleId
+  }
+
+  /**
+   * When a turn ends with a background Workflow still running, arm a single
+   * Kanna-owned wake so the agent re-enters to harvest results instead of
+   * going idle (the reported failure mode: a Workflow launched, the turn
+   * ended with `pendingWorkflowCount: 1`, and the chat sat idle forever).
+   * Kanna gets no mid-flight completion signal, so the replayed prompt asks
+   * the model to check its background work; if still running, the model can
+   * call `schedule_wakeup` to wait longer. The runaway cap bounds the poll.
+   * No-op when the count is absent/0 or a schedule is already live.
+   */
+  private async maybeArmPendingWorkflowWake(chatId: string, entry: TranscriptEntry): Promise<void> {
+    if (entry.kind !== "result") return
+    const count = entry.pendingWorkflowCount ?? 0
+    if (count <= 0) return
+    const live = deriveChatSchedules(this.store.getAutoContinueEvents(chatId), chatId).liveScheduleId
+    if (live !== null) return
+    await this.scheduleAgentWakeup({
+      chatId,
+      delayMs: this.pendingWorkflowPollMs,
+      prompt:
+        `A background Workflow was still running when your last turn ended `
+        + `(${count} pending). Check its result/output now and continue. If it is `
+        + `still running, call schedule_wakeup to wait longer rather than ending idle.`,
+      source: "pending_workflow",
+    })
   }
 
   listLiveSchedules(chatId: string): string[] {

@@ -74,6 +74,28 @@ describe("normalizeClaudeStreamMessage", () => {
     expect(entries[0].durationMs).toBe(3210)
   })
 
+  test("turn_duration surfaces pendingWorkflowCount onto the synthesized result", () => {
+    const entries = normalizeClaudeStreamMessage({
+      type: "system",
+      subtype: "turn_duration",
+      durationMs: 214278,
+      pendingWorkflowCount: 1,
+    })
+    expect(entries).toHaveLength(1)
+    if (entries[0]?.kind !== "result") throw new Error("unexpected entry")
+    expect(entries[0].pendingWorkflowCount).toBe(1)
+  })
+
+  test("turn_duration without pendingWorkflowCount leaves it undefined", () => {
+    const entries = normalizeClaudeStreamMessage({
+      type: "system",
+      subtype: "turn_duration",
+      durationMs: 100,
+    })
+    if (entries[0]?.kind !== "result") throw new Error("unexpected entry")
+    expect(entries[0].pendingWorkflowCount).toBeUndefined()
+  })
+
   test("normalizes Claude usage snapshots from SDK usage payloads", () => {
     const snapshot = normalizeClaudeUsageSnapshot({
       input_tokens: 4,
@@ -3140,6 +3162,55 @@ describe("AgentCoordinator.scheduleAgentWakeup", () => {
     }).catch(() => {}) // provider start throws in this minimal harness; the reset happens at enqueue
 
     expect(await wake()).not.toBeNull() // chain reset → armed again
+  })
+})
+
+describe("AgentCoordinator pending-workflow harvest wake", () => {
+  type ArmFn = (chatId: string, entry: { kind: string; pendingWorkflowCount?: number }) => Promise<void>
+  const makeCoord = (store: ReturnType<typeof createFakeStore>) =>
+    new AgentCoordinator({
+      store: store as never,
+      onStateChange: () => {},
+      startClaudeSession: async () => { throw new Error("not needed") },
+    })
+
+  test("arms a pending_workflow wake when a result carries pendingWorkflowCount > 0", async () => {
+    const store = createFakeStore()
+    const coordinator = makeCoord(store)
+    await (coordinator as unknown as { maybeArmPendingWorkflowWake: ArmFn })
+      .maybeArmPendingWorkflowWake("chat-1", { kind: "result", pendingWorkflowCount: 2 })
+
+    const events = store.getAutoContinueEvents("chat-1")
+    expect(events).toHaveLength(1)
+    expect(events[0].kind).toBe("auto_continue_accepted")
+    if (events[0].kind === "auto_continue_accepted") {
+      expect(events[0].source).toBe("pending_workflow")
+      expect(events[0].prompt).toContain("background Workflow")
+    }
+  })
+
+  test("no-op when pendingWorkflowCount is 0 / absent", async () => {
+    const store = createFakeStore()
+    const coordinator = makeCoord(store)
+    const arm = (coordinator as unknown as { maybeArmPendingWorkflowWake: ArmFn }).maybeArmPendingWorkflowWake.bind(coordinator)
+    await arm("chat-1", { kind: "result", pendingWorkflowCount: 0 })
+    await arm("chat-1", { kind: "result" })
+    expect(store.getAutoContinueEvents("chat-1")).toHaveLength(0)
+  })
+
+  test("no-op when a schedule is already live (no double-arm)", async () => {
+    const store = createFakeStore()
+    const coordinator = makeCoord(store)
+    // Seed a live scheduled wake.
+    await store.appendAutoContinueEvent({
+      v: 3, kind: "auto_continue_accepted", timestamp: Date.now(), chatId: "chat-1",
+      scheduleId: "live-1", scheduledAt: Date.now() + 10_000, tz: "system",
+      source: "agent_wakeup", resetAt: Date.now() + 10_000, detectedAt: Date.now(), prompt: "x",
+    })
+    await (coordinator as unknown as { maybeArmPendingWorkflowWake: ArmFn })
+      .maybeArmPendingWorkflowWake("chat-1", { kind: "result", pendingWorkflowCount: 1 })
+    // Still only the seeded event — no second arm.
+    expect(store.getAutoContinueEvents("chat-1")).toHaveLength(1)
   })
 })
 
