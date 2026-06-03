@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.82.0](https://github.com/cuongtranba/kanna/compare/v0.81.3...v0.82.0) (2026-06-03)
+
+
+### Features
+
+* Kanna-owned agent self-scheduled wake (ScheduleWakeup + pending-workflow harvest) ([#357](https://github.com/cuongtranba/kanna/issues/357)) ([51fd6fa](https://github.com/cuongtranba/kanna/commit/51fd6fafcf9bdf0c66e5fa823545e3d715c5d60d))
+* workflow status panel (PTY disk-watch) ([#358](https://github.com/cuongtranba/kanna/issues/358)) ([1ab36a2](https://github.com/cuongtranba/kanna/commit/1ab36a2c3fcde805c8369baf882d3b7cc3611038))
+
+
+### Bug Fixes
+
+* **chat-ui:** prevent composer toolbar / token readout overlap ([#354](https://github.com/cuongtranba/kanna/issues/354)) ([1e429b6](https://github.com/cuongtranba/kanna/commit/1e429b69ce122418dc364337fcb9c48dc00f7a7e))
+* **sidebar:** pin collapse-all toggle above scroll list ([#356](https://github.com/cuongtranba/kanna/issues/356)) ([abdb32b](https://github.com/cuongtranba/kanna/commit/abdb32b2c3195ba0146da0c66e0db6a85208a0d7))
+
 ## [0.81.3](https://github.com/cuongtranba/kanna/compare/v0.81.2...v0.81.3) (2026-06-03)
 
 
