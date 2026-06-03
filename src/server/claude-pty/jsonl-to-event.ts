@@ -16,6 +16,18 @@ import { KANNA_MCP_SERVER_NAME } from "../../shared/tools"
 // line is a real turn the main agent issued, NOT a background auto-wake.
 const KANNA_CHANNEL_TAG = `<channel source="${KANNA_MCP_SERVER_NAME}"`
 
+// Real on-disk transcript lines carry the session id as camelCase `sessionId`;
+// SDK stream-json messages use snake_case `session_id`. Accept either so PTY
+// chats persist a session token (without it, canForkChat stays false and the
+// fork button is disabled).
+function extractSessionId(message: Record<string, unknown>): string | null {
+  const snake = message.session_id
+  if (typeof snake === "string" && snake.length > 0) return snake
+  const camel = message.sessionId
+  if (typeof camel === "string" && camel.length > 0) return camel
+  return null
+}
+
 function userMessageContainsKannaChannel(message: Record<string, unknown>): boolean {
   const inner = message.message
   if (!inner || typeof inner !== "object") return false
@@ -117,8 +129,9 @@ export function createJsonlEventParser(opts: CreateJsonlEventParserOptions = {})
       // D3 — emit session_token for any message carrying a session_id, not
       // just `system/init`. Matches the SDK driver loop in
       // createClaudeHarnessStream (agent.ts).
-      if (typeof message.session_id === "string" && message.session_id.length > 0) {
-        events.push({ type: "session_token", sessionToken: message.session_id })
+      const sessionId = extractSessionId(message)
+      if (sessionId) {
+        events.push({ type: "session_token", sessionToken: sessionId })
       }
 
       // D2 — recognise both shapes:
@@ -226,8 +239,9 @@ export function parseJsonlLine(rawLine: string): HarnessEvent[] {
   if (message.isSidechain === true) return []
   const events: HarnessEvent[] = []
 
-  if (message.type === "system" && message.subtype === "init" && typeof message.session_id === "string") {
-    events.push({ type: "session_token", sessionToken: message.session_id })
+  if (message.type === "system" && message.subtype === "init") {
+    const sessionId = extractSessionId(message)
+    if (sessionId) events.push({ type: "session_token", sessionToken: sessionId })
   }
 
   if (message.type === "system" && message.subtype === "rate_limit") {
