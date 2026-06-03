@@ -605,6 +605,29 @@ function KannaSidebarImpl({
           </div>
         </div>
 
+        {allSidebarGroupKeys.length > 0 && (
+          <div className="flex items-center justify-end pl-2 pr-2 pt-1.5 pb-1 shrink-0">
+            <button
+              type="button"
+              onClick={toggleAllSections}
+              aria-pressed={allSectionsCollapsed}
+              className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-[11px] font-medium text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            >
+              {allSectionsCollapsed ? (
+                <>
+                  <ChevronsUpDown className="size-3" />
+                  Expand all
+                </>
+              ) : (
+                <>
+                  <ChevronsDownUp className="size-3" />
+                  Collapse all
+                </>
+              )}
+            </button>
+          </div>
+        )}
+
         <div
           ref={scrollContainerRef}
           className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden scrollbar-hide"
@@ -706,29 +729,6 @@ function KannaSidebarImpl({
                 </div>
               )
             })()}
-
-            {allSidebarGroupKeys.length > 0 && (
-              <div className="flex justify-end px-1 pt-1 pb-2">
-                <button
-                  type="button"
-                  onClick={toggleAllSections}
-                  aria-pressed={allSectionsCollapsed}
-                  className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-                >
-                  {allSectionsCollapsed ? (
-                    <>
-                      <ChevronsUpDown className="size-3" />
-                      Expand all
-                    </>
-                  ) : (
-                    <>
-                      <ChevronsDownUp className="size-3" />
-                      Collapse all
-                    </>
-                  )}
-                </button>
-              </div>
-            )}
 
             {starredProjectGroupsWithoutStackChats.length > 0 && (
               <>
