@@ -59,6 +59,63 @@ describe("WorkflowRegistry", () => {
     expect(reg.snapshot("chat1")).toEqual([])
   })
 
+  describe("snapshot surfaces in-flight runs (no sidecar yet)", () => {
+    test("synthesizes a running row for a fresh live run dir with no sidecar", () => {
+      const io = fakeIo(new Map([["/d", []]]))
+      const reg = createWorkflowRegistry({
+        read: io.read, watch: io.watch,
+        listRunDirs: () => [{ runId: "wf_live", newestMtimeMs: Date.now() }],
+      })
+      reg.register("chat1", "/d")
+      const snap = reg.snapshot("chat1")
+      expect(snap.map((r) => r.runId)).toEqual(["wf_live"])
+      expect(snap[0].status).toBe("running")
+    })
+
+    test("a terminal sidecar wins over the synthetic running row", () => {
+      const io = fakeIo(new Map([["/d", [
+        { runId: "wf_live", raw: { runId: "wf_live", status: "killed", startTime: 5 } },
+      ]]]))
+      const reg = createWorkflowRegistry({
+        read: io.read, watch: io.watch,
+        listRunDirs: () => [{ runId: "wf_live", newestMtimeMs: Date.now() }],
+      })
+      reg.register("chat1", "/d")
+      const snap = reg.snapshot("chat1")
+      expect(snap).toHaveLength(1)
+      expect(snap[0].status).toBe("killed")
+    })
+
+    test("drops a stale live dir (crash that never wrote a sidecar)", () => {
+      const io = fakeIo(new Map([["/d", []]]))
+      const reg = createWorkflowRegistry({
+        read: io.read, watch: io.watch,
+        listRunDirs: () => [{ runId: "wf_stale", newestMtimeMs: 0 }],
+      })
+      reg.register("chat1", "/d")
+      expect(reg.snapshot("chat1")).toEqual([])
+    })
+
+    test("watchRunDirs change notifies subscribers (launch with no sidecar)", () => {
+      const io = fakeIo(new Map([["/d", []]]))
+      let liveCb: (() => void) | null = null
+      let launched = false
+      const seen: string[] = []
+      const reg = createWorkflowRegistry({
+        read: io.read, watch: io.watch,
+        listRunDirs: () => launched ? [{ runId: "wf_live", newestMtimeMs: Date.now() }] : [],
+        watchRunDirs: (_dir, cb) => { liveCb = cb; return () => { liveCb = null } },
+      })
+      reg.subscribe((c) => seen.push(c))
+      reg.register("chat1", "/d")
+      expect(reg.snapshot("chat1").map((r) => r.runId)).toEqual([]) // nothing launched yet
+      launched = true
+      liveCb!() // live run dir appeared → watcher fires
+      expect(seen).toContain("chat1")
+      expect(reg.snapshot("chat1").map((r) => r.runId)).toEqual(["wf_live"])
+    })
+  })
+
   describe("hasActiveRun", () => {
     const NOW = 1_000_000
     const FRESH = 600_000

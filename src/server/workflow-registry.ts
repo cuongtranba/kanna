@@ -11,6 +11,12 @@ export interface WorkflowRegistryDeps {
    * (treated as "no live runs", preserving prior behavior).
    */
   listRunDirs?: (workflowsDir: string) => WorkflowRunDirInfo[]
+  /**
+   * Watch the live run-dir root so a newly-launched run (no sidecar yet) pushes
+   * a snapshot promptly. Absent in legacy callers (no live-run push, only
+   * sidecar-change pushes — preserves prior behavior).
+   */
+  watchRunDirs?: (workflowsDir: string, onChange: () => void) => () => void
 }
 export interface WorkflowRegistry {
   register(chatId: string, workflowsDir: string): void
@@ -31,8 +37,20 @@ export interface WorkflowRegistry {
 
 interface Entry { dir: string; dispose: () => void; runs: Map<string, WorkflowRun> }
 
+// A live run dir with no terminal sidecar and activity within this window is
+// surfaced as a synthetic `running` row. Claude flushes the wf_<runId>.json
+// sidecar only at/near termination, so without this the panel would only ever
+// show terminal runs and never an in-flight one. Stale dirs past the window
+// (likely a crash that never wrote a sidecar) are dropped rather than shown
+// as forever-running.
+const SNAPSHOT_LIVE_WINDOW_MS = 10 * 60 * 1000
+
 function byNewest(a: WorkflowRun, b: WorkflowRun): number {
   return (b.startTime ?? 0) - (a.startTime ?? 0)
+}
+
+function synthRunningRun(runId: string, startTime: number): WorkflowRun {
+  return { runId, status: "running", startTime, phases: [], agents: [] }
 }
 
 export function createWorkflowRegistry(deps: WorkflowRegistryDeps): WorkflowRegistry {
@@ -54,7 +72,11 @@ export function createWorkflowRegistry(deps: WorkflowRegistryDeps): WorkflowRegi
   return {
     register(chatId, workflowsDir) {
       entries.get(chatId)?.dispose()
-      const dispose = deps.watch(workflowsDir, () => refresh(chatId))
+      const disposeSidecar = deps.watch(workflowsDir, () => refresh(chatId))
+      // Also watch the live run-dir root so a launch (no sidecar yet) pushes a
+      // snapshot — otherwise an in-flight run is invisible until it terminates.
+      const disposeLive = deps.watchRunDirs?.(workflowsDir, () => refresh(chatId)) ?? (() => {})
+      const dispose = () => { disposeSidecar(); disposeLive() }
       entries.set(chatId, { dir: workflowsDir, dispose, runs: new Map() })
       refresh(chatId)
     },
@@ -67,7 +89,18 @@ export function createWorkflowRegistry(deps: WorkflowRegistryDeps): WorkflowRegi
     snapshot(chatId) {
       const entry = entries.get(chatId)
       if (!entry) return []
-      return [...entry.runs.values()].sort(byNewest).map(toRunSummary)
+      // Sidecar runs (terminal/authoritative) + synthetic running rows for live
+      // run dirs that have no sidecar yet. A sidecar always wins over a synthetic
+      // row (it carries the real terminal status + counts).
+      const merged = new Map(entry.runs)
+      if (deps.listRunDirs) {
+        const floor = Date.now() - SNAPSHOT_LIVE_WINDOW_MS
+        for (const { runId, newestMtimeMs } of deps.listRunDirs(entry.dir)) {
+          if (merged.has(runId) || newestMtimeMs < floor) continue
+          merged.set(runId, synthRunningRun(runId, newestMtimeMs))
+        }
+      }
+      return [...merged.values()].sort(byNewest).map(toRunSummary)
     },
     getRun(chatId, runId) {
       return entries.get(chatId)?.runs.get(runId) ?? null
