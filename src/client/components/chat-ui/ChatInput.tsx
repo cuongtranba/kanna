@@ -1082,63 +1082,61 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput({
       </div>
 
       <div className={cn("relative py-3 max-w-[840px] mx-auto", isStandalone && "p-5 pt-3")}>
-        <div className="overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden flex flex-row">
-          <div className="min-w-3" />
-          <ChatPreferenceControls
-            availableProviders={availableProviders}
-            selectedProvider={selectedProvider}
-            showCodexCliRequirementHints
-            model={providerPrefs.model}
-            modelOptions={providerPrefs.modelOptions}
-            onProviderChange={(provider) => {
-              resetChatComposerFromProvider(composerChatId, provider)
-            }}
-            onModelChange={(_, model) => {
-              setChatComposerModel(composerChatId, model)
-            }}
-            onModelOptionChange={(change) => {
-              switch (change.type) {
-                case "claudeReasoningEffort":
-                  setReasoningEffort(change.effort)
-                  break
-                case "codexReasoningEffort":
-                  setReasoningEffort(change.effort)
-                  break
-                case "contextWindow":
-                  setClaudeContextWindow(change.contextWindow)
-                  break
-                case "fastMode":
-                  updateComposerState(
-                    (state) => state.provider === "claude"
-                      ? state
-                      : { ...state, modelOptions: { ...state.modelOptions, fastMode: change.fastMode } }
-                  )
-                  break
-              }
-            }}
-            planMode={providerPrefs.planMode}
-            onPlanModeChange={setEffectivePlanMode}
-            includePlanMode={showPlanMode}
-            className="max-w-[840px] mx-auto"
-          />
-          <div className="min-w-3" />
+        <div className="flex items-center gap-2">
+          <div className="min-w-0 flex-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden flex flex-row">
+            <div className="min-w-3" />
+            <ChatPreferenceControls
+              availableProviders={availableProviders}
+              selectedProvider={selectedProvider}
+              showCodexCliRequirementHints
+              model={providerPrefs.model}
+              modelOptions={providerPrefs.modelOptions}
+              onProviderChange={(provider) => {
+                resetChatComposerFromProvider(composerChatId, provider)
+              }}
+              onModelChange={(_, model) => {
+                setChatComposerModel(composerChatId, model)
+              }}
+              onModelOptionChange={(change) => {
+                switch (change.type) {
+                  case "claudeReasoningEffort":
+                    setReasoningEffort(change.effort)
+                    break
+                  case "codexReasoningEffort":
+                    setReasoningEffort(change.effort)
+                    break
+                  case "contextWindow":
+                    setClaudeContextWindow(change.contextWindow)
+                    break
+                  case "fastMode":
+                    updateComposerState(
+                      (state) => state.provider === "claude"
+                        ? state
+                        : { ...state, modelOptions: { ...state.modelOptions, fastMode: change.fastMode } }
+                    )
+                    break
+                }
+              }}
+              planMode={providerPrefs.planMode}
+              onPlanModeChange={setEffectivePlanMode}
+              includePlanMode={showPlanMode}
+              className="max-w-[840px] mx-auto"
+            />
+            <div className="min-w-3" />
+          </div>
+
+          {activeContextWindow ? (
+            <div className="hidden shrink-0 items-center gap-2 pr-3 md:flex">
+              <SessionTokenPill usage={activeContextWindow} />
+              <ContextWindowMeter usage={activeContextWindow} />
+            </div>
+          ) : null}
         </div>
 
         {activeContextWindow ? (
           <div className="flex md:hidden items-center justify-end gap-2 px-[13px] pt-2">
             <SessionTokenPill usage={activeContextWindow} />
             <ContextWindowMeter usage={activeContextWindow} />
-          </div>
-        ) : null}
-
-        {activeContextWindow ? (
-          <div className="absolute right-[29px] top-1/2 translate-x-1/2 -translate-y-1/2 hidden md:block">
-            <ContextWindowMeter usage={activeContextWindow} />
-          </div>
-        ) : null}
-        {activeContextWindow ? (
-          <div className="absolute right-[58px] top-1/2 -translate-y-1/2 hidden md:block">
-            <SessionTokenPill usage={activeContextWindow} />
           </div>
         ) : null}
       </div>
