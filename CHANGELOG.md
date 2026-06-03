@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.83.0](https://github.com/cuongtranba/kanna/compare/v0.82.2...v0.83.0) (2026-06-03)
+
+
+### Features
+
+* **workflow:** show in-flight runs as running in the status panel ([#363](https://github.com/cuongtranba/kanna/issues/363)) ([be3933d](https://github.com/cuongtranba/kanna/commit/be3933d879fa8a67cc7f660e3f1402d5d29a27f8))
+
 ## [0.82.2](https://github.com/cuongtranba/kanna/compare/v0.82.1...v0.82.2) (2026-06-03)
 
 
