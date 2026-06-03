@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.83.1](https://github.com/cuongtranba/kanna/compare/v0.83.0...v0.83.1) (2026-06-03)
+
+
+### Bug Fixes
+
+* **workflow:** getRun returns synthetic running run (drill-in no longer flickers) ([#365](https://github.com/cuongtranba/kanna/issues/365)) ([243f8fd](https://github.com/cuongtranba/kanna/commit/243f8fd55bfe17efeec8389de7f5677f0c27b7ee))
+
 ## [0.83.0](https://github.com/cuongtranba/kanna/compare/v0.82.2...v0.83.0) (2026-06-03)
 
 
