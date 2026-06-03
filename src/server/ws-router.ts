@@ -7,6 +7,7 @@ import { PROTOCOL_VERSION } from "../shared/types"
 import type { ClientEnvelope, PtyInstancesEvent, ServerEnvelope, SubscriptionTopic } from "../shared/protocol"
 import type { PtyInstanceDelta } from "../shared/pty-instance"
 import type { PtyInstanceRegistry } from "./claude-pty/pty-instance-registry"
+import type { WorkflowRegistry } from "./workflow-registry"
 import { isClientEnvelope } from "../shared/protocol"
 import type { AgentCoordinator } from "./agent"
 import type { AnalyticsReporter } from "./analytics"
@@ -150,6 +151,7 @@ interface CreateWsRouterArgs {
   pushManager: PushManager
   ptyInstances?: PtyInstanceRegistry
   killPtyInstance?: (chatId: string) => Promise<{ ok: boolean; error?: string }>
+  workflowRegistry?: WorkflowRegistry
   sessionShare?: SessionShareService
 }
 
@@ -417,6 +419,7 @@ export function createWsRouter({
   pushManager,
   ptyInstances,
   killPtyInstance,
+  workflowRegistry,
   sessionShare,
 }: CreateWsRouterArgs) {
   const sockets = new Set<ServerWebSocket<ClientState>>()
@@ -920,6 +923,18 @@ export function createWsRouter({
       }
     }
 
+    if (topic.type === "workflows") {
+      return {
+        v: PROTOCOL_VERSION,
+        type: "snapshot",
+        id,
+        snapshot: {
+          type: "workflows",
+          data: { chatId: topic.chatId, runs: workflowRegistry?.snapshot(topic.chatId) ?? [] },
+        },
+      }
+    }
+
     return {
       v: PROTOCOL_VERSION,
       type: "snapshot",
@@ -1220,6 +1235,21 @@ export function createWsRouter({
       pushPtyInstancesEvent({ type: "pty-instances.updated", instance: delta.instance })
     } else {
       pushPtyInstancesEvent({ type: "pty-instances.removed", chatId: delta.chatId })
+    }
+  }) ?? (() => {})
+
+  const disposeWorkflows: () => void = workflowRegistry?.subscribe((chatId) => {
+    for (const ws of sockets) {
+      const snapshotSignatures = ensureSnapshotSignatures(ws)
+      for (const [id, topic] of ws.data.subscriptions.entries()) {
+        if (topic.type !== "workflows" || topic.chatId !== chatId) continue
+        const envelope = createEnvelope(id, topic, undefined, ws)
+        if (envelope.type !== "snapshot") continue
+        const signature = JSON.stringify(envelope.snapshot)
+        if (snapshotSignatures.get(id) === signature) continue
+        snapshotSignatures.set(id, signature)
+        send(ws, envelope)
+      }
     }
   }) ?? (() => {})
 
@@ -2093,6 +2123,11 @@ export function createWsRouter({
           send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: { ok: true, kind: "list", data: { shares } } })
           return
         }
+        case "workflows.getRun": {
+          const run = workflowRegistry?.getRun(command.chatId, command.runId) ?? null
+          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: run })
+          return
+        }
       }
 
       await broadcastSnapshots()
@@ -2177,6 +2212,7 @@ export function createWsRouter({
       disposeAppSettingsEvents()
       disposeUpdateEvents()
       disposePtyInstances()
+      disposeWorkflows()
     },
   }
 }
