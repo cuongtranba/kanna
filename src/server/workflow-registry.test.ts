@@ -86,6 +86,32 @@ describe("WorkflowRegistry", () => {
       expect(snap[0].status).toBe("killed")
     })
 
+    test("getRun returns a synthetic running run for a live dir with no sidecar (no dialog flicker)", () => {
+      const io = fakeIo(new Map([["/d", []]]))
+      const reg = createWorkflowRegistry({
+        read: io.read, watch: io.watch,
+        listRunDirs: () => [{ runId: "wf_live", newestMtimeMs: Date.now() }],
+      })
+      reg.register("chat1", "/d")
+      const run = reg.getRun("chat1", "wf_live")
+      expect(run).not.toBeNull()
+      expect(run?.status).toBe("running")
+      // unknown / stale runId still null
+      expect(reg.getRun("chat1", "wf_unknown")).toBeNull()
+    })
+
+    test("getRun: terminal sidecar wins over synthetic running", () => {
+      const io = fakeIo(new Map([["/d", [
+        { runId: "wf_live", raw: { runId: "wf_live", status: "completed" } },
+      ]]]))
+      const reg = createWorkflowRegistry({
+        read: io.read, watch: io.watch,
+        listRunDirs: () => [{ runId: "wf_live", newestMtimeMs: Date.now() }],
+      })
+      reg.register("chat1", "/d")
+      expect(reg.getRun("chat1", "wf_live")?.status).toBe("completed")
+    })
+
     test("drops a stale live dir (crash that never wrote a sidecar)", () => {
       const io = fakeIo(new Map([["/d", []]]))
       const reg = createWorkflowRegistry({
