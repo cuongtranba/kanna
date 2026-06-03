@@ -277,9 +277,6 @@ function WorkflowRunDetail({ run }: { run: WorkflowRun }) {
                   <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                     <div className="flex items-center gap-2">
                       <span className="truncate text-sm font-medium text-foreground">{agent.label}</span>
-                      {agent.agentId ? (
-                        <span className="text-[10px] text-muted-foreground/60">{agent.agentId}</span>
-                      ) : null}
                       {agent.model ? (
                         <span className="text-[10px] text-muted-foreground">{agent.model}</span>
                       ) : null}

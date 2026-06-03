@@ -233,14 +233,14 @@ describe("WorkflowsSectionWithDetail re-fetch on snapshot push", () => {
     const runRow = makeRun({ runId: "run-1", status: "running" })
     const detailV1 = makeFullRunForPush({
       agentCount: 2,
-      agents: [{ index: 1, label: "a", agentId: "a1", state: "running" }],
+      agents: [{ index: 1, label: "pkg-alpha", agentId: "a1", state: "running" }],
     })
     const detailV2 = makeFullRunForPush({
       agentCount: 3,
       agents: [
-        { index: 1, label: "a", agentId: "a1", state: "completed" },
-        { index: 2, label: "b", agentId: "a2", state: "running" },
-        { index: 3, label: "c", agentId: "a3", state: "running" },
+        { index: 1, label: "pkg-alpha", agentId: "a1", state: "completed" },
+        { index: 2, label: "pkg-bravo", agentId: "a2", state: "running" },
+        { index: 3, label: "pkg-charlie", agentId: "a3", state: "running" },
       ],
     })
     const calls: string[] = []
@@ -256,13 +256,14 @@ describe("WorkflowsSectionWithDetail re-fetch on snapshot push", () => {
     expect(btn).not.toBeNull()
     await act(async () => { btn!.click() })
     expect(calls).toEqual(["run-1"])
-    // v1 must be visible (a1 agent rendered)
-    expect(document.body.textContent ?? "").toContain("a1")
+    // v1 must be visible (alpha agent label rendered) but NOT bravo yet
+    expect(document.body.textContent ?? "").toContain("pkg-alpha")
+    expect(document.body.textContent ?? "").not.toContain("pkg-bravo")
 
     // snapshot push — same row, new prop reference (running unchanged)
     await rerender([{ ...runRow }])
     expect(calls).toEqual(["run-1", "run-1"])
-    expect(document.body.textContent ?? "").toContain("a3")
+    expect(document.body.textContent ?? "").toContain("pkg-charlie")
 
     cleanup()
   })
