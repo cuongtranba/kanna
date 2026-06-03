@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test"
 import { mkdtempSync, writeFileSync, rmSync, mkdirSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { readWorkflowDir, watchWorkflowDir } from "./workflow-watch-io.adapter"
+import { listWorkflowRunDirs, readWorkflowDir, watchWorkflowDir } from "./workflow-watch-io.adapter"
 
 const dirs: string[] = []
 function tmp(): string { const d = mkdtempSync(join(tmpdir(), "wf-")); dirs.push(d); return d }
@@ -55,4 +55,24 @@ describe("workflow-watch-io.adapter", () => {
     await new Promise((r) => setTimeout(r, 80))
     expect(calls).toBe(1)
   }, 5000)
+
+  test("listWorkflowRunDirs reads sibling subagents/workflows/wf_* with newest mtime", () => {
+    const session = tmp()
+    const workflowsDir = join(session, "workflows")          // registered (sidecar) dir
+    const liveRoot = join(session, "subagents", "workflows") // live run dirs
+    mkdirSync(join(liveRoot, "wf_a"), { recursive: true })
+    mkdirSync(join(liveRoot, "wf_b"), { recursive: true })
+    mkdirSync(join(liveRoot, "ignore"), { recursive: true })  // not wf_*
+    writeFileSync(join(liveRoot, "wf_a", "journal.jsonl"), "{}")
+    writeFileSync(join(liveRoot, "wf_b", "agent-x.jsonl"), "{}")
+
+    const out = listWorkflowRunDirs(workflowsDir)
+    expect(out.map((r) => r.runId).sort()).toEqual(["wf_a", "wf_b"])
+    expect(out.every((r) => r.newestMtimeMs > 0)).toBe(true)
+  })
+
+  test("listWorkflowRunDirs returns [] when the sibling dir is absent", () => {
+    const session = tmp()
+    expect(listWorkflowRunDirs(join(session, "workflows"))).toEqual([])
+  })
 })

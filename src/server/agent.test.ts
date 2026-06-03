@@ -23,25 +23,21 @@ import type { HarnessTurn } from "./harness-types"
 import type { ChatAttachment, McpServerConfig, SlashCommand, TranscriptEntry } from "../shared/types"
 import type { AutoContinueEvent } from "./auto-continue/events"
 import type { WorkflowRegistry } from "./workflow-registry"
-import type { WorkflowRunSummary, WorkflowStatus } from "../shared/workflow-types"
 import { AsyncEventQueue } from "./test-helpers/async-event-queue"
 import { waitFor } from "./test-helpers/wait-for"
 
 /**
- * Minimal in-memory WorkflowRegistry whose snapshot reflects a per-chat
- * status map. Only `snapshot` is exercised by the idle/budget guards; the
+ * Minimal in-memory WorkflowRegistry whose `hasActiveRun` reflects a per-chat
+ * boolean map. Only `hasActiveRun` is exercised by the idle/budget guards; the
  * rest are inert stubs to satisfy the interface.
  */
-function makeFakeWorkflowRegistry(statusByChat: Map<string, WorkflowStatus>): WorkflowRegistry {
+function makeFakeWorkflowRegistry(activeByChat: Map<string, boolean>): WorkflowRegistry {
   return {
     register: () => {},
     unregister: () => {},
-    snapshot: (chatId: string): WorkflowRunSummary[] => {
-      const status = statusByChat.get(chatId)
-      if (!status) return []
-      return [{ runId: `run-${chatId}`, status, phases: [], agents: [] }]
-    },
+    snapshot: () => [],
     getRun: () => null,
+    hasActiveRun: (chatId: string): boolean => activeByChat.get(chatId) ?? false,
     subscribe: () => () => {},
   }
 }
@@ -1763,7 +1759,7 @@ describe("AgentCoordinator claude integration", () => {
   test("does not reap an idle Claude session while it hosts a running workflow", () => {
     const store = createFakeStore()
     const closed: string[] = []
-    const runningByChat = new Map<string, WorkflowStatus>([["chat-wf", "running"]])
+    const activeByChat = new Map<string, boolean>([["chat-wf", true]])
     const coordinator = new AgentCoordinator({
       store: store as never,
       onStateChange: () => {},
@@ -1771,7 +1767,7 @@ describe("AgentCoordinator claude integration", () => {
       startClaudeSession: async () => {
         throw new Error("not used")
       },
-      workflowRegistry: makeFakeWorkflowRegistry(runningByChat),
+      workflowRegistry: makeFakeWorkflowRegistry(activeByChat),
     })
 
     function put(chatId: string) {
@@ -1812,8 +1808,8 @@ describe("AgentCoordinator claude integration", () => {
     expect(closed).toEqual(["chat-plain"])
     expect(coordinator.claudeSessions.has("chat-wf")).toBe(true)
 
-    // Once the run is no longer running, the next sweep reaps it.
-    runningByChat.set("chat-wf", "completed")
+    // Once the run is no longer active, the next sweep reaps it.
+    activeByChat.set("chat-wf", false)
     ;(coordinator as any).sweepIdleClaudeSessions(200)
     expect(closed).toEqual(["chat-plain", "chat-wf"])
 
@@ -1830,7 +1826,7 @@ describe("AgentCoordinator claude integration", () => {
       startClaudeSession: async () => {
         throw new Error("not used")
       },
-      workflowRegistry: makeFakeWorkflowRegistry(new Map([["chat-old", "running"]])),
+      workflowRegistry: makeFakeWorkflowRegistry(new Map([["chat-old", true]])),
     })
 
     function put(chatId: string, lastUsedAt: number) {
@@ -3299,6 +3295,33 @@ describe("AgentCoordinator.scheduleAgentWakeup", () => {
     }).catch(() => {}) // provider start throws in this minimal harness; the reset happens at enqueue
 
     expect(await wake()).not.toBeNull() // chain reset → armed again
+  })
+
+  test("clamps a delay longer than the idle window so the wake beats the reaper", async () => {
+    const store = createFakeStore()
+    const coordinator = new AgentCoordinator({
+      store: store as never,
+      onStateChange: () => {},
+      // idle window 600s; wake must land before it minus the 60s guard buffer.
+      claudeSessionLifecycle: { idleMs: 600_000, maxResidentSessions: 4, sweepIntervalMs: 0 },
+      startClaudeSession: async () => { throw new Error("not needed") },
+    })
+
+    const before = Date.now()
+    await coordinator.scheduleAgentWakeup({
+      chatId: "chat-1",
+      delayMs: 1_200_000, // model asked for 20 min ("wait longer")
+      prompt: "harvest",
+      source: "agent_wakeup",
+    })
+
+    const ev = store.getAutoContinueEvents("chat-1")[0]
+    expect(ev.kind).toBe("auto_continue_accepted")
+    if (ev.kind === "auto_continue_accepted") {
+      // clamped to idleMs - 60s buffer = 540_000, never the requested 1_200_000
+      expect(ev.scheduledAt).toBeLessThanOrEqual(before + 540_000 + 50)
+      expect(ev.scheduledAt).toBeGreaterThan(before + 500_000)
+    }
   })
 })
 

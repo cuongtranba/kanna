@@ -58,4 +58,49 @@ describe("WorkflowRegistry", () => {
     reg.unregister("chat1")
     expect(reg.snapshot("chat1")).toEqual([])
   })
+
+  describe("hasActiveRun", () => {
+    const NOW = 1_000_000
+    const FRESH = 600_000
+    function regWith(runDirs: { runId: string; newestMtimeMs: number }[], sidecars: WorkflowRawFile[] = []) {
+      const io = fakeIo(new Map([["/d", sidecars]]))
+      const reg = createWorkflowRegistry({ read: io.read, watch: io.watch, listRunDirs: () => runDirs })
+      reg.register("chat1", "/d")
+      return reg
+    }
+
+    test("true: fresh live run dir with NO terminal sidecar (the mid-run window)", () => {
+      const reg = regWith([{ runId: "wf_a", newestMtimeMs: NOW - 1000 }])
+      expect(reg.hasActiveRun("chat1", FRESH, NOW)).toBe(true)
+    })
+
+    test("false: run dir present but a terminal sidecar exists (killed/completed)", () => {
+      const reg = regWith(
+        [{ runId: "wf_a", newestMtimeMs: NOW - 1000 }],
+        [{ runId: "wf_a", raw: { runId: "wf_a", status: "killed" } }],
+      )
+      expect(reg.hasActiveRun("chat1", FRESH, NOW)).toBe(false)
+    })
+
+    test("true: sidecar exists but status still running", () => {
+      const reg = regWith(
+        [{ runId: "wf_a", newestMtimeMs: NOW - 1000 }],
+        [{ runId: "wf_a", raw: { runId: "wf_a", status: "running" } }],
+      )
+      expect(reg.hasActiveRun("chat1", FRESH, NOW)).toBe(true)
+    })
+
+    test("false: run dir activity older than the freshness window (stalled/crashed)", () => {
+      const reg = regWith([{ runId: "wf_a", newestMtimeMs: NOW - FRESH - 1 }])
+      expect(reg.hasActiveRun("chat1", FRESH, NOW)).toBe(false)
+    })
+
+    test("false: no listRunDirs dep (legacy) or unknown chat", () => {
+      const io = fakeIo(new Map([["/d", []]]))
+      const legacy = createWorkflowRegistry({ read: io.read, watch: io.watch })
+      legacy.register("chat1", "/d")
+      expect(legacy.hasActiveRun("chat1", FRESH, NOW)).toBe(false)
+      expect(regWith([{ runId: "wf_a", newestMtimeMs: NOW }]).hasActiveRun("unknown", FRESH, NOW)).toBe(false)
+    })
+  })
 })
