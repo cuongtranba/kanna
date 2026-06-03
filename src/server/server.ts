@@ -45,6 +45,8 @@ import { TunnelManager } from "./cloudflare-tunnel/tunnel-manager.adapter"
 import { TunnelLifecycle } from "./cloudflare-tunnel/lifecycle"
 import { initToolCallbackOnBoot, type ToolCallbackService } from "./tool-callback"
 import { SessionShareService } from "./session-share"
+import { createWorkflowRegistry } from "./workflow-registry"
+import { readWorkflowDir, watchWorkflowDir } from "./workflow-watch-io.adapter"
 import { SnapshotStore } from "./session-share/snapshot-store.adapter"
 import { handleShareApiRequest } from "./session-share/http-routes"
 import { buildChatSnapshot, type SnapshotSources } from "./session-share/snapshot-builder"
@@ -228,6 +230,10 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
   }
   const claudePtyRegistry = new ClaudePtyRegistry(path.join(store.dataDir, "claude-pty.json"))
   const ptyInstanceRegistry = createPtyInstanceRegistry()
+  const workflowRegistry = createWorkflowRegistry({
+    read: readWorkflowDir,
+    watch: (dir, onChange) => watchWorkflowDir(dir, onChange),
+  })
   const reapedClaudePty = await claudePtyRegistry.reapStale()
   if (reapedClaudePty.length > 0) {
     console.log(`[kanna] reaped ${reapedClaudePty.length} orphan claude PTY process group(s) from previous run`)
@@ -399,6 +405,7 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     toolCallback,
     claudePtyRegistry,
     ptyInstanceRegistry,
+    workflowRegistry,
     // Kanna is a personal-use tool on the developer's own machine. Tool calls
     // auto-allow at the kanna gate layer (the claude CLI itself runs with
     // `--dangerously-skip-permissions` so it doesn't gate either). The
@@ -444,6 +451,7 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     updateManager,
     pushManager,
     ptyInstances: ptyInstanceRegistry,
+    workflowRegistry,
     killPtyInstance: async (chatId: string) => {
       try {
         await agent.killPtyInstance(chatId)
