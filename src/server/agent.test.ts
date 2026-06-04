@@ -1776,6 +1776,8 @@ describe("AgentCoordinator claude integration", () => {
         pendingPromptSeqs: [],
         activeTokenId: null,
         lastUsedAt,
+        backgroundTaskIds: new Set<string>(),
+        backgroundTaskDeadlineAt: 0,
       } as any)
     }
 
@@ -1831,6 +1833,8 @@ describe("AgentCoordinator claude integration", () => {
         pendingPromptSeqs: [],
         activeTokenId: null,
         lastUsedAt: 0,
+        backgroundTaskIds: new Set<string>(),
+        backgroundTaskDeadlineAt: 0,
       } as any)
     }
 
@@ -1890,6 +1894,8 @@ describe("AgentCoordinator claude integration", () => {
         pendingPromptSeqs: [],
         activeTokenId: null,
         lastUsedAt,
+        backgroundTaskIds: new Set<string>(),
+        backgroundTaskDeadlineAt: 0,
       } as any)
     }
 
@@ -1903,6 +1909,231 @@ describe("AgentCoordinator claude integration", () => {
 
     expect(closed).toEqual(["chat-mid"])
     expect([...coordinator.claudeSessions.keys()].sort()).toEqual(["chat-new", "chat-old"])
+
+    coordinator.dispose()
+  })
+
+  test("detects a background Bash launch and keeps the idle session warm until its deadline", async () => {
+    const store = createFakeStore()
+    let closeCount = 0
+    const coordinator = new AgentCoordinator({
+      store: store as never,
+      onStateChange: () => {},
+      claudeSessionLifecycle: { idleMs: 10, maxResidentSessions: 4, sweepIntervalMs: 0, backgroundTaskMaxMs: 100_000 },
+      startClaudeSession: async () => {
+        const events = new AsyncEventQueue<any>()
+        return {
+          provider: "claude",
+          stream: events,
+          getAccountInfo: async () => null,
+          interrupt: async () => {},
+          close: () => { closeCount += 1; events.close() },
+          setModel: async () => {},
+          setPermissionMode: async () => {},
+          getSupportedCommands: async () => [],
+          sendPrompt: async () => {
+            events.push({
+              type: "transcript" as const,
+              entry: timestamped({
+                kind: "tool_result",
+                toolId: "toolu_bg",
+                content: "Command running in background with ID: bgABC123. Output is being written to: /tmp/x.output. You will be notified when it completes.",
+                isError: false,
+              }),
+            })
+            events.push({
+              type: "transcript" as const,
+              entry: timestamped({ kind: "result", subtype: "success", isError: false, durationMs: 0, result: "" }),
+            })
+          },
+        }
+      },
+    })
+
+    await coordinator.send({
+      type: "chat.send",
+      chatId: "chat-1",
+      provider: "claude",
+      content: "wait for CI in background",
+      model: "claude-opus-4-1",
+    })
+    await waitFor(() => store.turnFinishedCount === 1)
+
+    const session = coordinator.claudeSessions.get("chat-1") as any
+    expect(session.backgroundTaskIds.has("bgABC123")).toBe(true)
+    const deadline = session.backgroundTaskDeadlineAt as number
+    expect(deadline).toBeGreaterThan(0)
+
+    // Session is long-idle (lastUsedAt old) but a background task is pending →
+    // the reaper must NOT close it before the deadline.
+    session.lastUsedAt = 0
+    ;(coordinator as any).sweepIdleClaudeSessions(deadline - 1)
+    expect(coordinator.claudeSessions.has("chat-1")).toBe(true)
+    expect(closeCount).toBe(0)
+
+    // Past the deadline, the guard releases and the idle session reaps.
+    ;(coordinator as any).sweepIdleClaudeSessions(deadline + 1)
+    expect(coordinator.claudeSessions.has("chat-1")).toBe(false)
+    expect(closeCount).toBe(1)
+
+    coordinator.dispose()
+  })
+
+  test("a non-background tool_result does not arm the keep-alive guard", async () => {
+    const store = createFakeStore()
+    const coordinator = new AgentCoordinator({
+      store: store as never,
+      onStateChange: () => {},
+      claudeSessionLifecycle: { idleMs: 10, maxResidentSessions: 4, sweepIntervalMs: 0, backgroundTaskMaxMs: 100_000 },
+      startClaudeSession: async () => {
+        const events = new AsyncEventQueue<any>()
+        return {
+          provider: "claude",
+          stream: events,
+          getAccountInfo: async () => null,
+          interrupt: async () => {},
+          close: () => { events.close() },
+          setModel: async () => {},
+          setPermissionMode: async () => {},
+          getSupportedCommands: async () => [],
+          sendPrompt: async () => {
+            events.push({
+              type: "transcript" as const,
+              entry: timestamped({ kind: "tool_result", toolId: "toolu_fg", content: "total 5 files changed", isError: false }),
+            })
+            events.push({
+              type: "transcript" as const,
+              entry: timestamped({ kind: "result", subtype: "success", isError: false, durationMs: 0, result: "" }),
+            })
+          },
+        }
+      },
+    })
+
+    await coordinator.send({
+      type: "chat.send",
+      chatId: "chat-1",
+      provider: "claude",
+      content: "ls",
+      model: "claude-opus-4-1",
+    })
+    await waitFor(() => store.turnFinishedCount === 1)
+
+    const session = coordinator.claudeSessions.get("chat-1") as any
+    expect(session.backgroundTaskIds.size).toBe(0)
+    session.lastUsedAt = 0
+    ;(coordinator as any).sweepIdleClaudeSessions(100)
+    expect(coordinator.claudeSessions.has("chat-1")).toBe(false)
+
+    coordinator.dispose()
+  })
+
+  test("budget eviction skips a session with a pending background task", () => {
+    const store = createFakeStore()
+    const closed: string[] = []
+    const coordinator = new AgentCoordinator({
+      store: store as never,
+      onStateChange: () => {},
+      claudeSessionLifecycle: { idleMs: 10_000, maxResidentSessions: 2, sweepIntervalMs: 0, backgroundTaskMaxMs: 100_000 },
+      startClaudeSession: async () => { throw new Error("not used") },
+    })
+
+    function put(chatId: string, lastUsedAt: number, bg?: { ids: string[]; deadlineAt: number }) {
+      const events = new AsyncEventQueue<any>()
+      coordinator.claudeSessions.set(chatId, {
+        id: `state-${chatId}`,
+        chatId,
+        session: {
+          provider: "claude",
+          stream: events,
+          getAccountInfo: async () => null,
+          interrupt: async () => {},
+          close: () => { closed.push(chatId); events.close() },
+          sendPrompt: async () => {},
+          setModel: async () => {},
+          setPermissionMode: async () => {},
+          getSupportedCommands: async () => [],
+        },
+        localPath: "/tmp/project",
+        additionalDirectories: [],
+        model: "claude-opus-4-1",
+        planMode: false,
+        sessionToken: null,
+        accountInfoLoaded: false,
+        nextPromptSeq: 0,
+        pendingPromptSeqs: [],
+        activeTokenId: null,
+        lastUsedAt,
+        backgroundTaskIds: new Set(bg?.ids ?? []),
+        backgroundTaskDeadlineAt: bg?.deadlineAt ?? 0,
+      } as any)
+    }
+
+    // chat-old is the LRU candidate but has a pending background task → the
+    // enforcer must skip it and evict the next-oldest plain session instead.
+    put("chat-old", 1, { ids: ["bgX"], deadlineAt: Date.now() + 100_000 })
+    put("chat-mid", 2)
+    put("chat-new", 3)
+
+    ;(coordinator as any).enforceClaudeSessionBudget("chat-new")
+
+    expect(closed).toEqual(["chat-mid"])
+    expect([...coordinator.claudeSessions.keys()].sort()).toEqual(["chat-new", "chat-old"])
+
+    coordinator.dispose()
+  })
+
+  test("a real chat.send clears a stale background-task guard", async () => {
+    const store = createFakeStore()
+    const coordinator = new AgentCoordinator({
+      store: store as never,
+      onStateChange: () => {},
+      claudeSessionLifecycle: { idleMs: 10, maxResidentSessions: 4, sweepIntervalMs: 0, backgroundTaskMaxMs: 100_000 },
+      startClaudeSession: async () => {
+        const events = new AsyncEventQueue<any>()
+        return {
+          provider: "claude",
+          stream: events,
+          getAccountInfo: async () => null,
+          interrupt: async () => {},
+          close: () => { events.close() },
+          setModel: async () => {},
+          setPermissionMode: async () => {},
+          getSupportedCommands: async () => [],
+          sendPrompt: async () => {
+            events.push({
+              type: "transcript" as const,
+              entry: timestamped({ kind: "result", subtype: "success", isError: false, durationMs: 0, result: "" }),
+            })
+          },
+        }
+      },
+    })
+
+    await coordinator.send({
+      type: "chat.send",
+      chatId: "chat-1",
+      provider: "claude",
+      content: "first",
+      model: "claude-opus-4-1",
+    })
+    await waitFor(() => store.turnFinishedCount === 1)
+
+    const session = coordinator.claudeSessions.get("chat-1") as any
+    session.backgroundTaskIds = new Set(["bgStale"])
+    session.backgroundTaskDeadlineAt = Date.now() + 100_000
+
+    await coordinator.send({
+      type: "chat.send",
+      chatId: "chat-1",
+      provider: "claude",
+      content: "second",
+      model: "claude-opus-4-1",
+    })
+    await waitFor(() => store.turnFinishedCount === 2)
+
+    expect(session.backgroundTaskIds.size).toBe(0)
+    expect(session.backgroundTaskDeadlineAt).toBe(0)
 
     coordinator.dispose()
   })

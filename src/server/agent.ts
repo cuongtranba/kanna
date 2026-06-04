@@ -191,12 +191,25 @@ interface ClaudeSessionState {
   activeTokenId: string | null
   oauthKeyMasked: string | null
   lastUsedAt: number
+  // Claude-Code background Bash tasks (`Bash(run_in_background: true)`) run as
+  // children of this PTY process and notify completion via a `<task-notification>`
+  // transcript line that the continuous tail re-enters as a real turn — but ONLY
+  // if the process is still alive. Track launched task ids + a keep-alive
+  // deadline so the idle reaper / budget enforcer does not tear the process down
+  // mid-flight. See adr-20260604-pty-background-task-keepalive.
+  backgroundTaskIds: Set<string>
+  backgroundTaskDeadlineAt: number
 }
 
 interface ClaudeSessionLifecycleOptions {
   idleMs: number
   maxResidentSessions: number
   sweepIntervalMs: number
+  // Max time a warm PTY session is held open solely because a background Bash
+  // task is still pending (no other activity). Bounds a hung/never-completing
+  // task so it cannot pin a process forever. See
+  // adr-20260604-pty-background-task-keepalive.
+  backgroundTaskMaxMs: number
 }
 
 interface AgentCoordinatorArgs {
@@ -1140,6 +1153,9 @@ const TOKEN_ROTATION_DEDUPE_WINDOW_MS = 5_000
 const DEFAULT_CLAUDE_SESSION_IDLE_MS = 10 * 60 * 1000
 const DEFAULT_CLAUDE_SESSION_MAX_RESIDENT = 4
 const DEFAULT_CLAUDE_SESSION_SWEEP_INTERVAL_MS = 60 * 1000
+// Keep a PTY session warm up to 30 min while a background Bash task is pending —
+// comfortably longer than the 10-min idle window and typical CI durations.
+const DEFAULT_PTY_BACKGROUND_TASK_MAX_MS = 30 * 60 * 1000
 // Agent wakes are clamped to one idle window minus this buffer so a re-entry
 // always lands before the idle reaper closes the PTY (see scheduleAgentWakeup).
 const WAKE_GUARD_BUFFER_MS = 60 * 1000
@@ -1149,6 +1165,34 @@ function positiveIntegerFromEnv(value: string | undefined, fallback: number): nu
   if (value === undefined || value.trim() === "") return fallback
   const parsed = Number(value)
   return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback
+}
+
+// Claude Code's BashTool emits this exact line in the tool_result when a command
+// is launched with `run_in_background: true`. It is the only observable launch
+// signal in Kanna's entry stream (the later `<task-notification>` line produces
+// no transcript entry). The id is alphanumeric. Global flag: one result may
+// report multiple launches in theory; capture every id.
+const BACKGROUND_TASK_LAUNCH_RE = /Command running in background with ID:\s*(\w+)/g
+
+/** Extract background-task ids from a tool_result entry's content (string or content blocks). */
+function backgroundTaskIdsFromToolResult(content: unknown): string[] {
+  let text = ""
+  if (typeof content === "string") {
+    text = content
+  } else if (Array.isArray(content)) {
+    for (const block of content) {
+      if (block && typeof block === "object" && typeof (block as { text?: unknown }).text === "string") {
+        text += (block as { text: string }).text + "\n"
+      }
+    }
+  } else {
+    return []
+  }
+  const ids: string[] = []
+  for (const match of text.matchAll(BACKGROUND_TASK_LAUNCH_RE)) {
+    if (match[1]) ids.push(match[1])
+  }
+  return ids
 }
 
 // Thrown by Claude spawn paths when the OAuth pool has tokens but every one
@@ -1288,6 +1332,8 @@ export class AgentCoordinator {
         ?? positiveIntegerFromEnv(process.env.KANNA_CLAUDE_SESSION_MAX_RESIDENT, DEFAULT_CLAUDE_SESSION_MAX_RESIDENT),
       sweepIntervalMs: args.claudeSessionLifecycle?.sweepIntervalMs
         ?? positiveIntegerFromEnv(process.env.KANNA_CLAUDE_SESSION_SWEEP_INTERVAL_MS, DEFAULT_CLAUDE_SESSION_SWEEP_INTERVAL_MS),
+      backgroundTaskMaxMs: args.claudeSessionLifecycle?.backgroundTaskMaxMs
+        ?? positiveIntegerFromEnv(process.env.KANNA_PTY_BACKGROUND_TASK_MAX_MS, DEFAULT_PTY_BACKGROUND_TASK_MAX_MS),
     }
     this.claudeSessionSweepTimer = this.claudeSessionLifecycle.sweepIntervalMs > 0
       ? setInterval(() => { this.sweepIdleClaudeSessions() }, this.claudeSessionLifecycle.sweepIntervalMs)
@@ -1349,6 +1395,9 @@ export class AgentCoordinator {
     for (const [chatId, session] of this.claudeSessions) {
       if (this.activeTurns.get(chatId)?.provider === "claude") {
         out.set(chatId, "active")
+      } else if (this.hasPendingBackgroundTask(session, now)) {
+        // Held warm for a background Bash task — surface as "warming", not "idle".
+        out.set(chatId, "warming")
       } else if (now - session.lastUsedAt >= this.resolveClaudeIdleMs()) {
         out.set(chatId, "idle")
       } else {
@@ -1425,10 +1474,35 @@ export class AgentCoordinator {
     return this.workflowRegistry?.hasActiveRun(chatId, this.resolveClaudeIdleMs(), Date.now()) ?? false
   }
 
+  private resolveBackgroundTaskMaxMs(): number {
+    return this.claudeSessionLifecycle.backgroundTaskMaxMs
+  }
+
+  /**
+   * True while the session has a Claude-Code background Bash task that launched
+   * within the keep-alive window. Such a task runs as a child of the PTY process
+   * and signals completion via a `<task-notification>` transcript line that the
+   * continuous tail re-enters as a real turn — but only if the process is still
+   * alive. Without this guard the idle reaper / budget enforcer would close the
+   * process mid-flight (the reported failure: a CI-wait job, the turn ended, and
+   * the session reaped exactly one idle window later, killing the child before it
+   * could notify). Deadline-based because Kanna observes no per-id completion in
+   * its entry stream; the bound matches `hasLiveWorkflow`'s "eventually reaps"
+   * model. Lazily clears the set once the deadline has passed.
+   */
+  private hasPendingBackgroundTask(session: ClaudeSessionState, now: number): boolean {
+    if (session.backgroundTaskIds.size === 0) return false
+    if (now < session.backgroundTaskDeadlineAt) return true
+    session.backgroundTaskIds.clear()
+    session.backgroundTaskDeadlineAt = 0
+    return false
+  }
+
   private isClaudeSessionIdle(chatId: string, session: ClaudeSessionState, now = Date.now()): boolean {
     if (this.activeTurns.get(chatId)?.provider === "claude") return false
     if (session.pendingPromptSeqs.length > 0) return false
     if (this.hasLiveWorkflow(chatId)) return false
+    if (this.hasPendingBackgroundTask(session, now)) return false
     return now - session.lastUsedAt >= this.resolveClaudeIdleMs()
   }
 
@@ -1468,12 +1542,14 @@ export class AgentCoordinator {
     const max = this.resolveClaudeMaxResident()
     if (max <= 0 || this.claudeSessions.size <= max) return
 
+    const now = Date.now()
     const candidates = [...this.claudeSessions.entries()]
       .filter(([chatId, session]) => (
         chatId !== protectedChatId
         && !this.activeTurns.has(chatId)
         && session.pendingPromptSeqs.length === 0
         && !this.hasLiveWorkflow(chatId)
+        && !this.hasPendingBackgroundTask(session, now)
       ))
       .sort((a, b) => a[1].lastUsedAt - b[1].lastUsedAt)
 
@@ -2328,6 +2404,8 @@ export class AgentCoordinator {
         activeTokenId: picked?.id ?? null,
         oauthKeyMasked: picked ? maskOauthKey(picked.token) : null,
         lastUsedAt: Date.now(),
+        backgroundTaskIds: new Set<string>(),
+        backgroundTaskDeadlineAt: 0,
       }
       this.claudeSessions.set(args.chatId, session)
       this.enforceClaudeSessionBudget(args.chatId)
@@ -2369,6 +2447,15 @@ export class AgentCoordinator {
       ? { traceId: command.clientTraceId, startedAt: performance.now() }
       : null
     let chatId = command.chatId
+
+    // A real user chat.send means the agent is active again — release any
+    // background-task keep-alive guard so the session reaps normally afterward.
+    // Auto-continue / agent wakes bypass `send` and intentionally do NOT clear it.
+    const existingClaudeSession = chatId ? this.claudeSessions.get(chatId) : undefined
+    if (existingClaudeSession) {
+      existingClaudeSession.backgroundTaskIds.clear()
+      existingClaudeSession.backgroundTaskDeadlineAt = 0
+    }
 
     logSendToStartingProfile(profile, "chat_send.received", {
       existingChatId: command.chatId ?? null,
@@ -2753,6 +2840,19 @@ export class AgentCoordinator {
         if (!event.entry) continue
         if (this.claudeSessions.get(session.chatId) !== session) break
         await this.store.appendMessage(session.chatId, event.entry)
+        // Arm the background-task keep-alive guard the moment Claude Code reports
+        // a `Bash(run_in_background)` launch. Keeps the PTY process warm past the
+        // idle window so the later `<task-notification>` can re-enter the agent.
+        if (event.entry.kind === "tool_result") {
+          const launchedIds = backgroundTaskIdsFromToolResult(
+            (event.entry as { content?: unknown }).content,
+          )
+          if (launchedIds.length > 0) {
+            for (const id of launchedIds) session.backgroundTaskIds.add(id)
+            session.backgroundTaskDeadlineAt = Date.now() + this.resolveBackgroundTaskMaxMs()
+            this.emitStateChange(session.chatId)
+          }
+        }
         const active = this.activeTurns.get(session.chatId)
         if (event.entry.kind === "system_init" && active) {
           active.status = "running"

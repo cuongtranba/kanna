@@ -453,6 +453,37 @@ via event replay, obeys the cancel cascade). See
   `server.ts` and passed to `AgentCoordinator`; the coordinator reads only its
   args (side-effect seal).
 
+# Background Bash Task Keep-Alive (KANNA_PTY_BACKGROUND_TASK_MAX_MS)
+
+Claude-Code background Bash tasks (`Bash(run_in_background: true)`, e.g. a
+`gh pr checks` CI poll) run as children of the PTY `claude` process and report
+completion via a `<task-notification>` transcript line. That line is
+`type=user` with `isMeta != true`, so the `jsonl-to-event.ts` auto-wake filter
+does NOT drop it — the continuous transcript tail (`runClaudeSession` stream
+loop in `agent.ts`) re-enters it as a real turn. The ONLY failure was the idle
+reaper: a turn ends with a background task still running, no `activeTurn` /
+`pendingPromptSeq` / live workflow keeps the session busy, so
+`isClaudeSessionIdle` reaped the PTY exactly one idle window
+(`DEFAULT_CLAUDE_SESSION_IDLE_MS`, 10 min) later — killing the child before it
+could notify. See `adr-20260604-pty-background-task-keepalive`.
+
+- **Guard.** `hasPendingBackgroundTask(session, now)` mirrors `hasLiveWorkflow`:
+  consulted by both `isClaudeSessionIdle` and `enforceClaudeSessionBudget`, it
+  holds the session warm while a launched task is within its keep-alive window.
+- **Detection.** The stream consumer parses each `tool_result` for Claude Code's
+  exact `Command running in background with ID: <id>` line
+  (`backgroundTaskIdsFromToolResult`), records the id, and arms
+  `backgroundTaskDeadlineAt = now + KANNA_PTY_BACKGROUND_TASK_MAX_MS`. The later
+  `<task-notification>` produces no Kanna entry, so the guard is **deadline-based**
+  (no per-id completion signal), matching the workflow guard's "eventually
+  reaps" model. The deadline lazily clears once passed.
+- **Clear.** A real user `chat.send` (NOT auto-continue / agent wakes, which
+  bypass `send`) releases the guard so the session reaps normally afterward.
+- **Bound.** `KANNA_PTY_BACKGROUND_TASK_MAX_MS` (default 1_800_000 = 30 min,
+  via `positiveIntegerFromEnv`) caps how long a hung/never-completing task can
+  pin a process. Trade-off: a quick task still holds the session warm up to the
+  max (no early-clear) — acceptable and bounded; raise/lower per deployment.
+
 # Workflow Status Panel (PTY disk-watch, read-only)
 
 Surfaces Claude Code's native `Workflow` tool (dynamic multi-agent
