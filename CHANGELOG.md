@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.84.1](https://github.com/cuongtranba/kanna/compare/v0.84.0...v0.84.1) (2026-06-04)
+
+
+### Bug Fixes
+
+* **workflow:** surface a live re-run that reused a crashed run's runId ([#370](https://github.com/cuongtranba/kanna/issues/370)) ([bef730e](https://github.com/cuongtranba/kanna/commit/bef730e864bc03e6e029822e76d1e6f2d036c27e))
+
 ## [0.84.0](https://github.com/cuongtranba/kanna/compare/v0.83.1...v0.84.0) (2026-06-04)
 
 
