@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.85.2](https://github.com/cuongtranba/kanna/compare/v0.85.1...v0.85.2) (2026-06-04)
+
+
+### Bug Fixes
+
+* **pty:** keep session warm while a background Bash task is pending ([#379](https://github.com/cuongtranba/kanna/issues/379)) ([3652234](https://github.com/cuongtranba/kanna/commit/36522341ce9b6d8849f7f9e12b8696fa72f69055))
+* **workflow:** stop pending_workflow harvest wake re-arming forever ([#381](https://github.com/cuongtranba/kanna/issues/381)) ([5110cbc](https://github.com/cuongtranba/kanna/commit/5110cbc261e50dad1be267ea00ac8be2b883615c))
+
 ## [0.85.1](https://github.com/cuongtranba/kanna/compare/v0.85.0...v0.85.1) (2026-06-04)
 
 
