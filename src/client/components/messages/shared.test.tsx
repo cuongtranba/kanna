@@ -66,7 +66,7 @@ describe("markdownComponents", () => {
     const html = renderToStaticMarkup(
       <Markdown
         remarkPlugins={[remarkGfm]}
-        components={createMarkdownComponents({ onOpenLocalLink: () => {} })}
+        components={createMarkdownComponents()}
       >
         {"[app.ts](/Users/jake/Projects/kanna/src/client/app/App.tsx#L1)"}
       </Markdown>
@@ -80,7 +80,7 @@ describe("markdownComponents", () => {
     const html = renderToStaticMarkup(
       <Markdown
         remarkPlugins={[remarkGfm]}
-        components={createMarkdownComponents({ onOpenLocalLink: () => {} })}
+        components={createMarkdownComponents()}
       >
         {"[chibi-cute.png](/Users/cuongtran/.kanna/outputs/chibi-cute.png)"}
       </Markdown>
@@ -95,7 +95,7 @@ describe("markdownComponents", () => {
     const html = renderToStaticMarkup(
       <Markdown
         remarkPlugins={[remarkGfm]}
-        components={createMarkdownComponents({ onOpenLocalLink: () => {} })}
+        components={createMarkdownComponents()}
       >
         {"[App.tsx](/Users/jake/Projects/kanna/src/client/app/App.tsx)"}
       </Markdown>
