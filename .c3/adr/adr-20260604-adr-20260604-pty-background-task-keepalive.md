@@ -1,6 +1,6 @@
 ---
 id: adr-20260604-adr-20260604-pty-background-task-keepalive
-c3-seal: c57f57bf332d7f4b5884e0c9cc4a9e8d91791d1d4b7fc73ed46dfe0c04d78aaf
+c3-seal: 2d71a80fc0ca59ff211005adfc64e59354d8d067ef750b11f3bb560b9c3cf3da
 title: adr-20260604-pty-background-task-keepalive
 type: adr
 goal: |-
@@ -70,7 +70,6 @@ and set `backgroundTaskDeadlineAt = now + resolveBackgroundTaskMaxMs()`.
 0 && now < backgroundTaskDeadlineAt`; when the deadline has passed it lazily clears
 the set (so the badge/log stay accurate). Consult it in both `isClaudeSessionIdle`
 and `enforceClaudeSessionBudget`, exactly where `hasLiveWorkflow` is consulted.
-
 3. Clear the guard at the start of a real `chat_send` turn (`startTurnForChat`): the
 user is back, no need to hold the process for background polling.
 4. `resolveBackgroundTaskMaxMs()` reads `KANNA_PTY_BACKGROUND_TASK_MAX_MS` (default
