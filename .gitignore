@@ -44,6 +44,3 @@ scripts/pm2.config.cjs
 # pm2 local secrets (cloudflared token, password) — sourced by deploy.sh
 scripts/pm2.env
 .c3/c3.db
-
-# PR-specific demo assets (videos, gifs, screenshots) — kept local, not committed
-docs/pr-assets/
