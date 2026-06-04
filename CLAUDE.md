@@ -440,7 +440,12 @@ via event replay, obeys the cancel cascade). See
   `source:"pending_workflow"` wake (no double-arm if a schedule is already
   live). Kanna has no mid-flight completion signal, so the replayed prompt
   asks the model to check its background work and call `schedule_wakeup` again
-  if it is still running.
+  if it is still running. **Registry gate (adr-20260604-pending-workflow-wake-registry-gate):**
+  CC's `pendingWorkflowCount` stays > 0 *after* a run terminates, so arming on
+  the count alone re-queued the harvest prompt forever. The arm is gated on
+  `hasLiveWorkflow(chatId)` (the disk-watch `WorkflowRegistry`, same authority
+  the idle reaper uses) — the count is a hint; the registry decides whether a
+  run is actually live. No live run ⇒ no arm ⇒ the loop terminates.
 
 - **Runaway-loop cap.** `KANNA_MAX_AGENT_WAKES` (default 25) bounds consecutive
   agent wakes per chat; the in-memory chain counter resets when a real

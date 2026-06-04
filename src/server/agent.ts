@@ -3591,12 +3591,21 @@ export class AgentCoordinator {
    * Kanna gets no mid-flight completion signal, so the replayed prompt asks
    * the model to check its background work; if still running, the model can
    * call `schedule_wakeup` to wait longer. The runaway cap bounds the poll.
-   * No-op when the count is absent/0 or a schedule is already live.
+   * No-op when the count is absent/0, the registry shows no live run, or a
+   * schedule is already live.
    */
   private async maybeArmPendingWorkflowWake(chatId: string, entry: TranscriptEntry): Promise<void> {
     if (entry.kind !== "result") return
     const count = entry.pendingWorkflowCount ?? 0
     if (count <= 0) return
+    // Claude Code's per-turn `pendingWorkflowCount` stays > 0 after the run has
+    // already terminated, so arming on it alone re-queues the harvest prompt
+    // forever (sessions de4c6a76 14×, 5f78aa43 10×, even after the model said
+    // "no workflow running"). The disk-watch registry is the authority on
+    // liveness — the same source the idle reaper consults. Treat the count as a
+    // hint; only arm while a run is actually live. See
+    // adr-20260604-pending-workflow-wake-registry-gate.
+    if (!this.hasLiveWorkflow(chatId)) return
     const live = deriveChatSchedules(this.store.getAutoContinueEvents(chatId), chatId).liveScheduleId
     if (live !== null) return
     await this.scheduleAgentWakeup({

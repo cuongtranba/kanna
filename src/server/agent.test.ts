@@ -3593,11 +3593,18 @@ describe("AgentCoordinator.scheduleAgentWakeup", () => {
 
 describe("AgentCoordinator pending-workflow harvest wake", () => {
   type ArmFn = (chatId: string, entry: { kind: string; pendingWorkflowCount?: number }) => Promise<void>
-  const makeCoord = (store: ReturnType<typeof createFakeStore>) =>
+  // The harvest wake only arms while the disk-watch registry confirms a run is
+  // actually live; default the fake registry to "active" so the existing cases
+  // exercise the count/schedule guards, not the liveness guard.
+  const makeCoord = (
+    store: ReturnType<typeof createFakeStore>,
+    activeByChat: Map<string, boolean> = new Map([["chat-1", true]]),
+  ) =>
     new AgentCoordinator({
       store: store as never,
       onStateChange: () => {},
       startClaudeSession: async () => { throw new Error("not needed") },
+      workflowRegistry: makeFakeWorkflowRegistry(activeByChat),
     })
 
   test("arms a pending_workflow wake when a result carries pendingWorkflowCount > 0", async () => {
@@ -3640,6 +3647,18 @@ describe("AgentCoordinator pending-workflow harvest wake", () => {
       .maybeArmPendingWorkflowWake("chat-1", { kind: "result", pendingWorkflowCount: 1 })
     // Still only the seeded event — no second arm.
     expect(store.getAutoContinueEvents("chat-1")).toHaveLength(1)
+  })
+
+  test("no-op when the registry reports no live run (Claude Code's pendingWorkflowCount is stale)", async () => {
+    const store = createFakeStore()
+    // Registry is the authority: the workflow has terminated (hasActiveRun=false)
+    // even though Claude Code's turn_duration still reports pendingWorkflowCount>0.
+    // This is the loop that re-queued the harvest prompt forever (sessions
+    // de4c6a76 14×, 5f78aa43 10×). Must NOT arm.
+    const coordinator = makeCoord(store, new Map([["chat-1", false]]))
+    await (coordinator as unknown as { maybeArmPendingWorkflowWake: ArmFn })
+      .maybeArmPendingWorkflowWake("chat-1", { kind: "result", pendingWorkflowCount: 1 })
+    expect(store.getAutoContinueEvents("chat-1")).toHaveLength(0)
   })
 })
 
