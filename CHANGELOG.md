@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.84.0](https://github.com/cuongtranba/kanna/compare/v0.83.1...v0.84.0) (2026-06-04)
+
+
+### Features
+
+* **workflow:** live per-agent detail for running runs (journal.jsonl) ([#367](https://github.com/cuongtranba/kanna/issues/367)) ([5ac6975](https://github.com/cuongtranba/kanna/commit/5ac6975bb347287e86a078658bc55357b218b0e7))
+
+
+### Bug Fixes
+
+* **sidebar:** make collapse-all chip a real affordance with semantic icon ([#369](https://github.com/cuongtranba/kanna/issues/369)) ([92cc071](https://github.com/cuongtranba/kanna/commit/92cc07127464e1e68edf5e3cdfa3d4e9a29a0ffa))
+
 ## [0.83.1](https://github.com/cuongtranba/kanna/compare/v0.83.0...v0.83.1) (2026-06-03)
 
 
