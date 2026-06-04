@@ -295,6 +295,9 @@ function WorkflowRunDetail({ run }: { run: WorkflowRun }) {
                         <span className="tabular-nums">{agent.toolCalls} calls</span>
                       ) : null}
                     </div>
+                    {agent.lastToolSummary ? (
+                      <span className="text-xs text-muted-foreground">{agent.lastToolSummary}</span>
+                    ) : null}
                   </div>
                 </li>
               )

@@ -92,15 +92,36 @@ export interface WorkflowJournalEntry {
   type: "started" | "result"
   agentId: string
   key?: string
+  /**
+   * The agent's structured return value. Workflow scripts return arbitrary
+   * shapes via their StructuredOutput schema, so every field is optional and
+   * parsed defensively. The count fields (`fixed`/`stale`/`skipped`) are
+   * normalized from EITHER a bare number OR an array (the workflow returns
+   * `fixed: [1941]`, we surface the length) so the registry can build a
+   * uniform per-agent outcome summary.
+   */
   result?: {
     dir?: string
     fixed?: number
+    stale?: number
+    skipped?: number
+    testsPass?: boolean
     test_status?: string
     summary?: string
+    notes?: string
   }
 }
 
 const KNOWN_JOURNAL_KINDS: ReadonlySet<string> = new Set(["started", "result"])
+
+// Normalize a count-ish field: a bare number stays as-is, an array collapses to
+// its length (the workflow returns `fixed: [1941]`, we surface `1`). Anything
+// else is absent.
+function countOf(v: unknown): number | undefined {
+  if (typeof v === "number") return v
+  if (Array.isArray(v)) return v.length
+  return undefined
+}
 
 function parseJournalLine(line: string): WorkflowJournalEntry | null {
   if (!line) return null
@@ -118,9 +139,13 @@ function parseJournalLine(line: string): WorkflowJournalEntry | null {
     const rr = r.result as Record<string, unknown>
     const res: WorkflowJournalEntry["result"] = {}
     if (typeof rr.dir === "string") res.dir = rr.dir
-    if (typeof rr.fixed === "number") res.fixed = rr.fixed
+    const fixed = countOf(rr.fixed); if (fixed !== undefined) res.fixed = fixed
+    const stale = countOf(rr.stale); if (stale !== undefined) res.stale = stale
+    const skipped = countOf(rr.skipped); if (skipped !== undefined) res.skipped = skipped
+    if (typeof rr.testsPass === "boolean") res.testsPass = rr.testsPass
     if (typeof rr.test_status === "string") res.test_status = rr.test_status
     if (typeof rr.summary === "string") res.summary = rr.summary
+    if (typeof rr.notes === "string") res.notes = rr.notes
     out.result = res
   }
   return out

@@ -102,6 +102,31 @@ describe("workflow-watch-io.adapter", () => {
     expect(entries[1].result).toMatchObject({ dir: "/repo/pkg/x", fixed: 3, test_status: "pass" })
   })
 
+  test("readWorkflowRunJournal normalizes array count fields + parses real result shape", () => {
+    const session = tmp()
+    const runDir = join(session, "subagents", "workflows", "wf_real")
+    mkdirSync(runDir, { recursive: true })
+    writeFileSync(
+      join(runDir, "journal.jsonl"),
+      // The real sonar-sweep workflow returns count fields as ARRAYS, plus a
+      // boolean testsPass and a long notes string — the prior parser silently
+      // dropped all of these (it expected `fixed: number`, `test_status`).
+      JSON.stringify({
+        type: "result",
+        agentId: "r1",
+        result: { dir: "backend-core/pkg/enmime/internal/coding", fixed: [1941], stale: [1511, 2107], skipped: [], testsPass: true, notes: "Finding #1941 fixed." },
+      }) + "\n",
+    )
+
+    const entries = readWorkflowRunJournal(join(session, "workflows"), "wf_real")
+    expect(entries).toHaveLength(1)
+    // Arrays collapse to their length; testsPass + notes survive.
+    expect(entries[0].result).toMatchObject({
+      dir: "backend-core/pkg/enmime/internal/coding",
+      fixed: 1, stale: 2, skipped: 0, testsPass: true, notes: "Finding #1941 fixed.",
+    })
+  })
+
   test("readWorkflowRunJournal skips blank + unparseable lines; returns [] for missing file", () => {
     const session = tmp()
     const liveRoot = join(session, "subagents", "workflows")

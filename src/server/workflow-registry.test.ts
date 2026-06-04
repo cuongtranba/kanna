@@ -104,8 +104,31 @@ describe("WorkflowRegistry", () => {
       expect(run?.agentCount).toBe(2)
       expect(run?.agents).toHaveLength(2)
       expect(run?.agents[0]).toMatchObject({ agentId: "a1", state: "completed", label: "x" })
-      expect(run?.agents[0].lastToolSummary).toBe("fixed 3, test:pass")
+      expect(run?.agents[0].lastToolSummary).toBe("fixed 3 · test:pass")
       expect(run?.agents[1]).toMatchObject({ agentId: "a2", state: "running", label: "agent" })
+    })
+
+    test("getRun running enrich: summary from real journal shape (counts + testsPass)", () => {
+      const io = fakeIo(new Map([["/d", []]]))
+      const journal: import("./workflow-watch-io.adapter").WorkflowJournalEntry[] = [
+        // The adapter normalizes `fixed: [1941]` / `stale: [...]` arrays to counts.
+        { type: "result", agentId: "a1", result: { dir: "/repo/pkg/coding", fixed: 1, stale: 2, skipped: 0, testsPass: true } },
+        // A clean no-op agent (all zero counts) falls back to its summary string.
+        { type: "result", agentId: "a2", result: { dir: "/repo/pkg/y", fixed: 0, stale: 0, skipped: 0, summary: "nothing to do" } },
+        // tests failing.
+        { type: "result", agentId: "a3", result: { dir: "/repo/pkg/z", fixed: 3, testsPass: false } },
+      ]
+      const reg = createWorkflowRegistry({
+        read: io.read, watch: io.watch,
+        listRunDirs: () => [{ runId: "wf_live", newestMtimeMs: Date.now() }],
+        readRunJournal: () => journal,
+      })
+      reg.register("chat1", "/d")
+      const run = reg.getRun("chat1", "wf_live")
+      expect(run?.agents[0]).toMatchObject({ label: "coding", state: "completed" })
+      expect(run?.agents[0].lastToolSummary).toBe("fixed 1 · stale 2 · tests ✓")
+      expect(run?.agents[1].lastToolSummary).toBe("nothing to do")
+      expect(run?.agents[2].lastToolSummary).toBe("fixed 3 · tests ✗")
     })
 
     test("getRun: legacy/no-readRunJournal dep still works (agents:[] for running)", () => {

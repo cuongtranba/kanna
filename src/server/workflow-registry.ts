@@ -94,12 +94,19 @@ function buildAgentsFromJournal(entries: WorkflowJournalEntry[]): WorkflowAgentP
       const cur = out.get(e.agentId)
       if (!cur) continue
       cur.state = "completed"
-      const dirBase = basenameAfterSlash(e.result?.dir)
+      const r = e.result
+      const dirBase = basenameAfterSlash(r?.dir)
       if (dirBase) cur.label = dirBase
+      // Build a compact per-agent outcome summary from whatever the agent
+      // returned. Zero counts are omitted so a clean "no-op" agent stays quiet.
       const parts: string[] = []
-      if (typeof e.result?.fixed === "number") parts.push(`fixed ${e.result.fixed}`)
-      if (e.result?.test_status) parts.push(`test:${e.result.test_status}`)
-      if (parts.length > 0) cur.lastToolSummary = parts.join(", ")
+      if (r?.fixed) parts.push(`fixed ${r.fixed}`)
+      if (r?.stale) parts.push(`stale ${r.stale}`)
+      if (r?.skipped) parts.push(`skipped ${r.skipped}`)
+      if (typeof r?.testsPass === "boolean") parts.push(r.testsPass ? "tests ✓" : "tests ✗")
+      else if (r?.test_status) parts.push(`test:${r.test_status}`)
+      if (parts.length > 0) cur.lastToolSummary = parts.join(" · ")
+      else if (r?.summary) cur.lastToolSummary = r.summary
     }
   }
   return [...out.values()]

@@ -154,6 +154,7 @@ function makeFullRun(over: Partial<WorkflowRun> = {}): WorkflowRun {
         state: "completed",
         model: "claude-sonnet-4-6",
         lastToolName: "bash",
+        lastToolSummary: "fixed 1 · stale 2 · tests ✓",
         tokens: 1000,
         toolCalls: 5,
       },
@@ -193,6 +194,8 @@ describe("WorkflowsSectionWithDetail — drill-in", () => {
     await act(async () => {})
     expect(document.body.textContent).toContain("compiler")
     expect(document.body.textContent).toContain("Build succeeded.")
+    // Per-agent outcome summary (fixed/stale/tests) surfaces in the drill-in.
+    expect(document.body.textContent).toContain("fixed 1 · stale 2 · tests ✓")
 
     container.remove()
   })
