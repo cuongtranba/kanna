@@ -544,6 +544,16 @@ export function getClaudeAssistantMessageUsageId(message: any): string | null {
   return null
 }
 
+// Benign turn-end markers the Claude CLI emits as model "<synthetic>" messages
+// (the CVH-family constants in the CLI binary) when a turn ends with nothing to
+// say. They carry isApiErrorMessage:false and must render as ordinary assistant
+// text, never as a red api_error card.
+const SYNTHETIC_NON_ERROR_PLACEHOLDERS: ReadonlySet<string> = new Set([
+  "No response requested.",
+  "No action needed.",
+  "Nothing needed from you.",
+])
+
 export function normalizeClaudeStreamMessage(message: any): TranscriptEntry[] {
   const debugRaw = JSON.stringify(message)
   const messageId = typeof message.uuid === "string" ? message.uuid : undefined
@@ -567,11 +577,23 @@ export function normalizeClaudeStreamMessage(message: any): TranscriptEntry[] {
   }
 
   if (message.type === "assistant" && Array.isArray(message.message?.content)) {
-    if (message.isApiErrorMessage === true || message.message?.model === "<synthetic>") {
-      const joinedText = message.message.content
-        .filter((c: { type?: string; text?: string }) => c.type === "text" && typeof c.text === "string")
-        .map((c: { text: string }) => c.text)
-        .join("")
+    const joinedText = message.message.content
+      .filter((c: { type?: string; text?: string }) => c.type === "text" && typeof c.text === "string")
+      .map((c: { text: string }) => c.text)
+      .join("")
+    // The Claude CLI reuses model "<synthetic>" for two distinct purposes:
+    // genuine API errors AND benign turn-end placeholders ("No response
+    // requested." etc., the CVH-family constants in the CLI binary). The benign
+    // markers carry isApiErrorMessage:false, so a bare synthetic model is NOT
+    // sufficient to classify as an error — only treat it as api_error when the
+    // flag is set, or the synthetic text is not a known benign placeholder.
+    const isSyntheticModel = message.message?.model === "<synthetic>"
+    const isBenignSyntheticPlaceholder = isSyntheticModel
+      && SYNTHETIC_NON_ERROR_PLACEHOLDERS.has(joinedText.trim())
+    if (
+      message.isApiErrorMessage === true
+      || (isSyntheticModel && !isBenignSyntheticPlaceholder)
+    ) {
       const statusFromField = typeof message.apiErrorStatus === "number" ? message.apiErrorStatus : undefined
       const statusFromText = (() => {
         const match = /API Error:\s*(\d{3})/i.exec(joinedText)

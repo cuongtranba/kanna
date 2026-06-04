@@ -266,6 +266,41 @@ describe("normalizeClaudeStreamMessage", () => {
       expect(entries).toHaveLength(1)
       expect(entries[0].kind).toBe("assistant_text")
     })
+
+    // The Claude CLI reuses model "<synthetic>" for benign turn-end placeholders
+    // (CVH constant in the binary) as well as real API errors. Those benign
+    // markers carry isApiErrorMessage:false and must NOT render as red errors.
+    test.each([
+      "No response requested.",
+      "No action needed.",
+      "Nothing needed from you.",
+    ])("benign synthetic placeholder %p is assistant_text, not api_error", (text) => {
+      const entries = normalizeClaudeStreamMessage({
+        type: "assistant",
+        uuid: "msg-synthetic-benign",
+        isApiErrorMessage: false,
+        message: {
+          model: "<synthetic>",
+          content: [{ type: "text", text }],
+        },
+      })
+      expect(entries).toHaveLength(1)
+      expect(entries[0].kind).toBe("assistant_text")
+    })
+
+    test("synthetic message with isApiErrorMessage:true stays api_error even if text matches a benign phrase prefix", () => {
+      const entries = normalizeClaudeStreamMessage({
+        type: "assistant",
+        uuid: "msg-synthetic-real",
+        isApiErrorMessage: true,
+        message: {
+          model: "<synthetic>",
+          content: [{ type: "text", text: "No response requested." }],
+        },
+      })
+      expect(entries).toHaveLength(1)
+      expect(entries[0].kind).toBe("api_error")
+    })
   })
 })
 
