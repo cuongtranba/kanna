@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.85.0](https://github.com/cuongtranba/kanna/compare/v0.84.1...v0.85.0) (2026-06-04)
+
+
+### Features
+
+* **workflow:** richer per-agent journal detail in drill-in ([#372](https://github.com/cuongtranba/kanna/issues/372)) ([8d27627](https://github.com/cuongtranba/kanna/commit/8d27627e64ef02839accc8cb5781ced6a70e20c3))
+
+
+### Bug Fixes
+
+* **transcript:** stop rendering benign synthetic turn-end markers as API errors ([#374](https://github.com/cuongtranba/kanna/issues/374)) ([6206239](https://github.com/cuongtranba/kanna/commit/62062395f4d12da847b0a9481a70dc465171e728))
+
 ## [0.84.1](https://github.com/cuongtranba/kanna/compare/v0.84.0...v0.84.1) (2026-06-04)
 
 
