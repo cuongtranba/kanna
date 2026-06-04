@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
+import { createHash } from "node:crypto"
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { importClaudeSessions } from "./claude-session-importer.adapter"
@@ -42,6 +43,15 @@ function seedSession(homeDir: string, realProj: string, sessionId: string) {
     message: { role: "assistant", id: "m1", content: [{ type: "text", text: "hello" }] },
   })
   writeFileSync(path.join(projDir, `${sessionId}.jsonl`), `${line1}\n${line2}\n`, "utf8")
+}
+
+function claudeProjectDir(homeDir: string, realProj: string) {
+  const folderName = realProj.replace(/\//g, "-")
+  return path.join(homeDir, ".claude", "projects", folderName)
+}
+
+function md5File(filePath: string) {
+  return createHash("md5").update(readFileSync(filePath, "utf8")).digest("hex")
 }
 
 describe("importClaudeSessions", () => {
@@ -136,6 +146,206 @@ describe("importClaudeSessions", () => {
       const chats = [...store.state.chatsById.values()].filter((c) => !c.deletedAt)
       expect(chats.length).toBe(1)
       expect(chats[0].title).toBe("analyse this repo")
+    } finally {
+      ctx.cleanup()
+    }
+  })
+
+  test("prefers latest non-empty summary over first user text", async () => {
+    const ctx = fresh()
+    try {
+      const folderName = ctx.realProj.replace(/\//g, "-")
+      const projDir = path.join(ctx.homeDir, ".claude", "projects", folderName)
+      mkdirSync(projDir, { recursive: true })
+      const blankSummary = JSON.stringify({
+        type: "summary",
+        uuid: "s0",
+        sessionId: "sess-summary",
+        cwd: ctx.realProj,
+        timestamp: "2026-04-20T09:59:59.000Z",
+        summary: "   ",
+      })
+      const line = JSON.stringify({
+        type: "user",
+        uuid: "u1",
+        sessionId: "sess-summary",
+        cwd: ctx.realProj,
+        timestamp: "2026-04-20T10:00:00.000Z",
+        message: {
+          role: "user",
+          content: "first user prompt should not become the title",
+        },
+      })
+      const olderSummary = JSON.stringify({
+        type: "summary",
+        uuid: "s1",
+        sessionId: "sess-summary",
+        cwd: ctx.realProj,
+        timestamp: "2026-04-20T10:00:01.000Z",
+        summary: "Older summary title",
+      })
+      const latestSummary = JSON.stringify({
+        type: "summary",
+        uuid: "s2",
+        sessionId: "sess-summary",
+        cwd: ctx.realProj,
+        timestamp: "2026-04-20T10:00:02.000Z",
+        summary: "Latest summary title",
+      })
+      writeFileSync(
+        path.join(projDir, "sess-summary.jsonl"),
+        `${blankSummary}\n${line}\n${olderSummary}\n${latestSummary}\n`,
+        "utf8",
+      )
+
+      const store = createTestEventStore(ctx.dataDir)
+      await store.initialize()
+      const result = await importClaudeSessions({ store, homeDir: ctx.homeDir })
+      expect(result.imported).toBe(1)
+
+      const chats = [...store.state.chatsById.values()].filter((c) => !c.deletedAt)
+      expect(chats.length).toBe(1)
+      expect(chats[0].title).toBe("Latest summary title")
+    } finally {
+      ctx.cleanup()
+    }
+  })
+
+  test("prefers latest non-empty custom title over summary and first user text", async () => {
+    const ctx = fresh()
+    try {
+      const projDir = claudeProjectDir(ctx.homeDir, ctx.realProj)
+      mkdirSync(projDir, { recursive: true })
+      const blankCustomTitle = JSON.stringify({
+        type: "custom-title",
+        sessionId: "sess-custom-title",
+        customTitle: "   ",
+      })
+      const line = JSON.stringify({
+        type: "user",
+        uuid: "u1",
+        sessionId: "sess-custom-title",
+        cwd: ctx.realProj,
+        timestamp: "2026-04-20T10:00:00.000Z",
+        message: {
+          role: "user",
+          content: "first user prompt should not become the title",
+        },
+      })
+      const summary = JSON.stringify({
+        type: "summary",
+        uuid: "s1",
+        sessionId: "sess-custom-title",
+        cwd: ctx.realProj,
+        timestamp: "2026-04-20T10:00:01.000Z",
+        summary: "Summary title",
+      })
+      const olderCustomTitle = JSON.stringify({
+        type: "custom-title",
+        sessionId: "sess-custom-title",
+        customTitle: "Older custom title",
+      })
+      const latestCustomTitle = JSON.stringify({
+        type: "custom-title",
+        sessionId: "sess-custom-title",
+        customTitle: "Latest custom title",
+      })
+      writeFileSync(
+        path.join(projDir, "sess-custom-title.jsonl"),
+        `${blankCustomTitle}\n${line}\n${summary}\n${olderCustomTitle}\n${latestCustomTitle}\n`,
+        "utf8",
+      )
+
+      const store = createTestEventStore(ctx.dataDir)
+      await store.initialize()
+      const result = await importClaudeSessions({ store, homeDir: ctx.homeDir })
+      expect(result.imported).toBe(1)
+
+      const chats = [...store.state.chatsById.values()].filter((c) => !c.deletedAt)
+      expect(chats.length).toBe(1)
+      expect(chats[0].title).toBe("Latest custom title")
+    } finally {
+      ctx.cleanup()
+    }
+  })
+
+  test("backfills existing imported title even when source hash is unchanged", async () => {
+    const ctx = fresh()
+    try {
+      const projDir = claudeProjectDir(ctx.homeDir, ctx.realProj)
+      mkdirSync(projDir, { recursive: true })
+      const legacyPrompt = "what is the current jtbd structure? create a folder for the patient app"
+      const legacyPersistedTitle = legacyPrompt.slice(0, 60).trim()
+      const line = JSON.stringify({
+        type: "user",
+        uuid: "u1",
+        sessionId: "sess-backfill-title",
+        cwd: ctx.realProj,
+        timestamp: "2026-04-20T10:00:00.000Z",
+        message: { role: "user", content: legacyPrompt },
+      })
+      const customTitle = JSON.stringify({
+        type: "custom-title",
+        sessionId: "sess-backfill-title",
+        customTitle: "Backfilled custom title",
+      })
+      const jsonlPath = path.join(projDir, "sess-backfill-title.jsonl")
+      writeFileSync(jsonlPath, `${line}\n${customTitle}\n`, "utf8")
+
+      const store = createTestEventStore(ctx.dataDir)
+      await store.initialize()
+      const project = await store.openProject(ctx.realProj)
+      const chat = await store.createChat(project.id)
+      await store.setChatProvider(chat.id, "claude")
+      await store.renameChat(chat.id, legacyPersistedTitle)
+      await store.setSessionTokenForProvider(chat.id, "claude", "sess-backfill-title")
+      await store.setSourceHash(chat.id, md5File(jsonlPath))
+
+      const result = await importClaudeSessions({ store, homeDir: ctx.homeDir })
+      expect(result.imported).toBe(0)
+      expect(result.updated).toBe(1)
+      expect(result.skipped).toBe(0)
+      expect(store.state.chatsById.get(chat.id)?.title).toBe("Backfilled custom title")
+    } finally {
+      ctx.cleanup()
+    }
+  })
+
+  test("does not backfill over a manual Kanna title", async () => {
+    const ctx = fresh()
+    try {
+      const projDir = claudeProjectDir(ctx.homeDir, ctx.realProj)
+      mkdirSync(projDir, { recursive: true })
+      const line = JSON.stringify({
+        type: "user",
+        uuid: "u1",
+        sessionId: "sess-manual-title",
+        cwd: ctx.realProj,
+        timestamp: "2026-04-20T10:00:00.000Z",
+        message: { role: "user", content: "legacy first prompt title" },
+      })
+      const customTitle = JSON.stringify({
+        type: "custom-title",
+        sessionId: "sess-manual-title",
+        customTitle: "Claude custom title",
+      })
+      const jsonlPath = path.join(projDir, "sess-manual-title.jsonl")
+      writeFileSync(jsonlPath, `${line}\n${customTitle}\n`, "utf8")
+
+      const store = createTestEventStore(ctx.dataDir)
+      await store.initialize()
+      const project = await store.openProject(ctx.realProj)
+      const chat = await store.createChat(project.id)
+      await store.setChatProvider(chat.id, "claude")
+      await store.renameChat(chat.id, "Manual Kanna title")
+      await store.setSessionTokenForProvider(chat.id, "claude", "sess-manual-title")
+      await store.setSourceHash(chat.id, md5File(jsonlPath))
+
+      const result = await importClaudeSessions({ store, homeDir: ctx.homeDir })
+      expect(result.imported).toBe(0)
+      expect(result.updated).toBe(0)
+      expect(result.skipped).toBe(1)
+      expect(store.state.chatsById.get(chat.id)?.title).toBe("Manual Kanna title")
     } finally {
       ctx.cleanup()
     }

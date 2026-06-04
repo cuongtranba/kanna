@@ -4,15 +4,23 @@ import type { EventStore } from "./event-store"
 import type { ChatRecord } from "./events"
 import { mapClaudeRecordsToEntries } from "./claude-session-mapper"
 import { scanClaudeSessions } from "./claude-session-scanner.adapter"
-import type { ParsedClaudeSession } from "./claude-session-types"
+import type {
+  ClaudeSessionCustomTitleRecord,
+  ClaudeSessionSummaryRecord,
+  ParsedClaudeSession,
+} from "./claude-session-types"
 
 export interface ImportClaudeSessionsResult {
   imported: number    // brand new sessions
-  updated: number     // existing sessions whose hash changed; new messages appended
+  updated: number     // existing sessions whose hash or imported title changed
   skipped: number     // unchanged (hash match) or empty-entry sessions
   failed: number      // cwd missing or store error
   newProjects: number
 }
+
+const IMPORTED_SESSION_TITLE = "Imported session"
+const NEW_CHAT_TITLE = "New Chat"
+const TITLE_MAX_LENGTH = 60
 
 export interface ImportClaudeSessionsArgs {
   store: EventStore
@@ -46,14 +54,86 @@ function extractUserText(content: unknown): string | null {
   return null
 }
 
-function deriveTitle(session: ParsedClaudeSession): string {
+function extractSummaryText(record: ClaudeSessionSummaryRecord): string | null {
+  const trimmed = record.summary?.trim()
+  return trimmed ? trimmed : null
+}
+
+function extractCustomTitleText(record: ClaudeSessionCustomTitleRecord): string | null {
+  const trimmed = record.customTitle?.trim()
+  return trimmed ? trimmed : null
+}
+
+function truncateTitle(text: string): string {
+  return text.slice(0, TITLE_MAX_LENGTH).trim()
+}
+
+function isCustomTitleRecord(record: ParsedClaudeSession["records"][number]): record is ClaudeSessionCustomTitleRecord {
+  return record.type === "custom-title"
+}
+
+function isSummaryRecord(record: ParsedClaudeSession["records"][number]): record is ClaudeSessionSummaryRecord {
+  return record.type === "summary"
+}
+
+function deriveCustomTitle(session: ParsedClaudeSession): string | null {
+  for (let i = session.records.length - 1; i >= 0; i -= 1) {
+    const record = session.records[i]
+    if (!isCustomTitleRecord(record)) continue
+    const text = extractCustomTitleText(record)
+    if (text) return truncateTitle(text)
+  }
+  return null
+}
+
+function deriveSummaryTitle(session: ParsedClaudeSession): string | null {
+  for (let i = session.records.length - 1; i >= 0; i -= 1) {
+    const record = session.records[i]
+    if (!isSummaryRecord(record)) continue
+    const text = extractSummaryText(record)
+    if (text) return truncateTitle(text)
+  }
+  return null
+}
+
+function deriveUserTitle(session: ParsedClaudeSession): string | null {
   for (const record of session.records) {
     if (record.type !== "user") continue
     const content = (record as { message?: { content?: unknown } }).message?.content
     const text = extractUserText(content)
-    if (text) return text.slice(0, 60)
+    if (text) return truncateTitle(text)
   }
-  return "Imported session"
+  return null
+}
+
+function deriveTitle(session: ParsedClaudeSession): string {
+  return deriveCustomTitle(session)
+    ?? deriveSummaryTitle(session)
+    ?? deriveUserTitle(session)
+    ?? IMPORTED_SESSION_TITLE
+}
+
+function legacyImportedTitleCandidates(session: ParsedClaudeSession): Set<string> {
+  const userTitle = deriveUserTitle(session)
+  const summaryTitle = deriveSummaryTitle(session)
+  return new Set([
+    summaryTitle ?? userTitle ?? IMPORTED_SESSION_TITLE,
+    userTitle ?? IMPORTED_SESSION_TITLE,
+    IMPORTED_SESSION_TITLE,
+    NEW_CHAT_TITLE,
+  ])
+}
+
+async function backfillImportedChatTitle(
+  store: EventStore,
+  chat: ChatRecord,
+  session: ParsedClaudeSession,
+): Promise<boolean> {
+  const title = deriveTitle(session)
+  if (chat.title === title) return false
+  if (!legacyImportedTitleCandidates(session).has(chat.title)) return false
+  await store.renameChat(chat.id, title)
+  return true
 }
 
 /**
@@ -127,15 +207,22 @@ export async function importClaudeSessions(
     }
 
     if (existingChat) {
-      // Hash match → nothing new to do
-      if (existingChat.sourceHash === session.sourceHash) {
-        skipped += 1
-        continue
-      }
-      // Hash changed → append only new records
       try {
+        const titleBackfilled = await backfillImportedChatTitle(store, existingChat, session)
+
+        // Hash match → nothing new to do beyond possible title backfill
+        if (existingChat.sourceHash === session.sourceHash) {
+          if (titleBackfilled) {
+            updated += 1
+          } else {
+            skipped += 1
+          }
+          continue
+        }
+
+        // Hash changed → append only new records
         const appended = await applyDelta(store, existingChat.id, session)
-        if (appended > 0) {
+        if (appended > 0 || titleBackfilled) {
           updated += 1
         } else {
           skipped += 1

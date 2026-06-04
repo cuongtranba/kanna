@@ -38,6 +38,11 @@ export interface ClaudeSessionSummaryRecord extends ClaudeSessionRecordBase {
   summary?: string
 }
 
+export interface ClaudeSessionCustomTitleRecord extends ClaudeSessionRecordBase {
+  type: "custom-title"
+  customTitle?: string
+}
+
 export interface ClaudeSessionSystemRecord extends ClaudeSessionRecordBase {
   type: "system"
   content?: string
@@ -47,6 +52,7 @@ export type ClaudeSessionRecord =
   | ClaudeSessionUserRecord
   | ClaudeSessionAssistantRecord
   | ClaudeSessionSummaryRecord
+  | ClaudeSessionCustomTitleRecord
   | ClaudeSessionSystemRecord
   | ClaudeSessionRecordBase
 
