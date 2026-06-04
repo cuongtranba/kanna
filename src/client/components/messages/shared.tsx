@@ -33,7 +33,7 @@ import {
 } from "lucide-react"
 import remarkGfm from "remark-gfm"
 import { cn } from "../../lib/utils"
-import { isAbsoluteLocalFilePath, parseLocalFileLink, shouldOpenLocalFileLinkInEditor, toLocalFileUrl } from "../../lib/pathUtils"
+import { isAbsoluteLocalFilePath, parseLocalFileLink, toLocalFileUrl } from "../../lib/pathUtils"
 import { LocalFileLinkCard } from "./LocalFileLinkCard"
 import { MermaidDiagram } from "./MermaidDiagram"
 import { HighlightedCode } from "./HighlightedCode"
@@ -435,7 +435,7 @@ function LocalLink({ children, href, onClick, overrideOpenLocalLink, ...props }:
     )
   }
 
-  if (parsedLocalLink && !shouldOpenLocalFileLinkInEditor(parsedLocalLink.path)) {
+  if (parsedLocalLink) {
     const linkText = extractTextFromNode(children).trim()
     return <LocalFileLinkCard path={parsedLocalLink.path} linkText={linkText || undefined} />
   }

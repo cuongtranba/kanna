@@ -2,6 +2,7 @@ import { describe, expect, test, mock } from "bun:test"
 import { renderToStaticMarkup } from "react-dom/server"
 import Markdown from "react-markdown"
 import remarkGfm from "remark-gfm"
+import { TranscriptRenderOptionsProvider } from "./render-context"
 
 mock.module("../../hooks/useTheme", () => ({
   useTheme: () => ({ resolvedTheme: "light", theme: "light", setTheme: () => {} }),
@@ -61,7 +62,7 @@ describe("markdownComponents", () => {
     expect(html).toContain("<li")
   })
 
-  test("renders local file links without browser target handling", () => {
+  test("renders local file links as a card (no browser target handling)", () => {
     const html = renderToStaticMarkup(
       <Markdown
         remarkPlugins={[remarkGfm]}
@@ -71,7 +72,7 @@ describe("markdownComponents", () => {
       </Markdown>
     )
 
-    expect(html).toContain("/Users/jake/Projects/kanna/src/client/app/App.tsx#L1")
+    expect(html).toContain('data-testid="local-file-link"')
     expect(html).not.toContain('target="_blank"')
   })
 
@@ -90,7 +91,7 @@ describe("markdownComponents", () => {
     expect(html).not.toContain('href="/Users/cuongtran/.kanna/outputs/chibi-cute.png"')
   })
 
-  test("keeps editor-openable file links on the legacy anchor handler", () => {
+  test("renders editor-openable file links as a card (always-card)", () => {
     const html = renderToStaticMarkup(
       <Markdown
         remarkPlugins={[remarkGfm]}
@@ -100,11 +101,11 @@ describe("markdownComponents", () => {
       </Markdown>
     )
 
-    expect(html).not.toContain('data-testid="local-file-link"')
-    expect(html).toContain('href="/Users/jake/Projects/kanna/src/client/app/App.tsx"')
+    expect(html).toContain('data-testid="local-file-link"')
+    expect(html).not.toContain('href="/Users/jake/Projects/kanna/src/client/app/App.tsx"')
   })
 
-  test("renders local file links without browser target handling when provided by context", () => {
+  test("renders local file links as a card via context provider (no browser target handling)", () => {
     const html = renderToStaticMarkup(
       <OpenLocalLinkProvider onOpenLocalLink={() => {}}>
         <Markdown
@@ -116,8 +117,52 @@ describe("markdownComponents", () => {
       </OpenLocalLinkProvider>
     )
 
-    expect(html).toContain("/Users/jake/Projects/kanna/src/client/app/App.tsx#L1")
+    expect(html).toContain('data-testid="local-file-link"')
     expect(html).not.toContain('target="_blank"')
+  })
+})
+
+describe("LocalLink — always-card routing", () => {
+  function renderMd(source: string) {
+    return renderToStaticMarkup(
+      <Markdown remarkPlugins={defaultRemarkPlugins} components={defaultMarkdownComponents}>
+        {source}
+      </Markdown>
+    )
+  }
+
+  test.each([
+    ["README.md",   "/Users/me/proj/README.md"],
+    ["index.ts",    "/Users/me/proj/src/index.ts"],
+    ["pkg.json",    "/Users/me/proj/package.json"],
+    ["Dockerfile",  "/Users/me/proj/Dockerfile"],
+    ["LICENSE",     "/Users/me/proj/LICENSE"],
+  ])("renders a file card for [%s](%s)", (label, path) => {
+    const html = renderMd(`[${label}](${path})`)
+    expect(html).toContain("data-testid=\"local-file-link\"")
+  })
+
+  test("renders a file card for image links (regression)", () => {
+    const html = renderMd("[chart.png](/Users/me/proj/chart.png)")
+    expect(html).toContain("data-testid=\"local-file-link\"")
+  })
+
+  test("renders styled span (no card) when localLinkMode is text", () => {
+    const html = renderToStaticMarkup(
+      <TranscriptRenderOptionsProvider value={{ localLinkMode: "text" }}>
+        <Markdown remarkPlugins={defaultRemarkPlugins} components={defaultMarkdownComponents}>
+          {"[README.md](/Users/me/proj/README.md)"}
+        </Markdown>
+      </TranscriptRenderOptionsProvider>
+    )
+    expect(html).not.toContain("data-testid=\"local-file-link\"")
+    expect(html).toContain("README.md")
+  })
+
+  test("renders external <a target=_blank> for non-local href (regression)", () => {
+    const html = renderMd("[anthropic](https://anthropic.com)")
+    expect(html).toContain("target=\"_blank\"")
+    expect(html).not.toContain("data-testid=\"local-file-link\"")
   })
 })
 
