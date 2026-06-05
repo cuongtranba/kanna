@@ -175,6 +175,24 @@ and force-registers the `mcp__kanna__ask_user_question` /
 approval protocol to the UI — active regardless of `KANNA_MCP_TOOL_CALLBACKS`.
 See the Tool Callback Feature Flag section for full wiring.
 
+**Native subagent tool (`Agent` / `Task`) disallowed — delegate-only:**
+`PTY_DISALLOWED_NATIVE_TOOLS` also includes `Agent` (and its legacy CLI name
+`Task`), the native in-process subagent tool. Under PTY the native subagent
+runs inside the same `claude` process and buffers its `isSidechain` transcript
+writes, so the on-disk JSONL (the driver's SOLE event source) shows zero
+progress for 13–18 min per dispatch and the Kanna UI cannot surface any
+subagent activity — indistinguishable from a hang. Disallowing it forces the
+model onto `mcp__kanna__delegate_subagent` (orchestrator-mediated, per-turn-
+observable, drives the UI panel, routes to the configured roster). Both names
+are listed because Opus 4.8 emits the tool as `Agent` while older CLIs name it
+`Task`. **Tradeoff:** ad-hoc general-purpose native subagents are no longer
+reachable under PTY — only the configured roster via delegate; skills that
+assume a native general-purpose `Agent` (e.g.
+`superpowers:subagent-driven-development`,
+`superpowers:dispatching-parallel-agents`) lose ad-hoc spawns. SDK driver is
+unaffected (keeps native `Task`). See
+`adr-20260605-pty-disallow-native-subagent-tool`.
+
 **setPermissionMode:** Asymmetric.
 - ENTER plan (`planMode === true`) sends `/plan\r` and sets an internal
   `localPlanModeActive = true` flag.

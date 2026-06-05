@@ -209,8 +209,23 @@ export { OutputRing }
  * registered when a `scheduleWakeup` callback is supplied (main chats), so
  * subagent spawns simply lose the no-op native tool — which is correct, they
  * should not self-schedule. See adr-20260603-agent-self-scheduled-wake.
+ *
+ * `Agent` (and its legacy CLI name `Task`) — the native in-process subagent
+ * tool — is disallowed for the same observability reason. Under PTY the native
+ * subagent runs inside the same `claude` process and buffers its `isSidechain`
+ * transcript writes, so the on-disk JSONL (the driver's SOLE event source)
+ * shows zero progress for 13–18 min per dispatch and the Kanna UI cannot
+ * surface any subagent activity. Disallowing it forces the model onto
+ * `mcp__kanna__delegate_subagent` (the orchestrator-mediated, per-turn-
+ * observable path Kanna's system prompt already instructs), which routes to
+ * the configured subagent roster and drives the UI panel. Both `Agent` and
+ * `Task` are listed because Opus 4.8 emits the tool as `Agent` while older
+ * CLIs name it `Task`; disallowing both is version-drift-proof (the CLI
+ * ignores names it does not know). Tradeoff: ad-hoc general-purpose native
+ * subagents are no longer reachable under PTY — only the configured roster via
+ * delegate. See adr-20260605-pty-disallow-native-subagent-tool.
  */
-export const PTY_DISALLOWED_NATIVE_TOOLS = ["AskUserQuestion", "ExitPlanMode", "ScheduleWakeup"] as const
+export const PTY_DISALLOWED_NATIVE_TOOLS = ["AskUserQuestion", "ExitPlanMode", "ScheduleWakeup", "Agent", "Task"] as const
 
 export interface BuildPtyCliArgsInput {
   sessionId: string
