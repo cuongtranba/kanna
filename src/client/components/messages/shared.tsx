@@ -4,7 +4,6 @@ import {
   createContext,
   isValidElement,
   useCallback,
-  useContext,
   useState,
   type ComponentPropsWithoutRef,
   type ReactNode,
@@ -33,7 +32,7 @@ import {
 } from "lucide-react"
 import remarkGfm from "remark-gfm"
 import { cn } from "../../lib/utils"
-import { isAbsoluteLocalFilePath, parseLocalFileLink, shouldOpenLocalFileLinkInEditor, toLocalFileUrl } from "../../lib/pathUtils"
+import { isAbsoluteLocalFilePath, parseLocalFileLink, toLocalFileUrl } from "../../lib/pathUtils"
 import { LocalFileLinkCard } from "./LocalFileLinkCard"
 import { MermaidDiagram } from "./MermaidDiagram"
 import { HighlightedCode } from "./HighlightedCode"
@@ -417,13 +416,7 @@ export const markdownComponents = {
   },
 }
 
-interface LocalLinkProps extends ComponentPropsWithoutRef<"a"> {
-  overrideOpenLocalLink?: OpenLocalLinkHandler
-}
-
-function LocalLink({ children, href, onClick, overrideOpenLocalLink, ...props }: LocalLinkProps) {
-  const contextOpenLocalLink = useContext(OpenLocalLinkContext)
-  const onOpenLocalLink = overrideOpenLocalLink ?? contextOpenLocalLink
+function LocalLink({ children, href, onClick, ...props }: ComponentPropsWithoutRef<"a">) {
   const renderOptions = useTranscriptRenderOptions()
   const parsedLocalLink = parseLocalFileLink(href)
 
@@ -435,7 +428,7 @@ function LocalLink({ children, href, onClick, overrideOpenLocalLink, ...props }:
     )
   }
 
-  if (parsedLocalLink && !shouldOpenLocalFileLinkInEditor(parsedLocalLink.path)) {
+  if (parsedLocalLink) {
     const linkText = extractTextFromNode(children).trim()
     return <LocalFileLinkCard path={parsedLocalLink.path} linkText={linkText || undefined} />
   }
@@ -444,29 +437,9 @@ function LocalLink({ children, href, onClick, overrideOpenLocalLink, ...props }:
     <a
       className="transition-all underline decoration-2 text-logo decoration-logo/50 hover:text-logo/70 dark:text-logo dark:decoration-logo/70 dark:hover:text-logo/60 dark:hover:decoration-logo/40 "
       href={href}
-      target={parsedLocalLink ? undefined : "_blank"}
-      rel={parsedLocalLink ? undefined : "noopener noreferrer"}
-      onClick={(event) => {
-        onClick?.(event)
-        if (event.defaultPrevented || !parsedLocalLink || onOpenLocalLink === defaultOpenLocalLink) return
-        event.preventDefault()
-        onOpenLocalLink({
-          ...parsedLocalLink,
-          clientX: event.clientX,
-          clientY: event.clientY,
-          trigger: "click",
-        })
-      }}
-      onContextMenu={(event) => {
-        if (!parsedLocalLink || onOpenLocalLink === defaultOpenLocalLink) return
-        event.preventDefault()
-        onOpenLocalLink({
-          ...parsedLocalLink,
-          clientX: event.clientX,
-          clientY: event.clientY,
-          trigger: "contextmenu",
-        })
-      }}
+      target="_blank"
+      rel="noopener noreferrer"
+      onClick={onClick}
       {...props}
     >
       {children}
@@ -474,14 +447,10 @@ function LocalLink({ children, href, onClick, overrideOpenLocalLink, ...props }:
   )
 }
 
-export function createMarkdownComponents(options?: {
-  onOpenLocalLink?: OpenLocalLinkHandler
-}) {
+export function createMarkdownComponents() {
   return {
     ...markdownComponents,
-    a: (props: ComponentPropsWithoutRef<"a">) => (
-      <LocalLink {...props} overrideOpenLocalLink={options?.onOpenLocalLink} />
-    ),
+    a: (props: ComponentPropsWithoutRef<"a">) => <LocalLink {...props} />,
   }
 }
 
