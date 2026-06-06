@@ -92,6 +92,7 @@ interface Props {
   terminalShortcut?: string[]
   rightSidebarShortcut?: string[]
   branchName?: string
+  homeDir?: string
   hasGitRepo?: boolean
   gitStatus?: "unknown" | "ready" | "no_repo"
   timings?: ChatStateTimings
@@ -126,6 +127,7 @@ export function ChatNavbar({
   terminalShortcut,
   rightSidebarShortcut,
   branchName,
+  homeDir,
   hasGitRepo = true,
   gitStatus = "unknown",
   timings,
@@ -140,7 +142,7 @@ export function ChatNavbar({
   onShareMint,
   onShareRevoke,
 }: Props) {
-  const branchLabel = computeBranchLabel({ hasGitRepo, gitStatus, localPath, branchName })
+  const branchLabel = computeBranchLabel({ hasGitRepo, gitStatus, localPath, branchName, homeDir })
   const [sharePopoverOpen, setSharePopoverOpen] = useState(false)
   const isMac = platform === "darwin"
 
@@ -310,7 +312,7 @@ export function ChatNavbar({
                         )}
                       >
                         {rightSidebarVisible ? <PanelRight strokeWidth={2.25} className="h-4" /> : <GitBranch strokeWidth={2.25} className="h-4" />}
-                        {branchLabel && !rightSidebarVisible ? <div className="font-[13px] max-w-[140px] truncate hidden md:block">{branchLabel}</div> : null}
+                        {branchLabel && !rightSidebarVisible ? <div className="text-[13px] font-mono max-w-[280px] truncate hidden md:block">{branchLabel}</div> : null}
                       </Button>
                     </HotkeyTooltipTrigger>
                     <HotkeyTooltipContent side="bottom" shortcut={rightSidebarShortcut} />

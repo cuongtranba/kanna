@@ -51,4 +51,51 @@ describe("branchLabel", () => {
     expect(branchLabel({ gitStatus: "ready", localPath: "", branchName: "main" }))
       .toBe("main")
   })
+
+  describe("with homeDir", () => {
+    test("collapses homeDir prefix to ~ and shows full relative path", () => {
+      expect(branchLabel({
+        gitStatus: "ready",
+        localPath: "/Users/x/repo/kanna/.worktrees/feat",
+        branchName: "feat/x",
+        homeDir: "/Users/x",
+      })).toBe("~/repo/kanna/.worktrees/feat · feat/x")
+    })
+
+    test("shows ~ alone when localPath equals homeDir", () => {
+      expect(branchLabel({
+        gitStatus: "ready",
+        localPath: "/Users/x",
+        branchName: "main",
+        homeDir: "/Users/x",
+      })).toBe("~ · main")
+    })
+
+    test("tolerates trailing slash on homeDir", () => {
+      expect(branchLabel({
+        gitStatus: "ready",
+        localPath: "/Users/x/repo/wt",
+        branchName: "main",
+        homeDir: "/Users/x/",
+      })).toBe("~/repo/wt · main")
+    })
+
+    test("shows full absolute path when localPath is not under homeDir", () => {
+      expect(branchLabel({
+        gitStatus: "ready",
+        localPath: "/var/data/wt",
+        branchName: "main",
+        homeDir: "/Users/x",
+      })).toBe("/var/data/wt · main")
+    })
+
+    test("does not false-match a sibling dir sharing the home prefix", () => {
+      expect(branchLabel({
+        gitStatus: "ready",
+        localPath: "/Users/xavier/repo/wt",
+        branchName: "main",
+        homeDir: "/Users/x",
+      })).toBe("/Users/xavier/repo/wt · main")
+    })
+  })
 })

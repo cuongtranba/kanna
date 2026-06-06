@@ -174,7 +174,7 @@ describe("read models", () => {
         title: "Discovered Project",
         modifiedAt: 10,
       },
-    ], "Local Machine")
+    ], "Local Machine", "/Users/test")
 
     expect(snapshot.projects).toEqual([
       {

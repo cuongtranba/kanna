@@ -163,7 +163,8 @@ export function deriveSidebarData(
 export function deriveLocalProjectsSnapshot(
   state: StoreState,
   discoveredProjects: Array<{ localPath: string; title: string; modifiedAt: number }>,
-  machineName: string
+  machineName: string,
+  homeDir: string
 ): LocalProjectsSnapshot {
   const projects = new Map<string, LocalProjectsSnapshot["projects"][number]>()
 
@@ -199,6 +200,7 @@ export function deriveLocalProjectsSnapshot(
       id: "local",
       displayName: machineName,
       platform: process.platform,
+      homeDir,
     },
     projects: [...projects.values()].sort((a, b) => (b.lastOpenedAt ?? 0) - (a.lastOpenedAt ?? 0)),
   }

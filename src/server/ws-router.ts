@@ -815,7 +815,7 @@ export function createWsRouter({
 
     if (topic.type === "local-projects") {
       const discoveredProjects = getDiscoveredProjects()
-      const data = deriveLocalProjectsSnapshot(store.state, discoveredProjects, machineDisplayName)
+      const data = deriveLocalProjectsSnapshot(store.state, discoveredProjects, machineDisplayName, os.homedir())
 
       return {
         v: PROTOCOL_VERSION,
