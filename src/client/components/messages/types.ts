@@ -55,3 +55,8 @@ export type ProcessedInterruptedMessage = Extract<
   import("../../../shared/types").HydratedTranscriptMessage,
   { kind: "interrupted" }
 >
+
+export type ProcessedMemoryLoadedMessage = Extract<
+  import("../../../shared/types").HydratedTranscriptMessage,
+  { kind: "memory_loaded" }
+>

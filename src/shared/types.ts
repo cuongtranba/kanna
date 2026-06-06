@@ -1259,6 +1259,17 @@ export interface InterruptedEntry extends TranscriptEntryBase {
   kind: "interrupted"
 }
 
+/**
+ * A Claude Code memory/rule file auto-loaded into context (CLAUDE.md, nested
+ * CLAUDE.md, `.claude/rules/*.md`). PTY mode surfaces these from the
+ * transcript's `type:"nested_memory"` lines. Path only — file content is
+ * intentionally not carried (keeps the persisted/replayed event log light).
+ */
+export interface MemoryLoadedEntry extends TranscriptEntryBase {
+  kind: "memory_loaded"
+  path: string
+}
+
 export type TranscriptEntry =
   | UserPromptEntry
   | SystemInitEntry
@@ -1274,6 +1285,7 @@ export type TranscriptEntry =
   | CompactSummaryEntry
   | ContextClearedEntry
   | InterruptedEntry
+  | MemoryLoadedEntry
   | AutoContinuePromptEntry
   | PendingToolRequestEntry
   | ToolRequestResolvedEntry
@@ -1424,6 +1436,7 @@ export type HydratedTranscriptMessage =
   | ({ kind: "compact_summary"; summary: string; id: string; messageId?: string; timestamp: string; hidden?: boolean })
   | ({ kind: "context_cleared"; id: string; messageId?: string; timestamp: string; hidden?: boolean })
   | ({ kind: "interrupted"; id: string; messageId?: string; timestamp: string; hidden?: boolean })
+  | ({ kind: "memory_loaded"; path: string; id: string; messageId?: string; timestamp: string; hidden?: boolean })
   | ({ kind: "unknown"; json: string; id: string; messageId?: string; timestamp: string; hidden?: boolean })
   | ({ kind: "auto_continue_prompt"; scheduleId: string; id: string; messageId?: string; timestamp: string; hidden?: boolean })
   | ({ kind: "pending_tool_request"; toolRequestId: string; toolName: string; arguments: Record<string, unknown>; id: string; messageId?: string; timestamp: string; hidden?: boolean })

@@ -168,6 +168,13 @@ export function processTranscriptMessages(entries: TranscriptEntry[]): HydratedT
           kind: "interrupted",
         })
         break
+      case "memory_loaded":
+        messages.push({
+          ...createBaseMessage(entry),
+          kind: "memory_loaded",
+          path: entry.path,
+        })
+        break
       case "auto_continue_prompt":
         messages.push({
           ...createBaseMessage(entry),

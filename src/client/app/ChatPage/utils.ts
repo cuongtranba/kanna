@@ -60,6 +60,7 @@ export function estimateTranscriptRowHeight(row: ResolvedTranscriptRow) {
   switch (row.message.kind) {
     case "compact_boundary":
     case "context_cleared":
+    case "memory_loaded":
     case "status":
       return 40
     default:

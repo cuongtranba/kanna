@@ -567,4 +567,41 @@ describe("createJsonlEventParser", () => {
       expect(resultEntries(parser.parse(makeTurnDuration()))).toEqual([])
     })
   })
+
+  describe("nested_memory → memory_loaded", () => {
+    const memoryPaths = (events: HarnessEvent[]): string[] =>
+      events
+        .filter((e) => e.type === "transcript")
+        .map((e) => e.entry)
+        .filter((entry) => entry?.kind === "memory_loaded")
+        .map((entry) => (entry as { path: string }).path)
+
+    const resultCount = (events: HarnessEvent[]): number =>
+      events.filter((e) => e.type === "transcript" && e.entry?.kind === "result").length
+
+    const nestedMemory = (path: unknown): string =>
+      JSON.stringify({ type: "nested_memory", attachment: { type: "nested_memory", path } })
+
+    test("emits one memory_loaded entry carrying the attachment path", () => {
+      const parser = createJsonlEventParser()
+      const paths = memoryPaths(parser.parse(nestedMemory("/repo/.claude/rules/pattern_id.md")))
+      expect(paths).toEqual(["/repo/.claude/rules/pattern_id.md"])
+    })
+
+    test("malformed nested_memory (missing/blank/non-string path) emits nothing, does not throw", () => {
+      const parser = createJsonlEventParser()
+      expect(memoryPaths(parser.parse(JSON.stringify({ type: "nested_memory" })))).toEqual([])
+      expect(memoryPaths(parser.parse(nestedMemory("")))).toEqual([])
+      expect(memoryPaths(parser.parse(nestedMemory(42)))).toEqual([])
+    })
+
+    test("does not disturb turn-state (mid-turn nested_memory keeps the result emitting)", () => {
+      const parser = createJsonlEventParser()
+      parser.parse(JSON.stringify({ type: "user", message: { role: "user", content: "hi" } }))
+      parser.parse(nestedMemory("/repo/CLAUDE.md"))
+      parser.parse(JSON.stringify({ type: "assistant", message: { role: "assistant", content: [{ type: "text", text: "answer" }] } }))
+      const resultLine = JSON.stringify({ type: "system", subtype: "turn_duration", duration_ms: 5 })
+      expect(resultCount(parser.parse(resultLine))).toBeGreaterThan(0)
+    })
+  })
 })
