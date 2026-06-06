@@ -166,6 +166,68 @@ describe("EventStore", () => {
     expect(oldestPage.olderCursor).toBeNull()
   })
 
+  test("a context_window_updated flood does not evict real turns from the recent window", async () => {
+    const dataDir = await createTempDataDir()
+    const store = new EventStore(dataDir)
+    await store.initialize()
+
+    const project = await store.openProject("/tmp/project")
+    const chat = await store.createChat(project.id)
+
+    // Latest real turn, then a flood of readout updates larger than the window.
+    await store.appendMessage(chat.id, entry("user_prompt", 100, { content: "do we need to update nats" }))
+    for (let index = 0; index < 10; index += 1) {
+      await store.appendMessage(chat.id, {
+        _id: `cwu-${index}`,
+        createdAt: 200 + index,
+        kind: "context_window_updated",
+        usage: { usedTokens: 1000 + index, compactsAutomatically: false },
+      })
+    }
+    await store.appendMessage(chat.id, entry("assistant_text", 300, { content: "yes" }))
+
+    // Window of 3: coalescing the cwu run to its last entry keeps both real
+    // turns plus the latest readout. Without coalescing the window would be the
+    // last 3 entries (cwu, cwu, assistant_text) and the user_prompt is evicted.
+    const { messages } = store.getRecentChatHistory(chat.id, 3)
+    const kinds = messages.map((message) => message.kind)
+    expect(kinds).toContain("user_prompt")
+    expect(kinds).toEqual(["user_prompt", "context_window_updated", "assistant_text"])
+
+    // Latest readout value preserved (last entry of the collapsed run).
+    const cwu = messages.find((message) => message.kind === "context_window_updated")
+    expect(cwu?.kind === "context_window_updated" && cwu.usage.usedTokens).toBe(1009)
+  })
+
+  test("recent and load-older pages stay contiguous after cwu coalescing", async () => {
+    const dataDir = await createTempDataDir()
+    const store = new EventStore(dataDir)
+    await store.initialize()
+
+    const project = await store.openProject("/tmp/project")
+    const chat = await store.createChat(project.id)
+
+    await store.appendMessage(chat.id, entry("user_prompt", 100, { content: "first" }))
+    for (let index = 0; index < 5; index += 1) {
+      await store.appendMessage(chat.id, {
+        _id: `cwu-${index}`,
+        createdAt: 200 + index,
+        kind: "context_window_updated",
+        usage: { usedTokens: 1000 + index, compactsAutomatically: false },
+      })
+    }
+    await store.appendMessage(chat.id, entry("assistant_text", 300, { content: "second" }))
+
+    // Coalesced view = [user_prompt, cwu(last), assistant_text].
+    const recent = store.getRecentMessagesPage(chat.id, 2)
+    expect(recent.messages.map((message) => message._id)).toEqual(["cwu-4", "assistant_text-300"])
+    expect(recent.hasOlder).toBe(true)
+
+    const older = store.getMessagesPageBefore(chat.id, recent.olderCursor!, 2)
+    expect(older.messages.map((message) => message._id)).toEqual(["user_prompt-100"])
+    expect(older.hasOlder).toBe(false)
+  })
+
   test("persists queued messages across restart and removes promoted entries", async () => {
     const dataDir = await createTempDataDir()
     const store = new EventStore(dataDir)

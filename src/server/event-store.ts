@@ -189,6 +189,29 @@ function slashCommandsEqual(a: SlashCommand[], b: SlashCommand[]) {
   return true
 }
 
+// `context_window_updated` entries are token-readout noise emitted once per
+// stream tick — only the latest value matters. A single turn can emit hundreds
+// of them, and the bounded live window (getMessagesPageFromEntries) counts each
+// 1:1 against the limit, so a flood evicts real turns (e.g. the user_prompt)
+// out of the snapshot the client renders. Collapsing each maximal run of
+// consecutive cwu entries to its last entry keeps the latest readout while
+// freeing window budget for real turns. Applied only on the live-window read
+// path (not getMessages), so getLatestContextWindowUsage / full-transcript
+// export / importer still observe every persisted cwu.
+function coalesceContextWindowUpdates(entries: TranscriptEntry[]): TranscriptEntry[] {
+  const result: TranscriptEntry[] = []
+  for (let index = 0; index < entries.length; index += 1) {
+    const entry = entries[index]!
+    const next = entries[index + 1]
+    if (entry.kind === "context_window_updated" && next?.kind === "context_window_updated") {
+      // Drop this cwu; the last of the run survives.
+      continue
+    }
+    result.push(entry)
+  }
+  return result
+}
+
 function getHistorySnapshot(page: TranscriptPageResult, recentLimit: number): ChatHistorySnapshot {
   return {
     hasOlder: page.hasOlder,
@@ -1858,7 +1881,7 @@ export class EventStore implements PushEventStore {
       return { messages: [], hasOlder: false, olderCursor: null }
     }
 
-    const entries = this.getMessages(chatId)
+    const entries = coalesceContextWindowUpdates(this.getMessages(chatId))
     const page = this.getMessagesPageFromEntries(entries, limit)
 
     return {
@@ -1874,7 +1897,9 @@ export class EventStore implements PushEventStore {
     }
 
     const beforeIndex = decodeCursor(beforeCursor)
-    const entries = this.getMessages(chatId)
+    // Coalesce identically to getRecentMessagesPage so cursors (which index the
+    // coalesced array) stay consistent across recent + load-older paging.
+    const entries = coalesceContextWindowUpdates(this.getMessages(chatId))
     const page = this.getMessagesPageFromEntries(entries, limit, beforeIndex)
 
     return {
