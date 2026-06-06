@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.87.0](https://github.com/cuongtranba/kanna/compare/v0.86.0...v0.87.0) (2026-06-06)
+
+
+### Features
+
+* **pty:** surface loaded CLAUDE.md / rule files in transcript ([#386](https://github.com/cuongtranba/kanna/issues/386)) ([5d4cc52](https://github.com/cuongtranba/kanna/commit/5d4cc527bb19d63aec02ff076614c9eb51a88887))
+
+
+### Bug Fixes
+
+* **event-store:** coalesce context_window_updated in live window ([#387](https://github.com/cuongtranba/kanna/issues/387)) ([3f49d69](https://github.com/cuongtranba/kanna/commit/3f49d695e3dd7436b1fe858db0e13d5838c6c495))
+* import Claude session titles ([#383](https://github.com/cuongtranba/kanna/issues/383)) ([b7e69c1](https://github.com/cuongtranba/kanna/commit/b7e69c18a5f6b91acc1d4ae0869105a5012a9abf))
+
 ## [0.86.0](https://github.com/cuongtranba/kanna/compare/v0.85.2...v0.86.0) (2026-06-05)
 
 
