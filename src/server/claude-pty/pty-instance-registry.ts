@@ -163,6 +163,7 @@ export function createPtyInstanceRegistry(
         rssPeakBytes: null,
         cpuPercent: null,
         cpuPeakPercent: null,
+        tuiStatus: null,
         ...patch,
       }
       states.set(chatId, baseline)

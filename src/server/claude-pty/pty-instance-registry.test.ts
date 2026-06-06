@@ -28,6 +28,7 @@ function baseline(overrides: Partial<PtyInstanceState> = {}): Omit<PtyInstanceSt
     rssPeakBytes: null,
     cpuPercent: null,
     cpuPeakPercent: null,
+    tuiStatus: null,
     ...overrides,
   }
 }

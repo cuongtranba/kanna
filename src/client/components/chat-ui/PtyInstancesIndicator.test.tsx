@@ -29,6 +29,7 @@ function baseInstance(overrides: Partial<PtyInstanceState> = {}): PtyInstanceSta
     rssPeakBytes: null,
     cpuPercent: null,
     cpuPeakPercent: null,
+    tuiStatus: null,
     ...overrides,
   }
 }
