@@ -28,6 +28,19 @@ function extractSessionId(message: Record<string, unknown>): string | null {
   return null
 }
 
+// Claude Code records each auto-loaded memory/rule file (CLAUDE.md, nested
+// CLAUDE.md, `.claude/rules/*.md`) as a `type:"nested_memory"` transcript line
+// carrying `attachment.path`. Returns the path when present + non-empty, else
+// null (malformed / future-shape lines drop silently — never throw).
+function extractNestedMemoryPath(message: Record<string, unknown>): string | null {
+  if (message.type !== "nested_memory") return null
+  const attachment = message.attachment
+  if (!attachment || typeof attachment !== "object") return null
+  const path = (attachment as { path?: unknown }).path
+  if (typeof path === "string" && path.length > 0) return path
+  return null
+}
+
 function userMessageContainsKannaChannel(message: Record<string, unknown>): boolean {
   const inner = message.message
   if (!inner || typeof inner !== "object") return false
@@ -132,6 +145,19 @@ export function createJsonlEventParser(opts: CreateJsonlEventParserOptions = {})
       const sessionId = extractSessionId(message)
       if (sessionId) {
         events.push({ type: "session_token", sessionToken: sessionId })
+      }
+
+      // PTY-only: surface Claude Code's auto-loaded memory/rule files as a
+      // `memory_loaded` transcript entry (the "Loaded CLAUDE.md / rule" lines a
+      // native TUI prints). `normalizeClaudeStreamMessage` has no nested_memory
+      // case, so this branch is the only emitter — keeping the SDK driver
+      // unchanged (scope = PTY only).
+      const memoryPath = extractNestedMemoryPath(message)
+      if (memoryPath) {
+        events.push({
+          type: "transcript",
+          entry: timestamped({ kind: "memory_loaded", path: memoryPath }),
+        })
       }
 
       // D2 — recognise both shapes:

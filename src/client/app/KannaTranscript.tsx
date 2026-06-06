@@ -18,6 +18,7 @@ import { ImageGenerationMessage } from "../components/messages/ImageGenerationMe
 import { ResultMessage } from "../components/messages/ResultMessage"
 import { InterruptedMessage } from "../components/messages/InterruptedMessage"
 import { CompactBoundaryMessage, ContextClearedMessage } from "../components/messages/CompactBoundaryMessage"
+import { MemoryLoadedMessage } from "../components/messages/MemoryLoadedMessage"
 import { CompactSummaryMessage } from "../components/messages/CompactSummaryMessage"
 import { StatusMessage } from "../components/messages/StatusMessage"
 import { CollapsedToolGroup } from "../components/messages/CollapsedToolGroup"
@@ -281,6 +282,8 @@ function sameMessage(left: HydratedTranscriptMessage, right: HydratedTranscriptM
       return right.kind === "compact_summary" && left.summary === right.summary
     case "context_window_updated":
       return right.kind === "context_window_updated" && JSON.stringify(left.usage) === JSON.stringify(right.usage)
+    case "memory_loaded":
+      return right.kind === "memory_loaded" && left.path === right.path
     case "compact_boundary":
     case "context_cleared":
     case "interrupted":
@@ -512,6 +515,9 @@ const TranscriptSingleRow = memo(function TranscriptSingleRow({
         break
       case "context_cleared":
         rendered = <ContextClearedMessage key={message.id} />
+        break
+      case "memory_loaded":
+        rendered = <MemoryLoadedMessage key={message.id} message={message} />
         break
       case "compact_summary":
         rendered = <CompactSummaryMessage key={message.id} message={message} />

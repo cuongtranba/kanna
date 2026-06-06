@@ -157,6 +157,16 @@ describe("processTranscriptMessages", () => {
     expect(messages[0].usage.compactsAutomatically).toBe(true)
   })
 
+  test("hydrates memory_loaded entry carrying its path", () => {
+    const messages = processTranscriptMessages([
+      entry({ kind: "memory_loaded", path: "/repo/.claude/rules/pattern_id.md" }),
+    ])
+
+    expect(messages[0]?.kind).toBe("memory_loaded")
+    if (messages[0]?.kind !== "memory_loaded") throw new Error("unexpected message")
+    expect(messages[0].path).toBe("/repo/.claude/rules/pattern_id.md")
+  })
+
   test("preserves structured Claude ask-user-question results when a later echoed tool result arrives", () => {
     const messages = processTranscriptMessages([
       entry({
