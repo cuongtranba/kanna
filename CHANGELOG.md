@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.88.0](https://github.com/cuongtranba/kanna/compare/v0.87.0...v0.88.0) (2026-06-06)
+
+
+### Features
+
+* **chat-ui:** show home-relative cwd + branch in navbar label ([#388](https://github.com/cuongtranba/kanna/issues/388)) ([74d080a](https://github.com/cuongtranba/kanna/commit/74d080a04325e488ec24633d456e6d6761c35a06))
+* **pty:** surface live Claude TUI spinner status in chat header ([#389](https://github.com/cuongtranba/kanna/issues/389)) ([ac3b107](https://github.com/cuongtranba/kanna/commit/ac3b1079a3e593a8d215e03c680878b5191f3c34))
+
 ## [0.87.0](https://github.com/cuongtranba/kanna/compare/v0.86.0...v0.87.0) (2026-06-06)
 
 
