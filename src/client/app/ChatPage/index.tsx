@@ -967,6 +967,7 @@ export function ChatPage() {
           terminalShortcut={resolvedKeybindings.bindings.toggleEmbeddedTerminal}
           rightSidebarShortcut={resolvedKeybindings.bindings.toggleRightSidebar}
           branchName={state.chatDiffSnapshot?.branchName}
+          homeDir={state.localProjects?.machine.homeDir}
           hasGitRepo={state.chatDiffSnapshot?.status !== "no_repo"}
           gitStatus={state.chatDiffSnapshot?.status}
           timings={state.runtime?.timings}

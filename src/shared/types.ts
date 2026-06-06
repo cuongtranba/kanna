@@ -577,6 +577,7 @@ export interface LocalProjectsSnapshot {
     id: "local"
     displayName: string
     platform: NodeJS.Platform
+    homeDir: string
   }
   projects: LocalProjectSummary[]
 }
