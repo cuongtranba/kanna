@@ -249,3 +249,61 @@ describe("tool-callback durable protocol", () => {
     expect(mismatch?.toolUseId).toBe("tu-1")
   })
 })
+
+describe("tool-callback pending dedup (duplicate ask prevention)", () => {
+  test("re-delivered pending ask with a new toolUseId does not duplicate the pending record", async () => {
+    const { store } = await newTestStore()
+    const svc = createToolCallbackService({ store, serverSecret: "secret", now: () => 1_000 })
+
+    const first = svc.submit(baseInput) // toolUseId tu-1
+    const second = svc.submit({ ...baseInput, toolUseId: "tu-2" }) // re-delivery, same content
+    await new Promise<void>((r) => setTimeout(r, 0))
+
+    const pending = await store.listPendingToolRequests("chat-1")
+    expect(pending).toHaveLength(1)
+
+    // Answering the single live record resolves BOTH waiters.
+    await svc.answer(pending[0].id, { kind: "answer", payload: { ok: true } })
+    expect((await first).status).toBe("answered")
+    expect((await second).status).toBe("answered")
+  })
+
+  test("an identical ask issued AFTER the prior is answered creates a fresh pending record", async () => {
+    const { store } = await newTestStore()
+    const svc = createToolCallbackService({ store, serverSecret: "secret", now: () => 1_000 })
+
+    const first = svc.submit(baseInput)
+    await new Promise<void>((r) => setTimeout(r, 0))
+    const p1 = await store.listPendingToolRequests("chat-1")
+    expect(p1).toHaveLength(1)
+    await svc.answer(p1[0].id, { kind: "answer", payload: { ok: true } })
+    await first
+
+    // Same content, new delivery, AFTER resolution → must NOT be suppressed.
+    const second = svc.submit({ ...baseInput, toolUseId: "tu-9" })
+    await new Promise<void>((r) => setTimeout(r, 0))
+    const p2 = await store.listPendingToolRequests("chat-1")
+    expect(p2).toHaveLength(1)
+    expect(p2[0].status).toBe("pending")
+
+    await svc.answer(p2[0].id, { kind: "answer", payload: { ok: true } })
+    expect((await second).status).toBe("answered")
+  })
+
+  test("cancelAllForChat clears the dedup index so a later ask re-prompts", async () => {
+    const { store } = await newTestStore()
+    const svc = createToolCallbackService({ store, serverSecret: "secret", now: () => 1_000 })
+
+    const first = svc.submit(baseInput)
+    await new Promise<void>((r) => setTimeout(r, 0))
+    await svc.cancelAllForChat("chat-1", "user-cancel")
+    expect((await first).status).toBe("canceled")
+
+    const second = svc.submit({ ...baseInput, toolUseId: "tu-7" })
+    await new Promise<void>((r) => setTimeout(r, 0))
+    const pending = await store.listPendingToolRequests("chat-1")
+    expect(pending).toHaveLength(1)
+    await svc.answer(pending[0].id, { kind: "answer", payload: { ok: true } })
+    expect((await second).status).toBe("answered")
+  })
+})
