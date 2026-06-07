@@ -10,6 +10,7 @@ export interface ChatMeta {
 export type ChatSnapshotMessage =
   | { kind: "user_prompt"; id: string; createdAt: number; text: string }
   | { kind: "assistant_text"; id: string; createdAt: number; text: string }
+  | { kind: "assistant_thinking"; id: string; createdAt: number; text: string }
   | { kind: "tool_call"; id: string; createdAt: number; name: string; input: unknown }
   | { kind: "tool_result"; id: string; createdAt: number; toolCallId: string; output: unknown; isError: boolean }
   | { kind: "diff"; id: string; createdAt: number; path: string; patch: string }

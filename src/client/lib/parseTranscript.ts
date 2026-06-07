@@ -82,6 +82,14 @@ export function processTranscriptMessages(entries: TranscriptEntry[]): HydratedT
           text: entry.text,
         })
         break
+      case "assistant_thinking":
+        messages.push({
+          ...createBaseMessage(entry),
+          kind: "assistant_thinking",
+          text: entry.text,
+          signature: entry.signature,
+        })
+        break
       case "api_error":
         messages.push({
           ...createBaseMessage(entry),

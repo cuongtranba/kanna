@@ -364,6 +364,61 @@ describe("normalizeClaudeStreamMessage", () => {
       expect(entries[0].kind).toBe("api_error")
     })
   })
+
+  // Claude emits extended-reasoning as a separate `thinking` content block
+  // ({type:"thinking", thinking, signature}) alongside text/tool_use. It must
+  // surface as its own `assistant_thinking` kind so the UI can render it
+  // collapsed, and so the event log distinguishes reasoning from output.
+  // See adr-20260607-thinking-blocks-transcript-kind.
+  describe("thinking content blocks", () => {
+    test("a thinking block becomes an assistant_thinking entry carrying the text + signature", () => {
+      const entries = normalizeClaudeStreamMessage({
+        type: "assistant",
+        uuid: "msg-think-1",
+        message: {
+          model: "claude-opus-4-8",
+          content: [{ type: "thinking", thinking: "Let me reason about this.", signature: "sig-abc" }],
+        },
+      })
+      expect(entries).toHaveLength(1)
+      const entry = entries[0]
+      expect(entry.kind).toBe("assistant_thinking")
+      if (entry.kind !== "assistant_thinking") throw new Error("expected assistant_thinking")
+      expect(entry.text).toBe("Let me reason about this.")
+      expect(entry.signature).toBe("sig-abc")
+    })
+
+    test("preserves order across thinking, text, and tool_use blocks", () => {
+      const entries = normalizeClaudeStreamMessage({
+        type: "assistant",
+        uuid: "msg-think-2",
+        message: {
+          model: "claude-opus-4-8",
+          content: [
+            { type: "thinking", thinking: "first I think", signature: "s1" },
+            { type: "text", text: "then I answer" },
+            { type: "tool_use", id: "tu1", name: "Read", input: { file_path: "/x" } },
+          ],
+        },
+      })
+      expect(entries.map((e) => e.kind)).toEqual(["assistant_thinking", "assistant_text", "tool_call"])
+    })
+
+    test("drops a redacted thinking block with no text (signature only)", () => {
+      const entries = normalizeClaudeStreamMessage({
+        type: "assistant",
+        uuid: "msg-think-3",
+        message: {
+          model: "claude-opus-4-8",
+          content: [
+            { type: "thinking", thinking: "", signature: "sig-only" },
+            { type: "text", text: "visible" },
+          ],
+        },
+      })
+      expect(entries.map((e) => e.kind)).toEqual(["assistant_text"])
+    })
+  })
 })
 
 describe("attachment prompt helpers", () => {

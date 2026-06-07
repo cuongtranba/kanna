@@ -59,6 +59,7 @@ import type {
 import type {
   UserPromptEntry,
   AssistantTextEntry,
+  AssistantThinkingEntry,
   ToolCallEntry,
   ToolResultEntry,
 } from "../shared/types"
@@ -281,6 +282,11 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
           case "assistant_text": {
             const e = entry as AssistantTextEntry
             out.push({ kind: "assistant_text", id: e._id, createdAt: e.createdAt, text: e.text })
+            break
+          }
+          case "assistant_thinking": {
+            const e = entry as AssistantThinkingEntry
+            out.push({ kind: "assistant_thinking", id: e._id, createdAt: e.createdAt, text: e.text })
             break
           }
           case "tool_call": {

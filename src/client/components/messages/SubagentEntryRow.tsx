@@ -2,6 +2,7 @@ import type { ReactNode } from "react"
 import type { HydratedTranscriptMessage } from "../../../shared/types"
 import { toLocalFileUrl } from "../../lib/pathUtils"
 import { TextMessage } from "./TextMessage"
+import { ThinkingMessage } from "./ThinkingMessage"
 import { ToolCallMessage } from "./ToolCallMessage"
 import { ResultMessage } from "./ResultMessage"
 
@@ -53,6 +54,9 @@ export function SubagentEntryRow({ message, localPath, isRunning = false }: Suba
   switch (message.kind) {
     case "assistant_text":
       inner = <TextMessage message={message} />
+      break
+    case "assistant_thinking":
+      inner = <ThinkingMessage message={message} />
       break
     case "tool":
       inner = <ToolCallMessage message={message} isLoading={isRunning} localPath={localPath} />

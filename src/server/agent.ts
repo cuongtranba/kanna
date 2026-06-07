@@ -663,6 +663,18 @@ export function normalizeClaudeStreamMessage(message: any): TranscriptEntry[] {
     }
     const entries: TranscriptEntry[] = []
     for (const content of message.message.content) {
+      // Extended-reasoning block. Surface as its own kind so the UI renders it
+      // collapsed and the event log keeps reasoning distinct from output. A
+      // redacted block carries only a signature (empty thinking) — skip it.
+      if (content.type === "thinking" && typeof content.thinking === "string" && content.thinking.length > 0) {
+        entries.push(timestamped({
+          kind: "assistant_thinking",
+          messageId,
+          text: content.thinking,
+          signature: typeof content.signature === "string" ? content.signature : undefined,
+          debugRaw,
+        }))
+      }
       if (content.type === "text" && typeof content.text === "string") {
         entries.push(timestamped({
           kind: "assistant_text",

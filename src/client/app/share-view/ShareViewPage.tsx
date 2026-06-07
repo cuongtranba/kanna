@@ -3,6 +3,7 @@ import { Flower } from "lucide-react"
 import type { ChatSnapshot, ChatSnapshotMessage } from "../../../shared/session-share/types"
 import { defaultMarkdownComponents, defaultRemarkPlugins } from "../../components/messages/shared"
 import { HighlightedCode } from "../../components/messages/HighlightedCode"
+import { ThinkingBlock } from "../../components/messages/ThinkingBlock"
 import { TranscriptRenderOptionsProvider } from "../../components/messages/render-context"
 
 export interface ShareViewPageProps {
@@ -46,6 +47,12 @@ function MessageView({ message }: { message: ChatSnapshotMessage }) {
           <Markdown remarkPlugins={defaultRemarkPlugins} components={defaultMarkdownComponents}>
             {message.text}
           </Markdown>
+        </div>
+      )
+    case "assistant_thinking":
+      return (
+        <div className="w-full max-w-[70ch]">
+          <ThinkingBlock content={message.text} />
         </div>
       )
     case "tool_call":
