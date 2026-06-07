@@ -71,6 +71,29 @@ export function createToolCallbackService(opts: ToolCallbackServiceArgs): ToolCa
   // existing state synchronously (before the first await) so that concurrent
   // calls within the same event-loop turn see the correct state.
   const inMemory = new Map<string, ToolRequest>()
+  // Content-scoped pending index. Maps a content key
+  // (chatId|sessionId|toolName|argsHash) to the id of the currently-LIVE
+  // pending record, so a re-delivery of the same logical interactive call
+  // collapses onto the existing record instead of spawning a duplicate prompt.
+  // The streamable-HTTP MCP transport re-issues `tools/call` during a long
+  // block (reconnect / retry while the model waits for the answer), each time
+  // with a fresh volatile `toolUseId` → otherwise a new hmac id → a new pending
+  // record → a duplicate `pending_tool_request` card "again and again". The
+  // index holds ONLY non-terminal records (registered when a record goes
+  // `pending`, evicted the moment it resolves), so a genuinely repeated ask
+  // AFTER the prior one is answered still creates a fresh prompt.
+  // `contentKeyById` is the reverse map for O(1) eviction on resolve.
+  const pendingByContent = new Map<string, string>()
+  const contentKeyById = new Map<string, string>()
+  function contentKey(s: { chatId: string; sessionId: string; toolName: string }, hash: string): string {
+    return `${s.chatId}|${s.sessionId}|${s.toolName}|${hash}`
+  }
+  function clearContentIndex(id: string): void {
+    const key = contentKeyById.get(id)
+    if (key === undefined) return
+    contentKeyById.delete(id)
+    if (pendingByContent.get(key) === id) pendingByContent.delete(key)
+  }
 
   function hmacId(s: ToolCallbackSubmitArgs, hash: string): string {
     const h = createHmac("sha256", opts.serverSecret)
@@ -107,6 +130,7 @@ export function createToolCallbackService(opts: ToolCallbackServiceArgs): ToolCa
     if (existing) {
       inMemory.set(id, { ...existing, ...update })
     }
+    clearContentIndex(id)
     await opts.store.resolveToolRequest(id, update)
     if (existing) notify(existing.chatId)
   }
@@ -160,6 +184,27 @@ export function createToolCallbackService(opts: ToolCallbackServiceArgs): ToolCa
         })
       }
 
+      // ── Content dedup: collapse re-deliveries of the same live ask ────────
+      // A different (volatile) toolUseId yields a different `id`, so the
+      // id-based checks above miss a re-issued tools/call. If a LIVE pending
+      // record already exists for this exact content, attach a waiter to it
+      // instead of spawning a duplicate prompt. Only non-terminal records live
+      // in the index, so a repeat ask after resolution is NOT suppressed here.
+      const cKey = contentKey(args, hash)
+      const livePendingId = pendingByContent.get(cKey)
+      if (livePendingId !== undefined) {
+        const live = inMemory.get(livePendingId)
+        if (live && live.status === "pending") {
+          return new Promise<ToolCallbackResult>((resolve) => {
+            const list = waiters.get(livePendingId) ?? []
+            list.push({ resolve })
+            waiters.set(livePendingId, list)
+          })
+        }
+        // Stale index entry (record resolved without eviction) — drop it.
+        clearContentIndex(livePendingId)
+      }
+
       // ── New request ───────────────────────────────────────────────────────
       const verdict = policy.evaluate({
         toolName: args.toolName,
@@ -201,8 +246,11 @@ export function createToolCallbackService(opts: ToolCallbackServiceArgs): ToolCa
         return Promise.resolve({ status: "answered", decision })
       }
 
-      // "ask" verdict → persist then wait for external answer. Broadcast
-      // synchronously after the JSONL append so the UI gets the
+      // "ask" verdict → persist then wait for external answer. Register the
+      // content index so re-deliveries collapse onto this live record.
+      pendingByContent.set(cKey, id)
+      contentKeyById.set(id, cKey)
+      // Broadcast synchronously after the JSONL append so the UI gets the
       // pending_tool_request snapshot the moment the model emits the call.
       const pendingPromise = new Promise<ToolCallbackResult>((resolve) => {
         const list = waiters.get(id) ?? []
