@@ -1,6 +1,6 @@
 ---
 id: c3-225
-c3-seal: 2b67d72bd3d830ab385c32cec968efeb9bda5609562e0f99a38cf1b5c8e85db9
+c3-seal: f6729f933a463b5c8c4f5f490b512e41cd1d0362700c7a0301300f35351182a9
 title: claude-pty-driver
 type: component
 category: feature
@@ -89,6 +89,7 @@ Owns the Claude CLI PTY transport: spawns the `claude` subprocess (after the smo
 | One-shot prompt typed instead of channel-pushed | Edit calls sendUserPrompt on the oneShot path when KANNA_PTY_CHANNEL_DELIVERY is enabled | grep for sendUserPrompt inside the oneShot branch of driver.ts | bun test src/server/claude-pty/driver.test.ts |
 | Channel push fires more than once per one-shot spawn | Edit removes single-push guard or retries on apparent stall | grep for repeated calls or loop around pushChannelPrompt | bun test src/server/claude-pty/driver.test.ts (single-push assertion) |
 | Channel-ready timeout silently falls back to paste | Edit re-introduces paste fallback after channelClientReady timeout | grep for sendUserPrompt in the fail-fast cleanup block of driver.ts | bun test src/server/claude-pty/driver.test.ts (fail-fast throw assertion) |
+| Follow-up prompt typed without a TUI-ready gate (silent hang) | Edit removes the waitForTuiReady call before sendUserPrompt in the interactive sendPrompt handler — a paste into a not-yet-idle REPL after a long turn is swallowed and the turn hangs with no transcript line | grep for waitForTuiReady inside the sendPrompt handler of driver.ts; absence = regression | bun test src/server/claude-pty/driver.test.ts (follow-up TUI-ready gate) |
 | Dev-channels dialog dismissal regresses or signals premature ready | Edit removes postDismissOffset reference guard from waitForTuiReadyDismissingDialogs | grep for postDismissOffset usage in tui-control.ts | bun test src/server/claude-pty/tui-control.test.ts |
 | Subscription-billing invariant broken | ANTHROPIC_API_KEY not stripped from child env | buildPtyEnv auth test fails | bun test src/server/claude-pty/auth.test.ts |
 | Stale re-spawn handle clobbers the live PTY registry entry | Teardown calls unconditional upsert(chatId,exited)/unregister(sessionId) instead of the pid-scoped guards — a chat re-spawns via --resume so old+new handles share chatId+sessionId | grep for markExitedIfCurrent in cleanupResources and unregister(ownPid in driver.ts; absence = regression | bun test src/server/claude-pty/pty-instance-registry.test.ts src/server/claude-pty/pid-registry.test.ts |

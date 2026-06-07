@@ -911,6 +911,25 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
               .map((c) => c.text ?? "")
               .join("\n")
           : String(content)
+      // Gate on the TUI being back at its idle "❯ " input box before pasting.
+      // After a long previous turn the REPL may still be rendering (stop-hook
+      // summary / turn_duration / context compaction); pasting then drops the
+      // keystrokes silently and the turn hangs forever with no transcript line
+      // (observed: a "Ok" follow-up never reached claude). The first-prompt
+      // path already gates this way; follow-up turns must too. The ring-quiet
+      // settle inside waitForTuiReady is the real protector — it holds the
+      // paste until output stops growing. Best-effort: on cap timeout we warn
+      // and send anyway, so this is never worse than the prior zero-gate path.
+      const followupReadyMs = Number(
+        (args.env ?? process.env).KANNA_PTY_FOLLOWUP_READY_MS ?? tuiReadyMs,
+      )
+      const ready = await waitForTuiReady(ring, {
+        hardCapMs: followupReadyMs,
+        quietPeriodMs: tuiReadyQuietMs,
+      })
+      if (ready === "timeout") {
+        console.warn("[kanna/pty] TUI ready marker not detected before follow-up prompt; sending anyway", { chatId: args.chatId, hardCapMs: followupReadyMs })
+      }
       await sendUserPrompt(pty, ring, text)
     },
     setModel: async (model) => {

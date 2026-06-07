@@ -1042,6 +1042,95 @@ describe("channel-delivery (Task 5)", () => {
   }, 10_000)
 })
 
+describe("follow-up sendPrompt TUI-ready gate (silent-hang fix)", () => {
+  // Shared fake kanna-mcp handle for the interactive (channel-disabled) path.
+  const fakeHandle = {
+    url: "http://127.0.0.1:1/mcp", bearerToken: "t", close: async () => {},
+    channelClientReady: Promise.resolve(),
+    pushChannelPrompt: async () => {},
+  }
+  const idleStream = (async () => ({
+    lines: { [Symbol.asyncIterator]() { return { next(): Promise<IteratorResult<string>> { return new Promise(() => {}) } } } },
+    filePath: Promise.resolve("/tmp/x.jsonl"),
+    close: () => {},
+  })) as never
+
+  test("waits for ❯ marker + ring-quiet before pasting a follow-up prompt", async () => {
+    if (process.platform === "win32") return
+    const sentInputs: string[] = []
+    let pushOutput: (chunk: string) => void = () => {}
+    const fakePty = {
+      pid: 55555,
+      sendInput: async (d: string) => { sentInputs.push(d) },
+      resize() {}, exited: new Promise<number>(() => {}), close: () => {}, kill: () => {},
+    } as unknown as PtyProcess
+    const handle = await startClaudeSessionPTY({
+      chatId: "followup-1", projectId: "p1", localPath: "/tmp",
+      model: "claude-sonnet-4-6", planMode: false, forkSession: false,
+      oauthToken: "sk-ant-oat01-x", sessionToken: null,
+      systemPromptOverride: "You are a coding agent.",
+      // no initialPrompt → no boot paste; isolate the follow-up path
+      onToolRequest: async () => null,
+      env: { ...process.env,
+        KANNA_PTY_TRUST_DISMISS: "disabled",
+        KANNA_PTY_CHANNEL_DELIVERY: "disabled",
+        KANNA_PTY_TUI_BOOT_MS: "10",
+        KANNA_PTY_TUI_READY_QUIET_MS: "20",
+        KANNA_PTY_FOLLOWUP_READY_MS: "3000",
+      },
+      startKannaMcpHttpServer: (async () => fakeHandle) as never,
+      spawnPtyProcess: (async (a: SpawnPtyProcessArgs) => { pushOutput = a.onOutput ?? (() => {}); return fakePty }) as never,
+      startTranscriptStreamFn: idleStream,
+      smokeTestGate: { canSpawn: async () => ({ ok: true }) },
+    })
+
+    // REPL not at the idle "❯ " prompt yet → the gate must hold the paste.
+    const sendDone = handle.sendPrompt!("Ok")
+    await new Promise((r) => setTimeout(r, 150))
+    expect(sentInputs.some((d) => d.includes("\x1b[200~"))).toBe(false)
+
+    // Idle prompt appears → gate releases after the ring-quiet window.
+    pushOutput("❯ ")
+    await sendDone
+    expect(sentInputs.some((d) => d.includes("\x1b[200~Ok\x1b[201~"))).toBe(true)
+    expect(sentInputs.some((d) => d === "\r")).toBe(true)
+    handle.close()
+  }, 10_000)
+
+  test("never-ready REPL: warns and still sends after the cap (never worse than today)", async () => {
+    if (process.platform === "win32") return
+    const sentInputs: string[] = []
+    const fakePty = {
+      pid: 55556,
+      sendInput: async (d: string) => { sentInputs.push(d) },
+      resize() {}, exited: new Promise<number>(() => {}), close: () => {}, kill: () => {},
+    } as unknown as PtyProcess
+    const handle = await startClaudeSessionPTY({
+      chatId: "followup-2", projectId: "p1", localPath: "/tmp",
+      model: "claude-sonnet-4-6", planMode: false, forkSession: false,
+      oauthToken: "sk-ant-oat01-x", sessionToken: null,
+      systemPromptOverride: "You are a coding agent.",
+      onToolRequest: async () => null,
+      env: { ...process.env,
+        KANNA_PTY_TRUST_DISMISS: "disabled",
+        KANNA_PTY_CHANNEL_DELIVERY: "disabled",
+        KANNA_PTY_TUI_BOOT_MS: "10",
+        KANNA_PTY_TUI_READY_QUIET_MS: "20",
+        KANNA_PTY_FOLLOWUP_READY_MS: "40",
+      },
+      startKannaMcpHttpServer: (async () => fakeHandle) as never,
+      spawnPtyProcess: (async () => fakePty) as never,
+      startTranscriptStreamFn: idleStream,
+      smokeTestGate: { canSpawn: async () => ({ ok: true }) },
+    })
+
+    // Ring never receives "❯ "; the gate caps and sends anyway.
+    await handle.sendPrompt!("Ok")
+    expect(sentInputs.some((d) => d.includes("\x1b[200~Ok\x1b[201~"))).toBe(true)
+    handle.close()
+  }, 10_000)
+})
+
 describe("buildChannelPromptFraming", () => {
   test("keep-alive subagent framing tells the model to expect multiple channel turns", () => {
     const framing = buildChannelPromptFraming(true)
