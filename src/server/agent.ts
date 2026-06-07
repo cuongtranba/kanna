@@ -559,8 +559,12 @@ export function getClaudeAssistantMessageUsageId(message: any): string | null {
 
 // Benign turn-end markers the Claude CLI emits as model "<synthetic>" messages
 // (the CVH-family constants in the CLI binary) when a turn ends with nothing to
-// say. They carry isApiErrorMessage:false and must render as ordinary assistant
-// text, never as a red api_error card.
+// say. They carry isApiErrorMessage:false and carry zero information, so they
+// are dropped entirely — never rendered as a red api_error card and never as an
+// assistant_text bubble. In PTY channel-delivered turns the CLI emits one at the
+// start of every turn; surfacing it as assistant_text flipped the UI out of its
+// waiting state before the real reply streamed (spinner vanished, placeholder
+// read as the answer). See adr-20260607-drop-synthetic-no-response-marker.
 const SYNTHETIC_NON_ERROR_PLACEHOLDERS: ReadonlySet<string> = new Set([
   "No response requested.",
   "No action needed.",
@@ -623,6 +627,13 @@ export function normalizeClaudeStreamMessage(message: any): TranscriptEntry[] {
         requestId,
         debugRaw,
       })]
+    }
+    // Benign synthetic turn-end marker (not an api_error): drop it. The api_error
+    // branch above already claimed any isApiErrorMessage:true message, so a real
+    // error carrying the same text still surfaces. Turn termination is driven by
+    // the separate system/turn_duration → result message, not this placeholder.
+    if (isBenignSyntheticPlaceholder) {
+      return []
     }
     const entries: TranscriptEntry[] = []
     for (const content of message.message.content) {

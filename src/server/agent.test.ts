@@ -269,12 +269,17 @@ describe("normalizeClaudeStreamMessage", () => {
 
     // The Claude CLI reuses model "<synthetic>" for benign turn-end placeholders
     // (CVH constant in the binary) as well as real API errors. Those benign
-    // markers carry isApiErrorMessage:false and must NOT render as red errors.
+    // markers carry zero information and must NOT render as a red api_error card
+    // NOR as an assistant_text bubble — they are dropped entirely. In PTY
+    // channel-delivered turns the CLI emits one at the start of every turn; if
+    // surfaced as assistant_text it flips the UI out of its waiting state before
+    // the real reply streams (spinner vanishes, placeholder reads as the answer).
+    // See adr-20260607-drop-synthetic-no-response-marker.
     test.each([
       "No response requested.",
       "No action needed.",
       "Nothing needed from you.",
-    ])("benign synthetic placeholder %p is assistant_text, not api_error", (text) => {
+    ])("benign synthetic placeholder %p is dropped (no entry)", (text) => {
       const entries = normalizeClaudeStreamMessage({
         type: "assistant",
         uuid: "msg-synthetic-benign",
@@ -284,8 +289,7 @@ describe("normalizeClaudeStreamMessage", () => {
           content: [{ type: "text", text }],
         },
       })
-      expect(entries).toHaveLength(1)
-      expect(entries[0].kind).toBe("assistant_text")
+      expect(entries).toHaveLength(0)
     })
 
     test("synthetic message with isApiErrorMessage:true stays api_error even if text matches a benign phrase prefix", () => {
