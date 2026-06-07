@@ -171,6 +171,15 @@ export function watchWorkflowDir(
   let timer: ReturnType<typeof setTimeout> | null = null
   let disposed = false
   let watcher: ReturnType<typeof watch> | null = null
+  // Safety-net poll for the parent-arm phase. macOS FSEvents does not start
+  // delivering the instant `watch(ancestor)` returns, so a dir created in the
+  // race window between arming and first delivery is silently dropped and the
+  // watcher never promotes to the target — it then never fires at all. A small
+  // existence poll closes that gap (same "poll beats macOS fs.watch" rationale
+  // as the PTY transcript tail, adr-20260607-pty-transcript-pure-poll). It runs
+  // ONLY until the dir appears, then stops.
+  let parentPoll: ReturnType<typeof setInterval> | null = null
+  let promoted = false
 
   const fire = () => {
     if (disposed) return
@@ -179,6 +188,7 @@ export function watchWorkflowDir(
   }
 
   const closeWatcher = () => { try { watcher?.close() } catch { /* already closed */ } watcher = null }
+  const stopParentPoll = () => { if (parentPoll) { clearInterval(parentPoll); parentPoll = null } }
 
   const armTarget = () => {
     if (disposed) return
@@ -189,14 +199,23 @@ export function watchWorkflowDir(
     if (disposed) return
     const ancestor = nearestExistingAncestor(dir)
     if (!ancestor) return
+    // Promote from watching the ancestor to watching the target dir, exactly
+    // once, whichever signal (FSEvents or the safety poll) observes it first.
+    const promote = () => {
+      if (disposed || promoted || !existsSync(dir)) return
+      promoted = true
+      stopParentPoll()
+      closeWatcher()
+      armTarget()
+      fire() // the dir just appeared — trigger an initial read
+    }
     try {
-      watcher = watch(ancestor, { persistent: false }, () => {
-        if (disposed || !existsSync(dir)) return
-        closeWatcher()
-        armTarget()
-        fire() // the dir just appeared — trigger an initial read
-      })
+      watcher = watch(ancestor, { persistent: false }, promote)
     } catch { watcher = null }
+    const pollMs = Math.max(20, Math.min(debounceMs, 100))
+    parentPoll = setInterval(promote, pollMs)
+    // Do not let the safety poll keep the event loop alive (persistent:false).
+    parentPoll.unref?.()
   }
 
   if (existsSync(dir)) armTarget()
@@ -205,6 +224,7 @@ export function watchWorkflowDir(
   return () => {
     disposed = true
     if (timer) clearTimeout(timer)
+    stopParentPoll()
     closeWatcher()
   }
 }
