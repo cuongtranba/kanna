@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.89.0](https://github.com/cuongtranba/kanna/compare/v0.88.1...v0.89.0) (2026-06-07)
+
+
+### Features
+
+* **transcript:** surface Claude thinking blocks as assistant_thinking ([61b9f16](https://github.com/cuongtranba/kanna/commit/61b9f1613db287353ce4e94129c0bd4781668bb1))
+* **transcript:** surface Claude thinking blocks as assistant_thinking ([43860b9](https://github.com/cuongtranba/kanna/commit/43860b93ec118cd0f1b9576cfac7a7cc73861812))
+
+
+### Bug Fixes
+
+* **transcript:** drop synthetic 'No response requested.' + surface Usage-Policy refusals ([#394](https://github.com/cuongtranba/kanna/issues/394)) ([07df860](https://github.com/cuongtranba/kanna/commit/07df8607af541309e7421a94e391a15fbe18f946))
+* **workflow-watch:** poll fallback for missed parent-arm FSEvents ([7f69c20](https://github.com/cuongtranba/kanna/commit/7f69c20d0ddeacfc94da12bcfdc907250221b36c))
+
 ## [0.88.1](https://github.com/cuongtranba/kanna/compare/v0.88.0...v0.88.1) (2026-06-07)
 
 
