@@ -16,7 +16,6 @@ import { branchLabel as computeBranchLabel } from "../../lib/branchLabel"
 import { OpenExternalSelect } from "../open-external-menu"
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from "../ui/context-menu"
 import { PtyInstancesIndicator } from "./PtyInstancesIndicator"
-import { usePtyInstanceForChat } from "../../stores/ptyInstancesStore"
 import type { KannaSocket } from "../../app/socket"
 
 function openContextMenuFromButton(event: ReactMouseEvent<HTMLButtonElement>) {
@@ -71,26 +70,6 @@ function NavbarOverflowMenu({
         ) : null}
       </ContextMenuContent>
     </ContextMenu>
-  )
-}
-
-// Live Claude Code TUI spinner status, e.g.
-//   "Whirlpooling… (11m 11s · ↓ 40.5k tokens · almost done thinking with xhigh effort)"
-// Rendered as a calm muted mono row — the words themselves carry the signal, so
-// no extra status dot is needed (the navbar already shows the Kanna state dot).
-// PTY driver only; absent under the SDK driver.
-export function PtyTuiStatusLine({ raw }: { raw: string }) {
-  return (
-    <div className="flex items-center justify-center w-full mt-0.5 select-none">
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <span className="text-[11px] font-mono tabular-nums text-muted-foreground/80 truncate max-w-[min(78vw,560px)] cursor-default">
-            {raw}
-          </span>
-        </TooltipTrigger>
-        <TooltipContent side="bottom">{raw}</TooltipContent>
-      </Tooltip>
-    </div>
   )
 }
 
@@ -166,9 +145,6 @@ export function ChatNavbar({
   const branchLabel = computeBranchLabel({ hasGitRepo, gitStatus, localPath, branchName, homeDir })
   const [sharePopoverOpen, setSharePopoverOpen] = useState(false)
   const isMac = platform === "darwin"
-  // Live Claude Code TUI spinner status for the current chat (PTY driver only).
-  // Null whenever there is no live PTY turn, so the row simply does not render.
-  const tuiStatus = usePtyInstanceForChat(currentChatId)?.tuiStatus ?? null
 
   return (
     <CardHeader
@@ -347,7 +323,6 @@ export function ChatNavbar({
           </div>
         ) : null}
       </div>
-      {tuiStatus?.raw ? <PtyTuiStatusLine raw={tuiStatus.raw} /> : null}
       {resolvedBindings && resolvedBindings.length > 1 && (
         <PeerWorktreeStrip
           bindings={resolvedBindings}

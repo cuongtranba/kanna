@@ -1,21 +1,6 @@
-import "../lib/testing/setupHappyDom"
 import { describe, expect, test } from "bun:test"
-import { act } from "react"
-import { createRoot } from "react-dom/client"
 import type { PtyInstanceState } from "../../shared/pty-instance"
-import { renderForLoopCheck } from "../lib/testing/renderForLoopCheck"
-import { createPtyInstancesStore, usePtyInstanceForChat, usePtyInstancesStore } from "./ptyInstancesStore"
-
-async function renderText(element: React.ReactElement): Promise<string> {
-  const container = document.createElement("div")
-  document.body.appendChild(container)
-  const root = createRoot(container)
-  await act(async () => { root.render(element) })
-  const text = container.textContent ?? ""
-  await act(async () => { root.unmount() })
-  container.remove()
-  return text
-}
+import { createPtyInstancesStore } from "./ptyInstancesStore"
 
 function instance(chatId: string, overrides: Partial<PtyInstanceState> = {}): PtyInstanceState {
   return {
@@ -41,7 +26,6 @@ function instance(chatId: string, overrides: Partial<PtyInstanceState> = {}): Pt
     rssPeakBytes: null,
     cpuPercent: null,
     cpuPeakPercent: null,
-    tuiStatus: null,
     ...overrides,
   }
 }
@@ -105,39 +89,5 @@ describe("ptyInstancesStore", () => {
     expect(store.getState().popoverOpen).toBe(true)
     store.getState().closePopover()
     expect(store.getState().popoverOpen).toBe(false)
-  })
-})
-
-describe("usePtyInstanceForChat", () => {
-  const status: PtyInstanceState["tuiStatus"] = {
-    verb: "Whirlpooling",
-    elapsedSeconds: 671,
-    tokens: 40500,
-    effort: "almost done thinking with xhigh effort",
-    raw: "Whirlpooling… (11m 11s · ↓ 40.5k tokens · almost done thinking with xhigh effort)",
-  }
-
-  function Probe({ chatId }: { chatId: string | undefined }) {
-    const inst = usePtyInstanceForChat(chatId)
-    return <span>{inst?.tuiStatus?.verb ?? "none"}</span>
-  }
-
-  test("renders the matching instance's status and null for unknown / undefined chats", async () => {
-    usePtyInstancesStore.getState().applySnapshot([instance("c1", { tuiStatus: status })])
-    expect(await renderText(<Probe chatId="c1" />)).toContain("Whirlpooling")
-    expect(await renderText(<Probe chatId="missing" />)).toBe("none")
-    expect(await renderText(<Probe chatId={undefined} />)).toBe("none")
-  })
-
-  test("does not trigger a render loop (stable ref / null)", async () => {
-    usePtyInstancesStore.getState().applySnapshot([instance("c1", { tuiStatus: status })])
-    function Probe() {
-      const inst = usePtyInstanceForChat("c1")
-      return <span>{inst?.tuiStatus?.tokens ?? 0}</span>
-    }
-    const result = await renderForLoopCheck(<Probe />)
-    await result.cleanup()
-    expect(result.loopWarnings).toEqual([])
-    expect(result.thrown).toBeNull()
   })
 })
