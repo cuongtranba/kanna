@@ -151,9 +151,12 @@ Anthropic changes the dialog wording).
 `❯ ` before sending the first prompt. Hard cap defaults to 3000 ms
 (`KANNA_PTY_TUI_BOOT_MS`).
 
-**Transcript watch:** `tui-source.ts` uses `fs.watch` by default; set
-`KANNA_PTY_TRANSCRIPT_WATCH=poll` to force 50 ms polling (for unreliable
-filesystems like NFS / CIFS).
+**Transcript watch:** `tui-source.adapter.ts` follows the transcript with a
+single 50 ms tail-poll (`stat`-size diff read on the append-only JSONL). There
+is no `fs.watch` — under Bun it backs to kqueue (macOS) / inotify (Linux), which
+coalesced rapid turn-end appends (final `assistant` + `system/turn_duration`
+rows) and silently stalled the stream, so it was removed in favour of the
+loss-proof poll. See `adr-20260607-pty-transcript-pure-poll`.
 
 **oneShot subagent close:** After the first `result` transcript entry on a
 one-shot run (Claude subagent), the driver sends `/exit\r` to gracefully
@@ -219,8 +222,8 @@ feed the same `detectFromResultText` / OAuth-pool rotation path in
 **Architecture note:** PTY mode parses the on-disk transcript JSONL file
 as the sole event source — `src/server/claude-pty/tui-source.ts`
 (`startTranscriptStream`) watches `~/.claude/projects/<encoded-cwd>/`
-for the file claude creates on first user prompt, then follows it via
-`fs.watch` (or polling under `KANNA_PTY_TRANSCRIPT_WATCH=poll`).
+for the file claude creates on first user prompt, then follows it via a
+50 ms tail-poll (`stat`-size diff on the append-only JSONL; no `fs.watch`).
 `driver.ts` is a thin coordinator: spawn (via `pty-process.ts`
 `spawnPtyProcess` + Bun.Terminal) → trust dismiss → first-prompt send →
 pipe transcript lines into `createJsonlEventParser` → emit HarnessEvents.
@@ -240,7 +243,6 @@ the same rotation/retry path the SDK driver uses on thrown stream errors.
 - `KANNA_MCP_TOOL_CALLBACKS=1` — route built-in shims through durable approval.
 - `KANNA_PTY_TRUST_DISMISS=enabled|disabled` — trust-dialog dismiss (default `enabled`).
 - `KANNA_PTY_TUI_BOOT_MS=3000` — hard cap on TUI-ready wait (default `3000`).
-- `KANNA_PTY_TRANSCRIPT_WATCH=fs|poll` — transcript watch mode (default `fs`).
 - `CLAUDE_CODE_OAUTH_TOKEN` — set by driver from pool, NOT a user env var.
 - `KANNA_PTY_CHANNEL_DELIVERY=enabled|disabled` — for one-shot (subagent) PTY
   spawns, deliver the prompt via a `notifications/claude/channel` push instead
@@ -258,6 +260,8 @@ the same rotation/retry path the SDK driver uses on thrown stream errors.
 Removed in this version (no longer consulted):
 - `KANNA_PTY_PREFLIGHT_MODEL` — preflight gone, replaced by smoke-test.
 - `KANNA_PTY_SANDBOX` — sandbox already removed in a prior change; flag now inert.
+- `KANNA_PTY_TRANSCRIPT_WATCH` — `fs.watch` removed; the follower always polls
+  (`adr-20260607-pty-transcript-pure-poll`).
 
 # Kanna-MCP Built-in Shims
 

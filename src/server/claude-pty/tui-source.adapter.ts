@@ -1,5 +1,5 @@
 import { readdir, stat, open } from "node:fs/promises"
-import { existsSync, watch } from "node:fs"
+import { existsSync } from "node:fs"
 import path from "node:path"
 import { awaitClaudeSessionForPid } from "./claude-session-registry.adapter"
 import { computeJsonlPath } from "./jsonl-path.adapter"
@@ -58,7 +58,6 @@ export interface StartTranscriptStreamArgs {
    * succeeds, makes this floor moot.
    */
   minMtimeMs?: number
-  pollMode?: boolean
   pollIntervalMs?: number
   firstFileTimeoutMs?: number
   /**
@@ -81,7 +80,6 @@ const DEFAULT_FIRST_FILE_TIMEOUT_MS = 20_000
 const DEFAULT_POLL_INTERVAL_MS = 50
 const DEFAULT_SESSION_REGISTRY_TIMEOUT_MS = 2_000
 const DEFAULT_SESSION_REGISTRY_POLL_MS = 20
-const DEFAULT_SAFETY_POLL_MS = 500
 
 export async function startTranscriptStream(args: StartTranscriptStreamArgs): Promise<TranscriptStream> {
   const lineQueue: string[] = []
@@ -89,7 +87,6 @@ export async function startTranscriptStream(args: StartTranscriptStreamArgs): Pr
   let buffer = ""
   let position = 0
   let closed = false
-  let watcher: ReturnType<typeof watch> | null = null
   let pollTimer: ReturnType<typeof setInterval> | null = null
 
   function pushLine(line: string) {
@@ -132,23 +129,15 @@ export async function startTranscriptStream(args: StartTranscriptStreamArgs): Pr
   }
 
   function startFollowing(filePath: string) {
-    if (args.pollMode) {
-      const interval = args.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS
-      pollTimer = setInterval(() => { void readNewBytes(filePath) }, interval)
-    } else {
-      try {
-        watcher = watch(filePath, () => { void readNewBytes(filePath) })
-      } catch {
-        const interval = args.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS
-        pollTimer = setInterval(() => { void readNewBytes(filePath) }, interval)
-      }
-      // Safety-net poll alongside fs.watch: macOS FSEvents was observed to
-      // coalesce or drop events when claude appended several lines in rapid
-      // succession at turn end (final `assistant` + `system/turn_duration`
-      // rows silently lost). The watcher handles low-latency streaming;
-      // this poll guarantees eventual delivery within DEFAULT_SAFETY_POLL_MS.
-      pollTimer = setInterval(() => { void readNewBytes(filePath) }, DEFAULT_SAFETY_POLL_MS)
-    }
+    // Single tail-poll, no fs.watch. The transcript is append-only, so a
+    // stat-size diff read can never miss bytes. fs.watch (kqueue on macOS,
+    // inotify on Linux under Bun — NOT FSEvents) coalesces rapid turn-end
+    // appends (final `assistant` + `system/turn_duration`) and was observed
+    // to silently stall the stream, which is why an always-on backup poll
+    // already ran alongside it. Polling alone is the loss-proof and
+    // platform-uniform follower. See adr-20260607-pty-transcript-pure-poll.
+    const interval = args.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS
+    pollTimer = setInterval(() => { void readNewBytes(filePath) }, interval)
     void readNewBytes(filePath)
   }
 
@@ -248,7 +237,6 @@ export async function startTranscriptStream(args: StartTranscriptStreamArgs): Pr
     close() {
       if (closed) return
       closed = true
-      if (watcher) try { watcher.close() } catch { /* swallow */ }
       if (pollTimer) clearInterval(pollTimer)
       endLines()
     },
