@@ -9,6 +9,7 @@ import { SystemMessage } from "../components/messages/SystemMessage"
 import { AccountInfoMessage } from "../components/messages/AccountInfoMessage"
 import { TextMessage } from "../components/messages/TextMessage"
 import { ApiErrorMessage } from "../components/messages/ApiErrorMessage"
+import { PolicyRefusalMessage } from "../components/messages/PolicyRefusalMessage"
 import { AskUserQuestionMessage } from "../components/messages/AskUserQuestionMessage"
 import { ExitPlanModeMessage } from "../components/messages/ExitPlanModeMessage"
 import { TodoWriteMessage } from "../components/messages/TodoWriteMessage"
@@ -260,6 +261,10 @@ function sameMessage(left: HydratedTranscriptMessage, right: HydratedTranscriptM
         && left.status === right.status
         && left.text === right.text
         && left.requestId === right.requestId
+    case "policy_refusal":
+      return right.kind === "policy_refusal"
+        && left.text === right.text
+        && left.requestId === right.requestId
     case "tool":
       return right.kind === "tool"
         && left.toolKind === right.toolKind
@@ -459,6 +464,9 @@ const TranscriptSingleRow = memo(function TranscriptSingleRow({
         break
       case "api_error":
         rendered = <ApiErrorMessage key={message.id} message={message} />
+        break
+      case "policy_refusal":
+        rendered = <PolicyRefusalMessage key={message.id} message={message} />
         break
       case "tool":
         if (message.isError) {

@@ -16,6 +16,11 @@ export type ProcessedApiErrorMessage = Extract<
   { kind: "api_error" }
 >
 
+export type ProcessedPolicyRefusalMessage = Extract<
+  import("../../../shared/types").HydratedTranscriptMessage,
+  { kind: "policy_refusal" }
+>
+
 export type ProcessedSystemMessage = Extract<
   import("../../../shared/types").HydratedTranscriptMessage,
   { kind: "system_init" }

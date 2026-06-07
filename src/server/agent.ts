@@ -559,13 +559,26 @@ export function getClaudeAssistantMessageUsageId(message: any): string | null {
 
 // Benign turn-end markers the Claude CLI emits as model "<synthetic>" messages
 // (the CVH-family constants in the CLI binary) when a turn ends with nothing to
-// say. They carry isApiErrorMessage:false and must render as ordinary assistant
-// text, never as a red api_error card.
+// say. They carry isApiErrorMessage:false and carry zero information, so they
+// are dropped entirely — never rendered as a red api_error card and never as an
+// assistant_text bubble. In PTY channel-delivered turns the CLI emits one at the
+// start of every turn; surfacing it as assistant_text flipped the UI out of its
+// waiting state before the real reply streamed (spinner vanished, placeholder
+// read as the answer). See adr-20260607-drop-synthetic-no-response-marker.
 const SYNTHETIC_NON_ERROR_PLACEHOLDERS: ReadonlySet<string> = new Set([
   "No response requested.",
   "No action needed.",
   "Nothing needed from you.",
 ])
+
+// Claude CLI hard-refusals (Usage-Policy / real-time cyber-safeguard block)
+// arrive as a model "<synthetic>" message with stop_reason "refusal" and one of
+// these phrases in the text. Used to split a deliberate refusal out of the
+// generic api_error bucket. See adr-20260607-surface-policy-refusal-entry.
+const POLICY_REFUSAL_TEXT_MARKERS: readonly string[] = [
+  "violate our Usage Policy",
+  "unable to respond to this request",
+]
 
 export function normalizeClaudeStreamMessage(message: any): TranscriptEntry[] {
   const debugRaw = JSON.stringify(message)
@@ -615,6 +628,23 @@ export function normalizeClaudeStreamMessage(message: any): TranscriptEntry[] {
       const requestId = typeof message.request_id === "string"
         ? message.request_id
         : (typeof message.requestId === "string" ? message.requestId : undefined)
+      // A deliberate model refusal (Usage-Policy / cyber-safeguard block) is NOT
+      // a transport error — it carries stop_reason "refusal" and/or the policy
+      // phrase. Surface it as its own `policy_refusal` kind so the UI labels it
+      // "Blocked — Usage Policy" instead of a generic red API-error card that
+      // reads like a network failure. See adr-20260607-surface-policy-refusal-entry.
+      const isPolicyRefusal =
+        message.message?.stop_reason === "refusal"
+        || POLICY_REFUSAL_TEXT_MARKERS.some((marker) => joinedText.includes(marker))
+      if (isPolicyRefusal) {
+        return [timestamped({
+          kind: "policy_refusal",
+          messageId,
+          text: joinedText,
+          requestId,
+          debugRaw,
+        })]
+      }
       return [timestamped({
         kind: "api_error",
         messageId,
@@ -623,6 +653,13 @@ export function normalizeClaudeStreamMessage(message: any): TranscriptEntry[] {
         requestId,
         debugRaw,
       })]
+    }
+    // Benign synthetic turn-end marker (not an api_error): drop it. The api_error
+    // branch above already claimed any isApiErrorMessage:true message, so a real
+    // error carrying the same text still surfaces. Turn termination is driven by
+    // the separate system/turn_duration → result message, not this placeholder.
+    if (isBenignSyntheticPlaceholder) {
+      return []
     }
     const entries: TranscriptEntry[] = []
     for (const content of message.message.content) {
