@@ -18,7 +18,6 @@ import { spawnPtyProcess as defaultSpawnPtyProcess, type PtyProcess, type SpawnP
 import type { ClaudePtyRegistry } from "./pid-registry.adapter"
 import type { PtyInstanceRegistry } from "./pty-instance-registry"
 import { sampleProcessTreeUsage as defaultSampleProcessTreeUsage, type ProcessTreeSample } from "./pty-memory-sampler.adapter"
-import { parseTuiStatusLine } from "./tui-status-line"
 import { waitForTuiReady, waitForTuiReadyWithTrustDismiss, waitForTuiReadyDismissingDialogs, sendUserPrompt, sendExitCommand } from "./tui-control"
 import { startTranscriptStream } from "./tui-source.adapter"
 import { computeJsonlPath, computeProjectDir } from "./jsonl-path.adapter"
@@ -586,14 +585,7 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
       } catch {
         sample = null
       }
-      // Live TUI spinner status (verb/elapsed/tokens/effort) is parsed from the
-      // output ring — process metadata on the live-status channel, never a
-      // transcript event (c3-225). Refreshed even when ps sampling fails.
-      const tuiStatus = parseTuiStatusLine(ring.tail())
-      if (sample === null) {
-        args.ptyInstanceRegistry?.upsert(args.chatId, { tuiStatus })
-        return
-      }
+      if (sample === null) return
       if (sample.rssBytes > rssPeakBytes) rssPeakBytes = sample.rssBytes
       if (sample.cpuPercent > cpuPeakPercent) cpuPeakPercent = sample.cpuPercent
       args.ptyInstanceRegistry?.upsert(args.chatId, {
@@ -601,7 +593,6 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
         rssPeakBytes,
         cpuPercent: sample.cpuPercent,
         cpuPeakPercent,
-        tuiStatus,
       })
     }
     memorySamplerHandle = setInterval(() => { void tick() }, intervalMs)

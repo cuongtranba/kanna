@@ -77,15 +77,3 @@ export function usePtyLiveCount(): number {
 export function usePtyPopoverOpen(): boolean {
   return usePtyInstancesStore((state) => state.popoverOpen)
 }
-
-/**
- * Live PTY instance for a single chat, or null when none is tracked. Returns
- * the stored object reference (stable across renders until that instance's
- * delta updates it) or the stable `null` primitive — safe to use as a render
- * dependency without triggering React error #185.
- */
-export function usePtyInstanceForChat(chatId: string | undefined): PtyInstanceState | null {
-  return usePtyInstancesStore((state) =>
-    chatId ? state.instances.find((instance) => instance.chatId === chatId) ?? null : null,
-  )
-}

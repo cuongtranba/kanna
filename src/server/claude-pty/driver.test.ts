@@ -9,7 +9,6 @@ import { KANNA_SYSTEM_PROMPT_APPEND } from "../../shared/kanna-system-prompt"
 import type { HarnessEvent } from "../harness-types"
 import { readAppSettingsSnapshot } from "../app-settings"
 import type { McpServerConfig } from "../../shared/types"
-import { createPtyInstanceRegistry } from "./pty-instance-registry"
 
 
 
@@ -1055,70 +1054,4 @@ describe("buildChannelPromptFraming", () => {
     expect(framing).toMatch(/channel/i)
     expect(framing).not.toMatch(/multiple/i)
   })
-})
-
-// ── Live TUI spinner status (adr-20260606-pty-tui-status-line) ──────────────
-
-describe("memory sampler upserts tuiStatus parsed from the output ring", () => {
-  test("a sampler tick publishes the parsed spinner line onto PtyInstanceState", async () => {
-    if (process.platform === "win32") return
-    const homeDir = await mkdtemp(path.join(tmpdir(), "kanna-tui-status-"))
-    const registry = createPtyInstanceRegistry()
-    let exitResolve!: (code: number) => void
-    const exited = new Promise<number>((r) => { exitResolve = r })
-    const fakePty: PtyProcess = {
-      pid: 99999,
-      async sendInput() {},
-      resize() {},
-      exited,
-      close() { exitResolve(0) },
-      kill() { exitResolve(137) },
-    }
-    const spinner =
-      "\x1b[2K\r\x1b[38;5;213m✶ Whirlpooling… (11m 11s · ↓ 40.5k tokens · almost done thinking with xhigh effort)\x1b[0m"
-    const fakeSpawn = async (spawnArgs: SpawnPtyProcessArgs): Promise<PtyProcess> => {
-      spawnArgs.onOutput?.("❯ ")
-      spawnArgs.onOutput?.(spinner)
-      return fakePty
-    }
-    const neverStream: TranscriptStream = {
-      lines: { [Symbol.asyncIterator]() { return { next(): Promise<IteratorResult<string, undefined>> { return new Promise(() => {}) } } } },
-      filePath: new Promise<string>(() => {}),
-      close() {},
-    }
-
-    const handle = await startClaudeSessionPTY({
-      chatId: "tui-status", projectId: "test", localPath: homeDir,
-      model: "claude-haiku-4-5-20251001",
-      planMode: false, forkSession: false,
-      oauthToken: "test-token", sessionToken: null,
-      onToolRequest: async () => null,
-      homeDir,
-      env: { HOME: homeDir, CLAUDE_CODE_OAUTH_TOKEN: "test-token", KANNA_PTY_TRUST_DISMISS: "disabled", CLAUDE_EXECUTABLE: "/bin/sh" },
-      spawnPtyProcess: fakeSpawn,
-      startKannaMcpHttpServer: async () => ({ url: "http://127.0.0.1:0/mcp", bearerToken: "test", close: async () => {}, channelClientReady: Promise.resolve(), pushChannelPrompt: async () => {} }),
-      startTranscriptStreamFn: async () => neverStream,
-      smokeTestGate: { async canSpawn() { return { ok: true } } },
-      ptyInstanceRegistry: registry,
-      sampleProcessTreeUsage: async () => ({ rssBytes: 1024, cpuPercent: 1 }),
-      memorySamplerIntervalMs: 5,
-    })
-
-    try {
-      let status = registry.snapshot().find((s) => s.chatId === "tui-status")?.tuiStatus ?? null
-      for (let i = 0; i < 100 && status === null; i++) {
-        await new Promise((r) => setTimeout(r, 10))
-        status = registry.snapshot().find((s) => s.chatId === "tui-status")?.tuiStatus ?? null
-      }
-      expect(status).not.toBeNull()
-      expect(status?.verb).toBe("Whirlpooling")
-      expect(status?.elapsedSeconds).toBe(671)
-      expect(status?.tokens).toBe(40500)
-      expect(status?.effort).toBe("almost done thinking with xhigh effort")
-    } finally {
-      exitResolve(0)
-      handle.close()
-      await rm(homeDir, { recursive: true, force: true })
-    }
-  }, 15_000)
 })
