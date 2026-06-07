@@ -108,7 +108,6 @@ describe("startTranscriptStream (dir-watch)", () => {
     const stream = await startTranscriptStream({
       projectDir,
       firstFileTimeoutMs: 2000,
-      pollMode: true,
       pollIntervalMs: 30,
     })
     const iter = stream.lines[Symbol.asyncIterator]()
@@ -144,11 +143,10 @@ describe("startTranscriptStream (dir-watch)", () => {
   }, 5000)
 })
 
-describe("startTranscriptStream (poll-mode)", () => {
-  test("emits lines via polling when pollMode=true", async () => {
+describe("startTranscriptStream (poll follower)", () => {
+  test("emits lines via the tail-poll", async () => {
     const stream = await startTranscriptStream({
       projectDir,
-      pollMode: true,
       pollIntervalMs: 30,
       firstFileTimeoutMs: 2000,
     })
@@ -158,6 +156,28 @@ describe("startTranscriptStream (poll-mode)", () => {
     const first = await iter.next()
     expect(first.value).toBe('{"type":"polled"}')
     stream.close()
+  }, 5000)
+
+  test("close() stops the poll timer (no leak)", async () => {
+    const filePath = path.join(projectDir, "leak.jsonl")
+    await writeFile(filePath, '{"type":"one"}\n')
+    const stream = await startTranscriptStream({
+      projectDir,
+      knownFilePath: filePath,
+      pollIntervalMs: 20,
+      firstFileTimeoutMs: 500,
+    })
+    const iter = stream.lines[Symbol.asyncIterator]()
+    expect((await iter.next()).value).toBe('{"type":"one"}')
+    stream.close()
+    // After close, appends must NOT surface — the only timer is cleared.
+    await appendFile(filePath, '{"type":"two"}\n')
+    await new Promise((r) => setTimeout(r, 120))
+    const next = await Promise.race([
+      iter.next(),
+      new Promise<{ value: undefined; done: true }>((r) => setTimeout(() => r({ value: undefined, done: true }), 150)),
+    ])
+    expect(next.done).toBe(true)
   }, 5000)
 })
 
@@ -285,13 +305,14 @@ describe("startTranscriptStream (registry resolution)", () => {
   }, 5000)
 })
 
-describe("startTranscriptStream (safety-net poll vs fs.watch drops)", () => {
-  // Regression: fs.watch on macOS/FSEvents was observed to coalesce or drop
-  // events when claude appended `assistant` + `system/turn_duration` rows in
-  // rapid succession at the end of a turn — Kanna's stream would silently
-  // stop reading at ~52k bytes while the JSONL grew to ~55k. The safety-net
-  // poll runs alongside fs.watch and guarantees eventual delivery.
-  test("appends made after stream setup are delivered even with no further watcher fires", async () => {
+describe("startTranscriptStream (rapid turn-end appends)", () => {
+  // Regression: fs.watch (kqueue/inotify under Bun) was observed to coalesce
+  // or drop events when claude appended `assistant` + `system/turn_duration`
+  // rows in rapid succession at the end of a turn — the stream would silently
+  // stop reading at ~52k bytes while the JSONL grew to ~55k. The pure tail-poll
+  // (adr-20260607-pty-transcript-pure-poll) reads by stat-size diff and so
+  // delivers every appended row regardless of append timing.
+  test("delivers all rows appended in rapid succession after stream setup", async () => {
     const filePath = path.join(projectDir, "watched.jsonl")
     await writeFile(filePath, '{"type":"system","subtype":"init"}\n')
     const stream = await startTranscriptStream({
@@ -303,10 +324,9 @@ describe("startTranscriptStream (safety-net poll vs fs.watch drops)", () => {
     const first = await iter.next()
     expect(first.value).toContain('"system"')
 
-    // Append multiple rows AFTER the watcher is set up. On a buggy build
-    // where fs.watch drops the second/third append, the safety-net poll
-    // (fires every 500 ms) must still pick them up within the test
-    // timeout.
+    // Append multiple rows AFTER the follower is set up. The tail-poll must
+    // pick up every row by stat-size diff within the test timeout — no append
+    // may be lost to event coalescing.
     await appendFile(filePath, '{"type":"assistant","message":{"content":[{"type":"text","text":"a"}]}}\n')
     await appendFile(filePath, '{"type":"assistant","message":{"content":[{"type":"text","text":"b"}]}}\n')
     await appendFile(filePath, '{"type":"system","subtype":"turn_duration","durationMs":42}\n')
