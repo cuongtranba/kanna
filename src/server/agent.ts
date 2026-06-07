@@ -307,6 +307,8 @@ interface AgentCoordinatorArgs {
   ptyInstanceRegistry?: import("./claude-pty/pty-instance-registry").PtyInstanceRegistry
   /** Registry of workflow runs per chat, populated by PTY driver from the on-disk workflows dir. */
   workflowRegistry?: import("./workflow-registry").WorkflowRegistry
+  /** Registry mapping each chat to its `…/subagents` dir for on-demand Agent child-transcript drill-in. */
+  subagentTranscriptRegistry?: import("./subagent-transcript-registry").SubagentTranscriptRegistry
 }
 
 interface SendToStartingProfile {
@@ -1314,6 +1316,7 @@ export class AgentCoordinator {
   private readonly claudePtyRegistry: import("./claude-pty/pid-registry.adapter").ClaudePtyRegistry | null
   private readonly ptyInstanceRegistry: import("./claude-pty/pty-instance-registry").PtyInstanceRegistry | null
   private readonly workflowRegistry: import("./workflow-registry").WorkflowRegistry | null
+  private readonly subagentTranscriptRegistry: import("./subagent-transcript-registry").SubagentTranscriptRegistry | null
   private readonly subagentPendingResolvers = new Map<
     string,
     { resolve: (v: unknown) => void; reject: (e: Error) => void }
@@ -1391,6 +1394,7 @@ export class AgentCoordinator {
     this.claudePtyRegistry = args.claudePtyRegistry ?? null
     this.ptyInstanceRegistry = args.ptyInstanceRegistry ?? null
     this.workflowRegistry = args.workflowRegistry ?? null
+    this.subagentTranscriptRegistry = args.subagentTranscriptRegistry ?? null
   }
 
   setBackgroundErrorReporter(report: ((message: string) => void) | null) {
@@ -1759,6 +1763,7 @@ export class AgentCoordinator {
                 ptyRegistry: this.claudePtyRegistry ?? undefined,
                 ptyInstanceRegistry: this.ptyInstanceRegistry ?? undefined,
                 workflowRegistry: this.workflowRegistry ?? undefined,
+                subagentTranscriptRegistry: this.subagentTranscriptRegistry ?? undefined,
                 customMcpServers: this.getEnabledCustomMcpServers(),
                   })
             : await this.startClaudeSessionFn({
@@ -2403,6 +2408,7 @@ export class AgentCoordinator {
               ptyRegistry: this.claudePtyRegistry ?? undefined,
                 ptyInstanceRegistry: this.ptyInstanceRegistry ?? undefined,
               workflowRegistry: this.workflowRegistry ?? undefined,
+              subagentTranscriptRegistry: this.subagentTranscriptRegistry ?? undefined,
               customMcpServers: this.getEnabledCustomMcpServers(),
             })
           : await this.startClaudeSessionFn({

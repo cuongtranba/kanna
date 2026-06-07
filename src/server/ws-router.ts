@@ -8,6 +8,7 @@ import type { ClientEnvelope, PtyInstancesEvent, ServerEnvelope, SubscriptionTop
 import type { PtyInstanceDelta } from "../shared/pty-instance"
 import type { PtyInstanceRegistry } from "./claude-pty/pty-instance-registry"
 import type { WorkflowRegistry } from "./workflow-registry"
+import type { SubagentTranscriptRegistry } from "./subagent-transcript-registry"
 import { isClientEnvelope } from "../shared/protocol"
 import type { AgentCoordinator } from "./agent"
 import type { AnalyticsReporter } from "./analytics"
@@ -152,6 +153,7 @@ interface CreateWsRouterArgs {
   ptyInstances?: PtyInstanceRegistry
   killPtyInstance?: (chatId: string) => Promise<{ ok: boolean; error?: string }>
   workflowRegistry?: WorkflowRegistry
+  subagentTranscriptRegistry?: SubagentTranscriptRegistry
   sessionShare?: SessionShareService
 }
 
@@ -420,6 +422,7 @@ export function createWsRouter({
   ptyInstances,
   killPtyInstance,
   workflowRegistry,
+  subagentTranscriptRegistry,
   sessionShare,
 }: CreateWsRouterArgs) {
   const sockets = new Set<ServerWebSocket<ClientState>>()
@@ -2126,6 +2129,11 @@ export function createWsRouter({
         case "workflows.getRun": {
           const run = workflowRegistry?.getRun(command.chatId, command.runId) ?? null
           send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: run })
+          return
+        }
+        case "subagents.getRun": {
+          const entries = subagentTranscriptRegistry?.getAgentTranscript(command.chatId, command.agentId) ?? []
+          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: entries })
           return
         }
       }

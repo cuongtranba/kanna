@@ -155,6 +155,12 @@ export interface StartClaudeSessionPtyArgs {
    * unregisters on cleanup.
    */
   workflowRegistry?: import("../workflow-registry").WorkflowRegistry
+  /**
+   * Optional registry for native Agent subagent transcripts. When set, the
+   * driver registers the chat's `…/subagents` dir (sibling of `…/workflows`)
+   * once the transcript file path is known, and unregisters on cleanup.
+   */
+  subagentTranscriptRegistry?: import("../subagent-transcript-registry").SubagentTranscriptRegistry
   /** Optional sampler override (tests inject deterministic values). */
   sampleProcessTreeUsage?: (pid: number) => Promise<ProcessTreeSample | null>
   /** Optional poll-interval override (ms). Defaults to 2000. */
@@ -522,6 +528,7 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
     }
     workflowRegistrationCancelled = true
     args.workflowRegistry?.unregister(args.chatId)
+    args.subagentTranscriptRegistry?.unregister(args.chatId)
   }
 
   function pushMerged(ev: HarnessEvent) {
@@ -724,6 +731,21 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
       if (!workflowRegistrationCancelled) registry.register(chatId, workflowsDir)
     }).catch((err) => {
       console.warn("[kanna/pty] workflowRegistry.register skipped: transcript file not found", { chatId: args.chatId, err })
+    })
+  }
+
+  // Register the sibling `…/subagents` dir so the UI can drill into a native
+  // Agent subagent's child transcript on demand (read-only; never feeds the
+  // turn pipeline). Same sessionUUID derivation + cancel guard as workflows.
+  if (args.subagentTranscriptRegistry) {
+    const subRegistry = args.subagentTranscriptRegistry
+    const chatId = args.chatId
+    void transcriptStream.filePath.then((filePath) => {
+      const sessionUUID = path.basename(filePath, ".jsonl")
+      const subagentsDir = path.join(projectDir, sessionUUID, "subagents")
+      if (!workflowRegistrationCancelled) subRegistry.register(chatId, subagentsDir)
+    }).catch((err) => {
+      console.warn("[kanna/pty] subagentTranscriptRegistry.register skipped: transcript file not found", { chatId: args.chatId, err })
     })
   }
 

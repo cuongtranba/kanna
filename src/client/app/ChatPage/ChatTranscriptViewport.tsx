@@ -5,6 +5,7 @@ import { AnimatedShinyText } from "../../components/ui/animated-shiny-text"
 import { DrainingIndicator } from "../../components/messages/DrainingIndicator"
 import { QueuedUserMessage } from "../../components/messages/QueuedUserMessage"
 import { OpenLocalLinkProvider, type OpenLocalLinkTarget } from "../../components/messages/shared"
+import { SubagentTranscriptFetchProvider, type GetSubagentTranscript } from "../../components/messages/subagent-fetch-context"
 import { ProcessingMessage } from "../../components/messages/ProcessingMessage"
 import { ContextMenu, ContextMenuTrigger } from "../../components/ui/context-menu"
 import { OpenExternalContextMenuContent } from "../../components/open-external-menu"
@@ -68,6 +69,7 @@ interface ChatTranscriptViewportProps {
   onCancelSubagentRun?: (chatId: string, runId: string) => void
   workflowRuns?: WorkflowRunSummary[]
   getWorkflowRunDetail?: (runId: string) => Promise<WorkflowRun | null>
+  getSubagentTranscript?: GetSubagentTranscript
   showScrollButton: boolean
   onIsAtEndChange: (isAtEnd: boolean) => void
   scrollToBottom: () => void
@@ -118,6 +120,7 @@ export const ChatTranscriptViewport = memo(function ChatTranscriptViewport({
   onCancelSubagentRun,
   workflowRuns,
   getWorkflowRunDetail,
+  getSubagentTranscript,
   showScrollButton,
   onIsAtEndChange,
   scrollToBottom,
@@ -375,6 +378,7 @@ export const ChatTranscriptViewport = memo(function ChatTranscriptViewport({
 
   return (
     <>
+      <SubagentTranscriptFetchProvider value={getSubagentTranscript ?? null}>
       <OpenLocalLinkProvider onOpenLocalLink={handleOpenLocalLinkClick}>
         <LegendList<ResolvedTranscriptRow>
           ref={listRef}
@@ -396,6 +400,7 @@ export const ChatTranscriptViewport = memo(function ChatTranscriptViewport({
           ListFooterComponent={listFooter}
         />
       </OpenLocalLinkProvider>
+      </SubagentTranscriptFetchProvider>
 
       <ContextMenu onOpenChange={(open) => {
         if (!open) {

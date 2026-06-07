@@ -1,13 +1,18 @@
-import { UserRound, ArrowUp } from "lucide-react"
+import { useCallback, useState } from "react"
+import { UserRound, ArrowUp, ChevronRight, Loader2 } from "lucide-react"
 import { cn } from "../../lib/utils"
 import { formatCompactDuration } from "../../lib/formatDuration"
 import { formatContextWindowTokens } from "../../lib/contextWindow"
-import type { SubagentTaskResult, SubagentToolStats } from "../../../shared/types"
+import { processTranscriptMessages } from "../../lib/parseTranscript"
+import type { HydratedTranscriptMessage, SubagentTaskResult, SubagentToolStats } from "../../../shared/types"
+import { SubagentEntryRow } from "./SubagentEntryRow"
+import { useSubagentTranscriptFetch } from "./subagent-fetch-context"
 
 interface Props {
   subagentType?: string
   result?: SubagentTaskResult
   isError?: boolean
+  localPath?: string | null
 }
 
 type StatusTone = "muted" | "active" | "destructive"
@@ -52,14 +57,45 @@ function summarizeToolStats(stats: SubagentToolStats | undefined): string {
   return parts.join(" · ")
 }
 
-export function SubagentTaskMessage({ subagentType, result, isError }: Props) {
+export function SubagentTaskMessage({ subagentType, result, isError, localPath }: Props) {
   const name = subagentType || "Agent"
   const tone = toneFor(result?.status, isError)
   const toolSummary = summarizeToolStats(result?.toolStats)
 
-  return (
+  const fetchTranscript = useSubagentTranscriptFetch()
+  const agentId = result?.agentId
+  const canExpand = Boolean(fetchTranscript && agentId)
+
+  const [expanded, setExpanded] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [loaded, setLoaded] = useState(false)
+  const [children, setChildren] = useState<HydratedTranscriptMessage[]>([])
+  const [error, setError] = useState<string | null>(null)
+
+  const onToggle = useCallback(() => {
+    if (!fetchTranscript || !agentId) return
+    const next = !expanded
+    setExpanded(next)
+    if (next && !loaded && !loading) {
+      setLoading(true)
+      setError(null)
+      fetchTranscript(agentId)
+        .then((entries) => {
+          setChildren(processTranscriptMessages(entries))
+          setLoaded(true)
+        })
+        .catch((err: unknown) => setError(err instanceof Error ? err.message : "Failed to load subagent transcript"))
+        .finally(() => setLoading(false))
+    }
+  }, [fetchTranscript, agentId, expanded, loaded, loading])
+
+  const header = (
     <div className="flex items-center gap-2 min-w-0">
-      <UserRound className="size-4 text-muted-icon shrink-0" />
+      {canExpand ? (
+        <ChevronRight className={cn("size-4 text-muted-icon shrink-0 transition-transform", expanded && "rotate-90")} aria-hidden />
+      ) : (
+        <UserRound className="size-4 text-muted-icon shrink-0" />
+      )}
       <div className="flex flex-1 items-center gap-2 min-w-0 overflow-hidden">
         <span className="font-medium text-foreground/80 text-sm truncate">{name}</span>
         {result?.status && (
@@ -82,7 +118,29 @@ export function SubagentTaskMessage({ subagentType, result, isError }: Props) {
         {toolSummary && (
           <span className="text-xs text-muted-foreground tabular-nums truncate">{toolSummary}</span>
         )}
+        {loading && <Loader2 className="size-3 animate-spin text-muted-foreground" aria-label="Loading" />}
       </div>
+    </div>
+  )
+
+  if (!canExpand) return header
+
+  return (
+    <div className="min-w-0">
+      <button type="button" onClick={onToggle} aria-expanded={expanded} className="w-full text-left cursor-pointer">
+        {header}
+      </button>
+      {expanded && (
+        <div className="mt-2 ml-2 border-l-2 border-muted-foreground/20 pl-3 space-y-2">
+          {error && <div className="text-xs text-destructive">{error}</div>}
+          {!error && loaded && children.length === 0 && (
+            <div className="text-xs text-muted-foreground">No subagent activity recorded.</div>
+          )}
+          {children.map((message) => (
+            <SubagentEntryRow key={message.id} message={message} localPath={localPath ?? ""} />
+          ))}
+        </div>
+      )}
     </div>
   )
 }

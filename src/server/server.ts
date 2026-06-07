@@ -46,6 +46,7 @@ import { TunnelLifecycle } from "./cloudflare-tunnel/lifecycle"
 import { initToolCallbackOnBoot, type ToolCallbackService } from "./tool-callback"
 import { SessionShareService } from "./session-share"
 import { createWorkflowRegistry } from "./workflow-registry"
+import { createSubagentTranscriptRegistry } from "./subagent-transcript-registry"
 import { listWorkflowRunDirs, readWorkflowDir, readWorkflowRunJournal, watchWorkflowDir, watchWorkflowRunDirs } from "./workflow-watch-io.adapter"
 import { SnapshotStore } from "./session-share/snapshot-store.adapter"
 import { handleShareApiRequest } from "./session-share/http-routes"
@@ -245,6 +246,7 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     watchRunDirs: (dir, onChange) => watchWorkflowRunDirs(dir, onChange),
     readRunJournal: readWorkflowRunJournal,
   })
+  const subagentTranscriptRegistry = createSubagentTranscriptRegistry()
   const reapedClaudePty = await claudePtyRegistry.reapStale()
   if (reapedClaudePty.length > 0) {
     console.log(`[kanna] reaped ${reapedClaudePty.length} orphan claude PTY process group(s) from previous run`)
@@ -424,6 +426,7 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     claudePtyRegistry,
     ptyInstanceRegistry,
     workflowRegistry,
+    subagentTranscriptRegistry,
     // Kanna is a personal-use tool on the developer's own machine. Tool calls
     // auto-allow at the kanna gate layer (the claude CLI itself runs with
     // `--dangerously-skip-permissions` so it doesn't gate either). The
@@ -470,6 +473,7 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     pushManager,
     ptyInstances: ptyInstanceRegistry,
     workflowRegistry,
+    subagentTranscriptRegistry,
     killPtyInstance: async (chatId: string) => {
       try {
         await agent.killPtyInstance(chatId)

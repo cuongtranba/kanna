@@ -278,6 +278,7 @@ export function ToolCallMessage({ message, isLoading = false, localPath, chatId 
             subagentType={message.input.subagentType}
             result={message.result}
             isError={message.isError}
+            localPath={localPath}
           />
         ) : (
           <>

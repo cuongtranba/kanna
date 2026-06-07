@@ -43,6 +43,7 @@ import {
 import { useWorkflowsStore, selectRuns } from "../../stores/workflowsStore"
 import { useShallow } from "zustand/react/shallow"
 import type { WorkflowRun } from "../../../shared/workflow-types"
+import type { TranscriptEntry } from "../../../shared/types"
 
 export {
   getIgnoreFolderEntryFromDiffPath,
@@ -764,6 +765,12 @@ export function ChatPage() {
     return state.socket.command<WorkflowRun | null>({ type: "workflows.getRun", chatId, runId })
   }, [state.activeChatId, state.socket])
 
+  const handleGetSubagentTranscript = useCallback(async (agentId: string): Promise<TranscriptEntry[]> => {
+    const chatId = state.activeChatId
+    if (!chatId) return []
+    return state.socket.command<TranscriptEntry[]>({ type: "subagents.getRun", chatId, agentId })
+  }, [state.activeChatId, state.socket])
+
   const shareShares = useShareStore((s) => s.listForChat(state.activeChatId ?? ""))
   const addShare = useShareStore((s) => s.addShare)
   const removeShare = useShareStore((s) => s.removeShare)
@@ -1019,6 +1026,7 @@ export function ChatPage() {
           onCancelSubagentRun={handleCancelSubagentRun}
           workflowRuns={workflowRuns.length > 0 ? workflowRuns : undefined}
           getWorkflowRunDetail={handleGetWorkflowRunDetail}
+          getSubagentTranscript={handleGetSubagentTranscript}
           showScrollButton={showScrollToBottom && state.messages.length > 0}
           onIsAtEndChange={onIsAtEndChange}
           scrollToBottom={() => scrollToTranscriptEnd(true)}

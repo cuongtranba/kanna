@@ -254,6 +254,7 @@ export type ClientCommand =
       runId: string
     }
   | { type: "workflows.getRun"; chatId: string; runId: string }
+  | { type: "subagents.getRun"; chatId: string; agentId: string }
   | {
       type: "message.enqueue"
       chatId: string
