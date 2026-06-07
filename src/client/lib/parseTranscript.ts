@@ -91,6 +91,14 @@ export function processTranscriptMessages(entries: TranscriptEntry[]): HydratedT
           requestId: entry.requestId,
         })
         break
+      case "policy_refusal":
+        messages.push({
+          ...createBaseMessage(entry),
+          kind: "policy_refusal",
+          text: entry.text,
+          requestId: entry.requestId,
+        })
+        break
       case "tool_call": {
         const toolCall = hydrateToolCall(entry)
         pendingToolCalls.set(entry.tool.toolId, { hydrated: toolCall, normalized: entry.tool })

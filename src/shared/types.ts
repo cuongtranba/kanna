@@ -1038,6 +1038,17 @@ export interface ApiErrorEntry extends TranscriptEntryBase {
   requestId?: string
 }
 
+// A deliberate model refusal (Claude CLI returns stop_reason "refusal" /
+// Usage-Policy block text) — distinct from a transport/overload api_error.
+// Surfaced as its own kind so the UI can label it "Blocked — Usage Policy"
+// instead of a generic red API-error card.
+// See adr-20260607-surface-policy-refusal-entry.
+export interface PolicyRefusalEntry extends TranscriptEntryBase {
+  kind: "policy_refusal"
+  text: string
+  requestId?: string
+}
+
 export interface ToolCallEntry extends TranscriptEntryBase {
   kind: "tool_call"
   tool: NormalizedToolCall
@@ -1277,6 +1288,7 @@ export type TranscriptEntry =
   | AccountInfoEntry
   | AssistantTextEntry
   | ApiErrorEntry
+  | PolicyRefusalEntry
   | ToolCallEntry
   | ToolResultEntry
   | ResultEntry
@@ -1430,6 +1442,7 @@ export type HydratedTranscriptMessage =
   | ({ kind: "account_info"; accountInfo: AccountInfo; id: string; messageId?: string; timestamp: string; hidden?: boolean })
   | ({ kind: "assistant_text"; text: string; id: string; messageId?: string; timestamp: string; hidden?: boolean })
   | ({ kind: "api_error"; status: number; text: string; requestId?: string; id: string; messageId?: string; timestamp: string; hidden?: boolean })
+  | ({ kind: "policy_refusal"; text: string; requestId?: string; id: string; messageId?: string; timestamp: string; hidden?: boolean })
   | ({ kind: "result"; success: boolean; cancelled?: boolean; result: string; durationMs: number; costUsd?: number; id: string; messageId?: string; timestamp: string; hidden?: boolean })
   | ({ kind: "status"; status: string; id: string; messageId?: string; timestamp: string; hidden?: boolean })
   | ({ kind: "context_window_updated"; usage: ContextWindowUsageSnapshot; id: string; messageId?: string; timestamp: string; hidden?: boolean })

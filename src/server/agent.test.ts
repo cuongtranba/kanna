@@ -306,6 +306,64 @@ describe("normalizeClaudeStreamMessage", () => {
       expect(entries[0].kind).toBe("api_error")
     })
   })
+
+  // A deliberate model refusal (Claude CLI: stop_reason "refusal" / Usage-Policy
+  // block) must surface as its own `policy_refusal` kind, NOT a generic red
+  // api_error card that reads like a transport failure.
+  // See adr-20260607-surface-policy-refusal-entry.
+  describe("policy refusal classification", () => {
+    const POLICY_TEXT =
+      "API Error: Claude Code is unable to respond to this request, which appears to violate our Usage Policy (https://www.anthropic.com/legal/aup). Request ID: req_011CboJxt7if3fGCx2YcYSKz"
+
+    test("stop_reason 'refusal' becomes a policy_refusal entry carrying the text", () => {
+      const entries = normalizeClaudeStreamMessage({
+        type: "assistant",
+        uuid: "msg-refusal-1",
+        isApiErrorMessage: true,
+        request_id: "req_011CboJxt7if3fGCx2YcYSKz",
+        message: {
+          model: "<synthetic>",
+          stop_reason: "refusal",
+          content: [{ type: "text", text: POLICY_TEXT }],
+        },
+      })
+      expect(entries).toHaveLength(1)
+      const entry = entries[0]
+      expect(entry.kind).toBe("policy_refusal")
+      if (entry.kind !== "policy_refusal") throw new Error("expected policy_refusal")
+      expect(entry.text).toContain("violate our Usage Policy")
+      expect(entry.requestId).toBe("req_011CboJxt7if3fGCx2YcYSKz")
+    })
+
+    test("Usage-Policy block text becomes policy_refusal even without stop_reason", () => {
+      const entries = normalizeClaudeStreamMessage({
+        type: "assistant",
+        uuid: "msg-refusal-2",
+        isApiErrorMessage: true,
+        message: {
+          model: "<synthetic>",
+          content: [{ type: "text", text: POLICY_TEXT }],
+        },
+      })
+      expect(entries).toHaveLength(1)
+      expect(entries[0].kind).toBe("policy_refusal")
+    })
+
+    test("a plain transport api_error stays api_error (not misclassified as refusal)", () => {
+      const entries = normalizeClaudeStreamMessage({
+        type: "assistant",
+        uuid: "msg-overload",
+        isApiErrorMessage: true,
+        apiErrorStatus: 529,
+        message: {
+          model: "<synthetic>",
+          content: [{ type: "text", text: "API Error: 529 Overloaded." }],
+        },
+      })
+      expect(entries).toHaveLength(1)
+      expect(entries[0].kind).toBe("api_error")
+    })
+  })
 })
 
 describe("attachment prompt helpers", () => {
