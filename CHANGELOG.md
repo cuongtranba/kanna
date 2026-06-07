@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.88.1](https://github.com/cuongtranba/kanna/compare/v0.88.0...v0.88.1) (2026-06-07)
+
+
+### Bug Fixes
+
+* **claude-pty:** follow transcript with pure tail-poll, drop fs.watch ([#392](https://github.com/cuongtranba/kanna/issues/392)) ([1b6f3f2](https://github.com/cuongtranba/kanna/commit/1b6f3f2cd2b62e1a219fe6525a3ac69494eee03e))
+
 ## [0.88.0](https://github.com/cuongtranba/kanna/compare/v0.87.0...v0.88.0) (2026-06-06)
 
 
