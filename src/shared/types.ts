@@ -1400,8 +1400,33 @@ export type HydratedEditFileToolCall =
 export type HydratedDeleteFileToolCall =
   HydratedToolCallBase<"delete_file", DeleteFileToolCall["input"], unknown>
 
+export interface SubagentToolStats {
+  readCount?: number
+  searchCount?: number
+  bashCount?: number
+  editFileCount?: number
+  linesAdded?: number
+  linesRemoved?: number
+  otherToolCount?: number
+}
+
+// Parsed from the `Agent`/`Task` tool_result's top-level `toolUseResult`
+// sidecar (camelCase, written by claude-code into the transcript JSONL and
+// preserved on the tool_result entry's debugRaw). All fields optional — the
+// SDK driver / older transcripts / in-flight calls may omit it entirely.
+export interface SubagentTaskResult {
+  agentId?: string
+  agentType?: string
+  status?: string
+  totalTokens?: number
+  totalDurationMs?: number
+  totalToolUseCount?: number
+  toolStats?: SubagentToolStats
+  content?: string
+}
+
 export type HydratedSubagentTaskToolCall =
-  HydratedToolCallBase<"subagent_task", SubagentTaskToolCall["input"], unknown>
+  HydratedToolCallBase<"subagent_task", SubagentTaskToolCall["input"], SubagentTaskResult>
 
 export type HydratedMcpGenericToolCall =
   HydratedToolCallBase<"mcp_generic", McpGenericToolCall["input"], unknown>

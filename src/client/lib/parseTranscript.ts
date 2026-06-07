@@ -1,5 +1,5 @@
 import { hydrateToolResult } from "../../shared/tools"
-import type { HydratedToolCall, HydratedTranscriptMessage, NormalizedToolCall, TranscriptEntry } from "../../shared/types"
+import type { HydratedToolCall, HydratedTranscriptMessage, NormalizedToolCall, SubagentTaskResult, SubagentToolStats, TranscriptEntry } from "../../shared/types"
 
 function createTimestamp(createdAt: number): string {
   return new Date(createdAt).toISOString()
@@ -37,6 +37,59 @@ function getStructuredToolResultFromDebug(entry: Extract<TranscriptEntry, { kind
   } catch {
     return undefined
   }
+}
+
+function num(v: unknown): number | undefined { return typeof v === "number" ? v : undefined }
+function str(v: unknown): string | undefined { return typeof v === "string" ? v : undefined }
+
+function parseSubagentToolStats(v: unknown): SubagentToolStats | undefined {
+  if (!v || typeof v !== "object") return undefined
+  const r = v as Record<string, unknown>
+  const stats: SubagentToolStats = {
+    readCount: num(r.readCount),
+    searchCount: num(r.searchCount),
+    bashCount: num(r.bashCount),
+    editFileCount: num(r.editFileCount),
+    linesAdded: num(r.linesAdded),
+    linesRemoved: num(r.linesRemoved),
+    otherToolCount: num(r.otherToolCount),
+  }
+  return Object.values(stats).some((n) => n !== undefined) ? stats : undefined
+}
+
+// The native `Agent`/`Task` tool_result carries a top-level `toolUseResult`
+// (camelCase) sidecar with the subagent run stats. Kanna persists the whole
+// message on the tool_result entry's debugRaw, so parse it back out defensively.
+// Returns undefined when absent (SDK driver / older transcripts / in-flight),
+// in which case the renderer falls back to the generic tool row.
+function getSubagentTaskResultFromDebug(
+  entry: Extract<TranscriptEntry, { kind: "tool_result" }>,
+): SubagentTaskResult | undefined {
+  if (!entry.debugRaw) return undefined
+  let sidecar: unknown
+  try {
+    sidecar = (JSON.parse(entry.debugRaw) as { toolUseResult?: unknown }).toolUseResult
+  } catch {
+    return undefined
+  }
+  if (!sidecar || typeof sidecar !== "object") return undefined
+  const r = sidecar as Record<string, unknown>
+  const result: SubagentTaskResult = {
+    agentId: str(r.agentId),
+    agentType: str(r.agentType),
+    status: str(r.status),
+    totalTokens: num(r.totalTokens),
+    totalDurationMs: num(r.totalDurationMs),
+    totalToolUseCount: num(r.totalToolUseCount),
+    toolStats: parseSubagentToolStats(r.toolStats),
+    content: str(r.content),
+  }
+  // Require at least one identifying/stat field so a malformed `{}` sidecar
+  // still falls back to the generic render.
+  const hasSignal = result.agentId !== undefined || result.agentType !== undefined
+    || result.totalTokens !== undefined || result.totalDurationMs !== undefined
+    || result.status !== undefined
+  return hasSignal ? result : undefined
 }
 
 export function processTranscriptMessages(entries: TranscriptEntry[]): HydratedTranscriptMessage[] {
@@ -123,7 +176,14 @@ export function processTranscriptMessages(entries: TranscriptEntry[]): HydratedT
             ? getStructuredToolResultFromDebug(entry) ?? entry.content
             : entry.content
 
-          pendingCall.hydrated.result = hydrateToolResult(pendingCall.normalized, rawResult) as never
+          if (pendingCall.normalized.toolKind === "subagent_task") {
+            // Prefer the structured toolUseResult sidecar (tokens/duration/
+            // stats); leave result undefined when absent so the renderer
+            // falls back to the generic subagent row.
+            pendingCall.hydrated.result = getSubagentTaskResultFromDebug(entry) as never
+          } else {
+            pendingCall.hydrated.result = hydrateToolResult(pendingCall.normalized, rawResult) as never
+          }
           pendingCall.hydrated.rawResult = rawResult
           pendingCall.hydrated.isError = entry.isError
           // Phase 5: propagate persisted-on-disk metadata so renderers

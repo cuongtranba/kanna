@@ -65,6 +65,53 @@ describe("processTranscriptMessages", () => {
     expect(messages[0].result).toEqual({ answers: { "Provider?": ["Codex"] } })
   })
 
+  test("hydrates the Agent subagent toolUseResult sidecar from debugRaw", () => {
+    const debugRaw = JSON.stringify({
+      type: "user",
+      message: { role: "user", content: [{ type: "tool_result", tool_use_id: "tool-agent", content: "done" }] },
+      toolUseResult: {
+        agentId: "a1a2af9cbe422f9b3",
+        agentType: "general-purpose",
+        status: "completed",
+        totalTokens: 17263,
+        totalDurationMs: 12700,
+        totalToolUseCount: 1,
+        toolStats: { readCount: 1, searchCount: 0, bashCount: 0, editFileCount: 0, linesAdded: 0, linesRemoved: 0, otherToolCount: 0 },
+        content: "final reply",
+      },
+    })
+    const messages = processTranscriptMessages([
+      entry({
+        kind: "tool_call",
+        tool: { kind: "tool", toolKind: "subagent_task", toolName: "Agent", toolId: "tool-agent", input: { subagentType: "general-purpose" } },
+      }),
+      entry({ kind: "tool_result", toolId: "tool-agent", content: "done", debugRaw }),
+    ])
+
+    expect(messages[0]?.kind).toBe("tool")
+    if (messages[0]?.kind !== "tool" || messages[0].toolKind !== "subagent_task") throw new Error("unexpected message")
+    const r = messages[0].result
+    expect(r?.agentType).toBe("general-purpose")
+    expect(r?.totalTokens).toBe(17263)
+    expect(r?.totalDurationMs).toBe(12700)
+    expect(r?.status).toBe("completed")
+    expect(r?.toolStats?.readCount).toBe(1)
+    expect(r?.content).toBe("final reply")
+  })
+
+  test("Agent tool with no toolUseResult sidecar leaves result undefined (fallback)", () => {
+    const messages = processTranscriptMessages([
+      entry({
+        kind: "tool_call",
+        tool: { kind: "tool", toolKind: "subagent_task", toolName: "Agent", toolId: "tool-agent2", input: { subagentType: "general-purpose" } },
+      }),
+      entry({ kind: "tool_result", toolId: "tool-agent2", content: "raw text result" }),
+    ])
+    expect(messages[0]?.kind).toBe("tool")
+    if (messages[0]?.kind !== "tool" || messages[0].toolKind !== "subagent_task") throw new Error("unexpected message")
+    expect(messages[0].result).toBeUndefined()
+  })
+
   test("hydrates discarded prompt tool results", () => {
     const messages = processTranscriptMessages([
       entry({

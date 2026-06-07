@@ -8,6 +8,7 @@ import { AnimatedShinyText } from "../ui/animated-shiny-text"
 import { formatBashCommandTitle, toTitleCase } from "../../lib/formatters"
 import { FileContentView } from "./FileContentView"
 import { WorkflowMessage } from "./WorkflowMessage"
+import { SubagentTaskMessage } from "./SubagentTaskMessage"
 import { useWorkflowsStore, selectRuns } from "../../stores/workflowsStore"
 import type { WorkflowToolResult } from "../../../shared/types"
 
@@ -272,6 +273,12 @@ export function ToolCallMessage({ message, isLoading = false, localPath, chatId 
               />
             )
           })()
+        ) : message.toolKind === "subagent_task" && message.result ? (
+          <SubagentTaskMessage
+            subagentType={message.input.subagentType}
+            result={message.result}
+            isError={message.isError}
+          />
         ) : (
           <>
             <div className={`w-5 h-5 relative flex items-center justify-center`}>
