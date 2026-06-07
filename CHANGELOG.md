@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.90.0](https://github.com/cuongtranba/kanna/compare/v0.89.0...v0.90.0) (2026-06-07)
+
+
+### Features
+
+* **transcript:** expandable nested child transcript for native Agent calls ([174d011](https://github.com/cuongtranba/kanna/commit/174d011083f76b04dd29fc1fcf0bc30c32fe0333))
+* **transcript:** expandable nested child transcript for native Agent calls ([7a504f0](https://github.com/cuongtranba/kanna/commit/7a504f0a6862354c06cc6b8d833bf6143b97df59))
+* **transcript:** summary card for native Agent subagent tool calls ([69a44a2](https://github.com/cuongtranba/kanna/commit/69a44a25cc35257390c6ffe180b848cd3eb1158b))
+* **transcript:** summary card for native Agent subagent tool calls ([dff35c0](https://github.com/cuongtranba/kanna/commit/dff35c0277687e2bd27cef2ac15956c36da72a66))
+
+
+### Bug Fixes
+
+* **pty:** gate follow-up prompt on TUI-ready to stop silent hang ([#401](https://github.com/cuongtranba/kanna/issues/401)) ([50bcf85](https://github.com/cuongtranba/kanna/commit/50bcf85ec965ee42931fdc39604f6e18f058c8fb))
+* **tool-callback:** dedup duplicate AskUserQuestion prompts on long wait ([46c4dac](https://github.com/cuongtranba/kanna/commit/46c4dacdbccd99ad4a819f1c908ea02cb1dda5ef))
+* **tool-callback:** dedup duplicate AskUserQuestion prompts on long wait ([6f7c0cb](https://github.com/cuongtranba/kanna/commit/6f7c0cb245bb1a724a2ae65e7f31ad201167cfd3))
+
 ## [0.89.0](https://github.com/cuongtranba/kanna/compare/v0.88.1...v0.89.0) (2026-06-07)
 
 
