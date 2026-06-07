@@ -149,7 +149,17 @@ Anthropic changes the dialog wording).
 
 **TUI ready signal:** Driver polls the output ring for the input-box marker
 `❯ ` before sending the first prompt. Hard cap defaults to 3000 ms
-(`KANNA_PTY_TUI_BOOT_MS`).
+(`KANNA_PTY_TUI_BOOT_MS`). **Follow-up turns gate too
+(adr-20260607-pty-followup-tui-ready-gate):** `sendPrompt` (the interactive
+follow-up handler) waits for the same `❯ ` marker + ring-quiet settle before
+pasting — after a long previous turn the REPL may still be rendering
+(stop-hook summary / turn_duration / context compaction) and silently swallow
+a paste, hanging the turn forever with no transcript line (observed: an "Ok"
+follow-up that never reached claude). Cap defaults to `KANNA_PTY_TUI_BOOT_MS`,
+overridable via `KANNA_PTY_FOLLOWUP_READY_MS`. Best-effort: on cap timeout the
+driver warns and pastes anyway, so it is never worse than the prior zero-gate
+path. Channel-push delivery (one-shot / keep-alive subagents) is unaffected —
+it has its own `channelClientReady` readiness.
 
 **Transcript watch:** `tui-source.adapter.ts` follows the transcript with a
 single 50 ms tail-poll (`stat`-size diff read on the append-only JSONL). There
@@ -243,6 +253,9 @@ the same rotation/retry path the SDK driver uses on thrown stream errors.
 - `KANNA_MCP_TOOL_CALLBACKS=1` — route built-in shims through durable approval.
 - `KANNA_PTY_TRUST_DISMISS=enabled|disabled` — trust-dialog dismiss (default `enabled`).
 - `KANNA_PTY_TUI_BOOT_MS=3000` — hard cap on TUI-ready wait (default `3000`).
+- `KANNA_PTY_FOLLOWUP_READY_MS` — hard cap on the follow-up-turn TUI-ready
+  gate in `sendPrompt` (default = `KANNA_PTY_TUI_BOOT_MS` / 3000). On timeout
+  the driver warns and pastes anyway.
 - `CLAUDE_CODE_OAUTH_TOKEN` — set by driver from pool, NOT a user env var.
 - `KANNA_PTY_CHANNEL_DELIVERY=enabled|disabled` — for one-shot (subagent) PTY
   spawns, deliver the prompt via a `notifications/claude/channel` push instead
