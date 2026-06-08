@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.91.0](https://github.com/cuongtranba/kanna/compare/v0.90.1...v0.91.0) (2026-06-08)
+
+
+### Features
+
+* **subagent:** per-subagent folder restriction (workingDir + allowedPaths) ([#404](https://github.com/cuongtranba/kanna/issues/404)) ([f4e5af3](https://github.com/cuongtranba/kanna/commit/f4e5af39ff7f4a40901781c7e83a71f613be1b35))
+
+
+### Bug Fixes
+
+* **mobile:** left-edge swipe opens sidebar instead of going back ([#406](https://github.com/cuongtranba/kanna/issues/406)) ([cfe4452](https://github.com/cuongtranba/kanna/commit/cfe445222ff79412d041ecebc6e0e9ba25b9fcd6))
+
 ## [0.90.1](https://github.com/cuongtranba/kanna/compare/v0.90.0...v0.90.1) (2026-06-08)
 
 
