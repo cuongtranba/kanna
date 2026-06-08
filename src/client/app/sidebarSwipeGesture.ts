@@ -1,11 +1,17 @@
 import { useEffect } from "react"
 
 export const SIDEBAR_SWIPE_MOBILE_BREAKPOINT_PX = 768
-export const SIDEBAR_SWIPE_OPEN_START_MIN_X = 20
+// Open gesture may start at the very left edge (x = 0): we suppress the
+// browser/PWA native back gesture in this band via shouldPreventNativeBack,
+// so the edge swipe opens the panel instead of navigating back.
+export const SIDEBAR_SWIPE_OPEN_START_MIN_X = 0
 export const SIDEBAR_SWIPE_OPEN_START_MAX_X = 60
 export const SIDEBAR_SWIPE_MIN_HORIZONTAL_PX = 60
 export const SIDEBAR_SWIPE_HORIZONTAL_RATIO = 1.5
 export const SIDEBAR_SWIPE_MAX_DURATION_MS = 500
+// Horizontal travel (px) at which an in-progress move is committed enough to
+// claim the gesture from the native back/forward swipe via preventDefault().
+export const SIDEBAR_SWIPE_PREVENT_MIN_DX = 8
 
 export type SwipePoint = {
   x: number
@@ -48,6 +54,35 @@ export function evaluateSidebarSwipe(
   return null
 }
 
+/**
+ * Decide, mid-gesture, whether to call preventDefault() on the touchmove so the
+ * browser/PWA native edge swipe-back (or swipe-forward) does not steal the
+ * gesture. Returns true only for the same horizontal motions evaluateSidebarSwipe
+ * would later resolve to "open" / "close", so vertical scrolling and unrelated
+ * swipes keep their default behaviour.
+ */
+export function shouldPreventNativeBack(
+  start: SwipePoint,
+  current: SwipePoint,
+  ctx: SwipeGestureContext
+): boolean {
+  if (ctx.viewportWidth >= SIDEBAR_SWIPE_MOBILE_BREAKPOINT_PX) return false
+
+  const dx = current.x - start.x
+  const dy = current.y - start.y
+
+  if (Math.abs(dx) < SIDEBAR_SWIPE_PREVENT_MIN_DX) return false
+  if (Math.abs(dx) <= Math.abs(dy)) return false
+
+  // Opening: rightward swipe from the left-edge band claims the native back.
+  if (!ctx.sidebarOpen) {
+    return dx > 0 && start.x <= SIDEBAR_SWIPE_OPEN_START_MAX_X
+  }
+
+  // Closing: leftward swipe while the sidebar is open claims native forward/back.
+  return dx < 0
+}
+
 type UseSidebarSwipeGestureParams = {
   sidebarOpen: boolean
   onOpen: () => void
@@ -70,6 +105,22 @@ export function useSidebarSwipeGesture({ sidebarOpen, onOpen, onClose }: UseSide
       start = { x: touch.clientX, y: touch.clientY, t: event.timeStamp }
     }
 
+    function handleTouchMove(event: TouchEvent) {
+      const startPoint = start
+      if (!startPoint) return
+      if (event.touches.length !== 1) return
+      const touch = event.touches[0]
+      if (!touch) return
+      const prevent = shouldPreventNativeBack(
+        startPoint,
+        { x: touch.clientX, y: touch.clientY, t: event.timeStamp },
+        { sidebarOpen, viewportWidth: window.innerWidth }
+      )
+      // Claim the gesture from the native edge swipe-back so the move resolves
+      // to opening/closing the sidebar instead of navigating history.
+      if (prevent && event.cancelable) event.preventDefault()
+    }
+
     function handleTouchEnd(event: TouchEvent) {
       const startPoint = start
       start = null
@@ -90,11 +141,14 @@ export function useSidebarSwipeGesture({ sidebarOpen, onOpen, onClose }: UseSide
     }
 
     window.addEventListener("touchstart", handleTouchStart, { passive: true })
+    // Non-passive so preventDefault() can suppress the native edge swipe-back.
+    window.addEventListener("touchmove", handleTouchMove, { passive: false })
     window.addEventListener("touchend", handleTouchEnd, { passive: true })
     window.addEventListener("touchcancel", handleTouchCancel, { passive: true })
 
     return () => {
       window.removeEventListener("touchstart", handleTouchStart)
+      window.removeEventListener("touchmove", handleTouchMove)
       window.removeEventListener("touchend", handleTouchEnd)
       window.removeEventListener("touchcancel", handleTouchCancel)
     }
