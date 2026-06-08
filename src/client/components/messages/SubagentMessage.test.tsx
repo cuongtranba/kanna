@@ -67,6 +67,20 @@ describe("SubagentMessage", () => {
     expect(html).toContain("Done.")
   })
 
+  test("card root is a chat selection zone so text stays selectable", () => {
+    // Regression: subagent cards lacked data-chat-selection-zone, so the
+    // sticky-focus pointerup handler restored composer focus and cleared the
+    // user's text selection inside a subagent run card.
+    const html = renderToStaticMarkup(
+      <SubagentMessage
+        run={makeRunSnapshot({ status: "completed", finalText: "selectable subagent text" })}
+        indentDepth={0}
+        localPath="/tmp"
+      />,
+    )
+    expect(html).toContain("data-chat-selection-zone")
+  })
+
   test("indentDepth controls left margin", () => {
     const html = renderToStaticMarkup(
       <SubagentMessage
