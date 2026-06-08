@@ -2958,6 +2958,43 @@ export class AgentCoordinator {
           pendingPromptSeqs: [...session.pendingPromptSeqs],
         })
 
+        // PTY-only: the Kanna-injected proactive `/compact` turn never emits a
+        // terminal `result`/`turn_duration` under the interactive TUI — it
+        // writes only a `system/compact_boundary` line (confirmed in the
+        // on-disk transcript). Without a result, the normal finalize path below
+        // (kind === "result") never runs, so the active turn and its
+        // `proactiveCompactInjection` flag linger forever — permanently wedging
+        // `dequeue()` ("Cannot remove queued message while compact is running")
+        // and the queued-message drain. Treat the boundary as the compact
+        // turn's completion: finalize like the SDK result path and drain the
+        // queued user message the compact made room for. The SDK driver is
+        // excluded because there a real `result` still follows; finalizing here
+        // would double-finalize and corrupt the trailing result's seq
+        // accounting. See adr-20260608-pty-compact-boundary-dequeue-finalize.
+        if (
+          event.entry.kind === "compact_boundary"
+          && active?.proactiveCompactInjection
+          && !active.cancelRequested
+          && this.resolveClaudeDriverPreference() === "pty"
+        ) {
+          active.hasFinalResult = true
+          await this.store.recordTurnFinished(session.chatId)
+          await this.store.setCompactFailureCount(session.chatId, 0)
+          // The compact prompt's seq never gets shifted (no result event), so
+          // drop it here — otherwise the next real turn's result would shift
+          // this stale seq and FIFO-mismatch, wedging that turn. Mirrors
+          // cancel()'s pending-seq drain.
+          if (active.claudePromptSeq != null) {
+            const idx = session.pendingPromptSeqs.indexOf(active.claudePromptSeq)
+            if (idx >= 0) session.pendingPromptSeqs.splice(idx, 1)
+          }
+          this.activeTurns.delete(session.chatId)
+          this.oauthPool?.release(session.chatId)
+          await this.maybeStartNextQueuedMessage(session.chatId)
+          this.emitStateChange(session.chatId)
+          continue
+        }
+
         if (event.entry.kind === "result" && active && completedClaudePromptSeq === (active.claudePromptSeq ?? null)) {
           active.hasFinalResult = true
           // True once a rate-limit / auth-error was routed through

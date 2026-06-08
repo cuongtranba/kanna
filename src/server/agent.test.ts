@@ -3073,6 +3073,105 @@ describe("AgentCoordinator claude integration", () => {
 
     events.close()
   })
+
+  // Regression (adr-20260608-pty-compact-boundary-dequeue-finalize): under the
+  // PTY driver the interactive `/compact` writes a `compact_boundary` line but
+  // NO terminal `result`/`turn_duration`, so the compact turn never finalized —
+  // its `proactiveCompactInjection` active turn lingered forever, permanently
+  // wedging `dequeue()` and the queued-message drain. The boundary must now
+  // finalize the compact turn and drain the queue.
+  test("PTY: compact_boundary finalizes the proactive compact turn and drains the queue", async () => {
+    const events = new AsyncEventQueue<any>()
+    const prompts: string[] = []
+    let releaseBoundary!: () => void
+    const boundaryGate = new Promise<void>((resolve) => { releaseBoundary = resolve })
+
+    const store = createFakeStore()
+    store.chat.provider = "claude"
+    store.chat.sessionTokensByProvider = { claude: "sess-huge" }
+    store.messages.push(timestamped({
+      kind: "context_window_updated",
+      usage: { usedTokens: 180_000, maxTokens: 200_000, compactsAutomatically: false },
+    }))
+
+    const coordinator = new AgentCoordinator({
+      store: store as never,
+      onStateChange: () => {},
+      // Force the PTY driver so the compact_boundary finalize branch is active;
+      // the PTY path uses the injected startClaudeSessionPTY (not the SDK one).
+      getAppSettingsSnapshot: () => ({ claudeDriver: { preference: "pty" } }),
+      startClaudeSession: async () => {
+        throw new Error("SDK driver must not be used under PTY preference")
+      },
+      startClaudeSessionPTY: async () => ({
+        provider: "claude",
+        stream: events,
+        getAccountInfo: async () => null,
+        interrupt: async () => {},
+        close: () => {},
+        setModel: async () => {},
+        setPermissionMode: async () => {},
+        getSupportedCommands: async () => [],
+        sendPrompt: async (content: string) => {
+          prompts.push(content)
+          if (content === "/compact") {
+            // PTY `/compact` emits ONLY a compact_boundary — never a result.
+            // Defer it past the mid-flight dequeue probe below.
+            void boundaryGate.then(() => events.push({
+              type: "transcript" as const,
+              entry: timestamped({ kind: "compact_boundary" }),
+            }))
+            return
+          }
+          // The real prompt (drained after compact) completes normally.
+          events.push({
+            type: "transcript" as const,
+            entry: timestamped({
+              kind: "result",
+              subtype: "success",
+              isError: false,
+              durationMs: 0,
+              result: "done",
+            }),
+          })
+        },
+      }),
+    })
+
+    const sendResult = await coordinator.send({
+      type: "chat.send",
+      chatId: "chat-1",
+      provider: "claude",
+      content: "user's real prompt",
+      model: "claude-opus-4-7",
+    })
+
+    expect(sendResult).toMatchObject({ queued: true })
+    expect(store.queuedMessages.length).toBe(1)
+    const queuedId = store.queuedMessages[0].id
+
+    // Bug repro: while the compact turn is open, dequeue is blocked.
+    await expect(
+      coordinator.dequeue({
+        type: "message.dequeue",
+        chatId: "chat-1",
+        queuedMessageId: queuedId,
+      })
+    ).rejects.toThrow(/compact is running/)
+
+    // compact_boundary arrives (no result follows, as in real PTY).
+    releaseBoundary()
+
+    // The fix finalizes the compact turn on the boundary and drains the queue:
+    // the real prompt runs and the queued message is gone.
+    await waitFor(() => prompts.length >= 2, 2000)
+    expect(prompts).toEqual(["/compact", "user's real prompt"])
+    expect(store.queuedMessages.length).toBe(0)
+    // Both turns finalized (compact via boundary, real prompt via result).
+    await waitFor(() => store.turnFinishedCount >= 2, 2000)
+
+    events.close()
+  })
 })
 
 describe("AgentCoordinator.ensureSlashCommandsLoaded", () => {
