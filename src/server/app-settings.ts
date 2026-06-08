@@ -380,6 +380,49 @@ function normalizeUploadSettings(value: unknown, warnings: string[]): UploadSett
   return { maxFileSizeMb }
 }
 
+function validateSubagentRestriction(
+  provider: "claude" | "codex",
+  workingDir: string | undefined,
+  allowedPaths: string[] | undefined,
+): SubagentValidationError | null {
+  const hasRestriction = workingDir !== undefined || allowedPaths !== undefined
+  if (!hasRestriction) return null
+  if (provider === "codex") {
+    return {
+      code: "RESTRICTION_NOT_SUPPORTED",
+      message: "workingDir / allowedPaths are not supported for codex subagents",
+    }
+  }
+  const validateRelativePath = (raw: string, field: string): SubagentValidationError | null => {
+    const trimmed = raw.trim()
+    if (!trimmed) {
+      return { code: "INVALID_PATH", message: `${field} must not be empty` }
+    }
+    if (trimmed.startsWith("/") || trimmed.startsWith("~")) {
+      return { code: "INVALID_PATH", message: `${field} '${trimmed}' must be relative to parent cwd` }
+    }
+    const segments = trimmed.split(/[/\\]/)
+    if (segments.includes("..")) {
+      return { code: "PATH_ESCAPE", message: `${field} '${trimmed}' must not contain '..'` }
+    }
+    return null
+  }
+  if (workingDir !== undefined) {
+    const err = validateRelativePath(workingDir, "workingDir")
+    if (err) return err
+  }
+  if (allowedPaths !== undefined) {
+    if (allowedPaths.length === 0) {
+      return { code: "EMPTY_ALLOWED_PATHS", message: "allowedPaths must be non-empty when set" }
+    }
+    for (const p of allowedPaths) {
+      const err = validateRelativePath(p, "allowedPaths entry")
+      if (err) return err
+    }
+  }
+  return null
+}
+
 function validateSubagentName(
   rawName: string,
   existingIds: { id: string; name: string }[],
@@ -430,6 +473,10 @@ function normalizeSubagentEntry(value: unknown, warnings: string[]): Subagent | 
     : normalizeCodexPreference({ model, modelOptions: rawModelOptions }).modelOptions
   const contextScope: SubagentContextScope =
     source.contextScope === "full-transcript" ? "full-transcript" : "previous-assistant-reply"
+  const workingDir = typeof source.workingDir === "string" && source.workingDir.length > 0 ? source.workingDir : undefined
+  const allowedPaths = Array.isArray(source.allowedPaths)
+    ? source.allowedPaths.filter((p): p is string => typeof p === "string" && p.length > 0)
+    : undefined
   return {
     id: source.id.trim(),
     name: source.name.trim(),
@@ -439,6 +486,8 @@ function normalizeSubagentEntry(value: unknown, warnings: string[]): Subagent | 
     modelOptions,
     systemPrompt: typeof source.systemPrompt === "string" ? source.systemPrompt : "",
     contextScope,
+    workingDir,
+    allowedPaths: allowedPaths && allowedPaths.length > 0 ? allowedPaths : undefined,
     createdAt: typeof source.createdAt === "number" && Number.isFinite(source.createdAt) ? source.createdAt : Date.now(),
     updatedAt: typeof source.updatedAt === "number" && Number.isFinite(source.updatedAt) ? source.updatedAt : Date.now(),
   }
@@ -1028,6 +1077,8 @@ function applyPatch(state: AppSettingsState, patch: AppSettingsPatch): AppSettin
     const input = patch.subagents.create
     const error = validateSubagentName(input.name, state.subagents.map((s) => ({ id: s.id, name: s.name })))
     if (error) throw new SubagentValidationException(error)
+    const restrictionError = validateSubagentRestriction(input.provider, input.workingDir, input.allowedPaths)
+    if (restrictionError) throw new SubagentValidationException(restrictionError)
     const now = Date.now()
     nextSubagents = [
       ...state.subagents,
@@ -1040,6 +1091,8 @@ function applyPatch(state: AppSettingsState, patch: AppSettingsPatch): AppSettin
         modelOptions: input.modelOptions,
         systemPrompt: input.systemPrompt,
         contextScope: input.contextScope,
+        workingDir: input.workingDir,
+        allowedPaths: input.allowedPaths && input.allowedPaths.length > 0 ? input.allowedPaths : undefined,
         createdAt: now,
         updatedAt: now,
       },
@@ -1056,6 +1109,15 @@ function applyPatch(state: AppSettingsState, patch: AppSettingsPatch): AppSettin
       const error = validateSubagentName(nextName, state.subagents.map((s) => ({ id: s.id, name: s.name })), id)
       if (error) throw new SubagentValidationException(error)
     }
+    const nextProvider = subagentPatch.provider ?? existing.provider
+    const nextWorkingDir = subagentPatch.workingDir === null
+      ? undefined
+      : subagentPatch.workingDir !== undefined ? subagentPatch.workingDir : existing.workingDir
+    const nextAllowedPaths = subagentPatch.allowedPaths === null
+      ? undefined
+      : subagentPatch.allowedPaths !== undefined ? subagentPatch.allowedPaths : existing.allowedPaths
+    const restrictionError = validateSubagentRestriction(nextProvider, nextWorkingDir, nextAllowedPaths)
+    if (restrictionError) throw new SubagentValidationException(restrictionError)
     const merged: Subagent = {
       ...existing,
       ...subagentPatch,
@@ -1066,6 +1128,16 @@ function applyPatch(state: AppSettingsState, patch: AppSettingsPatch): AppSettin
           ? subagentPatch.description.trim() || undefined
           : existing.description,
       modelOptions: { ...existing.modelOptions, ...(subagentPatch.modelOptions ?? {}) } as Subagent["modelOptions"],
+      workingDir: subagentPatch.workingDir === null
+        ? undefined
+        : subagentPatch.workingDir !== undefined
+          ? subagentPatch.workingDir
+          : existing.workingDir,
+      allowedPaths: subagentPatch.allowedPaths === null
+        ? undefined
+        : subagentPatch.allowedPaths !== undefined
+          ? subagentPatch.allowedPaths
+          : existing.allowedPaths,
       updatedAt: Date.now(),
     }
     nextSubagents = [...state.subagents.slice(0, index), merged, ...state.subagents.slice(index + 1)]

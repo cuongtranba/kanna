@@ -32,6 +32,8 @@ import { EventStore } from "./event-store"
 import type { AnalyticsReporter } from "./analytics"
 import { NoopAnalyticsReporter } from "./analytics"
 import { CodexAppServerManager } from "./codex-app-server"
+import { resolveSubagentRoots } from "./paths"
+import { realpathAdapter } from "./paths-fs.adapter"
 import { type GenerateChatTitleResult, generateTitleForChatDetailed } from "./generate-title"
 import type { HarnessEvent, HarnessToolRequest, HarnessTurn } from "./harness-types"
 import {
@@ -126,6 +128,9 @@ const CLAUDE_TOOLSET = [
   "EnterPlanMode",
   "ExitPlanMode",
 ] as const
+
+/** Native FS tools the SDK driver disallows when a subagent is folder-restricted. */
+const SDK_RESTRICTED_FS_NATIVE_TOOLS = ["Read", "Edit", "Write", "Bash", "Glob", "Grep", "WebFetch"] as const
 
 interface PendingToolRequest {
   toolUseId: string
@@ -262,6 +267,8 @@ interface AgentCoordinatorArgs {
     customMcpServers?: readonly McpServerConfig[]
     /** Backs the `schedule_wakeup` MCP tool. Omit to hide the tool. */
     scheduleWakeup?: (a: { delayMs: number; prompt: string }) => Promise<string | null>
+    /** Folder-restricted subagent: disallow native FS tools + allowlist mcp__kanna__* + per-run path-deny scope. */
+    restrictedAllowedPaths?: string[]
   }) => Promise<ClaudeSessionHandle>
   startClaudeSessionPTY?: (args: StartClaudeSessionPtyArgs) => Promise<ClaudeSessionHandle>
   claudeLimitDetector?: LimitDetector
@@ -1072,6 +1079,8 @@ async function startClaudeSession(args: {
   scheduleWakeup?: (a: { delayMs: number; prompt: string }) => Promise<string | null>
   /** Enabled user MCP servers, merged into the SDK's mcpServers map. */
   customMcpServers?: readonly McpServerConfig[]
+  /** Folder-restricted subagent: disallow native FS tools, allowlist mcp__kanna__*, per-run path-deny. */
+  restrictedAllowedPaths?: string[]
 }): Promise<ClaudeSessionHandle> {
   const canUseTool = buildCanUseTool({
     localPath: args.localPath,
@@ -1097,7 +1106,9 @@ async function startClaudeSession(args: {
       forkSession: args.forkSession,
       permissionMode: args.planMode ? "plan" : "acceptEdits",
       canUseTool,
-      tools: [...CLAUDE_TOOLSET],
+      tools: args.restrictedAllowedPaths && args.restrictedAllowedPaths.length > 0
+        ? CLAUDE_TOOLSET.filter((t) => !SDK_RESTRICTED_FS_NATIVE_TOOLS.includes(t as typeof SDK_RESTRICTED_FS_NATIVE_TOOLS[number]))
+        : [...CLAUDE_TOOLSET],
       mcpServers: {
         [KANNA_MCP_SERVER_NAME]: createKannaMcpServer({
           projectId: args.projectId,
@@ -1110,6 +1121,7 @@ async function startClaudeSession(args: {
           subagentOrchestrator: args.subagentOrchestrator,
           delegationContext: args.delegationContext,
           scheduleWakeup: args.scheduleWakeup,
+          restrictedAllowedPaths: args.restrictedAllowedPaths,
         }),
         ...buildUserMcpServers(args.customMcpServers ?? []),
       },
@@ -2670,6 +2682,7 @@ export class AgentCoordinator {
                 ptyInstanceRegistry: this.ptyInstanceRegistry ?? undefined,
           workflowRegistry: this.workflowRegistry ?? undefined,
           customMcpServers: this.getEnabledCustomMcpServers(),
+          restrictedAllowedPaths: a.restrictedAllowedPaths,
         })
       }
       return this.startClaudeSessionFn({ ...a, customMcpServers: this.getEnabledCustomMcpServers() })
@@ -2691,6 +2704,9 @@ export class AgentCoordinator {
     const project = this.store.getProject(chat.projectId)
     if (!project) throw new Error(`Project ${chat.projectId} not found for chat ${args.chatId}`)
     const spawn = resolveSpawnPaths(chat, project.localPath)
+    const restriction = args.subagent.workingDir !== undefined || args.subagent.allowedPaths !== undefined
+      ? resolveSubagentRoots(spawn.cwd, args.subagent.workingDir, args.subagent.allowedPaths, realpathAdapter)
+      : null
 
     const onToolRequest = async (request: HarnessToolRequest): Promise<unknown> => {
       if (request.tool.toolKind !== "ask_user_question"
@@ -2744,8 +2760,9 @@ export class AgentCoordinator {
       userInstruction: args.userInstruction,
       runId: args.runId,
       abortSignal: args.abortSignal,
-      cwd: spawn.cwd,
+      cwd: restriction?.cwd ?? spawn.cwd,
       additionalDirectories: spawn.additionalDirectories,
+      allowedPaths: restriction?.allowedPaths,
       projectId: project.id,
       startClaudeSession: this.buildClaudeSubagentStarter(),
       subagentOrchestrator: this.subagentOrchestrator,

@@ -509,6 +509,105 @@ describe("subagent CRUD", () => {
     mgr.dispose()
   })
 
+  test("restriction rejects absolute path with INVALID_PATH", async () => {
+    const filePath = await createTempFilePath()
+    const mgr = trackManager(new AppSettingsManager(filePath))
+    await mgr.initialize()
+    const result = await mgr.createSubagent(baseInput({ name: "abs", workingDir: "/etc" }))
+    expect(result).toMatchObject({ code: "INVALID_PATH" })
+    mgr.dispose()
+  })
+
+  test("restriction rejects parent-escape with PATH_ESCAPE", async () => {
+    const filePath = await createTempFilePath()
+    const mgr = trackManager(new AppSettingsManager(filePath))
+    await mgr.initialize()
+    const result = await mgr.createSubagent(baseInput({ name: "escape", allowedPaths: ["../other"] }))
+    expect(result).toMatchObject({ code: "PATH_ESCAPE" })
+    mgr.dispose()
+  })
+
+  test("restriction rejects empty allowedPaths array", async () => {
+    const filePath = await createTempFilePath()
+    const mgr = trackManager(new AppSettingsManager(filePath))
+    await mgr.initialize()
+    const result = await mgr.createSubagent(baseInput({ name: "empty", allowedPaths: [] }))
+    expect(result).toMatchObject({ code: "EMPTY_ALLOWED_PATHS" })
+    mgr.dispose()
+  })
+
+  test("restriction on codex subagent rejected with RESTRICTION_NOT_SUPPORTED", async () => {
+    const filePath = await createTempFilePath()
+    const mgr = trackManager(new AppSettingsManager(filePath))
+    await mgr.initialize()
+    const result = await mgr.createSubagent(baseInput({
+      name: "codex-restricted",
+      provider: "codex",
+      model: "gpt-5-codex",
+      modelOptions: { reasoningEffort: "medium", fastMode: false },
+      workingDir: "docs",
+    }))
+    expect(result).toMatchObject({ code: "RESTRICTION_NOT_SUPPORTED" })
+    mgr.dispose()
+  })
+
+  test("restriction validation applied on update too", async () => {
+    const filePath = await createTempFilePath()
+    const mgr = trackManager(new AppSettingsManager(filePath))
+    await mgr.initialize()
+    const created = await mgr.createSubagent(baseInput({ name: "updme" }))
+    if (!("id" in created)) throw new Error("setup failed")
+    const result = await mgr.updateSubagent(created.id, { workingDir: "/etc" })
+    expect(result).toMatchObject({ code: "INVALID_PATH" })
+    mgr.dispose()
+  })
+
+  test("restriction fields round-trip and clear via null patch", async () => {
+    const filePath = await createTempFilePath()
+    const mgr = trackManager(new AppSettingsManager(filePath))
+    await mgr.initialize()
+
+    const created = await mgr.createSubagent(baseInput({
+      name: "restricted",
+      workingDir: "docs",
+      allowedPaths: ["docs", "wiki"],
+    }))
+    if (!("id" in created)) throw new Error("setup failed")
+    expect(created.workingDir).toBe("docs")
+    expect(created.allowedPaths).toEqual(["docs", "wiki"])
+
+    const cleared = await mgr.updateSubagent(created.id, { workingDir: null, allowedPaths: null })
+    if (!("id" in cleared)) throw new Error("clear failed")
+    expect(cleared.workingDir).toBeUndefined()
+    expect(cleared.allowedPaths).toBeUndefined()
+    mgr.dispose()
+  })
+
+  test("old settings (no restriction fields) load with undefined fields", async () => {
+    const filePath = await createTempFilePath()
+    const legacy = {
+      subagents: [{
+        id: "legacy-1",
+        name: "legacy",
+        provider: "claude",
+        model: "claude-opus-4-7",
+        modelOptions: { reasoningEffort: "medium", contextWindow: "1m" },
+        systemPrompt: "old",
+        contextScope: "previous-assistant-reply",
+        createdAt: 1,
+        updatedAt: 1,
+      }],
+    }
+    await Bun.write(filePath, JSON.stringify(legacy))
+    const mgr = trackManager(new AppSettingsManager(filePath))
+    await mgr.initialize()
+    const loaded = mgr.getSnapshot().subagents[0]
+    expect(loaded?.id).toBe("legacy-1")
+    expect(loaded?.workingDir).toBeUndefined()
+    expect(loaded?.allowedPaths).toBeUndefined()
+    mgr.dispose()
+  })
+
   test("CRUD round-trip survives reload", async () => {
     const filePath = await createTempFilePath()
     const mgr = trackManager(new AppSettingsManager(filePath))

@@ -428,6 +428,44 @@ function SubagentForm(props: SubagentFormProps) {
         />
       </FormRow>
 
+      {draft.provider === "claude" ? (
+        <>
+          <FormRow
+            label="Working directory"
+            hint="Optional. Relative to the parent chat cwd. Restricts the subagent's filesystem access to this subtree."
+          >
+            <Input
+              data-testid="subagent-form-working-dir"
+              value={draft.workingDir ?? ""}
+              onChange={(event) => {
+                const v = event.target.value
+                patchDraft({ workingDir: v.length > 0 ? v : undefined })
+              }}
+              placeholder="docs"
+            />
+          </FormRow>
+
+          <FormRow
+            label="Allowed paths"
+            hint="Optional. Newline-separated, relative to the parent chat cwd. When set, file tools can only read/write inside these roots."
+          >
+            <Textarea
+              data-testid="subagent-form-allowed-paths"
+              value={(draft.allowedPaths ?? []).join("\n")}
+              onChange={(event) => {
+                const lines = event.target.value
+                  .split(/\r?\n/)
+                  .map((l) => l.trim())
+                  .filter((l) => l.length > 0)
+                patchDraft({ allowedPaths: lines.length > 0 ? lines : undefined })
+              }}
+              placeholder={"docs\nwiki"}
+              rows={3}
+            />
+          </FormRow>
+        </>
+      ) : null}
+
       <footer className="flex flex-wrap items-center justify-end gap-2 pt-2">
         <Button variant="ghost" size="sm" onClick={props.onCancelEditing}>Cancel</Button>
         {props.mode === "edit" ? (
@@ -621,7 +659,17 @@ export function toSubagentInput(subagent: Subagent): SubagentInput {
     modelOptions: subagent.modelOptions,
     systemPrompt: subagent.systemPrompt,
     contextScope: subagent.contextScope,
+    workingDir: subagent.workingDir,
+    allowedPaths: subagent.allowedPaths,
   }
+}
+
+const stringArrayEqual = (a: string[] | undefined, b: string[] | undefined): boolean => {
+  if (a === b) return true
+  if (!a || !b) return false
+  if (a.length !== b.length) return false
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false
+  return true
 }
 
 export function isSubagentDraftDirty(draft: SubagentInput, baseline: SubagentInput): boolean {
@@ -631,6 +679,8 @@ export function isSubagentDraftDirty(draft: SubagentInput, baseline: SubagentInp
   if (draft.model !== baseline.model) return true
   if (draft.systemPrompt !== baseline.systemPrompt) return true
   if (draft.contextScope !== baseline.contextScope) return true
+  if ((draft.workingDir ?? "") !== (baseline.workingDir ?? "")) return true
+  if (!stringArrayEqual(draft.allowedPaths, baseline.allowedPaths)) return true
   return !shallowEqualModelOptions(draft.modelOptions, baseline.modelOptions)
 }
 

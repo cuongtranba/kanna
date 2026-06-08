@@ -160,6 +160,11 @@ export type ChatProviderPreferences = {
 
 export type SubagentContextScope = "previous-assistant-reply" | "full-transcript"
 
+export interface SubagentRestriction {
+  workingDir?: string
+  allowedPaths?: string[]
+}
+
 export interface Subagent {
   id: string
   name: string
@@ -169,6 +174,8 @@ export interface Subagent {
   modelOptions: ClaudeModelOptions | CodexModelOptions
   systemPrompt: string
   contextScope: SubagentContextScope
+  workingDir?: string
+  allowedPaths?: string[]
   createdAt: number
   updatedAt: number
 }
@@ -181,6 +188,8 @@ export interface SubagentInput {
   modelOptions: ClaudeModelOptions | CodexModelOptions
   systemPrompt: string
   contextScope: SubagentContextScope
+  workingDir?: string
+  allowedPaths?: string[]
 }
 
 export interface SubagentPatch {
@@ -191,6 +200,8 @@ export interface SubagentPatch {
   modelOptions?: Partial<ClaudeModelOptions> | Partial<CodexModelOptions>
   systemPrompt?: string
   contextScope?: SubagentContextScope
+  workingDir?: string | null
+  allowedPaths?: string[] | null
 }
 
 export type SubagentValidationErrorCode =
@@ -200,6 +211,10 @@ export type SubagentValidationErrorCode =
   | "DUPLICATE_NAME"
   | "TOO_LONG"
   | "NOT_FOUND"
+  | "RESTRICTION_NOT_SUPPORTED"
+  | "INVALID_PATH"
+  | "PATH_ESCAPE"
+  | "EMPTY_ALLOWED_PATHS"
 
 export interface SubagentValidationError {
   code: SubagentValidationErrorCode

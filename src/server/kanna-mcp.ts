@@ -74,6 +74,13 @@ export interface KannaMcpArgs extends OfferDownloadArgs {
    * register the 8 built-in shims — those stay gated on the env flag.
    */
   forceInteractiveToolCallbacks?: boolean
+  /**
+   * Folder-restricted subagent: per-run allowlist of absolute path roots. When
+   * set, the kanna-mcp shims (read/glob/grep/bash/edit/write) auto-deny any
+   * path resolving outside the listed roots. Empty / unset = no extra check.
+   * Layered on top of the per-chat readPathDeny / writePathDeny.
+   */
+  restrictedAllowedPaths?: readonly string[]
 }
 
 export interface ResolvedOfferDownload {
@@ -501,6 +508,7 @@ export function buildKannaMcpTools(args: KannaMcpArgs): SdkMcpToolDefinition<any
               toolUseId,
               cwd,
               chatPolicy,
+              restrictedAllowedPaths: args.restrictedAllowedPaths,
             })
           },
         ),

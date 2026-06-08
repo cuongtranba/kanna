@@ -1,6 +1,6 @@
 ---
 id: c3-225
-c3-seal: f6729f933a463b5c8c4f5f490b512e41cd1d0362700c7a0301300f35351182a9
+c3-seal: 6416eadec0eae318a3d9f7016dbdcced2f25c99daff088a2f8091d58c3487665
 title: claude-pty-driver
 type: component
 category: feature
@@ -80,6 +80,7 @@ Owns the Claude CLI PTY transport: spawns the `claude` subprocess (after the smo
 | Keep-alive multi-turn | IN/OUT | When StartClaudeSessionPtyArgs.keepAlive is set, the first result does NOT trigger oneShotClose so the REPL stays open; the handle exposes pushChannelPrompt(text) to deliver subsequent turns via the same channel push (after a short REPL idle beat). buildChannelPromptFraming(keepAlive) appends plural channel framing so the model expects multiple channel messages over the session. Drives c3-210 LiveTurnSource turns | c3-210 | src/server/claude-pty/driver.ts |
 | Dev-channels CLI flag | OUT | One-shot spawns append --dangerously-load-development-channels server:kanna so the channel handler registers in the spawned claude | c3-226 | src/server/claude-pty/pty-cli-args.ts |
 | Live-status registry upserts | OUT | Driver upserts PtyInstanceState (phase, pid, model, account, rssBytes, rssPeakBytes, cpuPercent, cpuPeakPercent) into PtyInstanceRegistry; ws-router fans deltas to subscribed clients. Resource sampler ticks every 2 s (configurable via memorySamplerIntervalMs) using sampleProcessTreeUsage which shells one ps -A -o pid=,ppid=,rss=,pcpu= per tick and sums RSS + CPU% across child + descendants; interval cleared on cleanupResources. Teardown is pid-scoped: cleanupResources captures the handle's own pid and uses markExitedIfCurrent(chatId, pid, …) + on-disk ptyRegistry.unregister(pid) so a stale re-spawn handle (same chatId+sessionId via --resume, older pid) cannot clobber the live entry. Orphan reap kills by process SUBTREE (killProcessTree), never by process group — the PTY child is not guaranteed to be its own pgid leader under a supervisor like PM2 | c3-102 | src/server/claude-pty/pty-instance-registry.ts, src/server/claude-pty/pid-registry.adapter.ts, src/server/claude-pty/pty-memory-sampler.adapter.ts, src/server/claude-pty/driver.ts |
+| Subagent restriction args | IN | StartClaudeSessionPtyArgs.restrictedAllowedPaths gates folder-restricted subagent spawns: buildPtyCliArgs(restricted) extends PTY_DISALLOWED_NATIVE_TOOLS with RESTRICTED_FS_NATIVE_TOOLS (Read Edit Write Bash Glob Grep WebFetch) and emits --tools mcp__kanna__* allowlist; driver forwards the same allowedPaths to kanna-mcp host so c3-226 enforces per-run path-deny | c3-210 | src/server/claude-pty/driver.ts |
 
 ## Change Safety
 

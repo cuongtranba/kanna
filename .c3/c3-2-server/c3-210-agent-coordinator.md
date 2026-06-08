@@ -1,7 +1,7 @@
 ---
 id: c3-210
 c3-version: 4
-c3-seal: a596727ab20c5c0c03592aead2ee06f349aef950cf04de1f8ff3fe2bb729d6f4
+c3-seal: 477dba2c66ed12d9ef8a1df35606d56a18d36d5fa8e71195afdd5e27b14878c0
 title: agent-coordinator
 type: component
 category: feature
@@ -81,6 +81,7 @@ Owns the agent turn lifecycle: receives `chat.send` commands, picks the provider
 | closeLiveRun(chatId, runId, reason) | IN | Tears down a live session (close REPL, cleanup RunState, onRunTerminal); also driven by idle timeout + cancel cascade | c3-226 | src/server/subagent-orchestrator.ts |
 | LiveTurnSource | OUT | Provider-run handle returned after keep-alive turn 1 — runTurn (push + drain one turn) + close; keeps the persistent HarnessEvent iterator open | c3-225 | src/server/subagent-provider-run.ts |
 | findSubagent(id) | IN | Snapshot lookup used by the MCP host to reject keep_alive for non-claude subagents | c3-226 | src/server/subagent-orchestrator.ts |
+| Subagent restriction threading | IN | buildSubagentProviderRunForChat resolves Subagent.workingDir + allowedPaths via c3-204 resolveSubagentRoots (with realpathAdapter), overrides spawn cwd, and passes restrictedAllowedPaths into BuildSubagentProviderRunArgs → startClaudeSession; both PTY (c3-225) and SDK paths forward the same list into c3-226 kanna-mcp host for per-run path-deny + into the driver for shim-only tool gating | c3-225 | src/server/agent.ts, src/server/subagent-provider-run.ts |
 
 ## Change Safety
 

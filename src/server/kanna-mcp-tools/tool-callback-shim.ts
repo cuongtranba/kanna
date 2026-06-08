@@ -7,6 +7,8 @@ export interface ToolHandlerContext {
   toolUseId: string
   cwd: string
   chatPolicy: ChatPermissionPolicy
+  /** Folder-restricted subagent: per-run absolute path-root allowlist. Undefined = no extra check. */
+  restrictedAllowedPaths?: readonly string[]
 }
 
 export interface ToolHandlerResult {
@@ -34,6 +36,7 @@ export async function gatedToolCall(args: GatedToolCallArgs): Promise<ToolHandle
     args: args.args,
     chatPolicy: args.ctx.chatPolicy,
     cwd: args.ctx.cwd,
+    restrictedAllowedPaths: args.ctx.restrictedAllowedPaths,
   })
   if (res.decision.kind === "allow" || res.decision.kind === "answer") {
     return await args.formatAnswer(res.decision.payload)

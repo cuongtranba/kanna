@@ -32,9 +32,17 @@ export interface BuildSubagentProviderRunArgs {
   runId: string
   /** Abort signal from the run's AbortController; triggers cancellation of the provider session. */
   abortSignal: AbortSignal
-  /** Project cwd shared with the parent chat. */
+  /** Project cwd shared with the parent chat — overridden when subagent declares workingDir. */
   cwd: string
   additionalDirectories?: string[]
+  /**
+   * Resolved allowed filesystem roots when the subagent declares
+   * workingDir / allowedPaths. When set, the spawn must force shim-only tool
+   * mode (disallow native FS tools, allowlist mcp__kanna__*) and the kanna-mcp
+   * host registers a per-run path-deny scope keyed on runId. Undefined =
+   * no restriction (legacy behaviour).
+   */
+  allowedPaths?: string[]
   /**
    * Subset of `AgentCoordinatorArgs["startClaudeSession"]` (`agent.ts:148-172`).
    * Subagents intentionally omit `tunnelGateway` — they don't tunnel-route.
@@ -57,6 +65,7 @@ export interface BuildSubagentProviderRunArgs {
     initialPrompt?: string
     subagentOrchestrator?: SubagentOrchestrator
     delegationContext?: KannaMcpDelegationContext
+    restrictedAllowedPaths?: string[]
   }) => Promise<ClaudeSessionHandle>
   /** Optional — propagated into the subagent's own kanna-mcp so it can call `delegate_subagent`. */
   subagentOrchestrator?: SubagentOrchestrator
@@ -154,6 +163,7 @@ async function runClaudeSubagent(opts: {
     initialPrompt,
     subagentOrchestrator: args.subagentOrchestrator,
     delegationContext: args.delegationContext,
+    restrictedAllowedPaths: args.allowedPaths,
   })
   args.abortSignal.addEventListener("abort", () => { session.interrupt() }, { once: true })
 

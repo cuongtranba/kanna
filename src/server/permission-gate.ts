@@ -12,6 +12,22 @@ export interface EvaluateArgs {
   args: Record<string, unknown>
   chatPolicy: ChatPermissionPolicy
   cwd: string
+  /**
+   * Folder-restricted subagent: per-run absolute path-root allowlist. When
+   * set, any path resolving outside ALL roots returns auto-deny BEFORE the
+   * chat-level readPathDeny / writePathDeny checks. Empty / unset = no extra
+   * restriction (legacy behaviour).
+   */
+  restrictedAllowedPaths?: readonly string[]
+}
+
+export function pathInsideAllowedRoots(absPath: string, roots: readonly string[]): boolean {
+  for (const root of roots) {
+    if (absPath === root) return true
+    const rel = path.relative(root, absPath)
+    if (rel !== "" && !rel.startsWith("..") && !path.isAbsolute(rel)) return true
+  }
+  return false
 }
 
 export interface EvaluateResult {
@@ -136,9 +152,25 @@ export const policy = {
     if (INTERACTIVE_TOOLS.has(args.toolName)) {
       return { verdict: "ask", reason: "interactive tool: always asks the user" }
     }
+    const roots = args.restrictedAllowedPaths && args.restrictedAllowedPaths.length > 0
+      ? args.restrictedAllowedPaths
+      : null
+    const checkRestrictedPath = (p: string): EvaluateResult | null => {
+      if (!roots) return null
+      const expanded = p.startsWith("~")
+        ? path.join(homedir(), p.slice(1).replace(/^\//, ""))
+        : p
+      const resolved = path.resolve(args.cwd, expanded)
+      if (!pathInsideAllowedRoots(resolved, roots)) {
+        return { verdict: "auto-deny", reason: `restrictedAllowedPaths: ${p}` }
+      }
+      return null
+    }
     if (READ_PATH_TOOLS.has(args.toolName)) {
       const p = getPathArg(args.args)
       if (p !== null) {
+        const restricted = checkRestrictedPath(p)
+        if (restricted) return restricted
         const expanded = p.startsWith("~")
           ? path.join(homedir(), p.slice(1).replace(/^\//, ""))
           : p
@@ -152,6 +184,8 @@ export const policy = {
     if (WRITE_PATH_TOOLS.has(args.toolName)) {
       const p = getPathArg(args.args)
       if (p !== null) {
+        const restricted = checkRestrictedPath(p)
+        if (restricted) return restricted
         const expanded = p.startsWith("~")
           ? path.join(homedir(), p.slice(1).replace(/^\//, ""))
           : p
@@ -195,6 +229,9 @@ export const policy = {
         return { verdict: fallback, reason: "bash command has env prefix" }
       }
       for (const p of parsed.paths) {
+        if (roots && !pathInsideAllowedRoots(p, roots)) {
+          return { verdict: "auto-deny", reason: `restrictedAllowedPaths: ${p}` }
+        }
         const denied = pathMatchesDeny(p, args.chatPolicy.readPathDeny)
         if (denied) {
           return { verdict: "auto-deny", reason: `readPathDeny: ${denied}` }

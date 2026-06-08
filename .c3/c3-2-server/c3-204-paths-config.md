@@ -1,7 +1,7 @@
 ---
 id: c3-204
 c3-version: 4
-c3-seal: 973197301d01c80d833fed35bbf2e94abc02ba22ba3065e5215cb93db9a33fcb
+c3-seal: c7f4554b449d6f6fe110a42dc0fdd31825e6b2d51bb5de14de36272977934386
 title: paths-config
 type: component
 category: foundation
@@ -61,6 +61,8 @@ Owns the canonical mapping of data dir, JSONL event logs, snapshot files, settin
 | --- | --- | --- | --- | --- |
 | paths.* helpers | OUT | Returns absolute paths within data dir | c3-206 | src/server/paths.ts |
 | Machine identity helper | OUT | Stable per-machine id from data dir | c3-218 | src/server/paths.ts |
+| resolveSubagentRoots | OUT | Resolves workingDir + allowedPaths against parent cwd via injected realpath fn; rejects absolute paths, tilde, parent-escape (lexical + realpath); returns { cwd, allowedPaths } with canonical absolute roots | c3-210 | src/server/paths.ts |
+| paths-fs.adapter realpathAdapter | OUT | Sole node:fs realpath wrapper feeding resolveSubagentRoots; defensive fallback to input on errno | c3-204 | src/server/paths-fs.adapter.ts |
 
 ## Change Safety
 

@@ -1,6 +1,6 @@
 ---
 id: c3-226
-c3-seal: d7870fc861e8bb32b6a3419e83ab7589feabb155cc50386e131eb0b45b732c2d
+c3-seal: addf142198af41b17353e8e0a38f2074a6241952478b94acc3d4957594c4e754
 title: kanna-mcp-host
 type: component
 category: feature
@@ -90,12 +90,13 @@ the approval protocol clears.
 | mcp__kanna__* tool surface | OUT | Set of MCP tools published to Claude/Codex; envelope matches MCP spec; KANNA_MCP_TOOL_CALLBACKS flag selects which shims register | c3-210 | src/server/kanna-mcp.ts |
 | Loopback HTTP MCP server | IN | HTTP endpoint Claude PTY/SDK attaches via --mcp-config; bound to 127.0.0.1 only | c3-202 | src/server/kanna-mcp-http.ts |
 | Durable approval protocol | IN/OUT | Register pending request, push to UI, await resolution; pendings survive process restart and replay as pending_tool_request entries. Surface methods: submit, answer, cancel, cancelAllForChat, recoverOnStartup. createToolCallbackService accepts an onStateChange(chatId) hook fired after every persisted state change inside submit's persistPut and answer/cancel/cancelAllForChat's persistResolve; server.ts wires this to router.scheduleChatStateBroadcast so the UI receives pending_tool_request the same tick the model emits the tool_use. Pendings resolve through three explicit paths: user answer, ws-router cancelAllForChat triggered by chat.cancel and chat.delete, or recoverOnStartup fail-close on server boot. | c3-208 | src/server/tool-callback.ts |
-| Path deny enforcement | IN | readPathDeny + writePathDeny reject paths outside allowed roots before shim execution | c3-204 | src/server/permission-gate.ts |
+| Path deny enforcement | IN | readPathDeny + writePathDeny reject paths outside allowed roots before shim execution; layered with per-run KannaMcpArgs.restrictedAllowedPaths so folder-restricted subagent spawns auto-deny any path resolving outside their allowed roots BEFORE the chat-level deny check (permission-gate pathInsideAllowedRoots) | c3-204 | src/server/permission-gate.ts |
 | Channel notification push | OUT | McpServer declares experimental capabilities claude/channel + claude/channel/permission; exposes pushChannelPrompt(content) which sends a single notifications/claude/channel notification, and channelClientReady which resolves when the spawned claude has acknowledged channel registration. Used by one-shot subagent PTY spawns (c3-225) to deliver the initial prompt without typing it into the TUI | c3-225 | src/server/kanna-mcp-http.ts, src/server/claude-pty/channel-notification.ts |
 | delegate_subagent keep_alive param | OUT | keep_alive boolean on delegate_subagent. When true and the target is a Claude subagent, the run stays live and the reply text carries the live run_id; non-claude targets return isError. Routes to c3-210 delegateRun with keepAlive | c3-210 | src/server/kanna-mcp.ts, src/server/kanna-mcp-tools/delegate-subagent.ts |
 | send_subagent_message tool | OUT | Takes run_id plus prompt, drives one follow-up turn into a live keep-alive session, blocks until that turn finishes, returns the subagent reply text or isError NO_LIVE_SESSION. Routes to c3-210 sendToLiveRun | c3-210 | src/server/kanna-mcp.ts |
 | close_subagent tool | OUT | Takes run_id, closes a live keep-alive session and frees its process. Routes to c3-210 closeLiveRun | c3-210 | src/server/kanna-mcp.ts |
 | schedule_wakeup tool | OUT | Takes delay_seconds plus prompt, arms a Kanna-owned agent_wakeup schedule via c3-210 scheduleAgentWakeup, returns the schedule_id or isError when the per-chat runaway cap is reached. Registered only when a scheduleWakeup callback is supplied, mirroring the delegate_subagent guard. Replaces the native ScheduleWakeup the PTY driver disallows | c3-227 | src/server/kanna-mcp.ts |
+| Per-run path-deny scope | IN | KannaMcpArgs.restrictedAllowedPaths threads through the kanna-mcp host into every shim ctx (ToolHandlerContext.restrictedAllowedPaths) and onto ToolCallbackSubmitArgs / EvaluateArgs; permission-gate.policy.evaluate auto-denies any read/write/bash path resolving outside the listed roots; lifetime is the subagent run (cleared with the spawn) | c3-225 | src/server/kanna-mcp.ts, src/server/permission-gate.ts, src/server/tool-callback.ts |
 
 ## Change Safety
 

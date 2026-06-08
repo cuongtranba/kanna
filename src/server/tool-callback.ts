@@ -32,6 +32,8 @@ export interface ToolCallbackSubmitArgs {
   args: Record<string, unknown>
   chatPolicy: ChatPermissionPolicy
   cwd: string
+  /** Folder-restricted subagent: per-run absolute path-root allowlist. Forwarded to policy.evaluate. */
+  restrictedAllowedPaths?: readonly string[]
 }
 
 export interface ToolCallbackResult {
@@ -211,6 +213,7 @@ export function createToolCallbackService(opts: ToolCallbackServiceArgs): ToolCa
         args: args.args,
         chatPolicy: args.chatPolicy,
         cwd: args.cwd,
+        restrictedAllowedPaths: args.restrictedAllowedPaths,
       })
       const now = opts.now()
       const req: ToolRequest = {

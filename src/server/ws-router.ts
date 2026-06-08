@@ -552,6 +552,12 @@ export function createWsRouter({
               ? undefined
               : patch.subagents.update.patch.description ?? subagent.description,
             modelOptions: { ...subagent.modelOptions, ...(patch.subagents.update.patch.modelOptions ?? {}) } as Subagent["modelOptions"],
+            workingDir: patch.subagents.update.patch.workingDir === null
+              ? undefined
+              : patch.subagents.update.patch.workingDir ?? subagent.workingDir,
+            allowedPaths: patch.subagents.update.patch.allowedPaths === null
+              ? undefined
+              : patch.subagents.update.patch.allowedPaths ?? subagent.allowedPaths,
             updatedAt: Date.now(),
           }
         : subagent)

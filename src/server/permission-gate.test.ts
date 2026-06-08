@@ -277,3 +277,85 @@ describe("regex try/catch guard", () => {
     expect(result.verdict).toBe("ask")
   })
 })
+
+describe("policy.evaluate restrictedAllowedPaths", () => {
+  test("read inside root passes", () => {
+    const v = policy.evaluate({
+      toolName: "mcp__kanna__read",
+      args: { path: "docs/foo.md" },
+      chatPolicy: { ...POLICY_DEFAULT, defaultAction: "auto-allow" },
+      cwd: "/repo/kanna",
+      restrictedAllowedPaths: ["/repo/kanna/docs"],
+    })
+    expect(v.verdict).toBe("auto-allow")
+  })
+
+  test("read outside root → auto-deny restrictedAllowedPaths", () => {
+    const v = policy.evaluate({
+      toolName: "mcp__kanna__read",
+      args: { path: "../other/secret.txt" },
+      chatPolicy: { ...POLICY_DEFAULT, defaultAction: "auto-allow" },
+      cwd: "/repo/kanna",
+      restrictedAllowedPaths: ["/repo/kanna/docs"],
+    })
+    expect(v.verdict).toBe("auto-deny")
+    expect(v.reason).toMatch(/restrictedAllowedPaths/)
+  })
+
+  test("write outside root → auto-deny", () => {
+    const v = policy.evaluate({
+      toolName: "mcp__kanna__edit",
+      args: { path: "/etc/passwd" },
+      chatPolicy: { ...POLICY_DEFAULT, defaultAction: "auto-allow" },
+      cwd: "/repo/kanna",
+      restrictedAllowedPaths: ["/repo/kanna/docs"],
+    })
+    expect(v.verdict).toBe("auto-deny")
+    expect(v.reason).toMatch(/restrictedAllowedPaths/)
+  })
+
+  test("bash path arg outside root → auto-deny", () => {
+    const v = policy.evaluate({
+      toolName: "mcp__kanna__bash",
+      args: { command: "cat /etc/passwd" },
+      chatPolicy: { ...POLICY_DEFAULT, defaultAction: "auto-allow", bash: { autoAllowVerbs: ["cat"] } },
+      cwd: "/repo/kanna",
+      restrictedAllowedPaths: ["/repo/kanna/docs"],
+    })
+    expect(v.verdict).toBe("auto-deny")
+    expect(v.reason).toMatch(/restrictedAllowedPaths/)
+  })
+
+  test("bash path arg inside root passes", () => {
+    const v = policy.evaluate({
+      toolName: "mcp__kanna__bash",
+      args: { command: "cat docs/readme.md" },
+      chatPolicy: { ...POLICY_DEFAULT, defaultAction: "auto-allow", bash: { autoAllowVerbs: ["cat"] } },
+      cwd: "/repo/kanna",
+      restrictedAllowedPaths: ["/repo/kanna/docs"],
+    })
+    expect(v.verdict).toBe("auto-allow")
+  })
+
+  test("multiple roots: pass when path matches any root", () => {
+    const v = policy.evaluate({
+      toolName: "mcp__kanna__read",
+      args: { path: "wiki/guide.md" },
+      chatPolicy: { ...POLICY_DEFAULT, defaultAction: "auto-allow" },
+      cwd: "/repo/kanna",
+      restrictedAllowedPaths: ["/repo/kanna/docs", "/repo/kanna/wiki"],
+    })
+    expect(v.verdict).toBe("auto-allow")
+  })
+
+  test("no restriction (undefined) falls back to legacy chat-level deny", () => {
+    const v = policy.evaluate({
+      toolName: "mcp__kanna__read",
+      args: { path: "../other/secret.txt" },
+      chatPolicy: { ...POLICY_DEFAULT, defaultAction: "auto-allow" },
+      cwd: "/repo/kanna",
+    })
+    // no restriction + no chat-level deny → falls through to auto-allow
+    expect(v.verdict).toBe("auto-allow")
+  })
+})

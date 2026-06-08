@@ -165,7 +165,25 @@ export interface StartClaudeSessionPtyArgs {
   sampleProcessTreeUsage?: (pid: number) => Promise<ProcessTreeSample | null>
   /** Optional poll-interval override (ms). Defaults to 2000. */
   memorySamplerIntervalMs?: number
+  /**
+   * When set, this spawn is a folder-restricted subagent run. Drives:
+   *   1. extends PTY_DISALLOWED_NATIVE_TOOLS with Read/Edit/Write/Bash/Glob/Grep/WebFetch
+   *      so the model cannot reach the FS via the native built-ins
+   *   2. emits `--tools "mcp__kanna__*"` allowlist so only kanna-mcp shims are usable
+   *   3. registers a per-run path-deny scope in the kanna-mcp host keyed on the
+   *      delegationContext.parentRunId (see toolCallback / permission-gate)
+   */
+  restrictedAllowedPaths?: string[]
 }
+
+/**
+ * Native FS tools disallowed when a subagent is folder-restricted. Layered ON TOP
+ * of {@link PTY_DISALLOWED_NATIVE_TOOLS} (which is always disallowed). Mirrors
+ * the SDK driver's `restrictedDisallowedTools` set.
+ */
+export const RESTRICTED_FS_NATIVE_TOOLS = [
+  "Read", "Edit", "Write", "Bash", "Glob", "Grep", "WebFetch",
+] as const
 
 /**
  * Derive an AccountInfo from the picked OAuth-pool token. The claude CLI
@@ -233,6 +251,8 @@ export interface BuildPtyCliArgsInput {
   /** When set, registers this MCP server as a dev channel so the host can
    *  push prompts via notifications/claude/channel (subagent one-shot only). */
   channelServerName?: string
+  /** When true, layer FS restriction: disallow native FS tools + allowlist `mcp__kanna__*`. */
+  restricted?: boolean
 }
 
 /**
@@ -293,10 +313,19 @@ export function buildPtyCliArgs(args: BuildPtyCliArgsInput): string[] {
       `server:${args.channelServerName}`,
     )
   }
+  if (args.restricted) {
+    // Folder-restricted subagent: allowlist kanna shims only so the model
+    // cannot reach the FS via native built-ins. Push BEFORE --disallowedTools
+    // so the disallow flag's variadic tail does not swallow the allowlist.
+    cliArgs.push("--tools", "mcp__kanna__*")
+  }
   // `--disallowedTools` is variadic in the claude CLI (space-separated tool
   // strings as separate argv — code.claude.com/docs/en/cli-reference). Push
   // it LAST so it cannot greedily swallow a subsequent flag value.
-  cliArgs.push("--disallowedTools", ...PTY_DISALLOWED_NATIVE_TOOLS)
+  const disallow: readonly string[] = args.restricted
+    ? [...PTY_DISALLOWED_NATIVE_TOOLS, ...RESTRICTED_FS_NATIVE_TOOLS]
+    : PTY_DISALLOWED_NATIVE_TOOLS
+  cliArgs.push("--disallowedTools", ...disallow)
   return cliArgs
 }
 
@@ -437,6 +466,7 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
         // with --disallowedTools AskUserQuestion ExitPlanMode above so the
         // model uses the shim instead of the auto-rejected native built-in.
         forceInteractiveToolCallbacks: true,
+        restrictedAllowedPaths: args.restrictedAllowedPaths,
       },
     })
     await writeRuntimeFile(
@@ -472,6 +502,7 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
     systemPromptAppend: args.systemPromptAppend,
     mcpConfigPath,
     channelServerName: channelDeliveryEnabled ? KANNA_MCP_SERVER_NAME : undefined,
+    restricted: Boolean(args.restrictedAllowedPaths && args.restrictedAllowedPaths.length > 0),
   })
 
   let closed = false
