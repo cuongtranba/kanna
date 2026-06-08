@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.90.1](https://github.com/cuongtranba/kanna/compare/v0.90.0...v0.90.1) (2026-06-08)
+
+
+### Bug Fixes
+
+* **compact:** finalize PTY proactive /compact turn on compact_boundary ([#402](https://github.com/cuongtranba/kanna/issues/402)) ([653c8f5](https://github.com/cuongtranba/kanna/commit/653c8f55cc7934938b7a84d880c8d64efc9f1c64))
+
 ## [0.90.0](https://github.com/cuongtranba/kanna/compare/v0.89.0...v0.90.0) (2026-06-07)
 
 
