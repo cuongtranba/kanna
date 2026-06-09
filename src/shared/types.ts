@@ -337,6 +337,14 @@ export const PROVIDERS: ProviderCatalogEntry[] = [
     supportsPlanMode: true,
     models: [
       {
+        id: "claude-fable-5",
+        label: "Fable 5",
+        supportsEffort: true,
+        aliases: ["fable"],
+        contextWindowOptions: [...CLAUDE_CONTEXT_WINDOW_OPTIONS],
+        supportsMaxReasoningEffort: true,
+      },
+      {
         id: "claude-opus-4-7",
         label: "Opus 4.7",
         supportsEffort: true,
