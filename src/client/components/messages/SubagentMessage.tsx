@@ -5,6 +5,7 @@ import type {
   NormalizedToolCall,
   SubagentRunSnapshot,
 } from "../../../shared/types"
+import { CHAT_SELECTION_ZONE_ATTRIBUTE } from "../../app/chatFocusPolicy"
 import { formatBashCommandTitle } from "../../lib/formatters"
 import { processTranscriptMessages } from "../../lib/parseTranscript"
 import { stripWorkspacePath } from "../../lib/pathUtils"
@@ -131,6 +132,7 @@ export function SubagentMessage({
       data-testid={`subagent-message:${run.runId}`}
       className={cn("border-l-2 border-accent pl-3 py-2 space-y-2")}
       style={{ marginLeft: `${indentDepth * 24}px` }}
+      {...{ [CHAT_SELECTION_ZONE_ATTRIBUTE]: "" }}
     >
       <header className="flex items-center gap-2 text-xs text-muted-foreground">
         <Bot className="h-3.5 w-3.5" />
