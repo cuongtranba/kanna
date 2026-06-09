@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.92.0](https://github.com/cuongtranba/kanna/compare/v0.91.0...v0.92.0) (2026-06-09)
+
+
+### Features
+
+* **models:** add Claude Fable 5 to the Claude provider catalog ([#409](https://github.com/cuongtranba/kanna/issues/409)) ([ffd106f](https://github.com/cuongtranba/kanna/commit/ffd106ffc8d1e3da3a27f440b67d31a1c6a63480))
+
+
+### Bug Fixes
+
+* **chat-ui:** keep subagent message text selectable ([#407](https://github.com/cuongtranba/kanna/issues/407)) ([73f8121](https://github.com/cuongtranba/kanna/commit/73f8121bc26f83bd42a8e90397f5e7961ad519b0))
+
 ## [0.91.0](https://github.com/cuongtranba/kanna/compare/v0.90.1...v0.91.0) (2026-06-08)
 
 
