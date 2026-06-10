@@ -20,6 +20,7 @@ import type { PtyInstanceRegistry } from "./pty-instance-registry"
 import { sampleProcessTreeUsage as defaultSampleProcessTreeUsage, type ProcessTreeSample } from "./pty-memory-sampler.adapter"
 import { waitForTuiReady, waitForTuiReadyWithTrustDismiss, waitForTuiReadyDismissingDialogs, sendUserPrompt, sendExitCommand } from "./tui-control"
 import { startTranscriptStream } from "./tui-source.adapter"
+import { readReplMounted } from "./repl-mount-probe.adapter"
 import { computeJsonlPath, computeProjectDir } from "./jsonl-path.adapter"
 import type { ClaudeSessionHandle } from "../agent"
 import type { HarnessEvent, HarnessToolRequest } from "../harness-types"
@@ -253,6 +254,11 @@ export interface BuildPtyCliArgsInput {
   channelServerName?: string
   /** When true, layer FS restriction: disallow native FS tools + allowlist `mcp__kanna__*`. */
   restricted?: boolean
+  /** When set, route claude `--debug` logging to this file (diverted off the
+   *  tty so the TUI render + glyph scan stay clean). Used ONLY to corroborate
+   *  the output-ring ready signal via the `[REPL:mount]` marker; never an event
+   *  source. Opt-in via KANNA_PTY_READY_CORROBORATE. */
+  debugFilePath?: string
 }
 
 /**
@@ -297,6 +303,13 @@ export function buildPtyCliArgs(args: BuildPtyCliArgsInput): string[] {
   }
   if (args.mcpConfigPath) {
     cliArgs.push("--mcp-config", args.mcpConfigPath, "--strict-mcp-config")
+  }
+  if (args.debugFilePath) {
+    // Routes claude --debug logging to a file (implicitly enables debug mode).
+    // Diverting to a file keeps the tty/TUI render clean so the output-ring
+    // glyph scan is unaffected; the file is read only to corroborate readiness
+    // via the [REPL:mount] marker. Opt-in (KANNA_PTY_READY_CORROBORATE).
+    cliArgs.push("--debug-file", args.debugFilePath)
   }
   if (args.effort && args.effort.length > 0) cliArgs.push("--effort", args.effort)
   if (args.additionalDirectories) {
@@ -489,6 +502,16 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
       ? `${args.systemPromptOverride}\n\n${buildChannelPromptFraming(Boolean(args.keepAlive))}`
       : args.systemPromptOverride
 
+  // Opt-in diagnostic: route claude --debug to a per-spawn file so the
+  // [REPL:mount] marker can corroborate the output-ring glyph ready signal.
+  // Default off — no debug file, no behavior change. The path lives under
+  // runtimeDir so removeRuntimeDir cleans it on every teardown branch.
+  const readyCorroborateEnabled =
+    (args.env ?? process.env).KANNA_PTY_READY_CORROBORATE === "enabled"
+  const debugFilePath = readyCorroborateEnabled
+    ? path.join(runtimeDir, "claude-debug.log")
+    : undefined
+
   const claudeBin = claudeBinAbs
   const cliArgs = buildPtyCliArgs({
     sessionId,
@@ -503,6 +526,7 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
     mcpConfigPath,
     channelServerName: channelDeliveryEnabled ? KANNA_MCP_SERVER_NAME : undefined,
     restricted: Boolean(args.restrictedAllowedPaths && args.restrictedAllowedPaths.length > 0),
+    debugFilePath,
   })
 
   let closed = false
@@ -695,10 +719,12 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
   const tuiReadyQuietRaw = (args.env ?? process.env).KANNA_PTY_TUI_READY_QUIET_MS
   const tuiReadyQuietMs = tuiReadyQuietRaw !== undefined ? Number(tuiReadyQuietRaw) : undefined
   const trustDismiss = (args.env ?? process.env).KANNA_PTY_TRUST_DISMISS ?? "enabled"
+  let ringReadyOk: boolean
   if (channelDeliveryEnabled && trustDismiss !== "disabled") {
     // Channel path: dismiss both trust dialog AND dev-channels dialog.
     // +8 s over the base cap to absorb both dialogs + project reload.
     const readyResult = await waitForTuiReadyDismissingDialogs(pty, ring, { hardCapMs: tuiReadyMs + 8_000 })
+    ringReadyOk = readyResult !== "timeout"
     if (readyResult === "timeout") {
       console.warn("[kanna/pty] TUI ready marker not detected after dialogs dismiss (channel path)", { chatId: args.chatId, hardCapMs: tuiReadyMs + 8_000 })
     } else {
@@ -707,6 +733,7 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
   } else if (trustDismiss !== "disabled") {
     // +5 s over the base cap to absorb trust-dialog dismiss + project reload.
     const readyResult = await waitForTuiReadyWithTrustDismiss(pty, ring, { hardCapMs: tuiReadyMs + 5_000, quietPeriodMs: tuiReadyQuietMs })
+    ringReadyOk = readyResult !== "timeout"
     if (readyResult === "timeout") {
       console.warn("[kanna/pty] TUI ready marker not detected after trust dismiss", { chatId: args.chatId, hardCapMs: tuiReadyMs + 5_000 })
     } else {
@@ -714,8 +741,24 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
     }
   } else {
     const readyResult = await waitForTuiReady(ring, { hardCapMs: tuiReadyMs, quietPeriodMs: tuiReadyQuietMs })
+    ringReadyOk = readyResult !== "timeout"
     if (readyResult === "timeout") {
       console.warn("[kanna/pty] TUI ready marker not detected within hard cap", { chatId: args.chatId, hardCapMs: tuiReadyMs })
+    }
+  }
+
+  // Opt-in corroboration (KANNA_PTY_READY_CORROBORATE=enabled): cross-check the
+  // output-ring glyph signal against claude's own [REPL:mount] marker in the
+  // debug file. Observe-only telemetry — warns on disagreement, never gates
+  // the spawn. The ring glyph stays the sole ready decision-maker.
+  if (debugFilePath) {
+    const replMounted = await readReplMounted(debugFilePath)
+    if (ringReadyOk !== replMounted) {
+      console.warn("[kanna/pty] ready-signal corroboration mismatch", {
+        chatId: args.chatId,
+        ringGlyphReady: ringReadyOk,
+        replMountMarker: replMounted,
+      })
     }
   }
 

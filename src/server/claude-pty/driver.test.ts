@@ -342,6 +342,18 @@ describe("buildPtyCliArgs", () => {
     expect(args).toContain("--dangerously-skip-permissions")
   })
 
+  test("omits --debug-file when no debugFilePath supplied (default off)", () => {
+    const args = buildPtyCliArgs(baseInput)
+    expect(args).not.toContain("--debug-file")
+  })
+
+  test("emits --debug-file <path> when debugFilePath supplied (ready corroboration)", () => {
+    const args = buildPtyCliArgs({ ...baseInput, debugFilePath: "/run/kanna/claude-debug.log" })
+    const idx = args.indexOf("--debug-file")
+    expect(idx).toBeGreaterThan(-1)
+    expect(args[idx + 1]).toBe("/run/kanna/claude-debug.log")
+  })
+
   test("plan mode picks 'plan' permission", () => {
     const args = buildPtyCliArgs({ ...baseInput, planMode: true })
     const idx = args.indexOf("--permission-mode")

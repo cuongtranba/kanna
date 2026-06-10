@@ -1,6 +1,6 @@
 ---
 id: c3-225
-c3-seal: 6416eadec0eae318a3d9f7016dbdcced2f25c99daff088a2f8091d58c3487665
+c3-seal: 86d4b0776b8ad964ae6c4a48ba83a4fe703a54671508a69a182dde15a996d9db
 title: claude-pty-driver
 type: component
 category: feature
@@ -92,6 +92,7 @@ Owns the Claude CLI PTY transport: spawns the `claude` subprocess (after the smo
 | Channel-ready timeout silently falls back to paste | Edit re-introduces paste fallback after channelClientReady timeout | grep for sendUserPrompt in the fail-fast cleanup block of driver.ts | bun test src/server/claude-pty/driver.test.ts (fail-fast throw assertion) |
 | Follow-up prompt typed without a TUI-ready gate (silent hang) | Edit removes the waitForTuiReady call before sendUserPrompt in the interactive sendPrompt handler — a paste into a not-yet-idle REPL after a long turn is swallowed and the turn hangs with no transcript line | grep for waitForTuiReady inside the sendPrompt handler of driver.ts; absence = regression | bun test src/server/claude-pty/driver.test.ts (follow-up TUI-ready gate) |
 | Dev-channels dialog dismissal regresses or signals premature ready | Edit removes postDismissOffset reference guard from waitForTuiReadyDismissingDialogs | grep for postDismissOffset usage in tui-control.ts | bun test src/server/claude-pty/tui-control.test.ts |
+| Ready corroboration becomes an event source or gates the spawn | Edit feeds readReplMounted into createJsonlEventParser, or makes the spawn throw/return on a mismatch instead of console.warn, or flips KANNA_PTY_READY_CORROBORATE default to enabled | grep for readReplMounted in driver.ts must show only a console.warn call site (never a parser feed or throw); the debug-file path is the opt-in corroboration input and is NEVER an event source | bun test src/server/claude-pty/repl-mount-probe.adapter.test.ts; bun test src/server/claude-pty/driver.test.ts |
 | Subscription-billing invariant broken | ANTHROPIC_API_KEY not stripped from child env | buildPtyEnv auth test fails | bun test src/server/claude-pty/auth.test.ts |
 | Stale re-spawn handle clobbers the live PTY registry entry | Teardown calls unconditional upsert(chatId,exited)/unregister(sessionId) instead of the pid-scoped guards — a chat re-spawns via --resume so old+new handles share chatId+sessionId | grep for markExitedIfCurrent in cleanupResources and unregister(ownPid in driver.ts; absence = regression | bun test src/server/claude-pty/pty-instance-registry.test.ts src/server/claude-pty/pid-registry.test.ts |
 | Reap no-ops on a non-leader pid or signals the whole app group | Edit reintroduces process.kill(-pid)/killPgroup instead of killProcessTree (PTY child inherits the server pgid under PM2) | grep -rn 'process.kill(-' src/server/claude-pty must be absent outside killProcessTree | bun test src/server/claude-pty/pid-registry.test.ts (non-leader subtree kill) |

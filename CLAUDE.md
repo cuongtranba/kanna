@@ -269,6 +269,20 @@ the same rotation/retry path the SDK driver uses on thrown stream errors.
   appends channel framing to the subagent system prompt.
 - `KANNA_PTY_CHANNEL_READY_TIMEOUT_MS=15000` — channel client-ready timeout
   before a subagent spawn fails fast (default `15000`).
+- `KANNA_PTY_READY_CORROBORATE=enabled|disabled` — opt-in diagnostic (default
+  `disabled`). When enabled, the spawn adds `--debug-file
+  <runtimeDir>/claude-debug.log` (diverting claude `--debug` logging OFF the tty
+  so the TUI render + output-ring `❯ ` glyph scan stay clean), and after the
+  ready wait reads that file for the `[REPL:mount] REPL mounted` marker via
+  `repl-mount-probe.adapter.ts`. On disagreement with the ring glyph signal it
+  emits a single `console.warn` — observe-only telemetry to catch premature- or
+  missed-ready glyph false-triggers. The ring glyph stays the SOLE ready
+  decision (the marker is NOT an event source and never gates the spawn); the
+  marker cannot replace the glyph because it carries no trust/dev-channels
+  dialog state. Default off because always-on `--debug-file` writes an unbounded
+  per-session debug log. The log lives under the per-spawn `runtimeDir`, cleaned
+  by `removeRuntimeDir` on every teardown branch. See
+  `adr-20260610-pty-repl-mount-ready-corroboration`.
 
 Removed in this version (no longer consulted):
 - `KANNA_PTY_PREFLIGHT_MODEL` — preflight gone, replaced by smoke-test.
