@@ -280,16 +280,36 @@ export async function waitForResultEntry(
       try {
         for await (const line of stream.lines) {
           if (settled) return
-          let parsed: { type?: string; subtype?: string; error?: string; isApiErrorMessage?: boolean; apiErrorStatus?: number }
+          let parsed: {
+            type?: string
+            subtype?: string
+            error?: string
+            isApiErrorMessage?: boolean
+            apiErrorStatus?: number
+            isSidechain?: boolean
+            message?: { stop_reason?: string | null }
+          }
           try { parsed = JSON.parse(line) as typeof parsed } catch { continue }
-          // Two completion markers:
+          // Three completion markers:
           //   - `type: "result"` — SDK / `claude -p` output (one-shot)
           //   - `type: "system", subtype: "turn_duration"` — interactive TUI
-          //     turn end (interactive mode never writes a `result` row).
-          // Reference: canon/index.ts:711 turnDurationMsFromRows.
+          //     turn end on older CLIs (≤ 2.0.x; reference: canon/index.ts:711
+          //     turnDurationMsFromRows).
+          //   - assistant row with a terminal `message.stop_reason` — CLI
+          //     ≥ 2.1.x writes NO system rows to the transcript; the final
+          //     assistant message's stop_reason is the only turn-end signal
+          //     left ("tool_use" / "pause_turn" mean the turn continues).
+          //     Sidechain (Task subagent) rows end only the subagent's turn.
+          const stopReason = parsed.message?.stop_reason
+          const isTerminalAssistant =
+            parsed.type === "assistant" &&
+            parsed.isSidechain !== true &&
+            typeof stopReason === "string" &&
+            ["end_turn", "stop_sequence", "max_tokens", "refusal"].includes(stopReason)
           const isTurnEnd =
             parsed.type === "result" ||
-            (parsed.type === "system" && parsed.subtype === "turn_duration")
+            (parsed.type === "system" && parsed.subtype === "turn_duration") ||
+            isTerminalAssistant
           if (isTurnEnd) {
             settled = true
             if (timer) clearTimeout(timer)

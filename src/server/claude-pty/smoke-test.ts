@@ -118,7 +118,15 @@ export function buildLiveSmokeProbe(args: BuildLiveSmokeProbeArgs): SmokeTestPro
       // creates the JSONL after the first user turn.
       const stream = await startTranscriptStream({ projectDir, firstFileTimeoutMs: 20_000 })
       try {
-        await sendUserPrompt(pty, ring, "Run the command ls -la /tmp using the Bash tool now. Just do it.")
+        // The probe must end its turn within the waitForResultEntry budget.
+        // An open-ended ask invites capable models to hunt for Bash
+        // alternatives (ToolSearch / Agent / Glob) for the whole window, so
+        // explicitly forbid fallbacks and give a fixed no-tool reply path.
+        await sendUserPrompt(
+          pty,
+          ring,
+          "Use the Bash tool to run: ls /tmp. If the Bash tool is not available, reply with exactly BASH_UNAVAILABLE and end your turn. Do not use any other tool and do not look for alternatives.",
+        )
         const filePath = await stream.filePath
         await waitForResultEntry(stream, { timeoutMs: 30_000 })
         const raw = await readTextFile(filePath)

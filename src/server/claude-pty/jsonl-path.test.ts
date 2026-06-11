@@ -7,15 +7,15 @@ import { computeJsonlPath, computeProjectDir, encodeCwd } from "./jsonl-path.ada
 
 describe("encodeCwd", () => {
   test("absolute path: replaces / with -", () => {
-    const expected = homedir().replace(/\//g, "-").replace(/\./g, "-")
+    const expected = homedir().replace(/[^a-zA-Z0-9]/g, "-")
     expect(encodeCwd(homedir())).toBe(expected)
   })
   test("absolute path with trailing slash: trims it", () => {
-    const expected = homedir().replace(/\//g, "-").replace(/\./g, "-")
+    const expected = homedir().replace(/[^a-zA-Z0-9]/g, "-")
     expect(encodeCwd(homedir() + "/")).toBe(expected)
   })
   test("nested path", () => {
-    const expected = process.cwd().replace(/\//g, "-").replace(/\./g, "-")
+    const expected = process.cwd().replace(/[^a-zA-Z0-9]/g, "-")
     expect(encodeCwd(process.cwd())).toBe(expected)
   })
   test("root path", () => {
@@ -28,7 +28,7 @@ describe("computeJsonlPath", () => {
     const tmp = await mkdtemp(path.join(tmpdir(), "kanna-jsonlpath-"))
     try {
       const realPath = realpathSync(tmp)
-      const encodedCwd = realPath.replace(/\//g, "-").replace(/\./g, "-")
+      const encodedCwd = realPath.replace(/[^a-zA-Z0-9]/g, "-")
       const result = computeJsonlPath({
         homeDir: "/home/u",
         cwd: tmp,
@@ -47,7 +47,7 @@ describe("encodeCwd realpath + dot replacement", () => {
     try {
       const encoded = encodeCwd(tmp)
       const realPath = realpathSync(tmp)
-      const expectedEncoded = realPath.replace(/\//g, "-").replace(/\./g, "-")
+      const expectedEncoded = realPath.replace(/[^a-zA-Z0-9]/g, "-")
       expect(encoded).toBe(expectedEncoded)
     } finally {
       await rm(tmp, { recursive: true, force: true })
@@ -104,7 +104,7 @@ describe("computeProjectDir", () => {
     const tmp = await mkdtemp(path.join(tmpdir(), "kanna-projdir-"))
     try {
       const realPath = realpathSync(tmp)
-      const encodedCwd = realPath.replace(/\//g, "-").replace(/\./g, "-")
+      const encodedCwd = realPath.replace(/[^a-zA-Z0-9]/g, "-")
       const result = computeProjectDir({ homeDir: "/home/user", cwd: tmp })
       expect(result).toBe(`/home/user/.claude/projects/${encodedCwd}`)
     } finally {

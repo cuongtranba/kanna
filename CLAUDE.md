@@ -179,7 +179,35 @@ Cached 24 h per (binarySha256, model) under
 `${HOME}/.kanna/cache/smoke-test/`. PASS unlocks spawn; FAIL refuses
 with a clear reason that surfaces through the existing spawn-error
 path. The 8-probe preflight gate is removed (`KANNA_PTY_PREFLIGHT_MODEL`
-no longer consulted).
+no longer consulted). The probe prompt explicitly forbids tool
+alternatives ("reply BASH_UNAVAILABLE … do not use any other tool") —
+an open-ended ask lets capable models burn the whole
+`waitForResultEntry` budget hunting for Bash substitutes
+(ToolSearch / Agent / Glob), which reads as a probe timeout → FAIL.
+
+**PTY turn-end detection (CLI ≥ 2.1.x format change):** Claude CLI
+≥ 2.1.x stopped writing `type:"system"` rows (`turn_duration`, `init`,
+`compact_boundary`) into the on-disk transcript JSONL. The turn-end
+signal is now the final assistant message's `message.stop_reason` —
+every persisted row of that message (one row per content block, same
+id) carries the same terminal value (`end_turn` / `stop_sequence` /
+`max_tokens` / `refusal`; `tool_use` and `pause_turn` mean the turn
+continues). `createJsonlEventParser` (`jsonl-to-event.ts`) arms a
+pending turn-end on a terminal-stop_reason row and flushes one
+synthesized `kind:"result"` on the next line that isn't part of the
+same message (claude writes `last-prompt` / `ai-title` / `mode` /
+`permission-mode` checkpoint rows right after, so the flush is
+prompt). A real `result` / `system/turn_duration` row (SDK fixtures,
+older CLIs) supersedes the pending flush, and a duplicate arriving
+just after a flush is swallowed — a turn never finalizes twice.
+`waitForResultEntry` (`tui-source.adapter.ts`) recognizes the same
+three markers. Sidechain rows never count (they end only the
+subagent's turn) but DO trigger a pending flush. Known degradations
+under the new format: `pendingWorkflowCount` (rode on
+`turn_duration`) is no longer available — the pending-workflow wake
+hint never arms from PTY transcripts (the `WorkflowRegistry` disk
+watch remains the live-run authority); `getSupportedCommands()` never
+sees a `system_init` row and stays on its static fallback list.
 
 **AskUserQuestion / ExitPlanMode (issue #215 — CLOSED):** Driver disallows
 the native built-ins (`--disallowedTools AskUserQuestion ExitPlanMode`)
@@ -208,7 +236,8 @@ as an interactive interrupt, cancelling the current turn.
 **getSupportedCommands():** Returns the live slash-command list from the
 spawned claude's `system_init` JSONL entry once a session is active.
 Falls back to a static four-command list (`model`, `exit`, `clear`, `help`)
-before first spawn (cold-start gap).
+before first spawn (cold-start gap). CLI ≥ 2.1.x writes no `system` rows
+to the transcript, so on current CLIs the static fallback is permanent.
 
 **SDK ↔ PTY equivalence (Phase 6):** `src/server/claude-pty/parity-matrix.test.ts`
 drives both `createClaudeHarnessStream` (SDK) and `createJsonlEventParser`
@@ -374,11 +403,12 @@ the main agent is always the one calling these tools.
 - **Transport:** each turn is a kanna channel push (`pushChannelPrompt`, the
   same MCP-notification transport shipped in PR #333) followed by draining
   the persistent `HarnessEvent` stream until the next synthesized
-  `kind:"result"` event. Interactive TUI claude writes `system/turn_duration`
-  (not `type:"result"`) per turn; `normalizeClaudeStreamMessage`
-  (`agent.ts`) synthesizes one `kind:"result"` per `turn_duration`, so a
-  per-turn drain (`drainOneTurn` in `subagent-provider-run.ts`) returns once
-  per turn and leaves the iterator open.
+  `kind:"result"` event. Interactive TUI claude never writes a
+  `type:"result"` row; the turn-end signal depends on CLI version (see
+  **PTY turn-end detection** below). `createJsonlEventParser`
+  (`jsonl-to-event.ts`) synthesizes one `kind:"result"` per turn either
+  way, so a per-turn drain (`drainOneTurn` in `subagent-provider-run.ts`)
+  returns once per turn and leaves the iterator open.
 - **Auto-wake filter exemption (do NOT remove):** a channel push lands in the
   transcript as a `user isMeta:true` line at a turn boundary, which the
   `jsonl-to-event.ts` auto-wake filter (added in 216392b to drop CC's own
@@ -452,7 +482,11 @@ via event replay, obeys the cancel cascade). See
 
 - **Pending-workflow harvest (Part B).** When a turn ends with a background
   Workflow still running, claude-code's `turn_duration` frame carries
-  `pendingWorkflowCount`. `normalizeClaudeStreamMessage` surfaces it onto the
+  `pendingWorkflowCount`. (CLI ≥ 2.1.x no longer writes `turn_duration` rows
+  at all — see **PTY turn-end detection** — so this hint never arrives from
+  PTY transcripts and the harvest does not arm there; the `WorkflowRegistry`
+  disk watch remains the live-run authority.)
+  `normalizeClaudeStreamMessage` surfaces it onto the
   `result` entry; `maybeArmPendingWorkflowWake` arms a single
   `source:"pending_workflow"` wake (no double-arm if a schedule is already
   live). Kanna has no mid-flight completion signal, so the replayed prompt
