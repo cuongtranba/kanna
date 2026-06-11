@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.92.1](https://github.com/cuongtranba/kanna/compare/v0.92.0...v0.92.1) (2026-06-11)
+
+
+### Bug Fixes
+
+* **claude-pty:** detect turn end via stop_reason — CLI ≥2.1.x writes no system rows ([#411](https://github.com/cuongtranba/kanna/issues/411)) ([8889806](https://github.com/cuongtranba/kanna/commit/888980683922b4bd5546d4354db4b4b37b3d74dd))
+
 ## [0.92.0](https://github.com/cuongtranba/kanna/compare/v0.91.0...v0.92.0) (2026-06-09)
 
 
