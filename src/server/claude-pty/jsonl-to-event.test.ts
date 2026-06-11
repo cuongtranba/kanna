@@ -478,6 +478,244 @@ describe("createJsonlEventParser", () => {
     })
   })
 
+  // Claude CLI ≥ 2.1.x stopped writing `type:"system"` rows (turn_duration,
+  // init, compact_boundary) into the on-disk transcript JSONL. The only
+  // turn-end signal left is the final assistant message's
+  // `message.stop_reason` ("end_turn" / "stop_sequence" / "max_tokens" /
+  // "refusal" — NOT "tool_use", which means the turn continues). Each content
+  // block of that final message is persisted as its own row, all carrying the
+  // same id and stop_reason, followed by session-state checkpoint rows
+  // (`last-prompt` / `ai-title` / `mode` / `permission-mode`). The parser must
+  // synthesize exactly one `result` per turn, AFTER the final assistant row's
+  // transcript entries, and must not double-emit when an old CLI still writes
+  // `turn_duration` (or an SDK fixture writes `result`) right after.
+  describe("stop_reason turn-end synthesis (claude ≥2.1.x, no system rows)", () => {
+    function makeRealUser(text: string): string {
+      return JSON.stringify({
+        type: "user",
+        sessionId: "sess-sr",
+        message: { role: "user", content: text },
+      })
+    }
+    function makeAssistantRow(args: {
+      id: string
+      stopReason: string | null
+      block: Record<string, unknown>
+    }): string {
+      return JSON.stringify({
+        type: "assistant",
+        sessionId: "sess-sr",
+        message: {
+          id: args.id,
+          role: "assistant",
+          stop_reason: args.stopReason,
+          content: [args.block],
+        },
+      })
+    }
+    function makeToolResultUser(toolUseId: string): string {
+      return JSON.stringify({
+        type: "user",
+        sessionId: "sess-sr",
+        message: {
+          role: "user",
+          content: [{ type: "tool_result", tool_use_id: toolUseId, content: "ok" }],
+        },
+      })
+    }
+    function makeLastPrompt(): string {
+      return JSON.stringify({
+        type: "last-prompt",
+        lastPrompt: "hi",
+        leafUuid: "leaf-1",
+        sessionId: "sess-sr",
+      })
+    }
+    function makeMetaUser(content: string): string {
+      return JSON.stringify({
+        type: "user",
+        isMeta: true,
+        sessionId: "sess-sr",
+        message: { role: "user", content },
+      })
+    }
+    function makeTurnDuration(): string {
+      return JSON.stringify({
+        type: "system",
+        subtype: "turn_duration",
+        sessionId: "sess-sr",
+        durationMs: 1234,
+      })
+    }
+    function resultEntries(events: HarnessEvent[]) {
+      return events.filter(
+        (e) => e.type === "transcript" && (e.entry as { kind?: string }).kind === "result",
+      )
+    }
+
+    test("new-format turn: result synthesized once, flushed on the checkpoint row", () => {
+      const parser = createJsonlEventParser()
+      expect(resultEntries(parser.parse(makeRealUser("list files")))).toEqual([])
+      expect(resultEntries(parser.parse(makeAssistantRow({
+        id: "msg_tool",
+        stopReason: "tool_use",
+        block: { type: "tool_use", id: "tu_1", name: "Glob", input: { pattern: "*" } },
+      })))).toEqual([])
+      expect(resultEntries(parser.parse(makeToolResultUser("tu_1")))).toEqual([])
+      // Final message: thinking row + text row, both stop_reason end_turn.
+      expect(resultEntries(parser.parse(makeAssistantRow({
+        id: "msg_end",
+        stopReason: "end_turn",
+        block: { type: "thinking", thinking: "done thinking" },
+      })))).toEqual([])
+      expect(resultEntries(parser.parse(makeAssistantRow({
+        id: "msg_end",
+        stopReason: "end_turn",
+        block: { type: "text", text: "all done" },
+      })))).toEqual([])
+      // Checkpoint row arrives → the pending turn-end flushes here.
+      const flushed = parser.parse(makeLastPrompt())
+      expect(resultEntries(flushed)).toHaveLength(1)
+      const entry = resultEntries(flushed)[0]?.entry as { subtype?: string; isError?: boolean }
+      expect(entry.subtype).toBe("success")
+      expect(entry.isError).toBe(false)
+    })
+
+    test("tool_use stop_reason never synthesizes a result", () => {
+      const parser = createJsonlEventParser()
+      parser.parse(makeRealUser("hi"))
+      parser.parse(makeAssistantRow({
+        id: "msg_t",
+        stopReason: "tool_use",
+        block: { type: "tool_use", id: "tu_2", name: "Read", input: {} },
+      }))
+      expect(resultEntries(parser.parse(makeLastPrompt()))).toEqual([])
+    })
+
+    test("old format: turn_duration after end_turn rows emits exactly one result (the real one)", () => {
+      const parser = createJsonlEventParser()
+      parser.parse(makeRealUser("hi"))
+      parser.parse(makeAssistantRow({
+        id: "msg_old",
+        stopReason: "end_turn",
+        block: { type: "text", text: "hello" },
+      }))
+      const events = parser.parse(makeTurnDuration())
+      const results = resultEntries(events)
+      expect(results).toHaveLength(1)
+      expect((results[0]?.entry as { durationMs?: number }).durationMs).toBe(1234)
+      // Nothing pending afterwards — checkpoint row emits no second result.
+      expect(resultEntries(parser.parse(makeLastPrompt()))).toEqual([])
+    })
+
+    test("SDK shape: result row directly after end_turn rows emits exactly one result", () => {
+      const parser = createJsonlEventParser()
+      parser.parse(makeRealUser("hi"))
+      parser.parse(makeAssistantRow({
+        id: "msg_sdk",
+        stopReason: "end_turn",
+        block: { type: "text", text: "hello" },
+      }))
+      const events = parser.parse(JSON.stringify({
+        type: "result",
+        subtype: "success",
+        isError: false,
+        duration_ms: 777,
+        result: "hello",
+      }))
+      const results = resultEntries(events)
+      expect(results).toHaveLength(1)
+      expect((results[0]?.entry as { durationMs?: number }).durationMs).toBe(777)
+    })
+
+    test("late turn_duration after a synthesized flush is swallowed; next turn unaffected", () => {
+      const parser = createJsonlEventParser()
+      parser.parse(makeRealUser("hi"))
+      parser.parse(makeAssistantRow({
+        id: "msg_a",
+        stopReason: "end_turn",
+        block: { type: "text", text: "first" },
+      }))
+      expect(resultEntries(parser.parse(makeLastPrompt()))).toHaveLength(1)
+      // An old CLI writing turn_duration after the checkpoint must not
+      // double-finalize the turn.
+      expect(resultEntries(parser.parse(makeTurnDuration()))).toEqual([])
+      // Next real turn still produces its own result.
+      parser.parse(makeRealUser("again"))
+      parser.parse(makeAssistantRow({
+        id: "msg_b",
+        stopReason: "end_turn",
+        block: { type: "text", text: "second" },
+      }))
+      expect(resultEntries(parser.parse(makeLastPrompt()))).toHaveLength(1)
+    })
+
+    test("auto-wake under new format: wake turn's synthesized result is dropped", () => {
+      const parser = createJsonlEventParser()
+      // Real turn 1 ends via stop_reason flush → parser is between turns.
+      parser.parse(makeRealUser("hi"))
+      parser.parse(makeAssistantRow({
+        id: "msg_1",
+        stopReason: "end_turn",
+        block: { type: "text", text: "hello" },
+      }))
+      expect(resultEntries(parser.parse(makeLastPrompt()))).toHaveLength(1)
+      // Background auto-wake at the boundary.
+      const wakeEvents = parser.parse(makeMetaUser("<task-notification>bash done</task-notification>"))
+      expect(wakeEvents.filter(
+        (e) => e.type === "transcript" && (e.entry as { kind?: string }).kind === "user_prompt",
+      )).toEqual([])
+      parser.parse(makeAssistantRow({
+        id: "msg_wake",
+        stopReason: "end_turn",
+        block: { type: "text", text: "ack" },
+      }))
+      // The wake turn's flush must be swallowed.
+      expect(resultEntries(parser.parse(makeLastPrompt()))).toEqual([])
+      // Next REAL turn emits again.
+      parser.parse(makeRealUser("status?"))
+      parser.parse(makeAssistantRow({
+        id: "msg_2",
+        stopReason: "end_turn",
+        block: { type: "text", text: "fine" },
+      }))
+      expect(resultEntries(parser.parse(makeLastPrompt()))).toHaveLength(1)
+    })
+
+    test("keep-alive channel push under new format: its turn-end result emits", () => {
+      const parser = createJsonlEventParser()
+      parser.parse(JSON.stringify({
+        type: "user",
+        isMeta: true,
+        sessionId: "sess-sr",
+        message: { role: "user", content: '<channel source="kanna">do the task</channel>' },
+      }))
+      parser.parse(makeAssistantRow({
+        id: "msg_ch",
+        stopReason: "end_turn",
+        block: { type: "text", text: "DONE" },
+      }))
+      expect(resultEntries(parser.parse(makeLastPrompt()))).toHaveLength(1)
+    })
+
+    test("sidechain row still triggers the pending flush (result not delayed)", () => {
+      const parser = createJsonlEventParser()
+      parser.parse(makeRealUser("hi"))
+      parser.parse(makeAssistantRow({
+        id: "msg_main",
+        stopReason: "end_turn",
+        block: { type: "text", text: "spawned a subagent earlier" },
+      }))
+      const events = parser.parse(JSON.stringify({
+        type: "assistant",
+        isSidechain: true,
+        sessionId: "sub-sess",
+        message: { id: "msg_side", role: "assistant", content: [{ type: "text", text: "side" }] },
+      }))
+      expect(resultEntries(events)).toHaveLength(1)
+    })
+  })
+
   // Keep-alive multi-turn subagents deliver EVERY turn (including turn 1) via a
   // kanna channel push, which lands in the transcript as a `user isMeta:true`
   // line whose content carries the `<channel source="kanna">` tag. Those lines

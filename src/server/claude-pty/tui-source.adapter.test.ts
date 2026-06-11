@@ -360,6 +360,39 @@ describe("waitForResultEntry", () => {
     stream.close()
   }, 5000)
 
+  // Claude CLI ≥ 2.1.x writes no `system/turn_duration` (nor any system) rows
+  // to the transcript — the only turn-end marker left is the final assistant
+  // row's `message.stop_reason`. Without this, every PTY smoke probe times
+  // out and the gate refuses all spawns.
+  test("resolves on assistant row with terminal stop_reason (new CLI format)", async () => {
+    const filePath = path.join(projectDir, "stop-reason.jsonl")
+    await writeFile(filePath, '{"type":"user","message":{"role":"user","content":"hi"}}\n')
+    const stream = await startTranscriptStream({ projectDir, firstFileTimeoutMs: 2000 })
+    const endTurnRow = JSON.stringify({
+      type: "assistant",
+      message: { id: "msg_end", role: "assistant", stop_reason: "end_turn", content: [{ type: "text", text: "done" }] },
+    })
+    setTimeout(() => writeFile(
+      filePath,
+      `{"type":"user","message":{"role":"user","content":"hi"}}\n${endTurnRow}\n`,
+    ), 100)
+    const entry = await waitForResultEntry(stream, { timeoutMs: 2000 })
+    expect(entry.parsed.type).toBe("assistant")
+    stream.close()
+  }, 5000)
+
+  test("does NOT resolve on assistant row with tool_use stop_reason", async () => {
+    const filePath = path.join(projectDir, "stop-reason-tooluse.jsonl")
+    const toolUseRow = JSON.stringify({
+      type: "assistant",
+      message: { id: "msg_t", role: "assistant", stop_reason: "tool_use", content: [{ type: "tool_use", id: "t1", name: "Read", input: {} }] },
+    })
+    await writeFile(filePath, `${toolUseRow}\n`)
+    const stream = await startTranscriptStream({ projectDir, firstFileTimeoutMs: 2000 })
+    await expect(waitForResultEntry(stream, { timeoutMs: 300 })).rejects.toThrow(/timed out/i)
+    stream.close()
+  }, 5000)
+
   test("rejects on abort signal", async () => {
     const filePath = path.join(projectDir, "abort.jsonl")
     await writeFile(filePath, '{"type":"system"}\n')
