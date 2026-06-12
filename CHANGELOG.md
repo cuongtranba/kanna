@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.92.3](https://github.com/cuongtranba/kanna/compare/v0.92.2...v0.92.3) (2026-06-12)
+
+
+### Bug Fixes
+
+* **local-projects:** enable vertical scroll when projects overflow viewport ([#416](https://github.com/cuongtranba/kanna/issues/416)) ([bb721b7](https://github.com/cuongtranba/kanna/commit/bb721b7c038b0ec1c302856bc90053fc5d57ef5b))
+
 ## [0.92.2](https://github.com/cuongtranba/kanna/compare/v0.92.1...v0.92.2) (2026-06-12)
 
 
