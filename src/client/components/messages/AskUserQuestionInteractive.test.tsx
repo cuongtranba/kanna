@@ -271,6 +271,11 @@ function setInputValue(input: HTMLInputElement, value: string): void {
   const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!.set!
   nativeSetter.call(input, value)
   input.focus()
+  // Dispatch the native `input` event React's `onChange` actually listens to,
+  // so the change propagates regardless of when happy-dom registers relative to
+  // react-dom load (which decides whose HTMLInputElement React's value tracker
+  // binds to). The trailing keydown still drives the Enter-to-submit handler.
+  input.dispatchEvent(new Event("input", { bubbles: true }))
   input.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true }))
 }
 
