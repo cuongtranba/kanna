@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.92.2](https://github.com/cuongtranba/kanna/compare/v0.92.1...v0.92.2) (2026-06-12)
+
+
+### Bug Fixes
+
+* **test:** register happy-dom in preload so Radix portals render deterministically ([#414](https://github.com/cuongtranba/kanna/issues/414)) ([5981875](https://github.com/cuongtranba/kanna/commit/59818753912c2494c0af0437ddde0010f44c824c))
+
 ## [0.92.1](https://github.com/cuongtranba/kanna/compare/v0.92.0...v0.92.1) (2026-06-11)
 
 
