@@ -1016,7 +1016,7 @@ export class SubagentOrchestrator {
    * Acquires a permit for the duration of the turn, then releases it so
    * idle sessions hold no permit between turns.
    */
-  async sendToLiveRun(runId: string, prompt: string): Promise<DelegationOutcome> {
+  async sendToLiveRun(runId: string, prompt: string): Promise<BackgroundRunOutcome> {
     const session = this.liveSessions.get(runId)
     if (!session) {
       return { status: "failed", runId, errorCode: "NO_LIVE_SESSION", errorMessage: `No live subagent session ${runId}` }
