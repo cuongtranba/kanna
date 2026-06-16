@@ -1255,7 +1255,7 @@ function positiveIntegerFromEnv(value: string | undefined, fallback: number): nu
 const BACKGROUND_TASK_LAUNCH_RE = /Command running in background with ID:\s*(\w+)/g
 
 /** Extract background-task ids from a tool_result entry's content (string or content blocks). */
-function backgroundTaskIdsFromToolResult(content: unknown): string[] {
+export function backgroundTaskIdsFromToolResult(content: unknown): string[] {
   let text = ""
   if (typeof content === "string") {
     text = content
