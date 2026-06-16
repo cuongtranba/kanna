@@ -1598,6 +1598,25 @@ export class AgentCoordinator {
    * scan reservedBy for `owner === chatId` and drop the *new* token the
    * rotation just claimed, leaking the rotation's reservation (audit #9d).
    */
+  private closeClaudeSession(
+    chatId: string,
+    session: ClaudeSessionState,
+    opts?: { keepReservation?: boolean },
+  ): void {
+    if (this.claudeSessions.get(chatId) === session) {
+      this.claudeSessions.delete(chatId)
+    }
+    if (!opts?.keepReservation) {
+      this.oauthPool?.release(chatId)
+    }
+    session.session.close()
+    // For SDK sessions, unregister the workflow dir here. PTY sessions unregister
+    // inside the driver's cleanupResources (driver.ts) — do not double-fire.
+    if (this.resolveClaudeDriverPreference() !== "pty") {
+      this.workflowRegistry?.unregister(chatId)
+    }
+  }
+
   /**
    * Register the workflow disk-watch dir for an SDK session once the session
    * token is known. No-op if the registry is absent, already registered, or
@@ -1617,25 +1636,6 @@ export class AgentCoordinator {
     })
     this.workflowRegistry.register(session.chatId, dir)
     session.workflowsDirRegistered = true
-  }
-
-  private closeClaudeSession(
-    chatId: string,
-    session: ClaudeSessionState,
-    opts?: { keepReservation?: boolean },
-  ): void {
-    if (this.claudeSessions.get(chatId) === session) {
-      this.claudeSessions.delete(chatId)
-    }
-    if (!opts?.keepReservation) {
-      this.oauthPool?.release(chatId)
-    }
-    session.session.close()
-    // For SDK sessions, unregister the workflow dir here. PTY sessions unregister
-    // inside the driver's cleanupResources (driver.ts) — do not double-fire.
-    if (this.resolveClaudeDriverPreference() !== "pty") {
-      this.workflowRegistry?.unregister(chatId)
-    }
   }
 
   private sweepIdleClaudeSessions(now = Date.now()): void {
