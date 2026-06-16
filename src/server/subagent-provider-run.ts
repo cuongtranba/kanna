@@ -66,6 +66,7 @@ export interface BuildSubagentProviderRunArgs {
     subagentOrchestrator?: SubagentOrchestrator
     delegationContext?: KannaMcpDelegationContext
     restrictedAllowedPaths?: string[]
+    keepAlive?: boolean
   }) => Promise<ClaudeSessionHandle>
   /** Optional — propagated into the subagent's own kanna-mcp so it can call `delegate_subagent`. */
   subagentOrchestrator?: SubagentOrchestrator
@@ -164,6 +165,7 @@ async function runClaudeSubagent(opts: {
     subagentOrchestrator: args.subagentOrchestrator,
     delegationContext: args.delegationContext,
     restrictedAllowedPaths: args.allowedPaths,
+    keepAlive,
   })
   args.abortSignal.addEventListener("abort", () => { session.interrupt() }, { once: true })
 

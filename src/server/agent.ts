@@ -60,6 +60,7 @@ import type { ToolCallbackService } from "./tool-callback"
 import type { ChatPermissionPolicy } from "../shared/permission-policy"
 import { mergePolicyOverride, POLICY_DEFAULT } from "../shared/permission-policy"
 import { startClaudeSessionPTY, type StartClaudeSessionPtyArgs } from "./claude-pty/driver"
+import { computeWorkflowsDir } from "./claude-pty/jsonl-path.adapter"
 
 type SdkMcpEntry =
   | { type: "stdio"; command: string; args: string[]; env: Record<string, string>; cwd?: string }
@@ -204,6 +205,8 @@ interface ClaudeSessionState {
   // mid-flight. See adr-20260604-pty-background-task-keepalive.
   backgroundTaskIds: Set<string>
   backgroundTaskDeadlineAt: number
+  /** SDK only: set once the workflows dir has been registered for this session. */
+  workflowsDirRegistered?: boolean
 }
 
 interface ClaudeSessionLifecycleOptions {
@@ -269,6 +272,8 @@ interface AgentCoordinatorArgs {
     scheduleWakeup?: (a: { delayMs: number; prompt: string }) => Promise<string | null>
     /** Folder-restricted subagent: disallow native FS tools + allowlist mcp__kanna__* + per-run path-deny scope. */
     restrictedAllowedPaths?: string[]
+    /** Keep the SDK prompt queue open after the initial prompt to allow multi-turn keep-alive. */
+    keepAlive?: boolean
   }) => Promise<ClaudeSessionHandle>
   startClaudeSessionPTY?: (args: StartClaudeSessionPtyArgs) => Promise<ClaudeSessionHandle>
   claudeLimitDetector?: LimitDetector
@@ -1081,6 +1086,8 @@ async function startClaudeSession(args: {
   customMcpServers?: readonly McpServerConfig[]
   /** Folder-restricted subagent: disallow native FS tools, allowlist mcp__kanna__*, per-run path-deny. */
   restrictedAllowedPaths?: string[]
+  /** When true, leave the prompt queue open after initialPrompt and expose pushChannelPrompt on the handle. */
+  keepAlive?: boolean
 }): Promise<ClaudeSessionHandle> {
   const canUseTool = buildCanUseTool({
     localPath: args.localPath,
@@ -1138,6 +1145,17 @@ async function startClaudeSession(args: {
     },
   })
 
+  // Follow-up turns (sendPrompt + keep-alive pushChannelPrompt) share one
+  // queue-push policy so the two transports cannot drift apart.
+  const enqueueUserPrompt = (content: string) => {
+    promptQueue.push({
+      type: "user",
+      message: { role: "user", content },
+      parent_tool_use_id: null,
+      session_id: args.sessionToken ?? "",
+    })
+  }
+
   if (args.initialPrompt != null) {
     promptQueue.push({
       type: "user",
@@ -1148,7 +1166,9 @@ async function startClaudeSession(args: {
       parent_tool_use_id: null,
       session_id: args.sessionToken ?? undefined,
     })
-    promptQueue.close()
+    if (!args.keepAlive) {
+      promptQueue.close()
+    }
   }
 
   return {
@@ -1165,15 +1185,7 @@ async function startClaudeSession(args: {
       await q.interrupt()
     },
     sendPrompt: async (content: string) => {
-      promptQueue.push({
-        type: "user",
-        message: {
-          role: "user",
-          content,
-        },
-        parent_tool_use_id: null,
-        session_id: args.sessionToken ?? "",
-      })
+      enqueueUserPrompt(content)
     },
     setModel: async (model: string) => {
       await q.setModel(model)
@@ -1189,6 +1201,11 @@ async function startClaudeSession(args: {
         return []
       }
     },
+    ...(args.keepAlive ? {
+      pushChannelPrompt: async (content: string) => {
+        enqueueUserPrompt(content)
+      },
+    } : {}),
     close: () => {
       promptQueue.close()
       q.close()
@@ -1238,7 +1255,7 @@ function positiveIntegerFromEnv(value: string | undefined, fallback: number): nu
 const BACKGROUND_TASK_LAUNCH_RE = /Command running in background with ID:\s*(\w+)/g
 
 /** Extract background-task ids from a tool_result entry's content (string or content blocks). */
-function backgroundTaskIdsFromToolResult(content: unknown): string[] {
+export function backgroundTaskIdsFromToolResult(content: unknown): string[] {
   let text = ""
   if (typeof content === "string") {
     text = content
@@ -1593,6 +1610,32 @@ export class AgentCoordinator {
       this.oauthPool?.release(chatId)
     }
     session.session.close()
+    // For SDK sessions, unregister the workflow dir here. PTY sessions unregister
+    // inside the driver's cleanupResources (driver.ts) — do not double-fire.
+    if (this.resolveClaudeDriverPreference() !== "pty") {
+      this.workflowRegistry?.unregister(chatId)
+    }
+  }
+
+  /**
+   * Register the workflow disk-watch dir for an SDK session once the session
+   * token is known. No-op if the registry is absent, already registered, or
+   * the driver preference is PTY (the PTY driver registers from its own
+   * resolved transcript path in driver.ts cleanup and must not be double-fired).
+   */
+  private maybeRegisterSdkWorkflowsDir(session: ClaudeSessionState): void {
+    if (!this.workflowRegistry) return
+    if (session.workflowsDirRegistered) return
+    // PTY registers from its own resolved transcript path; SDK derives from session_token.
+    if (this.resolveClaudeDriverPreference() === "pty") return
+    if (!session.sessionToken) return
+    const dir = computeWorkflowsDir({
+      homeDir: homedir(),
+      cwd: session.localPath,
+      sessionId: session.sessionToken,
+    })
+    this.workflowRegistry.register(session.chatId, dir)
+    session.workflowsDirRegistered = true
   }
 
   private sweepIdleClaudeSessions(now = Date.now()): void {
@@ -2683,6 +2726,7 @@ export class AgentCoordinator {
           workflowRegistry: this.workflowRegistry ?? undefined,
           customMcpServers: this.getEnabledCustomMcpServers(),
           restrictedAllowedPaths: a.restrictedAllowedPaths,
+          keepAlive: a.keepAlive,
         })
       }
       return this.startClaudeSessionFn({ ...a, customMcpServers: this.getEnabledCustomMcpServers() })
@@ -2891,6 +2935,7 @@ export class AgentCoordinator {
         if (event.type === "session_token" && event.sessionToken) {
           session.sessionToken = event.sessionToken
           await this.store.setSessionTokenForProvider(session.chatId, "claude", event.sessionToken)
+          this.maybeRegisterSdkWorkflowsDir(session)
           this.emitStateChange(session.chatId)
           continue
         }
