@@ -1142,6 +1142,17 @@ async function startClaudeSession(args: {
     },
   })
 
+  // Follow-up turns (sendPrompt + keep-alive pushChannelPrompt) share one
+  // queue-push policy so the two transports cannot drift apart.
+  const enqueueUserPrompt = (content: string) => {
+    promptQueue.push({
+      type: "user",
+      message: { role: "user", content },
+      parent_tool_use_id: null,
+      session_id: args.sessionToken ?? "",
+    })
+  }
+
   if (args.initialPrompt != null) {
     promptQueue.push({
       type: "user",
@@ -1171,15 +1182,7 @@ async function startClaudeSession(args: {
       await q.interrupt()
     },
     sendPrompt: async (content: string) => {
-      promptQueue.push({
-        type: "user",
-        message: {
-          role: "user",
-          content,
-        },
-        parent_tool_use_id: null,
-        session_id: args.sessionToken ?? "",
-      })
+      enqueueUserPrompt(content)
     },
     setModel: async (model: string) => {
       await q.setModel(model)
@@ -1197,15 +1200,7 @@ async function startClaudeSession(args: {
     },
     ...(args.keepAlive ? {
       pushChannelPrompt: async (content: string) => {
-        promptQueue.push({
-          type: "user",
-          message: {
-            role: "user",
-            content,
-          },
-          parent_tool_use_id: null,
-          session_id: args.sessionToken ?? "",
-        })
+        enqueueUserPrompt(content)
       },
     } : {}),
     close: () => {
