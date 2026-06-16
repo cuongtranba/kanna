@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.94.1](https://github.com/cuongtranba/kanna/compare/v0.94.0...v0.94.1) (2026-06-16)
+
+
+### Bug Fixes
+
+* **agent:** mirror PTY OAuth-pool account info in SDK driver ([#422](https://github.com/cuongtranba/kanna/issues/422)) ([ca347be](https://github.com/cuongtranba/kanna/commit/ca347beaf16e279a8a307c4415085d08fba93825))
+* **agent:** swallow SDK interrupt tail error on cancel ([#424](https://github.com/cuongtranba/kanna/issues/424)) ([dfc52a6](https://github.com/cuongtranba/kanna/commit/dfc52a6fa18e2136c1640689d72dc50dd0e49c59))
+
 ## [0.94.0](https://github.com/cuongtranba/kanna/compare/v0.93.0...v0.94.0) (2026-06-16)
 
 
