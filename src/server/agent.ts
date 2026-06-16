@@ -196,6 +196,7 @@ interface ClaudeSessionState {
   pendingPromptSeqs: number[]
   activeTokenId: string | null
   oauthKeyMasked: string | null
+  oauthLabel: string | null
   lastUsedAt: number
   // Claude-Code background Bash tasks (`Bash(run_in_background: true)`) run as
   // children of this PTY process and notify completion via a `<task-notification>`
@@ -2296,7 +2297,19 @@ export class AgentCoordinator {
             if (session) {
               if (session.accountInfoLoaded) return
               session.accountInfoLoaded = true
-              if (session.oauthKeyMasked && !accountInfo.oauthKeyMasked) {
+              // Mirror the PTY driver's deriveAccountInfoFromOauth: when the
+              // turn was started with a kanna OAuth-pool token, surface its
+              // name as organization and tag the source so the UI renders
+              // "Pool token" identically across drivers. SDK-reported extras
+              // (email, subscriptionType) are preserved.
+              if (session.activeTokenId) {
+                augmented = {
+                  ...accountInfo,
+                  tokenSource: "kanna-oauth-pool",
+                  ...(session.oauthLabel ? { organization: session.oauthLabel } : {}),
+                  ...(session.oauthKeyMasked ? { oauthKeyMasked: session.oauthKeyMasked } : {}),
+                }
+              } else if (session.oauthKeyMasked && !accountInfo.oauthKeyMasked) {
                 augmented = { ...accountInfo, oauthKeyMasked: session.oauthKeyMasked }
               }
             } else {
@@ -2516,6 +2529,7 @@ export class AgentCoordinator {
         pendingPromptSeqs: [],
         activeTokenId: picked?.id ?? null,
         oauthKeyMasked: picked ? maskOauthKey(picked.token) : null,
+        oauthLabel: picked?.label ?? null,
         lastUsedAt: Date.now(),
         backgroundTaskIds: new Set<string>(),
         backgroundTaskDeadlineAt: 0,
