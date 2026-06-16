@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.94.0](https://github.com/cuongtranba/kanna/compare/v0.93.0...v0.94.0) (2026-06-16)
+
+
+### Features
+
+* **subagent:** add run_in_background delegation mode ([#420](https://github.com/cuongtranba/kanna/issues/420)) ([a10fc89](https://github.com/cuongtranba/kanna/commit/a10fc893847fae90613a20016805b3287acb0ce1))
+
 ## [0.93.0](https://github.com/cuongtranba/kanna/compare/v0.92.3...v0.93.0) (2026-06-16)
 
 
