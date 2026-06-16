@@ -512,11 +512,11 @@ describe("buildSubagentProviderRun – keep-alive Claude", () => {
   })
 
   test("keepAlive:true is forwarded to startClaudeSession", async () => {
-    let capturedKeepAlive: boolean | undefined = undefined
+    const capturedKeepAlive: Array<boolean | undefined> = []
 
     const args = makeArgs({
       startClaudeSession: async (sessionArgs) => {
-        capturedKeepAlive = sessionArgs.keepAlive
+        capturedKeepAlive.push(sessionArgs.keepAlive)
         return {
           provider: "claude" as const,
           stream: makeHarnessTurn([makeTextEvent("t1"), makeResultEvent()]).stream,
@@ -533,7 +533,7 @@ describe("buildSubagentProviderRun – keep-alive Claude", () => {
 
     const run = buildSubagentProviderRun(args)
     await run.start(() => {}, () => {}, { keepAlive: true })
-    expect(capturedKeepAlive).toBe(true)
+    expect(capturedKeepAlive[0]).toBe(true)
   })
 
   test("keep-alive without pushChannelPrompt fails closed and closes session", async () => {
