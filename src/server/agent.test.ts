@@ -1773,6 +1773,81 @@ describe("AgentCoordinator claude integration", () => {
     events.close()
   })
 
+  test("cancel() suppresses the SDK interrupt-induced tail error result", async () => {
+    const events = new AsyncEventQueue<any>()
+
+    const store = createFakeStore()
+    const coordinator = new AgentCoordinator({
+      store: store as never,
+      onStateChange: () => {},
+      startClaudeSession: async () => ({
+        provider: "claude",
+        stream: events,
+        getAccountInfo: async () => null,
+        interrupt: async () => {},
+        close: () => {},
+        setModel: async () => {},
+        setPermissionMode: async () => {},
+        getSupportedCommands: async () => [],
+        // Turn never produces its own result — it hangs until cancelled,
+        // mirroring an in-flight SDK turn the user stops.
+        sendPrompt: async () => {
+          events.push({ type: "session_token" as const, sessionToken: "claude-session-1" })
+          events.push({
+            type: "transcript" as const,
+            entry: timestamped({
+              kind: "system_init",
+              provider: "claude",
+              model: "claude-opus-4-1",
+              tools: [],
+              agents: [],
+              slashCommands: [],
+              mcpServers: [],
+            }),
+          })
+        },
+      }),
+    })
+
+    await coordinator.send({
+      type: "chat.send",
+      chatId: "chat-1",
+      provider: "claude",
+      content: "do work",
+      model: "claude-opus-4-1",
+    })
+
+    await waitFor(() => coordinator.getActiveStatuses().get("chat-1") === "running")
+
+    await coordinator.cancel("chat-1")
+    await waitFor(() => store.messages.some((entry) => entry.kind === "interrupted"))
+
+    // The SDK's interrupt() resolves the query loop with a tail error result
+    // (subtype error_during_execution, empty text). This must be swallowed.
+    events.push({
+      type: "transcript" as const,
+      entry: timestamped({
+        kind: "result",
+        subtype: "error",
+        isError: true,
+        durationMs: 0,
+        result: "",
+      }),
+    })
+
+    // Give the stream loop a tick to process (and drop) the tail result.
+    await new Promise((resolve) => setTimeout(resolve, 10))
+
+    const interruptedEntries = store.messages.filter((entry) => entry.kind === "interrupted")
+    const errorResults = store.messages.filter(
+      (entry) => entry.kind === "result" && entry.isError,
+    )
+    expect(interruptedEntries).toHaveLength(1)
+    expect(errorResults).toHaveLength(0)
+
+    events.close()
+  })
+
   test("closes idle Claude sessions and resumes from the stored session token on the next turn", async () => {
     const startSessionCalls: Array<{ sessionToken: string | null }> = []
     const prompts: string[] = []
