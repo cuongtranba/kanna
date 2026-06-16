@@ -3,7 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises"
 import { homedir, tmpdir } from "node:os"
 import path from "node:path"
 import { describe, expect, test } from "bun:test"
-import { computeJsonlPath, computeProjectDir, encodeCwd } from "./jsonl-path.adapter"
+import { computeJsonlPath, computeProjectDir, computeWorkflowsDir, encodeCwd } from "./jsonl-path.adapter"
 
 describe("encodeCwd", () => {
   test("absolute path: replaces / with -", () => {
@@ -96,6 +96,15 @@ describe("encodeCwd realpath + dot replacement", () => {
     } finally {
       await rm(tmp, { recursive: true, force: true })
     }
+  })
+})
+
+describe("computeWorkflowsDir", () => {
+  test("computeWorkflowsDir = <projectDir>/<sessionId>/workflows", () => {
+    const cwd = process.cwd() // existing dir; realpathSync requires it to exist
+    const sessionId = "11111111-2222-3333-4444-555555555555"
+    const expected = `${computeProjectDir({ homeDir: "/home/x", cwd })}/${sessionId}/workflows`
+    expect(computeWorkflowsDir({ homeDir: "/home/x", cwd, sessionId })).toBe(expected)
   })
 })
 
