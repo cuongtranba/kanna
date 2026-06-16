@@ -392,13 +392,20 @@ the main model then synthesizes it into its own response.
   `user_prompt` entries for UI badges and analytics. The assistant-text
   mention scan and the `chat_send` / dequeue short-circuits are removed.
 
-## Keep-Alive Multi-Turn Subagents (claude-PTY only)
+## Keep-Alive Multi-Turn Subagents (claude SDK + PTY)
 
 `delegate_subagent({ subagent_id, prompt, keep_alive: true })` keeps the
-subagent's PTY claude REPL open after the first `result` instead of sending
-`/exit`. The main agent then drives further turns into the SAME warm
-process — no re-spawn, no re-trust, warm cache. Star topology preserved:
-the main agent is always the one calling these tools.
+subagent's claude session open after the first `result` instead of tearing it
+down. The main agent then drives further turns into the SAME warm session — no
+re-spawn, no re-trust, warm cache. Star topology preserved: the main agent is
+always the one calling these tools.
+
+- **SDK transport (adr-20260616-sdk-pty-feature-parity):** the SDK driver uses
+  its native streaming-input prompt queue — `startClaudeSession({ keepAlive })`
+  leaves the `AsyncMessageQueue` open after the initial prompt and exposes the
+  handle's `pushChannelPrompt` field backed by a queue push (shared with
+  `sendPrompt` via `enqueueUserPrompt`). No channel/dev-channels flag is needed.
+- **PTY transport:** as below — a kanna channel push.
 
 - **Transport:** each turn is a kanna channel push (`pushChannelPrompt`, the
   same MCP-notification transport shipped in PR #333) followed by draining
@@ -540,13 +547,22 @@ could notify. See `adr-20260604-pty-background-task-keepalive`.
   pin a process. Trade-off: a quick task still holds the session warm up to the
   max (no early-clear) — acceptable and bounded; raise/lower per deployment.
 
-# Workflow Status Panel (PTY disk-watch, read-only)
+# Workflow Status Panel (disk-watch, read-only — SDK + PTY)
 
 Surfaces Claude Code's native `Workflow` tool (dynamic multi-agent
 orchestration) in the UI: a per-chat panel listing every run with live status +
-drill-in progress, plus an inline transcript card on the launch. **PTY driver
-only, read-only.** Complementary to "Agent Self-Scheduled Wake" — that keeps the
+drill-in progress, plus an inline transcript card on the launch. **Read-only,
+both drivers.** Complementary to "Agent Self-Scheduled Wake" — that keeps the
 *agent* re-entering while a workflow runs; this *displays* the workflow.
+
+**SDK driver registration (adr-20260616-sdk-pty-feature-parity).** Claude writes
+the `wf_*.json` sidecars regardless of driver, so the SDK reuses the same
+disk-watch read-model. `AgentCoordinator.maybeRegisterSdkWorkflowsDir` derives
+`<projectDir>/<session-uuid>/workflows` (via `computeWorkflowsDir`) from the
+SDK's first `session_token` HarnessEvent and calls `workflowRegistry.register`
+once per session; `closeClaudeSession` unregisters. The PTY path keeps its own
+transcript-path registration (guarded by driver preference so neither
+double-fires).
 
 **Why disk-watch, not the event stream.** The PTY transcript JSONL (PTY's sole
 event source) carries the `Workflow` tool_use launch but **no**
@@ -596,7 +612,7 @@ subagent files). See `adr-20260603-workflow-disk-watch-read-model`.
   (mirrors `SubagentsSection`), `WorkflowMessage` transcript card (live pill
   joined by `taskId` once `chatId` is threaded through the transcript rows).
 
-Out of scope: SDK driver, global cross-chat view, stop/relaunch.
+Out of scope: global cross-chat view, stop/relaunch.
 
 # Tests
 
