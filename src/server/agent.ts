@@ -269,6 +269,8 @@ interface AgentCoordinatorArgs {
     scheduleWakeup?: (a: { delayMs: number; prompt: string }) => Promise<string | null>
     /** Folder-restricted subagent: disallow native FS tools + allowlist mcp__kanna__* + per-run path-deny scope. */
     restrictedAllowedPaths?: string[]
+    /** Keep the SDK prompt queue open after the initial prompt to allow multi-turn keep-alive. */
+    keepAlive?: boolean
   }) => Promise<ClaudeSessionHandle>
   startClaudeSessionPTY?: (args: StartClaudeSessionPtyArgs) => Promise<ClaudeSessionHandle>
   claudeLimitDetector?: LimitDetector
@@ -1081,6 +1083,8 @@ async function startClaudeSession(args: {
   customMcpServers?: readonly McpServerConfig[]
   /** Folder-restricted subagent: disallow native FS tools, allowlist mcp__kanna__*, per-run path-deny. */
   restrictedAllowedPaths?: string[]
+  /** When true, leave the prompt queue open after initialPrompt and expose pushChannelPrompt on the handle. */
+  keepAlive?: boolean
 }): Promise<ClaudeSessionHandle> {
   const canUseTool = buildCanUseTool({
     localPath: args.localPath,
@@ -1148,7 +1152,9 @@ async function startClaudeSession(args: {
       parent_tool_use_id: null,
       session_id: args.sessionToken ?? undefined,
     })
-    promptQueue.close()
+    if (!args.keepAlive) {
+      promptQueue.close()
+    }
   }
 
   return {
@@ -1189,6 +1195,19 @@ async function startClaudeSession(args: {
         return []
       }
     },
+    ...(args.keepAlive ? {
+      pushChannelPrompt: async (content: string) => {
+        promptQueue.push({
+          type: "user",
+          message: {
+            role: "user",
+            content,
+          },
+          parent_tool_use_id: null,
+          session_id: args.sessionToken ?? "",
+        })
+      },
+    } : {}),
     close: () => {
       promptQueue.close()
       q.close()
@@ -2683,6 +2702,7 @@ export class AgentCoordinator {
           workflowRegistry: this.workflowRegistry ?? undefined,
           customMcpServers: this.getEnabledCustomMcpServers(),
           restrictedAllowedPaths: a.restrictedAllowedPaths,
+          keepAlive: a.keepAlive,
         })
       }
       return this.startClaudeSessionFn({ ...a, customMcpServers: this.getEnabledCustomMcpServers() })
