@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.93.0](https://github.com/cuongtranba/kanna/compare/v0.92.3...v0.93.0) (2026-06-16)
+
+
+### Features
+
+* SDK↔PTY driver feature parity (keep-alive subagents, workflow panel) ([#418](https://github.com/cuongtranba/kanna/issues/418)) ([1742464](https://github.com/cuongtranba/kanna/commit/1742464a114611459be90f04dcb5be7e69da84e8))
+
 ## [0.92.3](https://github.com/cuongtranba/kanna/compare/v0.92.2...v0.92.3) (2026-06-12)
 
 
