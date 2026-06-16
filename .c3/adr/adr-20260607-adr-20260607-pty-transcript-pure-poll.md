@@ -1,6 +1,6 @@
 ---
 id: adr-20260607-adr-20260607-pty-transcript-pure-poll
-c3-seal: 6349bb8db1887831c5d6eed99dcfd3af06cd051db7c14b591a7882e6b9a6c0d2
+c3-seal: dc9adf7ae5a4fa6d6594a116576a48c1e584a7fa47055a5560b1bdf70449ad21
 title: adr-20260607-pty-transcript-pure-poll
 type: adr
 goal: |-
@@ -138,4 +138,4 @@ of the drop bug the safety poll was bolted on to mask.
 | bun test src/server/claude-pty/tui-source.adapter.test.ts | all tests pass |
 | bun test src/server/claude-pty/ | all PTY suites pass |
 | bun run lint | passes, no new warnings |
-| grep -n "watch|pollMode" src/server/claude-pty/tui-source.adapter.ts src/server/claude-pty/driver.ts | no fs.watch import, no pollMode references remain |
+| grep -n "watch | pollMode" src/server/claude-pty/tui-source.adapter.ts src/server/claude-pty/driver.ts |

@@ -466,6 +466,39 @@ always the one calling these tools.
   orchestrator deps at `AgentCoordinator` construction (`agent.ts`); the
   orchestrator itself reads only its deps (side-effect seal).
 
+# Background Subagents (delegate_subagent run_in_background)
+
+`delegate_subagent({ subagent_id, prompt, run_in_background: true })` launches a
+subagent WITHOUT blocking the main turn. The MCP tool returns immediately with
+`{status:"async_launched", run_id}`; the subagent's final reply is delivered
+back into the main chat as a fresh turn when it finishes. Mutually exclusive
+with `keep_alive` (the MCP host rejects both set). Works for any provider
+(Claude + Codex) — delivery is provider-agnostic. See
+adr-20260616-subagent-run-in-background.
+
+- **Orchestrator:** `delegateRun({background:true})` runs the subagent through
+  the normal `spawnRun` plumbing (permit, RunState, timeout, abort,
+  event-sourcing) but does NOT await it — it generates the runId up front,
+  returns `{status:"async_launched", runId}`, and on terminal fires the
+  `onBackgroundRunComplete(chatId, runId, BackgroundRunOutcome)` dep. The active
+  background run holds a permit while in flight, so concurrency is bounded by
+  the existing permit pool (default 4) + run timeout. No live-session registry
+  (background runs are one-shot, not keep-alive).
+- **Re-entry (driver-agnostic).** `AgentCoordinator.deliverBackgroundSubagentResult`
+  is wired as `onBackgroundRunComplete`. It builds a notification prompt
+  (the reply, or the failure) and routes through
+  `scheduleAgentWakeup({source:"subagent_background", delayMs:0})` — the SAME
+  event-sourced re-entry as every other agent wake. The turn machinery then
+  delivers it per driver: the SDK driver pushes a follow-up turn via the live
+  session's native `sendPrompt` (streaming-input queue); the PTY driver spawns
+  /resumes a turn. No driver-specific delivery code — `fireAutoContinue` →
+  `enqueueMessage` already handles both.
+- **Cap exemption.** `source:"subagent_background"` is EXEMPT from the
+  `KANNA_MAX_AGENT_WAKES` runaway cap (it delivers a real result, not a
+  self-poll) — exhausting the cap would silently drop genuine subagent
+  results. It is the only source that neither checks nor increments
+  `agentWakeChainByChat`. Concurrency is bounded by the permit pool instead.
+
 # Agent Self-Scheduled Wake (KANNA_MAX_AGENT_WAKES, KANNA_PENDING_WORKFLOW_POLL_MS)
 
 Kanna owns the timer for agent-driven chat re-entry. The native claude-code

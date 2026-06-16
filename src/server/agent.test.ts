@@ -3779,6 +3779,52 @@ describe("AgentCoordinator.scheduleAgentWakeup", () => {
     expect(await wake()).not.toBeNull() // chain reset → armed again
   })
 
+  test("subagent_background wakes are exempt from the runaway cap", async () => {
+    const store = createFakeStore()
+    const coordinator = new AgentCoordinator({
+      store: store as never,
+      onStateChange: () => {},
+      maxAgentWakes: 1,
+      startClaudeSession: async () => { throw new Error("not needed") },
+    })
+    const wake = () => coordinator.scheduleAgentWakeup({
+      chatId: "chat-1", delayMs: 0, prompt: "deliver result", source: "subagent_background",
+    })
+    // maxAgentWakes is 1, but background-result delivery must never be dropped.
+    expect(await wake()).not.toBeNull()
+    expect(await wake()).not.toBeNull()
+    expect(await wake()).not.toBeNull()
+  })
+
+  test("deliverBackgroundSubagentResult arms a subagent_background wake carrying the reply", async () => {
+    const store = createFakeStore()
+    const coordinator = new AgentCoordinator({
+      store: store as never,
+      onStateChange: () => {},
+      startClaudeSession: async () => { throw new Error("not needed") },
+    })
+    await (coordinator as unknown as {
+      deliverBackgroundSubagentResult: (
+        chatId: string,
+        runId: string,
+        outcome: { status: "completed"; runId: string; text: string },
+      ) => Promise<void>
+    }).deliverBackgroundSubagentResult("chat-1", "run-bg", {
+      status: "completed",
+      runId: "run-bg",
+      text: "the background answer",
+    })
+
+    const events = store.getAutoContinueEvents("chat-1")
+    expect(events).toHaveLength(1)
+    const ev = events[0]
+    expect(ev.kind).toBe("auto_continue_accepted")
+    if (ev.kind === "auto_continue_accepted") {
+      expect(ev.source).toBe("subagent_background")
+      expect(ev.prompt).toContain("the background answer")
+    }
+  })
+
   test("clamps a delay longer than the idle window so the wake beats the reaper", async () => {
     const store = createFakeStore()
     const coordinator = new AgentCoordinator({

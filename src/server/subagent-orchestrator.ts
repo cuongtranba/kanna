@@ -145,6 +145,15 @@ export interface SubagentOrchestratorDeps {
    * for tests.
    */
   onRunProgress?: (chatId: string, runId: string) => void
+  /**
+   * Called when a `run_in_background` run reaches a terminal state, carrying
+   * its final outcome (completed text or failure). Wired by AgentCoordinator
+   * to deliver the result back into the main chat as a fresh turn — SDK driver
+   * via the live session's `sendPrompt`, PTY driver via a `subagent_background`
+   * auto-continue wake. Optional for tests.
+   * See adr-20260616-subagent-run-in-background.
+   */
+  onBackgroundRunComplete?: (chatId: string, runId: string, outcome: BackgroundRunOutcome) => void
   now?: () => number
   maxParallel?: number
   maxChainDepth?: number
@@ -171,6 +180,16 @@ const DEFAULT_LIVE_IDLE_TIMEOUT_MS = 300_000
  * the main agent can synthesize the subagent's answer into its own reply.
  */
 export type DelegationOutcome =
+  | { status: "completed"; runId: string; text: string }
+  | { status: "failed"; runId: string; errorCode: SubagentErrorCode; errorMessage: string }
+  | { status: "async_launched"; runId: string }
+
+/**
+ * Terminal outcome of a background (run_in_background) run, delivered to
+ * `onBackgroundRunComplete` once the detached run finishes. Excludes
+ * `async_launched` — that is only the immediate return of the launch call.
+ */
+export type BackgroundRunOutcome =
   | { status: "completed"; runId: string; text: string }
   | { status: "failed"; runId: string; errorCode: SubagentErrorCode; errorMessage: string }
 // Subagents now run with full toolset (Bash, Read, etc) so single turns may
@@ -496,6 +515,16 @@ export class SubagentOrchestrator {
      * Over `maxLive` live sessions per chat → CAP_EXCEEDED.
      */
     keepAlive?: boolean
+    /**
+     * When true, launch the run detached and return `{status:"async_launched",
+     * runId}` immediately instead of awaiting the terminal outcome. The run
+     * still flows through `spawnRun` (permit, RunState, timeout, abort,
+     * event-sourcing); on terminal the orchestrator calls
+     * `onBackgroundRunComplete` so the caller can deliver the result back into
+     * the main chat. Mutually exclusive with `keepAlive` (enforced by the MCP
+     * host). See adr-20260616-subagent-run-in-background.
+     */
+    background?: boolean
   }): Promise<DelegationOutcome> {
     await this.recoveryPromise
     const subagent = this.deps.appSettings
@@ -577,6 +606,37 @@ export class SubagentOrchestrator {
         )
       }
     }
+    if (args.background) {
+      // Detached launch: kick off the run without awaiting and return
+      // immediately. The pre-generated runId lets the caller (UI, MCP) track
+      // the run before it finishes. On terminal, deliver the outcome via
+      // onBackgroundRunComplete. spawnRun never rejects (it maps every error to
+      // a failed DelegationOutcome), so the catch is defensive only.
+      const runId = crypto.randomUUID()
+      void this.spawnRun({
+        subagent,
+        chatId: args.chatId,
+        parentUserMessageId: args.parentUserMessageId,
+        parentRunId: args.parentRunId,
+        depth: args.depth,
+        ancestorSubagentIds: args.ancestorSubagentIds,
+        userInstruction: args.prompt,
+        onEntry: args.onEntry,
+        runId,
+      })
+        .then((outcome) => {
+          if (outcome.status === "async_launched") return
+          try {
+            this.deps.onBackgroundRunComplete?.(args.chatId, runId, outcome)
+          } catch (err) {
+            console.warn(`${LOG_PREFIX} onBackgroundRunComplete threw`, { chatId: args.chatId, runId, err })
+          }
+        })
+        .catch((err) => {
+          console.warn(`${LOG_PREFIX} background spawnRun rejected`, { chatId: args.chatId, runId, err })
+        })
+      return { status: "async_launched", runId }
+    }
     const outcome = await this.spawnRun({
       subagent,
       chatId: args.chatId,
@@ -621,8 +681,10 @@ export class SubagentOrchestrator {
     onEntry?: (entry: TranscriptEntry) => void
     /** When true, passes keepAlive to the provider run and registers a LiveSession on success. */
     keepAlive?: boolean
+    /** Pre-generated run id (background launches generate it up front to return synchronously). */
+    runId?: string
   }): Promise<DelegationOutcome> {
-    const runId = crypto.randomUUID()
+    const runId = args.runId ?? crypto.randomUUID()
     await this.deps.store.appendSubagentEvent({
       v: 3,
       type: "subagent_run_started",
@@ -954,7 +1016,7 @@ export class SubagentOrchestrator {
    * Acquires a permit for the duration of the turn, then releases it so
    * idle sessions hold no permit between turns.
    */
-  async sendToLiveRun(runId: string, prompt: string): Promise<DelegationOutcome> {
+  async sendToLiveRun(runId: string, prompt: string): Promise<BackgroundRunOutcome> {
     const session = this.liveSessions.get(runId)
     if (!session) {
       return { status: "failed", runId, errorCode: "NO_LIVE_SESSION", errorMessage: `No live subagent session ${runId}` }

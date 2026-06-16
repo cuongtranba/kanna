@@ -174,6 +174,13 @@ export interface StartKannaServerOptions {
    */
   trustProxy?: boolean
   onMigrationProgress?: (message: string) => void
+  /**
+   * Override project discovery. Defaults to scanning the real home dir
+   * (`~/.claude/projects`, `~/.codex/sessions`). Tests inject a stub so boot
+   * does not read the dev machine's entire session history — a full Codex
+   * session scan can take seconds and is the only slow step in boot.
+   */
+  discoverProjects?: () => DiscoveredProject[]
   update?: {
     version: string
     fetchLatestVersion: (packageName: string) => Promise<string>
@@ -223,8 +230,9 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
   await store.migrateLegacyTranscripts(options.onMigrationProgress)
   let discoveredProjects: DiscoveredProject[] = []
 
+  const runDiscovery = options.discoverProjects ?? discoverProjects
   async function refreshDiscovery() {
-    discoveredProjects = discoverProjects()
+    discoveredProjects = runDiscovery()
     return discoveredProjects
   }
 
