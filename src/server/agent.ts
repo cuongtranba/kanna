@@ -208,6 +208,14 @@ interface ClaudeSessionState {
   backgroundTaskDeadlineAt: number
   /** SDK only: set once the workflows dir has been registered for this session. */
   workflowsDirRegistered?: boolean
+  // Number of cancelled turns awaiting their interrupt-induced tail `result`.
+  // The SDK's `interrupt()` resolves the query loop with a `result` whose
+  // subtype is `error_during_execution` (NOT `cancelled`) and empty text, which
+  // would otherwise render as "An unknown error occurred." after the
+  // `interrupted` entry. Set on cancel, consumed (and the tail suppressed) when
+  // that result arrives, reset on each new turn so a no-tail cancel can't leak
+  // suppression onto a later real error.
+  cancelledResultPending: number
 }
 
 interface ClaudeSessionLifecycleOptions {
@@ -2330,6 +2338,10 @@ export class AgentCoordinator {
       const promptSeq = session.nextPromptSeq + 1
       session.nextPromptSeq = promptSeq
       session.pendingPromptSeqs.push(promptSeq)
+      // A new turn starts: clear any stale cancellation marker so a previous
+      // cancel that never produced a tail result can't suppress this turn's
+      // real result.
+      session.cancelledResultPending = 0
       active.claudePromptSeq = promptSeq
       logClaudeSteer("claude_prompt_sent", {
         chatId: args.chatId,
@@ -2533,6 +2545,7 @@ export class AgentCoordinator {
         lastUsedAt: Date.now(),
         backgroundTaskIds: new Set<string>(),
         backgroundTaskDeadlineAt: 0,
+        cancelledResultPending: 0,
       }
       this.claudeSessions.set(args.chatId, session)
       this.enforceClaudeSessionBudget(args.chatId)
@@ -2973,6 +2986,20 @@ export class AgentCoordinator {
 
         if (!event.entry) continue
         if (this.claudeSessions.get(session.chatId) !== session) break
+        // Suppress the interrupt-induced tail `result` of a cancelled turn.
+        // cancel() already removed the active turn, recorded the cancellation,
+        // and appended the `interrupted` entry; the SDK then emits one error
+        // `result` (subtype error_during_execution, empty text) that would
+        // otherwise render as "An unknown error occurred." Drop it (and skip
+        // the seq shift — cancel() already spliced the cancelled seq).
+        if (
+          event.entry.kind === "result" &&
+          event.entry.isError &&
+          session.cancelledResultPending > 0
+        ) {
+          session.cancelledResultPending -= 1
+          continue
+        }
         await this.store.appendMessage(session.chatId, event.entry)
         // Arm the background-task keep-alive guard the moment Claude Code reports
         // a `Bash(run_in_background)` launch. Keeps the PTY process warm past the
@@ -3915,6 +3942,12 @@ export class AgentCoordinator {
       if (session) {
         const idx = session.pendingPromptSeqs.indexOf(active.claudePromptSeq)
         if (idx >= 0) session.pendingPromptSeqs.splice(idx, 1)
+        // The SDK driver's `interrupt()` emits a tail `result` with
+        // subtype `error_during_execution` (empty text) after the splice
+        // above. Mark it pending so runClaudeSession suppresses that one
+        // result instead of rendering "An unknown error occurred." The
+        // `interrupted` entry above is the user-visible cancellation.
+        session.cancelledResultPending += 1
       }
     }
 
