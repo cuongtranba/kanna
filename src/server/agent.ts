@@ -54,7 +54,7 @@ import type { TunnelGateway } from "./cloudflare-tunnel/gateway"
 import { OAuthTokenPool } from "./oauth-pool/oauth-token-pool"
 import { maskOauthKey } from "../shared/mask-oauth-key"
 import { parseMentions, type ParsedMention } from "./mention-parser"
-import { SubagentOrchestrator, type ProviderRunStart } from "./subagent-orchestrator"
+import { SubagentOrchestrator, type BackgroundRunOutcome, type ProviderRunStart } from "./subagent-orchestrator"
 import { buildSubagentProviderRun, type BuildSubagentProviderRunArgs } from "./subagent-provider-run"
 import type { ToolCallbackService } from "./tool-callback"
 import type { ChatPermissionPolicy } from "../shared/permission-policy"
@@ -1397,6 +1397,9 @@ export class AgentCoordinator {
         // coalesces (16ms) and signature-dedups, so per-entry fan-out is
         // cheap.
         this.emitStateChange(chatId)
+      },
+      onBackgroundRunComplete: (chatId, runId, outcome) => {
+        void this.deliverBackgroundSubagentResult(chatId, runId, outcome)
       },
       maxLive: positiveIntegerFromEnv(process.env.KANNA_SUBAGENT_MAX_LIVE, 0) || undefined,
       liveIdleTimeoutMs: positiveIntegerFromEnv(process.env.KANNA_SUBAGENT_IDLE_TIMEOUT_MS, 0) || undefined,
@@ -3698,13 +3701,18 @@ export class AgentCoordinator {
     chatId: string
     delayMs: number
     prompt: string
-    source: "agent_wakeup" | "pending_workflow"
+    source: "agent_wakeup" | "pending_workflow" | "subagent_background"
   }): Promise<string | null> {
     const { chatId, prompt, source } = args
     if (!this.store.getChat(chatId)) throw new Error("Chat not found")
 
+    // `subagent_background` delivers a finished run_in_background subagent's
+    // reply — a real result, not a self-poll — so it is exempt from the
+    // runaway-wake cap. Its concurrency is already bounded by the subagent
+    // permit pool + run timeout. See adr-20260616-subagent-run-in-background.
+    const countsAgainstCap = source !== "subagent_background"
     const chainLength = this.agentWakeChainByChat.get(chatId) ?? 0
-    if (chainLength >= this.maxAgentWakes) return null
+    if (countsAgainstCap && chainLength >= this.maxAgentWakes) return null
 
     // Belt for the workflow-liveness guard: a wake must re-enter the chat
     // BEFORE the idle reaper closes the PTY, else a long model-chosen delay
@@ -3733,8 +3741,37 @@ export class AgentCoordinator {
       detectedAt: now,
       prompt,
     })
-    this.agentWakeChainByChat.set(chatId, chainLength + 1)
+    if (countsAgainstCap) this.agentWakeChainByChat.set(chatId, chainLength + 1)
     return scheduleId
+  }
+
+  /**
+   * Deliver a finished `run_in_background` subagent's result back into the
+   * main chat as a fresh turn. Wired as the orchestrator's
+   * `onBackgroundRunComplete` hook. Routes through `scheduleAgentWakeup`
+   * (`source: "subagent_background"`, delay 0) so re-entry uses the same
+   * event-sourced, driver-agnostic turn machinery as every other agent wake —
+   * the SDK driver delivers via its live session's native `sendPrompt`, the
+   * PTY driver via a fresh turn. See adr-20260616-subagent-run-in-background.
+   */
+  private async deliverBackgroundSubagentResult(
+    chatId: string,
+    runId: string,
+    outcome: BackgroundRunOutcome,
+  ): Promise<void> {
+    const prompt = outcome.status === "completed"
+      ? `A background subagent you launched (run ${runId}) finished. Its reply:\n\n${outcome.text}\n\nIncorporate this into your work; reply to the user if it answers their request.`
+      : `A background subagent you launched (run ${runId}) failed (${outcome.errorCode}): ${outcome.errorMessage}. Decide whether to retry, try another approach, or tell the user.`
+    try {
+      await this.scheduleAgentWakeup({
+        chatId,
+        delayMs: 0,
+        prompt,
+        source: "subagent_background",
+      })
+    } catch (err) {
+      console.warn(`${LOG_PREFIX} deliverBackgroundSubagentResult failed`, { chatId, runId, err })
+    }
   }
 
   /**

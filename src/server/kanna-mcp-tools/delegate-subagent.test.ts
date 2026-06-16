@@ -14,6 +14,8 @@ interface DelegateCall {
   subagentId: string
   prompt: string
   onEntry?: (entry: TranscriptEntry) => void
+  keepAlive?: boolean
+  background?: boolean
 }
 
 function makeFakeOrchestrator(outcome: DelegationOutcome, options: { fireEntries?: TranscriptEntry[] } = {}) {
@@ -124,6 +126,32 @@ describe("createDelegateSubagentTool", () => {
       ancestorSubagentIds: ["sa-a", "sa-b"],
       depth: 2,
     })
+  })
+
+  test("run_in_background forwards background:true and returns async_launched payload", async () => {
+    const { fake, calls } = makeFakeOrchestrator({ status: "async_launched", runId: "run-bg" })
+    const tool = createDelegateSubagentTool({ orchestrator: fake })
+    const result = await tool.handler(
+      { subagent_id: "sa-1", prompt: "long job", run_in_background: true },
+      baseCtx(),
+    )
+    expect(calls).toHaveLength(1)
+    expect(calls[0]).toMatchObject({ subagentId: "sa-1", background: true })
+    expect(result.isError).toBeFalsy()
+    const payload = JSON.parse(result.content[0].text)
+    expect(payload).toEqual({ status: "async_launched", run_id: "run-bg" })
+  })
+
+  test("rejects run_in_background combined with keep_alive without calling the orchestrator", async () => {
+    const { fake, calls } = makeFakeOrchestrator({ status: "completed", runId: "x", text: "" })
+    const tool = createDelegateSubagentTool({ orchestrator: fake })
+    const result = await tool.handler(
+      { subagent_id: "sa-1", prompt: "x", keep_alive: true, run_in_background: true },
+      baseCtx(),
+    )
+    expect(result.isError).toBe(true)
+    expect(result.content[0].text).toContain("mutually exclusive")
+    expect(calls).toHaveLength(0)
   })
 
   test("forwards onEntry from context to orchestrator.delegateRun so progress notifications can flow", async () => {

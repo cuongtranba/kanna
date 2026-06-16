@@ -7,6 +7,7 @@ import type { EventStore } from "./event-store"
 import { createTestEventStore } from "./storage/test-helpers"
 import {
   SubagentOrchestrator,
+  type DelegationOutcome,
   type LiveTurnSource,
   type OrchestratorAppSettings,
   type ProviderRunStart,
@@ -65,6 +66,7 @@ interface OrchestratorHarness {
   mockProviderRun: (override: Pick<ProviderRunStart, "start" | "authReady">) => void
   progressCalls: Array<{ chatId: string; runId: string }>
   terminalCalls: Array<{ chatId: string; runId: string; reason: "failed" | "completed" }>
+  backgroundCompletions: Array<{ chatId: string; runId: string; outcome: DelegationOutcome }>
 }
 
 async function setupHarness(opts: {
@@ -95,6 +97,7 @@ async function setupHarness(opts: {
 
   const progressCalls: Array<{ chatId: string; runId: string }> = []
   const terminalCalls: Array<{ chatId: string; runId: string; reason: "failed" | "completed" }> = []
+  const backgroundCompletions: Array<{ chatId: string; runId: string; outcome: DelegationOutcome }> = []
 
   let nowCounter = chat.createdAt + 1
   const orchestrator = new SubagentOrchestrator({
@@ -107,6 +110,7 @@ async function setupHarness(opts: {
     maxLive: opts.maxLive,
     onRunProgress: (chatId, runId) => { progressCalls.push({ chatId, runId }) },
     onRunTerminal: (chatId, runId, reason) => { terminalCalls.push({ chatId, runId, reason }) },
+    onBackgroundRunComplete: (chatId, runId, outcome) => { backgroundCompletions.push({ chatId, runId, outcome }) },
     startProviderRun: ({ subagent }): ProviderRunStart => {
       if (providerRunOverride) {
         return {
@@ -178,6 +182,7 @@ async function setupHarness(opts: {
     },
     progressCalls,
     terminalCalls,
+    backgroundCompletions,
   }
 }
 
@@ -1339,6 +1344,82 @@ describe("SubagentOrchestrator", () => {
       })
       expect(out.status).toBe("completed")
       expect(h.orchestrator.liveSessionCount()).toBe(1)
+    })
+
+    // ── run_in_background tests (adr-20260616-subagent-run-in-background) ──
+
+    test("delegateRun background returns async_launched without awaiting the run", async () => {
+      const h = await setupHarness({ subagents: [makeSubagent({})] })
+      h.holdReply("sa-1")
+      const out = await h.orchestrator.delegateRun({
+        chatId: h.chatId,
+        parentUserMessageId: h.userMessageId,
+        parentRunId: null,
+        parentSubagentId: null,
+        ancestorSubagentIds: [],
+        depth: 0,
+        subagentId: "sa-1",
+        prompt: "do background work",
+        background: true,
+      })
+      expect(out.status).toBe("async_launched")
+      expect(out.runId).toBeTruthy()
+      // The run is still in flight: no completion delivered yet.
+      expect(h.backgroundCompletions).toHaveLength(0)
+    })
+
+    test("background run delivers completed outcome to onBackgroundRunComplete on terminal", async () => {
+      const h = await setupHarness({ subagents: [makeSubagent({})] })
+      h.holdReply("sa-1")
+      const out = await h.orchestrator.delegateRun({
+        chatId: h.chatId,
+        parentUserMessageId: h.userMessageId,
+        parentRunId: null,
+        parentSubagentId: null,
+        ancestorSubagentIds: [],
+        depth: 0,
+        subagentId: "sa-1",
+        prompt: "do background work",
+        background: true,
+      })
+      // Wait for the detached spawn to reach its held provider start before resolving.
+      for (let i = 0; i < 50 && !h.pendingHolds.has("sa-1"); i++) {
+        await new Promise((r) => setTimeout(r, 0))
+      }
+      h.resolveReply("sa-1", "background result")
+      // Drain microtasks until the completion is delivered.
+      for (let i = 0; i < 50 && h.backgroundCompletions.length === 0; i++) {
+        await new Promise((r) => setTimeout(r, 0))
+      }
+      expect(h.backgroundCompletions).toHaveLength(1)
+      const c = h.backgroundCompletions[0]
+      expect(c.runId).toBe(out.runId)
+      expect(c.outcome.status).toBe("completed")
+      expect(c.outcome.status === "completed" && c.outcome.text).toBe("background result")
+    })
+
+    test("background run delivers failed outcome to onBackgroundRunComplete", async () => {
+      const h = await setupHarness({ subagents: [makeSubagent({})] })
+      h.programs.set("sa-1", { authReady: true, error: "boom" })
+      const out = await h.orchestrator.delegateRun({
+        chatId: h.chatId,
+        parentUserMessageId: h.userMessageId,
+        parentRunId: null,
+        parentSubagentId: null,
+        ancestorSubagentIds: [],
+        depth: 0,
+        subagentId: "sa-1",
+        prompt: "do background work",
+        background: true,
+      })
+      expect(out.status).toBe("async_launched")
+      for (let i = 0; i < 50 && h.backgroundCompletions.length === 0; i++) {
+        await new Promise((r) => setTimeout(r, 0))
+      }
+      expect(h.backgroundCompletions).toHaveLength(1)
+      const c = h.backgroundCompletions[0]
+      expect(c.outcome.status).toBe("failed")
+      expect(c.outcome.status === "failed" && c.outcome.errorCode).toBe("PROVIDER_ERROR")
     })
 
     // ── Task 5: sendToLiveRun + closeLiveRun ──

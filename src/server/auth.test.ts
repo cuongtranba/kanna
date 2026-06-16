@@ -26,6 +26,9 @@ async function startPasswordServer(options: {
     strictPort: true,
     password: "secret",
     trustProxy: options.trustProxy ?? false,
+    // Don't scan the real ~/.claude / ~/.codex on boot — keeps the test fast
+    // and isolated from the dev machine's session history.
+    discoverProjects: () => [],
   })
   const project = await server.store.openProject(projectDir, "Project")
   return { server, projectDir, project, dataDir }
@@ -60,6 +63,7 @@ describe("password auth", () => {
       strictPort: true,
       password: "secret",
       trustProxy: false,
+      discoverProjects: () => [],
     })
     await server.store.openProject(projectDir, "Project")
 
