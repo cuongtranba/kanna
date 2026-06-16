@@ -60,6 +60,7 @@ import type { ToolCallbackService } from "./tool-callback"
 import type { ChatPermissionPolicy } from "../shared/permission-policy"
 import { mergePolicyOverride, POLICY_DEFAULT } from "../shared/permission-policy"
 import { startClaudeSessionPTY, type StartClaudeSessionPtyArgs } from "./claude-pty/driver"
+import { computeWorkflowsDir } from "./claude-pty/jsonl-path.adapter"
 
 type SdkMcpEntry =
   | { type: "stdio"; command: string; args: string[]; env: Record<string, string>; cwd?: string }
@@ -204,6 +205,8 @@ interface ClaudeSessionState {
   // mid-flight. See adr-20260604-pty-background-task-keepalive.
   backgroundTaskIds: Set<string>
   backgroundTaskDeadlineAt: number
+  /** SDK only: set once the workflows dir has been registered for this session. */
+  workflowsDirRegistered?: boolean
 }
 
 interface ClaudeSessionLifecycleOptions {
@@ -1595,6 +1598,27 @@ export class AgentCoordinator {
    * scan reservedBy for `owner === chatId` and drop the *new* token the
    * rotation just claimed, leaking the rotation's reservation (audit #9d).
    */
+  /**
+   * Register the workflow disk-watch dir for an SDK session once the session
+   * token is known. No-op if the registry is absent, already registered, or
+   * the driver preference is PTY (the PTY driver registers from its own
+   * resolved transcript path in driver.ts cleanup and must not be double-fired).
+   */
+  private maybeRegisterSdkWorkflowsDir(session: ClaudeSessionState): void {
+    if (!this.workflowRegistry) return
+    if (session.workflowsDirRegistered) return
+    // PTY registers from its own resolved transcript path; SDK derives from session_token.
+    if (this.resolveClaudeDriverPreference() === "pty") return
+    if (!session.sessionToken) return
+    const dir = computeWorkflowsDir({
+      homeDir: homedir(),
+      cwd: session.localPath,
+      sessionId: session.sessionToken,
+    })
+    this.workflowRegistry.register(session.chatId, dir)
+    session.workflowsDirRegistered = true
+  }
+
   private closeClaudeSession(
     chatId: string,
     session: ClaudeSessionState,
@@ -1607,6 +1631,11 @@ export class AgentCoordinator {
       this.oauthPool?.release(chatId)
     }
     session.session.close()
+    // For SDK sessions, unregister the workflow dir here. PTY sessions unregister
+    // inside the driver's cleanupResources (driver.ts) — do not double-fire.
+    if (this.resolveClaudeDriverPreference() !== "pty") {
+      this.workflowRegistry?.unregister(chatId)
+    }
   }
 
   private sweepIdleClaudeSessions(now = Date.now()): void {
@@ -2906,6 +2935,7 @@ export class AgentCoordinator {
         if (event.type === "session_token" && event.sessionToken) {
           session.sessionToken = event.sessionToken
           await this.store.setSessionTokenForProvider(session.chatId, "claude", event.sessionToken)
+          this.maybeRegisterSdkWorkflowsDir(session)
           this.emitStateChange(session.chatId)
           continue
         }
