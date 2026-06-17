@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.95.1](https://github.com/cuongtranba/kanna/compare/v0.95.0...v0.95.1) (2026-06-17)
+
+
+### Bug Fixes
+
+* **subagent:** resolve delegate_subagent id by id or unambiguous name ([#427](https://github.com/cuongtranba/kanna/issues/427)) ([2d89d39](https://github.com/cuongtranba/kanna/commit/2d89d39d8e561ed3ada3ab7dfd471d9e9dd48663))
+
 ## [0.95.0](https://github.com/cuongtranba/kanna/compare/v0.94.1...v0.95.0) (2026-06-17)
 
 
