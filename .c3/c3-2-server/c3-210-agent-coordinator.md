@@ -1,7 +1,7 @@
 ---
 id: c3-210
 c3-version: 4
-c3-seal: d7168b34029a6af4f7ba95d8238b488b2a8728229e2a85e717f8678fe599fe1f
+c3-seal: 8add4fdb1f9347e4d4d5c5a3e20eadf37ddb4e10673a262f18753db21cc6616b
 title: agent-coordinator
 type: component
 category: feature
@@ -76,8 +76,9 @@ Owns the agent turn lifecycle: receives `chat.send` commands, picks the provider
 | runTurn(command) | IN | Drives a single turn from chat.send | c3-208 | src/server/agent-coordinator.ts |
 | Transcript events | OUT | Append-only typed events | c3-206 | src/server/agent-coordinator.ts |
 | Cancel callback | IN | Propagates cancel to provider | c3-211 | src/server/agent-coordinator.ts |
-| delegateRun({keepAlive?}) | IN | subagent_id resolved by exact id, else unambiguous exact name (id wins on collision, ambiguous name → UNKNOWN_SUBAGENT); runs subagent turn 1; on keepAlive completion registers a live session (no /exit) and returns runId; over KANNA_SUBAGENT_MAX_LIVE per chat fails CAP_EXCEEDED | c3-226 | src/server/subagent-orchestrator.ts |
+| delegateRun({keepAlive?}) | IN | subagent_id resolved by exact id, else unambiguous exact name (id wins on collision, ambiguous name → UNKNOWN_SUBAGENT); a target with triggerMode==="manual" whose id is NOT in args.mentionedSubagentIds fails MANUAL_ONLY (the user must @-mention it); runs subagent turn 1; on keepAlive completion registers a live session (no /exit) and returns runId; over KANNA_SUBAGENT_MAX_LIVE per chat fails CAP_EXCEEDED | c3-226 | src/server/subagent-orchestrator.ts |
 | delegateRun({background?}) | IN | Launches the run detached and returns {status:"async_launched", runId} immediately; the run still flows through spawnRun (permit, RunState, timeout, abort, events); on terminal fires onBackgroundRunComplete. Mutually exclusive with keepAlive | c3-226 | src/server/subagent-orchestrator.ts |
+| getMentionedSubagentIds() | IN | Per-turn getter on KannaMcpDelegationContext supplying the subagent ids the user @-mentioned in the message that started the turn; threaded from agent.ts (mentionedSubagentIdsByChat, sourced from parseMentions) and consumed by delegateRun's MANUAL_ONLY gate; subagent sub-spawn contexts pass an empty set so a subagent cannot drive a manual subagent | c3-226 | src/server/agent.ts, src/server/kanna-mcp.ts, src/server/kanna-mcp-tools/delegate-subagent.ts |
 | onBackgroundRunComplete(chatId, runId, outcome) | OUT | Dep fired when a background run reaches terminal; AgentCoordinator delivers the BackgroundRunOutcome back into the main chat as a fresh turn via scheduleAgentWakeup(source:"subagent_background") | c3-227 | src/server/subagent-orchestrator.ts, src/server/agent.ts |
 | sendToLiveRun(runId, prompt) | IN | Drives a follow-up turn into a warm keep-alive session via channel push; acquires a permit for the turn only; NO_LIVE_SESSION if unknown | c3-226 | src/server/subagent-orchestrator.ts |
 | closeLiveRun(chatId, runId, reason) | IN | Tears down a live session (close REPL, cleanup RunState, onRunTerminal); also driven by idle timeout + cancel cascade | c3-226 | src/server/subagent-orchestrator.ts |

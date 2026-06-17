@@ -35,6 +35,8 @@ export interface DelegateSubagentContext {
    * than fabricating a parent.
    */
   getParentUserMessageId: () => string | null
+  /** Subagent ids the user @-mentioned in the message that started the turn. Gates manual-trigger subagents. */
+  getMentionedSubagentIds: () => string[]
   /**
    * Optional per-entry callback. Each persisted subagent transcript entry
    * (tool_call, tool_result, assistant_text, …) is forwarded here while
@@ -75,6 +77,7 @@ export function createDelegateSubagentTool(deps: {
           isError: true,
         }
       }
+      const mentionedSubagentIds = ctx.getMentionedSubagentIds()
       if (input.keep_alive && input.run_in_background) {
         return {
           content: [{
@@ -92,6 +95,7 @@ export function createDelegateSubagentTool(deps: {
         ancestorSubagentIds: ctx.ancestorSubagentIds,
         depth: ctx.depth,
         subagentId: input.subagent_id,
+        mentionedSubagentIds,
         prompt: input.prompt,
         onEntry: ctx.onEntry,
         keepAlive: input.keep_alive,

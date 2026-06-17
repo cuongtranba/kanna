@@ -1334,6 +1334,7 @@ export class AgentCoordinator {
   readonly activeTurns = new Map<string, ActiveTurn>()
   readonly drainingStreams = new Map<string, { turn: HarnessTurn }>()
   readonly claudeSessions = new Map<string, ClaudeSessionState>()
+  private readonly mentionedSubagentIdsByChat = new Map<string, string[]>()
   private readonly slashCommandsInFlight = new Set<string>()
   private readonly claudeLimitDetector: LimitDetector
   private readonly codexLimitDetector: LimitDetector
@@ -2060,6 +2061,10 @@ export class AgentCoordinator {
       const subagentMentions = parsedMentions
         .filter((mention): mention is Extract<ParsedMention, { kind: "subagent" }> => mention.kind === "subagent")
         .map((mention) => ({ subagentId: mention.subagentId, raw: mention.raw }))
+      this.mentionedSubagentIdsByChat.set(
+        args.chatId,
+        subagentMentions.map((m) => m.subagentId),
+      )
       const unknownSubagentMentions = parsedMentions
         .filter((mention): mention is Extract<ParsedMention, { kind: "unknown-subagent" }> => mention.kind === "unknown-subagent")
         .map((mention) => ({ name: mention.name, raw: mention.raw }))
@@ -2489,6 +2494,7 @@ export class AgentCoordinator {
         ancestorSubagentIds: [],
         depth: 0,
         getParentUserMessageId: () => this.activeTurns.get(chatIdForCtx)?.userMessageId ?? null,
+        getMentionedSubagentIds: () => this.mentionedSubagentIdsByChat.get(chatIdForCtx) ?? [],
       }
       let started: ClaudeSessionHandle
       try {
@@ -2853,6 +2859,9 @@ export class AgentCoordinator {
       // run_started events use, and the orchestrator's depth/cycle checks
       // protect against runaway chains.
       getParentUserMessageId: () => args.parentUserMessageId,
+      // Subagents cannot inherit the user's @-mention authority: manual-trigger
+      // gates are enforced only at the top-level turn where the user typed the mention.
+      getMentionedSubagentIds: () => [],
     }
 
     return buildSubagentProviderRun({

@@ -608,6 +608,55 @@ describe("subagent CRUD", () => {
     mgr.dispose()
   })
 
+  test("legacy subagent without triggerMode loads with triggerMode === auto", async () => {
+    const filePath = await createTempFilePath()
+    const legacy = {
+      subagents: [{
+        id: "legacy-trigger-1",
+        name: "legacytrigger",
+        provider: "claude",
+        model: "claude-opus-4-7",
+        modelOptions: { reasoningEffort: "medium", contextWindow: "1m" },
+        systemPrompt: "old",
+        contextScope: "previous-assistant-reply",
+        createdAt: 1,
+        updatedAt: 1,
+      }],
+    }
+    await Bun.write(filePath, JSON.stringify(legacy))
+    const mgr = trackManager(new AppSettingsManager(filePath))
+    await mgr.initialize()
+    const loaded = mgr.getSnapshot().subagents[0]
+    expect(loaded?.id).toBe("legacy-trigger-1")
+    expect(loaded?.triggerMode).toBe("auto")
+    mgr.dispose()
+  })
+
+  test("subagent with triggerMode manual round-trips to manual", async () => {
+    const filePath = await createTempFilePath()
+    const data = {
+      subagents: [{
+        id: "manual-trigger-1",
+        name: "manualtrigger",
+        provider: "claude",
+        model: "claude-opus-4-7",
+        modelOptions: { reasoningEffort: "medium", contextWindow: "1m" },
+        systemPrompt: "test",
+        contextScope: "previous-assistant-reply",
+        triggerMode: "manual",
+        createdAt: 1,
+        updatedAt: 1,
+      }],
+    }
+    await Bun.write(filePath, JSON.stringify(data))
+    const mgr = trackManager(new AppSettingsManager(filePath))
+    await mgr.initialize()
+    const loaded = mgr.getSnapshot().subagents[0]
+    expect(loaded?.id).toBe("manual-trigger-1")
+    expect(loaded?.triggerMode).toBe("manual")
+    mgr.dispose()
+  })
+
   test("CRUD round-trip survives reload", async () => {
     const filePath = await createTempFilePath()
     const mgr = trackManager(new AppSettingsManager(filePath))

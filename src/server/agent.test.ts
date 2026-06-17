@@ -4309,6 +4309,7 @@ describe("AgentCoordinator subagent mention gating", () => {
       modelOptions: { reasoningEffort: "medium", contextWindow: "1m" } as never,
       systemPrompt: "test",
       contextScope: "previous-assistant-reply" as const,
+      triggerMode: "auto" as const,
       createdAt: 1,
       updatedAt: 1,
     }
@@ -4335,6 +4336,7 @@ describe("AgentCoordinator subagent mention gating", () => {
       parentSubagentId: null,
       ancestorSubagentIds: [],
       depth: 0,
+      mentionedSubagentIds: [],
       subagentId: "sa-missing",
       prompt: "ignored",
     })
@@ -4397,6 +4399,7 @@ describe("AgentCoordinator subagent mention gating", () => {
       parentSubagentId: null,
       ancestorSubagentIds: [],
       depth: 0,
+      mentionedSubagentIds: [],
       subagentId: "sa-1",
       prompt: "go",
     })
@@ -4490,6 +4493,7 @@ describe("AgentCoordinator subagent mention gating", () => {
       parentSubagentId: null,
       ancestorSubagentIds: [],
       depth: 0,
+      mentionedSubagentIds: [],
       subagentId: "sa-1",
       prompt: "go",
     })
@@ -4587,6 +4591,7 @@ describe("AgentCoordinator subagent mention gating", () => {
       parentSubagentId: null,
       ancestorSubagentIds: [],
       depth: 0,
+      mentionedSubagentIds: [],
       subagentId: "sa-1",
       prompt: "go",
     })
@@ -4660,6 +4665,7 @@ describe("AgentCoordinator subagent mention gating", () => {
       parentSubagentId: null,
       ancestorSubagentIds: [],
       depth: 0,
+      mentionedSubagentIds: [],
       subagentId: "sa-1",
       prompt: "go",
     })
