@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.95.0](https://github.com/cuongtranba/kanna/compare/v0.94.1...v0.95.0) (2026-06-17)
+
+
+### Features
+
+* **agent:** label stack projects in the Claude system prompt ([#425](https://github.com/cuongtranba/kanna/issues/425)) ([a43e805](https://github.com/cuongtranba/kanna/commit/a43e80556b5e283835e35c23d0a7a3f2439c8b7f))
+
 ## [0.94.1](https://github.com/cuongtranba/kanna/compare/v0.94.0...v0.94.1) (2026-06-16)
 
 
