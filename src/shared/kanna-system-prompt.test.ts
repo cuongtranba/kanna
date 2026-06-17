@@ -27,6 +27,7 @@ function fakeSubagent(overrides: Partial<Subagent> = {}): Subagent {
     modelOptions: overrides.modelOptions ?? { reasoningEffort: "medium", contextWindow: "200k" },
     systemPrompt: overrides.systemPrompt ?? "you are a reviewer",
     contextScope: overrides.contextScope ?? "previous-assistant-reply",
+    triggerMode: overrides.triggerMode ?? "auto",
     createdAt: overrides.createdAt ?? 1_000,
     updatedAt: overrides.updatedAt ?? 1_000,
   }
@@ -182,6 +183,32 @@ describe("buildKannaSystemPromptAppend", () => {
     test("BASE remains the first paragraph when only stackProjects set", () => {
       const out = buildKannaSystemPromptAppend([], { stackProjects: [fakeBinding()] })
       expect(out.startsWith(KANNA_SYSTEM_PROMPT_BASE)).toBe(true)
+    })
+  })
+
+  describe("triggerMode roster split", () => {
+    test("manual subagents render in a separate gated section", () => {
+      const out = buildKannaSystemPromptAppend([
+        fakeSubagent({ id: "a", name: "autoone", triggerMode: "auto" }),
+        fakeSubagent({ id: "m", name: "manualone", triggerMode: "manual" }),
+      ])
+      expect(out).toContain("## Available subagents")
+      expect(out).toContain("- autoone [id=a]")
+      expect(out).toContain("## Manual subagents")
+      expect(out).toContain("- manualone [id=m]")
+      const autoSection = out.split("## Manual subagents")[0]
+      expect(autoSection).not.toContain("manualone")
+    })
+
+    test("no manual section when all subagents are auto", () => {
+      const out = buildKannaSystemPromptAppend([fakeSubagent({ triggerMode: "auto" })])
+      expect(out).not.toContain("## Manual subagents")
+    })
+
+    test("no auto section when all subagents are manual", () => {
+      const out = buildKannaSystemPromptAppend([fakeSubagent({ id: "m", name: "m1", triggerMode: "manual" })])
+      expect(out).not.toContain("## Available subagents")
+      expect(out).toContain("## Manual subagents")
     })
   })
 })

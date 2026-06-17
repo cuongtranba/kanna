@@ -117,19 +117,36 @@ export function buildKannaSystemPromptAppend(
       .sort((a, b) => b.updatedAt - a.updatedAt)
       .slice(0, KANNA_SUBAGENT_ROSTER_LIMIT)
 
-    const lines = ranked.map((s) => {
+    const line = (s: Subagent) => {
       const desc = s.description?.trim() || "(no description)"
       return `- ${s.name} [id=${s.id}]: ${desc}`
-    })
+    }
 
-    sections.push(
-      "",
-      "## Available subagents",
-      "",
-      "You can hand off focused work to specialized subagents. Each runs in its own session with its own system prompt and cannot see your conversation history except for the prompt you pass.",
-      "",
-      ...lines,
-    )
+    const autoOnes = ranked.filter((s) => s.triggerMode !== "manual")
+    const manualOnes = ranked.filter((s) => s.triggerMode === "manual")
+
+    if (autoOnes.length > 0) {
+      sections.push(
+        "",
+        "## Available subagents",
+        "",
+        "You can hand off focused work to specialized subagents. Each runs in its own session with its own system prompt and cannot see your conversation history except for the prompt you pass.",
+        "",
+        ...autoOnes.map(line),
+      )
+    }
+
+    if (manualOnes.length > 0) {
+      sections.push(
+        "",
+        "## Manual subagents (delegate ONLY when the user @-mentions them)",
+        "",
+        "These subagents are manual-trigger. Do NOT call delegate_subagent for them unless the user explicitly wrote `@agent/<name>` for that subagent in their latest message. The server rejects unrequested manual delegations.",
+        "",
+        ...manualOnes.map(line),
+      )
+    }
+
     if (subagents.length > ranked.length) {
       sections.push(
         "",
