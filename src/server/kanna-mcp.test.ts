@@ -290,8 +290,8 @@ function buildKannaMcpForTest(opts: { withDelegation: boolean }): {
   }
   const fakeOrchestrator: Pick<SubagentOrchestrator, "delegateRun" | "sendToLiveRun" | "closeLiveRun" | "findSubagent"> = {
     findSubagent: (id: string) => {
-      if (id === "s1") return { id: "s1", name: "Agent S1", provider: "claude" as const, model: "claude-3-5-sonnet", systemPrompt: "", description: "", contextScope: "previous-assistant-reply" as const, createdAt: 0, updatedAt: 0, modelOptions: { reasoningEffort: "low" as const, contextWindow: "200k" as const } }
-      if (id === "s2-notclaude") return { id: "s2-notclaude", name: "Agent S2", provider: "codex" as const, model: "gpt-4o", systemPrompt: "", description: "", contextScope: "previous-assistant-reply" as const, createdAt: 0, updatedAt: 0, modelOptions: { reasoningEffort: "medium" as const, fastMode: false } }
+      if (id === "s1") return { id: "s1", name: "Agent S1", provider: "claude" as const, model: "claude-3-5-sonnet", systemPrompt: "", description: "", contextScope: "previous-assistant-reply" as const, triggerMode: "auto" as const, createdAt: 0, updatedAt: 0, modelOptions: { reasoningEffort: "low" as const, contextWindow: "200k" as const } }
+      if (id === "s2-notclaude") return { id: "s2-notclaude", name: "Agent S2", provider: "codex" as const, model: "gpt-4o", systemPrompt: "", description: "", contextScope: "previous-assistant-reply" as const, triggerMode: "auto" as const, createdAt: 0, updatedAt: 0, modelOptions: { reasoningEffort: "medium" as const, fastMode: false } }
       return undefined
     },
     delegateRun: async (args) => {
