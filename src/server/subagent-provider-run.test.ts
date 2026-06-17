@@ -154,6 +154,25 @@ describe("composeSubagentSystemPrompt", () => {
     const out = composeSubagentSystemPrompt("", "Always TDD.")
     expect(out).toBe("## Project instructions\n\nAlways TDD.")
   })
+
+  test("appends a Stack projects block after Project instructions", () => {
+    const out = composeSubagentSystemPrompt("You are alpha.", "Always TDD.", [
+      { projectId: "p1", projectTitle: "Backend API", worktreePath: "/be", role: "primary", projectStatus: "active" },
+      { projectId: "p2", projectTitle: "Web Client", worktreePath: "/fe", role: "additional", projectStatus: "active" },
+    ])
+    const instrIdx = out.indexOf("## Project instructions")
+    const stackIdx = out.indexOf("## Stack projects")
+    expect(out.startsWith("You are alpha.")).toBe(true)
+    expect(stackIdx).toBeGreaterThan(instrIdx)
+    expect(out).toContain("- Backend API [primary]: /be")
+    expect(out).toContain("- Web Client [additional]: /fe")
+  })
+
+  test("omits the Stack projects block when stackProjects empty", () => {
+    const out = composeSubagentSystemPrompt("You are alpha.", undefined, [])
+    expect(out).toBe("You are alpha.")
+    expect(out).not.toContain("## Stack projects")
+  })
 })
 
 // ---------------------------------------------------------------------------

@@ -4,9 +4,11 @@ import type {
   AgentProvider,
   CodexReasoningEffort,
   ProviderUsage,
+  ResolvedStackBinding,
   Subagent,
   TranscriptEntry,
 } from "../shared/types"
+import { renderStackProjectsBlock } from "../shared/kanna-system-prompt"
 import type { ClaudeSessionHandle } from "./agent"
 import type { LiveTurnSource, ProviderRunStart } from "./subagent-orchestrator"
 import type { SubagentOrchestrator } from "./subagent-orchestrator"
@@ -87,6 +89,15 @@ export interface BuildSubagentProviderRunArgs {
    * same project-wide guidance as the main turn.
    */
   globalPromptAppend?: string
+  /**
+   * Resolved stack bindings when the parent chat spans multiple projects AND
+   * this subagent run is unrestricted (no workingDir / allowedPaths). Rendered
+   * as a `## Stack projects` block in the Claude subagent system prompt so a
+   * delegated run that inherits every stack root (via additionalDirectories)
+   * also knows which project each path is. Empty for solo chats or
+   * path-restricted runs (where listing all roots would mislead).
+   */
+  stackProjects?: ResolvedStackBinding[]
 }
 
 export function buildSubagentProviderRun(args: BuildSubagentProviderRunArgs): ProviderRunStart {
@@ -116,13 +127,14 @@ export function buildSubagentProviderRun(args: BuildSubagentProviderRunArgs): Pr
 export function composeSubagentSystemPrompt(
   subagentSystemPrompt: string,
   globalPromptAppend?: string,
+  stackProjects: ResolvedStackBinding[] = [],
 ): string {
   const extra = globalPromptAppend?.trim() ?? ""
-  if (!extra) return subagentSystemPrompt
-  const baseText = subagentSystemPrompt.trimEnd()
-  return baseText
-    ? `${baseText}\n\n## Project instructions\n\n${extra}`
-    : `## Project instructions\n\n${extra}`
+  const stackBlock = renderStackProjectsBlock(stackProjects)
+  const sections = [subagentSystemPrompt.trimEnd()]
+  if (extra) sections.push(`## Project instructions\n\n${extra}`)
+  if (stackBlock) sections.push(stackBlock)
+  return sections.filter((s) => s !== "").join("\n\n")
 }
 
 export function composeInitialPrompt(
@@ -160,7 +172,7 @@ async function runClaudeSubagent(opts: {
     oauthToken: args.pickOauthToken(),
     chatId: args.chatId,
     onToolRequest: args.onToolRequest,
-    systemPromptOverride: composeSubagentSystemPrompt(args.subagent.systemPrompt, args.globalPromptAppend),
+    systemPromptOverride: composeSubagentSystemPrompt(args.subagent.systemPrompt, args.globalPromptAppend, args.stackProjects),
     initialPrompt,
     subagentOrchestrator: args.subagentOrchestrator,
     delegationContext: args.delegationContext,
