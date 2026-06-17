@@ -539,6 +539,7 @@ export function createWsRouter({
         id: randomUUID(),
         ...patch.subagents.create,
         name: patch.subagents.create.name.trim(),
+        triggerMode: patch.subagents.create.triggerMode ?? "auto",
         createdAt: now,
         updatedAt: now,
       }]

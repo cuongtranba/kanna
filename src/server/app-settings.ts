@@ -67,6 +67,7 @@ import {
   type Subagent,
   type SubagentContextScope,
   type SubagentInput,
+  type SubagentTriggerMode,
   type SubagentPatch,
   type SubagentValidationError,
   type UploadSettings,
@@ -473,6 +474,8 @@ function normalizeSubagentEntry(value: unknown, warnings: string[]): Subagent | 
     : normalizeCodexPreference({ model, modelOptions: rawModelOptions }).modelOptions
   const contextScope: SubagentContextScope =
     source.contextScope === "full-transcript" ? "full-transcript" : "previous-assistant-reply"
+  const triggerMode: SubagentTriggerMode =
+    source.triggerMode === "manual" ? "manual" : "auto"
   const workingDir = typeof source.workingDir === "string" && source.workingDir.length > 0 ? source.workingDir : undefined
   const allowedPaths = Array.isArray(source.allowedPaths)
     ? source.allowedPaths.filter((p): p is string => typeof p === "string" && p.length > 0)
@@ -486,6 +489,7 @@ function normalizeSubagentEntry(value: unknown, warnings: string[]): Subagent | 
     modelOptions,
     systemPrompt: typeof source.systemPrompt === "string" ? source.systemPrompt : "",
     contextScope,
+    triggerMode,
     workingDir,
     allowedPaths: allowedPaths && allowedPaths.length > 0 ? allowedPaths : undefined,
     createdAt: typeof source.createdAt === "number" && Number.isFinite(source.createdAt) ? source.createdAt : Date.now(),
@@ -1091,6 +1095,7 @@ function applyPatch(state: AppSettingsState, patch: AppSettingsPatch): AppSettin
         modelOptions: input.modelOptions,
         systemPrompt: input.systemPrompt,
         contextScope: input.contextScope,
+        triggerMode: input.triggerMode ?? "auto",
         workingDir: input.workingDir,
         allowedPaths: input.allowedPaths && input.allowedPaths.length > 0 ? input.allowedPaths : undefined,
         createdAt: now,
@@ -1138,6 +1143,7 @@ function applyPatch(state: AppSettingsState, patch: AppSettingsPatch): AppSettin
         : subagentPatch.allowedPaths !== undefined
           ? subagentPatch.allowedPaths
           : existing.allowedPaths,
+      triggerMode: subagentPatch.triggerMode ?? existing.triggerMode,
       updatedAt: Date.now(),
     }
     nextSubagents = [...state.subagents.slice(0, index), merged, ...state.subagents.slice(index + 1)]
