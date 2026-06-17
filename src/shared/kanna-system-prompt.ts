@@ -1,4 +1,4 @@
-import type { Subagent } from "./types"
+import type { ResolvedStackBinding, Subagent } from "./types"
 
 /**
  * The Kanna system-prompt suffix appended to Claude's `claude_code` preset.
@@ -25,6 +25,30 @@ export const KANNA_SYSTEM_PROMPT_APPEND = KANNA_SYSTEM_PROMPT_BASE
 /** Soft cap on roster size embedded in the system prompt. */
 export const KANNA_SUBAGENT_ROSTER_LIMIT = 20
 
+/**
+ * Render the `## Stack projects` block naming each bound project (title + role
+ * + worktree path). Returns "" when the list is empty so callers can splice it
+ * unconditionally. Shared by the main-turn builder and the subagent
+ * system-prompt composer so both surface identical project labels.
+ *
+ * Wording does not assume more than one binding — a stack may carry a lone
+ * primary — so it reads correctly for any non-empty list.
+ */
+export function renderStackProjectsBlock(stackProjects: ResolvedStackBinding[]): string {
+  if (stackProjects.length === 0) return ""
+  const lines = stackProjects.map((b) => {
+    const missing = b.projectStatus === "missing" ? " (missing)" : ""
+    return `- ${b.projectTitle} [${b.role}]: ${b.worktreePath}${missing}`
+  })
+  return [
+    "## Stack projects",
+    "",
+    "Project worktrees bound to this chat. Each path below is a separate project root you can read and edit — use them to work across projects:",
+    "",
+    ...lines,
+  ].join("\n")
+}
+
 const DELEGATION_GUIDANCE =
   "Delegate via `mcp__kanna__delegate_subagent({ subagent_id, prompt })`. The tool blocks until the subagent finishes and returns its final text. Brief the subagent like a smart colleague who just walked in: state the goal, what was tried, what to check, and any constraints. Don't delegate understanding — synthesize the subagent's reply yourself before responding to the user. When the user writes `@agent/<name>` treat it as a suggestion, not a command: confirm the subagent fits the actual ask, or redirect to a better one."
 
@@ -40,6 +64,18 @@ export interface KannaSystemPromptOptions {
    * `--append-system-prompt`) and Codex (`developer_instructions`).
    */
   globalPromptAppend?: string
+
+  /**
+   * Resolved stack bindings for a multi-project ("stack") chat. When present
+   * (≥1 entry) the suffix gains a `## Stack projects` block naming each
+   * project (title + role + worktree path) so the model knows which project
+   * each working directory belongs to and can work across them. Both drivers
+   * already grant filesystem access to every root (SDK `additionalDirectories`,
+   * PTY `--add-dir`); this only adds the human-readable mapping.
+   *
+   * Empty / absent for solo chats — the block is then omitted entirely.
+   */
+  stackProjects?: ResolvedStackBinding[]
 }
 
 /**
@@ -59,8 +95,9 @@ export function buildKannaSystemPromptAppend(
   options: KannaSystemPromptOptions = {},
 ): string {
   const projectInstructions = options.globalPromptAppend?.trim() ?? ""
+  const stackProjects = options.stackProjects ?? []
 
-  if (subagents.length === 0 && !projectInstructions) {
+  if (subagents.length === 0 && !projectInstructions && stackProjects.length === 0) {
     return KANNA_SYSTEM_PROMPT_BASE
   }
 
@@ -68,6 +105,11 @@ export function buildKannaSystemPromptAppend(
 
   if (projectInstructions) {
     sections.push("", "## Project instructions", "", projectInstructions)
+  }
+
+  const stackBlock = renderStackProjectsBlock(stackProjects)
+  if (stackBlock) {
+    sections.push("", stackBlock)
   }
 
   if (subagents.length > 0) {

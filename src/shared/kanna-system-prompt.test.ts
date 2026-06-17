@@ -5,7 +5,17 @@ import {
   KANNA_SYSTEM_PROMPT_BASE,
   buildKannaSystemPromptAppend,
 } from "./kanna-system-prompt"
-import type { Subagent } from "./types"
+import type { ResolvedStackBinding, Subagent } from "./types"
+
+function fakeBinding(overrides: Partial<ResolvedStackBinding> = {}): ResolvedStackBinding {
+  return {
+    projectId: overrides.projectId ?? "p1",
+    projectTitle: overrides.projectTitle ?? "Backend API",
+    worktreePath: overrides.worktreePath ?? "/work/be",
+    role: overrides.role ?? "primary",
+    projectStatus: overrides.projectStatus ?? "active",
+  }
+}
 
 function fakeSubagent(overrides: Partial<Subagent> = {}): Subagent {
   return {
@@ -124,6 +134,54 @@ describe("buildKannaSystemPromptAppend", () => {
       expect(out).toContain("## Project instructions")
       expect(out).toContain("Prefer pumped-go.")
       expect(out).not.toContain("## Available subagents")
+    })
+  })
+
+  describe("stackProjects option", () => {
+    test("returns BASE fast-path when stackProjects empty and nothing else set", () => {
+      expect(buildKannaSystemPromptAppend([], { stackProjects: [] })).toBe(KANNA_SYSTEM_PROMPT_BASE)
+    })
+
+    test("omits the block when option absent", () => {
+      const out = buildKannaSystemPromptAppend([fakeSubagent()])
+      expect(out).not.toContain("## Stack projects")
+    })
+
+    test("renders title, role, and worktree path per binding", () => {
+      const out = buildKannaSystemPromptAppend([], {
+        stackProjects: [
+          fakeBinding({ projectTitle: "Backend API", role: "primary", worktreePath: "/work/be" }),
+          fakeBinding({ projectId: "p2", projectTitle: "Web Client", role: "additional", worktreePath: "/work/fe" }),
+        ],
+      })
+      expect(out).toContain("## Stack projects")
+      expect(out).toContain("- Backend API [primary]: /work/be")
+      expect(out).toContain("- Web Client [additional]: /work/fe")
+    })
+
+    test("appends '(missing)' for a missing project status", () => {
+      const out = buildKannaSystemPromptAppend([], {
+        stackProjects: [fakeBinding({ projectTitle: "(missing)", projectStatus: "missing", worktreePath: "/work/gone" })],
+      })
+      expect(out).toContain("- (missing) [primary]: /work/gone (missing)")
+    })
+
+    test("places the block after Project instructions and before the subagent roster", () => {
+      const out = buildKannaSystemPromptAppend([fakeSubagent({ name: "rev" })], {
+        globalPromptAppend: "Always TDD.",
+        stackProjects: [fakeBinding()],
+      })
+      const instrIdx = out.indexOf("## Project instructions")
+      const stackIdx = out.indexOf("## Stack projects")
+      const rosterIdx = out.indexOf("## Available subagents")
+      expect(instrIdx).toBeGreaterThan(-1)
+      expect(stackIdx).toBeGreaterThan(instrIdx)
+      expect(rosterIdx).toBeGreaterThan(stackIdx)
+    })
+
+    test("BASE remains the first paragraph when only stackProjects set", () => {
+      const out = buildKannaSystemPromptAppend([], { stackProjects: [fakeBinding()] })
+      expect(out.startsWith(KANNA_SYSTEM_PROMPT_BASE)).toBe(true)
     })
   })
 })

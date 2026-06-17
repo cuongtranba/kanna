@@ -13,6 +13,7 @@ import type {
   PendingToolSnapshot,
   KannaStatus,
   QueuedChatMessage,
+  ResolvedStackBinding,
   SlashCommand,
   Subagent,
   TranscriptEntry,
@@ -109,6 +110,30 @@ export function resolveSpawnPaths(
     .filter((b) => b.role === "additional")
     .map((b) => b.worktreePath)
   return { cwd: primary.worktreePath, additionalDirectories }
+}
+
+/**
+ * Resolve a chat's stack bindings into named entries for the system prompt.
+ * Mirrors the read-model resolver in `read-models.ts` — looks each binding's
+ * project title up via `lookupProjectTitle`, falling back to `(missing)` /
+ * `projectStatus: "missing"` when the project no longer exists. Solo chats
+ * (no `stackBindings`) resolve to an empty list (no prompt block).
+ */
+export function resolveStackProjects(
+  chat: Pick<ChatRecord, "stackBindings">,
+  lookupProjectTitle: (projectId: string) => string | undefined,
+): ResolvedStackBinding[] {
+  if (!chat.stackBindings || chat.stackBindings.length === 0) return []
+  return chat.stackBindings.map((b) => {
+    const title = lookupProjectTitle(b.projectId)
+    return {
+      projectId: b.projectId,
+      projectTitle: title ?? "(missing)",
+      worktreePath: b.worktreePath,
+      role: b.role,
+      projectStatus: title !== undefined ? "active" : "missing",
+    }
+  })
 }
 
 const CLAUDE_TOOLSET = [
@@ -2212,6 +2237,7 @@ export class AgentCoordinator {
         projectId: project.id,
         localPath: spawn.cwd,
         additionalDirectories: spawn.additionalDirectories,
+        stackProjects: resolveStackProjects(chat, (id) => this.store.getProject(id)?.title),
         model: args.model,
         effort: args.effort,
         planMode: args.planMode,
@@ -2419,6 +2445,7 @@ export class AgentCoordinator {
     projectId: string
     localPath: string
     additionalDirectories?: string[]
+    stackProjects?: ResolvedStackBinding[]
     model: string
     effort?: string
     planMode: boolean
@@ -2453,6 +2480,7 @@ export class AgentCoordinator {
       const usePty = this.resolveClaudeDriverPreference() === "pty"
       const systemPromptAppend = buildKannaSystemPromptAppend(this.getSubagents(), {
         globalPromptAppend: this.getAppSettingsSnapshot().globalPromptAppend,
+        stackProjects: args.stackProjects,
       })
       const chatIdForCtx = args.chatId
       const delegationContext: KannaMcpDelegationContext = {
@@ -2836,6 +2864,9 @@ export class AgentCoordinator {
       abortSignal: args.abortSignal,
       cwd: restriction?.cwd ?? spawn.cwd,
       additionalDirectories: spawn.additionalDirectories,
+      // Only label stack projects for unrestricted runs — a path-restricted
+      // subagent cannot reach every root, so listing them all would mislead.
+      stackProjects: restriction ? [] : resolveStackProjects(chat, (id) => this.store.getProject(id)?.title),
       allowedPaths: restriction?.allowedPaths,
       projectId: project.id,
       startClaudeSession: this.buildClaudeSubagentStarter(),
