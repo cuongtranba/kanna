@@ -160,6 +160,8 @@ export type ChatProviderPreferences = {
 
 export type SubagentContextScope = "previous-assistant-reply" | "full-transcript"
 
+export type SubagentTriggerMode = "auto" | "manual"
+
 export interface SubagentRestriction {
   workingDir?: string
   allowedPaths?: string[]
@@ -174,6 +176,7 @@ export interface Subagent {
   modelOptions: ClaudeModelOptions | CodexModelOptions
   systemPrompt: string
   contextScope: SubagentContextScope
+  triggerMode: SubagentTriggerMode
   workingDir?: string
   allowedPaths?: string[]
   createdAt: number
@@ -188,6 +191,7 @@ export interface SubagentInput {
   modelOptions: ClaudeModelOptions | CodexModelOptions
   systemPrompt: string
   contextScope: SubagentContextScope
+  triggerMode?: SubagentTriggerMode
   workingDir?: string
   allowedPaths?: string[]
 }
@@ -200,6 +204,7 @@ export interface SubagentPatch {
   modelOptions?: Partial<ClaudeModelOptions> | Partial<CodexModelOptions>
   systemPrompt?: string
   contextScope?: SubagentContextScope
+  triggerMode?: SubagentTriggerMode
   workingDir?: string | null
   allowedPaths?: string[] | null
 }
@@ -1569,6 +1574,7 @@ export interface ResolvedStackBinding {
 export type SubagentErrorCode =
   | "AUTH_REQUIRED"
   | "UNKNOWN_SUBAGENT"
+  | "MANUAL_ONLY"
   | "LOOP_DETECTED"
   | "DEPTH_EXCEEDED"
   | "TIMEOUT"
