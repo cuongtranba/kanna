@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.96.0](https://github.com/cuongtranba/kanna/compare/v0.95.1...v0.96.0) (2026-06-17)
+
+
+### Features
+
+* **subagent:** per-subagent trigger mode (auto/manual) ([#429](https://github.com/cuongtranba/kanna/issues/429)) ([0a3a405](https://github.com/cuongtranba/kanna/commit/0a3a405c7da813b3666d22304dbbbe60244ea310))
+
 ## [0.95.1](https://github.com/cuongtranba/kanna/compare/v0.95.0...v0.95.1) (2026-06-17)
 
 
