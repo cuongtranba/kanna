@@ -11,6 +11,7 @@ function subagent(name: string, id = name): Subagent {
     modelOptions: { reasoningEffort: "medium", contextWindow: "1m" },
     systemPrompt: "",
     contextScope: "previous-assistant-reply",
+    triggerMode: "auto",
     createdAt: 1,
     updatedAt: 1,
   }

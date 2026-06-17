@@ -19,6 +19,7 @@ function makeSubagent(over: Partial<Subagent> = {}): Subagent {
     modelOptions: over.modelOptions ?? modelOptions,
     systemPrompt: over.systemPrompt ?? "You are alpha.",
     contextScope: over.contextScope ?? "previous-assistant-reply",
+    triggerMode: over.triggerMode ?? "auto",
     createdAt: over.createdAt ?? 1,
     updatedAt: over.updatedAt ?? 1,
     ...(over.description !== undefined ? { description: over.description } : {}),
