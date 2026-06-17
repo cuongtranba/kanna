@@ -279,11 +279,28 @@ export class SubagentOrchestrator {
   liveSessionCount() { return this.liveSessions.size }
 
   /**
-   * Look up a subagent by id from the current settings snapshot.
-   * Used by kanna-mcp to validate provider constraints before delegating.
+   * Resolve a subagent by exact id, falling back to an unambiguous exact
+   * name match. Id is checked first so a name that collides with another
+   * subagent's id can never shadow the id owner; an ambiguous name (>1
+   * match) returns undefined so callers fail closed rather than delegating
+   * to the wrong subagent. The main model often passes the roster name
+   * where the UUID is expected — this keeps that ergonomic.
+   */
+  private resolveSubagent(idOrName: string): Subagent | undefined {
+    const subagents = this.deps.appSettings.getSnapshot().subagents
+    const byId = subagents.find((s) => s.id === idOrName)
+    if (byId) return byId
+    const byName = subagents.filter((s) => s.name === idOrName)
+    return byName.length === 1 ? byName[0] : undefined
+  }
+
+  /**
+   * Look up a subagent by id (or unambiguous name) from the current
+   * settings snapshot. Used by kanna-mcp to validate provider constraints
+   * before delegating.
    */
   findSubagent(id: string): Subagent | undefined {
-    return this.deps.appSettings.getSnapshot().subagents.find((s) => s.id === id)
+    return this.resolveSubagent(id)
   }
 
   activePermitCount() {
@@ -527,9 +544,7 @@ export class SubagentOrchestrator {
     background?: boolean
   }): Promise<DelegationOutcome> {
     await this.recoveryPromise
-    const subagent = this.deps.appSettings
-      .getSnapshot()
-      .subagents.find((s) => s.id === args.subagentId)
+    const subagent = this.resolveSubagent(args.subagentId)
     if (!subagent) {
       const runId = crypto.randomUUID()
       await this.deps.store.appendSubagentEvent({

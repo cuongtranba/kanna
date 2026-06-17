@@ -1052,6 +1052,69 @@ describe("SubagentOrchestrator", () => {
       expect(outcome.errorCode).toBe("UNKNOWN_SUBAGENT")
     })
 
+    test("resolves subagent by exact name when the id does not match", async () => {
+      const h = await setupHarness({ subagents: [makeSubagent({ id: "sa-1", name: "4-golden-rules" })] })
+      h.programReply("sa-1", "by name reply")
+      const outcome = await h.orchestrator.delegateRun({
+        chatId: h.chatId,
+        parentUserMessageId: h.userMessageId,
+        parentRunId: null,
+        parentSubagentId: null,
+        ancestorSubagentIds: [],
+        depth: 0,
+        subagentId: "4-golden-rules",
+        prompt: "x",
+      })
+      expect(outcome.status).toBe("completed")
+      if (outcome.status !== "completed") throw new Error("unreachable")
+      expect(outcome.text).toBe("by name reply")
+    })
+
+    test("id match wins over a name collision", async () => {
+      const h = await setupHarness({
+        subagents: [
+          makeSubagent({ id: "collide", name: "alpha" }),
+          makeSubagent({ id: "other", name: "collide" }),
+        ],
+      })
+      h.programReply("collide", "id-owner reply")
+      const outcome = await h.orchestrator.delegateRun({
+        chatId: h.chatId,
+        parentUserMessageId: h.userMessageId,
+        parentRunId: null,
+        parentSubagentId: null,
+        ancestorSubagentIds: [],
+        depth: 0,
+        subagentId: "collide",
+        prompt: "x",
+      })
+      expect(outcome.status).toBe("completed")
+      if (outcome.status !== "completed") throw new Error("unreachable")
+      expect(outcome.text).toBe("id-owner reply")
+    })
+
+    test("ambiguous name (>1 match) fails UNKNOWN_SUBAGENT", async () => {
+      const h = await setupHarness({
+        subagents: [
+          makeSubagent({ id: "sa-1", name: "dup" }),
+          makeSubagent({ id: "sa-2", name: "dup" }),
+        ],
+      })
+      const outcome = await h.orchestrator.delegateRun({
+        chatId: h.chatId,
+        parentUserMessageId: h.userMessageId,
+        parentRunId: null,
+        parentSubagentId: null,
+        ancestorSubagentIds: [],
+        depth: 0,
+        subagentId: "dup",
+        prompt: "x",
+      })
+      expect(outcome.status).toBe("failed")
+      if (outcome.status !== "failed") throw new Error("unreachable")
+      expect(outcome.errorCode).toBe("UNKNOWN_SUBAGENT")
+    })
+
     test("rejects with DEPTH_EXCEEDED when depth > maxChainDepth", async () => {
       const h = await setupHarness({ subagents: [makeSubagent({})], maxChainDepth: 1 })
       const outcome = await h.orchestrator.delegateRun({

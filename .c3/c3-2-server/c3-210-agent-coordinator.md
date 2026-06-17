@@ -1,7 +1,7 @@
 ---
 id: c3-210
 c3-version: 4
-c3-seal: 4328693a9b455acfdfe213dc1211d9cbbb36321726119a67f0c08d4b8a2971a9
+c3-seal: d7168b34029a6af4f7ba95d8238b488b2a8728229e2a85e717f8678fe599fe1f
 title: agent-coordinator
 type: component
 category: feature
@@ -76,13 +76,13 @@ Owns the agent turn lifecycle: receives `chat.send` commands, picks the provider
 | runTurn(command) | IN | Drives a single turn from chat.send | c3-208 | src/server/agent-coordinator.ts |
 | Transcript events | OUT | Append-only typed events | c3-206 | src/server/agent-coordinator.ts |
 | Cancel callback | IN | Propagates cancel to provider | c3-211 | src/server/agent-coordinator.ts |
-| delegateRun({keepAlive?}) | IN | Runs subagent turn 1; on keepAlive completion registers a live session (no /exit) and returns runId; over KANNA_SUBAGENT_MAX_LIVE per chat fails CAP_EXCEEDED | c3-226 | src/server/subagent-orchestrator.ts |
+| delegateRun({keepAlive?}) | IN | subagent_id resolved by exact id, else unambiguous exact name (id wins on collision, ambiguous name → UNKNOWN_SUBAGENT); runs subagent turn 1; on keepAlive completion registers a live session (no /exit) and returns runId; over KANNA_SUBAGENT_MAX_LIVE per chat fails CAP_EXCEEDED | c3-226 | src/server/subagent-orchestrator.ts |
 | delegateRun({background?}) | IN | Launches the run detached and returns {status:"async_launched", runId} immediately; the run still flows through spawnRun (permit, RunState, timeout, abort, events); on terminal fires onBackgroundRunComplete. Mutually exclusive with keepAlive | c3-226 | src/server/subagent-orchestrator.ts |
 | onBackgroundRunComplete(chatId, runId, outcome) | OUT | Dep fired when a background run reaches terminal; AgentCoordinator delivers the BackgroundRunOutcome back into the main chat as a fresh turn via scheduleAgentWakeup(source:"subagent_background") | c3-227 | src/server/subagent-orchestrator.ts, src/server/agent.ts |
 | sendToLiveRun(runId, prompt) | IN | Drives a follow-up turn into a warm keep-alive session via channel push; acquires a permit for the turn only; NO_LIVE_SESSION if unknown | c3-226 | src/server/subagent-orchestrator.ts |
 | closeLiveRun(chatId, runId, reason) | IN | Tears down a live session (close REPL, cleanup RunState, onRunTerminal); also driven by idle timeout + cancel cascade | c3-226 | src/server/subagent-orchestrator.ts |
 | LiveTurnSource | OUT | Provider-run handle returned after keep-alive turn 1 — runTurn (push + drain one turn) + close; keeps the persistent HarnessEvent iterator open | c3-225 | src/server/subagent-provider-run.ts |
-| findSubagent(id) | IN | Snapshot lookup used by the MCP host to reject keep_alive for non-claude subagents | c3-226 | src/server/subagent-orchestrator.ts |
+| findSubagent(id) | IN | Snapshot lookup (by exact id, else unambiguous exact name) used by the MCP host to reject keep_alive for non-claude subagents | c3-226 | src/server/subagent-orchestrator.ts |
 | Subagent restriction threading | IN | buildSubagentProviderRunForChat resolves Subagent.workingDir + allowedPaths via c3-204 resolveSubagentRoots (with realpathAdapter), overrides spawn cwd, and passes restrictedAllowedPaths into BuildSubagentProviderRunArgs → startClaudeSession; both PTY (c3-225) and SDK paths forward the same list into c3-226 kanna-mcp host for per-run path-deny + into the driver for shim-only tool gating | c3-225 | src/server/agent.ts, src/server/subagent-provider-run.ts |
 
 ## Change Safety
