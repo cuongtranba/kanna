@@ -37,6 +37,7 @@ function makeSubagent(over: Partial<Subagent> = {}): Subagent {
     modelOptions: { reasoningEffort: "high", contextWindow: "200k" },
     systemPrompt: "Review carefully.",
     contextScope: "previous-assistant-reply",
+    triggerMode: "auto",
     createdAt: 100,
     updatedAt: 200,
     ...over,
@@ -111,6 +112,7 @@ describe("toSubagentInput", () => {
       modelOptions: { reasoningEffort: "high", contextWindow: "200k" },
       systemPrompt: "Review carefully.",
       contextScope: "previous-assistant-reply",
+      triggerMode: "auto",
       createdAt: 100,
       updatedAt: 200,
     }
@@ -123,6 +125,7 @@ describe("toSubagentInput", () => {
       modelOptions: { reasoningEffort: "high", contextWindow: "200k" },
       systemPrompt: "Review carefully.",
       contextScope: "previous-assistant-reply",
+      triggerMode: "auto",
     })
   })
 })
@@ -393,6 +396,28 @@ describe("SubagentsSection — edit form", () => {
     expect(container.textContent).toContain("Name already used")
     expect(handlers.onUpdate).toHaveBeenCalledTimes(1)
     container.remove()
+  })
+})
+
+describe("SubagentsSection — trigger mode control", () => {
+  test("switching to Manual makes form dirty and Save enabled", async () => {
+    const subagent = makeSubagent({ id: "sa-9", triggerMode: "auto" })
+    const { container, cleanup } = await mountSubagentsSection({
+      subagents: [subagent],
+      editing: { kind: "edit", id: "sa-9" },
+    })
+    // Save should be disabled initially (no unsaved changes)
+    const save = container.querySelector<HTMLButtonElement>("[data-testid='subagent-form-save']")!
+    expect(save.disabled).toBe(true)
+    // Find the "Manual" button in the Trigger SegmentedControl
+    const manualBtn = Array.from(container.querySelectorAll("button")).find(
+      (b) => b.textContent?.trim() === "Manual",
+    )
+    expect(manualBtn).toBeDefined()
+    await act(async () => { manualBtn!.click() })
+    // After clicking Manual, form should be dirty so Save is enabled
+    expect(save.disabled).toBe(false)
+    cleanup()
   })
 })
 

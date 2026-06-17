@@ -33,6 +33,7 @@ import {
   type Subagent,
   type SubagentContextScope,
   type SubagentInput,
+  type SubagentTriggerMode,
   type SubagentValidationError,
   type SubagentValidationErrorCode,
 } from "../../shared/types"
@@ -212,6 +213,11 @@ const PROVIDER_OPTIONS = [
 const CONTEXT_SCOPE_OPTIONS = [
   { value: "previous-assistant-reply" as const, label: "Last reply" },
   { value: "full-transcript" as const, label: "Full transcript" },
+]
+
+const TRIGGER_MODE_OPTIONS = [
+  { value: "auto" as const, label: "Auto" },
+  { value: "manual" as const, label: "Manual" },
 ]
 
 function SubagentForm(props: SubagentFormProps) {
@@ -413,6 +419,18 @@ function SubagentForm(props: SubagentFormProps) {
           value={draft.contextScope}
           onValueChange={(value) => patchDraft({ contextScope: value as SubagentContextScope })}
           options={CONTEXT_SCOPE_OPTIONS}
+          size="sm"
+        />
+      </FormRow>
+
+      <FormRow
+        label="Trigger"
+        hint="Auto: the main agent may delegate on its own. Manual: only runs when you @-mention it."
+      >
+        <SegmentedControl
+          value={draft.triggerMode ?? "auto"}
+          onValueChange={(value) => patchDraft({ triggerMode: value as SubagentTriggerMode })}
+          options={TRIGGER_MODE_OPTIONS}
           size="sm"
         />
       </FormRow>
@@ -634,6 +652,7 @@ export function createDefaultSubagentDraft(
       modelOptions: { ...modelOptions },
       systemPrompt: "",
       contextScope: "previous-assistant-reply",
+      triggerMode: "auto",
     }
   }
   const preference = providerDefaults?.codex
@@ -647,6 +666,7 @@ export function createDefaultSubagentDraft(
     modelOptions: { ...modelOptions },
     systemPrompt: "",
     contextScope: "previous-assistant-reply",
+    triggerMode: "auto",
   }
 }
 
@@ -659,6 +679,7 @@ export function toSubagentInput(subagent: Subagent): SubagentInput {
     modelOptions: subagent.modelOptions,
     systemPrompt: subagent.systemPrompt,
     contextScope: subagent.contextScope,
+    triggerMode: subagent.triggerMode,
     workingDir: subagent.workingDir,
     allowedPaths: subagent.allowedPaths,
   }
@@ -679,6 +700,7 @@ export function isSubagentDraftDirty(draft: SubagentInput, baseline: SubagentInp
   if (draft.model !== baseline.model) return true
   if (draft.systemPrompt !== baseline.systemPrompt) return true
   if (draft.contextScope !== baseline.contextScope) return true
+  if ((draft.triggerMode ?? "auto") !== (baseline.triggerMode ?? "auto")) return true
   if ((draft.workingDir ?? "") !== (baseline.workingDir ?? "")) return true
   if (!stringArrayEqual(draft.allowedPaths, baseline.allowedPaths)) return true
   return !shallowEqualModelOptions(draft.modelOptions, baseline.modelOptions)
