@@ -12,6 +12,7 @@ interface DelegateCall {
   ancestorSubagentIds: string[]
   depth: number
   subagentId: string
+  mentionedSubagentIds: string[]
   prompt: string
   onEntry?: (entry: TranscriptEntry) => void
   keepAlive?: boolean
@@ -41,6 +42,7 @@ const baseCtx = () => ({
   ancestorSubagentIds: [],
   depth: 0,
   getParentUserMessageId: () => "umsg-1",
+  getMentionedSubagentIds: () => [] as string[],
 })
 
 describe("createDelegateSubagentTool", () => {
@@ -64,8 +66,11 @@ describe("createDelegateSubagentTool", () => {
       ancestorSubagentIds: [],
       depth: 0,
       subagentId: "sa-1",
+      mentionedSubagentIds: [],
       prompt: "do the thing",
       onEntry: undefined,
+      keepAlive: undefined,
+      background: undefined,
     })
     expect(result.isError).toBeFalsy()
     const payload = JSON.parse(result.content[0].text)
@@ -118,6 +123,7 @@ describe("createDelegateSubagentTool", () => {
         ancestorSubagentIds: ["sa-a", "sa-b"],
         depth: 2,
         getParentUserMessageId: () => "umsg-1",
+        getMentionedSubagentIds: () => [] as string[],
       },
     )
     expect(calls[0]).toMatchObject({
@@ -152,6 +158,30 @@ describe("createDelegateSubagentTool", () => {
     expect(result.isError).toBe(true)
     expect(result.content[0].text).toContain("mutually exclusive")
     expect(calls).toHaveLength(0)
+  })
+
+  test("forwards mentionedSubagentIds from context to delegateRun", async () => {
+    const calls: Array<{ mentionedSubagentIds: string[] }> = []
+    const orchestrator = {
+      delegateRun: async (a: { mentionedSubagentIds: string[] }) => {
+        calls.push({ mentionedSubagentIds: a.mentionedSubagentIds })
+        return { status: "completed" as const, runId: "r1", text: "ok" }
+      },
+    } as unknown as SubagentOrchestrator
+    const tool = createDelegateSubagentTool({ orchestrator })
+    await tool.handler(
+      { subagent_id: "sa-1", prompt: "x" },
+      {
+        chatId: "c1",
+        parentSubagentId: null,
+        parentRunId: null,
+        ancestorSubagentIds: [],
+        depth: 0,
+        getParentUserMessageId: () => "msg-1",
+        getMentionedSubagentIds: () => ["sa-1"],
+      },
+    )
+    expect(calls[0].mentionedSubagentIds).toEqual(["sa-1"])
   })
 
   test("forwards onEntry from context to orchestrator.delegateRun so progress notifications can flow", async () => {

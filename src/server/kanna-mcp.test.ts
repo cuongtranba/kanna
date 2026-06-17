@@ -317,6 +317,7 @@ function buildKannaMcpForTest(opts: { withDelegation: boolean }): {
     ancestorSubagentIds: [],
     depth: 0,
     getParentUserMessageId: () => "msg-1",
+    getMentionedSubagentIds: () => [],
   }
 
   const rawTools = buildKannaMcpTools({
