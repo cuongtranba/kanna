@@ -517,6 +517,12 @@ export class SubagentOrchestrator {
     subagentId: string
     prompt: string
     /**
+     * The set of subagent ids the user explicitly @-mentioned for this turn.
+     * Required for the MANUAL_ONLY gate: a subagent with `triggerMode === "manual"`
+     * is blocked unless its id appears in this set.
+     */
+    mentionedSubagentIds: string[]
+    /**
      * Optional per-entry sink. Called once for each persisted
      * `subagent_entry_appended` event while the run is in flight. Used by
      * the MCP `delegate_subagent` tool to emit `notifications/progress`
@@ -562,6 +568,29 @@ export class SubagentOrchestrator {
         depth: args.depth,
       })
       return await this.failRun(args.chatId, runId, "UNKNOWN_SUBAGENT", `Subagent ${args.subagentId} not found`)
+    }
+    if (subagent.triggerMode === "manual" && !args.mentionedSubagentIds.includes(subagent.id)) {
+      const runId = crypto.randomUUID()
+      await this.deps.store.appendSubagentEvent({
+        v: 3,
+        type: "subagent_run_started",
+        timestamp: this.now(),
+        chatId: args.chatId,
+        runId,
+        subagentId: subagent.id,
+        subagentName: subagent.name,
+        provider: "claude",
+        model: "",
+        parentUserMessageId: args.parentUserMessageId,
+        parentRunId: args.parentRunId,
+        depth: args.depth,
+      })
+      return await this.failRun(
+        args.chatId,
+        runId,
+        "MANUAL_ONLY",
+        `Subagent ${subagent.name} is manual-trigger; the user must @-mention it to delegate`,
+      )
     }
     if (args.depth > this.maxDepth()) {
       const runId = crypto.randomUUID()
