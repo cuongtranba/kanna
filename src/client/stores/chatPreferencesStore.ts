@@ -3,6 +3,7 @@ import { persist } from "zustand/middleware"
 import {
   DEFAULT_CLAUDE_MODEL_OPTIONS,
   DEFAULT_CODEX_MODEL_OPTIONS,
+  DEFAULT_OPENROUTER_SDK_MODEL,
   normalizeClaudeContextWindow,
   normalizeClaudeModelId,
   normalizeCodexModelId,
@@ -33,6 +34,12 @@ export type ComposerState =
     modelOptions: CodexModelOptions
     planMode: boolean
   }
+  | {
+    provider: "openrouter"
+    model: string
+    modelOptions: Record<string, never>
+    planMode: boolean
+  }
 
 export const NEW_CHAT_COMPOSER_ID = "__new__"
 
@@ -51,6 +58,11 @@ type LegacyPersistedChatPreferencesState = Partial<{
       modelOptions?: Partial<CodexModelOptions>
       planMode?: boolean
     }
+    openrouter?: {
+      model?: string
+      modelOptions?: Record<string, never>
+      planMode?: boolean
+    }
   }
   composerState: PersistedComposerState
   liveProvider: AgentProvider
@@ -65,6 +77,11 @@ type LegacyPersistedChatPreferencesState = Partial<{
       model?: string
       effort?: string
       modelOptions?: Partial<CodexModelOptions>
+      planMode?: boolean
+    }
+    openrouter?: {
+      model?: string
+      modelOptions?: Record<string, never>
       planMode?: boolean
     }
   }
@@ -85,6 +102,12 @@ type PersistedComposerState =
     modelOptions?: Partial<CodexModelOptions>
     planMode?: boolean
   }
+  | {
+    provider: "openrouter"
+    model?: string
+    modelOptions?: Record<string, never>
+    planMode?: boolean
+  }
 
 type PersistedChatPreferencesState = LegacyPersistedChatPreferencesState & {
   chatStates?: Record<string, PersistedComposerState>
@@ -92,7 +115,7 @@ type PersistedChatPreferencesState = LegacyPersistedChatPreferencesState & {
 }
 
 export function normalizeDefaultProvider(value?: string): DefaultProviderPreference {
-  if (value === "claude" || value === "codex") return value
+  if (value === "claude" || value === "codex" || value === "openrouter") return value
   return "last_used"
 }
 
@@ -190,6 +213,11 @@ export function createDefaultProviderDefaults(): ChatProviderPreferences {
       modelOptions: { ...DEFAULT_CODEX_MODEL_OPTIONS },
       planMode: false,
     },
+    openrouter: {
+      model: DEFAULT_OPENROUTER_SDK_MODEL,
+      modelOptions: {},
+      planMode: false,
+    },
   }
 }
 
@@ -206,10 +234,20 @@ export function normalizeProviderDefaults(value?: {
     modelOptions?: Partial<CodexModelOptions>
     planMode?: boolean
   }
+  openrouter?: {
+    model?: string
+    modelOptions?: Record<string, never>
+    planMode?: boolean
+  }
 }): ChatProviderPreferences {
   return {
     claude: normalizeClaudePreference(value?.claude),
     codex: normalizeCodexPreference(value?.codex),
+    openrouter: {
+      model: value?.openrouter?.model ?? DEFAULT_OPENROUTER_SDK_MODEL,
+      modelOptions: {},
+      planMode: Boolean(value?.openrouter?.planMode),
+    },
   }
 }
 
@@ -229,6 +267,8 @@ function providerDefaultsEqual(a: ChatProviderPreferences, b: ChatProviderPrefer
     && a.codex.model === b.codex.model
     && a.codex.planMode === b.codex.planMode
     && codexModelOptionsEqual(a.codex.modelOptions, b.codex.modelOptions)
+    && a.openrouter.model === b.openrouter.model
+    && a.openrouter.planMode === b.openrouter.planMode
   )
 }
 
@@ -255,6 +295,16 @@ function composerFromProviderDefaults(
     }
   }
 
+  if (provider === "openrouter") {
+    const preference = providerDefaults.openrouter
+    return {
+      provider: "openrouter",
+      model: preference.model,
+      modelOptions: { ...preference.modelOptions },
+      planMode: preference.planMode,
+    }
+  }
+
   const preference = providerDefaults.codex
   return {
     provider: "codex",
@@ -265,19 +315,28 @@ function composerFromProviderDefaults(
 }
 
 function cloneComposerState(state: ComposerState): ComposerState {
-  return state.provider === "claude"
-    ? {
+  if (state.provider === "claude") {
+    return {
       provider: "claude",
       model: state.model,
       modelOptions: { ...state.modelOptions },
       planMode: state.planMode,
     }
-    : {
-      provider: "codex",
+  }
+  if (state.provider === "openrouter") {
+    return {
+      provider: "openrouter",
       model: state.model,
       modelOptions: { ...state.modelOptions },
       planMode: state.planMode,
     }
+  }
+  return {
+    provider: "codex",
+    model: state.model,
+    modelOptions: { ...state.modelOptions },
+    planMode: state.planMode,
+  }
 }
 
 function normalizeComposerState(
@@ -303,6 +362,15 @@ function normalizeComposerState(
       model: preference.model,
       modelOptions: preference.modelOptions,
       planMode: preference.planMode,
+    }
+  }
+
+  if (value?.provider === "openrouter") {
+    return {
+      provider: "openrouter",
+      model: value.model ?? DEFAULT_OPENROUTER_SDK_MODEL,
+      modelOptions: {},
+      planMode: Boolean(value.planMode),
     }
   }
 
@@ -496,10 +564,15 @@ export const useChatPreferencesStore = create<ChatPreferencesState>()(
                 ...state.providerDefaults.claude,
                 model,
               })
-              : normalizeCodexPreference({
-                ...state.providerDefaults.codex,
-                model,
-              }),
+              : provider === "openrouter"
+                ? {
+                  ...state.providerDefaults.openrouter,
+                  model,
+                }
+                : normalizeCodexPreference({
+                  ...state.providerDefaults.codex,
+                  model,
+                }),
           },
         })),
       setProviderDefaultModelOptions: (provider, modelOptions) =>
@@ -514,13 +587,18 @@ export const useChatPreferencesStore = create<ChatPreferencesState>()(
                   ...modelOptions as Partial<ClaudeModelOptions>,
                 },
               })
-              : normalizeCodexPreference({
-                ...state.providerDefaults.codex,
-                modelOptions: {
-                  ...state.providerDefaults.codex.modelOptions,
-                  ...modelOptions as Partial<CodexModelOptions>,
-                },
-              }),
+              : provider === "openrouter"
+                ? {
+                  ...state.providerDefaults.openrouter,
+                  modelOptions: {},
+                }
+                : normalizeCodexPreference({
+                  ...state.providerDefaults.codex,
+                  modelOptions: {
+                    ...state.providerDefaults.codex.modelOptions,
+                    ...modelOptions as Partial<CodexModelOptions>,
+                  },
+                }),
           },
         })),
       setProviderDefaultPlanMode: (provider, planMode) =>
@@ -574,9 +652,9 @@ export const useChatPreferencesStore = create<ChatPreferencesState>()(
       setChatComposerProvider: (chatId, provider) =>
         set((state) => withChatComposerState(state, chatId, () => composerFromProviderDefaults(provider, state.providerDefaults))),
       setChatComposerModel: (chatId, model) =>
-        set((state) => withChatComposerState(state, chatId, (composerState) => (
-          composerState.provider === "claude"
-            ? {
+        set((state) => withChatComposerState(state, chatId, (composerState) => {
+          if (composerState.provider === "claude") {
+            return {
               provider: "claude",
               model: normalizeClaudePreference({
                 ...composerState,
@@ -588,20 +666,29 @@ export const useChatPreferencesStore = create<ChatPreferencesState>()(
               }).modelOptions,
               planMode: composerState.planMode,
             }
-            : {
-              provider: "codex",
+          }
+          if (composerState.provider === "openrouter") {
+            return {
+              provider: "openrouter",
               model,
-              modelOptions: normalizeCodexPreference({
-                ...composerState,
-                model,
-              }).modelOptions,
+              modelOptions: {},
               planMode: composerState.planMode,
             }
-        ))),
+          }
+          return {
+            provider: "codex",
+            model,
+            modelOptions: normalizeCodexPreference({
+              ...composerState,
+              model,
+            }).modelOptions,
+            planMode: composerState.planMode,
+          }
+        })),
       setChatComposerModelOptions: (chatId, modelOptions) =>
-        set((state) => withChatComposerState(state, chatId, (composerState) => (
-          composerState.provider === "claude"
-            ? {
+        set((state) => withChatComposerState(state, chatId, (composerState) => {
+          if (composerState.provider === "claude") {
+            return {
               provider: "claude",
               model: composerState.model,
               modelOptions: normalizeClaudePreference({
@@ -613,19 +700,28 @@ export const useChatPreferencesStore = create<ChatPreferencesState>()(
               }).modelOptions,
               planMode: composerState.planMode,
             }
-            : {
-              provider: "codex",
+          }
+          if (composerState.provider === "openrouter") {
+            return {
+              provider: "openrouter",
               model: composerState.model,
-              modelOptions: normalizeCodexPreference({
-                ...composerState,
-                modelOptions: {
-                  ...composerState.modelOptions,
-                  ...modelOptions as Partial<CodexModelOptions>,
-                },
-              }).modelOptions,
+              modelOptions: {},
               planMode: composerState.planMode,
             }
-        ))),
+          }
+          return {
+            provider: "codex",
+            model: composerState.model,
+            modelOptions: normalizeCodexPreference({
+              ...composerState,
+              modelOptions: {
+                ...composerState.modelOptions,
+                ...modelOptions as Partial<CodexModelOptions>,
+              },
+            }).modelOptions,
+            planMode: composerState.planMode,
+          }
+        })),
       setChatComposerPlanMode: (chatId, planMode) =>
         set((state) => withChatComposerState(state, chatId, (composerState) => ({
           ...composerState,

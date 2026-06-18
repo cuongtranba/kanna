@@ -24,13 +24,14 @@ import { ensureProjectDirectory } from "./project-directory.adapter"
 import { TerminalManager } from "./terminal-manager"
 import type { UpdateManager } from "./update-manager"
 import { deriveChatSnapshot, deriveLocalProjectsSnapshot, deriveSidebarData } from "./read-models"
-import { AUTH_DEFAULTS, CLAUDE_AUTH_DEFAULTS, CLAUDE_DRIVER_DEFAULTS, CLAUDE_PTY_LIFECYCLE_DEFAULTS, CLOUDFLARE_TUNNEL_DEFAULTS, UPLOAD_DEFAULTS } from "../shared/types"
+import { AUTH_DEFAULTS, CLAUDE_AUTH_DEFAULTS, CLAUDE_DRIVER_DEFAULTS, CLAUDE_PTY_LIFECYCLE_DEFAULTS, CLOUDFLARE_TUNNEL_DEFAULTS, DEFAULT_OPENROUTER_SDK_MODEL, UPLOAD_DEFAULTS } from "../shared/types"
 import type {
   AppSettingsPatch,
   AppSettingsSnapshot,
   InstalledSkillsSnapshot,
   LlmProviderSnapshot,
   LlmProviderValidationResult,
+  OpenRouterModel,
   SkillInstallResult,
   SkillSearchSnapshot,
   SkillUninstallResult,
@@ -145,6 +146,7 @@ interface CreateWsRouterArgs {
     write: (value: Pick<LlmProviderSnapshot, "provider" | "apiKey" | "model" | "baseUrl">) => Promise<LlmProviderSnapshot>
     validate: (value: Pick<LlmProviderSnapshot, "provider" | "apiKey" | "model" | "baseUrl">) => Promise<LlmProviderValidationResult>
   }
+  listOpenRouterModels?: () => Promise<OpenRouterModel[]>
   refreshDiscovery: () => Promise<DiscoveredProject[]>
   getDiscoveredProjects: () => DiscoveredProject[]
   machineDisplayName: string
@@ -414,6 +416,7 @@ export function createWsRouter({
   analytics,
   tunnelGateway,
   llmProvider,
+  listOpenRouterModels,
   refreshDiscovery,
   getDiscoveredProjects,
   machineDisplayName,
@@ -518,6 +521,11 @@ export function createWsRouter({
         },
         planMode: false,
       },
+      openrouter: {
+        model: DEFAULT_OPENROUTER_SDK_MODEL,
+        modelOptions: {},
+        planMode: false,
+      },
     },
     warning: null,
     filePathDisplay: "~/.kanna/data/settings.json",
@@ -593,6 +601,11 @@ export function createWsRouter({
             ...snapshot.providerDefaults.codex.modelOptions,
             ...patch.providerDefaults?.codex?.modelOptions,
           },
+        },
+        openrouter: {
+          ...snapshot.providerDefaults.openrouter,
+          ...patch.providerDefaults?.openrouter,
+          modelOptions: {},
         },
       },
       cloudflareTunnel: {
@@ -1465,6 +1478,11 @@ export function createWsRouter({
         }
         case "settings.readLlmProvider": {
           send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: await resolvedLlmProvider.read() })
+          return
+        }
+        case "settings.listOpenRouterModels": {
+          const models = listOpenRouterModels ? await listOpenRouterModels() : []
+          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: models })
           return
         }
         case "settings.writeLlmProvider": {

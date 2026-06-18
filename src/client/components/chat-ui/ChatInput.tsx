@@ -1110,7 +1110,7 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput({
                     break
                   case "fastMode":
                     updateComposerState(
-                      (state) => state.provider === "claude"
+                      (state) => state.provider === "claude" || state.provider === "openrouter"
                         ? state
                         : { ...state, modelOptions: { ...state.modelOptions, fastMode: change.fastMode } }
                     )

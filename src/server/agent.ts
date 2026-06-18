@@ -7,6 +7,7 @@ import type {
   AgentProvider,
   ChatAttachment,
   ContextWindowUsageSnapshot,
+  LlmProviderSnapshot,
   McpServerConfig,
   ModelOptions,
   NormalizedToolCall,
@@ -40,10 +41,13 @@ import type { HarnessEvent, HarnessToolRequest, HarnessTurn } from "./harness-ty
 import {
   codexServiceTierFromModelOptions,
   getServerProviderCatalog,
+  isClaudeSdkProvider,
   normalizeClaudeModelOptions,
   normalizeCodexModelOptions,
   normalizeServerModel,
+  openrouterAuthReady,
 } from "./provider-catalog"
+import { readLlmProviderSnapshot } from "./llm-provider"
 import { resolveClaudeApiModelId, type ClaudeDriverPreference } from "../shared/types"
 import { fallbackTitleFromMessage } from "./generate-title"
 import { AUTO_CONTINUE_EVENT_VERSION, type AutoContinueEvent } from "./auto-continue/events"
@@ -281,6 +285,8 @@ interface AgentCoordinatorArgs {
      * so the subagent roster is embedded.
      */
     systemPromptAppend?: string
+    /** When set, redirect the SDK to OpenRouter instead of Anthropic. */
+    openrouterApiKey?: string | null
     /** Orchestrator for delegate_subagent. Omit to hide the tool. */
     subagentOrchestrator?: SubagentOrchestrator
     /** Per-spawn delegation context (depth / ancestor chain / parentUserMessageId resolver). */
@@ -355,6 +361,8 @@ interface AgentCoordinatorArgs {
   workflowRegistry?: import("./workflow-registry").WorkflowRegistry
   /** Registry mapping each chat to its `…/subagents` dir for on-demand Agent child-transcript drill-in. */
   subagentTranscriptRegistry?: import("./subagent-transcript-registry").SubagentTranscriptRegistry
+  /** Reads the persisted LLM provider snapshot (OpenRouter key source). */
+  readLlmProvider?: () => Promise<LlmProviderSnapshot>
 }
 
 interface SendToStartingProfile {
@@ -1099,11 +1107,29 @@ export function buildCanUseTool(args: BuildCanUseToolArgs): CanUseTool {
   }
 }
 
-export function buildClaudeEnv(baseEnv: NodeJS.ProcessEnv, oauthToken: string | null): NodeJS.ProcessEnv {
-  const { CLAUDECODE: _unused, ...rest } = baseEnv
+export function buildClaudeEnv(
+  baseEnv: NodeJS.ProcessEnv,
+  oauthToken: string | null,
+  openrouter?: { apiKey: string } | null,
+): NodeJS.ProcessEnv {
+  const { CLAUDECODE: _unused, CLAUDE_CODE_OAUTH_TOKEN: _oauth, ...rest } = baseEnv
+  if (openrouter) {
+    // OpenRouter's Anthropic-compatible endpoint. ANTHROPIC_API_KEY MUST be
+    // explicitly empty or the SDK prefers it over the auth token and 401s.
+    return {
+      ...rest,
+      ANTHROPIC_BASE_URL: "https://openrouter.ai/api",
+      ANTHROPIC_AUTH_TOKEN: openrouter.apiKey,
+      ANTHROPIC_API_KEY: "",
+    }
+  }
   // Empty string is treated the same as null. Blank tokens are rejected at persistence time
   // by normalizeTokenEntry, so in practice oauthToken is either a non-empty string or null.
-  if (!oauthToken) return rest
+  if (!oauthToken) {
+    return baseEnv.CLAUDE_CODE_OAUTH_TOKEN
+      ? { ...rest, CLAUDE_CODE_OAUTH_TOKEN: baseEnv.CLAUDE_CODE_OAUTH_TOKEN }
+      : rest
+  }
   return { ...rest, CLAUDE_CODE_OAUTH_TOKEN: oauthToken }
 }
 
@@ -1116,6 +1142,8 @@ async function startClaudeSession(args: {
   sessionToken: string | null
   forkSession: boolean
   oauthToken: string | null
+  /** When set, redirect the SDK to OpenRouter instead of Anthropic. */
+  openrouterApiKey?: string | null
   additionalDirectories?: string[]
   chatId?: string
   tunnelGateway?: TunnelGateway | null
@@ -1192,7 +1220,7 @@ async function startClaudeSession(args: {
           },
       settingSources: ["user", "project", "local"],
       pathToClaudeCodeExecutable: process.env.CLAUDE_EXECUTABLE?.replace(/^~(?=\/|$)/, homedir()) || undefined,
-      env: buildClaudeEnv(process.env, args.oauthToken),
+      env: buildClaudeEnv(process.env, args.oauthToken, args.openrouterApiKey ? { apiKey: args.openrouterApiKey } : null),
     },
   })
 
@@ -1398,6 +1426,7 @@ export class AgentCoordinator {
   private readonly ptyInstanceRegistry: import("./claude-pty/pty-instance-registry").PtyInstanceRegistry | null
   private readonly workflowRegistry: import("./workflow-registry").WorkflowRegistry | null
   private readonly subagentTranscriptRegistry: import("./subagent-transcript-registry").SubagentTranscriptRegistry | null
+  private readonly readLlmProvider: () => Promise<LlmProviderSnapshot>
   private readonly subagentPendingResolvers = new Map<
     string,
     { resolve: (v: unknown) => void; reject: (e: Error) => void }
@@ -1420,6 +1449,7 @@ export class AgentCoordinator {
     this.pendingWorkflowPollMs = args.pendingWorkflowPollMs ?? 120_000
     this.getSubagents = args.getSubagents ?? (() => [])
     this.getAppSettingsSnapshot = args.getAppSettingsSnapshot ?? (() => ({}))
+    this.readLlmProvider = args.readLlmProvider ?? readLlmProviderSnapshot
     this.subagentOrchestrator = new SubagentOrchestrator({
       store: this.store,
       appSettings: { getSnapshot: () => ({ subagents: this.getSubagents() }) },
@@ -1530,7 +1560,8 @@ export class AgentCoordinator {
     const out = new Map<string, "warming" | "active" | "idle">()
     const now = Date.now()
     for (const [chatId, session] of this.claudeSessions) {
-      if (this.activeTurns.get(chatId)?.provider === "claude") {
+      const activeProv = this.activeTurns.get(chatId)?.provider
+      if (activeProv !== undefined && isClaudeSdkProvider(activeProv)) {
         out.set(chatId, "active")
       } else if (this.hasPendingBackgroundTask(session, now)) {
         // Held warm for a background Bash task — surface as "warming", not "idle".
@@ -1636,7 +1667,8 @@ export class AgentCoordinator {
   }
 
   private isClaudeSessionIdle(chatId: string, session: ClaudeSessionState, now = Date.now()): boolean {
-    if (this.activeTurns.get(chatId)?.provider === "claude") return false
+    const activeProv = this.activeTurns.get(chatId)?.provider
+    if (activeProv !== undefined && isClaudeSdkProvider(activeProv)) return false
     if (session.pendingPromptSeqs.length > 0) return false
     if (this.hasLiveWorkflow(chatId)) return false
     if (this.hasPendingBackgroundTask(session, now)) return false
@@ -2247,7 +2279,7 @@ export class AgentCoordinator {
     const promptContent = primer ?? userPromptText
 
     let turn: HarnessTurn
-    if (args.provider === "claude") {
+    if (isClaudeSdkProvider(args.provider)) {
       logSendToStartingProfile(args.profile, "start_turn.provider_boot.begin", {
         chatId: args.chatId,
         provider: args.provider,
@@ -2266,6 +2298,7 @@ export class AgentCoordinator {
         sessionToken: pendingForkToken ?? existingToken,
         forkSession: pendingForkToken != null,
         onToolRequest,
+        provider: args.provider,
       })
       logSendToStartingProfile(args.profile, "start_turn.provider_boot.ready", {
         chatId: args.chatId,
@@ -2474,6 +2507,7 @@ export class AgentCoordinator {
     sessionToken: string | null
     forkSession: boolean
     onToolRequest: (request: HarnessToolRequest) => Promise<unknown>
+    provider: AgentProvider
   }): Promise<HarnessTurn> {
     let session = this.claudeSessions.get(args.chatId)
 
@@ -2489,17 +2523,19 @@ export class AgentCoordinator {
       }
 
       this.enforceClaudeSessionBudget(args.chatId)
-      const picked = this.oauthPool?.pickActive(args.chatId) ?? null
+      const isOpenRouter = args.provider === "openrouter"
+      const openrouterApiKey = isOpenRouter ? (await this.readLlmProvider()).apiKey : null
+      const picked = isOpenRouter ? null : (this.oauthPool?.pickActive(args.chatId) ?? null)
       // If the pool is populated but every token is currently unusable
       // (limited/error/disabled/reserved), refuse to spawn rather than let
       // the CLI fall back to its keychain auth — that path serves whichever
       // login the CLI binary's keychain holds, which is typically
       // expired in a pool-managed setup and produces opaque 401 loops.
-      if (this.oauthPool && this.oauthPool.hasAnyToken() && !picked) {
+      if (!isOpenRouter && this.oauthPool && this.oauthPool.hasAnyToken() && !picked) {
         throw new OAuthPoolUnavailableError(this.buildPoolUnavailableMessage(args.chatId, ""))
       }
       if (picked) this.oauthPool!.markUsed(picked.id)
-      const usePty = this.resolveClaudeDriverPreference() === "pty"
+      const usePty = !isOpenRouter && this.resolveClaudeDriverPreference() === "pty"
       const systemPromptAppend = buildKannaSystemPromptAppend(this.getSubagents(), {
         globalPromptAppend: this.getAppSettingsSnapshot().globalPromptAppend,
         stackProjects: args.stackProjects,
@@ -2554,6 +2590,7 @@ export class AgentCoordinator {
               sessionToken: args.sessionToken,
               forkSession: args.forkSession,
               oauthToken: picked?.token ?? null,
+              openrouterApiKey,
               additionalDirectories: args.additionalDirectories,
               chatId: args.chatId,
               tunnelGateway: this.tunnelGateway,
@@ -2698,7 +2735,7 @@ export class AgentCoordinator {
     // `/compact` produces its summary, so the next turn ships with a bounded
     // history instead of looping on "Prompt is too long".
     if (
-      provider === "claude"
+      provider === "claude" // openrouter intentionally excluded: /compact is claude-CLI-specific
       && this.shouldInjectProactiveCompact(chatId, command.content)
     ) {
       const queuedMessage = await this.enqueueMessage(chatId, command.content, command.attachments ?? [], {
@@ -2902,6 +2939,9 @@ export class AgentCoordinator {
       onToolRequest,
       globalPromptAppend: this.getAppSettingsSnapshot().globalPromptAppend,
       authReady: async (provider) => {
+        if (provider === "openrouter") {
+          return openrouterAuthReady(await this.readLlmProvider())
+        }
         if (provider === "claude") {
           const settings = this.getAppSettingsSnapshot()
           // Pass parent chat id so a token already reserved by the parent

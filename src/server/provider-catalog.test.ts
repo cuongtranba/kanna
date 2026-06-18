@@ -4,8 +4,12 @@ import {
   normalizeClaudeModelOptions,
   normalizeCodexModelOptions,
   normalizeServerModel,
+  isClaudeSdkProvider,
+  openrouterAuthReady,
+  getServerProviderCatalog,
 } from "./provider-catalog"
 import { resolveClaudeApiModelId } from "../shared/types"
+import type { LlmProviderSnapshot } from "../shared/types"
 
 describe("provider catalog normalization", () => {
   test("maps legacy Claude effort into shared model options", () => {
@@ -65,5 +69,32 @@ describe("provider catalog normalization", () => {
   test("resolves Claude API model ids for 1m context window", () => {
     expect(resolveClaudeApiModelId("claude-opus-4-7", "1m")).toBe("claude-opus-4-7[1m]")
     expect(resolveClaudeApiModelId("claude-sonnet-4-6", "200k")).toBe("claude-sonnet-4-6")
+  })
+})
+
+describe("isClaudeSdkProvider", () => {
+  test("claude and openrouter use the Claude SDK path; codex does not", () => {
+    expect(isClaudeSdkProvider("claude")).toBe(true)
+    expect(isClaudeSdkProvider("openrouter")).toBe(true)
+    expect(isClaudeSdkProvider("codex")).toBe(false)
+  })
+  test("openrouter server catalog entry exists", () => {
+    expect(getServerProviderCatalog("openrouter").id).toBe("openrouter")
+  })
+})
+
+describe("openrouterAuthReady", () => {
+  const base = { provider: "openrouter", apiKey: "sk-or-x", enabled: true } as unknown as LlmProviderSnapshot
+  test("true when openrouter snapshot enabled with a key", () => {
+    expect(openrouterAuthReady(base)).toBe(true)
+  })
+  test("false when disabled", () => {
+    expect(openrouterAuthReady({ ...base, enabled: false } as LlmProviderSnapshot)).toBe(false)
+  })
+  test("false when key empty", () => {
+    expect(openrouterAuthReady({ ...base, apiKey: "" } as LlmProviderSnapshot)).toBe(false)
+  })
+  test("false when provider is not openrouter", () => {
+    expect(openrouterAuthReady({ ...base, provider: "openai" } as LlmProviderSnapshot)).toBe(false)
   })
 })

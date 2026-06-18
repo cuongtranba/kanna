@@ -3,8 +3,8 @@ import { randomUUID } from "node:crypto"
 import { mkdtemp, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
-import { AUTH_DEFAULTS, CLAUDE_AUTH_DEFAULTS, CLAUDE_DRIVER_DEFAULTS, CLAUDE_PTY_LIFECYCLE_DEFAULTS, CLOUDFLARE_TUNNEL_DEFAULTS, PROTOCOL_VERSION, UPLOAD_DEFAULTS } from "../shared/types"
-import type { AppSettingsSnapshot, KeybindingsSnapshot, LlmProviderSnapshot, McpServerConfig, McpServerTestResult, UpdateSnapshot } from "../shared/types"
+import { AUTH_DEFAULTS, CLAUDE_AUTH_DEFAULTS, CLAUDE_DRIVER_DEFAULTS, CLAUDE_PTY_LIFECYCLE_DEFAULTS, CLOUDFLARE_TUNNEL_DEFAULTS, DEFAULT_OPENROUTER_SDK_MODEL, PROTOCOL_VERSION, UPLOAD_DEFAULTS } from "../shared/types"
+import type { AppSettingsSnapshot, KeybindingsSnapshot, LlmProviderSnapshot, McpServerConfig, McpServerTestResult, OpenRouterModel, UpdateSnapshot } from "../shared/types"
 import { createEmptyState } from "./events"
 import {
   assertSafeSkillId,
@@ -110,6 +110,11 @@ const DEFAULT_APP_SETTINGS_SNAPSHOT: AppSettingsSnapshot = {
         reasoningEffort: "high",
         fastMode: false,
       },
+      planMode: false,
+    },
+    openrouter: {
+      model: DEFAULT_OPENROUTER_SDK_MODEL,
+      modelOptions: {},
       planMode: false,
     },
   },
@@ -3637,5 +3642,55 @@ describe("settings.writeAppSettingsPatch auto-test", () => {
     )
 
     expect(ws.sent).toEqual([{ v: PROTOCOL_VERSION, type: "ack", id: "list-1", result: { ok: true, kind: "list", data: { shares } } }])
+  })
+})
+
+describe("settings.listOpenRouterModels", () => {
+  test("returns the model list from injected listOpenRouterModels dep", async () => {
+    const MODELS: OpenRouterModel[] = [{ id: "a/b", label: "A B", contextLength: 100 }]
+    const router = createWsRouter({
+      store: { state: createEmptyState() } as never,
+      agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set(), getSlashCommandsLoadingChatIds: () => new Set(), getWaitStartedAtByChatId: () => new Map(), ensureSlashCommandsLoaded: async () => {} } as never,
+      terminals: { getSnapshot: () => null, onEvent: () => () => {} } as never,
+      keybindings: { getSnapshot: () => DEFAULT_KEYBINDINGS_SNAPSHOT, onChange: () => () => {} } as never,
+      listOpenRouterModels: async () => MODELS,
+      refreshDiscovery: async () => [],
+      getDiscoveredProjects: () => [],
+      machineDisplayName: "Local Machine",
+      updateManager: null,
+      pushManager: NOOP_PUSH_MANAGER,
+    })
+    const ws = new FakeWebSocket()
+    router.handleOpen(ws as never)
+
+    await router.handleMessage(
+      ws as never,
+      JSON.stringify({ v: 1, type: "command", id: "or-models-1", command: { type: "settings.listOpenRouterModels" } }),
+    )
+
+    expect(ws.sent).toEqual([{ v: PROTOCOL_VERSION, type: "ack", id: "or-models-1", result: MODELS }])
+  })
+
+  test("returns empty array when listOpenRouterModels dep is not provided", async () => {
+    const router = createWsRouter({
+      store: { state: createEmptyState() } as never,
+      agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set(), getSlashCommandsLoadingChatIds: () => new Set(), getWaitStartedAtByChatId: () => new Map(), ensureSlashCommandsLoaded: async () => {} } as never,
+      terminals: { getSnapshot: () => null, onEvent: () => () => {} } as never,
+      keybindings: { getSnapshot: () => DEFAULT_KEYBINDINGS_SNAPSHOT, onChange: () => () => {} } as never,
+      refreshDiscovery: async () => [],
+      getDiscoveredProjects: () => [],
+      machineDisplayName: "Local Machine",
+      updateManager: null,
+      pushManager: NOOP_PUSH_MANAGER,
+    })
+    const ws = new FakeWebSocket()
+    router.handleOpen(ws as never)
+
+    await router.handleMessage(
+      ws as never,
+      JSON.stringify({ v: 1, type: "command", id: "or-models-2", command: { type: "settings.listOpenRouterModels" } }),
+    )
+
+    expect(ws.sent).toEqual([{ v: PROTOCOL_VERSION, type: "ack", id: "or-models-2", result: [] }])
   })
 })

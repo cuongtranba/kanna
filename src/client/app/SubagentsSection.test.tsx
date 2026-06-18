@@ -14,6 +14,7 @@ import {
 import {
   DEFAULT_CLAUDE_MODEL_OPTIONS,
   DEFAULT_CODEX_MODEL_OPTIONS,
+  DEFAULT_OPENROUTER_SDK_MODEL,
   type ChatProviderPreferences,
   type Subagent,
   type SubagentInput,
@@ -55,6 +56,11 @@ const defaultProviderPrefs: ChatProviderPreferences = {
     modelOptions: { reasoningEffort: "high", fastMode: false },
     planMode: false,
   },
+  openrouter: {
+    model: DEFAULT_OPENROUTER_SDK_MODEL,
+    modelOptions: {},
+    planMode: false,
+  },
 }
 
 const providerDefaults: ChatProviderPreferences = {
@@ -66,6 +72,11 @@ const providerDefaults: ChatProviderPreferences = {
   codex: {
     model: "gpt-5.4",
     modelOptions: { reasoningEffort: "low", fastMode: true },
+    planMode: false,
+  },
+  openrouter: {
+    model: DEFAULT_OPENROUTER_SDK_MODEL,
+    modelOptions: {},
     planMode: false,
   },
 }

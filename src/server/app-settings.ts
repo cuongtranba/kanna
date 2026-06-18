@@ -23,6 +23,7 @@ import {
   CLOUDFLARE_TUNNEL_DEFAULTS,
   DEFAULT_CLAUDE_MODEL_OPTIONS,
   DEFAULT_CODEX_MODEL_OPTIONS,
+  DEFAULT_OPENROUTER_SDK_MODEL,
   GLOBAL_PROMPT_APPEND_MAX_CHARS,
   isClaudeDriverPreference,
   isClaudeReasoningEffort,
@@ -39,6 +40,7 @@ import {
   UPLOAD_DEFAULTS,
   UPLOAD_MAX_FILE_SIZE_MB_MAX,
   UPLOAD_MAX_FILE_SIZE_MB_MIN,
+  type AgentProvider,
   type AppSettingsPatch,
   type AppSettingsSnapshot,
   type AppThemePreference,
@@ -96,6 +98,7 @@ interface AppSettingsFile {
   providerDefaults?: {
     claude?: Partial<ProviderPreference<Partial<ClaudeModelOptions>>> & { effort?: unknown }
     codex?: Partial<ProviderPreference<Partial<CodexModelOptions>>> & { effort?: unknown }
+    openrouter?: Partial<ProviderPreference<Record<string, never>>>
   }
   cloudflareTunnel?: unknown
   auth?: unknown
@@ -193,6 +196,11 @@ function createDefaultProviderDefaults(): ChatProviderPreferences {
     codex: {
       model: "gpt-5.5",
       modelOptions: { ...DEFAULT_CODEX_MODEL_OPTIONS },
+      planMode: false,
+    },
+    openrouter: {
+      model: DEFAULT_OPENROUTER_SDK_MODEL,
+      modelOptions: {},
       planMode: false,
     },
   }
@@ -296,6 +304,11 @@ function normalizeProviderDefaults(value: AppSettingsFile["providerDefaults"] | 
   return {
     claude: normalizeClaudePreference(value?.claude ?? defaults.claude),
     codex: normalizeCodexPreference(value?.codex ?? defaults.codex),
+    openrouter: {
+      model: value?.openrouter?.model ?? DEFAULT_OPENROUTER_SDK_MODEL,
+      modelOptions: {},
+      planMode: Boolean(value?.openrouter?.planMode),
+    },
   }
 }
 
@@ -382,7 +395,7 @@ function normalizeUploadSettings(value: unknown, warnings: string[]): UploadSett
 }
 
 function validateSubagentRestriction(
-  provider: "claude" | "codex",
+  provider: AgentProvider,
   workingDir: string | undefined,
   allowedPaths: string[] | undefined,
 ): SubagentValidationError | null {
@@ -1213,6 +1226,11 @@ function applyPatch(state: AppSettingsState, patch: AppSettingsPatch): AppSettin
           ...state.providerDefaults.codex.modelOptions,
           ...patch.providerDefaults?.codex?.modelOptions,
         },
+      },
+      openrouter: {
+        ...state.providerDefaults.openrouter,
+        ...patch.providerDefaults?.openrouter,
+        modelOptions: {},
       },
     },
     cloudflareTunnel: {

@@ -1,6 +1,7 @@
 import { memo, type RefObject } from "react"
 import { ChatInput, type ChatInputHandle } from "../../components/chat-ui/ChatInput"
 import type { ContextWindowSnapshot } from "../../lib/contextWindow"
+import type { AgentProvider } from "../../../shared/types"
 import type { KannaState } from "../useKannaState"
 
 interface ChatInputDockProps {
@@ -13,7 +14,7 @@ interface ChatInputDockProps {
   hasSelectedProject: boolean
   canCancel: boolean
   projectId: string | null
-  activeProvider: "claude" | "codex" | null
+  activeProvider: AgentProvider | null
   availableProviders: KannaState["availableProviders"]
   contextWindowSnapshot: ContextWindowSnapshot | null
   onSubmit: KannaState["handleSend"]

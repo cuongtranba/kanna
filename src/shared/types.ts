@@ -3,7 +3,7 @@ import type { ChatPermissionPolicyOverride, ToolRequestDecision, ToolRequestStat
 export const STORE_VERSION = 3 as const
 export const PROTOCOL_VERSION = 1 as const
 
-export type AgentProvider = "claude" | "codex"
+export type AgentProvider = "claude" | "codex" | "openrouter"
 export type LlmProviderKind = "openai" | "openrouter" | "custom"
 export type AppThemePreference = "light" | "dark" | "system"
 export type ChatSoundPreference = "never" | "unfocused" | "always"
@@ -12,6 +12,15 @@ export type DefaultProviderPreference = "last_used" | AgentProvider
 export type EditorPreset = "cursor" | "vscode" | "xcode" | "windsurf" | "custom"
 export const DEFAULT_OPENAI_SDK_MODEL = "gpt-5.4-mini"
 export const DEFAULT_OPENROUTER_SDK_MODEL = "moonshotai/kimi-k2.5:nitro"
+
+export const OPENROUTER_BASE_URL = "https://openrouter.ai/api"
+export const OPENROUTER_MODELS_URL = "https://openrouter.ai/api/v1/models"
+
+export interface OpenRouterModel {
+  id: string
+  label: string
+  contextLength: number
+}
 
 export type AttachmentKind = "image" | "file" | "mention"
 
@@ -142,9 +151,12 @@ export interface CodexModelOptions {
   fastMode: boolean
 }
 
+export type OpenRouterModelOptions = Record<string, never>
+
 export interface ProviderModelOptionsByProvider {
   claude: ClaudeModelOptions
   codex: CodexModelOptions
+  openrouter: OpenRouterModelOptions
 }
 
 export interface ProviderPreference<TModelOptions> {
@@ -156,6 +168,7 @@ export interface ProviderPreference<TModelOptions> {
 export type ChatProviderPreferences = {
   claude: ProviderPreference<ClaudeModelOptions>
   codex: ProviderPreference<CodexModelOptions>
+  openrouter: ProviderPreference<OpenRouterModelOptions>
 }
 
 export type SubagentContextScope = "previous-assistant-reply" | "full-transcript"
@@ -392,6 +405,14 @@ export const PROVIDERS: ProviderCatalogEntry[] = [
       { id: "gpt-5.3-codex", label: "GPT-5.3 Codex", supportsEffort: false, aliases: ["gpt-5-codex"] },
       { id: "gpt-5.3-codex-spark", label: "GPT-5.3 Codex Spark", supportsEffort: false },
     ],
+    efforts: [],
+  },
+  {
+    id: "openrouter",
+    label: "OpenRouter",
+    defaultModel: DEFAULT_OPENROUTER_SDK_MODEL,
+    supportsPlanMode: true,
+    models: [],
     efforts: [],
   },
 ]
@@ -753,6 +774,7 @@ export interface AppSettingsPatch {
   providerDefaults?: {
     claude?: Partial<ProviderPreference<ClaudeModelOptions>>
     codex?: Partial<ProviderPreference<CodexModelOptions>>
+    openrouter?: Partial<ProviderPreference<OpenRouterModelOptions>>
   }
   cloudflareTunnel?: Partial<CloudflareTunnelSettings>
   auth?: Partial<AuthSettings>

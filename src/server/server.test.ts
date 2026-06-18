@@ -32,6 +32,11 @@ function makeSnapshot(overrides: Partial<AppSettingsSnapshot> = {}): AppSettings
         modelOptions: { reasoningEffort: "high", fastMode: false },
         planMode: false,
       },
+      openrouter: {
+        model: "moonshotai/kimi-k2.5:nitro",
+        modelOptions: {},
+        planMode: false,
+      },
     },
     warning: null,
     filePathDisplay: "/tmp/settings.json",

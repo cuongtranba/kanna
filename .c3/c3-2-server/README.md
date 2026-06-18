@@ -1,7 +1,7 @@
 ---
 id: c3-2
 c3-version: 4
-c3-seal: ce52f697e8fc91213a7525615acb4ff3cce2bc9dfff381e7bae3bf8b48680ff4
+c3-seal: 2c1bb48a98718821653929e2e0ea21af61ab88c2396f5b5f973aa0280fc3dc83
 title: Server
 type: container
 boundary: service
@@ -58,3 +58,4 @@ Run the local Bun backend: serve HTTP+WebSocket on localhost, coordinate Claude 
 | c3-227 | auto-continue | feature | implemented | Detect rate-limit / auth-error endings, schedule retries, replay queued prompts |
 | c3-228 | session-share | feature | planned | Mint read-only share tokens for finished chats; serve frozen snapshots at /share/:token without auth |
 | c3-229 | workflow-status | feature | planned | Disk-watch sidecar read-model for PTY workflow runs; WorkflowRegistry + WorkflowsSnapshot WS topic |
+| c3-230 | openrouter-models | feature | implemented | Tool-capable OpenRouter model catalog: HTTPS fetch + parse + TTL cache; feeds the composer model picker via settings.listOpenRouterModels RPC |

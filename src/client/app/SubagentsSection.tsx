@@ -19,6 +19,7 @@ import {
   CODEX_REASONING_OPTIONS,
   DEFAULT_CLAUDE_MODEL_OPTIONS,
   DEFAULT_CODEX_MODEL_OPTIONS,
+  DEFAULT_OPENROUTER_SDK_MODEL,
   getProviderCatalog,
   isClaudeContextWindow,
   isClaudeReasoningEffort,
@@ -550,6 +551,11 @@ const FALLBACK_PROVIDER_PREFS: ChatProviderPreferences = {
   codex: {
     model: getProviderCatalog("codex").defaultModel,
     modelOptions: { ...DEFAULT_CODEX_MODEL_OPTIONS },
+    planMode: false,
+  },
+  openrouter: {
+    model: DEFAULT_OPENROUTER_SDK_MODEL,
+    modelOptions: {},
     planMode: false,
   },
 }
