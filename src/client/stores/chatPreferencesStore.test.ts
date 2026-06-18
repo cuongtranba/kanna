@@ -4,6 +4,7 @@ import {
   NEW_CHAT_COMPOSER_ID,
   useChatPreferencesStore,
 } from "./chatPreferencesStore"
+import { DEFAULT_OPENROUTER_SDK_MODEL } from "../../shared/types"
 
 const INITIAL_STATE = useChatPreferencesStore.getInitialState()
 
@@ -65,6 +66,11 @@ describe("migrateChatPreferencesState", () => {
         codex: {
           model: "gpt-5.5",
           modelOptions: { reasoningEffort: "minimal", fastMode: true },
+          planMode: false,
+        },
+        openrouter: {
+          model: DEFAULT_OPENROUTER_SDK_MODEL,
+          modelOptions: {},
           planMode: false,
         },
       },
@@ -384,6 +390,7 @@ describe("chat preference store", () => {
         planMode: true,
       },
       codex: { ...INITIAL_STATE.providerDefaults.codex },
+      openrouter: { ...INITIAL_STATE.providerDefaults.openrouter },
     })
 
     expect(useChatPreferencesStore.getState().getComposerState(NEW_CHAT_COMPOSER_ID)).toEqual({

@@ -43,6 +43,11 @@ export function mergeAppSettingsPatch(
           ...patch.providerDefaults?.codex?.modelOptions,
         },
       },
+      openrouter: {
+        ...settings.providerDefaults.openrouter,
+        ...patch.providerDefaults?.openrouter,
+        modelOptions: {},
+      },
     },
     cloudflareTunnel: {
       ...settings.cloudflareTunnel,

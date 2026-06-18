@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { useShallow } from "zustand/react/shallow"
-import { PROVIDERS, type AgentProvider, type AppSettingsPatch, type AppSettingsSnapshot, type AskUserQuestionAnswerMap, type ChatAttachment, type ChatDiffSnapshot, type ChatHistoryPage, type ClaudeAuthSettings, type KeybindingsSnapshot, type LlmProviderSnapshot, type LlmProviderValidationResult, type ModelOptions, type ProviderCatalogEntry, type PushConfigSnapshot, type QueuedChatMessage, type TranscriptEntry, type UpdateInstallResult, type UpdateSnapshot, type UserPromptEntry } from "../../shared/types"
+import { PROVIDERS, type AgentProvider, type AppSettingsPatch, type AppSettingsSnapshot, type AskUserQuestionAnswerMap, type ChatAttachment, type ChatDiffSnapshot, type ChatHistoryPage, type ClaudeAuthSettings, type KeybindingsSnapshot, type LlmProviderSnapshot, type LlmProviderValidationResult, type ModelOptions, type OpenRouterModel, type ProviderCatalogEntry, type PushConfigSnapshot, type QueuedChatMessage, type TranscriptEntry, type UpdateInstallResult, type UpdateSnapshot, type UserPromptEntry } from "../../shared/types"
 import { NEW_CHAT_COMPOSER_ID, type ComposerState, useChatPreferencesStore } from "../stores/chatPreferencesStore"
 import { useRightSidebarStore } from "../stores/rightSidebarStore"
 import { useTerminalLayoutStore } from "../stores/terminalLayoutStore"
@@ -24,6 +24,7 @@ import type { PtyInstancesSnapshot } from "../../shared/pty-instance"
 import type { ChatPermissionPolicyOverride, ToolRequestDecision } from "../../shared/permission-policy"
 import { usePtyInstancesStore } from "../stores/ptyInstancesStore"
 import { useWorkflowsStore } from "../stores/workflowsStore"
+import { useOpenRouterModelsStore } from "../stores/openrouterModelsStore"
 import type { WorkflowsSnapshot } from "../../shared/protocol"
 
 function shallowProviderTokenEquals(
@@ -56,6 +57,24 @@ function sameTranscriptEntries(left: ChatSnapshot["messages"] | null | undefined
   if (!left || !right) return false
   if (left.length !== right.length) return false
   return left.every((entry, index) => entry._id === right[index]?._id)
+}
+
+function mergeOpenRouterModels(
+  providers: ProviderCatalogEntry[],
+  models: OpenRouterModel[],
+): ProviderCatalogEntry[] {
+  if (models.length === 0) return providers
+  return providers.map((entry) => {
+    if (entry.id !== "openrouter") return entry
+    return {
+      ...entry,
+      models: models.map((m) => ({
+        id: m.id,
+        label: m.label,
+        supportsEffort: false,
+      })),
+    }
+  })
 }
 
 function sameProviders(left: ProviderCatalogEntry[] | null | undefined, right: ProviderCatalogEntry[] | null | undefined) {
@@ -1225,6 +1244,21 @@ export function useKannaState(activeChatId: string | null): KannaState {
 
   useEffect(() => {
     if (connectionStatus !== "connected") return
+    const store = useOpenRouterModelsStore.getState()
+    store.setLoading()
+    void socket
+      .command<OpenRouterModel[]>({ type: "settings.listOpenRouterModels" })
+      .then((models) => {
+        useOpenRouterModelsStore.getState().setModels(models)
+      })
+      .catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : String(error)
+        useOpenRouterModelsStore.getState().setError(message)
+      })
+  }, [connectionStatus, socket])
+
+  useEffect(() => {
+    if (connectionStatus !== "connected") return
     if (appSettings?.browserSettingsMigrated !== false) return
     const patch = readLegacyBrowserSettingsPatch()
     if (!patch) return
@@ -1474,7 +1508,12 @@ export function useKannaState(activeChatId: string | null): KannaState {
     ? "starting"
     : null
   const effectiveRuntimeStatus = optimisticRuntimeStatus ?? runtime?.status ?? null
-  const availableProviders = activeChatSnapshot?.availableProviders ?? PROVIDERS
+  const baseAvailableProviders = activeChatSnapshot?.availableProviders ?? PROVIDERS
+  const openrouterModels = useOpenRouterModelsStore(useShallow((s) => s.models))
+  const availableProviders = useMemo(
+    () => mergeOpenRouterModels(baseAvailableProviders, openrouterModels),
+    [baseAvailableProviders, openrouterModels],
+  )
   const isProcessing = isProcessingStatus(effectiveRuntimeStatus ?? undefined)
   const canCancel = canCancelStatus(effectiveRuntimeStatus ?? undefined)
   const isDraining = runtime?.isDraining ?? false

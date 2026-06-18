@@ -168,6 +168,7 @@ export interface ProviderPreference<TModelOptions> {
 export type ChatProviderPreferences = {
   claude: ProviderPreference<ClaudeModelOptions>
   codex: ProviderPreference<CodexModelOptions>
+  openrouter: ProviderPreference<OpenRouterModelOptions>
 }
 
 export type SubagentContextScope = "previous-assistant-reply" | "full-transcript"
@@ -773,6 +774,7 @@ export interface AppSettingsPatch {
   providerDefaults?: {
     claude?: Partial<ProviderPreference<ClaudeModelOptions>>
     codex?: Partial<ProviderPreference<CodexModelOptions>>
+    openrouter?: Partial<ProviderPreference<OpenRouterModelOptions>>
   }
   cloudflareTunnel?: Partial<CloudflareTunnelSettings>
   auth?: Partial<AuthSettings>
