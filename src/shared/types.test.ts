@@ -3,6 +3,10 @@ import {
   normalizeClaudeModelId,
   normalizeCodexModelId,
   supportsClaudeMaxReasoningEffort,
+  PROVIDERS,
+  OPENROUTER_BASE_URL,
+  OPENROUTER_MODELS_URL,
+  DEFAULT_OPENROUTER_SDK_MODEL,
 } from "./types"
 
 describe("shared model normalization", () => {
@@ -21,5 +25,19 @@ describe("shared model normalization", () => {
     expect(supportsClaudeMaxReasoningEffort("claude-opus-4-7")).toBe(true)
     expect(supportsClaudeMaxReasoningEffort("opus")).toBe(true)
     expect(supportsClaudeMaxReasoningEffort("claude-sonnet-4-6")).toBe(false)
+  })
+})
+
+describe("openrouter provider", () => {
+  test("openrouter is a known provider with a default model and empty static models", () => {
+    const entry = PROVIDERS.find((p) => p.id === "openrouter")
+    expect(entry).toBeDefined()
+    expect(entry?.defaultModel).toBe(DEFAULT_OPENROUTER_SDK_MODEL)
+    expect(entry?.models).toEqual([])
+    expect(entry?.supportsPlanMode).toBe(true)
+  })
+  test("openrouter endpoints are defined", () => {
+    expect(OPENROUTER_BASE_URL).toBe("https://openrouter.ai/api")
+    expect(OPENROUTER_MODELS_URL).toBe("https://openrouter.ai/api/v1/models")
   })
 })
