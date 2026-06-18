@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.97.0](https://github.com/cuongtranba/kanna/compare/v0.96.0...v0.97.0) (2026-06-18)
+
+
+### Features
+
+* **provider:** add OpenRouter as third agentic chat provider ([#435](https://github.com/cuongtranba/kanna/issues/435)) ([01b26a8](https://github.com/cuongtranba/kanna/commit/01b26a8c51ae551f4d2219e95d366b74bc068d8e))
+
+
+### Bug Fixes
+
+* **agent:** drop duplicate rate-limit body on trailing error result ([#434](https://github.com/cuongtranba/kanna/issues/434)) ([0274e27](https://github.com/cuongtranba/kanna/commit/0274e27129d621108dd5d40837024c4087d878d2))
+* **chat-ui:** surface subagent pending question at transcript footer ([#432](https://github.com/cuongtranba/kanna/issues/432)) ([ab6d0ac](https://github.com/cuongtranba/kanna/commit/ab6d0ac27a6e5237a73f1c915e3b94647a31222a))
+
 ## [0.96.0](https://github.com/cuongtranba/kanna/compare/v0.95.1...v0.96.0) (2026-06-17)
 
 
