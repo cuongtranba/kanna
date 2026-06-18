@@ -250,6 +250,34 @@ describe("SubagentMessage", () => {
     expect(html).toContain("Step 1: do thing")
   })
 
+  test("suppresses inline pending card but keeps status when suppressPendingTool is set", () => {
+    const html = renderToStaticMarkup(
+      <SubagentMessage
+        run={makeRunSnapshot({
+          status: "running",
+          pendingTool: {
+            toolUseId: "t3",
+            toolKind: "ask_user_question",
+            input: {
+              questions: [
+                { id: "q1", question: "Confirm?", header: "Confirm", multiSelect: false, options: [{ label: "yes" }, { label: "no" }] },
+              ],
+            },
+            requestedAt: 1700000000000,
+          },
+        })}
+        indentDepth={0}
+        localPath="/tmp"
+        suppressPendingTool
+        onSubagentAskUserQuestionSubmit={() => undefined}
+        onSubagentExitPlanModeSubmit={() => undefined}
+      />,
+    )
+    expect(html).not.toContain('data-testid="subagent-pending-tool:t3"')
+    expect(html).not.toContain("Confirm?")
+    expect(html).toContain("waiting for input...")
+  })
+
   test("renders persisted tool_result with View Full Output link", () => {
     // processTranscriptMessages folds tool_result INTO the preceding tool_call,
     // propagating `persisted` onto the hydrated tool message. Test the same

@@ -1,6 +1,6 @@
 import { LegendList, type LegendListRef } from "@legendapp/list/react"
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { ArrowDown, Flower, Upload } from "lucide-react"
+import { ArrowDown, Bot, Flower, Upload } from "lucide-react"
 import { AnimatedShinyText } from "../../components/ui/animated-shiny-text"
 import { DrainingIndicator } from "../../components/messages/DrainingIndicator"
 import { QueuedUserMessage } from "../../components/messages/QueuedUserMessage"
@@ -21,6 +21,7 @@ import type { KannaState } from "../useKannaState"
 import type { AutoContinueSchedule, CloudflareTunnelRecord, SubagentRunSnapshot } from "../../../shared/types"
 import type { ToolRequestDecision } from "../../../shared/permission-policy"
 import { SubagentMessage } from "../../components/messages/SubagentMessage"
+import { SubagentPendingToolCard } from "../../components/messages/SubagentPendingToolCard"
 import { renderChatLinks } from "../../components/messages/renderChatLinks"
 import React from "react"
 import { CloudflareTunnelCard } from "../../components/chat-ui/CloudflareTunnelCard"
@@ -31,6 +32,27 @@ import {
 import type { EditorPreset } from "../../../shared/protocol"
 import type { WorkflowRun, WorkflowRunSummary } from "../../../shared/workflow-types"
 import { WorkflowsSectionWithDetail } from "../WorkflowsSection"
+
+export type PendingQuestionRun = SubagentRunSnapshot & {
+  pendingTool: NonNullable<SubagentRunSnapshot["pendingTool"]>
+}
+
+/**
+ * Select every subagent run awaiting a user response, oldest request first.
+ * Pure so it can be unit-tested without rendering the virtualized list.
+ */
+export function collectPendingQuestionRuns(
+  subagentRuns: Record<string, SubagentRunSnapshot> | undefined,
+): PendingQuestionRun[] {
+  const pending = Object.values(subagentRuns ?? {}).filter(
+    (run): run is PendingQuestionRun => run.pendingTool !== null,
+  )
+  pending.sort(
+    (a, b) =>
+      a.pendingTool.requestedAt - b.pendingTool.requestedAt || a.runId.localeCompare(b.runId),
+  )
+  return pending
+}
 
 interface ChatTranscriptViewportProps {
   activeChatId: string | null
@@ -186,6 +208,11 @@ export const ChatTranscriptViewport = memo(function ChatTranscriptViewport({
     return { runsByUserMessageId: topByUser, childrenByParentRunId: byParent }
   }, [subagentRuns])
 
+  // Any subagent run (top-level or nested) awaiting a user response. Surfaced
+  // at the footer so a question never stays buried under its historical
+  // user_prompt anchor. See adr-20260618-subagent-pending-question-footer-surface.
+  const pendingQuestionRuns = useMemo(() => collectPendingQuestionRuns(subagentRuns), [subagentRuns])
+
   const renderRunTree = useCallback((run: SubagentRunSnapshot, depth: number): React.ReactNode => {
     const children = childrenByParentRunId.get(run.runId) ?? []
     return (
@@ -197,6 +224,7 @@ export const ChatTranscriptViewport = memo(function ChatTranscriptViewport({
           onSubagentAskUserQuestionSubmit={onSubagentAskUserQuestionSubmit}
           onSubagentExitPlanModeSubmit={onSubagentExitPlanModeSubmit}
           onCancelSubagentRun={onCancelSubagentRun}
+          suppressPendingTool
         />
         {children.map((child) => renderRunTree(child, depth + 1))}
       </React.Fragment>
@@ -373,6 +401,31 @@ export const ChatTranscriptViewport = memo(function ChatTranscriptViewport({
           {renderChatLinks(commandError)}
         </div>
       ) : null}
+      {pendingQuestionRuns.length > 0 && onSubagentAskUserQuestionSubmit && onSubagentExitPlanModeSubmit
+        ? pendingQuestionRuns.map((run) => (
+            <div
+              key={run.runId}
+              data-testid={`subagent-pending-footer:${run.runId}`}
+              className="mb-3"
+            >
+              <div className="mb-1.5 flex items-center gap-2 text-xs font-medium text-muted-foreground">
+                <Bot className="h-3.5 w-3.5 shrink-0" />
+                <span>
+                  <span className="text-foreground">{run.subagentName}</span> needs your input
+                </span>
+              </div>
+              <SubagentPendingToolCard
+                pendingTool={run.pendingTool}
+                onAskUserQuestionSubmit={(toolUseId, questions, answers) =>
+                  onSubagentAskUserQuestionSubmit(run.runId, toolUseId, questions, answers)
+                }
+                onExitPlanModeSubmit={(toolUseId, response) =>
+                  onSubagentExitPlanModeSubmit(run.runId, toolUseId, response)
+                }
+              />
+            </div>
+          ))
+        : null}
     </div>
   )
 
