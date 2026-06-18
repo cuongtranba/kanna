@@ -856,6 +856,13 @@ export async function* createClaudeHarnessStream(
   let latestUsageSnapshot: ContextWindowUsageSnapshot | null = null
   let lastKnownContextWindow: number | undefined = configuredContextWindow
   const detector = new ClaudeLimitDetector()
+  // SDK rate-limit / api-error turns emit BOTH a synthetic assistant
+  // `isApiErrorMessage` (→ `api_error` entry, red card with text) AND a
+  // `type:"result"` whose `result` field repeats the same text (→ second
+  // red card + "Failed after Xs"). Track per-turn api_error emission so
+  // we can scrub the duplicate body off the trailing result entry; the
+  // duration footer still renders, the message renders once.
+  let apiErrorEmittedInTurn = false
 
   for await (const sdkMessage of q as AsyncIterable<any>) {
     const sessionToken = typeof sdkMessage.session_id === "string" ? sdkMessage.session_id : null
@@ -919,6 +926,16 @@ export async function* createClaudeHarnessStream(
     }
 
     for (const entry of normalizeClaudeStreamMessage(sdkMessage)) {
+      if (entry.kind === "api_error") {
+        apiErrorEmittedInTurn = true
+      } else if (entry.kind === "result") {
+        const scrubbed = entry.isError && apiErrorEmittedInTurn
+          ? { ...entry, result: "" }
+          : entry
+        apiErrorEmittedInTurn = false
+        yield { type: "transcript", entry: scrubbed }
+        continue
+      }
       yield { type: "transcript", entry }
     }
   }
