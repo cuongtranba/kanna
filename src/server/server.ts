@@ -447,6 +447,7 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     },
     getSubagents: () => appSettings.getSnapshot().subagents,
     getAppSettingsSnapshot: () => buildAgentAppSettingsView(appSettings.getSnapshot()),
+    readLlmProvider: () => readLlmProviderSnapshot(),
     onStateChange: (chatId?: string, options?: { immediate?: boolean }) => {
       if (chatId) {
         if (options?.immediate) {
