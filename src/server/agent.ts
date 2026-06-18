@@ -1082,11 +1082,29 @@ export function buildCanUseTool(args: BuildCanUseToolArgs): CanUseTool {
   }
 }
 
-export function buildClaudeEnv(baseEnv: NodeJS.ProcessEnv, oauthToken: string | null): NodeJS.ProcessEnv {
-  const { CLAUDECODE: _unused, ...rest } = baseEnv
+export function buildClaudeEnv(
+  baseEnv: NodeJS.ProcessEnv,
+  oauthToken: string | null,
+  openrouter?: { apiKey: string } | null,
+): NodeJS.ProcessEnv {
+  const { CLAUDECODE: _unused, CLAUDE_CODE_OAUTH_TOKEN: _oauth, ...rest } = baseEnv
+  if (openrouter) {
+    // OpenRouter's Anthropic-compatible endpoint. ANTHROPIC_API_KEY MUST be
+    // explicitly empty or the SDK prefers it over the auth token and 401s.
+    return {
+      ...rest,
+      ANTHROPIC_BASE_URL: "https://openrouter.ai/api",
+      ANTHROPIC_AUTH_TOKEN: openrouter.apiKey,
+      ANTHROPIC_API_KEY: "",
+    }
+  }
   // Empty string is treated the same as null. Blank tokens are rejected at persistence time
   // by normalizeTokenEntry, so in practice oauthToken is either a non-empty string or null.
-  if (!oauthToken) return rest
+  if (!oauthToken) {
+    return baseEnv.CLAUDE_CODE_OAUTH_TOKEN
+      ? { ...rest, CLAUDE_CODE_OAUTH_TOKEN: baseEnv.CLAUDE_CODE_OAUTH_TOKEN }
+      : rest
+  }
   return { ...rest, CLAUDE_CODE_OAUTH_TOKEN: oauthToken }
 }
 
@@ -1099,6 +1117,8 @@ async function startClaudeSession(args: {
   sessionToken: string | null
   forkSession: boolean
   oauthToken: string | null
+  /** When set, redirect the SDK to OpenRouter instead of Anthropic. */
+  openrouterApiKey?: string | null
   additionalDirectories?: string[]
   chatId?: string
   tunnelGateway?: TunnelGateway | null
@@ -1175,7 +1195,7 @@ async function startClaudeSession(args: {
           },
       settingSources: ["user", "project", "local"],
       pathToClaudeCodeExecutable: process.env.CLAUDE_EXECUTABLE?.replace(/^~(?=\/|$)/, homedir()) || undefined,
-      env: buildClaudeEnv(process.env, args.oauthToken),
+      env: buildClaudeEnv(process.env, args.oauthToken, args.openrouterApiKey ? { apiKey: args.openrouterApiKey } : null),
     },
   })
 

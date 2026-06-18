@@ -6,6 +6,7 @@ import {
   AgentCoordinator,
   buildAttachmentHintText,
   buildCanUseTool,
+  buildClaudeEnv,
   buildPromptText,
   buildUserMcpServers,
   maxClaudeContextWindowFromModelUsage,
@@ -5275,5 +5276,28 @@ describe("buildUserMcpServers", () => {
       transport: "stdio", command: "x", args: [], env: {},
     }
     expect(buildUserMcpServers([cfg])).toEqual({})
+  })
+})
+
+describe("buildClaudeEnv openrouter branch", () => {
+  test("openrouter sets endpoint+auth, empties ANTHROPIC_API_KEY, strips oauth", () => {
+    const env = buildClaudeEnv(
+      { PATH: "/bin", CLAUDE_CODE_OAUTH_TOKEN: "should-be-stripped", ANTHROPIC_API_KEY: "leftover" } as NodeJS.ProcessEnv,
+      "oauth-ignored",
+      { apiKey: "sk-or-test" },
+    )
+    expect(env.ANTHROPIC_BASE_URL).toBe("https://openrouter.ai/api")
+    expect(env.ANTHROPIC_AUTH_TOKEN).toBe("sk-or-test")
+    expect(env.ANTHROPIC_API_KEY).toBe("")
+    expect(env.CLAUDE_CODE_OAUTH_TOKEN).toBeUndefined()
+  })
+  test("non-openrouter with oauth keeps existing behavior", () => {
+    const env = buildClaudeEnv({ PATH: "/bin" } as NodeJS.ProcessEnv, "oauth-123")
+    expect(env.CLAUDE_CODE_OAUTH_TOKEN).toBe("oauth-123")
+    expect(env.ANTHROPIC_BASE_URL).toBeUndefined()
+  })
+  test("non-openrouter null oauth but inherited oauth in base env is preserved", () => {
+    const env = buildClaudeEnv({ PATH: "/bin", CLAUDE_CODE_OAUTH_TOKEN: "inherited" } as NodeJS.ProcessEnv, null)
+    expect(env.CLAUDE_CODE_OAUTH_TOKEN).toBe("inherited")
   })
 })
