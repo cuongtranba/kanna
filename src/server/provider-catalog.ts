@@ -7,6 +7,7 @@ import type {
   ProviderCatalogEntry,
   ProviderModelOption,
   ServiceTier,
+  LlmProviderSnapshot,
 } from "../shared/types"
 import {
   DEFAULT_CLAUDE_MODEL_OPTIONS,
@@ -84,4 +85,12 @@ export function normalizeCodexModelOptions(modelOptions?: ModelOptions, legacyEf
 
 export function codexServiceTierFromModelOptions(modelOptions: CodexModelOptions): ServiceTier | undefined {
   return modelOptions.fastMode ? "fast" : undefined
+}
+
+export function isClaudeSdkProvider(provider: AgentProvider): boolean {
+  return provider === "claude" || provider === "openrouter"
+}
+
+export function openrouterAuthReady(snapshot: LlmProviderSnapshot): boolean {
+  return snapshot.provider === "openrouter" && snapshot.enabled && snapshot.apiKey.length > 0
 }
