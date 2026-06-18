@@ -151,9 +151,12 @@ export interface CodexModelOptions {
   fastMode: boolean
 }
 
+export type OpenRouterModelOptions = Record<string, never>
+
 export interface ProviderModelOptionsByProvider {
   claude: ClaudeModelOptions
   codex: CodexModelOptions
+  openrouter: OpenRouterModelOptions
 }
 
 export interface ProviderPreference<TModelOptions> {
