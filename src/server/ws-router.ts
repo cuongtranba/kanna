@@ -31,6 +31,7 @@ import type {
   InstalledSkillsSnapshot,
   LlmProviderSnapshot,
   LlmProviderValidationResult,
+  OpenRouterModel,
   SkillInstallResult,
   SkillSearchSnapshot,
   SkillUninstallResult,
@@ -145,6 +146,7 @@ interface CreateWsRouterArgs {
     write: (value: Pick<LlmProviderSnapshot, "provider" | "apiKey" | "model" | "baseUrl">) => Promise<LlmProviderSnapshot>
     validate: (value: Pick<LlmProviderSnapshot, "provider" | "apiKey" | "model" | "baseUrl">) => Promise<LlmProviderValidationResult>
   }
+  listOpenRouterModels?: () => Promise<OpenRouterModel[]>
   refreshDiscovery: () => Promise<DiscoveredProject[]>
   getDiscoveredProjects: () => DiscoveredProject[]
   machineDisplayName: string
@@ -414,6 +416,7 @@ export function createWsRouter({
   analytics,
   tunnelGateway,
   llmProvider,
+  listOpenRouterModels,
   refreshDiscovery,
   getDiscoveredProjects,
   machineDisplayName,
@@ -1465,6 +1468,11 @@ export function createWsRouter({
         }
         case "settings.readLlmProvider": {
           send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: await resolvedLlmProvider.read() })
+          return
+        }
+        case "settings.listOpenRouterModels": {
+          const models = listOpenRouterModels ? await listOpenRouterModels() : []
+          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: models })
           return
         }
         case "settings.writeLlmProvider": {

@@ -24,6 +24,8 @@ import { DiffStore } from "./diff-store"
 import { discoverProjects, type DiscoveredProject } from "./discovery.adapter"
 import { KeybindingsManager } from "./keybindings"
 import { readLlmProviderSnapshot, validateLlmProviderCredentials, writeLlmProviderSnapshot } from "./llm-provider"
+import { OpenRouterModelCache } from "./openrouter-models"
+import { fetchOpenRouterModelsRaw } from "./openrouter-models-io.adapter"
 import { getMachineDisplayName } from "./machine-name.adapter"
 import { TerminalManager } from "./terminal-manager"
 import { TerminalPidRegistry } from "./terminal-pid-registry.adapter"
@@ -263,6 +265,12 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
   const appSettings = new AppSettingsManager(path.join(store.dataDir, "settings.json"))
   await appSettings.initialize()
 
+  const openrouterModelCache = new OpenRouterModelCache({
+    fetchRaw: fetchOpenRouterModelsRaw,
+    ttlMs: 60 * 60 * 1000, // 1h
+    now: () => Date.now(),
+  })
+
   const snapshotStore = new SnapshotStore(path.join(store.dataDir, "shares"))
 
   const snapshotSources: SnapshotSources = {
@@ -475,6 +483,7 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
       write: writeLlmProviderSnapshot,
       validate: validateLlmProviderCredentials,
     },
+    listOpenRouterModels: () => openrouterModelCache.list(),
     refreshDiscovery,
     getDiscoveredProjects: () => discoveredProjects,
     machineDisplayName,
