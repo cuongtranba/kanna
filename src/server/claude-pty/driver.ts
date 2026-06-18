@@ -209,8 +209,16 @@ export { OutputRing }
  * registered when a `scheduleWakeup` callback is supplied (main chats), so
  * subagent spawns simply lose the no-op native tool — which is correct, they
  * should not self-schedule. See adr-20260603-agent-self-scheduled-wake.
+ *
+ * `Task` is disallowed so the PTY model cannot spawn a native `.claude/agents`
+ * subagent that bypasses Kanna's orchestrator (permit pool, cancel cascade,
+ * roster, depth/loop guard) and is invisible under PTY (native Task subagents
+ * only emit sidechain transcript lines, no lifecycle events). It must delegate
+ * through the force-registered `mcp__kanna__delegate_subagent` shim instead.
+ * `TaskOutput` stays enabled — it also serves background Bash task output
+ * (KANNA_PTY_BACKGROUND_TASK_MAX_MS). See adr-20260618-pty-disable-native-task.
  */
-export const PTY_DISALLOWED_NATIVE_TOOLS = ["AskUserQuestion", "ExitPlanMode", "ScheduleWakeup"] as const
+export const PTY_DISALLOWED_NATIVE_TOOLS = ["AskUserQuestion", "ExitPlanMode", "ScheduleWakeup", "Task"] as const
 
 export interface BuildPtyCliArgsInput {
   sessionId: string

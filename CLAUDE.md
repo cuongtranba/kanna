@@ -345,6 +345,16 @@ the main model then synthesizes it into its own response.
   `appendUserPrompt` path so `subagentMentions` metadata stays on
   `user_prompt` entries for UI badges and analytics. The assistant-text
   mention scan and the `chat_send` / dequeue short-circuits are removed.
+- **PTY gates native `Task` (adr-20260618-pty-disable-native-task).** Under
+  `KANNA_CLAUDE_DRIVER=pty`, `PTY_DISALLOWED_NATIVE_TOOLS` includes `Task`
+  (same #215 pattern as AskUserQuestion/ExitPlanMode/ScheduleWakeup), so the
+  model CANNOT spawn a native `.claude/agents` subagent that bypasses the
+  orchestrator and is invisible under PTY (native Task subagents only emit
+  sidechain transcript lines, no lifecycle events). It must delegate through
+  `mcp__kanna__delegate_subagent`. The SDK driver is UNCHANGED — it keeps
+  native `Task` (it can observe SDK subagent lifecycle fine). `TaskOutput`
+  stays enabled on both drivers (it also serves background Bash task output,
+  KANNA_PTY_BACKGROUND_TASK_MAX_MS).
 
 ## Keep-Alive Multi-Turn Subagents (claude-PTY only)
 

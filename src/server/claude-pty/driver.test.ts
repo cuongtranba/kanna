@@ -448,15 +448,18 @@ describe("buildPtyCliArgs", () => {
 
   // ── Issue #215: disallow native AskUserQuestion/ExitPlanMode under PTY ────
 
-  test("disallows native AskUserQuestion + ExitPlanMode + ScheduleWakeup (forces the mcp__kanna__ shims)", () => {
+  test("disallows native AskUserQuestion + ExitPlanMode + ScheduleWakeup + Task (forces the mcp__kanna__ shims)", () => {
     const args = buildPtyCliArgs(baseInput)
     const idx = args.indexOf("--disallowedTools")
     expect(idx).toBeGreaterThan(-1)
-    expect(args.slice(idx + 1)).toEqual(["AskUserQuestion", "ExitPlanMode", "ScheduleWakeup"])
-    expect(PTY_DISALLOWED_NATIVE_TOOLS).toEqual(["AskUserQuestion", "ExitPlanMode", "ScheduleWakeup"])
+    expect(args.slice(idx + 1)).toEqual(["AskUserQuestion", "ExitPlanMode", "ScheduleWakeup", "Task"])
+    expect(PTY_DISALLOWED_NATIVE_TOOLS).toEqual(["AskUserQuestion", "ExitPlanMode", "ScheduleWakeup", "Task"])
     // EnterPlanMode is intentionally NOT disallowed (no user round-trip;
     // SDK canUseTool never intercepts it — keeps SDK↔PTY parity).
     expect(args).not.toContain("EnterPlanMode")
+    // TaskOutput stays enabled — it also serves background Bash task output
+    // (KANNA_PTY_BACKGROUND_TASK_MAX_MS); only the Task subagent spawner is gated.
+    expect(args.slice(idx + 1)).not.toContain("TaskOutput")
   })
 
   test("--disallowedTools is last so its variadic args cannot swallow another flag", () => {
