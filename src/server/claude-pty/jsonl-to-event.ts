@@ -123,6 +123,11 @@ export function createJsonlEventParser(opts: CreateJsonlEventParserOptions = {})
   // never finalizes twice.
   let pendingTurnEnd: { messageId: string | undefined } | null = null
   let suppressNextResultRow = false
+  // Rate-limit / api-error turns emit BOTH a synthetic assistant
+  // `isApiErrorMessage` (→ `api_error` entry) AND a `result` whose body
+  // repeats the same text. Track per-turn api_error emission so the trailing
+  // result entry's body can be scrubbed; the duration footer still renders.
+  let apiErrorEmittedInTurn = false
 
   return {
     parse(rawLine: string): HarnessEvent[] {
@@ -324,6 +329,19 @@ export function createJsonlEventParser(opts: CreateJsonlEventParserOptions = {})
           // after a stop_reason flush is a duplicate turn-end — swallow it so
           // the turn never finalizes twice.
           if (isRealResultRow && suppressNextResultRow && (entry as { kind?: string }).kind === "result") {
+            continue
+          }
+          if (entry.kind === "api_error") {
+            apiErrorEmittedInTurn = true
+            events.push({ type: "transcript", entry })
+            continue
+          }
+          if (entry.kind === "result") {
+            const scrubbed = entry.isError && apiErrorEmittedInTurn
+              ? { ...entry, result: "" }
+              : entry
+            apiErrorEmittedInTurn = false
+            events.push({ type: "transcript", entry: scrubbed })
             continue
           }
           events.push({ type: "transcript", entry })

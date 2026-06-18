@@ -204,6 +204,43 @@ describe("SDK ↔ PTY HarnessEvent equivalence matrix", () => {
     ])
   })
 
+  test("rate-limit api_error + error result: result body scrubbed (no duplicate text)", async () => {
+    const limitText = "You've hit your limit · resets 11:10pm (Asia/Saigon)"
+    const sdk = await collectSdk([
+      {
+        type: "assistant",
+        session_id: "sess-rl",
+        uuid: "msg-err",
+        isApiErrorMessage: true,
+        message: {
+          model: "<synthetic>",
+          content: [{ type: "text", text: limitText }],
+        },
+      },
+      {
+        type: "result",
+        subtype: "error",
+        session_id: "sess-rl",
+        is_error: true,
+        result: limitText,
+        duration_ms: 2000,
+        uuid: "r-err",
+      },
+    ])
+    const apiErrorEntries = sdk.flatMap((ev) =>
+      ev.type === "transcript" && ev.entry && ev.entry.kind === "api_error" ? [ev.entry] : [],
+    )
+    const resultEntries = sdk.flatMap((ev) =>
+      ev.type === "transcript" && ev.entry && ev.entry.kind === "result" ? [ev.entry] : [],
+    )
+    expect(apiErrorEntries).toHaveLength(1)
+    expect(apiErrorEntries[0].text).toContain("hit your limit")
+    expect(resultEntries).toHaveLength(1)
+    expect(resultEntries[0].isError).toBe(true)
+    expect(resultEntries[0].result).toBe("")
+    expect(resultEntries[0].durationMs).toBe(2000)
+  })
+
   test("compact_boundary turn does not produce phantom context_window_updated", async () => {
     await assertSameEvents([
       {

@@ -46,6 +46,17 @@ describe("ResultMessage", () => {
     expect(html).toContain("Failed after")
   })
 
+  test("empty error body renders only the duration footer (api_error already shown)", () => {
+    const html = renderToStaticMarkup(
+      <MemoryRouter>
+        <ResultMessage message={makeMessage({ result: "", durationMs: 2000 })} />
+      </MemoryRouter>
+    )
+    expect(html).not.toContain("An unknown error occurred")
+    expect(html).not.toContain("bg-destructive/10")
+    expect(html).toContain("Failed after")
+  })
+
   test("renders success result as just a duration footer", () => {
     const html = renderToStaticMarkup(
       <MemoryRouter>
