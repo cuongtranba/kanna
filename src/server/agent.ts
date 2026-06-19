@@ -1967,6 +1967,19 @@ export class AgentCoordinator {
       }
     }
 
+    if (provider === "openrouter") {
+      // OpenRouter's model list is fetched dynamically (settings.listOpenRouterModels),
+      // so the static server catalog is empty and normalizeServerModel would collapse
+      // every selection to the default. Trust the client-selected id — OpenRouter
+      // rejects invalid ids at the API — falling back to the default only when blank.
+      return {
+        model: options.model?.trim() || catalog.defaultModel,
+        effort: undefined,
+        serviceTier: undefined,
+        planMode: catalog.supportsPlanMode ? Boolean(options.planMode) : false,
+      }
+    }
+
     const modelOptions = normalizeCodexModelOptions(options.modelOptions, options.effort)
     return {
       model: normalizeServerModel(provider, options.model),
