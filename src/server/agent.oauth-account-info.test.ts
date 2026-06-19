@@ -2,7 +2,8 @@ import { describe, expect, test } from "bun:test"
 import { AgentCoordinator } from "./agent"
 import { OAuthTokenPool } from "./oauth-pool/oauth-token-pool"
 import type { HarnessEvent } from "./harness-types"
-import type { AccountInfo, OAuthTokenEntry, SlashCommand, TranscriptEntry } from "../shared/types"
+import type { AccountInfo, LlmProviderSnapshot, OAuthTokenEntry, SlashCommand, TranscriptEntry } from "../shared/types"
+import { maskOauthKey } from "../shared/mask-oauth-key"
 import type { AutoContinueEvent } from "./auto-continue/events"
 import { AsyncEventQueue } from "./test-helpers/async-event-queue"
 import { waitFor } from "./test-helpers/wait-for"
@@ -247,6 +248,89 @@ describe("AgentCoordinator SDK OAuth-pool account info parity", () => {
       const info = accountInfoEntry(store.messages)!
       expect(info.tokenSource).toBe("CLAUDE_CODE_OAUTH_TOKEN")
       expect(info.organization).toBe("Real Org")
+    },
+    10_000,
+  )
+})
+
+describe("AgentCoordinator OpenRouter account info", () => {
+  function openrouterSnapshot(apiKey: string): LlmProviderSnapshot {
+    return {
+      provider: "openrouter",
+      apiKey,
+      model: "moonshotai/kimi-k2.5:nitro",
+      baseUrl: "",
+      resolvedBaseUrl: "https://openrouter.ai/api",
+      enabled: true,
+      warning: null,
+      filePathDisplay: "~/.kanna/llm-provider.json",
+    }
+  }
+
+  test(
+    "replaces the SDK's misleading ANTHROPIC_AUTH_TOKEN source with the OpenRouter identity",
+    async () => {
+      const rawKey = "sk-or-v1-abcdef1234567890"
+      const events = new AsyncEventQueue<HarnessEvent>()
+      const store = createFakeStore()
+      const coordinator = new AgentCoordinator({
+        store: store as never,
+        onStateChange: () => {},
+        readLlmProvider: async () => openrouterSnapshot(rawKey),
+        startClaudeSession: async () => ({
+          provider: "claude",
+          stream: events,
+          // OpenRouter redirect sets ANTHROPIC_AUTH_TOKEN, so the SDK
+          // self-reports this misleading Anthropic source with no account.
+          getAccountInfo: async (): Promise<AccountInfo> => ({
+            tokenSource: "ANTHROPIC_AUTH_TOKEN",
+          }),
+          interrupt: async () => {},
+          close: () => {},
+          setModel: async () => {},
+          setPermissionMode: async () => {},
+          getSupportedCommands: async () => [],
+          sendPrompt: async () => {
+            events.push({
+              type: "transcript",
+              entry: {
+                _id: "result-1",
+                createdAt: Date.now(),
+                kind: "result",
+                subtype: "success",
+                isError: false,
+                durationMs: 0,
+                result: "done",
+              } as never,
+            })
+          },
+        }),
+      })
+
+      await coordinator.send({
+        type: "chat.send",
+        chatId: "chat-1",
+        provider: "openrouter" as never,
+        content: "test",
+        model: "qwen/qwen3.7-plus",
+      })
+
+      await waitFor(
+        () => accountInfoEntry(store.messages) !== null,
+        4000,
+        "account_info entry appended",
+      )
+
+      const info = accountInfoEntry(store.messages)!
+      // Source renders "OpenRouter", not the raw Anthropic env-var name.
+      expect(info.tokenSource).toBe("openrouter")
+      // Masked OpenRouter key, never the raw secret.
+      expect(info.oauthKeyMasked).toBe(maskOauthKey(rawKey))
+      expect(info.oauthKeyMasked).not.toBe(rawKey)
+      // Model surfaces as the organization line.
+      expect(info.organization).toBeTruthy()
+      // Exactly one account_info entry (gated by accountInfoLoaded).
+      expect(store.messages.filter((m) => m.kind === "account_info").length).toBe(1)
     },
     10_000,
   )
