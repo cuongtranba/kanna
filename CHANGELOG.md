@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.97.1](https://github.com/cuongtranba/kanna/compare/v0.97.0...v0.97.1) (2026-06-19)
+
+
+### Bug Fixes
+
+* **agent:** run the selected OpenRouter model instead of collapsing to default ([#437](https://github.com/cuongtranba/kanna/issues/437)) ([f548d4a](https://github.com/cuongtranba/kanna/commit/f548d4adee96e47996173031b2c84ffe40711337))
+* **agent:** surface OpenRouter identity in account_info, not Anthropic source ([#436](https://github.com/cuongtranba/kanna/issues/436)) ([9970b04](https://github.com/cuongtranba/kanna/commit/9970b043baac59f8e86b0e6af6d363e983e8c44a))
+
 ## [0.97.0](https://github.com/cuongtranba/kanna/compare/v0.96.0...v0.97.0) (2026-06-18)
 
 
