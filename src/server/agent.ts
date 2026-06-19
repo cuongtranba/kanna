@@ -226,6 +226,11 @@ interface ClaudeSessionState {
   activeTokenId: string | null
   oauthKeyMasked: string | null
   oauthLabel: string | null
+  // OpenRouter turns route through the SDK with ANTHROPIC_AUTH_TOKEN set to the
+  // OpenRouter key, so the SDK self-reports a misleading Anthropic source. Hold
+  // the OpenRouter identity here to surface it in the account_info entry.
+  openrouterKeyMasked: string | null
+  openrouterModel: string | null
   lastUsedAt: number
   // Claude-Code background Bash tasks (`Bash(run_in_background: true)`) run as
   // children of this PTY process and notify completion via a `<task-notification>`
@@ -2379,11 +2384,26 @@ export class AgentCoordinator {
     if (turn.getAccountInfo) {
       void turn.getAccountInfo()
         .then(async (accountInfo) => {
-          if (!accountInfo) return
-          let augmented = accountInfo
-          if (args.provider === "claude") {
-            const session = this.claudeSessions.get(args.chatId)
-            if (session) {
+          const session = this.claudeSessions.get(args.chatId)
+          let augmented: AccountInfo
+          if (args.provider === "openrouter") {
+            // OpenRouter routes through the SDK with ANTHROPIC_AUTH_TOKEN set to
+            // the OpenRouter key, so the SDK self-reports tokenSource
+            // "ANTHROPIC_AUTH_TOKEN" with no account — mislabeling the chat as
+            // Anthropic. Override with the OpenRouter identity instead.
+            if (!session) return
+            if (session.accountInfoLoaded) return
+            session.accountInfoLoaded = true
+            augmented = {
+              tokenSource: "openrouter",
+              ...(session.openrouterKeyMasked ? { oauthKeyMasked: session.openrouterKeyMasked } : {}),
+              ...(session.openrouterModel ? { organization: session.openrouterModel } : {}),
+            }
+          } else {
+            if (!accountInfo) return
+            augmented = accountInfo
+            if (args.provider === "claude") {
+              if (!session) return
               if (session.accountInfoLoaded) return
               session.accountInfoLoaded = true
               // Mirror the PTY driver's deriveAccountInfoFromOauth: when the
@@ -2401,8 +2421,6 @@ export class AgentCoordinator {
               } else if (session.oauthKeyMasked && !accountInfo.oauthKeyMasked) {
                 augmented = { ...accountInfo, oauthKeyMasked: session.oauthKeyMasked }
               }
-            } else {
-              return
             }
           }
           await this.store.appendMessage(args.chatId, timestamped({ kind: "account_info", accountInfo: augmented }))
@@ -2630,6 +2648,8 @@ export class AgentCoordinator {
         activeTokenId: picked?.id ?? null,
         oauthKeyMasked: picked ? maskOauthKey(picked.token) : null,
         oauthLabel: picked?.label ?? null,
+        openrouterKeyMasked: openrouterApiKey ? maskOauthKey(openrouterApiKey) : null,
+        openrouterModel: isOpenRouter ? args.model : null,
         lastUsedAt: Date.now(),
         backgroundTaskIds: new Set<string>(),
         backgroundTaskDeadlineAt: 0,
