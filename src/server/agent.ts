@@ -416,10 +416,14 @@ function isPromptTooLongMessage(message: string): boolean {
     || /\bprompt\b.*\btoo\s+large\b/i.test(message)
 }
 
-function stringFromUnknown(value: unknown) {
+function stringFromUnknown(value: unknown): string {
   if (typeof value === "string") return value
+  if (value === undefined || value === null) return ""
   try {
-    return JSON.stringify(value, null, 2)
+    // JSON.stringify returns the JS value `undefined` (not a string) for
+    // functions/symbols, which would drop the `result` key on persist and
+    // break the `result: string` contract; coerce to "" in that case.
+    return JSON.stringify(value, null, 2) ?? ""
   } catch {
     return String(value)
   }
