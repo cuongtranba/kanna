@@ -210,3 +210,71 @@ describe("AgentCoordinator OpenRouter first-entry watchdog", () => {
     10_000,
   )
 })
+
+describe("AgentCoordinator OpenRouter SDK-session prompt delivery", () => {
+  test(
+    "delivers the user prompt to the SDK session for openrouter (regression: prompt-delivery gate)",
+    async () => {
+      // Regression for the gate that delivered prompts only when
+      // `provider === "claude"`. OpenRouter rides the same SDK session but was
+      // excluded, so its prompt never reached `sendPrompt` and every turn hung
+      // until the watchdog. `providerUsesSdkSession` now covers both.
+      const events = new AsyncEventQueue<HarnessEvent>()
+      const store = createFakeStore()
+      const sentPrompts: string[] = []
+      const coordinator = new AgentCoordinator({
+        store: store as never,
+        onStateChange: () => {},
+        readLlmProvider: async () => openrouterSnapshot(),
+        openrouterFirstEntryTimeoutMs: 5000,
+        startClaudeSession: async () => {
+          return {
+            provider: "claude",
+            stream: events,
+            getAccountInfo: async () => null,
+            interrupt: async () => {},
+            close: () => events.close(),
+            setModel: async () => {},
+            setPermissionMode: async () => {},
+            getSupportedCommands: async () => [],
+            sendPrompt: async (content: string) => {
+              sentPrompts.push(content)
+              // A real upstream would now stream a turn; emit a success result
+              // so the turn completes cleanly and the watchdog never fires.
+              events.push({
+                type: "transcript",
+                entry: {
+                  _id: "result-1",
+                  createdAt: Date.now(),
+                  kind: "result",
+                  subtype: "success",
+                  isError: false,
+                  durationMs: 0,
+                  result: "ok",
+                } as never,
+              })
+            },
+          }
+        },
+      } as never)
+
+      await coordinator.send({
+        type: "chat.send",
+        chatId: "chat-1",
+        provider: "openrouter" as never,
+        content: "hello openrouter",
+        model: "moonshotai/kimi-k2.5:nitro",
+      })
+
+      await waitFor(
+        () => sentPrompts.some((p) => p.includes("hello openrouter")),
+        4000,
+        "openrouter prompt delivered to the SDK session",
+      )
+
+      expect(sentPrompts.some((p) => p.includes("hello openrouter"))).toBe(true)
+      expect(store.turnFailedCount).toBe(0)
+    },
+    10_000,
+  )
+})
