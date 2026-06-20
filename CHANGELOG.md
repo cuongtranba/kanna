@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.97.3](https://github.com/cuongtranba/kanna/compare/v0.97.2...v0.97.3) (2026-06-20)
+
+
+### Bug Fixes
+
+* **agent:** deliver OpenRouter prompts via the SDK session transport ([#443](https://github.com/cuongtranba/kanna/issues/443)) ([d826774](https://github.com/cuongtranba/kanna/commit/d8267748c7c1acca3161e0f8d86396d518f04653))
+* **agent:** fail-close OpenRouter turns whose SDK stream stalls before first entry ([#441](https://github.com/cuongtranba/kanna/issues/441)) ([7a10c59](https://github.com/cuongtranba/kanna/commit/7a10c59d1ec1e9f2eba1cae4809d8e5bc585ede7))
+
 ## [0.97.2](https://github.com/cuongtranba/kanna/compare/v0.97.1...v0.97.2) (2026-06-20)
 
 
