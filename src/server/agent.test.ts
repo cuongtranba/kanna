@@ -92,6 +92,22 @@ describe("normalizeClaudeStreamMessage", () => {
     expect(entries[0].durationMs).toBe(3210)
   })
 
+  test("result message without a result field normalizes to an empty string, not undefined", () => {
+    // Aborted-stream errors (subtype "error_during_execution") carry no
+    // `result` key. The entry must still satisfy the `result: string` contract
+    // so the client never calls `.trim()` on undefined.
+    const entries = normalizeClaudeStreamMessage({
+      type: "result",
+      subtype: "error_during_execution",
+      is_error: true,
+      duration_ms: 40728,
+    })
+
+    expect(entries).toHaveLength(1)
+    if (entries[0]?.kind !== "result") throw new Error("unexpected entry")
+    expect(entries[0].result).toBe("")
+  })
+
   test("turn_duration surfaces pendingWorkflowCount onto the synthesized result", () => {
     const entries = normalizeClaudeStreamMessage({
       type: "system",
