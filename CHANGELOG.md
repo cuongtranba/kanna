@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.97.2](https://github.com/cuongtranba/kanna/compare/v0.97.1...v0.97.2) (2026-06-20)
+
+
+### Bug Fixes
+
+* **chat-ui:** stop crash on aborted-stream result with missing body ([#439](https://github.com/cuongtranba/kanna/issues/439)) ([3c398f3](https://github.com/cuongtranba/kanna/commit/3c398f33e52bd4d883ff75b4c5411d28f7b46bc4))
+
 ## [0.97.1](https://github.com/cuongtranba/kanna/compare/v0.97.0...v0.97.1) (2026-06-19)
 
 
