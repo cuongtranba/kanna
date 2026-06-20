@@ -48,7 +48,7 @@ import {
   openrouterAuthReady,
 } from "./provider-catalog"
 import { readLlmProviderSnapshot } from "./llm-provider"
-import { resolveClaudeApiModelId, type ClaudeDriverPreference } from "../shared/types"
+import { providerUsesSdkSession, resolveClaudeApiModelId, type ClaudeDriverPreference } from "../shared/types"
 import { fallbackTitleFromMessage } from "./generate-title"
 import { AUTO_CONTINUE_EVENT_VERSION, type AutoContinueEvent } from "./auto-continue/events"
 import { ClaudeLimitDetector, CodexLimitDetector, type LimitDetection, type LimitDetector } from "./auto-continue/limit-detector"
@@ -2466,10 +2466,13 @@ export class AgentCoordinator {
         .catch(() => undefined)
     }
 
-    if (args.provider === "claude") {
+    if (providerUsesSdkSession(args.provider)) {
+      // claude and openrouter both deliver their prompt through the SDK
+      // session queue; gating this on `=== "claude"` is what left openrouter's
+      // prompt undelivered, hanging every openrouter turn until the watchdog.
       const session = this.claudeSessions.get(args.chatId)
       if (!session) {
-        throw new Error("Claude session was not initialized")
+        throw new Error("SDK session was not initialized")
       }
       const promptSeq = session.nextPromptSeq + 1
       session.nextPromptSeq = promptSeq
@@ -2507,12 +2510,12 @@ export class AgentCoordinator {
     planMode: boolean
     clientTraceId?: string
   }): ActiveTurn | undefined {
-    if (args.provider !== "claude") return undefined
+    if (!providerUsesSdkSession(args.provider)) return undefined
     const session = this.claudeSessions.get(args.chatId)
     if (!session) return undefined
 
     const ghostTurn: HarnessTurn = {
-      provider: "claude",
+      provider: args.provider,
       stream: { async *[Symbol.asyncIterator]() {} },
       getAccountInfo: session.session.getAccountInfo,
       interrupt: session.session.interrupt,

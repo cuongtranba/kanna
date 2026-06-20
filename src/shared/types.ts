@@ -425,6 +425,22 @@ export function getProviderCatalog(provider: AgentProvider): ProviderCatalogEntr
   return entry
 }
 
+/**
+ * True when the provider's turns run through the Claude SDK session transport
+ * (a live `claudeSessions` entry consumed by `runClaudeSession`, prompts
+ * delivered via `session.sendPrompt`) rather than the generic harness-turn
+ * transport (`runTurn` over `active.turn.stream`).
+ *
+ * `claude` and `openrouter` both ride the SDK session — openrouter just points
+ * the SDK at OpenRouter's Anthropic-compatible endpoint. Branching on
+ * `provider === "claude"` where the real intent is "uses the SDK session" is
+ * what silently dropped openrouter's prompt delivery; use this predicate so a
+ * new SDK-backed provider can never be forgotten by an `if`-chain again.
+ */
+export function providerUsesSdkSession(provider: AgentProvider): boolean {
+  return provider === "claude" || provider === "openrouter"
+}
+
 function getProviderModelMatch(provider: AgentProvider, modelId?: string): ProviderModelOption | undefined {
   if (!modelId) return undefined
 
