@@ -432,6 +432,10 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     scheduleManager,
     maxAgentWakes: parsePositiveIntEnv(process.env.KANNA_MAX_AGENT_WAKES, 25),
     pendingWorkflowPollMs: parsePositiveIntEnv(process.env.KANNA_PENDING_WORKFLOW_POLL_MS, 120_000),
+    openrouterFirstEntryTimeoutMs: parsePositiveIntEnv(
+      process.env.KANNA_OPENROUTER_FIRST_ENTRY_TIMEOUT_MS,
+      2 * 60 * 1000,
+    ),
     claudeLimitDetector: options.agentOverrides?.claudeLimitDetector,
     codexLimitDetector: options.agentOverrides?.codexLimitDetector,
     throwOnClaudeSessionStart: options.agentOverrides?.throwOnClaudeSessionStart,

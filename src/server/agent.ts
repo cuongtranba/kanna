@@ -340,6 +340,17 @@ interface AgentCoordinatorArgs {
    * 120000 (2 min). Bounded by `maxAgentWakes`.
    */
   pendingWorkflowPollMs?: number
+  /**
+   * Watchdog (ms) for an OpenRouter turn whose SDK stream emits no transcript
+   * entry (no `system_init`) after the session-token handshake. OpenRouter
+   * routes through the Claude SDK; a stalled upstream leaves the stream open
+   * but silent, so the `runClaudeSession` for-await never returns or throws
+   * and the existing fail-close never fires. On timeout the watchdog
+   * interrupts + closes the session so the stream ends and the turn is
+   * recorded failed. OpenRouter-only; cleared on the first entry. Default
+   * 120000 (2 min).
+   */
+  openrouterFirstEntryTimeoutMs?: number
   getSubagents?: () => Subagent[]
   getAppSettingsSnapshot?: () => {
     claudeAuth?: { authenticated?: boolean } | null
@@ -1324,6 +1335,12 @@ const DEFAULT_CLAUDE_SESSION_SWEEP_INTERVAL_MS = 60 * 1000
 // Keep a PTY session warm up to 30 min while a background Bash task is pending —
 // comfortably longer than the 10-min idle window and typical CI durations.
 const DEFAULT_PTY_BACKGROUND_TASK_MAX_MS = 30 * 60 * 1000
+// OpenRouter-only watchdog: a stalled upstream leaves the SDK stream open but
+// silent after the session-token handshake, so the runClaudeSession for-await
+// never ends and the existing fail-close never fires. Abort if no transcript
+// entry arrives within this window. system_init is the SDK init echo (precedes
+// model inference), so 2 min is generous; env-tunable per deployment.
+const DEFAULT_OPENROUTER_FIRST_ENTRY_TIMEOUT_MS = 2 * 60 * 1000
 // Agent wakes are clamped to one idle window minus this buffer so a re-entry
 // always lands before the idle reaper closes the PTY (see scheduleAgentWakeup).
 const WAKE_GUARD_BUFFER_MS = 60 * 1000
@@ -1412,6 +1429,7 @@ export class AgentCoordinator {
   private readonly agentWakeChainByChat = new Map<string, number>()
   private readonly maxAgentWakes: number
   private readonly pendingWorkflowPollMs: number
+  private readonly openrouterFirstEntryTimeoutMs: number
   // Per-tokenId rotation dedupe state. When a shared OAuth token throws
   // limit/auth-error against N chats simultaneously, only the first chat
   // pays the cost of marking the pool + picking a fresh target; subsequent
@@ -1456,6 +1474,8 @@ export class AgentCoordinator {
     this.getAutoResumePreference = args.getAutoResumePreference ?? (() => false)
     this.maxAgentWakes = args.maxAgentWakes ?? 25
     this.pendingWorkflowPollMs = args.pendingWorkflowPollMs ?? 120_000
+    this.openrouterFirstEntryTimeoutMs =
+      args.openrouterFirstEntryTimeoutMs ?? DEFAULT_OPENROUTER_FIRST_ENTRY_TIMEOUT_MS
     this.getSubagents = args.getSubagents ?? (() => [])
     this.getAppSettingsSnapshot = args.getAppSettingsSnapshot ?? (() => ({}))
     this.readLlmProvider = args.readLlmProvider ?? readLlmProviderSnapshot
@@ -3089,6 +3109,56 @@ export class AgentCoordinator {
   }
 
   private async runClaudeSession(session: ClaudeSessionState) {
+    // OpenRouter-only first-entry watchdog. OpenRouter routes through the
+    // Claude SDK; a stalled upstream emits the session-token handshake then
+    // goes silent — the stream stays open with no entry, so this for-await
+    // never returns or throws and the chat hangs "running" until restart. The
+    // existing catch/finally fail-close is claude-provider-gated and depends
+    // on an active turn that the openrouter path tears down early, so the
+    // watchdog records the failure itself, then interrupts + closes the
+    // session to end the stream. `firstEntrySeen` guards against a late real
+    // entry; close() prevents any further entry from being processed.
+    const isOpenRouterSession = session.openrouterModel !== null
+    let firstEntrySeen = false
+    let firstEntryWatchdog: ReturnType<typeof setTimeout> | null = null
+    const clearFirstEntryWatchdog = () => {
+      if (firstEntryWatchdog !== null) {
+        clearTimeout(firstEntryWatchdog)
+        firstEntryWatchdog = null
+      }
+    }
+    if (isOpenRouterSession) {
+      firstEntryWatchdog = setTimeout(() => {
+        if (firstEntrySeen) return
+        if (this.claudeSessions.get(session.chatId) !== session) return
+        firstEntrySeen = true
+        const message = `OpenRouter produced no response within ${this.openrouterFirstEntryTimeoutMs}ms — the selected model may be invalid or the upstream stalled.`
+        console.warn("[kanna/agent] openrouter stream produced no entry within watchdog window — failing turn", {
+          chatId: session.chatId,
+          sessionId: session.id,
+          model: session.openrouterModel,
+          timeoutMs: this.openrouterFirstEntryTimeoutMs,
+        })
+        void (async () => {
+          await this.store.appendMessage(
+            session.chatId,
+            timestamped({
+              kind: "result",
+              subtype: "error",
+              isError: true,
+              durationMs: this.openrouterFirstEntryTimeoutMs,
+              result: message,
+            }),
+          )
+          await this.store.recordTurnFailed(session.chatId, message)
+          const active = this.activeTurns.get(session.chatId)
+          if (active) this.activeTurns.delete(session.chatId)
+          this.emitStateChange(session.chatId)
+          void session.session.interrupt().catch(() => {})
+          session.session.close()
+        })()
+      }, this.openrouterFirstEntryTimeoutMs)
+    }
     try {
       let simulateLimit = this.throwOnClaudeSessionStart
       for await (const event of session.session.stream) {
@@ -3119,6 +3189,8 @@ export class AgentCoordinator {
         }
 
         if (!event.entry) continue
+        firstEntrySeen = true
+        clearFirstEntryWatchdog()
         if (this.claudeSessions.get(session.chatId) !== session) break
         // Suppress the interrupt-induced tail `result` of a cancelled turn.
         // cancel() already removed the active turn, recorded the cancellation,
@@ -3337,6 +3409,7 @@ export class AgentCoordinator {
         }
       }
     } finally {
+      clearFirstEntryWatchdog()
       const active = this.activeTurns.get(session.chatId)
       const isCurrentSession = this.claudeSessions.get(session.chatId) === session
       // Trace point: stream-end-without-final-result is the hang signature.
