@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.98.0](https://github.com/cuongtranba/kanna/compare/v0.97.3...v0.98.0) (2026-06-22)
+
+
+### Features
+
+* **chat-ui:** show local skills + slash commands in / picker ([#444](https://github.com/cuongtranba/kanna/issues/444)) ([d5e344b](https://github.com/cuongtranba/kanna/commit/d5e344b6e08e6d22748387543b352e12d7e90919))
+
 ## [0.97.3](https://github.com/cuongtranba/kanna/compare/v0.97.2...v0.97.3) (2026-06-20)
 
 
