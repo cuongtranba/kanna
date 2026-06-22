@@ -1,7 +1,7 @@
 ---
 id: c3-210
 c3-version: 4
-c3-seal: 8add4fdb1f9347e4d4d5c5a3e20eadf37ddb4e10673a262f18753db21cc6616b
+c3-seal: 9d71fce83a02e972c369c208c312de96ea54716df151bde603f47cb8581a0049
 title: agent-coordinator
 type: component
 category: feature
@@ -9,6 +9,7 @@ parent: c3-2
 goal: 'Drive turn lifecycle across providers: start/cancel/resume Claude + Codex sessions, emit normalized transcript events.'
 uses:
     - c3-229
+    - c3-231
     - ref-colocated-bun-test
     - ref-event-sourcing
     - ref-provider-adapter
@@ -67,7 +68,8 @@ Owns the agent turn lifecycle: receives `chat.send` commands, picks the provider
 | ref-tool-hydration | ref | Tool calls normalized before persistence | must follow | Single hydration path |
 | ref-colocated-bun-test | ref | Tests live next to coordinator | must follow | agent-coordinator.test.ts |
 | rule-colocated-bun-test | rule | Coordinator test suites enforce colocated-bun-test rule | must follow | agent.*.test.ts colocated with agent.ts |
-| c3-229 | ref | Compliance target added by c3x wire; refine what must be reviewed or complied with before handoff. | wired compliance target beats uncited local prose | Added by c3x wire for explicit compliance review. |
+| c3-229 | ref | Workflow runs surfaced into ChatSnapshot via the coordinator | wired compliance target beats uncited local prose | workflow status panel wiring |
+| c3-231 | ref | Coordinator merges local-catalog list into ChatSnapshot.slashCommands at every record site | wired compliance target beats uncited local prose | Local-skill catalog merge wiring |
 
 ## Contract
 

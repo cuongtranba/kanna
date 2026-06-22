@@ -63,36 +63,45 @@ export function SlashCommandPicker({ items, activeIndex, loading, onSelect, onHo
       role="listbox"
       className="absolute bottom-full left-0 mb-2 w-full max-w-md md:max-w-xl max-h-64 overflow-auto rounded-md border border-border bg-popover shadow-md"
     >
-      {items.map((cmd, i) => (
-        <li
-          key={cmd.name}
-          role="option"
-          aria-selected={i === activeIndex}
-          onMouseDown={(event) => {
-            event.preventDefault()
-            onSelect(cmd)
-          }}
-          onMouseEnter={() => onHoverIndex(i)}
-          className={cn(
-            "flex flex-col gap-0.5 px-3 py-1.5 cursor-pointer text-sm sm:flex-row sm:items-center sm:gap-3",
-            i === activeIndex && "bg-accent text-accent-foreground",
-          )}
-        >
-          <div className="flex min-w-0 items-baseline gap-2">
-            <span className="font-mono break-all sm:whitespace-nowrap sm:break-normal">/{normalizeCommandName(cmd.name)}</span>
-            {cmd.argumentHint ? (
-              <span className="shrink-0 font-mono text-xs text-muted-foreground whitespace-nowrap">
-                {cmd.argumentHint}
+      {items.map((cmd, i) => {
+        const scopeTitle = cmd.scope ? `${cmd.scope.charAt(0).toUpperCase()}${cmd.scope.slice(1)}` : undefined
+        return (
+          <li
+            key={cmd.name}
+            role="option"
+            aria-selected={i === activeIndex}
+            onMouseDown={(event) => {
+              event.preventDefault()
+              onSelect(cmd)
+            }}
+            onMouseEnter={() => onHoverIndex(i)}
+            className={cn(
+              "flex flex-col gap-0.5 px-3 py-1.5 cursor-pointer text-sm sm:flex-row sm:items-center sm:gap-3",
+              i === activeIndex && "bg-accent text-accent-foreground",
+            )}
+            title={scopeTitle}
+          >
+            <div className="flex min-w-0 items-baseline gap-2">
+              <span className="font-mono break-all sm:whitespace-nowrap sm:break-normal">/{normalizeCommandName(cmd.name)}</span>
+              {cmd.kind === "skill" ? (
+                <span className="shrink-0 rounded-sm border border-border bg-muted px-1 py-px text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                  skill
+                </span>
+              ) : null}
+              {cmd.argumentHint ? (
+                <span className="shrink-0 font-mono text-xs text-muted-foreground whitespace-nowrap">
+                  {cmd.argumentHint}
+                </span>
+              ) : null}
+            </div>
+            {cmd.description ? (
+              <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground sm:text-right">
+                {clampDescription(cmd.description)}
               </span>
             ) : null}
-          </div>
-          {cmd.description ? (
-            <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground sm:text-right">
-              {clampDescription(cmd.description)}
-            </span>
-          ) : null}
-        </li>
-      ))}
+          </li>
+        )
+      })}
     </ul>
   )
 }

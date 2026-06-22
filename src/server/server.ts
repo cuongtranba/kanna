@@ -48,6 +48,8 @@ import { TunnelLifecycle } from "./cloudflare-tunnel/lifecycle"
 import { initToolCallbackOnBoot, type ToolCallbackService } from "./tool-callback"
 import { SessionShareService } from "./session-share"
 import { createWorkflowRegistry } from "./workflow-registry"
+import { LocalCatalogService } from "./local-catalog"
+import { scanLocalCatalog } from "./local-catalog-io.adapter"
 import { createSubagentTranscriptRegistry } from "./subagent-transcript-registry"
 import { listWorkflowRunDirs, readWorkflowDir, readWorkflowRunJournal, watchWorkflowDir, watchWorkflowRunDirs } from "./workflow-watch-io.adapter"
 import { SnapshotStore } from "./session-share/snapshot-store.adapter"
@@ -421,6 +423,7 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
   )
   setQuickResponseOAuthPool(oauthPool)
 
+  const localCatalog = new LocalCatalogService({ scan: scanLocalCatalog })
   let agent!: AgentCoordinator
   const scheduleManager = new ScheduleManager({
     fire: async (chatId, scheduleId) => {
@@ -447,6 +450,7 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     ptyInstanceRegistry,
     workflowRegistry,
     subagentTranscriptRegistry,
+    localCatalog,
     // Kanna is a personal-use tool on the developer's own machine. Tool calls
     // auto-allow at the kanna gate layer (the claude CLI itself runs with
     // `--dangerously-skip-permissions` so it doesn't gate either). The

@@ -1,13 +1,14 @@
 ---
 id: c3-115
 c3-version: 4
-c3-seal: d7e82da963e2a764aebfb3ff17eb76c2110cc197b1a5b8eb628c1e6c01de8291
+c3-seal: 075dbe3902549a8043b098ed63e7415ece6af6d73addafb831a29d78ae19325a
 title: chat-ui-chrome
 type: component
 category: feature
 parent: c3-1
 goal: 'Provide the composer and chat chrome: input dock, provider/model/effort pickers, attachment controls, queued message alignment.'
 uses:
+    - c3-231
     - ref-provider-adapter
     - ref-zustand-store
     - rule-zustand-store
@@ -59,7 +60,8 @@ Owns the composer and surrounding chrome: textarea input, provider/model/effort 
 | --- | --- | --- | --- | --- |
 | ref-provider-adapter | ref | Use normalized catalog, not per-provider forms | must follow | One UI for all providers |
 | ref-zustand-store | ref | Persist pending input + preferences | must follow | Survives reload |
-| rule-zustand-store | rule | Compliance target added by c3x wire; refine what must be reviewed or complied with before handoff. | wired compliance target beats uncited local prose | Added by c3x wire for explicit compliance review. |
+| rule-zustand-store | rule | All local UI state in chat-ui-chrome lives in zustand stores, not React state | wired compliance target beats uncited local prose | Added by c3x wire for explicit compliance review. |
+| c3-231 | ref | Picker consumes the merged slashCommands list including local skills + commands surfaced by local-catalog | wired compliance target beats uncited local prose | Local-skill catalog wiring |
 
 ## Contract
 
