@@ -379,6 +379,8 @@ interface AgentCoordinatorArgs {
   subagentTranscriptRegistry?: import("./subagent-transcript-registry").SubagentTranscriptRegistry
   /** Reads the persisted LLM provider snapshot (OpenRouter key source). */
   readLlmProvider?: () => Promise<LlmProviderSnapshot>
+  /** Local skill + slash command catalog (user, project, plugin scans). */
+  localCatalog?: import("./local-catalog").LocalCatalogService
 }
 
 interface SendToStartingProfile {
@@ -1453,6 +1455,7 @@ export class AgentCoordinator {
   private readonly ptyInstanceRegistry: import("./claude-pty/pty-instance-registry").PtyInstanceRegistry | null
   private readonly workflowRegistry: import("./workflow-registry").WorkflowRegistry | null
   private readonly subagentTranscriptRegistry: import("./subagent-transcript-registry").SubagentTranscriptRegistry | null
+  private readonly localCatalog: import("./local-catalog").LocalCatalogService | null
   private readonly readLlmProvider: () => Promise<LlmProviderSnapshot>
   private readonly subagentPendingResolvers = new Map<
     string,
@@ -1538,6 +1541,7 @@ export class AgentCoordinator {
     this.ptyInstanceRegistry = args.ptyInstanceRegistry ?? null
     this.workflowRegistry = args.workflowRegistry ?? null
     this.subagentTranscriptRegistry = args.subagentTranscriptRegistry ?? null
+    this.localCatalog = args.localCatalog ?? null
   }
 
   setBackgroundErrorReporter(report: ((message: string) => void) | null) {
@@ -1959,7 +1963,8 @@ export class AgentCoordinator {
           lease?.release()
         }
       }
-      await this.store.recordSessionCommandsLoaded(chatId, commands)
+      const merged = this.mergeLocalCatalog(commands, project.localPath)
+      await this.store.recordSessionCommandsLoaded(chatId, merged)
       this.emitStateChange(chatId)
     } catch (error) {
       console.warn("[kanna/agent] ensureSlashCommandsLoaded failed", error)
@@ -1967,6 +1972,20 @@ export class AgentCoordinator {
       this.slashCommandsInFlight.delete(chatId)
       this.emitStateChange(chatId)
     }
+  }
+
+  private mergeLocalCatalog(commands: SlashCommand[], cwd: string): SlashCommand[] {
+    if (!this.localCatalog) return commands
+    let local: SlashCommand[]
+    try {
+      local = this.localCatalog.list(cwd)
+    } catch (error) {
+      console.warn("[kanna/agent] localCatalog.list failed", error)
+      return commands
+    }
+    const cliKeys = new Set(commands.map((c) => c.name.toLowerCase()))
+    const filtered = local.filter((entry) => !cliKeys.has(entry.name.toLowerCase()))
+    return [...commands, ...filtered]
   }
 
   async closeChat(chatId: string) {
@@ -2701,7 +2720,8 @@ export class AgentCoordinator {
       void (async () => {
         try {
           const commands = await started.getSupportedCommands()
-          await this.store.recordSessionCommandsLoaded(args.chatId, commands)
+          const merged = this.mergeLocalCatalog(commands, args.localPath)
+          await this.store.recordSessionCommandsLoaded(args.chatId, merged)
           this.emitStateChange(args.chatId)
         } catch (error) {
           console.warn("[kanna/agent] failed to load slash commands", error)
@@ -3246,7 +3266,8 @@ export class AgentCoordinator {
               description: "",
               argumentHint: "",
             }))
-            await this.store.recordSessionCommandsLoaded(session.chatId, commands)
+            const merged = this.mergeLocalCatalog(commands, session.localPath)
+            await this.store.recordSessionCommandsLoaded(session.chatId, merged)
           }
           logClaudeSteer("claude_event_system_init", {
             chatId: session.chatId,

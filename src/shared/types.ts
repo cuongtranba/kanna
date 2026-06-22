@@ -1595,10 +1595,16 @@ export interface ChatHistorySnapshot {
   recentLimit: number
 }
 
+export type SlashCommandKind = "command" | "skill"
+
+export type SlashCommandScope = "builtin" | "personal" | "project" | "plugin"
+
 export interface SlashCommand {
   name: string
   description: string
   argumentHint: string
+  kind?: SlashCommandKind
+  scope?: SlashCommandScope
 }
 
 export interface ResolvedStackBinding {
