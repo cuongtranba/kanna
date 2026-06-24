@@ -3229,6 +3229,17 @@ export class AgentCoordinator {
           session.cancelledResultPending -= 1
           continue
         }
+        if (event.entry.kind === "system_init") {
+          const kannaNames = this.getSubagents().map((s) => s.name)
+          if (kannaNames.length > 0) {
+            const entry = event.entry as { agents: string[] }
+            const existing = new Set(entry.agents)
+            const extra = kannaNames.filter((n) => !existing.has(n))
+            if (extra.length > 0) {
+              entry.agents = [...entry.agents, ...extra]
+            }
+          }
+        }
         await this.store.appendMessage(session.chatId, event.entry)
         // Arm the background-task keep-alive guard the moment Claude Code reports
         // a `Bash(run_in_background)` launch. Shared SDK + PTY path: keeps the
