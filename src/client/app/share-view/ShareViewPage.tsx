@@ -1,7 +1,6 @@
-import Markdown from "react-markdown"
 import { Flower } from "lucide-react"
 import type { ChatSnapshot, ChatSnapshotMessage } from "../../../shared/session-share/types"
-import { defaultMarkdownComponents, defaultRemarkPlugins } from "../../components/messages/shared"
+import { renderMarkdownToReact } from "../../components/lexical/markdown/lexicalToReact"
 import { HighlightedCode } from "../../components/messages/HighlightedCode"
 import { ThinkingBlock } from "../../components/messages/ThinkingBlock"
 import { TranscriptRenderOptionsProvider } from "../../components/messages/render-context"
@@ -35,18 +34,14 @@ function MessageView({ message }: { message: ChatSnapshotMessage }) {
       return (
         <div className="flex justify-end">
           <div className="max-w-[85%] sm:max-w-[80%] rounded-[20px] border border-border bg-muted px-3.5 py-1.5 text-primary prose prose-sm prose-invert [&_p]:whitespace-pre-line">
-            <Markdown remarkPlugins={defaultRemarkPlugins} components={defaultMarkdownComponents}>
-              {message.text}
-            </Markdown>
+            {renderMarkdownToReact(message.text)}
           </div>
         </div>
       )
     case "assistant_text":
       return (
         <div className="text-pretty prose prose-sm dark:prose-invert w-full max-w-[70ch] space-y-4">
-          <Markdown remarkPlugins={defaultRemarkPlugins} components={defaultMarkdownComponents}>
-            {message.text}
-          </Markdown>
+          {renderMarkdownToReact(message.text)}
         </div>
       )
     case "assistant_thinking":

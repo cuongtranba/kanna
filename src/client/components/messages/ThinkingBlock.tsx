@@ -1,8 +1,7 @@
 import { memo, useState } from "react"
 import { Brain, ChevronRight } from "lucide-react"
-import Markdown from "react-markdown"
 import { cn } from "../../lib/utils"
-import { defaultMarkdownComponents, defaultRemarkPlugins } from "./shared"
+import { renderMarkdownToReact } from "../lexical/markdown/lexicalToReact"
 
 interface Props {
   content: string
@@ -32,12 +31,7 @@ export const ThinkingBlock = memo(function ThinkingBlock({ content }: Props) {
       </button>
       {expanded && (
         <div className="mt-2 border-l-2 border-muted-foreground/20 pl-3 text-sm text-muted-foreground italic prose prose-sm dark:prose-invert max-w-[70ch]">
-          <Markdown
-            remarkPlugins={defaultRemarkPlugins}
-            components={defaultMarkdownComponents}
-          >
-            {trimmed}
-          </Markdown>
+          {renderMarkdownToReact(trimmed)}
         </div>
       )}
     </div>

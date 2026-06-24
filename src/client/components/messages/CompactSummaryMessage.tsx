@@ -1,7 +1,7 @@
 import {  Minimize } from "lucide-react"
-import ReactMarkdown from "react-markdown"
 import type { ProcessedCompactSummaryMessage } from "./types"
-import { MetaRow, MetaLabel, ExpandableRow, VerticalLineContainer, defaultMarkdownComponents, defaultRemarkPlugins } from "./shared"
+import { MetaRow, MetaLabel, ExpandableRow, VerticalLineContainer } from "./shared"
+import { renderMarkdownToReact } from "../lexical/markdown/lexicalToReact"
 
 interface Props {
   message: ProcessedCompactSummaryMessage
@@ -14,9 +14,7 @@ export function CompactSummaryMessage({ message }: Props) {
         expandedContent={
           <VerticalLineContainer className="my-4 text-xs">
             <div className="prose prose-sm dark:prose-invert max-w-none">
-              <ReactMarkdown remarkPlugins={defaultRemarkPlugins} components={defaultMarkdownComponents}>
-                {message.summary}
-              </ReactMarkdown>
+              {renderMarkdownToReact(message.summary)}
             </div>
           </VerticalLineContainer>
         }

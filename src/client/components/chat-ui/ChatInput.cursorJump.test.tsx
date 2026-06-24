@@ -1,13 +1,37 @@
+/**
+ * ChatInput cursor / input behaviour tests.
+ *
+ * The original file (ChatInput.cursorJump.test.tsx) tested textarea-specific
+ * behaviour:
+ *   1. `shouldRefreshPickerOnSelection` – pure utility, still exported.
+ *   2. `isTouchDeviceEnvironment`       – pure utility, still exported.
+ *   3. "ChatInput onSelect wiring"      – verified that `select` events on a
+ *      controlled <textarea> did NOT trigger extra React renders on touch
+ *      devices (the caretVersion/pickerDismissed bump suppression guard).
+ *
+ * With the Lexical migration the controlled-textarea is gone. Lexical manages
+ * its own selection internally and does not fire React `onSelect` events that
+ * could cause spurious re-renders via a `caretVersion` state integer.
+ * The third test suite ("ChatInput onSelect wiring") therefore has NO
+ * equivalent under the Lexical editor — the entire problem it guarded against
+ * cannot occur. The test is intentionally removed; its intent is documented
+ * here for the orchestrator.
+ *
+ * NOTE: `shouldRefreshPickerOnSelection` is still exported for back-compat
+ * (external callers might import it) but it is no longer used internally by
+ * ChatInput — the Lexical typeahead plugins own their own query-refresh logic.
+ */
+
 import "../../lib/testing/setupHappyDom"
 import { afterEach, describe, expect, test } from "bun:test"
-import { Profiler, act } from "react"
-import { createRoot, type Root } from "react-dom/client"
 import {
-  ChatInput,
   isTouchDeviceEnvironment,
   shouldRefreshPickerOnSelection,
 } from "./ChatInput"
-import { PROVIDERS } from "../../../shared/types"
+
+// ---------------------------------------------------------------------------
+// Touch device detection helpers
+// ---------------------------------------------------------------------------
 
 function setTouchDevice(on: boolean) {
   if (on) {
@@ -21,19 +45,26 @@ function setTouchDevice(on: boolean) {
   })
 }
 
+// ---------------------------------------------------------------------------
+// shouldRefreshPickerOnSelection (pure utility)
+// ---------------------------------------------------------------------------
+
 describe("shouldRefreshPickerOnSelection", () => {
   test("desktop -> picker refreshes on caret moves (Arrow keys, mouse clicks)", () => {
     expect(shouldRefreshPickerOnSelection(false)).toBe(true)
   })
 
-  test("touch device -> picker does NOT refresh on `select` events (iOS hold-space cursor-drag safety)", () => {
-    // Regression guard: re-rendering a controlled <textarea> on every
-    // selection event causes the iOS Safari trackpad gesture to jump the
-    // caret mid-drag. The component must skip the caret-version bump on
-    // touch devices to keep the gesture smooth.
+  test("touch device -> picker does NOT refresh (iOS hold-space cursor-drag safety)", () => {
+    // This utility is kept for back-compat export. Under Lexical the
+    // typeahead plugins track query changes internally so this guard is
+    // no longer wired to any React state update inside ChatInput.
     expect(shouldRefreshPickerOnSelection(true)).toBe(false)
   })
 })
+
+// ---------------------------------------------------------------------------
+// isTouchDeviceEnvironment
+// ---------------------------------------------------------------------------
 
 describe("isTouchDeviceEnvironment", () => {
   afterEach(() => setTouchDevice(false))
@@ -57,70 +88,19 @@ describe("isTouchDeviceEnvironment", () => {
   })
 })
 
-describe("ChatInput onSelect wiring", () => {
-  let container: HTMLDivElement
-  let root: Root | null = null
-
-  afterEach(async () => {
-    if (root) {
-      await act(async () => {
-        root?.unmount()
-      })
-      root = null
-    }
-    container?.remove()
-    setTouchDevice(false)
-  })
-
-  test("touch device: `select` events on the textarea do not produce any extra render commits (no caret-version bump => no controlled-textarea reconciliation mid-gesture)", async () => {
-    setTouchDevice(true)
-
-    container = document.createElement("div")
-    document.body.appendChild(container)
-
-    let commitCount = 0
-    const onRender = () => {
-      commitCount++
-    }
-
-    await act(async () => {
-      root = createRoot(container)
-      root.render(
-        <Profiler id="chat-input" onRender={onRender}>
-          <ChatInput
-            onSubmit={async () => {}}
-            disabled={false}
-            chatId="touch-chat"
-            projectId={null}
-            activeProvider="claude"
-            availableProviders={PROVIDERS}
-          />
-        </Profiler>,
-      )
-    })
-
-    const textarea = container.querySelector("textarea") as HTMLTextAreaElement
-    expect(textarea).toBeTruthy()
-
-    const baseline = commitCount
-
-    // React 19 routes the `select` synthetic event through a document-level
-    // `selectionchange` listener and only forwards it when the source element
-    // is focused. Mimic that exact path here so we're testing the same code
-    // path iOS Safari hits during the hold-space cursor-drag gesture.
-    textarea.focus()
-    await act(async () => {
-      for (let pos = 0; pos < 5; pos++) {
-        textarea.setSelectionRange(pos, pos)
-        document.dispatchEvent(new Event("selectionchange", { bubbles: true }))
-        textarea.dispatchEvent(new Event("select", { bubbles: true }))
-      }
-    })
-
-    // On a touch device the gate must short-circuit `setCaretVersion`. If a
-    // regression re-introduces the unconditional bump, each `select` event
-    // schedules a state update and React commits an extra render that the
-    // Profiler observes.
-    expect(commitCount).toBe(baseline)
-  })
-})
+// ---------------------------------------------------------------------------
+// NOTE: "ChatInput onSelect wiring" test REMOVED
+//
+// The original test mounted ChatInput with a <Profiler> and fired `select` +
+// `selectionchange` events on a <textarea>, asserting that a touch device
+// produced zero extra React commits (no caretVersion bump → no controlled-
+// textarea reconciliation).
+//
+// Under the Lexical editor there is no controlled textarea and no
+// `caretVersion` state integer. Lexical manages its own selection state
+// internally. The test's regression target no longer exists.
+//
+// Coverage that still applies is preserved:
+//   - `shouldRefreshPickerOnSelection` exported utility (above)
+//   - `isTouchDeviceEnvironment` exported utility (above)
+// ---------------------------------------------------------------------------

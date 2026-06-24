@@ -20,8 +20,6 @@ import {
   Trash2,
   X,
 } from "lucide-react"
-import Markdown from "react-markdown"
-import remarkGfm from "remark-gfm"
 import { useNavigate, useOutletContext, useParams } from "react-router-dom"
 import { getKeybindingsFilePathDisplay, SDK_CLIENT_APP } from "../../shared/branding"
 import { ANALYTICS_STATIC_EVENT_NAMES, ANALYTICS_STATIC_PROPERTY_NAMES } from "../../shared/analytics"
@@ -54,7 +52,7 @@ import {
   type SkillUninstallResult,
   type UpdateSnapshot,
 } from "../../shared/types"
-import { markdownComponents } from "../components/messages/shared"
+import { renderMarkdownToReact } from "../components/lexical/markdown/lexicalToReact"
 import { SubagentsSettingsBranch } from "./SubagentsSection"
 import { McpServersSettingsBranch } from "./McpServersSection"
 import { ChatPreferenceControls } from "../components/chat-ui/ChatPreferenceControls"
@@ -544,9 +542,7 @@ export function ChangelogSection({
 
             {release.body?.trim() ? (
               <div className="prose prose-sm mt-5 max-w-none text-foreground dark:prose-invert">
-                <Markdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-                  {release.body}
-                </Markdown>
+                {renderMarkdownToReact(release.body)}
               </div>
             ) : (
               <div className="mt-5 text-sm text-muted-foreground">No release notes were provided.</div>

@@ -1,14 +1,13 @@
 ---
 id: c3-115
 c3-version: 4
-c3-seal: 075dbe3902549a8043b098ed63e7415ece6af6d73addafb831a29d78ae19325a
+c3-seal: b3feaf75656281cf9dbd88a9567d5d860905a6bb061a99e786e87acfc5af3b6b
 title: chat-ui-chrome
 type: component
 category: feature
 parent: c3-1
 goal: 'Provide the composer and chat chrome: input dock, provider/model/effort pickers, attachment controls, queued message alignment.'
 uses:
-    - c3-231
     - ref-provider-adapter
     - ref-zustand-store
     - rule-zustand-store
@@ -32,7 +31,7 @@ Provide the composer and chat chrome: input dock, provider/model/effort pickers,
 
 ## Purpose
 
-Owns the composer and surrounding chrome: textarea input, provider/model/effort pickers, attachment controls, queued message indicator, send action. Non-goals: transcript rendering, server command execution, chat history.
+Owns the composer and surrounding chrome: Lexical rich-text editor input, provider/model/effort pickers, attachment controls, queued message indicator, send action. Non-goals: transcript rendering, server command execution, chat history.
 
 ## Foundational Flow
 

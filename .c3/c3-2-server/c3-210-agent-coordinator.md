@@ -1,15 +1,13 @@
 ---
 id: c3-210
 c3-version: 4
-c3-seal: 9d71fce83a02e972c369c208c312de96ea54716df151bde603f47cb8581a0049
+c3-seal: 4efc99e974317d647e3ff03c00d883e591323f028a126d06c90c84909533eaee
 title: agent-coordinator
 type: component
 category: feature
 parent: c3-2
 goal: 'Drive turn lifecycle across providers: start/cancel/resume Claude + Codex sessions, emit normalized transcript events.'
 uses:
-    - c3-229
-    - c3-231
     - ref-colocated-bun-test
     - ref-event-sourcing
     - ref-provider-adapter
