@@ -27,6 +27,7 @@ import {
   $createAttachmentNode,
 } from "../nodes"
 import { serializeEditorToWire } from "../serialize/editorToWireString"
+import { isTypeaheadMenuOpen } from "./SubmitPlugin"
 import type { ChatAttachment } from "../../../../shared/types"
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -257,6 +258,50 @@ describe("SubmitPlugin — keyboard routing contract", () => {
 
     expect(canSubmit).toBe(true)
     expect(shouldSubmit(plainEnterEvent, disabled, canSubmit)).toBe(true)
+  })
+})
+
+// ─── Typeahead-menu guard (regression: Enter must select picker option) ───────
+
+describe("SubmitPlugin — isTypeaheadMenuOpen guard", () => {
+  it("returns true when a typeahead menu element is present", () => {
+    const fakeDoc = {
+      querySelector: (sel: string) =>
+        sel === "[data-kanna-typeahead-menu]" ? ({} as Element) : null,
+    }
+    expect(isTypeaheadMenuOpen(fakeDoc)).toBe(true)
+  })
+
+  it("returns false when no typeahead menu element is present", () => {
+    const fakeDoc = { querySelector: () => null }
+    expect(isTypeaheadMenuOpen(fakeDoc)).toBe(false)
+  })
+
+  it("returns false when document is undefined (SSR)", () => {
+    expect(isTypeaheadMenuOpen(undefined)).toBe(false)
+  })
+
+  it("Enter is suppressed (no submit) while a picker menu is open", () => {
+    // Mirrors the plugin's decision tree including the typeahead guard.
+    function shouldSubmit(
+      event: KeyboardEvent,
+      isDisabled: boolean,
+      menuOpen: boolean,
+      hasContent: boolean,
+    ): boolean {
+      if (isDisabled) return false
+      if (!event) return false
+      if (event.shiftKey) return false
+      if (menuOpen) return false
+      if (!hasContent) return false
+      return true
+    }
+
+    const plainEnter = { shiftKey: false } as KeyboardEvent
+    // Picker open → defer to picker, do not submit even with content.
+    expect(shouldSubmit(plainEnter, false, true, true)).toBe(false)
+    // Picker closed → submit normally.
+    expect(shouldSubmit(plainEnter, false, false, true)).toBe(true)
   })
 })
 

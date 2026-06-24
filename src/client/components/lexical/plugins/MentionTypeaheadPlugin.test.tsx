@@ -16,7 +16,7 @@
  */
 import { describe, expect, it } from "bun:test"
 import { createHeadlessEditor } from "@lexical/headless"
-import { $createParagraphNode, $getRoot } from "lexical"
+import { $createParagraphNode, $createTextNode, $getRoot } from "lexical"
 import { $createMentionNode, MentionNode } from "../nodes/MentionNode"
 import { MentionMenuOption } from "./MentionTypeaheadPlugin"
 import type { MentionOption } from "./MentionTypeaheadPlugin"
@@ -202,6 +202,56 @@ describe("MentionNode wire-form text — path (insertion target)", () => {
 
     expect(exported!.mentionKind).toBe("path")
     expect(exported!.value).toBe("docs/README.md")
+  })
+})
+
+// ---------------------------------------------------------------------------
+// onSelectOption insertion behaviour (regression)
+//
+// The bug: onSelectOption used `textNodeContainingQuery.remove()` followed by
+// `$insertNodes(...)`, which corrupted the selection and wiped the whole
+// composer. The fix uses `.replace(node)` + a trailing-space text node. These
+// tests lock that contract: surrounding text is preserved, a mention node is
+// inserted, and a trailing space follows it.
+// ---------------------------------------------------------------------------
+
+describe("onSelectOption insertion (regression — must not clear composer)", () => {
+  it("replaces the @query text node with a mention node + trailing space, keeping prior text", () => {
+    const editor = buildEditor()
+    let rootText = ""
+
+    editor.update(
+      () => {
+        const root = $getRoot()
+        root.clear()
+        const para = $createParagraphNode()
+        const lead = $createTextNode("hello ")
+        const queryNode = $createTextNode("@bui")
+        para.append(lead)
+        para.append(queryNode)
+        root.append(para)
+
+        // Mirror the fixed onSelectOption: replace the query node, then drop a
+        // trailing space and move the caret after it.
+        const mentionNode = $createMentionNode({
+          mentionKind: "agent",
+          value: "builder",
+          label: "builder",
+        })
+        queryNode.replace(mentionNode)
+        const trailingSpace = $createTextNode(" ")
+        mentionNode.insertAfter(trailingSpace)
+        trailingSpace.select()
+      },
+      { discrete: true },
+    )
+
+    editor.getEditorState().read(() => {
+      rootText = $getRoot().getTextContent()
+    })
+
+    // Composer NOT cleared: lead text + mention wire-form + trailing space.
+    expect(rootText).toBe("hello @agent/builder ")
   })
 })
 

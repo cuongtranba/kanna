@@ -21,6 +21,25 @@ export interface SubmitPluginProps {
 }
 
 // ---------------------------------------------------------------------------
+// Typeahead guard
+// ---------------------------------------------------------------------------
+
+/**
+ * True when a composer typeahead picker (mention `@` / slash `/`) is currently
+ * open. Both pickers tag their menu `<ul>` with `data-kanna-typeahead-menu`.
+ * SubmitPlugin runs at COMMAND_PRIORITY_HIGH; when a picker is open it must NOT
+ * submit on Enter — it bails so the picker's lower-priority KEY_ENTER_COMMAND
+ * handler can select the highlighted option instead.
+ */
+export function isTypeaheadMenuOpen(
+  doc: Pick<Document, "querySelector"> | undefined = typeof document !== "undefined"
+    ? document
+    : undefined,
+): boolean {
+  return doc?.querySelector("[data-kanna-typeahead-menu]") != null
+}
+
+// ---------------------------------------------------------------------------
 // Plugin
 // ---------------------------------------------------------------------------
 
@@ -47,6 +66,13 @@ export function SubmitPlugin({ onSubmit, disabled }: SubmitPluginProps): null {
 
         // Shift+Enter → insert newline; do not intercept.
         if (event.shiftKey) return false
+
+        // A typeahead picker (mention `@` / slash `/`) is open: let its own
+        // lower-priority KEY_ENTER_COMMAND handler select the highlighted
+        // option. This plugin runs at COMMAND_PRIORITY_HIGH, so returning
+        // false here lets the event fall through to the typeahead instead of
+        // submitting the raw trigger text.
+        if (isTypeaheadMenuOpen()) return false
 
         // Touch devices: allow the OS keyboard's Return key to insert newlines.
         const isTouchDevice =

@@ -59,6 +59,7 @@ import {
   KANNA_MESSAGE_NODES,
 } from "../nodes"
 import { KANNA_MESSAGE_TRANSFORMERS } from "./messageTransformers"
+import { MessageCodeBlock } from "./MessageCodeBlock"
 
 // ---------------------------------------------------------------------------
 // Node set: GFM built-ins + custom message nodes
@@ -160,15 +161,7 @@ function walkNode(node: LexicalNode): ReactNode {
       })
       .join("")
 
-    return (
-      <div key={nextKey()} className="relative overflow-x-auto max-w-full min-w-0 no-code-highlight group/pre">
-        <pre className="min-w-0 rounded-xl py-2.5 px-3.5">
-          <code className={`block text-xs whitespace-pre${lang ? ` language-${lang}` : ""}`}>
-            {code}
-          </code>
-        </pre>
-      </div>
-    )
+    return <MessageCodeBlock key={nextKey()} source={code} lang={lang} />
   }
 
   // --- List ---

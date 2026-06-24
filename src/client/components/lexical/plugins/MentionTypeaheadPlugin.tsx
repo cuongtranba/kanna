@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from "react"
 import type { ReactNode, RefObject } from "react"
-import { $insertNodes, TextNode } from "lexical"
+import { $createTextNode, $insertNodes, TextNode } from "lexical"
 import type { LexicalEditor } from "lexical"
 import {
   LexicalTypeaheadMenuPlugin,
@@ -123,30 +123,35 @@ export function MentionTypeaheadPlugin({
       textNodeContainingQuery: TextNode | null,
       closeMenu: () => void,
     ) => {
-      // Remove the trigger text (`@query`) and insert the mention node.
-      // textNodeContainingQuery is the TextNode that Lexical split for us.
+      // Replace the trigger text (`@query`) with the mention node.
+      // textNodeContainingQuery is the TextNode that Lexical split for us;
+      // `.replace()` preserves the caret position (a prior `.remove()` +
+      // `$insertNodes` corrupted the selection and wiped the composer).
+      const data = option.data
+      const mentionNode =
+        data.kind === "agent"
+          ? $createMentionNode({
+              mentionKind: "agent",
+              value: data.subagent.name,
+              label: data.subagent.name,
+            })
+          : $createMentionNode({
+              mentionKind: "path",
+              value: data.path.path,
+              label: data.path.path,
+            })
+
       if (textNodeContainingQuery !== null) {
-        textNodeContainingQuery.remove()
+        textNodeContainingQuery.replace(mentionNode)
+      } else {
+        $insertNodes([mentionNode])
       }
 
-      const data = option.data
-      if (data.kind === "agent") {
-        $insertNodes([
-          $createMentionNode({
-            mentionKind: "agent",
-            value: data.subagent.name,
-            label: data.subagent.name,
-          }),
-        ])
-      } else {
-        $insertNodes([
-          $createMentionNode({
-            mentionKind: "path",
-            value: data.path.path,
-            label: data.path.path,
-          }),
-        ])
-      }
+      // Inline decorator node can't hold the caret; drop a trailing space
+      // text node after it and place the caret there so typing continues.
+      const trailingSpace = $createTextNode(" ")
+      mentionNode.insertAfter(trailingSpace)
+      trailingSpace.select()
 
       closeMenu()
     },
@@ -174,6 +179,7 @@ export function MentionTypeaheadPlugin({
       return (
         <ul
           role="listbox"
+          data-kanna-typeahead-menu="mention"
           className="absolute bottom-full left-0 mb-2 w-full max-w-md md:max-w-xl max-h-64 overflow-auto rounded-md border border-border bg-popover shadow-md"
         >
           {mentionState.loading && menuOptions.length === 0

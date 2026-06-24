@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from "react"
 import type { ReactNode, RefObject } from "react"
-import { $insertNodes, TextNode } from "lexical"
+import { $createTextNode, $insertNodes, TextNode } from "lexical"
 import type { LexicalEditor } from "lexical"
 import {
   LexicalTypeaheadMenuPlugin,
@@ -99,18 +99,27 @@ export function SlashCommandTypeaheadPlugin({
       textNodeContainingQuery: TextNode | null,
       closeMenu: () => void,
     ) => {
-      // Remove the trigger text (`/query`) before inserting the node.
+      // Replace the trigger text (`/query`) with the slash-command node.
+      // `.replace()` preserves the caret position (a prior `.remove()` +
+      // `$insertNodes` corrupted the selection and submitted raw text).
+      const cmd = option.command
+      const commandNode = $createSlashCommandNode({
+        commandName: normalizeCommandName(cmd.name),
+        hasArgument: Boolean(cmd.argumentHint),
+      })
+
       if (textNodeContainingQuery !== null) {
-        textNodeContainingQuery.remove()
+        textNodeContainingQuery.replace(commandNode)
+      } else {
+        $insertNodes([commandNode])
       }
 
-      const cmd = option.command
-      $insertNodes([
-        $createSlashCommandNode({
-          commandName: normalizeCommandName(cmd.name),
-          hasArgument: Boolean(cmd.argumentHint),
-        }),
-      ])
+      // Inline decorator node can't hold the caret; drop a trailing space
+      // text node after it and place the caret there so the user can type
+      // the command argument.
+      const trailingSpace = $createTextNode(" ")
+      commandNode.insertAfter(trailingSpace)
+      trailingSpace.select()
 
       closeMenu()
     },
@@ -139,6 +148,7 @@ export function SlashCommandTypeaheadPlugin({
       return (
         <ul
           role="listbox"
+          data-kanna-typeahead-menu="slash"
           className="absolute bottom-full left-0 mb-2 w-full max-w-md md:max-w-xl max-h-64 overflow-auto rounded-md border border-border bg-popover shadow-md"
         >
           {loading && menuOptions.length === 0
