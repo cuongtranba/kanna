@@ -1,6 +1,6 @@
 ---
 id: c3-224
-c3-seal: e4fa6708633805800ee0f94fe0a5b76f0520ff50a1ef935a26af876b22ada94b
+c3-seal: 739362607f0697a74bdc5a923bf39c2152f9e4e686d8c8d4fef40dbc4aace0e3
 title: oauth-token-pool
 type: component
 category: feature
@@ -93,6 +93,6 @@ Maintains an in-memory refcounted reservation index (Map<tokenId, Set<chatId>>) 
 | Material | Must derive from | Allowed variance | Evidence |
 | --- | --- | --- | --- |
 | src/server/oauth-pool/oauth-token-pool.ts | c3-224 Contract | Internal data structures may evolve as long as Contract surfaces hold | src/server/oauth-pool/oauth-token-pool.ts |
-| src/server/oauth-pool/oauth-token-pool.test.ts | c3-224 Change Safety | Test names may evolve; coverage of state machine + reservation + describeUnavailability must remain | src/server/oauth-pool/oauth-token-pool.test.ts |
+| src/server/oauth-pool/oauth-token-pool.test.ts | c3-224 Contract (state machine + reservation + describeUnavailability) | Test names may evolve; coverage of state machine + reservation + describeUnavailability must remain | src/server/oauth-pool/oauth-token-pool.test.ts |
 | agent.ts buildPoolUnavailableMessage + OAuthPoolUnavailableError | c3-224 Contract (describeUnavailability surface) | Wording may evolve; markdown chat-link format title is fixed (UI parser); error class identity is used by startTurnForChat catch to switch on refusal vs other failures | src/server/agent.ts buildPoolUnavailableMessage, OAuthPoolUnavailableError |
 | renderChatLinks helper + ResultMessage error body | c3-224 Contract (describeUnavailability surface) | Regex may evolve; must keep accepting /chat/<uuid> link form | src/client/components/messages/renderChatLinks.tsx, src/client/components/messages/ResultMessage.tsx, src/client/app/ChatPage/ChatTranscriptViewport.tsx |

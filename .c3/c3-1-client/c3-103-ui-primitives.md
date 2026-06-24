@@ -1,7 +1,7 @@
 ---
 id: c3-103
 c3-version: 4
-c3-seal: 39d6a085b03d37a2f90e672090880b6a0102462b59d075ca23fb69d79f822553
+c3-seal: 56cba00f828bfe2ab413a1380fb3a0f76bae515c7cd438170a908c013b5a40d4
 title: ui-primitives
 type: component
 category: foundation
@@ -25,7 +25,7 @@ Ship the low-level, brand-aligned UI primitives (Radix + shadcn derivatives: but
 | Container | c3-1 (client) |
 | Parent Goal Slice | "Render the chat experience" — primitives keep interaction quality consistent across surfaces |
 | Category | foundation |
-| Lifecycle | Stateless React components, instantiated by features as needed |
+| Lifecycle | Stateless React components, tree-shaken at build time; imported per consumer |
 | Replaceability | Replaceable per-primitive provided shadcn/Radix prop contract is preserved |
 
 ## Purpose
