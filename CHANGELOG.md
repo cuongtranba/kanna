@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.99.0](https://github.com/cuongtranba/kanna/compare/v0.98.0...v0.99.0) (2026-06-24)
+
+
+### Features
+
+* **lexical:** migrate chat input and messages to Lexical 0.45 ([#446](https://github.com/cuongtranba/kanna/issues/446)) ([a5d3619](https://github.com/cuongtranba/kanna/commit/a5d3619fe2f7d34652ffd54533007b8c1c3c50c4))
+
+
+### Bug Fixes
+
+* **session-panel:** merge Kanna subagents into system_init.agents ([#450](https://github.com/cuongtranba/kanna/issues/450)) ([ba899c8](https://github.com/cuongtranba/kanna/commit/ba899c8788e9eb45ffe5146b3c3413905f8a43bf))
+
 ## [0.98.0](https://github.com/cuongtranba/kanna/compare/v0.97.3...v0.98.0) (2026-06-22)
 
 
