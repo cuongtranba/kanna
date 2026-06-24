@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # CI test runner with hang diagnostics.
 #
-# Runs `bun test` exactly as before. If bun does not finish within
+# Runs `bun test --conditions production` (production export condition is
+# required so Lexical's dev-build circular-ESM TDZ does not crash the runner;
+# see adr-20260624-lexical-chat-editor). If bun does not finish within
 # HANG_AFTER seconds, dumps the stuck process tree (per-thread wchan +
 # current syscall, kernel stacks, open fds, and a best-effort gdb
 # backtrace) BEFORE killing it, then fails the job. On normal completion
@@ -14,7 +16,7 @@ set -uo pipefail
 
 HANG_AFTER="${HANG_AFTER:-170}"
 
-bun test --timeout 30000 &
+bun test --conditions production --timeout 30000 &
 BUNPID=$!
 
 dump_pid() {
