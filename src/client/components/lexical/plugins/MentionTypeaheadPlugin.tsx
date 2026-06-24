@@ -203,6 +203,7 @@ export function MentionTypeaheadPlugin({
                 return (
                   <li
                     key={option.key}
+                    ref={option.setRefElement}
                     role="option"
                     aria-selected={isActive}
                     onMouseDown={(e) => {

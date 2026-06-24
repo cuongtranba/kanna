@@ -7,8 +7,8 @@
  *   1. SlashCommandMenuOption — key derivation, command storage.
  *   2. Node-insertion logic — headless editor verifies SlashCommandNode
  *      text-content serialisation for both argument and no-argument variants.
- *   3. The custom start-of-input trigger regex (SLASH_AT_START_RE) mirrors
- *      shouldShowPicker from src/client/lib/slash-commands.ts.
+ *   3. The custom trigger regex (SLASH_TRIGGER_RE) — fires at start-of-input
+ *      OR after whitespace, mirroring the mention trigger.
  *   4. filterCommands integration — verifies that the plugin's filtering
  *      logic (reused from slash-commands.ts) produces sorted results.
  */
@@ -16,7 +16,7 @@ import { describe, expect, it } from "bun:test"
 import { createHeadlessEditor } from "@lexical/headless"
 import { $createParagraphNode, $getRoot } from "lexical"
 import { $createSlashCommandNode, SlashCommandNode } from "../nodes/SlashCommandNode"
-import { SlashCommandMenuOption } from "./SlashCommandTypeaheadPlugin"
+import { SlashCommandMenuOption, dedupeCommandsByName } from "./SlashCommandTypeaheadPlugin"
 import { filterCommands, normalizeCommandName } from "../../../lib/slash-commands"
 import type { SlashCommand } from "../../../../shared/types"
 
@@ -51,6 +51,35 @@ function makeCmd(
     scope: opts.scope,
   }
 }
+
+// ---------------------------------------------------------------------------
+// dedupeCommandsByName (regression — duplicate React keys / selection breakage)
+// ---------------------------------------------------------------------------
+
+describe("dedupeCommandsByName", () => {
+  it("drops later commands sharing a normalized name, keeping the first", () => {
+    const result = dedupeCommandsByName([
+      makeCmd("c3", { scope: "personal" }),
+      makeCmd("model"),
+      makeCmd("c3", { scope: "project" }),
+      makeCmd("help"),
+    ])
+    expect(result.map((c) => c.name)).toEqual(["c3", "model", "help"])
+    expect(result[0]?.scope).toBe("personal") // first occurrence kept
+  })
+
+  it("yields unique option keys (no duplicate React keys)", () => {
+    const result = dedupeCommandsByName([makeCmd("c3"), makeCmd("c3"), makeCmd("c3")])
+    const keys = result.map((c) => new SlashCommandMenuOption(c).key)
+    expect(new Set(keys).size).toBe(keys.length)
+    expect(keys).toEqual(["c3"])
+  })
+
+  it("leaves an already-unique list unchanged", () => {
+    const input = [makeCmd("a"), makeCmd("b"), makeCmd("c")]
+    expect(dedupeCommandsByName(input).map((c) => c.name)).toEqual(["a", "b", "c"])
+  })
+})
 
 // ---------------------------------------------------------------------------
 // SlashCommandMenuOption
@@ -150,50 +179,61 @@ describe("SlashCommandNode wire-form text — with argument (insertion target)",
 })
 
 // ---------------------------------------------------------------------------
-// Start-of-input trigger (SLASH_AT_START_RE)
-// Mirrors shouldShowPicker: /^\/(\S*)$/ on the text up to the caret.
+// Slash trigger (SLASH_TRIGGER_RE) — start-of-input OR after whitespace
+// Mirrors the mention trigger so `/cmd` opens the picker anywhere, not only at
+// the very beginning. match[1] = "/query", match[2] = "query".
 // ---------------------------------------------------------------------------
 
-describe("slash start-of-input trigger (SLASH_AT_START_RE)", () => {
-  const SLASH_AT_START_RE = /^\/(\S*)$/
+describe("slash trigger (SLASH_TRIGGER_RE — start or after whitespace)", () => {
+  const SLASH_TRIGGER_RE = /(?:^|\s)(\/(\S*))$/
 
   function match(text: string) {
-    return SLASH_AT_START_RE.exec(text)
+    return SLASH_TRIGGER_RE.exec(text)
   }
 
   it("matches bare `/`", () => {
-    expect(match("/")).not.toBeNull()
+    const m = match("/")
+    expect(m).not.toBeNull()
+    expect(m![2]).toBe("")
   })
 
-  it("matches `/clear` — full command name", () => {
+  it("matches `/clear` — full command name (query in group 2)", () => {
     const m = match("/clear")
     expect(m).not.toBeNull()
-    expect(m![1]).toBe("clear")
+    expect(m![2]).toBe("clear")
   })
 
   it("matches `/mod` — partial command name", () => {
     const m = match("/mod")
     expect(m).not.toBeNull()
-    expect(m![1]).toBe("mod")
+    expect(m![2]).toBe("mod")
   })
 
-  it("does NOT match `hello /clear` — slash not at start", () => {
-    expect(match("hello /clear")).toBeNull()
+  it("matches `hello /clear` — slash after whitespace (mid-input)", () => {
+    const m = match("hello /clear")
+    expect(m).not.toBeNull()
+    expect(m![2]).toBe("clear")
+    // replaceableString is the `/clear` portion without the leading space.
+    expect(m![1]).toBe("/clear")
+  })
+
+  it("does NOT match `src/file` — slash mid-word (not preceded by whitespace)", () => {
+    expect(match("src/file")).toBeNull()
   })
 
   it("does NOT match empty string", () => {
     expect(match("")).toBeNull()
   })
 
-  it("does NOT match `/clear ` — trailing space (would mean command is complete)", () => {
-    // The regex requires \S* so a space after the command name breaks the match,
-    // correctly closing the typeahead once the user starts typing the argument.
+  it("does NOT match `/model ` — trailing space closes the query", () => {
+    // \S* stops at the first space so the typeahead closes once the user starts
+    // typing the argument.
     expect(match("/model ")).toBeNull()
   })
 
-  it("matchingString (group 1) is the query used to filter commands", () => {
+  it("matchingString (group 2) is the query used to filter commands", () => {
     const m = match("/cle")
-    expect(m![1]).toBe("cle")
+    expect(m![2]).toBe("cle")
   })
 })
 

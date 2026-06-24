@@ -14,23 +14,28 @@ import { $createSlashCommandNode } from "../nodes/SlashCommandNode"
 import { cn } from "../../../lib/utils"
 
 // ---------------------------------------------------------------------------
-// Custom trigger: slash only at the very start of the input
+// Custom trigger: slash at the start of the input OR after whitespace.
 //
-// Mirrors shouldShowPicker from src/client/lib/slash-commands.ts which checks
-// that the text up to the caret matches /^\/(\S*)$/.  We reproduce that check
-// here as a Lexical TriggerFn so the typeahead plugin uses the same semantics.
+// Mirrors the mention trigger so `/cmd` opens the picker anywhere in the
+// composer, not only at the very beginning. A `/` mid-word (e.g. a path like
+// `src/file`) does NOT trigger because it must be preceded by start-of-text or
+// whitespace. `\S*` terminates the query at the first space.
 // ---------------------------------------------------------------------------
 
-const SLASH_AT_START_RE = /^\/(\S*)$/
+const SLASH_TRIGGER_RE = /(?:^|\s)(\/(\S*))$/
 
-function useSlashAtStartTrigger(): TriggerFn {
+function useSlashTrigger(): TriggerFn {
   return useCallback((text: string, _editor: LexicalEditor): MenuTextMatch | null => {
-    const match = SLASH_AT_START_RE.exec(text)
+    const match = SLASH_TRIGGER_RE.exec(text)
     if (match === null) return null
+    // match.index = start of the full match (may include a leading space)
+    // match[1] = "/query" (no leading whitespace), match[2] = "query"
+    // leadOffset = position of `/` in the text
+    const leadOffset = match.index + (match[0].length - match[1].length)
     return {
-      leadOffset: 0,
-      matchingString: match[1] ?? "",
-      replaceableString: match[0],
+      leadOffset,
+      matchingString: match[2] ?? "",
+      replaceableString: match[1],
     }
   }, [])
 }
@@ -46,6 +51,25 @@ export class SlashCommandMenuOption extends MenuOption {
     super(command.name)
     this.command = command
   }
+}
+
+/**
+ * Dedupe commands by normalized name, keeping the first occurrence. The
+ * upstream merge (CLI built-ins + local skill catalog) can surface the same
+ * command twice; the picker's option keys (option.key === command.name) must
+ * be unique or React emits duplicate-key errors and the typeahead's selection
+ * tracking breaks.
+ */
+export function dedupeCommandsByName(commands: SlashCommand[]): SlashCommand[] {
+  const seen = new Set<string>()
+  const result: SlashCommand[] = []
+  for (const cmd of commands) {
+    const key = normalizeCommandName(cmd.name)
+    if (seen.has(key)) continue
+    seen.add(key)
+    result.push(cmd)
+  }
+  return result
 }
 
 // ---------------------------------------------------------------------------
@@ -81,12 +105,12 @@ export function SlashCommandTypeaheadPlugin({
   const slashCommands = useSlashCommands(chatId)
   const loading = useSlashCommandsLoading(chatId)
 
-  const triggerFn = useSlashAtStartTrigger()
+  const triggerFn = useSlashTrigger()
 
   const options = useMemo<SlashCommandMenuOption[]>(() => {
     if (!enabled) return []
     const filtered = filterCommands(slashCommands, query ?? "")
-    return filtered.map((cmd) => new SlashCommandMenuOption(cmd))
+    return dedupeCommandsByName(filtered).map((cmd) => new SlashCommandMenuOption(cmd))
   }, [enabled, slashCommands, query])
 
   const onQueryChange = useCallback((matchingString: string | null) => {
@@ -173,6 +197,7 @@ export function SlashCommandTypeaheadPlugin({
                 return (
                   <li
                     key={option.key}
+                    ref={option.setRefElement}
                     role="option"
                     aria-selected={isActive}
                     onMouseDown={(e) => {
