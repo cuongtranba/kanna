@@ -1,7 +1,6 @@
 import { memo, useMemo, useState } from "react"
 import type { ChatAttachment } from "../../../shared/types"
-import Markdown from "react-markdown"
-import { defaultMarkdownComponents, defaultRemarkPlugins } from "./shared"
+import { renderMarkdownToReact } from "../lexical/markdown/lexicalToReact"
 import { classifyAttachmentPreview } from "./attachmentPreview"
 import { AttachmentFileCard, AttachmentImageCard } from "./AttachmentCard"
 import { FilePreviewSheet } from "./file-preview/FilePreviewSheet"
@@ -96,7 +95,7 @@ export const UserMessage = memo(function UserMessage({ content, attachments = []
               />
             ) : null}
             <div className="min-w-0 flex-1 rounded-[20px] border border-border bg-muted px-3.5 py-1.5 text-primary prose prose-sm prose-invert [&_p]:whitespace-pre-line">
-              <Markdown remarkPlugins={defaultRemarkPlugins} components={defaultMarkdownComponents}>{parsedContent.body}</Markdown>
+              {renderMarkdownToReact(parsedContent.body)}
             </div>
           </div>
         ) : null}

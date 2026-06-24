@@ -1,8 +1,5 @@
 import {
-  Children,
-  cloneElement,
   createContext,
-  isValidElement,
   useCallback,
   useState,
   type ComponentPropsWithoutRef,
@@ -30,13 +27,7 @@ import {
   Copy,
   Check,
 } from "lucide-react"
-import remarkGfm from "remark-gfm"
 import { cn } from "../../lib/utils"
-import { isAbsoluteLocalFilePath, parseLocalFileLink, toLocalFileUrl } from "../../lib/pathUtils"
-import { LocalFileLinkCard } from "./LocalFileLinkCard"
-import { MermaidDiagram } from "./MermaidDiagram"
-import { HighlightedCode } from "./HighlightedCode"
-import { useTranscriptRenderOptions } from "./render-context"
 
 export type OpenLocalLinkTarget = {
   path: string
@@ -258,18 +249,6 @@ function extractText(node: ReactNode): string {
   return ""
 }
 
-type MarkdownChildNode = ReturnType<typeof Children.toArray>[number]
-
-function withChildClassName(node: MarkdownChildNode, className: string): MarkdownChildNode {
-  if (!isValidElement<{ className?: string }>(node)) {
-    return node
-  }
-
-  return cloneElement(node, {
-    className: cn(node.props.className, className),
-  })
-}
-
 function PreBlock({ children, ...props }: ComponentPropsWithoutRef<"pre">) {
   const [copied, setCopied] = useState(false)
   const textContent = extractText(children)
@@ -308,167 +287,3 @@ export function MermaidFallbackCodeBlock({ source }: { source: string }) {
   )
 }
 
-// Markdown component overrides
-export const markdownComponents = {
-  h1: ({ children }: { children?: ReactNode }) => (
-    <h1 className="text-[20px] font-normal leading-tight mt-5 mb-3 first:mt-0 last:mb-0">{children}</h1>
-  ),
-  h2: ({ children }: { children?: ReactNode }) => (
-    <h2 className="text-[18px] font-normal leading-tight mt-5 mb-3 first:mt-0 last:mb-0">{children}</h2>
-  ),
-  h3: ({ children }: { children?: ReactNode }) => (
-    <h3 className="text-[16px] font-normal leading-tight mt-5 mb-3 first:mt-0 last:mb-0">{children}</h3>
-  ),
-  h4: ({ children }: { children?: ReactNode }) => (
-    <h4 className="text-[16px] font-normal leading-tight mt-5 mb-3 first:mt-0 last:mb-0">{children}</h4>
-  ),
-  h5: ({ children }: { children?: ReactNode }) => (
-    <h5 className="text-[16px] font-normal leading-tight mt-5 mb-3 first:mt-0 last:mb-0">{children}</h5>
-  ),
-  h6: ({ children }: { children?: ReactNode }) => (
-    <h6 className="text-[16px] font-normal leading-tight mt-5 mb-3 first:mt-0 last:mb-0">{children}</h6>
-  ),
-
-  pre: PreBlock,
-
-  code: ({ children, className, ...props }: ComponentPropsWithoutRef<"code">) => {
-    const isInline = !className
-    if (isInline) {
-      return <code className="break-all px-1 bg-border/60 dark:[.no-pre-highlight_&]:bg-background dark:[.text-pretty_&]:bg-neutral [.no-code-highlight_&]:!bg-transparent py-0.5 rounded text-sm whitespace-wrap" {...props}>{children}</code>
-    }
-    const classes = className.split(/\s+/)
-    if (classes.includes("language-mermaid")) {
-      return <MermaidDiagram source={extractText(children)} />
-    }
-    const langClass = classes.find((c) => c.startsWith("language-"))
-    const lang = langClass ? langClass.slice("language-".length) : ""
-    if (lang) {
-      return <HighlightedCode source={extractText(children)} lang={lang} />
-    }
-    return (
-      <code className="block text-xs whitespace-pre" {...props}>
-        {children}
-      </code>
-    )
-  },
-
-  table: ({ children, ...props }: ComponentPropsWithoutRef<"table">) => (
-    <div className="border border-border  rounded-xl overflow-x-auto">
-      <table className="table-auto min-w-full divide-y divide-border bg-background" {...props}>{children}</table>
-    </div>
-  ),
-
-  tbody: ({ children, ...props }: ComponentPropsWithoutRef<"tbody">) => (
-    <tbody className="divide-y divide-border" {...props}>{children}</tbody>
-  ),
-
-  th: ({ children, ...props }: ComponentPropsWithoutRef<"th">) => (
-    <th className="text-left text-xs uppercase text-muted-foreground tracking-wider p-2 pl-0 first:pl-3 bg-muted dark:bg-card [&_*]:font-semibold" {...props}>{children}</th>
-  ),
-  td: ({ children, ...props }: ComponentPropsWithoutRef<"td">) => (
-    <td className="text-left    p-2 pl-0 first:pl-3 [&_*]:font-normal " {...props}>{children}</td>
-  ),
-
-  p: ({ children, ...props }: ComponentPropsWithoutRef<"p">) => (
-    <p className="break-words mt-5 mb-3 first:mt-0 last:mb-0" {...props}>{children}</p>
-  ),
-
-  blockquote: ({ children, ...props }: ComponentPropsWithoutRef<"blockquote">) => (
-    (() => {
-      const childNodes = Children.toArray(children)
-
-      const firstChild = childNodes[0]
-      if (firstChild !== undefined) {
-        childNodes[0] = withChildClassName(firstChild, "mt-0")
-      }
-
-      const lastIndex = childNodes.length - 1
-      const lastChild = childNodes[lastIndex]
-      if (lastChild !== undefined) {
-        childNodes[lastIndex] = withChildClassName(lastChild, "mb-0")
-      }
-
-      return (
-        <blockquote
-          className="my-2 mt-5 mb-3 first:mt-0 last:mb-0 border-l-2 border-border/80 pl-2 text-muted-foreground"
-          {...props}
-        >
-          {childNodes}
-        </blockquote>
-      )
-    })()
-  ),
-
-  a: ({ children, ...props }: ComponentPropsWithoutRef<"a">) => (
-    <a
-      className="transition-all underline decoration-2 text-logo decoration-logo/50 hover:text-logo/70 dark:text-logo dark:decoration-logo/70 dark:hover:text-logo/60 dark:hover:decoration-logo/40 "
-      target="_blank"
-      rel="noopener noreferrer"
-      {...props}
-    >
-      {children}
-    </a>
-  ),
-
-  img: ({ src, ...props }: ComponentPropsWithoutRef<"img">) => {
-    const resolved = typeof src === "string" && isAbsoluteLocalFilePath(src) ? toLocalFileUrl(src) : src
-    return <img src={resolved} {...props} />
-  },
-}
-
-function LocalLink({ children, href, onClick, ...props }: ComponentPropsWithoutRef<"a">) {
-  const renderOptions = useTranscriptRenderOptions()
-  const parsedLocalLink = parseLocalFileLink(href)
-
-  if (parsedLocalLink && renderOptions.localLinkMode === "text") {
-    return (
-      <span className="transition-all underline decoration-2 text-logo decoration-logo/50">
-        {children}
-      </span>
-    )
-  }
-
-  if (parsedLocalLink) {
-    const linkText = extractTextFromNode(children).trim()
-    return <LocalFileLinkCard path={parsedLocalLink.path} linkText={linkText || undefined} />
-  }
-
-  return (
-    <a
-      className="transition-all underline decoration-2 text-logo decoration-logo/50 hover:text-logo/70 dark:text-logo dark:decoration-logo/70 dark:hover:text-logo/60 dark:hover:decoration-logo/40 "
-      href={href}
-      target="_blank"
-      rel="noopener noreferrer"
-      onClick={onClick}
-      {...props}
-    >
-      {children}
-    </a>
-  )
-}
-
-export function createMarkdownComponents() {
-  return {
-    ...markdownComponents,
-    a: (props: ComponentPropsWithoutRef<"a">) => <LocalLink {...props} />,
-  }
-}
-
-// Stable references shared by every markdown message. Allocating these inline
-// per render hands react-markdown new `components`/`remarkPlugins` identities
-// every time, forcing a full re-parse of the markdown AST for every mounted
-// transcript row — which freezes the main thread on long mobile conversations.
-export const defaultRemarkPlugins = [remarkGfm]
-export const defaultMarkdownComponents = createMarkdownComponents()
-
-function extractTextFromNode(node: ReactNode): string {
-  if (node === null || node === undefined || typeof node === "boolean") return ""
-  if (typeof node === "string" || typeof node === "number") return String(node)
-  if (Array.isArray(node)) return node.map(extractTextFromNode).join("")
-  if (isValidElement<{ children?: ReactNode }>(node)) return extractTextFromNode(node.props.children)
-  return ""
-}
-
-export const markdownWithHeadingsComponents = {
-  ...markdownComponents,
-}

@@ -1,13 +1,29 @@
-import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from "react"
-import { SlashCommandPicker } from "./SlashCommandPicker"
-import { MentionPicker, type MentionPickerItem } from "./MentionPicker"
-import { applyCommandToInput, filterCommands, shouldShowPicker } from "../../lib/slash-commands"
-import { applyMentionToInput, shouldShowMentionPicker } from "../../lib/mention-suggestions"
-import { useMentionSuggestions, type ProjectPath } from "../../hooks/useMentionSuggestions"
-import { useSubagentSuggestions } from "../../hooks/useSubagentSuggestions"
-import { useSlashCommands, useSlashCommandsLoading } from "../../hooks/useSlashCommands"
-import type { SlashCommand } from "../../../shared/types"
+import {
+  forwardRef,
+  memo,
+  startTransition,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type RefObject,
+} from "react"
+import type { SerializedEditorState } from "lexical"
+import {
+  $createParagraphNode,
+  $createTextNode,
+  $getRoot,
+} from "lexical"
+import { LexicalComposer } from "@lexical/react/LexicalComposer"
+import { RichTextPlugin } from "@lexical/react/LexicalRichTextPlugin"
+import { ContentEditable } from "@lexical/react/LexicalContentEditable"
+import { HistoryPlugin } from "@lexical/react/LexicalHistoryPlugin"
+import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext"
 import { ArrowUp, Bot, Paperclip } from "lucide-react"
+
 import {
   type AgentProvider,
   type ChatAttachment,
@@ -16,17 +32,21 @@ import {
   type CodexReasoningEffort,
   type ModelOptions,
   type ProviderCatalogEntry,
+  type Subagent,
   normalizeClaudeContextWindow,
   resolveClaudeContextWindowTokens,
 } from "../../../shared/types"
 import { Button } from "../ui/button"
-import { Textarea } from "../ui/textarea"
 import { ScrollArea } from "../ui/scroll-area"
 import { cn } from "../../lib/utils"
 import { useIsStandalone } from "../../hooks/useIsStandalone"
 import { useChatInputStore } from "../../stores/chatInputStore"
-import { NEW_CHAT_COMPOSER_ID, type ComposerState, useChatPreferencesStore } from "../../stores/chatPreferencesStore"
-import { CHAT_INPUT_ATTRIBUTE, focusNextChatInput } from "../../app/chatFocusPolicy"
+import {
+  NEW_CHAT_COMPOSER_ID,
+  type ComposerState,
+  useChatPreferencesStore,
+} from "../../stores/chatPreferencesStore"
+import { CHAT_INPUT_ATTRIBUTE } from "../../app/chatFocusPolicy"
 import { ChatPreferenceControls } from "./ChatPreferenceControls"
 import { ContextWindowMeter } from "./ContextWindowMeter"
 import { SessionTokenPill } from "./SessionTokenPill"
@@ -34,20 +54,30 @@ import { AttachmentFileCard, AttachmentImageCard } from "../messages/AttachmentC
 import { FilePreviewSheet } from "../messages/file-preview/FilePreviewSheet"
 import { toPreviewSourceFromAttachment } from "../messages/file-preview/types"
 import { classifyAttachmentPreview } from "../messages/attachmentPreview"
-import { overrideContextWindowMaxTokens, type ContextWindowSnapshot } from "../../lib/contextWindow"
+import {
+  overrideContextWindowMaxTokens,
+  type ContextWindowSnapshot,
+} from "../../lib/contextWindow"
 import { uploadFile, UploadAbortedError } from "../../lib/uploadFile"
 import { useAppSettingsStore } from "../../stores/appSettingsStore"
 import { createAgentMentionRegex } from "../../../shared/mention-pattern"
-import type { Subagent } from "../../../shared/types"
 
-const EMPTY_SUBAGENTS: Subagent[] = []
+import { buildKannaEditorConfig } from "../lexical/config"
+import { KANNA_COMPOSER_NODES } from "../lexical/nodes"
+import {
+  MentionTypeaheadPlugin,
+  SlashCommandTypeaheadPlugin,
+  PasteImagePlugin,
+  DropAttachmentPlugin,
+  SubmitPlugin,
+  DraftPersistencePlugin,
+  type SubmitPayload,
+} from "../lexical/plugins"
+import { serializeEditorToWire } from "../lexical/serialize/editorToWireString"
 
-type MentionChip =
-  | { kind: "ok"; label: string; id: string }
-  | { kind: "missing"; label: string }
-
-const MAX_FILES_PER_DROP = 50
-const MAX_CONCURRENT_UPLOADS = 3
+// ---------------------------------------------------------------------------
+// Clipboard helpers (exported — ChatInput.test.ts imports them)
+// ---------------------------------------------------------------------------
 
 const CLIPBOARD_EXTENSION_BY_MIME_TYPE: Record<string, string> = {
   "image/gif": "gif",
@@ -56,55 +86,21 @@ const CLIPBOARD_EXTENSION_BY_MIME_TYPE: Record<string, string> = {
   "image/webp": "webp",
 }
 
-export function isTouchDeviceEnvironment(): boolean {
-  if (typeof window === "undefined") return false
-  if ("ontouchstart" in window) return true
-  const nav = typeof navigator !== "undefined" ? navigator : null
-  return (nav?.maxTouchPoints ?? 0) > 0
-}
-
-// iOS Safari emits many `select` events while the user holds the spacebar to
-// drag the cursor through textarea content (the soft-keyboard trackpad
-// gesture). Re-rendering a controlled <textarea> mid-gesture causes the
-// caret to jump because the reconciler re-writes the DOM `value` property.
-// Suppress the caret-version bump on touch devices to keep the gesture
-// smooth. Desktop keeps live picker refresh on cursor moves.
-export function shouldRefreshPickerOnSelection(isTouchDevice: boolean): boolean {
-  return !isTouchDevice
-}
-
-export function willExceedAttachmentLimit(args: {
-  currentAttachmentCount: number
-  queuedAttachmentCount: number
-  incomingAttachmentCount: number
-  maxAttachments?: number
-}) {
-  const maxAttachments = args.maxAttachments ?? MAX_FILES_PER_DROP
-  return args.currentAttachmentCount + args.queuedAttachmentCount + args.incomingAttachmentCount > maxAttachments
-}
-
 type ClipboardFileItem = Pick<DataTransferItem, "kind" | "type" | "getAsFile">
 
-function hasClipboardTextPayload(clipboardData: DataTransfer | null | undefined) {
-  if (!clipboardData) return false
-  return clipboardData.types.includes("text/plain") || clipboardData.types.includes("text/html")
-}
-
-function getClipboardImageExtension(file: File) {
+function getClipboardImageExtension(file: File): string {
   return CLIPBOARD_EXTENSION_BY_MIME_TYPE[file.type] ?? "bin"
 }
 
-function isGenericClipboardImageName(file: File) {
+function isGenericClipboardImageName(file: File): boolean {
   const normalized = file.name.trim().toLowerCase()
   if (!normalized) return true
-
   const expectedExtension = getClipboardImageExtension(file)
   return normalized === `image.${expectedExtension}` || normalized === "image.png"
 }
 
-function normalizeClipboardImageFile(file: File, index: number, timestamp: number) {
+function normalizeClipboardImageFileFn(file: File, index: number, timestamp: number): File {
   if (file.name && !isGenericClipboardImageName(file)) return file
-
   const extension = getClipboardImageExtension(file)
   const suffix = index === 0 ? "" : `-${index}`
   const fileName = `clipboard-${timestamp}${suffix}.${extension}`
@@ -115,31 +111,69 @@ function normalizeClipboardImageFile(file: File, index: number, timestamp: numbe
   return file
 }
 
-export function getClipboardImageFiles(items: Iterable<ClipboardFileItem>, timestamp: number) {
+export function getClipboardImageFiles(
+  items: Iterable<ClipboardFileItem>,
+  timestamp: number,
+): File[] {
   const files: File[] = []
-
   for (const item of items) {
     if (item.kind !== "file" || !item.type.startsWith("image/")) continue
     const file = item.getAsFile()
     if (!file) continue
-    files.push(normalizeClipboardImageFile(file, files.length, timestamp))
+    files.push(normalizeClipboardImageFileFn(file, files.length, timestamp))
   }
-
   return files
 }
 
-export function trimTrailingPastedNewlines(text: string) {
+export function trimTrailingPastedNewlines(text: string): string {
   return text.replace(/(?:\r\n|\r|\n)+$/, "")
 }
 
-function replaceTextSelection(args: {
-  value: string
-  insertedText: string
-  selectionStart: number
-  selectionEnd: number
-}) {
-  return `${args.value.slice(0, args.selectionStart)}${args.insertedText}${args.value.slice(args.selectionEnd)}`
+export function willExceedAttachmentLimit(args: {
+  currentAttachmentCount: number
+  queuedAttachmentCount: number
+  incomingAttachmentCount: number
+  maxAttachments?: number
+}): boolean {
+  const maxAttachments = args.maxAttachments ?? MAX_FILES_PER_DROP
+  return (
+    args.currentAttachmentCount + args.queuedAttachmentCount + args.incomingAttachmentCount >
+    maxAttachments
+  )
 }
+
+// ---------------------------------------------------------------------------
+// Touch-device helpers (exported — cursorJump test imports them)
+// ---------------------------------------------------------------------------
+
+export function isTouchDeviceEnvironment(): boolean {
+  if (typeof window === "undefined") return false
+  if ("ontouchstart" in window) return true
+  const nav = typeof navigator !== "undefined" ? navigator : null
+  return (nav?.maxTouchPoints ?? 0) > 0
+}
+
+/**
+ * On touch devices, suppress caret-version bumps to avoid iOS Safari caret
+ * jumps during the hold-space cursor-drag gesture.
+ * No longer used for the textarea (Lexical handles selection internally),
+ * but kept as an exported utility for back-compat with existing tests.
+ */
+export function shouldRefreshPickerOnSelection(isTouchDevice: boolean): boolean {
+  return !isTouchDevice
+}
+
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+
+const EMPTY_SUBAGENTS: Subagent[] = []
+const MAX_FILES_PER_DROP = 50
+const MAX_CONCURRENT_UPLOADS = 3
+
+// ---------------------------------------------------------------------------
+// Attachment types
+// ---------------------------------------------------------------------------
 
 interface ComposerAttachment extends ChatAttachment {
   status: "uploading" | "uploaded" | "failed"
@@ -148,10 +182,28 @@ interface ComposerAttachment extends ChatAttachment {
   cancelUpload?: () => void
 }
 
+// ---------------------------------------------------------------------------
+// MentionChip type (for @agent/<name> chips row above editor)
+// ---------------------------------------------------------------------------
+
+type MentionChip =
+  | { kind: "ok"; label: string; id: string }
+  | { kind: "missing"; label: string }
+
+// ---------------------------------------------------------------------------
+// External Props (unchanged contract)
+// ---------------------------------------------------------------------------
+
 interface Props {
   onSubmit: (
     value: string,
-    options?: { provider?: AgentProvider; model?: string; modelOptions?: ModelOptions; planMode?: boolean; attachments?: ChatAttachment[] }
+    options?: {
+      provider?: AgentProvider
+      model?: string
+      modelOptions?: ModelOptions
+      planMode?: boolean
+      attachments?: ChatAttachment[]
+    },
   ) => Promise<void>
   onLayoutChange?: () => void
   onCancel?: () => void
@@ -159,6 +211,10 @@ interface Props {
   canCancel?: boolean
   chatId?: string | null
   projectId?: string | null
+  /**
+   * Kept for API back-compat. The Lexical editor uses a contenteditable div,
+   * not a textarea. This ref is accepted but not connected to any DOM node.
+   */
   inputElementRef?: React.Ref<HTMLTextAreaElement>
   activeProvider: AgentProvider | null
   availableProviders: ProviderCatalogEntry[]
@@ -170,10 +226,11 @@ export interface ChatInputHandle {
   enqueueFiles: (files: File[]) => void
 }
 
-function withNormalizedContextWindow(
-  state: ComposerState,
-  model: string
-): ComposerState {
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function withNormalizedContextWindow(state: ComposerState, model: string): ComposerState {
   if (state.provider !== "claude") return { ...state, model }
   return {
     ...state,
@@ -188,41 +245,196 @@ function withNormalizedContextWindow(
 function getEffectiveComposerState(
   composerState: ComposerState,
   activeProvider: AgentProvider | null,
-  providerDefaults: ReturnType<typeof useChatPreferencesStore.getState>["providerDefaults"]
+  providerDefaults: ReturnType<typeof useChatPreferencesStore.getState>["providerDefaults"],
 ): ComposerState {
   if (!activeProvider || composerState.provider === activeProvider) {
     return composerState
   }
-
   return activeProvider === "claude"
     ? {
-      provider: "claude",
-      model: providerDefaults.claude.model,
-      modelOptions: { ...providerDefaults.claude.modelOptions },
-      planMode: composerState.planMode,
-    }
+        provider: "claude",
+        model: providerDefaults.claude.model,
+        modelOptions: { ...providerDefaults.claude.modelOptions },
+        planMode: composerState.planMode,
+      }
     : {
-      provider: "codex",
-      model: providerDefaults.codex.model,
-      modelOptions: { ...providerDefaults.codex.modelOptions },
-      planMode: composerState.planMode,
-    }
+        provider: "codex",
+        model: providerDefaults.codex.model,
+        modelOptions: { ...providerDefaults.codex.modelOptions },
+        planMode: composerState.planMode,
+      }
 }
 
-const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput({
-  onSubmit,
-  onLayoutChange,
-  onCancel,
-  disabled,
-  canCancel,
-  chatId,
-  projectId,
-  inputElementRef,
-  activeProvider,
-  availableProviders,
-  contextWindowSnapshot = null,
-  previousPrompt = null,
-}, forwardedRef) {
+function hydrateComposerAttachments(attachments: ChatAttachment[]): ComposerAttachment[] {
+  return attachments.map((attachment) => ({
+    ...attachment,
+    status: "uploaded" as const,
+  }))
+}
+
+async function deleteUploadedAttachment(attachment: ChatAttachment): Promise<void> {
+  if (!attachment.contentUrl) return
+  const deleteUrl = attachment.contentUrl.replace(/\/content$/, "")
+  await fetch(deleteUrl, { method: "DELETE" }).catch(() => undefined)
+}
+
+// ---------------------------------------------------------------------------
+// LexicalEditorBridge – exposes imperative editor methods to parent
+// ---------------------------------------------------------------------------
+
+interface LexicalEditorBridgeHandle {
+  /** Clear the editor to a single empty paragraph. */
+  clearEditor: () => void
+  /**
+   * Hydrate the editor from a serialized state or fall back to plain text.
+   * Prefer lexicalState; use text only if lexicalState is absent/invalid.
+   */
+  hydrateFromDraft: (lexicalState: SerializedEditorState | null, text: string | null) => void
+  /**
+   * Read the current wire payload synchronously.
+   * Returns `{ text, attachments }` (the same shape as serializeEditorToWire).
+   */
+  readCurrentPayload: () => SubmitPayload
+  /** Focus the editor. */
+  focusEditor: () => void
+}
+
+function LexicalEditorBridgePlugin({
+  bridgeRef,
+}: {
+  bridgeRef: RefObject<LexicalEditorBridgeHandle | null>
+}): null {
+  const [editor] = useLexicalComposerContext()
+
+  useEffect(() => {
+    bridgeRef.current = {
+      clearEditor: () => {
+        editor.update(() => {
+          const root = $getRoot()
+          root.clear()
+          root.append($createParagraphNode())
+        })
+      },
+
+      hydrateFromDraft: (lexicalState: SerializedEditorState | null, text: string | null) => {
+        if (lexicalState) {
+          try {
+            const parsed = editor.parseEditorState(lexicalState)
+            editor.setEditorState(parsed)
+            return
+          } catch {
+            // Fall through to plain-text hydration
+          }
+        }
+        if (text) {
+          editor.update(() => {
+            const root = $getRoot()
+            root.clear()
+            const para = $createParagraphNode()
+            para.append($createTextNode(text))
+            root.append(para)
+          })
+        } else {
+          editor.update(() => {
+            const root = $getRoot()
+            root.clear()
+            root.append($createParagraphNode())
+          })
+        }
+      },
+
+      readCurrentPayload: () => serializeEditorToWire(editor),
+
+      focusEditor: () => {
+        editor.focus()
+      },
+    }
+
+    return () => {
+      bridgeRef.current = null
+    }
+  }, [editor, bridgeRef])
+
+  return null
+}
+
+// ---------------------------------------------------------------------------
+// EditorEditabilityPlugin – syncs disabled→editable
+// ---------------------------------------------------------------------------
+
+function EditorEditabilityPlugin({ isDisabled }: { isDisabled: boolean }): null {
+  const [editor] = useLexicalComposerContext()
+
+  useEffect(() => {
+    editor.setEditable(!isDisabled)
+  }, [editor, isDisabled])
+
+  return null
+}
+
+// ---------------------------------------------------------------------------
+// EditorTextTracker – derives live wire text for canSubmit / button state
+// ---------------------------------------------------------------------------
+
+function EditorTextTracker({
+  onTextChange,
+}: {
+  onTextChange: (text: string) => void
+}): null {
+  const [editor] = useLexicalComposerContext()
+
+  useEffect(() => {
+    // Fire once synchronously on mount to pick up any hydrated state
+    const initial = serializeEditorToWire(editor)
+    onTextChange(initial.text)
+
+    return editor.registerUpdateListener(() => {
+      const payload = serializeEditorToWire(editor)
+      onTextChange(payload.text)
+    })
+  }, [editor, onTextChange])
+
+  return null
+}
+
+// ---------------------------------------------------------------------------
+// LexicalErrorBoundary – required by RichTextPlugin (ErrorBoundaryType compat)
+// ---------------------------------------------------------------------------
+
+function LexicalErrorBoundary({
+  children,
+  onError: _onError,
+}: {
+  children: React.ReactNode
+  onError: (error: Error) => void
+}): React.ReactNode {
+  // Simple passthrough; Lexical will call onError on uncaught decorator errors.
+  // Actual error propagation is handled by the kannaEditorOnError config hook.
+  return children
+}
+
+// ---------------------------------------------------------------------------
+// Main component
+// ---------------------------------------------------------------------------
+
+const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput(
+  {
+    onSubmit,
+    onLayoutChange,
+    onCancel,
+    disabled,
+    canCancel,
+    chatId,
+    projectId,
+    // inputElementRef accepted for API compat but not connected to a DOM textarea
+    inputElementRef: _inputElementRef,
+    activeProvider,
+    availableProviders,
+    contextWindowSnapshot = null,
+    previousPrompt = null,
+  },
+  forwardedRef,
+) {
   const {
     getDraft,
     setDraft,
@@ -239,15 +451,29 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput({
     setChatComposerPlanMode,
     resetChatComposerFromProvider,
   } = useChatPreferencesStore()
+
   const composerChatId = chatId ?? NEW_CHAT_COMPOSER_ID
-  const storedComposerState = useChatPreferencesStore((state) => state.chatStates[composerChatId])
+  const storedComposerState = useChatPreferencesStore(
+    (state) => state.chatStates[composerChatId],
+  )
   const composerState = storedComposerState ?? getComposerState(composerChatId)
-  const [value, setValue] = useState(() => (chatId ? getDraft(chatId) : ""))
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
   const isStandalone = useIsStandalone()
-  const [attachments, setAttachments] = useState<ComposerAttachment[]>(() => hydrateComposerAttachments(chatId ? getAttachmentDrafts(chatId) : []))
+
+  // ------ Attachments (outside editor, upload pipeline) ------
+  const [attachments, setAttachments] = useState<ComposerAttachment[]>(() =>
+    hydrateComposerAttachments(chatId ? getAttachmentDrafts(chatId) : []),
+  )
   const [selectedAttachmentId, setSelectedAttachmentId] = useState<string | null>(null)
   const [uploadError, setUploadError] = useState<string | null>(null)
+
+  // Reset attachment selection/error when chatId changes (adjust-during-render pattern avoids
+  // calling setState inside an effect, which causes cascading renders).
+  const [prevChatId, setPrevChatId] = useState<string | null | undefined>(chatId)
+  if (prevChatId !== chatId) {
+    setPrevChatId(chatId)
+    setSelectedAttachmentId(null)
+    setUploadError(null)
+  }
   const uploadQueueRef = useRef<File[]>([])
   const activeUploadsRef = useRef(0)
   const attachmentsRef = useRef<ComposerAttachment[]>([])
@@ -256,283 +482,380 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput({
   const previousProjectIdRef = useRef<string | null>(projectId ?? null)
   const latestChatIdRef = useRef<string | null>(chatId ?? null)
 
+  // ------ Lexical bridge ref ------
+  const bridgeRef = useRef<LexicalEditorBridgeHandle | null>(null)
+
+  // ------ Live wire text for canSubmit / button icon state ------
+  const [currentText, setCurrentText] = useState<string>(() => {
+    if (!chatId) return ""
+    const draft = getDraft(chatId)
+    return draft?.text ?? ""
+  })
+
   const providerPrefs = getEffectiveComposerState(composerState, activeProvider, providerDefaults)
   const selectedProvider = composerState.provider
-  const slashCommands = useSlashCommands(chatId ?? null)
-  const slashCommandsLoading = useSlashCommandsLoading(chatId ?? null)
+
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const [pickerIndex, setPickerIndex] = useState(0)
-  const [pickerDismissed, setPickerDismissed] = useState(false)
-  const [caretVersion, setCaretVersion] = useState(0)
-  const isTouchDevice = useMemo(() => isTouchDeviceEnvironment(), [])
-  const bumpCaretVersionOnSelection = useCallback(() => {
-    if (!shouldRefreshPickerOnSelection(isTouchDevice)) return
-    setCaretVersion((v) => v + 1)
-  }, [isTouchDevice])
 
-  useEffect(() => {
-    if (!value.startsWith("/")) setPickerDismissed(false)
-  }, [value])
-
-  const caret = textareaRef.current?.selectionStart ?? value.length
-  const pickerTrigger = useMemo(
-    () => shouldShowPicker(value, caret),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [value, caret, caretVersion],
-  )
-  const filteredCommands = useMemo(
-    () => (pickerTrigger.open ? filterCommands(slashCommands, pickerTrigger.query) : []),
-    [pickerTrigger.open, pickerTrigger.query, slashCommands],
-  )
-  const pickerOpen =
-    pickerTrigger.open &&
-    (slashCommands.length > 0 || slashCommandsLoading) &&
-    !pickerDismissed &&
-    selectedProvider === "claude"
-
-  useEffect(() => {
-    if (pickerOpen) setPickerIndex(0)
-  }, [pickerOpen, pickerTrigger.query])
-
-  const [mentionIndex, setMentionIndex] = useState(0)
-  const [mentionDismissed, setMentionDismissed] = useState(false)
-
-  const mentionTrigger = useMemo(
-    () => shouldShowMentionPicker(value, caret),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [value, caret, caretVersion],
-  )
-  const mentionState = useMentionSuggestions({
-    projectId: projectId ?? null,
-    query: mentionTrigger.query,
-    enabled: mentionTrigger.open && !mentionDismissed,
-  })
-  const subagentMentionState = useSubagentSuggestions({
-    query: mentionTrigger.query,
-    enabled: mentionTrigger.open && !mentionDismissed,
-  })
-  const mentionItems = useMemo<MentionPickerItem[]>(() => [
-    ...subagentMentionState.items,
-    ...mentionState.items.map((item) => ({ kind: "path" as const, path: item })),
-  ], [mentionState.items, subagentMentionState.items])
-  const subagentsForChips = useAppSettingsStore((state) => state.settings?.subagents ?? EMPTY_SUBAGENTS)
-  const mentionChips = useMemo<MentionChip[]>(() => {
-    const byNameLower = new Map(subagentsForChips.map((subagent) => [subagent.name.toLowerCase(), subagent]))
-    const matches = [...value.matchAll(createAgentMentionRegex())]
-    return matches.map((match) => {
-      const name = match[2]
-      const hit = byNameLower.get(name.toLowerCase())
-      return hit
-        ? { kind: "ok" as const, label: hit.name, id: hit.id }
-        : { kind: "missing" as const, label: name }
-    })
-  }, [value, subagentsForChips])
-  const mentionOpen =
-    mentionTrigger.open &&
-    !mentionDismissed &&
-    !pickerOpen &&
-    (mentionItems.length > 0 || mentionState.loading)
-
-  useEffect(() => {
-    if (mentionOpen) setMentionIndex(0)
-  }, [mentionOpen, mentionTrigger.query])
-
-  useEffect(() => {
-    if (!mentionTrigger.open) setMentionDismissed(false)
-  }, [mentionTrigger.open, mentionTrigger.tokenStart])
-
-  function acceptCommand(cmd: SlashCommand) {
-    const { value: nextValue, caret: nextCaret } = applyCommandToInput({
-      value,
-      caret,
-      command: cmd,
-    })
-    setValue(nextValue)
-    if (chatId) setDraft(chatId, nextValue)
-    setPickerDismissed(true)
-    requestAnimationFrame(() => {
-      const el = textareaRef.current
-      if (!el) return
-      el.focus()
-      el.setSelectionRange(nextCaret, nextCaret)
-    })
-  }
-
-  function acceptMention(item: MentionPickerItem) {
-    if (item.kind === "agent") {
-      const { value: nextValue, caret: nextCaret } = applyMentionToInput({
-        value,
-        caret,
-        tokenStart: mentionTrigger.tokenStart,
-        mention: { kind: "agent", name: item.subagent.name },
-      })
-      setValue(nextValue)
-      if (chatId) setDraft(chatId, nextValue)
-      setMentionDismissed(true)
-      requestAnimationFrame(() => {
-        const el = textareaRef.current
-        if (!el) return
-        el.focus()
-        el.setSelectionRange(nextCaret, nextCaret)
-      })
-      return
-    }
-
-    if (!projectId) {
-      setMentionDismissed(true)
-      return
-    }
-    const pathItem: ProjectPath = item.path
-    const { value: nextValue, caret: nextCaret } = applyMentionToInput({
-      value,
-      caret,
-      tokenStart: mentionTrigger.tokenStart,
-      mention: { kind: "path", path: pathItem.path },
-    })
-    setValue(nextValue)
-    if (chatId) setDraft(chatId, nextValue)
-
-    const relativeForAttachment = pathItem.path.endsWith("/") ? pathItem.path.slice(0, -1) : pathItem.path
-    const alreadyMentioned = attachments.some(
-      (a) => a.kind === "mention" && a.relativePath === `./${relativeForAttachment}`,
-    )
-    if (!alreadyMentioned) {
-      const contentUrl = pathItem.kind === "file"
-        ? `/api/projects/${projectId}/files/${encodeURIComponent(relativeForAttachment)}/content`
-        : ""
-      setAttachments((prev) => [
-        ...prev,
-        {
-          id: crypto.randomUUID(),
-          kind: "mention",
-          displayName: relativeForAttachment,
-          absolutePath: "",
-          relativePath: `./${relativeForAttachment}`,
-          contentUrl,
-          mimeType: "",
-          size: 0,
-          status: "uploaded",
-        },
-      ])
-    }
-    setMentionDismissed(true)
-    requestAnimationFrame(() => {
-      const el = textareaRef.current
-      if (!el) return
-      el.focus()
-      el.setSelectionRange(nextCaret, nextCaret)
-    })
-  }
-
-  const providerConfig = availableProviders.find((provider) => provider.id === selectedProvider) ?? availableProviders[0]
+  const providerConfig =
+    availableProviders.find((provider) => provider.id === selectedProvider) ?? availableProviders[0]
   const showPlanMode = providerConfig?.supportsPlanMode ?? false
+
   const activeContextWindow = useMemo(() => {
     if (providerPrefs.provider !== "claude") {
       return contextWindowSnapshot
     }
-
-    const claudeModelOptions = providerPrefs.modelOptions as Extract<ComposerState, { provider: "claude" }>["modelOptions"]
+    const claudeModelOptions = providerPrefs.modelOptions as Extract<
+      ComposerState,
+      { provider: "claude" }
+    >["modelOptions"]
     const stagedMaxTokens = resolveClaudeContextWindowTokens(
       normalizeClaudeContextWindow(providerPrefs.model, claudeModelOptions.contextWindow),
     )
     return overrideContextWindowMaxTokens(contextWindowSnapshot, stagedMaxTokens)
-  }, [contextWindowSnapshot, providerPrefs.model, providerPrefs.modelOptions, providerPrefs.provider])
-  const uploadedAttachments = attachments.filter((attachment) => attachment.status === "uploaded")
-  const hasPendingUploads = attachments.some((attachment) => attachment.status === "uploading")
-  const hasTextToSend = value.trim().length > 0
-  const canSubmit = value.trim().length > 0 || uploadedAttachments.length > 0
+  }, [
+    contextWindowSnapshot,
+    providerPrefs.model,
+    providerPrefs.modelOptions,
+    providerPrefs.provider,
+  ])
+
+  const uploadedAttachments = attachments.filter((a) => a.status === "uploaded")
+  const hasPendingUploads = attachments.some((a) => a.status === "uploading")
+  const hasTextToSend = currentText.trim().length > 0
+  const canSubmit = currentText.trim().length > 0 || uploadedAttachments.length > 0
   const orderedAttachments = [...attachments].sort((left, right) => {
     if (left.kind === right.kind) return 0
     return left.kind === "image" ? -1 : 1
   })
-  const selectedAttachment = attachments.find((attachment) => attachment.id === selectedAttachmentId) ?? null
+  const selectedAttachment = attachments.find((a) => a.id === selectedAttachmentId) ?? null
 
+  // ------ Subagent mention chips above the editor ------
+  const subagentsForChips = useAppSettingsStore(
+    (state) => state.settings?.subagents ?? EMPTY_SUBAGENTS,
+  )
+  const mentionChips = useMemo<MentionChip[]>(() => {
+    const byNameLower = new Map(
+      subagentsForChips.map((subagent) => [subagent.name.toLowerCase(), subagent]),
+    )
+    const matches = [...currentText.matchAll(createAgentMentionRegex())]
+    const chips: MentionChip[] = []
+    for (const match of matches) {
+      const name = match[2]
+      if (!name) continue
+      const hit = byNameLower.get(name.toLowerCase())
+      chips.push(
+        hit
+          ? { kind: "ok", label: hit.name, id: hit.id }
+          : { kind: "missing", label: name },
+      )
+    }
+    return chips
+  }, [currentText, subagentsForChips])
+
+  // ------ Attachment cleanup helpers ------
   const cleanupAttachmentPreview = useCallback((attachment: ComposerAttachment) => {
     if (attachment.previewUrl) {
       URL.revokeObjectURL(attachment.previewUrl)
     }
   }, [])
 
-  const clearAttachments = useCallback((options?: { cleanupPreviews?: boolean }) => {
-    const cleanupPreviews = options?.cleanupPreviews ?? true
-    uploadGenerationRef.current += 1
-    removedAttachmentIdsRef.current.clear()
-    setAttachments((current) => {
-      if (cleanupPreviews) {
-        current.forEach(cleanupAttachmentPreview)
+  const clearAttachments = useCallback(
+    (options?: { cleanupPreviews?: boolean }) => {
+      const cleanupPreviews = options?.cleanupPreviews ?? true
+      uploadGenerationRef.current += 1
+      removedAttachmentIdsRef.current.clear()
+      setAttachments((current) => {
+        if (cleanupPreviews) {
+          current.forEach(cleanupAttachmentPreview)
+        }
+        return []
+      })
+      uploadQueueRef.current = []
+      activeUploadsRef.current = 0
+      setSelectedAttachmentId(null)
+      setUploadError(null)
+    },
+    [cleanupAttachmentPreview],
+  )
+
+  // ------ Upload queue ------
+  // Ref breaks the self-reference cycle so the React Compiler can analyze this callback.
+  const processUploadQueueRef = useRef<(() => void) | undefined>(undefined)
+  const processUploadQueue = useCallback(() => {
+    if (!projectId) return
+
+    while (
+      activeUploadsRef.current < MAX_CONCURRENT_UPLOADS &&
+      uploadQueueRef.current.length > 0
+    ) {
+      const file = uploadQueueRef.current.shift()
+      if (!file) break
+
+      activeUploadsRef.current += 1
+      const tempId = crypto.randomUUID()
+      const previewUrl = file.type.startsWith("image/") ? URL.createObjectURL(file) : undefined
+      const generation = uploadGenerationRef.current
+
+      const handle = uploadFile({
+        projectId,
+        file,
+        onProgress: ({ loaded, total }) => {
+          if (generation !== uploadGenerationRef.current) return
+          const progress = total > 0 ? loaded / total : 0
+          setAttachments((current) =>
+            current.map((a) => (a.id === tempId ? { ...a, uploadProgress: progress } : a)),
+          )
+        },
+      })
+
+      setAttachments((current) => [
+        ...current,
+        {
+          id: tempId,
+          kind: file.type.startsWith("image/") ? ("image" as const) : ("file" as const),
+          displayName: file.name,
+          absolutePath: "",
+          relativePath: "",
+          contentUrl: "",
+          mimeType: file.type || "application/octet-stream",
+          size: file.size,
+          status: "uploading" as const,
+          previewUrl,
+          uploadProgress: 0,
+          cancelUpload: handle.abort,
+        },
+      ])
+
+      void (async () => {
+        try {
+          const { attachments: uploaded } = await handle.promise
+          const result = uploaded[0]
+          if (!result) throw new Error("Upload failed")
+
+          if (generation !== uploadGenerationRef.current) {
+            void deleteUploadedAttachment(result)
+            if (previewUrl) URL.revokeObjectURL(previewUrl)
+            return
+          }
+
+          if (removedAttachmentIdsRef.current.has(tempId)) {
+            removedAttachmentIdsRef.current.delete(tempId)
+            if (previewUrl) URL.revokeObjectURL(previewUrl)
+            void deleteUploadedAttachment(result)
+            return
+          }
+
+          setAttachments((current) =>
+            current.map((a) =>
+              a.id !== tempId
+                ? a
+                : {
+                    ...a,
+                    ...result,
+                    previewUrl: a.previewUrl,
+                    status: "uploaded" as const,
+                    uploadProgress: 1,
+                    cancelUpload: undefined,
+                  },
+            ),
+          )
+          setUploadError(null)
+        } catch (error) {
+          if (generation !== uploadGenerationRef.current) {
+            if (previewUrl) URL.revokeObjectURL(previewUrl)
+            return
+          }
+          if (error instanceof UploadAbortedError) {
+            setAttachments((current) => current.filter((a) => a.id !== tempId))
+            removedAttachmentIdsRef.current.delete(tempId)
+            if (previewUrl) URL.revokeObjectURL(previewUrl)
+            return
+          }
+          setAttachments((current) =>
+            current.map((a) =>
+              a.id === tempId
+                ? { ...a, status: "failed" as const, cancelUpload: undefined }
+                : a,
+            ),
+          )
+          setUploadError(error instanceof Error ? error.message : String(error))
+        } finally {
+          activeUploadsRef.current = Math.max(0, activeUploadsRef.current - 1)
+          processUploadQueueRef.current?.()
+        }
+      })()
+    }
+  }, [projectId])
+  // Keep ref pointing to the latest version so the async IIFE can recurse without
+  // capturing a stale closure.
+  useEffect(() => {
+    processUploadQueueRef.current = processUploadQueue
+  }, [processUploadQueue])
+
+  const enqueueFiles = useCallback(
+    (files: File[]) => {
+      if (!projectId) {
+        setUploadError("Open a project before uploading files.")
+        return
       }
-      return []
-    })
-    uploadQueueRef.current = []
-    activeUploadsRef.current = 0
-    setSelectedAttachmentId(null)
-    setUploadError(null)
-  }, [cleanupAttachmentPreview])
 
-  const autoResize = useCallback(() => {
-    const element = textareaRef.current
-    if (!element) return
-    if (element.value.length === 0) {
-      element.style.height = ""
-      return
-    }
-    element.style.height = "auto"
-    element.style.height = `${element.scrollHeight}px`
-  }, [])
-
-  const setTextareaRefs = useCallback((node: HTMLTextAreaElement | null) => {
-    textareaRef.current = node
-
-    if (inputElementRef) {
-      if (typeof inputElementRef === "function") {
-        inputElementRef(node)
-      } else {
-        inputElementRef.current = node
+      if (
+        willExceedAttachmentLimit({
+          currentAttachmentCount: attachmentsRef.current.length,
+          queuedAttachmentCount: uploadQueueRef.current.length,
+          incomingAttachmentCount: files.length,
+        })
+      ) {
+        setUploadError(`You can upload up to ${MAX_FILES_PER_DROP} files at a time.`)
+        return
       }
+
+      uploadQueueRef.current.push(...files)
+      setUploadError(null)
+      processUploadQueue()
+    },
+    [processUploadQueue, projectId],
+  )
+
+  useImperativeHandle(
+    forwardedRef,
+    () => ({ enqueueFiles }),
+    [enqueueFiles],
+  )
+
+  // ------ Core submit implementation ------
+  const buildSubmitOptions = useCallback(() => {
+    let modelOptions: ModelOptions
+    if (providerPrefs.provider === "claude") {
+      modelOptions = { claude: { ...providerPrefs.modelOptions } }
+    } else {
+      modelOptions = { codex: { ...providerPrefs.modelOptions } }
     }
-  }, [inputElementRef])
-
-  useLayoutEffect(() => {
-    autoResize()
-    onLayoutChange?.()
-  }, [autoResize, onLayoutChange, value])
-
-  useEffect(() => {
-    const handleResize = () => {
-      autoResize()
-      onLayoutChange?.()
+    return {
+      provider: selectedProvider,
+      model: providerPrefs.model,
+      modelOptions,
+      planMode: showPlanMode ? providerPrefs.planMode : false,
     }
+  }, [providerPrefs, selectedProvider, showPlanMode])
 
-    window.addEventListener("resize", handleResize)
-    return () => window.removeEventListener("resize", handleResize)
-  }, [autoResize, onLayoutChange])
+  const doSubmit = useCallback(
+    async (text: string, pluginAttachments: ChatAttachment[]) => {
+      const previousAttachments = attachmentsRef.current
+      const previousSelectedId = selectedAttachmentId
+      const previousUploadError = uploadError
 
-  useLayoutEffect(() => {
-    onLayoutChange?.()
-  }, [attachments.length, onLayoutChange, uploadError])
+      const composerAttachmentsCopy = uploadedAttachments.map(
+        ({ previewUrl: _p, status: _s, uploadProgress: _up, cancelUpload: _c, ...a }) => a,
+      )
+      const allAttachments = [...composerAttachmentsCopy, ...pluginAttachments]
 
-  useEffect(() => {
-    textareaRef.current?.focus()
-  }, [chatId])
+      const submitOptions = { ...buildSubmitOptions(), attachments: allAttachments }
 
-  useEffect(() => {
-    latestChatIdRef.current = chatId ?? null
-  }, [chatId])
+      // Eagerly clear
+      bridgeRef.current?.clearEditor()
+      setCurrentText("")
+      if (chatId) clearDraft(chatId)
+      clearAttachments({ cleanupPreviews: false })
+      if (latestChatIdRef.current) clearAttachmentDrafts(latestChatIdRef.current)
+
+      try {
+        await onSubmit(text, submitOptions)
+        previousAttachments.forEach(cleanupAttachmentPreview)
+      } catch (error) {
+        console.error("[ChatInput] Submit failed:", error)
+        if (chatId) setDraft(chatId, text)
+        setAttachments(previousAttachments)
+        setSelectedAttachmentId(previousSelectedId)
+        setUploadError(previousUploadError)
+      }
+    },
+    [
+      uploadedAttachments,
+      buildSubmitOptions,
+      chatId,
+      clearDraft,
+      clearAttachments,
+      clearAttachmentDrafts,
+      onSubmit,
+      cleanupAttachmentPreview,
+      selectedAttachmentId,
+      uploadError,
+      setDraft,
+    ],
+  )
+
+  // Called by SubmitPlugin (Enter key) — editor already cleared by the plugin
+  const handlePluginSubmit = useCallback(
+    async (payload: SubmitPayload) => {
+      if (!canSubmit || hasPendingUploads) return
+      await doSubmit(payload.text, payload.attachments)
+    },
+    [canSubmit, hasPendingUploads, doSubmit],
+  )
+
+  // Called by the Send button / onPointerDown
+  const handleManualSubmit = useCallback(async () => {
+    if (!canSubmit || hasPendingUploads) return
+    const payload = bridgeRef.current?.readCurrentPayload() ?? { text: currentText, attachments: [] }
+    await doSubmit(payload.text, payload.attachments)
+  }, [canSubmit, hasPendingUploads, currentText, doSubmit])
+
+  // ------ DraftPersistencePlugin onChange ------
+  const handleDraftChange = useCallback(
+    (state: SerializedEditorState, text: string) => {
+      if (chatId) {
+        // `text` from DraftPersistencePlugin is $getRoot().getTextContent(),
+        // which includes MentionNode/SlashCommandNode text content.
+        // We persist both the Lexical state (for full hydration) and the
+        // plain text (for back-compat getDraft().text reads).
+        setDraft(chatId, state, text)
+      }
+    },
+    [chatId, setDraft],
+  )
+
+  // ------ Effects ------
 
   useEffect(() => {
     initializeComposerForChat(composerChatId, { providerHint: activeProvider })
   }, [composerChatId, initializeComposerForChat, activeProvider])
 
   useEffect(() => {
+    latestChatIdRef.current = chatId ?? null
+  }, [chatId])
+
+  // Hydrate editor and focus when chatId changes (mirrors original textarea focus + draft effect)
+  useEffect(() => {
+    if (!chatId) {
+      bridgeRef.current?.clearEditor()
+    } else {
+      const draft = getDraft(chatId)
+      if (draft) {
+        bridgeRef.current?.hydrateFromDraft(draft.lexicalState ?? null, draft.text)
+      } else {
+        bridgeRef.current?.clearEditor()
+      }
+    }
+    // Focus the editor whenever the chat changes (mirrors original autoFocus on chatId)
+    bridgeRef.current?.focusEditor()
+    // setCurrentText is handled by EditorTextTracker via registerUpdateListener.
+    // We intentionally only re-run when chatId changes, not on every getDraft call.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chatId])
+
+  useEffect(() => {
     uploadGenerationRef.current += 1
     uploadQueueRef.current = []
     activeUploadsRef.current = 0
     removedAttachmentIdsRef.current.clear()
-    setSelectedAttachmentId(null)
-    setUploadError(null)
-    setAttachments((current) => {
-      current.forEach(cleanupAttachmentPreview)
-      return hydrateComposerAttachments(chatId ? getAttachmentDrafts(chatId) : [])
+    // selectedAttachmentId and uploadError are reset in the adjust-during-render block above.
+    startTransition(() => {
+      setAttachments((current) => {
+        current.forEach(cleanupAttachmentPreview)
+        return hydrateComposerAttachments(chatId ? getAttachmentDrafts(chatId) : [])
+      })
     })
   }, [chatId, cleanupAttachmentPreview, getAttachmentDrafts])
 
@@ -558,8 +881,16 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput({
     if (!chatId) return
 
     const persistedAttachments = attachments
-      .filter((attachment) => attachment.status === "uploaded")
-      .map(({ previewUrl: _previewUrl, status: _status, uploadProgress: _uploadProgress, cancelUpload: _cancelUpload, ...attachment }) => attachment)
+      .filter((a) => a.status === "uploaded")
+      .map(
+        ({
+          previewUrl: _previewUrl,
+          status: _status,
+          uploadProgress: _uploadProgress,
+          cancelUpload: _cancelUpload,
+          ...attachment
+        }) => attachment,
+      )
 
     if (persistedAttachments.length === 0) {
       clearAttachmentDrafts(chatId)
@@ -569,29 +900,51 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput({
     setAttachmentDrafts(chatId, persistedAttachments)
   }, [attachments, chatId, clearAttachmentDrafts, setAttachmentDrafts])
 
-  useEffect(() => () => {
-    attachmentsRef.current.forEach(cleanupAttachmentPreview)
-  }, [cleanupAttachmentPreview])
+  useEffect(
+    () => () => {
+      attachmentsRef.current.forEach(cleanupAttachmentPreview)
+    },
+    [cleanupAttachmentPreview],
+  )
 
+  useLayoutEffect(() => {
+    onLayoutChange?.()
+  }, [onLayoutChange, attachments.length, uploadError, currentText])
+
+  useEffect(() => {
+    const handleResize = () => {
+      onLayoutChange?.()
+    }
+    window.addEventListener("resize", handleResize)
+    return () => window.removeEventListener("resize", handleResize)
+  }, [onLayoutChange])
+
+  // ------ Composer state helpers ------
   function updateComposerState(transform: (state: ComposerState) => ComposerState) {
     useChatPreferencesStore.getState().setComposerState(composerChatId, transform(providerPrefs))
   }
 
   function setReasoningEffort(reasoningEffort: string) {
-    updateComposerState((state) => ({
-      ...state,
-      modelOptions: { ...state.modelOptions, reasoningEffort: reasoningEffort as ClaudeReasoningEffort & CodexReasoningEffort },
-    } as ComposerState))
+    updateComposerState(
+      (state) =>
+        ({
+          ...state,
+          modelOptions: {
+            ...state.modelOptions,
+            reasoningEffort: reasoningEffort as ClaudeReasoningEffort & CodexReasoningEffort,
+          },
+        }) as ComposerState,
+    )
   }
 
   function setClaudeContextWindow(contextWindow: ClaudeContextWindow) {
-    updateComposerState(
-      (state) => state.provider !== "claude"
+    updateComposerState((state) =>
+      state.provider !== "claude"
         ? state
         : withNormalizedContextWindow(
             { ...state, modelOptions: { ...state.modelOptions, contextWindow } },
-            state.model
-          )
+            state.model,
+          ),
     )
   }
 
@@ -603,299 +956,19 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput({
     setEffectivePlanMode(!providerPrefs.planMode)
   }
 
-  const processUploadQueue = useCallback(() => {
-    if (!projectId) return
-
-    while (activeUploadsRef.current < MAX_CONCURRENT_UPLOADS && uploadQueueRef.current.length > 0) {
-      const file = uploadQueueRef.current.shift()
-      if (!file) break
-
-      activeUploadsRef.current += 1
-      const tempId = crypto.randomUUID()
-      const previewUrl = file.type.startsWith("image/") ? URL.createObjectURL(file) : undefined
-      const generation = uploadGenerationRef.current
-
-      const handle = uploadFile({
-        projectId,
-        file,
-        onProgress: ({ loaded, total }) => {
-          if (generation !== uploadGenerationRef.current) return
-          const progress = total > 0 ? loaded / total : 0
-          setAttachments((current) => current.map((attachment) => (
-            attachment.id === tempId ? { ...attachment, uploadProgress: progress } : attachment
-          )))
-        },
-      })
-
-      setAttachments((current) => [...current, {
-        id: tempId,
-        kind: file.type.startsWith("image/") ? "image" : "file",
-        displayName: file.name,
-        absolutePath: "",
-        relativePath: "",
-        contentUrl: "",
-        mimeType: file.type || "application/octet-stream",
-        size: file.size,
-        status: "uploading",
-        previewUrl,
-        uploadProgress: 0,
-        cancelUpload: handle.abort,
-      }])
-
-      void (async () => {
-        try {
-          const { attachments } = await handle.promise
-          const uploaded = attachments[0]
-          if (!uploaded) {
-            throw new Error("Upload failed")
-          }
-
-          if (generation !== uploadGenerationRef.current) {
-            void deleteUploadedAttachment(uploaded)
-            if (previewUrl) URL.revokeObjectURL(previewUrl)
-            return
-          }
-
-          if (removedAttachmentIdsRef.current.has(tempId)) {
-            removedAttachmentIdsRef.current.delete(tempId)
-            if (previewUrl) URL.revokeObjectURL(previewUrl)
-            void deleteUploadedAttachment(uploaded)
-            return
-          }
-
-          setAttachments((current) => current.map((attachment) => (
-            attachment.id !== tempId
-              ? attachment
-              : {
-                  ...attachment,
-                  ...uploaded,
-                  previewUrl: attachment.previewUrl,
-                  status: "uploaded",
-                  uploadProgress: 1,
-                  cancelUpload: undefined,
-                }
-          )))
-          setUploadError(null)
-        } catch (error) {
-          if (generation !== uploadGenerationRef.current) {
-            if (previewUrl) URL.revokeObjectURL(previewUrl)
-            return
-          }
-          if (error instanceof UploadAbortedError) {
-            setAttachments((current) => current.filter((attachment) => attachment.id !== tempId))
-            removedAttachmentIdsRef.current.delete(tempId)
-            if (previewUrl) URL.revokeObjectURL(previewUrl)
-            return
-          }
-          setAttachments((current) => current.map((attachment) => (
-            attachment.id === tempId
-              ? { ...attachment, status: "failed", cancelUpload: undefined }
-              : attachment
-          )))
-          setUploadError(error instanceof Error ? error.message : String(error))
-        } finally {
-          activeUploadsRef.current = Math.max(0, activeUploadsRef.current - 1)
-          processUploadQueue()
-        }
-      })()
-    }
-  }, [projectId])
-
-  const enqueueFiles = useCallback((files: File[]) => {
-    if (!projectId) {
-      setUploadError("Open a project before uploading files.")
-      return
-    }
-
-    if (willExceedAttachmentLimit({
-      currentAttachmentCount: attachmentsRef.current.length,
-      queuedAttachmentCount: uploadQueueRef.current.length,
-      incomingAttachmentCount: files.length,
-    })) {
-      setUploadError(`You can upload up to ${MAX_FILES_PER_DROP} files at a time.`)
-      return
-    }
-
-    uploadQueueRef.current.push(...files)
-    setUploadError(null)
-    processUploadQueue()
-  }, [processUploadQueue, projectId])
-
-  useImperativeHandle(forwardedRef, () => ({
-    enqueueFiles,
-  }), [enqueueFiles])
-
-  async function handleSubmit() {
-    if (!canSubmit || hasPendingUploads) return
-
-    const nextValue = value
-    const previousAttachments = attachmentsRef.current
-    const previousSelectedAttachmentId = selectedAttachmentId
-    const previousUploadError = uploadError
-    const attachmentsForSubmit = uploadedAttachments.map(({ previewUrl: _previewUrl, status: _status, uploadProgress: _uploadProgress, cancelUpload: _cancelUpload, ...attachment }) => attachment)
-    let modelOptions: ModelOptions
-    if (providerPrefs.provider === "claude") {
-      modelOptions = { claude: { ...providerPrefs.modelOptions } }
-    } else {
-      modelOptions = { codex: { ...providerPrefs.modelOptions } }
-    }
-    const submitOptions = {
-      provider: selectedProvider,
-      model: providerPrefs.model,
-      modelOptions,
-      planMode: showPlanMode ? providerPrefs.planMode : false,
-      attachments: attachmentsForSubmit,
-    }
-    setValue("")
-    if (chatId) clearDraft(chatId)
-    if (textareaRef.current) textareaRef.current.style.height = "auto"
-    clearAttachments({ cleanupPreviews: false })
-    if (latestChatIdRef.current) {
-      clearAttachmentDrafts(latestChatIdRef.current)
-    }
-
-    try {
-      await onSubmit(nextValue, submitOptions)
-      previousAttachments.forEach(cleanupAttachmentPreview)
-    } catch (error) {
-      console.error("[ChatInput] Submit failed:", error)
-      setValue(nextValue)
-      if (chatId) setDraft(chatId, nextValue)
-      setAttachments(previousAttachments)
-      setSelectedAttachmentId(previousSelectedAttachmentId)
-      setUploadError(previousUploadError)
-    }
-  }
-
-  function handleKeyDown(event: React.KeyboardEvent) {
-    if (event.nativeEvent.isComposing || event.keyCode === 229) return
-
-    if (mentionOpen) {
-      if (event.key === "Escape") {
-        event.preventDefault()
-        setMentionDismissed(true)
-        return
-      }
-      if (event.key === "ArrowDown") {
-        event.preventDefault()
-        setMentionIndex((i) => Math.min(mentionItems.length - 1, i + 1))
-        return
-      }
-      if (event.key === "ArrowUp") {
-        event.preventDefault()
-        setMentionIndex((i) => Math.max(0, i - 1))
-        return
-      }
-      if (event.key === "Enter" || event.key === "Tab") {
-        event.preventDefault()
-        const item = mentionItems[mentionIndex]
-        if (item) acceptMention(item)
-        return
-      }
-    }
-
-    if (pickerOpen) {
-      if (event.key === "Escape") {
-        event.preventDefault()
-        setPickerDismissed(true)
-        return
-      }
-      if (event.key === "ArrowDown") {
-        event.preventDefault()
-        setPickerIndex((i) => Math.min(filteredCommands.length - 1, i + 1))
-        return
-      }
-      if (event.key === "ArrowUp") {
-        event.preventDefault()
-        setPickerIndex((i) => Math.max(0, i - 1))
-        return
-      }
-      if (event.key === "Enter" || event.key === "Tab") {
-        event.preventDefault()
-        const cmd = filteredCommands[pickerIndex]
-        if (cmd) acceptCommand(cmd)
-        return
-      }
-    }
-
-    if (event.key === "Tab" && !event.shiftKey) {
-      event.preventDefault()
-      focusNextChatInput(textareaRef.current, document)
-      return
-    }
-
-    if (event.key === "Tab" && event.shiftKey && showPlanMode) {
-      event.preventDefault()
-      toggleEffectivePlanMode()
-      return
-    }
-
-    if (event.key === "Escape" && canCancel) {
-      event.preventDefault()
-      onCancel?.()
-      return
-    }
-
-    if (event.key === "ArrowUp" && !event.shiftKey && !event.altKey && !event.ctrlKey && !event.metaKey && value.length === 0 && previousPrompt) {
-      event.preventDefault()
-      setValue(previousPrompt)
-      if (chatId) setDraft(chatId, previousPrompt)
-      return
-    }
-
-    const isTouchDevice = "ontouchstart" in window || navigator.maxTouchPoints > 0
-    if (event.key === "Enter" && !event.shiftKey && !isTouchDevice && !disabled && hasTextToSend && !hasPendingUploads) {
-      event.preventDefault()
-      void handleSubmit()
-    }
-  }
-
-  function handlePaste(event: React.ClipboardEvent<HTMLTextAreaElement>) {
-    const files = getClipboardImageFiles(event.clipboardData.items, Date.now())
-    const pastedText = event.clipboardData.getData("text/plain")
-    const trimmedText = trimTrailingPastedNewlines(pastedText)
-    const shouldTrimTrailingNewlines = pastedText.length > 0 && trimmedText !== pastedText
-
-    if (files.length === 0 && !shouldTrimTrailingNewlines) return
-
-    if (files.length > 0) {
-      enqueueFiles(files)
-    }
-
-    if (shouldTrimTrailingNewlines) {
-      event.preventDefault()
-      const textarea = event.currentTarget
-      const nextValue = replaceTextSelection({
-        value,
-        insertedText: trimmedText,
-        selectionStart: textarea.selectionStart,
-        selectionEnd: textarea.selectionEnd,
-      })
-      const nextCaretPosition = textarea.selectionStart + trimmedText.length
-      setValue(nextValue)
-      if (chatId) setDraft(chatId, nextValue)
-      autoResize()
-      requestAnimationFrame(() => {
-        textarea.selectionStart = nextCaretPosition
-        textarea.selectionEnd = nextCaretPosition
-      })
-      return
-    }
-
-    if (!hasClipboardTextPayload(event.clipboardData)) {
-      event.preventDefault()
-    }
-  }
-
+  // ------ Attachment handlers ------
   function handleAttachmentPreview(attachment: ComposerAttachment) {
     const target = classifyAttachmentPreview(attachment)
     if (target.openInNewTab) {
       if (typeof window !== "undefined") {
-        window.open(new URL(attachment.contentUrl, window.location.origin).toString(), "_blank", "noopener,noreferrer")
+        window.open(
+          new URL(attachment.contentUrl, window.location.origin).toString(),
+          "_blank",
+          "noopener,noreferrer",
+        )
       }
       return
     }
-
     setSelectedAttachmentId(attachment.id)
   }
 
@@ -912,17 +985,69 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput({
     if (selectedAttachmentId === attachment.id) {
       setSelectedAttachmentId(null)
     }
-
     if (attachment.status === "uploaded") {
       removedAttachmentIdsRef.current.delete(attachment.id)
       void deleteUploadedAttachment(attachment)
     }
   }
 
+  // ------ Keyboard: Escape, ShiftTab (plan mode), ArrowUp (previousPrompt) ------
+  // The SubmitPlugin handles Enter. These keys need to be intercepted at the
+  // wrapper div level since they affect state outside the editor.
+  function handleKeyDown(event: React.KeyboardEvent) {
+    if (event.nativeEvent.isComposing) return
+
+    if (event.key === "Tab" && event.shiftKey && showPlanMode) {
+      event.preventDefault()
+      toggleEffectivePlanMode()
+      return
+    }
+
+    if (event.key === "Escape" && canCancel) {
+      event.preventDefault()
+      onCancel?.()
+      return
+    }
+
+    if (
+      event.key === "ArrowUp" &&
+      !event.shiftKey &&
+      !event.altKey &&
+      !event.ctrlKey &&
+      !event.metaKey &&
+      currentText.length === 0 &&
+      previousPrompt
+    ) {
+      event.preventDefault()
+      bridgeRef.current?.hydrateFromDraft(null, previousPrompt)
+      setCurrentText(previousPrompt)
+      if (chatId) setDraft(chatId, previousPrompt)
+      return
+    }
+  }
+
+  // ------ Upload error handler for plugins ------
+  const handleUploadError = useCallback((msg: string) => {
+    setUploadError(msg)
+  }, [])
+
+  // ------ Editor config (memoized; LexicalComposer reads config only once) ------
+  const editorConfig = useMemo(
+    () =>
+      buildKannaEditorConfig({
+        namespace: `kanna-composer-${composerChatId}`,
+        nodes: [...KANNA_COMPOSER_NODES],
+        editable: !disabled,
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [composerChatId],
+  )
+
   return (
     <div>
       <div className={cn("px-3 pt-0", isStandalone && "px-5")}>
         <div className="max-w-[840px] mx-auto rounded-[32px]">
+          {/* @agent/<name> mention chips */}
           {mentionChips.length > 0 ? (
             <div className="flex flex-wrap gap-1 px-2 pt-2">
               {mentionChips.map((chip, i) => (
@@ -937,36 +1062,67 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput({
                 >
                   <Bot className="h-3 w-3" />
                   agent/{chip.label}
-                  {chip.kind === "missing" && <span className="ml-1 font-medium">unknown</span>}
+                  {chip.kind === "missing" && (
+                    <span className="ml-1 font-medium">unknown</span>
+                  )}
                 </span>
               ))}
             </div>
           ) : null}
+
+          {/* Attachment strip */}
           {attachments.length > 0 ? (
             <ScrollArea className="overflow-x-auto overflow-y-hidden whitespace-nowrap px-2 pb-2">
               <div className="flex items-end gap-2 pt-2">
                 {orderedAttachments.map((attachment) => (
                   <div
                     key={attachment.id}
-                    className={cn("flex shrink-0 flex-col justify-end", attachment.status === "failed" && "text-destructive")}
+                    className={cn(
+                      "flex shrink-0 flex-col justify-end",
+                      attachment.status === "failed" && "text-destructive",
+                    )}
                   >
                     {attachment.kind === "image" ? (
                       <AttachmentImageCard
                         attachment={attachment}
                         previewUrl={attachment.previewUrl}
                         size="composer"
-                        onClick={attachment.status === "uploaded" ? () => handleAttachmentPreview(attachment) : undefined}
+                        onClick={
+                          attachment.status === "uploaded"
+                            ? () => handleAttachmentPreview(attachment)
+                            : undefined
+                        }
                         onRemove={() => removeAttachment(attachment)}
-                        uploadProgress={attachment.status === "uploading" ? (attachment.uploadProgress ?? null) : undefined}
-                        onCancelUpload={attachment.status === "uploading" ? () => removeAttachment(attachment) : undefined}
+                        uploadProgress={
+                          attachment.status === "uploading"
+                            ? (attachment.uploadProgress ?? null)
+                            : undefined
+                        }
+                        onCancelUpload={
+                          attachment.status === "uploading"
+                            ? () => removeAttachment(attachment)
+                            : undefined
+                        }
                       />
                     ) : (
                       <AttachmentFileCard
                         attachment={attachment}
-                        onClick={attachment.status === "uploaded" && attachment.contentUrl ? () => handleAttachmentPreview(attachment) : undefined}
+                        onClick={
+                          attachment.status === "uploaded" && attachment.contentUrl
+                            ? () => handleAttachmentPreview(attachment)
+                            : undefined
+                        }
                         onRemove={() => removeAttachment(attachment)}
-                        uploadProgress={attachment.status === "uploading" ? (attachment.uploadProgress ?? null) : undefined}
-                        onCancelUpload={attachment.status === "uploading" ? () => removeAttachment(attachment) : undefined}
+                        uploadProgress={
+                          attachment.status === "uploading"
+                            ? (attachment.uploadProgress ?? null)
+                            : undefined
+                        }
+                        onCancelUpload={
+                          attachment.status === "uploading"
+                            ? () => removeAttachment(attachment)
+                            : undefined
+                        }
                       />
                     )}
                   </div>
@@ -975,35 +1131,18 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput({
             </ScrollArea>
           ) : null}
 
-          <div className="relative flex items-end max-w-[840px] mx-auto border bg-background dark:bg-card/90 border-border rounded-[29px] pr-1.5 transition-colors focus-within:border-ring/60 focus-within:ring-2 focus-within:ring-ring/30">
-            {pickerOpen && (
-              <SlashCommandPicker
-                items={filteredCommands}
-                activeIndex={pickerIndex}
-                loading={slashCommandsLoading}
-                onSelect={acceptCommand}
-                onHoverIndex={setPickerIndex}
-              />
-            )}
-            {mentionOpen && (
-              <MentionPicker
-                items={mentionItems}
-                activeIndex={mentionIndex}
-                loading={mentionState.loading}
-                onSelect={acceptMention}
-                onHoverIndex={setMentionIndex}
-              />
-            )}
+          {/* Input row */}
+          <div
+            className="relative flex items-end max-w-[840px] mx-auto border bg-background dark:bg-card/90 border-border rounded-[29px] pr-1.5 transition-colors focus-within:border-ring/60 focus-within:ring-2 focus-within:ring-ring/30"
+            onKeyDown={handleKeyDown}
+          >
+            {/* Attachment button */}
             <Button
               type="button"
               variant="ghost"
               size="icon"
               aria-label="Add attachment"
               disabled={disabled}
-              // iOS Safari scrolls the document when a tap transfers focus to
-              // a <input type="file"> (even when opacity:0). Keep the textarea
-              // focused via preventDefault on pointerdown, then trigger the
-              // hidden file input programmatically from the click handler.
               onPointerDown={(event) => event.preventDefault()}
               onClick={() => fileInputRef.current?.click()}
               className="relative flex-shrink-0 ml-1 mb-1 h-11 w-11 rounded-full text-muted-foreground hover:text-foreground"
@@ -1026,36 +1165,61 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput({
                 event.target.value = ""
               }}
             />
-            <Textarea
-              ref={setTextareaRefs}
-              placeholder="Build something..."
-              value={value}
-              autoFocus
-              {...{ [CHAT_INPUT_ATTRIBUTE]: "" }}
-              rows={1}
-              onChange={(event) => {
-                setValue(event.target.value)
-                if (chatId) setDraft(chatId, event.target.value)
-                autoResize()
-                setCaretVersion((v) => v + 1)
-              }}
-              onSelect={bumpCaretVersionOnSelection}
-              onKeyUp={() => setCaretVersion((v) => v + 1)}
-              onPaste={handlePaste}
-              onKeyDown={handleKeyDown}
-              disabled={disabled}
-              className="flex-1 text-base p-3 md:p-4 !pr-2 pl-0 md:pl-6 resize-none max-h-[200px] outline-none focus:outline-none focus-visible:outline-none focus-visible:ring-0 bg-transparent border-0 shadow-none"
-            />
+
+            {/* Lexical editor */}
+            <LexicalComposer initialConfig={editorConfig}>
+              {/*
+                CHAT_INPUT_ATTRIBUTE marks this element for the chatFocusPolicy.
+                The original textarea carried it; now the contenteditable wrapper does.
+              */}
+              <div
+                {...{ [CHAT_INPUT_ATTRIBUTE]: "" }}
+                className="relative flex-1 min-w-0"
+              >
+                <RichTextPlugin
+                  contentEditable={
+                    <ContentEditable
+                      placeholder={
+                        <div className="pointer-events-none absolute top-3 left-3 md:top-4 md:left-6 text-muted-foreground text-base select-none">
+                          Build something...
+                        </div>
+                      }
+                      className="flex-1 text-base p-3 md:p-4 !pr-2 pl-3 md:pl-6 min-h-[44px] max-h-[200px] outline-none focus:outline-none focus-visible:outline-none focus-visible:ring-0 bg-transparent border-0 shadow-none overflow-auto"
+                      aria-label="Chat input"
+                      aria-placeholder="Build something..."
+                      aria-multiline="true"
+                      role="textbox"
+                    />
+                  }
+                  ErrorBoundary={LexicalErrorBoundary}
+                />
+                <HistoryPlugin />
+                <MentionTypeaheadPlugin projectId={projectId ?? null} />
+                <SlashCommandTypeaheadPlugin
+                  chatId={chatId ?? null}
+                  enabled={selectedProvider === "claude"}
+                />
+                <PasteImagePlugin chatId={chatId ?? null} onUploadError={handleUploadError} />
+                <DropAttachmentPlugin chatId={chatId ?? null} onUploadError={handleUploadError} />
+                <SubmitPlugin onSubmit={handlePluginSubmit} disabled={disabled || hasPendingUploads} />
+                <DraftPersistencePlugin onChange={handleDraftChange} />
+                <LexicalEditorBridgePlugin bridgeRef={bridgeRef} />
+                <EditorEditabilityPlugin isDisabled={disabled} />
+                <EditorTextTracker onTextChange={setCurrentText} />
+              </div>
+            </LexicalComposer>
+
+            {/* Send / Cancel button */}
             <Button
               type="button"
               onPointerDown={(event) => {
                 event.preventDefault()
                 if (!disabled && hasTextToSend && !hasPendingUploads) {
-                  void handleSubmit()
+                  void handleManualSubmit()
                 } else if (canCancel) {
                   onCancel?.()
                 } else if (!disabled && canSubmit && !hasPendingUploads) {
-                  void handleSubmit()
+                  void handleManualSubmit()
                 }
               }}
               disabled={disabled || (!canCancel && !canSubmit) || hasPendingUploads}
@@ -1081,6 +1245,7 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput({
         ) : null}
       </div>
 
+      {/* Preference controls row */}
       <div className={cn("relative py-3 max-w-[840px] mx-auto", isStandalone && "p-5 pt-3")}>
         <div className="flex items-center gap-2">
           <div className="min-w-0 flex-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden flex flex-row">
@@ -1109,10 +1274,16 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput({
                     setClaudeContextWindow(change.contextWindow)
                     break
                   case "fastMode":
-                    updateComposerState(
-                      (state) => state.provider === "claude" || state.provider === "openrouter"
+                    updateComposerState((state) =>
+                      state.provider === "claude" || state.provider === "openrouter"
                         ? state
-                        : { ...state, modelOptions: { ...state.modelOptions, fastMode: change.fastMode } }
+                        : {
+                            ...state,
+                            modelOptions: {
+                              ...state.modelOptions,
+                              fastMode: change.fastMode,
+                            },
+                          },
                     )
                     break
                 }
@@ -1141,8 +1312,13 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput({
         ) : null}
       </div>
 
+      {/* File preview sheet */}
       <FilePreviewSheet
-        source={selectedAttachment ? toPreviewSourceFromAttachment(selectedAttachment, "user_attachment") : null}
+        source={
+          selectedAttachment
+            ? toPreviewSourceFromAttachment(selectedAttachment, "user_attachment")
+            : null
+        }
         open={selectedAttachment !== null}
         onOpenChange={(open) => !open && setSelectedAttachmentId(null)}
       />
@@ -1151,16 +1327,3 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput({
 })
 
 export const ChatInput = memo(ChatInputInner)
-
-async function deleteUploadedAttachment(attachment: ChatAttachment) {
-  if (!attachment.contentUrl) return
-  const deleteUrl = attachment.contentUrl.replace(/\/content$/, "")
-  await fetch(deleteUrl, { method: "DELETE" }).catch(() => undefined)
-}
-
-function hydrateComposerAttachments(attachments: ChatAttachment[]): ComposerAttachment[] {
-  return attachments.map((attachment) => ({
-    ...attachment,
-    status: "uploaded" as const,
-  }))
-}
