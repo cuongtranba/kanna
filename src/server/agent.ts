@@ -3231,8 +3231,9 @@ export class AgentCoordinator {
         }
         await this.store.appendMessage(session.chatId, event.entry)
         // Arm the background-task keep-alive guard the moment Claude Code reports
-        // a `Bash(run_in_background)` launch. Keeps the PTY process warm past the
-        // idle window so the later `<task-notification>` can re-enter the agent.
+        // a `Bash(run_in_background)` launch. Shared SDK + PTY path: keeps the
+        // claude session warm past the idle window so the later
+        // `<task-notification>` can re-enter the agent.
         if (event.entry.kind === "tool_result") {
           const launchedIds = backgroundTaskIdsFromToolResult(
             (event.entry as { content?: unknown }).content,
