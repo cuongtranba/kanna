@@ -1,14 +1,13 @@
 ---
 id: c3-202
 c3-version: 4
-c3-seal: f58866c80e38d426fb062c197cd5da0d5523016aed3a1e393a6b1a7a46e168c5
+c3-seal: 9edb58941b3df0e29c03bea5f1b4a22048ea237daad62740005a755a6a3e2652
 title: http-ws-server
 type: component
 category: foundation
 parent: c3-2
 goal: Serve HTTP (static + API) and upgrade to WebSocket; attach auth gating; expose `/health`.
 uses:
-    - c3-228
     - ref-local-first-data
     - ref-ws-subscription
 ---

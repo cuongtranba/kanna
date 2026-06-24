@@ -1,14 +1,13 @@
 ---
 id: c3-115
 c3-version: 4
-c3-seal: 075dbe3902549a8043b098ed63e7415ece6af6d73addafb831a29d78ae19325a
+c3-seal: 4300b1c8962d2fe9429606ff36230ab429c88525acb68ecf9439b67d8104865e
 title: chat-ui-chrome
 type: component
 category: feature
 parent: c3-1
 goal: 'Provide the composer and chat chrome: input dock, provider/model/effort pickers, attachment controls, queued message alignment.'
 uses:
-    - c3-231
     - ref-provider-adapter
     - ref-zustand-store
     - rule-zustand-store
