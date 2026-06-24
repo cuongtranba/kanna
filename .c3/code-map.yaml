@@ -40,11 +40,16 @@ c3-113:
   - src/client/app/subagent-run-placement.test.ts
   - src/client/app/subagent-run-placement.ts
 c3-114:
+  - src/client/components/lexical/markdown/**
   - src/client/components/messages/**/*.ts
   - src/client/components/messages/**/*.tsx
 c3-115:
   - src/client/components/chat-ui/**/*.ts
   - src/client/components/chat-ui/**/*.tsx
+  - src/client/components/lexical/config.ts
+  - src/client/components/lexical/nodes/**
+  - src/client/components/lexical/plugins/**
+  - src/client/components/lexical/serialize/**
   - src/client/components/open-external-menu.tsx
 c3-116:
   - src/client/app/SettingsPage.test.tsx

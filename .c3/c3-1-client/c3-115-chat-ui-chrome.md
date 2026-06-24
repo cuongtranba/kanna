@@ -1,7 +1,7 @@
 ---
 id: c3-115
 c3-version: 4
-c3-seal: b3feaf75656281cf9dbd88a9567d5d860905a6bb061a99e786e87acfc5af3b6b
+c3-seal: 10a0e4dde713e1e974f74c48cab18647f058d3b9c272c45a54257b408a4f66cd
 title: chat-ui-chrome
 type: component
 category: feature
@@ -38,10 +38,11 @@ Owns the composer and surrounding chrome: Lexical rich-text editor input, provid
 | Aspect | Detail | Reference |
 | --- | --- | --- |
 | Precondition | Chat-page provides session context | c3-112 |
-| Input — chat input store | Pending text, attachments | c3-102 |
+| Input — chat input store | Pending text + Lexical editor state, attachments | c3-102 |
 | Input — preferences | Theme, provider/model defaults | c3-102 |
-| Input — primitives | Textarea, popover, select, tooltip | c3-103 |
+| Input — primitives | Lexical contenteditable editor, popover, select, tooltip | c3-103 |
 | Input — provider catalog types | Provider/model/effort options | c3-301 |
+| Composer editor | Lexical 0.45 (nodes + plugins + serialize) under src/client/components/lexical | c3-1 |
 
 ## Business Flow
 
@@ -49,6 +50,7 @@ Owns the composer and surrounding chrome: Lexical rich-text editor input, provid
 | --- | --- | --- |
 | Outcome | User sends a message to the agent with chosen provider/model | c3-1 |
 | Primary path | Type → choose model → click Send → emit chat.send command | c3-208 |
+| Alternate — mention/slash picker | @ and / typeahead open at start OR after whitespace (not only line start); Arrow keys navigate with scroll-into-view; Enter or click inserts a chip node, never submits | c3-231 |
 | Alternate — drag-attach | Drop file → upload → reference inserted in payload | c3-217 |
 | Alternate — provider switch | Picker writes to preferences store; persists across sessions | ref-zustand-store |
 | Failure — send rejected | Show inline banner; retain text in store | c3-115 |
