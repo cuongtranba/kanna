@@ -52,6 +52,7 @@ import {
 } from "lexical"
 import { buildKannaEditorConfig } from "../config"
 import { parseThinkingSegments } from "../../../lib/parseThinking"
+import { linkifyTextRefs } from "../../../lib/linkifyTextRefs"
 import { ThinkingBlock } from "../../messages/ThinkingBlock"
 import {
   $isMermaidNode,
@@ -345,6 +346,7 @@ function walkChildren(node: { getChildren<T extends LexicalNode>(): T[] }): Reac
  * headless editor using KANNA_MESSAGE_TRANSFORMERS and the custom node set.
  */
 function renderMarkdownSegment(markdown: string): ReactNode {
+  const processed = linkifyTextRefs(markdown)
   const editor = createHeadlessEditor(
     buildKannaEditorConfig({
       namespace: "kanna-message-renderer",
@@ -354,7 +356,7 @@ function renderMarkdownSegment(markdown: string): ReactNode {
   )
 
   editor.update(() => {
-    $convertFromMarkdownString(markdown, KANNA_MESSAGE_TRANSFORMERS, undefined, true)
+    $convertFromMarkdownString(processed, KANNA_MESSAGE_TRANSFORMERS, undefined, true)
   }, { discrete: true })
 
   return editor.getEditorState().read(() => {
