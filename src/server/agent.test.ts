@@ -130,6 +130,56 @@ describe("normalizeClaudeStreamMessage", () => {
     expect(entries[0].pendingWorkflowCount).toBeUndefined()
   })
 
+  test("surfaces a settled background task notification as a status entry", () => {
+    // The Agent SDK emits SDKTaskNotificationMessage (type:system,
+    // subtype:task_notification) when a Bash(run_in_background) task settles.
+    // Kanna previously dropped it, so the background completion never reached
+    // the transcript/event log. Surface it as a status entry.
+    const entries = normalizeClaudeStreamMessage({
+      type: "system",
+      subtype: "task_notification",
+      task_id: "task-7",
+      tool_use_id: "toolu_42",
+      status: "completed",
+      output_file: "/tmp/ci.output",
+      summary: "CI checks all green",
+      uuid: "msg-tn",
+    })
+    expect(entries).toHaveLength(1)
+    if (entries[0]?.kind !== "status") throw new Error("unexpected entry")
+    expect(entries[0].status).toContain("completed")
+    expect(entries[0].status).toContain("CI checks all green")
+  })
+
+  test("a failed background task notification still surfaces its status", () => {
+    const entries = normalizeClaudeStreamMessage({
+      type: "system",
+      subtype: "task_notification",
+      task_id: "task-8",
+      status: "failed",
+      output_file: "/tmp/x.output",
+      summary: "build failed",
+    })
+    expect(entries).toHaveLength(1)
+    if (entries[0]?.kind !== "status") throw new Error("unexpected entry")
+    expect(entries[0].status).toContain("failed")
+  })
+
+  test("an ambient (skip_transcript) task notification is hidden from the inline transcript", () => {
+    const entries = normalizeClaudeStreamMessage({
+      type: "system",
+      subtype: "task_notification",
+      task_id: "task-9",
+      status: "completed",
+      output_file: "/tmp/y.output",
+      summary: "housekeeping",
+      skip_transcript: true,
+    })
+    expect(entries).toHaveLength(1)
+    if (entries[0]?.kind !== "status") throw new Error("unexpected entry")
+    expect(entries[0].hidden).toBe(true)
+  })
+
   test("normalizes Claude usage snapshots from SDK usage payloads", () => {
     const snapshot = normalizeClaudeUsageSnapshot({
       input_tokens: 4,

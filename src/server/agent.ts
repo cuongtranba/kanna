@@ -831,6 +831,27 @@ export function normalizeClaudeStreamMessage(message: any): TranscriptEntry[] {
     return [timestamped({ kind: "status", messageId, status: message.status, debugRaw })]
   }
 
+  // The Agent SDK emits SDKTaskNotificationMessage when a
+  // `Bash(run_in_background)` task settles (status completed|failed|stopped).
+  // The model is re-driven natively by the SDK's user-origin task-notification
+  // message (the `canUseTool`-after-result self-resume noted in send()), so
+  // this branch only SURFACES the completion into the transcript/event log —
+  // without it the background work was invisible to Kanna. `skip_transcript`
+  // marks ambient/housekeeping tasks the SDK asks consumers to hide inline.
+  if (message.type === "system" && message.subtype === "task_notification") {
+    const taskStatus = typeof message.status === "string" ? message.status : "completed"
+    const summary = typeof message.summary === "string" && message.summary.length > 0
+      ? message.summary
+      : "(no summary)"
+    return [timestamped({
+      kind: "status",
+      messageId,
+      status: `Background task ${taskStatus}: ${summary}`,
+      hidden: message.skip_transcript === true ? true : undefined,
+      debugRaw,
+    })]
+  }
+
   // Interactive TUI claude never writes a `type: "result"` row — it writes
   // `system/turn_duration` instead (per canon/shannon research). Synthesize a
   // turn-end `result` so the agent loop and UI see the turn complete.
