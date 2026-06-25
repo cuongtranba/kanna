@@ -649,9 +649,11 @@ Out of scope: global cross-chat view, stop/relaunch.
 
 # Tests
 
-`bun test` MUST pass locally before any push or PR. CI (`.github/workflows/test.yml`)
-runs `bun test` on every push to `main` and every PR; merges are blocked on failure.
-Run `bun test src/server/<file>.test.ts` for fast iteration on a single suite.
+`bun run test` MUST pass locally before any push or PR. CI (`.github/workflows/test.yml`)
+runs `bun test --conditions production` on every push to `main` and every PR; merges are blocked on failure.
+Always use `--conditions production` (or `bun run test`) — Lexical 0.45 dev ESM builds
+have a circular-dep TDZ that crashes bare `bun test`. For fast iteration on a single
+suite: `bun test --conditions production src/server/<file>.test.ts`.
 When a test spawns `git` or other subprocesses, ensure the spawn sets
 `stdin: "ignore"` and `GIT_TERMINAL_PROMPT=0` so a hung credential prompt
 cannot exhaust the test timeout. Also give it an explicit timeout
