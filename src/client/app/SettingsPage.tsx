@@ -32,8 +32,6 @@ import {
   CLAUDE_PTY_MAX_CONCURRENT_MIN,
   CLOUDFLARE_TUNNEL_DEFAULTS,
   DEFAULT_KEYBINDINGS,
-  DEFAULT_OPENAI_SDK_MODEL,
-  DEFAULT_OPENROUTER_SDK_MODEL,
   GLOBAL_PROMPT_APPEND_MAX_CHARS,
   PROVIDERS,
   UPLOAD_DEFAULTS,
@@ -100,6 +98,10 @@ import {
   unsubscribePush,
   type PushPermissionState,
 } from "./pushClient"
+import {
+  createLlmProviderDraftForSelection,
+  type LlmProviderDraft,
+} from "./llmProviderDraft"
 
 const sidebarItems = [
   {
@@ -1106,7 +1108,7 @@ export function SettingsPage() {
   )
   const shareDefaultTtlHours = appSettings?.shareDefaultTtlHours ?? 24
   const [shareDefaultTtlDraft, setShareDefaultTtlDraft] = useState(String(shareDefaultTtlHours))
-  const [llmProviderDraft, setLlmProviderDraft] = useState({
+  const [llmProviderDraft, setLlmProviderDraft] = useState<LlmProviderDraft>({
     provider: "openai" as LlmProviderKind,
     apiKey: "",
     model: "",
@@ -1536,16 +1538,7 @@ export function SettingsPage() {
   }
 
   function handleLlmProviderSelection(nextProvider: LlmProviderKind) {
-    const nextDraft = {
-      ...llmProviderDraft,
-      provider: nextProvider,
-      model: nextProvider === "openai"
-        ? DEFAULT_OPENAI_SDK_MODEL
-        : nextProvider === "openrouter"
-          ? DEFAULT_OPENROUTER_SDK_MODEL
-          : llmProviderDraft.model,
-      baseUrl: nextProvider === "custom" ? llmProviderDraft.baseUrl : "",
-    }
+    const nextDraft = createLlmProviderDraftForSelection(llmProviderDraft, nextProvider)
     setLlmProviderDraft(nextDraft)
     void commitLlmProvider(nextDraft)
   }
