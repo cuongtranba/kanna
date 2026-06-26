@@ -291,9 +291,11 @@ describe("createClaudeHarnessStream cost attachment", () => {
       events.push(ev)
     }
 
-    const cwuEntries = events.flatMap((ev) =>
-      ev.type === "transcript" && ev.entry.kind === "context_window_updated" ? [ev.entry] : [],
-    )
+    const cwuEntries = events.flatMap((ev) => {
+      if (ev.type !== "transcript") return []
+      const entry = ev.entry
+      return entry && entry.kind === "context_window_updated" ? [entry] : []
+    })
     const lastCwu = cwuEntries.at(-1)
     expect(lastCwu).toBeDefined()
     expect(lastCwu!.usage.costUsd).toBeCloseTo(0.0123, 6)
@@ -325,9 +327,11 @@ describe("createClaudeHarnessStream cost attachment", () => {
       events.push(ev)
     }
 
-    const cwuEntries = events.flatMap((ev) =>
-      ev.type === "transcript" && ev.entry.kind === "context_window_updated" ? [ev.entry] : [],
-    )
+    const cwuEntries = events.flatMap((ev) => {
+      if (ev.type !== "transcript") return []
+      const entry = ev.entry
+      return entry && entry.kind === "context_window_updated" ? [entry] : []
+    })
     const lastCwu = cwuEntries.at(-1)
     expect(lastCwu).toBeDefined()
     // 1M input @ $3/M = $3; no cached, no output

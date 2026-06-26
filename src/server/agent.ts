@@ -321,6 +321,10 @@ interface AgentCoordinatorArgs {
     restrictedAllowedPaths?: string[]
     /** Keep the SDK prompt queue open after the initial prompt to allow multi-turn keep-alive. */
     keepAlive?: boolean
+    /** Per-turn price for computing cost when the provider doesn't report it (OpenRouter). */
+    turnPrice?: ModelPrice | null
+    /** Overrides the configured context window (OpenRouter model contextLength). */
+    contextWindowOverride?: number
   }) => Promise<ClaudeSessionHandle>
   startClaudeSessionPTY?: (args: StartClaudeSessionPtyArgs) => Promise<ClaudeSessionHandle>
   claudeLimitDetector?: LimitDetector
