@@ -1,4 +1,4 @@
-import { closeSync, existsSync, openSync, readSync, readdirSync, statSync } from "node:fs"
+import { closeSync, existsSync, openSync, readFileSync, readSync, readdirSync, statSync } from "node:fs"
 import { homedir } from "node:os"
 import path from "node:path"
 
@@ -265,6 +265,58 @@ function scanPluginDir(pluginDir: string, pluginName: string): RawCatalogEntry[]
   return entries
 }
 
+interface MarketplacePlugin {
+  name: string
+  /** Absolute resolved directory the plugin's files live under. */
+  sourceDir: string
+}
+
+/**
+ * Read a marketplace's `.claude-plugin/marketplace.json` and map each declared
+ * plugin's local `source` directory to its real plugin name. Claude namespaces
+ * a plugin's slash commands by the plugin name, NOT the marketplace folder
+ * name, so this mapping is what lets the picker emit a command the CLI accepts.
+ * Non-string sources (git/github) have no local dir and are skipped.
+ */
+function readMarketplacePlugins(marketPath: string): MarketplacePlugin[] {
+  const manifestPath = path.join(marketPath, ".claude-plugin", "marketplace.json")
+  if (!existsSync(manifestPath)) return []
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(readFileSync(manifestPath, "utf8"))
+  } catch {
+    return []
+  }
+  if (typeof parsed !== "object" || parsed === null) return []
+  const plugins = (parsed as { plugins?: unknown }).plugins
+  if (!Array.isArray(plugins)) return []
+  const out: MarketplacePlugin[] = []
+  for (const raw of plugins) {
+    if (typeof raw !== "object" || raw === null) continue
+    const name = (raw as { name?: unknown }).name
+    const source = (raw as { source?: unknown }).source
+    if (typeof name !== "string" || name.length === 0) continue
+    if (typeof source !== "string") continue
+    out.push({ name, sourceDir: path.resolve(marketPath, source) })
+  }
+  return out
+}
+
+/**
+ * Find the declared plugin whose source directory is the nearest ancestor of
+ * `dir` (the most specific match wins). Returns its name, else the marketplace
+ * folder name as the fallback namespace for un-manifested marketplaces.
+ */
+function resolvePluginNamespace(plugins: readonly MarketplacePlugin[], dir: string, fallback: string): string {
+  let best: MarketplacePlugin | null = null
+  for (const plugin of plugins) {
+    const isOwned = dir === plugin.sourceDir || dir.startsWith(plugin.sourceDir + path.sep)
+    if (!isOwned) continue
+    if (!best || plugin.sourceDir.length > best.sourceDir.length) best = plugin
+  }
+  return best?.name ?? fallback
+}
+
 function scanPluginsRoot(pluginsRoot: string): RawCatalogEntry[] {
   if (!existsSync(pluginsRoot)) return []
   const entries: RawCatalogEntry[] = []
@@ -291,25 +343,28 @@ function scanPluginsRoot(pluginsRoot: string): RawCatalogEntry[] {
         continue
       }
       if (!st.isDirectory()) continue
+      const plugins = readMarketplacePlugins(marketPath)
       const skillsDir = path.join(marketPath, "skills")
       if (existsSync(skillsDir)) {
+        const ns = resolvePluginNamespace(plugins, skillsDir, market)
         entries.push(
           ...scanSkillsDir({
             baseDir: skillsDir,
             scope: "plugin",
-            pluginName: market,
-            namespace: market,
+            pluginName: ns,
+            namespace: ns,
           }),
         )
       }
       const commandsDir = path.join(marketPath, "commands")
       if (existsSync(commandsDir)) {
+        const ns = resolvePluginNamespace(plugins, commandsDir, market)
         entries.push(
           ...scanCommandsDir({
             baseDir: commandsDir,
             scope: "plugin",
-            pluginName: market,
-            namespace: market,
+            pluginName: ns,
+            namespace: ns,
           }),
         )
       }
@@ -325,12 +380,13 @@ function scanPluginsRoot(pluginsRoot: string): RawCatalogEntry[] {
         if (!cst.isDirectory()) continue
         const flatSkill = path.join(childPath, "SKILL.md")
         if (existsSync(flatSkill)) {
+          const ns = resolvePluginNamespace(plugins, childPath, market)
           entries.push(
             buildEntryFromSkill({
               filePath: flatSkill,
-              commandName: `${market}:${child}`,
+              commandName: `${ns}:${child}`,
               scope: "plugin",
-              pluginName: market,
+              pluginName: ns,
             }),
           )
         }
