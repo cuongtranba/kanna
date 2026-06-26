@@ -196,9 +196,12 @@ export function createJsonlEventParser(opts: CreateJsonlEventParserOptions = {})
           }
           // Mirror the real-result branch: reset per-turn usage tracking so the
           // next turn starts clean (the result branch that normally does this
-          // never runs on CLI >= 2.1.x).
+          // never runs on CLI >= 2.1.x). Clear the pending result vars too so a
+          // future code path can never carry one turn's cost into the next.
           seenAssistantUsageIds = new Set<string>()
           latestUsageSnapshot = null
+          pendingResultUsage = undefined
+          pendingResultCost = undefined
         }
       }
 

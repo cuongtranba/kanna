@@ -53,7 +53,10 @@ export function resolveModelPrice(
   if (openRouterPricing) {
     const inputPerMTok = openRouterPricing.promptPerTok * MILLION
     const outputPerMTok = openRouterPricing.completionPerTok * MILLION
-    if (inputPerMTok > 0 || outputPerMTok > 0) {
+    // OpenRouter is authoritative for its own models. A genuine 0/0 means a
+    // free model (zero cost is a valid price) — return it rather than falling
+    // back to the static table, which would fabricate a cost.
+    if (Number.isFinite(inputPerMTok) && Number.isFinite(outputPerMTok)) {
       return { inputPerMTok, outputPerMTok }
     }
   }

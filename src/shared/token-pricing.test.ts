@@ -62,6 +62,13 @@ describe("resolveModelPrice", () => {
     expect(resolveModelPrice("totally-unknown-model")).toBeNull()
   })
 
+  test("OpenRouter free model (0/0) returns zero price, not a static fallback", () => {
+    expect(resolveModelPrice("some/free-model", { promptPerTok: 0, completionPerTok: 0 })).toEqual({
+      inputPerMTok: 0,
+      outputPerMTok: 0,
+    })
+  })
+
   test("o4 needle does not match ids where o4 is part of a larger word", () => {
     expect(resolveModelPrice("acme/foo4bar")).toBeNull()
   })
