@@ -1,4 +1,4 @@
-import type { ContextWindowUsageSnapshot, TranscriptEntry } from "../../shared/types"
+import type { ContextWindowUsageSnapshot, ProviderUsage, TranscriptEntry } from "../../shared/types"
 
 export interface ContextWindowSnapshot extends ContextWindowUsageSnapshot {
   remainingTokens: number | null
@@ -77,37 +77,59 @@ export function overrideContextWindowMaxTokens(
   )
 }
 
-export interface SessionTokenSummary {
-  input: number
-  output: number
-  cached: number
-  cacheHitPercentage: number | null
-}
-
-export function computeSessionTokenSummary(
-  snapshot: ContextWindowSnapshot | null,
-): SessionTokenSummary | null {
-  if (!snapshot) return null
-
-  const input = toNonNegative(snapshot.inputTokens)
-  const output = toNonNegative(snapshot.outputTokens)
-  const cached = toNonNegative(snapshot.cachedInputTokens)
-
-  if (input === 0 && output === 0 && cached === 0) {
-    return null
-  }
-
-  const billedAndCached = input + cached
-  const cacheHitPercentage = billedAndCached > 0
-    ? (cached / billedAndCached) * 100
-    : null
-
-  return { input, output, cached, cacheHitPercentage }
-}
-
 function toNonNegative(value: number | undefined): number {
   if (value === undefined || !Number.isFinite(value) || value < 0) return 0
   return value
+}
+
+export interface SessionTotals {
+  inputTokens: number
+  outputTokens: number
+  cachedTokens: number
+  costUsd: number
+  cacheHitPercentage: number | null
+}
+
+export function computeSessionTotals(
+  entries: ReadonlyArray<TranscriptEntry>,
+  subagentRuns: ReadonlyArray<{ usage: ProviderUsage | null }>,
+): SessionTotals | null {
+  let input = 0
+  let output = 0
+  let cached = 0
+  let cost = 0
+
+  for (const entry of entries) {
+    if (entry.kind !== "result") continue
+    const u = entry.usage
+    if (u) {
+      input += toNonNegative(u.inputTokens)
+      output += toNonNegative(u.outputTokens)
+      cached += toNonNegative(u.cachedInputTokens)
+    }
+    cost += toNonNegative(entry.costUsd ?? u?.costUsd)
+  }
+  for (const run of subagentRuns) {
+    const u = run.usage
+    if (!u) continue
+    input += toNonNegative(u.inputTokens)
+    output += toNonNegative(u.outputTokens)
+    cached += toNonNegative(u.cachedInputTokens)
+    cost += toNonNegative(u.costUsd)
+  }
+
+  if (input === 0 && output === 0 && cached === 0 && cost === 0) return null
+
+  // inputTokens already includes the cached portion (see normalizeClaudeUsageSnapshot),
+  // so the hit rate is cached / input, not cached / (input + cached).
+  const cacheHitPercentage = input > 0 ? (cached / input) * 100 : null
+  return { inputTokens: input, outputTokens: output, cachedTokens: cached, costUsd: cost, cacheHitPercentage }
+}
+
+export function formatCostUsd(value: number): string {
+  if (!Number.isFinite(value) || value <= 0) return "$0.00"
+  if (value < 0.01) return "<$0.01"
+  return `$${value.toFixed(2)}`
 }
 
 export function formatContextWindowTokens(value: number | null | undefined): string {

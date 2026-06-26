@@ -20,6 +20,7 @@ export interface OpenRouterModel {
   id: string
   label: string
   contextLength: number
+  pricing?: { promptPerTok: number; completionPerTok: number }
 }
 
 export type AttachmentKind = "image" | "file" | "mention"
@@ -1164,6 +1165,8 @@ export interface ContextWindowUsageSnapshot {
   lastReasoningOutputTokens?: number
   toolUses?: number
   durationMs?: number
+  /** USD cost for this turn. Provider-reported (Claude) or computed (others). */
+  costUsd?: number
   compactsAutomatically: boolean
 }
 

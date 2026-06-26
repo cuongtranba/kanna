@@ -21,6 +21,53 @@ describe("parseOpenRouterModels", () => {
   })
 })
 
+describe("pricing parsing", () => {
+  test("parses per-token pricing when present", () => {
+    const models = parseOpenRouterModels({
+      data: [{
+        id: "anthropic/claude-sonnet-4",
+        name: "Claude Sonnet 4",
+        context_length: 200000,
+        supported_parameters: ["tools"],
+        pricing: { prompt: "0.000003", completion: "0.000015" },
+      }],
+    })
+    expect(models[0]?.pricing).toEqual({ promptPerTok: 0.000003, completionPerTok: 0.000015 })
+  })
+
+  test("omits pricing when fields are missing or malformed", () => {
+    const models = parseOpenRouterModels({
+      data: [{
+        id: "x/y",
+        supported_parameters: ["tools"],
+        pricing: { prompt: "abc" },
+      }],
+    })
+    expect(models[0]?.pricing).toBeUndefined()
+  })
+
+  test("omits pricing when a field is null", () => {
+    const models = parseOpenRouterModels({
+      data: [{ id: "x/y", supported_parameters: ["tools"], pricing: { prompt: null, completion: "0.001" } }],
+    })
+    expect(models[0]?.pricing).toBeUndefined()
+  })
+
+  test("omits pricing for empty or whitespace strings", () => {
+    const models = parseOpenRouterModels({
+      data: [{ id: "x/y", supported_parameters: ["tools"], pricing: { prompt: "", completion: " " } }],
+    })
+    expect(models[0]?.pricing).toBeUndefined()
+  })
+
+  test("accepts a numeric (non-string) price", () => {
+    const models = parseOpenRouterModels({
+      data: [{ id: "x/y", supported_parameters: ["tools"], pricing: { prompt: 0.000003, completion: 0.000015 } }],
+    })
+    expect(models[0]?.pricing).toEqual({ promptPerTok: 0.000003, completionPerTok: 0.000015 })
+  })
+})
+
 describe("OpenRouterModelCache", () => {
   test("fetches once, serves cache within TTL, refetches after TTL", async () => {
     let calls = 0

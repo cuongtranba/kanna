@@ -1,7 +1,7 @@
 ---
 id: c3-3
 c3-version: 4
-c3-seal: efae8370de0491f8fa0542b874f6c96f8bb91dc344a37e12f26bf16479465812
+c3-seal: bd91ae5f9ac119d7a2844317f7b2c364d01cab2e3a2a5365df987595e5239175
 title: Shared
 type: container
 boundary: library
@@ -21,6 +21,7 @@ Publish the wire protocol, core domain types, tool-call normalization, port and 
 - Define the WebSocket protocol envelope shared by client + server.
 - Normalize tool-call shapes so Claude and Codex render through one pipeline.
 - Publish port helpers and branding constants.
+- Provide pure USD token-cost math and model-price resolution used by both server providers and client readouts.
 
 ## Components
 
@@ -32,3 +33,4 @@ Publish the wire protocol, core domain types, tool-call normalization, port and 
 | c3-304 | ports | foundation | implemented | Port constants + dev-port helpers |
 | c3-305 | branding | foundation | implemented | Product name + data dir constants |
 | c3-306 | share-shared | foundation | implemented | Share DTOs shared with client |
+| c3-307 | token-pricing | foundation | implemented | Pure USD token-cost math + model-price resolution |

@@ -464,6 +464,7 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     getSubagents: () => appSettings.getSnapshot().subagents,
     getAppSettingsSnapshot: () => buildAgentAppSettingsView(appSettings.getSnapshot()),
     readLlmProvider: () => readLlmProviderSnapshot(),
+    listOpenRouterModels: () => openrouterModelCache.list(),
     onStateChange: (chatId?: string, options?: { immediate?: boolean }) => {
       if (chatId) {
         if (options?.immediate) {

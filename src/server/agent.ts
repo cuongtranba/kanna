@@ -13,6 +13,7 @@ import type {
   NormalizedToolCall,
   PendingToolSnapshot,
   KannaStatus,
+  ProviderUsage,
   QueuedChatMessage,
   ResolvedStackBinding,
   SlashCommand,
@@ -48,6 +49,8 @@ import {
   openrouterAuthReady,
 } from "./provider-catalog"
 import { readLlmProviderSnapshot } from "./llm-provider"
+import { computeCostUsd, resolveModelPrice, stripModelVariantSuffix } from "../shared/token-pricing"
+import type { ModelPrice } from "../shared/token-pricing"
 import { providerUsesSdkSession, resolveClaudeApiModelId, type ClaudeDriverPreference } from "../shared/types"
 import { fallbackTitleFromMessage } from "./generate-title"
 import { AUTO_CONTINUE_EVENT_VERSION, type AutoContinueEvent } from "./auto-continue/events"
@@ -319,6 +322,10 @@ interface AgentCoordinatorArgs {
     restrictedAllowedPaths?: string[]
     /** Keep the SDK prompt queue open after the initial prompt to allow multi-turn keep-alive. */
     keepAlive?: boolean
+    /** Per-turn price for computing cost when the provider doesn't report it (OpenRouter). */
+    turnPrice?: ModelPrice | null
+    /** Overrides the configured context window (OpenRouter model contextLength). */
+    contextWindowOverride?: number
   }) => Promise<ClaudeSessionHandle>
   startClaudeSessionPTY?: (args: StartClaudeSessionPtyArgs) => Promise<ClaudeSessionHandle>
   claudeLimitDetector?: LimitDetector
@@ -379,6 +386,8 @@ interface AgentCoordinatorArgs {
   subagentTranscriptRegistry?: import("./subagent-transcript-registry").SubagentTranscriptRegistry
   /** Reads the persisted LLM provider snapshot (OpenRouter key source). */
   readLlmProvider?: () => Promise<LlmProviderSnapshot>
+  /** Lists OpenRouter models (with pricing + contextLength) for cost computation. */
+  listOpenRouterModels?: () => Promise<import("../shared/types").OpenRouterModel[]>
   /** Local skill + slash command catalog (user, project, plugin scans). */
   localCatalog?: import("./local-catalog").LocalCatalogService
 }
@@ -902,6 +911,7 @@ export function normalizeClaudeStreamMessage(message: any): TranscriptEntry[] {
 export async function* createClaudeHarnessStream(
   q: Query,
   configuredContextWindow?: number,
+  resolveTurnPrice?: () => ModelPrice | null,
 ): AsyncGenerator<HarnessEvent> {
   let seenAssistantUsageIds = new Set<string>()
   let latestUsageSnapshot: ContextWindowUsageSnapshot | null = null
@@ -914,6 +924,12 @@ export async function* createClaudeHarnessStream(
   // we can scrub the duplicate body off the trailing result entry; the
   // duration footer still renders, the message renders once.
   let apiErrorEmittedInTurn = false
+
+  // Per-turn billed token usage and cost to attach to the result entry.
+  // Set when the `type:"result"` SDK message is processed; cleared after
+  // the result entry is yielded so they don't leak to a subsequent turn.
+  let pendingResultUsage: ProviderUsage | undefined
+  let pendingResultCost: number | undefined
 
   for await (const sdkMessage of q as AsyncIterable<any>) {
     const sessionToken = typeof sdkMessage.session_id === "string" ? sdkMessage.session_id : null
@@ -962,12 +978,47 @@ export async function* createClaudeHarnessStream(
         lastKnownContextWindow,
       )
 
+      const providerCostUsd =
+        typeof (sdkMessage as { total_cost_usd?: unknown }).total_cost_usd === "number"
+          ? (sdkMessage as { total_cost_usd: number }).total_cost_usd
+          : undefined
+
+      let costUsd = providerCostUsd
+      if (costUsd === undefined && resolveTurnPrice && finalUsage) {
+        const price = resolveTurnPrice()
+        if (price) {
+          costUsd = computeCostUsd(
+            {
+              inputTokens: finalUsage.inputTokens,
+              cachedInputTokens: finalUsage.cachedInputTokens,
+              outputTokens: finalUsage.outputTokens,
+            },
+            price,
+          )
+        }
+      }
+
+      // Stash billed token figures for the result entry (populated below
+      // in the entry loop). Prefer `accumulatedUsage` (the per-turn
+      // cumulative that the SDK computes) for tokens; fall back to
+      // `finalUsage` when accumulated is null.
+      const billed = accumulatedUsage ?? finalUsage
+      pendingResultUsage = billed
+        ? {
+            ...(billed.inputTokens !== undefined ? { inputTokens: billed.inputTokens } : {}),
+            ...(billed.outputTokens !== undefined ? { outputTokens: billed.outputTokens } : {}),
+            ...(billed.cachedInputTokens !== undefined ? { cachedInputTokens: billed.cachedInputTokens } : {}),
+          }
+        : undefined
+      pendingResultCost = costUsd
+
       if (finalUsage) {
+        const usageWithCost = costUsd !== undefined ? { ...finalUsage, costUsd } : finalUsage
         yield {
           type: "transcript",
           entry: timestamped({
             kind: "context_window_updated",
-            usage: finalUsage,
+            usage: usageWithCost,
           }),
         }
       }
@@ -984,7 +1035,14 @@ export async function* createClaudeHarnessStream(
           ? { ...entry, result: "" }
           : entry
         apiErrorEmittedInTurn = false
-        yield { type: "transcript", entry: scrubbed }
+        const enriched = {
+          ...scrubbed,
+          ...(pendingResultUsage !== undefined ? { usage: pendingResultUsage } : {}),
+          ...(pendingResultCost !== undefined ? { costUsd: pendingResultCost } : {}),
+        }
+        pendingResultUsage = undefined
+        pendingResultCost = undefined
+        yield { type: "transcript", entry: enriched }
         continue
       }
       yield { type: "transcript", entry }
@@ -1210,6 +1268,10 @@ async function startClaudeSession(args: {
   restrictedAllowedPaths?: string[]
   /** When true, leave the prompt queue open after initialPrompt and expose pushChannelPrompt on the handle. */
   keepAlive?: boolean
+  /** Per-turn price for computing cost when the provider doesn't report it (OpenRouter). */
+  turnPrice?: ModelPrice | null
+  /** Overrides the configured context window (OpenRouter model contextLength). */
+  contextWindowOverride?: number
 }): Promise<ClaudeSessionHandle> {
   const canUseTool = buildCanUseTool({
     localPath: args.localPath,
@@ -1295,7 +1357,11 @@ async function startClaudeSession(args: {
 
   return {
     provider: "claude",
-    stream: createClaudeHarnessStream(q, parseConfiguredContextWindowFromModelId(args.model)),
+    stream: createClaudeHarnessStream(
+      q,
+      args.contextWindowOverride ?? parseConfiguredContextWindowFromModelId(args.model),
+      args.turnPrice ? () => args.turnPrice ?? null : undefined,
+    ),
     getAccountInfo: async () => {
       try {
         return await q.accountInfo()
@@ -1478,6 +1544,7 @@ export class AgentCoordinator {
   private readonly subagentTranscriptRegistry: import("./subagent-transcript-registry").SubagentTranscriptRegistry | null
   private readonly localCatalog: import("./local-catalog").LocalCatalogService | null
   private readonly readLlmProvider: () => Promise<LlmProviderSnapshot>
+  private readonly listOpenRouterModelsFn: (() => Promise<import("../shared/types").OpenRouterModel[]>) | null
   private readonly subagentPendingResolvers = new Map<
     string,
     { resolve: (v: unknown) => void; reject: (e: Error) => void }
@@ -1503,6 +1570,7 @@ export class AgentCoordinator {
     this.getSubagents = args.getSubagents ?? (() => [])
     this.getAppSettingsSnapshot = args.getAppSettingsSnapshot ?? (() => ({}))
     this.readLlmProvider = args.readLlmProvider ?? readLlmProviderSnapshot
+    this.listOpenRouterModelsFn = args.listOpenRouterModels ?? null
     this.subagentOrchestrator = new SubagentOrchestrator({
       store: this.store,
       appSettings: { getSnapshot: () => ({ subagents: this.getSubagents() }) },
@@ -2633,6 +2701,24 @@ export class AgentCoordinator {
         throw new OAuthPoolUnavailableError(this.buildPoolUnavailableMessage(args.chatId, ""))
       }
       if (picked) this.oauthPool!.markUsed(picked.id)
+
+      let openrouterTurnPrice: ModelPrice | null = null
+      let openrouterContextWindow: number | undefined
+      if (isOpenRouter && this.listOpenRouterModelsFn) {
+        try {
+          const models = await this.listOpenRouterModelsFn()
+          // OpenRouter routing variants (":nitro", ":floor", ...) aren't their
+          // own /models entries — fall back to the base id for pricing/context.
+          const baseModelId = stripModelVariantSuffix(args.model)
+          const m = models.find((x) => x.id === args.model)
+            ?? models.find((x) => x.id === baseModelId)
+          openrouterTurnPrice = resolveModelPrice(baseModelId, m?.pricing ?? null)
+          if (m && m.contextLength > 0) openrouterContextWindow = m.contextLength
+        } catch (err) {
+          console.warn("[kanna/agent] openrouter pricing lookup failed", err)
+        }
+      }
+
       const usePty = !isOpenRouter && this.resolveClaudeDriverPreference() === "pty"
       const systemPromptAppend = buildKannaSystemPromptAppend(this.getSubagents(), {
         globalPromptAppend: this.getAppSettingsSnapshot().globalPromptAppend,
@@ -2702,6 +2788,8 @@ export class AgentCoordinator {
               toolCallback: this.toolCallback ?? undefined,
               chatPolicy: this.resolveChatPolicy(args.chatId),
               customMcpServers: this.getEnabledCustomMcpServers(),
+              turnPrice: openrouterTurnPrice,
+              contextWindowOverride: openrouterContextWindow,
             })
       } catch (err) {
         // Spawn failed before we registered the session — release the OAuth

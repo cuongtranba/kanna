@@ -57,6 +57,7 @@ import { classifyAttachmentPreview } from "../messages/attachmentPreview"
 import {
   overrideContextWindowMaxTokens,
   type ContextWindowSnapshot,
+  type SessionTotals,
 } from "../../lib/contextWindow"
 import { uploadFile, UploadAbortedError } from "../../lib/uploadFile"
 import { useAppSettingsStore } from "../../stores/appSettingsStore"
@@ -219,6 +220,7 @@ interface Props {
   activeProvider: AgentProvider | null
   availableProviders: ProviderCatalogEntry[]
   contextWindowSnapshot?: ContextWindowSnapshot | null
+  sessionTotals?: SessionTotals | null
   previousPrompt?: string | null
 }
 
@@ -431,6 +433,7 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput(
     activeProvider,
     availableProviders,
     contextWindowSnapshot = null,
+    sessionTotals = null,
     previousPrompt = null,
   },
   forwardedRef,
@@ -1296,18 +1299,18 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput(
             <div className="min-w-3" />
           </div>
 
-          {activeContextWindow ? (
+          {(sessionTotals ?? activeContextWindow) ? (
             <div className="hidden shrink-0 items-center gap-2 pr-3 md:flex">
-              <SessionTokenPill usage={activeContextWindow} />
-              <ContextWindowMeter usage={activeContextWindow} />
+              <SessionTokenPill totals={sessionTotals ?? null} />
+              {activeContextWindow ? <ContextWindowMeter usage={activeContextWindow} /> : null}
             </div>
           ) : null}
         </div>
 
-        {activeContextWindow ? (
+        {(sessionTotals ?? activeContextWindow) ? (
           <div className="flex md:hidden items-center justify-end gap-2 px-[13px] pt-2">
-            <SessionTokenPill usage={activeContextWindow} />
-            <ContextWindowMeter usage={activeContextWindow} />
+            <SessionTokenPill totals={sessionTotals ?? null} />
+            {activeContextWindow ? <ContextWindowMeter usage={activeContextWindow} /> : null}
           </div>
         ) : null}
       </div>

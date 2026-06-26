@@ -222,3 +222,5 @@ c3-305:
   - src/shared/branding.ts
 c3-306:
   - src/shared/share.ts
+c3-307:
+  - src/shared/token-pricing.ts

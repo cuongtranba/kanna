@@ -4,7 +4,7 @@ import { PassThrough } from "node:stream"
 import { mkdtempSync, rmSync, writeFileSync, existsSync, readFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { CodexAppServerManager, type CodexSessionScope } from "./codex-app-server"
+import { CodexAppServerManager, normalizeCodexTokenUsage, type CodexSessionScope } from "./codex-app-server"
 
 class FakeCodexProcess extends EventEmitter {
   readonly stdin = new PassThrough()
@@ -301,6 +301,89 @@ describe("CodexAppServerManager", () => {
       reasoningOutputTokens: 0,
       lastUsedTokens: 126,
       compactsAutomatically: true,
+    })
+  })
+
+  test("result entry carries usage tokens from the last token usage snapshot", async () => {
+    const process = new FakeCodexProcess((message, child) => {
+      if (message.method === "initialize") {
+        child.writeServerMessage({ id: message.id, result: { userAgent: "codex-test" } })
+      } else if (message.method === "thread/start") {
+        child.writeServerMessage({
+          id: message.id,
+          result: { thread: { id: "thread-result-usage" }, model: "gpt-5.4", reasoningEffort: "high" },
+        })
+      } else if (message.method === "turn/start") {
+        child.writeServerMessage({
+          id: message.id,
+          result: { turn: { id: "turn-result-usage", status: "completed", error: null } },
+        })
+        child.writeServerMessage({
+          method: "thread/tokenUsage/updated",
+          params: {
+            threadId: "thread-result-usage",
+            turnId: "turn-result-usage",
+            tokenUsage: {
+              total: {
+                inputTokens: 500,
+                cachedInputTokens: 100,
+                outputTokens: 42,
+                reasoningOutputTokens: 0,
+                totalTokens: 542,
+              },
+              last: {
+                inputTokens: 500,
+                cachedInputTokens: 100,
+                outputTokens: 42,
+                reasoningOutputTokens: 0,
+                totalTokens: 542,
+              },
+              modelContextWindow: 128_000,
+            },
+          },
+        })
+        child.writeServerMessage({
+          method: "turn/completed",
+          params: {
+            threadId: "thread-result-usage",
+            turn: { id: "turn-result-usage", status: "completed", error: null },
+          },
+        })
+      }
+    })
+
+    const manager = new CodexAppServerManager({
+      spawnProcess: () => process as never,
+    })
+
+    await manager.startSession({
+      chatId: "chat-result-usage",
+      cwd: "/tmp/project",
+      model: "gpt-5.4",
+      sessionToken: null,
+    })
+
+    const turn = await manager.startTurn({
+      chatId: "chat-result-usage",
+      model: "gpt-5.4",
+      content: "Hello",
+      planMode: false,
+      onToolRequest: async () => ({}),
+    })
+
+    const events = await collectStream(turn.stream)
+    const resultEvent = events.find((event: any) => event.type === "transcript" && event.entry.kind === "result")
+
+    expect(resultEvent).toBeDefined()
+    if (!resultEvent || resultEvent.type !== "transcript" || resultEvent.entry.kind !== "result") {
+      throw new Error("missing result event")
+    }
+
+    expect(resultEvent.entry.usage).toBeDefined()
+    expect(resultEvent.entry.usage).toMatchObject({
+      inputTokens: 500,
+      cachedInputTokens: 100,
+      outputTokens: 42,
     })
   })
 
@@ -2495,5 +2578,26 @@ describe("CodexAppServerManager developer_instructions", () => {
     })
     await collectStream(turn.stream)
     expect(lastTurnStart(process)?.params.collaborationMode?.settings?.developer_instructions).toBe("Be concise.")
+  })
+
+  test("codex usage snapshot includes computed cost from model price", () => {
+    const snap = normalizeCodexTokenUsage(
+      {
+        tokenUsage: {
+          last_token_usage: { input_tokens: 1_000_000, output_tokens: 0, total_tokens: 1_000_000 },
+          model_context_window: 400000,
+        },
+      } as never,
+      () => ({ inputPerMTok: 1.25, outputPerMTok: 10 }),
+    )
+    expect(snap?.costUsd).toBeCloseTo(1.25, 6)
+  })
+
+  test("codex snapshot omits cost when resolver returns null", () => {
+    const snap = normalizeCodexTokenUsage(
+      { tokenUsage: { last_token_usage: { input_tokens: 1000, output_tokens: 0, total_tokens: 1000 } } } as never,
+      () => null,
+    )
+    expect(snap?.costUsd).toBeUndefined()
   })
 })

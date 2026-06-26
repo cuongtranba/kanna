@@ -698,6 +698,91 @@ describe("createJsonlEventParser", () => {
       expect(resultEntries(parser.parse(makeLastPrompt()))).toHaveLength(1)
     })
 
+    test("synthesized result carries usage from the final assistant message (CLI ≥2.1.x path)", () => {
+      const parser = createJsonlEventParser()
+      parser.parse(makeRealUser("list files"))
+      // Final assistant row with terminal stop_reason and usage nested under message.usage
+      // (the real on-disk transcript shape).
+      const assistantWithUsage = JSON.stringify({
+        type: "assistant",
+        sessionId: "sess-sr",
+        message: {
+          id: "msg_usage_flush",
+          role: "assistant",
+          stop_reason: "end_turn",
+          content: [{ type: "text", text: "here are the files" }],
+          usage: {
+            input_tokens: 1234,
+            cache_creation_input_tokens: 100,
+            cache_read_input_tokens: 50,
+            output_tokens: 42,
+          },
+        },
+      })
+      parser.parse(assistantWithUsage)
+      // Checkpoint row triggers the pending flush.
+      const flushed = parser.parse(makeLastPrompt())
+      const results = resultEntries(flushed)
+      expect(results).toHaveLength(1)
+      const entry = results[0]?.entry as {
+        kind?: string
+        subtype?: string
+        usage?: { inputTokens?: number; outputTokens?: number; cachedInputTokens?: number }
+      }
+      expect(entry.subtype).toBe("success")
+      // normalizeClaudeUsageSnapshot sums direct + cache_creation + cache_read into inputTokens
+      // (1234 + 100 + 50 = 1384). cachedInputTokens = cache_read only (50).
+      expect(entry.usage?.inputTokens).toBe(1384)
+      expect(entry.usage?.outputTokens).toBe(42)
+      expect(entry.usage?.cachedInputTokens).toBe(50)
+    })
+
+    test("synthesized result resets usage tracking; next turn starts clean", () => {
+      const parser = createJsonlEventParser()
+      // Turn 1: assistant with usage → synthesized result.
+      parser.parse(makeRealUser("turn 1"))
+      const assistantRow = JSON.stringify({
+        type: "assistant",
+        sessionId: "sess-sr",
+        message: {
+          id: "msg_t1",
+          role: "assistant",
+          stop_reason: "end_turn",
+          content: [{ type: "text", text: "done" }],
+          usage: {
+            input_tokens: 99,
+            cache_creation_input_tokens: 0,
+            cache_read_input_tokens: 0,
+            output_tokens: 11,
+          },
+        },
+      })
+      parser.parse(assistantRow)
+      const turn1Results = resultEntries(parser.parse(makeLastPrompt()))
+      expect(turn1Results).toHaveLength(1)
+      const t1Entry = turn1Results[0]?.entry as { usage?: { inputTokens?: number } }
+      expect(t1Entry.usage?.inputTokens).toBe(99)
+
+      // Turn 2: assistant with no usage — synthesized result should have no usage field.
+      parser.parse(makeRealUser("turn 2"))
+      const assistantNoUsage = JSON.stringify({
+        type: "assistant",
+        sessionId: "sess-sr",
+        message: {
+          id: "msg_t2",
+          role: "assistant",
+          stop_reason: "end_turn",
+          content: [{ type: "text", text: "also done" }],
+          // No usage field at all.
+        },
+      })
+      parser.parse(assistantNoUsage)
+      const turn2Results = resultEntries(parser.parse(makeLastPrompt()))
+      expect(turn2Results).toHaveLength(1)
+      const t2Entry = turn2Results[0]?.entry as { usage?: unknown }
+      expect(t2Entry.usage).toBeUndefined()
+    })
+
     test("sidechain row still triggers the pending flush (result not delayed)", () => {
       const parser = createJsonlEventParser()
       parser.parse(makeRealUser("hi"))
