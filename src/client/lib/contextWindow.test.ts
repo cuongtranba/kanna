@@ -2,8 +2,10 @@ import { describe, expect, test } from "bun:test"
 import type { TranscriptEntry } from "../../shared/types"
 import {
   computeSessionTokenSummary,
+  computeSessionTotals,
   deriveLatestContextWindowSnapshot,
   formatContextWindowTokens,
+  formatCostUsd,
   overrideContextWindowMaxTokens,
 } from "./contextWindow"
 
@@ -133,5 +135,40 @@ describe("overrideContextWindowMaxTokens", () => {
     expect(overridden?.maxTokens).toBe(1_000_000)
     expect(overridden?.usedPercentage).toBe(5)
     expect(overridden?.remainingTokens).toBe(950_000)
+  })
+})
+
+describe("computeSessionTotals", () => {
+  test("sums per-turn last* deltas + subagent usage + cost", () => {
+    const entries = [
+      { kind: "context_window_updated", createdAt: 1, usage: { usedTokens: 100, lastInputTokens: 100, lastOutputTokens: 20, costUsd: 0.01, compactsAutomatically: false } },
+      { kind: "context_window_updated", createdAt: 2, usage: { usedTokens: 300, lastInputTokens: 150, lastOutputTokens: 30, costUsd: 0.02, compactsAutomatically: false } },
+    ] as never
+    const subagentRuns = [
+      { usage: { inputTokens: 40, outputTokens: 10, cachedInputTokens: 5, costUsd: 0.005 } },
+    ] as never
+    const totals = computeSessionTotals(entries, subagentRuns)
+    expect(totals?.inputTokens).toBe(290)   // 100 + 150 + 40
+    expect(totals?.outputTokens).toBe(60)   // 20 + 30 + 10
+    expect(totals?.cachedTokens).toBe(5)
+    expect(totals?.costUsd).toBeCloseTo(0.035, 6) // 0.01 + 0.02 + 0.005
+  })
+
+  test("returns null when nothing accumulated", () => {
+    expect(computeSessionTotals([] as never, [] as never)).toBeNull()
+  })
+
+  test("ignores non-context_window entries", () => {
+    const entries = [{ kind: "assistant_text", createdAt: 1, text: "hi" }] as never
+    expect(computeSessionTotals(entries, [] as never)).toBeNull()
+  })
+})
+
+describe("formatCostUsd", () => {
+  test("formats sub-cent and dollars", () => {
+    expect(formatCostUsd(0)).toBe("$0.00")
+    expect(formatCostUsd(0.004)).toBe("<$0.01")
+    expect(formatCostUsd(0.42)).toBe("$0.42")
+    expect(formatCostUsd(12.3)).toBe("$12.30")
   })
 })
