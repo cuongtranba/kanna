@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.101.0](https://github.com/cuongtranba/kanna/compare/v0.100.0...v0.101.0) (2026-06-26)
+
+
+### Features
+
+* per-turn token cost across SDK/OpenRouter/Codex + cumulative session totals ([#460](https://github.com/cuongtranba/kanna/issues/460)) ([5e4c9d7](https://github.com/cuongtranba/kanna/commit/5e4c9d709bf3e5d8d356b8c0fa284cff99198958))
+
+
+### Bug Fixes
+
+* **composer:** paste/drop images upload to the project, not the chat ([#459](https://github.com/cuongtranba/kanna/issues/459)) ([6826647](https://github.com/cuongtranba/kanna/commit/68266473098018f994445da52e9e15f9a41d5d70))
+* **local-catalog:** namespace marketplace skills by real plugin name ([#458](https://github.com/cuongtranba/kanna/issues/458)) ([42fa49e](https://github.com/cuongtranba/kanna/commit/42fa49e9802fe7c4d0f1329fd2167d884875b3e4))
+* **settings:** reset model when switching LLM provider ([#452](https://github.com/cuongtranba/kanna/issues/452)) ([6fab63d](https://github.com/cuongtranba/kanna/commit/6fab63dd4cc1a76f3db6a9696f2ec0f683592999))
+
 ## [0.100.0](https://github.com/cuongtranba/kanna/compare/v0.99.0...v0.100.0) (2026-06-25)
 
 
