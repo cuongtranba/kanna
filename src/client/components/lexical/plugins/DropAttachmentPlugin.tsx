@@ -27,7 +27,7 @@ export type UploadFileFn = typeof uploadFile
 export async function uploadDroppedFiles(
   files: File[],
   editor: LexicalEditor,
-  chatId: string,
+  projectId: string,
   uploadFileFn: UploadFileFn,
   onUploadError?: (msg: string) => void,
 ): Promise<void> {
@@ -41,7 +41,7 @@ export async function uploadDroppedFiles(
 
     try {
       const handle = uploadFileFn({
-        projectId: chatId,
+        projectId,
         file,
         onProgress: () => {
           // progress not tracked in the lexical plugin (no per-file progress UI here)
@@ -102,7 +102,7 @@ export function getDroppedFiles(event: DragEvent): File[] {
 // ─── Props ────────────────────────────────────────────────────────────────────
 
 export interface DropAttachmentPluginProps {
-  chatId: string | null
+  projectId: string | null
   onUploadError?: (msg: string) => void
   /** Injectable for testing. Defaults to the real uploadFile. */
   uploadFileFn?: UploadFileFn
@@ -111,7 +111,7 @@ export interface DropAttachmentPluginProps {
 // ─── Plugin ───────────────────────────────────────────────────────────────────
 
 export function DropAttachmentPlugin({
-  chatId,
+  projectId,
   onUploadError,
   uploadFileFn = uploadFile,
 }: DropAttachmentPluginProps): null {
@@ -138,8 +138,8 @@ export function DropAttachmentPlugin({
 
         event.preventDefault()
 
-        if (chatId) {
-          void uploadDroppedFiles(files, editor, chatId, uploadFileFn, onUploadError)
+        if (projectId) {
+          void uploadDroppedFiles(files, editor, projectId, uploadFileFn, onUploadError)
         }
         return true
       },
@@ -150,7 +150,7 @@ export function DropAttachmentPlugin({
       unregisterDragover()
       unregisterDrop()
     }
-  }, [editor, chatId, onUploadError, uploadFileFn])
+  }, [editor, projectId, onUploadError, uploadFileFn])
 
   return null
 }

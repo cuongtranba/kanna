@@ -82,7 +82,7 @@ export type UploadFileFn = typeof uploadFile
 export async function uploadAndInsertFiles(
   files: File[],
   editor: LexicalEditor,
-  chatId: string,
+  projectId: string,
   uploadFileFn: UploadFileFn,
   onUploadError?: (msg: string) => void,
 ): Promise<void> {
@@ -97,7 +97,7 @@ export async function uploadAndInsertFiles(
 
     try {
       const handle = uploadFileFn({
-        projectId: chatId,
+        projectId,
         file,
         onProgress: () => {
           // progress not tracked in the lexical plugin (no per-file progress UI here)
@@ -131,7 +131,7 @@ export async function uploadAndInsertFiles(
 // ─── Props ────────────────────────────────────────────────────────────────────
 
 export interface PasteImagePluginProps {
-  chatId: string | null
+  projectId: string | null
   onUploadError?: (msg: string) => void
   /** Injectable for testing. Defaults to the real uploadFile. */
   uploadFileFn?: UploadFileFn
@@ -140,7 +140,7 @@ export interface PasteImagePluginProps {
 // ─── Plugin ───────────────────────────────────────────────────────────────────
 
 export function PasteImagePlugin({
-  chatId,
+  projectId,
   onUploadError,
   uploadFileFn = uploadFile,
 }: PasteImagePluginProps): null {
@@ -162,9 +162,9 @@ export function PasteImagePlugin({
         // normally — only intercept file extraction, don't stop propagation.
         const hasText = hasClipboardTextPayload(clipboardData)
 
-        if (chatId) {
+        if (projectId) {
           // Fire-and-forget: we don't block the editor on upload
-          void uploadAndInsertFiles(files, editor, chatId, uploadFileFn, onUploadError)
+          void uploadAndInsertFiles(files, editor, projectId, uploadFileFn, onUploadError)
         }
 
         // Return true (handled) only when there is NO text, so Lexical doesn't
@@ -174,7 +174,7 @@ export function PasteImagePlugin({
       },
       COMMAND_PRIORITY_HIGH,
     )
-  }, [editor, chatId, onUploadError, uploadFileFn])
+  }, [editor, projectId, onUploadError, uploadFileFn])
 
   return null
 }
