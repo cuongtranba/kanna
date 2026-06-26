@@ -20,6 +20,7 @@ export interface OpenRouterModel {
   id: string
   label: string
   contextLength: number
+  pricing?: { promptPerTok: number; completionPerTok: number }
 }
 
 export type AttachmentKind = "image" | "file" | "mention"
