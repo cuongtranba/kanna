@@ -4,7 +4,7 @@ import { PassThrough } from "node:stream"
 import { mkdtempSync, rmSync, writeFileSync, existsSync, readFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { CodexAppServerManager, type CodexSessionScope } from "./codex-app-server"
+import { CodexAppServerManager, normalizeCodexTokenUsage, type CodexSessionScope } from "./codex-app-server"
 
 class FakeCodexProcess extends EventEmitter {
   readonly stdin = new PassThrough()
@@ -2495,5 +2495,26 @@ describe("CodexAppServerManager developer_instructions", () => {
     })
     await collectStream(turn.stream)
     expect(lastTurnStart(process)?.params.collaborationMode?.settings?.developer_instructions).toBe("Be concise.")
+  })
+
+  test("codex usage snapshot includes computed cost from model price", () => {
+    const snap = normalizeCodexTokenUsage(
+      {
+        tokenUsage: {
+          last_token_usage: { input_tokens: 1_000_000, output_tokens: 0, total_tokens: 1_000_000 },
+          model_context_window: 400000,
+        },
+      } as never,
+      () => ({ inputPerMTok: 1.25, outputPerMTok: 10 }),
+    )
+    expect(snap?.costUsd).toBeCloseTo(1.25, 6)
+  })
+
+  test("codex snapshot omits cost when resolver returns null", () => {
+    const snap = normalizeCodexTokenUsage(
+      { tokenUsage: { last_token_usage: { input_tokens: 1000, output_tokens: 0, total_tokens: 1000 } } } as never,
+      () => null,
+    )
+    expect(snap?.costUsd).toBeUndefined()
   })
 })

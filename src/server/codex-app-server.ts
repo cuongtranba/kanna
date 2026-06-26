@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto"
+import { computeCostUsd, resolveModelPrice, type ModelPrice } from "../shared/token-pricing"
 import { defaultSpawnCodexAppServer } from "./codex-spawn.adapter"
 import { createInterface } from "node:readline"
 import type { Readable, Writable } from "node:stream"
@@ -262,8 +263,9 @@ function asNumber(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined
 }
 
-function normalizeCodexTokenUsage(
+export function normalizeCodexTokenUsage(
   notification: ThreadTokenUsageUpdatedNotification,
+  resolveTurnPrice?: () => ModelPrice | null,
 ): ContextWindowUsageSnapshot | null {
   const usage = notification.tokenUsage
   const totalUsage = usage.total_token_usage ?? usage.total
@@ -282,6 +284,17 @@ function normalizeCodexTokenUsage(
     asNumber(lastUsage?.reasoning_output_tokens) ?? asNumber(lastUsage?.reasoningOutputTokens)
   const maxTokens = asNumber(usage.model_context_window) ?? asNumber(usage.modelContextWindow)
 
+  let costUsd: number | undefined
+  if (resolveTurnPrice) {
+    const price = resolveTurnPrice()
+    if (price) {
+      costUsd = computeCostUsd(
+        { inputTokens: inputTokens ?? 0, cachedInputTokens, outputTokens: outputTokens ?? 0 },
+        price,
+      )
+    }
+  }
+
   return {
     usedTokens,
     ...(totalProcessedTokens !== undefined && totalProcessedTokens > usedTokens ? { totalProcessedTokens } : {}),
@@ -296,6 +309,7 @@ function normalizeCodexTokenUsage(
     ...(reasoningOutputTokens !== undefined ? { lastReasoningOutputTokens: reasoningOutputTokens } : {}),
     lastUsedTokens: usedTokens,
     compactsAutomatically: true,
+    ...(costUsd !== undefined ? { costUsd } : {}),
   }
 }
 
@@ -1567,7 +1581,7 @@ export class CodexAppServerManager {
     pendingTurn: PendingTurn,
     notification: ThreadTokenUsageUpdatedNotification,
   ) {
-    const usage = normalizeCodexTokenUsage(notification)
+    const usage = normalizeCodexTokenUsage(notification, () => resolveModelPrice(pendingTurn.model))
     if (!usage) {
       return
     }
