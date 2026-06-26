@@ -1,38 +1,40 @@
 import {
-  type ContextWindowSnapshot,
-  computeSessionTokenSummary,
+  type SessionTotals,
   formatContextWindowTokens,
+  formatCostUsd,
 } from "../../lib/contextWindow"
 import { cn } from "../../lib/utils"
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover"
 
 interface SessionTokenPillProps {
-  usage: ContextWindowSnapshot | null
+  totals: SessionTotals | null
   className?: string
 }
 
-export function SessionTokenPill({ usage, className }: SessionTokenPillProps) {
-  const summary = computeSessionTokenSummary(usage)
-  if (!summary) return null
+export function SessionTokenPill({ totals, className }: SessionTokenPillProps) {
+  if (!totals) return null
 
-  const cacheLabel = summary.cacheHitPercentage === null
+  const cacheLabel = totals.cacheHitPercentage === null
     ? null
-    : formatCachePercentage(summary.cacheHitPercentage)
+    : formatCachePercentage(totals.cacheHitPercentage)
+
+  const hasCost = totals.costUsd > 0
+  const costLabel = hasCost ? formatCostUsd(totals.costUsd) : null
 
   return (
     <Popover>
       <PopoverTrigger asChild>
         <button
           type="button"
-          aria-label={buildAriaLabel(summary, cacheLabel)}
+          aria-label={buildAriaLabel(totals, cacheLabel, costLabel)}
           className={cn(
             "inline-flex min-h-[36px] cursor-pointer touch-manipulation items-center gap-1.5 rounded-md bg-muted/30 px-2.5 py-1.5 text-xs tabular-nums text-muted-foreground transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
             className,
           )}
         >
-          <Stat label="in" value={formatContextWindowTokens(summary.input)} />
+          <Stat label="in" value={formatContextWindowTokens(totals.inputTokens)} />
           <Separator />
-          <Stat label="out" value={formatContextWindowTokens(summary.output)} />
+          <Stat label="out" value={formatContextWindowTokens(totals.outputTokens)} />
           {cacheLabel !== null
             ? (
               <>
@@ -41,15 +43,26 @@ export function SessionTokenPill({ usage, className }: SessionTokenPillProps) {
               </>
             )
             : null}
+          {costLabel !== null
+            ? (
+              <>
+                <Separator />
+                <span className="tabular-nums">{costLabel}</span>
+              </>
+            )
+            : null}
         </button>
       </PopoverTrigger>
       <PopoverContent side="top" align="center" className="w-max max-w-none px-3 py-2">
         <div className="space-y-1 text-xs leading-tight">
-          <Row label="Input" value={formatContextWindowTokens(summary.input)} />
-          <Row label="Output" value={formatContextWindowTokens(summary.output)} />
-          <Row label="Cache read" value={formatContextWindowTokens(summary.cached)} />
+          <Row label="Input" value={formatContextWindowTokens(totals.inputTokens)} />
+          <Row label="Output" value={formatContextWindowTokens(totals.outputTokens)} />
+          <Row label="Cache read" value={formatContextWindowTokens(totals.cachedTokens)} />
           {cacheLabel !== null
             ? <Row label="Cache hit" value={cacheLabel} />
+            : null}
+          {costLabel !== null
+            ? <Row label="Cost" value={costLabel} />
             : null}
         </div>
       </PopoverContent>
@@ -88,15 +101,16 @@ function formatCachePercentage(value: number): string {
 }
 
 function buildAriaLabel(
-  summary: { input: number; output: number; cached: number },
+  totals: SessionTotals,
   cacheLabel: string | null,
+  costLabel: string | null,
 ): string {
   const parts = [
-    `Input ${formatContextWindowTokens(summary.input)}`,
-    `Output ${formatContextWindowTokens(summary.output)}`,
-    `Cache ${formatContextWindowTokens(summary.cached)}`,
+    `Input ${formatContextWindowTokens(totals.inputTokens)}`,
+    `Output ${formatContextWindowTokens(totals.outputTokens)}`,
+    `Cache ${formatContextWindowTokens(totals.cachedTokens)}`,
   ]
   if (cacheLabel !== null) parts.push(`hit ${cacheLabel}`)
+  if (costLabel !== null) parts.push(`cost ${costLabel}`)
   return `Session tokens: ${parts.join(", ")}`
 }
-

@@ -9,7 +9,7 @@ import { useAppDialog } from "../../components/ui/app-dialog"
 import { Card, CardContent } from "../../components/ui/card"
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "../../components/ui/resizable"
 import { actionMatchesEvent, getResolvedKeybindings } from "../../lib/keybindings"
-import { deriveLatestContextWindowSnapshot } from "../../lib/contextWindow"
+import { computeSessionTotals, deriveLatestContextWindowSnapshot } from "../../lib/contextWindow"
 import { cn } from "../../lib/utils"
 import {
   DEFAULT_RIGHT_SIDEBAR_SIZE,
@@ -488,6 +488,13 @@ export function ChatPage() {
   const contextWindowSnapshot = useMemo(
     () => deriveLatestContextWindowSnapshot(state.chatSnapshot?.messages ?? []),
     [state.chatSnapshot?.messages]
+  )
+  const sessionTotals = useMemo(
+    () => computeSessionTotals(
+      state.chatSnapshot?.messages ?? [],
+      Object.values(state.chatSnapshot?.subagentRuns ?? {}),
+    ),
+    [state.chatSnapshot?.messages, state.chatSnapshot?.subagentRuns],
   )
 
   const hasTerminals = terminalLayout.terminals.length > 0
@@ -1050,6 +1057,7 @@ export function ChatPage() {
         activeProvider={state.runtime?.provider ?? null}
         availableProviders={state.availableProviders}
         contextWindowSnapshot={contextWindowSnapshot}
+        sessionTotals={sessionTotals}
         onSubmit={handleChatSubmit}
         onCancel={handleCancel}
       />
