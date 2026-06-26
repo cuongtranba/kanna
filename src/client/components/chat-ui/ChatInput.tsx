@@ -1199,8 +1199,8 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput(
                   chatId={chatId ?? null}
                   enabled={selectedProvider === "claude"}
                 />
-                <PasteImagePlugin chatId={chatId ?? null} onUploadError={handleUploadError} />
-                <DropAttachmentPlugin chatId={chatId ?? null} onUploadError={handleUploadError} />
+                <PasteImagePlugin projectId={projectId ?? null} onUploadError={handleUploadError} />
+                <DropAttachmentPlugin projectId={projectId ?? null} onUploadError={handleUploadError} />
                 <SubmitPlugin onSubmit={handlePluginSubmit} disabled={disabled || hasPendingUploads} />
                 <DraftPersistencePlugin onChange={handleDraftChange} />
                 <LexicalEditorBridgePlugin bridgeRef={bridgeRef} />
