@@ -1165,6 +1165,8 @@ export interface ContextWindowUsageSnapshot {
   lastReasoningOutputTokens?: number
   toolUses?: number
   durationMs?: number
+  /** USD cost for this turn. Provider-reported (Claude) or computed (others). */
+  costUsd?: number
   compactsAutomatically: boolean
 }
 
