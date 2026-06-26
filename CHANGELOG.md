@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.100.0](https://github.com/cuongtranba/kanna/compare/v0.99.0...v0.100.0) (2026-06-25)
+
+
+### Features
+
+* **renderer:** linkify text references adjacent to URLs ([#456](https://github.com/cuongtranba/kanna/issues/456)) ([794d662](https://github.com/cuongtranba/kanna/commit/794d662cc31e4892bf28240b5ac3b15770144bc7))
+
+
+### Bug Fixes
+
+* **agent:** surface SDK background-task completions in the transcript ([#453](https://github.com/cuongtranba/kanna/issues/453)) ([353bd26](https://github.com/cuongtranba/kanna/commit/353bd26a67eb954cf6ca5993954ffd27a0608d95))
+* **transcript:** keep offer_download/image cards out of collapsed tool groups ([#455](https://github.com/cuongtranba/kanna/issues/455)) ([fc15009](https://github.com/cuongtranba/kanna/commit/fc150099ab5247316f9b4d553062ae70ca283f31))
+
 ## [0.99.0](https://github.com/cuongtranba/kanna/compare/v0.98.0...v0.99.0) (2026-06-24)
 
 
