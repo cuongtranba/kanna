@@ -29,6 +29,16 @@ describe("computeCostUsd", () => {
   test("missing fields treated as zero", () => {
     expect(computeCostUsd({}, { inputPerMTok: 3, outputPerMTok: 15 })).toBe(0)
   })
+
+  test("cached portion is not double-billed (input already includes cached)", () => {
+    // 1M total input of which 200k are cache reads, sonnet-like rates
+    const cost = computeCostUsd(
+      { inputTokens: 1_000_000, cachedInputTokens: 200_000, outputTokens: 0 },
+      { inputPerMTok: 3, outputPerMTok: 15, cachedInputPerMTok: 0.3 },
+    )
+    // 800k @ $3/M = 2.4 ; 200k @ $0.3/M = 0.06 ; total 2.46
+    expect(cost).toBeCloseTo(2.46, 6)
+  })
 })
 
 describe("resolveModelPrice", () => {
@@ -41,12 +51,25 @@ describe("resolveModelPrice", () => {
   })
 
   test("uses built-in table for a known static model id", () => {
-    const price = resolveModelPrice("claude-sonnet-4-6")
-    expect(price?.inputPerMTok).toBeGreaterThan(0)
-    expect(price?.outputPerMTok).toBeGreaterThan(0)
+    expect(resolveModelPrice("claude-sonnet-4-6")).toEqual({
+      inputPerMTok: 3,
+      outputPerMTok: 15,
+      cachedInputPerMTok: 0.3,
+    })
   })
 
   test("unknown model id returns null (never fabricate)", () => {
     expect(resolveModelPrice("totally-unknown-model")).toBeNull()
+  })
+
+  test("o4 needle does not match ids where o4 is part of a larger word", () => {
+    expect(resolveModelPrice("acme/foo4bar")).toBeNull()
+  })
+
+  test("o4 needle matches openai/o4-mini", () => {
+    expect(resolveModelPrice("openai/o4-mini")).toEqual({
+      inputPerMTok: 1.1,
+      outputPerMTok: 4.4,
+    })
   })
 })

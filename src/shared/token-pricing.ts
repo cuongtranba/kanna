@@ -19,14 +19,17 @@ export function computeCostUsd(usage: ProviderUsage, price: ModelPrice): number 
   const input = nonNeg(usage.inputTokens)
   const cached = nonNeg(usage.cachedInputTokens)
   const output = nonNeg(usage.outputTokens)
+  const nonCachedInput = Math.max(0, input - cached)
   const cachedRate = price.cachedInputPerMTok ?? price.inputPerMTok
   return (
-    (input / MILLION) * price.inputPerMTok
+    (nonCachedInput / MILLION) * price.inputPerMTok
     + (cached / MILLION) * cachedRate
     + (output / MILLION) * price.outputPerMTok
   )
 }
 
+// USD per 1M tokens. Approximate list prices as of 2026-06; used only as a
+// fallback when the provider does not report cost. Update when prices change.
 const STATIC_PRICES: ReadonlyArray<readonly [string, ModelPrice]> = [
   ["opus", { inputPerMTok: 15, outputPerMTok: 75, cachedInputPerMTok: 1.5 }],
   ["sonnet", { inputPerMTok: 3, outputPerMTok: 15, cachedInputPerMTok: 0.3 }],
@@ -34,6 +37,14 @@ const STATIC_PRICES: ReadonlyArray<readonly [string, ModelPrice]> = [
   ["gpt-5", { inputPerMTok: 1.25, outputPerMTok: 10 }],
   ["o4", { inputPerMTok: 1.1, outputPerMTok: 4.4 }],
 ]
+
+function matchesNeedle(id: string, needle: string): boolean {
+  if (needle === "opus" || needle === "sonnet" || needle === "haiku") {
+    return id.includes(needle)
+  }
+  // anchored: start, or token boundary (e.g. "o4", "o4-mini", "openai/gpt-5")
+  return new RegExp(`(^|[^a-z0-9])${needle}([^a-z0-9]|$)`).test(id)
+}
 
 export function resolveModelPrice(
   modelId: string,
@@ -48,7 +59,7 @@ export function resolveModelPrice(
   }
   const id = modelId.toLowerCase()
   for (const [needle, price] of STATIC_PRICES) {
-    if (id.includes(needle)) return price
+    if (matchesNeedle(id, needle)) return price
   }
   return null
 }
