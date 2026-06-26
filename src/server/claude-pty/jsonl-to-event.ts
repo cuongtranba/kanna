@@ -1,5 +1,5 @@
 import type { HarnessEvent } from "../harness-types"
-import type { ContextWindowUsageSnapshot } from "../../shared/types"
+import type { ContextWindowUsageSnapshot, ProviderUsage } from "../../shared/types"
 import {
   normalizeClaudeStreamMessage,
   normalizeClaudeUsageSnapshot,
@@ -128,6 +128,12 @@ export function createJsonlEventParser(opts: CreateJsonlEventParserOptions = {})
   // repeats the same text. Track per-turn api_error emission so the trailing
   // result entry's body can be scrubbed; the duration footer still renders.
   let apiErrorEmittedInTurn = false
+
+  // Per-turn billed token usage and cost to attach to the result entry.
+  // Mirrors the SDK driver's pendingResultUsage/pendingResultCost pattern in
+  // createClaudeHarnessStream so both drivers produce identical result entries.
+  let pendingResultUsage: ProviderUsage | undefined
+  let pendingResultCost: number | undefined
 
   return {
     parse(rawLine: string): HarnessEvent[] {
@@ -312,10 +318,30 @@ export function createJsonlEventParser(opts: CreateJsonlEventParserOptions = {})
           accumulatedUsage,
           lastKnownContextWindow,
         )
+
+        // Stash billed token figures for the result entry (populated below in
+        // the entry loop). Mirrors createClaudeHarnessStream so both drivers
+        // produce identical result entries. Prefer accumulatedUsage for tokens.
+        const billed = accumulatedUsage ?? finalUsage
+        pendingResultUsage = billed
+          ? {
+              ...(billed.inputTokens !== undefined ? { inputTokens: billed.inputTokens } : {}),
+              ...(billed.outputTokens !== undefined ? { outputTokens: billed.outputTokens } : {}),
+              ...(billed.cachedInputTokens !== undefined ? { cachedInputTokens: billed.cachedInputTokens } : {}),
+            }
+          : undefined
+        const providerCostUsd =
+          typeof (message as { total_cost_usd?: unknown }).total_cost_usd === "number"
+            ? (message as { total_cost_usd: number }).total_cost_usd
+            : undefined
+        pendingResultCost = providerCostUsd
+
         if (finalUsage) {
+          const usageWithCost =
+            providerCostUsd !== undefined ? { ...finalUsage, costUsd: providerCostUsd } : finalUsage
           events.push({
             type: "transcript",
-            entry: timestamped({ kind: "context_window_updated", usage: finalUsage }),
+            entry: timestamped({ kind: "context_window_updated", usage: usageWithCost }),
           })
         }
         seenAssistantUsageIds = new Set<string>()
@@ -341,7 +367,14 @@ export function createJsonlEventParser(opts: CreateJsonlEventParserOptions = {})
               ? { ...entry, result: "" }
               : entry
             apiErrorEmittedInTurn = false
-            events.push({ type: "transcript", entry: scrubbed })
+            const enriched = {
+              ...scrubbed,
+              ...(pendingResultUsage !== undefined ? { usage: pendingResultUsage } : {}),
+              ...(pendingResultCost !== undefined ? { costUsd: pendingResultCost } : {}),
+            }
+            pendingResultUsage = undefined
+            pendingResultCost = undefined
+            events.push({ type: "transcript", entry: enriched })
             continue
           }
           events.push({ type: "transcript", entry })

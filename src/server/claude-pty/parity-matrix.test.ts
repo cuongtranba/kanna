@@ -338,3 +338,82 @@ describe("createClaudeHarnessStream cost attachment", () => {
     expect(lastCwu!.usage.costUsd).toBeCloseTo(3, 6)
   })
 })
+
+describe("result entry usage + cost enrichment", () => {
+  test("claude: result entry carries usage tokens and provider costUsd", async () => {
+    const messages = [
+      {
+        type: "assistant",
+        session_id: "sess-ru",
+        message: { id: "m1", role: "assistant", content: [] },
+        usage: { input_tokens: 200, output_tokens: 80 },
+      },
+      {
+        type: "result",
+        subtype: "success",
+        session_id: "sess-ru",
+        is_error: false,
+        total_cost_usd: 0.02,
+        usage: { input_tokens: 200, output_tokens: 80 },
+        duration_ms: 100,
+        num_turns: 1,
+        result: "done",
+      },
+    ]
+
+    const events: HarnessEvent[] = []
+    for await (const ev of createClaudeHarnessStream(fakeQuery(messages))) {
+      events.push(ev)
+    }
+
+    const resultEntries = events.flatMap((ev) =>
+      ev.type === "transcript" && ev.entry && ev.entry.kind === "result" ? [ev.entry] : [],
+    )
+    expect(resultEntries).toHaveLength(1)
+    const resultEntry = resultEntries[0]
+    expect(resultEntry.costUsd).toBeCloseTo(0.02, 6)
+    expect(resultEntry.usage).toBeDefined()
+    expect(resultEntry.usage?.outputTokens).toBe(80)
+    expect(resultEntry.usage?.inputTokens).toBe(200)
+  })
+
+  test("openrouter: result entry carries computed cost and usage tokens from resolver", async () => {
+    const messages = [
+      {
+        type: "assistant",
+        session_id: "sess-oru",
+        message: { id: "m1", role: "assistant", content: [] },
+        usage: { input_tokens: 1_000_000, output_tokens: 0 },
+      },
+      {
+        type: "result",
+        subtype: "success",
+        session_id: "sess-oru",
+        is_error: false,
+        // no total_cost_usd — OpenRouter doesn't provide it
+        usage: { input_tokens: 1_000_000, output_tokens: 0 },
+        duration_ms: 10,
+        num_turns: 1,
+        result: "ok",
+      },
+    ]
+
+    const price: ModelPrice = { inputPerMTok: 3, outputPerMTok: 15 }
+    const events: HarnessEvent[] = []
+    for await (const ev of createClaudeHarnessStream(fakeQuery(messages), undefined, () => price)) {
+      events.push(ev)
+    }
+
+    const resultEntries = events.flatMap((ev) =>
+      ev.type === "transcript" && ev.entry && ev.entry.kind === "result" ? [ev.entry] : [],
+    )
+    expect(resultEntries).toHaveLength(1)
+    const resultEntry = resultEntries[0]
+    // 1M input @ $3/M = $3
+    expect(resultEntry.costUsd).toBeCloseTo(3, 6)
+    expect(resultEntry.usage).toBeDefined()
+    expect(resultEntry.usage?.inputTokens).toBe(1_000_000)
+    // outputTokens is omitted when 0 (normalizeClaudeUsageSnapshot skips zero values)
+    expect(resultEntry.usage?.outputTokens).toBeUndefined()
+  })
+})

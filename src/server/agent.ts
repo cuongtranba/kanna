@@ -13,6 +13,7 @@ import type {
   NormalizedToolCall,
   PendingToolSnapshot,
   KannaStatus,
+  ProviderUsage,
   QueuedChatMessage,
   ResolvedStackBinding,
   SlashCommand,
@@ -924,6 +925,12 @@ export async function* createClaudeHarnessStream(
   // duration footer still renders, the message renders once.
   let apiErrorEmittedInTurn = false
 
+  // Per-turn billed token usage and cost to attach to the result entry.
+  // Set when the `type:"result"` SDK message is processed; cleared after
+  // the result entry is yielded so they don't leak to a subsequent turn.
+  let pendingResultUsage: ProviderUsage | undefined
+  let pendingResultCost: number | undefined
+
   for await (const sdkMessage of q as AsyncIterable<any>) {
     const sessionToken = typeof sdkMessage.session_id === "string" ? sdkMessage.session_id : null
     if (sessionToken) {
@@ -991,6 +998,20 @@ export async function* createClaudeHarnessStream(
         }
       }
 
+      // Stash billed token figures for the result entry (populated below
+      // in the entry loop). Prefer `accumulatedUsage` (the per-turn
+      // cumulative that the SDK computes) for tokens; fall back to
+      // `finalUsage` when accumulated is null.
+      const billed = accumulatedUsage ?? finalUsage
+      pendingResultUsage = billed
+        ? {
+            ...(billed.inputTokens !== undefined ? { inputTokens: billed.inputTokens } : {}),
+            ...(billed.outputTokens !== undefined ? { outputTokens: billed.outputTokens } : {}),
+            ...(billed.cachedInputTokens !== undefined ? { cachedInputTokens: billed.cachedInputTokens } : {}),
+          }
+        : undefined
+      pendingResultCost = costUsd
+
       if (finalUsage) {
         const usageWithCost = costUsd !== undefined ? { ...finalUsage, costUsd } : finalUsage
         yield {
@@ -1014,7 +1035,14 @@ export async function* createClaudeHarnessStream(
           ? { ...entry, result: "" }
           : entry
         apiErrorEmittedInTurn = false
-        yield { type: "transcript", entry: scrubbed }
+        const enriched = {
+          ...scrubbed,
+          ...(pendingResultUsage !== undefined ? { usage: pendingResultUsage } : {}),
+          ...(pendingResultCost !== undefined ? { costUsd: pendingResultCost } : {}),
+        }
+        pendingResultUsage = undefined
+        pendingResultCost = undefined
+        yield { type: "transcript", entry: enriched }
         continue
       }
       yield { type: "transcript", entry }

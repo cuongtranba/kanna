@@ -91,6 +91,8 @@ interface PendingTurn {
   todoSequence: number
   pendingWebSearchResultToolId: string | null
   resolved: boolean
+  /** Most recent token usage snapshot for the turn; stashed to enrich the result entry. */
+  lastUsageSnapshot?: ContextWindowUsageSnapshot
   onToolRequest: (request: HarnessToolRequest) => Promise<unknown>
   onApprovalRequest?: (
     request:
@@ -1586,6 +1588,9 @@ export class CodexAppServerManager {
       return
     }
 
+    // Stash the latest snapshot so handleTurnCompleted can enrich the result entry.
+    pendingTurn.lastUsageSnapshot = usage
+
     pendingTurn.queue.push({
       type: "transcript",
       entry: timestamped({
@@ -1639,6 +1644,14 @@ export class CodexAppServerManager {
     }
 
     pendingTurn.resolved = true
+    const last = pendingTurn.lastUsageSnapshot
+    const resultUsage = last
+      ? {
+          ...(last.inputTokens !== undefined ? { inputTokens: last.inputTokens } : {}),
+          ...(last.outputTokens !== undefined ? { outputTokens: last.outputTokens } : {}),
+          ...(last.cachedInputTokens !== undefined ? { cachedInputTokens: last.cachedInputTokens } : {}),
+        }
+      : undefined
     pendingTurn.queue.push({
       type: "transcript",
       entry: timestamped({
@@ -1647,6 +1660,8 @@ export class CodexAppServerManager {
         isError,
         durationMs: 0,
         result: notification.turn.error?.message ?? "",
+        ...(resultUsage !== undefined ? { usage: resultUsage } : {}),
+        ...(last?.costUsd !== undefined ? { costUsd: last.costUsd } : {}),
       }),
     })
     pendingTurn.queue.finish()
