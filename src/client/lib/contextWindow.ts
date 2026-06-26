@@ -128,12 +128,14 @@ export function computeSessionTotals(
   let cost = 0
 
   for (const entry of entries) {
-    if (entry.kind !== "context_window_updated") continue
+    if (entry.kind !== "result") continue
     const u = entry.usage
-    input += toNonNegative(u.lastInputTokens)
-    output += toNonNegative(u.lastOutputTokens)
-    cached += toNonNegative(u.lastCachedInputTokens)
-    cost += toNonNegative(u.costUsd)
+    if (u) {
+      input += toNonNegative(u.inputTokens)
+      output += toNonNegative(u.outputTokens)
+      cached += toNonNegative(u.cachedInputTokens)
+    }
+    cost += toNonNegative(entry.costUsd ?? u?.costUsd)
   }
   for (const run of subagentRuns) {
     const u = run.usage

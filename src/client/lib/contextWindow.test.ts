@@ -139,10 +139,11 @@ describe("overrideContextWindowMaxTokens", () => {
 })
 
 describe("computeSessionTotals", () => {
-  test("sums per-turn last* deltas + subagent usage + cost", () => {
+  test("sums per-turn result entries + subagent usage + cost", () => {
     const entries = [
-      { kind: "context_window_updated", createdAt: 1, usage: { usedTokens: 100, lastInputTokens: 100, lastOutputTokens: 20, costUsd: 0.01, compactsAutomatically: false } },
-      { kind: "context_window_updated", createdAt: 2, usage: { usedTokens: 300, lastInputTokens: 150, lastOutputTokens: 30, costUsd: 0.02, compactsAutomatically: false } },
+      { kind: "context_window_updated", createdAt: 1, usage: { usedTokens: 5000, lastInputTokens: 5000, compactsAutomatically: false } },
+      { kind: "result", createdAt: 2, subtype: "success", isError: false, durationMs: 1, result: "", usage: { inputTokens: 100, outputTokens: 20, cachedInputTokens: 10, costUsd: 0.01 }, costUsd: 0.01 },
+      { kind: "result", createdAt: 3, subtype: "success", isError: false, durationMs: 1, result: "", usage: { inputTokens: 150, outputTokens: 30 }, costUsd: 0.02 },
     ] as never
     const subagentRuns = [
       { usage: { inputTokens: 40, outputTokens: 10, cachedInputTokens: 5, costUsd: 0.005 } },
@@ -150,17 +151,27 @@ describe("computeSessionTotals", () => {
     const totals = computeSessionTotals(entries, subagentRuns)
     expect(totals?.inputTokens).toBe(290)   // 100 + 150 + 40
     expect(totals?.outputTokens).toBe(60)   // 20 + 30 + 10
-    expect(totals?.cachedTokens).toBe(5)
+    expect(totals?.cachedTokens).toBe(15)   // 10 + 0 + 5
     expect(totals?.costUsd).toBeCloseTo(0.035, 6) // 0.01 + 0.02 + 0.005
+  })
+
+  test("ignores context_window_updated entries (no double count)", () => {
+    const entries = [
+      { kind: "context_window_updated", createdAt: 1, usage: { usedTokens: 9999, lastInputTokens: 9999, compactsAutomatically: false } },
+    ] as never
+    expect(computeSessionTotals(entries, [] as never)).toBeNull()
   })
 
   test("returns null when nothing accumulated", () => {
     expect(computeSessionTotals([] as never, [] as never)).toBeNull()
   })
 
-  test("ignores non-context_window entries", () => {
-    const entries = [{ kind: "assistant_text", createdAt: 1, text: "hi" }] as never
-    expect(computeSessionTotals(entries, [] as never)).toBeNull()
+  test("reads cost from result.costUsd when usage.costUsd absent", () => {
+    const entries = [
+      { kind: "result", createdAt: 1, subtype: "success", isError: false, durationMs: 1, result: "", usage: { inputTokens: 100, outputTokens: 20 }, costUsd: 0.03 },
+    ] as never
+    const totals = computeSessionTotals(entries, [] as never)
+    expect(totals?.costUsd).toBeCloseTo(0.03, 6)
   })
 })
 
