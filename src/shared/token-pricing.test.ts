@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { computeCostUsd, resolveModelPrice } from "./token-pricing"
+import { computeCostUsd, resolveModelPrice, stripModelVariantSuffix } from "./token-pricing"
 
 describe("computeCostUsd", () => {
   test("sums input+output at per-MTok rates", () => {
@@ -78,5 +78,16 @@ describe("resolveModelPrice", () => {
       inputPerMTok: 1.1,
       outputPerMTok: 4.4,
     })
+  })
+})
+
+describe("stripModelVariantSuffix", () => {
+  test("strips an OpenRouter routing variant suffix", () => {
+    expect(stripModelVariantSuffix("moonshotai/kimi-k2.5:nitro")).toBe("moonshotai/kimi-k2.5")
+    expect(stripModelVariantSuffix("openai/gpt-5:floor")).toBe("openai/gpt-5")
+  })
+
+  test("returns the id unchanged when there is no suffix", () => {
+    expect(stripModelVariantSuffix("anthropic/claude-sonnet-4")).toBe("anthropic/claude-sonnet-4")
   })
 })

@@ -49,7 +49,7 @@ import {
   openrouterAuthReady,
 } from "./provider-catalog"
 import { readLlmProviderSnapshot } from "./llm-provider"
-import { computeCostUsd, resolveModelPrice } from "../shared/token-pricing"
+import { computeCostUsd, resolveModelPrice, stripModelVariantSuffix } from "../shared/token-pricing"
 import type { ModelPrice } from "../shared/token-pricing"
 import { providerUsesSdkSession, resolveClaudeApiModelId, type ClaudeDriverPreference } from "../shared/types"
 import { fallbackTitleFromMessage } from "./generate-title"
@@ -2707,8 +2707,12 @@ export class AgentCoordinator {
       if (isOpenRouter && this.listOpenRouterModelsFn) {
         try {
           const models = await this.listOpenRouterModelsFn()
+          // OpenRouter routing variants (":nitro", ":floor", ...) aren't their
+          // own /models entries — fall back to the base id for pricing/context.
+          const baseModelId = stripModelVariantSuffix(args.model)
           const m = models.find((x) => x.id === args.model)
-          openrouterTurnPrice = resolveModelPrice(args.model, m?.pricing ?? null)
+            ?? models.find((x) => x.id === baseModelId)
+          openrouterTurnPrice = resolveModelPrice(baseModelId, m?.pricing ?? null)
           if (m && m.contextLength > 0) openrouterContextWindow = m.contextLength
         } catch (err) {
           console.warn("[kanna/agent] openrouter pricing lookup failed", err)

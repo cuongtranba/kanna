@@ -46,6 +46,15 @@ function matchesNeedle(id: string, needle: string): boolean {
   return new RegExp(`(^|[^a-z0-9])${needle}([^a-z0-9]|$)`).test(id)
 }
 
+// OpenRouter routing variants are a ":suffix" on an "org/model" id
+// (e.g. "moonshotai/kimi-k2.5:nitro", ":floor", ":free", ":online"). The
+// /models list only carries the base id, and our pricing lookup is exact-id,
+// so strip the suffix before matching. Org/model ids never contain ":".
+export function stripModelVariantSuffix(modelId: string): string {
+  const i = modelId.indexOf(":")
+  return i === -1 ? modelId : modelId.slice(0, i)
+}
+
 export function resolveModelPrice(
   modelId: string,
   openRouterPricing?: OpenRouterPricing | null,
