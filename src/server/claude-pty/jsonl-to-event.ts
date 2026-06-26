@@ -172,6 +172,14 @@ export function createJsonlEventParser(opts: CreateJsonlEventParserOptions = {})
           const wasAutoWake = turnState === "inAutoWake"
           turnState = "between"
           if (!wasAutoWake) {
+            const billed = latestUsageSnapshot
+            const flushUsage = billed
+              ? {
+                  ...(billed.inputTokens !== undefined ? { inputTokens: billed.inputTokens } : {}),
+                  ...(billed.outputTokens !== undefined ? { outputTokens: billed.outputTokens } : {}),
+                  ...(billed.cachedInputTokens !== undefined ? { cachedInputTokens: billed.cachedInputTokens } : {}),
+                }
+              : undefined
             events.push({
               type: "transcript",
               entry: timestamped({
@@ -181,9 +189,16 @@ export function createJsonlEventParser(opts: CreateJsonlEventParserOptions = {})
                 isError: false,
                 durationMs: 0,
                 result: "",
+                ...(flushUsage ? { usage: flushUsage } : {}),
+                ...(billed?.costUsd !== undefined ? { costUsd: billed.costUsd } : {}),
               }),
             })
           }
+          // Mirror the real-result branch: reset per-turn usage tracking so the
+          // next turn starts clean (the result branch that normally does this
+          // never runs on CLI >= 2.1.x).
+          seenAssistantUsageIds = new Set<string>()
+          latestUsageSnapshot = null
         }
       }
 
@@ -355,6 +370,8 @@ export function createJsonlEventParser(opts: CreateJsonlEventParserOptions = {})
           // after a stop_reason flush is a duplicate turn-end — swallow it so
           // the turn never finalizes twice.
           if (isRealResultRow && suppressNextResultRow && (entry as { kind?: string }).kind === "result") {
+            pendingResultUsage = undefined
+            pendingResultCost = undefined
             continue
           }
           if (entry.kind === "api_error") {

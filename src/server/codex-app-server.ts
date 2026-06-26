@@ -1671,6 +1671,14 @@ export class CodexAppServerManager {
   private failContext(context: SessionContext, message: string) {
     const pendingTurn = context.pendingTurn
     if (pendingTurn && !pendingTurn.resolved) {
+      const last = pendingTurn.lastUsageSnapshot
+      const resultUsage = last
+        ? {
+            ...(last.inputTokens !== undefined ? { inputTokens: last.inputTokens } : {}),
+            ...(last.outputTokens !== undefined ? { outputTokens: last.outputTokens } : {}),
+            ...(last.cachedInputTokens !== undefined ? { cachedInputTokens: last.cachedInputTokens } : {}),
+          }
+        : undefined
       pendingTurn.queue.push({
         type: "transcript",
         entry: timestamped({
@@ -1679,6 +1687,8 @@ export class CodexAppServerManager {
           isError: true,
           durationMs: 0,
           result: message,
+          ...(resultUsage !== undefined ? { usage: resultUsage } : {}),
+          ...(last?.costUsd !== undefined ? { costUsd: last.costUsd } : {}),
         }),
       })
       pendingTurn.queue.finish()
