@@ -91,6 +91,45 @@ describe("local-catalog-io.adapter", () => {
     expect(got[0]!.pluginName).toBe("acme")
   })
 
+  test("marketplace manifest maps source dir to real plugin name", () => {
+    const cwd = tmp("lci-")
+    const home = tmp("lci-home-")
+    // okra-style layout: marketplace folder != plugin name, source "./"
+    const marketPath = join(home, ".claude", "plugins", "marketplaces", "okra-marketplace")
+    const manifestDir = join(marketPath, ".claude-plugin")
+    mkdirSync(manifestDir, { recursive: true })
+    writeFileSync(
+      join(manifestDir, "marketplace.json"),
+      JSON.stringify({ name: "okra-marketplace", plugins: [{ name: "okra", source: "./" }] }),
+    )
+    const skillDir = join(marketPath, "skills", "reverse-tornado-okr")
+    mkdirSync(skillDir, { recursive: true })
+    writeFileSync(join(skillDir, "SKILL.md"), "---\ndescription: okr loop\n---\n")
+    const got = scanLocalCatalog({ cwd, homeDir: home })
+    expect(got).toHaveLength(1)
+    expect(got[0]!.name).toBe("okra:reverse-tornado-okr")
+    expect(got[0]!.pluginName).toBe("okra")
+  })
+
+  test("marketplace manifest maps a subdir source to its plugin name", () => {
+    const cwd = tmp("lci-")
+    const home = tmp("lci-home-")
+    const marketPath = join(home, ".claude", "plugins", "marketplaces", "multi")
+    const manifestDir = join(marketPath, ".claude-plugin")
+    mkdirSync(manifestDir, { recursive: true })
+    writeFileSync(
+      join(manifestDir, "marketplace.json"),
+      JSON.stringify({ name: "multi", plugins: [{ name: "alpha", source: "./alpha" }] }),
+    )
+    const skillDir = join(marketPath, "alpha", "SKILL.md")
+    mkdirSync(join(marketPath, "alpha"), { recursive: true })
+    writeFileSync(skillDir, "---\ndescription: a\n---\n")
+    const got = scanLocalCatalog({ cwd, homeDir: home })
+    expect(got).toHaveLength(1)
+    expect(got[0]!.name).toBe("alpha:alpha")
+    expect(got[0]!.pluginName).toBe("alpha")
+  })
+
   test("plugin top-level commands dir is namespaced", () => {
     const cwd = tmp("lci-")
     const home = tmp("lci-home-")
