@@ -45,6 +45,27 @@ describe("pricing parsing", () => {
     })
     expect(models[0]?.pricing).toBeUndefined()
   })
+
+  test("omits pricing when a field is null", () => {
+    const models = parseOpenRouterModels({
+      data: [{ id: "x/y", supported_parameters: ["tools"], pricing: { prompt: null, completion: "0.001" } }],
+    })
+    expect(models[0]?.pricing).toBeUndefined()
+  })
+
+  test("omits pricing for empty or whitespace strings", () => {
+    const models = parseOpenRouterModels({
+      data: [{ id: "x/y", supported_parameters: ["tools"], pricing: { prompt: "", completion: " " } }],
+    })
+    expect(models[0]?.pricing).toBeUndefined()
+  })
+
+  test("accepts a numeric (non-string) price", () => {
+    const models = parseOpenRouterModels({
+      data: [{ id: "x/y", supported_parameters: ["tools"], pricing: { prompt: 0.000003, completion: 0.000015 } }],
+    })
+    expect(models[0]?.pricing).toEqual({ promptPerTok: 0.000003, completionPerTok: 0.000015 })
+  })
 })
 
 describe("OpenRouterModelCache", () => {
