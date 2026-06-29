@@ -1,12 +1,14 @@
 import {
   registerClient,
   startAuthorization,
+  exchangeAuthorization,
 } from "@modelcontextprotocol/sdk/client/auth.js"
 import type {
   OAuthClientMetadata,
+  OAuthTokens,
   AuthorizationServerMetadata,
 } from "@modelcontextprotocol/sdk/shared/auth.js"
-import type { McpServerConfig, McpOAuthState } from "../shared/types"
+import type { McpServerConfig, McpOAuthState, McpServerTestResult } from "../shared/types"
 
 const REDIRECT_URI = "http://localhost:8765/callback"
 
@@ -146,4 +148,59 @@ export async function startMcpOAuth(
   }
   deps.persist(next)
   return { kind: "authorizationUrl", authorizationUrl: authorizationUrl.toString() }
+}
+
+export interface CompleteDeps {
+  fetchFn?: typeof fetch
+  persist: (oauth: McpOAuthState) => void
+  // injected so the adapter does not import the validator (avoids a cycle);
+  // returns the tool count after a bearer-authenticated listTools.
+  listTools: (serverUrl: string, accessToken: string) => Promise<number>
+}
+
+export async function completeMcpOAuth(
+  config: McpServerConfig,
+  callbackUrl: string,
+  deps: CompleteDeps,
+): Promise<McpServerTestResult> {
+  const fetchFn = deps.fetchFn ?? fetch
+  const oauth = config.transport === "stdio" ? undefined : config.oauth
+  const flow = oauth?.flow
+  if (!oauth || !flow) throw new Error("no pending OAuth flow; start authentication first")
+  const params = new URL(callbackUrl).searchParams
+  if (params.get("state") !== flow.state) throw new Error("OAuth state mismatch (possible CSRF)")
+  const code = params.get("code")
+  if (!code) throw new Error("callback URL missing authorization code")
+  const client = oauth.clientByIssuer?.[flow.issuer]
+  if (!client) throw new Error("missing registered client for issuer")
+
+  let tokens: OAuthTokens
+  try {
+    tokens = await exchangeAuthorization(flow.issuer, {
+      metadata: flow.metadata as AuthorizationServerMetadata,
+      clientInformation: client,
+      authorizationCode: code,
+      codeVerifier: flow.codeVerifier,
+      redirectUri: REDIRECT_URI,
+      resource: new URL(requireNetworkUrl(config)),
+      fetchFn,
+    })
+  } catch {
+    const next: McpOAuthState = { ...oauth, status: "error", errorMessage: "token exchange failed", flow: undefined }
+    deps.persist(next)
+    return { status: "error", testedAt: new Date().toISOString(), message: "token exchange failed" }
+  }
+
+  const toolCount = await deps.listTools(requireNetworkUrl(config), tokens.access_token)
+  const next: McpOAuthState = {
+    enabled: true,
+    status: "authenticated",
+    issuer: flow.issuer,
+    clientByIssuer: oauth.clientByIssuer,
+    tokens,
+    obtainedAt: Date.now(),
+    flow: undefined,
+  }
+  deps.persist(next)
+  return { status: "ok", testedAt: new Date().toISOString(), toolCount }
 }

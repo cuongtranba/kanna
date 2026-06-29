@@ -2,6 +2,8 @@ import { test, expect } from "bun:test"
 import { startMcpOAuth } from "./mcp-oauth.adapter"
 import type { McpServerConfig, McpOAuthState } from "../shared/types"
 
+type McpOAuthStateForTest = import("../shared/types").McpOAuthState
+
 function baseConfig(): McpServerConfig {
   return {
     id: "s1",
@@ -218,4 +220,81 @@ test("startMcpOAuth derives PRM URL from serverUrl when www-authenticate header 
   const u = new URL(result.authorizationUrl)
   expect(u.origin + u.pathname).toBe("https://as2.test/oauth/authorize")
   expect(persisted.at(-1)?.issuer).toBe("https://as2.test/")
+})
+
+import { completeMcpOAuth } from "./mcp-oauth.adapter"
+
+function authedConfigWithFlow(): McpServerConfig {
+  return {
+    id: "s1",
+    name: "design",
+    enabled: true,
+    createdAt: "2026-06-29T00:00:00Z",
+    updatedAt: "2026-06-29T00:00:00Z",
+    lastTest: { status: "untested" },
+    transport: "http",
+    url: "https://example.test/v1/mcp",
+    headers: {},
+    oauth: {
+      enabled: true,
+      status: "unauthenticated",
+      issuer: "https://as.test/v1/mcp",
+      clientByIssuer: {
+        "https://as.test/v1/mcp": { client_id: "client-123", redirect_uris: ["http://localhost:8765/callback"] } as never,
+      },
+      flow: {
+        codeVerifier: "verifier-xyz",
+        state: "state-abc",
+        issuer: "https://as.test/v1/mcp",
+        authorizationUrl: "https://as.test/oauth/authorize?...",
+        metadata: {
+          issuer: "https://as.test/v1/mcp",
+          authorization_endpoint: "https://as.test/oauth/authorize",
+          token_endpoint: "https://as.test/oauth/token",
+        },
+      },
+    },
+  }
+}
+
+function tokenFetch(): typeof fetch {
+  return (async (input: string | URL | Request) => {
+    const url = typeof input === "string" ? input : input.toString()
+    if (url === "https://as.test/oauth/token") {
+      return new Response(
+        JSON.stringify({ access_token: "AT", refresh_token: "RT", token_type: "Bearer", expires_in: 28800, scope: "a b" }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      )
+    }
+    throw new Error("unexpected fetch: " + url)
+  }) as unknown as typeof fetch
+}
+
+test("completeMcpOAuth rejects on state mismatch", async () => {
+  const cfg = authedConfigWithFlow()
+  await expect(
+    completeMcpOAuth(cfg, "http://localhost:8765/callback?code=C&state=WRONG", {
+      fetchFn: tokenFetch(),
+      persist: () => {},
+      listTools: async () => 20,
+    }),
+  ).rejects.toThrow(/state/i)
+})
+
+test("completeMcpOAuth exchanges code, persists tokens, returns ok", async () => {
+  const cfg = authedConfigWithFlow()
+  let saved: McpOAuthStateForTest | undefined
+  const result = await completeMcpOAuth(cfg, "http://localhost:8765/callback?code=C&state=state-abc", {
+    fetchFn: tokenFetch(),
+    persist: (o: McpOAuthStateForTest) => { saved = o },
+    listTools: async () => 20,
+  })
+  expect(result.status).toBe("ok")
+  if (result.status !== "ok") throw new Error("unreachable")
+  expect(result.toolCount).toBe(20)
+  expect(saved?.status).toBe("authenticated")
+  expect(saved?.issuer).toBe("https://as.test/v1/mcp")
+  expect(saved?.tokens?.access_token).toBe("AT")
+  expect(saved?.tokens?.refresh_token).toBe("RT")
+  expect(saved?.flow).toBeUndefined()
 })
