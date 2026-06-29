@@ -1,7 +1,7 @@
 import { test, expect } from "bun:test"
-import { startMcpOAuth } from "./mcp-oauth.adapter"
+import { startMcpOAuth, ensureFreshMcpToken } from "./mcp-oauth.adapter"
 import type { McpServerConfig, McpOAuthState } from "../shared/types"
-import type { OAuthClientInformationFull } from "@modelcontextprotocol/sdk/shared/auth.js"
+import type { OAuthClientInformationFull, OAuthTokens } from "@modelcontextprotocol/sdk/shared/auth.js"
 
 function baseConfig(): McpServerConfig {
   return {
@@ -384,4 +384,56 @@ test("completeMcpOAuth keeps tokens when listTools throws (Fix 1)", async () => 
   const last = persistedStates.at(-1)!
   expect(last.status).toBe("authenticated")
   expect(last.tokens?.access_token).toBe("AT")
+})
+
+function authedTokenConfig(obtainedAt: number, expiresIn: number, accessToken = "OLD"): McpServerConfig {
+  const c = authedConfigWithFlow()
+  if (c.transport !== "stdio") {
+    c.oauth = {
+      enabled: true,
+      status: "authenticated",
+      issuer: "https://as.test/v1/mcp",
+      clientByIssuer: {
+        "https://as.test/v1/mcp": { client_id: "client-123", redirect_uris: [new URL("http://localhost:8765/callback")] } as unknown as OAuthClientInformationFull,
+      },
+      tokens: { access_token: accessToken, refresh_token: "RT", token_type: "Bearer", expires_in: expiresIn } as unknown as OAuthTokens,
+      obtainedAt,
+    }
+  }
+  return c
+}
+
+test("ensureFreshMcpToken returns cached token when still valid", async () => {
+  const cfg = authedTokenConfig(Date.now(), 28800)
+  let persisted = false
+  const token = await ensureFreshMcpToken(cfg, {
+    fetchFn: (() => { throw new Error("should not refresh") }) as unknown as typeof fetch,
+    persist: () => { persisted = true },
+    metadataByIssuer: { "https://as.test/v1/mcp": { token_endpoint: "https://as.test/oauth/token" } },
+  })
+  expect(token).toBe("OLD")
+  expect(persisted).toBe(false)
+})
+
+test("ensureFreshMcpToken refreshes and persists rotated tokens when expired", async () => {
+  // obtainedAt far in the past => expired
+  const cfg = authedTokenConfig(Date.now() - 30000 * 1000, 28800)
+  let saved: McpOAuthState | undefined
+  const token = await ensureFreshMcpToken(cfg, {
+    fetchFn: tokenFetch(),
+    persist: (o: McpOAuthState) => { saved = o },
+    metadataByIssuer: { "https://as.test/v1/mcp": { token_endpoint: "https://as.test/oauth/token" } },
+  })
+  expect(token).toBe("AT")
+  expect(saved?.status).toBe("authenticated")
+  expect(saved?.tokens?.access_token).toBe("AT")
+  expect(saved?.tokens?.refresh_token).toBe("RT")
+  expect(saved?.obtainedAt).toBeGreaterThan(0)
+})
+
+test("ensureFreshMcpToken throws when not authenticated", async () => {
+  const cfg = baseConfig() // oauth status unauthenticated, no tokens
+  await expect(
+    ensureFreshMcpToken(cfg, { persist: () => {}, metadataByIssuer: {} }),
+  ).rejects.toThrow(/not authenticated/i)
 })

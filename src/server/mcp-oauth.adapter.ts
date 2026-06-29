@@ -2,6 +2,7 @@ import {
   registerClient,
   startAuthorization,
   exchangeAuthorization,
+  refreshAuthorization,
 } from "@modelcontextprotocol/sdk/client/auth.js"
 import type {
   OAuthClientMetadata,
@@ -212,5 +213,54 @@ export async function completeMcpOAuth(
     // Tokens are already persisted as authenticated — do NOT overwrite with
     // an error status; the user can retry the tool check without re-authing.
     return { status: "error", testedAt, message: "authenticated but tool check failed" }
+  }
+}
+
+const EXPIRY_SKEW_MS = 60_000
+
+export interface EnsureFreshDeps {
+  fetchFn?: typeof fetch
+  persist: (oauth: McpOAuthState) => void
+  /** AS metadata per issuer (must include token_endpoint). Provided by the caller. */
+  metadataByIssuer?: Record<string, Record<string, unknown>>
+}
+
+export async function ensureFreshMcpToken(
+  config: McpServerConfig,
+  deps: EnsureFreshDeps,
+): Promise<string> {
+  const fetchFn = deps.fetchFn ?? fetch
+  const oauth = config.transport === "stdio" ? undefined : config.oauth
+  if (!oauth?.tokens?.access_token) throw new Error("server is not authenticated")
+  const tokens = oauth.tokens
+  const expiresInMs = (tokens.expires_in ?? 0) * 1000
+  const stillValid =
+    oauth.obtainedAt !== undefined && oauth.obtainedAt + expiresInMs - EXPIRY_SKEW_MS > Date.now()
+  if (stillValid) return tokens.access_token
+  if (!tokens.refresh_token) throw new Error("access token expired and no refresh token")
+  const issuer = oauth.issuer
+  if (!issuer) throw new Error("missing issuer for refresh")
+  const client = oauth.clientByIssuer?.[issuer]
+  if (!client) throw new Error("missing client for refresh")
+  const metadata = deps.metadataByIssuer?.[issuer]
+  try {
+    const next = await refreshAuthorization(issuer, {
+      metadata: metadata as AuthorizationServerMetadata | undefined,
+      clientInformation: client,
+      refreshToken: tokens.refresh_token,
+      resource: new URL(requireNetworkUrl(config)),
+      fetchFn,
+    })
+    const updated: McpOAuthState = {
+      ...oauth,
+      status: "authenticated",
+      tokens: next,
+      obtainedAt: Date.now(),
+    }
+    deps.persist(updated)
+    return next.access_token
+  } catch (err) {
+    deps.persist({ ...oauth, status: "error", errorMessage: "token refresh failed" })
+    throw err instanceof Error ? err : new Error("token refresh failed")
   }
 }
