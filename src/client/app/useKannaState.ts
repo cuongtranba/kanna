@@ -806,6 +806,8 @@ export interface KannaState {
   handleReadAppSettings: () => Promise<void>
   handleWriteAppSettings: (patch: AppSettingsPatch) => Promise<void>
   handleTestMcpServer: (id: string) => Promise<void>
+  handleStartMcpOAuth: (id: string) => Promise<{ ok: boolean; authorizationUrl?: string; alreadyAuthenticated?: boolean; error?: string }>
+  handleCompleteMcpOAuth: (id: string, callbackUrl: string) => Promise<{ ok: boolean; error?: string }>
   handleSetChatPolicyOverride: (chatId: string, policyOverride: ChatPermissionPolicyOverride | null) => Promise<void>
   handleWriteCloudflareTunnel: (patch: Partial<CloudflareTunnelSettings>) => Promise<void>
   handleWriteClaudeAuth: (patch: Partial<ClaudeAuthSettings>) => Promise<void>
@@ -1151,6 +1153,37 @@ export function useKannaState(activeChatId: string | null): KannaState {
     } catch (error) {
       setCommandError(error instanceof Error ? error.message : String(error))
       throw error
+    }
+  }, [socket])
+
+  const handleStartMcpOAuth = useCallback(async (id: string) => {
+    try {
+      const result = await socket.command<{ ok: boolean; authorizationUrl?: string; alreadyAuthenticated?: boolean; error?: string }>({
+        type: "settings.startMcpOAuth",
+        id,
+      })
+      setCommandError(null)
+      return result
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error)
+      setCommandError(msg)
+      return { ok: false, error: msg }
+    }
+  }, [socket])
+
+  const handleCompleteMcpOAuth = useCallback(async (id: string, callbackUrl: string) => {
+    try {
+      const result = await socket.command<{ ok: boolean; error?: string }>({
+        type: "settings.completeMcpOAuth",
+        id,
+        callbackUrl,
+      })
+      setCommandError(null)
+      return result
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error)
+      setCommandError(msg)
+      return { ok: false, error: msg }
     }
   }, [socket])
 
@@ -2418,6 +2451,8 @@ export function useKannaState(activeChatId: string | null): KannaState {
     handleReadAppSettings,
     handleWriteAppSettings,
     handleTestMcpServer,
+    handleStartMcpOAuth,
+    handleCompleteMcpOAuth,
     handleSetChatPolicyOverride,
     handleWriteCloudflareTunnel,
     handleWriteClaudeAuth,

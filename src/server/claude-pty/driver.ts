@@ -112,6 +112,8 @@ export interface StartClaudeSessionPtyArgs {
   scheduleWakeup?: (a: { delayMs: number; prompt: string }) => Promise<string | null>
   /** Enabled user-defined MCP servers, written into mcp-config.json. */
   customMcpServers?: readonly McpServerConfig[]
+  /** Pre-resolved oauth bearer tokens keyed by server id. */
+  oauthBearers?: ReadonlyMap<string, string>
   /** Optional override used by tests to inject a fake HTTP MCP starter. */
   startKannaMcpHttpServer?: typeof startKannaMcpHttpServer
   /** Optional smoke-test gate override (used by tests to inject a fake gate). */
@@ -471,7 +473,7 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
     })
     await writeRuntimeFile(
       mcpConfigPath,
-      buildMcpConfigJson(mcpHandle, args.customMcpServers ?? []),
+      buildMcpConfigJson(mcpHandle, args.customMcpServers ?? [], args.oauthBearers),
       { encoding: "utf8", mode: 0o600 },
     )
   } catch (err) {

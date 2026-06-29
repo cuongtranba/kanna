@@ -1,4 +1,8 @@
 import type { ChatPermissionPolicyOverride, ToolRequestDecision, ToolRequestStatus } from "./permission-policy"
+import type {
+  OAuthTokens,
+  OAuthClientInformationFull,
+} from "@modelcontextprotocol/sdk/shared/auth.js"
 
 export const STORE_VERSION = 3 as const
 export const PROTOCOL_VERSION = 1 as const
@@ -248,6 +252,29 @@ export type McpServerTestResult =
   | { status: "ok"; testedAt: string; toolCount: number }
   | { status: "error"; testedAt: string; message: string }
 
+export interface McpOAuthFlowState {
+  codeVerifier: string
+  state: string
+  issuer: string
+  authorizationUrl: string
+  // AS metadata cached between start and complete (avoids re-discovery)
+  metadata: Record<string, unknown>
+}
+
+export interface McpOAuthState {
+  enabled: boolean
+  status: "unauthenticated" | "authenticated" | "error"
+  errorMessage?: string
+  // resolved AS issuer (set on complete; used by refresh without re-discovery)
+  issuer?: string
+  // DCR result keyed by AS issuer (SEP-2352)
+  clientByIssuer?: Record<string, OAuthClientInformationFull>
+  tokens?: OAuthTokens
+  obtainedAt?: number
+  // present only mid-flow; cleared on complete/cancel
+  flow?: McpOAuthFlowState
+}
+
 interface McpServerBase {
   id: string
   name: string
@@ -269,6 +296,7 @@ export interface McpServerNetworkFields {
   transport: "http" | "sse" | "ws"
   url: string
   headers: Record<string, string>
+  oauth?: McpOAuthState
 }
 
 export type McpServerConfig =
@@ -289,6 +317,7 @@ export type McpServerPatch = Partial<{
   cwd: string | undefined
   url: string
   headers: Record<string, string>
+  oauth: McpOAuthState
 }>
 
 export interface McpValidationError {
@@ -302,6 +331,7 @@ export interface McpValidationError {
     | "INVALID_HEADER_KEY"
     | "INVALID_ENV_KEY"
     | "NOT_FOUND"
+    | "INVALID_OAUTH_TRANSPORT"
   field?: string
   message: string
 }
@@ -808,6 +838,7 @@ export interface AppSettingsPatch {
     delete?: { id: string }
     setEnabled?: { id: string; enabled: boolean }
     setTestResult?: { id: string; result: McpServerTestResult }
+    setOAuthState?: { id: string; oauth: McpOAuthState }
   }
   claudeDriver?: {
     preference?: ClaudeDriverPreference

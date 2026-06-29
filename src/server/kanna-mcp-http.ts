@@ -194,6 +194,7 @@ function registerToolOnMcpServer(
 export function buildMcpConfigJson(
   handle: { url: string; bearerToken: string },
   userServers: readonly McpServerConfig[] = [],
+  oauthBearers: ReadonlyMap<string, string> = new Map(),
 ): string {
   const mcpServers: Record<string, unknown> = {
     [KANNA_MCP_SERVER_NAME]: {
@@ -207,12 +208,12 @@ export function buildMcpConfigJson(
   for (const s of userServers) {
     if (!s.enabled) continue
     if (s.name === KANNA_MCP_SERVER_NAME) continue
-    mcpServers[s.name] = toClaudeCliMcpEntry(s)
+    mcpServers[s.name] = toClaudeCliMcpEntry(s, oauthBearers.get(s.id))
   }
   return JSON.stringify({ mcpServers })
 }
 
-function toClaudeCliMcpEntry(s: McpServerConfig): Record<string, unknown> {
+function toClaudeCliMcpEntry(s: McpServerConfig, oauthBearer?: string): Record<string, unknown> {
   if (s.transport === "stdio") {
     return {
       type: "stdio",
@@ -222,9 +223,10 @@ function toClaudeCliMcpEntry(s: McpServerConfig): Record<string, unknown> {
       ...(s.cwd ? { cwd: s.cwd } : {}),
     }
   }
+  const headers = oauthBearer ? { ...s.headers, Authorization: `Bearer ${oauthBearer}` } : s.headers
   return {
     type: s.transport,
     url: s.url,
-    headers: s.headers,
+    headers,
   }
 }

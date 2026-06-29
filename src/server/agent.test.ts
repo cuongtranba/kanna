@@ -5343,6 +5343,27 @@ describe("buildUserMcpServers", () => {
     }
     expect(buildUserMcpServers([cfg])).toEqual({})
   })
+
+  test("injects oauth bearer header for authenticated server", () => {
+    const cfg: McpServerConfig = {
+      id: "d1", name: "design", enabled: true,
+      createdAt: "", updatedAt: "", lastTest: { status: "untested" },
+      transport: "http", url: "https://api.example/mcp", headers: {},
+      oauth: { enabled: true, status: "authenticated", tokens: { access_token: "AT", token_type: "Bearer" } as never },
+    }
+    const out = buildUserMcpServers([cfg], new Map([["d1", "AT"]]))
+    expect((out.design as { headers: Record<string, string> }).headers.Authorization).toBe("Bearer AT")
+  })
+
+  test("omits Authorization when no bearer provided", () => {
+    const cfg: McpServerConfig = {
+      id: "p1", name: "plain", enabled: true,
+      createdAt: "", updatedAt: "", lastTest: { status: "untested" },
+      transport: "http", url: "https://api.example/mcp", headers: { K: "v" },
+    }
+    const out = buildUserMcpServers([cfg], new Map())
+    expect((out.plain as { headers: Record<string, string> }).headers.Authorization).toBeUndefined()
+  })
 })
 
 describe("buildClaudeEnv openrouter branch", () => {

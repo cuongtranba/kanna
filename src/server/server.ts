@@ -463,6 +463,7 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     },
     getSubagents: () => appSettings.getSnapshot().subagents,
     getAppSettingsSnapshot: () => buildAgentAppSettingsView(appSettings.getSnapshot()),
+    persistOAuthState: (id, oauth) => void appSettings.writePatch({ customMcpServers: { setOAuthState: { id, oauth } } }),
     readLlmProvider: () => readLlmProviderSnapshot(),
     listOpenRouterModels: () => openrouterModelCache.list(),
     onStateChange: (chatId?: string, options?: { immediate?: boolean }) => {
