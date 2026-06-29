@@ -9,6 +9,16 @@ const DEFAULT_TIMEOUT_MS = 10_000
 
 export interface ValidateMcpOptions {
   timeoutMs?: number
+  /** Optional pre-resolved bearer token to inject for oauth servers. */
+  bearer?: string
+}
+
+export function networkHeaders(
+  config: Pick<Extract<McpServerConfig, { transport: "http" | "sse" | "ws" }>, "headers">,
+  bearer: string | undefined,
+): Record<string, string> {
+  if (!bearer) return config.headers
+  return { ...config.headers, Authorization: `Bearer ${bearer}` }
 }
 
 export async function validateMcpServer(
@@ -22,7 +32,7 @@ export async function validateMcpServer(
 
   try {
     client = new Client({ name: "kanna-validator", version: "0.0.0" }, { capabilities: {} })
-    const transport = buildTransport(config)
+    const transport = buildTransport(config, opts.bearer)
 
     const timeoutPromise = new Promise<never>((_, reject) => {
       timer = setTimeout(() => {
@@ -56,7 +66,7 @@ export async function validateMcpServer(
   }
 }
 
-function buildTransport(config: McpServerConfig) {
+function buildTransport(config: McpServerConfig, bearer?: string) {
   switch (config.transport) {
     case "stdio":
       return new StdioClientTransport({
@@ -67,11 +77,11 @@ function buildTransport(config: McpServerConfig) {
       })
     case "http":
       return new StreamableHTTPClientTransport(new URL(config.url), {
-        requestInit: { headers: config.headers },
+        requestInit: { headers: networkHeaders(config, bearer) },
       })
     case "sse":
       return new SSEClientTransport(new URL(config.url), {
-        requestInit: { headers: config.headers },
+        requestInit: { headers: networkHeaders(config, bearer) },
       })
     case "ws":
       return new WebSocketClientTransport(new URL(config.url))
