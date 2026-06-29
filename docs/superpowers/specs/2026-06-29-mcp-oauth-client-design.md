@@ -54,11 +54,71 @@ Its client ships a complete OAuth 2.1 implementation behind the
 - `iss` (RFC 9207) validation via `transport.finishAuth(params)`.
 
 Kanna does **not** write OAuth/crypto. Kanna writes:
-1. an `OAuthClientProvider` whose storage methods persist per-server into
-   `settings.json`,
+1. explicit discovery + an `OAuthClientProvider` whose storage methods persist
+   per-server into `settings.json`,
 2. two WS commands to drive the manual paste flow,
 3. bearer injection into both drivers at chat-spawn time,
 4. Settings UI.
+
+## Probe findings (2026-06-29, real `api.anthropic.com/v1/design/mcp`)
+
+A throwaway spike validated every machine-checkable leg from the Bun runtime.
+**The high-level SDK auto-discovery does NOT work against this server; Kanna must
+drive discovery explicitly.** Concrete results:
+
+- Unauthed `POST .../mcp` → `401` with
+  `WWW-Authenticate: Bearer resource_metadata="https://api.anthropic.com/v1/design/.well-known/oauth-protected-resource", scope="user:design:read user:design:write"`.
+- Protected-resource metadata is served at that **non-standard** path
+  (`/v1/design/.well-known/oauth-protected-resource`, not the SDK-derived
+  host-root `/.well-known/oauth-protected-resource/v1/design/mcp`). It returns
+  `authorization_servers: ["https://claude.ai/v1/design/mcp"]`.
+  → `discoverOAuthProtectedResourceMetadata(serverUrl)` throws "Resource server
+  does not implement Protected Resource Metadata" because it guesses the wrong
+  URL. **We must consume the `resource_metadata` URL from the 401 header.**
+- AS metadata is published ONLY at the OpenID path
+  `https://claude.ai/v1/design/mcp/.well-known/openid-configuration` →
+  `authorization_endpoint: https://claude.ai/oauth/authorize`,
+  `token_endpoint: https://api.anthropic.com/v1/design/mcp/oauth/token`,
+  `registration_endpoint: https://api.anthropic.com/v1/design/mcp/oauth/register`.
+  The RFC 8414 path-aware URL
+  (`https://claude.ai/.well-known/oauth-authorization-server/v1/design/mcp`)
+  returns claude.ai's **SPA `200 text/html`** (catch-all). The SDK's
+  `StreamableHTTPClientTransport({authProvider})` connect tries that first,
+  JSON-parses the HTML, throws "Failed to parse JSON", and aborts before
+  reaching the OpenID doc. → **cannot use the transport `authProvider`
+  auto-path; cannot use `discoverAuthorizationServerMetadata(issuer)` blindly.**
+- Dynamic client registration is **open**: `POST .../oauth/register` → `201`,
+  public client (`token_endpoint_auth_method: "none"`), grants
+  `authorization_code` + `refresh_token`. PKCE expected.
+- **Cloudflare:** `curl` hits the "Just a moment" JS challenge on some paths;
+  **Bun's `fetch` does not.** Kanna runs on Bun, so discovery/token/refresh
+  fetches are not Cloudflare-blocked. (Do not shell out to `curl`.)
+
+### Revised approach (replaces "transport authProvider auto-path")
+
+Kanna implements an explicit discovery + auth driver in
+`mcp-oauth.adapter.ts`, using the SDK's **granular** helpers (all exported from
+`@modelcontextprotocol/sdk/client/auth.js`) for the crypto-bearing legs only:
+
+1. `connect probe` → read `401` `WWW-Authenticate`, extract `resource_metadata`
+   URL (fallback to RFC 9728 derivation if header absent).
+2. `fetch(resource_metadata)` → `authorization_servers[0]` (issuer).
+3. Resolve AS metadata with a **robust candidate list** that prefers
+   `${issuer}/.well-known/openid-configuration` and **skips any `200` whose
+   content-type is not JSON** (the SPA trap). Helper:
+   `discoverAuthorizationServerMetadata` is tried but its result is validated;
+   on failure we fetch the OpenID URL directly.
+4. `registerClient(...)` (SDK) → store `client_id` keyed by issuer.
+5. `startAuthorization(...)` (SDK) → `{ authorizationUrl, codeVerifier }` with
+   PKCE + `state` + `resource` param. Persist `flow`; surface the URL.
+6. [user authorizes in browser, pastes callback URL]
+7. `exchangeAuthorization(...)` (SDK) with the pasted `code` + stored verifier →
+   `OAuthTokens`. Persist; `status:"authenticated"`.
+8. `refreshAuthorization(...)` (SDK) in `ensureFreshMcpToken`.
+
+The `OAuthClientProvider` interface is still implemented for storage typing, but
+the flow is driven by the granular functions above rather than
+`transport.finishAuth` / `client.connect`-triggered auth.
 
 ## Data model — `src/shared/types.ts`
 
@@ -126,29 +186,35 @@ class KannaMcpOAuthProvider implements OAuthClientProvider {
 }
 ```
 
-Exported functions:
+Exported functions (driven by the explicit discovery + granular SDK helpers
+from the "Revised approach" above — NOT `transport.finishAuth` / connect-trigger,
+which the probe proved unusable for this server):
+
+- `resolveAuthServer(config) -> { issuer, metadata }`
+  Internal. Probe `401` → `WWW-Authenticate` `resource_metadata` URL →
+  `fetch` PRM → `authorization_servers[0]` → resolve AS metadata via the robust
+  candidate list (prefer `openid-configuration`, skip `200` non-JSON). Cached on
+  the `flow` for the complete step.
 
 - `startMcpOAuth(config) -> { authorizationUrl } | { alreadyAuthenticated }`
-  Build provider + `StreamableHTTPClientTransport`, `client.connect()`. The
-  connect throws `UnauthorizedError` (possibly wrapped — unwrap `.data.cause`);
-  the provider's `redirectToAuthorization` captured the URL. Persist
-  `flow` (verifier/state/discovery) + `authorizationUrl`, set
+  `resolveAuthServer` → `registerClient` (if no `client_id` for issuer) →
+  `startAuthorization` (PKCE + `state` + `resource`). Persist `flow`
+  (verifier/state/discovery/clientId) + `authorizationUrl`, set
   `status:"unauthenticated"`, return the URL.
 
 - `completeMcpOAuth(config, callbackUrl) -> McpServerTestResult`
   Parse `new URL(callbackUrl).searchParams`. Verify `state === flow.state`
-  (CSRF). `transport.finishAuth(params)` (SDK validates `iss`, exchanges code,
-  saves tokens via provider). Reconnect on a fresh transport, `listTools()` to
-  confirm. On success: clear `flow`, set `status:"authenticated"`, return
-  `{status:"ok", toolCount}`. On `IssuerMismatchError`: never surface
-  `error_description`; set `status:"error"`, generic message.
+  (CSRF). `exchangeAuthorization(...)` with pasted `code` + stored verifier +
+  client info → `OAuthTokens`. Persist tokens + `obtainedAt`, clear `flow`, set
+  `status:"authenticated"`. Confirm by injecting the bearer and `listTools()`.
+  Return `{status:"ok", toolCount}`. Never surface raw `error_description` to the
+  UI on failure; set `status:"error"` with a generic message.
 
 - `ensureFreshMcpToken(config) -> string`  (access token)
   If `tokens` absent → throw (caller skips injection). If access token still
-  valid (`obtainedAt + expires_in - skew > now`) → return it. Else run the SDK
-  refresh (`auth()` with no auth code, or a throwaway authed connect) which
-  rotates + `saveTokens`; persist and return the new access token. On refresh
-  failure → set `status:"error"`, throw.
+  valid (`obtainedAt + expires_in - skew > now`) → return it. Else
+  `refreshAuthorization(...)` (SDK) which rotates the token set; persist and
+  return the new access token. On refresh failure → set `status:"error"`, throw.
 
 Errors reuse `mcp-validator.ts:formatError` shape where practical.
 
@@ -165,9 +231,10 @@ spawn:
 - PTY driver — `buildMcpConfigJson` (`src/server/kanna-mcp-http.ts`). Same
   resolution before serializing `mcp-config.json`.
 
-`validateMcpServer` (`mcp-validator.ts`) uses the same provider so the "Test"
-button works after auth (passes `authProvider` instead of static headers when
-`oauth.enabled`).
+`validateMcpServer` (`mcp-validator.ts`) injects the bearer from
+`ensureFreshMcpToken` as an `Authorization` header (NOT the transport
+`authProvider`, whose auto-discovery the probe proved broken for this server) so
+the "Test" button works after auth.
 
 ### Known limitation (documented, accepted for v1)
 
