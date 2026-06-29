@@ -4,7 +4,7 @@ import { tmpdir } from "node:os"
 import path from "node:path"
 import { AUTH_DEFAULTS, CLAUDE_AUTH_DEFAULTS, CLAUDE_DRIVER_DEFAULTS, CLAUDE_PTY_LIFECYCLE_DEFAULTS, CLOUDFLARE_TUNNEL_DEFAULTS, DEFAULT_OPENROUTER_SDK_MODEL, GLOBAL_PROMPT_APPEND_MAX_CHARS, UPLOAD_DEFAULTS } from "../shared/types"
 import { AppSettingsManager, readAppSettingsSnapshot } from "./app-settings"
-import type { AppSettingsSnapshot, SubagentInput } from "../shared/types"
+import type { AppSettingsSnapshot, McpOAuthState, SubagentInput } from "../shared/types"
 
 let tempDirs: string[] = []
 let activeManagers: AppSettingsManager[] = []
@@ -1113,6 +1113,115 @@ describe("shareDefaultTtlHours", () => {
     await expect(mgr.writePatch({ shareDefaultTtlHours: 0 })).rejects.toThrow()
     await expect(mgr.writePatch({ shareDefaultTtlHours: -1 })).rejects.toThrow()
     await expect(mgr.writePatch({ shareDefaultTtlHours: 1.5 })).rejects.toThrow()
+    mgr.dispose()
+  })
+})
+
+describe("customMcpServers — OAuth", () => {
+  test("create stdio entry with oauth.enabled=true is rejected with INVALID_OAUTH_TRANSPORT", async () => {
+    const filePath = await createTempFilePath()
+    const mgr = trackManager(new AppSettingsManager(filePath))
+    await mgr.initialize()
+    // stdio entries don't have oauth in the type union; cast to exercise the runtime guard
+    const badInput = {
+      name: "bad-oauth",
+      transport: "stdio" as const,
+      command: "/bin/mcp",
+      args: [],
+      env: {},
+      oauth: { enabled: true, status: "unauthenticated" as const },
+    }
+    await expect(
+      mgr.writePatch({ customMcpServers: { create: badInput as Parameters<typeof mgr.writePatch>[0]["customMcpServers"] extends { create: infer T } ? T : never } }),
+    ).rejects.toMatchObject({ validationError: { code: "INVALID_OAUTH_TRANSPORT" } })
+    mgr.dispose()
+  })
+
+  test("create http entry with oauth accepted (oauth is valid for network transports)", async () => {
+    const filePath = await createTempFilePath()
+    const mgr = trackManager(new AppSettingsManager(filePath))
+    await mgr.initialize()
+    await mgr.writePatch({
+      customMcpServers: {
+        create: {
+          name: "remote-oauth",
+          transport: "http",
+          url: "https://example.com/mcp",
+          headers: {},
+          oauth: { enabled: true, status: "unauthenticated" },
+        },
+      },
+    })
+    const list = mgr.getSnapshot().customMcpServers
+    expect(list).toHaveLength(1)
+    if (list[0]?.transport !== "stdio") {
+      expect(list[0]?.oauth?.enabled).toBe(true)
+      expect(list[0]?.oauth?.status).toBe("unauthenticated")
+    } else {
+      throw new Error("expected network transport")
+    }
+    mgr.dispose()
+  })
+
+  test("setOAuthState updates oauth block on target entry and leaves other entry untouched", async () => {
+    const filePath = await createTempFilePath()
+    const mgr = trackManager(new AppSettingsManager(filePath))
+    await mgr.initialize()
+
+    // create two http entries
+    await mgr.writePatch({
+      customMcpServers: {
+        create: { name: "alpha", transport: "http", url: "https://alpha.example.com/mcp", headers: {} },
+      },
+    })
+    await mgr.writePatch({
+      customMcpServers: {
+        create: { name: "beta", transport: "http", url: "https://beta.example.com/mcp", headers: {} },
+      },
+    })
+    const list = mgr.getSnapshot().customMcpServers
+    const alphaId = list.find((s) => s.name === "alpha")!.id
+    const betaId = list.find((s) => s.name === "beta")!.id
+
+    const nextOauth: McpOAuthState = { enabled: true, status: "authenticated", issuer: "https://auth.example.com" }
+    await mgr.writePatch({
+      customMcpServers: { setOAuthState: { id: alphaId, oauth: nextOauth } },
+    })
+
+    const updated = mgr.getSnapshot().customMcpServers
+    const alpha = updated.find((s) => s.id === alphaId)!
+    const beta = updated.find((s) => s.id === betaId)!
+
+    if (alpha.transport === "stdio" || beta.transport === "stdio") throw new Error("expected network")
+    expect(alpha.oauth).toEqual(nextOauth)
+    // beta's oauth untouched (was never set)
+    expect(beta.oauth).toBeUndefined()
+    mgr.dispose()
+  })
+
+  test("update patch with oauth field merges onto existing network entry", async () => {
+    const filePath = await createTempFilePath()
+    const mgr = trackManager(new AppSettingsManager(filePath))
+    await mgr.initialize()
+
+    await mgr.writePatch({
+      customMcpServers: {
+        create: { name: "srv", transport: "http", url: "https://srv.example.com/mcp", headers: {} },
+      },
+    })
+    const id = mgr.getSnapshot().customMcpServers[0]!.id
+
+    const patchedOauth: McpOAuthState = { enabled: true, status: "authenticated" }
+    await mgr.writePatch({
+      customMcpServers: { update: { id, patch: { oauth: patchedOauth } } },
+    })
+
+    const entry = mgr.getSnapshot().customMcpServers[0]!
+    if (entry.transport === "stdio") throw new Error("expected network")
+    expect(entry.oauth).toEqual(patchedOauth)
+    // other fields preserved
+    expect(entry.name).toBe("srv")
+    expect(entry.url).toBe("https://srv.example.com/mcp")
     mgr.dispose()
   })
 })

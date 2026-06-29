@@ -57,6 +57,7 @@ import {
   type CodexModelOptions,
   type DefaultProviderPreference,
   type EditorPreset,
+  type McpOAuthState,
   type McpServerConfig,
   type McpServerInput,
   type McpServerPatch,
@@ -611,6 +612,9 @@ function normalizeMcpEntry(value: unknown, warnings: string[]): McpServerConfig 
     transport: transport as "http" | "sse" | "ws",
     url,
     headers: normalizeStringMap(src.headers),
+    ...(src.oauth !== null && typeof src.oauth === "object" && !Array.isArray(src.oauth)
+      ? { oauth: src.oauth as McpOAuthState }
+      : {}),
   }
 }
 
@@ -1010,6 +1014,9 @@ function validateMcpShape(
         return { code: "INVALID_ENV_KEY", field: "env", message: "env keys must be non-empty" }
       }
     }
+    if ("oauth" in entry && (entry as { oauth?: { enabled?: boolean } }).oauth?.enabled) {
+      return { code: "INVALID_OAUTH_TRANSPORT", field: "oauth", message: "OAuth is only supported for http/sse transports" }
+    }
   } else {
     const urlErr = validateMcpUrl(entry.url, entry.transport)
     if (urlErr) return urlErr
@@ -1047,6 +1054,7 @@ function buildMcpFromInput(input: McpServerInput): McpServerConfig {
     transport: input.transport,
     url: input.url,
     headers: input.headers ?? {},
+    ...(input.oauth !== undefined ? { oauth: input.oauth } : {}),
   }
 }
 
@@ -1078,6 +1086,7 @@ function applyMcpPatch(existing: McpServerConfig, patch: McpServerPatch): McpSer
     transport,
     url: patch.url ?? (existing.transport !== "stdio" ? existing.url : ""),
     headers: patch.headers ?? (existing.transport !== "stdio" ? existing.headers : {}),
+    ...(patch.oauth !== undefined ? { oauth: patch.oauth } : existing.transport !== "stdio" && existing.oauth !== undefined ? { oauth: existing.oauth } : {}),
   }
 }
 
@@ -1166,7 +1175,15 @@ function applyPatch(state: AppSettingsState, patch: AppSettingsPatch): AppSettin
 
   let nextMcpServers = state.customMcpServers
   if (patch.customMcpServers?.create) {
-    const entry = buildMcpFromInput(patch.customMcpServers.create)
+    const createInput = patch.customMcpServers.create
+    if (
+      createInput.transport === "stdio"
+      && "oauth" in createInput
+      && (createInput as { oauth?: { enabled?: boolean } }).oauth?.enabled
+    ) {
+      throw new McpValidationException({ code: "INVALID_OAUTH_TRANSPORT", field: "oauth", message: "OAuth is only supported for http/sse transports" })
+    }
+    const entry = buildMcpFromInput(createInput)
     const error = validateMcpShape(entry, state.customMcpServers.map((s) => ({ id: s.id, name: s.name })))
     if (error) throw new McpValidationException(error)
     nextMcpServers = [...state.customMcpServers, entry]
@@ -1196,6 +1213,11 @@ function applyPatch(state: AppSettingsState, patch: AppSettingsPatch): AppSettin
     const { id, result } = patch.customMcpServers.setTestResult
     nextMcpServers = state.customMcpServers.map((s) =>
       s.id === id ? { ...s, lastTest: result, updatedAt: new Date().toISOString() } : s,
+    )
+  } else if (patch.customMcpServers?.setOAuthState) {
+    const { id, oauth } = patch.customMcpServers.setOAuthState
+    nextMcpServers = state.customMcpServers.map((s) =>
+      s.id === id && s.transport !== "stdio" ? { ...s, oauth } : s,
     )
   }
 
