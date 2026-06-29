@@ -222,7 +222,7 @@ export interface EnsureFreshDeps {
   fetchFn?: typeof fetch
   persist: (oauth: McpOAuthState) => void
   /** AS metadata per issuer (must include token_endpoint). Provided by the caller. */
-  metadataByIssuer?: Record<string, Record<string, unknown>>
+  metadataByIssuer?: Record<string, { token_endpoint: string } & Record<string, unknown>>
 }
 
 export async function ensureFreshMcpToken(
@@ -233,7 +233,12 @@ export async function ensureFreshMcpToken(
   const oauth = config.transport === "stdio" ? undefined : config.oauth
   if (!oauth?.tokens?.access_token) throw new Error("server is not authenticated")
   const tokens = oauth.tokens
-  const expiresInMs = (tokens.expires_in ?? 0) * 1000
+  // RFC 6749 makes expires_in optional. When absent, the token is non-expiring:
+  // return it directly without refreshing (no obtainedAt check needed either).
+  if (tokens.expires_in === undefined || tokens.expires_in === null) {
+    return tokens.access_token
+  }
+  const expiresInMs = tokens.expires_in * 1000
   const stillValid =
     oauth.obtainedAt !== undefined && oauth.obtainedAt + expiresInMs - EXPIRY_SKEW_MS > Date.now()
   if (stillValid) return tokens.access_token

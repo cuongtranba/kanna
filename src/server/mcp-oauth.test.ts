@@ -437,3 +437,75 @@ test("ensureFreshMcpToken throws when not authenticated", async () => {
     ensureFreshMcpToken(cfg, { persist: () => {}, metadataByIssuer: {} }),
   ).rejects.toThrow(/not authenticated/i)
 })
+
+test("ensureFreshMcpToken throws when expired and no refresh_token", async () => {
+  // Build a config with an expired token but no refresh_token
+  const cfg = authedTokenConfig(Date.now() - 30000 * 1000, 100, "EXPIRED")
+  if (cfg.transport !== "stdio" && cfg.oauth) {
+    // Strip refresh_token from the tokens
+    const { refresh_token: _dropped, ...tokensWithoutRefresh } = cfg.oauth.tokens as OAuthTokens & { refresh_token?: string }
+    cfg.oauth = {
+      ...cfg.oauth,
+      tokens: tokensWithoutRefresh as OAuthTokens,
+    }
+  }
+  await expect(
+    ensureFreshMcpToken(cfg, {
+      fetchFn: (() => { throw new Error("should not fetch") }) as unknown as typeof fetch,
+      persist: () => {},
+      metadataByIssuer: { "https://as.test/v1/mcp": { token_endpoint: "https://as.test/oauth/token" } },
+    }),
+  ).rejects.toThrow(/no refresh token/i)
+})
+
+test("ensureFreshMcpToken persists error state when refresh endpoint returns error", async () => {
+  // Expired config with refresh_token, but token endpoint returns 400 invalid_grant
+  const cfg = authedTokenConfig(Date.now() - 30000 * 1000, 100, "STALE")
+  const failRefreshFetch = (async (input: string | URL | Request) => {
+    const url = typeof input === "string" ? input : input.toString()
+    if (url === "https://as.test/oauth/token") {
+      return new Response(JSON.stringify({ error: "invalid_grant" }), {
+        status: 400,
+        headers: { "content-type": "application/json" },
+      })
+    }
+    throw new Error("unexpected fetch: " + url)
+  }) as unknown as typeof fetch
+
+  const persistedStates: McpOAuthState[] = []
+  await expect(
+    ensureFreshMcpToken(cfg, {
+      fetchFn: failRefreshFetch,
+      persist: (o: McpOAuthState) => { persistedStates.push(o) },
+      metadataByIssuer: { "https://as.test/v1/mcp": { token_endpoint: "https://as.test/oauth/token" } },
+    }),
+  ).rejects.toThrow()
+  expect(persistedStates.length).toBeGreaterThan(0)
+  expect(persistedStates.at(-1)!.status).toBe("error")
+})
+
+test("ensureFreshMcpToken returns cached token without refresh when expires_in is absent", async () => {
+  // Build a config with no expires_in, obtainedAt far in the past
+  const cfg = authedTokenConfig(Date.now() - 30000 * 1000, 0, "FOREVER")
+  if (cfg.transport !== "stdio" && cfg.oauth) {
+    // Remove expires_in from tokens entirely
+    const { expires_in: _dropped, ...tokensWithoutExpiry } = cfg.oauth.tokens as OAuthTokens & { expires_in?: number }
+    cfg.oauth = {
+      ...cfg.oauth,
+      tokens: tokensWithoutExpiry as OAuthTokens,
+    }
+  }
+
+  const fetchThatThrows = (() => {
+    throw new Error("fetch must not be called for non-expiring token")
+  }) as unknown as typeof fetch
+
+  let persistCalled = false
+  const token = await ensureFreshMcpToken(cfg, {
+    fetchFn: fetchThatThrows,
+    persist: () => { persistCalled = true },
+    metadataByIssuer: { "https://as.test/v1/mcp": { token_endpoint: "https://as.test/oauth/token" } },
+  })
+  expect(token).toBe("FOREVER")
+  expect(persistCalled).toBe(false)
+})
