@@ -355,6 +355,41 @@ explicit `settings.testMcpServer` RPC.
 (`app-settings.ts`) and `buildUserMcpServers` / `buildMcpConfigJson`
 filters (belt-and-suspenders).
 
+## Custom MCP Servers → OAuth
+
+OAuth 2.1 (PKCE + DCR + rotating refresh) is supported for `http` and `sse`
+transports only. The flow is explicit discovery rather than SDK auto-discovery:
+the SDK's `auth.js` `discovery()` helper follows RFC8414
+(`<issuer>/.well-known/oauth-authorization-server`) but some servers (e.g.
+Anthropic design MCP) serve the AS metadata only at the OpenID path
+(`<issuer>/.well-known/openid-configuration`), returning the claude.ai SPA
+HTML at the RFC8414 path — breaking auto-discovery. `mcp-oauth.adapter.ts`
+probes the OpenID path first, then falls back to RFC8414.
+
+**Two-step paste UX.** Kanna has no redirect server, so after the AS redirects
+the browser to `http://localhost:3334/callback?code=…`, the user copies that
+URL from the browser address bar and pastes it into the Settings UI. The
+`completeMcpOAuth` WS command exchanges the code via PKCE and stores tokens.
+
+**Token lifecycle.** `ensureFreshMcpToken` (called at chat spawn) pre-fetches a
+fresh access token if the current one is within 60 s of expiry. Rotating
+refresh tokens are persisted back via `persistOAuthState`. The TTL is
+determined by the AS (Anthropic design MCP issues 8 h tokens).
+
+**Storage.** OAuth state (`clientByIssuer`, `tokens`, `issuer`, `flow`) is
+stored inside the server entry in `settings.json` (file mode 0600). The
+`flow` field is present only mid-flow and cleared on complete or cancel.
+DCR results are keyed by AS issuer to avoid re-registering if the same AS
+serves multiple servers.
+
+**Bearer injection.** At spawn, `AgentCoordinator.buildOAuthBearers` iterates
+enabled network servers, calls `ensureFreshMcpToken` (refresh if needed, then
+return the access token), and builds a `ReadonlyMap<serverId, token>`. Both
+`buildUserMcpServers` (SDK driver) and `buildMcpConfigJson` (PTY driver) merge
+`Authorization: Bearer <token>` into the transport headers for that server.
+`validateMcpServer` also accepts an optional `bearer` for the manual "Test"
+action on OAuth servers.
+
 # Subagent Delegation (Anthropic Task-tool pattern)
 
 The main agent is always in the loop. `@agent/<name>` in chat input is a

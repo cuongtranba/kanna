@@ -52,11 +52,8 @@ c3-115:
   - src/client/components/lexical/serialize/**
   - src/client/components/open-external-menu.tsx
 c3-116:
-  - src/client/app/SettingsPage.test.tsx
-  - src/client/app/SettingsPage.tsx
-  - src/client/app/SubagentsSection.test.tsx
-  - src/client/app/SubagentsSection.tsx
-  - src/client/components/settings/**/*.tsx
+  - src/client/app/McpServersSection.test.tsx
+  - src/client/app/McpServersSection.tsx
 c3-117:
   - src/client/app/LocalProjectsPage.tsx
   - src/client/components/NewProjectModal.tsx
@@ -173,14 +170,8 @@ c3-224:
 c3-225:
   - src/server/claude-pty/**
 c3-226:
-  - src/server/kanna-mcp-http.test.ts
-  - src/server/kanna-mcp-http.ts
-  - src/server/kanna-mcp-tools/**/*.ts
-  - src/server/kanna-mcp.test.ts
-  - src/server/kanna-mcp.ts
-  - src/server/permission-gate.test.ts
-  - src/server/permission-gate.ts
-  - src/server/tool-callback.ts
+  - src/server/mcp-oauth.adapter.ts
+  - src/server/mcp-validator.ts
 c3-227:
   - src/server/auto-continue/**/*.ts
 c3-229:
