@@ -4,6 +4,7 @@ import {
 } from "@modelcontextprotocol/sdk/client/auth.js"
 import type {
   OAuthClientMetadata,
+  AuthorizationServerMetadata,
 } from "@modelcontextprotocol/sdk/shared/auth.js"
 import type { McpServerConfig, McpOAuthState } from "../shared/types"
 
@@ -41,38 +42,57 @@ function resourceMetadataUrl(header: string | null, serverUrl: string): string {
 interface ResolvedAuthServer {
   issuer: string
   scope: string
-  metadata: Record<string, unknown>
+  metadata: AuthorizationServerMetadata
 }
 
 async function resolveAuthServer(
-  config: McpServerConfig,
+  serverUrl: string,
   fetchFn: typeof fetch,
 ): Promise<ResolvedAuthServer> {
-  const serverUrl = requireNetworkUrl(config)
+  // Fix 4: 10s timeout on all fetches
   const probe = await fetchFn(serverUrl, {
     method: "POST",
     headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
     body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} }),
+    signal: AbortSignal.timeout(10_000),
   })
+  // Fix 1: consume the probe response body to avoid a leaked socket
+  await probe.body?.cancel()
   const prmUrl = resourceMetadataUrl(probe.headers.get("www-authenticate"), serverUrl)
-  const prm = (await (await fetchFn(prmUrl, { headers: { accept: "application/json" } })).json()) as {
+  const prm = (await (await fetchFn(prmUrl, { headers: { accept: "application/json" }, signal: AbortSignal.timeout(10_000) })).json()) as {
     authorization_servers?: string[]
     scopes_supported?: string[]
   }
   const issuer = prm.authorization_servers?.[0]
   if (!issuer) throw new Error("protected-resource metadata has no authorization_servers")
   const scope = (prm.scopes_supported ?? []).join(" ")
-  const candidates = [
-    `${issuer.replace(/\/$/, "")}/.well-known/openid-configuration`,
-    `${new URL(issuer).origin}/.well-known/oauth-authorization-server${new URL(issuer).pathname}`,
-  ]
+
+  // Fix 2: expanded candidate list per RFC 8414 / OpenID Discovery.
+  // We avoid the MCP SDK's discoverAuthorizationServerMetadata helper because
+  // it tries RFC8414 path-aware URLs first and aborts on SPA HTML (e.g. claude.ai
+  // returns 200 text/html for /.well-known/oauth-authorization-server/v1/design/mcp).
+  const issuerClean = issuer.replace(/\/$/, "")
+  const issuerUrl = new URL(issuer)
+  const { origin, pathname } = issuerUrl
+  const seen = new Set<string>()
+  const candidates: string[] = []
+  for (const c of [
+    `${origin}/.well-known/oauth-authorization-server${pathname}`,
+    `${issuerClean}/.well-known/openid-configuration`,
+    `${origin}/.well-known/openid-configuration${pathname}`,
+    `${origin}/.well-known/oauth-authorization-server`,
+    `${origin}/.well-known/openid-configuration`,
+  ]) {
+    if (!seen.has(c)) { seen.add(c); candidates.push(c) }
+  }
+
   for (const c of candidates) {
-    const r = await fetchFn(c, { headers: { accept: "application/json" } })
+    const r = await fetchFn(c, { headers: { accept: "application/json" }, signal: AbortSignal.timeout(10_000) })
     const ct = r.headers.get("content-type") ?? ""
     if (r.ok && ct.includes("json")) {
       const metadata = (await r.json()) as Record<string, unknown>
       if (metadata.authorization_endpoint && metadata.token_endpoint) {
-        return { issuer, scope, metadata }
+        return { issuer, scope, metadata: metadata as AuthorizationServerMetadata }
       }
     }
   }
@@ -84,28 +104,30 @@ export async function startMcpOAuth(
   deps: McpOAuthDeps,
 ): Promise<StartResult> {
   const fetchFn = deps.fetchFn ?? fetch
+  // Fix 3: hoist serverUrl to top, reused for probe and resource param
+  const serverUrl = requireNetworkUrl(config)
   const prev = config.transport === "stdio" ? undefined : config.oauth
   if (prev?.status === "authenticated" && prev.tokens) {
     return { kind: "alreadyAuthenticated" }
   }
-  const { issuer, scope, metadata } = await resolveAuthServer(config, fetchFn)
+  const { issuer, scope, metadata } = await resolveAuthServer(serverUrl, fetchFn)
   const existingClient = prev?.clientByIssuer?.[issuer]
   const client =
     existingClient ??
     (await registerClient(issuer, {
-      metadata: metadata as never,
+      metadata,
       clientMetadata: CLIENT_METADATA,
       scope,
       fetchFn,
     }))
   const state = crypto.randomUUID()
   const { authorizationUrl, codeVerifier } = await startAuthorization(issuer, {
-    metadata: metadata as never,
+    metadata,
     clientInformation: client,
     redirectUrl: REDIRECT_URI,
     scope,
     state,
-    resource: new URL(requireNetworkUrl(config)),
+    resource: new URL(serverUrl),
   })
   const next: McpOAuthState = {
     enabled: true,
@@ -119,7 +141,7 @@ export async function startMcpOAuth(
       state,
       issuer,
       authorizationUrl: authorizationUrl.toString(),
-      metadata,
+      metadata: metadata as Record<string, unknown>,
     },
   }
   deps.persist(next)
