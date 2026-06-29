@@ -43,6 +43,7 @@ import { listWorktrees } from "./worktree-store.adapter"
 import type { TunnelGateway } from "./cloudflare-tunnel/gateway"
 import type { PushManager } from "./push/push-manager"
 import { validateMcpServer } from "./mcp-validator"
+import { startMcpOAuth, completeMcpOAuth } from "./mcp-oauth.adapter"
 import type { SessionShareService } from "./session-share"
 import type { ShareCommandResult } from "../shared/session-share/protocol"
 
@@ -1474,6 +1475,49 @@ export function createWsRouter({
               lastTest,
             },
           })
+          return
+        }
+        case "settings.startMcpOAuth": {
+          const snapshot = resolvedAppSettings.getSnapshot()
+          const entry = snapshot.customMcpServers.find((s) => s.id === command.id)
+          if (!entry || entry.transport === "stdio") {
+            send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: { ok: false, error: "not found or unsupported transport" } })
+            return
+          }
+          try {
+            const result = await startMcpOAuth(entry, {
+              persist: (oauth) => void resolvedAppSettings.writePatch({ customMcpServers: { setOAuthState: { id: entry.id, oauth } } }),
+            })
+            send(ws, {
+              v: PROTOCOL_VERSION, type: "ack", id,
+              result: result.kind === "authorizationUrl"
+                ? { ok: true, authorizationUrl: result.authorizationUrl }
+                : { ok: true, alreadyAuthenticated: true },
+            })
+          } catch (err) {
+            send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: { ok: false, error: err instanceof Error ? err.message : "oauth start failed" } })
+          }
+          return
+        }
+        case "settings.completeMcpOAuth": {
+          const snapshot = resolvedAppSettings.getSnapshot()
+          const entry = snapshot.customMcpServers.find((s) => s.id === command.id)
+          if (!entry || entry.transport === "stdio") {
+            send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: { ok: false, error: "not found" } })
+            return
+          }
+          try {
+            const result = await completeMcpOAuth(entry, command.callbackUrl, {
+              persist: (oauth) => void resolvedAppSettings.writePatch({ customMcpServers: { setOAuthState: { id: entry.id, oauth } } }),
+              listTools: async (_serverUrl, accessToken) => {
+                const r = await validateMcpServer(entry, { bearer: accessToken })
+                return r.status === "ok" ? r.toolCount : 0
+              },
+            })
+            send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: { ok: true, testResult: result } })
+          } catch (err) {
+            send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: { ok: false, error: err instanceof Error ? err.message : "oauth complete failed" } })
+          }
           return
         }
         case "settings.readLlmProvider": {
