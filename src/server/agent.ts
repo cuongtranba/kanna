@@ -8,6 +8,7 @@ import type {
   ChatAttachment,
   ContextWindowUsageSnapshot,
   LlmProviderSnapshot,
+  McpOAuthState,
   McpServerConfig,
   ModelOptions,
   NormalizedToolCall,
@@ -69,6 +70,7 @@ import type { ChatPermissionPolicy } from "../shared/permission-policy"
 import { mergePolicyOverride, POLICY_DEFAULT } from "../shared/permission-policy"
 import { startClaudeSessionPTY, type StartClaudeSessionPtyArgs } from "./claude-pty/driver"
 import { computeWorkflowsDir } from "./claude-pty/jsonl-path.adapter"
+import { ensureFreshMcpToken } from "./mcp-oauth.adapter"
 
 type SdkMcpEntry =
   | { type: "stdio"; command: string; args: string[]; env: Record<string, string>; cwd?: string }
@@ -78,6 +80,7 @@ type SdkMcpEntry =
 
 export function buildUserMcpServers(
   servers: readonly McpServerConfig[],
+  oauthBearers: ReadonlyMap<string, string> = new Map(),
 ): Record<string, SdkMcpEntry> {
   const out: Record<string, SdkMcpEntry> = {}
   for (const s of servers) {
@@ -92,10 +95,12 @@ export function buildUserMcpServers(
         ...(s.cwd ? { cwd: s.cwd } : {}),
       }
     } else {
+      const bearer = oauthBearers.get(s.id)
+      const headers = bearer ? { ...s.headers, Authorization: `Bearer ${bearer}` } : s.headers
       out[s.name] = {
         type: s.transport,
         url: s.url,
-        headers: s.headers,
+        headers,
       }
     }
   }
@@ -316,6 +321,8 @@ interface AgentCoordinatorArgs {
     chatPolicy?: ChatPermissionPolicy
     /** Enabled user MCP servers, merged into the SDK's mcpServers map. */
     customMcpServers?: readonly McpServerConfig[]
+    /** Pre-resolved oauth bearer tokens keyed by server id. */
+    oauthBearers?: ReadonlyMap<string, string>
     /** Backs the `schedule_wakeup` MCP tool. Omit to hide the tool. */
     scheduleWakeup?: (a: { delayMs: number; prompt: string }) => Promise<string | null>
     /** Folder-restricted subagent: disallow native FS tools + allowlist mcp__kanna__* + per-run path-deny scope. */
@@ -390,6 +397,8 @@ interface AgentCoordinatorArgs {
   listOpenRouterModels?: () => Promise<import("../shared/types").OpenRouterModel[]>
   /** Local skill + slash command catalog (user, project, plugin scans). */
   localCatalog?: import("./local-catalog").LocalCatalogService
+  /** Persist updated OAuth state for a custom MCP server (called after token refresh at spawn). */
+  persistOAuthState?: (id: string, oauth: McpOAuthState) => void
 }
 
 interface SendToStartingProfile {
@@ -1264,6 +1273,8 @@ async function startClaudeSession(args: {
   scheduleWakeup?: (a: { delayMs: number; prompt: string }) => Promise<string | null>
   /** Enabled user MCP servers, merged into the SDK's mcpServers map. */
   customMcpServers?: readonly McpServerConfig[]
+  /** Pre-resolved oauth bearer tokens keyed by server id (from ensureFreshMcpToken). */
+  oauthBearers?: ReadonlyMap<string, string>
   /** Folder-restricted subagent: disallow native FS tools, allowlist mcp__kanna__*, per-run path-deny. */
   restrictedAllowedPaths?: string[]
   /** When true, leave the prompt queue open after initialPrompt and expose pushChannelPrompt on the handle. */
@@ -1314,7 +1325,7 @@ async function startClaudeSession(args: {
           scheduleWakeup: args.scheduleWakeup,
           restrictedAllowedPaths: args.restrictedAllowedPaths,
         }),
-        ...buildUserMcpServers(args.customMcpServers ?? []),
+        ...buildUserMcpServers(args.customMcpServers ?? [], args.oauthBearers),
       },
       systemPrompt: args.systemPromptOverride != null
         ? args.systemPromptOverride
@@ -1545,6 +1556,7 @@ export class AgentCoordinator {
   private readonly localCatalog: import("./local-catalog").LocalCatalogService | null
   private readonly readLlmProvider: () => Promise<LlmProviderSnapshot>
   private readonly listOpenRouterModelsFn: (() => Promise<import("../shared/types").OpenRouterModel[]>) | null
+  private readonly persistOAuthStateFn: ((id: string, oauth: McpOAuthState) => void) | null
   private readonly subagentPendingResolvers = new Map<
     string,
     { resolve: (v: unknown) => void; reject: (e: Error) => void }
@@ -1571,6 +1583,7 @@ export class AgentCoordinator {
     this.getAppSettingsSnapshot = args.getAppSettingsSnapshot ?? (() => ({}))
     this.readLlmProvider = args.readLlmProvider ?? readLlmProviderSnapshot
     this.listOpenRouterModelsFn = args.listOpenRouterModels ?? null
+    this.persistOAuthStateFn = args.persistOAuthState ?? null
     this.subagentOrchestrator = new SubagentOrchestrator({
       store: this.store,
       appSettings: { getSnapshot: () => ({ subagents: this.getSubagents() }) },
@@ -1716,6 +1729,24 @@ export class AgentCoordinator {
     const list = (snap as { customMcpServers?: readonly McpServerConfig[] }).customMcpServers
     if (!Array.isArray(list)) return []
     return list.filter((s) => s.enabled)
+  }
+
+  private async buildOAuthBearers(servers: readonly McpServerConfig[]): Promise<Map<string, string>> {
+    const bearers = new Map<string, string>()
+    for (const s of servers) {
+      if (s.transport === "stdio" || !s.oauth || s.oauth.status !== "authenticated") continue
+      try {
+        const token = await ensureFreshMcpToken(s, {
+          persist: (oauth) => {
+            if (this.persistOAuthStateFn) this.persistOAuthStateFn(s.id, oauth)
+          },
+        })
+        bearers.set(s.id, token)
+      } catch (err) {
+        console.warn("[kanna/mcp-oauth] token refresh failed for", s.name, err)
+      }
+    }
+    return bearers
   }
 
   /**
@@ -2733,6 +2764,8 @@ export class AgentCoordinator {
         getParentUserMessageId: () => this.activeTurns.get(chatIdForCtx)?.userMessageId ?? null,
         getMentionedSubagentIds: () => this.mentionedSubagentIdsByChat.get(chatIdForCtx) ?? [],
       }
+      const enabledMcpServers = this.getEnabledCustomMcpServers()
+      const oauthBearers = await this.buildOAuthBearers(enabledMcpServers)
       let started: ClaudeSessionHandle
       try {
         started = usePty
@@ -2763,7 +2796,8 @@ export class AgentCoordinator {
                 ptyInstanceRegistry: this.ptyInstanceRegistry ?? undefined,
               workflowRegistry: this.workflowRegistry ?? undefined,
               subagentTranscriptRegistry: this.subagentTranscriptRegistry ?? undefined,
-              customMcpServers: this.getEnabledCustomMcpServers(),
+              customMcpServers: enabledMcpServers,
+              oauthBearers,
             })
           : await this.startClaudeSessionFn({
               projectId: args.projectId,
@@ -2787,7 +2821,8 @@ export class AgentCoordinator {
               }),
               toolCallback: this.toolCallback ?? undefined,
               chatPolicy: this.resolveChatPolicy(args.chatId),
-              customMcpServers: this.getEnabledCustomMcpServers(),
+              customMcpServers: enabledMcpServers,
+              oauthBearers,
               turnPrice: openrouterTurnPrice,
               contextWindowOverride: openrouterContextWindow,
             })
@@ -3007,6 +3042,8 @@ export class AgentCoordinator {
    */
   private buildClaudeSubagentStarter(): NonNullable<BuildSubagentProviderRunArgs["startClaudeSession"]> {
     return async (a) => {
+      const enabledMcpServers = this.getEnabledCustomMcpServers()
+      const oauthBearers = await this.buildOAuthBearers(enabledMcpServers)
       if (this.resolveClaudeDriverPreference() === "pty") {
         return this.startClaudeSessionPTYFn({
           chatId: a.chatId ?? "",
@@ -3031,12 +3068,13 @@ export class AgentCoordinator {
           ptyRegistry: this.claudePtyRegistry ?? undefined,
                 ptyInstanceRegistry: this.ptyInstanceRegistry ?? undefined,
           workflowRegistry: this.workflowRegistry ?? undefined,
-          customMcpServers: this.getEnabledCustomMcpServers(),
+          customMcpServers: enabledMcpServers,
+          oauthBearers,
           restrictedAllowedPaths: a.restrictedAllowedPaths,
           keepAlive: a.keepAlive,
         })
       }
-      return this.startClaudeSessionFn({ ...a, customMcpServers: this.getEnabledCustomMcpServers() })
+      return this.startClaudeSessionFn({ ...a, customMcpServers: enabledMcpServers, oauthBearers })
     }
   }
 
