@@ -191,8 +191,9 @@ export async function completeMcpOAuth(
     return { status: "error", testedAt: new Date().toISOString(), message: "token exchange failed" }
   }
 
-  const toolCount = await deps.listTools(requireNetworkUrl(config), tokens.access_token)
-  const next: McpOAuthState = {
+  // Persist authenticated state BEFORE listTools so tokens are never lost if
+  // listTools throws.
+  const authenticatedState: McpOAuthState = {
     enabled: true,
     status: "authenticated",
     issuer: flow.issuer,
@@ -201,6 +202,15 @@ export async function completeMcpOAuth(
     obtainedAt: Date.now(),
     flow: undefined,
   }
-  deps.persist(next)
-  return { status: "ok", testedAt: new Date().toISOString(), toolCount }
+  deps.persist(authenticatedState)
+
+  const testedAt = new Date().toISOString()
+  try {
+    const toolCount = await deps.listTools(requireNetworkUrl(config), tokens.access_token)
+    return { status: "ok", testedAt, toolCount }
+  } catch {
+    // Tokens are already persisted as authenticated — do NOT overwrite with
+    // an error status; the user can retry the tool check without re-authing.
+    return { status: "error", testedAt, message: "authenticated but tool check failed" }
+  }
 }

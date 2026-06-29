@@ -1,8 +1,7 @@
 import { test, expect } from "bun:test"
 import { startMcpOAuth } from "./mcp-oauth.adapter"
 import type { McpServerConfig, McpOAuthState } from "../shared/types"
-
-type McpOAuthStateForTest = import("../shared/types").McpOAuthState
+import type { OAuthClientInformationFull } from "@modelcontextprotocol/sdk/shared/auth.js"
 
 function baseConfig(): McpServerConfig {
   return {
@@ -240,7 +239,7 @@ function authedConfigWithFlow(): McpServerConfig {
       status: "unauthenticated",
       issuer: "https://as.test/v1/mcp",
       clientByIssuer: {
-        "https://as.test/v1/mcp": { client_id: "client-123", redirect_uris: ["http://localhost:8765/callback"] } as never,
+        "https://as.test/v1/mcp": { client_id: "client-123", redirect_uris: ["http://localhost:8765/callback"] } as unknown as OAuthClientInformationFull,
       },
       flow: {
         codeVerifier: "verifier-xyz",
@@ -283,10 +282,10 @@ test("completeMcpOAuth rejects on state mismatch", async () => {
 
 test("completeMcpOAuth exchanges code, persists tokens, returns ok", async () => {
   const cfg = authedConfigWithFlow()
-  let saved: McpOAuthStateForTest | undefined
+  let saved: McpOAuthState | undefined
   const result = await completeMcpOAuth(cfg, "http://localhost:8765/callback?code=C&state=state-abc", {
     fetchFn: tokenFetch(),
-    persist: (o: McpOAuthStateForTest) => { saved = o },
+    persist: (o: McpOAuthState) => { saved = o },
     listTools: async () => 20,
   })
   expect(result.status).toBe("ok")
@@ -297,4 +296,92 @@ test("completeMcpOAuth exchanges code, persists tokens, returns ok", async () =>
   expect(saved?.tokens?.access_token).toBe("AT")
   expect(saved?.tokens?.refresh_token).toBe("RT")
   expect(saved?.flow).toBeUndefined()
+})
+
+// Fix 4 tests — error-path coverage
+
+test("completeMcpOAuth returns error and persists error state when token exchange fails", async () => {
+  const cfg = authedConfigWithFlow()
+  const persistedStates: McpOAuthState[] = []
+  const failingFetch = (async (input: string | URL | Request) => {
+    const url = typeof input === "string" ? input : input.toString()
+    if (url === "https://as.test/oauth/token") {
+      return new Response(JSON.stringify({ error: "invalid_grant" }), {
+        status: 400,
+        headers: { "content-type": "application/json" },
+      })
+    }
+    throw new Error("unexpected fetch: " + url)
+  }) as unknown as typeof fetch
+
+  const result = await completeMcpOAuth(
+    cfg,
+    "http://localhost:8765/callback?code=C&state=state-abc",
+    {
+      fetchFn: failingFetch,
+      persist: (o: McpOAuthState) => { persistedStates.push(o) },
+      listTools: async () => { throw new Error("should not be called") },
+    },
+  )
+  expect(result.status).toBe("error")
+  expect(persistedStates.length).toBeGreaterThan(0)
+  const last = persistedStates.at(-1)!
+  expect(last.status).toBe("error")
+  expect(last.flow).toBeUndefined()
+})
+
+test("completeMcpOAuth rejects when callback URL has no code", async () => {
+  const cfg = authedConfigWithFlow()
+  await expect(
+    completeMcpOAuth(
+      cfg,
+      "http://localhost:8765/callback?state=state-abc",
+      {
+        fetchFn: tokenFetch(),
+        persist: () => {},
+        listTools: async () => 0,
+      },
+    ),
+  ).rejects.toThrow(/code/i)
+})
+
+test("completeMcpOAuth rejects when no registered client for issuer", async () => {
+  const cfg = authedConfigWithFlow()
+  // Patch clientByIssuer to be empty so there is no client for the issuer
+  if (cfg.transport !== "stdio" && cfg.oauth) {
+    cfg.oauth = { ...cfg.oauth, clientByIssuer: {} }
+  }
+  await expect(
+    completeMcpOAuth(
+      cfg,
+      "http://localhost:8765/callback?code=C&state=state-abc",
+      {
+        fetchFn: tokenFetch(),
+        persist: () => {},
+        listTools: async () => 0,
+      },
+    ),
+  ).rejects.toThrow(/client/i)
+})
+
+test("completeMcpOAuth keeps tokens when listTools throws (Fix 1)", async () => {
+  const cfg = authedConfigWithFlow()
+  const persistedStates: McpOAuthState[] = []
+  const result = await completeMcpOAuth(
+    cfg,
+    "http://localhost:8765/callback?code=C&state=state-abc",
+    {
+      fetchFn: tokenFetch(),
+      persist: (o: McpOAuthState) => { persistedStates.push(o) },
+      listTools: async () => { throw new Error("connection refused") },
+    },
+  )
+  // listTools failure should return error (tool check failed), not throw
+  expect(result.status).toBe("error")
+  if (result.status !== "error") throw new Error("unreachable")
+  expect(result.message).toMatch(/tool check failed/)
+  // Tokens MUST be persisted as authenticated — not lost
+  const last = persistedStates.at(-1)!
+  expect(last.status).toBe("authenticated")
+  expect(last.tokens?.access_token).toBe("AT")
 })
