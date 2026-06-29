@@ -90,6 +90,14 @@ drive discovery explicitly.** Concrete results:
 - Dynamic client registration is **open**: `POST .../oauth/register` → `201`,
   public client (`token_endpoint_auth_method: "none"`), grants
   `authorization_code` + `refresh_token`. PKCE expected.
+- **Full live flow validated end-to-end** (real browser authorize + paste +
+  exchange): `exchangeAuthorization` → `access_token` (108 chars),
+  `refresh_token`, `token_type: "Bearer"`, `expires_in: 28800` (**8 hours**),
+  `scope: "user:design:read user:design:write"`. Injecting that bearer as a
+  **static `Authorization` header** on a fresh `StreamableHTTPClientTransport`
+  → `connect` + `listTools` returned **20 real tools** (`create_project`,
+  `write_files`, `render_preview`, `read_file`, …). `refreshAuthorization`
+  succeeded and **rotated** both the access AND refresh tokens.
 - **Cloudflare:** `curl` hits the "Just a moment" JS challenge on some paths;
   **Bun's `fetch` does not.** Kanna runs on Bun, so discovery/token/refresh
   fetches are not Cloudflare-blocked. (Do not shell out to `curl`.)
@@ -213,8 +221,10 @@ which the probe proved unusable for this server):
 - `ensureFreshMcpToken(config) -> string`  (access token)
   If `tokens` absent → throw (caller skips injection). If access token still
   valid (`obtainedAt + expires_in - skew > now`) → return it. Else
-  `refreshAuthorization(...)` (SDK) which rotates the token set; persist and
-  return the new access token. On refresh failure → set `status:"error"`, throw.
+  `refreshAuthorization(...)` (SDK). The probe confirmed refresh **rotates both
+  access AND refresh tokens** — persist the WHOLE new token set (including the
+  new `refresh_token`), not just the access token, or the next refresh 401s.
+  Return the new access token. On refresh failure → set `status:"error"`, throw.
 
 Errors reuse `mcp-validator.ts:formatError` shape where practical.
 
@@ -239,10 +249,12 @@ the "Test" button works after auth.
 ### Known limitation (documented, accepted for v1)
 
 The bearer is a static header fixed at spawn. A single turn outliving the access
--token TTL (design tokens ≈ 1h) will `401` mid-session until the next spawn
-refreshes. Mitigation: refresh at every spawn; most turns are far shorter than
-1h. A loopback token proxy (Kanna injects its own URL, adds a fresh bearer per
-request) would remove this entirely and is the planned v2 follow-up.
+-token TTL would `401` mid-session until the next spawn refreshes. The probe
+measured the design server's TTL at **28800s (8 hours)** — far longer than any
+realistic turn — so in practice this is a non-issue. Mitigation remains: refresh
+at every spawn. A loopback token proxy (Kanna injects its own URL, adds a fresh
+bearer per request) would remove the bound entirely and is a possible v2
+follow-up, but is not needed for correctness here.
 
 ## WS commands — `src/server/ws-router.ts`
 
