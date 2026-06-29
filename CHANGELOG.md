@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.102.0](https://github.com/cuongtranba/kanna/compare/v0.101.0...v0.102.0) (2026-06-29)
+
+
+### Features
+
+* OAuth 2.1 client for HTTP/SSE custom MCP servers ([#461](https://github.com/cuongtranba/kanna/issues/461)) ([924ba2e](https://github.com/cuongtranba/kanna/commit/924ba2e902de5010e344d1ef1f18b4d5532d29ad))
+
 ## [0.101.0](https://github.com/cuongtranba/kanna/compare/v0.100.0...v0.101.0) (2026-06-26)
 
 
