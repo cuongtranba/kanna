@@ -15,6 +15,7 @@ import {
   isBenignStaleStateMessage,
   listInstalledSkills,
   parseInstalledSkillsLock,
+  resolveMcpTestBearer,
 } from "./ws-router"
 import { createToolCallbackService } from "./tool-callback"
 import { createTestEventStore } from "./storage/test-helpers"
@@ -3323,6 +3324,102 @@ describe("settings.testMcpServer", () => {
     const persisted = appSettings.getSnapshot().customMcpServers.find((s) => s.id === entryId)
     expect(persisted?.lastTest.status).toBe("error")
   }, 15_000)
+
+  test("injects a fresh oauth bearer when probing an authenticated server", async () => {
+    let received: string | null = null as string | null
+    const server = Bun.serve({
+      port: 0,
+      fetch: (req) => {
+        received = req.headers.get("authorization")
+        return new Response("nope", { status: 401 })
+      },
+    })
+    try {
+      const entry: McpServerConfig = {
+        id: "oauth-1",
+        name: "design",
+        enabled: true,
+        createdAt: "",
+        updatedAt: "",
+        lastTest: { status: "untested" },
+        transport: "http",
+        url: `http://127.0.0.1:${server.port}/mcp`,
+        headers: {},
+        oauth: {
+          enabled: true,
+          status: "authenticated",
+          tokens: { access_token: "tok-123", token_type: "Bearer" },
+        },
+      }
+      const appSettings = makeAppSettingsStub({ customMcpServers: [entry] })
+      const router = makeTestRouter(appSettings)
+      const ws = new FakeWebSocket()
+      router.handleOpen(ws as never)
+
+      await router.handleMessage(
+        ws as never,
+        JSON.stringify({
+          v: 1,
+          type: "command",
+          id: "test-oauth-1",
+          command: { type: "settings.testMcpServer", id: "oauth-1" },
+        }),
+      )
+
+      // The stored access token must reach the server as a Bearer header.
+      expect(received).toBe("Bearer tok-123")
+    } finally {
+      server.stop()
+    }
+  }, 15_000)
+})
+
+describe("resolveMcpTestBearer", () => {
+  const noopAppSettings = { writePatch: async () => ({}) }
+
+  function authedHttp(): McpServerConfig {
+    return {
+      id: "h",
+      name: "design",
+      enabled: true,
+      createdAt: "",
+      updatedAt: "",
+      lastTest: { status: "untested" },
+      transport: "http",
+      url: "https://api.example/mcp",
+      headers: {},
+      oauth: {
+        enabled: true,
+        status: "authenticated",
+        tokens: { access_token: "tok-123", token_type: "Bearer" },
+      },
+    }
+  }
+
+  test("returns the access token for an authenticated oauth server", async () => {
+    expect(await resolveMcpTestBearer(authedHttp(), noopAppSettings)).toBe("tok-123")
+  })
+
+  test("returns undefined for a stdio server", async () => {
+    const entry: McpServerConfig = {
+      id: "s",
+      name: "s",
+      enabled: true,
+      createdAt: "",
+      updatedAt: "",
+      lastTest: { status: "untested" },
+      transport: "stdio",
+      command: "x",
+      args: [],
+      env: {},
+    }
+    expect(await resolveMcpTestBearer(entry, noopAppSettings)).toBeUndefined()
+  })
+
+  test("returns undefined for an unauthenticated oauth server", async () => {
+    const entry = { ...authedHttp(), oauth: { enabled: true, status: "unauthenticated" as const } }
+    expect(await resolveMcpTestBearer(entry, noopAppSettings)).toBeUndefined()
+  })
 })
 
 describe("settings.startMcpOAuth + settings.completeMcpOAuth", () => {
