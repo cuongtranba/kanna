@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.102.1](https://github.com/cuongtranba/kanna/compare/v0.102.0...v0.102.1) (2026-06-30)
+
+
+### Bug Fixes
+
+* **mcp-oauth:** persist AS metadata so token refresh survives past TTL ([#463](https://github.com/cuongtranba/kanna/issues/463)) ([be82004](https://github.com/cuongtranba/kanna/commit/be8200498ca7ea76712e298067d32b01aa680e9b))
+
 ## [0.102.0](https://github.com/cuongtranba/kanna/compare/v0.101.0...v0.102.0) (2026-06-29)
 
 
