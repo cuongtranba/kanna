@@ -509,3 +509,36 @@ test("ensureFreshMcpToken returns cached token without refresh when expires_in i
   expect(token).toBe("FOREVER")
   expect(persistCalled).toBe(false)
 })
+
+test("completeMcpOAuth persists AS metadata for later refresh", async () => {
+  const cfg = authedConfigWithFlow()
+  let saved: McpOAuthState | undefined
+  await completeMcpOAuth(cfg, "http://localhost:8765/callback?code=C&state=state-abc", {
+    fetchFn: tokenFetch(),
+    persist: (o: McpOAuthState) => { saved = o },
+    listTools: async () => 20,
+  })
+  expect(saved?.metadata).toBeDefined()
+  expect((saved?.metadata as { token_endpoint?: string }).token_endpoint).toBe("https://as.test/oauth/token")
+})
+
+test("ensureFreshMcpToken refreshes using persisted oauth.metadata when metadataByIssuer is absent", async () => {
+  // Regression: refresh must not re-discover token_endpoint from a
+  // non-resolvable issuer. The persisted metadata supplies it.
+  const cfg = authedTokenConfig(Date.now() - 30000 * 1000, 28800)
+  if (cfg.transport !== "stdio" && cfg.oauth) {
+    cfg.oauth = {
+      ...cfg.oauth,
+      metadata: { token_endpoint: "https://as.test/oauth/token" },
+    }
+  }
+  let saved: McpOAuthState | undefined
+  const token = await ensureFreshMcpToken(cfg, {
+    fetchFn: tokenFetch(),
+    persist: (o: McpOAuthState) => { saved = o },
+    // no metadataByIssuer — fallback to oauth.metadata
+  })
+  expect(token).toBe("AT")
+  expect(saved?.status).toBe("authenticated")
+  expect(saved?.metadata).toEqual({ token_endpoint: "https://as.test/oauth/token" })
+})
