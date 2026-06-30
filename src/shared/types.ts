@@ -267,6 +267,10 @@ export interface McpOAuthState {
   errorMessage?: string
   // resolved AS issuer (set on complete; used by refresh without re-discovery)
   issuer?: string
+  // cached AS metadata (token_endpoint, etc.) persisted at complete so refresh
+  // uses it directly instead of re-discovering from issuer (which may be a
+  // non-resolvable resource URL, e.g. claude.ai design MCP)
+  metadata?: Record<string, unknown>
   // DCR result keyed by AS issuer (SEP-2352)
   clientByIssuer?: Record<string, OAuthClientInformationFull>
   tokens?: OAuthTokens

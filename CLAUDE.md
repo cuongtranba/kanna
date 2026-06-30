@@ -373,10 +373,19 @@ URL from the browser address bar and pastes it into the Settings UI. The
 
 **Token lifecycle.** `ensureFreshMcpToken` (called at chat spawn) pre-fetches a
 fresh access token if the current one is within 60 s of expiry. Rotating
-refresh tokens are persisted back via `persistOAuthState`. The TTL is
-determined by the AS (Anthropic design MCP issues 8 h tokens).
+refresh tokens are persisted back via `persistOAuthState`. The access-token TTL
+is determined by the AS (Anthropic design MCP issues 8 h tokens) — but refresh
+extends the session indefinitely, so the 8 h is not a re-auth interval.
+`completeMcpOAuth` persists the resolved AS `metadata` (`token_endpoint`) onto
+`McpOAuthState.metadata`; `ensureFreshMcpToken` uses it
+(`metadataByIssuer?.[issuer] ?? oauth.metadata`) so `refreshAuthorization` hits
+the cached `token_endpoint` directly and never re-discovers from `issuer` (which
+may be a non-resolvable resource URL like `https://claude.ai/v1/design/mcp` —
+re-discovery there returns SPA HTML and was the cause of "token refresh failed"
+forcing an 8 h re-auth; see adr-20260630-mcp-oauth-refresh-metadata). Entries
+authenticated before this fix lack persisted metadata and must re-auth once.
 
-**Storage.** OAuth state (`clientByIssuer`, `tokens`, `issuer`, `flow`) is
+**Storage.** OAuth state (`clientByIssuer`, `tokens`, `issuer`, `metadata`, `flow`) is
 stored inside the server entry in `settings.json` (file mode 0600). The
 `flow` field is present only mid-flow and cleared on complete or cancel.
 DCR results are keyed by AS issuer to avoid re-registering if the same AS

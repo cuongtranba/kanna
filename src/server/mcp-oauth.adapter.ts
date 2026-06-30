@@ -198,6 +198,7 @@ export async function completeMcpOAuth(
     enabled: true,
     status: "authenticated",
     issuer: flow.issuer,
+    metadata: flow.metadata,
     clientByIssuer: oauth.clientByIssuer,
     tokens,
     obtainedAt: Date.now(),
@@ -247,7 +248,10 @@ export async function ensureFreshMcpToken(
   if (!issuer) throw new Error("missing issuer for refresh")
   const client = oauth.clientByIssuer?.[issuer]
   if (!client) throw new Error("missing client for refresh")
-  const metadata = deps.metadataByIssuer?.[issuer]
+  // Prefer the caller-supplied metadata, else the metadata persisted at
+  // complete. Without it the SDK re-discovers token_endpoint from issuer,
+  // which fails when issuer is a non-resolvable resource URL.
+  const metadata = deps.metadataByIssuer?.[issuer] ?? oauth.metadata
   try {
     const next = await refreshAuthorization(issuer, {
       metadata: metadata as AuthorizationServerMetadata | undefined,
