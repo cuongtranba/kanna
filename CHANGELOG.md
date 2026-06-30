@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.102.2](https://github.com/cuongtranba/kanna/compare/v0.102.1...v0.102.2) (2026-06-30)
+
+
+### Bug Fixes
+
+* **mcp:** inject fresh oauth bearer when testing authenticated MCP servers ([#465](https://github.com/cuongtranba/kanna/issues/465)) ([b187c39](https://github.com/cuongtranba/kanna/commit/b187c3986422e020c42929a6799fba2b6b3cd697))
+
 ## [0.102.1](https://github.com/cuongtranba/kanna/compare/v0.102.0...v0.102.1) (2026-06-30)
 
 
