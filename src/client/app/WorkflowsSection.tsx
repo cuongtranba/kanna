@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react"
-import { Activity } from "lucide-react"
+import { Activity, FileText } from "lucide-react"
 import { cn } from "../lib/utils"
 import { formatCompactDuration } from "../lib/formatDuration"
-import type { WorkflowRun, WorkflowRunSummary, WorkflowStatus } from "../../shared/workflow-types"
+import { groupWorkflowAgentsByPhase } from "../lib/workflowGrouping"
+import type { WorkflowAgentProgress, WorkflowRun, WorkflowRunSummary, WorkflowStatus } from "../../shared/workflow-types"
 import {
   Dialog,
   DialogContent,
@@ -13,7 +14,7 @@ import {
 
 // ── Status helpers ────────────────────────────────────────────────────────────
 
-type WorkflowStatusTone = "muted" | "active" | "destructive" | "warning"
+export type WorkflowStatusTone = "muted" | "active" | "destructive" | "warning"
 
 function workflowStatusLabel(status: WorkflowStatus): string {
   switch (status) {
@@ -36,7 +37,7 @@ function workflowStatusTone(status: WorkflowStatus): WorkflowStatusTone {
   }
 }
 
-function workflowStatusDotClass(tone: WorkflowStatusTone): string {
+export function workflowStatusDotClass(tone: WorkflowStatusTone): string {
   switch (tone) {
     case "active": return "bg-emerald-500 dark:bg-emerald-400"
     case "destructive": return "bg-destructive"
@@ -46,7 +47,7 @@ function workflowStatusDotClass(tone: WorkflowStatusTone): string {
   }
 }
 
-function workflowStatusTextClass(tone: WorkflowStatusTone): string {
+export function workflowStatusTextClass(tone: WorkflowStatusTone): string {
   switch (tone) {
     case "active": return "text-emerald-500 dark:text-emerald-400"
     case "destructive": return "text-destructive"
@@ -58,7 +59,7 @@ function workflowStatusTextClass(tone: WorkflowStatusTone): string {
 
 // ── StatusPill ────────────────────────────────────────────────────────────────
 
-function WorkflowStatusPill({ status }: { status: WorkflowStatus }) {
+export function WorkflowStatusPill({ status }: { status: WorkflowStatus }) {
   const tone = workflowStatusTone(status)
   return (
     <span className="inline-flex items-center gap-1 rounded border border-border bg-card px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide">
@@ -179,11 +180,24 @@ interface WorkflowRunDetailDialogProps {
   onClose: () => void
 }
 
-function agentStateTone(state: string): WorkflowStatusTone {
-  if (state === "running") return "active"
+export function agentStateTone(state: string): WorkflowStatusTone {
+  if (state === "running" || state === "progress") return "active"
   if (state === "failed" || state === "error") return "destructive"
   if (state === "killed") return "warning"
   return "muted"
+}
+
+// Pretty-print an overall workflow result. parseWorkflowRunFile stringifies
+// object results to JSON, so re-indent when it parses as JSON; otherwise show
+// the raw string.
+export function formatWorkflowResult(result: string): string {
+  const trimmed = result.trim()
+  if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) return result
+  try {
+    return JSON.stringify(JSON.parse(trimmed), null, 2)
+  } catch {
+    return result
+  }
 }
 
 export function WorkflowRunDetailDialog({ run, open, onClose }: WorkflowRunDetailDialogProps) {
@@ -205,8 +219,81 @@ export function WorkflowRunDetailDialog({ run, open, onClose }: WorkflowRunDetai
   )
 }
 
-function WorkflowRunDetail({ run }: { run: WorkflowRun }) {
+// ── Agent row + phase group (the progress tree) ───────────────────────────────
+
+function AgentPreviewBlock({ label, text }: { label: string; text: string }) {
+  return (
+    <div className="rounded border border-border/50 bg-muted/40 px-2 py-1">
+      <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{label}</span>
+      <p className="whitespace-pre-wrap break-words text-xs text-muted-foreground/90">{text}</p>
+    </div>
+  )
+}
+
+function WorkflowAgentRow({
+  agent,
+  onSelectAgent,
+}: {
+  agent: WorkflowAgentProgress
+  onSelectAgent?: (agentId: string) => void
+}) {
+  const stateTone = agentStateTone(agent.state)
+  const canDrill = Boolean(onSelectAgent && agent.agentId)
+  return (
+    <li
+      data-testid={`workflow-agent:${agent.agentId ?? agent.index}`}
+      className="flex items-start gap-2 rounded-md border border-border/60 px-2.5 py-2"
+    >
+      <span
+        aria-hidden
+        className={cn("mt-1.5 inline-block size-1.5 shrink-0 rounded-full", workflowStatusDotClass(stateTone))}
+      />
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
+        <div className="flex items-center gap-2">
+          <span className="truncate text-sm font-medium text-foreground">{agent.label}</span>
+          {agent.model ? <span className="text-[10px] text-muted-foreground">{agent.model}</span> : null}
+          {canDrill ? (
+            <button
+              type="button"
+              data-testid={`workflow-agent-transcript:${agent.agentId}`}
+              onClick={() => onSelectAgent?.(agent.agentId!)}
+              className="ml-auto inline-flex shrink-0 items-center gap-1 rounded border border-border bg-card px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            >
+              <FileText className="size-3" aria-hidden />
+              Transcript
+            </button>
+          ) : null}
+        </div>
+        <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
+          <span className={cn("capitalize", workflowStatusTextClass(stateTone))}>{agent.state}</span>
+          {agent.lastToolName ? <span>last: {agent.lastToolName}</span> : null}
+          {agent.durationMs != null ? <span className="tabular-nums">{formatCompactDuration(agent.durationMs)}</span> : null}
+          {agent.tokens != null ? <span className="tabular-nums">{agent.tokens.toLocaleString()} tok</span> : null}
+          {agent.toolCalls != null ? <span className="tabular-nums">{agent.toolCalls} calls</span> : null}
+        </div>
+        {agent.lastToolSummary ? <span className="text-xs text-muted-foreground">{agent.lastToolSummary}</span> : null}
+        {agent.promptPreview ? <AgentPreviewBlock label="Prompt" text={agent.promptPreview} /> : null}
+        {agent.resultPreview ? <AgentPreviewBlock label="Result" text={agent.resultPreview} /> : null}
+      </div>
+    </li>
+  )
+}
+
+// ── Run detail (shared by the in-chat dialog and the dedicated page) ───────────
+
+export interface WorkflowRunDetailProps {
+  run: WorkflowRun
+  /**
+   * When provided, each agent that has an `agentId` shows a "Transcript" button
+   * that opens the full per-agent transcript. The in-chat dialog omits this
+   * (previews only); the dedicated page wires it to the drill-in panel.
+   */
+  onSelectAgent?: (agentId: string) => void
+}
+
+export function WorkflowRunDetail({ run, onSelectAgent }: WorkflowRunDetailProps) {
   const tone = workflowStatusTone(run.status)
+  const groups = groupWorkflowAgentsByPhase(run.phases, run.agents)
 
   return (
     <div className="flex flex-col gap-5">
@@ -235,83 +322,62 @@ function WorkflowRunDetail({ run }: { run: WorkflowRun }) {
         ) : null}
       </div>
 
-      {/* Phases */}
-      {run.phases.length > 0 ? (
-        <section className="flex flex-col gap-1.5">
-          <h4 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Phases</h4>
-          <ol className="flex flex-col gap-0.5">
-            {run.phases.map((phase, i) => (
-              <li key={i} className="flex items-start gap-2 text-sm">
-                <span className="mt-0.5 tabular-nums text-xs text-muted-foreground">{i + 1}.</span>
-                <div className="flex flex-col">
-                  <span className="text-foreground">{phase.title}</span>
-                  {phase.detail ? (
-                    <span className="text-xs text-muted-foreground">{phase.detail}</span>
-                  ) : null}
-                </div>
-              </li>
-            ))}
-          </ol>
-        </section>
-      ) : null}
-
-      {/* Agents */}
-      {run.agents.length > 0 ? (
-        <section className="flex flex-col gap-1.5">
-          <h4 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Agents</h4>
-          <ul className="flex flex-col gap-0.5">
-            {run.agents.map((agent) => {
-              const stateTone = agentStateTone(agent.state)
-              return (
-                <li
-                  key={agent.index}
-                  className="flex items-start gap-2 rounded-md border border-border/60 px-2.5 py-2"
-                >
-                  <span
-                    aria-hidden
-                    className={cn(
-                      "mt-1.5 inline-block size-1.5 shrink-0 rounded-full",
-                      workflowStatusDotClass(stateTone),
-                    )}
-                  />
-                  <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                    <div className="flex items-center gap-2">
-                      <span className="truncate text-sm font-medium text-foreground">{agent.label}</span>
-                      {agent.model ? (
-                        <span className="text-[10px] text-muted-foreground">{agent.model}</span>
-                      ) : null}
-                    </div>
-                    <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
-                      <span className={cn("capitalize", workflowStatusTextClass(stateTone))}>
-                        {agent.state}
-                      </span>
-                      {agent.lastToolName ? (
-                        <span>last: {agent.lastToolName}</span>
-                      ) : null}
-                      {agent.tokens != null ? (
-                        <span className="tabular-nums">{agent.tokens.toLocaleString()} tok</span>
-                      ) : null}
-                      {agent.toolCalls != null ? (
-                        <span className="tabular-nums">{agent.toolCalls} calls</span>
-                      ) : null}
-                    </div>
-                    {agent.lastToolSummary ? (
-                      <span className="text-xs text-muted-foreground">{agent.lastToolSummary}</span>
-                    ) : null}
-                  </div>
-                </li>
-              )
-            })}
-          </ul>
-        </section>
-      ) : null}
-
       {/* Summary */}
       {run.summary ? (
         <section className="flex flex-col gap-1">
           <h4 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Summary</h4>
           <p className="text-sm text-foreground whitespace-pre-wrap">{run.summary}</p>
         </section>
+      ) : null}
+
+      {/* Progress tree: agents nested under their phase */}
+      {groups.length > 0 ? (
+        <section className="flex flex-col gap-3" data-testid="workflow-progress-tree">
+          {groups.map((group) => (
+            <div key={group.key} className="flex flex-col gap-1.5">
+              <div className="flex items-baseline gap-2">
+                <h4 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  {group.phaseIndex != null ? `${group.phaseIndex}. ` : ""}{group.title}
+                </h4>
+                <span className="text-[10px] text-muted-foreground tabular-nums">
+                  {group.agents.length} {group.agents.length === 1 ? "agent" : "agents"}
+                </span>
+              </div>
+              {group.detail ? <p className="text-xs text-muted-foreground">{group.detail}</p> : null}
+              {group.agents.length > 0 ? (
+                <ul className="flex flex-col gap-1">
+                  {group.agents.map((agent) => (
+                    <WorkflowAgentRow key={agent.agentId ?? agent.index} agent={agent} onSelectAgent={onSelectAgent} />
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-xs italic text-muted-foreground/70">No agents yet</p>
+              )}
+            </div>
+          ))}
+        </section>
+      ) : null}
+
+      {/* Result */}
+      {run.result ? (
+        <section className="flex flex-col gap-1">
+          <h4 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Result</h4>
+          <pre className="max-h-80 overflow-auto rounded-md border border-border/60 bg-muted/40 px-3 py-2 text-xs text-foreground whitespace-pre-wrap break-words">
+            {formatWorkflowResult(run.result)}
+          </pre>
+        </section>
+      ) : null}
+
+      {/* Script (collapsed by default) */}
+      {run.script ? (
+        <details className="flex flex-col gap-1">
+          <summary className="cursor-pointer text-xs font-medium uppercase tracking-wide text-muted-foreground hover:text-foreground">
+            Script
+          </summary>
+          <pre className="mt-1.5 max-h-96 overflow-auto rounded-md border border-border/60 bg-muted/40 px-3 py-2 text-xs text-foreground whitespace-pre-wrap break-words">
+            {run.script}
+          </pre>
+        </details>
       ) : null}
 
       {/* Error */}

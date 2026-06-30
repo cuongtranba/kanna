@@ -48,6 +48,60 @@ describe("WorkflowRegistry", () => {
     expect(reg.getRun("chat1", "nope")).toBeNull()
   })
 
+  describe("getAgentTranscript", () => {
+    // Real agent files are entirely isSidechain:true; the registry must parse
+    // via normalizeClaudeStreamMessage directly (same as the subagent viewer).
+    const textLine = JSON.stringify({
+      type: "assistant",
+      uuid: "a1",
+      isSidechain: true,
+      message: { model: "claude-sonnet-4-6", content: [{ type: "text", text: "working on it" }] },
+    })
+
+    test("reads dir+runId+agentId and parses lines into TranscriptEntry[]", () => {
+      const io = fakeIo(new Map([["/d", []]]))
+      const calls: Array<[string, string, string]> = []
+      const reg = createWorkflowRegistry({
+        read: io.read, watch: io.watch,
+        readAgentTranscriptLines: (dir, runId, agentId) => {
+          calls.push([dir, runId, agentId])
+          return [textLine]
+        },
+      })
+      reg.register("chat1", "/d")
+      const entries = reg.getAgentTranscript("chat1", "wf_a", "agent1")
+      expect(calls).toEqual([["/d", "wf_a", "agent1"]])
+      expect(entries.map((e) => e.kind)).toEqual(["assistant_text"])
+    })
+
+    test("returns [] for an unknown chat", () => {
+      const io = fakeIo(new Map([["/d", []]]))
+      const reg = createWorkflowRegistry({
+        read: io.read, watch: io.watch,
+        readAgentTranscriptLines: () => [textLine],
+      })
+      reg.register("chat1", "/d")
+      expect(reg.getAgentTranscript("other", "wf_a", "agent1")).toEqual([])
+    })
+
+    test("returns [] when the readAgentTranscriptLines dep is absent", () => {
+      const io = fakeIo(new Map([["/d", []]]))
+      const reg = createWorkflowRegistry({ read: io.read, watch: io.watch })
+      reg.register("chat1", "/d")
+      expect(reg.getAgentTranscript("chat1", "wf_a", "agent1")).toEqual([])
+    })
+
+    test("skips unparseable lines without throwing", () => {
+      const io = fakeIo(new Map([["/d", []]]))
+      const reg = createWorkflowRegistry({
+        read: io.read, watch: io.watch,
+        readAgentTranscriptLines: () => ["not json", "42", textLine],
+      })
+      reg.register("chat1", "/d")
+      expect(() => reg.getAgentTranscript("chat1", "wf_a", "agent1")).not.toThrow()
+    })
+  })
+
   test("unregister stops watching and clears snapshot", () => {
     const files = new Map<string, WorkflowRawFile[]>([["/d", [
       { runId: "wf_a", raw: { runId: "wf_a", status: "running" } },

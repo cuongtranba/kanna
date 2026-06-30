@@ -18,7 +18,7 @@ const RAW = {
       type: "workflow_agent", index: 1, label: "fix:a", phaseIndex: 1,
       agentId: "a1", model: "claude-sonnet-4-6", state: "progress",
       lastToolName: "Read", lastToolSummary: "/x", promptPreview: "do x",
-      tokens: 100, toolCalls: 3,
+      resultPreview: "did x", tokens: 100, toolCalls: 3,
     },
   ],
   result: null, error: null, summary: "wip", script: "export const meta…",
@@ -33,6 +33,8 @@ describe("parseWorkflowRunFile", () => {
     expect(run!.status).toBe("running")
     expect(run!.agents).toHaveLength(1)
     expect(run!.agents[0].label).toBe("fix:a")
+    expect(run!.agents[0].promptPreview).toBe("do x")
+    expect(run!.agents[0].resultPreview).toBe("did x")
     expect(run!.phases[0].title).toBe("Fix")
   })
 
@@ -57,5 +59,7 @@ describe("parseWorkflowRunFile", () => {
     expect("args" in sum).toBe(false)
     expect(sum.agents[0].state).toBe("progress")
     expect("promptPreview" in sum.agents[0]).toBe(false)
+    expect("resultPreview" in sum.agents[0]).toBe(false)
+    expect("lastToolSummary" in sum.agents[0]).toBe(false)
   })
 })

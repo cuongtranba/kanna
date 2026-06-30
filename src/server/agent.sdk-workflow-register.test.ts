@@ -147,6 +147,9 @@ function createFakeWorkflowRegistry(): WorkflowRegistry & {
     getRun() {
       return null
     },
+    getAgentTranscript() {
+      return []
+    },
     hasActiveRun() {
       return false
     },
