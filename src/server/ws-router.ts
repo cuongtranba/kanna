@@ -29,6 +29,7 @@ import type {
   AppSettingsPatch,
   AppSettingsSnapshot,
   InstalledSkillsSnapshot,
+  McpServerConfig,
   LlmProviderSnapshot,
   LlmProviderValidationResult,
   OpenRouterModel,
@@ -43,7 +44,7 @@ import { listWorktrees } from "./worktree-store.adapter"
 import type { TunnelGateway } from "./cloudflare-tunnel/gateway"
 import type { PushManager } from "./push/push-manager"
 import { validateMcpServer } from "./mcp-validator"
-import { startMcpOAuth, completeMcpOAuth } from "./mcp-oauth.adapter"
+import { startMcpOAuth, completeMcpOAuth, ensureFreshMcpToken } from "./mcp-oauth.adapter"
 import type { SessionShareService } from "./session-share"
 import type { ShareCommandResult } from "../shared/session-share/protocol"
 
@@ -1461,7 +1462,8 @@ export function createWsRouter({
               setTestResult: { id: entry.id, result: { status: "pending", startedAt: new Date().toISOString() } },
             },
           })
-          const lastTest = await validateMcpServer(entry)
+          const testBearer = await resolveMcpTestBearer(entry, resolvedAppSettings)
+          const lastTest = await validateMcpServer(entry, testBearer ? { bearer: testBearer } : {})
           await resolvedAppSettings.writePatch({
             customMcpServers: { setTestResult: { id: entry.id, result: lastTest } },
           })
@@ -2324,6 +2326,29 @@ async function testOAuthToken(token: string): Promise<{ ok: boolean; error: stri
   }
 }
 
+/**
+ * For an OAuth-authenticated network server, resolve a fresh access token to
+ * inject as a Bearer when probing it — the manual "Test" / auto-test path is
+ * otherwise tokenless and a healthy OAuth server 401s. Returns undefined for
+ * stdio, static-header, or not-yet-authenticated servers (the probe runs with
+ * stored headers only). A refresh failure also yields undefined, so the probe
+ * surfaces the unauthorized error that correctly signals re-auth is needed.
+ */
+export async function resolveMcpTestBearer(
+  entry: McpServerConfig,
+  appSettings: { writePatch(p: AppSettingsPatch): Promise<unknown> },
+): Promise<string | undefined> {
+  if (entry.transport === "stdio" || entry.oauth?.status !== "authenticated") return undefined
+  try {
+    return await ensureFreshMcpToken(entry, {
+      persist: (oauth) =>
+        void appSettings.writePatch({ customMcpServers: { setOAuthState: { id: entry.id, oauth } } }),
+    })
+  } catch {
+    return undefined
+  }
+}
+
 async function runMcpAutoTest(
   id: string,
   appSettings: { getSnapshot(): AppSettingsSnapshot; writePatch(p: AppSettingsPatch): Promise<unknown> },
@@ -2336,7 +2361,8 @@ async function runMcpAutoTest(
         setTestResult: { id, result: { status: "pending", startedAt: new Date().toISOString() } },
       },
     })
-    const result = await validateMcpServer(entry)
+    const bearer = await resolveMcpTestBearer(entry, appSettings)
+    const result = await validateMcpServer(entry, bearer ? { bearer } : {})
     await appSettings.writePatch({ customMcpServers: { setTestResult: { id, result } } })
   } catch (err) {
     // Auto-test must never throw; log + swallow.
