@@ -7,9 +7,9 @@ description: When things go wrong.
 
 This is the CLI auto-rejecting the native `AskUserQuestion` / `ExitPlanMode` tools. Under PTY mode Kanna passes `--disallowedTools AskUserQuestion ExitPlanMode` and force-registers the MCP shims (`mcp__kanna__ask_user_question` / `mcp__kanna__exit_plan_mode`). If you're seeing this on SDK mode, set `KANNA_MCP_TOOL_CALLBACKS=1` and restart.
 
-## PTY mode rejects the spawn with "built-in reachable: &lt;names&gt;"
+## PTY mode refuses the spawn (smoke-test failed)
 
-The allowlist preflight detected that one of the disallowed built-ins is still reachable. This is a security gate — do not bypass. Update the `claude` CLI to the latest version and re-run; the cache invalidates on binary sha256 change.
+Each PTY spawn runs a one-shot smoke test that confirms `--disallowedTools Bash` is honored. If the probe fails (the model reached Bash, or the probe timed out), the spawn is refused on the normal spawn-error path — this is a safety gate, do not bypass. Update the `claude` CLI to the latest version and re-run; the 24 h cache is keyed on the binary sha256, so a new binary re-runs the probe. (The old 8-probe "allowlist preflight" and `KANNA_PTY_PREFLIGHT_MODEL` no longer exist.)
 
 ## OAuth token rotated but the chat is stuck on the rate-limited one
 
