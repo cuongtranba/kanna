@@ -629,6 +629,7 @@ export function createWsRouter({
       },
       subagents,
       customMcpServers: snapshot.customMcpServers,
+      customModels: snapshot.customModels,
       claudeDriver: {
         preference: patch.claudeDriver?.preference ?? snapshot.claudeDriver.preference,
         lifecycle: {
