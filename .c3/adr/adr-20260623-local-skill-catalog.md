@@ -1,6 +1,6 @@
 ---
 id: adr-20260623-local-skill-catalog
-c3-seal: 98bb5b3b6197ea823fe189dac81c166dbf7daf0d45f16d7222a00fcca6261aa5
+c3-seal: 561319094eda6839167bb507fdcd04eb38c6cf6a5d37ab565f55e5f7238e1f3f
 title: local-skill-catalog
 type: adr
 goal: Surface every locally invocable Claude Code slash entry — user `~/.claude/{skills,commands}`, project `<cwd>/.claude/{skills,commands}`, and plugin-installed skills/commands under `~/.claude/plugins/**` — in Kanna's composer `/` picker, by merging a disk-scanned catalog into the existing `ChatSnapshot.slashCommands` list.
@@ -55,7 +55,7 @@ Introduce a server-side `LocalCatalogService` (c3-231) that scans the documented
 | --- | --- | --- |
 | New IO adapter | Hand-rolled YAML frontmatter parser; scans six source roots | src/server/local-catalog-io.adapter.ts |
 | New service | Cache + dedupe + precedence over RawCatalogEntry | src/server/local-catalog.ts |
-| Shared type | SlashCommand gains optional kind?: "command"|"skill" + scope?: "builtin"|"personal"|"project"|"plugin" | src/shared/types.ts |
+| Shared type | SlashCommand gains optional kind?: "command" | "skill" + scope?: "builtin" |
 | Agent merge | mergeLocalCatalog helper + call at three sites | src/server/agent.ts (ensureSlashCommandsLoaded, post-spawn getSupportedCommands, system_init event branch) |
 | Server bootstrap | Construct LocalCatalogService and inject | src/server/server.ts |
 | Picker badge | Render skill chip and scope title; insert unchanged | src/client/components/chat-ui/SlashCommandPicker.tsx |
