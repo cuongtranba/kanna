@@ -15,10 +15,16 @@ import {
   DEFAULT_CLAUDE_MODEL_OPTIONS,
   DEFAULT_CODEX_MODEL_OPTIONS,
   DEFAULT_OPENROUTER_SDK_MODEL,
+  mergeCustomModels,
+  PROVIDERS,
   type ChatProviderPreferences,
+  type CustomModelEntry,
+  type ProviderCatalogEntry,
   type Subagent,
   type SubagentInput,
 } from "../../shared/types"
+
+const BASE_PROVIDERS: ProviderCatalogEntry[] = [...PROVIDERS]
 
 function noopHandlers(): SubagentsSectionHandlers {
   return {
@@ -229,6 +235,7 @@ async function mountSubagentsSection(props: {
   providerDefaults?: ChatProviderPreferences
   editing?: { kind: "list" } | { kind: "create" } | { kind: "edit"; id: string }
   handlers?: SubagentsSectionHandlers
+  availableProviders?: ProviderCatalogEntry[]
 }): Promise<{ container: HTMLDivElement; cleanup: () => void }> {
   const container = document.createElement("div")
   document.body.appendChild(container)
@@ -242,6 +249,7 @@ async function mountSubagentsSection(props: {
         onStartCreate={() => undefined}
         onCancelEditing={() => undefined}
         handlers={props.handlers ?? noopHandlers()}
+        availableProviders={props.availableProviders ?? BASE_PROVIDERS}
       />,
     )
   })
@@ -270,6 +278,7 @@ describe("SubagentsSection — empty state", () => {
           onStartCreate={onStartCreate}
           onCancelEditing={() => undefined}
           handlers={noopHandlers()}
+          availableProviders={BASE_PROVIDERS}
         />,
       )
     })
@@ -323,6 +332,7 @@ describe("SubagentsSection — create form", () => {
           onStartCreate={() => undefined}
           onCancelEditing={onCancelEditing}
           handlers={noopHandlers()}
+          availableProviders={BASE_PROVIDERS}
         />,
       )
     })
@@ -333,6 +343,27 @@ describe("SubagentsSection — create form", () => {
     await act(async () => { cancel!.click() })
     expect(onCancelEditing).toHaveBeenCalledTimes(1)
     container.remove()
+  })
+
+  test("custom model from settings appears in Model dropdown", async () => {
+    const customEntry: CustomModelEntry = {
+      id: "claude-custom-preview",
+      provider: "claude",
+      label: "Claude Custom Preview",
+      supportsEffort: false,
+      createdAt: 0,
+      updatedAt: 0,
+    }
+    const availableProviders = mergeCustomModels(BASE_PROVIDERS, [customEntry])
+    const { container, cleanup } = await mountSubagentsSection({
+      subagents: [],
+      editing: { kind: "create" },
+      availableProviders,
+    })
+    const trigger = container.querySelector<HTMLButtonElement>("[data-testid='subagent-form-model']")!
+    await act(async () => { trigger.click() })
+    expect(document.body.textContent).toContain("Claude Custom Preview")
+    cleanup()
   })
 
   test("name input enforces maxLength cap", async () => {
@@ -390,6 +421,7 @@ describe("SubagentsSection — edit form", () => {
           onStartCreate={() => undefined}
           onCancelEditing={() => undefined}
           handlers={handlers}
+          availableProviders={BASE_PROVIDERS}
         />,
       )
     })
@@ -452,6 +484,7 @@ describe("SubagentsSection — delete confirm", () => {
           onStartCreate={() => undefined}
           onCancelEditing={() => undefined}
           handlers={handlers}
+          availableProviders={BASE_PROVIDERS}
         />,
       )
     })
@@ -496,6 +529,7 @@ describe("SubagentsSection — list rendering", () => {
           onStartCreate={() => undefined}
           onCancelEditing={() => undefined}
           handlers={noopHandlers()}
+          availableProviders={BASE_PROVIDERS}
         />,
       )
     })
