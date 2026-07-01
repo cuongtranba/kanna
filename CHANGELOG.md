@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.103.2](https://github.com/cuongtranba/kanna/compare/v0.103.1...v0.103.2) (2026-07-01)
+
+
+### Bug Fixes
+
+* **subagents:** centralize model catalog with customModels merge ([#474](https://github.com/cuongtranba/kanna/issues/474)) ([f3a7367](https://github.com/cuongtranba/kanna/commit/f3a73672fb2dc5d7bfae3873d88b06d5d8baef7c))
+
 ## [0.103.1](https://github.com/cuongtranba/kanna/compare/v0.103.0...v0.103.1) (2026-07-01)
 
 
