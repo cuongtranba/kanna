@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.103.1](https://github.com/cuongtranba/kanna/compare/v0.103.0...v0.103.1) (2026-07-01)
+
+
+### Bug Fixes
+
+* **models:** honor custom model catalog when normalizing selections ([#472](https://github.com/cuongtranba/kanna/issues/472)) ([9fd134b](https://github.com/cuongtranba/kanna/commit/9fd134bb2b219edd12178952f9a3a7ddf6dd98da))
+
 ## [0.103.0](https://github.com/cuongtranba/kanna/compare/v0.102.2...v0.103.0) (2026-07-01)
 
 
