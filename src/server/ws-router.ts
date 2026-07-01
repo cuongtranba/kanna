@@ -979,6 +979,7 @@ export function createWsRouter({
           agent.getWaitStartedAtByChatId(),
           Date.now(),
           agent.getClaudeSessionStates?.() ?? new Map(),
+          appSettings?.getSnapshot().customModels ?? [],
         ),
       },
     }
