@@ -537,6 +537,7 @@ export function createWsRouter({
     uploads: UPLOAD_DEFAULTS,
     subagents: [],
     customMcpServers: [],
+    customModels: [],
     claudeDriver: { ...CLAUDE_DRIVER_DEFAULTS, lifecycle: { ...CLAUDE_PTY_LIFECYCLE_DEFAULTS } },
     globalPromptAppend: "",
     shareDefaultTtlHours: 24,
@@ -628,6 +629,7 @@ export function createWsRouter({
       },
       subagents,
       customMcpServers: snapshot.customMcpServers,
+      customModels: snapshot.customModels,
       claudeDriver: {
         preference: patch.claudeDriver?.preference ?? snapshot.claudeDriver.preference,
         lifecycle: {
@@ -977,6 +979,7 @@ export function createWsRouter({
           agent.getWaitStartedAtByChatId(),
           Date.now(),
           agent.getClaudeSessionStates?.() ?? new Map(),
+          appSettings?.getSnapshot().customModels ?? [],
         ),
       },
     }

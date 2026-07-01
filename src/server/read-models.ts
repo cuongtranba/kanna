@@ -4,6 +4,7 @@ import type {
   ChatSnapshot,
   ChatStateTimings,
   ClaudeSessionLifecycleStatus,
+  CustomModelEntry,
   KannaStatus,
   LocalProjectsSnapshot,
   SidebarChatRow,
@@ -11,6 +12,7 @@ import type {
   SidebarProjectGroup,
   StackSummary,
 } from "../shared/types"
+import { mergeCustomModels } from "../shared/types"
 import type { ChatRecord, ChatTimingState, StoreState } from "./events"
 import { resolveLocalPath } from "./paths"
 import { SERVER_PROVIDERS } from "./provider-catalog"
@@ -276,6 +278,7 @@ export function deriveChatSnapshot(
   waitStartedAtByChatId: Map<string, number> = new Map(),
   nowMs: number = Date.now(),
   claudeSessionStates: Map<string, ClaudeSessionLifecycleStatus> = new Map(),
+  customModels: readonly CustomModelEntry[] = [],
 ): ChatSnapshot | null {
   const chat = state.chatsById.get(chatId)
   if (!chat || chat.deletedAt) return null
@@ -341,7 +344,7 @@ export function deriveChatSnapshot(
     })),
     messages: transcript.messages,
     history: transcript.history,
-    availableProviders: [...SERVER_PROVIDERS],
+    availableProviders: mergeCustomModels([...SERVER_PROVIDERS], customModels),
     slashCommands: (chat.slashCommands ?? []).map((c) => ({ ...c })),
     slashCommandsLoading: slashCommandsLoadingChatIds.has(chat.id),
     schedules,

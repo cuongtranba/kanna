@@ -4,6 +4,7 @@ import {
   Bot,
   Command,
   Code,
+  Cpu,
   ExternalLink,
   Info,
   Loader2,
@@ -34,6 +35,7 @@ import {
   DEFAULT_KEYBINDINGS,
   GLOBAL_PROMPT_APPEND_MAX_CHARS,
   PROVIDERS,
+  mergeCustomModels,
   UPLOAD_DEFAULTS,
   UPLOAD_MAX_FILE_SIZE_MB_MAX,
   UPLOAD_MAX_FILE_SIZE_MB_MIN,
@@ -53,6 +55,8 @@ import {
 import { renderMarkdownToReact } from "../components/lexical/markdown/lexicalToReact"
 import { SubagentsSettingsBranch } from "./SubagentsSection"
 import { McpServersSettingsBranch } from "./McpServersSection"
+import { ModelsSettingsBranch } from "./ModelsSection"
+import { useAppSettingsStore, selectCustomModels } from "../stores/appSettingsStore"
 import { ChatPreferenceControls } from "../components/chat-ui/ChatPreferenceControls"
 import { OAuthTokenPoolCard } from "../components/chat-ui/OAuthTokenPoolCard"
 import { EDITOR_OPTIONS, EditorIcon } from "../components/editor-icons"
@@ -121,6 +125,12 @@ const sidebarItems = [
     label: "Providers",
     icon: MessageSquareQuote,
     subtitle: "Manage the default chat provider and saved model defaults for Claude Code and Codex.",
+  },
+  {
+    id: "models",
+    label: "Models",
+    icon: Cpu,
+    subtitle: "Add, edit, and remove Claude and Codex models available in the model picker.",
   },
   {
     id: "subagents",
@@ -1082,6 +1092,8 @@ export function SettingsPage() {
   const setProviderDefaultModel = useChatPreferencesStore((store) => store.setProviderDefaultModel)
   const setProviderDefaultModelOptions = useChatPreferencesStore((store) => store.setProviderDefaultModelOptions)
   const setProviderDefaultPlanMode = useChatPreferencesStore((store) => store.setProviderDefaultPlanMode)
+  const customModels = useAppSettingsStore(selectCustomModels)
+  const mergedProviders = useMemo(() => mergeCustomModels([...PROVIDERS], customModels), [customModels])
   const resolvedKeybindings = useMemo(() => getResolvedKeybindings(keybindings), [keybindings])
   const keybindingsFilePathDisplay = resolvedKeybindings.filePathDisplay || getKeybindingsFilePathDisplay()
   const [pushPermissionState, setPushPermissionState] = useState<PushPermissionState>(() => detectPushSupport().state)
@@ -2280,7 +2292,7 @@ export function SettingsPage() {
                     >
                       <div className="max-w-[420px]">
                         <ChatPreferenceControls
-                          availableProviders={PROVIDERS}
+                          availableProviders={mergedProviders}
                           selectedProvider="claude"
                           showProviderPicker={false}
                           model={providerDefaults.claude.model}
@@ -2310,7 +2322,7 @@ export function SettingsPage() {
                     >
                       <div className="max-w-[420px]">
                         <ChatPreferenceControls
-                          availableProviders={PROVIDERS}
+                          availableProviders={mergedProviders}
                           selectedProvider="codex"
                           showProviderPicker={false}
                           model={providerDefaults.codex.model}
@@ -2459,6 +2471,8 @@ export function SettingsPage() {
                   <SkillsSection state={state} />
                 ) : selectedPage === "subagents" ? (
                   <SubagentsSettingsBranch state={state} />
+                ) : selectedPage === "models" ? (
+                  <ModelsSettingsBranch state={state} />
                 ) : selectedPage === "mcp-servers" ? (
                   <McpServersSettingsBranch state={state} />
                 ) : selectedPage === "instructions" ? (

@@ -7,9 +7,10 @@ import {
   isClaudeSdkProvider,
   openrouterAuthReady,
   getServerProviderCatalog,
+  SERVER_PROVIDERS,
 } from "./provider-catalog"
-import { resolveClaudeApiModelId } from "../shared/types"
-import type { LlmProviderSnapshot } from "../shared/types"
+import { resolveClaudeApiModelId, PROVIDERS } from "../shared/types"
+import type { LlmProviderSnapshot, CustomModelEntry } from "../shared/types"
 
 describe("provider catalog normalization", () => {
   test("maps legacy Claude effort into shared model options", () => {
@@ -97,4 +98,21 @@ describe("openrouterAuthReady", () => {
   test("false when provider is not openrouter", () => {
     expect(openrouterAuthReady({ ...base, provider: "openai" } as LlmProviderSnapshot)).toBe(false)
   })
+})
+
+test("SERVER_PROVIDERS mirrors PROVIDERS (no duplicate codex source)", () => {
+  expect(SERVER_PROVIDERS.map((p) => p.id)).toEqual(PROVIDERS.map((p) => p.id))
+  const codex = SERVER_PROVIDERS.find((p) => p.id === "codex")!
+  expect(codex.models.map((m) => m.id)).toEqual(PROVIDERS.find((p) => p.id === "codex")!.models.map((m) => m.id))
+})
+
+test("normalizeServerModel accepts a known custom model id", () => {
+  const custom: CustomModelEntry[] = [
+    { id: "claude-experimental", label: "Exp", provider: "claude", supportsEffort: true, createdAt: 1, updatedAt: 1 },
+  ]
+  expect(normalizeServerModel("claude", "claude-experimental", custom)).toBe("claude-experimental")
+})
+
+test("normalizeServerModel falls back to default for unknown id", () => {
+  expect(normalizeServerModel("claude", "nope", [])).toBe(PROVIDERS.find((p) => p.id === "claude")!.defaultModel)
 })

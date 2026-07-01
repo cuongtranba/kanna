@@ -460,6 +460,66 @@ export function getProviderCatalog(provider: AgentProvider): ProviderCatalogEntr
   return entry
 }
 
+export interface CustomModelEntry {
+  id: string
+  label: string
+  provider: "claude" | "codex"
+  supportsEffort: boolean
+  aliases?: readonly string[]
+  contextWindowOptions?: readonly ProviderContextWindowOption[]
+  supportsMaxReasoningEffort?: boolean
+  createdAt: number
+  updatedAt: number
+}
+
+export interface CustomModelInput {
+  id: string
+  label: string
+  provider: "claude" | "codex"
+  supportsEffort: boolean
+  aliases?: readonly string[]
+  contextWindowOptions?: readonly ProviderContextWindowOption[]
+  supportsMaxReasoningEffort?: boolean
+}
+
+export interface CustomModelPatch {
+  label?: string
+  supportsEffort?: boolean
+  aliases?: readonly string[] | null
+  contextWindowOptions?: readonly ProviderContextWindowOption[] | null
+  supportsMaxReasoningEffort?: boolean
+}
+
+function customEntryToModelOption(entry: CustomModelEntry): ProviderModelOption {
+  return {
+    id: entry.id,
+    label: entry.label,
+    supportsEffort: entry.supportsEffort,
+    ...(entry.aliases ? { aliases: entry.aliases } : {}),
+    ...(entry.contextWindowOptions ? { contextWindowOptions: entry.contextWindowOptions } : {}),
+    ...(entry.supportsMaxReasoningEffort !== undefined ? { supportsMaxReasoningEffort: entry.supportsMaxReasoningEffort } : {}),
+  }
+}
+
+export function mergeCustomModels(
+  base: ProviderCatalogEntry[],
+  customModels: readonly CustomModelEntry[],
+): ProviderCatalogEntry[] {
+  return base.map((entry) => {
+    if (entry.id !== "claude" && entry.id !== "codex") return { ...entry, models: [...entry.models] }
+    const forProvider = customModels.filter((m) => m.provider === entry.id)
+    if (forProvider.length === 0) return { ...entry, models: [...entry.models] }
+    const models = [...entry.models]
+    for (const custom of forProvider) {
+      const option = customEntryToModelOption(custom)
+      const idx = models.findIndex((m) => m.id === option.id)
+      if (idx >= 0) models[idx] = option
+      else models.push(option)
+    }
+    return { ...entry, models }
+  })
+}
+
 /**
  * True when the provider's turns run through the Claude SDK session transport
  * (a live `claudeSessions` entry consumed by `runClaudeSession`, prompts
@@ -808,6 +868,7 @@ export interface AppSettingsSnapshot {
   uploads: UploadSettings
   subagents: Subagent[]
   customMcpServers: McpServerConfig[]
+  customModels: CustomModelEntry[]
   claudeDriver: ClaudeDriverSettings
   globalPromptAppend: string
   shareDefaultTtlHours: number
@@ -843,6 +904,11 @@ export interface AppSettingsPatch {
     setEnabled?: { id: string; enabled: boolean }
     setTestResult?: { id: string; result: McpServerTestResult }
     setOAuthState?: { id: string; oauth: McpOAuthState }
+  }
+  customModels?: {
+    create?: CustomModelInput
+    update?: { id: string; patch: CustomModelPatch }
+    delete?: { id: string }
   }
   claudeDriver?: {
     preference?: ClaudeDriverPreference
