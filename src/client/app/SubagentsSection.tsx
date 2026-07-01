@@ -24,6 +24,8 @@ import {
   isClaudeContextWindow,
   isClaudeReasoningEffort,
   isCodexReasoningEffort,
+  mergeCustomModels,
+  PROVIDERS,
   type AgentProvider,
   type ChatProviderPreferences,
   type ClaudeContextWindow,
@@ -31,6 +33,7 @@ import {
   type ClaudeReasoningEffort,
   type CodexModelOptions,
   type CodexReasoningEffort,
+  type ProviderCatalogEntry,
   type Subagent,
   type SubagentContextScope,
   type SubagentInput,
@@ -54,6 +57,7 @@ export type SubagentsEditingState =
 interface SubagentsSectionProps {
   subagents: Subagent[]
   providerDefaults: ChatProviderPreferences
+  availableProviders: ProviderCatalogEntry[]
   editing: SubagentsEditingState
   onSelect: (id: string) => void
   onStartCreate: () => void
@@ -92,6 +96,7 @@ export function SubagentsSection(props: SubagentsSectionProps) {
           mode={formMode}
           subject={formMode === "edit" ? selected : null}
           providerDefaults={props.providerDefaults}
+          availableProviders={props.availableProviders}
           handlers={props.handlers}
           onCancelEditing={props.onCancelEditing}
         />
@@ -202,6 +207,7 @@ interface SubagentFormProps {
   mode: "create" | "edit"
   subject: Subagent | null
   providerDefaults: ChatProviderPreferences
+  availableProviders: ProviderCatalogEntry[]
   handlers: SubagentsSectionHandlers
   onCancelEditing: () => void
 }
@@ -224,8 +230,8 @@ const TRIGGER_MODE_OPTIONS = [
 function SubagentForm(props: SubagentFormProps) {
   const baseline = useMemo<SubagentInput>(() => {
     if (props.mode === "edit" && props.subject) return toSubagentInput(props.subject)
-    return createDefaultSubagentDraft("claude", props.providerDefaults)
-  }, [props.mode, props.subject, props.providerDefaults])
+    return createDefaultSubagentDraft("claude", props.providerDefaults, props.availableProviders)
+  }, [props.mode, props.subject, props.providerDefaults, props.availableProviders])
 
   const [draft, setDraft] = useState<SubagentInput>(baseline)
   const [error, setError] = useState<{ field: SubagentFieldKey; message: string } | null>(null)
@@ -246,7 +252,7 @@ function SubagentForm(props: SubagentFormProps) {
 
   function handleProviderChange(provider: AgentProvider) {
     if (provider === draft.provider) return
-    const defaults = createDefaultSubagentDraft(provider, props.providerDefaults)
+    const defaults = createDefaultSubagentDraft(provider, props.providerDefaults, props.availableProviders)
     setDraft((prev) => ({
       ...prev,
       provider,
@@ -313,7 +319,8 @@ function SubagentForm(props: SubagentFormProps) {
 
   const claudeOptions = draft.provider === "claude" ? draft.modelOptions as ClaudeModelOptions : null
   const codexOptions = draft.provider === "codex" ? draft.modelOptions as CodexModelOptions : null
-  const providerCatalog = getProviderCatalog(draft.provider)
+  const providerCatalog =
+    props.availableProviders.find((entry) => entry.id === draft.provider) ?? getProviderCatalog(draft.provider)
 
   return (
     <section className="flex w-full flex-1 flex-col gap-4">
@@ -538,7 +545,7 @@ function FormRow(props: {
 
 // ── SettingsPage wiring ──────────────────────────────────────────────────────
 import type { KannaState } from "./useKannaState"
-import { useAppSettingsStore } from "../stores/appSettingsStore"
+import { useAppSettingsStore, selectCustomModels } from "../stores/appSettingsStore"
 
 const EMPTY_SUBAGENTS: Subagent[] = []
 
@@ -568,6 +575,11 @@ export function SubagentsSettingsBranch(props: {
   )
   const providerDefaults = useAppSettingsStore(
     (store) => store.settings?.providerDefaults ?? FALLBACK_PROVIDER_PREFS,
+  )
+  const customModels = useAppSettingsStore(selectCustomModels)
+  const availableProviders = useMemo(
+    () => mergeCustomModels([...PROVIDERS], customModels),
+    [customModels],
   )
 
   const [editing, setEditing] = useState<SubagentsEditingState>({ kind: "list" })
@@ -615,6 +627,7 @@ export function SubagentsSettingsBranch(props: {
       <SubagentsSection
         subagents={subagents}
         providerDefaults={providerDefaults}
+        availableProviders={availableProviders}
         editing={editing}
         onSelect={handleSelect}
         onStartCreate={handleStartCreate}
@@ -645,10 +658,14 @@ export interface SubagentFieldError {
 export function createDefaultSubagentDraft(
   provider: AgentProvider,
   providerDefaults: ChatProviderPreferences | undefined,
+  availableProviders?: ProviderCatalogEntry[],
 ): SubagentInput {
   if (provider === "claude") {
     const preference = providerDefaults?.claude
-    const model = preference?.model ?? getProviderCatalog("claude").defaultModel
+    const model =
+      preference?.model
+      ?? availableProviders?.find((entry) => entry.id === "claude")?.defaultModel
+      ?? getProviderCatalog("claude").defaultModel
     const modelOptions: ClaudeModelOptions =
       preference?.modelOptions ?? { ...DEFAULT_CLAUDE_MODEL_OPTIONS }
     return {
@@ -662,7 +679,10 @@ export function createDefaultSubagentDraft(
     }
   }
   const preference = providerDefaults?.codex
-  const model = preference?.model ?? getProviderCatalog("codex").defaultModel
+  const model =
+    preference?.model
+    ?? availableProviders?.find((entry) => entry.id === "codex")?.defaultModel
+    ?? getProviderCatalog("codex").defaultModel
   const modelOptions: CodexModelOptions =
     preference?.modelOptions ?? { ...DEFAULT_CODEX_MODEL_OPTIONS }
   return {
