@@ -106,6 +106,7 @@ export interface AgentAppSettingsView {
   claudeDriver: AppSettingsSnapshot["claudeDriver"]
   globalPromptAppend: AppSettingsSnapshot["globalPromptAppend"]
   customMcpServers: AppSettingsSnapshot["customMcpServers"]
+  customModels: AppSettingsSnapshot["customModels"]
 }
 
 export function buildAgentAppSettingsView(snapshot: AppSettingsSnapshot): AgentAppSettingsView {
@@ -118,6 +119,9 @@ export function buildAgentAppSettingsView(snapshot: AppSettingsSnapshot): AgentA
     // from both Claude drivers. Same failure class as the globalPromptAppend
     // regression above. See server.test.ts guard.
     customMcpServers: snapshot.customMcpServers,
+    // Forward customModels so getProviderSettings can accept user-defined
+    // model ids without collapsing to the built-in default. See ChatPreferenceControls.
+    customModels: snapshot.customModels,
   }
 }
 

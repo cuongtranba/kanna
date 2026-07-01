@@ -14,6 +14,7 @@ import {
   type ProviderCatalogEntry,
   supportsClaudeMaxReasoningEffort,
 } from "../../../shared/types"
+import { useAppSettingsStore, selectCustomModels } from "../../stores/appSettingsStore"
 import { cn } from "../../lib/utils"
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover"
 
@@ -269,6 +270,7 @@ export function ChatPreferenceControls({
   includePlanMode = true,
   className,
 }: ChatPreferenceControlsProps) {
+  const customModels = useAppSettingsStore(selectCustomModels)
   const providerConfig = availableProviders.find((provider) => provider.id === selectedProvider) ?? availableProviders[0]
   const ProviderIcon = PROVIDER_ICONS[selectedProvider]
   const ModelIcon = Box
@@ -379,7 +381,7 @@ export function ChatPreferenceControls({
                 selected={modelOptions.reasoningEffort === effort.id}
                 icon={<Brain className="h-4 w-4 text-muted-foreground" />}
                 label={effort.label}
-                disabled={effort.id === "max" && !supportsClaudeMaxReasoningEffort(model)}
+                disabled={effort.id === "max" && !supportsClaudeMaxReasoningEffort(model, customModels)}
               />
             ))
             : CODEX_REASONING_OPTIONS.map((effort) => (

@@ -123,6 +123,11 @@ describe("buildAgentAppSettingsView", () => {
   // and one that removes a consumed key fails loudly.
   test("returns exactly the keys the AgentCoordinator consumes", () => {
     const view = buildAgentAppSettingsView(makeSnapshot())
-    expect(Object.keys(view).sort()).toEqual(["claudeDriver", "customMcpServers", "globalPromptAppend"])
+    expect(Object.keys(view).sort()).toEqual([
+      "claudeDriver",
+      "customMcpServers",
+      "customModels",
+      "globalPromptAppend",
+    ])
   })
 })
