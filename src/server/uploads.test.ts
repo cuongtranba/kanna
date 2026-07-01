@@ -22,6 +22,10 @@ async function startIsolatedServer(options: { port: number; strictPort?: boolean
     dataDir,
     port: options.port,
     strictPort: options.strictPort ?? true,
+    // Stub project discovery so boot never scans the dev machine's real
+    // ~/.claude / ~/.codex session history — a multi-second, non-deterministic
+    // filesystem walk that pushed boot past the 5s default test timeout.
+    discoverProjects: () => [],
   })
 }
 

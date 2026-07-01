@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test"
 import { mkdtempSync, writeFileSync, rmSync, mkdirSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import type { WorkflowJournalEntry } from "./workflow-watch-io.adapter"
+import type { WatchWorkflowDeps, WorkflowJournalEntry } from "./workflow-watch-io.adapter"
 import { listWorkflowRunDirs, readWorkflowDir, readWorkflowRunJournal, watchWorkflowDir } from "./workflow-watch-io.adapter"
 
 const dirs: string[] = []
@@ -43,19 +43,53 @@ describe("workflow-watch-io.adapter", () => {
     dispose()
   }, 5000)
 
-  test("watchWorkflowDir fires (debounced) on a new file, dispose stops it", async () => {
-    const d = tmp()
+  test("watchWorkflowDir coalesces rapid change events into one debounced call; dispose stops it", () => {
+    // Deterministic: inject a fake watcher + controllable timers so the test
+    // never depends on real fs-event delivery latency or wall-clock timer
+    // scheduling (both load-sensitive — the prior sleep-based version flaked
+    // under a busy suite, firing 0 or 2 times instead of the expected 1).
+    const d = tmp() // must exist so watchWorkflowDir takes the armTarget path
     let calls = 0
-    const dispose = watchWorkflowDir(d, () => { calls += 1 }, { debounceMs: 30 })
-    writeFileSync(join(d, "wf_a.json"), "{}")
-    writeFileSync(join(d, "wf_a.json"), "{}")
-    await new Promise((r) => setTimeout(r, 80))
+    let changeCb: (() => void) | null = null
+    const pendingTimeouts = new Map<number, () => void>()
+    let nextTimerId = 1
+    const deps: WatchWorkflowDeps = {
+      watch: ((_dir: string, _opts: unknown, cb: () => void) => {
+        changeCb = cb
+        return { close() {} }
+      }) as unknown as WatchWorkflowDeps["watch"],
+      setTimeout: (fn) => {
+        const id = nextTimerId++
+        pendingTimeouts.set(id, fn)
+        return id as unknown as ReturnType<typeof setTimeout>
+      },
+      clearTimeout: (handle) => { pendingTimeouts.delete(handle as unknown as number) },
+      setInterval: (() => 0 as unknown as ReturnType<typeof setInterval>),
+      clearInterval: () => {},
+    }
+    const flushTimers = () => {
+      const fns = [...pendingTimeouts.values()]
+      pendingTimeouts.clear()
+      for (const fn of fns) fn()
+    }
+
+    const dispose = watchWorkflowDir(d, () => { calls += 1 }, { debounceMs: 30, deps })
+    expect(changeCb).not.toBeNull()
+
+    // Two rapid change events land inside one debounce window: the second
+    // fire() clears the first pending timer, so exactly one timer survives.
+    changeCb!()
+    changeCb!()
+    flushTimers()
     expect(calls).toBe(1)
+
+    // After dispose, a late change event must never produce another call — the
+    // `disposed` guard short-circuits fire() regardless of timing.
     dispose()
-    writeFileSync(join(d, "wf_b.json"), "{}")
-    await new Promise((r) => setTimeout(r, 80))
+    changeCb!()
+    flushTimers()
     expect(calls).toBe(1)
-  }, 5000)
+  })
 
   test("listWorkflowRunDirs reads sibling subagents/workflows/wf_* with newest mtime", () => {
     const session = tmp()

@@ -13,7 +13,10 @@ afterEach(async () => {
 async function startServer(port: number) {
   const projectDir = await mkdtemp(path.join(tmpdir(), "kanna-paths-route-"))
   tempDirs.push(projectDir)
-  const server = await startKannaServer({ port, strictPort: true })
+  // Stub project discovery so boot never scans the dev machine's real
+  // ~/.claude / ~/.codex session history — a multi-second, non-deterministic
+  // filesystem walk that pushed boot past the 5s default test timeout.
+  const server = await startKannaServer({ port, strictPort: true, discoverProjects: () => [] })
   return { server, projectDir }
 }
 
