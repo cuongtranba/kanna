@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.103.0](https://github.com/cuongtranba/kanna/compare/v0.102.2...v0.103.0) (2026-07-01)
+
+
+### Features
+
+* configurable model catalog (customModels in settings) ([#469](https://github.com/cuongtranba/kanna/issues/469)) ([4371f06](https://github.com/cuongtranba/kanna/commit/4371f0651f6efbacfcec6f7be960ea65a1b373a6))
+
 ## [0.102.2](https://github.com/cuongtranba/kanna/compare/v0.102.1...v0.102.2) (2026-06-30)
 
 
