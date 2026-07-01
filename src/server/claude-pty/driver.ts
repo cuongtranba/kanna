@@ -879,13 +879,17 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
     const readyTimeoutMs = Number(
       (args.env ?? process.env).KANNA_PTY_CHANNEL_READY_TIMEOUT_MS ?? CHANNEL_READY_TIMEOUT_DEFAULT_MS,
     )
+    let channelReadyTimer: ReturnType<typeof setTimeout> | null = null
     try {
       await Promise.race([
         mcpHandle.channelClientReady,
-        new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error("channel client not ready")), readyTimeoutMs),
-        ),
+        new Promise<never>((_, reject) => {
+          channelReadyTimer = setTimeout(() => reject(new Error("channel client not ready")), readyTimeoutMs)
+        }),
       ])
+      // Race resolved via channelClientReady — cancel the pending timer so it
+      // never fires as an unhandled rejection in a later test.
+      if (channelReadyTimer !== null) { clearTimeout(channelReadyTimer); channelReadyTimer = null }
       // Settle: the channel handler registers just after the dev-channels
       // dialog is accepted and the client reports initialized.
       await new Promise((r) => setTimeout(r, 300))
