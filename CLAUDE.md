@@ -399,6 +399,45 @@ return the access token), and builds a `ReadonlyMap<serverId, token>`. Both
 `validateMcpServer` also accepts an optional `bearer` for the manual "Test"
 action on OAuth servers.
 
+# Configurable Model Catalog (customModels)
+
+Claude + Codex models are user-configurable from Settings → "Models" instead
+of being hardcoded. Entries persist in `settings.json` under `customModels`
+(seeded on first load from the built-in `PROVIDERS` list) and merge into the
+effective catalog at read time.
+
+- **Single source of truth.** `PROVIDERS` in `src/shared/types.ts` is the only
+  built-in catalog. `src/server/provider-catalog.ts` `SERVER_PROVIDERS` is
+  `[...PROVIDERS]` — the former duplicate `HARD_CODED_CODEX_MODELS` was
+  removed (it drifted).
+- **Merge.** `mergeCustomModels(base, customModels)` (pure, in `types.ts`)
+  folds each `CustomModelEntry` over its provider's model list: same `id`
+  **overrides** the built-in in place, a new `id` is **appended**. `base`
+  built-ins always remain as a fallback, so the catalog is never empty.
+- **Seed + revert-to-default.** `normalizeCustomModels` (`app-settings.ts`)
+  seeds `customModels` from built-ins (deterministic `createdAt/updatedAt = 0`)
+  when the persisted value is absent, making every built-in an editable copy in
+  the UI. Deleting a seeded copy removes the override, so the identical
+  built-in shows through again (revert-to-default); deleting a purely-custom
+  id removes it entirely.
+- **CRUD.** `AppSettingsPatch.customModels` carries `create | update | delete`,
+  handled by the settings reducer (mirrors `customMcpServers`), validated by
+  `validateCustomModelShape` (id regex, non-empty label, provider ∈
+  {claude,codex}, dedupe per provider). Rides the existing
+  `handleWriteAppSettings` RPC — no new endpoint.
+- **Transport.** `deriveChatSnapshot` (`read-models.ts`) emits
+  `availableProviders: mergeCustomModels([...SERVER_PROVIDERS], customModels)`
+  (customModels threaded from `AppSettingsManager` at the `ws-router.ts` call
+  site) — the per-chat snapshot is the single server→client catalog transport.
+  `normalizeServerModel(provider, model, customModels)` accepts custom ids at
+  turn time. Client: `selectCustomModels` selector (stable `EMPTY` ref) +
+  `ModelsSection.tsx` CRUD UI; the Settings-page default-model pickers derive
+  `mergeCustomModels([...PROVIDERS], customModels)`. Both `mergeAppSettingsPatch`
+  copies (client store + `ws-router` fallback) pin `customModels` so the CRUD
+  patch shape never leaks over the array.
+- **Scope.** OpenRouter untouched (already dynamic via API). Providers
+  themselves are not add/removable — models only.
+
 # Subagent Delegation (Anthropic Task-tool pattern)
 
 The main agent is always in the loop. `@agent/<name>` in chat input is a
