@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { AUTH_DEFAULTS, CLAUDE_AUTH_DEFAULTS, CLAUDE_DRIVER_DEFAULTS, CLAUDE_PTY_LIFECYCLE_DEFAULTS, CLOUDFLARE_TUNNEL_DEFAULTS, DEFAULT_OPENROUTER_SDK_MODEL, GLOBAL_PROMPT_APPEND_MAX_CHARS, UPLOAD_DEFAULTS } from "../shared/types"
-import { AppSettingsManager, readAppSettingsSnapshot } from "./app-settings"
+import { AppSettingsManager, readAppSettingsSnapshot, seedCustomModelsFromBuiltins } from "./app-settings"
 import type { AppSettingsSnapshot, McpOAuthState, SubagentInput } from "../shared/types"
 
 let tempDirs: string[] = []
@@ -82,6 +82,7 @@ function expectedSettingsSnapshot(filePath: string, overrides: Partial<AppSettin
     uploads: UPLOAD_DEFAULTS,
     subagents: [],
     customMcpServers: [],
+    customModels: seedCustomModelsFromBuiltins(),
     claudeDriver: { ...CLAUDE_DRIVER_DEFAULTS, lifecycle: { ...CLAUDE_PTY_LIFECYCLE_DEFAULTS } },
     globalPromptAppend: "",
     shareDefaultTtlHours: 24,
@@ -1223,5 +1224,54 @@ describe("customMcpServers — OAuth", () => {
     expect(entry.name).toBe("srv")
     expect(entry.url).toBe("https://srv.example.com/mcp")
     mgr.dispose()
+  })
+})
+
+describe("customModels", () => {
+  test("seeds from built-in PROVIDERS when absent", async () => {
+    const filePath = await createTempFilePath()
+    const manager = trackManager(new AppSettingsManager(filePath))
+    await manager.initialize()
+    const ids = manager.getSnapshot().customModels.map((m) => m.id)
+    expect(ids).toContain("claude-opus-4-8")
+    expect(ids).toContain("gpt-5.5")
+    expect(manager.getSnapshot().customModels.every((m) => m.provider === "claude" || m.provider === "codex")).toBe(true)
+  })
+
+  test("create adds a new custom model", async () => {
+    const filePath = await createTempFilePath()
+    const manager = trackManager(new AppSettingsManager(filePath))
+    await manager.initialize()
+    await manager.writePatch({ customModels: { create: { id: "claude-test", label: "Test", provider: "claude", supportsEffort: true } } })
+    expect(manager.getSnapshot().customModels.some((m) => m.id === "claude-test" && m.label === "Test")).toBe(true)
+  })
+
+  test("rejects create with empty label", async () => {
+    const filePath = await createTempFilePath()
+    const manager = trackManager(new AppSettingsManager(filePath))
+    await manager.initialize()
+    let err: unknown = null
+    try { await manager.writePatch({ customModels: { create: { id: "claude-bad", label: "  ", provider: "claude", supportsEffort: true } } }) } catch (e) { err = e }
+    expect(err).not.toBeNull()
+  })
+
+  test("rejects duplicate id within the same provider", async () => {
+    const filePath = await createTempFilePath()
+    const manager = trackManager(new AppSettingsManager(filePath))
+    await manager.initialize()
+    let err: unknown = null
+    try { await manager.writePatch({ customModels: { create: { id: "claude-opus-4-8", label: "Dup", provider: "claude", supportsEffort: true } } }) } catch (e) { err = e }
+    expect(err).not.toBeNull()
+  })
+
+  test("update edits label; delete removes the entry", async () => {
+    const filePath = await createTempFilePath()
+    const manager = trackManager(new AppSettingsManager(filePath))
+    await manager.initialize()
+    await manager.writePatch({ customModels: { create: { id: "claude-edit", label: "Before", provider: "claude", supportsEffort: true } } })
+    await manager.writePatch({ customModels: { update: { id: "claude-edit", patch: { label: "After" } } } })
+    expect(manager.getSnapshot().customModels.find((m) => m.id === "claude-edit")!.label).toBe("After")
+    await manager.writePatch({ customModels: { delete: { id: "claude-edit" } } })
+    expect(manager.getSnapshot().customModels.some((m) => m.id === "claude-edit")).toBe(false)
   })
 })

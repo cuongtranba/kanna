@@ -124,6 +124,7 @@ const DEFAULT_APP_SETTINGS_SNAPSHOT: AppSettingsSnapshot = {
   uploads: UPLOAD_DEFAULTS,
   subagents: [],
   customMcpServers: [],
+  customModels: [],
   claudeDriver: { ...CLAUDE_DRIVER_DEFAULTS, lifecycle: { ...CLAUDE_PTY_LIFECYCLE_DEFAULTS } },
   globalPromptAppend: "",
   shareDefaultTtlHours: 24,

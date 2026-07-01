@@ -36,6 +36,7 @@ import {
   OAUTH_TOKEN_MAX_CONCURRENT_MAX,
   OAUTH_TOKEN_MAX_CONCURRENT_MIN,
   OAUTH_TOKEN_VALUE_MAX,
+  PROVIDERS,
   supportsClaudeMaxReasoningEffort,
   UPLOAD_DEFAULTS,
   UPLOAD_MAX_FILE_SIZE_MB_MAX,
@@ -55,6 +56,9 @@ import {
   type ClaudePtyLifecycleSettings,
   type CloudflareTunnelSettings,
   type CodexModelOptions,
+  type CustomModelEntry,
+  type CustomModelInput,
+  type CustomModelPatch,
   type DefaultProviderPreference,
   type EditorPreset,
   type McpOAuthState,
@@ -107,6 +111,7 @@ interface AppSettingsFile {
   uploads?: unknown
   subagents?: unknown
   customMcpServers?: unknown
+  customModels?: unknown
   claudeDriver?: unknown
   globalPromptAppend?: unknown
   shareDefaultTtlHours?: unknown
@@ -138,6 +143,8 @@ const SUBAGENT_NAME_MAX = 64
 const MCP_VALID_TRANSPORTS = new Set<McpServerTransport>(["stdio", "http", "sse", "ws"])
 const MCP_NAME_REGEX = /^[a-zA-Z][a-zA-Z0-9_-]{0,31}$/
 const MCP_RESERVED_NAMES = new Set(["kanna"])
+const MODEL_ID_REGEX = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$/
+const MODEL_LABEL_MAX = 64
 
 class SubagentValidationException extends Error {
   constructor(readonly validationError: SubagentValidationError) {
@@ -822,6 +829,7 @@ function toFilePayload(state: AppSettingsState) {
     uploads: state.uploads,
     subagents: state.subagents,
     customMcpServers: state.customMcpServers,
+    customModels: state.customModels,
     claudeDriver: state.claudeDriver,
     globalPromptAppend: state.globalPromptAppend,
     shareDefaultTtlHours: state.shareDefaultTtlHours,
@@ -847,6 +855,7 @@ function toSnapshot(state: AppSettingsState): AppSettingsSnapshot {
     uploads: state.uploads,
     subagents: state.subagents,
     customMcpServers: state.customMcpServers,
+    customModels: state.customModels,
     claudeDriver: state.claudeDriver,
     globalPromptAppend: state.globalPromptAppend,
     shareDefaultTtlHours: state.shareDefaultTtlHours,
@@ -924,6 +933,7 @@ function normalizeAppSettings(
     uploads,
     subagents,
     customMcpServers: normalizeMcpServers(source?.customMcpServers, warnings),
+    customModels: normalizeCustomModels(source?.customModels, warnings),
     claudeDriver,
     globalPromptAppend,
     shareDefaultTtlHours,
@@ -959,6 +969,7 @@ function toComparablePayload(source: AppSettingsFile) {
     uploads: source.uploads,
     subagents: source.subagents,
     customMcpServers: source.customMcpServers,
+    customModels: source.customModels,
     claudeDriver: source.claudeDriver,
     globalPromptAppend: typeof source.globalPromptAppend === "string"
       ? source.globalPromptAppend.replace(/\s+$/u, "")
@@ -1088,6 +1099,109 @@ function applyMcpPatch(existing: McpServerConfig, patch: McpServerPatch): McpSer
     headers: patch.headers ?? (existing.transport !== "stdio" ? existing.headers : {}),
     ...(patch.oauth !== undefined ? { oauth: patch.oauth } : existing.transport !== "stdio" && existing.oauth !== undefined ? { oauth: existing.oauth } : {}),
   }
+}
+
+interface CustomModelValidationError {
+  code: "INVALID_ID" | "EMPTY_LABEL" | "INVALID_PROVIDER" | "DUPLICATE_ID" | "NOT_FOUND"
+  field?: string
+  message: string
+}
+
+class CustomModelValidationException extends Error {
+  constructor(readonly validationError: CustomModelValidationError) {
+    super(validationError.message)
+    this.name = "CustomModelValidationException"
+  }
+}
+
+function validateCustomModelShape(
+  entry: CustomModelEntry,
+  others: Array<{ id: string; provider: string }>,
+): CustomModelValidationError | null {
+  if (!MODEL_ID_REGEX.test(entry.id)) return { code: "INVALID_ID", field: "id", message: `id must match ${MODEL_ID_REGEX}` }
+  if (entry.label.trim().length === 0 || entry.label.length > MODEL_LABEL_MAX) return { code: "EMPTY_LABEL", field: "label", message: "label must be non-empty and <= 64 chars" }
+  if (entry.provider !== "claude" && entry.provider !== "codex") return { code: "INVALID_PROVIDER", field: "provider", message: "provider must be claude or codex" }
+  for (const other of others) {
+    if (other.id === entry.id && other.provider === entry.provider) return { code: "DUPLICATE_ID", field: "id", message: `model '${entry.id}' already exists for ${entry.provider}` }
+  }
+  return null
+}
+
+function buildCustomModelFromInput(input: CustomModelInput): CustomModelEntry {
+  const now = Date.now()
+  return {
+    id: input.id.trim(),
+    label: input.label.trim(),
+    provider: input.provider,
+    supportsEffort: input.supportsEffort,
+    ...(input.aliases ? { aliases: input.aliases } : {}),
+    ...(input.contextWindowOptions ? { contextWindowOptions: input.contextWindowOptions } : {}),
+    ...(input.supportsMaxReasoningEffort !== undefined ? { supportsMaxReasoningEffort: input.supportsMaxReasoningEffort } : {}),
+    createdAt: now,
+    updatedAt: now,
+  }
+}
+
+function applyCustomModelPatch(existing: CustomModelEntry, patch: CustomModelPatch): CustomModelEntry {
+  return {
+    ...existing,
+    label: patch.label !== undefined ? patch.label.trim() : existing.label,
+    supportsEffort: patch.supportsEffort ?? existing.supportsEffort,
+    aliases: patch.aliases === null ? undefined : patch.aliases ?? existing.aliases,
+    contextWindowOptions: patch.contextWindowOptions === null ? undefined : patch.contextWindowOptions ?? existing.contextWindowOptions,
+    supportsMaxReasoningEffort: patch.supportsMaxReasoningEffort ?? existing.supportsMaxReasoningEffort,
+    updatedAt: Date.now(),
+  }
+}
+
+export function seedCustomModelsFromBuiltins(): CustomModelEntry[] {
+  const out: CustomModelEntry[] = []
+  for (const provider of PROVIDERS) {
+    if (provider.id !== "claude" && provider.id !== "codex") continue
+    const provId = provider.id as "claude" | "codex"
+    for (const model of provider.models) {
+      out.push({
+        id: model.id,
+        label: model.label,
+        provider: provId,
+        supportsEffort: model.supportsEffort,
+        ...(model.aliases ? { aliases: model.aliases } : {}),
+        ...(model.contextWindowOptions ? { contextWindowOptions: model.contextWindowOptions } : {}),
+        ...(model.supportsMaxReasoningEffort !== undefined ? { supportsMaxReasoningEffort: model.supportsMaxReasoningEffort } : {}),
+        createdAt: 0,
+        updatedAt: 0,
+      })
+    }
+  }
+  return out
+}
+
+function normalizeCustomModels(value: unknown, warnings: string[]): CustomModelEntry[] {
+  if (value === undefined || value === null) return seedCustomModelsFromBuiltins()
+  if (!Array.isArray(value)) {
+    warnings.push("customModels must be an array")
+    return seedCustomModelsFromBuiltins()
+  }
+  const out: CustomModelEntry[] = []
+  for (const raw of value) {
+    if (!raw || typeof raw !== "object") continue
+    const candidate = raw as Partial<CustomModelEntry>
+    const entry: CustomModelEntry = {
+      id: String(candidate.id ?? ""),
+      label: String(candidate.label ?? ""),
+      provider: candidate.provider === "codex" ? "codex" : "claude",
+      supportsEffort: candidate.supportsEffort === true,
+      ...(Array.isArray(candidate.aliases) ? { aliases: candidate.aliases.map(String) } : {}),
+      ...(Array.isArray(candidate.contextWindowOptions) ? { contextWindowOptions: candidate.contextWindowOptions } : {}),
+      ...(typeof candidate.supportsMaxReasoningEffort === "boolean" ? { supportsMaxReasoningEffort: candidate.supportsMaxReasoningEffort } : {}),
+      createdAt: typeof candidate.createdAt === "number" ? candidate.createdAt : 0,
+      updatedAt: typeof candidate.updatedAt === "number" ? candidate.updatedAt : 0,
+    }
+    const err = validateCustomModelShape(entry, out.map((m) => ({ id: m.id, provider: m.provider })))
+    if (err) { warnings.push(`customModels: dropped ${entry.id || "entry"} (${err.message})`); continue }
+    out.push(entry)
+  }
+  return out
 }
 
 function applyPatch(state: AppSettingsState, patch: AppSettingsPatch): AppSettingsState {
@@ -1221,6 +1335,22 @@ function applyPatch(state: AppSettingsState, patch: AppSettingsPatch): AppSettin
     )
   }
 
+  let nextCustomModels = state.customModels
+  if (patch.customModels?.create) {
+    const entry = buildCustomModelFromInput(patch.customModels.create)
+    const error = validateCustomModelShape(entry, state.customModels.map((m) => ({ id: m.id, provider: m.provider })))
+    if (error) throw new CustomModelValidationException(error)
+    nextCustomModels = [...state.customModels, entry]
+  } else if (patch.customModels?.update) {
+    const { id, patch: modelPatch } = patch.customModels.update
+    const idx = state.customModels.findIndex((m) => m.id === id)
+    if (idx < 0) throw new CustomModelValidationException({ code: "NOT_FOUND", message: `custom model ${id} not found` })
+    const updated = applyCustomModelPatch(state.customModels[idx]!, modelPatch)
+    nextCustomModels = [...state.customModels.slice(0, idx), updated, ...state.customModels.slice(idx + 1)]
+  } else if (patch.customModels?.delete) {
+    nextCustomModels = state.customModels.filter((m) => m.id !== patch.customModels!.delete!.id)
+  }
+
   return normalizeAppSettings({
     ...toFilePayload(state),
     ...patch,
@@ -1273,6 +1403,7 @@ function applyPatch(state: AppSettingsState, patch: AppSettingsPatch): AppSettin
     },
     subagents: nextSubagents,
     customMcpServers: nextMcpServers,
+    customModels: nextCustomModels,
     claudeDriver: {
       preference: patch.claudeDriver?.preference ?? state.claudeDriver.preference,
       lifecycle: {

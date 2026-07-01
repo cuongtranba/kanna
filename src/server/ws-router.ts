@@ -537,6 +537,7 @@ export function createWsRouter({
     uploads: UPLOAD_DEFAULTS,
     subagents: [],
     customMcpServers: [],
+    customModels: [],
     claudeDriver: { ...CLAUDE_DRIVER_DEFAULTS, lifecycle: { ...CLAUDE_PTY_LIFECYCLE_DEFAULTS } },
     globalPromptAppend: "",
     shareDefaultTtlHours: 24,
