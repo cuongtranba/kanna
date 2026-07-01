@@ -4,13 +4,25 @@ import {
   NEW_CHAT_COMPOSER_ID,
   useChatPreferencesStore,
 } from "./chatPreferencesStore"
+import { useAppSettingsStore } from "./appSettingsStore"
+import type { AppSettingsSnapshot, CustomModelEntry } from "../../shared/types"
 import { DEFAULT_OPENROUTER_SDK_MODEL } from "../../shared/types"
 
 const INITIAL_STATE = useChatPreferencesStore.getInitialState()
+const APP_SETTINGS_INITIAL_STATE = useAppSettingsStore.getInitialState()
 
 afterEach(() => {
   useChatPreferencesStore.setState(INITIAL_STATE)
+  useAppSettingsStore.setState(APP_SETTINGS_INITIAL_STATE)
 })
+
+function seedCustomModels(entries: CustomModelEntry[]) {
+  useAppSettingsStore.setState({
+    ...APP_SETTINGS_INITIAL_STATE,
+    settings: { customModels: entries } as unknown as AppSettingsSnapshot,
+    hydrationStatus: "ready",
+  })
+}
 
 describe("migrateChatPreferencesState", () => {
   test("preserves max effort for versioned Opus Claude models", () => {
@@ -238,6 +250,33 @@ describe("chat preference store", () => {
       model: "gpt-5.3-codex",
       modelOptions: { reasoningEffort: "minimal", fastMode: true },
       planMode: true,
+    })
+  })
+
+  test("setChatComposerModel preserves a user-defined Claude custom model id", () => {
+    seedCustomModels([{
+      id: "sonnet-5",
+      label: "Sonnet 5",
+      provider: "claude",
+      supportsEffort: true,
+      createdAt: 1,
+      updatedAt: 1,
+    }])
+    const store = useChatPreferencesStore.getState()
+
+    store.setComposerState("chat-a", {
+      provider: "claude",
+      model: "claude-opus-4-7",
+      modelOptions: { reasoningEffort: "high", contextWindow: "200k" },
+      planMode: false,
+    })
+    store.setChatComposerModel("chat-a", "sonnet-5")
+
+    expect(store.getComposerState("chat-a")).toEqual({
+      provider: "claude",
+      model: "sonnet-5",
+      modelOptions: { reasoningEffort: "high", contextWindow: "200k" },
+      planMode: false,
     })
   })
 

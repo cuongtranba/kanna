@@ -536,10 +536,24 @@ export function providerUsesSdkSession(provider: AgentProvider): boolean {
   return provider === "claude" || provider === "openrouter"
 }
 
-function getProviderModelMatch(provider: AgentProvider, modelId?: string): ProviderModelOption | undefined {
+function catalogModelsFor(
+  provider: AgentProvider,
+  customModels?: readonly CustomModelEntry[],
+): readonly ProviderModelOption[] {
+  const catalog = getProviderCatalog(provider)
+  if (!customModels || customModels.length === 0) return catalog.models
+  const [merged] = mergeCustomModels([{ ...catalog, models: [...catalog.models] }], customModels)
+  return merged.models
+}
+
+function getProviderModelMatch(
+  provider: AgentProvider,
+  modelId?: string,
+  customModels?: readonly CustomModelEntry[],
+): ProviderModelOption | undefined {
   if (!modelId) return undefined
 
-  return getProviderCatalog(provider).models.find((candidate) =>
+  return catalogModelsFor(provider, customModels).find((candidate) =>
     candidate.id === modelId || candidate.aliases?.includes(modelId)
   )
 }
@@ -547,40 +561,66 @@ function getProviderModelMatch(provider: AgentProvider, modelId?: string): Provi
 export function normalizeProviderModelId(
   provider: AgentProvider,
   modelId?: string,
-  fallbackModelId?: string
+  fallbackModelId?: string,
+  customModels?: readonly CustomModelEntry[],
 ): string {
-  return getProviderModelMatch(provider, modelId)?.id
+  return getProviderModelMatch(provider, modelId, customModels)?.id
     ?? fallbackModelId
     ?? getProviderCatalog(provider).defaultModel
 }
 
-export function normalizeClaudeModelId(modelId?: string, fallbackModelId = "claude-opus-4-7"): string {
-  return normalizeProviderModelId("claude", modelId, fallbackModelId)
+export function normalizeClaudeModelId(
+  modelId?: string,
+  fallbackModelId = "claude-opus-4-7",
+  customModels?: readonly CustomModelEntry[],
+): string {
+  return normalizeProviderModelId("claude", modelId, fallbackModelId, customModels)
 }
 
-export function normalizeCodexModelId(modelId?: string, fallbackModelId = "gpt-5.5"): string {
-  return normalizeProviderModelId("codex", modelId, fallbackModelId)
+export function normalizeCodexModelId(
+  modelId?: string,
+  fallbackModelId = "gpt-5.5",
+  customModels?: readonly CustomModelEntry[],
+): string {
+  return normalizeProviderModelId("codex", modelId, fallbackModelId, customModels)
 }
 
-export function getProviderModelOption(provider: AgentProvider, modelId: string): ProviderModelOption | undefined {
-  const normalizedModelId = normalizeProviderModelId(provider, modelId)
-  return getProviderCatalog(provider).models.find((candidate) => candidate.id === normalizedModelId)
+export function getProviderModelOption(
+  provider: AgentProvider,
+  modelId: string,
+  customModels?: readonly CustomModelEntry[],
+): ProviderModelOption | undefined {
+  const normalizedModelId = normalizeProviderModelId(provider, modelId, undefined, customModels)
+  return catalogModelsFor(provider, customModels).find((candidate) => candidate.id === normalizedModelId)
 }
 
-export function getClaudeModelOption(modelId: string): ProviderModelOption | undefined {
-  return getProviderModelOption("claude", modelId)
+export function getClaudeModelOption(
+  modelId: string,
+  customModels?: readonly CustomModelEntry[],
+): ProviderModelOption | undefined {
+  return getProviderModelOption("claude", modelId, customModels)
 }
 
-export function supportsClaudeMaxReasoningEffort(modelId: string): boolean {
-  return Boolean(getClaudeModelOption(modelId)?.supportsMaxReasoningEffort)
+export function supportsClaudeMaxReasoningEffort(
+  modelId: string,
+  customModels?: readonly CustomModelEntry[],
+): boolean {
+  return Boolean(getClaudeModelOption(modelId, customModels)?.supportsMaxReasoningEffort)
 }
 
-export function getClaudeContextWindowOptions(modelId: string): readonly ProviderContextWindowOption[] {
-  return getClaudeModelOption(modelId)?.contextWindowOptions ?? []
+export function getClaudeContextWindowOptions(
+  modelId: string,
+  customModels?: readonly CustomModelEntry[],
+): readonly ProviderContextWindowOption[] {
+  return getClaudeModelOption(modelId, customModels)?.contextWindowOptions ?? []
 }
 
-export function normalizeClaudeContextWindow(modelId: string, contextWindow?: unknown): ClaudeContextWindow {
-  const options = getClaudeContextWindowOptions(modelId)
+export function normalizeClaudeContextWindow(
+  modelId: string,
+  contextWindow?: unknown,
+  customModels?: readonly CustomModelEntry[],
+): ClaudeContextWindow {
+  const options = getClaudeContextWindowOptions(modelId, customModels)
   if (options.length === 0) return DEFAULT_CLAUDE_MODEL_OPTIONS.contextWindow
   return options.some((option) => option.id === contextWindow)
     ? contextWindow as ClaudeContextWindow

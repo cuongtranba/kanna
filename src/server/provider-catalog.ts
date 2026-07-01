@@ -51,7 +51,8 @@ export function normalizeServerModel(
 export function normalizeClaudeModelOptions(
   model: string,
   modelOptions?: ModelOptions,
-  legacyEffort?: string
+  legacyEffort?: string,
+  customModels?: readonly CustomModelEntry[],
 ): ClaudeModelOptions {
   const reasoningEffort = modelOptions?.claude?.reasoningEffort
   return {
@@ -60,7 +61,7 @@ export function normalizeClaudeModelOptions(
       : isClaudeReasoningEffort(legacyEffort)
         ? legacyEffort
         : DEFAULT_CLAUDE_MODEL_OPTIONS.reasoningEffort,
-    contextWindow: normalizeClaudeContextWindow(model, modelOptions?.claude?.contextWindow as ClaudeContextWindow | undefined),
+    contextWindow: normalizeClaudeContextWindow(model, modelOptions?.claude?.contextWindow as ClaudeContextWindow | undefined, customModels),
   }
 }
 

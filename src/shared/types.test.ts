@@ -28,6 +28,40 @@ describe("shared model normalization", () => {
     expect(supportsClaudeMaxReasoningEffort("opus")).toBe(true)
     expect(supportsClaudeMaxReasoningEffort("claude-sonnet-4-6")).toBe(false)
   })
+
+  test("preserves a known custom model id instead of collapsing to default", () => {
+    const custom: CustomModelEntry[] = [{
+      id: "sonnet-5",
+      label: "Sonnet 5",
+      provider: "claude",
+      supportsEffort: true,
+      createdAt: 1,
+      updatedAt: 1,
+    }]
+    expect(normalizeClaudeModelId("sonnet-5", undefined, custom)).toBe("sonnet-5")
+    expect(normalizeCodexModelId("gpt-x", undefined, [{
+      id: "gpt-x",
+      label: "GPT X",
+      provider: "codex",
+      supportsEffort: false,
+      createdAt: 1,
+      updatedAt: 1,
+    }])).toBe("gpt-x")
+  })
+
+  test("supportsClaudeMaxReasoningEffort honors custom-model metadata", () => {
+    const custom: CustomModelEntry[] = [{
+      id: "sonnet-5",
+      label: "Sonnet 5",
+      provider: "claude",
+      supportsEffort: true,
+      supportsMaxReasoningEffort: true,
+      createdAt: 1,
+      updatedAt: 1,
+    }]
+    expect(supportsClaudeMaxReasoningEffort("sonnet-5", custom)).toBe(true)
+    expect(supportsClaudeMaxReasoningEffort("sonnet-5")).toBe(false)
+  })
 })
 
 describe("openrouter provider", () => {

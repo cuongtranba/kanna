@@ -30,6 +30,7 @@ import {
   type ClaudeContextWindow,
   type ClaudeReasoningEffort,
   type CodexReasoningEffort,
+  type CustomModelEntry,
   type ModelOptions,
   type ProviderCatalogEntry,
   type Subagent,
@@ -60,7 +61,7 @@ import {
   type SessionTotals,
 } from "../../lib/contextWindow"
 import { uploadFile, UploadAbortedError } from "../../lib/uploadFile"
-import { useAppSettingsStore } from "../../stores/appSettingsStore"
+import { useAppSettingsStore, selectCustomModels } from "../../stores/appSettingsStore"
 import { createAgentMentionRegex } from "../../../shared/mention-pattern"
 
 import { buildKannaEditorConfig } from "../lexical/config"
@@ -232,14 +233,18 @@ export interface ChatInputHandle {
 // Helpers
 // ---------------------------------------------------------------------------
 
-function withNormalizedContextWindow(state: ComposerState, model: string): ComposerState {
+function withNormalizedContextWindow(
+  state: ComposerState,
+  model: string,
+  customModels?: readonly CustomModelEntry[],
+): ComposerState {
   if (state.provider !== "claude") return { ...state, model }
   return {
     ...state,
     model,
     modelOptions: {
       ...state.modelOptions,
-      contextWindow: normalizeClaudeContextWindow(model, state.modelOptions.contextWindow),
+      contextWindow: normalizeClaudeContextWindow(model, state.modelOptions.contextWindow, customModels),
     },
   }
 }
@@ -497,6 +502,7 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput(
 
   const providerPrefs = getEffectiveComposerState(composerState, activeProvider, providerDefaults)
   const selectedProvider = composerState.provider
+  const customModels = useAppSettingsStore(selectCustomModels)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -513,11 +519,12 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput(
       { provider: "claude" }
     >["modelOptions"]
     const stagedMaxTokens = resolveClaudeContextWindowTokens(
-      normalizeClaudeContextWindow(providerPrefs.model, claudeModelOptions.contextWindow),
+      normalizeClaudeContextWindow(providerPrefs.model, claudeModelOptions.contextWindow, customModels),
     )
     return overrideContextWindowMaxTokens(contextWindowSnapshot, stagedMaxTokens)
   }, [
     contextWindowSnapshot,
+    customModels,
     providerPrefs.model,
     providerPrefs.modelOptions,
     providerPrefs.provider,
@@ -947,6 +954,7 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput(
         : withNormalizedContextWindow(
             { ...state, modelOptions: { ...state.modelOptions, contextWindow } },
             state.model,
+            customModels,
           ),
     )
   }

@@ -265,8 +265,8 @@ function normalizeClaudePreference(value?: {
   effort?: unknown
   modelOptions?: Partial<Record<keyof ClaudeModelOptions, unknown>>
   planMode?: unknown
-}): ProviderPreference<ClaudeModelOptions> {
-  const model = normalizeClaudeModelId(typeof value?.model === "string" ? value.model : undefined)
+}, customModels?: readonly CustomModelEntry[]): ProviderPreference<ClaudeModelOptions> {
+  const model = normalizeClaudeModelId(typeof value?.model === "string" ? value.model : undefined, undefined, customModels)
   const reasoningEffort = value?.modelOptions?.reasoningEffort
   const normalizedEffort = isClaudeReasoningEffort(reasoningEffort)
     ? reasoningEffort
@@ -277,8 +277,8 @@ function normalizeClaudePreference(value?: {
   return {
     model,
     modelOptions: {
-      reasoningEffort: !supportsClaudeMaxReasoningEffort(model) && normalizedEffort === "max" ? "high" : normalizedEffort,
-      contextWindow: normalizeClaudeContextWindow(model, value?.modelOptions?.contextWindow),
+      reasoningEffort: !supportsClaudeMaxReasoningEffort(model, customModels) && normalizedEffort === "max" ? "high" : normalizedEffort,
+      contextWindow: normalizeClaudeContextWindow(model, value?.modelOptions?.contextWindow, customModels),
     },
     planMode: value?.planMode === true,
   }
@@ -289,10 +289,10 @@ function normalizeCodexPreference(value?: {
   effort?: unknown
   modelOptions?: Partial<Record<keyof CodexModelOptions, unknown>>
   planMode?: unknown
-}): ProviderPreference<CodexModelOptions> {
+}, customModels?: readonly CustomModelEntry[]): ProviderPreference<CodexModelOptions> {
   const reasoningEffort = value?.modelOptions?.reasoningEffort
   return {
-    model: normalizeCodexModelId(typeof value?.model === "string" ? value.model : undefined),
+    model: normalizeCodexModelId(typeof value?.model === "string" ? value.model : undefined, undefined, customModels),
     modelOptions: {
       reasoningEffort: isCodexReasoningEffort(reasoningEffort)
         ? reasoningEffort
@@ -307,11 +307,14 @@ function normalizeCodexPreference(value?: {
   }
 }
 
-function normalizeProviderDefaults(value: AppSettingsFile["providerDefaults"] | undefined): ChatProviderPreferences {
+function normalizeProviderDefaults(
+  value: AppSettingsFile["providerDefaults"] | undefined,
+  customModels?: readonly CustomModelEntry[],
+): ChatProviderPreferences {
   const defaults = createDefaultProviderDefaults()
   return {
-    claude: normalizeClaudePreference(value?.claude ?? defaults.claude),
-    codex: normalizeCodexPreference(value?.codex ?? defaults.codex),
+    claude: normalizeClaudePreference(value?.claude ?? defaults.claude, customModels),
+    codex: normalizeCodexPreference(value?.codex ?? defaults.codex, customModels),
     openrouter: {
       model: value?.openrouter?.model ?? DEFAULT_OPENROUTER_SDK_MODEL,
       modelOptions: {},
@@ -474,7 +477,11 @@ function validateSubagentName(
   return null
 }
 
-function normalizeSubagentEntry(value: unknown, warnings: string[]): Subagent | null {
+function normalizeSubagentEntry(
+  value: unknown,
+  warnings: string[],
+  customModels?: readonly CustomModelEntry[],
+): Subagent | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null
   const source = value as Record<string, unknown>
   if (typeof source.id !== "string" || !source.id.trim()) return null
@@ -488,11 +495,11 @@ function normalizeSubagentEntry(value: unknown, warnings: string[]): Subagent | 
     ? source.modelOptions as Record<string, unknown>
     : {}
   const model = provider === "claude"
-    ? normalizeClaudeModelId(typeof source.model === "string" ? source.model : undefined)
-    : normalizeCodexModelId(typeof source.model === "string" ? source.model : undefined)
+    ? normalizeClaudeModelId(typeof source.model === "string" ? source.model : undefined, undefined, customModels)
+    : normalizeCodexModelId(typeof source.model === "string" ? source.model : undefined, undefined, customModels)
   const modelOptions = provider === "claude"
-    ? normalizeClaudePreference({ model, modelOptions: rawModelOptions }).modelOptions
-    : normalizeCodexPreference({ model, modelOptions: rawModelOptions }).modelOptions
+    ? normalizeClaudePreference({ model, modelOptions: rawModelOptions }, customModels).modelOptions
+    : normalizeCodexPreference({ model, modelOptions: rawModelOptions }, customModels).modelOptions
   const contextScope: SubagentContextScope =
     source.contextScope === "full-transcript" ? "full-transcript" : "previous-assistant-reply"
   const triggerMode: SubagentTriggerMode =
@@ -518,7 +525,11 @@ function normalizeSubagentEntry(value: unknown, warnings: string[]): Subagent | 
   }
 }
 
-function normalizeSubagents(value: unknown, warnings: string[]): Subagent[] {
+function normalizeSubagents(
+  value: unknown,
+  warnings: string[],
+  customModels?: readonly CustomModelEntry[],
+): Subagent[] {
   if (value === undefined) return []
   if (!Array.isArray(value)) {
     warnings.push("subagents must be an array")
@@ -526,7 +537,7 @@ function normalizeSubagents(value: unknown, warnings: string[]): Subagent[] {
   }
   const out: Subagent[] = []
   for (const entry of value) {
-    const normalized = normalizeSubagentEntry(entry, warnings)
+    const normalized = normalizeSubagentEntry(entry, warnings, customModels)
     if (!normalized) continue
     const error = validateSubagentName(normalized.name, out.map((s) => ({ id: s.id, name: s.name })))
     if (error) {
@@ -893,7 +904,8 @@ function normalizeAppSettings(
   const auth = normalizeAuthSettings(source?.auth, warnings)
   const claudeAuth = normalizeClaudeAuth(source?.claudeAuth, warnings)
   const uploads = normalizeUploadSettings(source?.uploads, warnings)
-  const subagents = normalizeSubagents(source?.subagents, warnings)
+  const customModels = normalizeCustomModels(source?.customModels, warnings)
+  const subagents = normalizeSubagents(source?.subagents, warnings, customModels)
   const claudeDriver = normalizeClaudeDriverSettings(source?.claudeDriver, warnings)
   const globalPromptAppend = normalizeGlobalPromptAppend(source?.globalPromptAppend, warnings)
 
@@ -924,7 +936,7 @@ function normalizeAppSettings(
       commandTemplate: normalizeEditorCommandTemplate(source?.editor?.commandTemplate, editorPreset),
     },
     defaultProvider: normalizeDefaultProvider(source?.defaultProvider),
-    providerDefaults: normalizeProviderDefaults(source?.providerDefaults),
+    providerDefaults: normalizeProviderDefaults(source?.providerDefaults, customModels),
     warning: null,
     filePathDisplay: formatDisplayPath(filePath),
     cloudflareTunnel,
@@ -933,7 +945,7 @@ function normalizeAppSettings(
     uploads,
     subagents,
     customMcpServers: normalizeMcpServers(source?.customMcpServers, warnings),
-    customModels: normalizeCustomModels(source?.customModels, warnings),
+    customModels,
     claudeDriver,
     globalPromptAppend,
     shareDefaultTtlHours,

@@ -52,7 +52,7 @@ import {
 import { readLlmProviderSnapshot } from "./llm-provider"
 import { computeCostUsd, resolveModelPrice, stripModelVariantSuffix } from "../shared/token-pricing"
 import type { ModelPrice } from "../shared/token-pricing"
-import { providerUsesSdkSession, resolveClaudeApiModelId, type ClaudeDriverPreference } from "../shared/types"
+import { providerUsesSdkSession, resolveClaudeApiModelId, type ClaudeDriverPreference, type CustomModelEntry } from "../shared/types"
 import { fallbackTitleFromMessage } from "./generate-title"
 import { AUTO_CONTINUE_EVENT_VERSION, type AutoContinueEvent } from "./auto-continue/events"
 import { ClaudeLimitDetector, CodexLimitDetector, type LimitDetection, type LimitDetector } from "./auto-continue/limit-detector"
@@ -374,6 +374,7 @@ interface AgentCoordinatorArgs {
     }
     globalPromptAppend?: string
     customMcpServers?: readonly McpServerConfig[]
+    customModels?: readonly CustomModelEntry[]
   }
   throwOnClaudeSessionStart?: boolean
   oauthPool?: OAuthTokenPool
@@ -2124,9 +2125,10 @@ export class AgentCoordinator {
 
   private getProviderSettings(provider: AgentProvider, options: SendMessageOptions) {
     const catalog = getServerProviderCatalog(provider)
+    const customModels = this.getAppSettingsSnapshot().customModels ?? []
     if (provider === "claude") {
-      const model = normalizeServerModel(provider, options.model)
-      const modelOptions = normalizeClaudeModelOptions(model, options.modelOptions, options.effort)
+      const model = normalizeServerModel(provider, options.model, customModels)
+      const modelOptions = normalizeClaudeModelOptions(model, options.modelOptions, options.effort, customModels)
       return {
         model: resolveClaudeApiModelId(model, modelOptions.contextWindow),
         effort: modelOptions.reasoningEffort,
@@ -2150,7 +2152,7 @@ export class AgentCoordinator {
 
     const modelOptions = normalizeCodexModelOptions(options.modelOptions, options.effort)
     return {
-      model: normalizeServerModel(provider, options.model),
+      model: normalizeServerModel(provider, options.model, customModels),
       effort: modelOptions.reasoningEffort,
       serviceTier: codexServiceTierFromModelOptions(modelOptions),
       planMode: catalog.supportsPlanMode ? Boolean(options.planMode) : false,
