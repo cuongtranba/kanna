@@ -1,5 +1,5 @@
 import { create } from "zustand"
-import type { AppSettingsPatch, AppSettingsSnapshot, McpServerConfig } from "../../shared/types"
+import type { AppSettingsPatch, AppSettingsSnapshot, CustomModelEntry, McpServerConfig } from "../../shared/types"
 
 type AppSettingsHydrationStatus = "idle" | "loading" | "ready" | "error"
 
@@ -94,3 +94,8 @@ const EMPTY_MCP_SERVERS: readonly McpServerConfig[] = []
 
 export const selectCustomMcpServers = (state: AppSettingsStoreState): readonly McpServerConfig[] =>
   state.settings?.customMcpServers ?? EMPTY_MCP_SERVERS
+
+const EMPTY_CUSTOM_MODELS: readonly CustomModelEntry[] = []
+
+export const selectCustomModels = (state: AppSettingsStoreState): readonly CustomModelEntry[] =>
+  state.settings?.customModels ?? EMPTY_CUSTOM_MODELS
