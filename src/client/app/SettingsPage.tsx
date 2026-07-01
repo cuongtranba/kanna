@@ -4,6 +4,7 @@ import {
   Bot,
   Command,
   Code,
+  Cpu,
   ExternalLink,
   Info,
   Loader2,
@@ -54,6 +55,7 @@ import {
 import { renderMarkdownToReact } from "../components/lexical/markdown/lexicalToReact"
 import { SubagentsSettingsBranch } from "./SubagentsSection"
 import { McpServersSettingsBranch } from "./McpServersSection"
+import { ModelsSettingsBranch } from "./ModelsSection"
 import { useAppSettingsStore, selectCustomModels } from "../stores/appSettingsStore"
 import { ChatPreferenceControls } from "../components/chat-ui/ChatPreferenceControls"
 import { OAuthTokenPoolCard } from "../components/chat-ui/OAuthTokenPoolCard"
@@ -123,6 +125,12 @@ const sidebarItems = [
     label: "Providers",
     icon: MessageSquareQuote,
     subtitle: "Manage the default chat provider and saved model defaults for Claude Code and Codex.",
+  },
+  {
+    id: "models",
+    label: "Models",
+    icon: Cpu,
+    subtitle: "Add, edit, and remove Claude and Codex models available in the model picker.",
   },
   {
     id: "subagents",
@@ -2463,6 +2471,8 @@ export function SettingsPage() {
                   <SkillsSection state={state} />
                 ) : selectedPage === "subagents" ? (
                   <SubagentsSettingsBranch state={state} />
+                ) : selectedPage === "models" ? (
+                  <ModelsSettingsBranch state={state} />
                 ) : selectedPage === "mcp-servers" ? (
                   <McpServersSettingsBranch state={state} />
                 ) : selectedPage === "instructions" ? (
