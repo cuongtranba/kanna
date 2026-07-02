@@ -28,13 +28,13 @@ import HomeOutro from '../../components/HomeOutro.astro'
   screenshotAlt="OAuth pool configuration in Kanna settings"
 >
   Setting `KANNA_CLAUDE_DRIVER=pty` launches the `claude` CLI under a
-  pseudo-terminal and parses its stdout stream line by line. Your
+  pseudo-terminal and tails the on-disk transcript JSONL it writes. Your
   subscription is charged, not the API. Register one OAuth token, or
   several, and Kanna rotates per chat with automatic fallover on rate
   limits.
 
-  Codex sits beside Claude in the same composer. Switch provider
-  mid-chat; previous turns stay where they are.
+  Codex and OpenRouter sit beside Claude in the same composer. Switch
+  provider mid-chat; previous turns stay where they are.
 </Narrative>
 
 <Narrative
