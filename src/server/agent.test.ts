@@ -38,6 +38,7 @@ function makeFakeWorkflowRegistry(activeByChat: Map<string, boolean>): WorkflowR
     unregister: () => {},
     snapshot: () => [],
     getRun: () => null,
+    getAgentTranscript: () => [],
     hasActiveRun: (chatId: string): boolean => activeByChat.get(chatId) ?? false,
     subscribe: () => () => {},
   }

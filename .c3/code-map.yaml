@@ -175,9 +175,17 @@ c3-226:
 c3-227:
   - src/server/auto-continue/**/*.ts
 c3-229:
+  - src/client/app/WorkflowAgentTranscriptPanel.test.tsx
+  - src/client/app/WorkflowAgentTranscriptPanel.tsx
+  - src/client/app/WorkflowsPage.test.tsx
+  - src/client/app/WorkflowsPage.tsx
   - src/client/app/WorkflowsSection.tsx
   - src/client/components/messages/WorkflowMessage.tsx
+  - src/client/lib/workflowGrouping.test.ts
+  - src/client/lib/workflowGrouping.ts
   - src/client/stores/workflowsStore.ts
+  - src/server/workflow-agent-transcript-io.adapter.test.ts
+  - src/server/workflow-agent-transcript-io.adapter.ts
   - src/server/workflow-registry.test.ts
   - src/server/workflow-registry.ts
   - src/server/workflow-watch-io.adapter.test.ts

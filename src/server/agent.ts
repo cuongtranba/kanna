@@ -148,12 +148,13 @@ export function resolveStackProjects(
   })
 }
 
-const CLAUDE_TOOLSET = [
+export const CLAUDE_TOOLSET = [
   "Skill",
   "WebFetch",
   "WebSearch",
   "Task",
   "TaskOutput",
+  "Workflow",
   "Bash",
   "Glob",
   "Grep",

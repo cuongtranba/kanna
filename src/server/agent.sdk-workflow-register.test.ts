@@ -147,6 +147,9 @@ function createFakeWorkflowRegistry(): WorkflowRegistry & {
     getRun() {
       return null
     },
+    getAgentTranscript() {
+      return []
+    },
     hasActiveRun() {
       return false
     },
@@ -342,4 +345,11 @@ describe("AgentCoordinator — SDK workflow dir registration", () => {
     },
     10_000,
   )
+})
+
+describe("CLAUDE_TOOLSET — Workflow tool", () => {
+  test("includes Workflow so SDK sessions can launch runs that feed the /workflows page", async () => {
+    const { CLAUDE_TOOLSET } = await import("./agent")
+    expect(CLAUDE_TOOLSET).toContain("Workflow")
+  })
 })

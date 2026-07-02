@@ -1,6 +1,8 @@
 import type { WorkflowJournalEntry, WorkflowRawFile, WorkflowRunDirInfo } from "./workflow-watch-io.adapter"
 import { parseWorkflowRunFile, toRunSummary } from "../shared/workflow-types"
 import type { WorkflowAgentProgress, WorkflowRun, WorkflowRunSummary } from "../shared/workflow-types"
+import { normalizeClaudeStreamMessage } from "./agent"
+import type { TranscriptEntry } from "../shared/types"
 
 export interface WorkflowRegistryDeps {
   read: (dir: string) => WorkflowRawFile[]
@@ -23,12 +25,28 @@ export interface WorkflowRegistryDeps {
    * legacy callers (running run keeps `agents:[]`, preserving prior behavior).
    */
   readRunJournal?: (workflowsDir: string, runId: string) => WorkflowJournalEntry[]
+  /**
+   * Read the raw JSONL lines of one workflow agent's full transcript
+   * (`subagents/workflows/<runId>/agent-<agentId>.jsonl`). Injected leaf IO;
+   * absent in legacy callers (`getAgentTranscript` then returns []). Parsing
+   * stays in the registry (side-effect seal).
+   */
+  readAgentTranscriptLines?: (workflowsDir: string, runId: string, agentId: string) => string[]
 }
 export interface WorkflowRegistry {
   register(chatId: string, workflowsDir: string): void
   unregister(chatId: string): void
   snapshot(chatId: string): WorkflowRunSummary[]
   getRun(chatId: string, runId: string): WorkflowRun | null
+  /**
+   * Read + parse one workflow agent's full transcript into `TranscriptEntry[]`.
+   * Parses each line with `normalizeClaudeStreamMessage` directly — NOT
+   * `createJsonlEventParser` (which drops the `isSidechain:true` lines the agent
+   * files are entirely made of) — and never feeds the turn/event pipeline
+   * (c3-225; same independent read-model spirit as the native-subagent viewer).
+   * Returns [] for an unknown chat or missing IO/file.
+   */
+  getAgentTranscript(chatId: string, runId: string, agentId: string): TranscriptEntry[]
   /**
    * True when the chat hosts an in-flight run. A run is live when its live
    * transcript dir saw activity within `freshnessMs` AND it has no terminal
@@ -206,6 +224,26 @@ export function createWorkflowRegistry(deps: WorkflowRegistryDeps): WorkflowRegi
         }
       }
       return sidecar ?? null
+    },
+    getAgentTranscript(chatId, runId, agentId) {
+      const entry = entries.get(chatId)
+      if (!entry || !deps.readAgentTranscriptLines) return []
+      const out: TranscriptEntry[] = []
+      for (const line of deps.readAgentTranscriptLines(entry.dir, runId, agentId)) {
+        let parsed: unknown
+        try {
+          parsed = JSON.parse(line)
+        } catch {
+          continue // partial / corrupt line — skip
+        }
+        if (!parsed || typeof parsed !== "object") continue
+        try {
+          out.push(...normalizeClaudeStreamMessage(parsed))
+        } catch {
+          continue // defensive: never let one bad line abort the read
+        }
+      }
+      return out
     },
     hasActiveRun(chatId, freshnessMs, now) {
       const entry = entries.get(chatId)

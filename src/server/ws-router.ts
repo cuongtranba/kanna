@@ -2205,6 +2205,11 @@ export function createWsRouter({
           send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: run })
           return
         }
+        case "workflows.getAgentTranscript": {
+          const entries = workflowRegistry?.getAgentTranscript(command.chatId, command.runId, command.agentId) ?? []
+          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: entries })
+          return
+        }
         case "subagents.getRun": {
           const entries = subagentTranscriptRegistry?.getAgentTranscript(command.chatId, command.agentId) ?? []
           send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: entries })

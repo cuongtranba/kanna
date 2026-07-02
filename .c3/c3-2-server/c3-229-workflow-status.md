@@ -1,11 +1,11 @@
 ---
 id: c3-229
-c3-seal: 09651e0a37ee0f0896f38c1ec1fc790b027e747da94d6145e262a887a0e37df2
+c3-seal: 692f9f15a5ffcf553b48b607d3298ddea245a2b169edc879e7601c0cb2a164f3
 title: workflow-status
 type: component
 category: feature
 parent: c3-2
-goal: Watch Claude Code `wf_<runId>.json` sidecar files from disk, maintain a per-chat in-memory WorkflowRegistry read-model, and broadcast WorkflowsSnapshot updates to subscribing clients over the `workflows` WebSocket topic.
+goal: Watch Claude Code `wf_<runId>.json` sidecar files from disk, maintain a per-chat in-memory WorkflowRegistry read-model, broadcast WorkflowsSnapshot updates over the `workflows` WebSocket topic, and serve per-agent workflow transcripts to a full-page `/workflows/:chatId` view via the `workflows.getAgentTranscript` command.
 uses:
     - ref-cqrs-read-models
     - ref-event-sourcing
@@ -24,7 +24,7 @@ uses:
 
 ## Goal
 
-Watch Claude Code `wf_<runId>.json` sidecar files from disk, maintain a per-chat in-memory WorkflowRegistry read-model, and broadcast WorkflowsSnapshot updates to subscribing clients over the `workflows` WebSocket topic.
+Watch Claude Code `wf_<runId>.json` sidecar files from disk, maintain a per-chat in-memory WorkflowRegistry read-model, broadcast WorkflowsSnapshot updates over the `workflows` WebSocket topic, and serve per-agent workflow transcripts to a full-page `/workflows/:chatId` view via the `workflows.getAgentTranscript` command.
 
 ## Parent Fit
 
@@ -60,6 +60,7 @@ Owns the workflow sidecar read-model lifecycle: receives `watch(chatId, dir)` / 
 | Primary path | PTY writes wf_<runId>.json → adapter detects change → registry updates snapshot → WS push to subscriber | c3-208 |
 | Alternate — initial subscribe | Client subscribes → ws-router calls registry.getSnapshot(chatId) → full snapshot pushed immediately | c3-208 |
 | Alternate — getRun command | Client sends workflows.getRun → ws-router calls registry.getRun(chatId, runId) → typed response | c3-302 |
+| Alternate — getAgentTranscript command | Client (full-page /workflows view) sends workflows.getAgentTranscript → ws-router calls registry.getAgentTranscript(chatId, runId, agentId) → TranscriptEntry[] rendered in WorkflowAgentTranscriptPanel | c3-302 |
 | Failure — dir not found | adapter returns empty snapshot; re-arms parent watcher; recovers when dir is created | ref-side-effect-adapter |
 | Failure — unwatch missing | unwatch(chatId) is idempotent; no-op if chatId not registered | c3-225 |
 
@@ -67,18 +68,19 @@ Owns the workflow sidecar read-model lifecycle: receives `watch(chatId, dir)` / 
 
 | Reference | Type | Governs | Precedence | Notes |
 | --- | --- | --- | --- | --- |
-| ref-cqrs-read-models | ref | WorkflowRegistry is a read-model: read path (snapshot + WS push) separated from write path (disk sidecar) | primary | Registry never writes to disk |
-| ref-ws-subscription | ref | workflows topic follows the single-socket subscribe/command/push envelope contract in protocol.ts | primary | WorkflowsSnapshot and getRun use shared typed envelopes |
-| ref-side-effect-adapter | ref | All fs.watch/readFile/readdir calls live in workflow-watch-io.adapter.ts only; domain files stay pure | primary | ESLint seal enforces mechanically |
+| ref-cqrs-read-models | ref | WorkflowRegistry is a read-model: read path (snapshot + WS push + getAgentTranscript) separated from write path (disk sidecar) | primary | Registry never writes to disk |
+| ref-ws-subscription | ref | workflows topic follows the single-socket subscribe/command/push envelope contract in protocol.ts | primary | WorkflowsSnapshot, getRun, and getAgentTranscript use shared typed envelopes |
+| ref-side-effect-adapter | ref | All fs.watch/readFile/readdir calls live in workflow-watch-io.adapter.ts and workflow-agent-transcript-io.adapter.ts only; domain files stay pure | primary | ESLint seal enforces mechanically |
 | ref-provider-adapter | ref | WorkflowRegistry is PTY-only; SDK driver must not wire it; wiring is conditional on driver type | primary | registry is undefined when SDK driver is active |
-| ref-tool-hydration | ref | workflow ToolKind added to tools.ts; WorkflowMessage.tsx dispatches on kind | primary | Hydration normalizes Workflow tool_use into inline card |
-| ref-strong-typing | ref | WorkflowsSnapshot, WorkflowRunSummary, WorkflowRunFile are named exports; no any at WS boundary | primary | Types declared in src/shared/workflow-types.ts |
-| ref-zustand-store | ref | workflowsStore.ts is a scoped Zustand store holding server-pushed workflow state | primary | Never independently cache truth; re-populate from WS subscription |
+| ref-tool-hydration | ref | workflow ToolKind added to tools.ts; WorkflowMessage.tsx dispatches on kind; agent transcript lines normalized to TranscriptEntry | primary | Hydration normalizes Workflow tool_use into inline card; getAgentTranscript reuses normalizeClaudeStreamMessage |
+| ref-strong-typing | ref | WorkflowsSnapshot, WorkflowRunSummary, WorkflowRunFile, and the getAgentTranscript command/result are named exports; no any at WS boundary | primary | Types declared in src/shared/workflow-types.ts + protocol.ts |
+| ref-zustand-store | ref | workflowsStore.ts is a scoped Zustand store holding server-pushed workflow state; the full-page view consumes it | primary | Never independently cache truth; re-populate from WS subscription |
 | ref-event-sourcing | ref | SCOPED OVERRIDE: workflow state is derived from disk sidecars, not from the Kanna event log. Override documented in adr-20260603-workflow-disk-watch-read-model | override | Exception limited to WorkflowRegistry only |
 | rule-strong-typing | rule | All boundary types crossing WS or module boundaries must be named TypeScript exports | primary | bunx tsc --noEmit enforces |
-| rule-colocated-bun-test | rule | workflow-types.test.ts, workflow-watch-io.adapter.test.ts, workflow-registry.test.ts colocated next to impl | primary | bun test enforces by path convention |
+| rule-colocated-bun-test | rule | Every workflow impl file has a colocated test (workflow-registry, workflow-watch-io.adapter, workflow-agent-transcript-io.adapter, workflow-types, WorkflowsPage, WorkflowAgentTranscriptPanel, workflowGrouping) | primary | bun test enforces by path convention |
 | rule-zustand-store | rule | workflowsStore.ts follows one-concern-per-store and subscribes via WS, not direct server import | primary | Store subscribes to socket topic on mount |
 | adr-20260603-workflow-disk-watch-read-model | adr | Work order authorizing this component and its disk-watch design | primary | Must be accepted before implementation |
+| adr-20260701-add-workflows-fullpage-agent-transcript | adr | Work order authorizing the full-page /workflows/:chatId view and the per-agent transcript read path (getAgentTranscript + leaf adapter + WS command) | primary | Accepted before implementation |
 
 ## Contract
 
@@ -88,12 +90,15 @@ Owns the workflow sidecar read-model lifecycle: receives `watch(chatId, dir)` / 
 | WorkflowRegistry.unwatch(chatId) | IN | Tear down all fs.watch handles for the chat; idempotent if chatId not registered | c3-225 | src/server/workflow-registry.ts |
 | WorkflowRegistry.snapshot(chatId) | OUT | Return WorkflowRunSummary[] = terminal sidecar runs MERGED with synthetic running rows from live run dirs (no sidecar yet, fresh within 10m); real terminal sidecars win, EXCEPT a no-op crash sidecar (failed + agentCount 0 + no agents) is overridden by a fresh, non-empty live journal — a re-run reused the runId (carries the crash sidecar's taskId/workflowName) | c3-208 | src/server/workflow-registry.ts |
 | WorkflowRegistry.getRun(chatId, runId) | OUT | Return single WorkflowRun or null; mirrors snapshot — a running run with no sidecar yet (or a crash sidecar overridden by a fresh non-empty journal) is synthesized from its live dir and (when readRunJournal is wired) enriched with agents[] + agentCount from journal.jsonl; a crash sidecar with no live agents falls back to the failed sidecar | c3-208 | src/server/workflow-registry.ts |
+| WorkflowRegistry.getAgentTranscript(chatId, runId, agentId) | OUT | Read + parse one workflow agent's full transcript (subagents/workflows/<runId>/agent-<id>.jsonl) into TranscriptEntry[] via normalizeClaudeStreamMessage per line — NOT createJsonlEventParser (which drops the isSidechain:true lines the agent files are entirely made of); never feeds the turn/event pipeline (c3-225); returns [] for an unknown chat or missing IO/file | c3-208 | src/server/workflow-registry.ts |
 | WorkflowRegistry.hasActiveRun(chatId, freshnessMs, now) | OUT | True when a live run dir (subagents/workflows/wf_*) saw activity within freshnessMs AND has no terminal sidecar yet; the in-run liveness signal for the idle reaper / budget enforcer | c3-210 | src/server/workflow-registry.ts |
 | listWorkflowRunDirs(workflowsDir) | OUT | Adapter: list live run dirs subagents/workflows/wf_* with newest file mtime; the live signal Claude writes from second one (unlike the terminal sidecar) | c3-210 | src/server/workflow-watch-io.adapter.ts |
 | watchWorkflowRunDirs(workflowsDir, cb) | IN | Adapter: watch the live run-dir root so a launch (no sidecar yet) pushes a snapshot promptly | c3-302 | src/server/workflow-watch-io.adapter.ts |
 | readWorkflowRunJournal(workflowsDir, runId) | OUT | Adapter: parse subagents/workflows/<runId>/journal.jsonl into WorkflowJournalEntry[] (defensive; [] when missing/unreadable); the live per-agent signal getRun uses to enrich a running run | c3-208 | src/server/workflow-watch-io.adapter.ts |
+| readWorkflowAgentTranscriptLines(workflowsDir, runId, agentId) | OUT | Adapter: read the raw jsonl lines of one workflow agent's transcript (subagents/workflows/<runId>/agent-<id>.jsonl); leaf IO only — parsing stays in the registry (side-effect seal) | c3-208 | src/server/workflow-agent-transcript-io.adapter.ts |
 | WorkflowRegistry.subscribe(chatId, cb) | IN/OUT | Register callback invoked on every snapshot change; returns unsubscribe fn | c3-208 | src/server/workflow-registry.ts |
 | WorkflowsSnapshot WS push | OUT | Typed envelope for WS push on the workflows topic | c3-302 | src/shared/workflow-types.ts |
+| workflows.getAgentTranscript WS command | IN | Typed pull command; ws-router routes it to registry.getAgentTranscript and acks TranscriptEntry[] for the full-page WorkflowAgentTranscriptPanel drill-in | c3-302 | src/shared/protocol.ts |
 | workflow ToolKind | OUT | Normalized hydrated transcript entry for Workflow tool_use dispatched to WorkflowMessage.tsx | c3-303 | src/shared/tools.ts |
 
 ## Change Safety
@@ -111,10 +116,18 @@ Owns the workflow sidecar read-model lifecycle: receives `watch(chatId, dir)` / 
 | --- | --- | --- | --- |
 | src/shared/workflow-types.ts | Contract | Field additions are non-breaking; removals require ADR update | src/shared/workflow-types.ts |
 | src/server/workflow-watch-io.adapter.ts | Contract | May add new fs primitives; must stay a leaf module with no domain logic | src/server/workflow-watch-io.adapter.ts |
-| src/server/workflow-registry.ts | Contract | Internal data structure may change; public API is the contract | src/server/workflow-registry.ts |
+| src/server/workflow-agent-transcript-io.adapter.ts | Contract | Leaf IO for agent-<id>.jsonl lines; reads raw lines only, no parsing/domain logic | src/server/workflow-agent-transcript-io.adapter.ts |
+| src/server/workflow-registry.ts | Contract | Internal data structure may change; public API (incl. getAgentTranscript) is the contract | src/server/workflow-registry.ts |
 | src/client/stores/workflowsStore.ts | Contract | May add UI-local state fields; must not independently derive server truth | src/client/stores/workflowsStore.ts |
 | src/client/app/WorkflowsSection.tsx | Contract | UI layout may change; must not bypass the Zustand store | src/client/app/WorkflowsSection.tsx |
+| src/client/app/WorkflowsPage.tsx | Contract | Full-page /workflows/:chatId view; the router-free WorkflowsPageView is the testable unit; must consume the store/WS, not fetch server truth directly | src/client/app/WorkflowsPage.tsx |
+| src/client/app/WorkflowAgentTranscriptPanel.tsx | Contract | Per-agent transcript drill-in; fetches via workflows.getAgentTranscript; presentation may change | src/client/app/WorkflowAgentTranscriptPanel.tsx |
+| src/client/lib/workflowGrouping.ts | Contract | Pure phase/agent grouping helper; presentation-only, no IO or server coupling | src/client/lib/workflowGrouping.ts |
 | src/client/components/messages/WorkflowMessage.tsx | Contract | Presentation may change; must dispatch only on kind === workflow | src/client/components/messages/WorkflowMessage.tsx |
-| src/server/workflow-registry.test.ts | Change Safety | Test cases per surface | src/server/workflow-registry.test.ts |
+| src/server/workflow-registry.test.ts | Change Safety | Test cases per surface incl. getAgentTranscript | src/server/workflow-registry.test.ts |
 | src/server/workflow-watch-io.adapter.test.ts | Change Safety | Debounce, re-arm, error handling coverage | src/server/workflow-watch-io.adapter.test.ts |
+| src/server/workflow-agent-transcript-io.adapter.test.ts | Change Safety | Missing-file, prefixed-agentId, and line-split coverage | src/server/workflow-agent-transcript-io.adapter.test.ts |
+| src/client/app/WorkflowsPage.test.tsx | Change Safety | Run selection, push-refetch, agent drill-in, stable-ref selector | src/client/app/WorkflowsPage.test.tsx |
+| src/client/app/WorkflowAgentTranscriptPanel.test.tsx | Change Safety | Transcript fetch + render coverage | src/client/app/WorkflowAgentTranscriptPanel.test.tsx |
+| src/client/lib/workflowGrouping.test.ts | Change Safety | Grouping helper coverage | src/client/lib/workflowGrouping.test.ts |
 | src/shared/workflow-types.test.ts | Change Safety | parseWorkflowRunFile and toRunSummary coverage | src/shared/workflow-types.test.ts |

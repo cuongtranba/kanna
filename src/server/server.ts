@@ -52,6 +52,7 @@ import { LocalCatalogService } from "./local-catalog"
 import { scanLocalCatalog } from "./local-catalog-io.adapter"
 import { createSubagentTranscriptRegistry } from "./subagent-transcript-registry"
 import { listWorkflowRunDirs, readWorkflowDir, readWorkflowRunJournal, watchWorkflowDir, watchWorkflowRunDirs } from "./workflow-watch-io.adapter"
+import { readWorkflowAgentTranscriptLines } from "./workflow-agent-transcript-io.adapter"
 import { SnapshotStore } from "./session-share/snapshot-store.adapter"
 import { handleShareApiRequest } from "./session-share/http-routes"
 import { buildChatSnapshot, type SnapshotSources } from "./session-share/snapshot-builder"
@@ -261,6 +262,7 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     listRunDirs: listWorkflowRunDirs,
     watchRunDirs: (dir, onChange) => watchWorkflowRunDirs(dir, onChange),
     readRunJournal: readWorkflowRunJournal,
+    readAgentTranscriptLines: readWorkflowAgentTranscriptLines,
   })
   const subagentTranscriptRegistry = createSubagentTranscriptRegistry()
   const reapedClaudePty = await claudePtyRegistry.reapStale()
