@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react"
-import { useOutletContext, useParams } from "react-router-dom"
-import { Activity, Loader2 } from "lucide-react"
+import { useNavigate, useOutletContext, useParams } from "react-router-dom"
+import { ArrowLeft, Loader2, Workflow } from "lucide-react"
 import { useShallow } from "zustand/react/shallow"
 import type { KannaState } from "./useKannaState"
 import { useWorkflowsStore, selectRuns } from "../stores/workflowsStore"
 import { WorkflowsSection, WorkflowRunDetail } from "./WorkflowsSection"
 import { WorkflowAgentTranscriptPanel } from "./WorkflowAgentTranscriptPanel"
+import { SettingsHeaderButton } from "../components/ui/settings-header-button"
+import { cn } from "../lib/utils"
 import type { WorkflowRun, WorkflowRunSummary } from "../../shared/workflow-types"
 import type { TranscriptEntry } from "../../shared/types"
 
@@ -15,9 +17,11 @@ export interface WorkflowsPageViewProps {
   runs: WorkflowRunSummary[]
   getRunDetail: (runId: string) => Promise<WorkflowRun | null>
   getAgentTranscript: (runId: string, agentId: string) => Promise<TranscriptEntry[]>
+  /** When provided, the header shows a "Back to chat" button wired to it. */
+  onBackToChat?: () => void
 }
 
-export function WorkflowsPageView({ runs, getRunDetail, getAgentTranscript }: WorkflowsPageViewProps) {
+export function WorkflowsPageView({ runs, getRunDetail, getAgentTranscript, onBackToChat }: WorkflowsPageViewProps) {
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null)
   const [selectedRun, setSelectedRun] = useState<WorkflowRun | null | "loading" | "not-found">(null)
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null)
@@ -40,6 +44,13 @@ export function WorkflowsPageView({ runs, getRunDetail, getAgentTranscript }: Wo
     if (fetchSeqRef.current !== seq) return // a newer fetch superseded this one
     setSelectedRun(detail ?? "not-found")
   }, [getRunDetail, runs])
+
+  const handleClearSelection = useCallback(() => {
+    setSelectedRunId(null)
+    setSelectedRun(null)
+    setSelectedAgentId(null)
+    runsAtSelectionRef.current = null
+  }, [])
 
   // Re-fetch the selected run in-place (no "loading" swap) when a snapshot push
   // delivers a new `runs` reference AND the selected run is still running. Stops
@@ -66,27 +77,69 @@ export function WorkflowsPageView({ runs, getRunDetail, getAgentTranscript }: Wo
     selectedAgentId !== null && runObj
       ? runObj.agents.find((a) => a.agentId === selectedAgentId)
       : undefined
+  const hasSelection = selectedRunId !== null
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden">
-      <div className="flex items-center gap-2 border-b border-border px-6 py-3">
-        <Activity className="size-5 text-muted-foreground" aria-hidden />
+      <div className="flex items-center gap-2 border-b border-border px-4 py-3 md:px-6">
+        <Workflow className="size-5 shrink-0 text-muted-foreground" aria-hidden />
         <h1 className="text-lg font-semibold text-foreground">Workflows</h1>
+        {runs.length > 0 ? (
+          <span
+            className="text-xs font-medium uppercase tracking-wide text-muted-foreground tabular-nums"
+            style={{ fontVariantNumeric: "tabular-nums" }}
+          >
+            {runs.length} {runs.length === 1 ? "run" : "runs"}
+          </span>
+        ) : null}
+        {onBackToChat ? (
+          <SettingsHeaderButton
+            aria-label="Back to chat"
+            className="ml-auto"
+            icon={<ArrowLeft className="size-3.5" aria-hidden />}
+            onClick={onBackToChat}
+          >
+            Back to chat
+          </SettingsHeaderButton>
+        ) : null}
       </div>
       <div className="flex min-h-0 flex-1 overflow-hidden">
-        <div className="w-80 shrink-0 overflow-auto border-r border-border p-4">
-          <WorkflowsSection runs={runs} onSelectRun={(runId) => { void handleSelectRun(runId) }} />
+        <div
+          className={cn(
+            "w-full shrink-0 overflow-auto p-3 md:w-80 md:border-r md:border-border",
+            hasSelection && "hidden md:block",
+          )}
+        >
+          <WorkflowsSection
+            runs={runs}
+            selectedRunId={selectedRunId}
+            onSelectRun={(runId) => { void handleSelectRun(runId) }}
+          />
         </div>
-        <div className="min-w-0 flex-1 overflow-auto p-4">
+        <div
+          className={cn(
+            "min-w-0 flex-1 overflow-auto px-4 py-4 md:px-6",
+            !hasSelection && "hidden md:block",
+          )}
+        >
+          {hasSelection ? (
+            <button
+              type="button"
+              onClick={handleClearSelection}
+              aria-label="Back to runs"
+              className="mb-3 inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground md:hidden"
+            >
+              <ArrowLeft className="size-3.5" aria-hidden />
+              All runs
+            </button>
+          ) : null}
           {selectedRun === "loading" ? (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <div className="flex h-full items-center justify-center gap-2 text-sm text-muted-foreground">
               <Loader2 className="size-4 animate-spin" aria-label="Loading" />
               Loading run…
             </div>
           ) : selectedRun === "not-found" ? (
-            <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-              Run not found or no longer available.
-            </div>
+            <WorkflowDetailPlaceholder text="Run not found or no longer available." />
           ) : selectedAgent && runObj ? (
             <WorkflowAgentTranscriptPanel
               key={selectedAgentId ?? ""}
@@ -99,13 +152,28 @@ export function WorkflowsPageView({ runs, getRunDetail, getAgentTranscript }: Wo
               getTranscript={getAgentTranscript}
             />
           ) : runObj ? (
-            <WorkflowRunDetail run={runObj} onSelectAgent={(agentId) => setSelectedAgentId(agentId)} />
+            <WorkflowRunDetail
+              run={runObj}
+              title={runObj.workflowName ?? runObj.runId}
+              onSelectAgent={(agentId) => setSelectedAgentId(agentId)}
+            />
           ) : (
-            <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-              Select a run to view its phases and agents.
-            </div>
+            <WorkflowDetailPlaceholder text="Select a run to view its phases and agents." />
           )}
         </div>
+      </div>
+    </div>
+  )
+}
+
+function WorkflowDetailPlaceholder({ text }: { text: string }) {
+  return (
+    <div className="flex h-full items-center justify-center">
+      <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed border-border px-8 py-10 text-center">
+        <div className="flex size-10 items-center justify-center rounded-full bg-muted text-muted-foreground">
+          <Workflow className="size-5" aria-hidden />
+        </div>
+        <p className="text-sm text-muted-foreground">{text}</p>
       </div>
     </div>
   )
@@ -115,6 +183,7 @@ export function WorkflowsPageView({ runs, getRunDetail, getAgentTranscript }: Wo
 
 export function WorkflowsPage() {
   const state = useOutletContext<KannaState>()
+  const navigate = useNavigate()
   const { chatId } = useParams<{ chatId: string }>()
   const runs = useWorkflowsStore(useShallow(selectRuns(chatId ?? "")))
 
@@ -128,6 +197,11 @@ export function WorkflowsPage() {
     return state.socket.command<TranscriptEntry[]>({ type: "workflows.getAgentTranscript", chatId, runId, agentId })
   }, [chatId, state.socket])
 
+  const handleBackToChat = useCallback(() => {
+    if (!chatId) return
+    navigate(`/chat/${chatId}`)
+  }, [chatId, navigate])
+
   if (!chatId) {
     return (
       <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
@@ -136,5 +210,12 @@ export function WorkflowsPage() {
     )
   }
 
-  return <WorkflowsPageView runs={runs} getRunDetail={getRunDetail} getAgentTranscript={getAgentTranscript} />
+  return (
+    <WorkflowsPageView
+      runs={runs}
+      getRunDetail={getRunDetail}
+      getAgentTranscript={getAgentTranscript}
+      onBackToChat={handleBackToChat}
+    />
+  )
 }

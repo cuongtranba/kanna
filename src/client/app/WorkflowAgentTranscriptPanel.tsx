@@ -75,7 +75,7 @@ export function WorkflowAgentTranscriptPanel({
 
   return (
     <div className="flex min-h-0 flex-col gap-3" data-testid="workflow-agent-transcript-panel">
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 border-b border-border pb-2.5">
         <button
           type="button"
           onClick={onClose}
@@ -84,8 +84,16 @@ export function WorkflowAgentTranscriptPanel({
         >
           <ArrowLeft className="size-4" aria-hidden />
         </button>
-        <span className="truncate text-sm font-medium text-foreground">{agentLabel}</span>
-        <span className="text-xs text-muted-foreground">transcript</span>
+        <span className="truncate text-sm font-semibold text-foreground">{agentLabel}</span>
+        <span className="shrink-0 rounded border border-border bg-card px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+          Transcript
+        </span>
+        {agentIsRunning ? (
+          <span className="inline-flex shrink-0 items-center gap-1 rounded border border-border bg-card px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide">
+            <span aria-hidden className="inline-block size-1.5 animate-pulse rounded-full bg-emerald-500 dark:bg-emerald-400" />
+            <span className="text-emerald-500 dark:text-emerald-400">Running</span>
+          </span>
+        ) : null}
         <button
           type="button"
           onClick={handleRefresh}
@@ -97,13 +105,13 @@ export function WorkflowAgentTranscriptPanel({
       </div>
 
       {agentIsRunning ? (
-        <p className="text-[11px] text-muted-foreground">
+        <p className="rounded-md border border-amber-500/20 bg-amber-500/5 px-2.5 py-1.5 text-[11px] text-amber-600 dark:text-amber-400">
           This agent is still running — the transcript may be incomplete. Refresh to update.
         </p>
       ) : null}
 
       {promptPreview ? (
-        <div className="rounded border border-border/50 bg-muted/40 px-2 py-1">
+        <div className="rounded-md border border-border/50 bg-muted/40 px-2.5 py-1.5">
           <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Prompt (preview)</span>
           <p className="whitespace-pre-wrap break-words text-xs text-muted-foreground/90">{promptPreview}</p>
         </div>

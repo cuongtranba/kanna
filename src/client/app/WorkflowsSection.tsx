@@ -65,7 +65,11 @@ export function WorkflowStatusPill({ status }: { status: WorkflowStatus }) {
     <span className="inline-flex items-center gap-1 rounded border border-border bg-card px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide">
       <span
         aria-hidden
-        className={cn("inline-block size-1.5 rounded-full", workflowStatusDotClass(tone))}
+        className={cn(
+          "inline-block size-1.5 rounded-full",
+          workflowStatusDotClass(tone),
+          status === "running" && "animate-pulse",
+        )}
       />
       <span className={workflowStatusTextClass(tone)}>{workflowStatusLabel(status)}</span>
     </span>
@@ -77,11 +81,13 @@ export function WorkflowStatusPill({ status }: { status: WorkflowStatus }) {
 export interface WorkflowsSectionProps {
   runs: WorkflowRunSummary[]
   onSelectRun: (runId: string) => void
+  /** Highlights the matching row. The in-chat panel omits it (dialog detail). */
+  selectedRunId?: string | null
 }
 
 // ── WorkflowsSection ──────────────────────────────────────────────────────────
 
-export function WorkflowsSection({ runs, onSelectRun }: WorkflowsSectionProps) {
+export function WorkflowsSection({ runs, onSelectRun, selectedRunId }: WorkflowsSectionProps) {
   if (runs.length === 0) {
     return <WorkflowEmptyState />
   }
@@ -98,7 +104,12 @@ export function WorkflowsSection({ runs, onSelectRun }: WorkflowsSectionProps) {
       </div>
       <ul className="flex flex-col gap-0.5">
         {runs.map((run) => (
-          <WorkflowRunRow key={run.runId} run={run} onSelect={onSelectRun} />
+          <WorkflowRunRow
+            key={run.runId}
+            run={run}
+            selected={run.runId === selectedRunId}
+            onSelect={onSelectRun}
+          />
         ))}
       </ul>
     </div>
@@ -124,9 +135,14 @@ function WorkflowEmptyState() {
 
 // ── WorkflowRunRow ────────────────────────────────────────────────────────────
 
-function WorkflowRunRow(props: { run: WorkflowRunSummary; onSelect: (runId: string) => void }) {
-  const { run } = props
+function WorkflowRunRow(props: {
+  run: WorkflowRunSummary
+  selected: boolean
+  onSelect: (runId: string) => void
+}) {
+  const { run, selected } = props
   const label = run.workflowName ?? run.runId
+  const live = run.status === "running"
 
   const handleClick = useCallback(() => {
     props.onSelect(run.runId)
@@ -138,26 +154,25 @@ function WorkflowRunRow(props: { run: WorkflowRunSummary; onSelect: (runId: stri
         type="button"
         data-testid={`workflow-row:${run.runId}`}
         onClick={handleClick}
-        className="flex w-full flex-col items-start gap-0.5 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-muted"
+        className={cn(
+          "flex w-full flex-col items-start gap-0.5 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-muted",
+          selected && "bg-muted",
+        )}
       >
         <span className="flex w-full items-center justify-between gap-2">
-          <span className="truncate text-sm font-medium text-foreground">{label}</span>
+          <span className={cn("truncate text-sm text-foreground", (live || selected) && "font-medium")}>
+            {label}
+          </span>
           <WorkflowStatusPill status={run.status} />
         </span>
         <span className="flex w-full items-center gap-3 text-xs text-muted-foreground">
           {run.agentCount != null ? (
-            <span
-              className="tabular-nums"
-              style={{ fontVariantNumeric: "tabular-nums" }}
-            >
+            <span className="tabular-nums" style={{ fontVariantNumeric: "tabular-nums" }}>
               {run.agentCount} {run.agentCount === 1 ? "agent" : "agents"}
             </span>
           ) : null}
           {run.totalTokens != null ? (
-            <span
-              className="tabular-nums"
-              style={{ fontVariantNumeric: "tabular-nums" }}
-            >
+            <span className="tabular-nums" style={{ fontVariantNumeric: "tabular-nums" }}>
               {run.totalTokens.toLocaleString()} tokens
             </span>
           ) : null}
@@ -238,20 +253,29 @@ function WorkflowAgentRow({
   onSelectAgent?: (agentId: string) => void
 }) {
   const stateTone = agentStateTone(agent.state)
+  const live = stateTone === "active"
   const canDrill = Boolean(onSelectAgent && agent.agentId)
   return (
     <li
       data-testid={`workflow-agent:${agent.agentId ?? agent.index}`}
-      className="flex items-start gap-2 rounded-md border border-border/60 px-2.5 py-2"
+      className="group flex items-start gap-2 rounded-md px-2 py-1.5 transition-colors hover:bg-muted/50"
     >
       <span
         aria-hidden
-        className={cn("mt-1.5 inline-block size-1.5 shrink-0 rounded-full", workflowStatusDotClass(stateTone))}
+        className={cn(
+          "mt-1.5 inline-block size-1.5 shrink-0 rounded-full",
+          workflowStatusDotClass(stateTone),
+          live && "animate-pulse",
+        )}
       />
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <div className="flex items-center gap-2">
-          <span className="truncate text-sm font-medium text-foreground">{agent.label}</span>
-          {agent.model ? <span className="text-[10px] text-muted-foreground">{agent.model}</span> : null}
+          <span className={cn("truncate text-sm text-foreground", live && "font-medium")}>{agent.label}</span>
+          {agent.model ? (
+            <span className="shrink-0 rounded border border-border bg-card px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+              {agent.model}
+            </span>
+          ) : null}
           {canDrill ? (
             <button
               type="button"
@@ -266,12 +290,12 @@ function WorkflowAgentRow({
         </div>
         <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
           <span className={cn("capitalize", workflowStatusTextClass(stateTone))}>{agent.state}</span>
-          {agent.lastToolName ? <span>last: {agent.lastToolName}</span> : null}
+          {agent.lastToolName ? <span className="truncate">last: {agent.lastToolName}</span> : null}
           {agent.durationMs != null ? <span className="tabular-nums">{formatCompactDuration(agent.durationMs)}</span> : null}
           {agent.tokens != null ? <span className="tabular-nums">{agent.tokens.toLocaleString()} tok</span> : null}
           {agent.toolCalls != null ? <span className="tabular-nums">{agent.toolCalls} calls</span> : null}
         </div>
-        {agent.lastToolSummary ? <span className="text-xs text-muted-foreground">{agent.lastToolSummary}</span> : null}
+        {agent.lastToolSummary ? <span className="truncate text-xs text-muted-foreground/80">{agent.lastToolSummary}</span> : null}
         {agent.promptPreview ? <AgentPreviewBlock label="Prompt" text={agent.promptPreview} /> : null}
         {agent.resultPreview ? <AgentPreviewBlock label="Result" text={agent.resultPreview} /> : null}
       </div>
@@ -289,37 +313,45 @@ export interface WorkflowRunDetailProps {
    * (previews only); the dedicated page wires it to the drill-in panel.
    */
   onSelectAgent?: (agentId: string) => void
+  /**
+   * Heading rendered above the meta row. The dedicated page passes the run
+   * name; the in-chat dialog omits it (DialogTitle already shows the name).
+   */
+  title?: string
 }
 
-export function WorkflowRunDetail({ run, onSelectAgent }: WorkflowRunDetailProps) {
+export function WorkflowRunDetail({ run, onSelectAgent, title }: WorkflowRunDetailProps) {
   const tone = workflowStatusTone(run.status)
   const groups = groupWorkflowAgentsByPhase(run.phases, run.agents)
 
   return (
     <div className="flex flex-col gap-5">
-      {/* Header meta */}
-      <div className="flex flex-wrap items-center gap-3">
-        <WorkflowStatusPill status={run.status} />
-        {run.durationMs != null ? (
-          <span className="text-xs text-muted-foreground tabular-nums">
-            {formatCompactDuration(run.durationMs)}
-          </span>
-        ) : null}
-        {run.agentCount != null ? (
-          <span className="text-xs text-muted-foreground tabular-nums">
-            {run.agentCount} {run.agentCount === 1 ? "agent" : "agents"}
-          </span>
-        ) : null}
-        {run.totalTokens != null ? (
-          <span className="text-xs text-muted-foreground tabular-nums">
-            {run.totalTokens.toLocaleString()} tokens
-          </span>
-        ) : null}
-        {run.totalToolCalls != null ? (
-          <span className="text-xs text-muted-foreground tabular-nums">
-            {run.totalToolCalls} tool calls
-          </span>
-        ) : null}
+      {/* Header: optional title + meta row */}
+      <div className="flex flex-col gap-1.5">
+        {title ? <h3 className="truncate text-base font-semibold text-foreground">{title}</h3> : null}
+        <div className="flex flex-wrap items-center gap-3">
+          <WorkflowStatusPill status={run.status} />
+          {run.durationMs != null ? (
+            <span className="text-xs text-muted-foreground tabular-nums">
+              {formatCompactDuration(run.durationMs)}
+            </span>
+          ) : null}
+          {run.agentCount != null ? (
+            <span className="text-xs text-muted-foreground tabular-nums">
+              {run.agentCount} {run.agentCount === 1 ? "agent" : "agents"}
+            </span>
+          ) : null}
+          {run.totalTokens != null ? (
+            <span className="text-xs text-muted-foreground tabular-nums">
+              {run.totalTokens.toLocaleString()} tokens
+            </span>
+          ) : null}
+          {run.totalToolCalls != null ? (
+            <span className="text-xs text-muted-foreground tabular-nums">
+              {run.totalToolCalls} tool calls
+            </span>
+          ) : null}
+        </div>
       </div>
 
       {/* Summary */}
@@ -332,12 +364,20 @@ export function WorkflowRunDetail({ run, onSelectAgent }: WorkflowRunDetailProps
 
       {/* Progress tree: agents nested under their phase */}
       {groups.length > 0 ? (
-        <section className="flex flex-col gap-3" data-testid="workflow-progress-tree">
+        <section className="flex flex-col gap-4" data-testid="workflow-progress-tree">
           {groups.map((group) => (
             <div key={group.key} className="flex flex-col gap-1.5">
-              <div className="flex items-baseline gap-2">
-                <h4 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                  {group.phaseIndex != null ? `${group.phaseIndex}. ` : ""}{group.title}
+              <div className="flex items-center gap-2">
+                {group.phaseIndex != null ? (
+                  <span
+                    aria-hidden
+                    className="flex size-4 shrink-0 items-center justify-center rounded bg-muted text-[10px] font-medium text-muted-foreground tabular-nums"
+                  >
+                    {group.phaseIndex}
+                  </span>
+                ) : null}
+                <h4 className="text-xs font-semibold uppercase tracking-wide text-foreground">
+                  {group.title}
                 </h4>
                 <span className="text-[10px] text-muted-foreground tabular-nums">
                   {group.agents.length} {group.agents.length === 1 ? "agent" : "agents"}
@@ -345,13 +385,15 @@ export function WorkflowRunDetail({ run, onSelectAgent }: WorkflowRunDetailProps
               </div>
               {group.detail ? <p className="text-xs text-muted-foreground">{group.detail}</p> : null}
               {group.agents.length > 0 ? (
-                <ul className="flex flex-col gap-1">
+                <ul className="ml-1.5 flex flex-col gap-0.5 border-l border-border pl-2.5">
                   {group.agents.map((agent) => (
                     <WorkflowAgentRow key={agent.agentId ?? agent.index} agent={agent} onSelectAgent={onSelectAgent} />
                   ))}
                 </ul>
               ) : (
-                <p className="text-xs italic text-muted-foreground/70">No agents yet</p>
+                <p className="ml-1.5 border-l border-border pl-2.5 text-xs italic text-muted-foreground/70">
+                  No agents yet
+                </p>
               )}
             </div>
           ))}

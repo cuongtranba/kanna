@@ -186,6 +186,32 @@ describe("WorkflowsPageView", () => {
     container.remove()
   })
 
+  test("renders a Back-to-chat button only when onBackToChat is provided, and clicking it fires the callback", async () => {
+    const getRunDetail = mock(async (): Promise<WorkflowRun | null> => null)
+    const { container: bare, cleanup: cleanupBare } = await mount({ runs: [summary()], getRunDetail })
+    expect(bare.querySelector("[aria-label='Back to chat']")).toBeNull()
+    cleanupBare()
+
+    const onBackToChat = mock(() => undefined)
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    await act(async () => {
+      createRoot(container).render(
+        <WorkflowsPageView
+          runs={[summary()]}
+          getRunDetail={getRunDetail}
+          getAgentTranscript={async () => []}
+          onBackToChat={onBackToChat}
+        />,
+      )
+    })
+    const btn = container.querySelector<HTMLButtonElement>("[aria-label='Back to chat']")
+    expect(btn).not.toBeNull()
+    await act(async () => { btn!.click() })
+    expect(onBackToChat).toHaveBeenCalled()
+    container.remove()
+  })
+
   test("mounts without a render-loop warning", async () => {
     const getRunDetail = mock(async (): Promise<WorkflowRun | null> => null)
     const result = await renderForLoopCheck(

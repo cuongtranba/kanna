@@ -25,6 +25,7 @@ function makeRun(over: Partial<WorkflowRunSummary> = {}): WorkflowRunSummary {
 async function mountWorkflowsSection(props: {
   runs: WorkflowRunSummary[]
   onSelectRun?: (runId: string) => void
+  selectedRunId?: string | null
 }): Promise<{ container: HTMLDivElement; cleanup: () => void }> {
   const container = document.createElement("div")
   document.body.appendChild(container)
@@ -33,6 +34,7 @@ async function mountWorkflowsSection(props: {
       <WorkflowsSection
         runs={props.runs}
         onSelectRun={props.onSelectRun ?? (() => undefined)}
+        selectedRunId={props.selectedRunId}
       />,
     )
   })
@@ -87,6 +89,18 @@ describe("WorkflowsSection — list rendering", () => {
       runs: [makeRun({ runId: "run-1", agentCount: 7 })],
     })
     expect(container.textContent).toContain("7")
+    cleanup()
+  })
+
+  test("highlights the selected run row", async () => {
+    const { container, cleanup } = await mountWorkflowsSection({
+      runs: [makeRun({ runId: "run-1" }), makeRun({ runId: "run-2" })],
+      selectedRunId: "run-1",
+    })
+    const selected = container.querySelector("[data-testid='workflow-row:run-1']")
+    const other = container.querySelector("[data-testid='workflow-row:run-2']")
+    expect(selected?.classList.contains("bg-muted")).toBe(true)
+    expect(other?.classList.contains("bg-muted")).toBe(false)
     cleanup()
   })
 
