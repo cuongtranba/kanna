@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.104.0](https://github.com/cuongtranba/kanna/compare/v0.103.2...v0.104.0) (2026-07-03)
+
+
+### Features
+
+* add full-page /workflows view with per-agent transcript drill-in ([#468](https://github.com/cuongtranba/kanna/issues/468)) ([#478](https://github.com/cuongtranba/kanna/issues/478)) ([a13cd75](https://github.com/cuongtranba/kanna/commit/a13cd758b189f28034f90cc1963f971d46d6f8a0))
+
+
+### Bug Fixes
+
+* **client:** only 404 disables download offer card ([#476](https://github.com/cuongtranba/kanna/issues/476)) ([54fbc13](https://github.com/cuongtranba/kanna/commit/54fbc1394304a86b47492f1ca7e90f6fd5a45071))
+
 ## [0.103.2](https://github.com/cuongtranba/kanna/compare/v0.103.1...v0.103.2) (2026-07-01)
 
 
