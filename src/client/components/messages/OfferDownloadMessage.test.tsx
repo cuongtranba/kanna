@@ -1,4 +1,7 @@
-import { describe, expect, test } from "bun:test"
+import "../../lib/testing/setupHappyDom"
+import { afterEach, describe, expect, test } from "bun:test"
+import { act } from "react"
+import { createRoot, type Root } from "react-dom/client"
 import { renderToStaticMarkup } from "react-dom/server"
 import type { HydratedOfferDownloadToolCall } from "../../../shared/types"
 import { OfferDownloadMessage } from "./OfferDownloadMessage"
@@ -95,5 +98,65 @@ describe("OfferDownloadMessage", () => {
   test("non-preview-able mime (application/zip) keeps download-only behaviour (regression)", () => {
     const html = renderToStaticMarkup(<OfferDownloadMessage message={buildMessage()} />)
     expect(html).toContain('download="build.zip"')
+  })
+})
+
+describe("OfferDownloadMessage HEAD probe", () => {
+  const originalFetch = globalThis.fetch
+  let root: Root | null = null
+  let container: HTMLElement | null = null
+
+  afterEach(async () => {
+    globalThis.fetch = originalFetch
+    await act(async () => {
+      root?.unmount()
+    })
+    container?.remove()
+    root = null
+    container = null
+  })
+
+  function mockFetch(response: () => Promise<Response>) {
+    globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === "HEAD") return response()
+      return originalFetch(input, init)
+    }) as typeof fetch
+  }
+
+  async function mount(message: HydratedOfferDownloadToolCall): Promise<HTMLElement> {
+    container = document.createElement("div")
+    document.body.appendChild(container)
+    await act(async () => {
+      root = createRoot(container!)
+      root.render(<OfferDownloadMessage message={message} />)
+    })
+    return container
+  }
+
+  test("404 marks the file as no longer available", async () => {
+    mockFetch(async () => new Response(null, { status: 404 }))
+    const el = await mount(buildMessage())
+    expect(el.innerHTML).toContain("File no longer available")
+  })
+
+  test("401 keeps the card clickable (auth failure is not a missing file)", async () => {
+    mockFetch(async () => new Response(null, { status: 401 }))
+    const el = await mount(buildMessage())
+    expect(el.innerHTML).not.toContain("File no longer available")
+    expect(el.innerHTML).toContain('href="/api/projects/p1/files/dist/build.zip/content"')
+  })
+
+  test("5xx keeps the card clickable (transient proxy error is not a missing file)", async () => {
+    mockFetch(async () => new Response(null, { status: 502 }))
+    const el = await mount(buildMessage())
+    expect(el.innerHTML).not.toContain("File no longer available")
+  })
+
+  test("network failure keeps the card clickable", async () => {
+    mockFetch(async () => {
+      throw new TypeError("Failed to fetch")
+    })
+    const el = await mount(buildMessage())
+    expect(el.innerHTML).not.toContain("File no longer available")
   })
 })

@@ -23,7 +23,9 @@ export function OfferDownloadMessage({ message }: Props) {
     fetch(contentUrl, { method: "HEAD", signal: controller.signal })
       .then((response) => {
         if (controller.signal.aborted) return
-        setState(response.ok ? "ready" : "missing")
+        // Only 404 means the file is gone; 401/5xx are auth or proxy
+        // failures and must not disable the card.
+        setState(response.status === 404 ? "missing" : "ready")
       })
       .catch(() => {})
     return () => controller.abort()
