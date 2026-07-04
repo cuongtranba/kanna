@@ -489,6 +489,15 @@ describe("resolveWorkspaceFile", () => {
     expect(result.payload.mimeType).toBe("image/png")
   })
 
+  test("resolves a .json file despite its charset mime parameter", async () => {
+    const jsonPath = path.join(tempRoot, "data.json")
+    await writeFile(jsonPath, "{}")
+    const result = await resolveWorkspaceFile({ localPath: tempRoot }, { path: "data.json" })
+    expect(result.ok).toBe(true)
+    if (!result.ok) throw new Error("expected ok")
+    expect(result.payload.mimeType).toBe("application/json; charset=utf-8")
+  })
+
   test("rejects absolute paths", async () => {
     const result = await resolveWorkspaceFile({ localPath: tempRoot }, { path: "/etc/passwd" })
     expect(result.ok).toBe(false)

@@ -159,8 +159,9 @@ const PREVIEWABLE_MIME_PREFIXES = ["text/", "image/", "audio/", "video/"]
 const PREVIEWABLE_EXACT_MIMES = new Set(["application/json", "application/pdf"])
 
 function isPreviewableMime(mimeType: string): boolean {
-  if (PREVIEWABLE_EXACT_MIMES.has(mimeType)) return true
-  return PREVIEWABLE_MIME_PREFIXES.some((prefix) => mimeType.startsWith(prefix))
+  const essence = mimeType.split(";")[0]?.trim().toLowerCase() ?? ""
+  if (PREVIEWABLE_EXACT_MIMES.has(essence)) return true
+  return PREVIEWABLE_MIME_PREFIXES.some((prefix) => essence.startsWith(prefix))
 }
 
 export async function resolveWorkspaceFile(
