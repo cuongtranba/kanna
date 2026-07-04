@@ -338,3 +338,60 @@ describe("hydrateToolResult — Workflow", () => {
     expect(r.taskId).toBe("wcxjintdj")
   })
 })
+
+describe("normalizeToolCall — preview_file", () => {
+  test("maps mcp__kanna__preview_file to preview_file toolKind", () => {
+    const tool = normalizeToolCall({
+      toolName: "mcp__kanna__preview_file",
+      toolId: "tool-pf-1",
+      input: { path: "docs/spec.md", label: "The spec" },
+    })
+    expect(tool.toolKind).toBe("preview_file")
+    if (tool.toolKind !== "preview_file") throw new Error("unexpected kind")
+    expect(tool.input.path).toBe("docs/spec.md")
+    expect(tool.input.label).toBe("The spec")
+  })
+
+  test("maps mcp__kanna__preview_file without label", () => {
+    const tool = normalizeToolCall({
+      toolName: "mcp__kanna__preview_file",
+      toolId: "tool-pf-2",
+      input: { path: "src/index.ts" },
+    })
+    expect(tool.toolKind).toBe("preview_file")
+    if (tool.toolKind !== "preview_file") throw new Error("unexpected kind")
+    expect(tool.input.label).toBeUndefined()
+  })
+})
+
+describe("hydrateToolResult — preview_file", () => {
+  test("hydrates preview_file tool result fields", () => {
+    const normalized = normalizeToolCall({
+      toolName: "mcp__kanna__preview_file",
+      toolId: "tool-pf-3",
+      input: { path: "docs/spec.md" },
+    })
+    const rawResult = {
+      content: [{
+        type: "text",
+        text: JSON.stringify({
+          kind: "file_preview",
+          contentUrl: "/api/local-file?path=%2Fhome%2Fproject%2Fdocs%2Fspec.md",
+          relativePath: "docs/spec.md",
+          fileName: "spec.md",
+          displayName: "spec.md",
+          size: 1024,
+          mimeType: "text/markdown; charset=utf-8",
+        }),
+      }],
+    }
+    const result = hydrateToolResult(normalized, rawResult)
+    const r = result as Record<string, unknown>
+    expect(r.contentUrl).toBe("/api/local-file?path=%2Fhome%2Fproject%2Fdocs%2Fspec.md")
+    expect(r.relativePath).toBe("docs/spec.md")
+    expect(r.fileName).toBe("spec.md")
+    expect(r.displayName).toBe("spec.md")
+    expect(r.size).toBe(1024)
+    expect(r.mimeType).toBe("text/markdown; charset=utf-8")
+  })
+})
