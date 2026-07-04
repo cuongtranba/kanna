@@ -71,3 +71,21 @@ describe("shouldCloseFromDragEnd", () => {
     expect(shouldCloseFromDragEnd({ startY: 100, lastY: 100, lastT: 990, endY: 130, now: 1000 })).toBe(true)
   })
 })
+
+describe("SheetBody — preview_file origin", () => {
+  test("when origin=preview_file, Download button NOT rendered, Share IS rendered", () => {
+    const html = renderSheetBody({ ...SRC, origin: "preview_file" })
+    expect(html).not.toContain(">Download<")
+    expect(html).toContain("Share")
+  })
+})
+
+describe("SheetBody — mermaid routing", () => {
+  test("mermaid mime source renders without throwing", () => {
+    const mermaidSrc: PreviewSource = {
+      id: "m1", contentUrl: "/u/flow.mmd", displayName: "flow.mmd", fileName: "flow.mmd",
+      mimeType: "text/vnd.mermaid", size: 50, origin: "preview_file",
+    }
+    expect(() => renderSheetBody(mermaidSrc)).not.toThrow()
+  })
+})

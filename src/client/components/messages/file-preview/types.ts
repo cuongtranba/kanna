@@ -5,6 +5,7 @@ export type PreviewOrigin =
   | "local_file_link"
   | "offer_download"
   | "image_generation"
+  | "preview_file"
 
 export interface PreviewSource {
   id: string
