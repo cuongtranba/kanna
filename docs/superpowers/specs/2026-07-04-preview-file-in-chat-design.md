@@ -104,11 +104,23 @@ transcript flow. No new event kinds, no driver changes.
   wrong tree's bytes. `offer_download` has that mismatch today
   (pre-existing, untouched); `preview_file` must not inherit it because
   worktree chats are this feature's primary use case.
+- **Mime inference must learn media + mermaid extensions first**
+  (adversarial-review finding B1): `inferAttachmentContentType`
+  (`src/server/uploads.ts`) currently returns `application/octet-stream`
+  for `.png`/`.jpg`/`.gif`/`.webp`/`.svg`/`.pdf`/audio/video — the gate
+  below would wrongly reject every image. Extend the extension map with
+  common image (`.png .jpg .jpeg .gif .webp .svg .avif`), pdf, audio
+  (`.mp3 .wav .m4a .ogg`), video (`.mp4 .mov .webm .m4v`) types plus
+  `.mmd`/`.mermaid` → `text/vnd.mermaid`. (Side benefit: correct
+  Content-Type metadata everywhere else the helper is used.)
 - **Previewability gate:** reject with `isError` when the inferred mime
   is not renderable (`application/octet-stream`, archives). Error text
   tells the model what to do instead: "not a previewable kind — use
   offer_download". Renderable families: `text/*`, `application/json`,
-  `application/pdf`, `image/*`, `audio/*`, `video/*`.
+  `application/pdf`, `image/*`, `audio/*`, `video/*`. Known limitation
+  (documented, v1): extensionless text files (`Makefile`, `LICENSE`,
+  `Dockerfile`) infer as octet-stream and are rejected with the
+  actionable error.
 - Result content (small JSON, ~200 bytes — file bytes are never in the
   tool result): `{ kind: "file_preview", contentUrl, relativePath,
   fileName, displayName, size, mimeType }`.
@@ -156,14 +168,24 @@ transcript flow. No new event kinds, no driver changes.
   `origin === "offer_download"`, so the new origin shows Share only.
 - **Mermaid gap:** `classifyAttachmentIcon` / `classifyAttachmentPreview`
   (`attachmentPreview.ts`) learn a `mermaid` kind for `.mmd`/`.mermaid`
-  (and mime `text/vnd.mermaid`); `FilePreviewSheet.pickBody` routes it to
-  a new `bodies/MermaidBody.tsx` (text fetch via `useTextBodyContent` →
-  `MermaidDiagram`).
+  (and mime `text/vnd.mermaid`); `FilePreviewSheet.pickBody` gets an
+  explicit `iconKind === "mermaid"` branch routing to a new
+  `bodies/MermaidBody.tsx` (text fetch via `useTextBodyContent` →
+  `MermaidDiagram`) — `pickBody` has no such case today.
 - **`KannaTranscript.tsx`** render switch: `toolKind === "preview_file"`
-  → `<PreviewFileMessage>` (next to the `offer_download` case; same
-  hidden/collapse-group treatment). Nested subagent transcripts
-  (`SubagentMessage.tsx`) mirror wherever they special-case
-  `offer_download` today.
+  → `<PreviewFileMessage>` (next to the `offer_download` case).
+  **Collapse-group exclusion is mandatory** (adversarial-review finding
+  B2): `isCollapsibleToolCall` treats any tool not in
+  `SPECIAL_TOOL_NAMES` as collapsible, so without adding
+  `mcp__kanna__preview_file` there, a preview sandwiched between other
+  tool calls collapses into a "N tool calls" group and the card becomes
+  invisible. Add it to `SPECIAL_TOOL_NAMES` with a regression test.
+- **Nested subagent limitation (v1, documented):** `SubagentEntryRow`
+  renders ALL tool entries through the generic `ToolCallMessage` — it
+  does not special-case `offer_download` today, and `preview_file`
+  inherits the same plain-row rendering when a subagent calls it. The
+  user-facing flow is unaffected (the main agent is the one talking to
+  the user; star topology). Rich nested cards are a follow-up.
 
 ### 4. System prompt nudge (`src/shared/kanna-system-prompt.ts`)
 
@@ -173,10 +195,19 @@ One sentence appended to `KANNA_SYSTEM_PROMPT_BASE`:
 > they asked to see), call `mcp__kanna__preview_file` to show it in the
 > chat instead of pasting or summarizing its content.
 
-Both drivers inherit it (single source of truth). Keeps the tool
-description as the detailed contract; the base line exists because the
-user's core requirement is proactive showing, and tool descriptions
-alone are weaker at shifting default behavior.
+Both Claude drivers (SDK + PTY) inherit it — single source of truth.
+Keeps the tool description as the detailed contract; the base line
+exists because the user's core requirement is proactive showing, and
+tool descriptions alone are weaker at shifting default behavior.
+
+**Claude-only, by construction** (adversarial-review finding B3):
+Codex spawns never receive `KANNA_SYSTEM_PROMPT_BASE` and never get
+`mcp__kanna__*` tools (`codexManager.startTurn` has no kanna-mcp
+server), so the nudge cannot instruct Codex to call a tool it lacks.
+Same standing limitation as `offer_download` / `delegate_subagent`.
+The prompt tests that compare against `KANNA_SYSTEM_PROMPT_BASE` by
+reference keep passing; any hardcoded-string assertions are updated in
+the same commit.
 
 ## Data flow
 
@@ -202,7 +233,7 @@ model calls mcp__kanna__preview_file({path})
 |---------|----------|
 | Empty/absolute/traversal path | `isError`: "Invalid project file path" (model self-corrects) |
 | File not found / not a file | `isError` with the path so the model can fix it |
-| Non-previewable kind (archive, unknown binary) | `isError`: "not a previewable kind — use offer_download" |
+| Non-previewable kind (archive, unknown binary, extensionless file) | `isError`: "not a previewable kind — use offer_download" |
 | File deleted after show, before tap | HEAD probe fails → disabled "File no longer available" card |
 | File deleted while sheet open | Body fetch error block (existing sheet behavior) |
 | File > 1 MB | Existing body truncation notice ("Preview truncated to 1024 KB") |
@@ -225,8 +256,20 @@ Unit (colocated, `bun test`):
 - `FilePreviewSheet` — origin `preview_file` shows Share, hides
   Download; `.mmd` source routes to `MermaidBody`.
 - `attachmentPreview` — `.mmd`/`.mermaid` classify as mermaid kind.
+- `uploads.ts` — extension→mime table for the new image/pdf/audio/
+  video/mermaid entries (and octet-stream for extensionless names).
+- `KannaTranscript` — regression: a `preview_file` call between two
+  bash calls is NOT absorbed into a collapsed tool group
+  (`SPECIAL_TOOL_NAMES`).
+- `kanna-system-prompt` — assertions updated for the new base line.
 - Render-loop check (`renderForLoopCheck`) for the new message
   component per the repo rule.
+
+Security note: `contentUrl` rides `/api/local-file`, the same
+pre-existing route `LocalFileLinkCard` and image generation use (no
+new exposure is introduced by this feature; the tool itself only emits
+URLs for files it resolved inside the chat cwd). Same-origin fetch;
+no CORS changes.
 
 Browser QA (agent-browser, iPhone viewport 390×844) — PR evidence:
 
