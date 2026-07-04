@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises"
 import path from "node:path"
 import os from "node:os"
 import type { TranscriptEntry } from "../shared/types"
-import { buildDelegateProgressEmitter, buildKannaMcpTools, resolveOfferDownload } from "./kanna-mcp"
+import { buildDelegateProgressEmitter, buildKannaMcpTools, resolveOfferDownload, resolveWorkspaceFile } from "./kanna-mcp"
 import { POLICY_DEFAULT } from "../shared/permission-policy"
 import type { SubagentOrchestrator } from "./subagent-orchestrator"
 import type { KannaMcpDelegationContext } from "./kanna-mcp"
@@ -445,5 +445,106 @@ describe("schedule_wakeup tool", () => {
     const res = await tools.get("schedule_wakeup")!.handler({ delay_seconds: 5, prompt: "again" })
     expect(res.isError).toBe(true)
     expect(res.content[0].text).toContain("cap")
+  })
+})
+
+describe("resolveWorkspaceFile", () => {
+  test("resolves a markdown file and returns local-file contentUrl", async () => {
+    const mdPath = path.join(tempRoot, "spec.md")
+    await writeFile(mdPath, "# hello")
+    const result = await resolveWorkspaceFile({ localPath: tempRoot }, { path: "spec.md" })
+    expect(result.ok).toBe(true)
+    if (!result.ok) throw new Error("expected ok")
+    expect(result.payload.contentUrl).toMatch(/^\/api\/local-file\?path=/)
+    expect(result.payload.contentUrl).toContain(encodeURIComponent(mdPath))
+    expect(result.payload.fileName).toBe("spec.md")
+    expect(result.payload.mimeType).toContain("text/markdown")
+    expect(result.payload.size).toBeGreaterThan(0)
+  })
+
+  test("resolves a .ts source file", async () => {
+    const tsPath = path.join(tempRoot, "index.ts")
+    await writeFile(tsPath, "export const x = 1")
+    const result = await resolveWorkspaceFile({ localPath: tempRoot }, { path: "index.ts" })
+    expect(result.ok).toBe(true)
+    if (!result.ok) throw new Error("expected ok")
+    expect(result.payload.mimeType).toContain("text/plain")
+  })
+
+  test("resolves a .mmd mermaid file", async () => {
+    const mmdPath = path.join(tempRoot, "flow.mmd")
+    await writeFile(mmdPath, "graph TD\nA-->B")
+    const result = await resolveWorkspaceFile({ localPath: tempRoot }, { path: "flow.mmd" })
+    expect(result.ok).toBe(true)
+    if (!result.ok) throw new Error("expected ok")
+    expect(result.payload.mimeType).toBe("text/vnd.mermaid")
+  })
+
+  test("resolves a .png image file", async () => {
+    const pngPath = path.join(tempRoot, "logo.png")
+    await writeFile(pngPath, Buffer.from("PNG"))
+    const result = await resolveWorkspaceFile({ localPath: tempRoot }, { path: "logo.png" })
+    expect(result.ok).toBe(true)
+    if (!result.ok) throw new Error("expected ok")
+    expect(result.payload.mimeType).toBe("image/png")
+  })
+
+  test("rejects absolute paths", async () => {
+    const result = await resolveWorkspaceFile({ localPath: tempRoot }, { path: "/etc/passwd" })
+    expect(result.ok).toBe(false)
+    if (result.ok) throw new Error("expected error")
+    expect(result.error).toContain("Invalid project file path")
+  })
+
+  test("rejects traversal paths", async () => {
+    const result = await resolveWorkspaceFile({ localPath: tempRoot }, { path: "../../../etc/passwd" })
+    expect(result.ok).toBe(false)
+  })
+
+  test("rejects missing files", async () => {
+    const result = await resolveWorkspaceFile({ localPath: tempRoot }, { path: "ghost.md" })
+    expect(result.ok).toBe(false)
+    if (result.ok) throw new Error("expected error")
+    expect(result.error).toContain("ghost.md")
+  })
+
+  test("rejects directories", async () => {
+    const result = await resolveWorkspaceFile({ localPath: tempRoot }, { path: "dist" })
+    expect(result.ok).toBe(false)
+  })
+
+  test("rejects non-previewable mime (zip)", async () => {
+    const result = await resolveWorkspaceFile({ localPath: tempRoot }, { path: "dist/build.zip" })
+    expect(result.ok).toBe(false)
+    if (result.ok) throw new Error("expected error")
+    expect(result.error).toContain("offer_download")
+  })
+
+  test("rejects extensionless files as non-previewable", async () => {
+    const noExt = path.join(tempRoot, "Makefile")
+    await writeFile(noExt, "all:\n\techo done")
+    const result = await resolveWorkspaceFile({ localPath: tempRoot }, { path: "Makefile" })
+    expect(result.ok).toBe(false)
+    if (result.ok) throw new Error("expected error")
+    expect(result.error).toContain("offer_download")
+  })
+
+  test("uses label as displayName when provided", async () => {
+    const notesPath = path.join(tempRoot, "notes.md")
+    await writeFile(notesPath, "# notes")
+    const result = await resolveWorkspaceFile({ localPath: tempRoot }, { path: "notes.md", label: "My Notes" })
+    expect(result.ok).toBe(true)
+    if (!result.ok) throw new Error("expected ok")
+    expect(result.payload.displayName).toBe("My Notes")
+  })
+
+  test("resolveOfferDownload still works after shared helper extraction (regression)", async () => {
+    const result = await resolveOfferDownload(
+      { projectId: "p1", localPath: tempRoot },
+      { path: "dist/build.zip" },
+    )
+    expect(result.ok).toBe(true)
+    if (!result.ok) throw new Error("expected ok")
+    expect(result.payload.contentUrl).toContain("/api/projects/p1/files/")
   })
 })

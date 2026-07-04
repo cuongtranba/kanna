@@ -4,8 +4,8 @@ import path from "node:path"
 import { randomUUID } from "node:crypto"
 import { statPathOrNull } from "./fs-stat.adapter"
 import { KANNA_MCP_SERVER_NAME } from "../shared/tools"
-import { buildProjectFileContentUrl } from "../shared/projectFileUrl"
-import { inferProjectFileContentType } from "./uploads"
+import { buildProjectFileContentUrl, buildLocalFileContentUrl } from "../shared/projectFileUrl"
+import { inferAttachmentContentType, inferProjectFileContentType } from "./uploads"
 import type { TranscriptEntry } from "../shared/types"
 import type { TunnelGateway } from "./cloudflare-tunnel/gateway"
 import { createAskUserQuestionTool } from "./kanna-mcp-tools/ask-user-question"
@@ -146,6 +146,82 @@ export async function resolveOfferDownload(
   }
 }
 
+export interface ResolvedWorkspaceFile {
+  contentUrl: string
+  relativePath: string
+  fileName: string
+  displayName: string
+  size: number
+  mimeType: string
+}
+
+const PREVIEWABLE_MIME_PREFIXES = ["text/", "image/", "audio/", "video/"]
+const PREVIEWABLE_EXACT_MIMES = new Set(["application/json", "application/pdf"])
+
+function isPreviewableMime(mimeType: string): boolean {
+  if (PREVIEWABLE_EXACT_MIMES.has(mimeType)) return true
+  return PREVIEWABLE_MIME_PREFIXES.some((prefix) => mimeType.startsWith(prefix))
+}
+
+export async function resolveWorkspaceFile(
+  args: { localPath: string },
+  input: { path: string; label?: string },
+): Promise<{ ok: true; payload: ResolvedWorkspaceFile } | { ok: false; error: string }> {
+  const rawPath = (input.path ?? "").trim()
+  if (!rawPath) {
+    return { ok: false, error: "path is required" }
+  }
+
+  const relativePath = path.posix.normalize(rawPath.replaceAll("\\", "/"))
+  if (
+    !relativePath
+    || relativePath === "."
+    || relativePath.startsWith("../")
+    || relativePath.includes("/../")
+    || path.posix.isAbsolute(relativePath)
+  ) {
+    return { ok: false, error: `Invalid project file path: ${input.path}` }
+  }
+
+  const projectRoot = path.resolve(args.localPath)
+  const absolutePath = path.resolve(args.localPath, relativePath)
+  if (absolutePath !== projectRoot && !absolutePath.startsWith(`${projectRoot}${path.sep}`)) {
+    return { ok: false, error: "Path resolves outside the project root" }
+  }
+
+  const info = await statPathOrNull(absolutePath)
+  if (!info) {
+    return { ok: false, error: `File not found: ${relativePath}` }
+  }
+  if (!info.isFile()) {
+    return { ok: false, error: `Not a file: ${relativePath}` }
+  }
+
+  const fileName = path.posix.basename(relativePath)
+  const mimeType = inferAttachmentContentType(fileName)
+
+  if (!isPreviewableMime(mimeType)) {
+    return {
+      ok: false,
+      error: `"${relativePath}" is not a previewable kind (${mimeType}) — use offer_download to let the user download it instead.`,
+    }
+  }
+
+  const contentUrl = buildLocalFileContentUrl(absolutePath)
+
+  return {
+    ok: true,
+    payload: {
+      contentUrl,
+      relativePath,
+      fileName,
+      displayName: input.label?.trim() || fileName,
+      size: info.size,
+      mimeType,
+    },
+  }
+}
+
 const OFFER_DOWNLOAD_DESCRIPTION = `Offer a file from the user's project workspace as an inline downloadable link in the Kanna chat UI.
 
 Use this when you have created or generated a file the user is likely to want to download (build artifact, exported report, generated document, etc.).
@@ -167,6 +243,20 @@ Returns one of:
 - already_live: a tunnel for this port is already proposed or active in this chat
 - disabled: the user has not enabled Cloudflare Tunnel in settings
 - invalid_port: the port is outside the valid range
+`
+
+const PREVIEW_FILE_DESCRIPTION = `Show a file from the workspace to the user as a rich in-chat preview card in the Kanna UI. Tapping the card opens a full-screen mobile-friendly reader: markdown is typeset (mermaid/flowchart blocks render as diagrams, code blocks are syntax-highlighted), source files are syntax-highlighted, CSV becomes a table, images display inline. This is how the user READS a file on their phone without an IDE.
+
+Call this proactively whenever the user should read a file:
+- right after you create or substantially edit a spec, plan, report, or document you want the user to review
+- when the user asks to see, read, show, or open a file
+- when your reply refers to a file the user should read to follow along
+
+Do NOT paste the file's content into your reply as well — call this tool and give a 1–2 sentence summary instead. Use offer_download only when the user needs the bytes (archives, binaries, exports).
+
+Args:
+- path: workspace-relative path to the file (must stay inside the project root)
+- label: optional human-readable title shown on the card
 `
 
 /**
@@ -384,6 +474,29 @@ export function buildKannaMcpTools(args: KannaMcpArgs): SdkMcpToolDefinition<any
           content: [{
             type: "text" as const,
             text: JSON.stringify({ kind: "download_offer", ...result.payload }),
+          }],
+        }
+      },
+    ),
+    tool(
+      "preview_file",
+      PREVIEW_FILE_DESCRIPTION,
+      {
+        path: z.string().describe("Workspace-relative path to the file to preview"),
+        label: z.string().optional().describe("Optional human-readable title shown on the card"),
+      },
+      async (input) => {
+        const result = await resolveWorkspaceFile(args, input)
+        if (!result.ok) {
+          return {
+            content: [{ type: "text" as const, text: result.error }],
+            isError: true,
+          }
+        }
+        return {
+          content: [{
+            type: "text" as const,
+            text: JSON.stringify({ kind: "file_preview", ...result.payload }),
           }],
         }
       },
