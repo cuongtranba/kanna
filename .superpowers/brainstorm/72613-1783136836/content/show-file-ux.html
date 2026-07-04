@@ -1,0 +1,135 @@
+<h2>show_file — how it looks on your phone</h2>
+<p class="subtitle">Left: the moment the agent shows a file. Right: the same chat later in scrollback. The card is a normal file card — tap it any time to view.</p>
+
+<style>
+  .phones { display: flex; gap: 28px; flex-wrap: wrap; justify-content: center; margin: 24px 0; }
+  .phone {
+    width: 300px; height: 620px; border-radius: 42px; border: 3px solid #3a3a3f;
+    background: #0b0b0e; position: relative; overflow: hidden; flex-shrink: 0;
+    box-shadow: 0 12px 40px rgba(0,0,0,.5);
+  }
+  .phone .notch { position:absolute; top:8px; left:50%; transform:translateX(-50%); width:90px; height:22px; background:#000; border-radius:12px; z-index:30; }
+  .phone-label { text-align:center; font-size:13px; color:#9ca3af; margin-top:10px; }
+  .chat { position:absolute; inset:0; padding:44px 12px 60px; display:flex; flex-direction:column; gap:10px; font-size:12.5px; }
+  .navbar { position:absolute; top:0; left:0; right:0; height:40px; background:#0b0b0e; border-bottom:1px solid #1f1f24; display:flex; align-items:center; justify-content:center; color:#e5e7eb; font-size:12px; z-index:20; padding-top:6px; }
+  .msg-user { align-self:flex-end; background:#2563eb; color:#fff; border-radius:16px 16px 4px 16px; padding:8px 12px; max-width:80%; }
+  .msg-agent { align-self:flex-start; color:#d1d5db; max-width:92%; line-height:1.45; }
+  .toolrow { align-self:flex-start; color:#6b7280; font-size:11px; font-family:ui-monospace,monospace; }
+  .filecard {
+    align-self:flex-start; display:flex; gap:10px; align-items:center;
+    background:#17171c; border:1px solid #2a2a31; border-radius:14px; padding:10px 14px;
+    cursor:pointer; transition: border-color .15s;
+  }
+  .filecard:hover { border-color:#4f46e5; }
+  .filecard .ficon { width:34px; height:34px; border-radius:9px; background:#312e81; display:flex; align-items:center; justify-content:center; font-size:16px; }
+  .filecard .fname { color:#e5e7eb; font-weight:600; font-size:12.5px; }
+  .filecard .fmeta { color:#8b8b94; font-size:11px; }
+  .composer { position:absolute; bottom:10px; left:10px; right:10px; height:38px; background:#17171c; border:1px solid #2a2a31; border-radius:19px; color:#6b7280; display:flex; align-items:center; padding:0 14px; font-size:12px; }
+
+  /* the auto-opened sheet */
+  .sheet {
+    position:absolute; left:0; right:0; bottom:0; top:34px; background:#101014;
+    border-radius:22px 22px 0 0; border-top:1px solid #34343c; z-index:40;
+    display:flex; flex-direction:column; animation: none;
+    box-shadow: 0 -8px 30px rgba(0,0,0,.6);
+  }
+  .sheet .grab { width:44px; height:5px; border-radius:3px; background:#3f3f46; margin:8px auto 4px; }
+  .sheet .shead { display:flex; align-items:center; gap:8px; padding:6px 14px 10px; border-bottom:1px solid #1f1f24; }
+  .sheet .shead .t { color:#f3f4f6; font-weight:600; font-size:13px; }
+  .sheet .shead .m { color:#8b8b94; font-size:10.5px; }
+  .sheet .sbody { flex:1; overflow:hidden; padding:14px 16px; color:#d1d5db; font-size:12px; line-height:1.55; }
+  .sheet .sbody h1 { font-size:16px; color:#fff; margin:0 0 8px; border:none; padding:0; }
+  .sheet .sbody h2 { font-size:13px; color:#f3f4f6; margin:12px 0 6px; border:none; padding:0; }
+  .sheet .sbody ul { margin:4px 0 8px 16px; padding:0; }
+  .sheet .sbody li { margin:2px 0; }
+  .sheet .sbody code { background:#1e1e26; border-radius:4px; padding:1px 5px; font-size:11px; color:#93c5fd; }
+  .sheet .sbody .codeblock { background:#0d1117; border:1px solid #21262d; border-radius:8px; padding:8px 10px; font-family:ui-monospace,monospace; font-size:10.5px; color:#a5d6ff; margin:8px 0; }
+  .sheet .sfoot { border-top:1px solid #1f1f24; padding:10px 16px; display:flex; gap:10px; }
+  .sheet .sfoot .btn { flex:1; text-align:center; background:#1e1e26; border:1px solid #34343c; color:#e5e7eb; border-radius:10px; padding:8px 0; font-size:12px; }
+  .swipehint { position:absolute; top:44%; left:50%; transform:translateX(-50%); color:#71717a; font-size:10px; z-index:50; background:rgba(0,0,0,.55); border-radius:8px; padding:3px 8px; }
+</style>
+
+<div class="phones">
+  <!-- Phone 1: live arrival, sheet auto-opened -->
+  <div>
+    <div class="phone">
+      <div class="notch"></div>
+      <div class="navbar">kanna · feature-chat</div>
+      <div class="chat">
+        <div class="msg-user">write the spec then let me review</div>
+        <div class="msg-agent">Spec is ready — opening it for you. It covers the tool contract, mobile sheet UX and error paths. Two decisions I flagged inline.</div>
+        <div class="toolrow">⚙ show_file docs/specs/show-file-design.md</div>
+      </div>
+      <!-- auto-opened sheet -->
+      <div class="sheet">
+        <div class="grab"></div>
+        <div class="shead">
+          <div style="font-size:15px">📄</div>
+          <div>
+            <div class="t">show-file-design.md</div>
+            <div class="m">Markdown · 4.2 KB · docs/specs/</div>
+          </div>
+        </div>
+        <div class="sbody">
+          <h1>show_file — Design</h1>
+          <p><b>Status:</b> Draft · <b>Date:</b> 2026-07-04</p>
+          <h2>Problem</h2>
+          <p>Users on phones can't read files the agent creates without switching to an IDE…</p>
+          <h2>Tool contract</h2>
+          <div class="codeblock">mcp__kanna__show_file({<br>&nbsp;&nbsp;path: "docs/specs/…"<br>})</div>
+          <ul>
+            <li>Resolves inside chat cwd</li>
+            <li>Returns tiny JSON ack — no token bloat</li>
+            <li>Markdown rendered, code highlighted</li>
+          </ul>
+        </div>
+        <div class="sfoot"><div class="btn">↗ Share</div></div>
+      </div>
+      <div class="swipehint">swipe down to dismiss</div>
+    </div>
+    <div class="phone-label">① Agent calls <code>show_file</code> → reader opens, markdown rendered</div>
+  </div>
+
+  <!-- Phone 2: scrollback, card only -->
+  <div>
+    <div class="phone">
+      <div class="notch"></div>
+      <div class="navbar">kanna · feature-chat</div>
+      <div class="chat">
+        <div class="msg-user">write the spec then let me review</div>
+        <div class="msg-agent">Spec is ready — opening it for you. It covers the tool contract, mobile sheet UX and error paths. Two decisions I flagged inline.</div>
+        <div class="filecard">
+          <div class="ficon">📄</div>
+          <div>
+            <div class="fname">show-file-design.md</div>
+            <div class="fmeta">Markdown · 4.2 KB · tap to view</div>
+          </div>
+        </div>
+        <div class="msg-user">approve the spec, start implementing</div>
+        <div class="msg-agent">On it — worktree created, plan drafted. I'll report with evidence when tests pass.</div>
+      </div>
+      <div class="composer">Message…</div>
+    </div>
+    <div class="phone-label">② Later in scrollback — a normal file card, tap re-opens the reader</div>
+  </div>
+</div>
+
+<h3>The one open question: what happens at the moment the file is shown?</h3>
+<p class="subtitle">Your note "the card is like normal click file and view" can be read two ways — pick the behavior for the live moment (the card itself is identical in both):</p>
+
+<div class="options">
+  <div class="option" data-choice="auto-open" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Auto-open on arrival (phone ①)</h3>
+      <p>When the agent shows a file, the reader sheet opens by itself — you're already reading when the phone buzzes. Happens once per show; scrollback/reload never re-opens; swipe down and the card (phone ②) remains for later.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="tap-only" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Never auto-open — card only (phone ②)</h3>
+      <p>The agent's show_file drops the card in the transcript; nothing pops up. You tap the card when you're ready to read. Zero interruption, one extra tap every time.</p>
+    </div>
+  </div>
+</div>
