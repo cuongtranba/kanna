@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.105.0](https://github.com/cuongtranba/kanna/compare/v0.104.0...v0.105.0) (2026-07-04)
+
+
+### Features
+
+* in-chat file preview via mcp__kanna__preview_file tool ([#479](https://github.com/cuongtranba/kanna/issues/479)) ([93056ab](https://github.com/cuongtranba/kanna/commit/93056ab75e41373041868d6a52c9682c51c78dee))
+
+
+### Bug Fixes
+
+* remove PR assets ([#482](https://github.com/cuongtranba/kanna/issues/482)) ([2250d2a](https://github.com/cuongtranba/kanna/commit/2250d2aa82774a4bb4d49099e32c04fbd3699d3b))
+
 ## [0.104.0](https://github.com/cuongtranba/kanna/compare/v0.103.2...v0.104.0) (2026-07-03)
 
 
