@@ -126,4 +126,9 @@ describe("buildKannaSystemPromptAppend", () => {
       expect(out).not.toContain("## Available subagents")
     })
   })
+
+  test("KANNA_SYSTEM_PROMPT_BASE includes preview_file proactivity nudge", () => {
+    expect(KANNA_SYSTEM_PROMPT_BASE).toContain("mcp__kanna__preview_file")
+    expect(KANNA_SYSTEM_PROMPT_BASE).toContain("pasting or summarizing its content")
+  })
 })
