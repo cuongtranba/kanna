@@ -43,6 +43,26 @@ function createToolMessage(id: string, toolId = id): HydratedTranscriptMessage {
   }
 }
 
+function createOfferDownloadMessage(id: string, toolId = id): HydratedTranscriptMessage {
+  return {
+    id,
+    kind: "tool",
+    toolKind: "offer_download",
+    toolName: "mcp__kanna__offer_download",
+    toolId,
+    input: { path: ".kanna/uploads/report.xlsx" },
+    result: {
+      contentUrl: "/api/projects/p1/files/.kanna/uploads/report.xlsx/content",
+      relativePath: ".kanna/uploads/report.xlsx",
+      fileName: "report.xlsx",
+      displayName: "report.xlsx",
+      size: 7122,
+      mimeType: "application/octet-stream",
+    },
+    timestamp: new Date().toISOString(),
+  }
+}
+
 describe("KannaTranscript", () => {
   test("renders user attachment cards outside the user bubble", () => {
     const html = renderTranscript([
@@ -393,6 +413,32 @@ Please check the latest error first.`,
     expect(rows[0]?.kind).toBe("tool-group")
     if (rows[0]?.kind !== "tool-group") throw new Error("unexpected row kind")
     expect(rows[0].messages.map((message) => message.id)).toEqual(["tool-1", "tool-2"])
+  })
+
+  test("keeps offer_download out of an adjacent collapsible tool group", () => {
+    const rows = buildResolvedTranscriptRows([
+      createToolMessage("tool-1"),
+      createOfferDownloadMessage("offer-1"),
+    ], {
+      isLoading: false,
+      latestToolIds: { AskUserQuestion: null, ExitPlanMode: null, TodoWrite: null },
+    })
+
+    expect(rows).toHaveLength(2)
+    expect(rows[0]?.kind).toBe("single")
+    expect(rows[1]?.kind).toBe("single")
+    if (rows[1]?.kind !== "single") throw new Error("unexpected row kind")
+    expect(rows[1].message.id).toBe("offer-1")
+  })
+
+  test("renders the offer_download card even when sandwiched between tool calls", () => {
+    const html = renderTranscript([
+      createToolMessage("tool-1"),
+      createOfferDownloadMessage("offer-1"),
+      createToolMessage("tool-2"),
+    ])
+
+    expect(html).toContain("offer-download-link")
   })
 
   test("does not group collapsible tools across visible transcript rows", () => {

@@ -114,7 +114,10 @@ export type ClientCommand =
   | { type: "subagent.update"; id: string; patch: SubagentPatch }
   | { type: "subagent.delete"; id: string }
   | { type: "settings.testMcpServer"; id: string }
+  | { type: "settings.startMcpOAuth"; id: string }
+  | { type: "settings.completeMcpOAuth"; id: string; callbackUrl: string }
   | { type: "settings.readLlmProvider" }
+  | { type: "settings.listOpenRouterModels" }
   | { type: "skills.search"; query: string; limit?: number }
   | { type: "skills.install"; source: string; skillId: string }
   | { type: "skills.uninstall"; skillId: string }
@@ -254,6 +257,7 @@ export type ClientCommand =
       runId: string
     }
   | { type: "workflows.getRun"; chatId: string; runId: string }
+  | { type: "workflows.getAgentTranscript"; chatId: string; runId: string; agentId: string }
   | { type: "subagents.getRun"; chatId: string; agentId: string }
   | {
       type: "message.enqueue"

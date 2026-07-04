@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto"
+import { computeCostUsd, resolveModelPrice, type ModelPrice } from "../shared/token-pricing"
 import { defaultSpawnCodexAppServer } from "./codex-spawn.adapter"
 import { createInterface } from "node:readline"
 import type { Readable, Writable } from "node:stream"
@@ -90,6 +91,8 @@ interface PendingTurn {
   todoSequence: number
   pendingWebSearchResultToolId: string | null
   resolved: boolean
+  /** Most recent token usage snapshot for the turn; stashed to enrich the result entry. */
+  lastUsageSnapshot?: ContextWindowUsageSnapshot
   onToolRequest: (request: HarnessToolRequest) => Promise<unknown>
   onApprovalRequest?: (
     request:
@@ -262,8 +265,9 @@ function asNumber(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined
 }
 
-function normalizeCodexTokenUsage(
+export function normalizeCodexTokenUsage(
   notification: ThreadTokenUsageUpdatedNotification,
+  resolveTurnPrice?: () => ModelPrice | null,
 ): ContextWindowUsageSnapshot | null {
   const usage = notification.tokenUsage
   const totalUsage = usage.total_token_usage ?? usage.total
@@ -282,6 +286,17 @@ function normalizeCodexTokenUsage(
     asNumber(lastUsage?.reasoning_output_tokens) ?? asNumber(lastUsage?.reasoningOutputTokens)
   const maxTokens = asNumber(usage.model_context_window) ?? asNumber(usage.modelContextWindow)
 
+  let costUsd: number | undefined
+  if (resolveTurnPrice) {
+    const price = resolveTurnPrice()
+    if (price) {
+      costUsd = computeCostUsd(
+        { inputTokens: inputTokens ?? 0, cachedInputTokens, outputTokens: outputTokens ?? 0 },
+        price,
+      )
+    }
+  }
+
   return {
     usedTokens,
     ...(totalProcessedTokens !== undefined && totalProcessedTokens > usedTokens ? { totalProcessedTokens } : {}),
@@ -296,6 +311,7 @@ function normalizeCodexTokenUsage(
     ...(reasoningOutputTokens !== undefined ? { lastReasoningOutputTokens: reasoningOutputTokens } : {}),
     lastUsedTokens: usedTokens,
     compactsAutomatically: true,
+    ...(costUsd !== undefined ? { costUsd } : {}),
   }
 }
 
@@ -1567,10 +1583,13 @@ export class CodexAppServerManager {
     pendingTurn: PendingTurn,
     notification: ThreadTokenUsageUpdatedNotification,
   ) {
-    const usage = normalizeCodexTokenUsage(notification)
+    const usage = normalizeCodexTokenUsage(notification, () => resolveModelPrice(pendingTurn.model))
     if (!usage) {
       return
     }
+
+    // Stash the latest snapshot so handleTurnCompleted can enrich the result entry.
+    pendingTurn.lastUsageSnapshot = usage
 
     pendingTurn.queue.push({
       type: "transcript",
@@ -1625,6 +1644,14 @@ export class CodexAppServerManager {
     }
 
     pendingTurn.resolved = true
+    const last = pendingTurn.lastUsageSnapshot
+    const resultUsage = last
+      ? {
+          ...(last.inputTokens !== undefined ? { inputTokens: last.inputTokens } : {}),
+          ...(last.outputTokens !== undefined ? { outputTokens: last.outputTokens } : {}),
+          ...(last.cachedInputTokens !== undefined ? { cachedInputTokens: last.cachedInputTokens } : {}),
+        }
+      : undefined
     pendingTurn.queue.push({
       type: "transcript",
       entry: timestamped({
@@ -1633,6 +1660,8 @@ export class CodexAppServerManager {
         isError,
         durationMs: 0,
         result: notification.turn.error?.message ?? "",
+        ...(resultUsage !== undefined ? { usage: resultUsage } : {}),
+        ...(last?.costUsd !== undefined ? { costUsd: last.costUsd } : {}),
       }),
     })
     pendingTurn.queue.finish()
@@ -1642,6 +1671,14 @@ export class CodexAppServerManager {
   private failContext(context: SessionContext, message: string) {
     const pendingTurn = context.pendingTurn
     if (pendingTurn && !pendingTurn.resolved) {
+      const last = pendingTurn.lastUsageSnapshot
+      const resultUsage = last
+        ? {
+            ...(last.inputTokens !== undefined ? { inputTokens: last.inputTokens } : {}),
+            ...(last.outputTokens !== undefined ? { outputTokens: last.outputTokens } : {}),
+            ...(last.cachedInputTokens !== undefined ? { cachedInputTokens: last.cachedInputTokens } : {}),
+          }
+        : undefined
       pendingTurn.queue.push({
         type: "transcript",
         entry: timestamped({
@@ -1650,6 +1687,8 @@ export class CodexAppServerManager {
           isError: true,
           durationMs: 0,
           result: message,
+          ...(resultUsage !== undefined ? { usage: resultUsage } : {}),
+          ...(last?.costUsd !== undefined ? { costUsd: last.costUsd } : {}),
         }),
       })
       pendingTurn.queue.finish()

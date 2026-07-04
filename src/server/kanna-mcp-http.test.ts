@@ -253,4 +253,25 @@ describe("buildMcpConfigJson — user servers", () => {
     const json = JSON.parse(buildMcpConfigJson(HANDLE, [stdio("a"), stdio("b"), stdio("c")]))
     expect(Object.keys(json.mcpServers)).toEqual(["kanna", "a", "b", "c"])
   })
+
+  test("injects oauth bearer header for authenticated server", () => {
+    const cfg: McpServerConfig = {
+      id: "s1", name: "design", enabled: true,
+      createdAt: "", updatedAt: "", lastTest: { status: "untested" },
+      transport: "http", url: "https://api.example/mcp", headers: {},
+      oauth: { enabled: true, status: "authenticated", tokens: { access_token: "AT", token_type: "Bearer" } as never },
+    }
+    const json = JSON.parse(buildMcpConfigJson(HANDLE, [cfg], new Map([["s1", "AT"]])))
+    expect(json.mcpServers.design.headers.Authorization).toBe("Bearer AT")
+  })
+
+  test("omits Authorization when no bearer resolved", () => {
+    const cfg: McpServerConfig = {
+      id: "s2", name: "plain", enabled: true,
+      createdAt: "", updatedAt: "", lastTest: { status: "untested" },
+      transport: "http", url: "https://api.example/mcp", headers: {},
+    }
+    const json = JSON.parse(buildMcpConfigJson(HANDLE, [cfg], new Map()))
+    expect(json.mcpServers.plain.headers?.Authorization).toBeUndefined()
+  })
 })

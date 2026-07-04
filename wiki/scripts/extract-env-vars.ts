@@ -15,10 +15,20 @@ const DESCRIPTIONS: Record<string, { default: string; description: string }> = {
   KANNA_PASSWORD: { default: '(unset)', description: 'HTTP/WS/API password gate. Recommended for exposed deployments.' },
   KANNA_CLAUDE_DRIVER: { default: 'sdk', description: 'Driver mode: "sdk" (API rates) or "pty" (subscription billing, macOS/Linux only).' },
   KANNA_MCP_TOOL_CALLBACKS: { default: '0', description: 'Set to "1" to route AskUserQuestion / ExitPlanMode / built-in shims through the durable approval protocol.' },
-  KANNA_PTY_SANDBOX: { default: 'on', description: 'PTY OS-level sandbox. Set to "off" to disable (loses defense-in-depth).' },
-  KANNA_PTY_PREFLIGHT_MODEL: { default: 'claude-haiku-4-5-20251001', description: 'Model used for allowlist preflight probes. Burns subscription turns — do not change unless cost is understood.' },
   KANNA_SERVER_SECRET: { default: '(random per process)', description: 'Stabilises HMAC tool-request ids across process restarts.' },
   KANNA_SYSTEM_PROMPT_APPEND: { default: '(unset)', description: 'Appended to the system prompt for every agent spawn (both SDK and PTY drivers).' },
+  KANNA_MAX_AGENT_WAKES: { default: '25', description: 'Max consecutive agent self-scheduled wakes per chat before the runaway-loop cap trips. Resets on a real user turn.' },
+  KANNA_PENDING_WORKFLOW_POLL_MS: { default: '120000', description: 'Interval the pending-workflow harvest wake re-polls a still-running background Workflow.' },
+  KANNA_SUBAGENT_MAX_LIVE: { default: '5', description: 'Max concurrent keep-alive (warm) subagent processes per chat. Over cap, delegate_subagent({keep_alive:true}) fails CAP_EXCEEDED.' },
+  KANNA_SUBAGENT_IDLE_TIMEOUT_MS: { default: '300000', description: 'Idle window after which a keep-alive subagent session is auto-closed. Reset on each turn.' },
+  KANNA_PTY_BACKGROUND_TASK_MAX_MS: { default: '1800000', description: 'Max time a launched background Bash task keeps the PTY session warm before the idle reaper may reclaim it (30 min).' },
+  KANNA_OPENROUTER_FIRST_ENTRY_TIMEOUT_MS: { default: '120000', description: 'Fail-close timeout for an OpenRouter turn whose SDK stream stalls before the first transcript entry.' },
+  KANNA_CLAUDE_SESSION_IDLE_MS: { default: '600000', description: 'Idle window before a resident Claude session is reaped (10 min).' },
+  KANNA_CLAUDE_SESSION_MAX_RESIDENT: { default: '4', description: 'Max simultaneously resident Claude sessions before the least-recently-used is reaped.' },
+  KANNA_CLAUDE_SESSION_SWEEP_INTERVAL_MS: { default: '60000', description: 'How often the resident-session reaper sweeps for idle sessions.' },
+  KANNA_RELOADER: { default: 'supervisor', description: 'Self-update reload strategy: "supervisor" (default, end-user) or "pm2" (self-host, requires KANNA_REPO_DIR).' },
+  KANNA_REPO_DIR: { default: '(unset)', description: 'Repo checkout the pm2 reloader pulls/rebuilds. Required when KANNA_RELOADER=pm2.' },
+  KANNA_DISABLE_SELF_UPDATE: { default: '0', description: 'Set to "1" to disable the in-app self-update path.' },
 }
 
 const seen = new Set<string>()

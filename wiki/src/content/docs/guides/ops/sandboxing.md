@@ -1,34 +1,28 @@
 ---
-title: Sandboxing
-description: Toggle and tune the PTY sandbox.
+title: PTY spawn smoke-test
+description: How the PTY driver gates each spawn, and what replaced the old sandbox.
 ---
 
-## When the sandbox runs
+## What runs on each PTY spawn
 
-Every `KANNA_CLAUDE_DRIVER=pty` spawn is wrapped in an OS-level sandbox when supported (macOS `sandbox-exec`, Linux `bwrap`). Default **on**.
+When `KANNA_CLAUDE_DRIVER=pty`, every spawn first passes a single TUI **smoke test**. Kanna probes the spawned `claude` to confirm that `--disallowedTools Bash` is honored — that the model genuinely cannot reach the Bash built-in. PASS unlocks the spawn; FAIL refuses it with a clear reason on the normal spawn-error path.
 
-## Toggle off
+The verdict is cached for 24 hours, keyed on `(binarySha256, model)`, under `${HOME}/.kanna/cache/smoke-test/`. It invalidates automatically when the `claude` CLI binary changes.
 
-```bash
-export KANNA_PTY_SANDBOX=off
-```
+## The sandbox and preflight were removed
 
-You lose defense-in-depth against built-in tool credential reads. Only do this if you have an alternative isolation layer (e.g., dedicated VM, container with no host access).
+Older builds wrapped each PTY spawn in an OS-level sandbox (`sandbox-exec` on macOS, `bwrap` on Linux) and ran an 8-probe allowlist "preflight" against every disallowed built-in. **Both are gone.**
 
-## Linux without bwrap
+- `KANNA_PTY_SANDBOX` — inert (sandbox removed).
+- `KANNA_PTY_PREFLIGHT_MODEL` — inert (preflight replaced by the smoke test).
+- `KANNA_PTY_TRANSCRIPT_WATCH` — inert (the transcript follower always tail-polls; there is no `fs.watch` to toggle).
 
-If `bwrap` is not installed, sandbox silently disables. To suppress the gap explicitly:
+Setting any of these has no effect. You can remove them from your environment.
 
-```bash
-sudo apt install bubblewrap          # Debian/Ubuntu
-sudo pacman -S bubblewrap            # Arch
-sudo dnf install bubblewrap          # Fedora
-```
+## Getting isolation today
 
-Or set `KANNA_PTY_SANDBOX=off` to acknowledge the gap.
+If you need stronger isolation than process separation:
 
-## Allowlist preflight cache
-
-`KANNA_PTY_PREFLIGHT_MODEL` overrides the model used for the 8 directed probes. Defaults to `claude-haiku-4-5-20251001` for cost and speed. Probes burn subscription turns — do not change unless you understand the cost.
-
-Cache TTL: 24 hours, keyed on `(binarySha256, tools-string, model)`. Invalidates automatically when the `claude` CLI is updated.
+- Run each chat in a **[git worktree](/features/projects-sessions/)** so file changes stay scoped to a throwaway working tree.
+- Run Kanna itself inside a dedicated VM or container with no host credential access.
+- Keep `AskUserQuestion` / `ExitPlanMode` routed through the durable approval protocol (always on under PTY) so plan and question gates stay in your hands.

@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <em>Community fork of <a href="https://github.com/jakemor/kanna">jakemor/kanna</a> — kept in sync with upstream and extended with subscription-billing PTY mode, OAuth token pooling, multi-provider chat (Claude + Codex), subagent orchestration, durable tool-approval protocol, in-app self-update, and more.</em>
+  <em>Community fork of <a href="https://github.com/jakemor/kanna">jakemor/kanna</a> — kept in sync with upstream and extended with subscription-billing PTY mode, OAuth token pooling, multi-provider chat (Claude + Codex + OpenRouter), subagent orchestration, custom MCP servers, a workflow status panel, durable tool-approval protocol, in-app self-update, and more.</em>
 </p>
 
 <p align="center">
@@ -41,14 +41,17 @@ Kanna started life as [jakemor/kanna](https://github.com/jakemor/kanna) — a cl
 
 **Headline additions vs. upstream:**
 
-- **Subscription-billing PTY driver** (`KANNA_CLAUDE_DRIVER=pty`) — runs the `claude` CLI under a pseudo-terminal so Pro/Max plans are charged instead of API rates. Includes JSONL event parity with the SDK driver, macOS `sandbox-exec` / Linux `bwrap` sandboxing, allowlist preflight probes, and failure-mode parity.
+- **Subscription-billing PTY driver** (`KANNA_CLAUDE_DRIVER=pty`) — runs the `claude` CLI under a pseudo-terminal so Pro/Max plans are charged instead of API rates. Parses the on-disk transcript JSONL as the sole event source, with HarnessEvent parity with the SDK driver, a cached per-spawn smoke-test gate, and failure-mode parity.
 - **OAuth token pool** — register multiple Claude OAuth tokens; Kanna rotates across them per chat with automatic fallover on rate-limit and an explicit disabled state.
-- **Multi-provider chat** — switch between Claude and Codex (OpenAI) from the composer with per-provider model + reasoning-effort controls and Codex fast mode.
-- **Subagent orchestration** — first-class subagent CRUD, `@agent/` mentions, parallel runs, live activity labels, MCP progress notifications, and `mcp__kanna__delegate_subagent` so the main agent itself can delegate.
+- **Multi-provider chat** — switch between Claude, Codex (OpenAI), and OpenRouter from the composer with per-provider model + reasoning-effort controls and Codex fast mode. OpenRouter populates its model picker live from the public catalog (tool-capable models).
+- **Subagent orchestration** — first-class subagent CRUD, `@agent/` mentions, parallel runs, live activity labels, MCP progress notifications, and `mcp__kanna__delegate_subagent` so the main agent itself can delegate — including **keep-alive multi-turn** sessions (`send_subagent_message` / `close_subagent`) and **background** runs that report back as a fresh turn.
+- **Custom MCP servers** — register your own `stdio` / `http` / `sse` / `ws` MCP servers from Settings (with OAuth 2.1 for network transports); they merge into both drivers and their tools surface as `mcp__<name>__<tool>`.
+- **Workflow status panel** — read-only per-chat panel surfacing Claude Code's native Workflow tool runs (live status, drill-in progress, token totals) via disk-watch, under both drivers.
+- **Agent self-scheduled wake** — `mcp__kanna__schedule_wakeup` lets the agent re-enter the chat to harvest long-running background work, with a runaway-loop cap.
 - **Durable tool-approval protocol** (`KANNA_MCP_TOOL_CALLBACKS=1`) — pending `AskUserQuestion` / `ExitPlanMode` / built-in shims survive server restart and replay to the client on reconnect.
 - **Cloudflare `expose_port` MCP tool** — agent-callable port exposure with always-ask or auto-expose modes, replacing bash-output sniffing.
 - **In-app self-update** — one-click pull/rebuild/reload with a host-agnostic supervisor (works under pm2, systemd, docker, plain shell) or direct pm2 reload; install any prior release straight from the changelog UI.
-- **Git worktree isolation** per chat, **bulk import** of existing `~/.claude/projects/` sessions, **proactive context compaction**, **password gate** for HTTP/WS/API, **PWA / mobile layout**, **mermaid rendering** in transcripts, **standalone HTML transcript export**, and **customizable keybindings**.
+- **Git worktree isolation** per chat, **bulk import** of existing `~/.claude/projects/` sessions, **proactive context compaction**, **per-turn token cost**, **local skills & slash commands** in the composer `/` picker, **password gate** for HTTP/WS/API, **PWA / mobile layout**, **mermaid rendering** in transcripts, **standalone HTML transcript export**, and **customizable keybindings**.
 
 See the full inventory in [Features](#features) below.
 
@@ -76,9 +79,11 @@ That's it. Kanna opens in your browser at [`localhost:3210`](http://localhost:32
 
 **Providers & models**
 
-- **Multi-provider support** — switch between Claude and Codex (OpenAI) from the chat input, with per-provider model selection, reasoning-effort controls, and Codex fast mode
+- **Multi-provider support** — switch between Claude, Codex (OpenAI), and OpenRouter from the chat input, with per-provider model selection, reasoning-effort controls, and Codex fast mode
+- **OpenRouter** — set an OpenRouter API key in Settings; the model picker populates live from OpenRouter's catalog (tool-capable models), routed through its Anthropic-compatible endpoint
 - **OAuth token pool** — register multiple Claude OAuth tokens; Kanna rotates across them per chat
 - **Subscription-billing PTY driver** — optional `KANNA_CLAUDE_DRIVER=pty` runs the `claude` CLI under a pseudo-terminal so Pro/Max subscription billing is preserved instead of API rates
+- **Custom MCP servers** — register `stdio` / `http` / `sse` / `ws` MCP servers from Settings (OAuth 2.1 for network transports); merged into both drivers
 
 **Chat & transcript**
 
@@ -86,10 +91,13 @@ That's it. Kanna opens in your browser at [`localhost:3210`](http://localhost:32
 - **Inline diff viewer** — file and commit diffs rendered directly in the transcript
 - **Embedded terminal** — per-project xterm terminal in a resizable side panel (macOS/Linux)
 - **File & image uploads** — drag-and-drop attachments into the composer
-- **Slash commands & @-mentions** — in-composer pickers for slash commands, file mentions, and subagents
+- **Slash commands & @-mentions** — in-composer pickers for slash commands (including local Claude Code skills/commands), file mentions, and subagents
 - **Plan mode** — review and approve agent plans before execution
-- **Subagent orchestration** — run and track parallel subagents within a turn
+- **Subagent orchestration** — run and track parallel subagents within a turn, plus keep-alive multi-turn sessions and non-blocking background runs that report back as a fresh turn
+- **Workflow status panel** — read-only per-chat view of Claude Code's native Workflow tool runs with live status and drill-in progress
+- **Agent self-scheduled wake** — the agent can re-enter the chat to harvest long-running background work (`schedule_wakeup`), with a runaway-loop cap
 - **Background tasks** — long-running tasks tracked out-of-band with a status indicator
+- **Per-turn token cost** — token usage and estimated USD cost shown inline per turn
 - **Auto-continue** — optionally continue a turn automatically when the agent stops short
 - **Proactive compaction** — context-window meter with automatic transcript compaction before limits are hit
 
@@ -390,22 +398,26 @@ src/
 │   ├── claude-pty/               PTY driver (subscription billing)
 │   ├── oauth-pool/               Claude OAuth token rotation
 │   ├── provider-catalog.ts       provider/model/effort normalization
+│   ├── openrouter-models.ts      live OpenRouter catalog (tool-capable models)
 │   ├── quick-response.ts         structured queries w/ provider fallback
 │   ├── event-store.ts            JSONL persistence, replay & compaction
 │   ├── read-models.ts            derived view models
 │   ├── events.ts                 event type definitions
 │   ├── discovery.ts              auto-discover Claude/Codex projects
+│   ├── local-catalog.ts          local Claude skills/slash-command discovery
 │   ├── claude-session-importer.ts  bulk import existing sessions
 │   ├── diff-store.ts             per-chat diff hydration
 │   ├── terminal-manager.ts       embedded-terminal PTY sessions
 │   ├── uploads.ts                attachment intake
-│   ├── subagent-orchestrator.ts  parallel subagent runs
+│   ├── subagent-orchestrator.ts  parallel + keep-alive + background subagent runs
+│   ├── workflow-registry.ts      workflow status panel (disk-watch read-model)
 │   ├── background-tasks.ts       out-of-band task tracking
 │   ├── worktree-store.ts         git worktree isolation
 │   ├── push/                     web-push notifications
 │   ├── share.ts · cloudflare-tunnel/  trycloudflare / expose_port tunnels
 │   ├── update-manager.ts · update-strategy.ts  self-update
 │   ├── kanna-mcp.ts              Kanna MCP tools (built-in shims)
+│   ├── mcp-validator.ts · mcp-oauth.adapter.ts  custom MCP connect-test + OAuth
 │   └── keybindings.ts            persisted keybindings
 └── shared/          Shared between client & server
     ├── types.ts     core domain types, provider catalog, transcript entries
@@ -413,6 +425,7 @@ src/
     ├── protocol.ts  WebSocket wire envelopes
     ├── ports.ts     default ports & dev-mode offsets
     ├── share.ts     share/tunnel shared types
+    ├── token-pricing.ts  per-turn token cost (USD)
     └── branding.ts  app name & data-directory paths
 ```
 

@@ -11,8 +11,10 @@ export interface WorkflowAgentProgress {
   lastToolName?: string
   lastToolSummary?: string
   promptPreview?: string
+  resultPreview?: string
   tokens?: number
   toolCalls?: number
+  durationMs?: number
   startedAt?: number
   lastProgressAt?: number
 }
@@ -35,7 +37,7 @@ export interface WorkflowRun {
   scriptPath?: string
   args?: string
 }
-export type WorkflowAgentSummary = Omit<WorkflowAgentProgress, "promptPreview" | "lastToolSummary">
+export type WorkflowAgentSummary = Omit<WorkflowAgentProgress, "promptPreview" | "resultPreview" | "lastToolSummary">
 export interface WorkflowRunSummary {
   runId: string
   taskId?: string
@@ -75,8 +77,10 @@ function parseAgents(progress: unknown): WorkflowAgentProgress[] {
       lastToolName: str(r.lastToolName),
       lastToolSummary: str(r.lastToolSummary),
       promptPreview: str(r.promptPreview),
+      resultPreview: str(r.resultPreview),
       tokens: num(r.tokens),
       toolCalls: num(r.toolCalls),
+      durationMs: num(r.durationMs),
       startedAt: num(r.startedAt),
       lastProgressAt: num(r.lastProgressAt),
     })
@@ -138,6 +142,8 @@ export function toRunSummary(run: WorkflowRun): WorkflowRunSummary {
     totalTokens: run.totalTokens,
     totalToolCalls: run.totalToolCalls,
     phases: run.phases,
-    agents: run.agents.map(({ promptPreview: _promptPreview, lastToolSummary: _lastToolSummary, ...keep }) => keep),
+    agents: run.agents.map(
+      ({ promptPreview: _promptPreview, resultPreview: _resultPreview, lastToolSummary: _lastToolSummary, ...keep }) => keep,
+    ),
   }
 }

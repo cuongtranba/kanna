@@ -5,7 +5,17 @@ import {
   KANNA_SYSTEM_PROMPT_BASE,
   buildKannaSystemPromptAppend,
 } from "./kanna-system-prompt"
-import type { Subagent } from "./types"
+import type { ResolvedStackBinding, Subagent } from "./types"
+
+function fakeBinding(overrides: Partial<ResolvedStackBinding> = {}): ResolvedStackBinding {
+  return {
+    projectId: overrides.projectId ?? "p1",
+    projectTitle: overrides.projectTitle ?? "Backend API",
+    worktreePath: overrides.worktreePath ?? "/work/be",
+    role: overrides.role ?? "primary",
+    projectStatus: overrides.projectStatus ?? "active",
+  }
+}
 
 function fakeSubagent(overrides: Partial<Subagent> = {}): Subagent {
   return {
@@ -17,6 +27,7 @@ function fakeSubagent(overrides: Partial<Subagent> = {}): Subagent {
     modelOptions: overrides.modelOptions ?? { reasoningEffort: "medium", contextWindow: "200k" },
     systemPrompt: overrides.systemPrompt ?? "you are a reviewer",
     contextScope: overrides.contextScope ?? "previous-assistant-reply",
+    triggerMode: overrides.triggerMode ?? "auto",
     createdAt: overrides.createdAt ?? 1_000,
     updatedAt: overrides.updatedAt ?? 1_000,
   }
@@ -130,5 +141,79 @@ describe("buildKannaSystemPromptAppend", () => {
   test("KANNA_SYSTEM_PROMPT_BASE includes preview_file proactivity nudge", () => {
     expect(KANNA_SYSTEM_PROMPT_BASE).toContain("mcp__kanna__preview_file")
     expect(KANNA_SYSTEM_PROMPT_BASE).toContain("pasting or summarizing its content")
+  })
+
+  describe("stackProjects option", () => {
+    test("returns BASE fast-path when stackProjects empty and nothing else set", () => {
+      expect(buildKannaSystemPromptAppend([], { stackProjects: [] })).toBe(KANNA_SYSTEM_PROMPT_BASE)
+    })
+
+    test("omits the block when option absent", () => {
+      const out = buildKannaSystemPromptAppend([fakeSubagent()])
+      expect(out).not.toContain("## Stack projects")
+    })
+
+    test("renders title, role, and worktree path per binding", () => {
+      const out = buildKannaSystemPromptAppend([], {
+        stackProjects: [
+          fakeBinding({ projectTitle: "Backend API", role: "primary", worktreePath: "/work/be" }),
+          fakeBinding({ projectId: "p2", projectTitle: "Web Client", role: "additional", worktreePath: "/work/fe" }),
+        ],
+      })
+      expect(out).toContain("## Stack projects")
+      expect(out).toContain("- Backend API [primary]: /work/be")
+      expect(out).toContain("- Web Client [additional]: /work/fe")
+    })
+
+    test("appends '(missing)' for a missing project status", () => {
+      const out = buildKannaSystemPromptAppend([], {
+        stackProjects: [fakeBinding({ projectTitle: "(missing)", projectStatus: "missing", worktreePath: "/work/gone" })],
+      })
+      expect(out).toContain("- (missing) [primary]: /work/gone (missing)")
+    })
+
+    test("places the block after Project instructions and before the subagent roster", () => {
+      const out = buildKannaSystemPromptAppend([fakeSubagent({ name: "rev" })], {
+        globalPromptAppend: "Always TDD.",
+        stackProjects: [fakeBinding()],
+      })
+      const instrIdx = out.indexOf("## Project instructions")
+      const stackIdx = out.indexOf("## Stack projects")
+      const rosterIdx = out.indexOf("## Available subagents")
+      expect(instrIdx).toBeGreaterThan(-1)
+      expect(stackIdx).toBeGreaterThan(instrIdx)
+      expect(rosterIdx).toBeGreaterThan(stackIdx)
+    })
+
+    test("BASE remains the first paragraph when only stackProjects set", () => {
+      const out = buildKannaSystemPromptAppend([], { stackProjects: [fakeBinding()] })
+      expect(out.startsWith(KANNA_SYSTEM_PROMPT_BASE)).toBe(true)
+    })
+  })
+
+  describe("triggerMode roster split", () => {
+    test("manual subagents render in a separate gated section", () => {
+      const out = buildKannaSystemPromptAppend([
+        fakeSubagent({ id: "a", name: "autoone", triggerMode: "auto" }),
+        fakeSubagent({ id: "m", name: "manualone", triggerMode: "manual" }),
+      ])
+      expect(out).toContain("## Available subagents")
+      expect(out).toContain("- autoone [id=a]")
+      expect(out).toContain("## Manual subagents")
+      expect(out).toContain("- manualone [id=m]")
+      const autoSection = out.split("## Manual subagents")[0]
+      expect(autoSection).not.toContain("manualone")
+    })
+
+    test("no manual section when all subagents are auto", () => {
+      const out = buildKannaSystemPromptAppend([fakeSubagent({ triggerMode: "auto" })])
+      expect(out).not.toContain("## Manual subagents")
+    })
+
+    test("no auto section when all subagents are manual", () => {
+      const out = buildKannaSystemPromptAppend([fakeSubagent({ id: "m", name: "m1", triggerMode: "manual" })])
+      expect(out).not.toContain("## Available subagents")
+      expect(out).toContain("## Manual subagents")
+    })
   })
 })

@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
-import { Download, Flower, FoldVertical, PanelLeft, UnfoldVertical, X, Menu, Plus, Settings } from "lucide-react"
+import { Download, Flower, FoldVertical, PanelLeft, UnfoldVertical, X, Menu, Plus, Settings, Workflow } from "lucide-react"
 import { useLocation, useNavigate } from "react-router-dom"
 import { APP_NAME } from "../../shared/branding"
 import { Button } from "../components/ui/button"
@@ -478,7 +478,8 @@ function KannaSidebarImpl({
   const hasVisibleChats = activeVisibleCount > 0
   const isLocalProjectsActive = location.pathname === "/"
   const isSettingsActive = location.pathname.startsWith("/settings")
-  const isUtilityPageActive = isLocalProjectsActive || isSettingsActive
+  const isWorkflowsActive = location.pathname.startsWith("/workflows")
+  const isUtilityPageActive = isLocalProjectsActive || isSettingsActive || isWorkflowsActive
   const isConnecting = connectionStatus === "connecting"
   const statusLabel = isConnecting ? "Connecting" : connectionStatus === "connected" ? "Connected" : "Disconnected"
   const statusDotClass = connectionStatus === "connected" ? "bg-success" : "bg-warning"
@@ -785,6 +786,27 @@ function KannaSidebarImpl({
         </div>
 
         <div className="border-t border-border">
+          <button
+            type="button"
+            disabled={!activeChatId}
+            aria-label="Workflows"
+            onClick={() => {
+              if (!activeChatId) return
+              navigate(`/workflows/${activeChatId}`)
+              onClose()
+            }}
+            className={cn(
+              "w-full flex items-center gap-2 px-3 py-2.5 text-left transition-colors duration-150 rounded-none",
+              !activeChatId
+                ? "opacity-50 cursor-not-allowed"
+                : isWorkflowsActive
+                  ? "bg-muted"
+                  : "hover:bg-muted/50"
+            )}
+          >
+            <Workflow className="h-4 w-4 shrink-0 text-muted-foreground" />
+            <span className="text-sm flex-1">Workflows</span>
+          </button>
           <button
             type="button"
             onClick={() => {

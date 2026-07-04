@@ -1,9 +1,13 @@
 import type { ChatPermissionPolicyOverride, ToolRequestDecision, ToolRequestStatus } from "./permission-policy"
+import type {
+  OAuthTokens,
+  OAuthClientInformationFull,
+} from "@modelcontextprotocol/sdk/shared/auth.js"
 
 export const STORE_VERSION = 3 as const
 export const PROTOCOL_VERSION = 1 as const
 
-export type AgentProvider = "claude" | "codex"
+export type AgentProvider = "claude" | "codex" | "openrouter"
 export type LlmProviderKind = "openai" | "openrouter" | "custom"
 export type AppThemePreference = "light" | "dark" | "system"
 export type ChatSoundPreference = "never" | "unfocused" | "always"
@@ -12,6 +16,16 @@ export type DefaultProviderPreference = "last_used" | AgentProvider
 export type EditorPreset = "cursor" | "vscode" | "xcode" | "windsurf" | "custom"
 export const DEFAULT_OPENAI_SDK_MODEL = "gpt-5.4-mini"
 export const DEFAULT_OPENROUTER_SDK_MODEL = "moonshotai/kimi-k2.5:nitro"
+
+export const OPENROUTER_BASE_URL = "https://openrouter.ai/api"
+export const OPENROUTER_MODELS_URL = "https://openrouter.ai/api/v1/models"
+
+export interface OpenRouterModel {
+  id: string
+  label: string
+  contextLength: number
+  pricing?: { promptPerTok: number; completionPerTok: number }
+}
 
 export type AttachmentKind = "image" | "file" | "mention"
 
@@ -142,9 +156,12 @@ export interface CodexModelOptions {
   fastMode: boolean
 }
 
+export type OpenRouterModelOptions = Record<string, never>
+
 export interface ProviderModelOptionsByProvider {
   claude: ClaudeModelOptions
   codex: CodexModelOptions
+  openrouter: OpenRouterModelOptions
 }
 
 export interface ProviderPreference<TModelOptions> {
@@ -156,9 +173,12 @@ export interface ProviderPreference<TModelOptions> {
 export type ChatProviderPreferences = {
   claude: ProviderPreference<ClaudeModelOptions>
   codex: ProviderPreference<CodexModelOptions>
+  openrouter: ProviderPreference<OpenRouterModelOptions>
 }
 
 export type SubagentContextScope = "previous-assistant-reply" | "full-transcript"
+
+export type SubagentTriggerMode = "auto" | "manual"
 
 export interface SubagentRestriction {
   workingDir?: string
@@ -174,6 +194,7 @@ export interface Subagent {
   modelOptions: ClaudeModelOptions | CodexModelOptions
   systemPrompt: string
   contextScope: SubagentContextScope
+  triggerMode: SubagentTriggerMode
   workingDir?: string
   allowedPaths?: string[]
   createdAt: number
@@ -188,6 +209,7 @@ export interface SubagentInput {
   modelOptions: ClaudeModelOptions | CodexModelOptions
   systemPrompt: string
   contextScope: SubagentContextScope
+  triggerMode?: SubagentTriggerMode
   workingDir?: string
   allowedPaths?: string[]
 }
@@ -200,6 +222,7 @@ export interface SubagentPatch {
   modelOptions?: Partial<ClaudeModelOptions> | Partial<CodexModelOptions>
   systemPrompt?: string
   contextScope?: SubagentContextScope
+  triggerMode?: SubagentTriggerMode
   workingDir?: string | null
   allowedPaths?: string[] | null
 }
@@ -229,6 +252,33 @@ export type McpServerTestResult =
   | { status: "ok"; testedAt: string; toolCount: number }
   | { status: "error"; testedAt: string; message: string }
 
+export interface McpOAuthFlowState {
+  codeVerifier: string
+  state: string
+  issuer: string
+  authorizationUrl: string
+  // AS metadata cached between start and complete (avoids re-discovery)
+  metadata: Record<string, unknown>
+}
+
+export interface McpOAuthState {
+  enabled: boolean
+  status: "unauthenticated" | "authenticated" | "error"
+  errorMessage?: string
+  // resolved AS issuer (set on complete; used by refresh without re-discovery)
+  issuer?: string
+  // cached AS metadata (token_endpoint, etc.) persisted at complete so refresh
+  // uses it directly instead of re-discovering from issuer (which may be a
+  // non-resolvable resource URL, e.g. claude.ai design MCP)
+  metadata?: Record<string, unknown>
+  // DCR result keyed by AS issuer (SEP-2352)
+  clientByIssuer?: Record<string, OAuthClientInformationFull>
+  tokens?: OAuthTokens
+  obtainedAt?: number
+  // present only mid-flow; cleared on complete/cancel
+  flow?: McpOAuthFlowState
+}
+
 interface McpServerBase {
   id: string
   name: string
@@ -250,6 +300,7 @@ export interface McpServerNetworkFields {
   transport: "http" | "sse" | "ws"
   url: string
   headers: Record<string, string>
+  oauth?: McpOAuthState
 }
 
 export type McpServerConfig =
@@ -270,6 +321,7 @@ export type McpServerPatch = Partial<{
   cwd: string | undefined
   url: string
   headers: Record<string, string>
+  oauth: McpOAuthState
 }>
 
 export interface McpValidationError {
@@ -283,6 +335,7 @@ export interface McpValidationError {
     | "INVALID_HEADER_KEY"
     | "INVALID_ENV_KEY"
     | "NOT_FOUND"
+    | "INVALID_OAUTH_TRANSPORT"
   field?: string
   message: string
 }
@@ -389,6 +442,14 @@ export const PROVIDERS: ProviderCatalogEntry[] = [
     ],
     efforts: [],
   },
+  {
+    id: "openrouter",
+    label: "OpenRouter",
+    defaultModel: DEFAULT_OPENROUTER_SDK_MODEL,
+    supportsPlanMode: true,
+    models: [],
+    efforts: [],
+  },
 ]
 
 export function getProviderCatalog(provider: AgentProvider): ProviderCatalogEntry {
@@ -399,10 +460,100 @@ export function getProviderCatalog(provider: AgentProvider): ProviderCatalogEntr
   return entry
 }
 
-function getProviderModelMatch(provider: AgentProvider, modelId?: string): ProviderModelOption | undefined {
+export interface CustomModelEntry {
+  id: string
+  label: string
+  provider: "claude" | "codex"
+  supportsEffort: boolean
+  aliases?: readonly string[]
+  contextWindowOptions?: readonly ProviderContextWindowOption[]
+  supportsMaxReasoningEffort?: boolean
+  createdAt: number
+  updatedAt: number
+}
+
+export interface CustomModelInput {
+  id: string
+  label: string
+  provider: "claude" | "codex"
+  supportsEffort: boolean
+  aliases?: readonly string[]
+  contextWindowOptions?: readonly ProviderContextWindowOption[]
+  supportsMaxReasoningEffort?: boolean
+}
+
+export interface CustomModelPatch {
+  label?: string
+  supportsEffort?: boolean
+  aliases?: readonly string[] | null
+  contextWindowOptions?: readonly ProviderContextWindowOption[] | null
+  supportsMaxReasoningEffort?: boolean
+}
+
+function customEntryToModelOption(entry: CustomModelEntry): ProviderModelOption {
+  return {
+    id: entry.id,
+    label: entry.label,
+    supportsEffort: entry.supportsEffort,
+    ...(entry.aliases ? { aliases: entry.aliases } : {}),
+    ...(entry.contextWindowOptions ? { contextWindowOptions: entry.contextWindowOptions } : {}),
+    ...(entry.supportsMaxReasoningEffort !== undefined ? { supportsMaxReasoningEffort: entry.supportsMaxReasoningEffort } : {}),
+  }
+}
+
+export function mergeCustomModels(
+  base: ProviderCatalogEntry[],
+  customModels: readonly CustomModelEntry[],
+): ProviderCatalogEntry[] {
+  return base.map((entry) => {
+    if (entry.id !== "claude" && entry.id !== "codex") return { ...entry, models: [...entry.models] }
+    const forProvider = customModels.filter((m) => m.provider === entry.id)
+    if (forProvider.length === 0) return { ...entry, models: [...entry.models] }
+    const models = [...entry.models]
+    for (const custom of forProvider) {
+      const option = customEntryToModelOption(custom)
+      const idx = models.findIndex((m) => m.id === option.id)
+      if (idx >= 0) models[idx] = option
+      else models.push(option)
+    }
+    return { ...entry, models }
+  })
+}
+
+/**
+ * True when the provider's turns run through the Claude SDK session transport
+ * (a live `claudeSessions` entry consumed by `runClaudeSession`, prompts
+ * delivered via `session.sendPrompt`) rather than the generic harness-turn
+ * transport (`runTurn` over `active.turn.stream`).
+ *
+ * `claude` and `openrouter` both ride the SDK session — openrouter just points
+ * the SDK at OpenRouter's Anthropic-compatible endpoint. Branching on
+ * `provider === "claude"` where the real intent is "uses the SDK session" is
+ * what silently dropped openrouter's prompt delivery; use this predicate so a
+ * new SDK-backed provider can never be forgotten by an `if`-chain again.
+ */
+export function providerUsesSdkSession(provider: AgentProvider): boolean {
+  return provider === "claude" || provider === "openrouter"
+}
+
+function catalogModelsFor(
+  provider: AgentProvider,
+  customModels?: readonly CustomModelEntry[],
+): readonly ProviderModelOption[] {
+  const catalog = getProviderCatalog(provider)
+  if (!customModels || customModels.length === 0) return catalog.models
+  const [merged] = mergeCustomModels([{ ...catalog, models: [...catalog.models] }], customModels)
+  return merged.models
+}
+
+function getProviderModelMatch(
+  provider: AgentProvider,
+  modelId?: string,
+  customModels?: readonly CustomModelEntry[],
+): ProviderModelOption | undefined {
   if (!modelId) return undefined
 
-  return getProviderCatalog(provider).models.find((candidate) =>
+  return catalogModelsFor(provider, customModels).find((candidate) =>
     candidate.id === modelId || candidate.aliases?.includes(modelId)
   )
 }
@@ -410,40 +561,66 @@ function getProviderModelMatch(provider: AgentProvider, modelId?: string): Provi
 export function normalizeProviderModelId(
   provider: AgentProvider,
   modelId?: string,
-  fallbackModelId?: string
+  fallbackModelId?: string,
+  customModels?: readonly CustomModelEntry[],
 ): string {
-  return getProviderModelMatch(provider, modelId)?.id
+  return getProviderModelMatch(provider, modelId, customModels)?.id
     ?? fallbackModelId
     ?? getProviderCatalog(provider).defaultModel
 }
 
-export function normalizeClaudeModelId(modelId?: string, fallbackModelId = "claude-opus-4-7"): string {
-  return normalizeProviderModelId("claude", modelId, fallbackModelId)
+export function normalizeClaudeModelId(
+  modelId?: string,
+  fallbackModelId = "claude-opus-4-7",
+  customModels?: readonly CustomModelEntry[],
+): string {
+  return normalizeProviderModelId("claude", modelId, fallbackModelId, customModels)
 }
 
-export function normalizeCodexModelId(modelId?: string, fallbackModelId = "gpt-5.5"): string {
-  return normalizeProviderModelId("codex", modelId, fallbackModelId)
+export function normalizeCodexModelId(
+  modelId?: string,
+  fallbackModelId = "gpt-5.5",
+  customModels?: readonly CustomModelEntry[],
+): string {
+  return normalizeProviderModelId("codex", modelId, fallbackModelId, customModels)
 }
 
-export function getProviderModelOption(provider: AgentProvider, modelId: string): ProviderModelOption | undefined {
-  const normalizedModelId = normalizeProviderModelId(provider, modelId)
-  return getProviderCatalog(provider).models.find((candidate) => candidate.id === normalizedModelId)
+export function getProviderModelOption(
+  provider: AgentProvider,
+  modelId: string,
+  customModels?: readonly CustomModelEntry[],
+): ProviderModelOption | undefined {
+  const normalizedModelId = normalizeProviderModelId(provider, modelId, undefined, customModels)
+  return catalogModelsFor(provider, customModels).find((candidate) => candidate.id === normalizedModelId)
 }
 
-export function getClaudeModelOption(modelId: string): ProviderModelOption | undefined {
-  return getProviderModelOption("claude", modelId)
+export function getClaudeModelOption(
+  modelId: string,
+  customModels?: readonly CustomModelEntry[],
+): ProviderModelOption | undefined {
+  return getProviderModelOption("claude", modelId, customModels)
 }
 
-export function supportsClaudeMaxReasoningEffort(modelId: string): boolean {
-  return Boolean(getClaudeModelOption(modelId)?.supportsMaxReasoningEffort)
+export function supportsClaudeMaxReasoningEffort(
+  modelId: string,
+  customModels?: readonly CustomModelEntry[],
+): boolean {
+  return Boolean(getClaudeModelOption(modelId, customModels)?.supportsMaxReasoningEffort)
 }
 
-export function getClaudeContextWindowOptions(modelId: string): readonly ProviderContextWindowOption[] {
-  return getClaudeModelOption(modelId)?.contextWindowOptions ?? []
+export function getClaudeContextWindowOptions(
+  modelId: string,
+  customModels?: readonly CustomModelEntry[],
+): readonly ProviderContextWindowOption[] {
+  return getClaudeModelOption(modelId, customModels)?.contextWindowOptions ?? []
 }
 
-export function normalizeClaudeContextWindow(modelId: string, contextWindow?: unknown): ClaudeContextWindow {
-  const options = getClaudeContextWindowOptions(modelId)
+export function normalizeClaudeContextWindow(
+  modelId: string,
+  contextWindow?: unknown,
+  customModels?: readonly CustomModelEntry[],
+): ClaudeContextWindow {
+  const options = getClaudeContextWindowOptions(modelId, customModels)
   if (options.length === 0) return DEFAULT_CLAUDE_MODEL_OPTIONS.contextWindow
   return options.some((option) => option.id === contextWindow)
     ? contextWindow as ClaudeContextWindow
@@ -731,6 +908,7 @@ export interface AppSettingsSnapshot {
   uploads: UploadSettings
   subagents: Subagent[]
   customMcpServers: McpServerConfig[]
+  customModels: CustomModelEntry[]
   claudeDriver: ClaudeDriverSettings
   globalPromptAppend: string
   shareDefaultTtlHours: number
@@ -748,6 +926,7 @@ export interface AppSettingsPatch {
   providerDefaults?: {
     claude?: Partial<ProviderPreference<ClaudeModelOptions>>
     codex?: Partial<ProviderPreference<CodexModelOptions>>
+    openrouter?: Partial<ProviderPreference<OpenRouterModelOptions>>
   }
   cloudflareTunnel?: Partial<CloudflareTunnelSettings>
   auth?: Partial<AuthSettings>
@@ -764,6 +943,12 @@ export interface AppSettingsPatch {
     delete?: { id: string }
     setEnabled?: { id: string; enabled: boolean }
     setTestResult?: { id: string; result: McpServerTestResult }
+    setOAuthState?: { id: string; oauth: McpOAuthState }
+  }
+  customModels?: {
+    create?: CustomModelInput
+    update?: { id: string; patch: CustomModelPatch }
+    delete?: { id: string }
   }
   claudeDriver?: {
     preference?: ClaudeDriverPreference
@@ -1134,6 +1319,8 @@ export interface ContextWindowUsageSnapshot {
   lastReasoningOutputTokens?: number
   toolUses?: number
   durationMs?: number
+  /** USD cost for this turn. Provider-reported (Claude) or computed (others). */
+  costUsd?: number
   compactsAutomatically: boolean
 }
 
@@ -1569,10 +1756,16 @@ export interface ChatHistorySnapshot {
   recentLimit: number
 }
 
+export type SlashCommandKind = "command" | "skill"
+
+export type SlashCommandScope = "builtin" | "personal" | "project" | "plugin"
+
 export interface SlashCommand {
   name: string
   description: string
   argumentHint: string
+  kind?: SlashCommandKind
+  scope?: SlashCommandScope
 }
 
 export interface ResolvedStackBinding {
@@ -1586,6 +1779,7 @@ export interface ResolvedStackBinding {
 export type SubagentErrorCode =
   | "AUTH_REQUIRED"
   | "UNKNOWN_SUBAGENT"
+  | "MANUAL_ONLY"
   | "LOOP_DETECTED"
   | "DEPTH_EXCEEDED"
   | "TIMEOUT"

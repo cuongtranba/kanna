@@ -24,13 +24,15 @@ import { ensureProjectDirectory } from "./project-directory.adapter"
 import { TerminalManager } from "./terminal-manager"
 import type { UpdateManager } from "./update-manager"
 import { deriveChatSnapshot, deriveLocalProjectsSnapshot, deriveSidebarData } from "./read-models"
-import { AUTH_DEFAULTS, CLAUDE_AUTH_DEFAULTS, CLAUDE_DRIVER_DEFAULTS, CLAUDE_PTY_LIFECYCLE_DEFAULTS, CLOUDFLARE_TUNNEL_DEFAULTS, UPLOAD_DEFAULTS } from "../shared/types"
+import { AUTH_DEFAULTS, CLAUDE_AUTH_DEFAULTS, CLAUDE_DRIVER_DEFAULTS, CLAUDE_PTY_LIFECYCLE_DEFAULTS, CLOUDFLARE_TUNNEL_DEFAULTS, DEFAULT_OPENROUTER_SDK_MODEL, UPLOAD_DEFAULTS } from "../shared/types"
 import type {
   AppSettingsPatch,
   AppSettingsSnapshot,
   InstalledSkillsSnapshot,
+  McpServerConfig,
   LlmProviderSnapshot,
   LlmProviderValidationResult,
+  OpenRouterModel,
   SkillInstallResult,
   SkillSearchSnapshot,
   SkillUninstallResult,
@@ -42,6 +44,7 @@ import { listWorktrees } from "./worktree-store.adapter"
 import type { TunnelGateway } from "./cloudflare-tunnel/gateway"
 import type { PushManager } from "./push/push-manager"
 import { validateMcpServer } from "./mcp-validator"
+import { startMcpOAuth, completeMcpOAuth, ensureFreshMcpToken } from "./mcp-oauth.adapter"
 import type { SessionShareService } from "./session-share"
 import type { ShareCommandResult } from "../shared/session-share/protocol"
 
@@ -145,6 +148,7 @@ interface CreateWsRouterArgs {
     write: (value: Pick<LlmProviderSnapshot, "provider" | "apiKey" | "model" | "baseUrl">) => Promise<LlmProviderSnapshot>
     validate: (value: Pick<LlmProviderSnapshot, "provider" | "apiKey" | "model" | "baseUrl">) => Promise<LlmProviderValidationResult>
   }
+  listOpenRouterModels?: () => Promise<OpenRouterModel[]>
   refreshDiscovery: () => Promise<DiscoveredProject[]>
   getDiscoveredProjects: () => DiscoveredProject[]
   machineDisplayName: string
@@ -414,6 +418,7 @@ export function createWsRouter({
   analytics,
   tunnelGateway,
   llmProvider,
+  listOpenRouterModels,
   refreshDiscovery,
   getDiscoveredProjects,
   machineDisplayName,
@@ -518,6 +523,11 @@ export function createWsRouter({
         },
         planMode: false,
       },
+      openrouter: {
+        model: DEFAULT_OPENROUTER_SDK_MODEL,
+        modelOptions: {},
+        planMode: false,
+      },
     },
     warning: null,
     filePathDisplay: "~/.kanna/data/settings.json",
@@ -527,6 +537,7 @@ export function createWsRouter({
     uploads: UPLOAD_DEFAULTS,
     subagents: [],
     customMcpServers: [],
+    customModels: [],
     claudeDriver: { ...CLAUDE_DRIVER_DEFAULTS, lifecycle: { ...CLAUDE_PTY_LIFECYCLE_DEFAULTS } },
     globalPromptAppend: "",
     shareDefaultTtlHours: 24,
@@ -539,6 +550,7 @@ export function createWsRouter({
         id: randomUUID(),
         ...patch.subagents.create,
         name: patch.subagents.create.name.trim(),
+        triggerMode: patch.subagents.create.triggerMode ?? "auto",
         createdAt: now,
         updatedAt: now,
       }]
@@ -593,6 +605,11 @@ export function createWsRouter({
             ...patch.providerDefaults?.codex?.modelOptions,
           },
         },
+        openrouter: {
+          ...snapshot.providerDefaults.openrouter,
+          ...patch.providerDefaults?.openrouter,
+          modelOptions: {},
+        },
       },
       cloudflareTunnel: {
         ...snapshot.cloudflareTunnel,
@@ -612,6 +629,7 @@ export function createWsRouter({
       },
       subagents,
       customMcpServers: snapshot.customMcpServers,
+      customModels: snapshot.customModels,
       claudeDriver: {
         preference: patch.claudeDriver?.preference ?? snapshot.claudeDriver.preference,
         lifecycle: {
@@ -961,6 +979,7 @@ export function createWsRouter({
           agent.getWaitStartedAtByChatId(),
           Date.now(),
           agent.getClaudeSessionStates?.() ?? new Map(),
+          appSettings?.getSnapshot().customModels ?? [],
         ),
       },
     }
@@ -1446,7 +1465,8 @@ export function createWsRouter({
               setTestResult: { id: entry.id, result: { status: "pending", startedAt: new Date().toISOString() } },
             },
           })
-          const lastTest = await validateMcpServer(entry)
+          const testBearer = await resolveMcpTestBearer(entry, resolvedAppSettings)
+          const lastTest = await validateMcpServer(entry, testBearer ? { bearer: testBearer } : {})
           await resolvedAppSettings.writePatch({
             customMcpServers: { setTestResult: { id: entry.id, result: lastTest } },
           })
@@ -1462,8 +1482,56 @@ export function createWsRouter({
           })
           return
         }
+        case "settings.startMcpOAuth": {
+          const snapshot = resolvedAppSettings.getSnapshot()
+          const entry = snapshot.customMcpServers.find((s) => s.id === command.id)
+          if (!entry || entry.transport === "stdio") {
+            send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: { ok: false, error: "not found or unsupported transport" } })
+            return
+          }
+          try {
+            const result = await startMcpOAuth(entry, {
+              persist: (oauth) => void resolvedAppSettings.writePatch({ customMcpServers: { setOAuthState: { id: entry.id, oauth } } }),
+            })
+            send(ws, {
+              v: PROTOCOL_VERSION, type: "ack", id,
+              result: result.kind === "authorizationUrl"
+                ? { ok: true, authorizationUrl: result.authorizationUrl }
+                : { ok: true, alreadyAuthenticated: true },
+            })
+          } catch (err) {
+            send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: { ok: false, error: err instanceof Error ? err.message : "oauth start failed" } })
+          }
+          return
+        }
+        case "settings.completeMcpOAuth": {
+          const snapshot = resolvedAppSettings.getSnapshot()
+          const entry = snapshot.customMcpServers.find((s) => s.id === command.id)
+          if (!entry || entry.transport === "stdio") {
+            send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: { ok: false, error: "not found" } })
+            return
+          }
+          try {
+            const result = await completeMcpOAuth(entry, command.callbackUrl, {
+              persist: (oauth) => void resolvedAppSettings.writePatch({ customMcpServers: { setOAuthState: { id: entry.id, oauth } } }),
+              listTools: async (_serverUrl, accessToken) => {
+                const r = await validateMcpServer(entry, { bearer: accessToken })
+                return r.status === "ok" ? r.toolCount : 0
+              },
+            })
+            send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: { ok: true, testResult: result } })
+          } catch (err) {
+            send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: { ok: false, error: err instanceof Error ? err.message : "oauth complete failed" } })
+          }
+          return
+        }
         case "settings.readLlmProvider": {
           send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: await resolvedLlmProvider.read() })
+          return
+        }
+        case "settings.listOpenRouterModels": {
+          const models = listOpenRouterModels ? await listOpenRouterModels() : []
+          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: models })
           return
         }
         case "settings.writeLlmProvider": {
@@ -2137,6 +2205,11 @@ export function createWsRouter({
           send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: run })
           return
         }
+        case "workflows.getAgentTranscript": {
+          const entries = workflowRegistry?.getAgentTranscript(command.chatId, command.runId, command.agentId) ?? []
+          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: entries })
+          return
+        }
         case "subagents.getRun": {
           const entries = subagentTranscriptRegistry?.getAgentTranscript(command.chatId, command.agentId) ?? []
           send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: entries })
@@ -2261,6 +2334,29 @@ async function testOAuthToken(token: string): Promise<{ ok: boolean; error: stri
   }
 }
 
+/**
+ * For an OAuth-authenticated network server, resolve a fresh access token to
+ * inject as a Bearer when probing it — the manual "Test" / auto-test path is
+ * otherwise tokenless and a healthy OAuth server 401s. Returns undefined for
+ * stdio, static-header, or not-yet-authenticated servers (the probe runs with
+ * stored headers only). A refresh failure also yields undefined, so the probe
+ * surfaces the unauthorized error that correctly signals re-auth is needed.
+ */
+export async function resolveMcpTestBearer(
+  entry: McpServerConfig,
+  appSettings: { writePatch(p: AppSettingsPatch): Promise<unknown> },
+): Promise<string | undefined> {
+  if (entry.transport === "stdio" || entry.oauth?.status !== "authenticated") return undefined
+  try {
+    return await ensureFreshMcpToken(entry, {
+      persist: (oauth) =>
+        void appSettings.writePatch({ customMcpServers: { setOAuthState: { id: entry.id, oauth } } }),
+    })
+  } catch {
+    return undefined
+  }
+}
+
 async function runMcpAutoTest(
   id: string,
   appSettings: { getSnapshot(): AppSettingsSnapshot; writePatch(p: AppSettingsPatch): Promise<unknown> },
@@ -2273,7 +2369,8 @@ async function runMcpAutoTest(
         setTestResult: { id, result: { status: "pending", startedAt: new Date().toISOString() } },
       },
     })
-    const result = await validateMcpServer(entry)
+    const bearer = await resolveMcpTestBearer(entry, appSettings)
+    const result = await validateMcpServer(entry, bearer ? { bearer } : {})
     await appSettings.writePatch({ customMcpServers: { setTestResult: { id, result } } })
   } catch (err) {
     // Auto-test must never throw; log + swallow.

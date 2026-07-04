@@ -12,6 +12,9 @@ const InputSchema = z.object({
   keep_alive: z.boolean().optional().describe(
     "Keep the subagent session alive after the first turn for follow-up prompts via send_subagent_message. Claude subagents only.",
   ),
+  run_in_background: z.boolean().optional().describe(
+    "Launch the subagent without blocking your turn. Returns immediately with {status:'async_launched', run_id}; the subagent's final reply is delivered back to you as a new turn when it finishes. Use for long jobs you don't need to wait on. Mutually exclusive with keep_alive.",
+  ),
 })
 
 export type DelegateSubagentInput = z.infer<typeof InputSchema>
@@ -32,6 +35,8 @@ export interface DelegateSubagentContext {
    * than fabricating a parent.
    */
   getParentUserMessageId: () => string | null
+  /** Subagent ids the user @-mentioned in the message that started the turn. Gates manual-trigger subagents. */
+  getMentionedSubagentIds: () => string[]
   /**
    * Optional per-entry callback. Each persisted subagent transcript entry
    * (tool_call, tool_result, assistant_text, …) is forwarded here while
@@ -53,7 +58,7 @@ export interface DelegateSubagentTool {
 }
 
 const DESCRIPTION =
-  "Hand off focused work to a specialized subagent listed in the system prompt. Blocks until the subagent finishes and returns its final reply as text. Brief the subagent like a smart colleague who just walked in: state the goal, what was tried, what to check, any constraints. The subagent cannot see your chat history — distill the context yourself."
+  "Hand off focused work to a specialized subagent listed in the system prompt. By default blocks until the subagent finishes and returns its final reply as text. Pass run_in_background:true to launch it without waiting — you get {status:'async_launched', run_id} immediately and the reply arrives as a new turn when it finishes. Brief the subagent like a smart colleague who just walked in: state the goal, what was tried, what to check, any constraints. The subagent cannot see your chat history — distill the context yourself."
 
 export function createDelegateSubagentTool(deps: {
   orchestrator: SubagentOrchestrator
@@ -72,6 +77,16 @@ export function createDelegateSubagentTool(deps: {
           isError: true,
         }
       }
+      const mentionedSubagentIds = ctx.getMentionedSubagentIds()
+      if (input.keep_alive && input.run_in_background) {
+        return {
+          content: [{
+            type: "text" as const,
+            text: "keep_alive and run_in_background are mutually exclusive — keep_alive holds a warm session for follow-up turns; run_in_background fires the run and delivers the result later. Pick one.",
+          }],
+          isError: true,
+        }
+      }
       const outcome = await deps.orchestrator.delegateRun({
         chatId: ctx.chatId,
         parentUserMessageId,
@@ -80,10 +95,23 @@ export function createDelegateSubagentTool(deps: {
         ancestorSubagentIds: ctx.ancestorSubagentIds,
         depth: ctx.depth,
         subagentId: input.subagent_id,
+        mentionedSubagentIds,
         prompt: input.prompt,
         onEntry: ctx.onEntry,
         keepAlive: input.keep_alive,
+        background: input.run_in_background,
       })
+      if (outcome.status === "async_launched") {
+        return {
+          content: [{
+            type: "text" as const,
+            text: JSON.stringify({
+              status: "async_launched",
+              run_id: outcome.runId,
+            }),
+          }],
+        }
+      }
       if (outcome.status === "completed") {
         return {
           content: [{

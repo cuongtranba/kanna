@@ -13,6 +13,7 @@ function badgeText(code: SubagentErrorCode) {
   switch (code) {
     case "AUTH_REQUIRED": return "Auth required"
     case "UNKNOWN_SUBAGENT": return "Unknown subagent"
+    case "MANUAL_ONLY": return "Manual only"
     case "LOOP_DETECTED": return "Loop detected"
     case "DEPTH_EXCEEDED": return "Depth exceeded"
     case "TIMEOUT": return "Timeout"

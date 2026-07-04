@@ -4,8 +4,13 @@ import {
   normalizeClaudeModelOptions,
   normalizeCodexModelOptions,
   normalizeServerModel,
+  isClaudeSdkProvider,
+  openrouterAuthReady,
+  getServerProviderCatalog,
+  SERVER_PROVIDERS,
 } from "./provider-catalog"
-import { resolveClaudeApiModelId } from "../shared/types"
+import { resolveClaudeApiModelId, PROVIDERS } from "../shared/types"
+import type { LlmProviderSnapshot, CustomModelEntry } from "../shared/types"
 
 describe("provider catalog normalization", () => {
   test("maps legacy Claude effort into shared model options", () => {
@@ -66,4 +71,48 @@ describe("provider catalog normalization", () => {
     expect(resolveClaudeApiModelId("claude-opus-4-7", "1m")).toBe("claude-opus-4-7[1m]")
     expect(resolveClaudeApiModelId("claude-sonnet-4-6", "200k")).toBe("claude-sonnet-4-6")
   })
+})
+
+describe("isClaudeSdkProvider", () => {
+  test("claude and openrouter use the Claude SDK path; codex does not", () => {
+    expect(isClaudeSdkProvider("claude")).toBe(true)
+    expect(isClaudeSdkProvider("openrouter")).toBe(true)
+    expect(isClaudeSdkProvider("codex")).toBe(false)
+  })
+  test("openrouter server catalog entry exists", () => {
+    expect(getServerProviderCatalog("openrouter").id).toBe("openrouter")
+  })
+})
+
+describe("openrouterAuthReady", () => {
+  const base = { provider: "openrouter", apiKey: "sk-or-x", enabled: true } as unknown as LlmProviderSnapshot
+  test("true when openrouter snapshot enabled with a key", () => {
+    expect(openrouterAuthReady(base)).toBe(true)
+  })
+  test("false when disabled", () => {
+    expect(openrouterAuthReady({ ...base, enabled: false } as LlmProviderSnapshot)).toBe(false)
+  })
+  test("false when key empty", () => {
+    expect(openrouterAuthReady({ ...base, apiKey: "" } as LlmProviderSnapshot)).toBe(false)
+  })
+  test("false when provider is not openrouter", () => {
+    expect(openrouterAuthReady({ ...base, provider: "openai" } as LlmProviderSnapshot)).toBe(false)
+  })
+})
+
+test("SERVER_PROVIDERS mirrors PROVIDERS (no duplicate codex source)", () => {
+  expect(SERVER_PROVIDERS.map((p) => p.id)).toEqual(PROVIDERS.map((p) => p.id))
+  const codex = SERVER_PROVIDERS.find((p) => p.id === "codex")!
+  expect(codex.models.map((m) => m.id)).toEqual(PROVIDERS.find((p) => p.id === "codex")!.models.map((m) => m.id))
+})
+
+test("normalizeServerModel accepts a known custom model id", () => {
+  const custom: CustomModelEntry[] = [
+    { id: "claude-experimental", label: "Exp", provider: "claude", supportsEffort: true, createdAt: 1, updatedAt: 1 },
+  ]
+  expect(normalizeServerModel("claude", "claude-experimental", custom)).toBe("claude-experimental")
+})
+
+test("normalizeServerModel falls back to default for unknown id", () => {
+  expect(normalizeServerModel("claude", "nope", [])).toBe(PROVIDERS.find((p) => p.id === "claude")!.defaultModel)
 })

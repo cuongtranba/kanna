@@ -1,7 +1,7 @@
 import { test, expect } from "bun:test"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { validateMcpServer } from "./mcp-validator"
+import { validateMcpServer, networkHeaders } from "./mcp-validator"
 import type { McpServerConfig } from "../shared/types"
 
 // Write stub to a temp file so bun resolves node_modules from the repo root
@@ -63,6 +63,14 @@ test("stdio timeout returns timeout error", async () => {
   if (result.status !== "error") throw new Error("expected error")
   expect(result.message.toLowerCase()).toContain("timed out")
 }, 5_000)
+
+test("networkHeaders adds bearer for oauth server", () => {
+  expect(networkHeaders({ headers: { X: "1" } } as never, "AT")).toEqual({ X: "1", Authorization: "Bearer AT" })
+})
+
+test("networkHeaders leaves headers unchanged when no bearer", () => {
+  expect(networkHeaders({ headers: { K: "v" } } as never, undefined)).toEqual({ K: "v" })
+})
 
 test("http 401 surfaces unauthorized", async () => {
   const server = Bun.serve({ port: 0, fetch: () => new Response("nope", { status: 401 }) })

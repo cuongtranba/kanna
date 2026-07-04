@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { useShallow } from "zustand/react/shallow"
-import { PROVIDERS, type AgentProvider, type AppSettingsPatch, type AppSettingsSnapshot, type AskUserQuestionAnswerMap, type ChatAttachment, type ChatDiffSnapshot, type ChatHistoryPage, type ClaudeAuthSettings, type KeybindingsSnapshot, type LlmProviderSnapshot, type LlmProviderValidationResult, type ModelOptions, type ProviderCatalogEntry, type PushConfigSnapshot, type QueuedChatMessage, type TranscriptEntry, type UpdateInstallResult, type UpdateSnapshot, type UserPromptEntry } from "../../shared/types"
+import { PROVIDERS, type AgentProvider, type AppSettingsPatch, type AppSettingsSnapshot, type AskUserQuestionAnswerMap, type ChatAttachment, type ChatDiffSnapshot, type ChatHistoryPage, type ClaudeAuthSettings, type KeybindingsSnapshot, type LlmProviderSnapshot, type LlmProviderValidationResult, type ModelOptions, type OpenRouterModel, type ProviderCatalogEntry, type PushConfigSnapshot, type QueuedChatMessage, type TranscriptEntry, type UpdateInstallResult, type UpdateSnapshot, type UserPromptEntry } from "../../shared/types"
 import { NEW_CHAT_COMPOSER_ID, type ComposerState, useChatPreferencesStore } from "../stores/chatPreferencesStore"
 import { useRightSidebarStore } from "../stores/rightSidebarStore"
 import { useTerminalLayoutStore } from "../stores/terminalLayoutStore"
@@ -24,6 +24,7 @@ import type { PtyInstancesSnapshot } from "../../shared/pty-instance"
 import type { ChatPermissionPolicyOverride, ToolRequestDecision } from "../../shared/permission-policy"
 import { usePtyInstancesStore } from "../stores/ptyInstancesStore"
 import { useWorkflowsStore } from "../stores/workflowsStore"
+import { useOpenRouterModelsStore } from "../stores/openrouterModelsStore"
 import type { WorkflowsSnapshot } from "../../shared/protocol"
 
 function shallowProviderTokenEquals(
@@ -56,6 +57,24 @@ function sameTranscriptEntries(left: ChatSnapshot["messages"] | null | undefined
   if (!left || !right) return false
   if (left.length !== right.length) return false
   return left.every((entry, index) => entry._id === right[index]?._id)
+}
+
+function mergeOpenRouterModels(
+  providers: ProviderCatalogEntry[],
+  models: OpenRouterModel[],
+): ProviderCatalogEntry[] {
+  if (models.length === 0) return providers
+  return providers.map((entry) => {
+    if (entry.id !== "openrouter") return entry
+    return {
+      ...entry,
+      models: models.map((m) => ({
+        id: m.id,
+        label: m.label,
+        supportsEffort: false,
+      })),
+    }
+  })
 }
 
 function sameProviders(left: ProviderCatalogEntry[] | null | undefined, right: ProviderCatalogEntry[] | null | undefined) {
@@ -787,6 +806,8 @@ export interface KannaState {
   handleReadAppSettings: () => Promise<void>
   handleWriteAppSettings: (patch: AppSettingsPatch) => Promise<void>
   handleTestMcpServer: (id: string) => Promise<void>
+  handleStartMcpOAuth: (id: string) => Promise<{ ok: boolean; authorizationUrl?: string; alreadyAuthenticated?: boolean; error?: string }>
+  handleCompleteMcpOAuth: (id: string, callbackUrl: string) => Promise<{ ok: boolean; error?: string }>
   handleSetChatPolicyOverride: (chatId: string, policyOverride: ChatPermissionPolicyOverride | null) => Promise<void>
   handleWriteCloudflareTunnel: (patch: Partial<CloudflareTunnelSettings>) => Promise<void>
   handleWriteClaudeAuth: (patch: Partial<ClaudeAuthSettings>) => Promise<void>
@@ -1135,6 +1156,37 @@ export function useKannaState(activeChatId: string | null): KannaState {
     }
   }, [socket])
 
+  const handleStartMcpOAuth = useCallback(async (id: string) => {
+    try {
+      const result = await socket.command<{ ok: boolean; authorizationUrl?: string; alreadyAuthenticated?: boolean; error?: string }>({
+        type: "settings.startMcpOAuth",
+        id,
+      })
+      setCommandError(null)
+      return result
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error)
+      setCommandError(msg)
+      return { ok: false, error: msg }
+    }
+  }, [socket])
+
+  const handleCompleteMcpOAuth = useCallback(async (id: string, callbackUrl: string) => {
+    try {
+      const result = await socket.command<{ ok: boolean; error?: string }>({
+        type: "settings.completeMcpOAuth",
+        id,
+        callbackUrl,
+      })
+      setCommandError(null)
+      return result
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error)
+      setCommandError(msg)
+      return { ok: false, error: msg }
+    }
+  }, [socket])
+
   const handleWriteCloudflareTunnel = useCallback(async (patch: Partial<CloudflareTunnelSettings>) => {
     try {
       useAppSettingsStore.getState().applyOptimisticPatch({ cloudflareTunnel: patch })
@@ -1222,6 +1274,21 @@ export function useKannaState(activeChatId: string | null): KannaState {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void handleReadAppSettings()
   }, [connectionStatus, handleReadAppSettings])
+
+  useEffect(() => {
+    if (connectionStatus !== "connected") return
+    const store = useOpenRouterModelsStore.getState()
+    store.setLoading()
+    void socket
+      .command<OpenRouterModel[]>({ type: "settings.listOpenRouterModels" })
+      .then((models) => {
+        useOpenRouterModelsStore.getState().setModels(models)
+      })
+      .catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : String(error)
+        useOpenRouterModelsStore.getState().setError(message)
+      })
+  }, [connectionStatus, socket])
 
   useEffect(() => {
     if (connectionStatus !== "connected") return
@@ -1474,7 +1541,12 @@ export function useKannaState(activeChatId: string | null): KannaState {
     ? "starting"
     : null
   const effectiveRuntimeStatus = optimisticRuntimeStatus ?? runtime?.status ?? null
-  const availableProviders = activeChatSnapshot?.availableProviders ?? PROVIDERS
+  const baseAvailableProviders = activeChatSnapshot?.availableProviders ?? PROVIDERS
+  const openrouterModels = useOpenRouterModelsStore(useShallow((s) => s.models))
+  const availableProviders = useMemo(
+    () => mergeOpenRouterModels(baseAvailableProviders, openrouterModels),
+    [baseAvailableProviders, openrouterModels],
+  )
   const isProcessing = isProcessingStatus(effectiveRuntimeStatus ?? undefined)
   const canCancel = canCancelStatus(effectiveRuntimeStatus ?? undefined)
   const isDraining = runtime?.isDraining ?? false
@@ -2379,6 +2451,8 @@ export function useKannaState(activeChatId: string | null): KannaState {
     handleReadAppSettings,
     handleWriteAppSettings,
     handleTestMcpServer,
+    handleStartMcpOAuth,
+    handleCompleteMcpOAuth,
     handleSetChatPolicyOverride,
     handleWriteCloudflareTunnel,
     handleWriteClaudeAuth,

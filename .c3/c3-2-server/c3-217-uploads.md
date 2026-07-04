@@ -1,7 +1,7 @@
 ---
 id: c3-217
 c3-version: 4
-c3-seal: d320255e10f2473f36c54335b44810a1423cb085e5f10995f373688552730b61
+c3-seal: 75851a8c6cd130dfed11649b1aaae1cfd0ffa92685e2828d1ae6d0b17a5f9348
 title: uploads
 type: component
 category: feature
@@ -38,14 +38,14 @@ Hosts the upload HTTP endpoint, persists files under the data dir, emits typed u
 | Precondition | HTTP server bound | c3-202 |
 | Input — paths | Uploads dir under data dir | c3-204 |
 | Input — event store | Writes upload events | c3-206 |
-| Initialization | Bound to /api/uploads on boot | c3-202 |
+| Initialization | Bound to /api/projects/:projectId/uploads on boot | c3-202 |
 
 ## Business Flow
 
 | Aspect | Detail | Reference |
 | --- | --- | --- |
 | Outcome | User attaches file → chat references stored asset | c3-115 |
-| Primary path | POST /api/uploads → write file → emit event | c3-206 |
+| Primary path | POST /api/projects/:projectId/uploads → write file → emit event | c3-206 |
 | Alternate — large file | Streamed write; event emitted on complete | c3-217 |
 | Failure — disk error | Surface 500; no event emitted | c3-202 |
 
@@ -59,7 +59,7 @@ Hosts the upload HTTP endpoint, persists files under the data dir, emits typed u
 
 | Surface | Direction | Contract | Boundary | Evidence |
 | --- | --- | --- | --- | --- |
-| POST /api/uploads | IN | Accepts multipart form data | c3-202 | src/server/uploads.ts |
+| POST /api/projects/:projectId/uploads | IN | Accepts multipart form data | c3-202 | src/server/server.ts |
 | Upload event | OUT | Typed event referencing stored path | c3-206 | src/server/uploads.ts |
 
 ## Change Safety

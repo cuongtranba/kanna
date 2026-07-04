@@ -23,7 +23,10 @@ describe("TextMessage", () => {
       <TextMessage message={buildMessage("hello **world**")} />
     )
     expect(html).toContain("hello")
-    expect(html).toContain("<strong>world</strong>")
+    // Lexical renderer wraps bold text in <strong> with a className
+    expect(html).toContain("<strong")
+    expect(html).toContain("world")
+    expect(html).toContain("</strong>")
   })
 
   test("hides thinking content behind collapsed disclosure", () => {

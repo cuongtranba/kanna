@@ -6,6 +6,7 @@ import {
   AgentCoordinator,
   buildAttachmentHintText,
   buildCanUseTool,
+  buildClaudeEnv,
   buildPromptText,
   buildUserMcpServers,
   maxClaudeContextWindowFromModelUsage,
@@ -37,6 +38,7 @@ function makeFakeWorkflowRegistry(activeByChat: Map<string, boolean>): WorkflowR
     unregister: () => {},
     snapshot: () => [],
     getRun: () => null,
+    getAgentTranscript: () => [],
     hasActiveRun: (chatId: string): boolean => activeByChat.get(chatId) ?? false,
     subscribe: () => () => {},
   }
@@ -91,6 +93,22 @@ describe("normalizeClaudeStreamMessage", () => {
     expect(entries[0].durationMs).toBe(3210)
   })
 
+  test("result message without a result field normalizes to an empty string, not undefined", () => {
+    // Aborted-stream errors (subtype "error_during_execution") carry no
+    // `result` key. The entry must still satisfy the `result: string` contract
+    // so the client never calls `.trim()` on undefined.
+    const entries = normalizeClaudeStreamMessage({
+      type: "result",
+      subtype: "error_during_execution",
+      is_error: true,
+      duration_ms: 40728,
+    })
+
+    expect(entries).toHaveLength(1)
+    if (entries[0]?.kind !== "result") throw new Error("unexpected entry")
+    expect(entries[0].result).toBe("")
+  })
+
   test("turn_duration surfaces pendingWorkflowCount onto the synthesized result", () => {
     const entries = normalizeClaudeStreamMessage({
       type: "system",
@@ -111,6 +129,56 @@ describe("normalizeClaudeStreamMessage", () => {
     })
     if (entries[0]?.kind !== "result") throw new Error("unexpected entry")
     expect(entries[0].pendingWorkflowCount).toBeUndefined()
+  })
+
+  test("surfaces a settled background task notification as a status entry", () => {
+    // The Agent SDK emits SDKTaskNotificationMessage (type:system,
+    // subtype:task_notification) when a Bash(run_in_background) task settles.
+    // Kanna previously dropped it, so the background completion never reached
+    // the transcript/event log. Surface it as a status entry.
+    const entries = normalizeClaudeStreamMessage({
+      type: "system",
+      subtype: "task_notification",
+      task_id: "task-7",
+      tool_use_id: "toolu_42",
+      status: "completed",
+      output_file: "/tmp/ci.output",
+      summary: "CI checks all green",
+      uuid: "msg-tn",
+    })
+    expect(entries).toHaveLength(1)
+    if (entries[0]?.kind !== "status") throw new Error("unexpected entry")
+    expect(entries[0].status).toContain("completed")
+    expect(entries[0].status).toContain("CI checks all green")
+  })
+
+  test("a failed background task notification still surfaces its status", () => {
+    const entries = normalizeClaudeStreamMessage({
+      type: "system",
+      subtype: "task_notification",
+      task_id: "task-8",
+      status: "failed",
+      output_file: "/tmp/x.output",
+      summary: "build failed",
+    })
+    expect(entries).toHaveLength(1)
+    if (entries[0]?.kind !== "status") throw new Error("unexpected entry")
+    expect(entries[0].status).toContain("failed")
+  })
+
+  test("an ambient (skip_transcript) task notification is hidden from the inline transcript", () => {
+    const entries = normalizeClaudeStreamMessage({
+      type: "system",
+      subtype: "task_notification",
+      task_id: "task-9",
+      status: "completed",
+      output_file: "/tmp/y.output",
+      summary: "housekeeping",
+      skip_transcript: true,
+    })
+    expect(entries).toHaveLength(1)
+    if (entries[0]?.kind !== "status") throw new Error("unexpected entry")
+    expect(entries[0].hidden).toBe(true)
   })
 
   test("normalizes Claude usage snapshots from SDK usage payloads", () => {
@@ -1769,6 +1837,81 @@ describe("AgentCoordinator claude integration", () => {
     expect(startSessionCalls[0]?.sessionToken).toBeNull()
     expect(prompts).toEqual(["start background task", "check task output"])
     expect(store.chat.sessionToken).toBe("claude-session-1")
+
+    events.close()
+  })
+
+  test("cancel() suppresses the SDK interrupt-induced tail error result", async () => {
+    const events = new AsyncEventQueue<any>()
+
+    const store = createFakeStore()
+    const coordinator = new AgentCoordinator({
+      store: store as never,
+      onStateChange: () => {},
+      startClaudeSession: async () => ({
+        provider: "claude",
+        stream: events,
+        getAccountInfo: async () => null,
+        interrupt: async () => {},
+        close: () => {},
+        setModel: async () => {},
+        setPermissionMode: async () => {},
+        getSupportedCommands: async () => [],
+        // Turn never produces its own result — it hangs until cancelled,
+        // mirroring an in-flight SDK turn the user stops.
+        sendPrompt: async () => {
+          events.push({ type: "session_token" as const, sessionToken: "claude-session-1" })
+          events.push({
+            type: "transcript" as const,
+            entry: timestamped({
+              kind: "system_init",
+              provider: "claude",
+              model: "claude-opus-4-1",
+              tools: [],
+              agents: [],
+              slashCommands: [],
+              mcpServers: [],
+            }),
+          })
+        },
+      }),
+    })
+
+    await coordinator.send({
+      type: "chat.send",
+      chatId: "chat-1",
+      provider: "claude",
+      content: "do work",
+      model: "claude-opus-4-1",
+    })
+
+    await waitFor(() => coordinator.getActiveStatuses().get("chat-1") === "running")
+
+    await coordinator.cancel("chat-1")
+    await waitFor(() => store.messages.some((entry) => entry.kind === "interrupted"))
+
+    // The SDK's interrupt() resolves the query loop with a tail error result
+    // (subtype error_during_execution, empty text). This must be swallowed.
+    events.push({
+      type: "transcript" as const,
+      entry: timestamped({
+        kind: "result",
+        subtype: "error",
+        isError: true,
+        durationMs: 0,
+        result: "",
+      }),
+    })
+
+    // Give the stream loop a tick to process (and drop) the tail result.
+    await new Promise((resolve) => setTimeout(resolve, 10))
+
+    const interruptedEntries = store.messages.filter((entry) => entry.kind === "interrupted")
+    const errorResults = store.messages.filter(
+      (entry) => entry.kind === "result" && entry.isError,
+    )
+    expect(interruptedEntries).toHaveLength(1)
+    expect(errorResults).toHaveLength(0)
 
     events.close()
   })
@@ -3779,6 +3922,52 @@ describe("AgentCoordinator.scheduleAgentWakeup", () => {
     expect(await wake()).not.toBeNull() // chain reset → armed again
   })
 
+  test("subagent_background wakes are exempt from the runaway cap", async () => {
+    const store = createFakeStore()
+    const coordinator = new AgentCoordinator({
+      store: store as never,
+      onStateChange: () => {},
+      maxAgentWakes: 1,
+      startClaudeSession: async () => { throw new Error("not needed") },
+    })
+    const wake = () => coordinator.scheduleAgentWakeup({
+      chatId: "chat-1", delayMs: 0, prompt: "deliver result", source: "subagent_background",
+    })
+    // maxAgentWakes is 1, but background-result delivery must never be dropped.
+    expect(await wake()).not.toBeNull()
+    expect(await wake()).not.toBeNull()
+    expect(await wake()).not.toBeNull()
+  })
+
+  test("deliverBackgroundSubagentResult arms a subagent_background wake carrying the reply", async () => {
+    const store = createFakeStore()
+    const coordinator = new AgentCoordinator({
+      store: store as never,
+      onStateChange: () => {},
+      startClaudeSession: async () => { throw new Error("not needed") },
+    })
+    await (coordinator as unknown as {
+      deliverBackgroundSubagentResult: (
+        chatId: string,
+        runId: string,
+        outcome: { status: "completed"; runId: string; text: string },
+      ) => Promise<void>
+    }).deliverBackgroundSubagentResult("chat-1", "run-bg", {
+      status: "completed",
+      runId: "run-bg",
+      text: "the background answer",
+    })
+
+    const events = store.getAutoContinueEvents("chat-1")
+    expect(events).toHaveLength(1)
+    const ev = events[0]
+    expect(ev.kind).toBe("auto_continue_accepted")
+    if (ev.kind === "auto_continue_accepted") {
+      expect(ev.source).toBe("subagent_background")
+      expect(ev.prompt).toContain("the background answer")
+    }
+  })
+
   test("clamps a delay longer than the idle window so the wake beats the reaper", async () => {
     const store = createFakeStore()
     const coordinator = new AgentCoordinator({
@@ -4188,6 +4377,7 @@ describe("AgentCoordinator subagent mention gating", () => {
       modelOptions: { reasoningEffort: "medium", contextWindow: "1m" } as never,
       systemPrompt: "test",
       contextScope: "previous-assistant-reply" as const,
+      triggerMode: "auto" as const,
       createdAt: 1,
       updatedAt: 1,
     }
@@ -4214,6 +4404,7 @@ describe("AgentCoordinator subagent mention gating", () => {
       parentSubagentId: null,
       ancestorSubagentIds: [],
       depth: 0,
+      mentionedSubagentIds: [],
       subagentId: "sa-missing",
       prompt: "ignored",
     })
@@ -4276,6 +4467,7 @@ describe("AgentCoordinator subagent mention gating", () => {
       parentSubagentId: null,
       ancestorSubagentIds: [],
       depth: 0,
+      mentionedSubagentIds: [],
       subagentId: "sa-1",
       prompt: "go",
     })
@@ -4369,6 +4561,7 @@ describe("AgentCoordinator subagent mention gating", () => {
       parentSubagentId: null,
       ancestorSubagentIds: [],
       depth: 0,
+      mentionedSubagentIds: [],
       subagentId: "sa-1",
       prompt: "go",
     })
@@ -4466,6 +4659,7 @@ describe("AgentCoordinator subagent mention gating", () => {
       parentSubagentId: null,
       ancestorSubagentIds: [],
       depth: 0,
+      mentionedSubagentIds: [],
       subagentId: "sa-1",
       prompt: "go",
     })
@@ -4539,6 +4733,7 @@ describe("AgentCoordinator subagent mention gating", () => {
       parentSubagentId: null,
       ancestorSubagentIds: [],
       depth: 0,
+      mentionedSubagentIds: [],
       subagentId: "sa-1",
       prompt: "go",
     })
@@ -5148,5 +5343,49 @@ describe("buildUserMcpServers", () => {
       transport: "stdio", command: "x", args: [], env: {},
     }
     expect(buildUserMcpServers([cfg])).toEqual({})
+  })
+
+  test("injects oauth bearer header for authenticated server", () => {
+    const cfg: McpServerConfig = {
+      id: "d1", name: "design", enabled: true,
+      createdAt: "", updatedAt: "", lastTest: { status: "untested" },
+      transport: "http", url: "https://api.example/mcp", headers: {},
+      oauth: { enabled: true, status: "authenticated", tokens: { access_token: "AT", token_type: "Bearer" } as never },
+    }
+    const out = buildUserMcpServers([cfg], new Map([["d1", "AT"]]))
+    expect((out.design as { headers: Record<string, string> }).headers.Authorization).toBe("Bearer AT")
+  })
+
+  test("omits Authorization when no bearer provided", () => {
+    const cfg: McpServerConfig = {
+      id: "p1", name: "plain", enabled: true,
+      createdAt: "", updatedAt: "", lastTest: { status: "untested" },
+      transport: "http", url: "https://api.example/mcp", headers: { K: "v" },
+    }
+    const out = buildUserMcpServers([cfg], new Map())
+    expect((out.plain as { headers: Record<string, string> }).headers.Authorization).toBeUndefined()
+  })
+})
+
+describe("buildClaudeEnv openrouter branch", () => {
+  test("openrouter sets endpoint+auth, empties ANTHROPIC_API_KEY, strips oauth", () => {
+    const env = buildClaudeEnv(
+      { PATH: "/bin", CLAUDE_CODE_OAUTH_TOKEN: "should-be-stripped", ANTHROPIC_API_KEY: "leftover" } as NodeJS.ProcessEnv,
+      "oauth-ignored",
+      { apiKey: "sk-or-test" },
+    )
+    expect(env.ANTHROPIC_BASE_URL).toBe("https://openrouter.ai/api")
+    expect(env.ANTHROPIC_AUTH_TOKEN).toBe("sk-or-test")
+    expect(env.ANTHROPIC_API_KEY).toBe("")
+    expect(env.CLAUDE_CODE_OAUTH_TOKEN).toBeUndefined()
+  })
+  test("non-openrouter with oauth keeps existing behavior", () => {
+    const env = buildClaudeEnv({ PATH: "/bin" } as NodeJS.ProcessEnv, "oauth-123")
+    expect(env.CLAUDE_CODE_OAUTH_TOKEN).toBe("oauth-123")
+    expect(env.ANTHROPIC_BASE_URL).toBeUndefined()
+  })
+  test("non-openrouter null oauth but inherited oauth in base env is preserved", () => {
+    const env = buildClaudeEnv({ PATH: "/bin", CLAUDE_CODE_OAUTH_TOKEN: "inherited" } as NodeJS.ProcessEnv, null)
+    expect(env.CLAUDE_CODE_OAUTH_TOKEN).toBe("inherited")
   })
 })

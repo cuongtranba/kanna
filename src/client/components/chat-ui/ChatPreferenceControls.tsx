@@ -1,5 +1,5 @@
-import { useState, type ComponentType, type SVGProps } from "react"
-import { Box, Brain, Gauge, ListTodo, LockOpen, SquareMenu, SquareMinus } from "lucide-react"
+import { useMemo, useState, type ComponentType, type SVGProps } from "react"
+import { Box, Brain, Gauge, ListTodo, LockOpen, Search, SquareMenu, SquareMinus } from "lucide-react"
 import {
   CLAUDE_CONTEXT_WINDOW_OPTIONS,
   CLAUDE_REASONING_OPTIONS,
@@ -10,9 +10,11 @@ import {
   type ClaudeReasoningEffort,
   type CodexModelOptions,
   type CodexReasoningEffort,
+  type OpenRouterModelOptions,
   type ProviderCatalogEntry,
   supportsClaudeMaxReasoningEffort,
 } from "../../../shared/types"
+import { useAppSettingsStore, selectCustomModels } from "../../stores/appSettingsStore"
 import { cn } from "../../lib/utils"
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover"
 
@@ -46,9 +48,32 @@ function OpenAIIcon({ className, ...props }: SVGProps<SVGSVGElement>) {
   )
 }
 
+function OpenRouterIcon({ className, ...props }: SVGProps<SVGSVGElement>) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      className={cn("shrink-0", className)}
+      {...props}
+    >
+      <circle cx="12" cy="12" r="3" />
+      <path d="M6.3 6.3a8 8 0 1 0 11.4 11.4" />
+      <path d="M17.7 6.3a8 8 0 0 1 0 11.4" />
+      <path d="M2 12h4" />
+      <path d="M18 12h4" />
+    </svg>
+  )
+}
+
 export const PROVIDER_ICONS: Record<AgentProvider, IconComponent> = {
   claude: AnthropicIcon,
   codex: OpenAIIcon,
+  openrouter: OpenRouterIcon,
 }
 
 export function PopoverMenuItem({
@@ -133,6 +158,81 @@ export function InputPopover({
   )
 }
 
+function SearchableModelPopover({
+  models,
+  selectedModel,
+  onSelect,
+  ModelIcon,
+}: {
+  models: readonly { id: string; label: string }[]
+  selectedModel: string
+  onSelect: (id: string) => void
+  ModelIcon: IconComponent
+}) {
+  const [open, setOpen] = useState(false)
+  const [query, setQuery] = useState("")
+  const selectedLabel = models.find((m) => m.id === selectedModel)?.label ?? selectedModel
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    if (!q) return models
+    return models.filter((m) => m.id.toLowerCase().includes(q) || m.label.toLowerCase().includes(q))
+  }, [models, query])
+
+  return (
+    <Popover open={open} onOpenChange={(v) => { setOpen(v); if (!v) setQuery("") }}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className={cn(
+            "flex min-h-[36px] cursor-pointer touch-manipulation items-center gap-1.5 px-2 py-1 text-sm rounded-md transition-colors text-muted-foreground [&>svg]:shrink-0 [&>span]:whitespace-nowrap",
+            "hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          )}
+        >
+          <ModelIcon className="h-3.5 w-3.5" />
+          <span className="max-w-[200px] truncate">{selectedLabel}</span>
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="center" className="w-80 p-1">
+        <div className="flex items-center gap-2 px-2 py-1.5 border-b border-border/50">
+          <Search className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search models..."
+            autoFocus
+            className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+          />
+        </div>
+        <div className="max-h-72 overflow-y-auto py-1 space-y-1">
+          {models.length === 0 ? (
+            <div className="px-2 py-3 text-xs text-muted-foreground text-center">
+              Loading models… verify OpenRouter API key in Settings.
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="px-2 py-3 text-xs text-muted-foreground text-center">No matches</div>
+          ) : (
+            filtered.map((candidate) => (
+              <PopoverMenuItem
+                key={candidate.id}
+                onClick={() => {
+                  onSelect(candidate.id)
+                  setOpen(false)
+                  setQuery("")
+                }}
+                selected={selectedModel === candidate.id}
+                icon={<Box className="h-4 w-4 text-muted-foreground" />}
+                label={candidate.label}
+                description={candidate.id}
+              />
+            ))
+          )}
+        </div>
+      </PopoverContent>
+    </Popover>
+  )
+}
+
 export type ModelOptionChange =
   | { type: "claudeReasoningEffort"; effort: ClaudeReasoningEffort }
   | { type: "contextWindow"; contextWindow: ClaudeContextWindow }
@@ -145,7 +245,7 @@ interface ChatPreferenceControlsProps {
   showProviderPicker?: boolean
   showCodexCliRequirementHints?: boolean
   model: string
-  modelOptions: ClaudeModelOptions | CodexModelOptions
+  modelOptions: ClaudeModelOptions | CodexModelOptions | OpenRouterModelOptions
   onProviderChange?: (provider: AgentProvider) => void
   onModelChange: (provider: AgentProvider, model: string) => void
   onModelOptionChange: (change: ModelOptionChange) => void
@@ -170,6 +270,7 @@ export function ChatPreferenceControls({
   includePlanMode = true,
   className,
 }: ChatPreferenceControlsProps) {
+  const customModels = useAppSettingsStore(selectCustomModels)
   const providerConfig = availableProviders.find((provider) => provider.id === selectedProvider) ?? availableProviders[0]
   const ProviderIcon = PROVIDER_ICONS[selectedProvider]
   const ModelIcon = Box
@@ -210,42 +311,52 @@ export function ChatPreferenceControls({
         </InputPopover>
       ) : null}
 
-      <InputPopover
-        trigger={(
-          <>
-            <ModelIcon className="h-3.5 w-3.5" />
-            <span>{providerConfig.models.find((candidate) => candidate.id === model)?.label ?? model}</span>
-          </>
-        )}
-      >
-        {(close) => providerConfig.models.map((candidate) => {
-          const Icon = Box
-          return (
-            <PopoverMenuItem
-              key={candidate.id}
-              onClick={() => {
-                onModelChange(selectedProvider, candidate.id)
-                close()
-              }}
-              selected={model === candidate.id}
-              icon={<Icon className="h-4 w-4 text-muted-foreground" />}
-              label={
-                showCodexCliRequirementHints && selectedProvider === "codex" && candidate.id === "gpt-5.5"
-                  ? (
-                    <>
-                      {candidate.label}{" "}
-                      <span className="text-xs font-normal text-muted-foreground">
-                        codex-cli &gt;= 0.124
-                      </span>
-                    </>
-                  )
-                  : candidate.label
-              }
-            />
-          )
-        })}
-      </InputPopover>
+      {selectedProvider === "openrouter" ? (
+        <SearchableModelPopover
+          models={providerConfig.models}
+          selectedModel={model}
+          onSelect={(id) => onModelChange(selectedProvider, id)}
+          ModelIcon={ModelIcon}
+        />
+      ) : (
+        <InputPopover
+          trigger={(
+            <>
+              <ModelIcon className="h-3.5 w-3.5" />
+              <span>{providerConfig.models.find((candidate) => candidate.id === model)?.label ?? model}</span>
+            </>
+          )}
+        >
+          {(close) => providerConfig.models.map((candidate) => {
+            const Icon = Box
+            return (
+              <PopoverMenuItem
+                key={candidate.id}
+                onClick={() => {
+                  onModelChange(selectedProvider, candidate.id)
+                  close()
+                }}
+                selected={model === candidate.id}
+                icon={<Icon className="h-4 w-4 text-muted-foreground" />}
+                label={
+                  showCodexCliRequirementHints && selectedProvider === "codex" && candidate.id === "gpt-5.5"
+                    ? (
+                      <>
+                        {candidate.label}{" "}
+                        <span className="text-xs font-normal text-muted-foreground">
+                          codex-cli &gt;= 0.124
+                        </span>
+                      </>
+                    )
+                    : candidate.label
+                }
+              />
+            )
+          })}
+        </InputPopover>
+      )}
 
+      {selectedProvider !== "openrouter" ? (
       <InputPopover
         trigger={(
           <>
@@ -270,7 +381,7 @@ export function ChatPreferenceControls({
                 selected={modelOptions.reasoningEffort === effort.id}
                 icon={<Brain className="h-4 w-4 text-muted-foreground" />}
                 label={effort.label}
-                disabled={effort.id === "max" && !supportsClaudeMaxReasoningEffort(model)}
+                disabled={effort.id === "max" && !supportsClaudeMaxReasoningEffort(model, customModels)}
               />
             ))
             : CODEX_REASONING_OPTIONS.map((effort) => (
@@ -287,6 +398,7 @@ export function ChatPreferenceControls({
             ))
         )}
       </InputPopover>
+      ) : null}
 
       {selectedProvider === "claude" && contextWindowOptions.length > 1 ? (
         <InputPopover

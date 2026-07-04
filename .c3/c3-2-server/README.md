@@ -1,7 +1,7 @@
 ---
 id: c3-2
 c3-version: 4
-c3-seal: ce52f697e8fc91213a7525615acb4ff3cce2bc9dfff381e7bae3bf8b48680ff4
+c3-seal: 53fc0b4df0b977d4b7d5cb87f3b44e6c4d98e2e8573a4b4e5e2439476603e407
 title: Server
 type: container
 boundary: service
@@ -58,3 +58,5 @@ Run the local Bun backend: serve HTTP+WebSocket on localhost, coordinate Claude 
 | c3-227 | auto-continue | feature | implemented | Detect rate-limit / auth-error endings, schedule retries, replay queued prompts |
 | c3-228 | session-share | feature | planned | Mint read-only share tokens for finished chats; serve frozen snapshots at /share/:token without auth |
 | c3-229 | workflow-status | feature | planned | Disk-watch sidecar read-model for PTY workflow runs; WorkflowRegistry + WorkflowsSnapshot WS topic |
+| c3-230 | openrouter-models | feature | implemented | Tool-capable OpenRouter model catalog: HTTPS fetch + parse + TTL cache; feeds the composer model picker via settings.listOpenRouterModels RPC |
+| c3-231 | local-catalog | feature | implemented | Scan local Claude skills + slash commands (user, project, plugin) and merge them into ChatSnapshot.slashCommands so the composer / picker mirrors Claude Code |

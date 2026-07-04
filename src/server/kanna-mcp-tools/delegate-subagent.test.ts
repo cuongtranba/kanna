@@ -12,8 +12,11 @@ interface DelegateCall {
   ancestorSubagentIds: string[]
   depth: number
   subagentId: string
+  mentionedSubagentIds: string[]
   prompt: string
   onEntry?: (entry: TranscriptEntry) => void
+  keepAlive?: boolean
+  background?: boolean
 }
 
 function makeFakeOrchestrator(outcome: DelegationOutcome, options: { fireEntries?: TranscriptEntry[] } = {}) {
@@ -39,6 +42,7 @@ const baseCtx = () => ({
   ancestorSubagentIds: [],
   depth: 0,
   getParentUserMessageId: () => "umsg-1",
+  getMentionedSubagentIds: () => [] as string[],
 })
 
 describe("createDelegateSubagentTool", () => {
@@ -62,8 +66,11 @@ describe("createDelegateSubagentTool", () => {
       ancestorSubagentIds: [],
       depth: 0,
       subagentId: "sa-1",
+      mentionedSubagentIds: [],
       prompt: "do the thing",
       onEntry: undefined,
+      keepAlive: undefined,
+      background: undefined,
     })
     expect(result.isError).toBeFalsy()
     const payload = JSON.parse(result.content[0].text)
@@ -116,6 +123,7 @@ describe("createDelegateSubagentTool", () => {
         ancestorSubagentIds: ["sa-a", "sa-b"],
         depth: 2,
         getParentUserMessageId: () => "umsg-1",
+        getMentionedSubagentIds: () => [] as string[],
       },
     )
     expect(calls[0]).toMatchObject({
@@ -124,6 +132,56 @@ describe("createDelegateSubagentTool", () => {
       ancestorSubagentIds: ["sa-a", "sa-b"],
       depth: 2,
     })
+  })
+
+  test("run_in_background forwards background:true and returns async_launched payload", async () => {
+    const { fake, calls } = makeFakeOrchestrator({ status: "async_launched", runId: "run-bg" })
+    const tool = createDelegateSubagentTool({ orchestrator: fake })
+    const result = await tool.handler(
+      { subagent_id: "sa-1", prompt: "long job", run_in_background: true },
+      baseCtx(),
+    )
+    expect(calls).toHaveLength(1)
+    expect(calls[0]).toMatchObject({ subagentId: "sa-1", background: true })
+    expect(result.isError).toBeFalsy()
+    const payload = JSON.parse(result.content[0].text)
+    expect(payload).toEqual({ status: "async_launched", run_id: "run-bg" })
+  })
+
+  test("rejects run_in_background combined with keep_alive without calling the orchestrator", async () => {
+    const { fake, calls } = makeFakeOrchestrator({ status: "completed", runId: "x", text: "" })
+    const tool = createDelegateSubagentTool({ orchestrator: fake })
+    const result = await tool.handler(
+      { subagent_id: "sa-1", prompt: "x", keep_alive: true, run_in_background: true },
+      baseCtx(),
+    )
+    expect(result.isError).toBe(true)
+    expect(result.content[0].text).toContain("mutually exclusive")
+    expect(calls).toHaveLength(0)
+  })
+
+  test("forwards mentionedSubagentIds from context to delegateRun", async () => {
+    const calls: Array<{ mentionedSubagentIds: string[] }> = []
+    const orchestrator = {
+      delegateRun: async (a: { mentionedSubagentIds: string[] }) => {
+        calls.push({ mentionedSubagentIds: a.mentionedSubagentIds })
+        return { status: "completed" as const, runId: "r1", text: "ok" }
+      },
+    } as unknown as SubagentOrchestrator
+    const tool = createDelegateSubagentTool({ orchestrator })
+    await tool.handler(
+      { subagent_id: "sa-1", prompt: "x" },
+      {
+        chatId: "c1",
+        parentSubagentId: null,
+        parentRunId: null,
+        ancestorSubagentIds: [],
+        depth: 0,
+        getParentUserMessageId: () => "msg-1",
+        getMentionedSubagentIds: () => ["sa-1"],
+      },
+    )
+    expect(calls[0].mentionedSubagentIds).toEqual(["sa-1"])
   })
 
   test("forwards onEntry from context to orchestrator.delegateRun so progress notifications can flow", async () => {

@@ -24,6 +24,8 @@ import { DiffStore } from "./diff-store"
 import { discoverProjects, type DiscoveredProject } from "./discovery.adapter"
 import { KeybindingsManager } from "./keybindings"
 import { readLlmProviderSnapshot, validateLlmProviderCredentials, writeLlmProviderSnapshot } from "./llm-provider"
+import { OpenRouterModelCache } from "./openrouter-models"
+import { fetchOpenRouterModelsRaw } from "./openrouter-models-io.adapter"
 import { getMachineDisplayName } from "./machine-name.adapter"
 import { TerminalManager } from "./terminal-manager"
 import { TerminalPidRegistry } from "./terminal-pid-registry.adapter"
@@ -46,8 +48,11 @@ import { TunnelLifecycle } from "./cloudflare-tunnel/lifecycle"
 import { initToolCallbackOnBoot, type ToolCallbackService } from "./tool-callback"
 import { SessionShareService } from "./session-share"
 import { createWorkflowRegistry } from "./workflow-registry"
+import { LocalCatalogService } from "./local-catalog"
+import { scanLocalCatalog } from "./local-catalog-io.adapter"
 import { createSubagentTranscriptRegistry } from "./subagent-transcript-registry"
 import { listWorkflowRunDirs, readWorkflowDir, readWorkflowRunJournal, watchWorkflowDir, watchWorkflowRunDirs } from "./workflow-watch-io.adapter"
+import { readWorkflowAgentTranscriptLines } from "./workflow-agent-transcript-io.adapter"
 import { SnapshotStore } from "./session-share/snapshot-store.adapter"
 import { handleShareApiRequest } from "./session-share/http-routes"
 import { buildChatSnapshot, type SnapshotSources } from "./session-share/snapshot-builder"
@@ -102,6 +107,7 @@ export interface AgentAppSettingsView {
   claudeDriver: AppSettingsSnapshot["claudeDriver"]
   globalPromptAppend: AppSettingsSnapshot["globalPromptAppend"]
   customMcpServers: AppSettingsSnapshot["customMcpServers"]
+  customModels: AppSettingsSnapshot["customModels"]
 }
 
 export function buildAgentAppSettingsView(snapshot: AppSettingsSnapshot): AgentAppSettingsView {
@@ -114,6 +120,9 @@ export function buildAgentAppSettingsView(snapshot: AppSettingsSnapshot): AgentA
     // from both Claude drivers. Same failure class as the globalPromptAppend
     // regression above. See server.test.ts guard.
     customMcpServers: snapshot.customMcpServers,
+    // Forward customModels so getProviderSettings can accept user-defined
+    // model ids without collapsing to the built-in default. See ChatPreferenceControls.
+    customModels: snapshot.customModels,
   }
 }
 
@@ -174,6 +183,13 @@ export interface StartKannaServerOptions {
    */
   trustProxy?: boolean
   onMigrationProgress?: (message: string) => void
+  /**
+   * Override project discovery. Defaults to scanning the real home dir
+   * (`~/.claude/projects`, `~/.codex/sessions`). Tests inject a stub so boot
+   * does not read the dev machine's entire session history — a full Codex
+   * session scan can take seconds and is the only slow step in boot.
+   */
+  discoverProjects?: () => DiscoveredProject[]
   update?: {
     version: string
     fetchLatestVersion: (packageName: string) => Promise<string>
@@ -223,8 +239,9 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
   await store.migrateLegacyTranscripts(options.onMigrationProgress)
   let discoveredProjects: DiscoveredProject[] = []
 
+  const runDiscovery = options.discoverProjects ?? discoverProjects
   async function refreshDiscovery() {
-    discoveredProjects = discoverProjects()
+    discoveredProjects = runDiscovery()
     return discoveredProjects
   }
 
@@ -245,6 +262,7 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     listRunDirs: listWorkflowRunDirs,
     watchRunDirs: (dir, onChange) => watchWorkflowRunDirs(dir, onChange),
     readRunJournal: readWorkflowRunJournal,
+    readAgentTranscriptLines: readWorkflowAgentTranscriptLines,
   })
   const subagentTranscriptRegistry = createSubagentTranscriptRegistry()
   const reapedClaudePty = await claudePtyRegistry.reapStale()
@@ -254,6 +272,12 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
   const keybindings = new KeybindingsManager()
   const appSettings = new AppSettingsManager(path.join(store.dataDir, "settings.json"))
   await appSettings.initialize()
+
+  const openrouterModelCache = new OpenRouterModelCache({
+    fetchRaw: fetchOpenRouterModelsRaw,
+    ttlMs: 60 * 60 * 1000, // 1h
+    now: () => Date.now(),
+  })
 
   const snapshotStore = new SnapshotStore(path.join(store.dataDir, "shares"))
 
@@ -405,6 +429,7 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
   )
   setQuickResponseOAuthPool(oauthPool)
 
+  const localCatalog = new LocalCatalogService({ scan: scanLocalCatalog })
   let agent!: AgentCoordinator
   const scheduleManager = new ScheduleManager({
     fire: async (chatId, scheduleId) => {
@@ -416,6 +441,10 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     scheduleManager,
     maxAgentWakes: parsePositiveIntEnv(process.env.KANNA_MAX_AGENT_WAKES, 25),
     pendingWorkflowPollMs: parsePositiveIntEnv(process.env.KANNA_PENDING_WORKFLOW_POLL_MS, 120_000),
+    openrouterFirstEntryTimeoutMs: parsePositiveIntEnv(
+      process.env.KANNA_OPENROUTER_FIRST_ENTRY_TIMEOUT_MS,
+      2 * 60 * 1000,
+    ),
     claudeLimitDetector: options.agentOverrides?.claudeLimitDetector,
     codexLimitDetector: options.agentOverrides?.codexLimitDetector,
     throwOnClaudeSessionStart: options.agentOverrides?.throwOnClaudeSessionStart,
@@ -427,6 +456,7 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     ptyInstanceRegistry,
     workflowRegistry,
     subagentTranscriptRegistry,
+    localCatalog,
     // Kanna is a personal-use tool on the developer's own machine. Tool calls
     // auto-allow at the kanna gate layer (the claude CLI itself runs with
     // `--dangerously-skip-permissions` so it doesn't gate either). The
@@ -439,6 +469,9 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     },
     getSubagents: () => appSettings.getSnapshot().subagents,
     getAppSettingsSnapshot: () => buildAgentAppSettingsView(appSettings.getSnapshot()),
+    persistOAuthState: (id, oauth) => void appSettings.writePatch({ customMcpServers: { setOAuthState: { id, oauth } } }),
+    readLlmProvider: () => readLlmProviderSnapshot(),
+    listOpenRouterModels: () => openrouterModelCache.list(),
     onStateChange: (chatId?: string, options?: { immediate?: boolean }) => {
       if (chatId) {
         if (options?.immediate) {
@@ -466,6 +499,7 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
       write: writeLlmProviderSnapshot,
       validate: validateLlmProviderCredentials,
     },
+    listOpenRouterModels: () => openrouterModelCache.list(),
     refreshDiscovery,
     getDiscoveredProjects: () => discoveredProjects,
     machineDisplayName,

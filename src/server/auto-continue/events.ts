@@ -7,6 +7,9 @@ export const AUTO_CONTINUE_EVENT_VERSION = 3 as const
  *  - `agent_wakeup` — the model called `ScheduleWakeup`; replay its prompt.
  *  - `pending_workflow` — turn ended with a background Workflow still running;
  *    re-enter to harvest results.
+ *  - `subagent_background` — a `run_in_background` subagent finished; re-enter
+ *    to deliver its reply. Exempt from the runaway-wake cap (result delivery,
+ *    not a self-poll). See adr-20260616-subagent-run-in-background.
  */
 export type AutoContinueSource =
   | "user"
@@ -14,6 +17,7 @@ export type AutoContinueSource =
   | "token_rotation"
   | "agent_wakeup"
   | "pending_workflow"
+  | "subagent_background"
 
 interface AutoContinueEventBase {
   v: typeof AUTO_CONTINUE_EVENT_VERSION

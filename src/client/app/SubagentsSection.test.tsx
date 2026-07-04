@@ -14,10 +14,17 @@ import {
 import {
   DEFAULT_CLAUDE_MODEL_OPTIONS,
   DEFAULT_CODEX_MODEL_OPTIONS,
+  DEFAULT_OPENROUTER_SDK_MODEL,
+  mergeCustomModels,
+  PROVIDERS,
   type ChatProviderPreferences,
+  type CustomModelEntry,
+  type ProviderCatalogEntry,
   type Subagent,
   type SubagentInput,
 } from "../../shared/types"
+
+const BASE_PROVIDERS: ProviderCatalogEntry[] = [...PROVIDERS]
 
 function noopHandlers(): SubagentsSectionHandlers {
   return {
@@ -37,6 +44,7 @@ function makeSubagent(over: Partial<Subagent> = {}): Subagent {
     modelOptions: { reasoningEffort: "high", contextWindow: "200k" },
     systemPrompt: "Review carefully.",
     contextScope: "previous-assistant-reply",
+    triggerMode: "auto",
     createdAt: 100,
     updatedAt: 200,
     ...over,
@@ -54,6 +62,11 @@ const defaultProviderPrefs: ChatProviderPreferences = {
     modelOptions: { reasoningEffort: "high", fastMode: false },
     planMode: false,
   },
+  openrouter: {
+    model: DEFAULT_OPENROUTER_SDK_MODEL,
+    modelOptions: {},
+    planMode: false,
+  },
 }
 
 const providerDefaults: ChatProviderPreferences = {
@@ -65,6 +78,11 @@ const providerDefaults: ChatProviderPreferences = {
   codex: {
     model: "gpt-5.4",
     modelOptions: { reasoningEffort: "low", fastMode: true },
+    planMode: false,
+  },
+  openrouter: {
+    model: DEFAULT_OPENROUTER_SDK_MODEL,
+    modelOptions: {},
     planMode: false,
   },
 }
@@ -111,6 +129,7 @@ describe("toSubagentInput", () => {
       modelOptions: { reasoningEffort: "high", contextWindow: "200k" },
       systemPrompt: "Review carefully.",
       contextScope: "previous-assistant-reply",
+      triggerMode: "auto",
       createdAt: 100,
       updatedAt: 200,
     }
@@ -123,6 +142,7 @@ describe("toSubagentInput", () => {
       modelOptions: { reasoningEffort: "high", contextWindow: "200k" },
       systemPrompt: "Review carefully.",
       contextScope: "previous-assistant-reply",
+      triggerMode: "auto",
     })
   })
 })
@@ -215,6 +235,7 @@ async function mountSubagentsSection(props: {
   providerDefaults?: ChatProviderPreferences
   editing?: { kind: "list" } | { kind: "create" } | { kind: "edit"; id: string }
   handlers?: SubagentsSectionHandlers
+  availableProviders?: ProviderCatalogEntry[]
 }): Promise<{ container: HTMLDivElement; cleanup: () => void }> {
   const container = document.createElement("div")
   document.body.appendChild(container)
@@ -228,6 +249,7 @@ async function mountSubagentsSection(props: {
         onStartCreate={() => undefined}
         onCancelEditing={() => undefined}
         handlers={props.handlers ?? noopHandlers()}
+        availableProviders={props.availableProviders ?? BASE_PROVIDERS}
       />,
     )
   })
@@ -256,6 +278,7 @@ describe("SubagentsSection — empty state", () => {
           onStartCreate={onStartCreate}
           onCancelEditing={() => undefined}
           handlers={noopHandlers()}
+          availableProviders={BASE_PROVIDERS}
         />,
       )
     })
@@ -309,6 +332,7 @@ describe("SubagentsSection — create form", () => {
           onStartCreate={() => undefined}
           onCancelEditing={onCancelEditing}
           handlers={noopHandlers()}
+          availableProviders={BASE_PROVIDERS}
         />,
       )
     })
@@ -319,6 +343,27 @@ describe("SubagentsSection — create form", () => {
     await act(async () => { cancel!.click() })
     expect(onCancelEditing).toHaveBeenCalledTimes(1)
     container.remove()
+  })
+
+  test("custom model from settings appears in Model dropdown", async () => {
+    const customEntry: CustomModelEntry = {
+      id: "claude-custom-preview",
+      provider: "claude",
+      label: "Claude Custom Preview",
+      supportsEffort: false,
+      createdAt: 0,
+      updatedAt: 0,
+    }
+    const availableProviders = mergeCustomModels(BASE_PROVIDERS, [customEntry])
+    const { container, cleanup } = await mountSubagentsSection({
+      subagents: [],
+      editing: { kind: "create" },
+      availableProviders,
+    })
+    const trigger = container.querySelector<HTMLButtonElement>("[data-testid='subagent-form-model']")!
+    await act(async () => { trigger.click() })
+    expect(document.body.textContent).toContain("Claude Custom Preview")
+    cleanup()
   })
 
   test("name input enforces maxLength cap", async () => {
@@ -376,6 +421,7 @@ describe("SubagentsSection — edit form", () => {
           onStartCreate={() => undefined}
           onCancelEditing={() => undefined}
           handlers={handlers}
+          availableProviders={BASE_PROVIDERS}
         />,
       )
     })
@@ -393,6 +439,28 @@ describe("SubagentsSection — edit form", () => {
     expect(container.textContent).toContain("Name already used")
     expect(handlers.onUpdate).toHaveBeenCalledTimes(1)
     container.remove()
+  })
+})
+
+describe("SubagentsSection — trigger mode control", () => {
+  test("switching to Manual makes form dirty and Save enabled", async () => {
+    const subagent = makeSubagent({ id: "sa-9", triggerMode: "auto" })
+    const { container, cleanup } = await mountSubagentsSection({
+      subagents: [subagent],
+      editing: { kind: "edit", id: "sa-9" },
+    })
+    // Save should be disabled initially (no unsaved changes)
+    const save = container.querySelector<HTMLButtonElement>("[data-testid='subagent-form-save']")!
+    expect(save.disabled).toBe(true)
+    // Find the "Manual" button in the Trigger SegmentedControl
+    const manualBtn = Array.from(container.querySelectorAll("button")).find(
+      (b) => b.textContent?.trim() === "Manual",
+    )
+    expect(manualBtn).toBeDefined()
+    await act(async () => { manualBtn!.click() })
+    // After clicking Manual, form should be dirty so Save is enabled
+    expect(save.disabled).toBe(false)
+    cleanup()
   })
 })
 
@@ -416,6 +484,7 @@ describe("SubagentsSection — delete confirm", () => {
           onStartCreate={() => undefined}
           onCancelEditing={() => undefined}
           handlers={handlers}
+          availableProviders={BASE_PROVIDERS}
         />,
       )
     })
@@ -460,6 +529,7 @@ describe("SubagentsSection — list rendering", () => {
           onStartCreate={() => undefined}
           onCancelEditing={() => undefined}
           handlers={noopHandlers()}
+          availableProviders={BASE_PROVIDERS}
         />,
       )
     })

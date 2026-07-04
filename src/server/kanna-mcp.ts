@@ -45,6 +45,7 @@ export interface KannaMcpDelegationContext {
   ancestorSubagentIds: string[]
   depth: number
   getParentUserMessageId: () => string | null
+  getMentionedSubagentIds: () => string[]
 }
 
 export interface KannaMcpArgs extends OfferDownloadArgs {
@@ -341,6 +342,7 @@ function buildDelegateSubagentToolList(args: {
           ancestorSubagentIds: ctx.ancestorSubagentIds,
           depth: ctx.depth,
           getParentUserMessageId: ctx.getParentUserMessageId,
+          getMentionedSubagentIds: ctx.getMentionedSubagentIds,
           onEntry,
         }
         const result = await delegate.handler(input, handlerCtx)

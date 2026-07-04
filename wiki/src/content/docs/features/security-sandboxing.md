@@ -1,23 +1,17 @@
 ---
 title: Security & Sandboxing
-description: OS sandbox, allowlist preflight, durable approvals, OAuth-only PTY, password gate.
+description: PTY smoke-test gate, durable approvals, OAuth-only PTY, password gate.
 ---
 
-## OS sandbox (PTY mode)
+## PTY spawn smoke-test gate
 
-Every `KANNA_CLAUDE_DRIVER=pty` spawn is wrapped with an OS-level sandbox.
+When `KANNA_CLAUDE_DRIVER=pty`, every spawn first passes a single TUI **smoke test**: Kanna probes the spawned `claude` with a prompt that should be answerable only if the `--disallowedTools Bash` flag is honored, and verifies the model cannot reach Bash. PASS unlocks the spawn; FAIL refuses it with a clear reason surfaced through the normal spawn-error path.
 
-- **macOS:** `/usr/bin/sandbox-exec -f <profile.sb>`. Profile generated per spawn from `POLICY_DEFAULT.readPathDeny` + `writePathDeny`. Default **on**.
-- **Linux:** `/usr/bin/bwrap` with `--tmpfs <path>` per deny entry. Default **on when `bwrap` is installed** (`apt install bubblewrap` / `pacman -S bubblewrap` / `dnf install bubblewrap`). Silently disables if absent — set `KANNA_PTY_SANDBOX=off` to suppress the gap.
-- **Windows:** PTY refused per spec.
+The result is cached for 24 hours, keyed on `(binarySha256, model)`, under `${HOME}/.kanna/cache/smoke-test/`. The cache invalidates automatically when the `claude` CLI binary changes (new sha256).
 
-To opt out: `KANNA_PTY_SANDBOX=off`. Loses defense-in-depth against built-in tool credential reads.
-
-## Allowlist preflight
-
-When `KANNA_CLAUDE_DRIVER=pty`, every spawn passes through the preflight gate (`claude-pty/preflight/gate.ts`). The gate runs 8 directed probes against the disallowed built-ins (Bash, Edit, Write, Read, Glob, Grep, WebFetch, WebSearch). If any built-in is reachable, the spawn is refused.
-
-Cache TTL: 24 hours, keyed on `(binarySha256, tools-string, model)`. Override the probe model via `KANNA_PTY_PREFLIGHT_MODEL` (default `claude-haiku-4-5-20251001`).
+:::note
+Earlier versions wrapped each PTY spawn in an OS-level sandbox (`sandbox-exec` / `bwrap`) and ran an 8-probe "allowlist preflight" gate. **Both were removed.** The single smoke-test above replaces the preflight, and `KANNA_PTY_SANDBOX` / `KANNA_PTY_PREFLIGHT_MODEL` are no longer consulted. Isolation is instead provided per-chat by [git worktrees](/features/projects-sessions/) and the durable tool-approval protocol below.
+:::
 
 ## Durable approval protocol
 

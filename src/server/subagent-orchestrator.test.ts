@@ -7,6 +7,7 @@ import type { EventStore } from "./event-store"
 import { createTestEventStore } from "./storage/test-helpers"
 import {
   SubagentOrchestrator,
+  type DelegationOutcome,
   type LiveTurnSource,
   type OrchestratorAppSettings,
   type ProviderRunStart,
@@ -35,6 +36,7 @@ function makeSubagent(over: Partial<Subagent> = {}): Subagent {
     modelOptions: over.modelOptions ?? modelOptions,
     systemPrompt: over.systemPrompt ?? "You are alpha.",
     contextScope: over.contextScope ?? "previous-assistant-reply",
+    triggerMode: over.triggerMode ?? "auto",
     createdAt: over.createdAt ?? 1,
     updatedAt: over.updatedAt ?? 1,
     ...(over.description !== undefined ? { description: over.description } : {}),
@@ -65,6 +67,7 @@ interface OrchestratorHarness {
   mockProviderRun: (override: Pick<ProviderRunStart, "start" | "authReady">) => void
   progressCalls: Array<{ chatId: string; runId: string }>
   terminalCalls: Array<{ chatId: string; runId: string; reason: "failed" | "completed" }>
+  backgroundCompletions: Array<{ chatId: string; runId: string; outcome: DelegationOutcome }>
 }
 
 async function setupHarness(opts: {
@@ -95,6 +98,7 @@ async function setupHarness(opts: {
 
   const progressCalls: Array<{ chatId: string; runId: string }> = []
   const terminalCalls: Array<{ chatId: string; runId: string; reason: "failed" | "completed" }> = []
+  const backgroundCompletions: Array<{ chatId: string; runId: string; outcome: DelegationOutcome }> = []
 
   let nowCounter = chat.createdAt + 1
   const orchestrator = new SubagentOrchestrator({
@@ -107,6 +111,7 @@ async function setupHarness(opts: {
     maxLive: opts.maxLive,
     onRunProgress: (chatId, runId) => { progressCalls.push({ chatId, runId }) },
     onRunTerminal: (chatId, runId, reason) => { terminalCalls.push({ chatId, runId, reason }) },
+    onBackgroundRunComplete: (chatId, runId, outcome) => { backgroundCompletions.push({ chatId, runId, outcome }) },
     startProviderRun: ({ subagent }): ProviderRunStart => {
       if (providerRunOverride) {
         return {
@@ -178,6 +183,7 @@ async function setupHarness(opts: {
     },
     progressCalls,
     terminalCalls,
+    backgroundCompletions,
   }
 }
 
@@ -898,6 +904,7 @@ describe("SubagentOrchestrator", () => {
       depth: 0,
       subagentId: "sa-1",
       prompt: "review please",
+      mentionedSubagentIds: [],
     })
 
     expect(outcome.status).toBe("completed")
@@ -1023,6 +1030,7 @@ describe("SubagentOrchestrator", () => {
         depth: 0,
         subagentId: "sa-1",
         prompt: "review the diff",
+        mentionedSubagentIds: [],
       })
       expect(outcome.status).toBe("completed")
       if (outcome.status !== "completed") throw new Error("unreachable")
@@ -1041,6 +1049,73 @@ describe("SubagentOrchestrator", () => {
         depth: 0,
         subagentId: "sa-missing",
         prompt: "x",
+        mentionedSubagentIds: [],
+      })
+      expect(outcome.status).toBe("failed")
+      if (outcome.status !== "failed") throw new Error("unreachable")
+      expect(outcome.errorCode).toBe("UNKNOWN_SUBAGENT")
+    })
+
+    test("resolves subagent by exact name when the id does not match", async () => {
+      const h = await setupHarness({ subagents: [makeSubagent({ id: "sa-1", name: "4-golden-rules" })] })
+      h.programReply("sa-1", "by name reply")
+      const outcome = await h.orchestrator.delegateRun({
+        chatId: h.chatId,
+        parentUserMessageId: h.userMessageId,
+        parentRunId: null,
+        parentSubagentId: null,
+        ancestorSubagentIds: [],
+        depth: 0,
+        subagentId: "4-golden-rules",
+        prompt: "x",
+        mentionedSubagentIds: [],
+      })
+      expect(outcome.status).toBe("completed")
+      if (outcome.status !== "completed") throw new Error("unreachable")
+      expect(outcome.text).toBe("by name reply")
+    })
+
+    test("id match wins over a name collision", async () => {
+      const h = await setupHarness({
+        subagents: [
+          makeSubagent({ id: "collide", name: "alpha" }),
+          makeSubagent({ id: "other", name: "collide" }),
+        ],
+      })
+      h.programReply("collide", "id-owner reply")
+      const outcome = await h.orchestrator.delegateRun({
+        chatId: h.chatId,
+        parentUserMessageId: h.userMessageId,
+        parentRunId: null,
+        parentSubagentId: null,
+        ancestorSubagentIds: [],
+        depth: 0,
+        subagentId: "collide",
+        prompt: "x",
+        mentionedSubagentIds: [],
+      })
+      expect(outcome.status).toBe("completed")
+      if (outcome.status !== "completed") throw new Error("unreachable")
+      expect(outcome.text).toBe("id-owner reply")
+    })
+
+    test("ambiguous name (>1 match) fails UNKNOWN_SUBAGENT", async () => {
+      const h = await setupHarness({
+        subagents: [
+          makeSubagent({ id: "sa-1", name: "dup" }),
+          makeSubagent({ id: "sa-2", name: "dup" }),
+        ],
+      })
+      const outcome = await h.orchestrator.delegateRun({
+        chatId: h.chatId,
+        parentUserMessageId: h.userMessageId,
+        parentRunId: null,
+        parentSubagentId: null,
+        ancestorSubagentIds: [],
+        depth: 0,
+        subagentId: "dup",
+        prompt: "x",
+        mentionedSubagentIds: [],
       })
       expect(outcome.status).toBe("failed")
       if (outcome.status !== "failed") throw new Error("unreachable")
@@ -1058,6 +1133,7 @@ describe("SubagentOrchestrator", () => {
         depth: 2,
         subagentId: "sa-1",
         prompt: "deep",
+        mentionedSubagentIds: [],
       })
       expect(outcome.status).toBe("failed")
       if (outcome.status !== "failed") throw new Error("unreachable")
@@ -1075,6 +1151,7 @@ describe("SubagentOrchestrator", () => {
         depth: 1,
         subagentId: "sa-1",
         prompt: "loop",
+        mentionedSubagentIds: [],
       })
       expect(outcome.status).toBe("failed")
       if (outcome.status !== "failed") throw new Error("unreachable")
@@ -1107,6 +1184,7 @@ describe("SubagentOrchestrator", () => {
         subagentId: "sa-1",
         prompt: "go",
         onEntry: (e) => { observed.push(e.kind) },
+        mentionedSubagentIds: [],
       })
       expect(outcome.status).toBe("completed")
       expect(observed).toEqual(["assistant_text", "tool_call"])
@@ -1131,6 +1209,7 @@ describe("SubagentOrchestrator", () => {
         subagentId: "sa-1",
         prompt: "go",
         onEntry: () => { throw new Error("listener boom") },
+        mentionedSubagentIds: [],
       })
       expect(outcome.status).toBe("completed")
     })
@@ -1147,6 +1226,7 @@ describe("SubagentOrchestrator", () => {
         depth: 0,
         subagentId: "sa-1",
         prompt: "go",
+        mentionedSubagentIds: [],
       })
       expect(outcome.status).toBe("failed")
       if (outcome.status !== "failed") throw new Error("unreachable")
@@ -1179,6 +1259,7 @@ describe("SubagentOrchestrator", () => {
         depth: 0,
         subagentId: "sa-1",
         prompt: "go",
+        mentionedSubagentIds: [],
       })
       expect(outcome.status).toBe("completed")
       if (outcome.status !== "completed") throw new Error("unreachable")
@@ -1239,6 +1320,7 @@ describe("SubagentOrchestrator", () => {
         depth: 0,
         subagentId: "sa-1",
         prompt: "go",
+        mentionedSubagentIds: [],
       })
 
       expect(progressCountInsideStart).toBe(1)
@@ -1267,6 +1349,7 @@ describe("SubagentOrchestrator", () => {
         depth: 0,
         subagentId: "sa-1",
         prompt: "go",
+        mentionedSubagentIds: [],
       })
       runStartProgress.value = 1 // always 1 call for run_started
 
@@ -1298,6 +1381,7 @@ describe("SubagentOrchestrator", () => {
         depth: 0,
         subagentId: "sa-1",
         prompt: "go",
+        mentionedSubagentIds: [],
       })
       expect(outcome.status).toBe("failed")
       if (outcome.status !== "failed") throw new Error("unreachable")
@@ -1336,9 +1420,89 @@ describe("SubagentOrchestrator", () => {
         subagentId: "sa-1",
         prompt: "start session",
         keepAlive: true,
+        mentionedSubagentIds: [],
       })
       expect(out.status).toBe("completed")
       expect(h.orchestrator.liveSessionCount()).toBe(1)
+    })
+
+    // ── run_in_background tests (adr-20260616-subagent-run-in-background) ──
+
+    test("delegateRun background returns async_launched without awaiting the run", async () => {
+      const h = await setupHarness({ subagents: [makeSubagent({})] })
+      h.holdReply("sa-1")
+      const out = await h.orchestrator.delegateRun({
+        chatId: h.chatId,
+        parentUserMessageId: h.userMessageId,
+        parentRunId: null,
+        parentSubagentId: null,
+        ancestorSubagentIds: [],
+        depth: 0,
+        subagentId: "sa-1",
+        prompt: "do background work",
+        background: true,
+        mentionedSubagentIds: [],
+      })
+      expect(out.status).toBe("async_launched")
+      expect(out.runId).toBeTruthy()
+      // The run is still in flight: no completion delivered yet.
+      expect(h.backgroundCompletions).toHaveLength(0)
+    })
+
+    test("background run delivers completed outcome to onBackgroundRunComplete on terminal", async () => {
+      const h = await setupHarness({ subagents: [makeSubagent({})] })
+      h.holdReply("sa-1")
+      const out = await h.orchestrator.delegateRun({
+        chatId: h.chatId,
+        parentUserMessageId: h.userMessageId,
+        parentRunId: null,
+        parentSubagentId: null,
+        ancestorSubagentIds: [],
+        depth: 0,
+        subagentId: "sa-1",
+        prompt: "do background work",
+        background: true,
+        mentionedSubagentIds: [],
+      })
+      // Wait for the detached spawn to reach its held provider start before resolving.
+      for (let i = 0; i < 50 && !h.pendingHolds.has("sa-1"); i++) {
+        await new Promise((r) => setTimeout(r, 0))
+      }
+      h.resolveReply("sa-1", "background result")
+      // Drain microtasks until the completion is delivered.
+      for (let i = 0; i < 50 && h.backgroundCompletions.length === 0; i++) {
+        await new Promise((r) => setTimeout(r, 0))
+      }
+      expect(h.backgroundCompletions).toHaveLength(1)
+      const c = h.backgroundCompletions[0]
+      expect(c.runId).toBe(out.runId)
+      expect(c.outcome.status).toBe("completed")
+      expect(c.outcome.status === "completed" && c.outcome.text).toBe("background result")
+    })
+
+    test("background run delivers failed outcome to onBackgroundRunComplete", async () => {
+      const h = await setupHarness({ subagents: [makeSubagent({})] })
+      h.programs.set("sa-1", { authReady: true, error: "boom" })
+      const out = await h.orchestrator.delegateRun({
+        chatId: h.chatId,
+        parentUserMessageId: h.userMessageId,
+        parentRunId: null,
+        parentSubagentId: null,
+        ancestorSubagentIds: [],
+        depth: 0,
+        subagentId: "sa-1",
+        prompt: "do background work",
+        background: true,
+        mentionedSubagentIds: [],
+      })
+      expect(out.status).toBe("async_launched")
+      for (let i = 0; i < 50 && h.backgroundCompletions.length === 0; i++) {
+        await new Promise((r) => setTimeout(r, 0))
+      }
+      expect(h.backgroundCompletions).toHaveLength(1)
+      const c = h.backgroundCompletions[0]
+      expect(c.outcome.status).toBe("failed")
+      expect(c.outcome.status === "failed" && c.outcome.errorCode).toBe("PROVIDER_ERROR")
     })
 
     // ── Task 5: sendToLiveRun + closeLiveRun ──
@@ -1362,6 +1526,7 @@ describe("SubagentOrchestrator", () => {
         subagentId: "sa-1",
         prompt: "start session",
         keepAlive: true,
+        mentionedSubagentIds: [] as string[],
       }
     }
 
@@ -1427,6 +1592,7 @@ describe("SubagentOrchestrator", () => {
         subagentId: "sa-1",
         prompt: "first",
         keepAlive: true,
+        mentionedSubagentIds: [],
       })
       expect(out1.status).toBe("completed")
       expect(h.orchestrator.liveSessionCount()).toBe(1)
@@ -1441,9 +1607,44 @@ describe("SubagentOrchestrator", () => {
         subagentId: "sa-1",
         prompt: "second",
         keepAlive: true,
+        mentionedSubagentIds: [],
       })
       expect(out2.status).toBe("failed")
       expect(out2.status === "failed" && out2.errorCode).toBe("CAP_EXCEEDED")
+    })
+
+    test("manual subagent without a matching mention fails MANUAL_ONLY", async () => {
+      const h = await setupHarness({ subagents: [makeSubagent({ id: "sa-1", triggerMode: "manual" })] })
+      const outcome = await h.orchestrator.delegateRun({
+        chatId: h.chatId, parentUserMessageId: h.userMessageId, parentRunId: null,
+        parentSubagentId: null, ancestorSubagentIds: [], depth: 0,
+        subagentId: "sa-1", prompt: "x", mentionedSubagentIds: [],
+      })
+      expect(outcome.status).toBe("failed")
+      if (outcome.status !== "failed") throw new Error("unreachable")
+      expect(outcome.errorCode).toBe("MANUAL_ONLY")
+    })
+
+    test("manual subagent runs when it is in the mention set", async () => {
+      const h = await setupHarness({ subagents: [makeSubagent({ id: "sa-1", triggerMode: "manual" })] })
+      h.programReply("sa-1", "ran")
+      const outcome = await h.orchestrator.delegateRun({
+        chatId: h.chatId, parentUserMessageId: h.userMessageId, parentRunId: null,
+        parentSubagentId: null, ancestorSubagentIds: [], depth: 0,
+        subagentId: "sa-1", prompt: "x", mentionedSubagentIds: ["sa-1"],
+      })
+      expect(outcome.status).toBe("completed")
+    })
+
+    test("auto subagent ignores the mention set", async () => {
+      const h = await setupHarness({ subagents: [makeSubagent({ id: "sa-1", triggerMode: "auto" })] })
+      h.programReply("sa-1", "ran")
+      const outcome = await h.orchestrator.delegateRun({
+        chatId: h.chatId, parentUserMessageId: h.userMessageId, parentRunId: null,
+        parentSubagentId: null, ancestorSubagentIds: [], depth: 0,
+        subagentId: "sa-1", prompt: "x", mentionedSubagentIds: [],
+      })
+      expect(outcome.status).toBe("completed")
     })
   })
 })

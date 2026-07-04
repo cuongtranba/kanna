@@ -110,6 +110,13 @@ interface SubagentMessageProps {
     response: { confirmed: boolean; clearContext?: boolean; message?: string },
   ) => void
   onCancelSubagentRun?: (chatId: string, runId: string) => void
+  /**
+   * When set, the inline pending-tool card is not rendered (the run still shows
+   * its "waiting for input..." status). The actionable card is surfaced at the
+   * transcript footer instead, so a buried inline card is never the only place
+   * to answer. See adr-20260618-subagent-pending-question-footer-surface.
+   */
+  suppressPendingTool?: boolean
 }
 
 export function SubagentMessage({
@@ -121,6 +128,7 @@ export function SubagentMessage({
   onSubagentAskUserQuestionSubmit,
   onSubagentExitPlanModeSubmit,
   onCancelSubagentRun,
+  suppressPendingTool = false,
 }: SubagentMessageProps) {
   const messages = processTranscriptMessages(run.entries)
   const hasAnyText = messages.some((m) => m.kind === "assistant_text")
@@ -169,7 +177,7 @@ export function SubagentMessage({
           isRunning={run.status === "running"}
         />
       ))}
-      {run.pendingTool && (
+      {!suppressPendingTool && run.pendingTool && (
         <SubagentPendingToolCard
           pendingTool={run.pendingTool}
           onAskUserQuestionSubmit={(toolUseId, questions, answers) =>

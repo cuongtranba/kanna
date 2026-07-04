@@ -1,14 +1,13 @@
 ---
 id: c3-208
 c3-version: 4
-c3-seal: 84bb93824011b523ed71e02324eb0473fbc9c77f838625000cf793816cf866a9
+c3-seal: 839496fab0554464dd0e2c1752d0ebcc6aeaa27f9c766e77528fbe4565a15e21
 title: ws-router
 type: component
 category: foundation
 parent: c3-2
 goal: 'Multiplex WS traffic: route subscribe/unsubscribe/command envelopes, push projections on every state change.'
 uses:
-    - c3-228
     - ref-colocated-bun-test
     - ref-cqrs-read-models
     - ref-ws-subscription

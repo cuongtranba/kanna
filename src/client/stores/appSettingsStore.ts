@@ -1,5 +1,5 @@
 import { create } from "zustand"
-import type { AppSettingsPatch, AppSettingsSnapshot, McpServerConfig } from "../../shared/types"
+import type { AppSettingsPatch, AppSettingsSnapshot, CustomModelEntry, McpServerConfig } from "../../shared/types"
 
 type AppSettingsHydrationStatus = "idle" | "loading" | "ready" | "error"
 
@@ -43,6 +43,11 @@ export function mergeAppSettingsPatch(
           ...patch.providerDefaults?.codex?.modelOptions,
         },
       },
+      openrouter: {
+        ...settings.providerDefaults.openrouter,
+        ...patch.providerDefaults?.openrouter,
+        modelOptions: {},
+      },
     },
     cloudflareTunnel: {
       ...settings.cloudflareTunnel,
@@ -62,6 +67,7 @@ export function mergeAppSettingsPatch(
     },
     subagents: settings.subagents,
     customMcpServers: settings.customMcpServers,
+    customModels: settings.customModels,
     claudeDriver: {
       preference: patch.claudeDriver?.preference ?? settings.claudeDriver.preference,
       lifecycle: {
@@ -88,3 +94,8 @@ const EMPTY_MCP_SERVERS: readonly McpServerConfig[] = []
 
 export const selectCustomMcpServers = (state: AppSettingsStoreState): readonly McpServerConfig[] =>
   state.settings?.customMcpServers ?? EMPTY_MCP_SERVERS
+
+const EMPTY_CUSTOM_MODELS: readonly CustomModelEntry[] = []
+
+export const selectCustomModels = (state: AppSettingsStoreState): readonly CustomModelEntry[] =>
+  state.settings?.customModels ?? EMPTY_CUSTOM_MODELS

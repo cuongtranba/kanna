@@ -5,8 +5,9 @@ import type {
   ClaudeContextWindow,
   ModelOptions,
   ProviderCatalogEntry,
-  ProviderModelOption,
   ServiceTier,
+  LlmProviderSnapshot,
+  CustomModelEntry,
 } from "../shared/types"
 import {
   DEFAULT_CLAUDE_MODEL_OPTIONS,
@@ -16,24 +17,10 @@ import {
   normalizeProviderModelId,
   isClaudeReasoningEffort,
   isCodexReasoningEffort,
+  mergeCustomModels,
 } from "../shared/types"
 
-const HARD_CODED_CODEX_MODELS: ProviderModelOption[] = [
-  { id: "gpt-5.5", label: "GPT-5.5", supportsEffort: false },
-  { id: "gpt-5.4", label: "GPT-5.4", supportsEffort: false },
-  { id: "gpt-5.3-codex", label: "GPT-5.3 Codex", supportsEffort: false },
-  { id: "gpt-5.3-codex-spark", label: "GPT-5.3 Codex Spark", supportsEffort: false },
-]
-
-export const SERVER_PROVIDERS: ProviderCatalogEntry[] = PROVIDERS.map((provider) =>
-  provider.id === "codex"
-    ? {
-        ...provider,
-        defaultModel: "gpt-5.5",
-        models: HARD_CODED_CODEX_MODELS,
-      }
-    : provider
-)
+export const SERVER_PROVIDERS: ProviderCatalogEntry[] = [...PROVIDERS]
 
 export function getServerProviderCatalog(provider: AgentProvider): ProviderCatalogEntry {
   const entry = SERVER_PROVIDERS.find((candidate) => candidate.id === provider)
@@ -43,8 +30,17 @@ export function getServerProviderCatalog(provider: AgentProvider): ProviderCatal
   return entry
 }
 
-export function normalizeServerModel(provider: AgentProvider, model?: string): string {
-  const catalog = getServerProviderCatalog(provider)
+export function normalizeServerModel(
+  provider: AgentProvider,
+  model?: string,
+  customModels: readonly CustomModelEntry[] = [],
+): string {
+  const merged = mergeCustomModels([...SERVER_PROVIDERS], customModels)
+  const catalog = merged.find((candidate) => candidate.id === provider) ?? getServerProviderCatalog(provider)
+  const match = model
+    ? catalog.models.find((candidate) => candidate.id === model || candidate.aliases?.includes(model))
+    : undefined
+  if (match) return match.id
   const normalizedModel = normalizeProviderModelId(provider, model, catalog.defaultModel)
   if (catalog.models.some((candidate) => candidate.id === normalizedModel)) {
     return normalizedModel
@@ -55,7 +51,8 @@ export function normalizeServerModel(provider: AgentProvider, model?: string): s
 export function normalizeClaudeModelOptions(
   model: string,
   modelOptions?: ModelOptions,
-  legacyEffort?: string
+  legacyEffort?: string,
+  customModels?: readonly CustomModelEntry[],
 ): ClaudeModelOptions {
   const reasoningEffort = modelOptions?.claude?.reasoningEffort
   return {
@@ -64,7 +61,7 @@ export function normalizeClaudeModelOptions(
       : isClaudeReasoningEffort(legacyEffort)
         ? legacyEffort
         : DEFAULT_CLAUDE_MODEL_OPTIONS.reasoningEffort,
-    contextWindow: normalizeClaudeContextWindow(model, modelOptions?.claude?.contextWindow as ClaudeContextWindow | undefined),
+    contextWindow: normalizeClaudeContextWindow(model, modelOptions?.claude?.contextWindow as ClaudeContextWindow | undefined, customModels),
   }
 }
 
@@ -84,4 +81,12 @@ export function normalizeCodexModelOptions(modelOptions?: ModelOptions, legacyEf
 
 export function codexServiceTierFromModelOptions(modelOptions: CodexModelOptions): ServiceTier | undefined {
   return modelOptions.fastMode ? "fast" : undefined
+}
+
+export function isClaudeSdkProvider(provider: AgentProvider): boolean {
+  return provider === "claude" || provider === "openrouter"
+}
+
+export function openrouterAuthReady(snapshot: LlmProviderSnapshot): boolean {
+  return snapshot.provider === "openrouter" && snapshot.enabled && snapshot.apiKey.length > 0
 }

@@ -19,6 +19,7 @@ function makeSubagent(over: Partial<Subagent> = {}): Subagent {
     modelOptions: over.modelOptions ?? modelOptions,
     systemPrompt: over.systemPrompt ?? "You are alpha.",
     contextScope: over.contextScope ?? "previous-assistant-reply",
+    triggerMode: over.triggerMode ?? "auto",
     createdAt: over.createdAt ?? 1,
     updatedAt: over.updatedAt ?? 1,
     ...(over.description !== undefined ? { description: over.description } : {}),
@@ -153,6 +154,25 @@ describe("composeSubagentSystemPrompt", () => {
   test("emits only the project block when subagent prompt is empty", () => {
     const out = composeSubagentSystemPrompt("", "Always TDD.")
     expect(out).toBe("## Project instructions\n\nAlways TDD.")
+  })
+
+  test("appends a Stack projects block after Project instructions", () => {
+    const out = composeSubagentSystemPrompt("You are alpha.", "Always TDD.", [
+      { projectId: "p1", projectTitle: "Backend API", worktreePath: "/be", role: "primary", projectStatus: "active" },
+      { projectId: "p2", projectTitle: "Web Client", worktreePath: "/fe", role: "additional", projectStatus: "active" },
+    ])
+    const instrIdx = out.indexOf("## Project instructions")
+    const stackIdx = out.indexOf("## Stack projects")
+    expect(out.startsWith("You are alpha.")).toBe(true)
+    expect(stackIdx).toBeGreaterThan(instrIdx)
+    expect(out).toContain("- Backend API [primary]: /be")
+    expect(out).toContain("- Web Client [additional]: /fe")
+  })
+
+  test("omits the Stack projects block when stackProjects empty", () => {
+    const out = composeSubagentSystemPrompt("You are alpha.", undefined, [])
+    expect(out).toBe("You are alpha.")
+    expect(out).not.toContain("## Stack projects")
   })
 })
 
@@ -509,6 +529,31 @@ describe("buildSubagentProviderRun – keep-alive Claude", () => {
 
     await first.live!.close()
     expect(closed).toBe(true)
+  })
+
+  test("keepAlive:true is forwarded to startClaudeSession", async () => {
+    const capturedKeepAlive: Array<boolean | undefined> = []
+
+    const args = makeArgs({
+      startClaudeSession: async (sessionArgs) => {
+        capturedKeepAlive.push(sessionArgs.keepAlive)
+        return {
+          provider: "claude" as const,
+          stream: makeHarnessTurn([makeTextEvent("t1"), makeResultEvent()]).stream,
+          interrupt: async () => {},
+          close: () => {},
+          sendPrompt: async () => {},
+          setModel: async () => {},
+          setPermissionMode: async () => {},
+          getSupportedCommands: async () => [],
+          pushChannelPrompt: async (_text: string) => {},
+        }
+      },
+    })
+
+    const run = buildSubagentProviderRun(args)
+    await run.start(() => {}, () => {}, { keepAlive: true })
+    expect(capturedKeepAlive[0]).toBe(true)
   })
 
   test("keep-alive without pushChannelPrompt fails closed and closes session", async () => {

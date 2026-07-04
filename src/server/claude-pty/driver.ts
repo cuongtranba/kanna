@@ -112,6 +112,8 @@ export interface StartClaudeSessionPtyArgs {
   scheduleWakeup?: (a: { delayMs: number; prompt: string }) => Promise<string | null>
   /** Enabled user-defined MCP servers, written into mcp-config.json. */
   customMcpServers?: readonly McpServerConfig[]
+  /** Pre-resolved oauth bearer tokens keyed by server id. */
+  oauthBearers?: ReadonlyMap<string, string>
   /** Optional override used by tests to inject a fake HTTP MCP starter. */
   startKannaMcpHttpServer?: typeof startKannaMcpHttpServer
   /** Optional smoke-test gate override (used by tests to inject a fake gate). */
@@ -471,7 +473,7 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
     })
     await writeRuntimeFile(
       mcpConfigPath,
-      buildMcpConfigJson(mcpHandle, args.customMcpServers ?? []),
+      buildMcpConfigJson(mcpHandle, args.customMcpServers ?? [], args.oauthBearers),
       { encoding: "utf8", mode: 0o600 },
     )
   } catch (err) {
@@ -877,13 +879,17 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
     const readyTimeoutMs = Number(
       (args.env ?? process.env).KANNA_PTY_CHANNEL_READY_TIMEOUT_MS ?? CHANNEL_READY_TIMEOUT_DEFAULT_MS,
     )
+    let channelReadyTimer: ReturnType<typeof setTimeout> | null = null
     try {
       await Promise.race([
         mcpHandle.channelClientReady,
-        new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error("channel client not ready")), readyTimeoutMs),
-        ),
+        new Promise<never>((_, reject) => {
+          channelReadyTimer = setTimeout(() => reject(new Error("channel client not ready")), readyTimeoutMs)
+        }),
       ])
+      // Race resolved via channelClientReady — cancel the pending timer so it
+      // never fires as an unhandled rejection in a later test.
+      if (channelReadyTimer !== null) { clearTimeout(channelReadyTimer); channelReadyTimer = null }
       // Settle: the channel handler registers just after the dev-channels
       // dialog is accepted and the client reports initialized.
       await new Promise((r) => setTimeout(r, 300))

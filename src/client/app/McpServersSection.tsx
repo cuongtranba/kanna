@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from "react"
-import { Plug, Plus, Trash2, RefreshCw, Pencil } from "lucide-react"
+import { Plug, Plus, Trash2, RefreshCw, Pencil, ExternalLink, Copy, KeyRound } from "lucide-react"
 import { Button } from "../components/ui/button"
 import { Input } from "../components/ui/input"
 import { Textarea } from "../components/ui/textarea"
@@ -14,6 +14,7 @@ import { cn } from "../lib/utils"
 import { useAppSettingsStore, selectCustomMcpServers } from "../stores/appSettingsStore"
 import type {
   AppSettingsPatch,
+  McpOAuthState,
   McpServerConfig,
   McpServerInput,
   McpServerPatch,
@@ -22,12 +23,21 @@ import type {
 } from "../../shared/types"
 import type { KannaState } from "./useKannaState"
 
+interface OAuthStartResult {
+  ok: boolean
+  authorizationUrl?: string
+  alreadyAuthenticated?: boolean
+  error?: string
+}
+
 interface McpServersSectionHandlers {
   onCreate: (input: McpServerInput) => Promise<void>
   onUpdate: (id: string, patch: McpServerPatch) => Promise<void>
   onDelete: (id: string) => Promise<void>
   onSetEnabled: (id: string, enabled: boolean) => Promise<void>
   onTest: (id: string) => Promise<void>
+  onStartMcpOAuth: (id: string) => Promise<OAuthStartResult>
+  onCompleteMcpOAuth: (id: string, callbackUrl: string) => Promise<{ ok: boolean; error?: string }>
 }
 
 type EditingState =
@@ -132,6 +142,7 @@ function McpRow({
       </div>
       <div className="ml-auto flex items-center gap-2">
         <TestPill result={server.lastTest} pending={testing} />
+        {server.transport !== "stdio" && <OAuthPill oauth={server.oauth} />}
         <label className="inline-flex cursor-pointer items-center gap-1 text-xs text-muted-foreground">
           <input
             type="checkbox"
@@ -202,6 +213,22 @@ function TestPill({ result, pending }: { result: McpServerTestResult; pending: b
   }
 }
 
+function OAuthPill({ oauth }: { oauth: McpOAuthState | undefined }) {
+  if (!oauth?.enabled) return null
+  switch (oauth.status) {
+    case "authenticated":
+      return <span className="text-xs text-green-600">OAuth ✓</span>
+    case "error":
+      return (
+        <span className="text-xs text-red-600" title={oauth.errorMessage}>
+          OAuth error
+        </span>
+      )
+    default:
+      return <span className="text-xs text-muted-foreground">OAuth: unauth</span>
+  }
+}
+
 // ── Editor form ───────────────────────────────────────────────────────────
 
 function McpServerEditor({
@@ -247,6 +274,70 @@ function McpServerEditor({
   )
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+
+  // OAuth flow state (http/sse edit mode only)
+  const [oauthEnabled, setOauthEnabled] = useState(
+    initial !== null && initial.transport !== "stdio" ? (initial.oauth?.enabled ?? false) : false,
+  )
+  const [authFlowUrl, setAuthFlowUrl] = useState<string | null>(null)
+  const [callbackInput, setCallbackInput] = useState("")
+  const [oauthError, setOauthError] = useState<string | null>(null)
+  const [authenticating, setAuthenticating] = useState(false)
+  const [completing, setCompleting] = useState(false)
+
+  const currentOauth = initial !== null && initial.transport !== "stdio" ? initial.oauth : undefined
+
+  const toggleOAuth = useCallback(
+    async (enabled: boolean) => {
+      setOauthEnabled(enabled)
+      if (!enabled) {
+        setAuthFlowUrl(null)
+        setCallbackInput("")
+        setOauthError(null)
+      }
+      if (initial) {
+        await handlers.onUpdate(initial.id, {
+          oauth: { ...(currentOauth ?? { status: "unauthenticated" as const }), enabled },
+        })
+      }
+    },
+    [initial, currentOauth, handlers],
+  )
+
+  const startAuth = useCallback(async () => {
+    if (!initial) return
+    setAuthenticating(true)
+    setOauthError(null)
+    try {
+      const result = await handlers.onStartMcpOAuth(initial.id)
+      if (result.ok && result.authorizationUrl) {
+        setAuthFlowUrl(result.authorizationUrl)
+      } else if (result.ok && result.alreadyAuthenticated) {
+        setAuthFlowUrl(null)
+      } else {
+        setOauthError(result.error ?? "Failed to start OAuth flow")
+      }
+    } finally {
+      setAuthenticating(false)
+    }
+  }, [initial, handlers])
+
+  const completeAuth = useCallback(async () => {
+    if (!initial) return
+    setCompleting(true)
+    setOauthError(null)
+    try {
+      const result = await handlers.onCompleteMcpOAuth(initial.id, callbackInput)
+      if (result.ok) {
+        setAuthFlowUrl(null)
+        setCallbackInput("")
+      } else {
+        setOauthError(result.error ?? "Failed to complete OAuth flow")
+      }
+    } finally {
+      setCompleting(false)
+    }
+  }, [initial, callbackInput, handlers])
 
   const nameError = useMemo(() => {
     if (name.length === 0) return null
@@ -417,7 +508,109 @@ function McpServerEditor({
                 onChange={(e) => setHeadersText(e.target.value)}
                 rows={3}
                 className="font-mono text-sm"
+                disabled={oauthEnabled}
               />
+              {oauthEnabled && (
+                <p className="text-xs text-muted-foreground">
+                  Authorization header is managed by OAuth when enabled.
+                </p>
+              )}
+            </div>
+          )}
+          {(transport === "http" || transport === "sse") && (
+            <div className="flex flex-col gap-3 rounded-md border p-3">
+              <div className="flex items-center gap-2">
+                <KeyRound className="h-4 w-4 text-muted-foreground" aria-hidden />
+                <span className="text-xs font-medium">OAuth 2.1</span>
+                <label className="ml-auto flex cursor-pointer items-center gap-1 text-xs text-muted-foreground">
+                  <input
+                    type="checkbox"
+                    checked={oauthEnabled}
+                    onChange={(e) => { void toggleOAuth(e.target.checked) }}
+                    aria-label="Enable OAuth"
+                  />
+                  <span>Enable</span>
+                </label>
+              </div>
+              {oauthEnabled && !initial && (
+                <p className="text-xs text-muted-foreground">
+                  Save the server first, then authenticate.
+                </p>
+              )}
+              {oauthEnabled && initial && (
+                <>
+                  <div className="flex items-center gap-2">
+                    <OAuthPill oauth={currentOauth} />
+                    {currentOauth?.status === "authenticated" && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => { void startAuth() }}
+                        disabled={authenticating}
+                      >
+                        Re-authenticate
+                      </Button>
+                    )}
+                  </div>
+                  {(currentOauth?.status !== "authenticated" || authFlowUrl) && (
+                    !authFlowUrl ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-fit"
+                        onClick={() => { void startAuth() }}
+                        disabled={authenticating}
+                      >
+                        {authenticating ? "Starting…" : "Authenticate"}
+                      </Button>
+                    ) : (
+                      <div className="flex flex-col gap-2">
+                        <div className="flex items-center gap-1">
+                          <a
+                            href={authFlowUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-1 text-xs text-blue-600 underline"
+                          >
+                            Open authorization URL
+                            <ExternalLink className="h-3 w-3" />
+                          </a>
+                          <button
+                            type="button"
+                            onClick={() => { void navigator.clipboard.writeText(authFlowUrl) }}
+                            className="ml-1 text-muted-foreground hover:text-foreground"
+                            title="Copy URL"
+                            aria-label="Copy authorization URL"
+                          >
+                            <Copy className="h-3 w-3" />
+                          </button>
+                        </div>
+                        <div className="grid gap-1">
+                          <span className="text-xs text-muted-foreground">
+                            After authorizing, paste the callback URL here:
+                          </span>
+                          <Input
+                            value={callbackInput}
+                            onChange={(e) => setCallbackInput(e.target.value)}
+                            placeholder="http://localhost:…/callback?code=…"
+                            className="font-mono text-xs"
+                          />
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="w-fit"
+                          onClick={() => { void completeAuth() }}
+                          disabled={completing || callbackInput.length === 0}
+                        >
+                          {completing ? "Completing…" : "Complete"}
+                        </Button>
+                      </div>
+                    )
+                  )}
+                  {oauthError && <p className="text-xs text-red-600">{oauthError}</p>}
+                </>
+              )}
             </div>
           )}
         </>
@@ -445,7 +638,7 @@ function McpServerEditor({
 // ── Settings page wrapper ─────────────────────────────────────────────────
 
 export function McpServersSettingsBranch(props: {
-  state: Pick<KannaState, "handleWriteAppSettings" | "handleTestMcpServer">
+  state: Pick<KannaState, "handleWriteAppSettings" | "handleTestMcpServer" | "handleStartMcpOAuth" | "handleCompleteMcpOAuth">
 }) {
   const servers = useAppSettingsStore(selectCustomMcpServers)
   const [editing, setEditing] = useState<EditingState>({ kind: "list" })
@@ -476,6 +669,8 @@ export function McpServersSettingsBranch(props: {
       onTest: async (id) => {
         await props.state.handleTestMcpServer(id)
       },
+      onStartMcpOAuth: async (id) => props.state.handleStartMcpOAuth(id),
+      onCompleteMcpOAuth: async (id, callbackUrl) => props.state.handleCompleteMcpOAuth(id, callbackUrl),
     }),
     [props.state],
   )

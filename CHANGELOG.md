@@ -1,5 +1,191 @@
 # Changelog
 
+## [0.104.0](https://github.com/cuongtranba/kanna/compare/v0.103.2...v0.104.0) (2026-07-03)
+
+
+### Features
+
+* add full-page /workflows view with per-agent transcript drill-in ([#468](https://github.com/cuongtranba/kanna/issues/468)) ([#478](https://github.com/cuongtranba/kanna/issues/478)) ([a13cd75](https://github.com/cuongtranba/kanna/commit/a13cd758b189f28034f90cc1963f971d46d6f8a0))
+
+
+### Bug Fixes
+
+* **client:** only 404 disables download offer card ([#476](https://github.com/cuongtranba/kanna/issues/476)) ([54fbc13](https://github.com/cuongtranba/kanna/commit/54fbc1394304a86b47492f1ca7e90f6fd5a45071))
+
+## [0.103.2](https://github.com/cuongtranba/kanna/compare/v0.103.1...v0.103.2) (2026-07-01)
+
+
+### Bug Fixes
+
+* **subagents:** centralize model catalog with customModels merge ([#474](https://github.com/cuongtranba/kanna/issues/474)) ([f3a7367](https://github.com/cuongtranba/kanna/commit/f3a73672fb2dc5d7bfae3873d88b06d5d8baef7c))
+
+## [0.103.1](https://github.com/cuongtranba/kanna/compare/v0.103.0...v0.103.1) (2026-07-01)
+
+
+### Bug Fixes
+
+* **models:** honor custom model catalog when normalizing selections ([#472](https://github.com/cuongtranba/kanna/issues/472)) ([9fd134b](https://github.com/cuongtranba/kanna/commit/9fd134bb2b219edd12178952f9a3a7ddf6dd98da))
+
+## [0.103.0](https://github.com/cuongtranba/kanna/compare/v0.102.2...v0.103.0) (2026-07-01)
+
+
+### Features
+
+* configurable model catalog (customModels in settings) ([#469](https://github.com/cuongtranba/kanna/issues/469)) ([4371f06](https://github.com/cuongtranba/kanna/commit/4371f0651f6efbacfcec6f7be960ea65a1b373a6))
+
+## [0.102.2](https://github.com/cuongtranba/kanna/compare/v0.102.1...v0.102.2) (2026-06-30)
+
+
+### Bug Fixes
+
+* **mcp:** inject fresh oauth bearer when testing authenticated MCP servers ([#465](https://github.com/cuongtranba/kanna/issues/465)) ([b187c39](https://github.com/cuongtranba/kanna/commit/b187c3986422e020c42929a6799fba2b6b3cd697))
+
+## [0.102.1](https://github.com/cuongtranba/kanna/compare/v0.102.0...v0.102.1) (2026-06-30)
+
+
+### Bug Fixes
+
+* **mcp-oauth:** persist AS metadata so token refresh survives past TTL ([#463](https://github.com/cuongtranba/kanna/issues/463)) ([be82004](https://github.com/cuongtranba/kanna/commit/be8200498ca7ea76712e298067d32b01aa680e9b))
+
+## [0.102.0](https://github.com/cuongtranba/kanna/compare/v0.101.0...v0.102.0) (2026-06-29)
+
+
+### Features
+
+* OAuth 2.1 client for HTTP/SSE custom MCP servers ([#461](https://github.com/cuongtranba/kanna/issues/461)) ([924ba2e](https://github.com/cuongtranba/kanna/commit/924ba2e902de5010e344d1ef1f18b4d5532d29ad))
+
+## [0.101.0](https://github.com/cuongtranba/kanna/compare/v0.100.0...v0.101.0) (2026-06-26)
+
+
+### Features
+
+* per-turn token cost across SDK/OpenRouter/Codex + cumulative session totals ([#460](https://github.com/cuongtranba/kanna/issues/460)) ([5e4c9d7](https://github.com/cuongtranba/kanna/commit/5e4c9d709bf3e5d8d356b8c0fa284cff99198958))
+
+
+### Bug Fixes
+
+* **composer:** paste/drop images upload to the project, not the chat ([#459](https://github.com/cuongtranba/kanna/issues/459)) ([6826647](https://github.com/cuongtranba/kanna/commit/68266473098018f994445da52e9e15f9a41d5d70))
+* **local-catalog:** namespace marketplace skills by real plugin name ([#458](https://github.com/cuongtranba/kanna/issues/458)) ([42fa49e](https://github.com/cuongtranba/kanna/commit/42fa49e9802fe7c4d0f1329fd2167d884875b3e4))
+* **settings:** reset model when switching LLM provider ([#452](https://github.com/cuongtranba/kanna/issues/452)) ([6fab63d](https://github.com/cuongtranba/kanna/commit/6fab63dd4cc1a76f3db6a9696f2ec0f683592999))
+
+## [0.100.0](https://github.com/cuongtranba/kanna/compare/v0.99.0...v0.100.0) (2026-06-25)
+
+
+### Features
+
+* **renderer:** linkify text references adjacent to URLs ([#456](https://github.com/cuongtranba/kanna/issues/456)) ([794d662](https://github.com/cuongtranba/kanna/commit/794d662cc31e4892bf28240b5ac3b15770144bc7))
+
+
+### Bug Fixes
+
+* **agent:** surface SDK background-task completions in the transcript ([#453](https://github.com/cuongtranba/kanna/issues/453)) ([353bd26](https://github.com/cuongtranba/kanna/commit/353bd26a67eb954cf6ca5993954ffd27a0608d95))
+* **transcript:** keep offer_download/image cards out of collapsed tool groups ([#455](https://github.com/cuongtranba/kanna/issues/455)) ([fc15009](https://github.com/cuongtranba/kanna/commit/fc150099ab5247316f9b4d553062ae70ca283f31))
+
+## [0.99.0](https://github.com/cuongtranba/kanna/compare/v0.98.0...v0.99.0) (2026-06-24)
+
+
+### Features
+
+* **lexical:** migrate chat input and messages to Lexical 0.45 ([#446](https://github.com/cuongtranba/kanna/issues/446)) ([a5d3619](https://github.com/cuongtranba/kanna/commit/a5d3619fe2f7d34652ffd54533007b8c1c3c50c4))
+
+
+### Bug Fixes
+
+* **session-panel:** merge Kanna subagents into system_init.agents ([#450](https://github.com/cuongtranba/kanna/issues/450)) ([ba899c8](https://github.com/cuongtranba/kanna/commit/ba899c8788e9eb45ffe5146b3c3413905f8a43bf))
+
+## [0.98.0](https://github.com/cuongtranba/kanna/compare/v0.97.3...v0.98.0) (2026-06-22)
+
+
+### Features
+
+* **chat-ui:** show local skills + slash commands in / picker ([#444](https://github.com/cuongtranba/kanna/issues/444)) ([d5e344b](https://github.com/cuongtranba/kanna/commit/d5e344b6e08e6d22748387543b352e12d7e90919))
+
+## [0.97.3](https://github.com/cuongtranba/kanna/compare/v0.97.2...v0.97.3) (2026-06-20)
+
+
+### Bug Fixes
+
+* **agent:** deliver OpenRouter prompts via the SDK session transport ([#443](https://github.com/cuongtranba/kanna/issues/443)) ([d826774](https://github.com/cuongtranba/kanna/commit/d8267748c7c1acca3161e0f8d86396d518f04653))
+* **agent:** fail-close OpenRouter turns whose SDK stream stalls before first entry ([#441](https://github.com/cuongtranba/kanna/issues/441)) ([7a10c59](https://github.com/cuongtranba/kanna/commit/7a10c59d1ec1e9f2eba1cae4809d8e5bc585ede7))
+
+## [0.97.2](https://github.com/cuongtranba/kanna/compare/v0.97.1...v0.97.2) (2026-06-20)
+
+
+### Bug Fixes
+
+* **chat-ui:** stop crash on aborted-stream result with missing body ([#439](https://github.com/cuongtranba/kanna/issues/439)) ([3c398f3](https://github.com/cuongtranba/kanna/commit/3c398f33e52bd4d883ff75b4c5411d28f7b46bc4))
+
+## [0.97.1](https://github.com/cuongtranba/kanna/compare/v0.97.0...v0.97.1) (2026-06-19)
+
+
+### Bug Fixes
+
+* **agent:** run the selected OpenRouter model instead of collapsing to default ([#437](https://github.com/cuongtranba/kanna/issues/437)) ([f548d4a](https://github.com/cuongtranba/kanna/commit/f548d4adee96e47996173031b2c84ffe40711337))
+* **agent:** surface OpenRouter identity in account_info, not Anthropic source ([#436](https://github.com/cuongtranba/kanna/issues/436)) ([9970b04](https://github.com/cuongtranba/kanna/commit/9970b043baac59f8e86b0e6af6d363e983e8c44a))
+
+## [0.97.0](https://github.com/cuongtranba/kanna/compare/v0.96.0...v0.97.0) (2026-06-18)
+
+
+### Features
+
+* **provider:** add OpenRouter as third agentic chat provider ([#435](https://github.com/cuongtranba/kanna/issues/435)) ([01b26a8](https://github.com/cuongtranba/kanna/commit/01b26a8c51ae551f4d2219e95d366b74bc068d8e))
+
+
+### Bug Fixes
+
+* **agent:** drop duplicate rate-limit body on trailing error result ([#434](https://github.com/cuongtranba/kanna/issues/434)) ([0274e27](https://github.com/cuongtranba/kanna/commit/0274e27129d621108dd5d40837024c4087d878d2))
+* **chat-ui:** surface subagent pending question at transcript footer ([#432](https://github.com/cuongtranba/kanna/issues/432)) ([ab6d0ac](https://github.com/cuongtranba/kanna/commit/ab6d0ac27a6e5237a73f1c915e3b94647a31222a))
+
+## [0.96.0](https://github.com/cuongtranba/kanna/compare/v0.95.1...v0.96.0) (2026-06-17)
+
+
+### Features
+
+* **subagent:** per-subagent trigger mode (auto/manual) ([#429](https://github.com/cuongtranba/kanna/issues/429)) ([0a3a405](https://github.com/cuongtranba/kanna/commit/0a3a405c7da813b3666d22304dbbbe60244ea310))
+
+## [0.95.1](https://github.com/cuongtranba/kanna/compare/v0.95.0...v0.95.1) (2026-06-17)
+
+
+### Bug Fixes
+
+* **subagent:** resolve delegate_subagent id by id or unambiguous name ([#427](https://github.com/cuongtranba/kanna/issues/427)) ([2d89d39](https://github.com/cuongtranba/kanna/commit/2d89d39d8e561ed3ada3ab7dfd471d9e9dd48663))
+
+## [0.95.0](https://github.com/cuongtranba/kanna/compare/v0.94.1...v0.95.0) (2026-06-17)
+
+
+### Features
+
+* **agent:** label stack projects in the Claude system prompt ([#425](https://github.com/cuongtranba/kanna/issues/425)) ([a43e805](https://github.com/cuongtranba/kanna/commit/a43e80556b5e283835e35c23d0a7a3f2439c8b7f))
+
+## [0.94.1](https://github.com/cuongtranba/kanna/compare/v0.94.0...v0.94.1) (2026-06-16)
+
+
+### Bug Fixes
+
+* **agent:** mirror PTY OAuth-pool account info in SDK driver ([#422](https://github.com/cuongtranba/kanna/issues/422)) ([ca347be](https://github.com/cuongtranba/kanna/commit/ca347beaf16e279a8a307c4415085d08fba93825))
+* **agent:** swallow SDK interrupt tail error on cancel ([#424](https://github.com/cuongtranba/kanna/issues/424)) ([dfc52a6](https://github.com/cuongtranba/kanna/commit/dfc52a6fa18e2136c1640689d72dc50dd0e49c59))
+
+## [0.94.0](https://github.com/cuongtranba/kanna/compare/v0.93.0...v0.94.0) (2026-06-16)
+
+
+### Features
+
+* **subagent:** add run_in_background delegation mode ([#420](https://github.com/cuongtranba/kanna/issues/420)) ([a10fc89](https://github.com/cuongtranba/kanna/commit/a10fc893847fae90613a20016805b3287acb0ce1))
+
+## [0.93.0](https://github.com/cuongtranba/kanna/compare/v0.92.3...v0.93.0) (2026-06-16)
+
+
+### Features
+
+* SDK↔PTY driver feature parity (keep-alive subagents, workflow panel) ([#418](https://github.com/cuongtranba/kanna/issues/418)) ([1742464](https://github.com/cuongtranba/kanna/commit/1742464a114611459be90f04dcb5be7e69da84e8))
+
+## [0.92.3](https://github.com/cuongtranba/kanna/compare/v0.92.2...v0.92.3) (2026-06-12)
+
+
+### Bug Fixes
+
+* **local-projects:** enable vertical scroll when projects overflow viewport ([#416](https://github.com/cuongtranba/kanna/issues/416)) ([bb721b7](https://github.com/cuongtranba/kanna/commit/bb721b7c038b0ec1c302856bc90053fc5d57ef5b))
+
 ## [0.92.2](https://github.com/cuongtranba/kanna/compare/v0.92.1...v0.92.2) (2026-06-12)
 
 

@@ -32,6 +32,11 @@ function makeSnapshot(overrides: Partial<AppSettingsSnapshot> = {}): AppSettings
         modelOptions: { reasoningEffort: "high", fastMode: false },
         planMode: false,
       },
+      openrouter: {
+        model: "moonshotai/kimi-k2.5:nitro",
+        modelOptions: {},
+        planMode: false,
+      },
     },
     warning: null,
     filePathDisplay: "/tmp/settings.json",
@@ -41,6 +46,7 @@ function makeSnapshot(overrides: Partial<AppSettingsSnapshot> = {}): AppSettings
     uploads: UPLOAD_DEFAULTS,
     subagents: [],
     customMcpServers: [],
+    customModels: [],
     claudeDriver: { ...CLAUDE_DRIVER_DEFAULTS, lifecycle: { ...CLAUDE_PTY_LIFECYCLE_DEFAULTS } },
     globalPromptAppend: "",
     shareDefaultTtlHours: 24,
@@ -117,6 +123,11 @@ describe("buildAgentAppSettingsView", () => {
   // and one that removes a consumed key fails loudly.
   test("returns exactly the keys the AgentCoordinator consumes", () => {
     const view = buildAgentAppSettingsView(makeSnapshot())
-    expect(Object.keys(view).sort()).toEqual(["claudeDriver", "customMcpServers", "globalPromptAppend"])
+    expect(Object.keys(view).sort()).toEqual([
+      "claudeDriver",
+      "customMcpServers",
+      "customModels",
+      "globalPromptAppend",
+    ])
   })
 })

@@ -1,7 +1,7 @@
 ---
 id: c3-115
 c3-version: 4
-c3-seal: d7e82da963e2a764aebfb3ff17eb76c2110cc197b1a5b8eb628c1e6c01de8291
+c3-seal: 10a0e4dde713e1e974f74c48cab18647f058d3b9c272c45a54257b408a4f66cd
 title: chat-ui-chrome
 type: component
 category: feature
@@ -31,17 +31,18 @@ Provide the composer and chat chrome: input dock, provider/model/effort pickers,
 
 ## Purpose
 
-Owns the composer and surrounding chrome: textarea input, provider/model/effort pickers, attachment controls, queued message indicator, send action. Non-goals: transcript rendering, server command execution, chat history.
+Owns the composer and surrounding chrome: Lexical rich-text editor input, provider/model/effort pickers, attachment controls, queued message indicator, send action. Non-goals: transcript rendering, server command execution, chat history.
 
 ## Foundational Flow
 
 | Aspect | Detail | Reference |
 | --- | --- | --- |
 | Precondition | Chat-page provides session context | c3-112 |
-| Input — chat input store | Pending text, attachments | c3-102 |
+| Input — chat input store | Pending text + Lexical editor state, attachments | c3-102 |
 | Input — preferences | Theme, provider/model defaults | c3-102 |
-| Input — primitives | Textarea, popover, select, tooltip | c3-103 |
+| Input — primitives | Lexical contenteditable editor, popover, select, tooltip | c3-103 |
 | Input — provider catalog types | Provider/model/effort options | c3-301 |
+| Composer editor | Lexical 0.45 (nodes + plugins + serialize) under src/client/components/lexical | c3-1 |
 
 ## Business Flow
 
@@ -49,6 +50,7 @@ Owns the composer and surrounding chrome: textarea input, provider/model/effort 
 | --- | --- | --- |
 | Outcome | User sends a message to the agent with chosen provider/model | c3-1 |
 | Primary path | Type → choose model → click Send → emit chat.send command | c3-208 |
+| Alternate — mention/slash picker | @ and / typeahead open at start OR after whitespace (not only line start); Arrow keys navigate with scroll-into-view; Enter or click inserts a chip node, never submits | c3-231 |
 | Alternate — drag-attach | Drop file → upload → reference inserted in payload | c3-217 |
 | Alternate — provider switch | Picker writes to preferences store; persists across sessions | ref-zustand-store |
 | Failure — send rejected | Show inline banner; retain text in store | c3-115 |
@@ -59,7 +61,8 @@ Owns the composer and surrounding chrome: textarea input, provider/model/effort 
 | --- | --- | --- | --- | --- |
 | ref-provider-adapter | ref | Use normalized catalog, not per-provider forms | must follow | One UI for all providers |
 | ref-zustand-store | ref | Persist pending input + preferences | must follow | Survives reload |
-| rule-zustand-store | rule | Compliance target added by c3x wire; refine what must be reviewed or complied with before handoff. | wired compliance target beats uncited local prose | Added by c3x wire for explicit compliance review. |
+| rule-zustand-store | rule | All local UI state in chat-ui-chrome lives in zustand stores, not React state | wired compliance target beats uncited local prose | Added by c3x wire for explicit compliance review. |
+| c3-231 | ref | Picker consumes the merged slashCommands list including local skills + commands surfaced by local-catalog | wired compliance target beats uncited local prose | Local-skill catalog wiring |
 
 ## Contract
 

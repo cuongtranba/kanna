@@ -4,6 +4,7 @@ import {
   Bot,
   Command,
   Code,
+  Cpu,
   ExternalLink,
   Info,
   Loader2,
@@ -20,8 +21,6 @@ import {
   Trash2,
   X,
 } from "lucide-react"
-import Markdown from "react-markdown"
-import remarkGfm from "remark-gfm"
 import { useNavigate, useOutletContext, useParams } from "react-router-dom"
 import { getKeybindingsFilePathDisplay, SDK_CLIENT_APP } from "../../shared/branding"
 import { ANALYTICS_STATIC_EVENT_NAMES, ANALYTICS_STATIC_PROPERTY_NAMES } from "../../shared/analytics"
@@ -34,10 +33,9 @@ import {
   CLAUDE_PTY_MAX_CONCURRENT_MIN,
   CLOUDFLARE_TUNNEL_DEFAULTS,
   DEFAULT_KEYBINDINGS,
-  DEFAULT_OPENAI_SDK_MODEL,
-  DEFAULT_OPENROUTER_SDK_MODEL,
   GLOBAL_PROMPT_APPEND_MAX_CHARS,
   PROVIDERS,
+  mergeCustomModels,
   UPLOAD_DEFAULTS,
   UPLOAD_MAX_FILE_SIZE_MB_MAX,
   UPLOAD_MAX_FILE_SIZE_MB_MIN,
@@ -54,9 +52,11 @@ import {
   type SkillUninstallResult,
   type UpdateSnapshot,
 } from "../../shared/types"
-import { markdownComponents } from "../components/messages/shared"
+import { renderMarkdownToReact } from "../components/lexical/markdown/lexicalToReact"
 import { SubagentsSettingsBranch } from "./SubagentsSection"
 import { McpServersSettingsBranch } from "./McpServersSection"
+import { ModelsSettingsBranch } from "./ModelsSection"
+import { useAppSettingsStore, selectCustomModels } from "../stores/appSettingsStore"
 import { ChatPreferenceControls } from "../components/chat-ui/ChatPreferenceControls"
 import { OAuthTokenPoolCard } from "../components/chat-ui/OAuthTokenPoolCard"
 import { EDITOR_OPTIONS, EditorIcon } from "../components/editor-icons"
@@ -102,6 +102,10 @@ import {
   unsubscribePush,
   type PushPermissionState,
 } from "./pushClient"
+import {
+  createLlmProviderDraftForSelection,
+  type LlmProviderDraft,
+} from "./llmProviderDraft"
 
 const sidebarItems = [
   {
@@ -121,6 +125,12 @@ const sidebarItems = [
     label: "Providers",
     icon: MessageSquareQuote,
     subtitle: "Manage the default chat provider and saved model defaults for Claude Code and Codex.",
+  },
+  {
+    id: "models",
+    label: "Models",
+    icon: Cpu,
+    subtitle: "Add, edit, and remove Claude and Codex models available in the model picker.",
   },
   {
     id: "subagents",
@@ -544,9 +554,7 @@ export function ChangelogSection({
 
             {release.body?.trim() ? (
               <div className="prose prose-sm mt-5 max-w-none text-foreground dark:prose-invert">
-                <Markdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-                  {release.body}
-                </Markdown>
+                {renderMarkdownToReact(release.body)}
               </div>
             ) : (
               <div className="mt-5 text-sm text-muted-foreground">No release notes were provided.</div>
@@ -1084,6 +1092,8 @@ export function SettingsPage() {
   const setProviderDefaultModel = useChatPreferencesStore((store) => store.setProviderDefaultModel)
   const setProviderDefaultModelOptions = useChatPreferencesStore((store) => store.setProviderDefaultModelOptions)
   const setProviderDefaultPlanMode = useChatPreferencesStore((store) => store.setProviderDefaultPlanMode)
+  const customModels = useAppSettingsStore(selectCustomModels)
+  const mergedProviders = useMemo(() => mergeCustomModels([...PROVIDERS], customModels), [customModels])
   const resolvedKeybindings = useMemo(() => getResolvedKeybindings(keybindings), [keybindings])
   const keybindingsFilePathDisplay = resolvedKeybindings.filePathDisplay || getKeybindingsFilePathDisplay()
   const [pushPermissionState, setPushPermissionState] = useState<PushPermissionState>(() => detectPushSupport().state)
@@ -1110,7 +1120,7 @@ export function SettingsPage() {
   )
   const shareDefaultTtlHours = appSettings?.shareDefaultTtlHours ?? 24
   const [shareDefaultTtlDraft, setShareDefaultTtlDraft] = useState(String(shareDefaultTtlHours))
-  const [llmProviderDraft, setLlmProviderDraft] = useState({
+  const [llmProviderDraft, setLlmProviderDraft] = useState<LlmProviderDraft>({
     provider: "openai" as LlmProviderKind,
     apiKey: "",
     model: "",
@@ -1540,16 +1550,7 @@ export function SettingsPage() {
   }
 
   function handleLlmProviderSelection(nextProvider: LlmProviderKind) {
-    const nextDraft = {
-      ...llmProviderDraft,
-      provider: nextProvider,
-      model: nextProvider === "openai"
-        ? DEFAULT_OPENAI_SDK_MODEL
-        : nextProvider === "openrouter"
-          ? DEFAULT_OPENROUTER_SDK_MODEL
-          : llmProviderDraft.model,
-      baseUrl: nextProvider === "custom" ? llmProviderDraft.baseUrl : "",
-    }
+    const nextDraft = createLlmProviderDraftForSelection(llmProviderDraft, nextProvider)
     setLlmProviderDraft(nextDraft)
     void commitLlmProvider(nextDraft)
   }
@@ -2291,7 +2292,7 @@ export function SettingsPage() {
                     >
                       <div className="max-w-[420px]">
                         <ChatPreferenceControls
-                          availableProviders={PROVIDERS}
+                          availableProviders={mergedProviders}
                           selectedProvider="claude"
                           showProviderPicker={false}
                           model={providerDefaults.claude.model}
@@ -2321,7 +2322,7 @@ export function SettingsPage() {
                     >
                       <div className="max-w-[420px]">
                         <ChatPreferenceControls
-                          availableProviders={PROVIDERS}
+                          availableProviders={mergedProviders}
                           selectedProvider="codex"
                           showProviderPicker={false}
                           model={providerDefaults.codex.model}
@@ -2470,6 +2471,8 @@ export function SettingsPage() {
                   <SkillsSection state={state} />
                 ) : selectedPage === "subagents" ? (
                   <SubagentsSettingsBranch state={state} />
+                ) : selectedPage === "models" ? (
+                  <ModelsSettingsBranch state={state} />
                 ) : selectedPage === "mcp-servers" ? (
                   <McpServersSettingsBranch state={state} />
                 ) : selectedPage === "instructions" ? (

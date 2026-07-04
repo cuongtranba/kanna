@@ -1,11 +1,10 @@
 import { useState, useRef, useEffect } from "react"
 import { Check, CheckCheck, Pencil, CornerDownLeft, ChevronDown, Copy, Send } from "lucide-react"
-import Markdown from "react-markdown"
 import type { ProcessedToolCall } from "./types"
 import { Button } from "../ui/button"
-import { defaultMarkdownComponents, defaultRemarkPlugins } from "./shared"
 import { cn } from "../../lib/utils"
 import { useTranscriptRenderOptions } from "./render-context"
+import { renderMarkdownToReact } from "../lexical/markdown/lexicalToReact"
 
 interface Props {
   message: Extract<ProcessedToolCall, { toolKind: "exit_plan_mode" }>
@@ -74,9 +73,7 @@ export function ExitPlanModeMessage({ message, onConfirm, isLatest }: Props) {
           )}
           {input?.plan ? (
             <div className="prose prose-sm dark:prose-invert max-w-none">
-              <Markdown remarkPlugins={defaultRemarkPlugins} components={defaultMarkdownComponents}>
-                {input.plan}
-              </Markdown>
+              {renderMarkdownToReact(input.plan)}
               <div className="mt-5" />
             </div>
           ) : (

@@ -7,12 +7,16 @@ import type {
   AgentProvider,
   ChatAttachment,
   ContextWindowUsageSnapshot,
+  LlmProviderSnapshot,
+  McpOAuthState,
   McpServerConfig,
   ModelOptions,
   NormalizedToolCall,
   PendingToolSnapshot,
   KannaStatus,
+  ProviderUsage,
   QueuedChatMessage,
+  ResolvedStackBinding,
   SlashCommand,
   Subagent,
   TranscriptEntry,
@@ -39,11 +43,16 @@ import type { HarnessEvent, HarnessToolRequest, HarnessTurn } from "./harness-ty
 import {
   codexServiceTierFromModelOptions,
   getServerProviderCatalog,
+  isClaudeSdkProvider,
   normalizeClaudeModelOptions,
   normalizeCodexModelOptions,
   normalizeServerModel,
+  openrouterAuthReady,
 } from "./provider-catalog"
-import { resolveClaudeApiModelId, type ClaudeDriverPreference } from "../shared/types"
+import { readLlmProviderSnapshot } from "./llm-provider"
+import { computeCostUsd, resolveModelPrice, stripModelVariantSuffix } from "../shared/token-pricing"
+import type { ModelPrice } from "../shared/token-pricing"
+import { providerUsesSdkSession, resolveClaudeApiModelId, type ClaudeDriverPreference, type CustomModelEntry } from "../shared/types"
 import { fallbackTitleFromMessage } from "./generate-title"
 import { AUTO_CONTINUE_EVENT_VERSION, type AutoContinueEvent } from "./auto-continue/events"
 import { ClaudeLimitDetector, CodexLimitDetector, type LimitDetection, type LimitDetector } from "./auto-continue/limit-detector"
@@ -54,12 +63,14 @@ import type { TunnelGateway } from "./cloudflare-tunnel/gateway"
 import { OAuthTokenPool } from "./oauth-pool/oauth-token-pool"
 import { maskOauthKey } from "../shared/mask-oauth-key"
 import { parseMentions, type ParsedMention } from "./mention-parser"
-import { SubagentOrchestrator, type ProviderRunStart } from "./subagent-orchestrator"
+import { SubagentOrchestrator, type BackgroundRunOutcome, type ProviderRunStart } from "./subagent-orchestrator"
 import { buildSubagentProviderRun, type BuildSubagentProviderRunArgs } from "./subagent-provider-run"
 import type { ToolCallbackService } from "./tool-callback"
 import type { ChatPermissionPolicy } from "../shared/permission-policy"
 import { mergePolicyOverride, POLICY_DEFAULT } from "../shared/permission-policy"
 import { startClaudeSessionPTY, type StartClaudeSessionPtyArgs } from "./claude-pty/driver"
+import { computeWorkflowsDir } from "./claude-pty/jsonl-path.adapter"
+import { ensureFreshMcpToken } from "./mcp-oauth.adapter"
 
 type SdkMcpEntry =
   | { type: "stdio"; command: string; args: string[]; env: Record<string, string>; cwd?: string }
@@ -69,6 +80,7 @@ type SdkMcpEntry =
 
 export function buildUserMcpServers(
   servers: readonly McpServerConfig[],
+  oauthBearers: ReadonlyMap<string, string> = new Map(),
 ): Record<string, SdkMcpEntry> {
   const out: Record<string, SdkMcpEntry> = {}
   for (const s of servers) {
@@ -83,10 +95,12 @@ export function buildUserMcpServers(
         ...(s.cwd ? { cwd: s.cwd } : {}),
       }
     } else {
+      const bearer = oauthBearers.get(s.id)
+      const headers = bearer ? { ...s.headers, Authorization: `Bearer ${bearer}` } : s.headers
       out[s.name] = {
         type: s.transport,
         url: s.url,
-        headers: s.headers,
+        headers,
       }
     }
   }
@@ -110,12 +124,37 @@ export function resolveSpawnPaths(
   return { cwd: primary.worktreePath, additionalDirectories }
 }
 
-const CLAUDE_TOOLSET = [
+/**
+ * Resolve a chat's stack bindings into named entries for the system prompt.
+ * Mirrors the read-model resolver in `read-models.ts` — looks each binding's
+ * project title up via `lookupProjectTitle`, falling back to `(missing)` /
+ * `projectStatus: "missing"` when the project no longer exists. Solo chats
+ * (no `stackBindings`) resolve to an empty list (no prompt block).
+ */
+export function resolveStackProjects(
+  chat: Pick<ChatRecord, "stackBindings">,
+  lookupProjectTitle: (projectId: string) => string | undefined,
+): ResolvedStackBinding[] {
+  if (!chat.stackBindings || chat.stackBindings.length === 0) return []
+  return chat.stackBindings.map((b) => {
+    const title = lookupProjectTitle(b.projectId)
+    return {
+      projectId: b.projectId,
+      projectTitle: title ?? "(missing)",
+      worktreePath: b.worktreePath,
+      role: b.role,
+      projectStatus: title !== undefined ? "active" : "missing",
+    }
+  })
+}
+
+export const CLAUDE_TOOLSET = [
   "Skill",
   "WebFetch",
   "WebSearch",
   "Task",
   "TaskOutput",
+  "Workflow",
   "Bash",
   "Glob",
   "Grep",
@@ -195,6 +234,12 @@ interface ClaudeSessionState {
   pendingPromptSeqs: number[]
   activeTokenId: string | null
   oauthKeyMasked: string | null
+  oauthLabel: string | null
+  // OpenRouter turns route through the SDK with ANTHROPIC_AUTH_TOKEN set to the
+  // OpenRouter key, so the SDK self-reports a misleading Anthropic source. Hold
+  // the OpenRouter identity here to surface it in the account_info entry.
+  openrouterKeyMasked: string | null
+  openrouterModel: string | null
   lastUsedAt: number
   // Claude-Code background Bash tasks (`Bash(run_in_background: true)`) run as
   // children of this PTY process and notify completion via a `<task-notification>`
@@ -204,6 +249,16 @@ interface ClaudeSessionState {
   // mid-flight. See adr-20260604-pty-background-task-keepalive.
   backgroundTaskIds: Set<string>
   backgroundTaskDeadlineAt: number
+  /** SDK only: set once the workflows dir has been registered for this session. */
+  workflowsDirRegistered?: boolean
+  // Number of cancelled turns awaiting their interrupt-induced tail `result`.
+  // The SDK's `interrupt()` resolves the query loop with a `result` whose
+  // subtype is `error_during_execution` (NOT `cancelled`) and empty text, which
+  // would otherwise render as "An unknown error occurred." after the
+  // `interrupted` entry. Set on cancel, consumed (and the tail suppressed) when
+  // that result arrives, reset on each new turn so a no-tail cancel can't leak
+  // suppression onto a later real error.
+  cancelledResultPending: number
 }
 
 interface ClaudeSessionLifecycleOptions {
@@ -244,6 +299,8 @@ interface AgentCoordinatorArgs {
      * so the subagent roster is embedded.
      */
     systemPromptAppend?: string
+    /** When set, redirect the SDK to OpenRouter instead of Anthropic. */
+    openrouterApiKey?: string | null
     /** Orchestrator for delegate_subagent. Omit to hide the tool. */
     subagentOrchestrator?: SubagentOrchestrator
     /** Per-spawn delegation context (depth / ancestor chain / parentUserMessageId resolver). */
@@ -265,10 +322,18 @@ interface AgentCoordinatorArgs {
     chatPolicy?: ChatPermissionPolicy
     /** Enabled user MCP servers, merged into the SDK's mcpServers map. */
     customMcpServers?: readonly McpServerConfig[]
+    /** Pre-resolved oauth bearer tokens keyed by server id. */
+    oauthBearers?: ReadonlyMap<string, string>
     /** Backs the `schedule_wakeup` MCP tool. Omit to hide the tool. */
     scheduleWakeup?: (a: { delayMs: number; prompt: string }) => Promise<string | null>
     /** Folder-restricted subagent: disallow native FS tools + allowlist mcp__kanna__* + per-run path-deny scope. */
     restrictedAllowedPaths?: string[]
+    /** Keep the SDK prompt queue open after the initial prompt to allow multi-turn keep-alive. */
+    keepAlive?: boolean
+    /** Per-turn price for computing cost when the provider doesn't report it (OpenRouter). */
+    turnPrice?: ModelPrice | null
+    /** Overrides the configured context window (OpenRouter model contextLength). */
+    contextWindowOverride?: number
   }) => Promise<ClaudeSessionHandle>
   startClaudeSessionPTY?: (args: StartClaudeSessionPtyArgs) => Promise<ClaudeSessionHandle>
   claudeLimitDetector?: LimitDetector
@@ -290,6 +355,17 @@ interface AgentCoordinatorArgs {
    * 120000 (2 min). Bounded by `maxAgentWakes`.
    */
   pendingWorkflowPollMs?: number
+  /**
+   * Watchdog (ms) for an OpenRouter turn whose SDK stream emits no transcript
+   * entry (no `system_init`) after the session-token handshake. OpenRouter
+   * routes through the Claude SDK; a stalled upstream leaves the stream open
+   * but silent, so the `runClaudeSession` for-await never returns or throws
+   * and the existing fail-close never fires. On timeout the watchdog
+   * interrupts + closes the session so the stream ends and the turn is
+   * recorded failed. OpenRouter-only; cleared on the first entry. Default
+   * 120000 (2 min).
+   */
+  openrouterFirstEntryTimeoutMs?: number
   getSubagents?: () => Subagent[]
   getAppSettingsSnapshot?: () => {
     claudeAuth?: { authenticated?: boolean } | null
@@ -299,6 +375,7 @@ interface AgentCoordinatorArgs {
     }
     globalPromptAppend?: string
     customMcpServers?: readonly McpServerConfig[]
+    customModels?: readonly CustomModelEntry[]
   }
   throwOnClaudeSessionStart?: boolean
   oauthPool?: OAuthTokenPool
@@ -316,6 +393,14 @@ interface AgentCoordinatorArgs {
   workflowRegistry?: import("./workflow-registry").WorkflowRegistry
   /** Registry mapping each chat to its `…/subagents` dir for on-demand Agent child-transcript drill-in. */
   subagentTranscriptRegistry?: import("./subagent-transcript-registry").SubagentTranscriptRegistry
+  /** Reads the persisted LLM provider snapshot (OpenRouter key source). */
+  readLlmProvider?: () => Promise<LlmProviderSnapshot>
+  /** Lists OpenRouter models (with pricing + contextLength) for cost computation. */
+  listOpenRouterModels?: () => Promise<import("../shared/types").OpenRouterModel[]>
+  /** Local skill + slash command catalog (user, project, plugin scans). */
+  localCatalog?: import("./local-catalog").LocalCatalogService
+  /** Persist updated OAuth state for a custom MCP server (called after token refresh at spawn). */
+  persistOAuthState?: (id: string, oauth: McpOAuthState) => void
 }
 
 interface SendToStartingProfile {
@@ -364,10 +449,14 @@ function isPromptTooLongMessage(message: string): boolean {
     || /\bprompt\b.*\btoo\s+large\b/i.test(message)
 }
 
-function stringFromUnknown(value: unknown) {
+function stringFromUnknown(value: unknown): string {
   if (typeof value === "string") return value
+  if (value === undefined || value === null) return ""
   try {
-    return JSON.stringify(value, null, 2)
+    // JSON.stringify returns the JS value `undefined` (not a string) for
+    // functions/symbols, which would drop the `result` key on persist and
+    // break the `result: string` contract; coerce to "" in that case.
+    return JSON.stringify(value, null, 2) ?? ""
   } catch {
     return String(value)
   }
@@ -762,6 +851,27 @@ export function normalizeClaudeStreamMessage(message: any): TranscriptEntry[] {
     return [timestamped({ kind: "status", messageId, status: message.status, debugRaw })]
   }
 
+  // The Agent SDK emits SDKTaskNotificationMessage when a
+  // `Bash(run_in_background)` task settles (status completed|failed|stopped).
+  // The model is re-driven natively by the SDK's user-origin task-notification
+  // message (the `canUseTool`-after-result self-resume noted in send()), so
+  // this branch only SURFACES the completion into the transcript/event log —
+  // without it the background work was invisible to Kanna. `skip_transcript`
+  // marks ambient/housekeeping tasks the SDK asks consumers to hide inline.
+  if (message.type === "system" && message.subtype === "task_notification") {
+    const taskStatus = typeof message.status === "string" ? message.status : "completed"
+    const summary = typeof message.summary === "string" && message.summary.length > 0
+      ? message.summary
+      : "(no summary)"
+    return [timestamped({
+      kind: "status",
+      messageId,
+      status: `Background task ${taskStatus}: ${summary}`,
+      hidden: message.skip_transcript === true ? true : undefined,
+      debugRaw,
+    })]
+  }
+
   // Interactive TUI claude never writes a `type: "result"` row — it writes
   // `system/turn_duration` instead (per canon/shannon research). Synthesize a
   // turn-end `result` so the agent loop and UI see the turn complete.
@@ -812,11 +922,25 @@ export function normalizeClaudeStreamMessage(message: any): TranscriptEntry[] {
 export async function* createClaudeHarnessStream(
   q: Query,
   configuredContextWindow?: number,
+  resolveTurnPrice?: () => ModelPrice | null,
 ): AsyncGenerator<HarnessEvent> {
   let seenAssistantUsageIds = new Set<string>()
   let latestUsageSnapshot: ContextWindowUsageSnapshot | null = null
   let lastKnownContextWindow: number | undefined = configuredContextWindow
   const detector = new ClaudeLimitDetector()
+  // SDK rate-limit / api-error turns emit BOTH a synthetic assistant
+  // `isApiErrorMessage` (→ `api_error` entry, red card with text) AND a
+  // `type:"result"` whose `result` field repeats the same text (→ second
+  // red card + "Failed after Xs"). Track per-turn api_error emission so
+  // we can scrub the duplicate body off the trailing result entry; the
+  // duration footer still renders, the message renders once.
+  let apiErrorEmittedInTurn = false
+
+  // Per-turn billed token usage and cost to attach to the result entry.
+  // Set when the `type:"result"` SDK message is processed; cleared after
+  // the result entry is yielded so they don't leak to a subsequent turn.
+  let pendingResultUsage: ProviderUsage | undefined
+  let pendingResultCost: number | undefined
 
   for await (const sdkMessage of q as AsyncIterable<any>) {
     const sessionToken = typeof sdkMessage.session_id === "string" ? sdkMessage.session_id : null
@@ -865,12 +989,47 @@ export async function* createClaudeHarnessStream(
         lastKnownContextWindow,
       )
 
+      const providerCostUsd =
+        typeof (sdkMessage as { total_cost_usd?: unknown }).total_cost_usd === "number"
+          ? (sdkMessage as { total_cost_usd: number }).total_cost_usd
+          : undefined
+
+      let costUsd = providerCostUsd
+      if (costUsd === undefined && resolveTurnPrice && finalUsage) {
+        const price = resolveTurnPrice()
+        if (price) {
+          costUsd = computeCostUsd(
+            {
+              inputTokens: finalUsage.inputTokens,
+              cachedInputTokens: finalUsage.cachedInputTokens,
+              outputTokens: finalUsage.outputTokens,
+            },
+            price,
+          )
+        }
+      }
+
+      // Stash billed token figures for the result entry (populated below
+      // in the entry loop). Prefer `accumulatedUsage` (the per-turn
+      // cumulative that the SDK computes) for tokens; fall back to
+      // `finalUsage` when accumulated is null.
+      const billed = accumulatedUsage ?? finalUsage
+      pendingResultUsage = billed
+        ? {
+            ...(billed.inputTokens !== undefined ? { inputTokens: billed.inputTokens } : {}),
+            ...(billed.outputTokens !== undefined ? { outputTokens: billed.outputTokens } : {}),
+            ...(billed.cachedInputTokens !== undefined ? { cachedInputTokens: billed.cachedInputTokens } : {}),
+          }
+        : undefined
+      pendingResultCost = costUsd
+
       if (finalUsage) {
+        const usageWithCost = costUsd !== undefined ? { ...finalUsage, costUsd } : finalUsage
         yield {
           type: "transcript",
           entry: timestamped({
             kind: "context_window_updated",
-            usage: finalUsage,
+            usage: usageWithCost,
           }),
         }
       }
@@ -880,6 +1039,23 @@ export async function* createClaudeHarnessStream(
     }
 
     for (const entry of normalizeClaudeStreamMessage(sdkMessage)) {
+      if (entry.kind === "api_error") {
+        apiErrorEmittedInTurn = true
+      } else if (entry.kind === "result") {
+        const scrubbed = entry.isError && apiErrorEmittedInTurn
+          ? { ...entry, result: "" }
+          : entry
+        apiErrorEmittedInTurn = false
+        const enriched = {
+          ...scrubbed,
+          ...(pendingResultUsage !== undefined ? { usage: pendingResultUsage } : {}),
+          ...(pendingResultCost !== undefined ? { costUsd: pendingResultCost } : {}),
+        }
+        pendingResultUsage = undefined
+        pendingResultCost = undefined
+        yield { type: "transcript", entry: enriched }
+        continue
+      }
       yield { type: "transcript", entry }
     }
   }
@@ -1043,11 +1219,29 @@ export function buildCanUseTool(args: BuildCanUseToolArgs): CanUseTool {
   }
 }
 
-export function buildClaudeEnv(baseEnv: NodeJS.ProcessEnv, oauthToken: string | null): NodeJS.ProcessEnv {
-  const { CLAUDECODE: _unused, ...rest } = baseEnv
+export function buildClaudeEnv(
+  baseEnv: NodeJS.ProcessEnv,
+  oauthToken: string | null,
+  openrouter?: { apiKey: string } | null,
+): NodeJS.ProcessEnv {
+  const { CLAUDECODE: _unused, CLAUDE_CODE_OAUTH_TOKEN: _oauth, ...rest } = baseEnv
+  if (openrouter) {
+    // OpenRouter's Anthropic-compatible endpoint. ANTHROPIC_API_KEY MUST be
+    // explicitly empty or the SDK prefers it over the auth token and 401s.
+    return {
+      ...rest,
+      ANTHROPIC_BASE_URL: "https://openrouter.ai/api",
+      ANTHROPIC_AUTH_TOKEN: openrouter.apiKey,
+      ANTHROPIC_API_KEY: "",
+    }
+  }
   // Empty string is treated the same as null. Blank tokens are rejected at persistence time
   // by normalizeTokenEntry, so in practice oauthToken is either a non-empty string or null.
-  if (!oauthToken) return rest
+  if (!oauthToken) {
+    return baseEnv.CLAUDE_CODE_OAUTH_TOKEN
+      ? { ...rest, CLAUDE_CODE_OAUTH_TOKEN: baseEnv.CLAUDE_CODE_OAUTH_TOKEN }
+      : rest
+  }
   return { ...rest, CLAUDE_CODE_OAUTH_TOKEN: oauthToken }
 }
 
@@ -1060,6 +1254,8 @@ async function startClaudeSession(args: {
   sessionToken: string | null
   forkSession: boolean
   oauthToken: string | null
+  /** When set, redirect the SDK to OpenRouter instead of Anthropic. */
+  openrouterApiKey?: string | null
   additionalDirectories?: string[]
   chatId?: string
   tunnelGateway?: TunnelGateway | null
@@ -1079,8 +1275,16 @@ async function startClaudeSession(args: {
   scheduleWakeup?: (a: { delayMs: number; prompt: string }) => Promise<string | null>
   /** Enabled user MCP servers, merged into the SDK's mcpServers map. */
   customMcpServers?: readonly McpServerConfig[]
+  /** Pre-resolved oauth bearer tokens keyed by server id (from ensureFreshMcpToken). */
+  oauthBearers?: ReadonlyMap<string, string>
   /** Folder-restricted subagent: disallow native FS tools, allowlist mcp__kanna__*, per-run path-deny. */
   restrictedAllowedPaths?: string[]
+  /** When true, leave the prompt queue open after initialPrompt and expose pushChannelPrompt on the handle. */
+  keepAlive?: boolean
+  /** Per-turn price for computing cost when the provider doesn't report it (OpenRouter). */
+  turnPrice?: ModelPrice | null
+  /** Overrides the configured context window (OpenRouter model contextLength). */
+  contextWindowOverride?: number
 }): Promise<ClaudeSessionHandle> {
   const canUseTool = buildCanUseTool({
     localPath: args.localPath,
@@ -1123,7 +1327,7 @@ async function startClaudeSession(args: {
           scheduleWakeup: args.scheduleWakeup,
           restrictedAllowedPaths: args.restrictedAllowedPaths,
         }),
-        ...buildUserMcpServers(args.customMcpServers ?? []),
+        ...buildUserMcpServers(args.customMcpServers ?? [], args.oauthBearers),
       },
       systemPrompt: args.systemPromptOverride != null
         ? args.systemPromptOverride
@@ -1134,9 +1338,20 @@ async function startClaudeSession(args: {
           },
       settingSources: ["user", "project", "local"],
       pathToClaudeCodeExecutable: process.env.CLAUDE_EXECUTABLE?.replace(/^~(?=\/|$)/, homedir()) || undefined,
-      env: buildClaudeEnv(process.env, args.oauthToken),
+      env: buildClaudeEnv(process.env, args.oauthToken, args.openrouterApiKey ? { apiKey: args.openrouterApiKey } : null),
     },
   })
+
+  // Follow-up turns (sendPrompt + keep-alive pushChannelPrompt) share one
+  // queue-push policy so the two transports cannot drift apart.
+  const enqueueUserPrompt = (content: string) => {
+    promptQueue.push({
+      type: "user",
+      message: { role: "user", content },
+      parent_tool_use_id: null,
+      session_id: args.sessionToken ?? "",
+    })
+  }
 
   if (args.initialPrompt != null) {
     promptQueue.push({
@@ -1148,12 +1363,18 @@ async function startClaudeSession(args: {
       parent_tool_use_id: null,
       session_id: args.sessionToken ?? undefined,
     })
-    promptQueue.close()
+    if (!args.keepAlive) {
+      promptQueue.close()
+    }
   }
 
   return {
     provider: "claude",
-    stream: createClaudeHarnessStream(q, parseConfiguredContextWindowFromModelId(args.model)),
+    stream: createClaudeHarnessStream(
+      q,
+      args.contextWindowOverride ?? parseConfiguredContextWindowFromModelId(args.model),
+      args.turnPrice ? () => args.turnPrice ?? null : undefined,
+    ),
     getAccountInfo: async () => {
       try {
         return await q.accountInfo()
@@ -1165,15 +1386,7 @@ async function startClaudeSession(args: {
       await q.interrupt()
     },
     sendPrompt: async (content: string) => {
-      promptQueue.push({
-        type: "user",
-        message: {
-          role: "user",
-          content,
-        },
-        parent_tool_use_id: null,
-        session_id: args.sessionToken ?? "",
-      })
+      enqueueUserPrompt(content)
     },
     setModel: async (model: string) => {
       await q.setModel(model)
@@ -1189,6 +1402,11 @@ async function startClaudeSession(args: {
         return []
       }
     },
+    ...(args.keepAlive ? {
+      pushChannelPrompt: async (content: string) => {
+        enqueueUserPrompt(content)
+      },
+    } : {}),
     close: () => {
       promptQueue.close()
       q.close()
@@ -1219,6 +1437,12 @@ const DEFAULT_CLAUDE_SESSION_SWEEP_INTERVAL_MS = 60 * 1000
 // Keep a PTY session warm up to 30 min while a background Bash task is pending —
 // comfortably longer than the 10-min idle window and typical CI durations.
 const DEFAULT_PTY_BACKGROUND_TASK_MAX_MS = 30 * 60 * 1000
+// OpenRouter-only watchdog: a stalled upstream leaves the SDK stream open but
+// silent after the session-token handshake, so the runClaudeSession for-await
+// never ends and the existing fail-close never fires. Abort if no transcript
+// entry arrives within this window. system_init is the SDK init echo (precedes
+// model inference), so 2 min is generous; env-tunable per deployment.
+const DEFAULT_OPENROUTER_FIRST_ENTRY_TIMEOUT_MS = 2 * 60 * 1000
 // Agent wakes are clamped to one idle window minus this buffer so a re-entry
 // always lands before the idle reaper closes the PTY (see scheduleAgentWakeup).
 const WAKE_GUARD_BUFFER_MS = 60 * 1000
@@ -1238,7 +1462,7 @@ function positiveIntegerFromEnv(value: string | undefined, fallback: number): nu
 const BACKGROUND_TASK_LAUNCH_RE = /Command running in background with ID:\s*(\w+)/g
 
 /** Extract background-task ids from a tool_result entry's content (string or content blocks). */
-function backgroundTaskIdsFromToolResult(content: unknown): string[] {
+export function backgroundTaskIdsFromToolResult(content: unknown): string[] {
   let text = ""
   if (typeof content === "string") {
     text = content
@@ -1283,6 +1507,7 @@ export class AgentCoordinator {
   readonly activeTurns = new Map<string, ActiveTurn>()
   readonly drainingStreams = new Map<string, { turn: HarnessTurn }>()
   readonly claudeSessions = new Map<string, ClaudeSessionState>()
+  private readonly mentionedSubagentIdsByChat = new Map<string, string[]>()
   private readonly slashCommandsInFlight = new Set<string>()
   private readonly claudeLimitDetector: LimitDetector
   private readonly codexLimitDetector: LimitDetector
@@ -1306,6 +1531,7 @@ export class AgentCoordinator {
   private readonly agentWakeChainByChat = new Map<string, number>()
   private readonly maxAgentWakes: number
   private readonly pendingWorkflowPollMs: number
+  private readonly openrouterFirstEntryTimeoutMs: number
   // Per-tokenId rotation dedupe state. When a shared OAuth token throws
   // limit/auth-error against N chats simultaneously, only the first chat
   // pays the cost of marking the pool + picking a fresh target; subsequent
@@ -1329,6 +1555,10 @@ export class AgentCoordinator {
   private readonly ptyInstanceRegistry: import("./claude-pty/pty-instance-registry").PtyInstanceRegistry | null
   private readonly workflowRegistry: import("./workflow-registry").WorkflowRegistry | null
   private readonly subagentTranscriptRegistry: import("./subagent-transcript-registry").SubagentTranscriptRegistry | null
+  private readonly localCatalog: import("./local-catalog").LocalCatalogService | null
+  private readonly readLlmProvider: () => Promise<LlmProviderSnapshot>
+  private readonly listOpenRouterModelsFn: (() => Promise<import("../shared/types").OpenRouterModel[]>) | null
+  private readonly persistOAuthStateFn: ((id: string, oauth: McpOAuthState) => void) | null
   private readonly subagentPendingResolvers = new Map<
     string,
     { resolve: (v: unknown) => void; reject: (e: Error) => void }
@@ -1349,8 +1579,13 @@ export class AgentCoordinator {
     this.getAutoResumePreference = args.getAutoResumePreference ?? (() => false)
     this.maxAgentWakes = args.maxAgentWakes ?? 25
     this.pendingWorkflowPollMs = args.pendingWorkflowPollMs ?? 120_000
+    this.openrouterFirstEntryTimeoutMs =
+      args.openrouterFirstEntryTimeoutMs ?? DEFAULT_OPENROUTER_FIRST_ENTRY_TIMEOUT_MS
     this.getSubagents = args.getSubagents ?? (() => [])
     this.getAppSettingsSnapshot = args.getAppSettingsSnapshot ?? (() => ({}))
+    this.readLlmProvider = args.readLlmProvider ?? readLlmProviderSnapshot
+    this.listOpenRouterModelsFn = args.listOpenRouterModels ?? null
+    this.persistOAuthStateFn = args.persistOAuthState ?? null
     this.subagentOrchestrator = new SubagentOrchestrator({
       store: this.store,
       appSettings: { getSnapshot: () => ({ subagents: this.getSubagents() }) },
@@ -1381,6 +1616,9 @@ export class AgentCoordinator {
         // cheap.
         this.emitStateChange(chatId)
       },
+      onBackgroundRunComplete: (chatId, runId, outcome) => {
+        void this.deliverBackgroundSubagentResult(chatId, runId, outcome)
+      },
       maxLive: positiveIntegerFromEnv(process.env.KANNA_SUBAGENT_MAX_LIVE, 0) || undefined,
       liveIdleTimeoutMs: positiveIntegerFromEnv(process.env.KANNA_SUBAGENT_IDLE_TIMEOUT_MS, 0) || undefined,
     })
@@ -1407,6 +1645,7 @@ export class AgentCoordinator {
     this.ptyInstanceRegistry = args.ptyInstanceRegistry ?? null
     this.workflowRegistry = args.workflowRegistry ?? null
     this.subagentTranscriptRegistry = args.subagentTranscriptRegistry ?? null
+    this.localCatalog = args.localCatalog ?? null
   }
 
   setBackgroundErrorReporter(report: ((message: string) => void) | null) {
@@ -1458,7 +1697,8 @@ export class AgentCoordinator {
     const out = new Map<string, "warming" | "active" | "idle">()
     const now = Date.now()
     for (const [chatId, session] of this.claudeSessions) {
-      if (this.activeTurns.get(chatId)?.provider === "claude") {
+      const activeProv = this.activeTurns.get(chatId)?.provider
+      if (activeProv !== undefined && isClaudeSdkProvider(activeProv)) {
         out.set(chatId, "active")
       } else if (this.hasPendingBackgroundTask(session, now)) {
         // Held warm for a background Bash task — surface as "warming", not "idle".
@@ -1491,6 +1731,24 @@ export class AgentCoordinator {
     const list = (snap as { customMcpServers?: readonly McpServerConfig[] }).customMcpServers
     if (!Array.isArray(list)) return []
     return list.filter((s) => s.enabled)
+  }
+
+  private async buildOAuthBearers(servers: readonly McpServerConfig[]): Promise<Map<string, string>> {
+    const bearers = new Map<string, string>()
+    for (const s of servers) {
+      if (s.transport === "stdio" || !s.oauth || s.oauth.status !== "authenticated") continue
+      try {
+        const token = await ensureFreshMcpToken(s, {
+          persist: (oauth) => {
+            if (this.persistOAuthStateFn) this.persistOAuthStateFn(s.id, oauth)
+          },
+        })
+        bearers.set(s.id, token)
+      } catch (err) {
+        console.warn("[kanna/mcp-oauth] token refresh failed for", s.name, err)
+      }
+    }
+    return bearers
   }
 
   /**
@@ -1564,7 +1822,8 @@ export class AgentCoordinator {
   }
 
   private isClaudeSessionIdle(chatId: string, session: ClaudeSessionState, now = Date.now()): boolean {
-    if (this.activeTurns.get(chatId)?.provider === "claude") return false
+    const activeProv = this.activeTurns.get(chatId)?.provider
+    if (activeProv !== undefined && isClaudeSdkProvider(activeProv)) return false
     if (session.pendingPromptSeqs.length > 0) return false
     if (this.hasLiveWorkflow(chatId)) return false
     if (this.hasPendingBackgroundTask(session, now)) return false
@@ -1593,6 +1852,32 @@ export class AgentCoordinator {
       this.oauthPool?.release(chatId)
     }
     session.session.close()
+    // For SDK sessions, unregister the workflow dir here. PTY sessions unregister
+    // inside the driver's cleanupResources (driver.ts) — do not double-fire.
+    if (this.resolveClaudeDriverPreference() !== "pty") {
+      this.workflowRegistry?.unregister(chatId)
+    }
+  }
+
+  /**
+   * Register the workflow disk-watch dir for an SDK session once the session
+   * token is known. No-op if the registry is absent, already registered, or
+   * the driver preference is PTY (the PTY driver registers from its own
+   * resolved transcript path in driver.ts cleanup and must not be double-fired).
+   */
+  private maybeRegisterSdkWorkflowsDir(session: ClaudeSessionState): void {
+    if (!this.workflowRegistry) return
+    if (session.workflowsDirRegistered) return
+    // PTY registers from its own resolved transcript path; SDK derives from session_token.
+    if (this.resolveClaudeDriverPreference() === "pty") return
+    if (!session.sessionToken) return
+    const dir = computeWorkflowsDir({
+      homeDir: homedir(),
+      cwd: session.localPath,
+      sessionId: session.sessionToken,
+    })
+    this.workflowRegistry.register(session.chatId, dir)
+    session.workflowsDirRegistered = true
   }
 
   private sweepIdleClaudeSessions(now = Date.now()): void {
@@ -1800,7 +2085,8 @@ export class AgentCoordinator {
           lease?.release()
         }
       }
-      await this.store.recordSessionCommandsLoaded(chatId, commands)
+      const merged = this.mergeLocalCatalog(commands, project.localPath)
+      await this.store.recordSessionCommandsLoaded(chatId, merged)
       this.emitStateChange(chatId)
     } catch (error) {
       console.warn("[kanna/agent] ensureSlashCommandsLoaded failed", error)
@@ -1808,6 +2094,20 @@ export class AgentCoordinator {
       this.slashCommandsInFlight.delete(chatId)
       this.emitStateChange(chatId)
     }
+  }
+
+  private mergeLocalCatalog(commands: SlashCommand[], cwd: string): SlashCommand[] {
+    if (!this.localCatalog) return commands
+    let local: SlashCommand[]
+    try {
+      local = this.localCatalog.list(cwd)
+    } catch (error) {
+      console.warn("[kanna/agent] localCatalog.list failed", error)
+      return commands
+    }
+    const cliKeys = new Set(commands.map((c) => c.name.toLowerCase()))
+    const filtered = local.filter((entry) => !cliKeys.has(entry.name.toLowerCase()))
+    return [...commands, ...filtered]
   }
 
   async closeChat(chatId: string) {
@@ -1826,9 +2126,10 @@ export class AgentCoordinator {
 
   private getProviderSettings(provider: AgentProvider, options: SendMessageOptions) {
     const catalog = getServerProviderCatalog(provider)
+    const customModels = this.getAppSettingsSnapshot().customModels ?? []
     if (provider === "claude") {
-      const model = normalizeServerModel(provider, options.model)
-      const modelOptions = normalizeClaudeModelOptions(model, options.modelOptions, options.effort)
+      const model = normalizeServerModel(provider, options.model, customModels)
+      const modelOptions = normalizeClaudeModelOptions(model, options.modelOptions, options.effort, customModels)
       return {
         model: resolveClaudeApiModelId(model, modelOptions.contextWindow),
         effort: modelOptions.reasoningEffort,
@@ -1837,9 +2138,22 @@ export class AgentCoordinator {
       }
     }
 
+    if (provider === "openrouter") {
+      // OpenRouter's model list is fetched dynamically (settings.listOpenRouterModels),
+      // so the static server catalog is empty and normalizeServerModel would collapse
+      // every selection to the default. Trust the client-selected id — OpenRouter
+      // rejects invalid ids at the API — falling back to the default only when blank.
+      return {
+        model: options.model?.trim() || catalog.defaultModel,
+        effort: undefined,
+        serviceTier: undefined,
+        planMode: catalog.supportsPlanMode ? Boolean(options.planMode) : false,
+      }
+    }
+
     const modelOptions = normalizeCodexModelOptions(options.modelOptions, options.effort)
     return {
-      model: normalizeServerModel(provider, options.model),
+      model: normalizeServerModel(provider, options.model, customModels),
       effort: modelOptions.reasoningEffort,
       serviceTier: codexServiceTierFromModelOptions(modelOptions),
       planMode: catalog.supportsPlanMode ? Boolean(options.planMode) : false,
@@ -1980,6 +2294,10 @@ export class AgentCoordinator {
       const subagentMentions = parsedMentions
         .filter((mention): mention is Extract<ParsedMention, { kind: "subagent" }> => mention.kind === "subagent")
         .map((mention) => ({ subagentId: mention.subagentId, raw: mention.raw }))
+      this.mentionedSubagentIdsByChat.set(
+        args.chatId,
+        subagentMentions.map((m) => m.subagentId),
+      )
       const unknownSubagentMentions = parsedMentions
         .filter((mention): mention is Extract<ParsedMention, { kind: "unknown-subagent" }> => mention.kind === "unknown-subagent")
         .map((mention) => ({ name: mention.name, raw: mention.raw }))
@@ -2145,7 +2463,7 @@ export class AgentCoordinator {
     const promptContent = primer ?? userPromptText
 
     let turn: HarnessTurn
-    if (args.provider === "claude") {
+    if (isClaudeSdkProvider(args.provider)) {
       logSendToStartingProfile(args.profile, "start_turn.provider_boot.begin", {
         chatId: args.chatId,
         provider: args.provider,
@@ -2157,12 +2475,14 @@ export class AgentCoordinator {
         projectId: project.id,
         localPath: spawn.cwd,
         additionalDirectories: spawn.additionalDirectories,
+        stackProjects: resolveStackProjects(chat, (id) => this.store.getProject(id)?.title),
         model: args.model,
         effort: args.effort,
         planMode: args.planMode,
         sessionToken: pendingForkToken ?? existingToken,
         forkSession: pendingForkToken != null,
         onToolRequest,
+        provider: args.provider,
       })
       logSendToStartingProfile(args.profile, "start_turn.provider_boot.ready", {
         chatId: args.chatId,
@@ -2243,18 +2563,43 @@ export class AgentCoordinator {
     if (turn.getAccountInfo) {
       void turn.getAccountInfo()
         .then(async (accountInfo) => {
-          if (!accountInfo) return
-          let augmented = accountInfo
-          if (args.provider === "claude") {
-            const session = this.claudeSessions.get(args.chatId)
-            if (session) {
+          const session = this.claudeSessions.get(args.chatId)
+          let augmented: AccountInfo
+          if (args.provider === "openrouter") {
+            // OpenRouter routes through the SDK with ANTHROPIC_AUTH_TOKEN set to
+            // the OpenRouter key, so the SDK self-reports tokenSource
+            // "ANTHROPIC_AUTH_TOKEN" with no account — mislabeling the chat as
+            // Anthropic. Override with the OpenRouter identity instead.
+            if (!session) return
+            if (session.accountInfoLoaded) return
+            session.accountInfoLoaded = true
+            augmented = {
+              tokenSource: "openrouter",
+              ...(session.openrouterKeyMasked ? { oauthKeyMasked: session.openrouterKeyMasked } : {}),
+              ...(session.openrouterModel ? { organization: session.openrouterModel } : {}),
+            }
+          } else {
+            if (!accountInfo) return
+            augmented = accountInfo
+            if (args.provider === "claude") {
+              if (!session) return
               if (session.accountInfoLoaded) return
               session.accountInfoLoaded = true
-              if (session.oauthKeyMasked && !accountInfo.oauthKeyMasked) {
+              // Mirror the PTY driver's deriveAccountInfoFromOauth: when the
+              // turn was started with a kanna OAuth-pool token, surface its
+              // name as organization and tag the source so the UI renders
+              // "Pool token" identically across drivers. SDK-reported extras
+              // (email, subscriptionType) are preserved.
+              if (session.activeTokenId) {
+                augmented = {
+                  ...accountInfo,
+                  tokenSource: "kanna-oauth-pool",
+                  ...(session.oauthLabel ? { organization: session.oauthLabel } : {}),
+                  ...(session.oauthKeyMasked ? { oauthKeyMasked: session.oauthKeyMasked } : {}),
+                }
+              } else if (session.oauthKeyMasked && !accountInfo.oauthKeyMasked) {
                 augmented = { ...accountInfo, oauthKeyMasked: session.oauthKeyMasked }
               }
-            } else {
-              return
             }
           }
           await this.store.appendMessage(args.chatId, timestamped({ kind: "account_info", accountInfo: augmented }))
@@ -2263,14 +2608,21 @@ export class AgentCoordinator {
         .catch(() => undefined)
     }
 
-    if (args.provider === "claude") {
+    if (providerUsesSdkSession(args.provider)) {
+      // claude and openrouter both deliver their prompt through the SDK
+      // session queue; gating this on `=== "claude"` is what left openrouter's
+      // prompt undelivered, hanging every openrouter turn until the watchdog.
       const session = this.claudeSessions.get(args.chatId)
       if (!session) {
-        throw new Error("Claude session was not initialized")
+        throw new Error("SDK session was not initialized")
       }
       const promptSeq = session.nextPromptSeq + 1
       session.nextPromptSeq = promptSeq
       session.pendingPromptSeqs.push(promptSeq)
+      // A new turn starts: clear any stale cancellation marker so a previous
+      // cancel that never produced a tail result can't suppress this turn's
+      // real result.
+      session.cancelledResultPending = 0
       active.claudePromptSeq = promptSeq
       logClaudeSteer("claude_prompt_sent", {
         chatId: args.chatId,
@@ -2300,12 +2652,12 @@ export class AgentCoordinator {
     planMode: boolean
     clientTraceId?: string
   }): ActiveTurn | undefined {
-    if (args.provider !== "claude") return undefined
+    if (!providerUsesSdkSession(args.provider)) return undefined
     const session = this.claudeSessions.get(args.chatId)
     if (!session) return undefined
 
     const ghostTurn: HarnessTurn = {
-      provider: "claude",
+      provider: args.provider,
       stream: { async *[Symbol.asyncIterator]() {} },
       getAccountInfo: session.session.getAccountInfo,
       interrupt: session.session.interrupt,
@@ -2348,12 +2700,14 @@ export class AgentCoordinator {
     projectId: string
     localPath: string
     additionalDirectories?: string[]
+    stackProjects?: ResolvedStackBinding[]
     model: string
     effort?: string
     planMode: boolean
     sessionToken: string | null
     forkSession: boolean
     onToolRequest: (request: HarnessToolRequest) => Promise<unknown>
+    provider: AgentProvider
   }): Promise<HarnessTurn> {
     let session = this.claudeSessions.get(args.chatId)
 
@@ -2369,19 +2723,40 @@ export class AgentCoordinator {
       }
 
       this.enforceClaudeSessionBudget(args.chatId)
-      const picked = this.oauthPool?.pickActive(args.chatId) ?? null
+      const isOpenRouter = args.provider === "openrouter"
+      const openrouterApiKey = isOpenRouter ? (await this.readLlmProvider()).apiKey : null
+      const picked = isOpenRouter ? null : (this.oauthPool?.pickActive(args.chatId) ?? null)
       // If the pool is populated but every token is currently unusable
       // (limited/error/disabled/reserved), refuse to spawn rather than let
       // the CLI fall back to its keychain auth — that path serves whichever
       // login the CLI binary's keychain holds, which is typically
       // expired in a pool-managed setup and produces opaque 401 loops.
-      if (this.oauthPool && this.oauthPool.hasAnyToken() && !picked) {
+      if (!isOpenRouter && this.oauthPool && this.oauthPool.hasAnyToken() && !picked) {
         throw new OAuthPoolUnavailableError(this.buildPoolUnavailableMessage(args.chatId, ""))
       }
       if (picked) this.oauthPool!.markUsed(picked.id)
-      const usePty = this.resolveClaudeDriverPreference() === "pty"
+
+      let openrouterTurnPrice: ModelPrice | null = null
+      let openrouterContextWindow: number | undefined
+      if (isOpenRouter && this.listOpenRouterModelsFn) {
+        try {
+          const models = await this.listOpenRouterModelsFn()
+          // OpenRouter routing variants (":nitro", ":floor", ...) aren't their
+          // own /models entries — fall back to the base id for pricing/context.
+          const baseModelId = stripModelVariantSuffix(args.model)
+          const m = models.find((x) => x.id === args.model)
+            ?? models.find((x) => x.id === baseModelId)
+          openrouterTurnPrice = resolveModelPrice(baseModelId, m?.pricing ?? null)
+          if (m && m.contextLength > 0) openrouterContextWindow = m.contextLength
+        } catch (err) {
+          console.warn("[kanna/agent] openrouter pricing lookup failed", err)
+        }
+      }
+
+      const usePty = !isOpenRouter && this.resolveClaudeDriverPreference() === "pty"
       const systemPromptAppend = buildKannaSystemPromptAppend(this.getSubagents(), {
         globalPromptAppend: this.getAppSettingsSnapshot().globalPromptAppend,
+        stackProjects: args.stackProjects,
       })
       const chatIdForCtx = args.chatId
       const delegationContext: KannaMcpDelegationContext = {
@@ -2390,7 +2765,10 @@ export class AgentCoordinator {
         ancestorSubagentIds: [],
         depth: 0,
         getParentUserMessageId: () => this.activeTurns.get(chatIdForCtx)?.userMessageId ?? null,
+        getMentionedSubagentIds: () => this.mentionedSubagentIdsByChat.get(chatIdForCtx) ?? [],
       }
+      const enabledMcpServers = this.getEnabledCustomMcpServers()
+      const oauthBearers = await this.buildOAuthBearers(enabledMcpServers)
       let started: ClaudeSessionHandle
       try {
         started = usePty
@@ -2421,7 +2799,8 @@ export class AgentCoordinator {
                 ptyInstanceRegistry: this.ptyInstanceRegistry ?? undefined,
               workflowRegistry: this.workflowRegistry ?? undefined,
               subagentTranscriptRegistry: this.subagentTranscriptRegistry ?? undefined,
-              customMcpServers: this.getEnabledCustomMcpServers(),
+              customMcpServers: enabledMcpServers,
+              oauthBearers,
             })
           : await this.startClaudeSessionFn({
               projectId: args.projectId,
@@ -2432,6 +2811,7 @@ export class AgentCoordinator {
               sessionToken: args.sessionToken,
               forkSession: args.forkSession,
               oauthToken: picked?.token ?? null,
+              openrouterApiKey,
               additionalDirectories: args.additionalDirectories,
               chatId: args.chatId,
               tunnelGateway: this.tunnelGateway,
@@ -2444,7 +2824,10 @@ export class AgentCoordinator {
               }),
               toolCallback: this.toolCallback ?? undefined,
               chatPolicy: this.resolveChatPolicy(args.chatId),
-              customMcpServers: this.getEnabledCustomMcpServers(),
+              customMcpServers: enabledMcpServers,
+              oauthBearers,
+              turnPrice: openrouterTurnPrice,
+              contextWindowOverride: openrouterContextWindow,
             })
       } catch (err) {
         // Spawn failed before we registered the session — release the OAuth
@@ -2470,9 +2853,13 @@ export class AgentCoordinator {
         pendingPromptSeqs: [],
         activeTokenId: picked?.id ?? null,
         oauthKeyMasked: picked ? maskOauthKey(picked.token) : null,
+        oauthLabel: picked?.label ?? null,
+        openrouterKeyMasked: openrouterApiKey ? maskOauthKey(openrouterApiKey) : null,
+        openrouterModel: isOpenRouter ? args.model : null,
         lastUsedAt: Date.now(),
         backgroundTaskIds: new Set<string>(),
         backgroundTaskDeadlineAt: 0,
+        cancelledResultPending: 0,
       }
       this.claudeSessions.set(args.chatId, session)
       this.enforceClaudeSessionBudget(args.chatId)
@@ -2480,7 +2867,8 @@ export class AgentCoordinator {
       void (async () => {
         try {
           const commands = await started.getSupportedCommands()
-          await this.store.recordSessionCommandsLoaded(args.chatId, commands)
+          const merged = this.mergeLocalCatalog(commands, args.localPath)
+          await this.store.recordSessionCommandsLoaded(args.chatId, merged)
           this.emitStateChange(args.chatId)
         } catch (error) {
           console.warn("[kanna/agent] failed to load slash commands", error)
@@ -2574,7 +2962,7 @@ export class AgentCoordinator {
     // `/compact` produces its summary, so the next turn ships with a bounded
     // history instead of looping on "Prompt is too long".
     if (
-      provider === "claude"
+      provider === "claude" // openrouter intentionally excluded: /compact is claude-CLI-specific
       && this.shouldInjectProactiveCompact(chatId, command.content)
     ) {
       const queuedMessage = await this.enqueueMessage(chatId, command.content, command.attachments ?? [], {
@@ -2657,6 +3045,8 @@ export class AgentCoordinator {
    */
   private buildClaudeSubagentStarter(): NonNullable<BuildSubagentProviderRunArgs["startClaudeSession"]> {
     return async (a) => {
+      const enabledMcpServers = this.getEnabledCustomMcpServers()
+      const oauthBearers = await this.buildOAuthBearers(enabledMcpServers)
       if (this.resolveClaudeDriverPreference() === "pty") {
         return this.startClaudeSessionPTYFn({
           chatId: a.chatId ?? "",
@@ -2681,11 +3071,13 @@ export class AgentCoordinator {
           ptyRegistry: this.claudePtyRegistry ?? undefined,
                 ptyInstanceRegistry: this.ptyInstanceRegistry ?? undefined,
           workflowRegistry: this.workflowRegistry ?? undefined,
-          customMcpServers: this.getEnabledCustomMcpServers(),
+          customMcpServers: enabledMcpServers,
+          oauthBearers,
           restrictedAllowedPaths: a.restrictedAllowedPaths,
+          keepAlive: a.keepAlive,
         })
       }
-      return this.startClaudeSessionFn({ ...a, customMcpServers: this.getEnabledCustomMcpServers() })
+      return this.startClaudeSessionFn({ ...a, customMcpServers: enabledMcpServers, oauthBearers })
     }
   }
 
@@ -2751,6 +3143,9 @@ export class AgentCoordinator {
       // run_started events use, and the orchestrator's depth/cycle checks
       // protect against runaway chains.
       getParentUserMessageId: () => args.parentUserMessageId,
+      // Subagents cannot inherit the user's @-mention authority: manual-trigger
+      // gates are enforced only at the top-level turn where the user typed the mention.
+      getMentionedSubagentIds: () => [],
     }
 
     return buildSubagentProviderRun({
@@ -2762,6 +3157,9 @@ export class AgentCoordinator {
       abortSignal: args.abortSignal,
       cwd: restriction?.cwd ?? spawn.cwd,
       additionalDirectories: spawn.additionalDirectories,
+      // Only label stack projects for unrestricted runs — a path-restricted
+      // subagent cannot reach every root, so listing them all would mislead.
+      stackProjects: restriction ? [] : resolveStackProjects(chat, (id) => this.store.getProject(id)?.title),
       allowedPaths: restriction?.allowedPaths,
       projectId: project.id,
       startClaudeSession: this.buildClaudeSubagentStarter(),
@@ -2771,6 +3169,9 @@ export class AgentCoordinator {
       onToolRequest,
       globalPromptAppend: this.getAppSettingsSnapshot().globalPromptAppend,
       authReady: async (provider) => {
+        if (provider === "openrouter") {
+          return openrouterAuthReady(await this.readLlmProvider())
+        }
         if (provider === "claude") {
           const settings = this.getAppSettingsSnapshot()
           // Pass parent chat id so a token already reserved by the parent
@@ -2881,6 +3282,56 @@ export class AgentCoordinator {
   }
 
   private async runClaudeSession(session: ClaudeSessionState) {
+    // OpenRouter-only first-entry watchdog. OpenRouter routes through the
+    // Claude SDK; a stalled upstream emits the session-token handshake then
+    // goes silent — the stream stays open with no entry, so this for-await
+    // never returns or throws and the chat hangs "running" until restart. The
+    // existing catch/finally fail-close is claude-provider-gated and depends
+    // on an active turn that the openrouter path tears down early, so the
+    // watchdog records the failure itself, then interrupts + closes the
+    // session to end the stream. `firstEntrySeen` guards against a late real
+    // entry; close() prevents any further entry from being processed.
+    const isOpenRouterSession = session.openrouterModel !== null
+    let firstEntrySeen = false
+    let firstEntryWatchdog: ReturnType<typeof setTimeout> | null = null
+    const clearFirstEntryWatchdog = () => {
+      if (firstEntryWatchdog !== null) {
+        clearTimeout(firstEntryWatchdog)
+        firstEntryWatchdog = null
+      }
+    }
+    if (isOpenRouterSession) {
+      firstEntryWatchdog = setTimeout(() => {
+        if (firstEntrySeen) return
+        if (this.claudeSessions.get(session.chatId) !== session) return
+        firstEntrySeen = true
+        const message = `OpenRouter produced no response within ${this.openrouterFirstEntryTimeoutMs}ms — the selected model may be invalid or the upstream stalled.`
+        console.warn("[kanna/agent] openrouter stream produced no entry within watchdog window — failing turn", {
+          chatId: session.chatId,
+          sessionId: session.id,
+          model: session.openrouterModel,
+          timeoutMs: this.openrouterFirstEntryTimeoutMs,
+        })
+        void (async () => {
+          await this.store.appendMessage(
+            session.chatId,
+            timestamped({
+              kind: "result",
+              subtype: "error",
+              isError: true,
+              durationMs: this.openrouterFirstEntryTimeoutMs,
+              result: message,
+            }),
+          )
+          await this.store.recordTurnFailed(session.chatId, message)
+          const active = this.activeTurns.get(session.chatId)
+          if (active) this.activeTurns.delete(session.chatId)
+          this.emitStateChange(session.chatId)
+          void session.session.interrupt().catch(() => {})
+          session.session.close()
+        })()
+      }, this.openrouterFirstEntryTimeoutMs)
+    }
     try {
       let simulateLimit = this.throwOnClaudeSessionStart
       for await (const event of session.session.stream) {
@@ -2891,6 +3342,7 @@ export class AgentCoordinator {
         if (event.type === "session_token" && event.sessionToken) {
           session.sessionToken = event.sessionToken
           await this.store.setSessionTokenForProvider(session.chatId, "claude", event.sessionToken)
+          this.maybeRegisterSdkWorkflowsDir(session)
           this.emitStateChange(session.chatId)
           continue
         }
@@ -2910,11 +3362,39 @@ export class AgentCoordinator {
         }
 
         if (!event.entry) continue
+        firstEntrySeen = true
+        clearFirstEntryWatchdog()
         if (this.claudeSessions.get(session.chatId) !== session) break
+        // Suppress the interrupt-induced tail `result` of a cancelled turn.
+        // cancel() already removed the active turn, recorded the cancellation,
+        // and appended the `interrupted` entry; the SDK then emits one error
+        // `result` (subtype error_during_execution, empty text) that would
+        // otherwise render as "An unknown error occurred." Drop it (and skip
+        // the seq shift — cancel() already spliced the cancelled seq).
+        if (
+          event.entry.kind === "result" &&
+          event.entry.isError &&
+          session.cancelledResultPending > 0
+        ) {
+          session.cancelledResultPending -= 1
+          continue
+        }
+        if (event.entry.kind === "system_init") {
+          const kannaNames = this.getSubagents().map((s) => s.name)
+          if (kannaNames.length > 0) {
+            const entry = event.entry as { agents: string[] }
+            const existing = new Set(entry.agents)
+            const extra = kannaNames.filter((n) => !existing.has(n))
+            if (extra.length > 0) {
+              entry.agents = [...entry.agents, ...extra]
+            }
+          }
+        }
         await this.store.appendMessage(session.chatId, event.entry)
         // Arm the background-task keep-alive guard the moment Claude Code reports
-        // a `Bash(run_in_background)` launch. Keeps the PTY process warm past the
-        // idle window so the later `<task-notification>` can re-enter the agent.
+        // a `Bash(run_in_background)` launch. Shared SDK + PTY path: keeps the
+        // claude session warm past the idle window so the later
+        // `<task-notification>` can re-enter the agent.
         if (event.entry.kind === "tool_result") {
           const launchedIds = backgroundTaskIdsFromToolResult(
             (event.entry as { content?: unknown }).content,
@@ -2948,7 +3428,8 @@ export class AgentCoordinator {
               description: "",
               argumentHint: "",
             }))
-            await this.store.recordSessionCommandsLoaded(session.chatId, commands)
+            const merged = this.mergeLocalCatalog(commands, session.localPath)
+            await this.store.recordSessionCommandsLoaded(session.chatId, merged)
           }
           logClaudeSteer("claude_event_system_init", {
             chatId: session.chatId,
@@ -3114,6 +3595,7 @@ export class AgentCoordinator {
         }
       }
     } finally {
+      clearFirstEntryWatchdog()
       const active = this.activeTurns.get(session.chatId)
       const isCurrentSession = this.claudeSessions.get(session.chatId) === session
       // Trace point: stream-end-without-final-result is the hang signature.
@@ -3653,13 +4135,18 @@ export class AgentCoordinator {
     chatId: string
     delayMs: number
     prompt: string
-    source: "agent_wakeup" | "pending_workflow"
+    source: "agent_wakeup" | "pending_workflow" | "subagent_background"
   }): Promise<string | null> {
     const { chatId, prompt, source } = args
     if (!this.store.getChat(chatId)) throw new Error("Chat not found")
 
+    // `subagent_background` delivers a finished run_in_background subagent's
+    // reply — a real result, not a self-poll — so it is exempt from the
+    // runaway-wake cap. Its concurrency is already bounded by the subagent
+    // permit pool + run timeout. See adr-20260616-subagent-run-in-background.
+    const countsAgainstCap = source !== "subagent_background"
     const chainLength = this.agentWakeChainByChat.get(chatId) ?? 0
-    if (chainLength >= this.maxAgentWakes) return null
+    if (countsAgainstCap && chainLength >= this.maxAgentWakes) return null
 
     // Belt for the workflow-liveness guard: a wake must re-enter the chat
     // BEFORE the idle reaper closes the PTY, else a long model-chosen delay
@@ -3688,8 +4175,37 @@ export class AgentCoordinator {
       detectedAt: now,
       prompt,
     })
-    this.agentWakeChainByChat.set(chatId, chainLength + 1)
+    if (countsAgainstCap) this.agentWakeChainByChat.set(chatId, chainLength + 1)
     return scheduleId
+  }
+
+  /**
+   * Deliver a finished `run_in_background` subagent's result back into the
+   * main chat as a fresh turn. Wired as the orchestrator's
+   * `onBackgroundRunComplete` hook. Routes through `scheduleAgentWakeup`
+   * (`source: "subagent_background"`, delay 0) so re-entry uses the same
+   * event-sourced, driver-agnostic turn machinery as every other agent wake —
+   * the SDK driver delivers via its live session's native `sendPrompt`, the
+   * PTY driver via a fresh turn. See adr-20260616-subagent-run-in-background.
+   */
+  private async deliverBackgroundSubagentResult(
+    chatId: string,
+    runId: string,
+    outcome: BackgroundRunOutcome,
+  ): Promise<void> {
+    const prompt = outcome.status === "completed"
+      ? `A background subagent you launched (run ${runId}) finished. Its reply:\n\n${outcome.text}\n\nIncorporate this into your work; reply to the user if it answers their request.`
+      : `A background subagent you launched (run ${runId}) failed (${outcome.errorCode}): ${outcome.errorMessage}. Decide whether to retry, try another approach, or tell the user.`
+    try {
+      await this.scheduleAgentWakeup({
+        chatId,
+        delayMs: 0,
+        prompt,
+        source: "subagent_background",
+      })
+    } catch (err) {
+      console.warn(`${LOG_PREFIX} deliverBackgroundSubagentResult failed`, { chatId, runId, err })
+    }
   }
 
   /**
@@ -3819,6 +4335,12 @@ export class AgentCoordinator {
       if (session) {
         const idx = session.pendingPromptSeqs.indexOf(active.claudePromptSeq)
         if (idx >= 0) session.pendingPromptSeqs.splice(idx, 1)
+        // The SDK driver's `interrupt()` emits a tail `result` with
+        // subtype `error_during_execution` (empty text) after the splice
+        // above. Mark it pending so runClaudeSession suppresses that one
+        // result instead of rendering "An unknown error occurred." The
+        // `interrupted` entry above is the user-visible cancellation.
+        session.cancelledResultPending += 1
       }
     }
 

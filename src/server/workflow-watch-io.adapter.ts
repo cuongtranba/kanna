@@ -164,10 +164,34 @@ export function readWorkflowRunJournal(workflowsDir: string, runId: string): Wor
   return out
 }
 
+/**
+ * Injectable seam for {@link watchWorkflowDir}. Production uses the node:fs
+ * `watch` + global timers (the defaults below). Tests inject fakes so debounce
+ * coalescing can be asserted deterministically without depending on real
+ * fs-event delivery latency or wall-clock timer scheduling — both of which are
+ * load-sensitive and made the debounce test flaky under a busy suite.
+ */
+export interface WatchWorkflowDeps {
+  watch: typeof watch
+  setTimeout: (fn: () => void, ms: number) => ReturnType<typeof setTimeout>
+  clearTimeout: (handle: ReturnType<typeof setTimeout>) => void
+  setInterval: (fn: () => void, ms: number) => ReturnType<typeof setInterval>
+  clearInterval: (handle: ReturnType<typeof setInterval>) => void
+}
+
+const DEFAULT_WATCH_DEPS: WatchWorkflowDeps = {
+  watch,
+  setTimeout: (fn, ms) => setTimeout(fn, ms),
+  clearTimeout: (handle) => clearTimeout(handle),
+  setInterval: (fn, ms) => setInterval(fn, ms),
+  clearInterval: (handle) => clearInterval(handle),
+}
+
 export function watchWorkflowDir(
-  dir: string, onChange: () => void, opts?: { debounceMs?: number },
+  dir: string, onChange: () => void, opts?: { debounceMs?: number; deps?: WatchWorkflowDeps },
 ): () => void {
   const debounceMs = opts?.debounceMs ?? 250
+  const deps = opts?.deps ?? DEFAULT_WATCH_DEPS
   let timer: ReturnType<typeof setTimeout> | null = null
   let disposed = false
   let watcher: ReturnType<typeof watch> | null = null
@@ -183,16 +207,16 @@ export function watchWorkflowDir(
 
   const fire = () => {
     if (disposed) return
-    if (timer) clearTimeout(timer)
-    timer = setTimeout(() => { timer = null; if (!disposed) onChange() }, debounceMs)
+    if (timer) deps.clearTimeout(timer)
+    timer = deps.setTimeout(() => { timer = null; if (!disposed) onChange() }, debounceMs)
   }
 
   const closeWatcher = () => { try { watcher?.close() } catch { /* already closed */ } watcher = null }
-  const stopParentPoll = () => { if (parentPoll) { clearInterval(parentPoll); parentPoll = null } }
+  const stopParentPoll = () => { if (parentPoll) { deps.clearInterval(parentPoll); parentPoll = null } }
 
   const armTarget = () => {
     if (disposed) return
-    try { watcher = watch(dir, { persistent: false }, fire) } catch { watcher = null }
+    try { watcher = deps.watch(dir, { persistent: false }, fire) } catch { watcher = null }
   }
 
   const armParent = () => {
@@ -210,10 +234,10 @@ export function watchWorkflowDir(
       fire() // the dir just appeared — trigger an initial read
     }
     try {
-      watcher = watch(ancestor, { persistent: false }, promote)
+      watcher = deps.watch(ancestor, { persistent: false }, promote)
     } catch { watcher = null }
     const pollMs = Math.max(20, Math.min(debounceMs, 100))
-    parentPoll = setInterval(promote, pollMs)
+    parentPoll = deps.setInterval(promote, pollMs)
     // Do not let the safety poll keep the event loop alive (persistent:false).
     parentPoll.unref?.()
   }

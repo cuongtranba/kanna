@@ -1,7 +1,6 @@
-import Markdown from "react-markdown"
 import type { QueuedChatMessage } from "../../../shared/types"
 import { Button } from "../ui/button"
-import { defaultMarkdownComponents, defaultRemarkPlugins } from "./shared"
+import { renderMarkdownToReact } from "../lexical/markdown/lexicalToReact"
 import { ArrowUp, X } from "lucide-react"
 
 interface QueuedUserMessageProps {
@@ -32,7 +31,7 @@ export function QueuedUserMessage({ message, onRemove, onSendNow }: QueuedUserMe
 
               <div className="grid grid-cols-[1fr_auto] items-end gap-2.5 rounded-[20px] border border-dashed border-border bg-transparent pl-3.5 pr-1.5 py-1.5 prose prose-sm prose-invert text-left text-primary [&_p]:whitespace-pre-line">
                 <div>
-                <Markdown remarkPlugins={defaultRemarkPlugins} components={defaultMarkdownComponents}>{message.content}</Markdown>
+                {renderMarkdownToReact(message.content)}
                 </div>
                   <Button
                   type="button"

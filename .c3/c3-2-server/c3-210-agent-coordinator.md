@@ -1,14 +1,13 @@
 ---
 id: c3-210
 c3-version: 4
-c3-seal: 477dba2c66ed12d9ef8a1df35606d56a18d36d5fa8e71195afdd5e27b14878c0
+c3-seal: 4efc99e974317d647e3ff03c00d883e591323f028a126d06c90c84909533eaee
 title: agent-coordinator
 type: component
 category: feature
 parent: c3-2
 goal: 'Drive turn lifecycle across providers: start/cancel/resume Claude + Codex sessions, emit normalized transcript events.'
 uses:
-    - c3-229
     - ref-colocated-bun-test
     - ref-event-sourcing
     - ref-provider-adapter
@@ -67,7 +66,8 @@ Owns the agent turn lifecycle: receives `chat.send` commands, picks the provider
 | ref-tool-hydration | ref | Tool calls normalized before persistence | must follow | Single hydration path |
 | ref-colocated-bun-test | ref | Tests live next to coordinator | must follow | agent-coordinator.test.ts |
 | rule-colocated-bun-test | rule | Coordinator test suites enforce colocated-bun-test rule | must follow | agent.*.test.ts colocated with agent.ts |
-| c3-229 | ref | Compliance target added by c3x wire; refine what must be reviewed or complied with before handoff. | wired compliance target beats uncited local prose | Added by c3x wire for explicit compliance review. |
+| c3-229 | ref | Workflow runs surfaced into ChatSnapshot via the coordinator | wired compliance target beats uncited local prose | workflow status panel wiring |
+| c3-231 | ref | Coordinator merges local-catalog list into ChatSnapshot.slashCommands at every record site | wired compliance target beats uncited local prose | Local-skill catalog merge wiring |
 
 ## Contract
 
@@ -76,11 +76,14 @@ Owns the agent turn lifecycle: receives `chat.send` commands, picks the provider
 | runTurn(command) | IN | Drives a single turn from chat.send | c3-208 | src/server/agent-coordinator.ts |
 | Transcript events | OUT | Append-only typed events | c3-206 | src/server/agent-coordinator.ts |
 | Cancel callback | IN | Propagates cancel to provider | c3-211 | src/server/agent-coordinator.ts |
-| delegateRun({keepAlive?}) | IN | Runs subagent turn 1; on keepAlive completion registers a live session (no /exit) and returns runId; over KANNA_SUBAGENT_MAX_LIVE per chat fails CAP_EXCEEDED | c3-226 | src/server/subagent-orchestrator.ts |
+| delegateRun({keepAlive?}) | IN | subagent_id resolved by exact id, else unambiguous exact name (id wins on collision, ambiguous name → UNKNOWN_SUBAGENT); a target with triggerMode==="manual" whose id is NOT in args.mentionedSubagentIds fails MANUAL_ONLY (the user must @-mention it); runs subagent turn 1; on keepAlive completion registers a live session (no /exit) and returns runId; over KANNA_SUBAGENT_MAX_LIVE per chat fails CAP_EXCEEDED | c3-226 | src/server/subagent-orchestrator.ts |
+| delegateRun({background?}) | IN | Launches the run detached and returns {status:"async_launched", runId} immediately; the run still flows through spawnRun (permit, RunState, timeout, abort, events); on terminal fires onBackgroundRunComplete. Mutually exclusive with keepAlive | c3-226 | src/server/subagent-orchestrator.ts |
+| getMentionedSubagentIds() | IN | Per-turn getter on KannaMcpDelegationContext supplying the subagent ids the user @-mentioned in the message that started the turn; threaded from agent.ts (mentionedSubagentIdsByChat, sourced from parseMentions) and consumed by delegateRun's MANUAL_ONLY gate; subagent sub-spawn contexts pass an empty set so a subagent cannot drive a manual subagent | c3-226 | src/server/agent.ts, src/server/kanna-mcp.ts, src/server/kanna-mcp-tools/delegate-subagent.ts |
+| onBackgroundRunComplete(chatId, runId, outcome) | OUT | Dep fired when a background run reaches terminal; AgentCoordinator delivers the BackgroundRunOutcome back into the main chat as a fresh turn via scheduleAgentWakeup(source:"subagent_background") | c3-227 | src/server/subagent-orchestrator.ts, src/server/agent.ts |
 | sendToLiveRun(runId, prompt) | IN | Drives a follow-up turn into a warm keep-alive session via channel push; acquires a permit for the turn only; NO_LIVE_SESSION if unknown | c3-226 | src/server/subagent-orchestrator.ts |
 | closeLiveRun(chatId, runId, reason) | IN | Tears down a live session (close REPL, cleanup RunState, onRunTerminal); also driven by idle timeout + cancel cascade | c3-226 | src/server/subagent-orchestrator.ts |
 | LiveTurnSource | OUT | Provider-run handle returned after keep-alive turn 1 — runTurn (push + drain one turn) + close; keeps the persistent HarnessEvent iterator open | c3-225 | src/server/subagent-provider-run.ts |
-| findSubagent(id) | IN | Snapshot lookup used by the MCP host to reject keep_alive for non-claude subagents | c3-226 | src/server/subagent-orchestrator.ts |
+| findSubagent(id) | IN | Snapshot lookup (by exact id, else unambiguous exact name) used by the MCP host to reject keep_alive for non-claude subagents | c3-226 | src/server/subagent-orchestrator.ts |
 | Subagent restriction threading | IN | buildSubagentProviderRunForChat resolves Subagent.workingDir + allowedPaths via c3-204 resolveSubagentRoots (with realpathAdapter), overrides spawn cwd, and passes restrictedAllowedPaths into BuildSubagentProviderRunArgs → startClaudeSession; both PTY (c3-225) and SDK paths forward the same list into c3-226 kanna-mcp host for per-run path-deny + into the driver for shim-only tool gating | c3-225 | src/server/agent.ts, src/server/subagent-provider-run.ts |
 
 ## Change Safety

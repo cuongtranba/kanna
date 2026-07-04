@@ -55,3 +55,15 @@ export function computeJsonlPath(args: {
     `${args.sessionId}.jsonl`,
   )
 }
+
+export function computeWorkflowsDir(args: {
+  homeDir: string
+  cwd: string
+  sessionId: string
+}): string {
+  return path.join(
+    computeProjectDir({ homeDir: args.homeDir, cwd: args.cwd }),
+    args.sessionId,
+    "workflows",
+  )
+}

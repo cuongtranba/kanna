@@ -2,7 +2,7 @@ import { describe, expect, mock, test } from "bun:test"
 import { act } from "react"
 import { createRoot } from "react-dom/client"
 import "../lib/testing/setupHappyDom"
-import { WorkflowsSection, WorkflowsSectionWithDetail } from "./WorkflowsSection"
+import { formatWorkflowResult, WorkflowRunDetail, WorkflowsSection, WorkflowsSectionWithDetail } from "./WorkflowsSection"
 import type { WorkflowRun, WorkflowRunSummary } from "../../shared/workflow-types"
 import { renderForLoopCheck } from "../lib/testing/renderForLoopCheck"
 
@@ -25,6 +25,7 @@ function makeRun(over: Partial<WorkflowRunSummary> = {}): WorkflowRunSummary {
 async function mountWorkflowsSection(props: {
   runs: WorkflowRunSummary[]
   onSelectRun?: (runId: string) => void
+  selectedRunId?: string | null
 }): Promise<{ container: HTMLDivElement; cleanup: () => void }> {
   const container = document.createElement("div")
   document.body.appendChild(container)
@@ -33,6 +34,7 @@ async function mountWorkflowsSection(props: {
       <WorkflowsSection
         runs={props.runs}
         onSelectRun={props.onSelectRun ?? (() => undefined)}
+        selectedRunId={props.selectedRunId}
       />,
     )
   })
@@ -87,6 +89,18 @@ describe("WorkflowsSection — list rendering", () => {
       runs: [makeRun({ runId: "run-1", agentCount: 7 })],
     })
     expect(container.textContent).toContain("7")
+    cleanup()
+  })
+
+  test("highlights the selected run row", async () => {
+    const { container, cleanup } = await mountWorkflowsSection({
+      runs: [makeRun({ runId: "run-1" }), makeRun({ runId: "run-2" })],
+      selectedRunId: "run-1",
+    })
+    const selected = container.querySelector("[data-testid='workflow-row:run-1']")
+    const other = container.querySelector("[data-testid='workflow-row:run-2']")
+    expect(selected?.classList.contains("bg-muted")).toBe(true)
+    expect(other?.classList.contains("bg-muted")).toBe(false)
     cleanup()
   })
 
@@ -165,6 +179,118 @@ function makeFullRun(over: Partial<WorkflowRun> = {}): WorkflowRun {
     ...over,
   }
 }
+
+// ── WorkflowRunDetail — phase tree, previews, transcript drill-in ─────────────
+
+async function mountDetail(run: WorkflowRun, onSelectAgent?: (agentId: string) => void) {
+  const container = document.createElement("div")
+  document.body.appendChild(container)
+  await act(async () => {
+    createRoot(container).render(<WorkflowRunDetail run={run} onSelectAgent={onSelectAgent} />)
+  })
+  return { container, cleanup: () => container.remove() }
+}
+
+describe("WorkflowRunDetail — parity rendering", () => {
+  test("groups agents under their phase titles (progress tree)", async () => {
+    const run = makeFullRun({
+      phases: [{ title: "Compile", detail: "build it" }, { title: "Deploy" }],
+      agents: [
+        { index: 1, label: "compiler", state: "completed", phaseIndex: 1 },
+        { index: 2, label: "shipper", state: "running", phaseIndex: 2 },
+      ],
+    })
+    const { container, cleanup } = await mountDetail(run)
+    const tree = container.querySelector("[data-testid='workflow-progress-tree']")
+    expect(tree).not.toBeNull()
+    expect(tree!.textContent).toContain("Compile")
+    expect(tree!.textContent).toContain("build it")
+    expect(tree!.textContent).toContain("Deploy")
+    expect(tree!.textContent).toContain("compiler")
+    expect(tree!.textContent).toContain("shipper")
+    cleanup()
+  })
+
+  test("renders per-agent prompt and result previews", async () => {
+    const run = makeFullRun({
+      agents: [{ index: 1, label: "modeler", state: "completed", promptPreview: "SYSTEM: read the code", resultPreview: "the cause is X" }],
+    })
+    const { container, cleanup } = await mountDetail(run)
+    expect(container.textContent).toContain("SYSTEM: read the code")
+    expect(container.textContent).toContain("the cause is X")
+    cleanup()
+  })
+
+  test("renders the overall result and the script", async () => {
+    const run = makeFullRun({
+      result: JSON.stringify({ rootCause: "deadlock" }),
+      script: "export const meta = { name: 'x' }",
+    })
+    const { container, cleanup } = await mountDetail(run)
+    expect(container.textContent).toContain("rootCause")
+    expect(container.textContent).toContain("export const meta")
+    cleanup()
+  })
+
+  test("shows a Transcript button only when onSelectAgent + agentId are present; click fires it", async () => {
+    const run = makeFullRun({
+      agents: [{ index: 1, label: "modeler", state: "completed", agentId: "agent-xyz" }],
+    })
+    const onSelectAgent = mock((_id: string) => undefined)
+    const { container, cleanup } = await mountDetail(run, onSelectAgent)
+    const btn = container.querySelector<HTMLButtonElement>("[data-testid='workflow-agent-transcript:agent-xyz']")
+    expect(btn).not.toBeNull()
+    await act(async () => { btn!.click() })
+    expect(onSelectAgent).toHaveBeenCalledWith("agent-xyz")
+    cleanup()
+  })
+
+  test("no Transcript button when onSelectAgent is absent", async () => {
+    const run = makeFullRun({ agents: [{ index: 1, label: "modeler", state: "completed", agentId: "agent-xyz" }] })
+    const { container, cleanup } = await mountDetail(run)
+    expect(container.querySelector("[data-testid='workflow-agent-transcript:agent-xyz']")).toBeNull()
+    cleanup()
+  })
+
+  test("no Transcript button when the agent has no agentId", async () => {
+    const run = makeFullRun({ agents: [{ index: 1, label: "modeler", state: "completed" }] })
+    const onSelectAgent = mock((_id: string) => undefined)
+    const { container, cleanup } = await mountDetail(run, onSelectAgent)
+    expect(container.querySelector("[data-testid^='workflow-agent-transcript:']")).toBeNull()
+    cleanup()
+  })
+
+  test("renders per-agent duration when present", async () => {
+    const run = makeFullRun({ agents: [{ index: 1, label: "modeler", state: "completed", durationMs: 42_000 }] })
+    const { container, cleanup } = await mountDetail(run)
+    expect(container.textContent).toContain("42s")
+    cleanup()
+  })
+
+  test("renders the error section for a failed run and suppresses it when completed", async () => {
+    const failed = await mountDetail(makeFullRun({ status: "failed", error: "agent crashed" }))
+    expect(failed.container.textContent).toContain("agent crashed")
+    failed.cleanup()
+
+    const completed = await mountDetail(makeFullRun({ status: "completed", error: "leftover stderr" }))
+    expect(completed.container.textContent).not.toContain("leftover stderr")
+    completed.cleanup()
+  })
+})
+
+describe("formatWorkflowResult", () => {
+  test("re-indents valid JSON", () => {
+    expect(formatWorkflowResult('{"a":1}')).toBe('{\n  "a": 1\n}')
+  })
+
+  test("passes a plain (non-JSON) string through unchanged", () => {
+    expect(formatWorkflowResult("just a sentence")).toBe("just a sentence")
+  })
+
+  test("passes a malformed JSON-looking string through unchanged", () => {
+    expect(formatWorkflowResult("{not valid json")).toBe("{not valid json")
+  })
+})
 
 describe("WorkflowsSectionWithDetail — drill-in", () => {
   test("clicking a row calls getRunDetail with the run id and shows detail", async () => {

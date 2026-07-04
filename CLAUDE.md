@@ -355,6 +355,89 @@ explicit `settings.testMcpServer` RPC.
 (`app-settings.ts`) and `buildUserMcpServers` / `buildMcpConfigJson`
 filters (belt-and-suspenders).
 
+## Custom MCP Servers → OAuth
+
+OAuth 2.1 (PKCE + DCR + rotating refresh) is supported for `http` and `sse`
+transports only. The flow is explicit discovery rather than SDK auto-discovery:
+the SDK's `auth.js` `discovery()` helper follows RFC8414
+(`<issuer>/.well-known/oauth-authorization-server`) but some servers (e.g.
+Anthropic design MCP) serve the AS metadata only at the OpenID path
+(`<issuer>/.well-known/openid-configuration`), returning the claude.ai SPA
+HTML at the RFC8414 path — breaking auto-discovery. `mcp-oauth.adapter.ts`
+probes the OpenID path first, then falls back to RFC8414.
+
+**Two-step paste UX.** Kanna has no redirect server, so after the AS redirects
+the browser to `http://localhost:3334/callback?code=…`, the user copies that
+URL from the browser address bar and pastes it into the Settings UI. The
+`completeMcpOAuth` WS command exchanges the code via PKCE and stores tokens.
+
+**Token lifecycle.** `ensureFreshMcpToken` (called at chat spawn) pre-fetches a
+fresh access token if the current one is within 60 s of expiry. Rotating
+refresh tokens are persisted back via `persistOAuthState`. The access-token TTL
+is determined by the AS (Anthropic design MCP issues 8 h tokens) — but refresh
+extends the session indefinitely, so the 8 h is not a re-auth interval.
+`completeMcpOAuth` persists the resolved AS `metadata` (`token_endpoint`) onto
+`McpOAuthState.metadata`; `ensureFreshMcpToken` uses it
+(`metadataByIssuer?.[issuer] ?? oauth.metadata`) so `refreshAuthorization` hits
+the cached `token_endpoint` directly and never re-discovers from `issuer` (which
+may be a non-resolvable resource URL like `https://claude.ai/v1/design/mcp` —
+re-discovery there returns SPA HTML and was the cause of "token refresh failed"
+forcing an 8 h re-auth; see adr-20260630-mcp-oauth-refresh-metadata). Entries
+authenticated before this fix lack persisted metadata and must re-auth once.
+
+**Storage.** OAuth state (`clientByIssuer`, `tokens`, `issuer`, `metadata`, `flow`) is
+stored inside the server entry in `settings.json` (file mode 0600). The
+`flow` field is present only mid-flow and cleared on complete or cancel.
+DCR results are keyed by AS issuer to avoid re-registering if the same AS
+serves multiple servers.
+
+**Bearer injection.** At spawn, `AgentCoordinator.buildOAuthBearers` iterates
+enabled network servers, calls `ensureFreshMcpToken` (refresh if needed, then
+return the access token), and builds a `ReadonlyMap<serverId, token>`. Both
+`buildUserMcpServers` (SDK driver) and `buildMcpConfigJson` (PTY driver) merge
+`Authorization: Bearer <token>` into the transport headers for that server.
+`validateMcpServer` also accepts an optional `bearer` for the manual "Test"
+action on OAuth servers.
+
+# Configurable Model Catalog (customModels)
+
+Claude + Codex models are user-configurable from Settings → "Models" instead
+of being hardcoded. Entries persist in `settings.json` under `customModels`
+(seeded on first load from the built-in `PROVIDERS` list) and merge into the
+effective catalog at read time.
+
+- **Single source of truth.** `PROVIDERS` in `src/shared/types.ts` is the only
+  built-in catalog. `src/server/provider-catalog.ts` `SERVER_PROVIDERS` is
+  `[...PROVIDERS]` — the former duplicate `HARD_CODED_CODEX_MODELS` was
+  removed (it drifted).
+- **Merge.** `mergeCustomModels(base, customModels)` (pure, in `types.ts`)
+  folds each `CustomModelEntry` over its provider's model list: same `id`
+  **overrides** the built-in in place, a new `id` is **appended**. `base`
+  built-ins always remain as a fallback, so the catalog is never empty.
+- **Seed + revert-to-default.** `normalizeCustomModels` (`app-settings.ts`)
+  seeds `customModels` from built-ins (deterministic `createdAt/updatedAt = 0`)
+  when the persisted value is absent, making every built-in an editable copy in
+  the UI. Deleting a seeded copy removes the override, so the identical
+  built-in shows through again (revert-to-default); deleting a purely-custom
+  id removes it entirely.
+- **CRUD.** `AppSettingsPatch.customModels` carries `create | update | delete`,
+  handled by the settings reducer (mirrors `customMcpServers`), validated by
+  `validateCustomModelShape` (id regex, non-empty label, provider ∈
+  {claude,codex}, dedupe per provider). Rides the existing
+  `handleWriteAppSettings` RPC — no new endpoint.
+- **Transport.** `deriveChatSnapshot` (`read-models.ts`) emits
+  `availableProviders: mergeCustomModels([...SERVER_PROVIDERS], customModels)`
+  (customModels threaded from `AppSettingsManager` at the `ws-router.ts` call
+  site) — the per-chat snapshot is the single server→client catalog transport.
+  `normalizeServerModel(provider, model, customModels)` accepts custom ids at
+  turn time. Client: `selectCustomModels` selector (stable `EMPTY` ref) +
+  `ModelsSection.tsx` CRUD UI; the Settings-page default-model pickers derive
+  `mergeCustomModels([...PROVIDERS], customModels)`. Both `mergeAppSettingsPatch`
+  copies (client store + `ws-router` fallback) pin `customModels` so the CRUD
+  patch shape never leaks over the array.
+- **Scope.** OpenRouter untouched (already dynamic via API). Providers
+  themselves are not add/removable — models only.
+
 # Subagent Delegation (Anthropic Task-tool pattern)
 
 The main agent is always in the loop. `@agent/<name>` in chat input is a
@@ -392,13 +475,20 @@ the main model then synthesizes it into its own response.
   `user_prompt` entries for UI badges and analytics. The assistant-text
   mention scan and the `chat_send` / dequeue short-circuits are removed.
 
-## Keep-Alive Multi-Turn Subagents (claude-PTY only)
+## Keep-Alive Multi-Turn Subagents (claude SDK + PTY)
 
 `delegate_subagent({ subagent_id, prompt, keep_alive: true })` keeps the
-subagent's PTY claude REPL open after the first `result` instead of sending
-`/exit`. The main agent then drives further turns into the SAME warm
-process — no re-spawn, no re-trust, warm cache. Star topology preserved:
-the main agent is always the one calling these tools.
+subagent's claude session open after the first `result` instead of tearing it
+down. The main agent then drives further turns into the SAME warm session — no
+re-spawn, no re-trust, warm cache. Star topology preserved: the main agent is
+always the one calling these tools.
+
+- **SDK transport (adr-20260616-sdk-pty-feature-parity):** the SDK driver uses
+  its native streaming-input prompt queue — `startClaudeSession({ keepAlive })`
+  leaves the `AsyncMessageQueue` open after the initial prompt and exposes the
+  handle's `pushChannelPrompt` field backed by a queue push (shared with
+  `sendPrompt` via `enqueueUserPrompt`). No channel/dev-channels flag is needed.
+- **PTY transport:** as below — a kanna channel push.
 
 - **Transport:** each turn is a kanna channel push (`pushChannelPrompt`, the
   same MCP-notification transport shipped in PR #333) followed by draining
@@ -458,6 +548,39 @@ the main agent is always the one calling these tools.
   `KANNA_SUBAGENT_IDLE_TIMEOUT_MS` (default 300000) — both wired into the
   orchestrator deps at `AgentCoordinator` construction (`agent.ts`); the
   orchestrator itself reads only its deps (side-effect seal).
+
+# Background Subagents (delegate_subagent run_in_background)
+
+`delegate_subagent({ subagent_id, prompt, run_in_background: true })` launches a
+subagent WITHOUT blocking the main turn. The MCP tool returns immediately with
+`{status:"async_launched", run_id}`; the subagent's final reply is delivered
+back into the main chat as a fresh turn when it finishes. Mutually exclusive
+with `keep_alive` (the MCP host rejects both set). Works for any provider
+(Claude + Codex) — delivery is provider-agnostic. See
+adr-20260616-subagent-run-in-background.
+
+- **Orchestrator:** `delegateRun({background:true})` runs the subagent through
+  the normal `spawnRun` plumbing (permit, RunState, timeout, abort,
+  event-sourcing) but does NOT await it — it generates the runId up front,
+  returns `{status:"async_launched", runId}`, and on terminal fires the
+  `onBackgroundRunComplete(chatId, runId, BackgroundRunOutcome)` dep. The active
+  background run holds a permit while in flight, so concurrency is bounded by
+  the existing permit pool (default 4) + run timeout. No live-session registry
+  (background runs are one-shot, not keep-alive).
+- **Re-entry (driver-agnostic).** `AgentCoordinator.deliverBackgroundSubagentResult`
+  is wired as `onBackgroundRunComplete`. It builds a notification prompt
+  (the reply, or the failure) and routes through
+  `scheduleAgentWakeup({source:"subagent_background", delayMs:0})` — the SAME
+  event-sourced re-entry as every other agent wake. The turn machinery then
+  delivers it per driver: the SDK driver pushes a follow-up turn via the live
+  session's native `sendPrompt` (streaming-input queue); the PTY driver spawns
+  /resumes a turn. No driver-specific delivery code — `fireAutoContinue` →
+  `enqueueMessage` already handles both.
+- **Cap exemption.** `source:"subagent_background"` is EXEMPT from the
+  `KANNA_MAX_AGENT_WAKES` runaway cap (it delivers a real result, not a
+  self-poll) — exhausting the cap would silently drop genuine subagent
+  results. It is the only source that neither checks nor increments
+  `agentWakeChainByChat`. Concurrency is bounded by the permit pool instead.
 
 # Agent Self-Scheduled Wake (KANNA_MAX_AGENT_WAKES, KANNA_PENDING_WORKFLOW_POLL_MS)
 
@@ -540,13 +663,22 @@ could notify. See `adr-20260604-pty-background-task-keepalive`.
   pin a process. Trade-off: a quick task still holds the session warm up to the
   max (no early-clear) — acceptable and bounded; raise/lower per deployment.
 
-# Workflow Status Panel (PTY disk-watch, read-only)
+# Workflow Status Panel (disk-watch, read-only — SDK + PTY)
 
 Surfaces Claude Code's native `Workflow` tool (dynamic multi-agent
 orchestration) in the UI: a per-chat panel listing every run with live status +
-drill-in progress, plus an inline transcript card on the launch. **PTY driver
-only, read-only.** Complementary to "Agent Self-Scheduled Wake" — that keeps the
+drill-in progress, plus an inline transcript card on the launch. **Read-only,
+both drivers.** Complementary to "Agent Self-Scheduled Wake" — that keeps the
 *agent* re-entering while a workflow runs; this *displays* the workflow.
+
+**SDK driver registration (adr-20260616-sdk-pty-feature-parity).** Claude writes
+the `wf_*.json` sidecars regardless of driver, so the SDK reuses the same
+disk-watch read-model. `AgentCoordinator.maybeRegisterSdkWorkflowsDir` derives
+`<projectDir>/<session-uuid>/workflows` (via `computeWorkflowsDir`) from the
+SDK's first `session_token` HarnessEvent and calls `workflowRegistry.register`
+once per session; `closeClaudeSession` unregisters. The PTY path keeps its own
+transcript-path registration (guarded by driver preference so neither
+double-fires).
 
 **Why disk-watch, not the event stream.** The PTY transcript JSONL (PTY's sole
 event source) carries the `Workflow` tool_use launch but **no**
@@ -596,13 +728,15 @@ subagent files). See `adr-20260603-workflow-disk-watch-read-model`.
   (mirrors `SubagentsSection`), `WorkflowMessage` transcript card (live pill
   joined by `taskId` once `chatId` is threaded through the transcript rows).
 
-Out of scope: SDK driver, global cross-chat view, stop/relaunch.
+Out of scope: global cross-chat view, stop/relaunch.
 
 # Tests
 
-`bun test` MUST pass locally before any push or PR. CI (`.github/workflows/test.yml`)
-runs `bun test` on every push to `main` and every PR; merges are blocked on failure.
-Run `bun test src/server/<file>.test.ts` for fast iteration on a single suite.
+`bun run test` MUST pass locally before any push or PR. CI (`.github/workflows/test.yml`)
+runs `bun test --conditions production` on every push to `main` and every PR; merges are blocked on failure.
+Always use `--conditions production` (or `bun run test`) — Lexical 0.45 dev ESM builds
+have a circular-dep TDZ that crashes bare `bun test`. For fast iteration on a single
+suite: `bun test --conditions production src/server/<file>.test.ts`.
 When a test spawns `git` or other subprocesses, ensure the spawn sets
 `stdin: "ignore"` and `GIT_TERMINAL_PROMPT=0` so a hung credential prompt
 cannot exhaust the test timeout. Also give it an explicit timeout

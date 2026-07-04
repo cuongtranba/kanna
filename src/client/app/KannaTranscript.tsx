@@ -41,6 +41,10 @@ import { PREVIEW_FILE_TOOL_NAME } from "../../shared/tools"
 
 const SPECIAL_TOOL_NAMES = new Set(["AskUserQuestion", "ExitPlanMode", "TodoWrite", DELEGATE_SUBAGENT_TOOL_NAME, PREVIEW_FILE_TOOL_NAME])
 
+// Tool kinds that render a dedicated card (download link, generated image).
+// They must never fold into a CollapsedToolGroup or their card is hidden.
+const SPECIAL_TOOL_KINDS = new Set<ProcessedToolCall["toolKind"]>(["offer_download", "image_generation"])
+
 export type TranscriptRenderItem =
   | { type: "single"; message: HydratedTranscriptMessage; index: number }
   | { type: "tool-group"; messages: HydratedTranscriptMessage[]; startIndex: number }
@@ -88,8 +92,9 @@ interface TranscriptMessageRenderState {
 
 function isCollapsibleToolCall(message: HydratedTranscriptMessage) {
   if (message.kind !== "tool") return false
-  const toolName = (message as ProcessedToolCall).toolName
-  return !SPECIAL_TOOL_NAMES.has(toolName)
+  const tool = message as ProcessedToolCall
+  if (SPECIAL_TOOL_KINDS.has(tool.toolKind)) return false
+  return !SPECIAL_TOOL_NAMES.has(tool.toolName)
 }
 
 function getTranscriptMessageRenderState(

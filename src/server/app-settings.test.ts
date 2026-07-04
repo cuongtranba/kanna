@@ -2,9 +2,9 @@ import { afterEach, describe, expect, test } from "bun:test"
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
-import { AUTH_DEFAULTS, CLAUDE_AUTH_DEFAULTS, CLAUDE_DRIVER_DEFAULTS, CLAUDE_PTY_LIFECYCLE_DEFAULTS, CLOUDFLARE_TUNNEL_DEFAULTS, GLOBAL_PROMPT_APPEND_MAX_CHARS, UPLOAD_DEFAULTS } from "../shared/types"
-import { AppSettingsManager, readAppSettingsSnapshot } from "./app-settings"
-import type { AppSettingsSnapshot, SubagentInput } from "../shared/types"
+import { AUTH_DEFAULTS, CLAUDE_AUTH_DEFAULTS, CLAUDE_DRIVER_DEFAULTS, CLAUDE_PTY_LIFECYCLE_DEFAULTS, CLOUDFLARE_TUNNEL_DEFAULTS, DEFAULT_OPENROUTER_SDK_MODEL, GLOBAL_PROMPT_APPEND_MAX_CHARS, UPLOAD_DEFAULTS } from "../shared/types"
+import { AppSettingsManager, readAppSettingsSnapshot, seedCustomModelsFromBuiltins } from "./app-settings"
+import type { AppSettingsSnapshot, McpOAuthState, SubagentInput } from "../shared/types"
 
 let tempDirs: string[] = []
 let activeManagers: AppSettingsManager[] = []
@@ -68,6 +68,11 @@ function expectedSettingsSnapshot(filePath: string, overrides: Partial<AppSettin
         },
         planMode: false,
       },
+      openrouter: {
+        model: DEFAULT_OPENROUTER_SDK_MODEL,
+        modelOptions: {},
+        planMode: false,
+      },
     },
     warning: null,
     filePathDisplay: filePath,
@@ -77,6 +82,7 @@ function expectedSettingsSnapshot(filePath: string, overrides: Partial<AppSettin
     uploads: UPLOAD_DEFAULTS,
     subagents: [],
     customMcpServers: [],
+    customModels: seedCustomModelsFromBuiltins(),
     claudeDriver: { ...CLAUDE_DRIVER_DEFAULTS, lifecycle: { ...CLAUDE_PTY_LIFECYCLE_DEFAULTS } },
     globalPromptAppend: "",
     shareDefaultTtlHours: 24,
@@ -608,6 +614,55 @@ describe("subagent CRUD", () => {
     mgr.dispose()
   })
 
+  test("legacy subagent without triggerMode loads with triggerMode === auto", async () => {
+    const filePath = await createTempFilePath()
+    const legacy = {
+      subagents: [{
+        id: "legacy-trigger-1",
+        name: "legacytrigger",
+        provider: "claude",
+        model: "claude-opus-4-7",
+        modelOptions: { reasoningEffort: "medium", contextWindow: "1m" },
+        systemPrompt: "old",
+        contextScope: "previous-assistant-reply",
+        createdAt: 1,
+        updatedAt: 1,
+      }],
+    }
+    await Bun.write(filePath, JSON.stringify(legacy))
+    const mgr = trackManager(new AppSettingsManager(filePath))
+    await mgr.initialize()
+    const loaded = mgr.getSnapshot().subagents[0]
+    expect(loaded?.id).toBe("legacy-trigger-1")
+    expect(loaded?.triggerMode).toBe("auto")
+    mgr.dispose()
+  })
+
+  test("subagent with triggerMode manual round-trips to manual", async () => {
+    const filePath = await createTempFilePath()
+    const data = {
+      subagents: [{
+        id: "manual-trigger-1",
+        name: "manualtrigger",
+        provider: "claude",
+        model: "claude-opus-4-7",
+        modelOptions: { reasoningEffort: "medium", contextWindow: "1m" },
+        systemPrompt: "test",
+        contextScope: "previous-assistant-reply",
+        triggerMode: "manual",
+        createdAt: 1,
+        updatedAt: 1,
+      }],
+    }
+    await Bun.write(filePath, JSON.stringify(data))
+    const mgr = trackManager(new AppSettingsManager(filePath))
+    await mgr.initialize()
+    const loaded = mgr.getSnapshot().subagents[0]
+    expect(loaded?.id).toBe("manual-trigger-1")
+    expect(loaded?.triggerMode).toBe("manual")
+    mgr.dispose()
+  })
+
   test("CRUD round-trip survives reload", async () => {
     const filePath = await createTempFilePath()
     const mgr = trackManager(new AppSettingsManager(filePath))
@@ -1060,5 +1115,163 @@ describe("shareDefaultTtlHours", () => {
     await expect(mgr.writePatch({ shareDefaultTtlHours: -1 })).rejects.toThrow()
     await expect(mgr.writePatch({ shareDefaultTtlHours: 1.5 })).rejects.toThrow()
     mgr.dispose()
+  })
+})
+
+describe("customMcpServers — OAuth", () => {
+  test("create stdio entry with oauth.enabled=true is rejected with INVALID_OAUTH_TRANSPORT", async () => {
+    const filePath = await createTempFilePath()
+    const mgr = trackManager(new AppSettingsManager(filePath))
+    await mgr.initialize()
+    // stdio entries don't have oauth in the type union; cast to exercise the runtime guard
+    const badInput = {
+      name: "bad-oauth",
+      transport: "stdio" as const,
+      command: "/bin/mcp",
+      args: [],
+      env: {},
+      oauth: { enabled: true, status: "unauthenticated" as const },
+    }
+    await expect(
+      mgr.writePatch({ customMcpServers: { create: badInput as Parameters<typeof mgr.writePatch>[0]["customMcpServers"] extends { create: infer T } ? T : never } }),
+    ).rejects.toMatchObject({ validationError: { code: "INVALID_OAUTH_TRANSPORT" } })
+    mgr.dispose()
+  })
+
+  test("create http entry with oauth accepted (oauth is valid for network transports)", async () => {
+    const filePath = await createTempFilePath()
+    const mgr = trackManager(new AppSettingsManager(filePath))
+    await mgr.initialize()
+    await mgr.writePatch({
+      customMcpServers: {
+        create: {
+          name: "remote-oauth",
+          transport: "http",
+          url: "https://example.com/mcp",
+          headers: {},
+          oauth: { enabled: true, status: "unauthenticated" },
+        },
+      },
+    })
+    const list = mgr.getSnapshot().customMcpServers
+    expect(list).toHaveLength(1)
+    if (list[0]?.transport !== "stdio") {
+      expect(list[0]?.oauth?.enabled).toBe(true)
+      expect(list[0]?.oauth?.status).toBe("unauthenticated")
+    } else {
+      throw new Error("expected network transport")
+    }
+    mgr.dispose()
+  })
+
+  test("setOAuthState updates oauth block on target entry and leaves other entry untouched", async () => {
+    const filePath = await createTempFilePath()
+    const mgr = trackManager(new AppSettingsManager(filePath))
+    await mgr.initialize()
+
+    // create two http entries
+    await mgr.writePatch({
+      customMcpServers: {
+        create: { name: "alpha", transport: "http", url: "https://alpha.example.com/mcp", headers: {} },
+      },
+    })
+    await mgr.writePatch({
+      customMcpServers: {
+        create: { name: "beta", transport: "http", url: "https://beta.example.com/mcp", headers: {} },
+      },
+    })
+    const list = mgr.getSnapshot().customMcpServers
+    const alphaId = list.find((s) => s.name === "alpha")!.id
+    const betaId = list.find((s) => s.name === "beta")!.id
+
+    const nextOauth: McpOAuthState = { enabled: true, status: "authenticated", issuer: "https://auth.example.com" }
+    await mgr.writePatch({
+      customMcpServers: { setOAuthState: { id: alphaId, oauth: nextOauth } },
+    })
+
+    const updated = mgr.getSnapshot().customMcpServers
+    const alpha = updated.find((s) => s.id === alphaId)!
+    const beta = updated.find((s) => s.id === betaId)!
+
+    if (alpha.transport === "stdio" || beta.transport === "stdio") throw new Error("expected network")
+    expect(alpha.oauth).toEqual(nextOauth)
+    // beta's oauth untouched (was never set)
+    expect(beta.oauth).toBeUndefined()
+    mgr.dispose()
+  })
+
+  test("update patch with oauth field merges onto existing network entry", async () => {
+    const filePath = await createTempFilePath()
+    const mgr = trackManager(new AppSettingsManager(filePath))
+    await mgr.initialize()
+
+    await mgr.writePatch({
+      customMcpServers: {
+        create: { name: "srv", transport: "http", url: "https://srv.example.com/mcp", headers: {} },
+      },
+    })
+    const id = mgr.getSnapshot().customMcpServers[0]!.id
+
+    const patchedOauth: McpOAuthState = { enabled: true, status: "authenticated" }
+    await mgr.writePatch({
+      customMcpServers: { update: { id, patch: { oauth: patchedOauth } } },
+    })
+
+    const entry = mgr.getSnapshot().customMcpServers[0]!
+    if (entry.transport === "stdio") throw new Error("expected network")
+    expect(entry.oauth).toEqual(patchedOauth)
+    // other fields preserved
+    expect(entry.name).toBe("srv")
+    expect(entry.url).toBe("https://srv.example.com/mcp")
+    mgr.dispose()
+  })
+})
+
+describe("customModels", () => {
+  test("seeds from built-in PROVIDERS when absent", async () => {
+    const filePath = await createTempFilePath()
+    const manager = trackManager(new AppSettingsManager(filePath))
+    await manager.initialize()
+    const ids = manager.getSnapshot().customModels.map((m) => m.id)
+    expect(ids).toContain("claude-opus-4-8")
+    expect(ids).toContain("gpt-5.5")
+    expect(manager.getSnapshot().customModels.every((m) => m.provider === "claude" || m.provider === "codex")).toBe(true)
+  })
+
+  test("create adds a new custom model", async () => {
+    const filePath = await createTempFilePath()
+    const manager = trackManager(new AppSettingsManager(filePath))
+    await manager.initialize()
+    await manager.writePatch({ customModels: { create: { id: "claude-test", label: "Test", provider: "claude", supportsEffort: true } } })
+    expect(manager.getSnapshot().customModels.some((m) => m.id === "claude-test" && m.label === "Test")).toBe(true)
+  })
+
+  test("rejects create with empty label", async () => {
+    const filePath = await createTempFilePath()
+    const manager = trackManager(new AppSettingsManager(filePath))
+    await manager.initialize()
+    let err: unknown = null
+    try { await manager.writePatch({ customModels: { create: { id: "claude-bad", label: "  ", provider: "claude", supportsEffort: true } } }) } catch (e) { err = e }
+    expect(err).not.toBeNull()
+  })
+
+  test("rejects duplicate id within the same provider", async () => {
+    const filePath = await createTempFilePath()
+    const manager = trackManager(new AppSettingsManager(filePath))
+    await manager.initialize()
+    let err: unknown = null
+    try { await manager.writePatch({ customModels: { create: { id: "claude-opus-4-8", label: "Dup", provider: "claude", supportsEffort: true } } }) } catch (e) { err = e }
+    expect(err).not.toBeNull()
+  })
+
+  test("update edits label; delete removes the entry", async () => {
+    const filePath = await createTempFilePath()
+    const manager = trackManager(new AppSettingsManager(filePath))
+    await manager.initialize()
+    await manager.writePatch({ customModels: { create: { id: "claude-edit", label: "Before", provider: "claude", supportsEffort: true } } })
+    await manager.writePatch({ customModels: { update: { id: "claude-edit", patch: { label: "After" } } } })
+    expect(manager.getSnapshot().customModels.find((m) => m.id === "claude-edit")!.label).toBe("After")
+    await manager.writePatch({ customModels: { delete: { id: "claude-edit" } } })
+    expect(manager.getSnapshot().customModels.some((m) => m.id === "claude-edit")).toBe(false)
   })
 })

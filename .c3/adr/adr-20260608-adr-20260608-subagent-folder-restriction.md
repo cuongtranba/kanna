@@ -1,6 +1,6 @@
 ---
 id: adr-20260608-adr-20260608-subagent-folder-restriction
-c3-seal: 8accfcc76a88148186076825f5d0d28e8afa734e16746e7c979cabd417c9d733
+c3-seal: 66af527b857c41186d1654986c605c6cf67c1f5788b25fff43a27f647c18ae1a
 title: adr-20260608-subagent-folder-restriction
 type: adr
 goal: Add per-subagent filesystem restriction so a configured subagent can only read, write, glob, grep, edit, or shell inside a user-declared subtree of the parent chat's cwd. The decision authorizes two new optional fields on `Subagent` — `workingDir` (cwd override) and `allowedPaths` (root whitelist) — and wires them through claude-pty + claude-sdk subagent spawns so the model has no path to bypass them.
@@ -27,10 +27,10 @@ Affected topology: subagent type (`c3-301`), subagent orchestration (`c3-210`), 
 
 `allowedPaths?: string[]` — non-empty list of roots, same resolution rules as `workingDir`. Each root must be inside the parent chat cwd. Empty / unset = no path restriction.
 
-2. **Claude PTY + SDK subagent spawn (`c3-210 → c3-225`)**: when either field is set on the picked subagent, `subagent-provider-run.ts` passes the resolved `cwd` (parent cwd joined with `workingDir`) and `allowedPaths` into the driver. PTY driver appends `Read Edit Write Bash Glob Grep WebFetch` to `PTY_DISALLOWED_NATIVE_TOOLS` for that spawn and emits `--tools "mcp__kanna__*"` so only kanna shims reach the FS. SDK driver passes the same `disallowedTools` list through SDK options; its existing `canUseTool` already routes to the shims.
-3. **`c3-226 kanna-mcp-host`** registers per-run `readPathDeny` / `writePathDeny` derived from the subagent's `allowedPaths` for the lifetime of that subagent run (via the existing `delegationContext` + `subagentOrchestrator` wiring). Path-deny becomes a per-run scope, not just per-chat.
-4. **Codex (`c3-211 codex-app-server`)** is explicitly OUT for v1. A subagent configured with `workingDir` / `allowedPaths` whose `provider === "codex"` fails validation at save time (`subagent.validate` returns a new `RESTRICTION_NOT_SUPPORTED` error) until a follow-up ADR wires codex tool gating.
-5. Settings UI (`c3-116 settings-page`) gets two new optional inputs under the subagent form: working directory (single text field, relative path) and allowed paths (newline-separated). Validation messages surface through the existing `SubagentValidationError` path.
+1. **Claude PTY + SDK subagent spawn (`c3-210 → c3-225`)**: when either field is set on the picked subagent, `subagent-provider-run.ts` passes the resolved `cwd` (parent cwd joined with `workingDir`) and `allowedPaths` into the driver. PTY driver appends `Read Edit Write Bash Glob Grep WebFetch` to `PTY_DISALLOWED_NATIVE_TOOLS` for that spawn and emits `--tools "mcp__kanna__*"` so only kanna shims reach the FS. SDK driver passes the same `disallowedTools` list through SDK options; its existing `canUseTool` already routes to the shims.
+2. **`c3-226 kanna-mcp-host`** registers per-run `readPathDeny` / `writePathDeny` derived from the subagent's `allowedPaths` for the lifetime of that subagent run (via the existing `delegationContext` + `subagentOrchestrator` wiring). Path-deny becomes a per-run scope, not just per-chat.
+3. **Codex (`c3-211 codex-app-server`)** is explicitly OUT for v1. A subagent configured with `workingDir` / `allowedPaths` whose `provider === "codex"` fails validation at save time (`subagent.validate` returns a new `RESTRICTION_NOT_SUPPORTED` error) until a follow-up ADR wires codex tool gating.
+4. Settings UI (`c3-116 settings-page`) gets two new optional inputs under the subagent form: working directory (single text field, relative path) and allowed paths (newline-separated). Validation messages surface through the existing `SubagentValidationError` path.
 
 Why this approach: it reuses the path-deny machinery already shipped in c3-226 / c3-204 (no new enforcement layer), uses the same `--disallowedTools` shape already used for `AskUserQuestion` / `ExitPlanMode` / `ScheduleWakeup` in PTY (proven pattern), and keeps the subagent record the single source of truth so the restriction survives spawn / restart / event replay.
 
