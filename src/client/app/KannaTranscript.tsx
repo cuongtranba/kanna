@@ -16,6 +16,7 @@ import { ExitPlanModeMessage } from "../components/messages/ExitPlanModeMessage"
 import { TodoWriteMessage } from "../components/messages/TodoWriteMessage"
 import { ToolCallMessage } from "../components/messages/ToolCallMessage"
 import { OfferDownloadMessage } from "../components/messages/OfferDownloadMessage"
+import { PreviewFileMessage } from "../components/messages/PreviewFileMessage"
 import { ImageGenerationMessage } from "../components/messages/ImageGenerationMessage"
 import { ResultMessage } from "../components/messages/ResultMessage"
 import { InterruptedMessage } from "../components/messages/InterruptedMessage"
@@ -36,8 +37,9 @@ import {
   matchRunsToDelegateCalls,
   reportOrphanRuns,
 } from "./subagent-run-placement"
+import { PREVIEW_FILE_TOOL_NAME } from "../../shared/tools"
 
-const SPECIAL_TOOL_NAMES = new Set(["AskUserQuestion", "ExitPlanMode", "TodoWrite", DELEGATE_SUBAGENT_TOOL_NAME])
+const SPECIAL_TOOL_NAMES = new Set(["AskUserQuestion", "ExitPlanMode", "TodoWrite", DELEGATE_SUBAGENT_TOOL_NAME, PREVIEW_FILE_TOOL_NAME])
 
 export type TranscriptRenderItem =
   | { type: "single"; message: HydratedTranscriptMessage; index: number }
@@ -507,6 +509,10 @@ const TranscriptSingleRow = memo(function TranscriptSingleRow({
         }
         if (message.toolKind === "offer_download" && message.result) {
           rendered = <OfferDownloadMessage key={message.id} message={message} />
+          break
+        }
+        if (message.toolKind === "preview_file" && message.result) {
+          rendered = <PreviewFileMessage key={message.id} message={message} />
           break
         }
         if (message.toolKind === "image_generation") {
