@@ -433,4 +433,43 @@ describe("uploads", () => {
     expect(inferAttachmentContentType("main.ts", "video/mp2t")).toBe("text/plain; charset=utf-8")
     expect(inferAttachmentContentType("archive.zip", "application/zip")).toBe("application/zip")
   })
+
+  test("infers image MIME types", () => {
+    expect(inferAttachmentContentType("photo.png")).toBe("image/png")
+    expect(inferAttachmentContentType("photo.jpg")).toBe("image/jpeg")
+    expect(inferAttachmentContentType("photo.jpeg")).toBe("image/jpeg")
+    expect(inferAttachmentContentType("photo.gif")).toBe("image/gif")
+    expect(inferAttachmentContentType("photo.webp")).toBe("image/webp")
+    expect(inferAttachmentContentType("icon.svg")).toBe("image/svg+xml")
+    expect(inferAttachmentContentType("photo.avif")).toBe("image/avif")
+  })
+
+  test("infers application/pdf for .pdf", () => {
+    expect(inferAttachmentContentType("doc.pdf")).toBe("application/pdf")
+  })
+
+  test("infers audio MIME types", () => {
+    expect(inferAttachmentContentType("song.mp3")).toBe("audio/mpeg")
+    expect(inferAttachmentContentType("song.wav")).toBe("audio/wav")
+    expect(inferAttachmentContentType("song.m4a")).toBe("audio/mp4")
+    expect(inferAttachmentContentType("song.ogg")).toBe("audio/ogg")
+  })
+
+  test("infers video MIME types", () => {
+    expect(inferAttachmentContentType("clip.mp4")).toBe("video/mp4")
+    expect(inferAttachmentContentType("clip.mov")).toBe("video/quicktime")
+    expect(inferAttachmentContentType("clip.webm")).toBe("video/webm")
+    expect(inferAttachmentContentType("clip.m4v")).toBe("video/mp4")
+  })
+
+  test("infers text/vnd.mermaid for .mmd and .mermaid", () => {
+    expect(inferAttachmentContentType("diagram.mmd")).toBe("text/vnd.mermaid")
+    expect(inferAttachmentContentType("diagram.mermaid")).toBe("text/vnd.mermaid")
+  })
+
+  test("returns octet-stream for unknown binary extensions and extensionless files", () => {
+    expect(inferAttachmentContentType("archive.zip")).toBe("application/octet-stream")
+    expect(inferAttachmentContentType("Makefile")).toBe("application/octet-stream")
+    expect(inferAttachmentContentType("noext")).toBe("application/octet-stream")
+  })
 })

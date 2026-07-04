@@ -6,11 +6,29 @@ const TEXT_PLAIN_CONTENT_TYPE = "text/plain; charset=utf-8"
 const DEFAULT_BINARY_MIME_TYPE = "application/octet-stream"
 
 const TEXT_CONTENT_TYPE_BY_EXTENSION = new Map<string, string>([
+  [".avif", "image/avif"],
   [".csv", "text/csv; charset=utf-8"],
+  [".gif", "image/gif"],
+  [".jpeg", "image/jpeg"],
+  [".jpg", "image/jpeg"],
   [".json", "application/json; charset=utf-8"],
   [".jsonc", TEXT_PLAIN_CONTENT_TYPE],
+  [".m4a", "audio/mp4"],
+  [".m4v", "video/mp4"],
   [".md", "text/markdown; charset=utf-8"],
+  [".mermaid", "text/vnd.mermaid"],
+  [".mmd", "text/vnd.mermaid"],
+  [".mov", "video/quicktime"],
+  [".mp3", "audio/mpeg"],
+  [".mp4", "video/mp4"],
+  [".ogg", "audio/ogg"],
+  [".pdf", "application/pdf"],
+  [".png", "image/png"],
+  [".svg", "image/svg+xml"],
   [".tsv", "text/tab-separated-values; charset=utf-8"],
+  [".wav", "audio/wav"],
+  [".webm", "video/webm"],
+  [".webp", "image/webp"],
 ])
 
 const TEXT_LIKE_EXTENSIONS = new Set([
