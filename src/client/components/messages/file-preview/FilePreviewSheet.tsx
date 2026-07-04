@@ -19,6 +19,7 @@ import { JsonBody } from "./bodies/JsonBody"
 import { AudioBody } from "./bodies/AudioBody"
 import { VideoBody } from "./bodies/VideoBody"
 import { CodeBody } from "./bodies/CodeBody"
+import { MermaidBody } from "./bodies/MermaidBody"
 import { downloadFile, shareViaWebShare } from "./actions"
 import type { PreviewSource } from "./types"
 
@@ -146,6 +147,7 @@ function pickBody(source: PreviewSource): React.ComponentType<{ source: PreviewS
   if (iconKind === "table") return TableBody
   if (iconKind === "markdown") return MarkdownBody
   if (iconKind === "json") return JsonBody
+  if (iconKind === "mermaid") return MermaidBody
   if (iconKind === "code") return CodeBody
   const target = classifyAttachmentPreview(attachmentLike)
   if (target.kind === "external") return PdfBody

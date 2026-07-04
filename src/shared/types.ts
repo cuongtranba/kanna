@@ -1154,6 +1154,18 @@ export interface OfferDownloadToolResult {
   mimeType?: string
 }
 
+export interface PreviewFileToolCall
+  extends ToolCallBase<"preview_file", { path: string; label?: string }> { }
+
+export interface PreviewFileToolResult {
+  contentUrl: string
+  relativePath: string
+  fileName: string
+  displayName: string
+  size: number
+  mimeType: string
+}
+
 export type ImageGenerationStatus = "in_progress" | "completed" | "failed"
 
 export interface ImageGenerationToolCall
@@ -1187,6 +1199,7 @@ export type NormalizedToolCall =
   | SubagentTaskToolCall
   | McpGenericToolCall
   | OfferDownloadToolCall
+  | PreviewFileToolCall
   | ImageGenerationToolCall
   | WorkflowToolCall
   | UnknownToolCall
@@ -1644,6 +1657,9 @@ export type HydratedMcpGenericToolCall =
 export type HydratedOfferDownloadToolCall =
   HydratedToolCallBase<"offer_download", OfferDownloadToolCall["input"], OfferDownloadToolResult>
 
+export type HydratedPreviewFileToolCall =
+  HydratedToolCallBase<"preview_file", PreviewFileToolCall["input"], PreviewFileToolResult>
+
 export type HydratedImageGenerationToolCall =
   HydratedToolCallBase<"image_generation", ImageGenerationToolCall["input"], ImageGenerationToolResult>
 
@@ -1674,6 +1690,7 @@ export type HydratedToolCall =
   | HydratedSubagentTaskToolCall
   | HydratedMcpGenericToolCall
   | HydratedOfferDownloadToolCall
+  | HydratedPreviewFileToolCall
   | HydratedImageGenerationToolCall
   | HydratedWorkflowToolCall
   | HydratedUnknownToolCall

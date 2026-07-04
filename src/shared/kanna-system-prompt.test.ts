@@ -138,6 +138,11 @@ describe("buildKannaSystemPromptAppend", () => {
     })
   })
 
+  test("KANNA_SYSTEM_PROMPT_BASE includes preview_file proactivity nudge", () => {
+    expect(KANNA_SYSTEM_PROMPT_BASE).toContain("mcp__kanna__preview_file")
+    expect(KANNA_SYSTEM_PROMPT_BASE).toContain("pasting or summarizing its content")
+  })
+
   describe("stackProjects option", () => {
     test("returns BASE fast-path when stackProjects empty and nothing else set", () => {
       expect(buildKannaSystemPromptAppend([], { stackProjects: [] })).toBe(KANNA_SYSTEM_PROMPT_BASE)

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { renderToStaticMarkup } from "react-dom/server"
 import { CollapsedToolGroup } from "../components/messages/CollapsedToolGroup"
-import type { HydratedTranscriptMessage, SubagentRunSnapshot } from "../../shared/types"
+import type { HydratedPreviewFileToolCall, HydratedTranscriptMessage, SubagentRunSnapshot } from "../../shared/types"
 import {
   buildResolvedTranscriptRows,
   computeStableResolvedTranscriptRows,
@@ -775,5 +775,57 @@ describe("KannaTranscript subagent runs", () => {
     expect(html.indexOf("data-testid=\"subagent-message:r2\"")).toBeGreaterThan(
       html.indexOf("BETWEEN_DELEGATES_MARKER"),
     )
+  })
+
+  function createPreviewFileMessage(id: string): HydratedPreviewFileToolCall {
+    return {
+      id,
+      kind: "tool",
+      toolKind: "preview_file",
+      toolName: "mcp__kanna__preview_file",
+      toolId: id,
+      input: { path: "spec.md" },
+      timestamp: new Date().toISOString(),
+      rawResult: undefined,
+      isError: false,
+      result: {
+        contentUrl: "/api/local-file?path=%2Ftmp%2Fspec.md",
+        relativePath: "spec.md",
+        fileName: "spec.md",
+        displayName: "spec.md",
+        size: 512,
+        mimeType: "text/markdown; charset=utf-8",
+      },
+    }
+  }
+
+  test("preview_file message sandwiched between bash calls is NOT collapsed into a tool group", () => {
+    const messages = [
+      createToolMessage("bash-1"),
+      createPreviewFileMessage("preview-1"),
+      createToolMessage("bash-2"),
+    ]
+    const html = renderTranscript(messages as HydratedTranscriptMessage[])
+    // preview-file-card must appear in the output — not be absorbed into a CollapsedToolGroup
+    expect(html).toContain('data-testid="preview-file-card"')
+    // The bash calls before/after should not pull the preview card into a group
+    expect(html).not.toContain("tool calls")
+  })
+
+  test("preview_file with no result renders nothing (guard in PreviewFileMessage)", () => {
+    const noResult: HydratedPreviewFileToolCall = {
+      id: "pf-no-result",
+      kind: "tool",
+      toolKind: "preview_file",
+      toolName: "mcp__kanna__preview_file",
+      toolId: "pf-no-result",
+      input: { path: "spec.md" },
+      timestamp: new Date().toISOString(),
+      rawResult: undefined,
+      isError: false,
+      result: undefined,
+    }
+    const html = renderTranscript([noResult as HydratedTranscriptMessage])
+    expect(html).not.toContain('data-testid="preview-file-card"')
   })
 })

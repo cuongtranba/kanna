@@ -7,6 +7,7 @@ import type {
   ImageGenerationToolResult,
   NormalizedToolCall,
   OfferDownloadToolResult,
+  PreviewFileToolResult,
   ReadFileToolResult,
   TodoItem,
   WorkflowToolResult,
@@ -14,6 +15,7 @@ import type {
 
 export const KANNA_MCP_SERVER_NAME = "kanna"
 export const OFFER_DOWNLOAD_TOOL_NAME = `mcp__${KANNA_MCP_SERVER_NAME}__offer_download`
+export const PREVIEW_FILE_TOOL_NAME = `mcp__${KANNA_MCP_SERVER_NAME}__preview_file`
 export const EXPOSE_PORT_TOOL_NAME = `mcp__${KANNA_MCP_SERVER_NAME}__expose_port`
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -218,6 +220,20 @@ export function normalizeToolCall(args: {
     }
   }
 
+  if (toolName === PREVIEW_FILE_TOOL_NAME) {
+    return {
+      kind: "tool",
+      toolKind: "preview_file",
+      toolName,
+      toolId,
+      input: {
+        path: typeof input.path === "string" ? input.path : "",
+        label: typeof input.label === "string" ? input.label : undefined,
+      },
+      rawInput: input,
+    }
+  }
+
   const mcpMatch = toolName.match(/^mcp__(.+?)__(.+)$/)
   if (mcpMatch) {
     return {
@@ -411,6 +427,21 @@ export function hydrateToolResult(tool: NormalizedToolCall, raw: unknown): Hydra
         size: typeof record?.size === "number" ? record.size : 0,
         ...(typeof record?.mimeType === "string" ? { mimeType: record.mimeType } : {}),
       } satisfies OfferDownloadToolResult
+    }
+    case "preview_file": {
+      const text = extractMcpTextContent(parsed)
+      const payload = text ? parseJsonValue(text) : parsed
+      const record = asRecord(payload)
+      return {
+        contentUrl: typeof record?.contentUrl === "string" ? record.contentUrl : "",
+        relativePath: typeof record?.relativePath === "string" ? record.relativePath : "",
+        fileName: typeof record?.fileName === "string" ? record.fileName : "",
+        displayName: typeof record?.displayName === "string"
+          ? record.displayName
+          : typeof record?.fileName === "string" ? record.fileName : "",
+        size: typeof record?.size === "number" ? record.size : 0,
+        mimeType: typeof record?.mimeType === "string" ? record.mimeType : "application/octet-stream",
+      } satisfies PreviewFileToolResult
     }
     case "image_generation": {
       const record = asRecord(parsed)

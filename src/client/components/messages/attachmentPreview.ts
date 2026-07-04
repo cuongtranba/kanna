@@ -28,6 +28,7 @@ export type AttachmentIconKind =
   | "audio"
   | "video"
   | "file"
+  | "mermaid"
 
 export type AttachmentPreviewKind =
   | "image"
@@ -106,6 +107,7 @@ const FRIENDLY_MIME_BY_KIND: Record<AttachmentIconKind, string> = {
   audio: "Audio",
   video: "Video",
   file: "File",
+  mermaid: "Diagram",
 }
 
 export function friendlyMimeLabel(kind: AttachmentIconKind, mimeType?: string): string {
@@ -133,6 +135,7 @@ export function classifyAttachmentIcon(attachment: ChatAttachment): AttachmentIc
   if (mimeType.startsWith("audio/") || AUDIO_EXTENSIONS.has(extension)) return "audio"
   if (mimeType.startsWith("video/") || VIDEO_EXTENSIONS.has(extension)) return "video"
   if (mimeType.includes("zip") || mimeType.includes("archive") || ARCHIVE_EXTENSIONS.has(extension)) return "archive"
+  if (mimeType === "text/vnd.mermaid" || extension === ".mmd" || extension === ".mermaid") return "mermaid"
   if (CODE_OR_CONFIG_EXTENSIONS.has(extension)) {
     if (extension === ".txt") return "text"
     return "code"

@@ -142,4 +142,22 @@ describe("classifyAttachmentIcon", () => {
     expect(classifyAttachmentIcon(makeAttachment({ displayName: "app.tsx", mimeType: "application/octet-stream" }))).toBe("code")
     expect(classifyAttachmentIcon(makeAttachment({ displayName: "bundle.zip", mimeType: "application/zip" }))).toBe("archive")
   })
+
+  test("returns mermaid for .mmd extension", () => {
+    expect(classifyAttachmentIcon(makeAttachment({ displayName: "flow.mmd", mimeType: "text/vnd.mermaid" }))).toBe("mermaid")
+  })
+
+  test("returns mermaid for .mermaid extension", () => {
+    expect(classifyAttachmentIcon(makeAttachment({ displayName: "arch.mermaid", mimeType: "text/vnd.mermaid" }))).toBe("mermaid")
+  })
+
+  test("returns mermaid for text/vnd.mermaid mime with unknown extension", () => {
+    expect(classifyAttachmentIcon(makeAttachment({ displayName: "diagram", mimeType: "text/vnd.mermaid" }))).toBe("mermaid")
+  })
+})
+
+describe("friendlyMimeLabel — mermaid", () => {
+  test("returns Diagram for mermaid kind", () => {
+    expect(friendlyMimeLabel("mermaid")).toBe("Diagram")
+  })
 })

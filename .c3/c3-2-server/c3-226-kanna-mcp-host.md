@@ -1,6 +1,6 @@
 ---
 id: c3-226
-c3-seal: addf142198af41b17353e8e0a38f2074a6241952478b94acc3d4957594c4e754
+c3-seal: 1a5f1db6fde9fad032f12178c71b974660c7a7cbcde1111f4dd8c7300490e494
 title: kanna-mcp-host
 type: component
 category: feature
@@ -97,6 +97,7 @@ the approval protocol clears.
 | close_subagent tool | OUT | Takes run_id, closes a live keep-alive session and frees its process. Routes to c3-210 closeLiveRun | c3-210 | src/server/kanna-mcp.ts |
 | schedule_wakeup tool | OUT | Takes delay_seconds plus prompt, arms a Kanna-owned agent_wakeup schedule via c3-210 scheduleAgentWakeup, returns the schedule_id or isError when the per-chat runaway cap is reached. Registered only when a scheduleWakeup callback is supplied, mirroring the delegate_subagent guard. Replaces the native ScheduleWakeup the PTY driver disallows | c3-227 | src/server/kanna-mcp.ts |
 | Per-run path-deny scope | IN | KannaMcpArgs.restrictedAllowedPaths threads through the kanna-mcp host into every shim ctx (ToolHandlerContext.restrictedAllowedPaths) and onto ToolCallbackSubmitArgs / EvaluateArgs; permission-gate.policy.evaluate auto-denies any read/write/bash path resolving outside the listed roots; lifetime is the subagent run (cleared with the spawn) | c3-225 | src/server/kanna-mcp.ts, src/server/permission-gate.ts, src/server/tool-callback.ts |
+| preview_file tool | OUT | Takes a path argument (and a label to title the card); resolveWorkspaceFile applies the same path-safety as offer_download, infers MIME via inferAttachmentContentType, and gates on isPreviewableMime (accepts text/, image/, audio/, video/, application/json, application/pdf after stripping mime params; rejects others with a "use offer_download" hint). Builds the content URL via buildLocalFileContentUrl (/api/local-file?path=<abs>) so files written in a worktree chat resolve — NOT the project-scoped URL. Returns a {kind:"file_preview", contentUrl, relativePath, fileName, displayName, size, mimeType} result that hydrates through c3-303 into a tap-to-open preview card (FilePreviewSheet, origin=preview_file, Share only, no download). Read-only: not gated by KANNA_MCP_TOOL_CALLBACKS and does not touch the durable approval protocol | c3-303 | src/server/kanna-mcp.ts, src/server/uploads.ts |
 
 ## Change Safety
 
