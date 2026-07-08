@@ -5542,3 +5542,67 @@ describe("buildClaudeEnv openrouter branch", () => {
     expect(env.CLAUDE_CODE_OAUTH_TOKEN).toBe("inherited")
   })
 })
+
+// ── AgentCoordinator teamsRegistry feed ──────────────────────────────────────
+
+describe("AgentCoordinator teamsRegistry feed", () => {
+  test("feeds task HarnessEvents from the harness stream into teamsRegistry", async () => {
+    const { createTeamsRegistry } = await import("./teams/teams-registry")
+    const teamsRegistry = createTeamsRegistry({ now: () => Date.now() })
+    const events = new AsyncEventQueue<any>()
+
+    const store = createFakeStore()
+    const coordinator = new AgentCoordinator({
+      store: store as never,
+      onStateChange: () => {},
+      teamsRegistry,
+      startClaudeSession: async () => ({
+        provider: "claude" as const,
+        stream: events,
+        getAccountInfo: async () => null,
+        interrupt: async () => {},
+        close: () => {},
+        sendPrompt: async () => {
+          // Push a task event, then finish the turn
+          events.push({
+            type: "task" as const,
+            task: {
+              subtype: "task_started" as const,
+              taskId: "t1",
+              description: "do the thing",
+              name: "Task One",
+            },
+          })
+          events.push({
+            type: "transcript" as const,
+            entry: timestamped({
+              kind: "result",
+              subtype: "success",
+              isError: false,
+              durationMs: 0,
+              result: "done",
+            }),
+          })
+        },
+        setModel: async () => {},
+        setPermissionMode: async () => {},
+        getSupportedCommands: async () => [],
+      }),
+    })
+
+    await coordinator.send({
+      type: "chat.send",
+      chatId: "chat-1",
+      provider: "claude",
+      content: "hello",
+      model: "claude-opus-4-1",
+    })
+    await waitFor(() => store.turnFinishedCount === 1)
+
+    const tasks = teamsRegistry.snapshot("chat-1")
+    expect(tasks).toHaveLength(1)
+    expect(tasks[0]).toMatchObject({ taskId: "t1", description: "do the thing", status: "running" })
+
+    events.close()
+  })
+})

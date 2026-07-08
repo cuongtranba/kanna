@@ -48,6 +48,7 @@ import { TunnelLifecycle } from "./cloudflare-tunnel/lifecycle"
 import { initToolCallbackOnBoot, type ToolCallbackService } from "./tool-callback"
 import { SessionShareService } from "./session-share"
 import { createWorkflowRegistry } from "./workflow-registry"
+import { createTeamsRegistry } from "./teams/teams-registry"
 import { LocalCatalogService } from "./local-catalog"
 import { scanLocalCatalog } from "./local-catalog-io.adapter"
 import { createSubagentTranscriptRegistry } from "./subagent-transcript-registry"
@@ -264,6 +265,7 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     readRunJournal: readWorkflowRunJournal,
     readAgentTranscriptLines: readWorkflowAgentTranscriptLines,
   })
+  const teamsRegistry = createTeamsRegistry({ now: () => Date.now() })
   const subagentTranscriptRegistry = createSubagentTranscriptRegistry()
   const reapedClaudePty = await claudePtyRegistry.reapStale()
   if (reapedClaudePty.length > 0) {
@@ -455,6 +457,7 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     claudePtyRegistry,
     ptyInstanceRegistry,
     workflowRegistry,
+    teamsRegistry,
     subagentTranscriptRegistry,
     localCatalog,
     // Kanna is a personal-use tool on the developer's own machine. Tool calls
@@ -507,6 +510,7 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     pushManager,
     ptyInstances: ptyInstanceRegistry,
     workflowRegistry,
+    teamsRegistry,
     subagentTranscriptRegistry,
     killPtyInstance: async (chatId: string) => {
       try {

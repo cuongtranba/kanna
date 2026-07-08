@@ -3873,3 +3873,100 @@ describe("settings.listOpenRouterModels", () => {
     expect(ws.sent).toEqual([{ v: PROTOCOL_VERSION, type: "ack", id: "or-models-2", result: [] }])
   })
 })
+
+// ── teams WS topic ────────────────────────────────────────────────────────────
+
+describe("ws-router teams topic", () => {
+  test("subscribing to teams yields an immediate snapshot with current registry tasks", async () => {
+    const { createTeamsRegistry } = await import("./teams/teams-registry")
+    const teamsRegistry = createTeamsRegistry({ now: () => 1000 })
+    teamsRegistry.apply("chat-1", {
+      subtype: "task_started",
+      taskId: "t1",
+      description: "do something",
+      name: "Task One",
+    })
+
+    const router = createWsRouter({
+      store: { state: createEmptyState() } as never,
+      agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set(), getSlashCommandsLoadingChatIds: () => new Set(), getWaitStartedAtByChatId: () => new Map(), ensureSlashCommandsLoaded: async () => {} } as never,
+      terminals: { getSnapshot: () => null, onEvent: () => () => {} } as never,
+      keybindings: { getSnapshot: () => DEFAULT_KEYBINDINGS_SNAPSHOT, onChange: () => () => {} } as never,
+      refreshDiscovery: async () => [],
+      getDiscoveredProjects: () => [],
+      machineDisplayName: "Local Machine",
+      updateManager: null,
+      pushManager: NOOP_PUSH_MANAGER,
+      teamsRegistry,
+    })
+
+    const ws = new FakeWebSocket()
+    router.handleOpen(ws as never)
+
+    await router.handleMessage(
+      ws as never,
+      JSON.stringify({ v: 1, type: "subscribe", id: "teams-sub-1", topic: { type: "teams", chatId: "chat-1" } }),
+    )
+
+    const snapshot = ws.sent.find((m: any) => m.snapshot?.type === "teams")
+    expect(snapshot).toMatchObject({
+      v: PROTOCOL_VERSION,
+      type: "snapshot",
+      id: "teams-sub-1",
+      snapshot: {
+        type: "teams",
+        data: {
+          chatId: "chat-1",
+          tasks: [
+            expect.objectContaining({ taskId: "t1", description: "do something", status: "running" }),
+          ],
+        },
+      },
+    })
+  })
+
+  test("registry change pushes updated snapshot to subscribed socket", async () => {
+    const { createTeamsRegistry } = await import("./teams/teams-registry")
+    const teamsRegistry = createTeamsRegistry({ now: () => 2000 })
+
+    const router = createWsRouter({
+      store: { state: createEmptyState() } as never,
+      agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set(), getSlashCommandsLoadingChatIds: () => new Set(), getWaitStartedAtByChatId: () => new Map(), ensureSlashCommandsLoaded: async () => {} } as never,
+      terminals: { getSnapshot: () => null, onEvent: () => () => {} } as never,
+      keybindings: { getSnapshot: () => DEFAULT_KEYBINDINGS_SNAPSHOT, onChange: () => () => {} } as never,
+      refreshDiscovery: async () => [],
+      getDiscoveredProjects: () => [],
+      machineDisplayName: "Local Machine",
+      updateManager: null,
+      pushManager: NOOP_PUSH_MANAGER,
+      teamsRegistry,
+    })
+
+    const ws = new FakeWebSocket()
+    router.handleOpen(ws as never)
+
+    await router.handleMessage(
+      ws as never,
+      JSON.stringify({ v: 1, type: "subscribe", id: "teams-sub-2", topic: { type: "teams", chatId: "chat-1" } }),
+    )
+
+    // Push a task_started event — should trigger a push to subscribed socket
+    teamsRegistry.apply("chat-1", {
+      subtype: "task_started",
+      taskId: "t2",
+      description: "new task",
+      name: "Task Two",
+    })
+
+    // Allow microtasks to flush
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    const teamSnapshots = ws.sent.filter((m: any) => m.snapshot?.type === "teams")
+    // Should have at least 2: the initial subscribe snapshot + the push after apply
+    expect(teamSnapshots.length).toBeGreaterThanOrEqual(2)
+    const lastSnapshot = teamSnapshots.at(-1) as any
+    expect(lastSnapshot.snapshot.data.tasks).toEqual(
+      expect.arrayContaining([expect.objectContaining({ taskId: "t2", status: "running" })]),
+    )
+  })
+})

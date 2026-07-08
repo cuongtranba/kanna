@@ -396,6 +396,8 @@ export interface AgentCoordinatorArgs {
   workflowRegistry?: import("./workflow-registry").WorkflowRegistry
   /** Registry mapping each chat to its `…/subagents` dir for on-demand Agent child-transcript drill-in. */
   subagentTranscriptRegistry?: import("./subagent-transcript-registry").SubagentTranscriptRegistry
+  /** Per-chat teams task registry, fed from `{type:"task"}` HarnessEvents in the main turn stream. */
+  teamsRegistry?: import("./teams/teams-registry").TeamsRegistry
   /** Reads the persisted LLM provider snapshot (OpenRouter key source). */
   readLlmProvider?: () => Promise<LlmProviderSnapshot>
   /** Lists OpenRouter models (with pricing + contextLength) for cost computation. */
@@ -1628,6 +1630,7 @@ export class AgentCoordinator {
   private readonly ptyInstanceRegistry: import("./claude-pty/pty-instance-registry").PtyInstanceRegistry | null
   private readonly workflowRegistry: import("./workflow-registry").WorkflowRegistry | null
   private readonly subagentTranscriptRegistry: import("./subagent-transcript-registry").SubagentTranscriptRegistry | null
+  private readonly teamsRegistry: import("./teams/teams-registry").TeamsRegistry | null
   private readonly localCatalog: import("./local-catalog").LocalCatalogService | null
   private readonly readLlmProvider: () => Promise<LlmProviderSnapshot>
   private readonly listOpenRouterModelsFn: (() => Promise<import("../shared/types").OpenRouterModel[]>) | null
@@ -1718,6 +1721,7 @@ export class AgentCoordinator {
     this.ptyInstanceRegistry = args.ptyInstanceRegistry ?? null
     this.workflowRegistry = args.workflowRegistry ?? null
     this.subagentTranscriptRegistry = args.subagentTranscriptRegistry ?? null
+    this.teamsRegistry = args.teamsRegistry ?? null
     this.localCatalog = args.localCatalog ?? null
   }
 
@@ -3432,6 +3436,11 @@ export class AgentCoordinator {
             raw: event,
           })
           if (this.claudeSessions.get(session.chatId) !== session) break
+          continue
+        }
+
+        if (event.type === "task" && event.task) {
+          this.teamsRegistry?.apply(session.chatId, event.task)
           continue
         }
 
