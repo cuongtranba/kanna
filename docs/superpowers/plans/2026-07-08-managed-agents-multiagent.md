@@ -93,14 +93,19 @@ git commit -m "feat(managed): add @anthropic-ai/sdk dependency for Managed Agent
 ```ts
 export interface ManagedAgentsSettings {
   enabled: boolean
-  apiKey: string
+  /** Control-plane auth. "oauth-pool" reuses Kanna's OAuth token pool as authToken
+   *  (subscription billing — valid only if Task 4.5 probe confirmed acceptance);
+   *  "api-key" uses the explicit key below (API-rate billing). */
+  authMode: "oauth-pool" | "api-key"
+  apiKey: string // used only when authMode === "api-key"
   environmentId: string
-  environmentKey: string
+  environmentKey: string // worker auth (sk-ant-oat01-…, environment-scoped) — the ONLY credential the worker half ever sees
   lastTest?: { ok: boolean; message: string; testedAt: number }
 }
 
 export const DEFAULT_MANAGED_AGENTS_SETTINGS: ManagedAgentsSettings = {
   enabled: false,
+  authMode: "api-key",
   apiKey: "",
   environmentId: "",
   environmentKey: "",
@@ -288,8 +293,14 @@ export interface ManagedApi {
 import Anthropic from "@anthropic-ai/sdk"
 import type { ManagedApi, ManagedSessionEvent, ManagedThreadSummary } from "./managed-types"
 
-export function createManagedApi(apiKey: string): ManagedApi {
-  const client = new Anthropic({ apiKey })
+export type ManagedControlAuth =
+  | { kind: "api-key"; apiKey: string }
+  | { kind: "oauth"; token: string } // Kanna OAuth-pool token, sent as authToken (bearer)
+
+export function createManagedApi(auth: ManagedControlAuth): ManagedApi {
+  const client = auth.kind === "api-key"
+    ? new Anthropic({ apiKey: auth.apiKey })
+    : new Anthropic({ authToken: auth.token, apiKey: null })
   // Implement each ManagedApi method with the corresponding client.beta.* call:
   //   upsertAgent/updateAgent    -> client.beta.agents.create / client.beta.agents.update
   //   createCoordinator          -> client.beta.agents.create({ tools: [{ type: "agent_toolset_20260401" }],
@@ -335,7 +346,7 @@ probe with a budget, not production code. Output is a learning checkpoint, not a
 
 **Budget:** half a day. If blocked past budget ⇒ raise **Cannot** flag to the human, stop.
 
-**Requires from human before starting:** Anthropic API key, Console-created self-hosted environment id + environment key (Console-only generation), exported as `KANNA_MANAGED_LIVE_API_KEY` / `KANNA_MANAGED_LIVE_ENV_ID` / `KANNA_MANAGED_LIVE_ENV_KEY`.
+**Requires from human before starting:** Console-created self-hosted environment id + environment key (Console-only generation) exported as `KANNA_MANAGED_LIVE_ENV_ID` / `KANNA_MANAGED_LIVE_ENV_KEY`, plus ONE control-plane credential: `KANNA_MANAGED_LIVE_API_KEY` (API key) and/or an OAuth-pool token as `KANNA_MANAGED_LIVE_OAUTH_TOKEN`. The worker itself uses only the environment key — never give it the API key.
 
 - [ ] **Step 1: Write the probe script** — with real creds, in order:
   1. `client.beta.agents.create` an echo agent (haiku model, system "reply with exactly what you are told to say").
@@ -352,6 +363,7 @@ bun scratch/managed-probe.ts | tee scratch/probe-run.log
 ```
 
 - [ ] **Step 3: Write the learning checkpoint** to `scratch/probe-checkpoint.md`, answering ALL of:
+  - Does the control plane accept an OAuth-pool token via `authToken` (create agent + create session succeed)? If yes ⇒ subscription billing, `authMode: "oauth-pool"` becomes the default; if 401 ⇒ API key stays required
   - Do `@anthropic-ai/sdk` worker helpers run under Bun on macOS? (exact working import paths, or the failure)
   - Does local tool execution work on darwin despite docs saying "Linux host"? (yes/no/partially — evidence)
   - Exact `client.beta.*` method names + request/response shapes actually used (vs Task 4 docs-derived guesses)
@@ -1018,8 +1030,9 @@ managedThreadsRegistry?: ManagedThreadsRegistry
 - [ ] **Step 3: Write failing coordinator test** — provider `"claude-managed"` in `chat.send` routes to the injected `startManagedSession` fake (NOT SDK/PTY), passing `existingSessionId` from the store and persisting the returned session id. Mirror the existing driver-selection tests in `agent.test.ts`.
 
 - [ ] **Step 4: Implement branch** in the spawn path where the coordinator currently picks SDK vs PTY: when `provider === "claude-managed"`:
-  - Guard: settings incomplete (`!enabled || !apiKey || !environmentId || !environmentKey`) ⇒ emit an `api_error` transcript entry telling the user to configure Settings → Managed Agents, end the turn.
-  - Build args: `api: createManagedApi(settings.apiKey)`, subagents from `this.getSubagents()`, `syncState` + `existingSessionId` from event store, `persistSessionId: (id) => store.recordSessionToken(chatId, "claude-managed", id)`, `persistSyncState: (agents, coordinatorId) => store.recordManagedSyncState(projectId, agents, coordinatorId)`, `toolCallback`, `threadsRegistry`, `systemPromptAppend` (same append the other drivers get).
+  - Guard: settings incomplete (`!enabled || !environmentId || !environmentKey`, or `authMode === "api-key" && !apiKey`, or `authMode === "oauth-pool"` with no active pool token) ⇒ emit an `api_error` transcript entry telling the user to configure Settings → Managed Agents, end the turn.
+  - Resolve control auth: `authMode === "oauth-pool"` ⇒ `{ kind: "oauth", token: <active pool token via the same picker the PTY driver uses> }`, else `{ kind: "api-key", apiKey: settings.apiKey }`.
+  - Build args: `api: createManagedApi(controlAuth)`, subagents from `this.getSubagents()`, `syncState` + `existingSessionId` from event store, `persistSessionId: (id) => store.recordSessionToken(chatId, "claude-managed", id)`, `persistSyncState: (agents, coordinatorId) => store.recordManagedSyncState(projectId, agents, coordinatorId)`, `toolCallback`, `threadsRegistry`, `systemPromptAppend` (same append the other drivers get).
   - The returned `ClaudeSessionHandle` flows through the SAME turn loop as the other drivers (stream consumption, event-store append, cancel cascade) — no special-casing after spawn.
   - `cancelChat` for managed chats: handle's `interrupt()` already maps to `user.interrupt`; ensure `close()` is called on turn teardown like other drivers.
 
@@ -1083,7 +1096,7 @@ git commit -m "feat(managed): route claude-managed chats through managed driver,
 - [ ] **Step 3: Implement** in `ws-router.ts`:
   - Subscribe handler (mirror workflows at :953): on subscribe send `{ type: "managed-threads", data: { chatId, threads: managedThreadsRegistry?.snapshot(chatId) ?? [] } }`; wire `managedThreadsRegistry.subscribe` to push on change (mirror how workflow registry pushes).
   - `managedThreads.interrupt` / `.archive`: call through a small `ManagedControl` dep injected from server.ts (`{ interrupt(chatId, threadId), archive(chatId, threadId) }`) that the AgentCoordinator implements by delegating to the live driver handle's api (add `getManagedControl(chatId)` on the coordinator; no live session ⇒ no-op with warn).
-  - `settings.testManagedAgents`: build `createManagedApi(apiKey).workStats(environmentId)`, reply `{ ok: true, message: "workers polling: N" }` or `{ ok: false, message: <error> }`, persist as `managedAgents.lastTest` settings patch.
+  - `settings.testManagedAgents`: resolve control auth same as Task 11 (oauth-pool token or apiKey), build `createManagedApi(controlAuth).workStats(environmentId)`, reply `{ ok: true, message: "workers polling: N" }` or `{ ok: false, message: <error> }`, persist as `managedAgents.lastTest` settings patch.
 
 - [ ] **Step 4: Run, verify pass. Commit**
 
@@ -1103,8 +1116,8 @@ git commit -m "feat(managed): managed-threads WS topic, thread commands, connect
 - Modify: settings page component that renders sections (locate via the component rendering `ModelsSection` / MCP section)
 - Test: `src/client/app/settings/ManagedAgentsSection.test.tsx`
 
-- [ ] **Step 1: Failing component test** — renders masked API key input, environment id/key inputs, enable toggle, Test button; typing + save dispatches `managedAgents` settings patch; `lastTest` renders status pill. Follow the MCP servers section test file as the template (same store mocking pattern).
-- [ ] **Step 2: Implement** — copy structure of the MCP servers card: text inputs bound to local state, Save applies `AppSettingsPatch { managedAgents: {...} }` over the existing settings write command, Test button sends `settings.testManagedAgents` and renders reply. Include static copy: billing at API rates; tool inputs/outputs transit Anthropic; environment + key created in Anthropic Console (link `https://platform.claude.com/workspaces/default/environments`).
+- [ ] **Step 1: Failing component test** — renders auth-mode selector (OAuth pool / API key), masked API key input (visible only in api-key mode), environment id/key inputs, enable toggle, Test button; typing + save dispatches `managedAgents` settings patch; `lastTest` renders status pill. Follow the MCP servers section test file as the template (same store mocking pattern).
+- [ ] **Step 2: Implement** — copy structure of the MCP servers card: auth-mode radio + text inputs bound to local state, Save applies `AppSettingsPatch { managedAgents: {...} }` over the existing settings write command, Test button sends `settings.testManagedAgents` and renders reply. Include static copy: billing = subscription when OAuth-pool mode, API rates when api-key mode; tool inputs/outputs transit Anthropic; environment + key created in Anthropic Console (link `https://platform.claude.com/workspaces/default/environments`). Hide the OAuth-pool option if the Task 4.5 probe recorded the control plane rejecting pool tokens.
 - [ ] **Step 3: Run test, `renderForLoopCheck` on any new selector. Commit**
 
 ```bash

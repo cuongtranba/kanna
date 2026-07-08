@@ -46,6 +46,25 @@ used for everything else).
 The existing `@anthropic-ai/claude-agent-sdk` dependency and both current
 drivers (Agent-SDK driver, PTY driver) are untouched by this feature.
 
+### Authentication model (corrected)
+
+Two credentials, two halves — neither half hard-requires a platform API key:
+
+- **Worker half:** authenticates with the Console-generated **environment
+  key** only (`sk-ant-oat01-…`, OAuth-format, environment-scoped), passed as
+  `authToken`. An API key must NEVER be set on the worker path (official
+  guidance: it would expose an org-scoped credential to agent tool calls).
+- **Control half** (agents/sessions/events/threads): `@anthropic-ai/sdk`
+  accepts either `apiKey` (`x-api-key`) or `authToken` (OAuth bearer).
+  Kanna's existing OAuth token pool issues `sk-ant-oat01-…` tokens —
+  **candidate**: reuse a pool token as `authToken` for the control plane,
+  which would keep subscription billing and eliminate the separate API-key
+  requirement. Whether the managed-agents endpoints accept subscription
+  OAuth tokens is UNVERIFIED — the walking-skeleton probe (plan Task 4.5)
+  answers it. Fallback: user-supplied API key in settings (API-rate
+  billing). The settings block therefore treats `apiKey` as optional when
+  an OAuth pool token is configured and the probe confirmed acceptance.
+
 ## Decisions (locked during brainstorm)
 
 | Question | Decision |
@@ -203,8 +222,10 @@ Colocated bun tests, run with `--conditions production`:
 
 ## Constraints and risks (accepted)
 
-1. **Billing:** API-key rates only. No Pro/Max subscription path — this
-   provider bills differently from the PTY driver. Surfaced in settings copy.
+1. **Billing:** depends on probe outcome. If the control plane accepts
+   OAuth-pool tokens (`authToken`), billing rides the Pro/Max subscription
+   like the PTY driver; otherwise API-key rates apply. Surfaced in settings
+   copy either way.
 2. **Data flow:** tool inputs/outputs transit Anthropic's control plane
    even with self-hosted execution. Documented in settings copy.
 3. **Platform:** docs state the worker needs a Linux host with `/bin/bash`;
