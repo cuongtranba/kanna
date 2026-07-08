@@ -104,7 +104,8 @@ export function createTeamsRegistry(deps: { now: () => number }): TeamsRegistry 
     snapshot(chatId: string): TeamTaskSummary[] {
       const tasks = store.get(chatId)
       if (!tasks) return []
-      return Array.from(tasks.values())
+      // shallow-copy so consumers cannot mutate registry state
+      return Array.from(tasks.values(), (s) => ({ ...s }))
     },
 
     clear(chatId: string): void {
