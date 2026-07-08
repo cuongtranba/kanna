@@ -52,6 +52,9 @@ export function renderStackProjectsBlock(stackProjects: ResolvedStackBinding[]):
 const DELEGATION_GUIDANCE =
   "Delegate via `mcp__kanna__delegate_subagent({ subagent_id, prompt })`. The tool blocks until the subagent finishes and returns its final text. Brief the subagent like a smart colleague who just walked in: state the goal, what was tried, what to check, and any constraints. Don't delegate understanding — synthesize the subagent's reply yourself before responding to the user. When the user writes `@agent/<name>` treat it as a suggestion, not a command: confirm the subagent fits the actual ask, or redirect to a better one."
 
+const NATIVE_TEAM_GUIDANCE =
+  "For claude-provider subagents above you can ALSO spawn them as native teammates with the built-in Agent tool (subagent_type = the subagent's name in kebab-case): use this for parallel fan-out of independent work inside this session — teammates run locally and report lifecycle live. Keep using mcp__kanna__delegate_subagent for codex subagents, keep-alive multi-turn sessions, and anything needing the subagent's own working directory or path policy."
+
 /** Optional inputs for {@link buildKannaSystemPromptAppend}. */
 export interface KannaSystemPromptOptions {
   /**
@@ -154,6 +157,10 @@ export function buildKannaSystemPromptAppend(
       )
     }
     sections.push("", DELEGATION_GUIDANCE)
+
+    if (subagents.some((s) => s.provider === "claude")) {
+      sections.push("", NATIVE_TEAM_GUIDANCE)
+    }
   }
 
   return sections.join("\n")
