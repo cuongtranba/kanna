@@ -4789,15 +4789,15 @@ describe("buildCanUseTool", () => {
     const result = await canUseTool(
       "AskUserQuestion",
       { questions: [{ id: "q1", question: "What color?" }] },
-      { toolUseID: "tool-use-1", signal: new AbortController().signal },
+      { toolUseID: "tool-use-1", requestId: "", signal: new AbortController().signal },
     )
 
     // Legacy path must be taken: onToolRequest called once, toolCallback NOT called
     expect(onToolRequestCallCount).toBe(1)
     expect(toolCallbackSubmitCallCount).toBe(0)
-    expect(result.behavior).toBe("allow")
-    if (result.behavior === "allow") {
-      expect((result.updatedInput as any).answers).toEqual({ q1: "legacy-answer" })
+    expect(result!.behavior).toBe("allow")
+    if (result!.behavior === "allow") {
+      expect((result!.updatedInput as any).answers).toEqual({ q1: "legacy-answer" })
     }
   })
 
@@ -4840,15 +4840,15 @@ describe("buildCanUseTool", () => {
       const result = await canUseTool(
         "AskUserQuestion",
         { questions: [{ id: "q1", question: "What color?" }] },
-        { toolUseID: "tool-use-2", signal: new AbortController().signal },
+        { toolUseID: "tool-use-2", requestId: "", signal: new AbortController().signal },
       )
 
       // Flag-on path: toolCallback called once, legacy onToolRequest NOT called
       expect(toolCallbackSubmitCallCount).toBe(1)
       expect(onToolRequestCallCount).toBe(0)
-      expect(result.behavior).toBe("allow")
-      if (result.behavior === "allow") {
-        expect((result.updatedInput as any).answers).toEqual({ q1: ["blue"] })
+      expect(result!.behavior).toBe("allow")
+      if (result!.behavior === "allow") {
+        expect((result!.updatedInput as any).answers).toEqual({ q1: ["blue"] })
       }
     } finally {
       delete process.env.KANNA_MCP_TOOL_CALLBACKS
@@ -4880,12 +4880,12 @@ describe("buildCanUseTool", () => {
       const result = await canUseTool(
         "AskUserQuestion",
         { questions: [{ id: "q1", question: "Proceed?" }] },
-        { toolUseID: "tool-use-3", signal: new AbortController().signal },
+        { toolUseID: "tool-use-3", requestId: "", signal: new AbortController().signal },
       )
 
-      expect(result.behavior).toBe("deny")
-      if (result.behavior === "deny") {
-        expect(result.message).toBe("not allowed by policy")
+      expect(result!.behavior).toBe("deny")
+      if (result!.behavior === "deny") {
+        expect(result!.message).toBe("not allowed by policy")
       }
     } finally {
       delete process.env.KANNA_MCP_TOOL_CALLBACKS
@@ -4911,7 +4911,7 @@ describe("buildCanUseTool", () => {
       await canUseTool(
         "AskUserQuestion",
         { questions: [{ id: "q1", question: "Hello?" }] },
-        { toolUseID: "tool-use-4", signal: new AbortController().signal },
+        { toolUseID: "tool-use-4", requestId: "", signal: new AbortController().signal },
       )
 
       expect(onToolRequestCallCount).toBe(1)
@@ -4932,9 +4932,9 @@ describe("buildCanUseTool", () => {
         onToolRequest: async () => { onToolRequestCallCount++; return null },
       })
 
-      const result = await canUseTool("Bash", { command: "ls" }, { toolUseID: "tool-use-5", signal: new AbortController().signal })
+      const result = await canUseTool("Bash", { command: "ls" }, { toolUseID: "tool-use-5", requestId: "", signal: new AbortController().signal })
 
-      expect(result.behavior).toBe("allow")
+      expect(result!.behavior).toBe("allow")
       expect(onToolRequestCallCount).toBe(0)
     } finally {
       delete process.env.KANNA_MCP_TOOL_CALLBACKS
@@ -4992,8 +4992,8 @@ describe("buildCanUseTool", () => {
       })
 
       const result = await resultPromise
-      expect(result.behavior).toBe("allow")
-      const updatedInput = (result as Extract<typeof result, { behavior: "allow" }>).updatedInput as Record<string, unknown>
+      expect(result!.behavior).toBe("allow")
+      const updatedInput = (result as Extract<NonNullable<typeof result>, { behavior: "allow" }>).updatedInput as Record<string, unknown>
       expect(updatedInput.answers).toEqual({ "Pick option": "a" })
 
       await rm(tempDir, { recursive: true, force: true })

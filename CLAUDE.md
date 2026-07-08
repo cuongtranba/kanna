@@ -121,8 +121,7 @@ Setting `KANNA_CLAUDE_DRIVER=pty` launches the `claude` CLI **interactively**
 under a Bun.Terminal pseudo-terminal (Shannon-style) and tails the on-disk
 transcript JSONL at `~/.claude/projects/<encoded-cwd>/<session-uuid>.jsonl`
 as the sole event source. Input is sent as raw text + `\r` (no JSONL
-envelopes). PTY mode preserves Pro/Max subscription billing; SDK mode
-bills at API rates.
+envelopes). Both drivers use OAuth-pool subscription billing when an OAuth token is injected via `CLAUDE_CODE_OAUTH_TOKEN`; the difference between PTY and SDK is transport (interactive TUI vs. streaming API), not billing model.
 
 Default is `sdk` (no behaviour change). Authentication requires an OAuth-pool
 token configured in Kanna settings; the token is injected via
