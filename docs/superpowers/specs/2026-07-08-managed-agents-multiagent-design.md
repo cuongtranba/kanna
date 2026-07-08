@@ -15,6 +15,37 @@ control plane; **tool execution runs locally** — the Kanna server acts as a
 self-hosted environment worker, executing `bash/read/write/edit/glob/grep`
 in the chat's project directory.
 
+## SDK boundary (important)
+
+Kanna's existing "SDK driver" uses `@anthropic-ai/claude-agent-sdk` (the
+Claude Code agent loop run in-process). **Managed Agents is NOT part of that
+SDK.** It is a hosted platform REST API exposed only through the Anthropic
+client SDK `@anthropic-ai/sdk` (`client.beta.agents / sessions /
+environments`, beta header `managed-agents-2026-04-01`) — a dependency Kanna
+does not currently have.
+
+Two options for the new driver's transport:
+
+1. **Add `@anthropic-ai/sdk` as a dependency (recommended).** Gains typed
+   request/response models, SSE stream helpers, and the self-hosted worker
+   helpers (`EnvironmentWorker`, `WorkPoller`, `tool_runner`,
+   `AgentToolContext` + `beta_agent_toolset_20260401`) — the worker half
+   nearly for free. Import confined to `src/server/claude-managed/*.adapter.ts`
+   files so the rest of the codebase never sees it. Bun compatibility of the
+   worker helpers is verified by the phase 1 spike; known requirement is
+   Node 22+ semantics plus `unzip`/`tar` on PATH (skills extraction).
+2. **Raw REST via `fetch` inside `managed-api.adapter.ts`.** No new
+   dependency, but re-implements SSE parsing, pagination, the work-queue
+   claim/keep-alive protocol, and all types by hand from the reference docs.
+
+Decision: option 1, with option 2 as the fallback if the worker helpers do
+not run under Bun (in that case only the worker claim-loop is hand-rolled
+against the Environments Work REST endpoints; the typed client is still
+used for everything else).
+
+The existing `@anthropic-ai/claude-agent-sdk` dependency and both current
+drivers (Agent-SDK driver, PTY driver) are untouched by this feature.
+
 ## Decisions (locked during brainstorm)
 
 | Question | Decision |
@@ -83,8 +114,8 @@ New directory `src/server/claude-managed/` (mirrors `claude-pty/`):
 
 | File | Role | Seal |
 | --- | --- | --- |
-| `driver.ts` | Driver contract (start / sendPrompt / interrupt / close) emitting `HarnessEvent`s, same shape as SDK/PTY drivers | pure coordinator |
-| `managed-api.adapter.ts` | ALL HTTP + SSE to `api.anthropic.com`: agents/sessions/events/threads CRUD, beta header, environment work endpoints | `.adapter.ts` leaf |
+| `driver.ts` | Driver contract (start / sendPrompt / interrupt / close) emitting `HarnessEvent`s, same shape as the Agent-SDK and PTY drivers | pure coordinator |
+| `managed-api.adapter.ts` | ALL calls to `api.anthropic.com` via `@anthropic-ai/sdk` (`client.beta.*`): agents/sessions/events/threads CRUD, SSE streams, environment work endpoints. Sole import site of `@anthropic-ai/sdk` (with `worker/tool-exec.adapter.ts`) | `.adapter.ts` leaf |
 | `managed-types.ts` | Every beta API request/response shape, typed once (single blast radius for beta drift) | pure |
 | `sse-to-event.ts` | Pure translation: managed event stream → `HarnessEvent` (sibling of `jsonl-to-event.ts`). `agent.message` → assistant text; `session.status_idle` → `kind:"result"`; `session.thread_*` → threads registry feed | pure |
 | `agent-sync.ts` | Pure hash-diff of Kanna subagents ↔ managed agent definitions; decides create/update/skip; triggers coordinator upsert when the roster hash changes | pure |
@@ -108,10 +139,11 @@ New directory `src/server/claude-managed/` (mirrors `claude-pty/`):
 - **Approval bridge:** `requires_action` stop reason → existing
   `tool-callback.ts` durable protocol → `user.tool_confirmation` post.
   Reuses the 600 s timeout and fail-closed restart semantics.
-- **SDK vs raw REST:** phase 1 spike tries `@anthropic-ai/sdk` worker
-  helpers (`WorkPoller`, `tool_runner`) under Bun; fallback is the raw
-  Environments Work REST endpoints implemented in `managed-api.adapter.ts`.
-  The component boundaries above do not change either way.
+- **Dependency:** `@anthropic-ai/sdk` added as a new server dependency (see
+  "SDK boundary" above). Phase 1 spike verifies its worker helpers
+  (`WorkPoller`, `tool_runner`) run under Bun; fallback is hand-rolling the
+  claim loop against the Environments Work REST endpoints inside
+  `managed-api.adapter.ts`. Component boundaries do not change either way.
 
 ## Client UI
 
