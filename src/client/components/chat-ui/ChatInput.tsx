@@ -249,29 +249,6 @@ function withNormalizedContextWindow(
   }
 }
 
-function getEffectiveComposerState(
-  composerState: ComposerState,
-  activeProvider: AgentProvider | null,
-  providerDefaults: ReturnType<typeof useChatPreferencesStore.getState>["providerDefaults"],
-): ComposerState {
-  if (!activeProvider || composerState.provider === activeProvider) {
-    return composerState
-  }
-  return activeProvider === "claude"
-    ? {
-        provider: "claude",
-        model: providerDefaults.claude.model,
-        modelOptions: { ...providerDefaults.claude.modelOptions },
-        planMode: composerState.planMode,
-      }
-    : {
-        provider: "codex",
-        model: providerDefaults.codex.model,
-        modelOptions: { ...providerDefaults.codex.modelOptions },
-        planMode: composerState.planMode,
-      }
-}
-
 function hydrateComposerAttachments(attachments: ChatAttachment[]): ComposerAttachment[] {
   return attachments.map((attachment) => ({
     ...attachment,
@@ -452,7 +429,6 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput(
     clearAttachmentDrafts,
   } = useChatInputStore()
   const {
-    providerDefaults,
     getComposerState,
     initializeComposerForChat,
     setChatComposerModel,
@@ -500,7 +476,7 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput(
     return draft?.text ?? ""
   })
 
-  const providerPrefs = getEffectiveComposerState(composerState, activeProvider, providerDefaults)
+  const providerPrefs = composerState
   const selectedProvider = composerState.provider
   const customModels = useAppSettingsStore(selectCustomModels)
 
@@ -739,8 +715,10 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput(
     let modelOptions: ModelOptions
     if (providerPrefs.provider === "claude") {
       modelOptions = { claude: { ...providerPrefs.modelOptions } }
-    } else {
+    } else if (providerPrefs.provider === "codex") {
       modelOptions = { codex: { ...providerPrefs.modelOptions } }
+    } else {
+      modelOptions = { openrouter: {} }
     }
     return {
       provider: selectedProvider,
