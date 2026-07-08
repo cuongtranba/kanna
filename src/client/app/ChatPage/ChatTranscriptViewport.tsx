@@ -33,6 +33,8 @@ import type { EditorPreset } from "../../../shared/protocol"
 import type { WorkflowRun, WorkflowRunSummary } from "../../../shared/workflow-types"
 import { WorkflowsSectionWithDetail } from "../WorkflowsSection"
 import { TeamsSection } from "../TeamsSection"
+
+const EMPTY_TEAM_TASKS: TeamTaskSummary[] = []
 import type { TeamTaskSummary } from "../../../shared/types"
 
 export type PendingQuestionRun = SubagentRunSnapshot & {
@@ -379,11 +381,9 @@ export const ChatTranscriptViewport = memo(function ChatTranscriptViewport({
           />
         </div>
       ) : null}
-      {teamTasks != null ? (
-        <div className="pb-5">
-          <TeamsSection tasks={teamTasks} driverPreference={driverPreference ?? "sdk"} />
-        </div>
-      ) : null}
+      <div className="pb-5">
+        <TeamsSection tasks={teamTasks ?? EMPTY_TEAM_TASKS} driverPreference={driverPreference ?? "sdk"} />
+      </div>
       {liveTunnelRecord && onTunnelAccept && onTunnelStop && onTunnelRetry && (
         <div className="pb-5">
           <CloudflareTunnelCard

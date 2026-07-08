@@ -766,7 +766,7 @@ export function ChatPage() {
   }, [state.socket])
 
   const workflowRuns = useWorkflowsStore(useShallow(selectRuns(state.activeChatId ?? "")))
-  const teamTasks = useTeamsStore(selectTasks(state.activeChatId ?? ""))
+  const teamTasks = useTeamsStore(useShallow(selectTasks(state.activeChatId ?? "")))
   const driverPreference: "sdk" | "pty" = state.appSettings?.claudeDriver.preference === "pty" ? "pty" : "sdk"
 
   const handleGetWorkflowRunDetail = useCallback(async (runId: string): Promise<WorkflowRun | null> => {
