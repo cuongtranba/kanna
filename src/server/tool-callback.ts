@@ -34,6 +34,8 @@ export interface ToolCallbackSubmitArgs {
   cwd: string
   /** Folder-restricted subagent: per-run absolute path-root allowlist. Forwarded to policy.evaluate. */
   restrictedAllowedPaths?: readonly string[]
+  /** Display name of the teammate (native Agent-tool task) that triggered the request. */
+  agentName?: string
 }
 
 export interface ToolCallbackResult {
@@ -228,6 +230,7 @@ export function createToolCallbackService(opts: ToolCallbackServiceArgs): ToolCa
         status: "pending",
         createdAt: now,
         expiresAt: NEVER_EXPIRES,
+        ...(args.agentName !== undefined ? { agentName: args.agentName } : {}),
       }
 
       // Register synchronously so subsequent calls within the same tick see it.

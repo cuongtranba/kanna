@@ -121,8 +121,7 @@ Setting `KANNA_CLAUDE_DRIVER=pty` launches the `claude` CLI **interactively**
 under a Bun.Terminal pseudo-terminal (Shannon-style) and tails the on-disk
 transcript JSONL at `~/.claude/projects/<encoded-cwd>/<session-uuid>.jsonl`
 as the sole event source. Input is sent as raw text + `\r` (no JSONL
-envelopes). PTY mode preserves Pro/Max subscription billing; SDK mode
-bills at API rates.
+envelopes). Both drivers use OAuth-pool subscription billing when an OAuth token is injected via `CLAUDE_CODE_OAUTH_TOKEN`; the difference between PTY and SDK is transport (interactive TUI vs. streaming API), not billing model.
 
 Default is `sdk` (no behaviour change). Authentication requires an OAuth-pool
 token configured in Kanna settings; the token is injected via
@@ -729,6 +728,17 @@ subagent files). See `adr-20260603-workflow-disk-watch-read-model`.
   joined by `taskId` once `chatId` is threaded through the transcript rows).
 
 Out of scope: global cross-chat view, stop/relaunch.
+
+# Agent Teams (SDK driver — native multi-agent)
+
+Agent SDK ≥0.3.x native teams are surfaced on the **SDK driver only** (PTY is out of scope; the `TeamsSection` panel renders a driver hint when PTY is active).
+
+- **Agent definitions.** Settings subagents with `provider === "claude"` map into `options.agents` via `buildAgentDefinitions` (`src/server/teams/agent-definitions.ts`). Each entry's kebab-case `sanitizeAgentKey(name)` becomes the teammate's `subagent_type`. Codex subagents stay on `mcp__kanna__delegate_subagent`; both are presented to the model via `NATIVE_TEAM_GUIDANCE` in the system-prompt append so it knows which path to use.
+- **Task lifecycle.** The SDK emits `{type:"system", subtype:"task_started"|"task_progress"|"task_updated"|"task_notification"}` messages during teammate execution. `normalizeClaudeStreamMessage` (`agent.ts`) maps these to status transcript entries (visible inline) AND to `{type:"task"}` `HarnessEvents` via `toTeamTaskEvent` (`harness-types.ts`).
+- **Registry.** `teams-registry.ts` (`createTeamsRegistry`) holds an in-memory per-chat `Map<chatId, Map<taskId, TeamTaskSummary>>`. `AgentCoordinator` calls `registry.apply(chatId, event)` for every `task_*` HarnessEvent and `registry.clear(chatId)` on session close. Stale-session guard: events that arrive after `clear` are silently dropped.
+- **Transport.** WS topic `{type:"teams", chatId}` pushes snapshot updates (mirrors the workflows topic). `teamsStore` on the client holds the stable `EMPTY` ref. `TeamsSection` panel lives beside `WorkflowsSection`; shows a discovery hint when the driver is SDK with no active tasks, and a driver hint when PTY is active.
+- **Teammate attribution.** The SDK `canUseTool` callback receives `options.agentID` identifying the teammate. `resolveAgentName` looks up the id in the teams-registry to get the human name and sets `agentName` on the `pending_tool_request` transcript entry. Approval cards render this as a byline; the fallback label is `"teammate"` when no registry entry is found.
+- **Live test.** `KANNA_TEAMS_LIVE_OAUTH_TOKEN=<token> bun test --conditions production src/server/teams/teams.live.test.ts` — spawns a coordinator with `bypassPermissions`, asserts ≥2 `task_started` messages, and verifies the synthesized result contains both `"42"` and `"kanna-team-ok"`.
 
 # Tests
 

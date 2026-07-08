@@ -289,6 +289,35 @@ describe("getLatestToolIds", () => {
     })
   })
 
+  test("pending_tool_request with agentName passes agentName through", () => {
+    const messages = processTranscriptMessages([{
+      _id: "pending-1",
+      createdAt: 1000,
+      kind: "pending_tool_request",
+      toolRequestId: "req-1",
+      toolName: "mcp__kanna__ask_user_question",
+      arguments: { questions: [] },
+      agentName: "calc",
+    }])
+    expect(messages[0]?.kind).toBe("pending_tool_request")
+    const msg = messages[0] as Extract<(typeof messages)[0], { kind: "pending_tool_request" }>
+    expect(msg.agentName).toBe("calc")
+  })
+
+  test("pending_tool_request without agentName has no agentName field", () => {
+    const messages = processTranscriptMessages([{
+      _id: "pending-2",
+      createdAt: 1000,
+      kind: "pending_tool_request",
+      toolRequestId: "req-2",
+      toolName: "mcp__kanna__ask_user_question",
+      arguments: { questions: [] },
+    }])
+    expect(messages[0]?.kind).toBe("pending_tool_request")
+    const msg = messages[0] as Extract<(typeof messages)[0], { kind: "pending_tool_request" }>
+    expect(msg.agentName).toBeUndefined()
+  })
+
   test("ignores discarded special tools when choosing the latest active id", () => {
     const messages = processTranscriptMessages([
       entry({

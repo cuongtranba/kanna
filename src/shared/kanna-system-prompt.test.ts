@@ -191,6 +191,28 @@ describe("buildKannaSystemPromptAppend", () => {
     })
   })
 
+  describe("native-team guidance", () => {
+    const claudeSub = fakeSubagent({ id: "c1", name: "codereview", provider: "claude" })
+    const codexSub = fakeSubagent({ id: "x1", name: "codexbot", provider: "codex" })
+
+    test("claude subagents add native-team guidance", () => {
+      const out = buildKannaSystemPromptAppend([claudeSub], {})
+      expect(out).toContain("Agent tool")
+      expect(out).toContain("delegate_subagent")
+      expect(out).toContain("native teammates")
+    })
+
+    test("codex-only roster omits native-team guidance", () => {
+      const out = buildKannaSystemPromptAppend([codexSub], {})
+      expect(out).not.toContain("native teammates")
+    })
+
+    test("mixed roster includes native-team guidance", () => {
+      const out = buildKannaSystemPromptAppend([claudeSub, codexSub], {})
+      expect(out).toContain("native teammates")
+    })
+  })
+
   describe("triggerMode roster split", () => {
     test("manual subagents render in a separate gated section", () => {
       const out = buildKannaSystemPromptAppend([

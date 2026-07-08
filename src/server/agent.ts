@@ -1,4 +1,4 @@
-import { query, type CanUseTool, type PermissionResult, type Query, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk"
+import { query, type AgentDefinition, type CanUseTool, type PermissionResult, type Query, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk"
 import { createKannaMcpServer, type KannaMcpDelegationContext } from "./kanna-mcp"
 import { KANNA_MCP_SERVER_NAME } from "../shared/tools"
 import { homedir } from "node:os"
@@ -39,7 +39,7 @@ import { CodexAppServerManager } from "./codex-app-server"
 import { resolveSubagentRoots } from "./paths"
 import { realpathAdapter } from "./paths-fs.adapter"
 import { type GenerateChatTitleResult, generateTitleForChatDetailed } from "./generate-title"
-import type { HarnessEvent, HarnessToolRequest, HarnessTurn } from "./harness-types"
+import type { HarnessEvent, HarnessToolRequest, HarnessTurn, TeamTaskEvent } from "./harness-types"
 import {
   codexServiceTierFromModelOptions,
   getServerProviderCatalog,
@@ -71,6 +71,7 @@ import { mergePolicyOverride, POLICY_DEFAULT } from "../shared/permission-policy
 import { startClaudeSessionPTY, type StartClaudeSessionPtyArgs } from "./claude-pty/driver"
 import { computeWorkflowsDir } from "./claude-pty/jsonl-path.adapter"
 import { ensureFreshMcpToken } from "./mcp-oauth.adapter"
+import { buildAgentDefinitions } from "./teams/agent-definitions"
 
 type SdkMcpEntry =
   | { type: "stdio"; command: string; args: string[]; env: Record<string, string>; cwd?: string }
@@ -175,6 +176,8 @@ interface PendingToolRequest {
   toolUseId: string
   tool: NormalizedToolCall & { toolKind: "ask_user_question" | "exit_plan_mode" }
   resolve: (result: unknown) => void
+  /** Display name of the teammate that triggered this request; absent for main-model requests. */
+  agentName?: string
 }
 
 interface ActiveTurn {
@@ -272,7 +275,7 @@ interface ClaudeSessionLifecycleOptions {
   backgroundTaskMaxMs: number
 }
 
-interface AgentCoordinatorArgs {
+export interface AgentCoordinatorArgs {
   store: EventStore
   onStateChange: (chatId?: string, options?: { immediate?: boolean }) => void
   analytics?: AnalyticsReporter
@@ -334,6 +337,10 @@ interface AgentCoordinatorArgs {
     turnPrice?: ModelPrice | null
     /** Overrides the configured context window (OpenRouter model contextLength). */
     contextWindowOverride?: number
+    /** Native SDK agent definitions derived from configured claude subagents. */
+    agentDefinitions?: Record<string, AgentDefinition>
+    /** Resolves SDK agentID (native Agent-tool task id) to a display name for approval cards. */
+    resolveAgentName?: (agentId: string) => string | undefined
   }) => Promise<ClaudeSessionHandle>
   startClaudeSessionPTY?: (args: StartClaudeSessionPtyArgs) => Promise<ClaudeSessionHandle>
   claudeLimitDetector?: LimitDetector
@@ -393,6 +400,8 @@ interface AgentCoordinatorArgs {
   workflowRegistry?: import("./workflow-registry").WorkflowRegistry
   /** Registry mapping each chat to its `…/subagents` dir for on-demand Agent child-transcript drill-in. */
   subagentTranscriptRegistry?: import("./subagent-transcript-registry").SubagentTranscriptRegistry
+  /** Per-chat teams task registry, fed from `{type:"task"}` HarnessEvents in the main turn stream. */
+  teamsRegistry?: import("./teams/teams-registry").TeamsRegistry
   /** Reads the persisted LLM provider snapshot (OpenRouter key source). */
   readLlmProvider?: () => Promise<LlmProviderSnapshot>
   /** Lists OpenRouter models (with pricing + contextLength) for cost computation. */
@@ -678,6 +687,32 @@ const POLICY_REFUSAL_TEXT_MARKERS: readonly string[] = [
   "unable to respond to this request",
 ]
 
+/** Maps an agent-SDK 0.3.x task lifecycle system message to `TeamTaskEvent` (snake_case → camelCase). */
+export function toTeamTaskEvent(message: {
+  type?: string
+  subtype: string
+  task_id?: string
+  tool_use_id?: string
+  description?: string
+  subagent_type?: string
+  name?: string
+  model?: string
+  patch?: { status?: string; end_time?: number }
+  status?: string
+}): TeamTaskEvent {
+  return {
+    subtype: message.subtype as TeamTaskEvent["subtype"],
+    taskId: typeof message.task_id === "string" ? message.task_id : "",
+    ...(typeof message.tool_use_id === "string" ? { toolUseId: message.tool_use_id } : {}),
+    ...(typeof message.description === "string" ? { description: message.description } : {}),
+    ...(typeof message.subagent_type === "string" ? { subagentType: message.subagent_type } : {}),
+    ...(typeof message.name === "string" ? { name: message.name } : {}),
+    ...(typeof message.model === "string" ? { model: message.model } : {}),
+    ...(message.patch !== undefined ? { patch: message.patch } : {}),
+    ...(typeof message.status === "string" ? { status: message.status } : {}),
+  }
+}
+
 export function normalizeClaudeStreamMessage(message: any): TranscriptEntry[] {
   const debugRaw = JSON.stringify(message)
   const messageId = typeof message.uuid === "string" ? message.uuid : undefined
@@ -872,6 +907,33 @@ export function normalizeClaudeStreamMessage(message: any): TranscriptEntry[] {
     })]
   }
 
+  // Agent-SDK 0.3.x task lifecycle messages from teammate (sub-agent) execution.
+  // `task_started` and `task_updated` (terminal status only) surface as status
+  // entries for inline visibility; `task_progress` is silent (too chatty).
+  // `task_notification` is handled above and must NOT be duplicated here.
+  if (message.type === "system" && message.subtype === "task_started") {
+    const taskId = typeof message.task_id === "string" ? message.task_id : "?"
+    const label = typeof message.name === "string" && message.name.length > 0
+      ? message.name
+      : typeof message.description === "string" && message.description.length > 0
+        ? message.description
+        : taskId
+    return [timestamped({ kind: "status", messageId, status: `Teammate started: ${label}`, debugRaw })]
+  }
+
+  if (message.type === "system" && message.subtype === "task_updated") {
+    const taskId = typeof message.task_id === "string" ? message.task_id : "?"
+    const patchStatus = typeof message.patch?.status === "string" ? message.patch.status : undefined
+    if (patchStatus === "completed" || patchStatus === "failed") {
+      return [timestamped({ kind: "status", messageId, status: `Teammate ${patchStatus}: ${taskId.slice(0, 8)}`, debugRaw })]
+    }
+    return []
+  }
+
+  if (message.type === "system" && message.subtype === "task_progress") {
+    return []
+  }
+
   // Interactive TUI claude never writes a `type: "result"` row — it writes
   // `system/turn_duration` instead (per canon/shannon research). Synthesize a
   // turn-end `result` so the agent loop and UI see the turn complete.
@@ -1038,6 +1100,20 @@ export async function* createClaudeHarnessStream(
       latestUsageSnapshot = null
     }
 
+    // Yield a {type:"task"} HarnessEvent for agent-SDK 0.3.x task lifecycle
+    // messages so downstream registries (Task 6/7) can track teammate runs.
+    // task_notification is already covered by the transcript branch below and
+    // must be included here too — all four subtypes get a task event.
+    if (
+      sdkMessage?.type === "system" &&
+      (sdkMessage.subtype === "task_started" ||
+        sdkMessage.subtype === "task_progress" ||
+        sdkMessage.subtype === "task_updated" ||
+        sdkMessage.subtype === "task_notification")
+    ) {
+      yield { type: "task", task: toTeamTaskEvent(sdkMessage) }
+    }
+
     for (const entry of normalizeClaudeStreamMessage(sdkMessage)) {
       if (entry.kind === "api_error") {
         apiErrorEmittedInTurn = true
@@ -1116,6 +1192,14 @@ export interface BuildCanUseToolArgs {
   onToolRequest: (request: HarnessToolRequest) => Promise<unknown>
   toolCallback?: ToolCallbackService
   chatPolicy?: ChatPermissionPolicy
+  /**
+   * Optional resolver: given the SDK's `agentID` (the task id of a native
+   * Agent-tool teammate), return a human-readable display name. The coordinator
+   * wires this to `teamsRegistry.snapshot(chatId)` at build time. When absent
+   * or returning `undefined`, the fallback `"teammate"` is used when agentID
+   * is present.
+   */
+  resolveAgentName?: (agentId: string) => string | undefined
 }
 
 /**
@@ -1139,6 +1223,13 @@ export function buildCanUseTool(args: BuildCanUseToolArgs): CanUseTool {
       return { behavior: "deny", message: "Unsupported tool request" }
     }
 
+    // Resolve teammate display name from SDK-provided agentID (present when a
+    // native Agent-tool task triggers the call).
+    const agentId = options.agentID
+    const agentName = agentId !== undefined
+      ? (args.resolveAgentName?.(agentId) ?? "teammate")
+      : undefined
+
     // ── Flag-on path: route through tool-callback ──────────────────────────
     if (process.env.KANNA_MCP_TOOL_CALLBACKS === "1" && args.toolCallback) {
       const result = await args.toolCallback.submit({
@@ -1149,6 +1240,7 @@ export function buildCanUseTool(args: BuildCanUseToolArgs): CanUseTool {
         args: (tool.rawInput ?? {}) as Record<string, unknown>,
         chatPolicy: args.chatPolicy ?? POLICY_DEFAULT,
         cwd: args.localPath,
+        agentName,
       })
 
       if (result.decision.kind === "deny") {
@@ -1187,7 +1279,7 @@ export function buildCanUseTool(args: BuildCanUseToolArgs): CanUseTool {
     }
 
     // ── Legacy path (flag off OR toolCallback not provided) ────────────────
-    const result = await args.onToolRequest({ tool })
+    const result = await args.onToolRequest({ tool, agentName })
 
     if (tool.toolKind === "ask_user_question") {
       const record = result && typeof result === "object" ? result as Record<string, unknown> : {}
@@ -1285,6 +1377,14 @@ async function startClaudeSession(args: {
   turnPrice?: ModelPrice | null
   /** Overrides the configured context window (OpenRouter model contextLength). */
   contextWindowOverride?: number
+  /** Native SDK agent definitions derived from configured claude subagents. */
+  agentDefinitions?: Record<string, AgentDefinition>
+  /**
+   * Optional resolver: given the SDK's agentID (native Agent-tool task id),
+   * returns the teammate's display name. Wired from the coordinator via
+   * teamsRegistry.snapshot(chatId).
+   */
+  resolveAgentName?: (agentId: string) => string | undefined
 }): Promise<ClaudeSessionHandle> {
   const canUseTool = buildCanUseTool({
     localPath: args.localPath,
@@ -1293,6 +1393,7 @@ async function startClaudeSession(args: {
     onToolRequest: args.onToolRequest,
     toolCallback: args.toolCallback,
     chatPolicy: args.chatPolicy,
+    resolveAgentName: args.resolveAgentName,
   })
 
   const promptQueue = new AsyncMessageQueue<SDKUserMessage>()
@@ -1339,6 +1440,7 @@ async function startClaudeSession(args: {
       settingSources: ["user", "project", "local"],
       pathToClaudeCodeExecutable: process.env.CLAUDE_EXECUTABLE?.replace(/^~(?=\/|$)/, homedir()) || undefined,
       env: buildClaudeEnv(process.env, args.oauthToken, args.openrouterApiKey ? { apiKey: args.openrouterApiKey } : null),
+      agents: args.agentDefinitions && Object.keys(args.agentDefinitions).length > 0 ? args.agentDefinitions : undefined,
     },
   })
 
@@ -1555,6 +1657,7 @@ export class AgentCoordinator {
   private readonly ptyInstanceRegistry: import("./claude-pty/pty-instance-registry").PtyInstanceRegistry | null
   private readonly workflowRegistry: import("./workflow-registry").WorkflowRegistry | null
   private readonly subagentTranscriptRegistry: import("./subagent-transcript-registry").SubagentTranscriptRegistry | null
+  private readonly teamsRegistry: import("./teams/teams-registry").TeamsRegistry | null
   private readonly localCatalog: import("./local-catalog").LocalCatalogService | null
   private readonly readLlmProvider: () => Promise<LlmProviderSnapshot>
   private readonly listOpenRouterModelsFn: (() => Promise<import("../shared/types").OpenRouterModel[]>) | null
@@ -1645,6 +1748,7 @@ export class AgentCoordinator {
     this.ptyInstanceRegistry = args.ptyInstanceRegistry ?? null
     this.workflowRegistry = args.workflowRegistry ?? null
     this.subagentTranscriptRegistry = args.subagentTranscriptRegistry ?? null
+    this.teamsRegistry = args.teamsRegistry ?? null
     this.localCatalog = args.localCatalog ?? null
   }
 
@@ -1857,6 +1961,8 @@ export class AgentCoordinator {
     if (this.resolveClaudeDriverPreference() !== "pty") {
       this.workflowRegistry?.unregister(chatId)
     }
+    // Teams are per-session: teammates die with the session, so drop the live view.
+    this.teamsRegistry?.clear(chatId)
   }
 
   /**
@@ -2442,6 +2548,7 @@ export class AgentCoordinator {
           toolUseId: request.tool.toolId,
           tool: request.tool,
           resolve,
+          agentName: request.agentName,
         }
       })
     }
@@ -2828,6 +2935,12 @@ export class AgentCoordinator {
               oauthBearers,
               turnPrice: openrouterTurnPrice,
               contextWindowOverride: openrouterContextWindow,
+              agentDefinitions: buildAgentDefinitions(this.getSubagents()),
+              resolveAgentName: (agentId) => {
+                const tasks = this.teamsRegistry?.snapshot(args.chatId) ?? []
+                const task = tasks.find((t) => t.taskId === agentId)
+                return task?.name ?? task?.subagentType ?? task?.description
+              },
             })
       } catch (err) {
         // Spawn failed before we registered the session — release the OAuth
@@ -3358,6 +3471,13 @@ export class AgentCoordinator {
             raw: event,
           })
           if (this.claudeSessions.get(session.chatId) !== session) break
+          continue
+        }
+
+        if (event.type === "task" && event.task) {
+          // Ignore stale task events from a session that has been rotated away.
+          if (this.claudeSessions.get(session.chatId) !== session) continue
+          this.teamsRegistry?.apply(session.chatId, event.task)
           continue
         }
 

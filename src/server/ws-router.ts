@@ -9,6 +9,7 @@ import type { PtyInstanceDelta } from "../shared/pty-instance"
 import type { PtyInstanceRegistry } from "./claude-pty/pty-instance-registry"
 import type { WorkflowRegistry } from "./workflow-registry"
 import type { SubagentTranscriptRegistry } from "./subagent-transcript-registry"
+import type { TeamsRegistry } from "./teams/teams-registry"
 import { isClientEnvelope } from "../shared/protocol"
 import type { AgentCoordinator } from "./agent"
 import type { AnalyticsReporter } from "./analytics"
@@ -157,6 +158,7 @@ interface CreateWsRouterArgs {
   ptyInstances?: PtyInstanceRegistry
   killPtyInstance?: (chatId: string) => Promise<{ ok: boolean; error?: string }>
   workflowRegistry?: WorkflowRegistry
+  teamsRegistry?: TeamsRegistry
   subagentTranscriptRegistry?: SubagentTranscriptRegistry
   sessionShare?: SessionShareService
 }
@@ -427,6 +429,7 @@ export function createWsRouter({
   ptyInstances,
   killPtyInstance,
   workflowRegistry,
+  teamsRegistry,
   subagentTranscriptRegistry,
   sessionShare,
 }: CreateWsRouterArgs) {
@@ -962,6 +965,18 @@ export function createWsRouter({
       }
     }
 
+    if (topic.type === "teams") {
+      return {
+        v: PROTOCOL_VERSION,
+        type: "snapshot",
+        id,
+        snapshot: {
+          type: "teams",
+          data: { chatId: topic.chatId, tasks: teamsRegistry?.snapshot(topic.chatId) ?? [] },
+        },
+      }
+    }
+
     return {
       v: PROTOCOL_VERSION,
       type: "snapshot",
@@ -1271,6 +1286,21 @@ export function createWsRouter({
       const snapshotSignatures = ensureSnapshotSignatures(ws)
       for (const [id, topic] of ws.data.subscriptions.entries()) {
         if (topic.type !== "workflows" || topic.chatId !== chatId) continue
+        const envelope = createEnvelope(id, topic, undefined, ws)
+        if (envelope.type !== "snapshot") continue
+        const signature = JSON.stringify(envelope.snapshot)
+        if (snapshotSignatures.get(id) === signature) continue
+        snapshotSignatures.set(id, signature)
+        send(ws, envelope)
+      }
+    }
+  }) ?? (() => {})
+
+  const disposeTeams: () => void = teamsRegistry?.subscribe((chatId) => {
+    for (const ws of sockets) {
+      const snapshotSignatures = ensureSnapshotSignatures(ws)
+      for (const [id, topic] of ws.data.subscriptions.entries()) {
+        if (topic.type !== "teams" || topic.chatId !== chatId) continue
         const envelope = createEnvelope(id, topic, undefined, ws)
         if (envelope.type !== "snapshot") continue
         const signature = JSON.stringify(envelope.snapshot)
@@ -2300,6 +2330,7 @@ export function createWsRouter({
       disposeUpdateEvents()
       disposePtyInstances()
       disposeWorkflows()
+      disposeTeams()
     },
   }
 }

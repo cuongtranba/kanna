@@ -244,6 +244,18 @@ export interface SubagentValidationError {
   message: string
 }
 
+export interface TeamTaskSummary {
+  taskId: string
+  name?: string
+  subagentType?: string
+  description: string
+  status: "running" | "completed" | "failed"
+  model?: string
+  startedAt: number
+  endedAt?: number
+  lastActivityAt: number
+}
+
 export type McpServerTransport = "stdio" | "http" | "sse" | "ws"
 
 export type McpServerTestResult =
@@ -1713,7 +1725,7 @@ export type HydratedTranscriptMessage =
   | ({ kind: "memory_loaded"; path: string; id: string; messageId?: string; timestamp: string; hidden?: boolean })
   | ({ kind: "unknown"; json: string; id: string; messageId?: string; timestamp: string; hidden?: boolean })
   | ({ kind: "auto_continue_prompt"; scheduleId: string; id: string; messageId?: string; timestamp: string; hidden?: boolean })
-  | ({ kind: "pending_tool_request"; toolRequestId: string; toolName: string; arguments: Record<string, unknown>; id: string; messageId?: string; timestamp: string; hidden?: boolean })
+  | ({ kind: "pending_tool_request"; toolRequestId: string; toolName: string; arguments: Record<string, unknown>; agentName?: string; id: string; messageId?: string; timestamp: string; hidden?: boolean })
   | ({ id: string; messageId?: string; hidden?: boolean } & HydratedToolCall)
 
 export interface ChatTimingCumulativeMs {
@@ -1897,6 +1909,8 @@ export interface PendingToolRequestEntry extends TranscriptEntryBase {
   toolRequestId: string
   toolName: string
   arguments: Record<string, unknown>
+  /** Display name of the teammate (native Agent-tool task) that triggered the request. Absent when the main model triggered it. */
+  agentName?: string
 }
 
 export interface ToolRequestResolvedEntry extends TranscriptEntryBase {

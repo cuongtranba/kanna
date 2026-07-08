@@ -21,6 +21,7 @@ import type {
   SubagentInput,
   SubagentPatch,
   SubagentValidationError,
+  TeamTaskSummary,
   UpdateSnapshot,
   EditorPreset,
 } from "./types"
@@ -47,6 +48,7 @@ export type SubscriptionTopic =
   | { type: "terminal"; terminalId: string }
   | { type: "pty-instances" }
   | { type: "workflows"; chatId: string }
+  | { type: "teams"; chatId: string }
 
 export interface TerminalSnapshot {
   terminalId: string
@@ -80,6 +82,11 @@ export type PtyInstancesEvent =
 export interface WorkflowsSnapshot {
   chatId: string
   runs: WorkflowRunSummary[]
+}
+
+export interface TeamsSnapshot {
+  chatId: string
+  tasks: TeamTaskSummary[]
 }
 
 export type WsEvent = TerminalEvent | PtyInstancesEvent
@@ -320,6 +327,7 @@ export type ServerSnapshot =
   | { type: "terminal"; data: TerminalSnapshot | null }
   | { type: "pty-instances"; data: PtyInstancesSnapshot }
   | { type: "workflows"; data: WorkflowsSnapshot }
+  | { type: "teams"; data: TeamsSnapshot }
 
 export type ServerEnvelope =
   | { v: 1; type: "snapshot"; id: string; snapshot: ServerSnapshot }

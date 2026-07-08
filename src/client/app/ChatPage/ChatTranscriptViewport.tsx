@@ -32,6 +32,10 @@ import {
 import type { EditorPreset } from "../../../shared/protocol"
 import type { WorkflowRun, WorkflowRunSummary } from "../../../shared/workflow-types"
 import { WorkflowsSectionWithDetail } from "../WorkflowsSection"
+import { TeamsSection } from "../TeamsSection"
+
+const EMPTY_TEAM_TASKS: TeamTaskSummary[] = []
+import type { TeamTaskSummary } from "../../../shared/types"
 
 export type PendingQuestionRun = SubagentRunSnapshot & {
   pendingTool: NonNullable<SubagentRunSnapshot["pendingTool"]>
@@ -91,6 +95,8 @@ interface ChatTranscriptViewportProps {
   onCancelSubagentRun?: (chatId: string, runId: string) => void
   workflowRuns?: WorkflowRunSummary[]
   getWorkflowRunDetail?: (runId: string) => Promise<WorkflowRun | null>
+  teamTasks?: TeamTaskSummary[]
+  driverPreference?: "sdk" | "pty"
   getSubagentTranscript?: GetSubagentTranscript
   showScrollButton: boolean
   onIsAtEndChange: (isAtEnd: boolean) => void
@@ -142,6 +148,8 @@ export const ChatTranscriptViewport = memo(function ChatTranscriptViewport({
   onCancelSubagentRun,
   workflowRuns,
   getWorkflowRunDetail,
+  teamTasks,
+  driverPreference,
   getSubagentTranscript,
   showScrollButton,
   onIsAtEndChange,
@@ -373,6 +381,9 @@ export const ChatTranscriptViewport = memo(function ChatTranscriptViewport({
           />
         </div>
       ) : null}
+      <div className="pb-5">
+        <TeamsSection tasks={teamTasks ?? EMPTY_TEAM_TASKS} driverPreference={driverPreference ?? "sdk"} />
+      </div>
       {liveTunnelRecord && onTunnelAccept && onTunnelStop && onTunnelRetry && (
         <div className="pb-5">
           <CloudflareTunnelCard

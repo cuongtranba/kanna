@@ -14,14 +14,17 @@ import {
   normalizeClaudeUsageSnapshot,
   parseConfiguredContextWindowFromModelId,
   resolveFinalTurnUsage,
+  toTeamTaskEvent,
 } from "./agent"
+import type { AgentCoordinatorArgs } from "./agent"
 import { EventStore } from "./event-store"
 import { createToolCallbackService } from "./tool-callback"
 import type { ToolCallbackService } from "./tool-callback"
 import type { ChatPermissionPolicy } from "../shared/permission-policy"
 import { POLICY_DEFAULT } from "../shared/permission-policy"
-import type { HarnessTurn } from "./harness-types"
-import type { ChatAttachment, McpServerConfig, SlashCommand, TranscriptEntry } from "../shared/types"
+import type { HarnessTurn, HarnessToolRequest } from "./harness-types"
+import type { ChatAttachment, McpServerConfig, SlashCommand, Subagent, TranscriptEntry } from "../shared/types"
+import { buildAgentDefinitions } from "./teams/agent-definitions"
 import type { AutoContinueEvent } from "./auto-continue/events"
 import type { WorkflowRegistry } from "./workflow-registry"
 import { AsyncEventQueue } from "./test-helpers/async-event-queue"
@@ -485,6 +488,72 @@ describe("normalizeClaudeStreamMessage", () => {
         },
       })
       expect(entries.map((e) => e.kind)).toEqual(["assistant_text"])
+    })
+  })
+
+  describe("task lifecycle messages (agent-sdk 0.3.x)", () => {
+    test("task_started -> status entry announcing teammate", () => {
+      const entries = normalizeClaudeStreamMessage({
+        type: "system", subtype: "task_started",
+        task_id: "t1", tool_use_id: "toolu_1", description: "Compute 21*2 with bash", name: "calc",
+      })
+      expect(entries).toHaveLength(1)
+      expect(entries[0]).toMatchObject({ kind: "status", status: expect.stringContaining("calc") })
+    })
+
+    test("task_started without name falls back to description", () => {
+      const entries = normalizeClaudeStreamMessage({ type: "system", subtype: "task_started", task_id: "t1", description: "Echo task" })
+      expect(entries[0]).toMatchObject({ kind: "status", status: expect.stringContaining("Echo task") })
+    })
+
+    test("task_updated completed/failed -> status entry; other patches silent", () => {
+      expect(normalizeClaudeStreamMessage({ type: "system", subtype: "task_updated", task_id: "t1", patch: { status: "completed" } })[0])
+        .toMatchObject({ kind: "status" })
+      expect(normalizeClaudeStreamMessage({ type: "system", subtype: "task_updated", task_id: "t1", patch: { status: "failed" } })[0])
+        .toMatchObject({ kind: "status" })
+      expect(normalizeClaudeStreamMessage({ type: "system", subtype: "task_updated", task_id: "t1", patch: { end_time: 5 } })).toHaveLength(0)
+    })
+
+    test("task_progress -> no transcript entry", () => {
+      expect(normalizeClaudeStreamMessage({ type: "system", subtype: "task_progress", task_id: "t1", description: "x" })).toHaveLength(0)
+    })
+  })
+})
+
+describe("toTeamTaskEvent", () => {
+  test("maps snake_case fields to camelCase for task_started", () => {
+    const event = toTeamTaskEvent({
+      type: "system",
+      subtype: "task_started",
+      task_id: "ad95f",
+      tool_use_id: "toolu_019i",
+      description: "Compute 21*2 with bash",
+      name: "calc",
+      subagent_type: "claude",
+      model: "claude-sonnet-4-6",
+    })
+    expect(event).toMatchObject({
+      subtype: "task_started",
+      taskId: "ad95f",
+      toolUseId: "toolu_019i",
+      description: "Compute 21*2 with bash",
+      name: "calc",
+      subagentType: "claude",
+      model: "claude-sonnet-4-6",
+    })
+  })
+
+  test("maps task_updated patch fields", () => {
+    const event = toTeamTaskEvent({
+      type: "system",
+      subtype: "task_updated",
+      task_id: "t2",
+      patch: { status: "completed", end_time: 1783486335679 },
+    })
+    expect(event).toMatchObject({
+      subtype: "task_updated",
+      taskId: "t2",
+      patch: { status: "completed", end_time: 1783486335679 },
     })
   })
 })
@@ -4789,15 +4858,15 @@ describe("buildCanUseTool", () => {
     const result = await canUseTool(
       "AskUserQuestion",
       { questions: [{ id: "q1", question: "What color?" }] },
-      { toolUseID: "tool-use-1", signal: new AbortController().signal },
+      { toolUseID: "tool-use-1", requestId: "", signal: new AbortController().signal },
     )
 
     // Legacy path must be taken: onToolRequest called once, toolCallback NOT called
     expect(onToolRequestCallCount).toBe(1)
     expect(toolCallbackSubmitCallCount).toBe(0)
-    expect(result.behavior).toBe("allow")
-    if (result.behavior === "allow") {
-      expect((result.updatedInput as any).answers).toEqual({ q1: "legacy-answer" })
+    expect(result!.behavior).toBe("allow")
+    if (result!.behavior === "allow") {
+      expect((result!.updatedInput as any).answers).toEqual({ q1: "legacy-answer" })
     }
   })
 
@@ -4840,15 +4909,15 @@ describe("buildCanUseTool", () => {
       const result = await canUseTool(
         "AskUserQuestion",
         { questions: [{ id: "q1", question: "What color?" }] },
-        { toolUseID: "tool-use-2", signal: new AbortController().signal },
+        { toolUseID: "tool-use-2", requestId: "", signal: new AbortController().signal },
       )
 
       // Flag-on path: toolCallback called once, legacy onToolRequest NOT called
       expect(toolCallbackSubmitCallCount).toBe(1)
       expect(onToolRequestCallCount).toBe(0)
-      expect(result.behavior).toBe("allow")
-      if (result.behavior === "allow") {
-        expect((result.updatedInput as any).answers).toEqual({ q1: ["blue"] })
+      expect(result!.behavior).toBe("allow")
+      if (result!.behavior === "allow") {
+        expect((result!.updatedInput as any).answers).toEqual({ q1: ["blue"] })
       }
     } finally {
       delete process.env.KANNA_MCP_TOOL_CALLBACKS
@@ -4880,12 +4949,12 @@ describe("buildCanUseTool", () => {
       const result = await canUseTool(
         "AskUserQuestion",
         { questions: [{ id: "q1", question: "Proceed?" }] },
-        { toolUseID: "tool-use-3", signal: new AbortController().signal },
+        { toolUseID: "tool-use-3", requestId: "", signal: new AbortController().signal },
       )
 
-      expect(result.behavior).toBe("deny")
-      if (result.behavior === "deny") {
-        expect(result.message).toBe("not allowed by policy")
+      expect(result!.behavior).toBe("deny")
+      if (result!.behavior === "deny") {
+        expect(result!.message).toBe("not allowed by policy")
       }
     } finally {
       delete process.env.KANNA_MCP_TOOL_CALLBACKS
@@ -4911,7 +4980,7 @@ describe("buildCanUseTool", () => {
       await canUseTool(
         "AskUserQuestion",
         { questions: [{ id: "q1", question: "Hello?" }] },
-        { toolUseID: "tool-use-4", signal: new AbortController().signal },
+        { toolUseID: "tool-use-4", requestId: "", signal: new AbortController().signal },
       )
 
       expect(onToolRequestCallCount).toBe(1)
@@ -4932,9 +5001,9 @@ describe("buildCanUseTool", () => {
         onToolRequest: async () => { onToolRequestCallCount++; return null },
       })
 
-      const result = await canUseTool("Bash", { command: "ls" }, { toolUseID: "tool-use-5", signal: new AbortController().signal })
+      const result = await canUseTool("Bash", { command: "ls" }, { toolUseID: "tool-use-5", requestId: "", signal: new AbortController().signal })
 
-      expect(result.behavior).toBe("allow")
+      expect(result!.behavior).toBe("allow")
       expect(onToolRequestCallCount).toBe(0)
     } finally {
       delete process.env.KANNA_MCP_TOOL_CALLBACKS
@@ -4992,14 +5061,89 @@ describe("buildCanUseTool", () => {
       })
 
       const result = await resultPromise
-      expect(result.behavior).toBe("allow")
-      const updatedInput = (result as Extract<typeof result, { behavior: "allow" }>).updatedInput as Record<string, unknown>
+      expect(result!.behavior).toBe("allow")
+      const updatedInput = (result as Extract<NonNullable<typeof result>, { behavior: "allow" }>).updatedInput as Record<string, unknown>
       expect(updatedInput.answers).toEqual({ "Pick option": "a" })
 
       await rm(tempDir, { recursive: true, force: true })
     } finally {
       delete process.env.KANNA_MCP_TOOL_CALLBACKS
     }
+  })
+
+  test("agentID present + resolver returns name → HarnessToolRequest.agentName set to resolved name", async () => {
+    delete process.env.KANNA_MCP_TOOL_CALLBACKS
+
+    let capturedRequest: HarnessToolRequest | null = null
+    const canUseTool = buildCanUseTool({
+      localPath: "/tmp/test",
+      chatId: "chat-1",
+      sessionToken: "sess-1",
+      onToolRequest: async (req) => {
+        capturedRequest = req
+        return { answers: { q1: "answer" } }
+      },
+      resolveAgentName: (agentId) => (agentId === "t1" ? "calc" : undefined),
+    })
+
+    await canUseTool(
+      "AskUserQuestion",
+      { questions: [{ id: "q1", question: "What color?" }] },
+      { toolUseID: "tool-use-agent", requestId: "", agentID: "t1", signal: new AbortController().signal } as any,
+    )
+
+    expect(capturedRequest).not.toBeNull()
+    expect(capturedRequest!.agentName).toBe("calc")
+  })
+
+  test("agentID absent → HarnessToolRequest.agentName is undefined", async () => {
+    delete process.env.KANNA_MCP_TOOL_CALLBACKS
+
+    let capturedRequest: HarnessToolRequest | null = null
+    const canUseTool = buildCanUseTool({
+      localPath: "/tmp/test",
+      chatId: "chat-1",
+      sessionToken: "sess-1",
+      onToolRequest: async (req) => {
+        capturedRequest = req
+        return { answers: { q1: "answer" } }
+      },
+      resolveAgentName: () => "should-not-be-called",
+    })
+
+    await canUseTool(
+      "AskUserQuestion",
+      { questions: [{ id: "q1", question: "What color?" }] },
+      { toolUseID: "tool-use-no-agent", requestId: "", signal: new AbortController().signal },
+    )
+
+    expect(capturedRequest).not.toBeNull()
+    expect(capturedRequest!.agentName).toBeUndefined()
+  })
+
+  test("agentID present but resolver returns undefined → agentName falls back to 'teammate'", async () => {
+    delete process.env.KANNA_MCP_TOOL_CALLBACKS
+
+    let capturedRequest: HarnessToolRequest | null = null
+    const canUseTool = buildCanUseTool({
+      localPath: "/tmp/test",
+      chatId: "chat-1",
+      sessionToken: "sess-1",
+      onToolRequest: async (req) => {
+        capturedRequest = req
+        return { answers: { q1: "answer" } }
+      },
+      resolveAgentName: () => undefined,
+    })
+
+    await canUseTool(
+      "AskUserQuestion",
+      { questions: [{ id: "q1", question: "What color?" }] },
+      { toolUseID: "tool-use-fallback", requestId: "", agentID: "unknown-task", signal: new AbortController().signal } as any,
+    )
+
+    expect(capturedRequest).not.toBeNull()
+    expect(capturedRequest!.agentName).toBe("teammate")
   })
 })
 
@@ -5057,6 +5201,90 @@ describe("AgentCoordinator chatPolicy plumbing", () => {
     await waitFor(() => store.turnFinishedCount === 1)
 
     expect(received?.chatPolicy?.defaultAction).toBe("auto-deny")
+
+    events.close()
+  })
+})
+
+// ── AgentCoordinator agentDefinitions plumbing ───────────────────────────────
+
+describe("AgentCoordinator agentDefinitions plumbing", () => {
+  test("plumbs agentDefinitions for claude subagents to startClaudeSession (SDK path)", async () => {
+    const events = new AsyncEventQueue<any>()
+    type SpawnArgs = Parameters<NonNullable<AgentCoordinatorArgs["startClaudeSession"]>>[0]
+    const received: { current: SpawnArgs | null } = { current: null }
+
+    const claudeSub: Subagent = {
+      id: "sub-claude-1",
+      name: "Code Reviewer",
+      description: "Reviews code for quality",
+      provider: "claude",
+      model: "claude-sonnet-4-5",
+      modelOptions: { reasoningEffort: "high", contextWindow: "200k" },
+      systemPrompt: "You are a code reviewer.",
+      contextScope: "full-transcript",
+      triggerMode: "manual",
+      createdAt: 1000,
+      updatedAt: 2000,
+    }
+
+    const codexSub: Subagent = {
+      id: "sub-codex-1",
+      name: "Codex Agent",
+      description: "Codex agent",
+      provider: "codex",
+      model: "codex-mini-latest",
+      modelOptions: { reasoningEffort: "high", fastMode: false },
+      systemPrompt: "You are a codex agent.",
+      contextScope: "full-transcript",
+      triggerMode: "manual",
+      createdAt: 1001,
+      updatedAt: 2001,
+    }
+
+    const store = createFakeStore()
+    const coordinator = new AgentCoordinator({
+      store: store as never,
+      onStateChange: () => {},
+      getSubagents: () => [claudeSub, codexSub],
+      startClaudeSession: async (args) => {
+        received.current = args
+        return {
+          provider: "claude" as const,
+          stream: events,
+          getAccountInfo: async () => null,
+          interrupt: async () => {},
+          close: () => {},
+          sendPrompt: async () => {
+            events.push({
+              type: "transcript" as const,
+              entry: timestamped({
+                kind: "result",
+                subtype: "success",
+                isError: false,
+                durationMs: 0,
+                result: "done",
+              }),
+            })
+          },
+          setModel: async () => {},
+          setPermissionMode: async () => {},
+          getSupportedCommands: async () => [],
+        }
+      },
+    })
+
+    await coordinator.send({
+      type: "chat.send",
+      chatId: "chat-1",
+      provider: "claude",
+      content: "hello",
+      model: "claude-opus-4-1",
+    })
+    await waitFor(() => store.turnFinishedCount === 1)
+
+    expect(received.current).not.toBeNull()
+    expect(received.current?.agentDefinitions).toEqual(buildAgentDefinitions([claudeSub, codexSub]))
 
     events.close()
   })
@@ -5387,5 +5615,69 @@ describe("buildClaudeEnv openrouter branch", () => {
   test("non-openrouter null oauth but inherited oauth in base env is preserved", () => {
     const env = buildClaudeEnv({ PATH: "/bin", CLAUDE_CODE_OAUTH_TOKEN: "inherited" } as NodeJS.ProcessEnv, null)
     expect(env.CLAUDE_CODE_OAUTH_TOKEN).toBe("inherited")
+  })
+})
+
+// ── AgentCoordinator teamsRegistry feed ──────────────────────────────────────
+
+describe("AgentCoordinator teamsRegistry feed", () => {
+  test("feeds task HarnessEvents from the harness stream into teamsRegistry", async () => {
+    const { createTeamsRegistry } = await import("./teams/teams-registry")
+    const teamsRegistry = createTeamsRegistry({ now: () => Date.now() })
+    const events = new AsyncEventQueue<any>()
+
+    const store = createFakeStore()
+    const coordinator = new AgentCoordinator({
+      store: store as never,
+      onStateChange: () => {},
+      teamsRegistry,
+      startClaudeSession: async () => ({
+        provider: "claude" as const,
+        stream: events,
+        getAccountInfo: async () => null,
+        interrupt: async () => {},
+        close: () => {},
+        sendPrompt: async () => {
+          // Push a task event, then finish the turn
+          events.push({
+            type: "task" as const,
+            task: {
+              subtype: "task_started" as const,
+              taskId: "t1",
+              description: "do the thing",
+              name: "Task One",
+            },
+          })
+          events.push({
+            type: "transcript" as const,
+            entry: timestamped({
+              kind: "result",
+              subtype: "success",
+              isError: false,
+              durationMs: 0,
+              result: "done",
+            }),
+          })
+        },
+        setModel: async () => {},
+        setPermissionMode: async () => {},
+        getSupportedCommands: async () => [],
+      }),
+    })
+
+    await coordinator.send({
+      type: "chat.send",
+      chatId: "chat-1",
+      provider: "claude",
+      content: "hello",
+      model: "claude-opus-4-1",
+    })
+    await waitFor(() => store.turnFinishedCount === 1)
+
+    const tasks = teamsRegistry.snapshot("chat-1")
+    expect(tasks).toHaveLength(1)
+    expect(tasks[0]).toMatchObject({ taskId: "t1", description: "do the thing", status: "running" })
+
+    events.close()
   })
 })

@@ -1,14 +1,29 @@
 import type { AccountInfo, AgentProvider, NormalizedToolCall, TranscriptEntry } from "../shared/types"
 
+export interface TeamTaskEvent {
+  subtype: "task_started" | "task_progress" | "task_updated" | "task_notification"
+  taskId: string
+  toolUseId?: string
+  description?: string
+  subagentType?: string
+  name?: string
+  model?: string
+  patch?: { status?: string; end_time?: number }
+  status?: string
+}
+
 export interface HarnessEvent {
-  type: "transcript" | "session_token" | "rate_limit"
+  type: "transcript" | "session_token" | "rate_limit" | "task"
   entry?: TranscriptEntry
   sessionToken?: string
   rateLimit?: { resetAt: number; tz: string }
+  task?: TeamTaskEvent
 }
 
 export interface HarnessToolRequest {
   tool: NormalizedToolCall & { toolKind: "ask_user_question" | "exit_plan_mode" }
+  /** Display name of the teammate (native Agent-tool task) that triggered the request. Absent when the main model triggers it. */
+  agentName?: string
 }
 
 export interface HarnessTurn {
