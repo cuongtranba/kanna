@@ -1,3 +1,4 @@
+import type { ReactElement } from "react"
 import type { HydratedTranscriptMessage, AskUserQuestionItem } from "../../../shared/types"
 import type { ToolRequestDecision } from "../../../shared/permission-policy"
 import { Button } from "../ui/button"
@@ -116,6 +117,17 @@ function TeammateByline({ agentName }: { agentName: string }) {
   )
 }
 
+/** Prefixes the card with a teammate byline; absent agentName renders the card exactly as before (no wrapper). */
+function withTeammateByline(agentName: string | undefined, card: ReactElement): ReactElement {
+  if (agentName === undefined) return card
+  return (
+    <>
+      <TeammateByline agentName={agentName} />
+      {card}
+    </>
+  )
+}
+
 // ── public component ─────────────────────────────────────────────────────────
 
 export function PendingToolRequestMessage({ entry, onAnswer }: Props) {
@@ -135,48 +147,42 @@ export function PendingToolRequestMessage({ entry, onAnswer }: Props) {
       options: Array.isArray(q.options) ? q.options as AskUserQuestionItem["options"] : undefined,
       multiSelect: typeof q.multiSelect === "boolean" ? q.multiSelect : false,
     }))
-    return (
-      <div>
-        {agentName !== undefined ? <TeammateByline agentName={agentName} /> : null}
-        <AskUserQuestionInteractive
-          questions={questions}
-          onSubmit={(finalAnswers) =>
-            onAnswer(toolRequestId, {
-              kind: "answer",
-              payload: { questions, answers: finalAnswers },
-            })
-          }
-          onCancel={() =>
-            onAnswer(toolRequestId, { kind: "deny", reason: "user_canceled" })
-          }
-        />
-      </div>
+    return withTeammateByline(
+      agentName,
+      <AskUserQuestionInteractive
+        questions={questions}
+        onSubmit={(finalAnswers) =>
+          onAnswer(toolRequestId, {
+            kind: "answer",
+            payload: { questions, answers: finalAnswers },
+          })
+        }
+        onCancel={() =>
+          onAnswer(toolRequestId, { kind: "deny", reason: "user_canceled" })
+        }
+      />,
     )
   }
 
   if (toolName === "mcp__kanna__exit_plan_mode") {
     const plan = typeof args.plan === "string" ? args.plan : ""
-    return (
-      <div>
-        {agentName !== undefined ? <TeammateByline agentName={agentName} /> : null}
-        <ExitPlanModePending
-          toolRequestId={toolRequestId}
-          plan={plan}
-          onAnswer={onAnswer}
-        />
-      </div>
+    return withTeammateByline(
+      agentName,
+      <ExitPlanModePending
+        toolRequestId={toolRequestId}
+        plan={plan}
+        onAnswer={onAnswer}
+      />,
     )
   }
 
-  return (
-    <div>
-      {agentName !== undefined ? <TeammateByline agentName={agentName} /> : null}
-      <GenericPending
-        toolRequestId={toolRequestId}
-        toolName={toolName}
-        args={args}
-        onAnswer={onAnswer}
-      />
-    </div>
+  return withTeammateByline(
+    agentName,
+    <GenericPending
+      toolRequestId={toolRequestId}
+      toolName={toolName}
+      args={args}
+      onAnswer={onAnswer}
+    />,
   )
 }

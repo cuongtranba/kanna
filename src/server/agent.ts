@@ -1225,7 +1225,7 @@ export function buildCanUseTool(args: BuildCanUseToolArgs): CanUseTool {
 
     // Resolve teammate display name from SDK-provided agentID (present when a
     // native Agent-tool task triggers the call).
-    const agentId = (options as { agentID?: string }).agentID
+    const agentId = options.agentID
     const agentName = agentId !== undefined
       ? (args.resolveAgentName?.(agentId) ?? "teammate")
       : undefined
