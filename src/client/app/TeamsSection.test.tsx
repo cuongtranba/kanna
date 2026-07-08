@@ -48,7 +48,7 @@ describe("TeamsSection — empty state (sdk)", () => {
 describe("TeamsSection — empty state (pty)", () => {
   test("renders SDK driver hint for pty driver with no tasks", async () => {
     const { container, cleanup } = await mountTeamsSection({ tasks: [], driverPreference: "pty" })
-    expect(container.textContent).toContain("Teams live view requires the SDK driver")
+    expect(container.textContent).toContain("Switch to the SDK driver")
     expect(container.querySelector("[data-testid='teams-empty-pty']")).not.toBeNull()
     cleanup()
   })

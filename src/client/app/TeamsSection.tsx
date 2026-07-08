@@ -60,12 +60,7 @@ export function TeamsSection({ tasks, driverPreference }: TeamsSectionProps) {
 
   return (
     <div className="flex flex-col gap-2">
-      <span
-        className="text-xs font-medium uppercase tracking-wide text-muted-foreground"
-        style={{ fontVariantNumeric: "tabular-nums" }}
-      >
-        Teams
-      </span>
+      <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Teams</span>
       <ul className="flex flex-col gap-0.5">
         {tasks.map((task) => (
           <TeamTaskRow key={task.taskId} task={task} />
@@ -84,7 +79,7 @@ function TeamsEmptyState({ driverPreference }: { driverPreference: "sdk" | "pty"
         className="text-xs text-muted-foreground"
         data-testid="teams-empty-pty"
       >
-        Teams live view requires the SDK driver (Settings → Claude driver).
+        Switch to the SDK driver (Settings → Claude driver) to see team tasks live.
       </p>
     )
   }
@@ -128,7 +123,7 @@ function TeamTaskRow({ task }: { task: TeamTaskSummary }) {
             {task.model}
           </span>
         ) : null}
-        <span className="tabular-nums" style={{ fontVariantNumeric: "tabular-nums" }}>
+        <span className="tabular-nums">
           {formatCompactDuration(durationMs)}
         </span>
       </span>
