@@ -41,6 +41,7 @@ import {
   hasFileDragTypes,
 } from "./utils"
 import { useWorkflowsStore, selectRuns } from "../../stores/workflowsStore"
+import { useTeamsStore, selectTasks } from "../../stores/teamsStore"
 import { useShallow } from "zustand/react/shallow"
 import type { WorkflowRun } from "../../../shared/workflow-types"
 import type { TranscriptEntry } from "../../../shared/types"
@@ -765,6 +766,8 @@ export function ChatPage() {
   }, [state.socket])
 
   const workflowRuns = useWorkflowsStore(useShallow(selectRuns(state.activeChatId ?? "")))
+  const teamTasks = useTeamsStore(selectTasks(state.activeChatId ?? ""))
+  const driverPreference: "sdk" | "pty" = state.appSettings?.claudeDriver.preference === "pty" ? "pty" : "sdk"
 
   const handleGetWorkflowRunDetail = useCallback(async (runId: string): Promise<WorkflowRun | null> => {
     const chatId = state.activeChatId
@@ -1033,6 +1036,8 @@ export function ChatPage() {
           onCancelSubagentRun={handleCancelSubagentRun}
           workflowRuns={workflowRuns.length > 0 ? workflowRuns : undefined}
           getWorkflowRunDetail={handleGetWorkflowRunDetail}
+          teamTasks={teamTasks}
+          driverPreference={driverPreference}
           getSubagentTranscript={handleGetSubagentTranscript}
           showScrollButton={showScrollToBottom && state.messages.length > 0}
           onIsAtEndChange={onIsAtEndChange}
