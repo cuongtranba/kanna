@@ -15,6 +15,7 @@ import {
   parseConfiguredContextWindowFromModelId,
   resolveFinalTurnUsage,
 } from "./agent"
+import type { AgentCoordinatorArgs } from "./agent"
 import { EventStore } from "./event-store"
 import { createToolCallbackService } from "./tool-callback"
 import type { ToolCallbackService } from "./tool-callback"
@@ -5068,7 +5069,8 @@ describe("AgentCoordinator chatPolicy plumbing", () => {
 describe("AgentCoordinator agentDefinitions plumbing", () => {
   test("plumbs agentDefinitions for claude subagents to startClaudeSession (SDK path)", async () => {
     const events = new AsyncEventQueue<any>()
-    let received: any = null
+    type SpawnArgs = Parameters<NonNullable<AgentCoordinatorArgs["startClaudeSession"]>>[0]
+    const received: { current: SpawnArgs | null } = { current: null }
 
     const claudeSub: Subagent = {
       id: "sub-claude-1",
@@ -5104,7 +5106,7 @@ describe("AgentCoordinator agentDefinitions plumbing", () => {
       onStateChange: () => {},
       getSubagents: () => [claudeSub, codexSub],
       startClaudeSession: async (args) => {
-        received = args
+        received.current = args
         return {
           provider: "claude" as const,
           stream: events,
@@ -5139,7 +5141,8 @@ describe("AgentCoordinator agentDefinitions plumbing", () => {
     })
     await waitFor(() => store.turnFinishedCount === 1)
 
-    expect(received?.agentDefinitions).toEqual(buildAgentDefinitions([claudeSub, codexSub]))
+    expect(received.current).not.toBeNull()
+    expect(received.current?.agentDefinitions).toEqual(buildAgentDefinitions([claudeSub, codexSub]))
 
     events.close()
   })

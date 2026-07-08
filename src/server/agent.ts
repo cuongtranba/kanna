@@ -273,7 +273,7 @@ interface ClaudeSessionLifecycleOptions {
   backgroundTaskMaxMs: number
 }
 
-interface AgentCoordinatorArgs {
+export interface AgentCoordinatorArgs {
   store: EventStore
   onStateChange: (chatId?: string, options?: { immediate?: boolean }) => void
   analytics?: AnalyticsReporter
