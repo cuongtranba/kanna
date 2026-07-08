@@ -10,6 +10,27 @@
 
 **Spec:** `docs/superpowers/specs/2026-07-08-managed-agents-multiagent-design.md`
 
+---
+
+## Execution frame (ratified 2026-07-08 — human-owned, do not edit during execution)
+
+**Objective (direct metrics — the ONLY progress that counts):**
+1. Live round-trip test green on the developer's macOS machine: managed chat → coordinator delegates to roster agent → local bash executes in workdir → result streams into transcript.
+2. UI golden path: 1 successful multi-agent chat started from the provider picker with the threads panel updating live.
+
+Checked-off tasks are scaffolding, NOT progress. Never report task completion as feature progress; report the two metrics above.
+
+**Anti-goals (the wall):**
+1. **Tripwire:** `bun run test --conditions production` + `bun run lint` green at every commit; existing SDK/PTY parity tests untouched and green. Breach ⇒ stop all forward work, fix first.
+2. **Drift gauge:** live-API spend during development ≤ $20 (read from Anthropic Console usage after each live run; multi-agent threads parallelize token burn).
+
+**Flags (escalate to human, stop affected work):**
+- **Cannot:** Task 4.5 probe fails on macOS AND the raw-REST fallback also fails ⇒ hand up; feature may need a Linux-only gate — human decision.
+- **Breaking:** existing test/lint regression, or spend over cap.
+- **Pointless:** Tasks 1–15 green (fakes pass) but the live metric stays red ⇒ fakes encoded wrong API assumptions; re-derive fixtures from Task 4.5 probe evidence instead of adding tasks.
+
+**Human-only calls:** scope reduction (multi-agent → single-agent), spend-cap changes, Linux-only fallback, any change to this frame.
+
 **Verified codebase contracts used throughout (do not re-derive):**
 
 - `HarnessEvent` — `src/server/harness-types.ts:3` — `{ type: "transcript" | "session_token" | "rate_limit"; entry?: TranscriptEntry; sessionToken?: string; rateLimit?: {...} }`
@@ -303,9 +324,54 @@ git add src/server/claude-managed/managed-types.ts src/server/claude-managed/man
 git commit -m "feat(managed): typed ManagedApi surface + @anthropic-ai/sdk adapter"
 ```
 
+### Task 4.5: Walking-skeleton probe (DISCOVERY — do not skip, do not defer)
+
+**Purpose:** de-risk every docs-derived assumption before Phase B builds on it. This is a scoped
+probe with a budget, not production code. Output is a learning checkpoint, not a feature.
+
+**Files:**
+- Create: `scratch/managed-probe.ts` (git-ignored scratch dir; NOT under `src/`, never imported by production code)
+- Modify (afterwards): fixture data in Tasks 5–9 tests if real shapes differ from docs
+
+**Budget:** half a day. If blocked past budget ⇒ raise **Cannot** flag to the human, stop.
+
+**Requires from human before starting:** Anthropic API key, Console-created self-hosted environment id + environment key (Console-only generation), exported as `KANNA_MANAGED_LIVE_API_KEY` / `KANNA_MANAGED_LIVE_ENV_ID` / `KANNA_MANAGED_LIVE_ENV_KEY`.
+
+- [ ] **Step 1: Write the probe script** — with real creds, in order:
+  1. `client.beta.agents.create` an echo agent (haiku model, system "reply with exactly what you are told to say").
+  2. Create a coordinator with `agent_toolset_20260401` + `multiagent` roster = [echo agent].
+  3. Start the worker on THIS macOS machine against a tmpdir workdir (SDK helpers path first; note exact imports that resolve).
+  4. `client.beta.sessions.create` targeting the self-hosted environment with `metadata: { projectPath: <tmpdir> }`.
+  5. Send `user.message`: "delegate to the echo agent, then run `echo kanna-probe-ok` in bash and report the output".
+  6. Stream primary-thread events to stdout as raw JSON; save the full event log to `scratch/probe-events.jsonl`.
+
+- [ ] **Step 2: Run it**
+
+```bash
+bun scratch/managed-probe.ts | tee scratch/probe-run.log
+```
+
+- [ ] **Step 3: Write the learning checkpoint** to `scratch/probe-checkpoint.md`, answering ALL of:
+  - Do `@anthropic-ai/sdk` worker helpers run under Bun on macOS? (exact working import paths, or the failure)
+  - Does local tool execution work on darwin despite docs saying "Linux host"? (yes/no/partially — evidence)
+  - Exact `client.beta.*` method names + request/response shapes actually used (vs Task 4 docs-derived guesses)
+  - Real primary-thread event JSON for: `agent.message`, `session.status_idle`, `session.thread_created`, `agent.thread_message_sent/received`, thread `requires_action` (capture at least one of each where possible)
+  - Observed spend for the probe run (Console usage read — feeds the $20 drift gauge)
+
+- [ ] **Step 4: Reconcile the plan** — update `managed-types.ts` shapes (Task 4) and the fixture events in Tasks 5, 6, 8, 9 tests to match captured reality. If helpers failed under Bun ⇒ switch Task 7 to its written raw-REST fallback. If macOS execution failed entirely ⇒ STOP, raise **Cannot**, human decides Linux-only gate vs abort.
+
+- [ ] **Step 5: Commit the checkpoint (not the scratch script)**
+
+```bash
+git add docs/superpowers/plans/2026-07-08-managed-agents-multiagent.md
+git commit -m "docs(managed): walking-skeleton probe checkpoint — reconcile API shapes"
+```
+
 ---
 
 ## Phase B — Pure logic (TDD throughout)
+
+> Gate: Phase B fixture shapes must come from the Task 4.5 probe evidence, not from docs memory.
 
 ### Task 5: `agent-sync.ts` — roster diff + coordinator upsert decisions
 
