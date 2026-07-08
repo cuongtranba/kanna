@@ -21,7 +21,8 @@ import type { ToolCallbackService } from "./tool-callback"
 import type { ChatPermissionPolicy } from "../shared/permission-policy"
 import { POLICY_DEFAULT } from "../shared/permission-policy"
 import type { HarnessTurn } from "./harness-types"
-import type { ChatAttachment, McpServerConfig, SlashCommand, TranscriptEntry } from "../shared/types"
+import type { ChatAttachment, McpServerConfig, SlashCommand, Subagent, TranscriptEntry } from "../shared/types"
+import { buildAgentDefinitions } from "./teams/agent-definitions"
 import type { AutoContinueEvent } from "./auto-continue/events"
 import type { WorkflowRegistry } from "./workflow-registry"
 import { AsyncEventQueue } from "./test-helpers/async-event-queue"
@@ -5057,6 +5058,88 @@ describe("AgentCoordinator chatPolicy plumbing", () => {
     await waitFor(() => store.turnFinishedCount === 1)
 
     expect(received?.chatPolicy?.defaultAction).toBe("auto-deny")
+
+    events.close()
+  })
+})
+
+// ── AgentCoordinator agentDefinitions plumbing ───────────────────────────────
+
+describe("AgentCoordinator agentDefinitions plumbing", () => {
+  test("plumbs agentDefinitions for claude subagents to startClaudeSession (SDK path)", async () => {
+    const events = new AsyncEventQueue<any>()
+    let received: any = null
+
+    const claudeSub: Subagent = {
+      id: "sub-claude-1",
+      name: "Code Reviewer",
+      description: "Reviews code for quality",
+      provider: "claude",
+      model: "claude-sonnet-4-5",
+      modelOptions: { reasoningEffort: "high", contextWindow: "200k" },
+      systemPrompt: "You are a code reviewer.",
+      contextScope: "full-transcript",
+      triggerMode: "manual",
+      createdAt: 1000,
+      updatedAt: 2000,
+    }
+
+    const codexSub: Subagent = {
+      id: "sub-codex-1",
+      name: "Codex Agent",
+      description: "Codex agent",
+      provider: "codex",
+      model: "codex-mini-latest",
+      modelOptions: { reasoningEffort: "high", fastMode: false },
+      systemPrompt: "You are a codex agent.",
+      contextScope: "full-transcript",
+      triggerMode: "manual",
+      createdAt: 1001,
+      updatedAt: 2001,
+    }
+
+    const store = createFakeStore()
+    const coordinator = new AgentCoordinator({
+      store: store as never,
+      onStateChange: () => {},
+      getSubagents: () => [claudeSub, codexSub],
+      startClaudeSession: async (args) => {
+        received = args
+        return {
+          provider: "claude" as const,
+          stream: events,
+          getAccountInfo: async () => null,
+          interrupt: async () => {},
+          close: () => {},
+          sendPrompt: async () => {
+            events.push({
+              type: "transcript" as const,
+              entry: timestamped({
+                kind: "result",
+                subtype: "success",
+                isError: false,
+                durationMs: 0,
+                result: "done",
+              }),
+            })
+          },
+          setModel: async () => {},
+          setPermissionMode: async () => {},
+          getSupportedCommands: async () => [],
+        }
+      },
+    })
+
+    await coordinator.send({
+      type: "chat.send",
+      chatId: "chat-1",
+      provider: "claude",
+      content: "hello",
+      model: "claude-opus-4-1",
+    })
+    await waitFor(() => store.turnFinishedCount === 1)
+
+    expect(received?.agentDefinitions).toEqual(buildAgentDefinitions([claudeSub, codexSub]))
 
     events.close()
   })

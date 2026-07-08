@@ -1,4 +1,4 @@
-import { query, type CanUseTool, type PermissionResult, type Query, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk"
+import { query, type AgentDefinition, type CanUseTool, type PermissionResult, type Query, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk"
 import { createKannaMcpServer, type KannaMcpDelegationContext } from "./kanna-mcp"
 import { KANNA_MCP_SERVER_NAME } from "../shared/tools"
 import { homedir } from "node:os"
@@ -71,6 +71,7 @@ import { mergePolicyOverride, POLICY_DEFAULT } from "../shared/permission-policy
 import { startClaudeSessionPTY, type StartClaudeSessionPtyArgs } from "./claude-pty/driver"
 import { computeWorkflowsDir } from "./claude-pty/jsonl-path.adapter"
 import { ensureFreshMcpToken } from "./mcp-oauth.adapter"
+import { buildAgentDefinitions } from "./teams/agent-definitions"
 
 type SdkMcpEntry =
   | { type: "stdio"; command: string; args: string[]; env: Record<string, string>; cwd?: string }
@@ -334,6 +335,8 @@ interface AgentCoordinatorArgs {
     turnPrice?: ModelPrice | null
     /** Overrides the configured context window (OpenRouter model contextLength). */
     contextWindowOverride?: number
+    /** Native SDK agent definitions derived from configured claude subagents. */
+    agentDefinitions?: Record<string, AgentDefinition>
   }) => Promise<ClaudeSessionHandle>
   startClaudeSessionPTY?: (args: StartClaudeSessionPtyArgs) => Promise<ClaudeSessionHandle>
   claudeLimitDetector?: LimitDetector
@@ -1285,6 +1288,8 @@ async function startClaudeSession(args: {
   turnPrice?: ModelPrice | null
   /** Overrides the configured context window (OpenRouter model contextLength). */
   contextWindowOverride?: number
+  /** Native SDK agent definitions derived from configured claude subagents. */
+  agentDefinitions?: Record<string, AgentDefinition>
 }): Promise<ClaudeSessionHandle> {
   const canUseTool = buildCanUseTool({
     localPath: args.localPath,
@@ -1339,6 +1344,7 @@ async function startClaudeSession(args: {
       settingSources: ["user", "project", "local"],
       pathToClaudeCodeExecutable: process.env.CLAUDE_EXECUTABLE?.replace(/^~(?=\/|$)/, homedir()) || undefined,
       env: buildClaudeEnv(process.env, args.oauthToken, args.openrouterApiKey ? { apiKey: args.openrouterApiKey } : null),
+      agents: args.agentDefinitions && Object.keys(args.agentDefinitions).length > 0 ? args.agentDefinitions : undefined,
     },
   })
 
@@ -2828,6 +2834,7 @@ export class AgentCoordinator {
               oauthBearers,
               turnPrice: openrouterTurnPrice,
               contextWindowOverride: openrouterContextWindow,
+              agentDefinitions: buildAgentDefinitions(this.getSubagents()),
             })
       } catch (err) {
         // Spawn failed before we registered the session — release the OAuth
