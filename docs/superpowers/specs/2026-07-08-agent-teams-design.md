@@ -86,12 +86,55 @@ flowchart TB
 | Transcript cards | reuse `StatusEntry` or existing task rendering | Verify what 0.3.x already produces through the normalizer before adding anything |
 | Enablement | none needed | `Agent` tool is native; teams activate when the model uses it. Optional later: `teammateMode` option plumbed to settings |
 
+### Integration with configured subagents (Settings → Subagents)
+
+The SDK exposes `options.agents?: Record<string, AgentDefinition>` where
+`AgentDefinition = { description, prompt, tools?, disallowedTools?, model? }`. Kanna maps its
+configured subagents into this option at SDK-driver spawn time:
+
+| Kanna `Subagent` field | `AgentDefinition` mapping |
+| --- | --- |
+| `name` | record key (sanitized to the Agent-tool `subagent_type` format) |
+| `description` | `description` (drives when the model picks it) |
+| `systemPrompt` | `prompt` |
+| `model` | `model` (full id passes through) |
+| `provider !== "claude"` | **excluded** — codex subagents cannot be native teammates |
+| `contextScope`, `triggerMode`, `workingDir`, `allowedPaths` | not mapped in v1 (native teammates inherit the session cwd; path policy stays with `delegate_subagent`) |
+
+Effect: the model can spawn a configured persona as a native teammate via
+`Agent { subagent_type: "<name>", run_in_background: true }` — parallel, task-event-visible,
+same session tree. The Teams panel joins a teammate row back to the settings subagent by name
+(shows its label/description).
+
+**Division of labor (system-prompt guidance updated accordingly):**
+- Native teams (`Agent` tool): claude-provider subagents + ad-hoc teammates — parallel fan-out,
+  live panel, subscription billing, one session tree.
+- `delegate_subagent` MCP: codex subagents, keep-alive multi-turn sessions, cross-provider —
+  unchanged.
+
 ### Relationship to existing features (no changes in v1)
 
-- **SubagentOrchestrator (`delegate_subagent`)**: complementary — Kanna-configured personas with
-  own provider/model vs. ad-hoc native teammates the model spawns. Both stay.
+- **SubagentOrchestrator (`delegate_subagent`)**: complementary — see division of labor above.
 - **Workflows panel**: unchanged; teams panel sits beside it (Workflow tool ≠ Agent teams).
 - **PTY driver**: out of scope v1; discovery later whether task events appear in transcript JSONL.
+
+## UX review amendments (from user-workflow walkthrough)
+
+1. **PTY empty-state hint.** Teams live view works only on the SDK driver in v1. When the open
+   chat runs the PTY driver, the Teams panel renders a one-line empty state: "Teams live view
+   requires the SDK driver (Settings → Claude driver)" — prevents silent-broken perception.
+2. **Billing doc verification.** CLAUDE.md claims "SDK mode bills at API rates"; the probe
+   proved agent-sdk + `CLAUDE_CODE_OAUTH_TOKEN` runs on subscription. The upgrade task must
+   verify which claim is true for Kanna's SDK driver as wired (pool token injection) and fix
+   CLAUDE.md in the same PR.
+3. **Discovery affordance.** Empty Teams panel (SDK-driver chats) shows an example prompt:
+   "Ask Claude to 'use parallel agents' to fan work out." No forced orchestration.
+4. **Teammate attribution on approvals.** Teammate-originated permission/`AskUserQuestion`
+   requests carry `agent_id` in 0.3.x. The approval card prefixes the teammate name (registry
+   lookup) so the user knows who is asking.
+
+Accepted without change: three-panel proliferation (copy differentiates), per-teammate token
+cost (shapes don't carry usage), restart amnesia of the in-memory registry.
 
 ## Error handling
 
