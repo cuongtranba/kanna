@@ -192,6 +192,8 @@ c3-229:
   - src/server/workflow-watch-io.adapter.ts
   - src/shared/workflow-types.test.ts
   - src/shared/workflow-types.ts
+c3-232:
+  - src/server/teams/**
 c3-301:
   - src/shared/analytics.ts
   - src/shared/kanna-system-prompt.test.ts
