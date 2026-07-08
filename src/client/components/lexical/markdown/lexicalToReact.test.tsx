@@ -5,6 +5,13 @@
  * Strategy: renderToStaticMarkup (matching the existing test pattern in this repo)
  * on a wrapper element to assert tag presence / class presence.
  */
+import { mock } from "bun:test"
+
+// MermaidDiagram calls useTheme() on render; mock it so SSR doesn't throw.
+mock.module("../../../hooks/useTheme", () => ({
+  useTheme: () => ({ resolvedTheme: "dark", theme: "dark", setTheme: () => {} }),
+}))
+
 import { describe, expect, test } from "bun:test"
 import { renderToStaticMarkup } from "react-dom/server"
 import { renderMarkdownToReact } from "./lexicalToReact"
@@ -117,6 +124,13 @@ describe("renderMarkdownToReact", () => {
     expect(html).toContain("<pre")
     expect(html).toContain("some code")
     expect(html).not.toContain("language-")
+  })
+
+  test("renders mermaid fenced block via MermaidDiagram (language-mermaid class in fallback)", () => {
+    const md = "```mermaid\ngraph TD\nA-->B\n```"
+    const html = render(md)
+    expect(html).toContain("language-mermaid")
+    expect(html).toContain("graph TD")
   })
 
   // ---- Link ----------------------------------------------------------------
