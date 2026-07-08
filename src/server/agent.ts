@@ -39,7 +39,7 @@ import { CodexAppServerManager } from "./codex-app-server"
 import { resolveSubagentRoots } from "./paths"
 import { realpathAdapter } from "./paths-fs.adapter"
 import { type GenerateChatTitleResult, generateTitleForChatDetailed } from "./generate-title"
-import type { HarnessEvent, HarnessToolRequest, HarnessTurn } from "./harness-types"
+import type { HarnessEvent, HarnessToolRequest, HarnessTurn, TeamTaskEvent } from "./harness-types"
 import {
   codexServiceTierFromModelOptions,
   getServerProviderCatalog,
@@ -681,6 +681,32 @@ const POLICY_REFUSAL_TEXT_MARKERS: readonly string[] = [
   "unable to respond to this request",
 ]
 
+/** Maps an agent-SDK 0.3.x task lifecycle system message to `TeamTaskEvent` (snake_case → camelCase). */
+export function toTeamTaskEvent(message: {
+  type?: string
+  subtype: string
+  task_id?: string
+  tool_use_id?: string
+  description?: string
+  subagent_type?: string
+  name?: string
+  model?: string
+  patch?: { status?: string; end_time?: number }
+  status?: string
+}): TeamTaskEvent {
+  return {
+    subtype: message.subtype as TeamTaskEvent["subtype"],
+    taskId: typeof message.task_id === "string" ? message.task_id : "",
+    ...(typeof message.tool_use_id === "string" ? { toolUseId: message.tool_use_id } : {}),
+    ...(typeof message.description === "string" ? { description: message.description } : {}),
+    ...(typeof message.subagent_type === "string" ? { subagentType: message.subagent_type } : {}),
+    ...(typeof message.name === "string" ? { name: message.name } : {}),
+    ...(typeof message.model === "string" ? { model: message.model } : {}),
+    ...(message.patch !== undefined ? { patch: message.patch } : {}),
+    ...(typeof message.status === "string" ? { status: message.status } : {}),
+  }
+}
+
 export function normalizeClaudeStreamMessage(message: any): TranscriptEntry[] {
   const debugRaw = JSON.stringify(message)
   const messageId = typeof message.uuid === "string" ? message.uuid : undefined
@@ -875,6 +901,33 @@ export function normalizeClaudeStreamMessage(message: any): TranscriptEntry[] {
     })]
   }
 
+  // Agent-SDK 0.3.x task lifecycle messages from teammate (sub-agent) execution.
+  // `task_started` and `task_updated` (terminal status only) surface as status
+  // entries for inline visibility; `task_progress` is silent (too chatty).
+  // `task_notification` is handled above and must NOT be duplicated here.
+  if (message.type === "system" && message.subtype === "task_started") {
+    const taskId = typeof message.task_id === "string" ? message.task_id : "?"
+    const label = typeof message.name === "string" && message.name.length > 0
+      ? message.name
+      : typeof message.description === "string" && message.description.length > 0
+        ? message.description
+        : taskId
+    return [timestamped({ kind: "status", messageId, status: `Teammate started: ${label}`, debugRaw })]
+  }
+
+  if (message.type === "system" && message.subtype === "task_updated") {
+    const taskId = typeof message.task_id === "string" ? message.task_id : "?"
+    const patchStatus = typeof message.patch?.status === "string" ? message.patch.status : undefined
+    if (patchStatus === "completed" || patchStatus === "failed") {
+      return [timestamped({ kind: "status", messageId, status: `Teammate ${patchStatus}: ${taskId.slice(0, 8)}`, debugRaw })]
+    }
+    return []
+  }
+
+  if (message.type === "system" && message.subtype === "task_progress") {
+    return []
+  }
+
   // Interactive TUI claude never writes a `type: "result"` row — it writes
   // `system/turn_duration` instead (per canon/shannon research). Synthesize a
   // turn-end `result` so the agent loop and UI see the turn complete.
@@ -1039,6 +1092,20 @@ export async function* createClaudeHarnessStream(
 
       seenAssistantUsageIds = new Set<string>()
       latestUsageSnapshot = null
+    }
+
+    // Yield a {type:"task"} HarnessEvent for agent-SDK 0.3.x task lifecycle
+    // messages so downstream registries (Task 6/7) can track teammate runs.
+    // task_notification is already covered by the transcript branch below and
+    // must be included here too — all four subtypes get a task event.
+    if (
+      sdkMessage?.type === "system" &&
+      (sdkMessage.subtype === "task_started" ||
+        sdkMessage.subtype === "task_progress" ||
+        sdkMessage.subtype === "task_updated" ||
+        sdkMessage.subtype === "task_notification")
+    ) {
+      yield { type: "task", task: toTeamTaskEvent(sdkMessage) }
     }
 
     for (const entry of normalizeClaudeStreamMessage(sdkMessage)) {

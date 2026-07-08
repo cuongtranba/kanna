@@ -14,6 +14,7 @@ import {
   normalizeClaudeUsageSnapshot,
   parseConfiguredContextWindowFromModelId,
   resolveFinalTurnUsage,
+  toTeamTaskEvent,
 } from "./agent"
 import type { AgentCoordinatorArgs } from "./agent"
 import { EventStore } from "./event-store"
@@ -487,6 +488,72 @@ describe("normalizeClaudeStreamMessage", () => {
         },
       })
       expect(entries.map((e) => e.kind)).toEqual(["assistant_text"])
+    })
+  })
+
+  describe("task lifecycle messages (agent-sdk 0.3.x)", () => {
+    test("task_started -> status entry announcing teammate", () => {
+      const entries = normalizeClaudeStreamMessage({
+        type: "system", subtype: "task_started",
+        task_id: "t1", tool_use_id: "toolu_1", description: "Compute 21*2 with bash", name: "calc",
+      })
+      expect(entries).toHaveLength(1)
+      expect(entries[0]).toMatchObject({ kind: "status", status: expect.stringContaining("calc") })
+    })
+
+    test("task_started without name falls back to description", () => {
+      const entries = normalizeClaudeStreamMessage({ type: "system", subtype: "task_started", task_id: "t1", description: "Echo task" })
+      expect(entries[0]).toMatchObject({ kind: "status", status: expect.stringContaining("Echo task") })
+    })
+
+    test("task_updated completed/failed -> status entry; other patches silent", () => {
+      expect(normalizeClaudeStreamMessage({ type: "system", subtype: "task_updated", task_id: "t1", patch: { status: "completed" } })[0])
+        .toMatchObject({ kind: "status" })
+      expect(normalizeClaudeStreamMessage({ type: "system", subtype: "task_updated", task_id: "t1", patch: { status: "failed" } })[0])
+        .toMatchObject({ kind: "status" })
+      expect(normalizeClaudeStreamMessage({ type: "system", subtype: "task_updated", task_id: "t1", patch: { end_time: 5 } })).toHaveLength(0)
+    })
+
+    test("task_progress -> no transcript entry", () => {
+      expect(normalizeClaudeStreamMessage({ type: "system", subtype: "task_progress", task_id: "t1", description: "x" })).toHaveLength(0)
+    })
+  })
+})
+
+describe("toTeamTaskEvent", () => {
+  test("maps snake_case fields to camelCase for task_started", () => {
+    const event = toTeamTaskEvent({
+      type: "system",
+      subtype: "task_started",
+      task_id: "ad95f",
+      tool_use_id: "toolu_019i",
+      description: "Compute 21*2 with bash",
+      name: "calc",
+      subagent_type: "claude",
+      model: "claude-sonnet-4-6",
+    })
+    expect(event).toMatchObject({
+      subtype: "task_started",
+      taskId: "ad95f",
+      toolUseId: "toolu_019i",
+      description: "Compute 21*2 with bash",
+      name: "calc",
+      subagentType: "claude",
+      model: "claude-sonnet-4-6",
+    })
+  })
+
+  test("maps task_updated patch fields", () => {
+    const event = toTeamTaskEvent({
+      type: "system",
+      subtype: "task_updated",
+      task_id: "t2",
+      patch: { status: "completed", end_time: 1783486335679 },
+    })
+    expect(event).toMatchObject({
+      subtype: "task_updated",
+      taskId: "t2",
+      patch: { status: "completed", end_time: 1783486335679 },
     })
   })
 })
