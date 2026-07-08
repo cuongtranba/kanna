@@ -1,67 +1,36 @@
 import { test, expect } from "bun:test"
-import { query } from "@anthropic-ai/claude-agent-sdk"
-import { mkdtemp, rm } from "node:fs/promises"
-import { tmpdir } from "node:os"
 import { join } from "node:path"
 
 const token = process.env.KANNA_TEAMS_LIVE_OAUTH_TOKEN
 const enabled = !!token
 
+// The agent-sdk's internal AbortSignal wiring throws ERR_INVALID_ARG_TYPE when
+// query() runs inside the bun:test realm, so the live round-trip executes in a
+// plain `bun` child process (test-helpers/teams-live-runner.ts) and reports a
+// JSON verdict line this test asserts on.
 test.skipIf(!enabled)(
   "native teams: two parallel teammates execute locally and coordinator synthesizes",
   async () => {
-    const workdir = await mkdtemp(join(tmpdir(), "kanna-teams-live-"))
-    try {
-      const env: NodeJS.ProcessEnv = {
-        ...process.env,
-        CLAUDE_CODE_OAUTH_TOKEN: token as string,
-        ANTHROPIC_API_KEY: "",
-      }
-
-      let taskStartedCount = 0
-      let finalResultText = ""
-      let finalIsError = false
-
-      const q = query({
-        prompt:
-          "Spawn two agents IN PARALLEL using the Agent tool (single message, two tool calls): one computes 21*2 with bash, one runs `echo kanna-team-ok` with bash. Wait for both, then reply exactly: RESULTS: <number> <echo-output>",
-        options: {
-          cwd: workdir,
-          model: "claude-haiku-4-5",
-          permissionMode: "bypassPermissions",
-          allowedTools: ["Agent", "Bash", "TaskOutput"],
-          env,
-        },
-      })
-
-      for await (const message of q) {
-        if (
-          message &&
-          typeof message === "object" &&
-          (message as Record<string, unknown>).type === "system" &&
-          (message as Record<string, unknown>).subtype === "task_started"
-        ) {
-          taskStartedCount++
-        }
-
-        if (
-          message &&
-          typeof message === "object" &&
-          (message as Record<string, unknown>).type === "result"
-        ) {
-          const msg = message as Record<string, unknown>
-          finalResultText = typeof msg.result === "string" ? msg.result : ""
-          finalIsError = Boolean(msg.is_error)
-        }
-      }
-
-      expect(taskStartedCount).toBeGreaterThanOrEqual(2)
-      expect(finalIsError).toBe(false)
-      expect(finalResultText).toContain("42")
-      expect(finalResultText).toContain("kanna-team-ok")
-    } finally {
-      await rm(workdir, { recursive: true, force: true })
+    const runner = join(import.meta.dir, "..", "test-helpers", "teams-live-runner.ts")
+    const proc = Bun.spawn(["bun", "run", runner], {
+      env: { ...process.env, KANNA_TEAMS_LIVE_OAUTH_TOKEN: token as string },
+      stdin: "ignore",
+      stdout: "pipe",
+      stderr: "pipe",
+    })
+    const [stdout, exitCode] = await Promise.all([new Response(proc.stdout).text(), proc.exited])
+    const verdictLine = stdout.split("\n").find((l) => l.startsWith("TEAMS_LIVE_RESULT:"))
+    expect(exitCode).toBe(0)
+    expect(verdictLine).toBeDefined()
+    const verdict = JSON.parse(verdictLine!.slice("TEAMS_LIVE_RESULT:".length)) as {
+      taskStartedCount: number
+      resultText: string
+      isError: boolean
     }
+    expect(verdict.taskStartedCount).toBeGreaterThanOrEqual(2)
+    expect(verdict.isError).toBe(false)
+    expect(verdict.resultText).toContain("42")
+    expect(verdict.resultText).toContain("kanna-team-ok")
   },
   300_000,
 )
