@@ -112,7 +112,7 @@ function TeammateByline({ agentName }: { agentName: string }) {
     <p className="mb-1 text-xs text-muted-foreground">
       {agentName}
       {" "}
-      asks:
+      requests:
     </p>
   )
 }

@@ -437,7 +437,7 @@ describe("PendingToolRequestMessage — agentName attribution", () => {
     })
 
     expect(container.textContent).toContain("calc")
-    expect(container.textContent).toContain("asks:")
+    expect(container.textContent).toContain("requests:")
     container.remove()
   })
 
@@ -453,7 +453,7 @@ describe("PendingToolRequestMessage — agentName attribution", () => {
       )
     })
 
-    expect(container.textContent).not.toContain("asks:")
+    expect(container.textContent).not.toContain("requests:")
     container.remove()
   })
 
@@ -474,7 +474,7 @@ describe("PendingToolRequestMessage — agentName attribution", () => {
     })
 
     expect(container.textContent).toContain("calc")
-    expect(container.textContent).toContain("asks:")
+    expect(container.textContent).toContain("requests:")
     container.remove()
   })
 })
