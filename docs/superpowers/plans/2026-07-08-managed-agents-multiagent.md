@@ -22,14 +22,14 @@ Checked-off tasks are scaffolding, NOT progress. Never report task completion as
 
 **Anti-goals (the wall):**
 1. **Tripwire:** `bun run test --conditions production` + `bun run lint` green at every commit; existing SDK/PTY parity tests untouched and green. Breach ⇒ stop all forward work, fix first.
-2. **Drift gauge:** live-API spend during development ≤ $20 (read from Anthropic Console usage after each live run; multi-agent threads parallelize token burn).
+2. **Drift gauge:** subscription-quota burn. All live runs (probe, live test, dev chats) authenticate the control plane with an OAuth-pool token — API-key billing is NOT authorized at any point in this project. Watch: `rate_limit` events on pool tokens during dev runs (Kanna's existing detection). A dev-run-induced rate-limit/lockout on a pool token shared with normal chats = drift toward the wall; repeated lockouts ⇒ pause live runs for the day.
 
 **Flags (escalate to human, stop affected work):**
-- **Cannot:** Task 4.5 probe fails on macOS AND the raw-REST fallback also fails ⇒ hand up; feature may need a Linux-only gate — human decision.
-- **Breaking:** existing test/lint regression, or spend over cap.
+- **Cannot:** Task 4.5 probe fails on macOS AND the raw-REST fallback also fails ⇒ hand up (Linux-only gate is a human decision). ALSO: control plane rejects OAuth-pool tokens ⇒ Cannot — API-key spend is not authorized for this project, so the human decides whether the feature ships api-key-only for others or stops.
+- **Breaking:** existing test/lint regression, or pool-token rate-limit lockouts from dev runs.
 - **Pointless:** Tasks 1–15 green (fakes pass) but the live metric stays red ⇒ fakes encoded wrong API assumptions; re-derive fixtures from Task 4.5 probe evidence instead of adding tasks.
 
-**Human-only calls:** scope reduction (multi-agent → single-agent), spend-cap changes, Linux-only fallback, any change to this frame.
+**Human-only calls:** scope reduction (multi-agent → single-agent), authorizing any API-key billing (currently forbidden), Linux-only fallback, any change to this frame.
 
 **Verified codebase contracts used throughout (do not re-derive):**
 
@@ -105,7 +105,7 @@ export interface ManagedAgentsSettings {
 
 export const DEFAULT_MANAGED_AGENTS_SETTINGS: ManagedAgentsSettings = {
   enabled: false,
-  authMode: "api-key",
+  authMode: "oauth-pool",
   apiKey: "",
   environmentId: "",
   environmentKey: "",
@@ -346,7 +346,7 @@ probe with a budget, not production code. Output is a learning checkpoint, not a
 
 **Budget:** half a day. If blocked past budget ⇒ raise **Cannot** flag to the human, stop.
 
-**Requires from human before starting:** Console-created self-hosted environment id + environment key (Console-only generation) exported as `KANNA_MANAGED_LIVE_ENV_ID` / `KANNA_MANAGED_LIVE_ENV_KEY`, plus ONE control-plane credential: `KANNA_MANAGED_LIVE_API_KEY` (API key) and/or an OAuth-pool token as `KANNA_MANAGED_LIVE_OAUTH_TOKEN`. The worker itself uses only the environment key — never give it the API key.
+**Requires from human before starting:** Console-created self-hosted environment id + environment key (Console-only generation) exported as `KANNA_MANAGED_LIVE_ENV_ID` / `KANNA_MANAGED_LIVE_ENV_KEY`, plus an OAuth-pool token as `KANNA_MANAGED_LIVE_OAUTH_TOKEN` (control plane; API-key billing not authorized in this project — probe rejecting the OAuth token raises Cannot). The worker itself uses only the environment key.
 
 - [ ] **Step 1: Write the probe script** — with real creds, in order:
   1. `client.beta.agents.create` an echo agent (haiku model, system "reply with exactly what you are told to say").
@@ -368,7 +368,7 @@ bun scratch/managed-probe.ts | tee scratch/probe-run.log
   - Does local tool execution work on darwin despite docs saying "Linux host"? (yes/no/partially — evidence)
   - Exact `client.beta.*` method names + request/response shapes actually used (vs Task 4 docs-derived guesses)
   - Real primary-thread event JSON for: `agent.message`, `session.status_idle`, `session.thread_created`, `agent.thread_message_sent/received`, thread `requires_action` (capture at least one of each where possible)
-  - Observed spend for the probe run (Console usage read — feeds the $20 drift gauge)
+  - Any `rate_limit`/429 responses on the pool token during the probe (feeds the quota drift gauge)
 
 - [ ] **Step 4: Reconcile the plan** — update `managed-types.ts` shapes (Task 4) and the fixture events in Tasks 5, 6, 8, 9 tests to match captured reality. If helpers failed under Bun ⇒ switch Task 7 to its written raw-REST fallback. If macOS execution failed entirely ⇒ STOP, raise **Cannot**, human decides Linux-only gate vs abort.
 
