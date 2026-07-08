@@ -64,6 +64,7 @@ import {
 import { KANNA_BUILTIN_TRANSFORMERS } from "./gfmTransformers"
 import { buildKannaEditorConfig } from "../config"
 import { MessageCodeBlock } from "./MessageCodeBlock"
+import { MermaidDiagram } from "../../messages/MermaidDiagram"
 
 // ---------------------------------------------------------------------------
 // Node set required by the headless editor
@@ -155,6 +156,7 @@ function walkNode(node: LexicalNode): ReactNode {
       })
       .join("")
 
+    if (lang === "mermaid") return <MermaidDiagram key={nextKey()} source={code} />
     return <MessageCodeBlock key={nextKey()} source={code} lang={lang} />
   }
 
