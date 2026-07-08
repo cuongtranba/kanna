@@ -135,7 +135,7 @@ function makeCoordinator(capture: SpawnCapture) {
         setModel: async () => {},
         setPermissionMode: async () => {},
         getSupportedCommands: async () => [],
-        sendPrompt: async () => pushResult(events),
+        sendPrompt: async () => {},
       }
     },
   })

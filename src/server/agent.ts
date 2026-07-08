@@ -262,6 +262,7 @@ interface ClaudeSessionState {
   // that result arrives, reset on each new turn so a no-tail cancel can't leak
   // suppression onto a later real error.
   cancelledResultPending: number
+  advisorModel?: string
 }
 
 interface ClaudeSessionLifecycleOptions {
@@ -287,6 +288,7 @@ export interface AgentCoordinatorArgs {
     localPath: string
     model: string
     effort?: string
+    advisorModel?: string
     planMode: boolean
     sessionToken: string | null
     forkSession: boolean
@@ -2276,6 +2278,7 @@ export class AgentCoordinator {
       attachments,
       provider: options?.provider,
       model: options?.model,
+      advisorModel: options?.advisorModel,
       modelOptions: options?.modelOptions,
       planMode: options?.planMode,
       autoContinue: options?.autoContinue,
@@ -2301,6 +2304,7 @@ export class AgentCoordinator {
       attachments: queuedMessage.attachments,
       model: settings.model,
       effort: settings.effort,
+      advisorModel: settings.advisorModel,
       serviceTier: settings.serviceTier,
       planMode: settings.planMode,
       appendUserPrompt: true,
@@ -2830,6 +2834,7 @@ export class AgentCoordinator {
       !session ||
       session.localPath !== args.localPath ||
       session.effort !== args.effort ||
+      session.advisorModel !== args.advisorModel ||
       args.forkSession ||
       session.additionalDirectories.join("|") !== (args.additionalDirectories ?? []).join("|")
     ) {
@@ -2968,6 +2973,7 @@ export class AgentCoordinator {
         additionalDirectories: args.additionalDirectories ?? [],
         model: args.model,
         effort: args.effort,
+        advisorModel: args.advisorModel,
         planMode: args.planMode,
         sessionToken: args.sessionToken,
         accountInfoLoaded: false,
@@ -3062,6 +3068,7 @@ export class AgentCoordinator {
       const queuedMessage = await this.enqueueMessage(chatId, command.content, command.attachments ?? [], {
         provider: command.provider,
         model: command.model,
+        advisorModel: command.advisorModel,
         modelOptions: command.modelOptions,
         effort: command.effort,
         planMode: command.planMode,
@@ -3329,6 +3336,7 @@ export class AgentCoordinator {
     const queuedMessage = await this.enqueueMessage(command.chatId, command.content, command.attachments ?? [], {
       provider: command.provider,
       model: command.model,
+      advisorModel: command.advisorModel,
       modelOptions: command.modelOptions,
       planMode: command.planMode,
     })

@@ -202,6 +202,7 @@ interface Props {
     options?: {
       provider?: AgentProvider
       model?: string
+      advisorModel?: string
       modelOptions?: ModelOptions
       planMode?: boolean
       attachments?: ChatAttachment[]
@@ -433,6 +434,7 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput(
     initializeComposerForChat,
     setChatComposerModel,
     setChatComposerPlanMode,
+    setChatComposerAdvisorModel,
     resetChatComposerFromProvider,
   } = useChatPreferencesStore()
 
@@ -723,6 +725,7 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput(
     return {
       provider: selectedProvider,
       model: providerPrefs.model,
+      advisorModel: providerPrefs.provider === "claude" ? providerPrefs.advisorModel : undefined,
       modelOptions,
       planMode: showPlanMode ? providerPrefs.planMode : false,
     }
@@ -1280,6 +1283,8 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput(
               planMode={providerPrefs.planMode}
               onPlanModeChange={setEffectivePlanMode}
               includePlanMode={showPlanMode}
+              advisorModel={providerPrefs.provider === "claude" ? providerPrefs.advisorModel : undefined}
+              onAdvisorModelChange={(m) => setChatComposerAdvisorModel(composerChatId, m)}
               className="max-w-[840px] mx-auto"
             />
             <div className="min-w-3" />
