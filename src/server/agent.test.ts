@@ -4858,7 +4858,7 @@ describe("buildCanUseTool", () => {
     const result = await canUseTool(
       "AskUserQuestion",
       { questions: [{ id: "q1", question: "What color?" }] },
-      { toolUseID: "tool-use-1", requestId: "", signal: new AbortController().signal },
+      { toolUseID: "tool-use-1", signal: new AbortController().signal },
     )
 
     // Legacy path must be taken: onToolRequest called once, toolCallback NOT called
@@ -4909,7 +4909,7 @@ describe("buildCanUseTool", () => {
       const result = await canUseTool(
         "AskUserQuestion",
         { questions: [{ id: "q1", question: "What color?" }] },
-        { toolUseID: "tool-use-2", requestId: "", signal: new AbortController().signal },
+        { toolUseID: "tool-use-2", signal: new AbortController().signal },
       )
 
       // Flag-on path: toolCallback called once, legacy onToolRequest NOT called
@@ -4949,7 +4949,7 @@ describe("buildCanUseTool", () => {
       const result = await canUseTool(
         "AskUserQuestion",
         { questions: [{ id: "q1", question: "Proceed?" }] },
-        { toolUseID: "tool-use-3", requestId: "", signal: new AbortController().signal },
+        { toolUseID: "tool-use-3", signal: new AbortController().signal },
       )
 
       expect(result!.behavior).toBe("deny")
@@ -4980,7 +4980,7 @@ describe("buildCanUseTool", () => {
       await canUseTool(
         "AskUserQuestion",
         { questions: [{ id: "q1", question: "Hello?" }] },
-        { toolUseID: "tool-use-4", requestId: "", signal: new AbortController().signal },
+        { toolUseID: "tool-use-4", signal: new AbortController().signal },
       )
 
       expect(onToolRequestCallCount).toBe(1)
@@ -5001,7 +5001,7 @@ describe("buildCanUseTool", () => {
         onToolRequest: async () => { onToolRequestCallCount++; return null },
       })
 
-      const result = await canUseTool("Bash", { command: "ls" }, { toolUseID: "tool-use-5", requestId: "", signal: new AbortController().signal })
+      const result = await canUseTool("Bash", { command: "ls" }, { toolUseID: "tool-use-5", signal: new AbortController().signal })
 
       expect(result!.behavior).toBe("allow")
       expect(onToolRequestCallCount).toBe(0)
@@ -5089,7 +5089,7 @@ describe("buildCanUseTool", () => {
     await canUseTool(
       "AskUserQuestion",
       { questions: [{ id: "q1", question: "What color?" }] },
-      { toolUseID: "tool-use-agent", requestId: "", agentID: "t1", signal: new AbortController().signal } as any,
+      { toolUseID: "tool-use-agent", agentID: "t1", signal: new AbortController().signal } as any,
     )
 
     expect(capturedRequest).not.toBeNull()
@@ -5114,7 +5114,7 @@ describe("buildCanUseTool", () => {
     await canUseTool(
       "AskUserQuestion",
       { questions: [{ id: "q1", question: "What color?" }] },
-      { toolUseID: "tool-use-no-agent", requestId: "", signal: new AbortController().signal },
+      { toolUseID: "tool-use-no-agent", signal: new AbortController().signal },
     )
 
     expect(capturedRequest).not.toBeNull()
@@ -5139,7 +5139,7 @@ describe("buildCanUseTool", () => {
     await canUseTool(
       "AskUserQuestion",
       { questions: [{ id: "q1", question: "What color?" }] },
-      { toolUseID: "tool-use-fallback", requestId: "", agentID: "unknown-task", signal: new AbortController().signal } as any,
+      { toolUseID: "tool-use-fallback", agentID: "unknown-task", signal: new AbortController().signal } as any,
     )
 
     expect(capturedRequest).not.toBeNull()
