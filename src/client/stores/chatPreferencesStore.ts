@@ -33,6 +33,7 @@ export type ComposerState =
     model: string
     modelOptions: ClaudeModelOptions
     planMode: boolean
+    advisorModel?: string
   }
   | {
     provider: "codex"
@@ -100,6 +101,7 @@ type PersistedComposerState =
     effort?: string
     modelOptions?: Partial<ClaudeModelOptions>
     planMode?: boolean
+    advisorModel?: string
   }
   | {
     provider: "codex"
@@ -327,6 +329,7 @@ function cloneComposerState(state: ComposerState): ComposerState {
       model: state.model,
       modelOptions: { ...state.modelOptions },
       planMode: state.planMode,
+      advisorModel: state.advisorModel,
     }
   }
   if (state.provider === "openrouter") {
@@ -358,6 +361,7 @@ function normalizeComposerState(
       model: preference.model,
       modelOptions: preference.modelOptions,
       planMode: preference.planMode,
+      advisorModel: value.advisorModel,
     }
   }
 
@@ -506,6 +510,7 @@ interface ChatPreferencesState {
     modelOptions: Partial<ClaudeModelOptions> | Partial<CodexModelOptions>
   ) => void
   setChatComposerPlanMode: (chatId: string, planMode: boolean) => void
+  setChatComposerAdvisorModel: (chatId: string, advisorModel: string | undefined) => void
   resetChatComposerFromProvider: (chatId: string, provider: AgentProvider) => void
 }
 
@@ -659,6 +664,7 @@ export const useChatPreferencesStore = create<ChatPreferencesState>()(
                   model: normalizeClaudePreference(composerState, customModels).model,
                   modelOptions: normalizeClaudePreference(composerState, customModels).modelOptions,
                   planMode: composerState.planMode,
+                  advisorModel: composerState.advisorModel,
                 }
                 : cloneComposerState(composerState),
             },
@@ -679,6 +685,7 @@ export const useChatPreferencesStore = create<ChatPreferencesState>()(
               model: normalized.model,
               modelOptions: normalized.modelOptions,
               planMode: composerState.planMode,
+              advisorModel: composerState.advisorModel,
             }
           }
           if (composerState.provider === "openrouter") {
@@ -714,6 +721,7 @@ export const useChatPreferencesStore = create<ChatPreferencesState>()(
                 },
               }, customModels).modelOptions,
               planMode: composerState.planMode,
+              advisorModel: composerState.advisorModel,
             }
           }
           if (composerState.provider === "openrouter") {
@@ -742,6 +750,11 @@ export const useChatPreferencesStore = create<ChatPreferencesState>()(
           ...composerState,
           planMode,
         }))),
+      setChatComposerAdvisorModel: (chatId, advisorModel) =>
+        set((state) => withChatComposerState(state, chatId, (composerState) => {
+          if (composerState.provider !== "claude") return composerState
+          return { ...composerState, advisorModel: advisorModel || undefined }
+        })),
       resetChatComposerFromProvider: (chatId, provider) =>
         set((state) => ({
           chatStates: {

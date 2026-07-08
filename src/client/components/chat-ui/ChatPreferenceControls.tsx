@@ -1,5 +1,5 @@
 import { useMemo, useState, type ComponentType, type SVGProps } from "react"
-import { Box, Brain, Gauge, ListTodo, LockOpen, Search, SquareMenu, SquareMinus } from "lucide-react"
+import { Box, Brain, Gauge, ListTodo, LockOpen, Search, Sparkles, SquareMenu, SquareMinus } from "lucide-react"
 import {
   CLAUDE_CONTEXT_WINDOW_OPTIONS,
   CLAUDE_REASONING_OPTIONS,
@@ -252,6 +252,8 @@ interface ChatPreferenceControlsProps {
   planMode?: boolean
   onPlanModeChange?: (planMode: boolean) => void
   includePlanMode?: boolean
+  advisorModel?: string
+  onAdvisorModelChange?: (model: string | undefined) => void
   className?: string
 }
 
@@ -268,9 +270,12 @@ export function ChatPreferenceControls({
   planMode = false,
   onPlanModeChange,
   includePlanMode = true,
+  advisorModel,
+  onAdvisorModelChange,
   className,
 }: ChatPreferenceControlsProps) {
   const customModels = useAppSettingsStore(selectCustomModels)
+  const isDriverPty = useAppSettingsStore((s) => s.settings?.claudeDriver.preference === "pty")
   const providerConfig = availableProviders.find((provider) => provider.id === selectedProvider) ?? availableProviders[0]
   const ProviderIcon = PROVIDER_ICONS[selectedProvider]
   const ModelIcon = Box
@@ -425,6 +430,48 @@ export function ChatPreferenceControls({
               />
           ))}
         </InputPopover>
+      ) : null}
+
+      {selectedProvider === "claude" ? (
+        isDriverPty ? (
+          <span className="flex items-center gap-1 px-2 text-xs text-muted-foreground">
+            <Sparkles className="h-3.5 w-3.5 shrink-0" />
+            <span className="whitespace-nowrap">Advisor: SDK only</span>
+          </span>
+        ) : (
+          <InputPopover
+            trigger={(
+              <>
+                <Sparkles className="h-3.5 w-3.5" />
+                <span>{advisorModel
+                  ? (providerConfig.models.find((m) => m.id === advisorModel)?.label ?? advisorModel)
+                  : "No Advisor"
+                }</span>
+              </>
+            )}
+          >
+            {(close) => (
+              <>
+                <PopoverMenuItem
+                  onClick={() => { onAdvisorModelChange?.(undefined); close() }}
+                  selected={!advisorModel}
+                  icon={<Sparkles className="h-4 w-4 text-muted-foreground" />}
+                  label="No Advisor"
+                  description="Use executor model only"
+                />
+                {providerConfig.models.map((candidate) => (
+                  <PopoverMenuItem
+                    key={candidate.id}
+                    onClick={() => { onAdvisorModelChange?.(candidate.id); close() }}
+                    selected={advisorModel === candidate.id}
+                    icon={<Box className="h-4 w-4 text-muted-foreground" />}
+                    label={candidate.label}
+                  />
+                ))}
+              </>
+            )}
+          </InputPopover>
+        )
       ) : null}
 
       {selectedProvider === "codex" ? (

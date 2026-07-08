@@ -174,6 +174,7 @@ export type ClientCommand =
       content: string
       attachments?: ChatAttachment[]
       model?: string
+      advisorModel?: string
       modelOptions?: ModelOptions
       effort?: string
       planMode?: boolean
@@ -273,6 +274,7 @@ export type ClientCommand =
       attachments?: ChatAttachment[]
       provider?: AgentProvider
       model?: string
+      advisorModel?: string
       modelOptions?: ModelOptions
       planMode?: boolean
       autoResumeOnRateLimit?: boolean

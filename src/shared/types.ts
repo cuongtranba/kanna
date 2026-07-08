@@ -96,6 +96,7 @@ export interface QueuedChatMessage {
   createdAt: number
   provider?: AgentProvider
   model?: string
+  advisorModel?: string
   modelOptions?: ModelOptions
   planMode?: boolean
   autoContinue?: { scheduleId: string }

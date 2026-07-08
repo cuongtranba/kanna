@@ -586,6 +586,7 @@ function logSendToStartingTrace(
 function composerStateFromSendOptions(options?: {
   provider?: AgentProvider
   model?: string
+  advisorModel?: string
   modelOptions?: ModelOptions
   planMode?: boolean
 }): ComposerState | null {
@@ -598,6 +599,7 @@ function composerStateFromSendOptions(options?: {
         contextWindow: options.modelOptions.claude.contextWindow ?? "200k",
       },
       planMode: Boolean(options.planMode),
+      advisorModel: options.advisorModel,
     }
   }
 
@@ -1862,7 +1864,7 @@ export function useKannaState(activeChatId: string | null): KannaState {
 
   const handleSend = useCallback(async (
     content: string,
-    options?: { provider?: AgentProvider; model?: string; modelOptions?: ModelOptions; planMode?: boolean; attachments?: import("../../shared/types").ChatAttachment[] }
+    options?: { provider?: AgentProvider; model?: string; advisorModel?: string; modelOptions?: ModelOptions; planMode?: boolean; attachments?: import("../../shared/types").ChatAttachment[] }
   ) => {
     const attachments = options?.attachments ?? []
     const optimisticId = generateUUID()
@@ -1935,6 +1937,7 @@ export function useKannaState(activeChatId: string | null): KannaState {
         content,
         attachments,
         model: options?.model,
+        advisorModel: options?.advisorModel,
         modelOptions: options?.modelOptions,
         planMode: options?.planMode,
         autoResumeOnRateLimit,
