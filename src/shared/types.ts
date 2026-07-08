@@ -244,6 +244,18 @@ export interface SubagentValidationError {
   message: string
 }
 
+export interface TeamTaskSummary {
+  taskId: string
+  name?: string
+  subagentType?: string
+  description: string
+  status: "running" | "completed" | "failed"
+  model?: string
+  startedAt: number
+  endedAt?: number
+  lastActivityAt: number
+}
+
 export type McpServerTransport = "stdio" | "http" | "sse" | "ws"
 
 export type McpServerTestResult =
