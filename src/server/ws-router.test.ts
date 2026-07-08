@@ -3876,6 +3876,13 @@ describe("settings.listOpenRouterModels", () => {
 
 // ── teams WS topic ────────────────────────────────────────────────────────────
 
+type TeamsTestEnvelope = {
+  v: number
+  type: string
+  id: string
+  snapshot?: { type: string; data: { chatId: string; tasks: import("../shared/types").TeamTaskSummary[] } }
+}
+
 describe("ws-router teams topic", () => {
   test("subscribing to teams yields an immediate snapshot with current registry tasks", async () => {
     const { createTeamsRegistry } = await import("./teams/teams-registry")
@@ -3908,7 +3915,7 @@ describe("ws-router teams topic", () => {
       JSON.stringify({ v: 1, type: "subscribe", id: "teams-sub-1", topic: { type: "teams", chatId: "chat-1" } }),
     )
 
-    const snapshot = ws.sent.find((m: any) => m.snapshot?.type === "teams")
+    const snapshot = (ws.sent as TeamsTestEnvelope[]).find((m) => m.snapshot?.type === "teams")
     expect(snapshot).toMatchObject({
       v: PROTOCOL_VERSION,
       type: "snapshot",
@@ -3961,11 +3968,11 @@ describe("ws-router teams topic", () => {
     // Allow microtasks to flush
     await new Promise((resolve) => setTimeout(resolve, 0))
 
-    const teamSnapshots = ws.sent.filter((m: any) => m.snapshot?.type === "teams")
+    const teamSnapshots = (ws.sent as TeamsTestEnvelope[]).filter((m) => m.snapshot?.type === "teams")
     // Should have at least 2: the initial subscribe snapshot + the push after apply
     expect(teamSnapshots.length).toBeGreaterThanOrEqual(2)
-    const lastSnapshot = teamSnapshots.at(-1) as any
-    expect(lastSnapshot.snapshot.data.tasks).toEqual(
+    const lastSnapshot = teamSnapshots.at(-1)
+    expect(lastSnapshot?.snapshot?.data.tasks).toEqual(
       expect.arrayContaining([expect.objectContaining({ taskId: "t2", status: "running" })]),
     )
   })
