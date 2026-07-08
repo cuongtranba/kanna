@@ -1934,6 +1934,8 @@ export class AgentCoordinator {
     if (this.resolveClaudeDriverPreference() !== "pty") {
       this.workflowRegistry?.unregister(chatId)
     }
+    // Teams are per-session: teammates die with the session, so drop the live view.
+    this.teamsRegistry?.clear(chatId)
   }
 
   /**
@@ -3440,6 +3442,8 @@ export class AgentCoordinator {
         }
 
         if (event.type === "task" && event.task) {
+          // Ignore stale task events from a session that has been rotated away.
+          if (this.claudeSessions.get(session.chatId) !== session) continue
           this.teamsRegistry?.apply(session.chatId, event.task)
           continue
         }
