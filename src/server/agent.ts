@@ -436,6 +436,7 @@ The user would like to inform you of something while you continue to work. Ackno
 interface SendMessageOptions {
   provider?: AgentProvider
   model?: string
+  advisorModel?: string
   modelOptions?: ModelOptions
   effort?: string
   planMode?: boolean
@@ -1342,6 +1343,7 @@ async function startClaudeSession(args: {
   localPath: string
   model: string
   effort?: string
+  advisorModel?: string
   planMode: boolean
   sessionToken: string | null
   forkSession: boolean
@@ -1438,6 +1440,7 @@ async function startClaudeSession(args: {
             append: args.systemPromptAppend ?? KANNA_SYSTEM_PROMPT_APPEND,
           },
       settingSources: ["user", "project", "local"],
+      ...(args.advisorModel ? { settings: { advisorModel: args.advisorModel } } : {}),
       pathToClaudeCodeExecutable: process.env.CLAUDE_EXECUTABLE?.replace(/^~(?=\/|$)/, homedir()) || undefined,
       env: buildClaudeEnv(process.env, args.oauthToken, args.openrouterApiKey ? { apiKey: args.openrouterApiKey } : null),
       agents: args.agentDefinitions && Object.keys(args.agentDefinitions).length > 0 ? args.agentDefinitions : undefined,
@@ -2240,6 +2243,7 @@ export class AgentCoordinator {
         model: resolveClaudeApiModelId(model, modelOptions.contextWindow),
         effort: modelOptions.reasoningEffort,
         serviceTier: undefined,
+        advisorModel: options.advisorModel?.trim() || undefined,
         planMode: catalog.supportsPlanMode ? Boolean(options.planMode) : false,
       }
     }
@@ -2322,6 +2326,7 @@ export class AgentCoordinator {
     attachments: ChatAttachment[]
     model: string
     effort?: string
+    advisorModel?: string
     serviceTier?: "fast"
     planMode: boolean
     appendUserPrompt: boolean
@@ -2505,6 +2510,7 @@ export class AgentCoordinator {
       attachments: ChatAttachment[]
       model: string
       effort?: string
+      advisorModel?: string
       serviceTier?: "fast"
       planMode: boolean
       appendUserPrompt: boolean
@@ -2585,6 +2591,7 @@ export class AgentCoordinator {
         stackProjects: resolveStackProjects(chat, (id) => this.store.getProject(id)?.title),
         model: args.model,
         effort: args.effort,
+        advisorModel: args.advisorModel,
         planMode: args.planMode,
         sessionToken: pendingForkToken ?? existingToken,
         forkSession: pendingForkToken != null,
@@ -2810,6 +2817,7 @@ export class AgentCoordinator {
     stackProjects?: ResolvedStackBinding[]
     model: string
     effort?: string
+    advisorModel?: string
     planMode: boolean
     sessionToken: string | null
     forkSession: boolean
@@ -2914,6 +2922,7 @@ export class AgentCoordinator {
               localPath: args.localPath,
               model: args.model,
               effort: args.effort,
+              advisorModel: args.advisorModel,
               planMode: args.planMode,
               sessionToken: args.sessionToken,
               forkSession: args.forkSession,
@@ -3092,6 +3101,7 @@ export class AgentCoordinator {
         attachments: [],
         model: settings.model,
         effort: settings.effort,
+        advisorModel: settings.advisorModel,
         serviceTier: settings.serviceTier,
         planMode: settings.planMode,
         // /compact is a slash command, not the user's actual message — don't
@@ -3121,6 +3131,7 @@ export class AgentCoordinator {
       attachments: command.attachments ?? [],
       model: settings.model,
       effort: settings.effort,
+      advisorModel: settings.advisorModel,
       serviceTier: settings.serviceTier,
       planMode: settings.planMode,
       appendUserPrompt: true,
