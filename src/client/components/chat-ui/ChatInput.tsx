@@ -715,8 +715,10 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput(
     let modelOptions: ModelOptions
     if (providerPrefs.provider === "claude") {
       modelOptions = { claude: { ...providerPrefs.modelOptions } }
-    } else {
+    } else if (providerPrefs.provider === "codex") {
       modelOptions = { codex: { ...providerPrefs.modelOptions } }
+    } else {
+      modelOptions = { openrouter: {} }
     }
     return {
       provider: selectedProvider,
