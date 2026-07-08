@@ -1,7 +1,9 @@
 # Claude Managed Agents (Multi-Agent) Provider — Design
 
 Date: 2026-07-08
-Status: Approved (brainstorm complete)
+Status: SUPERSEDED by `2026-07-08-agent-teams-design.md` — probe proved the hosted control
+plane rejects subscription OAuth tokens (401) and API-key billing is forbidden by the frame.
+See `2026-07-08-probe-checkpoint.md`.
 Source research: https://platform.claude.com/docs/en/managed-agents/multi-agent, /environments, /self-hosted-sandboxes, /events-and-streaming
 API beta: `managed-agents-2026-04-01`
 
