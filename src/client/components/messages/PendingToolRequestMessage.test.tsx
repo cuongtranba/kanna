@@ -420,3 +420,61 @@ describe("PendingToolRequestMessage — generic fallback", () => {
     container.remove()
   })
 })
+
+// ── teammate attribution (agentName) ─────────────────────────────────────────
+
+describe("PendingToolRequestMessage — agentName attribution", () => {
+  test("agentName present on ask_user_question renders teammate byline", async () => {
+    const entry = makeEntry({ agentName: "calc" })
+    const onAnswer = mock((_id: string, _decision: ToolRequestDecision) => undefined)
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+
+    await act(async () => {
+      createRoot(container).render(
+        <PendingToolRequestMessage entry={entry} onAnswer={onAnswer} />,
+      )
+    })
+
+    expect(container.textContent).toContain("calc")
+    expect(container.textContent).toContain("asks:")
+    container.remove()
+  })
+
+  test("agentName absent on ask_user_question does not render byline", async () => {
+    const entry = makeEntry()
+    const onAnswer = mock((_id: string, _decision: ToolRequestDecision) => undefined)
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+
+    await act(async () => {
+      createRoot(container).render(
+        <PendingToolRequestMessage entry={entry} onAnswer={onAnswer} />,
+      )
+    })
+
+    expect(container.textContent).not.toContain("asks:")
+    container.remove()
+  })
+
+  test("agentName present on exit_plan_mode renders teammate byline", async () => {
+    const entry = makeEntry({
+      toolName: "mcp__kanna__exit_plan_mode",
+      arguments: { plan: "Step 1" },
+      agentName: "calc",
+    })
+    const onAnswer = mock((_id: string, _decision: ToolRequestDecision) => undefined)
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+
+    await act(async () => {
+      createRoot(container).render(
+        <PendingToolRequestMessage entry={entry} onAnswer={onAnswer} />,
+      )
+    })
+
+    expect(container.textContent).toContain("calc")
+    expect(container.textContent).toContain("asks:")
+    container.remove()
+  })
+})

@@ -84,6 +84,8 @@ export interface ToolRequest {
   createdAt: number
   resolvedAt?: number
   expiresAt: number
+  /** Display name of the teammate (native Agent-tool task) that triggered the request. Absent when the main model triggered it. */
+  agentName?: string
 }
 
 export const POLICY_DEFAULT: ChatPermissionPolicy = {

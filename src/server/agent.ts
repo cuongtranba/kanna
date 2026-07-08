@@ -176,6 +176,8 @@ interface PendingToolRequest {
   toolUseId: string
   tool: NormalizedToolCall & { toolKind: "ask_user_question" | "exit_plan_mode" }
   resolve: (result: unknown) => void
+  /** Display name of the teammate that triggered this request; absent for main-model requests. */
+  agentName?: string
 }
 
 interface ActiveTurn {
@@ -337,6 +339,8 @@ export interface AgentCoordinatorArgs {
     contextWindowOverride?: number
     /** Native SDK agent definitions derived from configured claude subagents. */
     agentDefinitions?: Record<string, AgentDefinition>
+    /** Resolves SDK agentID (native Agent-tool task id) to a display name for approval cards. */
+    resolveAgentName?: (agentId: string) => string | undefined
   }) => Promise<ClaudeSessionHandle>
   startClaudeSessionPTY?: (args: StartClaudeSessionPtyArgs) => Promise<ClaudeSessionHandle>
   claudeLimitDetector?: LimitDetector
@@ -1188,6 +1192,14 @@ export interface BuildCanUseToolArgs {
   onToolRequest: (request: HarnessToolRequest) => Promise<unknown>
   toolCallback?: ToolCallbackService
   chatPolicy?: ChatPermissionPolicy
+  /**
+   * Optional resolver: given the SDK's `agentID` (the task id of a native
+   * Agent-tool teammate), return a human-readable display name. The coordinator
+   * wires this to `teamsRegistry.snapshot(chatId)` at build time. When absent
+   * or returning `undefined`, the fallback `"teammate"` is used when agentID
+   * is present.
+   */
+  resolveAgentName?: (agentId: string) => string | undefined
 }
 
 /**
@@ -1211,6 +1223,13 @@ export function buildCanUseTool(args: BuildCanUseToolArgs): CanUseTool {
       return { behavior: "deny", message: "Unsupported tool request" }
     }
 
+    // Resolve teammate display name from SDK-provided agentID (present when a
+    // native Agent-tool task triggers the call).
+    const agentId = (options as { agentID?: string }).agentID
+    const agentName = agentId !== undefined
+      ? (args.resolveAgentName?.(agentId) ?? "teammate")
+      : undefined
+
     // ── Flag-on path: route through tool-callback ──────────────────────────
     if (process.env.KANNA_MCP_TOOL_CALLBACKS === "1" && args.toolCallback) {
       const result = await args.toolCallback.submit({
@@ -1221,6 +1240,7 @@ export function buildCanUseTool(args: BuildCanUseToolArgs): CanUseTool {
         args: (tool.rawInput ?? {}) as Record<string, unknown>,
         chatPolicy: args.chatPolicy ?? POLICY_DEFAULT,
         cwd: args.localPath,
+        agentName,
       })
 
       if (result.decision.kind === "deny") {
@@ -1259,7 +1279,7 @@ export function buildCanUseTool(args: BuildCanUseToolArgs): CanUseTool {
     }
 
     // ── Legacy path (flag off OR toolCallback not provided) ────────────────
-    const result = await args.onToolRequest({ tool })
+    const result = await args.onToolRequest({ tool, agentName })
 
     if (tool.toolKind === "ask_user_question") {
       const record = result && typeof result === "object" ? result as Record<string, unknown> : {}
@@ -1359,6 +1379,12 @@ async function startClaudeSession(args: {
   contextWindowOverride?: number
   /** Native SDK agent definitions derived from configured claude subagents. */
   agentDefinitions?: Record<string, AgentDefinition>
+  /**
+   * Optional resolver: given the SDK's agentID (native Agent-tool task id),
+   * returns the teammate's display name. Wired from the coordinator via
+   * teamsRegistry.snapshot(chatId).
+   */
+  resolveAgentName?: (agentId: string) => string | undefined
 }): Promise<ClaudeSessionHandle> {
   const canUseTool = buildCanUseTool({
     localPath: args.localPath,
@@ -1367,6 +1393,7 @@ async function startClaudeSession(args: {
     onToolRequest: args.onToolRequest,
     toolCallback: args.toolCallback,
     chatPolicy: args.chatPolicy,
+    resolveAgentName: args.resolveAgentName,
   })
 
   const promptQueue = new AsyncMessageQueue<SDKUserMessage>()
@@ -2521,6 +2548,7 @@ export class AgentCoordinator {
           toolUseId: request.tool.toolId,
           tool: request.tool,
           resolve,
+          agentName: request.agentName,
         }
       })
     }
@@ -2908,6 +2936,11 @@ export class AgentCoordinator {
               turnPrice: openrouterTurnPrice,
               contextWindowOverride: openrouterContextWindow,
               agentDefinitions: buildAgentDefinitions(this.getSubagents()),
+              resolveAgentName: (agentId) => {
+                const tasks = this.teamsRegistry?.snapshot(args.chatId) ?? []
+                const task = tasks.find((t) => t.taskId === agentId)
+                return task?.name ?? task?.subagentType ?? task?.description
+              },
             })
       } catch (err) {
         // Spawn failed before we registered the session — release the OAuth

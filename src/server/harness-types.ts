@@ -22,6 +22,8 @@ export interface HarnessEvent {
 
 export interface HarnessToolRequest {
   tool: NormalizedToolCall & { toolKind: "ask_user_question" | "exit_plan_mode" }
+  /** Display name of the teammate (native Agent-tool task) that triggered the request. Absent when the main model triggers it. */
+  agentName?: string
 }
 
 export interface HarnessTurn {

@@ -1919,6 +1919,7 @@ export class EventStore implements PushEventStore {
       toolRequestId: req.id,
       toolName: req.toolName,
       arguments: req.arguments,
+      ...(req.agentName !== undefined ? { agentName: req.agentName } : {}),
     }))
     const merged = [...page.messages, ...pendingEntries]
     return {

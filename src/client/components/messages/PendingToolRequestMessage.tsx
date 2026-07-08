@@ -104,10 +104,22 @@ function GenericPending({
   )
 }
 
+// ── teammate attribution header ──────────────────────────────────────────────
+
+function TeammateByline({ agentName }: { agentName: string }) {
+  return (
+    <p className="mb-1 text-xs text-muted-foreground">
+      {agentName}
+      {" "}
+      asks:
+    </p>
+  )
+}
+
 // ── public component ─────────────────────────────────────────────────────────
 
 export function PendingToolRequestMessage({ entry, onAnswer }: Props) {
-  const { toolRequestId, toolName, arguments: args } = entry
+  const { toolRequestId, toolName, arguments: args, agentName } = entry
 
   if (toolName === "mcp__kanna__ask_user_question") {
     // MCP shim args use `text` field per its zod schema; AskUserQuestionItem
@@ -124,38 +136,47 @@ export function PendingToolRequestMessage({ entry, onAnswer }: Props) {
       multiSelect: typeof q.multiSelect === "boolean" ? q.multiSelect : false,
     }))
     return (
-      <AskUserQuestionInteractive
-        questions={questions}
-        onSubmit={(finalAnswers) =>
-          onAnswer(toolRequestId, {
-            kind: "answer",
-            payload: { questions, answers: finalAnswers },
-          })
-        }
-        onCancel={() =>
-          onAnswer(toolRequestId, { kind: "deny", reason: "user_canceled" })
-        }
-      />
+      <div>
+        {agentName !== undefined ? <TeammateByline agentName={agentName} /> : null}
+        <AskUserQuestionInteractive
+          questions={questions}
+          onSubmit={(finalAnswers) =>
+            onAnswer(toolRequestId, {
+              kind: "answer",
+              payload: { questions, answers: finalAnswers },
+            })
+          }
+          onCancel={() =>
+            onAnswer(toolRequestId, { kind: "deny", reason: "user_canceled" })
+          }
+        />
+      </div>
     )
   }
 
   if (toolName === "mcp__kanna__exit_plan_mode") {
     const plan = typeof args.plan === "string" ? args.plan : ""
     return (
-      <ExitPlanModePending
-        toolRequestId={toolRequestId}
-        plan={plan}
-        onAnswer={onAnswer}
-      />
+      <div>
+        {agentName !== undefined ? <TeammateByline agentName={agentName} /> : null}
+        <ExitPlanModePending
+          toolRequestId={toolRequestId}
+          plan={plan}
+          onAnswer={onAnswer}
+        />
+      </div>
     )
   }
 
   return (
-    <GenericPending
-      toolRequestId={toolRequestId}
-      toolName={toolName}
-      args={args}
-      onAnswer={onAnswer}
-    />
+    <div>
+      {agentName !== undefined ? <TeammateByline agentName={agentName} /> : null}
+      <GenericPending
+        toolRequestId={toolRequestId}
+        toolName={toolName}
+        args={args}
+        onAnswer={onAnswer}
+      />
+    </div>
   )
 }

@@ -265,6 +265,7 @@ export function processTranscriptMessages(entries: TranscriptEntry[]): HydratedT
           toolRequestId: entry.toolRequestId,
           toolName: entry.toolName,
           arguments: entry.arguments,
+          ...(entry.agentName !== undefined ? { agentName: entry.agentName } : {}),
         })
         break
       case "tool_request_resolved":

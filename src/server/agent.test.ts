@@ -22,7 +22,7 @@ import { createToolCallbackService } from "./tool-callback"
 import type { ToolCallbackService } from "./tool-callback"
 import type { ChatPermissionPolicy } from "../shared/permission-policy"
 import { POLICY_DEFAULT } from "../shared/permission-policy"
-import type { HarnessTurn } from "./harness-types"
+import type { HarnessTurn, HarnessToolRequest } from "./harness-types"
 import type { ChatAttachment, McpServerConfig, SlashCommand, Subagent, TranscriptEntry } from "../shared/types"
 import { buildAgentDefinitions } from "./teams/agent-definitions"
 import type { AutoContinueEvent } from "./auto-continue/events"
@@ -5069,6 +5069,81 @@ describe("buildCanUseTool", () => {
     } finally {
       delete process.env.KANNA_MCP_TOOL_CALLBACKS
     }
+  })
+
+  test("agentID present + resolver returns name → HarnessToolRequest.agentName set to resolved name", async () => {
+    delete process.env.KANNA_MCP_TOOL_CALLBACKS
+
+    let capturedRequest: HarnessToolRequest | null = null
+    const canUseTool = buildCanUseTool({
+      localPath: "/tmp/test",
+      chatId: "chat-1",
+      sessionToken: "sess-1",
+      onToolRequest: async (req) => {
+        capturedRequest = req
+        return { answers: { q1: "answer" } }
+      },
+      resolveAgentName: (agentId) => (agentId === "t1" ? "calc" : undefined),
+    })
+
+    await canUseTool(
+      "AskUserQuestion",
+      { questions: [{ id: "q1", question: "What color?" }] },
+      { toolUseID: "tool-use-agent", requestId: "", agentID: "t1", signal: new AbortController().signal } as any,
+    )
+
+    expect(capturedRequest).not.toBeNull()
+    expect(capturedRequest!.agentName).toBe("calc")
+  })
+
+  test("agentID absent → HarnessToolRequest.agentName is undefined", async () => {
+    delete process.env.KANNA_MCP_TOOL_CALLBACKS
+
+    let capturedRequest: HarnessToolRequest | null = null
+    const canUseTool = buildCanUseTool({
+      localPath: "/tmp/test",
+      chatId: "chat-1",
+      sessionToken: "sess-1",
+      onToolRequest: async (req) => {
+        capturedRequest = req
+        return { answers: { q1: "answer" } }
+      },
+      resolveAgentName: () => "should-not-be-called",
+    })
+
+    await canUseTool(
+      "AskUserQuestion",
+      { questions: [{ id: "q1", question: "What color?" }] },
+      { toolUseID: "tool-use-no-agent", requestId: "", signal: new AbortController().signal },
+    )
+
+    expect(capturedRequest).not.toBeNull()
+    expect(capturedRequest!.agentName).toBeUndefined()
+  })
+
+  test("agentID present but resolver returns undefined → agentName falls back to 'teammate'", async () => {
+    delete process.env.KANNA_MCP_TOOL_CALLBACKS
+
+    let capturedRequest: HarnessToolRequest | null = null
+    const canUseTool = buildCanUseTool({
+      localPath: "/tmp/test",
+      chatId: "chat-1",
+      sessionToken: "sess-1",
+      onToolRequest: async (req) => {
+        capturedRequest = req
+        return { answers: { q1: "answer" } }
+      },
+      resolveAgentName: () => undefined,
+    })
+
+    await canUseTool(
+      "AskUserQuestion",
+      { questions: [{ id: "q1", question: "What color?" }] },
+      { toolUseID: "tool-use-fallback", requestId: "", agentID: "unknown-task", signal: new AbortController().signal } as any,
+    )
+
+    expect(capturedRequest).not.toBeNull()
+    expect(capturedRequest!.agentName).toBe("teammate")
   })
 })
 
