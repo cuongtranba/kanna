@@ -92,15 +92,11 @@ export function createTeamsRegistry(deps: { now: () => number }): TeamsRegistry 
         if (!existing) return // unknown task — ignore, no notify
 
         const status = event.status
-        if (status !== undefined && isTerminalStatus(status)) {
-          // Idempotent: only set endedAt if not already terminal
-          if (!isTerminalStatus(existing.status)) {
-            existing.status = status
-            existing.endedAt = now()
-          }
-          // If already terminal, values stay stable — still notify (spec says "MAY notify again")
+        if (status !== undefined && isTerminalStatus(status) && !isTerminalStatus(existing.status)) {
+          existing.status = status
+          existing.endedAt = now()
+          notify(chatId)
         }
-        notify(chatId)
         return
       }
     },
