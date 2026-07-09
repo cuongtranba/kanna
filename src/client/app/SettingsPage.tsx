@@ -1640,7 +1640,7 @@ export function SettingsPage() {
   return (
     <div className="relative flex h-full flex-1 min-w-0 bg-background">
       <div className="flex min-w-0 flex-1">
-        <aside className={`hidden w-[200px] shrink-0 md:block ${showFooter ? "pb-[89px]" : ""}`}>
+        <aside className={`hidden w-[220px] shrink-0 md:block ${showFooter ? "pb-[89px]" : ""}`}>
           <div className="flex flex-col gap-1 px-4 py-6">
             <div className="px-3 pb-5 text-[22px] font-extrabold tracking-[-0.5px] text-foreground">
               Settings
@@ -1660,9 +1660,9 @@ export function SettingsPage() {
                 >
                   <div className="flex items-center gap-2.5">
                     <item.icon className="h-4 w-4 shrink-0" />
-                    <span>{item.label}</span>
+                    <span className="min-w-0 truncate">{item.label}</span>
                     {showUpdateBadge ? (
-                      <span className="ml-auto inline-flex items-center rounded-full bg-logo/20 px-2 py-0.5 text-[10px] font-bold tracking-wider text-logo">
+                      <span className="ml-auto inline-flex shrink-0 items-center rounded-full bg-logo/20 px-1.5 py-0.5 text-[9px] font-bold tracking-wide text-logo">
                         UPDATE
                       </span>
                     ) : null}
