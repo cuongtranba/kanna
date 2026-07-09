@@ -1014,11 +1014,14 @@ export function GlobalInstructionsSection({ state }: { state: KannaState }) {
     <div className="border-b border-border">
       <SettingsRow
         title="Global Instructions"
-        description="Appended to every Claude and Codex turn — including subagent turns. Kanna does not read CLAUDE.md or AGENTS.md from disk; paste your global instructions here. Leave blank to disable."
+        description="Appended to every Claude and Codex turn — including subagent turns — after Kanna's built-in safety base prompt, which always runs first and cannot be edited. Kanna does not read CLAUDE.md or AGENTS.md from disk; paste your global instructions here. Leave blank to disable."
         bordered={false}
         alignStart
       >
         <div className="flex w-full flex-col gap-2 md:w-[420px]">
+          <p className="text-xs text-muted-foreground">
+            A built-in safety base prompt always runs first and cannot be edited. Text below is appended after it.
+          </p>
           <textarea
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
