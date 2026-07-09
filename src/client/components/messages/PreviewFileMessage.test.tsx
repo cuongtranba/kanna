@@ -30,8 +30,9 @@ describe("PreviewFileMessage", () => {
   test("renders card with file name and friendly type label", () => {
     const html = renderToStaticMarkup(<PreviewFileMessage message={buildMessage()} />)
     expect(html).toContain("Design Spec")
-    // displayName "Design Spec" has no extension — classifies as Text via text/markdown mime prefix
-    expect(html).toContain("Text")
+    // displayName "Design Spec" has no extension, but the server-sent
+    // text/markdown mime classifies it as Markdown (rendered, not raw text).
+    expect(html).toContain("Markdown")
   })
 
   test("renders Markdown label when displayName has .md extension", () => {
