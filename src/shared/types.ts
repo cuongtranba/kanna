@@ -1271,6 +1271,11 @@ export interface AssistantThinkingEntry extends TranscriptEntryBase {
   signature?: string
 }
 
+export interface AssistantAdvisorEntry extends TranscriptEntryBase {
+  kind: "assistant_advisor"
+  text: string
+}
+
 export interface ApiErrorEntry extends TranscriptEntryBase {
   kind: "api_error"
   status: number
@@ -1530,6 +1535,7 @@ export type TranscriptEntry =
   | AccountInfoEntry
   | AssistantTextEntry
   | AssistantThinkingEntry
+  | AssistantAdvisorEntry
   | ApiErrorEntry
   | PolicyRefusalEntry
   | ToolCallEntry
@@ -1714,6 +1720,7 @@ export type HydratedTranscriptMessage =
   | ({ kind: "account_info"; accountInfo: AccountInfo; id: string; messageId?: string; timestamp: string; hidden?: boolean })
   | ({ kind: "assistant_text"; text: string; id: string; messageId?: string; timestamp: string; hidden?: boolean })
   | ({ kind: "assistant_thinking"; text: string; signature?: string; id: string; messageId?: string; timestamp: string; hidden?: boolean })
+  | ({ kind: "assistant_advisor"; text: string; id: string; messageId?: string; timestamp: string; hidden?: boolean })
   | ({ kind: "api_error"; status: number; text: string; requestId?: string; id: string; messageId?: string; timestamp: string; hidden?: boolean })
   | ({ kind: "policy_refusal"; text: string; requestId?: string; id: string; messageId?: string; timestamp: string; hidden?: boolean })
   | ({ kind: "result"; success: boolean; cancelled?: boolean; result: string; durationMs: number; costUsd?: number; id: string; messageId?: string; timestamp: string; hidden?: boolean })

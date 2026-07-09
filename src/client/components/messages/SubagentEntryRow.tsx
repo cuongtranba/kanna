@@ -3,6 +3,7 @@ import type { HydratedTranscriptMessage } from "../../../shared/types"
 import { toLocalFileUrl } from "../../lib/pathUtils"
 import { TextMessage } from "./TextMessage"
 import { ThinkingMessage } from "./ThinkingMessage"
+import { AdvisorMessage } from "./AdvisorMessage"
 import { ToolCallMessage } from "./ToolCallMessage"
 import { ResultMessage } from "./ResultMessage"
 
@@ -57,6 +58,9 @@ export function SubagentEntryRow({ message, localPath, isRunning = false }: Suba
       break
     case "assistant_thinking":
       inner = <ThinkingMessage message={message} />
+      break
+    case "assistant_advisor":
+      inner = <AdvisorMessage message={message} />
       break
     case "tool":
       inner = <ToolCallMessage message={message} isLoading={isRunning} localPath={localPath} />

@@ -50,6 +50,12 @@ function MessageView({ message }: { message: ChatSnapshotMessage }) {
           <ThinkingBlock content={message.text} />
         </div>
       )
+    case "assistant_advisor":
+      return (
+        <div className="w-full max-w-[70ch]">
+          <ThinkingBlock content={message.text} />
+        </div>
+      )
     case "tool_call":
       return (
         <div className="rounded-lg border border-border bg-card/40 overflow-hidden">
