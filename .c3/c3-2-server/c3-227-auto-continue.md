@@ -1,6 +1,6 @@
 ---
 id: c3-227
-c3-seal: cf8bdf5d73b8a9a93354021d117d7e9596e2b522db9e55e89f1c0eac0829397e
+c3-seal: ad8fcf1ec4be5d9c52fd523f0ac8b7a0676ab549b5ff8b42a360bc7b26c69e3c
 title: auto-continue
 type: component
 category: feature
@@ -105,8 +105,8 @@ subscribe to and the WS router fans out.
 | Material | Must derive from | Allowed variance | Evidence |
 | --- | --- | --- | --- |
 | src/server/auto-continue/events.ts | Contract (auto-continue events) | Event payload field names | src/server/auto-continue/events.ts |
-| src/server/auto-continue/limit-detector.ts | Foundational Flow (rate-limit classifier) | Pattern detail | src/server/auto-continue/limit-detector.ts |
-| src/server/auto-continue/auth-error-detector.ts | Foundational Flow (auth-error classifier) | Pattern detail | src/server/auto-continue/auth-error-detector.ts |
+| src/server/auto-continue/limit-detector.ts | Contract | Pattern detail | src/server/auto-continue/limit-detector.ts |
+| src/server/auto-continue/auth-error-detector.ts | Contract | Pattern detail | src/server/auto-continue/auth-error-detector.ts |
 | src/server/auto-continue/schedule-manager.ts | Contract (schedule + trigger surface) | Timer backend | src/server/auto-continue/schedule-manager.ts |
 | src/server/auto-continue/read-model.ts | Contract (schedule read-model) | Projection detail | src/server/auto-continue/read-model.ts |
-| src/server/auto-continue/e2e.test.ts | Business Flow primary path | Test framing | src/server/auto-continue/e2e.test.ts |
+| src/server/auto-continue/e2e.test.ts | Contract | Test framing | src/server/auto-continue/e2e.test.ts |

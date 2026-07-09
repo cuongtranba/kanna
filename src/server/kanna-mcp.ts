@@ -4,7 +4,7 @@ import path from "node:path"
 import { randomUUID } from "node:crypto"
 import { statPathOrNull } from "./fs-stat.adapter"
 import { KANNA_MCP_SERVER_NAME } from "../shared/tools"
-import { buildProjectFileContentUrl, buildLocalFileContentUrl } from "../shared/projectFileUrl"
+import { buildProjectFileContentUrl, buildLocalFileContentUrl, isAbsoluteFilePath } from "../shared/projectFileUrl"
 import { inferAttachmentContentType, inferProjectFileContentType } from "./uploads"
 import type { TranscriptEntry } from "../shared/types"
 import type { TunnelGateway } from "./cloudflare-tunnel/gateway"
@@ -93,13 +93,28 @@ export interface ResolvedOfferDownload {
   mimeType: string
 }
 
-export async function resolveOfferDownload(
-  args: OfferDownloadArgs,
-  input: { path: string; label?: string },
-): Promise<{ ok: true; payload: ResolvedOfferDownload } | { ok: false; error: string }> {
-  const rawPath = (input.path ?? "").trim()
-  if (!rawPath) {
-    return { ok: false, error: "path is required" }
+/**
+ * Resolve a workspace file path to an absolute path plus a display-relative
+ * path. Two accepted shapes:
+ *   • absolute (`/…` or `C:\…`) — used verbatim; served through
+ *     `/api/local-file`, so files that live outside the chat's project root
+ *     (e.g. a sibling git worktree the user committed a spec to) resolve.
+ *     `relativePath` echoes the absolute path for the card subtitle.
+ *   • project-relative — normalized and confined to `localPath`; `..` escapes
+ *     and absolute-after-normalize are rejected.
+ * `isAbsolute` lets the caller pick the right content URL (local-file vs
+ * project-scoped).
+ */
+function resolveWorkspacePath(
+  localPath: string,
+  rawPath: string,
+  originalInput: string,
+):
+  | { ok: true; absolutePath: string; relativePath: string; isAbsolute: boolean }
+  | { ok: false; error: string } {
+  if (isAbsoluteFilePath(rawPath)) {
+    const absolutePath = path.resolve(rawPath)
+    return { ok: true, absolutePath, relativePath: absolutePath, isAbsolute: true }
   }
 
   const relativePath = path.posix.normalize(rawPath.replaceAll("\\", "/"))
@@ -110,14 +125,32 @@ export async function resolveOfferDownload(
     || relativePath.includes("/../")
     || path.posix.isAbsolute(relativePath)
   ) {
-    return { ok: false, error: `Invalid project file path: ${input.path}` }
+    return { ok: false, error: `Invalid project file path: ${originalInput}` }
   }
 
-  const projectRoot = path.resolve(args.localPath)
-  const absolutePath = path.resolve(args.localPath, relativePath)
+  const projectRoot = path.resolve(localPath)
+  const absolutePath = path.resolve(localPath, relativePath)
   if (absolutePath !== projectRoot && !absolutePath.startsWith(`${projectRoot}${path.sep}`)) {
     return { ok: false, error: "Path resolves outside the project root" }
   }
+
+  return { ok: true, absolutePath, relativePath, isAbsolute: false }
+}
+
+export async function resolveOfferDownload(
+  args: OfferDownloadArgs,
+  input: { path: string; label?: string },
+): Promise<{ ok: true; payload: ResolvedOfferDownload } | { ok: false; error: string }> {
+  const rawPath = (input.path ?? "").trim()
+  if (!rawPath) {
+    return { ok: false, error: "path is required" }
+  }
+
+  const resolved = resolveWorkspacePath(args.localPath, rawPath, input.path)
+  if (!resolved.ok) {
+    return resolved
+  }
+  const { absolutePath, relativePath, isAbsolute } = resolved
 
   const info = await statPathOrNull(absolutePath)
   if (!info) {
@@ -129,7 +162,9 @@ export async function resolveOfferDownload(
 
   const fileName = path.posix.basename(relativePath)
   const mimeType = inferProjectFileContentType(fileName)
-  const contentUrl = buildProjectFileContentUrl(args.projectId, relativePath)
+  const contentUrl = isAbsolute
+    ? buildLocalFileContentUrl(absolutePath)
+    : buildProjectFileContentUrl(args.projectId, relativePath)
   if (!contentUrl) {
     return { ok: false, error: "Failed to build project file URL" }
   }
@@ -174,22 +209,11 @@ export async function resolveWorkspaceFile(
     return { ok: false, error: "path is required" }
   }
 
-  const relativePath = path.posix.normalize(rawPath.replaceAll("\\", "/"))
-  if (
-    !relativePath
-    || relativePath === "."
-    || relativePath.startsWith("../")
-    || relativePath.includes("/../")
-    || path.posix.isAbsolute(relativePath)
-  ) {
-    return { ok: false, error: `Invalid project file path: ${input.path}` }
+  const resolved = resolveWorkspacePath(args.localPath, rawPath, input.path)
+  if (!resolved.ok) {
+    return resolved
   }
-
-  const projectRoot = path.resolve(args.localPath)
-  const absolutePath = path.resolve(args.localPath, relativePath)
-  if (absolutePath !== projectRoot && !absolutePath.startsWith(`${projectRoot}${path.sep}`)) {
-    return { ok: false, error: "Path resolves outside the project root" }
-  }
+  const { absolutePath, relativePath } = resolved
 
   const info = await statPathOrNull(absolutePath)
   if (!info) {
@@ -229,7 +253,7 @@ const OFFER_DOWNLOAD_DESCRIPTION = `Offer a file from the user's project workspa
 Use this when you have created or generated a file the user is likely to want to download (build artifact, exported report, generated document, etc.).
 
 Args:
-- path: workspace-relative path to the file (must stay inside the project root)
+- path: project-relative path, OR an absolute path (e.g. a file in a sibling git worktree outside the project root)
 - label: optional human-readable label shown next to the download link
 `
 
@@ -257,7 +281,7 @@ Call this proactively whenever the user should read a file:
 Do NOT paste the file's content into your reply as well — call this tool and give a 1–2 sentence summary instead. Use offer_download only when the user needs the bytes (archives, binaries, exports).
 
 Args:
-- path: workspace-relative path to the file (must stay inside the project root)
+- path: project-relative path, OR an absolute path (e.g. a spec in a sibling git worktree outside the project root)
 - label: optional human-readable title shown on the card
 `
 

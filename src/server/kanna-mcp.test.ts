@@ -50,12 +50,23 @@ describe("resolveOfferDownload", () => {
     expect(result.payload.mimeType).toBeTruthy()
   })
 
-  test("rejects absolute paths", async () => {
-    const result = await resolveOfferDownload(
-      { projectId: "p1", localPath: tempRoot },
-      { path: "/etc/passwd" },
-    )
-    expect(result.ok).toBe(false)
+  test("accepts absolute paths (routes to /api/local-file)", async () => {
+    // Simulates a file in a sibling git worktree outside the project root.
+    const outsideRoot = await mkdtemp(path.join(os.tmpdir(), "kanna-mcp-outside-"))
+    const absFile = path.join(outsideRoot, "artifact.zip")
+    await writeFile(absFile, "binary contents")
+    try {
+      const result = await resolveOfferDownload(
+        { projectId: "p1", localPath: tempRoot },
+        { path: absFile },
+      )
+      expect(result.ok).toBe(true)
+      if (!result.ok) throw new Error("expected ok")
+      expect(result.payload.contentUrl).toBe(`/api/local-file?path=${encodeURIComponent(absFile)}`)
+      expect(result.payload.fileName).toBe("artifact.zip")
+    } finally {
+      await rm(outsideRoot, { recursive: true, force: true })
+    }
   })
 
   test("rejects parent-relative escape paths", async () => {
@@ -499,11 +510,20 @@ describe("resolveWorkspaceFile", () => {
     expect(result.payload.mimeType).toBe("application/json; charset=utf-8")
   })
 
-  test("rejects absolute paths", async () => {
-    const result = await resolveWorkspaceFile({ localPath: tempRoot }, { path: "/etc/passwd" })
-    expect(result.ok).toBe(false)
-    if (result.ok) throw new Error("expected error")
-    expect(result.error).toContain("Invalid project file path")
+  test("accepts absolute paths in a sibling worktree (routes to /api/local-file)", async () => {
+    const outsideRoot = await mkdtemp(path.join(os.tmpdir(), "kanna-mcp-outside-"))
+    const absSpec = path.join(outsideRoot, "design.md")
+    await writeFile(absSpec, "# spec")
+    try {
+      const result = await resolveWorkspaceFile({ localPath: tempRoot }, { path: absSpec })
+      expect(result.ok).toBe(true)
+      if (!result.ok) throw new Error("expected ok")
+      expect(result.payload.contentUrl).toBe(`/api/local-file?path=${encodeURIComponent(absSpec)}`)
+      expect(result.payload.fileName).toBe("design.md")
+      expect(result.payload.mimeType).toContain("text/markdown")
+    } finally {
+      await rm(outsideRoot, { recursive: true, force: true })
+    }
   })
 
   test("rejects traversal paths", async () => {
