@@ -452,6 +452,9 @@ export function ChatPreferenceControls({
           >
             {(close) => (
               <>
+                <div className="px-2 py-1.5 text-xs text-muted-foreground border-b border-border/50">
+                  Experimental — needs account access. Advisor must rank ≥ the executor model.
+                </div>
                 <PopoverMenuItem
                   onClick={() => { onAdvisorModelChange?.(undefined); close() }}
                   selected={!advisorModel}

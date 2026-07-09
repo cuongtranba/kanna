@@ -54,6 +54,7 @@ import { computeCostUsd, resolveModelPrice, stripModelVariantSuffix } from "../s
 import type { ModelPrice } from "../shared/token-pricing"
 import { providerUsesSdkSession, resolveClaudeApiModelId, type ClaudeDriverPreference, type CustomModelEntry } from "../shared/types"
 import { fallbackTitleFromMessage } from "./generate-title"
+import { describeAdvisorApiError } from "./advisor-error"
 import { AUTO_CONTINUE_EVENT_VERSION, type AutoContinueEvent } from "./auto-continue/events"
 import { ClaudeLimitDetector, CodexLimitDetector, type LimitDetection, type LimitDetector } from "./auto-continue/limit-detector"
 import { ClaudeAuthErrorDetector, type AuthErrorDetection } from "./auto-continue/auth-error-detector"
@@ -781,11 +782,15 @@ export function normalizeClaudeStreamMessage(message: any): TranscriptEntry[] {
           debugRaw,
         })]
       }
+      // Enrich the cryptic advisor-pairing 400 with actionable guidance. The
+      // raw API text stays intact in `debugRaw`; only the displayed `text`
+      // gets a trailing sentence. Non-advisor errors are untouched (null).
+      const advisorHint = describeAdvisorApiError(joinedText)
       return [timestamped({
         kind: "api_error",
         messageId,
         status: statusFromField ?? statusFromText ?? 0,
-        text: joinedText,
+        text: advisorHint ? `${joinedText}\n\n${advisorHint}` : joinedText,
         requestId,
         debugRaw,
       })]
