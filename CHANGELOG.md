@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.108.0](https://github.com/cuongtranba/kanna/compare/v0.107.0...v0.108.0) (2026-07-09)
+
+
+### Features
+
+* graceful shutdown + crash-resilient turn resume ([#493](https://github.com/cuongtranba/kanna/issues/493)) ([d76119a](https://github.com/cuongtranba/kanna/commit/d76119a3d1a76f140d4e494a003967853d390181))
+* **settings:** disable agent teams + advisor to curb token blowup ([#496](https://github.com/cuongtranba/kanna/issues/496)) ([6d2fbf8](https://github.com/cuongtranba/kanna/commit/6d2fbf8274b333a0fb8f7383d0e0f78e0bd307db))
+* surface advisor_tool_result blocks as assistant_advisor transcript entries ([#495](https://github.com/cuongtranba/kanna/issues/495)) ([67b1904](https://github.com/cuongtranba/kanna/commit/67b190457ba5d3a89e8a5b3ce0c159398e16411e))
+
 ## [0.107.0](https://github.com/cuongtranba/kanna/compare/v0.106.0...v0.107.0) (2026-07-09)
 
 
