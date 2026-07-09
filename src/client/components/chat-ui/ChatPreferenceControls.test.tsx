@@ -1,5 +1,8 @@
-import { describe, expect, test } from "bun:test"
+import { beforeEach, describe, expect, test } from "bun:test"
 import { renderToStaticMarkup } from "react-dom/server"
+import { act, createElement } from "react"
+import { createRoot } from "react-dom/client"
+import "../../lib/testing/setupHappyDom"
 import { PROVIDERS } from "../../../shared/types"
 import { ChatPreferenceControls } from "./ChatPreferenceControls"
 
@@ -66,5 +69,40 @@ describe("ChatPreferenceControls", () => {
     // touch-manipulation pair so taps register reliably on mobile.
     expect(html).toContain("min-h-[36px]")
     expect(html).toContain("touch-manipulation")
+  })
+
+  describe("advisor picker hint", () => {
+    beforeEach(() => { document.body.innerHTML = "" })
+
+    test("opening the advisor picker (claude SDK) reveals the experimental/rank hint", async () => {
+      const container = document.createElement("div")
+      document.body.appendChild(container)
+      try {
+        await act(async () => {
+          createRoot(container).render(
+            createElement(ChatPreferenceControls, {
+              availableProviders: PROVIDERS,
+              selectedProvider: "claude",
+              model: "claude-opus-4-7",
+              modelOptions: { reasoningEffort: "high", contextWindow: "1m" },
+              onProviderChange: () => {},
+              onModelChange: () => {},
+              onModelOptionChange: () => {},
+              onAdvisorModelChange: () => {},
+              isDriverPty: false,
+            }),
+          )
+        })
+        // The advisor trigger carries the "No Advisor" label when unset.
+        const trigger = Array.from(container.querySelectorAll("button"))
+          .find((b) => (b.textContent ?? "").includes("No Advisor"))
+        expect(trigger).toBeTruthy()
+        await act(async () => { trigger!.click() })
+        // Radix portals popover content to document.body.
+        expect(document.body.textContent ?? "").toContain("Advisor must rank")
+      } finally {
+        container.remove()
+      }
+    })
   })
 })
