@@ -34,6 +34,22 @@ async function mountTeamsSection(props: {
   return { container, cleanup: () => container.remove() }
 }
 
+function toggle(container: HTMLElement): HTMLButtonElement {
+  const btn = container.querySelector<HTMLButtonElement>("[data-testid='teams-toggle']")
+  if (!btn) throw new Error("teams-toggle button not found")
+  return btn
+}
+
+async function clickToggle(container: HTMLElement): Promise<void> {
+  await act(async () => {
+    toggle(container).click()
+  })
+}
+
+function rowCount(container: HTMLElement): number {
+  return container.querySelectorAll("[data-testid^='team-task-row:']").length
+}
+
 // ── empty states ──────────────────────────────────────────────────────────────
 
 describe("TeamsSection — empty state (sdk)", () => {
@@ -41,6 +57,8 @@ describe("TeamsSection — empty state (sdk)", () => {
     const { container, cleanup } = await mountTeamsSection({ tasks: [], driverPreference: "sdk" })
     expect(container.textContent).toContain("use parallel agents")
     expect(container.querySelector("[data-testid='teams-empty-sdk']")).not.toBeNull()
+    // No toggle header in the empty state.
+    expect(container.querySelector("[data-testid='teams-toggle']")).toBeNull()
     cleanup()
   })
 })
@@ -50,6 +68,83 @@ describe("TeamsSection — empty state (pty)", () => {
     const { container, cleanup } = await mountTeamsSection({ tasks: [], driverPreference: "pty" })
     expect(container.textContent).toContain("Switch to the SDK driver")
     expect(container.querySelector("[data-testid='teams-empty-pty']")).not.toBeNull()
+    cleanup()
+  })
+})
+
+// ── collapse behavior ─────────────────────────────────────────────────────────
+
+describe("TeamsSection — collapse behavior", () => {
+  test("collapses by default when no task is running", async () => {
+    const { container, cleanup } = await mountTeamsSection({
+      tasks: [
+        makeTask({ taskId: "t1", status: "completed", endedAt: BASE_NOW }),
+        makeTask({ taskId: "t2", status: "completed", endedAt: BASE_NOW }),
+      ],
+      driverPreference: "sdk",
+    })
+    // Header present, aria-expanded false, rows hidden.
+    expect(toggle(container).getAttribute("aria-expanded")).toBe("false")
+    expect(rowCount(container)).toBe(0)
+    // Summary shows the done count.
+    expect(container.textContent).toContain("2 done")
+    cleanup()
+  })
+
+  test("expands by default when a task is running", async () => {
+    const { container, cleanup } = await mountTeamsSection({
+      tasks: [
+        makeTask({ taskId: "t1", status: "running" }),
+        makeTask({ taskId: "t2", status: "completed", endedAt: BASE_NOW }),
+      ],
+      driverPreference: "sdk",
+    })
+    expect(toggle(container).getAttribute("aria-expanded")).toBe("true")
+    expect(rowCount(container)).toBe(2)
+    expect(container.textContent).toContain("1 running")
+    cleanup()
+  })
+
+  test("clicking the header reveals rows when idle-collapsed", async () => {
+    const { container, cleanup } = await mountTeamsSection({
+      tasks: [makeTask({ taskId: "t1", status: "completed", endedAt: BASE_NOW, name: "seed demo" })],
+      driverPreference: "sdk",
+    })
+    expect(rowCount(container)).toBe(0)
+    await clickToggle(container)
+    expect(toggle(container).getAttribute("aria-expanded")).toBe("true")
+    expect(rowCount(container)).toBe(1)
+    expect(container.textContent).toContain("seed demo")
+    cleanup()
+  })
+
+  test("clicking the header collapses a running-expanded section", async () => {
+    const { container, cleanup } = await mountTeamsSection({
+      tasks: [makeTask({ taskId: "t1", status: "running" })],
+      driverPreference: "sdk",
+    })
+    expect(rowCount(container)).toBe(1)
+    await clickToggle(container)
+    expect(toggle(container).getAttribute("aria-expanded")).toBe("false")
+    expect(rowCount(container)).toBe(0)
+    // Toggle back open.
+    await clickToggle(container)
+    expect(rowCount(container)).toBe(1)
+    cleanup()
+  })
+
+  test("summary counts running, done and failed", async () => {
+    const { container, cleanup } = await mountTeamsSection({
+      tasks: [
+        makeTask({ taskId: "t1", status: "running" }),
+        makeTask({ taskId: "t2", status: "completed", endedAt: BASE_NOW }),
+        makeTask({ taskId: "t3", status: "failed", endedAt: BASE_NOW }),
+      ],
+      driverPreference: "sdk",
+    })
+    expect(container.textContent).toContain("1 running")
+    expect(container.textContent).toContain("1 done")
+    expect(container.textContent).toContain("1 failed")
     cleanup()
   })
 })
@@ -115,20 +210,23 @@ describe("TeamsSection — row rendering", () => {
     cleanup()
   })
 
-  test("renders status pill text for completed task", async () => {
+  test("renders status pill text for completed task (expanded)", async () => {
     const { container, cleanup } = await mountTeamsSection({
       tasks: [makeTask({ taskId: "t1", status: "completed", endedAt: BASE_NOW })],
       driverPreference: "sdk",
     })
+    // Idle-collapsed by default; expand to see the row pill.
+    await clickToggle(container)
     expect(container.textContent?.toUpperCase()).toContain("COMPLETED")
     cleanup()
   })
 
-  test("renders status pill text for failed task", async () => {
+  test("renders status pill text for failed task (expanded)", async () => {
     const { container, cleanup } = await mountTeamsSection({
       tasks: [makeTask({ taskId: "t1", status: "failed", endedAt: BASE_NOW })],
       driverPreference: "sdk",
     })
+    await clickToggle(container)
     expect(container.textContent?.toUpperCase()).toContain("FAILED")
     cleanup()
   })
@@ -155,9 +253,11 @@ describe("TeamsSection — row rendering", () => {
 
   test("renders elapsed duration using formatCompactDuration (42s)", async () => {
     const { container, cleanup } = await mountTeamsSection({
-      tasks: [makeTask({ taskId: "t1", startedAt: BASE_NOW - 42_000, endedAt: BASE_NOW })],
+      tasks: [makeTask({ taskId: "t1", status: "completed", startedAt: BASE_NOW - 42_000, endedAt: BASE_NOW })],
       driverPreference: "sdk",
     })
+    // Completed → idle-collapsed; expand to see the row duration.
+    await clickToggle(container)
     expect(container.textContent).toContain("42s")
     cleanup()
   })
@@ -184,6 +284,17 @@ describe("TeamsSection — render-loop safety", () => {
   test("mounts with tasks without render-loop warning", async () => {
     const result = await renderForLoopCheck(
       <TeamsSection tasks={[makeTask()]} driverPreference="sdk" />,
+    )
+    expect(result.loopWarnings).toEqual([])
+    await result.cleanup()
+  })
+
+  test("mounts idle-collapsed without render-loop warning", async () => {
+    const result = await renderForLoopCheck(
+      <TeamsSection
+        tasks={[makeTask({ status: "completed", endedAt: BASE_NOW })]}
+        driverPreference="sdk"
+      />,
     )
     expect(result.loopWarnings).toEqual([])
     await result.cleanup()
