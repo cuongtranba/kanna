@@ -4,7 +4,12 @@ import type { ChatRecord } from "../events"
 import { buildResumePrompt, detectResumableTurns, isTurnDangling } from "./detect"
 
 function entry(kind: TranscriptEntry["kind"], extra: Record<string, unknown> = {}): TranscriptEntry {
-  return { kind, id: `${kind}-${Math.round(Math.random() * 1e9)}`, timestamp: "2026-07-09T00:00:00.000Z", ...extra } as TranscriptEntry
+  return {
+    kind,
+    id: `${kind}-${Math.round(Math.random() * 1e9)}`,
+    timestamp: "2026-07-09T00:00:00.000Z",
+    ...extra,
+  } as unknown as TranscriptEntry
 }
 
 function chat(overrides: Partial<ChatRecord> = {}): ChatRecord {

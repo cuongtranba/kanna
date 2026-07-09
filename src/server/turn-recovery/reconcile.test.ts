@@ -19,7 +19,13 @@ class FakeClock implements Clock {
 function mkEntry(kind: "user_prompt", content: string): TranscriptEntry
 function mkEntry(kind: "interrupted"): TranscriptEntry
 function mkEntry(kind: string, content?: string): TranscriptEntry {
-  return { kind, id: crypto.randomUUID(), timestamp: new Date().toISOString(), content: content ?? "", attachments: [] } as TranscriptEntry
+  return {
+    kind,
+    id: crypto.randomUUID(),
+    timestamp: new Date().toISOString(),
+    content: content ?? "",
+    attachments: [],
+  } as unknown as TranscriptEntry
 }
 
 async function harness() {
