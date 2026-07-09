@@ -61,6 +61,7 @@ export interface TablePreviewData {
 
 export function classifyAttachmentPreview(attachment: ChatAttachment): AttachmentPreviewTarget {
   const mimeType = attachment.mimeType.toLowerCase()
+  const essence = mimeEssence(mimeType)
   const extension = getFileExtension(attachment.displayName)
 
   if (mimeType.startsWith("image/")) {
@@ -74,7 +75,9 @@ export function classifyAttachmentPreview(attachment: ChatAttachment): Attachmen
       ? { kind: "json", openInNewTab: false }
       : { kind: "external", openInNewTab: true }
   }
-  if (extension === ".md") {
+  // A preview_file with a custom label carries no ".md" extension on its
+  // displayName, so classify by the server-sent MIME essence too.
+  if (extension === ".md" || essence === "text/markdown") {
     return { kind: "markdown", openInNewTab: false }
   }
   if (mimeType === "text/csv" || mimeType === "text/tab-separated-values") {
@@ -125,17 +128,20 @@ export function friendlyMimeLabel(kind: AttachmentIconKind, mimeType?: string): 
 
 export function classifyAttachmentIcon(attachment: ChatAttachment): AttachmentIconKind {
   const mimeType = attachment.mimeType.toLowerCase()
+  const essence = mimeEssence(mimeType)
   const extension = getFileExtension(attachment.displayName)
 
   if (mimeType.startsWith("image/")) return "image"
   if (mimeType === "application/pdf" || extension === ".pdf") return "pdf"
   if (mimeType === "application/json" || extension === ".json" || extension === ".jsonc") return "json"
-  if (extension === ".md") return "markdown"
+  // A preview_file with a custom label carries no ".md" extension on its
+  // displayName, so classify by the server-sent MIME essence too.
+  if (extension === ".md" || essence === "text/markdown") return "markdown"
   if (mimeType === "text/csv" || mimeType === "text/tab-separated-values" || extension === ".csv" || extension === ".tsv") return "table"
   if (mimeType.startsWith("audio/") || AUDIO_EXTENSIONS.has(extension)) return "audio"
   if (mimeType.startsWith("video/") || VIDEO_EXTENSIONS.has(extension)) return "video"
   if (mimeType.includes("zip") || mimeType.includes("archive") || ARCHIVE_EXTENSIONS.has(extension)) return "archive"
-  if (mimeType === "text/vnd.mermaid" || extension === ".mmd" || extension === ".mermaid") return "mermaid"
+  if (essence === "text/vnd.mermaid" || extension === ".mmd" || extension === ".mermaid") return "mermaid"
   if (CODE_OR_CONFIG_EXTENSIONS.has(extension)) {
     if (extension === ".txt") return "text"
     return "code"
@@ -245,6 +251,11 @@ export function parseDelimitedPreview(content: string, delimiter: "," | "\t"): T
 function getFileExtension(fileName: string) {
   const index = fileName.lastIndexOf(".")
   return index >= 0 ? fileName.slice(index).toLowerCase() : ""
+}
+
+/** Strip parameters (e.g. `; charset=utf-8`) to get the bare MIME type. */
+function mimeEssence(mimeType: string): string {
+  return mimeType.split(";")[0]?.trim() ?? ""
 }
 
 function resolvePreviewUrl(url: string) {

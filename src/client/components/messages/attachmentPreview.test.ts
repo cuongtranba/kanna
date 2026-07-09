@@ -45,6 +45,16 @@ describe("classifyAttachmentPreview", () => {
     expect(target.openInNewTab).toBe(false)
   })
 
+  test("routes text/markdown mime to markdown even without a .md extension (labeled preview_file)", () => {
+    const target = classifyAttachmentPreview(makeAttachment({
+      displayName: "Spec: editable base prompt + locked safety",
+      mimeType: "text/markdown; charset=utf-8",
+    }))
+
+    expect(target.kind).toBe("markdown")
+    expect(target.openInNewTab).toBe(false)
+  })
+
   test("treats code extensions as text previews", () => {
     const target = classifyAttachmentPreview(makeAttachment({
       displayName: "app.tsx",
@@ -141,6 +151,20 @@ describe("classifyAttachmentIcon", () => {
     expect(classifyAttachmentIcon(makeAttachment({ displayName: "people.csv", mimeType: "text/csv" }))).toBe("table")
     expect(classifyAttachmentIcon(makeAttachment({ displayName: "app.tsx", mimeType: "application/octet-stream" }))).toBe("code")
     expect(classifyAttachmentIcon(makeAttachment({ displayName: "bundle.zip", mimeType: "application/zip" }))).toBe("archive")
+  })
+
+  test("returns markdown for text/markdown mime with a label-only displayName", () => {
+    expect(classifyAttachmentIcon(makeAttachment({
+      displayName: "Spec: editable base prompt + locked safety",
+      mimeType: "text/markdown; charset=utf-8",
+    }))).toBe("markdown")
+  })
+
+  test("returns mermaid for text/vnd.mermaid mime with charset param", () => {
+    expect(classifyAttachmentIcon(makeAttachment({
+      displayName: "diagram",
+      mimeType: "text/vnd.mermaid; charset=utf-8",
+    }))).toBe("mermaid")
   })
 
   test("returns mermaid for .mmd extension", () => {
