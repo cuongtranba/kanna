@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.106.0](https://github.com/cuongtranba/kanna/compare/v0.105.0...v0.106.0) (2026-07-09)
+
+
+### Features
+
+* advisor_20260301 tool — per-chat advisor model picker (SDK driver) ([#488](https://github.com/cuongtranba/kanna/issues/488)) ([e62d824](https://github.com/cuongtranba/kanna/commit/e62d82480616fac385d4901b0cc97d2e60758926))
+* Agent SDK native teams — live panel + subagent teammates ([#483](https://github.com/cuongtranba/kanna/issues/483)) ([3fb216f](https://github.com/cuongtranba/kanna/commit/3fb216f16b8b34308cb43a124dcf14556abfcd72))
+* **kanna-mcp:** accept absolute paths in preview_file/offer_download ([#489](https://github.com/cuongtranba/kanna/issues/489)) ([4c476bb](https://github.com/cuongtranba/kanna/commit/4c476bb9dba68673a85bf23319a0504e32ed6873))
+* render mermaid blocks in file preview modal ([#487](https://github.com/cuongtranba/kanna/issues/487)) ([f2a5459](https://github.com/cuongtranba/kanna/commit/f2a545953de735e4d071d812c803c82688d1a0f7))
+
+
+### Bug Fixes
+
+* **composer:** provider switch must carry the provider's own model ([#485](https://github.com/cuongtranba/kanna/issues/485)) ([16b0ede](https://github.com/cuongtranba/kanna/commit/16b0edea1a7cc5a36d95e8c7460d2674ea8d4356))
+
 ## [0.105.0](https://github.com/cuongtranba/kanna/compare/v0.104.0...v0.105.0) (2026-07-04)
 
 
