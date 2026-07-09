@@ -768,6 +768,7 @@ export function ChatPage() {
   const workflowRuns = useWorkflowsStore(useShallow(selectRuns(state.activeChatId ?? "")))
   const teamTasks = useTeamsStore(useShallow(selectTasks(state.activeChatId ?? "")))
   const driverPreference: "sdk" | "pty" = state.appSettings?.claudeDriver.preference === "pty" ? "pty" : "sdk"
+  const teamsEnabled = state.appSettings?.teamsEnabled !== false
 
   const handleGetWorkflowRunDetail = useCallback(async (runId: string): Promise<WorkflowRun | null> => {
     const chatId = state.activeChatId
@@ -1038,6 +1039,7 @@ export function ChatPage() {
           getWorkflowRunDetail={handleGetWorkflowRunDetail}
           teamTasks={teamTasks}
           driverPreference={driverPreference}
+          teamsEnabled={teamsEnabled}
           getSubagentTranscript={handleGetSubagentTranscript}
           showScrollButton={showScrollToBottom && state.messages.length > 0}
           onIsAtEndChange={onIsAtEndChange}
