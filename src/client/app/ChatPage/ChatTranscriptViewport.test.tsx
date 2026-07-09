@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { SubagentPendingTool, SubagentRunSnapshot } from "../../../shared/types"
-import { collectPendingQuestionRuns } from "./ChatTranscriptViewport"
+import { collectPendingQuestionRuns, shouldRenderTeamsPanel } from "./ChatTranscriptViewport"
 
 function makeRun(over: Partial<SubagentRunSnapshot> = {}): SubagentRunSnapshot {
   return {
@@ -67,5 +67,19 @@ describe("collectPendingQuestionRuns", () => {
     const runs = { r1: makeRun({ pendingTool: pending(100) }) }
     const [run] = collectPendingQuestionRuns(runs)
     expect(run.pendingTool.requestedAt).toBe(100)
+  })
+})
+
+describe("shouldRenderTeamsPanel", () => {
+  test("hides the panel when teamsEnabled is explicitly false", () => {
+    expect(shouldRenderTeamsPanel(false)).toBe(false)
+  })
+
+  test("shows the panel when teamsEnabled is true", () => {
+    expect(shouldRenderTeamsPanel(true)).toBe(true)
+  })
+
+  test("defaults to shown when teamsEnabled is undefined (settings not loaded)", () => {
+    expect(shouldRenderTeamsPanel(undefined)).toBe(true)
   })
 })

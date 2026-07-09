@@ -42,6 +42,16 @@ export type PendingQuestionRun = SubagentRunSnapshot & {
 }
 
 /**
+ * Whether the Teams panel should render. The `teamsEnabled` settings
+ * kill-switch (adr-20260709-disable-team-advisor-config) hides it entirely
+ * when off; `undefined` (settings not yet loaded) defaults to shown so the
+ * panel never flickers away during the initial snapshot fetch.
+ */
+export function shouldRenderTeamsPanel(teamsEnabled: boolean | undefined): boolean {
+  return teamsEnabled !== false
+}
+
+/**
  * Select every subagent run awaiting a user response, oldest request first.
  * Pure so it can be unit-tested without rendering the virtualized list.
  */
@@ -97,6 +107,8 @@ interface ChatTranscriptViewportProps {
   getWorkflowRunDetail?: (runId: string) => Promise<WorkflowRun | null>
   teamTasks?: TeamTaskSummary[]
   driverPreference?: "sdk" | "pty"
+  /** Settings kill-switch. When false the Teams panel is hidden entirely. */
+  teamsEnabled?: boolean
   getSubagentTranscript?: GetSubagentTranscript
   showScrollButton: boolean
   onIsAtEndChange: (isAtEnd: boolean) => void
@@ -150,6 +162,7 @@ export const ChatTranscriptViewport = memo(function ChatTranscriptViewport({
   getWorkflowRunDetail,
   teamTasks,
   driverPreference,
+  teamsEnabled,
   getSubagentTranscript,
   showScrollButton,
   onIsAtEndChange,
@@ -381,9 +394,11 @@ export const ChatTranscriptViewport = memo(function ChatTranscriptViewport({
           />
         </div>
       ) : null}
-      <div className="pb-5">
-        <TeamsSection tasks={teamTasks ?? EMPTY_TEAM_TASKS} driverPreference={driverPreference ?? "sdk"} />
-      </div>
+      {shouldRenderTeamsPanel(teamsEnabled) ? (
+        <div className="pb-5">
+          <TeamsSection tasks={teamTasks ?? EMPTY_TEAM_TASKS} driverPreference={driverPreference ?? "sdk"} />
+        </div>
+      ) : null}
       {liveTunnelRecord && onTunnelAccept && onTunnelStop && onTunnelRetry && (
         <div className="pb-5">
           <CloudflareTunnelCard
