@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.108.1](https://github.com/cuongtranba/kanna/compare/v0.108.0...v0.108.1) (2026-07-09)
+
+
+### Bug Fixes
+
+* **file-preview:** render labeled markdown/mermaid instead of raw text ([#498](https://github.com/cuongtranba/kanna/issues/498)) ([69b3b5e](https://github.com/cuongtranba/kanna/commit/69b3b5eaeb70ac889a09fc208d4af30bef01d7e7))
+
 ## [0.108.0](https://github.com/cuongtranba/kanna/compare/v0.107.0...v0.108.0) (2026-07-09)
 
 
