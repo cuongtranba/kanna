@@ -89,7 +89,6 @@ describe("ChatPreferenceControls", () => {
               onModelChange: () => {},
               onModelOptionChange: () => {},
               onAdvisorModelChange: () => {},
-              isDriverPty: false,
             }),
           )
         })
