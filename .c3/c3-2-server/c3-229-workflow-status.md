@@ -1,6 +1,6 @@
 ---
 id: c3-229
-c3-seal: 692f9f15a5ffcf553b48b607d3298ddea245a2b169edc879e7601c0cb2a164f3
+c3-seal: e749d991b0d3812656765f4e65a32e5180ed65a63ac32035980700cba848cc87
 title: workflow-status
 type: component
 category: feature
@@ -124,10 +124,10 @@ Owns the workflow sidecar read-model lifecycle: receives `watch(chatId, dir)` / 
 | src/client/app/WorkflowAgentTranscriptPanel.tsx | Contract | Per-agent transcript drill-in; fetches via workflows.getAgentTranscript; presentation may change | src/client/app/WorkflowAgentTranscriptPanel.tsx |
 | src/client/lib/workflowGrouping.ts | Contract | Pure phase/agent grouping helper; presentation-only, no IO or server coupling | src/client/lib/workflowGrouping.ts |
 | src/client/components/messages/WorkflowMessage.tsx | Contract | Presentation may change; must dispatch only on kind === workflow | src/client/components/messages/WorkflowMessage.tsx |
-| src/server/workflow-registry.test.ts | Change Safety | Test cases per surface incl. getAgentTranscript | src/server/workflow-registry.test.ts |
-| src/server/workflow-watch-io.adapter.test.ts | Change Safety | Debounce, re-arm, error handling coverage | src/server/workflow-watch-io.adapter.test.ts |
-| src/server/workflow-agent-transcript-io.adapter.test.ts | Change Safety | Missing-file, prefixed-agentId, and line-split coverage | src/server/workflow-agent-transcript-io.adapter.test.ts |
-| src/client/app/WorkflowsPage.test.tsx | Change Safety | Run selection, push-refetch, agent drill-in, stable-ref selector | src/client/app/WorkflowsPage.test.tsx |
-| src/client/app/WorkflowAgentTranscriptPanel.test.tsx | Change Safety | Transcript fetch + render coverage | src/client/app/WorkflowAgentTranscriptPanel.test.tsx |
-| src/client/lib/workflowGrouping.test.ts | Change Safety | Grouping helper coverage | src/client/lib/workflowGrouping.test.ts |
-| src/shared/workflow-types.test.ts | Change Safety | parseWorkflowRunFile and toRunSummary coverage | src/shared/workflow-types.test.ts |
+| src/server/workflow-registry.test.ts | Contract | Test cases per surface incl. getAgentTranscript | src/server/workflow-registry.test.ts |
+| src/server/workflow-watch-io.adapter.test.ts | Contract | Debounce, re-arm, error handling coverage | src/server/workflow-watch-io.adapter.test.ts |
+| src/server/workflow-agent-transcript-io.adapter.test.ts | Contract | Missing-file, prefixed-agentId, and line-split coverage | src/server/workflow-agent-transcript-io.adapter.test.ts |
+| src/client/app/WorkflowsPage.test.tsx | Contract | Run selection, push-refetch, agent drill-in, stable-ref selector | src/client/app/WorkflowsPage.test.tsx |
+| src/client/app/WorkflowAgentTranscriptPanel.test.tsx | Contract | Transcript fetch + render coverage | src/client/app/WorkflowAgentTranscriptPanel.test.tsx |
+| src/client/lib/workflowGrouping.test.ts | Contract | Grouping helper coverage | src/client/lib/workflowGrouping.test.ts |
+| src/shared/workflow-types.test.ts | Contract | parseWorkflowRunFile and toRunSummary coverage | src/shared/workflow-types.test.ts |
