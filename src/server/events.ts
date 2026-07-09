@@ -35,6 +35,19 @@ export interface ChatRecord {
   hasMessages?: boolean
   lastMessageAt?: number
   lastTurnOutcome: "success" | "failed" | "cancelled" | null
+  /**
+   * Why the most recent turn was cancelled, when `lastTurnOutcome` is
+   * `"cancelled"`. `"user"` = explicit Stop (never auto-resumed); `"shutdown"`
+   * = graceful server stop / deploy (eligible for boot resume). Absent on
+   * chats whose last turn was not a cancel. See turn-recovery.
+   */
+  lastTurnCancelReason?: TurnCancelReason | null
+  /**
+   * How many times turn-recovery has resumed this chat's turn without a
+   * completed turn (`turn_finished`/`turn_failed`) in between. Bounds a
+   * resume→crash→resume loop across boots; reset to 0 on any turn completion.
+   */
+  resumeAttemptsSinceProgress?: number
   slashCommands?: SlashCommand[]
   stackId?: string
   stackBindings?: StackBinding[]
@@ -212,6 +225,13 @@ export type QueuedMessageEvent =
       queuedMessageId: string
     }
 
+/**
+ * Origin of a turn cancellation. `"user"` — explicit Stop from the UI, never
+ * auto-resumed. `"shutdown"` — graceful server stop (SIGTERM/SIGINT/deploy),
+ * eligible for boot-time resume by turn-recovery.
+ */
+export type TurnCancelReason = "user" | "shutdown"
+
 export type TurnEvent =
   | {
       v: 3
@@ -235,6 +255,15 @@ export type TurnEvent =
   | {
       v: 3
       type: "turn_cancelled"
+      timestamp: number
+      chatId: string
+      /** Absent on legacy logs → treated as `"user"` on replay. */
+      reason?: TurnCancelReason
+    }
+  | {
+      v: 3
+      /** turn-recovery armed a boot-time resume for this chat's unfinished turn. */
+      type: "turn_resume_attempted"
       timestamp: number
       chatId: string
     }

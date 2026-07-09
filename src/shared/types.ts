@@ -1898,6 +1898,8 @@ export interface AutoContinueSchedule {
    * fire the literal `"continue"`.
    */
   prompt?: string
+  /** Why the schedule was accepted. Set from `auto_continue_accepted.source`. */
+  source?: string
 }
 
 export interface AutoContinuePromptEntry extends TranscriptEntryBase {

@@ -10,6 +10,10 @@ export const AUTO_CONTINUE_EVENT_VERSION = 3 as const
  *  - `subagent_background` — a `run_in_background` subagent finished; re-enter
  *    to deliver its reply. Exempt from the runaway-wake cap (result delivery,
  *    not a self-poll). See adr-20260616-subagent-run-in-background.
+ *  - `interrupted_resume` — a turn that did not finish before the server
+ *    stopped (crash or graceful deploy); re-enter on next boot to continue it.
+ *    Exempt from the runaway-wake cap (bounded instead by the per-turn resume
+ *    attempt cap). See turn-recovery.
  */
 export type AutoContinueSource =
   | "user"
@@ -18,6 +22,7 @@ export type AutoContinueSource =
   | "agent_wakeup"
   | "pending_workflow"
   | "subagent_background"
+  | "interrupted_resume"
 
 interface AutoContinueEventBase {
   v: typeof AUTO_CONTINUE_EVENT_VERSION

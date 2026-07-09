@@ -19,6 +19,7 @@ import {
   type StoreState,
   type SubagentRunEvent,
   type ToolRequestEvent,
+  type TurnCancelReason,
   type TurnEvent,
   cloneTranscriptEntries,
   createEmptyState,
@@ -117,6 +118,7 @@ function getReplayEventPriority(event: StoreEvent): number {
       return 7
     case "turn_finished":
     case "turn_failed":
+    case "turn_resume_attempted":
       return 8
     case "chat_read_state_set":
     case "chat_source_hash_set":
@@ -778,6 +780,8 @@ export class EventStore implements PushEventStore {
         chat.updatedAt = e.timestamp
         chat.unread = true
         chat.lastTurnOutcome = "success"
+        chat.lastTurnCancelReason = null
+        chat.resumeAttemptsSinceProgress = 0
         this.updateTiming(e.chatId, e.timestamp, "idle", false, true)
         break
       }
@@ -787,6 +791,8 @@ export class EventStore implements PushEventStore {
         chat.updatedAt = e.timestamp
         chat.unread = true
         chat.lastTurnOutcome = "failed"
+        chat.lastTurnCancelReason = null
+        chat.resumeAttemptsSinceProgress = 0
         this.updateTiming(e.chatId, e.timestamp, "failed", false, true)
         break
       }
@@ -795,7 +801,17 @@ export class EventStore implements PushEventStore {
         if (!chat) break
         chat.updatedAt = e.timestamp
         chat.lastTurnOutcome = "cancelled"
+        // Legacy logs (pre-reason) replay as "user" — the safe default that
+        // never auto-resumes.
+        chat.lastTurnCancelReason = e.reason ?? "user"
         this.updateTiming(e.chatId, e.timestamp, "idle", false, true)
+        break
+      }
+      case "turn_resume_attempted": {
+        const chat = this.state.chatsById.get(e.chatId)
+        if (!chat) break
+        chat.updatedAt = e.timestamp
+        chat.resumeAttemptsSinceProgress = (chat.resumeAttemptsSinceProgress ?? 0) + 1
         break
       }
       case "session_token_set": {
@@ -1688,13 +1704,25 @@ export class EventStore implements PushEventStore {
     await this.append(this.turnsLogPath, event)
   }
 
-  async recordTurnCancelled(chatId: string) {
+  async recordTurnResumeAttempted(chatId: string) {
+    this.requireChat(chatId)
+    const event: TurnEvent = {
+      v: STORE_VERSION,
+      type: "turn_resume_attempted",
+      timestamp: Date.now(),
+      chatId,
+    }
+    await this.append(this.turnsLogPath, event)
+  }
+
+  async recordTurnCancelled(chatId: string, reason: TurnCancelReason = "user") {
     this.requireChat(chatId)
     const event: TurnEvent = {
       v: STORE_VERSION,
       type: "turn_cancelled",
       timestamp: Date.now(),
       chatId,
+      reason,
     }
     await this.append(this.turnsLogPath, event)
   }
@@ -1942,6 +1970,11 @@ export class EventStore implements PushEventStore {
       .sort((a, b) => (b.lastMessageAt ?? b.updatedAt) - (a.lastMessageAt ?? a.updatedAt))
   }
 
+  /** All non-deleted, non-archived chats across every project. Used by boot-time turn-recovery. */
+  listAllChats() {
+    return [...this.state.chatsById.values()].filter((chat) => !chat.deletedAt && !chat.archivedAt)
+  }
+
   getChatCount(projectId: string) {
     return this.listChatsByProject(projectId).length
   }
@@ -1999,7 +2032,21 @@ export class EventStore implements PushEventStore {
     }
   }
 
+  /**
+   * Resolve once every append enqueued so far has hit disk and been applied to
+   * in-memory state. Callers awaiting this before `snapshotAndTruncateLogs()`
+   * guarantee no pending append (e.g. a graceful-shutdown `turn_cancelled`)
+   * races the log truncation on the same file. Appends enqueued AFTER this call
+   * are not awaited.
+   */
+  async flushWrites() {
+    await this.writeChain
+  }
+
   async snapshotAndTruncateLogs() {
+    // Drain any in-flight append so a truncation below cannot interleave with a
+    // concurrent write to the same log file (append-only integrity).
+    await this.writeChain
     const snapshot = this.createSnapshot()
     await this.storage.writeText(this.snapshotPath, JSON.stringify(snapshot, null, 2))
     await Promise.all([

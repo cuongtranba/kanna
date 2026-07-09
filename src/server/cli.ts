@@ -57,7 +57,19 @@ const exitAction = await new Promise<"ui_restart" | "exit">((resolve) => {
   process.once("SIGHUP", shutdown)
 })
 
-await result.stop()
+// Hard backstop around the graceful stop: if server shutdown hangs (a stalled
+// auth.dispose, a wedged snapshot), the process must still exit rather than wait
+// for the supervisor's SIGKILL. Sized just above the server's own drain grace so
+// the in-server bounded drain runs first. Any turn left unfinished by a forced
+// exit is auto-resumed on next boot by turn-recovery.
+const stopBackstopMs = (Number(process.env.KANNA_SHUTDOWN_GRACE_MS) || 4000) + 1000
+const stoppedCleanly = await Promise.race([
+  result.stop().then(() => true),
+  new Promise<boolean>((resolve) => setTimeout(() => resolve(false), stopBackstopMs)),
+])
+if (!stoppedCleanly) {
+  console.warn(`${LOG_PREFIX} graceful stop exceeded ${stopBackstopMs}ms; forcing exit`)
+}
 if (exitAction === "ui_restart") {
   console.log(`${LOG_PREFIX} current process stopped, handing restart back to supervisor`)
 }

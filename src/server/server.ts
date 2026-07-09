@@ -442,6 +442,7 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     store,
     scheduleManager,
     maxAgentWakes: parsePositiveIntEnv(process.env.KANNA_MAX_AGENT_WAKES, 25),
+    maxResumeAttempts: parsePositiveIntEnv(process.env.KANNA_MAX_RESUME_ATTEMPTS, 3),
     pendingWorkflowPollMs: parsePositiveIntEnv(process.env.KANNA_PENDING_WORKFLOW_POLL_MS, 120_000),
     openrouterFirstEntryTimeoutMs: parsePositiveIntEnv(
       process.env.KANNA_OPENROUTER_FIRST_ENTRY_TIMEOUT_MS,
@@ -533,6 +534,13 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
   scheduleManager.rehydrate(
     store.listAutoContinueChats().flatMap((chatId) => store.getAutoContinueEvents(chatId))
   )
+
+  // Turn recovery: resume any turn that did not finish before the previous stop
+  // (hard crash or graceful deploy). Runs after rehydrate so it can skip chats
+  // that already have a live schedule. Best-effort — never fatal to boot.
+  await agent.reconcileInterruptedTurns().catch((err) => {
+    console.warn("[kanna] turn-recovery reconcile failed", err)
+  })
 
   await tunnelGateway.reapOrphanedTunnels()
   const staleEmptyChatPruneInterval = setInterval(() => {
@@ -677,6 +685,13 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     strictPort,
   })
 
+  // Grace budget for draining in-flight turns on a graceful stop. Kept below
+  // pm2's kill_timeout (5000ms) so the app exits cleanly instead of being
+  // SIGKILL'd mid-drain. Turns not cancelled within the budget are left
+  // dangling and auto-resumed on next boot by turn-recovery — so giving up is
+  // safe, not lossy.
+  const shutdownGraceMs = parsePositiveIntEnv(process.env.KANNA_SHUTDOWN_GRACE_MS, 4000)
+
   const shutdown = async () => {
     // Dispose the fs.watch-backed managers FIRST, before any await. bun keeps a
     // single shared inotify "File Watcher" thread alive for any open fs.watch;
@@ -690,8 +705,24 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     tunnelGateway.shutdown()
     snapshotSweepHandle.stop()
     clearInterval(staleEmptyChatPruneInterval)
-    for (const chatId of [...agent.activeTurns.keys()]) {
-      await agent.cancel(chatId)
+    // Cancel every in-flight turn with reason "shutdown" (distinct from a user
+    // Stop, so turn-recovery resumes them on next boot) and skipQueueDrain (so
+    // no NEW turn is spawned mid-shutdown). Bounded by shutdownGraceMs: a stuck
+    // cancel can no longer hang the whole process — allSettled swallows per-turn
+    // errors, and the deadline forces progress.
+    const cancelAll = Promise.allSettled(
+      [...agent.activeTurns.keys()].map((chatId) =>
+        agent.cancel(chatId, { reason: "shutdown", skipQueueDrain: true })
+      )
+    )
+    const drainedInTime = await Promise.race([
+      cancelAll.then(() => true),
+      new Promise<boolean>((resolve) => setTimeout(() => resolve(false), shutdownGraceMs)),
+    ])
+    if (!drainedInTime) {
+      console.warn(
+        `[kanna] shutdown drain exceeded ${shutdownGraceMs}ms; remaining turns will auto-resume on next boot`
+      )
     }
     // After cancel handles in-flight turns, dispose() closes any RESIDENT
     // claudeSessions that have no active turn (idle but cached) — without
