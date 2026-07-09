@@ -1,6 +1,6 @@
 ---
 id: c3-233
-c3-seal: f4ae2eabcc9d064c96b9900b6fa92b50b8a0b9293c252474d343dc5e1d7d3e84
+c3-seal: 92c198a767d9ebcd6de483900141845725a03f9899402413207e6b61c8484f80
 title: turn-recovery
 type: component
 category: feature
@@ -80,5 +80,5 @@ Scans every chat after boot to find turns that did not finish before the server 
 | Material | Must derive from | Allowed variance | Evidence |
 | --- | --- | --- | --- |
 | src/server/turn-recovery/detect.ts | Contract (detectResumableTurns, buildResumePrompt) | Pure function bodies | src/server/turn-recovery/detect.ts |
-| src/server/turn-recovery/detect.test.ts | Change Safety (all four walls) | Test detail | src/server/turn-recovery/detect.test.ts |
+| src/server/turn-recovery/detect.test.ts | Contract (detectResumableTurns, buildResumePrompt) + Change Safety | Test detail | src/server/turn-recovery/detect.test.ts |
 | src/server/turn-recovery/reconcile.test.ts | Contract (reconcileInterruptedTurns) + Change Safety | Test detail | src/server/turn-recovery/reconcile.test.ts |
