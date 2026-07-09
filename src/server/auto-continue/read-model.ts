@@ -49,6 +49,7 @@ function applyOne(schedules: Record<string, AutoContinueSchedule>, event: AutoCo
         tz: event.tz,
         resetAt: event.resetAt,
         detectedAt: event.detectedAt,
+        source: event.source,
         ...(event.prompt !== undefined ? { prompt: event.prompt } : {}),
       }
       return

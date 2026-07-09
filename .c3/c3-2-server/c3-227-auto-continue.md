@@ -1,6 +1,6 @@
 ---
 id: c3-227
-c3-seal: ad8fcf1ec4be5d9c52fd523f0ac8b7a0676ab549b5ff8b42a360bc7b26c69e3c
+c3-seal: 5283d39ac413345350ce09a0ab8ed33091b44833c9eb39f6a5d5ffe7e3279310
 title: auto-continue
 type: component
 category: feature
@@ -9,7 +9,9 @@ goal: |-
     Detect provider rate-limit and auth-error endings on a Kanna chat,
     schedule a retry at the right wake-up moment, replay the queued user
     prompt automatically, and expose the current schedule as a derived view
-    the UI can render.
+    the UI can render. Also serves as the generic agent-wake engine for
+    `agent_wakeup`, `pending_workflow`, `subagent_background`, and
+    `interrupted_resume` sources armed by the agent coordinator.
 uses:
     - ref-cqrs-read-models
     - ref-event-sourcing
@@ -18,14 +20,14 @@ uses:
     - rule-strong-typing
 ---
 
-# auto-continue
-
 ## Goal
 
 Detect provider rate-limit and auth-error endings on a Kanna chat,
 schedule a retry at the right wake-up moment, replay the queued user
 prompt automatically, and expose the current schedule as a derived view
-the UI can render.
+the UI can render. Also serves as the generic agent-wake engine for
+`agent_wakeup`, `pending_workflow`, `subagent_background`, and
+`interrupted_resume` sources armed by the agent coordinator.
 
 ## Parent Fit
 
@@ -67,6 +69,8 @@ subscribe to and the WS router fans out.
 | Outcome | A chat that hit a soft failure resumes itself when the provider's rate window reopens, without user intervention | c3-210 |
 | Primary path | result(error) → classifier → schedule → wake → start new turn with the queued prompt | c3-210 |
 | Alternate — auth-error | Trigger OAuth-pool rotation through c3-224 and reschedule once a healthy token exists | c3-224 |
+| Alternate — agent wake | AgentCoordinator arms agent_wakeup or pending_workflow schedule; fireAutoContinue replays the prompt | c3-210 |
+| Alternate — interrupted_resume | Turn-recovery (c3-233) arms interrupted_resume schedule on boot for crash/deploy-stopped turns; exempt from the runaway-wake cap; bounded by per-turn resume-attempt counter | c3-233 |
 | Alternate — user cancels | UI emits auto_continue_cancel; scheduler appends auto_continue_cancelled and clears the timer | c3-208 |
 | Failure — unknown error shape | Classifier returns null; no schedule recorded; original result propagates unchanged | N.A - internal fallback path |
 | Failure — server restart mid-wait | Event-store replay re-creates the pending schedule on boot | c3-206 |
@@ -86,9 +90,9 @@ subscribe to and the WS router fans out.
 | Surface | Direction | Contract | Boundary | Evidence |
 | --- | --- | --- | --- | --- |
 | Auto-continue events | OUT | auto_continue_scheduled, auto_continue_triggered, auto_continue_cancelled typed events on the JSONL log | c3-205 | src/server/auto-continue/events.ts |
-| Schedule read-model | OUT | {chatId, wakeAt, reason} snapshots projected from the event log | c3-207 | src/server/auto-continue/read-model.ts |
+| Schedule read-model | OUT | {chatId, wakeAt, reason, source} snapshots projected from the event log; source field copied from auto_continue_accepted | c3-207 | src/server/auto-continue/read-model.ts |
 | Trigger new turn | OUT | On wake, call the agent coordinator's "start turn"; replay the schedule prompt for agent wakes or the queued user prompt for provider-failure resume | c3-210 | src/server/auto-continue/schedule-manager.ts |
-| Arm agent wake | IN | AgentCoordinator.scheduleAgentWakeup arms an agent_wakeup or pending_workflow schedule and returns null past the per-chat runaway cap | c3-210 | src/server/agent.ts |
+| Arm agent wake | IN | AgentCoordinator.scheduleAgentWakeup arms agent_wakeup, pending_workflow, subagent_background, or interrupted_resume schedule; returns null past the per-chat runaway cap (interrupted_resume and subagent_background are cap-exempt) | c3-210 | src/server/agent.ts |
 | Cancel signal | IN | UI cancels via auto_continue_cancel command on the WS router | c3-208 | src/server/auto-continue/schedule-manager.ts |
 
 ## Change Safety

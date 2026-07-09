@@ -1,15 +1,13 @@
 ---
 id: c3-2
 c3-version: 4
-c3-seal: d8afed3e9ca46014c8a83d802ad29f8d674e319ab00ececec07794286a94b3ea
+c3-seal: 2b9b9031762a3349b28ef56ceac7b906cfbdc95675c8ae5f1ea8a7fe725ac26f
 title: Server
 type: container
 boundary: service
 parent: c3-0
 goal: 'Run the local Bun backend: serve HTTP+WebSocket on localhost, coordinate Claude + Codex agent turns, persist events, and broadcast derived read models.'
 ---
-
-# server
 
 ## Goal
 
@@ -61,3 +59,4 @@ Run the local Bun backend: serve HTTP+WebSocket on localhost, coordinate Claude 
 | c3-230 | openrouter-models | feature | implemented | Tool-capable OpenRouter model catalog: HTTPS fetch + parse + TTL cache; feeds the composer model picker via settings.listOpenRouterModels RPC |
 | c3-231 | local-catalog | feature | implemented | Scan local Claude skills + slash commands (user, project, plugin) and merge them into ChatSnapshot.slashCommands so the composer / picker mirrors Claude Code |
 | c3-232 | teams-registry | feature | implemented | In-memory per-chat Agent-SDK teammate task read-model feeding the teams WS topic + TeamsSection panel |
+| c3-233 | turn-recovery | feature | implemented | Boot-time scan for crash/deploy-stopped turns; arms interrupted_resume auto-continue wakes so turns resume without user intervention |

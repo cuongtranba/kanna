@@ -21,7 +21,8 @@ import type {
   Subagent,
   TranscriptEntry,
 } from "../shared/types"
-import type { ChatRecord, ProjectRecord } from "./events"
+import type { ChatRecord, ProjectRecord, TurnCancelReason } from "./events"
+import { buildResumePrompt, detectResumableTurns } from "./turn-recovery/detect"
 import { buildHistoryPrimer, shouldInjectPrimer } from "./history-primer"
 import {
   getLatestContextWindowUsage,
@@ -196,6 +197,12 @@ interface ActiveTurn {
   hasFinalResult: boolean
   cancelRequested: boolean
   cancelRecorded: boolean
+  /**
+   * Why this turn is being cancelled. Set by `cancel()`; read by the fail-safe
+   * `recordTurnCancelled` sites so the persisted reason matches the cancel
+   * origin (`"user"` = Stop button, `"shutdown"` = graceful server stop).
+   */
+  cancelReason: TurnCancelReason
   clientTraceId?: string
   profilingStartedAt?: number
   waitStartedAt: number | null
@@ -357,6 +364,12 @@ export interface AgentCoordinatorArgs {
    * resets on any real (non-auto-continue) user message. Default 25.
    */
   maxAgentWakes?: number
+  /**
+   * Max times boot-time turn-recovery will resume a chat's turn without a
+   * completed turn in between. Bounds a resume→crash→resume loop across boots
+   * (a turn whose resume reliably crashes the process). Default 3.
+   */
+  maxResumeAttempts?: number
   /**
    * Delay (ms) for the pending-workflow harvest wake armed when a turn ends
    * with a background Workflow still running. Kanna gets no mid-flight
@@ -1642,6 +1655,7 @@ export class AgentCoordinator {
   // runaway loop) and avoids threading a counter through the event log.
   private readonly agentWakeChainByChat = new Map<string, number>()
   private readonly maxAgentWakes: number
+  private readonly maxResumeAttempts: number
   private readonly pendingWorkflowPollMs: number
   private readonly openrouterFirstEntryTimeoutMs: number
   // Per-tokenId rotation dedupe state. When a shared OAuth token throws
@@ -1691,6 +1705,7 @@ export class AgentCoordinator {
     this.scheduleManager = args.scheduleManager ?? null
     this.getAutoResumePreference = args.getAutoResumePreference ?? (() => false)
     this.maxAgentWakes = args.maxAgentWakes ?? 25
+    this.maxResumeAttempts = args.maxResumeAttempts ?? 3
     this.pendingWorkflowPollMs = args.pendingWorkflowPollMs ?? 120_000
     this.openrouterFirstEntryTimeoutMs =
       args.openrouterFirstEntryTimeoutMs ?? DEFAULT_OPENROUTER_FIRST_ENTRY_TIMEOUT_MS
@@ -2667,6 +2682,7 @@ export class AgentCoordinator {
       hasFinalResult: false,
       cancelRequested: false,
       cancelRecorded: false,
+      cancelReason: "user",
       clientTraceId: args.profile?.traceId,
       profilingStartedAt: args.profile?.startedAt,
       waitStartedAt: null,
@@ -2801,6 +2817,7 @@ export class AgentCoordinator {
       hasFinalResult: false,
       cancelRequested: false,
       cancelRecorded: false,
+      cancelReason: "user",
       clientTraceId: args.clientTraceId,
       waitStartedAt: null,
       userMessageId: this.findLastUserMessageId(args.chatId),
@@ -3768,7 +3785,7 @@ export class AgentCoordinator {
         this.oauthPool?.release(session.chatId)
         if (active?.provider === "claude") {
           if (active.cancelRequested && !active.cancelRecorded) {
-            await this.store.recordTurnCancelled(session.chatId)
+            await this.store.recordTurnCancelled(session.chatId, active.cancelReason)
           } else if (!active.hasFinalResult) {
             // Stream ended without any terminal result event (PTY died,
             // SDK transport dropped, etc). Fail-close the turn so the UI
@@ -3874,7 +3891,7 @@ export class AgentCoordinator {
       }
     } finally {
       if (active.cancelRequested && !active.cancelRecorded) {
-        await this.store.recordTurnCancelled(active.chatId)
+        await this.store.recordTurnCancelled(active.chatId, active.cancelReason)
       }
       active.turn.close()
       // Only remove if we're still the active turn for this chat.
@@ -4279,7 +4296,7 @@ export class AgentCoordinator {
     chatId: string
     delayMs: number
     prompt: string
-    source: "agent_wakeup" | "pending_workflow" | "subagent_background"
+    source: "agent_wakeup" | "pending_workflow" | "subagent_background" | "interrupted_resume"
   }): Promise<string | null> {
     const { chatId, prompt, source } = args
     if (!this.store.getChat(chatId)) throw new Error("Chat not found")
@@ -4288,7 +4305,9 @@ export class AgentCoordinator {
     // reply — a real result, not a self-poll — so it is exempt from the
     // runaway-wake cap. Its concurrency is already bounded by the subagent
     // permit pool + run timeout. See adr-20260616-subagent-run-in-background.
-    const countsAgainstCap = source !== "subagent_background"
+    // `interrupted_resume` continues real unfinished work on boot; it is bounded
+    // by the per-turn resume-attempt cap instead. See turn-recovery.
+    const countsAgainstCap = source !== "subagent_background" && source !== "interrupted_resume"
     const chainLength = this.agentWakeChainByChat.get(chatId) ?? 0
     if (countsAgainstCap && chainLength >= this.maxAgentWakes) return null
 
@@ -4321,6 +4340,66 @@ export class AgentCoordinator {
     })
     if (countsAgainstCap) this.agentWakeChainByChat.set(chatId, chainLength + 1)
     return scheduleId
+  }
+
+  /**
+   * Boot-time turn recovery. Scans every chat for a turn that did not finish
+   * before the server stopped — a hard-crash dangling turn (no terminal entry)
+   * or a graceful-shutdown cancel (`reason: "shutdown"`) — and arms an
+   * `interrupted_resume` wake to continue it. Explicit user cancels are never
+   * resumed (wall 3). A resume reuses the chat's persisted session token via
+   * `--resume`, so committed tool results are not re-run (wall 1). Bounded per
+   * chat by `maxResumeAttempts` so a resume that reliably crashes the process
+   * cannot loop across boots. Returns the number of resumes armed.
+   *
+   * Call once after the event store has replayed and the WS router exists (so a
+   * schedule broadcast reaches connected clients). Best-effort: a per-chat
+   * failure is logged and skipped, never fatal to boot.
+   */
+  async reconcileInterruptedTurns(): Promise<number> {
+    const resumable = detectResumableTurns(
+      this.store.listAllChats(),
+      (chatId) => this.store.getMessages(chatId)
+    )
+    let armed = 0
+    for (const turn of resumable) {
+      try {
+        // A prior boot may have armed a resume that hasn't fired yet; rehydrate
+        // restores it as a live schedule. Don't double-arm — the existing
+        // schedule will re-enter the chat.
+        const live = deriveChatSchedules(this.store.getAutoContinueEvents(turn.chatId), turn.chatId).liveScheduleId
+        if (live) continue
+        const chat = this.store.getChat(turn.chatId)
+        const attempts = chat?.resumeAttemptsSinceProgress ?? 0
+        if (attempts >= this.maxResumeAttempts) {
+          console.warn(
+            `${LOG_PREFIX} turn-recovery: skipping ${turn.chatId} — ${attempts} resume attempts without progress (cap ${this.maxResumeAttempts})`
+          )
+          continue
+        }
+        const prompt = buildResumePrompt(turn)
+        if (!prompt) continue
+        // Record the attempt BEFORE arming so the counter is durable even if the
+        // resumed turn crashes the process again before completing.
+        await this.store.recordTurnResumeAttempted(turn.chatId)
+        const scheduleId = await this.scheduleAgentWakeup({
+          chatId: turn.chatId,
+          // Small per-chat stagger so a boot with many interrupted chats does
+          // not spawn every session at once.
+          delayMs: armed * 250,
+          prompt,
+          source: "interrupted_resume",
+        })
+        if (scheduleId) {
+          armed++
+          console.log(`${LOG_PREFIX} turn-recovery: resuming ${turn.chatId} (${turn.reason})`)
+        }
+      } catch (err) {
+        console.warn(`${LOG_PREFIX} turn-recovery: failed to resume ${turn.chatId}`, err)
+      }
+    }
+    if (armed > 0) console.log(`${LOG_PREFIX} turn-recovery: armed ${armed} resume(s)`)
+    return armed
   }
 
   /**
@@ -4412,7 +4491,7 @@ export class AgentCoordinator {
     })
   }
 
-  async cancel(chatId: string, options?: { hideInterrupted?: boolean; skipQueueDrain?: boolean }) {
+  async cancel(chatId: string, options?: { hideInterrupted?: boolean; skipQueueDrain?: boolean; reason?: TurnCancelReason }) {
     // Also clean up any draining stream for this chat.
     const draining = this.drainingStreams.get(chatId)
     if (draining) {
@@ -4441,6 +4520,7 @@ export class AgentCoordinator {
     // Guard against concurrent cancel() calls — only the first one does work.
     if (active.cancelRequested) return
     active.cancelRequested = true
+    active.cancelReason = options?.reason ?? "user"
 
     const pendingTool = active.pendingTool
     active.pendingTool = null
@@ -4461,7 +4541,7 @@ export class AgentCoordinator {
     }
 
     await this.store.appendMessage(chatId, timestamped({ kind: "interrupted", hidden: options?.hideInterrupted }))
-    await this.store.recordTurnCancelled(chatId)
+    await this.store.recordTurnCancelled(chatId, active.cancelReason)
     active.cancelRecorded = true
     active.hasFinalResult = true
 

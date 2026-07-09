@@ -1,7 +1,7 @@
 ---
 id: c3-209
 c3-version: 4
-c3-seal: c80638fcbd96f3c35dc04fbb04a7124db1809b9d11ad1a3ce9b1399410443539
+c3-seal: b918e5a6cebad774726da49a15a584b6d85b22b13fbd464ff22562afee7b1930
 title: process-utils
 type: component
 category: foundation
@@ -11,8 +11,6 @@ uses:
     - ref-strong-typing
     - rule-strong-typing
 ---
-
-# process-utils
 
 ## Goal
 
@@ -30,7 +28,7 @@ Provide helpers for spawning, signaling, and tearing down child processes (agent
 
 ## Purpose
 
-Wraps Bun's child-process APIs into typed helpers (spawn, signal, kill, drain stdio) that features call rather than reinventing process lifecycle logic. Non-goals: domain-specific process orchestration — that belongs to feature components.
+Wraps Bun's child-process APIs into typed helpers (spawn, signal, kill, drain stdio) that features call rather than reinventing process lifecycle logic. Non-goals: domain-specific process orchestration — that belongs to feature components. Bounded shutdown drain (SIGTERM grace → SIGKILL) is implemented directly in `server.ts`/`cli.ts`, not as a process-utils helper.
 
 ## Foundational Flow
 
@@ -61,18 +59,18 @@ Wraps Bun's child-process APIs into typed helpers (spawn, signal, kill, drain st
 
 | Surface | Direction | Contract | Boundary | Evidence |
 | --- | --- | --- | --- | --- |
-| spawn(opts) | OUT | Returns typed child handle | c3-216 | src/server/process-utils.ts |
-| signalAndWait(handle) | OUT | Sends SIGTERM, escalates after timeout | c3-220 | src/server/process-utils.ts |
+| spawn(opts) | OUT | Returns typed child handle | c3-216 | src/server/process-utils.adapter.ts |
+| N.A - signalAndWait removed | N.A - surface no longer exists | N.A - bounded drain is now Promise.race in server.ts; no helper exported | N.A - removed surface | src/server/server.ts |
 
 ## Change Safety
 
 | Risk | Trigger | Detection | Required Verification |
 | --- | --- | --- | --- |
-| Zombie process leak | Helper skips wait on exit | Process count grows over session | bun run check against src/server/process-utils.ts |
+| Zombie process leak | Helper skips wait on exit | Process count grows over session | bun run check against src/server/process-utils.adapter.ts |
 | Signal escalation regression | Timeout edit | Stuck on shutdown | Manual SIGTERM smoke + grep src/server/ for stuck process patterns |
 
 ## Derived Materials
 
 | Material | Must derive from | Allowed variance | Evidence |
 | --- | --- | --- | --- |
-| src/server/process-utils.ts | c3-209 Contract | Helper detail | src/server/process-utils.ts |
+| src/server/process-utils.adapter.ts | c3-209 Contract | Helper detail | src/server/process-utils.adapter.ts |
