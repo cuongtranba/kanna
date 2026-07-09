@@ -491,6 +491,55 @@ describe("normalizeClaudeStreamMessage", () => {
     })
   })
 
+  describe("advisor_tool_result content blocks", () => {
+    test("an advisor_tool_result block becomes an assistant_advisor entry carrying the result text", () => {
+      const entries = normalizeClaudeStreamMessage({
+        type: "assistant",
+        uuid: "msg-adv-1",
+        message: {
+          model: "claude-sonnet-5",
+          content: [{ type: "advisor_tool_result", tool_use_id: "srvtoolu_abc", content: { type: "advisor_result", text: "17 × 23 = 391" } }],
+        },
+      })
+      expect(entries).toHaveLength(1)
+      const entry = entries[0]
+      expect(entry.kind).toBe("assistant_advisor")
+      if (entry.kind !== "assistant_advisor") throw new Error("expected assistant_advisor")
+      expect(entry.text).toBe("17 × 23 = 391")
+    })
+
+    test("drops an advisor_tool_result block with empty result text", () => {
+      const entries = normalizeClaudeStreamMessage({
+        type: "assistant",
+        uuid: "msg-adv-2",
+        message: {
+          model: "claude-sonnet-5",
+          content: [
+            { type: "advisor_tool_result", tool_use_id: "srvtoolu_abc", content: { type: "advisor_result", text: "" } },
+            { type: "text", text: "answer" },
+          ],
+        },
+      })
+      expect(entries.map((e) => e.kind)).toEqual(["assistant_text"])
+    })
+
+    test("preserves order across thinking, advisor_tool_result, and text blocks", () => {
+      const entries = normalizeClaudeStreamMessage({
+        type: "assistant",
+        uuid: "msg-adv-3",
+        message: {
+          model: "claude-sonnet-5",
+          content: [
+            { type: "thinking", thinking: "Let me think", signature: "s1" },
+            { type: "advisor_tool_result", tool_use_id: "srvtoolu_abc", content: { type: "advisor_result", text: "Advisor says: yes" } },
+            { type: "text", text: "Final answer" },
+          ],
+        },
+      })
+      expect(entries.map((e) => e.kind)).toEqual(["assistant_thinking", "assistant_advisor", "assistant_text"])
+    })
+  })
+
   describe("task lifecycle messages (agent-sdk 0.3.x)", () => {
     test("task_started -> status entry announcing teammate", () => {
       const entries = normalizeClaudeStreamMessage({

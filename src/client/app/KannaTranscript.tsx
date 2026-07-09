@@ -9,6 +9,7 @@ import { SystemMessage } from "../components/messages/SystemMessage"
 import { AccountInfoMessage } from "../components/messages/AccountInfoMessage"
 import { TextMessage } from "../components/messages/TextMessage"
 import { ThinkingMessage } from "../components/messages/ThinkingMessage"
+import { AdvisorMessage } from "../components/messages/AdvisorMessage"
 import { ApiErrorMessage } from "../components/messages/ApiErrorMessage"
 import { PolicyRefusalMessage } from "../components/messages/PolicyRefusalMessage"
 import { AskUserQuestionMessage } from "../components/messages/AskUserQuestionMessage"
@@ -266,6 +267,8 @@ function sameMessage(left: HydratedTranscriptMessage, right: HydratedTranscriptM
       return right.kind === "assistant_text" && left.text === right.text
     case "assistant_thinking":
       return right.kind === "assistant_thinking" && left.text === right.text
+    case "assistant_advisor":
+      return right.kind === "assistant_advisor" && left.text === right.text
     case "api_error":
       return right.kind === "api_error"
         && left.status === right.status
@@ -474,6 +477,9 @@ const TranscriptSingleRow = memo(function TranscriptSingleRow({
         break
       case "assistant_thinking":
         rendered = <ThinkingMessage key={message.id} message={message} />
+        break
+      case "assistant_advisor":
+        rendered = <AdvisorMessage key={message.id} message={message} />
         break
       case "api_error":
         rendered = <ApiErrorMessage key={message.id} message={message} />

@@ -16,6 +16,11 @@ export type ProcessedThinkingMessage = Extract<
   { kind: "assistant_thinking" }
 >
 
+export type ProcessedAdvisorMessage = Extract<
+  import("../../../shared/types").HydratedTranscriptMessage,
+  { kind: "assistant_advisor" }
+>
+
 export type ProcessedApiErrorMessage = Extract<
   import("../../../shared/types").HydratedTranscriptMessage,
   { kind: "api_error" }

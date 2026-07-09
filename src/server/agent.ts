@@ -829,6 +829,17 @@ export function normalizeClaudeStreamMessage(message: any): TranscriptEntry[] {
           debugRaw,
         }))
       }
+      if (content.type === "advisor_tool_result") {
+        const result = content.content
+        if (result?.type === "advisor_result" && typeof result.text === "string" && result.text.length > 0) {
+          entries.push(timestamped({
+            kind: "assistant_advisor",
+            messageId,
+            text: result.text,
+            debugRaw,
+          }))
+        }
+      }
       if (content.type === "text" && typeof content.text === "string") {
         entries.push(timestamped({
           kind: "assistant_text",
