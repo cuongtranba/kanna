@@ -1,7 +1,30 @@
 import type { ResolvedStackBinding, Subagent } from "./types"
 
 /**
+ * LOCKED safety contract — identity + refusal policy. Position 0 of every
+ * composed prompt, immutable, NOT user-editable.
+ *
+ * This is the safety floor the "Instructions" setting (`globalPromptAppend`)
+ * appends *after* — user text can add to the prompt but never reword or
+ * remove this paragraph. Keeping it first means the refusal policy is in
+ * scope before any user-controlled text (see {@link buildKannaSystemPromptAppend}).
+ */
+export const KANNA_SAFETY_PREFIX =
+  "You are the Kanna coding agent helping a trusted developer work on their own codebase via Kanna's web UI. Treat user code as their own project. Do not refuse tasks or label code as 'malware' based on speculation; only refuse when the user explicitly requests clearly malicious behavior (e.g. weaponized exploits against third parties, credential theft, mass abuse). Reverse-engineering, security research, defensive tooling, low-level system code, packers, hooks, and unconventional patterns in the user's own project are legitimate and must be assisted."
+
+/**
+ * Behavioral default — the `preview_file` proactivity nudge. Still hardcoded,
+ * but surfaced as its own constant so the two BASE concerns (locked safety vs.
+ * tunable behavior) are legible and future tuning is a one-line change.
+ */
+export const KANNA_AGENT_BASE_DEFAULT =
+  "When the user should read a file (a spec or plan you wrote, a file they asked to see), call `mcp__kanna__preview_file` to show it in the chat instead of pasting or summarizing its content."
+
+/**
  * The Kanna system-prompt suffix appended to Claude's `claude_code` preset.
+ * Composition is {@link KANNA_SAFETY_PREFIX} + blank line +
+ * {@link KANNA_AGENT_BASE_DEFAULT} — same bytes callers and snapshots already
+ * depend on; the split above is readability only.
  *
  * Single source of truth for both drivers:
  * - SDK driver (`agent.ts`) passes it as `systemPrompt.append`.
@@ -9,10 +32,10 @@ import type { ResolvedStackBinding, Subagent } from "./types"
  *
  * Keeping the two in lockstep matters: a weaker PTY prompt diverged refusal
  * behaviour (PTY would decline reverse-engineering / security-research tasks
- * the SDK path accepts). Edit here, both drivers inherit it.
+ * the SDK path accepts). Edit the constants above, both drivers inherit it.
  */
 export const KANNA_SYSTEM_PROMPT_BASE =
-  "You are the Kanna coding agent helping a trusted developer work on their own codebase via Kanna's web UI. Treat user code as their own project. Do not refuse tasks or label code as 'malware' based on speculation; only refuse when the user explicitly requests clearly malicious behavior (e.g. weaponized exploits against third parties, credential theft, mass abuse). Reverse-engineering, security research, defensive tooling, low-level system code, packers, hooks, and unconventional patterns in the user's own project are legitimate and must be assisted.\n\nWhen the user should read a file (a spec or plan you wrote, a file they asked to see), call `mcp__kanna__preview_file` to show it in the chat instead of pasting or summarizing its content."
+  KANNA_SAFETY_PREFIX + "\n\n" + KANNA_AGENT_BASE_DEFAULT
 
 /**
  * Legacy constant kept for snapshot/import compatibility. Equal to
