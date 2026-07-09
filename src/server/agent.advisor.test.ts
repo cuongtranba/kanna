@@ -251,4 +251,40 @@ describe("AgentCoordinator advisor tool", () => {
     expect(calls[0]?.advisorModel).toBe("claude-opus-4-8")
     expect(calls[1]?.advisorModel).toBe("claude-opus-4-7")
   }, 10_000)
+
+  test("drops advisorModel at spawn when advisorEnabled is false", async () => {
+    const capture: SpawnCapture = { advisorModel: "SENTINEL", seen: false }
+    const events = new AsyncEventQueue<HarnessEvent>()
+    const store = createFakeStore()
+    const coordinator = new AgentCoordinator({
+      store: store as never,
+      onStateChange: () => {},
+      getAppSettingsSnapshot: () => ({ advisorEnabled: false }),
+      startClaudeSession: async (args: { advisorModel?: string }) => {
+        capture.advisorModel = args.advisorModel
+        capture.seen = true
+        return {
+          provider: "claude",
+          stream: events,
+          getAccountInfo: async () => null,
+          interrupt: async () => {},
+          close: () => {},
+          setModel: async () => {},
+          setPermissionMode: async () => {},
+          getSupportedCommands: async () => [],
+          sendPrompt: async () => {},
+        }
+      },
+    })
+    await coordinator.send({
+      type: "chat.send",
+      chatId: "chat-5",
+      provider: "claude" as never,
+      content: "test",
+      model: "claude-sonnet-4-6",
+      advisorModel: "claude-opus-4-8",
+    })
+    await waitFor(() => capture.seen, 4000, "session spawned")
+    expect(capture.advisorModel).toBeUndefined()
+  }, 10_000)
 })

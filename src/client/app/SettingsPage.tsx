@@ -2005,6 +2005,34 @@ export function SettingsPage() {
                         />
                       </SettingsRow>
 
+                      <SettingsRow
+                        title="Native agent teams"
+                        description="Let Claude spawn your configured Claude subagents as parallel Agent-tool teammates (SDK driver). Each teammate copies the full context and burns tokens fast. Turn off to save quota — delegation via @agent still works."
+                      >
+                        <AutoResumeToggleSection
+                          checked={appSettings?.teamsEnabled !== false}
+                          onChange={(value) => {
+                            void handleWriteAppSettings({ teamsEnabled: value }).catch((error) => {
+                              setAppSettingsError(error instanceof Error ? error.message : String(error))
+                            })
+                          }}
+                        />
+                      </SettingsRow>
+
+                      <SettingsRow
+                        title="Advisor model"
+                        description="Allow a chat's executor model to consult a higher-intelligence advisor model mid-turn (SDK driver). Each consult re-reads the full context on the pricier model and burns quota quickly. Turn off to disable the advisor picker."
+                      >
+                        <AutoResumeToggleSection
+                          checked={appSettings?.advisorEnabled !== false}
+                          onChange={(value) => {
+                            void handleWriteAppSettings({ advisorEnabled: value }).catch((error) => {
+                              setAppSettingsError(error instanceof Error ? error.message : String(error))
+                            })
+                          }}
+                        />
+                      </SettingsRow>
+
                       {state.pushConfig ? (
                         <SettingsRow
                           title="Push notifications"

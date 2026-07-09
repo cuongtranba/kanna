@@ -211,6 +211,19 @@ describe("buildKannaSystemPromptAppend", () => {
       const out = buildKannaSystemPromptAppend([claudeSub, codexSub], {})
       expect(out).toContain("native teammates")
     })
+
+    test("nativeTeamsEnabled:false omits guidance but keeps delegation", () => {
+      const out = buildKannaSystemPromptAppend([claudeSub], { nativeTeamsEnabled: false })
+      expect(out).not.toContain("native teammates")
+      // Delegation must still work when native teams are disabled.
+      expect(out).toContain("mcp__kanna__delegate_subagent")
+      expect(out).toContain("- codereview [id=c1]")
+    })
+
+    test("nativeTeamsEnabled:true is the default (guidance present)", () => {
+      const out = buildKannaSystemPromptAppend([claudeSub], { nativeTeamsEnabled: true })
+      expect(out).toContain("native teammates")
+    })
   })
 
   describe("triggerMode roster split", () => {

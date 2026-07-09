@@ -79,6 +79,15 @@ export interface KannaSystemPromptOptions {
    * Empty / absent for solo chats — the block is then omitted entirely.
    */
   stackProjects?: ResolvedStackBinding[]
+
+  /**
+   * When false, the `NATIVE_TEAM_GUIDANCE` block is omitted even if
+   * claude-provider subagents are present. Mirrors the `teamsEnabled`
+   * app setting: with native teams disabled the model is not told it can
+   * spawn Agent-tool teammates (they are also not injected into
+   * `options.agents`). Delegation guidance is unaffected. Default true.
+   */
+  nativeTeamsEnabled?: boolean
 }
 
 /**
@@ -158,7 +167,7 @@ export function buildKannaSystemPromptAppend(
     }
     sections.push("", DELEGATION_GUIDANCE)
 
-    if (subagents.some((s) => s.provider === "claude")) {
+    if (options.nativeTeamsEnabled !== false && subagents.some((s) => s.provider === "claude")) {
       sections.push("", NATIVE_TEAM_GUIDANCE)
     }
   }
