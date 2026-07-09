@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.108.2](https://github.com/cuongtranba/kanna/compare/v0.108.1...v0.108.2) (2026-07-09)
+
+
+### Bug Fixes
+
+* **settings:** keep UPDATE badge inside changelog nav item ([#501](https://github.com/cuongtranba/kanna/issues/501)) ([c94c40b](https://github.com/cuongtranba/kanna/commit/c94c40b3d97f14db5fadc3e4564b60137321b068))
+* **teams:** hide Teams panel in chat when teamsEnabled is off ([#503](https://github.com/cuongtranba/kanna/issues/503)) ([305c1af](https://github.com/cuongtranba/kanna/commit/305c1af8ccaababbc17c70a6ef7bcfcc037baa86))
+
 ## [0.108.1](https://github.com/cuongtranba/kanna/compare/v0.108.0...v0.108.1) (2026-07-09)
 
 
