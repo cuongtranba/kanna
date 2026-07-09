@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.107.0](https://github.com/cuongtranba/kanna/compare/v0.106.0...v0.107.0) (2026-07-09)
+
+
+### Features
+
+* **advisor:** friendly 400 message + composer picker hint ([#492](https://github.com/cuongtranba/kanna/issues/492)) ([5d59327](https://github.com/cuongtranba/kanna/commit/5d59327a4022f52b496d4ffbcf86f87ea724e94c))
+* **teams:** auto-collapse Teams panel, expand only while running ([#490](https://github.com/cuongtranba/kanna/issues/490)) ([e5de22b](https://github.com/cuongtranba/kanna/commit/e5de22bf9bc639a0b75ec18183a6d21864e7a55d))
+
 ## [0.106.0](https://github.com/cuongtranba/kanna/compare/v0.105.0...v0.106.0) (2026-07-09)
 
 
