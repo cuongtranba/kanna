@@ -276,6 +276,9 @@ export function ChatPreferenceControls({
 }: ChatPreferenceControlsProps) {
   const customModels = useAppSettingsStore(selectCustomModels)
   const isDriverPty = useAppSettingsStore((s) => s.settings?.claudeDriver.preference === "pty")
+  // Advisor picker hides when the feature is disabled in Settings. The server
+  // also drops advisorModel at spawn, so a stale per-chat pick is inert.
+  const advisorEnabled = useAppSettingsStore((s) => s.settings?.advisorEnabled !== false)
   const providerConfig = availableProviders.find((provider) => provider.id === selectedProvider) ?? availableProviders[0]
   const ProviderIcon = PROVIDER_ICONS[selectedProvider]
   const ModelIcon = Box
@@ -432,7 +435,7 @@ export function ChatPreferenceControls({
         </InputPopover>
       ) : null}
 
-      {selectedProvider === "claude" ? (
+      {selectedProvider === "claude" && advisorEnabled ? (
         isDriverPty ? (
           <span className="flex items-center gap-1 px-2 text-xs text-muted-foreground">
             <Sparkles className="h-3.5 w-3.5 shrink-0" />

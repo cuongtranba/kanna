@@ -115,6 +115,8 @@ interface AppSettingsFile {
   claudeDriver?: unknown
   globalPromptAppend?: unknown
   shareDefaultTtlHours?: unknown
+  teamsEnabled?: unknown
+  advisorEnabled?: unknown
 }
 
 interface AppSettingsState extends AppSettingsSnapshot {
@@ -844,6 +846,8 @@ function toFilePayload(state: AppSettingsState) {
     claudeDriver: state.claudeDriver,
     globalPromptAppend: state.globalPromptAppend,
     shareDefaultTtlHours: state.shareDefaultTtlHours,
+    teamsEnabled: state.teamsEnabled,
+    advisorEnabled: state.advisorEnabled,
   }
 }
 
@@ -870,6 +874,8 @@ function toSnapshot(state: AppSettingsState): AppSettingsSnapshot {
     claudeDriver: state.claudeDriver,
     globalPromptAppend: state.globalPromptAppend,
     shareDefaultTtlHours: state.shareDefaultTtlHours,
+    teamsEnabled: state.teamsEnabled,
+    advisorEnabled: state.advisorEnabled,
   }
 }
 
@@ -919,6 +925,15 @@ function normalizeAppSettings(
     }
   }
 
+  const teamsEnabled = typeof source?.teamsEnabled === "boolean" ? source.teamsEnabled : true
+  if (source?.teamsEnabled !== undefined && typeof source.teamsEnabled !== "boolean") {
+    warnings.push("teamsEnabled must be a boolean")
+  }
+  const advisorEnabled = typeof source?.advisorEnabled === "boolean" ? source.advisorEnabled : true
+  if (source?.advisorEnabled !== undefined && typeof source.advisorEnabled !== "boolean") {
+    warnings.push("advisorEnabled must be a boolean")
+  }
+
   const editorPreset = normalizeEditorPreset(source?.editor?.preset)
   const state: AppSettingsState = {
     analyticsEnabled,
@@ -949,6 +964,8 @@ function normalizeAppSettings(
     claudeDriver,
     globalPromptAppend,
     shareDefaultTtlHours,
+    teamsEnabled,
+    advisorEnabled,
   }
 
   const shouldWrite = JSON.stringify(source ? toComparablePayload(source) : null) !== JSON.stringify(toFilePayload(state))
@@ -987,6 +1004,8 @@ function toComparablePayload(source: AppSettingsFile) {
       ? source.globalPromptAppend.replace(/\s+$/u, "")
       : source.globalPromptAppend,
     shareDefaultTtlHours: source.shareDefaultTtlHours,
+    teamsEnabled: source.teamsEnabled,
+    advisorEnabled: source.advisorEnabled,
   }
 }
 
@@ -1425,6 +1444,8 @@ function applyPatch(state: AppSettingsState, patch: AppSettingsPatch): AppSettin
     },
     globalPromptAppend: patch.globalPromptAppend ?? state.globalPromptAppend,
     shareDefaultTtlHours: patch.shareDefaultTtlHours ?? state.shareDefaultTtlHours,
+    teamsEnabled: patch.teamsEnabled ?? state.teamsEnabled,
+    advisorEnabled: patch.advisorEnabled ?? state.advisorEnabled,
   }, state.filePathDisplay).payload
 }
 

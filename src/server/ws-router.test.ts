@@ -128,6 +128,8 @@ const DEFAULT_APP_SETTINGS_SNAPSHOT: AppSettingsSnapshot = {
   claudeDriver: { ...CLAUDE_DRIVER_DEFAULTS, lifecycle: { ...CLAUDE_PTY_LIFECYCLE_DEFAULTS } },
   globalPromptAppend: "",
   shareDefaultTtlHours: 24,
+  teamsEnabled: true,
+  advisorEnabled: true,
 }
 
 describe("isBenignStaleStateMessage", () => {

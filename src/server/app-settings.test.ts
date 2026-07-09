@@ -86,6 +86,8 @@ function expectedSettingsSnapshot(filePath: string, overrides: Partial<AppSettin
     claudeDriver: { ...CLAUDE_DRIVER_DEFAULTS, lifecycle: { ...CLAUDE_PTY_LIFECYCLE_DEFAULTS } },
     globalPromptAppend: "",
     shareDefaultTtlHours: 24,
+    teamsEnabled: true,
+    advisorEnabled: true,
     ...overrides,
   }
 }
@@ -1115,6 +1117,37 @@ describe("shareDefaultTtlHours", () => {
     await expect(mgr.writePatch({ shareDefaultTtlHours: -1 })).rejects.toThrow()
     await expect(mgr.writePatch({ shareDefaultTtlHours: 1.5 })).rejects.toThrow()
     mgr.dispose()
+  })
+})
+
+describe("teamsEnabled / advisorEnabled", () => {
+  test("both default to true and are independently patchable", async () => {
+    const filePath = await createTempFilePath()
+    const mgr = trackManager(new AppSettingsManager(filePath))
+    await mgr.initialize()
+    expect(mgr.getSnapshot().teamsEnabled).toBe(true)
+    expect(mgr.getSnapshot().advisorEnabled).toBe(true)
+
+    await mgr.writePatch({ teamsEnabled: false })
+    expect(mgr.getSnapshot().teamsEnabled).toBe(false)
+    expect(mgr.getSnapshot().advisorEnabled).toBe(true)
+
+    await mgr.writePatch({ advisorEnabled: false })
+    expect(mgr.getSnapshot().teamsEnabled).toBe(false)
+    expect(mgr.getSnapshot().advisorEnabled).toBe(false)
+
+    await mgr.writePatch({ teamsEnabled: true })
+    expect(mgr.getSnapshot().teamsEnabled).toBe(true)
+    mgr.dispose()
+  })
+
+  test("non-boolean persisted values reset to the enabled default with a warning", async () => {
+    const filePath = await writeSettingsFile({ teamsEnabled: "nope", advisorEnabled: 1 })
+    const snapshot = await readAppSettingsSnapshot(filePath)
+    expect(snapshot.teamsEnabled).toBe(true)
+    expect(snapshot.advisorEnabled).toBe(true)
+    expect(snapshot.warning).toContain("teamsEnabled must be a boolean")
+    expect(snapshot.warning).toContain("advisorEnabled must be a boolean")
   })
 })
 

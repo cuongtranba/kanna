@@ -76,6 +76,8 @@ export function mergeAppSettingsPatch(
       },
     },
     globalPromptAppend: patch.globalPromptAppend ?? settings.globalPromptAppend,
+    teamsEnabled: patch.teamsEnabled ?? settings.teamsEnabled,
+    advisorEnabled: patch.advisorEnabled ?? settings.advisorEnabled,
   }
 }
 

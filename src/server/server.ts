@@ -109,6 +109,8 @@ export interface AgentAppSettingsView {
   globalPromptAppend: AppSettingsSnapshot["globalPromptAppend"]
   customMcpServers: AppSettingsSnapshot["customMcpServers"]
   customModels: AppSettingsSnapshot["customModels"]
+  teamsEnabled: AppSettingsSnapshot["teamsEnabled"]
+  advisorEnabled: AppSettingsSnapshot["advisorEnabled"]
 }
 
 export function buildAgentAppSettingsView(snapshot: AppSettingsSnapshot): AgentAppSettingsView {
@@ -124,6 +126,10 @@ export function buildAgentAppSettingsView(snapshot: AppSettingsSnapshot): AgentA
     // Forward customModels so getProviderSettings can accept user-defined
     // model ids without collapsing to the built-in default. See ChatPreferenceControls.
     customModels: snapshot.customModels,
+    // Forward the team/advisor kill switches so startClaudeTurn can gate the
+    // native-teammate injection and advisor-model forwarding. Absent ⇒ enabled.
+    teamsEnabled: snapshot.teamsEnabled,
+    advisorEnabled: snapshot.advisorEnabled,
   }
 }
 

@@ -925,6 +925,19 @@ export interface AppSettingsSnapshot {
   claudeDriver: ClaudeDriverSettings
   globalPromptAppend: string
   shareDefaultTtlHours: number
+  /**
+   * When false, the SDK driver stops injecting claude subagents as native
+   * Agent-tool teammates (`options.agents`) and drops the native-team
+   * guidance from the system-prompt append. Delegation via
+   * `mcp__kanna__delegate_subagent` is unaffected. Default true.
+   */
+  teamsEnabled: boolean
+  /**
+   * When false, the per-chat advisor model is never forwarded to the SDK
+   * `query().settings.advisorModel`, so Claude never consults the
+   * higher-intelligence advisor tool. Default true.
+   */
+  advisorEnabled: boolean
 }
 
 export interface AppSettingsPatch {
@@ -969,6 +982,8 @@ export interface AppSettingsPatch {
   }
   globalPromptAppend?: string
   shareDefaultTtlHours?: number
+  teamsEnabled?: boolean
+  advisorEnabled?: boolean
 }
 
 export interface LlmProviderFile {

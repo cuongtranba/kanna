@@ -50,6 +50,8 @@ function makeSnapshot(overrides: Partial<AppSettingsSnapshot> = {}): AppSettings
     claudeDriver: { ...CLAUDE_DRIVER_DEFAULTS, lifecycle: { ...CLAUDE_PTY_LIFECYCLE_DEFAULTS } },
     globalPromptAppend: "",
     shareDefaultTtlHours: 24,
+    teamsEnabled: true,
+    advisorEnabled: true,
     ...overrides,
   }
 }
@@ -124,10 +126,12 @@ describe("buildAgentAppSettingsView", () => {
   test("returns exactly the keys the AgentCoordinator consumes", () => {
     const view = buildAgentAppSettingsView(makeSnapshot())
     expect(Object.keys(view).sort()).toEqual([
+      "advisorEnabled",
       "claudeDriver",
       "customMcpServers",
       "customModels",
       "globalPromptAppend",
+      "teamsEnabled",
     ])
   })
 })

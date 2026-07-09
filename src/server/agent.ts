@@ -399,6 +399,8 @@ export interface AgentCoordinatorArgs {
     globalPromptAppend?: string
     customMcpServers?: readonly McpServerConfig[]
     customModels?: readonly CustomModelEntry[]
+    teamsEnabled?: boolean
+    advisorEnabled?: boolean
   }
   throwOnClaudeSessionStart?: boolean
   oauthPool?: OAuthTokenPool
@@ -2852,11 +2854,19 @@ export class AgentCoordinator {
   }): Promise<HarnessTurn> {
     let session = this.claudeSessions.get(args.chatId)
 
+    // Settings-level kill switches (default on). `teamsEnabled=false` drops the
+    // native Agent-tool teammate injection + guidance; `advisorEnabled=false`
+    // strips the per-chat advisor model so the SDK never consults it. Both cut
+    // the token/quota amplification those features add on every turn.
+    const appSettings = this.getAppSettingsSnapshot()
+    const teamsEnabled = appSettings.teamsEnabled !== false
+    const effectiveAdvisorModel = appSettings.advisorEnabled === false ? undefined : args.advisorModel
+
     if (
       !session ||
       session.localPath !== args.localPath ||
       session.effort !== args.effort ||
-      session.advisorModel !== args.advisorModel ||
+      session.advisorModel !== effectiveAdvisorModel ||
       args.forkSession ||
       session.additionalDirectories.join("|") !== (args.additionalDirectories ?? []).join("|")
     ) {
@@ -2899,6 +2909,7 @@ export class AgentCoordinator {
       const systemPromptAppend = buildKannaSystemPromptAppend(this.getSubagents(), {
         globalPromptAppend: this.getAppSettingsSnapshot().globalPromptAppend,
         stackProjects: args.stackProjects,
+        nativeTeamsEnabled: teamsEnabled,
       })
       const chatIdForCtx = args.chatId
       const delegationContext: KannaMcpDelegationContext = {
@@ -2949,7 +2960,7 @@ export class AgentCoordinator {
               localPath: args.localPath,
               model: args.model,
               effort: args.effort,
-              advisorModel: args.advisorModel,
+              advisorModel: effectiveAdvisorModel,
               planMode: args.planMode,
               sessionToken: args.sessionToken,
               forkSession: args.forkSession,
@@ -2971,7 +2982,7 @@ export class AgentCoordinator {
               oauthBearers,
               turnPrice: openrouterTurnPrice,
               contextWindowOverride: openrouterContextWindow,
-              agentDefinitions: buildAgentDefinitions(this.getSubagents()),
+              agentDefinitions: teamsEnabled ? buildAgentDefinitions(this.getSubagents()) : {},
               resolveAgentName: (agentId) => {
                 const tasks = this.teamsRegistry?.snapshot(args.chatId) ?? []
                 const task = tasks.find((t) => t.taskId === agentId)
@@ -2995,7 +3006,7 @@ export class AgentCoordinator {
         additionalDirectories: args.additionalDirectories ?? [],
         model: args.model,
         effort: args.effort,
-        advisorModel: args.advisorModel,
+        advisorModel: effectiveAdvisorModel,
         planMode: args.planMode,
         sessionToken: args.sessionToken,
         accountInfoLoaded: false,
