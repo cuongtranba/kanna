@@ -550,7 +550,13 @@ export class OrchestrationQueue {
   ): Promise<boolean> {
     const spec = config.verify!
     const runVerify = this.deps.runVerify!
-    const fixPhaseIndex = config.phases.findLastIndex((p) => p.kind === "fix")
+    let fixPhaseIndex = -1
+    for (let i = config.phases.length - 1; i >= 0; i--) {
+      if (config.phases[i]!.kind === "fix") {
+        fixPhaseIndex = i
+        break
+      }
+    }
     for (let attempt = 0; attempt <= spec.retries; attempt++) {
       if (rt.cancelled) return false
       await this.deps.store.appendOrchestrationEvent({
