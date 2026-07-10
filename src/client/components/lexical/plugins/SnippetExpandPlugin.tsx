@@ -86,17 +86,25 @@ export function SnippetExpandPlugin({ snippets }: SnippetExpandPluginProps): nul
 
           const token = match[1]
           const start = offset - token.length
-          // Remove the shortcut token; caret lands at `start`.
-          node.spliceText(start, token.length, "", true)
-
-          const afterSelection = $getSelection()
-          if (!$isRangeSelection(afterSelection)) return
-
           const parts = snippet.expansion.split("\n")
-          parts.forEach((part, index) => {
-            if (index > 0) afterSelection.insertLineBreak()
-            if (part.length > 0) afterSelection.insertText(part)
-          })
+
+          // Replace the shortcut token in place with the FIRST expansion line.
+          // Splicing straight to the replacement (instead of emptying the node
+          // then re-inserting) avoids leaving a transient empty TextNode: an
+          // empty node gets pruned during DOM reconciliation, which orphans the
+          // caret and leaves it invisible after Tab. `spliceText(..., true)`
+          // lands the caret at the end of the inserted first line.
+          node.spliceText(start, token.length, parts[0] ?? "", true)
+
+          if (parts.length > 1) {
+            const afterSelection = $getSelection()
+            if (!$isRangeSelection(afterSelection)) return
+            for (let index = 1; index < parts.length; index += 1) {
+              afterSelection.insertLineBreak()
+              const line = parts[index]
+              if (line.length > 0) afterSelection.insertText(line)
+            }
+          }
 
           handled = true
         })

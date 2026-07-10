@@ -64,13 +64,17 @@ function expandInEditor(editor: ReturnType<typeof buildEditor>, snippets: readon
       const found = findSnippetForCaret(textBeforeCaret, snippets)
       if (found === null) return
       const token = match[1]
-      node.spliceText(offset - token.length, token.length, "", true)
-      const after = $getSelection()
-      if (!$isRangeSelection(after)) return
-      found.expansion.split("\n").forEach((part, index) => {
-        if (index > 0) after.insertLineBreak()
-        if (part.length > 0) after.insertText(part)
-      })
+      const parts = found.expansion.split("\n")
+      node.spliceText(offset - token.length, token.length, parts[0] ?? "", true)
+      if (parts.length > 1) {
+        const after = $getSelection()
+        if (!$isRangeSelection(after)) return
+        for (let index = 1; index < parts.length; index += 1) {
+          after.insertLineBreak()
+          const line = parts[index]
+          if (line.length > 0) after.insertText(line)
+        }
+      }
       handled = true
     },
     { discrete: true },
@@ -194,5 +198,97 @@ describe("SnippetExpandPlugin — expansion", () => {
     seedText(editor, "sig")
     expect(expandInEditor(editor, SNIPPETS)).toBe(true)
     expect(serializeEditorToWire(editor).text).toBe("Best regards,\nAda")
+  })
+})
+
+// ─── Caret placement (regression: invisible/lost caret) ───────────────────────
+//
+// The original algorithm spliced the shortcut token to "" and then re-inserted.
+// When the token WAS the whole text node, that left a transient empty TextNode
+// which Lexical prunes during DOM reconciliation, orphaning the caret so it
+// rendered invisible. These assertions guard that the caret always ends on an
+// ATTACHED TextNode at the end of the expansion, so the user can keep typing.
+
+/** Reads the collapsed selection anchor after an expansion. */
+function anchorAfterExpand(editor: ReturnType<typeof buildEditor>): {
+  isText: boolean
+  attached: boolean
+  atEnd: boolean
+} {
+  let out = { isText: false, attached: false, atEnd: false }
+  editor.getEditorState().read(() => {
+    const sel = $getSelection()
+    if (!$isRangeSelection(sel) || !sel.isCollapsed()) return
+    const node = sel.anchor.getNode()
+    const isText = $isTextNode(node)
+    out = {
+      isText,
+      attached: node.isAttached(),
+      atEnd: isText && sel.anchor.offset === node.getTextContent().length,
+    }
+  })
+  return out
+}
+
+const CARET_SNIPPETS: readonly TextSnippet[] = [
+  snippet("pgm", "pull request green then merge"),
+  snippet("sig", "Best regards,\nAda"),
+  snippet("lead", "\nsecond line"),
+  snippet("trail", "line then newline\n"),
+  snippet("gap", "a\n\nb"),
+]
+
+describe("SnippetExpandPlugin — caret placement", () => {
+  it("lands the caret at the end of the expansion when the token is the whole node", () => {
+    const editor = buildEditor()
+    seedText(editor, "pgm")
+    expect(expandInEditor(editor, CARET_SNIPPETS)).toBe(true)
+    const a = anchorAfterExpand(editor)
+    expect(a.isText).toBe(true)
+    expect(a.attached).toBe(true)
+    expect(a.atEnd).toBe(true)
+  })
+
+  it("lands the caret on an attached node for multi-line expansions", () => {
+    const editor = buildEditor()
+    seedText(editor, "please sig")
+    expect(expandInEditor(editor, CARET_SNIPPETS)).toBe(true)
+    expect(serializeEditorToWire(editor).text).toBe("please Best regards,\nAda")
+    const a = anchorAfterExpand(editor)
+    expect(a.isText).toBe(true)
+    expect(a.attached).toBe(true)
+    expect(a.atEnd).toBe(true)
+  })
+
+  it("handles an expansion that starts with a newline (leading empty line)", () => {
+    const editor = buildEditor()
+    seedText(editor, "lead")
+    expect(expandInEditor(editor, CARET_SNIPPETS)).toBe(true)
+    expect(serializeEditorToWire(editor).text).toBe("\nsecond line")
+    const a = anchorAfterExpand(editor)
+    expect(a.isText).toBe(true)
+    expect(a.attached).toBe(true)
+    expect(a.atEnd).toBe(true)
+  })
+
+  it("handles an expansion that ends with a newline (caret on the fresh line)", () => {
+    const editor = buildEditor()
+    seedText(editor, "trail")
+    expect(expandInEditor(editor, CARET_SNIPPETS)).toBe(true)
+    // The wire serializer trims a trailing soft line break, so the sent text is
+    // the first line; the caret still sits on the fresh line, node attached.
+    expect(serializeEditorToWire(editor).text).toBe("line then newline")
+    expect(anchorAfterExpand(editor).attached).toBe(true)
+  })
+
+  it("handles consecutive newlines inside an expansion", () => {
+    const editor = buildEditor()
+    seedText(editor, "gap")
+    expect(expandInEditor(editor, CARET_SNIPPETS)).toBe(true)
+    expect(serializeEditorToWire(editor).text).toBe("a\n\nb")
+    const a = anchorAfterExpand(editor)
+    expect(a.isText).toBe(true)
+    expect(a.attached).toBe(true)
+    expect(a.atEnd).toBe(true)
   })
 })
