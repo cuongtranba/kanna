@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [0.107.0](https://github.com/cuongtranba/kanna/compare/v0.106.0...v0.107.0) (2026-07-10)
+
+
+### Features
+
+* **composer:** add Tab-expand text snippets ([#511](https://github.com/cuongtranba/kanna/issues/511)) ([d93e1c8](https://github.com/cuongtranba/kanna/commit/d93e1c8ec2dd3de564767b69b751f9c708caa1b6))
+
 ## [0.106.0](https://github.com/cuongtranba/kanna/compare/v0.105.0...v0.106.0) (2026-07-10)
 
 
