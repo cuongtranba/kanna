@@ -19,6 +19,11 @@ jobs:
       - uses: googleapis/release-please-action@v4
         id: release
         with:
+          # PAT (not the default GITHUB_TOKEN) so the release PR's commits
+          # trigger the test.yml `pull_request` workflow. A PR opened with
+          # GITHUB_TOKEN never fires further workflow runs, so the required
+          # check stays "pending" forever and the PR can only be admin-merged.
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
 
