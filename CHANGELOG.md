@@ -8,6 +8,23 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [0.106.0](https://github.com/cuongtranba/kanna/compare/v0.105.0...v0.106.0) (2026-07-10)
+
+
+### Features
+
+* **orchestration:** durable multi-task orchestration engine (Plan A) ([#507](https://github.com/cuongtranba/kanna/issues/507)) ([05a75f1](https://github.com/cuongtranba/kanna/commit/05a75f10ae8ed35c1b317d29415bfcfa13bcb5c2))
+
+
+### Bug Fixes
+
+* **auto-continue:** suppress noisy 'continue' bubble on rate-limit recovery ([#506](https://github.com/cuongtranba/kanna/issues/506)) ([16ed674](https://github.com/cuongtranba/kanna/commit/16ed674632f753579214a8bc8af248131ec9d698))
+
+
+### Performance Improvements
+
+* **diff-sidebar:** virtualize the changes file list ([#510](https://github.com/cuongtranba/kanna/issues/510)) ([8bc882f](https://github.com/cuongtranba/kanna/commit/8bc882f7608c17ad91e64f2f9565d36981150756))
+
 ## [0.105.0](https://github.com/cuongtranba/kanna/compare/v0.104.0...v0.105.0) (2026-07-04)
 
 **This is the current version of Kanna after the 2026-07-10 rollback.**
