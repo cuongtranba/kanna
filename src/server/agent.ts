@@ -2184,6 +2184,13 @@ export class AgentCoordinator {
     // `appendUserPrompt`.
     const provider = this.resolveProvider(queuedMessage, chat.provider)
     const settings = this.getProviderSettings(provider, queuedMessage)
+    // Auto-continue rate-limit recovery sends the literal "continue" as a
+    // resume signal. Appending it as a user_prompt entry adds noise to the
+    // transcript (shows as an "auto-sent" bubble right before a COMPACTED
+    // divider, confusing the user). Suppress the entry for that fallback
+    // case; agent-driven wakes with a meaningful custom prompt still appear.
+    const isRateLimitFallback = queuedMessage.autoContinue !== undefined
+      && queuedMessage.content === "continue"
     await this.startTurnForChat({
       chatId,
       provider,
@@ -2193,7 +2200,7 @@ export class AgentCoordinator {
       effort: settings.effort,
       serviceTier: settings.serviceTier,
       planMode: settings.planMode,
-      appendUserPrompt: true,
+      appendUserPrompt: !isRateLimitFallback,
       steered: options?.steered,
       autoContinue: queuedMessage.autoContinue,
     })

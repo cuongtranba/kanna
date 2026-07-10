@@ -75,7 +75,7 @@ function makeRateLimitError(resetAt: number): Error & { status: number; headers:
 // ---------------------------------------------------------------------------
 
 describe("auto-continue end-to-end", () => {
-  test("rate limit → proposed → accept → timer fires → auto_continue_fired + 'continue' user_prompt", async () => {
+  test("rate limit → proposed → accept → timer fires → auto_continue_fired, no 'continue' user_prompt bubble", async () => {
     const dir = await mkdtemp(join(tmpdir(), "kanna-ac-e2e-"))
     let scheduleManager: ScheduleManager | undefined
     try {
@@ -190,23 +190,15 @@ describe("auto-continue end-to-end", () => {
       expect(firedEvent!.scheduleId).toBe(scheduleId)
 
       // ----------------------------------------------------------------
-      // Step 5: Assert "continue" user_prompt with autoContinue metadata.
+      // Step 5: The fallback "continue" resume prompt must NOT be appended
+      // as a user_prompt — it would render as a noisy "auto-sent" bubble.
+      // The turn still fires (Step 4); it just runs without a visible entry.
       // ----------------------------------------------------------------
-      await waitFor(() =>
-        store.getMessages(chatId).some((m) => m.kind === "user_prompt" && m.content === "continue")
-      )
-
       const messages = store.getMessages(chatId)
       const continuePrompts = messages.filter(
         (m) => m.kind === "user_prompt" && m.content === "continue"
       )
-      expect(continuePrompts).toHaveLength(1)
-      const continuePrompt = continuePrompts[0]
-      if (continuePrompt?.kind === "user_prompt") {
-        expect(continuePrompt.autoContinue?.scheduleId).toBe(scheduleId)
-      } else {
-        throw new Error("Expected user_prompt entry")
-      }
+      expect(continuePrompts).toHaveLength(0)
     } finally {
       scheduleManager?.shutdown()
       await rm(dir, { recursive: true, force: true })
