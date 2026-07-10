@@ -252,3 +252,56 @@ describe("OrchestrationQueue phase pipeline", () => {
     ])
   })
 })
+
+describe("OrchestrationQueue hand-back", () => {
+  test("handed_back requeues and a later claim retries with attempt+1", async () => {
+    const { store } = await makeStore()
+    let firstCall = true
+    const startWorker: StartWorker = async () => {
+      if (firstCall) {
+        firstCall = false
+        return { kind: "handed_back", reason: "unknown discovered" }
+      }
+      return { kind: "completed", text: "ok" }
+    }
+    const q = new OrchestrationQueue({ store, worktrees: fakeWorktreeOps(), startWorker })
+    const runId = await q.createRun(makeConfig(), tasks(1))
+    await q.waitForRun(runId)
+    const task = store.getOrchRun(runId)!.tasks[0]!
+    expect(task.state).toBe("committed")
+    expect(task.attempts).toBe(2)
+  })
+
+  test("attempts exhausted -> terminal failed, run completes", async () => {
+    const { store } = await makeStore()
+    const startWorker: StartWorker = async () => ({ kind: "handed_back", reason: "never learns" })
+    const q = new OrchestrationQueue({ store, worktrees: fakeWorktreeOps(), startWorker })
+    const runId = await q.createRun(makeConfig({ maxAttempts: 2 }), tasks(1))
+    await q.waitForRun(runId)
+    const task = store.getOrchRun(runId)!.tasks[0]!
+    expect(task.state).toBe("failed")
+    expect(task.attempts).toBe(2)
+    expect(task.error).toContain("max attempts")
+    expect(store.getOrchRun(runId)!.status).toBe("completed")
+  })
+
+  test("requeued task re-claims its OWN slot — dirty progress never trampled (F13/F2)", async () => {
+    const { store } = await makeStore()
+    const wt = fakeWorktreeOps()
+    let calls = 0
+    const startWorker: StartWorker = async () => {
+      calls += 1
+      return calls === 1 ? { kind: "handed_back", reason: "retry" } : { kind: "completed", text: "ok" }
+    }
+    const q = new OrchestrationQueue({ store, worktrees: wt, startWorker })
+    const runId = await q.createRun(makeConfig(), tasks(1))
+    await q.waitForRun(runId)
+    // both claims bound the SAME slot (hold kept across requeue)
+    const claims = store.getOrchRunEvents(runId)
+      .filter((e): e is Extract<typeof e, { type: "orch_task_claimed" }> => e.type === "orch_task_claimed")
+    expect(claims).toHaveLength(2)
+    expect(claims[0]!.worktreePath).toBe(claims[1]!.worktreePath)
+    // hand-back is NOT a failure — the worktree must never be reset (F2)
+    expect(wt.resets).toHaveLength(0)
+  })
+})
