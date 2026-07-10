@@ -12,6 +12,15 @@ import type {
 } from "../shared/types"
 import type { AutoContinueEvent } from "./auto-continue/events"
 import type { ChatPermissionPolicyOverride, ToolRequest, ToolRequestDecision, ToolRequestStatus } from "../shared/permission-policy"
+import type {
+  OrchGateDecision,
+  OrchGateKind,
+  OrchRunConfig,
+  OrchRunStatus,
+  OrchTaskSpec,
+  OrchTaskState,
+  OrchWorktreeSlot,
+} from "../shared/orchestration-types"
 
 export interface ProjectRecord extends ProjectSummary {
   deletedAt?: number
@@ -70,6 +79,7 @@ export interface StoreState {
   stacksById: Map<string, StackRecord>
   subagentRunsByChatId: Map<string, Map<string, SubagentRunSnapshot>>
   toolRequestsById: Map<string, ToolRequest>
+  orchRunsById: Map<string, OrchRunRecord>
 }
 
 export interface SnapshotFile {
@@ -393,7 +403,204 @@ export type ToolRequestEvent =
       mismatchReason?: string
     }
 
-export type StoreEvent = ProjectEvent | ChatEvent | MessageEvent | QueuedMessageEvent | TurnEvent | StackEvent | AutoContinueEvent | SubagentRunEvent | ToolRequestEvent
+export type OrchestrationEvent =
+  | {
+      v: 3
+      type: "orch_run_created"
+      timestamp: number
+      runId: string
+      config: OrchRunConfig
+      tasks: OrchTaskSpec[]
+    }
+  | {
+      v: 3
+      type: "orch_worktree_provisioned"
+      timestamp: number
+      runId: string
+      index: number
+      path: string
+      branch: string
+    }
+  | {
+      v: 3
+      type: "orch_worktree_init_started"
+      timestamp: number
+      runId: string
+      index: number
+    }
+  | {
+      v: 3
+      type: "orch_worktree_init_completed"
+      timestamp: number
+      runId: string
+      index: number
+      ok: boolean
+      outputExcerpt: string
+    }
+  | {
+      v: 3
+      type: "orch_task_claimed"
+      timestamp: number
+      runId: string
+      taskId: string
+      workerId: string
+      /** Worktree-branch HEAD at claim — the {{DIFF}} anchor for this task (F13). */
+      baseSha: string
+      worktreePath: string
+      branch: string
+    }
+  | {
+      v: 3
+      type: "orch_phase_started"
+      timestamp: number
+      runId: string
+      taskId: string
+      phaseIndex: number
+      phaseName: string
+      workerIds: string[]
+    }
+  | {
+      v: 3
+      type: "orch_phase_completed"
+      timestamp: number
+      runId: string
+      taskId: string
+      phaseIndex: number
+      /** Joined worker output, capped at 64k chars — the {{PRIOR}} context for the next phase, persisted so a gated/recovered task can resume (F2). */
+      output: string
+      outputChars: number
+      /** Per-worker link to the subagent run that executed it (F10) — the panel drill-in reuses the existing subagent transcript viewer. Null for fake/unlinked workers. */
+      workers: Array<{ workerId: string; subagentRunId: string | null }>
+    }
+  | {
+      v: 3
+      type: "orch_gate_opened"
+      timestamp: number
+      runId: string
+      taskId: string
+      phaseIndex: number
+      phaseName: string
+      gateKind: OrchGateKind
+    }
+  | {
+      v: 3
+      type: "orch_gate_resolved"
+      timestamp: number
+      runId: string
+      taskId: string
+      phaseIndex: number
+      decision: OrchGateDecision
+    }
+  | {
+      v: 3
+      type: "orch_scope_overlap_flagged"
+      timestamp: number
+      runId: string
+      taskIds: string[]
+      paths: string[]
+    }
+  | {
+      v: 3
+      type: "orch_config_warning"
+      timestamp: number
+      runId: string
+      message: string
+    }
+  | {
+      v: 3
+      type: "orch_verify_started"
+      timestamp: number
+      runId: string
+      taskId: string
+      attempt: number
+    }
+  | {
+      v: 3
+      type: "orch_verify_completed"
+      timestamp: number
+      runId: string
+      taskId: string
+      attempt: number
+      passed: boolean
+      outputExcerpt: string
+    }
+  | {
+      v: 3
+      type: "orch_task_committed"
+      timestamp: number
+      runId: string
+      taskId: string
+      commitSha: string | null
+    }
+  | {
+      v: 3
+      type: "orch_task_failed"
+      timestamp: number
+      runId: string
+      taskId: string
+      error: string
+    }
+  | {
+      v: 3
+      type: "orch_task_requeued"
+      timestamp: number
+      runId: string
+      taskId: string
+      reason: "handed_back" | "restart_recovery"
+      detail: string | null
+    }
+  | {
+      v: 3
+      type: "orch_run_completed"
+      timestamp: number
+      runId: string
+    }
+  | {
+      v: 3
+      type: "orch_run_cancelled"
+      timestamp: number
+      runId: string
+    }
+
+export type StoreEvent = ProjectEvent | ChatEvent | MessageEvent | QueuedMessageEvent | TurnEvent | StackEvent | AutoContinueEvent | SubagentRunEvent | ToolRequestEvent | OrchestrationEvent
+
+export interface OrchTaskRecord {
+  taskId: string
+  title: string
+  prompt: string
+  scopePaths: string[]
+  state: OrchTaskState
+  ownerWorkerId: string | null
+  worktreePath: string | null
+  branch: string | null
+  /** Worktree-branch HEAD at claim — {{DIFF}} anchor (F13). */
+  baseSha: string | null
+  phaseIndex: number
+  attempts: number
+  error: string | null
+  commitSha: string | null
+  /** Last completed phase's joined output — resume context after gate/restart. */
+  lastPhaseOutput: string | null
+  updatedAt: number
+}
+
+export interface OrchRunRecord {
+  runId: string
+  status: OrchRunStatus
+  config: OrchRunConfig
+  tasksById: Map<string, OrchTaskRecord>
+  taskOrder: string[]
+  /** Worktree pool (F13) — provisioned slots, hold state folded from events. */
+  worktrees: OrchWorktreeSlot[]
+  /**
+   * Full ordered event timeline for this run (F8) — the rich drill-in source
+   * (phase timings, gate history, requeue reasons, outputs). Rebuilt on
+   * restart by replay. Memory bounded by the 64k phase-output cap.
+   */
+  eventLog: OrchestrationEvent[]
+  createdAt: number
+  updatedAt: number
+}
 
 export interface StackRecord {
   id: string
@@ -416,6 +623,7 @@ export function createEmptyState(): StoreState {
     stacksById: new Map(),
     subagentRunsByChatId: new Map(),
     toolRequestsById: new Map<string, ToolRequest>(),
+    orchRunsById: new Map(),
   }
 }
 

@@ -582,6 +582,36 @@ adr-20260616-subagent-run-in-background.
   results. It is the only source that neither checks nor increments
   `agentWakeChainByChat`. Concurrency is bounded by the permit pool instead.
 
+# Orchestration Core (Plan A — engine only)
+
+`OrchestrationQueue` in `src/server/orchestration-queue.ts` drives durable, multi-task, multi-phase coding runs. It is a sibling of `SubagentOrchestrator` inside `AgentCoordinator`'s dependency tree.
+
+- **Run lifecycle:** `createRun(config)` provisions N git worktrees at branches `orch/<runId>/wt-<i>`, seeds all tasks as `orch_task_queued`, then returns a `runId`. `waitForRun(runId)` resolves to `OrchRunSnapshot` when the run reaches a terminal state.
+
+- **Phase pipeline (F4):** Each task runs through an ordered list of `OrchPhaseSpec` entries (implement → review × 2 → fix). Each phase spawns a fresh worker via the injected `StartWorker`. `{{TASK}}`, `{{DIFF}}`, `{{PRIOR}}` template vars carry context forward across phases. `contextPrompt` is prepended to every worker prompt; `scopePaths` is injected only into implement-kind phases.
+
+- **Event sourcing:** Every state transition appends one of 18 `OrchestrationEvent` variants to the existing event store at **sourceIndex 8** (`orch.jsonl`). Orchestration events are **NOT folded into snapshot.json** — state is reconstructed from pure replay on boot. `orchRunsById` is a read model derived at replay time.
+
+- **Worktree pool (F13):** `heldByTaskId` is preserved on requeue (progress not lost); cleared only on commit or fail. `ensureWorktree` is idempotent — safe to call during `recoverOnStartup`.
+
+- **Permit pool (F3):** `rt.permits` counter per run, separate from `SubagentOrchestrator`'s pool. The `heldPermit` boolean in `runTask` prevents a permit leak on the gate-resume path: it starts `false` in the resume branch, is set to `true` only after `awaitGate` returns, and `finally` releases only `if (heldPermit)`.
+
+- **Gate protocol (F5):** Hard gates (`kind:"hard"`) pause the task in `gated` state until `resolveGate(runId, taskId, true)`. Soft gates emit events and continue without blocking.
+
+- **Verify step (F12):** After all phases, `config.verify.command` is run. Non-zero exit re-runs the fix phase with the command output as `{{PRIOR}}`; exhausted retries → `failed`.
+
+- **Restart recovery (`recoverOnStartup`):** (1) Requeue all `nonTerminalOrchTasks()` events. (2) Rebuild pool via `ensureWorktree` (idempotent). (3) Re-arm gated tasks by calling `runTask` in the resume path. (4) `schedule()` deferred via `setTimeout(0)` — lets boot-time callers observe clean state first.
+
+- **Cancel (AG1):** `cancelRun` is the ONLY abort path: sets `rt.cancelled`, aborts all per-phase `AbortController`s, resolves all pending gate `Promise` resolvers, appends `orch_run_cancelled`.
+
+- **Adapters:** `orchestration-git.adapter.ts` owns `commitAll` + `diffAgainstBase`; `orchestration-worktree.adapter.ts` owns `ensureWorktree`, `resetHard`, `removeWorktree`. Both are IO-leaf `.adapter.ts` files exempt from the side-effect seal. `src/shared/orchestration-types.ts` contains pure types only.
+
+- **Scope overlap detection:** `detectScopeOverlap(tasks)` is an exported pure function that returns `{ taskIds, paths } | null` for caller-side validation before `createRun`.
+
+- **Tests:** `orchestration-queue.test.ts` (32 cases: scheduling, phase pipeline, hand-back, gates, scope overlap, restart, verify, cancel), `orchestration-worktree.adapter.test.ts` (5 real-git cases), `orchestration-e2e.test.ts` (1 acceptance test: 4 tasks × 3 phases, real worktrees). All run with `bun test --conditions production`.
+
+- **WS wiring (not yet landed):** `createRun` / `cancelRun` / `resolveGate` / `waitForRun` will be exposed as `ws-router` commands in a follow-on PR.
+
 # Agent Self-Scheduled Wake (KANNA_MAX_AGENT_WAKES, KANNA_PENDING_WORKFLOW_POLL_MS)
 
 Kanna owns the timer for agent-driven chat re-entry. The native claude-code
