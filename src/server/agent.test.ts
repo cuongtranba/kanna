@@ -3839,11 +3839,10 @@ describe("AgentCoordinator auto-continue firing", () => {
     // Advancing the clock past that fires the schedule.
     clock.advance(10_000)
 
-    // Wait for the fired event AND the "continue" user_prompt to both appear.
+    // Wait for the fired event to appear (auto-continue fallback "continue" is
+    // intentionally NOT appended as a user_prompt to avoid the noisy bubble).
     await waitFor(
-      () =>
-        store.getAutoContinueEvents("chat-1").some((e) => e.kind === "auto_continue_fired") &&
-        store.messages.some((m) => m.kind === "user_prompt" && m.content === "continue")
+      () => store.getAutoContinueEvents("chat-1").some((e) => e.kind === "auto_continue_fired")
     )
 
     const acEvents = store.getAutoContinueEvents("chat-1")
@@ -3853,14 +3852,12 @@ describe("AgentCoordinator auto-continue firing", () => {
       expect(firedEvent.scheduleId).toBe(acceptedEvent.scheduleId)
     }
 
-    // Exactly one "continue" user_prompt with autoContinue metadata.
-    const userPrompts = store.messages.filter(
+    // The fallback "continue" prompt must NOT appear as a user_prompt entry —
+    // it would show as a confusing "auto-sent" bubble in the UI.
+    const continuePrompts = store.messages.filter(
       (m) => m.kind === "user_prompt" && m.content === "continue"
     )
-    expect(userPrompts).toHaveLength(1)
-    if (userPrompts[0].kind === "user_prompt") {
-      expect(userPrompts[0].autoContinue?.scheduleId).toBe(acceptedEvent.scheduleId)
-    }
+    expect(continuePrompts).toHaveLength(0)
   })
 })
 
