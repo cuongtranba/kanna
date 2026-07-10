@@ -256,6 +256,11 @@ export class OrchestrationQueue {
     return rt.done.promise
   }
 
+  /** Current permit count for a run (test/introspection). 0 if unknown. */
+  getPermits(runId: string): number {
+    return this.runRuntimes.get(runId)?.permits ?? 0
+  }
+
   private ensureRunRuntime(runId: string, config: OrchRunConfig): RunRuntime {
     const existing = this.runRuntimes.get(runId)
     if (existing) return existing
@@ -331,6 +336,13 @@ export class OrchestrationQueue {
     const taskRt: TaskRuntime = { abortController: new AbortController() }
     rt.taskRuntimes.set(taskId, taskRt)
     let terminalFailed = false
+    // Idle gate holds no permit. The normal schedule() path decrements a permit
+    // before calling runTask, so it enters already holding one. A recovered
+    // gated task (resume) enters holding NONE — it re-parks at its gate and only
+    // acquires a permit once the gate is approved. `heldPermit` guards the
+    // finally release so a recovered task can never inflate the pool (approve →
+    // acquire then release = balanced; reject → never acquired, never released).
+    let heldPermit = resume === undefined
     try {
       const run = this.deps.store.getOrchRun(runId)
       if (!run) return
@@ -338,6 +350,8 @@ export class OrchestrationQueue {
       if (resume) {
         const proceed = await this.awaitGate(rt, runId, taskId, resume.pendingGate.phaseIndex, resume.pendingGate.phaseName, resume.pendingGate.kind)
         if (!proceed) return
+        rt.permits -= 1
+        heldPermit = true
       }
       const taskSpec = this.deps.store.getOrchTaskSpec(runId, taskId)
       const taskPrompt = taskSpec?.prompt ?? ""
@@ -423,7 +437,7 @@ export class OrchestrationQueue {
       }
       rt.taskRuntimes.delete(taskId)
       rt.gateResolvers.delete(taskId)
-      rt.permits += 1
+      if (heldPermit) rt.permits += 1
       this.schedule(runId)
     }
   }

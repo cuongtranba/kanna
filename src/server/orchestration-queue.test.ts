@@ -488,6 +488,54 @@ describe("OrchestrationQueue gated restart re-arm (F2+F5)", () => {
     expect(prompts).toHaveLength(1) // only the fix phase ran after resume
     expect(prompts[0]).toContain("impl out") // persisted {{PRIOR}} survived the restart
   })
+
+  test("recovered gated task does not inflate permit pool (no permit leak)", async () => {
+    const { store, dir } = await makeStore()
+    const config = makeConfig({
+      maxParallelTasks: 1,
+      worktreePoolSize: 1,
+      phases: [
+        { name: "implement", kind: "implement", parallel: 1, promptTemplate: "IMPL {{TASK}}" },
+        { name: "fix", kind: "fix", parallel: 1, promptTemplate: "FIX {{PRIOR}}" },
+      ],
+      gates: [{ afterPhase: "implement", kind: "hard" }],
+    })
+    await store.appendOrchestrationEvent({
+      v: 3, type: "orch_run_created", timestamp: 1, runId: "r2",
+      config, tasks: [{ id: "t1", title: "a", prompt: "do a" }],
+    })
+    await store.appendOrchestrationEvent({
+      v: 3, type: "orch_task_claimed", timestamp: 2, runId: "r2", taskId: "t1",
+      workerId: "w-old", worktreePath: "/wt/t1", branch: "orch/r2/wt-0", baseSha: "sha0",
+    })
+    await store.appendOrchestrationEvent({
+      v: 3, type: "orch_phase_started", timestamp: 3, runId: "r2", taskId: "t1",
+      phaseIndex: 0, phaseName: "implement", workerIds: ["w-old"],
+    })
+    await store.appendOrchestrationEvent({
+      v: 3, type: "orch_phase_completed", timestamp: 4, runId: "r2", taskId: "t1",
+      phaseIndex: 0, output: "impl out", outputChars: 8,
+      workers: [{ workerId: "w-old", subagentRunId: null }],
+    })
+    await store.appendOrchestrationEvent({
+      v: 3, type: "orch_gate_opened", timestamp: 5, runId: "r2", taskId: "t1",
+      phaseIndex: 0, phaseName: "implement", gateKind: "hard",
+    })
+    await store.flush()
+
+    const reopened = new EventStore(dir)
+    await reopened.initialize()
+    const q = new OrchestrationQueue({
+      store: reopened, worktrees: fakeWorktreeOps(),
+      startWorker: async () => ({ kind: "completed", text: "fixed" }),
+    })
+    await q.recoverOnStartup()
+    await new Promise((r) => setTimeout(r, 20))
+    expect(q.resolveGate("r2", "t1", "approve")).toBe(true)
+    await q.waitForRun("r2")
+    // After completion, permits must be back to maxParallelTasks (no leak)
+    expect(q.getPermits("r2")).toBe(config.maxParallelTasks)
+  })
 })
 
 describe("detectScopeOverlap", () => {
