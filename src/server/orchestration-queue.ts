@@ -278,11 +278,11 @@ export class OrchestrationQueue {
     if (!rt) return
     const taskRt: TaskRuntime = { abortController: new AbortController() }
     rt.taskRuntimes.set(taskId, taskRt)
-    const run = this.deps.store.getOrchRun(runId)
-    if (!run) return
-    const config = run.config
     let terminalFailed = false
     try {
+      const run = this.deps.store.getOrchRun(runId)
+      if (!run) return
+      const config = run.config
       if (resume) {
         const proceed = await this.awaitGate(rt, runId, taskId, resume.pendingGate.phaseIndex, resume.pendingGate.phaseName, resume.pendingGate.kind)
         if (!proceed) return

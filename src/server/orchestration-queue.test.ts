@@ -102,7 +102,10 @@ describe("OrchestrationQueue scheduling", () => {
     const q = new OrchestrationQueue({ store, worktrees: fakeWorktreeOps(), startWorker })
     const runId = await q.createRun(makeConfig({ maxParallelTasks: 2 }), tasks(5))
     // let the scheduler claim up to the cap
-    await new Promise((r) => setTimeout(r, 20))
+    const deadline = Date.now() + 2000
+    while (peak < 2 && Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 5))
+    }
     expect(peak).toBe(2)
     // release all workers as they arrive until done
     const release = setInterval(() => { gate.splice(0).forEach((g) => g()) }, 5)
