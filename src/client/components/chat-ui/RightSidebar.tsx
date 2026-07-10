@@ -1,3 +1,4 @@
+import { LegendList, type LegendListRef } from "@legendapp/list/react"
 import { PatchDiff } from "@pierre/diffs/react"
 import { AlertTriangle, ArrowUp, Ban, Building2, Check, ChevronDown, ChevronUp, Code, Columns2, Copy, Download, Ellipsis, FileText, FolderOpen, GitBranch, GitBranchPlus, Github, GitMerge, GitPullRequest, Globe, LoaderCircle, Lock, Minus, PencilLine, PenLine, RefreshCw, Rows3, Search, Trash2, Upload, UserRound, WrapText } from "lucide-react"
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode, type RefObject } from "react"
@@ -1142,7 +1143,7 @@ function DiffFileCard({
   onLoadPatch,
 }: {
   file: DiffFile
-  rootRef: RefObject<HTMLDivElement | null>
+  rootRef: RefObject<HTMLElement | null>
   projectId: string | null
   isCollapsed: boolean
   isChecked: boolean
@@ -1474,7 +1475,11 @@ function RightSidebarImpl({
   const [patchesByPath, setPatchesByPath] = useState<Record<string, string>>({})
   const [patchErrorsByPath, setPatchErrorsByPath] = useState<Record<string, string>>({})
   const [loadingPatchPaths, setLoadingPatchPaths] = useState<Record<string, boolean>>({})
-  const scrollContainerRef = useRef<HTMLDivElement | null>(null)
+  // Holds the diff file list's own scrollable node (LegendList is the
+  // scroller). Passed to each card as the IntersectionObserver root for its
+  // sticky header. Populated from `filesListRef` after the list mounts.
+  const scrollContainerRef = useRef<HTMLElement | null>(null)
+  const filesListRef = useRef<LegendListRef | null>(null)
   const patchDigestsByPathRef = useRef<Record<string, string>>({})
   const filePaths = useMemo(() => diffs.files.map((file) => file.path), [diffs.files])
   const filePathsKey = useMemo(() => filePaths.join("\u0000"), [filePaths])
@@ -1662,6 +1667,64 @@ function RightSidebarImpl({
     }
   }, [diffs.files, loadingPatchPaths, onLoadPatch, patchesByPath])
 
+  const diffFileKey = useCallback((file: DiffFile) => file.path, [])
+
+  const renderDiffFileItem = useCallback(
+    ({ item: file }: { item: DiffFile }) => {
+      const isCollapsed = collapsedPaths[file.path] ?? true
+      const isChecked = checkedPaths[file.path] ?? true
+      return (
+        <div className="pb-1.5">
+          <DiffFileCard
+            file={file}
+            rootRef={scrollContainerRef}
+            projectId={projectId}
+            isCollapsed={isCollapsed}
+            isChecked={isChecked}
+            editorLabel={editorLabel}
+            diffRenderMode={diffRenderMode}
+            wrapLines={wrapLines}
+            onToggleCollapsed={() => {
+              if (!projectId) return
+              toggleCollapsedPath(projectId, file.path)
+            }}
+            onToggleChecked={() => {
+              if (!projectId) return
+              setCheckedPath(projectId, file.path, !isChecked)
+            }}
+            fileActions={fileActions}
+            patch={patchesByPath[file.path]}
+            patchError={patchErrorsByPath[file.path]}
+            isPatchLoading={Boolean(loadingPatchPaths[file.path])}
+            onLoadPatch={handleLoadPatch}
+          />
+        </div>
+      )
+    },
+    [
+      checkedPaths,
+      collapsedPaths,
+      diffRenderMode,
+      editorLabel,
+      fileActions,
+      handleLoadPatch,
+      loadingPatchPaths,
+      patchErrorsByPath,
+      patchesByPath,
+      projectId,
+      setCheckedPath,
+      toggleCollapsedPath,
+      wrapLines,
+    ],
+  )
+
+  // LegendList owns its scroll node; mirror it into scrollContainerRef so each
+  // card's sticky-header IntersectionObserver has the right root.
+  useEffect(() => {
+    const node = filesListRef.current?.getScrollableNode?.()
+    scrollContainerRef.current = node instanceof HTMLElement ? node : null
+  }, [viewMode, diffs.files.length])
+
   return (
     <div className="h-full min-h-0 border-l border-border bg-background md:min-w-[370px]">
       <div className="flex h-full min-h-0 flex-col">
@@ -1833,7 +1896,7 @@ function RightSidebarImpl({
               </div>
             </div>
           </div>
-          <div ref={scrollContainerRef} className="h-full overflow-y-auto [scrollbar-gutter:stable]">
+          <div className="h-full min-h-0">
             {diffs.status === "no_repo" ? (
               <div className="flex h-full items-center justify-center px-6 py-3 text-center">
                 <div className="flex max-w-[280px] flex-col items-center gap-3">
@@ -1849,7 +1912,7 @@ function RightSidebarImpl({
                   <p className="text-sm text-muted-foreground">No recent commits on {diffs.branchName ?? "this branch"}.</p>
                 </div>
               ) : (
-                <div className="space-y-1.5 p-1.5">
+                <div className="h-full overflow-y-auto [scrollbar-gutter:stable] space-y-1.5 p-1.5">
                   {branchHistory.map((entry, index) => <CommitHistoryRow key={entry.sha} entry={entry} isPendingPush={index < aheadCount} />)}
                 </div>
               )
@@ -1858,41 +1921,20 @@ function RightSidebarImpl({
                 <p className="text-sm text-muted-foreground">No file changes.</p>
               </div>
             ) : (
-              <div className="space-y-1.5 p-1.5 pb-10">
-                {diffs.files.map((file) => {
-                  const isCollapsed = collapsedPaths[file.path] ?? true
-                  const isChecked = checkedPaths[file.path] ?? true
-
-                  return (
-                    <DiffFileCard
-                      key={file.path}
-                      file={file}
-                      rootRef={scrollContainerRef}
-                      projectId={projectId}
-                      isCollapsed={isCollapsed}
-                      isChecked={isChecked}
-                      editorLabel={editorLabel}
-                      diffRenderMode={diffRenderMode}
-                      wrapLines={wrapLines}
-                      onToggleCollapsed={() => {
-                        if (!projectId) return
-                        toggleCollapsedPath(projectId, file.path)
-                      }}
-                      onToggleChecked={() => {
-                        if (!projectId) return
-                        setCheckedPath(projectId, file.path, !isChecked)
-                      }}
-                      fileActions={fileActions}
-                      patch={patchesByPath[file.path]}
-                      patchError={patchErrorsByPath[file.path]}
-                      isPatchLoading={Boolean(loadingPatchPaths[file.path])}
-                      onLoadPatch={handleLoadPatch}
-                    />
-                  )
-                })}
+              <div className="relative h-full min-h-0">
+                <LegendList<DiffFile>
+                  ref={filesListRef}
+                  data={diffs.files}
+                  keyExtractor={diffFileKey}
+                  renderItem={renderDiffFileItem}
+                  extraData={{ collapsedPaths, checkedPaths, patchesByPath, patchErrorsByPath, loadingPatchPaths, diffRenderMode, wrapLines }}
+                  estimatedItemSize={44}
+                  className="h-full overflow-y-auto [scrollbar-gutter:stable] p-1.5"
+                  contentContainerStyle={{ paddingBottom: viewMode === "changes" ? 220 : 40 }}
+                />
 
                 {viewMode === "changes" ? (
-                  <div className="pointer-events-none sticky inset-x-0 bottom-11 py-1 pb-6 z-30 overflow-y-auto">
+                  <div className="pointer-events-none absolute inset-x-0 bottom-0 py-1 pb-6 z-30">
                   <div className="absolute inset-x-0 bottom-0 top-0 bg-gradient-to-t from-background to-transparent" />
                   <div className="pointer-events-auto relative">
                     <div className="space-y-0 rounded-xl mx-auto max-w-[700px]">
