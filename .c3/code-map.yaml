@@ -192,6 +192,15 @@ c3-229:
   - src/server/workflow-watch-io.adapter.ts
   - src/shared/workflow-types.test.ts
   - src/shared/workflow-types.ts
+c3-232:
+  - src/server/event-store-orchestration.test.ts
+  - src/server/orchestration-e2e.test.ts
+  - src/server/orchestration-git.adapter.ts
+  - src/server/orchestration-queue.test.ts
+  - src/server/orchestration-queue.ts
+  - src/server/orchestration-worktree.adapter.test.ts
+  - src/server/orchestration-worktree.adapter.ts
+  - src/shared/orchestration-types.ts
 c3-301:
   - src/shared/analytics.ts
   - src/shared/kanna-system-prompt.test.ts
