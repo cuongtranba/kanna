@@ -189,6 +189,58 @@ export class OrchestrationQueue {
     }
   }
 
+  /**
+   * Explicit cancel (AG1). Aborts every in-flight worker, unblocks any task
+   * parked at a hard gate (resolvers fire "reject" but `awaitGate` short-circuits
+   * on `rt.cancelled` so no reject/failed events are appended), records the
+   * terminal `orch_run_cancelled` event, and resolves the run's done promise.
+   */
+  async cancelRun(runId: string): Promise<void> {
+    const rt = this.runRuntimes.get(runId)
+    if (!rt) return
+    rt.cancelled = true
+    for (const taskRt of rt.taskRuntimes.values()) taskRt.abortController.abort()
+    for (const [taskId, resolver] of [...rt.gateResolvers]) {
+      rt.gateResolvers.delete(taskId)
+      resolver("reject")
+    }
+    await this.deps.store.appendOrchestrationEvent({
+      v: 3, type: "orch_run_cancelled", timestamp: this.now(), runId,
+    })
+    rt.done.resolve()
+  }
+
+  /**
+   * Re-arm tasks parked at a hard gate across a process restart (F2+F5). A gated
+   * task is NOT requeued — its worktree still holds the completed phase's work.
+   * We rebuild a RunRuntime, seed the slot head from the persisted claim, and
+   * re-enter `runTask` with a `GatedResume` that re-notifies the gate at the
+   * correct phase and resumes the NEXT phase with the persisted `{{PRIOR}}`.
+   */
+  async recoverOnStartup(): Promise<void> {
+    for (const { runId, taskId, phaseIndex } of this.deps.store.gatedOrchTasks()) {
+      const run = this.deps.store.getOrchRun(runId)
+      if (!run) continue
+      const config = run.config
+      const task = run.tasks.find((t) => t.taskId === taskId)
+      if (!task || task.worktreePath === null) continue
+      const phase = config.phases[phaseIndex]
+      if (!phase) continue
+      const gate = config.gates.find((g) => g.afterPhase === phase.name)
+      if (!gate) continue
+      const rt = this.ensureRunRuntime(runId, config)
+      rt.poolReady = true
+      rt.slotHeads.set(task.worktreePath, task.baseSha ?? "")
+      const resume: GatedResume = {
+        fromPhase: phaseIndex + 1,
+        prior: this.deps.store.getOrchLastPhaseOutput(runId, taskId) ?? "",
+        pendingGate: { phaseIndex, phaseName: phase.name, kind: gate.kind },
+      }
+      const workerId = `w-${taskId}-resume`
+      void this.runTask(runId, taskId, workerId, task.worktreePath, task.branch ?? "", task.baseSha ?? "", resume)
+    }
+  }
+
   resolveGate(runId: string, taskId: string, decision: OrchGateDecision): boolean {
     const rt = this.runRuntimes.get(runId)
     const resolver = rt?.gateResolvers.get(taskId)

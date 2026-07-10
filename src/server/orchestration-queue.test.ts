@@ -6,6 +6,8 @@ import path from "node:path"
 import { EventStore } from "./event-store"
 import {
   OrchestrationQueue,
+  detectScopeOverlap,
+  type OrchGateOpenedNotice,
   type OrchWorktreeOps,
   type StartWorker,
 } from "./orchestration-queue"
@@ -303,5 +305,209 @@ describe("OrchestrationQueue hand-back", () => {
     expect(claims[0]!.worktreePath).toBe(claims[1]!.worktreePath)
     // hand-back is NOT a failure — the worktree must never be reset (F2)
     expect(wt.resets).toHaveLength(0)
+  })
+})
+
+describe("OrchestrationQueue gates (F5)", () => {
+  const gatedConfig = (kind: "soft" | "hard") => makeConfig({
+    phases: [
+      { name: "implement", kind: "implement", parallel: 1, promptTemplate: "IMPL {{TASK}}" },
+      { name: "fix", kind: "fix", parallel: 1, promptTemplate: "FIX {{PRIOR}}" },
+    ],
+    gates: [{ afterPhase: "implement", kind }],
+  })
+
+  test("hard gate pauses task in gated; approve resumes next phase with prior output", async () => {
+    const { store } = await makeStore()
+    const notices: OrchGateOpenedNotice[] = []
+    const prompts: string[] = []
+    const startWorker: StartWorker = async (args) => {
+      prompts.push(args.prompt)
+      return { kind: "completed", text: `out-p${args.phaseIndex}` }
+    }
+    const q = new OrchestrationQueue({
+      store, worktrees: fakeWorktreeOps(), startWorker,
+      onGateOpened: (n) => notices.push(n),
+    })
+    const runId = await q.createRun(gatedConfig("hard"), tasks(1))
+    await new Promise((r) => setTimeout(r, 20))
+    expect(store.getOrchRun(runId)!.tasks[0]!.state).toBe("gated")
+    expect(notices).toHaveLength(1)
+    expect(notices[0]!.gateKind).toBe("hard")
+    expect(q.resolveGate(runId, "t1", "approve")).toBe(true)
+    await q.waitForRun(runId)
+    const task = store.getOrchRun(runId)!.tasks[0]!
+    expect(task.state).toBe("committed")
+    expect(prompts[1]).toContain("out-p0") // fix phase saw implement output across the gate
+  })
+
+  test("hard gate reject -> task failed with gate error, run completes", async () => {
+    const { store } = await makeStore()
+    const startWorker: StartWorker = async () => ({ kind: "completed", text: "ok" })
+    const q = new OrchestrationQueue({ store, worktrees: fakeWorktreeOps(), startWorker })
+    const runId = await q.createRun(gatedConfig("hard"), tasks(1))
+    await new Promise((r) => setTimeout(r, 20))
+    expect(q.resolveGate(runId, "t1", "reject")).toBe(true)
+    await q.waitForRun(runId)
+    const task = store.getOrchRun(runId)!.tasks[0]!
+    expect(task.state).toBe("failed")
+    expect(task.error).toContain('hard gate after phase "implement" rejected')
+    expect(store.getOrchRun(runId)!.status).toBe("completed")
+  })
+
+  test("soft gate flags and continues without resolution", async () => {
+    const { store, dir } = await makeStore()
+    const notices: OrchGateOpenedNotice[] = []
+    const startWorker: StartWorker = async () => ({ kind: "completed", text: "ok" })
+    const q = new OrchestrationQueue({
+      store, worktrees: fakeWorktreeOps(), startWorker,
+      onGateOpened: (n) => notices.push(n),
+    })
+    const runId = await q.createRun(gatedConfig("soft"), tasks(1))
+    await q.waitForRun(runId) // no resolveGate call — must complete on its own
+    expect(store.getOrchRun(runId)!.tasks[0]!.state).toBe("committed")
+    expect(notices).toHaveLength(1)
+    expect(notices[0]!.gateKind).toBe("soft")
+    await store.flush()
+    const log = await Bun.file(path.join(dir, "orch.jsonl")).text()
+    const types = log.trim().split("\n").map((l) => (JSON.parse(l) as { type: string }).type)
+    expect(types).toContain("orch_gate_opened")
+    expect(types).toContain("orch_gate_resolved")
+  })
+
+  test("cancelRun unblocks a hard-gate waiter (AG1: explicit cancel only)", async () => {
+    const { store } = await makeStore()
+    const startWorker: StartWorker = async () => ({ kind: "completed", text: "ok" })
+    const q = new OrchestrationQueue({ store, worktrees: fakeWorktreeOps(), startWorker })
+    const runId = await q.createRun(gatedConfig("hard"), tasks(1))
+    await new Promise((r) => setTimeout(r, 20))
+    expect(store.getOrchRun(runId)!.tasks[0]!.state).toBe("gated")
+    await q.cancelRun(runId)
+    await q.waitForRun(runId)
+    expect(store.getOrchRun(runId)!.status).toBe("cancelled")
+  })
+})
+
+describe("OrchestrationQueue scope overlap (F6)", () => {
+  test("overlapping scopePaths emit a soft flag; run proceeds", async () => {
+    const { store, dir } = await makeStore()
+    const startWorker: StartWorker = async () => ({ kind: "completed", text: "ok" })
+    const q = new OrchestrationQueue({ store, worktrees: fakeWorktreeOps(), startWorker })
+    const runId = await q.createRun(makeConfig(), [
+      { id: "t1", title: "a", prompt: "a", scopePaths: ["src/a"] },
+      { id: "t2", title: "b", prompt: "b", scopePaths: ["src/a/utils.ts"] },
+      { id: "t3", title: "c", prompt: "c", scopePaths: ["src/c"] },
+    ])
+    await q.waitForRun(runId)
+    expect(store.getOrchRun(runId)!.tasks.every((t) => t.state === "committed")).toBe(true)
+    await store.flush()
+    const log = await Bun.file(path.join(dir, "orch.jsonl")).text()
+    const flag = log.trim().split("\n")
+      .map((l) => JSON.parse(l) as { type: string; taskIds?: string[] })
+      .find((e) => e.type === "orch_scope_overlap_flagged")
+    expect(flag).toBeDefined()
+    expect(flag!.taskIds!.sort()).toEqual(["t1", "t2"])
+  })
+
+  test("maxParallelTasks > worktreePoolSize emits a soft config warning; run proceeds", async () => {
+    const { store, dir } = await makeStore()
+    const startWorker: StartWorker = async () => ({ kind: "completed", text: "ok" })
+    const q = new OrchestrationQueue({ store, worktrees: fakeWorktreeOps(), startWorker })
+    const runId = await q.createRun(makeConfig({ maxParallelTasks: 6, worktreePoolSize: 2 }), [
+      { id: "t1", title: "a", prompt: "a" },
+    ])
+    await q.waitForRun(runId)
+    expect(store.getOrchRun(runId)!.status).toBe("completed")
+    await store.flush()
+    const log = await Bun.file(path.join(dir, "orch.jsonl")).text()
+    const warn = log.trim().split("\n")
+      .map((l) => JSON.parse(l) as { type: string; message?: string })
+      .find((e) => e.type === "orch_config_warning")
+    expect(warn).toBeDefined()
+    expect(warn!.message).toContain("capped at 2")
+  })
+})
+
+describe("OrchestrationQueue gated restart re-arm (F2+F5)", () => {
+  test("boot with task paused at hard gate: gate re-notified, approve resumes with persisted prior", async () => {
+    const { store, dir } = await makeStore()
+    const config = makeConfig({
+      phases: [
+        { name: "implement", kind: "implement", parallel: 1, promptTemplate: "IMPL {{TASK}}" },
+        { name: "fix", kind: "fix", parallel: 1, promptTemplate: "FIX {{PRIOR}}" },
+      ],
+      gates: [{ afterPhase: "implement", kind: "hard" }],
+    })
+    // Previous lifetime: implement done, gate opened, then crash.
+    await store.appendOrchestrationEvent({
+      v: 3, type: "orch_run_created", timestamp: 1, runId: "r1",
+      config, tasks: [{ id: "t1", title: "a", prompt: "do a" }],
+    })
+    await store.appendOrchestrationEvent({
+      v: 3, type: "orch_task_claimed", timestamp: 2, runId: "r1", taskId: "t1",
+      workerId: "w-old", worktreePath: "/wt/t1", branch: "orch/r1/wt-0", baseSha: "base0",
+    })
+    await store.appendOrchestrationEvent({
+      v: 3, type: "orch_phase_started", timestamp: 3, runId: "r1", taskId: "t1",
+      phaseIndex: 0, phaseName: "implement", workerIds: ["w-old"],
+    })
+    await store.appendOrchestrationEvent({
+      v: 3, type: "orch_phase_completed", timestamp: 4, runId: "r1", taskId: "t1",
+      phaseIndex: 0, output: "impl out", outputChars: 8,
+      workers: [{ workerId: "w-old", subagentRunId: null }],
+    })
+    await store.appendOrchestrationEvent({
+      v: 3, type: "orch_gate_opened", timestamp: 5, runId: "r1", taskId: "t1",
+      phaseIndex: 0, phaseName: "implement", gateKind: "hard",
+    })
+    await store.flush()
+
+    const reopened = new EventStore(dir)
+    await reopened.initialize()
+    expect(reopened.getOrchRun("r1")!.tasks[0]!.state).toBe("gated")
+
+    const notices: OrchGateOpenedNotice[] = []
+    const prompts: string[] = []
+    const startWorker: StartWorker = async (args) => {
+      prompts.push(args.prompt)
+      return { kind: "completed", text: "fixed" }
+    }
+    const q = new OrchestrationQueue({
+      store: reopened, worktrees: fakeWorktreeOps(), startWorker,
+      onGateOpened: (n) => notices.push(n),
+    })
+    await q.recoverOnStartup()
+    await new Promise((r) => setTimeout(r, 20))
+    expect(notices).toHaveLength(1) // gate re-notified, task NOT requeued
+    expect(reopened.getOrchRun("r1")!.tasks[0]!.state).toBe("gated")
+
+    expect(q.resolveGate("r1", "t1", "approve")).toBe(true)
+    await q.waitForRun("r1")
+    const task = reopened.getOrchRun("r1")!.tasks[0]!
+    expect(task.state).toBe("committed")
+    expect(prompts).toHaveLength(1) // only the fix phase ran after resume
+    expect(prompts[0]).toContain("impl out") // persisted {{PRIOR}} survived the restart
+  })
+})
+
+describe("detectScopeOverlap", () => {
+  test("disjoint -> null", () => {
+    expect(detectScopeOverlap([
+      { id: "a", title: "a", prompt: "a", scopePaths: ["src/a"] },
+      { id: "b", title: "b", prompt: "b", scopePaths: ["src/b"] },
+    ])).toBeNull()
+  })
+  test("prefix normalization: ./src/a/ overlaps src/a/x.ts", () => {
+    const hit = detectScopeOverlap([
+      { id: "a", title: "a", prompt: "a", scopePaths: ["./src/a/"] },
+      { id: "b", title: "b", prompt: "b", scopePaths: ["src/a/x.ts"] },
+    ])
+    expect(hit?.taskIds.sort()).toEqual(["a", "b"])
+  })
+  test("missing scopePaths never overlap", () => {
+    expect(detectScopeOverlap([
+      { id: "a", title: "a", prompt: "a" },
+      { id: "b", title: "b", prompt: "b", scopePaths: ["src"] },
+    ])).toBeNull()
   })
 })
