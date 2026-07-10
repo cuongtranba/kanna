@@ -559,3 +559,148 @@ describe("detectScopeOverlap", () => {
     ])).toBeNull()
   })
 })
+
+describe("OrchestrationQueue verify step (F12)", () => {
+  test("verify passing -> task committed, verify events in timeline", async () => {
+    const { store } = await makeStore()
+    let verifyCalls = 0
+    const runVerify = async () => { verifyCalls++; return { exitCode: 0, output: "ok" } }
+    const startWorker: StartWorker = async () => ({ kind: "completed", text: "ok" })
+    const config = makeConfig({
+      phases: [{ name: "implement", kind: "implement", parallel: 1, promptTemplate: "IMPL {{TASK}}" }],
+      verify: { command: ["check"], timeoutMs: 1_000, retries: 1 },
+    })
+    const q = new OrchestrationQueue({ store, worktrees: fakeWorktreeOps(), startWorker, runVerify })
+    const runId = await q.createRun(config, tasks(1))
+    await q.waitForRun(runId)
+    expect(store.getOrchRun(runId)!.tasks[0]!.state).toBe("committed")
+    expect(verifyCalls).toBe(1)
+    const events = store.getOrchRunEvents(runId)
+    expect(events.some((e) => e.type === "orch_verify_started")).toBe(true)
+    expect(events.some((e) => e.type === "orch_verify_completed" && (e as { passed: boolean }).passed)).toBe(true)
+  })
+
+  test("verify fail then pass after fix retry -> committed (retries = 1)", async () => {
+    const { store } = await makeStore()
+    let verifyCalls = 0
+    const runVerify = async () => {
+      verifyCalls++
+      return verifyCalls === 1 ? { exitCode: 1, output: "FAIL: missing x" } : { exitCode: 0, output: "ok" }
+    }
+    const fixPrompts: string[] = []
+    const startWorker: StartWorker = async (args) => {
+      if (args.phase.kind === "fix") fixPrompts.push(args.prompt)
+      return { kind: "completed", text: "fixed" }
+    }
+    const config = makeConfig({
+      phases: [
+        { name: "implement", kind: "implement", parallel: 1, promptTemplate: "IMPL {{TASK}}" },
+        { name: "fix", kind: "fix", parallel: 1, promptTemplate: "FIX {{PRIOR}}" },
+      ],
+      verify: { command: ["check"], timeoutMs: 1_000, retries: 1 },
+    })
+    const q = new OrchestrationQueue({ store, worktrees: fakeWorktreeOps(), startWorker, runVerify })
+    const runId = await q.createRun(config, tasks(1))
+    await q.waitForRun(runId)
+    expect(store.getOrchRun(runId)!.tasks[0]!.state).toBe("committed")
+    expect(verifyCalls).toBe(2)
+    // Verify output fed as {{PRIOR}} into the fix phase
+    expect(fixPrompts.at(-1)).toContain("FAIL: missing x")
+  })
+
+  test("verify fails all retries -> task failed", async () => {
+    const { store } = await makeStore()
+    const runVerify = async () => ({ exitCode: 1, output: "always fail" })
+    const startWorker: StartWorker = async () => ({ kind: "completed", text: "ok" })
+    const config = makeConfig({
+      phases: [
+        { name: "implement", kind: "implement", parallel: 1, promptTemplate: "IMPL {{TASK}}" },
+        { name: "fix", kind: "fix", parallel: 1, promptTemplate: "FIX {{PRIOR}}" },
+      ],
+      verify: { command: ["check"], timeoutMs: 1_000, retries: 1 },
+    })
+    const q = new OrchestrationQueue({ store, worktrees: fakeWorktreeOps(), startWorker, runVerify })
+    const runId = await q.createRun(config, tasks(1))
+    await q.waitForRun(runId)
+    const task = store.getOrchRun(runId)!.tasks[0]!
+    expect(task.state).toBe("failed")
+    expect(task.error).toContain("verify step failed")
+  })
+
+  test("verify = null skips the step even when runVerify is present", async () => {
+    const { store } = await makeStore()
+    let verifyCalls = 0
+    const runVerify = async () => { verifyCalls++; return { exitCode: 0, output: "" } }
+    const startWorker: StartWorker = async () => ({ kind: "completed", text: "ok" })
+    const q = new OrchestrationQueue({ store, worktrees: fakeWorktreeOps(), startWorker, runVerify })
+    const runId = await q.createRun(makeConfig({ verify: null }), tasks(1))
+    await q.waitForRun(runId)
+    expect(store.getOrchRun(runId)!.tasks[0]!.state).toBe("committed")
+    expect(verifyCalls).toBe(0)
+  })
+})
+
+describe("OrchestrationQueue contextPrompt + scopePaths injection (F11)", () => {
+  test("contextPrompt prefix injected into every worker prompt across all phases", async () => {
+    const { store } = await makeStore()
+    const prompts: string[] = []
+    const startWorker: StartWorker = async (args) => {
+      prompts.push(args.prompt)
+      return { kind: "completed", text: "ok" }
+    }
+    const config = makeConfig({
+      phases: [
+        { name: "implement", kind: "implement", parallel: 1, promptTemplate: "IMPL {{TASK}}" },
+        { name: "review", kind: "review", parallel: 1, promptTemplate: "REVIEW {{DIFF}}" },
+      ],
+      contextPrompt: "SHARED CONVENTIONS: always use TypeScript strict mode",
+    })
+    const q = new OrchestrationQueue({ store, worktrees: fakeWorktreeOps(), startWorker })
+    const runId = await q.createRun(config, tasks(1))
+    await q.waitForRun(runId)
+    expect(prompts).toHaveLength(2)
+    // Every prompt starts with the shared conventions block
+    for (const p of prompts) {
+      expect(p).toContain("SHARED CONVENTIONS")
+    }
+  })
+
+  test("implement phase receives scope hint; non-implement phases do not", async () => {
+    const { store } = await makeStore()
+    const byPhase: Record<string, string> = {}
+    const startWorker: StartWorker = async (args) => {
+      byPhase[args.phase.name] = args.prompt
+      return { kind: "completed", text: "ok" }
+    }
+    const config = makeConfig({
+      phases: [
+        { name: "implement", kind: "implement", parallel: 1, promptTemplate: "IMPL {{TASK}}" },
+        { name: "review", kind: "review", parallel: 1, promptTemplate: "REVIEW {{DIFF}}" },
+      ],
+    })
+    const q = new OrchestrationQueue({ store, worktrees: fakeWorktreeOps(), startWorker })
+    const runId = await q.createRun(config, [
+      { id: "t1", title: "task", prompt: "do task", scopePaths: ["src/auth", "src/session"] },
+    ])
+    await q.waitForRun(runId)
+    // Implementer sees the scope hint
+    expect(byPhase["implement"]).toContain("src/auth")
+    expect(byPhase["implement"]).toContain("src/session")
+    // Reviewer does NOT (they see the diff instead)
+    expect(byPhase["review"]).not.toContain("src/auth")
+  })
+
+  test("contextPrompt = null and empty scopePaths add nothing to prompt", async () => {
+    const { store } = await makeStore()
+    const prompts: string[] = []
+    const startWorker: StartWorker = async (args) => {
+      prompts.push(args.prompt)
+      return { kind: "completed", text: "ok" }
+    }
+    const q = new OrchestrationQueue({ store, worktrees: fakeWorktreeOps(), startWorker })
+    const runId = await q.createRun(makeConfig(), tasks(1))
+    await q.waitForRun(runId)
+    // Prompt is exactly the template substitution — no extra prefix or scope line
+    expect(prompts[0]).toBe("IMPL do 1")
+  })
+})
