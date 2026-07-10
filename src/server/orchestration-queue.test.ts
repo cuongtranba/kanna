@@ -704,3 +704,36 @@ describe("OrchestrationQueue contextPrompt + scopePaths injection (F11)", () => 
     expect(prompts[0]).toBe("IMPL do 1")
   })
 })
+
+describe("OrchestrationQueue cancel", () => {
+  test("cancelRun aborts in-flight workers via signal and marks run cancelled", async () => {
+    const { store } = await makeStore()
+    let sawAbort = false
+    const startWorker: StartWorker = async (args) => {
+      await new Promise<void>((resolve) => {
+        args.abortSignal.addEventListener("abort", () => { sawAbort = true; resolve() })
+      })
+      return { kind: "failed", error: "aborted" }
+    }
+    const q = new OrchestrationQueue({ store, worktrees: fakeWorktreeOps(), startWorker })
+    const runId = await q.createRun(makeConfig(), tasks(1))
+    await new Promise((r) => setTimeout(r, 20)) // let claim + phase start
+    await q.cancelRun(runId)
+    await q.waitForRun(runId)
+    expect(sawAbort).toBe(true)
+    expect(store.getOrchRun(runId)!.status).toBe("cancelled")
+  })
+
+  test("no worker is ever aborted WITHOUT cancelRun (AG1)", async () => {
+    const { store } = await makeStore()
+    let aborted = 0
+    const startWorker: StartWorker = async (args) => {
+      args.abortSignal.addEventListener("abort", () => { aborted += 1 })
+      return { kind: "completed", text: "ok" }
+    }
+    const q = new OrchestrationQueue({ store, worktrees: fakeWorktreeOps(), startWorker })
+    const runId = await q.createRun(makeConfig(), tasks(3))
+    await q.waitForRun(runId)
+    expect(aborted).toBe(0)
+  })
+})
