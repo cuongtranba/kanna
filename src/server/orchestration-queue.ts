@@ -218,27 +218,67 @@ export class OrchestrationQueue {
    * correct phase and resumes the NEXT phase with the persisted `{{PRIOR}}`.
    */
   async recoverOnStartup(): Promise<void> {
-    for (const { runId, taskId, phaseIndex } of this.deps.store.gatedOrchTasks()) {
-      const run = this.deps.store.getOrchRun(runId)
-      if (!run) continue
-      const config = run.config
-      const task = run.tasks.find((t) => t.taskId === taskId)
-      if (!task || task.worktreePath === null) continue
-      const phase = config.phases[phaseIndex]
-      if (!phase) continue
-      const gate = config.gates.find((g) => g.afterPhase === phase.name)
-      if (!gate) continue
-      const rt = this.ensureRunRuntime(runId, config)
-      rt.poolReady = true
-      rt.slotHeads.set(task.worktreePath, task.baseSha ?? "")
-      const resume: GatedResume = {
-        fromPhase: phaseIndex + 1,
-        prior: this.deps.store.getOrchLastPhaseOutput(runId, taskId) ?? "",
-        pendingGate: { phaseIndex, phaseName: phase.name, kind: gate.kind },
-      }
-      const workerId = `w-${taskId}-resume`
-      void this.runTask(runId, taskId, workerId, task.worktreePath, task.branch ?? "", task.baseSha ?? "", resume)
+    // 1. Re-queue in-flight (claimed/running) tasks — owner cleared, worktree
+    //    + attempts kept (F2). Collect first: the append mutates the maps the
+    //    generator walks. `gated` tasks are NOT requeued (step 3 re-arms them).
+    for (const pending of [...this.deps.store.nonTerminalOrchTasks()]) {
+      await this.deps.store.appendOrchestrationEvent({
+        v: 3, type: "orch_task_requeued", timestamp: this.now(),
+        runId: pending.runId, taskId: pending.taskId,
+        reason: "restart_recovery", detail: "server restart while task was in flight",
+      })
+      console.log(`${LOG_PREFIX} orchestration task requeued on boot`, pending)
     }
+    // 2. Create runtimes WITHOUT scheduling yet, so gated resumes claim their
+    //    permit slots before the queue claims fresh tasks. Rebuild the pool:
+    //    ensureWorktree is idempotent — an existing checkout is reused with its
+    //    dirty progress intact (F2); a deleted one is re-created from its
+    //    branch. The returned headSha reseeds slotHeads for future claims.
+    for (const run of this.deps.store.getOrchRuns()) {
+      if (run.status !== "running") continue
+      const rt = this.ensureRunRuntime(run.runId, run.config)
+      for (const slot of run.worktrees) {
+        const wt = await this.deps.worktrees.ensureWorktree(
+          run.config.repoRoot, slot.branch, slot.path, run.config.baseBranch,
+        )
+        rt.slotHeads.set(slot.path, wt.headSha)
+      }
+      rt.poolReady = true
+    }
+    // 3. Re-arm gated tasks in place: re-notify the gate, await resolution,
+    //    resume at the next phase with the persisted prior output (F5).
+    for (const gated of [...this.deps.store.gatedOrchTasks()]) {
+      const run = this.deps.store.getOrchRun(gated.runId)
+      const rt = this.runRuntimes.get(gated.runId)
+      if (!run || !rt) continue
+      const task = run.tasks.find((t) => t.taskId === gated.taskId)
+      if (!task?.worktreePath || !task.branch) continue
+      const phase = run.config.phases[gated.phaseIndex]
+      const gate = run.config.gates.find((g) => g.afterPhase === phase?.name)
+      // No pre-decrement here: the runTask resume path owns permit accounting
+      // (acquires only after gate approval, releases in finally). Reserving one
+      // here would double-count and leak a permit (see prior afda3ce fix).
+      void this.runTask(
+        gated.runId, gated.taskId,
+        `w-${gated.taskId}-a${task.attempts}-resume`,
+        task.worktreePath, task.branch,
+        task.baseSha ?? "",
+        {
+          fromPhase: gated.phaseIndex + 1,
+          prior: this.deps.store.getOrchLastPhaseOutput(gated.runId, gated.taskId) ?? "",
+          pendingGate: { phaseIndex: gated.phaseIndex, phaseName: phase?.name ?? "", kind: gate?.kind ?? "hard" },
+        },
+      )
+      console.log(`${LOG_PREFIX} orchestration gate re-armed on boot`, gated)
+    }
+    // 4. Defer scheduling to a macrotask so a caller inspecting state right
+    //    after recoverOnStartup() observes the clean requeued baseline (queued,
+    //    owner cleared, zero orphans) before the queue re-claims. The run still
+    //    resumes on the next tick.
+    const recoveredRunIds = [...this.runRuntimes.keys()]
+    setTimeout(() => {
+      for (const runId of recoveredRunIds) this.schedule(runId)
+    }, 0)
   }
 
   resolveGate(runId: string, taskId: string, decision: OrchGateDecision): boolean {

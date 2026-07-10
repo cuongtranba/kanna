@@ -737,3 +737,75 @@ describe("OrchestrationQueue cancel", () => {
     expect(aborted).toBe(0)
   })
 })
+
+describe("OrchestrationQueue restart recovery", () => {
+  test("boot after crash: in-flight tasks requeued (owner cleared, worktree kept), run resumes to completion (F2/AG2)", async () => {
+    const { store, dir } = await makeStore()
+    // Simulate a previous lifetime: run created, t1 claimed + mid-phase, t2 committed.
+    await store.appendOrchestrationEvent({
+      v: 3, type: "orch_run_created", timestamp: 1, runId: "r1",
+      config: makeConfig({ maxAttempts: 3 }),
+      tasks: [
+        { id: "t1", title: "a", prompt: "do a" },
+        { id: "t2", title: "b", prompt: "do b" },
+      ],
+    })
+    // Pool of the previous lifetime (F13) — slots must exist for the scheduler.
+    await store.appendOrchestrationEvent({
+      v: 3, type: "orch_worktree_provisioned", timestamp: 1, runId: "r1",
+      index: 0, path: "/wt/t1", branch: "orch/r1/wt-0",
+    })
+    await store.appendOrchestrationEvent({
+      v: 3, type: "orch_worktree_init_completed", timestamp: 1, runId: "r1",
+      index: 0, ok: true, outputExcerpt: "",
+    })
+    await store.appendOrchestrationEvent({
+      v: 3, type: "orch_worktree_provisioned", timestamp: 1, runId: "r1",
+      index: 1, path: "/wt/t2", branch: "orch/r1/wt-1",
+    })
+    await store.appendOrchestrationEvent({
+      v: 3, type: "orch_worktree_init_completed", timestamp: 1, runId: "r1",
+      index: 1, ok: true, outputExcerpt: "",
+    })
+    await store.appendOrchestrationEvent({
+      v: 3, type: "orch_task_claimed", timestamp: 2, runId: "r1", taskId: "t1",
+      workerId: "w-old", worktreePath: "/wt/t1", branch: "orch/r1/wt-0", baseSha: "base0",
+    })
+    await store.appendOrchestrationEvent({
+      v: 3, type: "orch_phase_started", timestamp: 3, runId: "r1", taskId: "t1",
+      phaseIndex: 0, phaseName: "implement", workerIds: ["w-old"],
+    })
+    await store.appendOrchestrationEvent({
+      v: 3, type: "orch_task_claimed", timestamp: 4, runId: "r1", taskId: "t2",
+      workerId: "w-old2", worktreePath: "/wt/t2", branch: "orch/r1/wt-1", baseSha: "base1",
+    })
+    await store.appendOrchestrationEvent({
+      v: 3, type: "orch_task_committed", timestamp: 5, runId: "r1", taskId: "t2", commitSha: "sha2",
+    })
+    await store.flush()
+
+    // "Reboot": fresh store replays the log, fresh engine recovers.
+    const reopened = new EventStore(dir)
+    await reopened.initialize()
+    const wt = fakeWorktreeOps()
+    const startWorker: StartWorker = async () => ({ kind: "completed", text: "ok" })
+    const q = new OrchestrationQueue({ store: reopened, worktrees: wt, startWorker })
+    await q.recoverOnStartup()
+
+    const afterRecovery = reopened.getOrchRun("r1")!
+    const t1 = afterRecovery.tasks.find((t) => t.taskId === "t1")!
+    expect(t1.ownerWorkerId).toBeNull()          // owner cleared
+    expect(t1.worktreePath).toBe("/wt/t1")       // progress kept
+    // zero orphans: nothing left claimed/running with no live worker
+    expect([...reopened.nonTerminalOrchTasks()]).toHaveLength(0)
+
+    await q.waitForRun("r1")
+    const final = reopened.getOrchRun("r1")!
+    expect(final.status).toBe("completed")
+    expect(final.tasks.find((t) => t.taskId === "t1")!.state).toBe("committed")
+    expect(final.tasks.find((t) => t.taskId === "t2")!.state).toBe("committed") // untouched
+    expect(final.tasks.find((t) => t.taskId === "t1")!.attempts).toBe(2)
+    // recovery reused the recorded worktree path
+    expect(wt.added[0]).toBe("/wt/t1")
+  })
+})
