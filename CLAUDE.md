@@ -22,6 +22,26 @@ PRs MUST target `cuongtranba/kanna`, never `jakemor/kanna`.
 `gh repo set-default cuongtranba/kanna` is set; always pass `--repo cuongtranba/kanna`
 or `--base main --head <branch>` to `gh pr create` to make the target explicit.
 
+# TypeScript (dual install: TS7 compiler + TS6 API for tooling)
+
+Type checking runs on **TypeScript 7** (native compiler). typescript-eslint
+has no TS7-compatible release yet (TS7 dropped the compiler JS API from
+`require('typescript')` — it now exports only `{version}`; the API moved to
+`typescript/unstable/*`), so two TypeScript packages are installed:
+
+- `"typescript": "6.0.3"` — classic TS6 with the full legacy JS API
+  (`createProgram`, `ModuleKind`, …) that typescript-eslint's parser loads
+  via `require('typescript')`. Peer range `<6.1.0` is satisfied.
+- `"typescript-7": "npm:typescript@^7.0.2"` — the real TS7 compiler used for
+  the actual type check.
+
+Both packages ship a `tsc` bin, so **never** rely on bare `tsc` / `bunx tsc`
+(the `.bin/tsc` link is ambiguous). The `typecheck` script invokes TS7 by
+explicit path (`node_modules/typescript-7/bin/tsc --noEmit`); CI's Type-check
+step and the local `check` script both call `bun run typecheck`. When
+typescript-eslint ships TS7 support, collapse back to a single `typescript`
+dep and restore `bunx tsc`.
+
 # Lint
 
 `bun run lint` runs ESLint on `src/` with `--max-warnings=0`. CI runs it

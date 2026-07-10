@@ -14,8 +14,7 @@
     "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": false,
-    "types": ["bun"],
-    "baseUrl": "."
+    "types": ["bun"]
   },
   "include": [
     "scripts/**/*.ts",
