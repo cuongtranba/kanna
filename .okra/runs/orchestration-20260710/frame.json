@@ -1,0 +1,44 @@
+{
+  "run_id": "orchestration-20260710",
+  "ratified_at": "2026-07-10",
+  "ratified_by": "human (bacuongtr@gmail.com)",
+  "status": "frozen",
+  "objective": {
+    "title": "Kanna orchestration mode ships (Bun-in-Rust pattern)",
+    "reference": "https://bun.com/blog/bun-in-rust",
+    "metrics": [
+      { "id": "OBJ-1", "metric": "Worker count and phase count are user-configurable", "target": "config surface exists; defaults 4 workers / 3 phases" },
+      { "id": "OBJ-2", "metric": "Parallel workers in isolated git worktrees (acceptance run at defaults)", "target": ">= 4 concurrent" },
+      { "id": "OBJ-3", "metric": "Pipeline phases per task (acceptance run at defaults)", "target": ">= 3 (implement -> adversarial review -> fix)" },
+      { "id": "OBJ-4", "metric": "E2E orchestration test in CI", "target": "green" },
+      { "id": "OBJ-5", "metric": "Demo run: queued tasks reaching terminal state (done/failed-with-reason)", "target": "100%" }
+    ]
+  },
+  "anti_goals": [
+    { "id": "AG1", "title": "Never break execution momentum", "metric": "Workers killed mid-task by orchestrator without explicit cancel", "threshold": 0, "type": "tripwire" },
+    { "id": "AG2", "title": "Never lose worker state/progress/ownership", "metric": "Post-restart: in-flight runs failing to recover owner+progress+queue position (orphaned tasks)", "threshold": 0, "type": "tripwire" },
+    { "id": "AG3", "title": "No invisible execution", "metric": "State transitions without a persisted, UI-visible event", "threshold": 0, "type": "tripwire" },
+    { "id": "AG4", "title": "No regression to existing Kanna", "metric": "bun run lint + bun run test red on any commit; existing subagent/workflow/teams features broken", "threshold": 0, "type": "tripwire" }
+  ],
+  "action_envelope": {
+    "allowed": [
+      "read-only codebase/doc research (DKR probes)",
+      "code changes in a dedicated git worktree branch, PR to cuongtranba/kanna main",
+      "c3 change-units for architecture doc updates",
+      "targeted tests/lint scoped to changed files (subagents); full suite only from orchestrator"
+    ],
+    "forbidden": [
+      "push to main directly",
+      "PR to upstream jakemor/kanna",
+      "relaxing any AG threshold",
+      "full project builds/test suites from parallel subagents",
+      "destructive git ops without human confirmation"
+    ],
+    "approval_required": [
+      "opening PRs",
+      "merging",
+      "any frame change (human-only)"
+    ]
+  },
+  "human_only": ["objective targets", "AG thresholds", "goal switch", "action envelope changes"]
+}
