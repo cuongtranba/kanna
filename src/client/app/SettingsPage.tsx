@@ -19,6 +19,7 @@ import {
   DownloadCloud,
   LogOut,
   Trash2,
+  Type,
   X,
 } from "lucide-react"
 import { useNavigate, useOutletContext, useParams } from "react-router-dom"
@@ -56,6 +57,7 @@ import { renderMarkdownToReact } from "../components/lexical/markdown/lexicalToR
 import { SubagentsSettingsBranch } from "./SubagentsSection"
 import { McpServersSettingsBranch } from "./McpServersSection"
 import { ModelsSettingsBranch } from "./ModelsSection"
+import { TextSnippetsSettingsBranch } from "./TextSnippetsSection"
 import { useAppSettingsStore, selectCustomModels } from "../stores/appSettingsStore"
 import { ChatPreferenceControls } from "../components/chat-ui/ChatPreferenceControls"
 import { OAuthTokenPoolCard } from "../components/chat-ui/OAuthTokenPoolCard"
@@ -143,6 +145,12 @@ const sidebarItems = [
     label: "MCP servers",
     icon: Plug,
     subtitle: "Install custom MCP servers (stdio, http, sse, ws) and connect-test them.",
+  },
+  {
+    id: "snippets",
+    label: "Text snippets",
+    icon: Type,
+    subtitle: "Define shortcuts that expand to full text in the chat composer with Tab.",
   },
   {
     id: "instructions",
@@ -2475,6 +2483,8 @@ export function SettingsPage() {
                   <ModelsSettingsBranch state={state} />
                 ) : selectedPage === "mcp-servers" ? (
                   <McpServersSettingsBranch state={state} />
+                ) : selectedPage === "snippets" ? (
+                  <TextSnippetsSettingsBranch state={state} />
                 ) : selectedPage === "instructions" ? (
                   <GlobalInstructionsSection state={state} />
                 ) : (

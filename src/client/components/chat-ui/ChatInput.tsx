@@ -61,7 +61,7 @@ import {
   type SessionTotals,
 } from "../../lib/contextWindow"
 import { uploadFile, UploadAbortedError } from "../../lib/uploadFile"
-import { useAppSettingsStore, selectCustomModels } from "../../stores/appSettingsStore"
+import { useAppSettingsStore, selectCustomModels, selectTextSnippets } from "../../stores/appSettingsStore"
 import { createAgentMentionRegex } from "../../../shared/mention-pattern"
 
 import { buildKannaEditorConfig } from "../lexical/config"
@@ -73,6 +73,7 @@ import {
   DropAttachmentPlugin,
   SubmitPlugin,
   DraftPersistencePlugin,
+  SnippetExpandPlugin,
   type SubmitPayload,
 } from "../lexical/plugins"
 import { serializeEditorToWire } from "../lexical/serialize/editorToWireString"
@@ -503,6 +504,7 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput(
   const providerPrefs = getEffectiveComposerState(composerState, activeProvider, providerDefaults)
   const selectedProvider = composerState.provider
   const customModels = useAppSettingsStore(selectCustomModels)
+  const textSnippets = useAppSettingsStore(selectTextSnippets)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -1212,6 +1214,7 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput(
                 />
                 <PasteImagePlugin projectId={projectId ?? null} onUploadError={handleUploadError} />
                 <DropAttachmentPlugin projectId={projectId ?? null} onUploadError={handleUploadError} />
+                <SnippetExpandPlugin snippets={textSnippets} />
                 <SubmitPlugin onSubmit={handlePluginSubmit} disabled={disabled || hasPendingUploads} />
                 <DraftPersistencePlugin onChange={handleDraftChange} />
                 <LexicalEditorBridgePlugin bridgeRef={bridgeRef} />
