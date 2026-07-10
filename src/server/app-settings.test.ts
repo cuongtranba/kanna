@@ -83,6 +83,7 @@ function expectedSettingsSnapshot(filePath: string, overrides: Partial<AppSettin
     subagents: [],
     customMcpServers: [],
     customModels: seedCustomModelsFromBuiltins(),
+    textSnippets: [],
     claudeDriver: { ...CLAUDE_DRIVER_DEFAULTS, lifecycle: { ...CLAUDE_PTY_LIFECYCLE_DEFAULTS } },
     globalPromptAppend: "",
     shareDefaultTtlHours: 24,
@@ -1273,5 +1274,77 @@ describe("customModels", () => {
     expect(manager.getSnapshot().customModels.find((m) => m.id === "claude-edit")!.label).toBe("After")
     await manager.writePatch({ customModels: { delete: { id: "claude-edit" } } })
     expect(manager.getSnapshot().customModels.some((m) => m.id === "claude-edit")).toBe(false)
+  })
+})
+
+describe("textSnippets", () => {
+  test("defaults to an empty list", async () => {
+    const filePath = await createTempFilePath()
+    const manager = trackManager(new AppSettingsManager(filePath))
+    await manager.initialize()
+    expect(manager.getSnapshot().textSnippets).toEqual([])
+  })
+
+  test("create adds a snippet with a generated id", async () => {
+    const filePath = await createTempFilePath()
+    const manager = trackManager(new AppSettingsManager(filePath))
+    await manager.initialize()
+    await manager.writePatch({ textSnippets: { create: { shortcut: "pgm", expansion: "pull request green then merge" } } })
+    const snippets = manager.getSnapshot().textSnippets
+    expect(snippets).toHaveLength(1)
+    expect(snippets[0]!.shortcut).toBe("pgm")
+    expect(snippets[0]!.expansion).toBe("pull request green then merge")
+    expect(snippets[0]!.id.length).toBeGreaterThan(0)
+  })
+
+  test("rejects a shortcut with whitespace", async () => {
+    const filePath = await createTempFilePath()
+    const manager = trackManager(new AppSettingsManager(filePath))
+    await manager.initialize()
+    let err: unknown = null
+    try { await manager.writePatch({ textSnippets: { create: { shortcut: "two words", expansion: "x" } } }) } catch (e) { err = e }
+    expect(err).not.toBeNull()
+  })
+
+  test("rejects an empty expansion", async () => {
+    const filePath = await createTempFilePath()
+    const manager = trackManager(new AppSettingsManager(filePath))
+    await manager.initialize()
+    let err: unknown = null
+    try { await manager.writePatch({ textSnippets: { create: { shortcut: "pgm", expansion: "" } } }) } catch (e) { err = e }
+    expect(err).not.toBeNull()
+  })
+
+  test("rejects a duplicate shortcut", async () => {
+    const filePath = await createTempFilePath()
+    const manager = trackManager(new AppSettingsManager(filePath))
+    await manager.initialize()
+    await manager.writePatch({ textSnippets: { create: { shortcut: "pgm", expansion: "one" } } })
+    let err: unknown = null
+    try { await manager.writePatch({ textSnippets: { create: { shortcut: "pgm", expansion: "two" } } }) } catch (e) { err = e }
+    expect(err).not.toBeNull()
+  })
+
+  test("update edits fields; delete removes the entry", async () => {
+    const filePath = await createTempFilePath()
+    const manager = trackManager(new AppSettingsManager(filePath))
+    await manager.initialize()
+    await manager.writePatch({ textSnippets: { create: { shortcut: "pgm", expansion: "before" } } })
+    const id = manager.getSnapshot().textSnippets[0]!.id
+    await manager.writePatch({ textSnippets: { update: { id, patch: { expansion: "after" } } } })
+    expect(manager.getSnapshot().textSnippets.find((s) => s.id === id)!.expansion).toBe("after")
+    await manager.writePatch({ textSnippets: { delete: { id } } })
+    expect(manager.getSnapshot().textSnippets.some((s) => s.id === id)).toBe(false)
+  })
+
+  test("persists across reload", async () => {
+    const filePath = await createTempFilePath()
+    const manager = trackManager(new AppSettingsManager(filePath))
+    await manager.initialize()
+    await manager.writePatch({ textSnippets: { create: { shortcut: "pgm", expansion: "pull request green then merge" } } })
+
+    const reloaded = trackManager(new AppSettingsManager(filePath))
+    await reloaded.initialize()
+    expect(reloaded.getSnapshot().textSnippets.some((s) => s.shortcut === "pgm")).toBe(true)
   })
 })

@@ -490,6 +490,24 @@ export interface CustomModelPatch {
   supportsMaxReasoningEffort?: boolean
 }
 
+export interface TextSnippet {
+  id: string
+  shortcut: string
+  expansion: string
+  createdAt: number
+  updatedAt: number
+}
+
+export interface TextSnippetInput {
+  shortcut: string
+  expansion: string
+}
+
+export interface TextSnippetPatch {
+  shortcut?: string
+  expansion?: string
+}
+
 function customEntryToModelOption(entry: CustomModelEntry): ProviderModelOption {
   return {
     id: entry.id,
@@ -909,6 +927,7 @@ export interface AppSettingsSnapshot {
   subagents: Subagent[]
   customMcpServers: McpServerConfig[]
   customModels: CustomModelEntry[]
+  textSnippets: TextSnippet[]
   claudeDriver: ClaudeDriverSettings
   globalPromptAppend: string
   shareDefaultTtlHours: number
@@ -948,6 +967,11 @@ export interface AppSettingsPatch {
   customModels?: {
     create?: CustomModelInput
     update?: { id: string; patch: CustomModelPatch }
+    delete?: { id: string }
+  }
+  textSnippets?: {
+    create?: TextSnippetInput
+    update?: { id: string; patch: TextSnippetPatch }
     delete?: { id: string }
   }
   claudeDriver?: {

@@ -59,6 +59,9 @@ import {
   type CustomModelEntry,
   type CustomModelInput,
   type CustomModelPatch,
+  type TextSnippet,
+  type TextSnippetInput,
+  type TextSnippetPatch,
   type DefaultProviderPreference,
   type EditorPreset,
   type McpOAuthState,
@@ -112,6 +115,7 @@ interface AppSettingsFile {
   subagents?: unknown
   customMcpServers?: unknown
   customModels?: unknown
+  textSnippets?: unknown
   claudeDriver?: unknown
   globalPromptAppend?: unknown
   shareDefaultTtlHours?: unknown
@@ -145,6 +149,8 @@ const MCP_NAME_REGEX = /^[a-zA-Z][a-zA-Z0-9_-]{0,31}$/
 const MCP_RESERVED_NAMES = new Set(["kanna"])
 const MODEL_ID_REGEX = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$/
 const MODEL_LABEL_MAX = 64
+const SNIPPET_SHORTCUT_REGEX = /^\S{1,32}$/
+const SNIPPET_EXPANSION_MAX = 4_000
 
 class SubagentValidationException extends Error {
   constructor(readonly validationError: SubagentValidationError) {
@@ -841,6 +847,7 @@ function toFilePayload(state: AppSettingsState) {
     subagents: state.subagents,
     customMcpServers: state.customMcpServers,
     customModels: state.customModels,
+    textSnippets: state.textSnippets,
     claudeDriver: state.claudeDriver,
     globalPromptAppend: state.globalPromptAppend,
     shareDefaultTtlHours: state.shareDefaultTtlHours,
@@ -867,6 +874,7 @@ function toSnapshot(state: AppSettingsState): AppSettingsSnapshot {
     subagents: state.subagents,
     customMcpServers: state.customMcpServers,
     customModels: state.customModels,
+    textSnippets: state.textSnippets,
     claudeDriver: state.claudeDriver,
     globalPromptAppend: state.globalPromptAppend,
     shareDefaultTtlHours: state.shareDefaultTtlHours,
@@ -905,6 +913,7 @@ function normalizeAppSettings(
   const claudeAuth = normalizeClaudeAuth(source?.claudeAuth, warnings)
   const uploads = normalizeUploadSettings(source?.uploads, warnings)
   const customModels = normalizeCustomModels(source?.customModels, warnings)
+  const textSnippets = normalizeTextSnippets(source?.textSnippets, warnings)
   const subagents = normalizeSubagents(source?.subagents, warnings, customModels)
   const claudeDriver = normalizeClaudeDriverSettings(source?.claudeDriver, warnings)
   const globalPromptAppend = normalizeGlobalPromptAppend(source?.globalPromptAppend, warnings)
@@ -946,6 +955,7 @@ function normalizeAppSettings(
     subagents,
     customMcpServers: normalizeMcpServers(source?.customMcpServers, warnings),
     customModels,
+    textSnippets,
     claudeDriver,
     globalPromptAppend,
     shareDefaultTtlHours,
@@ -982,6 +992,7 @@ function toComparablePayload(source: AppSettingsFile) {
     subagents: source.subagents,
     customMcpServers: source.customMcpServers,
     customModels: source.customModels,
+    textSnippets: source.textSnippets,
     claudeDriver: source.claudeDriver,
     globalPromptAppend: typeof source.globalPromptAppend === "string"
       ? source.globalPromptAppend.replace(/\s+$/u, "")
@@ -1164,6 +1175,81 @@ function applyCustomModelPatch(existing: CustomModelEntry, patch: CustomModelPat
     supportsMaxReasoningEffort: patch.supportsMaxReasoningEffort ?? existing.supportsMaxReasoningEffort,
     updatedAt: Date.now(),
   }
+}
+
+interface TextSnippetValidationError {
+  code: "INVALID_SHORTCUT" | "EMPTY_EXPANSION" | "DUPLICATE_SHORTCUT" | "NOT_FOUND"
+  field?: string
+  message: string
+}
+
+class TextSnippetValidationException extends Error {
+  constructor(readonly validationError: TextSnippetValidationError) {
+    super(validationError.message)
+    this.name = "TextSnippetValidationException"
+  }
+}
+
+function validateTextSnippetShape(
+  entry: TextSnippet,
+  others: Array<{ id: string; shortcut: string }>,
+): TextSnippetValidationError | null {
+  if (!SNIPPET_SHORTCUT_REGEX.test(entry.shortcut)) {
+    return { code: "INVALID_SHORTCUT", field: "shortcut", message: "shortcut must be 1-32 characters with no whitespace" }
+  }
+  if (entry.expansion.length === 0 || entry.expansion.length > SNIPPET_EXPANSION_MAX) {
+    return { code: "EMPTY_EXPANSION", field: "expansion", message: `expansion must be non-empty and <= ${SNIPPET_EXPANSION_MAX} chars` }
+  }
+  for (const other of others) {
+    if (other.id !== entry.id && other.shortcut === entry.shortcut) {
+      return { code: "DUPLICATE_SHORTCUT", field: "shortcut", message: `shortcut '${entry.shortcut}' already exists` }
+    }
+  }
+  return null
+}
+
+function buildTextSnippetFromInput(input: TextSnippetInput): TextSnippet {
+  const now = Date.now()
+  return {
+    id: randomUUID(),
+    shortcut: input.shortcut.trim(),
+    expansion: input.expansion,
+    createdAt: now,
+    updatedAt: now,
+  }
+}
+
+function applyTextSnippetPatch(existing: TextSnippet, patch: TextSnippetPatch): TextSnippet {
+  return {
+    ...existing,
+    shortcut: patch.shortcut !== undefined ? patch.shortcut.trim() : existing.shortcut,
+    expansion: patch.expansion !== undefined ? patch.expansion : existing.expansion,
+    updatedAt: Date.now(),
+  }
+}
+
+function normalizeTextSnippets(value: unknown, warnings: string[]): TextSnippet[] {
+  if (value === undefined || value === null) return []
+  if (!Array.isArray(value)) {
+    warnings.push("textSnippets must be an array")
+    return []
+  }
+  const out: TextSnippet[] = []
+  for (const raw of value) {
+    if (!raw || typeof raw !== "object") continue
+    const candidate = raw as Partial<TextSnippet>
+    const entry: TextSnippet = {
+      id: typeof candidate.id === "string" && candidate.id.length > 0 ? candidate.id : randomUUID(),
+      shortcut: String(candidate.shortcut ?? "").trim(),
+      expansion: String(candidate.expansion ?? ""),
+      createdAt: typeof candidate.createdAt === "number" ? candidate.createdAt : 0,
+      updatedAt: typeof candidate.updatedAt === "number" ? candidate.updatedAt : 0,
+    }
+    const err = validateTextSnippetShape(entry, out.map((s) => ({ id: s.id, shortcut: s.shortcut })))
+    if (err) { warnings.push(`textSnippets: dropped ${entry.shortcut || "entry"} (${err.message})`); continue }
+    out.push(entry)
+  }
+  return out
 }
 
 export function seedCustomModelsFromBuiltins(): CustomModelEntry[] {
@@ -1363,6 +1449,24 @@ function applyPatch(state: AppSettingsState, patch: AppSettingsPatch): AppSettin
     nextCustomModels = state.customModels.filter((m) => m.id !== patch.customModels!.delete!.id)
   }
 
+  let nextTextSnippets = state.textSnippets
+  if (patch.textSnippets?.create) {
+    const entry = buildTextSnippetFromInput(patch.textSnippets.create)
+    const error = validateTextSnippetShape(entry, state.textSnippets.map((s) => ({ id: s.id, shortcut: s.shortcut })))
+    if (error) throw new TextSnippetValidationException(error)
+    nextTextSnippets = [...state.textSnippets, entry]
+  } else if (patch.textSnippets?.update) {
+    const { id, patch: snippetPatch } = patch.textSnippets.update
+    const idx = state.textSnippets.findIndex((s) => s.id === id)
+    if (idx < 0) throw new TextSnippetValidationException({ code: "NOT_FOUND", message: `text snippet ${id} not found` })
+    const updated = applyTextSnippetPatch(state.textSnippets[idx]!, snippetPatch)
+    const error = validateTextSnippetShape(updated, state.textSnippets.map((s) => ({ id: s.id, shortcut: s.shortcut })))
+    if (error) throw new TextSnippetValidationException(error)
+    nextTextSnippets = [...state.textSnippets.slice(0, idx), updated, ...state.textSnippets.slice(idx + 1)]
+  } else if (patch.textSnippets?.delete) {
+    nextTextSnippets = state.textSnippets.filter((s) => s.id !== patch.textSnippets!.delete!.id)
+  }
+
   return normalizeAppSettings({
     ...toFilePayload(state),
     ...patch,
@@ -1416,6 +1520,7 @@ function applyPatch(state: AppSettingsState, patch: AppSettingsPatch): AppSettin
     subagents: nextSubagents,
     customMcpServers: nextMcpServers,
     customModels: nextCustomModels,
+    textSnippets: nextTextSnippets,
     claudeDriver: {
       preference: patch.claudeDriver?.preference ?? state.claudeDriver.preference,
       lifecycle: {

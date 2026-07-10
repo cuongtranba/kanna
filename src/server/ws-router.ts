@@ -538,6 +538,7 @@ export function createWsRouter({
     subagents: [],
     customMcpServers: [],
     customModels: [],
+    textSnippets: [],
     claudeDriver: { ...CLAUDE_DRIVER_DEFAULTS, lifecycle: { ...CLAUDE_PTY_LIFECYCLE_DEFAULTS } },
     globalPromptAppend: "",
     shareDefaultTtlHours: 24,
@@ -630,6 +631,7 @@ export function createWsRouter({
       subagents,
       customMcpServers: snapshot.customMcpServers,
       customModels: snapshot.customModels,
+      textSnippets: snapshot.textSnippets,
       claudeDriver: {
         preference: patch.claudeDriver?.preference ?? snapshot.claudeDriver.preference,
         lifecycle: {

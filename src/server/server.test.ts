@@ -47,6 +47,7 @@ function makeSnapshot(overrides: Partial<AppSettingsSnapshot> = {}): AppSettings
     subagents: [],
     customMcpServers: [],
     customModels: [],
+    textSnippets: [],
     claudeDriver: { ...CLAUDE_DRIVER_DEFAULTS, lifecycle: { ...CLAUDE_PTY_LIFECYCLE_DEFAULTS } },
     globalPromptAppend: "",
     shareDefaultTtlHours: 24,
