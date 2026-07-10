@@ -175,3 +175,80 @@ describe("OrchestrationQueue scheduling", () => {
     expect(store.getOrchRun(runId)!.tasks.every((t) => t.state === "committed")).toBe(true)
   })
 })
+
+describe("OrchestrationQueue phase pipeline", () => {
+  test("phases run in declared order, fresh worker ids per phase (F4)", async () => {
+    const { store } = await makeStore()
+    const calls: Array<{ phaseIndex: number; workerId: string; prompt: string }> = []
+    const startWorker: StartWorker = async (args) => {
+      calls.push({ phaseIndex: args.phaseIndex, workerId: args.workerId, prompt: args.prompt })
+      return { kind: "completed", text: `out-p${args.phaseIndex}` }
+    }
+    const config = makeConfig({
+      phases: [
+        { name: "implement", kind: "implement", parallel: 1, promptTemplate: "IMPL {{TASK}}" },
+        { name: "review", kind: "review", parallel: 2, promptTemplate: "REVIEW {{DIFF}}" },
+        { name: "fix", kind: "fix", parallel: 1, promptTemplate: "FIX {{TASK}} FEEDBACK {{PRIOR}}" },
+      ],
+    })
+    const q = new OrchestrationQueue({ store, worktrees: fakeWorktreeOps(), startWorker })
+    const runId = await q.createRun(config, tasks(1))
+    await q.waitForRun(runId)
+
+    expect(calls.map((c) => c.phaseIndex)).toEqual([0, 1, 1, 2])
+    // review fanout gets distinct fresh worker ids
+    const reviewIds = calls.filter((c) => c.phaseIndex === 1).map((c) => c.workerId)
+    expect(new Set(reviewIds).size).toBe(2)
+    // prompt composition
+    expect(calls[0]!.prompt).toBe("IMPL do 1")
+    expect(calls[1]!.prompt).toContain("+fake") // {{DIFF}} from fake ops
+    expect(calls[3]!.prompt).toContain("out-p1") // {{PRIOR}} = joined review output
+    expect(calls[3]!.prompt).toContain("do 1")
+  })
+
+  test("phase failure marks task failed, run still completes (other tasks unaffected)", async () => {
+    const { store } = await makeStore()
+    const wt = fakeWorktreeOps()
+    const startWorker: StartWorker = async (args) =>
+      args.taskId === "t1"
+        ? { kind: "failed", error: "boom" }
+        : { kind: "completed", text: "ok" }
+    const q = new OrchestrationQueue({ store, worktrees: wt, startWorker })
+    const runId = await q.createRun(makeConfig(), tasks(2))
+    await q.waitForRun(runId)
+    const run = store.getOrchRun(runId)!
+    expect(run.status).toBe("completed")
+    const t1 = run.tasks.find((t) => t.taskId === "t1")!
+    const t2 = run.tasks.find((t) => t.taskId === "t2")!
+    expect(t1.state).toBe("failed")
+    expect(t1.error).toBe("boom")
+    expect(t2.state).toBe("committed")
+    // F13: failed task's uncommitted junk scrubbed so the slot is safe to reuse
+    expect(wt.resets).toEqual([t1.worktreePath!])
+    // and the slot was released back to the pool
+    expect(run.worktrees.find((w) => w.path === t1.worktreePath)!.heldByTaskId).toBeNull()
+  })
+
+  test("every transition produced a persisted event (AG3)", async () => {
+    const { store, dir } = await makeStore()
+    const startWorker: StartWorker = async () => ({ kind: "completed", text: "ok" })
+    const q = new OrchestrationQueue({ store, worktrees: fakeWorktreeOps(), startWorker })
+    const runId = await q.createRun(makeConfig(), tasks(1))
+    await q.waitForRun(runId)
+    await store.flush()
+    const log = await Bun.file(path.join(dir, "orch.jsonl")).text()
+    const types = log.trim().split("\n").map((l) => (JSON.parse(l) as { type: string }).type)
+    expect(types).toEqual([
+      "orch_run_created",
+      "orch_worktree_provisioned",      // slot 0 (F13)
+      "orch_worktree_init_completed",
+      "orch_worktree_provisioned",      // slot 1
+      "orch_worktree_init_completed",
+      "orch_task_claimed",
+      "orch_phase_started",
+      "orch_phase_completed",
+      "orch_task_committed",
+      "orch_run_completed",
+    ])
+  })
+})
