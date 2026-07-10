@@ -35,7 +35,8 @@
   "scripts": {
     "build": "bun run build:client",
     "build:client": "vite build",
-    "check": "tsc --noEmit && bun run lint && bun run build:client",
+    "typecheck": "node_modules/typescript-7/bin/tsc --noEmit",
+    "check": "bun run typecheck && bun run lint && bun run build:client",
     "lint": "eslint src/ --max-warnings=0",
     "dev": "bun run ./scripts/dev.ts",
     "dev:client": "vite --host 0.0.0.0 --port 5174",
@@ -115,7 +116,8 @@
     "react-router-dom": "^7.12.0",
     "tailwind-merge": "^3.4.0",
     "tailwindcss": "^4.1.18",
-    "typescript": "5.8.3",
+    "typescript": "6.0.3",
+    "typescript-7": "npm:typescript@^7.0.2",
     "typescript-eslint": "^8.59.3",
     "vite": "^6.0.0",
     "zustand": "^5.0.10"

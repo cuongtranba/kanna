@@ -57,7 +57,7 @@ export interface PushSubscribeServerCall {
   userAgent: string
 }
 
-export function urlBase64ToUint8Array(base64String: string): Uint8Array {
+export function urlBase64ToUint8Array(base64String: string): Uint8Array<ArrayBuffer> {
   if (typeof Buffer !== "undefined") {
     return new Uint8Array(Buffer.from(base64String, "base64url"))
   }
