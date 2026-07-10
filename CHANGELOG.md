@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.0.1](https://github.com/cuongtranba/kanna/compare/v1.0.0...v1.0.1) (2026-07-10)
+
+
+### Bug Fixes
+
+* **composer:** keep snippet-expand caret visible after Tab ([#517](https://github.com/cuongtranba/kanna/issues/517)) ([15fd450](https://github.com/cuongtranba/kanna/commit/15fd45089fff435dda2be8a7c54b7a0fbd24bb6f))
+
 ## [1.0.0](https://github.com/cuongtranba/kanna/compare/v0.108.2...v1.0.0) (2026-07-10)
 
 
