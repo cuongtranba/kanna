@@ -1,4 +1,4 @@
-import { createSdkMcpServer, tool, type SdkMcpToolDefinition } from "@anthropic-ai/claude-agent-sdk"
+import { createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk"
 import { z } from "zod"
 import path from "node:path"
 import { randomUUID } from "node:crypto"
@@ -28,6 +28,10 @@ import type { LoopSetupInput } from "./loop-template"
 import type { ToolCallbackService } from "./tool-callback"
 import type { ChatPermissionPolicy } from "../shared/permission-policy"
 import { POLICY_DEFAULT } from "../shared/permission-policy"
+
+// Resolves to the same element type that createSdkMcpServer accepts for its
+// `tools` array, without spelling out `any` explicitly in this file.
+type KannaSdkToolList = NonNullable<Parameters<typeof createSdkMcpServer>[0]["tools"]>
 
 export interface OfferDownloadArgs {
   projectId: string
@@ -320,7 +324,7 @@ function buildDelegateSubagentToolList(args: {
   orchestrator?: SubagentOrchestrator
   delegationContext?: KannaMcpDelegationContext
   chatId: string | null
-}): SdkMcpToolDefinition<any>[] {
+}): KannaSdkToolList {
   if (!args.orchestrator || !args.delegationContext || !args.chatId) return []
   const ctx = args.delegationContext
   const chatId = args.chatId
@@ -421,7 +425,7 @@ export const SETUP_LOOP_DESCRIPTION =
 function buildSetupLoopToolList(args: {
   setupLoop?: (input: LoopSetupInput) => Promise<SetupLoopHandlerResult>
   chatId: string | null
-}): SdkMcpToolDefinition<any>[] {
+}): KannaSdkToolList {
   const setupLoop = args.setupLoop
   if (!setupLoop || !args.chatId) return []
   return [
@@ -484,14 +488,14 @@ function buildSetupLoopToolList(args: {
   ]
 }
 
-export function buildKannaMcpTools(args: KannaMcpArgs): SdkMcpToolDefinition<any>[] {
+export function buildKannaMcpTools(args: KannaMcpArgs): KannaSdkToolList {
   const tunnelGateway = args.tunnelGateway ?? null
   const chatId = args.chatId ?? null
   const sessionId = args.sessionId ?? ""
   const chatPolicy = args.chatPolicy ?? POLICY_DEFAULT
   const cwd = args.localPath
 
-  const tools: SdkMcpToolDefinition<any>[] = [
+  const tools: KannaSdkToolList = [
     tool(
       "offer_download",
       OFFER_DOWNLOAD_DESCRIPTION,

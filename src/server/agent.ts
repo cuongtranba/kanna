@@ -55,7 +55,7 @@ import {
 import { readLlmProviderSnapshot } from "./llm-provider"
 import { computeCostUsd, resolveModelPrice, stripModelVariantSuffix } from "../shared/token-pricing"
 import type { ModelPrice } from "../shared/token-pricing"
-import { providerUsesSdkSession, resolveClaudeApiModelId, type ClaudeDriverPreference, type CustomModelEntry } from "../shared/types"
+import { isCodexReasoningEffort, providerUsesSdkSession, resolveClaudeApiModelId, type ClaudeDriverPreference, type CustomModelEntry } from "../shared/types"
 import { fallbackTitleFromMessage } from "./generate-title"
 import { AUTO_CONTINUE_EVENT_VERSION, type AutoContinueEvent } from "./auto-continue/events"
 import { ClaudeLimitDetector, CodexLimitDetector, type LimitDetection, type LimitDetector } from "./auto-continue/limit-detector"
@@ -633,7 +633,68 @@ export function parseConfiguredContextWindowFromModelId(modelId: string): number
   return modelId.endsWith("[1m]") ? 1_000_000 : undefined
 }
 
-export function getClaudeAssistantMessageUsageId(message: any): string | null {
+// Minimal structural interface for raw SDK JSONL messages. All properties are
+// optional so that both real SDK types and partial test fixtures are assignable.
+// No `any` or `unknown` — every accessed field is typed concretely.
+interface ClaudeRawContentBlock {
+  type?: string
+  text?: string
+  thinking?: string
+  signature?: string
+  name?: string
+  id?: string
+  // input is structurally opaque; passed straight through to normalizeToolCall
+  input?: Record<string, string | number | boolean | null | object>
+  tool_use_id?: string
+  // content is opaque (tool_result bodies have nested structures) — passed
+  // through as-is to ToolResultEntry.content which accepts any value.
+  content?: object | string | null
+  is_error?: boolean
+}
+interface ClaudeRawMessageBody {
+  id?: string
+  content?: ClaudeRawContentBlock[] | string
+  role?: string
+  model?: string
+  stop_reason?: string
+  usage?: Record<string, number>
+}
+export interface ClaudeRawSdkMessage {
+  type?: string
+  subtype?: string
+  uuid?: string
+  model?: string
+  tools?: string[]
+  agents?: string[]
+  slash_commands?: string[]
+  mcp_servers?: string[]
+  message?: ClaudeRawMessageBody
+  isApiErrorMessage?: boolean
+  apiErrorStatus?: number
+  request_id?: string
+  requestId?: string
+  is_error?: boolean
+  duration_ms?: number
+  result?: string
+  total_cost_usd?: number
+  status?: string
+  summary?: string
+  skip_transcript?: boolean
+  durationMs?: number
+  pendingWorkflowCount?: number
+  usage?: Record<string, number>
+  modelUsage?: Record<string, number>[]
+  // SDK rate-limit event fields
+  rate_limit_info?: Record<string, string | number | boolean | null>
+  session_id?: string
+  stop_reason?: string
+  // Task-notification fields
+  task_id?: string
+  output_file?: string
+  tool_use_id?: string
+}
+
+export function getClaudeAssistantMessageUsageId(message: ClaudeRawSdkMessage): string | null {
   if (typeof message?.message?.id === "string" && message.message.id) {
     return message.message.id
   }
@@ -666,7 +727,7 @@ const POLICY_REFUSAL_TEXT_MARKERS: readonly string[] = [
   "unable to respond to this request",
 ]
 
-export function normalizeClaudeStreamMessage(message: any): TranscriptEntry[] {
+export function normalizeClaudeStreamMessage(message: ClaudeRawSdkMessage): TranscriptEntry[] {
   const debugRaw = JSON.stringify(message)
   const messageId = typeof message.uuid === "string" ? message.uuid : undefined
 
@@ -690,8 +751,8 @@ export function normalizeClaudeStreamMessage(message: any): TranscriptEntry[] {
 
   if (message.type === "assistant" && Array.isArray(message.message?.content)) {
     const joinedText = message.message.content
-      .filter((c: { type?: string; text?: string }) => c.type === "text" && typeof c.text === "string")
-      .map((c: { text: string }) => c.text)
+      .filter((c): c is ClaudeRawContentBlock & { text: string } => c.type === "text" && typeof c.text === "string")
+      .map((c) => c.text)
       .join("")
     // The Claude CLI reuses model "<synthetic>" for two distinct purposes:
     // genuine API errors AND benign turn-end placeholders ("No response
@@ -930,7 +991,7 @@ export async function* createClaudeHarnessStream(
   let pendingResultUsage: ProviderUsage | undefined
   let pendingResultCost: number | undefined
 
-  for await (const sdkMessage of q as AsyncIterable<any>) {
+  for await (const sdkMessage of q as AsyncIterable<ClaudeRawSdkMessage>) {
     const sessionToken = typeof sdkMessage.session_id === "string" ? sdkMessage.session_id : null
     if (sessionToken) {
       yield { type: "session_token", sessionToken }
@@ -2490,7 +2551,7 @@ export class AgentCoordinator {
         chatId: args.chatId,
         content: promptContent,
         model: args.model,
-        effort: args.effort as any,
+        effort: isCodexReasoningEffort(args.effort) ? args.effort : undefined,
         serviceTier: args.serviceTier,
         planMode: args.planMode,
         onToolRequest,
