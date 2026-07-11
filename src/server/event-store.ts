@@ -441,7 +441,7 @@ export class EventStore implements PushEventStore {
         }
       }
     } catch (error) {
-      log.warn(`${LOG_PREFIX} Failed to load snapshot, resetting local history:`, error)
+      log.warn(`${LOG_PREFIX} Failed to load snapshot, resetting local history:`, String(error))
       await this.clearStorage()
     }
   }
@@ -475,7 +475,7 @@ export class EventStore implements PushEventStore {
         }
         this.sidebarProjectOrder = normalizeSidebarProjectOrder(JSON.parse(text))
       } catch (error) {
-        log.warn(`${LOG_PREFIX} Failed to load ${SIDEBAR_PROJECT_ORDER_FILE}, ignoring saved order:`, error)
+        log.warn(`${LOG_PREFIX} Failed to load ${SIDEBAR_PROJECT_ORDER_FILE}, ignoring saved order:`, String(error))
         this.sidebarProjectOrder = []
       }
       return
@@ -530,7 +530,7 @@ export class EventStore implements PushEventStore {
           log.warn(`${LOG_PREFIX} Ignoring corrupt trailing line in ${path.basename(this.projectsLogPath)} while migrating sidebar order`)
           return projectIds
         }
-        log.warn(`${LOG_PREFIX} Failed to migrate sidebar order from ${path.basename(this.projectsLogPath)}:`, error)
+        log.warn(`${LOG_PREFIX} Failed to migrate sidebar order from ${path.basename(this.projectsLogPath)}:`, String(error))
         return []
       }
     }
@@ -609,7 +609,7 @@ export class EventStore implements PushEventStore {
           log.warn(`${LOG_PREFIX} Ignoring corrupt trailing line in ${path.basename(filePath)}`)
           return parsedEvents
         }
-        log.warn(`${LOG_PREFIX} Failed to replay ${path.basename(filePath)}, resetting local history:`, error)
+        log.warn(`${LOG_PREFIX} Failed to replay ${path.basename(filePath)}, resetting local history:`, String(error))
         await this.clearStorage()
         return []
       }

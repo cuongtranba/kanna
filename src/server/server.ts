@@ -756,7 +756,7 @@ async function handleProjectUpload(req: Request, url: URL, store: EventStore, ap
     })
     return Response.json({ attachments })
   } catch (error) {
-    log.error("[uploads] Upload failed:", error)
+    log.error("[uploads] Upload failed:", String(error))
     return Response.json({ error: "Upload failed" }, { status: 500 })
   }
 }
@@ -958,7 +958,7 @@ async function handleProjectPaths(req: Request, url: URL, store: EventStore) {
     })
     return Response.json({ paths })
   } catch (error) {
-    log.error("[paths] list failed:", error)
+    log.error("[paths] list failed:", String(error))
     return Response.json({ error: "Failed to list paths" }, { status: 500 })
   }
 }

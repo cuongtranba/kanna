@@ -72,7 +72,7 @@ export class KeybindingsManager {
     this.watcher?.close()
     const next = watchKeybindingsDirectory(this.filePath, () => {
       void this.reload().catch((error: unknown) => {
-        log.warn(`${LOG_PREFIX} Failed to reload keybindings:`, error)
+        log.warn(`${LOG_PREFIX} Failed to reload keybindings:`, String(error))
       })
     })
     if (!next) {

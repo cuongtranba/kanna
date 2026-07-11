@@ -291,7 +291,7 @@ function KannaLayout() {
         description: `${parts.join(", ")}.${suffix}`,
       })
     } catch (error) {
-      log.error("[kanna/import] failed", error)
+      log.error("[kanna/import] failed", String(error))
       await dialog.alert({
         title: "Import failed",
         description: "See console for details.",

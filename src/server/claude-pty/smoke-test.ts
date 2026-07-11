@@ -150,7 +150,7 @@ export function buildLiveSmokeProbe(args: BuildLiveSmokeProbeArgs): SmokeTestPro
       // Rate-limit errors must not be cached as "fail" — they're transient.
       // Re-throw so the gate propagates the error without poisoning the cache.
       if (err instanceof Error && (err as Error & { code?: string }).code === "rate_limited") throw err
-      log.warn("[kanna/pty] smoke probe errored, treating as FAIL", err)
+      log.warn("[kanna/pty] smoke probe errored, treating as FAIL", String(err))
       probeResult = "fail"
     } finally {
       try { await sendExitCommand(pty) } catch { /* swallow */ }

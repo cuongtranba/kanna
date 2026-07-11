@@ -30,7 +30,7 @@ export class ScheduleManager {
   constructor(args: ScheduleManagerArgs) {
     this.clock = args.clock ?? realClock
     this.fireFn = args.fire
-    this.onError = args.onError ?? ((error) => log.error("[kanna/schedule-manager]", error))
+    this.onError = args.onError ?? ((error) => log.error("[kanna/schedule-manager]", String(error)))
   }
 
   rehydrate(events: readonly AutoContinueEvent[]) {

@@ -230,7 +230,7 @@ export async function importClaudeSessions(
         }
         await store.setSourceHash(existingChat.id, session.sourceHash)
       } catch (error) {
-        log.error("[kanna/import] failed to update session", session.filePath, error)
+        log.error("[kanna/import] failed to update session", session.filePath, String(error))
         failed += 1
       }
       continue
@@ -266,7 +266,7 @@ export async function importClaudeSessions(
       imported += 1
       if (onProgress) onProgress({ scanned, imported })
     } catch (error) {
-      log.error("[kanna/import] failed to import session", session.filePath, error)
+      log.error("[kanna/import] failed to import session", session.filePath, String(error))
       failed += 1
     }
   }

@@ -1448,7 +1448,7 @@ async function startClaudeSession(args: {
       try {
         return await q.supportedCommands()
       } catch (error) {
-        log.warn("[kanna/claude] supportedCommands failed", error)
+        log.warn("[kanna/claude] supportedCommands failed", String(error))
         return []
       }
     },
@@ -1781,7 +1781,7 @@ export class AgentCoordinator {
         })
         bearers.set(s.id, token)
       } catch (err) {
-        log.warn("[kanna/mcp-oauth] token refresh failed for", s.name, err)
+        log.warn("[kanna/mcp-oauth] token refresh failed for", s.name, String(err))
       }
     }
     return bearers
@@ -2125,7 +2125,7 @@ export class AgentCoordinator {
       await this.store.recordSessionCommandsLoaded(chatId, merged)
       this.emitStateChange(chatId)
     } catch (error) {
-      log.warn("[kanna/agent] ensureSlashCommandsLoaded failed", error)
+      log.warn("[kanna/agent] ensureSlashCommandsLoaded failed", String(error))
     } finally {
       this.slashCommandsInFlight.delete(chatId)
       this.emitStateChange(chatId)
@@ -2138,7 +2138,7 @@ export class AgentCoordinator {
     try {
       local = this.localCatalog.list(cwd)
     } catch (error) {
-      log.warn("[kanna/agent] localCatalog.list failed", error)
+      log.warn("[kanna/agent] localCatalog.list failed", String(error))
       return commands
     }
     const cliKeys = new Set(commands.map((c) => c.name.toLowerCase()))
@@ -2784,7 +2784,7 @@ export class AgentCoordinator {
           openrouterTurnPrice = resolveModelPrice(baseModelId, m?.pricing ?? null)
           if (m && m.contextLength > 0) openrouterContextWindow = m.contextLength
         } catch (err) {
-          log.warn("[kanna/agent] openrouter pricing lookup failed", err)
+          log.warn("[kanna/agent] openrouter pricing lookup failed", String(err))
         }
       }
 
@@ -2906,7 +2906,7 @@ export class AgentCoordinator {
           await this.store.recordSessionCommandsLoaded(args.chatId, merged)
           this.emitStateChange(args.chatId)
         } catch (error) {
-          log.warn("[kanna/agent] failed to load slash commands", error)
+          log.warn("[kanna/agent] failed to load slash commands", String(error))
         }
       })()
     } else {

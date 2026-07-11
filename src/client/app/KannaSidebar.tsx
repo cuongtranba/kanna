@@ -470,7 +470,7 @@ function KannaSidebarImpl({
     try {
       await onImportClaudeSessions()
     } catch (error) {
-      log.error("[kanna/import] failed", error)
+      log.error("[kanna/import] failed", String(error))
     } finally {
       setIsImporting(false)
     }

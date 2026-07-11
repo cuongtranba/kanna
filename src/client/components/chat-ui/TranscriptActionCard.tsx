@@ -58,7 +58,7 @@ export function TranscriptActionCard({
       try {
         result = action.onClick()
       } catch (error) {
-        log.error("[transcript-action-card] sync click threw", error)
+        log.error("[transcript-action-card] sync click threw", String(error))
         setActionError(error instanceof Error ? error.message : String(error))
         return
       }
@@ -67,7 +67,7 @@ export function TranscriptActionCard({
       try {
         await result
       } catch (error) {
-        log.error("[transcript-action-card] async click rejected", error)
+        log.error("[transcript-action-card] async click rejected", String(error))
         setActionError(error instanceof Error ? error.message : String(error))
       } finally {
         setBusyId(null)

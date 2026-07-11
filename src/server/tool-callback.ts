@@ -115,7 +115,7 @@ export function createToolCallbackService(opts: ToolCallbackServiceArgs): ToolCa
     try {
       opts.onStateChange(chatId)
     } catch (err) {
-      log.warn("[tool-callback] onStateChange threw", err)
+      log.warn("[tool-callback] onStateChange threw", String(err))
     }
   }
 

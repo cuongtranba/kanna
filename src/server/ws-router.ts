@@ -2377,6 +2377,6 @@ async function runMcpAutoTest(
     await appSettings.writePatch({ customMcpServers: { setTestResult: { id, result } } })
   } catch (err) {
     // Auto-test must never throw; log + swallow.
-    log.warn("[kanna/ws-router] runMcpAutoTest failed", err)
+    log.warn("[kanna/ws-router] runMcpAutoTest failed", String(err))
   }
 }

@@ -911,7 +911,7 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
     try {
       await sendUserPrompt(pty, ring, args.initialPrompt)
     } catch (err) {
-      log.warn("[kanna/pty] initialPrompt write failed", err)
+      log.warn("[kanna/pty] initialPrompt write failed", String(err))
     }
   }
 
@@ -974,7 +974,7 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
       try {
         await pty.sendInput(`/model ${model}\r`)
       } catch (err) {
-        log.warn("[kanna/pty] setModel via /model slash command failed", err)
+        log.warn("[kanna/pty] setModel via /model slash command failed", String(err))
       }
     },
     setPermissionMode: async (planMode) => {
@@ -983,7 +983,7 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
           await pty.sendInput("/plan\r")
           localPlanModeActive = true
         } catch (err) {
-          log.warn("[kanna/pty] /plan slash command failed", err)
+          log.warn("[kanna/pty] /plan slash command failed", String(err))
         }
         return
       }
@@ -992,7 +992,7 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
           await pty.sendInput(SHIFT_TAB_KEY)
           localPlanModeActive = false
         } catch (err) {
-          log.warn("[kanna/pty] Shift+Tab exit-plan failed", err)
+          log.warn("[kanna/pty] Shift+Tab exit-plan failed", String(err))
         }
         return
       }

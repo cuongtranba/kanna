@@ -777,7 +777,7 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
         await onSubmit(text, submitOptions)
         previousAttachments.forEach(cleanupAttachmentPreview)
       } catch (error) {
-        log.error("[ChatInput] Submit failed:", error)
+        log.error("[ChatInput] Submit failed:", String(error))
         if (chatId) setDraft(chatId, text)
         setAttachments(previousAttachments)
         setSelectedAttachmentId(previousSelectedId)

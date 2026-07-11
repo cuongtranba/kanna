@@ -404,7 +404,7 @@ export function createJsonlEventParser(opts: CreateJsonlEventParserOptions = {})
           suppressNextResultRow = false
         }
       } catch (err) {
-        log.warn("[claude-pty/jsonl] normalizeClaudeStreamMessage threw", err)
+        log.warn("[claude-pty/jsonl] normalizeClaudeStreamMessage threw", String(err))
       }
 
       return events
@@ -450,7 +450,7 @@ export function parseJsonlLine(rawLine: string): HarnessEvent[] {
       events.push({ type: "transcript", entry })
     }
   } catch (err) {
-    log.warn("[claude-pty/jsonl] normalizeClaudeStreamMessage threw", err)
+    log.warn("[claude-pty/jsonl] normalizeClaudeStreamMessage threw", String(err))
   }
 
   return events

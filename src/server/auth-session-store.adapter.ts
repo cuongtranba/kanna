@@ -110,7 +110,7 @@ export async function createAuthSessionStore(options: CreateAuthSessionStoreOpti
       try {
         await writeFileAtomic()
       } catch (error) {
-        log.warn(`${LOG_PREFIX} Failed to persist sessions.json:`, error)
+        log.warn(`${LOG_PREFIX} Failed to persist sessions.json:`, String(error))
       }
     } while (writeAgain)
     activeWrite = null
