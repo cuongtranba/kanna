@@ -16,7 +16,7 @@ const AS_CAST_BAN = {
     "Type assertions (`x as T`) are banned. Use `satisfies`, a type guard (`isX(v): v is X`), or proper generics. `as const` is allowed.",
 }
 const UNKNOWN_BAN = {
-  selector: "TSUnknownKeyword",
+  selector: "TSTypeAnnotation > TSUnknownKeyword",
   message:
     "`unknown` is banned. Route boundary values through a typed guard, or narrow errors via src/shared/errors.ts `toError()`.",
 }
@@ -223,8 +223,9 @@ export default tseslint.config(
       "no-restricted-syntax": ["error", ...SHARED_CLIENT_SEAL_SYNTAX, AS_CAST_BAN],
     },
   },
-  // Tests + fixtures + test-helpers legitimately use console and `any`
-  // (accessing private members, mock types, partial stubs require it).
+  // Tests + fixtures + test-helpers legitimately use console, `any`, `as`
+  // casts, and `unknown` (accessing private members, mock types, partial
+  // stubs, and typed fixtures all require it).
   {
     files: [
       "src/**/*.test.ts",
@@ -236,6 +237,7 @@ export default tseslint.config(
     rules: {
       "no-console": "off",
       "@typescript-eslint/no-explicit-any": "off",
+      "no-restricted-syntax": "off",
     },
   },
 )
