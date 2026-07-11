@@ -1455,6 +1455,14 @@ function applyPatch(state: AppSettingsState, patch: AppSettingsPatch): AppSettin
   let nextMcpServers = state.customMcpServers
   if (patch.customMcpServers?.create) {
     const createInput = patch.customMcpServers.create
+    if (
+      createInput.transport === "stdio"
+      && isPlainObject(createInput)
+      && isPlainObject(createInput.oauth)
+      && createInput.oauth.enabled
+    ) {
+      throw new McpValidationException({ code: "INVALID_OAUTH_TRANSPORT", field: "oauth", message: "OAuth is only supported for http/sse transports" })
+    }
     const entry = buildMcpFromInput(createInput)
     const error = validateMcpShape(entry, state.customMcpServers.map((s) => ({ id: s.id, name: s.name })))
     if (error) throw new McpValidationException(error)

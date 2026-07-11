@@ -30,7 +30,7 @@ function isFeatureSupported(): boolean {
   if (typeof window === "undefined") return false
   if (typeof Notification === "undefined") return false
   if (!("serviceWorker" in navigator)) return false
-  if (!("PushManager" in globalThis)) return false
+  if (typeof Reflect.get(globalThis, "PushManager") === "undefined") return false
   return true
 }
 
