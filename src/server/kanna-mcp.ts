@@ -541,7 +541,7 @@ export function buildKannaMcpTools(args: KannaMcpArgs): SdkMcpToolDefinition<any
     ...buildDelegateSubagentToolList({
       orchestrator: args.subagentOrchestrator,
       delegationContext: args.delegationContext,
-      chatId: chatId,
+      chatId,
     }),
     ...buildSetupLoopToolList({ setupLoop: args.setupLoop, chatId }),
     tool(

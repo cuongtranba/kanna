@@ -62,7 +62,7 @@ async function ptyEventsViaTranscriptStream(messages: unknown[], configuredConte
   const events: HarnessEvent[] = []
   const writeAll = (async () => {
     for (const m of messages) {
-      await appendFile(filePath, JSON.stringify(m) + "\n")
+      await appendFile(filePath, `${JSON.stringify(m)  }\n`)
       await new Promise<void>((r) => setTimeout(r, 30))
     }
     await appendFile(filePath, '{"type":"__parity_sentinel__"}\n')

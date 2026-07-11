@@ -219,10 +219,10 @@ export function ToolCallMessage({ message, isLoading = false, localPath, chatId 
                   isBashTool ? (
                     <span className="flex items-center gap-2 w-full">
                       <span>Command</span>
-                      {!!message.input.timeoutMs && (
+                      {Boolean(message.input.timeoutMs) && (
                         <span className="text-muted-foreground">timeout: {String(message.input.timeoutMs)}ms</span>
                       )}
-                      {!!message.input.runInBackground && (
+                      {Boolean(message.input.runInBackground) && (
                         <span className="text-muted-foreground">background</span>
                       )}
                     </span>

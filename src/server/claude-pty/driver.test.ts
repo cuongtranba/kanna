@@ -860,7 +860,6 @@ describe("keep-alive (Task 1)", () => {
     const pushed: string[] = []
 
     // Controllable transcript lines emitter: we resolve this to send a JSONL line.
-    let emitLine!: (line: string) => void
     const lineQueue: string[] = []
     const lineWaiters: Array<(r: IteratorResult<string>) => void> = []
     function notifyLine(line: string) {
@@ -868,7 +867,7 @@ describe("keep-alive (Task 1)", () => {
       if (w) w({ value: line, done: false })
       else lineQueue.push(line)
     }
-    emitLine = notifyLine
+    const emitLine: (line: string) => void = notifyLine
     const controlledStream: TranscriptStream = {
       lines: {
         [Symbol.asyncIterator]() {

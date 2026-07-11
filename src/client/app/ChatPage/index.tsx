@@ -273,7 +273,7 @@ interface ChatWorkspaceProps {
 
 type ChatSidebarContentProps = ComponentProps<typeof RightSidebar>
 
-const ChatSidebarContent = memo(function ChatSidebarContent(props: ChatSidebarContentProps) {
+const ChatSidebarContent = memo((props: ChatSidebarContentProps) => {
   return (
     <RightSidebar
       {...props}
@@ -290,13 +290,13 @@ interface DesktopSidebarPaneProps {
   content: ReactNode
 }
 
-const DesktopSidebarPane = memo(function DesktopSidebarPane({
+const DesktopSidebarPane = memo(({
   showRightSidebar,
   sizePercent,
   sidebarPanelRef,
   sidebarVisualRef,
   content,
-}: DesktopSidebarPaneProps) {
+}: DesktopSidebarPaneProps) => {
   return (
     <ResizablePanel
       id="rightSidebar"
@@ -326,13 +326,13 @@ interface MobileSidebarPaneProps {
   content: ReactNode
 }
 
-const MobileSidebarPane = memo(function MobileSidebarPane({
+const MobileSidebarPane = memo(({
   projectId,
   showRightSidebar,
   sidebarVisualRef,
   onClose,
   content,
-}: MobileSidebarPaneProps) {
+}: MobileSidebarPaneProps) => {
   if (!projectId) {
     return null
   }

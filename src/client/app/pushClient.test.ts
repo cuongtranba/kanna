@@ -53,7 +53,7 @@ function setupBrowser(opts: {
       ? {}
       : { serviceWorker: { register: async () => ({}), ready: Promise.resolve({}) }, userAgent: "test" },
   )
-  setGlobal("PushManager", opts.hasPushManager === false ? undefined : function () {})
+  setGlobal("PushManager", opts.hasPushManager === false ? undefined : () => {})
 }
 
 describe("detectPushSupport", () => {
@@ -124,7 +124,7 @@ describe("subscribePush", () => {
       },
       userAgent: "Mozilla/5.0 (TestUA)",
     })
-    setGlobal("PushManager", function () {})
+    setGlobal("PushManager", () => {})
 
     const calls: PushSubscribeServerCall[] = []
     const id = await subscribePush({
@@ -151,7 +151,7 @@ describe("subscribePush", () => {
       serviceWorker: { register: async () => ({}), ready: Promise.resolve({}) },
       userAgent: "ua",
     })
-    setGlobal("PushManager", function () {})
+    setGlobal("PushManager", () => {})
 
     await expect(subscribePush({
       vapidPublicKey: "BPg4MhSNQjK4FjoUf4f9Ye_K2gM4ahK_5BWj9rYjZ8sHbqJj9oKkrFHBwZJh1XJF8AaXh",

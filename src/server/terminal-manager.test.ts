@@ -7,7 +7,7 @@ import { TerminalManager } from "./terminal-manager"
 const SHELL_START_TIMEOUT_MS = 5_000
 const COMMAND_TIMEOUT_MS = 5_000
 const FOCUS_IN_SEQUENCE = "\x1b[I"
-const RAW_READ_HEX_COMMAND = `python3 -c "exec('import os,sys,tty,termios,select\\nfd=sys.stdin.fileno()\\nold=termios.tcgetattr(fd)\\ntty.setraw(fd)\\ntry:\\n    sys.stdout.write(\"__RAW_READY__\\\\n\")\\n    sys.stdout.flush()\\n    r,_,_=select.select([fd],[],[],1)\\n    data=os.read(fd,8) if r else b\"\"\\n    print(data.hex() or \"__EMPTY__\")\\nfinally:\\n    termios.tcsetattr(fd, termios.TCSADRAIN, old)')"\r`
+const RAW_READ_HEX_COMMAND = `python3 -c "exec('import os,sys,tty,termios,select\\nfd=sys.stdin.fileno()\\nold=termios.tcgetattr(fd)\\ntty.setraw(fd)\\ntry:\\n    sys.stdout.write("__RAW_READY__\\\\n")\\n    sys.stdout.flush()\\n    r,_,_=select.select([fd],[],[],1)\\n    data=os.read(fd,8) if r else b""\\n    print(data.hex() or "__EMPTY__")\\nfinally:\\n    termios.tcsetattr(fd, termios.TCSADRAIN, old)')"\r`
 
 const isSupportedPlatform = process.platform !== "win32" && typeof Bun.Terminal === "function"
 const describeIfSupported = isSupportedPlatform ? describe : describe.skip
@@ -348,7 +348,7 @@ describeIfSupported("TerminalManager", () => {
     const manager = new TerminalManager()
     const firstTerminalId = "terminal-focus-first"
     const secondTerminalId = "terminal-focus-second"
-    let outputByTerminalId = new Map<string, string>()
+    const outputByTerminalId = new Map<string, string>()
 
     manager.onEvent((event) => {
       if (event.type !== "terminal.output") return

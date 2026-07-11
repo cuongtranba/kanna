@@ -7,7 +7,7 @@ interface Props {
   content: string
 }
 
-export const ThinkingBlock = memo(function ThinkingBlock({ content }: Props) {
+export const ThinkingBlock = memo(({ content }: Props) => {
   const [expanded, setExpanded] = useState(false)
   const trimmed = content.trim()
   if (trimmed.length === 0) return null

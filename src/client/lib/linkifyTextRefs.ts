@@ -132,9 +132,9 @@ function processLine(line: string): string {
   for (const ref of toReplace) {
     const url = assoc.get(ref.start)!
     result =
-      result.slice(0, ref.start) +
-      `[${ref.full}](${url})` +
-      result.slice(ref.end)
+      `${result.slice(0, ref.start) 
+      }[${ref.full}](${url})${ 
+      result.slice(ref.end)}`
   }
   return result
 }

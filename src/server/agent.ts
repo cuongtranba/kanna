@@ -1453,7 +1453,7 @@ export function backgroundTaskIdsFromToolResult(content: unknown): string[] {
   } else if (Array.isArray(content)) {
     for (const block of content) {
       if (block && typeof block === "object" && typeof (block as { text?: unknown }).text === "string") {
-        text += (block as { text: string }).text + "\n"
+        text += `${(block as { text: string }).text  }\n`
       }
     }
   } else {

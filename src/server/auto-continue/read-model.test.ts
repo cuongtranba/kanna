@@ -53,34 +53,34 @@ describe("deriveChatSchedules", () => {
       prompt: "Read PROGRESS.md, decide next action.",
     }
     const result = deriveChatSchedules([wake], "c1")
-    expect(result.schedules["s1"].state).toBe("scheduled")
-    expect(result.schedules["s1"].prompt).toBe("Read PROGRESS.md, decide next action.")
+    expect(result.schedules.s1.state).toBe("scheduled")
+    expect(result.schedules.s1.prompt).toBe("Read PROGRESS.md, decide next action.")
     expect(result.liveScheduleId).toBe("s1")
   })
 
   test("provider-failure accepted event leaves prompt undefined", () => {
     const result = deriveChatSchedules([accepted("c1", "s1")], "c1")
-    expect(result.schedules["s1"].prompt).toBeUndefined()
+    expect(result.schedules.s1.prompt).toBeUndefined()
   })
 
   test("proposed event yields state=proposed with liveScheduleId set", () => {
     const result = deriveChatSchedules([proposed("c1", "s1")])
-    expect(result.schedules["s1"].state).toBe("proposed")
-    expect(result.schedules["s1"].scheduledAt).toBeNull()
+    expect(result.schedules.s1.state).toBe("proposed")
+    expect(result.schedules.s1.scheduledAt).toBeNull()
     expect(result.liveScheduleId).toBe("s1")
   })
 
   test("accept after propose promotes to scheduled", () => {
     const result = deriveChatSchedules([proposed("c1", "s1"), accepted("c1", "s1")])
-    expect(result.schedules["s1"].state).toBe("scheduled")
-    expect(result.schedules["s1"].scheduledAt).toBe(12_000)
+    expect(result.schedules.s1.state).toBe("scheduled")
+    expect(result.schedules.s1.scheduledAt).toBe(12_000)
     expect(result.liveScheduleId).toBe("s1")
   })
 
   test("accept with source=auto_setting without prior proposed still produces scheduled", () => {
     const result = deriveChatSchedules([accepted("c1", "s1", 1_500, "auto_setting")])
-    expect(result.schedules["s1"].state).toBe("scheduled")
-    expect(result.schedules["s1"].resetAt).toBe(11_500)
+    expect(result.schedules.s1.state).toBe("scheduled")
+    expect(result.schedules.s1.resetAt).toBe(11_500)
     expect(result.liveScheduleId).toBe("s1")
   })
 
@@ -90,7 +90,7 @@ describe("deriveChatSchedules", () => {
       accepted("c1", "s1"),
       { v: 3, kind: "auto_continue_cancelled", timestamp: 3_000, chatId: "c1", scheduleId: "s1", reason: "user" },
     ])
-    expect(result.schedules["s1"].state).toBe("cancelled")
+    expect(result.schedules.s1.state).toBe("cancelled")
     expect(result.liveScheduleId).toBeNull()
   })
 
@@ -100,8 +100,8 @@ describe("deriveChatSchedules", () => {
       accepted("c1", "s1"),
       { v: 3, kind: "auto_continue_fired", timestamp: 12_000, chatId: "c1", scheduleId: "s1" },
     ])
-    expect(result.schedules["s1"].state).toBe("fired")
-    expect(result.schedules["s1"].scheduledAt).toBe(12_000)
+    expect(result.schedules.s1.state).toBe("fired")
+    expect(result.schedules.s1.scheduledAt).toBe(12_000)
     expect(result.liveScheduleId).toBeNull()
   })
 
@@ -111,8 +111,8 @@ describe("deriveChatSchedules", () => {
       { v: 3, kind: "auto_continue_cancelled", timestamp: 1_100, chatId: "c1", scheduleId: "s1", reason: "user" },
       proposed("c1", "s2", 2_000),
     ])
-    expect(result.schedules["s1"].state).toBe("cancelled")
-    expect(result.schedules["s2"].state).toBe("proposed")
+    expect(result.schedules.s1.state).toBe("cancelled")
+    expect(result.schedules.s2.state).toBe("proposed")
     expect(result.liveScheduleId).toBe("s2")
   })
 
@@ -122,8 +122,8 @@ describe("deriveChatSchedules", () => {
       accepted("c1", "s1"),
       { v: 3, kind: "auto_continue_rescheduled", timestamp: 2_500, chatId: "c1", scheduleId: "s1", scheduledAt: 20_000 },
     ])
-    expect(result.schedules["s1"].state).toBe("scheduled")
-    expect(result.schedules["s1"].scheduledAt).toBe(20_000)
+    expect(result.schedules.s1.state).toBe("scheduled")
+    expect(result.schedules.s1.scheduledAt).toBe(20_000)
   })
 
   test("events for different chats produce independent results", () => {

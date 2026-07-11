@@ -22,7 +22,7 @@ function QuestionCard({
   children: React.ReactNode
 }) {
   const showBackButton = onBack && currentIndex > 0
-  const hasMeta = showBackButton || totalQuestions > 1 || !!header
+  const hasMeta = showBackButton || totalQuestions > 1 || Boolean(header)
 
   return (
     <div className="rounded-2xl border border-border overflow-hidden">
@@ -273,7 +273,7 @@ export function AskUserQuestionInteractive(
               className="flex-1 px-3 !py-1 pl-4 min-h-[55px] min-w-0 text-sm bg-transparent outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background rounded-md text-foreground placeholder:text-muted-foreground"
             />
             <Checkbox
-              selected={!!customInput}
+              selected={Boolean(customInput)}
               multiSelect={currentQuestion.multiSelect}
               onClick={currentQuestion.multiSelect && customInput ? () => clearCustomInput(currentQuestion) : undefined}
             />
@@ -288,7 +288,7 @@ export function AskUserQuestionInteractive(
           </Button>
         ) : null}
         <div className="ml-auto flex gap-2">
-          {!isLastQuestion && currentHasAnswer && (currentQuestion.multiSelect || !!customInput) && (
+          {!isLastQuestion && currentHasAnswer && (currentQuestion.multiSelect || Boolean(customInput)) && (
             <Button size="sm" onClick={handleNext}>Next</Button>
           )}
           {isLastQuestion && (

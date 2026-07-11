@@ -44,7 +44,7 @@ interface TerminalWorkspacePaneProps {
   setPaneElement: (terminalId: string, element: HTMLDivElement | null) => void
 }
 
-const TerminalWorkspacePane = memo(function TerminalWorkspacePane({
+const TerminalWorkspacePane = memo(({
   projectId,
   terminalId,
   size,
@@ -63,7 +63,7 @@ const TerminalWorkspacePane = memo(function TerminalWorkspacePane({
   onPathChange,
   onCommandSent,
   setPaneElement,
-}: TerminalWorkspacePaneProps) {
+}: TerminalWorkspacePaneProps) => {
   const handleSetPaneElement = useCallback((element: HTMLDivElement | null) => {
     setPaneElement(terminalId, element)
   }, [setPaneElement, terminalId])

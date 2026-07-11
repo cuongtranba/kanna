@@ -1748,10 +1748,11 @@ export class EventStore implements PushEventStore {
   }
 
   async appendSubagentEvent(event: SubagentRunEvent) {
+    let effectiveEvent = event
     if (event.type === "subagent_entry_appended" && event.entry.kind === "tool_result") {
       const chat = this.state.chatsById.get(event.chatId)
       if (chat) {
-        event = {
+        effectiveEvent = {
           ...event,
           entry: await capTranscriptEntry({
             entry: event.entry,
@@ -1766,8 +1767,8 @@ export class EventStore implements PushEventStore {
     // Apply in-memory synchronously so the UI sees the update immediately,
     // decoupled from disk I/O backlog on writeChain (scoped to ephemeral
     // subagent_* events only — structural events keep strict append→apply ordering).
-    this.applyEvent(event)
-    this.enqueueDiskAppend(this.turnsLogPath, `${JSON.stringify(event)}\n`)
+    this.applyEvent(effectiveEvent)
+    this.enqueueDiskAppend(this.turnsLogPath, `${JSON.stringify(effectiveEvent)}\n`)
   }
 
   getSubagentRuns(chatId: string): Record<string, SubagentRunSnapshot> {

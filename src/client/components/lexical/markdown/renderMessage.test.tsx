@@ -77,7 +77,7 @@ describe("renderMessageMarkdown – mermaid fences", () => {
     // MermaidDiagram in loading state renders MermaidFallbackCodeBlock
     // which produces a <pre><code class="... language-mermaid">...</code></pre>
     const source = "graph LR\nA-->B"
-    const html = render("```mermaid\n" + source + "\n```")
+    const html = render(`\`\`\`mermaid\n${  source  }\n\`\`\``)
     // The fallback code block contains the source and language-mermaid class.
     // renderToStaticMarkup HTML-encodes ">" as "&gt;", so assert on the
     // encoded form for the arrow character.

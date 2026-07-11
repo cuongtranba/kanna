@@ -624,7 +624,7 @@ describe("deriveChatSnapshot subagent immutability", () => {
       () => ({ messages: [], history: { hasOlder: false, olderCursor: null, recentLimit: 200 } }),
       () => []
     )
-    const capturedEntries = snap1!.subagentRuns["r1"]!.entries
+    const capturedEntries = snap1!.subagentRuns.r1!.entries
     expect(capturedEntries).toHaveLength(1)
 
     // Simulate reducer push (event-store does run.entries.push(entry) in place)
@@ -684,7 +684,7 @@ describe("deriveChatSnapshot schedules", () => {
       () => ({ messages: [], history: { hasOlder: false, olderCursor: null, recentLimit: 0 } }),
       () => []
     )
-    expect(snapshot!.schedules["s1"].state).toBe("proposed")
+    expect(snapshot!.schedules.s1.state).toBe("proposed")
     expect(snapshot!.liveScheduleId).toBe("s1")
   })
 })

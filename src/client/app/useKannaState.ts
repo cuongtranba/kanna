@@ -1009,7 +1009,7 @@ export function useKannaState(activeChatId: string | null): KannaState {
     if (reconnectAction === "awaiting_server_ready") {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       markUiRestartPhase("awaiting_server_ready")
-      return
+      
     }
   }, [connectionStatus, markUiRestartPhase])
 

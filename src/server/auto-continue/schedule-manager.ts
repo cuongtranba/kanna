@@ -66,7 +66,7 @@ export class ScheduleManager {
       default: {
         const _exhaustive: never = event
         void _exhaustive
-        return
+        
       }
     }
   }

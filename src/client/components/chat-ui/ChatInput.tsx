@@ -425,7 +425,7 @@ function LexicalErrorBoundary({
 // Main component
 // ---------------------------------------------------------------------------
 
-const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput(
+const ChatInputInner = forwardRef<ChatInputHandle, Props>((
   {
     onSubmit,
     onLayoutChange,
@@ -443,7 +443,7 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput(
     previousPrompt = null,
   },
   forwardedRef,
-) {
+) => {
   const {
     getDraft,
     setDraft,
@@ -1035,7 +1035,7 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput(
       bridgeRef.current?.hydrateFromDraft(null, previousPrompt)
       setCurrentText(previousPrompt)
       if (chatId) setDraft(chatId, previousPrompt)
-      return
+      
     }
   }
 

@@ -403,7 +403,7 @@ describe("OAuthTokenPool.hasUsable (TOCTOU parity with pickActive)", () => {
 
   test("does NOT mutate status for elapsed-limited tokens (read-only)", () => {
     const writes: Array<{ id: string; patch: unknown }> = []
-    let now = 1000
+    const now = 1000
     const store = [tok("a", { status: "limited", limitedUntil: 500 })]
     const pool = new OAuthTokenPool(
       () => store,

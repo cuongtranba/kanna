@@ -91,7 +91,7 @@ export const MERMAID_FENCE: MultilineElementTransformer = {
   export(node: LexicalNode): string | null {
     if (!(node instanceof MermaidNode)) return null
     const source = node.getTextContent()
-    return "```mermaid\n" + source + "\n```"
+    return `\`\`\`mermaid\n${  source  }\n\`\`\``
   },
 }
 

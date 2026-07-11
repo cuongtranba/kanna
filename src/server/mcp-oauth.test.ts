@@ -53,7 +53,7 @@ function fakeFetch(): typeof fetch {
     if (url === "https://as.test/oauth/register") {
       return json({ client_id: "client-123", redirect_uris: ["http://localhost:8765/callback"] }, 201)
     }
-    throw new Error("unexpected fetch: " + url)
+    throw new Error(`unexpected fetch: ${  url}`)
   }) as unknown as typeof fetch
 }
 
@@ -154,7 +154,7 @@ test("startMcpOAuth falls through SPA-HTML candidate to working openid-config", 
     if (url === "https://as.test/oauth/register") {
       return json({ client_id: "spa-client", redirect_uris: ["http://localhost:8765/callback"] }, 201)
     }
-    throw new Error("unexpected fetch in spaFetch: " + url)
+    throw new Error(`unexpected fetch in spaFetch: ${  url}`)
   }) as unknown as typeof fetch
 
   const cfg = baseConfig()
@@ -205,7 +205,7 @@ test("startMcpOAuth derives PRM URL from serverUrl when www-authenticate header 
     if (url === "https://as2.test/oauth/register") {
       return json({ client_id: "no-header-client", redirect_uris: ["http://localhost:8765/callback"] }, 201)
     }
-    throw new Error("unexpected fetch in noHeaderFetch: " + url)
+    throw new Error(`unexpected fetch in noHeaderFetch: ${  url}`)
   }) as unknown as typeof fetch
 
   const cfg = baseConfig()
@@ -265,7 +265,7 @@ function tokenFetch(): typeof fetch {
         { status: 200, headers: { "content-type": "application/json" } },
       )
     }
-    throw new Error("unexpected fetch: " + url)
+    throw new Error(`unexpected fetch: ${  url}`)
   }) as unknown as typeof fetch
 }
 
@@ -311,7 +311,7 @@ test("completeMcpOAuth returns error and persists error state when token exchang
         headers: { "content-type": "application/json" },
       })
     }
-    throw new Error("unexpected fetch: " + url)
+    throw new Error(`unexpected fetch: ${  url}`)
   }) as unknown as typeof fetch
 
   const result = await completeMcpOAuth(
@@ -469,7 +469,7 @@ test("ensureFreshMcpToken persists error state when refresh endpoint returns err
         headers: { "content-type": "application/json" },
       })
     }
-    throw new Error("unexpected fetch: " + url)
+    throw new Error(`unexpected fetch: ${  url}`)
   }) as unknown as typeof fetch
 
   const persistedStates: McpOAuthState[] = []

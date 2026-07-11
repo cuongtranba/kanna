@@ -61,7 +61,7 @@ export class SlashCommandNode extends DecoratorNode<ReactNode> {
 
   createDOM(_config: EditorConfig, _editor: LexicalEditor): HTMLElement {
     const span = document.createElement("span")
-    span.dataset["lexicalDecorator"] = "true"
+    span.dataset.lexicalDecorator = "true"
     return span
   }
 

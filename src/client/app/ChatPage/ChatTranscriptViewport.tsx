@@ -105,7 +105,7 @@ interface ChatTranscriptViewportProps {
   headerOffsetPx?: number
 }
 
-export const ChatTranscriptViewport = memo(function ChatTranscriptViewport({
+export const ChatTranscriptViewport = memo(({
   activeChatId,
   listRef,
   messages,
@@ -154,7 +154,7 @@ export const ChatTranscriptViewport = memo(function ChatTranscriptViewport({
   editorCommandTemplate,
   platform = "darwin",
   headerOffsetPx = CHAT_NAVBAR_OFFSET_PX,
-}: ChatTranscriptViewportProps) {
+}: ChatTranscriptViewportProps) => {
   const previousRowCountRef = useRef(0)
   const localLinkMenuTriggerRef = useRef<HTMLSpanElement | null>(null)
   const [toolGroupExpanded, setToolGroupExpanded] = useState<Record<string, boolean>>({})

@@ -118,7 +118,7 @@ describe("workflow-watch-io.adapter", () => {
     mkdirSync(runDir, { recursive: true })
     writeFileSync(
       join(runDir, "journal.jsonl"),
-      [
+      `${[
         JSON.stringify({ type: "started", agentId: "a1", key: "v2:x" }),
         JSON.stringify({
           type: "result",
@@ -126,7 +126,7 @@ describe("workflow-watch-io.adapter", () => {
           key: "v2:x",
           result: { dir: "/repo/pkg/x", fixed: 3, test_status: "pass", summary: "ok" },
         }),
-      ].join("\n") + "\n",
+      ].join("\n")  }\n`,
     )
 
     const entries = readWorkflowRunJournal(join(session, "workflows"), "wf_a")
@@ -145,11 +145,11 @@ describe("workflow-watch-io.adapter", () => {
       // The real sonar-sweep workflow returns count fields as ARRAYS, plus a
       // boolean testsPass and a long notes string — the prior parser silently
       // dropped all of these (it expected `fixed: number`, `test_status`).
-      JSON.stringify({
+      `${JSON.stringify({
         type: "result",
         agentId: "r1",
         result: { dir: "backend-core/pkg/enmime/internal/coding", fixed: [1941], stale: [1511, 2107], skipped: [], testsPass: true, notes: "Finding #1941 fixed." },
-      }) + "\n",
+      })  }\n`,
     )
 
     const entries = readWorkflowRunJournal(join(session, "workflows"), "wf_real")
@@ -168,12 +168,12 @@ describe("workflow-watch-io.adapter", () => {
     mkdirSync(runDir, { recursive: true })
     writeFileSync(
       join(runDir, "journal.jsonl"),
-      [
+      `${[
         "",
         "{not json",
         JSON.stringify({ type: "started", agentId: "b1" }),
         JSON.stringify({ type: "unrelated", agentId: "x" }),
-      ].join("\n") + "\n",
+      ].join("\n")  }\n`,
     )
 
     const entries = readWorkflowRunJournal(join(session, "workflows"), "wf_b")

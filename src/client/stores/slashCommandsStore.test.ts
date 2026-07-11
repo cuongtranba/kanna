@@ -10,7 +10,7 @@ describe("slashCommandsStore", () => {
     useSlashCommandsStore.getState().setForChat("c1", [
       { name: "review", description: "r", argumentHint: "<pr>" },
     ])
-    expect(useSlashCommandsStore.getState().byChatId["c1"]).toEqual([
+    expect(useSlashCommandsStore.getState().byChatId.c1).toEqual([
       { name: "review", description: "r", argumentHint: "<pr>" },
     ])
   })
@@ -18,7 +18,7 @@ describe("slashCommandsStore", () => {
   test("setForChat replaces existing list", () => {
     useSlashCommandsStore.getState().setForChat("c1", [{ name: "a", description: "", argumentHint: "" }])
     useSlashCommandsStore.getState().setForChat("c1", [{ name: "b", description: "", argumentHint: "" }])
-    expect(useSlashCommandsStore.getState().byChatId["c1"]).toEqual([
+    expect(useSlashCommandsStore.getState().byChatId.c1).toEqual([
       { name: "b", description: "", argumentHint: "" },
     ])
   })
@@ -27,8 +27,8 @@ describe("slashCommandsStore", () => {
     useSlashCommandsStore.getState().setForChat("c1", [{ name: "x", description: "", argumentHint: "" }])
     useSlashCommandsStore.getState().setLoadingForChat("c1", true)
     useSlashCommandsStore.getState().clear("c1")
-    expect(useSlashCommandsStore.getState().byChatId["c1"]).toBeUndefined()
-    expect(useSlashCommandsStore.getState().loadingByChatId["c1"]).toBeUndefined()
+    expect(useSlashCommandsStore.getState().byChatId.c1).toBeUndefined()
+    expect(useSlashCommandsStore.getState().loadingByChatId.c1).toBeUndefined()
   })
 
   test("clear on unknown chat is a no-op", () => {
@@ -39,9 +39,9 @@ describe("slashCommandsStore", () => {
 
   test("setLoadingForChat toggles loading flag", () => {
     useSlashCommandsStore.getState().setLoadingForChat("c1", true)
-    expect(useSlashCommandsStore.getState().loadingByChatId["c1"]).toBe(true)
+    expect(useSlashCommandsStore.getState().loadingByChatId.c1).toBe(true)
     useSlashCommandsStore.getState().setLoadingForChat("c1", false)
-    expect(useSlashCommandsStore.getState().loadingByChatId["c1"]).toBe(false)
+    expect(useSlashCommandsStore.getState().loadingByChatId.c1).toBe(false)
   })
 
   test("setLoadingForChat is a no-op when value unchanged", () => {

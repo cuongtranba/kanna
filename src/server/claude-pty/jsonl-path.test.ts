@@ -12,7 +12,7 @@ describe("encodeCwd", () => {
   })
   test("absolute path with trailing slash: trims it", () => {
     const expected = homedir().replace(/[^a-zA-Z0-9]/g, "-")
-    expect(encodeCwd(homedir() + "/")).toBe(expected)
+    expect(encodeCwd(`${homedir()  }/`)).toBe(expected)
   })
   test("nested path", () => {
     const expected = process.cwd().replace(/[^a-zA-Z0-9]/g, "-")

@@ -65,8 +65,8 @@ function MessageView({ message }: { message: ChatSnapshotMessage }) {
       return (
         <div
           className={
-            "rounded-lg border overflow-hidden " +
-            (message.isError ? "border-destructive/40 bg-destructive/5" : "border-border bg-muted/30")
+            `rounded-lg border overflow-hidden ${ 
+            message.isError ? "border-destructive/40 bg-destructive/5" : "border-border bg-muted/30"}`
           }
         >
           <div className="px-3 py-1 text-[11px] font-mono uppercase tracking-wide text-muted-foreground">

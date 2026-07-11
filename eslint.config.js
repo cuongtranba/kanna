@@ -98,7 +98,11 @@ export default tseslint.config(
 
       // Strict quality (burn-down tier).
       eqeqeq: ["error", "smart"],
-      "prefer-const": strict,
+      // ignoreReadBeforeAssign: exempt the forward-reference init pattern
+      // (a `let` read inside a closure created before its single assignment,
+      // e.g. AgentCoordinator ↔ ScheduleManager circular wiring). Still flags
+      // genuine never-reassigned lets.
+      "prefer-const": ["error", { ignoreReadBeforeAssign: true }],
       "dot-notation": strict,
       "prefer-template": strict,
       "prefer-arrow-callback": strict,

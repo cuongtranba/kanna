@@ -167,7 +167,7 @@ export function getProjectGroupReorderPreviewTargetId({
   return activeId
 }
 
-const SortableProjectGroup = memo(function SortableProjectGroup({
+const SortableProjectGroup = memo(({
   group,
   editorLabel,
   collapsedSections,
@@ -183,7 +183,7 @@ const SortableProjectGroup = memo(function SortableProjectGroup({
   onToggleStar,
   isConnected,
   startingLocalPath,
-}: SortableProjectGroupProps) {
+}: SortableProjectGroupProps) => {
   const { groupKey, localPath } = group
   const isExpanded = expandedGroups.has(groupKey)
   const isEmptyProject = group.chats.length === 0

@@ -626,7 +626,7 @@ function McpServerEditor({
           onClick={() => {
             void submit()
           }}
-          disabled={submitting || !!nameError || name.length === 0}
+          disabled={submitting || Boolean(nameError) || name.length === 0}
         >
           {submitting ? "Saving…" : initial ? "Save changes" : "Add server"}
         </Button>

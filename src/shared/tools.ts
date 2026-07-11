@@ -459,7 +459,7 @@ export function hydrateToolResult(tool: NormalizedToolCall, raw: unknown): Hydra
         text,
       } satisfies WorkflowToolResult
     }
-    case "read_file":
+    case "read_file": {
       if (typeof parsed === "string") {
         return parsed
       }
@@ -477,6 +477,7 @@ export function hydrateToolResult(tool: NormalizedToolCall, raw: unknown): Hydra
       return {
         content: typeof record?.content === "string" ? record.content : JSON.stringify(parsed, null, 2),
       } satisfies ReadFileToolResult
+    }
     default:
       return parsed
   }

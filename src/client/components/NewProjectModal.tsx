@@ -58,7 +58,7 @@ export function NewProjectModal({ open, onOpenChange, onConfirm }: Props) {
   const newPath = kebab ? `${DEFAULT_NEW_PROJECT_ROOT}/${kebab}` : ""
   const trimmedExisting = existingPath.trim()
 
-  const canSubmit = tab === "new" ? !!kebab : !!trimmedExisting
+  const canSubmit = tab === "new" ? Boolean(kebab) : Boolean(trimmedExisting)
 
   const handleSubmit = () => {
     if (!canSubmit) return

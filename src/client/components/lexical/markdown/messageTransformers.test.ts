@@ -109,7 +109,7 @@ describe("MERMAID_FENCE transformer", () => {
 
   it("preserves multiline mermaid source", () => {
     const source = "sequenceDiagram\nAlice->>Bob: Hello\nBob-->>Alice: Hi"
-    const markdown = "```mermaid\n" + source + "\n```"
+    const markdown = `\`\`\`mermaid\n${  source  }\n\`\`\``
     const editor = parseMarkdown(markdown)
     editor.getEditorState().read(() => {
       const allNodes = flattenNodes($getRoot().getChildren<LexicalNode>())

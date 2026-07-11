@@ -14,7 +14,7 @@ interface Props {
 
 export function ExitPlanModeMessage({ message, onConfirm, isLatest }: Props) {
   const renderOptions = useTranscriptRenderOptions()
-  const isComplete = !!message.result
+  const isComplete = Boolean(message.result)
   const [expanded, setExpanded] = useState(false)
   const [copied, setCopied] = useState(false)
   const [showEditInput, setShowEditInput] = useState(false)

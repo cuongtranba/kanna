@@ -107,7 +107,7 @@ function walkNode(node: LexicalNode): ReactNode {
       h5: "text-[16px] font-normal leading-tight mt-5 mb-3 first:mt-0 last:mb-0",
       h6: "text-[16px] font-normal leading-tight mt-5 mb-3 first:mt-0 last:mb-0",
     }
-    const cls = classMap[tag] ?? classMap["h1"]
+    const cls = classMap[tag] ?? classMap.h1
     const k = nextKey()
     switch (tag) {
       case "h1": return <h1 key={k} className={cls}>{children}</h1>
