@@ -13,6 +13,7 @@ import type { ClaudeSessionHandle } from "./agent"
 import type { LiveTurnSource, ProviderRunStart } from "./subagent-orchestrator"
 import type { SubagentOrchestrator } from "./subagent-orchestrator"
 import type { KannaMcpDelegationContext } from "./kanna-mcp"
+import { log } from "../shared/log"
 
 /**
  * Builds a ProviderRunStart for a single subagent run. Each call returns a
@@ -324,7 +325,7 @@ async function drainHarnessTurn(
   //   • PTY exit synth error (sawResult + isError) — process died mid-turn
   //   • premature stream close (no result at all) — orchestrator close or
   //     driver bug; partial text is the only evidence
-  console.log("[kanna/subagent] drainHarnessTurn finished", {
+  log.info("[kanna/subagent] drainHarnessTurn finished", {
     accumulatedChars: text.length,
     sawResult,
     sawError,

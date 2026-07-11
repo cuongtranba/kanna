@@ -56,6 +56,7 @@ import {
   isServerNotification,
   isServerRequest,
 } from "./codex-app-server-protocol"
+import { log } from "../shared/log"
 
 export interface CodexAppServerProcess {
   stdin: Writable
@@ -342,7 +343,7 @@ function warnUnknownItemType(item: ThreadItem) {
   const type = (item as { type?: string }).type ?? "<missing>"
   if (warnedUnknownItemTypes.has(type)) return
   warnedUnknownItemTypes.add(type)
-  console.warn(`[codex-app-server] unknown ThreadItem type "${type}"; emitting generic tool placeholder. Update protocol bindings.`)
+  log.warn(`[codex-app-server] unknown ThreadItem type "${type}"; emitting generic tool placeholder. Update protocol bindings.`)
 }
 
 function fallbackToolNameForItem(item: ThreadItem): string {

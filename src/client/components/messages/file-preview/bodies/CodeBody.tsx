@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react"
 import { useTextBodyContent } from "./textLoader"
 import type { PreviewSource } from "../types"
+import { log } from "../../../../../shared/log"
 
 const SHIKI_SIZE_CEILING = 200 * 1024
 
@@ -36,7 +37,7 @@ export function CodeBody({ source }: { source: PreviewSource }) {
         if (!cancelled) setHighlighted({ key: myKey, html })
       })
       .catch(() => {
-        if (typeof console !== "undefined") console.warn("[file-preview] Shiki unavailable; falling back to plain text")
+        log.warn("[file-preview] Shiki unavailable; falling back to plain text")
       })
     return () => { cancelled = true }
   }, [shouldHighlight, highlightKey, state, source.fileName])

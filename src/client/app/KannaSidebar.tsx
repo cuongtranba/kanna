@@ -23,6 +23,7 @@ import {
   isSidebarModifierShortcut,
   shouldShowSidebarNumberJumpHints,
 } from "./sidebarNumberJump"
+import { log } from "../../shared/log"
 
 const SIDEBAR_WIDTH_STORAGE_KEY = "kanna:sidebar-width"
 export const DEFAULT_SIDEBAR_WIDTH = 275
@@ -469,7 +470,7 @@ function KannaSidebarImpl({
     try {
       await onImportClaudeSessions()
     } catch (error) {
-      console.error("[kanna/import] failed", error)
+      log.error("[kanna/import] failed", error)
     } finally {
       setIsImporting(false)
     }

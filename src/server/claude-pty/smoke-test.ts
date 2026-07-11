@@ -12,6 +12,7 @@ import { spawnPtyProcess as defaultSpawnPtyProcess } from "./pty-process.adapter
 import { waitForTuiReadyWithTrustDismiss, sendUserPrompt, sendExitCommand } from "./tui-control"
 import { startTranscriptStream, waitForResultEntry } from "./tui-source.adapter"
 import { computeProjectDir } from "./jsonl-path.adapter"
+import { log } from "../../shared/log"
 
 export type SmokeTestProbeFn = () => Promise<"pass" | "fail">
 
@@ -149,7 +150,7 @@ export function buildLiveSmokeProbe(args: BuildLiveSmokeProbeArgs): SmokeTestPro
       // Rate-limit errors must not be cached as "fail" — they're transient.
       // Re-throw so the gate propagates the error without poisoning the cache.
       if (err instanceof Error && (err as Error & { code?: string }).code === "rate_limited") throw err
-      console.warn("[kanna/pty] smoke probe errored, treating as FAIL", err)
+      log.warn("[kanna/pty] smoke probe errored, treating as FAIL", err)
       probeResult = "fail"
     } finally {
       try { await sendExitCommand(pty) } catch { /* swallow */ }

@@ -7,6 +7,7 @@ import type {
   TerminalSnapshot,
 } from "../../shared/protocol"
 import { LOG_PREFIX } from "../../shared/branding"
+import { log } from "../../shared/log"
 import { generateUUID } from "../lib/utils"
 import { getStoredPushDeviceId } from "./pushClient"
 
@@ -244,7 +245,7 @@ export class KannaSocket {
       }
 
       if (isSendToStartingProfilingEnabled() && payload.type === "snapshot" && payload.snapshot.type === "chat" && payload.snapshot.data?.runtime.status === "starting") {
-        console.debug("[kanna/send->starting][client-ws]", {
+        log.debug("[kanna/send->starting][client-ws]", {
           stage: "socket_message_received",
           receivedAt,
           payloadBytes: rawText.length,
@@ -255,7 +256,7 @@ export class KannaSocket {
       }
 
       if (isSendToStartingProfilingEnabled() && payload.type === "ack") {
-        console.debug("[kanna/send->starting][client-ws]", {
+        log.debug("[kanna/send->starting][client-ws]", {
           stage: "socket_ack_received",
           receivedAt,
           payloadBytes: rawText.length,
@@ -285,7 +286,7 @@ export class KannaSocket {
 
       if (payload.type === "error") {
         if (!payload.id) {
-          console.error(LOG_PREFIX, payload.message)
+          log.error(LOG_PREFIX, payload.message)
           return
         }
         const pending = this.pending.get(payload.id)

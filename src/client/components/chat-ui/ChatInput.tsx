@@ -77,6 +77,7 @@ import {
   type SubmitPayload,
 } from "../lexical/plugins"
 import { serializeEditorToWire } from "../lexical/serialize/editorToWireString"
+import { log } from "../../../shared/log"
 
 // ---------------------------------------------------------------------------
 // Clipboard helpers (exported — ChatInput.test.ts imports them)
@@ -776,7 +777,7 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
         await onSubmit(text, submitOptions)
         previousAttachments.forEach(cleanupAttachmentPreview)
       } catch (error) {
-        console.error("[ChatInput] Submit failed:", error)
+        log.error("[ChatInput] Submit failed:", error)
         if (chatId) setDraft(chatId, text)
         setAttachments(previousAttachments)
         setSelectedAttachmentId(previousSelectedId)

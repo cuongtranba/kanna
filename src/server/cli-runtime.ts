@@ -1,5 +1,6 @@
 import process from "node:process"
 import { hasCommand, spawnDetached, spawnSyncCapture } from "./process-utils.adapter"
+import { log } from "../shared/log"
 import { APP_NAME, CLI_COMMAND, getDataDirDisplay, LOG_PREFIX, PACKAGE_NAME } from "../shared/branding"
 import type { ShareMode } from "../shared/share"
 import { assertNoHostOverride, getShareCliFlag, isShareEnabled, isTokenShareMode } from "../shared/share"
@@ -78,7 +79,7 @@ function throwShareConflict(share: Exclude<ShareMode, false>, hostFlag: "--host"
 }
 
 function printHelp() {
-  console.log(`${APP_NAME} — local-only project chat UI
+  log.info(`${APP_NAME} — local-only project chat UI
 
 Usage:
   ${CLI_COMMAND} [options]
@@ -337,7 +338,7 @@ export function openUrl(url: string) {
   } else {
     void spawnDetached("xdg-open", [url]).catch(() => {})
   }
-  console.log(`${LOG_PREFIX} opened in default browser`)
+  log.info(`${LOG_PREFIX} opened in default browser`)
 }
 
 export async function fetchLatestPackageVersion(packageName: string) {

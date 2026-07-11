@@ -3,6 +3,7 @@ import { homedir } from "node:os"
 import type { EventStore } from "./event-store"
 import type { ChatRecord } from "./events"
 import { mapClaudeRecordsToEntries } from "./claude-session-mapper"
+import { log } from "../shared/log"
 import { scanClaudeSessions } from "./claude-session-scanner.adapter"
 import type {
   ClaudeSessionCustomTitleRecord,
@@ -229,7 +230,7 @@ export async function importClaudeSessions(
         }
         await store.setSourceHash(existingChat.id, session.sourceHash)
       } catch (error) {
-        console.error("[kanna/import] failed to update session", session.filePath, error)
+        log.error("[kanna/import] failed to update session", session.filePath, error)
         failed += 1
       }
       continue
@@ -265,7 +266,7 @@ export async function importClaudeSessions(
       imported += 1
       if (onProgress) onProgress({ scanned, imported })
     } catch (error) {
-      console.error("[kanna/import] failed to import session", session.filePath, error)
+      log.error("[kanna/import] failed to import session", session.filePath, error)
       failed += 1
     }
   }

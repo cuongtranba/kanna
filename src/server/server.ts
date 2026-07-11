@@ -57,6 +57,7 @@ import { SnapshotStore } from "./session-share/snapshot-store.adapter"
 import { handleShareApiRequest } from "./session-share/http-routes"
 import { buildChatSnapshot, type SnapshotSources } from "./session-share/snapshot-builder"
 import { startSnapshotSweep } from "./session-share/sweep"
+import { log } from "../shared/log"
 import type {
   ChatSnapshotMessage,
   AttachmentManifestEntry,
@@ -252,7 +253,7 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
   const terminalPidRegistry = new TerminalPidRegistry(path.join(store.dataDir, "terminals.json"))
   const reapedTerminals = await terminalPidRegistry.reapStale()
   if (reapedTerminals.length > 0) {
-    console.log(`[kanna] reaped ${reapedTerminals.length} orphan terminal process group(s) from previous run`)
+    log.info(`[kanna] reaped ${reapedTerminals.length} orphan terminal process group(s) from previous run`)
   }
   const claudePtyRegistry = new ClaudePtyRegistry(path.join(store.dataDir, "claude-pty.json"))
   const ptyInstanceRegistry = createPtyInstanceRegistry()
@@ -267,7 +268,7 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
   const subagentTranscriptRegistry = createSubagentTranscriptRegistry()
   const reapedClaudePty = await claudePtyRegistry.reapStale()
   if (reapedClaudePty.length > 0) {
-    console.log(`[kanna] reaped ${reapedClaudePty.length} orphan claude PTY process group(s) from previous run`)
+    log.info(`[kanna] reaped ${reapedClaudePty.length} orphan claude PTY process group(s) from previous run`)
   }
   const keybindings = new KeybindingsManager()
   const appSettings = new AppSettingsManager(path.join(store.dataDir, "settings.json"))
@@ -421,7 +422,7 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     () => appSettings.getSnapshot().claudeAuth.tokens,
     (id, patch) => {
       appSettings.mutateTokenStatus(id, patch).catch((err) => {
-        console.warn("[oauth-pool] token status write failed:", err)
+        log.warn("[oauth-pool] token status write failed:", err)
       })
     },
     Date.now,
@@ -657,7 +658,7 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
       if (!isAddrInUse || strictPort || attempt === MAX_PORT_ATTEMPTS - 1) {
         throw err
       }
-      console.log(`Port ${actualPort} is in use, trying ${actualPort + 1}...`)
+      log.info(`Port ${actualPort} is in use, trying ${actualPort + 1}...`)
       actualPort++
     }
   }
@@ -755,7 +756,7 @@ async function handleProjectUpload(req: Request, url: URL, store: EventStore, ap
     })
     return Response.json({ attachments })
   } catch (error) {
-    console.error("[uploads] Upload failed:", error)
+    log.error("[uploads] Upload failed:", error)
     return Response.json({ error: "Upload failed" }, { status: 500 })
   }
 }
@@ -957,7 +958,7 @@ async function handleProjectPaths(req: Request, url: URL, store: EventStore) {
     })
     return Response.json({ paths })
   } catch (error) {
-    console.error("[paths] list failed:", error)
+    log.error("[paths] list failed:", error)
     return Response.json({ error: "Failed to list paths" }, { status: 500 })
   }
 }

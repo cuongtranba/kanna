@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react"
 import { useTheme } from "../../hooks/useTheme"
+import { log } from "../../../shared/log"
 
 const SIZE_CEILING = 200 * 1024
 
@@ -92,7 +93,7 @@ export function HighlightedCode({ source, lang }: { source: string; lang: string
         setHighlighted({ source, theme: shikiTheme, lang: resolvedLang, html: stripShikiWrappers(html) })
       })
       .catch(() => {
-        if (typeof console !== "undefined") console.warn("[transcript] Shiki unavailable; falling back to plain code")
+        log.warn("[transcript] Shiki unavailable; falling back to plain code")
       })
     return () => {
       cancelled = true

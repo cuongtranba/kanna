@@ -1,4 +1,5 @@
 import { query } from "@anthropic-ai/claude-agent-sdk"
+import { log } from "../shared/log"
 import { homedir } from "node:os"
 import OpenAI from "openai"
 import { getDataRootDir } from "../shared/branding"
@@ -148,7 +149,7 @@ export async function runClaudeStructured(args: Omit<StructuredQuickResponseArgs
   // typically holds a stale or unrelated token → opaque 401 loops.
   if (pool && pool.hasAnyToken() && !picked) {
     lease?.release()
-    console.warn("[quick-response] no usable OAuth token in pool; skipping claude provider")
+    log.warn("[quick-response] no usable OAuth token in pool; skipping claude provider")
     return null
   }
   if (picked && pool) pool.markUsed(picked.id)
@@ -205,7 +206,7 @@ export async function runClaudeStructured(args: Omit<StructuredQuickResponseArgs
     const errorLimit = detector.detectFromResultText("", reason)
     const rateLimited = Boolean(detectedLimit) || errorLimit !== null || isClaudeRateLimitMessage(reason)
     if (rateLimited) {
-      console.log(`[quick-response] claude rate-limited, falling back: ${reason}`)
+      log.info(`[quick-response] claude rate-limited, falling back: ${reason}`)
       if (picked && pool) {
         const limit = detectedLimit ?? (errorLimit ? { resetAt: errorLimit.resetAt, tz: errorLimit.tz } : null)
         // Fallback window when we can't parse the precise reset: 5 minutes.
@@ -219,10 +220,10 @@ export async function runClaudeStructured(args: Omit<StructuredQuickResponseArgs
         // pickActive() skips it — otherwise quick-response would keep
         // selecting the same dead token by lastUsedAt ordering and burn
         // every subsequent call on the same 401.
-        console.warn(`[quick-response] claude auth error, marking token ${picked.id} errored: ${reason}`)
+        log.warn(`[quick-response] claude auth error, marking token ${picked.id} errored: ${reason}`)
         pool.markError(picked.id, authDetection.reason)
       } else {
-        console.warn(`[quick-response] claude structured request failed: ${reason}`)
+        log.warn(`[quick-response] claude structured request failed: ${reason}`)
       }
     }
     return null

@@ -74,6 +74,7 @@ import { mergePolicyOverride, POLICY_DEFAULT } from "../shared/permission-policy
 import { startClaudeSessionPTY, type StartClaudeSessionPtyArgs } from "./claude-pty/driver"
 import { computeWorkflowsDir } from "./claude-pty/jsonl-path.adapter"
 import { ensureFreshMcpToken } from "./mcp-oauth.adapter"
+import { log } from "../shared/log"
 
 type SdkMcpEntry =
   | { type: "stdio"; command: string; args: string[]; env: Record<string, string>; cwd?: string }
@@ -402,7 +403,7 @@ function isClaudeSteerLoggingEnabled() {
 
 function logClaudeSteer(stage: string, details?: Record<string, unknown>) {
   if (!isClaudeSteerLoggingEnabled()) return
-  console.log("[kanna/claude-steer]", JSON.stringify({
+  log.info("[kanna/claude-steer]", JSON.stringify({
     stage,
     ...details,
   }))
@@ -489,7 +490,7 @@ function logSendToStartingProfile(
     return
   }
 
-  console.log("[kanna/send->starting][server]", JSON.stringify({
+  log.info("[kanna/send->starting][server]", JSON.stringify({
     traceId: profile.traceId,
     stage,
     elapsedMs: elapsedProfileMs(profile.startedAt),
@@ -1447,7 +1448,7 @@ async function startClaudeSession(args: {
       try {
         return await q.supportedCommands()
       } catch (error) {
-        console.warn("[kanna/claude] supportedCommands failed", error)
+        log.warn("[kanna/claude] supportedCommands failed", error)
         return []
       }
     },
@@ -1780,7 +1781,7 @@ export class AgentCoordinator {
         })
         bearers.set(s.id, token)
       } catch (err) {
-        console.warn("[kanna/mcp-oauth] token refresh failed for", s.name, err)
+        log.warn("[kanna/mcp-oauth] token refresh failed for", s.name, err)
       }
     }
     return bearers
@@ -2124,7 +2125,7 @@ export class AgentCoordinator {
       await this.store.recordSessionCommandsLoaded(chatId, merged)
       this.emitStateChange(chatId)
     } catch (error) {
-      console.warn("[kanna/agent] ensureSlashCommandsLoaded failed", error)
+      log.warn("[kanna/agent] ensureSlashCommandsLoaded failed", error)
     } finally {
       this.slashCommandsInFlight.delete(chatId)
       this.emitStateChange(chatId)
@@ -2137,7 +2138,7 @@ export class AgentCoordinator {
     try {
       local = this.localCatalog.list(cwd)
     } catch (error) {
-      console.warn("[kanna/agent] localCatalog.list failed", error)
+      log.warn("[kanna/agent] localCatalog.list failed", error)
       return commands
     }
     const cliKeys = new Set(commands.map((c) => c.name.toLowerCase()))
@@ -2372,7 +2373,7 @@ export class AgentCoordinator {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       const isOAuthRefusal = error instanceof OAuthPoolUnavailableError
-      console.error(`${LOG_PREFIX} startTurnForChat failed after turn_started`, {
+      log.error(`${LOG_PREFIX} startTurnForChat failed after turn_started`, {
         chatId: args.chatId,
         provider: args.provider,
         model: args.model,
@@ -2399,7 +2400,7 @@ export class AgentCoordinator {
             })
           )
         } catch (appendErr) {
-          console.error(`${LOG_PREFIX} append refusal result entry failed`, {
+          log.error(`${LOG_PREFIX} append refusal result entry failed`, {
             chatId: args.chatId,
             appendErr: appendErr instanceof Error ? appendErr.message : String(appendErr),
           })
@@ -2408,7 +2409,7 @@ export class AgentCoordinator {
       try {
         await this.store.recordTurnFailed(args.chatId, message)
       } catch (recordErr) {
-        console.error(`${LOG_PREFIX} recordTurnFailed also failed`, {
+        log.error(`${LOG_PREFIX} recordTurnFailed also failed`, {
           chatId: args.chatId,
           recordErr: recordErr instanceof Error ? recordErr.message : String(recordErr),
         })
@@ -2783,7 +2784,7 @@ export class AgentCoordinator {
           openrouterTurnPrice = resolveModelPrice(baseModelId, m?.pricing ?? null)
           if (m && m.contextLength > 0) openrouterContextWindow = m.contextLength
         } catch (err) {
-          console.warn("[kanna/agent] openrouter pricing lookup failed", err)
+          log.warn("[kanna/agent] openrouter pricing lookup failed", err)
         }
       }
 
@@ -2905,7 +2906,7 @@ export class AgentCoordinator {
           await this.store.recordSessionCommandsLoaded(args.chatId, merged)
           this.emitStateChange(args.chatId)
         } catch (error) {
-          console.warn("[kanna/agent] failed to load slash commands", error)
+          log.warn("[kanna/agent] failed to load slash commands", error)
         }
       })()
     } else {
@@ -3340,7 +3341,7 @@ export class AgentCoordinator {
         if (this.claudeSessions.get(session.chatId) !== session) return
         firstEntrySeen = true
         const message = `OpenRouter produced no response within ${this.openrouterFirstEntryTimeoutMs}ms — the selected model may be invalid or the upstream stalled.`
-        console.warn("[kanna/agent] openrouter stream produced no entry within watchdog window — failing turn", {
+        log.warn("[kanna/agent] openrouter stream produced no entry within watchdog window — failing turn", {
           chatId: session.chatId,
           sessionId: session.id,
           model: session.openrouterModel,
@@ -3637,7 +3638,7 @@ export class AgentCoordinator {
       // Trace point: stream-end-without-final-result is the hang signature.
       // If `hasActiveTurn=true` && `hasFinalResult=false` && this fires,
       // the user will see "still running" forever unless we fail-close.
-      console.log("[kanna/agent] runClaudeSession stream ended", {
+      log.info("[kanna/agent] runClaudeSession stream ended", {
         chatId: session.chatId,
         sessionId: session.id,
         sessionToken: session.sessionToken,
@@ -3666,7 +3667,7 @@ export class AgentCoordinator {
             // SDK transport dropped, etc). Fail-close the turn so the UI
             // stops showing "running" forever. Without this the chat is
             // wedged until the user manually clicks Stop or reloads.
-            console.warn("[kanna/agent] stream ended with no final result — recording turn failure", { chatId: session.chatId, sessionId: session.id })
+            log.warn("[kanna/agent] stream ended with no final result — recording turn failure", { chatId: session.chatId, sessionId: session.id })
             await this.store.recordTurnFailed(session.chatId, "session stream ended without a result")
           }
           this.activeTurns.delete(session.chatId)
@@ -3899,7 +3900,7 @@ export class AgentCoordinator {
       && (!limitedTokenId || rotationTarget.id !== limitedTokenId)
 
     if (this.oauthPool) {
-      console.log("[oauth-pool] rate-limit detected", {
+      log.info("[oauth-pool] rate-limit detected", {
         chatId,
         markedLimitedTokenId: limitedTokenId,
         resetAt: new Date(detection.resetAt).toISOString(),
@@ -4010,7 +4011,7 @@ export class AgentCoordinator {
       && (!erroredTokenId || rotationTarget.id !== erroredTokenId)
 
     if (this.oauthPool) {
-      console.log("[oauth-pool] auth-error detected", {
+      log.info("[oauth-pool] auth-error detected", {
         chatId,
         markedErrorTokenId: erroredTokenId,
         reason: detection.reason,
@@ -4200,7 +4201,7 @@ export class AgentCoordinator {
         prompt,
       })
     } catch (err) {
-      console.warn(`${LOG_PREFIX} deliverSubagentToMain failed`, { chatId, runId, err })
+      log.warn(`${LOG_PREFIX} deliverSubagentToMain failed`, { chatId, runId, err })
     }
   }
 

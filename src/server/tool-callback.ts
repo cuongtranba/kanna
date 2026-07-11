@@ -9,6 +9,7 @@ import { POLICY_TERMINAL_STATUSES } from "../shared/permission-policy"
 import { policy } from "./permission-gate"
 import { canonicalArgsHash } from "./canonical-args"
 import type { EventStore } from "./event-store"
+import { log } from "../shared/log"
 
 export interface ToolCallbackServiceArgs {
   store: EventStore
@@ -114,7 +115,7 @@ export function createToolCallbackService(opts: ToolCallbackServiceArgs): ToolCa
     try {
       opts.onStateChange(chatId)
     } catch (err) {
-      console.warn("[tool-callback] onStateChange threw", err)
+      log.warn("[tool-callback] onStateChange threw", err)
     }
   }
 

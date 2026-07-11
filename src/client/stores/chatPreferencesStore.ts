@@ -20,6 +20,7 @@ import {
   type ProviderModelOptionsByProvider,
 } from "../../shared/types"
 import { useAppSettingsStore } from "./appSettingsStore"
+import { log } from "../../shared/log"
 
 function currentCustomModels(): readonly CustomModelEntry[] {
   return useAppSettingsStore.getState().settings?.customModels ?? []
@@ -280,11 +281,11 @@ function providerDefaultsEqual(a: ChatProviderPreferences, b: ChatProviderPrefer
 
 function logChatPreferences(message: string, details?: unknown) {
   if (details === undefined) {
-    console.info(`[chat-preferences] ${message}`)
+    log.info(`[chat-preferences] ${message}`)
     return
   }
 
-  console.info(`[chat-preferences] ${message}`, details)
+  log.info(`[chat-preferences] ${message}`, details)
 }
 
 function composerFromProviderDefaults(

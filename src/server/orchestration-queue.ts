@@ -2,6 +2,7 @@
 import crypto from "node:crypto"
 import path from "node:path"
 import { LOG_PREFIX } from "../shared/branding"
+import { log } from "../shared/log"
 import type {
   OrchGateDecision,
   OrchGateKind,
@@ -227,7 +228,7 @@ export class OrchestrationQueue {
         runId: pending.runId, taskId: pending.taskId,
         reason: "restart_recovery", detail: "server restart while task was in flight",
       })
-      console.log(`${LOG_PREFIX} orchestration task requeued on boot`, pending)
+      log.info(`${LOG_PREFIX} orchestration task requeued on boot`, pending)
     }
     // 2. Create runtimes WITHOUT scheduling yet, so gated resumes claim their
     //    permit slots before the queue claims fresh tasks. Rebuild the pool:
@@ -269,7 +270,7 @@ export class OrchestrationQueue {
           pendingGate: { phaseIndex: gated.phaseIndex, phaseName: phase?.name ?? "", kind: gate?.kind ?? "hard" },
         },
       )
-      console.log(`${LOG_PREFIX} orchestration gate re-armed on boot`, gated)
+      log.info(`${LOG_PREFIX} orchestration gate re-armed on boot`, gated)
     }
     // 4. Defer scheduling to a macrotask so a caller inspecting state right
     //    after recoverOnStartup() observes the clean requeued baseline (queued,
@@ -624,7 +625,7 @@ export class OrchestrationQueue {
         v: 3, type: "orch_run_completed", timestamp: this.now(), runId,
       })
       rt.done.resolve()
-      console.log(`${LOG_PREFIX} orchestration run completed`, { runId })
+      log.info(`${LOG_PREFIX} orchestration run completed`, { runId })
     }
   }
 }

@@ -1,4 +1,5 @@
 import type { HarnessEvent } from "../harness-types"
+import { log } from "../../shared/log"
 import type { ContextWindowUsageSnapshot, ProviderUsage } from "../../shared/types"
 import {
   normalizeClaudeStreamMessage,
@@ -143,7 +144,7 @@ export function createJsonlEventParser(opts: CreateJsonlEventParserOptions = {})
       try {
         parsed = JSON.parse(trimmed)
       } catch {
-        console.warn("[claude-pty/jsonl] failed to parse line", trimmed.slice(0, 120))
+        log.warn("[claude-pty/jsonl] failed to parse line", trimmed.slice(0, 120))
         return []
       }
       if (!parsed || typeof parsed !== "object") return []
@@ -403,7 +404,7 @@ export function createJsonlEventParser(opts: CreateJsonlEventParserOptions = {})
           suppressNextResultRow = false
         }
       } catch (err) {
-        console.warn("[claude-pty/jsonl] normalizeClaudeStreamMessage threw", err)
+        log.warn("[claude-pty/jsonl] normalizeClaudeStreamMessage threw", err)
       }
 
       return events
@@ -423,7 +424,7 @@ export function parseJsonlLine(rawLine: string): HarnessEvent[] {
   try {
     parsed = JSON.parse(trimmed)
   } catch {
-    console.warn("[claude-pty/jsonl] failed to parse line", trimmed.slice(0, 120))
+    log.warn("[claude-pty/jsonl] failed to parse line", trimmed.slice(0, 120))
     return []
   }
   if (!parsed || typeof parsed !== "object") return []
@@ -449,7 +450,7 @@ export function parseJsonlLine(rawLine: string): HarnessEvent[] {
       events.push({ type: "transcript", entry })
     }
   } catch (err) {
-    console.warn("[claude-pty/jsonl] normalizeClaudeStreamMessage threw", err)
+    log.warn("[claude-pty/jsonl] normalizeClaudeStreamMessage threw", err)
   }
 
   return events

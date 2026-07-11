@@ -6,6 +6,7 @@ import { parse as shellParse } from "shell-quote"
 import path from "node:path"
 import { homedir } from "node:os"
 import { minimatch } from "minimatch"
+import { log } from "../shared/log"
 
 export interface EvaluateArgs {
   toolName: string
@@ -215,7 +216,7 @@ export const policy = {
         try {
           re = new RegExp(rule.pattern)
         } catch {
-          console.warn(`[permission-gate] invalid regex pattern: ${rule.pattern}`)
+          log.warn(`[permission-gate] invalid regex pattern: ${rule.pattern}`)
           continue
         }
         if (re.test(argsToText(args.args))) {
@@ -251,7 +252,7 @@ export const policy = {
       try {
         re = new RegExp(rule.pattern)
       } catch {
-        console.warn(`[permission-gate] invalid regex pattern: ${rule.pattern}`)
+        log.warn(`[permission-gate] invalid regex pattern: ${rule.pattern}`)
         continue
       }
       if (re.test(argsToText(args.args))) {
@@ -266,7 +267,7 @@ export const policy = {
       try {
         re = new RegExp(rule.pattern)
       } catch {
-        console.warn(`[permission-gate] invalid regex pattern: ${rule.pattern}`)
+        log.warn(`[permission-gate] invalid regex pattern: ${rule.pattern}`)
         continue
       }
       if (re.test(argsToText(args.args))) {

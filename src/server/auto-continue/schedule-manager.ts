@@ -1,5 +1,6 @@
 import type { AutoContinueEvent } from "./events"
 import { deriveChatSchedules } from "./read-model"
+import { log } from "../../shared/log"
 
 export interface Clock {
   now(): number
@@ -29,7 +30,7 @@ export class ScheduleManager {
   constructor(args: ScheduleManagerArgs) {
     this.clock = args.clock ?? realClock
     this.fireFn = args.fire
-    this.onError = args.onError ?? ((error) => console.error("[kanna/schedule-manager]", error))
+    this.onError = args.onError ?? ((error) => log.error("[kanna/schedule-manager]", error))
   }
 
   rehydrate(events: readonly AutoContinueEvent[]) {

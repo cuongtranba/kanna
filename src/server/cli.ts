@@ -1,5 +1,6 @@
 import process from "node:process"
 import { LOG_PREFIX } from "../shared/branding"
+import { log } from "../shared/log"
 import { getBunVersion, loadPackageVersion } from "./cli-bootstrap.adapter"
 import {
   fetchLatestPackageVersion,
@@ -23,7 +24,7 @@ const result = await runCli(argv, {
     if (started.updateManager && options.update) {
       started.updateManager.onChange((snapshot) => {
         if (snapshot.status !== "restart_pending") return
-        console.log(`${LOG_PREFIX} update installed, shutting down current process for restart`)
+        log.info(`${LOG_PREFIX} update installed, shutting down current process for restart`)
         resolveExitAction?.("ui_restart")
       })
     }
@@ -33,8 +34,8 @@ const result = await runCli(argv, {
   fetchLatestVersion: fetchLatestPackageVersion,
   installVersion: installPackageVersion,
   openUrl,
-  log: console.log,
-  warn: console.warn,
+  log: log.info,
+  warn: log.warn,
 })
 
 if (result.kind === "exited") {
@@ -59,6 +60,6 @@ const exitAction = await new Promise<"ui_restart" | "exit">((resolve) => {
 
 await result.stop()
 if (exitAction === "ui_restart") {
-  console.log(`${LOG_PREFIX} current process stopped, handing restart back to supervisor`)
+  log.info(`${LOG_PREFIX} current process stopped, handing restart back to supervisor`)
 }
 process.exit(exitAction === "ui_restart" ? CLI_UI_UPDATE_RESTART_EXIT_CODE : 0)

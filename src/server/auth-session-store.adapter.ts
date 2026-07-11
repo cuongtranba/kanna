@@ -2,6 +2,7 @@ import { createHash } from "node:crypto"
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { LOG_PREFIX } from "../shared/branding"
+import { log } from "../shared/log"
 
 const FILE_VERSION = 1
 const PERSIST_DEBOUNCE_MS = 250
@@ -60,7 +61,7 @@ async function loadSessionsFile(filePath: string): Promise<PersistedSession[]> {
   } catch (error) {
     if ((error as NodeJS.ErrnoException)?.code === "ENOENT") return []
     if (error instanceof SyntaxError) {
-      console.warn(`${LOG_PREFIX} sessions.json is invalid JSON; ignoring.`)
+      log.warn(`${LOG_PREFIX} sessions.json is invalid JSON; ignoring.`)
       return []
     }
     throw error
@@ -109,7 +110,7 @@ export async function createAuthSessionStore(options: CreateAuthSessionStoreOpti
       try {
         await writeFileAtomic()
       } catch (error) {
-        console.warn(`${LOG_PREFIX} Failed to persist sessions.json:`, error)
+        log.warn(`${LOG_PREFIX} Failed to persist sessions.json:`, error)
       }
     } while (writeAgain)
     activeWrite = null

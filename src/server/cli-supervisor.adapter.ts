@@ -1,6 +1,7 @@
 import process from "node:process"
 import { spawn } from "node:child_process"
 import { CLI_COMMAND, LOG_PREFIX } from "../shared/branding"
+import { log } from "../shared/log"
 import {
   CLI_CHILD_ARGS_ENV_VAR,
   CLI_CHILD_COMMAND_ENV_VAR,
@@ -86,7 +87,7 @@ while (true) {
     // own package cache). Skip the self-update on the next spawn so the child
     // proceeds normally instead of trying to update again.
     if (isStartupUpdate && lastStartupUpdateRestart) {
-      console.log(`${LOG_PREFIX} update installed but the running binary did not change, continuing with current version`)
+      log.info(`${LOG_PREFIX} update installed but the running binary did not change, continuing with current version`)
       skipUpdateOnNextChild = true
       lastStartupUpdateRestart = false
     } else {
@@ -102,7 +103,7 @@ while (true) {
       skipUpdateOnNextChild = true
     }
     suppressOpenOnNextChild = uiRestart
-    console.log(`${LOG_PREFIX} supervisor restarting ${CLI_COMMAND} in the same terminal session`)
+    log.info(`${LOG_PREFIX} supervisor restarting ${CLI_COMMAND} in the same terminal session`)
     continue
   }
 

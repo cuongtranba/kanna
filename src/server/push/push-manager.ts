@@ -1,4 +1,5 @@
 import webpush from "web-push"
+import { log } from "../../shared/log"
 import type {
   KannaStatus,
   PushPayload,
@@ -182,10 +183,10 @@ export class PushManager {
   async sendTest(id: string): Promise<void> {
     const sub = this.subscriptions.get(id)
     if (!sub) {
-      console.warn("[kanna/push] sendTest: no subscription for id", { id })
+      log.warn("[kanna/push] sendTest: no subscription for id", { id })
       return
     }
-    console.log("[kanna/push] sendTest: delivering test push", {
+    log.info("[kanna/push] sendTest: delivering test push", {
       id,
       endpoint: safeEndpointHost(sub.endpoint),
       label: sub.label,
@@ -303,7 +304,7 @@ export class PushManager {
   private async deliver(sub: PushSubscriptionRecord, payload: PushPayload): Promise<void> {
     const body = JSON.stringify(payload)
     const endpointHost = safeEndpointHost(sub.endpoint)
-    console.log("[kanna/push] deliver: sending", {
+    log.info("[kanna/push] deliver: sending", {
       id: sub.id,
       endpoint: endpointHost,
       kind: payload.kind,
@@ -320,12 +321,12 @@ export class PushManager {
           privateKey: this.vapid.privateKey,
         },
       })
-      console.log("[kanna/push] deliver: ok", { id: sub.id, endpoint: endpointHost })
+      log.info("[kanna/push] deliver: ok", { id: sub.id, endpoint: endpointHost })
     } catch (error) {
       const status = (error as { statusCode?: number }).statusCode
       const headers = (error as { headers?: Record<string, string> }).headers
       const responseBody = (error as { body?: string }).body
-      console.warn("[kanna/push] deliver: failed", {
+      log.warn("[kanna/push] deliver: failed", {
         id: sub.id,
         endpoint: endpointHost,
         status,

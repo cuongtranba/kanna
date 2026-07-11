@@ -1,6 +1,7 @@
 import { homedir } from "node:os"
 import path from "node:path"
 import { getDataDir, LOG_PREFIX } from "../shared/branding"
+import { log } from "../shared/log"
 import type { StorageBackend } from "./storage/backend"
 import { FsStorageBackend } from "./storage/fs-storage.adapter"
 import type { AgentProvider, ChatHistoryPage, ChatHistorySnapshot, QueuedChatMessage, SlashCommand, StackBinding, SubagentRunSnapshot, TranscriptEntry } from "../shared/types"
@@ -66,7 +67,7 @@ function logSendToStartingProfile(stage: string, details?: Record<string, unknow
     return
   }
 
-  console.log("[kanna/send->starting][server]", JSON.stringify({
+  log.info("[kanna/send->starting][server]", JSON.stringify({
     stage,
     ...details,
   }))
@@ -366,7 +367,7 @@ export class EventStore implements PushEventStore {
       if (!text.trim()) return
       const parsed = JSON.parse(text) as SnapshotFile
       if (parsed.v !== STORE_VERSION) {
-        console.warn(`${LOG_PREFIX} Resetting local chat history for store version ${STORE_VERSION}`)
+        log.warn(`${LOG_PREFIX} Resetting local chat history for store version ${STORE_VERSION}`)
         await this.clearStorage()
         return
       }
@@ -440,7 +441,7 @@ export class EventStore implements PushEventStore {
         }
       }
     } catch (error) {
-      console.warn(`${LOG_PREFIX} Failed to load snapshot, resetting local history:`, error)
+      log.warn(`${LOG_PREFIX} Failed to load snapshot, resetting local history:`, error)
       await this.clearStorage()
     }
   }
@@ -474,7 +475,7 @@ export class EventStore implements PushEventStore {
         }
         this.sidebarProjectOrder = normalizeSidebarProjectOrder(JSON.parse(text))
       } catch (error) {
-        console.warn(`${LOG_PREFIX} Failed to load ${SIDEBAR_PROJECT_ORDER_FILE}, ignoring saved order:`, error)
+        log.warn(`${LOG_PREFIX} Failed to load ${SIDEBAR_PROJECT_ORDER_FILE}, ignoring saved order:`, error)
         this.sidebarProjectOrder = []
       }
       return
@@ -526,10 +527,10 @@ export class EventStore implements PushEventStore {
         projectIds = normalizeSidebarProjectOrder(event.projectIds)
       } catch (error) {
         if (index === lastNonEmpty) {
-          console.warn(`${LOG_PREFIX} Ignoring corrupt trailing line in ${path.basename(this.projectsLogPath)} while migrating sidebar order`)
+          log.warn(`${LOG_PREFIX} Ignoring corrupt trailing line in ${path.basename(this.projectsLogPath)} while migrating sidebar order`)
           return projectIds
         }
-        console.warn(`${LOG_PREFIX} Failed to migrate sidebar order from ${path.basename(this.projectsLogPath)}:`, error)
+        log.warn(`${LOG_PREFIX} Failed to migrate sidebar order from ${path.basename(this.projectsLogPath)}:`, error)
         return []
       }
     }
@@ -591,7 +592,7 @@ export class EventStore implements PushEventStore {
       try {
         const event = JSON.parse(line) as Partial<StoreEvent>
         if (event.v !== STORE_VERSION) {
-          console.warn(`${LOG_PREFIX} Resetting local history from incompatible event log`)
+          log.warn(`${LOG_PREFIX} Resetting local history from incompatible event log`)
           await this.clearStorage()
           return []
         }
@@ -605,10 +606,10 @@ export class EventStore implements PushEventStore {
         })
       } catch (error) {
         if (index === lastNonEmpty) {
-          console.warn(`${LOG_PREFIX} Ignoring corrupt trailing line in ${path.basename(filePath)}`)
+          log.warn(`${LOG_PREFIX} Ignoring corrupt trailing line in ${path.basename(filePath)}`)
           return parsedEvents
         }
-        console.warn(`${LOG_PREFIX} Failed to replay ${path.basename(filePath)}, resetting local history:`, error)
+        log.warn(`${LOG_PREFIX} Failed to replay ${path.basename(filePath)}, resetting local history:`, error)
         await this.clearStorage()
         return []
       }
@@ -1109,7 +1110,7 @@ export class EventStore implements PushEventStore {
     this.writeChain = this.writeChain
       .then(() => this.storage.appendText(filePath, payload))
       .catch((err) => {
-        console.error("[event-store] subagent disk append failed:", err)
+        log.error("[event-store] subagent disk append failed:", err)
       })
   }
 
@@ -1481,7 +1482,7 @@ export class EventStore implements PushEventStore {
     try {
       await this.storage.remove(dir, { recursive: true })
     } catch (err) {
-      console.warn(`${LOG_PREFIX} subagent-results cleanup failed`, { chatId, err })
+      log.warn(`${LOG_PREFIX} subagent-results cleanup failed`, { chatId, err })
     }
   }
 
@@ -2162,7 +2163,7 @@ export class EventStore implements PushEventStore {
         const event = JSON.parse(line) as CloudflareTunnelEvent
         this.applyTunnelEvent(event)
       } catch {
-        console.warn(`${LOG_PREFIX} Ignoring malformed line in tunnels.jsonl`)
+        log.warn(`${LOG_PREFIX} Ignoring malformed line in tunnels.jsonl`)
       }
     }
   }
@@ -2191,7 +2192,7 @@ export class EventStore implements PushEventStore {
         const event = JSON.parse(line) as ShareEvent
         this.shareEventsAll.push(event)
       } catch {
-        console.warn(`${LOG_PREFIX} Ignoring malformed line in shares.jsonl`)
+        log.warn(`${LOG_PREFIX} Ignoring malformed line in shares.jsonl`)
       }
     }
   }
@@ -2216,7 +2217,7 @@ export class EventStore implements PushEventStore {
       try {
         events.push(JSON.parse(line) as PushEvent)
       } catch {
-        console.warn(`${LOG_PREFIX} Ignoring malformed line in push.jsonl`)
+        log.warn(`${LOG_PREFIX} Ignoring malformed line in push.jsonl`)
       }
     }
     return events

@@ -26,6 +26,7 @@ import { usePtyInstancesStore } from "../stores/ptyInstancesStore"
 import { useWorkflowsStore } from "../stores/workflowsStore"
 import { useOpenRouterModelsStore } from "../stores/openrouterModelsStore"
 import type { WorkflowsSnapshot } from "../../shared/protocol"
+import { log } from "../../shared/log"
 
 function shallowProviderTokenEquals(
   a: Partial<Record<AgentProvider, string | null>>,
@@ -572,7 +573,7 @@ function logSendToStartingTrace(
     return
   }
 
-  console.debug("[kanna/send->starting][client]", {
+  log.debug("[kanna/send->starting][client]", {
     traceId: trace.traceId,
     stage,
     elapsedMs: elapsedTraceMs(trace.startedAt),

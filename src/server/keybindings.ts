@@ -1,6 +1,7 @@
 import { homedir } from "node:os"
 import path from "node:path"
 import { getKeybindingsFilePath, LOG_PREFIX } from "../shared/branding"
+import { log } from "../shared/log"
 import { DEFAULT_KEYBINDINGS, type KeybindingAction, type KeybindingsSnapshot } from "../shared/types"
 import {
   ensureKeybindingsFile,
@@ -71,11 +72,11 @@ export class KeybindingsManager {
     this.watcher?.close()
     const next = watchKeybindingsDirectory(this.filePath, () => {
       void this.reload().catch((error: unknown) => {
-        console.warn(`${LOG_PREFIX} Failed to reload keybindings:`, error)
+        log.warn(`${LOG_PREFIX} Failed to reload keybindings:`, error)
       })
     })
     if (!next) {
-      console.warn(`${LOG_PREFIX} Failed to watch keybindings file`)
+      log.warn(`${LOG_PREFIX} Failed to watch keybindings file`)
     }
     this.watcher = next
   }

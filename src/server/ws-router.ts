@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto"
 import { readTextFileOrThrow, spawnCommandCapture } from "./ws-router-io.adapter"
+import { log } from "../shared/log"
 import os from "node:os"
 import path from "node:path"
 import type { ServerWebSocket } from "bun"
@@ -65,7 +66,7 @@ function logSendToStartingProfile(
     return
   }
 
-  console.log("[kanna/send->starting][server]", JSON.stringify({
+  log.info("[kanna/send->starting][server]", JSON.stringify({
     traceId,
     stage,
     elapsedMs: Number((performance.now() - startedAt).toFixed(1)),
@@ -725,7 +726,7 @@ export function createWsRouter({
       protectedChatIds: protectedDraftChatIds,
     })
     if (isSendToStartingProfilingEnabled()) {
-      console.log("[kanna/send->starting][server]", JSON.stringify({
+      log.info("[kanna/send->starting][server]", JSON.stringify({
         stage: "ws.prune_stale_empty_chats",
         elapsedMs: Number((performance.now() - startedAt).toFixed(1)),
         activeChatCount: activeChatIds.size,
@@ -794,11 +795,11 @@ export function createWsRouter({
       }))
     )
     void pushManager.observeStatuses(observed).catch((error) => {
-      console.warn("[kanna/push] observeStatuses failed", { error })
+      log.warn("[kanna/push] observeStatuses failed", { error })
     })
     if (isSendToStartingProfilingEnabled()) {
       const totalChats = data.projectGroups.reduce((count, group) => count + group.chats.length, 0)
-      console.log("[kanna/send->starting][server]", JSON.stringify({
+      log.info("[kanna/send->starting][server]", JSON.stringify({
         stage: "ws.sidebar_snapshot_built",
         elapsedMs: Number((performance.now() - startedAt).toFixed(1)),
         projectGroupCount: data.projectGroups.length,
@@ -1048,7 +1049,7 @@ export function createWsRouter({
       }
     }
     if (isSendToStartingProfilingEnabled()) {
-      console.log("[kanna/send->starting][server]", JSON.stringify({
+      log.info("[kanna/send->starting][server]", JSON.stringify({
         stage: "ws.push_snapshots_completed",
         elapsedMs: Number((performance.now() - pushStartedAt).toFixed(1)),
         skipPrune: Boolean(options?.skipPrune),
@@ -1068,7 +1069,7 @@ export function createWsRouter({
       await pushSnapshots(ws, { skipPrune: true, cache })
     }
     if (isSendToStartingProfilingEnabled()) {
-      console.log("[kanna/send->starting][server]", JSON.stringify({
+      log.info("[kanna/send->starting][server]", JSON.stringify({
         stage: "ws.broadcast_snapshots_completed",
         elapsedMs: Number((performance.now() - startedAt).toFixed(1)),
         pruneMs: 0,
@@ -1088,7 +1089,7 @@ export function createWsRouter({
       await pushSnapshots(ws, { skipPrune: true, filter, cache })
     }
     if (isSendToStartingProfilingEnabled()) {
-      console.log("[kanna/send->starting][server]", JSON.stringify({
+      log.info("[kanna/send->starting][server]", JSON.stringify({
         stage: "ws.broadcast_filtered_snapshots_completed",
         elapsedMs: Number((performance.now() - startedAt).toFixed(1)),
         socketCount,
@@ -2223,8 +2224,8 @@ export function createWsRouter({
     } catch (error) {
       const messageText = error instanceof Error ? error.message : String(error)
       const benign = isBenignStaleStateMessage(messageText)
-      const logger = benign ? console.log : console.error
-      logger("[ws-router] command failed", {
+      const logFn = benign ? log.info : log.error
+      logFn("[ws-router] command failed", {
         id,
         type: command.type,
         message: messageText,
@@ -2376,6 +2377,6 @@ async function runMcpAutoTest(
     await appSettings.writePatch({ customMcpServers: { setTestResult: { id, result } } })
   } catch (err) {
     // Auto-test must never throw; log + swallow.
-    console.warn("[kanna/ws-router] runMcpAutoTest failed", err)
+    log.warn("[kanna/ws-router] runMcpAutoTest failed", err)
   }
 }
