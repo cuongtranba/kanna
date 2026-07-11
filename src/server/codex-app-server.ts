@@ -1447,7 +1447,7 @@ export class CodexAppServerManager {
         return
       case "error":
         this.failContext(context, notification.params.error.message)
-        
+        return
       default:
         
     }

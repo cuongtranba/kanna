@@ -223,7 +223,8 @@ export default tseslint.config(
       "no-restricted-syntax": ["error", ...SHARED_CLIENT_SEAL_SYNTAX, AS_CAST_BAN],
     },
   },
-  // Tests + fixtures + test-helpers legitimately log to console.
+  // Tests + fixtures + test-helpers legitimately use console and `any`
+  // (accessing private members, mock types, partial stubs require it).
   {
     files: [
       "src/**/*.test.ts",
@@ -232,6 +233,9 @@ export default tseslint.config(
       "src/**/__fixtures__/**",
       "src/client/lib/testing/**",
     ],
-    rules: { "no-console": "off" },
+    rules: {
+      "no-console": "off",
+      "@typescript-eslint/no-explicit-any": "off",
+    },
   },
 )
