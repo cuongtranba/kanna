@@ -196,9 +196,33 @@ export function MentionTypeaheadPlugin({
             : menuOptions.map((option, i) => {
                 const isActive = i === selectedIndex
                 const data = option.data
-                const isAgent = data.kind === "agent"
                 const path = data.kind === "path" ? data.path : null
                 const Icon = path?.kind === "dir" ? Folder : FileText
+                let mentionContent: React.ReactNode
+                if (data.kind === "agent") {
+                  mentionContent = (
+                    <>
+                      <Bot className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                      <span className="font-mono truncate">
+                        agent/{data.subagent.name}
+                      </span>
+                      {data.subagent.description ? (
+                        <span className="min-w-0 truncate text-xs text-muted-foreground">
+                          {data.subagent.description}
+                        </span>
+                      ) : null}
+                    </>
+                  )
+                } else if (path) {
+                  mentionContent = (
+                    <>
+                      <Icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                      <span className="font-mono truncate">{path.path}</span>
+                    </>
+                  )
+                } else {
+                  mentionContent = null
+                }
 
                 return (
                   <li
@@ -217,24 +241,7 @@ export function MentionTypeaheadPlugin({
                     )}
                   >
                     <AtSign className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                    {isAgent && data.kind === "agent" ? (
-                      <>
-                        <Bot className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                        <span className="font-mono truncate">
-                          agent/{data.subagent.name}
-                        </span>
-                        {data.subagent.description ? (
-                          <span className="min-w-0 truncate text-xs text-muted-foreground">
-                            {data.subagent.description}
-                          </span>
-                        ) : null}
-                      </>
-                    ) : path ? (
-                      <>
-                        <Icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                        <span className="font-mono truncate">{path.path}</span>
-                      </>
-                    ) : null}
+                    {mentionContent}
                   </li>
                 )
               })}

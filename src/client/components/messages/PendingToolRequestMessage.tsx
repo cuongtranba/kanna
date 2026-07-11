@@ -114,15 +114,23 @@ export function PendingToolRequestMessage({ entry, onAnswer }: Props) {
     // uses `question` (matches the SDK native AskUserQuestion shape). Map
     // here so getKey()/answer keys use the question body, not "undefined".
     const rawQuestions = Array.isArray(args.questions) ? args.questions as Record<string, unknown>[] : []
-    const questions: AskUserQuestionItem[] = rawQuestions.map((q) => ({
-      id: typeof q.id === "string" ? q.id : undefined,
-      question: typeof q.question === "string"
-        ? q.question
-        : typeof q.text === "string" ? q.text : "",
-      header: typeof q.header === "string" ? q.header : undefined,
-      options: Array.isArray(q.options) ? q.options as AskUserQuestionItem["options"] : undefined,
-      multiSelect: typeof q.multiSelect === "boolean" ? q.multiSelect : false,
-    }))
+    const questions: AskUserQuestionItem[] = rawQuestions.map((q) => {
+      let question: string
+      if (typeof q.question === "string") {
+        question = q.question
+      } else if (typeof q.text === "string") {
+        question = q.text
+      } else {
+        question = ""
+      }
+      return {
+        id: typeof q.id === "string" ? q.id : undefined,
+        question,
+        header: typeof q.header === "string" ? q.header : undefined,
+        options: Array.isArray(q.options) ? q.options as AskUserQuestionItem["options"] : undefined,
+        multiSelect: typeof q.multiSelect === "boolean" ? q.multiSelect : false,
+      }
+    })
     return (
       <AskUserQuestionInteractive
         questions={questions}

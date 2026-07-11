@@ -2,7 +2,7 @@
 // `console` (see eslint.config.js `no-console: off` override). Everywhere else
 // imports `log` instead so `no-console` stays enforced repo-wide.
 
-type LogArg = string | number | boolean | null | undefined | object | unknown
+type LogArg = string | number | boolean | null | undefined | object
 
 export const log = {
   debug(...args: LogArg[]): void {

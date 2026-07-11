@@ -178,6 +178,32 @@ function SearchableModelPopover({
     return models.filter((m) => m.id.toLowerCase().includes(q) || m.label.toLowerCase().includes(q))
   }, [models, query])
 
+  let modelsContent: React.ReactNode
+  if (models.length === 0) {
+    modelsContent = (
+      <div className="px-2 py-3 text-xs text-muted-foreground text-center">
+        Loading models… verify OpenRouter API key in Settings.
+      </div>
+    )
+  } else if (filtered.length === 0) {
+    modelsContent = <div className="px-2 py-3 text-xs text-muted-foreground text-center">No matches</div>
+  } else {
+    modelsContent = filtered.map((candidate) => (
+      <PopoverMenuItem
+        key={candidate.id}
+        onClick={() => {
+          onSelect(candidate.id)
+          setOpen(false)
+          setQuery("")
+        }}
+        selected={selectedModel === candidate.id}
+        icon={<Box className="h-4 w-4 text-muted-foreground" />}
+        label={candidate.label}
+        description={candidate.id}
+      />
+    ))
+  }
+
   return (
     <Popover open={open} onOpenChange={(v) => { setOpen(v); if (!v) setQuery("") }}>
       <PopoverTrigger asChild>
@@ -205,28 +231,7 @@ function SearchableModelPopover({
           />
         </div>
         <div className="max-h-72 overflow-y-auto py-1 space-y-1">
-          {models.length === 0 ? (
-            <div className="px-2 py-3 text-xs text-muted-foreground text-center">
-              Loading models… verify OpenRouter API key in Settings.
-            </div>
-          ) : filtered.length === 0 ? (
-            <div className="px-2 py-3 text-xs text-muted-foreground text-center">No matches</div>
-          ) : (
-            filtered.map((candidate) => (
-              <PopoverMenuItem
-                key={candidate.id}
-                onClick={() => {
-                  onSelect(candidate.id)
-                  setOpen(false)
-                  setQuery("")
-                }}
-                selected={selectedModel === candidate.id}
-                icon={<Box className="h-4 w-4 text-muted-foreground" />}
-                label={candidate.label}
-                description={candidate.id}
-              />
-            ))
-          )}
+          {modelsContent}
         </div>
       </PopoverContent>
     </Popover>

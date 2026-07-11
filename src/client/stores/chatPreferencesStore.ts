@@ -133,11 +133,14 @@ export function normalizeClaudePreference(value?: {
   planMode?: boolean
 }, customModels?: readonly CustomModelEntry[]): ProviderPreference<ClaudeModelOptions> {
   const reasoningEffort = value?.modelOptions?.reasoningEffort
-  const normalizedEffort = isClaudeReasoningEffort(reasoningEffort)
-    ? reasoningEffort
-    : isClaudeReasoningEffort(value?.effort)
-      ? value.effort
-      : DEFAULT_CLAUDE_MODEL_OPTIONS.reasoningEffort
+  let normalizedEffort: ClaudeModelOptions["reasoningEffort"]
+  if (isClaudeReasoningEffort(reasoningEffort)) {
+    normalizedEffort = reasoningEffort
+  } else if (isClaudeReasoningEffort(value?.effort)) {
+    normalizedEffort = value.effort
+  } else {
+    normalizedEffort = DEFAULT_CLAUDE_MODEL_OPTIONS.reasoningEffort
+  }
   const model = normalizeClaudeModelId(value?.model, undefined, customModels)
   const contextWindow = normalizeClaudeContextWindow(model, value?.modelOptions?.contextWindow, customModels)
 
@@ -158,14 +161,18 @@ export function normalizeCodexPreference(value?: {
   planMode?: boolean
 }, customModels?: readonly CustomModelEntry[]): ProviderPreference<CodexModelOptions> {
   const reasoningEffort = value?.modelOptions?.reasoningEffort
+  let normalizedCodexEffort: CodexModelOptions["reasoningEffort"]
+  if (isCodexReasoningEffort(reasoningEffort)) {
+    normalizedCodexEffort = reasoningEffort
+  } else if (isCodexReasoningEffort(value?.effort)) {
+    normalizedCodexEffort = value.effort
+  } else {
+    normalizedCodexEffort = DEFAULT_CODEX_MODEL_OPTIONS.reasoningEffort
+  }
   return {
     model: normalizeCodexModelId(value?.model, undefined, customModels),
     modelOptions: {
-      reasoningEffort: isCodexReasoningEffort(reasoningEffort)
-        ? reasoningEffort
-        : isCodexReasoningEffort(value?.effort)
-          ? value.effort
-          : DEFAULT_CODEX_MODEL_OPTIONS.reasoningEffort,
+      reasoningEffort: normalizedCodexEffort,
       fastMode: typeof value?.modelOptions?.fastMode === "boolean"
         ? value.modelOptions.fastMode
         : DEFAULT_CODEX_MODEL_OPTIONS.fastMode,
@@ -565,52 +572,64 @@ export const useChatPreferencesStore = create<ChatPreferencesState>()(
       setProviderDefaultModel: (provider, model) =>
         set((state) => {
           const customModels = currentCustomModels()
+          if (provider === "claude") {
+            return {
+              providerDefaults: {
+                ...state.providerDefaults,
+                [provider]: normalizeClaudePreference({ ...state.providerDefaults.claude, model }, customModels),
+              },
+            }
+          }
+          if (provider === "openrouter") {
+            return {
+              providerDefaults: {
+                ...state.providerDefaults,
+                [provider]: { ...state.providerDefaults.openrouter, model },
+              },
+            }
+          }
           return {
             providerDefaults: {
               ...state.providerDefaults,
-              [provider]: provider === "claude"
-                ? normalizeClaudePreference({
-                  ...state.providerDefaults.claude,
-                  model,
-                }, customModels)
-                : provider === "openrouter"
-                  ? {
-                    ...state.providerDefaults.openrouter,
-                    model,
-                  }
-                  : normalizeCodexPreference({
-                    ...state.providerDefaults.codex,
-                    model,
-                  }, customModels),
+              [provider]: normalizeCodexPreference({ ...state.providerDefaults.codex, model }, customModels),
             },
           }
         }),
       setProviderDefaultModelOptions: (provider, modelOptions) =>
         set((state) => {
           const customModels = currentCustomModels()
-          return {
-            providerDefaults: {
-              ...state.providerDefaults,
-              [provider]: provider === "claude"
-                ? normalizeClaudePreference({
+          if (provider === "claude") {
+            return {
+              providerDefaults: {
+                ...state.providerDefaults,
+                [provider]: normalizeClaudePreference({
                   ...state.providerDefaults.claude,
                   modelOptions: {
                     ...state.providerDefaults.claude.modelOptions,
                     ...modelOptions as Partial<ClaudeModelOptions>,
                   },
-                }, customModels)
-                : provider === "openrouter"
-                  ? {
-                    ...state.providerDefaults.openrouter,
-                    modelOptions: {},
-                  }
-                  : normalizeCodexPreference({
-                    ...state.providerDefaults.codex,
-                    modelOptions: {
-                      ...state.providerDefaults.codex.modelOptions,
-                      ...modelOptions as Partial<CodexModelOptions>,
-                    },
-                  }, customModels),
+                }, customModels),
+              },
+            }
+          }
+          if (provider === "openrouter") {
+            return {
+              providerDefaults: {
+                ...state.providerDefaults,
+                [provider]: { ...state.providerDefaults.openrouter, modelOptions: {} },
+              },
+            }
+          }
+          return {
+            providerDefaults: {
+              ...state.providerDefaults,
+              [provider]: normalizeCodexPreference({
+                ...state.providerDefaults.codex,
+                modelOptions: {
+                  ...state.providerDefaults.codex.modelOptions,
+                  ...modelOptions as Partial<CodexModelOptions>,
+                },
+              }, customModels),
             },
           }
         }),

@@ -188,6 +188,15 @@ function ModelEditor({
     }
   }
 
+  let submitLabel: string
+  if (submitting) {
+    submitLabel = "Saving…"
+  } else if (isEdit) {
+    submitLabel = "Save changes"
+  } else {
+    submitLabel = "Add model"
+  }
+
   return (
     <div className="flex flex-col gap-4 px-6 py-6">
       <h2 className="text-base font-medium">{isEdit ? "Edit model" : "Add model"}</h2>
@@ -246,7 +255,7 @@ function ModelEditor({
           }}
           disabled={!canSave}
         >
-          {submitting ? "Saving…" : isEdit ? "Save changes" : "Add model"}
+          {submitLabel}
         </Button>
         <Button variant="ghost" onClick={onDone} disabled={submitting}>
           Cancel

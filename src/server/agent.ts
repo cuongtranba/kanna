@@ -773,9 +773,14 @@ export function normalizeClaudeStreamMessage(message: ClaudeRawSdkMessage): Tran
         const match = /API Error:\s*(\d{3})/i.exec(joinedText)
         return match ? Number.parseInt(match[1], 10) : undefined
       })()
-      const requestId = typeof message.request_id === "string"
-        ? message.request_id
-        : (typeof message.requestId === "string" ? message.requestId : undefined)
+      let requestId: string | undefined
+      if (typeof message.request_id === "string") {
+        requestId = message.request_id
+      } else if (typeof message.requestId === "string") {
+        requestId = message.requestId
+      } else {
+        requestId = undefined
+      }
       // A deliberate model refusal (Usage-Policy / cyber-safeguard block) is NOT
       // a transport error — it carries stop_reason "refusal" and/or the policy
       // phrase. Surface it as its own `policy_refusal` kind so the UI labels it
@@ -926,11 +931,14 @@ export function normalizeClaudeStreamMessage(message: ClaudeRawSdkMessage): Tran
   // `system/turn_duration` instead (per canon/shannon research). Synthesize a
   // turn-end `result` so the agent loop and UI see the turn complete.
   if (message.type === "system" && message.subtype === "turn_duration") {
-    const durationMs = typeof message.durationMs === "number"
-      ? message.durationMs
-      : typeof message.duration_ms === "number"
-        ? message.duration_ms
-        : 0
+    let durationMs: number
+    if (typeof message.durationMs === "number") {
+      durationMs = message.durationMs
+    } else if (typeof message.duration_ms === "number") {
+      durationMs = message.duration_ms
+    } else {
+      durationMs = 0
+    }
     const pendingWorkflowCount = typeof message.pendingWorkflowCount === "number"
       ? message.pendingWorkflowCount
       : undefined
@@ -3924,33 +3932,36 @@ export class AgentCoordinator {
       ? Math.min(detection.resetAt, earliestPoolUnlimit)
       : detection.resetAt
 
-    const event: AutoContinueEvent = canRotate
-      ? {
-          ...base,
-          kind: "auto_continue_accepted",
-          scheduledAt: now + TOKEN_ROTATION_SCHEDULE_DELAY_MS + slot.extraDelayMs,
-          tz: detection.tz,
-          source: "token_rotation",
-          resetAt: detection.resetAt,
-          detectedAt: now,
-        }
-      : this.resolveAutoResumeFor(chatId)
-        ? {
-            ...base,
-            kind: "auto_continue_accepted",
-            scheduledAt: waitUntil,
-            tz: detection.tz,
-            source: "auto_setting",
-            resetAt: waitUntil,
-            detectedAt: now,
-          }
-        : {
-            ...base,
-            kind: "auto_continue_proposed",
-            detectedAt: now,
-            resetAt: waitUntil,
-            tz: detection.tz,
-          }
+    let event: AutoContinueEvent
+    if (canRotate) {
+      event = {
+        ...base,
+        kind: "auto_continue_accepted",
+        scheduledAt: now + TOKEN_ROTATION_SCHEDULE_DELAY_MS + slot.extraDelayMs,
+        tz: detection.tz,
+        source: "token_rotation",
+        resetAt: detection.resetAt,
+        detectedAt: now,
+      }
+    } else if (this.resolveAutoResumeFor(chatId)) {
+      event = {
+        ...base,
+        kind: "auto_continue_accepted",
+        scheduledAt: waitUntil,
+        tz: detection.tz,
+        source: "auto_setting",
+        resetAt: waitUntil,
+        detectedAt: now,
+      }
+    } else {
+      event = {
+        ...base,
+        kind: "auto_continue_proposed",
+        detectedAt: now,
+        resetAt: waitUntil,
+        tz: detection.tz,
+      }
+    }
 
     await this.emitAutoContinueEvent(event)
     if (canRotate && session) {

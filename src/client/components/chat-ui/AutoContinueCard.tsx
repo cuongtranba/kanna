@@ -21,8 +21,14 @@ export function AutoContinueCard({ schedule, onAccept, onReschedule, onCancel }:
   const parsed = useMemo(() => parseLocal(draft, schedule.tz), [draft, schedule.tz])
   // eslint-disable-next-line react-hooks/purity
   const isFuture = parsed !== null && parsed > Date.now()
-  const inputInvalid = parsed === null ? "Use format dd/mm/yyyy hh:mm" :
-    !isFuture ? "Time must be in the future" : null
+  let inputInvalid: string | null
+  if (parsed === null) {
+    inputInvalid = "Use format dd/mm/yyyy hh:mm"
+  } else if (!isFuture) {
+    inputInvalid = "Time must be in the future"
+  } else {
+    inputInvalid = null
+  }
 
   if (schedule.state === "fired") {
     const at = formatLocal(schedule.scheduledAt ?? schedule.resetAt, schedule.tz)

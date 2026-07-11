@@ -23,6 +23,23 @@ function QuestionCard({
 }) {
   const showBackButton = onBack && currentIndex > 0
   const hasMeta = showBackButton || totalQuestions > 1 || Boolean(header)
+  let backOrProgress: React.ReactNode
+  if (showBackButton) {
+    backOrProgress = (
+      <button
+        onClick={onBack}
+        className="text-muted-foreground hover:opacity-60 transition-all flex items-center"
+      >
+        <ChevronLeft className="h-4 w-4 -ml-0.5" strokeWidth={3} />
+      </button>
+    )
+  } else if (totalQuestions > 1) {
+    backOrProgress = (
+      <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground whitespace-nowrap">{currentIndex + 1} of {totalQuestions}</span>
+    )
+  } else {
+    backOrProgress = null
+  }
 
   return (
     <div className="rounded-2xl border border-border overflow-hidden">
@@ -30,16 +47,7 @@ function QuestionCard({
         <div className="p-3 px-4 bg-card border-b border-border">
           {hasMeta && (
             <div className="flex flex-row items-center gap-2 mb-1">
-              {showBackButton ? (
-                <button
-                  onClick={onBack}
-                  className="text-muted-foreground hover:opacity-60 transition-all flex items-center"
-                >
-                  <ChevronLeft className="h-4 w-4 -ml-0.5" strokeWidth={3} />
-                </button>
-              ) : totalQuestions > 1 ? (
-                <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground whitespace-nowrap">{currentIndex + 1} of {totalQuestions}</span>
-              ) : null}
+              {backOrProgress}
               {header ? (
                 <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground text-pretty">{header}</span>
               ) : null}

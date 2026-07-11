@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react"
+import { useState, useRef, useEffect, type ReactNode } from "react"
 import { Check, CheckCheck, Pencil, CornerDownLeft, ChevronDown, Copy, Send } from "lucide-react"
 import type { ProcessedToolCall } from "./types"
 import { Button } from "../ui/button"
@@ -37,6 +37,127 @@ export function ExitPlanModeMessage({ message, onConfirm, isLatest }: Props) {
 
   const result = isComplete ? message.result : null
   const isDiscarded = result?.discarded === true
+
+  let resultLabel: string
+  if (isDiscarded) {
+    resultLabel = "Discarded"
+  } else if (result?.clearContext) {
+    resultLabel = "Approved & Cleared Context"
+  } else if (result?.confirmed) {
+    resultLabel = "Approved"
+  } else if (result?.message) {
+    resultLabel = `Adjusted: "${result.message}"`
+  } else {
+    resultLabel = "Adjusted Plan"
+  }
+
+  let planFooter: ReactNode
+  if (isComplete) {
+    planFooter = (
+      <div className="flex justify-end mx-2">
+        <span
+          className="pl-4 inline text-sm font-medium bg-background text-foreground/60 border border-border py-1.5 px-3 rounded-[20px] leading-relaxed max-w-[85%] sm:max-w-[80%]"
+        >
+          <em>{resultLabel}</em>
+          <CornerDownLeft className="inline h-4 w-4 ml-1.5 -mt-0.5" />
+        </span>
+      </div>
+    )
+  } else if (!isLatest) {
+    planFooter = (
+      <div className="flex justify-end mx-2">
+        <span className="inline text-sm text-muted-foreground italic">Plan pending (newer prompt active)</span>
+      </div>
+    )
+  } else if (renderOptions.readonly) {
+    planFooter = (
+      <div className="flex justify-end mx-2">
+        <span className="inline text-sm text-muted-foreground italic">Plan pending in original session</span>
+      </div>
+    )
+  } else {
+    planFooter = (
+      <div className="flex flex-col gap-3">
+        {!showEditInput && (
+          <div className="flex flex-col md:flex-row items-stretch md:items-center justify-end gap-2 mx-2">
+            <Button
+              size="sm"
+              onClick={() => onConfirm(message.toolId, true, true)}
+              className="rounded-full bg-primary text-background pr-4 md:order-last"
+            >
+              <CheckCheck className="h-4 w-4 mr-1.5" />
+              Approve & Clear
+            </Button>
+            <div className="flex items-stretch md:items-center gap-2 md:contents">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setShowEditInput(true)}
+                className="rounded-full border-border flex-1 md:flex-initial md:order-first"
+              >
+                <Pencil className="h-4 w-4 mr-1.5" />
+                Suggest Edits
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => onConfirm(message.toolId, true)}
+                className="rounded-full border-border flex-1 md:flex-initial"
+              >
+                <Check className="h-4 w-4 mr-1.5" />
+                Approve
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {showEditInput && (
+          <div className="flex flex-col gap-2">
+            <textarea
+              ref={textareaRef}
+              value={editMessage}
+              onChange={(e) => setEditMessage(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey && editMessage.trim()) {
+                  e.preventDefault()
+                  onConfirm(message.toolId, false, undefined, editMessage.trim())
+                }
+                if (e.key === "Escape") {
+                  setShowEditInput(false)
+                  setEditMessage("")
+                }
+              }}
+              placeholder="Describe what you'd like to change..."
+              rows={3}
+              className="w-full rounded-2xl border border-border bg-muted dark:bg-card px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground resize-none outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+            />
+            <div className="flex items-center justify-end gap-2 mx-2">
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => {
+                  setShowEditInput(false)
+                  setEditMessage("")
+                }}
+                className="rounded-full text-muted-foreground"
+              >
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                disabled={!editMessage.trim()}
+                onClick={() => onConfirm(message.toolId, false, undefined, editMessage.trim())}
+                className="rounded-full bg-primary text-background disabled:opacity-50 disabled:pointer-events-none"
+              >
+                <Send className="h-4 w-4 mr-1.5" />
+                Adjust Plan
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
+    )
+  }
 
   return (
     <div className="flex flex-col gap-3">
@@ -82,110 +203,7 @@ export function ExitPlanModeMessage({ message, onConfirm, isLatest }: Props) {
         </div>
       </div>
 
-      {isComplete ? (
-        <div className="flex justify-end mx-2">
-          <span
-            className="pl-4 inline text-sm font-medium bg-background text-foreground/60 border border-border py-1.5 px-3 rounded-[20px] leading-relaxed max-w-[85%] sm:max-w-[80%]"
-          >
-            <em>{
-              isDiscarded ? "Discarded"
-              : result?.clearContext ? "Approved & Cleared Context"
-              : result?.confirmed ? "Approved"
-              : result?.message ? `Adjusted: "${result.message}"`
-              : "Adjusted Plan"
-            }</em>
-            <CornerDownLeft className="inline h-4 w-4 ml-1.5 -mt-0.5" />
-          </span>
-        </div>
-      ) : !isLatest ? (
-        <div className="flex justify-end mx-2">
-          <span className="inline text-sm text-muted-foreground italic">Plan pending (newer prompt active)</span>
-        </div>
-      ) : renderOptions.readonly ? (
-        <div className="flex justify-end mx-2">
-          <span className="inline text-sm text-muted-foreground italic">Plan pending in original session</span>
-        </div>
-      ) : (
-        <div className="flex flex-col gap-3">
-          {!showEditInput && (
-            <div className="flex flex-col md:flex-row items-stretch md:items-center justify-end gap-2 mx-2">
-              <Button
-                size="sm"
-                onClick={() => onConfirm(message.toolId, true, true)}
-                className="rounded-full bg-primary text-background pr-4 md:order-last"
-              >
-                <CheckCheck className="h-4 w-4 mr-1.5" />
-                Approve & Clear
-              </Button>
-              <div className="flex items-stretch md:items-center gap-2 md:contents">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => setShowEditInput(true)}
-                  className="rounded-full border-border flex-1 md:flex-initial md:order-first"
-                >
-                  <Pencil className="h-4 w-4 mr-1.5" />
-                  Suggest Edits
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => onConfirm(message.toolId, true)}
-                  className="rounded-full border-border flex-1 md:flex-initial"
-                >
-                  <Check className="h-4 w-4 mr-1.5" />
-                  Approve
-                </Button>
-              </div>
-            </div>
-          )}
-
-          {showEditInput && (
-            <div className="flex flex-col gap-2">
-              <textarea
-                ref={textareaRef}
-                value={editMessage}
-                onChange={(e) => setEditMessage(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey && editMessage.trim()) {
-                    e.preventDefault()
-                    onConfirm(message.toolId, false, undefined, editMessage.trim())
-                  }
-                  if (e.key === "Escape") {
-                    setShowEditInput(false)
-                    setEditMessage("")
-                  }
-                }}
-                placeholder="Describe what you'd like to change..."
-                rows={3}
-                className="w-full rounded-2xl border border-border bg-muted dark:bg-card px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground resize-none outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-              />
-              <div className="flex items-center justify-end gap-2 mx-2">
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => {
-                    setShowEditInput(false)
-                    setEditMessage("")
-                  }}
-                  className="rounded-full text-muted-foreground"
-                >
-                  Cancel
-                </Button>
-                <Button
-                  size="sm"
-                  disabled={!editMessage.trim()}
-                  onClick={() => onConfirm(message.toolId, false, undefined, editMessage.trim())}
-                  className="rounded-full bg-primary text-background disabled:opacity-50 disabled:pointer-events-none"
-                >
-                  <Send className="h-4 w-4 mr-1.5" />
-                  Adjust Plan
-                </Button>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
+      {planFooter}
     </div>
   )
 }

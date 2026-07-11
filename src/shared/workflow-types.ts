@@ -109,6 +109,23 @@ export function parseWorkflowRunFile(raw: unknown): WorkflowRun | null {
   const rawStatus = str(r.status)
   const status: WorkflowStatus = rawStatus && KNOWN_STATUS.has(rawStatus) ? (rawStatus as WorkflowStatus) : "unknown"
   const resultVal = r.result
+  let resultStr: string | null
+  if (typeof resultVal === "string") {
+    resultStr = resultVal
+  } else if (resultVal == null) {
+    resultStr = null
+  } else {
+    resultStr = JSON.stringify(resultVal)
+  }
+  const argsVal = r.args
+  let argsStr: string | undefined
+  if (typeof argsVal === "string") {
+    argsStr = argsVal
+  } else if (argsVal == null) {
+    argsStr = undefined
+  } else {
+    argsStr = JSON.stringify(argsVal)
+  }
   return {
     runId,
     taskId: str(r.taskId),
@@ -121,12 +138,12 @@ export function parseWorkflowRunFile(raw: unknown): WorkflowRun | null {
     totalToolCalls: num(r.totalToolCalls),
     phases: parsePhases(r.phases),
     agents: parseAgents(r.workflowProgress),
-    result: typeof resultVal === "string" ? resultVal : resultVal == null ? null : JSON.stringify(resultVal),
+    result: resultStr,
     error: str(r.error) ?? (r.error == null ? null : String(r.error)),
     summary: str(r.summary) ?? null,
     script: str(r.script),
     scriptPath: str(r.scriptPath),
-    args: typeof r.args === "string" ? r.args : r.args == null ? undefined : JSON.stringify(r.args),
+    args: argsStr,
   }
 }
 

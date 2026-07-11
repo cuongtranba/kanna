@@ -1242,9 +1242,7 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
               aria-label={canCancel ? "Stop" : "Send message"}
               className="flex-shrink-0 bg-primary text-background rounded-full cursor-pointer h-11 w-11 mb-1 -mr-0.5 md:mr-0 md:mb-1.5 touch-manipulation disabled:opacity-50"
             >
-              {hasTextToSend ? (
-                <ArrowUp className="h-5 w-5 md:h-6 md:w-6" />
-              ) : canCancel ? (
+              {canCancel && !hasTextToSend ? (
                 <div className="w-3 h-3 md:w-4 md:h-4 rounded-xs bg-current" />
               ) : (
                 <ArrowUp className="h-5 w-5 md:h-6 md:w-6" />

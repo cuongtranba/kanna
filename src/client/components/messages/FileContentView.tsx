@@ -91,7 +91,14 @@ function buildRawDiff(oldLines: string[], newLines: string[], dp: number[][]): R
 
 function buildDiffLines(rawDiff: RawLine[]): DiffLine[] {
   return rawDiff.map((d) => {
-    const prefix = d.type === "removed" ? "-" : d.type === "added" ? "+" : " "
+    let prefix: string
+    if (d.type === "removed") {
+      prefix = "-"
+    } else if (d.type === "added") {
+      prefix = "+"
+    } else {
+      prefix = " "
+    }
     return { type: d.type, content: `${prefix}${d.text}` }
   })
 }
@@ -125,24 +132,46 @@ export function FileContentView({ content, isDiff = false, oldString, newString 
           <table className="w-full border-collapse text-xs font-mono">
             <tbody>
               {diffLines.map((line, i) => {
-                const bg =
-                  line.type === "removed"
-                    ? "bg-destructive/10 dark:bg-destructive/15"
-                    : line.type === "added"
-                      ? "bg-success/10 dark:bg-success/15"
-                      : ""
+                let bg: string
+                if (line.type === "removed") {
+                  bg = "bg-destructive/10 dark:bg-destructive/15"
+                } else if (line.type === "added") {
+                  bg = "bg-success/10 dark:bg-success/15"
+                } else {
+                  bg = ""
+                }
 
-                const textColor =
-                  line.type === "removed"
-                    ? "text-destructive"
-                    : line.type === "added"
-                      ? "text-success"
-                      : "text-foreground"
+                let textColor: string
+                if (line.type === "removed") {
+                  textColor = "text-destructive"
+                } else if (line.type === "added") {
+                  textColor = "text-success"
+                } else {
+                  textColor = "text-foreground"
+                }
+
+                let gutterColor: string
+                if (line.type === "removed") {
+                  gutterColor = "text-destructive/50"
+                } else if (line.type === "added") {
+                  gutterColor = "text-success/50"
+                } else {
+                  gutterColor = "text-muted-foreground/50"
+                }
+
+                let gutterChar: string
+                if (line.type === "removed") {
+                  gutterChar = "-"
+                } else if (line.type === "added") {
+                  gutterChar = "+"
+                } else {
+                  gutterChar = " "
+                }
 
                 return (
                   <tr key={i} className={bg}>
-                    <td className={`px-2 py-0 select-none w-0 whitespace-nowrap ${line.type === "removed" ? "text-destructive/50" : line.type === "added" ? "text-success/50" : "text-muted-foreground/50"}`}>
-                      {line.type === "removed" ? "-" : line.type === "added" ? "+" : " "}
+                    <td className={`px-2 py-0 select-none w-0 whitespace-nowrap ${gutterColor}`}>
+                      {gutterChar}
                     </td>
                     <td className={`px-2 py-0 whitespace-pre select-all ${textColor}`}>
                       {line.content.slice(1)}

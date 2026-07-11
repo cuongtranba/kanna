@@ -403,6 +403,15 @@ function McpServerEditor({
     url,
   ])
 
+  let submitLabel: string
+  if (submitting) {
+    submitLabel = "Saving…"
+  } else if (initial) {
+    submitLabel = "Save changes"
+  } else {
+    submitLabel = "Add server"
+  }
+
   return (
     <div className="flex flex-col gap-4 px-6 py-6 max-w-2xl">
       <h2 className="text-base font-medium">
@@ -628,7 +637,7 @@ function McpServerEditor({
           }}
           disabled={submitting || Boolean(nameError) || name.length === 0}
         >
-          {submitting ? "Saving…" : initial ? "Save changes" : "Add server"}
+          {submitLabel}
         </Button>
       </div>
     </div>

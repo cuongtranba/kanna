@@ -186,6 +186,15 @@ export function OpenExternalSelect({
     openAppValue({ value, editorCommandTemplate, onOpenExternal })
   }
 
+  let tooltipShortcut: typeof finderShortcut | undefined
+  if (lastValue === "finder") {
+    tooltipShortcut = finderShortcut
+  } else if (lastValue === `editor:${editorPreset}`) {
+    tooltipShortcut = editorShortcut
+  } else {
+    tooltipShortcut = undefined
+  }
+
   return (
     <div className="grid grid-cols-[1fr_auto]">
       <HotkeyTooltip>
@@ -202,7 +211,7 @@ export function OpenExternalSelect({
         </HotkeyTooltipTrigger>
         <HotkeyTooltipContent
           side="bottom"
-          shortcut={lastValue === "finder" ? finderShortcut : lastValue === `editor:${editorPreset}` ? editorShortcut : undefined}
+          shortcut={tooltipShortcut}
         />
       </HotkeyTooltip>
       <Select value={undefined} onValueChange={(value) => handleOpenValue(value as OpenAppValue)}>

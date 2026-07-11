@@ -166,6 +166,15 @@ function SnippetEditor({
     }
   }
 
+  let submitLabel: string
+  if (submitting) {
+    submitLabel = "Saving…"
+  } else if (isEdit) {
+    submitLabel = "Save changes"
+  } else {
+    submitLabel = "Add snippet"
+  }
+
   return (
     <div className="flex flex-col gap-4 px-6 py-6">
       <h2 className="text-base font-medium">{isEdit ? "Edit snippet" : "Add snippet"}</h2>
@@ -208,7 +217,7 @@ function SnippetEditor({
           }}
           disabled={!canSave}
         >
-          {submitting ? "Saving…" : isEdit ? "Save changes" : "Add snippet"}
+          {submitLabel}
         </Button>
         <Button variant="ghost" onClick={onDone} disabled={submitting}>
           Cancel

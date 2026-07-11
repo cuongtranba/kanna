@@ -73,9 +73,12 @@ export function parseResetFromText(text: string, nowMs: number = Date.now()): { 
   const tz = match[4].trim()
   if (!Number.isFinite(hour12) || hour12 < 1 || hour12 > 12) return null
   if (!Number.isFinite(minute) || minute < 0 || minute > 59) return null
-  const hour24 = meridiem === "pm"
-    ? (hour12 === 12 ? 12 : hour12 + 12)
-    : (hour12 === 12 ? 0 : hour12)
+  let hour24: number
+  if (meridiem === "pm") {
+    hour24 = hour12 === 12 ? 12 : hour12 + 12
+  } else {
+    hour24 = hour12 === 12 ? 0 : hour12
+  }
   let tzYear: number, tzMonth: number, tzDay: number
   try {
     const dtf = new Intl.DateTimeFormat("en-US", {

@@ -28,19 +28,21 @@ export function shouldAutoFollowTranscriptResize(
 }
 
 export function serializeBranchSelection(branch: ChatBranchListEntry) {
-  return branch.kind === "local"
-    ? { kind: "local" as const, name: branch.name }
-    : branch.kind === "remote"
-      ? { kind: "remote" as const, name: branch.name, remoteRef: branch.remoteRef ?? branch.displayName }
-      : {
-          kind: "pull_request" as const,
-          name: branch.name,
-          prNumber: branch.prNumber ?? 0,
-          headRefName: branch.headRefName ?? branch.name,
-          headRepoCloneUrl: branch.headRepoCloneUrl,
-          isCrossRepository: branch.isCrossRepository,
-          remoteRef: branch.remoteRef,
-        }
+  if (branch.kind === "local") {
+    return { kind: "local" as const, name: branch.name }
+  }
+  if (branch.kind === "remote") {
+    return { kind: "remote" as const, name: branch.name, remoteRef: branch.remoteRef ?? branch.displayName }
+  }
+  return {
+    kind: "pull_request" as const,
+    name: branch.name,
+    prNumber: branch.prNumber ?? 0,
+    headRefName: branch.headRefName ?? branch.name,
+    headRepoCloneUrl: branch.headRepoCloneUrl,
+    isCrossRepository: branch.isCrossRepository,
+    remoteRef: branch.remoteRef,
+  }
 }
 
 export function isInteractiveTranscriptRow(row: ResolvedTranscriptRow) {

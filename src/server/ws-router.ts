@@ -470,20 +470,26 @@ export function createWsRouter({
       apiKey: string
       model: string
       baseUrl: string
-    }) => ({
-      provider,
-      apiKey,
-      model,
-      baseUrl,
-      resolvedBaseUrl: provider === "openrouter"
-        ? "https://openrouter.ai/api/v1"
-        : provider === "custom"
-          ? baseUrl
-          : "https://api.openai.com/v1",
-      enabled: false,
-      warning: null,
-      filePathDisplay: "~/.kanna/llm-provider.json",
-    }),
+    }) => {
+      let resolvedBaseUrl: string
+      if (provider === "openrouter") {
+        resolvedBaseUrl = "https://openrouter.ai/api/v1"
+      } else if (provider === "custom") {
+        resolvedBaseUrl = baseUrl
+      } else {
+        resolvedBaseUrl = "https://api.openai.com/v1"
+      }
+      return {
+        provider,
+        apiKey,
+        model,
+        baseUrl,
+        resolvedBaseUrl,
+        enabled: false,
+        warning: null,
+        filePathDisplay: "~/.kanna/llm-provider.json",
+      }
+    },
     validate: async () => ({
       ok: false,
       error: {

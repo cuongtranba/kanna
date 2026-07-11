@@ -1721,11 +1721,14 @@ export function useKannaState(activeChatId: string | null): KannaState {
 
   const startChatFromIntent = useCallback(async (intent: StartChatIntent) => {
     try {
-      const localPath = intent.kind === "project_id"
-        ? null
-        : intent.kind === "local_path"
-          ? intent.localPath
-          : intent.project.localPath
+      let localPath: string | null
+      if (intent.kind === "project_id") {
+        localPath = null
+      } else if (intent.kind === "local_path") {
+        localPath = intent.localPath
+      } else {
+        localPath = intent.project.localPath
+      }
       if (localPath) {
         setStartingLocalPath(localPath)
       }

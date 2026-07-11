@@ -824,13 +824,16 @@ function parseStatusPaths(output: string): DirtyPathEntry[] {
     const isRename = statusCode.includes("R")
     const isDelete = statusCode.includes("D")
     const isAdd = statusCode.includes("A") || isUntracked
-    const changeType: ChatDiffFile["changeType"] = isRename
-      ? "renamed"
-      : isDelete
-        ? "deleted"
-        : isAdd
-          ? "added"
-          : "modified"
+    let changeType: ChatDiffFile["changeType"]
+    if (isRename) {
+      changeType = "renamed"
+    } else if (isDelete) {
+      changeType = "deleted"
+    } else if (isAdd) {
+      changeType = "added"
+    } else {
+      changeType = "modified"
+    }
 
     if (isRename && value.includes(" -> ")) {
       const [previousPath, nextPath] = value.split(" -> ")
@@ -1099,11 +1102,14 @@ export function appendGitIgnoreEntry(currentContents: string | null, entry: stri
       : normalizedContents
   }
 
-  const prefix = normalizedContents.length === 0
-    ? ""
-    : normalizedContents.endsWith("\n")
-      ? normalizedContents
-      : `${normalizedContents}\n`
+  let prefix: string
+  if (normalizedContents.length === 0) {
+    prefix = ""
+  } else if (normalizedContents.endsWith("\n")) {
+    prefix = normalizedContents
+  } else {
+    prefix = `${normalizedContents}\n`
+  }
   return `${prefix}${entry}\n`
 }
 

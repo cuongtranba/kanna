@@ -296,16 +296,19 @@ type ReadStructuredImageBlock = {
 }
 
 function normalizeReadBlocks(value: unknown): Array<ReadStructuredTextBlock | ReadStructuredImageBlock> {
-  const blocks = (
+  let blocks: unknown[]
+  if (
     value
     && typeof value === "object"
     && "content" in value
     && Array.isArray((value as { content?: unknown }).content)
-  )
-    ? (value as { content: unknown[] }).content
-    : Array.isArray(value)
-      ? value
-      : []
+  ) {
+    blocks = (value as { content: unknown[] }).content
+  } else if (Array.isArray(value)) {
+    blocks = value
+  } else {
+    blocks = []
+  }
 
   const normalized: Array<ReadStructuredTextBlock | ReadStructuredImageBlock> = []
 
@@ -314,7 +317,7 @@ function normalizeReadBlocks(value: unknown): Array<ReadStructuredTextBlock | Re
       continue
     }
 
-    if (block.type === "text" && typeof block.text === "string") {
+    if (block.type === "text" && "text" in block && typeof block.text === "string") {
       normalized.push({ type: "text", text: block.text })
       continue
     }
@@ -324,7 +327,7 @@ function normalizeReadBlocks(value: unknown): Array<ReadStructuredTextBlock | Re
         normalized.push({
           type: "image",
           data: block.data,
-          mimeType: typeof block.mimeType === "string" ? block.mimeType : undefined,
+          mimeType: "mimeType" in block && typeof block.mimeType === "string" ? block.mimeType : undefined,
         })
         continue
       }
@@ -341,7 +344,7 @@ function normalizeReadBlocks(value: unknown): Array<ReadStructuredTextBlock | Re
         normalized.push({
           type: "image",
           data: block.source.data,
-          mimeType: typeof block.source.media_type === "string" ? block.source.media_type : undefined,
+          mimeType: "media_type" in block.source && typeof block.source.media_type === "string" ? block.source.media_type : undefined,
         })
       }
     }
@@ -351,23 +354,26 @@ function normalizeReadBlocks(value: unknown): Array<ReadStructuredTextBlock | Re
 }
 
 function extractMcpTextContent(value: unknown): string | null {
-  const blocks = (
+  let blocks: unknown[] | null
+  if (
     value
     && typeof value === "object"
     && "content" in value
     && Array.isArray((value as { content?: unknown }).content)
-  )
-    ? (value as { content: unknown[] }).content
-    : Array.isArray(value)
-      ? value
-      : null
+  ) {
+    blocks = (value as { content: unknown[] }).content
+  } else if (Array.isArray(value)) {
+    blocks = value
+  } else {
+    blocks = null
+  }
 
   if (!blocks) return null
 
   const parts: string[] = []
   for (const block of blocks) {
-    if (block && typeof block === "object" && "type" in block && block.type === "text" && typeof (block as { text?: unknown }).text === "string") {
-      parts.push((block as { text: string }).text)
+    if (block && typeof block === "object" && "type" in block && block.type === "text" && "text" in block && typeof block.text === "string") {
+      parts.push(block.text)
     }
   }
   return parts.length > 0 ? parts.join("") : null
@@ -417,13 +423,19 @@ export function hydrateToolResult(tool: NormalizedToolCall, raw: unknown): Hydra
       const text = extractMcpTextContent(parsed)
       const payload = text ? parseJsonValue(text) : parsed
       const record = asRecord(payload)
+      let offerDisplayName: string
+      if (typeof record?.displayName === "string") {
+        offerDisplayName = record.displayName
+      } else if (typeof record?.fileName === "string") {
+        offerDisplayName = record.fileName
+      } else {
+        offerDisplayName = ""
+      }
       return {
         contentUrl: typeof record?.contentUrl === "string" ? record.contentUrl : "",
         relativePath: typeof record?.relativePath === "string" ? record.relativePath : "",
         fileName: typeof record?.fileName === "string" ? record.fileName : "",
-        displayName: typeof record?.displayName === "string"
-          ? record.displayName
-          : typeof record?.fileName === "string" ? record.fileName : "",
+        displayName: offerDisplayName,
         size: typeof record?.size === "number" ? record.size : 0,
         ...(typeof record?.mimeType === "string" ? { mimeType: record.mimeType } : {}),
       } satisfies OfferDownloadToolResult
@@ -432,13 +444,19 @@ export function hydrateToolResult(tool: NormalizedToolCall, raw: unknown): Hydra
       const text = extractMcpTextContent(parsed)
       const payload = text ? parseJsonValue(text) : parsed
       const record = asRecord(payload)
+      let previewDisplayName: string
+      if (typeof record?.displayName === "string") {
+        previewDisplayName = record.displayName
+      } else if (typeof record?.fileName === "string") {
+        previewDisplayName = record.fileName
+      } else {
+        previewDisplayName = ""
+      }
       return {
         contentUrl: typeof record?.contentUrl === "string" ? record.contentUrl : "",
         relativePath: typeof record?.relativePath === "string" ? record.relativePath : "",
         fileName: typeof record?.fileName === "string" ? record.fileName : "",
-        displayName: typeof record?.displayName === "string"
-          ? record.displayName
-          : typeof record?.fileName === "string" ? record.fileName : "",
+        displayName: previewDisplayName,
         size: typeof record?.size === "number" ? record.size : 0,
         mimeType: typeof record?.mimeType === "string" ? record.mimeType : "application/octet-stream",
       } satisfies PreviewFileToolResult

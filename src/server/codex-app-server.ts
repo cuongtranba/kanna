@@ -1316,12 +1316,14 @@ export class CodexAppServerManager {
           .map((entry) => asRecord(entry))
           .filter((entry): entry is Record<string, unknown> => Boolean(entry))
           .map((entry) => {
-            const status: TurnPlanStep["status"] =
-              entry.status === "completed"
-                ? "completed"
-                : entry.status === "inProgress" || entry.status === "in_progress"
-                  ? "inProgress"
-                  : "pending"
+            let status: TurnPlanStep["status"]
+            if (entry.status === "completed") {
+              status = "completed"
+            } else if (entry.status === "inProgress" || entry.status === "in_progress") {
+              status = "inProgress"
+            } else {
+              status = "pending"
+            }
             return {
               step: typeof entry.step === "string" ? entry.step : "",
               status,
@@ -1448,7 +1450,7 @@ export class CodexAppServerManager {
         return
       case "error":
         this.failContext(context, notification.params.error.message)
-        return
+        break
       default:
         
     }
@@ -1653,11 +1655,19 @@ export class CodexAppServerManager {
           ...(last.cachedInputTokens !== undefined ? { cachedInputTokens: last.cachedInputTokens } : {}),
         }
       : undefined
+    let subtype: "cancelled" | "error" | "success"
+    if (isCancelled) {
+      subtype = "cancelled"
+    } else if (isError) {
+      subtype = "error"
+    } else {
+      subtype = "success"
+    }
     pendingTurn.queue.push({
       type: "transcript",
       entry: timestamped({
         kind: "result",
-        subtype: isCancelled ? "cancelled" : isError ? "error" : "success",
+        subtype,
         isError,
         durationMs: 0,
         result: notification.turn.error?.message ?? "",

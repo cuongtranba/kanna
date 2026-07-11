@@ -274,11 +274,14 @@ function normalizeClaudePreference(value?: {
 }, customModels?: readonly CustomModelEntry[]): ProviderPreference<ClaudeModelOptions> {
   const model = normalizeClaudeModelId(typeof value?.model === "string" ? value.model : undefined, undefined, customModels)
   const reasoningEffort = value?.modelOptions?.reasoningEffort
-  const normalizedEffort = isClaudeReasoningEffort(reasoningEffort)
-    ? reasoningEffort
-    : isClaudeReasoningEffort(value?.effort)
-      ? value.effort
-      : DEFAULT_CLAUDE_MODEL_OPTIONS.reasoningEffort
+  let normalizedEffort: ClaudeModelOptions["reasoningEffort"]
+  if (isClaudeReasoningEffort(reasoningEffort)) {
+    normalizedEffort = reasoningEffort
+  } else if (isClaudeReasoningEffort(value?.effort)) {
+    normalizedEffort = value.effort
+  } else {
+    normalizedEffort = DEFAULT_CLAUDE_MODEL_OPTIONS.reasoningEffort
+  }
 
   return {
     model,
@@ -297,14 +300,18 @@ function normalizeCodexPreference(value?: {
   planMode?: unknown
 }, customModels?: readonly CustomModelEntry[]): ProviderPreference<CodexModelOptions> {
   const reasoningEffort = value?.modelOptions?.reasoningEffort
+  let normalizedCodexEffort: CodexModelOptions["reasoningEffort"]
+  if (isCodexReasoningEffort(reasoningEffort)) {
+    normalizedCodexEffort = reasoningEffort
+  } else if (isCodexReasoningEffort(value?.effort)) {
+    normalizedCodexEffort = value.effort
+  } else {
+    normalizedCodexEffort = DEFAULT_CODEX_MODEL_OPTIONS.reasoningEffort
+  }
   return {
     model: normalizeCodexModelId(typeof value?.model === "string" ? value.model : undefined, undefined, customModels),
     modelOptions: {
-      reasoningEffort: isCodexReasoningEffort(reasoningEffort)
-        ? reasoningEffort
-        : isCodexReasoningEffort(value?.effort)
-          ? value.effort
-          : DEFAULT_CODEX_MODEL_OPTIONS.reasoningEffort,
+      reasoningEffort: normalizedCodexEffort,
       fastMode: typeof value?.modelOptions?.fastMode === "boolean"
         ? value.modelOptions.fastMode
         : DEFAULT_CODEX_MODEL_OPTIONS.fastMode,
@@ -1106,21 +1113,37 @@ function applyMcpPatch(existing: McpServerConfig, patch: McpServerPatch): McpSer
     lastTest: existing.lastTest,
   }
   if (transport === "stdio") {
+    let cwd: string | undefined
+    if (patch.cwd !== undefined) {
+      cwd = patch.cwd
+    } else if (existing.transport === "stdio") {
+      cwd = existing.cwd
+    } else {
+      cwd = undefined
+    }
     return {
       ...shared,
       transport: "stdio",
       command: patch.command ?? (existing.transport === "stdio" ? existing.command : ""),
       args: patch.args ?? (existing.transport === "stdio" ? existing.args : []),
       env: patch.env ?? (existing.transport === "stdio" ? existing.env : {}),
-      cwd: patch.cwd !== undefined ? patch.cwd : existing.transport === "stdio" ? existing.cwd : undefined,
+      cwd,
     }
+  }
+  let oauthSpread: { oauth?: McpOAuthState }
+  if (patch.oauth !== undefined) {
+    oauthSpread = { oauth: patch.oauth }
+  } else if (existing.transport !== "stdio" && existing.oauth !== undefined) {
+    oauthSpread = { oauth: existing.oauth }
+  } else {
+    oauthSpread = {}
   }
   return {
     ...shared,
     transport,
     url: patch.url ?? (existing.transport !== "stdio" ? existing.url : ""),
     headers: patch.headers ?? (existing.transport !== "stdio" ? existing.headers : {}),
-    ...(patch.oauth !== undefined ? { oauth: patch.oauth } : existing.transport !== "stdio" && existing.oauth !== undefined ? { oauth: existing.oauth } : {}),
+    ...oauthSpread,
   }
 }
 
@@ -1349,34 +1372,40 @@ function applyPatch(state: AppSettingsState, patch: AppSettingsPatch): AppSettin
       if (error) throw new SubagentValidationException(error)
     }
     const nextProvider = subagentPatch.provider ?? existing.provider
-    const nextWorkingDir = subagentPatch.workingDir === null
-      ? undefined
-      : subagentPatch.workingDir !== undefined ? subagentPatch.workingDir : existing.workingDir
-    const nextAllowedPaths = subagentPatch.allowedPaths === null
-      ? undefined
-      : subagentPatch.allowedPaths !== undefined ? subagentPatch.allowedPaths : existing.allowedPaths
+    let nextWorkingDir: string | undefined
+    if (subagentPatch.workingDir === null) {
+      nextWorkingDir = undefined
+    } else if (subagentPatch.workingDir !== undefined) {
+      nextWorkingDir = subagentPatch.workingDir
+    } else {
+      nextWorkingDir = existing.workingDir
+    }
+    let nextAllowedPaths: string[] | undefined
+    if (subagentPatch.allowedPaths === null) {
+      nextAllowedPaths = undefined
+    } else if (subagentPatch.allowedPaths !== undefined) {
+      nextAllowedPaths = subagentPatch.allowedPaths
+    } else {
+      nextAllowedPaths = existing.allowedPaths
+    }
     const restrictionError = validateSubagentRestriction(nextProvider, nextWorkingDir, nextAllowedPaths)
     if (restrictionError) throw new SubagentValidationException(restrictionError)
+    let descriptionValue: string | undefined
+    if (subagentPatch.description === null) {
+      descriptionValue = undefined
+    } else if (subagentPatch.description !== undefined) {
+      descriptionValue = subagentPatch.description.trim() || undefined
+    } else {
+      descriptionValue = existing.description
+    }
     const merged: Subagent = {
       ...existing,
       ...subagentPatch,
       name: nextName,
-      description: subagentPatch.description === null
-        ? undefined
-        : subagentPatch.description !== undefined
-          ? subagentPatch.description.trim() || undefined
-          : existing.description,
+      description: descriptionValue,
       modelOptions: { ...existing.modelOptions, ...(subagentPatch.modelOptions ?? {}) } as Subagent["modelOptions"],
-      workingDir: subagentPatch.workingDir === null
-        ? undefined
-        : subagentPatch.workingDir !== undefined
-          ? subagentPatch.workingDir
-          : existing.workingDir,
-      allowedPaths: subagentPatch.allowedPaths === null
-        ? undefined
-        : subagentPatch.allowedPaths !== undefined
-          ? subagentPatch.allowedPaths
-          : existing.allowedPaths,
+      workingDir: nextWorkingDir,
+      allowedPaths: nextAllowedPaths,
       triggerMode: subagentPatch.triggerMode ?? existing.triggerMode,
       updatedAt: Date.now(),
     }

@@ -941,14 +941,17 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
       try { await pty.sendInput("\x03") } catch { /* swallow */ }
     },
     sendPrompt: async (content) => {
-      const text = typeof content === "string"
-        ? content
-        : Array.isArray(content)
-          ? (content as Array<{ type?: string; text?: string }>)
-              .filter((c) => c.type === "text")
-              .map((c) => c.text ?? "")
-              .join("\n")
-          : String(content)
+      let text: string
+      if (typeof content === "string") {
+        text = content
+      } else if (Array.isArray(content)) {
+        text = (content as Array<{ type?: string; text?: string }>)
+          .filter((c) => c.type === "text")
+          .map((c) => c.text ?? "")
+          .join("\n")
+      } else {
+        text = String(content)
+      }
       // Gate on the TUI being back at its idle "❯ " input box before pasting.
       // After a long previous turn the REPL may still be rendering (stop-hook
       // summary / turn_duration / context compaction); pasting then drops the

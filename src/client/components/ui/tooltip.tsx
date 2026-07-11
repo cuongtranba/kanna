@@ -57,11 +57,14 @@ const HotkeyTooltipContent = React.forwardRef<
   React.ComponentRef<typeof TooltipPrimitive.Content>,
   HotkeyTooltipContentProps
 >(({ className, sideOffset = 4, children, shortcut, ...props }, ref) => {
-  const firstShortcut = shortcut === undefined
-    ? null
-    : Array.isArray(shortcut)
-      ? shortcut[0] ?? null
-      : shortcut
+  let firstShortcut: string | null
+  if (shortcut === undefined) {
+    firstShortcut = null
+  } else if (Array.isArray(shortcut)) {
+    firstShortcut = shortcut[0] ?? null
+  } else {
+    firstShortcut = shortcut
+  }
 
   return (
     <TooltipPrimitive.Portal>

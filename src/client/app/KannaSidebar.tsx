@@ -482,11 +482,26 @@ function KannaSidebarImpl({
   const isWorkflowsActive = location.pathname.startsWith("/workflows")
   const isUtilityPageActive = isLocalProjectsActive || isSettingsActive || isWorkflowsActive
   const isConnecting = connectionStatus === "connecting"
-  const statusLabel = isConnecting ? "Connecting" : connectionStatus === "connected" ? "Connected" : "Disconnected"
+  let statusLabel: string
+  if (isConnecting) {
+    statusLabel = "Connecting"
+  } else if (connectionStatus === "connected") {
+    statusLabel = "Connected"
+  } else {
+    statusLabel = "Disconnected"
+  }
   const statusDotClass = connectionStatus === "connected" ? "bg-success" : "bg-warning"
   const showDevBadge = updateSnapshot
     ? updateSnapshot.latestVersion === `${updateSnapshot.currentVersion}-dev`
     : false
+  let workflowsButtonClass: string
+  if (!activeChatId) {
+    workflowsButtonClass = "opacity-50 cursor-not-allowed"
+  } else if (isWorkflowsActive) {
+    workflowsButtonClass = "bg-muted"
+  } else {
+    workflowsButtonClass = "hover:bg-muted/50"
+  }
 
   return (
     <>
@@ -798,11 +813,7 @@ function KannaSidebarImpl({
             }}
             className={cn(
               "w-full flex items-center gap-2 px-3 py-2.5 text-left transition-colors duration-150 rounded-none",
-              !activeChatId
-                ? "opacity-50 cursor-not-allowed"
-                : isWorkflowsActive
-                  ? "bg-muted"
-                  : "hover:bg-muted/50"
+              workflowsButtonClass
             )}
           >
             <Workflow className="h-4 w-4 shrink-0 text-muted-foreground" />
