@@ -1,19 +1,12 @@
 import type { OpenRouterModel } from "../shared/types"
+import type { AnyValue } from "../shared/errors"
 
 interface RawModelPricing {
-  prompt?: unknown
-  completion?: unknown
+  prompt?: AnyValue
+  completion?: AnyValue
 }
 
-interface RawModel {
-  id?: unknown
-  name?: unknown
-  context_length?: unknown
-  supported_parameters?: unknown
-  pricing?: RawModelPricing
-}
-
-function toRate(value: unknown): number | null {
+function toRate(value: AnyValue): number | null {
   if (typeof value === "number") {
     return Number.isFinite(value) && value >= 0 ? value : null
   }
@@ -36,15 +29,19 @@ function parsePricing(
   return { promptPerTok: prompt, completionPerTok: completion }
 }
 
-export function parseOpenRouterModels(raw: unknown): OpenRouterModel[] {
-  const data = (raw as { data?: unknown })?.data
+import { isRecord } from "../shared/errors"
+
+export function parseOpenRouterModels(raw: AnyValue): OpenRouterModel[] {
+  if (!isRecord(raw)) return []
+  const { data } = raw
   if (!Array.isArray(data)) return []
   const out: OpenRouterModel[] = []
-  for (const entry of data as RawModel[]) {
-    if (typeof entry?.id !== "string") continue
+  for (const entry of data) {
+    if (!isRecord(entry)) continue
+    if (typeof entry.id !== "string") continue
     const params = Array.isArray(entry.supported_parameters) ? entry.supported_parameters : []
     if (!params.includes("tools")) continue
-    const pricing = parsePricing(entry.pricing)
+    const pricing = parsePricing(isRecord(entry.pricing) ? { prompt: entry.pricing.prompt, completion: entry.pricing.completion } : undefined)
     out.push({
       id: entry.id,
       label: typeof entry.name === "string" && entry.name.length > 0 ? entry.name : entry.id,

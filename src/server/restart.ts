@@ -18,7 +18,7 @@ export function parseChildArgsEnv(value: string | undefined) {
   if (!value) return []
 
   try {
-    const parsed = JSON.parse(value) as unknown
+    const parsed = JSON.parse(value)
     if (!Array.isArray(parsed) || !parsed.every((entry) => typeof entry === "string")) {
       throw new Error("child args must be an array of strings")
     }

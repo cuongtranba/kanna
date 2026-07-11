@@ -2,6 +2,8 @@ import { createHash } from "node:crypto"
 import { mkdir, writeFile } from "node:fs/promises"
 import path from "node:path"
 import type { TranscriptEntry, ToolResultEntry } from "../shared/types"
+import type { AnyValue } from "../shared/errors"
+import { isRecord } from "../shared/errors"
 
 // Bytes (UTF-8), not chars. Matches claude-code's 50K char default in
 // spirit but enforced precisely against the byte size we serialize.
@@ -24,7 +26,7 @@ interface ContentSizeInfo {
   serialized: string
 }
 
-function measureContent(content: unknown): ContentSizeInfo | null {
+function measureContent(content: AnyValue): ContentSizeInfo | null {
   // Measure the BYTES we actually write to disk + ship through the
   // JSONL event log. Char length under-counts multibyte content, and
   // counting only text-block lengths while serializing the full array
@@ -105,9 +107,13 @@ function dirFor(args: CapArgs): string {
   )
 }
 
+function isToolResultEntry(entry: TranscriptEntry): entry is ToolResultEntry {
+  return entry.kind === "tool_result"
+}
+
 export async function capTranscriptEntry(args: CapArgs): Promise<TranscriptEntry> {
-  if (args.entry.kind !== "tool_result") return args.entry
-  const entry = args.entry as ToolResultEntry
+  if (!isToolResultEntry(args.entry)) return args.entry
+  const entry = args.entry
   const info = measureContent(entry.content)
   if (!info || info.size <= SUBAGENT_RESULT_THRESHOLD) return entry
 
@@ -122,7 +128,7 @@ export async function capTranscriptEntry(args: CapArgs): Promise<TranscriptEntry
   try {
     await writeFile(filePath, info.serialized, { encoding: "utf-8", flag: "wx" })
   } catch (err) {
-    const code = (err as NodeJS.ErrnoException).code
+    const code = isRecord(err) && typeof err.code === "string" ? err.code : undefined
     // Same (toolId, content-hash) writing twice = identical content; safe to
     // skip. Any other write error must surface.
     if (code !== "EEXIST") throw err

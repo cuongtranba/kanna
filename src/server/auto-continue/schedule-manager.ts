@@ -1,5 +1,7 @@
 import type { AutoContinueEvent } from "./events"
 import { deriveChatSchedules } from "./read-model"
+import { log } from "../../shared/log"
+import { toError } from "../../shared/errors"
 
 export interface Clock {
   now(): number
@@ -9,27 +11,31 @@ export interface Clock {
 
 export const realClock: Clock = {
   now: () => Date.now(),
-  setTimeout: (fn, delayMs) => setTimeout(fn, delayMs) as unknown as number,
-  clearTimeout: (id) => clearTimeout(id as unknown as NodeJS.Timeout),
+  setTimeout: (fn, delayMs) => {
+    // Node's setTimeout returns NodeJS.Timeout; cast through Number coercion for the Clock interface
+    const t = setTimeout(fn, delayMs)
+    return Number(t)
+  },
+  clearTimeout: (id) => { clearTimeout(id) },
 }
 
 export interface ScheduleManagerArgs {
   clock?: Clock
   fire: (chatId: string, scheduleId: string) => Promise<void>
-  onError?: (error: unknown) => void
+  onError?: (error: Error) => void
 }
 
 export class ScheduleManager {
   private readonly clock: Clock
   private readonly fireFn: ScheduleManagerArgs["fire"]
-  private readonly onError: (error: unknown) => void
+  private readonly onError: (error: Error) => void
   private readonly timers = new Map<string, number>()
   private readonly pendingByScheduleId = new Map<string, { chatId: string; scheduledAt: number }>()
 
   constructor(args: ScheduleManagerArgs) {
     this.clock = args.clock ?? realClock
     this.fireFn = args.fire
-    this.onError = args.onError ?? ((error) => console.error("[kanna/schedule-manager]", error))
+    this.onError = args.onError ?? ((error) => log.error("[kanna/schedule-manager]", String(error)))
   }
 
   rehydrate(events: readonly AutoContinueEvent[]) {
@@ -66,7 +72,7 @@ export class ScheduleManager {
       default: {
         const _exhaustive: never = event
         void _exhaustive
-        return
+        
       }
     }
   }
@@ -82,7 +88,7 @@ export class ScheduleManager {
       try {
         await this.fireFn(chatId, scheduleId)
       } catch (error) {
-        this.onError(error)
+        this.onError(toError(error))
       }
     }
 

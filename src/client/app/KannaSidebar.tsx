@@ -1,4 +1,9 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
+
+/** Returns CSS custom properties as a React-compatible style object via Object.assign. */
+function cssVars(vars: Record<`--${string}`, string>): CSSProperties {
+  return Object.assign({} satisfies CSSProperties, vars)
+}
 import { Download, Flower, FoldVertical, PanelLeft, UnfoldVertical, X, Menu, Plus, Settings, Workflow } from "lucide-react"
 import { useLocation, useNavigate } from "react-router-dom"
 import { APP_NAME } from "../../shared/branding"
@@ -23,6 +28,7 @@ import {
   isSidebarModifierShortcut,
   shouldShowSidebarNumberJumpHints,
 } from "./sidebarNumberJump"
+import { log } from "../../shared/log"
 
 const SIDEBAR_WIDTH_STORAGE_KEY = "kanna:sidebar-width"
 export const DEFAULT_SIDEBAR_WIDTH = 275
@@ -402,7 +408,8 @@ function KannaSidebarImpl({
 
     requestAnimationFrame(() => {
       const container = scrollContainerRef.current
-      const activeElement = container?.querySelector(`[data-chat-id="${activeChatId}"]`) as HTMLElement | null
+      const found = container?.querySelector(`[data-chat-id="${activeChatId}"]`)
+      const activeElement = found instanceof HTMLElement ? found : null
       if (!activeElement || !container) return
 
       const elementRect = activeElement.getBoundingClientRect()
@@ -469,7 +476,7 @@ function KannaSidebarImpl({
     try {
       await onImportClaudeSessions()
     } catch (error) {
-      console.error("[kanna/import] failed", error)
+      log.error("[kanna/import] failed", String(error))
     } finally {
       setIsImporting(false)
     }
@@ -481,11 +488,26 @@ function KannaSidebarImpl({
   const isWorkflowsActive = location.pathname.startsWith("/workflows")
   const isUtilityPageActive = isLocalProjectsActive || isSettingsActive || isWorkflowsActive
   const isConnecting = connectionStatus === "connecting"
-  const statusLabel = isConnecting ? "Connecting" : connectionStatus === "connected" ? "Connected" : "Disconnected"
+  let statusLabel: string
+  if (isConnecting) {
+    statusLabel = "Connecting"
+  } else if (connectionStatus === "connected") {
+    statusLabel = "Connected"
+  } else {
+    statusLabel = "Disconnected"
+  }
   const statusDotClass = connectionStatus === "connected" ? "bg-success" : "bg-warning"
   const showDevBadge = updateSnapshot
     ? updateSnapshot.latestVersion === `${updateSnapshot.currentVersion}-dev`
     : false
+  let workflowsButtonClass: string
+  if (!activeChatId) {
+    workflowsButtonClass = "opacity-50 cursor-not-allowed"
+  } else if (isWorkflowsActive) {
+    workflowsButtonClass = "bg-muted"
+  } else {
+    workflowsButtonClass = "hover:bg-muted/50"
+  }
 
   return (
     <>
@@ -526,7 +548,7 @@ function KannaSidebarImpl({
           open ? "flex" : "hidden md:flex",
           collapsed && "md:hidden"
         )}
-        style={{ "--sidebar-width": `${sidebarWidth}px` } as CSSProperties}
+        style={cssVars({ "--sidebar-width": `${sidebarWidth}px` })}
       >
         <div className="px-[5px] h-[64px] max-h-[64px] md:h-[55px] md:max-h-[55px] border-b grid grid-cols-[40px_minmax(0,1fr)_40px] items-center md:px-[7px] md:pl-3 md:flex md:justify-between">
           <div className="md:hidden">
@@ -797,11 +819,7 @@ function KannaSidebarImpl({
             }}
             className={cn(
               "w-full flex items-center gap-2 px-3 py-2.5 text-left transition-colors duration-150 rounded-none",
-              !activeChatId
-                ? "opacity-50 cursor-not-allowed"
-                : isWorkflowsActive
-                  ? "bg-muted"
-                  : "hover:bg-muted/50"
+              workflowsButtonClass
             )}
           >
             <Workflow className="h-4 w-4 shrink-0 text-muted-foreground" />

@@ -1,3 +1,4 @@
+import type { AnyValue } from "../../../../shared/errors"
 import type { EditorConfig, LexicalEditor, SerializedLexicalNode, Spread } from "lexical"
 import type { ReactNode } from "react"
 import { DecoratorNode, $applyNodeReplacement } from "lexical"
@@ -83,6 +84,6 @@ export function $createThinkingNode(content: string): ThinkingNode {
   return $applyNodeReplacement(new ThinkingNode(content))
 }
 
-export function $isThinkingNode(node: unknown): node is ThinkingNode {
+export function $isThinkingNode(node: AnyValue): node is ThinkingNode {
   return node instanceof ThinkingNode
 }

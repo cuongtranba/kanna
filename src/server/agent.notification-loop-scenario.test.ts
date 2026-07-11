@@ -51,7 +51,7 @@ function createLoopStore() {
       return chat
     },
     getProject: () => ({ id: "project-1", localPath: "/tmp/loop" }),
-    getMessages: function () { return this.messages },
+    getMessages () { return this.messages },
     async appendMessage(_chatId: string, entry: TranscriptEntry) {
       this.messages.push(entry)
     },
@@ -81,10 +81,10 @@ function createLoopStore() {
     async appendAutoContinueEvent(event: AutoContinueEvent) {
       this.autoContinueEvents.push(event)
     },
-    getAutoContinueEvents: function (chatId: string) {
+    getAutoContinueEvents (chatId: string) {
       return this.autoContinueEvents.filter((e) => e.chatId === chatId)
     },
-    listAutoContinueChats: function () {
+    listAutoContinueChats () {
       return [...new Set(this.autoContinueEvents.map((e) => e.chatId))]
     },
     // The remainder are inert stubs the coordinator will only touch when a

@@ -2,7 +2,6 @@ import type { HarnessEvent, HarnessToolRequest, HarnessTurn } from "./harness-ty
 import type { CodexAppServerManager } from "./codex-app-server"
 import type {
   AgentProvider,
-  CodexReasoningEffort,
   ProviderUsage,
   ResolvedStackBinding,
   Subagent,
@@ -13,6 +12,7 @@ import type { ClaudeSessionHandle } from "./agent"
 import type { LiveTurnSource, ProviderRunStart } from "./subagent-orchestrator"
 import type { SubagentOrchestrator } from "./subagent-orchestrator"
 import type { KannaMcpDelegationContext } from "./kanna-mcp"
+import { log } from "../shared/log"
 
 /**
  * Builds a ProviderRunStart for a single subagent run. Each call returns a
@@ -252,9 +252,9 @@ async function runCodexSubagent(opts: {
       scope,
       content: initialPrompt,
       model: args.subagent.model,
-      // modelOptions is ClaudeModelOptions | CodexModelOptions; runtime-narrowed
-      // by the outer provider check, but TS doesn't propagate that to modelOptions.
-      effort: args.subagent.modelOptions?.reasoningEffort as CodexReasoningEffort | undefined,
+      effort: args.subagent.modelOptions && "fastMode" in args.subagent.modelOptions
+        ? args.subagent.modelOptions.reasoningEffort
+        : undefined,
       serviceTier: undefined,
       planMode: false,
       onToolRequest: args.onToolRequest,
@@ -324,7 +324,7 @@ async function drainHarnessTurn(
   //   • PTY exit synth error (sawResult + isError) — process died mid-turn
   //   • premature stream close (no result at all) — orchestrator close or
   //     driver bug; partial text is the only evidence
-  console.log("[kanna/subagent] drainHarnessTurn finished", {
+  log.info("[kanna/subagent] drainHarnessTurn finished", {
     accumulatedChars: text.length,
     sawResult,
     sawError,

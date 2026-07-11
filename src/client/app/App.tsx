@@ -25,6 +25,7 @@ import { SharePage } from "./share-view/SharePage"
 import { useKannaState } from "./useKannaState"
 import { useSidebarSwipeGesture } from "./sidebarSwipeGesture"
 import type { AppSettingsSnapshot } from "../../shared/types"
+import { log } from "../../shared/log"
 
 const VERSION_SEEN_STORAGE_KEY = "kanna:last-seen-version"
 const AUTH_STATUS_RETRY_DELAY_MS = 500
@@ -154,7 +155,7 @@ function useAppAuthState() {
       return
     }
 
-    const payload = await response.json() as Partial<AuthStatusResponse>
+    const payload: Partial<AuthStatusResponse> = await response.json()
     setState(getAppAuthStateFromStatus(payload))
   }, [])
 
@@ -290,7 +291,7 @@ function KannaLayout() {
         description: `${parts.join(", ")}.${suffix}`,
       })
     } catch (error) {
-      console.error("[kanna/import] failed", error)
+      log.error("[kanna/import] failed", String(error))
       await dialog.alert({
         title: "Import failed",
         description: "See console for details.",

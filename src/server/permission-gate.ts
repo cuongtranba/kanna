@@ -6,6 +6,9 @@ import { parse as shellParse } from "shell-quote"
 import path from "node:path"
 import { homedir } from "node:os"
 import { minimatch } from "minimatch"
+import { log } from "../shared/log"
+import type { AnyValue } from "../shared/errors"
+import { isRecord } from "../shared/errors"
 
 export interface EvaluateArgs {
   toolName: string
@@ -40,8 +43,8 @@ function argsToText(args: Record<string, unknown>): string {
 }
 
 interface ShellOp { op: string }
-function isShellOp(token: unknown): token is ShellOp {
-  return typeof token === "object" && token !== null && "op" in (token as object)
+function isShellOp(token: AnyValue): token is ShellOp {
+  return isRecord(token) && typeof token.op === "string"
 }
 
 interface ParsedSimpleCommand {
@@ -215,7 +218,7 @@ export const policy = {
         try {
           re = new RegExp(rule.pattern)
         } catch {
-          console.warn(`[permission-gate] invalid regex pattern: ${rule.pattern}`)
+          log.warn(`[permission-gate] invalid regex pattern: ${rule.pattern}`)
           continue
         }
         if (re.test(argsToText(args.args))) {
@@ -251,7 +254,7 @@ export const policy = {
       try {
         re = new RegExp(rule.pattern)
       } catch {
-        console.warn(`[permission-gate] invalid regex pattern: ${rule.pattern}`)
+        log.warn(`[permission-gate] invalid regex pattern: ${rule.pattern}`)
         continue
       }
       if (re.test(argsToText(args.args))) {
@@ -266,7 +269,7 @@ export const policy = {
       try {
         re = new RegExp(rule.pattern)
       } catch {
-        console.warn(`[permission-gate] invalid regex pattern: ${rule.pattern}`)
+        log.warn(`[permission-gate] invalid regex pattern: ${rule.pattern}`)
         continue
       }
       if (re.test(argsToText(args.args))) {

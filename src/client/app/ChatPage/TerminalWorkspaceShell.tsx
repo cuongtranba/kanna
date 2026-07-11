@@ -19,7 +19,7 @@ interface TerminalWorkspaceShellProps {
   onTerminalLayout: ReturnType<typeof useTerminalLayoutStore.getState>["setTerminalSizes"]
 }
 
-export const TerminalWorkspaceShell = memo(function TerminalWorkspaceShell({
+export const TerminalWorkspaceShell = memo(({
   projectId,
   fixedTerminalHeight,
   terminalLayout,
@@ -33,7 +33,7 @@ export const TerminalWorkspaceShell = memo(function TerminalWorkspaceShell({
   onTerminalCommandSent,
   onRemoveTerminal,
   onTerminalLayout,
-}: TerminalWorkspaceShellProps) {
+}: TerminalWorkspaceShellProps) => {
   return (
     <div style={fixedTerminalHeight > 0 ? { height: `${fixedTerminalHeight}px` } : undefined}>
       <TerminalWorkspace

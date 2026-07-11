@@ -1,11 +1,13 @@
 import { spawn, spawnSync } from "node:child_process"
+import type { AnyValue } from "../shared/errors"
 
-function formatSpawnError(command: string, error: unknown) {
+function formatSpawnError(command: string, error: AnyValue) {
   if (!(error instanceof Error)) {
     return new Error(`Failed to start ${command}`)
   }
 
-  const code = "code" in error ? (error as NodeJS.ErrnoException).code : undefined
+  const errnoError: Error & { code?: AnyValue } = error
+  const code = typeof errnoError.code === "string" ? errnoError.code : undefined
   if (code === "ENOENT") {
     return new Error(`Command not found: ${command}`)
   }

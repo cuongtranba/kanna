@@ -1,4 +1,5 @@
 import { LegendList, type LegendListRef } from "@legendapp/list/react"
+import type { AnyValue } from "../../../shared/errors"
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { ArrowDown, Bot, Flower, Upload } from "lucide-react"
 import { AnimatedShinyText } from "../../components/ui/animated-shiny-text"
@@ -105,7 +106,7 @@ interface ChatTranscriptViewportProps {
   headerOffsetPx?: number
 }
 
-export const ChatTranscriptViewport = memo(function ChatTranscriptViewport({
+export const ChatTranscriptViewport = memo(({
   activeChatId,
   listRef,
   messages,
@@ -154,7 +155,7 @@ export const ChatTranscriptViewport = memo(function ChatTranscriptViewport({
   editorCommandTemplate,
   platform = "darwin",
   headerOffsetPx = CHAT_NAVBAR_OFFSET_PX,
-}: ChatTranscriptViewportProps) {
+}: ChatTranscriptViewportProps) => {
   const previousRowCountRef = useRef(0)
   const localLinkMenuTriggerRef = useRef<HTMLSpanElement | null>(null)
   const [toolGroupExpanded, setToolGroupExpanded] = useState<Record<string, boolean>>({})
@@ -242,7 +243,7 @@ export const ChatTranscriptViewport = memo(function ChatTranscriptViewport({
     ))
   }, [])
 
-  const handleScroll = useCallback((event?: unknown) => {
+  const handleScroll = useCallback((event?: AnyValue) => {
     const currentTarget = (
       typeof event === "object"
       && event !== null

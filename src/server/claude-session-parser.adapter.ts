@@ -1,13 +1,18 @@
 import { createHash } from "node:crypto"
 import { readFileSync, statSync } from "node:fs"
+import type { AnyValue } from "../shared/errors"
 import type { ClaudeSessionRecord, ParsedClaudeSession } from "./claude-session-types"
+
+function isClaudeSessionRecord(v: AnyValue): v is ClaudeSessionRecord {
+  if (typeof v !== "object" || v === null || Array.isArray(v)) return false
+  const rec = <Record<string, AnyValue>>v
+  return typeof rec.type === "string"
+}
 
 function tryParse(line: string): ClaudeSessionRecord | null {
   try {
-    const parsed = JSON.parse(line)
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null
-    if (typeof (parsed as ClaudeSessionRecord).type !== "string") return null
-    return parsed as ClaudeSessionRecord
+    const parsed: AnyValue = JSON.parse(line)
+    return isClaudeSessionRecord(parsed) ? parsed : null
   } catch {
     return null
   }

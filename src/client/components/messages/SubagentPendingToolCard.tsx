@@ -5,6 +5,7 @@ import type {
   HydratedExitPlanModeToolCall,
   SubagentPendingTool,
 } from "../../../shared/types"
+import { isRecord } from "../../../shared/errors"
 import { AskUserQuestionMessage } from "./AskUserQuestionMessage"
 import { ExitPlanModeMessage } from "./ExitPlanModeMessage"
 
@@ -27,14 +28,17 @@ export function SubagentPendingToolCard({
   onExitPlanModeSubmit,
 }: Props) {
   if (pendingTool.toolKind === "ask_user_question") {
-    const rawInput = pendingTool.input as { questions?: AskUserQuestionItem[] }
+    const questionsRaw = pendingTool.input.questions
+    const questions: AskUserQuestionItem[] = Array.isArray(questionsRaw)
+      ? questionsRaw.filter((q): q is AskUserQuestionItem => isRecord(q))
+      : []
     const message: HydratedAskUserQuestionToolCall = {
       id: pendingTool.toolUseId,
       kind: "tool",
       toolKind: "ask_user_question",
       toolName: "AskUserQuestion",
       toolId: pendingTool.toolUseId,
-      input: { questions: rawInput.questions ?? [] },
+      input: { questions },
       timestamp: new Date(pendingTool.requestedAt).toISOString(),
     }
     return (
@@ -52,14 +56,17 @@ export function SubagentPendingToolCard({
   }
 
   if (pendingTool.toolKind === "exit_plan_mode") {
-    const rawInput = pendingTool.input as { plan?: string; summary?: string }
+    const rawInput = pendingTool.input
     const message: HydratedExitPlanModeToolCall = {
       id: pendingTool.toolUseId,
       kind: "tool",
       toolKind: "exit_plan_mode",
       toolName: "ExitPlanMode",
       toolId: pendingTool.toolUseId,
-      input: { plan: rawInput.plan, summary: rawInput.summary },
+      input: {
+        plan: typeof rawInput.plan === "string" ? rawInput.plan : undefined,
+        summary: typeof rawInput.summary === "string" ? rawInput.summary : undefined,
+      },
       timestamp: new Date(pendingTool.requestedAt).toISOString(),
     }
     return (

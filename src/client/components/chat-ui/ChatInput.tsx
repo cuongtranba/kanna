@@ -28,12 +28,12 @@ import {
   type AgentProvider,
   type ChatAttachment,
   type ClaudeContextWindow,
-  type ClaudeReasoningEffort,
-  type CodexReasoningEffort,
   type CustomModelEntry,
   type ModelOptions,
   type ProviderCatalogEntry,
   type Subagent,
+  isClaudeReasoningEffort,
+  isCodexReasoningEffort,
   normalizeClaudeContextWindow,
   resolveClaudeContextWindowTokens,
 } from "../../../shared/types"
@@ -77,6 +77,7 @@ import {
   type SubmitPayload,
 } from "../lexical/plugins"
 import { serializeEditorToWire } from "../lexical/serialize/editorToWireString"
+import { log } from "../../../shared/log"
 
 // ---------------------------------------------------------------------------
 // Clipboard helpers (exported — ChatInput.test.ts imports them)
@@ -425,7 +426,7 @@ function LexicalErrorBoundary({
 // Main component
 // ---------------------------------------------------------------------------
 
-const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput(
+const ChatInputInner = forwardRef<ChatInputHandle, Props>((
   {
     onSubmit,
     onLayoutChange,
@@ -443,7 +444,7 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput(
     previousPrompt = null,
   },
   forwardedRef,
-) {
+) => {
   const {
     getDraft,
     setDraft,
@@ -516,10 +517,7 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput(
     if (providerPrefs.provider !== "claude") {
       return contextWindowSnapshot
     }
-    const claudeModelOptions = providerPrefs.modelOptions as Extract<
-      ComposerState,
-      { provider: "claude" }
-    >["modelOptions"]
+    const { modelOptions: claudeModelOptions } = providerPrefs
     const stagedMaxTokens = resolveClaudeContextWindowTokens(
       normalizeClaudeContextWindow(providerPrefs.model, claudeModelOptions.contextWindow, customModels),
     )
@@ -527,9 +525,7 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput(
   }, [
     contextWindowSnapshot,
     customModels,
-    providerPrefs.model,
-    providerPrefs.modelOptions,
-    providerPrefs.provider,
+    providerPrefs,
   ])
 
   const uploadedAttachments = attachments.filter((a) => a.status === "uploaded")
@@ -776,7 +772,7 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput(
         await onSubmit(text, submitOptions)
         previousAttachments.forEach(cleanupAttachmentPreview)
       } catch (error) {
-        console.error("[ChatInput] Submit failed:", error)
+        log.error("[ChatInput] Submit failed:", String(error))
         if (chatId) setDraft(chatId, text)
         setAttachments(previousAttachments)
         setSelectedAttachmentId(previousSelectedId)
@@ -937,16 +933,15 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput(
   }
 
   function setReasoningEffort(reasoningEffort: string) {
-    updateComposerState(
-      (state) =>
-        ({
-          ...state,
-          modelOptions: {
-            ...state.modelOptions,
-            reasoningEffort: reasoningEffort as ClaudeReasoningEffort & CodexReasoningEffort,
-          },
-        }) as ComposerState,
-    )
+    updateComposerState((state): ComposerState => {
+      if (state.provider === "claude" && isClaudeReasoningEffort(reasoningEffort)) {
+        return { ...state, modelOptions: { ...state.modelOptions, reasoningEffort } }
+      }
+      if (state.provider === "codex" && isCodexReasoningEffort(reasoningEffort)) {
+        return { ...state, modelOptions: { ...state.modelOptions, reasoningEffort } }
+      }
+      return state
+    })
   }
 
   function setClaudeContextWindow(contextWindow: ClaudeContextWindow) {
@@ -1035,7 +1030,7 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput(
       bridgeRef.current?.hydrateFromDraft(null, previousPrompt)
       setCurrentText(previousPrompt)
       if (chatId) setDraft(chatId, previousPrompt)
-      return
+      
     }
   }
 
@@ -1241,9 +1236,7 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>(function ChatInput(
               aria-label={canCancel ? "Stop" : "Send message"}
               className="flex-shrink-0 bg-primary text-background rounded-full cursor-pointer h-11 w-11 mb-1 -mr-0.5 md:mr-0 md:mb-1.5 touch-manipulation disabled:opacity-50"
             >
-              {hasTextToSend ? (
-                <ArrowUp className="h-5 w-5 md:h-6 md:w-6" />
-              ) : canCancel ? (
+              {canCancel && !hasTextToSend ? (
                 <div className="w-3 h-3 md:w-4 md:h-4 rounded-xs bg-current" />
               ) : (
                 <ArrowUp className="h-5 w-5 md:h-6 md:w-6" />

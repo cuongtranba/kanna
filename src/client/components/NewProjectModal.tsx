@@ -58,7 +58,7 @@ export function NewProjectModal({ open, onOpenChange, onConfirm }: Props) {
   const newPath = kebab ? `${DEFAULT_NEW_PROJECT_ROOT}/${kebab}` : ""
   const trimmedExisting = existingPath.trim()
 
-  const canSubmit = tab === "new" ? !!kebab : !!trimmedExisting
+  const canSubmit = tab === "new" ? Boolean(kebab) : Boolean(trimmedExisting)
 
   const handleSubmit = () => {
     if (!canSubmit) return
@@ -81,8 +81,8 @@ export function NewProjectModal({ open, onOpenChange, onConfirm }: Props) {
             value={tab}
             onValueChange={setTab}
             options={[
-              { value: "new" as Tab, label: "New Folder" },
-              { value: "existing" as Tab, label: "Existing Path" },
+              { value: "new" satisfies Tab, label: "New Folder" },
+              { value: "existing" satisfies Tab, label: "Existing Path" },
             ]}
             className="w-full mb-2"
             optionClassName="flex-1 justify-center"

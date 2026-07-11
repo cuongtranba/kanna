@@ -289,7 +289,7 @@ export async function waitForResultEntry(
             isSidechain?: boolean
             message?: { stop_reason?: string | null }
           }
-          try { parsed = JSON.parse(line) as typeof parsed } catch { continue }
+          try { parsed = JSON.parse(line) } catch { continue }
           // Three completion markers:
           //   - `type: "result"` — SDK / `claude -p` output (one-shot)
           //   - `type: "system", subtype: "turn_duration"` — interactive TUI
@@ -324,8 +324,7 @@ export async function waitForResultEntry(
             settled = true
             if (timer) clearTimeout(timer)
             if (opts.signal) opts.signal.removeEventListener("abort", onAbort)
-            const rlErr = new Error("rate_limited") as Error & { code: string }
-            rlErr.code = "rate_limited"
+            const rlErr: Error & { code: string } = Object.assign(new Error("rate_limited"), { code: "rate_limited" })
             reject(rlErr)
             return
           }

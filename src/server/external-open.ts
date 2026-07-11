@@ -246,7 +246,15 @@ function resolveEditorExecutable(preset: Exclude<EditorPreset, "custom">, platfo
     }
   }
 
-  return { command: preset === "vscode" ? "code" : preset === "xcode" ? "xed" : preset, args: [] }
+  let command: string
+  if (preset === "vscode") {
+    command = "code"
+  } else if (preset === "xcode") {
+    command = "xed"
+  } else {
+    command = preset
+  }
+  return { command, args: [] }
 }
 
 function buildCustomEditorCommand(args: {

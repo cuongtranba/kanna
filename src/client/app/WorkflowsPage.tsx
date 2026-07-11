@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { useNavigate, useOutletContext, useParams } from "react-router-dom"
 import { ArrowLeft, Loader2, Workflow } from "lucide-react"
 import { useShallow } from "zustand/react/shallow"
@@ -79,6 +79,41 @@ export function WorkflowsPageView({ runs, getRunDetail, getAgentTranscript, onBa
       : undefined
   const hasSelection = selectedRunId !== null
 
+  let detailContent: ReactNode
+  if (selectedRun === "loading") {
+    detailContent = (
+      <div className="flex h-full items-center justify-center gap-2 text-sm text-muted-foreground">
+        <Loader2 className="size-4 animate-spin" aria-label="Loading" />
+        Loading run…
+      </div>
+    )
+  } else if (selectedRun === "not-found") {
+    detailContent = <WorkflowDetailPlaceholder text="Run not found or no longer available." />
+  } else if (selectedAgent && runObj) {
+    detailContent = (
+      <WorkflowAgentTranscriptPanel
+        key={selectedAgentId ?? ""}
+        runId={runObj.runId}
+        agentId={selectedAgent.agentId!}
+        agentLabel={selectedAgent.label}
+        promptPreview={selectedAgent.promptPreview}
+        agentIsRunning={selectedAgent.state === "running" || selectedAgent.state === "progress"}
+        onClose={() => setSelectedAgentId(null)}
+        getTranscript={getAgentTranscript}
+      />
+    )
+  } else if (runObj) {
+    detailContent = (
+      <WorkflowRunDetail
+        run={runObj}
+        title={runObj.workflowName ?? runObj.runId}
+        onSelectAgent={(agentId) => setSelectedAgentId(agentId)}
+      />
+    )
+  } else {
+    detailContent = <WorkflowDetailPlaceholder text="Select a run to view its phases and agents." />
+  }
+
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden">
       <div className="flex items-center gap-2 border-b border-border px-4 py-3 md:px-6">
@@ -133,33 +168,7 @@ export function WorkflowsPageView({ runs, getRunDetail, getAgentTranscript, onBa
               All runs
             </button>
           ) : null}
-          {selectedRun === "loading" ? (
-            <div className="flex h-full items-center justify-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="size-4 animate-spin" aria-label="Loading" />
-              Loading run…
-            </div>
-          ) : selectedRun === "not-found" ? (
-            <WorkflowDetailPlaceholder text="Run not found or no longer available." />
-          ) : selectedAgent && runObj ? (
-            <WorkflowAgentTranscriptPanel
-              key={selectedAgentId ?? ""}
-              runId={runObj.runId}
-              agentId={selectedAgent.agentId!}
-              agentLabel={selectedAgent.label}
-              promptPreview={selectedAgent.promptPreview}
-              agentIsRunning={selectedAgent.state === "running" || selectedAgent.state === "progress"}
-              onClose={() => setSelectedAgentId(null)}
-              getTranscript={getAgentTranscript}
-            />
-          ) : runObj ? (
-            <WorkflowRunDetail
-              run={runObj}
-              title={runObj.workflowName ?? runObj.runId}
-              onSelectAgent={(agentId) => setSelectedAgentId(agentId)}
-            />
-          ) : (
-            <WorkflowDetailPlaceholder text="Select a run to view its phases and agents." />
-          )}
+          {detailContent}
         </div>
       </div>
     </div>

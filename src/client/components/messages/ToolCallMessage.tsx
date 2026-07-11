@@ -1,7 +1,9 @@
 import { GitBranch, UserRound, X } from "lucide-react"
+import type { AnyValue } from "../../../shared/errors"
+import { isRecord } from "../../../shared/errors"
 import type { ProcessedToolCall } from "./types"
 import { MetaRow, MetaLabel, MetaCodeBlock, ExpandableRow, VerticalLineContainer, getToolIcon, LucideIconWrapper } from "./shared"
-import { useMemo } from "react"
+import { useMemo, type ReactNode } from "react"
 import { useShallow } from "zustand/react/shallow"
 import { stripWorkspacePath } from "../../lib/pathUtils"
 import { AnimatedShinyText } from "../ui/animated-shiny-text"
@@ -25,17 +27,15 @@ type ReadImageBlock = {
   mimeType?: string
 }
 
-function extractReadImageBlocks(value: unknown): ReadImageBlock[] {
-  const blocks = (
-    value
-    && typeof value === "object"
-    && "content" in value
-    && Array.isArray((value as { content?: unknown }).content)
-  )
-    ? (value as { content: unknown[] }).content
-    : Array.isArray(value)
-      ? value
-      : []
+function extractReadImageBlocks(value: AnyValue): ReadImageBlock[] {
+  let blocks: AnyValue[]
+  if (isRecord(value) && Array.isArray(value.content)) {
+    blocks = value.content
+  } else if (Array.isArray(value)) {
+    blocks = value
+  } else {
+    blocks = []
+  }
 
   return blocks.flatMap((block) => {
     if (!block || typeof block !== "object" || !("type" in block) || block.type !== "image") {
@@ -46,7 +46,7 @@ function extractReadImageBlocks(value: unknown): ReadImageBlock[] {
       return [{
         type: "image",
         data: block.data,
-        mimeType: typeof block.mimeType === "string" ? block.mimeType : undefined,
+        mimeType: "mimeType" in block && typeof block.mimeType === "string" ? block.mimeType : undefined,
       } satisfies ReadImageBlock]
     }
 
@@ -62,7 +62,7 @@ function extractReadImageBlocks(value: unknown): ReadImageBlock[] {
       return [{
         type: "image",
         data: block.source.data,
-        mimeType: typeof block.source.media_type === "string" ? block.source.media_type : undefined,
+        mimeType: "media_type" in block.source && typeof block.source.media_type === "string" ? block.source.media_type : undefined,
       } satisfies ReadImageBlock]
     }
 
@@ -160,8 +160,8 @@ export function ToolCallMessage({ message, isLoading = false, localPath, chatId 
   const resultText = useMemo(() => {
     if (typeof message.result === "string") return message.result
     if (!message.result) return ""
-    if (typeof message.result === "object" && message.result !== null && "content" in message.result) {
-      const content = (message.result as { content?: unknown }).content
+    if (isRecord(message.result)) {
+      const content = message.result.content
       if (typeof content === "string") return content
     }
     return JSON.stringify(message.result, null, 2)
@@ -169,11 +169,12 @@ export function ToolCallMessage({ message, isLoading = false, localPath, chatId 
 
   const readImages = useMemo(() => {
     if (!isReadTool) {
-      return [] as ReadImageBlock[]
+      const empty: ReadImageBlock[] = []
+      return empty
     }
 
-    if (message.result && typeof message.result === "object" && "blocks" in message.result) {
-      const blocks = (message.result as { blocks?: unknown }).blocks
+    if (isRecord(message.result)) {
+      const blocks = message.result.blocks
       if (Array.isArray(blocks)) {
         const hydratedBlocks = extractReadImageBlocks(blocks)
         if (hydratedBlocks.length > 0) {
@@ -197,40 +198,106 @@ export function ToolCallMessage({ message, isLoading = false, localPath, chatId 
     }
   }, [message])
 
+  let inputBlockLabel: ReactNode
+  if (isBashTool) {
+    inputBlockLabel = (
+      <span className="flex items-center gap-2 w-full">
+        <span>Command</span>
+        {Boolean(message.input.timeoutMs) && (
+          <span className="text-muted-foreground">timeout: {String(message.input.timeoutMs)}ms</span>
+        )}
+        {Boolean(message.input.runInBackground) && (
+          <span className="text-muted-foreground">background</span>
+        )}
+      </span>
+    )
+  } else if (isWriteTool) {
+    inputBlockLabel = "Contents"
+  } else {
+    inputBlockLabel = "Input"
+  }
+
+  let toolInputSection: ReactNode
+  if (isEditTool) {
+    toolInputSection = (
+      <FileContentView
+        content=""
+        isDiff
+        oldString={message.input.oldString}
+        newString={message.input.newString}
+      />
+    )
+  } else if (isDeleteTool) {
+    toolInputSection = <FileContentView content={message.input.content} />
+  } else if (!isReadTool && !isWriteTool) {
+    toolInputSection = (
+      <MetaCodeBlock label={inputBlockLabel} copyText={inputText}>
+        {inputText}
+      </MetaCodeBlock>
+    )
+  } else {
+    toolInputSection = null
+  }
+
+  let toolContent: ReactNode
+  if (message.toolKind === "workflow" && !message.isError) {
+    const hydratedResult: WorkflowToolResult | undefined = isRecord(message.result) && typeof message.result.text === "string"
+      ? { taskId: typeof message.result.taskId === "string" ? message.result.taskId : undefined, text: message.result.text }
+      : undefined
+    const taskId = hydratedResult?.taskId
+    const run = taskId ? workflowRuns.find((r) => r.taskId === taskId) : undefined
+    toolContent = (
+      <WorkflowMessage
+        name={message.input.name}
+        description={message.input.description}
+        run={run}
+      />
+    )
+  } else if (message.toolKind === "subagent_task" && message.result) {
+    toolContent = (
+      <SubagentTaskMessage
+        subagentType={message.input.subagentType}
+        result={message.result}
+        isError={message.isError}
+        localPath={localPath}
+      />
+    )
+  } else {
+    toolContent = (
+      <>
+        <div className={`w-5 h-5 relative flex items-center justify-center`}>
+          {(() => {
+            if (message.isError) {
+              return <X className="size-4 text-destructive" />
+            }
+            if (isAgent) {
+              return <UserRound className="size-4 text-muted-icon" />
+            }
+            if (message.toolKind === "workflow") {
+              return <GitBranch className="size-4 text-muted-icon" />
+            }
+            return <LucideIconWrapper icon={getToolIcon(message.toolName)} className="size-4 text-muted-icon" />
+          })()}
+        </div>
+        <MetaLabel className="text-left transition-opacity duration-200 truncate">
+          <AnimatedShinyText
+            animate={showLoadingState}
+            shimmerWidth={Math.max(20, ((description || name)?.length ?? 33) * 3)}
+          >
+            {description || name}
+          </AnimatedShinyText>
+        </MetaLabel>
+      </>
+    )
+  }
+
   return (
     <MetaRow className="w-full">
       <ExpandableRow
         expandedContent={
           <VerticalLineContainer className="my-4 text-sm">
             <div className="flex flex-col gap-2">
-              {isEditTool ? (
-                <FileContentView
-                  content=""
-                  isDiff
-                  oldString={message.input.oldString}
-                  newString={message.input.newString}
-                />
-              ) : isDeleteTool ? (
-                <FileContentView
-                  content={message.input.content}
-                />
-              ) : !isReadTool && !isWriteTool && (
-                <MetaCodeBlock label={
-                  isBashTool ? (
-                    <span className="flex items-center gap-2 w-full">
-                      <span>Command</span>
-                      {!!message.input.timeoutMs && (
-                        <span className="text-muted-foreground">timeout: {String(message.input.timeoutMs)}ms</span>
-                      )}
-                      {!!message.input.runInBackground && (
-                        <span className="text-muted-foreground">background</span>
-                      )}
-                    </span>
-                  ) : isWriteTool ? "Contents" : "Input"
-                } copyText={inputText}>
-                  {inputText}
-                </MetaCodeBlock>
-              )}
+              {toolInputSection}
               {hasResult && isReadTool && !message.isError && (
                 readImages.length > 0 ? (
                   <div>
@@ -260,52 +327,7 @@ export function ToolCallMessage({ message, isLoading = false, localPath, chatId 
         }
       >
 
-        {message.toolKind === "workflow" && !message.isError ? (
-          (() => {
-            const hydratedResult = message.result as WorkflowToolResult | undefined
-            const taskId = hydratedResult?.taskId
-            const run = taskId ? workflowRuns.find((r) => r.taskId === taskId) : undefined
-            return (
-              <WorkflowMessage
-                name={message.input.name}
-                description={message.input.description}
-                run={run}
-              />
-            )
-          })()
-        ) : message.toolKind === "subagent_task" && message.result ? (
-          <SubagentTaskMessage
-            subagentType={message.input.subagentType}
-            result={message.result}
-            isError={message.isError}
-            localPath={localPath}
-          />
-        ) : (
-          <>
-            <div className={`w-5 h-5 relative flex items-center justify-center`}>
-              {(() => {
-                if (message.isError) {
-                  return <X className="size-4 text-destructive" />
-                }
-                if (isAgent) {
-                  return <UserRound className="size-4 text-muted-icon" />
-                }
-                if (message.toolKind === "workflow") {
-                  return <GitBranch className="size-4 text-muted-icon" />
-                }
-                return <LucideIconWrapper icon={getToolIcon(message.toolName)} className="size-4 text-muted-icon" />
-              })()}
-            </div>
-            <MetaLabel className="text-left transition-opacity duration-200 truncate">
-              <AnimatedShinyText
-                animate={showLoadingState}
-                shimmerWidth={Math.max(20, ((description || name)?.length ?? 33) * 3)}
-              >
-                {description || name}
-              </AnimatedShinyText>
-            </MetaLabel>
-          </>
-        )}
+        {toolContent}
 
 
 

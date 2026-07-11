@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentProps, type CSSProperties, type DragEvent, type ReactNode, type RefObject } from "react"
+import React, { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentProps, type DragEvent, type ReactNode, type RefObject } from "react"
 import { type LegendListRef } from "@legendapp/list/react"
 import type { GroupImperativeHandle } from "react-resizable-panels"
 import { useNavigate, useOutletContext } from "react-router-dom"
@@ -58,9 +58,9 @@ export {
 // most visible on phones. Do not drop min-h-0.
 export const CHAT_PAGE_LAYOUT_ROOT_CLASS = "flex-1 flex flex-col min-h-0 min-w-0 relative"
 
-const TERMINAL_TOGGLE_DURATION_STYLE: CSSProperties = {
+const TERMINAL_TOGGLE_DURATION_STYLE: React.CSSProperties & { "--terminal-toggle-duration": string } = {
   "--terminal-toggle-duration": `${TERMINAL_TOGGLE_ANIMATION_DURATION_MS}ms`,
-} as CSSProperties
+}
 
 function useEmptyStateTyping(showEmptyState: boolean, activeChatId: string | null) {
   const [typedEmptyStateText, setTypedEmptyStateText] = useState("")
@@ -273,7 +273,7 @@ interface ChatWorkspaceProps {
 
 type ChatSidebarContentProps = ComponentProps<typeof RightSidebar>
 
-const ChatSidebarContent = memo(function ChatSidebarContent(props: ChatSidebarContentProps) {
+const ChatSidebarContent = memo((props: ChatSidebarContentProps) => {
   return (
     <RightSidebar
       {...props}
@@ -290,13 +290,13 @@ interface DesktopSidebarPaneProps {
   content: ReactNode
 }
 
-const DesktopSidebarPane = memo(function DesktopSidebarPane({
+const DesktopSidebarPane = memo(({
   showRightSidebar,
   sizePercent,
   sidebarPanelRef,
   sidebarVisualRef,
   content,
-}: DesktopSidebarPaneProps) {
+}: DesktopSidebarPaneProps) => {
   return (
     <ResizablePanel
       id="rightSidebar"
@@ -326,13 +326,13 @@ interface MobileSidebarPaneProps {
   content: ReactNode
 }
 
-const MobileSidebarPane = memo(function MobileSidebarPane({
+const MobileSidebarPane = memo(({
   projectId,
   showRightSidebar,
   sidebarVisualRef,
   onClose,
   content,
-}: MobileSidebarPaneProps) {
+}: MobileSidebarPaneProps) => {
   if (!projectId) {
     return null
   }

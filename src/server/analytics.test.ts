@@ -237,9 +237,9 @@ describe("KannaAnalyticsReporter", () => {
   })
 
   test("logs when analytics request logging is enabled and the request succeeds", async () => {
-    const originalLog = console.log
+    const originalInfo = console.info
     const logs: unknown[][] = []
-    console.log = (...args: unknown[]) => {
+    console.info = (...args: unknown[]) => {
       logs.push(args)
     }
     process.env.KANNA_LOG_ANALYTICS = "1"
@@ -271,7 +271,7 @@ describe("KannaAnalyticsReporter", () => {
         200,
       ])
     } finally {
-      console.log = originalLog
+      console.info = originalInfo
       restoreAnalyticsLoggingEnv()
     }
   })

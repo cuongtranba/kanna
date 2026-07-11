@@ -1,3 +1,4 @@
+import type { AnyValue } from "../../../../shared/errors"
 import type { EditorConfig, LexicalEditor, SerializedLexicalNode, Spread } from "lexical"
 import type { ReactNode } from "react"
 import { DecoratorNode, $applyNodeReplacement } from "lexical"
@@ -61,7 +62,7 @@ export class SlashCommandNode extends DecoratorNode<ReactNode> {
 
   createDOM(_config: EditorConfig, _editor: LexicalEditor): HTMLElement {
     const span = document.createElement("span")
-    span.dataset["lexicalDecorator"] = "true"
+    span.dataset.lexicalDecorator = "true"
     return span
   }
 
@@ -118,6 +119,6 @@ export function $createSlashCommandNode(args: CreateSlashCommandNodeArgs): Slash
   return $applyNodeReplacement(new SlashCommandNode(args.commandName, args.hasArgument))
 }
 
-export function $isSlashCommandNode(node: unknown): node is SlashCommandNode {
+export function $isSlashCommandNode(node: AnyValue): node is SlashCommandNode {
   return node instanceof SlashCommandNode
 }

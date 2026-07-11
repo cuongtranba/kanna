@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type RefObject } from "react"
+import type { AnyValue } from "../../../../shared/errors"
 
 export type ViewportFetchState = "idle" | "loading" | "ready" | "error"
 
@@ -16,23 +17,26 @@ interface Options<T> {
   rootMargin?: string
 }
 
-const snippetCache = new Map<string, unknown>()
+const snippetCache = new Map<string, AnyValue>()
+function getCached<T>(key: string): T | undefined {
+  const v = snippetCache.get(key)
+  return v !== undefined ? <T>v : undefined
+}
 
 export function useViewportFetch<T>(opts: Options<T>): ViewportFetchResult<T> {
   const { cacheKey, enabled, ref, fetcher, rootMargin } = opts
-  const cached = snippetCache.get(cacheKey) as T | undefined
+  const cached = getCached<T>(cacheKey)
   const [state, setState] = useState<ViewportFetchState>(cached !== undefined ? "ready" : "idle")
   const [data, setData] = useState<T | null>(cached !== undefined ? cached : null)
   const [error, setError] = useState<Error | null>(null)
   const [lastKey, setLastKey] = useState(cacheKey)
   const controllerRef = useRef<AbortController | null>(null)
   const currentKeyRef = useRef(cacheKey)
-  // eslint-disable-next-line react-hooks/refs -- intentional render-time sync write so async fetch completion (which can fire between render and commit) sees the latest key and refuses to overwrite state for a stale key.
   currentKeyRef.current = cacheKey
 
   if (lastKey !== cacheKey) {
     setLastKey(cacheKey)
-    const fresh = snippetCache.get(cacheKey) as T | undefined
+    const fresh = getCached<T>(cacheKey)
     setState(fresh !== undefined ? "ready" : "idle")
     setData(fresh !== undefined ? fresh : null)
     setError(null)
@@ -63,7 +67,7 @@ export function useViewportFetch<T>(opts: Options<T>): ViewportFetchResult<T> {
               setData(value)
               setState("ready")
             })
-            .catch((err: unknown) => {
+            .catch((err: AnyValue) => {
               if (cancelled || controller.signal.aborted || currentKeyRef.current !== myKey) return
               setError(err instanceof Error ? err : new Error(String(err)))
               setState("error")

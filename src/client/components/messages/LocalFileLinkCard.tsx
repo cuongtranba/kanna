@@ -80,21 +80,24 @@ export function LocalFileLinkCard({ path, linkText }: Props) {
   const isLoading = probe.kind === "loading"
   const isError = probe.kind === "error"
 
-  const meta = isLoading ? (
-    <span className="text-muted-foreground">Fetching…</span>
-  ) : isError ? (
-    <span className="text-muted-foreground">Unable to load</span>
-  ) : (
-    <>
-      {friendlyType}
-      {sizeLabel ? (
-        <>
-          {" · "}
-          <span className="tabular-nums">{sizeLabel}</span>
-        </>
-      ) : null}
-    </>
-  )
+  let meta: React.ReactNode
+  if (isLoading) {
+    meta = <span className="text-muted-foreground">Fetching…</span>
+  } else if (isError) {
+    meta = <span className="text-muted-foreground">Unable to load</span>
+  } else {
+    meta = (
+      <>
+        {friendlyType}
+        {sizeLabel ? (
+          <>
+            {" · "}
+            <span className="tabular-nums">{sizeLabel}</span>
+          </>
+        ) : null}
+      </>
+    )
+  }
 
   const previewTarget = probe.kind === "ready" ? classifyAttachmentPreview(attachment) : null
   const canPreviewInModal = previewTarget !== null && !previewTarget.openInNewTab
@@ -103,7 +106,7 @@ export function LocalFileLinkCard({ path, linkText }: Props) {
     rawDisplayName,
     friendlyType,
     sizeLabel,
-  ].filter(Boolean) as string[]
+  ].filter((s): s is string => Boolean(s))
 
   if (canPreviewInModal) {
     return (

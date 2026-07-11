@@ -26,14 +26,17 @@ import { usePtyInstancesStore } from "../stores/ptyInstancesStore"
 import { useWorkflowsStore } from "../stores/workflowsStore"
 import { useOpenRouterModelsStore } from "../stores/openrouterModelsStore"
 import type { WorkflowsSnapshot } from "../../shared/protocol"
+import { log } from "../../shared/log"
+import type { AnyValue } from "../../shared/errors"
+import { isRecord } from "../../shared/errors"
 
 function shallowProviderTokenEquals(
   a: Partial<Record<AgentProvider, string | null>>,
   b: Partial<Record<AgentProvider, string | null>>,
 ) {
-  const keys = new Set<string>([...Object.keys(a), ...Object.keys(b)])
-  for (const key of keys) {
-    if (a[key as AgentProvider] !== b[key as AgentProvider]) return false
+  const providers: AgentProvider[] = ["claude", "codex", "openrouter"]
+  for (const key of providers) {
+    if (a[key] !== b[key]) return false
   }
   return true
 }
@@ -303,10 +306,8 @@ function readPersistedZustandState(key: string): Record<string, unknown> | null 
   const raw = window.localStorage.getItem(key)
   if (!raw) return null
   try {
-    const parsed = JSON.parse(raw) as { state?: unknown }
-    return parsed.state && typeof parsed.state === "object" && !Array.isArray(parsed.state)
-      ? parsed.state as Record<string, unknown>
-      : null
+    const parsed: { state?: AnyValue } = JSON.parse(raw)
+    return isRecord(parsed.state) ? parsed.state : null
   } catch {
     return null
   }
@@ -370,8 +371,10 @@ function readLegacyBrowserSettingsPatch(): AppSettingsPatch | null {
   if (chatPreferencesState?.defaultProvider === "last_used" || chatPreferencesState?.defaultProvider === "claude" || chatPreferencesState?.defaultProvider === "codex") {
     patch.defaultProvider = chatPreferencesState.defaultProvider
   }
-  if (chatPreferencesState?.providerDefaults && typeof chatPreferencesState.providerDefaults === "object") {
-    patch.providerDefaults = chatPreferencesState.providerDefaults as AppSettingsPatch["providerDefaults"]
+  if (isRecord(chatPreferencesState?.providerDefaults)) {
+    // Legacy migration: providerDefaults stored as opaque Record; checked via isRecord above
+    const legacyProviderDefaults: AppSettingsPatch["providerDefaults"] = chatPreferencesState.providerDefaults
+    patch.providerDefaults = legacyProviderDefaults
   }
 
   patch.browserSettingsMigrated = true
@@ -530,7 +533,7 @@ function useKannaSocket() {
   return socket
 }
 
-function logKannaState(message: string, details?: unknown) {
+function logKannaState(message: string, details?: AnyValue) {
   void message
   void details
 }
@@ -572,7 +575,7 @@ function logSendToStartingTrace(
     return
   }
 
-  console.debug("[kanna/send->starting][client]", {
+  log.debug("[kanna/send->starting][client]", {
     traceId: trace.traceId,
     stage,
     elapsedMs: elapsedTraceMs(trace.startedAt),
@@ -1009,7 +1012,7 @@ export function useKannaState(activeChatId: string | null): KannaState {
     if (reconnectAction === "awaiting_server_ready") {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       markUiRestartPhase("awaiting_server_ready")
-      return
+      
     }
   }, [connectionStatus, markUiRestartPhase])
 
@@ -1284,7 +1287,7 @@ export function useKannaState(activeChatId: string | null): KannaState {
       .then((models) => {
         useOpenRouterModelsStore.getState().setModels(models)
       })
-      .catch((error: unknown) => {
+      .catch((error: AnyValue) => {
         const message = error instanceof Error ? error.message : String(error)
         useOpenRouterModelsStore.getState().setError(message)
       })
@@ -1720,11 +1723,14 @@ export function useKannaState(activeChatId: string | null): KannaState {
 
   const startChatFromIntent = useCallback(async (intent: StartChatIntent) => {
     try {
-      const localPath = intent.kind === "project_id"
-        ? null
-        : intent.kind === "local_path"
-          ? intent.localPath
-          : intent.project.localPath
+      let localPath: string | null
+      if (intent.kind === "project_id") {
+        localPath = null
+      } else if (intent.kind === "local_path") {
+        localPath = intent.localPath
+      } else {
+        localPath = intent.project.localPath
+      }
       if (localPath) {
         setStartingLocalPath(localPath)
       }

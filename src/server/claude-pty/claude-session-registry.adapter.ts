@@ -39,7 +39,7 @@ export async function readClaudeSessionByPid(
   }
   let parsed: Partial<ClaudeSessionRegistryEntry>
   try {
-    parsed = JSON.parse(raw) as Partial<ClaudeSessionRegistryEntry>
+    parsed = JSON.parse(raw)
   } catch {
     return null
   }

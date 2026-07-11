@@ -1,5 +1,7 @@
 import { randomBytes, timingSafeEqual } from "node:crypto"
 import type { AuthSessionStore } from "./auth-session-store.adapter"
+import type { AnyValue } from "../shared/errors"
+import { isRecord } from "../shared/errors"
 
 const SESSION_COOKIE_NAME = "kanna_session"
 const TOUCH_THROTTLE_MS = 60 * 1000
@@ -93,7 +95,8 @@ async function readLoginForm(req: Request) {
   const contentType = req.headers.get("content-type") ?? ""
 
   if (contentType.includes("application/json")) {
-    const payload = await req.json() as { password?: unknown; next?: unknown }
+    const rawPayload = await req.json()
+    const payload: { password?: AnyValue; next?: AnyValue } = isRecord(rawPayload) ? rawPayload : {}
     return {
       password: typeof payload.password === "string" ? payload.password : "",
       nextPath: sanitizeNextPath(typeof payload.next === "string" ? payload.next : "/"),

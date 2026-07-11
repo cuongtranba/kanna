@@ -124,6 +124,15 @@ export function AppDialogProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<AppDialogContextValue>(() => ({ confirm, prompt, alert }), [alert, confirm, prompt])
 
+  let confirmBtnLabel = "Confirm"
+  if (dialogState) {
+    if (dialogState.kind === "alert") {
+      confirmBtnLabel = dialogState.options.closeLabel ?? "OK"
+    } else if ("confirmLabel" in dialogState.options) {
+      confirmBtnLabel = dialogState.options.confirmLabel ?? "Confirm"
+    }
+  }
+
   return (
     <AppDialogContext.Provider value={value}>
       {children}
@@ -180,11 +189,7 @@ export function AppDialogProvider({ children }: { children: ReactNode }) {
                   onClick={resolveConfirm}
                   disabled={dialogState.kind === "prompt" && !inputValue.trim()}
                 >
-                  {dialogState.kind === "alert"
-                    ? (dialogState.options.closeLabel ?? "OK")
-                    : "confirmLabel" in dialogState.options
-                      ? (dialogState.options.confirmLabel ?? "Confirm")
-                      : "Confirm"}
+                  {confirmBtnLabel}
                 </Button>
               </DialogFooter>
             </>

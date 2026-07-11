@@ -7,11 +7,13 @@ import {
   rmDirRecursive,
   writeFile0600,
 } from "./smoke-test-io.adapter"
+import { isRecord } from "../../shared/errors"
 import { OutputRing } from "./output-ring"
 import { spawnPtyProcess as defaultSpawnPtyProcess } from "./pty-process.adapter"
 import { waitForTuiReadyWithTrustDismiss, sendUserPrompt, sendExitCommand } from "./tui-control"
 import { startTranscriptStream, waitForResultEntry } from "./tui-source.adapter"
 import { computeProjectDir } from "./jsonl-path.adapter"
+import { log } from "../../shared/log"
 
 export type SmokeTestProbeFn = () => Promise<"pass" | "fail">
 
@@ -133,7 +135,7 @@ export function buildLiveSmokeProbe(args: BuildLiveSmokeProbeArgs): SmokeTestPro
         for (const line of raw.split("\n")) {
           if (!line.trim()) continue
           let parsed: { message?: { content?: Array<{ type?: string; name?: string }> } }
-          try { parsed = JSON.parse(line) as { message?: { content?: Array<{ type?: string; name?: string }> } } } catch { continue }
+          try { parsed = JSON.parse(line) } catch { continue }
           const blocks = parsed.message?.content
           if (!Array.isArray(blocks)) continue
           for (const b of blocks) {
@@ -148,8 +150,9 @@ export function buildLiveSmokeProbe(args: BuildLiveSmokeProbeArgs): SmokeTestPro
     } catch (err) {
       // Rate-limit errors must not be cached as "fail" — they're transient.
       // Re-throw so the gate propagates the error without poisoning the cache.
-      if (err instanceof Error && (err as Error & { code?: string }).code === "rate_limited") throw err
-      console.warn("[kanna/pty] smoke probe errored, treating as FAIL", err)
+      const errWithCode: { code?: string } = isRecord(err) ? err : {}
+      if (err instanceof Error && errWithCode.code === "rate_limited") throw err
+      log.warn("[kanna/pty] smoke probe errored, treating as FAIL", String(err))
       probeResult = "fail"
     } finally {
       try { await sendExitCommand(pty) } catch { /* swallow */ }
@@ -169,7 +172,7 @@ export function createFileSmokeTestCache(args: { cacheDir: string }): SmokeTestC
       if (!fileExists(fp)) return null
       try {
         const raw = await readTextFile(fp)
-        const parsed = JSON.parse(raw) as SmokeTestCacheEntry
+        const parsed: SmokeTestCacheEntry = JSON.parse(raw)
         if (parsed.result !== "pass" && parsed.result !== "fail") return null
         if (typeof parsed.ts !== "number") return null
         return parsed

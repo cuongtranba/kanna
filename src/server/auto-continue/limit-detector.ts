@@ -1,43 +1,38 @@
+import { type AnyValue, isRecord } from "../../shared/errors"
+
 export interface LimitDetection {
   chatId: string
   resetAt: number
   tz: string
-  raw: unknown
+  raw: AnyValue
 }
 
 export interface LimitDetector {
-  detect(chatId: string, error: unknown): LimitDetection | null
+  detect(chatId: string, error: AnyValue): LimitDetection | null
   detectFromResultText?(chatId: string, text: string, nowMs?: number): LimitDetection | null
-  detectFromSdkRateLimitInfo?(chatId: string, info: unknown): LimitDetection | null
+  detectFromSdkRateLimitInfo?(chatId: string, info: AnyValue): LimitDetection | null
 }
 
-interface ErrorLike {
-  message?: string
-  status?: number
-  headers?: Record<string, string>
-}
-
-function extractHeaders(error: unknown): Record<string, string> {
-  if (error && typeof error === "object" && "headers" in error) {
-    const headers = (error as ErrorLike).headers
-    if (headers && typeof headers === "object") return headers
+function extractHeaders(error: AnyValue): Record<string, AnyValue> {
+  if (isRecord(error) && "headers" in error && isRecord(error.headers)) {
+    return error.headers
   }
   return {}
 }
 
-function parseBody(error: unknown): Record<string, unknown> | null {
-  if (!error || typeof error !== "object") return null
-  const message = (error as ErrorLike).message
-  if (!message) return null
+function parseBody(error: AnyValue): Record<string, AnyValue> | null {
+  if (!isRecord(error)) return null
+  const message = error.message
+  if (typeof message !== "string" || !message) return null
   try {
-    const parsed = JSON.parse(message)
-    return parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>) : null
+    const parsed: AnyValue = JSON.parse(message)
+    return isRecord(parsed) ? parsed : null
   } catch {
     return null
   }
 }
 
-function parseIsoMillis(value: unknown): number | null {
+function parseIsoMillis(value: AnyValue): number | null {
   if (typeof value !== "string" || !value) return null
   const millis = new Date(value).getTime()
   return Number.isFinite(millis) ? millis : null
@@ -73,9 +68,12 @@ export function parseResetFromText(text: string, nowMs: number = Date.now()): { 
   const tz = match[4].trim()
   if (!Number.isFinite(hour12) || hour12 < 1 || hour12 > 12) return null
   if (!Number.isFinite(minute) || minute < 0 || minute > 59) return null
-  const hour24 = meridiem === "pm"
-    ? (hour12 === 12 ? 12 : hour12 + 12)
-    : (hour12 === 12 ? 0 : hour12)
+  let hour24: number
+  if (meridiem === "pm") {
+    hour24 = hour12 === 12 ? 12 : hour12 + 12
+  } else {
+    hour24 = hour12 === 12 ? 0 : hour12
+  }
   let tzYear: number, tzMonth: number, tzDay: number
   try {
     const dtf = new Intl.DateTimeFormat("en-US", {
@@ -103,13 +101,11 @@ export function parseResetFromText(text: string, nowMs: number = Date.now()): { 
 }
 
 export class ClaudeLimitDetector implements LimitDetector {
-  detect(chatId: string, error: unknown): LimitDetection | null {
+  detect(chatId: string, error: AnyValue): LimitDetection | null {
     const body = parseBody(error)
-    const inner = body && typeof body.error === "object" && body.error !== null
-      ? (body.error as Record<string, unknown>)
-      : null
+    const inner = body && isRecord(body.error) ? body.error : null
     const isRateLimit = inner?.type === "rate_limit_error"
-      || (error as ErrorLike | null)?.status === 429 && inner?.type === "rate_limit_error"
+      || (isRecord(error) && error.status === 429 && inner?.type === "rate_limit_error")
 
     if (isRateLimit) {
       const headers = extractHeaders(error)
@@ -117,9 +113,15 @@ export class ClaudeLimitDetector implements LimitDetector {
         ?? parseIsoMillis(inner?.resets_at)
         ?? parseIsoMillis(inner?.reset_at)
       if (resetAt !== null) {
-        const tz = headers["x-anthropic-timezone"]
-          ?? (typeof inner?.timezone === "string" ? (inner.timezone as string) : null)
-          ?? "system"
+        const timezone = inner?.timezone
+        let tz: string
+        if (typeof headers["x-anthropic-timezone"] === "string") {
+          tz = headers["x-anthropic-timezone"]
+        } else if (typeof timezone === "string") {
+          tz = timezone
+        } else {
+          tz = "system"
+        }
         return { chatId, resetAt, tz, raw: error }
       }
     }
@@ -128,7 +130,7 @@ export class ClaudeLimitDetector implements LimitDetector {
     // `Error("Claude Code returned an error result: <text>")`. Parse the
     // text directly for "You've hit your limit · resets ..." / "usage limit
     // reached|<unix>" forms.
-    const message = (error as ErrorLike | null)?.message
+    const message = isRecord(error) ? error.message : null
     if (typeof message === "string") {
       return this.detectFromResultText(chatId, message)
     }
@@ -143,11 +145,10 @@ export class ClaudeLimitDetector implements LimitDetector {
     return null
   }
 
-  detectFromSdkRateLimitInfo(chatId: string, info: unknown): LimitDetection | null {
-    if (!info || typeof info !== "object") return null
-    const rec = info as Record<string, unknown>
-    if (rec.status !== "rejected") return null
-    const raw = rec.resetsAt
+  detectFromSdkRateLimitInfo(chatId: string, info: AnyValue): LimitDetection | null {
+    if (!isRecord(info)) return null
+    if (info.status !== "rejected") return null
+    const raw = info.resetsAt
     if (typeof raw !== "number" || !Number.isFinite(raw) || raw <= 0) return null
     // SDK emits `resetsAt` as epoch seconds for claude.ai subscription limits;
     // coerce to ms defensively (anything below year 5138 in ms is below 1e14).
@@ -166,29 +167,23 @@ export function parseClaudeUsageLimitPipe(text: string): number | null {
   return value < 1e12 ? value * 1000 : value
 }
 
-interface JsonRpcErrorLike {
-  code?: number
-  message?: string
-  data?: Record<string, unknown>
-}
-
 export class CodexLimitDetector implements LimitDetector {
-  detect(chatId: string, error: unknown): LimitDetection | null {
-    if (!error || typeof error !== "object") return null
-    const rpc = error as JsonRpcErrorLike
-    const data = rpc.data && typeof rpc.data === "object" ? rpc.data : null
-    const isRateLimit = data?.code === "rate_limit" || rpc.code === -32001
+  detect(chatId: string, error: AnyValue): LimitDetection | null {
+    if (!isRecord(error)) return null
+    const rpcCode = error.code
+    const rpcData = isRecord(error.data) ? error.data : null
+    const isRateLimit = rpcData?.code === "rate_limit" || rpcCode === -32001
     if (!isRateLimit) return null
 
     let resetAt: number | null
-    if (typeof data?.resets_at_ms === "number" && Number.isFinite(data.resets_at_ms)) {
-      resetAt = data.resets_at_ms
+    if (typeof rpcData?.resets_at_ms === "number" && Number.isFinite(rpcData.resets_at_ms)) {
+      resetAt = rpcData.resets_at_ms
     } else {
-      resetAt = parseIsoMillis(data?.resets_at)
+      resetAt = parseIsoMillis(rpcData?.resets_at)
     }
     if (resetAt === null) return null
 
-    const tz = typeof data?.timezone === "string" ? (data.timezone as string) : "system"
+    const tz = typeof rpcData?.timezone === "string" ? rpcData.timezone : "system"
     return { chatId, resetAt, tz, raw: error }
   }
 }

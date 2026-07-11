@@ -19,9 +19,7 @@ let mermaidPromise: Promise<MermaidModule> | null = null
 
 function loadMermaid(): Promise<MermaidModule> {
   if (!mermaidPromise) {
-    mermaidPromise = import("mermaid").then(
-      (m) => (m as unknown as { default: MermaidModule }).default
-    )
+    mermaidPromise = import("mermaid").then((m): MermaidModule => m.default)
   }
   return mermaidPromise
 }

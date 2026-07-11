@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react"
+import type { AnyValue } from "../../../../../shared/errors"
 import {
   TABLE_PREVIEW_COLUMN_LIMIT,
   TEXT_PREVIEW_LIMIT_BYTES,
@@ -49,7 +50,7 @@ export function TableBody({ source }: { source: PreviewSource }) {
         cache.set(myKey, next)
         setState(next)
       })
-      .catch((err: unknown) => {
+      .catch((err: AnyValue) => {
         if (cancelled || currentKeyRef.current !== myKey) return
         const next: State = { status: "error", message: err instanceof Error ? err.message : "Unable to load preview." }
         cache.set(myKey, next)

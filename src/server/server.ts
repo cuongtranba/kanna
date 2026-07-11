@@ -1,5 +1,6 @@
 import path from "node:path"
 import type { Server } from "bun"
+import { isErrnoException } from "../shared/errors"
 import { getServerFile, serveHttp, statFile } from "./server-io.adapter"
 import { bin as cloudflaredBin } from "cloudflared"
 import { APP_NAME, getRuntimeProfile } from "../shared/branding"
@@ -57,18 +58,12 @@ import { SnapshotStore } from "./session-share/snapshot-store.adapter"
 import { handleShareApiRequest } from "./session-share/http-routes"
 import { buildChatSnapshot, type SnapshotSources } from "./session-share/snapshot-builder"
 import { startSnapshotSweep } from "./session-share/sweep"
+import { log } from "../shared/log"
 import type {
   ChatSnapshotMessage,
   AttachmentManifestEntry,
   ChatMeta,
 } from "../shared/session-share/types"
-import type {
-  UserPromptEntry,
-  AssistantTextEntry,
-  AssistantThinkingEntry,
-  ToolCallEntry,
-  ToolResultEntry,
-} from "../shared/types"
 
 /** Parse a positive-integer env var, falling back to `fallback` on unset/invalid/<=0. */
 function parsePositiveIntEnv(raw: string | undefined, fallback: number): number {
@@ -252,7 +247,7 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
   const terminalPidRegistry = new TerminalPidRegistry(path.join(store.dataDir, "terminals.json"))
   const reapedTerminals = await terminalPidRegistry.reapStale()
   if (reapedTerminals.length > 0) {
-    console.log(`[kanna] reaped ${reapedTerminals.length} orphan terminal process group(s) from previous run`)
+    log.info(`[kanna] reaped ${reapedTerminals.length} orphan terminal process group(s) from previous run`)
   }
   const claudePtyRegistry = new ClaudePtyRegistry(path.join(store.dataDir, "claude-pty.json"))
   const ptyInstanceRegistry = createPtyInstanceRegistry()
@@ -267,7 +262,7 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
   const subagentTranscriptRegistry = createSubagentTranscriptRegistry()
   const reapedClaudePty = await claudePtyRegistry.reapStale()
   if (reapedClaudePty.length > 0) {
-    console.log(`[kanna] reaped ${reapedClaudePty.length} orphan claude PTY process group(s) from previous run`)
+    log.info(`[kanna] reaped ${reapedClaudePty.length} orphan claude PTY process group(s) from previous run`)
   }
   const keybindings = new KeybindingsManager()
   const appSettings = new AppSettingsManager(path.join(store.dataDir, "settings.json"))
@@ -301,28 +296,23 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
       for (const entry of store.getMessages(chatId)) {
         switch (entry.kind) {
           case "user_prompt": {
-            const e = entry as UserPromptEntry
-            out.push({ kind: "user_prompt", id: e._id, createdAt: e.createdAt, text: e.content })
+            out.push({ kind: "user_prompt", id: entry._id, createdAt: entry.createdAt, text: entry.content })
             break
           }
           case "assistant_text": {
-            const e = entry as AssistantTextEntry
-            out.push({ kind: "assistant_text", id: e._id, createdAt: e.createdAt, text: e.text })
+            out.push({ kind: "assistant_text", id: entry._id, createdAt: entry.createdAt, text: entry.text })
             break
           }
           case "assistant_thinking": {
-            const e = entry as AssistantThinkingEntry
-            out.push({ kind: "assistant_thinking", id: e._id, createdAt: e.createdAt, text: e.text })
+            out.push({ kind: "assistant_thinking", id: entry._id, createdAt: entry.createdAt, text: entry.text })
             break
           }
           case "tool_call": {
-            const e = entry as ToolCallEntry
-            out.push({ kind: "tool_call", id: e._id, createdAt: e.createdAt, name: e.tool.toolName, input: e.tool.input })
+            out.push({ kind: "tool_call", id: entry._id, createdAt: entry.createdAt, name: entry.tool.toolName, input: entry.tool.input })
             break
           }
           case "tool_result": {
-            const e = entry as ToolResultEntry
-            out.push({ kind: "tool_result", id: e._id, createdAt: e.createdAt, toolCallId: e.toolId, output: e.content, isError: e.isError ?? false })
+            out.push({ kind: "tool_result", id: entry._id, createdAt: entry.createdAt, toolCallId: entry.toolId, output: entry.content, isError: entry.isError ?? false })
             break
           }
           default:
@@ -421,7 +411,7 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     () => appSettings.getSnapshot().claudeAuth.tokens,
     (id, patch) => {
       appSettings.mutateTokenStatus(id, patch).catch((err) => {
-        console.warn("[oauth-pool] token status write failed:", err)
+        log.warn("[oauth-pool] token status write failed:", err)
       })
     },
     Date.now,
@@ -651,13 +641,13 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
         },
       })
       break
-    } catch (err: unknown) {
+    } catch (err) {
       const isAddrInUse =
-        err instanceof Error && "code" in err && (err as NodeJS.ErrnoException).code === "EADDRINUSE"
+        isErrnoException(err) && err.code === "EADDRINUSE"
       if (!isAddrInUse || strictPort || attempt === MAX_PORT_ATTEMPTS - 1) {
         throw err
       }
-      console.log(`Port ${actualPort} is in use, trying ${actualPort + 1}...`)
+      log.info(`Port ${actualPort} is in use, trying ${actualPort + 1}...`)
       actualPort++
     }
   }
@@ -755,7 +745,7 @@ async function handleProjectUpload(req: Request, url: URL, store: EventStore, ap
     })
     return Response.json({ attachments })
   } catch (error) {
-    console.error("[uploads] Upload failed:", error)
+    log.error("[uploads] Upload failed:", String(error))
     return Response.json({ error: "Upload failed" }, { status: 500 })
   }
 }
@@ -957,7 +947,7 @@ async function handleProjectPaths(req: Request, url: URL, store: EventStore) {
     })
     return Response.json({ paths })
   } catch (error) {
-    console.error("[paths] list failed:", error)
+    log.error("[paths] list failed:", String(error))
     return Response.json({ error: "Failed to list paths" }, { status: 500 })
   }
 }

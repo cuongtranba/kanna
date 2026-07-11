@@ -1,6 +1,8 @@
 import { homedir } from "node:os"
 import path from "node:path"
 import OpenAI from "openai"
+import type { AnyValue } from "../shared/errors"
+import { isRecord } from "../shared/errors"
 import { getLlmProviderFilePath } from "../shared/branding"
 import {
   DEFAULT_OPENAI_SDK_MODEL,
@@ -29,14 +31,14 @@ function formatDisplayPath(filePath: string) {
   return filePath
 }
 
-function resolveProvider(value: unknown) {
+function resolveProvider(value: AnyValue) {
   if (value === "openai" || value === "openrouter" || value === "custom") {
     return value
   }
   return null
 }
 
-function normalizeString(value: unknown) {
+function normalizeString(value: AnyValue) {
   return typeof value === "string" ? value.trim() : ""
 }
 
@@ -53,12 +55,10 @@ export function resolveLlmProviderDefaultModel(provider: LlmProviderKind) {
 }
 
 export function normalizeLlmProviderSnapshot(
-  value: unknown,
+  value: AnyValue,
   filePath = getLlmProviderFilePath(homedir())
 ): LlmProviderSnapshot {
-  const source = value && typeof value === "object" && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : null
+  const source = isRecord(value) && !Array.isArray(value) ? value : null
   const warnings: string[] = []
 
   if (!source) {
@@ -119,21 +119,21 @@ export function createDefaultSnapshot(filePath: string, warning: string | null =
   }
 }
 
-function toSerializableValue(value: unknown): unknown {
+function toSerializableValue(value: AnyValue): AnyValue {
   if (value === null || value === undefined) return value ?? null
   if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") return value
   if (Array.isArray(value)) {
-    return value.map((entry) => toSerializableValue(entry))
+    return value.map((entry: AnyValue) => toSerializableValue(entry))
   }
   if (value instanceof Error) {
-    return toSerializableValue(Object.fromEntries(
-      Object.getOwnPropertyNames(value).map((key) => [key, (value as unknown as Record<string, unknown>)[key]])
-    ))
+    const errRecord: Record<string, AnyValue> = Object.fromEntries(
+      Object.getOwnPropertyNames(value).map((key) => [key, Object.getOwnPropertyDescriptor(value, key)?.value])
+    )
+    return toSerializableValue(errRecord)
   }
-  if (typeof value === "object") {
-    const record = value as Record<string, unknown>
+  if (isRecord(value)) {
     return Object.fromEntries(
-      Object.keys(record).map((key) => [key, toSerializableValue(record[key])])
+      Object.keys(value).map((key) => [key, toSerializableValue(value[key])])
     )
   }
   return String(value)

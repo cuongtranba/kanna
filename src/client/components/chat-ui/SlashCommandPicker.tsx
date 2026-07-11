@@ -23,7 +23,8 @@ export function SlashCommandPicker({ items, activeIndex, loading, onSelect, onHo
   const listRef = useRef<HTMLUListElement>(null)
 
   useEffect(() => {
-    const el = listRef.current?.children.item(activeIndex) as HTMLElement | null
+    const child = listRef.current?.children.item(activeIndex)
+    const el = child instanceof HTMLElement ? child : null
     el?.scrollIntoView({ block: "nearest" })
   }, [activeIndex])
 

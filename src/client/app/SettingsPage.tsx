@@ -35,11 +35,18 @@ import {
   CLOUDFLARE_TUNNEL_DEFAULTS,
   DEFAULT_KEYBINDINGS,
   GLOBAL_PROMPT_APPEND_MAX_CHARS,
+  KEYBINDING_ACTIONS,
   PROVIDERS,
   mergeCustomModels,
   UPLOAD_DEFAULTS,
   UPLOAD_MAX_FILE_SIZE_MB_MAX,
   UPLOAD_MAX_FILE_SIZE_MB_MIN,
+  isAgentProvider,
+  isChatSoundId,
+  isChatSoundPreference,
+  isClaudeDriverPreference,
+  isEditorPreset,
+  isLlmProviderKind,
   type AgentProvider,
   type CloudflareTunnelMode,
   type CloudflareTunnelSettings,
@@ -177,13 +184,13 @@ type SidebarPageId = SidebarItem["id"]
 
 export function resolveSettingsSectionId(sectionId: string | undefined): SidebarPageId | null {
   if (!sectionId) return null
-  return sidebarItems.some((item) => item.id === sectionId) ? (sectionId as SidebarPageId) : null
+  return sidebarItems.find((item) => item.id === sectionId)?.id ?? null
 }
 
-const themeOptions = [
-  { value: "light" as ThemePreference, label: "Light", icon: Sun },
-  { value: "dark" as ThemePreference, label: "Dark", icon: Moon },
-  { value: "system" as ThemePreference, label: "System", icon: Monitor },
+const themeOptions: Array<{ value: ThemePreference; label: string; icon: typeof Sun }> = [
+  { value: "light", label: "Light", icon: Sun },
+  { value: "dark", label: "Dark", icon: Moon },
+  { value: "system", label: "System", icon: Monitor },
 ]
 
 const chatSoundPreferenceOptions: { value: ChatSoundPreference; label: string }[] = [
@@ -237,7 +244,7 @@ type ChangelogCache = {
 type FetchReleases = (input: string, init?: RequestInit) => Promise<Response>
 
 let changelogCache: ChangelogCache | null = null
-const KEYBINDING_ACTIONS = Object.keys(KEYBINDING_ACTION_LABELS) as KeybindingAction[]
+// KEYBINDING_ACTIONS imported from shared/types
 
 export function getKeybindingsSubtitle(filePathDisplay: string) {
   return `Edit global app shortcuts stored in ${filePathDisplay}.`
@@ -264,7 +271,7 @@ export async function fetchGithubReleases(fetchImpl: FetchReleases = fetch): Pro
     throw new Error(`GitHub releases request failed with status ${response.status}`)
   }
 
-  const payload = await response.json() as GithubRelease[]
+  const payload: GithubRelease[] = await response.json()
   return payload.filter((release) => !release.draft)
 }
 
@@ -526,16 +533,22 @@ export function ChangelogSection({
                 
                   { (isLatestRelease && canInstallUpdate) || (!isLatestRelease && !isCurrentRelease) ? (() => {
                     const rowPending = pendingAction === release.tag_name || (snapshotUpdating && pendingAction === null)
-                    const actionLabel = isLatestRelease
-                      ? "Update"
-                      : compareSemverTags(normalizedTag, normalizedCurrentVersion) < 0
-                        ? "Rollback"
-                        : "Install"
-                    const pendingLabel = isLatestRelease
-                      ? "Updating…"
-                      : compareSemverTags(normalizedTag, normalizedCurrentVersion) < 0
-                        ? "Rolling back…"
-                        : "Installing…"
+                    let actionLabel: string
+                    if (isLatestRelease) {
+                      actionLabel = "Update"
+                    } else if (compareSemverTags(normalizedTag, normalizedCurrentVersion) < 0) {
+                      actionLabel = "Rollback"
+                    } else {
+                      actionLabel = "Install"
+                    }
+                    let pendingLabel: string
+                    if (isLatestRelease) {
+                      pendingLabel = "Updating…"
+                    } else if (compareSemverTags(normalizedTag, normalizedCurrentVersion) < 0) {
+                      pendingLabel = "Rolling back…"
+                    } else {
+                      pendingLabel = "Installing…"
+                    }
                     return (
                       <SettingsHeaderButton
                         variant="default"
@@ -659,6 +672,14 @@ function SkillResultCard({
   message?: string
   onInstall: () => void
 }) {
+  let buttonLabel: string
+  if (installed) {
+    buttonLabel = "Installed"
+  } else if (installing) {
+    buttonLabel = "Installing"
+  } else {
+    buttonLabel = "Get"
+  }
   return (
     <div className="flex min-w-0 items-center justify-between gap-3 rounded-lg border border-border bg-card/30 p-3">
       <div className="min-w-0">
@@ -685,7 +706,7 @@ function SkillResultCard({
           className="h-6 rounded-full px-2 text-xs"
         >
           {installing ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null}
-          {installed ? "Installed" : installing ? "Installing" : "Get"}
+          {buttonLabel}
         </Button>
       </div>
     </div>
@@ -857,6 +878,29 @@ export function SkillsSection({
     }
   }
 
+  let installedContent: ReactNode
+  if (installedSkills.length > 0) {
+    installedContent = (
+      <div className="grid gap-3 md:grid-cols-2">
+        {installedSkills.map((skill) => (
+          <InstalledSkillCard
+            key={`${skill.source}/${skill.name}`}
+            skill={skill}
+            uninstalling={uninstallingSkillId === skill.name}
+            onUninstall={() => { void uninstallSkill(skill) }}
+          />
+        ))}
+      </div>
+    )
+  } else if (!installedLoading) {
+    installedContent = (
+      <div className="rounded-lg border border-border bg-card/30 p-3 text-sm text-muted-foreground">
+        No global skills installed.
+      </div>
+    )
+  } else {
+    installedContent = null
+  }
   return (
     <div className="flex flex-col gap-6">
       {operationError ? <SkillErrorBlock message={operationError} /> : null}
@@ -866,22 +910,7 @@ export function SkillsSection({
           {installedLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" /> : null}
         </div>
         {installedError ? <div className="text-xs text-destructive">{installedError}</div> : null}
-        {installedSkills.length > 0 ? (
-          <div className="grid gap-3 md:grid-cols-2">
-            {installedSkills.map((skill) => (
-              <InstalledSkillCard
-                key={`${skill.source}/${skill.name}`}
-                skill={skill}
-                uninstalling={uninstallingSkillId === skill.name}
-                onUninstall={() => { void uninstallSkill(skill) }}
-              />
-            ))}
-          </div>
-        ) : !installedLoading ? (
-          <div className="rounded-lg border border-border bg-card/30 p-3 text-sm text-muted-foreground">
-            No global skills installed.
-          </div>
-        ) : null}
+        {installedContent}
       </section>
 
       <section className="flex flex-col gap-3">
@@ -1018,6 +1047,15 @@ export function GlobalInstructionsSection({ state }: { state: KannaState }) {
     }
   }, [saveDisabled, state, trimmed])
 
+  let saveLabel: string
+  if (saving) {
+    saveLabel = "Saving…"
+  } else if (dirty) {
+    saveLabel = "Save"
+  } else {
+    saveLabel = "Saved"
+  }
+
   return (
     <div className="border-b border-border">
       <SettingsRow
@@ -1050,7 +1088,7 @@ export function GlobalInstructionsSection({ state }: { state: KannaState }) {
               onClick={() => { void onSave() }}
               disabled={saveDisabled}
             >
-              {saving ? "Saving…" : dirty ? "Save" : "Saved"}
+              {saveLabel}
             </Button>
           </div>
           {error ? (
@@ -1129,7 +1167,7 @@ export function SettingsPage() {
   const shareDefaultTtlHours = appSettings?.shareDefaultTtlHours ?? 24
   const [shareDefaultTtlDraft, setShareDefaultTtlDraft] = useState(String(shareDefaultTtlHours))
   const [llmProviderDraft, setLlmProviderDraft] = useState<LlmProviderDraft>({
-    provider: "openai" as LlmProviderKind,
+    provider: "openai",
     apiKey: "",
     model: "",
     baseUrl: "",
@@ -1146,19 +1184,22 @@ export function SettingsPage() {
   const handleReadLlmProvider = state.handleReadLlmProvider
   const handleWriteLlmProvider = state.handleWriteLlmProvider
   const handleValidateLlmProvider = state.handleValidateLlmProvider
-  const updateStatusLabel = updateSnapshot?.status === "checking"
-    ? "Checking for updates…"
-    : updateSnapshot?.status === "updating"
-      ? "Installing update…"
-      : updateSnapshot?.status === "restart_pending"
-        ? "Restarting Kanna…"
-        : updateSnapshot?.status === "available"
-          ? `Update available${updateSnapshot.latestVersion ? `: ${updateSnapshot.latestVersion}` : ""}`
-          : updateSnapshot?.status === "up_to_date"
-            ? "Up to date"
-            : updateSnapshot?.status === "error"
-              ? "Update check failed"
-              : "Not checked yet"
+  let updateStatusLabel: string
+  if (updateSnapshot?.status === "checking") {
+    updateStatusLabel = "Checking for updates…"
+  } else if (updateSnapshot?.status === "updating") {
+    updateStatusLabel = "Installing update…"
+  } else if (updateSnapshot?.status === "restart_pending") {
+    updateStatusLabel = "Restarting Kanna…"
+  } else if (updateSnapshot?.status === "available") {
+    updateStatusLabel = `Update available${updateSnapshot.latestVersion ? `: ${updateSnapshot.latestVersion}` : ""}`
+  } else if (updateSnapshot?.status === "up_to_date") {
+    updateStatusLabel = "Up to date"
+  } else if (updateSnapshot?.status === "error") {
+    updateStatusLabel = "Update check failed"
+  } else {
+    updateStatusLabel = "Not checked yet"
+  }
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -1247,7 +1288,8 @@ export function SettingsPage() {
     })
       .then(async (response) => {
         if (!response.ok) return { enabled: false }
-        return await response.json() as { enabled?: boolean }
+        const json: { enabled?: boolean } = await response.json()
+        return json
       })
       .then((payload) => {
         if (cancelled) return
@@ -1282,7 +1324,7 @@ export function SettingsPage() {
         setReleases(nextReleases)
         setChangelogStatus("success")
       })
-      .catch((error: unknown) => {
+      .catch((error) => {
         if (cancelled) return
         setChangelogError(error instanceof Error ? error.message : "Unable to load changelog.")
         setChangelogStatus("error")
@@ -1573,7 +1615,7 @@ export function SettingsPage() {
         setReleases(nextReleases)
         setChangelogStatus("success")
       })
-      .catch((error: unknown) => {
+      .catch((error) => {
         setChangelogError(error instanceof Error ? error.message : "Unable to load changelog.")
         setChangelogStatus("error")
       })
@@ -1594,6 +1636,38 @@ export function SettingsPage() {
       : selectedSection.subtitle
   const showFooter = !isConnecting
   const llmValidationErrorText = llmValidationError ? JSON.stringify(llmValidationError, null, 2) : ""
+  let llmStatusClassName: string
+  if (llmValidationStatus === "valid") {
+    llmStatusClassName = "text-success"
+  } else if (llmValidationStatus === "invalid") {
+    llmStatusClassName = "text-destructive"
+  } else {
+    llmStatusClassName = "hidden"
+  }
+  let llmStatusContent: ReactNode
+  if (llmValidationStatus === "valid") {
+    llmStatusContent = "Credentials valid & saved"
+  } else if (llmValidationStatus === "invalid") {
+    llmStatusContent = (
+      <>
+        <span>Credentials invalid.</span>
+        {llmValidationError ? (
+          <>
+            {" "}
+            <button
+              type="button"
+              onClick={() => setLlmValidationDialogOpen(true)}
+              className="underline underline-offset-2"
+            >
+              See error
+            </button>
+          </>
+        ) : null}
+      </>
+    )
+  } else {
+    llmStatusContent = null
+  }
   const llmValidationDescription = (
     <>
       <span>
@@ -1602,32 +1676,10 @@ export function SettingsPage() {
       <span
         className={cn(
           "mt-2 block text-sm font-medium",
-          llmValidationStatus === "valid"
-            ? "text-success"
-            : llmValidationStatus === "invalid"
-              ? "text-destructive"
-              : "hidden"
+          llmStatusClassName
         )}
       >
-        {llmValidationStatus === "valid" ? (
-          "Credentials valid & saved"
-        ) : llmValidationStatus === "invalid" ? (
-          <>
-            <span>Credentials invalid.</span>
-            {llmValidationError ? (
-              <>
-                {" "}
-                <button
-                  type="button"
-                  onClick={() => setLlmValidationDialogOpen(true)}
-                  className="underline underline-offset-2"
-                >
-                  See error
-                </button>
-              </>
-            ) : null}
-          </>
-        ) : null}
+        {llmStatusContent}
       </span>
     </>
   )
@@ -1784,7 +1836,7 @@ export function SettingsPage() {
                   </div>
                 </div>
 
-                {selectedPage === "general" ? (
+                {selectedPage === "general" && (
                   <>
                     {appSettingsError ? (
                       <div className="mb-4 rounded-lg border border-destructive/20 bg-destructive/5 px-4 py-3 text-sm text-destructive">
@@ -1838,7 +1890,7 @@ export function SettingsPage() {
                       >
                         <Select
                           value={chatSoundPreference}
-                          onValueChange={(value) => handleChatSoundPreferenceChange(value as ChatSoundPreference)}
+                          onValueChange={(value) => { if (isChatSoundPreference(value)) handleChatSoundPreferenceChange(value) }}
                         >
                           <SelectTrigger className="min-w-[180px]">
                             <SelectValue />
@@ -1861,7 +1913,7 @@ export function SettingsPage() {
                       >
                         <Select
                           value={chatSoundId}
-                          onValueChange={(value) => handleChatSoundIdChange(value as ChatSoundId)}
+                          onValueChange={(value) => { if (isChatSoundId(value)) handleChatSoundIdChange(value) }}
                         >
                           <SelectTrigger className="min-w-[180px]">
                             <SelectValue />
@@ -1885,7 +1937,7 @@ export function SettingsPage() {
                       >
                         <Select
                           value={editorPreset}
-                          onValueChange={(value) => handleEditorPresetChange(value as EditorPreset)}
+                          onValueChange={(value) => { if (isEditorPreset(value)) handleEditorPresetChange(value) }}
                         >
                           <SelectTrigger className="min-w-[180px]">
                             <SelectValue />
@@ -2140,7 +2192,7 @@ export function SettingsPage() {
                             <SegmentedControl
                               value={tunnelSettings.mode}
                               onValueChange={(value) => {
-                                void handleTunnelPatch({ mode: value as CloudflareTunnelMode })
+                                void handleTunnelPatch({ mode: value })
                               }}
                               options={cloudflareTunnelModeOptions}
                               size="sm"
@@ -2191,7 +2243,8 @@ export function SettingsPage() {
                       </SettingsRow>
                     </div>
                   </>
-                ) : selectedPage === "providers" ? (
+                )}
+                {selectedPage === "providers" && (
                   <div className="border-b border-border">
                     <SettingsRow
                       title="Claude OAuth tokens"
@@ -2215,10 +2268,10 @@ export function SettingsPage() {
                     >
                       <SegmentedControl
                         value={claudeDriverPreference}
-                        onValueChange={(value) => handleClaudeDriverChange(value as "sdk" | "pty")}
+                        onValueChange={(value) => { if (isClaudeDriverPreference(value)) handleClaudeDriverChange(value) }}
                         options={[
-                          { value: "sdk", label: "SDK (API)" },
-                          { value: "pty", label: "PTY (subscription)" },
+                          { value: "sdk" as const, label: "SDK (API)" },
+                          { value: "pty" as const, label: "PTY (subscription)" },
                         ]}
                       />
                     </SettingsRow>
@@ -2273,7 +2326,7 @@ export function SettingsPage() {
                     >
                       <Select
                         value={defaultProvider}
-                        onValueChange={(value) => handleDefaultProviderChange(value as "last_used" | AgentProvider)}
+                        onValueChange={(value) => { if (value === "last_used" || isAgentProvider(value)) handleDefaultProviderChange(value) }}
                       >
                         <SelectTrigger className="min-w-[180px]">
                           <SelectValue />
@@ -2369,7 +2422,7 @@ export function SettingsPage() {
                             {llmProvider.warning}
                           </div>
                         ) : null}
-                        <Select value={llmProviderDraft.provider} onValueChange={(value) => handleLlmProviderSelection(value as LlmProviderKind)}>
+                        <Select value={llmProviderDraft.provider} onValueChange={(value) => { if (isLlmProviderKind(value)) handleLlmProviderSelection(value) }}>
                           <SelectTrigger className="w-full">
                             <SelectValue />
                           </SelectTrigger>
@@ -2410,7 +2463,8 @@ export function SettingsPage() {
                       </div>
                     </SettingsRow>
                   </div>
-                ) : selectedPage === "keybindings" ? (
+                )}
+                {selectedPage === "keybindings" && (
                   <div className="border-b border-border">
                     {keybindingsError ? (
                       <div className="mb-4 rounded-lg border border-destructive/20 bg-destructive/5 px-4 py-3 text-sm text-destructive">
@@ -2475,19 +2529,14 @@ export function SettingsPage() {
                       )
                     })}
                   </div>
-                ) : selectedPage === "skills" ? (
-                  <SkillsSection state={state} />
-                ) : selectedPage === "subagents" ? (
-                  <SubagentsSettingsBranch state={state} />
-                ) : selectedPage === "models" ? (
-                  <ModelsSettingsBranch state={state} />
-                ) : selectedPage === "mcp-servers" ? (
-                  <McpServersSettingsBranch state={state} />
-                ) : selectedPage === "snippets" ? (
-                  <TextSnippetsSettingsBranch state={state} />
-                ) : selectedPage === "instructions" ? (
-                  <GlobalInstructionsSection state={state} />
-                ) : (
+                )}
+                {selectedPage === "skills" && <SkillsSection state={state} />}
+                {selectedPage === "subagents" && <SubagentsSettingsBranch state={state} />}
+                {selectedPage === "models" && <ModelsSettingsBranch state={state} />}
+                {selectedPage === "mcp-servers" && <McpServersSettingsBranch state={state} />}
+                {selectedPage === "snippets" && <TextSnippetsSettingsBranch state={state} />}
+                {selectedPage === "instructions" && <GlobalInstructionsSection state={state} />}
+                {!["general", "providers", "keybindings", "skills", "subagents", "models", "mcp-servers", "snippets", "instructions"].includes(selectedPage) && (
                   <ChangelogSection
                     status={changelogStatus}
                     releases={releases}

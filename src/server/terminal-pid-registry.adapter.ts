@@ -1,6 +1,8 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises"
 import path from "node:path"
 import process from "node:process"
+import type { AnyValue } from "../shared/errors"
+import { isRecord } from "../shared/errors"
 
 export interface TerminalPidEntry {
   terminalId: string
@@ -63,7 +65,7 @@ export class TerminalPidRegistry {
       return []
     }
     try {
-      const parsed = JSON.parse(raw) as Partial<RegistryFile>
+      const parsed: Partial<RegistryFile> = JSON.parse(raw)
       if (!parsed || !Array.isArray(parsed.entries)) return []
       return parsed.entries.filter(isValidEntry)
     } catch {
@@ -84,15 +86,14 @@ export class TerminalPidRegistry {
   }
 }
 
-function isValidEntry(value: unknown): value is TerminalPidEntry {
-  if (!value || typeof value !== "object") return false
-  const candidate = value as Partial<TerminalPidEntry>
+function isValidEntry(value: AnyValue): value is TerminalPidEntry {
+  if (!isRecord(value)) return false
   return (
-    typeof candidate.terminalId === "string"
-    && typeof candidate.pid === "number"
-    && Number.isFinite(candidate.pid)
-    && typeof candidate.cwd === "string"
-    && typeof candidate.createdAt === "number"
+    typeof value.terminalId === "string"
+    && typeof value.pid === "number"
+    && Number.isFinite(value.pid)
+    && typeof value.cwd === "string"
+    && typeof value.createdAt === "number"
   )
 }
 

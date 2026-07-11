@@ -2,6 +2,8 @@
 // Keep names and field shapes aligned with the official app-server protocol.
 
 import type { CodexReasoningEffort, ServiceTier } from "../shared/types"
+import type { AnyValue } from "../shared/errors"
+import { isRecord } from "../shared/errors"
 
 export type CodexRequestId = string | number
 
@@ -340,8 +342,8 @@ export interface McpToolCallItem {
   tool: string
   arguments?: Record<string, unknown> | null
   result?: {
-    content?: unknown[]
-    structuredContent?: unknown
+    content?: AnyValue[]
+    structuredContent?: AnyValue
   } | null
   error?: {
     message?: string
@@ -452,7 +454,7 @@ export interface ErrorNotification {
   error: {
     message: string
     codexErrorInfo?: string
-    additionalDetails?: unknown
+    additionalDetails?: AnyValue
   }
   willRetry: boolean
   threadId?: string
@@ -471,34 +473,33 @@ export type ServerNotification =
   | { method: "thread/compacted"; params: ContextCompactedNotification }
   | { method: "error"; params: ErrorNotification }
 
-export function isJsonRpcResponse(value: unknown): value is JsonRpcResponse {
-  return Boolean(value) && typeof value === "object" && "id" in (value as Record<string, unknown>)
-    && ("result" in (value as Record<string, unknown>) || "error" in (value as Record<string, unknown>))
-    && !("method" in (value as Record<string, unknown>))
+export function isJsonRpcResponse(value: AnyValue): value is JsonRpcResponse {
+  if (!isRecord(value)) return false
+  return "id" in value
+    && ("result" in value || "error" in value)
+    && !("method" in value)
 }
 
-export function isServerRequest(value: unknown): value is ServerRequest {
-  if (!value || typeof value !== "object") return false
-  const candidate = value as Record<string, unknown>
-  if (typeof candidate.method !== "string" || !("id" in candidate)) return false
-  return candidate.method === "item/tool/requestUserInput"
-    || candidate.method === "item/tool/call"
-    || candidate.method === "item/commandExecution/requestApproval"
-    || candidate.method === "item/fileChange/requestApproval"
+export function isServerRequest(value: AnyValue): value is ServerRequest {
+  if (!isRecord(value)) return false
+  if (typeof value.method !== "string" || !("id" in value)) return false
+  return value.method === "item/tool/requestUserInput"
+    || value.method === "item/tool/call"
+    || value.method === "item/commandExecution/requestApproval"
+    || value.method === "item/fileChange/requestApproval"
 }
 
-export function isServerNotification(value: unknown): value is ServerNotification {
-  if (!value || typeof value !== "object") return false
-  const candidate = value as Record<string, unknown>
-  if (typeof candidate.method !== "string" || "id" in candidate) return false
-  return candidate.method === "thread/started"
-    || candidate.method === "thread/tokenUsage/updated"
-    || candidate.method === "turn/started"
-    || candidate.method === "turn/completed"
-    || candidate.method === "turn/plan/updated"
-    || candidate.method === "item/started"
-    || candidate.method === "item/completed"
-    || candidate.method === "item/plan/delta"
-    || candidate.method === "thread/compacted"
-    || candidate.method === "error"
+export function isServerNotification(value: AnyValue): value is ServerNotification {
+  if (!isRecord(value)) return false
+  if (typeof value.method !== "string" || "id" in value) return false
+  return value.method === "thread/started"
+    || value.method === "thread/tokenUsage/updated"
+    || value.method === "turn/started"
+    || value.method === "turn/completed"
+    || value.method === "turn/plan/updated"
+    || value.method === "item/started"
+    || value.method === "item/completed"
+    || value.method === "item/plan/delta"
+    || value.method === "thread/compacted"
+    || value.method === "error"
 }

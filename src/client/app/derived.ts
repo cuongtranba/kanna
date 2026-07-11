@@ -1,16 +1,19 @@
 import type { HydratedTranscriptMessage } from "../../shared/types"
 import type { ProcessedToolCall } from "../components/messages/types"
 
+function isProcessedToolCall(m: HydratedTranscriptMessage): m is ProcessedToolCall {
+  return m.kind === "tool"
+}
+
 const SPECIAL_TOOL_NAMES = ["AskUserQuestion", "ExitPlanMode", "TodoWrite"] as const
 const RESOLVED_TOOL_NAMES = new Set<string>(["TodoWrite"])
 
 function findLatestUnresolvedToolId(messages: HydratedTranscriptMessage[], toolName: string): string | null {
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = messages[index]
-    if (message.kind !== "tool") continue
-    const toolCall = message as ProcessedToolCall
-    if (toolCall.toolName === toolName && !toolCall.result) {
-      return toolCall.id
+    if (!isProcessedToolCall(message)) continue
+    if (message.toolName === toolName && !message.result) {
+      return message.id
     }
   }
   return null
@@ -19,10 +22,9 @@ function findLatestUnresolvedToolId(messages: HydratedTranscriptMessage[], toolN
 function findLatestToolId(messages: HydratedTranscriptMessage[], toolName: string): string | null {
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = messages[index]
-    if (message.kind !== "tool") continue
-    const toolCall = message as ProcessedToolCall
-    if (toolCall.toolName === toolName) {
-      return toolCall.id
+    if (!isProcessedToolCall(message)) continue
+    if (message.toolName === toolName) {
+      return message.id
     }
   }
   return null

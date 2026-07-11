@@ -6,7 +6,7 @@ interface Props {
   message: ProcessedTextMessage
 }
 
-export const TextMessage = memo(function TextMessage({ message }: Props) {
+export const TextMessage = memo(({ message }: Props) => {
   return (
     <div className="text-pretty prose prose-sm dark:prose-invert px-0.5 w-full max-w-[70ch] space-y-4">
       {renderMessageMarkdown(message.text)}

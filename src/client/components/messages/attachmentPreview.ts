@@ -1,3 +1,4 @@
+import type { AnyValue } from "../../../shared/errors"
 import type { ChatAttachment } from "../../../shared/types"
 
 export const TEXT_PREVIEW_LIMIT_BYTES = 1024 * 1024
@@ -255,7 +256,7 @@ function resolvePreviewUrl(url: string) {
   return new URL(url, document.baseURI || window.location.href).toString()
 }
 
-function isPreviewTimeout(error: unknown) {
+function isPreviewTimeout(error: AnyValue) {
   if (error instanceof DOMException && error.name === "AbortError") {
     return true
   }

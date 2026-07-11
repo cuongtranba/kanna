@@ -3,7 +3,10 @@ import { homedir } from "node:os"
 import type { EventStore } from "./event-store"
 import type { ChatRecord } from "./events"
 import { mapClaudeRecordsToEntries } from "./claude-session-mapper"
+import { log } from "../shared/log"
 import { scanClaudeSessions } from "./claude-session-scanner.adapter"
+import type { AnyValue } from "../shared/errors"
+import { isRecord } from "../shared/errors"
 import type {
   ClaudeSessionCustomTitleRecord,
   ClaudeSessionSummaryRecord,
@@ -37,17 +40,16 @@ function cwdExists(cwd: string): boolean {
   }
 }
 
-function extractUserText(content: unknown): string | null {
+function extractUserText(content: AnyValue): string | null {
   if (typeof content === "string") {
     const trimmed = content.trim()
     return trimmed ? trimmed : null
   }
   if (!Array.isArray(content)) return null
   for (const block of content) {
-    if (!block || typeof block !== "object") continue
-    const blockRec = block as { type?: unknown; text?: unknown }
-    if (blockRec.type === "text" && typeof blockRec.text === "string") {
-      const trimmed = blockRec.text.trim()
+    if (!isRecord(block)) continue
+    if (block.type === "text" && typeof block.text === "string") {
+      const trimmed = block.text.trim()
       if (trimmed) return trimmed
     }
   }
@@ -99,7 +101,9 @@ function deriveSummaryTitle(session: ParsedClaudeSession): string | null {
 function deriveUserTitle(session: ParsedClaudeSession): string | null {
   for (const record of session.records) {
     if (record.type !== "user") continue
-    const content = (record as { message?: { content?: unknown } }).message?.content
+    const recordRec = isRecord(record) ? record : null
+    const message = recordRec && isRecord(recordRec.message) ? recordRec.message : null
+    const content = message?.content
     const text = extractUserText(content)
     if (text) return truncateTitle(text)
   }
@@ -229,7 +233,7 @@ export async function importClaudeSessions(
         }
         await store.setSourceHash(existingChat.id, session.sourceHash)
       } catch (error) {
-        console.error("[kanna/import] failed to update session", session.filePath, error)
+        log.error("[kanna/import] failed to update session", session.filePath, String(error))
         failed += 1
       }
       continue
@@ -265,7 +269,7 @@ export async function importClaudeSessions(
       imported += 1
       if (onProgress) onProgress({ scanned, imported })
     } catch (error) {
-      console.error("[kanna/import] failed to import session", session.filePath, error)
+      log.error("[kanna/import] failed to import session", session.filePath, String(error))
       failed += 1
     }
   }

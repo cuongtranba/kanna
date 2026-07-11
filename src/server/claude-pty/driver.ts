@@ -1,5 +1,8 @@
 import { homedir } from "node:os"
 import path from "node:path"
+import type { AnyValue } from "../../shared/errors"
+import { isRecord } from "../../shared/errors"
+import { log } from "../../shared/log"
 import { randomUUID } from "node:crypto"
 import { createRuntimeDir, writeRuntimeFile, removeRuntimeDir } from "./runtime-dir.adapter"
 import { verifyPtyAuth } from "./auth"
@@ -369,7 +372,7 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
   const home = args.homeDir ?? homedir()
   const env = args.env ?? process.env
 
-  console.log("[kanna/pty] startClaudeSessionPTY begin", {
+  log.info("[kanna/pty] startClaudeSessionPTY begin", {
     chatId: args.chatId,
     projectId: args.projectId,
     localPath: args.localPath,
@@ -398,7 +401,7 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
 
   const auth = await verifyPtyAuth({ env, oauthToken: args.oauthToken })
   if (!auth.ok) {
-    console.error("[kanna/pty] verifyPtyAuth failed", {
+    log.error("[kanna/pty] verifyPtyAuth failed", {
       chatId: args.chatId,
       error: auth.error,
       hasOauthToken: Boolean(args.oauthToken),
@@ -408,7 +411,7 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
   }
 
   const resolved = await resolveClaudeBinary({ env, homeDir: home })
-  console.log("[kanna/pty] resolved claude binary", {
+  log.info("[kanna/pty] resolved claude binary", {
     chatId: args.chatId,
     path: resolved.path,
     source: resolved.source,
@@ -429,7 +432,7 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
   })
   const smoke = await smokeGate.canSpawn({ binarySha256, model: args.model })
   if (!smoke.ok) {
-    console.error("[kanna/pty] smoke-test refused spawn", { chatId: args.chatId, reason: smoke.reason })
+    log.error("[kanna/pty] smoke-test refused spawn", { chatId: args.chatId, reason: smoke.reason })
     throw new Error(`PTY smoke-test refused spawn: ${smoke.reason}`)
   }
 
@@ -447,7 +450,7 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
   const runtimeDir = await createRuntimeDir(`kanna-pty-${sessionId.slice(0, 8)}-`)
 
   const mcpConfigPath = path.join(runtimeDir, "mcp-config.json")
-  let mcpHandle: KannaMcpHttpHandle
+  let mcpHandle: KannaMcpHttpHandle | undefined
   const startMcp = args.startKannaMcpHttpServer ?? startKannaMcpHttpServer
   try {
     mcpHandle = await startMcp({
@@ -477,7 +480,7 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
       { encoding: "utf8", mode: 0o600 },
     )
   } catch (err) {
-    try { await (mcpHandle! as KannaMcpHttpHandle | undefined)?.close() } catch { /* swallow */ }
+    try { if (mcpHandle) await mcpHandle.close() } catch { /* swallow */ }
     try { await removeRuntimeDir(runtimeDir) } catch { /* swallow */ }
     throw err
   }
@@ -541,13 +544,13 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
     // "ask_user_question dropped" UX bug. Pendings now resolve only via
     // explicit chat.cancel / chat.delete (cancelAllForChat in ws-router)
     // or recoverOnStartup fail-close on the next server boot.
-    try { await mcpHandle.close() } catch (err) {
+    try { if (mcpHandle) await mcpHandle.close() } catch (err) {
       // Logged because a swallowed mcpHandle close error means the loopback
       // HTTP server may still be listening — a real resource leak.
-      console.warn("[kanna/pty] mcpHandle.close failed (HTTP server may leak)", { chatId: args.chatId, sessionId, err })
+      log.warn("[kanna/pty] mcpHandle.close failed (HTTP server may leak)", { chatId: args.chatId, sessionId, err })
     }
     try { await removeRuntimeDir(runtimeDir) } catch (err) {
-      console.warn("[kanna/pty] runtimeDir cleanup failed", { chatId: args.chatId, runtimeDir, err })
+      log.warn("[kanna/pty] runtimeDir cleanup failed", { chatId: args.chatId, runtimeDir, err })
     }
     if (args.ptyRegistry && ownPid !== null) {
       // Unregister by THIS handle's pid (not sessionId): a live re-spawn
@@ -556,7 +559,7 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
       try { await args.ptyRegistry.unregister(ownPid) } catch (err) {
         // A stale entry on disk only matters across server restarts — log
         // for observability but do not fail cleanup.
-        console.warn("[kanna/pty] ptyRegistry.unregister failed", { chatId: args.chatId, sessionId, pid: ownPid, err })
+        log.warn("[kanna/pty] ptyRegistry.unregister failed", { chatId: args.chatId, sessionId, pid: ownPid, err })
       }
     }
     workflowRegistrationCancelled = true
@@ -566,9 +569,10 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
 
   function pushMerged(ev: HarnessEvent) {
     if (ev.type === "transcript" && ev.entry) {
-      const entry = ev.entry as { kind?: string; accountInfo?: unknown; slashCommands?: unknown }
-      if (entry.kind === "account_info" && entry.accountInfo !== undefined) {
-        cachedAccountInfo = entry.accountInfo as AccountInfo
+      const entry = ev.entry
+      if (entry.kind === "account_info" && isRecord(entry) && entry.accountInfo !== undefined) {
+        const ai: AccountInfo = entry.accountInfo satisfies AnyValue
+        cachedAccountInfo = ai
       }
       if (entry.kind === "result") {
         sawResultEntry = true
@@ -577,8 +581,9 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
       // CLI knows about — including every skill, plugin command, project
       // command, and built-in. Cache it so getSupportedCommands() returns
       // the live set instead of the cold-start fallback.
-      if (entry.kind === "system_init" && Array.isArray(entry.slashCommands)) {
-        cachedSlashCommands = (entry.slashCommands as string[]).map((name) => ({
+      if (entry.kind === "system_init" && isRecord(entry) && Array.isArray(entry.slashCommands)) {
+        const rawCommands: AnyValue[] = entry.slashCommands
+        cachedSlashCommands = rawCommands.filter((s): s is string => typeof s === "string").map((name) => ({
           name,
           description: "",
           argumentHint: "",
@@ -593,7 +598,7 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
       args.oneShot
       && !args.keepAlive
       && ev.type === "transcript"
-      && (ev.entry as { kind?: string } | undefined)?.kind === "result"
+      && ev.entry?.kind === "result"
     ) {
       void oneShotClose()
     }
@@ -642,7 +647,7 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
   const ring = new OutputRing()
   const spawnPty = args.spawnPtyProcess ?? defaultSpawnPtyProcess
   try {
-    console.log("[kanna/pty] spawn begin", {
+    log.info("[kanna/pty] spawn begin", {
       chatId: args.chatId,
       command: claudeBin,
       cwd: args.localPath,
@@ -654,7 +659,7 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
       env: spawnEnv,
       onOutput: (chunk) => { ring.append(chunk) },
     })
-    console.log("[kanna/pty] pty spawned", { chatId: args.chatId, sessionId, pid: pty.pid })
+    log.info("[kanna/pty] pty spawned", { chatId: args.chatId, sessionId, pid: pty.pid })
     ownPid = pty.pid
     args.ptyInstanceRegistry?.upsert(args.chatId, {
       sessionId,
@@ -676,11 +681,11 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
           runtimeDir,
         })
       } catch (err) {
-        console.warn("[kanna/pty] ptyRegistry.register failed (orphan reap on crash disabled for this session)", { chatId: args.chatId, sessionId, err })
+        log.warn("[kanna/pty] ptyRegistry.register failed (orphan reap on crash disabled for this session)", { chatId: args.chatId, sessionId, err })
       }
     }
   } catch (err) {
-    console.error("[kanna/pty] spawn failed", {
+    log.error("[kanna/pty] spawn failed", {
       chatId: args.chatId,
       sessionId,
       error: err instanceof Error ? err.message : String(err),
@@ -702,22 +707,22 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
     // +8 s over the base cap to absorb both dialogs + project reload.
     const readyResult = await waitForTuiReadyDismissingDialogs(pty, ring, { hardCapMs: tuiReadyMs + 8_000 })
     if (readyResult === "timeout") {
-      console.warn("[kanna/pty] TUI ready marker not detected after dialogs dismiss (channel path)", { chatId: args.chatId, hardCapMs: tuiReadyMs + 8_000 })
+      log.warn("[kanna/pty] TUI ready marker not detected after dialogs dismiss (channel path)", { chatId: args.chatId, hardCapMs: tuiReadyMs + 8_000 })
     } else {
-      console.log("[kanna/pty] TUI ready (channel path)", { chatId: args.chatId })
+      log.info("[kanna/pty] TUI ready (channel path)", { chatId: args.chatId })
     }
   } else if (trustDismiss !== "disabled") {
     // +5 s over the base cap to absorb trust-dialog dismiss + project reload.
     const readyResult = await waitForTuiReadyWithTrustDismiss(pty, ring, { hardCapMs: tuiReadyMs + 5_000, quietPeriodMs: tuiReadyQuietMs })
     if (readyResult === "timeout") {
-      console.warn("[kanna/pty] TUI ready marker not detected after trust dismiss", { chatId: args.chatId, hardCapMs: tuiReadyMs + 5_000 })
+      log.warn("[kanna/pty] TUI ready marker not detected after trust dismiss", { chatId: args.chatId, hardCapMs: tuiReadyMs + 5_000 })
     } else {
-      console.log("[kanna/pty] TUI ready", { chatId: args.chatId })
+      log.info("[kanna/pty] TUI ready", { chatId: args.chatId })
     }
   } else {
     const readyResult = await waitForTuiReady(ring, { hardCapMs: tuiReadyMs, quietPeriodMs: tuiReadyQuietMs })
     if (readyResult === "timeout") {
-      console.warn("[kanna/pty] TUI ready marker not detected within hard cap", { chatId: args.chatId, hardCapMs: tuiReadyMs })
+      log.warn("[kanna/pty] TUI ready marker not detected within hard cap", { chatId: args.chatId, hardCapMs: tuiReadyMs })
     }
   }
 
@@ -763,7 +768,7 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
       const workflowsDir = path.join(projectDir, sessionUUID, "workflows")
       if (!workflowRegistrationCancelled) registry.register(chatId, workflowsDir)
     }).catch((err) => {
-      console.warn("[kanna/pty] workflowRegistry.register skipped: transcript file not found", { chatId: args.chatId, err })
+      log.warn("[kanna/pty] workflowRegistry.register skipped: transcript file not found", { chatId: args.chatId, err })
     })
   }
 
@@ -778,7 +783,7 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
       const subagentsDir = path.join(projectDir, sessionUUID, "subagents")
       if (!workflowRegistrationCancelled) subRegistry.register(chatId, subagentsDir)
     }).catch((err) => {
-      console.warn("[kanna/pty] subagentTranscriptRegistry.register skipped: transcript file not found", { chatId: args.chatId, err })
+      log.warn("[kanna/pty] subagentTranscriptRegistry.register skipped: transcript file not found", { chatId: args.chatId, err })
     })
   }
 
@@ -794,17 +799,17 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
           const events = parser.parse(line)
           for (const ev of events) pushMerged(ev)
         } catch (err) {
-          console.warn("[kanna/pty] parser threw on line", { chatId: args.chatId, sessionId, err })
+          log.warn("[kanna/pty] parser threw on line", { chatId: args.chatId, sessionId, err })
         }
       }
-      console.log("[kanna/pty] transcript stream ended", { chatId: args.chatId, sessionId })
+      log.info("[kanna/pty] transcript stream ended", { chatId: args.chatId, sessionId })
     } catch (err) {
-      console.warn("[kanna/pty] transcript stream errored", { chatId: args.chatId, sessionId, err })
+      log.warn("[kanna/pty] transcript stream errored", { chatId: args.chatId, sessionId, err })
     }
   })()
 
   function drainTerminate(exitCode: number | null) {
-    console.log("[kanna/pty] drainTerminate", {
+    log.info("[kanna/pty] drainTerminate", {
       chatId: args.chatId,
       sessionId,
       exitCode,
@@ -817,7 +822,7 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
     if (closed || oneShotClosing) {
       while (mergedWaiters.length > 0) {
         const w = mergedWaiters.shift()
-        if (w) w({ value: undefined as unknown as HarnessEvent, done: true })
+        if (w) w({ value: undefined, done: true })
       }
       return
     }
@@ -827,7 +832,7 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
       const resultText = tail.length > 0
         ? tail
         : `claude PTY process exited (${codeNote}) before producing a result.`
-      console.warn("[kanna/pty] synthesizing error-result for early PTY exit (no turn_duration / result row seen)", {
+      log.warn("[kanna/pty] synthesizing error-result for early PTY exit (no turn_duration / result row seen)", {
         chatId: args.chatId,
         sessionId,
         exitCode,
@@ -837,7 +842,7 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
         type: "transcript",
         entry: timestamped({
           kind: "result",
-          subtype: "error",
+          subtype: "error" as const,
           isError: true,
           durationMs: 0,
           result: resultText,
@@ -848,31 +853,31 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
     void cleanupResources()
     while (mergedWaiters.length > 0) {
       const w = mergedWaiters.shift()
-      if (w) w({ value: undefined as unknown as HarnessEvent, done: true })
+      if (w) w({ value: undefined, done: true })
     }
   }
 
   void pty.exited
     .then((code) => {
-      console.log("[kanna/pty] pty.exited resolved", { chatId: args.chatId, sessionId, pid: pty.pid, code })
+      log.info("[kanna/pty] pty.exited resolved", { chatId: args.chatId, sessionId, pid: pty.pid, code })
       drainTerminate(typeof code === "number" ? code : null)
     })
     .catch((err) => {
-      console.warn("[kanna/pty] pty.exited rejected", { chatId: args.chatId, sessionId, pid: pty.pid, err })
+      log.warn("[kanna/pty] pty.exited rejected", { chatId: args.chatId, sessionId, pid: pty.pid, err })
       drainTerminate(null)
     })
 
   async function oneShotClose() {
     if (oneShotClosing || closed) return
     oneShotClosing = true
-    console.log("[kanna/pty] oneShotClose start", { chatId: args.chatId, sessionId, sawResultEntry })
+    log.info("[kanna/pty] oneShotClose start", { chatId: args.chatId, sessionId, sawResultEntry })
     try { await sendExitCommand(pty) } catch (err) {
-      console.warn("[kanna/pty] oneShotClose sendExitCommand failed", { chatId: args.chatId, sessionId, err })
+      log.warn("[kanna/pty] oneShotClose sendExitCommand failed", { chatId: args.chatId, sessionId, err })
     }
     try { await pty.exited } catch { /* swallow */ }
     try { transcriptStream.close() } catch { /* swallow */ }
     await cleanupResources()
-    console.log("[kanna/pty] oneShotClose finished", { chatId: args.chatId, sessionId })
+    log.info("[kanna/pty] oneShotClose finished", { chatId: args.chatId, sessionId })
   }
 
   if (channelDeliveryEnabled && args.initialPrompt) {
@@ -894,12 +899,12 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
       // dialog is accepted and the client reports initialized.
       await new Promise((r) => setTimeout(r, 300))
       await mcpHandle.pushChannelPrompt(args.initialPrompt)
-      console.log("[kanna/pty] delivered initial prompt via channel push", { chatId: args.chatId })
+      log.info("[kanna/pty] delivered initial prompt via channel push", { chatId: args.chatId })
     } catch (err) {
       // FAIL FAST: do not paste. A silent paste would re-introduce the
       // multi-line truncation bug. Surface a clear spawn failure instead.
       const message = err instanceof Error ? err.message : String(err)
-      console.error("[kanna/pty] channel delivery failed; failing spawn (no paste fallback)", { chatId: args.chatId, sessionId, error: message })
+      log.error("[kanna/pty] channel delivery failed; failing spawn (no paste fallback)", { chatId: args.chatId, sessionId, error: message })
       try { transcriptStream.close() } catch { /* swallow */ }
       try { pty.close() } catch { /* swallow */ }
       try { await mcpHandle.close() } catch { /* swallow */ }
@@ -910,7 +915,7 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
     try {
       await sendUserPrompt(pty, ring, args.initialPrompt)
     } catch (err) {
-      console.warn("[kanna/pty] initialPrompt write failed", err)
+      log.warn("[kanna/pty] initialPrompt write failed", String(err))
     }
   }
 
@@ -923,7 +928,7 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
             if (ev) return Promise.resolve({ value: ev, done: false })
           }
           if (closed) {
-            return Promise.resolve({ value: undefined as unknown as HarnessEvent, done: true })
+            return Promise.resolve({ value: undefined, done: true })
           }
           return new Promise((resolve) => {
             mergedWaiters.push(resolve)
@@ -940,14 +945,7 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
       try { await pty.sendInput("\x03") } catch { /* swallow */ }
     },
     sendPrompt: async (content) => {
-      const text = typeof content === "string"
-        ? content
-        : Array.isArray(content)
-          ? (content as Array<{ type?: string; text?: string }>)
-              .filter((c) => c.type === "text")
-              .map((c) => c.text ?? "")
-              .join("\n")
-          : String(content)
+      const text = content
       // Gate on the TUI being back at its idle "❯ " input box before pasting.
       // After a long previous turn the REPL may still be rendering (stop-hook
       // summary / turn_duration / context compaction); pasting then drops the
@@ -965,7 +963,7 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
         quietPeriodMs: tuiReadyQuietMs,
       })
       if (ready === "timeout") {
-        console.warn("[kanna/pty] TUI ready marker not detected before follow-up prompt; sending anyway", { chatId: args.chatId, hardCapMs: followupReadyMs })
+        log.warn("[kanna/pty] TUI ready marker not detected before follow-up prompt; sending anyway", { chatId: args.chatId, hardCapMs: followupReadyMs })
       }
       await sendUserPrompt(pty, ring, text)
     },
@@ -973,7 +971,7 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
       try {
         await pty.sendInput(`/model ${model}\r`)
       } catch (err) {
-        console.warn("[kanna/pty] setModel via /model slash command failed", err)
+        log.warn("[kanna/pty] setModel via /model slash command failed", String(err))
       }
     },
     setPermissionMode: async (planMode) => {
@@ -982,7 +980,7 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
           await pty.sendInput("/plan\r")
           localPlanModeActive = true
         } catch (err) {
-          console.warn("[kanna/pty] /plan slash command failed", err)
+          log.warn("[kanna/pty] /plan slash command failed", String(err))
         }
         return
       }
@@ -991,11 +989,11 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
           await pty.sendInput(SHIFT_TAB_KEY)
           localPlanModeActive = false
         } catch (err) {
-          console.warn("[kanna/pty] Shift+Tab exit-plan failed", err)
+          log.warn("[kanna/pty] Shift+Tab exit-plan failed", String(err))
         }
         return
       }
-      console.warn(PLAN_MODE_EXIT_UNSUPPORTED)
+      log.warn(PLAN_MODE_EXIT_UNSUPPORTED)
     },
     getSupportedCommands: async () => cachedSlashCommands ?? STATIC_SUPPORTED_COMMANDS,
     getAccountInfo: async () => cachedAccountInfo,
@@ -1017,7 +1015,7 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
         //   3. SIGKILL (force kill, unblocks hung TUI)
         // Each timer is cleared if pty.exited resolves before the deadline.
         try { await sendExitCommand(pty) } catch { /* swallow */ }
-        const sigkillTimer = { ref: null as ReturnType<typeof setTimeout> | null }
+        const sigkillTimer: { ref: ReturnType<typeof setTimeout> | null } = { ref: null }
         const termTimer = setTimeout(() => {
           try { pty.close() } catch { /* swallow */ }
           sigkillTimer.ref = setTimeout(() => {
@@ -1033,7 +1031,7 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
         await cleanupResources()
         while (mergedWaiters.length > 0) {
           const w = mergedWaiters.shift()
-          if (w) w({ value: undefined as unknown as HarnessEvent, done: true })
+          if (w) w({ value: undefined, done: true })
         }
       })()
     },

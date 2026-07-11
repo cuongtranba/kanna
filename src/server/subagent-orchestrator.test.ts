@@ -83,7 +83,7 @@ async function setupHarness(opts: {
   const project = await store.openProject("/tmp/p-orch")
   const chat = await store.createChat(project.id)
 
-  let subagents = opts.subagents
+  const subagents = opts.subagents
   const appSettings: OrchestratorAppSettings = {
     getSnapshot: () => ({ subagents }),
   }

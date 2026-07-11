@@ -52,15 +52,18 @@ export interface WorkflowRunSummary {
   agents: WorkflowAgentSummary[]
 }
 
+import type { AnyValue } from "./errors"
+import { isRecord } from "./errors"
+
 const KNOWN_STATUS: ReadonlySet<string> = new Set(["running", "completed", "failed", "killed"])
 
-function rec(v: unknown): Record<string, unknown> | null {
-  return v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : null
+function rec(v: AnyValue): Record<string, AnyValue> | null {
+  return isRecord(v) && !Array.isArray(v) ? v : null
 }
-function str(v: unknown): string | undefined { return typeof v === "string" ? v : undefined }
-function num(v: unknown): number | undefined { return typeof v === "number" ? v : undefined }
+function str(v: AnyValue): string | undefined { return typeof v === "string" ? v : undefined }
+function num(v: AnyValue): number | undefined { return typeof v === "number" ? v : undefined }
 
-function parseAgents(progress: unknown): WorkflowAgentProgress[] {
+function parseAgents(progress: AnyValue): WorkflowAgentProgress[] {
   if (!Array.isArray(progress)) return []
   const out: WorkflowAgentProgress[] = []
   for (const item of progress) {
@@ -88,7 +91,7 @@ function parseAgents(progress: unknown): WorkflowAgentProgress[] {
   return out
 }
 
-function parsePhases(phases: unknown): WorkflowPhase[] {
+function parsePhases(phases: AnyValue): WorkflowPhase[] {
   if (!Array.isArray(phases)) return []
   const out: WorkflowPhase[] = []
   for (const item of phases) {
@@ -101,14 +104,34 @@ function parsePhases(phases: unknown): WorkflowPhase[] {
   return out
 }
 
-export function parseWorkflowRunFile(raw: unknown): WorkflowRun | null {
+export function parseWorkflowRunFile(raw: AnyValue): WorkflowRun | null {
   const r = rec(raw)
   if (!r) return null
   const runId = str(r.runId)
   if (!runId) return null
   const rawStatus = str(r.status)
-  const status: WorkflowStatus = rawStatus && KNOWN_STATUS.has(rawStatus) ? (rawStatus as WorkflowStatus) : "unknown"
+  function isKnownStatus(s: string): s is Exclude<WorkflowStatus, "unknown"> {
+    return KNOWN_STATUS.has(s)
+  }
+  const status: WorkflowStatus = rawStatus && isKnownStatus(rawStatus) ? rawStatus : "unknown"
   const resultVal = r.result
+  let resultStr: string | null
+  if (typeof resultVal === "string") {
+    resultStr = resultVal
+  } else if (resultVal == null) {
+    resultStr = null
+  } else {
+    resultStr = JSON.stringify(resultVal)
+  }
+  const argsVal = r.args
+  let argsStr: string | undefined
+  if (typeof argsVal === "string") {
+    argsStr = argsVal
+  } else if (argsVal == null) {
+    argsStr = undefined
+  } else {
+    argsStr = JSON.stringify(argsVal)
+  }
   return {
     runId,
     taskId: str(r.taskId),
@@ -121,12 +144,12 @@ export function parseWorkflowRunFile(raw: unknown): WorkflowRun | null {
     totalToolCalls: num(r.totalToolCalls),
     phases: parsePhases(r.phases),
     agents: parseAgents(r.workflowProgress),
-    result: typeof resultVal === "string" ? resultVal : resultVal == null ? null : JSON.stringify(resultVal),
+    result: resultStr,
     error: str(r.error) ?? (r.error == null ? null : String(r.error)),
     summary: str(r.summary) ?? null,
     script: str(r.script),
     scriptPath: str(r.scriptPath),
-    args: typeof r.args === "string" ? r.args : r.args == null ? undefined : JSON.stringify(r.args),
+    args: argsStr,
   }
 }
 

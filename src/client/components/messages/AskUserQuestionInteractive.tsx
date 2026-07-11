@@ -22,7 +22,24 @@ function QuestionCard({
   children: React.ReactNode
 }) {
   const showBackButton = onBack && currentIndex > 0
-  const hasMeta = showBackButton || totalQuestions > 1 || !!header
+  const hasMeta = showBackButton || totalQuestions > 1 || Boolean(header)
+  let backOrProgress: React.ReactNode
+  if (showBackButton) {
+    backOrProgress = (
+      <button
+        onClick={onBack}
+        className="text-muted-foreground hover:opacity-60 transition-all flex items-center"
+      >
+        <ChevronLeft className="h-4 w-4 -ml-0.5" strokeWidth={3} />
+      </button>
+    )
+  } else if (totalQuestions > 1) {
+    backOrProgress = (
+      <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground whitespace-nowrap">{currentIndex + 1} of {totalQuestions}</span>
+    )
+  } else {
+    backOrProgress = null
+  }
 
   return (
     <div className="rounded-2xl border border-border overflow-hidden">
@@ -30,16 +47,7 @@ function QuestionCard({
         <div className="p-3 px-4 bg-card border-b border-border">
           {hasMeta && (
             <div className="flex flex-row items-center gap-2 mb-1">
-              {showBackButton ? (
-                <button
-                  onClick={onBack}
-                  className="text-muted-foreground hover:opacity-60 transition-all flex items-center"
-                >
-                  <ChevronLeft className="h-4 w-4 -ml-0.5" strokeWidth={3} />
-                </button>
-              ) : totalQuestions > 1 ? (
-                <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground whitespace-nowrap">{currentIndex + 1} of {totalQuestions}</span>
-              ) : null}
+              {backOrProgress}
               {header ? (
                 <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground text-pretty">{header}</span>
               ) : null}
@@ -273,7 +281,7 @@ export function AskUserQuestionInteractive(
               className="flex-1 px-3 !py-1 pl-4 min-h-[55px] min-w-0 text-sm bg-transparent outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background rounded-md text-foreground placeholder:text-muted-foreground"
             />
             <Checkbox
-              selected={!!customInput}
+              selected={Boolean(customInput)}
               multiSelect={currentQuestion.multiSelect}
               onClick={currentQuestion.multiSelect && customInput ? () => clearCustomInput(currentQuestion) : undefined}
             />
@@ -288,7 +296,7 @@ export function AskUserQuestionInteractive(
           </Button>
         ) : null}
         <div className="ml-auto flex gap-2">
-          {!isLastQuestion && currentHasAnswer && (currentQuestion.multiSelect || !!customInput) && (
+          {!isLastQuestion && currentHasAnswer && (currentQuestion.multiSelect || Boolean(customInput)) && (
             <Button size="sm" onClick={handleNext}>Next</Button>
           )}
           {isLastQuestion && (

@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto"
 import { mkdir, open, rm } from "node:fs/promises"
 import path from "node:path"
 import { fileTypeFromBuffer } from "file-type"
+import { isErrnoException } from "../shared/errors"
 import type { ChatAttachment } from "../shared/types"
 import { getProjectUploadDir } from "./paths"
 
@@ -56,7 +57,7 @@ export async function persistProjectUpload(args: {
       }
       break
     } catch (error) {
-      const code = error instanceof Error && "code" in error ? (error as NodeJS.ErrnoException).code : undefined
+      const code = isErrnoException(error) ? error.code : undefined
       if (code !== "EEXIST") {
         throw error
       }

@@ -27,7 +27,7 @@ function parseSystemMessage(content: string) {
   }
 }
 
-export const UserMessage = memo(function UserMessage({ content, attachments = [], steered = false, autoContinue }: Props) {
+export const UserMessage = memo(({ content, attachments = [], steered = false, autoContinue }: Props) => {
   const [selectedAttachmentId, setSelectedAttachmentId] = useState<string | null>(null)
   const renderOptions = useTranscriptRenderOptions()
   const parsedContent = useMemo(() => parseSystemMessage(content), [content])

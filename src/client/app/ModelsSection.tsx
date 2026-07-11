@@ -25,6 +25,10 @@ export interface ModelsSectionHandlers {
 }
 
 type ModelProvider = "claude" | "codex"
+const MODEL_PROVIDER_SET = new Set<string>(["claude", "codex"])
+function isModelProvider(v: string): v is ModelProvider {
+  return MODEL_PROVIDER_SET.has(v)
+}
 
 type EditingState =
   | { kind: "list" }
@@ -188,6 +192,15 @@ function ModelEditor({
     }
   }
 
+  let submitLabel: string
+  if (submitting) {
+    submitLabel = "Saving…"
+  } else if (isEdit) {
+    submitLabel = "Save changes"
+  } else {
+    submitLabel = "Add model"
+  }
+
   return (
     <div className="flex flex-col gap-4 px-6 py-6">
       <h2 className="text-base font-medium">{isEdit ? "Edit model" : "Add model"}</h2>
@@ -196,7 +209,7 @@ function ModelEditor({
         <span className="text-sm font-medium">Provider</span>
         <Select
           value={modelProvider}
-          onValueChange={(value) => setModelProvider(value as ModelProvider)}
+          onValueChange={(value) => { if (isModelProvider(value)) setModelProvider(value) }}
           disabled={isEdit}
         >
           <SelectTrigger className="min-w-[180px]">
@@ -246,7 +259,7 @@ function ModelEditor({
           }}
           disabled={!canSave}
         >
-          {submitting ? "Saving…" : isEdit ? "Save changes" : "Add model"}
+          {submitLabel}
         </Button>
         <Button variant="ghost" onClick={onDone} disabled={submitting}>
           Cancel
@@ -265,13 +278,16 @@ export function ModelsSettingsBranch(props: {
   const handlers = useMemo<ModelsSectionHandlers>(
     () => ({
       onCreate: async (input) => {
-        await props.state.handleWriteAppSettings({ customModels: { create: input } } as AppSettingsPatch)
+        const s: AppSettingsPatch = { customModels: { create: input } }
+        await props.state.handleWriteAppSettings(s)
       },
       onUpdate: async (id, patch) => {
-        await props.state.handleWriteAppSettings({ customModels: { update: { id, patch } } } as AppSettingsPatch)
+        const s: AppSettingsPatch = { customModels: { update: { id, patch } } }
+        await props.state.handleWriteAppSettings(s)
       },
       onDelete: async (id) => {
-        await props.state.handleWriteAppSettings({ customModels: { delete: { id } } } as AppSettingsPatch)
+        const s: AppSettingsPatch = { customModels: { delete: { id } } }
+        await props.state.handleWriteAppSettings(s)
       },
     }),
     [props.state],

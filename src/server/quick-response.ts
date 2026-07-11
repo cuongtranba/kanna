@@ -1,4 +1,5 @@
 import { query } from "@anthropic-ai/claude-agent-sdk"
+import { log } from "../shared/log"
 import { homedir } from "node:os"
 import OpenAI from "openai"
 import { getDataRootDir } from "../shared/branding"
@@ -8,6 +9,7 @@ import { ClaudeLimitDetector } from "./auto-continue/limit-detector"
 import { CodexAppServerManager } from "./codex-app-server"
 import { readLlmProviderSnapshot } from "./llm-provider"
 import type { OAuthTokenPool } from "./oauth-pool/oauth-token-pool"
+import { type AnyValue, isRecord } from "../shared/errors"
 
 let activeOAuthPool: OAuthTokenPool | null = null
 
@@ -62,7 +64,7 @@ export interface StructuredQuickResponseArgs<T> {
   task: string
   prompt: string
   schema: JsonSchema
-  parse: (value: unknown) => T | null
+  parse: (value: AnyValue) => T | null
 }
 
 interface QuickResponseAdapterArgs {
@@ -70,10 +72,10 @@ interface QuickResponseAdapterArgs {
   readLlmProvider?: () => Promise<LlmProviderSnapshot>
   runOpenAIStructured?: (
     config: LlmProviderSnapshot,
-    args: Omit<StructuredQuickResponseArgs<unknown>, "parse">
-  ) => Promise<unknown | null>
-  runClaudeStructured?: (args: Omit<StructuredQuickResponseArgs<unknown>, "parse">) => Promise<unknown | null>
-  runCodexStructured?: (args: Omit<StructuredQuickResponseArgs<unknown>, "parse">) => Promise<unknown | null>
+    args: Omit<StructuredQuickResponseArgs<AnyValue>, "parse">
+  ) => Promise<AnyValue | null>
+  runClaudeStructured?: (args: Omit<StructuredQuickResponseArgs<AnyValue>, "parse">) => Promise<AnyValue | null>
+  runCodexStructured?: (args: Omit<StructuredQuickResponseArgs<AnyValue>, "parse">) => Promise<AnyValue | null>
 }
 
 export interface StructuredQuickResponseFailure {
@@ -111,31 +113,29 @@ function parseJsonText(value: string): unknown | null {
   return null
 }
 
-function structuredOutputFromSdkMessage(message: unknown): unknown | null {
-  if (!message || typeof message !== "object") return null
+function structuredOutputFromSdkMessage(message: AnyValue): AnyValue | null {
+  if (!isRecord(message)) return null
 
-  const record = message as Record<string, unknown>
-  if (record.type === "result") {
-    return record.structured_output ?? null
+  if (message.type === "result") {
+    return message.structured_output ?? null
   }
 
-  const assistantMessage = record.message
-  if (!assistantMessage || typeof assistantMessage !== "object") return null
-  const content = (assistantMessage as { content?: unknown }).content
+  const assistantMessage = message.message
+  if (!isRecord(assistantMessage)) return null
+  const { content } = assistantMessage
   if (!Array.isArray(content)) return null
 
   for (const item of content) {
-    if (!item || typeof item !== "object") continue
-    const toolUse = item as Record<string, unknown>
-    if (toolUse.type === "tool_use" && toolUse.name === "StructuredOutput") {
-      return toolUse.input ?? null
+    if (!isRecord(item)) continue
+    if (item.type === "tool_use" && item.name === "StructuredOutput") {
+      return item.input ?? null
     }
   }
 
   return null
 }
 
-export async function runClaudeStructured(args: Omit<StructuredQuickResponseArgs<unknown>, "parse">): Promise<unknown | null> {
+export async function runClaudeStructured(args: Omit<StructuredQuickResponseArgs<AnyValue>, "parse">): Promise<AnyValue | null> {
   const pool = activeOAuthPool
   // Reserve under a synthetic ephemeral key so concurrent quick-response
   // calls cannot all be handed the same lowest-lastUsedAt token. The lease
@@ -148,7 +148,7 @@ export async function runClaudeStructured(args: Omit<StructuredQuickResponseArgs
   // typically holds a stale or unrelated token → opaque 401 loops.
   if (pool && pool.hasAnyToken() && !picked) {
     lease?.release()
-    console.warn("[quick-response] no usable OAuth token in pool; skipping claude provider")
+    log.warn("[quick-response] no usable OAuth token in pool; skipping claude provider")
     return null
   }
   if (picked && pool) pool.markUsed(picked.id)
@@ -176,11 +176,11 @@ export async function runClaudeStructured(args: Omit<StructuredQuickResponseArgs
   })
 
   try {
-    const result = await Promise.race<unknown | null>([
+    const result = await Promise.race<AnyValue | null>([
       (async () => {
         for await (const message of q) {
-          if (message && typeof message === "object" && (message as { type?: string }).type === "rate_limit_event") {
-            const detection = detector.detectFromSdkRateLimitInfo("", (message as { rate_limit_info?: unknown }).rate_limit_info)
+          if (isRecord(message) && message.type === "rate_limit_event") {
+            const detection = detector.detectFromSdkRateLimitInfo("", message.rate_limit_info)
             if (detection) {
               detectedLimit = { resetAt: detection.resetAt, tz: detection.tz }
             }
@@ -205,7 +205,7 @@ export async function runClaudeStructured(args: Omit<StructuredQuickResponseArgs
     const errorLimit = detector.detectFromResultText("", reason)
     const rateLimited = Boolean(detectedLimit) || errorLimit !== null || isClaudeRateLimitMessage(reason)
     if (rateLimited) {
-      console.log(`[quick-response] claude rate-limited, falling back: ${reason}`)
+      log.info(`[quick-response] claude rate-limited, falling back: ${reason}`)
       if (picked && pool) {
         const limit = detectedLimit ?? (errorLimit ? { resetAt: errorLimit.resetAt, tz: errorLimit.tz } : null)
         // Fallback window when we can't parse the precise reset: 5 minutes.
@@ -219,10 +219,10 @@ export async function runClaudeStructured(args: Omit<StructuredQuickResponseArgs
         // pickActive() skips it — otherwise quick-response would keep
         // selecting the same dead token by lastUsedAt ordering and burn
         // every subsequent call on the same 401.
-        console.warn(`[quick-response] claude auth error, marking token ${picked.id} errored: ${reason}`)
+        log.warn(`[quick-response] claude auth error, marking token ${picked.id} errored: ${reason}`)
         pool.markError(picked.id, authDetection.reason)
       } else {
-        console.warn(`[quick-response] claude structured request failed: ${reason}`)
+        log.warn(`[quick-response] claude structured request failed: ${reason}`)
       }
     }
     return null
@@ -351,8 +351,8 @@ export class QuickResponseAdapter {
   private async tryProvider<T>(
     provider: "openai" | "claude" | "codex",
     task: string,
-    parse: (value: unknown) => T | null,
-    run: () => Promise<unknown | null>
+    parse: (value: AnyValue) => T | null,
+    run: () => Promise<AnyValue | null>
   ): Promise<{ value: T | null; failure: StructuredQuickResponseFailure | null }> {
     try {
       const result = await run()

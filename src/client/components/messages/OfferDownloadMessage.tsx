@@ -86,7 +86,7 @@ export function OfferDownloadMessage({ message }: Props) {
     )
   }
 
-  const ariaLabelParts = ["Download", attachment.displayName, friendlyType, sizeLabel].filter(Boolean) as string[]
+  const ariaLabelParts = ["Download", attachment.displayName, friendlyType, sizeLabel].filter((s): s is string => Boolean(s))
   return (
     <div className="flex" data-testid="offer-download-link">
       <AttachmentFileCard

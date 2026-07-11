@@ -90,11 +90,14 @@ interface TranscriptMessageRenderState {
   shouldRender: boolean
 }
 
+function isProcessedToolCall(message: HydratedTranscriptMessage): message is ProcessedToolCall {
+  return message.kind === "tool"
+}
+
 function isCollapsibleToolCall(message: HydratedTranscriptMessage) {
-  if (message.kind !== "tool") return false
-  const tool = message as ProcessedToolCall
-  if (SPECIAL_TOOL_KINDS.has(tool.toolKind)) return false
-  return !SPECIAL_TOOL_NAMES.has(tool.toolName)
+  if (!isProcessedToolCall(message)) return false
+  if (SPECIAL_TOOL_KINDS.has(message.toolKind)) return false
+  return !SPECIAL_TOOL_NAMES.has(message.toolName)
 }
 
 function getTranscriptMessageRenderState(
@@ -412,7 +415,7 @@ interface TranscriptSingleRowProps {
   chatId?: string
 }
 
-const TranscriptSingleRow = memo(function TranscriptSingleRow({
+const TranscriptSingleRow = memo(({
   message,
   index,
   isLoading,
@@ -432,7 +435,7 @@ const TranscriptSingleRow = memo(function TranscriptSingleRow({
   onAutoContinueReschedule,
   onAutoContinueCancel,
   chatId,
-}: TranscriptSingleRowProps) {
+}: TranscriptSingleRowProps) => {
   let rendered: React.ReactNode = null
 
   if (message.kind === "user_prompt") {
@@ -606,7 +609,7 @@ interface TranscriptToolGroupProps {
   chatId?: string
 }
 
-const TranscriptToolGroup = memo(function TranscriptToolGroup({
+const TranscriptToolGroup = memo(({
   id,
   messages,
   isLoading,
@@ -614,7 +617,7 @@ const TranscriptToolGroup = memo(function TranscriptToolGroup({
   expanded,
   onExpandedChange,
   chatId,
-}: TranscriptToolGroupProps) {
+}: TranscriptToolGroupProps) => {
   return (
     <div
       className="group relative"
@@ -778,7 +781,7 @@ interface KannaTranscriptRowProps {
   chatId?: string
 }
 
-export const KannaTranscriptRow = memo(function KannaTranscriptRow({
+export const KannaTranscriptRow = memo(({
   row,
   toolGroupExpanded,
   onToolGroupExpandedChange,
@@ -790,7 +793,7 @@ export const KannaTranscriptRow = memo(function KannaTranscriptRow({
   onAutoContinueReschedule,
   onAutoContinueCancel,
   chatId,
-}: KannaTranscriptRowProps) {
+}: KannaTranscriptRowProps) => {
   if (row.kind === "tool-group") {
     return (
       <TranscriptToolGroup

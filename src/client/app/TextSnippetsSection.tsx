@@ -166,6 +166,15 @@ function SnippetEditor({
     }
   }
 
+  let submitLabel: string
+  if (submitting) {
+    submitLabel = "Saving…"
+  } else if (isEdit) {
+    submitLabel = "Save changes"
+  } else {
+    submitLabel = "Add snippet"
+  }
+
   return (
     <div className="flex flex-col gap-4 px-6 py-6">
       <h2 className="text-base font-medium">{isEdit ? "Edit snippet" : "Add snippet"}</h2>
@@ -208,7 +217,7 @@ function SnippetEditor({
           }}
           disabled={!canSave}
         >
-          {submitting ? "Saving…" : isEdit ? "Save changes" : "Add snippet"}
+          {submitLabel}
         </Button>
         <Button variant="ghost" onClick={onDone} disabled={submitting}>
           Cancel
@@ -227,13 +236,16 @@ export function TextSnippetsSettingsBranch(props: {
   const handlers = useMemo<TextSnippetsSectionHandlers>(
     () => ({
       onCreate: async (input) => {
-        await props.state.handleWriteAppSettings({ textSnippets: { create: input } } as AppSettingsPatch)
+        const s: AppSettingsPatch = { textSnippets: { create: input } }
+        await props.state.handleWriteAppSettings(s)
       },
       onUpdate: async (id, patch) => {
-        await props.state.handleWriteAppSettings({ textSnippets: { update: { id, patch } } } as AppSettingsPatch)
+        const s: AppSettingsPatch = { textSnippets: { update: { id, patch } } }
+        await props.state.handleWriteAppSettings(s)
       },
       onDelete: async (id) => {
-        await props.state.handleWriteAppSettings({ textSnippets: { delete: { id } } } as AppSettingsPatch)
+        const s: AppSettingsPatch = { textSnippets: { delete: { id } } }
+        await props.state.handleWriteAppSettings(s)
       },
     }),
     [props.state],

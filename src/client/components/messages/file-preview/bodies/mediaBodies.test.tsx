@@ -5,7 +5,7 @@ import { VideoBody } from "./VideoBody"
 import type { PreviewSource } from "../types"
 
 const mkSrc = (mime: string, name: string): PreviewSource => ({
-  id: name, contentUrl: "/u/" + name, displayName: name, fileName: name,
+  id: name, contentUrl: `/u/${  name}`, displayName: name, fileName: name,
   mimeType: mime, size: 1, origin: "user_attachment",
 })
 

@@ -1,5 +1,6 @@
 import crypto from "node:crypto"
 import { LOG_PREFIX } from "../shared/branding"
+import { log } from "../shared/log"
 import type {
   AgentProvider,
   ProviderUsage,
@@ -261,7 +262,7 @@ export class SubagentOrchestrator {
           },
         })
       } catch (err) {
-        console.warn(`${LOG_PREFIX} interrupted-run recovery failed`, {
+        log.warn(`${LOG_PREFIX} interrupted-run recovery failed`, {
           chatId: run.chatId, runId: run.runId, err,
         })
       }
@@ -673,11 +674,11 @@ export class SubagentOrchestrator {
           try {
             this.deps.onBackgroundRunComplete?.(args.chatId, runId, outcome)
           } catch (err) {
-            console.warn(`${LOG_PREFIX} onBackgroundRunComplete threw`, { chatId: args.chatId, runId, err })
+            log.warn(`${LOG_PREFIX} onBackgroundRunComplete threw`, { chatId: args.chatId, runId, err })
           }
         })
         .catch((err) => {
-          console.warn(`${LOG_PREFIX} background spawnRun rejected`, { chatId: args.chatId, runId, err })
+          log.warn(`${LOG_PREFIX} background spawnRun rejected`, { chatId: args.chatId, runId, err })
         })
       return { status: "async_launched", runId }
     }
@@ -696,7 +697,7 @@ export class SubagentOrchestrator {
     // `delegate_subagent` tool to the parent claude as its tool_result.
     // If the parent appears to hang after this point, the bug is on the
     // MCP shim or the parent PTY side, not in the orchestrator.
-    console.log("[kanna/subagent] delegateRun outcome", {
+    log.info("[kanna/subagent] delegateRun outcome", {
       chatId: args.chatId,
       subagentId: args.subagentId,
       parentRunId: args.parentRunId,
@@ -790,7 +791,7 @@ export class SubagentOrchestrator {
     }
 
     try {
-      const transcript = this.deps.store.getMessages(args.chatId) as TranscriptEntry[]
+      const transcript = this.deps.store.getMessages(args.chatId)
       let primer: string | null
       if (args.subagent.contextScope === "full-transcript") {
         primer = buildHistoryPrimer(transcript, args.subagent.provider, "")
@@ -853,7 +854,7 @@ export class SubagentOrchestrator {
             content: chunk,
           })
           .catch((err) => {
-            console.warn(`${LOG_PREFIX} subagent delta append failed`, { chatId: args.chatId, runId, err })
+            log.warn(`${LOG_PREFIX} subagent delta append failed`, { chatId: args.chatId, runId, err })
           })
         // Trailing-edge throttle: fire progress after a quiet window so
         // streamed assistant text becomes visible incrementally in the UI.
@@ -875,7 +876,7 @@ export class SubagentOrchestrator {
             entry,
           })
           .catch((err) => {
-            console.warn(`${LOG_PREFIX} subagent entry append failed`, { chatId: args.chatId, runId, err })
+            log.warn(`${LOG_PREFIX} subagent entry append failed`, { chatId: args.chatId, runId, err })
           })
         // Fire immediately — applyEvent now runs synchronously in appendSubagentEvent
         // so the broadcast snapshot already includes this entry.
@@ -884,7 +885,7 @@ export class SubagentOrchestrator {
           try {
             externalOnEntry(entry)
           } catch (err) {
-            console.warn(`${LOG_PREFIX} external onEntry threw`, { chatId: args.chatId, runId, err })
+            log.warn(`${LOG_PREFIX} external onEntry threw`, { chatId: args.chatId, runId, err })
           }
         }
       }
@@ -968,7 +969,7 @@ export class SubagentOrchestrator {
       try {
         this.deps.onRunTerminal?.(args.chatId, runId, "completed")
       } catch (err) {
-        console.warn(`${LOG_PREFIX} onRunTerminal(completed) threw`, { chatId: args.chatId, runId, err })
+        log.warn(`${LOG_PREFIX} onRunTerminal(completed) threw`, { chatId: args.chatId, runId, err })
       }
 
       releaseSlot()
@@ -1096,7 +1097,7 @@ export class SubagentOrchestrator {
             content: chunk,
           })
           .catch((err) => {
-            console.warn(`${LOG_PREFIX} sendToLiveRun delta append failed`, { chatId, runId, err })
+            log.warn(`${LOG_PREFIX} sendToLiveRun delta append failed`, { chatId, runId, err })
           })
         if (chunkProgressTimer !== null) clearTimeout(chunkProgressTimer)
         chunkProgressTimer = setTimeout(() => {
@@ -1116,7 +1117,7 @@ export class SubagentOrchestrator {
             entry,
           })
           .catch((err) => {
-            console.warn(`${LOG_PREFIX} sendToLiveRun entry append failed`, { chatId, runId, err })
+            log.warn(`${LOG_PREFIX} sendToLiveRun entry append failed`, { chatId, runId, err })
           })
         this.deps.onRunProgress?.(chatId, runId)
       }
@@ -1161,11 +1162,11 @@ export class SubagentOrchestrator {
     this.liveSessions.delete(runId)
     if (s.idleTimer) { clearTimeout(s.idleTimer); s.idleTimer = null }
     try { await s.live.close() } catch (err) {
-      console.warn(`${LOG_PREFIX} live close failed`, { chatId, runId, reason, err })
+      log.warn(`${LOG_PREFIX} live close failed`, { chatId, runId, reason, err })
     }
     this.cleanupRunState(runId)
     try { this.deps.onRunTerminal?.(chatId, runId, "completed") } catch (err) {
-      console.warn(`${LOG_PREFIX} onRunTerminal(completed) threw in closeLiveRun`, { chatId, runId, err })
+      log.warn(`${LOG_PREFIX} onRunTerminal(completed) threw in closeLiveRun`, { chatId, runId, err })
     }
   }
 
@@ -1185,7 +1186,7 @@ export class SubagentOrchestrator {
     code: SubagentErrorCode,
     message: string,
   ): Promise<DelegationOutcome> {
-    console.warn(`${LOG_PREFIX} subagent run failed`, { chatId, runId, code, message })
+    log.warn(`${LOG_PREFIX} subagent run failed`, { chatId, runId, code, message })
     try {
       await this.deps.store.appendSubagentEvent({
         v: 3,
@@ -1200,12 +1201,12 @@ export class SubagentOrchestrator {
       // called from `catch` and `finally` blocks where an unhandled rejection
       // would leak the permit. Log and continue; the orchestrator will still
       // notify the terminal callback below so the resolver map is cleaned up.
-      console.warn(`${LOG_PREFIX} failRun appendSubagentEvent threw`, { chatId, runId, code, err })
+      log.warn(`${LOG_PREFIX} failRun appendSubagentEvent threw`, { chatId, runId, code, err })
     }
     try {
       this.deps.onRunTerminal?.(chatId, runId, "failed")
     } catch (err) {
-      console.warn(`${LOG_PREFIX} onRunTerminal(failed) threw`, { chatId, runId, err })
+      log.warn(`${LOG_PREFIX} onRunTerminal(failed) threw`, { chatId, runId, err })
     }
     return { status: "failed", runId, errorCode: code, errorMessage: message }
   }

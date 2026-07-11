@@ -684,10 +684,10 @@ describe("OrchestrationQueue contextPrompt + scopePaths injection (F11)", () => 
     ])
     await q.waitForRun(runId)
     // Implementer sees the scope hint
-    expect(byPhase["implement"]).toContain("src/auth")
-    expect(byPhase["implement"]).toContain("src/session")
+    expect(byPhase.implement).toContain("src/auth")
+    expect(byPhase.implement).toContain("src/session")
     // Reviewer does NOT (they see the diff instead)
-    expect(byPhase["review"]).not.toContain("src/auth")
+    expect(byPhase.review).not.toContain("src/auth")
   })
 
   test("contextPrompt = null and empty scopePaths add nothing to prompt", async () => {

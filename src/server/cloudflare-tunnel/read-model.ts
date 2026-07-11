@@ -74,7 +74,7 @@ function applyOne(tunnels: Record<string, CloudflareTunnelRecord>, event: Cloudf
     default: {
       const _exhaustive: never = event
       void _exhaustive
-      return
+      
     }
   }
 }

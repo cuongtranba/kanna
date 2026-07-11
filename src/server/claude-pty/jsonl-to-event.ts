@@ -1,6 +1,8 @@
 import type { HarnessEvent } from "../harness-types"
+import { log } from "../../shared/log"
 import type { ContextWindowUsageSnapshot, ProviderUsage } from "../../shared/types"
 import {
+  type ClaudeRawSdkMessage,
   normalizeClaudeStreamMessage,
   normalizeClaudeUsageSnapshot,
   resolveFinalTurnUsage,
@@ -10,17 +12,24 @@ import {
 } from "../agent"
 import { ClaudeLimitDetector } from "./../auto-continue/limit-detector"
 import { KANNA_MCP_SERVER_NAME } from "../../shared/tools"
+import { isRecord } from "../../shared/errors"
 
 // Keep-alive subagent turns are delivered via a kanna channel push, which
 // claude records as a `user isMeta:true` line tagged with this marker. Such a
 // line is a real turn the main agent issued, NOT a background auto-wake.
 const KANNA_CHANNEL_TAG = `<channel source="${KANNA_MCP_SERVER_NAME}"`
 
+// On-disk JSONL messages include JSONL-specific fields (isSidechain, isMeta,
+// attachment, sessionId camelCase) that are not in the SDK's ClaudeRawSdkMessage
+// interface. Using an intersection gives us both typed SDK fields and index
+// access for JSONL-specific fields without casts.
+type JsonlMessage = ClaudeRawSdkMessage & Record<string, unknown>
+
 // Real on-disk transcript lines carry the session id as camelCase `sessionId`;
 // SDK stream-json messages use snake_case `session_id`. Accept either so PTY
 // chats persist a session token (without it, canForkChat stays false and the
 // fork button is disabled).
-function extractSessionId(message: Record<string, unknown>): string | null {
+function extractSessionId(message: JsonlMessage): string | null {
   const snake = message.session_id
   if (typeof snake === "string" && snake.length > 0) return snake
   const camel = message.sessionId
@@ -32,11 +41,11 @@ function extractSessionId(message: Record<string, unknown>): string | null {
 // CLAUDE.md, `.claude/rules/*.md`) as a `type:"nested_memory"` transcript line
 // carrying `attachment.path`. Returns the path when present + non-empty, else
 // null (malformed / future-shape lines drop silently — never throw).
-function extractNestedMemoryPath(message: Record<string, unknown>): string | null {
+function extractNestedMemoryPath(message: JsonlMessage): string | null {
   if (message.type !== "nested_memory") return null
   const attachment = message.attachment
-  if (!attachment || typeof attachment !== "object") return null
-  const path = (attachment as { path?: unknown }).path
+  if (!isRecord(attachment)) return null
+  const path = attachment.path
   if (typeof path === "string" && path.length > 0) return path
   return null
 }
@@ -49,30 +58,30 @@ function extractNestedMemoryPath(message: Record<string, unknown>): string | nul
 // synthetic API-error rows.
 const TERMINAL_STOP_REASONS = new Set(["end_turn", "stop_sequence", "max_tokens", "refusal"])
 
-function assistantMessageId(message: Record<string, unknown>): string | undefined {
+function assistantMessageId(message: JsonlMessage): string | undefined {
   const inner = message.message
-  if (!inner || typeof inner !== "object") return undefined
-  const id = (inner as { id?: unknown }).id
+  if (!isRecord(inner)) return undefined
+  const id = inner.id
   return typeof id === "string" ? id : undefined
 }
 
-function hasTerminalStopReason(message: Record<string, unknown>): boolean {
+function hasTerminalStopReason(message: JsonlMessage): boolean {
   if (message.type !== "assistant") return false
   const inner = message.message
-  if (!inner || typeof inner !== "object") return false
-  const stop = (inner as { stop_reason?: unknown }).stop_reason
+  if (!isRecord(inner)) return false
+  const stop = inner.stop_reason
   return typeof stop === "string" && TERMINAL_STOP_REASONS.has(stop)
 }
 
-function userMessageContainsKannaChannel(message: Record<string, unknown>): boolean {
+function userMessageContainsKannaChannel(message: JsonlMessage): boolean {
   const inner = message.message
-  if (!inner || typeof inner !== "object") return false
-  const content = (inner as { content?: unknown }).content
+  if (!isRecord(inner)) return false
+  const content = inner.content
   if (typeof content === "string") return content.includes(KANNA_CHANNEL_TAG)
   if (Array.isArray(content)) {
     for (const block of content) {
-      if (block && typeof block === "object") {
-        const text = (block as { text?: unknown }).text
+      if (isRecord(block)) {
+        const text = block.text
         if (typeof text === "string" && text.includes(KANNA_CHANNEL_TAG)) return true
       }
     }
@@ -139,15 +148,17 @@ export function createJsonlEventParser(opts: CreateJsonlEventParserOptions = {})
     parse(rawLine: string): HarnessEvent[] {
       const trimmed = rawLine.trim()
       if (!trimmed) return []
-      let parsed: unknown
+      let messageOrNull: JsonlMessage | null = null
       try {
-        parsed = JSON.parse(trimmed)
+        const raw: JsonlMessage = JSON.parse(trimmed)
+        if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+          messageOrNull = raw
+        }
       } catch {
-        console.warn("[claude-pty/jsonl] failed to parse line", trimmed.slice(0, 120))
-        return []
+        log.warn("[claude-pty/jsonl] failed to parse line", trimmed.slice(0, 120))
       }
-      if (!parsed || typeof parsed !== "object") return []
-      const message = parsed as Record<string, unknown>
+      if (!messageOrNull) return []
+      const message = messageOrNull
 
       const isSidechain = message.isSidechain === true
       const isRealResultRow = !isSidechain && (
@@ -185,7 +196,7 @@ export function createJsonlEventParser(opts: CreateJsonlEventParserOptions = {})
               entry: timestamped({
                 kind: "result",
                 messageId: flushedMessageId,
-                subtype: "success",
+                subtype: "success" as const,
                 isError: false,
                 durationMs: 0,
                 result: "",
@@ -284,7 +295,7 @@ export function createJsonlEventParser(opts: CreateJsonlEventParserOptions = {})
       if (message.type === "rate_limit_event") {
         const detection = detector.detectFromSdkRateLimitInfo(
           "",
-          (message as { rate_limit_info?: unknown }).rate_limit_info,
+          message.rate_limit_info,
         )
         if (detection) {
           events.push({ type: "rate_limit", rateLimit: { resetAt: detection.resetAt, tz: detection.tz } })
@@ -302,9 +313,9 @@ export function createJsonlEventParser(opts: CreateJsonlEventParserOptions = {})
         // AND usage — under `.message`. The SDK stream-json shape keeps `usage`
         // at the top level. Prefer the nested location (real interactive
         // sessions) and fall back to the flat one (SDK fixtures / parity).
-        const innerMessage = (message as { message?: { usage?: unknown } }).message
+        const innerMessage = isRecord(message.message) ? message.message : undefined
         const usageSnapshot = normalizeClaudeUsageSnapshot(
-          innerMessage?.usage ?? (message as { usage?: unknown }).usage,
+          (innerMessage?.usage) ?? message.usage,
           lastKnownContextWindow,
         )
         if (usageId && usageSnapshot && !seenAssistantUsageIds.has(usageId)) {
@@ -322,13 +333,13 @@ export function createJsonlEventParser(opts: CreateJsonlEventParserOptions = {})
       // can't silently override a 1M-beta opt-in.
       if (message.type === "result") {
         const resultContextWindow = maxClaudeContextWindowFromModelUsage(
-          (message as { modelUsage?: unknown }).modelUsage,
+          message.modelUsage,
         )
         if (resultContextWindow !== undefined) {
           lastKnownContextWindow = Math.max(lastKnownContextWindow ?? 0, resultContextWindow)
         }
         const accumulatedUsage = normalizeClaudeUsageSnapshot(
-          (message as { usage?: unknown }).usage,
+          message.usage,
           lastKnownContextWindow,
         )
         const finalUsage = resolveFinalTurnUsage(
@@ -349,8 +360,8 @@ export function createJsonlEventParser(opts: CreateJsonlEventParserOptions = {})
             }
           : undefined
         const providerCostUsd =
-          typeof (message as { total_cost_usd?: unknown }).total_cost_usd === "number"
-            ? (message as { total_cost_usd: number }).total_cost_usd
+          typeof message.total_cost_usd === "number"
+            ? message.total_cost_usd
             : undefined
         pendingResultCost = providerCostUsd
 
@@ -367,12 +378,12 @@ export function createJsonlEventParser(opts: CreateJsonlEventParserOptions = {})
       }
 
       try {
-        const entries = normalizeClaudeStreamMessage(parsed)
+        const entries = normalizeClaudeStreamMessage(message)
         for (const entry of entries) {
           // An old CLI writing `turn_duration` (or an SDK `result`) right
           // after a stop_reason flush is a duplicate turn-end — swallow it so
           // the turn never finalizes twice.
-          if (isRealResultRow && suppressNextResultRow && (entry as { kind?: string }).kind === "result") {
+          if (isRealResultRow && suppressNextResultRow && entry.kind === "result") {
             pendingResultUsage = undefined
             pendingResultCost = undefined
             continue
@@ -403,7 +414,7 @@ export function createJsonlEventParser(opts: CreateJsonlEventParserOptions = {})
           suppressNextResultRow = false
         }
       } catch (err) {
-        console.warn("[claude-pty/jsonl] normalizeClaudeStreamMessage threw", err)
+        log.warn("[claude-pty/jsonl] normalizeClaudeStreamMessage threw", String(err))
       }
 
       return events
@@ -419,15 +430,17 @@ export function createJsonlEventParser(opts: CreateJsonlEventParserOptions = {})
 export function parseJsonlLine(rawLine: string): HarnessEvent[] {
   const trimmed = rawLine.trim()
   if (!trimmed) return []
-  let parsed: unknown
+  let messageOrNull: JsonlMessage | null = null
   try {
-    parsed = JSON.parse(trimmed)
+    const raw: JsonlMessage = JSON.parse(trimmed)
+    if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+      messageOrNull = raw
+    }
   } catch {
-    console.warn("[claude-pty/jsonl] failed to parse line", trimmed.slice(0, 120))
-    return []
+    log.warn("[claude-pty/jsonl] failed to parse line", trimmed.slice(0, 120))
   }
-  if (!parsed || typeof parsed !== "object") return []
-  const message = parsed as Record<string, unknown>
+  if (!messageOrNull) return []
+  const message = messageOrNull
   // Sidechain (Task subagent) lines never belong to the main turn stream.
   if (message.isSidechain === true) return []
   const events: HarnessEvent[] = []
@@ -444,12 +457,12 @@ export function parseJsonlLine(rawLine: string): HarnessEvent[] {
   }
 
   try {
-    const entries = normalizeClaudeStreamMessage(parsed)
+    const entries = normalizeClaudeStreamMessage(message)
     for (const entry of entries) {
       events.push({ type: "transcript", entry })
     }
   } catch (err) {
-    console.warn("[claude-pty/jsonl] normalizeClaudeStreamMessage threw", err)
+    log.warn("[claude-pty/jsonl] normalizeClaudeStreamMessage threw", String(err))
   }
 
   return events

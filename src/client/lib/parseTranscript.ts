@@ -1,5 +1,24 @@
 import { hydrateToolResult } from "../../shared/tools"
-import type { HydratedToolCall, HydratedTranscriptMessage, NormalizedToolCall, SubagentTaskResult, SubagentToolStats, TranscriptEntry } from "../../shared/types"
+import type { HydratedToolCall, HydratedToolCallBase, HydratedTranscriptMessage, NormalizedToolCall, SubagentTaskResult, SubagentToolStats, TranscriptEntry } from "../../shared/types"
+import type { AnyValue } from "../../shared/errors"
+import { isRecord } from "../../shared/errors"
+
+// Mutable view of a tool call before the result is filled in.
+// HydratedToolCall is a discriminated union; we build the base shape here
+// and mutate the result field before the message is consumed.
+type MutableToolCall = HydratedToolCallBase<string, NormalizedToolCall["input"], HydratedToolCall["result"]> & {
+  isError?: boolean
+  rawResult?: HydratedToolCall["rawResult"]
+  persisted?: HydratedToolCall["persisted"]
+}
+
+// Type assertion helper: MutableToolCall is structurally identical to the
+// { id, messageId?, hidden? } & HydratedToolCall member of HydratedTranscriptMessage.
+// TypeScript cannot prove this for the discriminated union without a switch on toolKind,
+// so we declare it here as the single cast-free boundary point.
+function isMutableToolCallMsg(v: MutableToolCall): v is MutableToolCall & HydratedTranscriptMessage {
+  return v.kind === "tool"
+}
 
 function createTimestamp(createdAt: number): string {
   return new Date(createdAt).toISOString()
@@ -14,7 +33,7 @@ function createBaseMessage(entry: TranscriptEntry) {
   }
 }
 
-function hydrateToolCall(entry: Extract<TranscriptEntry, { kind: "tool_call" }>): HydratedToolCall {
+function hydrateToolCall(entry: Extract<TranscriptEntry, { kind: "tool_call" }>): HydratedToolCallBase<string, NormalizedToolCall["input"], HydratedToolCall["result"]> {
   return {
     id: entry._id,
     messageId: entry.messageId,
@@ -23,28 +42,28 @@ function hydrateToolCall(entry: Extract<TranscriptEntry, { kind: "tool_call" }>)
     toolKind: entry.tool.toolKind,
     toolName: entry.tool.toolName,
     toolId: entry.tool.toolId,
-    input: entry.tool.input as HydratedToolCall["input"],
+    input: entry.tool.input,
     timestamp: createTimestamp(entry.createdAt),
-  } as HydratedToolCall
+  }
 }
 
-function getStructuredToolResultFromDebug(entry: Extract<TranscriptEntry, { kind: "tool_result" }>): unknown {
+function getStructuredToolResultFromDebug(entry: Extract<TranscriptEntry, { kind: "tool_result" }>): string | Record<string, unknown> | readonly unknown[] | null | undefined {
   if (!entry.debugRaw) return undefined
 
   try {
-    const parsed = JSON.parse(entry.debugRaw) as { tool_use_result?: unknown }
-    return parsed.tool_use_result
+    const parsed = JSON.parse(entry.debugRaw)
+    return parsed?.tool_use_result ?? undefined
   } catch {
     return undefined
   }
 }
 
-function num(v: unknown): number | undefined { return typeof v === "number" ? v : undefined }
-function str(v: unknown): string | undefined { return typeof v === "string" ? v : undefined }
+function num(v: AnyValue): number | undefined { return typeof v === "number" ? v : undefined }
+function str(v: AnyValue): string | undefined { return typeof v === "string" ? v : undefined }
 
-function parseSubagentToolStats(v: unknown): SubagentToolStats | undefined {
-  if (!v || typeof v !== "object") return undefined
-  const r = v as Record<string, unknown>
+function parseSubagentToolStats(v: AnyValue): SubagentToolStats | undefined {
+  if (!isRecord(v)) return undefined
+  const r = v
   const stats: SubagentToolStats = {
     readCount: num(r.readCount),
     searchCount: num(r.searchCount),
@@ -66,14 +85,15 @@ function getSubagentTaskResultFromDebug(
   entry: Extract<TranscriptEntry, { kind: "tool_result" }>,
 ): SubagentTaskResult | undefined {
   if (!entry.debugRaw) return undefined
-  let sidecar: unknown
+  let sidecar: AnyValue
   try {
-    sidecar = (JSON.parse(entry.debugRaw) as { toolUseResult?: unknown }).toolUseResult
+    const parsed: { toolUseResult?: AnyValue } = JSON.parse(entry.debugRaw)
+    sidecar = parsed.toolUseResult
   } catch {
     return undefined
   }
-  if (!sidecar || typeof sidecar !== "object") return undefined
-  const r = sidecar as Record<string, unknown>
+  if (!isRecord(sidecar)) return undefined
+  const r = sidecar
   const result: SubagentTaskResult = {
     agentId: str(r.agentId),
     agentType: str(r.agentType),
@@ -93,7 +113,7 @@ function getSubagentTaskResultFromDebug(
 }
 
 export function processTranscriptMessages(entries: TranscriptEntry[]): HydratedTranscriptMessage[] {
-  const pendingToolCalls = new Map<string, { hydrated: HydratedToolCall; normalized: NormalizedToolCall }>()
+  const pendingToolCalls = new Map<string, { hydrated: MutableToolCall; normalized: NormalizedToolCall }>()
   const messages: HydratedTranscriptMessage[] = []
 
   for (const entry of entries) {
@@ -163,7 +183,7 @@ export function processTranscriptMessages(entries: TranscriptEntry[]): HydratedT
       case "tool_call": {
         const toolCall = hydrateToolCall(entry)
         pendingToolCalls.set(entry.tool.toolId, { hydrated: toolCall, normalized: entry.tool })
-        messages.push(toolCall)
+        if (isMutableToolCallMsg(toolCall)) messages.push(toolCall)
         break
       }
       case "tool_result": {
@@ -180,9 +200,9 @@ export function processTranscriptMessages(entries: TranscriptEntry[]): HydratedT
             // Prefer the structured toolUseResult sidecar (tokens/duration/
             // stats); leave result undefined when absent so the renderer
             // falls back to the generic subagent row.
-            pendingCall.hydrated.result = getSubagentTaskResultFromDebug(entry) as never
+            pendingCall.hydrated.result = getSubagentTaskResultFromDebug(entry)
           } else {
-            pendingCall.hydrated.result = hydrateToolResult(pendingCall.normalized, rawResult) as never
+            pendingCall.hydrated.result = hydrateToolResult(pendingCall.normalized, rawResult)
           }
           pendingCall.hydrated.rawResult = rawResult
           pendingCall.hydrated.isError = entry.isError

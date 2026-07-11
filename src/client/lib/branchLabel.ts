@@ -26,7 +26,7 @@ function displayPath(localPath: string, homeDir?: string): string {
   if (path === home) return "~"
   for (const sep of ["/", "\\"]) {
     if (path.startsWith(home + sep)) {
-      return "~/" + path.slice(home.length + 1).replace(/\\/g, "/")
+      return `~/${  path.slice(home.length + 1).replace(/\\/g, "/")}`
     }
   }
   return path

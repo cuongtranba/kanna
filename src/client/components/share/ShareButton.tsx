@@ -5,7 +5,7 @@ import { Button } from "../ui/button"
 export type ShareButtonProps = React.ComponentPropsWithoutRef<typeof Button>
 
 export const ShareButton = forwardRef<HTMLButtonElement, ShareButtonProps>(
-  function ShareButton(props, ref) {
+  (props, ref) => {
     return (
       <Button
         ref={ref}

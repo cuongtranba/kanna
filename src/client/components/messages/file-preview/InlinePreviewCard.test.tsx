@@ -4,7 +4,7 @@ import { InlinePreviewCard } from "./InlinePreviewCard"
 import type { PreviewSource } from "./types"
 
 const mk = (mime: string, name: string): PreviewSource => ({
-  id: name, contentUrl: "/u/" + name, displayName: name, fileName: name,
+  id: name, contentUrl: `/u/${  name}`, displayName: name, fileName: name,
   mimeType: mime, size: 1024, origin: "user_attachment",
 })
 

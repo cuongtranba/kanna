@@ -89,7 +89,7 @@ export function createGrepTool(deps: { toolCallback: ToolCallbackService }): Gre
         toolCallback: deps.toolCallback,
         toolName: "mcp__kanna__grep",
         ctx,
-        args: input as unknown as Record<string, unknown>,
+        args: input,
         formatAnswer: async () => {
           let re: RegExp
           try {

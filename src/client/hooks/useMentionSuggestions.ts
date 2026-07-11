@@ -24,7 +24,7 @@ export async function fetchProjectPaths(args: {
       signal: args.signal,
     })
     if (!response.ok) return []
-    const payload = await response.json() as { paths?: ProjectPath[] }
+    const payload: { paths?: ProjectPath[] } = await response.json()
     return payload.paths ?? []
   } catch {
     return []

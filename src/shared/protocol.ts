@@ -1,4 +1,6 @@
 import type { ShareClientCommand } from "./session-share/protocol"
+import type { AnyValue } from "./errors"
+import { isRecord } from "./errors"
 import type {
   AppSettingsSnapshot,
   AppSettingsPatch,
@@ -243,14 +245,14 @@ export type ClientCommand =
   | { type: "chat.cancel"; chatId: string }
   | { type: "chat.stopDraining"; chatId: string }
   | { type: "chat.loadHistory"; chatId: string; beforeCursor: string; limit: number }
-  | { type: "chat.respondTool"; chatId: string; toolUseId: string; result: unknown }
+  | { type: "chat.respondTool"; chatId: string; toolUseId: string; result: AnyValue }
   | {
       type: "chat.toolRequestAnswer"
       chatId: string
       toolRequestId: string
       decision: ToolRequestDecision
     }
-  | { type: "chat.respondSubagentTool"; chatId: string; runId: string; toolUseId: string; result: unknown }
+  | { type: "chat.respondSubagentTool"; chatId: string; runId: string; toolUseId: string; result: Record<string, unknown> }
   | {
       type: "chat.cancelSubagentRun"
       chatId: string
@@ -324,11 +326,10 @@ export type ServerSnapshot =
 export type ServerEnvelope =
   | { v: 1; type: "snapshot"; id: string; snapshot: ServerSnapshot }
   | { v: 1; type: "event"; id: string; event: WsEvent }
-  | { v: 1; type: "ack"; id: string; result?: unknown | ChatHistoryPage }
+  | { v: 1; type: "ack"; id: string; result?: AnyValue | ChatHistoryPage }
   | { v: 1; type: "error"; id?: string; message: string }
 
-export function isClientEnvelope(value: unknown): value is ClientEnvelope {
-  if (!value || typeof value !== "object") return false
-  const candidate = value as Partial<ClientEnvelope>
-  return candidate.v === 1 && typeof candidate.type === "string"
+export function isClientEnvelope(value: AnyValue): value is ClientEnvelope {
+  if (!isRecord(value)) return false
+  return value.v === 1 && typeof value.type === "string"
 }

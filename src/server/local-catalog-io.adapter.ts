@@ -1,6 +1,8 @@
 import { closeSync, existsSync, openSync, readFileSync, readSync, readdirSync, statSync } from "node:fs"
 import { homedir } from "node:os"
 import path from "node:path"
+import type { AnyValue } from "../shared/errors"
+import { isRecord } from "../shared/errors"
 
 export type CatalogKind = "skill" | "command"
 export type CatalogScope = "project" | "personal" | "plugin"
@@ -281,20 +283,20 @@ interface MarketplacePlugin {
 function readMarketplacePlugins(marketPath: string): MarketplacePlugin[] {
   const manifestPath = path.join(marketPath, ".claude-plugin", "marketplace.json")
   if (!existsSync(manifestPath)) return []
-  let parsed: unknown
+  let parsed: AnyValue
   try {
     parsed = JSON.parse(readFileSync(manifestPath, "utf8"))
   } catch {
     return []
   }
-  if (typeof parsed !== "object" || parsed === null) return []
-  const plugins = (parsed as { plugins?: unknown }).plugins
+  if (!isRecord(parsed)) return []
+  const plugins = parsed.plugins
   if (!Array.isArray(plugins)) return []
   const out: MarketplacePlugin[] = []
   for (const raw of plugins) {
-    if (typeof raw !== "object" || raw === null) continue
-    const name = (raw as { name?: unknown }).name
-    const source = (raw as { source?: unknown }).source
+    if (!isRecord(raw)) continue
+    const name = raw.name
+    const source = raw.source
     if (typeof name !== "string" || name.length === 0) continue
     if (typeof source !== "string") continue
     out.push({ name, sourceDir: path.resolve(marketPath, source) })

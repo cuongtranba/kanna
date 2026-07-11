@@ -135,7 +135,7 @@ async function walkDirectory(root: string): Promise<string[]> {
     const abs = path.join(root, rel)
     let entries: DirEntry[]
     try {
-      entries = await readDirEntries(abs) as DirEntry[]
+      entries = await readDirEntries(abs)
     } catch {
       continue
     }

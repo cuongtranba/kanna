@@ -90,11 +90,38 @@ function ChatRowImpl({
   const isActive = activeChatId === normalizedChatId
 
   const tone = dotToneFor(chat)
-  const trailingSlotWidth = chat.canFork
-    ? "w-12"
-    : isLiveState
-      ? "w-12 md:w-20"
-      : "w-6 md:w-14"
+  let trailingSlotWidth: string
+  if (chat.canFork) {
+    trailingSlotWidth = "w-12"
+  } else if (isLiveState) {
+    trailingSlotWidth = "w-12 md:w-20"
+  } else {
+    trailingSlotWidth = "w-6 md:w-14"
+  }
+
+  let trailingLabelContent: React.ReactNode = null
+  if (trailingLabel) {
+    if (showShortcutKeycap) {
+      trailingLabelContent = (
+        <span className="hidden md:flex absolute inset-0 items-center justify-end pr-0.5 text-[11px] text-foreground transition-opacity duration-150 group-hover:opacity-0">
+          <Kbd className="h-4 min-w-4 rounded-sm border-border/50 bg-transparent px-1 text-[10px]">
+            {shortcutHint}
+          </Kbd>
+        </span>
+      )
+    } else {
+      trailingLabelContent = (
+        <span
+          className={cn(
+            "hidden md:flex absolute inset-0 items-center justify-end pr-1 text-[11px] tabular-nums transition-opacity duration-150 group-hover:opacity-0 whitespace-nowrap",
+            isLiveState ? dotTextClass(tone) : "text-muted-foreground"
+          )}
+        >
+          {trailingLabel}
+        </span>
+      )
+    }
+  }
 
   const row = (
     <div
@@ -144,24 +171,7 @@ function ChatRowImpl({
         {chat.title}
       </span>
       <div className={cn("relative h-6 shrink-0", trailingSlotWidth)}>
-        {trailingLabel ? (
-          showShortcutKeycap ? (
-            <span className="hidden md:flex absolute inset-0 items-center justify-end pr-0.5 text-[11px] text-foreground transition-opacity duration-150 group-hover:opacity-0">
-              <Kbd className="h-4 min-w-4 rounded-sm border-border/50 bg-transparent px-1 text-[10px]">
-                {shortcutHint}
-              </Kbd>
-            </span>
-          ) : (
-            <span
-              className={cn(
-                "hidden md:flex absolute inset-0 items-center justify-end pr-1 text-[11px] tabular-nums transition-opacity duration-150 group-hover:opacity-0 whitespace-nowrap",
-                isLiveState ? dotTextClass(tone) : "text-muted-foreground"
-              )}
-            >
-              {trailingLabel}
-            </span>
-          )
-        ) : null}
+        {trailingLabelContent}
         <div
           className={cn(
             "absolute inset-0 flex items-center justify-end gap-0 transition-opacity duration-150",

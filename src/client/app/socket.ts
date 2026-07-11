@@ -7,12 +7,14 @@ import type {
   TerminalSnapshot,
 } from "../../shared/protocol"
 import { LOG_PREFIX } from "../../shared/branding"
+import { log } from "../../shared/log"
+import type { AnyValue } from "../../shared/errors"
 import { generateUUID } from "../lib/utils"
 import { getStoredPushDeviceId } from "./pushClient"
 
 if (typeof navigator !== "undefined" && "serviceWorker" in navigator) {
-  navigator.serviceWorker.addEventListener("message", (event) => {
-    const data = (event as MessageEvent<{ type?: string; url?: string }>).data
+  navigator.serviceWorker.addEventListener("message", (event: MessageEvent) => {
+    const data: { type?: string; url?: string } = event.data
     if (data?.type === "kanna.navigate" && typeof data.url === "string") {
       window.location.href = data.url
     }
@@ -29,10 +31,10 @@ const HEARTBEAT_INTERVAL_MS = 15_000
 const PING_TIMEOUT_MS = 4_000
 const SEND_TO_STARTING_PROFILE_STORAGE_KEY = "kanna:profile-send-to-starting"
 
-interface SubscriptionEntry<TSnapshot, TEvent = never> {
+interface InternalSubscriptionEntry {
   topic: SubscriptionTopic
-  listener: SnapshotListener<TSnapshot>
-  eventListener?: EventListener<TEvent>
+  listener(v: AnyValue): void
+  eventListener?(v: AnyValue): void
 }
 
 function isSendToStartingProfilingEnabled() {
@@ -50,8 +52,8 @@ export class KannaSocket {
   private started = false
   private reconnectTimer: number | null = null
   private reconnectDelayMs = 750
-  private readonly subscriptions = new Map<string, SubscriptionEntry<unknown, unknown>>()
-  private readonly pending = new Map<string, { resolve: (value: unknown) => void; reject: (reason?: unknown) => void }>()
+  private readonly subscriptions = new Map<string, InternalSubscriptionEntry>()
+  private readonly pending = new Map<string, { resolve: (value: AnyValue) => void; reject: (reason?: AnyValue) => void }>()
   private readonly outboundQueue: ClientEnvelope[] = []
   private readonly statusListeners = new Set<StatusListener>()
   private heartbeatTimer: number | null = null
@@ -123,11 +125,12 @@ export class KannaSocket {
     eventListener?: EventListener<TEvent>
   ) {
     const id = generateUUID()
-    this.subscriptions.set(id, {
+    const entry: InternalSubscriptionEntry = {
       topic,
-      listener: listener as SnapshotListener<unknown>,
-      eventListener: eventListener as EventListener<unknown> | undefined,
-    })
+      listener,
+      eventListener,
+    }
+    this.subscriptions.set(id, entry)
     this.enqueue({ v: 1, type: "subscribe", id, topic })
     return () => {
       this.subscriptions.delete(id)
@@ -144,11 +147,12 @@ export class KannaSocket {
   ) {
     const id = generateUUID()
     const topic: SubscriptionTopic = { type: "terminal", terminalId }
-    this.subscriptions.set(id, {
+    const entry: InternalSubscriptionEntry = {
       topic,
-      listener: handlers.onSnapshot as SnapshotListener<unknown>,
-      eventListener: handlers.onEvent as EventListener<unknown> | undefined,
-    })
+      listener: handlers.onSnapshot,
+      eventListener: handlers.onEvent,
+    }
+    this.subscriptions.set(id, entry)
     this.enqueue({ v: 1, type: "subscribe", id, topic })
     return () => {
       this.subscriptions.delete(id)
@@ -156,11 +160,12 @@ export class KannaSocket {
     }
   }
 
-  command<TResult = unknown>(command: ClientCommand) {
+  command<TResult = AnyValue>(command: ClientCommand): Promise<TResult>
+  command(command: ClientCommand): Promise<AnyValue> {
     const id = generateUUID()
     const envelope: ClientEnvelope = { v: 1, type: "command", id, command }
-    return new Promise<TResult>((resolve, reject) => {
-      this.pending.set(id, { resolve: resolve as (value: unknown) => void, reject })
+    return new Promise<AnyValue>((resolve, reject) => {
+      this.pending.set(id, { resolve, reject })
       this.enqueue(envelope)
     })
   }
@@ -238,13 +243,13 @@ export class KannaSocket {
       const rawText = String(event.data)
       let payload: ServerEnvelope
       try {
-        payload = JSON.parse(rawText) as ServerEnvelope
+        payload = JSON.parse(rawText)
       } catch {
         return
       }
 
       if (isSendToStartingProfilingEnabled() && payload.type === "snapshot" && payload.snapshot.type === "chat" && payload.snapshot.data?.runtime.status === "starting") {
-        console.debug("[kanna/send->starting][client-ws]", {
+        log.debug("[kanna/send->starting][client-ws]", {
           stage: "socket_message_received",
           receivedAt,
           payloadBytes: rawText.length,
@@ -255,7 +260,7 @@ export class KannaSocket {
       }
 
       if (isSendToStartingProfilingEnabled() && payload.type === "ack") {
-        console.debug("[kanna/send->starting][client-ws]", {
+        log.debug("[kanna/send->starting][client-ws]", {
           stage: "socket_ack_received",
           receivedAt,
           payloadBytes: rawText.length,
@@ -285,7 +290,7 @@ export class KannaSocket {
 
       if (payload.type === "error") {
         if (!payload.id) {
-          console.error(LOG_PREFIX, payload.message)
+          log.error(LOG_PREFIX, payload.message)
           return
         }
         const pending = this.pending.get(payload.id)

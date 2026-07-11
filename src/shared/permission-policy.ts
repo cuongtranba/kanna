@@ -1,3 +1,5 @@
+import type { AnyValue } from "./errors"
+
 export type ToolRequestStatus =
   | "pending"
   | "answered"
@@ -65,7 +67,7 @@ export function mergePolicyOverride(
 
 export interface ToolRequestDecision {
   kind: "allow" | "deny" | "answer"
-  payload?: unknown
+  payload?: AnyValue
   reason?: string
 }
 

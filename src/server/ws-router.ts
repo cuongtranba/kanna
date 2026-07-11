@@ -1,5 +1,8 @@
 import { randomUUID } from "node:crypto"
 import { readTextFileOrThrow, spawnCommandCapture } from "./ws-router-io.adapter"
+import type { AnyValue } from "../shared/errors"
+import { isRecord } from "../shared/errors"
+import { log } from "../shared/log"
 import os from "node:os"
 import path from "node:path"
 import type { ServerWebSocket } from "bun"
@@ -65,7 +68,7 @@ function logSendToStartingProfile(
     return
   }
 
-  console.log("[kanna/send->starting][server]", JSON.stringify({
+  log.info("[kanna/send->starting][server]", JSON.stringify({
     traceId,
     stage,
     elapsedMs: Number((performance.now() - startedAt).toFixed(1)),
@@ -234,24 +237,20 @@ export function getGlobalSkillLockPath() {
   return path.join(os.homedir(), ".agents", ".skill-lock.json")
 }
 
-function asString(value: unknown) {
+function asString(value: AnyValue) {
   return typeof value === "string" ? value : ""
 }
 
-export function parseInstalledSkillsLock(parsed: unknown, lockFilePath: string): InstalledSkillsSnapshot {
-  const skillsRecord = parsed
-    && typeof parsed === "object"
-    && "skills" in parsed
-    && parsed.skills
-    && typeof parsed.skills === "object"
-    && !Array.isArray(parsed.skills)
-      ? parsed.skills as Record<string, unknown>
-      : {}
+export function parseInstalledSkillsLock(parsed: AnyValue, lockFilePath: string): InstalledSkillsSnapshot {
+  const skillsRaw = isRecord(parsed) && isRecord(parsed.skills) && !Array.isArray(parsed.skills)
+    ? parsed.skills
+    : null
+  const skillsRecord: Record<string, AnyValue> = skillsRaw ?? {}
 
   const skills = Object.entries(skillsRecord)
     .filter(([, entry]) => entry && typeof entry === "object" && !Array.isArray(entry))
     .map(([name, entry]) => {
-      const record = entry as Record<string, unknown>
+      const record: Record<string, AnyValue> = isRecord(entry) ? entry : {}
       return {
         name,
         source: asString(record.source),
@@ -306,7 +305,7 @@ export async function searchSkills(query: string, limit = 100): Promise<SkillSea
     throw new Error(`Skills search failed with status ${response.status}.`)
   }
 
-  const payload = await response.json() as Partial<SkillSearchSnapshot>
+  const payload: Partial<SkillSearchSnapshot> = await response.json()
   return {
     query: typeof payload.query === "string" ? payload.query : normalizedQuery,
     searchType: typeof payload.searchType === "string" ? payload.searchType : "fuzzy",
@@ -469,20 +468,26 @@ export function createWsRouter({
       apiKey: string
       model: string
       baseUrl: string
-    }) => ({
-      provider,
-      apiKey,
-      model,
-      baseUrl,
-      resolvedBaseUrl: provider === "openrouter"
-        ? "https://openrouter.ai/api/v1"
-        : provider === "custom"
-          ? baseUrl
-          : "https://api.openai.com/v1",
-      enabled: false,
-      warning: null,
-      filePathDisplay: "~/.kanna/llm-provider.json",
-    }),
+    }) => {
+      let resolvedBaseUrl: string
+      if (provider === "openrouter") {
+        resolvedBaseUrl = "https://openrouter.ai/api/v1"
+      } else if (provider === "custom") {
+        resolvedBaseUrl = baseUrl
+      } else {
+        resolvedBaseUrl = "https://api.openai.com/v1"
+      }
+      return {
+        provider,
+        apiKey,
+        model,
+        baseUrl,
+        resolvedBaseUrl,
+        enabled: false,
+        warning: null,
+        filePathDisplay: "~/.kanna/llm-provider.json",
+      }
+    },
     validate: async () => ({
       ok: false,
       error: {
@@ -556,7 +561,7 @@ export function createWsRouter({
         updatedAt: now,
       }]
     } else if (patch.subagents?.update) {
-      subagents = subagents.map((subagent) => subagent.id === patch.subagents?.update?.id
+      subagents = subagents.map((subagent): Subagent => subagent.id === patch.subagents?.update?.id
         ? {
             ...subagent,
             ...patch.subagents.update.patch,
@@ -564,7 +569,7 @@ export function createWsRouter({
             description: patch.subagents.update.patch.description === null
               ? undefined
               : patch.subagents.update.patch.description ?? subagent.description,
-            modelOptions: { ...subagent.modelOptions, ...(patch.subagents.update.patch.modelOptions ?? {}) } as Subagent["modelOptions"],
+            modelOptions: <Subagent["modelOptions"]>{ ...subagent.modelOptions, ...(patch.subagents.update.patch.modelOptions ?? {}) },
             workingDir: patch.subagents.update.patch.workingDir === null
               ? undefined
               : patch.subagents.update.patch.workingDir ?? subagent.workingDir,
@@ -725,7 +730,7 @@ export function createWsRouter({
       protectedChatIds: protectedDraftChatIds,
     })
     if (isSendToStartingProfilingEnabled()) {
-      console.log("[kanna/send->starting][server]", JSON.stringify({
+      log.info("[kanna/send->starting][server]", JSON.stringify({
         stage: "ws.prune_stale_empty_chats",
         elapsedMs: Number((performance.now() - startedAt).toFixed(1)),
         activeChatCount: activeChatIds.size,
@@ -794,11 +799,11 @@ export function createWsRouter({
       }))
     )
     void pushManager.observeStatuses(observed).catch((error) => {
-      console.warn("[kanna/push] observeStatuses failed", { error })
+      log.warn("[kanna/push] observeStatuses failed", { error })
     })
     if (isSendToStartingProfilingEnabled()) {
       const totalChats = data.projectGroups.reduce((count, group) => count + group.chats.length, 0)
-      console.log("[kanna/send->starting][server]", JSON.stringify({
+      log.info("[kanna/send->starting][server]", JSON.stringify({
         stage: "ws.sidebar_snapshot_built",
         elapsedMs: Number((performance.now() - startedAt).toFixed(1)),
         projectGroupCount: data.projectGroups.length,
@@ -1048,7 +1053,7 @@ export function createWsRouter({
       }
     }
     if (isSendToStartingProfilingEnabled()) {
-      console.log("[kanna/send->starting][server]", JSON.stringify({
+      log.info("[kanna/send->starting][server]", JSON.stringify({
         stage: "ws.push_snapshots_completed",
         elapsedMs: Number((performance.now() - pushStartedAt).toFixed(1)),
         skipPrune: Boolean(options?.skipPrune),
@@ -1068,7 +1073,7 @@ export function createWsRouter({
       await pushSnapshots(ws, { skipPrune: true, cache })
     }
     if (isSendToStartingProfilingEnabled()) {
-      console.log("[kanna/send->starting][server]", JSON.stringify({
+      log.info("[kanna/send->starting][server]", JSON.stringify({
         stage: "ws.broadcast_snapshots_completed",
         elapsedMs: Number((performance.now() - startedAt).toFixed(1)),
         pruneMs: 0,
@@ -1088,7 +1093,7 @@ export function createWsRouter({
       await pushSnapshots(ws, { skipPrune: true, filter, cache })
     }
     if (isSendToStartingProfilingEnabled()) {
-      console.log("[kanna/send->starting][server]", JSON.stringify({
+      log.info("[kanna/send->starting][server]", JSON.stringify({
         stage: "ws.broadcast_filtered_snapshots_completed",
         elapsedMs: Number((performance.now() - startedAt).toFixed(1)),
         socketCount,
@@ -1981,7 +1986,7 @@ export function createWsRouter({
           const toolCallbackSvc = agent.toolCallbackService
           if (!toolCallbackSvc) throw new Error("tool callback service unavailable")
           const validKinds = new Set(["allow", "deny", "answer"])
-          if (typeof command.decision !== "object" || command.decision === null || !validKinds.has((command.decision as { kind?: string }).kind ?? "")) {
+          if (!isRecord(command.decision) || !validKinds.has(typeof command.decision.kind === "string" ? command.decision.kind : "")) {
             throw new Error("Invalid tool request decision kind")
           }
           const existing = store.getToolRequest(command.toolRequestId)
@@ -2223,8 +2228,8 @@ export function createWsRouter({
     } catch (error) {
       const messageText = error instanceof Error ? error.message : String(error)
       const benign = isBenignStaleStateMessage(messageText)
-      const logger = benign ? console.log : console.error
-      logger("[ws-router] command failed", {
+      const logFn = benign ? log.info : log.error
+      logFn("[ws-router] command failed", {
         id,
         type: command.type,
         message: messageText,
@@ -2249,7 +2254,7 @@ export function createWsRouter({
     scheduleChatStateBroadcast,
     pruneStaleEmptyChats: () => maybePruneStaleEmptyChats(),
     async handleMessage(ws: ServerWebSocket<ClientState>, raw: string | Buffer | ArrayBuffer | Uint8Array) {
-      let parsed: unknown
+      let parsed: AnyValue
       try {
         parsed = JSON.parse(String(raw))
       } catch {
@@ -2376,6 +2381,6 @@ async function runMcpAutoTest(
     await appSettings.writePatch({ customMcpServers: { setTestResult: { id, result } } })
   } catch (err) {
     // Auto-test must never throw; log + swallow.
-    console.warn("[kanna/ws-router] runMcpAutoTest failed", err)
+    log.warn("[kanna/ws-router] runMcpAutoTest failed", String(err))
   }
 }

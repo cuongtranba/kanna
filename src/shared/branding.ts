@@ -16,12 +16,8 @@ export type RuntimeProfile = "dev" | "prod"
 type RuntimeEnv = Record<string, string | undefined> | undefined
 
 function getRuntimeEnv(): RuntimeEnv {
-  const candidate = globalThis as typeof globalThis & {
-    process?: {
-      env?: Record<string, string | undefined>
-    }
-  }
-  return candidate.process?.env
+  const proc: { env?: RuntimeEnv } | undefined = Reflect.get(globalThis, "process")
+  return proc?.env
 }
 
 export function getRuntimeProfile(env: RuntimeEnv = getRuntimeEnv()): RuntimeProfile {

@@ -140,19 +140,24 @@ export function AttachmentFileCard({
       : "hover:bg-accent/50"
   )
 
-  const subtitle = isMention ? (
-    <div className="max-w-[150px] truncate text-[11px] text-muted-foreground">
-      {mentionSubtitle ? `@${mentionSubtitle}` : "@mention"}
-    </div>
-  ) : disabledReason ? (
-    <div className="truncate text-[11px] text-muted-foreground">{disabledReason}</div>
-  ) : meta !== undefined ? (
-    <div className="truncate text-[11px] text-muted-foreground">{meta}</div>
-  ) : (
-    <div className="truncate text-[11px] text-muted-foreground">
-      {attachment.mimeType} · {formatAttachmentSize(attachment.size)}
-    </div>
-  )
+  let subtitle: React.ReactNode
+  if (isMention) {
+    subtitle = (
+      <div className="max-w-[150px] truncate text-[11px] text-muted-foreground">
+        {mentionSubtitle ? `@${mentionSubtitle}` : "@mention"}
+      </div>
+    )
+  } else if (disabledReason) {
+    subtitle = <div className="truncate text-[11px] text-muted-foreground">{disabledReason}</div>
+  } else if (meta !== undefined) {
+    subtitle = <div className="truncate text-[11px] text-muted-foreground">{meta}</div>
+  } else {
+    subtitle = (
+      <div className="truncate text-[11px] text-muted-foreground">
+        {attachment.mimeType} · {formatAttachmentSize(attachment.size)}
+      </div>
+    )
+  }
 
   const inner = (
     <>

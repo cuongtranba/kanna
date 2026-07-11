@@ -1,3 +1,4 @@
+import type { AnyValue } from "../../../../shared/errors"
 import { type ReactNode } from "react"
 import {
   type EditorConfig,
@@ -120,7 +121,7 @@ export function $createAttachmentNode(attachment: ChatAttachment): AttachmentNod
 }
 
 export function $isAttachmentNode(
-  node: unknown,
+  node: AnyValue,
 ): node is AttachmentNode {
   return node instanceof AttachmentNode
 }

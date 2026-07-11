@@ -25,7 +25,7 @@ function getQuestionKey(question: AskUserQuestionItem): string {
 export function AskUserQuestionMessage({ message, onSubmit, isLatest }: Props) {
   const renderOptions = useTranscriptRenderOptions()
   const questions = message.input.questions
-  const isComplete = !!message.result
+  const isComplete = Boolean(message.result)
   const savedAnswers = parseAnswersFromResult(message.result)
   const isDiscarded = message.result?.discarded === true
 
@@ -49,7 +49,7 @@ export function AskUserQuestionMessage({ message, onSubmit, isLatest }: Props) {
             const selectedDescriptions = question.options
               ? answerValue
                 .map((label) => question.options?.find((option) => option.label === label)?.description)
-                .filter((value): value is string => !!value)
+                .filter((value): value is string => Boolean(value))
               : []
 
             return (

@@ -2,6 +2,7 @@ import { ANALYTICS_ENDPOINT } from "../shared/analytics"
 import { PROD_SERVER_PORT } from "../shared/ports"
 import type { ShareMode } from "../shared/share"
 import { isTokenShareMode } from "../shared/share"
+import { log } from "../shared/log"
 interface AnalyticsRequestBody {
   userId: string
   environment: AnalyticsEnvironment
@@ -89,12 +90,12 @@ export class KannaAnalyticsReporter implements AnalyticsReporter {
           throw new Error(`Analytics request failed with status ${response.status}`)
         }
         if (isAnalyticsLoggingEnabled()) {
-          console.log("[kanna/analytics] Sent analytics event:", eventName, response.status)
+          log.info("[kanna/analytics] Sent analytics event:", eventName, response.status)
         }
       })
       .catch((error) => {
         if (isAnalyticsLoggingEnabled()) {
-          console.warn("[kanna/analytics] Failed to send analytics event:", eventName, error)
+          log.warn("[kanna/analytics] Failed to send analytics event:", eventName, error)
         }
       })
   }

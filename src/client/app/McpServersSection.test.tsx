@@ -19,14 +19,16 @@ function stdio(
   name: string,
   status: McpServerConfig["lastTest"]["status"] = "untested",
 ): McpServerConfig {
-  const lastTest: McpServerConfig["lastTest"] =
-    status === "ok"
-      ? { status: "ok", testedAt: "", toolCount: 3 }
-      : status === "error"
-        ? { status: "error", testedAt: "", message: "boom" }
-        : status === "pending"
-          ? { status: "pending", startedAt: "" }
-          : { status: "untested" }
+  let lastTest: McpServerConfig["lastTest"]
+  if (status === "ok") {
+    lastTest = { status: "ok", testedAt: "", toolCount: 3 }
+  } else if (status === "error") {
+    lastTest = { status: "error", testedAt: "", message: "boom" }
+  } else if (status === "pending") {
+    lastTest = { status: "pending", startedAt: "" }
+  } else {
+    lastTest = { status: "untested" }
+  }
   return {
     id: name,
     name,

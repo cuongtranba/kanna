@@ -2,8 +2,8 @@ import { describe, expect, test } from "bun:test"
 import { mkdtemp, rm, writeFile, appendFile, mkdir } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
-import type { Query } from "@anthropic-ai/claude-agent-sdk"
 import { createClaudeHarnessStream } from "../agent"
+import type { ClaudeRawSdkMessage } from "../agent"
 import { createJsonlEventParser } from "./jsonl-to-event"
 import { startTranscriptStream } from "./tui-source.adapter"
 import type { HarnessEvent } from "../harness-types"
@@ -23,11 +23,10 @@ import type { ModelPrice } from "../../shared/token-pricing"
  *   one line per message.
  */
 
-function fakeQuery(messages: unknown[]): Query {
-  const q = (async function* () {
-    for (const m of messages) yield m as never
+function fakeQuery(messages: unknown[]): AsyncGenerator<ClaudeRawSdkMessage> {
+  return (async function* () {
+    for (const m of messages) yield m as ClaudeRawSdkMessage
   })()
-  return q as unknown as Query
 }
 
 function normalize(events: HarnessEvent[]): unknown[] {
@@ -62,7 +61,7 @@ async function ptyEventsViaTranscriptStream(messages: unknown[], configuredConte
   const events: HarnessEvent[] = []
   const writeAll = (async () => {
     for (const m of messages) {
-      await appendFile(filePath, JSON.stringify(m) + "\n")
+      await appendFile(filePath, `${JSON.stringify(m)  }\n`)
       await new Promise<void>((r) => setTimeout(r, 30))
     }
     await appendFile(filePath, '{"type":"__parity_sentinel__"}\n')

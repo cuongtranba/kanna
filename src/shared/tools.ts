@@ -1,6 +1,7 @@
 import type {
   AskUserQuestionItem,
   AskUserQuestionAnswerMap,
+  AskUserQuestionOption,
   AskUserQuestionToolResult,
   ExitPlanModeToolResult,
   HydratedToolCall,
@@ -12,15 +13,15 @@ import type {
   TodoItem,
   WorkflowToolResult,
 } from "./types"
+import { type AnyValue, isRecord } from "./errors"
 
 export const KANNA_MCP_SERVER_NAME = "kanna"
 export const OFFER_DOWNLOAD_TOOL_NAME = `mcp__${KANNA_MCP_SERVER_NAME}__offer_download`
 export const PREVIEW_FILE_TOOL_NAME = `mcp__${KANNA_MCP_SERVER_NAME}__preview_file`
 export const EXPOSE_PORT_TOOL_NAME = `mcp__${KANNA_MCP_SERVER_NAME}__expose_port`
 
-function asRecord(value: unknown): Record<string, unknown> | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return null
-  return value as Record<string, unknown>
+function asRecord<T>(value: T): (T & Record<string, unknown>) | null {
+  return isRecord(value) ? value : null
 }
 
 function parseWorkflowMeta(script: string): { name?: string; description?: string } {
@@ -44,7 +45,9 @@ export function normalizeToolCall(args: {
         toolName,
         toolId,
         input: {
-          questions: Array.isArray(input.questions) ? (input.questions as AskUserQuestionItem[]) : [],
+          questions: Array.isArray(input.questions)
+            ? input.questions.filter((q): q is AskUserQuestionItem => isRecord(q) && typeof q.question === "string")
+            : [],
         },
         rawInput: input,
       }
@@ -53,12 +56,18 @@ export function normalizeToolCall(args: {
       // `question`. Normalise to AskUserQuestionItem so renderers and answer
       // key generation work identically regardless of which path fired.
       const questions: AskUserQuestionItem[] = Array.isArray(input.questions)
-        ? (input.questions as Record<string, unknown>[]).map((q) => ({
-            question: typeof q.text === "string" ? q.text : String(q.text ?? ""),
-            header: typeof q.header === "string" ? q.header : undefined,
-            options: Array.isArray(q.options) ? q.options as AskUserQuestionItem["options"] : undefined,
-            multiSelect: typeof q.multiSelect === "boolean" ? q.multiSelect : false,
-          }))
+        ? input.questions.flatMap((q) => {
+            if (!isRecord(q)) return []
+            const options: AskUserQuestionOption[] | undefined = Array.isArray(q.options)
+              ? q.options.filter((o: AnyValue): o is AskUserQuestionOption => isRecord(o) && typeof o.label === "string")
+              : undefined
+            return [{
+              question: typeof q.text === "string" ? q.text : String(q.text ?? ""),
+              header: typeof q.header === "string" ? q.header : undefined,
+              options,
+              multiSelect: typeof q.multiSelect === "boolean" ? q.multiSelect : false,
+            }]
+          })
         : []
       return {
         kind: "tool",
@@ -89,7 +98,15 @@ export function normalizeToolCall(args: {
         toolName,
         toolId,
         input: {
-          todos: Array.isArray(input.todos) ? (input.todos as TodoItem[]) : [],
+          todos: Array.isArray(input.todos)
+            ? input.todos.filter(
+                (t): t is TodoItem =>
+                  isRecord(t) &&
+                  typeof t.content === "string" &&
+                  typeof t.status === "string" &&
+                  typeof t.activeForm === "string",
+              )
+            : [],
         },
         rawInput: input,
       }
@@ -275,7 +292,7 @@ export function normalizeToolCall(args: {
   }
 }
 
-function parseJsonValue(value: unknown): unknown {
+function parseJsonValue(value: AnyValue): AnyValue {
   if (typeof value !== "string") return value
   try {
     return JSON.parse(value)
@@ -295,17 +312,15 @@ type ReadStructuredImageBlock = {
   mimeType?: string
 }
 
-function normalizeReadBlocks(value: unknown): Array<ReadStructuredTextBlock | ReadStructuredImageBlock> {
-  const blocks = (
-    value
-    && typeof value === "object"
-    && "content" in value
-    && Array.isArray((value as { content?: unknown }).content)
-  )
-    ? (value as { content: unknown[] }).content
-    : Array.isArray(value)
-      ? value
-      : []
+function normalizeReadBlocks(value: AnyValue): Array<ReadStructuredTextBlock | ReadStructuredImageBlock> {
+  let blocks: unknown[]
+  if (isRecord(value) && "content" in value && Array.isArray(value.content)) {
+    blocks = value.content
+  } else if (Array.isArray(value)) {
+    blocks = value
+  } else {
+    blocks = []
+  }
 
   const normalized: Array<ReadStructuredTextBlock | ReadStructuredImageBlock> = []
 
@@ -314,7 +329,7 @@ function normalizeReadBlocks(value: unknown): Array<ReadStructuredTextBlock | Re
       continue
     }
 
-    if (block.type === "text" && typeof block.text === "string") {
+    if (block.type === "text" && "text" in block && typeof block.text === "string") {
       normalized.push({ type: "text", text: block.text })
       continue
     }
@@ -324,7 +339,7 @@ function normalizeReadBlocks(value: unknown): Array<ReadStructuredTextBlock | Re
         normalized.push({
           type: "image",
           data: block.data,
-          mimeType: typeof block.mimeType === "string" ? block.mimeType : undefined,
+          mimeType: "mimeType" in block && typeof block.mimeType === "string" ? block.mimeType : undefined,
         })
         continue
       }
@@ -341,7 +356,7 @@ function normalizeReadBlocks(value: unknown): Array<ReadStructuredTextBlock | Re
         normalized.push({
           type: "image",
           data: block.source.data,
-          mimeType: typeof block.source.media_type === "string" ? block.source.media_type : undefined,
+          mimeType: "media_type" in block.source && typeof block.source.media_type === "string" ? block.source.media_type : undefined,
         })
       }
     }
@@ -350,30 +365,28 @@ function normalizeReadBlocks(value: unknown): Array<ReadStructuredTextBlock | Re
   return normalized
 }
 
-function extractMcpTextContent(value: unknown): string | null {
-  const blocks = (
-    value
-    && typeof value === "object"
-    && "content" in value
-    && Array.isArray((value as { content?: unknown }).content)
-  )
-    ? (value as { content: unknown[] }).content
-    : Array.isArray(value)
-      ? value
-      : null
+function extractMcpTextContent(value: AnyValue): string | null {
+  let blocks: unknown[] | null
+  if (isRecord(value) && "content" in value && Array.isArray(value.content)) {
+    blocks = value.content
+  } else if (Array.isArray(value)) {
+    blocks = value
+  } else {
+    blocks = null
+  }
 
   if (!blocks) return null
 
   const parts: string[] = []
   for (const block of blocks) {
-    if (block && typeof block === "object" && "type" in block && block.type === "text" && typeof (block as { text?: unknown }).text === "string") {
-      parts.push((block as { text: string }).text)
+    if (block && typeof block === "object" && "type" in block && block.type === "text" && "text" in block && typeof block.text === "string") {
+      parts.push(block.text)
     }
   }
   return parts.length > 0 ? parts.join("") : null
 }
 
-export function hydrateToolResult(tool: NormalizedToolCall, raw: unknown): HydratedToolCall["result"] {
+export function hydrateToolResult(tool: NormalizedToolCall, raw: AnyValue): HydratedToolCall["result"] {
   const parsed = parseJsonValue(raw)
 
   switch (tool.toolKind) {
@@ -384,21 +397,20 @@ export function hydrateToolResult(tool: NormalizedToolCall, raw: unknown): Hydra
       const payload = innerText !== null ? parseJsonValue(innerText) : parsed
       const record = asRecord(payload)
       const answers = asRecord(record?.answers) ?? (record ? record : {})
+      const answersMap: AskUserQuestionAnswerMap = {}
+      for (const [key, value] of Object.entries(answers)) {
+        if (Array.isArray(value)) {
+          answersMap[key] = value.map((entry) => String(entry))
+        } else if (isRecord(value) && Array.isArray(value.answers)) {
+          answersMap[key] = value.answers.map((entry) => String(entry))
+        } else if (value == null || value === "") {
+          answersMap[key] = []
+        } else {
+          answersMap[key] = [String(value)]
+        }
+      }
       return {
-        answers: Object.fromEntries(
-          Object.entries(answers).map(([key, value]) => {
-            if (Array.isArray(value)) {
-              return [key, value.map((entry) => String(entry))]
-            }
-            if (value && typeof value === "object" && Array.isArray((value as { answers?: unknown }).answers)) {
-              return [key, (value as { answers: unknown[] }).answers.map((entry) => String(entry))]
-            }
-            if (value == null || value === "") {
-              return [key, []]
-            }
-            return [key, [String(value)]]
-          })
-        ) as AskUserQuestionAnswerMap,
+        answers: answersMap,
         ...(record?.discarded === true ? { discarded: true } : {}),
       } satisfies AskUserQuestionToolResult
     }
@@ -417,13 +429,19 @@ export function hydrateToolResult(tool: NormalizedToolCall, raw: unknown): Hydra
       const text = extractMcpTextContent(parsed)
       const payload = text ? parseJsonValue(text) : parsed
       const record = asRecord(payload)
+      let offerDisplayName: string
+      if (typeof record?.displayName === "string") {
+        offerDisplayName = record.displayName
+      } else if (typeof record?.fileName === "string") {
+        offerDisplayName = record.fileName
+      } else {
+        offerDisplayName = ""
+      }
       return {
         contentUrl: typeof record?.contentUrl === "string" ? record.contentUrl : "",
         relativePath: typeof record?.relativePath === "string" ? record.relativePath : "",
         fileName: typeof record?.fileName === "string" ? record.fileName : "",
-        displayName: typeof record?.displayName === "string"
-          ? record.displayName
-          : typeof record?.fileName === "string" ? record.fileName : "",
+        displayName: offerDisplayName,
         size: typeof record?.size === "number" ? record.size : 0,
         ...(typeof record?.mimeType === "string" ? { mimeType: record.mimeType } : {}),
       } satisfies OfferDownloadToolResult
@@ -432,13 +450,19 @@ export function hydrateToolResult(tool: NormalizedToolCall, raw: unknown): Hydra
       const text = extractMcpTextContent(parsed)
       const payload = text ? parseJsonValue(text) : parsed
       const record = asRecord(payload)
+      let previewDisplayName: string
+      if (typeof record?.displayName === "string") {
+        previewDisplayName = record.displayName
+      } else if (typeof record?.fileName === "string") {
+        previewDisplayName = record.fileName
+      } else {
+        previewDisplayName = ""
+      }
       return {
         contentUrl: typeof record?.contentUrl === "string" ? record.contentUrl : "",
         relativePath: typeof record?.relativePath === "string" ? record.relativePath : "",
         fileName: typeof record?.fileName === "string" ? record.fileName : "",
-        displayName: typeof record?.displayName === "string"
-          ? record.displayName
-          : typeof record?.fileName === "string" ? record.fileName : "",
+        displayName: previewDisplayName,
         size: typeof record?.size === "number" ? record.size : 0,
         mimeType: typeof record?.mimeType === "string" ? record.mimeType : "application/octet-stream",
       } satisfies PreviewFileToolResult
@@ -459,7 +483,7 @@ export function hydrateToolResult(tool: NormalizedToolCall, raw: unknown): Hydra
         text,
       } satisfies WorkflowToolResult
     }
-    case "read_file":
+    case "read_file": {
       if (typeof parsed === "string") {
         return parsed
       }
@@ -477,6 +501,7 @@ export function hydrateToolResult(tool: NormalizedToolCall, raw: unknown): Hydra
       return {
         content: typeof record?.content === "string" ? record.content : JSON.stringify(parsed, null, 2),
       } satisfies ReadFileToolResult
+    }
     default:
       return parsed
   }

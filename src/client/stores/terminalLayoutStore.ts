@@ -145,7 +145,8 @@ export const useTerminalLayoutStore = create<TerminalLayoutState>()(
       setMainSizes: (projectId, sizes) =>
         set((state) => {
           if (sizes.length !== 2) return state
-          const normalized = normalizeSizes(sizes) as [number, number]
+          const [a = 50, b = 50] = normalizeSizes(sizes)
+          const normalized: [number, number] = [a, b]
           return {
             projects: withProjectLayout(state.projects, projectId, (layout) => ({
               ...layout,

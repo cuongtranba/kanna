@@ -2,6 +2,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from "node:fs"
 import { homedir } from "node:os"
 import path from "node:path"
 import type { AgentProvider } from "../shared/types"
+import { isRecord } from "../shared/errors"
 import { resolveLocalPath } from "./paths"
 
 export interface DiscoveredProject {
@@ -125,10 +126,8 @@ export class ClaudeProjectDiscoveryAdapter implements ProjectDiscoveryAdapter {
 function parseJsonRecord(line: string): Record<string, unknown> | null {
   try {
     const parsed = JSON.parse(line)
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-      return null
-    }
-    return parsed as Record<string, unknown>
+    if (!isRecord(parsed)) return null
+    return parsed
   } catch {
     return null
   }
@@ -207,7 +206,7 @@ function readCodexSessionMetadata(sessionsDir: string) {
     const payload = record.payload
     if (!payload || typeof payload !== "object" || Array.isArray(payload)) continue
 
-    const payloadRecord = payload as Record<string, unknown>
+    const payloadRecord: Record<string, unknown> = isRecord(payload) ? payload : {}
     const sessionId = typeof payloadRecord.id === "string" ? payloadRecord.id : null
     const cwd = typeof payloadRecord.cwd === "string" ? payloadRecord.cwd : null
     if (!sessionId || !cwd) continue

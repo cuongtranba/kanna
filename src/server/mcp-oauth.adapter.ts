@@ -62,10 +62,7 @@ async function resolveAuthServer(
   // Fix 1: consume the probe response body to avoid a leaked socket
   await probe.body?.cancel()
   const prmUrl = resourceMetadataUrl(probe.headers.get("www-authenticate"), serverUrl)
-  const prm = (await (await fetchFn(prmUrl, { headers: { accept: "application/json" }, signal: AbortSignal.timeout(10_000) })).json()) as {
-    authorization_servers?: string[]
-    scopes_supported?: string[]
-  }
+  const prm: { authorization_servers?: string[]; scopes_supported?: string[] } = await (await fetchFn(prmUrl, { headers: { accept: "application/json" }, signal: AbortSignal.timeout(10_000) })).json()
   const issuer = prm.authorization_servers?.[0]
   if (!issuer) throw new Error("protected-resource metadata has no authorization_servers")
   const scope = (prm.scopes_supported ?? []).join(" ")
@@ -93,9 +90,9 @@ async function resolveAuthServer(
     const r = await fetchFn(c, { headers: { accept: "application/json" }, signal: AbortSignal.timeout(10_000) })
     const ct = r.headers.get("content-type") ?? ""
     if (r.ok && ct.includes("json")) {
-      const metadata = (await r.json()) as Record<string, unknown>
+      const metadata: AuthorizationServerMetadata = await r.json()
       if (metadata.authorization_endpoint && metadata.token_endpoint) {
-        return { issuer, scope, metadata: metadata as AuthorizationServerMetadata }
+        return { issuer, scope, metadata }
       }
     }
   }
@@ -144,7 +141,7 @@ export async function startMcpOAuth(
       state,
       issuer,
       authorizationUrl: authorizationUrl.toString(),
-      metadata: metadata as Record<string, unknown>,
+      metadata,
     },
   }
   deps.persist(next)
@@ -178,7 +175,7 @@ export async function completeMcpOAuth(
   let tokens: OAuthTokens
   try {
     tokens = await exchangeAuthorization(flow.issuer, {
-      metadata: flow.metadata as AuthorizationServerMetadata,
+      metadata: flow.metadata,
       clientInformation: client,
       authorizationCode: code,
       codeVerifier: flow.codeVerifier,
@@ -223,7 +220,7 @@ export interface EnsureFreshDeps {
   fetchFn?: typeof fetch
   persist: (oauth: McpOAuthState) => void
   /** AS metadata per issuer (must include token_endpoint). Provided by the caller. */
-  metadataByIssuer?: Record<string, { token_endpoint: string } & Record<string, unknown>>
+  metadataByIssuer?: Record<string, AuthorizationServerMetadata>
 }
 
 export async function ensureFreshMcpToken(
@@ -254,7 +251,7 @@ export async function ensureFreshMcpToken(
   const metadata = deps.metadataByIssuer?.[issuer] ?? oauth.metadata
   try {
     const next = await refreshAuthorization(issuer, {
-      metadata: metadata as AuthorizationServerMetadata | undefined,
+      metadata,
       clientInformation: client,
       refreshToken: tokens.refresh_token,
       resource: new URL(requireNetworkUrl(config)),

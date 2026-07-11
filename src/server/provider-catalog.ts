@@ -2,7 +2,6 @@ import type {
   AgentProvider,
   ClaudeModelOptions,
   CodexModelOptions,
-  ClaudeContextWindow,
   ModelOptions,
   ProviderCatalogEntry,
   ServiceTier,
@@ -54,25 +53,33 @@ export function normalizeClaudeModelOptions(
   legacyEffort?: string,
   customModels?: readonly CustomModelEntry[],
 ): ClaudeModelOptions {
-  const reasoningEffort = modelOptions?.claude?.reasoningEffort
+  const rawEffort = modelOptions?.claude?.reasoningEffort
+  let resolvedEffort: ClaudeModelOptions["reasoningEffort"]
+  if (isClaudeReasoningEffort(rawEffort)) {
+    resolvedEffort = rawEffort
+  } else if (isClaudeReasoningEffort(legacyEffort)) {
+    resolvedEffort = legacyEffort
+  } else {
+    resolvedEffort = DEFAULT_CLAUDE_MODEL_OPTIONS.reasoningEffort
+  }
   return {
-    reasoningEffort: isClaudeReasoningEffort(reasoningEffort)
-      ? reasoningEffort
-      : isClaudeReasoningEffort(legacyEffort)
-        ? legacyEffort
-        : DEFAULT_CLAUDE_MODEL_OPTIONS.reasoningEffort,
-    contextWindow: normalizeClaudeContextWindow(model, modelOptions?.claude?.contextWindow as ClaudeContextWindow | undefined, customModels),
+    reasoningEffort: resolvedEffort,
+    contextWindow: normalizeClaudeContextWindow(model, modelOptions?.claude?.contextWindow, customModels),
   }
 }
 
 export function normalizeCodexModelOptions(modelOptions?: ModelOptions, legacyEffort?: string): CodexModelOptions {
-  const reasoningEffort = modelOptions?.codex?.reasoningEffort
+  const rawEffort = modelOptions?.codex?.reasoningEffort
+  let resolvedEffort: CodexModelOptions["reasoningEffort"]
+  if (isCodexReasoningEffort(rawEffort)) {
+    resolvedEffort = rawEffort
+  } else if (isCodexReasoningEffort(legacyEffort)) {
+    resolvedEffort = legacyEffort
+  } else {
+    resolvedEffort = DEFAULT_CODEX_MODEL_OPTIONS.reasoningEffort
+  }
   return {
-    reasoningEffort: isCodexReasoningEffort(reasoningEffort)
-      ? reasoningEffort
-      : isCodexReasoningEffort(legacyEffort)
-        ? legacyEffort
-        : DEFAULT_CODEX_MODEL_OPTIONS.reasoningEffort,
+    reasoningEffort: resolvedEffort,
     fastMode: typeof modelOptions?.codex?.fastMode === "boolean"
       ? modelOptions.codex.fastMode
       : DEFAULT_CODEX_MODEL_OPTIONS.fastMode,

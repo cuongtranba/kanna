@@ -44,7 +44,8 @@ export function collectTreePids(rows: readonly PsProcessRow[], rootPid: number):
   const tree = new Set<number>([rootPid])
   const queue: number[] = [rootPid]
   while (queue.length > 0) {
-    const next = queue.shift() as number
+    const next = queue.shift()
+    if (next === undefined) break
     const kids = childrenByParent.get(next)
     if (!kids) continue
     for (const kid of kids) {

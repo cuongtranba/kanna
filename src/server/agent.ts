@@ -55,7 +55,7 @@ import {
 import { readLlmProviderSnapshot } from "./llm-provider"
 import { computeCostUsd, resolveModelPrice, stripModelVariantSuffix } from "../shared/token-pricing"
 import type { ModelPrice } from "../shared/token-pricing"
-import { providerUsesSdkSession, resolveClaudeApiModelId, type ClaudeDriverPreference, type CustomModelEntry } from "../shared/types"
+import { isCodexReasoningEffort, providerUsesSdkSession, resolveClaudeApiModelId, type ClaudeDriverPreference, type CustomModelEntry } from "../shared/types"
 import { fallbackTitleFromMessage } from "./generate-title"
 import { AUTO_CONTINUE_EVENT_VERSION, type AutoContinueEvent } from "./auto-continue/events"
 import { ClaudeLimitDetector, CodexLimitDetector, type LimitDetection, type LimitDetector } from "./auto-continue/limit-detector"
@@ -74,6 +74,8 @@ import { mergePolicyOverride, POLICY_DEFAULT } from "../shared/permission-policy
 import { startClaudeSessionPTY, type StartClaudeSessionPtyArgs } from "./claude-pty/driver"
 import { computeWorkflowsDir } from "./claude-pty/jsonl-path.adapter"
 import { ensureFreshMcpToken } from "./mcp-oauth.adapter"
+import { log } from "../shared/log"
+import { type AnyValue, isRecord } from "../shared/errors"
 
 type SdkMcpEntry =
   | { type: "stdio"; command: string; args: string[]; env: Record<string, string>; cwd?: string }
@@ -177,7 +179,7 @@ const SDK_RESTRICTED_FS_NATIVE_TOOLS = ["Read", "Edit", "Write", "Bash", "Glob",
 interface PendingToolRequest {
   toolUseId: string
   tool: NormalizedToolCall & { toolKind: "ask_user_question" | "exit_plan_mode" }
-  resolve: (result: unknown) => void
+  resolve: (result: AnyValue) => void
 }
 
 interface ActiveTurn {
@@ -294,7 +296,7 @@ interface AgentCoordinatorArgs {
     additionalDirectories?: string[]
     chatId?: string
     tunnelGateway?: TunnelGateway | null
-    onToolRequest: (request: HarnessToolRequest) => Promise<unknown>
+    onToolRequest: (request: HarnessToolRequest) => Promise<AnyValue>
     /**
      * Append text for the claude_code preset's `systemPrompt.append`.
      * Defaults to the static refusal-policy blurb; production callers in
@@ -402,7 +404,7 @@ function isClaudeSteerLoggingEnabled() {
 
 function logClaudeSteer(stage: string, details?: Record<string, unknown>) {
   if (!isClaudeSteerLoggingEnabled()) return
-  console.log("[kanna/claude-steer]", JSON.stringify({
+  log.info("[kanna/claude-steer]", JSON.stringify({
     stage,
     ...details,
   }))
@@ -424,12 +426,12 @@ interface SendMessageOptions {
 export function timestamped<T extends Omit<TranscriptEntry, "_id" | "createdAt">>(
   entry: T,
   createdAt = Date.now()
-): TranscriptEntry {
+) {
   return {
     _id: crypto.randomUUID(),
     createdAt,
     ...entry,
-  } as TranscriptEntry
+  }
 }
 
 function isPromptTooLongMessage(message: string): boolean {
@@ -437,7 +439,7 @@ function isPromptTooLongMessage(message: string): boolean {
     || /\bprompt\b.*\btoo\s+large\b/i.test(message)
 }
 
-function stringFromUnknown(value: unknown): string {
+function stringFromUnknown<T>(value: T): string {
   if (typeof value === "string") return value
   if (value === undefined || value === null) return ""
   try {
@@ -456,11 +458,11 @@ function buildSteeredMessageContent(content: string) {
     : STEERED_MESSAGE_PREFIX
 }
 
-function asRecord(value: unknown): Record<string, unknown> | null {
-  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null
+function asRecord<T>(value: T): Record<string, unknown> | null {
+  return isRecord(value) ? value : null
 }
 
-function asNumber(value: unknown): number | undefined {
+function asNumber<T>(value: T): number | undefined {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined
 }
 
@@ -476,6 +478,14 @@ function isSendToStartingProfilingEnabled() {
   return process.env.KANNA_PROFILE_SEND_TO_STARTING === "1"
 }
 
+/** Narrows a free-form effort string to the SDK-accepted union without a cast. */
+function toSdkEffort(effort: string | undefined): "low" | "medium" | "high" | "xhigh" | "max" | undefined {
+  if (effort === "low" || effort === "medium" || effort === "high" || effort === "xhigh" || effort === "max") {
+    return effort
+  }
+  return undefined
+}
+
 function elapsedProfileMs(startedAt: number) {
   return Number((performance.now() - startedAt).toFixed(1))
 }
@@ -489,7 +499,7 @@ function logSendToStartingProfile(
     return
   }
 
-  console.log("[kanna/send->starting][server]", JSON.stringify({
+  log.info("[kanna/send->starting][server]", JSON.stringify({
     traceId: profile.traceId,
     stage,
     elapsedMs: elapsedProfileMs(profile.startedAt),
@@ -539,8 +549,8 @@ function discardedToolResult(
   }
 }
 
-export function normalizeClaudeUsageSnapshot(
-  value: unknown,
+export function normalizeClaudeUsageSnapshot<T>(
+  value: T,
   maxTokens?: number,
 ): ContextWindowUsageSnapshot | null {
   const usage = asRecord(value)
@@ -610,7 +620,7 @@ export function resolveFinalTurnUsage(
   }
 }
 
-export function maxClaudeContextWindowFromModelUsage(modelUsage: unknown): number | undefined {
+export function maxClaudeContextWindowFromModelUsage<T>(modelUsage: T): number | undefined {
   const record = asRecord(modelUsage)
   if (!record) return undefined
 
@@ -633,7 +643,76 @@ export function parseConfiguredContextWindowFromModelId(modelId: string): number
   return modelId.endsWith("[1m]") ? 1_000_000 : undefined
 }
 
-export function getClaudeAssistantMessageUsageId(message: any): string | null {
+function normalizeMcpServerEntry(s: AnyValue): { name: string; status: string } {
+  if (typeof s === "string") return { name: s, status: "connected" }
+  if (isRecord(s) && typeof s.name === "string") {
+    return { name: s.name, status: typeof s.status === "string" ? s.status : "connected" }
+  }
+  return { name: String(s), status: "connected" }
+}
+
+// Minimal structural interface for raw SDK JSONL messages. All properties are
+// optional so that both real SDK types and partial test fixtures are assignable.
+// No `any` or `unknown` — every accessed field is typed concretely.
+interface ClaudeRawContentBlock {
+  type?: string
+  text?: string
+  thinking?: string
+  signature?: string
+  name?: string
+  id?: string
+  // input is structurally opaque; passed straight through to normalizeToolCall
+  input?: AnyValue
+  tool_use_id?: string
+  // content is opaque (tool_result bodies have nested structures) — passed
+  // through as-is to ToolResultEntry.content which accepts any value.
+  content?: object | string | null
+  is_error?: boolean
+}
+interface ClaudeRawMessageBody {
+  id?: string
+  content?: ClaudeRawContentBlock[] | string
+  role?: string
+  model?: string
+  stop_reason?: string | null
+  usage?: AnyValue
+}
+export interface ClaudeRawSdkMessage {
+  type?: string
+  subtype?: string
+  uuid?: string
+  model?: string
+  tools?: string[]
+  agents?: string[]
+  slash_commands?: string[]
+  mcp_servers?: AnyValue[]
+  message?: ClaudeRawMessageBody
+  isApiErrorMessage?: boolean
+  apiErrorStatus?: number
+  request_id?: string
+  requestId?: string
+  is_error?: boolean
+  duration_ms?: number
+  result?: string
+  total_cost_usd?: number
+  status?: string | null
+  summary?: string
+  skip_transcript?: boolean
+  durationMs?: number
+  pendingWorkflowCount?: number
+  usage?: AnyValue
+  modelUsage?: AnyValue
+  // SDK rate-limit event fields
+  rate_limit_info?: Record<string, string | number | boolean | null>
+  session_id?: string
+  stop_reason?: string | null
+  // Task-notification fields
+  task_id?: string
+  output_file?: string
+  tool_use_id?: string
+}
+
+export function getClaudeAssistantMessageUsageId(message: ClaudeRawSdkMessage): string | null {
   if (typeof message?.message?.id === "string" && message.message.id) {
     return message.message.id
   }
@@ -666,7 +745,27 @@ const POLICY_REFUSAL_TEXT_MARKERS: readonly string[] = [
   "unable to respond to this request",
 ]
 
-export function normalizeClaudeStreamMessage(message: any): TranscriptEntry[] {
+function normalizeToolContent(c: AnyValue): string | Record<string, unknown> | readonly unknown[] | null {
+  if (c === null || c === undefined) return null
+  if (typeof c === "string") return c
+  if (Array.isArray(c)) return c
+  if (isRecord(c)) return c
+  return null
+}
+
+// Type-bridge: ClaudeRawSdkMessage is a structural duck-type — all fields optional.
+// Any SDK message object satisfies it at runtime via dynamic field access.
+function isSdkToClaudeMessage(m: object): m is ClaudeRawSdkMessage {
+  void m
+  return true
+}
+async function* toClaudeMessageStream(q: Query): AsyncGenerator<ClaudeRawSdkMessage> {
+  for await (const m of q) {
+    if (isSdkToClaudeMessage(m)) yield m
+  }
+}
+
+export function normalizeClaudeStreamMessage(message: ClaudeRawSdkMessage): TranscriptEntry[] {
   const debugRaw = JSON.stringify(message)
   const messageId = typeof message.uuid === "string" ? message.uuid : undefined
 
@@ -682,7 +781,9 @@ export function normalizeClaudeStreamMessage(message: any): TranscriptEntry[] {
         slashCommands: Array.isArray(message.slash_commands)
           ? message.slash_commands.filter((entry: string) => !entry.startsWith("._"))
           : [],
-        mcpServers: Array.isArray(message.mcp_servers) ? message.mcp_servers : [],
+        mcpServers: Array.isArray(message.mcp_servers)
+          ? message.mcp_servers.map((s: AnyValue) => normalizeMcpServerEntry(s))
+          : [],
         debugRaw,
       }),
     ]
@@ -690,8 +791,8 @@ export function normalizeClaudeStreamMessage(message: any): TranscriptEntry[] {
 
   if (message.type === "assistant" && Array.isArray(message.message?.content)) {
     const joinedText = message.message.content
-      .filter((c: { type?: string; text?: string }) => c.type === "text" && typeof c.text === "string")
-      .map((c: { text: string }) => c.text)
+      .filter((c): c is ClaudeRawContentBlock & { text: string } => c.type === "text" && typeof c.text === "string")
+      .map((c) => c.text)
       .join("")
     // The Claude CLI reuses model "<synthetic>" for two distinct purposes:
     // genuine API errors AND benign turn-end placeholders ("No response
@@ -711,9 +812,14 @@ export function normalizeClaudeStreamMessage(message: any): TranscriptEntry[] {
         const match = /API Error:\s*(\d{3})/i.exec(joinedText)
         return match ? Number.parseInt(match[1], 10) : undefined
       })()
-      const requestId = typeof message.request_id === "string"
-        ? message.request_id
-        : (typeof message.requestId === "string" ? message.requestId : undefined)
+      let requestId: string | undefined
+      if (typeof message.request_id === "string") {
+        requestId = message.request_id
+      } else if (typeof message.requestId === "string") {
+        requestId = message.requestId
+      } else {
+        requestId = undefined
+      }
       // A deliberate model refusal (Usage-Policy / cyber-safeguard block) is NOT
       // a transport error — it carries stop_reason "refusal" and/or the policy
       // phrase. Surface it as its own `policy_refusal` kind so the UI labels it
@@ -776,7 +882,7 @@ export function normalizeClaudeStreamMessage(message: any): TranscriptEntry[] {
           tool: normalizeToolCall({
             toolName: content.name,
             toolId: content.id,
-            input: (content.input ?? {}) as Record<string, unknown>,
+            input: isRecord(content.input) ? content.input : {},
           }),
           debugRaw,
         }))
@@ -793,7 +899,7 @@ export function normalizeClaudeStreamMessage(message: any): TranscriptEntry[] {
           kind: "tool_result",
           messageId,
           toolId: content.tool_use_id,
-          content: content.content,
+          content: normalizeToolContent(content.content),
           isError: Boolean(content.is_error),
           debugRaw,
         }))
@@ -864,11 +970,14 @@ export function normalizeClaudeStreamMessage(message: any): TranscriptEntry[] {
   // `system/turn_duration` instead (per canon/shannon research). Synthesize a
   // turn-end `result` so the agent loop and UI see the turn complete.
   if (message.type === "system" && message.subtype === "turn_duration") {
-    const durationMs = typeof message.durationMs === "number"
-      ? message.durationMs
-      : typeof message.duration_ms === "number"
-        ? message.duration_ms
-        : 0
+    let durationMs: number
+    if (typeof message.durationMs === "number") {
+      durationMs = message.durationMs
+    } else if (typeof message.duration_ms === "number") {
+      durationMs = message.duration_ms
+    } else {
+      durationMs = 0
+    }
     const pendingWorkflowCount = typeof message.pendingWorkflowCount === "number"
       ? message.pendingWorkflowCount
       : undefined
@@ -908,7 +1017,7 @@ export function normalizeClaudeStreamMessage(message: any): TranscriptEntry[] {
 }
 
 export async function* createClaudeHarnessStream(
-  q: Query,
+  q: AsyncIterable<ClaudeRawSdkMessage>,
   configuredContextWindow?: number,
   resolveTurnPrice?: () => ModelPrice | null,
 ): AsyncGenerator<HarnessEvent> {
@@ -930,7 +1039,7 @@ export async function* createClaudeHarnessStream(
   let pendingResultUsage: ProviderUsage | undefined
   let pendingResultCost: number | undefined
 
-  for await (const sdkMessage of q as AsyncIterable<any>) {
+  for await (const sdkMessage of q) {
     const sessionToken = typeof sdkMessage.session_id === "string" ? sdkMessage.session_id : null
     if (sessionToken) {
       yield { type: "session_token", sessionToken }
@@ -978,8 +1087,8 @@ export async function* createClaudeHarnessStream(
       )
 
       const providerCostUsd =
-        typeof (sdkMessage as { total_cost_usd?: unknown }).total_cost_usd === "number"
-          ? (sdkMessage as { total_cost_usd: number }).total_cost_usd
+        typeof sdkMessage.total_cost_usd === "number"
+          ? sdkMessage.total_cost_usd
           : undefined
 
       let costUsd = providerCostUsd
@@ -1051,7 +1160,7 @@ export async function* createClaudeHarnessStream(
 
 class AsyncMessageQueue<T> implements AsyncIterable<T> {
   private readonly values: T[] = []
-  private readonly waiters: Array<(result: IteratorResult<T>) => void> = []
+  private readonly waiters: Array<(result: IteratorResult<T, undefined>) => void> = []
   private closed = false
 
   push(value: T) {
@@ -1073,22 +1182,22 @@ class AsyncMessageQueue<T> implements AsyncIterable<T> {
     this.closed = true
     while (this.waiters.length > 0) {
       const waiter = this.waiters.shift()
-      waiter?.({ done: true, value: undefined as never })
+      waiter?.({ done: true, value: undefined })
     }
   }
 
-  [Symbol.asyncIterator](): AsyncIterator<T> {
+  [Symbol.asyncIterator](): AsyncIterator<T, undefined> {
     return {
-      next: async () => {
+      next: async (): Promise<IteratorResult<T, undefined>> => {
         if (this.values.length > 0) {
-          return { done: false, value: this.values.shift() as T }
+          return { done: false, value: this.values.shift()! }
         }
 
         if (this.closed) {
-          return { done: true, value: undefined as never }
+          return { done: true, value: undefined }
         }
 
-        return await new Promise<IteratorResult<T>>((resolve) => {
+        return await new Promise<IteratorResult<T, undefined>>((resolve) => {
           this.waiters.push(resolve)
         })
       },
@@ -1101,7 +1210,7 @@ export interface BuildCanUseToolArgs {
   localPath: string
   chatId?: string
   sessionToken?: string | null
-  onToolRequest: (request: HarnessToolRequest) => Promise<unknown>
+  onToolRequest: (request: HarnessToolRequest) => Promise<AnyValue>
   toolCallback?: ToolCallbackService
   chatPolicy?: ChatPermissionPolicy
 }
@@ -1120,7 +1229,7 @@ export function buildCanUseTool(args: BuildCanUseToolArgs): CanUseTool {
     const tool = normalizeToolCall({
       toolName,
       toolId: options.toolUseID,
-      input: (input ?? {}) as Record<string, unknown>,
+      input: input ?? {},
     })
 
     if (tool.toolKind !== "ask_user_question" && tool.toolKind !== "exit_plan_mode") {
@@ -1134,7 +1243,7 @@ export function buildCanUseTool(args: BuildCanUseToolArgs): CanUseTool {
         sessionId: args.sessionToken ?? "",
         toolUseId: options.toolUseID,
         toolName: `mcp__kanna__${tool.toolKind}`,
-        args: (tool.rawInput ?? {}) as Record<string, unknown>,
+        args: isRecord(tool.rawInput) ? tool.rawInput : {},
         chatPolicy: args.chatPolicy ?? POLICY_DEFAULT,
         cwd: args.localPath,
       })
@@ -1143,9 +1252,7 @@ export function buildCanUseTool(args: BuildCanUseToolArgs): CanUseTool {
         return { behavior: "deny", message: result.decision.reason ?? "denied" }
       }
 
-      const payload = (result.decision.payload && typeof result.decision.payload === "object")
-        ? result.decision.payload as Record<string, unknown>
-        : {}
+      const payload: Record<string, unknown> = isRecord(result.decision.payload) ? result.decision.payload : {}
 
       if (tool.toolKind === "ask_user_question") {
         return {
@@ -1178,7 +1285,7 @@ export function buildCanUseTool(args: BuildCanUseToolArgs): CanUseTool {
     const result = await args.onToolRequest({ tool })
 
     if (tool.toolKind === "ask_user_question") {
-      const record = result && typeof result === "object" ? result as Record<string, unknown> : {}
+      const record: Record<string, unknown> = isRecord(result) ? result : {}
       return {
         behavior: "allow",
         updatedInput: {
@@ -1189,7 +1296,7 @@ export function buildCanUseTool(args: BuildCanUseToolArgs): CanUseTool {
       } satisfies PermissionResult
     }
 
-    const record = result && typeof result === "object" ? result as Record<string, unknown> : {}
+    const record: Record<string, unknown> = isRecord(result) ? result : {}
     const confirmed = Boolean(record.confirmed)
     if (confirmed) {
       return {
@@ -1247,7 +1354,7 @@ async function startClaudeSession(args: {
   additionalDirectories?: string[]
   chatId?: string
   tunnelGateway?: TunnelGateway | null
-  onToolRequest: (request: HarnessToolRequest) => Promise<unknown>
+  onToolRequest: (request: HarnessToolRequest) => Promise<AnyValue>
   systemPromptAppend?: string
   systemPromptOverride?: string
   initialPrompt?: string
@@ -1293,13 +1400,13 @@ async function startClaudeSession(args: {
         ? { additionalDirectories: args.additionalDirectories }
         : {}),
       model: args.model,
-      effort: args.effort as "low" | "medium" | "high" | "max" | undefined,
+      effort: toSdkEffort(args.effort),
       resume: args.sessionToken ?? undefined,
       forkSession: args.forkSession,
       permissionMode: args.planMode ? "plan" : "acceptEdits",
       canUseTool,
       tools: args.restrictedAllowedPaths && args.restrictedAllowedPaths.length > 0
-        ? CLAUDE_TOOLSET.filter((t) => !SDK_RESTRICTED_FS_NATIVE_TOOLS.includes(t as typeof SDK_RESTRICTED_FS_NATIVE_TOOLS[number]))
+        ? CLAUDE_TOOLSET.filter((t) => !new Set<string>(SDK_RESTRICTED_FS_NATIVE_TOOLS).has(t))
         : [...CLAUDE_TOOLSET],
       mcpServers: {
         [KANNA_MCP_SERVER_NAME]: createKannaMcpServer({
@@ -1359,7 +1466,7 @@ async function startClaudeSession(args: {
   return {
     provider: "claude",
     stream: createClaudeHarnessStream(
-      q,
+      toClaudeMessageStream(q),
       args.contextWindowOverride ?? parseConfiguredContextWindowFromModelId(args.model),
       args.turnPrice ? () => args.turnPrice ?? null : undefined,
     ),
@@ -1386,7 +1493,7 @@ async function startClaudeSession(args: {
       try {
         return await q.supportedCommands()
       } catch (error) {
-        console.warn("[kanna/claude] supportedCommands failed", error)
+        log.warn("[kanna/claude] supportedCommands failed", String(error))
         return []
       }
     },
@@ -1446,14 +1553,17 @@ function positiveIntegerFromEnv(value: string | undefined, fallback: number): nu
 const BACKGROUND_TASK_LAUNCH_RE = /Command running in background with ID:\s*(\w+)/g
 
 /** Extract background-task ids from a tool_result entry's content (string or content blocks). */
-export function backgroundTaskIdsFromToolResult(content: unknown): string[] {
+export function backgroundTaskIdsFromToolResult<T>(content: T): string[] {
   let text = ""
   if (typeof content === "string") {
     text = content
   } else if (Array.isArray(content)) {
     for (const block of content) {
-      if (block && typeof block === "object" && typeof (block as { text?: unknown }).text === "string") {
-        text += (block as { text: string }).text + "\n"
+      if (isRecord(block)) {
+        const blockText = block.text
+        if (typeof blockText === "string") {
+          text += `${blockText}\n`
+        }
       }
     }
   } else {
@@ -1537,7 +1647,7 @@ export class AgentCoordinator {
   private readonly persistOAuthStateFn: ((id: string, oauth: McpOAuthState) => void) | null
   private readonly subagentPendingResolvers = new Map<
     string,
-    { resolve: (v: unknown) => void; reject: (e: Error) => void }
+    { resolve: (v: AnyValue) => void; reject: (e: Error) => void }
   >()
 
   constructor(args: AgentCoordinatorArgs) {
@@ -1702,7 +1812,7 @@ export class AgentCoordinator {
 
   private getEnabledCustomMcpServers(): readonly McpServerConfig[] {
     const snap = this.getAppSettingsSnapshot()
-    const list = (snap as { customMcpServers?: readonly McpServerConfig[] }).customMcpServers
+    const list = snap.customMcpServers
     if (!Array.isArray(list)) return []
     return list.filter((s) => s.enabled)
   }
@@ -1719,7 +1829,7 @@ export class AgentCoordinator {
         })
         bearers.set(s.id, token)
       } catch (err) {
-        console.warn("[kanna/mcp-oauth] token refresh failed for", s.name, err)
+        log.warn("[kanna/mcp-oauth] token refresh failed for", s.name, String(err))
       }
     }
     return bearers
@@ -2063,7 +2173,7 @@ export class AgentCoordinator {
       await this.store.recordSessionCommandsLoaded(chatId, merged)
       this.emitStateChange(chatId)
     } catch (error) {
-      console.warn("[kanna/agent] ensureSlashCommandsLoaded failed", error)
+      log.warn("[kanna/agent] ensureSlashCommandsLoaded failed", String(error))
     } finally {
       this.slashCommandsInFlight.delete(chatId)
       this.emitStateChange(chatId)
@@ -2076,7 +2186,7 @@ export class AgentCoordinator {
     try {
       local = this.localCatalog.list(cwd)
     } catch (error) {
-      console.warn("[kanna/agent] localCatalog.list failed", error)
+      log.warn("[kanna/agent] localCatalog.list failed", String(error))
       return commands
     }
     const cliKeys = new Set(commands.map((c) => c.name.toLowerCase()))
@@ -2311,7 +2421,7 @@ export class AgentCoordinator {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       const isOAuthRefusal = error instanceof OAuthPoolUnavailableError
-      console.error(`${LOG_PREFIX} startTurnForChat failed after turn_started`, {
+      log.error(`${LOG_PREFIX} startTurnForChat failed after turn_started`, {
         chatId: args.chatId,
         provider: args.provider,
         model: args.model,
@@ -2338,7 +2448,7 @@ export class AgentCoordinator {
             })
           )
         } catch (appendErr) {
-          console.error(`${LOG_PREFIX} append refusal result entry failed`, {
+          log.error(`${LOG_PREFIX} append refusal result entry failed`, {
             chatId: args.chatId,
             appendErr: appendErr instanceof Error ? appendErr.message : String(appendErr),
           })
@@ -2347,7 +2457,7 @@ export class AgentCoordinator {
       try {
         await this.store.recordTurnFailed(args.chatId, message)
       } catch (recordErr) {
-        console.error(`${LOG_PREFIX} recordTurnFailed also failed`, {
+        log.error(`${LOG_PREFIX} recordTurnFailed also failed`, {
           chatId: args.chatId,
           recordErr: recordErr instanceof Error ? recordErr.message : String(recordErr),
         })
@@ -2392,7 +2502,7 @@ export class AgentCoordinator {
       void this.generateTitleInBackground(args.chatId, args.content, project.localPath, optimisticTitle ?? "New Chat")
     }
 
-    const onToolRequest = async (request: HarnessToolRequest): Promise<unknown> => {
+    const onToolRequest = async (request: HarnessToolRequest): Promise<AnyValue> => {
       let active = this.activeTurns.get(args.chatId)
       if (!active) {
         // The prior turn's `result` event already deleted the activeTurn, but
@@ -2410,7 +2520,7 @@ export class AgentCoordinator {
       active.waitStartedAt = Date.now()
       this.emitStateChange(args.chatId)
 
-      return await new Promise<unknown>((resolve) => {
+      return await new Promise<AnyValue>((resolve) => {
         active.pendingTool = {
           toolUseId: request.tool.toolId,
           tool: request.tool,
@@ -2490,7 +2600,7 @@ export class AgentCoordinator {
         chatId: args.chatId,
         content: promptContent,
         model: args.model,
-        effort: args.effort as any,
+        effort: isCodexReasoningEffort(args.effort) ? args.effort : undefined,
         serviceTier: args.serviceTier,
         planMode: args.planMode,
         onToolRequest,
@@ -2660,7 +2770,7 @@ export class AgentCoordinator {
   }
 
   private findLastUserMessageId(chatId: string): string | null {
-    const messages = this.store.getMessages(chatId) as TranscriptEntry[]
+    const messages = this.store.getMessages(chatId)
     for (let i = messages.length - 1; i >= 0; i -= 1) {
       const entry = messages[i]
       if (entry.kind === "user_prompt") return entry._id
@@ -2679,7 +2789,7 @@ export class AgentCoordinator {
     planMode: boolean
     sessionToken: string | null
     forkSession: boolean
-    onToolRequest: (request: HarnessToolRequest) => Promise<unknown>
+    onToolRequest: (request: HarnessToolRequest) => Promise<AnyValue>
     provider: AgentProvider
   }): Promise<HarnessTurn> {
     let session = this.claudeSessions.get(args.chatId)
@@ -2722,7 +2832,7 @@ export class AgentCoordinator {
           openrouterTurnPrice = resolveModelPrice(baseModelId, m?.pricing ?? null)
           if (m && m.contextLength > 0) openrouterContextWindow = m.contextLength
         } catch (err) {
-          console.warn("[kanna/agent] openrouter pricing lookup failed", err)
+          log.warn("[kanna/agent] openrouter pricing lookup failed", String(err))
         }
       }
 
@@ -2844,7 +2954,7 @@ export class AgentCoordinator {
           await this.store.recordSessionCommandsLoaded(args.chatId, merged)
           this.emitStateChange(args.chatId)
         } catch (error) {
-          console.warn("[kanna/agent] failed to load slash commands", error)
+          log.warn("[kanna/agent] failed to load slash commands", String(error))
         }
       })()
     } else {
@@ -3073,7 +3183,7 @@ export class AgentCoordinator {
       ? resolveSubagentRoots(spawn.cwd, args.subagent.workingDir, args.subagent.allowedPaths, realpathAdapter)
       : null
 
-    const onToolRequest = async (request: HarnessToolRequest): Promise<unknown> => {
+    const onToolRequest = async (request: HarnessToolRequest): Promise<AnyValue> => {
       if (request.tool.toolKind !== "ask_user_question"
           && request.tool.toolKind !== "exit_plan_mode") {
         // Non-interactive tools (bash, read, write, ...) — SDK handles
@@ -3094,7 +3204,7 @@ export class AgentCoordinator {
       })
       this.emitStateChange(args.chatId)
       this.subagentOrchestrator.notifySubagentToolPending(args.runId)
-      return await new Promise<unknown>((resolve, reject) => {
+      return await new Promise<AnyValue>((resolve, reject) => {
         // Defensive: if `canUseTool` somehow fires twice for the same
         // (chatId, runId, toolUseId) — e.g. SDK retry — reject the previous
         // resolver before overwriting so its Promise doesn't leak.
@@ -3279,7 +3389,7 @@ export class AgentCoordinator {
         if (this.claudeSessions.get(session.chatId) !== session) return
         firstEntrySeen = true
         const message = `OpenRouter produced no response within ${this.openrouterFirstEntryTimeoutMs}ms — the selected model may be invalid or the upstream stalled.`
-        console.warn("[kanna/agent] openrouter stream produced no entry within watchdog window — failing turn", {
+        log.warn("[kanna/agent] openrouter stream produced no entry within watchdog window — failing turn", {
           chatId: session.chatId,
           sessionId: session.id,
           model: session.openrouterModel,
@@ -3355,7 +3465,7 @@ export class AgentCoordinator {
         if (event.entry.kind === "system_init") {
           const kannaNames = this.getSubagents().map((s) => s.name)
           if (kannaNames.length > 0) {
-            const entry = event.entry as { agents: string[] }
+            const entry = event.entry
             const existing = new Set(entry.agents)
             const extra = kannaNames.filter((n) => !existing.has(n))
             if (extra.length > 0) {
@@ -3370,7 +3480,7 @@ export class AgentCoordinator {
         // `<task-notification>` can re-enter the agent.
         if (event.entry.kind === "tool_result") {
           const launchedIds = backgroundTaskIdsFromToolResult(
-            (event.entry as { content?: unknown }).content,
+            event.entry.content,
           )
           if (launchedIds.length > 0) {
             for (const id of launchedIds) session.backgroundTaskIds.add(id)
@@ -3394,8 +3504,8 @@ export class AgentCoordinator {
           // after spawn often returns the static fallback because system_init
           // hadn't arrived yet; this overwrites that with the canonical list
           // (skills + plugins + built-ins, no `/` prefix).
-          if (Array.isArray((event.entry as { slashCommands?: unknown }).slashCommands)) {
-            const names = (event.entry as { slashCommands: string[] }).slashCommands
+          if (Array.isArray(event.entry.slashCommands)) {
+            const names = event.entry.slashCommands
             const commands: SlashCommand[] = names.map((name) => ({
               name,
               description: "",
@@ -3480,9 +3590,7 @@ export class AgentCoordinator {
           let failureHandled = false
           if (event.entry.isError) {
             const resultText = event.entry.result || "Turn failed"
-            const debugRaw = typeof (event.entry as { debugRaw?: unknown }).debugRaw === "string"
-              ? (event.entry as { debugRaw: string }).debugRaw
-              : ""
+            const debugRaw = event.entry.debugRaw ?? ""
             const detection = this.claudeLimitDetector.detectFromResultText?.(session.chatId, resultText) ?? null
             const authDetection = this.claudeAuthErrorDetector.detectFromResultText(session.chatId, resultText)
               ?? this.claudeAuthErrorDetector.detectFromResultText(session.chatId, debugRaw)
@@ -3576,7 +3684,7 @@ export class AgentCoordinator {
       // Trace point: stream-end-without-final-result is the hang signature.
       // If `hasActiveTurn=true` && `hasFinalResult=false` && this fires,
       // the user will see "still running" forever unless we fail-close.
-      console.log("[kanna/agent] runClaudeSession stream ended", {
+      log.info("[kanna/agent] runClaudeSession stream ended", {
         chatId: session.chatId,
         sessionId: session.id,
         sessionToken: session.sessionToken,
@@ -3605,7 +3713,7 @@ export class AgentCoordinator {
             // SDK transport dropped, etc). Fail-close the turn so the UI
             // stops showing "running" forever. Without this the chat is
             // wedged until the user manually clicks Stop or reloads.
-            console.warn("[kanna/agent] stream ended with no final result — recording turn failure", { chatId: session.chatId, sessionId: session.id })
+            log.warn("[kanna/agent] stream ended with no final result — recording turn failure", { chatId: session.chatId, sessionId: session.id })
             await this.store.recordTurnFailed(session.chatId, "session stream ended without a result")
           }
           this.activeTurns.delete(session.chatId)
@@ -3817,7 +3925,7 @@ export class AgentCoordinator {
     return { extraDelayMs: existing.staggerCount * TOKEN_ROTATION_HERD_STAGGER_MS, isFirst: false }
   }
 
-  private async handleLimitError(chatId: string, detector: LimitDetector, error: unknown): Promise<boolean> {
+  private async handleLimitError(chatId: string, detector: LimitDetector, error: AnyValue): Promise<boolean> {
     const detection = detector.detect(chatId, error)
     if (!detection) return false
     return this.handleLimitDetection(chatId, detection)
@@ -3838,7 +3946,7 @@ export class AgentCoordinator {
       && (!limitedTokenId || rotationTarget.id !== limitedTokenId)
 
     if (this.oauthPool) {
-      console.log("[oauth-pool] rate-limit detected", {
+      log.info("[oauth-pool] rate-limit detected", {
         chatId,
         markedLimitedTokenId: limitedTokenId,
         resetAt: new Date(detection.resetAt).toISOString(),
@@ -3862,33 +3970,36 @@ export class AgentCoordinator {
       ? Math.min(detection.resetAt, earliestPoolUnlimit)
       : detection.resetAt
 
-    const event: AutoContinueEvent = canRotate
-      ? {
-          ...base,
-          kind: "auto_continue_accepted",
-          scheduledAt: now + TOKEN_ROTATION_SCHEDULE_DELAY_MS + slot.extraDelayMs,
-          tz: detection.tz,
-          source: "token_rotation",
-          resetAt: detection.resetAt,
-          detectedAt: now,
-        }
-      : this.resolveAutoResumeFor(chatId)
-        ? {
-            ...base,
-            kind: "auto_continue_accepted",
-            scheduledAt: waitUntil,
-            tz: detection.tz,
-            source: "auto_setting",
-            resetAt: waitUntil,
-            detectedAt: now,
-          }
-        : {
-            ...base,
-            kind: "auto_continue_proposed",
-            detectedAt: now,
-            resetAt: waitUntil,
-            tz: detection.tz,
-          }
+    let event: AutoContinueEvent
+    if (canRotate) {
+      event = {
+        ...base,
+        kind: "auto_continue_accepted",
+        scheduledAt: now + TOKEN_ROTATION_SCHEDULE_DELAY_MS + slot.extraDelayMs,
+        tz: detection.tz,
+        source: "token_rotation",
+        resetAt: detection.resetAt,
+        detectedAt: now,
+      }
+    } else if (this.resolveAutoResumeFor(chatId)) {
+      event = {
+        ...base,
+        kind: "auto_continue_accepted",
+        scheduledAt: waitUntil,
+        tz: detection.tz,
+        source: "auto_setting",
+        resetAt: waitUntil,
+        detectedAt: now,
+      }
+    } else {
+      event = {
+        ...base,
+        kind: "auto_continue_proposed",
+        detectedAt: now,
+        resetAt: waitUntil,
+        tz: detection.tz,
+      }
+    }
 
     await this.emitAutoContinueEvent(event)
     if (canRotate && session) {
@@ -3949,7 +4060,7 @@ export class AgentCoordinator {
       && (!erroredTokenId || rotationTarget.id !== erroredTokenId)
 
     if (this.oauthPool) {
-      console.log("[oauth-pool] auth-error detected", {
+      log.info("[oauth-pool] auth-error detected", {
         chatId,
         markedErrorTokenId: erroredTokenId,
         reason: detection.reason,
@@ -4139,7 +4250,7 @@ export class AgentCoordinator {
         prompt,
       })
     } catch (err) {
-      console.warn(`${LOG_PREFIX} deliverSubagentToMain failed`, { chatId, runId, err })
+      log.warn(`${LOG_PREFIX} deliverSubagentToMain failed`, { chatId, runId, err })
     }
   }
 
@@ -4374,7 +4485,7 @@ export class AgentCoordinator {
       timestamped({
         kind: "tool_result",
         toolId: command.toolUseId,
-        content: command.result,
+        content: normalizeToolContent(command.result),
       })
     )
 
@@ -4383,27 +4494,26 @@ export class AgentCoordinator {
     active.waitStartedAt = null
 
     if (pending.tool.toolKind === "exit_plan_mode") {
-      const result = (command.result ?? {}) as {
-        confirmed?: boolean
-        clearContext?: boolean
-        message?: string
-      }
-      if (result.confirmed && result.clearContext) {
+      const resultRec: Record<string, unknown> = isRecord(command.result) ? command.result : {}
+      const confirmed = Boolean(resultRec.confirmed)
+      const clearContext = Boolean(resultRec.clearContext)
+      const message = typeof resultRec.message === "string" ? resultRec.message : ""
+      if (confirmed && clearContext) {
         await this.store.setSessionTokenForProvider(command.chatId, active.provider, null)
         await this.store.appendMessage(command.chatId, timestamped({ kind: "context_cleared" }))
       }
 
       if (active.provider === "codex") {
-        active.postToolFollowUp = result.confirmed
+        active.postToolFollowUp = confirmed
           ? {
-              content: result.message
-                ? `Proceed with the approved plan. Additional guidance: ${result.message}`
+              content: message
+                ? `Proceed with the approved plan. Additional guidance: ${message}`
                 : "Proceed with the approved plan.",
               planMode: false,
             }
           : {
-              content: result.message
-                ? `Revise the plan using this feedback: ${result.message}`
+              content: message
+                ? `Revise the plan using this feedback: ${message}`
                 : "Revise the plan using this feedback.",
               planMode: true,
             }

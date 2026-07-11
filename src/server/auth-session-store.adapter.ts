@@ -2,6 +2,9 @@ import { createHash } from "node:crypto"
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { LOG_PREFIX } from "../shared/branding"
+import { log } from "../shared/log"
+import type { AnyValue } from "../shared/errors"
+import { isRecord } from "../shared/errors"
 
 const FILE_VERSION = 1
 const PERSIST_DEBOUNCE_MS = 250
@@ -39,28 +42,28 @@ function hashToken(token: string) {
   return createHash("sha256").update(token).digest("hex")
 }
 
-function isPersistedSession(value: unknown): value is PersistedSession {
-  if (!value || typeof value !== "object") return false
-  const candidate = value as Record<string, unknown>
-  return typeof candidate.tokenHash === "string"
-    && typeof candidate.createdAt === "number"
-    && typeof candidate.lastSeenAt === "number"
-    && typeof candidate.expiresAt === "number"
+function isPersistedSession(value: AnyValue): value is PersistedSession {
+  if (!isRecord(value)) return false
+  return typeof value.tokenHash === "string"
+    && typeof value.createdAt === "number"
+    && typeof value.lastSeenAt === "number"
+    && typeof value.expiresAt === "number"
 }
 
 async function loadSessionsFile(filePath: string): Promise<PersistedSession[]> {
   try {
     const text = await readFile(filePath, "utf8")
     if (!text.trim()) return []
-    const parsed = JSON.parse(text) as Partial<SessionsFile>
+    const parsed: Partial<SessionsFile> = JSON.parse(text)
     if (!parsed || typeof parsed !== "object" || !Array.isArray(parsed.sessions)) {
       return []
     }
     return parsed.sessions.filter(isPersistedSession)
   } catch (error) {
-    if ((error as NodeJS.ErrnoException)?.code === "ENOENT") return []
+    const errnoError: { code?: AnyValue } = isRecord(error) ? error : {}
+    if (errnoError.code === "ENOENT") return []
     if (error instanceof SyntaxError) {
-      console.warn(`${LOG_PREFIX} sessions.json is invalid JSON; ignoring.`)
+      log.warn(`${LOG_PREFIX} sessions.json is invalid JSON; ignoring.`)
       return []
     }
     throw error
@@ -109,7 +112,7 @@ export async function createAuthSessionStore(options: CreateAuthSessionStoreOpti
       try {
         await writeFileAtomic()
       } catch (error) {
-        console.warn(`${LOG_PREFIX} Failed to persist sessions.json:`, error)
+        log.warn(`${LOG_PREFIX} Failed to persist sessions.json:`, String(error))
       }
     } while (writeAgain)
     activeWrite = null

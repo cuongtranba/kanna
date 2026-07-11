@@ -465,7 +465,7 @@ describe("buildSubagentProviderRun – keep-alive Claude", () => {
     // in sync with what the implementation requests.
     const queue: Array<{ resolve: (r: IteratorResult<HarnessEvent>) => void }> = []
     const pending: HarnessEvent[] = []
-    let done = false
+    const done = false
 
     async function nextFromQueue(): Promise<IteratorResult<HarnessEvent>> {
       if (pending.length > 0) {

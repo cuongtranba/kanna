@@ -49,7 +49,7 @@ export function createWebFetchTool(deps: { toolCallback: ToolCallbackService }):
         toolCallback: deps.toolCallback,
         toolName: "mcp__kanna__webfetch",
         ctx,
-        args: input as unknown as Record<string, unknown>,
+        args: input,
         formatAnswer: async () => {
           const check = isSafeUrl(input.url)
           if (!check.ok) {

@@ -20,7 +20,14 @@ let fetchCalls: string[] = []
 function installFetch(handler: (url: string) => Promise<Response>) {
   fetchCalls = []
   globalThis.fetch = (async (input: RequestInfo | URL) => {
-    const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url
+    let url: string
+    if (typeof input === "string") {
+      url = input
+    } else if (input instanceof URL) {
+      url = input.toString()
+    } else {
+      url = input.url
+    }
     fetchCalls.push(url)
     return handler(url)
   }) as typeof fetch

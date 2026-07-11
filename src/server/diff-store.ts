@@ -590,8 +590,8 @@ async function fetchGitHubPullRequestsViaGh(path: string): Promise<GitHubPullReq
     return null
   }
 
-  const json = JSON.parse(result.stdout)
-  return Array.isArray(json) ? json as GitHubPullRequestResponseItem[] : []
+  const json: GitHubPullRequestResponseItem[] = JSON.parse(result.stdout)
+  return Array.isArray(json) ? json : []
 }
 
 export async function fetchGitHubPullRequests(
@@ -621,8 +621,8 @@ export async function fetchGitHubPullRequests(
     throw new Error(`GitHub pull requests request failed with status ${response.status}`)
   }
 
-  const json = await response.json()
-  return Array.isArray(json) ? json as GitHubPullRequestResponseItem[] : []
+  const json: GitHubPullRequestResponseItem[] = await response.json()
+  return Array.isArray(json) ? json : []
 }
 
 function buildGitHubCommitUrl(remoteUrl: string | null, sha: string) {
@@ -768,9 +768,7 @@ async function getGhAuthInfo() {
   }
 
   try {
-    const parsed = JSON.parse(authStatusResult.stdout) as {
-      hosts?: Record<string, Array<{ active?: boolean; login?: string; state?: string }>>
-    }
+    const parsed: { hosts?: Record<string, Array<{ active?: boolean; login?: string; state?: string }>> } = JSON.parse(authStatusResult.stdout)
     const accounts = parsed.hosts?.["github.com"] ?? []
     const activeAccount = accounts.find((account) => account.active) ?? accounts[0]
     return {
@@ -824,13 +822,16 @@ function parseStatusPaths(output: string): DirtyPathEntry[] {
     const isRename = statusCode.includes("R")
     const isDelete = statusCode.includes("D")
     const isAdd = statusCode.includes("A") || isUntracked
-    const changeType: ChatDiffFile["changeType"] = isRename
-      ? "renamed"
-      : isDelete
-        ? "deleted"
-        : isAdd
-          ? "added"
-          : "modified"
+    let changeType: ChatDiffFile["changeType"]
+    if (isRename) {
+      changeType = "renamed"
+    } else if (isDelete) {
+      changeType = "deleted"
+    } else if (isAdd) {
+      changeType = "added"
+    } else {
+      changeType = "modified"
+    }
 
     if (isRename && value.includes(" -> ")) {
       const [previousPath, nextPath] = value.split(" -> ")
@@ -1099,11 +1100,14 @@ export function appendGitIgnoreEntry(currentContents: string | null, entry: stri
       : normalizedContents
   }
 
-  const prefix = normalizedContents.length === 0
-    ? ""
-    : normalizedContents.endsWith("\n")
-      ? normalizedContents
-      : `${normalizedContents}\n`
+  let prefix: string
+  if (normalizedContents.length === 0) {
+    prefix = ""
+  } else if (normalizedContents.endsWith("\n")) {
+    prefix = normalizedContents
+  } else {
+    prefix = `${normalizedContents}\n`
+  }
   return `${prefix}${entry}\n`
 }
 

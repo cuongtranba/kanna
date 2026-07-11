@@ -22,7 +22,8 @@ export function MentionPicker({ items, activeIndex, loading, onSelect, onHoverIn
   const listRef = useRef<HTMLUListElement>(null)
 
   useEffect(() => {
-    const el = listRef.current?.children.item(activeIndex) as HTMLElement | null
+    const child = listRef.current?.children.item(activeIndex)
+    const el = child instanceof HTMLElement ? child : null
     el?.scrollIntoView({ block: "nearest" })
   }, [activeIndex])
 
@@ -65,6 +66,27 @@ export function MentionPicker({ items, activeIndex, loading, onSelect, onHoverIn
         const isAgent = item.kind === "agent"
         const path = item.kind === "path" ? item.path : null
         const Icon = path?.kind === "dir" ? Folder : FileText
+        let mentionContent: React.ReactNode
+        if (item.kind === "agent") {
+          mentionContent = (
+            <>
+              <Bot className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              <span className="font-mono truncate">agent/{item.subagent.name}</span>
+              {item.subagent.description ? (
+                <span className="min-w-0 truncate text-xs text-muted-foreground">{item.subagent.description}</span>
+              ) : null}
+            </>
+          )
+        } else if (path) {
+          mentionContent = (
+            <>
+              <Icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              <span className="font-mono truncate">{path.path}</span>
+            </>
+          )
+        } else {
+          mentionContent = null
+        }
         return (
           <li
             key={isAgent ? `agent:${item.subagent.id}` : `path:${path?.kind}:${path?.path}`}
@@ -81,20 +103,7 @@ export function MentionPicker({ items, activeIndex, loading, onSelect, onHoverIn
             )}
           >
             <AtSign className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-            {isAgent ? (
-              <>
-                <Bot className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                <span className="font-mono truncate">agent/{item.subagent.name}</span>
-                {item.subagent.description ? (
-                  <span className="min-w-0 truncate text-xs text-muted-foreground">{item.subagent.description}</span>
-                ) : null}
-              </>
-            ) : path ? (
-              <>
-                <Icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                <span className="font-mono truncate">{path.path}</span>
-              </>
-            ) : null}
+            {mentionContent}
           </li>
         )
       })}

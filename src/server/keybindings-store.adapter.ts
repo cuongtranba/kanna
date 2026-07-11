@@ -1,6 +1,7 @@
 import { watch, type FSWatcher } from "node:fs"
 import { mkdir, readFile, writeFile } from "node:fs/promises"
 import path from "node:path"
+import { isErrnoException } from "../shared/errors"
 
 export interface KeybindingsFilePresence {
   text: string | null
@@ -19,7 +20,7 @@ export async function readKeybindingsFile(filePath: string): Promise<Keybindings
     const text = await readFile(filePath, "utf8")
     return { text }
   } catch (error) {
-    if ((error as NodeJS.ErrnoException)?.code === "ENOENT") {
+    if (isErrnoException(error) && error.code === "ENOENT") {
       return { text: null }
     }
     throw error

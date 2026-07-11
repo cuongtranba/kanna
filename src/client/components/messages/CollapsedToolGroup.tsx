@@ -6,6 +6,10 @@ import { AnimatedShinyText } from "../ui/animated-shiny-text"
 import type { ProcessedToolCall } from "./types"
 import type { HydratedTranscriptMessage } from "../../../shared/types"
 
+function isProcessedToolCall(msg: HydratedTranscriptMessage): msg is ProcessedToolCall {
+  return msg.kind === "tool"
+}
+
 interface ToolCategory {
   key: string
   singular: string
@@ -37,7 +41,8 @@ function getToolGroupLabel(messages: HydratedTranscriptMessage[]): string {
   const order: string[] = []
 
   for (const msg of messages) {
-    const toolKind = (msg as ProcessedToolCall).toolKind
+    if (!isProcessedToolCall(msg)) continue
+    const toolKind = msg.toolKind
     const category = getToolCategory(toolKind)
 
     const existing = counts.get(category.key)
@@ -69,10 +74,7 @@ export function CollapsedToolGroup({ messages, isLoading, localPath, expanded, o
   const label = useMemo(() => getToolGroupLabel(messages), [messages])
 
   // Check if any tool in the group is still in progress
-  const anyInProgress = messages.some(msg => {
-    const processed = msg as ProcessedToolCall
-    return processed.result === undefined
-  })
+  const anyInProgress = messages.some(msg => isProcessedToolCall(msg) && msg.result === undefined)
 
   const showLoadingState = anyInProgress && isLoading
 
@@ -96,10 +98,10 @@ export function CollapsedToolGroup({ messages, isLoading, localPath, expanded, o
         </button>
         {expanded && (
           <div className="my-4 flex flex-col gap-3">
-            {messages.map(msg => (
+            {messages.filter(isProcessedToolCall).map(msg => (
               <ToolCallMessage
                 key={msg.id}
-                message={msg as ProcessedToolCall}
+                message={msg}
                 isLoading={isLoading}
                 localPath={localPath}
                 chatId={chatId}

@@ -1,4 +1,5 @@
 import { detectBwrap } from "./detect.adapter"
+import { log } from "../../../shared/log"
 
 /**
  * Whether sandbox availability is *statically* known for the platform.
@@ -22,7 +23,7 @@ export async function isSandboxEnabledAsync(args: {
   if (args.platform === "linux") {
     const ok = await detectBwrap()
     if (!ok) {
-      console.warn(
+      log.warn(
         "[claude-pty/sandbox] bwrap not found on PATH — PTY OS sandbox is "
         + "DISABLED (loses defense-in-depth against built-in credential "
         + "reads). Install bubblewrap (apt/dnf/pacman install bubblewrap) "

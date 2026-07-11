@@ -3,6 +3,7 @@ import { writeFile } from "node:fs/promises"
 import type { ChatPermissionPolicy } from "../../../shared/permission-policy"
 import { generateMacosProfile } from "./profile-macos.adapter"
 import { generateBwrapArgs } from "./profile-linux.adapter"
+import { log } from "../../../shared/log"
 
 const SANDBOX_EXEC = "/usr/bin/sandbox-exec"
 const BWRAP = "/usr/bin/bwrap"
@@ -41,7 +42,7 @@ export async function wrapWithSandbox(opts: WrapArgs): Promise<WrapResult> {
       homeDir: opts.homeDir,
     })
     if (unmountableGlobs.length > 0) {
-      console.warn(
+      log.warn(
         "[claude-pty/sandbox] bwrap cannot tmpfs glob deny patterns "
         + `(${unmountableGlobs.join(", ")}); these are enforced by the `
         + "kanna-mcp tool-callback layer (permission-gate minimatch), not "

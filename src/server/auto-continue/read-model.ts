@@ -78,7 +78,7 @@ function applyOne(schedules: Record<string, AutoContinueSchedule>, event: AutoCo
         return
       }
       schedules[event.scheduleId] = { ...existing, state: "fired", scheduledAt: event.timestamp }
-      return
+      
     }
   }
 }

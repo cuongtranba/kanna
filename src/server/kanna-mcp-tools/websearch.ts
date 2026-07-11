@@ -24,7 +24,7 @@ export function createWebSearchTool(deps: { toolCallback: ToolCallbackService })
         toolCallback: deps.toolCallback,
         toolName: "mcp__kanna__websearch",
         ctx,
-        args: input as unknown as Record<string, unknown>,
+        args: input,
         formatAnswer: async () => ({
           content: [{
             type: "text" as const,
