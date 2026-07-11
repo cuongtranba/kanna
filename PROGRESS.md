@@ -76,6 +76,7 @@ node -e 'let s="";process.stdin.on("d",d=>s+=d);process.stdin.on("data",d=>s+=d)
 - Commit after each chunk with a clear message.
 
 ## Progress (latest first)
+- 2026-07-11 Chunk 3 DONE (commit a410add). Migrated all 154 no-console violations to log.* across 35 production files. Also widened LogArg in log.ts to include unknown so catch-block errors type-check (matches original console.* semantics). Typecheck green; no-console production count 0. Remaining: 2591 no-restricted-syntax, 127 no-nested-ternary.
 - 2026-07-11 Chunk 2 DONE (commits c992f3f + 6d91d17). Added test-file @typescript-eslint/no-explicit-any:off override (mirrors no-console pattern). Fixed 14 production violations. Also fixed 1 no-fallthrough in codex-app-server.ts. no-explicit-any now 0; no-fallthrough now 0. Remaining: 2591 no-restricted-syntax, 154 no-console, 127 no-nested-ternary.
 - 2026-07-11 Chunk 2 partial: subagent fixed 14 production-file `any` violations (no commit before timeout). 128 remain, all in test files. Retrying as 2b+2c batches.
 - 2026-07-11 Chunk 1 DONE (commit d0fa616). Autofix pass + hand-fixes cleared
@@ -99,7 +100,7 @@ node -e 'let s="";process.stdin.on("d",d=>s+=d);process.stdin.on("data",d=>s+=d)
 - 2026-07-11 Chunk 2 agent.ts: SDKMessage param type → blocked by BetaMCPToolUseBlock.input: unknown not assignable to any non-any/non-unknown type. Correct approach: custom ClaudeRawSdkMessage interface with all-optional concrete fields + keep the pre-existing as cast but swap AsyncIterable<any> → AsyncIterable<ClaudeRawSdkMessage>.
 
 ## Next chunk
-Chunk 3: eliminate no-console (154 violations across ~35 production files). Import `{ log }` from relative path to `src/shared/log.ts`. Map: console.log→log.info, console.warn→log.warn, console.error→log.error, console.debug→log.debug. Tests already exempt via config. Run scoped tests on touched files. Commit, update PROGRESS.md.
+Chunk 4: eliminate no-nested-ternary (127 violations, client-heavy). Extract helpers or use early-returns to flatten nested ternaries. Keep output semantically identical. Commit per file batch. Then the only remaining rule is no-restricted-syntax (2591 — the big as/unknown burn-down).
 
 ## Final gate (when lint+typecheck are 0)
 - `cd <worktree> && bun run test` (`--conditions production`) fully green.
