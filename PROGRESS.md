@@ -76,6 +76,7 @@ node -e 'let s="";process.stdin.on("d",d=>s+=d);process.stdin.on("data",d=>s+=d)
 - Commit after each chunk with a clear message.
 
 ## Progress (latest first)
+- 2026-07-11 Chunk 2 partial: subagent fixed 14 production-file `any` violations (no commit before timeout). 128 remain, all in test files. Retrying as 2b+2c batches.
 - 2026-07-11 Chunk 1 DONE (commit d0fa616). Autofix pass + hand-fixes cleared
   all 10 chunk-1 rules to 0: dot-notation, prefer-template,
   prefer-arrow-callback, no-implicit-coercion, object-shorthand,
@@ -92,12 +93,18 @@ node -e 'let s="";process.stdin.on("d",d=>s+=d);process.stdin.on("data",d=>s+=d)
   chokepoints in place; 3134 violations remain.
 
 ## Failed approaches
-- (none yet)
+- 2026-07-11 Chunk 2 subagent TIMEOUT (600s). Fixed 14 production-file `any` violations (142→128). All 128 remaining are in test files. Splitting into smaller batches.
 
 ## Next chunk
-Chunk 2: eliminate @typescript-eslint/no-explicit-any (142 violations in ~11
-files). Give each `any` a real type or use a generic. NO casts to `any`, NO
-eslint-disable. Verify, commit, update this file.
+Chunk 2b: fix `no-explicit-any` in small test files (53 violations across 6 files):
+- src/server/event-store.test.ts (1)
+- src/server/read-models.test.ts (3)
+- src/server/analytics.test.ts (7)
+- src/server/agent.stack-spawn.test.ts (6)
+- src/client/app/socket.test.ts (14)
+- src/server/codex-app-server.test.ts (22)
+Give each `any` a real type or use a generic. Verify typecheck, commit, update this file.
+Then Chunk 2c: src/server/agent.test.ts (75 violations) — do in one focused pass.
 
 ## Final gate (when lint+typecheck are 0)
 - `cd <worktree> && bun run test` (`--conditions production`) fully green.
