@@ -3861,8 +3861,16 @@ describe("AgentCoordinator auto-continue firing", () => {
   })
 })
 
-describe("AgentCoordinator.scheduleAgentWakeup", () => {
-  test("arms an agent_wakeup schedule carrying the prompt and a future scheduledAt", async () => {
+describe("AgentCoordinator.deliverSubagentToMain (notification-driven /clear)", () => {
+  type DeliverFn = (
+    chatId: string,
+    runId: string,
+    outcome:
+      | { status: "completed"; runId: string; text: string }
+      | { status: "failed"; runId: string; errorCode: string; errorMessage: string },
+  ) => Promise<void>
+
+  test("success: wipes claude session_token, appends context_cleared, emits subagent_background auto-continue with 'Read PROGRESS.md' prompt", async () => {
     const store = createFakeStore()
     const coordinator = new AgentCoordinator({
       store: store as never,
@@ -3870,90 +3878,58 @@ describe("AgentCoordinator.scheduleAgentWakeup", () => {
       startClaudeSession: async () => { throw new Error("not needed") },
     })
 
-    const before = Date.now()
-    const scheduleId = await coordinator.scheduleAgentWakeup({
-      chatId: "chat-1",
-      delayMs: 1_500,
-      prompt: "resume the sweep",
-      source: "agent_wakeup",
-    })
-    expect(scheduleId).not.toBeNull()
+    // seed the chat with a non-null claude session token so we can verify it is wiped
+    await store.setSessionTokenForProvider("chat-1", "claude", "prior-session-uuid")
 
+    await (coordinator as unknown as { deliverSubagentToMain: DeliverFn }).deliverSubagentToMain(
+      "chat-1",
+      "run-bg",
+      { status: "completed", runId: "run-bg", text: "the answer" },
+    )
+
+    // Session token wiped
+    expect(store.chat.sessionTokensByProvider.claude ?? null).toBeNull()
+
+    // context_cleared transcript entry appended
+    const cleared = store.messages.filter((m) => m.kind === "context_cleared")
+    expect(cleared).toHaveLength(1)
+
+    // Auto-continue event with subagent_background source + minimal prompt
     const events = store.getAutoContinueEvents("chat-1")
     expect(events).toHaveLength(1)
     const ev = events[0]
     expect(ev.kind).toBe("auto_continue_accepted")
     if (ev.kind === "auto_continue_accepted") {
-      expect(ev.source).toBe("agent_wakeup")
-      expect(ev.prompt).toBe("resume the sweep")
-      expect(ev.scheduledAt).toBeGreaterThanOrEqual(before + 1_500)
+      expect(ev.source).toBe("subagent_background")
+      expect(ev.prompt).toContain("PROGRESS.md")
+      expect(ev.prompt).toContain("context has been cleared")
+      // Subagent output is NOT carried forward (PROGRESS.md is truth)
+      expect(ev.prompt).not.toContain("the answer")
     }
   })
 
-  test("runaway-loop cap: returns null past maxAgentWakes; a real user message resets the chain", async () => {
-    const store = createFakeStore()
-    const coordinator = new AgentCoordinator({
-      store: store as never,
-      onStateChange: () => {},
-      maxAgentWakes: 2,
-      startClaudeSession: async () => { throw new Error("not needed") },
-    })
-
-    const wake = () => coordinator.scheduleAgentWakeup({
-      chatId: "chat-1", delayMs: 1_000, prompt: "again", source: "agent_wakeup",
-    })
-
-    expect(await wake()).not.toBeNull()
-    expect(await wake()).not.toBeNull()
-    expect(await wake()).toBeNull() // capped
-
-    // A real (non-auto-continue) user send resets the chain.
-    await coordinator.send({
-      type: "chat.send",
-      chatId: "chat-1",
-      provider: "claude",
-      content: "human back in the loop",
-      model: "claude-opus-4-5",
-    }).catch(() => {}) // provider start throws in this minimal harness; the reset happens at enqueue
-
-    expect(await wake()).not.toBeNull() // chain reset → armed again
-  })
-
-  test("subagent_background wakes are exempt from the runaway cap", async () => {
-    const store = createFakeStore()
-    const coordinator = new AgentCoordinator({
-      store: store as never,
-      onStateChange: () => {},
-      maxAgentWakes: 1,
-      startClaudeSession: async () => { throw new Error("not needed") },
-    })
-    const wake = () => coordinator.scheduleAgentWakeup({
-      chatId: "chat-1", delayMs: 0, prompt: "deliver result", source: "subagent_background",
-    })
-    // maxAgentWakes is 1, but background-result delivery must never be dropped.
-    expect(await wake()).not.toBeNull()
-    expect(await wake()).not.toBeNull()
-    expect(await wake()).not.toBeNull()
-  })
-
-  test("deliverBackgroundSubagentResult arms a subagent_background wake carrying the reply", async () => {
+  test("failure: still /clears, prompt carries error code + message", async () => {
     const store = createFakeStore()
     const coordinator = new AgentCoordinator({
       store: store as never,
       onStateChange: () => {},
       startClaudeSession: async () => { throw new Error("not needed") },
     })
-    await (coordinator as unknown as {
-      deliverBackgroundSubagentResult: (
-        chatId: string,
-        runId: string,
-        outcome: { status: "completed"; runId: string; text: string },
-      ) => Promise<void>
-    }).deliverBackgroundSubagentResult("chat-1", "run-bg", {
-      status: "completed",
-      runId: "run-bg",
-      text: "the background answer",
-    })
+
+    await (coordinator as unknown as { deliverSubagentToMain: DeliverFn }).deliverSubagentToMain(
+      "chat-1",
+      "run-fail",
+      {
+        status: "failed",
+        runId: "run-fail",
+        errorCode: "TIMEOUT",
+        errorMessage: "exceeded deadline",
+      },
+    )
+
+    // /clear happens regardless of subagent outcome
+    const cleared = store.messages.filter((m) => m.kind === "context_cleared")
+    expect(cleared).toHaveLength(1)
 
     const events = store.getAutoContinueEvents("chat-1")
     expect(events).toHaveLength(1)
@@ -3961,139 +3937,29 @@ describe("AgentCoordinator.scheduleAgentWakeup", () => {
     expect(ev.kind).toBe("auto_continue_accepted")
     if (ev.kind === "auto_continue_accepted") {
       expect(ev.source).toBe("subagent_background")
-      expect(ev.prompt).toContain("the background answer")
+      expect(ev.prompt).toContain("TIMEOUT")
+      expect(ev.prompt).toContain("exceeded deadline")
+      expect(ev.prompt).toContain("PROGRESS.md")
     }
   })
 
-  test("clamps a delay longer than the idle window so the wake beats the reaper", async () => {
+  test("no-op when chat does not exist", async () => {
     const store = createFakeStore()
-    const coordinator = new AgentCoordinator({
-      store: store as never,
-      onStateChange: () => {},
-      // idle window 600s; wake must land before it minus the 60s guard buffer.
-      claudeSessionLifecycle: { idleMs: 600_000, maxResidentSessions: 4, sweepIntervalMs: 0 },
-      startClaudeSession: async () => { throw new Error("not needed") },
-    })
-
-    const before = Date.now()
-    await coordinator.scheduleAgentWakeup({
-      chatId: "chat-1",
-      delayMs: 1_200_000, // model asked for 20 min ("wait longer")
-      prompt: "harvest",
-      source: "agent_wakeup",
-    })
-
-    const ev = store.getAutoContinueEvents("chat-1")[0]
-    expect(ev.kind).toBe("auto_continue_accepted")
-    if (ev.kind === "auto_continue_accepted") {
-      // clamped to idleMs - 60s buffer = 540_000, never the requested 1_200_000
-      expect(ev.scheduledAt).toBeLessThanOrEqual(before + 540_000 + 50)
-      expect(ev.scheduledAt).toBeGreaterThan(before + 500_000)
-    }
-  })
-})
-
-describe("AgentCoordinator pending-workflow harvest wake", () => {
-  type ArmFn = (chatId: string, entry: { kind: string; pendingWorkflowCount?: number }) => Promise<void>
-  // The harvest wake only arms while the disk-watch registry confirms a run is
-  // actually live; default the fake registry to "active" so the existing cases
-  // exercise the count/schedule guards, not the liveness guard.
-  const makeCoord = (
-    store: ReturnType<typeof createFakeStore>,
-    activeByChat: Map<string, boolean> = new Map([["chat-1", true]]),
-  ) =>
-    new AgentCoordinator({
-      store: store as never,
-      onStateChange: () => {},
-      startClaudeSession: async () => { throw new Error("not needed") },
-      workflowRegistry: makeFakeWorkflowRegistry(activeByChat),
-    })
-
-  test("arms a pending_workflow wake when a result carries pendingWorkflowCount > 0", async () => {
-    const store = createFakeStore()
-    const coordinator = makeCoord(store)
-    await (coordinator as unknown as { maybeArmPendingWorkflowWake: ArmFn })
-      .maybeArmPendingWorkflowWake("chat-1", { kind: "result", pendingWorkflowCount: 2 })
-
-    const events = store.getAutoContinueEvents("chat-1")
-    expect(events).toHaveLength(1)
-    expect(events[0].kind).toBe("auto_continue_accepted")
-    if (events[0].kind === "auto_continue_accepted") {
-      expect(events[0].source).toBe("pending_workflow")
-      expect(events[0].prompt).toContain("background Workflow")
-      // path-agnostic: steer harvest to the working tree, not a pinned output path
-      expect(events[0].prompt).toContain("working tree")
-      expect(events[0].prompt).not.toContain("/tasks/")
-    }
-  })
-
-  test("no-op when pendingWorkflowCount is 0 / absent", async () => {
-    const store = createFakeStore()
-    const coordinator = makeCoord(store)
-    const arm = (coordinator as unknown as { maybeArmPendingWorkflowWake: ArmFn }).maybeArmPendingWorkflowWake.bind(coordinator)
-    await arm("chat-1", { kind: "result", pendingWorkflowCount: 0 })
-    await arm("chat-1", { kind: "result" })
-    expect(store.getAutoContinueEvents("chat-1")).toHaveLength(0)
-  })
-
-  test("no-op when a schedule is already live (no double-arm)", async () => {
-    const store = createFakeStore()
-    const coordinator = makeCoord(store)
-    // Seed a live scheduled wake.
-    await store.appendAutoContinueEvent({
-      v: 3, kind: "auto_continue_accepted", timestamp: Date.now(), chatId: "chat-1",
-      scheduleId: "live-1", scheduledAt: Date.now() + 10_000, tz: "system",
-      source: "agent_wakeup", resetAt: Date.now() + 10_000, detectedAt: Date.now(), prompt: "x",
-    })
-    await (coordinator as unknown as { maybeArmPendingWorkflowWake: ArmFn })
-      .maybeArmPendingWorkflowWake("chat-1", { kind: "result", pendingWorkflowCount: 1 })
-    // Still only the seeded event — no second arm.
-    expect(store.getAutoContinueEvents("chat-1")).toHaveLength(1)
-  })
-
-  test("no-op when the registry reports no live run (Claude Code's pendingWorkflowCount is stale)", async () => {
-    const store = createFakeStore()
-    // Registry is the authority: the workflow has terminated (hasActiveRun=false)
-    // even though Claude Code's turn_duration still reports pendingWorkflowCount>0.
-    // This is the loop that re-queued the harvest prompt forever (sessions
-    // de4c6a76 14×, 5f78aa43 10×). Must NOT arm.
-    const coordinator = makeCoord(store, new Map([["chat-1", false]]))
-    await (coordinator as unknown as { maybeArmPendingWorkflowWake: ArmFn })
-      .maybeArmPendingWorkflowWake("chat-1", { kind: "result", pendingWorkflowCount: 1 })
-    expect(store.getAutoContinueEvents("chat-1")).toHaveLength(0)
-  })
-})
-
-describe("AgentCoordinator.fireAutoContinue prompt replay", () => {
-  test("replays the agent_wakeup schedule's prompt instead of the literal 'continue'", async () => {
-    const store = { ...createFakeStore(), getQueuedMessages: () => [] }
     const coordinator = new AgentCoordinator({
       store: store as never,
       onStateChange: () => {},
       startClaudeSession: async () => { throw new Error("not needed") },
     })
 
-    const scheduleId = "wake-1"
-    const acceptedEvent: AutoContinueEvent = {
-      v: 3,
-      kind: "auto_continue_accepted",
-      timestamp: Date.now(),
-      chatId: "chat-1",
-      scheduleId,
-      scheduledAt: Date.now() + 1_000,
-      tz: "system",
-      source: "agent_wakeup",
-      resetAt: Date.now() + 1_000,
-      detectedAt: Date.now(),
-      prompt: "harvest the workflow results",
-    }
-    await store.appendAutoContinueEvent(acceptedEvent)
+    await (coordinator as unknown as { deliverSubagentToMain: DeliverFn }).deliverSubagentToMain(
+      "does-not-exist",
+      "run-x",
+      { status: "completed", runId: "run-x", text: "irrelevant" },
+    )
 
-    await coordinator.fireAutoContinue("chat-1", scheduleId)
-
-    const enqueued = store.queuedMessages.filter((m) => m.autoContinue?.scheduleId === scheduleId)
-    expect(enqueued).toHaveLength(1)
-    expect(enqueued[0].content).toBe("harvest the workflow results")
+    // No side effects on unknown chat
+    expect(store.getAutoContinueEvents("does-not-exist")).toHaveLength(0)
+    expect(store.messages.filter((m) => m.kind === "context_cleared")).toHaveLength(0)
   })
 })
 

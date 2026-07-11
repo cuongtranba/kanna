@@ -59,15 +59,6 @@ export interface KannaMcpArgs extends OfferDownloadArgs {
   /** Required alongside `subagentOrchestrator`. Defaults to a stub returning null when omitted. */
   delegationContext?: KannaMcpDelegationContext
   /**
-   * Arms a Kanna-owned wake for this chat (the `schedule_wakeup` tool). The
-   * native claude-code `ScheduleWakeup` cannot drive re-entry under Kanna's
-   * spawn model, so the PTY driver disallows it and force-registers this shim
-   * instead. Returns the new scheduleId, or `null` when the per-chat
-   * runaway-loop cap is reached. Omit to hide the tool.
-   * See adr-20260603-agent-self-scheduled-wake.
-   */
-  scheduleWakeup?: (args: { delayMs: number; prompt: string }) => Promise<string | null>
-  /**
    * Forces the `ask_user_question` / `exit_plan_mode` shims to register
    * even when `KANNA_MCP_TOOL_CALLBACKS` is unset. The PTY driver sets
    * this because the durable approval protocol is the only host path
@@ -396,60 +387,6 @@ function buildDelegateSubagentToolList(args: {
   ]
 }
 
-export const SCHEDULE_WAKEUP_DESCRIPTION =
-  "Schedule yourself to resume this chat later. Use when you've kicked off " +
-  "background work (a Workflow, a long task) and want to wake up after a delay " +
-  "to harvest results or continue a self-paced loop, instead of ending the turn " +
-  "and going idle. Kanna owns the timer (survives restart). When it fires, your " +
-  "`prompt` is replayed as the next turn. There is a per-chat cap on consecutive " +
-  "self-wakes; a real user message resets it."
-
-function buildScheduleWakeupToolList(args: {
-  scheduleWakeup?: (args: { delayMs: number; prompt: string }) => Promise<string | null>
-  chatId: string | null
-}): SdkMcpToolDefinition<any>[] {
-  const scheduleWakeup = args.scheduleWakeup
-  if (!scheduleWakeup || !args.chatId) return []
-  return [
-    tool(
-      "schedule_wakeup",
-      SCHEDULE_WAKEUP_DESCRIPTION,
-      {
-        delay_seconds: z
-          .number()
-          .int()
-          .min(1)
-          .describe("Seconds from now to wake up and replay the prompt"),
-        prompt: z
-          .string()
-          .min(1)
-          .describe("Instructions to resume with when the wake fires"),
-      },
-      async (input) => {
-        const scheduleId = await scheduleWakeup({
-          delayMs: input.delay_seconds * 1000,
-          prompt: input.prompt,
-        })
-        if (scheduleId === null) {
-          return {
-            isError: true as const,
-            content: [{
-              type: "text" as const,
-              text: "Wake not scheduled: this chat hit the consecutive self-wake cap. Finish the current work or wait for a user message to reset the budget.",
-            }],
-          }
-        }
-        return {
-          content: [{
-            type: "text" as const,
-            text: `Wake scheduled in ${input.delay_seconds}s [schedule_id: ${scheduleId}]. Ending this turn; Kanna will replay your prompt when it fires.`,
-          }],
-        }
-      },
-    ),
-  ]
-}
-
 export function buildKannaMcpTools(args: KannaMcpArgs): SdkMcpToolDefinition<any>[] {
   const tunnelGateway = args.tunnelGateway ?? null
   const chatId = args.chatId ?? null
@@ -509,7 +446,6 @@ export function buildKannaMcpTools(args: KannaMcpArgs): SdkMcpToolDefinition<any
       delegationContext: args.delegationContext,
       chatId: chatId,
     }),
-    ...buildScheduleWakeupToolList({ scheduleWakeup: args.scheduleWakeup, chatId }),
     tool(
       "expose_port",
       EXPOSE_PORT_DESCRIPTION,

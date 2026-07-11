@@ -1,6 +1,6 @@
 ---
 id: adr-20260603-agent-self-scheduled-wake
-c3-seal: ced766d7be6068e9a57435790a84add359ec20ac668deeefcfd939b116203ffa
+c3-seal: 48c8b60f3c09780eeaa2f3de8d158fbeffb280d3ab44f36b5f8cdef461045959
 title: agent-self-scheduled-wake
 type: adr
 goal: |-
@@ -13,7 +13,7 @@ goal: |-
     restart-survivable), rather than relying on the CLI's in-process cron
     scheduler — which dead-letters our spawn and whose fires Kanna's auto-wake
     filter deliberately drops.
-status: accepted
+status: superseded
 date: "2026-06-03"
 ---
 

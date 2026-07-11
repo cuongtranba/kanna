@@ -1904,9 +1904,8 @@ export interface AutoContinueSchedule {
   resetAt: number
   detectedAt: number
   /**
-   * Prompt replayed when an agent-driven wake (`agent_wakeup` /
-   * `pending_workflow`) fires. Absent on provider-failure schedules, which
-   * fire the literal `"continue"`.
+   * Prompt replayed when a `subagent_background` delivery fires. Absent on
+   * provider-failure schedules, which fire the literal `"continue"`.
    */
   prompt?: string
 }

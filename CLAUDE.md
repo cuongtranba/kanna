@@ -587,20 +587,19 @@ adr-20260616-subagent-run-in-background.
   background run holds a permit while in flight, so concurrency is bounded by
   the existing permit pool (default 4) + run timeout. No live-session registry
   (background runs are one-shot, not keep-alive).
-- **Re-entry (driver-agnostic).** `AgentCoordinator.deliverBackgroundSubagentResult`
-  is wired as `onBackgroundRunComplete`. It builds a notification prompt
-  (the reply, or the failure) and routes through
-  `scheduleAgentWakeup({source:"subagent_background", delayMs:0})` — the SAME
-  event-sourced re-entry as every other agent wake. The turn machinery then
-  delivers it per driver: the SDK driver pushes a follow-up turn via the live
-  session's native `sendPrompt` (streaming-input queue); the PTY driver spawns
-  /resumes a turn. No driver-specific delivery code — `fireAutoContinue` →
-  `enqueueMessage` already handles both.
-- **Cap exemption.** `source:"subagent_background"` is EXEMPT from the
-  `KANNA_MAX_AGENT_WAKES` runaway cap (it delivers a real result, not a
-  self-poll) — exhausting the cap would silently drop genuine subagent
-  results. It is the only source that neither checks nor increments
-  `agentWakeChainByChat`. Concurrency is bounded by the permit pool instead.
+- **Re-entry (driver-agnostic, always /clears main).** `AgentCoordinator.deliverSubagentToMain`
+  is wired as `onBackgroundRunComplete`. On every delivery it (1) wipes the
+  chat's Claude `session_token` (main /clear equivalent — same machinery
+  `exit_plan_mode`'s clearContext branch uses), (2) appends a `context_cleared`
+  transcript entry, (3) emits `auto_continue_accepted { source:
+  "subagent_background", delayMs: 0, prompt: "Read PROGRESS.md, decide next
+  action." }`. Subagent output is NOT carried forward as prompt content —
+  PROGRESS.md is the tier-2 durability contract. `fireAutoContinue` →
+  `enqueueMessage` delivers to both drivers; because session_token is null,
+  the next main turn is a FRESH Claude spawn.
+- **No wake cap.** Concurrency is bounded by the subagent permit pool + run
+  timeout. Every delivery is a real event, never a self-poll — no runaway
+  budget is meaningful here.
 
 # Orchestration Core (Plan A — engine only)
 
@@ -632,55 +631,78 @@ adr-20260616-subagent-run-in-background.
 
 - **WS wiring (not yet landed):** `createRun` / `cancelRun` / `resolveGate` / `waitForRun` will be exposed as `ws-router` commands in a follow-on PR.
 
-# Agent Self-Scheduled Wake (KANNA_MAX_AGENT_WAKES, KANNA_PENDING_WORKFLOW_POLL_MS)
+# Notification-Driven Loop Orchestration (supersedes Agent Self-Scheduled Wake)
 
-Kanna owns the timer for agent-driven chat re-entry. The native claude-code
-`ScheduleWakeup` / `/loop` cron cannot drive a re-entry under Kanna's spawn
-model: a fire lands in the transcript as an `isMeta:true` user line, which
-`jsonl-to-event.ts` deliberately drops as a background auto-wake, and the
-CLI's in-memory cron dies on restart. So both agent-wake paths route through
-the existing event-sourced `auto-continue` `ScheduleManager` (survives restart
-via event replay, obeys the cancel cascade). See
-`adr-20260603-agent-self-scheduled-wake`.
+Long-horizon autonomous loops (eslint burn-downs, migration sweeps, multi-hour
+codemods) run under a notification-driven pattern with per-iteration `/clear`
+on the main agent's Claude session. There is no timer-based `schedule_wakeup`
+anymore (removed in adr-2026XXXX-notification-driven-loop-orchestration —
+which supersedes `adr-20260603-agent-self-scheduled-wake`).
 
-- **`ScheduleWakeup` interception (Part A).** The PTY driver disallows the
-  native tool (`PTY_DISALLOWED_NATIVE_TOOLS` now includes `ScheduleWakeup`,
-  same #215 pattern as AskUserQuestion/ExitPlanMode) and force-registers
-  `mcp__kanna__schedule_wakeup`, which calls
-  `AgentCoordinator.scheduleAgentWakeup({source:"agent_wakeup"})`. The shim is
-  registered only when a `scheduleWakeup` callback is supplied (main chats);
-  subagent spawns lose the no-op native tool by design. On fire,
-  `fireAutoContinue` replays the schedule's `prompt` instead of the literal
-  `"continue"` (the prompt rides on `auto_continue_accepted.prompt`).
+**Roles:**
+- **Main agent = orchestrator; stateless-in-context, stateful-in-file.**
+  Every subagent completion delivery /clears the main-agent Claude session
+  (wipes `session_token`, appends `context_cleared` transcript entry). The
+  next main turn is a FRESH Claude spawn that re-reads PROGRESS.md.
+- **Subagent = worker per iteration.** Fresh Claude spawn per delegation
+  (`sessionToken: null, forkSession: false` — enforced at
+  `subagent-provider-run.ts:170-171`). Subagent does one chunk of work and
+  writes PROGRESS.md before terminating.
+- **PROGRESS.md** (or whatever tracking file the user configures) is the
+  ONLY durability contract. Main context is intentionally ephemeral.
 
-- **Pending-workflow harvest (Part B).** When a turn ends with a background
-  Workflow still running, claude-code's `turn_duration` frame carries
-  `pendingWorkflowCount`. (CLI ≥ 2.1.x no longer writes `turn_duration` rows
-  at all — see **PTY turn-end detection** — so this hint never arrives from
-  PTY transcripts and the harvest does not arm there; the `WorkflowRegistry`
-  disk watch remains the live-run authority.)
-  `normalizeClaudeStreamMessage` surfaces it onto the
-  `result` entry; `maybeArmPendingWorkflowWake` arms a single
-  `source:"pending_workflow"` wake (no double-arm if a schedule is already
-  live). Kanna has no mid-flight completion signal, so the replayed prompt
-  asks the model to check its background work and call `schedule_wakeup` again
-  if it is still running. **Registry gate (adr-20260604-pending-workflow-wake-registry-gate):**
-  CC's `pendingWorkflowCount` stays > 0 *after* a run terminates, so arming on
-  the count alone re-queued the harvest prompt forever. The arm is gated on
-  `hasLiveWorkflow(chatId)` (the disk-watch `WorkflowRegistry`, same authority
-  the idle reaper uses) — the count is a hint; the registry decides whether a
-  run is actually live. No live run ⇒ no arm ⇒ the loop terminates.
+**Wake path:** the model calls
+`mcp__kanna__delegate_subagent({run_in_background: true, prompt: ...})` and
+ends the main turn. `SubagentOrchestrator` runs the subagent through the
+existing permit pool + timeout + event-source plumbing; on terminal, its
+`onBackgroundRunComplete` hook fires `AgentCoordinator.deliverSubagentToMain`,
+which /clears the main session and emits an `auto_continue_accepted` event
+with `source: "subagent_background"` and a minimal `"Read PROGRESS.md, decide
+next action."` prompt. `fireAutoContinue` → `enqueueMessage` delivers on both
+drivers.
 
-- **Runaway-loop cap.** `KANNA_MAX_AGENT_WAKES` (default 25) bounds consecutive
-  agent wakes per chat; the in-memory chain counter resets when a real
-  (non-auto-continue) user turn starts in `startTurnForChat`. Over cap,
-  `scheduleAgentWakeup` returns `null` and `schedule_wakeup` surfaces an
-  `isError` with guidance.
+**Loop termination:** absence of delegation. When the model reads PROGRESS.md
+and sees the goal is met, it does not delegate. The main goes idle. No timer
+to disarm, no wake cap to worry about.
 
-- **Env vars:** `KANNA_MAX_AGENT_WAKES` (default 25),
-  `KANNA_PENDING_WORKFLOW_POLL_MS` (default 120000) — both parsed in
-  `server.ts` and passed to `AgentCoordinator`; the coordinator reads only its
-  args (side-effect seal).
+**Removed (hard break, per adr-2026XXXX):**
+- `mcp__kanna__schedule_wakeup` MCP tool.
+- `AgentCoordinator.scheduleAgentWakeup` method.
+- `maybeArmPendingWorkflowWake` (pending-workflow poll harvest) — workflow
+  status stays visible via the disk-watch panel; model can `delegate_subagent`
+  to a status-check subagent for event-driven workflow wake.
+- `AutoContinueSource` variants `agent_wakeup` and `pending_workflow`.
+- Env vars `KANNA_MAX_AGENT_WAKES` and `KANNA_PENDING_WORKFLOW_POLL_MS`.
+
+**PTY behaviour:** native `ScheduleWakeup` stays disallowed
+(`PTY_DISALLOWED_NATIVE_TOOLS` still includes it) — the CLI cron is a
+dead-letter under Kanna's spawn model and there is no Kanna replacement.
+Native `/loop` slash command inside PTY-mode chats will not have a way to
+schedule (its `ScheduleWakeup` calls hit the disallowed list); use
+`delegate_subagent({run_in_background: true})` instead.
+
+**Example PROGRESS.md skeleton:**
+```markdown
+## Goal
+eslint --max-warnings=0 exits 0
+
+## Progress (latest first)
+- 2026-07-11 W3 no-empty-function chunk 4/8 DONE (subagent run-abc123)
+
+## Failed approaches
+- Generic `noop` helper → typecheck fail (variance mismatch)
+
+## Next chunk
+W3 no-empty-function chunk 5/8: files X, Y, Z. Approach: shared typed noop.
+```
+
+**Example `/loop` recurring prompt:**
+```
+Read PROGRESS.md. If Goal met → PushNotification + STOP (do not delegate).
+Else: delegate_subagent({run_in_background: true, prompt: "<Next chunk from
+PROGRESS.md>; verify oracle; update PROGRESS.md with result then terminate"}).
+End this turn.
+```
 
 # Background Bash Task Keep-Alive (KANNA_PTY_BACKGROUND_TASK_MAX_MS)
 
@@ -718,8 +740,9 @@ could notify. See `adr-20260604-pty-background-task-keepalive`.
 Surfaces Claude Code's native `Workflow` tool (dynamic multi-agent
 orchestration) in the UI: a per-chat panel listing every run with live status +
 drill-in progress, plus an inline transcript card on the launch. **Read-only,
-both drivers.** Complementary to "Agent Self-Scheduled Wake" — that keeps the
-*agent* re-entering while a workflow runs; this *displays* the workflow.
+both drivers.** After adr-2026XXXX the model handles workflow harvest via
+`delegate_subagent({run_in_background: true})` status-check spawns; this
+panel *displays* the workflow.
 
 **SDK driver registration (adr-20260616-sdk-pty-feature-parity).** Claude writes
 the `wf_*.json` sidecars regardless of driver, so the SDK reuses the same

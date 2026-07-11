@@ -324,8 +324,6 @@ interface AgentCoordinatorArgs {
     customMcpServers?: readonly McpServerConfig[]
     /** Pre-resolved oauth bearer tokens keyed by server id. */
     oauthBearers?: ReadonlyMap<string, string>
-    /** Backs the `schedule_wakeup` MCP tool. Omit to hide the tool. */
-    scheduleWakeup?: (a: { delayMs: number; prompt: string }) => Promise<string | null>
     /** Folder-restricted subagent: disallow native FS tools + allowlist mcp__kanna__* + per-run path-deny scope. */
     restrictedAllowedPaths?: string[]
     /** Keep the SDK prompt queue open after the initial prompt to allow multi-turn keep-alive. */
@@ -340,21 +338,6 @@ interface AgentCoordinatorArgs {
   codexLimitDetector?: LimitDetector
   scheduleManager?: ScheduleManager
   getAutoResumePreference?: () => boolean
-  /**
-   * Max consecutive agent-driven wakes (`ScheduleWakeup` / pending-workflow)
-   * per chat before Kanna refuses to arm another — runaway-loop guard so a
-   * self-scheduling agent cannot burn OAuth quota indefinitely. The chain
-   * resets on any real (non-auto-continue) user message. Default 25.
-   */
-  maxAgentWakes?: number
-  /**
-   * Delay (ms) for the pending-workflow harvest wake armed when a turn ends
-   * with a background Workflow still running. Kanna gets no mid-flight
-   * completion signal, so the wake replays a "check your background work"
-   * prompt after this delay; the model harvests or re-schedules. Default
-   * 120000 (2 min). Bounded by `maxAgentWakes`.
-   */
-  pendingWorkflowPollMs?: number
   /**
    * Watchdog (ms) for an OpenRouter turn whose SDK stream emits no transcript
    * entry (no `system_init`) after the session-token handshake. OpenRouter
@@ -1271,8 +1254,6 @@ async function startClaudeSession(args: {
   subagentOrchestrator?: SubagentOrchestrator
   /** Per-spawn delegation context (depth / ancestor chain / parentUserMessageId resolver). */
   delegationContext?: KannaMcpDelegationContext
-  /** Backs the `schedule_wakeup` MCP tool. Omit to hide the tool. */
-  scheduleWakeup?: (a: { delayMs: number; prompt: string }) => Promise<string | null>
   /** Enabled user MCP servers, merged into the SDK's mcpServers map. */
   customMcpServers?: readonly McpServerConfig[]
   /** Pre-resolved oauth bearer tokens keyed by server id (from ensureFreshMcpToken). */
@@ -1324,7 +1305,6 @@ async function startClaudeSession(args: {
           chatPolicy: args.chatPolicy,
           subagentOrchestrator: args.subagentOrchestrator,
           delegationContext: args.delegationContext,
-          scheduleWakeup: args.scheduleWakeup,
           restrictedAllowedPaths: args.restrictedAllowedPaths,
         }),
         ...buildUserMcpServers(args.customMcpServers ?? [], args.oauthBearers),
@@ -1443,10 +1423,6 @@ const DEFAULT_PTY_BACKGROUND_TASK_MAX_MS = 30 * 60 * 1000
 // entry arrives within this window. system_init is the SDK init echo (precedes
 // model inference), so 2 min is generous; env-tunable per deployment.
 const DEFAULT_OPENROUTER_FIRST_ENTRY_TIMEOUT_MS = 2 * 60 * 1000
-// Agent wakes are clamped to one idle window minus this buffer so a re-entry
-// always lands before the idle reaper closes the PTY (see scheduleAgentWakeup).
-const WAKE_GUARD_BUFFER_MS = 60 * 1000
-const WAKE_GUARD_MIN_DELAY_MS = 30 * 1000
 
 function positiveIntegerFromEnv(value: string | undefined, fallback: number): number {
   if (value === undefined || value.trim() === "") return fallback
@@ -1523,14 +1499,6 @@ export class AgentCoordinator {
   }
   private readonly throwOnClaudeSessionStart: boolean
   private readonly autoResumeByChat = new Map<string, boolean>()
-  // Per-chat consecutive agent-wake counter (runaway-loop guard). Incremented
-  // on each scheduleAgentWakeup; reset to 0 when a real user message enqueues
-  // (enqueueMessage without an autoContinue option). In-memory by design — a
-  // server restart resetting the chain is acceptable (restart also breaks any
-  // runaway loop) and avoids threading a counter through the event log.
-  private readonly agentWakeChainByChat = new Map<string, number>()
-  private readonly maxAgentWakes: number
-  private readonly pendingWorkflowPollMs: number
   private readonly openrouterFirstEntryTimeoutMs: number
   // Per-tokenId rotation dedupe state. When a shared OAuth token throws
   // limit/auth-error against N chats simultaneously, only the first chat
@@ -1577,8 +1545,6 @@ export class AgentCoordinator {
     this.claudeAuthErrorDetector = new ClaudeAuthErrorDetector()
     this.scheduleManager = args.scheduleManager ?? null
     this.getAutoResumePreference = args.getAutoResumePreference ?? (() => false)
-    this.maxAgentWakes = args.maxAgentWakes ?? 25
-    this.pendingWorkflowPollMs = args.pendingWorkflowPollMs ?? 120_000
     this.openrouterFirstEntryTimeoutMs =
       args.openrouterFirstEntryTimeoutMs ?? DEFAULT_OPENROUTER_FIRST_ENTRY_TIMEOUT_MS
     this.getSubagents = args.getSubagents ?? (() => [])
@@ -1617,7 +1583,7 @@ export class AgentCoordinator {
         this.emitStateChange(chatId)
       },
       onBackgroundRunComplete: (chatId, runId, outcome) => {
-        void this.deliverBackgroundSubagentResult(chatId, runId, outcome)
+        void this.deliverSubagentToMain(chatId, runId, outcome)
       },
       maxLive: positiveIntegerFromEnv(process.env.KANNA_SUBAGENT_MAX_LIVE, 0) || undefined,
       liveIdleTimeoutMs: positiveIntegerFromEnv(process.env.KANNA_SUBAGENT_IDLE_TIMEOUT_MS, 0) || undefined,
@@ -2257,14 +2223,6 @@ export class AgentCoordinator {
       throw new Error("Chat is already running")
     }
 
-    // A real human turn (appendUserPrompt, not an auto-continue replay) breaks
-    // any agent-wake chain: the user is back in the loop, so the runaway-loop
-    // budget (`maxAgentWakes`) resets. Auto-continue fires carry `autoContinue`
-    // and must NOT reset, or the cap could never trip.
-    if (args.appendUserPrompt && !args.autoContinue) {
-      this.agentWakeChainByChat.delete(args.chatId)
-    }
-
     if (chat.provider !== args.provider) {
       await this.store.setChatProvider(args.chatId, args.provider)
       logSendToStartingProfile(args.profile, "start_turn.provider_set", {
@@ -2796,9 +2754,6 @@ export class AgentCoordinator {
               systemPromptAppend,
               subagentOrchestrator: this.subagentOrchestrator,
               delegationContext,
-              scheduleWakeup: (a) => this.scheduleAgentWakeup({
-                chatId: chatIdForCtx, delayMs: a.delayMs, prompt: a.prompt, source: "agent_wakeup",
-              }),
               toolCallback: this.toolCallback ?? undefined,
               tunnelGateway: this.tunnelGateway,
               chatPolicy: this.resolveChatPolicy(args.chatId),
@@ -2826,9 +2781,6 @@ export class AgentCoordinator {
               systemPromptAppend,
               subagentOrchestrator: this.subagentOrchestrator,
               delegationContext,
-              scheduleWakeup: (a) => this.scheduleAgentWakeup({
-                chatId: chatIdForCtx, delayMs: a.delayMs, prompt: a.prompt, source: "agent_wakeup",
-              }),
               toolCallback: this.toolCallback ?? undefined,
               chatPolicy: this.resolveChatPolicy(args.chatId),
               customMcpServers: enabledMcpServers,
@@ -3545,7 +3497,9 @@ export class AgentCoordinator {
             if (active.proactiveCompactInjection) {
               await this.store.setCompactFailureCount(session.chatId, 0)
             }
-            await this.maybeArmPendingWorkflowWake(session.chatId, event.entry)
+            // Note: pending-workflow harvest wake removed — workflow-completion
+            // notification is a follow-up ADR. Model can delegate a status-check
+            // subagent if it needs event-driven workflow wake.
           }
           this.activeTurns.delete(session.chatId)
           // Turn-scoped reservation: release on turn end so other chats can
@@ -4044,9 +3998,8 @@ export class AgentCoordinator {
   async fireAutoContinue(chatId: string, scheduleId: string) {
     if (!this.store.getChat(chatId)) return
 
-    // Agent-driven wakes (`agent_wakeup` / `pending_workflow`) carry the prompt
-    // the model asked to resume with; provider-failure schedules carry none and
-    // fall back to the literal "continue".
+    // `subagent_background` deliveries carry the "Read PROGRESS.md" prompt;
+    // provider-failure schedules carry none and fall back to the literal "continue".
     const schedule = this.getChatSchedule(chatId, scheduleId)
     const promptToReplay = schedule?.prompt ?? "continue"
 
@@ -4126,131 +4079,54 @@ export class AgentCoordinator {
   }
 
   /**
-   * Arm a Kanna-owned wake for an agent-driven signal — the model calling
-   * `ScheduleWakeup` (`source: "agent_wakeup"`) or a turn ending with a
-   * background Workflow still running (`source: "pending_workflow"`). Routes
-   * through the same event-sourced `ScheduleManager` as provider-failure
-   * resume, so it survives restart and obeys the cancel cascade. The native
-   * claude-code wake cannot work under Kanna's spawn model (the fire lands as
-   * an `isMeta:true` line that `jsonl-to-event.ts` drops), so Kanna owns it.
-   * See adr-20260603-agent-self-scheduled-wake.
-   *
-   * Returns the new `scheduleId`, or `null` when the per-chat runaway-loop cap
-   * (`maxAgentWakes`) is reached — the caller surfaces that to the model.
-   */
-  async scheduleAgentWakeup(args: {
-    chatId: string
-    delayMs: number
-    prompt: string
-    source: "agent_wakeup" | "pending_workflow" | "subagent_background"
-  }): Promise<string | null> {
-    const { chatId, prompt, source } = args
-    if (!this.store.getChat(chatId)) throw new Error("Chat not found")
-
-    // `subagent_background` delivers a finished run_in_background subagent's
-    // reply — a real result, not a self-poll — so it is exempt from the
-    // runaway-wake cap. Its concurrency is already bounded by the subagent
-    // permit pool + run timeout. See adr-20260616-subagent-run-in-background.
-    const countsAgainstCap = source !== "subagent_background"
-    const chainLength = this.agentWakeChainByChat.get(chatId) ?? 0
-    if (countsAgainstCap && chainLength >= this.maxAgentWakes) return null
-
-    // Belt for the workflow-liveness guard: a wake must re-enter the chat
-    // BEFORE the idle reaper closes the PTY, else a long model-chosen delay
-    // (the #357 harvest prompt tells the model to "wait longer", so it sets
-    // ~1200s) outlives the ~600s idle window and the workflow is killed in the
-    // gap. Clamp the delay to one idle window minus a guard buffer so a turn
-    // always resets the idle clock first. The primary defense is
-    // `hasLiveWorkflow`; this guarantees liveness even if the file probe misses.
-    const idleMs = this.resolveClaudeIdleMs()
-    const maxDelayMs = Math.max(WAKE_GUARD_MIN_DELAY_MS, idleMs - WAKE_GUARD_BUFFER_MS)
-    const delayMs = Math.min(args.delayMs, maxDelayMs)
-
-    const now = Date.now()
-    const scheduledAt = now + Math.max(0, delayMs)
-    const scheduleId = crypto.randomUUID()
-    await this.emitAutoContinueEvent({
-      v: AUTO_CONTINUE_EVENT_VERSION,
-      kind: "auto_continue_accepted",
-      timestamp: now,
-      chatId,
-      scheduleId,
-      scheduledAt,
-      tz: "system",
-      source,
-      resetAt: scheduledAt,
-      detectedAt: now,
-      prompt,
-    })
-    if (countsAgainstCap) this.agentWakeChainByChat.set(chatId, chainLength + 1)
-    return scheduleId
-  }
-
-  /**
    * Deliver a finished `run_in_background` subagent's result back into the
-   * main chat as a fresh turn. Wired as the orchestrator's
-   * `onBackgroundRunComplete` hook. Routes through `scheduleAgentWakeup`
-   * (`source: "subagent_background"`, delay 0) so re-entry uses the same
-   * event-sourced, driver-agnostic turn machinery as every other agent wake —
-   * the SDK driver delivers via its live session's native `sendPrompt`, the
-   * PTY driver via a fresh turn. See adr-20260616-subagent-run-in-background.
+   * main chat as a fresh turn AND clear the main-agent's Claude session so the
+   * next turn starts with a fresh context window. Wired as the orchestrator's
+   * `onBackgroundRunComplete` hook.
+   *
+   * Loop-orchestration invariant: main is stateless-in-context / stateful-in-file.
+   * PROGRESS.md is the durability contract; every delivery re-reads it. Subagent
+   * output is NOT carried forward as prompt content — the subagent is expected
+   * to have written its findings into PROGRESS.md before terminating.
+   *
+   * See adr-2026XXXX-notification-driven-loop-orchestration.
    */
-  private async deliverBackgroundSubagentResult(
+  private async deliverSubagentToMain(
     chatId: string,
     runId: string,
     outcome: BackgroundRunOutcome,
   ): Promise<void> {
+    if (!this.store.getChat(chatId)) return
+
     const prompt = outcome.status === "completed"
-      ? `A background subagent you launched (run ${runId}) finished. Its reply:\n\n${outcome.text}\n\nIncorporate this into your work; reply to the user if it answers their request.`
-      : `A background subagent you launched (run ${runId}) failed (${outcome.errorCode}): ${outcome.errorMessage}. Decide whether to retry, try another approach, or tell the user.`
+      ? `A background subagent (run ${runId}) finished. Your Claude context has been cleared. Read PROGRESS.md, decide the next action.`
+      : `A background subagent (run ${runId}) failed (${outcome.errorCode}): ${outcome.errorMessage}. Your Claude context has been cleared. Read PROGRESS.md; decide whether to retry, try another approach, or stop.`
+
     try {
-      await this.scheduleAgentWakeup({
+      // Wipe the main-agent's Claude session token so the next spawn starts
+      // fresh (the /clear equivalent — same machinery `exit_plan_mode`'s
+      // clearContext branch already uses). Codex path is unaffected.
+      await this.store.setSessionTokenForProvider(chatId, "claude", null)
+      await this.store.appendMessage(chatId, timestamped({ kind: "context_cleared" }))
+
+      const now = Date.now()
+      const scheduleId = crypto.randomUUID()
+      await this.emitAutoContinueEvent({
+        v: AUTO_CONTINUE_EVENT_VERSION,
+        kind: "auto_continue_accepted",
+        timestamp: now,
         chatId,
-        delayMs: 0,
-        prompt,
+        scheduleId,
+        scheduledAt: now,
+        tz: "system",
         source: "subagent_background",
+        resetAt: now,
+        detectedAt: now,
+        prompt,
       })
     } catch (err) {
-      console.warn(`${LOG_PREFIX} deliverBackgroundSubagentResult failed`, { chatId, runId, err })
+      console.warn(`${LOG_PREFIX} deliverSubagentToMain failed`, { chatId, runId, err })
     }
-  }
-
-  /**
-   * When a turn ends with a background Workflow still running, arm a single
-   * Kanna-owned wake so the agent re-enters to harvest results instead of
-   * going idle (the reported failure mode: a Workflow launched, the turn
-   * ended with `pendingWorkflowCount: 1`, and the chat sat idle forever).
-   * Kanna gets no mid-flight completion signal, so the replayed prompt asks
-   * the model to check its background work; if still running, the model can
-   * call `schedule_wakeup` to wait longer. The runaway cap bounds the poll.
-   * No-op when the count is absent/0, the registry shows no live run, or a
-   * schedule is already live.
-   */
-  private async maybeArmPendingWorkflowWake(chatId: string, entry: TranscriptEntry): Promise<void> {
-    if (entry.kind !== "result") return
-    const count = entry.pendingWorkflowCount ?? 0
-    if (count <= 0) return
-    // Claude Code's per-turn `pendingWorkflowCount` stays > 0 after the run has
-    // already terminated, so arming on it alone re-queues the harvest prompt
-    // forever (sessions de4c6a76 14×, 5f78aa43 10×, even after the model said
-    // "no workflow running"). The disk-watch registry is the authority on
-    // liveness — the same source the idle reaper consults. Treat the count as a
-    // hint; only arm while a run is actually live. See
-    // adr-20260604-pending-workflow-wake-registry-gate.
-    if (!this.hasLiveWorkflow(chatId)) return
-    const live = deriveChatSchedules(this.store.getAutoContinueEvents(chatId), chatId).liveScheduleId
-    if (live !== null) return
-    await this.scheduleAgentWakeup({
-      chatId,
-      delayMs: this.pendingWorkflowPollMs,
-      prompt:
-        `A background Workflow was running when your last turn ended (${count} pending). `
-        + `Harvest from the working tree, not a pinned task-output path (the run's process `
-        + `may have been recycled): check git status/diff for the files agents changed, `
-        + `build-verify and commit the good ones, revert failures. If the workflow is still `
-        + `running, call schedule_wakeup to wait longer rather than ending idle.`,
-      source: "pending_workflow",
-    })
   }
 
   listLiveSchedules(chatId: string): string[] {
