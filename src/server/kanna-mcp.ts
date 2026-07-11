@@ -24,6 +24,7 @@ import {
   type DelegateSubagentContext,
 } from "./kanna-mcp-tools/delegate-subagent"
 import type { SubagentOrchestrator } from "./subagent-orchestrator"
+import type { LoopSetupInput } from "./loop-template"
 import type { ToolCallbackService } from "./tool-callback"
 import type { ChatPermissionPolicy } from "../shared/permission-policy"
 import { POLICY_DEFAULT } from "../shared/permission-policy"
@@ -73,7 +74,24 @@ export interface KannaMcpArgs extends OfferDownloadArgs {
    * Layered on top of the per-chat readPathDeny / writePathDeny.
    */
   restrictedAllowedPaths?: readonly string[]
+  /**
+   * Backs the `setup_loop` MCP tool. Omit to hide the tool. Handler validates
+   * the loop spec, ensures the tracking file exists, and enqueues a
+   * validated templated recurring prompt as an auto-continue on this chat.
+   * See adr-2026XXXX-setup-loop-template.
+   */
+  setupLoop?: (input: LoopSetupInput) => Promise<SetupLoopHandlerResult>
 }
+
+export type SetupLoopHandlerResult =
+  | {
+      ok: true
+      trackingFileRel: string
+      created: boolean
+      /** Fully-rendered recurring prompt (echoed back for observability). */
+      prompt: string
+    }
+  | { ok: false; errors: string[] }
 
 export interface ResolvedOfferDownload {
   contentUrl: string
@@ -387,6 +405,85 @@ function buildDelegateSubagentToolList(args: {
   ]
 }
 
+export const SETUP_LOOP_DESCRIPTION =
+  "Set up an autonomous loop bound to a measurable goal. Kanna renders a "
+  + "deterministic recurring prompt from your input, VALIDATES it (rejects "
+  + "vague goals / unparseable verify commands / paths outside cwd), ensures "
+  + "the tracking file exists (writes a skeleton if absent), then wipes this "
+  + "chat's main-agent context and enqueues the templated prompt so the loop "
+  + "starts on the next turn. Every iteration the main agent will: (1) read the "
+  + "tracking file, (2) run the verify command, (3) if verify exits 0 print "
+  + "'GOAL MET' and END the turn (loop terminates by absence of delegation), "
+  + "otherwise (4) delegate the next chunk to a background subagent that "
+  + "updates the tracking file. Use this instead of writing loop prompts by "
+  + "hand — free-form prompts drift and lose the invariants."
+
+function buildSetupLoopToolList(args: {
+  setupLoop?: (input: LoopSetupInput) => Promise<SetupLoopHandlerResult>
+  chatId: string | null
+}): SdkMcpToolDefinition<any>[] {
+  const setupLoop = args.setupLoop
+  if (!setupLoop || !args.chatId) return []
+  return [
+    tool(
+      "setup_loop",
+      SETUP_LOOP_DESCRIPTION,
+      {
+        goal: z
+          .string()
+          .min(1)
+          .describe(
+            "Human-readable goal. Kept short. Example: 'eslint --max-warnings=0 passes'.",
+          ),
+        verify_command: z
+          .string()
+          .min(1)
+          .describe(
+            "Shell command run in the project cwd. Exit code 0 = goal met. Must be shell-parseable. Example: 'bun run lint'.",
+          ),
+        tracking_file: z
+          .string()
+          .optional()
+          .describe(
+            "Path (relative to cwd or absolute-inside-cwd). Default PROGRESS.md at cwd root. Skeleton is auto-created if missing.",
+          ),
+        chunk_hint: z
+          .string()
+          .optional()
+          .describe(
+            "Optional starter description for the first chunk written into the tracking-file skeleton. Ignored if the file already exists.",
+          ),
+      },
+      async (input) => {
+        const result = await setupLoop({
+          goal: input.goal,
+          verifyCommand: input.verify_command,
+          trackingFile: input.tracking_file,
+          chunkHint: input.chunk_hint,
+        })
+        if (!result.ok) {
+          return {
+            isError: true as const,
+            content: [{
+              type: "text" as const,
+              text: `setup_loop rejected:\n- ${result.errors.join("\n- ")}`,
+            }],
+          }
+        }
+        return {
+          content: [{
+            type: "text" as const,
+            text:
+              `Loop armed. Tracking file: ${result.trackingFileRel}`
+              + `${result.created ? " (created skeleton)" : " (existing file left untouched)"}.`
+              + " Your main-agent context has been cleared; the next turn will replay the loop prompt.",
+          }],
+        }
+      },
+    ),
+  ]
+}
+
 export function buildKannaMcpTools(args: KannaMcpArgs): SdkMcpToolDefinition<any>[] {
   const tunnelGateway = args.tunnelGateway ?? null
   const chatId = args.chatId ?? null
@@ -446,6 +543,7 @@ export function buildKannaMcpTools(args: KannaMcpArgs): SdkMcpToolDefinition<any
       delegationContext: args.delegationContext,
       chatId: chatId,
     }),
+    ...buildSetupLoopToolList({ setupLoop: args.setupLoop, chatId }),
     tool(
       "expose_port",
       EXPOSE_PORT_DESCRIPTION,
