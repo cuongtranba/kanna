@@ -417,6 +417,116 @@ describe("schedule_wakeup tool removed", () => {
   })
 })
 
+describe("setup_loop tool", () => {
+  const baseArgs = {
+    projectId: "p",
+    localPath: "/tmp",
+    chatId: "c",
+    sessionId: "s",
+    chatPolicy: POLICY_DEFAULT,
+    tunnelGateway: null,
+  } as const
+
+  function toolMap(tools: ReturnType<typeof buildKannaMcpTools>) {
+    const m = new Map<string, { handler: (i: Record<string, unknown>) => Promise<{ content: Array<{ type: string; text: string }>; isError?: boolean }> }>()
+    for (const t of tools) {
+      m.set(t.name, {
+        handler: (i) => (
+          t as { handler: (x: Record<string, unknown>, e: unknown) => Promise<{ content: Array<{ type: string; text: string }>; isError?: boolean }> }
+        ).handler(i, undefined),
+      })
+    }
+    return m
+  }
+
+  test("hidden when no setupLoop callback supplied", () => {
+    const tools = buildKannaMcpTools({ ...baseArgs })
+    expect(tools.map((t) => t.name)).not.toContain("setup_loop")
+  })
+
+  test("hidden when chatId is absent (subagent spawns lose the tool)", () => {
+    const tools = buildKannaMcpTools({
+      ...baseArgs,
+      chatId: undefined,
+      setupLoop: async () => ({
+        ok: true,
+        trackingFileRel: "PROGRESS.md",
+        created: false,
+        prompt: "x",
+      }),
+    })
+    expect(tools.map((t) => t.name)).not.toContain("setup_loop")
+  })
+
+  test("registered when setupLoop + chatId supplied; forwards zod-validated input; surfaces success", async () => {
+    const calls: Array<Record<string, unknown>> = []
+    const tools = toolMap(buildKannaMcpTools({
+      ...baseArgs,
+      setupLoop: async (input) => {
+        calls.push({ ...input })
+        return {
+          ok: true,
+          trackingFileRel: "PROGRESS.md",
+          created: true,
+          prompt: "the rendered loop prompt",
+        }
+      },
+    }))
+    expect(tools.has("setup_loop")).toBe(true)
+    const res = await tools.get("setup_loop")!.handler({
+      goal: "eslint passes",
+      verify_command: "bun run lint",
+      chunk_hint: "start with src/client",
+    })
+    expect(res.isError).toBeUndefined()
+    expect(calls[0]).toEqual({
+      goal: "eslint passes",
+      verifyCommand: "bun run lint",
+      trackingFile: undefined,
+      chunkHint: "start with src/client",
+    })
+    expect(res.content[0].text).toContain("PROGRESS.md")
+    expect(res.content[0].text).toContain("created skeleton")
+    expect(res.content[0].text).toContain("cleared")
+  })
+
+  test("existing tracking file: message reports 'existing file left untouched'", async () => {
+    const tools = toolMap(buildKannaMcpTools({
+      ...baseArgs,
+      setupLoop: async () => ({
+        ok: true,
+        trackingFileRel: "PROGRESS.md",
+        created: false,
+        prompt: "p",
+      }),
+    }))
+    const res = await tools.get("setup_loop")!.handler({
+      goal: "g",
+      verify_command: "true",
+    })
+    expect(res.isError).toBeUndefined()
+    expect(res.content[0].text).toContain("existing file left untouched")
+  })
+
+  test("validator rejection → isError with the error list", async () => {
+    const tools = toolMap(buildKannaMcpTools({
+      ...baseArgs,
+      setupLoop: async () => ({
+        ok: false,
+        errors: ["goal is required and must be a non-empty string", "verifyCommand is required and must be a non-empty string"],
+      }),
+    }))
+    const res = await tools.get("setup_loop")!.handler({
+      goal: "g",
+      verify_command: "true",
+    })
+    expect(res.isError).toBe(true)
+    expect(res.content[0].text).toContain("setup_loop rejected")
+    expect(res.content[0].text).toContain("goal is required")
+    expect(res.content[0].text).toContain("verifyCommand is required")
+  })
+})
+
 describe("resolveWorkspaceFile", () => {
   test("resolves a markdown file and returns local-file contentUrl", async () => {
     const mdPath = path.join(tempRoot, "spec.md")

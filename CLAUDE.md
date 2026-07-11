@@ -704,6 +704,34 @@ PROGRESS.md>; verify oracle; update PROGRESS.md with result then terminate"}).
 End this turn.
 ```
 
+## setup_loop MCP tool (validated template)
+
+Instead of writing the recurring prompt by hand, the user can say "set up a
+/loop with goal X, verify command Y" and the model calls
+`mcp__kanna__setup_loop({ goal, verify_command, tracking_file?, chunk_hint? })`.
+The server owns the template so the prompt is deterministic. See
+`adr-20260711-setup-loop-template`.
+
+- **Pure validator** (`src/server/loop-template.ts`): rejects blank goal /
+  unparseable verify command (unbalanced quotes) / `trackingFile` outside cwd
+  / NUL byte / oversize inputs. Returns a flat error list (does not
+  fail-fast); the tool surfaces the list as `isError`.
+- **IO adapter** (`src/server/loop-template-io.adapter.ts`): creates the
+  tracking file with a skeleton if absent; NEVER overwrites an existing
+  file. Parent dirs auto-created.
+- **Coordinator entry** (`AgentCoordinator.setupLoop`): after validation +
+  file ensure, wipes the chat's Claude `session_token`, appends
+  `context_cleared`, and emits `auto_continue_accepted` with the templated
+  prompt (source `subagent_background` — reuses the notification-driven
+  path). Codex untouched.
+- **Registration guard**: only registered on MAIN chats (`delegationContext.depth === 0`)
+  — subagent spawns lose the no-op tool.
+- **Rendered prompt invariants** (asserted structurally in `validateLoopSetup`):
+  the recurring prompt MUST contain the tracking-file path, the verify
+  command, `delegate_subagent`, `run_in_background: true`, `GOAL MET`,
+  `END THIS TURN`, and `/clear`. Future edits to the template that drop
+  any of these fail validation.
+
 # Background Bash Task Keep-Alive (KANNA_PTY_BACKGROUND_TASK_MAX_MS)
 
 Claude-Code background Bash tasks (`Bash(run_in_background: true)`, e.g. a
