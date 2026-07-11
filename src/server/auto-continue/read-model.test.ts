@@ -38,7 +38,7 @@ describe("deriveChatSchedules", () => {
     expect(result.liveScheduleId).toBeNull()
   })
 
-  test("agent_wakeup accepted event carries prompt onto the schedule", () => {
+  test("subagent_background accepted event carries prompt onto the schedule", () => {
     const wake: AutoContinueEvent = {
       v: 3,
       kind: "auto_continue_accepted",
@@ -47,14 +47,14 @@ describe("deriveChatSchedules", () => {
       scheduleId: "s1",
       scheduledAt: 12_000,
       tz: "system",
-      source: "agent_wakeup",
+      source: "subagent_background",
       resetAt: 12_000,
       detectedAt: 2_000,
-      prompt: "resume the sonar sweep",
+      prompt: "Read PROGRESS.md, decide next action.",
     }
     const result = deriveChatSchedules([wake], "c1")
     expect(result.schedules["s1"].state).toBe("scheduled")
-    expect(result.schedules["s1"].prompt).toBe("resume the sonar sweep")
+    expect(result.schedules["s1"].prompt).toBe("Read PROGRESS.md, decide next action.")
     expect(result.liveScheduleId).toBe("s1")
   })
 

@@ -160,6 +160,12 @@ async function runClaudeSubagent(opts: {
   keepAlive: boolean
 }): Promise<{ text: string; usage?: ProviderUsage; live?: LiveTurnSource }> {
   const { args, initialPrompt, onChunk, onEntry, keepAlive } = opts
+  // Fresh Claude session per subagent (sessionToken: null, forkSession: false)
+  // — main-agent context never leaks in. Combined with the main-agent /clear
+  // that fires on every subagent_background delivery in
+  // AgentCoordinator.deliverSubagentToMain, this makes PROGRESS.md the ONLY
+  // durability contract for the loop-orchestration pattern. See
+  // adr-2026XXXX-notification-driven-loop-orchestration.
   const session = await args.startClaudeSession({
     projectId: args.projectId,
     localPath: args.cwd,

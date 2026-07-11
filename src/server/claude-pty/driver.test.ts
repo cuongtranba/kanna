@@ -448,7 +448,7 @@ describe("buildPtyCliArgs", () => {
 
   // ── Issue #215: disallow native AskUserQuestion/ExitPlanMode under PTY ────
 
-  test("disallows native AskUserQuestion + ExitPlanMode + ScheduleWakeup (forces the mcp__kanna__ shims)", () => {
+  test("disallows native AskUserQuestion + ExitPlanMode + ScheduleWakeup (shims for AQ/EPM; no shim for ScheduleWakeup — hard-break per adr-2026XXXX)", () => {
     const args = buildPtyCliArgs(baseInput)
     const idx = args.indexOf("--disallowedTools")
     expect(idx).toBeGreaterThan(-1)

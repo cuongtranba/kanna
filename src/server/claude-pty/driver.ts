@@ -108,8 +108,6 @@ export interface StartClaudeSessionPtyArgs {
   subagentOrchestrator?: SubagentOrchestrator
   /** Per-spawn delegation context (depth / ancestor chain / parentUserMessageId resolver). */
   delegationContext?: KannaMcpDelegationContext
-  /** Backs the `schedule_wakeup` MCP tool. Omit to hide the tool from the model. */
-  scheduleWakeup?: (a: { delayMs: number; prompt: string }) => Promise<string | null>
   /** Enabled user-defined MCP servers, written into mcp-config.json. */
   customMcpServers?: readonly McpServerConfig[]
   /** Pre-resolved oauth bearer tokens keyed by server id. */
@@ -227,14 +225,13 @@ export { OutputRing }
  * `EnterPlanMode` is intentionally excluded — it has no user round-trip and
  * the SDK hook never intercepts it, so leaving it native preserves parity.
  *
- * `ScheduleWakeup` is disallowed for the same reason: the native CLI wake is
- * a dead-letter under Kanna's spawn model (the fire lands as an isMeta:true
- * transcript line that `jsonl-to-event.ts` drops, and the in-memory cron dies
- * on restart). Kanna force-registers `mcp__kanna__schedule_wakeup` instead,
- * which owns the timer via the event-sourced ScheduleManager. The shim is only
- * registered when a `scheduleWakeup` callback is supplied (main chats), so
- * subagent spawns simply lose the no-op native tool — which is correct, they
- * should not self-schedule. See adr-20260603-agent-self-scheduled-wake.
+ * `ScheduleWakeup` is disallowed with NO Kanna replacement — the native CLI
+ * wake is a dead-letter under Kanna's spawn model (the fire lands as an
+ * isMeta:true transcript line that `jsonl-to-event.ts` drops, and the in-memory
+ * cron dies on restart). Loop orchestration uses notification-driven wakes via
+ * `delegate_subagent({run_in_background: true})` + `subagent_background`
+ * auto-continue delivery, with per-iteration /clear on the main-agent Claude
+ * session. See adr-2026XXXX-notification-driven-loop-orchestration.
  */
 export const PTY_DISALLOWED_NATIVE_TOOLS = ["AskUserQuestion", "ExitPlanMode", "ScheduleWakeup"] as const
 
@@ -461,7 +458,6 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
         chatPolicy: args.chatPolicy,
         subagentOrchestrator: args.subagentOrchestrator,
         delegationContext: args.delegationContext,
-        scheduleWakeup: args.scheduleWakeup,
         // PTY has no canUseTool hook — the durable approval protocol is the
         // only host path for AskUserQuestion/ExitPlanMode. Force the shims
         // on regardless of KANNA_MCP_TOOL_CALLBACKS (issue #215). Paired

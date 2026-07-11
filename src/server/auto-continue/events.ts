@@ -4,19 +4,22 @@ export const AUTO_CONTINUE_EVENT_VERSION = 3 as const
  * Why a schedule was accepted.
  *  - `user` / `auto_setting` / `token_rotation` — provider-failure resume
  *    (rate-limit, auth-error). Fire the literal `"continue"`.
- *  - `agent_wakeup` — the model called `ScheduleWakeup`; replay its prompt.
- *  - `pending_workflow` — turn ended with a background Workflow still running;
- *    re-enter to harvest results.
  *  - `subagent_background` — a `run_in_background` subagent finished; re-enter
- *    to deliver its reply. Exempt from the runaway-wake cap (result delivery,
- *    not a self-poll). See adr-20260616-subagent-run-in-background.
+ *    to deliver a minimal "Read PROGRESS.md, decide next action" prompt after
+ *    Kanna wipes the main-agent Claude session (per-iteration /clear). See
+ *    adr-2026XXXX-notification-driven-loop-orchestration.
+ *
+ * Removed in adr-2026XXXX (hard break):
+ *  - `agent_wakeup` — timer-based `schedule_wakeup` self-poll (loop lost momentum
+ *    on compaction; replaced by notification-driven `delegate_subagent` pattern).
+ *  - `pending_workflow` — workflow-harvest poll (deferred to a follow-up ADR;
+ *    model can `delegate_subagent` to a status-check subagent for event-driven
+ *    workflow wake).
  */
 export type AutoContinueSource =
   | "user"
   | "auto_setting"
   | "token_rotation"
-  | "agent_wakeup"
-  | "pending_workflow"
   | "subagent_background"
 
 interface AutoContinueEventBase {
@@ -42,8 +45,8 @@ export type AutoContinueEvent =
       detectedAt: number
       /**
        * Prompt to replay when this schedule fires. Present only for
-       * agent-driven wakes (`agent_wakeup`, `pending_workflow`); provider-
-       * failure schedules omit it and fire the literal `"continue"`.
+       * `subagent_background` deliveries; provider-failure schedules omit it
+       * and fire the literal `"continue"`.
        */
       prompt?: string
     })
