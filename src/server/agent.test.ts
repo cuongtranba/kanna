@@ -3963,6 +3963,138 @@ describe("AgentCoordinator.deliverSubagentToMain (notification-driven /clear)", 
   })
 })
 
+describe("AgentCoordinator.setupLoop (mcp__kanna__setup_loop backing)", () => {
+  test("valid input: creates skeleton, /clears main, emits subagent_background auto-continue carrying the templated prompt", async () => {
+    const projectRoot = await mkdtemp(path.join(tmpdir(), "kanna-setup-loop-"))
+    try {
+      const store = createFakeStore()
+      // Redirect the fake's getProject to point at a real tmp cwd so the
+      // IO adapter has somewhere to write.
+      store.getProject = () => ({ id: "project-1", localPath: projectRoot }) as never
+      await store.setSessionTokenForProvider("chat-1", "claude", "prior")
+
+      const coordinator = new AgentCoordinator({
+        store: store as never,
+        onStateChange: () => {},
+        startClaudeSession: async () => { throw new Error("not needed") },
+      })
+
+      const result = await coordinator.setupLoop({
+        chatId: "chat-1",
+        input: {
+          goal: "eslint --max-warnings=0 passes",
+          verifyCommand: "bun run lint",
+          chunkHint: "start with src/client",
+        },
+      })
+
+      if (!result.ok) throw new Error(result.errors.join(", "))
+      expect(result.trackingFileRel).toBe("PROGRESS.md")
+      expect(result.created).toBe(true)
+
+      // Skeleton written to disk
+      const written = await Bun.file(path.join(projectRoot, "PROGRESS.md")).text()
+      expect(written).toContain("eslint --max-warnings=0 passes")
+      expect(written).toContain("bun run lint")
+      expect(written).toContain("start with src/client")
+
+      // Main /clear applied
+      expect(store.chat.sessionTokensByProvider.claude ?? null).toBeNull()
+      expect(store.messages.filter((m) => m.kind === "context_cleared")).toHaveLength(1)
+
+      // Auto-continue emitted with the templated prompt
+      const events = store.getAutoContinueEvents("chat-1")
+      expect(events).toHaveLength(1)
+      const ev = events[0]
+      if (ev.kind !== "auto_continue_accepted") throw new Error("expected accepted")
+      expect(ev.source).toBe("subagent_background")
+      expect(ev.prompt).toContain("PROGRESS.md")
+      expect(ev.prompt).toContain("bun run lint")
+      expect(ev.prompt).toContain("delegate_subagent")
+      expect(ev.prompt).toContain("GOAL MET")
+    } finally {
+      await rm(projectRoot, { recursive: true, force: true })
+    }
+  })
+
+  test("existing tracking file is left untouched; result.created is false; loop still arms", async () => {
+    const projectRoot = await mkdtemp(path.join(tmpdir(), "kanna-setup-loop-"))
+    try {
+      const abs = path.join(projectRoot, "PROGRESS.md")
+      await Bun.write(abs, "user-authored content")
+
+      const store = createFakeStore()
+      store.getProject = () => ({ id: "project-1", localPath: projectRoot }) as never
+      const coordinator = new AgentCoordinator({
+        store: store as never,
+        onStateChange: () => {},
+        startClaudeSession: async () => { throw new Error("not needed") },
+      })
+
+      const result = await coordinator.setupLoop({
+        chatId: "chat-1",
+        input: { goal: "g", verifyCommand: "true" },
+      })
+      if (!result.ok) throw new Error(result.errors.join(", "))
+      expect(result.created).toBe(false)
+
+      const content = await Bun.file(abs).text()
+      expect(content).toBe("user-authored content")
+      expect(store.getAutoContinueEvents("chat-1")).toHaveLength(1)
+    } finally {
+      await rm(projectRoot, { recursive: true, force: true })
+    }
+  })
+
+  test("invalid input (multiple bad fields) returns rejection; NO /clear, NO file, NO event", async () => {
+    const projectRoot = await mkdtemp(path.join(tmpdir(), "kanna-setup-loop-"))
+    try {
+      const store = createFakeStore()
+      store.getProject = () => ({ id: "project-1", localPath: projectRoot }) as never
+      const coordinator = new AgentCoordinator({
+        store: store as never,
+        onStateChange: () => {},
+        startClaudeSession: async () => { throw new Error("not needed") },
+      })
+
+      const result = await coordinator.setupLoop({
+        chatId: "chat-1",
+        input: {
+          goal: "",
+          verifyCommand: "echo 'unclosed",
+          trackingFile: "../escaped.md",
+        },
+      })
+
+      expect(result.ok).toBe(false)
+      if (result.ok) throw new Error("expected reject")
+      expect(result.errors.length).toBeGreaterThanOrEqual(3)
+
+      // No side effects on invalid input
+      expect(store.messages.filter((m) => m.kind === "context_cleared")).toHaveLength(0)
+      expect(store.getAutoContinueEvents("chat-1")).toHaveLength(0)
+    } finally {
+      await rm(projectRoot, { recursive: true, force: true })
+    }
+  })
+
+  test("unknown chatId returns rejection", async () => {
+    const store = createFakeStore()
+    const coordinator = new AgentCoordinator({
+      store: store as never,
+      onStateChange: () => {},
+      startClaudeSession: async () => { throw new Error("not needed") },
+    })
+    const result = await coordinator.setupLoop({
+      chatId: "does-not-exist",
+      input: { goal: "g", verifyCommand: "true" },
+    })
+    expect(result.ok).toBe(false)
+    if (result.ok) throw new Error("expected reject")
+    expect(result.errors[0]).toContain("does-not-exist")
+  })
+})
+
 // ── AgentCoordinator: acceptAutoContinue / rescheduleAutoContinue / cancelAutoContinue / listLiveSchedules ──
 
 // Minimal coordinator factory for Task 14 auto-continue tests; intentionally omits

@@ -1,5 +1,8 @@
 import { query, type CanUseTool, type PermissionResult, type Query, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk"
-import { createKannaMcpServer, type KannaMcpDelegationContext } from "./kanna-mcp"
+import { createKannaMcpServer, type KannaMcpDelegationContext, type SetupLoopHandlerResult } from "./kanna-mcp"
+import type { LoopSetupInput } from "./loop-template"
+import { validateLoopSetup } from "./loop-template"
+import { ensureTrackingFile } from "./loop-template-io.adapter"
 import { KANNA_MCP_SERVER_NAME } from "../shared/tools"
 import { homedir } from "node:os"
 import type {
@@ -326,6 +329,8 @@ interface AgentCoordinatorArgs {
     oauthBearers?: ReadonlyMap<string, string>
     /** Folder-restricted subagent: disallow native FS tools + allowlist mcp__kanna__* + per-run path-deny scope. */
     restrictedAllowedPaths?: string[]
+    /** Backs the `setup_loop` MCP tool. Omit to hide the tool. */
+    setupLoop?: (input: LoopSetupInput) => Promise<SetupLoopHandlerResult>
     /** Keep the SDK prompt queue open after the initial prompt to allow multi-turn keep-alive. */
     keepAlive?: boolean
     /** Per-turn price for computing cost when the provider doesn't report it (OpenRouter). */
@@ -1260,6 +1265,8 @@ async function startClaudeSession(args: {
   oauthBearers?: ReadonlyMap<string, string>
   /** Folder-restricted subagent: disallow native FS tools, allowlist mcp__kanna__*, per-run path-deny. */
   restrictedAllowedPaths?: string[]
+  /** Backs the `setup_loop` MCP tool. Omit to hide the tool. */
+  setupLoop?: (input: LoopSetupInput) => Promise<SetupLoopHandlerResult>
   /** When true, leave the prompt queue open after initialPrompt and expose pushChannelPrompt on the handle. */
   keepAlive?: boolean
   /** Per-turn price for computing cost when the provider doesn't report it (OpenRouter). */
@@ -1306,6 +1313,7 @@ async function startClaudeSession(args: {
           subagentOrchestrator: args.subagentOrchestrator,
           delegationContext: args.delegationContext,
           restrictedAllowedPaths: args.restrictedAllowedPaths,
+          setupLoop: args.setupLoop,
         }),
         ...buildUserMcpServers(args.customMcpServers ?? [], args.oauthBearers),
       },
@@ -2754,6 +2762,9 @@ export class AgentCoordinator {
               systemPromptAppend,
               subagentOrchestrator: this.subagentOrchestrator,
               delegationContext,
+              setupLoop: delegationContext.depth === 0
+                ? (input) => this.setupLoop({ chatId: chatIdForCtx, input })
+                : undefined,
               toolCallback: this.toolCallback ?? undefined,
               tunnelGateway: this.tunnelGateway,
               chatPolicy: this.resolveChatPolicy(args.chatId),
@@ -2781,6 +2792,9 @@ export class AgentCoordinator {
               systemPromptAppend,
               subagentOrchestrator: this.subagentOrchestrator,
               delegationContext,
+              setupLoop: delegationContext.depth === 0
+                ? (input) => this.setupLoop({ chatId: chatIdForCtx, input })
+                : undefined,
               toolCallback: this.toolCallback ?? undefined,
               chatPolicy: this.resolveChatPolicy(args.chatId),
               customMcpServers: enabledMcpServers,
@@ -4126,6 +4140,77 @@ export class AgentCoordinator {
       })
     } catch (err) {
       console.warn(`${LOG_PREFIX} deliverSubagentToMain failed`, { chatId, runId, err })
+    }
+  }
+
+  /**
+   * Arm an autonomous loop on the main chat. Validates the loop spec, ensures
+   * the tracking file exists (writes a skeleton if absent), then /clears the
+   * main-agent Claude session and enqueues the templated recurring prompt so
+   * the next turn starts the loop. Backs `mcp__kanna__setup_loop`. See
+   * adr-2026XXXX-setup-loop-template.
+   */
+  async setupLoop(args: {
+    chatId: string
+    input: LoopSetupInput
+  }): Promise<SetupLoopHandlerResult> {
+    const chat = this.store.getChat(args.chatId)
+    if (!chat) return { ok: false, errors: [`chat ${args.chatId} not found`] }
+    const project = this.store.getProject(chat.projectId)
+    if (!project) return { ok: false, errors: [`project ${chat.projectId} not found`] }
+
+    const validation = validateLoopSetup(args.input, project.localPath)
+    if (!validation.ok) return { ok: false, errors: validation.errors }
+
+    const resolved = validation.resolved
+    let created: boolean
+    try {
+      const ensureResult = await ensureTrackingFile({
+        absPath: resolved.trackingFileAbs,
+        skeleton: resolved.skeleton,
+      })
+      created = ensureResult.created
+    } catch (err) {
+      return {
+        ok: false,
+        errors: [`ensureTrackingFile failed: ${err instanceof Error ? err.message : String(err)}`],
+      }
+    }
+
+    try {
+      // Wipe main-agent Claude session so the next turn starts fresh with the
+      // rendered loop prompt. Codex untouched. Mirrors the /clear branch used
+      // by `exit_plan_mode` and `deliverSubagentToMain`.
+      await this.store.setSessionTokenForProvider(args.chatId, "claude", null)
+      await this.store.appendMessage(args.chatId, timestamped({ kind: "context_cleared" }))
+
+      const now = Date.now()
+      const scheduleId = crypto.randomUUID()
+      await this.emitAutoContinueEvent({
+        v: AUTO_CONTINUE_EVENT_VERSION,
+        kind: "auto_continue_accepted",
+        timestamp: now,
+        chatId: args.chatId,
+        scheduleId,
+        scheduledAt: now,
+        tz: "system",
+        source: "subagent_background",
+        resetAt: now,
+        detectedAt: now,
+        prompt: resolved.prompt,
+      })
+    } catch (err) {
+      return {
+        ok: false,
+        errors: [`enqueue failed: ${err instanceof Error ? err.message : String(err)}`],
+      }
+    }
+
+    return {
+      ok: true,
+      trackingFileRel: resolved.trackingFileRel,
+      created,
+      prompt: resolved.prompt,
     }
   }
 
