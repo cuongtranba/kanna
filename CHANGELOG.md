@@ -8,6 +8,14 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.1.0](https://github.com/cuongtranba/kanna/compare/v1.0.1...v1.1.0) (2026-07-11)
+
+
+### Features
+
+* **agent:** notification-driven loop orchestration; remove schedule_wakeup ([#519](https://github.com/cuongtranba/kanna/issues/519)) ([2cb3470](https://github.com/cuongtranba/kanna/commit/2cb34707904000fc8b049a4557e7b791d6c091cf))
+* **mcp:** setup_loop MCP tool with validated template ([#522](https://github.com/cuongtranba/kanna/issues/522)) ([3bb70f4](https://github.com/cuongtranba/kanna/commit/3bb70f46ffd3f00b86cd1eb1915a4ae83f6c83f3))
+
 ## [1.0.1](https://github.com/cuongtranba/kanna/compare/v1.0.0...v1.0.1) (2026-07-10)
 
 
