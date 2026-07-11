@@ -23,6 +23,11 @@ import type {
 } from "../../shared/types"
 import type { KannaState } from "./useKannaState"
 
+const MCP_TRANSPORT_SET = new Set<string>(["stdio", "http", "sse", "ws"])
+function isMcpServerTransport(v: string): v is McpServerTransport {
+  return MCP_TRANSPORT_SET.has(v)
+}
+
 interface OAuthStartResult {
   ok: boolean
   authorizationUrl?: string
@@ -60,7 +65,7 @@ export function McpServersSection(props: McpServersSectionProps) {
       <McpServerEditor
         initial={
           props.editing.kind === "edit"
-            ? (props.servers.find((s) => s.id === (props.editing as { kind: "edit"; id: string }).id) ?? null)
+            ? (props.servers.find((s) => props.editing.kind === "edit" && s.id === props.editing.id) ?? null)
             : null
         }
         existingNames={props.servers.map((s) => ({ id: s.id, name: s.name }))}
@@ -432,7 +437,7 @@ function McpServerEditor({
         <span className="text-xs font-medium text-foreground">Transport</span>
         <Select
           value={transport}
-          onValueChange={(v) => setTransport(v as McpServerTransport)}
+          onValueChange={(v) => { if (isMcpServerTransport(v)) setTransport(v) }}
         >
           <SelectTrigger>
             <SelectValue />
@@ -655,25 +660,21 @@ export function McpServersSettingsBranch(props: {
   const handlers = useMemo<McpServersSectionHandlers>(
     () => ({
       onCreate: async (input) => {
-        await props.state.handleWriteAppSettings({
-          customMcpServers: { create: input },
-        } as AppSettingsPatch)
+        const patch: AppSettingsPatch = { customMcpServers: { create: input } }
+        await props.state.handleWriteAppSettings(patch)
       },
       onUpdate: async (id, patch) => {
-        await props.state.handleWriteAppSettings({
-          customMcpServers: { update: { id, patch } },
-        } as AppSettingsPatch)
+        const settings: AppSettingsPatch = { customMcpServers: { update: { id, patch } } }
+        await props.state.handleWriteAppSettings(settings)
       },
       onDelete: async (id) => {
-        await props.state.handleWriteAppSettings({
-          customMcpServers: { delete: { id } },
-        } as AppSettingsPatch)
+        const patch: AppSettingsPatch = { customMcpServers: { delete: { id } } }
+        await props.state.handleWriteAppSettings(patch)
         setEditing({ kind: "list" })
       },
       onSetEnabled: async (id, enabled) => {
-        await props.state.handleWriteAppSettings({
-          customMcpServers: { setEnabled: { id, enabled } },
-        } as AppSettingsPatch)
+        const patch: AppSettingsPatch = { customMcpServers: { setEnabled: { id, enabled } } }
+        await props.state.handleWriteAppSettings(patch)
       },
       onTest: async (id) => {
         await props.state.handleTestMcpServer(id)

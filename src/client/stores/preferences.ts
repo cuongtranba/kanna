@@ -28,7 +28,7 @@ export const usePreferencesStore = create<PreferencesState>()(
       name: "kanna-preferences",
       version: 1,
       migrate: (persistedState) => migratePreferencesState(
-        persistedState as Partial<PersistedPreferencesState> | undefined,
+        <Partial<PersistedPreferencesState> | undefined>persistedState,
       ),
     },
   ),

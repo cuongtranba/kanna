@@ -7,6 +7,8 @@ import path from "node:path"
 import { homedir } from "node:os"
 import { minimatch } from "minimatch"
 import { log } from "../shared/log"
+import type { AnyValue } from "../shared/errors"
+import { isRecord } from "../shared/errors"
 
 export interface EvaluateArgs {
   toolName: string
@@ -41,8 +43,8 @@ function argsToText(args: Record<string, unknown>): string {
 }
 
 interface ShellOp { op: string }
-function isShellOp(token: unknown): token is ShellOp {
-  return typeof token === "object" && token !== null && "op" in (token as object)
+function isShellOp(token: AnyValue): token is ShellOp {
+  return isRecord(token) && typeof token.op === "string"
 }
 
 interface ParsedSimpleCommand {

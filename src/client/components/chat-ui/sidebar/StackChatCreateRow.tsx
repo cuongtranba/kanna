@@ -54,11 +54,14 @@ export function StackChatCreateRow({
       setErrorMessage(null)
       setIsSubmitting(true)
       try {
-        const stackBindings = filteredProjects.map((p) => ({
-          projectId: p.id,
-          worktreePath: selectedWorktrees.get(p.id) ?? p.worktrees[0]?.path ?? "",
-          role: (p.id === primaryProjectId ? "primary" : "additional") as "primary" | "additional",
-        }))
+        const stackBindings = filteredProjects.map((p) => {
+          const role: "primary" | "additional" = p.id === primaryProjectId ? "primary" : "additional"
+          return {
+            projectId: p.id,
+            worktreePath: selectedWorktrees.get(p.id) ?? p.worktrees[0]?.path ?? "",
+            role,
+          }
+        })
         await onCreate({ primaryProjectId, stackBindings })
       } catch (err) {
         setErrorMessage(err instanceof Error ? err.message : "Could not create chat. Try again.")

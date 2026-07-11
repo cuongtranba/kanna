@@ -1,4 +1,5 @@
 import type { AgentProvider, TranscriptEntry } from "../shared/types"
+import { isRecord, type AnyValue } from "../shared/errors"
 
 // Policy: renderEntry handles message-shaped TranscriptEntry kinds only
 // (user_prompt, assistant_text, tool_call). All other kinds — slash-command
@@ -79,10 +80,8 @@ export function extractPreviousAssistantReply(entries: TranscriptEntry[]): strin
     const entry = entries[i]
     if (entry.kind !== "tool_call") continue
     const tool = entry.tool
-    const input = (tool as { input?: unknown }).input
-    const cmd = input && typeof input === "object" && "command" in (input as Record<string, unknown>)
-      ? (input as { command?: string }).command ?? ""
-      : ""
+    const inputRaw: Record<string, AnyValue> | null = isRecord(tool.input) ? <Record<string, AnyValue>>tool.input : null
+    const cmd = inputRaw && typeof inputRaw.command === "string" ? inputRaw.command : ""
     const suffix = cmd ? `: ${cmd}` : ""
     return `${tool.toolName}${suffix}`.trim()
   }

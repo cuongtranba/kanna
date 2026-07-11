@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { ChevronDown } from "lucide-react"
 import type { EditorOpenSettings, EditorPreset, OpenExternalAction } from "../../shared/protocol"
+import { isEditorPreset } from "../../shared/types"
 import { getDefaultEditorCommandTemplate } from "../stores/terminalPreferencesStore"
 import { DefaultAppIcon, EDITOR_OPTIONS, EditorIcon, FinderIcon, FolderFallbackIcon, PreviewIcon, TerminalIcon } from "./editor-icons"
 import { HotkeyTooltip, HotkeyTooltipContent, HotkeyTooltipTrigger } from "./ui/tooltip"
@@ -47,7 +48,7 @@ export function getOpenAppLabel(value: OpenAppValue, isMac: boolean) {
   if (value === "terminal") return "Terminal"
   if (value === "preview") return "Preview"
   if (value === "default") return "Default App"
-  const preset = value.replace("editor:", "") as EditorPreset
+  const preset = value.slice("editor:".length)
   if (preset === "vscode") return "VS Code"
   return EDITOR_OPTIONS.find((option) => option.value === preset)?.label ?? "Editor"
 }
@@ -65,19 +66,24 @@ export function OpenAppIcon({ value, isMac, className }: { value: OpenAppValue; 
   if (value === "default") {
     return <DefaultAppIcon className={className} />
   }
-  return <EditorIcon preset={value.replace("editor:", "") as EditorPreset} className={className} />
+  const preset = value.slice("editor:".length)
+  const resolvedPreset = EDITOR_OPTIONS.find((o) => o.value === preset)?.value ?? "vscode"
+  return <EditorIcon preset={resolvedPreset} className={className} />
 }
 
 function normalizeOpenAppValue(value: string | null, fallback: OpenAppValue): OpenAppValue {
   if (value === "finder" || value === "terminal" || value === "preview" || value === "default") return value
   if (value?.startsWith("editor:")) {
     const preset = value.slice("editor:".length)
-    if (preset === "vscode" || EDITOR_OPTIONS.some((option) => option.value === preset)) {
-      return value as OpenAppValue
+    if (isEditorPreset(preset)) {
+      const v: OpenAppValue = `editor:${preset}`
+      return v
     }
   }
   return fallback
 }
+
+type OpenAppItem = { value: OpenAppValue; label: string }
 
 export function getOpenAppItems({
   editorPreset,
@@ -95,14 +101,20 @@ export function getOpenAppItems({
   includePreview?: boolean
   includeDefault?: boolean
   menuKind?: "context" | "navbar"
-}): Array<{ value: OpenAppValue; label: string }> {
-  const editorItems: Array<{ value: OpenAppValue; label: string }> = [
+}): Array<OpenAppItem> {
+  const finderItem: OpenAppItem = { value: "finder", label: isMac ? "Finder" : "Folder" }
+  const terminalItem: OpenAppItem = { value: "terminal", label: "Terminal" }
+  const previewItem: OpenAppItem = { value: "preview", label: "Preview" }
+  const defaultItem: OpenAppItem = { value: "default", label: "Default App" }
+  const customEditorItem: OpenAppItem = { value: "editor:custom", label: "Custom" }
+
+  const editorItems: Array<OpenAppItem> = [
     { value: "editor:cursor", label: "Cursor" },
     { value: "editor:xcode", label: "Xcode" },
     { value: "editor:windsurf", label: "Windsurf" },
-    ...(editorPreset === "custom" ? [{ value: "editor:custom" as OpenAppValue, label: "Custom" }] : []),
+    ...(editorPreset === "custom" ? [customEditorItem] : []),
   ]
-  const defaultEditorValue = `editor:${editorPreset}` as OpenAppValue
+  const defaultEditorValue: OpenAppValue = `editor:${editorPreset}`
   const sortedEditorItems = [
     ...editorItems.filter((item) => item.value === defaultEditorValue),
     ...editorItems.filter((item) => item.value !== defaultEditorValue),
@@ -110,17 +122,17 @@ export function getOpenAppItems({
   if (menuKind === "navbar") {
     return [
       ...sortedEditorItems.filter((item) => item.value === defaultEditorValue),
-      ...(includeFinder ? [{ value: "finder" as OpenAppValue, label: isMac ? "Finder" : "Folder" }] : []),
-      ...(includeTerminal ? [{ value: "terminal" as OpenAppValue, label: "Terminal" }] : []),
+      ...(includeFinder ? [finderItem] : []),
+      ...(includeTerminal ? [terminalItem] : []),
       ...sortedEditorItems.filter((item) => item.value !== defaultEditorValue),
     ]
   }
   return [
     ...sortedEditorItems,
-    ...(includePreview && isMac ? [{ value: "preview" as OpenAppValue, label: "Preview" }] : []),
-    ...(includeFinder ? [{ value: "finder" as OpenAppValue, label: isMac ? "Finder" : "Folder" }] : []),
-    ...(includeTerminal ? [{ value: "terminal" as OpenAppValue, label: "Terminal" }] : []),
-    ...(includeDefault ? [{ value: "default" as OpenAppValue, label: "Default App" }] : []),
+    ...(includePreview && isMac ? [previewItem] : []),
+    ...(includeFinder ? [finderItem] : []),
+    ...(includeTerminal ? [terminalItem] : []),
+    ...(includeDefault ? [defaultItem] : []),
   ]
 }
 
@@ -145,7 +157,8 @@ export function openAppValue(args: {
     args.onOpenExternal("open_default")
     return
   }
-  const preset = args.value.replace("editor:", "") as EditorPreset
+  const rawPreset = args.value.slice("editor:".length)
+  const preset = EDITOR_OPTIONS.find((o) => o.value === rawPreset)?.value ?? "vscode"
   args.onOpenExternal("open_editor", getEditorSettings(preset, args.editorCommandTemplate))
 }
 
@@ -164,7 +177,7 @@ export function OpenExternalSelect({
   editorShortcut?: string[]
   onOpenExternal: (action: OpenExternalAction, editor?: EditorOpenSettings) => void
 }) {
-  const fallbackValue = `editor:${editorPreset}` as OpenAppValue
+  const fallbackValue: OpenAppValue = `editor:${editorPreset}`
   const [lastValue, setLastValue] = useState<OpenAppValue>(fallbackValue)
 
   useEffect(() => {
@@ -214,7 +227,7 @@ export function OpenExternalSelect({
           shortcut={tooltipShortcut}
         />
       </HotkeyTooltip>
-      <Select value={undefined} onValueChange={(value) => handleOpenValue(value as OpenAppValue)}>
+      <Select value={undefined} onValueChange={(value) => handleOpenValue(normalizeOpenAppValue(value, lastValue))}>
         <SelectTrigger
           aria-label="Choose open destination"
           className="!pl-1 !pr-2.5 border-0 bg-transparent hover:bg-transparent focus:ring-0 focus:ring-offset-0 [&>svg]:hidden"

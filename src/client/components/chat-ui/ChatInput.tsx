@@ -28,12 +28,12 @@ import {
   type AgentProvider,
   type ChatAttachment,
   type ClaudeContextWindow,
-  type ClaudeReasoningEffort,
-  type CodexReasoningEffort,
   type CustomModelEntry,
   type ModelOptions,
   type ProviderCatalogEntry,
   type Subagent,
+  isClaudeReasoningEffort,
+  isCodexReasoningEffort,
   normalizeClaudeContextWindow,
   resolveClaudeContextWindowTokens,
 } from "../../../shared/types"
@@ -517,10 +517,7 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
     if (providerPrefs.provider !== "claude") {
       return contextWindowSnapshot
     }
-    const claudeModelOptions = providerPrefs.modelOptions as Extract<
-      ComposerState,
-      { provider: "claude" }
-    >["modelOptions"]
+    const { modelOptions: claudeModelOptions } = providerPrefs
     const stagedMaxTokens = resolveClaudeContextWindowTokens(
       normalizeClaudeContextWindow(providerPrefs.model, claudeModelOptions.contextWindow, customModels),
     )
@@ -528,9 +525,7 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
   }, [
     contextWindowSnapshot,
     customModels,
-    providerPrefs.model,
-    providerPrefs.modelOptions,
-    providerPrefs.provider,
+    providerPrefs,
   ])
 
   const uploadedAttachments = attachments.filter((a) => a.status === "uploaded")
@@ -938,16 +933,15 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
   }
 
   function setReasoningEffort(reasoningEffort: string) {
-    updateComposerState(
-      (state) =>
-        ({
-          ...state,
-          modelOptions: {
-            ...state.modelOptions,
-            reasoningEffort: reasoningEffort as ClaudeReasoningEffort & CodexReasoningEffort,
-          },
-        }) as ComposerState,
-    )
+    updateComposerState((state): ComposerState => {
+      if (state.provider === "claude" && isClaudeReasoningEffort(reasoningEffort)) {
+        return { ...state, modelOptions: { ...state.modelOptions, reasoningEffort } }
+      }
+      if (state.provider === "codex" && isCodexReasoningEffort(reasoningEffort)) {
+        return { ...state, modelOptions: { ...state.modelOptions, reasoningEffort } }
+      }
+      return state
+    })
   }
 
   function setClaudeContextWindow(contextWindow: ClaudeContextWindow) {

@@ -43,7 +43,7 @@ export function createBashTool(deps: { toolCallback: ToolCallbackService }): Bas
         toolCallback: deps.toolCallback,
         toolName: "mcp__kanna__bash",
         ctx,
-        args: input as unknown as Record<string, unknown>,
+        args: input,
         formatAnswer: async () => {
           const proc = Bun.spawn(["/bin/sh", "-c", input.command], {
             cwd: ctx.cwd,

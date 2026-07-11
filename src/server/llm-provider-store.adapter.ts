@@ -2,6 +2,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises"
 import { homedir } from "node:os"
 import path from "node:path"
 import { getLlmProviderFilePath } from "../shared/branding"
+import { isErrnoException } from "../shared/errors"
 import type { LlmProviderFile, LlmProviderSnapshot } from "../shared/types"
 import { normalizeLlmProviderSnapshot, createDefaultSnapshot } from "./llm-provider"
 
@@ -15,7 +16,7 @@ export async function readLlmProviderSnapshotFromDisk(
     }
     return normalizeLlmProviderSnapshot(JSON.parse(text), filePath)
   } catch (error) {
-    if ((error as NodeJS.ErrnoException)?.code === "ENOENT") {
+    if (isErrnoException(error) && error.code === "ENOENT") {
       return createDefaultSnapshot(filePath)
     }
     if (error instanceof SyntaxError) {

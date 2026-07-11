@@ -2,6 +2,7 @@ import { z } from "zod"
 import type { ToolCallbackService } from "../tool-callback"
 import type { ToolHandlerContext, ToolHandlerResult } from "./tool-callback-shim"
 import { gatedToolCall } from "./tool-callback-shim"
+import { isRecord } from "../../shared/errors"
 
 const InputSchema = z.object({
   plan: z.string(),
@@ -24,11 +25,9 @@ export function createExitPlanModeTool(deps: { toolCallback: ToolCallbackService
         toolCallback: deps.toolCallback,
         toolName: "mcp__kanna__exit_plan_mode",
         ctx,
-        args: input as unknown as Record<string, unknown>,
+        args: input,
         formatAnswer: (payload) => {
-          const record = (payload && typeof payload === "object")
-            ? payload as Record<string, unknown>
-            : {}
+          const record = isRecord(payload) ? payload : {}
           if (record.confirmed) {
             return {
               content: [{ type: "text" as const, text: JSON.stringify({ confirmed: true }) }],

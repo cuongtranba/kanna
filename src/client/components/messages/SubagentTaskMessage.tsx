@@ -4,6 +4,7 @@ import { cn } from "../../lib/utils"
 import { formatCompactDuration } from "../../lib/formatDuration"
 import { formatContextWindowTokens } from "../../lib/contextWindow"
 import { processTranscriptMessages } from "../../lib/parseTranscript"
+import type { AnyValue } from "../../../shared/errors"
 import type { HydratedTranscriptMessage, SubagentTaskResult, SubagentToolStats } from "../../../shared/types"
 import { SubagentEntryRow } from "./SubagentEntryRow"
 import { useSubagentTranscriptFetch } from "./subagent-fetch-context"
@@ -84,7 +85,7 @@ export function SubagentTaskMessage({ subagentType, result, isError, localPath }
           setChildren(processTranscriptMessages(entries))
           setLoaded(true)
         })
-        .catch((err: unknown) => setError(err instanceof Error ? err.message : "Failed to load subagent transcript"))
+        .catch((err: AnyValue) => setError(err instanceof Error ? err.message : "Failed to load subagent transcript"))
         .finally(() => setLoading(false))
     }
   }, [fetchTranscript, agentId, expanded, loaded, loading])

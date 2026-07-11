@@ -38,7 +38,7 @@ export function createSubagentTranscriptRegistry(
       if (dir === undefined) return []
       const out: TranscriptEntry[] = []
       for (const line of read(dir, agentId)) {
-        let parsed: unknown
+        let parsed
         try {
           parsed = JSON.parse(line)
         } catch {

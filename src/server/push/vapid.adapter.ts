@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises"
 import { join } from "node:path"
 import webpush from "web-push"
+import { isRecord } from "../../shared/errors"
 
 export interface VapidKeypair {
   publicKey: string
@@ -15,7 +16,7 @@ export async function loadOrGenerateVapidKeys(dataDir: string): Promise<VapidKey
   const path = join(dataDir, "vapid.json")
   try {
     const text = await readFile(path, "utf8")
-    const parsed = JSON.parse(text) as Partial<VapidKeypair>
+    const parsed: Partial<VapidKeypair> = JSON.parse(text)
     if (typeof parsed.publicKey === "string" && typeof parsed.privateKey === "string") {
       return {
         publicKey: parsed.publicKey,
@@ -24,7 +25,7 @@ export async function loadOrGenerateVapidKeys(dataDir: string): Promise<VapidKey
       }
     }
   } catch (err) {
-    const code = (err as NodeJS.ErrnoException).code
+    const code = isRecord(err) && typeof err.code === "string" ? err.code : undefined
     if (code !== "ENOENT") {
       // Corrupt JSON, permission error, or other readable-but-unparseable file
       // → fall through to regenerate. Don't crash startup.

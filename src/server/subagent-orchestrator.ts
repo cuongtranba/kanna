@@ -791,7 +791,7 @@ export class SubagentOrchestrator {
     }
 
     try {
-      const transcript = this.deps.store.getMessages(args.chatId) as TranscriptEntry[]
+      const transcript = this.deps.store.getMessages(args.chatId)
       let primer: string | null
       if (args.subagent.contextScope === "full-transcript") {
         primer = buildHistoryPrimer(transcript, args.subagent.provider, "")

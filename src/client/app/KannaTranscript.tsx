@@ -90,11 +90,14 @@ interface TranscriptMessageRenderState {
   shouldRender: boolean
 }
 
+function isProcessedToolCall(message: HydratedTranscriptMessage): message is ProcessedToolCall {
+  return message.kind === "tool"
+}
+
 function isCollapsibleToolCall(message: HydratedTranscriptMessage) {
-  if (message.kind !== "tool") return false
-  const tool = message as ProcessedToolCall
-  if (SPECIAL_TOOL_KINDS.has(tool.toolKind)) return false
-  return !SPECIAL_TOOL_NAMES.has(tool.toolName)
+  if (!isProcessedToolCall(message)) return false
+  if (SPECIAL_TOOL_KINDS.has(message.toolKind)) return false
+  return !SPECIAL_TOOL_NAMES.has(message.toolName)
 }
 
 function getTranscriptMessageRenderState(

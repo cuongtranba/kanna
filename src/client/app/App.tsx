@@ -155,7 +155,7 @@ function useAppAuthState() {
       return
     }
 
-    const payload = await response.json() as Partial<AuthStatusResponse>
+    const payload: Partial<AuthStatusResponse> = await response.json()
     setState(getAppAuthStateFromStatus(payload))
   }, [])
 

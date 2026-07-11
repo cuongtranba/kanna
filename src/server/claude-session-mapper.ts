@@ -92,13 +92,21 @@ function mapAssistantRecord(record: ClaudeSessionAssistantRecord): TranscriptEnt
   return entries
 }
 
+function isUserRecord(r: ClaudeSessionRecord): r is ClaudeSessionUserRecord {
+  return r.type === "user"
+}
+
+function isAssistantRecord(r: ClaudeSessionRecord): r is ClaudeSessionAssistantRecord {
+  return r.type === "assistant"
+}
+
 export function mapClaudeRecordsToEntries(records: ClaudeSessionRecord[]): TranscriptEntry[] {
   const entries: TranscriptEntry[] = []
   for (const record of records) {
-    if (record.type === "user") {
-      entries.push(...mapUserRecord(record as ClaudeSessionUserRecord))
-    } else if (record.type === "assistant") {
-      entries.push(...mapAssistantRecord(record as ClaudeSessionAssistantRecord))
+    if (isUserRecord(record)) {
+      entries.push(...mapUserRecord(record))
+    } else if (isAssistantRecord(record)) {
+      entries.push(...mapAssistantRecord(record))
     }
     // summary / system / other: skipped
   }

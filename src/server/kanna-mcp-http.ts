@@ -2,14 +2,16 @@ import { randomBytes, randomUUID } from "node:crypto"
 import { closeHttpServer, createHttpServer, listen, type HttpIncomingMessage } from "./http-server.adapter"
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js"
+import type { ServerNotification } from "@modelcontextprotocol/sdk/types.js"
 import type { SdkMcpToolDefinition } from "@anthropic-ai/claude-agent-sdk"
 import { KANNA_MCP_SERVER_NAME } from "../shared/tools"
 import { buildKannaMcpTools, type KannaMcpArgs } from "./kanna-mcp"
 import type { McpServerConfig } from "../shared/types"
+import type { AnyValue } from "../shared/errors"
 
 export interface ChannelNotification {
   method: "notifications/claude/channel"
-  params: { content: string; meta: Record<string, unknown> }
+  params: { content: string; meta: Record<string, AnyValue>; _meta?: Record<string, AnyValue> }
 }
 
 /**
@@ -99,9 +101,7 @@ export async function startKannaMcpHttpServer(
   ): Promise<void> => {
     const notification = buildChannelNotification(content, meta)
     try {
-      await mcp.server.notification(
-        notification as Parameters<typeof mcp.server.notification>[0],
-      )
+      await mcp.server.notification(<ServerNotification><unknown>notification)
     } catch (err) {
       // Before a client connects there is no peer; swallow that case.
       if (mcp.isConnected()) throw err
@@ -176,8 +176,8 @@ function registerToolOnMcpServer(
       description: def.description,
       inputSchema: def.inputSchema,
     },
-    async (input: unknown, extra: unknown) => {
-      return await def.handler(input as never, extra)
+    async (input: AnyValue, extra: AnyValue) => {
+      return await def.handler(<Record<string, AnyValue>>input, extra)
     },
   )
 }

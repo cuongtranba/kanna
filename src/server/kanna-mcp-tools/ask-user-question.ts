@@ -31,7 +31,7 @@ export function createAskUserQuestionTool(deps: { toolCallback: ToolCallbackServ
         toolCallback: deps.toolCallback,
         toolName: "mcp__kanna__ask_user_question",
         ctx,
-        args: input as unknown as Record<string, unknown>,
+        args: input,
         formatAnswer: (payload) => {
           // Fail fast — silently coercing an undefined payload to `{}` would
           // hide the real bug (an interactive tool being auto-allowed with

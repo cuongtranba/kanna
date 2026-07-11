@@ -15,6 +15,7 @@ import type {
   GitHubPublishInfo,
   GitHubRepoAvailabilityResult,
 } from "../../../shared/types"
+import { isRecord } from "../../../shared/errors"
 import { useStickyState } from "../../hooks/useStickyState"
 import { cn } from "../../lib/utils"
 import { useDiffCommitStore } from "../../stores/diffCommitStore"
@@ -36,6 +37,14 @@ import { Dialog, DialogBody, DialogContent, DialogDescription, DialogFooter, Dia
 type DiffRenderMode = "unified" | "split"
 type DiffFile = ChatDiffSnapshot["files"][number]
 type SidebarViewMode = "changes" | "history"
+type RepoVisibility = "public" | "private"
+type EntryView = "branches" | "pull_requests"
+const SIDEBAR_VIEW_MODES = new Set<string>(["changes", "history"] satisfies SidebarViewMode[])
+const REPO_VISIBILITY_VALUES = new Set<string>(["public", "private"] satisfies RepoVisibility[])
+const ENTRY_VIEW_VALUES = new Set<string>(["branches", "pull_requests"] satisfies EntryView[])
+function isSidebarViewMode(v: string): v is SidebarViewMode { return SIDEBAR_VIEW_MODES.has(v) }
+function isRepoVisibility(v: string): v is RepoVisibility { return REPO_VISIBILITY_VALUES.has(v) }
+function isEntryView(v: string): v is EntryView { return ENTRY_VIEW_VALUES.has(v) }
 const EMPTY_CHECKED_PATHS: Record<string, boolean> = {}
 
 export function shouldLoadDiffPatchNow(args: {
@@ -441,7 +450,7 @@ function GitHubPublishModal({
         visibility,
         description,
       })
-      if ((result as { ok?: boolean } | null)?.ok) {
+      if (isRecord(result) && result.ok) {
         onOpenChange(false)
       }
     } finally {
@@ -572,7 +581,7 @@ function GitHubPublishModal({
           </div>
         </div>
         <div className="space-y-2">
-          <Select value={visibility} onValueChange={(value) => setVisibility(value as "public" | "private")}>
+          <Select value={visibility} onValueChange={(value) => { if (isRepoVisibility(value)) setVisibility(value) }}>
             <SelectTrigger className="pl-[11px] [&>span]:flex [&>span]:items-center [&>span]:gap-2">
               <SelectValue placeholder="Select visibility" />
             </SelectTrigger>
@@ -1152,7 +1161,7 @@ function BranchSwitcher({
           />
           <SegmentedControl
             value={entryView}
-            onValueChange={(value) => setEntryView(value as "branches" | "pull_requests")}
+            onValueChange={(value) => { if (isEntryView(value)) setEntryView(value) }}
             size="sm"
             className="w-full"
             optionClassName="flex-1 justify-center"
@@ -2026,7 +2035,7 @@ function RightSidebarImpl({
                       value={viewMode}
                       onValueChange={(value) => {
                         if (!projectId) return
-                        setViewMode(projectId, value as SidebarViewMode)
+                        if (isSidebarViewMode(value)) setViewMode(projectId, value)
                       }}
                       size="sm"
                       optionClassName="flex-1 justify-center"
@@ -2159,9 +2168,6 @@ function RightSidebarImpl({
               </div>
             )}
           </div>
-
-          
-          
         </div>
         <GitHubPublishModal
           open={isGitHubPublishModalOpen}

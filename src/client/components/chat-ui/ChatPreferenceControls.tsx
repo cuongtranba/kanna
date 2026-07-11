@@ -280,8 +280,8 @@ export function ChatPreferenceControls({
   const ProviderIcon = PROVIDER_ICONS[selectedProvider]
   const ModelIcon = Box
   const showPlanMode = includePlanMode && providerConfig?.supportsPlanMode && onPlanModeChange
-  const claudeModelOptions = selectedProvider === "claude" ? modelOptions as ClaudeModelOptions : null
-  const codexModelOptions = selectedProvider === "codex" ? modelOptions as CodexModelOptions : null
+  const claudeModelOptions = selectedProvider === "claude" && "contextWindow" in modelOptions ? modelOptions : null
+  const codexModelOptions = selectedProvider === "codex" && "fastMode" in modelOptions ? modelOptions : null
   const contextWindowOptions = providerConfig.models.find((candidate) => candidate.id === model)?.contextWindowOptions ?? []
   const selectedContextWindow = claudeModelOptions?.contextWindow ?? CLAUDE_CONTEXT_WINDOW_OPTIONS[0].id
   const ContextWindowIcon = selectedContextWindow === "1m" ? SquareMenu : SquareMinus

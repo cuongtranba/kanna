@@ -2,7 +2,8 @@ import { homedir } from "node:os"
 import path from "node:path"
 import { getKeybindingsFilePath, LOG_PREFIX } from "../shared/branding"
 import { log } from "../shared/log"
-import { DEFAULT_KEYBINDINGS, type KeybindingAction, type KeybindingsSnapshot } from "../shared/types"
+import type { AnyValue } from "../shared/errors"
+import { DEFAULT_KEYBINDINGS, KEYBINDING_ACTIONS, type KeybindingAction, type KeybindingsSnapshot } from "../shared/types"
 import {
   ensureKeybindingsFile,
   readKeybindingsFile,
@@ -11,9 +12,7 @@ import {
   type KeybindingsWatcher,
 } from "./keybindings-store.adapter"
 
-const KEYBINDING_ACTIONS = Object.keys(DEFAULT_KEYBINDINGS) as KeybindingAction[]
-
-type KeybindingsFile = Partial<Record<KeybindingAction, unknown>>
+type KeybindingsFile = Partial<Record<KeybindingAction, AnyValue>>
 
 export class KeybindingsManager {
   readonly filePath: string
@@ -71,7 +70,7 @@ export class KeybindingsManager {
   private startWatching() {
     this.watcher?.close()
     const next = watchKeybindingsDirectory(this.filePath, () => {
-      void this.reload().catch((error: unknown) => {
+      void this.reload().catch((error) => {
         log.warn(`${LOG_PREFIX} Failed to reload keybindings:`, String(error))
       })
     })
@@ -91,7 +90,7 @@ export async function readKeybindingsSnapshot(filePath: string) {
     return createDefaultSnapshot(filePath, "Keybindings file was empty. Using defaults.")
   }
   try {
-    const parsed = JSON.parse(presence.text) as KeybindingsFile
+    const parsed: KeybindingsFile = JSON.parse(presence.text)
     return normalizeKeybindings(parsed, filePath)
   } catch (error) {
     if (error instanceof SyntaxError) {
@@ -111,15 +110,13 @@ export function normalizeKeybindings(value: KeybindingsFile | null | undefined, 
     return createDefaultSnapshot(filePath, "Keybindings file must contain a JSON object. Using defaults.")
   }
 
-  const bindings = {} as Record<KeybindingAction, string[]>
-  for (const action of KEYBINDING_ACTIONS) {
+  const bindingsEntries = KEYBINDING_ACTIONS.map((action): [KeybindingAction, string[]] => {
     const rawValue = source[action]
     if (!Array.isArray(rawValue)) {
-      bindings[action] = [...DEFAULT_KEYBINDINGS[action]]
       if (rawValue !== undefined) {
         warnings.push(`${action} must be an array of shortcut strings`)
       }
-      continue
+      return [action, [...DEFAULT_KEYBINDINGS[action]]]
     }
 
     const normalized = rawValue
@@ -129,16 +126,15 @@ export function normalizeKeybindings(value: KeybindingsFile | null | undefined, 
       .filter(Boolean)
 
     if (normalized.length === 0) {
-      bindings[action] = [...DEFAULT_KEYBINDINGS[action]]
       if (rawValue.length > 0 || source[action] !== undefined) {
         warnings.push(`${action} did not contain any valid shortcut strings`)
       }
-      continue
+      return [action, [...DEFAULT_KEYBINDINGS[action]]]
     }
 
-    bindings[action] = normalized
-  }
-
+    return [action, normalized]
+  })
+  const bindings = <Record<KeybindingAction, string[]>>Object.fromEntries(bindingsEntries)
   return {
     bindings,
     warning: warnings.length > 0 ? `Some keybindings were reset to defaults: ${warnings.join("; ")}` : null,
@@ -147,12 +143,12 @@ export function normalizeKeybindings(value: KeybindingsFile | null | undefined, 
 }
 
 function createDefaultSnapshot(filePath: string, warning: string | null = null): KeybindingsSnapshot {
-  const bindings = Object.fromEntries(
-    (Object.keys(DEFAULT_KEYBINDINGS) as KeybindingAction[]).map((action) => [
+  const bindings = <Record<KeybindingAction, string[]>>Object.fromEntries(
+    KEYBINDING_ACTIONS.map((action): [KeybindingAction, string[]] => [
       action,
       [...DEFAULT_KEYBINDINGS[action]],
     ])
-  ) as Record<KeybindingAction, string[]>
+  )
   return {
     bindings,
     warning,

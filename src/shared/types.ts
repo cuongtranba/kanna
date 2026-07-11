@@ -2,6 +2,7 @@ import type { ChatPermissionPolicyOverride, ToolRequestDecision, ToolRequestStat
 import type {
   OAuthTokens,
   OAuthClientInformationFull,
+  AuthorizationServerMetadata,
 } from "@modelcontextprotocol/sdk/shared/auth.js"
 
 export const STORE_VERSION = 3 as const
@@ -258,7 +259,7 @@ export interface McpOAuthFlowState {
   issuer: string
   authorizationUrl: string
   // AS metadata cached between start and complete (avoids re-discovery)
-  metadata: Record<string, unknown>
+  metadata: AuthorizationServerMetadata
 }
 
 export interface McpOAuthState {
@@ -270,7 +271,7 @@ export interface McpOAuthState {
   // cached AS metadata (token_endpoint, etc.) persisted at complete so refresh
   // uses it directly instead of re-discovering from issuer (which may be a
   // non-resolvable resource URL, e.g. claude.ai design MCP)
-  metadata?: Record<string, unknown>
+  metadata?: AuthorizationServerMetadata
   // DCR result keyed by AS issuer (SEP-2352)
   clientByIssuer?: Record<string, OAuthClientInformationFull>
   tokens?: OAuthTokens
@@ -354,11 +355,11 @@ export const DEFAULT_CODEX_MODEL_OPTIONS = {
   fastMode: false,
 } as const satisfies CodexModelOptions
 
-export function isClaudeReasoningEffort(value: unknown): value is ClaudeReasoningEffort {
+export function isClaudeReasoningEffort(value: string | null | undefined): value is ClaudeReasoningEffort {
   return CLAUDE_REASONING_OPTIONS.some((option) => option.id === value)
 }
 
-export function isCodexReasoningEffort(value: unknown): value is CodexReasoningEffort {
+export function isCodexReasoningEffort(value: string | null | undefined): value is CodexReasoningEffort {
   return CODEX_REASONING_OPTIONS.some((option) => option.id === value)
 }
 
@@ -367,7 +368,7 @@ export const CLAUDE_CONTEXT_WINDOW_OPTIONS = [
   { id: "1m", label: "1M" },
 ] as const satisfies readonly ProviderContextWindowOption[]
 
-export function isClaudeContextWindow(value: unknown): value is ClaudeContextWindow {
+export function isClaudeContextWindow(value: string | null | undefined): value is ClaudeContextWindow {
   return CLAUDE_CONTEXT_WINDOW_OPTIONS.some((option) => option.id === value)
 }
 
@@ -635,13 +636,13 @@ export function getClaudeContextWindowOptions(
 
 export function normalizeClaudeContextWindow(
   modelId: string,
-  contextWindow?: unknown,
+  contextWindow?: string,
   customModels?: readonly CustomModelEntry[],
 ): ClaudeContextWindow {
   const options = getClaudeContextWindowOptions(modelId, customModels)
   if (options.length === 0) return DEFAULT_CLAUDE_MODEL_OPTIONS.contextWindow
-  return options.some((option) => option.id === contextWindow)
-    ? contextWindow as ClaudeContextWindow
+  return isClaudeContextWindow(contextWindow) && options.some((option) => option.id === contextWindow)
+    ? contextWindow
     : DEFAULT_CLAUDE_MODEL_OPTIONS.contextWindow
 }
 
@@ -865,7 +866,7 @@ export type ClaudeDriverPreference = "sdk" | "pty"
 
 export const CLAUDE_DRIVER_VALUES: readonly ClaudeDriverPreference[] = ["sdk", "pty"]
 
-export function isClaudeDriverPreference(value: unknown): value is ClaudeDriverPreference {
+export function isClaudeDriverPreference(value: string | null | undefined): value is ClaudeDriverPreference {
   return value === "sdk" || value === "pty"
 }
 
@@ -1065,6 +1066,20 @@ export const DEFAULT_KEYBINDINGS: Record<KeybindingAction, string[]> = {
   jumpToStacks: ["g s"],
 }
 
+export const KEYBINDING_ACTIONS: readonly KeybindingAction[] = [
+  "toggleEmbeddedTerminal",
+  "toggleRightSidebar",
+  "openInFinder",
+  "openInEditor",
+  "addSplitTerminal",
+  "jumpToSidebarChat",
+  "createChatInCurrentProject",
+  "openAddProject",
+  "newStack",
+  "newStackChat",
+  "jumpToStacks",
+] satisfies KeybindingAction[]
+
 export interface KeybindingsSnapshot {
   bindings: Record<KeybindingAction, string[]>
   warning: string | null
@@ -1231,7 +1246,7 @@ export type NormalizedToolCall =
 export interface ToolResultEntry extends TranscriptEntryBase {
   kind: "tool_result"
   toolId: string
-  content: unknown
+  content: string | Record<string, unknown> | readonly unknown[] | null
   isError?: boolean
   /**
    * Set when the original content exceeded the subagent payload cap
@@ -1567,7 +1582,7 @@ export interface HydratedToolCallBase<TKind extends string, TInput, TResult> {
   toolId: string
   input: TInput
   result?: TResult
-  rawResult?: unknown
+  rawResult?: string | Record<string, unknown> | readonly unknown[] | null
   isError?: boolean
   /**
    * Set when the underlying tool_result entry was persisted to disk
@@ -1825,7 +1840,7 @@ export interface ProviderUsage {
 export interface SubagentPendingTool {
   toolUseId: string
   toolKind: "ask_user_question" | "exit_plan_mode"
-  input: unknown
+  input: Record<string, unknown>
   requestedAt: number
 }
 
@@ -1963,4 +1978,46 @@ export interface GitWorktree {
   sha: string                  // HEAD commit sha
   isPrimary: boolean
   isLocked: boolean            // git has flagged this worktree as locked (pruning inhibited)
+}
+
+// Type guards for string literal unions — used by Select/SegmentedControl callbacks
+// (Radix Select passes `string`; these guards narrow without an `as` cast)
+
+export function isEditorPreset(value: string): value is EditorPreset {
+  return value === "cursor" || value === "vscode" || value === "xcode" || value === "windsurf" || value === "custom"
+}
+
+export function isChatSoundPreference(value: string): value is ChatSoundPreference {
+  return value === "never" || value === "unfocused" || value === "always"
+}
+
+export function isChatSoundId(value: string): value is ChatSoundId {
+  return (
+    value === "blow" || value === "bottle" || value === "frog" || value === "funk" ||
+    value === "glass" || value === "ping" || value === "pop" || value === "purr" || value === "tink"
+  )
+}
+
+export function isCloudFlareTunnelMode(value: string): value is CloudflareTunnelMode {
+  return value === "always-ask" || value === "auto-expose"
+}
+
+export function isLlmProviderKind(value: string): value is LlmProviderKind {
+  return value === "openai" || value === "openrouter" || value === "custom"
+}
+
+export function isAgentProvider(value: string): value is AgentProvider {
+  return value === "claude" || value === "codex" || value === "openrouter"
+}
+
+export function isSubagentContextScope(value: string): value is SubagentContextScope {
+  return value === "previous-assistant-reply" || value === "full-transcript"
+}
+
+export function isSubagentTriggerMode(value: string): value is SubagentTriggerMode {
+  return value === "auto" || value === "manual"
+}
+
+export function isAppThemePreference(value: string): value is AppThemePreference {
+  return value === "light" || value === "dark" || value === "system"
 }

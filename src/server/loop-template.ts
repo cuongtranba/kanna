@@ -47,7 +47,7 @@ export type LoopSetupValidation =
   | { ok: true; resolved: ResolvedLoopSetup }
   | { ok: false; errors: string[] }
 
-function isNonBlankString(v: unknown): v is string {
+function isNonBlankString<T>(v: T): v is T & string {
   return typeof v === "string" && v.trim().length > 0
 }
 

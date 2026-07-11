@@ -35,11 +35,18 @@ import {
   CLOUDFLARE_TUNNEL_DEFAULTS,
   DEFAULT_KEYBINDINGS,
   GLOBAL_PROMPT_APPEND_MAX_CHARS,
+  KEYBINDING_ACTIONS,
   PROVIDERS,
   mergeCustomModels,
   UPLOAD_DEFAULTS,
   UPLOAD_MAX_FILE_SIZE_MB_MAX,
   UPLOAD_MAX_FILE_SIZE_MB_MIN,
+  isAgentProvider,
+  isChatSoundId,
+  isChatSoundPreference,
+  isClaudeDriverPreference,
+  isEditorPreset,
+  isLlmProviderKind,
   type AgentProvider,
   type CloudflareTunnelMode,
   type CloudflareTunnelSettings,
@@ -177,13 +184,13 @@ type SidebarPageId = SidebarItem["id"]
 
 export function resolveSettingsSectionId(sectionId: string | undefined): SidebarPageId | null {
   if (!sectionId) return null
-  return sidebarItems.some((item) => item.id === sectionId) ? (sectionId as SidebarPageId) : null
+  return sidebarItems.find((item) => item.id === sectionId)?.id ?? null
 }
 
-const themeOptions = [
-  { value: "light" as ThemePreference, label: "Light", icon: Sun },
-  { value: "dark" as ThemePreference, label: "Dark", icon: Moon },
-  { value: "system" as ThemePreference, label: "System", icon: Monitor },
+const themeOptions: Array<{ value: ThemePreference; label: string; icon: typeof Sun }> = [
+  { value: "light", label: "Light", icon: Sun },
+  { value: "dark", label: "Dark", icon: Moon },
+  { value: "system", label: "System", icon: Monitor },
 ]
 
 const chatSoundPreferenceOptions: { value: ChatSoundPreference; label: string }[] = [
@@ -237,7 +244,7 @@ type ChangelogCache = {
 type FetchReleases = (input: string, init?: RequestInit) => Promise<Response>
 
 let changelogCache: ChangelogCache | null = null
-const KEYBINDING_ACTIONS = Object.keys(KEYBINDING_ACTION_LABELS) as KeybindingAction[]
+// KEYBINDING_ACTIONS imported from shared/types
 
 export function getKeybindingsSubtitle(filePathDisplay: string) {
   return `Edit global app shortcuts stored in ${filePathDisplay}.`
@@ -264,7 +271,7 @@ export async function fetchGithubReleases(fetchImpl: FetchReleases = fetch): Pro
     throw new Error(`GitHub releases request failed with status ${response.status}`)
   }
 
-  const payload = await response.json() as GithubRelease[]
+  const payload: GithubRelease[] = await response.json()
   return payload.filter((release) => !release.draft)
 }
 
@@ -1160,7 +1167,7 @@ export function SettingsPage() {
   const shareDefaultTtlHours = appSettings?.shareDefaultTtlHours ?? 24
   const [shareDefaultTtlDraft, setShareDefaultTtlDraft] = useState(String(shareDefaultTtlHours))
   const [llmProviderDraft, setLlmProviderDraft] = useState<LlmProviderDraft>({
-    provider: "openai" as LlmProviderKind,
+    provider: "openai",
     apiKey: "",
     model: "",
     baseUrl: "",
@@ -1281,7 +1288,8 @@ export function SettingsPage() {
     })
       .then(async (response) => {
         if (!response.ok) return { enabled: false }
-        return await response.json() as { enabled?: boolean }
+        const json: { enabled?: boolean } = await response.json()
+        return json
       })
       .then((payload) => {
         if (cancelled) return
@@ -1316,7 +1324,7 @@ export function SettingsPage() {
         setReleases(nextReleases)
         setChangelogStatus("success")
       })
-      .catch((error: unknown) => {
+      .catch((error) => {
         if (cancelled) return
         setChangelogError(error instanceof Error ? error.message : "Unable to load changelog.")
         setChangelogStatus("error")
@@ -1607,7 +1615,7 @@ export function SettingsPage() {
         setReleases(nextReleases)
         setChangelogStatus("success")
       })
-      .catch((error: unknown) => {
+      .catch((error) => {
         setChangelogError(error instanceof Error ? error.message : "Unable to load changelog.")
         setChangelogStatus("error")
       })
@@ -1882,7 +1890,7 @@ export function SettingsPage() {
                       >
                         <Select
                           value={chatSoundPreference}
-                          onValueChange={(value) => handleChatSoundPreferenceChange(value as ChatSoundPreference)}
+                          onValueChange={(value) => { if (isChatSoundPreference(value)) handleChatSoundPreferenceChange(value) }}
                         >
                           <SelectTrigger className="min-w-[180px]">
                             <SelectValue />
@@ -1905,7 +1913,7 @@ export function SettingsPage() {
                       >
                         <Select
                           value={chatSoundId}
-                          onValueChange={(value) => handleChatSoundIdChange(value as ChatSoundId)}
+                          onValueChange={(value) => { if (isChatSoundId(value)) handleChatSoundIdChange(value) }}
                         >
                           <SelectTrigger className="min-w-[180px]">
                             <SelectValue />
@@ -1929,7 +1937,7 @@ export function SettingsPage() {
                       >
                         <Select
                           value={editorPreset}
-                          onValueChange={(value) => handleEditorPresetChange(value as EditorPreset)}
+                          onValueChange={(value) => { if (isEditorPreset(value)) handleEditorPresetChange(value) }}
                         >
                           <SelectTrigger className="min-w-[180px]">
                             <SelectValue />
@@ -2184,7 +2192,7 @@ export function SettingsPage() {
                             <SegmentedControl
                               value={tunnelSettings.mode}
                               onValueChange={(value) => {
-                                void handleTunnelPatch({ mode: value as CloudflareTunnelMode })
+                                void handleTunnelPatch({ mode: value })
                               }}
                               options={cloudflareTunnelModeOptions}
                               size="sm"
@@ -2260,10 +2268,10 @@ export function SettingsPage() {
                     >
                       <SegmentedControl
                         value={claudeDriverPreference}
-                        onValueChange={(value) => handleClaudeDriverChange(value as "sdk" | "pty")}
+                        onValueChange={(value) => { if (isClaudeDriverPreference(value)) handleClaudeDriverChange(value) }}
                         options={[
-                          { value: "sdk", label: "SDK (API)" },
-                          { value: "pty", label: "PTY (subscription)" },
+                          { value: "sdk" as const, label: "SDK (API)" },
+                          { value: "pty" as const, label: "PTY (subscription)" },
                         ]}
                       />
                     </SettingsRow>
@@ -2318,7 +2326,7 @@ export function SettingsPage() {
                     >
                       <Select
                         value={defaultProvider}
-                        onValueChange={(value) => handleDefaultProviderChange(value as "last_used" | AgentProvider)}
+                        onValueChange={(value) => { if (value === "last_used" || isAgentProvider(value)) handleDefaultProviderChange(value) }}
                       >
                         <SelectTrigger className="min-w-[180px]">
                           <SelectValue />
@@ -2414,7 +2422,7 @@ export function SettingsPage() {
                             {llmProvider.warning}
                           </div>
                         ) : null}
-                        <Select value={llmProviderDraft.provider} onValueChange={(value) => handleLlmProviderSelection(value as LlmProviderKind)}>
+                        <Select value={llmProviderDraft.provider} onValueChange={(value) => { if (isLlmProviderKind(value)) handleLlmProviderSelection(value) }}>
                           <SelectTrigger className="w-full">
                             <SelectValue />
                           </SelectTrigger>

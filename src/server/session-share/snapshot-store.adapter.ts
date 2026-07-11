@@ -1,6 +1,7 @@
 import { mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises"
 import { join } from "node:path"
 import type { ChatSnapshot } from "../../shared/session-share/types"
+import { isRecord } from "../../shared/errors"
 
 const TOKEN_PATTERN = /^[A-Za-z0-9_-]{1,128}$/
 
@@ -27,9 +28,10 @@ export class SnapshotStore {
   async readSnapshot(tokenId: string): Promise<ChatSnapshot | null> {
     try {
       const body = await readFile(this.path(tokenId), "utf8")
-      return JSON.parse(body) as ChatSnapshot
+      const snap: ChatSnapshot = JSON.parse(body)
+      return snap
     } catch (err) {
-      if ((err as NodeJS.ErrnoException).code === "ENOENT") return null
+      if (isRecord(err) && err.code === "ENOENT") return null
       throw err
     }
   }
@@ -43,7 +45,7 @@ export class SnapshotStore {
     try {
       entries = await readdir(this.dir)
     } catch (err) {
-      if ((err as NodeJS.ErrnoException).code === "ENOENT") return 0
+      if (isRecord(err) && err.code === "ENOENT") return 0
       throw err
     }
     let total = 0

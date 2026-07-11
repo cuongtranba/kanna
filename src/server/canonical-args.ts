@@ -1,15 +1,18 @@
 import { createHash } from "node:crypto"
+import type { AnyValue } from "../shared/errors"
+import { isRecord } from "../shared/errors"
 
-function canonicalJson(value: unknown): string {
+function canonicalJson(value: AnyValue): string {
   if (value === null || typeof value !== "object") return JSON.stringify(value)
   if (Array.isArray(value)) {
-    return `[${value.map(canonicalJson).join(",")}]`
+    const arr: AnyValue[] = value
+    return `[${arr.map(canonicalJson).join(",")}]`
   }
-  const obj = value as Record<string, unknown>
-  const keys = Object.keys(obj).sort()
-  return `{${keys.map((k) => `${JSON.stringify(k)}:${canonicalJson(obj[k])}`).join(",")}}`
+  if (!isRecord(value)) return JSON.stringify(value)
+  const keys = Object.keys(value).sort()
+  return `{${keys.map((k) => `${JSON.stringify(k)}:${canonicalJson(value[k])}`).join(",")}}`
 }
 
-export function canonicalArgsHash(args: unknown): string {
+export function canonicalArgsHash(args: AnyValue): string {
   return createHash("sha256").update(canonicalJson(args)).digest("hex")
 }

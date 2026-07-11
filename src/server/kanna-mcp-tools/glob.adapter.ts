@@ -64,7 +64,7 @@ export function createGlobTool(deps: { toolCallback: ToolCallbackService }): Glo
         toolCallback: deps.toolCallback,
         toolName: "mcp__kanna__glob",
         ctx,
-        args: input as unknown as Record<string, unknown>,
+        args: input,
         formatAnswer: async () => {
           const root = resolvePath(input.path, ctx.cwd)
           const allFiles: string[] = []

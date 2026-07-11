@@ -1,4 +1,5 @@
 import { LegendList, type LegendListRef } from "@legendapp/list/react"
+import type { AnyValue } from "../../../shared/errors"
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { ArrowDown, Bot, Flower, Upload } from "lucide-react"
 import { AnimatedShinyText } from "../../components/ui/animated-shiny-text"
@@ -242,7 +243,7 @@ export const ChatTranscriptViewport = memo(({
     ))
   }, [])
 
-  const handleScroll = useCallback((event?: unknown) => {
+  const handleScroll = useCallback((event?: AnyValue) => {
     const currentTarget = (
       typeof event === "object"
       && event !== null

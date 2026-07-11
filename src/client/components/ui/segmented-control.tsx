@@ -22,6 +22,10 @@ interface SegmentedControlProps<T extends string> {
   optionClassName?: string
 }
 
+function isLucideIcon(v: LucideIcon | ReactNode): v is LucideIcon {
+  return typeof v === "object" && v !== null && "render" in v && !isValidElement(v)
+}
+
 const sizeClasses: Record<SegmentedSize, string> = {
   sm: "text-sm px-2.5 py-1",
   md: "text-sm px-3 py-1.5",
@@ -50,8 +54,8 @@ export function SegmentedControl<T extends string>({
         if (icon) {
           if (isValidElement(icon)) {
             iconElement = icon
-          } else {
-            const Icon = icon as LucideIcon
+          } else if (isLucideIcon(icon)) {
+            const Icon = icon
             iconElement = <Icon className={size === "sm" ? "h-3.5 w-3.5" : "h-4 w-4"} />
           }
         }

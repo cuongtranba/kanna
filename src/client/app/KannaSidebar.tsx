@@ -1,4 +1,9 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
+
+/** Returns CSS custom properties as a React-compatible style object via Object.assign. */
+function cssVars(vars: Record<`--${string}`, string>): CSSProperties {
+  return Object.assign({} satisfies CSSProperties, vars)
+}
 import { Download, Flower, FoldVertical, PanelLeft, UnfoldVertical, X, Menu, Plus, Settings, Workflow } from "lucide-react"
 import { useLocation, useNavigate } from "react-router-dom"
 import { APP_NAME } from "../../shared/branding"
@@ -403,7 +408,8 @@ function KannaSidebarImpl({
 
     requestAnimationFrame(() => {
       const container = scrollContainerRef.current
-      const activeElement = container?.querySelector(`[data-chat-id="${activeChatId}"]`) as HTMLElement | null
+      const found = container?.querySelector(`[data-chat-id="${activeChatId}"]`)
+      const activeElement = found instanceof HTMLElement ? found : null
       if (!activeElement || !container) return
 
       const elementRect = activeElement.getBoundingClientRect()
@@ -542,7 +548,7 @@ function KannaSidebarImpl({
           open ? "flex" : "hidden md:flex",
           collapsed && "md:hidden"
         )}
-        style={{ "--sidebar-width": `${sidebarWidth}px` } as CSSProperties}
+        style={cssVars({ "--sidebar-width": `${sidebarWidth}px` })}
       >
         <div className="px-[5px] h-[64px] max-h-[64px] md:h-[55px] md:max-h-[55px] border-b grid grid-cols-[40px_minmax(0,1fr)_40px] items-center md:px-[7px] md:pl-3 md:flex md:justify-between">
           <div className="md:hidden">

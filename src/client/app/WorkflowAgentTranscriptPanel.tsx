@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react"
 import { ArrowLeft, Loader2, RefreshCw } from "lucide-react"
 import type { HydratedTranscriptMessage, TranscriptEntry } from "../../shared/types"
 import { processTranscriptMessages } from "../lib/parseTranscript"
+import type { AnyValue } from "../../shared/errors"
 import { SubagentEntryRow } from "../components/messages/SubagentEntryRow"
 import { SubagentTranscriptFetchProvider } from "../components/messages/subagent-fetch-context"
 
@@ -58,7 +59,7 @@ export function WorkflowAgentTranscriptPanel({
         setMessages(processTranscriptMessages(entries))
         setState("loaded")
       })
-      .catch((err: unknown) => {
+      .catch((err: AnyValue) => {
         if (stale) return
         setError(err instanceof Error ? err.message : "Failed to load agent transcript")
         setState("error")

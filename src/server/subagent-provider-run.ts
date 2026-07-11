@@ -2,7 +2,6 @@ import type { HarnessEvent, HarnessToolRequest, HarnessTurn } from "./harness-ty
 import type { CodexAppServerManager } from "./codex-app-server"
 import type {
   AgentProvider,
-  CodexReasoningEffort,
   ProviderUsage,
   ResolvedStackBinding,
   Subagent,
@@ -253,9 +252,9 @@ async function runCodexSubagent(opts: {
       scope,
       content: initialPrompt,
       model: args.subagent.model,
-      // modelOptions is ClaudeModelOptions | CodexModelOptions; runtime-narrowed
-      // by the outer provider check, but TS doesn't propagate that to modelOptions.
-      effort: args.subagent.modelOptions?.reasoningEffort as CodexReasoningEffort | undefined,
+      effort: args.subagent.modelOptions && "fastMode" in args.subagent.modelOptions
+        ? args.subagent.modelOptions.reasoningEffort
+        : undefined,
       serviceTier: undefined,
       planMode: false,
       onToolRequest: args.onToolRequest,

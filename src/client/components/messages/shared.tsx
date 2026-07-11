@@ -232,6 +232,11 @@ export function VerticalLineContainer({ children, className }: { children: React
 }
 
 // Helper function to extract text content from ReactNode
+type NodeWithChildren = { props: { children?: ReactNode } }
+function hasChildren(v: ReactNode): v is NodeWithChildren & ReactNode {
+  return typeof v === "object" && v !== null && "props" in v
+}
+
 function extractText(node: ReactNode): string {
   if (typeof node === "string") {
     return node
@@ -242,9 +247,8 @@ function extractText(node: ReactNode): string {
   if (Array.isArray(node)) {
     return node.map(extractText).join("")
   }
-  if (node && typeof node === "object" && "props" in node) {
-    const props = node.props as { children?: ReactNode }
-    return extractText(props.children)
+  if (hasChildren(node)) {
+    return extractText(node.props.children)
   }
   return ""
 }

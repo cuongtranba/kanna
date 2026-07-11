@@ -50,7 +50,7 @@ export class SessionShareService {
     try {
       snapshot = this.deps.buildSnapshot(req.chatId)
     } catch (err) {
-      const msg = (err as Error).message
+      const msg = err instanceof Error ? err.message : String(err)
       if (msg.startsWith("chat_not_found:")) {
         return { ok: false, error: { kind: "chat_not_found", chatId: req.chatId } }
       }
@@ -70,7 +70,7 @@ export class SessionShareService {
     try {
       await this.deps.snapshotStore.writeSnapshot(tokenId, snapshot)
     } catch (err) {
-      return { ok: false, error: { kind: "snapshot_write_failed", message: (err as Error).message } }
+      return { ok: false, error: { kind: "snapshot_write_failed", message: err instanceof Error ? err.message : String(err) } }
     }
 
     const event: ShareEvent = {

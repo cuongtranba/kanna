@@ -15,7 +15,8 @@ function hashSuffix(name: string): string {
   // Mirror claude-code/src/utils/sessionStoragePortable.ts: prefer Bun.hash
   // (wyhash) when running under Bun, fall back to djb2 elsewhere. Both encode
   // base36. Cross-runtime stability matters only for paths >200 chars.
-  const maybeBun = (globalThis as { Bun?: { hash: (s: string) => bigint } }).Bun
+  const globalWithBun: { Bun?: { hash: (s: string) => number | bigint } } = globalThis
+  const maybeBun = globalWithBun.Bun
   if (maybeBun && typeof maybeBun.hash === "function") {
     return maybeBun.hash(name).toString(36)
   }

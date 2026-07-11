@@ -57,6 +57,7 @@ import {
   isServerRequest,
 } from "./codex-app-server-protocol"
 import { log } from "../shared/log"
+import { type AnyValue, isRecord, errorMessage as sharedErrorMessage } from "../shared/errors"
 
 export interface CodexAppServerProcess {
   stdin: Writable
@@ -116,7 +117,7 @@ interface SessionContext {
   cwd: string
   projectId: string | null
   child: CodexAppServerProcess
-  pendingRequests: Map<CodexRequestId, PendingRequest<unknown>>
+  pendingRequests: Map<CodexRequestId, PendingRequest<AnyValue>>
   pendingTurn: PendingTurn | null
   sessionToken: string | null
   stderrLines: string[]
@@ -165,12 +166,12 @@ export interface GenerateStructuredArgs {
 function timestamped<T extends Omit<TranscriptEntry, "_id" | "createdAt">>(
   entry: T,
   createdAt = Date.now()
-): TranscriptEntry {
+): T & { _id: string; createdAt: number } {
   return {
     _id: randomUUID(),
     createdAt,
     ...entry,
-  } as TranscriptEntry
+  }
 }
 
 function codexSystemInitEntry(model: string): TranscriptEntry {
@@ -185,12 +186,7 @@ function codexSystemInitEntry(model: string): TranscriptEntry {
   })
 }
 
-function errorMessage(value: unknown): string {
-  if (value instanceof Error) return value.message
-  return String(value)
-}
-
-function parseJsonLine(line: string): unknown | null {
+function parseJsonLine(line: string): AnyValue | null {
   try {
     return JSON.parse(line)
   } catch {
@@ -198,8 +194,8 @@ function parseJsonLine(line: string): unknown | null {
   }
 }
 
-function isRecoverableResumeError(error: unknown): boolean {
-  const message = errorMessage(error).toLowerCase()
+function isRecoverableResumeError(error: AnyValue): boolean {
+  const message = sharedErrorMessage(error).toLowerCase()
   if (!message.includes("thread/resume")) return false
   return ["not found", "missing thread", "no such thread", "unknown thread", "does not exist"].some((snippet) =>
     message.includes(snippet)
@@ -226,12 +222,10 @@ function toAskUserQuestionItems(params: ToolRequestUserInputParams): AskUserQues
   }))
 }
 
-function toToolRequestUserInputResponse(raw: unknown, questions: ToolRequestUserInputParams["questions"]): ToolRequestUserInputResponse {
-  const record = raw && typeof raw === "object" ? raw as Record<string, unknown> : {}
+function toToolRequestUserInputResponse(raw: AnyValue, questions: ToolRequestUserInputParams["questions"]): ToolRequestUserInputResponse {
+  const record = isRecord(raw) ? raw : {}
   const answersValue = record.answers
-  const value = answersValue && typeof answersValue === "object" && !Array.isArray(answersValue)
-    ? answersValue as Record<string, unknown>
-    : record
+  const value = isRecord(answersValue) ? answersValue : record
   const answers = Object.fromEntries(
     questions.map((question) => {
       const rawAnswer = value[question.id] ?? value[question.question]
@@ -241,8 +235,8 @@ function toToolRequestUserInputResponse(raw: unknown, questions: ToolRequestUser
       if (typeof rawAnswer === "string") {
         return [question.id, { answers: [rawAnswer] }]
       }
-      if (rawAnswer && typeof rawAnswer === "object" && Array.isArray((rawAnswer as { answers?: unknown }).answers)) {
-        return [question.id, { answers: ((rawAnswer as { answers: unknown[] }).answers).map((entry) => String(entry)) }]
+      if (isRecord(rawAnswer) && Array.isArray(rawAnswer.answers)) {
+        return [question.id, { answers: rawAnswer.answers.map((entry) => String(entry)) }]
       }
       return [question.id, { answers: [] }]
     })
@@ -250,19 +244,26 @@ function toToolRequestUserInputResponse(raw: unknown, questions: ToolRequestUser
   return { answers }
 }
 
-function contentFromMcpResult(item: McpToolCallItem): unknown {
+function normalizeMcpContent(v: AnyValue): string | Record<string, AnyValue> | AnyValue[] | null {
+  if (typeof v === "string") return v
+  if (isRecord(v)) return v
+  if (Array.isArray(v)) return v
+  return null
+}
+
+function contentFromMcpResult(item: McpToolCallItem): AnyValue {
   if (item.error?.message) {
     return { error: item.error.message }
   }
   return item.result?.structuredContent ?? item.result?.content ?? null
 }
 
-function asRecord(value: unknown): Record<string, unknown> | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return null
-  return value as Record<string, unknown>
+function asRecord(value: AnyValue): Record<string, unknown> | null {
+  if (!isRecord(value)) return null
+  return value
 }
 
-function asNumber(value: unknown): number | undefined {
+function asNumber(value: AnyValue): number | undefined {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined
 }
 
@@ -340,14 +341,14 @@ function renderPlanMarkdownFromSteps(steps: TurnPlanStep[]): string {
 const warnedUnknownItemTypes = new Set<string>()
 
 function warnUnknownItemType(item: ThreadItem) {
-  const type = (item as { type?: string }).type ?? "<missing>"
+  const type = ("type" in item && typeof item.type === "string" ? item.type : null) ?? "<missing>"
   if (warnedUnknownItemTypes.has(type)) return
   warnedUnknownItemTypes.add(type)
   log.warn(`[codex-app-server] unknown ThreadItem type "${type}"; emitting generic tool placeholder. Update protocol bindings.`)
 }
 
 function fallbackToolNameForItem(item: ThreadItem): string {
-  const type = (item as { type?: string }).type ?? "Unknown"
+  const type = ("type" in item && typeof item.type === "string" ? item.type : null) ?? "Unknown"
   return type.charAt(0).toUpperCase() + type.slice(1)
 }
 
@@ -391,12 +392,12 @@ export const IMAGE_GENERATION_TOOL_NAME = "ImageGeneration"
 // must wait for `item/completed` so the UI sees the real revisedPrompt/status.
 export const DEFERRED_DYNAMIC_TOOLS: ReadonlySet<string> = new Set([IMAGE_GENERATION_TOOL_NAME])
 
-function normalizeImageGenerationStatus(raw: unknown): ImageGenerationStatus {
+function normalizeImageGenerationStatus(raw: AnyValue): ImageGenerationStatus {
   if (raw === "completed" || raw === "failed") return raw
   return "in_progress"
 }
 
-function imageGenerationInputFromArgs(args: unknown): { revisedPrompt: string | null; status: ImageGenerationStatus } {
+function imageGenerationInputFromArgs(args: AnyValue): { revisedPrompt: string | null; status: ImageGenerationStatus } {
   const record = asRecord(args)
   return {
     revisedPrompt: typeof record?.revisedPrompt === "string" ? record.revisedPrompt : null,
@@ -479,7 +480,7 @@ function collabToolCall(item: CollabAgentToolCallItem): TranscriptEntry {
       input: {
         subagentType: item.tool,
       },
-      rawInput: item as unknown as Record<string, unknown>,
+      rawInput: isRecord(item) ? item : {},
     },
   })
 }
@@ -525,10 +526,8 @@ function fileChangePayload(
   item: Extract<ThreadItem, { type: "fileChange" }>,
   change: Extract<ThreadItem, { type: "fileChange" }>["changes"][number]
 ): Record<string, unknown> {
-  return {
-    ...item,
-    changes: [change],
-  } as unknown as Record<string, unknown>
+  const payload = { ...item, changes: [change] }
+  return isRecord(payload) ? payload : {}
 }
 
 function parseUnifiedDiff(diff: string): { oldString: string; newString: string } {
@@ -721,7 +720,7 @@ function itemToToolCalls(item: ThreadItem, _projectId: string | null): Transcrip
           input: {
             command: item.command,
           },
-          rawInput: item,
+          rawInput: Object.fromEntries(Object.entries(item)),
         },
       })]
     case "webSearch":
@@ -735,7 +734,7 @@ function itemToToolCalls(item: ThreadItem, _projectId: string | null): Transcrip
           input: {
             query: webSearchQuery(item),
           },
-          rawInput: item,
+          rawInput: Object.fromEntries(Object.entries(item)),
         },
       })]
     case "mcpToolCall":
@@ -767,9 +766,9 @@ function itemToToolCalls(item: ThreadItem, _projectId: string | null): Transcrip
           toolName: "Error",
           toolId: item.id,
           input: {
-            payload: item as unknown as Record<string, unknown>,
+            payload: isRecord(item) ? item : {},
           },
-          rawInput: item as unknown as Record<string, unknown>,
+          rawInput: isRecord(item) ? item : {},
         },
       })]
     case "imageGeneration":
@@ -783,14 +782,14 @@ function itemToToolCalls(item: ThreadItem, _projectId: string | null): Transcrip
           toolName: "ImageView",
           toolId: item.id,
           input: {
-            path: item.path,
+            payload: { path: item.path },
           },
-          rawInput: item as unknown as Record<string, unknown>,
+          rawInput: isRecord(item) ? item : {},
         },
       })]
     default: {
       warnUnknownItemType(item)
-      const record = item as unknown as Record<string, unknown>
+      const record: Record<string, unknown> = isRecord(item) ? item : {}
       const id = typeof record.id === "string" ? record.id : `unknown-${randomUUID()}`
       return [timestamped({
         kind: "tool_call",
@@ -825,36 +824,38 @@ function itemToToolResults(item: ThreadItem, projectId: string | null, cwd: stri
       return [timestamped({
         kind: "tool_result",
         toolId: item.id,
-        content: dynamicContentToText(item.contentItems) || item,
+        content: dynamicContentToText(item.contentItems) || Object.fromEntries(Object.entries(item)),
         isError: item.status === "failed" || item.success === false,
       })]
     case "collabAgentToolCall":
       return [timestamped({
         kind: "tool_result",
         toolId: item.id,
-        content: item,
+        content: Object.fromEntries(Object.entries(item)),
         isError: item.status === "failed",
       })]
     case "commandExecution":
       return [timestamped({
         kind: "tool_result",
         toolId: item.id,
-        content: item.aggregatedOutput ?? item,
+        content: item.aggregatedOutput ?? Object.fromEntries(Object.entries(item)),
         isError: (typeof item.exitCode === "number" && item.exitCode !== 0) || item.status === "failed" || item.status === "declined",
       })]
     case "webSearch":
       return [timestamped({
         kind: "tool_result",
         toolId: item.id,
-        content: item,
+        content: Object.fromEntries(Object.entries(item)),
       })]
-    case "mcpToolCall":
+    case "mcpToolCall": {
+      const mcpContent = contentFromMcpResult(item)
       return [timestamped({
         kind: "tool_result",
         toolId: item.id,
-        content: contentFromMcpResult(item),
+        content: normalizeMcpContent(mcpContent),
         isError: item.status === "failed",
       })]
+    }
     case "fileChange":
       return fileChangeToToolResults(item)
     case "plan":
@@ -879,7 +880,7 @@ function itemToToolResults(item: ThreadItem, projectId: string | null, cwd: stri
         content: item.path,
       })]
     default: {
-      const record = item as unknown as Record<string, unknown>
+      const record: Record<string, unknown> = isRecord(item) ? item : {}
       const id = typeof record.id === "string" ? record.id : `unknown-${randomUUID()}`
       return [timestamped({
         kind: "tool_result",
@@ -908,20 +909,25 @@ class AsyncQueue<T> implements AsyncIterable<T> {
   finish() {
     if (this.done) return
     this.done = true
+    const doneResult: IteratorReturnResult<undefined> = { value: undefined, done: true }
     while (this.resolvers.length > 0) {
       const resolver = this.resolvers.shift()
-      resolver?.({ value: undefined as T, done: true })
+      resolver?.(doneResult)
     }
   }
 
   [Symbol.asyncIterator](): AsyncIterator<T> {
+    const doneResult: IteratorReturnResult<undefined> = { value: undefined, done: true }
     return {
       next: () => {
         if (this.values.length > 0) {
-          return Promise.resolve({ value: this.values.shift() as T, done: false })
+          const next = this.values.shift()
+          if (next !== undefined) {
+            return Promise.resolve({ value: next, done: false as const })
+          }
         }
         if (this.done) {
-          return Promise.resolve({ value: undefined as T, done: true })
+          return Promise.resolve(doneResult)
         }
         return new Promise<IteratorResult<T>>((resolve) => {
           this.resolvers.push(resolve)
@@ -936,7 +942,7 @@ export class CodexAppServerManager {
   private readonly spawnProcess: SpawnCodexAppServer
 
   private static keyFor(chatId: string, scope: CodexSessionScope = "main"): string {
-    if ((scope as string) === "sub:") {
+    if (scope === "sub:") {
       throw new Error(`Invalid CodexSessionScope: empty sub-id (got "sub:")`)
     }
     return `${chatId}::${scope}`
@@ -1694,7 +1700,7 @@ export class CodexAppServerManager {
         type: "transcript",
         entry: timestamped({
           kind: "result",
-          subtype: "error",
+          subtype: "error" as const,
           isError: true,
           durationMs: 0,
           result: message,
@@ -1713,12 +1719,12 @@ export class CodexAppServerManager {
     context.closed = true
   }
 
-  private async sendRequest<TResult>(context: SessionContext, method: string, params: unknown): Promise<TResult> {
+  private async sendRequest<TResult>(context: SessionContext, method: string, params: AnyValue): Promise<TResult> {
     const id = randomUUID()
     const promise = new Promise<TResult>((resolve, reject) => {
-      context.pendingRequests.set(id, {
+      context.pendingRequests.set(id, <PendingRequest<AnyValue>>{
         method,
-        resolve: resolve as (value: unknown) => void,
+        resolve: <(value: AnyValue) => void>resolve,
         reject,
       })
     })

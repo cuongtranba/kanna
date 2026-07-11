@@ -1,5 +1,6 @@
 import type { HydratedTranscriptMessage, AskUserQuestionItem } from "../../../shared/types"
 import type { ToolRequestDecision } from "../../../shared/permission-policy"
+import { isRecord } from "../../../shared/errors"
 import { Button } from "../ui/button"
 import { AskUserQuestionInteractive } from "./AskUserQuestionInteractive"
 
@@ -68,11 +69,10 @@ function GenericPending({
   // tell what they're approving without expanding raw JSON. Falls back to
   // the JSON itself for tools we don't have a curated key for.
   const previewKey = (["command", "path", "url", "pattern", "query"] as const).find(
-    (k) => typeof args[k] === "string" && (args[k] as string).length > 0,
+    (k) => typeof args[k] === "string" && String(args[k]).length > 0,
   )
-  const preview = previewKey
-    ? (args[previewKey] as string)
-    : JSON.stringify(args)
+  const previewValue = previewKey !== undefined ? args[previewKey] : undefined
+  const preview = typeof previewValue === "string" ? previewValue : JSON.stringify(args)
   return (
     <div className="rounded-2xl border border-border bg-background px-4 py-3 text-sm">
       <div className="flex items-baseline gap-2">
@@ -113,7 +113,7 @@ export function PendingToolRequestMessage({ entry, onAnswer }: Props) {
     // MCP shim args use `text` field per its zod schema; AskUserQuestionItem
     // uses `question` (matches the SDK native AskUserQuestion shape). Map
     // here so getKey()/answer keys use the question body, not "undefined".
-    const rawQuestions = Array.isArray(args.questions) ? args.questions as Record<string, unknown>[] : []
+    const rawQuestions = Array.isArray(args.questions) ? args.questions.filter(isRecord) : []
     const questions: AskUserQuestionItem[] = rawQuestions.map((q) => {
       let question: string
       if (typeof q.question === "string") {
@@ -127,7 +127,9 @@ export function PendingToolRequestMessage({ entry, onAnswer }: Props) {
         id: typeof q.id === "string" ? q.id : undefined,
         question,
         header: typeof q.header === "string" ? q.header : undefined,
-        options: Array.isArray(q.options) ? q.options as AskUserQuestionItem["options"] : undefined,
+        options: Array.isArray(q.options)
+          ? q.options.filter(isRecord).filter((o: Record<string, unknown>): o is { label: string; description?: string } => typeof o.label === "string")
+          : undefined,
         multiSelect: typeof q.multiSelect === "boolean" ? q.multiSelect : false,
       }
     })

@@ -86,22 +86,21 @@ function getTerminalSize(terminal: Terminal) {
 
 function getMeasuredTerminalSize(terminal: Terminal, container: HTMLElement) {
   const xtermElement = terminal.element
-  const cellDimensions = (
-    terminal as unknown as {
-      _core?: {
-        _renderService?: {
-          dimensions?: {
-            css?: {
-              cell?: {
-                width?: number
-                height?: number
-              }
-            }
+  interface TerminalInternals {
+    _core?: {
+      _renderService?: {
+        dimensions?: {
+          css?: {
+            cell?: { width?: number; height?: number }
           }
         }
       }
     }
-  )._core?._renderService?.dimensions?.css?.cell
+  }
+  function isTerminalInternals(t: Terminal): t is Terminal & TerminalInternals { return "_core" in t }
+  const cellDimensions = isTerminalInternals(terminal)
+    ? terminal._core?._renderService?.dimensions?.css?.cell
+    : undefined
 
   const cellWidth = cellDimensions?.width ?? 0
   const cellHeight = cellDimensions?.height ?? 0
@@ -463,7 +462,7 @@ export function TerminalPane({
       const size = getMeasuredTerminalSize(terminal, element) ?? getTerminalSize(terminal)
       terminal.resize(size.cols, size.rows)
       lastSizeRef.current = size
-      void socket.command({
+      void socket.command<TerminalSnapshot | null>({
         type: "terminal.create",
         projectId,
         terminalId,
@@ -474,7 +473,7 @@ export function TerminalPane({
         hasCreatedRef.current = true
         setError(null)
         if (snapshot) {
-          applySnapshot(snapshot as TerminalSnapshot)
+          applySnapshot(snapshot)
         }
         scheduleResizeSync()
       }).catch((commandError) => {

@@ -24,6 +24,9 @@ import {
   isClaudeContextWindow,
   isClaudeReasoningEffort,
   isCodexReasoningEffort,
+  isAgentProvider,
+  isSubagentContextScope,
+  isSubagentTriggerMode,
   mergeCustomModels,
   PROVIDERS,
   type AgentProvider,
@@ -35,13 +38,19 @@ import {
   type CodexReasoningEffort,
   type ProviderCatalogEntry,
   type Subagent,
-  type SubagentContextScope,
   type SubagentInput,
-  type SubagentTriggerMode,
   type SubagentValidationError,
   type SubagentValidationErrorCode,
 } from "../../shared/types"
+import { isRecord } from "../../shared/errors"
 import type { SubagentCommandResult } from "../../shared/protocol"
+
+function isClaudeModelOptions(opts: ClaudeModelOptions | CodexModelOptions): opts is ClaudeModelOptions {
+  return "contextWindow" in opts
+}
+function isCodexModelOptions(opts: ClaudeModelOptions | CodexModelOptions): opts is CodexModelOptions {
+  return "fastMode" in opts
+}
 
 export interface SubagentsSectionHandlers {
   onCreate: (input: SubagentInput) => Promise<SubagentCommandResult>
@@ -263,26 +272,26 @@ function SubagentForm(props: SubagentFormProps) {
 
   function handleClaudeReasoning(value: ClaudeReasoningEffort) {
     if (draft.provider !== "claude") return
-    setDraft((prev) => ({
-      ...prev,
-      modelOptions: { ...(prev.modelOptions as ClaudeModelOptions), reasoningEffort: value },
-    }))
+    setDraft((prev) => {
+      const opts = isClaudeModelOptions(prev.modelOptions) ? prev.modelOptions : DEFAULT_CLAUDE_MODEL_OPTIONS
+      return { ...prev, modelOptions: { ...DEFAULT_CLAUDE_MODEL_OPTIONS, ...opts, reasoningEffort: value } }
+    })
   }
 
   function handleClaudeContextWindow(value: ClaudeContextWindow) {
     if (draft.provider !== "claude") return
-    setDraft((prev) => ({
-      ...prev,
-      modelOptions: { ...(prev.modelOptions as ClaudeModelOptions), contextWindow: value },
-    }))
+    setDraft((prev) => {
+      const opts = isClaudeModelOptions(prev.modelOptions) ? prev.modelOptions : DEFAULT_CLAUDE_MODEL_OPTIONS
+      return { ...prev, modelOptions: { ...DEFAULT_CLAUDE_MODEL_OPTIONS, ...opts, contextWindow: value } }
+    })
   }
 
   function handleCodexReasoning(value: CodexReasoningEffort) {
     if (draft.provider !== "codex") return
-    setDraft((prev) => ({
-      ...prev,
-      modelOptions: { ...(prev.modelOptions as CodexModelOptions), reasoningEffort: value },
-    }))
+    setDraft((prev) => {
+      const opts = isCodexModelOptions(prev.modelOptions) ? prev.modelOptions : DEFAULT_CODEX_MODEL_OPTIONS
+      return { ...prev, modelOptions: { ...DEFAULT_CODEX_MODEL_OPTIONS, ...opts, reasoningEffort: value } }
+    })
   }
 
   async function handleSubmit() {
@@ -317,8 +326,12 @@ function SubagentForm(props: SubagentFormProps) {
     }
   }
 
-  const claudeOptions = draft.provider === "claude" ? draft.modelOptions as ClaudeModelOptions : null
-  const codexOptions = draft.provider === "codex" ? draft.modelOptions as CodexModelOptions : null
+  const claudeOptions: ClaudeModelOptions | null = draft.provider === "claude"
+    ? { ...DEFAULT_CLAUDE_MODEL_OPTIONS, ...(isClaudeModelOptions(draft.modelOptions) ? draft.modelOptions : {}) }
+    : null
+  const codexOptions: CodexModelOptions | null = draft.provider === "codex"
+    ? { ...DEFAULT_CODEX_MODEL_OPTIONS, ...(isCodexModelOptions(draft.modelOptions) ? draft.modelOptions : {}) }
+    : null
   const providerCatalog =
     props.availableProviders.find((entry) => entry.id === draft.provider) ?? getProviderCatalog(draft.provider)
 
@@ -362,7 +375,7 @@ function SubagentForm(props: SubagentFormProps) {
       <FormRow label="Provider">
         <SegmentedControl
           value={draft.provider}
-          onValueChange={(value) => handleProviderChange(value as AgentProvider)}
+          onValueChange={(value) => { if (isAgentProvider(value)) handleProviderChange(value) }}
           options={PROVIDER_OPTIONS}
           size="sm"
         />
@@ -425,7 +438,7 @@ function SubagentForm(props: SubagentFormProps) {
       <FormRow label="Context scope">
         <SegmentedControl
           value={draft.contextScope}
-          onValueChange={(value) => patchDraft({ contextScope: value as SubagentContextScope })}
+          onValueChange={(value) => { if (isSubagentContextScope(value)) patchDraft({ contextScope: value }) }}
           options={CONTEXT_SCOPE_OPTIONS}
           size="sm"
         />
@@ -437,7 +450,7 @@ function SubagentForm(props: SubagentFormProps) {
       >
         <SegmentedControl
           value={draft.triggerMode ?? "auto"}
-          onValueChange={(value) => patchDraft({ triggerMode: value as SubagentTriggerMode })}
+          onValueChange={(value) => { if (isSubagentTriggerMode(value)) patchDraft({ triggerMode: value }) }}
           options={TRIGGER_MODE_OPTIONS}
           size="sm"
         />
@@ -736,11 +749,10 @@ function shallowEqualModelOptions(
   a: ClaudeModelOptions | CodexModelOptions,
   b: ClaudeModelOptions | CodexModelOptions,
 ): boolean {
-  const ra = a as unknown as Record<string, unknown>
-  const rb = b as unknown as Record<string, unknown>
-  const keys = new Set([...Object.keys(ra), ...Object.keys(rb)])
+  if (!isRecord(a) || !isRecord(b)) return false
+  const keys = new Set([...Object.keys(a), ...Object.keys(b)])
   for (const key of keys) {
-    if (ra[key] !== rb[key]) return false
+    if (a[key] !== b[key]) return false
   }
   return true
 }

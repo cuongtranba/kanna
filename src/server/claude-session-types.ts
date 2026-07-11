@@ -16,7 +16,7 @@ export interface ClaudeSessionUserRecord extends ClaudeSessionRecordBase {
     role: "user"
     content: string | Array<
       | { type: "text"; text: string }
-      | { type: "tool_result"; tool_use_id: string; content?: unknown; is_error?: boolean }
+      | { type: "tool_result"; tool_use_id: string; content?: string | Array<Record<string, unknown>>; is_error?: boolean }
     >
   }
 }

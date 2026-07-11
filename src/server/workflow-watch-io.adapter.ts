@@ -1,7 +1,9 @@
 import { existsSync, readdirSync, readFileSync, statSync, watch } from "node:fs"
 import { join, dirname, basename } from "node:path"
+import type { AnyValue } from "../shared/errors"
+import { isRecord } from "../shared/errors"
 
-export interface WorkflowRawFile { runId: string; raw: unknown }
+export interface WorkflowRawFile { runId: string; raw: AnyValue }
 
 /** Liveness probe for an in-flight run, derived from its live transcript dir. */
 export interface WorkflowRunDirInfo { runId: string; newestMtimeMs: number }
@@ -57,7 +59,7 @@ export function readWorkflowDir(dir: string): WorkflowRawFile[] {
   for (const name of names) {
     if (!isWfFile(name)) continue
     try {
-      const raw: unknown = JSON.parse(readFileSync(join(dir, name), "utf8"))
+      const raw: AnyValue = JSON.parse(readFileSync(join(dir, name), "utf8"))
       out.push({ runId: name.slice(0, -".json".length), raw })
     } catch {
       // partial write / corrupt file — skip this tick; next write re-fires the watch
@@ -117,7 +119,7 @@ const KNOWN_JOURNAL_KINDS: ReadonlySet<string> = new Set(["started", "result"])
 // Normalize a count-ish field: a bare number stays as-is, an array collapses to
 // its length (the workflow returns `fixed: [1941]`, we surface `1`). Anything
 // else is absent.
-function countOf(v: unknown): number | undefined {
+function countOf(v: AnyValue): number | undefined {
   if (typeof v === "number") return v
   if (Array.isArray(v)) return v.length
   return undefined
@@ -125,18 +127,19 @@ function countOf(v: unknown): number | undefined {
 
 function parseJournalLine(line: string): WorkflowJournalEntry | null {
   if (!line) return null
-  let raw: unknown
+  let raw: AnyValue
   try { raw = JSON.parse(line) } catch { return null }
-  if (!raw || typeof raw !== "object") return null
-  const r = raw as Record<string, unknown>
+  if (!isRecord(raw)) return null
+  const r = raw
   const type = r.type
   const agentId = r.agentId
   if (typeof type !== "string" || !KNOWN_JOURNAL_KINDS.has(type)) return null
   if (typeof agentId !== "string") return null
-  const out: WorkflowJournalEntry = { type: type as "started" | "result", agentId }
+  const journalType: "started" | "result" = type === "started" ? "started" : "result"
+  const out: WorkflowJournalEntry = { type: journalType, agentId }
   if (typeof r.key === "string") out.key = r.key
-  if (r.result && typeof r.result === "object" && !Array.isArray(r.result)) {
-    const rr = r.result as Record<string, unknown>
+  if (isRecord(r.result) && !Array.isArray(r.result)) {
+    const rr = r.result
     const res: WorkflowJournalEntry["result"] = {}
     if (typeof rr.dir === "string") res.dir = rr.dir
     const fixed = countOf(rr.fixed); if (fixed !== undefined) res.fixed = fixed

@@ -30,13 +30,13 @@ function isFeatureSupported(): boolean {
   if (typeof window === "undefined") return false
   if (typeof Notification === "undefined") return false
   if (!("serviceWorker" in navigator)) return false
-  if (typeof (globalThis as { PushManager?: unknown }).PushManager === "undefined") return false
+  if (!("PushManager" in globalThis)) return false
   return true
 }
 
 function isSecure(): boolean {
   if (typeof window === "undefined") return false
-  if ((window as { isSecureContext?: boolean }).isSecureContext) return true
+  if (window.isSecureContext) return true
   const host = window.location?.hostname ?? ""
   return host === "localhost" || host === "127.0.0.1" || host === "::1"
 }
@@ -101,7 +101,7 @@ export async function subscribePush(args: {
 
   const json = subscription.toJSON()
   const endpoint = json.endpoint ?? subscription.endpoint
-  const keys = (json.keys ?? {}) as { p256dh?: string; auth?: string }
+  const keys: { p256dh?: string; auth?: string } = json.keys ?? {}
   if (!endpoint || !keys.p256dh || !keys.auth) {
     throw new Error("Subscription returned without endpoint or keys")
   }

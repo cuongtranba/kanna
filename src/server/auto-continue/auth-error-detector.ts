@@ -1,7 +1,10 @@
+import type { AnyValue } from "../../shared/errors"
+import { isRecord } from "../../shared/errors"
+
 export interface AuthErrorDetection {
   chatId: string
   reason: string
-  raw: unknown
+  raw: AnyValue
 }
 
 interface ErrorLike {
@@ -34,9 +37,9 @@ export class ClaudeAuthErrorDetector {
    * spawn has been rejected by the API — caller should mark the token as
    * errored and rotate.
    */
-  detect(chatId: string, error: unknown): AuthErrorDetection | null {
+  detect(chatId: string, error: AnyValue): AuthErrorDetection | null {
     if (!error) return null
-    const e = error as ErrorLike
+    const e: ErrorLike = isRecord(error) ? error : {}
     if (e.status === 401 || e.api_error_status === 401) {
       return { chatId, reason: this.summarize(e.message), raw: error }
     }

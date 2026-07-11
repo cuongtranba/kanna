@@ -81,8 +81,8 @@ export function NewProjectModal({ open, onOpenChange, onConfirm }: Props) {
             value={tab}
             onValueChange={setTab}
             options={[
-              { value: "new" as Tab, label: "New Folder" },
-              { value: "existing" as Tab, label: "Existing Path" },
+              { value: "new" satisfies Tab, label: "New Folder" },
+              { value: "existing" satisfies Tab, label: "Existing Path" },
             ]}
             className="w-full mb-2"
             optionClassName="flex-1 justify-center"

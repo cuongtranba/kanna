@@ -4,10 +4,9 @@ export type ShareOutcome = "shared" | "copied" | "failed"
 
 export async function shareViaWebShare(source: PreviewSource): Promise<ShareOutcome> {
   const absolute = toAbsoluteUrl(source.contentUrl)
-  const shareApi = (navigator as Navigator & { share?: (data: ShareData) => Promise<void> }).share
-  if (typeof shareApi === "function") {
+  if ("share" in navigator && typeof navigator.share === "function") {
     try {
-      await shareApi.call(navigator, { title: source.displayName, url: absolute })
+      await navigator.share({ title: source.displayName, url: absolute })
       return "shared"
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") return "shared"

@@ -1,4 +1,5 @@
 import type { ChatAttachment } from "../../shared/types"
+import type { AnyValue } from "../../shared/errors"
 
 export class UploadAbortedError extends Error {
   constructor() {
@@ -60,7 +61,7 @@ export function uploadFile(args: UploadFileArgs): UploadHandle {
 
     xhr.addEventListener("load", () => {
       if (aborted) return
-      let payload: unknown
+      let payload: AnyValue
       try {
         payload = xhr.responseText ? JSON.parse(xhr.responseText) : null
       } catch {
@@ -68,7 +69,7 @@ export function uploadFile(args: UploadFileArgs): UploadHandle {
       }
 
       if (xhr.status >= 200 && xhr.status < 300) {
-        const attachments = (payload as { attachments?: ChatAttachment[] } | null)?.attachments
+        const attachments = (<{ attachments?: ChatAttachment[] } | null>payload)?.attachments
         if (!Array.isArray(attachments)) {
           reject(new Error("Upload failed: malformed response"))
           return
@@ -77,7 +78,7 @@ export function uploadFile(args: UploadFileArgs): UploadHandle {
         return
       }
 
-      const errorMessage = (payload as { error?: string } | null)?.error
+      const errorMessage = (<{ error?: string } | null>payload)?.error
       reject(new Error(typeof errorMessage === "string" ? errorMessage : "Upload failed"))
     })
 

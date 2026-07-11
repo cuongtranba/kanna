@@ -372,7 +372,7 @@ export type SubagentRunEvent =
       runId: string
       toolUseId: string
       toolKind: "ask_user_question" | "exit_plan_mode"
-      input: unknown
+      input: Record<string, unknown>
     }
   | {
       v: 3
@@ -381,7 +381,7 @@ export type SubagentRunEvent =
       chatId: string
       runId: string
       toolUseId: string
-      result: unknown
+      result: string | Record<string, unknown> | readonly unknown[] | null
       resolution: "user" | "auto_deny" | "interrupted"
     }
 

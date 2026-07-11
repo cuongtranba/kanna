@@ -34,7 +34,7 @@ export function createEditTool(deps: { toolCallback: ToolCallbackService }): Edi
         toolCallback: deps.toolCallback,
         toolName: "mcp__kanna__edit",
         ctx,
-        args: input as unknown as Record<string, unknown>,
+        args: input,
         formatAnswer: async () => {
           const resolved = resolvePath(input.path, ctx.cwd)
           let content: string

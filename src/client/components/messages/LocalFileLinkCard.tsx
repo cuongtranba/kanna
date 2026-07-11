@@ -106,7 +106,7 @@ export function LocalFileLinkCard({ path, linkText }: Props) {
     rawDisplayName,
     friendlyType,
     sizeLabel,
-  ].filter(Boolean) as string[]
+  ].filter((s): s is string => Boolean(s))
 
   if (canPreviewInModal) {
     return (

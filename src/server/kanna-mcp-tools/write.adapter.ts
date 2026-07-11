@@ -33,7 +33,7 @@ export function createWriteTool(deps: { toolCallback: ToolCallbackService }): Wr
         toolCallback: deps.toolCallback,
         toolName: "mcp__kanna__write",
         ctx,
-        args: input as unknown as Record<string, unknown>,
+        args: input,
         formatAnswer: async () => {
           const resolved = resolvePath(input.path, ctx.cwd)
           try {

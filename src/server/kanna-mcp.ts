@@ -2,6 +2,8 @@ import { createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk"
 import { z } from "zod"
 import path from "node:path"
 import { randomUUID } from "node:crypto"
+import type { AnyValue } from "../shared/errors"
+import { isRecord } from "../shared/errors"
 import { statPathOrNull } from "./fs-stat.adapter"
 import { KANNA_MCP_SERVER_NAME } from "../shared/tools"
 import { buildProjectFileContentUrl, buildLocalFileContentUrl } from "../shared/projectFileUrl"
@@ -289,19 +291,18 @@ Args:
  * `sendNotification`.
  */
 export function buildDelegateProgressEmitter(
-  extra: unknown,
+  extra: AnyValue,
 ): ((entry: TranscriptEntry) => void) | undefined {
-  if (extra == null || typeof extra !== "object") return undefined
-  const meta = (extra as { _meta?: { progressToken?: string | number } })._meta
-  const progressToken = meta?.progressToken
+  if (!isRecord(extra)) return undefined
+  const metaRaw = extra._meta
+  const meta = isRecord(metaRaw) ? metaRaw : null
+  const progressToken = meta !== null && (typeof meta.progressToken === "string" || typeof meta.progressToken === "number") ? meta.progressToken : undefined
   if (progressToken === undefined) return undefined
-  const sendNotification = (extra as {
-    sendNotification?: (notification: {
-      method: string
-      params: Record<string, unknown>
-    }) => Promise<void>
-  }).sendNotification
-  if (typeof sendNotification !== "function") return undefined
+  if (typeof extra.sendNotification !== "function") return undefined
+  const rawSendNotification = extra.sendNotification
+  function sendNotification(notification: { method: string; params: Record<string, AnyValue> }): void {
+    void rawSendNotification(notification)
+  }
   let progress = 0
   return (entry) => {
     progress += 1
@@ -314,8 +315,6 @@ export function buildDelegateProgressEmitter(
           ? `tool_call:${entry.tool.toolName}`
           : entry.kind,
       },
-    }).catch(() => {
-      /* notification is advisory; drop on send failure */
     })
   }
 }
@@ -364,7 +363,10 @@ function buildDelegateSubagentToolList(args: {
         // how to drive follow-up turns.
         if (input.keep_alive && !result.isError && result.content.length > 0) {
           const parsed = (() => {
-            try { return JSON.parse(result.content[0].text) as { status?: string; run_id?: string } } catch { return null }
+            try {
+              const p: { status?: string; run_id?: string } = JSON.parse(result.content[0].text)
+              return p
+            } catch { return null }
           })()
           if (parsed?.status === "completed" && parsed.run_id) {
             const hint = `\n\n[run_id: ${parsed.run_id}] — session kept alive; use send_subagent_message({run_id, prompt}) for more turns, close_subagent({run_id}) when done.`
@@ -603,7 +605,7 @@ export function buildKannaMcpTools(args: KannaMcpArgs): KannaSdkToolList {
         "Ask the user a question with multiple choice answers",
         askTool.schema.shape,
         async (input, extra) => {
-          const requestId = (extra as { requestId?: string | number } | undefined)?.requestId
+          const requestId = isRecord(extra) && (typeof extra.requestId === "string" || typeof extra.requestId === "number") ? extra.requestId : undefined
           const toolUseId = requestId != null ? String(requestId) : randomUUID()
           return await askTool.handler(input, {
             chatId: chatId ?? "",
@@ -619,7 +621,7 @@ export function buildKannaMcpTools(args: KannaMcpArgs): KannaSdkToolList {
         "Submit a plan for user approval before continuing",
         exitPlanTool.schema.shape,
         async (input, extra) => {
-          const requestId = (extra as { requestId?: string | number } | undefined)?.requestId
+          const requestId = isRecord(extra) && (typeof extra.requestId === "string" || typeof extra.requestId === "number") ? extra.requestId : undefined
           const toolUseId = requestId != null ? String(requestId) : randomUUID()
           return await exitPlanTool.handler(input, {
             chatId: chatId ?? "",
@@ -654,9 +656,10 @@ export function buildKannaMcpTools(args: KannaMcpArgs): KannaSdkToolList {
           `Kanna built-in replacement for ${shim.name}.`,
           shim.schema.shape,
           async (input, extra) => {
-            const requestId = (extra as { requestId?: string | number } | undefined)?.requestId
+            const requestId = isRecord(extra) && (typeof extra.requestId === "string" || typeof extra.requestId === "number") ? extra.requestId : undefined
             const toolUseId = requestId != null ? String(requestId) : randomUUID()
-            return await shim.handler(input as I, {
+            const typedInput = <I>input
+            return await shim.handler(typedInput, {
               chatId: chatId ?? "",
               sessionId,
               toolUseId,

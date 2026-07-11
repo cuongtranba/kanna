@@ -347,7 +347,7 @@ export async function fetchLatestPackageVersion(packageName: string) {
     throw new Error(`registry returned ${response.status}`)
   }
 
-  const payload = await response.json() as { version?: unknown }
+  const payload: { version?: string } = await response.json()
   if (typeof payload.version !== "string" || !payload.version.trim()) {
     throw new Error("registry response did not include a version")
   }

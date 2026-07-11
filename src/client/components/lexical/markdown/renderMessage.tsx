@@ -47,6 +47,8 @@ import {
   IS_ITALIC,
   IS_STRIKETHROUGH,
   IS_CODE,
+  type EditorConfig,
+  type LexicalEditor,
   type LexicalNode,
   TextNode,
 } from "lexical"
@@ -91,16 +93,20 @@ function nextKey(): string {
   return String(keyCounter++)
 }
 
+/** Current editor/config set at the start of each render pass. */
+let renderEditor: LexicalEditor | null = null
+let renderConfig: EditorConfig | null = null
+
 /** Walk a single Lexical node and return its React representation. */
 function walkNode(node: LexicalNode): ReactNode {
   // --- MermaidNode (DecoratorNode, block) ---
-  if ($isMermaidNode(node)) {
-    return <span key={nextKey()}>{node.decorate(null as never, null as never)}</span>
+  if ($isMermaidNode(node) && renderEditor && renderConfig) {
+    return <span key={nextKey()}>{node.decorate(renderEditor, renderConfig)}</span>
   }
 
   // --- LocalFileLinkNode (DecoratorNode, inline) ---
-  if ($isLocalFileLinkNode(node)) {
-    return <span key={nextKey()}>{node.decorate(null as never, null as never)}</span>
+  if ($isLocalFileLinkNode(node) && renderEditor && renderConfig) {
+    return <span key={nextKey()}>{node.decorate(renderEditor, renderConfig)}</span>
   }
 
   // --- Heading ---
@@ -347,13 +353,12 @@ function walkChildren(node: { getChildren<T extends LexicalNode>(): T[] }): Reac
  */
 function renderMarkdownSegment(markdown: string): ReactNode {
   const processed = linkifyTextRefs(markdown)
-  const editor = createHeadlessEditor(
-    buildKannaEditorConfig({
-      namespace: "kanna-message-renderer",
-      nodes: MESSAGE_NODES,
-      editable: false,
-    }),
-  )
+  const editorConfig = buildKannaEditorConfig({
+    namespace: "kanna-message-renderer",
+    nodes: MESSAGE_NODES,
+    editable: false,
+  })
+  const editor = createHeadlessEditor(editorConfig)
 
   editor.update(() => {
     $convertFromMarkdownString(processed, KANNA_MESSAGE_TRANSFORMERS, undefined, true)
@@ -361,9 +366,14 @@ function renderMarkdownSegment(markdown: string): ReactNode {
 
   return editor.getEditorState().read(() => {
     keyCounter = 0
+    renderEditor = editor
+    renderConfig = editorConfig
     const root = $getRoot()
     const children = root.getChildren<LexicalNode>()
-    return <>{children.map(walkNode)}</>
+    const result = <>{children.map(walkNode)}</>
+    renderEditor = null
+    renderConfig = null
+    return result
   })
 }
 

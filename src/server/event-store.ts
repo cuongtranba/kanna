@@ -1,6 +1,7 @@
 import { homedir } from "node:os"
 import path from "node:path"
 import { getDataDir, LOG_PREFIX } from "../shared/branding"
+import type { AnyValue } from "../shared/errors"
 import { log } from "../shared/log"
 import type { StorageBackend } from "./storage/backend"
 import { FsStorageBackend } from "./storage/fs-storage.adapter"
@@ -40,7 +41,7 @@ const SNAPSHOT_THRESHOLD_BYTES = 2 * 1024 * 1024
 const STALE_EMPTY_CHAT_MAX_AGE_MS = 30 * 60 * 1000
 const SIDEBAR_PROJECT_ORDER_FILE = "sidebar-order.json"
 
-function normalizeSidebarProjectOrder(value: unknown) {
+function normalizeSidebarProjectOrder<T>(value: T) {
   if (!Array.isArray(value)) {
     return []
   }
@@ -365,7 +366,7 @@ export class EventStore implements PushEventStore {
     try {
       const text = await this.storage.readText(this.snapshotPath)
       if (!text.trim()) return
-      const parsed = JSON.parse(text) as SnapshotFile
+      const parsed: SnapshotFile = JSON.parse(text)
       if (parsed.v !== STORE_VERSION) {
         log.warn(`${LOG_PREFIX} Resetting local chat history for store version ${STORE_VERSION}`)
         await this.clearStorage()
@@ -376,40 +377,28 @@ export class EventStore implements PushEventStore {
         this.state.projectIdsByPath.set(project.localPath, project.id)
       }
       for (const chat of parsed.chats) {
-        const legacy = chat as unknown as {
-          sessionToken?: string | null
-          pendingForkSessionToken?: string | null | { provider: AgentProvider; token: string }
-          sessionTokensByProvider?: Partial<Record<AgentProvider, string | null>>
-        }
+        // Access legacy fields from old snapshot data via Reflect.get (avoids `as` casts).
+        const legacySessionToken: string | null | undefined = Reflect.get(chat, "sessionToken")
+        const legacyPendingFork: string | null | { provider: AgentProvider; token: string } | undefined = Reflect.get(chat, "pendingForkSessionToken")
+        const legacyTokensByProvider: Partial<Record<AgentProvider, string | null>> | undefined = Reflect.get(chat, "sessionTokensByProvider")
+
         const sessionTokensByProvider: Partial<Record<AgentProvider, string | null>> =
-          legacy.sessionTokensByProvider
-            ? { ...legacy.sessionTokensByProvider }
-            : {}
+          legacyTokensByProvider ? { ...legacyTokensByProvider } : {}
         if (
-          typeof legacy.sessionToken === "string"
+          typeof legacySessionToken === "string"
           && chat.provider
           && sessionTokensByProvider[chat.provider] == null
         ) {
-          sessionTokensByProvider[chat.provider] = legacy.sessionToken
+          sessionTokensByProvider[chat.provider] = legacySessionToken
         }
         let pendingForkSessionToken: ChatRecord["pendingForkSessionToken"] = null
-        const rawPending = legacy.pendingForkSessionToken
-        if (rawPending && typeof rawPending === "object" && "token" in rawPending) {
-          pendingForkSessionToken = rawPending as { provider: AgentProvider; token: string }
-        } else if (typeof rawPending === "string" && chat.provider) {
-          pendingForkSessionToken = { provider: chat.provider, token: rawPending }
+        if (legacyPendingFork && typeof legacyPendingFork === "object" && "token" in legacyPendingFork) {
+          pendingForkSessionToken = legacyPendingFork
+        } else if (typeof legacyPendingFork === "string" && chat.provider) {
+          pendingForkSessionToken = { provider: chat.provider, token: legacyPendingFork }
         }
-        const {
-          sessionToken: _legacySessionToken,
-          pendingForkSessionToken: _legacyPendingForkSessionToken,
-          sessionTokensByProvider: _legacyByProvider,
-          ...rest
-        } = legacy
-        void _legacySessionToken
-        void _legacyPendingForkSessionToken
-        void _legacyByProvider
         this.state.chatsById.set(chat.id, {
-          ...(rest as unknown as ChatRecord),
+          ...chat,
           unread: chat.unread ?? false,
           sessionTokensByProvider,
           pendingForkSessionToken,
@@ -516,11 +505,7 @@ export class EventStore implements PushEventStore {
       const line = lines[index].trim()
       if (!line) continue
       try {
-        const event = JSON.parse(line) as {
-          v?: number
-          type?: string
-          projectIds?: unknown
-        }
+        const event: { v?: number; type?: string; projectIds?: AnyValue } = JSON.parse(line)
         if (event.v !== STORE_VERSION || event.type !== "sidebar_project_order_set") {
           continue
         }
@@ -590,17 +575,17 @@ export class EventStore implements PushEventStore {
       const line = lines[index].trim()
       if (!line) continue
       try {
-        const event = JSON.parse(line) as Partial<StoreEvent>
+        const event: StoreEvent & { v?: number; type?: string } = JSON.parse(line)
         if (event.v !== STORE_VERSION) {
           log.warn(`${LOG_PREFIX} Resetting local history from incompatible event log`)
           await this.clearStorage()
           return []
         }
-        if ((event as { type?: unknown }).type === "sidebar_project_order_set") {
+        if (event.type === "sidebar_project_order_set") {
           continue
         }
         parsedEvents.push({
-          event: event as StoreEvent,
+          event,
           sourceIndex,
           lineIndex: index,
         })
@@ -623,7 +608,7 @@ export class EventStore implements PushEventStore {
       this.applyAutoContinueEvent(event)
       return
     }
-    const e = event as Exclude<StoreEvent, AutoContinueEvent>
+    const e: Exclude<StoreEvent, AutoContinueEvent> = event
     switch (e.type) {
       case "project_opened": {
         const localPath = resolveLocalPath(e.localPath)
@@ -1141,9 +1126,9 @@ export class EventStore implements PushEventStore {
     for (const rawLine of text.split("\n")) {
       const line = rawLine.trim()
       if (!line) continue
-      const entry = JSON.parse(line) as TranscriptEntry
+      const entry: TranscriptEntry & { messageId?: string } = JSON.parse(line)
       entries.push(entry)
-      const mid = (entry as { messageId?: string }).messageId
+      const mid = entry.messageId
       if (typeof mid === "string" && mid.length > 0) {
         seen.add(mid)
       }
@@ -1627,7 +1612,7 @@ export class EventStore implements PushEventStore {
       // Dedupe by messageId: if a transcript entry from the same JSONL source
       // message has already been appended, skip. Server-generated entries
       // without messageId (e.g. interrupted, context_cleared) always append.
-      const mid = (entry as { messageId?: string }).messageId
+      const mid = entry.messageId
       if (typeof mid === "string" && mid.length > 0) {
         // Ensure the transcript is loaded so the seen set is populated.
         this.getMessages(chatId)
@@ -2160,7 +2145,7 @@ export class EventStore implements PushEventStore {
       const line = rawLine.trim()
       if (!line) continue
       try {
-        const event = JSON.parse(line) as CloudflareTunnelEvent
+        const event: CloudflareTunnelEvent = JSON.parse(line)
         this.applyTunnelEvent(event)
       } catch {
         log.warn(`${LOG_PREFIX} Ignoring malformed line in tunnels.jsonl`)
@@ -2189,7 +2174,7 @@ export class EventStore implements PushEventStore {
       const line = rawLine.trim()
       if (!line) continue
       try {
-        const event = JSON.parse(line) as ShareEvent
+        const event: ShareEvent = JSON.parse(line)
         this.shareEventsAll.push(event)
       } catch {
         log.warn(`${LOG_PREFIX} Ignoring malformed line in shares.jsonl`)
@@ -2215,7 +2200,8 @@ export class EventStore implements PushEventStore {
       const line = rawLine.trim()
       if (!line) continue
       try {
-        events.push(JSON.parse(line) as PushEvent)
+        const pushEvent: PushEvent = JSON.parse(line)
+        events.push(pushEvent)
       } catch {
         log.warn(`${LOG_PREFIX} Ignoring malformed line in push.jsonl`)
       }

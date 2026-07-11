@@ -1,5 +1,5 @@
 export async function loadPackageVersion(): Promise<string> {
-  const pkg = (await Bun.file(new URL("../../package.json", import.meta.url)).json()) as { version?: string }
+  const pkg: { version?: string } = await Bun.file(new URL("../../package.json", import.meta.url)).json()
   return pkg.version ?? "0.0.0"
 }
 

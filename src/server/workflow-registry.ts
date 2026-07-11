@@ -230,7 +230,7 @@ export function createWorkflowRegistry(deps: WorkflowRegistryDeps): WorkflowRegi
       if (!entry || !deps.readAgentTranscriptLines) return []
       const out: TranscriptEntry[] = []
       for (const line of deps.readAgentTranscriptLines(entry.dir, runId, agentId)) {
-        let parsed: unknown
+        let parsed
         try {
           parsed = JSON.parse(line)
         } catch {

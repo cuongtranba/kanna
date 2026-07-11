@@ -48,7 +48,7 @@ export function SharePage() {
     const ac = new AbortController()
     fetch(`/api/share/${encodeURIComponent(token)}`, { signal: ac.signal })
       .then(async (res) => {
-        const body = await res.json() as ShareApiResponse
+        const body: ShareApiResponse = await res.json()
         if (aborted) return
         if (body.ok) {
           setState({ kind: "ok", snapshot: body.snapshot })

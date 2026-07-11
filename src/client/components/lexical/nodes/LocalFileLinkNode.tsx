@@ -1,3 +1,4 @@
+import type { AnyValue } from "../../../../shared/errors"
 import type { EditorConfig, LexicalEditor, SerializedLexicalNode, Spread } from "lexical"
 import type { ReactNode } from "react"
 import { DecoratorNode, $applyNodeReplacement } from "lexical"
@@ -118,6 +119,6 @@ export function $createLocalFileLinkNode(
   )
 }
 
-export function $isLocalFileLinkNode(node: unknown): node is LocalFileLinkNode {
+export function $isLocalFileLinkNode(node: AnyValue): node is LocalFileLinkNode {
   return node instanceof LocalFileLinkNode
 }

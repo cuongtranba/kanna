@@ -1,5 +1,6 @@
 import webpush from "web-push"
 import { log } from "../../shared/log"
+import { isRecord } from "../../shared/errors"
 import type {
   KannaStatus,
   PushPayload,
@@ -323,16 +324,17 @@ export class PushManager {
       })
       log.info("[kanna/push] deliver: ok", { id: sub.id, endpoint: endpointHost })
     } catch (error) {
-      const status = (error as { statusCode?: number }).statusCode
-      const headers = (error as { headers?: Record<string, string> }).headers
-      const responseBody = (error as { body?: string }).body
+      const errRec = isRecord(error) ? error : {}
+      const status = typeof errRec.statusCode === "number" ? errRec.statusCode : undefined
+      const headers = isRecord(errRec.headers) ? errRec.headers : undefined
+      const responseBody = typeof errRec.body === "string" ? errRec.body : undefined
       log.warn("[kanna/push] deliver: failed", {
         id: sub.id,
         endpoint: endpointHost,
         status,
         headers,
         responseBody,
-        message: (error as Error).message,
+        message: error instanceof Error ? error.message : String(error),
       })
       if (status === 410 || status === 404 || status === 403) {
         await this.removeSubscription(sub.id, "expired")

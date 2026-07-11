@@ -79,14 +79,12 @@ export function StackCreatePanel({
       } else if (e.key === "ArrowRight") {
         const chips = chipContainerRef.current?.querySelectorAll("button")
         if (chips) {
-          const next = chips[index + 1] as HTMLButtonElement | undefined
-          next?.focus()
+          chips[index + 1]?.focus()
         }
       } else if (e.key === "ArrowLeft") {
         const chips = chipContainerRef.current?.querySelectorAll("button")
         if (chips) {
-          const prev = chips[index - 1] as HTMLButtonElement | undefined
-          prev?.focus()
+          chips[index - 1]?.focus()
         }
       }
     },

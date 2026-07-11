@@ -1,6 +1,8 @@
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises"
 import path from "node:path"
 import process from "node:process"
+import type { AnyValue } from "../../shared/errors"
+import { isRecord } from "../../shared/errors"
 
 /**
  * On-disk registry of claude PTY children so a non-graceful server crash
@@ -100,7 +102,7 @@ export class ClaudePtyRegistry {
       return []
     }
     try {
-      const parsed = JSON.parse(raw) as Partial<RegistryFile>
+      const parsed: Partial<RegistryFile> = JSON.parse(raw)
       if (!parsed || !Array.isArray(parsed.entries)) return []
       return parsed.entries.filter(isValidEntry)
     } catch {
@@ -121,17 +123,16 @@ export class ClaudePtyRegistry {
   }
 }
 
-function isValidEntry(value: unknown): value is ClaudePtyEntry {
-  if (!value || typeof value !== "object") return false
-  const candidate = value as Partial<ClaudePtyEntry>
+function isValidEntry(value: AnyValue): value is ClaudePtyEntry {
+  if (!isRecord(value)) return false
   return (
-    typeof candidate.chatId === "string"
-    && typeof candidate.sessionId === "string"
-    && typeof candidate.pid === "number"
-    && Number.isFinite(candidate.pid)
-    && typeof candidate.cwd === "string"
-    && typeof candidate.runtimeDir === "string"
-    && typeof candidate.createdAt === "number"
+    typeof value.chatId === "string"
+    && typeof value.sessionId === "string"
+    && typeof value.pid === "number"
+    && Number.isFinite(value.pid)
+    && typeof value.cwd === "string"
+    && typeof value.runtimeDir === "string"
+    && typeof value.createdAt === "number"
   )
 }
 
@@ -180,7 +181,8 @@ async function collectDescendants(root: number): Promise<number[]> {
   const queue = [root]
   const seen = new Set<number>([root])
   while (queue.length > 0) {
-    const parent = queue.shift() as number
+    const parent = queue.shift()
+    if (parent === undefined) break
     for (const child of childrenByParent.get(parent) ?? []) {
       if (seen.has(child)) continue
       seen.add(child)
@@ -196,8 +198,8 @@ function parsePidPpid(psOutput: string): Map<number, number[]> {
   for (const line of psOutput.split("\n")) {
     const match = line.trim().match(/^(\d+)\s+(\d+)$/)
     if (!match) continue
-    const pid = Number.parseInt(match[1] as string, 10)
-    const ppid = Number.parseInt(match[2] as string, 10)
+    const pid = Number.parseInt(match[1] ?? "", 10)
+    const ppid = Number.parseInt(match[2] ?? "", 10)
     if (!Number.isFinite(pid) || !Number.isFinite(ppid)) continue
     const siblings = childrenByParent.get(ppid)
     if (siblings) siblings.push(pid)

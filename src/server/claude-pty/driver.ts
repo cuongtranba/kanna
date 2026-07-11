@@ -1,5 +1,7 @@
 import { homedir } from "node:os"
 import path from "node:path"
+import type { AnyValue } from "../../shared/errors"
+import { isRecord } from "../../shared/errors"
 import { log } from "../../shared/log"
 import { randomUUID } from "node:crypto"
 import { createRuntimeDir, writeRuntimeFile, removeRuntimeDir } from "./runtime-dir.adapter"
@@ -448,7 +450,7 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
   const runtimeDir = await createRuntimeDir(`kanna-pty-${sessionId.slice(0, 8)}-`)
 
   const mcpConfigPath = path.join(runtimeDir, "mcp-config.json")
-  let mcpHandle: KannaMcpHttpHandle
+  let mcpHandle: KannaMcpHttpHandle | undefined
   const startMcp = args.startKannaMcpHttpServer ?? startKannaMcpHttpServer
   try {
     mcpHandle = await startMcp({
@@ -478,7 +480,7 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
       { encoding: "utf8", mode: 0o600 },
     )
   } catch (err) {
-    try { await (mcpHandle! as KannaMcpHttpHandle | undefined)?.close() } catch { /* swallow */ }
+    try { if (mcpHandle) await mcpHandle.close() } catch { /* swallow */ }
     try { await removeRuntimeDir(runtimeDir) } catch { /* swallow */ }
     throw err
   }
@@ -542,7 +544,7 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
     // "ask_user_question dropped" UX bug. Pendings now resolve only via
     // explicit chat.cancel / chat.delete (cancelAllForChat in ws-router)
     // or recoverOnStartup fail-close on the next server boot.
-    try { await mcpHandle.close() } catch (err) {
+    try { if (mcpHandle) await mcpHandle.close() } catch (err) {
       // Logged because a swallowed mcpHandle close error means the loopback
       // HTTP server may still be listening — a real resource leak.
       log.warn("[kanna/pty] mcpHandle.close failed (HTTP server may leak)", { chatId: args.chatId, sessionId, err })
@@ -567,9 +569,10 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
 
   function pushMerged(ev: HarnessEvent) {
     if (ev.type === "transcript" && ev.entry) {
-      const entry = ev.entry as { kind?: string; accountInfo?: unknown; slashCommands?: unknown }
-      if (entry.kind === "account_info" && entry.accountInfo !== undefined) {
-        cachedAccountInfo = entry.accountInfo as AccountInfo
+      const entry = ev.entry
+      if (entry.kind === "account_info" && isRecord(entry) && entry.accountInfo !== undefined) {
+        const ai: AccountInfo = entry.accountInfo satisfies AnyValue
+        cachedAccountInfo = ai
       }
       if (entry.kind === "result") {
         sawResultEntry = true
@@ -578,8 +581,9 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
       // CLI knows about — including every skill, plugin command, project
       // command, and built-in. Cache it so getSupportedCommands() returns
       // the live set instead of the cold-start fallback.
-      if (entry.kind === "system_init" && Array.isArray(entry.slashCommands)) {
-        cachedSlashCommands = (entry.slashCommands as string[]).map((name) => ({
+      if (entry.kind === "system_init" && isRecord(entry) && Array.isArray(entry.slashCommands)) {
+        const rawCommands: AnyValue[] = entry.slashCommands
+        cachedSlashCommands = rawCommands.filter((s): s is string => typeof s === "string").map((name) => ({
           name,
           description: "",
           argumentHint: "",
@@ -594,7 +598,7 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
       args.oneShot
       && !args.keepAlive
       && ev.type === "transcript"
-      && (ev.entry as { kind?: string } | undefined)?.kind === "result"
+      && ev.entry?.kind === "result"
     ) {
       void oneShotClose()
     }
@@ -818,7 +822,7 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
     if (closed || oneShotClosing) {
       while (mergedWaiters.length > 0) {
         const w = mergedWaiters.shift()
-        if (w) w({ value: undefined as unknown as HarnessEvent, done: true })
+        if (w) w({ value: undefined, done: true })
       }
       return
     }
@@ -838,7 +842,7 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
         type: "transcript",
         entry: timestamped({
           kind: "result",
-          subtype: "error",
+          subtype: "error" as const,
           isError: true,
           durationMs: 0,
           result: resultText,
@@ -849,7 +853,7 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
     void cleanupResources()
     while (mergedWaiters.length > 0) {
       const w = mergedWaiters.shift()
-      if (w) w({ value: undefined as unknown as HarnessEvent, done: true })
+      if (w) w({ value: undefined, done: true })
     }
   }
 
@@ -924,7 +928,7 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
             if (ev) return Promise.resolve({ value: ev, done: false })
           }
           if (closed) {
-            return Promise.resolve({ value: undefined as unknown as HarnessEvent, done: true })
+            return Promise.resolve({ value: undefined, done: true })
           }
           return new Promise((resolve) => {
             mergedWaiters.push(resolve)
@@ -941,17 +945,7 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
       try { await pty.sendInput("\x03") } catch { /* swallow */ }
     },
     sendPrompt: async (content) => {
-      let text: string
-      if (typeof content === "string") {
-        text = content
-      } else if (Array.isArray(content)) {
-        text = (content as Array<{ type?: string; text?: string }>)
-          .filter((c) => c.type === "text")
-          .map((c) => c.text ?? "")
-          .join("\n")
-      } else {
-        text = String(content)
-      }
+      const text = content
       // Gate on the TUI being back at its idle "❯ " input box before pasting.
       // After a long previous turn the REPL may still be rendering (stop-hook
       // summary / turn_duration / context compaction); pasting then drops the
@@ -1021,7 +1015,7 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
         //   3. SIGKILL (force kill, unblocks hung TUI)
         // Each timer is cleared if pty.exited resolves before the deadline.
         try { await sendExitCommand(pty) } catch { /* swallow */ }
-        const sigkillTimer = { ref: null as ReturnType<typeof setTimeout> | null }
+        const sigkillTimer: { ref: ReturnType<typeof setTimeout> | null } = { ref: null }
         const termTimer = setTimeout(() => {
           try { pty.close() } catch { /* swallow */ }
           sigkillTimer.ref = setTimeout(() => {
@@ -1037,7 +1031,7 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
         await cleanupResources()
         while (mergedWaiters.length > 0) {
           const w = mergedWaiters.shift()
-          if (w) w({ value: undefined as unknown as HarnessEvent, done: true })
+          if (w) w({ value: undefined, done: true })
         }
       })()
     },

@@ -1,5 +1,6 @@
 import path from "node:path"
 import type { Server } from "bun"
+import { isErrnoException } from "../shared/errors"
 import { getServerFile, serveHttp, statFile } from "./server-io.adapter"
 import { bin as cloudflaredBin } from "cloudflared"
 import { APP_NAME, getRuntimeProfile } from "../shared/branding"
@@ -63,13 +64,6 @@ import type {
   AttachmentManifestEntry,
   ChatMeta,
 } from "../shared/session-share/types"
-import type {
-  UserPromptEntry,
-  AssistantTextEntry,
-  AssistantThinkingEntry,
-  ToolCallEntry,
-  ToolResultEntry,
-} from "../shared/types"
 
 /** Parse a positive-integer env var, falling back to `fallback` on unset/invalid/<=0. */
 function parsePositiveIntEnv(raw: string | undefined, fallback: number): number {
@@ -302,28 +296,23 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
       for (const entry of store.getMessages(chatId)) {
         switch (entry.kind) {
           case "user_prompt": {
-            const e = entry as UserPromptEntry
-            out.push({ kind: "user_prompt", id: e._id, createdAt: e.createdAt, text: e.content })
+            out.push({ kind: "user_prompt", id: entry._id, createdAt: entry.createdAt, text: entry.content })
             break
           }
           case "assistant_text": {
-            const e = entry as AssistantTextEntry
-            out.push({ kind: "assistant_text", id: e._id, createdAt: e.createdAt, text: e.text })
+            out.push({ kind: "assistant_text", id: entry._id, createdAt: entry.createdAt, text: entry.text })
             break
           }
           case "assistant_thinking": {
-            const e = entry as AssistantThinkingEntry
-            out.push({ kind: "assistant_thinking", id: e._id, createdAt: e.createdAt, text: e.text })
+            out.push({ kind: "assistant_thinking", id: entry._id, createdAt: entry.createdAt, text: entry.text })
             break
           }
           case "tool_call": {
-            const e = entry as ToolCallEntry
-            out.push({ kind: "tool_call", id: e._id, createdAt: e.createdAt, name: e.tool.toolName, input: e.tool.input })
+            out.push({ kind: "tool_call", id: entry._id, createdAt: entry.createdAt, name: entry.tool.toolName, input: entry.tool.input })
             break
           }
           case "tool_result": {
-            const e = entry as ToolResultEntry
-            out.push({ kind: "tool_result", id: e._id, createdAt: e.createdAt, toolCallId: e.toolId, output: e.content, isError: e.isError ?? false })
+            out.push({ kind: "tool_result", id: entry._id, createdAt: entry.createdAt, toolCallId: entry.toolId, output: entry.content, isError: entry.isError ?? false })
             break
           }
           default:
@@ -652,9 +641,9 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
         },
       })
       break
-    } catch (err: unknown) {
+    } catch (err) {
       const isAddrInUse =
-        err instanceof Error && "code" in err && (err as NodeJS.ErrnoException).code === "EADDRINUSE"
+        isErrnoException(err) && err.code === "EADDRINUSE"
       if (!isAddrInUse || strictPort || attempt === MAX_PORT_ATTEMPTS - 1) {
         throw err
       }

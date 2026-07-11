@@ -88,37 +88,57 @@ type StatusPatch = Partial<Pick<OAuthTokenEntry,
 >>
 
 interface AppSettingsFile {
-  analyticsEnabled?: unknown
-  analyticsUserId?: unknown
-  browserSettingsMigrated?: unknown
-  theme?: unknown
-  chatSoundPreference?: unknown
-  chatSoundId?: unknown
+  analyticsEnabled?: boolean
+  analyticsUserId?: string
+  browserSettingsMigrated?: boolean
+  theme?: string
+  chatSoundPreference?: string
+  chatSoundId?: string
   terminal?: {
-    scrollbackLines?: unknown
-    minColumnWidth?: unknown
+    scrollbackLines?: number
+    minColumnWidth?: number
   }
   editor?: {
-    preset?: unknown
-    commandTemplate?: unknown
+    preset?: string
+    commandTemplate?: string
   }
-  defaultProvider?: unknown
+  defaultProvider?: string
   providerDefaults?: {
-    claude?: Partial<ProviderPreference<Partial<ClaudeModelOptions>>> & { effort?: unknown }
-    codex?: Partial<ProviderPreference<Partial<CodexModelOptions>>> & { effort?: unknown }
+    claude?: Partial<ProviderPreference<Partial<ClaudeModelOptions>>> & { effort?: string }
+    codex?: Partial<ProviderPreference<Partial<CodexModelOptions>>> & { effort?: string }
     openrouter?: Partial<ProviderPreference<Record<string, never>>>
   }
-  cloudflareTunnel?: unknown
-  auth?: unknown
-  claudeAuth?: unknown
-  uploads?: unknown
-  subagents?: unknown
-  customMcpServers?: unknown
-  customModels?: unknown
-  textSnippets?: unknown
-  claudeDriver?: unknown
-  globalPromptAppend?: unknown
-  shareDefaultTtlHours?: unknown
+  cloudflareTunnel?: Record<string, unknown>
+  auth?: Record<string, unknown>
+  claudeAuth?: Record<string, unknown>
+  uploads?: Record<string, unknown>
+  subagents?: readonly unknown[]
+  customMcpServers?: readonly unknown[]
+  customModels?: readonly unknown[]
+  textSnippets?: readonly unknown[]
+  claudeDriver?: Record<string, unknown>
+  globalPromptAppend?: string
+  shareDefaultTtlHours?: number
+}
+
+function isPlainObject<T>(value: T): value is T & Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value)
+}
+
+function isAppSettingsFile<T>(value: T): value is T & AppSettingsFile {
+  return isPlainObject(value)
+}
+
+function isErrnoException<T>(error: T): error is T & NodeJS.ErrnoException {
+  return error instanceof Error && "code" in error
+}
+
+function isMcpOAuthState<T>(value: T): value is T & McpOAuthState {
+  return isPlainObject(value)
+}
+
+function isMcpTransport<T>(value: T): value is T & McpServerTransport {
+  return value === "stdio" || value === "http" || value === "sse" || value === "ws"
 }
 
 interface AppSettingsState extends AppSettingsSnapshot {
@@ -144,7 +164,6 @@ const DEFAULT_CHAT_SOUND_ID: ChatSoundId = "funk"
 const SUBAGENT_NAME_REGEX = /^[a-z0-9_-]+$/
 const SUBAGENT_RESERVED_NAMES = new Set(["agent", "agents"])
 const SUBAGENT_NAME_MAX = 64
-const MCP_VALID_TRANSPORTS = new Set<McpServerTransport>(["stdio", "http", "sse", "ws"])
 const MCP_NAME_REGEX = /^[a-zA-Z][a-zA-Z0-9_-]{0,31}$/
 const MCP_RESERVED_NAMES = new Set(["kanna"])
 const MODEL_ID_REGEX = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$/
@@ -220,65 +239,79 @@ function createDefaultProviderDefaults(): ChatProviderPreferences {
   }
 }
 
-function clampNumber(value: unknown, fallback: number, min: number, max: number) {
+function clampNumber<T>(value: T, fallback: number, min: number, max: number) {
   const numberValue = typeof value === "number" ? value : Number(value)
   if (!Number.isFinite(numberValue)) return fallback
   return Math.min(max, Math.max(min, Math.round(numberValue)))
 }
 
-function normalizeTheme(value: unknown): AppThemePreference {
-  return value === "light" || value === "dark" || value === "system" ? value : "system"
+function normalizeTheme<T>(value: T): AppThemePreference {
+  if (value === "light") return "light"
+  if (value === "dark") return "dark"
+  if (value === "system") return "system"
+  return "system"
 }
 
-function normalizeChatSoundPreference(value: unknown): ChatSoundPreference {
-  return value === "never" || value === "unfocused" || value === "always" ? value : DEFAULT_CHAT_SOUND_PREFERENCE
+function normalizeChatSoundPreference<T>(value: T): ChatSoundPreference {
+  if (value === "never") return "never"
+  if (value === "unfocused") return "unfocused"
+  if (value === "always") return "always"
+  return DEFAULT_CHAT_SOUND_PREFERENCE
 }
 
-function normalizeChatSoundId(value: unknown): ChatSoundId {
+function normalizeChatSoundId<T>(value: T): ChatSoundId {
   switch (value) {
-    case "blow":
-    case "bottle":
-    case "frog":
-    case "funk":
-    case "glass":
-    case "ping":
-    case "pop":
-    case "purr":
-    case "tink":
-      return value
+    case "blow": return "blow"
+    case "bottle": return "bottle"
+    case "frog": return "frog"
+    case "funk": return "funk"
+    case "glass": return "glass"
+    case "ping": return "ping"
+    case "pop": return "pop"
+    case "purr": return "purr"
+    case "tink": return "tink"
     default:
       return DEFAULT_CHAT_SOUND_ID
   }
 }
 
-function normalizeDefaultProvider(value: unknown): DefaultProviderPreference {
-  return value === "claude" || value === "codex" || value === "last_used" ? value : "last_used"
+function normalizeDefaultProvider<T>(value: T): DefaultProviderPreference {
+  if (value === "claude") return "claude"
+  if (value === "codex") return "codex"
+  if (value === "last_used") return "last_used"
+  return "last_used"
 }
 
-function normalizeEditorPreset(value: unknown): EditorPreset {
-  return value === "vscode" || value === "xcode" || value === "windsurf" || value === "custom" || value === "cursor"
-    ? value
-    : DEFAULT_EDITOR_PRESET
+function normalizeEditorPreset<T>(value: T): EditorPreset {
+  if (value === "vscode") return "vscode"
+  if (value === "xcode") return "xcode"
+  if (value === "windsurf") return "windsurf"
+  if (value === "custom") return "custom"
+  if (value === "cursor") return "cursor"
+  return DEFAULT_EDITOR_PRESET
 }
 
-function normalizeEditorCommandTemplate(value: unknown, preset: EditorPreset) {
+function normalizeEditorCommandTemplate<T>(value: T, preset: EditorPreset) {
   const trimmed = typeof value === "string" ? value.trim() : ""
   return trimmed || getDefaultEditorCommandTemplate(preset)
 }
 
 function normalizeClaudePreference(value?: {
-  model?: unknown
-  effort?: unknown
+  model?: string
+  effort?: string
   modelOptions?: Partial<Record<keyof ClaudeModelOptions, unknown>>
-  planMode?: unknown
+  planMode?: boolean
 }, customModels?: readonly CustomModelEntry[]): ProviderPreference<ClaudeModelOptions> {
   const model = normalizeClaudeModelId(typeof value?.model === "string" ? value.model : undefined, undefined, customModels)
-  const reasoningEffort = value?.modelOptions?.reasoningEffort
+  const rawEffort = value?.modelOptions?.reasoningEffort
+  const effortStr = typeof rawEffort === "string" ? rawEffort : undefined
+  const rawLegacyEffort = value?.effort
+  const legacyEffortStr = typeof rawLegacyEffort === "string" ? rawLegacyEffort : undefined
   let normalizedEffort: ClaudeModelOptions["reasoningEffort"]
-  if (isClaudeReasoningEffort(reasoningEffort)) {
-    normalizedEffort = reasoningEffort
-  } else if (isClaudeReasoningEffort(value?.effort)) {
-    normalizedEffort = value.effort
+  if (isClaudeReasoningEffort(effortStr)) {
+    normalizedEffort = effortStr
+  } else if (isClaudeReasoningEffort(legacyEffortStr)) {
+    normalizedEffort = legacyEffortStr
   } else {
     normalizedEffort = DEFAULT_CLAUDE_MODEL_OPTIONS.reasoningEffort
   }
@@ -287,24 +320,27 @@ function normalizeClaudePreference(value?: {
     model,
     modelOptions: {
       reasoningEffort: !supportsClaudeMaxReasoningEffort(model, customModels) && normalizedEffort === "max" ? "high" : normalizedEffort,
-      contextWindow: normalizeClaudeContextWindow(model, value?.modelOptions?.contextWindow, customModels),
+      contextWindow: normalizeClaudeContextWindow(model, typeof value?.modelOptions?.contextWindow === "string" ? value.modelOptions.contextWindow : undefined, customModels),
     },
     planMode: value?.planMode === true,
   }
 }
 
 function normalizeCodexPreference(value?: {
-  model?: unknown
-  effort?: unknown
+  model?: string
+  effort?: string
   modelOptions?: Partial<Record<keyof CodexModelOptions, unknown>>
-  planMode?: unknown
+  planMode?: boolean
 }, customModels?: readonly CustomModelEntry[]): ProviderPreference<CodexModelOptions> {
-  const reasoningEffort = value?.modelOptions?.reasoningEffort
+  const rawCodexEffort = value?.modelOptions?.reasoningEffort
+  const codexEffortStr = typeof rawCodexEffort === "string" ? rawCodexEffort : undefined
+  const rawCodexLegacyEffort = value?.effort
+  const codexLegacyEffortStr = typeof rawCodexLegacyEffort === "string" ? rawCodexLegacyEffort : undefined
   let normalizedCodexEffort: CodexModelOptions["reasoningEffort"]
-  if (isCodexReasoningEffort(reasoningEffort)) {
-    normalizedCodexEffort = reasoningEffort
-  } else if (isCodexReasoningEffort(value?.effort)) {
-    normalizedCodexEffort = value.effort
+  if (isCodexReasoningEffort(codexEffortStr)) {
+    normalizedCodexEffort = codexEffortStr
+  } else if (isCodexReasoningEffort(codexLegacyEffortStr)) {
+    normalizedCodexEffort = codexLegacyEffortStr
   } else {
     normalizedCodexEffort = DEFAULT_CODEX_MODEL_OPTIONS.reasoningEffort
   }
@@ -336,10 +372,8 @@ function normalizeProviderDefaults(
   }
 }
 
-function normalizeCloudflareTunnel(value: unknown, warnings: string[]): CloudflareTunnelSettings {
-  const tunnelSource = value && typeof value === "object" && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : null
+function normalizeCloudflareTunnel<T>(value: T, warnings: string[]): CloudflareTunnelSettings {
+  const tunnelSource = isPlainObject(value) ? value : null
   if (value !== undefined && !tunnelSource) {
     warnings.push("cloudflareTunnel must be an object")
   }
@@ -370,10 +404,8 @@ function normalizeCloudflareTunnel(value: unknown, warnings: string[]): Cloudfla
   return { enabled, cloudflaredPath, mode }
 }
 
-function normalizeAuthSettings(value: unknown, warnings: string[]): AuthSettings {
-  const source = value && typeof value === "object" && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : null
+function normalizeAuthSettings<T>(value: T, warnings: string[]): AuthSettings {
+  const source = isPlainObject(value) ? value : null
   if (value !== undefined && !source) {
     warnings.push("auth must be an object")
   }
@@ -394,10 +426,8 @@ function normalizeAuthSettings(value: unknown, warnings: string[]): AuthSettings
   return { sessionMaxAgeDays }
 }
 
-function normalizeUploadSettings(value: unknown, warnings: string[]): UploadSettings {
-  const source = value && typeof value === "object" && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : null
+function normalizeUploadSettings<T>(value: T, warnings: string[]): UploadSettings {
+  const source = isPlainObject(value) ? value : null
   if (value !== undefined && !source) {
     warnings.push("uploads must be an object")
   }
@@ -490,13 +520,13 @@ function validateSubagentName(
   return null
 }
 
-function normalizeSubagentEntry(
-  value: unknown,
+function normalizeSubagentEntry<T>(
+  value: T,
   warnings: string[],
   customModels?: readonly CustomModelEntry[],
 ): Subagent | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return null
-  const source = value as Record<string, unknown>
+  const source = isPlainObject(value) ? value : null
+  if (!source) return null
   if (typeof source.id !== "string" || !source.id.trim()) return null
   if (typeof source.name !== "string") return null
   const provider = source.provider === "claude" || source.provider === "codex" ? source.provider : null
@@ -504,9 +534,7 @@ function normalizeSubagentEntry(
     warnings.push(`Subagent '${source.id}' has invalid provider; dropped`)
     return null
   }
-  const rawModelOptions = source.modelOptions && typeof source.modelOptions === "object" && !Array.isArray(source.modelOptions)
-    ? source.modelOptions as Record<string, unknown>
-    : {}
+  const rawModelOptions = isPlainObject(source.modelOptions) ? source.modelOptions : {}
   const model = provider === "claude"
     ? normalizeClaudeModelId(typeof source.model === "string" ? source.model : undefined, undefined, customModels)
     : normalizeCodexModelId(typeof source.model === "string" ? source.model : undefined, undefined, customModels)
@@ -538,8 +566,8 @@ function normalizeSubagentEntry(
   }
 }
 
-function normalizeSubagents(
-  value: unknown,
+function normalizeSubagents<T>(
+  value: T,
   warnings: string[],
   customModels?: readonly CustomModelEntry[],
 ): Subagent[] {
@@ -562,19 +590,20 @@ function normalizeSubagents(
   return out.sort((a, b) => a.createdAt - b.createdAt)
 }
 
-function normalizeStringMap(value: unknown): Record<string, string> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return {}
+function normalizeStringMap<T>(value: T): Record<string, string> {
+  const obj = isPlainObject(value) ? value : null
+  if (!obj) return {}
   const out: Record<string, string> = {}
-  for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+  for (const [k, v] of Object.entries(obj)) {
     if (typeof k !== "string" || k.length === 0) continue
     out[k] = typeof v === "string" ? v : String(v ?? "")
   }
   return out
 }
 
-function normalizeMcpTestResult(value: unknown): McpServerTestResult {
-  if (!value || typeof value !== "object") return { status: "untested" }
-  const v = value as Record<string, unknown>
+function normalizeMcpTestResult<T>(value: T): McpServerTestResult {
+  const v = isPlainObject(value) ? value : null
+  if (!v) return { status: "untested" as const }
   switch (v.status) {
     case "pending":
       return { status: "pending", startedAt: typeof v.startedAt === "string" ? v.startedAt : new Date().toISOString() }
@@ -595,9 +624,9 @@ function normalizeMcpTestResult(value: unknown): McpServerTestResult {
   }
 }
 
-function normalizeMcpEntry(value: unknown, warnings: string[]): McpServerConfig | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return null
-  const src = value as Record<string, unknown>
+function normalizeMcpEntry<T>(value: T, warnings: string[]): McpServerConfig | null {
+  const src = isPlainObject(value) ? value : null
+  if (!src) return null
   const id = typeof src.id === "string" && src.id.length > 0 ? src.id : null
   const name = typeof src.name === "string" ? src.name : null
   const transport = src.transport
@@ -605,7 +634,7 @@ function normalizeMcpEntry(value: unknown, warnings: string[]): McpServerConfig 
     warnings.push(`MCP entry rejected: missing id/name/transport`)
     return null
   }
-  if (!MCP_VALID_TRANSPORTS.has(transport as McpServerTransport)) {
+  if (!isMcpTransport(transport)) {
     warnings.push(`MCP entry '${id}' rejected: unknown transport ${transport}`)
     return null
   }
@@ -640,16 +669,14 @@ function normalizeMcpEntry(value: unknown, warnings: string[]): McpServerConfig 
   }
   return {
     ...base,
-    transport: transport as "http" | "sse" | "ws",
+    transport,
     url,
     headers: normalizeStringMap(src.headers),
-    ...(src.oauth !== null && typeof src.oauth === "object" && !Array.isArray(src.oauth)
-      ? { oauth: src.oauth as McpOAuthState }
-      : {}),
+    ...(isMcpOAuthState(src.oauth) ? { oauth: src.oauth } : {}),
   }
 }
 
-function normalizeMcpServers(value: unknown, warnings: string[]): McpServerConfig[] {
+function normalizeMcpServers<T>(value: T, warnings: string[]): McpServerConfig[] {
   if (value === undefined) return []
   if (!Array.isArray(value)) {
     warnings.push("customMcpServers must be an array")
@@ -670,14 +697,16 @@ function normalizeMcpServers(value: unknown, warnings: string[]): McpServerConfi
   return out
 }
 
-function normalizeOAuthTokenStatus(value: unknown): OAuthTokenStatus {
-  if (value === "limited" || value === "error" || value === "disabled") return value
+function normalizeOAuthTokenStatus<T>(value: T): OAuthTokenStatus {
+  if (value === "limited") return "limited"
+  if (value === "error") return "error"
+  if (value === "disabled") return "disabled"
   return "active"
 }
 
-function normalizeTokenEntry(value: unknown, warnings: string[]): OAuthTokenEntry | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return null
-  const src = value as Record<string, unknown>
+function normalizeTokenEntry<T>(value: T, warnings: string[]): OAuthTokenEntry | null {
+  const src = isPlainObject(value) ? value : null
+  if (!src) return null
   const id = typeof src.id === "string" && src.id.trim() ? src.id.trim() : null
   const token = typeof src.token === "string" ? src.token : ""
   if (!id || !token) {
@@ -722,10 +751,8 @@ function normalizeTokenEntry(value: unknown, warnings: string[]): OAuthTokenEntr
   }
 }
 
-function normalizeClaudePtyLifecycle(value: unknown, warnings: string[]): ClaudePtyLifecycleSettings {
-  const source = value && typeof value === "object" && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : null
+function normalizeClaudePtyLifecycle<T>(value: T, warnings: string[]): ClaudePtyLifecycleSettings {
+  const source = isPlainObject(value) ? value : null
   if (value !== undefined && !source) {
     warnings.push("claudeDriver.lifecycle must be an object")
   }
@@ -760,10 +787,8 @@ function normalizeClaudePtyLifecycle(value: unknown, warnings: string[]): Claude
   return { idleTimeoutMs, maxConcurrent }
 }
 
-function normalizeClaudeDriverSettings(value: unknown, warnings: string[]): ClaudeDriverSettings {
-  const source = value && typeof value === "object" && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : null
+function normalizeClaudeDriverSettings<T>(value: T, warnings: string[]): ClaudeDriverSettings {
+  const source = isPlainObject(value) ? value : null
   if (value !== undefined && !source) {
     warnings.push("claudeDriver must be an object")
     return {
@@ -771,17 +796,18 @@ function normalizeClaudeDriverSettings(value: unknown, warnings: string[]): Clau
       lifecycle: { ...CLAUDE_PTY_LIFECYCLE_DEFAULTS },
     }
   }
-  const preference: ClaudeDriverPreference = isClaudeDriverPreference(source?.preference)
-    ? source.preference
+  const rawPref = typeof source?.preference === "string" ? source.preference : undefined
+  const preference: ClaudeDriverPreference = isClaudeDriverPreference(rawPref)
+    ? rawPref
     : CLAUDE_DRIVER_DEFAULTS.preference
-  if (source?.preference !== undefined && !isClaudeDriverPreference(source.preference)) {
+  if (source?.preference !== undefined && !isClaudeDriverPreference(rawPref)) {
     warnings.push(`claudeDriver.preference must be "sdk" or "pty"`)
   }
   const lifecycle = normalizeClaudePtyLifecycle(source?.lifecycle, warnings)
   return { preference, lifecycle }
 }
 
-function normalizeGlobalPromptAppend(value: unknown, warnings: string[]): string {
+function normalizeGlobalPromptAppend<T>(value: T, warnings: string[]): string {
   if (value === undefined || value === null) return ""
   if (typeof value !== "string") {
     warnings.push("globalPromptAppend must be a string")
@@ -795,19 +821,19 @@ function normalizeGlobalPromptAppend(value: unknown, warnings: string[]): string
   return trimmed
 }
 
-function normalizeClaudeAuth(value: unknown, warnings: string[]): ClaudeAuthSettings {
+function normalizeClaudeAuth<T>(value: T, warnings: string[]): ClaudeAuthSettings {
   if (value === undefined) return { ...CLAUDE_AUTH_DEFAULTS }
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+  const src = isPlainObject(value) ? value : null
+  if (!src) {
     warnings.push("claudeAuth must be an object")
     return { ...CLAUDE_AUTH_DEFAULTS }
   }
-  const src = value as { tokens?: unknown; concurrencyDefault?: unknown }
   if (src.tokens !== undefined && !Array.isArray(src.tokens)) {
     warnings.push("claudeAuth.tokens must be an array")
     return { ...CLAUDE_AUTH_DEFAULTS }
   }
   const tokens: OAuthTokenEntry[] = []
-  for (const raw of (src.tokens ?? []) as unknown[]) {
+  for (const raw of (Array.isArray(src.tokens) ? src.tokens : [])) {
     const entry = normalizeTokenEntry(raw, warnings)
     if (entry) tokens.push(entry)
   }
@@ -888,13 +914,11 @@ function toSnapshot(state: AppSettingsState): AppSettingsSnapshot {
   }
 }
 
-function normalizeAppSettings(
-  value: unknown,
+function normalizeAppSettings<T>(
+  value: T,
   filePath = getSettingsFilePath(homedir())
 ): NormalizedAppSettings {
-  const source = value && typeof value === "object" && !Array.isArray(value)
-    ? value as AppSettingsFile
-    : null
+  const source = isAppSettingsFile(value) ? value : null
   const warnings: string[] = []
 
   if (value !== undefined && value !== null && !source) {
@@ -1055,9 +1079,6 @@ function validateMcpShape(
         return { code: "INVALID_ENV_KEY", field: "env", message: "env keys must be non-empty" }
       }
     }
-    if ("oauth" in entry && (entry as { oauth?: { enabled?: boolean } }).oauth?.enabled) {
-      return { code: "INVALID_OAUTH_TRANSPORT", field: "oauth", message: "OAuth is only supported for http/sse transports" }
-    }
   } else {
     const urlErr = validateMcpUrl(entry.url, entry.transport)
     if (urlErr) return urlErr
@@ -1078,7 +1099,7 @@ function buildMcpFromInput(input: McpServerInput): McpServerConfig {
     enabled: input.enabled !== false,
     createdAt: now,
     updatedAt: now,
-    lastTest: { status: "untested" } as McpServerTestResult,
+    lastTest: { status: "untested" as const },
   }
   if (input.transport === "stdio") {
     return {
@@ -1251,7 +1272,7 @@ function applyTextSnippetPatch(existing: TextSnippet, patch: TextSnippetPatch): 
   }
 }
 
-function normalizeTextSnippets(value: unknown, warnings: string[]): TextSnippet[] {
+function normalizeTextSnippets<T>(value: T, warnings: string[]): TextSnippet[] {
   if (value === undefined || value === null) return []
   if (!Array.isArray(value)) {
     warnings.push("textSnippets must be an array")
@@ -1259,14 +1280,13 @@ function normalizeTextSnippets(value: unknown, warnings: string[]): TextSnippet[
   }
   const out: TextSnippet[] = []
   for (const raw of value) {
-    if (!raw || typeof raw !== "object") continue
-    const candidate = raw as Partial<TextSnippet>
+    if (!isPlainObject(raw)) continue
     const entry: TextSnippet = {
-      id: typeof candidate.id === "string" && candidate.id.length > 0 ? candidate.id : randomUUID(),
-      shortcut: String(candidate.shortcut ?? "").trim(),
-      expansion: String(candidate.expansion ?? ""),
-      createdAt: typeof candidate.createdAt === "number" ? candidate.createdAt : 0,
-      updatedAt: typeof candidate.updatedAt === "number" ? candidate.updatedAt : 0,
+      id: typeof raw.id === "string" && raw.id.length > 0 ? raw.id : randomUUID(),
+      shortcut: String(raw.shortcut ?? "").trim(),
+      expansion: String(raw.expansion ?? ""),
+      createdAt: typeof raw.createdAt === "number" ? raw.createdAt : 0,
+      updatedAt: typeof raw.updatedAt === "number" ? raw.updatedAt : 0,
     }
     const err = validateTextSnippetShape(entry, out.map((s) => ({ id: s.id, shortcut: s.shortcut })))
     if (err) { warnings.push(`textSnippets: dropped ${entry.shortcut || "entry"} (${err.message})`); continue }
@@ -1279,7 +1299,7 @@ export function seedCustomModelsFromBuiltins(): CustomModelEntry[] {
   const out: CustomModelEntry[] = []
   for (const provider of PROVIDERS) {
     if (provider.id !== "claude" && provider.id !== "codex") continue
-    const provId = provider.id as "claude" | "codex"
+    const provId: "claude" | "codex" = provider.id === "claude" ? "claude" : "codex"
     for (const model of provider.models) {
       out.push({
         id: model.id,
@@ -1297,7 +1317,7 @@ export function seedCustomModelsFromBuiltins(): CustomModelEntry[] {
   return out
 }
 
-function normalizeCustomModels(value: unknown, warnings: string[]): CustomModelEntry[] {
+function normalizeCustomModels<T>(value: T, warnings: string[]): CustomModelEntry[] {
   if (value === undefined || value === null) return seedCustomModelsFromBuiltins()
   if (!Array.isArray(value)) {
     warnings.push("customModels must be an array")
@@ -1305,24 +1325,42 @@ function normalizeCustomModels(value: unknown, warnings: string[]): CustomModelE
   }
   const out: CustomModelEntry[] = []
   for (const raw of value) {
-    if (!raw || typeof raw !== "object") continue
-    const candidate = raw as Partial<CustomModelEntry>
+    if (!isPlainObject(raw)) continue
     const entry: CustomModelEntry = {
-      id: String(candidate.id ?? ""),
-      label: String(candidate.label ?? ""),
-      provider: candidate.provider === "codex" ? "codex" : "claude",
-      supportsEffort: candidate.supportsEffort === true,
-      ...(Array.isArray(candidate.aliases) ? { aliases: candidate.aliases.map(String) } : {}),
-      ...(Array.isArray(candidate.contextWindowOptions) ? { contextWindowOptions: candidate.contextWindowOptions } : {}),
-      ...(typeof candidate.supportsMaxReasoningEffort === "boolean" ? { supportsMaxReasoningEffort: candidate.supportsMaxReasoningEffort } : {}),
-      createdAt: typeof candidate.createdAt === "number" ? candidate.createdAt : 0,
-      updatedAt: typeof candidate.updatedAt === "number" ? candidate.updatedAt : 0,
+      id: String(raw.id ?? ""),
+      label: String(raw.label ?? ""),
+      provider: raw.provider === "codex" ? "codex" : "claude",
+      supportsEffort: raw.supportsEffort === true,
+      ...(Array.isArray(raw.aliases) ? { aliases: raw.aliases.map(String) } : {}),
+      ...(Array.isArray(raw.contextWindowOptions) ? { contextWindowOptions: raw.contextWindowOptions } : {}),
+      ...(typeof raw.supportsMaxReasoningEffort === "boolean" ? { supportsMaxReasoningEffort: raw.supportsMaxReasoningEffort } : {}),
+      createdAt: typeof raw.createdAt === "number" ? raw.createdAt : 0,
+      updatedAt: typeof raw.updatedAt === "number" ? raw.updatedAt : 0,
     }
     const err = validateCustomModelShape(entry, out.map((m) => ({ id: m.id, provider: m.provider })))
     if (err) { warnings.push(`customModels: dropped ${entry.id || "entry"} (${err.message})`); continue }
     out.push(entry)
   }
   return out
+}
+
+function mergeSubagentModelOptions(
+  existing: ClaudeModelOptions | CodexModelOptions,
+  patch: Partial<ClaudeModelOptions> | Partial<CodexModelOptions> | undefined,
+): ClaudeModelOptions | CodexModelOptions {
+  if (!patch) return existing
+  if ("contextWindow" in existing) {
+    const claudePatch = "contextWindow" in patch ? patch : undefined
+    return {
+      reasoningEffort: claudePatch?.reasoningEffort ?? existing.reasoningEffort,
+      contextWindow: claudePatch?.contextWindow ?? existing.contextWindow,
+    }
+  }
+  const codexPatch = "fastMode" in patch ? patch : undefined
+  return {
+    reasoningEffort: codexPatch?.reasoningEffort ?? existing.reasoningEffort,
+    fastMode: codexPatch?.fastMode ?? existing.fastMode,
+  }
 }
 
 function applyPatch(state: AppSettingsState, patch: AppSettingsPatch): AppSettingsState {
@@ -1403,7 +1441,7 @@ function applyPatch(state: AppSettingsState, patch: AppSettingsPatch): AppSettin
       ...subagentPatch,
       name: nextName,
       description: descriptionValue,
-      modelOptions: { ...existing.modelOptions, ...(subagentPatch.modelOptions ?? {}) } as Subagent["modelOptions"],
+      modelOptions: mergeSubagentModelOptions(existing.modelOptions, subagentPatch.modelOptions),
       workingDir: nextWorkingDir,
       allowedPaths: nextAllowedPaths,
       triggerMode: subagentPatch.triggerMode ?? existing.triggerMode,
@@ -1417,13 +1455,6 @@ function applyPatch(state: AppSettingsState, patch: AppSettingsPatch): AppSettin
   let nextMcpServers = state.customMcpServers
   if (patch.customMcpServers?.create) {
     const createInput = patch.customMcpServers.create
-    if (
-      createInput.transport === "stdio"
-      && "oauth" in createInput
-      && (createInput as { oauth?: { enabled?: boolean } }).oauth?.enabled
-    ) {
-      throw new McpValidationException({ code: "INVALID_OAUTH_TRANSPORT", field: "oauth", message: "OAuth is only supported for http/sse transports" })
-    }
     const entry = buildMcpFromInput(createInput)
     const error = validateMcpShape(entry, state.customMcpServers.map((s) => ({ id: s.id, name: s.name })))
     if (error) throw new McpValidationException(error)
@@ -1575,7 +1606,7 @@ export async function readAppSettingsSnapshot(filePath = getSettingsFilePath(hom
 
     return toSnapshot(normalizeAppSettings(JSON.parse(text), filePath).payload)
   } catch (error) {
-    if ((error as NodeJS.ErrnoException)?.code === "ENOENT") {
+    if (isErrnoException(error) && error.code === "ENOENT") {
       return toSnapshot(normalizeAppSettings(undefined, filePath).payload)
     }
     if (error instanceof SyntaxError) {
@@ -1772,7 +1803,7 @@ export class AppSettingsManager {
         warning: !hasText ? "Settings file was empty. Using defaults." : normalized.warning,
       } satisfies AppSettingsState
     } catch (error) {
-      if ((error as NodeJS.ErrnoException)?.code !== "ENOENT" && !(error instanceof SyntaxError)) {
+      if (!(isErrnoException(error) && error.code === "ENOENT") && !(error instanceof SyntaxError)) {
         throw error
       }
 

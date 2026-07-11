@@ -6,14 +6,6 @@ export const CHAT_SELECTION_ZONE_ATTRIBUTE = "data-chat-selection-zone"
 
 export type ChatFocusAction = "restore" | "escape-focus" | "none"
 
-type ElementLike = {
-  closest?: (selector: string) => Element | null
-  matches?: (selector: string) => boolean
-  getAttribute?: (name: string) => string | null
-  tabIndex?: number
-  isContentEditable?: boolean
-}
-
 type RootLike = {
   contains: (other: Node | null) => boolean
 }
@@ -23,22 +15,20 @@ function hasAttributeInTree(element: Element | null, attribute: string) {
 }
 
 export function isTextEntryTarget(element: Element | null): boolean {
-  const candidate = element as ElementLike | null
-  if (!candidate?.matches) return false
-  if (candidate.matches("input:not([type='checkbox']):not([type='radio']):not([type='button']):not([type='submit']):not([type='reset']), textarea, select")) {
+  if (!element?.matches) return false
+  if (element.matches("input:not([type='checkbox']):not([type='radio']):not([type='button']):not([type='submit']):not([type='reset']), textarea, select")) {
     return true
   }
-  if (candidate.isContentEditable) return true
-  if (candidate.getAttribute?.("role") === "textbox") return true
+  if (element instanceof HTMLElement && element.isContentEditable) return true
+  if (element.getAttribute?.("role") === "textbox") return true
   return hasAttributeInTree(element, ALLOW_FOCUS_RETAIN_ATTRIBUTE)
 }
 
 export function isFocusableTarget(element: Element | null): boolean {
-  const candidate = element as ElementLike | null
-  if (!candidate?.matches) return false
+  if (!element?.matches) return false
   if (isTextEntryTarget(element)) return true
-  if ((candidate.tabIndex ?? -1) >= 0) return true
-  if (candidate.matches("button, a[href], summary")) return true
+  if (element instanceof HTMLElement && (element.tabIndex ?? -1) >= 0) return true
+  if (element.matches("button, a[href], summary")) return true
   return hasAttributeInTree(element, ALLOW_FOCUS_RETAIN_ATTRIBUTE)
 }
 

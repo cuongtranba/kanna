@@ -1,5 +1,6 @@
 import { create } from "zustand"
 import { persist } from "zustand/middleware"
+import type { AnyValue } from "../../shared/errors"
 
 export interface ProjectRightSidebarVisibilityState {
   isVisible: boolean
@@ -57,16 +58,18 @@ function getProjectVisibilityState(
   return projects[projectId] ?? createDefaultProjectVisibilityState()
 }
 
-export function migrateRightSidebarStore(persistedState: unknown) {
+type PersistedRightSidebarState = {
+  size?: number
+  projects?: Record<string, Partial<{ isVisible: boolean; size: number }>>
+  projectUi?: Record<string, ProjectRightSidebarUiState>
+}
+
+export function migrateRightSidebarStore(persistedState: AnyValue) {
   if (!persistedState || typeof persistedState !== "object") {
     return { size: DEFAULT_RIGHT_SIDEBAR_SIZE, projects: {}, projectUi: {} }
   }
 
-  const state = persistedState as {
-    size?: number
-    projects?: Record<string, Partial<{ isVisible: boolean, size: number }>>
-    projectUi?: Record<string, ProjectRightSidebarUiState>
-  }
+  const state = <PersistedRightSidebarState>persistedState
   const globalSize = Number.isFinite(state.size)
     ? clampSize(state.size ?? DEFAULT_RIGHT_SIDEBAR_SIZE)
     : clampSize(

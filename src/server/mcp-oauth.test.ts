@@ -1,7 +1,7 @@
 import { test, expect } from "bun:test"
 import { startMcpOAuth, ensureFreshMcpToken } from "./mcp-oauth.adapter"
 import type { McpServerConfig, McpOAuthState } from "../shared/types"
-import type { OAuthClientInformationFull, OAuthTokens } from "@modelcontextprotocol/sdk/shared/auth.js"
+import type { OAuthClientInformationFull, OAuthTokens, AuthorizationServerMetadata } from "@modelcontextprotocol/sdk/shared/auth.js"
 
 function baseConfig(): McpServerConfig {
   return {
@@ -250,7 +250,7 @@ function authedConfigWithFlow(): McpServerConfig {
           issuer: "https://as.test/v1/mcp",
           authorization_endpoint: "https://as.test/oauth/authorize",
           token_endpoint: "https://as.test/oauth/token",
-        },
+        } as unknown as AuthorizationServerMetadata,
       },
     },
   }
@@ -409,7 +409,7 @@ test("ensureFreshMcpToken returns cached token when still valid", async () => {
   const token = await ensureFreshMcpToken(cfg, {
     fetchFn: (() => { throw new Error("should not refresh") }) as unknown as typeof fetch,
     persist: () => { persisted = true },
-    metadataByIssuer: { "https://as.test/v1/mcp": { token_endpoint: "https://as.test/oauth/token" } },
+    metadataByIssuer: { "https://as.test/v1/mcp": { token_endpoint: "https://as.test/oauth/token" } as unknown as AuthorizationServerMetadata },
   })
   expect(token).toBe("OLD")
   expect(persisted).toBe(false)
@@ -422,7 +422,7 @@ test("ensureFreshMcpToken refreshes and persists rotated tokens when expired", a
   const token = await ensureFreshMcpToken(cfg, {
     fetchFn: tokenFetch(),
     persist: (o: McpOAuthState) => { saved = o },
-    metadataByIssuer: { "https://as.test/v1/mcp": { token_endpoint: "https://as.test/oauth/token" } },
+    metadataByIssuer: { "https://as.test/v1/mcp": { token_endpoint: "https://as.test/oauth/token" } as unknown as AuthorizationServerMetadata },
   })
   expect(token).toBe("AT")
   expect(saved?.status).toBe("authenticated")
@@ -453,7 +453,7 @@ test("ensureFreshMcpToken throws when expired and no refresh_token", async () =>
     ensureFreshMcpToken(cfg, {
       fetchFn: (() => { throw new Error("should not fetch") }) as unknown as typeof fetch,
       persist: () => {},
-      metadataByIssuer: { "https://as.test/v1/mcp": { token_endpoint: "https://as.test/oauth/token" } },
+      metadataByIssuer: { "https://as.test/v1/mcp": { token_endpoint: "https://as.test/oauth/token" } as unknown as AuthorizationServerMetadata },
     }),
   ).rejects.toThrow(/no refresh token/i)
 })
@@ -477,7 +477,7 @@ test("ensureFreshMcpToken persists error state when refresh endpoint returns err
     ensureFreshMcpToken(cfg, {
       fetchFn: failRefreshFetch,
       persist: (o: McpOAuthState) => { persistedStates.push(o) },
-      metadataByIssuer: { "https://as.test/v1/mcp": { token_endpoint: "https://as.test/oauth/token" } },
+      metadataByIssuer: { "https://as.test/v1/mcp": { token_endpoint: "https://as.test/oauth/token" } as unknown as AuthorizationServerMetadata },
     }),
   ).rejects.toThrow()
   expect(persistedStates.length).toBeGreaterThan(0)
@@ -504,7 +504,7 @@ test("ensureFreshMcpToken returns cached token without refresh when expires_in i
   const token = await ensureFreshMcpToken(cfg, {
     fetchFn: fetchThatThrows,
     persist: () => { persistCalled = true },
-    metadataByIssuer: { "https://as.test/v1/mcp": { token_endpoint: "https://as.test/oauth/token" } },
+    metadataByIssuer: { "https://as.test/v1/mcp": { token_endpoint: "https://as.test/oauth/token" } as unknown as AuthorizationServerMetadata },
   })
   expect(token).toBe("FOREVER")
   expect(persistCalled).toBe(false)
@@ -529,7 +529,7 @@ test("ensureFreshMcpToken refreshes using persisted oauth.metadata when metadata
   if (cfg.transport !== "stdio" && cfg.oauth) {
     cfg.oauth = {
       ...cfg.oauth,
-      metadata: { token_endpoint: "https://as.test/oauth/token" },
+      metadata: { token_endpoint: "https://as.test/oauth/token" } as unknown as AuthorizationServerMetadata,
     }
   }
   let saved: McpOAuthState | undefined
@@ -540,5 +540,5 @@ test("ensureFreshMcpToken refreshes using persisted oauth.metadata when metadata
   })
   expect(token).toBe("AT")
   expect(saved?.status).toBe("authenticated")
-  expect(saved?.metadata).toEqual({ token_endpoint: "https://as.test/oauth/token" })
+  expect(saved?.metadata).toEqual({ token_endpoint: "https://as.test/oauth/token" } as unknown as AuthorizationServerMetadata)
 })

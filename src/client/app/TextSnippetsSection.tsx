@@ -236,13 +236,16 @@ export function TextSnippetsSettingsBranch(props: {
   const handlers = useMemo<TextSnippetsSectionHandlers>(
     () => ({
       onCreate: async (input) => {
-        await props.state.handleWriteAppSettings({ textSnippets: { create: input } } as AppSettingsPatch)
+        const s: AppSettingsPatch = { textSnippets: { create: input } }
+        await props.state.handleWriteAppSettings(s)
       },
       onUpdate: async (id, patch) => {
-        await props.state.handleWriteAppSettings({ textSnippets: { update: { id, patch } } } as AppSettingsPatch)
+        const s: AppSettingsPatch = { textSnippets: { update: { id, patch } } }
+        await props.state.handleWriteAppSettings(s)
       },
       onDelete: async (id) => {
-        await props.state.handleWriteAppSettings({ textSnippets: { delete: { id } } } as AppSettingsPatch)
+        const s: AppSettingsPatch = { textSnippets: { delete: { id } } }
+        await props.state.handleWriteAppSettings(s)
       },
     }),
     [props.state],

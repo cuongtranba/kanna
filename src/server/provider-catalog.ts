@@ -2,7 +2,6 @@ import type {
   AgentProvider,
   ClaudeModelOptions,
   CodexModelOptions,
-  ClaudeContextWindow,
   ModelOptions,
   ProviderCatalogEntry,
   ServiceTier,
@@ -65,7 +64,7 @@ export function normalizeClaudeModelOptions(
   }
   return {
     reasoningEffort: resolvedEffort,
-    contextWindow: normalizeClaudeContextWindow(model, modelOptions?.claude?.contextWindow as ClaudeContextWindow | undefined, customModels),
+    contextWindow: normalizeClaudeContextWindow(model, modelOptions?.claude?.contextWindow, customModels),
   }
 }
 

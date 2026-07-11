@@ -1,5 +1,7 @@
 import { randomUUID } from "node:crypto"
 import { readTextFileOrThrow, spawnCommandCapture } from "./ws-router-io.adapter"
+import type { AnyValue } from "../shared/errors"
+import { isRecord } from "../shared/errors"
 import { log } from "../shared/log"
 import os from "node:os"
 import path from "node:path"
@@ -235,24 +237,20 @@ export function getGlobalSkillLockPath() {
   return path.join(os.homedir(), ".agents", ".skill-lock.json")
 }
 
-function asString(value: unknown) {
+function asString(value: AnyValue) {
   return typeof value === "string" ? value : ""
 }
 
-export function parseInstalledSkillsLock(parsed: unknown, lockFilePath: string): InstalledSkillsSnapshot {
-  const skillsRecord = parsed
-    && typeof parsed === "object"
-    && "skills" in parsed
-    && parsed.skills
-    && typeof parsed.skills === "object"
-    && !Array.isArray(parsed.skills)
-      ? parsed.skills as Record<string, unknown>
-      : {}
+export function parseInstalledSkillsLock(parsed: AnyValue, lockFilePath: string): InstalledSkillsSnapshot {
+  const skillsRaw = isRecord(parsed) && isRecord(parsed.skills) && !Array.isArray(parsed.skills)
+    ? parsed.skills
+    : null
+  const skillsRecord: Record<string, AnyValue> = skillsRaw ?? {}
 
   const skills = Object.entries(skillsRecord)
     .filter(([, entry]) => entry && typeof entry === "object" && !Array.isArray(entry))
     .map(([name, entry]) => {
-      const record = entry as Record<string, unknown>
+      const record: Record<string, AnyValue> = isRecord(entry) ? entry : {}
       return {
         name,
         source: asString(record.source),
@@ -307,7 +305,7 @@ export async function searchSkills(query: string, limit = 100): Promise<SkillSea
     throw new Error(`Skills search failed with status ${response.status}.`)
   }
 
-  const payload = await response.json() as Partial<SkillSearchSnapshot>
+  const payload: Partial<SkillSearchSnapshot> = await response.json()
   return {
     query: typeof payload.query === "string" ? payload.query : normalizedQuery,
     searchType: typeof payload.searchType === "string" ? payload.searchType : "fuzzy",
@@ -563,7 +561,7 @@ export function createWsRouter({
         updatedAt: now,
       }]
     } else if (patch.subagents?.update) {
-      subagents = subagents.map((subagent) => subagent.id === patch.subagents?.update?.id
+      subagents = subagents.map((subagent): Subagent => subagent.id === patch.subagents?.update?.id
         ? {
             ...subagent,
             ...patch.subagents.update.patch,
@@ -571,7 +569,7 @@ export function createWsRouter({
             description: patch.subagents.update.patch.description === null
               ? undefined
               : patch.subagents.update.patch.description ?? subagent.description,
-            modelOptions: { ...subagent.modelOptions, ...(patch.subagents.update.patch.modelOptions ?? {}) } as Subagent["modelOptions"],
+            modelOptions: <Subagent["modelOptions"]>{ ...subagent.modelOptions, ...(patch.subagents.update.patch.modelOptions ?? {}) },
             workingDir: patch.subagents.update.patch.workingDir === null
               ? undefined
               : patch.subagents.update.patch.workingDir ?? subagent.workingDir,
@@ -1988,7 +1986,7 @@ export function createWsRouter({
           const toolCallbackSvc = agent.toolCallbackService
           if (!toolCallbackSvc) throw new Error("tool callback service unavailable")
           const validKinds = new Set(["allow", "deny", "answer"])
-          if (typeof command.decision !== "object" || command.decision === null || !validKinds.has((command.decision as { kind?: string }).kind ?? "")) {
+          if (!isRecord(command.decision) || !validKinds.has(typeof command.decision.kind === "string" ? command.decision.kind : "")) {
             throw new Error("Invalid tool request decision kind")
           }
           const existing = store.getToolRequest(command.toolRequestId)
@@ -2256,7 +2254,7 @@ export function createWsRouter({
     scheduleChatStateBroadcast,
     pruneStaleEmptyChats: () => maybePruneStaleEmptyChats(),
     async handleMessage(ws: ServerWebSocket<ClientState>, raw: string | Buffer | ArrayBuffer | Uint8Array) {
-      let parsed: unknown
+      let parsed: AnyValue
       try {
         parsed = JSON.parse(String(raw))
       } catch {

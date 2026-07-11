@@ -431,8 +431,8 @@ const LocalProjectsSectionImpl = function LocalProjectsSection({
     const { active, over } = event
 
     if (over && active.id !== over.id && onReorderGroups) {
-      const oldIndex = groupIds.indexOf(active.id as string)
-      const newIndex = groupIds.indexOf(over.id as string)
+      const oldIndex = groupIds.indexOf(String(active.id))
+      const newIndex = groupIds.indexOf(String(over.id))
       if (oldIndex !== -1 && newIndex !== -1) {
         const newOrder = arrayMove(groupIds, oldIndex, newIndex)
         onReorderGroups(newOrder)

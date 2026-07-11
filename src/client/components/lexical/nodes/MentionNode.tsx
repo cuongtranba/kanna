@@ -1,3 +1,4 @@
+import type { AnyValue } from "../../../../shared/errors"
 import type { EditorConfig, LexicalEditor, SerializedLexicalNode, Spread } from "lexical"
 import type { ReactNode } from "react"
 import { DecoratorNode, $applyNodeReplacement } from "lexical"
@@ -144,6 +145,6 @@ export function $createMentionNode(args: CreateMentionNodeArgs): MentionNode {
   return $applyNodeReplacement(new MentionNode(args.mentionKind, args.value, args.label))
 }
 
-export function $isMentionNode(node: unknown): node is MentionNode {
+export function $isMentionNode(node: AnyValue): node is MentionNode {
   return node instanceof MentionNode
 }

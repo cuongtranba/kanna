@@ -219,7 +219,7 @@ export class TerminalManager {
         cols,
         rows,
         name: "xterm-256color",
-        data: (_terminal: unknown, data: Uint8Array) => {
+        data: (_terminal: Bun.Terminal, data: Uint8Array) => {
           const chunk = Buffer.from(data).toString("utf8")
           updateFocusReportingState(session, chunk)
           headless.write(chunk)

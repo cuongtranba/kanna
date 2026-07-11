@@ -1,4 +1,6 @@
 import { QuickResponseAdapter } from "./quick-response"
+import type { AnyValue } from "../shared/errors"
+import { isRecord } from "../shared/errors"
 
 const TITLE_SCHEMA = {
   type: "object",
@@ -9,7 +11,7 @@ const TITLE_SCHEMA = {
   additionalProperties: false,
 } as const
 
-function normalizeGeneratedTitle(value: unknown): string | null {
+function normalizeGeneratedTitle(value: AnyValue): string | null {
   if (typeof value !== "string") return null
   const normalized = value.replace(/\s+/g, " ").trim().slice(0, 80)
   if (!normalized || normalized === "New Chat") return null
@@ -54,7 +56,7 @@ export async function generateTitleForChatDetailed(
     prompt: `Generate a short, descriptive title (under 30 chars) for a conversation that starts with this message.\n\n${messageContent}`,
     schema: TITLE_SCHEMA,
     parse: (value) => {
-      const output = value && typeof value === "object" ? value as { title?: unknown } : {}
+      const output = isRecord(value) ? value : {}
       return normalizeGeneratedTitle(output.title)
     },
   })

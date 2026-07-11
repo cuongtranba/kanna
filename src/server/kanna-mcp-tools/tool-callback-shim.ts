@@ -1,5 +1,7 @@
 import type { ToolCallbackService } from "../tool-callback"
 import type { ChatPermissionPolicy } from "../../shared/permission-policy"
+import type { AnyValue } from "../../shared/errors"
+import { isRecord } from "../../shared/errors"
 
 export interface ToolHandlerContext {
   chatId: string
@@ -13,7 +15,7 @@ export interface ToolHandlerContext {
 
 export interface ToolHandlerResult {
   // Index signature required to satisfy MCP CallToolResult shape
-  [key: string]: unknown
+  [key: string]: AnyValue
   content: { type: "text"; text: string }[]
   isError?: boolean
 }
@@ -22,18 +24,19 @@ export interface GatedToolCallArgs {
   toolCallback: ToolCallbackService
   toolName: string
   ctx: ToolHandlerContext
-  args: Record<string, unknown>
-  formatAnswer: (payload: unknown) => ToolHandlerResult | Promise<ToolHandlerResult>
+  args: AnyValue
+  formatAnswer: (payload: AnyValue) => ToolHandlerResult | Promise<ToolHandlerResult>
   formatDeny: (reason: string) => ToolHandlerResult
 }
 
 export async function gatedToolCall(args: GatedToolCallArgs): Promise<ToolHandlerResult> {
+  const submitArgs: Record<string, AnyValue> = isRecord(args.args) ? args.args : {}
   const res = await args.toolCallback.submit({
     chatId: args.ctx.chatId,
     sessionId: args.ctx.sessionId,
     toolUseId: args.ctx.toolUseId,
     toolName: args.toolName,
-    args: args.args,
+    args: submitArgs,
     chatPolicy: args.ctx.chatPolicy,
     cwd: args.ctx.cwd,
     restrictedAllowedPaths: args.ctx.restrictedAllowedPaths,

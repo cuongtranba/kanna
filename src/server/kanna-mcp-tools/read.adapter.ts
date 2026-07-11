@@ -32,7 +32,7 @@ export function createReadTool(deps: { toolCallback: ToolCallbackService }): Rea
         toolCallback: deps.toolCallback,
         toolName: "mcp__kanna__read",
         ctx,
-        args: input as unknown as Record<string, unknown>,
+        args: input,
         formatAnswer: async () => {
           try {
             const resolved = resolvePath(input.path, ctx.cwd)

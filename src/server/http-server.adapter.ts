@@ -30,7 +30,9 @@ export function listen(server: http.Server, port: number, host: string): Promise
     server.once("error", reject)
     server.listen(port, host, () => {
       server.off("error", reject)
-      resolve(server.address() as AddressInfo)
+      const addr = server.address()
+      if (!addr || typeof addr !== "object") { reject(new Error("server.address() is not an AddressInfo")); return }
+      resolve(addr)
     })
   })
 }

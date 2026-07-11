@@ -1,4 +1,6 @@
 import { GitBranch, UserRound, X } from "lucide-react"
+import type { AnyValue } from "../../../shared/errors"
+import { isRecord } from "../../../shared/errors"
 import type { ProcessedToolCall } from "./types"
 import { MetaRow, MetaLabel, MetaCodeBlock, ExpandableRow, VerticalLineContainer, getToolIcon, LucideIconWrapper } from "./shared"
 import { useMemo, type ReactNode } from "react"
@@ -25,15 +27,10 @@ type ReadImageBlock = {
   mimeType?: string
 }
 
-function extractReadImageBlocks(value: unknown): ReadImageBlock[] {
-  let blocks: unknown[]
-  if (
-    value
-    && typeof value === "object"
-    && "content" in value
-    && Array.isArray((value as { content?: unknown }).content)
-  ) {
-    blocks = (value as { content: unknown[] }).content
+function extractReadImageBlocks(value: AnyValue): ReadImageBlock[] {
+  let blocks: AnyValue[]
+  if (isRecord(value) && Array.isArray(value.content)) {
+    blocks = value.content
   } else if (Array.isArray(value)) {
     blocks = value
   } else {
@@ -163,8 +160,8 @@ export function ToolCallMessage({ message, isLoading = false, localPath, chatId 
   const resultText = useMemo(() => {
     if (typeof message.result === "string") return message.result
     if (!message.result) return ""
-    if (typeof message.result === "object" && message.result !== null && "content" in message.result) {
-      const content = (message.result as { content?: unknown }).content
+    if (isRecord(message.result)) {
+      const content = message.result.content
       if (typeof content === "string") return content
     }
     return JSON.stringify(message.result, null, 2)
@@ -172,11 +169,12 @@ export function ToolCallMessage({ message, isLoading = false, localPath, chatId 
 
   const readImages = useMemo(() => {
     if (!isReadTool) {
-      return [] as ReadImageBlock[]
+      const empty: ReadImageBlock[] = []
+      return empty
     }
 
-    if (message.result && typeof message.result === "object" && "blocks" in message.result) {
-      const blocks = (message.result as { blocks?: unknown }).blocks
+    if (isRecord(message.result)) {
+      const blocks = message.result.blocks
       if (Array.isArray(blocks)) {
         const hydratedBlocks = extractReadImageBlocks(blocks)
         if (hydratedBlocks.length > 0) {
@@ -243,7 +241,9 @@ export function ToolCallMessage({ message, isLoading = false, localPath, chatId 
 
   let toolContent: ReactNode
   if (message.toolKind === "workflow" && !message.isError) {
-    const hydratedResult = message.result as WorkflowToolResult | undefined
+    const hydratedResult: WorkflowToolResult | undefined = isRecord(message.result) && typeof message.result.text === "string"
+      ? { taskId: typeof message.result.taskId === "string" ? message.result.taskId : undefined, text: message.result.text }
+      : undefined
     const taskId = hydratedResult?.taskId
     const run = taskId ? workflowRuns.find((r) => r.taskId === taskId) : undefined
     toolContent = (
