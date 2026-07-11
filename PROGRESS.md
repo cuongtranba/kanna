@@ -76,6 +76,18 @@ node -e 'let s="";process.stdin.on("d",d=>s+=d);process.stdin.on("data",d=>s+=d)
 - Commit after each chunk with a clear message.
 
 ## Progress (latest first)
+- 2026-07-11 Chunk 1 DONE (commit d0fa616). Autofix pass + hand-fixes cleared
+  all 10 chunk-1 rules to 0: dot-notation, prefer-template,
+  prefer-arrow-callback, no-implicit-coercion, object-shorthand,
+  no-useless-return, no-useless-escape, prefer-const, no-case-declarations,
+  no-param-reassign. Hand-fixes: tools.ts read_file case braces (2);
+  event-store.ts appendSubagentEvent param→local (1); terminal-manager.test.ts
+  redundant `\"` in python template (6); driver.test.ts merged split `emitLine`
+  decl (1); eslint.config.js prefer-const `ignoreReadBeforeAssign:true` for the
+  AgentCoordinator↔ScheduleManager forward-ref init pattern (4). typecheck
+  green; scoped tests pass (tools, event-store, driver, terminal-manager).
+  Remaining: 2595 no-restricted-syntax, 154 no-console, 142 no-explicit-any,
+  127 no-nested-ternary, 1 no-fallthrough.
 - 2026-07-11 baseline committed (4f2f20f); strict config + log.ts/errors.ts
   chokepoints in place; 3134 violations remain.
 
@@ -83,9 +95,9 @@ node -e 'let s="";process.stdin.on("d",d=>s+=d);process.stdin.on("data",d=>s+=d)
 - (none yet)
 
 ## Next chunk
-Chunk 1: autofix pass (`eslint src/ --fix`) in the worktree, then hand-fix the
-2 no-case-declarations + 1 no-param-reassign + any leftover escape/const.
-Verify, commit, update this file.
+Chunk 2: eliminate @typescript-eslint/no-explicit-any (142 violations in ~11
+files). Give each `any` a real type or use a generic. NO casts to `any`, NO
+eslint-disable. Verify, commit, update this file.
 
 ## Final gate (when lint+typecheck are 0)
 - `cd <worktree> && bun run test` (`--conditions production`) fully green.
