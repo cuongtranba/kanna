@@ -1,4 +1,4 @@
-import { createElement, useCallback, useRef, useState } from "react"
+import { createElement, useCallback, useRef } from "react"
 import { Share2, Download } from "lucide-react"
 import {
   Dialog,
@@ -22,6 +22,7 @@ import { CodeBody } from "./bodies/CodeBody"
 import { MermaidBody } from "./bodies/MermaidBody"
 import { downloadFile, shareViaWebShare } from "./actions"
 import type { PreviewSource } from "./types"
+import { SheetBodyStore } from "./SheetBody.store"
 
 interface Props {
   source: PreviewSource | null
@@ -62,9 +63,10 @@ export function shouldCloseFromDragEnd({ startY, lastY, lastT, endY, now }: Drag
   return dyFinal > DRAG_CLOSE_DISTANCE_PX || velocity > DRAG_CLOSE_VELOCITY
 }
 
-export function SheetBody({ source, onClose }: { source: PreviewSource; onClose: () => void }) {
+function SheetBodyInner({ source, onClose }: { source: PreviewSource; onClose: () => void }) {
   const meta = describeMeta(source)
-  const [dy, setDy] = useState(0)
+  const dy = SheetBodyStore.useScopedStore((s) => s.dy)
+  const setDy = SheetBodyStore.useScopedStore((s) => s.setDy)
   const startRef = useRef<{ y: number; lastY: number; lastT: number } | null>(null)
 
   const onPointerDown = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
@@ -79,7 +81,7 @@ export function SheetBody({ source, onClose }: { source: PreviewSource; onClose:
     startRef.current.lastY = event.clientY
     startRef.current.lastT = Date.now()
     setDy(delta)
-  }, [])
+  }, [setDy])
 
   const onPointerUp = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     const start = startRef.current
@@ -91,7 +93,7 @@ export function SheetBody({ source, onClose }: { source: PreviewSource; onClose:
     } else {
       setDy(0)
     }
-  }, [onClose])
+  }, [onClose, setDy])
 
   const handleShare = useCallback(() => { void shareViaWebShare(source) }, [source])
   const handleDownload = useCallback(() => downloadFile(source), [source])
@@ -125,6 +127,14 @@ export function SheetBody({ source, onClose }: { source: PreviewSource; onClose:
         ) : null}
       </div>
     </div>
+  )
+}
+
+export function SheetBody({ source, onClose }: { source: PreviewSource; onClose: () => void }) {
+  return (
+    <SheetBodyStore.Provider init={undefined}>
+      <SheetBodyInner source={source} onClose={onClose} />
+    </SheetBodyStore.Provider>
   )
 }
 
