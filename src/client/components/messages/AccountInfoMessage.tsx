@@ -1,8 +1,8 @@
-import { useState } from "react"
 import { ChevronRight } from "lucide-react"
 import type { ProcessedAccountInfoMessage } from "./types"
 import { MetaCodeBlock, MetaRow, VerticalLineContainer } from "./shared"
 import { cn } from "../../lib/utils"
+import { AccountInfoMessageStore } from "./AccountInfoMessage.store"
 
 interface Props {
   message: ProcessedAccountInfoMessage
@@ -21,18 +21,19 @@ function describeSource(tokenSource?: string, apiKeySource?: string): string | n
   return null
 }
 
-export function AccountInfoMessage({ message }: Props) {
+function AccountInfoMessageInner({ message }: Props) {
   const { organization, tokenSource, apiKeySource, subscriptionType, email, oauthKeyMasked } = message.accountInfo
   const primaryKey = oauthKeyMasked ?? organization ?? email ?? "Unknown account"
   const sourceLabel = describeSource(tokenSource, apiKeySource)
-  const [expanded, setExpanded] = useState(false)
+  const expanded = AccountInfoMessageStore.useScopedStore((s) => s.expanded)
+  const setExpanded = AccountInfoMessageStore.useScopedStore((s) => s.setExpanded)
 
   return (
     <MetaRow>
       <div className="flex w-full flex-col">
         <button
           type="button"
-          onClick={() => setExpanded((v) => !v)}
+          onClick={() => setExpanded(!expanded)}
           aria-expanded={expanded}
           className="group/account flex w-full items-center gap-2.5 text-left transition-opacity hover:opacity-80 focus-visible:opacity-100"
         >
@@ -98,5 +99,13 @@ export function AccountInfoMessage({ message }: Props) {
         ) : null}
       </div>
     </MetaRow>
+  )
+}
+
+export function AccountInfoMessage({ message }: Props) {
+  return (
+    <AccountInfoMessageStore.Provider init={undefined}>
+      <AccountInfoMessageInner message={message} />
+    </AccountInfoMessageStore.Provider>
   )
 }

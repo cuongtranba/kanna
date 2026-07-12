@@ -1,8 +1,8 @@
-import { useState } from "react"
 import { Check, ChevronLeft } from "lucide-react"
 import type { AskUserQuestionAnswerMap, AskUserQuestionItem, AskUserQuestionOption } from "../../../shared/types"
 import { cn } from "../../lib/utils"
 import { Button } from "../ui/button"
+import { AskUserQuestionInteractiveStore } from "./AskUserQuestionInteractive.store"
 
 // ─── Slide-card sub-components (module-private) ─────────────────────────────
 
@@ -154,12 +154,15 @@ export interface AskUserQuestionInteractiveProps {
   onCancel?: () => void
 }
 
-export function AskUserQuestionInteractive(
+function AskUserQuestionInteractiveInner(
   { questions, onSubmit, onCancel }: AskUserQuestionInteractiveProps,
 ): React.ReactElement | null {
-  const [currentIndex, setCurrentIndex] = useState(0)
-  const [answers, setAnswers] = useState<Record<string, string>>({})
-  const [customInputs, setCustomInputs] = useState<Record<string, string>>({})
+  const currentIndex = AskUserQuestionInteractiveStore.useScopedStore((s) => s.currentIndex)
+  const answers = AskUserQuestionInteractiveStore.useScopedStore((s) => s.answers)
+  const customInputs = AskUserQuestionInteractiveStore.useScopedStore((s) => s.customInputs)
+  const setCurrentIndex = AskUserQuestionInteractiveStore.useScopedStore((s) => s.setCurrentIndex)
+  const setAnswers = AskUserQuestionInteractiveStore.useScopedStore((s) => s.setAnswers)
+  const setCustomInputs = AskUserQuestionInteractiveStore.useScopedStore((s) => s.setCustomInputs)
 
   if (questions.length === 0) return null
 
@@ -312,5 +315,15 @@ export function AskUserQuestionInteractive(
         </div>
       </div>
     </div>
+  )
+}
+
+export function AskUserQuestionInteractive(
+  { questions, onSubmit, onCancel }: AskUserQuestionInteractiveProps,
+): React.ReactElement | null {
+  return (
+    <AskUserQuestionInteractiveStore.Provider init={undefined}>
+      <AskUserQuestionInteractiveInner questions={questions} onSubmit={onSubmit} onCancel={onCancel} />
+    </AskUserQuestionInteractiveStore.Provider>
   )
 }

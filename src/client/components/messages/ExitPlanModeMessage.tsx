@@ -1,10 +1,11 @@
-import { useState, useRef, useEffect, type ReactNode } from "react"
+import { useRef, useEffect, type ReactNode } from "react"
 import { Check, CheckCheck, Pencil, CornerDownLeft, ChevronDown, Copy, Send } from "lucide-react"
 import type { ProcessedToolCall } from "./types"
 import { Button } from "../ui/button"
 import { cn } from "../../lib/utils"
 import { useTranscriptRenderOptions } from "./render-context"
 import { renderMarkdownToReact } from "../lexical/markdown/lexicalToReact"
+import { ExitPlanModeMessageStore } from "./ExitPlanModeMessage.store"
 
 interface Props {
   message: Extract<ProcessedToolCall, { toolKind: "exit_plan_mode" }>
@@ -12,13 +13,17 @@ interface Props {
   isLatest: boolean
 }
 
-export function ExitPlanModeMessage({ message, onConfirm, isLatest }: Props) {
+function ExitPlanModeMessageInner({ message, onConfirm, isLatest }: Props) {
   const renderOptions = useTranscriptRenderOptions()
   const isComplete = Boolean(message.result)
-  const [expanded, setExpanded] = useState(false)
-  const [copied, setCopied] = useState(false)
-  const [showEditInput, setShowEditInput] = useState(false)
-  const [editMessage, setEditMessage] = useState("")
+  const expanded = ExitPlanModeMessageStore.useScopedStore((s) => s.expanded)
+  const copied = ExitPlanModeMessageStore.useScopedStore((s) => s.copied)
+  const showEditInput = ExitPlanModeMessageStore.useScopedStore((s) => s.showEditInput)
+  const editMessage = ExitPlanModeMessageStore.useScopedStore((s) => s.editMessage)
+  const setExpanded = ExitPlanModeMessageStore.useScopedStore((s) => s.setExpanded)
+  const setCopied = ExitPlanModeMessageStore.useScopedStore((s) => s.setCopied)
+  const setShowEditInput = ExitPlanModeMessageStore.useScopedStore((s) => s.setShowEditInput)
+  const setEditMessage = ExitPlanModeMessageStore.useScopedStore((s) => s.setEditMessage)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const input = message.input
 
@@ -205,5 +210,13 @@ export function ExitPlanModeMessage({ message, onConfirm, isLatest }: Props) {
 
       {planFooter}
     </div>
+  )
+}
+
+export function ExitPlanModeMessage({ message, onConfirm, isLatest }: Props) {
+  return (
+    <ExitPlanModeMessageStore.Provider init={undefined}>
+      <ExitPlanModeMessageInner message={message} onConfirm={onConfirm} isLatest={isLatest} />
+    </ExitPlanModeMessageStore.Provider>
   )
 }

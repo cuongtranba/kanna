@@ -1,21 +1,22 @@
-import { useEffect, useState } from "react"
+import { useEffect } from "react"
 import type { ChatAttachment, HydratedOfferDownloadToolCall } from "../../../shared/types"
 import { AttachmentFileCard, formatAttachmentSize } from "./AttachmentCard"
 import { classifyAttachmentIcon, classifyAttachmentPreview, friendlyMimeLabel } from "./attachmentPreview"
 import { FilePreviewSheet } from "./file-preview/FilePreviewSheet"
 import { toPreviewSourceFromAttachment } from "./file-preview/types"
+import { OfferDownloadMessageStore } from "./OfferDownloadMessage.store"
 
 interface Props {
   message: HydratedOfferDownloadToolCall
 }
 
-type ProbeState = "idle" | "ready" | "missing"
-
-export function OfferDownloadMessage({ message }: Props) {
+function OfferDownloadMessageInner({ message }: Props) {
   const result = message.result
   const contentUrl = result?.contentUrl
-  const [state, setState] = useState<ProbeState>("idle")
-  const [previewOpen, setPreviewOpen] = useState(false)
+  const probeState = OfferDownloadMessageStore.useScopedStore((s) => s.probeState)
+  const previewOpen = OfferDownloadMessageStore.useScopedStore((s) => s.previewOpen)
+  const setProbeState = OfferDownloadMessageStore.useScopedStore((s) => s.setProbeState)
+  const setPreviewOpen = OfferDownloadMessageStore.useScopedStore((s) => s.setPreviewOpen)
 
   useEffect(() => {
     if (!contentUrl) return
@@ -25,11 +26,11 @@ export function OfferDownloadMessage({ message }: Props) {
         if (controller.signal.aborted) return
         // Only 404 means the file is gone; 401/5xx are auth or proxy
         // failures and must not disable the card.
-        setState(response.status === 404 ? "missing" : "ready")
+        setProbeState(response.status === 404 ? "missing" : "ready")
       })
       .catch(() => {})
     return () => controller.abort()
-  }, [contentUrl])
+  }, [contentUrl, setProbeState])
 
   if (!result || !contentUrl) return null
 
@@ -54,7 +55,7 @@ export function OfferDownloadMessage({ message }: Props) {
     </>
   )
 
-  if (state === "missing") {
+  if (probeState === "missing") {
     return (
       <div className="flex" data-testid="offer-download-link">
         <AttachmentFileCard attachment={attachment} disabledReason="File no longer available" />
@@ -97,5 +98,13 @@ export function OfferDownloadMessage({ message }: Props) {
         ariaLabel={ariaLabelParts.join(", ")}
       />
     </div>
+  )
+}
+
+export function OfferDownloadMessage({ message }: Props) {
+  return (
+    <OfferDownloadMessageStore.Provider init={undefined}>
+      <OfferDownloadMessageInner message={message} />
+    </OfferDownloadMessageStore.Provider>
   )
 }

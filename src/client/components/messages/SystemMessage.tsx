@@ -1,18 +1,20 @@
-import { useState, useMemo, type ReactNode } from "react"
+import { useMemo, type ReactNode } from "react"
 import { Asterisk, ChevronRight, Slash, UserRound } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 import type { ProcessedSystemMessage } from "./types"
 import { MetaRow, MetaLabel, MetaText, MetaPill, ExpandableRow, VerticalLineContainer, toolIcons, defaultToolIcon, getToolIcon } from "./shared"
 import { toTitleCase } from "../../lib/formatters"
 import { cn } from "../../lib/utils"
+import { CollapsibleSectionStore, ExpandableMcpServerStore, RawMessageSectionStore } from "./SystemMessage.store"
 
 interface Props {
   message: ProcessedSystemMessage
   rawJson?: string
 }
 
-function CollapsibleSection({ title, count, children, badge }: { title: string; count: number; children: ReactNode; badge?: ReactNode }) {
-  const [open, setOpen] = useState(false)
+function CollapsibleSectionInner({ title, count, children, badge }: { title: string; count: number; children: ReactNode; badge?: ReactNode }) {
+  const open = CollapsibleSectionStore.useScopedStore((s) => s.open)
+  const setOpen = CollapsibleSectionStore.useScopedStore((s) => s.setOpen)
   if (count === 0) return null
   return (
     <div className="flex flex-col gap-1.5">
@@ -24,6 +26,14 @@ function CollapsibleSection({ title, count, children, badge }: { title: string; 
       </button>
       {open && <div className="ml-5">{children}</div>}
     </div>
+  )
+}
+
+function CollapsibleSection({ title, count, children, badge }: { title: string; count: number; children: ReactNode; badge?: ReactNode }) {
+  return (
+    <CollapsibleSectionStore.Provider init={undefined}>
+      <CollapsibleSectionInner title={title} count={count} badge={badge}>{children}</CollapsibleSectionInner>
+    </CollapsibleSectionStore.Provider>
   )
 }
 
@@ -84,8 +94,9 @@ function statusLabel(status: string): string {
   }
 }
 
-function ExpandableMcpServer({ server }: { server: McpServerWithTools }) {
-  const [open, setOpen] = useState(false)
+function ExpandableMcpServerInner({ server }: { server: McpServerWithTools }) {
+  const open = ExpandableMcpServerStore.useScopedStore((s) => s.open)
+  const setOpen = ExpandableMcpServerStore.useScopedStore((s) => s.setOpen)
   const isConnected = server.status === "connected"
 
   return (
@@ -122,6 +133,14 @@ function ExpandableMcpServer({ server }: { server: McpServerWithTools }) {
   )
 }
 
+function ExpandableMcpServer({ server }: { server: McpServerWithTools }) {
+  return (
+    <ExpandableMcpServerStore.Provider init={undefined}>
+      <ExpandableMcpServerInner server={server} />
+    </ExpandableMcpServerStore.Provider>
+  )
+}
+
 function McpServerSection({ servers }: { servers: McpServerWithTools[] }) {
   if (servers.length === 0) return null
 
@@ -149,8 +168,9 @@ function McpServerSection({ servers }: { servers: McpServerWithTools[] }) {
   )
 }
 
-function RawMessageSection({ rawJson }: { rawJson: string }) {
-  const [open, setOpen] = useState(false)
+function RawMessageSectionInner({ rawJson }: { rawJson: string }) {
+  const open = RawMessageSectionStore.useScopedStore((s) => s.open)
+  const setOpen = RawMessageSectionStore.useScopedStore((s) => s.setOpen)
   return (
     <div className="flex flex-col gap-1.5">
       <button onClick={() => setOpen(!open)} className="flex items-center gap-1 cursor-pointer group/section hover:opacity-60 transition-opacity">
@@ -163,6 +183,14 @@ function RawMessageSection({ rawJson }: { rawJson: string }) {
         </pre>
       )}
     </div>
+  )
+}
+
+function RawMessageSection({ rawJson }: { rawJson: string }) {
+  return (
+    <RawMessageSectionStore.Provider init={undefined}>
+      <RawMessageSectionInner rawJson={rawJson} />
+    </RawMessageSectionStore.Provider>
   )
 }
 

@@ -1,10 +1,10 @@
-import { useState } from "react"
 import { MessageCircleQuestion } from "lucide-react"
 import type { ProcessedToolCall, AskUserQuestionItem } from "./types"
 import type { AskUserQuestionAnswerMap } from "../../../shared/types"
 import { cn } from "../../lib/utils"
 import { useTranscriptRenderOptions } from "./render-context"
 import { AskUserQuestionInteractive } from "./AskUserQuestionInteractive"
+import { AskUserQuestionMessageStore } from "./AskUserQuestionMessage.store"
 
 interface Props {
   message: Extract<ProcessedToolCall, { toolKind: "ask_user_question" }>
@@ -22,15 +22,17 @@ function getQuestionKey(question: AskUserQuestionItem): string {
   return question.id || question.question
 }
 
-export function AskUserQuestionMessage({ message, onSubmit, isLatest }: Props) {
+function AskUserQuestionMessageInner({ message, onSubmit, isLatest }: Props) {
   const renderOptions = useTranscriptRenderOptions()
   const questions = message.input.questions
   const isComplete = Boolean(message.result)
   const savedAnswers = parseAnswersFromResult(message.result)
   const isDiscarded = message.result?.discarded === true
 
-  const [submittedAnswers, setSubmittedAnswers] = useState<AskUserQuestionAnswerMap | null>(savedAnswers ?? null)
-  const [isSubmitted, setIsSubmitted] = useState(isComplete)
+  const submittedAnswers = AskUserQuestionMessageStore.useScopedStore((s) => s.submittedAnswers)
+  const isSubmitted = AskUserQuestionMessageStore.useScopedStore((s) => s.isSubmitted)
+  const setSubmittedAnswers = AskUserQuestionMessageStore.useScopedStore((s) => s.setSubmittedAnswers)
+  const setIsSubmitted = AskUserQuestionMessageStore.useScopedStore((s) => s.setIsSubmitted)
 
   // Completed state
   if (isSubmitted || isComplete) {
@@ -142,5 +144,15 @@ export function AskUserQuestionMessage({ message, onSubmit, isLatest }: Props) {
         onSubmit(message.toolId, questions, finalAnswers)
       }}
     />
+  )
+}
+
+export function AskUserQuestionMessage({ message, onSubmit, isLatest }: Props) {
+  const savedAnswers = parseAnswersFromResult(message.result) ?? null
+  const isComplete = Boolean(message.result)
+  return (
+    <AskUserQuestionMessageStore.Provider init={{ savedAnswers, isComplete }}>
+      <AskUserQuestionMessageInner message={message} onSubmit={onSubmit} isLatest={isLatest} />
+    </AskUserQuestionMessageStore.Provider>
   )
 }
