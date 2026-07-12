@@ -1,9 +1,10 @@
-import { useMemo, useState } from "react"
+import { useMemo } from "react"
 import { Copy, Link2Off } from "lucide-react"
 import { Button } from "../ui/button"
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover"
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip"
 import type { ShareSummary } from "../../../shared/session-share/types"
+import { SharePopoverBodyStore } from "./SharePopoverBody.store"
 
 export interface SharePopoverProps {
   chatId: string
@@ -32,8 +33,9 @@ export interface SharePopoverBodyProps {
   onRevoke: (tokenId: string) => Promise<void>
 }
 
-export function SharePopoverBody(props: SharePopoverBodyProps) {
-  const [busy, setBusy] = useState(false)
+function SharePopoverBodyInner(props: SharePopoverBodyProps) {
+  const busy = SharePopoverBodyStore.useScopedStore((s) => s.busy)
+  const setBusy = SharePopoverBodyStore.useScopedStore((s) => s.setBusy)
   const activeShares = props.shares.filter((s) => !s.revoked)
 
   return (
@@ -81,6 +83,14 @@ export function SharePopoverBody(props: SharePopoverBodyProps) {
         </ul>
       )}
     </>
+  )
+}
+
+export function SharePopoverBody(props: SharePopoverBodyProps) {
+  return (
+    <SharePopoverBodyStore.Provider init={undefined}>
+      <SharePopoverBodyInner {...props} />
+    </SharePopoverBodyStore.Provider>
   )
 }
 

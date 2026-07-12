@@ -35,9 +35,10 @@
 - [x] T13 McpServersSection: `src/client/app/McpServersSection.tsx` (18)
 - [x] T14 Settings sections: `ModelsSection.tsx` (7), `SubagentsSection.tsx` (7), `TextSnippetsSection.tsx` (5), `src/client/components/chat-ui/OAuthTokenPoolCard.tsx` (5)
 - [x] T15 Workflows: `src/client/app/WorkflowsPage.tsx` (3), `WorkflowsSection.tsx` (2), `WorkflowAgentTranscriptPanel.tsx` (4)
-- [ ] T16 Final sweep: `src/client/components/share/SharePopover.tsx` (1) + any file still listed by `bun scripts/usestate-ratchet.ts --zero`; then run `bun run migrate:verify` and fix everything until it exits 0
+- [x] T16 Final sweep: `src/client/components/share/SharePopover.tsx` (1) + any file still listed by `bun scripts/usestate-ratchet.ts --zero`; then run `bun run migrate:verify` and fix everything until it exits 0
 
 ## Progress (latest first)
+- 2026-07-12 T16 Final sweep DONE (2 → 0 useState, -2) — SharePopoverBody.store.ts scoped store; migrate:verify exits 0; 3140 tests pass
 - 2026-07-12 T15 Workflows DONE (14 → 2 useState, -12) — scoped stores for WorkflowsPageView, WorkflowsSectionWithDetail, WorkflowAgentTranscriptPanel; 43 tests pass
 - 2026-07-12 T14 Settings sections DONE (42 → 14 useState, -28)
 - 2026-07-12 T13 McpServersSection DONE (61 → 42 useState, -19)
@@ -59,4 +60,4 @@
 - (none yet)
 
 ## Next chunk
-T16 Final sweep: `src/client/components/share/SharePopover.tsx` (2 useState remain). Then run `bun run migrate:verify` and fix everything until it exits 0. Follow ALL Worker rules, satisfy all 6 acceptance criteria, update this file, then terminate.
+GOAL MET — `bun run migrate:verify` exits 0. All 16 tasks complete, 0 useState violations remain.
