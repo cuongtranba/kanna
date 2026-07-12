@@ -1,5 +1,5 @@
 import * as React from "react"
-import { useCallback, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo } from "react"
 import { Bot, Plus } from "lucide-react"
 import { Button } from "../components/ui/button"
 import { Input } from "../components/ui/input"
@@ -44,6 +44,7 @@ import {
 } from "../../shared/types"
 import { isRecord } from "../../shared/errors"
 import type { SubagentCommandResult } from "../../shared/protocol"
+import { useSubagentsSectionStore } from "../stores/subagentsSectionStore"
 
 function isClaudeModelOptions(opts: ClaudeModelOptions | CodexModelOptions): opts is ClaudeModelOptions {
   return "contextWindow" in opts
@@ -242,10 +243,21 @@ function SubagentForm(props: SubagentFormProps) {
     return createDefaultSubagentDraft("claude", props.providerDefaults, props.availableProviders)
   }, [props.mode, props.subject, props.providerDefaults, props.availableProviders])
 
-  const [draft, setDraft] = useState<SubagentInput>(baseline)
-  const [error, setError] = useState<{ field: SubagentFieldKey; message: string } | null>(null)
-  const [pending, setPending] = useState(false)
-  const [confirmDelete, setConfirmDelete] = useState(false)
+  const resetForm = useSubagentsSectionStore((state) => state.resetForm)
+  const form = useSubagentsSectionStore((state) => state.form)
+  const patchFormDraft = useSubagentsSectionStore((state) => state.patchFormDraft)
+  const setFormDraft = useSubagentsSectionStore((state) => state.setFormDraft)
+  const setFormError = useSubagentsSectionStore((state) => state.setFormError)
+  const setFormPending = useSubagentsSectionStore((state) => state.setFormPending)
+  const setFormConfirmDelete = useSubagentsSectionStore((state) => state.setFormConfirmDelete)
+
+  // Initialize store with baseline on mount (key prop ensures re-mount on subagent switch)
+  useEffect(() => {
+    resetForm(baseline)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const { draft, error, pending, confirmDelete } = form
 
   const nameError = error?.field === "name" ? error.message : null
   const generalError = error?.field === "general" ? error.message : null
@@ -253,76 +265,70 @@ function SubagentForm(props: SubagentFormProps) {
   const canSave = draft.name.trim().length > 0 && (props.mode === "create" || isDirty)
 
   function patchDraft(patch: Partial<SubagentInput>) {
-    setDraft((prev) => ({ ...prev, ...patch }))
+    patchFormDraft(patch)
     if (error?.field === "name" && "name" in patch) {
-      setError(null)
+      setFormError(null)
     }
   }
 
   function handleProviderChange(provider: AgentProvider) {
     if (provider === draft.provider) return
     const defaults = createDefaultSubagentDraft(provider, props.providerDefaults, props.availableProviders)
-    setDraft((prev) => ({
-      ...prev,
+    setFormDraft({
+      ...draft,
       provider,
       model: defaults.model,
       modelOptions: defaults.modelOptions,
-    }))
+    })
   }
 
   function handleClaudeReasoning(value: ClaudeReasoningEffort) {
     if (draft.provider !== "claude") return
-    setDraft((prev) => {
-      const opts = isClaudeModelOptions(prev.modelOptions) ? prev.modelOptions : DEFAULT_CLAUDE_MODEL_OPTIONS
-      return { ...prev, modelOptions: { ...DEFAULT_CLAUDE_MODEL_OPTIONS, ...opts, reasoningEffort: value } }
-    })
+    const opts = isClaudeModelOptions(draft.modelOptions) ? draft.modelOptions : DEFAULT_CLAUDE_MODEL_OPTIONS
+    patchFormDraft({ modelOptions: { ...DEFAULT_CLAUDE_MODEL_OPTIONS, ...opts, reasoningEffort: value } })
   }
 
   function handleClaudeContextWindow(value: ClaudeContextWindow) {
     if (draft.provider !== "claude") return
-    setDraft((prev) => {
-      const opts = isClaudeModelOptions(prev.modelOptions) ? prev.modelOptions : DEFAULT_CLAUDE_MODEL_OPTIONS
-      return { ...prev, modelOptions: { ...DEFAULT_CLAUDE_MODEL_OPTIONS, ...opts, contextWindow: value } }
-    })
+    const opts = isClaudeModelOptions(draft.modelOptions) ? draft.modelOptions : DEFAULT_CLAUDE_MODEL_OPTIONS
+    patchFormDraft({ modelOptions: { ...DEFAULT_CLAUDE_MODEL_OPTIONS, ...opts, contextWindow: value } })
   }
 
   function handleCodexReasoning(value: CodexReasoningEffort) {
     if (draft.provider !== "codex") return
-    setDraft((prev) => {
-      const opts = isCodexModelOptions(prev.modelOptions) ? prev.modelOptions : DEFAULT_CODEX_MODEL_OPTIONS
-      return { ...prev, modelOptions: { ...DEFAULT_CODEX_MODEL_OPTIONS, ...opts, reasoningEffort: value } }
-    })
+    const opts = isCodexModelOptions(draft.modelOptions) ? draft.modelOptions : DEFAULT_CODEX_MODEL_OPTIONS
+    patchFormDraft({ modelOptions: { ...DEFAULT_CODEX_MODEL_OPTIONS, ...opts, reasoningEffort: value } })
   }
 
   async function handleSubmit() {
     if (!canSave || pending) return
-    setPending(true)
-    setError(null)
+    setFormPending(true)
+    setFormError(null)
     try {
       const result =
         props.mode === "create"
           ? await props.handlers.onCreate(draft)
           : await props.handlers.onUpdate(props.subject!.id, draft)
       if (!result.ok) {
-        setError(mapSubagentValidationError(result.error))
+        setFormError(mapSubagentValidationError(result.error))
       }
     } finally {
-      setPending(false)
+      setFormPending(false)
     }
   }
 
   async function handleDelete() {
     if (props.mode !== "edit" || !props.subject) return
     if (!confirmDelete) {
-      setConfirmDelete(true)
+      setFormConfirmDelete(true)
       return
     }
-    setPending(true)
+    setFormPending(true)
     try {
       await props.handlers.onDelete(props.subject.id)
     } finally {
-      setPending(false)
-      setConfirmDelete(false)
+      setFormPending(false)
+      setFormConfirmDelete(false)
     }
   }
 
@@ -614,7 +620,8 @@ export function SubagentsSettingsBranch(props: {
     [customModels],
   )
 
-  const [editing, setEditing] = useState<SubagentsEditingState>({ kind: "list" })
+  const editing = useSubagentsSectionStore((state) => state.editing)
+  const setEditing = useSubagentsSectionStore((state) => state.setEditing)
 
   const handlers = useMemo<SubagentsSectionHandlers>(
     () => ({
@@ -641,20 +648,20 @@ export function SubagentsSettingsBranch(props: {
         setEditing({ kind: "list" })
       },
     }),
-    [props.state.socket],
+    [props.state.socket, setEditing],
   )
 
   const handleSelect = useCallback((id: string) => {
     setEditing({ kind: "edit", id })
-  }, [])
+  }, [setEditing])
 
   const handleStartCreate = useCallback(() => {
     setEditing({ kind: "create" })
-  }, [])
+  }, [setEditing])
 
   const handleCancelEditing = useCallback(() => {
     setEditing({ kind: "list" })
-  }, [])
+  }, [setEditing])
 
   return (
     <div className="flex flex-col gap-6 px-6 py-6">
@@ -695,8 +702,16 @@ function LoopRuntimePanel(props: {
   const timeoutSeconds = runtime ? Math.round(runtime.runTimeoutMs / 1000) : DEFAULT_SUBAGENT_RUN_TIMEOUT_S
   const defaultLoopSubagentId = runtime?.defaultLoopSubagentId ?? null
 
-  const [timeoutDraft, setTimeoutDraft] = useState(String(timeoutSeconds))
-  const [error, setError] = useState<string | null>(null)
+  const timeoutDraft = useSubagentsSectionStore((state) => state.timeoutDraft)
+  const setTimeoutDraft = useSubagentsSectionStore((state) => state.setTimeoutDraft)
+  const error = useSubagentsSectionStore((state) => state.loopError)
+  const setError = useSubagentsSectionStore((state) => state.setLoopError)
+
+  // Sync draft when server value changes (e.g. on load)
+  useEffect(() => {
+    setTimeoutDraft(String(timeoutSeconds))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [timeoutSeconds])
 
   function commitTimeout() {
     const seconds = Number(timeoutDraft)

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react"
+import { useMemo } from "react"
 import { Plus, Trash2, Pencil, Type } from "lucide-react"
 import { Button } from "../components/ui/button"
 import { Input } from "../components/ui/input"
@@ -11,17 +11,16 @@ import type {
   TextSnippetPatch,
 } from "../../shared/types"
 import type { KannaState } from "./useKannaState"
+import {
+  useTextSnippetsSectionStore,
+  type SnippetEditingState,
+} from "../stores/textSnippetsSectionStore"
 
 export interface TextSnippetsSectionHandlers {
   onCreate: (input: TextSnippetInput) => Promise<void>
   onUpdate: (id: string, patch: TextSnippetPatch) => Promise<void>
   onDelete: (id: string) => Promise<void>
 }
-
-type EditingState =
-  | { kind: "list" }
-  | { kind: "create" }
-  | { kind: "edit"; id: string }
 
 interface TextSnippetsSectionProps {
   snippets: readonly TextSnippet[]
@@ -31,7 +30,21 @@ interface TextSnippetsSectionProps {
 const SHORTCUT_REGEX = /^\S{1,32}$/
 
 export function TextSnippetsSection({ snippets, handlers }: TextSnippetsSectionProps) {
-  const [editing, setEditing] = useState<EditingState>({ kind: "list" })
+  const editing = useTextSnippetsSectionStore((state) => state.editing)
+  const setEditing = useTextSnippetsSectionStore((state) => state.setEditing)
+  const resetEditorForm = useTextSnippetsSectionStore((state) => state.resetEditorForm)
+
+  function navigate(next: SnippetEditingState) {
+    if (next.kind === "create") {
+      resetEditorForm("", "")
+    } else if (next.kind === "edit") {
+      const initial = snippets.find((s) => s.id === next.id) ?? null
+      if (initial) {
+        resetEditorForm(initial.shortcut, initial.expansion)
+      }
+    }
+    setEditing(next)
+  }
 
   if (editing.kind !== "list") {
     const initial =
@@ -56,7 +69,7 @@ export function TextSnippetsSection({ snippets, handlers }: TextSnippetsSectionP
             text. Handy for prompts you send often.
           </p>
         </div>
-        <Button size="sm" onClick={() => setEditing({ kind: "create" })}>
+        <Button size="sm" onClick={() => navigate({ kind: "create" })}>
           <Plus className="mr-1 h-4 w-4" />
           Add snippet
         </Button>
@@ -75,7 +88,7 @@ export function TextSnippetsSection({ snippets, handlers }: TextSnippetsSectionP
             <SnippetRow
               key={snippet.id}
               snippet={snippet}
-              onEdit={() => setEditing({ kind: "edit", id: snippet.id })}
+              onEdit={() => navigate({ kind: "edit", id: snippet.id })}
               onDelete={() => {
                 if (window.confirm(`Delete snippet "${snippet.shortcut}"?`)) {
                   void handlers.onDelete(snippet.id)
@@ -134,12 +147,15 @@ function SnippetEditor({
   handlers: TextSnippetsSectionHandlers
   onDone: () => void
 }) {
-  const isEdit = initial !== null
-  const [shortcut, setShortcut] = useState(initial?.shortcut ?? "")
-  const [expansion, setExpansion] = useState(initial?.expansion ?? "")
-  const [submitting, setSubmitting] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const editorForm = useTextSnippetsSectionStore((state) => state.editorForm)
+  const setEditorShortcut = useTextSnippetsSectionStore((state) => state.setEditorShortcut)
+  const setEditorExpansion = useTextSnippetsSectionStore((state) => state.setEditorExpansion)
+  const setEditorSubmitting = useTextSnippetsSectionStore((state) => state.setEditorSubmitting)
+  const setEditorError = useTextSnippetsSectionStore((state) => state.setEditorError)
 
+  const { shortcut, expansion, submitting, error } = editorForm
+
+  const isEdit = initial !== null
   const trimmedShortcut = shortcut.trim()
   const shortcutValid = SHORTCUT_REGEX.test(trimmedShortcut)
   const duplicate = useMemo(
@@ -150,8 +166,8 @@ function SnippetEditor({
   const canSave = shortcutValid && !duplicate && expansion.length > 0 && !submitting
 
   const onSubmit = async () => {
-    setSubmitting(true)
-    setError(null)
+    setEditorSubmitting(true)
+    setEditorError(null)
     try {
       if (isEdit && initial) {
         await handlers.onUpdate(initial.id, { shortcut: trimmedShortcut, expansion })
@@ -160,9 +176,9 @@ function SnippetEditor({
       }
       onDone()
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to save snippet")
+      setEditorError(e instanceof Error ? e.message : "Failed to save snippet")
     } finally {
-      setSubmitting(false)
+      setEditorSubmitting(false)
     }
   }
 
@@ -183,7 +199,7 @@ function SnippetEditor({
         <span className="text-sm font-medium">Shortcut</span>
         <Input
           value={shortcut}
-          onChange={(e) => setShortcut(e.target.value)}
+          onChange={(e) => setEditorShortcut(e.target.value)}
           placeholder="pgm"
           className="font-mono"
           autoFocus
@@ -202,7 +218,7 @@ function SnippetEditor({
         <span className="text-sm font-medium">Expands to</span>
         <Textarea
           value={expansion}
-          onChange={(e) => setExpansion(e.target.value)}
+          onChange={(e) => setEditorExpansion(e.target.value)}
           placeholder="pull request green then merge"
           rows={4}
         />
