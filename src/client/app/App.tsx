@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react"
 import { Navigate, Outlet, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom"
 import { Flower } from "lucide-react"
 import { ChatPolicyDialog } from "../components/chat-ui/ChatPolicyDialog"
@@ -26,6 +26,8 @@ import { useKannaState } from "./useKannaState"
 import { useSidebarSwipeGesture } from "./sidebarSwipeGesture"
 import type { AppSettingsSnapshot } from "../../shared/types"
 import { log } from "../../shared/log"
+import { useAppShellStore } from "../stores/appShellStore"
+import { PasswordScreenStore } from "./PasswordScreen.store"
 
 const VERSION_SEEN_STORAGE_KEY = "kanna:last-seen-version"
 const AUTH_STATUS_RETRY_DELAY_MS = 500
@@ -52,15 +54,17 @@ export function shouldRetryAuthStatusRequest(responseOk: boolean | null) {
   return responseOk !== true
 }
 
-function PasswordScreen({
+function PasswordScreenInner({
   error,
   onSubmit,
 }: {
   error: string | null
   onSubmit: (password: string) => Promise<void>
 }) {
-  const [password, setPassword] = useState("")
-  const [submitting, setSubmitting] = useState(false)
+  const password = PasswordScreenStore.useScopedStore((s) => s.password)
+  const submitting = PasswordScreenStore.useScopedStore((s) => s.submitting)
+  const setPassword = PasswordScreenStore.useScopedStore((s) => s.setPassword)
+  const setSubmitting = PasswordScreenStore.useScopedStore((s) => s.setSubmitting)
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -119,8 +123,22 @@ function PasswordScreen({
   )
 }
 
+function PasswordScreen({
+  error,
+  onSubmit,
+}: {
+  error: string | null
+  onSubmit: (password: string) => Promise<void>
+}) {
+  return (
+    <PasswordScreenStore.Provider init={{}}>
+      <PasswordScreenInner error={error} onSubmit={onSubmit} />
+    </PasswordScreenStore.Provider>
+  )
+}
+
 function useAppAuthState() {
-  const [state, setState] = useState<AppAuthState>({ status: "checking" })
+  const authStatus = useAppShellStore((s) => s.authStatus)
   const retryTimeoutRef = useRef<number | null>(null)
   const refreshRef = useRef<() => Promise<void>>(async () => { /* stable ref kept current by useLayoutEffect */ })
 
@@ -130,7 +148,8 @@ function useAppAuthState() {
       retryTimeoutRef.current = null
     }
 
-    setState((current) => current.status === "ready" ? current : { status: "checking" })
+    const { authStatus: current, setAuthStatus } = useAppShellStore.getState()
+    setAuthStatus(current.status === "ready" ? current : { status: "checking" })
 
     let response: Response
     try {
@@ -156,7 +175,7 @@ function useAppAuthState() {
     }
 
     const payload: Partial<AuthStatusResponse> = await response.json()
-    setState(getAppAuthStateFromStatus(payload))
+    useAppShellStore.getState().setAuthStatus(getAppAuthStateFromStatus(payload))
   }, [])
 
   useLayoutEffect(() => {
@@ -164,7 +183,6 @@ function useAppAuthState() {
   })
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     void refresh()
     return () => {
       if (retryTimeoutRef.current !== null) {
@@ -184,7 +202,7 @@ function useAppAuthState() {
     })
 
     if (!response.ok) {
-      setState({ status: "locked", error: "Incorrect password. Try again." })
+      useAppShellStore.getState().setAuthStatus({ status: "locked", error: "Incorrect password. Try again." })
       return
     }
 
@@ -192,7 +210,7 @@ function useAppAuthState() {
   }, [refresh])
 
   return {
-    state,
+    state: authStatus,
     submitPassword,
   }
 }
@@ -299,13 +317,14 @@ function KannaLayout() {
     }
   }, [dialog, importClaudeSessions])
 
-  const [permissionsChatId, setPermissionsChatId] = useState<string | null>(null)
+  const permissionsChatId = useAppShellStore((s) => s.permissionsChatId)
+  const setPermissionsChatId = useAppShellStore((s) => s.setPermissionsChatId)
   const handleSidebarEditPermissions = useCallback((chatId: string) => {
     setPermissionsChatId(chatId)
     if (state.activeChatId !== chatId) {
       navigate(`/chat/${chatId}`)
     }
-  }, [navigate, state.activeChatId])
+  }, [navigate, setPermissionsChatId, state.activeChatId])
   const permissionsChatTitle = state.chatSnapshot?.runtime.title ?? "Chat"
   const permissionsCurrentOverride = state.chatSnapshot?.runtime.policyOverride ?? null
 

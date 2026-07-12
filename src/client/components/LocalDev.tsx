@@ -1,4 +1,5 @@
-import { useMemo, useState, type ComponentType, type ReactNode } from "react"
+import { useMemo, type ComponentType, type ReactNode } from "react"
+import { CopyButtonStore } from "./CopyButton.store"
 import {
   Check,
   ChevronRight,
@@ -33,8 +34,9 @@ interface LocalDevProps {
   onCreateProject: (project: { mode: "new" | "existing"; localPath: string; title: string }) => Promise<void>
 }
 
-function CopyButton({ text }: { text: string }) {
-  const [copied, setCopied] = useState(false)
+function CopyButtonInner({ text }: { text: string }) {
+  const copied = CopyButtonStore.useScopedStore((s) => s.copied)
+  const setCopied = CopyButtonStore.useScopedStore((s) => s.setCopied)
 
   async function handleCopy() {
     await navigator.clipboard.writeText(text)
@@ -52,6 +54,14 @@ function CopyButton({ text }: { text: string }) {
     >
       {copied ? <Check className="h-4 w-4 text-success" /> : <Copy className="h-4 w-4" />}
     </Button>
+  )
+}
+
+function CopyButton({ text }: { text: string }) {
+  return (
+    <CopyButtonStore.Provider init={{}}>
+      <CopyButtonInner text={text} />
+    </CopyButtonStore.Provider>
   )
 }
 
