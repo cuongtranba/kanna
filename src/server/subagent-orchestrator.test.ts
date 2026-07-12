@@ -51,6 +51,10 @@ interface ProviderProgram {
   error?: string
 }
 
+type ProviderRunOverride =
+  Pick<ProviderRunStart, "start" | "authReady">
+  & Partial<Pick<ProviderRunStart, "maxTurns" | "nativeMaxTurns">>
+
 interface OrchestratorHarness {
   store: EventStore
   appSettings: OrchestratorAppSettings
@@ -64,7 +68,7 @@ interface OrchestratorHarness {
   setAuthReady: (subagentId: string, ready: boolean) => void
   activeStarts: { value: number; max: number }
   pendingHolds: Map<string, (text: string) => void>
-  mockProviderRun: (override: Pick<ProviderRunStart, "start" | "authReady">) => void
+  mockProviderRun: (override: ProviderRunOverride) => void
   progressCalls: Array<{ chatId: string; runId: string }>
   terminalCalls: Array<{ chatId: string; runId: string; reason: "failed" | "completed" }>
   backgroundCompletions: Array<{ chatId: string; runId: string; outcome: DelegationOutcome }>
@@ -94,7 +98,7 @@ async function setupHarness(opts: {
   const activeStarts = { value: 0, max: 0 }
   const pendingHolds = new Map<string, (text: string) => void>()
 
-  let providerRunOverride: Pick<ProviderRunStart, "start" | "authReady"> | null = null
+  let providerRunOverride: ProviderRunOverride | null = null
 
   const progressCalls: Array<{ chatId: string; runId: string }> = []
   const terminalCalls: Array<{ chatId: string; runId: string; reason: "failed" | "completed" }> = []
@@ -121,6 +125,8 @@ async function setupHarness(opts: {
           preamble: null,
           authReady: providerRunOverride.authReady,
           start: providerRunOverride.start,
+          maxTurns: providerRunOverride.maxTurns,
+          nativeMaxTurns: providerRunOverride.nativeMaxTurns,
         }
       }
       const prog = programs.get(subagent.id) ?? { authReady: true, reply: "" }
@@ -385,6 +391,66 @@ describe("SubagentOrchestrator", () => {
     expect(run.error ?? null).toBeNull()
     expect(run.finalText).toBe("done")
   }, 10_000)
+
+  test("maxTurns backstop: run without native enforcement is aborted once tool_call count exceeds the bound", async () => {
+    const alpha = makeSubagent({ id: "sa-a", name: "alpha" })
+    const h = await setupHarness({ subagents: [alpha] })
+    h.mockProviderRun({
+      maxTurns: 3,
+      nativeMaxTurns: false,
+      authReady: async () => true,
+      start: async (_onChunk, onEntry) => {
+        // Stream 5 tool calls — the 4th must trip the backstop (count > 3).
+        for (let i = 0; i < 5; i += 1) {
+          onEntry({
+            _id: `tc-${i}`, createdAt: i, kind: "tool_call",
+            tool: { kind: "tool", toolKind: "bash", toolName: "Bash", toolId: `t${i}`, input: { command: "ls" } },
+          } as TranscriptEntry)
+          await new Promise((r) => setTimeout(r, 5))
+        }
+        // Never resolves on its own — the backstop must end the race.
+        return new Promise(() => {})
+      },
+    })
+    await h.orchestrator.runMentionsForUserMessage({
+      chatId: h.chatId,
+      userMessageId: h.userMessageId,
+      mentions: [{ kind: "subagent", subagentId: "sa-a", raw: "@agent/alpha" }],
+    })
+    const run = Object.values(h.store.getSubagentRuns(h.chatId))[0]
+    expect(run.status).toBe("failed")
+    expect(run.error?.code).toBe("MAX_TURNS")
+  }, 10_000)
+
+  test("maxTurns backstop skipped when the provider enforces natively (SDK runs)", async () => {
+    const alpha = makeSubagent({ id: "sa-a", name: "alpha" })
+    const h = await setupHarness({ subagents: [alpha] })
+    h.mockProviderRun({
+      maxTurns: 2,
+      nativeMaxTurns: true,
+      authReady: async () => true,
+      start: async (_onChunk, onEntry) => {
+        // 4 tool calls exceed the bound, but native enforcement owns the stop
+        // — the host must NOT abort (a host abort would clobber the SDK's
+        // graceful max_turns stop that preserves output).
+        for (let i = 0; i < 4; i += 1) {
+          onEntry({
+            _id: `tc-${i}`, createdAt: i, kind: "tool_call",
+            tool: { kind: "tool", toolKind: "bash", toolName: "Bash", toolId: `t${i}`, input: { command: "ls" } },
+          } as TranscriptEntry)
+        }
+        return { text: "partial output kept" }
+      },
+    })
+    await h.orchestrator.runMentionsForUserMessage({
+      chatId: h.chatId,
+      userMessageId: h.userMessageId,
+      mentions: [{ kind: "subagent", subagentId: "sa-a", raw: "@agent/alpha" }],
+    })
+    const run = Object.values(h.store.getSubagentRuns(h.chatId))[0]
+    expect(run.status).toBe("completed")
+    expect(run.finalText).toBe("partial output kept")
+  })
 
   test("snapshots subagentName at start - rename mid-run is irrelevant to recorded event", async () => {
     const alpha = makeSubagent({ id: "sa-a", name: "alpha" })

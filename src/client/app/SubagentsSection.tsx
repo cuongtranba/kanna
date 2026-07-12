@@ -467,6 +467,25 @@ function SubagentForm(props: SubagentFormProps) {
         />
       </FormRow>
 
+      <FormRow
+        label="Max turns"
+        hint="Optional. Caps the agentic turns per run (like Claude Code's per-agent maxTurns). Empty = unbounded. Claude SDK runs stop gracefully at the limit; PTY/Codex runs are aborted."
+      >
+        <Input
+          data-testid="subagent-form-max-turns"
+          type="number"
+          min={1}
+          step={1}
+          value={draft.maxTurns?.toString() ?? ""}
+          onChange={(event) => {
+            const parsed = Number.parseInt(event.target.value, 10)
+            patchDraft({ maxTurns: Number.isInteger(parsed) && parsed > 0 ? parsed : undefined })
+          }}
+          placeholder="unbounded"
+          className="w-36"
+        />
+      </FormRow>
+
       {draft.provider === "claude" ? (
         <>
           <FormRow
@@ -611,7 +630,9 @@ export function SubagentsSettingsBranch(props: {
         const result = await props.state.socket.command<SubagentCommandResult>({
           type: "subagent.update",
           id,
-          patch: input,
+          // maxTurns: explicit null when cleared — an absent key would keep
+          // the server's previous value (JSON drops undefined).
+          patch: { ...input, maxTurns: input.maxTurns ?? null },
         })
         return result
       },
@@ -823,6 +844,7 @@ export function toSubagentInput(subagent: Subagent): SubagentInput {
     triggerMode: subagent.triggerMode,
     workingDir: subagent.workingDir,
     allowedPaths: subagent.allowedPaths,
+    maxTurns: subagent.maxTurns,
   }
 }
 
@@ -844,6 +866,7 @@ export function isSubagentDraftDirty(draft: SubagentInput, baseline: SubagentInp
   if ((draft.triggerMode ?? "auto") !== (baseline.triggerMode ?? "auto")) return true
   if ((draft.workingDir ?? "") !== (baseline.workingDir ?? "")) return true
   if (!stringArrayEqual(draft.allowedPaths, baseline.allowedPaths)) return true
+  if ((draft.maxTurns ?? null) !== (baseline.maxTurns ?? null)) return true
   return !shallowEqualModelOptions(draft.modelOptions, baseline.modelOptions)
 }
 

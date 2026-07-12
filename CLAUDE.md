@@ -592,11 +592,16 @@ adr-20260616-subagent-run-in-background.
   chat's Claude `session_token` (main /clear equivalent — same machinery
   `exit_plan_mode`'s clearContext branch uses), (2) appends a `context_cleared`
   transcript entry, (3) emits `auto_continue_accepted { source:
-  "subagent_background", delayMs: 0, prompt: "Read PROGRESS.md, decide next
-  action." }`. Subagent output is NOT carried forward as prompt content —
-  PROGRESS.md is the tier-2 durability contract. `fireAutoContinue` →
-  `enqueueMessage` delivers to both drivers; because session_token is null,
-  the next main turn is a FRESH Claude spawn.
+  "subagent_background", delayMs: 0 }` whose prompt is the structured
+  `<task-notification>` XML (`buildTaskNotification` in `agent.ts` — same
+  format Claude Code's LocalAgentTask uses, so the model parses task
+  identity/status natively). Un-armed ad-hoc deliveries include the subagent's
+  `<result>` body (truncated at 4k chars) — the /clear per delivery means the
+  result rides exactly one fresh prompt, context never accumulates. ARMED loop
+  deliveries omit `<result>` (PROGRESS.md stays the loop's only durability
+  contract) and append the full loop discipline prompt after the notification.
+  `fireAutoContinue` → `enqueueMessage` delivers to both drivers; because
+  session_token is null, the next main turn is a FRESH Claude spawn.
 - **No wake cap.** Concurrency is bounded by the subagent permit pool + run
   timeout. Every delivery is a real event, never a self-poll — no runaway
   budget is meaningful here.
@@ -731,6 +736,42 @@ The server owns the template so the prompt is deterministic. See
   command, `delegate_subagent`, `run_in_background: true`, `GOAL MET`,
   `END THIS TURN`, and `/clear`. Future edits to the template that drop
   any of these fail validation.
+
+## Loop-armed state + hard tool-block (adr-20260712-loop-orchestration-hardening)
+
+`setup_loop` durably arms the loop (`loop_armed` auto-continue event carrying
+the resolved `subagentId` + rendered prompt; replayed by `deriveLoopState`).
+`mcp__kanna__stop_loop` (model, on GOAL MET) and a real user `chat.send`
+(takeover — awaited before the turn starts) emit `loop_disarmed`. While armed:
+
+- **Filter-at-spawn (Claude Code's `filterToolsForAgent` pattern), both
+  drivers.** `LOOP_BLOCKED_NATIVE_TOOLS` (Edit/Write/MultiEdit/NotebookEdit/
+  Task) are removed at spawn — PTY via `--disallowedTools` CLI args, SDK via
+  `options.disallowedTools` — so the model never sees them. The SDK
+  `canUseTool` deny stays as mid-turn belt-and-suspenders.
+- **Respawn on armed flip.** Spawn args are immutable per process, so
+  `ClaudeSessionState.loopArmedAtSpawn` is compared against the live
+  `isLoopArmed()` in `startClaudeTurn`'s reuse condition — any flip (arm or
+  disarm) forces a fresh session at the next turn boundary.
+- **Armed wakes re-inject the full loop prompt** (see Re-entry above), never
+  the generic "decide next action" string.
+
+## Per-subagent maxTurns (Claude Code frontmatter analog)
+
+`Subagent.maxTurns` (Settings → Subagents editor; optional, unset = unbounded,
+positive int) caps agentic turns per run — the analog of Claude Code's
+per-agent-definition frontmatter `maxTurns` (NOT a global setting there
+either; CC hardcodes 200 only for its fork agent). Enforcement:
+
+- **Claude SDK runs:** threaded natively into `query()` `options.maxTurns` —
+  the SDK stops gracefully at the limit and the accumulated output is kept
+  (CC's `max_turns_reached` semantics).
+- **PTY claude + Codex runs:** no native bound — `SubagentOrchestrator`
+  applies a host-side backstop (`ProviderRunStart.maxTurns` +
+  `nativeMaxTurns: false`): the run is aborted with error code `MAX_TURNS`
+  once its `tool_call` entry count exceeds the bound. Harder semantics than
+  native (abort, not graceful); the `nativeMaxTurns` flag prevents the
+  backstop from clobbering the SDK's graceful stop.
 
 # Background Bash Task Keep-Alive (KANNA_PTY_BACKGROUND_TASK_MAX_MS)
 

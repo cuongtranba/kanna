@@ -254,11 +254,12 @@ interface ClaudeSessionState {
   // mid-flight. See adr-20260604-pty-background-task-keepalive.
   backgroundTaskIds: Set<string>
   backgroundTaskDeadlineAt: number
-  // Armed-loop state captured at spawn. PTY bakes the loop tool-block into
-  // `--disallowedTools` (immutable per process), so when the armed state
-  // changes (setup_loop arms / stop_loop or user-send disarms) the session
-  // must be respawned at the next turn boundary or the block goes stale.
-  // SDK re-evaluates `isLoopArmed()` per tool call and never needs this.
+  // Armed-loop state captured at spawn. Both drivers bake the loop tool-block
+  // into the spawn (PTY: --disallowedTools CLI args; SDK: options.disallowedTools
+  // so the model never sees the blocked tools — Claude Code's filter-at-spawn
+  // pattern). When the armed state changes (setup_loop arms / stop_loop or
+  // user-send disarms) the session must be respawned at the next turn boundary
+  // or the block goes stale.
   loopArmedAtSpawn: boolean
   /** SDK only: set once the workflows dir has been registered for this session. */
   workflowsDirRegistered?: boolean
@@ -1231,6 +1232,40 @@ export const LOOP_BLOCKED_NATIVE_TOOLS: readonly string[] = [
   "Task",
 ]
 
+/** Cap on the <result> body inside a task-notification — bounds re-entry prompt size. */
+const TASK_NOTIFICATION_RESULT_MAX_CHARS = 4_000
+
+/**
+ * Render a background-subagent outcome as the `<task-notification>` XML that
+ * Claude Code's own LocalAgentTask uses for background-agent completion, so
+ * the model parses task identity/status with a format it natively knows.
+ * `includeResult: false` (armed loops) omits the result body — PROGRESS.md is
+ * the loop's durability contract, not the re-entry prompt.
+ */
+export function buildTaskNotification(
+  runId: string,
+  outcome: BackgroundRunOutcome,
+  opts: { includeResult: boolean },
+): string {
+  const status = outcome.status === "completed" ? "completed" : "failed"
+  const summary = outcome.status === "completed"
+    ? `Background subagent run ${runId} completed`
+    : `Background subagent run ${runId} failed (${outcome.errorCode}): ${outcome.errorMessage}`
+  let resultSection = ""
+  if (opts.includeResult) {
+    const body = outcome.status === "completed" ? outcome.text : outcome.errorMessage
+    const trimmed = body.length > TASK_NOTIFICATION_RESULT_MAX_CHARS
+      ? `${body.slice(0, TASK_NOTIFICATION_RESULT_MAX_CHARS)}\n[... truncated]`
+      : body
+    if (trimmed) resultSection = `\n<result>${trimmed}</result>`
+  }
+  return `<task-notification>
+<task-id>${runId}</task-id>
+<status>${status}</status>
+<summary>${summary}</summary>${resultSection}
+</task-notification>`
+}
+
 /** Args for the `buildCanUseTool` helper — exposed for unit testing. */
 export interface BuildCanUseToolArgs {
   localPath: string
@@ -1419,6 +1454,12 @@ async function startClaudeSession(args: {
   stopLoop?: () => Promise<void>
   /** Live check: true while an autonomous loop is armed — blocks direct-edit native tools. */
   isLoopArmed?: () => boolean
+  /**
+   * Agentic-turn bound passed natively to the SDK query() (Claude Code's
+   * per-agent frontmatter maxTurns analog): the SDK stops gracefully and
+   * keeps the accumulated output. Used by subagent spawns.
+   */
+  maxTurns?: number
   /** When true, leave the prompt queue open after initialPrompt and expose pushChannelPrompt on the handle. */
   keepAlive?: boolean
   /** Per-turn price for computing cost when the provider doesn't report it (OpenRouter). */
@@ -1451,6 +1492,16 @@ async function startClaudeSession(args: {
       forkSession: args.forkSession,
       permissionMode: args.planMode ? "plan" : "acceptEdits",
       canUseTool,
+      // Filter-at-spawn (Claude Code's filterToolsForAgent pattern): while a
+      // loop is armed the direct-edit tools are removed from the tool list the
+      // model sees, so it cannot even attempt them. The dynamic canUseTool
+      // deny stays as belt-and-suspenders; an armed-state flip respawns the
+      // session (see loopArmedAtSpawn in startClaudeTurn).
+      ...(args.isLoopArmed?.() ? { disallowedTools: [...LOOP_BLOCKED_NATIVE_TOOLS] } : {}),
+      // Per-agent turn bound, threaded from Subagent.maxTurns. The SDK emits
+      // a graceful stop at the limit — accumulated output is preserved,
+      // matching Claude Code's max_turns_reached semantics.
+      ...(args.maxTurns !== undefined ? { maxTurns: args.maxTurns } : {}),
       tools: args.restrictedAllowedPaths && args.restrictedAllowedPaths.length > 0
         ? CLAUDE_TOOLSET.filter((t) => !new Set<string>(SDK_RESTRICTED_FS_NATIVE_TOOLS).has(t))
         : [...CLAUDE_TOOLSET],
@@ -2857,10 +2908,11 @@ export class AgentCoordinator {
       session.effort !== args.effort ||
       args.forkSession ||
       session.additionalDirectories.join("|") !== (args.additionalDirectories ?? []).join("|") ||
-      // PTY bakes the loop tool-block into --disallowedTools at spawn, so an
-      // armed-state flip (arm OR disarm) requires a fresh process. SDK
-      // re-evaluates isLoopArmed() per tool call and can keep its session.
-      (driverIsPty && session.loopArmedAtSpawn !== loopArmedNow)
+      // Both drivers bake the loop tool-block into the spawn (PTY via
+      // --disallowedTools CLI args, SDK via options.disallowedTools), so an
+      // armed-state flip (arm OR disarm) requires a fresh session. The SDK's
+      // dynamic canUseTool deny remains as belt-and-suspenders mid-turn.
+      session.loopArmedAtSpawn !== loopArmedNow
     ) {
       if (session) {
         this.closeClaudeSession(args.chatId, session)
@@ -3327,6 +3379,9 @@ export class AgentCoordinator {
       allowedPaths: restriction?.allowedPaths,
       projectId: project.id,
       startClaudeSession: this.buildClaudeSubagentStarter(),
+      // PTY claude has no native maxTurns (interactive CLI) — the orchestrator
+      // applies a host-side tool-call-count backstop for PTY + Codex runs.
+      claudeDriverIsPty: this.resolveClaudeDriverPreference() === "pty",
       subagentOrchestrator: this.subagentOrchestrator,
       delegationContext,
       codexManager: this.codexManager,
@@ -4304,19 +4359,26 @@ export class AgentCoordinator {
   ): Promise<void> {
     if (!this.store.getChat(chatId)) return
 
-    // When a loop is armed, re-inject the FULL loop discipline prompt on every
-    // wake — not the generic "decide next action" string, which drifted into
-    // self-implementation (the 7.5h marathon-turn bug). The loop prompt itself
-    // instructs read → verify → delegate-one-chunk → end, and stop_loop on
-    // GOAL MET. Non-loop background deliveries keep the generic prompt.
+    // Structured re-entry: the completion is delivered as the same
+    // <task-notification> XML Claude Code's own background agents use
+    // (LocalAgentTask), so the model parses task identity/status with the
+    // format it already knows from native training.
+    //
+    // When a loop is armed, the FULL loop discipline prompt follows the
+    // notification on every wake — not a generic "decide next action" string,
+    // which drifted into self-implementation (the 7.5h marathon-turn bug).
+    // Armed notifications carry NO <result> body: PROGRESS.md is the loop's
+    // only durability contract. Non-loop deliveries include the (truncated)
+    // result since ad-hoc background delegations have no tracking file.
     const armed = this.isLoopArmed(chatId)
+    const notification = buildTaskNotification(runId, outcome, { includeResult: !armed })
     let prompt: string
     if (armed) {
-      prompt = armed.prompt
+      prompt = `${notification}\n\n${armed.prompt}`
     } else if (outcome.status === "completed") {
-      prompt = `A background subagent (run ${runId}) finished. Your Claude context has been cleared. Read PROGRESS.md, decide the next action.`
+      prompt = `${notification}\n\nYour Claude context has been cleared. Read PROGRESS.md if present, then decide the next action.`
     } else {
-      prompt = `A background subagent (run ${runId}) failed (${outcome.errorCode}): ${outcome.errorMessage}. Your Claude context has been cleared. Read PROGRESS.md; decide whether to retry, try another approach, or stop.`
+      prompt = `${notification}\n\nYour Claude context has been cleared. Read PROGRESS.md if present; decide whether to retry, try another approach, or stop.`
     }
 
     try {

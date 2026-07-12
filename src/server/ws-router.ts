@@ -577,6 +577,9 @@ export function createWsRouter({
             allowedPaths: patch.subagents.update.patch.allowedPaths === null
               ? undefined
               : patch.subagents.update.patch.allowedPaths ?? subagent.allowedPaths,
+            maxTurns: patch.subagents.update.patch.maxTurns === null
+              ? undefined
+              : patch.subagents.update.patch.maxTurns ?? subagent.maxTurns,
             updatedAt: Date.now(),
           }
         : subagent)

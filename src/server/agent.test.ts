@@ -8,6 +8,7 @@ import {
   buildCanUseTool,
   buildClaudeEnv,
   buildPromptText,
+  buildTaskNotification,
   buildUserMcpServers,
   maxClaudeContextWindowFromModelUsage,
   normalizeClaudeStreamMessage,
@@ -3405,6 +3406,79 @@ describe("AgentCoordinator claude integration", () => {
 
     for (const q of queues) q.close()
   })
+
+  // SDK bakes options.disallowedTools at spawn too (filter-at-spawn — the
+  // model never sees the blocked tools), so the armed-state flip must respawn
+  // SDK sessions just like PTY ones.
+  test("SDK: loop armed-state flip respawns the session; steady state reuses it", async () => {
+    const store = createFakeStore()
+    store.chat.provider = "claude"
+
+    let armed = true
+    let spawnCount = 0
+    const queues: AsyncEventQueue<any>[] = []
+
+    const coordinator = new AgentCoordinator({
+      store: store as never,
+      onStateChange: () => {},
+      startClaudeSession: async () => {
+        spawnCount += 1
+        const events = new AsyncEventQueue<any>()
+        queues.push(events)
+        return {
+          provider: "claude",
+          stream: events,
+          getAccountInfo: async () => null,
+          interrupt: async () => {},
+          close: () => {},
+          setModel: async () => {},
+          setPermissionMode: async () => {},
+          getSupportedCommands: async () => [],
+          sendPrompt: async () => {
+            events.push({
+              type: "transcript" as const,
+              entry: timestamped({
+                kind: "result",
+                subtype: "success",
+                isError: false,
+                durationMs: 0,
+                result: "done",
+              }),
+            })
+          },
+        }
+      },
+    })
+
+    coordinator.isLoopArmed = () => (armed ? { subagentId: "sa-1", prompt: "loop prompt" } : null)
+
+    const sendTurn = async (content: string, expectedFinished: number) => {
+      await coordinator.send({
+        type: "chat.send",
+        chatId: "chat-1",
+        provider: "claude",
+        content,
+        model: "claude-opus-4-7",
+      })
+      await waitFor(() => store.turnFinishedCount >= expectedFinished, 2000)
+    }
+
+    await sendTurn("turn 1 (armed)", 1)
+    expect(spawnCount).toBe(1)
+
+    await sendTurn("turn 2 (armed)", 2)
+    expect(spawnCount).toBe(1)
+
+    armed = false
+    await sendTurn("turn 3 (disarmed)", 3)
+    expect(spawnCount).toBe(2)
+
+    armed = true
+    await sendTurn("turn 4 (armed)", 4)
+    expect(spawnCount).toBe(3)
+
+    for (const q of queues) q.close()
+  })
 })
 
 describe("AgentCoordinator.ensureSlashCommandsLoaded", () => {
@@ -3960,7 +4034,7 @@ describe("AgentCoordinator.deliverSubagentToMain (notification-driven /clear)", 
       | { status: "failed"; runId: string; errorCode: string; errorMessage: string },
   ) => Promise<void>
 
-  test("success: wipes claude session_token, appends context_cleared, emits subagent_background auto-continue with 'Read PROGRESS.md' prompt", async () => {
+  test("success: wipes claude session_token, appends context_cleared, emits subagent_background auto-continue with task-notification XML", async () => {
     const store = createFakeStore()
     const coordinator = new AgentCoordinator({
       store: store as never,
@@ -3984,17 +4058,50 @@ describe("AgentCoordinator.deliverSubagentToMain (notification-driven /clear)", 
     const cleared = store.messages.filter((m) => m.kind === "context_cleared")
     expect(cleared).toHaveLength(1)
 
-    // Auto-continue event with subagent_background source + minimal prompt
+    // Auto-continue event with subagent_background source + the structured
+    // <task-notification> XML (Claude Code's LocalAgentTask format). Un-armed
+    // ad-hoc deliveries carry the subagent's <result> body.
     const events = store.getAutoContinueEvents("chat-1")
     expect(events).toHaveLength(1)
     const ev = events[0]
     expect(ev.kind).toBe("auto_continue_accepted")
     if (ev.kind === "auto_continue_accepted") {
       expect(ev.source).toBe("subagent_background")
+      expect(ev.prompt).toContain("<task-notification>")
+      expect(ev.prompt).toContain("<task-id>run-bg</task-id>")
+      expect(ev.prompt).toContain("<status>completed</status>")
+      expect(ev.prompt).toContain("<result>the answer</result>")
       expect(ev.prompt).toContain("PROGRESS.md")
       expect(ev.prompt).toContain("context has been cleared")
-      // Subagent output is NOT carried forward (PROGRESS.md is truth)
-      expect(ev.prompt).not.toContain("the answer")
+    }
+  })
+
+  test("armed loop: notification omits <result> (PROGRESS.md is the contract) and the full loop prompt follows", async () => {
+    const store = createFakeStore()
+    const coordinator = new AgentCoordinator({
+      store: store as never,
+      onStateChange: () => {},
+      startClaudeSession: async () => { throw new Error("not needed") },
+    })
+    coordinator.isLoopArmed = () => ({ subagentId: "sa-loop", prompt: "LOOP DISCIPLINE PROMPT" })
+
+    await (coordinator as unknown as { deliverSubagentToMain: DeliverFn }).deliverSubagentToMain(
+      "chat-1",
+      "run-loop",
+      { status: "completed", runId: "run-loop", text: "iteration output that must not leak" },
+    )
+
+    const events = store.getAutoContinueEvents("chat-1")
+    expect(events).toHaveLength(1)
+    const ev = events[0]
+    expect(ev.kind).toBe("auto_continue_accepted")
+    if (ev.kind === "auto_continue_accepted") {
+      expect(ev.prompt).toContain("<task-notification>")
+      expect(ev.prompt).toContain("<task-id>run-loop</task-id>")
+      expect(ev.prompt).not.toContain("<result>")
+      expect(ev.prompt).not.toContain("iteration output that must not leak")
+      // The full loop discipline prompt is re-injected after the notification.
+      expect(ev.prompt).toContain("LOOP DISCIPLINE PROMPT")
     }
   })
 
@@ -4859,6 +4966,46 @@ describe("AgentCoordinator subagent mention gating", () => {
 })
 
 // ── canUseTool routing tests ───────────────────────────────────────────────────
+
+describe("buildTaskNotification", () => {
+  test("completed with result: full XML with truncated body", () => {
+    const long = "x".repeat(5_000)
+    const xml = buildTaskNotification(
+      "run-1",
+      { status: "completed", runId: "run-1", text: long },
+      { includeResult: true },
+    )
+    expect(xml).toContain("<task-notification>")
+    expect(xml).toContain("<task-id>run-1</task-id>")
+    expect(xml).toContain("<status>completed</status>")
+    expect(xml).toContain("<result>")
+    expect(xml).toContain("[... truncated]")
+    // 4k cap + fixed envelope — never balloons the re-entry prompt.
+    expect(xml.length).toBeLessThan(4_500)
+  })
+
+  test("includeResult false omits the <result> body entirely", () => {
+    const xml = buildTaskNotification(
+      "run-2",
+      { status: "completed", runId: "run-2", text: "secret loop output" },
+      { includeResult: false },
+    )
+    expect(xml).not.toContain("<result>")
+    expect(xml).not.toContain("secret loop output")
+    expect(xml).toContain("<status>completed</status>")
+  })
+
+  test("failed outcome carries errorCode + message in summary", () => {
+    const xml = buildTaskNotification(
+      "run-3",
+      { status: "failed", runId: "run-3", errorCode: "MAX_TURNS", errorMessage: "exceeded 50 tool calls" },
+      { includeResult: true },
+    )
+    expect(xml).toContain("<status>failed</status>")
+    expect(xml).toContain("MAX_TURNS")
+    expect(xml).toContain("exceeded 50 tool calls")
+  })
+})
 
 describe("buildCanUseTool — loop-armed tool-block", () => {
   const noopOnToolRequest = async () => ({})

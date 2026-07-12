@@ -96,6 +96,19 @@ export interface ProviderRunStart {
   systemPrompt: string
   preamble: string | null
   /**
+   * Per-subagent agentic-turn bound (Claude Code frontmatter maxTurns analog).
+   * Undefined = unbounded.
+   */
+  maxTurns?: number
+  /**
+   * True when the provider enforces `maxTurns` natively (claude via SDK
+   * query()). When false and `maxTurns` is set, the orchestrator applies a
+   * host-side backstop: the run is aborted once its tool_call entry count
+   * exceeds the bound. Native enforcement is graceful (output kept); the
+   * backstop is a hard abort — PTY/Codex only.
+   */
+  nativeMaxTurns?: boolean
+  /**
    * Run the subagent against its provider.
    *  - `onChunk(text)`: every assistant_text fragment, in order. Used to
    *    persist `subagent_message_delta` events for streaming UI.
@@ -886,10 +899,30 @@ export class SubagentOrchestrator {
           this.deps.onRunProgress?.(args.chatId, runId)
         }, CHUNK_PROGRESS_THROTTLE_MS)
       }
+      // Host-side maxTurns backstop for providers without native enforcement
+      // (PTY claude, Codex). Tool_call entries approximate agentic turns —
+      // Claude Code's query() counts loop iterations, each of which issues
+      // tool calls. SDK runs (nativeMaxTurns) are excluded: the SDK stops
+      // gracefully on its own and a host abort would clobber that.
+      const hostMaxTurns = runStart.maxTurns !== undefined && runStart.maxTurns > 0 && !runStart.nativeMaxTurns
+        ? runStart.maxTurns
+        : null
+      let toolCallCount = 0
+      const maxTurnsRejection = createDeferred<never>()
+
       const externalOnEntry = args.onEntry
       const onEntry = (entry: TranscriptEntry) => {
         // Stall watchdog: a persisted transcript entry counts as activity.
         runState.timeout?.reset()
+        if (hostMaxTurns !== null && entry.kind === "tool_call") {
+          toolCallCount += 1
+          if (toolCallCount > hostMaxTurns) {
+            // Same order contract as the stall watchdog: reject BEFORE abort
+            // so Promise.race resolves MAX_TURNS, not USER_CANCELLED.
+            maxTurnsRejection.reject(new Error("MAX_TURNS"))
+            runState.abortController.abort()
+          }
+        }
         this.deps.store
           .appendSubagentEvent({
             v: 3,
@@ -948,6 +981,7 @@ export class SubagentOrchestrator {
           result = await Promise.race([
             runStart.start(onChunk, onEntry, { keepAlive: args.keepAlive }),
             timeoutRejection.promise,
+            maxTurnsRejection.promise,
             abortRejection.promise,
           ])
         } finally {
@@ -961,6 +995,8 @@ export class SubagentOrchestrator {
         let outcome: DelegationOutcome
         if (message === "TIMEOUT") {
           outcome = await this.failRun(args.chatId, runId, "TIMEOUT", `Run stalled (no activity for ${this.timeoutMs()}ms)`)
+        } else if (message === "MAX_TURNS") {
+          outcome = await this.failRun(args.chatId, runId, "MAX_TURNS", `Run exceeded maxTurns (${hostMaxTurns} tool calls)`)
         } else if (message === "USER_CANCELLED" || runState.cancelled) {
           outcome = await this.failRun(args.chatId, runId, "USER_CANCELLED", "Cancelled by user")
         } else {

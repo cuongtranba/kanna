@@ -198,6 +198,11 @@ export interface Subagent {
   triggerMode: SubagentTriggerMode
   workingDir?: string
   allowedPaths?: string[]
+  // Per-subagent agentic-turn bound — the analog of Claude Code's agent
+  // frontmatter `maxTurns`. Unset = unbounded (Claude Code's default).
+  // Claude-SDK runs pass it natively to query() (graceful stop, output kept);
+  // PTY/Codex runs get a host-side tool-call-count backstop (hard abort).
+  maxTurns?: number
   createdAt: number
   updatedAt: number
 }
@@ -213,6 +218,7 @@ export interface SubagentInput {
   triggerMode?: SubagentTriggerMode
   workingDir?: string
   allowedPaths?: string[]
+  maxTurns?: number
 }
 
 export interface SubagentPatch {
@@ -226,6 +232,7 @@ export interface SubagentPatch {
   triggerMode?: SubagentTriggerMode
   workingDir?: string | null
   allowedPaths?: string[] | null
+  maxTurns?: number | null
 }
 
 export type SubagentValidationErrorCode =
@@ -1836,6 +1843,7 @@ export type SubagentErrorCode =
   | "LOOP_DETECTED"
   | "DEPTH_EXCEEDED"
   | "TIMEOUT"
+  | "MAX_TURNS"
   | "PROVIDER_ERROR"
   | "INTERRUPTED"
   | "USER_CANCELLED"

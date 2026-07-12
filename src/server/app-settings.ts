@@ -559,6 +559,7 @@ function normalizeSubagentEntry<T>(
   const allowedPaths = Array.isArray(source.allowedPaths)
     ? source.allowedPaths.filter((p): p is string => typeof p === "string" && p.length > 0)
     : undefined
+  const maxTurns = normalizeSubagentMaxTurns(typeof source.maxTurns === "number" ? source.maxTurns : undefined)
   return {
     id: source.id.trim(),
     name: source.name.trim(),
@@ -571,9 +572,15 @@ function normalizeSubagentEntry<T>(
     triggerMode,
     workingDir,
     allowedPaths: allowedPaths && allowedPaths.length > 0 ? allowedPaths : undefined,
+    maxTurns,
     createdAt: typeof source.createdAt === "number" && Number.isFinite(source.createdAt) ? source.createdAt : Date.now(),
     updatedAt: typeof source.updatedAt === "number" && Number.isFinite(source.updatedAt) ? source.updatedAt : Date.now(),
   }
+}
+
+/** Positive integer or undefined — mirrors Claude Code's frontmatter maxTurns validation. */
+function normalizeSubagentMaxTurns(value: number | undefined): number | undefined {
+  return typeof value === "number" && Number.isInteger(value) && value > 0 ? value : undefined
 }
 
 function normalizeSubagents<T>(
@@ -1463,6 +1470,7 @@ function applyPatch(state: AppSettingsState, patch: AppSettingsPatch): AppSettin
         triggerMode: input.triggerMode ?? "auto",
         workingDir: input.workingDir,
         allowedPaths: input.allowedPaths && input.allowedPaths.length > 0 ? input.allowedPaths : undefined,
+        maxTurns: normalizeSubagentMaxTurns(input.maxTurns),
         createdAt: now,
         updatedAt: now,
       },
@@ -1496,6 +1504,14 @@ function applyPatch(state: AppSettingsState, patch: AppSettingsPatch): AppSettin
     } else {
       nextAllowedPaths = existing.allowedPaths
     }
+    let nextMaxTurns: number | undefined
+    if (subagentPatch.maxTurns === null) {
+      nextMaxTurns = undefined
+    } else if (subagentPatch.maxTurns !== undefined) {
+      nextMaxTurns = normalizeSubagentMaxTurns(subagentPatch.maxTurns)
+    } else {
+      nextMaxTurns = existing.maxTurns
+    }
     const restrictionError = validateSubagentRestriction(nextProvider, nextWorkingDir, nextAllowedPaths)
     if (restrictionError) throw new SubagentValidationException(restrictionError)
     let descriptionValue: string | undefined
@@ -1514,6 +1530,7 @@ function applyPatch(state: AppSettingsState, patch: AppSettingsPatch): AppSettin
       modelOptions: mergeSubagentModelOptions(existing.modelOptions, subagentPatch.modelOptions),
       workingDir: nextWorkingDir,
       allowedPaths: nextAllowedPaths,
+      maxTurns: nextMaxTurns,
       triggerMode: subagentPatch.triggerMode ?? existing.triggerMode,
       updatedAt: Date.now(),
     }
