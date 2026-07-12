@@ -8,6 +8,14 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.1.2](https://github.com/cuongtranba/kanna/compare/v1.1.1...v1.1.2) (2026-07-12)
+
+
+### Bug Fixes
+
+* **composer:** swallow Tab auto-repeat keydowns after a snippet expansion ([#530](https://github.com/cuongtranba/kanna/issues/530)) ([00b8216](https://github.com/cuongtranba/kanna/commit/00b82163353d4f71d2526dac50a223bdacf3dafe))
+* **subagent:** embed live roster in UNKNOWN_SUBAGENT errors and reject guessed ids before delegation ([#527](https://github.com/cuongtranba/kanna/issues/527)) ([30bd397](https://github.com/cuongtranba/kanna/commit/30bd3974886127c1bf17c8727260b6c79554d70a))
+
 ## [1.1.1](https://github.com/cuongtranba/kanna/compare/v1.1.0...v1.1.1) (2026-07-12)
 
 
