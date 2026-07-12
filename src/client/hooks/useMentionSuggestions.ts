@@ -1,14 +1,9 @@
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useRef } from "react"
+import { useComposerStore, type MentionSuggestionsState } from "../stores/composerStore"
 
 export interface ProjectPath {
   path: string
   kind: "file" | "dir"
-}
-
-interface State {
-  items: ProjectPath[]
-  loading: boolean
-  error: string | null
 }
 
 const DEBOUNCE_MS = 120
@@ -31,26 +26,28 @@ export async function fetchProjectPaths(args: {
   }
 }
 
+const EMPTY_STATE: MentionSuggestionsState = { items: [], loading: false, error: null }
+
 export function useMentionSuggestions(args: {
   projectId: string | null
   query: string
   enabled: boolean
-}): State {
-  const [state, setState] = useState<State>({ items: [], loading: false, error: null })
+}): MentionSuggestionsState {
+  const state = useComposerStore((s) => s.mentionSuggestions)
+  const setMentionSuggestions = useComposerStore((s) => s.setMentionSuggestions)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const abortRef = useRef<AbortController | null>(null)
 
   useEffect(() => {
     if (!args.enabled || !args.projectId) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setState({ items: [], loading: false, error: null })
+      setMentionSuggestions(EMPTY_STATE)
       return
     }
 
     if (debounceRef.current) clearTimeout(debounceRef.current)
     abortRef.current?.abort()
 
-    setState((s) => ({ ...s, loading: true, error: null }))
+    setMentionSuggestions({ items: useComposerStore.getState().mentionSuggestions.items, loading: true, error: null })
     const controller = new AbortController()
     abortRef.current = controller
 
@@ -61,14 +58,14 @@ export function useMentionSuggestions(args: {
         signal: controller.signal,
       })
       if (controller.signal.aborted) return
-      setState({ items, loading: false, error: null })
+      setMentionSuggestions({ items, loading: false, error: null })
     }, DEBOUNCE_MS)
 
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current)
       controller.abort()
     }
-  }, [args.enabled, args.projectId, args.query])
+  }, [args.enabled, args.projectId, args.query, setMentionSuggestions])
 
   return state
 }

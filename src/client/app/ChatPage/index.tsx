@@ -1,4 +1,4 @@
-import React, { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentProps, type DragEvent, type ReactNode, type RefObject } from "react"
+import React, { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, type ComponentProps, type DragEvent, type ReactNode, type RefObject } from "react"
 import { type LegendListRef } from "@legendapp/list/react"
 import type { GroupImperativeHandle } from "react-resizable-panels"
 import { useNavigate, useOutletContext } from "react-router-dom"
@@ -18,6 +18,7 @@ import {
   RIGHT_SIDEBAR_MIN_WIDTH_PX,
   useRightSidebarStore,
 } from "../../stores/rightSidebarStore"
+import { useChatPageStore } from "../../stores/chatPageStore"
 import { DEFAULT_PROJECT_TERMINAL_LAYOUT, useTerminalLayoutStore } from "../../stores/terminalLayoutStore"
 import { useTerminalPreferencesStore } from "../../stores/terminalPreferencesStore"
 import { shouldCloseTerminalPane } from "../terminalLayoutResize"
@@ -63,15 +64,16 @@ const TERMINAL_TOGGLE_DURATION_STYLE: React.CSSProperties & { "--terminal-toggle
 }
 
 function useEmptyStateTyping(showEmptyState: boolean, activeChatId: string | null) {
-  const [typedEmptyStateText, setTypedEmptyStateText] = useState("")
-  const [isEmptyStateTypingComplete, setIsEmptyStateTypingComplete] = useState(false)
+  const typedEmptyStateText = useChatPageStore((s) => s.typedEmptyStateText)
+  const isEmptyStateTypingComplete = useChatPageStore((s) => s.isEmptyStateTypingComplete)
+  const setTypedEmptyStateText = useChatPageStore((s) => s.setTypedEmptyStateText)
+  const setIsEmptyStateTypingComplete = useChatPageStore((s) => s.setIsEmptyStateTypingComplete)
+  const resetEmptyStateTyping = useChatPageStore((s) => s.resetEmptyStateTyping)
 
   useEffect(() => {
     if (!showEmptyState) return
 
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setTypedEmptyStateText("")
-    setIsEmptyStateTypingComplete(false)
+    resetEmptyStateTyping()
 
     let characterIndex = 0
     const interval = window.setInterval(() => {
@@ -85,7 +87,7 @@ function useEmptyStateTyping(showEmptyState: boolean, activeChatId: string | nul
     }, EMPTY_STATE_TYPING_INTERVAL_MS)
 
     return () => window.clearInterval(interval)
-  }, [showEmptyState, activeChatId])
+  }, [showEmptyState, activeChatId, resetEmptyStateTyping, setTypedEmptyStateText, setIsEmptyStateTypingComplete])
 
   return { typedEmptyStateText, isEmptyStateTypingComplete }
 }
@@ -94,7 +96,8 @@ function usePageFileDrop(args: {
   hasSelectedProject: boolean
   onFilesDropped: (files: File[]) => void
 }) {
-  const [isPageFileDragActive, setIsPageFileDragActive] = useState(false)
+  const isPageFileDragActive = useChatPageStore((s) => s.isPageFileDragActive)
+  const setIsPageFileDragActive = useChatPageStore((s) => s.setIsPageFileDragActive)
   const pageFileDragDepthRef = useRef(0)
 
   const hasDraggedFiles = useCallback((event: DragEvent) => hasFileDragTypes(event.dataTransfer?.types ?? []), [])
@@ -104,7 +107,7 @@ function usePageFileDrop(args: {
     event.preventDefault()
     pageFileDragDepthRef.current += 1
     setIsPageFileDragActive(true)
-  }, [args.hasSelectedProject, hasDraggedFiles])
+  }, [args.hasSelectedProject, hasDraggedFiles, setIsPageFileDragActive])
 
   const handleTranscriptDragOver = useCallback((event: DragEvent) => {
     if (!hasDraggedFiles(event) || !args.hasSelectedProject) return
@@ -113,7 +116,7 @@ function usePageFileDrop(args: {
     if (!isPageFileDragActive) {
       setIsPageFileDragActive(true)
     }
-  }, [args.hasSelectedProject, hasDraggedFiles, isPageFileDragActive])
+  }, [args.hasSelectedProject, hasDraggedFiles, isPageFileDragActive, setIsPageFileDragActive])
 
   const handleTranscriptDragLeave = useCallback((event: DragEvent) => {
     if (!hasDraggedFiles(event) || !args.hasSelectedProject) return
@@ -122,7 +125,7 @@ function usePageFileDrop(args: {
     if (pageFileDragDepthRef.current === 0) {
       setIsPageFileDragActive(false)
     }
-  }, [args.hasSelectedProject, hasDraggedFiles])
+  }, [args.hasSelectedProject, hasDraggedFiles, setIsPageFileDragActive])
 
   const handleTranscriptDrop = useCallback((event: DragEvent) => {
     if (!hasDraggedFiles(event) || !args.hasSelectedProject) return
@@ -130,7 +133,7 @@ function usePageFileDrop(args: {
     pageFileDragDepthRef.current = 0
     setIsPageFileDragActive(false)
     args.onFilesDropped([...event.dataTransfer.files])
-  }, [args, hasDraggedFiles])
+  }, [args, hasDraggedFiles, setIsPageFileDragActive])
 
   return {
     isPageFileDragActive,
@@ -142,7 +145,8 @@ function usePageFileDrop(args: {
 }
 
 function useLayoutWidth(ref: RefObject<HTMLDivElement | null>) {
-  const [layoutWidth, setLayoutWidth] = useState(0)
+  const layoutWidth = useChatPageStore((s) => s.layoutWidth)
+  const setLayoutWidth = useChatPageStore((s) => s.setLayoutWidth)
 
   useLayoutEffect(() => {
     const element = ref.current
@@ -150,7 +154,10 @@ function useLayoutWidth(ref: RefObject<HTMLDivElement | null>) {
 
     const updateWidth = () => {
       const nextWidth = element.clientWidth
-      setLayoutWidth((current) => (Math.abs(current - nextWidth) < 1 ? current : nextWidth))
+      const current = useChatPageStore.getState().layoutWidth
+      if (Math.abs(current - nextWidth) >= 1) {
+        setLayoutWidth(nextWidth)
+      }
     }
 
     const observer = new ResizeObserver(updateWidth)
@@ -158,21 +165,26 @@ function useLayoutWidth(ref: RefObject<HTMLDivElement | null>) {
     updateWidth()
 
     return () => observer.disconnect()
-  }, [ref])
+  }, [ref, setLayoutWidth])
 
   return layoutWidth
 }
 
 function useTranscriptPaddingBottom() {
   const inputRef = useRef<HTMLDivElement>(null)
-  const [inputHeight, setInputHeight] = useState(148)
+  const inputHeight = useChatPageStore((s) => s.inputHeight)
+  const setInputHeight = useChatPageStore((s) => s.setInputHeight)
 
   const syncInputHeight = useCallback(() => {
     const element = inputRef.current
     if (!element) return
     const measuredHeight = element.getBoundingClientRect().height
-    setInputHeight((current) => getNextMeasuredInputHeight(current, measuredHeight))
-  }, [])
+    const current = useChatPageStore.getState().inputHeight
+    const next = getNextMeasuredInputHeight(current, measuredHeight)
+    if (next !== current) {
+      setInputHeight(next)
+    }
+  }, [setInputHeight])
 
   useLayoutEffect(() => {
     const element = inputRef.current
@@ -200,7 +212,8 @@ export function shouldUseMobileRightSidebarOverlay(viewportWidth: number) {
 }
 
 function useMobileRightSidebarOverlayEnabled() {
-  const [viewportWidth, setViewportWidth] = useState(() => (typeof window === "undefined" ? 0 : window.innerWidth))
+  const viewportWidth = useChatPageStore((s) => s.viewportWidth)
+  const setViewportWidth = useChatPageStore((s) => s.setViewportWidth)
 
   useEffect(() => {
     if (typeof window === "undefined") return
@@ -209,7 +222,7 @@ function useMobileRightSidebarOverlayEnabled() {
     updateViewportWidth()
     window.addEventListener("resize", updateViewportWidth)
     return () => window.removeEventListener("resize", updateViewportWidth)
-  }, [])
+  }, [setViewportWidth])
 
   return shouldUseMobileRightSidebarOverlay(viewportWidth)
 }
@@ -219,7 +232,8 @@ function useFixedTerminalHeight(args: {
   shouldRenderTerminalLayout: boolean
   terminalMainSizes: [number, number]
 }) {
-  const [fixedTerminalHeight, setFixedTerminalHeight] = useState(0)
+  const fixedTerminalHeight = useChatPageStore((s) => s.fixedTerminalHeight)
+  const setFixedTerminalHeight = useChatPageStore((s) => s.setFixedTerminalHeight)
 
   useEffect(() => {
     const element = args.layoutRootRef.current
@@ -235,7 +249,10 @@ function useFixedTerminalHeight(args: {
       if (containerHeight <= 0) return
       const nextHeight = containerHeight * (args.terminalMainSizes[1] / 100)
       if (nextHeight <= 0) return
-      setFixedTerminalHeight((current) => (Math.abs(current - nextHeight) < 1 ? current : nextHeight))
+      const current = useChatPageStore.getState().fixedTerminalHeight
+      if (Math.abs(current - nextHeight) >= 1) {
+        setFixedTerminalHeight(nextHeight)
+      }
     }
 
     const observer = new ResizeObserver(updateHeight)
@@ -243,7 +260,7 @@ function useFixedTerminalHeight(args: {
     updateHeight()
 
     return () => observer.disconnect()
-  }, [args.layoutRootRef, args.shouldRenderTerminalLayout, args.terminalMainSizes])
+  }, [args.layoutRootRef, args.shouldRenderTerminalLayout, args.terminalMainSizes, setFixedTerminalHeight])
 
   return fixedTerminalHeight
 }
@@ -460,7 +477,8 @@ export function ChatPage() {
   const chatInputElementRef = useRef<HTMLTextAreaElement>(null)
   const chatInputRef = useRef<ChatInputHandle | null>(null)
   const { inputRef, syncInputHeight, transcriptPaddingBottom } = useTranscriptPaddingBottom()
-  const [showScrollToBottom, setShowScrollToBottom] = useState(false)
+  const showScrollToBottom = useChatPageStore((s) => s.showScrollToBottom)
+  const setShowScrollToBottom = useChatPageStore((s) => s.setShowScrollToBottom)
   const navigate = useNavigate()
   const handleOpenPtyChat = useCallback((chatId: string) => {
     navigate(`/chat/${chatId}`)
@@ -700,7 +718,7 @@ export function ChatPage() {
       setShowScrollToBottom(true)
       showScrollTimeoutRef.current = null
     }, 150)
-  }, [clearShowScrollTimeout])
+  }, [clearShowScrollTimeout, setShowScrollToBottom])
 
   const syncIsAtEndFromList = useCallback(() => {
     const state = transcriptListRef.current?.getState?.()
@@ -714,7 +732,7 @@ export function ChatPage() {
     clearShowScrollTimeout()
     setShowScrollToBottom(false)
     await transcriptListRef.current?.scrollToEnd?.({ animated })
-  }, [clearShowScrollTimeout])
+  }, [clearShowScrollTimeout, setShowScrollToBottom])
 
   const handleChatSubmit = useCallback(async (
     content: string,
@@ -811,9 +829,8 @@ export function ChatPage() {
   useEffect(() => {
     isAtEndRef.current = true
     clearShowScrollTimeout()
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setShowScrollToBottom(false)
-  }, [clearShowScrollTimeout, state.activeChatId])
+  }, [clearShowScrollTimeout, setShowScrollToBottom, state.activeChatId])
 
   useEffect(() => {
     function handleGlobalKeydown(event: KeyboardEvent) {

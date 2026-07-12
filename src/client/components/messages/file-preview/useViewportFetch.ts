@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState, type RefObject } from "react"
+import { useEffect, useMemo, useRef, type RefObject } from "react"
+import { createStore, useStore, type StoreApi } from "zustand"
 import type { AnyValue } from "../../../../shared/errors"
 
 export type ViewportFetchState = "idle" | "loading" | "ready" | "error"
@@ -23,24 +24,45 @@ function getCached<T>(key: string): T | undefined {
   return v !== undefined ? <T>v : undefined
 }
 
+interface FetchStoreState<T> {
+  state: ViewportFetchState
+  data: T | null
+  error: Error | null
+}
+
 export function useViewportFetch<T>(opts: Options<T>): ViewportFetchResult<T> {
   const { cacheKey, enabled, ref, fetcher, rootMargin } = opts
   const cached = getCached<T>(cacheKey)
-  const [state, setState] = useState<ViewportFetchState>(cached !== undefined ? "ready" : "idle")
-  const [data, setData] = useState<T | null>(cached !== undefined ? cached : null)
-  const [error, setError] = useState<Error | null>(null)
-  const [lastKey, setLastKey] = useState(cacheKey)
+
+  const storeRef = useRef<StoreApi<FetchStoreState<T>> | null>(null)
+  if (storeRef.current === null) {
+    storeRef.current = createStore<FetchStoreState<T>>(() => ({
+      state: cached !== undefined ? "ready" : "idle",
+      data: cached !== undefined ? cached : null,
+      error: null,
+    }))
+  }
+
+  const state = useStore(storeRef.current, (s) => s.state)
+  const data = useStore(storeRef.current, (s) => s.data)
+  const error = useStore(storeRef.current, (s) => s.error)
+
+  const lastKeyRef = useRef(cacheKey)
   const controllerRef = useRef<AbortController | null>(null)
   const currentKeyRef = useRef(cacheKey)
   currentKeyRef.current = cacheKey
 
-  if (lastKey !== cacheKey) {
-    setLastKey(cacheKey)
+  // Reset store state when cacheKey changes
+  useEffect(() => {
+    if (lastKeyRef.current === cacheKey) return
+    lastKeyRef.current = cacheKey
     const fresh = getCached<T>(cacheKey)
-    setState(fresh !== undefined ? "ready" : "idle")
-    setData(fresh !== undefined ? fresh : null)
-    setError(null)
-  }
+    storeRef.current!.setState({
+      state: fresh !== undefined ? "ready" : "idle",
+      data: fresh !== undefined ? fresh : null,
+      error: null,
+    })
+  }, [cacheKey])
 
   useEffect(() => {
     if (!enabled) return
@@ -59,18 +81,19 @@ export function useViewportFetch<T>(opts: Options<T>): ViewportFetchResult<T> {
           if (cancelled) return
           const controller = new AbortController()
           controllerRef.current = controller
-          setState("loading")
+          storeRef.current!.setState({ state: "loading" })
           fetcher(controller.signal)
             .then((value) => {
               if (cancelled || currentKeyRef.current !== myKey) return
               snippetCache.set(myKey, value)
-              setData(value)
-              setState("ready")
+              storeRef.current!.setState({ data: value, state: "ready" })
             })
             .catch((err: AnyValue) => {
               if (cancelled || controller.signal.aborted || currentKeyRef.current !== myKey) return
-              setError(err instanceof Error ? err : new Error(String(err)))
-              setState("error")
+              storeRef.current!.setState({
+                error: err instanceof Error ? err : new Error(String(err)),
+                state: "error",
+              })
             })
           break
         }

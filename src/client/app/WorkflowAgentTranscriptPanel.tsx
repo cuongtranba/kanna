@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect } from "react"
 import { ArrowLeft, Loader2, RefreshCw } from "lucide-react"
-import type { HydratedTranscriptMessage, TranscriptEntry } from "../../shared/types"
+import type { TranscriptEntry } from "../../shared/types"
 import { processTranscriptMessages } from "../lib/parseTranscript"
 import type { AnyValue } from "../../shared/errors"
 import { SubagentEntryRow } from "../components/messages/SubagentEntryRow"
 import { SubagentTranscriptFetchProvider } from "../components/messages/subagent-fetch-context"
+import { WorkflowAgentTranscriptStore } from "./WorkflowAgentTranscriptPanel.store"
 
 export interface WorkflowAgentTranscriptPanelProps {
   runId: string
@@ -30,9 +31,7 @@ export interface WorkflowAgentTranscriptPanelProps {
   getTranscript: (runId: string, agentId: string) => Promise<TranscriptEntry[]>
 }
 
-type LoadState = "loading" | "loaded" | "error"
-
-export function WorkflowAgentTranscriptPanel({
+function WorkflowAgentTranscriptPanelInner({
   runId,
   agentId,
   agentLabel,
@@ -41,11 +40,13 @@ export function WorkflowAgentTranscriptPanel({
   onClose,
   getTranscript,
 }: WorkflowAgentTranscriptPanelProps) {
-  const [state, setState] = useState<LoadState>("loading")
-  const [messages, setMessages] = useState<HydratedTranscriptMessage[]>([])
-  const [error, setError] = useState<string | null>(null)
-  // Bumped by Refresh to force the fetch effect to re-run.
-  const [reloadNonce, setReloadNonce] = useState(0)
+  const loadState = WorkflowAgentTranscriptStore.useScopedStore((s) => s.loadState)
+  const messages = WorkflowAgentTranscriptStore.useScopedStore((s) => s.messages)
+  const error = WorkflowAgentTranscriptStore.useScopedStore((s) => s.error)
+  const reloadNonce = WorkflowAgentTranscriptStore.useScopedStore((s) => s.reloadNonce)
+  const setLoaded = WorkflowAgentTranscriptStore.useScopedStore((s) => s.setLoaded)
+  const setStoreError = WorkflowAgentTranscriptStore.useScopedStore((s) => s.setError)
+  const refresh = WorkflowAgentTranscriptStore.useScopedStore((s) => s.refresh)
 
   // The fetch never sets "loading" synchronously (that would be set-state-in-
   // effect; initial state is already "loading", and Refresh sets it from the
@@ -56,23 +57,19 @@ export function WorkflowAgentTranscriptPanel({
     getTranscript(runId, agentId)
       .then((entries) => {
         if (stale) return
-        setMessages(processTranscriptMessages(entries))
-        setState("loaded")
+        setLoaded(processTranscriptMessages(entries))
       })
       .catch((err: AnyValue) => {
         if (stale) return
-        setError(err instanceof Error ? err.message : "Failed to load agent transcript")
-        setState("error")
+        setStoreError(err instanceof Error ? err.message : "Failed to load agent transcript")
       })
     return () => { stale = true }
-  }, [runId, agentId, getTranscript, reloadNonce])
+  }, [runId, agentId, getTranscript, reloadNonce, setLoaded, setStoreError])
 
   // Manual refresh is a user event, so resetting to "loading" here is allowed.
   const handleRefresh = useCallback(() => {
-    setError(null)
-    setState("loading")
-    setReloadNonce((n) => n + 1)
-  }, [])
+    refresh()
+  }, [refresh])
 
   return (
     <div className="flex min-h-0 flex-col gap-3" data-testid="workflow-agent-transcript-panel">
@@ -101,7 +98,7 @@ export function WorkflowAgentTranscriptPanel({
           aria-label="Refresh transcript"
           className="ml-auto inline-flex size-6 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
         >
-          <RefreshCw className={state === "loading" ? "size-3.5 animate-spin" : "size-3.5"} aria-hidden />
+          <RefreshCw className={loadState === "loading" ? "size-3.5 animate-spin" : "size-3.5"} aria-hidden />
         </button>
       </div>
 
@@ -120,14 +117,14 @@ export function WorkflowAgentTranscriptPanel({
 
       <SubagentTranscriptFetchProvider value={null}>
         <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-auto">
-          {state === "loading" ? (
+          {loadState === "loading" ? (
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <Loader2 className="size-3 animate-spin" aria-label="Loading" />
               Loading transcript…
             </div>
           ) : null}
-          {state === "error" ? <div className="text-xs text-destructive">{error}</div> : null}
-          {state === "loaded" && messages.length === 0 ? (
+          {loadState === "error" ? <div className="text-xs text-destructive">{error}</div> : null}
+          {loadState === "loaded" && messages.length === 0 ? (
             <div className="text-xs text-muted-foreground">No transcript recorded yet.</div>
           ) : null}
           {messages.map((message) => (
@@ -136,5 +133,13 @@ export function WorkflowAgentTranscriptPanel({
         </div>
       </SubagentTranscriptFetchProvider>
     </div>
+  )
+}
+
+export function WorkflowAgentTranscriptPanel(props: WorkflowAgentTranscriptPanelProps) {
+  return (
+    <WorkflowAgentTranscriptStore.Provider init={undefined}>
+      <WorkflowAgentTranscriptPanelInner {...props} />
+    </WorkflowAgentTranscriptStore.Provider>
   )
 }

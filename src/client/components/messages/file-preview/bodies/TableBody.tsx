@@ -1,20 +1,15 @@
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useRef } from "react"
 import type { AnyValue } from "../../../../../shared/errors"
 import {
   TABLE_PREVIEW_COLUMN_LIMIT,
   TEXT_PREVIEW_LIMIT_BYTES,
   fetchTextPreview,
   parseDelimitedPreview,
-  type TablePreviewData,
 } from "../../attachmentPreview"
 import type { PreviewSource } from "../types"
+import { TableBodyStore, type TableBodyState } from "./TableBody.store"
 
-type State =
-  | { status: "loading" }
-  | { status: "error"; message: string }
-  | { status: "ready"; table: TablePreviewData; truncated: boolean }
-
-const cache = new Map<string, State>()
+const cache = new Map<string, TableBodyState>()
 
 export function __clearTableBodyCacheForTests() {
   cache.clear()
@@ -24,19 +19,16 @@ function cacheKeyFor(source: PreviewSource): string {
   return `${source.id}|${source.contentUrl}|${source.size ?? 0}|${source.mimeType}`
 }
 
-export function TableBody({ source }: { source: PreviewSource }) {
+function TableBodyInner({ source }: { source: PreviewSource }) {
   const cacheKey = cacheKeyFor(source)
   const cached = cache.get(cacheKey)
-  const [state, setState] = useState<State>(cached ?? { status: "loading" })
-  const [lastKey, setLastKey] = useState(cacheKey)
+
+  const state = TableBodyStore.useScopedStore((s) => s.state)
+  const setState = TableBodyStore.useScopedStore((s) => s.setState)
+
   const currentKeyRef = useRef(cacheKey)
   // eslint-disable-next-line react-hooks/refs -- intentional render-time sync write so async fetch completion (which can fire between render and commit) sees the latest key and refuses to overwrite state for a stale key.
   currentKeyRef.current = cacheKey
-
-  if (lastKey !== cacheKey) {
-    setLastKey(cacheKey)
-    setState(cache.get(cacheKey) ?? { status: "loading" })
-  }
 
   useEffect(() => {
     if (cached && cached.status !== "loading") return
@@ -46,18 +38,18 @@ export function TableBody({ source }: { source: PreviewSource }) {
     fetchTextPreview(source.contentUrl, TEXT_PREVIEW_LIMIT_BYTES)
       .then((res) => {
         if (cancelled || currentKeyRef.current !== myKey) return
-        const next: State = { status: "ready", table: parseDelimitedPreview(res.content, delimiter), truncated: res.truncated }
+        const next: TableBodyState = { status: "ready", table: parseDelimitedPreview(res.content, delimiter), truncated: res.truncated }
         cache.set(myKey, next)
         setState(next)
       })
       .catch((err: AnyValue) => {
         if (cancelled || currentKeyRef.current !== myKey) return
-        const next: State = { status: "error", message: err instanceof Error ? err.message : "Unable to load preview." }
+        const next: TableBodyState = { status: "error", message: err instanceof Error ? err.message : "Unable to load preview." }
         cache.set(myKey, next)
         setState(next)
       })
     return () => { cancelled = true }
-  }, [cached, cacheKey, source.contentUrl, source.mimeType])
+  }, [cached, cacheKey, source.contentUrl, source.mimeType, setState])
 
   if (state.status === "loading") {
     return <div className="p-4 text-sm text-muted-foreground"><table className="sr-only" /> Loading…</div>
@@ -92,5 +84,15 @@ export function TableBody({ source }: { source: PreviewSource }) {
         </table>
       </div>
     </div>
+  )
+}
+
+export function TableBody({ source }: { source: PreviewSource }) {
+  const cacheKey = cacheKeyFor(source)
+  const cached = cache.get(cacheKey)
+  return (
+    <TableBodyStore.Provider init={{ initialState: cached ?? { status: "loading" } }}>
+      <TableBodyInner source={source} />
+    </TableBodyStore.Provider>
   )
 }

@@ -1,4 +1,3 @@
-import { useState } from "react"
 import { Trash2, FlaskConical, Power, PowerOff } from "lucide-react"
 import {
   type ClaudeAuthSettings,
@@ -10,6 +9,7 @@ import {
 import { maskToken } from "../../lib/oauthTokenMask"
 import { Input } from "../ui/input"
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "../ui/tooltip"
+import { useOAuthTokenPoolCardStore } from "../../stores/oauthTokenPoolCardStore"
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -21,7 +21,7 @@ function formatLimitedUntil(msUntilReset: number): string {
   if (min < 60) return `reset in ${min}m ${sec.toString().padStart(2, "0")}s`
   const hr = Math.floor(min / 60)
   const remMin = min % 60
-  return `reset in ${hr}h ${remMin.toString().padStart(2, "0")}m`
+  return `reset in ${hr}h ${remMin.toString().padStart(2, "00")}m`
 }
 
 // ─── types ───────────────────────────────────────────────────────────────────
@@ -122,22 +122,27 @@ function TokenRow({
   onTest: (token: string) => Promise<{ ok: boolean; error: string | null }>
   onChangeMaxConcurrent: (id: string, value: number) => void
 }) {
-  const [testResult, setTestResult] = useState<string | null>(null)
-  const [testing, setTesting] = useState(false)
+  const tokenRowStates = useOAuthTokenPoolCardStore((state) => state.tokenRowStates)
+  const setTokenRowTesting = useOAuthTokenPoolCardStore((state) => state.setTokenRowTesting)
+  const setTokenRowTestResult = useOAuthTokenPoolCardStore((state) => state.setTokenRowTestResult)
+
+  const rowState = tokenRowStates[entry.id]
+  const testResult = rowState?.testResult ?? null
+  const testing = rowState?.testing ?? false
 
   const handleTest = async () => {
-    setTesting(true)
-    setTestResult(null)
+    setTokenRowTesting(entry.id, true)
+    setTokenRowTestResult(entry.id, null)
     try {
       const res = await onTest(entry.token)
       const label = res.ok ? "OK" : (res.error ?? "Error")
-      setTestResult(label)
-      setTimeout(() => setTestResult(null), 3000)
+      setTokenRowTestResult(entry.id, label)
+      setTimeout(() => setTokenRowTestResult(entry.id, null), 3000)
     } catch {
-      setTestResult("Error")
-      setTimeout(() => setTestResult(null), 3000)
+      setTokenRowTestResult(entry.id, "Error")
+      setTimeout(() => setTokenRowTestResult(entry.id, null), 3000)
     } finally {
-      setTesting(false)
+      setTokenRowTesting(entry.id, false)
     }
   }
 
@@ -231,20 +236,24 @@ function AddTokenForm({
   tokens: OAuthTokenEntry[]
   onWrite: OAuthTokenPoolCardProps["onWrite"]
 }) {
-  const [label, setLabel] = useState("")
-  const [token, setToken] = useState("")
-  const [submitting, setSubmitting] = useState(false)
+  const addLabel = useOAuthTokenPoolCardStore((state) => state.addLabel)
+  const addToken = useOAuthTokenPoolCardStore((state) => state.addToken)
+  const addSubmitting = useOAuthTokenPoolCardStore((state) => state.addSubmitting)
+  const setAddLabel = useOAuthTokenPoolCardStore((state) => state.setAddLabel)
+  const setAddToken = useOAuthTokenPoolCardStore((state) => state.setAddToken)
+  const setAddSubmitting = useOAuthTokenPoolCardStore((state) => state.setAddSubmitting)
+  const resetAddForm = useOAuthTokenPoolCardStore((state) => state.resetAddForm)
 
-  const canSubmit = label.trim().length > 0 && token.trim().length > 0 && !submitting
+  const canSubmit = addLabel.trim().length > 0 && addToken.trim().length > 0 && !addSubmitting
 
   const handleAdd = async () => {
     if (!canSubmit) return
-    setSubmitting(true)
+    setAddSubmitting(true)
     try {
       const newEntry: OAuthTokenEntry = {
         id: crypto.randomUUID(),
-        label: label.trim(),
-        token: token.trim(),
+        label: addLabel.trim(),
+        token: addToken.trim(),
         status: "active",
         limitedUntil: null,
         lastUsedAt: null,
@@ -253,10 +262,9 @@ function AddTokenForm({
         addedAt: Date.now(),
       }
       await onWrite({ tokens: [...tokens, newEntry] })
-      setLabel("")
-      setToken("")
+      resetAddForm()
     } finally {
-      setSubmitting(false)
+      setAddSubmitting(false)
     }
   }
 
@@ -265,8 +273,8 @@ function AddTokenForm({
       <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:gap-3">
         <div className="flex-1">
           <Input
-            value={label}
-            onChange={(e) => setLabel(e.target.value)}
+            value={addLabel}
+            onChange={(e) => setAddLabel(e.target.value)}
             placeholder="e.g. personal"
             maxLength={64}
             className="text-sm"
@@ -275,8 +283,8 @@ function AddTokenForm({
         </div>
         <div className="flex-[2]">
           <Input
-            value={token}
-            onChange={(e) => setToken(e.target.value)}
+            value={addToken}
+            onChange={(e) => setAddToken(e.target.value)}
             type="password"
             placeholder="sk-ant-..."
             maxLength={1024}

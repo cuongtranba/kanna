@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
+import { memo, useCallback, useEffect, useMemo, useRef, type CSSProperties } from "react"
 
 /** Returns CSS custom properties as a React-compatible style object via Object.assign. */
 function cssVars(vars: Record<`--${string}`, string>): CSSProperties {
@@ -29,27 +29,16 @@ import {
   shouldShowSidebarNumberJumpHints,
 } from "./sidebarNumberJump"
 import { log } from "../../shared/log"
+import {
+  useKannaSidebarStore,
+  clampSidebarWidth,
+  persistSidebarWidth,
+  DEFAULT_SIDEBAR_WIDTH,
+  MIN_SIDEBAR_WIDTH,
+  MAX_SIDEBAR_WIDTH,
+} from "../stores/kannaSidebarStore"
 
-const SIDEBAR_WIDTH_STORAGE_KEY = "kanna:sidebar-width"
-export const DEFAULT_SIDEBAR_WIDTH = 275
-export const MIN_SIDEBAR_WIDTH = 220
-export const MAX_SIDEBAR_WIDTH = 520
-
-export function clampSidebarWidth(width: number) {
-  if (!Number.isFinite(width)) return DEFAULT_SIDEBAR_WIDTH
-  return Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, Math.round(width)))
-}
-
-function readStoredSidebarWidth() {
-  if (typeof window === "undefined") return DEFAULT_SIDEBAR_WIDTH
-  const stored = window.localStorage.getItem(SIDEBAR_WIDTH_STORAGE_KEY)
-  return stored ? clampSidebarWidth(Number(stored)) : DEFAULT_SIDEBAR_WIDTH
-}
-
-function persistSidebarWidth(width: number) {
-  if (typeof window === "undefined") return
-  window.localStorage.setItem(SIDEBAR_WIDTH_STORAGE_KEY, String(clampSidebarWidth(width)))
-}
+export { DEFAULT_SIDEBAR_WIDTH, MIN_SIDEBAR_WIDTH, MAX_SIDEBAR_WIDTH, clampSidebarWidth }
 
 interface KannaSidebarProps {
   data: SidebarData
@@ -127,20 +116,41 @@ function KannaSidebarImpl({
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const resizeStartRef = useRef<{ pointerX: number; width: number } | null>(null)
   const initializedCollapsedGroupKeysRef = useRef<Set<string>>(new Set())
-  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set())
-  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
-  const [nowMs, setNowMs] = useState(() => Date.now())
-  const [showNumberJumpHints, setShowNumberJumpHints] = useState(false)
-  const [sidebarWidth, setSidebarWidth] = useState(readStoredSidebarWidth)
-  const [isResizingSidebar, setIsResizingSidebar] = useState(false)
-  const [archivedProjectId, setArchivedProjectId] = useState<string | null>(null)
-  const [expandedStackIds, setExpandedStackIds] = useState<Set<string>>(new Set())
-  const [stackCreatePanelOpen, setStackCreatePanelOpen] = useState(false)
-  const [stackEditId, setStackEditId] = useState<string | null>(null)
-  const [stackDeleteConfirmId, setStackDeleteConfirmId] = useState<string | null>(null)
-  const [stackChatCreateId, setStackChatCreateId] = useState<string | null>(null)
-  const [stackChatWorktrees, setStackChatWorktrees] = useState<Map<string, GitWorktree[]>>(new Map())
-  const [stackChatLoading, setStackChatLoading] = useState(false)
+  const expandedGroupsSnapshotRef = useRef<Set<string>>(new Set())
+
+  const collapsedSections = useKannaSidebarStore((s) => s.collapsedSections)
+  const expandedGroups = useKannaSidebarStore((s) => s.expandedGroups)
+  const nowMs = useKannaSidebarStore((s) => s.nowMs)
+  const showNumberJumpHints = useKannaSidebarStore((s) => s.showNumberJumpHints)
+  const sidebarWidth = useKannaSidebarStore((s) => s.sidebarWidth)
+  const isResizingSidebar = useKannaSidebarStore((s) => s.isResizingSidebar)
+  const archivedProjectId = useKannaSidebarStore((s) => s.archivedProjectId)
+  const expandedStackIds = useKannaSidebarStore((s) => s.expandedStackIds)
+  const stackCreatePanelOpen = useKannaSidebarStore((s) => s.stackCreatePanelOpen)
+  const stackEditId = useKannaSidebarStore((s) => s.stackEditId)
+  const stackDeleteConfirmId = useKannaSidebarStore((s) => s.stackDeleteConfirmId)
+  const stackChatCreateId = useKannaSidebarStore((s) => s.stackChatCreateId)
+  const stackChatWorktrees = useKannaSidebarStore((s) => s.stackChatWorktrees)
+  const stackChatLoading = useKannaSidebarStore((s) => s.stackChatLoading)
+  const isImporting = useKannaSidebarStore((s) => s.isImporting)
+
+  const setCollapsedSections = useKannaSidebarStore((s) => s.setCollapsedSections)
+  const setExpandedGroups = useKannaSidebarStore((s) => s.setExpandedGroups)
+  const setNowMs = useKannaSidebarStore((s) => s.setNowMs)
+  const setShowNumberJumpHints = useKannaSidebarStore((s) => s.setShowNumberJumpHints)
+  const setSidebarWidth = useKannaSidebarStore((s) => s.setSidebarWidth)
+  const setSidebarWidthAndPersist = useKannaSidebarStore((s) => s.setSidebarWidthAndPersist)
+  const setIsResizingSidebar = useKannaSidebarStore((s) => s.setIsResizingSidebar)
+  const setArchivedProjectId = useKannaSidebarStore((s) => s.setArchivedProjectId)
+  const setExpandedStackIds = useKannaSidebarStore((s) => s.setExpandedStackIds)
+  const setStackCreatePanelOpen = useKannaSidebarStore((s) => s.setStackCreatePanelOpen)
+  const setStackEditId = useKannaSidebarStore((s) => s.setStackEditId)
+  const setStackDeleteConfirmId = useKannaSidebarStore((s) => s.setStackDeleteConfirmId)
+  const setStackChatCreateId = useKannaSidebarStore((s) => s.setStackChatCreateId)
+  const setStackChatWorktrees = useKannaSidebarStore((s) => s.setStackChatWorktrees)
+  const setStackChatLoading = useKannaSidebarStore((s) => s.setStackChatLoading)
+  const setIsImporting = useKannaSidebarStore((s) => s.setIsImporting)
+
   const resolvedKeybindings = useMemo(() => getResolvedKeybindings(keybindings), [keybindings])
 
   const stackChats = useMemo(() => {
@@ -205,12 +215,12 @@ function KannaSidebarImpl({
     } finally {
       setStackChatLoading(false)
     }
-  }, [data.stacks, onListStackWorktrees])
+  }, [data.stacks, onListStackWorktrees, setStackChatCreateId, setStackChatLoading, setStackChatWorktrees])
 
   const closeStackChatCreate = useCallback(() => {
     setStackChatCreateId(null)
     setStackChatWorktrees(new Map())
-  }, [])
+  }, [setStackChatCreateId, setStackChatWorktrees])
 
   const projectIdByPath = useMemo(
     () => new Map([...data.starredProjectGroups, ...data.projectGroups].map((group) => [group.localPath, group.groupKey])),
@@ -258,7 +268,7 @@ function KannaSidebarImpl({
 
       return next
     })
-  }, [data.starredProjectGroups, data.projectGroups])
+  }, [data.starredProjectGroups, data.projectGroups, setCollapsedSections])
 
   const toggleSection = useCallback((key: string) => {
     setCollapsedSections((previous) => {
@@ -270,7 +280,7 @@ function KannaSidebarImpl({
       }
       return next
     })
-  }, [])
+  }, [setCollapsedSections])
 
   const toggleExpandedGroup = useCallback((key: string) => {
     setExpandedGroups((previous) => {
@@ -279,27 +289,26 @@ function KannaSidebarImpl({
       else next.add(key)
       return next
     })
-  }, [])
+  }, [setExpandedGroups])
 
   const allSidebarGroupKeys = useMemo(
     () => [...data.starredProjectGroups, ...data.projectGroups].map((g) => g.groupKey),
     [data.starredProjectGroups, data.projectGroups]
   )
-  const expandedGroupsSnapshotRef = useRef<Set<string>>(new Set())
   const allSectionsCollapsed = allSidebarGroupKeys.length > 0
     && allSidebarGroupKeys.every((key) => collapsedSections.has(key))
 
   const toggleAllSections = useCallback(() => {
     if (allSidebarGroupKeys.length === 0) return
     if (allSectionsCollapsed) {
-      setCollapsedSections(new Set())
-      setExpandedGroups(expandedGroupsSnapshotRef.current)
+      setCollapsedSections(() => new Set())
+      setExpandedGroups(() => expandedGroupsSnapshotRef.current)
       return
     }
     expandedGroupsSnapshotRef.current = expandedGroups
-    setCollapsedSections(new Set(allSidebarGroupKeys))
-    setExpandedGroups(new Set())
-  }, [allSidebarGroupKeys, allSectionsCollapsed, expandedGroups])
+    setCollapsedSections(() => new Set(allSidebarGroupKeys))
+    setExpandedGroups(() => new Set())
+  }, [allSidebarGroupKeys, allSectionsCollapsed, expandedGroups, setCollapsedSections, setExpandedGroups])
 
   const renderChatRow = useCallback((chat: SidebarChatRow) => {
     const visibleIndex = visibleIndexByChatId.get(chat.chatId)
@@ -332,7 +341,7 @@ function KannaSidebarImpl({
     }, 30_000)
 
     return () => window.clearInterval(intervalId)
-  }, [])
+  }, [setNowMs])
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
@@ -401,7 +410,7 @@ function KannaSidebarImpl({
       window.removeEventListener("keyup", handleKeyUp)
       window.removeEventListener("blur", clearHints)
     }
-  }, [currentProjectId, navigate, onClose, onCreateChat, onOpenAddProjectModal, resolvedKeybindings])
+  }, [currentProjectId, navigate, onClose, onCreateChat, onOpenAddProjectModal, resolvedKeybindings, setShowNumberJumpHints, setStackCreatePanelOpen])
 
   useEffect(() => {
     if (!activeChatId || !scrollContainerRef.current) return
@@ -459,9 +468,8 @@ function KannaSidebarImpl({
       document.body.style.cursor = previousCursor
       document.body.style.userSelect = previousUserSelect
     }
-  }, [isResizingSidebar])
+  }, [isResizingSidebar, setSidebarWidth, setIsResizingSidebar])
 
-  const [isImporting, setIsImporting] = useState(false)
   const dialog = useAppDialog()
 
   const handleImport = useCallback(async () => {
@@ -480,7 +488,7 @@ function KannaSidebarImpl({
     } finally {
       setIsImporting(false)
     }
-  }, [dialog, isImporting, onImportClaudeSessions])
+  }, [dialog, isImporting, onImportClaudeSessions, setIsImporting])
 
   const hasVisibleChats = activeVisibleCount > 0
   const isLocalProjectsActive = location.pathname === "/"
@@ -869,8 +877,7 @@ function KannaSidebarImpl({
             setIsResizingSidebar(true)
           }}
           onDoubleClick={() => {
-            setSidebarWidth(DEFAULT_SIDEBAR_WIDTH)
-            persistSidebarWidth(DEFAULT_SIDEBAR_WIDTH)
+            setSidebarWidthAndPersist(DEFAULT_SIDEBAR_WIDTH)
           }}
           onKeyDown={(event) => {
             let nextWidth: number | null = null
@@ -881,9 +888,7 @@ function KannaSidebarImpl({
             else if (event.key === "Enter") nextWidth = DEFAULT_SIDEBAR_WIDTH
             if (nextWidth === null) return
             event.preventDefault()
-            const clampedWidth = clampSidebarWidth(nextWidth)
-            setSidebarWidth(clampedWidth)
-            persistSidebarWidth(clampedWidth)
+            setSidebarWidthAndPersist(nextWidth)
           }}
         />
       </div>

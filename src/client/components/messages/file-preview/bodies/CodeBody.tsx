@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react"
+import { useEffect } from "react"
 import { useTextBodyContent } from "./textLoader"
 import type { PreviewSource } from "../types"
 import { log } from "../../../../../shared/log"
+import { CodeBodyStore } from "./CodeBody.store"
 
 const SHIKI_SIZE_CEILING = 200 * 1024
 
@@ -18,13 +19,15 @@ function extToLang(name: string): string {
   return map[ext] ?? "text"
 }
 
-export function CodeBody({ source }: { source: PreviewSource }) {
+function CodeBodyInner({ source }: { source: PreviewSource }) {
   const state = useTextBodyContent(source)
   const shouldHighlight = state.status === "ready" && state.content.length <= SHIKI_SIZE_CEILING
   const highlightKey = shouldHighlight
     ? `${source.id}|${source.contentUrl}|${source.size ?? 0}|${state.content.length}`
     : null
-  const [highlighted, setHighlighted] = useState<{ key: string; html: string } | null>(null)
+
+  const highlighted = CodeBodyStore.useScopedStore((s) => s.highlighted)
+  const setHighlighted = CodeBodyStore.useScopedStore((s) => s.setHighlighted)
 
   useEffect(() => {
     if (!shouldHighlight || state.status !== "ready" || highlightKey === null) return
@@ -40,7 +43,7 @@ export function CodeBody({ source }: { source: PreviewSource }) {
         log.warn("[file-preview] Shiki unavailable; falling back to plain text")
       })
     return () => { cancelled = true }
-  }, [shouldHighlight, highlightKey, state, source.fileName])
+  }, [shouldHighlight, highlightKey, state, source.fileName, setHighlighted])
 
   if (state.status === "loading") return <div className="p-4 text-sm text-muted-foreground"><pre className="sr-only" /> Loading…</div>
   if (state.status === "error") return <div className="p-4 text-sm text-destructive"><pre className="sr-only" /> {state.message}</div>
@@ -55,5 +58,13 @@ export function CodeBody({ source }: { source: PreviewSource }) {
       {state.truncated ? <div className="rounded-xl border border-border bg-background px-3 py-2 text-xs text-muted-foreground">Preview truncated to 1024 KB.</div> : null}
       <pre className="whitespace-pre-wrap break-words rounded-xl border border-border bg-background p-3 text-xs">{state.content}</pre>
     </div>
+  )
+}
+
+export function CodeBody({ source }: { source: PreviewSource }) {
+  return (
+    <CodeBodyStore.Provider init={undefined}>
+      <CodeBodyInner source={source} />
+    </CodeBodyStore.Provider>
   )
 }

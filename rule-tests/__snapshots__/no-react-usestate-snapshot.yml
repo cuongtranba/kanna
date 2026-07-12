@@ -1,0 +1,54 @@
+id: no-react-usestate
+snapshots:
+  const [count, setCount] = useState(0):
+    labels:
+    - source: useState(0)
+      style: primary
+      start: 26
+      end: 37
+  const [tab, setTab] = useState<Tab>("new"):
+    labels:
+    - source: useState<Tab>("new")
+      style: primary
+      start: 22
+      end: 42
+  const [x, setX] = React.useState(0):
+    labels:
+    - source: React.useState(0)
+      style: primary
+      start: 18
+      end: 35
+  const [y, setY] = React.useState<number | null>(null):
+    labels:
+    - source: React.useState<number | null>(null)
+      style: primary
+      start: 18
+      end: 53
+  import { useEffect, useState as useLocalState } from "react":
+    labels:
+    - source: useState as useLocalState
+      style: primary
+      start: 20
+      end: 45
+    - source: '"react"'
+      style: secondary
+      start: 53
+      end: 60
+    - source: import { useEffect, useState as useLocalState } from "react"
+      style: secondary
+      start: 0
+      end: 60
+  import { useState } from "react":
+    labels:
+    - source: useState
+      style: primary
+      start: 9
+      end: 17
+    - source: '"react"'
+      style: secondary
+      start: 25
+      end: 32
+    - source: import { useState } from "react"
+      style: secondary
+      start: 0
+      end: 32

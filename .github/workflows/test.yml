@@ -23,6 +23,9 @@ jobs:
 
       - run: bun run lint
 
+      - name: useState gate (ast-grep)
+        run: bun run lint:usestate
+
       - name: Type check
         run: bun run typecheck
 

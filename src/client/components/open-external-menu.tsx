@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo } from "react"
+import { OpenExternalSelectStore } from "./OpenExternalSelect.store"
 import { ChevronDown } from "lucide-react"
 import type { EditorOpenSettings, EditorPreset, OpenExternalAction } from "../../shared/protocol"
 import { isEditorPreset } from "../../shared/types"
@@ -162,7 +163,7 @@ export function openAppValue(args: {
   args.onOpenExternal("open_editor", getEditorSettings(preset, args.editorCommandTemplate))
 }
 
-export function OpenExternalSelect({
+function OpenExternalSelectInner({
   isMac,
   editorPreset,
   editorCommandTemplate,
@@ -178,12 +179,12 @@ export function OpenExternalSelect({
   onOpenExternal: (action: OpenExternalAction, editor?: EditorOpenSettings) => void
 }) {
   const fallbackValue: OpenAppValue = `editor:${editorPreset}`
-  const [lastValue, setLastValue] = useState<OpenAppValue>(fallbackValue)
+  const lastValue = OpenExternalSelectStore.useScopedStore((s) => s.lastValue)
+  const setLastValue = OpenExternalSelectStore.useScopedStore((s) => s.setLastValue)
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLastValue(normalizeOpenAppValue(window.localStorage.getItem(OPEN_SELECT_STORAGE_KEY), fallbackValue))
-  }, [fallbackValue])
+  }, [fallbackValue, setLastValue])
 
   const items = useMemo(() => getOpenAppItems({
     editorPreset,
@@ -247,6 +248,36 @@ export function OpenExternalSelect({
         </SelectContent>
       </Select>
     </div>
+  )
+}
+
+export function OpenExternalSelect({
+  isMac,
+  editorPreset,
+  editorCommandTemplate,
+  finderShortcut,
+  editorShortcut,
+  onOpenExternal,
+}: {
+  isMac: boolean
+  editorPreset: EditorPreset
+  editorCommandTemplate?: string
+  finderShortcut?: string[]
+  editorShortcut?: string[]
+  onOpenExternal: (action: OpenExternalAction, editor?: EditorOpenSettings) => void
+}) {
+  const initialValue: OpenAppValue = `editor:${editorPreset}`
+  return (
+    <OpenExternalSelectStore.Provider init={{ initialValue }}>
+      <OpenExternalSelectInner
+        isMac={isMac}
+        editorPreset={editorPreset}
+        editorCommandTemplate={editorCommandTemplate}
+        finderShortcut={finderShortcut}
+        editorShortcut={editorShortcut}
+        onOpenExternal={onOpenExternal}
+      />
+    </OpenExternalSelectStore.Provider>
   )
 }
 

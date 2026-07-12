@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react"
+import { useCallback, useMemo } from "react"
 import type { ReactNode, RefObject } from "react"
 import { $createTextNode, $insertNodes, TextNode } from "lexical"
 import type { LexicalEditor } from "lexical"
@@ -12,6 +12,7 @@ import { filterCommands, normalizeCommandName } from "../../../lib/slash-command
 import type { SlashCommand } from "../../../../shared/types"
 import { $createSlashCommandNode } from "../nodes/SlashCommandNode"
 import { cn } from "../../../lib/utils"
+import { useComposerStore } from "../../../stores/composerStore"
 
 // ---------------------------------------------------------------------------
 // Custom trigger: slash at the start of the input OR after whitespace.
@@ -100,7 +101,8 @@ export function SlashCommandTypeaheadPlugin({
   chatId,
   enabled,
 }: SlashCommandTypeaheadPluginProps): ReactNode {
-  const [query, setQuery] = useState<string | null>(null)
+  const query = useComposerStore((state) => state.slashQuery)
+  const setQuery = useComposerStore((state) => state.setSlashQuery)
 
   const slashCommands = useSlashCommands(chatId)
   const loading = useSlashCommandsLoading(chatId)
@@ -115,7 +117,7 @@ export function SlashCommandTypeaheadPlugin({
 
   const onQueryChange = useCallback((matchingString: string | null) => {
     setQuery(matchingString)
-  }, [])
+  }, [setQuery])
 
   const onSelectOption = useCallback(
     (

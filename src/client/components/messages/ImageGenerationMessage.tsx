@@ -1,19 +1,20 @@
-import { useState } from "react"
 import type { HydratedImageGenerationToolCall } from "../../../shared/types"
 import { InlinePreviewCard } from "./file-preview/InlinePreviewCard"
 import { FilePreviewSheet } from "./file-preview/FilePreviewSheet"
 import type { PreviewSource } from "./file-preview/types"
+import { ImageGenerationMessageStore } from "./ImageGenerationMessage.store"
 
 interface Props {
   message: HydratedImageGenerationToolCall
 }
 
-export function ImageGenerationMessage({ message }: Props) {
+function ImageGenerationMessageInner({ message }: Props) {
   const { status, revisedPrompt } = message.input
   const result = message.result
   const contentUrl = result?.contentUrl
   const hasFailed = message.isError || status === "failed"
-  const [open, setOpen] = useState(false)
+  const open = ImageGenerationMessageStore.useScopedStore((s) => s.open)
+  const setOpen = ImageGenerationMessageStore.useScopedStore((s) => s.setOpen)
 
   if (!hasFailed && !result && status === "in_progress") {
     return (
@@ -58,5 +59,13 @@ export function ImageGenerationMessage({ message }: Props) {
       ) : null}
       <FilePreviewSheet source={open ? source : null} open={open} onOpenChange={setOpen} />
     </figure>
+  )
+}
+
+export function ImageGenerationMessage({ message }: Props) {
+  return (
+    <ImageGenerationMessageStore.Provider init={undefined}>
+      <ImageGenerationMessageInner message={message} />
+    </ImageGenerationMessageStore.Provider>
   )
 }

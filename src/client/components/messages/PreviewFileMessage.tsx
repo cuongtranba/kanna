@@ -1,21 +1,22 @@
-import { useEffect, useState } from "react"
+import { useEffect } from "react"
 import type { ChatAttachment, HydratedPreviewFileToolCall } from "../../../shared/types"
 import { AttachmentFileCard, formatAttachmentSize } from "./AttachmentCard"
 import { classifyAttachmentIcon, friendlyMimeLabel } from "./attachmentPreview"
 import { FilePreviewSheet } from "./file-preview/FilePreviewSheet"
 import { toPreviewSourceFromAttachment } from "./file-preview/types"
+import { PreviewFileMessageStore } from "./PreviewFileMessage.store"
 
 interface Props {
   message: HydratedPreviewFileToolCall
 }
 
-type ProbeState = "idle" | "ready" | "missing"
-
-export function PreviewFileMessage({ message }: Props) {
+function PreviewFileMessageInner({ message }: Props) {
   const result = message.result
   const contentUrl = result?.contentUrl
-  const [state, setState] = useState<ProbeState>("idle")
-  const [previewOpen, setPreviewOpen] = useState(false)
+  const probeState = PreviewFileMessageStore.useScopedStore((s) => s.probeState)
+  const previewOpen = PreviewFileMessageStore.useScopedStore((s) => s.previewOpen)
+  const setProbeState = PreviewFileMessageStore.useScopedStore((s) => s.setProbeState)
+  const setPreviewOpen = PreviewFileMessageStore.useScopedStore((s) => s.setPreviewOpen)
 
   useEffect(() => {
     if (!contentUrl) return
@@ -23,11 +24,11 @@ export function PreviewFileMessage({ message }: Props) {
     fetch(contentUrl, { method: "HEAD", signal: controller.signal })
       .then((response) => {
         if (controller.signal.aborted) return
-        setState(response.ok ? "ready" : "missing")
+        setProbeState(response.ok ? "ready" : "missing")
       })
       .catch(() => {})
     return () => controller.abort()
-  }, [contentUrl])
+  }, [contentUrl, setProbeState])
 
   if (!result || !contentUrl) return null
 
@@ -52,7 +53,7 @@ export function PreviewFileMessage({ message }: Props) {
     </>
   )
 
-  if (state === "missing") {
+  if (probeState === "missing") {
     return (
       <div className="flex" data-testid="preview-file-card">
         <AttachmentFileCard attachment={attachment} disabledReason="File no longer available" />
@@ -77,5 +78,13 @@ export function PreviewFileMessage({ message }: Props) {
         onOpenChange={setPreviewOpen}
       />
     </>
+  )
+}
+
+export function PreviewFileMessage({ message }: Props) {
+  return (
+    <PreviewFileMessageStore.Provider init={undefined}>
+      <PreviewFileMessageInner message={message} />
+    </PreviewFileMessageStore.Provider>
   )
 }

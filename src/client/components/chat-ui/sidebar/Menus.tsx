@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react"
+import { type ReactNode } from "react"
 import { Archive, Code, Copy, EyeOff, FolderOpen, Pencil, ShieldAlert, Split, Star, StarOff, Trash2, Users } from "lucide-react"
 import {
   ContextMenu,
@@ -7,6 +7,20 @@ import {
   ContextMenuTrigger,
 } from "../../ui/context-menu"
 import { Popover, PopoverContent, PopoverTrigger } from "../../ui/popover"
+import { createScopedStore } from "../../../lib/createScopedStore"
+
+interface StackActionsPopoverStoreState {
+  open: boolean
+  setOpen: (open: boolean) => void
+}
+
+const stackActionsPopoverStore = createScopedStore<
+  Record<string, never>,
+  StackActionsPopoverStoreState
+>("StackActionsPopover", () => (set) => ({
+  open: false,
+  setOpen: (open) => set({ open }),
+}))
 
 export function ProjectSectionMenu({
   editorLabel,
@@ -184,7 +198,7 @@ export function ChatRowMenu({
   )
 }
 
-export function StackActionsPopover({
+function StackActionsPopoverInner({
   stackTitle,
   onRename,
   onEditMembers,
@@ -197,7 +211,8 @@ export function StackActionsPopover({
   onDelete: () => void
   children: ReactNode
 }) {
-  const [open, setOpen] = useState(false)
+  const open = stackActionsPopoverStore.useScopedStore((s) => s.open)
+  const setOpen = stackActionsPopoverStore.useScopedStore((s) => s.setOpen)
 
   function handle(action: () => void) {
     return () => {
@@ -245,6 +260,33 @@ export function StackActionsPopover({
         </button>
       </PopoverContent>
     </Popover>
+  )
+}
+
+export function StackActionsPopover({
+  stackTitle,
+  onRename,
+  onEditMembers,
+  onDelete,
+  children,
+}: {
+  stackTitle: string
+  onRename: () => void
+  onEditMembers: () => void
+  onDelete: () => void
+  children: ReactNode
+}) {
+  return (
+    <stackActionsPopoverStore.Provider init={{}}>
+      <StackActionsPopoverInner
+        stackTitle={stackTitle}
+        onRename={onRename}
+        onEditMembers={onEditMembers}
+        onDelete={onDelete}
+      >
+        {children}
+      </StackActionsPopoverInner>
+    </stackActionsPopoverStore.Provider>
   )
 }
 

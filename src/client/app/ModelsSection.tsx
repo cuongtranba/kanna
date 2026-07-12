@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react"
+import { useMemo } from "react"
 import { Plus, Trash2, Pencil, Cpu } from "lucide-react"
 import { Button } from "../components/ui/button"
 import { Input } from "../components/ui/input"
@@ -17,6 +17,11 @@ import type {
   CustomModelPatch,
 } from "../../shared/types"
 import type { KannaState } from "./useKannaState"
+import {
+  useModelsSectionStore,
+  type ModelProvider,
+  type ModelsEditingState,
+} from "../stores/modelsSectionStore"
 
 export interface ModelsSectionHandlers {
   onCreate: (input: CustomModelInput) => Promise<void>
@@ -24,16 +29,10 @@ export interface ModelsSectionHandlers {
   onDelete: (id: string) => Promise<void>
 }
 
-type ModelProvider = "claude" | "codex"
 const MODEL_PROVIDER_SET = new Set<string>(["claude", "codex"])
 function isModelProvider(v: string): v is ModelProvider {
   return MODEL_PROVIDER_SET.has(v)
 }
-
-type EditingState =
-  | { kind: "list" }
-  | { kind: "create"; provider: ModelProvider }
-  | { kind: "edit"; id: string }
 
 interface ModelsSectionProps {
   models: readonly CustomModelEntry[]
@@ -46,7 +45,21 @@ const PROVIDER_LABEL: Record<ModelProvider, string> = {
 }
 
 export function ModelsSection({ models, handlers }: ModelsSectionProps) {
-  const [editing, setEditing] = useState<EditingState>({ kind: "list" })
+  const editing = useModelsSectionStore((state) => state.editing)
+  const setEditing = useModelsSectionStore((state) => state.setEditing)
+  const resetEditorForm = useModelsSectionStore((state) => state.resetEditorForm)
+
+  function navigate(next: ModelsEditingState) {
+    if (next.kind === "create") {
+      resetEditorForm("", "", next.provider, false)
+    } else if (next.kind === "edit") {
+      const initial = models.find((m) => m.id === next.id) ?? null
+      if (initial) {
+        resetEditorForm(initial.id, initial.label, initial.provider, initial.supportsEffort ?? false)
+      }
+    }
+    setEditing(next)
+  }
 
   if (editing.kind !== "list") {
     const initial =
@@ -54,7 +67,6 @@ export function ModelsSection({ models, handlers }: ModelsSectionProps) {
     return (
       <ModelEditor
         initial={initial}
-        provider={editing.kind === "create" ? editing.provider : (initial?.provider ?? "claude")}
         existing={models.map((m) => ({ id: m.id, provider: m.provider }))}
         handlers={handlers}
         onDone={() => setEditing({ kind: "list" })}
@@ -70,7 +82,7 @@ export function ModelsSection({ models, handlers }: ModelsSectionProps) {
           <div key={provider} className="flex flex-col gap-3">
             <div className="flex items-center justify-between">
               <h2 className="text-base font-medium">{PROVIDER_LABEL[provider]} models</h2>
-              <Button size="sm" onClick={() => setEditing({ kind: "create", provider })}>
+              <Button size="sm" onClick={() => navigate({ kind: "create", provider })}>
                 <Plus className="mr-1 h-4 w-4" />
                 Add model
               </Button>
@@ -88,7 +100,7 @@ export function ModelsSection({ models, handlers }: ModelsSectionProps) {
                   <ModelRow
                     key={model.id}
                     model={model}
-                    onEdit={() => setEditing({ kind: "edit", id: model.id })}
+                    onEdit={() => navigate({ kind: "edit", id: model.id })}
                     onDelete={() => {
                       if (window.confirm(`Delete model "${model.label}"?`)) {
                         void handlers.onDelete(model.id)
@@ -142,24 +154,26 @@ function ModelRow({
 
 function ModelEditor({
   initial,
-  provider,
   existing,
   handlers,
   onDone,
 }: {
   initial: CustomModelEntry | null
-  provider: ModelProvider
   existing: ReadonlyArray<{ id: string; provider: string }>
   handlers: ModelsSectionHandlers
   onDone: () => void
 }) {
+  const editorForm = useModelsSectionStore((state) => state.editorForm)
+  const setEditorId = useModelsSectionStore((state) => state.setEditorId)
+  const setEditorLabel = useModelsSectionStore((state) => state.setEditorLabel)
+  const setEditorModelProvider = useModelsSectionStore((state) => state.setEditorModelProvider)
+  const setEditorSupportsEffort = useModelsSectionStore((state) => state.setEditorSupportsEffort)
+  const setEditorSubmitting = useModelsSectionStore((state) => state.setEditorSubmitting)
+  const setEditorError = useModelsSectionStore((state) => state.setEditorError)
+
+  const { id, label, modelProvider, supportsEffort, submitting, error } = editorForm
+
   const isEdit = initial !== null
-  const [id, setId] = useState(initial?.id ?? "")
-  const [label, setLabel] = useState(initial?.label ?? "")
-  const [modelProvider, setModelProvider] = useState<ModelProvider>(initial?.provider ?? provider)
-  const [supportsEffort, setSupportsEffort] = useState(initial?.supportsEffort ?? false)
-  const [submitting, setSubmitting] = useState(false)
-  const [error, setError] = useState<string | null>(null)
 
   const duplicate = useMemo(
     () =>
@@ -171,8 +185,8 @@ function ModelEditor({
   const canSave = id.trim().length > 0 && label.trim().length > 0 && !duplicate && !submitting
 
   const onSubmit = async () => {
-    setSubmitting(true)
-    setError(null)
+    setEditorSubmitting(true)
+    setEditorError(null)
     try {
       if (isEdit && initial) {
         await handlers.onUpdate(initial.id, { label: label.trim(), supportsEffort })
@@ -186,9 +200,9 @@ function ModelEditor({
       }
       onDone()
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to save model")
+      setEditorError(e instanceof Error ? e.message : "Failed to save model")
     } finally {
-      setSubmitting(false)
+      setEditorSubmitting(false)
     }
   }
 
@@ -209,7 +223,7 @@ function ModelEditor({
         <span className="text-sm font-medium">Provider</span>
         <Select
           value={modelProvider}
-          onValueChange={(value) => { if (isModelProvider(value)) setModelProvider(value) }}
+          onValueChange={(value) => { if (isModelProvider(value)) setEditorModelProvider(value) }}
           disabled={isEdit}
         >
           <SelectTrigger className="min-w-[180px]">
@@ -226,7 +240,7 @@ function ModelEditor({
         <span className="text-sm font-medium">Model ID</span>
         <Input
           value={id}
-          onChange={(e) => setId(e.target.value)}
+          onChange={(e) => setEditorId(e.target.value)}
           placeholder="claude-opus-4-9"
           disabled={isEdit}
           className="font-mono"
@@ -238,14 +252,14 @@ function ModelEditor({
 
       <label className="flex flex-col gap-1">
         <span className="text-sm font-medium">Label</span>
-        <Input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Opus 4.9" />
+        <Input value={label} onChange={(e) => setEditorLabel(e.target.value)} placeholder="Opus 4.9" />
       </label>
 
       <label className="inline-flex cursor-pointer items-center gap-2 text-sm">
         <input
           type="checkbox"
           checked={supportsEffort}
-          onChange={(e) => setSupportsEffort(e.target.checked)}
+          onChange={(e) => setEditorSupportsEffort(e.target.checked)}
         />
         <span>Supports reasoning effort</span>
       </label>

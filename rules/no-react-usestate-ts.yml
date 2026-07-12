@@ -1,0 +1,35 @@
+id: no-react-usestate-ts
+language: typescript
+severity: error
+message: useState is banned for application state — move state and actions into a Zustand store.
+note: |
+  Singleton feature state -> src/client/stores/<feature>Store.ts (zustand create()).
+  Per-instance component state -> colocated <Component>.store.ts using
+  createScopedStore from src/client/lib/createScopedStore.tsx.
+  Spec: docs/superpowers/specs/2026-07-12-usestate-zustand-migration-design.md
+files:
+  - src/client/**
+ignores:
+  - src/client/**/*.test.ts
+  - src/client/**/*.test.tsx
+  - src/client/components/ui/**
+  - src/client/hooks/useIsMobile.ts
+  - src/client/hooks/useNow.ts
+  - src/client/hooks/useStickyState.ts
+  - src/client/hooks/useTheme.tsx
+  - src/client/hooks/useIsStandalone.ts
+rule:
+  any:
+    - pattern: useState($$$ARGS)
+    - pattern: useState<$$$T>($$$ARGS)
+    - pattern: React.useState($$$ARGS)
+    - pattern: React.useState<$$$T>($$$ARGS)
+    - all:
+        - kind: import_specifier
+          regex: ^useState\b
+        - inside:
+            stopBy: end
+            kind: import_statement
+            has:
+              field: source
+              regex: ^['"]react['"]$

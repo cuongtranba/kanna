@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo } from "react"
 import type { ChatAttachment } from "../../../shared/types"
 import { middleTruncate } from "../../lib/middleTruncate"
 import { toLocalFileUrl } from "../../lib/pathUtils"
@@ -6,12 +6,7 @@ import { AttachmentFileCard, formatAttachmentSize } from "./AttachmentCard"
 import { FilePreviewSheet } from "./file-preview/FilePreviewSheet"
 import { toPreviewSourceFromAttachment } from "./file-preview/types"
 import { classifyAttachmentIcon, classifyAttachmentPreview, friendlyMimeLabel } from "./attachmentPreview"
-
-type ProbeState =
-  | { kind: "loading" }
-  | { kind: "ready"; mimeType: string; size: number }
-  | { kind: "missing" }
-  | { kind: "error" }
+import { LocalFileLinkCardStore } from "./LocalFileLinkCard.store"
 
 interface Props {
   path: string
@@ -23,10 +18,12 @@ function basename(p: string): string {
   return idx >= 0 ? p.slice(idx + 1) : p
 }
 
-export function LocalFileLinkCard({ path, linkText }: Props) {
+function LocalFileLinkCardInner({ path, linkText }: Props) {
   const contentUrl = useMemo(() => toLocalFileUrl(path), [path])
-  const [probe, setProbe] = useState<ProbeState>({ kind: "loading" })
-  const [previewOpen, setPreviewOpen] = useState(false)
+  const probe = LocalFileLinkCardStore.useScopedStore((s) => s.probe)
+  const previewOpen = LocalFileLinkCardStore.useScopedStore((s) => s.previewOpen)
+  const setProbe = LocalFileLinkCardStore.useScopedStore((s) => s.setProbe)
+  const setPreviewOpen = LocalFileLinkCardStore.useScopedStore((s) => s.setPreviewOpen)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -46,7 +43,7 @@ export function LocalFileLinkCard({ path, linkText }: Props) {
         setProbe({ kind: "error" })
       })
     return () => controller.abort()
-  }, [contentUrl])
+  }, [contentUrl, setProbe])
 
   const fileName = basename(path)
   const rawDisplayName = linkText || fileName
@@ -138,5 +135,13 @@ export function LocalFileLinkCard({ path, linkText }: Props) {
         ariaLabel={ariaLabelParts.join(", ")}
       />
     </span>
+  )
+}
+
+export function LocalFileLinkCard({ path, linkText }: Props) {
+  return (
+    <LocalFileLinkCardStore.Provider init={undefined}>
+      <LocalFileLinkCardInner path={path} linkText={linkText} />
+    </LocalFileLinkCardStore.Provider>
   )
 }

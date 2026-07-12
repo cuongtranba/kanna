@@ -1,7 +1,8 @@
-import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react"
+import { useEffect, useLayoutEffect, useRef, type RefObject } from "react"
 import type { GroupImperativeHandle } from "react-resizable-panels"
 import type { ProjectTerminalLayout } from "../stores/terminalLayoutStore"
 import { interpolateLayout, TERMINAL_TOGGLE_ANIMATION_DURATION_MS } from "./terminalToggleAnimation"
+import { useChatPageStore } from "../stores/chatPageStore"
 
 type UseTerminalToggleAnimationParams = {
   chatInputRef: RefObject<HTMLTextAreaElement | null>
@@ -87,7 +88,8 @@ export function useTerminalToggleAnimation({
   const previousShouldRenderTerminalLayoutRef = useRef(false)
   const previousShowTerminalPaneRef = useRef(false)
   const previousFocusedTerminalVisibilityRef = useRef(false)
-  const [terminalFocusRequestVersion, setTerminalFocusRequestVersion] = useState(0)
+  const terminalFocusRequestVersion = useChatPageStore((s) => s.terminalFocusRequestVersion)
+  const incrementTerminalFocusRequestVersion = useChatPageStore((s) => s.incrementTerminalFocusRequestVersion)
 
   useEffect(() => {
     const previousProjectId = previousProjectIdRef.current
@@ -99,7 +101,7 @@ export function useTerminalToggleAnimation({
       showTerminalPane,
       wasTerminalVisible: wasVisible,
     })) {
-      setTerminalFocusRequestVersion((current) => current + 1)
+      incrementTerminalFocusRequestVersion()
     }
 
     if (previousProjectId !== null && previousProjectId === projectId && !showTerminalPane && wasVisible) {
@@ -108,7 +110,7 @@ export function useTerminalToggleAnimation({
 
     previousFocusedTerminalVisibilityRef.current = showTerminalPane
     previousProjectIdRef.current = projectId
-  }, [chatInputRef, projectId, showTerminalPane])
+  }, [chatInputRef, incrementTerminalFocusRequestVersion, projectId, showTerminalPane])
 
   useEffect(() => {
     return () => {

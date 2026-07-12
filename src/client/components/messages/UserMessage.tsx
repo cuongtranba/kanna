@@ -1,4 +1,4 @@
-import { memo, useMemo, useState } from "react"
+import { memo, useMemo } from "react"
 import type { ChatAttachment } from "../../../shared/types"
 import { renderMarkdownToReact } from "../lexical/markdown/lexicalToReact"
 import { classifyAttachmentPreview } from "./attachmentPreview"
@@ -7,6 +7,7 @@ import { FilePreviewSheet } from "./file-preview/FilePreviewSheet"
 import { toPreviewSourceFromAttachment, type PreviewSource } from "./file-preview/types"
 import { Zap } from "lucide-react"
 import { useTranscriptRenderOptions } from "./render-context"
+import { UserMessageStore } from "./UserMessage.store"
 
 interface Props {
   content: string
@@ -27,8 +28,9 @@ function parseSystemMessage(content: string) {
   }
 }
 
-export const UserMessage = memo(({ content, attachments = [], steered = false, autoContinue }: Props) => {
-  const [selectedAttachmentId, setSelectedAttachmentId] = useState<string | null>(null)
+function UserMessageInner({ content, attachments = [], steered = false, autoContinue }: Props) {
+  const selectedAttachmentId = UserMessageStore.useScopedStore((s) => s.selectedAttachmentId)
+  const setSelectedAttachmentId = UserMessageStore.useScopedStore((s) => s.setSelectedAttachmentId)
   const renderOptions = useTranscriptRenderOptions()
   const parsedContent = useMemo(() => parseSystemMessage(content), [content])
   const canInteractWithAttachments = !renderOptions.readonly
@@ -109,5 +111,13 @@ export const UserMessage = memo(({ content, attachments = [], steered = false, a
         onOpenChange={(open) => !open && setSelectedAttachmentId(null)}
       />
     </>
+  )
+}
+
+export const UserMessage = memo(({ content, attachments = [], steered = false, autoContinue }: Props) => {
+  return (
+    <UserMessageStore.Provider init={undefined}>
+      <UserMessageInner content={content} attachments={attachments} steered={steered} autoContinue={autoContinue} />
+    </UserMessageStore.Provider>
   )
 })

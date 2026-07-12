@@ -1,4 +1,5 @@
-import React, { memo, useCallback, useLayoutEffect, useMemo, useRef, useState } from "react"
+import React, { memo, useCallback, useLayoutEffect, useMemo, useRef } from "react"
+import { KannaTranscriptStore } from "./KannaTranscript.store"
 import type { AskUserQuestionItem, ProcessedToolCall } from "../components/messages/types"
 import { SubagentMessage } from "../components/messages/SubagentMessage"
 import type { SubagentRunSnapshot } from "../../shared/types"
@@ -878,7 +879,7 @@ const NOOP_ACCEPT = (_scheduleId: string, _scheduledAt: number): void => {}
 const NOOP_RESCHEDULE = (_scheduleId: string, _scheduledAt: number): void => {}
 const NOOP_CANCEL = (_scheduleId: string): void => {}
 
-function KannaTranscriptImpl({
+function KannaTranscriptInner({
   messages,
   isLoading,
   localPath,
@@ -900,7 +901,8 @@ function KannaTranscriptImpl({
   onSubagentExitPlanModeSubmit,
   onCancelSubagentRun,
 }: KannaTranscriptProps) {
-  const [toolGroupExpanded, setToolGroupExpanded] = useState<Record<string, boolean>>({})
+  const toolGroupExpanded = KannaTranscriptStore.useScopedStore((s) => s.toolGroupExpanded)
+  const setToolGroupExpanded = KannaTranscriptStore.useScopedStore((s) => s.setToolGroupExpanded)
   const rows = useMemo(() => buildResolvedTranscriptRows(messages, {
     isLoading,
     localPath,
@@ -927,15 +929,8 @@ function KannaTranscriptImpl({
     return { matchedRunsByToolId: matched, childrenByParentRunId: byParent }
   }, [subagentRuns, messages])
   const handleToolGroupExpandedChange = useCallback((groupId: string, next: boolean) => {
-    setToolGroupExpanded((current) => (
-      current[groupId] === next
-        ? current
-        : {
-            ...current,
-            [groupId]: next,
-          }
-    ))
-  }, [])
+    setToolGroupExpanded(groupId, next)
+  }, [setToolGroupExpanded])
 
   return (
     <OpenLocalLinkProvider onOpenLocalLink={onOpenLocalLink}>
@@ -969,6 +964,14 @@ function KannaTranscriptImpl({
         )
       })}
     </OpenLocalLinkProvider>
+  )
+}
+
+function KannaTranscriptImpl(props: KannaTranscriptProps) {
+  return (
+    <KannaTranscriptStore.Provider init={{}}>
+      <KannaTranscriptInner {...props} />
+    </KannaTranscriptStore.Provider>
   )
 }
 

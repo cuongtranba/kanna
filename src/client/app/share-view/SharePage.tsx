@@ -1,12 +1,8 @@
-import { useEffect, useState } from "react"
+import { useEffect } from "react"
 import { useParams } from "react-router-dom"
 import type { ChatSnapshot, ShareError } from "../../../shared/session-share/types"
 import { ShareViewPage } from "./ShareViewPage"
-
-type LoadState =
-  | { kind: "loading" }
-  | { kind: "ok"; snapshot: ChatSnapshot }
-  | { kind: "error"; error: ShareError; status: number }
+import { SharePageStore } from "./SharePage.store"
 
 interface ShareApiOk {
   ok: true
@@ -38,10 +34,9 @@ function errorMessage(error: ShareError): string {
   }
 }
 
-export function SharePage() {
-  const params = useParams<{ token: string }>()
-  const token = params.token ?? ""
-  const [state, setState] = useState<LoadState>({ kind: "loading" })
+function SharePageInner({ token }: { token: string }) {
+  const loadState = SharePageStore.useScopedStore((s) => s.loadState)
+  const setLoadState = SharePageStore.useScopedStore((s) => s.setLoadState)
 
   useEffect(() => {
     let aborted = false
@@ -51,15 +46,15 @@ export function SharePage() {
         const body: ShareApiResponse = await res.json()
         if (aborted) return
         if (body.ok) {
-          setState({ kind: "ok", snapshot: body.snapshot })
+          setLoadState({ kind: "ok", snapshot: body.snapshot })
         } else {
-          setState({ kind: "error", error: body.error, status: res.status })
+          setLoadState({ kind: "error", error: body.error, status: res.status })
         }
       })
       .catch((err) => {
         if (aborted) return
         if (err instanceof Error && err.name === "AbortError") return
-        setState({
+        setLoadState({
           kind: "error",
           error: { kind: "snapshot_read_failed", message: String(err) },
           status: 0,
@@ -69,22 +64,32 @@ export function SharePage() {
       aborted = true
       ac.abort()
     }
-  }, [token])
+  }, [token, setLoadState])
 
-  if (state.kind === "loading") {
+  if (loadState.kind === "loading") {
     return (
       <main className="kanna-share-view" data-state="loading">
         <p>Loading shared chat…</p>
       </main>
     )
   }
-  if (state.kind === "error") {
+  if (loadState.kind === "error") {
     return (
       <main className="kanna-share-view" data-state="error">
-        <h1>{errorTitle(state.error)}</h1>
-        <p>{errorMessage(state.error)}</p>
+        <h1>{errorTitle(loadState.error)}</h1>
+        <p>{errorMessage(loadState.error)}</p>
       </main>
     )
   }
-  return <ShareViewPage snapshot={state.snapshot} />
+  return <ShareViewPage snapshot={loadState.snapshot} />
+}
+
+export function SharePage() {
+  const params = useParams<{ token: string }>()
+  const token = params.token ?? ""
+  return (
+    <SharePageStore.Provider init={{}}>
+      <SharePageInner token={token} />
+    </SharePageStore.Provider>
+  )
 }

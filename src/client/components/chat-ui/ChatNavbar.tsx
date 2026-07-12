@@ -1,4 +1,4 @@
-import { useState, type MouseEvent as ReactMouseEvent } from "react"
+import { type MouseEvent as ReactMouseEvent } from "react"
 import { Flower, GitBranch, Menu, MoreHorizontal, PanelLeft, PanelRight, SquarePen, Terminal } from "lucide-react"
 import { ShareButton } from "../share/ShareButton"
 import { SharePopover } from "../share/SharePopover"
@@ -17,6 +17,7 @@ import { OpenExternalSelect } from "../open-external-menu"
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from "../ui/context-menu"
 import { PtyInstancesIndicator } from "./PtyInstancesIndicator"
 import type { KannaSocket } from "../../app/socket"
+import { useSharePopoverOpen, useSetSharePopoverOpen } from "../../stores/chatNavbarStore"
 
 function openContextMenuFromButton(event: ReactMouseEvent<HTMLButtonElement>) {
   event.preventDefault()
@@ -143,7 +144,8 @@ export function ChatNavbar({
   onShareRevoke,
 }: Props) {
   const branchLabel = computeBranchLabel({ hasGitRepo, gitStatus, localPath, branchName, homeDir })
-  const [sharePopoverOpen, setSharePopoverOpen] = useState(false)
+  const sharePopoverOpen = useSharePopoverOpen()
+  const setSharePopoverOpen = useSetSharePopoverOpen()
   const isMac = platform === "darwin"
 
   return (
