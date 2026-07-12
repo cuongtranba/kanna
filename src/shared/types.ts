@@ -932,6 +932,19 @@ export interface AppSettingsSnapshot {
   claudeDriver: ClaudeDriverSettings
   globalPromptAppend: string
   shareDefaultTtlHours: number
+  subagentRuntime: SubagentRuntimeSettings
+}
+
+/**
+ * Runtime knobs for delegated subagent runs (delegate_subagent) and the
+ * autonomous loop (setup_loop). `runTimeoutMs` is the stall/idle watchdog
+ * window — a run is aborted only after this long with NO streamed activity,
+ * not a total wall-clock cap. `defaultLoopSubagentId` is the subagent
+ * setup_loop delegates to when the caller omits an explicit id.
+ */
+export interface SubagentRuntimeSettings {
+  runTimeoutMs: number
+  defaultLoopSubagentId: string | null
 }
 
 export interface AppSettingsPatch {
@@ -981,6 +994,7 @@ export interface AppSettingsPatch {
   }
   globalPromptAppend?: string
   shareDefaultTtlHours?: number
+  subagentRuntime?: Partial<SubagentRuntimeSettings>
 }
 
 export interface LlmProviderFile {

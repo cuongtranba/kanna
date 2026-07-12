@@ -79,6 +79,7 @@ import {
   type SubagentInput,
   type SubagentTriggerMode,
   type SubagentPatch,
+  type SubagentRuntimeSettings,
   type SubagentValidationError,
   type UploadSettings,
 } from "../shared/types"
@@ -119,6 +120,10 @@ interface AppSettingsFile {
   claudeDriver?: Record<string, unknown>
   globalPromptAppend?: string
   shareDefaultTtlHours?: number
+  subagentRuntime?: {
+    runTimeoutMs?: number
+    defaultLoopSubagentId?: string | null
+  }
 }
 
 function isPlainObject<T>(value: T): value is T & Record<string, unknown> {
@@ -152,6 +157,11 @@ interface NormalizedAppSettings {
 }
 
 const DEFAULT_SHARE_DEFAULT_TTL_HOURS = 24
+// Stall/idle window for subagent runs (see subagent-orchestrator
+// DEFAULT_RUN_TIMEOUT_MS). Kept in sync as the app-settings default.
+const DEFAULT_SUBAGENT_RUN_TIMEOUT_MS = 600_000
+const MIN_SUBAGENT_RUN_TIMEOUT_MS = 30_000
+const MAX_SUBAGENT_RUN_TIMEOUT_MS = 86_400_000
 const DEFAULT_TERMINAL_SCROLLBACK = 1_000
 const MIN_TERMINAL_SCROLLBACK = 500
 const MAX_TERMINAL_SCROLLBACK = 5_000
@@ -821,6 +831,44 @@ function normalizeGlobalPromptAppend<T>(value: T, warnings: string[]): string {
   return trimmed
 }
 
+function normalizeSubagentRuntime<T>(
+  value: T,
+  subagents: readonly Subagent[],
+  warnings: string[],
+): SubagentRuntimeSettings {
+  const src = isPlainObject(value) ? value : null
+  if (value !== undefined && value !== null && !src) {
+    warnings.push("subagentRuntime must be an object")
+  }
+
+  let runTimeoutMs = DEFAULT_SUBAGENT_RUN_TIMEOUT_MS
+  const rawTimeout = src?.runTimeoutMs
+  if (rawTimeout !== undefined) {
+    if (typeof rawTimeout !== "number" || !Number.isInteger(rawTimeout)) {
+      warnings.push("subagentRuntime.runTimeoutMs must be an integer")
+    } else if (rawTimeout < MIN_SUBAGENT_RUN_TIMEOUT_MS || rawTimeout > MAX_SUBAGENT_RUN_TIMEOUT_MS) {
+      warnings.push(`subagentRuntime.runTimeoutMs must be between ${MIN_SUBAGENT_RUN_TIMEOUT_MS} and ${MAX_SUBAGENT_RUN_TIMEOUT_MS}`)
+    } else {
+      runTimeoutMs = rawTimeout
+    }
+  }
+
+  let defaultLoopSubagentId: string | null = null
+  const rawId = src?.defaultLoopSubagentId
+  if (rawId !== undefined && rawId !== null) {
+    if (typeof rawId !== "string") {
+      warnings.push("subagentRuntime.defaultLoopSubagentId must be a string")
+    } else if (!subagents.some((s) => s.id === rawId)) {
+      // Unknown id (subagent deleted / renamed): clear it rather than persist a dangling ref.
+      warnings.push(`subagentRuntime.defaultLoopSubagentId "${rawId}" is not a known subagent; clearing`)
+    } else {
+      defaultLoopSubagentId = rawId
+    }
+  }
+
+  return { runTimeoutMs, defaultLoopSubagentId }
+}
+
 function normalizeClaudeAuth<T>(value: T, warnings: string[]): ClaudeAuthSettings {
   if (value === undefined) return { ...CLAUDE_AUTH_DEFAULTS }
   const src = isPlainObject(value) ? value : null
@@ -884,6 +932,7 @@ function toFilePayload(state: AppSettingsState) {
     claudeDriver: state.claudeDriver,
     globalPromptAppend: state.globalPromptAppend,
     shareDefaultTtlHours: state.shareDefaultTtlHours,
+    subagentRuntime: state.subagentRuntime,
   }
 }
 
@@ -911,6 +960,7 @@ function toSnapshot(state: AppSettingsState): AppSettingsSnapshot {
     claudeDriver: state.claudeDriver,
     globalPromptAppend: state.globalPromptAppend,
     shareDefaultTtlHours: state.shareDefaultTtlHours,
+    subagentRuntime: state.subagentRuntime,
   }
 }
 
@@ -959,6 +1009,8 @@ function normalizeAppSettings<T>(
     }
   }
 
+  const subagentRuntime = normalizeSubagentRuntime(source?.subagentRuntime, subagents, warnings)
+
   const editorPreset = normalizeEditorPreset(source?.editor?.preset)
   const state: AppSettingsState = {
     analyticsEnabled,
@@ -990,6 +1042,7 @@ function normalizeAppSettings<T>(
     claudeDriver,
     globalPromptAppend,
     shareDefaultTtlHours,
+    subagentRuntime,
   }
 
   const shouldWrite = JSON.stringify(source ? toComparablePayload(source) : null) !== JSON.stringify(toFilePayload(state))
@@ -1029,6 +1082,7 @@ function toComparablePayload(source: AppSettingsFile) {
       ? source.globalPromptAppend.replace(/\s+$/u, "")
       : source.globalPromptAppend,
     shareDefaultTtlHours: source.shareDefaultTtlHours,
+    subagentRuntime: source.subagentRuntime,
   }
 }
 
@@ -1371,6 +1425,22 @@ function applyPatch(state: AppSettingsState, patch: AppSettingsPatch): AppSettin
     }
   }
 
+  if (patch.subagentRuntime?.runTimeoutMs !== undefined) {
+    const value = patch.subagentRuntime.runTimeoutMs
+    if (!Number.isInteger(value) || value < MIN_SUBAGENT_RUN_TIMEOUT_MS || value > MAX_SUBAGENT_RUN_TIMEOUT_MS) {
+      throw new Error(`subagentRuntime.runTimeoutMs must be an integer between ${MIN_SUBAGENT_RUN_TIMEOUT_MS} and ${MAX_SUBAGENT_RUN_TIMEOUT_MS}`)
+    }
+  }
+  if (patch.subagentRuntime?.defaultLoopSubagentId != null) {
+    const id = patch.subagentRuntime.defaultLoopSubagentId
+    // Validate against the post-patch roster so setting a default in the same
+    // patch that creates the subagent still works is out of scope — require the
+    // subagent to already exist.
+    if (!state.subagents.some((s) => s.id === id)) {
+      throw new Error(`subagentRuntime.defaultLoopSubagentId "${id}" is not a known subagent`)
+    }
+  }
+
   let nextSubagents = state.subagents
   if (patch.subagents?.create) {
     const input = patch.subagents.create
@@ -1598,6 +1668,12 @@ function applyPatch(state: AppSettingsState, patch: AppSettingsPatch): AppSettin
     },
     globalPromptAppend: patch.globalPromptAppend ?? state.globalPromptAppend,
     shareDefaultTtlHours: patch.shareDefaultTtlHours ?? state.shareDefaultTtlHours,
+    subagentRuntime: {
+      runTimeoutMs: patch.subagentRuntime?.runTimeoutMs ?? state.subagentRuntime.runTimeoutMs,
+      defaultLoopSubagentId: patch.subagentRuntime?.defaultLoopSubagentId !== undefined
+        ? patch.subagentRuntime.defaultLoopSubagentId
+        : state.subagentRuntime.defaultLoopSubagentId,
+    },
   }, state.filePathDisplay).payload
 }
 

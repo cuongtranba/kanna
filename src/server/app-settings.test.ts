@@ -87,6 +87,7 @@ function expectedSettingsSnapshot(filePath: string, overrides: Partial<AppSettin
     claudeDriver: { ...CLAUDE_DRIVER_DEFAULTS, lifecycle: { ...CLAUDE_PTY_LIFECYCLE_DEFAULTS } },
     globalPromptAppend: "",
     shareDefaultTtlHours: 24,
+    subagentRuntime: { runTimeoutMs: 600_000, defaultLoopSubagentId: null },
     ...overrides,
   }
 }

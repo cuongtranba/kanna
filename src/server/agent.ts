@@ -366,6 +366,7 @@ interface AgentCoordinatorArgs {
     globalPromptAppend?: string
     customMcpServers?: readonly McpServerConfig[]
     customModels?: readonly CustomModelEntry[]
+    subagentRuntime?: { runTimeoutMs?: number; defaultLoopSubagentId?: string | null }
   }
   throwOnClaudeSessionStart?: boolean
   oauthPool?: OAuthTokenPool
@@ -1705,6 +1706,12 @@ export class AgentCoordinator {
       },
       maxLive: positiveIntegerFromEnv(process.env.KANNA_SUBAGENT_MAX_LIVE, 0) || undefined,
       liveIdleTimeoutMs: positiveIntegerFromEnv(process.env.KANNA_SUBAGENT_IDLE_TIMEOUT_MS, 0) || undefined,
+      // Stall/idle watchdog window. Precedence: app setting > env > orchestrator
+      // default. The orchestrator reads this once at construction; a settings
+      // change takes effect on next server start (acceptable — restart-scoped).
+      runTimeoutMs: (this.getAppSettingsSnapshot().subagentRuntime?.runTimeoutMs
+        ?? positiveIntegerFromEnv(process.env.KANNA_SUBAGENT_RUN_TIMEOUT_MS, 0))
+        || undefined,
     })
     this.throwOnClaudeSessionStart = args.throwOnClaudeSessionStart ?? false
     this.tunnelGateway = args.tunnelGateway ?? null

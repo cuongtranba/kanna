@@ -103,6 +103,7 @@ export interface AgentAppSettingsView {
   globalPromptAppend: AppSettingsSnapshot["globalPromptAppend"]
   customMcpServers: AppSettingsSnapshot["customMcpServers"]
   customModels: AppSettingsSnapshot["customModels"]
+  subagentRuntime: AppSettingsSnapshot["subagentRuntime"]
 }
 
 export function buildAgentAppSettingsView(snapshot: AppSettingsSnapshot): AgentAppSettingsView {
@@ -118,6 +119,9 @@ export function buildAgentAppSettingsView(snapshot: AppSettingsSnapshot): AgentA
     // Forward customModels so getProviderSettings can accept user-defined
     // model ids without collapsing to the built-in default. See ChatPreferenceControls.
     customModels: snapshot.customModels,
+    // Forward subagent-runtime knobs: the stall watchdog window (read once at
+    // orchestrator construction) and the default loop subagent (used by setupLoop).
+    subagentRuntime: snapshot.subagentRuntime,
   }
 }
 

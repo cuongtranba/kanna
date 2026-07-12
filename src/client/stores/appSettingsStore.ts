@@ -77,6 +77,12 @@ export function mergeAppSettingsPatch(
       },
     },
     globalPromptAppend: patch.globalPromptAppend ?? settings.globalPromptAppend,
+    subagentRuntime: {
+      runTimeoutMs: patch.subagentRuntime?.runTimeoutMs ?? settings.subagentRuntime.runTimeoutMs,
+      defaultLoopSubagentId: patch.subagentRuntime?.defaultLoopSubagentId !== undefined
+        ? patch.subagentRuntime.defaultLoopSubagentId
+        : settings.subagentRuntime.defaultLoopSubagentId,
+    },
   }
 }
 
