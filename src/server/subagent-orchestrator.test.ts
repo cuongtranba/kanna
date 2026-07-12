@@ -1211,6 +1211,52 @@ describe("SubagentOrchestrator", () => {
       expect(outcome.errorCode).toBe("UNKNOWN_SUBAGENT")
     })
 
+    test("UNKNOWN_SUBAGENT error message lists the live roster so the model can self-correct", async () => {
+      const h = await setupHarness({
+        subagents: [
+          makeSubagent({ id: "sa-auto", name: "general-purpose" }),
+          makeSubagent({ id: "sa-manual", name: "blog", triggerMode: "manual" }),
+        ],
+      })
+      const outcome = await h.orchestrator.delegateRun({
+        chatId: h.chatId,
+        parentUserMessageId: h.userMessageId,
+        parentRunId: null,
+        parentSubagentId: null,
+        ancestorSubagentIds: [],
+        depth: 0,
+        subagentId: "claude",
+        prompt: "x",
+        mentionedSubagentIds: [],
+      })
+      expect(outcome.status).toBe("failed")
+      if (outcome.status !== "failed") throw new Error("unreachable")
+      expect(outcome.errorCode).toBe("UNKNOWN_SUBAGENT")
+      expect(outcome.errorMessage).toContain('Subagent "claude" not found')
+      expect(outcome.errorMessage).toContain("general-purpose [id=sa-auto]")
+      expect(outcome.errorMessage).toContain("blog [id=sa-manual]")
+      expect(outcome.errorMessage).toContain("manual")
+    })
+
+    test("UNKNOWN_SUBAGENT with an empty roster points at Settings instead of listing nothing", async () => {
+      const h = await setupHarness({ subagents: [] })
+      const outcome = await h.orchestrator.delegateRun({
+        chatId: h.chatId,
+        parentUserMessageId: h.userMessageId,
+        parentRunId: null,
+        parentSubagentId: null,
+        ancestorSubagentIds: [],
+        depth: 0,
+        subagentId: "claude",
+        prompt: "x",
+        mentionedSubagentIds: [],
+      })
+      expect(outcome.status).toBe("failed")
+      if (outcome.status !== "failed") throw new Error("unreachable")
+      expect(outcome.errorCode).toBe("UNKNOWN_SUBAGENT")
+      expect(outcome.errorMessage).toContain("No subagents are configured")
+    })
+
     test("resolves subagent by exact name when the id does not match", async () => {
       const h = await setupHarness({ subagents: [makeSubagent({ id: "sa-1", name: "4-golden-rules" })] })
       h.programReply("sa-1", "by name reply")

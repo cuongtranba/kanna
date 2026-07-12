@@ -19,7 +19,10 @@ interface DelegateCall {
   background?: boolean
 }
 
-function makeFakeOrchestrator(outcome: DelegationOutcome, options: { fireEntries?: TranscriptEntry[] } = {}) {
+function makeFakeOrchestrator(
+  outcome: DelegationOutcome,
+  options: { fireEntries?: TranscriptEntry[]; unknownSubagent?: boolean } = {},
+) {
   const calls: DelegateCall[] = []
   const fake = {
     async delegateRun(args: DelegateCall) {
@@ -30,6 +33,12 @@ function makeFakeOrchestrator(outcome: DelegationOutcome, options: { fireEntries
         }
       }
       return outcome
+    },
+    findSubagent(id: string) {
+      return options.unknownSubagent ? undefined : { id, name: id }
+    },
+    describeUnknownSubagent(requested: string) {
+      return `Subagent "${requested}" not found. Available subagents:\n- roster-stub [id=sa-roster]`
     },
   } as unknown as SubagentOrchestrator
   return { fake, calls }
@@ -148,6 +157,22 @@ describe("createDelegateSubagentTool", () => {
     expect(payload).toEqual({ status: "async_launched", run_id: "run-bg" })
   })
 
+  test("rejects an unresolvable subagent_id with the roster BEFORE delegating — no run record persisted", async () => {
+    const { fake, calls } = makeFakeOrchestrator(
+      { status: "completed", runId: "x", text: "" },
+      { unknownSubagent: true },
+    )
+    const tool = createDelegateSubagentTool({ orchestrator: fake })
+    const result = await tool.handler(
+      { subagent_id: "claude", prompt: "x" },
+      baseCtx(),
+    )
+    expect(result.isError).toBe(true)
+    expect(result.content[0].text).toContain('Subagent "claude" not found')
+    expect(result.content[0].text).toContain("roster-stub [id=sa-roster]")
+    expect(calls).toHaveLength(0)
+  })
+
   test("rejects run_in_background combined with keep_alive without calling the orchestrator", async () => {
     const { fake, calls } = makeFakeOrchestrator({ status: "completed", runId: "x", text: "" })
     const tool = createDelegateSubagentTool({ orchestrator: fake })
@@ -167,6 +192,8 @@ describe("createDelegateSubagentTool", () => {
         calls.push({ mentionedSubagentIds: a.mentionedSubagentIds })
         return { status: "completed" as const, runId: "r1", text: "ok" }
       },
+      findSubagent: (id: string) => ({ id, name: id }),
+      describeUnknownSubagent: (requested: string) => `Subagent "${requested}" not found.`,
     } as unknown as SubagentOrchestrator
     const tool = createDelegateSubagentTool({ orchestrator })
     await tool.handler(

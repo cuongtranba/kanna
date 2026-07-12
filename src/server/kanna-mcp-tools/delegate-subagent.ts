@@ -87,6 +87,19 @@ export function createDelegateSubagentTool(deps: {
           isError: true,
         }
       }
+      // Fail before delegateRun so no ghost run record (and no failed-run
+      // card in the UI) is persisted for a guessed id; the live roster in
+      // the error lets the model self-correct on the next call even when
+      // the system-prompt roster is stale.
+      if (!deps.orchestrator.findSubagent(input.subagent_id)) {
+        return {
+          content: [{
+            type: "text" as const,
+            text: deps.orchestrator.describeUnknownSubagent(input.subagent_id),
+          }],
+          isError: true,
+        }
+      }
       const outcome = await deps.orchestrator.delegateRun({
         chatId: ctx.chatId,
         parentUserMessageId,
