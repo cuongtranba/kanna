@@ -8,7 +8,6 @@ import {
   useLayoutEffect,
   useMemo,
   useRef,
-  useState,
   type RefObject,
 } from "react"
 import type { SerializedEditorState } from "lexical"
@@ -42,6 +41,10 @@ import { ScrollArea } from "../ui/scroll-area"
 import { cn } from "../../lib/utils"
 import { useIsStandalone } from "../../hooks/useIsStandalone"
 import { useChatInputStore } from "../../stores/chatInputStore"
+import {
+  useComposerStore,
+  type ComposerAttachment as StoreComposerAttachment,
+} from "../../stores/composerStore"
 import {
   NEW_CHAT_COMPOSER_ID,
   type ComposerState,
@@ -176,15 +179,10 @@ const MAX_FILES_PER_DROP = 50
 const MAX_CONCURRENT_UPLOADS = 3
 
 // ---------------------------------------------------------------------------
-// Attachment types
+// Attachment types — re-export from composerStore for local use
 // ---------------------------------------------------------------------------
 
-interface ComposerAttachment extends ChatAttachment {
-  status: "uploading" | "uploaded" | "failed"
-  previewUrl?: string
-  uploadProgress?: number
-  cancelUpload?: () => void
-}
+type ComposerAttachment = StoreComposerAttachment
 
 // ---------------------------------------------------------------------------
 // MentionChip type (for @agent/<name> chips row above editor)
@@ -469,21 +467,16 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
   const composerState = storedComposerState ?? getComposerState(composerChatId)
   const isStandalone = useIsStandalone()
 
-  // ------ Attachments (outside editor, upload pipeline) ------
-  const [attachments, setAttachments] = useState<ComposerAttachment[]>(() =>
-    hydrateComposerAttachments(chatId ? getAttachmentDrafts(chatId) : []),
-  )
-  const [selectedAttachmentId, setSelectedAttachmentId] = useState<string | null>(null)
-  const [uploadError, setUploadError] = useState<string | null>(null)
+  // ------ Composer store (replaces 5 useState calls) ------
+  const attachments = useComposerStore((state) => state.attachments)
+  const setAttachments = useComposerStore((state) => state.setAttachments)
+  const selectedAttachmentId = useComposerStore((state) => state.selectedAttachmentId)
+  const setSelectedAttachmentId = useComposerStore((state) => state.setSelectedAttachmentId)
+  const uploadError = useComposerStore((state) => state.uploadError)
+  const setUploadError = useComposerStore((state) => state.setUploadError)
+  const currentText = useComposerStore((state) => state.currentText)
+  const setCurrentText = useComposerStore((state) => state.setCurrentText)
 
-  // Reset attachment selection/error when chatId changes (adjust-during-render pattern avoids
-  // calling setState inside an effect, which causes cascading renders).
-  const [prevChatId, setPrevChatId] = useState<string | null | undefined>(chatId)
-  if (prevChatId !== chatId) {
-    setPrevChatId(chatId)
-    setSelectedAttachmentId(null)
-    setUploadError(null)
-  }
   const uploadQueueRef = useRef<File[]>([])
   const activeUploadsRef = useRef(0)
   const attachmentsRef = useRef<ComposerAttachment[]>([])
@@ -494,13 +487,6 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
 
   // ------ Lexical bridge ref ------
   const bridgeRef = useRef<LexicalEditorBridgeHandle | null>(null)
-
-  // ------ Live wire text for canSubmit / button icon state ------
-  const [currentText, setCurrentText] = useState<string>(() => {
-    if (!chatId) return ""
-    const draft = getDraft(chatId)
-    return draft?.text ?? ""
-  })
 
   const providerPrefs = getEffectiveComposerState(composerState, activeProvider, providerDefaults)
   const selectedProvider = composerState.provider
@@ -584,7 +570,7 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
       setSelectedAttachmentId(null)
       setUploadError(null)
     },
-    [cleanupAttachmentPreview],
+    [cleanupAttachmentPreview, setAttachments, setSelectedAttachmentId, setUploadError],
   )
 
   // ------ Upload queue ------
@@ -694,7 +680,7 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
         }
       })()
     }
-  }, [projectId])
+  }, [projectId, setAttachments, setUploadError])
   // Keep ref pointing to the latest version so the async IIFE can recurse without
   // capturing a stale closure.
   useEffect(() => {
@@ -723,7 +709,7 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
       setUploadError(null)
       processUploadQueue()
     },
-    [processUploadQueue, projectId],
+    [processUploadQueue, projectId, setUploadError],
   )
 
   useImperativeHandle(
@@ -791,6 +777,10 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
       selectedAttachmentId,
       uploadError,
       setDraft,
+      setCurrentText,
+      setAttachments,
+      setSelectedAttachmentId,
+      setUploadError,
     ],
   )
 
@@ -858,14 +848,16 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
     uploadQueueRef.current = []
     activeUploadsRef.current = 0
     removedAttachmentIdsRef.current.clear()
-    // selectedAttachmentId and uploadError are reset in the adjust-during-render block above.
+    // Reset attachment selection and upload error when chatId changes.
+    setSelectedAttachmentId(null)
+    setUploadError(null)
     startTransition(() => {
       setAttachments((current) => {
         current.forEach(cleanupAttachmentPreview)
         return hydrateComposerAttachments(chatId ? getAttachmentDrafts(chatId) : [])
       })
     })
-  }, [chatId, cleanupAttachmentPreview, getAttachmentDrafts])
+  }, [chatId, cleanupAttachmentPreview, getAttachmentDrafts, setSelectedAttachmentId, setUploadError, setAttachments])
 
   useEffect(() => {
     const previousProjectId = previousProjectIdRef.current
@@ -1037,7 +1029,7 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
   // ------ Upload error handler for plugins ------
   const handleUploadError = useCallback((msg: string) => {
     setUploadError(msg)
-  }, [])
+  }, [setUploadError])
 
   // ------ Editor config (memoized; LexicalComposer reads config only once) ------
   const editorConfig = useMemo(

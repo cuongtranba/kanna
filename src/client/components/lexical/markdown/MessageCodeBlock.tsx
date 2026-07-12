@@ -1,21 +1,23 @@
-import { useCallback, useState } from "react"
+import { useCallback } from "react"
 import { Check, Copy } from "lucide-react"
 import { Button } from "../../ui/button"
 import { cn } from "../../../lib/utils"
 import { HighlightedCode } from "../../messages/HighlightedCode"
+import { MessageCodeBlockStore } from "./MessageCodeBlock.store"
 
 // Fenced code block for rendered message bodies: shiki syntax highlighting via
 // HighlightedCode plus a hover copy button. Mirrors the legacy PreBlock chrome
 // from messages/shared.tsx so the Lexical headless render matches the prior
 // react-markdown output.
-export function MessageCodeBlock({ source, lang }: { source: string; lang: string }) {
-  const [copied, setCopied] = useState(false)
+function MessageCodeBlockInner({ source, lang }: { source: string; lang: string }) {
+  const copied = MessageCodeBlockStore.useScopedStore((state) => state.copied)
+  const setCopied = MessageCodeBlockStore.useScopedStore((state) => state.setCopied)
 
   const handleCopy = useCallback(async () => {
     await navigator.clipboard.writeText(source)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
-  }, [source])
+  }, [source, setCopied])
 
   return (
     <div className="relative overflow-x-auto max-w-full min-w-0 no-code-highlight group/pre">
@@ -40,5 +42,13 @@ export function MessageCodeBlock({ source, lang }: { source: string; lang: strin
         {copied ? <Check className="h-4 w-4 text-success" /> : <Copy className="h-4 w-4" />}
       </Button>
     </div>
+  )
+}
+
+export function MessageCodeBlock({ source, lang }: { source: string; lang: string }) {
+  return (
+    <MessageCodeBlockStore.Provider init={undefined}>
+      <MessageCodeBlockInner source={source} lang={lang} />
+    </MessageCodeBlockStore.Provider>
   )
 }

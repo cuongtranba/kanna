@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react"
+import { useCallback, useMemo } from "react"
 import type { ReactNode, RefObject } from "react"
 import { $createTextNode, $insertNodes, TextNode } from "lexical"
 import type { LexicalEditor } from "lexical"
@@ -14,6 +14,7 @@ import type { SubagentSuggestion } from "../../../hooks/useSubagentSuggestions"
 import type { ProjectPath } from "../../../hooks/useMentionSuggestions"
 import { $createMentionNode } from "../nodes/MentionNode"
 import { cn } from "../../../lib/utils"
+import { useComposerStore } from "../../../stores/composerStore"
 
 // ---------------------------------------------------------------------------
 // Custom trigger: matches `@` at start of text or after whitespace, allows
@@ -83,7 +84,8 @@ export interface MentionTypeaheadPluginProps {
 export function MentionTypeaheadPlugin({
   projectId,
 }: MentionTypeaheadPluginProps): ReactNode {
-  const [query, setQuery] = useState<string | null>(null)
+  const query = useComposerStore((state) => state.mentionQuery)
+  const setQuery = useComposerStore((state) => state.setMentionQuery)
 
   // Custom trigger: allows `/` and `.` in path queries (e.g., `@agent/builder`
   // or `@src/file.ts`).  useBasicTypeaheadTriggerMatch treats `/` as
@@ -115,7 +117,7 @@ export function MentionTypeaheadPlugin({
 
   const onQueryChange = useCallback((matchingString: string | null) => {
     setQuery(matchingString)
-  }, [])
+  }, [setQuery])
 
   const onSelectOption = useCallback(
     (
