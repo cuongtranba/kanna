@@ -3964,6 +3964,21 @@ describe("AgentCoordinator.deliverSubagentToMain (notification-driven /clear)", 
 })
 
 describe("AgentCoordinator.setupLoop (mcp__kanna__setup_loop backing)", () => {
+  function makeSubagentRecord(over: { id: string; name: string }) {
+    return {
+      id: over.id,
+      name: over.name,
+      provider: "claude" as const,
+      model: "claude-opus-4-7",
+      modelOptions: { reasoningEffort: "medium", contextWindow: "1m" } as never,
+      systemPrompt: "test",
+      contextScope: "previous-assistant-reply" as const,
+      triggerMode: "auto" as const,
+      createdAt: 1,
+      updatedAt: 1,
+    }
+  }
+
   test("valid input: creates skeleton, /clears main, emits subagent_background auto-continue carrying the templated prompt", async () => {
     const projectRoot = await mkdtemp(path.join(tmpdir(), "kanna-setup-loop-"))
     try {
@@ -3977,6 +3992,7 @@ describe("AgentCoordinator.setupLoop (mcp__kanna__setup_loop backing)", () => {
         store: store as never,
         onStateChange: () => {},
         startClaudeSession: async () => { throw new Error("not needed") },
+        getSubagents: () => [makeSubagentRecord({ id: "sa-1", name: "alpha" })],
       })
 
       const result = await coordinator.setupLoop({
@@ -3985,6 +4001,7 @@ describe("AgentCoordinator.setupLoop (mcp__kanna__setup_loop backing)", () => {
           goal: "eslint --max-warnings=0 passes",
           verifyCommand: "bun run lint",
           chunkHint: "start with src/client",
+          subagentId: "sa-1",
         },
       })
 
@@ -4002,16 +4019,17 @@ describe("AgentCoordinator.setupLoop (mcp__kanna__setup_loop backing)", () => {
       expect(store.chat.sessionTokensByProvider.claude ?? null).toBeNull()
       expect(store.messages.filter((m) => m.kind === "context_cleared")).toHaveLength(1)
 
-      // Auto-continue emitted with the templated prompt
+      // Two auto-continue events: loop_armed (durable state) + the accepted schedule.
       const events = store.getAutoContinueEvents("chat-1")
-      expect(events).toHaveLength(1)
-      const ev = events[0]
-      if (ev.kind !== "auto_continue_accepted") throw new Error("expected accepted")
+      expect(events.filter((e) => e.kind === "loop_armed")).toHaveLength(1)
+      const ev = events.find((e) => e.kind === "auto_continue_accepted")
+      if (!ev || ev.kind !== "auto_continue_accepted") throw new Error("expected accepted")
       expect(ev.source).toBe("subagent_background")
       expect(ev.prompt).toContain("PROGRESS.md")
       expect(ev.prompt).toContain("bun run lint")
       expect(ev.prompt).toContain("delegate_subagent")
       expect(ev.prompt).toContain("GOAL MET")
+      expect(ev.prompt).toContain("sa-1")
     } finally {
       await rm(projectRoot, { recursive: true, force: true })
     }
@@ -4029,18 +4047,20 @@ describe("AgentCoordinator.setupLoop (mcp__kanna__setup_loop backing)", () => {
         store: store as never,
         onStateChange: () => {},
         startClaudeSession: async () => { throw new Error("not needed") },
+        getSubagents: () => [makeSubagentRecord({ id: "sa-1", name: "alpha" })],
       })
 
       const result = await coordinator.setupLoop({
         chatId: "chat-1",
-        input: { goal: "g", verifyCommand: "true" },
+        input: { goal: "g", verifyCommand: "true", subagentId: "sa-1" },
       })
       if (!result.ok) throw new Error(result.errors.join(", "))
       expect(result.created).toBe(false)
 
       const content = await Bun.file(abs).text()
       expect(content).toBe("user-authored content")
-      expect(store.getAutoContinueEvents("chat-1")).toHaveLength(1)
+      // loop_armed + auto_continue_accepted
+      expect(store.getAutoContinueEvents("chat-1")).toHaveLength(2)
     } finally {
       await rm(projectRoot, { recursive: true, force: true })
     }

@@ -359,15 +359,17 @@ describe("SubagentOrchestrator", () => {
 
   test("idle stall-watchdog: steady streamed activity keeps a run alive past runTimeoutMs", async () => {
     const alpha = makeSubagent({ id: "sa-a", name: "alpha" })
-    // 60ms idle window; provider streams a chunk every 40ms for a total of
-    // 120ms (2x the window). Each chunk must reset the watchdog, otherwise the
-    // run is killed at 60ms. Proves the timer is idle-based, not wall-clock.
-    const h = await setupHarness({ subagents: [alpha], runTimeoutMs: 60 })
+    // 200ms idle window; provider streams a chunk every 60ms for a total of
+    // ~300ms (1.5x the window). Each gap (60ms) is well under the window, so
+    // each chunk must reset the watchdog — otherwise the run is killed at
+    // 200ms. Proves the timer is idle-based, not wall-clock. Generous margins
+    // keep it non-flaky under CI load.
+    const h = await setupHarness({ subagents: [alpha], runTimeoutMs: 200 })
     h.mockProviderRun({
       authReady: async () => true,
       start: async (onChunk) => {
-        for (let i = 0; i < 3; i += 1) {
-          await new Promise((r) => setTimeout(r, 40))
+        for (let i = 0; i < 5; i += 1) {
+          await new Promise((r) => setTimeout(r, 60))
           onChunk(`chunk-${i}`)
         }
         return { text: "done" }

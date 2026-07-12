@@ -130,6 +130,7 @@ describe("buildAgentAppSettingsView", () => {
       "customMcpServers",
       "customModels",
       "globalPromptAppend",
+      "subagentRuntime",
     ])
   })
 })
