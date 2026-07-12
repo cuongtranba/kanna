@@ -67,7 +67,29 @@ export function SnippetExpandPlugin({ snippets }: SnippetExpandPluginProps): nul
         if (isTypeaheadMenuOpen()) return false
         if (snippets.length === 0) return false
 
-        let handled = false
+        // Decide synchronously whether a snippet will expand, then
+        // preventDefault BEFORE the mutation. `editor.update` defers its
+        // callback whenever a command is already dispatching: KEY_TAB_COMMAND
+        // fires inside an active update (`editor._updating === true`), so
+        // `updateEditor` queues our callback instead of running it inline
+        // (LexicalUpdates.ts). If we gated preventDefault on a flag the
+        // callback sets, the flag would still be false when we check it, Tab's
+        // default focus traversal would move focus to the next control (the
+        // Send button), and the caret would vanish from the composer even
+        // though the text expanded a tick later. A synchronous state read lets
+        // us preventDefault up front and keep focus in the editor.
+        const willExpand = editor.getEditorState().read(() => {
+          const selection = $getSelection()
+          if (!$isRangeSelection(selection) || !selection.isCollapsed()) return false
+          const node = selection.anchor.getNode()
+          if (!$isTextNode(node)) return false
+          const textBeforeCaret = node.getTextContent().slice(0, selection.anchor.offset)
+          return findSnippetForCaret(textBeforeCaret, snippets) !== null
+        })
+        if (!willExpand) return false
+
+        event.preventDefault()
+
         editor.update(() => {
           const selection = $getSelection()
           if (!$isRangeSelection(selection) || !selection.isCollapsed()) return
@@ -88,12 +110,10 @@ export function SnippetExpandPlugin({ snippets }: SnippetExpandPluginProps): nul
           const start = offset - token.length
           const parts = snippet.expansion.split("\n")
 
-          // Replace the shortcut token in place with the FIRST expansion line.
-          // Splicing straight to the replacement (instead of emptying the node
-          // then re-inserting) avoids leaving a transient empty TextNode: an
-          // empty node gets pruned during DOM reconciliation, which orphans the
-          // caret and leaves it invisible after Tab. `spliceText(..., true)`
-          // lands the caret at the end of the inserted first line.
+          // Splice the token straight to the first expansion line so the node
+          // is never emptied (an empty TextNode gets pruned during DOM
+          // reconciliation). `spliceText(..., true)` lands the caret at the end
+          // of the inserted first line.
           node.spliceText(start, token.length, parts[0] ?? "", true)
 
           if (parts.length > 1) {
@@ -105,15 +125,9 @@ export function SnippetExpandPlugin({ snippets }: SnippetExpandPluginProps): nul
               if (line.length > 0) afterSelection.insertText(line)
             }
           }
-
-          handled = true
         })
 
-        if (handled) {
-          event.preventDefault()
-          return true
-        }
-        return false
+        return true
       },
       COMMAND_PRIORITY_LOW,
     )

@@ -203,11 +203,17 @@ describe("SnippetExpandPlugin — expansion", () => {
 
 // ─── Caret placement (regression: invisible/lost caret) ───────────────────────
 //
-// The original algorithm spliced the shortcut token to "" and then re-inserted.
-// When the token WAS the whole text node, that left a transient empty TextNode
-// which Lexical prunes during DOM reconciliation, orphaning the caret so it
-// rendered invisible. These assertions guard that the caret always ends on an
-// ATTACHED TextNode at the end of the expansion, so the user can keep typing.
+// These assertions guard the MUTATION shape: the caret always ends on an
+// ATTACHED TextNode at the end of the expansion (spliceText never empties the
+// node, so nothing gets pruned). They run against a headless editor and drive
+// the expansion algorithm directly, so they can NOT observe the real cause of
+// the "invisible caret after Tab" report — that the KEY_TAB_COMMAND handler
+// must call event.preventDefault() SYNCHRONOUSLY. Because Lexical defers the
+// expand `editor.update` callback (KEY_TAB_COMMAND dispatches inside an active
+// update), gating preventDefault on the callback let Tab's default focus
+// traversal steal focus to the Send button, hiding the caret. The plugin now
+// decides via a synchronous state read and preventDefaults up front; that
+// ordering is verified in a real browser, not here.
 
 /** Reads the collapsed selection anchor after an expansion. */
 function anchorAfterExpand(editor: ReturnType<typeof buildEditor>): {
