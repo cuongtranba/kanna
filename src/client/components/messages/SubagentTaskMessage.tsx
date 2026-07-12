@@ -1,13 +1,14 @@
-import { useCallback, useState } from "react"
+import { useCallback } from "react"
 import { UserRound, ArrowUp, ChevronRight, Loader2 } from "lucide-react"
 import { cn } from "../../lib/utils"
 import { formatCompactDuration } from "../../lib/formatDuration"
 import { formatContextWindowTokens } from "../../lib/contextWindow"
 import { processTranscriptMessages } from "../../lib/parseTranscript"
 import type { AnyValue } from "../../../shared/errors"
-import type { HydratedTranscriptMessage, SubagentTaskResult, SubagentToolStats } from "../../../shared/types"
+import type { SubagentTaskResult, SubagentToolStats } from "../../../shared/types"
 import { SubagentEntryRow } from "./SubagentEntryRow"
 import { useSubagentTranscriptFetch } from "./subagent-fetch-context"
+import { SubagentTaskMessageStore } from "./SubagentTaskMessage.store"
 
 interface Props {
   subagentType?: string
@@ -58,7 +59,7 @@ function summarizeToolStats(stats: SubagentToolStats | undefined): string {
   return parts.join(" · ")
 }
 
-export function SubagentTaskMessage({ subagentType, result, isError, localPath }: Props) {
+function SubagentTaskMessageInner({ subagentType, result, isError, localPath }: Props) {
   const name = subagentType || "Agent"
   const tone = toneFor(result?.status, isError)
   const toolSummary = summarizeToolStats(result?.toolStats)
@@ -67,11 +68,16 @@ export function SubagentTaskMessage({ subagentType, result, isError, localPath }
   const agentId = result?.agentId
   const canExpand = Boolean(fetchTranscript && agentId)
 
-  const [expanded, setExpanded] = useState(false)
-  const [loading, setLoading] = useState(false)
-  const [loaded, setLoaded] = useState(false)
-  const [children, setChildren] = useState<HydratedTranscriptMessage[]>([])
-  const [error, setError] = useState<string | null>(null)
+  const expanded = SubagentTaskMessageStore.useScopedStore((s) => s.expanded)
+  const loading = SubagentTaskMessageStore.useScopedStore((s) => s.loading)
+  const loaded = SubagentTaskMessageStore.useScopedStore((s) => s.loaded)
+  const children = SubagentTaskMessageStore.useScopedStore((s) => s.children)
+  const error = SubagentTaskMessageStore.useScopedStore((s) => s.error)
+  const setExpanded = SubagentTaskMessageStore.useScopedStore((s) => s.setExpanded)
+  const setLoading = SubagentTaskMessageStore.useScopedStore((s) => s.setLoading)
+  const setLoaded = SubagentTaskMessageStore.useScopedStore((s) => s.setLoaded)
+  const setChildren = SubagentTaskMessageStore.useScopedStore((s) => s.setChildren)
+  const setError = SubagentTaskMessageStore.useScopedStore((s) => s.setError)
 
   const onToggle = useCallback(() => {
     if (!fetchTranscript || !agentId) return
@@ -88,7 +94,7 @@ export function SubagentTaskMessage({ subagentType, result, isError, localPath }
         .catch((err: AnyValue) => setError(err instanceof Error ? err.message : "Failed to load subagent transcript"))
         .finally(() => setLoading(false))
     }
-  }, [fetchTranscript, agentId, expanded, loaded, loading])
+  }, [fetchTranscript, agentId, expanded, loaded, loading, setExpanded, setLoading, setError, setChildren, setLoaded])
 
   const header = (
     <div className="flex items-center gap-2 min-w-0">
@@ -143,5 +149,13 @@ export function SubagentTaskMessage({ subagentType, result, isError, localPath }
         </div>
       )}
     </div>
+  )
+}
+
+export function SubagentTaskMessage({ subagentType, result, isError, localPath }: Props) {
+  return (
+    <SubagentTaskMessageStore.Provider init={undefined}>
+      <SubagentTaskMessageInner subagentType={subagentType} result={result} isError={isError} localPath={localPath} />
+    </SubagentTaskMessageStore.Provider>
   )
 }

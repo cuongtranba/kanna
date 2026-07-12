@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react"
+import { useEffect } from "react"
 import { useTheme } from "../../hooks/useTheme"
 import { log } from "../../../shared/log"
+import { HighlightedCodeStore } from "./HighlightedCode.store"
 
 const SIZE_CEILING = 200 * 1024
 
@@ -68,19 +69,13 @@ function stripShikiWrappers(html: string): string {
     .replace(CODE_CLOSE, "")
 }
 
-interface HighlightedState {
-  source: string
-  theme: string
-  lang: string
-  html: string
-}
-
-export function HighlightedCode({ source, lang }: { source: string; lang: string }) {
+function HighlightedCodeInner({ source, lang }: { source: string; lang: string }) {
   const { resolvedTheme } = useTheme()
   const shikiTheme = resolvedTheme === "dark" ? "github-dark" : "github-light"
   const resolvedLang = resolveLang(lang)
   const shouldHighlight = resolvedLang !== null && source.length <= SIZE_CEILING
-  const [highlighted, setHighlighted] = useState<HighlightedState | null>(null)
+  const highlighted = HighlightedCodeStore.useScopedStore((s) => s.highlighted)
+  const setHighlighted = HighlightedCodeStore.useScopedStore((s) => s.setHighlighted)
 
   useEffect(() => {
     if (!shouldHighlight || resolvedLang === null) return
@@ -98,7 +93,7 @@ export function HighlightedCode({ source, lang }: { source: string; lang: string
     return () => {
       cancelled = true
     }
-  }, [shouldHighlight, source, resolvedLang, shikiTheme])
+  }, [shouldHighlight, source, resolvedLang, shikiTheme, setHighlighted])
 
   const fallbackLang = resolvedLang ?? lang.toLowerCase()
   const isCurrent =
@@ -116,4 +111,12 @@ export function HighlightedCode({ source, lang }: { source: string; lang: string
     )
   }
   return <code className={`block text-xs whitespace-pre language-${fallbackLang}`}>{source}</code>
+}
+
+export function HighlightedCode({ source, lang }: { source: string; lang: string }) {
+  return (
+    <HighlightedCodeStore.Provider init={undefined}>
+      <HighlightedCodeInner source={source} lang={lang} />
+    </HighlightedCodeStore.Provider>
+  )
 }

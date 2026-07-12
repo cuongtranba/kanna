@@ -1,10 +1,11 @@
 import {
   createContext,
   useCallback,
-  useState,
   type ComponentPropsWithoutRef,
   type ReactNode,
 } from "react"
+import { ExpandableRowStore } from "./ExpandableRow.store"
+import { CopyStateStore } from "./CopyState.store"
 import { Button } from "../ui/button"
 import {
   ArrowDownToLine,
@@ -149,8 +150,9 @@ interface ExpandableRowProps {
   defaultExpanded?: boolean
 }
 
-export function ExpandableRow({ children, expandedContent, defaultExpanded = false }: ExpandableRowProps) {
-  const [expanded, setExpanded] = useState(defaultExpanded)
+function ExpandableRowInner({ children, expandedContent }: Omit<ExpandableRowProps, "defaultExpanded">) {
+  const expanded = ExpandableRowStore.useScopedStore((s) => s.expanded)
+  const setExpanded = ExpandableRowStore.useScopedStore((s) => s.setExpanded)
 
   return (
     <div className="flex flex-col w-full">
@@ -171,16 +173,24 @@ export function ExpandableRow({ children, expandedContent, defaultExpanded = fal
   )
 }
 
-// Code block for expanded content
-export function MetaCodeBlock({ label, children, copyText }: { label: ReactNode; children: ReactNode; copyText?: string }) {
-  const [copied, setCopied] = useState(false)
+export function ExpandableRow({ children, expandedContent, defaultExpanded = false }: ExpandableRowProps) {
+  return (
+    <ExpandableRowStore.Provider init={{ defaultExpanded }}>
+      <ExpandableRowInner expandedContent={expandedContent}>{children}</ExpandableRowInner>
+    </ExpandableRowStore.Provider>
+  )
+}
+
+function MetaCodeBlockInner({ label, children, copyText }: { label: ReactNode; children: ReactNode; copyText?: string }) {
+  const copied = CopyStateStore.useScopedStore((s) => s.copied)
+  const setCopied = CopyStateStore.useScopedStore((s) => s.setCopied)
   const textContent = copyText ?? extractText(children)
 
   const handleCopy = useCallback(async () => {
     await navigator.clipboard.writeText(textContent)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
-  }, [textContent])
+  }, [textContent, setCopied])
 
   return (
     <div>
@@ -204,6 +214,15 @@ export function MetaCodeBlock({ label, children, copyText }: { label: ReactNode;
         </Button>
       </div>
     </div>
+  )
+}
+
+// Code block for expanded content
+export function MetaCodeBlock({ label, children, copyText }: { label: ReactNode; children: ReactNode; copyText?: string }) {
+  return (
+    <CopyStateStore.Provider init={undefined}>
+      <MetaCodeBlockInner label={label} copyText={copyText}>{children}</MetaCodeBlockInner>
+    </CopyStateStore.Provider>
   )
 }
 
@@ -253,8 +272,9 @@ function extractText(node: ReactNode): string {
   return ""
 }
 
-function PreBlock({ children, ...props }: ComponentPropsWithoutRef<"pre">) {
-  const [copied, setCopied] = useState(false)
+function PreBlockInner({ children, ...props }: ComponentPropsWithoutRef<"pre">) {
+  const copied = CopyStateStore.useScopedStore((s) => s.copied)
+  const setCopied = CopyStateStore.useScopedStore((s) => s.setCopied)
   const textContent = extractText(children)
 
   const handleCopy = async () => {
@@ -280,6 +300,14 @@ function PreBlock({ children, ...props }: ComponentPropsWithoutRef<"pre">) {
         {copied ? <Check className="h-4 w-4 text-success" /> : <Copy className="h-4 w-4" />}
       </Button>
     </div>
+  )
+}
+
+function PreBlock({ children, ...props }: ComponentPropsWithoutRef<"pre">) {
+  return (
+    <CopyStateStore.Provider init={undefined}>
+      <PreBlockInner {...props}>{children}</PreBlockInner>
+    </CopyStateStore.Provider>
   )
 }
 

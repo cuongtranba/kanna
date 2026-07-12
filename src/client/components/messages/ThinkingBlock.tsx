@@ -1,14 +1,16 @@
-import { memo, useState } from "react"
+import { memo } from "react"
 import { Brain, ChevronRight } from "lucide-react"
 import { cn } from "../../lib/utils"
 import { renderMarkdownToReact } from "../lexical/markdown/lexicalToReact"
+import { ThinkingBlockStore } from "./ThinkingBlock.store"
 
 interface Props {
   content: string
 }
 
-export const ThinkingBlock = memo(({ content }: Props) => {
-  const [expanded, setExpanded] = useState(false)
+function ThinkingBlockInner({ content }: Props) {
+  const expanded = ThinkingBlockStore.useScopedStore((s) => s.expanded)
+  const setExpanded = ThinkingBlockStore.useScopedStore((s) => s.setExpanded)
   const trimmed = content.trim()
   if (trimmed.length === 0) return null
 
@@ -16,7 +18,7 @@ export const ThinkingBlock = memo(({ content }: Props) => {
     <div className="my-3 first:mt-0 last:mb-0">
       <button
         type="button"
-        onClick={() => setExpanded((v) => !v)}
+        onClick={() => setExpanded(!expanded)}
         aria-expanded={expanded}
         className="group/thinking flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
       >
@@ -36,4 +38,10 @@ export const ThinkingBlock = memo(({ content }: Props) => {
       )}
     </div>
   )
-})
+}
+
+export const ThinkingBlock = memo(({ content }: Props) => (
+  <ThinkingBlockStore.Provider init={undefined}>
+    <ThinkingBlockInner content={content} />
+  </ThinkingBlockStore.Provider>
+))

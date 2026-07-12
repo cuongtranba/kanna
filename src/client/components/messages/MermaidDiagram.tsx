@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useId, useState } from "react"
+import { useCallback, useEffect, useId } from "react"
 import { Check, Code2, Copy, Maximize2 } from "lucide-react"
 import { Button } from "../ui/button"
 import { cn } from "../../lib/utils"
 import { useTheme } from "../../hooks/useTheme"
 import { MermaidFallbackCodeBlock } from "./shared"
 import { MermaidZoomModal } from "./MermaidZoomModal"
+import { MermaidDiagramStore } from "./MermaidDiagram.store"
 
 interface MermaidModule {
   initialize: (config: {
@@ -24,22 +25,21 @@ function loadMermaid(): Promise<MermaidModule> {
   return mermaidPromise
 }
 
-type RenderState =
-  | { status: "loading" }
-  | { status: "ready"; svg: string }
-  | { status: "error" }
-
-export function MermaidDiagram({ source }: { source: string }) {
+function MermaidDiagramInner({ source }: { source: string }) {
   const { resolvedTheme } = useTheme()
   const mermaidTheme: "dark" | "default" = resolvedTheme === "dark" ? "dark" : "default"
-  const [state, setState] = useState<RenderState>({ status: "loading" })
+  const renderState = MermaidDiagramStore.useScopedStore((s) => s.renderState)
+  const showSource = MermaidDiagramStore.useScopedStore((s) => s.showSource)
+  const zoomOpen = MermaidDiagramStore.useScopedStore((s) => s.zoomOpen)
+  const copied = MermaidDiagramStore.useScopedStore((s) => s.copied)
+  const setRenderState = MermaidDiagramStore.useScopedStore((s) => s.setRenderState)
+  const setShowSource = MermaidDiagramStore.useScopedStore((s) => s.setShowSource)
+  const setZoomOpen = MermaidDiagramStore.useScopedStore((s) => s.setZoomOpen)
+  const setCopied = MermaidDiagramStore.useScopedStore((s) => s.setCopied)
   const rawId = useId()
   const domId = `mermaid-${rawId.replace(/[^a-zA-Z0-9_-]/g, "")}`
-  const [showSource, setShowSource] = useState(false)
-  const [zoomOpen, setZoomOpen] = useState(false)
-  const [copied, setCopied] = useState(false)
 
-  const closeZoom = useCallback(() => setZoomOpen(false), [])
+  const closeZoom = useCallback(() => setZoomOpen(false), [setZoomOpen])
 
   const handleCopy = async () => {
     await navigator.clipboard.writeText(source)
@@ -57,20 +57,20 @@ export function MermaidDiagram({ source }: { source: string }) {
           theme: mermaidTheme,
         })
         const { svg } = await mermaid.render(domId, source)
-        if (!cancelled) setState({ status: "ready", svg })
+        if (!cancelled) setRenderState({ status: "ready", svg })
       })
       .catch(() => {
-        if (!cancelled) setState({ status: "error" })
+        if (!cancelled) setRenderState({ status: "error" })
       })
     return () => {
       cancelled = true
     }
-  }, [source, mermaidTheme, domId])
+  }, [source, mermaidTheme, domId, setRenderState])
 
-  if (state.status === "error") {
+  if (renderState.status === "error") {
     return <MermaidFallbackCodeBlock source={source} />
   }
-  if (state.status === "loading") {
+  if (renderState.status === "loading") {
     return (
       <div className="relative group/mermaid">
         <MermaidFallbackCodeBlock source={source} />
@@ -84,7 +84,7 @@ export function MermaidDiagram({ source }: { source: string }) {
         <MermaidFallbackCodeBlock source={source} />
         <MermaidControls
           showSource={showSource}
-          onToggleSource={() => setShowSource((v) => !v)}
+          onToggleSource={() => setShowSource(!showSource)}
           onCopy={handleCopy}
           copied={copied}
           onZoom={undefined}
@@ -97,19 +97,27 @@ export function MermaidDiagram({ source }: { source: string }) {
     <div className="relative group/mermaid my-3">
       <div
         className="flex justify-center overflow-x-auto"
-        dangerouslySetInnerHTML={{ __html: state.svg }}
+        dangerouslySetInnerHTML={{ __html: renderState.svg }}
       />
       <MermaidControls
         showSource={showSource}
-        onToggleSource={() => setShowSource((v) => !v)}
+        onToggleSource={() => setShowSource(!showSource)}
         onCopy={handleCopy}
         copied={copied}
         onZoom={() => setZoomOpen(true)}
       />
       {zoomOpen && (
-        <MermaidZoomModal svg={state.svg} onClose={closeZoom} />
+        <MermaidZoomModal svg={renderState.svg} onClose={closeZoom} />
       )}
     </div>
+  )
+}
+
+export function MermaidDiagram({ source }: { source: string }) {
+  return (
+    <MermaidDiagramStore.Provider init={undefined}>
+      <MermaidDiagramInner source={source} />
+    </MermaidDiagramStore.Provider>
   )
 }
 
