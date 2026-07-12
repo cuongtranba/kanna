@@ -45,4 +45,4 @@
 - (none yet)
 
 ## Next chunk
-T1 App state hub: migrate `src/client/app/useKannaState.ts` (30 call sites) off useState into zustand store(s) in `src/client/stores/`. Follow ALL Worker rules above, satisfy all 6 acceptance criteria, update this file, then terminate.
+T2 ChatPage: migrate `src/client/app/ChatPage/index.tsx` (8), `ChatTranscriptViewport.tsx` (2), `useChatPageSidebarActions.ts` (2), `src/client/app/useTerminalToggleAnimation.ts` (1) off useState. Follow ALL Worker rules above, satisfy all 6 acceptance criteria, update this file, then terminate.
