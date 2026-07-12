@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type KeyboardEvent, type ReactNode } from "react"
+import { useCallback, useEffect, useMemo, type KeyboardEvent, type ReactNode } from "react"
 import {
   BookText,
   Bot,
@@ -105,16 +105,12 @@ import { PushNotificationsSection } from "../components/settings/PushNotificatio
 import {
   clearStoredPushDeviceId,
   detectPushSupport,
-  getStoredPushDeviceId,
   setStoredPushDeviceId,
   subscribePush,
   unsubscribePush,
-  type PushPermissionState,
 } from "./pushClient"
-import {
-  createLlmProviderDraftForSelection,
-  type LlmProviderDraft,
-} from "./llmProviderDraft"
+import { createLlmProviderDraftForSelection } from "./llmProviderDraft"
+import { useSettingsPageStore, type GithubRelease, type ChangelogStatus } from "../stores/settingsPageStore"
 
 const sidebarItems = [
   {
@@ -222,19 +218,6 @@ const QUICK_RESPONSE_PROVIDER_OPTIONS: Array<{ value: LlmProviderKind; label: st
 
 const GITHUB_RELEASES_URL = "https://api.github.com/repos/cuongtranba/kanna/releases"
 const CHANGELOG_CACHE_TTL_MS = 5 * 60 * 1000
-
-type GithubRelease = {
-  id: number
-  name: string | null
-  tag_name: string
-  html_url: string
-  published_at: string | null
-  body: string | null
-  prerelease: boolean
-  draft: boolean
-}
-
-type ChangelogStatus = "idle" | "loading" | "success" | "error"
 
 type ChangelogCache = {
   expiresAt: number
@@ -359,7 +342,8 @@ export function ChangelogSection({
   onCheckForUpdates: () => void
   onForceReload: () => Promise<void> | void
 }) {
-  const [pendingAction, setPendingAction] = useState<string | null>(null)
+  const pendingAction = useSettingsPageStore((s) => s.changelogPendingAction)
+  const setPendingAction = useSettingsPageStore((s) => s.setChangelogPendingAction)
   const latestVersion = updateSnapshot?.latestVersion ?? releases[0]?.tag_name ?? "Unknown"
   const currentVersionLabel = updateSnapshot?.currentVersion ?? currentVersion
   const isChecking = updateSnapshot?.status === "checking"
@@ -376,7 +360,7 @@ export function ChangelogSection({
     } finally {
       setPendingAction(null)
     }
-  }, [onInstallUpdate])
+  }, [onInstallUpdate, setPendingAction])
 
   const handleRedeployClick = useCallback(async () => {
     setPendingAction(REDEPLOY_PENDING_KEY)
@@ -385,7 +369,7 @@ export function ChangelogSection({
     } finally {
       setPendingAction(null)
     }
-  }, [onForceReload])
+  }, [onForceReload, setPendingAction])
 
   const redeployPending = pendingAction === REDEPLOY_PENDING_KEY || snapshotUpdating
 
@@ -720,18 +704,34 @@ export function SkillsSection({
 }) {
   const socket = state.socket
   const connectionStatus = state.connectionStatus
-  const [query, setQuery] = useState("")
-  const [results, setResults] = useState<SkillSearchResult[]>([])
-  const [searchLoading, setSearchLoading] = useState(false)
-  const [searchError, setSearchError] = useState<string | null>(null)
-  const [installedSkills, setInstalledSkills] = useState<InstalledSkillSummary[]>([])
-  const [installedSkillIds, setInstalledSkillIds] = useState<Set<string>>(() => new Set())
-  const [installedLoading, setInstalledLoading] = useState(false)
-  const [installedError, setInstalledError] = useState<string | null>(null)
-  const [operationError, setOperationError] = useState<string | null>(null)
-  const [installingSkillId, setInstallingSkillId] = useState<string | null>(null)
-  const [uninstallingSkillId, setUninstallingSkillId] = useState<string | null>(null)
-  const [installMessages, setInstallMessages] = useState<Record<string, string>>({})
+  const query = useSettingsPageStore((s) => s.skillQuery)
+  const setQuery = useSettingsPageStore((s) => s.setSkillQuery)
+  const results = useSettingsPageStore((s) => s.skillResults)
+  const setResults = useSettingsPageStore((s) => s.setSkillResults)
+  const searchLoading = useSettingsPageStore((s) => s.skillSearchLoading)
+  const setSearchLoading = useSettingsPageStore((s) => s.setSkillSearchLoading)
+  const searchError = useSettingsPageStore((s) => s.skillSearchError)
+  const setSearchError = useSettingsPageStore((s) => s.setSkillSearchError)
+  const installedSkills = useSettingsPageStore((s) => s.installedSkills)
+  const setInstalledSkills = useSettingsPageStore((s) => s.setInstalledSkills)
+  const installedSkillIds = useSettingsPageStore((s) => s.installedSkillIds)
+  const setInstalledSkillIds = useSettingsPageStore((s) => s.setInstalledSkillIds)
+  const addInstalledSkillId = useSettingsPageStore((s) => s.addInstalledSkillId)
+  const removeInstalledSkillId = useSettingsPageStore((s) => s.removeInstalledSkillId)
+  const installedLoading = useSettingsPageStore((s) => s.installedLoading)
+  const setInstalledLoading = useSettingsPageStore((s) => s.setInstalledLoading)
+  const installedError = useSettingsPageStore((s) => s.installedError)
+  const setInstalledError = useSettingsPageStore((s) => s.setInstalledError)
+  const operationError = useSettingsPageStore((s) => s.skillOperationError)
+  const setOperationError = useSettingsPageStore((s) => s.setSkillOperationError)
+  const installingSkillId = useSettingsPageStore((s) => s.installingSkillId)
+  const setInstallingSkillId = useSettingsPageStore((s) => s.setInstallingSkillId)
+  const uninstallingSkillId = useSettingsPageStore((s) => s.uninstallingSkillId)
+  const setUninstallingSkillId = useSettingsPageStore((s) => s.setUninstallingSkillId)
+  const installMessages = useSettingsPageStore((s) => s.installMessages)
+  const setInstallMessage = useSettingsPageStore((s) => s.setInstallMessage)
+  const clearInstallMessage = useSettingsPageStore((s) => s.clearInstallMessage)
+  const clearInstallMessagesForSkill = useSettingsPageStore((s) => s.clearInstallMessagesForSkill)
 
   const loadInstalledSkills = useCallback(async () => {
     if (connectionStatus !== "connected") {
@@ -755,17 +755,15 @@ export function SkillsSection({
     } finally {
       setInstalledLoading(false)
     }
-  }, [connectionStatus, socket])
+  }, [connectionStatus, socket, setInstalledSkills, setInstalledSkillIds, setInstalledError, setInstalledLoading])
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadInstalledSkills()
   }, [connectionStatus, loadInstalledSkills, socket])
 
   useEffect(() => {
     const normalizedQuery = query.trim()
     if (normalizedQuery.length < 2) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setResults([])
       setSearchError(null)
       setSearchLoading(false)
@@ -808,7 +806,7 @@ export function SkillsSection({
       cancelled = true
       window.clearTimeout(timeout)
     }
-  }, [connectionStatus, query, socket])
+  }, [connectionStatus, query, socket, setResults, setSearchError, setSearchLoading])
 
   async function installSkill(skill: SkillSearchResult) {
     if (connectionStatus !== "connected") {
@@ -819,21 +817,14 @@ export function SkillsSection({
     try {
       setInstallingSkillId(skill.id)
       setOperationError(null)
-      setInstallMessages((current) => {
-        const next = { ...current }
-        delete next[skill.id]
-        return next
-      })
+      clearInstallMessage(skill.id)
       await socket.command<SkillInstallResult>({
         type: "skills.install",
         source: skill.source,
         skillId: skill.skillId,
       })
-      setInstalledSkillIds((current) => new Set(current).add(skill.skillId))
-      setInstallMessages((current) => ({
-        ...current,
-        [skill.id]: "Installed globally",
-      }))
+      addInstalledSkillId(skill.skillId)
+      setInstallMessage(skill.id, "Installed globally")
       void loadInstalledSkills()
     } catch (error) {
       setOperationError(error instanceof Error ? error.message : "Install failed.")
@@ -855,21 +846,9 @@ export function SkillsSection({
         type: "skills.uninstall",
         skillId: skill.name,
       })
-      setInstalledSkills((current) => current.filter((installedSkill) => installedSkill.name !== skill.name))
-      setInstalledSkillIds((current) => {
-        const next = new Set(current)
-        next.delete(skill.name)
-        return next
-      })
-      setInstallMessages((current) => {
-        const next = { ...current }
-        for (const key of Object.keys(next)) {
-          if (key.endsWith(`/${skill.name}`) || key === skill.name) {
-            delete next[key]
-          }
-        }
-        return next
-      })
+      setInstalledSkills(installedSkills.filter((installedSkill) => installedSkill.name !== skill.name))
+      removeInstalledSkillId(skill.name)
+      clearInstallMessagesForSkill(skill.name)
       void loadInstalledSkills()
     } catch (error) {
       setOperationError(error instanceof Error ? error.message : "Uninstall failed.")
@@ -1016,18 +995,25 @@ export function CloudflareTunnelSectionTitle() {
 
 export function GlobalInstructionsSection({ state }: { state: KannaState }) {
   const persisted = state.appSettings?.globalPromptAppend ?? ""
-  const [draft, setDraft] = useState(persisted)
-  const [persistedAtMount, setPersistedAtMount] = useState(persisted)
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const draft = useSettingsPageStore((s) => s.globalInstructionsDraft)
+  const setDraft = useSettingsPageStore((s) => s.setGlobalInstructionsDraft)
+  const persistedAtMount = useSettingsPageStore((s) => s.globalInstructionsPersistedAtMount)
+  const saving = useSettingsPageStore((s) => s.globalInstructionsSaving)
+  const setSaving = useSettingsPageStore((s) => s.setGlobalInstructionsSaving)
+  const error = useSettingsPageStore((s) => s.globalInstructionsError)
+  const setError = useSettingsPageStore((s) => s.setGlobalInstructionsError)
 
-  if (persisted !== persistedAtMount) {
-    // External update (initial hydration, watcher reload, save round-trip) —
-    // resync the draft. Unsaved local edits intentionally lose to the latest
-    // server value to match every other section in this page.
-    setPersistedAtMount(persisted)
-    setDraft(persisted)
-  }
+  useEffect(() => {
+    if (persisted !== persistedAtMount) {
+      // External update (initial hydration, watcher reload, save round-trip) —
+      // resync the draft. Unsaved local edits intentionally lose to the latest
+      // server value to match every other section in this page.
+      useSettingsPageStore.setState({
+        globalInstructionsPersistedAtMount: persisted,
+        globalInstructionsDraft: persisted,
+      })
+    }
+  }, [persisted, persistedAtMount])
 
   const trimmed = draft.replace(/\s+$/u, "")
   const overCap = trimmed.length > GLOBAL_PROMPT_APPEND_MAX_CHARS
@@ -1045,7 +1031,7 @@ export function GlobalInstructionsSection({ state }: { state: KannaState }) {
     } finally {
       setSaving(false)
     }
-  }, [saveDisabled, state, trimmed])
+  }, [saveDisabled, state, trimmed, setError, setSaving])
 
   let saveLabel: string
   if (saving) {
@@ -1105,11 +1091,16 @@ export function SettingsPage() {
   const { sectionId } = useParams<{ sectionId: string }>()
   const state = useOutletContext<KannaState>()
   const { theme, setTheme } = useTheme()
-  const [changelogStatus, setChangelogStatus] = useState<ChangelogStatus>("idle")
-  const [signingOut, setSigningOut] = useState(false)
-  const [authEnabled, setAuthEnabled] = useState(false)
-  const [releases, setReleases] = useState<GithubRelease[]>([])
-  const [changelogError, setChangelogError] = useState<string | null>(null)
+  const changelogStatus = useSettingsPageStore((s) => s.changelogStatus)
+  const setChangelogStatus = useSettingsPageStore((s) => s.setChangelogStatus)
+  const signingOut = useSettingsPageStore((s) => s.signingOut)
+  const setSigningOut = useSettingsPageStore((s) => s.setSigningOut)
+  const authEnabled = useSettingsPageStore((s) => s.authEnabled)
+  const setAuthEnabled = useSettingsPageStore((s) => s.setAuthEnabled)
+  const releases = useSettingsPageStore((s) => s.releases)
+  const setReleases = useSettingsPageStore((s) => s.setReleases)
+  const changelogError = useSettingsPageStore((s) => s.changelogError)
+  const setChangelogError = useSettingsPageStore((s) => s.setChangelogError)
   const selectedPage = resolveSettingsSectionId(sectionId) ?? "general"
   const isConnecting = state.connectionStatus === "connecting" || !state.localProjectsReady
   const machineName = state.localProjects?.machine.displayName ?? "Unavailable"
@@ -1142,40 +1133,53 @@ export function SettingsPage() {
   const mergedProviders = useMemo(() => mergeCustomModels([...PROVIDERS], customModels), [customModels])
   const resolvedKeybindings = useMemo(() => getResolvedKeybindings(keybindings), [keybindings])
   const keybindingsFilePathDisplay = resolvedKeybindings.filePathDisplay || getKeybindingsFilePathDisplay()
-  const [pushPermissionState, setPushPermissionState] = useState<PushPermissionState>(() => detectPushSupport().state)
-  const [pushDeviceId, setPushDeviceId] = useState<string | null>(() => getStoredPushDeviceId())
-  const [scrollbackDraft, setScrollbackDraft] = useState(String(scrollbackLines))
-  const [minColumnWidthDraft, setMinColumnWidthDraft] = useState(String(minColumnWidth))
+  const pushPermissionState = useSettingsPageStore((s) => s.pushPermissionState)
+  const setPushPermissionState = useSettingsPageStore((s) => s.setPushPermissionState)
+  const pushDeviceId = useSettingsPageStore((s) => s.pushDeviceId)
+  const setPushDeviceId = useSettingsPageStore((s) => s.setPushDeviceId)
+  const scrollbackDraft = useSettingsPageStore((s) => s.scrollbackDraft)
+  const setScrollbackDraft = useSettingsPageStore((s) => s.setScrollbackDraft)
+  const minColumnWidthDraft = useSettingsPageStore((s) => s.minColumnWidthDraft)
+  const setMinColumnWidthDraft = useSettingsPageStore((s) => s.setMinColumnWidthDraft)
   const uploadMaxFileSizeMb = appSettings?.uploads.maxFileSizeMb ?? UPLOAD_DEFAULTS.maxFileSizeMb
-  const [uploadMaxFileSizeDraft, setUploadMaxFileSizeDraft] = useState(String(uploadMaxFileSizeMb))
+  const uploadMaxFileSizeDraft = useSettingsPageStore((s) => s.uploadMaxFileSizeDraft)
+  const setUploadMaxFileSizeDraft = useSettingsPageStore((s) => s.setUploadMaxFileSizeDraft)
   const claudeDriverPreference = appSettings?.claudeDriver.preference ?? CLAUDE_DRIVER_DEFAULTS.preference
   const claudeIdleMinutes = Math.round(
     (appSettings?.claudeDriver.lifecycle.idleTimeoutMs ?? CLAUDE_PTY_LIFECYCLE_DEFAULTS.idleTimeoutMs) / 60_000,
   )
   const claudeMaxConcurrent = appSettings?.claudeDriver.lifecycle.maxConcurrent ?? CLAUDE_PTY_LIFECYCLE_DEFAULTS.maxConcurrent
-  const [claudeIdleMinutesDraft, setClaudeIdleMinutesDraft] = useState(String(claudeIdleMinutes))
-  const [claudeMaxConcurrentDraft, setClaudeMaxConcurrentDraft] = useState(String(claudeMaxConcurrent))
-  const [editorCommandDraft, setEditorCommandDraft] = useState(editorCommandTemplate)
-  const [keybindingDrafts, setKeybindingDrafts] = useState<Record<string, string>>({})
-  const [keybindingsError, setKeybindingsError] = useState<string | null>(null)
-  const [appSettingsError, setAppSettingsError] = useState<string | null>(null)
-  const [analyticsDialogOpen, setAnalyticsDialogOpen] = useState(false)
-  const [tunnelError, setTunnelError] = useState<string | null>(null)
-  const [cloudflaredPathDraft, setCloudflaredPathDraft] = useState(
-    appSettings?.cloudflareTunnel.cloudflaredPath ?? CLOUDFLARE_TUNNEL_DEFAULTS.cloudflaredPath
-  )
+  const claudeIdleMinutesDraft = useSettingsPageStore((s) => s.claudeIdleMinutesDraft)
+  const setClaudeIdleMinutesDraft = useSettingsPageStore((s) => s.setClaudeIdleMinutesDraft)
+  const claudeMaxConcurrentDraft = useSettingsPageStore((s) => s.claudeMaxConcurrentDraft)
+  const setClaudeMaxConcurrentDraft = useSettingsPageStore((s) => s.setClaudeMaxConcurrentDraft)
+  const editorCommandDraft = useSettingsPageStore((s) => s.editorCommandDraft)
+  const setEditorCommandDraft = useSettingsPageStore((s) => s.setEditorCommandDraft)
+  const keybindingDrafts = useSettingsPageStore((s) => s.keybindingDrafts)
+  const setKeybindingDrafts = useSettingsPageStore((s) => s.setKeybindingDrafts)
+  const keybindingsError = useSettingsPageStore((s) => s.keybindingsError)
+  const setKeybindingsError = useSettingsPageStore((s) => s.setKeybindingsError)
+  const appSettingsError = useSettingsPageStore((s) => s.appSettingsError)
+  const setAppSettingsError = useSettingsPageStore((s) => s.setAppSettingsError)
+  const analyticsDialogOpen = useSettingsPageStore((s) => s.analyticsDialogOpen)
+  const setAnalyticsDialogOpen = useSettingsPageStore((s) => s.setAnalyticsDialogOpen)
+  const tunnelError = useSettingsPageStore((s) => s.tunnelError)
+  const setTunnelError = useSettingsPageStore((s) => s.setTunnelError)
+  const cloudflaredPathDraft = useSettingsPageStore((s) => s.cloudflaredPathDraft)
+  const setCloudflaredPathDraft = useSettingsPageStore((s) => s.setCloudflaredPathDraft)
   const shareDefaultTtlHours = appSettings?.shareDefaultTtlHours ?? 24
-  const [shareDefaultTtlDraft, setShareDefaultTtlDraft] = useState(String(shareDefaultTtlHours))
-  const [llmProviderDraft, setLlmProviderDraft] = useState<LlmProviderDraft>({
-    provider: "openai",
-    apiKey: "",
-    model: "",
-    baseUrl: "",
-  })
-  const [llmProviderError, setLlmProviderError] = useState<string | null>(null)
-  const [llmValidationStatus, setLlmValidationStatus] = useState<"idle" | "valid" | "invalid">("idle")
-  const [llmValidationError, setLlmValidationError] = useState<unknown | null>(null)
-  const [llmValidationDialogOpen, setLlmValidationDialogOpen] = useState(false)
+  const shareDefaultTtlDraft = useSettingsPageStore((s) => s.shareDefaultTtlDraft)
+  const setShareDefaultTtlDraft = useSettingsPageStore((s) => s.setShareDefaultTtlDraft)
+  const llmProviderDraft = useSettingsPageStore((s) => s.llmProviderDraft)
+  const setLlmProviderDraft = useSettingsPageStore((s) => s.setLlmProviderDraft)
+  const llmProviderError = useSettingsPageStore((s) => s.llmProviderError)
+  const setLlmProviderError = useSettingsPageStore((s) => s.setLlmProviderError)
+  const llmValidationStatus = useSettingsPageStore((s) => s.llmValidationStatus)
+  const setLlmValidationStatus = useSettingsPageStore((s) => s.setLlmValidationStatus)
+  const llmValidationError = useSettingsPageStore((s) => s.llmValidationError)
+  const setLlmValidationError = useSettingsPageStore((s) => s.setLlmValidationError)
+  const llmValidationDialogOpen = useSettingsPageStore((s) => s.llmValidationDialogOpen)
+  const setLlmValidationDialogOpen = useSettingsPageStore((s) => s.setLlmValidationDialogOpen)
   const updateSnapshot = state.updateSnapshot
   const handleWriteAppSettings = state.handleWriteAppSettings
   const handleWriteCloudflareTunnel = state.handleWriteCloudflareTunnel
@@ -1202,67 +1206,58 @@ export function SettingsPage() {
   }
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setScrollbackDraft(String(scrollbackLines))
-  }, [scrollbackLines])
+  }, [scrollbackLines, setScrollbackDraft])
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMinColumnWidthDraft(String(minColumnWidth))
-  }, [minColumnWidth])
+  }, [minColumnWidth, setMinColumnWidthDraft])
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setUploadMaxFileSizeDraft(String(uploadMaxFileSizeMb))
-  }, [uploadMaxFileSizeMb])
+  }, [uploadMaxFileSizeMb, setUploadMaxFileSizeDraft])
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setClaudeIdleMinutesDraft(String(claudeIdleMinutes))
-  }, [claudeIdleMinutes])
+  }, [claudeIdleMinutes, setClaudeIdleMinutesDraft])
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setClaudeMaxConcurrentDraft(String(claudeMaxConcurrent))
-  }, [claudeMaxConcurrent])
+  }, [claudeMaxConcurrent, setClaudeMaxConcurrentDraft])
 
   useEffect(() => {
     const handler = () => setPushPermissionState(detectPushSupport().state)
     window.addEventListener("focus", handler)
     return () => window.removeEventListener("focus", handler)
-  }, [])
+  }, [setPushPermissionState])
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setEditorCommandDraft(editorCommandTemplate)
-  }, [editorCommandTemplate])
+  }, [editorCommandTemplate, setEditorCommandDraft])
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setKeybindingDrafts(Object.fromEntries(
       KEYBINDING_ACTIONS.map((action) => [
         action,
         formatKeybindingInput(resolvedKeybindings.bindings[action]),
       ])
     ))
-  }, [resolvedKeybindings])
+  }, [resolvedKeybindings, setKeybindingDrafts])
 
   useEffect(() => {
     if (!llmProvider) return
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLlmProviderDraft({
       provider: llmProvider.provider,
       apiKey: llmProvider.apiKey,
       model: llmProvider.model,
       baseUrl: llmProvider.baseUrl,
     })
-  }, [llmProvider])
+  }, [llmProvider, setLlmProviderDraft])
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLlmValidationStatus("idle")
     setLlmValidationError(null)
-  }, [llmProviderDraft.provider, llmProviderDraft.apiKey, llmProviderDraft.model, llmProviderDraft.baseUrl])
+  }, [llmProviderDraft.provider, llmProviderDraft.apiKey, llmProviderDraft.model, llmProviderDraft.baseUrl, setLlmValidationStatus, setLlmValidationError])
 
   useEffect(() => {
     if (!sectionId) return
@@ -1272,9 +1267,8 @@ export function SettingsPage() {
 
   useEffect(() => {
     if (!appSettings) return
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setCloudflaredPathDraft(appSettings.cloudflareTunnel.cloudflaredPath)
-  }, [appSettings])
+  }, [appSettings, setCloudflaredPathDraft])
 
   useEffect(() => {
     let cancelled = false
@@ -1303,7 +1297,7 @@ export function SettingsPage() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [setAuthEnabled])
 
   useEffect(() => {
     if (selectedPage !== "providers" || isConnecting) return
@@ -1314,7 +1308,6 @@ export function SettingsPage() {
     if (selectedPage !== "changelog" || isConnecting) return
 
     let cancelled = false
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setChangelogStatus("loading")
     setChangelogError(null)
 
@@ -1333,7 +1326,7 @@ export function SettingsPage() {
     return () => {
       cancelled = true
     }
-  }, [isConnecting, selectedPage])
+  }, [isConnecting, selectedPage, setChangelogStatus, setChangelogError, setReleases])
 
   function commitScrollback() {
     const nextValue = Number(scrollbackDraft)
@@ -2439,7 +2432,7 @@ export function SettingsPage() {
                         {llmProviderDraft.provider === "custom" ? (
                           <Input
                             value={llmProviderDraft.baseUrl}
-                            onChange={(event) => setLlmProviderDraft((current) => ({ ...current, baseUrl: event.target.value }))}
+                            onChange={(event) => setLlmProviderDraft({ ...llmProviderDraft, baseUrl: event.target.value })}
                             onBlur={() => void commitLlmProvider()}
                             onKeyDown={(event) => handleTextInputKeyDown(event, () => void commitLlmProvider())}
                             placeholder="https://your-provider.example/v1"
@@ -2448,14 +2441,14 @@ export function SettingsPage() {
                         <Input
                           type="password"
                           value={llmProviderDraft.apiKey}
-                          onChange={(event) => setLlmProviderDraft((current) => ({ ...current, apiKey: event.target.value }))}
+                          onChange={(event) => setLlmProviderDraft({ ...llmProviderDraft, apiKey: event.target.value })}
                           onBlur={() => void commitLlmProvider()}
                           onKeyDown={(event) => handleTextInputKeyDown(event, () => void commitLlmProvider())}
                           placeholder="API key"
                         />
                         <Input
                           value={llmProviderDraft.model}
-                          onChange={(event) => setLlmProviderDraft((current) => ({ ...current, model: event.target.value }))}
+                          onChange={(event) => setLlmProviderDraft({ ...llmProviderDraft, model: event.target.value })}
                           onBlur={() => void commitLlmProvider()}
                           onKeyDown={(event) => handleTextInputKeyDown(event, () => void commitLlmProvider())}
                           placeholder="Model id"
@@ -2514,7 +2507,7 @@ export function SettingsPage() {
                               value={currentValue}
                               onChange={(event) => {
                                 const nextValue = event.target.value
-                                setKeybindingDrafts((current) => ({ ...current, [action]: nextValue }))
+                                setKeybindingDrafts({ ...keybindingDrafts, [action]: nextValue })
                               }}
                               onBlur={() => {
                                 void commitKeybindings()
