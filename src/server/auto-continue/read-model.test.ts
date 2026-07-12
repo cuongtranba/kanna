@@ -1,6 +1,45 @@
 import { describe, expect, test } from "bun:test"
-import { deriveChatSchedules } from "./read-model"
+import { deriveChatSchedules, deriveLoopState } from "./read-model"
 import type { AutoContinueEvent } from "./events"
+
+function armed(chatId: string, subagentId: string, prompt: string, at = 1_000): AutoContinueEvent {
+  return { v: 3, kind: "loop_armed", timestamp: at, chatId, scheduleId: `arm-${at}`, subagentId, prompt }
+}
+
+function disarmed(chatId: string, at = 2_000): AutoContinueEvent {
+  return { v: 3, kind: "loop_disarmed", timestamp: at, chatId, scheduleId: `dis-${at}`, reason: "goal_met" }
+}
+
+describe("deriveLoopState", () => {
+  test("no loop events → null", () => {
+    expect(deriveLoopState([], "c1")).toBeNull()
+  })
+
+  test("loop_armed → armed state with subagentId + prompt", () => {
+    const state = deriveLoopState([armed("c1", "sub-1", "LOOP PROMPT")], "c1")
+    expect(state).toEqual({ subagentId: "sub-1", prompt: "LOOP PROMPT" })
+  })
+
+  test("loop_disarmed after loop_armed → null", () => {
+    const state = deriveLoopState([armed("c1", "sub-1", "P"), disarmed("c1")], "c1")
+    expect(state).toBeNull()
+  })
+
+  test("re-arm after disarm → latest armed wins", () => {
+    const state = deriveLoopState([
+      armed("c1", "sub-1", "P1", 1_000),
+      disarmed("c1", 2_000),
+      armed("c1", "sub-2", "P2", 3_000),
+    ], "c1")
+    expect(state).toEqual({ subagentId: "sub-2", prompt: "P2" })
+  })
+
+  test("armed state is per-chat", () => {
+    const events = [armed("c1", "sub-1", "P1"), armed("c2", "sub-2", "P2")]
+    expect(deriveLoopState(events, "c1")?.subagentId).toBe("sub-1")
+    expect(deriveLoopState(events, "c2")?.subagentId).toBe("sub-2")
+  })
+})
 
 function proposed(chatId: string, scheduleId: string, at = 1_000): AutoContinueEvent {
   return {

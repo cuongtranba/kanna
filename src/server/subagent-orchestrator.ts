@@ -14,11 +14,13 @@ import { parseMentions, type ParsedMention } from "./mention-parser"
 
 class PausableTimeout {
   private remainingMs: number
+  private readonly totalMs: number
   private deadline: number | null = null
   private handle: ReturnType<typeof setTimeout> | null = null
   private onFire: () => void
 
   constructor(totalMs: number, onFire: () => void) {
+    this.totalMs = totalMs
     this.remainingMs = totalMs
     this.onFire = onFire
   }
@@ -39,6 +41,20 @@ class PausableTimeout {
   resume(now: number = Date.now()): void {
     if (this.handle != null) return
     this.start(now)
+  }
+
+  /**
+   * Re-arm the full window from now. Makes this a stall/idle watchdog rather
+   * than a total wall-clock deadline: each streamed subagent event calls this
+   * so only a genuinely hung run (no activity for the whole window) fires.
+   * No-op while paused (an interactive approval gate holds the clock).
+   */
+  reset(now: number = Date.now()): void {
+    if (this.handle == null) return
+    this.remainingMs = this.totalMs
+    clearTimeout(this.handle)
+    this.deadline = now + this.remainingMs
+    this.handle = setTimeout(this.onFire, this.remainingMs)
   }
 
   clear(): void {
@@ -79,6 +95,19 @@ export interface ProviderRunStart {
   model: string
   systemPrompt: string
   preamble: string | null
+  /**
+   * Per-subagent agentic-turn bound (Claude Code frontmatter maxTurns analog).
+   * Undefined = unbounded.
+   */
+  maxTurns?: number
+  /**
+   * True when the provider enforces `maxTurns` natively (claude via SDK
+   * query()). When false and `maxTurns` is set, the orchestrator applies a
+   * host-side backstop: the run is aborted once its tool_call entry count
+   * exceeds the bound. Native enforcement is graceful (output kept); the
+   * backstop is a hard abort — PTY/Codex only.
+   */
+  nativeMaxTurns?: boolean
   /**
    * Run the subagent against its provider.
    *  - `onChunk(text)`: every assistant_text fragment, in order. Used to
@@ -193,9 +222,13 @@ export type DelegationOutcome =
 export type BackgroundRunOutcome =
   | { status: "completed"; runId: string; text: string }
   | { status: "failed"; runId: string; errorCode: SubagentErrorCode; errorMessage: string }
-// Subagents now run with full toolset (Bash, Read, etc) so single turns may
-// take minutes. 600s matches the default Bash tool wall-clock cap. Tests still
-// override via SubagentOrchestratorDeps.runTimeoutMs.
+// Stall/idle window, NOT a total wall-clock deadline: the watchdog resets on
+// every streamed event (see PausableTimeout.reset + the onChunk/onEntry
+// hooks), so it fires only when a run goes silent for the whole window. A
+// long-but-active subagent runs indefinitely. Configurable via the
+// `subagentRunTimeoutMs` app setting / `KANNA_SUBAGENT_RUN_TIMEOUT_MS` env,
+// wired at AgentCoordinator construction; tests override via
+// SubagentOrchestratorDeps.runTimeoutMs.
 const DEFAULT_RUN_TIMEOUT_MS = 600_000
 
 interface LiveSession {
@@ -844,6 +877,8 @@ export class SubagentOrchestrator {
 
       const onChunk = (chunk: string) => {
         if (!chunk) return
+        // Stall watchdog: any streamed activity re-arms the idle window.
+        runState.timeout?.reset()
         this.deps.store
           .appendSubagentEvent({
             v: 3,
@@ -864,8 +899,30 @@ export class SubagentOrchestrator {
           this.deps.onRunProgress?.(args.chatId, runId)
         }, CHUNK_PROGRESS_THROTTLE_MS)
       }
+      // Host-side maxTurns backstop for providers without native enforcement
+      // (PTY claude, Codex). Tool_call entries approximate agentic turns —
+      // Claude Code's query() counts loop iterations, each of which issues
+      // tool calls. SDK runs (nativeMaxTurns) are excluded: the SDK stops
+      // gracefully on its own and a host abort would clobber that.
+      const hostMaxTurns = runStart.maxTurns !== undefined && runStart.maxTurns > 0 && !runStart.nativeMaxTurns
+        ? runStart.maxTurns
+        : null
+      let toolCallCount = 0
+      const maxTurnsRejection = createDeferred<never>()
+
       const externalOnEntry = args.onEntry
       const onEntry = (entry: TranscriptEntry) => {
+        // Stall watchdog: a persisted transcript entry counts as activity.
+        runState.timeout?.reset()
+        if (hostMaxTurns !== null && entry.kind === "tool_call") {
+          toolCallCount += 1
+          if (toolCallCount > hostMaxTurns) {
+            // Same order contract as the stall watchdog: reject BEFORE abort
+            // so Promise.race resolves MAX_TURNS, not USER_CANCELLED.
+            maxTurnsRejection.reject(new Error("MAX_TURNS"))
+            runState.abortController.abort()
+          }
+        }
         this.deps.store
           .appendSubagentEvent({
             v: 3,
@@ -890,6 +947,11 @@ export class SubagentOrchestrator {
         }
       }
       const timeoutRejection = createDeferred<never>()
+      // Stall/idle watchdog, NOT a total wall-clock deadline. `onChunk` /
+      // `onEntry` call `reset()` on every streamed event, so this fires only
+      // when a run produces no activity for the whole window — matching
+      // Anthropic's guidance (no per-subagent wall-clock deadline; use a stall
+      // watchdog). A productively-working subagent is never killed mid-edit.
       const pausable = new PausableTimeout(this.timeoutMs(), () => {
         // Race-rejection ORDER MATTERS. Reject TIMEOUT before aborting so
         // `Promise.race` resolves with the TIMEOUT error and the catch
@@ -919,6 +981,7 @@ export class SubagentOrchestrator {
           result = await Promise.race([
             runStart.start(onChunk, onEntry, { keepAlive: args.keepAlive }),
             timeoutRejection.promise,
+            maxTurnsRejection.promise,
             abortRejection.promise,
           ])
         } finally {
@@ -931,7 +994,9 @@ export class SubagentOrchestrator {
         const message = error instanceof Error ? error.message : String(error)
         let outcome: DelegationOutcome
         if (message === "TIMEOUT") {
-          outcome = await this.failRun(args.chatId, runId, "TIMEOUT", `Run exceeded ${this.timeoutMs()}ms`)
+          outcome = await this.failRun(args.chatId, runId, "TIMEOUT", `Run stalled (no activity for ${this.timeoutMs()}ms)`)
+        } else if (message === "MAX_TURNS") {
+          outcome = await this.failRun(args.chatId, runId, "MAX_TURNS", `Run exceeded maxTurns (${hostMaxTurns} tool calls)`)
         } else if (message === "USER_CANCELLED" || runState.cancelled) {
           outcome = await this.failRun(args.chatId, runId, "USER_CANCELLED", "Cancelled by user")
         } else {

@@ -198,6 +198,11 @@ export interface Subagent {
   triggerMode: SubagentTriggerMode
   workingDir?: string
   allowedPaths?: string[]
+  // Per-subagent agentic-turn bound — the analog of Claude Code's agent
+  // frontmatter `maxTurns`. Unset = unbounded (Claude Code's default).
+  // Claude-SDK runs pass it natively to query() (graceful stop, output kept);
+  // PTY/Codex runs get a host-side tool-call-count backstop (hard abort).
+  maxTurns?: number
   createdAt: number
   updatedAt: number
 }
@@ -213,6 +218,7 @@ export interface SubagentInput {
   triggerMode?: SubagentTriggerMode
   workingDir?: string
   allowedPaths?: string[]
+  maxTurns?: number
 }
 
 export interface SubagentPatch {
@@ -226,6 +232,7 @@ export interface SubagentPatch {
   triggerMode?: SubagentTriggerMode
   workingDir?: string | null
   allowedPaths?: string[] | null
+  maxTurns?: number | null
 }
 
 export type SubagentValidationErrorCode =
@@ -932,6 +939,19 @@ export interface AppSettingsSnapshot {
   claudeDriver: ClaudeDriverSettings
   globalPromptAppend: string
   shareDefaultTtlHours: number
+  subagentRuntime: SubagentRuntimeSettings
+}
+
+/**
+ * Runtime knobs for delegated subagent runs (delegate_subagent) and the
+ * autonomous loop (setup_loop). `runTimeoutMs` is the stall/idle watchdog
+ * window — a run is aborted only after this long with NO streamed activity,
+ * not a total wall-clock cap. `defaultLoopSubagentId` is the subagent
+ * setup_loop delegates to when the caller omits an explicit id.
+ */
+export interface SubagentRuntimeSettings {
+  runTimeoutMs: number
+  defaultLoopSubagentId: string | null
 }
 
 export interface AppSettingsPatch {
@@ -981,6 +1001,7 @@ export interface AppSettingsPatch {
   }
   globalPromptAppend?: string
   shareDefaultTtlHours?: number
+  subagentRuntime?: Partial<SubagentRuntimeSettings>
 }
 
 export interface LlmProviderFile {
@@ -1822,6 +1843,7 @@ export type SubagentErrorCode =
   | "LOOP_DETECTED"
   | "DEPTH_EXCEEDED"
   | "TIMEOUT"
+  | "MAX_TURNS"
   | "PROVIDER_ERROR"
   | "INTERRUPTED"
   | "USER_CANCELLED"

@@ -69,6 +69,10 @@ export class ScheduleManager {
       case "auto_continue_fired":
         this.clear(event.scheduleId)
         return
+      case "loop_armed":
+      case "loop_disarmed":
+        // Loop arm/disarm are durable state markers, not schedule timers.
+        return
       default: {
         const _exhaustive: never = event
         void _exhaustive

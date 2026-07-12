@@ -8,6 +8,7 @@ import {
   buildCanUseTool,
   buildClaudeEnv,
   buildPromptText,
+  buildTaskNotification,
   buildUserMcpServers,
   maxClaudeContextWindowFromModelUsage,
   normalizeClaudeStreamMessage,
@@ -3315,6 +3316,169 @@ describe("AgentCoordinator claude integration", () => {
 
     events.close()
   })
+
+  // PTY bakes the loop tool-block into --disallowedTools at spawn time, so a
+  // flip of the armed state (setup_loop arms, stop_loop / user takeover
+  // disarms) MUST respawn the session at the next turn boundary — otherwise
+  // the block goes stale (armed session keeps tools blocked after disarm, and
+  // vice versa). SDK re-evaluates isLoopArmed() per tool call and never
+  // respawns for this.
+  test("PTY: loop armed-state flip respawns the session; steady state reuses it", async () => {
+    const store = createFakeStore()
+    store.chat.provider = "claude"
+
+    let armed = true
+    let spawnCount = 0
+    const queues: AsyncEventQueue<any>[] = []
+
+    const coordinator = new AgentCoordinator({
+      store: store as never,
+      onStateChange: () => {},
+      getAppSettingsSnapshot: () => ({ claudeDriver: { preference: "pty" } }),
+      startClaudeSession: async () => {
+        throw new Error("SDK driver must not be used under PTY preference")
+      },
+      startClaudeSessionPTY: async () => {
+        spawnCount += 1
+        const events = new AsyncEventQueue<any>()
+        queues.push(events)
+        return {
+          provider: "claude",
+          stream: events,
+          getAccountInfo: async () => null,
+          interrupt: async () => {},
+          close: () => {},
+          setModel: async () => {},
+          setPermissionMode: async () => {},
+          getSupportedCommands: async () => [],
+          sendPrompt: async () => {
+            events.push({
+              type: "transcript" as const,
+              entry: timestamped({
+                kind: "result",
+                subtype: "success",
+                isError: false,
+                durationMs: 0,
+                result: "done",
+              }),
+            })
+          },
+        }
+      },
+    })
+
+    // Pin the armed state to the test toggle — the send() takeover path would
+    // otherwise disarm before the spawn check ever sees an armed loop.
+    coordinator.isLoopArmed = () => (armed ? { subagentId: "sa-1", prompt: "loop prompt" } : null)
+
+    const sendTurn = async (content: string, expectedFinished: number) => {
+      await coordinator.send({
+        type: "chat.send",
+        chatId: "chat-1",
+        provider: "claude",
+        content,
+        model: "claude-opus-4-7",
+      })
+      await waitFor(() => store.turnFinishedCount >= expectedFinished, 2000)
+    }
+
+    // Turn 1 spawns armed.
+    await sendTurn("turn 1 (armed)", 1)
+    expect(spawnCount).toBe(1)
+
+    // Steady state (still armed): session reused.
+    await sendTurn("turn 2 (armed)", 2)
+    expect(spawnCount).toBe(1)
+
+    // Disarm flip: must respawn so --disallowedTools is dropped.
+    armed = false
+    await sendTurn("turn 3 (disarmed)", 3)
+    expect(spawnCount).toBe(2)
+
+    // Steady state (disarmed): session reused.
+    await sendTurn("turn 4 (disarmed)", 4)
+    expect(spawnCount).toBe(2)
+
+    // Arm flip: must respawn so --disallowedTools is applied.
+    armed = true
+    await sendTurn("turn 5 (armed)", 5)
+    expect(spawnCount).toBe(3)
+
+    for (const q of queues) q.close()
+  })
+
+  // SDK bakes options.disallowedTools at spawn too (filter-at-spawn — the
+  // model never sees the blocked tools), so the armed-state flip must respawn
+  // SDK sessions just like PTY ones.
+  test("SDK: loop armed-state flip respawns the session; steady state reuses it", async () => {
+    const store = createFakeStore()
+    store.chat.provider = "claude"
+
+    let armed = true
+    let spawnCount = 0
+    const queues: AsyncEventQueue<any>[] = []
+
+    const coordinator = new AgentCoordinator({
+      store: store as never,
+      onStateChange: () => {},
+      startClaudeSession: async () => {
+        spawnCount += 1
+        const events = new AsyncEventQueue<any>()
+        queues.push(events)
+        return {
+          provider: "claude",
+          stream: events,
+          getAccountInfo: async () => null,
+          interrupt: async () => {},
+          close: () => {},
+          setModel: async () => {},
+          setPermissionMode: async () => {},
+          getSupportedCommands: async () => [],
+          sendPrompt: async () => {
+            events.push({
+              type: "transcript" as const,
+              entry: timestamped({
+                kind: "result",
+                subtype: "success",
+                isError: false,
+                durationMs: 0,
+                result: "done",
+              }),
+            })
+          },
+        }
+      },
+    })
+
+    coordinator.isLoopArmed = () => (armed ? { subagentId: "sa-1", prompt: "loop prompt" } : null)
+
+    const sendTurn = async (content: string, expectedFinished: number) => {
+      await coordinator.send({
+        type: "chat.send",
+        chatId: "chat-1",
+        provider: "claude",
+        content,
+        model: "claude-opus-4-7",
+      })
+      await waitFor(() => store.turnFinishedCount >= expectedFinished, 2000)
+    }
+
+    await sendTurn("turn 1 (armed)", 1)
+    expect(spawnCount).toBe(1)
+
+    await sendTurn("turn 2 (armed)", 2)
+    expect(spawnCount).toBe(1)
+
+    armed = false
+    await sendTurn("turn 3 (disarmed)", 3)
+    expect(spawnCount).toBe(2)
+
+    armed = true
+    await sendTurn("turn 4 (armed)", 4)
+    expect(spawnCount).toBe(3)
+
+    for (const q of queues) q.close()
+  })
 })
 
 describe("AgentCoordinator.ensureSlashCommandsLoaded", () => {
@@ -3870,7 +4034,7 @@ describe("AgentCoordinator.deliverSubagentToMain (notification-driven /clear)", 
       | { status: "failed"; runId: string; errorCode: string; errorMessage: string },
   ) => Promise<void>
 
-  test("success: wipes claude session_token, appends context_cleared, emits subagent_background auto-continue with 'Read PROGRESS.md' prompt", async () => {
+  test("success: wipes claude session_token, appends context_cleared, emits subagent_background auto-continue with task-notification XML", async () => {
     const store = createFakeStore()
     const coordinator = new AgentCoordinator({
       store: store as never,
@@ -3894,17 +4058,50 @@ describe("AgentCoordinator.deliverSubagentToMain (notification-driven /clear)", 
     const cleared = store.messages.filter((m) => m.kind === "context_cleared")
     expect(cleared).toHaveLength(1)
 
-    // Auto-continue event with subagent_background source + minimal prompt
+    // Auto-continue event with subagent_background source + the structured
+    // <task-notification> XML (Claude Code's LocalAgentTask format). Un-armed
+    // ad-hoc deliveries carry the subagent's <result> body.
     const events = store.getAutoContinueEvents("chat-1")
     expect(events).toHaveLength(1)
     const ev = events[0]
     expect(ev.kind).toBe("auto_continue_accepted")
     if (ev.kind === "auto_continue_accepted") {
       expect(ev.source).toBe("subagent_background")
+      expect(ev.prompt).toContain("<task-notification>")
+      expect(ev.prompt).toContain("<task-id>run-bg</task-id>")
+      expect(ev.prompt).toContain("<status>completed</status>")
+      expect(ev.prompt).toContain("<result>the answer</result>")
       expect(ev.prompt).toContain("PROGRESS.md")
       expect(ev.prompt).toContain("context has been cleared")
-      // Subagent output is NOT carried forward (PROGRESS.md is truth)
-      expect(ev.prompt).not.toContain("the answer")
+    }
+  })
+
+  test("armed loop: notification omits <result> (PROGRESS.md is the contract) and the full loop prompt follows", async () => {
+    const store = createFakeStore()
+    const coordinator = new AgentCoordinator({
+      store: store as never,
+      onStateChange: () => {},
+      startClaudeSession: async () => { throw new Error("not needed") },
+    })
+    coordinator.isLoopArmed = () => ({ subagentId: "sa-loop", prompt: "LOOP DISCIPLINE PROMPT" })
+
+    await (coordinator as unknown as { deliverSubagentToMain: DeliverFn }).deliverSubagentToMain(
+      "chat-1",
+      "run-loop",
+      { status: "completed", runId: "run-loop", text: "iteration output that must not leak" },
+    )
+
+    const events = store.getAutoContinueEvents("chat-1")
+    expect(events).toHaveLength(1)
+    const ev = events[0]
+    expect(ev.kind).toBe("auto_continue_accepted")
+    if (ev.kind === "auto_continue_accepted") {
+      expect(ev.prompt).toContain("<task-notification>")
+      expect(ev.prompt).toContain("<task-id>run-loop</task-id>")
+      expect(ev.prompt).not.toContain("<result>")
+      expect(ev.prompt).not.toContain("iteration output that must not leak")
+      // The full loop discipline prompt is re-injected after the notification.
+      expect(ev.prompt).toContain("LOOP DISCIPLINE PROMPT")
     }
   })
 
@@ -3964,6 +4161,21 @@ describe("AgentCoordinator.deliverSubagentToMain (notification-driven /clear)", 
 })
 
 describe("AgentCoordinator.setupLoop (mcp__kanna__setup_loop backing)", () => {
+  function makeSubagentRecord(over: { id: string; name: string }) {
+    return {
+      id: over.id,
+      name: over.name,
+      provider: "claude" as const,
+      model: "claude-opus-4-7",
+      modelOptions: { reasoningEffort: "medium", contextWindow: "1m" } as never,
+      systemPrompt: "test",
+      contextScope: "previous-assistant-reply" as const,
+      triggerMode: "auto" as const,
+      createdAt: 1,
+      updatedAt: 1,
+    }
+  }
+
   test("valid input: creates skeleton, /clears main, emits subagent_background auto-continue carrying the templated prompt", async () => {
     const projectRoot = await mkdtemp(path.join(tmpdir(), "kanna-setup-loop-"))
     try {
@@ -3977,6 +4189,7 @@ describe("AgentCoordinator.setupLoop (mcp__kanna__setup_loop backing)", () => {
         store: store as never,
         onStateChange: () => {},
         startClaudeSession: async () => { throw new Error("not needed") },
+        getSubagents: () => [makeSubagentRecord({ id: "sa-1", name: "alpha" })],
       })
 
       const result = await coordinator.setupLoop({
@@ -3985,6 +4198,7 @@ describe("AgentCoordinator.setupLoop (mcp__kanna__setup_loop backing)", () => {
           goal: "eslint --max-warnings=0 passes",
           verifyCommand: "bun run lint",
           chunkHint: "start with src/client",
+          subagentId: "sa-1",
         },
       })
 
@@ -4002,16 +4216,17 @@ describe("AgentCoordinator.setupLoop (mcp__kanna__setup_loop backing)", () => {
       expect(store.chat.sessionTokensByProvider.claude ?? null).toBeNull()
       expect(store.messages.filter((m) => m.kind === "context_cleared")).toHaveLength(1)
 
-      // Auto-continue emitted with the templated prompt
+      // Two auto-continue events: loop_armed (durable state) + the accepted schedule.
       const events = store.getAutoContinueEvents("chat-1")
-      expect(events).toHaveLength(1)
-      const ev = events[0]
-      if (ev.kind !== "auto_continue_accepted") throw new Error("expected accepted")
+      expect(events.filter((e) => e.kind === "loop_armed")).toHaveLength(1)
+      const ev = events.find((e) => e.kind === "auto_continue_accepted")
+      if (!ev || ev.kind !== "auto_continue_accepted") throw new Error("expected accepted")
       expect(ev.source).toBe("subagent_background")
       expect(ev.prompt).toContain("PROGRESS.md")
       expect(ev.prompt).toContain("bun run lint")
       expect(ev.prompt).toContain("delegate_subagent")
       expect(ev.prompt).toContain("GOAL MET")
+      expect(ev.prompt).toContain("sa-1")
     } finally {
       await rm(projectRoot, { recursive: true, force: true })
     }
@@ -4029,18 +4244,20 @@ describe("AgentCoordinator.setupLoop (mcp__kanna__setup_loop backing)", () => {
         store: store as never,
         onStateChange: () => {},
         startClaudeSession: async () => { throw new Error("not needed") },
+        getSubagents: () => [makeSubagentRecord({ id: "sa-1", name: "alpha" })],
       })
 
       const result = await coordinator.setupLoop({
         chatId: "chat-1",
-        input: { goal: "g", verifyCommand: "true" },
+        input: { goal: "g", verifyCommand: "true", subagentId: "sa-1" },
       })
       if (!result.ok) throw new Error(result.errors.join(", "))
       expect(result.created).toBe(false)
 
       const content = await Bun.file(abs).text()
       expect(content).toBe("user-authored content")
-      expect(store.getAutoContinueEvents("chat-1")).toHaveLength(1)
+      // loop_armed + auto_continue_accepted
+      expect(store.getAutoContinueEvents("chat-1")).toHaveLength(2)
     } finally {
       await rm(projectRoot, { recursive: true, force: true })
     }
@@ -4749,6 +4966,96 @@ describe("AgentCoordinator subagent mention gating", () => {
 })
 
 // ── canUseTool routing tests ───────────────────────────────────────────────────
+
+describe("buildTaskNotification", () => {
+  test("completed with result: full XML with truncated body", () => {
+    const long = "x".repeat(5_000)
+    const xml = buildTaskNotification(
+      "run-1",
+      { status: "completed", runId: "run-1", text: long },
+      { includeResult: true },
+    )
+    expect(xml).toContain("<task-notification>")
+    expect(xml).toContain("<task-id>run-1</task-id>")
+    expect(xml).toContain("<status>completed</status>")
+    expect(xml).toContain("<result>")
+    expect(xml).toContain("[... truncated]")
+    // 4k cap + fixed envelope — never balloons the re-entry prompt.
+    expect(xml.length).toBeLessThan(4_500)
+  })
+
+  test("includeResult false omits the <result> body entirely", () => {
+    const xml = buildTaskNotification(
+      "run-2",
+      { status: "completed", runId: "run-2", text: "secret loop output" },
+      { includeResult: false },
+    )
+    expect(xml).not.toContain("<result>")
+    expect(xml).not.toContain("secret loop output")
+    expect(xml).toContain("<status>completed</status>")
+  })
+
+  test("failed outcome carries errorCode + message in summary", () => {
+    const xml = buildTaskNotification(
+      "run-3",
+      { status: "failed", runId: "run-3", errorCode: "MAX_TURNS", errorMessage: "exceeded 50 tool calls" },
+      { includeResult: true },
+    )
+    expect(xml).toContain("<status>failed</status>")
+    expect(xml).toContain("MAX_TURNS")
+    expect(xml).toContain("exceeded 50 tool calls")
+  })
+})
+
+describe("buildCanUseTool — loop-armed tool-block", () => {
+  const noopOnToolRequest = async () => ({})
+
+  test("blocks Edit/Write/MultiEdit/NotebookEdit/Task while loop armed", async () => {
+    const canUseTool = buildCanUseTool({
+      localPath: "/tmp/test",
+      onToolRequest: noopOnToolRequest,
+      isLoopArmed: () => true,
+    })
+    for (const toolName of ["Edit", "Write", "MultiEdit", "NotebookEdit", "Task"]) {
+      const result = await canUseTool(
+        toolName,
+        { any: "input" },
+        { toolUseID: "t", signal: new AbortController().signal },
+      )
+      expect(result.behavior).toBe("deny")
+    }
+  })
+
+  test("allows Read/Bash/Grep and delegate_subagent while loop armed", async () => {
+    const canUseTool = buildCanUseTool({
+      localPath: "/tmp/test",
+      onToolRequest: noopOnToolRequest,
+      isLoopArmed: () => true,
+    })
+    for (const toolName of ["Read", "Bash", "Grep", "Glob", "mcp__kanna__delegate_subagent"]) {
+      const result = await canUseTool(
+        toolName,
+        {},
+        { toolUseID: "t", signal: new AbortController().signal },
+      )
+      expect(result.behavior).toBe("allow")
+    }
+  })
+
+  test("does NOT block edits when no loop is armed", async () => {
+    const canUseTool = buildCanUseTool({
+      localPath: "/tmp/test",
+      onToolRequest: noopOnToolRequest,
+      isLoopArmed: () => false,
+    })
+    const result = await canUseTool(
+      "Edit",
+      {},
+      { toolUseID: "t", signal: new AbortController().signal },
+    )
+    expect(result.behavior).toBe("allow")
+  })
+})
 
 describe("buildCanUseTool", () => {
   test("flag off: AskUserQuestion uses legacy onToolRequest path", async () => {

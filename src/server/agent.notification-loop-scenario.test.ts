@@ -4,7 +4,7 @@ import type { AutoContinueEvent } from "./auto-continue/events"
 import type { TranscriptEntry, SlashCommand } from "../shared/types"
 
 // Long-scenario test for the notification-driven loop-orchestration pattern
-// (adr-2026XXXX-notification-driven-loop-orchestration).
+// (adr-20260711-notification-driven-loop-orchestration).
 //
 // The loop pattern is: main-agent = stateless-in-context / stateful-in-file
 // (PROGRESS.md). Every subagent_background delivery /clears the main-agent
@@ -153,8 +153,12 @@ describe("notification-driven loop orchestration — 50-iteration scenario", () 
     expect(cleared).toHaveLength(N)
 
     // Invariant 3: exactly N auto-continue events, all subagent_background,
-    // all with the minimal "Read PROGRESS.md" prompt, NONE carry subagent
-    // summary text forward (PROGRESS.md is the only truth).
+    // each carrying the structured <task-notification> XML (Claude Code's
+    // LocalAgentTask format). Un-armed ad-hoc deliveries include the
+    // subagent's <result> body; context never accumulates because every
+    // delivery /clears the session (Invariant 1) — the result rides exactly
+    // one fresh prompt. (Armed loops omit <result>: PROGRESS.md is the loop's
+    // only durability contract — covered by the armed-wake test in agent.test.ts.)
     const events = store.getAutoContinueEvents("chat-loop")
     expect(events).toHaveLength(N)
     for (let i = 0; i < N; i += 1) {
@@ -162,9 +166,12 @@ describe("notification-driven loop orchestration — 50-iteration scenario", () 
       expect(ev.kind).toBe("auto_continue_accepted")
       if (ev.kind === "auto_continue_accepted") {
         expect(ev.source).toBe("subagent_background")
+        expect(ev.prompt).toContain("<task-notification>")
+        expect(ev.prompt).toContain(`<task-id>run-${i + 1}</task-id>`)
+        expect(ev.prompt).toContain("<status>completed</status>")
+        expect(ev.prompt).toContain(`<result>iteration ${i + 1} of the loop is done</result>`)
         expect(ev.prompt).toContain("PROGRESS.md")
         expect(ev.prompt).toContain("context has been cleared")
-        expect(ev.prompt).not.toContain("iteration")
       }
     }
   })

@@ -61,7 +61,7 @@ import { AUTO_CONTINUE_EVENT_VERSION, type AutoContinueEvent } from "./auto-cont
 import { ClaudeLimitDetector, CodexLimitDetector, type LimitDetection, type LimitDetector } from "./auto-continue/limit-detector"
 import { ClaudeAuthErrorDetector, type AuthErrorDetection } from "./auto-continue/auth-error-detector"
 import type { ScheduleManager } from "./auto-continue/schedule-manager"
-import { deriveChatSchedules } from "./auto-continue/read-model"
+import { deriveChatSchedules, deriveLoopState, type LoopState } from "./auto-continue/read-model"
 import type { TunnelGateway } from "./cloudflare-tunnel/gateway"
 import { OAuthTokenPool } from "./oauth-pool/oauth-token-pool"
 import { maskOauthKey } from "../shared/mask-oauth-key"
@@ -254,6 +254,13 @@ interface ClaudeSessionState {
   // mid-flight. See adr-20260604-pty-background-task-keepalive.
   backgroundTaskIds: Set<string>
   backgroundTaskDeadlineAt: number
+  // Armed-loop state captured at spawn. Both drivers bake the loop tool-block
+  // into the spawn (PTY: --disallowedTools CLI args; SDK: options.disallowedTools
+  // so the model never sees the blocked tools — Claude Code's filter-at-spawn
+  // pattern). When the armed state changes (setup_loop arms / stop_loop or
+  // user-send disarms) the session must be respawned at the next turn boundary
+  // or the block goes stale.
+  loopArmedAtSpawn: boolean
   /** SDK only: set once the workflows dir has been registered for this session. */
   workflowsDirRegistered?: boolean
   // Number of cancelled turns awaiting their interrupt-induced tail `result`.
@@ -333,6 +340,10 @@ interface AgentCoordinatorArgs {
     restrictedAllowedPaths?: string[]
     /** Backs the `setup_loop` MCP tool. Omit to hide the tool. */
     setupLoop?: (input: LoopSetupInput) => Promise<SetupLoopHandlerResult>
+    /** Backs the `stop_loop` MCP tool. Omit to hide the tool. */
+    stopLoop?: () => Promise<void>
+    /** Live check: true while an autonomous loop is armed — blocks direct-edit native tools. */
+    isLoopArmed?: () => boolean
     /** Keep the SDK prompt queue open after the initial prompt to allow multi-turn keep-alive. */
     keepAlive?: boolean
     /** Per-turn price for computing cost when the provider doesn't report it (OpenRouter). */
@@ -366,6 +377,7 @@ interface AgentCoordinatorArgs {
     globalPromptAppend?: string
     customMcpServers?: readonly McpServerConfig[]
     customModels?: readonly CustomModelEntry[]
+    subagentRuntime?: { runTimeoutMs?: number; defaultLoopSubagentId?: string | null }
   }
   throwOnClaudeSessionStart?: boolean
   oauthPool?: OAuthTokenPool
@@ -1205,6 +1217,55 @@ class AsyncMessageQueue<T> implements AsyncIterable<T> {
   }
 }
 
+/**
+ * Native tools blocked while an autonomous loop is armed on the chat. The loop
+ * orchestrator must delegate every code change to a subagent (fresh context
+ * each iteration); letting it edit directly is exactly the drift that produced
+ * the 7.5h marathon turn. `Task` (the native Agent tool) is blocked too — it
+ * runs inline in the same turn with no /clear.
+ */
+export const LOOP_BLOCKED_NATIVE_TOOLS: readonly string[] = [
+  "Edit",
+  "Write",
+  "MultiEdit",
+  "NotebookEdit",
+  "Task",
+]
+
+/** Cap on the <result> body inside a task-notification — bounds re-entry prompt size. */
+const TASK_NOTIFICATION_RESULT_MAX_CHARS = 4_000
+
+/**
+ * Render a background-subagent outcome as the `<task-notification>` XML that
+ * Claude Code's own LocalAgentTask uses for background-agent completion, so
+ * the model parses task identity/status with a format it natively knows.
+ * `includeResult: false` (armed loops) omits the result body — PROGRESS.md is
+ * the loop's durability contract, not the re-entry prompt.
+ */
+export function buildTaskNotification(
+  runId: string,
+  outcome: BackgroundRunOutcome,
+  opts: { includeResult: boolean },
+): string {
+  const status = outcome.status === "completed" ? "completed" : "failed"
+  const summary = outcome.status === "completed"
+    ? `Background subagent run ${runId} completed`
+    : `Background subagent run ${runId} failed (${outcome.errorCode}): ${outcome.errorMessage}`
+  let resultSection = ""
+  if (opts.includeResult) {
+    const body = outcome.status === "completed" ? outcome.text : outcome.errorMessage
+    const trimmed = body.length > TASK_NOTIFICATION_RESULT_MAX_CHARS
+      ? `${body.slice(0, TASK_NOTIFICATION_RESULT_MAX_CHARS)}\n[... truncated]`
+      : body
+    if (trimmed) resultSection = `\n<result>${trimmed}</result>`
+  }
+  return `<task-notification>
+<task-id>${runId}</task-id>
+<status>${status}</status>
+<summary>${summary}</summary>${resultSection}
+</task-notification>`
+}
+
 /** Args for the `buildCanUseTool` helper — exposed for unit testing. */
 export interface BuildCanUseToolArgs {
   localPath: string
@@ -1213,6 +1274,8 @@ export interface BuildCanUseToolArgs {
   onToolRequest: (request: HarnessToolRequest) => Promise<AnyValue>
   toolCallback?: ToolCallbackService
   chatPolicy?: ChatPermissionPolicy
+  /** When present and returns true, block LOOP_BLOCKED_NATIVE_TOOLS (loop-armed turn). */
+  isLoopArmed?: () => boolean
 }
 
 /**
@@ -1222,6 +1285,19 @@ export interface BuildCanUseToolArgs {
  */
 export function buildCanUseTool(args: BuildCanUseToolArgs): CanUseTool {
   return async (toolName, input, options) => {
+    // Loop-armed turns: the orchestrator may only Read/Bash(verify)/delegate.
+    // Block direct edits + the native Agent tool so it cannot self-implement.
+    if (args.isLoopArmed?.() && LOOP_BLOCKED_NATIVE_TOOLS.includes(toolName)) {
+      return {
+        behavior: "deny",
+        message:
+          `${toolName} is blocked while an autonomous loop is armed. You are the `
+          + "orchestrator: delegate the next chunk with delegate_subagent "
+          + "(run_in_background: true) and end your turn, or call stop_loop if the "
+          + "goal is met. Do not edit files directly.",
+      }
+    }
+
     if (toolName !== "AskUserQuestion" && toolName !== "ExitPlanMode") {
       return { behavior: "allow", updatedInput: input }
     }
@@ -1374,6 +1450,16 @@ async function startClaudeSession(args: {
   restrictedAllowedPaths?: string[]
   /** Backs the `setup_loop` MCP tool. Omit to hide the tool. */
   setupLoop?: (input: LoopSetupInput) => Promise<SetupLoopHandlerResult>
+  /** Backs the `stop_loop` MCP tool. Omit to hide the tool. */
+  stopLoop?: () => Promise<void>
+  /** Live check: true while an autonomous loop is armed — blocks direct-edit native tools. */
+  isLoopArmed?: () => boolean
+  /**
+   * Agentic-turn bound passed natively to the SDK query() (Claude Code's
+   * per-agent frontmatter maxTurns analog): the SDK stops gracefully and
+   * keeps the accumulated output. Used by subagent spawns.
+   */
+  maxTurns?: number
   /** When true, leave the prompt queue open after initialPrompt and expose pushChannelPrompt on the handle. */
   keepAlive?: boolean
   /** Per-turn price for computing cost when the provider doesn't report it (OpenRouter). */
@@ -1388,6 +1474,7 @@ async function startClaudeSession(args: {
     onToolRequest: args.onToolRequest,
     toolCallback: args.toolCallback,
     chatPolicy: args.chatPolicy,
+    isLoopArmed: args.isLoopArmed,
   })
 
   const promptQueue = new AsyncMessageQueue<SDKUserMessage>()
@@ -1405,6 +1492,16 @@ async function startClaudeSession(args: {
       forkSession: args.forkSession,
       permissionMode: args.planMode ? "plan" : "acceptEdits",
       canUseTool,
+      // Filter-at-spawn (Claude Code's filterToolsForAgent pattern): while a
+      // loop is armed the direct-edit tools are removed from the tool list the
+      // model sees, so it cannot even attempt them. The dynamic canUseTool
+      // deny stays as belt-and-suspenders; an armed-state flip respawns the
+      // session (see loopArmedAtSpawn in startClaudeTurn).
+      ...(args.isLoopArmed?.() ? { disallowedTools: [...LOOP_BLOCKED_NATIVE_TOOLS] } : {}),
+      // Per-agent turn bound, threaded from Subagent.maxTurns. The SDK emits
+      // a graceful stop at the limit — accumulated output is preserved,
+      // matching Claude Code's max_turns_reached semantics.
+      ...(args.maxTurns !== undefined ? { maxTurns: args.maxTurns } : {}),
       tools: args.restrictedAllowedPaths && args.restrictedAllowedPaths.length > 0
         ? CLAUDE_TOOLSET.filter((t) => !new Set<string>(SDK_RESTRICTED_FS_NATIVE_TOOLS).has(t))
         : [...CLAUDE_TOOLSET],
@@ -1421,6 +1518,7 @@ async function startClaudeSession(args: {
           delegationContext: args.delegationContext,
           restrictedAllowedPaths: args.restrictedAllowedPaths,
           setupLoop: args.setupLoop,
+          stopLoop: args.stopLoop,
         }),
         ...buildUserMcpServers(args.customMcpServers ?? [], args.oauthBearers),
       },
@@ -1705,6 +1803,12 @@ export class AgentCoordinator {
       },
       maxLive: positiveIntegerFromEnv(process.env.KANNA_SUBAGENT_MAX_LIVE, 0) || undefined,
       liveIdleTimeoutMs: positiveIntegerFromEnv(process.env.KANNA_SUBAGENT_IDLE_TIMEOUT_MS, 0) || undefined,
+      // Stall/idle watchdog window. Precedence: app setting > env > orchestrator
+      // default. The orchestrator reads this once at construction; a settings
+      // change takes effect on next server start (acceptable — restart-scoped).
+      runTimeoutMs: (this.getAppSettingsSnapshot().subagentRuntime?.runTimeoutMs
+        ?? positiveIntegerFromEnv(process.env.KANNA_SUBAGENT_RUN_TIMEOUT_MS, 0))
+        || undefined,
     })
     this.throwOnClaudeSessionStart = args.throwOnClaudeSessionStart ?? false
     this.tunnelGateway = args.tunnelGateway ?? null
@@ -2794,12 +2898,21 @@ export class AgentCoordinator {
   }): Promise<HarnessTurn> {
     let session = this.claudeSessions.get(args.chatId)
 
+    const driverIsPty = args.provider !== "openrouter"
+      && this.resolveClaudeDriverPreference() === "pty"
+    const loopArmedNow = this.isLoopArmed(args.chatId) !== null
+
     if (
       !session ||
       session.localPath !== args.localPath ||
       session.effort !== args.effort ||
       args.forkSession ||
-      session.additionalDirectories.join("|") !== (args.additionalDirectories ?? []).join("|")
+      session.additionalDirectories.join("|") !== (args.additionalDirectories ?? []).join("|") ||
+      // Both drivers bake the loop tool-block into the spawn (PTY via
+      // --disallowedTools CLI args, SDK via options.disallowedTools), so an
+      // armed-state flip (arm OR disarm) requires a fresh session. The SDK's
+      // dynamic canUseTool deny remains as belt-and-suspenders mid-turn.
+      session.loopArmedAtSpawn !== loopArmedNow
     ) {
       if (session) {
         this.closeClaudeSession(args.chatId, session)
@@ -2836,7 +2949,7 @@ export class AgentCoordinator {
         }
       }
 
-      const usePty = !isOpenRouter && this.resolveClaudeDriverPreference() === "pty"
+      const usePty = driverIsPty
       const systemPromptAppend = buildKannaSystemPromptAppend(this.getSubagents(), {
         globalPromptAppend: this.getAppSettingsSnapshot().globalPromptAppend,
         stackProjects: args.stackProjects,
@@ -2875,6 +2988,12 @@ export class AgentCoordinator {
               setupLoop: delegationContext.depth === 0
                 ? (input) => this.setupLoop({ chatId: chatIdForCtx, input })
                 : undefined,
+              stopLoop: delegationContext.depth === 0
+                ? () => this.stopLoop(chatIdForCtx, "goal_met")
+                : undefined,
+              isLoopArmed: delegationContext.depth === 0
+                ? () => this.isLoopArmed(chatIdForCtx) !== null
+                : undefined,
               toolCallback: this.toolCallback ?? undefined,
               tunnelGateway: this.tunnelGateway,
               chatPolicy: this.resolveChatPolicy(args.chatId),
@@ -2904,6 +3023,12 @@ export class AgentCoordinator {
               delegationContext,
               setupLoop: delegationContext.depth === 0
                 ? (input) => this.setupLoop({ chatId: chatIdForCtx, input })
+                : undefined,
+              stopLoop: delegationContext.depth === 0
+                ? () => this.stopLoop(chatIdForCtx, "goal_met")
+                : undefined,
+              isLoopArmed: delegationContext.depth === 0
+                ? () => this.isLoopArmed(chatIdForCtx) !== null
                 : undefined,
               toolCallback: this.toolCallback ?? undefined,
               chatPolicy: this.resolveChatPolicy(args.chatId),
@@ -2942,6 +3067,7 @@ export class AgentCoordinator {
         lastUsedAt: Date.now(),
         backgroundTaskIds: new Set<string>(),
         backgroundTaskDeadlineAt: 0,
+        loopArmedAtSpawn: loopArmedNow,
         cancelledResultPending: 0,
       }
       this.claudeSessions.set(args.chatId, session)
@@ -2994,6 +3120,13 @@ export class AgentCoordinator {
       existingClaudeSession.backgroundTaskIds.clear()
       existingClaudeSession.backgroundTaskDeadlineAt = 0
     }
+
+    // A real user send is a takeover: disarm any armed loop so tools are
+    // restored and the generic wake path resumes. Auto-continue / background
+    // wakes bypass `send`, so they do NOT disarm.
+    // Awaited so a failed event-log write surfaces instead of silently
+    // leaving the loop armed (and tools blocked) after the takeover.
+    if (chatId) await this.stopLoop(chatId, "user_send")
 
     logSendToStartingProfile(profile, "chat_send.received", {
       existingChatId: command.chatId ?? null,
@@ -3246,6 +3379,9 @@ export class AgentCoordinator {
       allowedPaths: restriction?.allowedPaths,
       projectId: project.id,
       startClaudeSession: this.buildClaudeSubagentStarter(),
+      // PTY claude has no native maxTurns (interactive CLI) — the orchestrator
+      // applies a host-side tool-call-count backstop for PTY + Codex runs.
+      claudeDriverIsPty: this.resolveClaudeDriverPreference() === "pty",
       subagentOrchestrator: this.subagentOrchestrator,
       delegationContext,
       codexManager: this.codexManager,
@@ -4214,7 +4350,7 @@ export class AgentCoordinator {
    * output is NOT carried forward as prompt content — the subagent is expected
    * to have written its findings into PROGRESS.md before terminating.
    *
-   * See adr-2026XXXX-notification-driven-loop-orchestration.
+   * See adr-20260711-notification-driven-loop-orchestration.
    */
   private async deliverSubagentToMain(
     chatId: string,
@@ -4223,9 +4359,27 @@ export class AgentCoordinator {
   ): Promise<void> {
     if (!this.store.getChat(chatId)) return
 
-    const prompt = outcome.status === "completed"
-      ? `A background subagent (run ${runId}) finished. Your Claude context has been cleared. Read PROGRESS.md, decide the next action.`
-      : `A background subagent (run ${runId}) failed (${outcome.errorCode}): ${outcome.errorMessage}. Your Claude context has been cleared. Read PROGRESS.md; decide whether to retry, try another approach, or stop.`
+    // Structured re-entry: the completion is delivered as the same
+    // <task-notification> XML Claude Code's own background agents use
+    // (LocalAgentTask), so the model parses task identity/status with the
+    // format it already knows from native training.
+    //
+    // When a loop is armed, the FULL loop discipline prompt follows the
+    // notification on every wake — not a generic "decide next action" string,
+    // which drifted into self-implementation (the 7.5h marathon-turn bug).
+    // Armed notifications carry NO <result> body: PROGRESS.md is the loop's
+    // only durability contract. Non-loop deliveries include the (truncated)
+    // result since ad-hoc background delegations have no tracking file.
+    const armed = this.isLoopArmed(chatId)
+    const notification = buildTaskNotification(runId, outcome, { includeResult: !armed })
+    let prompt: string
+    if (armed) {
+      prompt = `${notification}\n\n${armed.prompt}`
+    } else if (outcome.status === "completed") {
+      prompt = `${notification}\n\nYour Claude context has been cleared. Read PROGRESS.md if present, then decide the next action.`
+    } else {
+      prompt = `${notification}\n\nYour Claude context has been cleared. Read PROGRESS.md if present; decide whether to retry, try another approach, or stop.`
+    }
 
     try {
       // Wipe the main-agent's Claude session token so the next spawn starts
@@ -4259,7 +4413,7 @@ export class AgentCoordinator {
    * the tracking file exists (writes a skeleton if absent), then /clears the
    * main-agent Claude session and enqueues the templated recurring prompt so
    * the next turn starts the loop. Backs `mcp__kanna__setup_loop`. See
-   * adr-2026XXXX-setup-loop-template.
+   * adr-20260711-setup-loop-template.
    */
   async setupLoop(args: {
     chatId: string
@@ -4270,7 +4424,10 @@ export class AgentCoordinator {
     const project = this.store.getProject(chat.projectId)
     if (!project) return { ok: false, errors: [`project ${chat.projectId} not found`] }
 
-    const validation = validateLoopSetup(args.input, project.localPath)
+    const validation = validateLoopSetup(args.input, project.localPath, {
+      roster: this.getSubagents().map((s) => ({ id: s.id, name: s.name })),
+      defaultLoopSubagentId: this.getAppSettingsSnapshot().subagentRuntime?.defaultLoopSubagentId ?? null,
+    })
     if (!validation.ok) return { ok: false, errors: validation.errors }
 
     const resolved = validation.resolved
@@ -4296,6 +4453,20 @@ export class AgentCoordinator {
       await this.store.appendMessage(args.chatId, timestamped({ kind: "context_cleared" }))
 
       const now = Date.now()
+      // Arm the loop durably: every subsequent background-completion wake
+      // re-injects THIS prompt (not the generic one) and loop turns are
+      // tool-blocked. Superseded by a later setup_loop or cleared by stop_loop
+      // / a real user send. Replays from the auto-continue log on restart.
+      await this.emitAutoContinueEvent({
+        v: AUTO_CONTINUE_EVENT_VERSION,
+        kind: "loop_armed",
+        timestamp: now,
+        chatId: args.chatId,
+        scheduleId: crypto.randomUUID(),
+        subagentId: resolved.subagentId,
+        prompt: resolved.prompt,
+      })
+
       const scheduleId = crypto.randomUUID()
       await this.emitAutoContinueEvent({
         v: AUTO_CONTINUE_EVENT_VERSION,
@@ -4323,6 +4494,28 @@ export class AgentCoordinator {
       created,
       prompt: resolved.prompt,
     }
+  }
+
+  /** Current armed-loop state for a chat, or null. Pure replay of the auto-continue log. */
+  isLoopArmed(chatId: string): LoopState | null {
+    return deriveLoopState(this.store.getAutoContinueEvents(chatId), chatId)
+  }
+
+  /**
+   * Disarm an armed loop (restores tools + stops prompt re-injection). Backs
+   * the `stop_loop` MCP tool (called by the model on GOAL MET) and the
+   * user-send takeover path. No-op when no loop is armed.
+   */
+  async stopLoop(chatId: string, reason: "goal_met" | "user_send" | "chat_deleted"): Promise<void> {
+    if (!this.isLoopArmed(chatId)) return
+    await this.emitAutoContinueEvent({
+      v: AUTO_CONTINUE_EVENT_VERSION,
+      kind: "loop_disarmed",
+      timestamp: Date.now(),
+      chatId,
+      scheduleId: crypto.randomUUID(),
+      reason,
+    })
   }
 
   listLiveSchedules(chatId: string): string[] {

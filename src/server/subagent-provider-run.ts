@@ -69,7 +69,14 @@ export interface BuildSubagentProviderRunArgs {
     delegationContext?: KannaMcpDelegationContext
     restrictedAllowedPaths?: string[]
     keepAlive?: boolean
+    maxTurns?: number
   }) => Promise<ClaudeSessionHandle>
+  /**
+   * True when the claude driver preference is PTY. PTY claude (interactive
+   * CLI) has no native maxTurns, so the orchestrator must apply its host-side
+   * tool-call-count backstop; SDK runs get maxTurns natively via query().
+   */
+  claudeDriverIsPty?: boolean
   /** Optional — propagated into the subagent's own kanna-mcp so it can call `delegate_subagent`. */
   subagentOrchestrator?: SubagentOrchestrator
   /** Optional — per-spawn delegation context forwarded to kanna-mcp for sub-spawn-sub. */
@@ -106,6 +113,11 @@ export function buildSubagentProviderRun(args: BuildSubagentProviderRunArgs): Pr
     model: args.subagent.model,
     systemPrompt: args.subagent.systemPrompt,
     preamble: args.primer,
+    maxTurns: args.subagent.maxTurns,
+    // Claude-SDK runs enforce maxTurns natively inside query() (graceful stop,
+    // output kept). PTY claude + Codex have no native bound — the orchestrator
+    // applies its host-side tool-call-count backstop for those.
+    nativeMaxTurns: args.subagent.provider === "claude" && !args.claudeDriverIsPty,
     authReady: async () => args.authReady(args.subagent.provider),
     async start(onChunk, onEntry, opts) {
       const initialPrompt = composeInitialPrompt(args.subagent, args.primer, args.userInstruction)
@@ -165,7 +177,7 @@ async function runClaudeSubagent(opts: {
   // that fires on every subagent_background delivery in
   // AgentCoordinator.deliverSubagentToMain, this makes PROGRESS.md the ONLY
   // durability contract for the loop-orchestration pattern. See
-  // adr-2026XXXX-notification-driven-loop-orchestration.
+  // adr-20260711-notification-driven-loop-orchestration.
   const session = await args.startClaudeSession({
     projectId: args.projectId,
     localPath: args.cwd,
@@ -184,6 +196,7 @@ async function runClaudeSubagent(opts: {
     delegationContext: args.delegationContext,
     restrictedAllowedPaths: args.allowedPaths,
     keepAlive,
+    maxTurns: args.subagent.maxTurns,
   })
   args.abortSignal.addEventListener("abort", () => { session.interrupt() }, { once: true })
 

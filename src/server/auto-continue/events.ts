@@ -7,9 +7,9 @@ export const AUTO_CONTINUE_EVENT_VERSION = 3 as const
  *  - `subagent_background` — a `run_in_background` subagent finished; re-enter
  *    to deliver a minimal "Read PROGRESS.md, decide next action" prompt after
  *    Kanna wipes the main-agent Claude session (per-iteration /clear). See
- *    adr-2026XXXX-notification-driven-loop-orchestration.
+ *    adr-20260711-notification-driven-loop-orchestration.
  *
- * Removed in adr-2026XXXX (hard break):
+ * Removed in adr-20260711-notification-driven-loop-orchestration (hard break):
  *  - `agent_wakeup` — timer-based `schedule_wakeup` self-poll (loop lost momentum
  *    on compaction; replaced by notification-driven `delegate_subagent` pattern).
  *  - `pending_workflow` — workflow-harvest poll (deferred to a follow-up ADR;
@@ -60,4 +60,21 @@ export type AutoContinueEvent =
     })
   | (AutoContinueEventBase & {
       kind: "auto_continue_fired"
+    })
+  | (AutoContinueEventBase & {
+      /**
+       * A `setup_loop` armed an autonomous loop on this chat. Persists the
+       * resolved worker + rendered loop prompt so every subsequent
+       * background-completion wake re-injects the loop discipline (rather than
+       * the generic "decide next action" prompt) and so loop turns can be
+       * tool-blocked at the host. Superseded by a later `loop_armed` or
+       * cleared by `loop_disarmed`. See adr-20260712-loop-orchestration-hardening.
+       */
+      kind: "loop_armed"
+      subagentId: string
+      prompt: string
+    })
+  | (AutoContinueEventBase & {
+      kind: "loop_disarmed"
+      reason: "goal_met" | "user_send" | "chat_deleted"
     })

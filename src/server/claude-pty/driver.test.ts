@@ -448,7 +448,7 @@ describe("buildPtyCliArgs", () => {
 
   // ── Issue #215: disallow native AskUserQuestion/ExitPlanMode under PTY ────
 
-  test("disallows native AskUserQuestion + ExitPlanMode + ScheduleWakeup (shims for AQ/EPM; no shim for ScheduleWakeup — hard-break per adr-2026XXXX)", () => {
+  test("disallows native AskUserQuestion + ExitPlanMode + ScheduleWakeup (shims for AQ/EPM; no shim for ScheduleWakeup — hard-break per adr-20260711-notification-driven-loop-orchestration)", () => {
     const args = buildPtyCliArgs(baseInput)
     const idx = args.indexOf("--disallowedTools")
     expect(idx).toBeGreaterThan(-1)
@@ -463,6 +463,23 @@ describe("buildPtyCliArgs", () => {
     const args = buildPtyCliArgs({ ...baseInput, mcpConfigPath: "/tmp/mcp-config.json" })
     const idx = args.indexOf("--disallowedTools")
     expect(idx).toBe(args.length - PTY_DISALLOWED_NATIVE_TOOLS.length - 1)
+  })
+
+  test("loopArmed adds Edit/Write/MultiEdit/NotebookEdit/Task to --disallowedTools", () => {
+    const args = buildPtyCliArgs({ ...baseInput, loopArmed: true })
+    const idx = args.indexOf("--disallowedTools")
+    const disallowed = args.slice(idx + 1)
+    for (const t of ["Edit", "Write", "MultiEdit", "NotebookEdit", "Task"]) {
+      expect(disallowed).toContain(t)
+    }
+    // Base disallows still present
+    expect(disallowed).toContain("AskUserQuestion")
+  })
+
+  test("loopArmed=false leaves the base disallow list untouched", () => {
+    const args = buildPtyCliArgs({ ...baseInput, loopArmed: false })
+    const idx = args.indexOf("--disallowedTools")
+    expect(args.slice(idx + 1)).toEqual(["AskUserQuestion", "ExitPlanMode", "ScheduleWakeup"])
   })
 
   test("--disallowedTools coexists with --append-system-prompt (index assertion still holds)", () => {

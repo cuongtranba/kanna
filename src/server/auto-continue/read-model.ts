@@ -6,6 +6,35 @@ export interface ChatSchedulesProjection {
   liveScheduleId: string | null
 }
 
+/** Armed-loop state for a chat, or null when no loop is currently armed. */
+export interface LoopState {
+  subagentId: string
+  prompt: string
+}
+
+/**
+ * Fold the auto-continue event log into the chat's current armed-loop state.
+ * The latest `loop_armed` wins; a later `loop_disarmed` clears it. Pure replay
+ * over the same durable event stream `deriveChatSchedules` uses, so it survives
+ * restart for free. Used to (a) re-inject the loop prompt on every
+ * background-completion wake and (b) tool-block loop-orchestrator turns.
+ */
+export function deriveLoopState(
+  events: readonly AutoContinueEvent[],
+  chatId: string,
+): LoopState | null {
+  let state: LoopState | null = null
+  for (const event of events) {
+    if (event.chatId !== chatId) continue
+    if (event.kind === "loop_armed") {
+      state = { subagentId: event.subagentId, prompt: event.prompt }
+    } else if (event.kind === "loop_disarmed") {
+      state = null
+    }
+  }
+  return state
+}
+
 const EMPTY: ChatSchedulesProjection = { schedules: {}, liveScheduleId: null }
 
 export function deriveChatSchedules(

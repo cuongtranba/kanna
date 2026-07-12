@@ -32,6 +32,9 @@ function createFakeStore() {
     requireChat() {
       return chat
     },
+    getAutoContinueEvents() {
+      return []
+    },
     getChat(chatId: string) {
       if (chatId !== "chat-1") return null
       return chat

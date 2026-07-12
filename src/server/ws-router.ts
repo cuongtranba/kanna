@@ -547,6 +547,7 @@ export function createWsRouter({
     claudeDriver: { ...CLAUDE_DRIVER_DEFAULTS, lifecycle: { ...CLAUDE_PTY_LIFECYCLE_DEFAULTS } },
     globalPromptAppend: "",
     shareDefaultTtlHours: 24,
+    subagentRuntime: { runTimeoutMs: 600_000, defaultLoopSubagentId: null },
   }
   const mergeAppSettingsPatch = (snapshot: AppSettingsSnapshot, patch: AppSettingsPatch): AppSettingsSnapshot => {
     let subagents = snapshot.subagents
@@ -576,6 +577,9 @@ export function createWsRouter({
             allowedPaths: patch.subagents.update.patch.allowedPaths === null
               ? undefined
               : patch.subagents.update.patch.allowedPaths ?? subagent.allowedPaths,
+            maxTurns: patch.subagents.update.patch.maxTurns === null
+              ? undefined
+              : patch.subagents.update.patch.maxTurns ?? subagent.maxTurns,
             updatedAt: Date.now(),
           }
         : subagent)
@@ -643,6 +647,12 @@ export function createWsRouter({
           ...snapshot.claudeDriver.lifecycle,
           ...patch.claudeDriver?.lifecycle,
         },
+      },
+      subagentRuntime: {
+        runTimeoutMs: patch.subagentRuntime?.runTimeoutMs ?? snapshot.subagentRuntime.runTimeoutMs,
+        defaultLoopSubagentId: patch.subagentRuntime?.defaultLoopSubagentId !== undefined
+          ? patch.subagentRuntime.defaultLoopSubagentId
+          : snapshot.subagentRuntime.defaultLoopSubagentId,
       },
     }
   }

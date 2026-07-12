@@ -467,6 +467,25 @@ function SubagentForm(props: SubagentFormProps) {
         />
       </FormRow>
 
+      <FormRow
+        label="Max turns"
+        hint="Optional. Caps the agentic turns per run (like Claude Code's per-agent maxTurns). Empty = unbounded. Claude SDK runs stop gracefully at the limit; PTY/Codex runs are aborted."
+      >
+        <Input
+          data-testid="subagent-form-max-turns"
+          type="number"
+          min={1}
+          step={1}
+          value={draft.maxTurns?.toString() ?? ""}
+          onChange={(event) => {
+            const parsed = Number.parseInt(event.target.value, 10)
+            patchDraft({ maxTurns: Number.isInteger(parsed) && parsed > 0 ? parsed : undefined })
+          }}
+          placeholder="unbounded"
+          className="w-36"
+        />
+      </FormRow>
+
       {draft.provider === "claude" ? (
         <>
           <FormRow
@@ -581,7 +600,7 @@ const FALLBACK_PROVIDER_PREFS: ChatProviderPreferences = {
 }
 
 export function SubagentsSettingsBranch(props: {
-  state: Pick<KannaState, "socket" | "appSettings">
+  state: Pick<KannaState, "socket" | "appSettings" | "handleWriteAppSettings">
 }) {
   const subagents = useAppSettingsStore(
     (store) => store.settings?.subagents ?? EMPTY_SUBAGENTS,
@@ -611,7 +630,9 @@ export function SubagentsSettingsBranch(props: {
         const result = await props.state.socket.command<SubagentCommandResult>({
           type: "subagent.update",
           id,
-          patch: input,
+          // maxTurns: explicit null when cleared — an absent key would keep
+          // the server's previous value (JSON drops undefined).
+          patch: { ...input, maxTurns: input.maxTurns ?? null },
         })
         return result
       },
@@ -636,7 +657,11 @@ export function SubagentsSettingsBranch(props: {
   }, [])
 
   return (
-    <div className="px-6 py-6">
+    <div className="flex flex-col gap-6 px-6 py-6">
+      <LoopRuntimePanel
+        subagents={subagents}
+        handleWriteAppSettings={props.state.handleWriteAppSettings}
+      />
       <SubagentsSection
         subagents={subagents}
         providerDefaults={providerDefaults}
@@ -648,6 +673,104 @@ export function SubagentsSettingsBranch(props: {
         handlers={handlers}
       />
     </div>
+  )
+}
+
+const DEFAULT_LOOP_SUBAGENT_NONE = "__none__"
+const SUBAGENT_RUN_TIMEOUT_MIN_S = 30
+const SUBAGENT_RUN_TIMEOUT_MAX_S = 86_400
+const DEFAULT_SUBAGENT_RUN_TIMEOUT_S = 600
+
+/**
+ * Runtime knobs for delegated subagent runs + the autonomous loop:
+ * the idle stall-watchdog window and the default loop subagent. Reads
+ * `subagentRuntime` off the app-settings store and writes patches through
+ * `handleWriteAppSettings` (optimistic, same path as every other setting).
+ */
+function LoopRuntimePanel(props: {
+  subagents: Subagent[]
+  handleWriteAppSettings: KannaState["handleWriteAppSettings"]
+}) {
+  const runtime = useAppSettingsStore((store) => store.settings?.subagentRuntime)
+  const timeoutSeconds = runtime ? Math.round(runtime.runTimeoutMs / 1000) : DEFAULT_SUBAGENT_RUN_TIMEOUT_S
+  const defaultLoopSubagentId = runtime?.defaultLoopSubagentId ?? null
+
+  const [timeoutDraft, setTimeoutDraft] = useState(String(timeoutSeconds))
+  const [error, setError] = useState<string | null>(null)
+
+  function commitTimeout() {
+    const seconds = Number(timeoutDraft)
+    if (!Number.isInteger(seconds) || seconds < SUBAGENT_RUN_TIMEOUT_MIN_S || seconds > SUBAGENT_RUN_TIMEOUT_MAX_S) {
+      setTimeoutDraft(String(timeoutSeconds))
+      setError(`Timeout must be a whole number of seconds between ${SUBAGENT_RUN_TIMEOUT_MIN_S} and ${SUBAGENT_RUN_TIMEOUT_MAX_S}.`)
+      return
+    }
+    setError(null)
+    if (seconds === timeoutSeconds) return
+    void props.handleWriteAppSettings({ subagentRuntime: { runTimeoutMs: seconds * 1000 } })
+      .catch((err) => setError(err instanceof Error ? err.message : "Unable to save subagent runtime settings."))
+  }
+
+  function handleDefaultChange(value: string) {
+    setError(null)
+    const next = value === DEFAULT_LOOP_SUBAGENT_NONE ? null : value
+    void props.handleWriteAppSettings({ subagentRuntime: { defaultLoopSubagentId: next } })
+      .catch((err) => setError(err instanceof Error ? err.message : "Unable to save default loop subagent."))
+  }
+
+  return (
+    <section className="flex flex-col gap-4 rounded-lg border border-border/60 bg-card/40 p-4">
+      <header className="flex flex-col gap-1">
+        <h3 className="text-sm font-medium text-foreground">Loop &amp; runtime</h3>
+        <p className="text-xs text-muted-foreground">
+          Applies to background subagent runs and the autonomous <code className="rounded bg-muted px-1 py-0.5 font-mono">/loop</code>.
+        </p>
+      </header>
+
+      {error ? (
+        <div className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+          {error}
+        </div>
+      ) : null}
+
+      <FormRow
+        label="Stall timeout (seconds)"
+        hint="A subagent run is aborted only after this long with no streamed activity — not a total wall-clock cap. A steadily-working run is never killed."
+      >
+        <Input
+          type="number"
+          inputMode="numeric"
+          min={SUBAGENT_RUN_TIMEOUT_MIN_S}
+          max={SUBAGENT_RUN_TIMEOUT_MAX_S}
+          value={timeoutDraft}
+          onChange={(event) => setTimeoutDraft(event.target.value)}
+          onBlur={commitTimeout}
+          onKeyDown={(event) => {
+            if (event.key !== "Enter") return
+            commitTimeout()
+            event.currentTarget.blur()
+          }}
+          className="w-full md:w-48 tabular-nums"
+        />
+      </FormRow>
+
+      <FormRow
+        label="Default loop subagent"
+        hint="The subagent setup_loop delegates each chunk to when no explicit id is given."
+      >
+        <Select value={defaultLoopSubagentId ?? DEFAULT_LOOP_SUBAGENT_NONE} onValueChange={handleDefaultChange}>
+          <SelectTrigger className="w-full md:w-72">
+            <SelectValue placeholder="None" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={DEFAULT_LOOP_SUBAGENT_NONE}>None (require explicit id)</SelectItem>
+            {props.subagents.map((subagent) => (
+              <SelectItem key={subagent.id} value={subagent.id}>{subagent.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </FormRow>
+    </section>
   )
 }
 
@@ -721,6 +844,7 @@ export function toSubagentInput(subagent: Subagent): SubagentInput {
     triggerMode: subagent.triggerMode,
     workingDir: subagent.workingDir,
     allowedPaths: subagent.allowedPaths,
+    maxTurns: subagent.maxTurns,
   }
 }
 
@@ -742,6 +866,7 @@ export function isSubagentDraftDirty(draft: SubagentInput, baseline: SubagentInp
   if ((draft.triggerMode ?? "auto") !== (baseline.triggerMode ?? "auto")) return true
   if ((draft.workingDir ?? "") !== (baseline.workingDir ?? "")) return true
   if (!stringArrayEqual(draft.allowedPaths, baseline.allowedPaths)) return true
+  if ((draft.maxTurns ?? null) !== (baseline.maxTurns ?? null)) return true
   return !shallowEqualModelOptions(draft.modelOptions, baseline.modelOptions)
 }
 

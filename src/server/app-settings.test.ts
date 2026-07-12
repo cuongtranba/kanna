@@ -87,6 +87,7 @@ function expectedSettingsSnapshot(filePath: string, overrides: Partial<AppSettin
     claudeDriver: { ...CLAUDE_DRIVER_DEFAULTS, lifecycle: { ...CLAUDE_PTY_LIFECYCLE_DEFAULTS } },
     globalPromptAppend: "",
     shareDefaultTtlHours: 24,
+    subagentRuntime: { runTimeoutMs: 600_000, defaultLoopSubagentId: null },
     ...overrides,
   }
 }
@@ -479,6 +480,39 @@ describe("subagent CRUD", () => {
     expect(await mgr.createSubagent(baseInput({ name: "foo/bar" }))).toMatchObject({ code: "INVALID_CHAR" })
     expect(await mgr.createSubagent(baseInput({ name: "   " }))).toMatchObject({ code: "EMPTY_NAME" })
     expect(await mgr.createSubagent(baseInput({ name: ".hidden" }))).toMatchObject({ code: "INVALID_CHAR" })
+    mgr.dispose()
+  })
+
+  test("maxTurns: valid on create, invalid values dropped, null patch clears", async () => {
+    const filePath = await createTempFilePath()
+    const mgr = trackManager(new AppSettingsManager(filePath))
+    await mgr.initialize()
+
+    const created = await mgr.createSubagent(baseInput({ maxTurns: 50 }))
+    expect("id" in created).toBe(true)
+    if (!("id" in created)) return
+    expect(created.maxTurns).toBe(50)
+
+    // Invalid values (zero, negative, fractional) normalize to undefined.
+    const bad = await mgr.createSubagent(baseInput({ name: "bad-turns", maxTurns: -3 }))
+    if (!("id" in bad)) return
+    expect(bad.maxTurns).toBeUndefined()
+    const frac = await mgr.createSubagent(baseInput({ name: "frac-turns", maxTurns: 2.5 }))
+    if (!("id" in frac)) return
+    expect(frac.maxTurns).toBeUndefined()
+
+    // Patch updates the bound; explicit null clears back to unbounded.
+    const updated = await mgr.updateSubagent(created.id, { maxTurns: 200 })
+    if (!("id" in updated)) return
+    expect(updated.maxTurns).toBe(200)
+    const cleared = await mgr.updateSubagent(created.id, { maxTurns: null })
+    if (!("id" in cleared)) return
+    expect(cleared.maxTurns).toBeUndefined()
+    // Omitted key keeps the existing value.
+    await mgr.updateSubagent(created.id, { maxTurns: 75 })
+    const kept = await mgr.updateSubagent(created.id, { description: "unrelated" })
+    if (!("id" in kept)) return
+    expect(kept.maxTurns).toBe(75)
     mgr.dispose()
   })
 
