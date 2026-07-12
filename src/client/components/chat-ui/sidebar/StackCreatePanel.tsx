@@ -1,6 +1,7 @@
-import { useState, useCallback, useRef, type KeyboardEvent, type FormEvent, type ReactNode } from "react"
+import { useCallback, useRef, type KeyboardEvent, type FormEvent, type ReactNode } from "react"
 import { Button } from "../../ui/button"
 import { cn } from "../../../lib/utils"
+import { createScopedStore } from "../../../lib/createScopedStore"
 
 interface StackCreatePanelProps {
   mode: "create" | "edit"
@@ -11,19 +12,41 @@ interface StackCreatePanelProps {
   onCancel: () => void
 }
 
-export function StackCreatePanel({
+interface StackCreatePanelInit {
+  initialTitle: string
+  initialSelectedIds: Set<string>
+}
+
+interface StackCreatePanelState {
+  title: string
+  selectedIds: Set<string>
+  setTitle: (title: string) => void
+  setSelectedIds: (updater: (prev: Set<string>) => Set<string>) => void
+}
+
+const stackCreatePanelStore = createScopedStore<
+  StackCreatePanelInit,
+  StackCreatePanelState
+>("StackCreatePanel", (init) => (set) => ({
+  title: init.initialTitle,
+  selectedIds: init.initialSelectedIds,
+  setTitle: (title) => set({ title }),
+  setSelectedIds: (updater) =>
+    set((state) => ({ selectedIds: updater(state.selectedIds) })),
+}))
+
+function StackCreatePanelInner({
   mode: _mode,
-  initialTitle,
-  initialProjectIds,
   projects,
   onSubmit,
   onCancel,
 }: StackCreatePanelProps): ReactNode {
-  const [title, setTitle] = useState<string>(initialTitle ?? "")
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(
-    new Set(initialProjectIds ?? [])
-  )
   const chipContainerRef = useRef<HTMLDivElement>(null)
+
+  const title = stackCreatePanelStore.useScopedStore((s) => s.title)
+  const selectedIds = stackCreatePanelStore.useScopedStore((s) => s.selectedIds)
+  const setTitle = stackCreatePanelStore.useScopedStore((s) => s.setTitle)
+  const setSelectedIds = stackCreatePanelStore.useScopedStore((s) => s.setSelectedIds)
 
   const hasEnoughProjects = projects.length >= 2
   const isSaveDisabled =
@@ -39,7 +62,7 @@ export function StackCreatePanel({
       }
       return next
     })
-  }, [])
+  }, [setSelectedIds])
 
   // Fix 2: form submit handler receives FormEvent
   const handleFormSubmit = useCallback(async (e: FormEvent<HTMLFormElement>) => {
@@ -160,5 +183,32 @@ export function StackCreatePanel({
         </Button>
       </div>
     </form>
+  )
+}
+
+export function StackCreatePanel({
+  mode,
+  initialTitle,
+  initialProjectIds,
+  projects,
+  onSubmit,
+  onCancel,
+}: StackCreatePanelProps): ReactNode {
+  return (
+    <stackCreatePanelStore.Provider
+      init={{
+        initialTitle: initialTitle ?? "",
+        initialSelectedIds: new Set(initialProjectIds ?? []),
+      }}
+    >
+      <StackCreatePanelInner
+        mode={mode}
+        initialTitle={initialTitle}
+        initialProjectIds={initialProjectIds}
+        projects={projects}
+        onSubmit={onSubmit}
+        onCancel={onCancel}
+      />
+    </stackCreatePanelStore.Provider>
   )
 }

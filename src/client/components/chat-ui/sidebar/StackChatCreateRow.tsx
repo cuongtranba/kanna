@@ -1,5 +1,4 @@
 import {
-  useState,
   useCallback,
   useId,
   type FormEvent,
@@ -11,6 +10,7 @@ import { Button } from "../../ui/button"
 import { cn } from "../../../lib/utils"
 import { useIsMobile } from "../../../hooks/useIsMobile"
 import type { GitWorktree, StackSummary } from "../../../../shared/types"
+import { createScopedStore } from "../../../lib/createScopedStore"
 
 interface StackChatCreateRowProps {
   stack: StackSummary
@@ -22,7 +22,38 @@ interface StackChatCreateRowProps {
   onCancel: () => void
 }
 
-export function StackChatCreateRow({
+interface StackChatCreateRowInit {
+  initialPrimaryProjectId: string
+  initialSelectedWorktrees: Map<string, string>
+}
+
+interface StackChatCreateRowState {
+  selectedWorktrees: Map<string, string>
+  primaryProjectId: string
+  isSubmitting: boolean
+  errorMessage: string | null
+  setSelectedWorktrees: (updater: (prev: Map<string, string>) => Map<string, string>) => void
+  setPrimaryProjectId: (id: string) => void
+  setIsSubmitting: (submitting: boolean) => void
+  setErrorMessage: (message: string | null) => void
+}
+
+const stackChatCreateRowStore = createScopedStore<
+  StackChatCreateRowInit,
+  StackChatCreateRowState
+>("StackChatCreateRow", (init) => (set) => ({
+  selectedWorktrees: init.initialSelectedWorktrees,
+  primaryProjectId: init.initialPrimaryProjectId,
+  isSubmitting: false,
+  errorMessage: null,
+  setSelectedWorktrees: (updater) =>
+    set((state) => ({ selectedWorktrees: updater(state.selectedWorktrees) })),
+  setPrimaryProjectId: (id) => set({ primaryProjectId: id }),
+  setIsSubmitting: (submitting) => set({ isSubmitting: submitting }),
+  setErrorMessage: (message) => set({ errorMessage: message }),
+}))
+
+function StackChatCreateRowInner({
   stack,
   projects,
   onCreate,
@@ -32,18 +63,14 @@ export function StackChatCreateRow({
   const isMobile = useIsMobile()
   const errorId = useId()
 
-  const [selectedWorktrees, setSelectedWorktrees] = useState<Map<string, string>>(() => {
-    const map = new Map<string, string>()
-    for (const p of filteredProjects) {
-      const primary = p.worktrees.find((w) => w.isPrimary) ?? p.worktrees[0]
-      if (primary) map.set(p.id, primary.path)
-    }
-    return map
-  })
-
-  const [primaryProjectId, setPrimaryProjectId] = useState(filteredProjects[0]?.id ?? "")
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const selectedWorktrees = stackChatCreateRowStore.useScopedStore((s) => s.selectedWorktrees)
+  const primaryProjectId = stackChatCreateRowStore.useScopedStore((s) => s.primaryProjectId)
+  const isSubmitting = stackChatCreateRowStore.useScopedStore((s) => s.isSubmitting)
+  const errorMessage = stackChatCreateRowStore.useScopedStore((s) => s.errorMessage)
+  const setSelectedWorktrees = stackChatCreateRowStore.useScopedStore((s) => s.setSelectedWorktrees)
+  const setPrimaryProjectId = stackChatCreateRowStore.useScopedStore((s) => s.setPrimaryProjectId)
+  const setIsSubmitting = stackChatCreateRowStore.useScopedStore((s) => s.setIsSubmitting)
+  const setErrorMessage = stackChatCreateRowStore.useScopedStore((s) => s.setErrorMessage)
 
   const isSingleProject = filteredProjects.length <= 1
 
@@ -68,7 +95,7 @@ export function StackChatCreateRow({
         setIsSubmitting(false)
       }
     },
-    [filteredProjects, selectedWorktrees, primaryProjectId, onCreate, isSubmitting]
+    [filteredProjects, selectedWorktrees, primaryProjectId, onCreate, isSubmitting, setErrorMessage, setIsSubmitting]
   )
 
   const handleKeyDown = useCallback(
@@ -200,5 +227,35 @@ export function StackChatCreateRow({
         </DialogPrimitive.Content>
       </DialogPrimitive.Portal>
     </DialogPrimitive.Root>
+  )
+}
+
+export function StackChatCreateRow({
+  stack,
+  projects,
+  onCreate,
+  onCancel,
+}: StackChatCreateRowProps): ReactNode {
+  const filteredProjects = projects.filter((p) => stack.projectIds.includes(p.id))
+
+  const initialSelectedWorktrees = new Map<string, string>()
+  for (const p of filteredProjects) {
+    const primary = p.worktrees.find((w) => w.isPrimary) ?? p.worktrees[0]
+    if (primary) initialSelectedWorktrees.set(p.id, primary.path)
+  }
+
+  const initialPrimaryProjectId = filteredProjects[0]?.id ?? ""
+
+  return (
+    <stackChatCreateRowStore.Provider
+      init={{ initialPrimaryProjectId, initialSelectedWorktrees }}
+    >
+      <StackChatCreateRowInner
+        stack={stack}
+        projects={projects}
+        onCreate={onCreate}
+        onCancel={onCancel}
+      />
+    </stackChatCreateRowStore.Provider>
   )
 }
