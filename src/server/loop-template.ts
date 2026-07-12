@@ -27,6 +27,22 @@ export interface LoopSetupInput {
   trackingFile?: string
   /** Optional starter description of the first chunk written into the skeleton. */
   chunkHint?: string
+  /**
+   * Subagent the loop delegates each chunk to. Optional: when omitted the
+   * caller's configured `defaultLoopSubagentId` is used. Resolution + roster
+   * membership are validated so the loop never guesses at runtime.
+   */
+  subagentId?: string
+}
+
+/**
+ * Loop-setup context the caller supplies: the current subagent roster (id →
+ * display name) and the configured default loop subagent. Kept separate from
+ * `LoopSetupInput` because it is server state, not model-supplied args.
+ */
+export interface LoopSetupContext {
+  roster: readonly { id: string; name: string }[]
+  defaultLoopSubagentId: string | null
 }
 
 export interface ResolvedLoopSetup {
@@ -37,6 +53,8 @@ export interface ResolvedLoopSetup {
   /** Path relative to `cwd`; the prompt embeds this. */
   trackingFileRel: string
   chunkHint: string | null
+  /** Concrete subagent id the loop delegates to (never null after resolve). */
+  subagentId: string
   /** The full recurring prompt the main agent will re-execute each iteration. */
   prompt: string
   /** Skeleton written when `trackingFileAbs` does not exist yet. */
@@ -99,27 +117,36 @@ function renderLoopPrompt(args: {
   goal: string
   verifyCommand: string
   trackingFileRel: string
+  subagentId: string
 }): string {
-  const { goal, verifyCommand, trackingFileRel } = args
+  const { goal, verifyCommand, trackingFileRel, subagentId } = args
   return [
-    "You are running an autonomous loop. Follow these steps EXACTLY every turn:",
+    "You are the ORCHESTRATOR of an autonomous loop. You do NOT do the work",
+    "yourself — you delegate it. Follow these steps EXACTLY every turn:",
     "",
     `1. Read ${trackingFileRel}.`,
     `2. Run the verify command with Bash: \`${verifyCommand}\`. Check its exit code.`,
     "3. If the verify command exited 0, the goal is met. Print a one-line",
-    `   "GOAL MET: ${goal}" message and END THIS TURN. Do NOT call`,
-    "   delegate_subagent. The loop ends by absence of delegation.",
+    `   "GOAL MET: ${goal}" message, then call mcp__kanna__stop_loop({}) and`,
+    "   END THIS TURN. Do NOT call delegate_subagent.",
     "4. Otherwise, pick the \"Next chunk\" from the tracking file and delegate it",
-    "   to an appropriate subagent from your roster:",
+    "   with EXACTLY this call (the subagent is fixed by configuration):",
     "",
     "     mcp__kanna__delegate_subagent({",
-    "       subagent_id: <pick appropriate id from your roster>,",
+    `       subagent_id: "${subagentId}",`,
     "       run_in_background: true,",
     `       prompt: "Do the next chunk in ${trackingFileRel}. Verify locally with \`${verifyCommand}\`. On success: append a Progress row to ${trackingFileRel} (chunk done + timestamp) and set the next chunk. On failure: append a Failed-approaches row with a short reason. Terminate when done.",`,
     "     })",
     "",
     "5. End your turn. Kanna will /clear your context and re-fire this exact",
     `   prompt after the subagent completes. Your ONLY durable state is ${trackingFileRel}.`,
+    "",
+    "HARD RULES (do not violate):",
+    "- You are the orchestrator. NEVER edit code yourself: do NOT use Edit,",
+    "  Write, MultiEdit, or the Task/Agent tool. Kanna blocks these tools in",
+    "  loop turns; attempting them wastes the turn.",
+    "- Exactly ONE delegate_subagent per turn, then END THE TURN immediately.",
+    "- All progress lives in the tracking file, never in your context.",
     "",
     `Goal (for reference): ${goal}`,
     `Verify command: \`${verifyCommand}\``,
@@ -164,7 +191,11 @@ function renderSkeleton(args: {
  * uses to (a) ensure the tracking file exists on disk and (b) enqueue the
  * templated prompt as an auto-continue.
  */
-export function validateLoopSetup(input: LoopSetupInput, cwd: string): LoopSetupValidation {
+export function validateLoopSetup(
+  input: LoopSetupInput,
+  cwd: string,
+  context: LoopSetupContext,
+): LoopSetupValidation {
   const errors: string[] = []
 
   if (!isNonBlankString(input.goal)) {
@@ -187,11 +218,23 @@ export function validateLoopSetup(input: LoopSetupInput, cwd: string): LoopSetup
     }
   }
 
+  // Resolve the worker: explicit param wins, else the configured default.
+  const requestedSubagentId = isNonBlankString(input.subagentId)
+    ? input.subagentId.trim()
+    : (context.defaultLoopSubagentId ?? null)
+  if (!requestedSubagentId) {
+    errors.push("subagentId is required: pass it explicitly or set a default loop subagent in Settings")
+  } else if (!context.roster.some((s) => s.id === requestedSubagentId)) {
+    errors.push(`subagentId "${requestedSubagentId}" is not a known subagent`)
+  }
+
   const resolved = resolveTrackingFile(input.trackingFile, cwd)
   if ("error" in resolved) errors.push(resolved.error)
 
   if (errors.length > 0) return { ok: false, errors }
   if ("error" in resolved) return { ok: false, errors: [resolved.error] } // unreachable; narrows type
+  if (requestedSubagentId === null) return { ok: false, errors: ["internal: subagentId unresolved"] } // narrows type
+  const subagentId = requestedSubagentId
 
   const chunkHint = input.chunkHint?.trim() ? input.chunkHint.trim() : null
   const goal = input.goal.trim()
@@ -200,6 +243,7 @@ export function validateLoopSetup(input: LoopSetupInput, cwd: string): LoopSetup
     goal,
     verifyCommand,
     trackingFileRel: resolved.rel,
+    subagentId,
   })
 
   // Belt-and-suspenders structural check on the rendered prompt. Guards
@@ -208,11 +252,14 @@ export function validateLoopSetup(input: LoopSetupInput, cwd: string): LoopSetup
   const requiredSubstrings: readonly string[] = [
     resolved.rel,
     verifyCommand,
+    subagentId,
     "delegate_subagent",
     "run_in_background: true",
+    "stop_loop",
     "GOAL MET",
     "END THIS TURN",
     "/clear",
+    "NEVER edit code yourself",
   ]
   const missing = requiredSubstrings.filter((s) => !prompt.includes(s))
   if (missing.length > 0) {
@@ -230,6 +277,7 @@ export function validateLoopSetup(input: LoopSetupInput, cwd: string): LoopSetup
       trackingFileAbs: resolved.abs,
       trackingFileRel: resolved.rel,
       chunkHint,
+      subagentId,
       prompt,
       skeleton: renderSkeleton({ goal, verifyCommand, chunkHint }),
     },

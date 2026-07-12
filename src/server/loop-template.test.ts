@@ -1,6 +1,12 @@
 import { describe, expect, test } from "bun:test"
 import path from "node:path"
-import { validateLoopSetup, __testing } from "./loop-template"
+import { validateLoopSetup, __testing, type LoopSetupContext } from "./loop-template"
+
+// A valid context most tests share: one known subagent, set as the default.
+const CTX: LoopSetupContext = {
+  roster: [{ id: "sub-1", name: "worker" }, { id: "sub-2", name: "reviewer" }],
+  defaultLoopSubagentId: "sub-1",
+}
 
 describe("validateLoopSetup — happy path", () => {
   const cwd = "/tmp/kanna-loop-test-project"
@@ -13,6 +19,7 @@ describe("validateLoopSetup — happy path", () => {
         chunkHint: "start with warnings in src/client/**",
       },
       cwd,
+      CTX,
     )
     if (!result.ok) throw new Error(`expected ok, got errors: ${result.errors.join(", ")}`)
     expect(result.resolved.goal).toBe("eslint --max-warnings=0 passes")
@@ -20,6 +27,8 @@ describe("validateLoopSetup — happy path", () => {
     expect(result.resolved.trackingFileRel).toBe("PROGRESS.md")
     expect(result.resolved.trackingFileAbs).toBe(path.join(cwd, "PROGRESS.md"))
     expect(result.resolved.chunkHint).toBe("start with warnings in src/client/**")
+    // Defaulted worker resolved from context
+    expect(result.resolved.subagentId).toBe("sub-1")
     // Rendered prompt embeds every required clause verbatim
     expect(result.resolved.prompt).toContain("PROGRESS.md")
     expect(result.resolved.prompt).toContain("bun run lint")
@@ -28,10 +37,25 @@ describe("validateLoopSetup — happy path", () => {
     expect(result.resolved.prompt).toContain("GOAL MET")
     expect(result.resolved.prompt).toContain("END THIS TURN")
     expect(result.resolved.prompt).toContain("/clear")
+    // Hardening: the concrete subagent id + stop_loop + no-self-edit rule
+    expect(result.resolved.prompt).toContain("sub-1")
+    expect(result.resolved.prompt).toContain("stop_loop")
+    expect(result.resolved.prompt).toContain("NEVER edit code yourself")
     // Skeleton includes goal + verify command
     expect(result.resolved.skeleton).toContain("eslint --max-warnings=0 passes")
     expect(result.resolved.skeleton).toContain("bun run lint")
     expect(result.resolved.skeleton).toContain("start with warnings in src/client/**")
+  })
+
+  test("explicit subagentId overrides the configured default", () => {
+    const result = validateLoopSetup(
+      { goal: "g", verifyCommand: "true", subagentId: "sub-2" },
+      cwd,
+      CTX,
+    )
+    if (!result.ok) throw new Error(result.errors.join(", "))
+    expect(result.resolved.subagentId).toBe("sub-2")
+    expect(result.resolved.prompt).toContain("sub-2")
   })
 
   test("respects custom relative tracking file path inside cwd", () => {
@@ -42,6 +66,7 @@ describe("validateLoopSetup — happy path", () => {
         trackingFile: "docs/LOOP-STATE.md",
       },
       cwd,
+      CTX,
     )
     if (!result.ok) throw new Error(result.errors.join(", "))
     expect(result.resolved.trackingFileRel).toBe(path.join("docs", "LOOP-STATE.md"))
@@ -57,6 +82,7 @@ describe("validateLoopSetup — happy path", () => {
         trackingFile: path.join(cwd, "sub", "PROG.md"),
       },
       cwd,
+      CTX,
     )
     if (!result.ok) throw new Error(result.errors.join(", "))
     expect(result.resolved.trackingFileRel).toBe(path.join("sub", "PROG.md"))
@@ -70,6 +96,7 @@ describe("validateLoopSetup — happy path", () => {
         chunkHint: "   ",
       },
       cwd,
+      CTX,
     )
     if (!result.ok) throw new Error(result.errors.join(", "))
     expect(result.resolved.chunkHint).toBeNull()
@@ -78,36 +105,74 @@ describe("validateLoopSetup — happy path", () => {
   })
 })
 
+describe("validateLoopSetup — subagent resolution", () => {
+  const cwd = "/tmp/kanna-loop-test-project"
+
+  test("rejects when neither explicit id nor default is set", () => {
+    const result = validateLoopSetup(
+      { goal: "g", verifyCommand: "true" },
+      cwd,
+      { roster: [{ id: "sub-1", name: "worker" }], defaultLoopSubagentId: null },
+    )
+    expect(result.ok).toBe(false)
+    if (result.ok) throw new Error("expected reject")
+    expect(result.errors.some((e) => e.includes("subagentId is required"))).toBe(true)
+  })
+
+  test("rejects an explicit id that is not in the roster", () => {
+    const result = validateLoopSetup(
+      { goal: "g", verifyCommand: "true", subagentId: "ghost" },
+      cwd,
+      CTX,
+    )
+    expect(result.ok).toBe(false)
+    if (result.ok) throw new Error("expected reject")
+    expect(result.errors.some((e) => e.includes("ghost") && e.includes("not a known subagent"))).toBe(true)
+  })
+
+  test("rejects a default id that is not in the roster", () => {
+    const result = validateLoopSetup(
+      { goal: "g", verifyCommand: "true" },
+      cwd,
+      { roster: [{ id: "sub-1", name: "worker" }], defaultLoopSubagentId: "stale-id" },
+    )
+    expect(result.ok).toBe(false)
+    if (result.ok) throw new Error("expected reject")
+    expect(result.errors.some((e) => e.includes("stale-id"))).toBe(true)
+  })
+})
+
 describe("validateLoopSetup — rejections", () => {
   const cwd = "/tmp/kanna-loop-test-project"
 
   test("rejects when goal is missing / blank", () => {
-    const empty = validateLoopSetup({ goal: "", verifyCommand: "x" }, cwd)
+    const empty = validateLoopSetup({ goal: "", verifyCommand: "x" }, cwd, CTX)
     expect(empty.ok).toBe(false)
     if (empty.ok) throw new Error("expected reject")
     expect(empty.errors.some((e) => e.includes("goal"))).toBe(true)
 
-    const blank = validateLoopSetup({ goal: "   ", verifyCommand: "x" }, cwd)
+    const blank = validateLoopSetup({ goal: "   ", verifyCommand: "x" }, cwd, CTX)
     expect(blank.ok).toBe(false)
 
     // Not-a-string via type cast simulates an SDK payload with the wrong shape.
     const notString = validateLoopSetup(
       { goal: 42 as unknown as string, verifyCommand: "x" },
       cwd,
+      CTX,
     )
     expect(notString.ok).toBe(false)
   })
 
   test("rejects when goal exceeds max length", () => {
     const overlong = "a".repeat(501)
-    const result = validateLoopSetup({ goal: overlong, verifyCommand: "x" }, cwd)
+    const result = validateLoopSetup({ goal: overlong, verifyCommand: "x" }, cwd, CTX)
     expect(result.ok).toBe(false)
     if (result.ok) throw new Error("expected reject")
     expect(result.errors.some((e) => e.includes("500"))).toBe(true)
   })
 
   test("rejects when verifyCommand is missing or blank", () => {
-    const empty = validateLoopSetup({ goal: "g", verifyCommand: "" }, cwd)
+    const empty = validateLoopSetup({ goal: "g", verifyCommand: "" }, cwd, CTX)
     expect(empty.ok).toBe(false)
     if (empty.ok) throw new Error("expected reject")
     expect(empty.errors.some((e) => e.includes("verifyCommand"))).toBe(true)
@@ -117,6 +182,7 @@ describe("validateLoopSetup — rejections", () => {
     const result = validateLoopSetup(
       { goal: "g", verifyCommand: "echo 'unclosed" },
       cwd,
+      CTX,
     )
     expect(result.ok).toBe(false)
     if (result.ok) throw new Error("expected reject")
@@ -127,6 +193,7 @@ describe("validateLoopSetup — rejections", () => {
     const result = validateLoopSetup(
       { goal: "g", verifyCommand: "true", trackingFile: "../escaped.md" },
       cwd,
+      CTX,
     )
     expect(result.ok).toBe(false)
     if (result.ok) throw new Error("expected reject")
@@ -137,6 +204,7 @@ describe("validateLoopSetup — rejections", () => {
     const result = validateLoopSetup(
       { goal: "g", verifyCommand: "true", trackingFile: "/etc/passwd" },
       cwd,
+      CTX,
     )
     expect(result.ok).toBe(false)
     if (result.ok) throw new Error("expected reject")
@@ -146,6 +214,7 @@ describe("validateLoopSetup — rejections", () => {
     const result = validateLoopSetup(
       { goal: "g", verifyCommand: "true", trackingFile: cwd },
       cwd,
+      CTX,
     )
     expect(result.ok).toBe(false)
   })
@@ -154,6 +223,7 @@ describe("validateLoopSetup — rejections", () => {
     const result = validateLoopSetup(
       { goal: "g", verifyCommand: "true", trackingFile: "PROG\0RESS.md" },
       cwd,
+      CTX,
     )
     expect(result.ok).toBe(false)
   })
@@ -163,6 +233,7 @@ describe("validateLoopSetup — rejections", () => {
     const result = validateLoopSetup(
       { goal: "g", verifyCommand: "true", chunkHint: overlong },
       cwd,
+      CTX,
     )
     expect(result.ok).toBe(false)
     if (result.ok) throw new Error("expected reject")
@@ -173,6 +244,7 @@ describe("validateLoopSetup — rejections", () => {
     const result = validateLoopSetup(
       { goal: "", verifyCommand: "" },
       cwd,
+      CTX,
     )
     expect(result.ok).toBe(false)
     if (result.ok) throw new Error("expected reject")
@@ -199,8 +271,10 @@ describe("renderLoopPrompt structural invariants", () => {
       goal: "green build",
       verifyCommand: "make check",
       trackingFileRel: "PROGRESS.md",
+      subagentId: "sub-1",
     })
     expect(prompt).toContain("Goal (for reference): green build")
     expect(prompt).toContain("Verify command: `make check`")
+    expect(prompt).toContain("subagent_id: \"sub-1\"")
   })
 })

@@ -114,6 +114,10 @@ export interface StartClaudeSessionPtyArgs {
   delegationContext?: KannaMcpDelegationContext
   /** Backs the `setup_loop` MCP tool. Omit to hide the tool from the model. */
   setupLoop?: (input: LoopSetupInput) => Promise<SetupLoopHandlerResult>
+  /** Backs the `stop_loop` MCP tool. Omit to hide the tool from the model. */
+  stopLoop?: () => Promise<void>
+  /** Evaluated at spawn: when true, add LOOP_BLOCKED tools to --disallowedTools. */
+  isLoopArmed?: () => boolean
   /** Enabled user-defined MCP servers, written into mcp-config.json. */
   customMcpServers?: readonly McpServerConfig[]
   /** Pre-resolved oauth bearer tokens keyed by server id. */
@@ -258,7 +262,21 @@ export interface BuildPtyCliArgsInput {
   channelServerName?: string
   /** When true, layer FS restriction: disallow native FS tools + allowlist `mcp__kanna__*`. */
   restricted?: boolean
+  /**
+   * When true, an autonomous loop is armed on this chat: disallow the
+   * direct-edit + native Agent tools (LOOP_BLOCKED_NATIVE_TOOLS mirror) so the
+   * orchestrator can only delegate. PTY has no canUseTool hook, so this is the
+   * host enforcement path (parity with the SDK driver's canUseTool block).
+   */
+  loopArmed?: boolean
 }
+
+/**
+ * Native tools disallowed while a loop is armed (PTY mirror of the SDK
+ * `LOOP_BLOCKED_NATIVE_TOOLS`). Kept as a literal here to avoid a server→pty
+ * import edge; the driver test pins parity with the SDK list.
+ */
+export const PTY_LOOP_BLOCKED_NATIVE_TOOLS = ["Edit", "Write", "MultiEdit", "NotebookEdit", "Task"] as const
 
 /**
  * Build claude CLI args for TUI driver mode.
@@ -327,9 +345,14 @@ export function buildPtyCliArgs(args: BuildPtyCliArgsInput): string[] {
   // `--disallowedTools` is variadic in the claude CLI (space-separated tool
   // strings as separate argv — code.claude.com/docs/en/cli-reference). Push
   // it LAST so it cannot greedily swallow a subsequent flag value.
-  const disallow: readonly string[] = args.restricted
+  const disallow: string[] = args.restricted
     ? [...PTY_DISALLOWED_NATIVE_TOOLS, ...RESTRICTED_FS_NATIVE_TOOLS]
-    : PTY_DISALLOWED_NATIVE_TOOLS
+    : [...PTY_DISALLOWED_NATIVE_TOOLS]
+  if (args.loopArmed) {
+    for (const t of PTY_LOOP_BLOCKED_NATIVE_TOOLS) {
+      if (!disallow.includes(t)) disallow.push(t)
+    }
+  }
   cliArgs.push("--disallowedTools", ...disallow)
   return cliArgs
 }
@@ -465,6 +488,7 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
         subagentOrchestrator: args.subagentOrchestrator,
         delegationContext: args.delegationContext,
         setupLoop: args.setupLoop,
+        stopLoop: args.stopLoop,
         // PTY has no canUseTool hook — the durable approval protocol is the
         // only host path for AskUserQuestion/ExitPlanMode. Force the shims
         // on regardless of KANNA_MCP_TOOL_CALLBACKS (issue #215). Paired
@@ -508,6 +532,7 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
     mcpConfigPath,
     channelServerName: channelDeliveryEnabled ? KANNA_MCP_SERVER_NAME : undefined,
     restricted: Boolean(args.restrictedAllowedPaths && args.restrictedAllowedPaths.length > 0),
+    loopArmed: args.isLoopArmed?.() ?? false,
   })
 
   let closed = false

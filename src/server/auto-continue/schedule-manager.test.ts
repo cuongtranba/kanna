@@ -47,6 +47,10 @@ function event(kind: AutoContinueEvent["kind"], overrides: Partial<AutoContinueE
       return { ...base, kind, reason: "user", ...overrides } as AutoContinueEvent
     case "auto_continue_fired":
       return { ...base, kind, ...overrides } as AutoContinueEvent
+    case "loop_armed":
+      return { ...base, kind, subagentId: "sub-1", prompt: "p", ...overrides } as AutoContinueEvent
+    case "loop_disarmed":
+      return { ...base, kind, reason: "goal_met", ...overrides } as AutoContinueEvent
   }
 }
 

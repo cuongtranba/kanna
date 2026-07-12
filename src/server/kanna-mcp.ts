@@ -87,6 +87,12 @@ export interface KannaMcpArgs extends OfferDownloadArgs {
    * See adr-2026XXXX-setup-loop-template.
    */
   setupLoop?: (input: LoopSetupInput) => Promise<SetupLoopHandlerResult>
+  /**
+   * Backs the `stop_loop` MCP tool. Disarms an armed loop on this chat
+   * (restores tools + stops prompt re-injection). Registered alongside
+   * `setup_loop` (same main-chat gating). Omit to hide the tool.
+   */
+  stopLoop?: () => Promise<void>
 }
 
 export type SetupLoopHandlerResult =
@@ -424,13 +430,22 @@ export const SETUP_LOOP_DESCRIPTION =
   + "updates the tracking file. Use this instead of writing loop prompts by "
   + "hand — free-form prompts drift and lose the invariants."
 
+const STOP_LOOP_DESCRIPTION =
+  "Disarm the autonomous loop armed by setup_loop on this chat. Call this "
+  + "when the goal is met (verify command exits 0) right before ending your "
+  + "turn. Restores normal editing tools (Edit/Write/Task are blocked while a "
+  + "loop is armed) and stops the loop prompt from being re-injected on future "
+  + "turns. No-op if no loop is armed."
+
 function buildSetupLoopToolList(args: {
   setupLoop?: (input: LoopSetupInput) => Promise<SetupLoopHandlerResult>
+  stopLoop?: () => Promise<void>
   chatId: string | null
 }): KannaSdkToolList {
   const setupLoop = args.setupLoop
   if (!setupLoop || !args.chatId) return []
-  return [
+  const stopLoop = args.stopLoop
+  const tools: KannaSdkToolList = [
     tool(
       "setup_loop",
       SETUP_LOOP_DESCRIPTION,
@@ -459,6 +474,12 @@ function buildSetupLoopToolList(args: {
           .describe(
             "Optional starter description for the first chunk written into the tracking-file skeleton. Ignored if the file already exists.",
           ),
+        subagent_id: z
+          .string()
+          .optional()
+          .describe(
+            "Subagent id the loop delegates each chunk to. Optional: if omitted, the configured default loop subagent (Settings) is used. Rejected if neither is set or the id is not in your roster.",
+          ),
       },
       async (input) => {
         const result = await setupLoop({
@@ -466,6 +487,7 @@ function buildSetupLoopToolList(args: {
           verifyCommand: input.verify_command,
           trackingFile: input.tracking_file,
           chunkHint: input.chunk_hint,
+          subagentId: input.subagent_id,
         })
         if (!result.ok) {
           return {
@@ -488,6 +510,25 @@ function buildSetupLoopToolList(args: {
       },
     ),
   ]
+  if (stopLoop) {
+    tools.push(
+      tool(
+        "stop_loop",
+        STOP_LOOP_DESCRIPTION,
+        {},
+        async () => {
+          await stopLoop()
+          return {
+            content: [{
+              type: "text" as const,
+              text: "Loop disarmed. Normal editing tools are restored; no further loop prompts will be re-injected.",
+            }],
+          }
+        },
+      ),
+    )
+  }
+  return tools
 }
 
 export function buildKannaMcpTools(args: KannaMcpArgs): KannaSdkToolList {
@@ -549,7 +590,7 @@ export function buildKannaMcpTools(args: KannaMcpArgs): KannaSdkToolList {
       delegationContext: args.delegationContext,
       chatId,
     }),
-    ...buildSetupLoopToolList({ setupLoop: args.setupLoop, chatId }),
+    ...buildSetupLoopToolList({ setupLoop: args.setupLoop, stopLoop: args.stopLoop, chatId }),
     tool(
       "expose_port",
       EXPOSE_PORT_DESCRIPTION,
