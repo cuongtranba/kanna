@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef } from "react"
+import { useChatPageStore } from "../../stores/chatPageStore"
 import type {
   BranchActionFailure,
   BranchActionSuccess,
@@ -38,8 +39,10 @@ export function useChatPageSidebarActions({
   showRightSidebar,
 }: UseChatPageSidebarActionsArgs) {
   const dialog = useAppDialog()
-  const [diffRenderMode, setDiffRenderMode] = useState<"unified" | "split">("unified")
-  const [wrapDiffLines, setWrapDiffLines] = useState(false)
+  const diffRenderMode = useChatPageStore((s) => s.diffRenderMode)
+  const wrapDiffLines = useChatPageStore((s) => s.wrapDiffLines)
+  const setDiffRenderMode = useChatPageStore((s) => s.setDiffRenderMode)
+  const setWrapDiffLines = useChatPageStore((s) => s.setWrapDiffLines)
   const terminalDiffRefreshTimeoutRef = useRef<number | null>(null)
   const wasProcessingRef = useRef(false)
   const lastProjectGitRefreshProjectIdRef = useRef<string | null>(null)

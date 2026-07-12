@@ -1,6 +1,7 @@
 import { LegendList, type LegendListRef } from "@legendapp/list/react"
 import type { AnyValue } from "../../../shared/errors"
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { memo, useCallback, useEffect, useMemo, useRef } from "react"
+import { useChatPageStore } from "../../stores/chatPageStore"
 import { ArrowDown, Bot, Flower, Upload } from "lucide-react"
 import { AnimatedShinyText } from "../../components/ui/animated-shiny-text"
 import { DrainingIndicator } from "../../components/messages/DrainingIndicator"
@@ -158,8 +159,11 @@ export const ChatTranscriptViewport = memo(({
 }: ChatTranscriptViewportProps) => {
   const previousRowCountRef = useRef(0)
   const localLinkMenuTriggerRef = useRef<HTMLSpanElement | null>(null)
-  const [toolGroupExpanded, setToolGroupExpanded] = useState<Record<string, boolean>>({})
-  const [localLinkMenuTarget, setLocalLinkMenuTarget] = useState<OpenLocalLinkTarget | null>(null)
+  const toolGroupExpanded = useChatPageStore((s) => s.toolGroupExpanded)
+  const setToolGroupExpanded = useChatPageStore((s) => s.setToolGroupExpanded)
+  const resetToolGroupExpanded = useChatPageStore((s) => s.resetToolGroupExpanded)
+  const localLinkMenuTarget = useChatPageStore((s) => s.localLinkMenuTarget)
+  const setLocalLinkMenuTarget = useChatPageStore((s) => s.setLocalLinkMenuTarget)
   const isMac = platform === "darwin"
 
   const rawRows = useMemo(() => buildResolvedTranscriptRows(messages, {
@@ -170,8 +174,8 @@ export const ChatTranscriptViewport = memo(({
   const resolvedRows = useStableResolvedRows(rawRows)
 
   useEffect(() => {
-    setToolGroupExpanded({})
-  }, [activeChatId])
+    resetToolGroupExpanded()
+  }, [activeChatId, resetToolGroupExpanded])
 
   useEffect(() => {
     const previousRowCount = previousRowCountRef.current
@@ -241,7 +245,7 @@ export const ChatTranscriptViewport = memo(({
             [groupId]: next,
           }
     ))
-  }, [])
+  }, [setToolGroupExpanded])
 
   const handleScroll = useCallback((event?: AnyValue) => {
     const currentTarget = (
@@ -318,7 +322,7 @@ export const ChatTranscriptViewport = memo(({
         view: window,
       }))
     })
-  }, [onOpenLocalLink])
+  }, [onOpenLocalLink, setLocalLinkMenuTarget])
 
   const renderItem = useCallback(({ item }: { item: ResolvedTranscriptRow }) => {
     const userMessageId = item.kind === "single" && item.message.kind === "user_prompt"
