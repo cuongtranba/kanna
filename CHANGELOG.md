@@ -8,6 +8,14 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.1.1](https://github.com/cuongtranba/kanna/compare/v1.1.0...v1.1.1) (2026-07-12)
+
+
+### Bug Fixes
+
+* **composer:** keep Tab snippet caret in editor by preventing default synchronously ([#524](https://github.com/cuongtranba/kanna/issues/524)) ([1d07c2c](https://github.com/cuongtranba/kanna/commit/1d07c2c097cac80eabf2ec577e580012d20c2ae3))
+* **loop:** stall-watchdog timeout, armed-state re-injection, hard tool-block, deterministic worker ([#526](https://github.com/cuongtranba/kanna/issues/526)) ([bc32d6f](https://github.com/cuongtranba/kanna/commit/bc32d6f6aa6391d3d33d28e1192c75644ed9b1d5))
+
 ## [1.1.0](https://github.com/cuongtranba/kanna/compare/v1.0.1...v1.1.0) (2026-07-11)
 
 
