@@ -1,8 +1,9 @@
-import { useMemo, useState } from "react"
+import { useMemo } from "react"
 import type { AutoContinueSchedule } from "../../../shared/types"
 import { formatLocal, parseLocal } from "../../lib/autoContinueTime"
 import { Input } from "../ui/input"
 import { TranscriptActionCard, type CardAction } from "./TranscriptActionCard"
+import { AutoContinueCardStore } from "./AutoContinueCard.store"
 
 export interface AutoContinueCardProps {
   schedule: AutoContinueSchedule
@@ -12,11 +13,19 @@ export interface AutoContinueCardProps {
 }
 
 export function AutoContinueCard({ schedule, onAccept, onReschedule, onCancel }: AutoContinueCardProps) {
-  const [draft, setDraft] = useState<string>(() => formatLocal(
-    schedule.scheduledAt ?? schedule.resetAt,
-    schedule.tz,
-  ))
-  const [editing, setEditing] = useState(false)
+  const initialDraft = formatLocal(schedule.scheduledAt ?? schedule.resetAt, schedule.tz)
+  return (
+    <AutoContinueCardStore.Provider init={{ initialDraft }}>
+      <AutoContinueCardContent schedule={schedule} onAccept={onAccept} onReschedule={onReschedule} onCancel={onCancel} />
+    </AutoContinueCardStore.Provider>
+  )
+}
+
+function AutoContinueCardContent({ schedule, onAccept, onReschedule, onCancel }: AutoContinueCardProps) {
+  const draft = AutoContinueCardStore.useScopedStore((state) => state.draft)
+  const editing = AutoContinueCardStore.useScopedStore((state) => state.editing)
+  const setDraft = AutoContinueCardStore.useScopedStore((state) => state.setDraft)
+  const setEditing = AutoContinueCardStore.useScopedStore((state) => state.setEditing)
 
   const parsed = useMemo(() => parseLocal(draft, schedule.tz), [draft, schedule.tz])
   // eslint-disable-next-line react-hooks/purity

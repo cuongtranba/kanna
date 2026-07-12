@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react"
+import { useEffect, useRef } from "react"
 import { DEFAULT_NEW_PROJECT_ROOT } from "../../shared/branding"
 import { Button } from "./ui/button"
 import {
@@ -10,14 +10,19 @@ import {
 } from "./ui/dialog"
 import { Input } from "./ui/input"
 import { SegmentedControl } from "./ui/segmented-control"
+import {
+  useNewProjectModalStore,
+  useNewProjectTab,
+  useNewProjectName,
+  useNewProjectExistingPath,
+  type NewProjectModalTab,
+} from "../stores/newProjectModalStore"
 
 interface Props {
   open: boolean
   onOpenChange: (open: boolean) => void
-  onConfirm: (project: { mode: Tab; localPath: string; title: string }) => void
+  onConfirm: (project: { mode: NewProjectModalTab; localPath: string; title: string }) => void
 }
-
-type Tab = "new" | "existing"
 
 function toKebab(str: string): string {
   return str
@@ -29,21 +34,22 @@ function toKebab(str: string): string {
 }
 
 export function NewProjectModal({ open, onOpenChange, onConfirm }: Props) {
-  const [tab, setTab] = useState<Tab>("new")
-  const [name, setName] = useState("")
-  const [existingPath, setExistingPath] = useState("")
+  const tab = useNewProjectTab()
+  const name = useNewProjectName()
+  const existingPath = useNewProjectExistingPath()
+  const setTab = useNewProjectModalStore((state) => state.setTab)
+  const setName = useNewProjectModalStore((state) => state.setName)
+  const setExistingPath = useNewProjectModalStore((state) => state.setExistingPath)
+  const resetForOpen = useNewProjectModalStore((state) => state.resetForOpen)
   const inputRef = useRef<HTMLInputElement>(null)
   const existingInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     if (open) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setTab("new")
-      setName("")
-      setExistingPath("")
+      resetForOpen()
       setTimeout(() => inputRef.current?.focus(), 0)
     }
-  }, [open])
+  }, [open, resetForOpen])
 
   useEffect(() => {
     if (open) {
@@ -81,8 +87,8 @@ export function NewProjectModal({ open, onOpenChange, onConfirm }: Props) {
             value={tab}
             onValueChange={setTab}
             options={[
-              { value: "new" satisfies Tab, label: "New Folder" },
-              { value: "existing" satisfies Tab, label: "Existing Path" },
+              { value: "new" satisfies NewProjectModalTab, label: "New Folder" },
+              { value: "existing" satisfies NewProjectModalTab, label: "Existing Path" },
             ]}
             className="w-full mb-2"
             optionClassName="flex-1 justify-center"

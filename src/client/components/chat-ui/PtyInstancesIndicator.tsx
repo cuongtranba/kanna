@@ -1,7 +1,8 @@
-import { useCallback, useMemo, useState } from "react"
+import { useCallback, useMemo } from "react"
 import type { PtyInstancePhase, PtyInstanceState } from "../../../shared/pty-instance"
 import type { ClientCommand } from "../../../shared/protocol"
 import { usePtyInstances, usePtyInstancesStore, usePtyLiveCount, usePtyPopoverOpen } from "../../stores/ptyInstancesStore"
+import { PtyInstanceRowStore } from "./PtyInstanceRow.store"
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover"
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip"
 import type { KannaSocket } from "../../app/socket"
@@ -84,16 +85,26 @@ function StatusPill({ phase }: { phase: PtyInstancePhase }) {
 }
 
 export function PtyInstanceRow({ instance, onOpenChat, onCancel, onKill }: RowProps) {
-  const [confirmKill, setConfirmKill] = useState(false)
+  return (
+    <PtyInstanceRowStore.Provider init={undefined}>
+      <PtyInstanceRowContent instance={instance} onOpenChat={onOpenChat} onCancel={onCancel} onKill={onKill} />
+    </PtyInstanceRowStore.Provider>
+  )
+}
+
+function PtyInstanceRowContent({ instance, onOpenChat, onCancel, onKill }: RowProps) {
+  const confirmKill = PtyInstanceRowStore.useScopedStore((state) => state.confirmKill)
+  const storeApi = PtyInstanceRowStore.useScopedStoreApi()
 
   const handleKillClick = useCallback(() => {
-    if (confirmKill) {
+    const state = storeApi.getState()
+    if (state.confirmKill) {
       onKill(instance.chatId)
-      setConfirmKill(false)
+      state.setConfirmKill(false)
     } else {
-      setConfirmKill(true)
+      state.setConfirmKill(true)
     }
-  }, [confirmKill, instance.chatId, onKill])
+  }, [storeApi, instance.chatId, onKill])
 
   return (
     <div className="group border border-border/60 rounded-lg p-3 flex flex-col gap-2 hover:border-border transition-colors">
@@ -177,7 +188,7 @@ export function PtyInstanceRow({ instance, onOpenChat, onCancel, onKill }: RowPr
           <button
             type="button"
             onClick={handleKillClick}
-            onBlur={() => setConfirmKill(false)}
+            onBlur={() => storeApi.getState().setConfirmKill(false)}
             className="text-[10px] font-mono px-2 py-1 rounded-md border transition-colors ml-auto"
             style={{
               borderColor: confirmKill ? "var(--destructive)" : "var(--border)",

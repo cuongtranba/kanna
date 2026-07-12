@@ -1,4 +1,4 @@
-import { useMemo, useState, type ComponentType, type SVGProps } from "react"
+import { useMemo, type ComponentType, type SVGProps } from "react"
 import { Box, Brain, Gauge, ListTodo, LockOpen, Search, SquareMenu, SquareMinus } from "lucide-react"
 import {
   CLAUDE_CONTEXT_WINDOW_OPTIONS,
@@ -17,6 +17,8 @@ import {
 import { useAppSettingsStore, selectCustomModels } from "../../stores/appSettingsStore"
 import { cn } from "../../lib/utils"
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover"
+import { InputPopoverStore } from "./InputPopover.store"
+import { SearchableModelPopoverStore } from "./SearchableModelPopover.store"
 
 type IconComponent = ComponentType<SVGProps<SVGSVGElement>>
 
@@ -121,8 +123,6 @@ export function InputPopover({
   disabled?: boolean
   children: React.ReactNode | ((close: () => void) => React.ReactNode)
 }) {
-  const [open, setOpen] = useState(false)
-
   if (disabled) {
     return (
       <button
@@ -136,6 +136,27 @@ export function InputPopover({
       </button>
     )
   }
+
+  return (
+    <InputPopoverStore.Provider init={undefined}>
+      <InputPopoverContent trigger={trigger} triggerClassName={triggerClassName}>
+        {children}
+      </InputPopoverContent>
+    </InputPopoverStore.Provider>
+  )
+}
+
+function InputPopoverContent({
+  trigger,
+  triggerClassName,
+  children,
+}: {
+  trigger: React.ReactNode
+  triggerClassName?: string
+  children: React.ReactNode | ((close: () => void) => React.ReactNode)
+}) {
+  const open = InputPopoverStore.useScopedStore((state) => state.open)
+  const setOpen = InputPopoverStore.useScopedStore((state) => state.setOpen)
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -169,8 +190,35 @@ function SearchableModelPopover({
   onSelect: (id: string) => void
   ModelIcon: IconComponent
 }) {
-  const [open, setOpen] = useState(false)
-  const [query, setQuery] = useState("")
+  return (
+    <SearchableModelPopoverStore.Provider init={undefined}>
+      <SearchableModelPopoverContent
+        models={models}
+        selectedModel={selectedModel}
+        onSelect={onSelect}
+        ModelIcon={ModelIcon}
+      />
+    </SearchableModelPopoverStore.Provider>
+  )
+}
+
+function SearchableModelPopoverContent({
+  models,
+  selectedModel,
+  onSelect,
+  ModelIcon,
+}: {
+  models: readonly { id: string; label: string }[]
+  selectedModel: string
+  onSelect: (id: string) => void
+  ModelIcon: IconComponent
+}) {
+  const open = SearchableModelPopoverStore.useScopedStore((state) => state.open)
+  const query = SearchableModelPopoverStore.useScopedStore((state) => state.query)
+  const setOpen = SearchableModelPopoverStore.useScopedStore((state) => state.setOpen)
+  const setQuery = SearchableModelPopoverStore.useScopedStore((state) => state.setQuery)
+  const closeAndClearQuery = SearchableModelPopoverStore.useScopedStore((state) => state.closeAndClearQuery)
+
   const selectedLabel = models.find((m) => m.id === selectedModel)?.label ?? selectedModel
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -193,8 +241,7 @@ function SearchableModelPopover({
         key={candidate.id}
         onClick={() => {
           onSelect(candidate.id)
-          setOpen(false)
-          setQuery("")
+          closeAndClearQuery()
         }}
         selected={selectedModel === candidate.id}
         icon={<Box className="h-4 w-4 text-muted-foreground" />}
@@ -205,7 +252,7 @@ function SearchableModelPopover({
   }
 
   return (
-    <Popover open={open} onOpenChange={(v) => { setOpen(v); if (!v) setQuery("") }}>
+    <Popover open={open} onOpenChange={(v) => { if (v) setOpen(true); else closeAndClearQuery() }}>
       <PopoverTrigger asChild>
         <button
           type="button"

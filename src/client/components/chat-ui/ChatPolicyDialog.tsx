@@ -1,8 +1,8 @@
-import { useState } from "react"
 import { Button } from "../ui/button"
 import { Dialog, DialogBody, DialogContent, DialogFooter, DialogTitle } from "../ui/dialog"
 import { SegmentedControl } from "../ui/segmented-control"
 import type { ChatPermissionPolicy, ChatPermissionPolicyOverride } from "../../../shared/permission-policy"
+import { ChatPolicyDialogStore } from "./ChatPolicyDialog.store"
 
 type DefaultAction = ChatPermissionPolicy["defaultAction"]
 
@@ -35,19 +35,49 @@ export function ChatPolicyDialog(props: Props) {
 }
 
 function ChatPolicyDialogInner({ open, chatTitle, baseline, current, onApply, onCancel }: Props) {
-  const [defaultAction, setDefaultAction] = useState<DefaultAction>(current?.defaultAction ?? baseline.defaultAction)
-  const [readDenyText, setReadDenyText] = useState(listToText(current?.readPathDeny ?? baseline.readPathDeny))
-  const [writeDenyText, setWriteDenyText] = useState(listToText(current?.writePathDeny ?? baseline.writePathDeny))
-  const [confirmUnsafeOpen, setConfirmUnsafeOpen] = useState(false)
-  const [pendingDefaultAction, setPendingDefaultAction] = useState<DefaultAction | null>(null)
+  const initialDefaultAction = current?.defaultAction ?? baseline.defaultAction
+  const initialReadDenyText = listToText(current?.readPathDeny ?? baseline.readPathDeny)
+  const initialWriteDenyText = listToText(current?.writePathDeny ?? baseline.writePathDeny)
+
+  return (
+    <ChatPolicyDialogStore.Provider
+      init={{ initialDefaultAction, initialReadDenyText, initialWriteDenyText }}
+    >
+      <ChatPolicyDialogContent
+        open={open}
+        chatTitle={chatTitle}
+        baseline={baseline}
+        onApply={onApply}
+        onCancel={onCancel}
+      />
+    </ChatPolicyDialogStore.Provider>
+  )
+}
+
+interface ContentProps {
+  open: boolean
+  chatTitle: string
+  baseline: ChatPermissionPolicy
+  onApply: (next: ChatPermissionPolicyOverride | null) => void
+  onCancel: () => void
+}
+
+function ChatPolicyDialogContent({ open, chatTitle, baseline, onApply, onCancel }: ContentProps) {
+  const defaultAction = ChatPolicyDialogStore.useScopedStore((state) => state.defaultAction)
+  const readDenyText = ChatPolicyDialogStore.useScopedStore((state) => state.readDenyText)
+  const writeDenyText = ChatPolicyDialogStore.useScopedStore((state) => state.writeDenyText)
+  const confirmUnsafeOpen = ChatPolicyDialogStore.useScopedStore((state) => state.confirmUnsafeOpen)
+  const pendingDefaultAction = ChatPolicyDialogStore.useScopedStore((state) => state.pendingDefaultAction)
+  const storeApi = ChatPolicyDialogStore.useScopedStoreApi()
 
   function handleDefaultActionChange(next: DefaultAction) {
-    if (next === "auto-allow" && defaultAction !== "auto-allow") {
-      setPendingDefaultAction(next)
-      setConfirmUnsafeOpen(true)
+    const state = storeApi.getState()
+    if (next === "auto-allow" && state.defaultAction !== "auto-allow") {
+      state.setPendingDefaultAction(next)
+      state.setConfirmUnsafeOpen(true)
       return
     }
-    setDefaultAction(next)
+    state.setDefaultAction(next)
   }
 
   function buildOverride(): ChatPermissionPolicyOverride | null {
@@ -97,7 +127,7 @@ function ChatPolicyDialogInner({ open, chatTitle, baseline, current, onApply, on
               </div>
               <textarea
                 value={readDenyText}
-                onChange={(event) => setReadDenyText(event.target.value)}
+                onChange={(event) => storeApi.getState().setReadDenyText(event.target.value)}
                 rows={8}
                 className="w-full rounded-md border border-border bg-background px-3 py-2 font-mono text-xs"
                 spellCheck={false}
@@ -111,7 +141,7 @@ function ChatPolicyDialogInner({ open, chatTitle, baseline, current, onApply, on
               </div>
               <textarea
                 value={writeDenyText}
-                onChange={(event) => setWriteDenyText(event.target.value)}
+                onChange={(event) => storeApi.getState().setWriteDenyText(event.target.value)}
                 rows={8}
                 className="w-full rounded-md border border-border bg-background px-3 py-2 font-mono text-xs"
                 spellCheck={false}
@@ -128,7 +158,7 @@ function ChatPolicyDialogInner({ open, chatTitle, baseline, current, onApply, on
         </DialogContent>
       </Dialog>
 
-      <Dialog open={confirmUnsafeOpen} onOpenChange={(next) => { if (!next) { setConfirmUnsafeOpen(false); setPendingDefaultAction(null) } }}>
+      <Dialog open={confirmUnsafeOpen} onOpenChange={(next) => { if (!next) { storeApi.getState().setConfirmUnsafeOpen(false); storeApi.getState().setPendingDefaultAction(null) } }}>
         <DialogContent className="max-w-md">
           <DialogTitle>Enable auto-allow for this chat?</DialogTitle>
           <DialogBody className="space-y-3 text-sm">
@@ -139,15 +169,16 @@ function ChatPolicyDialogInner({ open, chatTitle, baseline, current, onApply, on
             <p className="text-warning">Use a worktree for risky tasks.</p>
           </DialogBody>
           <DialogFooter className="justify-end gap-2">
-            <Button variant="ghost" onClick={() => { setConfirmUnsafeOpen(false); setPendingDefaultAction(null) }}>
+            <Button variant="ghost" onClick={() => { storeApi.getState().setConfirmUnsafeOpen(false); storeApi.getState().setPendingDefaultAction(null) }}>
               Cancel
             </Button>
             <Button
               variant="destructive"
               onClick={() => {
-                if (pendingDefaultAction) setDefaultAction(pendingDefaultAction)
-                setConfirmUnsafeOpen(false)
-                setPendingDefaultAction(null)
+                const state = storeApi.getState()
+                if (pendingDefaultAction) state.setDefaultAction(pendingDefaultAction)
+                state.setConfirmUnsafeOpen(false)
+                state.setPendingDefaultAction(null)
               }}
             >
               Enable auto-allow

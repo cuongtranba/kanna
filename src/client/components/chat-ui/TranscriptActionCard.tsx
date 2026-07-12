@@ -1,8 +1,9 @@
-import { useCallback, useState, type ReactNode } from "react"
+import { useCallback, type ReactNode } from "react"
 import { Loader2 } from "lucide-react"
 import { Button } from "../ui/button"
 import { cn } from "../../lib/utils"
 import { log } from "../../../shared/log"
+import { TranscriptActionCardStore } from "./TranscriptActionCard.store"
 
 export type CardActionVariant = "primary" | "secondary" | "ghost" | "destructive"
 
@@ -39,7 +40,15 @@ const VARIANT_TO_BUTTON: Record<CardActionVariant, "default" | "secondary" | "gh
   destructive: "destructive",
 }
 
-export function TranscriptActionCard({
+export function TranscriptActionCard(props: TranscriptActionCardProps) {
+  return (
+    <TranscriptActionCardStore.Provider init={undefined}>
+      <TranscriptActionCardContent {...props} />
+    </TranscriptActionCardStore.Provider>
+  )
+}
+
+function TranscriptActionCardContent({
   title,
   description,
   body,
@@ -47,33 +56,35 @@ export function TranscriptActionCard({
   tone = "neutral",
   actions = [],
 }: TranscriptActionCardProps) {
-  const [busyId, setBusyId] = useState<string | null>(null)
-  const [actionError, setActionError] = useState<string | null>(null)
+  const busyId = TranscriptActionCardStore.useScopedStore((state) => state.busyId)
+  const actionError = TranscriptActionCardStore.useScopedStore((state) => state.actionError)
+  const storeApi = TranscriptActionCardStore.useScopedStoreApi()
 
   const handleClick = useCallback(
     async (action: CardAction) => {
-      if (busyId) return
-      setActionError(null)
+      const state = storeApi.getState()
+      if (state.busyId) return
+      state.setActionError(null)
       let result: void | Promise<void>
       try {
         result = action.onClick()
       } catch (error) {
         log.error("[transcript-action-card] sync click threw", String(error))
-        setActionError(error instanceof Error ? error.message : String(error))
+        storeApi.getState().setActionError(error instanceof Error ? error.message : String(error))
         return
       }
       if (!(result instanceof Promise)) return
-      setBusyId(action.id)
+      state.setBusyId(action.id)
       try {
         await result
       } catch (error) {
         log.error("[transcript-action-card] async click rejected", String(error))
-        setActionError(error instanceof Error ? error.message : String(error))
+        storeApi.getState().setActionError(error instanceof Error ? error.message : String(error))
       } finally {
-        setBusyId(null)
+        storeApi.getState().setBusyId(null)
       }
     },
-    [busyId],
+    [storeApi],
   )
 
   const isBusy = busyId !== null
