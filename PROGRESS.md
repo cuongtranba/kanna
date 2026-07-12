@@ -23,7 +23,7 @@
 - [x] T1 App state hub: `src/client/app/useKannaState.ts` (30)
 - [x] T2 ChatPage: `src/client/app/ChatPage/index.tsx` (8), `ChatTranscriptViewport.tsx` (2), `useChatPageSidebarActions.ts` (2), `src/client/app/useTerminalToggleAnimation.ts` (1)
 - [x] T3 Composer: `src/client/components/chat-ui/ChatInput.tsx` (5), `src/client/hooks/useMentionSuggestions.ts` (1), `src/client/components/lexical/plugins/SlashCommandTypeaheadPlugin.tsx` (1), `MentionTypeaheadPlugin.tsx` (1), `src/client/components/lexical/markdown/MessageCodeBlock.tsx` (1)
-- [ ] T4 Sidebar: `src/client/app/KannaSidebar.tsx` (15), `src/client/components/chat-ui/sidebar/Menus.tsx` (1), `StackChatCreateRow.tsx` (4), `StackCreatePanel.tsx` (2)
+- [x] T4 Sidebar: `src/client/app/KannaSidebar.tsx` (15), `src/client/components/chat-ui/sidebar/Menus.tsx` (1), `StackChatCreateRow.tsx` (4), `StackCreatePanel.tsx` (2)
 - [ ] T5 RightSidebar: `src/client/components/chat-ui/RightSidebar.tsx` (31)
 - [ ] T6 Chat-UI misc: `ChatNavbar.tsx` (1), `AutoContinueCard.tsx` (2), `TranscriptActionCard.tsx` (2), `ChatPreferenceControls.tsx` (3), `ChatPolicyDialog.tsx` (5), `PtyInstancesIndicator.tsx` (1), `src/client/components/NewProjectModal.tsx` (3)
 - [ ] T7 App shell: `src/client/app/App.tsx` (4), `KannaTranscript.tsx` (1), `share-view/SharePage.tsx` (1), `src/client/components/LocalDev.tsx` (1), `open-external-menu.tsx` (1)
@@ -38,6 +38,7 @@
 - [ ] T16 Final sweep: `src/client/components/share/SharePopover.tsx` (1) + any file still listed by `bun scripts/usestate-ratchet.ts --zero`; then run `bun run migrate:verify` and fix everything until it exits 0
 
 ## Progress (latest first)
+- 2026-07-12 T4 Sidebar DONE (275 → 249 useState, -26)
 - 2026-07-12 T3 Composer DONE (289 → 275 useState, -14)
 - 2026-07-12 T2 ChatPage DONE (306 → 289 useState, -17)
 - 2026-07-12 T1 App state hub (useKannaState.ts 30 useState) DONE
@@ -47,4 +48,4 @@
 - (none yet)
 
 ## Next chunk
-T4 Sidebar: migrate `src/client/app/KannaSidebar.tsx` (15 useState), `src/client/components/chat-ui/sidebar/Menus.tsx` (1), `src/client/components/chat-ui/sidebar/StackChatCreateRow.tsx` (4), `src/client/components/chat-ui/sidebar/StackCreatePanel.tsx` (2) off useState. KannaSidebar renders once → singleton store; sidebar sub-components check whether they render once or many times. Follow ALL Worker rules, satisfy all 6 acceptance criteria, update this file, then terminate.
+T5 RightSidebar: migrate src/client/components/chat-ui/RightSidebar.tsx (31 useState) off useState. Follow ALL Worker rules, satisfy all 6 acceptance criteria, update this file, then terminate.
