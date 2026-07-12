@@ -29,7 +29,7 @@
 - [x] T7 App shell: `src/client/app/App.tsx` (4), `KannaTranscript.tsx` (1), `share-view/SharePage.tsx` (1), `src/client/components/LocalDev.tsx` (1), `open-external-menu.tsx` (1)
 - [x] T8 Terminal: `src/client/components/chat-ui/TerminalWorkspace.tsx` (3), `TerminalPane.tsx` (2)
 - [x] T9 Messages A (multi-instance — use createScopedStore): `SubagentTaskMessage.tsx` (5), `MermaidDiagram.tsx` (4), `MermaidZoomModal.tsx` (3), `ThinkingBlock.tsx` (1), `HighlightedCode.tsx` (1), `shared.tsx` (3) — all under `src/client/components/messages/`
-- [ ] T10 Messages B (multi-instance): `SystemMessage.tsx` (3), `ExitPlanModeMessage.tsx` (4), `AskUserQuestionInteractive.tsx` (3), `AskUserQuestionMessage.tsx` (2), `UserMessage.tsx` (1), `AccountInfoMessage.tsx` (1), `ImageGenerationMessage.tsx` (1), `PreviewFileMessage.tsx` (2), `OfferDownloadMessage.tsx` (2), `LocalFileLinkCard.tsx` (2)
+- [x] T10 Messages B (multi-instance): `SystemMessage.tsx` (3), `ExitPlanModeMessage.tsx` (4), `AskUserQuestionInteractive.tsx` (3), `AskUserQuestionMessage.tsx` (2), `UserMessage.tsx` (1), `AccountInfoMessage.tsx` (1), `ImageGenerationMessage.tsx` (1), `PreviewFileMessage.tsx` (2), `OfferDownloadMessage.tsx` (2), `LocalFileLinkCard.tsx` (2)
 - [ ] T11 File preview: `src/client/components/messages/file-preview/FilePreviewSheet.tsx` (1), `useViewportFetch.ts` (4), `bodies/textLoader.ts` (2), `bodies/TableBody.tsx` (2), `bodies/CodeBody.tsx` (1)
 - [ ] T12 SettingsPage: `src/client/app/SettingsPage.tsx` (42)
 - [ ] T13 McpServersSection: `src/client/app/McpServersSection.tsx` (18)
@@ -38,6 +38,7 @@
 - [ ] T16 Final sweep: `src/client/components/share/SharePopover.tsx` (1) + any file still listed by `bun scripts/usestate-ratchet.ts --zero`; then run `bun run migrate:verify` and fix everything until it exits 0
 
 ## Progress (latest first)
+- 2026-07-12 T10 Messages B DONE (150 → 119 useState, -31)
 - 2026-07-12 T9 Messages A DONE (173 → 150 useState, -23)
 - 2026-07-12 T8 Terminal DONE (180 → 173 useState, -7)
 - 2026-07-12 T7 App shell DONE (193 → 180 useState, -13)
@@ -53,4 +54,4 @@
 - (none yet)
 
 ## Next chunk
-T10 Messages B (multi-instance): migrate SystemMessage.tsx (3), ExitPlanModeMessage.tsx (4), AskUserQuestionInteractive.tsx (3), AskUserQuestionMessage.tsx (2), UserMessage.tsx (1), AccountInfoMessage.tsx (1), ImageGenerationMessage.tsx (1), PreviewFileMessage.tsx (2), OfferDownloadMessage.tsx (2), LocalFileLinkCard.tsx (2) off useState. Follow ALL Worker rules, satisfy all 6 acceptance criteria, update this file, then terminate.
+T11 File preview: migrate `src/client/components/messages/file-preview/FilePreviewSheet.tsx` (2→ actually check current count), `useViewportFetch.ts` (5), `bodies/textLoader.ts` (3), `bodies/TableBody.tsx` (3), `bodies/CodeBody.tsx` (2) off useState using createScopedStore (per-instance). Follow ALL Worker rules, satisfy all 6 acceptance criteria, update this file, then terminate.
