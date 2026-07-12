@@ -25,7 +25,7 @@
 - [x] T3 Composer: `src/client/components/chat-ui/ChatInput.tsx` (5), `src/client/hooks/useMentionSuggestions.ts` (1), `src/client/components/lexical/plugins/SlashCommandTypeaheadPlugin.tsx` (1), `MentionTypeaheadPlugin.tsx` (1), `src/client/components/lexical/markdown/MessageCodeBlock.tsx` (1)
 - [x] T4 Sidebar: `src/client/app/KannaSidebar.tsx` (15), `src/client/components/chat-ui/sidebar/Menus.tsx` (1), `StackChatCreateRow.tsx` (4), `StackCreatePanel.tsx` (2)
 - [x] T5 RightSidebar: `src/client/components/chat-ui/RightSidebar.tsx` (31)
-- [ ] T6 Chat-UI misc: `ChatNavbar.tsx` (1), `AutoContinueCard.tsx` (2), `TranscriptActionCard.tsx` (2), `ChatPreferenceControls.tsx` (3), `ChatPolicyDialog.tsx` (5), `PtyInstancesIndicator.tsx` (1), `src/client/components/NewProjectModal.tsx` (3)
+- [x] T6 Chat-UI misc: `ChatNavbar.tsx` (1), `AutoContinueCard.tsx` (2), `TranscriptActionCard.tsx` (2), `ChatPreferenceControls.tsx` (3), `ChatPolicyDialog.tsx` (5), `PtyInstancesIndicator.tsx` (1), `src/client/components/NewProjectModal.tsx` (3)
 - [ ] T7 App shell: `src/client/app/App.tsx` (4), `KannaTranscript.tsx` (1), `share-view/SharePage.tsx` (1), `src/client/components/LocalDev.tsx` (1), `open-external-menu.tsx` (1)
 - [ ] T8 Terminal: `src/client/components/chat-ui/TerminalWorkspace.tsx` (3), `TerminalPane.tsx` (2)
 - [ ] T9 Messages A (multi-instance — use createScopedStore): `SubagentTaskMessage.tsx` (5), `MermaidDiagram.tsx` (4), `MermaidZoomModal.tsx` (3), `ThinkingBlock.tsx` (1), `HighlightedCode.tsx` (1), `shared.tsx` (3) — all under `src/client/components/messages/`
@@ -38,6 +38,7 @@
 - [ ] T16 Final sweep: `src/client/components/share/SharePopover.tsx` (1) + any file still listed by `bun scripts/usestate-ratchet.ts --zero`; then run `bun run migrate:verify` and fix everything until it exits 0
 
 ## Progress (latest first)
+- 2026-07-12 T6 Chat-UI misc DONE (217 → 193 useState, -24)
 - 2026-07-12 T5 RightSidebar DONE (249 → 217 useState, -32)
 - 2026-07-12 T4 Sidebar DONE (275 → 249 useState, -26)
 - 2026-07-12 T3 Composer DONE (289 → 275 useState, -14)
@@ -49,4 +50,4 @@
 - (none yet)
 
 ## Next chunk
-T6 Chat-UI misc: migrate `ChatNavbar.tsx` (1), `AutoContinueCard.tsx` (2), `TranscriptActionCard.tsx` (2), `ChatPreferenceControls.tsx` (3), `ChatPolicyDialog.tsx` (5), `PtyInstancesIndicator.tsx` (1), `src/client/components/NewProjectModal.tsx` (3) off useState. Follow ALL Worker rules, satisfy all 6 acceptance criteria, update this file, then terminate.
+T7 App shell: migrate `src/client/app/App.tsx` (5), `src/client/app/KannaTranscript.tsx` (2), `src/client/app/share-view/SharePage.tsx` (2), `src/client/components/LocalDev.tsx` (2), `src/client/components/open-external-menu.tsx` (2) off useState. Follow ALL Worker rules, satisfy all 6 acceptance criteria, update this file, then terminate.
