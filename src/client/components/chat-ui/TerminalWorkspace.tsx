@@ -1,4 +1,4 @@
-import { Fragment, memo, useCallback, useLayoutEffect, useMemo, useRef, useState } from "react"
+import { Fragment, memo, useCallback, useLayoutEffect, useMemo, useRef } from "react"
 import { Eraser, Plus, X } from "lucide-react"
 import type { SocketStatus, KannaSocket } from "../../app/socket"
 import { Button } from "../ui/button"
@@ -7,6 +7,7 @@ import { HotkeyTooltip, HotkeyTooltipContent, HotkeyTooltipTrigger } from "../ui
 import type { ProjectTerminalLayout } from "../../stores/terminalLayoutStore"
 import { TerminalPane } from "./TerminalPane"
 import { getMinimumTerminalWidth, getMinimumTerminalWorkspaceWidth } from "./TerminalWorkspaceLayout"
+import { TerminalWorkspaceStore } from "./TerminalWorkspace.store"
 
 interface Props {
   projectId: string
@@ -159,7 +160,7 @@ const TerminalWorkspacePane = memo(({
   )
 })
 
-function TerminalWorkspaceImpl({
+function TerminalWorkspaceInner({
   projectId,
   layout,
   socket,
@@ -176,9 +177,12 @@ function TerminalWorkspaceImpl({
   const containerRef = useRef<HTMLDivElement>(null)
   const paneRefs = useRef<Record<string, HTMLDivElement | null>>({})
   const previousTerminalIdsRef = useRef<string[]>([])
-  const [viewportWidth, setViewportWidth] = useState(0)
-  const [pathsByTerminalId, setPathsByTerminalId] = useState<Record<string, string | null>>({})
-  const [clearVersionsByTerminalId, setClearVersionsByTerminalId] = useState<Record<string, number>>({})
+  const viewportWidth = TerminalWorkspaceStore.useScopedStore((state) => state.viewportWidth)
+  const pathsByTerminalId = TerminalWorkspaceStore.useScopedStore((state) => state.pathsByTerminalId)
+  const clearVersionsByTerminalId = TerminalWorkspaceStore.useScopedStore((state) => state.clearVersionsByTerminalId)
+  const setViewportWidth = TerminalWorkspaceStore.useScopedStore((state) => state.setViewportWidth)
+  const updatePath = TerminalWorkspaceStore.useScopedStore((state) => state.updatePath)
+  const incrementClearVersion = TerminalWorkspaceStore.useScopedStore((state) => state.incrementClearVersion)
 
   useLayoutEffect(() => {
     const element = containerRef.current
@@ -193,7 +197,7 @@ function TerminalWorkspaceImpl({
     updateWidth()
 
     return () => observer.disconnect()
-  }, [])
+  }, [setViewportWidth])
 
   const paneCount = layout.terminals.length
   const minTerminalWidth = getMinimumTerminalWidth(minColumnWidth)
@@ -208,21 +212,12 @@ function TerminalWorkspaceImpl({
   }, [])
 
   const handlePathChange = useCallback((terminalId: string, path: string | null) => {
-    setPathsByTerminalId((current) => {
-      if (current[terminalId] === path) return current
-      return {
-        ...current,
-        [terminalId]: path,
-      }
-    })
-  }, [])
+    updatePath(terminalId, path)
+  }, [updatePath])
 
   const handleClearTerminal = useCallback((terminalId: string) => {
-    setClearVersionsByTerminalId((current) => ({
-      ...current,
-      [terminalId]: (current[terminalId] ?? 0) + 1,
-    }))
-  }, [])
+    incrementClearVersion(terminalId)
+  }, [incrementClearVersion])
 
   const handleLayoutChanged = useCallback((nextLayout: Record<string, number>) => {
     onTerminalLayout(
@@ -291,6 +286,14 @@ function TerminalWorkspaceImpl({
         </div>
       </div>
     </div>
+  )
+}
+
+function TerminalWorkspaceImpl(props: Props) {
+  return (
+    <TerminalWorkspaceStore.Provider init={undefined}>
+      <TerminalWorkspaceInner {...props} />
+    </TerminalWorkspaceStore.Provider>
   )
 }
 

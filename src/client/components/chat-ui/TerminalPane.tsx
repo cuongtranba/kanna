@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useRef, useState, type MutableRefObject } from "react"
+import { useCallback, useEffect, useRef, type MutableRefObject } from "react"
 import { SerializeAddon } from "@xterm/addon-serialize"
 import { WebLinksAddon } from "@xterm/addon-web-links"
 import { Terminal, type ITheme, type ITerminalOptions } from "@xterm/xterm"
 import type { TerminalSnapshot } from "../../../shared/protocol"
 import type { KannaSocket, SocketStatus } from "../../app/socket"
 import { useTheme } from "../../hooks/useTheme"
+import { TerminalPaneStore } from "./TerminalPane.store"
 
 interface Props {
   projectId: string
@@ -128,17 +129,6 @@ function refreshTerminal(terminal: Terminal) {
   terminal.refresh(0, Math.max(0, terminal.rows - 1))
 }
 
-function sameTerminalMetadata(
-  left: Pick<TerminalSnapshot, "cwd" | "shell" | "status" | "exitCode"> | null,
-  right: Pick<TerminalSnapshot, "cwd" | "shell" | "status" | "exitCode"> | null
-) {
-  if (left === right) return true
-  if (!left || !right) return false
-  return left.cwd === right.cwd
-    && left.shell === right.shell
-    && left.status === right.status
-    && left.exitCode === right.exitCode
-}
 
 function isMacPlatform(platform: string) {
   return /mac/i.test(platform)
@@ -235,7 +225,7 @@ function syncTerminalSize(
   return nextSize
 }
 
-export function TerminalPane({
+function TerminalPaneInner({
   projectId,
   terminalId,
   socket,
@@ -255,8 +245,12 @@ export function TerminalPane({
   const createAttemptRef = useRef(0)
   const lastAppliedSnapshotKeyRef = useRef<string | null>(null)
   const lastSizeRef = useRef<{ cols: number; rows: number } | null>(null)
-  const [metadata, setMetadata] = useState<Pick<TerminalSnapshot, "cwd" | "shell" | "status" | "exitCode"> | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const metadata = TerminalPaneStore.useScopedStore((state) => state.metadata)
+  const error = TerminalPaneStore.useScopedStore((state) => state.error)
+  const storeSetError = TerminalPaneStore.useScopedStore((state) => state.setError)
+  const setMetadataConditional = TerminalPaneStore.useScopedStore((state) => state.setMetadataConditional)
+  const setMetadataFromExit = TerminalPaneStore.useScopedStore((state) => state.setMetadataFromExit)
+  const resetTerminal = TerminalPaneStore.useScopedStore((state) => state.resetTerminal)
   const terminalTheme = buildTerminalTheme(resolvedTheme === "dark" ? "dark" : "light")
   const sendInput = useCallback((data: string) => {
     void socket.command({
@@ -264,12 +258,12 @@ export function TerminalPane({
       terminalId,
       data,
     }).catch((commandError) => {
-      setError(commandError instanceof Error ? commandError.message : String(commandError))
+      storeSetError(commandError instanceof Error ? commandError.message : String(commandError))
     })
     if (data.includes("\r") || data.includes("\n")) {
       onCommandSentRef.current?.()
     }
-  }, [socket, terminalId])
+  }, [socket, terminalId, storeSetError])
   const sendResize = useCallback((cols: number, rows: number) => {
     void socket.command({
       type: "terminal.resize",
@@ -402,17 +396,16 @@ export function TerminalPane({
     createAttemptRef.current += 1
     lastAppliedSnapshotKeyRef.current = null
     replayStateRef.current = null
-    setMetadata(null)
-    setError(null)
+    resetTerminal()
     terminal.reset()
     refreshTerminal(terminal)
     void socket.command({
       type: "terminal.close",
       terminalId,
     }).catch((commandError) => {
-      setError(commandError instanceof Error ? commandError.message : String(commandError))
+      storeSetError(commandError instanceof Error ? commandError.message : String(commandError))
     })
-  }, [clearVersion, socket, terminalId])
+  }, [clearVersion, socket, terminalId, resetTerminal, storeSetError])
 
   useEffect(() => {
     onPathChange?.(metadata?.cwd ?? null)
@@ -439,12 +432,12 @@ export function TerminalPane({
         serializedState: snapshot.serializedState,
       })
       if (lastAppliedSnapshotKeyRef.current === snapshotKey) {
-        setMetadata((current) => sameTerminalMetadata(current, nextMetadata) ? current : nextMetadata)
+        setMetadataConditional(nextMetadata)
         replayStateRef.current = snapshot.serializedState || null
         return false
       }
       lastAppliedSnapshotKeyRef.current = snapshotKey
-      setMetadata((current) => sameTerminalMetadata(current, nextMetadata) ? current : nextMetadata)
+      setMetadataConditional(nextMetadata)
       replayStateRef.current = snapshot.serializedState || null
       terminal.options.scrollback = snapshot.scrollback
       terminal.reset()
@@ -471,13 +464,13 @@ export function TerminalPane({
         scrollback,
       }).then((snapshot) => {
         hasCreatedRef.current = true
-        setError(null)
+        storeSetError(null)
         if (snapshot) {
           applySnapshot(snapshot)
         }
         scheduleResizeSync()
       }).catch((commandError) => {
-        setError(commandError instanceof Error ? commandError.message : String(commandError))
+        storeSetError(commandError instanceof Error ? commandError.message : String(commandError))
       })
     }
 
@@ -517,7 +510,7 @@ export function TerminalPane({
           return
         }
         hasCreatedRef.current = true
-        setError(null)
+        storeSetError(null)
         if (applySnapshot(snapshot)) {
           scheduleResizeSync()
         }
@@ -530,16 +523,11 @@ export function TerminalPane({
           return
         }
         if (event.type === "terminal.exit") {
-          setMetadata((current) => ({
-            cwd: current?.cwd ?? "",
-            shell: current?.shell ?? "",
-            status: "exited",
-            exitCode: event.exitCode,
-          }))
+          setMetadataFromExit(event.exitCode)
         }
       },
     })
-  }, [connectionStatus, projectId, scheduleResizeSync, scrollback, socket, terminalId])
+  }, [connectionStatus, projectId, scheduleResizeSync, scrollback, socket, terminalId, setMetadataConditional, setMetadataFromExit, storeSetError])
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden pb-4">
@@ -548,5 +536,13 @@ export function TerminalPane({
       </div>
       {error ? <div className="px-3 py-1 text-xs text-destructive">Terminal error: {error}</div> : null}
     </div>
+  )
+}
+
+export function TerminalPane(props: Props) {
+  return (
+    <TerminalPaneStore.Provider init={undefined}>
+      <TerminalPaneInner {...props} />
+    </TerminalPaneStore.Provider>
   )
 }
