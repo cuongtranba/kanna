@@ -22,7 +22,7 @@ import {
 } from "lexical"
 import { KANNA_COMPOSER_NODES } from "../nodes"
 import { serializeEditorToWire } from "../serialize/editorToWireString"
-import { findSnippetForCaret } from "./SnippetExpandPlugin"
+import { decideTab, findSnippetForCaret } from "./SnippetExpandPlugin"
 import { isTypeaheadMenuOpen } from "./SubmitPlugin"
 import type { TextSnippet } from "../../../../shared/types"
 
@@ -166,6 +166,51 @@ describe("SnippetExpandPlugin — Tab guard", () => {
         querySelector: (sel: string) => (sel === "[data-kanna-typeahead-menu]" ? ({} as Element) : null),
       }),
     ).toBe(true)
+  })
+})
+
+// ─── decideTab (regression: caret lost to Tab auto-repeat, issue re-reported
+// after #524) ─────────────────────────────────────────────────────────────────
+//
+// Holding Tab slightly long fires OS auto-repeat keydowns (`event.repeat`).
+// The first keydown expands the snippet; the repeat keydown no longer finds a
+// matching trailing token, fell through to the browser's default Tab focus
+// traversal, and moved focus to the Send button — the caret vanished from the
+// composer even though the expansion succeeded. Repeat keydowns must inherit
+// the initial press's decision: if the press expanded, repeats are swallowed.
+
+describe("decideTab", () => {
+  const plainTab = { shiftKey: false, ctrlKey: false, metaKey: false, altKey: false, repeat: false }
+
+  it("attempts expansion on a plain initial Tab press", () => {
+    expect(decideTab(plainTab, false, 2, false)).toBe("attempt")
+  })
+
+  it("ignores modifier Tabs regardless of repeat state", () => {
+    expect(decideTab({ ...plainTab, shiftKey: true }, false, 2, true)).toBe("ignore")
+    expect(decideTab({ ...plainTab, ctrlKey: true, repeat: true }, false, 2, true)).toBe("ignore")
+    expect(decideTab({ ...plainTab, metaKey: true }, false, 2, true)).toBe("ignore")
+    expect(decideTab({ ...plainTab, altKey: true, repeat: true }, false, 2, true)).toBe("ignore")
+  })
+
+  it("swallows a repeat keydown when the initial press expanded", () => {
+    expect(decideTab({ ...plainTab, repeat: true }, false, 2, true)).toBe("swallow-repeat")
+  })
+
+  it("lets a repeat keydown fall through when the initial press did not expand", () => {
+    expect(decideTab({ ...plainTab, repeat: true }, false, 2, false)).toBe("ignore")
+  })
+
+  it("swallows repeats even if the typeahead menu opened mid-press", () => {
+    expect(decideTab({ ...plainTab, repeat: true }, true, 2, true)).toBe("swallow-repeat")
+  })
+
+  it("ignores initial Tab while a typeahead menu is open", () => {
+    expect(decideTab(plainTab, true, 2, false)).toBe("ignore")
+  })
+
+  it("ignores initial Tab when there are no snippets", () => {
+    expect(decideTab(plainTab, false, 0, false)).toBe("ignore")
   })
 })
 
