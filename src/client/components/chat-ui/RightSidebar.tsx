@@ -1,7 +1,7 @@
 import { LegendList, type LegendListRef } from "@legendapp/list/react"
 import { PatchDiff } from "@pierre/diffs/react"
 import { AlertTriangle, ArrowUp, Ban, Building2, Check, ChevronDown, ChevronUp, Code, Columns2, Copy, Download, Ellipsis, FileText, FolderOpen, GitBranch, GitBranchPlus, Github, GitMerge, GitPullRequest, Globe, LoaderCircle, Lock, Minus, PencilLine, PenLine, RefreshCw, Rows3, Search, Trash2, Upload, UserRound, WrapText } from "lucide-react"
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode, type RefObject } from "react"
+import { memo, useCallback, useEffect, useMemo, useRef, type MouseEvent as ReactMouseEvent, type ReactNode, type RefObject } from "react"
 import type {
   ChatAttachment,
   ChatBranchHistoryEntry,
@@ -20,6 +20,8 @@ import { useStickyState } from "../../hooks/useStickyState"
 import { cn } from "../../lib/utils"
 import { useDiffCommitStore } from "../../stores/diffCommitStore"
 import { useRightSidebarStore } from "../../stores/rightSidebarStore"
+import { useRightSidebarUiStore } from "../../stores/rightSidebarUiStore"
+import { DiffFileCardStore } from "./DiffFileCard.store"
 import { AttachmentFileCard, AttachmentImageCard } from "../messages/AttachmentCard"
 import { FilePreviewSheet } from "../messages/file-preview/FilePreviewSheet"
 import { toPreviewSourceFromAttachment } from "../messages/file-preview/types"
@@ -374,20 +376,28 @@ function GitHubPublishModal({
   onCheckGitHubRepoAvailability: (args: { owner: string; name: string }) => Promise<GitHubRepoAvailabilityResult>
   onPublish: (args: { owner: string; name: string; visibility: "public" | "private"; description: string }) => Promise<unknown>
 }) {
-  const [info, setInfo] = useState<GitHubPublishInfo | null>(null)
-  const [isLoadingInfo, setIsLoadingInfo] = useState(false)
-  const [owner, setOwner] = useState("")
-  const [name, setName] = useState("")
-  const [visibility, setVisibility] = useState<"public" | "private">("private")
-  const [description, setDescription] = useState("")
-  const [availability, setAvailability] = useState<GitHubRepoAvailabilityResult | null>(null)
-  const [isCheckingAvailability, setIsCheckingAvailability] = useState(false)
-  const [isPublishing, setIsPublishing] = useState(false)
+  const info = useRightSidebarUiStore((store) => store.publishInfo)
+  const isLoadingInfo = useRightSidebarUiStore((store) => store.isLoadingPublishInfo)
+  const owner = useRightSidebarUiStore((store) => store.publishOwner)
+  const name = useRightSidebarUiStore((store) => store.publishName)
+  const visibility = useRightSidebarUiStore((store) => store.publishVisibility)
+  const description = useRightSidebarUiStore((store) => store.publishDescription)
+  const availability = useRightSidebarUiStore((store) => store.publishAvailability)
+  const isCheckingAvailability = useRightSidebarUiStore((store) => store.isCheckingPublishAvailability)
+  const isPublishing = useRightSidebarUiStore((store) => store.isPublishing)
+  const setInfo = useRightSidebarUiStore((store) => store.setPublishInfo)
+  const setIsLoadingInfo = useRightSidebarUiStore((store) => store.setIsLoadingPublishInfo)
+  const setOwner = useRightSidebarUiStore((store) => store.setPublishOwner)
+  const setName = useRightSidebarUiStore((store) => store.setPublishName)
+  const setVisibility = useRightSidebarUiStore((store) => store.setPublishVisibility)
+  const setDescription = useRightSidebarUiStore((store) => store.setPublishDescription)
+  const setAvailability = useRightSidebarUiStore((store) => store.setPublishAvailability)
+  const setIsCheckingAvailability = useRightSidebarUiStore((store) => store.setIsCheckingPublishAvailability)
+  const setIsPublishing = useRightSidebarUiStore((store) => store.setIsPublishing)
 
   useEffect(() => {
     if (!open) return
     let cancelled = false
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsLoadingInfo(true)
     setAvailability(null)
     void onGetGitHubPublishInfo()
@@ -406,7 +416,7 @@ function GitHubPublishModal({
     return () => {
       cancelled = true
     }
-  }, [onGetGitHubPublishInfo, open])
+  }, [onGetGitHubPublishInfo, open, setAvailability, setDescription, setInfo, setIsLoadingInfo, setName, setOwner, setVisibility])
 
   useEffect(() => {
     if (!open || !info?.ghInstalled || !info.authenticated) {
@@ -415,7 +425,6 @@ function GitHubPublishModal({
     const trimmedOwner = owner.trim()
     const trimmedName = name.trim()
     if (!trimmedOwner || !trimmedName) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setAvailability(null)
       return
     }
@@ -438,7 +447,7 @@ function GitHubPublishModal({
       cancelled = true
       window.clearTimeout(timeoutId)
     }
-  }, [info?.authenticated, info?.ghInstalled, name, onCheckGitHubRepoAvailability, open, owner])
+  }, [info?.authenticated, info?.ghInstalled, name, onCheckGitHubRepoAvailability, open, owner, setAvailability, setIsCheckingAvailability])
 
   async function handlePublish() {
     if (!owner.trim() || !name.trim()) return
@@ -751,12 +760,20 @@ function MergeBranchModal({
   onPreviewMergeBranch: (branch: ChatBranchListEntry) => Promise<ChatMergePreviewResult>
   onMergeBranch: (branch: ChatBranchListEntry) => Promise<ChatMergeBranchResult | null>
 }) {
-  const [query, setQuery] = useState("")
-  const [selectedName, setSelectedName] = useState<string | null>(null)
-  const [preview, setPreview] = useState<ChatMergePreviewResult | null>(null)
-  const [previewError, setPreviewError] = useState<string | null>(null)
-  const [isPreviewLoading, setIsPreviewLoading] = useState(false)
-  const [isMerging, setIsMerging] = useState(false)
+  const query = useRightSidebarUiStore((store) => store.mergeBranchQuery)
+  const selectedName = useRightSidebarUiStore((store) => store.mergeBranchSelectedName)
+  const preview = useRightSidebarUiStore((store) => store.mergePreview)
+  const previewError = useRightSidebarUiStore((store) => store.mergePreviewError)
+  const isPreviewLoading = useRightSidebarUiStore((store) => store.isMergePreviewLoading)
+  const isMerging = useRightSidebarUiStore((store) => store.isMergeBranching)
+  const setQuery = useRightSidebarUiStore((store) => store.setMergeBranchQuery)
+  const setSelectedName = useRightSidebarUiStore((store) => store.setMergeBranchSelectedName)
+  const setPreview = useRightSidebarUiStore((store) => store.setMergePreview)
+  const setPreviewError = useRightSidebarUiStore((store) => store.setMergePreviewError)
+  const setIsPreviewLoading = useRightSidebarUiStore((store) => store.setIsMergePreviewLoading)
+  const setIsMerging = useRightSidebarUiStore((store) => store.setIsMergeBranching)
+  const resetMergeBranchModal = useRightSidebarUiStore((store) => store.resetMergeBranchModal)
+  const resetMergePreview = useRightSidebarUiStore((store) => store.resetMergePreview)
 
   const groupedEntries = useMemo(() => {
     if (!branchList) {
@@ -791,22 +808,13 @@ function MergeBranchModal({
 
   useEffect(() => {
     if (!open) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setQuery("")
-      setSelectedName(null)
-      setPreview(null)
-      setPreviewError(null)
-      setIsPreviewLoading(false)
-      setIsMerging(false)
+      resetMergeBranchModal()
     }
-  }, [open])
+  }, [open, resetMergeBranchModal])
 
   useEffect(() => {
     if (!open || !selectedEntry) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setPreview(null)
-      setPreviewError(null)
-      setIsPreviewLoading(false)
+      resetMergePreview()
       return
     }
 
@@ -832,7 +840,7 @@ function MergeBranchModal({
     return () => {
       cancelled = true
     }
-  }, [onPreviewMergeBranch, open, selectedEntry])
+  }, [onPreviewMergeBranch, open, resetMergePreview, selectedEntry, setIsPreviewLoading, setPreview, setPreviewError])
 
   const mergeDisabled = !selectedEntry || !preview || isPreviewLoading || isMerging || preview.status !== "mergeable"
 
@@ -983,18 +991,25 @@ function BranchSwitcher({
   onCheckoutBranch: (branch: ChatBranchListEntry) => Promise<void>
   onCreateBranch: () => Promise<void>
 }) {
-  const [open, setOpen] = useState(false)
-  const [mergeModalOpen, setMergeModalOpen] = useState(false)
-  const [isLoading, setIsLoading] = useState(false)
-  const [isMutating, setIsMutating] = useState(false)
-  const [query, setQuery] = useState("")
-  const [entryView, setEntryView] = useState<"branches" | "pull_requests">("branches")
-  const [branchList, setBranchList] = useState<ChatBranchListResult | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const open = useRightSidebarUiStore((store) => store.branchSwitcherOpen)
+  const mergeModalOpen = useRightSidebarUiStore((store) => store.mergeModalOpen)
+  const isLoading = useRightSidebarUiStore((store) => store.branchSwitcherIsLoading)
+  const isMutating = useRightSidebarUiStore((store) => store.branchSwitcherIsMutating)
+  const query = useRightSidebarUiStore((store) => store.branchSwitcherQuery)
+  const entryView = useRightSidebarUiStore((store) => store.branchSwitcherEntryView)
+  const branchList = useRightSidebarUiStore((store) => store.branchList)
+  const error = useRightSidebarUiStore((store) => store.branchSwitcherError)
+  const setOpen = useRightSidebarUiStore((store) => store.setBranchSwitcherOpen)
+  const setMergeModalOpen = useRightSidebarUiStore((store) => store.setMergeModalOpen)
+  const setIsLoading = useRightSidebarUiStore((store) => store.setBranchSwitcherIsLoading)
+  const setIsMutating = useRightSidebarUiStore((store) => store.setBranchSwitcherIsMutating)
+  const setQuery = useRightSidebarUiStore((store) => store.setBranchSwitcherQuery)
+  const setEntryView = useRightSidebarUiStore((store) => store.setBranchSwitcherEntryView)
+  const setBranchList = useRightSidebarUiStore((store) => store.setBranchList)
+  const setError = useRightSidebarUiStore((store) => store.setBranchSwitcherError)
 
   useEffect(() => {
     if (!open) return
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsLoading(true)
     setError(null)
     void onListBranches()
@@ -1005,7 +1020,7 @@ function BranchSwitcher({
       .finally(() => {
         setIsLoading(false)
       })
-  }, [onListBranches, open])
+  }, [onListBranches, open, setBranchList, setError, setIsLoading])
 
   const normalizedQuery = query.trim().toLowerCase()
   const filterEntries = (entries: ChatBranchListEntry[]) => entries.filter((entry) => {
@@ -1236,7 +1251,8 @@ function DiffFileCard({
 }) {
   const canIgnore = canIgnoreDiffFile(file)
   const canIgnoreFolder = canIgnoreDiffFolder(file)
-  const [selectedAttachmentId, setSelectedAttachmentId] = useState<string | null>(null)
+  const selectedAttachmentId = DiffFileCardStore.useScopedStore((state) => state.selectedAttachmentId)
+  const setSelectedAttachmentId = DiffFileCardStore.useScopedStore((state) => state.setSelectedAttachmentId)
   const cardRef = useRef<HTMLDivElement | null>(null)
   const autoLoadPatchKeyRef = useRef<string | null>(null)
   const { sentinelRef, isStuck } = useStickyState<HTMLDivElement>({
@@ -1558,13 +1574,23 @@ function RightSidebarImpl({
     onCopyRelativePath,
   }), [onOpenFile, onOpenInFinder, onDiscardFile, onIgnoreFile, onIgnoreFolder, onCopyFilePath, onCopyRelativePath])
   const hasChanges = diffs.files.length > 0
-  const [isGenerating, setIsGenerating] = useState(false)
-  const [commitModeInFlight, setCommitModeInFlight] = useState<DiffCommitMode | null>(null)
-  const [isSyncing, setIsSyncing] = useState(false)
-  const [isGitHubPublishModalOpen, setIsGitHubPublishModalOpen] = useState(false)
-  const [patchesByPath, setPatchesByPath] = useState<Record<string, string>>({})
-  const [patchErrorsByPath, setPatchErrorsByPath] = useState<Record<string, string>>({})
-  const [loadingPatchPaths, setLoadingPatchPaths] = useState<Record<string, boolean>>({})
+  const isGenerating = useRightSidebarUiStore((store) => store.isGenerating)
+  const commitModeInFlight = useRightSidebarUiStore((store) => store.commitModeInFlight)
+  const isSyncing = useRightSidebarUiStore((store) => store.isSyncing)
+  const isGitHubPublishModalOpen = useRightSidebarUiStore((store) => store.isGitHubPublishModalOpen)
+  const patchesByPath = useRightSidebarUiStore((store) => store.patchesByPath)
+  const patchErrorsByPath = useRightSidebarUiStore((store) => store.patchErrorsByPath)
+  const loadingPatchPaths = useRightSidebarUiStore((store) => store.loadingPatchPaths)
+  const setIsGenerating = useRightSidebarUiStore((store) => store.setIsGenerating)
+  const setCommitModeInFlight = useRightSidebarUiStore((store) => store.setCommitModeInFlight)
+  const setIsSyncing = useRightSidebarUiStore((store) => store.setIsSyncing)
+  const setIsGitHubPublishModalOpen = useRightSidebarUiStore((store) => store.setIsGitHubPublishModalOpen)
+  const reconcilePatches = useRightSidebarUiStore((store) => store.reconcilePatches)
+  const setPatchLoading = useRightSidebarUiStore((store) => store.setPatchLoading)
+  const clearPatchLoading = useRightSidebarUiStore((store) => store.clearPatchLoading)
+  const clearPatchError = useRightSidebarUiStore((store) => store.clearPatchError)
+  const setPatchResult = useRightSidebarUiStore((store) => store.setPatchResult)
+  const setPatchError = useRightSidebarUiStore((store) => store.setPatchError)
   // Holds the diff file list's own scrollable node (LegendList is the
   // scroller). Passed to each card as the IntersectionObserver root for its
   // sticky header. Populated from `filesListRef` after the list mounts.
@@ -1597,13 +1623,9 @@ function RightSidebarImpl({
   useEffect(() => {
     const nextDigestsByPath = Object.fromEntries(diffs.files.map((file) => [file.path, file.patchDigest]))
     const isCurrentDigest = (path: string) => patchDigestsByPathRef.current[path] === nextDigestsByPath[path]
-    setPatchesByPath((current) => Object.fromEntries(
-      Object.entries(current).filter(([path]) => filePaths.includes(path) && isCurrentDigest(path))
-    ))
-    setPatchErrorsByPath((current) => Object.fromEntries(Object.entries(current).filter(([path]) => filePaths.includes(path) && isCurrentDigest(path))))
-    setLoadingPatchPaths((current) => Object.fromEntries(Object.entries(current).filter(([path]) => filePaths.includes(path) && isCurrentDigest(path))))
+    reconcilePatches(filePaths, isCurrentDigest)
     patchDigestsByPathRef.current = nextDigestsByPath
-  }, [diffs.files, filePaths, filePathsKey])
+  }, [diffs.files, filePaths, filePathsKey, reconcilePatches])
 
   useEffect(() => {
     if (!projectId) return
@@ -1727,20 +1749,17 @@ function RightSidebarImpl({
   }
 
   const handleLoadPatch = useCallback(async (path: string) => {
-    if (patchesByPath[path] !== undefined || loadingPatchPaths[path]) {
-      return patchesByPath[path] ?? ""
+    const { patchesByPath: currentPatches, loadingPatchPaths: currentLoading } = useRightSidebarUiStore.getState()
+    if (currentPatches[path] !== undefined || currentLoading[path]) {
+      return currentPatches[path] ?? ""
     }
 
-    setLoadingPatchPaths((current) => ({ ...current, [path]: true }))
-    setPatchErrorsByPath((current) => {
-      if (!(path in current)) return current
-      const { [path]: _removed, ...rest } = current
-      return rest
-    })
+    setPatchLoading(path)
+    clearPatchError(path)
 
     try {
       const patch = await onLoadPatch(path)
-      setPatchesByPath((current) => ({ ...current, [path]: patch }))
+      setPatchResult(path, patch)
       const digest = diffs.files.find((file) => file.path === path)?.patchDigest
       if (digest) {
         patchDigestsByPathRef.current = {
@@ -1751,15 +1770,12 @@ function RightSidebarImpl({
       return patch
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
-      setPatchErrorsByPath((current) => ({ ...current, [path]: message }))
+      setPatchError(path, message)
       throw error
     } finally {
-      setLoadingPatchPaths((current) => {
-        const { [path]: _removed, ...rest } = current
-        return rest
-      })
+      clearPatchLoading(path)
     }
-  }, [diffs.files, loadingPatchPaths, onLoadPatch, patchesByPath])
+  }, [clearPatchError, clearPatchLoading, diffs.files, onLoadPatch, setPatchError, setPatchLoading, setPatchResult])
 
   const diffFileKey = useCallback((file: DiffFile) => file.path, [])
 
@@ -1769,29 +1785,31 @@ function RightSidebarImpl({
       const isChecked = checkedPaths[file.path] ?? true
       return (
         <div className="pb-1.5">
-          <DiffFileCard
-            file={file}
-            rootRef={scrollContainerRef}
-            projectId={projectId}
-            isCollapsed={isCollapsed}
-            isChecked={isChecked}
-            editorLabel={editorLabel}
-            diffRenderMode={diffRenderMode}
-            wrapLines={wrapLines}
-            onToggleCollapsed={() => {
-              if (!projectId) return
-              toggleCollapsedPath(projectId, file.path)
-            }}
-            onToggleChecked={() => {
-              if (!projectId) return
-              setCheckedPath(projectId, file.path, !isChecked)
-            }}
-            fileActions={fileActions}
-            patch={patchesByPath[file.path]}
-            patchError={patchErrorsByPath[file.path]}
-            isPatchLoading={Boolean(loadingPatchPaths[file.path])}
-            onLoadPatch={handleLoadPatch}
-          />
+          <DiffFileCardStore.Provider init={undefined}>
+            <DiffFileCard
+              file={file}
+              rootRef={scrollContainerRef}
+              projectId={projectId}
+              isCollapsed={isCollapsed}
+              isChecked={isChecked}
+              editorLabel={editorLabel}
+              diffRenderMode={diffRenderMode}
+              wrapLines={wrapLines}
+              onToggleCollapsed={() => {
+                if (!projectId) return
+                toggleCollapsedPath(projectId, file.path)
+              }}
+              onToggleChecked={() => {
+                if (!projectId) return
+                setCheckedPath(projectId, file.path, !isChecked)
+              }}
+              fileActions={fileActions}
+              patch={patchesByPath[file.path]}
+              patchError={patchErrorsByPath[file.path]}
+              isPatchLoading={Boolean(loadingPatchPaths[file.path])}
+              onLoadPatch={handleLoadPatch}
+            />
+          </DiffFileCardStore.Provider>
         </div>
       )
     },
