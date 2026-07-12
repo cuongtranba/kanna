@@ -1,0 +1,12 @@
+id: no-react-usestate-ts
+valid:
+  - const value = useAppStore((state) => state.value)
+  - import { useEffect, useMemo } from "react"
+  - const [a, b] = usePair(0)
+invalid:
+  - const [count, setCount] = useState(0)
+  - const [tab, setTab] = useState<Tab>("new")
+  - const [x, setX] = React.useState(0)
+  - const [y, setY] = React.useState<number | null>(null)
+  - import { useState } from "react"
+  - import { useEffect, useState as useLocalState } from "react"
