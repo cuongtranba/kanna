@@ -241,7 +241,7 @@ export { OutputRing }
  * cron dies on restart). Loop orchestration uses notification-driven wakes via
  * `delegate_subagent({run_in_background: true})` + `subagent_background`
  * auto-continue delivery, with per-iteration /clear on the main-agent Claude
- * session. See adr-2026XXXX-notification-driven-loop-orchestration.
+ * session. See adr-20260711-notification-driven-loop-orchestration.
  */
 export const PTY_DISALLOWED_NATIVE_TOOLS = ["AskUserQuestion", "ExitPlanMode", "ScheduleWakeup"] as const
 

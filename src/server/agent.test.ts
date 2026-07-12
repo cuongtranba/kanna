@@ -3315,6 +3315,96 @@ describe("AgentCoordinator claude integration", () => {
 
     events.close()
   })
+
+  // PTY bakes the loop tool-block into --disallowedTools at spawn time, so a
+  // flip of the armed state (setup_loop arms, stop_loop / user takeover
+  // disarms) MUST respawn the session at the next turn boundary — otherwise
+  // the block goes stale (armed session keeps tools blocked after disarm, and
+  // vice versa). SDK re-evaluates isLoopArmed() per tool call and never
+  // respawns for this.
+  test("PTY: loop armed-state flip respawns the session; steady state reuses it", async () => {
+    const store = createFakeStore()
+    store.chat.provider = "claude"
+
+    let armed = true
+    let spawnCount = 0
+    const queues: AsyncEventQueue<any>[] = []
+
+    const coordinator = new AgentCoordinator({
+      store: store as never,
+      onStateChange: () => {},
+      getAppSettingsSnapshot: () => ({ claudeDriver: { preference: "pty" } }),
+      startClaudeSession: async () => {
+        throw new Error("SDK driver must not be used under PTY preference")
+      },
+      startClaudeSessionPTY: async () => {
+        spawnCount += 1
+        const events = new AsyncEventQueue<any>()
+        queues.push(events)
+        return {
+          provider: "claude",
+          stream: events,
+          getAccountInfo: async () => null,
+          interrupt: async () => {},
+          close: () => {},
+          setModel: async () => {},
+          setPermissionMode: async () => {},
+          getSupportedCommands: async () => [],
+          sendPrompt: async () => {
+            events.push({
+              type: "transcript" as const,
+              entry: timestamped({
+                kind: "result",
+                subtype: "success",
+                isError: false,
+                durationMs: 0,
+                result: "done",
+              }),
+            })
+          },
+        }
+      },
+    })
+
+    // Pin the armed state to the test toggle — the send() takeover path would
+    // otherwise disarm before the spawn check ever sees an armed loop.
+    coordinator.isLoopArmed = () => (armed ? { subagentId: "sa-1", prompt: "loop prompt" } : null)
+
+    const sendTurn = async (content: string, expectedFinished: number) => {
+      await coordinator.send({
+        type: "chat.send",
+        chatId: "chat-1",
+        provider: "claude",
+        content,
+        model: "claude-opus-4-7",
+      })
+      await waitFor(() => store.turnFinishedCount >= expectedFinished, 2000)
+    }
+
+    // Turn 1 spawns armed.
+    await sendTurn("turn 1 (armed)", 1)
+    expect(spawnCount).toBe(1)
+
+    // Steady state (still armed): session reused.
+    await sendTurn("turn 2 (armed)", 2)
+    expect(spawnCount).toBe(1)
+
+    // Disarm flip: must respawn so --disallowedTools is dropped.
+    armed = false
+    await sendTurn("turn 3 (disarmed)", 3)
+    expect(spawnCount).toBe(2)
+
+    // Steady state (disarmed): session reused.
+    await sendTurn("turn 4 (disarmed)", 4)
+    expect(spawnCount).toBe(2)
+
+    // Arm flip: must respawn so --disallowedTools is applied.
+    armed = true
+    await sendTurn("turn 5 (armed)", 5)
+    expect(spawnCount).toBe(3)
+
+    for (const q of queues) q.close()
+  })
 })
 
 describe("AgentCoordinator.ensureSlashCommandsLoaded", () => {

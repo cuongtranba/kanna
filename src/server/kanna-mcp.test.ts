@@ -403,7 +403,7 @@ describe("keep_alive delegate + send_subagent_message + close_subagent", () => {
 })
 
 describe("schedule_wakeup tool removed", () => {
-  test("no schedule_wakeup registered under any args (hard-break per adr-2026XXXX)", () => {
+  test("no schedule_wakeup registered under any args (hard-break per adr-20260711-notification-driven-loop-orchestration)", () => {
     const baseArgs = {
       projectId: "p",
       localPath: "/tmp",

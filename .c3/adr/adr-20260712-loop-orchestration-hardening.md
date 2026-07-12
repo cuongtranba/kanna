@@ -107,7 +107,7 @@ embeds the concrete id in the rendered delegate call.
 | --- | --- | --- |
 | A hung (no-event) subagent pins a run for the whole idle window | Window is bounded + configurable; only truly silent runs stall out | subagent-orchestrator stall test |
 | Loop-armed tool-block persists after a session if not disarmed | stop_loop on GOAL MET + real user send both disarm; state is event-sourced and per-chat | read-model.test.ts arm/disarm cases |
-| PTY tool-block evaluated only at spawn | Each wake is a fresh PTY spawn (session_token wiped), so it re-evaluates armed state | driver.test.ts loopArmed cases |
+| PTY tool-block evaluated only at spawn | Loop wakes are fresh PTY spawns (session_token wiped). Session reuse across an armed-state flip (arm via setup_loop, disarm via stop_loop / user-send takeover) is prevented by `loopArmedAtSpawn` on the session record: `startClaudeTurn` respawns when the captured state differs from `isLoopArmed()` (PTY only — SDK re-evaluates per tool call) | driver.test.ts loopArmed cases; agent.test.ts respawn-on-flip case |
 
 ## Verification
 

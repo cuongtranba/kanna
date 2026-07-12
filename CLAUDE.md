@@ -636,7 +636,7 @@ adr-20260616-subagent-run-in-background.
 Long-horizon autonomous loops (eslint burn-downs, migration sweeps, multi-hour
 codemods) run under a notification-driven pattern with per-iteration `/clear`
 on the main agent's Claude session. There is no timer-based `schedule_wakeup`
-anymore (removed in adr-2026XXXX-notification-driven-loop-orchestration —
+anymore (removed in adr-20260711-notification-driven-loop-orchestration —
 which supersedes `adr-20260603-agent-self-scheduled-wake`).
 
 **Roles:**
@@ -665,7 +665,7 @@ drivers.
 and sees the goal is met, it does not delegate. The main goes idle. No timer
 to disarm, no wake cap to worry about.
 
-**Removed (hard break, per adr-2026XXXX):**
+**Removed (hard break, per adr-20260711-notification-driven-loop-orchestration):**
 - `mcp__kanna__schedule_wakeup` MCP tool.
 - `AgentCoordinator.scheduleAgentWakeup` method.
 - `maybeArmPendingWorkflowWake` (pending-workflow poll harvest) — workflow
@@ -768,7 +768,7 @@ could notify. See `adr-20260604-pty-background-task-keepalive`.
 Surfaces Claude Code's native `Workflow` tool (dynamic multi-agent
 orchestration) in the UI: a per-chat panel listing every run with live status +
 drill-in progress, plus an inline transcript card on the launch. **Read-only,
-both drivers.** After adr-2026XXXX the model handles workflow harvest via
+both drivers.** After adr-20260711-notification-driven-loop-orchestration the model handles workflow harvest via
 `delegate_subagent({run_in_background: true})` status-check spawns; this
 panel *displays* the workflow.
 

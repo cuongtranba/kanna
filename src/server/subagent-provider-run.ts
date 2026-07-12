@@ -165,7 +165,7 @@ async function runClaudeSubagent(opts: {
   // that fires on every subagent_background delivery in
   // AgentCoordinator.deliverSubagentToMain, this makes PROGRESS.md the ONLY
   // durability contract for the loop-orchestration pattern. See
-  // adr-2026XXXX-notification-driven-loop-orchestration.
+  // adr-20260711-notification-driven-loop-orchestration.
   const session = await args.startClaudeSession({
     projectId: args.projectId,
     localPath: args.cwd,

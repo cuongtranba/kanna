@@ -50,8 +50,8 @@ class PausableTimeout {
    * No-op while paused (an interactive approval gate holds the clock).
    */
   reset(now: number = Date.now()): void {
-    this.remainingMs = this.totalMs
     if (this.handle == null) return
+    this.remainingMs = this.totalMs
     clearTimeout(this.handle)
     this.deadline = now + this.remainingMs
     this.handle = setTimeout(this.onFire, this.remainingMs)

@@ -84,7 +84,7 @@ export interface KannaMcpArgs extends OfferDownloadArgs {
    * Backs the `setup_loop` MCP tool. Omit to hide the tool. Handler validates
    * the loop spec, ensures the tracking file exists, and enqueues a
    * validated templated recurring prompt as an auto-continue on this chat.
-   * See adr-2026XXXX-setup-loop-template.
+   * See adr-20260711-setup-loop-template.
    */
   setupLoop?: (input: LoopSetupInput) => Promise<SetupLoopHandlerResult>
   /**

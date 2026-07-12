@@ -254,6 +254,12 @@ interface ClaudeSessionState {
   // mid-flight. See adr-20260604-pty-background-task-keepalive.
   backgroundTaskIds: Set<string>
   backgroundTaskDeadlineAt: number
+  // Armed-loop state captured at spawn. PTY bakes the loop tool-block into
+  // `--disallowedTools` (immutable per process), so when the armed state
+  // changes (setup_loop arms / stop_loop or user-send disarms) the session
+  // must be respawned at the next turn boundary or the block goes stale.
+  // SDK re-evaluates `isLoopArmed()` per tool call and never needs this.
+  loopArmedAtSpawn: boolean
   /** SDK only: set once the workflows dir has been registered for this session. */
   workflowsDirRegistered?: boolean
   // Number of cancelled turns awaiting their interrupt-induced tail `result`.
@@ -2841,12 +2847,20 @@ export class AgentCoordinator {
   }): Promise<HarnessTurn> {
     let session = this.claudeSessions.get(args.chatId)
 
+    const driverIsPty = args.provider !== "openrouter"
+      && this.resolveClaudeDriverPreference() === "pty"
+    const loopArmedNow = this.isLoopArmed(args.chatId) !== null
+
     if (
       !session ||
       session.localPath !== args.localPath ||
       session.effort !== args.effort ||
       args.forkSession ||
-      session.additionalDirectories.join("|") !== (args.additionalDirectories ?? []).join("|")
+      session.additionalDirectories.join("|") !== (args.additionalDirectories ?? []).join("|") ||
+      // PTY bakes the loop tool-block into --disallowedTools at spawn, so an
+      // armed-state flip (arm OR disarm) requires a fresh process. SDK
+      // re-evaluates isLoopArmed() per tool call and can keep its session.
+      (driverIsPty && session.loopArmedAtSpawn !== loopArmedNow)
     ) {
       if (session) {
         this.closeClaudeSession(args.chatId, session)
@@ -2883,7 +2897,7 @@ export class AgentCoordinator {
         }
       }
 
-      const usePty = !isOpenRouter && this.resolveClaudeDriverPreference() === "pty"
+      const usePty = driverIsPty
       const systemPromptAppend = buildKannaSystemPromptAppend(this.getSubagents(), {
         globalPromptAppend: this.getAppSettingsSnapshot().globalPromptAppend,
         stackProjects: args.stackProjects,
@@ -3001,6 +3015,7 @@ export class AgentCoordinator {
         lastUsedAt: Date.now(),
         backgroundTaskIds: new Set<string>(),
         backgroundTaskDeadlineAt: 0,
+        loopArmedAtSpawn: loopArmedNow,
         cancelledResultPending: 0,
       }
       this.claudeSessions.set(args.chatId, session)
@@ -3057,7 +3072,9 @@ export class AgentCoordinator {
     // A real user send is a takeover: disarm any armed loop so tools are
     // restored and the generic wake path resumes. Auto-continue / background
     // wakes bypass `send`, so they do NOT disarm.
-    if (chatId) void this.stopLoop(chatId, "user_send")
+    // Awaited so a failed event-log write surfaces instead of silently
+    // leaving the loop armed (and tools blocked) after the takeover.
+    if (chatId) await this.stopLoop(chatId, "user_send")
 
     logSendToStartingProfile(profile, "chat_send.received", {
       existingChatId: command.chatId ?? null,
@@ -4278,7 +4295,7 @@ export class AgentCoordinator {
    * output is NOT carried forward as prompt content — the subagent is expected
    * to have written its findings into PROGRESS.md before terminating.
    *
-   * See adr-2026XXXX-notification-driven-loop-orchestration.
+   * See adr-20260711-notification-driven-loop-orchestration.
    */
   private async deliverSubagentToMain(
     chatId: string,
@@ -4334,7 +4351,7 @@ export class AgentCoordinator {
    * the tracking file exists (writes a skeleton if absent), then /clears the
    * main-agent Claude session and enqueues the templated recurring prompt so
    * the next turn starts the loop. Backs `mcp__kanna__setup_loop`. See
-   * adr-2026XXXX-setup-loop-template.
+   * adr-20260711-setup-loop-template.
    */
   async setupLoop(args: {
     chatId: string

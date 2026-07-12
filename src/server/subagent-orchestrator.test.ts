@@ -609,6 +609,66 @@ describe("SubagentOrchestrator", () => {
     expect(run.finalText).toBe("done after pause")
   }, 10_000)
 
+  test("reset() while paused is a no-op: residual window survives resume instead of re-arming full", async () => {
+    const harness = await setupHarness({
+      subagents: [makeSubagent({ id: "sa-1", name: "alpha" })],
+      runTimeoutMs: 900,
+    })
+
+    let startResolve!: (result: { text: string }) => void
+    const startDeferred = new Promise<{ text: string }>((resolve) => { startResolve = resolve })
+
+    let capturedRunId: string | null = null
+    const origAppendSubagentEvent = harness.store.appendSubagentEvent.bind(harness.store)
+    harness.store.appendSubagentEvent = async (event) => {
+      if (event.type === "subagent_run_started") {
+        capturedRunId = event.runId
+      }
+      return origAppendSubagentEvent(event)
+    }
+
+    let capturedOnChunk: ((text: string) => void) | null = null
+    harness.mockProviderRun({
+      async start(onChunk) {
+        capturedOnChunk = onChunk
+        return startDeferred
+      },
+      async authReady() { return true },
+    })
+
+    const runPromise = harness.orchestrator.runMentionsForUserMessage({
+      chatId: harness.chatId,
+      userMessageId: harness.userMessageId,
+      mentions: [{ kind: "subagent", subagentId: "sa-1", raw: "@agent/alpha" }],
+    })
+
+    await new Promise((r) => setTimeout(r, 10))
+    expect(capturedRunId).not.toBeNull()
+    expect(capturedOnChunk).not.toBeNull()
+
+    // Burn ~500ms of the 900ms idle window, then pause (≈400ms residual).
+    await new Promise((r) => setTimeout(r, 500))
+    harness.orchestrator.notifySubagentToolPending(capturedRunId!)
+
+    // A chunk streamed mid-pause calls reset() — it must NOT re-arm the full
+    // window while the approval gate holds the clock.
+    capturedOnChunk!("chunk-during-pause")
+
+    await new Promise((r) => setTimeout(r, 100))
+    harness.orchestrator.notifySubagentToolResolved(capturedRunId!)
+
+    // Silence after resume: the ~400ms residual must have fired by +700ms.
+    // With a corrupted (re-armed full 900ms) clock the run is still alive here.
+    await new Promise((r) => setTimeout(r, 700))
+    const run = Object.values(harness.store.getSubagentRuns(harness.chatId))[0]
+    expect(run.status).toBe("failed")
+    expect(run.error?.code).toBe("TIMEOUT")
+
+    // unblock the stuck provider so harness teardown is clean
+    startResolve({ text: "late" })
+    await runPromise
+  }, 10_000)
+
   test("recoverInterruptedRuns: marks runs with pendingTool as INTERRUPTED", async () => {
     const dataDir = await createTempDataDir()
     const store = createTestEventStore(dataDir)

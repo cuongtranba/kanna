@@ -4,7 +4,7 @@
  * Feeds `mcp__kanna__setup_loop`. Server owns the template so `/loop` setups
  * are deterministic — user prompt like "set up /loop and goal to do X" flows
  * through validation before the model can start looping. See
- * adr-2026XXXX-setup-loop-template.
+ * adr-20260711-setup-loop-template.
  *
  * NO IO. Path resolution is on absolute strings only; caller supplies both
  * `cwd` and any user-provided `trackingFile` and this module normalizes /

@@ -4,7 +4,7 @@ import type { AutoContinueEvent } from "./auto-continue/events"
 import type { TranscriptEntry, SlashCommand } from "../shared/types"
 
 // Long-scenario test for the notification-driven loop-orchestration pattern
-// (adr-2026XXXX-notification-driven-loop-orchestration).
+// (adr-20260711-notification-driven-loop-orchestration).
 //
 // The loop pattern is: main-agent = stateless-in-context / stateful-in-file
 // (PROGRESS.md). Every subagent_background delivery /clears the main-agent
