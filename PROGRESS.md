@@ -33,11 +33,12 @@
 - [x] T11 File preview: `src/client/components/messages/file-preview/FilePreviewSheet.tsx` (1), `useViewportFetch.ts` (4), `bodies/textLoader.ts` (2), `bodies/TableBody.tsx` (2), `bodies/CodeBody.tsx` (1)
 - [x] T12 SettingsPage: `src/client/app/SettingsPage.tsx` (42)
 - [x] T13 McpServersSection: `src/client/app/McpServersSection.tsx` (18)
-- [ ] T14 Settings sections: `ModelsSection.tsx` (7), `SubagentsSection.tsx` (7), `TextSnippetsSection.tsx` (5), `src/client/components/chat-ui/OAuthTokenPoolCard.tsx` (5)
+- [x] T14 Settings sections: `ModelsSection.tsx` (7), `SubagentsSection.tsx` (7), `TextSnippetsSection.tsx` (5), `src/client/components/chat-ui/OAuthTokenPoolCard.tsx` (5)
 - [ ] T15 Workflows: `src/client/app/WorkflowsPage.tsx` (3), `WorkflowsSection.tsx` (2), `WorkflowAgentTranscriptPanel.tsx` (4)
 - [ ] T16 Final sweep: `src/client/components/share/SharePopover.tsx` (1) + any file still listed by `bun scripts/usestate-ratchet.ts --zero`; then run `bun run migrate:verify` and fix everything until it exits 0
 
 ## Progress (latest first)
+- 2026-07-12 T14 Settings sections DONE (42 → 14 useState, -28)
 - 2026-07-12 T13 McpServersSection DONE (61 → 42 useState, -19)
 - 2026-07-12 T12 SettingsPage DONE (104 → 61 useState, -43)
 - 2026-07-12 T11 File preview DONE (119 → 104 useState, -15)
@@ -57,4 +58,4 @@
 - (none yet)
 
 ## Next chunk
-T14 Settings sections: migrate `src/client/app/ModelsSection.tsx` (7), `src/client/app/SubagentsSection.tsx` (7), `src/client/app/TextSnippetsSection.tsx` (5), `src/client/components/chat-ui/OAuthTokenPoolCard.tsx` (5) off useState. All are singleton settings sections — use a single feature store at `src/client/stores/settingsSectionsStore.ts` (NO `persist`). Follow ALL Worker rules, satisfy all 6 acceptance criteria, update this file, then terminate.
+T15 Workflows: src/client/app/WorkflowsPage.tsx (3), WorkflowsSection.tsx (2), WorkflowAgentTranscriptPanel.tsx (4). All singleton sections — use feature stores. Follow ALL Worker rules, satisfy all 6 acceptance criteria, update this file, then terminate.
