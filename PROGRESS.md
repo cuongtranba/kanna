@@ -34,10 +34,11 @@
 - [x] T12 SettingsPage: `src/client/app/SettingsPage.tsx` (42)
 - [x] T13 McpServersSection: `src/client/app/McpServersSection.tsx` (18)
 - [x] T14 Settings sections: `ModelsSection.tsx` (7), `SubagentsSection.tsx` (7), `TextSnippetsSection.tsx` (5), `src/client/components/chat-ui/OAuthTokenPoolCard.tsx` (5)
-- [ ] T15 Workflows: `src/client/app/WorkflowsPage.tsx` (3), `WorkflowsSection.tsx` (2), `WorkflowAgentTranscriptPanel.tsx` (4)
+- [x] T15 Workflows: `src/client/app/WorkflowsPage.tsx` (3), `WorkflowsSection.tsx` (2), `WorkflowAgentTranscriptPanel.tsx` (4)
 - [ ] T16 Final sweep: `src/client/components/share/SharePopover.tsx` (1) + any file still listed by `bun scripts/usestate-ratchet.ts --zero`; then run `bun run migrate:verify` and fix everything until it exits 0
 
 ## Progress (latest first)
+- 2026-07-12 T15 Workflows DONE (14 → 2 useState, -12) — scoped stores for WorkflowsPageView, WorkflowsSectionWithDetail, WorkflowAgentTranscriptPanel; 43 tests pass
 - 2026-07-12 T14 Settings sections DONE (42 → 14 useState, -28)
 - 2026-07-12 T13 McpServersSection DONE (61 → 42 useState, -19)
 - 2026-07-12 T12 SettingsPage DONE (104 → 61 useState, -43)
@@ -58,4 +59,4 @@
 - (none yet)
 
 ## Next chunk
-T15 Workflows: src/client/app/WorkflowsPage.tsx (3), WorkflowsSection.tsx (2), WorkflowAgentTranscriptPanel.tsx (4). All singleton sections — use feature stores. Follow ALL Worker rules, satisfy all 6 acceptance criteria, update this file, then terminate.
+T16 Final sweep: `src/client/components/share/SharePopover.tsx` (2 useState remain). Then run `bun run migrate:verify` and fix everything until it exits 0. Follow ALL Worker rules, satisfy all 6 acceptance criteria, update this file, then terminate.

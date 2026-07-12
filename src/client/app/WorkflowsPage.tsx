@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
+import { useCallback, useEffect, useRef, type ReactNode } from "react"
+import { WorkflowsPageViewStore } from "./WorkflowsPage.store"
 import { useNavigate, useOutletContext, useParams } from "react-router-dom"
 import { ArrowLeft, Loader2, Workflow } from "lucide-react"
 import { useShallow } from "zustand/react/shallow"
@@ -21,10 +22,14 @@ export interface WorkflowsPageViewProps {
   onBackToChat?: () => void
 }
 
-export function WorkflowsPageView({ runs, getRunDetail, getAgentTranscript, onBackToChat }: WorkflowsPageViewProps) {
-  const [selectedRunId, setSelectedRunId] = useState<string | null>(null)
-  const [selectedRun, setSelectedRun] = useState<WorkflowRun | null | "loading" | "not-found">(null)
-  const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null)
+function WorkflowsPageViewInner({ runs, getRunDetail, getAgentTranscript, onBackToChat }: WorkflowsPageViewProps) {
+  const selectedRunId = WorkflowsPageViewStore.useScopedStore((s) => s.selectedRunId)
+  const selectedRun = WorkflowsPageViewStore.useScopedStore((s) => s.selectedRun)
+  const selectedAgentId = WorkflowsPageViewStore.useScopedStore((s) => s.selectedAgentId)
+  const setSelectedRunId = WorkflowsPageViewStore.useScopedStore((s) => s.setSelectedRunId)
+  const setSelectedRun = WorkflowsPageViewStore.useScopedStore((s) => s.setSelectedRun)
+  const setSelectedAgentId = WorkflowsPageViewStore.useScopedStore((s) => s.setSelectedAgentId)
+  const clearSelection = WorkflowsPageViewStore.useScopedStore((s) => s.clearSelection)
   // The runs reference present when a row was last clicked. The push-refetch
   // effect only fires once `runs` changes identity AFTER the selection.
   const runsAtSelectionRef = useRef<WorkflowRunSummary[] | null>(null)
@@ -43,14 +48,12 @@ export function WorkflowsPageView({ runs, getRunDetail, getAgentTranscript, onBa
     const detail = await getRunDetail(runId)
     if (fetchSeqRef.current !== seq) return // a newer fetch superseded this one
     setSelectedRun(detail ?? "not-found")
-  }, [getRunDetail, runs])
+  }, [getRunDetail, runs, setSelectedRunId, setSelectedAgentId, setSelectedRun])
 
   const handleClearSelection = useCallback(() => {
-    setSelectedRunId(null)
-    setSelectedRun(null)
-    setSelectedAgentId(null)
+    clearSelection()
     runsAtSelectionRef.current = null
-  }, [])
+  }, [clearSelection])
 
   // Re-fetch the selected run in-place (no "loading" swap) when a snapshot push
   // delivers a new `runs` reference AND the selected run is still running. Stops
@@ -70,7 +73,7 @@ export function WorkflowsPageView({ runs, getRunDetail, getAgentTranscript, onBa
       setSelectedRun(detail)
     })
     return () => { cancelled = true }
-  }, [runs, selectedRunId, selectedAgentId, getRunDetail])
+  }, [runs, selectedRunId, selectedAgentId, getRunDetail, setSelectedRun])
 
   const runObj = selectedRun !== "loading" && selectedRun !== "not-found" ? selectedRun : null
   const selectedAgent =
@@ -172,6 +175,14 @@ export function WorkflowsPageView({ runs, getRunDetail, getAgentTranscript, onBa
         </div>
       </div>
     </div>
+  )
+}
+
+export function WorkflowsPageView(props: WorkflowsPageViewProps) {
+  return (
+    <WorkflowsPageViewStore.Provider init={undefined}>
+      <WorkflowsPageViewInner {...props} />
+    </WorkflowsPageViewStore.Provider>
   )
 }
 

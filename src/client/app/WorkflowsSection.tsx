@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef } from "react"
+import { WorkflowsSectionDetailStore } from "./WorkflowsSection.store"
 import { Activity, FileText } from "lucide-react"
 import { cn } from "../lib/utils"
 import { formatCompactDuration } from "../lib/formatDuration"
@@ -446,9 +447,12 @@ export interface WorkflowsSectionWithDetailProps {
   getRunDetail: (runId: string) => Promise<WorkflowRun | null>
 }
 
-export function WorkflowsSectionWithDetail({ runs, getRunDetail }: WorkflowsSectionWithDetailProps) {
-  const [selectedRun, setSelectedRun] = useState<WorkflowRun | null | "loading">(null)
-  const [selectedRunId, setSelectedRunId] = useState<string | null>(null)
+function WorkflowsSectionWithDetailInner({ runs, getRunDetail }: WorkflowsSectionWithDetailProps) {
+  const selectedRun = WorkflowsSectionDetailStore.useScopedStore((s) => s.selectedRun)
+  const selectedRunId = WorkflowsSectionDetailStore.useScopedStore((s) => s.selectedRunId)
+  const setSelectedRun = WorkflowsSectionDetailStore.useScopedStore((s) => s.setSelectedRun)
+  const setSelectedRunId = WorkflowsSectionDetailStore.useScopedStore((s) => s.setSelectedRunId)
+  const clearSelection = WorkflowsSectionDetailStore.useScopedStore((s) => s.clearSelection)
   const isOpen = selectedRun !== null
   // Track the runs reference that was present when the run was last selected
   // via a click. The push-refetch effect only fires when runs changes identity
@@ -461,13 +465,12 @@ export function WorkflowsSectionWithDetail({ runs, getRunDetail }: WorkflowsSect
     setSelectedRun("loading")
     const detail = await getRunDetail(runId)
     setSelectedRun(detail)
-  }, [getRunDetail, runs])
+  }, [getRunDetail, runs, setSelectedRun, setSelectedRunId])
 
   const handleClose = useCallback(() => {
-    setSelectedRunId(null)
-    setSelectedRun(null)
+    clearSelection()
     runsAtSelectionRef.current = null
-  }, [])
+  }, [clearSelection])
 
   // Re-fetch the selected run's detail in-place (no "loading" swap) whenever
   // the snapshot push delivers a new `runs` reference AND the selected run is
@@ -485,7 +488,7 @@ export function WorkflowsSectionWithDetail({ runs, getRunDetail }: WorkflowsSect
       setSelectedRun(detail)
     })
     return () => { stale = true }
-  }, [runs, selectedRunId, getRunDetail])
+  }, [runs, selectedRunId, getRunDetail, setSelectedRun])
 
   return (
     <>
@@ -499,5 +502,13 @@ export function WorkflowsSectionWithDetail({ runs, getRunDetail }: WorkflowsSect
         onClose={handleClose}
       />
     </>
+  )
+}
+
+export function WorkflowsSectionWithDetail(props: WorkflowsSectionWithDetailProps) {
+  return (
+    <WorkflowsSectionDetailStore.Provider init={undefined}>
+      <WorkflowsSectionWithDetailInner {...props} />
+    </WorkflowsSectionDetailStore.Provider>
   )
 }
