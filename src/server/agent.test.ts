@@ -4750,6 +4750,56 @@ describe("AgentCoordinator subagent mention gating", () => {
 
 // ── canUseTool routing tests ───────────────────────────────────────────────────
 
+describe("buildCanUseTool — loop-armed tool-block", () => {
+  const noopOnToolRequest = async () => ({})
+
+  test("blocks Edit/Write/MultiEdit/NotebookEdit/Task while loop armed", async () => {
+    const canUseTool = buildCanUseTool({
+      localPath: "/tmp/test",
+      onToolRequest: noopOnToolRequest,
+      isLoopArmed: () => true,
+    })
+    for (const toolName of ["Edit", "Write", "MultiEdit", "NotebookEdit", "Task"]) {
+      const result = await canUseTool(
+        toolName,
+        { any: "input" },
+        { toolUseID: "t", signal: new AbortController().signal },
+      )
+      expect(result.behavior).toBe("deny")
+    }
+  })
+
+  test("allows Read/Bash/Grep and delegate_subagent while loop armed", async () => {
+    const canUseTool = buildCanUseTool({
+      localPath: "/tmp/test",
+      onToolRequest: noopOnToolRequest,
+      isLoopArmed: () => true,
+    })
+    for (const toolName of ["Read", "Bash", "Grep", "Glob", "mcp__kanna__delegate_subagent"]) {
+      const result = await canUseTool(
+        toolName,
+        {},
+        { toolUseID: "t", signal: new AbortController().signal },
+      )
+      expect(result.behavior).toBe("allow")
+    }
+  })
+
+  test("does NOT block edits when no loop is armed", async () => {
+    const canUseTool = buildCanUseTool({
+      localPath: "/tmp/test",
+      onToolRequest: noopOnToolRequest,
+      isLoopArmed: () => false,
+    })
+    const result = await canUseTool(
+      "Edit",
+      {},
+      { toolUseID: "t", signal: new AbortController().signal },
+    )
+    expect(result.behavior).toBe("allow")
+  })
+})
+
 describe("buildCanUseTool", () => {
   test("flag off: AskUserQuestion uses legacy onToolRequest path", async () => {
     delete process.env.KANNA_MCP_TOOL_CALLBACKS

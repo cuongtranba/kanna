@@ -357,6 +357,33 @@ describe("SubagentOrchestrator", () => {
     h.resolveReply("sa-a", "late")
   })
 
+  test("idle stall-watchdog: steady streamed activity keeps a run alive past runTimeoutMs", async () => {
+    const alpha = makeSubagent({ id: "sa-a", name: "alpha" })
+    // 60ms idle window; provider streams a chunk every 40ms for a total of
+    // 120ms (2x the window). Each chunk must reset the watchdog, otherwise the
+    // run is killed at 60ms. Proves the timer is idle-based, not wall-clock.
+    const h = await setupHarness({ subagents: [alpha], runTimeoutMs: 60 })
+    h.mockProviderRun({
+      authReady: async () => true,
+      start: async (onChunk) => {
+        for (let i = 0; i < 3; i += 1) {
+          await new Promise((r) => setTimeout(r, 40))
+          onChunk(`chunk-${i}`)
+        }
+        return { text: "done" }
+      },
+    })
+    await h.orchestrator.runMentionsForUserMessage({
+      chatId: h.chatId,
+      userMessageId: h.userMessageId,
+      mentions: [{ kind: "subagent", subagentId: "sa-a", raw: "@agent/alpha" }],
+    })
+    const run = Object.values(h.store.getSubagentRuns(h.chatId))[0]
+    expect(run.status).toBe("completed")
+    expect(run.error ?? null).toBeNull()
+    expect(run.finalText).toBe("done")
+  }, 10_000)
+
   test("snapshots subagentName at start - rename mid-run is irrelevant to recorded event", async () => {
     const alpha = makeSubagent({ id: "sa-a", name: "alpha" })
     const h = await setupHarness({ subagents: [alpha] })
