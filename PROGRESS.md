@@ -21,7 +21,7 @@
 
 ## Tasks (priority order; call-site counts at baseline)
 - [x] T1 App state hub: `src/client/app/useKannaState.ts` (30)
-- [ ] T2 ChatPage: `src/client/app/ChatPage/index.tsx` (8), `ChatTranscriptViewport.tsx` (2), `useChatPageSidebarActions.ts` (2), `src/client/app/useTerminalToggleAnimation.ts` (1)
+- [x] T2 ChatPage: `src/client/app/ChatPage/index.tsx` (8), `ChatTranscriptViewport.tsx` (2), `useChatPageSidebarActions.ts` (2), `src/client/app/useTerminalToggleAnimation.ts` (1)
 - [ ] T3 Composer: `src/client/components/chat-ui/ChatInput.tsx` (5), `src/client/hooks/useMentionSuggestions.ts` (1), `src/client/components/lexical/plugins/SlashCommandTypeaheadPlugin.tsx` (1), `MentionTypeaheadPlugin.tsx` (1), `src/client/components/lexical/markdown/MessageCodeBlock.tsx` (1)
 - [ ] T4 Sidebar: `src/client/app/KannaSidebar.tsx` (15), `src/client/components/chat-ui/sidebar/Menus.tsx` (1), `StackChatCreateRow.tsx` (4), `StackCreatePanel.tsx` (2)
 - [ ] T5 RightSidebar: `src/client/components/chat-ui/RightSidebar.tsx` (31)
@@ -38,6 +38,7 @@
 - [ ] T16 Final sweep: `src/client/components/share/SharePopover.tsx` (1) + any file still listed by `bun scripts/usestate-ratchet.ts --zero`; then run `bun run migrate:verify` and fix everything until it exits 0
 
 ## Progress (latest first)
+- 2026-07-12 T2 ChatPage DONE (306 → 289 useState, -17)
 - 2026-07-12 T1 App state hub (useKannaState.ts 30 useState) DONE
 - 2026-07-12 Tooling landed (rule, ratchet, baseline report, createScopedStore). Loop not yet started.
 
@@ -45,4 +46,4 @@
 - (none yet)
 
 ## Next chunk
-T2 ChatPage: migrate `src/client/app/ChatPage/index.tsx` (8), `ChatTranscriptViewport.tsx` (2), `useChatPageSidebarActions.ts` (2), `src/client/app/useTerminalToggleAnimation.ts` (1) off useState. Follow ALL Worker rules above, satisfy all 6 acceptance criteria, update this file, then terminate.
+T3 Composer: migrate `src/client/components/chat-ui/ChatInput.tsx` (5 useState), `src/client/hooks/useMentionSuggestions.ts` (1), `src/client/components/lexical/plugins/SlashCommandTypeaheadPlugin.tsx` (1), `MentionTypeaheadPlugin.tsx` (1), `src/client/components/lexical/markdown/MessageCodeBlock.tsx` (1) off useState. Determine singleton vs per-instance for each (ChatInput renders once per ChatPage → singleton; the lexical plugins render per-editor, check call sites). Follow ALL Worker rules above, satisfy all 6 acceptance criteria, update this file, then terminate.
