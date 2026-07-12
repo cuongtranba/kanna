@@ -42,6 +42,43 @@ export function findSnippetForCaret(
 }
 
 // ---------------------------------------------------------------------------
+// Tab decision (pure — exported for tests)
+// ---------------------------------------------------------------------------
+
+export interface TabKeyLike {
+  readonly shiftKey: boolean
+  readonly ctrlKey: boolean
+  readonly metaKey: boolean
+  readonly altKey: boolean
+  readonly repeat: boolean
+}
+
+export type TabDecision = "ignore" | "swallow-repeat" | "attempt"
+
+/**
+ * Decides how the KEY_TAB_COMMAND handler treats a Tab keydown.
+ *
+ * OS auto-repeat keydowns (`event.repeat`) inherit the decision of the
+ * initial keydown of the same physical press: after the initial press
+ * expanded a snippet, the trailing token no longer matches, so re-evaluating
+ * a repeat would fall through to the browser's default Tab focus traversal
+ * and steal the caret from the composer (the residual "caret vanishes after
+ * Tab" report following #524 — holding Tab ≳300 ms fires repeats).
+ */
+export function decideTab(
+  event: TabKeyLike,
+  menuOpen: boolean,
+  snippetCount: number,
+  lastPressExpanded: boolean,
+): TabDecision {
+  if (event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) return "ignore"
+  if (event.repeat) return lastPressExpanded ? "swallow-repeat" : "ignore"
+  if (menuOpen) return "ignore"
+  if (snippetCount === 0) return "ignore"
+  return "attempt"
+}
+
+// ---------------------------------------------------------------------------
 // Plugin
 // ---------------------------------------------------------------------------
 
@@ -52,6 +89,7 @@ export function findSnippetForCaret(
  *   – Shift/Ctrl/Meta/Alt+Tab                 → ignored (plan-mode toggle etc.)
  *   – A typeahead picker (@ / /) open          → ignored
  *   – No matching shortcut                     → ignored (browser default Tab)
+ *   – Auto-repeat keydowns of an expanding press → swallowed (keep the caret)
  *
  * Multi-line expansions insert soft line breaks between segments.
  */
@@ -59,13 +97,24 @@ export function SnippetExpandPlugin({ snippets }: SnippetExpandPluginProps): nul
   const [editor] = useLexicalComposerContext()
 
   useEffect(() => {
+    // Whether the initial (non-repeat) keydown of the current Tab press
+    // expanded a snippet. Repeat keydowns consult this instead of re-reading
+    // editor state, which by then no longer has a matching trailing token.
+    let lastPressExpanded = false
+
     return editor.registerCommand(
       KEY_TAB_COMMAND,
       (event: KeyboardEvent | null) => {
         if (!event) return false
-        if (event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) return false
-        if (isTypeaheadMenuOpen()) return false
-        if (snippets.length === 0) return false
+        const decision = decideTab(event, isTypeaheadMenuOpen(), snippets.length, lastPressExpanded)
+        // Every new physical press resets the flag; only an expanding initial
+        // keydown (below) re-arms it for that press's repeats.
+        if (!event.repeat) lastPressExpanded = false
+        if (decision === "ignore") return false
+        if (decision === "swallow-repeat") {
+          event.preventDefault()
+          return true
+        }
 
         // Decide synchronously whether a snippet will expand, then
         // preventDefault BEFORE the mutation. `editor.update` defers its
@@ -88,6 +137,7 @@ export function SnippetExpandPlugin({ snippets }: SnippetExpandPluginProps): nul
         })
         if (!willExpand) return false
 
+        lastPressExpanded = true
         event.preventDefault()
 
         editor.update(() => {
