@@ -1,7 +1,7 @@
 ---
 id: c3-102
 c3-version: 4
-c3-seal: 5e661d21719b3fb4d50032fa771998f3882bade8f6849b8a034d616c25f91dc8
+c3-seal: 2bb5b03ad40ccf191e8a94ec80e28abbc87cf6d7b1c9e7f43645e71707a22d12
 title: state-stores
 type: component
 category: foundation
@@ -34,7 +34,7 @@ Hold UI-local state (chat input, terminal layout, sidebar, preferences) in small
 
 ## Purpose
 
-Owns the browser-side ephemeral state split into per-concern Zustand stores (chat input, sidebar order, terminal layout, preferences) with selective `persist` middleware so reloads only restore what users expect. Non-goals: server state, transcript content, route state — those live elsewhere.
+Owns the browser-side state surface as Zustand stores in three forms: singleton per-concern stores (chat input, sidebar order, terminal layout, preferences) with selective `persist` middleware, the WS-fed `kannaStateStore` holding server snapshots (written exclusively by the `useKannaState` socket pipeline), and the `createScopedStore` factory (`src/client/lib/createScopedStore.tsx`) backing per-instance stores colocated as `<Component>.store.ts` beside their components. Raw `useState` is banned outside the frozen allowlist by the `no-react-usestate` ast-grep gate. Non-goals: route state and derived render caches — those live elsewhere.
 
 ## Foundational Flow
 

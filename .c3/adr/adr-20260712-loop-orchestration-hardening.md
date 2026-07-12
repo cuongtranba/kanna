@@ -1,6 +1,6 @@
 ---
 id: adr-20260712-loop-orchestration-hardening
-c3-seal: a0f827bbb8d19b6175cff0294026decf4f86e797ca92e5200c6e6ec9b2c2ecda
+c3-seal: d1a3493dde39e377edcac36291d47d5689bb4aace86941cf2e75a357f8062435
 title: loop-orchestration-hardening
 type: adr
 goal: |-
@@ -107,7 +107,7 @@ embeds the concrete id in the rendered delegate call.
 | --- | --- | --- |
 | A hung (no-event) subagent pins a run for the whole idle window | Window is bounded + configurable; only truly silent runs stall out | subagent-orchestrator stall test |
 | Loop-armed tool-block persists after a session if not disarmed | stop_loop on GOAL MET + real user send both disarm; state is event-sourced and per-chat | read-model.test.ts arm/disarm cases |
-| Tool-block evaluated only at spawn | Loop wakes are fresh spawns (session_token wiped). Session reuse across an armed-state flip (arm via setup_loop, disarm via stop_loop / user-send takeover) is prevented by `loopArmedAtSpawn` on the session record: `startClaudeTurn` respawns when the captured state differs from `isLoopArmed()` — both drivers, since both bake the block at spawn | driver.test.ts loopArmed cases; agent.test.ts PTY + SDK respawn-on-flip cases |
+| Tool-block evaluated only at spawn | Loop wakes are fresh spawns (session_token wiped). Session reuse across an armed-state flip (arm via setup_loop, disarm via stop_loop / user-send takeover) is prevented by loopArmedAtSpawn on the session record: startClaudeTurn respawns when the captured state differs from isLoopArmed() — both drivers, since both bake the block at spawn | driver.test.ts loopArmed cases; agent.test.ts PTY + SDK respawn-on-flip cases |
 
 ## Claude Code alignment (same PR, follow-up to review)
 
@@ -116,9 +116,9 @@ reference: `claude-code-qa`) closed in this PR:
 
 | Gap | Claude Code behavior | Kanna implementation |
 | --- | --- | --- |
-| Turn bound | Per-agent frontmatter `maxTurns` (`loadAgentsDir.ts`), param override in `runAgent.ts`, hardcoded 200 only for the fork agent; `query()` emits `max_turns_reached` and the run keeps its output. NOT a global setting. | `Subagent.maxTurns` (Settings editor, optional, unset = unbounded). Claude-SDK runs thread it natively into `options.maxTurns` (graceful). PTY/Codex get a host-side backstop in `SubagentOrchestrator`: abort with `MAX_TURNS` once tool_call count exceeds the bound; `ProviderRunStart.nativeMaxTurns` keeps the backstop off SDK runs. |
-| Tool restriction | Filter-at-spawn: `filterToolsForAgent` removes forbidden tools from the tool list, the model never sees them (`ALL_AGENT_DISALLOWED_TOOLS`, `COORDINATOR_MODE_ALLOWED_TOOLS`). | Loop-armed spawns pass `options.disallowedTools` (SDK) / `--disallowedTools` (PTY) with `LOOP_BLOCKED_NATIVE_TOOLS`; `canUseTool` deny demoted to belt-and-suspenders. Armed-flip respawn (above) keeps the spawn-time block fresh. |
-| Result re-entry format | `<task-notification>` XML (task-id / status / summary / result) enqueued into the pending message queue (`LocalAgentTask.tsx`). | `buildTaskNotification` (agent.ts) renders the same XML into the `subagent_background` wake prompt. Un-armed deliveries include `<result>` (4k cap); armed loop deliveries omit it (PROGRESS.md contract) and append the loop prompt. |
+| Turn bound | Per-agent frontmatter maxTurns (loadAgentsDir.ts), param override in runAgent.ts, hardcoded 200 only for the fork agent; query() emits max_turns_reached and the run keeps its output. NOT a global setting. | Subagent.maxTurns (Settings editor, optional, unset = unbounded). Claude-SDK runs thread it natively into options.maxTurns (graceful). PTY/Codex get a host-side backstop in SubagentOrchestrator: abort with MAX_TURNS once tool_call count exceeds the bound; ProviderRunStart.nativeMaxTurns keeps the backstop off SDK runs. |
+| Tool restriction | Filter-at-spawn: filterToolsForAgent removes forbidden tools from the tool list, the model never sees them (ALL_AGENT_DISALLOWED_TOOLS, COORDINATOR_MODE_ALLOWED_TOOLS). | Loop-armed spawns pass options.disallowedTools (SDK) / --disallowedTools (PTY) with LOOP_BLOCKED_NATIVE_TOOLS; canUseTool deny demoted to belt-and-suspenders. Armed-flip respawn (above) keeps the spawn-time block fresh. |
+| Result re-entry format | <task-notification> XML (task-id / status / summary / result) enqueued into the pending message queue (LocalAgentTask.tsx). | buildTaskNotification (agent.ts) renders the same XML into the subagent_background wake prompt. Un-armed deliveries include <result> (4k cap); armed loop deliveries omit it (PROGRESS.md contract) and append the loop prompt. |
 
 ## Verification
 
