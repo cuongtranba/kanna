@@ -1,7 +1,7 @@
 ---
 id: c3-2
 c3-version: 4
-c3-seal: a8be1c569d1ec43f9e9a87a6441a5b009a21e1ecf85e47bac0b9181cc57f1426
+c3-seal: e41194cbdf3feef514dcfb99b0a83a873b24911a9f5462f1a60a14d5db2b2c23
 title: Server
 type: container
 boundary: service
@@ -28,35 +28,35 @@ Run the local Bun backend: serve HTTP+WebSocket on localhost, coordinate Claude 
 
 | ID | Name | Category | Status | Goal Contribution |
 | --- | --- | --- | --- | --- |
-| c3-201 | cli-entry | foundation | implemented | CLI parsing, supervisor, browser launcher |
-| c3-202 | http-ws-server | foundation | implemented | HTTP + WS + static serving |
-| c3-203 | auth | foundation | implemented | Password + session cookie gating |
-| c3-204 | paths-config | foundation | implemented | Central data-path resolution |
-| c3-205 | events-schema | foundation | implemented | Typed event unions for the log |
-| c3-206 | event-store | foundation | implemented | Append-only JSONL + replay + snapshot compaction |
-| c3-207 | read-models | foundation | implemented | Derived views from event state |
-| c3-208 | ws-router | foundation | implemented | WS subscribe/command multiplexer |
-| c3-209 | process-utils | foundation | implemented | Shared process lifecycle helpers |
-| c3-210 | agent-coordinator | feature | implemented | Multi-provider turn orchestration |
-| c3-211 | codex-app-server | feature | implemented | Codex App Server JSON-RPC adapter |
-| c3-212 | provider-catalog | feature | implemented | Provider/model/effort normalization |
-| c3-213 | quick-response | feature | implemented | Structured Haiku queries with Codex fallback |
-| c3-214 | discovery | feature | implemented | Auto-discover local Claude + Codex projects |
-| c3-215 | diff-store | feature | implemented | Per-chat diff state for file-change UI |
-| c3-216 | terminal-manager | feature | implemented | PTY sessions for embedded terminal |
-| c3-217 | uploads | feature | implemented | File upload handling |
-| c3-218 | share | feature | implemented | Cloudflare quick + named tunnels + QR |
-| c3-219 | update-manager | feature | implemented | npm version checking |
-| c3-220 | restart | feature | implemented | In-place server relaunch |
-| c3-221 | external-open | feature | implemented | Open URLs/files in external apps |
-| c3-222 | keybindings | feature | implemented | Persist user keybindings |
-| c3-223 | cloudflare-tunnel | feature | implemented | Detect dev-server ports and expose via cloudflared quick tunnels |
-| c3-224 | oauth-token-pool | feature | implemented | Multi-account OAuth token pool: per-chat reservation, rate-limit/auth-error rotation, refusal classifier |
-| c3-225 | claude-pty-driver | feature | implemented | Claude CLI PTY transport: parse subprocess stdout JSONL into normalized events, preserve subscription billing |
-| c3-226 | kanna-mcp-host | feature | implemented | Loopback MCP server + built-in shims + durable approval protocol + path-deny |
-| c3-227 | auto-continue | feature | implemented | Detect rate-limit / auth-error endings, schedule retries, replay queued prompts |
-| c3-228 | session-share | feature | planned | Mint read-only share tokens for finished chats; serve frozen snapshots at /share/:token without auth |
-| c3-229 | workflow-status | feature | planned | Disk-watch sidecar read-model for PTY workflow runs; WorkflowRegistry + WorkflowsSnapshot WS topic |
-| c3-230 | openrouter-models | feature | implemented | Tool-capable OpenRouter model catalog: HTTPS fetch + parse + TTL cache; feeds the composer model picker via settings.listOpenRouterModels RPC |
-| c3-231 | local-catalog | feature | implemented | Scan local Claude skills + slash commands (user, project, plugin) and merge them into ChatSnapshot.slashCommands so the composer / picker mirrors Claude Code |
-| c3-232 | orchestration-core | feature | implemented | Durable multi-task coding runs: git worktree pool, phase pipeline (implement→review×2→fix), event-sourced state at sourceIndex 8, restart recovery |
+| c3-201 | cli-entry | foundation | active | CLI parsing, supervisor, browser launcher |
+| c3-202 | http-ws-server | foundation | active | HTTP + WS + static serving |
+| c3-203 | auth | foundation | active | Password + session cookie gating |
+| c3-204 | paths-config | foundation | active | Central data-path resolution |
+| c3-205 | events-schema | foundation | active | Typed event unions for the log |
+| c3-206 | event-store | foundation | active | Append-only JSONL + replay + snapshot compaction |
+| c3-207 | read-models | foundation | active | Derived views from event state |
+| c3-208 | ws-router | foundation | active | WS subscribe/command multiplexer |
+| c3-209 | process-utils | foundation | active | Shared process lifecycle helpers |
+| c3-210 | agent-coordinator | feature | active | Multi-provider turn orchestration |
+| c3-211 | codex-app-server | feature | active | Codex App Server JSON-RPC adapter |
+| c3-212 | provider-catalog | feature | active | Provider/model/effort normalization |
+| c3-213 | quick-response | feature | active | Structured Haiku queries with Codex fallback |
+| c3-214 | discovery | feature | active | Auto-discover local Claude + Codex projects |
+| c3-215 | diff-store | feature | active | Per-chat diff state for file-change UI |
+| c3-216 | terminal-manager | feature | active | PTY sessions for embedded terminal |
+| c3-217 | uploads | feature | active | File upload handling |
+| c3-218 | share | feature | active | Cloudflare quick + named tunnels + QR |
+| c3-219 | update-manager | feature | active | npm version checking |
+| c3-220 | restart | feature | active | In-place server relaunch |
+| c3-221 | external-open | feature | active | Open URLs/files in external apps |
+| c3-222 | keybindings | feature | active | Persist user keybindings |
+| c3-223 | cloudflare-tunnel | feature | active | Detect dev-server ports and expose via cloudflared quick tunnels |
+| c3-224 | oauth-token-pool | feature | active | Multi-account OAuth token pool: per-chat reservation, rate-limit/auth-error rotation, refusal classifier |
+| c3-225 | claude-pty-driver | feature | active | Claude CLI PTY transport: parse subprocess stdout JSONL into normalized events, preserve subscription billing |
+| c3-226 | kanna-mcp-host | feature | active | Loopback MCP server + built-in shims + durable approval protocol + path-deny |
+| c3-227 | auto-continue | feature | active | Detect rate-limit / auth-error endings, schedule retries, replay queued prompts |
+| c3-228 | session-share | feature | active | Mint read-only share tokens for finished chats; serve frozen snapshots at /share/:token without auth |
+| c3-229 | workflow-status | feature | active | Disk-watch sidecar read-model for PTY workflow runs; WorkflowRegistry + WorkflowsSnapshot WS topic |
+| c3-230 | openrouter-models | feature | active | Tool-capable OpenRouter model catalog: HTTPS fetch + parse + TTL cache; feeds the composer model picker via settings.listOpenRouterModels RPC |
+| c3-231 | local-catalog | feature | active | Scan local Claude skills + slash commands (user, project, plugin) and merge them into ChatSnapshot.slashCommands so the composer / picker mirrors Claude Code |
+| c3-232 | orchestration-core | feature | active | Durable multi-task coding runs: git worktree pool, phase pipeline (implement→review×2→fix), event-sourced state at sourceIndex 8, restart recovery |

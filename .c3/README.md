@@ -1,7 +1,7 @@
 ---
 id: c3-0
 c3-version: 4
-c3-seal: b5e913fe120829f2ba2c77e05e71abfbe5a23eed841b79c03e6c8b3025330589
+c3-seal: 500783a07b473145a8340e8a3462652b66959d86e2dde3e6cd54a5cc3690048d
 title: Kanna
 goal: ${GOAL}
 summary: Bun+React web app that drives Claude Agent SDK and Codex App Server over WebSocket, persisting all state as append-only JSONL and rendering live transcripts with hydrated tool calls.
@@ -28,6 +28,6 @@ ${GOAL}
 
 | ID | Name | Boundary | Status | Responsibilities | Goal Contribution |
 | --- | --- | --- | --- | --- | --- |
-| c3-1 | Client | app | implemented | Render transcript, accept chat input, manage sidebar + settings, subscribe to WebSocket pushes | Provides the browser UX that makes Claude/Codex usable through a beautiful chat view |
-| c3-2 | Server | service | implemented | Host HTTP+WS on localhost, drive agents, persist events, derive read models | Single-binary local backend that coordinates providers and owns all state |
-| c3-3 | Shared | library | implemented | Define protocol, types, tool normalization, ports, branding shared by client and server | Guarantees client + server agree on wire format and domain types |
+| c3-1 | Client | app | active | Render transcript, accept chat input, manage sidebar + settings, subscribe to WebSocket pushes | Provides the browser UX that makes Claude/Codex usable through a beautiful chat view |
+| c3-2 | Server | service | active | Host HTTP+WS on localhost, drive agents, persist events, derive read models | Single-binary local backend that coordinates providers and owns all state |
+| c3-3 | Shared | library | active | Define protocol, types, tool normalization, ports, branding shared by client and server | Guarantees client + server agree on wire format and domain types |

@@ -337,6 +337,23 @@ export class SubagentOrchestrator {
     return this.resolveSubagent(id)
   }
 
+  /**
+   * Error text for a delegation that named an unresolvable subagent.
+   * Embeds the LIVE roster (read from settings at error time, not at spawn
+   * time) so the model can self-correct on retry even when the roster in its
+   * system prompt is stale — subagents created mid-session were invisible to
+   * the running session, which caused repeated guessed ids like "claude".
+   */
+  describeUnknownSubagent(requested: string): string {
+    const subagents = this.deps.appSettings.getSnapshot().subagents
+    if (subagents.length === 0) {
+      return `Subagent "${requested}" not found. No subagents are configured — ask the user to create one in Settings → Subagents.`
+    }
+    const lines = subagents.map((s) =>
+      `- ${s.name} [id=${s.id}]${s.triggerMode === "manual" ? " (manual — requires user @-mention)" : ""}`)
+    return `Subagent "${requested}" not found. Available subagents:\n${lines.join("\n")}\nRetry with the exact id (or unique name) of one of these.`
+  }
+
   activePermitCount() {
     return this.maxParallel() - this.permits
   }
@@ -601,7 +618,7 @@ export class SubagentOrchestrator {
         parentRunId: args.parentRunId,
         depth: args.depth,
       })
-      return await this.failRun(args.chatId, runId, "UNKNOWN_SUBAGENT", `Subagent ${args.subagentId} not found`)
+      return await this.failRun(args.chatId, runId, "UNKNOWN_SUBAGENT", this.describeUnknownSubagent(args.subagentId))
     }
     if (subagent.triggerMode === "manual" && !args.mentionedSubagentIds.includes(subagent.id)) {
       const runId = crypto.randomUUID()
