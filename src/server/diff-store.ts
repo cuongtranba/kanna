@@ -24,6 +24,7 @@ import type {
   ChatDiffSnapshot,
   BranchActionSuccess,
   BranchActionFailure,
+  GithubRelease,
   GitHubPublishInfo,
   GitHubRepoAvailabilityResult,
   ChatMergeBranchResult,
@@ -623,6 +624,64 @@ export async function fetchGitHubPullRequests(
 
   const json: GitHubPullRequestResponseItem[] = await response.json()
   return Array.isArray(json) ? json : []
+}
+
+type GitHubReleasesCliApiLike = (path: string) => Promise<GithubRelease[] | null>
+
+interface FetchGitHubReleasesDeps {
+  fetchImpl?: FetchLike
+  ghApiImpl?: GitHubReleasesCliApiLike
+}
+
+async function fetchGitHubReleasesViaGh(path: string): Promise<GithubRelease[] | null> {
+  const result = await runCommand([
+    "gh",
+    "api",
+    "-H",
+    "Accept: application/vnd.github+json",
+    path,
+  ])
+  if (result.exitCode !== 0) {
+    return null
+  }
+
+  const json: GithubRelease[] = JSON.parse(result.stdout)
+  return Array.isArray(json) ? json : []
+}
+
+// Fetches published releases for the changelog panel. Prefers the authenticated
+// `gh` CLI (5000 req/hr) and falls back to an unauthenticated HTTP request
+// (60 req/hr per IP) so the browser never hits GitHub's low anonymous limit.
+export async function fetchGitHubReleases(
+  repoSlug: string,
+  deps: FetchLike | FetchGitHubReleasesDeps = fetch
+): Promise<GithubRelease[]> {
+  const fetchImpl = typeof deps === "function" ? deps : (deps.fetchImpl ?? fetch)
+  const ghApiImpl = typeof deps === "function" ? fetchGitHubReleasesViaGh : (deps.ghApiImpl ?? fetchGitHubReleasesViaGh)
+  const ghPath = `repos/${repoSlug}/releases`
+
+  let releases: GithubRelease[] | null = null
+  try {
+    releases = await ghApiImpl(ghPath)
+  } catch {
+    // Fall back to an unauthenticated HTTP request when `gh` is unavailable.
+  }
+
+  if (!releases) {
+    const response = await fetchImpl(`https://api.github.com/${ghPath}`, {
+      headers: {
+        Accept: "application/vnd.github+json",
+      },
+    })
+
+    if (!response.ok) {
+      throw new Error(`GitHub releases request failed with status ${response.status}`)
+    }
+
+    releases = await response.json()
+  }
+
+  return Array.isArray(releases) ? releases.filter((release) => !release.draft) : []
 }
 
 function buildGitHubCommitUrl(remoteUrl: string | null, sha: string) {

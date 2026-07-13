@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test"
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
-import { appendGitIgnoreEntry, DiffStore, extractGitHubRepoSlug, fetchGitHubPullRequests } from "./diff-store"
+import { appendGitIgnoreEntry, DiffStore, extractGitHubRepoSlug, fetchGitHubPullRequests, fetchGitHubReleases } from "./diff-store"
 
 async function run(command: string[], cwd: string) {
   const proc = Bun.spawn(command, {
@@ -489,6 +489,59 @@ describe("DiffStore", () => {
     expect(requestedUrl).toBe("https://api.github.com/repos/acme/repo/pulls?state=open&per_page=50")
     expect(requestedAcceptHeader).toBe("application/vnd.github+json")
     expect(pulls).toHaveLength(1)
+  })
+
+  test("fetchGitHubReleases prefers gh api and filters drafts", async () => {
+    let requestedPath = ""
+
+    const releases = await fetchGitHubReleases("acme/repo", {
+      ghApiImpl: async (path) => {
+        requestedPath = path
+        return [
+          { id: 1, name: "v1", tag_name: "v1", html_url: "u1", published_at: null, body: null, prerelease: false, draft: false },
+          { id: 2, name: "wip", tag_name: "v2", html_url: "u2", published_at: null, body: null, prerelease: false, draft: true },
+        ]
+      },
+      fetchImpl: async () => {
+        throw new Error("fetch should not be used when gh succeeds")
+      },
+    })
+
+    expect(requestedPath).toBe("repos/acme/repo/releases")
+    expect(releases).toHaveLength(1)
+    expect(releases[0].tag_name).toBe("v1")
+  })
+
+  test("fetchGitHubReleases falls back to fetch and sends the GitHub accept header", async () => {
+    let requestedUrl = ""
+    let requestedAcceptHeader = ""
+
+    const releases = await fetchGitHubReleases("acme/repo", {
+      ghApiImpl: async () => null,
+      fetchImpl: async (input, init) => {
+        requestedUrl = String(input)
+        requestedAcceptHeader = String(new Headers(init?.headers).get("Accept"))
+        return new Response(
+          JSON.stringify([
+            { id: 1, name: "v1", tag_name: "v1", html_url: "u1", published_at: null, body: null, prerelease: false, draft: false },
+          ]),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        )
+      },
+    })
+
+    expect(requestedUrl).toBe("https://api.github.com/repos/acme/repo/releases")
+    expect(requestedAcceptHeader).toBe("application/vnd.github+json")
+    expect(releases).toHaveLength(1)
+  })
+
+  test("fetchGitHubReleases throws when the fallback fetch fails", async () => {
+    await expect(
+      fetchGitHubReleases("acme/repo", {
+        ghApiImpl: async () => null,
+        fetchImpl: async () => new Response("nope", { status: 403 }),
+      })
+    ).rejects.toThrow("GitHub releases request failed with status 403")
   })
 
   test("listBranches includes default branch, local and remote branches, and recent branches", async () => {

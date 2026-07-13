@@ -120,6 +120,7 @@ export type ClientCommand =
   | { type: "settings.completeMcpOAuth"; id: string; callbackUrl: string }
   | { type: "settings.readLlmProvider" }
   | { type: "settings.listOpenRouterModels" }
+  | { type: "settings.getChangelog" }
   | { type: "skills.search"; query: string; limit?: number }
   | { type: "skills.install"; source: string; skillId: string }
   | { type: "skills.uninstall"; skillId: string }
