@@ -100,6 +100,10 @@ export type SetupLoopHandlerResult =
       ok: true
       trackingFileRel: string
       created: boolean
+      /** True when an existing tracking file was rewritten to conform to the loop schema. */
+      reconciled: boolean
+      /** Section-level reconcile actions taken (empty when created or already conformant). */
+      reconcileActions: string[]
       /** Fully-rendered recurring prompt (echoed back for observability). */
       prompt: string
     }
@@ -498,12 +502,17 @@ function buildSetupLoopToolList(args: {
             }],
           }
         }
+        let fileNote = " (existing file already conforms to the loop schema)"
+        if (result.created) {
+          fileNote = " (created skeleton)"
+        } else if (result.reconciled) {
+          fileNote = ` (existing file reconciled to the loop schema: ${result.reconcileActions.join("; ")})`
+        }
         return {
           content: [{
             type: "text" as const,
             text:
-              `Loop armed. Tracking file: ${result.trackingFileRel}`
-              + `${result.created ? " (created skeleton)" : " (existing file left untouched)"}.`
+              `Loop armed. Tracking file: ${result.trackingFileRel}${fileNote}.`
               + " Your main-agent context has been cleared; the next turn will replay the loop prompt.",
           }],
         }

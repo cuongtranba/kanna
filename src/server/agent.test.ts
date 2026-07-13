@@ -4488,7 +4488,7 @@ describe("AgentCoordinator.setupLoop (mcp__kanna__setup_loop backing)", () => {
     }
   })
 
-  test("existing tracking file is left untouched; result.created is false; loop still arms", async () => {
+  test("existing non-conformant tracking file is deterministically reconciled; loop still arms", async () => {
     const projectRoot = await mkdtemp(path.join(tmpdir(), "kanna-setup-loop-"))
     try {
       const abs = path.join(projectRoot, "PROGRESS.md")
@@ -4509,11 +4509,84 @@ describe("AgentCoordinator.setupLoop (mcp__kanna__setup_loop backing)", () => {
       })
       if (!result.ok) throw new Error(result.errors.join(", "))
       expect(result.created).toBe(false)
+      expect(result.reconciled).toBe(true)
+      expect(result.reconcileActions).toContain('inserted "## Goal"')
+      expect(result.reconcileActions).toContain('inserted "## Next chunk"')
 
+      // Original prose preserved as preamble; canonical sections inserted after it
       const content = await Bun.file(abs).text()
-      expect(content).toBe("user-authored content")
+      expect(content).toContain("user-authored content")
+      expect(content).toContain("## Goal")
+      expect(content).toContain("## Verify command")
+      expect(content).toContain("## Next chunk")
       // loop_armed + auto_continue_accepted
       expect(store.getAutoContinueEvents("chat-1")).toHaveLength(2)
+    } finally {
+      await rm(projectRoot, { recursive: true, force: true })
+    }
+  })
+
+  test("existing conformant tracking file is left byte-identical (reconciled=false)", async () => {
+    const projectRoot = await mkdtemp(path.join(tmpdir(), "kanna-setup-loop-"))
+    try {
+      const store = createFakeStore()
+      store.getProject = () => ({ id: "project-1", localPath: projectRoot }) as never
+      const coordinator = new AgentCoordinator({
+        store: store as never,
+        onStateChange: () => {},
+        startClaudeSession: async () => { throw new Error("not needed") },
+        getSubagents: () => [makeSubagentRecord({ id: "sa-1", name: "alpha" })],
+      })
+      const input = { goal: "g", verifyCommand: "true", subagentId: "sa-1" }
+
+      // First call creates the canonical skeleton …
+      const first = await coordinator.setupLoop({ chatId: "chat-1", input })
+      if (!first.ok) throw new Error(first.errors.join(", "))
+      expect(first.created).toBe(true)
+      const abs = path.join(projectRoot, "PROGRESS.md")
+      const written = await Bun.file(abs).text()
+
+      // … re-arming with the same inputs leaves it byte-identical.
+      const second = await coordinator.setupLoop({ chatId: "chat-1", input })
+      if (!second.ok) throw new Error(second.errors.join(", "))
+      expect(second.created).toBe(false)
+      expect(second.reconciled).toBe(false)
+      expect(second.reconcileActions).toEqual([])
+      expect(await Bun.file(abs).text()).toBe(written)
+    } finally {
+      await rm(projectRoot, { recursive: true, force: true })
+    }
+  })
+
+  test("existing file with a stale goal gets the Goal section rewritten to the new input", async () => {
+    const projectRoot = await mkdtemp(path.join(tmpdir(), "kanna-setup-loop-"))
+    try {
+      const store = createFakeStore()
+      store.getProject = () => ({ id: "project-1", localPath: projectRoot }) as never
+      const coordinator = new AgentCoordinator({
+        store: store as never,
+        onStateChange: () => {},
+        startClaudeSession: async () => { throw new Error("not needed") },
+        getSubagents: () => [makeSubagentRecord({ id: "sa-1", name: "alpha" })],
+      })
+
+      const first = await coordinator.setupLoop({
+        chatId: "chat-1",
+        input: { goal: "OLD STALE GOAL", verifyCommand: "true", subagentId: "sa-1" },
+      })
+      if (!first.ok) throw new Error(first.errors.join(", "))
+
+      const second = await coordinator.setupLoop({
+        chatId: "chat-1",
+        input: { goal: "fresh goal", verifyCommand: "true", subagentId: "sa-1" },
+      })
+      if (!second.ok) throw new Error(second.errors.join(", "))
+      expect(second.reconciled).toBe(true)
+      expect(second.reconcileActions).toEqual(['rewrote "## Goal"'])
+
+      const content = await Bun.file(path.join(projectRoot, "PROGRESS.md")).text()
+      expect(content).toContain("fresh goal")
+      expect(content).not.toContain("OLD STALE GOAL")
     } finally {
       await rm(projectRoot, { recursive: true, force: true })
     }

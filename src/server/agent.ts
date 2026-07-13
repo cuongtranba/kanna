@@ -1,7 +1,7 @@
 import { query, type CanUseTool, type PermissionResult, type Query, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk"
 import { createKannaMcpServer, type KannaMcpDelegationContext, type SetupLoopHandlerResult } from "./kanna-mcp"
 import type { LoopSetupInput } from "./loop-template"
-import { validateLoopSetup } from "./loop-template"
+import { reconcileTrackingFile, validateLoopSetup } from "./loop-template"
 import { ensureTrackingFile } from "./loop-template-io.adapter"
 import { KANNA_MCP_SERVER_NAME } from "../shared/tools"
 import { homedir } from "node:os"
@@ -4484,12 +4484,25 @@ export class AgentCoordinator {
 
     const resolved = validation.resolved
     let created: boolean
+    let reconciled: boolean
+    let reconcileActions: string[]
     try {
       const ensureResult = await ensureTrackingFile({
         absPath: resolved.trackingFileAbs,
         skeleton: resolved.skeleton,
+        // Deterministic schema reconcile of an EXISTING tracking file: pure
+        // string transform — server-owned sections rewritten to the inputs,
+        // loop history preserved. No model judgement involved.
+        reconcile: (existing) =>
+          reconcileTrackingFile(existing, {
+            goal: resolved.goal,
+            verifyCommand: resolved.verifyCommand,
+            chunkHint: resolved.chunkHint,
+          }),
       })
       created = ensureResult.created
+      reconciled = ensureResult.reconciled
+      reconcileActions = ensureResult.actions
     } catch (err) {
       return {
         ok: false,
@@ -4545,6 +4558,8 @@ export class AgentCoordinator {
       ok: true,
       trackingFileRel: resolved.trackingFileRel,
       created,
+      reconciled,
+      reconcileActions,
       prompt: resolved.prompt,
     }
   }
