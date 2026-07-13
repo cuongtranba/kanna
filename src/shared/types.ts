@@ -79,6 +79,17 @@ export interface InstalledSkillsSnapshot {
   skills: InstalledSkillSummary[]
 }
 
+export interface GithubRelease {
+  id: number
+  name: string | null
+  tag_name: string
+  html_url: string
+  published_at: string | null
+  body: string | null
+  prerelease: boolean
+  draft: boolean
+}
+
 export interface ChatAttachment {
   id: string
   kind: AttachmentKind

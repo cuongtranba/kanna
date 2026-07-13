@@ -18,7 +18,7 @@ import type { AnalyticsReporter } from "./analytics"
 import { NoopAnalyticsReporter } from "./analytics"
 import type { AppSettingsManager } from "./app-settings"
 import type { DiscoveredProject } from "./discovery.adapter"
-import { DiffStore } from "./diff-store"
+import { DiffStore, fetchGitHubReleases } from "./diff-store"
 import { EventStore } from "./event-store"
 import { openExternal } from "./external-open"
 import { KeybindingsManager } from "./keybindings"
@@ -1549,6 +1549,11 @@ export function createWsRouter({
         case "settings.listOpenRouterModels": {
           const models = listOpenRouterModels ? await listOpenRouterModels() : []
           send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: models })
+          return
+        }
+        case "settings.getChangelog": {
+          const releases = await fetchGitHubReleases("cuongtranba/kanna")
+          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: releases })
           return
         }
         case "settings.writeLlmProvider": {

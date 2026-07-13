@@ -216,7 +216,6 @@ const QUICK_RESPONSE_PROVIDER_OPTIONS: Array<{ value: LlmProviderKind; label: st
   { value: "custom", label: "Custom" },
 ]
 
-const GITHUB_RELEASES_URL = "https://api.github.com/repos/cuongtranba/kanna/releases"
 const CHANGELOG_CACHE_TTL_MS = 5 * 60 * 1000
 
 type ChangelogCache = {
@@ -224,7 +223,10 @@ type ChangelogCache = {
   releases: GithubRelease[]
 }
 
-type FetchReleases = (input: string, init?: RequestInit) => Promise<Response>
+// Fetched through the Kanna server (which prefers the authenticated `gh` CLI)
+// rather than directly from the browser, so we avoid GitHub's 60 req/hr
+// unauthenticated per-IP limit that surfaced as a 403 in the changelog panel.
+type FetchReleases = () => Promise<GithubRelease[]>
 
 let changelogCache: ChangelogCache | null = null
 // KEYBINDING_ACTIONS imported from shared/types
@@ -244,20 +246,6 @@ export function resetSettingsPageChangelogCache() {
   changelogCache = null
 }
 
-export async function fetchGithubReleases(fetchImpl: FetchReleases = fetch): Promise<GithubRelease[]> {
-  const response = await fetchImpl(GITHUB_RELEASES_URL, {
-    headers: {
-      Accept: "application/vnd.github+json",
-    },
-  })
-  if (!response.ok) {
-    throw new Error(`GitHub releases request failed with status ${response.status}`)
-  }
-
-  const payload: GithubRelease[] = await response.json()
-  return payload.filter((release) => !release.draft)
-}
-
 export function getCachedChangelog() {
   if (!changelogCache) return null
   if (Date.now() >= changelogCache.expiresAt) {
@@ -274,13 +262,13 @@ export function setCachedChangelog(releases: GithubRelease[]) {
   }
 }
 
-export async function loadChangelog(options?: { force?: boolean; fetchImpl?: FetchReleases }) {
+export async function loadChangelog(fetchReleases: FetchReleases, options?: { force?: boolean }) {
   const cached = options?.force ? null : getCachedChangelog()
   if (cached) {
     return cached
   }
 
-  const releases = await fetchGithubReleases(options?.fetchImpl)
+  const releases = await fetchReleases()
   setCachedChangelog(releases)
   return releases
 }
@@ -1304,6 +1292,11 @@ export function SettingsPage() {
     void handleReadLlmProvider()
   }, [handleReadLlmProvider, isConnecting, selectedPage])
 
+  const fetchChangelogReleases = useCallback<FetchReleases>(
+    () => state.socket.command<GithubRelease[]>({ type: "settings.getChangelog" }),
+    [state.socket]
+  )
+
   useEffect(() => {
     if (selectedPage !== "changelog" || isConnecting) return
 
@@ -1311,7 +1304,7 @@ export function SettingsPage() {
     setChangelogStatus("loading")
     setChangelogError(null)
 
-    void loadChangelog()
+    void loadChangelog(fetchChangelogReleases)
       .then((nextReleases) => {
         if (cancelled) return
         setReleases(nextReleases)
@@ -1326,7 +1319,7 @@ export function SettingsPage() {
     return () => {
       cancelled = true
     }
-  }, [isConnecting, selectedPage, setChangelogStatus, setChangelogError, setReleases])
+  }, [isConnecting, selectedPage, setChangelogStatus, setChangelogError, setReleases, fetchChangelogReleases])
 
   function commitScrollback() {
     const nextValue = Number(scrollbackDraft)
@@ -1603,7 +1596,7 @@ export function SettingsPage() {
     setChangelogStatus("loading")
     setChangelogError(null)
 
-    void loadChangelog({ force: true })
+    void loadChangelog(fetchChangelogReleases, { force: true })
       .then((nextReleases) => {
         setReleases(nextReleases)
         setChangelogStatus("success")

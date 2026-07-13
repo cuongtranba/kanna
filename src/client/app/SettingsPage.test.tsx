@@ -5,7 +5,6 @@ import {
   AutoResumeToggleSection,
   ChangelogSection,
   CloudflareTunnelSectionTitle,
-  fetchGithubReleases,
   formatPublishedDate,
   getCachedChangelog,
   getKeybindingsSubtitle,
@@ -61,33 +60,18 @@ function createUpdateSnapshot(overrides: Partial<UpdateSnapshot> = {}): UpdateSn
   }
 }
 
-describe("fetchGithubReleases", () => {
-  test("filters draft releases and sends the GitHub accept header", async () => {
-    let requestedUrl = ""
-    let requestedAcceptHeader = ""
-
-    const releases = await fetchGithubReleases(async (input, init) => {
-      requestedUrl = String(input)
-      requestedAcceptHeader = String(new Headers(init?.headers).get("Accept"))
-
-      return new Response(JSON.stringify([
-        SAMPLE_RELEASES[0],
-        { ...SAMPLE_RELEASES[1], draft: true },
-      ]), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      })
-    })
-
-    expect(requestedUrl).toBe("https://api.github.com/repos/cuongtranba/kanna/releases")
-    expect(requestedAcceptHeader).toBe("application/vnd.github+json")
+describe("loadChangelog", () => {
+  test("returns releases from the injected fetcher on a cold cache", async () => {
+    const releases = await loadChangelog(async () => [SAMPLE_RELEASES[0]])
     expect(releases).toEqual([SAMPLE_RELEASES[0]])
   })
 
-  test("throws on non-200 responses", async () => {
-    await expect(fetchGithubReleases(async () => new Response("nope", { status: 403 }))).rejects.toThrow(
-      "GitHub releases request failed with status 403"
-    )
+  test("propagates fetcher errors", async () => {
+    await expect(
+      loadChangelog(async () => {
+        throw new Error("GitHub releases request failed with status 403")
+      })
+    ).rejects.toThrow("GitHub releases request failed with status 403")
   })
 })
 
@@ -120,13 +104,7 @@ describe("changelog cache", () => {
   test("force refresh bypasses the in-memory cache", async () => {
     setCachedChangelog([SAMPLE_RELEASES[0]])
 
-    const releases = await loadChangelog({
-      force: true,
-      fetchImpl: async () => new Response(JSON.stringify([SAMPLE_RELEASES[1]]), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      }),
-    })
+    const releases = await loadChangelog(async () => [SAMPLE_RELEASES[1]], { force: true })
 
     expect(releases).toEqual([SAMPLE_RELEASES[1]])
   })

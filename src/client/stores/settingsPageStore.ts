@@ -1,19 +1,9 @@
 import { create } from "zustand"
 import { detectPushSupport, getStoredPushDeviceId, type PushPermissionState } from "../app/pushClient"
 import type { LlmProviderDraft } from "../app/llmProviderDraft"
-import type { InstalledSkillSummary, SkillSearchResult } from "../../shared/types"
+import type { GithubRelease, InstalledSkillSummary, SkillSearchResult } from "../../shared/types"
 
-// Types re-exported from SettingsPage to avoid circular imports
-export type GithubRelease = {
-  id: number
-  name: string | null
-  tag_name: string
-  html_url: string
-  published_at: string | null
-  body: string | null
-  prerelease: boolean
-  draft: boolean
-}
+export type { GithubRelease }
 
 export type ChangelogStatus = "idle" | "loading" | "success" | "error"
 
