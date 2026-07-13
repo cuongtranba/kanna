@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import path from "node:path"
-import { validateLoopSetup, __testing, type LoopSetupContext } from "./loop-template"
+import { reconcileTrackingFile, validateLoopSetup, __testing, type LoopSetupContext } from "./loop-template"
 
 // A valid context most tests share: one known subagent, set as the default.
 const CTX: LoopSetupContext = {
@@ -262,6 +262,149 @@ describe("resolveTrackingFile edge cases", () => {
     const r = __testing.resolveTrackingFile("docs\\PROG.md", "/tmp/x")
     if ("error" in r) throw new Error(r.error)
     expect(r.rel).toBe(path.join("docs", "PROG.md"))
+  })
+})
+
+describe("reconcileTrackingFile — deterministic schema reconcile", () => {
+  const ARGS = {
+    goal: "eslint --max-warnings=0 passes",
+    verifyCommand: "bun run lint",
+    chunkHint: "start with src/client/**" as string | null,
+  }
+
+  test("a skeleton generated from the same inputs round-trips unchanged", () => {
+    const skeleton = __testing.renderSkeleton(ARGS)
+    const result = reconcileTrackingFile(skeleton, ARGS)
+    expect(result.changed).toBe(false)
+    expect(result.content).toBe(skeleton)
+    expect(result.actions).toEqual([])
+  })
+
+  test("an empty file becomes exactly the canonical skeleton", () => {
+    const result = reconcileTrackingFile("", ARGS)
+    expect(result.changed).toBe(true)
+    expect(result.content).toBe(__testing.renderSkeleton(ARGS))
+    expect(result.actions).toContain('inserted "## Goal"')
+    expect(result.actions).toContain('inserted "## Verify command"')
+    expect(result.actions).toContain('inserted "## Progress (latest first)"')
+    expect(result.actions).toContain('inserted "## Failed approaches"')
+    expect(result.actions).toContain('inserted "## Next chunk"')
+  })
+
+  test("a whitespace-only file becomes exactly the canonical skeleton", () => {
+    const result = reconcileTrackingFile("   \n\n  ", ARGS)
+    expect(result.changed).toBe(true)
+    expect(result.content).toBe(__testing.renderSkeleton(ARGS))
+  })
+
+  test("missing '## Next chunk' is inserted; other sections preserved verbatim", () => {
+    const existing = [
+      "# Loop tracking file",
+      "",
+      "## Goal",
+      ARGS.goal,
+      "",
+      "## Verify command",
+      "```",
+      ARGS.verifyCommand,
+      "```",
+      "",
+      "## Progress (latest first)",
+      "",
+      "- 2026-07-13 chunk 1 DONE (run-abc)",
+      "",
+      "## Failed approaches",
+      "",
+      "- naive regex broke on nested quotes",
+      "",
+    ].join("\n")
+    const result = reconcileTrackingFile(existing, ARGS)
+    expect(result.changed).toBe(true)
+    expect(result.actions).toEqual(['inserted "## Next chunk"'])
+    // Loop-owned history preserved byte-for-byte
+    expect(result.content).toContain("- 2026-07-13 chunk 1 DONE (run-abc)")
+    expect(result.content).toContain("- naive regex broke on nested quotes")
+    // Inserted section carries the chunk hint
+    expect(result.content).toContain("## Next chunk")
+    expect(result.content).toContain("start with src/client/**")
+  })
+
+  test("mismatched goal is rewritten to the input; progress rows preserved", () => {
+    const skeleton = __testing.renderSkeleton({ ...ARGS, goal: "OLD STALE GOAL" })
+    const withHistory = skeleton.replace(
+      "_Subagent appends one row per completed chunk here._",
+      "- 2026-07-12 chunk 0 DONE",
+    )
+    const result = reconcileTrackingFile(withHistory, ARGS)
+    expect(result.changed).toBe(true)
+    expect(result.actions).toEqual(['rewrote "## Goal"'])
+    expect(result.content).toContain(ARGS.goal)
+    expect(result.content).not.toContain("OLD STALE GOAL")
+    expect(result.content).toContain("- 2026-07-12 chunk 0 DONE")
+  })
+
+  test("mismatched verify command is rewritten to the input", () => {
+    const skeleton = __testing.renderSkeleton({ ...ARGS, verifyCommand: "make old-check" })
+    const result = reconcileTrackingFile(skeleton, ARGS)
+    expect(result.changed).toBe(true)
+    expect(result.actions).toEqual(['rewrote "## Verify command"'])
+    expect(result.content).toContain("bun run lint")
+    expect(result.content).not.toContain("make old-check")
+  })
+
+  test("unknown extra sections are preserved after the canonical ones", () => {
+    const skeleton = __testing.renderSkeleton(ARGS)
+    const existing = `${skeleton}## Notes\n\nkeep me around\n`
+    const result = reconcileTrackingFile(existing, ARGS)
+    expect(result.content).toContain("## Notes")
+    expect(result.content).toContain("keep me around")
+    // Canonical section order holds: Next chunk before the unknown section
+    expect(result.content.indexOf("## Next chunk")).toBeLessThan(result.content.indexOf("## Notes"))
+  })
+
+  test("a custom preamble above the first section is preserved", () => {
+    const skeleton = __testing.renderSkeleton(ARGS)
+    const existing = skeleton.replace("# Loop tracking file", "# My custom loop title\n\nsome intro prose")
+    const result = reconcileTrackingFile(existing, ARGS)
+    expect(result.content).toContain("# My custom loop title")
+    expect(result.content).toContain("some intro prose")
+  })
+
+  test("heading match is case-insensitive and tolerant of suffix text", () => {
+    const existing = [
+      "# t",
+      "",
+      "## goal",
+      ARGS.goal,
+      "",
+      "## VERIFY COMMAND",
+      "```",
+      ARGS.verifyCommand,
+      "```",
+      "",
+      "## Progress",
+      "",
+      "- row",
+      "",
+      "## Failed Approaches (dead ends)",
+      "",
+      "- x",
+      "",
+      "## next chunk",
+      "",
+      "do the thing",
+      "",
+    ].join("\n")
+    const result = reconcileTrackingFile(existing, ARGS)
+    // All five sections matched: nothing inserted, server-owned bodies already equal
+    expect(result.actions).toEqual([])
+    expect(result.changed).toBe(false)
+    expect(result.content).toBe(existing)
+  })
+
+  test("null chunkHint inserts the default placeholder for a missing Next chunk", () => {
+    const result = reconcileTrackingFile("", { ...ARGS, chunkHint: null })
+    expect(result.content).toContain("_Describe the first chunk the subagent should do._")
   })
 })
 

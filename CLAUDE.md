@@ -721,9 +721,22 @@ The server owns the template so the prompt is deterministic. See
   unparseable verify command (unbalanced quotes) / `trackingFile` outside cwd
   / NUL byte / oversize inputs. Returns a flat error list (does not
   fail-fast); the tool surfaces the list as `isError`.
+- **Deterministic tracking-file reconcile** (`reconcileTrackingFile`, pure,
+  same module): when the tracking file already EXISTS, it is reconciled
+  against the canonical schema instead of being silently trusted — a pure
+  string transform, no model judgement. Server-owned sections (`## Goal`,
+  `## Verify command`) are rewritten in place when they differ from the
+  setup_loop inputs; loop-owned sections (`## Progress`, `## Failed
+  approaches`, `## Next chunk`) are preserved verbatim when present and
+  inserted from the skeleton when missing (history never destroyed);
+  preamble + unknown sections preserved. A conformant file round-trips
+  byte-identical. The skeleton and the reconcile derive from one
+  `CANONICAL_SECTIONS` table so they cannot drift. The tool result reports
+  `created skeleton` / `reconciled: <actions>` / `already conforms`.
 - **IO adapter** (`src/server/loop-template-io.adapter.ts`): creates the
-  tracking file with a skeleton if absent; NEVER overwrites an existing
-  file. Parent dirs auto-created.
+  tracking file with a skeleton if absent; otherwise applies the injected
+  pure reconcile and rewrites only when it reports a change. Parent dirs
+  auto-created.
 - **Coordinator entry** (`AgentCoordinator.setupLoop`): after validation +
   file ensure, wipes the chat's Claude `session_token`, appends
   `context_cleared`, and emits `auto_continue_accepted` with the templated

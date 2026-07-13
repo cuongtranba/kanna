@@ -153,36 +153,150 @@ function renderLoopPrompt(args: {
   ].join("\n")
 }
 
-/** Skeleton written to disk when the tracking file does not exist yet. */
-function renderSkeleton(args: {
+interface SkeletonArgs {
   goal: string
   verifyCommand: string
   chunkHint: string | null
-}): string {
+}
+
+const DEFAULT_PREAMBLE_LINES: readonly string[] = ["# Loop tracking file", ""]
+
+/**
+ * The five canonical tracking-file sections, in fixed order. `serverOwned`
+ * sections carry setup_loop inputs and are rewritten on mismatch; the rest
+ * belong to the loop (subagent-appended history) and are preserved verbatim.
+ * Both the skeleton and the reconcile derive from this single table so the
+ * two can never drift.
+ */
+const CANONICAL_SECTIONS: readonly {
+  heading: string
+  serverOwned: boolean
+  matches: (normalizedHeading: string) => boolean
+  canonicalBodyLines: (args: SkeletonArgs) => string[]
+}[] = [
+  {
+    heading: "## Goal",
+    serverOwned: true,
+    matches: (h) => h === "goal",
+    canonicalBodyLines: (args) => [args.goal, ""],
+  },
+  {
+    heading: "## Verify command",
+    serverOwned: true,
+    matches: (h) => h === "verify command",
+    canonicalBodyLines: (args) => ["```", args.verifyCommand, "```", ""],
+  },
+  {
+    heading: "## Progress (latest first)",
+    serverOwned: false,
+    matches: (h) => h.startsWith("progress"),
+    canonicalBodyLines: () => ["", "_Subagent appends one row per completed chunk here._", ""],
+  },
+  {
+    heading: "## Failed approaches",
+    serverOwned: false,
+    matches: (h) => h.startsWith("failed approaches"),
+    canonicalBodyLines: () => ["", "_Subagent appends dead-ends here so future iterations don't repeat them._", ""],
+  },
+  {
+    heading: "## Next chunk",
+    serverOwned: false,
+    matches: (h) => h.startsWith("next chunk"),
+    canonicalBodyLines: (args) => ["", args.chunkHint ?? "_Describe the first chunk the subagent should do._", ""],
+  },
+]
+
+/** Skeleton written to disk when the tracking file does not exist yet. */
+function renderSkeleton(args: SkeletonArgs): string {
   return [
-    "# Loop tracking file",
-    "",
-    "## Goal",
-    args.goal,
-    "",
-    "## Verify command",
-    "```",
-    args.verifyCommand,
-    "```",
-    "",
-    "## Progress (latest first)",
-    "",
-    "_Subagent appends one row per completed chunk here._",
-    "",
-    "## Failed approaches",
-    "",
-    "_Subagent appends dead-ends here so future iterations don't repeat them._",
-    "",
-    "## Next chunk",
-    "",
-    args.chunkHint ?? "_Describe the first chunk the subagent should do._",
-    "",
+    ...DEFAULT_PREAMBLE_LINES,
+    ...CANONICAL_SECTIONS.flatMap((s) => [s.heading, ...s.canonicalBodyLines(args)]),
   ].join("\n")
+}
+
+export interface TrackingFileReconcile {
+  /** Deterministically reconciled file content. Equal to the input when `changed` is false. */
+  content: string
+  changed: boolean
+  /** Ordered section-level actions taken, e.g. `rewrote "## Goal"`. Empty when `changed` is false. */
+  actions: string[]
+}
+
+interface ParsedSection {
+  /** Heading text after "## ", trimmed + lowercased, for matching. */
+  normalizedHeading: string
+  /** Raw lines including the heading line — reassembled verbatim when preserved. */
+  lines: string[]
+}
+
+function parseSections(existing: string): { preamble: string[]; sections: ParsedSection[] } {
+  const lines = existing.split("\n")
+  const preamble: string[] = []
+  const sections: ParsedSection[] = []
+  let current: ParsedSection | null = null
+  for (const line of lines) {
+    if (line.startsWith("## ")) {
+      current = { normalizedHeading: line.slice(3).trim().toLowerCase(), lines: [line] }
+      sections.push(current)
+    } else if (current) {
+      current.lines.push(line)
+    } else {
+      preamble.push(line)
+    }
+  }
+  return { preamble, sections }
+}
+
+/**
+ * Deterministically reconcile an EXISTING tracking file against the loop's
+ * canonical schema — a pure string transform, no model judgement involved:
+ *
+ * - Server-owned sections (`## Goal`, `## Verify command`) are rewritten in
+ *   place when their content differs from the setup_loop inputs.
+ * - Loop-owned sections (`## Progress`, `## Failed approaches`, `## Next
+ *   chunk`) are preserved verbatim when present and inserted from the
+ *   skeleton when missing — accumulated history is never destroyed.
+ * - A preamble above the first section and any unknown sections are
+ *   preserved verbatim (unknowns move after the canonical five).
+ *
+ * A file that already conforms round-trips byte-identical (`changed: false`).
+ */
+export function reconcileTrackingFile(existing: string, args: SkeletonArgs): TrackingFileReconcile {
+  const { preamble, sections } = parseSections(existing)
+  const actions: string[] = []
+  const claimed = new Set<ParsedSection>()
+
+  const out: string[] = preamble.some((l) => l.trim() !== "")
+    ? [...preamble]
+    : [...DEFAULT_PREAMBLE_LINES]
+
+  for (const spec of CANONICAL_SECTIONS) {
+    const match = sections.find((s) => !claimed.has(s) && spec.matches(s.normalizedHeading))
+    if (!match) {
+      out.push(spec.heading, ...spec.canonicalBodyLines(args))
+      actions.push(`inserted "${spec.heading}"`)
+      continue
+    }
+    claimed.add(match)
+    const bodyConforms =
+      !spec.serverOwned
+      || match.lines.slice(1).join("\n").trim() === spec.canonicalBodyLines(args).join("\n").trim()
+    if (bodyConforms) {
+      out.push(...match.lines)
+    } else {
+      out.push(spec.heading, ...spec.canonicalBodyLines(args))
+      actions.push(`rewrote "${spec.heading}"`)
+    }
+  }
+
+  for (const section of sections) {
+    if (!claimed.has(section)) out.push(...section.lines)
+  }
+
+  const content = out.join("\n")
+  const changed = content !== existing
+  if (changed && actions.length === 0) actions.push("normalized formatting")
+  return { content, changed, actions: changed ? actions : [] }
 }
 
 /**

@@ -452,6 +452,8 @@ describe("setup_loop tool", () => {
         ok: true,
         trackingFileRel: "PROGRESS.md",
         created: false,
+        reconciled: false,
+        reconcileActions: [],
         prompt: "x",
       }),
     })
@@ -468,6 +470,8 @@ describe("setup_loop tool", () => {
           ok: true,
           trackingFileRel: "PROGRESS.md",
           created: true,
+          reconciled: false,
+          reconcileActions: [],
           prompt: "the rendered loop prompt",
         }
       },
@@ -490,13 +494,15 @@ describe("setup_loop tool", () => {
     expect(res.content[0].text).toContain("cleared")
   })
 
-  test("existing tracking file: message reports 'existing file left untouched'", async () => {
+  test("existing conformant tracking file: message reports it already conforms", async () => {
     const tools = toolMap(buildKannaMcpTools({
       ...baseArgs,
       setupLoop: async () => ({
         ok: true,
         trackingFileRel: "PROGRESS.md",
         created: false,
+        reconciled: false,
+        reconcileActions: [],
         prompt: "p",
       }),
     }))
@@ -505,7 +511,29 @@ describe("setup_loop tool", () => {
       verify_command: "true",
     })
     expect(res.isError).toBeUndefined()
-    expect(res.content[0].text).toContain("existing file left untouched")
+    expect(res.content[0].text).toContain("existing file already conforms to the loop schema")
+  })
+
+  test("existing reconciled tracking file: message lists the deterministic actions taken", async () => {
+    const tools = toolMap(buildKannaMcpTools({
+      ...baseArgs,
+      setupLoop: async () => ({
+        ok: true,
+        trackingFileRel: "PROGRESS.md",
+        created: false,
+        reconciled: true,
+        reconcileActions: ['rewrote "## Goal"', 'inserted "## Next chunk"'],
+        prompt: "p",
+      }),
+    }))
+    const res = await tools.get("setup_loop")!.handler({
+      goal: "g",
+      verify_command: "true",
+    })
+    expect(res.isError).toBeUndefined()
+    expect(res.content[0].text).toContain("existing file reconciled to the loop schema")
+    expect(res.content[0].text).toContain('rewrote "## Goal"')
+    expect(res.content[0].text).toContain('inserted "## Next chunk"')
   })
 
   test("validator rejection → isError with the error list", async () => {
