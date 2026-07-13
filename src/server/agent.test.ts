@@ -1917,6 +1917,134 @@ describe("AgentCoordinator claude integration", () => {
     events.close()
   })
 
+  test("clears the stored session token when resume fails with 'No conversation found'", async () => {
+    const events = new AsyncEventQueue<any>()
+    let closeCount = 0
+
+    const store = createFakeStore()
+    await store.setSessionTokenForProvider("chat-1", "claude", "poisoned-old")
+    const coordinator = new AgentCoordinator({
+      store: store as never,
+      onStateChange: () => {},
+      startClaudeSession: async () => ({
+        provider: "claude",
+        stream: events,
+        getAccountInfo: async () => null,
+        interrupt: async () => {},
+        close: () => {
+          closeCount += 1
+        },
+        setModel: async () => {},
+        setPermissionMode: async () => {},
+        getSupportedCommands: async () => [],
+        // Mirrors the SDK failing to resume a conversation the CLI never
+        // persisted: the doomed spawn first emits its own fresh session id,
+        // then an error result whose message lives only in debugRaw.errors
+        // (result text is empty).
+        sendPrompt: async () => {
+          events.push({ type: "session_token" as const, sessionToken: "poisoned-new" })
+          events.push({
+            type: "transcript" as const,
+            entry: timestamped({
+              kind: "result",
+              subtype: "error",
+              isError: true,
+              durationMs: 0,
+              result: "",
+              debugRaw:
+                '{"type":"result","subtype":"error_during_execution","is_error":true,"errors":["No conversation found with session ID: poisoned-old"]}',
+            }),
+          })
+        },
+      }),
+    })
+
+    await coordinator.send({
+      type: "chat.send",
+      chatId: "chat-1",
+      provider: "claude",
+      content: "hello",
+      model: "claude-opus-4-1",
+    })
+    await waitFor(() => store.turnFailedCount === 1)
+
+    // Self-heal: the poisoned token (including the doomed spawn's own fresh
+    // id) is cleared and the dead session closed, so the next send spawns
+    // fresh instead of looping on "No conversation found" forever.
+    expect(store.chat.sessionTokensByProvider.claude ?? null).toBeNull()
+    expect(closeCount).toBeGreaterThanOrEqual(1)
+
+    events.close()
+  })
+
+  test("does not persist a session token that arrives after cancel()", async () => {
+    const events = new AsyncEventQueue<any>()
+
+    const store = createFakeStore()
+    const coordinator = new AgentCoordinator({
+      store: store as never,
+      onStateChange: () => {},
+      startClaudeSession: async () => ({
+        provider: "claude",
+        stream: events,
+        getAccountInfo: async () => null,
+        interrupt: async () => {},
+        close: () => {},
+        setModel: async () => {},
+        setPermissionMode: async () => {},
+        getSupportedCommands: async () => [],
+        sendPrompt: async () => {
+          events.push({ type: "session_token" as const, sessionToken: "good-token" })
+          events.push({
+            type: "transcript" as const,
+            entry: timestamped({
+              kind: "system_init",
+              provider: "claude",
+              model: "claude-opus-4-1",
+              tools: [],
+              agents: [],
+              slashCommands: [],
+              mcpServers: [],
+            }),
+          })
+        },
+      }),
+    })
+
+    await coordinator.send({
+      type: "chat.send",
+      chatId: "chat-1",
+      provider: "claude",
+      content: "do work",
+      model: "claude-opus-4-1",
+    })
+    await waitFor(() => coordinator.getActiveStatuses().get("chat-1") === "running")
+    await waitFor(() => (store.chat.sessionTokensByProvider.claude ?? null) === "good-token")
+
+    await coordinator.cancel("chat-1")
+    await waitFor(() => store.messages.some((entry) => entry.kind === "interrupted"))
+
+    // A slow spawn can emit its session_token AFTER the user cancelled — the
+    // CLI may never persist that conversation to disk, so storing the token
+    // would poison the next resume ("No conversation found with session ID").
+    events.push({ type: "session_token" as const, sessionToken: "poison-late" })
+    events.push({
+      type: "transcript" as const,
+      entry: timestamped({
+        kind: "result",
+        subtype: "error",
+        isError: true,
+        durationMs: 0,
+        result: "",
+      }),
+    })
+    await new Promise((resolve) => setTimeout(resolve, 10))
+
+    expect(store.chat.sessionTokensByProvider.claude).toBe("good-token")
+
+    events.close()
+  })
+
   test("closes idle Claude sessions and resumes from the stored session token on the next turn", async () => {
     const startSessionCalls: Array<{ sessionToken: string | null }> = []
     const prompts: string[] = []
@@ -4076,6 +4204,66 @@ describe("AgentCoordinator.deliverSubagentToMain (notification-driven /clear)", 
     }
   })
 
+  test("closes the warm claude session so the /clear yields a truly fresh spawn", async () => {
+    const events = new AsyncEventQueue<any>()
+    let closeCount = 0
+
+    const store = createFakeStore()
+    const coordinator = new AgentCoordinator({
+      store: store as never,
+      onStateChange: () => {},
+      startClaudeSession: async () => ({
+        provider: "claude",
+        stream: events,
+        getAccountInfo: async () => null,
+        interrupt: async () => {},
+        close: () => {
+          closeCount += 1
+        },
+        setModel: async () => {},
+        setPermissionMode: async () => {},
+        getSupportedCommands: async () => [],
+        sendPrompt: async () => {
+          events.push({ type: "session_token" as const, sessionToken: "warm-token" })
+          events.push({
+            type: "transcript" as const,
+            entry: timestamped({
+              kind: "result",
+              subtype: "success",
+              isError: false,
+              durationMs: 0,
+              result: "done",
+            }),
+          })
+        },
+      }),
+    })
+
+    // Complete one turn so a warm SDK session lingers in claudeSessions.
+    await coordinator.send({
+      type: "chat.send",
+      chatId: "chat-1",
+      provider: "claude",
+      content: "seed a warm session",
+      model: "claude-opus-4-1",
+    })
+    await waitFor(() => store.turnFinishedCount === 1)
+    expect(store.chat.sessionTokensByProvider.claude).toBe("warm-token")
+
+    await (coordinator as unknown as { deliverSubagentToMain: DeliverFn }).deliverSubagentToMain(
+      "chat-1",
+      "run-bg",
+      { status: "completed", runId: "run-bg", text: "the answer" },
+    )
+
+    // Idle warm session torn down: without this, the next turn would reuse
+    // the in-band SDK session and the documented /clear would be a no-op.
+    expect(closeCount).toBeGreaterThanOrEqual(1)
+    expect(store.chat.sessionTokensByProvider.claude ?? null).toBeNull()
+
+    events.close()
+  })
+
   test("armed loop: notification omits <result> (PROGRESS.md is the contract) and the full loop prompt follows", async () => {
     const store = createFakeStore()
     const coordinator = new AgentCoordinator({
@@ -4228,6 +4416,74 @@ describe("AgentCoordinator.setupLoop (mcp__kanna__setup_loop backing)", () => {
       expect(ev.prompt).toContain("GOAL MET")
       expect(ev.prompt).toContain("sa-1")
     } finally {
+      await rm(projectRoot, { recursive: true, force: true })
+    }
+  })
+
+  test("the /clear is not overwritten by a late session_token from the in-flight turn", async () => {
+    const projectRoot = await mkdtemp(path.join(tmpdir(), "kanna-setup-loop-"))
+    const events = new AsyncEventQueue<any>()
+    try {
+      const store = createFakeStore()
+      store.getProject = () => ({ id: "project-1", localPath: projectRoot }) as never
+      const coordinator = new AgentCoordinator({
+        store: store as never,
+        onStateChange: () => {},
+        getSubagents: () => [makeSubagentRecord({ id: "sa-1", name: "alpha" })],
+        startClaudeSession: async () => ({
+          provider: "claude",
+          stream: events,
+          getAccountInfo: async () => null,
+          interrupt: async () => {},
+          close: () => {},
+          setModel: async () => {},
+          setPermissionMode: async () => {},
+          getSupportedCommands: async () => [],
+          // The turn hangs mid-stream — setup_loop is called from INSIDE a
+          // running turn, so the session keeps streaming after the /clear.
+          sendPrompt: async () => {
+            events.push({ type: "session_token" as const, sessionToken: "pre-clear-token" })
+            events.push({
+              type: "transcript" as const,
+              entry: timestamped({
+                kind: "system_init",
+                provider: "claude",
+                model: "claude-opus-4-1",
+                tools: [],
+                agents: [],
+                slashCommands: [],
+                mcpServers: [],
+              }),
+            })
+          },
+        }),
+      })
+
+      await coordinator.send({
+        type: "chat.send",
+        chatId: "chat-1",
+        provider: "claude",
+        content: "set up a loop",
+        model: "claude-opus-4-1",
+      })
+      await waitFor(() => (store.chat.sessionTokensByProvider.claude ?? null) === "pre-clear-token")
+
+      const result = await coordinator.setupLoop({
+        chatId: "chat-1",
+        input: { goal: "g", verifyCommand: "true", subagentId: "sa-1" },
+      })
+      if (!result.ok) throw new Error(result.errors.join(", "))
+      expect(store.chat.sessionTokensByProvider.claude ?? null).toBeNull()
+
+      // The still-streaming turn emits another session_token for the OLD
+      // conversation (observed 121ms after the wipe in the field) — it must
+      // not resurrect the cleared token.
+      events.push({ type: "session_token" as const, sessionToken: "pre-clear-token" })
+      await new Promise((resolve) => setTimeout(resolve, 10))
+
+      expect(store.chat.sessionTokensByProvider.claude ?? null).toBeNull()
+    } finally {
+      events.close()
       await rm(projectRoot, { recursive: true, force: true })
     }
   })
