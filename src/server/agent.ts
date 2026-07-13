@@ -271,6 +271,11 @@ interface ClaudeSessionState {
   // that result arrives, reset on each new turn so a no-tail cancel can't leak
   // suppression onto a later real error.
   cancelledResultPending: number
+  // Set by clearClaudeSessionContext (/clear machinery: setup_loop, background
+  // delivery). Once the chat's context is declared cleared, any session_token
+  // this in-flight session still emits belongs to the OLD conversation and
+  // must never re-persist over the wipe. Fresh spawns start unsuppressed.
+  suppressSessionTokenPersist: boolean
 }
 
 interface ClaudeSessionLifecycleOptions {
@@ -449,6 +454,15 @@ export function timestamped<T extends Omit<TranscriptEntry, "_id" | "createdAt">
 function isPromptTooLongMessage(message: string): boolean {
   return /\bprompt\b.*\btoo\s+long\b/i.test(message)
     || /\bprompt\b.*\btoo\s+large\b/i.test(message)
+}
+
+// The stored session token points at a conversation the Claude CLI never
+// persisted (e.g. a spawn interrupted before its first write). Every resume
+// then fails instantly — and the doomed spawn mints yet another unpersisted
+// session id, so without clearing the token the chat is wedged forever. The
+// message rides in result.errors (debugRaw); result text is empty.
+function isNoConversationFoundMessage(message: string): boolean {
+  return /No conversation found with session ID/i.test(message)
 }
 
 function stringFromUnknown<T>(value: T): string {
@@ -3069,6 +3083,7 @@ export class AgentCoordinator {
         backgroundTaskDeadlineAt: 0,
         loopArmedAtSpawn: loopArmedNow,
         cancelledResultPending: 0,
+        suppressSessionTokenPersist: false,
       }
       this.claudeSessions.set(args.chatId, session)
       this.enforceClaudeSessionBudget(args.chatId)
@@ -3560,7 +3575,21 @@ export class AgentCoordinator {
         }
         if (event.type === "session_token" && event.sessionToken) {
           session.sessionToken = event.sessionToken
-          await this.store.setSessionTokenForProvider(session.chatId, "claude", event.sessionToken)
+          // Persist only when this session is still current, no cancel is in
+          // flight, and no /clear suppressed it. A cancelled spawn can emit
+          // its session_token AFTER the user interrupted — the CLI may never
+          // persist that conversation, so storing the token would poison the
+          // next `--resume` ("No conversation found with session ID"). A
+          // /clear (setup_loop, background delivery) mid-stream must likewise
+          // not be resurrected by the old conversation's next token event.
+          const isCurrentSession = this.claudeSessions.get(session.chatId) === session
+          if (
+            isCurrentSession
+            && session.cancelledResultPending === 0
+            && !session.suppressSessionTokenPersist
+          ) {
+            await this.store.setSessionTokenForProvider(session.chatId, "claude", event.sessionToken)
+          }
           this.maybeRegisterSdkWorkflowsDir(session)
           this.emitStateChange(session.chatId)
           continue
@@ -3739,7 +3768,11 @@ export class AgentCoordinator {
             failureHandled = handled
             if (handled) {
               await this.store.recordTurnFailed(session.chatId, detection ? "rate_limit" : "auth_error")
-            } else if (isPromptTooLongMessage(resultText)) {
+            } else if (
+              isPromptTooLongMessage(resultText)
+              || isNoConversationFoundMessage(resultText)
+              || isNoConversationFoundMessage(debugRaw)
+            ) {
               await this.store.recordTurnFailed(session.chatId, resultText)
               this.closeClaudeSession(session.chatId, session)
               await this.store.setSessionTokenForProvider(session.chatId, "claude", null)
@@ -3805,7 +3838,7 @@ export class AgentCoordinator {
             })
           )
           await this.store.recordTurnFailed(session.chatId, message)
-          if (isPromptTooLongMessage(message)) {
+          if (isPromptTooLongMessage(message) || isNoConversationFoundMessage(message)) {
             this.closeClaudeSession(session.chatId, session)
             await this.store.setSessionTokenForProvider(session.chatId, "claude", null)
           }
@@ -4340,6 +4373,26 @@ export class AgentCoordinator {
   }
 
   /**
+   * The /clear machinery for the loop-orchestration paths (setup_loop,
+   * background delivery). Wiping the store token alone is not enough:
+   * - an in-flight turn keeps streaming and its next `session_token` event
+   *   would re-persist the OLD conversation's token over the wipe (observed
+   *   121 ms after a setup_loop /clear) — so suppress persistence on the
+   *   live session for the rest of its life;
+   * - an idle warm SDK session would be reused in-band by the next turn,
+   *   making the /clear a no-op — so tear it down when no turn is active.
+   */
+  private async clearClaudeSessionContext(chatId: string): Promise<void> {
+    await this.store.setSessionTokenForProvider(chatId, "claude", null)
+    const session = this.claudeSessions.get(chatId)
+    if (!session) return
+    session.suppressSessionTokenPersist = true
+    if (!this.activeTurns.has(chatId)) {
+      this.closeClaudeSession(chatId, session)
+    }
+  }
+
+  /**
    * Deliver a finished `run_in_background` subagent's result back into the
    * main chat as a fresh turn AND clear the main-agent's Claude session so the
    * next turn starts with a fresh context window. Wired as the orchestrator's
@@ -4383,9 +4436,8 @@ export class AgentCoordinator {
 
     try {
       // Wipe the main-agent's Claude session token so the next spawn starts
-      // fresh (the /clear equivalent — same machinery `exit_plan_mode`'s
-      // clearContext branch already uses). Codex path is unaffected.
-      await this.store.setSessionTokenForProvider(chatId, "claude", null)
+      // fresh (the /clear equivalent). Codex path is unaffected.
+      await this.clearClaudeSessionContext(chatId)
       await this.store.appendMessage(chatId, timestamped({ kind: "context_cleared" }))
 
       const now = Date.now()
@@ -4447,9 +4499,10 @@ export class AgentCoordinator {
 
     try {
       // Wipe main-agent Claude session so the next turn starts fresh with the
-      // rendered loop prompt. Codex untouched. Mirrors the /clear branch used
-      // by `exit_plan_mode` and `deliverSubagentToMain`.
-      await this.store.setSessionTokenForProvider(args.chatId, "claude", null)
+      // rendered loop prompt. Codex untouched. setup_loop runs from INSIDE a
+      // live turn, so the suppression half of clearClaudeSessionContext is
+      // what keeps the wipe from being overwritten by the in-flight stream.
+      await this.clearClaudeSessionContext(args.chatId)
       await this.store.appendMessage(args.chatId, timestamped({ kind: "context_cleared" }))
 
       const now = Date.now()
