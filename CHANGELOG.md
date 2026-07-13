@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.1.4](https://github.com/cuongtranba/kanna/compare/v1.1.3...v1.1.4) (2026-07-13)
+
+
+### Bug Fixes
+
+* **loop:** deterministically reconcile existing tracking files in setup_loop ([#533](https://github.com/cuongtranba/kanna/issues/533)) ([4f10445](https://github.com/cuongtranba/kanna/commit/4f104454dda475b14b33017ba472aebd58050988))
+
 ## [1.1.3](https://github.com/cuongtranba/kanna/compare/v1.1.2...v1.1.3) (2026-07-13)
 
 
