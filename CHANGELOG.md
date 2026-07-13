@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.1.5](https://github.com/cuongtranba/kanna/compare/v1.1.4...v1.1.5) (2026-07-13)
+
+
+### Bug Fixes
+
+* **settings:** proxy changelog releases through server ([#535](https://github.com/cuongtranba/kanna/issues/535)) ([0371717](https://github.com/cuongtranba/kanna/commit/03717174a45cc09777b762ad5046d9a8f609d26f))
+
 ## [1.1.4](https://github.com/cuongtranba/kanna/compare/v1.1.3...v1.1.4) (2026-07-13)
 
 
