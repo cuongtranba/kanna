@@ -68,6 +68,11 @@ import { maskOauthKey } from "../shared/mask-oauth-key"
 import { parseMentions, type ParsedMention } from "./mention-parser"
 import { SubagentOrchestrator, type BackgroundRunOutcome, type ProviderRunStart } from "./subagent-orchestrator"
 import { buildSubagentProviderRun, type BuildSubagentProviderRunArgs } from "./subagent-provider-run"
+import { OrchestrationQueue, type WorkerResult, type WorkerSpawnArgs } from "./orchestration-queue"
+import { createOrchWorktreeOps } from "./orchestration-worktree.adapter"
+import { runCommandInWorktree } from "./orchestration-exec-io.adapter"
+import { toOrchRunDetail, validateOrchRun, type OrchRunContext } from "./orchestration-input"
+import type { OrchRunDetail, OrchRunInput } from "../shared/orchestration-types"
 import type { ToolCallbackService } from "./tool-callback"
 import type { ChatPermissionPolicy } from "../shared/permission-policy"
 import { mergePolicyOverride, POLICY_DEFAULT } from "../shared/permission-policy"
@@ -349,6 +354,10 @@ interface AgentCoordinatorArgs {
     stopLoop?: () => Promise<void>
     /** Live check: true while an autonomous loop is armed — blocks direct-edit native tools. */
     isLoopArmed?: () => boolean
+    /** Backs the `orch_run` / `orch_run_status` / `orch_cancel_run` MCP tools. Main-chat only. */
+    runOrch?: (input: OrchRunInput) => Promise<{ ok: true; runId: string } | { ok: false; errors: string[] }>
+    cancelOrchRun?: (runId: string) => Promise<void>
+    getOrchRunStatus?: (runId: string) => OrchRunDetail | null
     /** Keep the SDK prompt queue open after the initial prompt to allow multi-turn keep-alive. */
     keepAlive?: boolean
     /** Per-turn price for computing cost when the provider doesn't report it (OpenRouter). */
@@ -382,7 +391,7 @@ interface AgentCoordinatorArgs {
     globalPromptAppend?: string
     customMcpServers?: readonly McpServerConfig[]
     customModels?: readonly CustomModelEntry[]
-    subagentRuntime?: { runTimeoutMs?: number; defaultLoopSubagentId?: string | null }
+    subagentRuntime?: { runTimeoutMs?: number; defaultLoopSubagentId?: string | null; defaultOrchSubagentId?: string | null }
   }
   throwOnClaudeSessionStart?: boolean
   oauthPool?: OAuthTokenPool
@@ -1468,6 +1477,10 @@ async function startClaudeSession(args: {
   stopLoop?: () => Promise<void>
   /** Live check: true while an autonomous loop is armed — blocks direct-edit native tools. */
   isLoopArmed?: () => boolean
+  /** Backs the `orch_run` / `orch_run_status` / `orch_cancel_run` MCP tools. Main-chat only. */
+  runOrch?: (input: OrchRunInput) => Promise<{ ok: true; runId: string } | { ok: false; errors: string[] }>
+  cancelOrchRun?: (runId: string) => Promise<void>
+  getOrchRunStatus?: (runId: string) => OrchRunDetail | null
   /**
    * Agentic-turn bound passed natively to the SDK query() (Claude Code's
    * per-agent frontmatter maxTurns analog): the SDK stops gracefully and
@@ -1533,6 +1546,9 @@ async function startClaudeSession(args: {
           restrictedAllowedPaths: args.restrictedAllowedPaths,
           setupLoop: args.setupLoop,
           stopLoop: args.stopLoop,
+          runOrch: args.runOrch,
+          cancelOrchRun: args.cancelOrchRun,
+          getOrchRunStatus: args.getOrchRunStatus,
         }),
         ...buildUserMcpServers(args.customMcpServers ?? [], args.oauthBearers),
       },
@@ -1727,6 +1743,11 @@ export class AgentCoordinator {
   getSubagentOrchestrator(): SubagentOrchestrator {
     return this.subagentOrchestrator
   }
+  private readonly orchestrationQueue: OrchestrationQueue
+  /** Public accessor for tests + the `orch_*` MCP tool + ws-router wiring. */
+  getOrchestrationQueue(): OrchestrationQueue {
+    return this.orchestrationQueue
+  }
   private readonly throwOnClaudeSessionStart: boolean
   private readonly autoResumeByChat = new Map<string, boolean>()
   private readonly openrouterFirstEntryTimeoutMs: number
@@ -1823,6 +1844,13 @@ export class AgentCoordinator {
       runTimeoutMs: (this.getAppSettingsSnapshot().subagentRuntime?.runTimeoutMs
         ?? positiveIntegerFromEnv(process.env.KANNA_SUBAGENT_RUN_TIMEOUT_MS, 0))
         || undefined,
+    })
+    this.orchestrationQueue = new OrchestrationQueue({
+      store: this.store,
+      worktrees: createOrchWorktreeOps(),
+      startWorker: (a) => this.buildOrchWorker(a),
+      runVerify: runCommandInWorktree,
+      runInit: runCommandInWorktree,
     })
     this.throwOnClaudeSessionStart = args.throwOnClaudeSessionStart ?? false
     this.tunnelGateway = args.tunnelGateway ?? null
@@ -3008,6 +3036,15 @@ export class AgentCoordinator {
               isLoopArmed: delegationContext.depth === 0
                 ? () => this.isLoopArmed(chatIdForCtx) !== null
                 : undefined,
+              runOrch: delegationContext.depth === 0
+                ? (input) => this.runOrchestration(chatIdForCtx, input)
+                : undefined,
+              cancelOrchRun: delegationContext.depth === 0
+                ? (runId) => this.cancelOrchRun(runId)
+                : undefined,
+              getOrchRunStatus: delegationContext.depth === 0
+                ? (runId) => this.getOrchRunDetail(runId)
+                : undefined,
               toolCallback: this.toolCallback ?? undefined,
               tunnelGateway: this.tunnelGateway,
               chatPolicy: this.resolveChatPolicy(args.chatId),
@@ -3043,6 +3080,15 @@ export class AgentCoordinator {
                 : undefined,
               isLoopArmed: delegationContext.depth === 0
                 ? () => this.isLoopArmed(chatIdForCtx) !== null
+                : undefined,
+              runOrch: delegationContext.depth === 0
+                ? (input) => this.runOrchestration(chatIdForCtx, input)
+                : undefined,
+              cancelOrchRun: delegationContext.depth === 0
+                ? (runId) => this.cancelOrchRun(runId)
+                : undefined,
+              getOrchRunStatus: delegationContext.depth === 0
+                ? (runId) => this.getOrchRunDetail(runId)
                 : undefined,
               toolCallback: this.toolCallback ?? undefined,
               chatPolicy: this.resolveChatPolicy(args.chatId),
@@ -3322,12 +3368,20 @@ export class AgentCoordinator {
     depth: number
     ancestorSubagentIds: string[]
     parentUserMessageId: string
+    /**
+     * Orchestration workers run in an isolated git worktree, not the chat cwd.
+     * When set, this overrides the resolved cwd, disables workingDir/allowedPaths
+     * restriction, and drops additional dirs / stack labelling (the worktree is
+     * a self-contained checkout).
+     */
+    cwdOverride?: string
   }): ProviderRunStart {
     const chat = this.store.requireChat(args.chatId)
     const project = this.store.getProject(chat.projectId)
     if (!project) throw new Error(`Project ${chat.projectId} not found for chat ${args.chatId}`)
     const spawn = resolveSpawnPaths(chat, project.localPath)
-    const restriction = args.subagent.workingDir !== undefined || args.subagent.allowedPaths !== undefined
+    const restriction = args.cwdOverride === undefined
+      && (args.subagent.workingDir !== undefined || args.subagent.allowedPaths !== undefined)
       ? resolveSubagentRoots(spawn.cwd, args.subagent.workingDir, args.subagent.allowedPaths, realpathAdapter)
       : null
 
@@ -3386,11 +3440,11 @@ export class AgentCoordinator {
       userInstruction: args.userInstruction,
       runId: args.runId,
       abortSignal: args.abortSignal,
-      cwd: restriction?.cwd ?? spawn.cwd,
-      additionalDirectories: spawn.additionalDirectories,
+      cwd: args.cwdOverride ?? restriction?.cwd ?? spawn.cwd,
+      additionalDirectories: args.cwdOverride ? [] : spawn.additionalDirectories,
       // Only label stack projects for unrestricted runs — a path-restricted
       // subagent cannot reach every root, so listing them all would mislead.
-      stackProjects: restriction ? [] : resolveStackProjects(chat, (id) => this.store.getProject(id)?.title),
+      stackProjects: args.cwdOverride || restriction ? [] : resolveStackProjects(chat, (id) => this.store.getProject(id)?.title),
       allowedPaths: restriction?.allowedPaths,
       projectId: project.id,
       startClaudeSession: this.buildClaudeSubagentStarter(),
@@ -3429,6 +3483,88 @@ export class AgentCoordinator {
         return picked?.token ?? null
       },
     })
+  }
+
+  /**
+   * StartWorker adapter for the OrchestrationQueue: spawn the run's configured
+   * worker subagent against the task worktree (`spawn.cwd`) with the phase
+   * prompt. Origin chat + subagent are read from the persisted run config so
+   * this resolves identically on a fresh run and after a restart.
+   */
+  private async buildOrchWorker(spawn: WorkerSpawnArgs): Promise<WorkerResult> {
+    const run = this.store.getOrchRun(spawn.runId)
+    const chatId = run?.config.originChatId
+    const subagentId = run?.config.workerSubagentId
+    if (!chatId || !subagentId) {
+      return { kind: "failed", error: "orchestration run missing originChatId / workerSubagentId" }
+    }
+    const subagent = this.getSubagents().find((s) => s.id === subagentId)
+    if (!subagent) return { kind: "failed", error: `orchestration worker subagent "${subagentId}" not found` }
+    if (!this.store.getChat(chatId)) return { kind: "failed", error: `orchestration origin chat ${chatId} not found` }
+
+    const providerRun = this.buildSubagentProviderRunForChat({
+      subagent,
+      chatId,
+      primer: null,
+      userInstruction: spawn.prompt,
+      runId: `${spawn.runId}:${spawn.workerId}`,
+      abortSignal: spawn.abortSignal,
+      depth: 0,
+      ancestorSubagentIds: [],
+      parentUserMessageId: spawn.runId,
+      cwdOverride: spawn.cwd,
+    })
+    try {
+      if (!(await providerRun.authReady())) {
+        return { kind: "failed", error: "orchestration worker auth not ready" }
+      }
+      const result = await providerRun.start(() => undefined, () => undefined)
+      return { kind: "completed", text: result.text }
+    } catch (err) {
+      if (spawn.abortSignal.aborted) return { kind: "failed", error: "aborted" }
+      return { kind: "failed", error: err instanceof Error ? err.message : String(err) }
+    }
+  }
+
+  private buildOrchRunContext(chatId: string): OrchRunContext | null {
+    const chat = this.store.getChat(chatId)
+    if (!chat) return null
+    const project = this.store.getProject(chat.projectId)
+    if (!project) return null
+    return {
+      chatId,
+      repoRoot: project.localPath,
+      roster: this.getSubagents().map((s) => ({ id: s.id, name: s.name })),
+      defaultOrchSubagentId: this.getAppSettingsSnapshot().subagentRuntime?.defaultOrchSubagentId ?? null,
+    }
+  }
+
+  /**
+   * User-callable entry point (MCP `orch_run` + ws `orch.run`). Validates the
+   * task list into the fixed linear config, then starts the run. Returns the
+   * runId or the flat validation error list — never a partial run.
+   */
+  async runOrchestration(
+    chatId: string,
+    input: OrchRunInput,
+  ): Promise<{ ok: true; runId: string } | { ok: false; errors: string[] }> {
+    const context = this.buildOrchRunContext(chatId)
+    if (!context) return { ok: false, errors: [`chat ${chatId} not found or has no project`] }
+    const validation = validateOrchRun(input, context)
+    if (!validation.ok) return { ok: false, errors: validation.errors }
+    const runId = await this.orchestrationQueue.createRun(validation.resolved.config, validation.resolved.tasks)
+    return { ok: true, runId }
+  }
+
+  /** Cancel a run (MCP `orch_cancel_run` + ws `orch.cancelRun`). */
+  async cancelOrchRun(runId: string): Promise<void> {
+    await this.orchestrationQueue.cancelRun(runId)
+  }
+
+  /** Canonical run detail DTO (MCP `orch_run_status` + ws `orch.getRun`). */
+  getOrchRunDetail(runId: string): OrchRunDetail | null {
+    const snapshot = this.store.getOrchRun(runId)
+    return snapshot ? toOrchRunDetail(snapshot) : null
   }
 
   async enqueue(command: Extract<ClientCommand, { type: "message.enqueue" }>) {

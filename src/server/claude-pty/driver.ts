@@ -10,6 +10,7 @@ import { startKannaMcpHttpServer, buildMcpConfigJson, type KannaMcpHttpHandle } 
 import { KANNA_MCP_SERVER_NAME } from "../../shared/tools"
 import type { KannaMcpDelegationContext, SetupLoopHandlerResult } from "../kanna-mcp"
 import type { LoopSetupInput } from "../loop-template"
+import type { OrchRunDetail, OrchRunInput } from "../../shared/orchestration-types"
 import type { SubagentOrchestrator } from "../subagent-orchestrator"
 import { parseConfiguredContextWindowFromModelId, timestamped } from "../agent"
 import { KANNA_SYSTEM_PROMPT_APPEND } from "../../shared/kanna-system-prompt"
@@ -118,6 +119,10 @@ export interface StartClaudeSessionPtyArgs {
   stopLoop?: () => Promise<void>
   /** Evaluated at spawn: when true, add LOOP_BLOCKED tools to --disallowedTools. */
   isLoopArmed?: () => boolean
+  /** Backs the `orch_run` / `orch_run_status` / `orch_cancel_run` MCP tools. Main-chat only. */
+  runOrch?: (input: OrchRunInput) => Promise<{ ok: true; runId: string } | { ok: false; errors: string[] }>
+  cancelOrchRun?: (runId: string) => Promise<void>
+  getOrchRunStatus?: (runId: string) => OrchRunDetail | null
   /** Enabled user-defined MCP servers, written into mcp-config.json. */
   customMcpServers?: readonly McpServerConfig[]
   /** Pre-resolved oauth bearer tokens keyed by server id. */
@@ -489,6 +494,9 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
         delegationContext: args.delegationContext,
         setupLoop: args.setupLoop,
         stopLoop: args.stopLoop,
+        runOrch: args.runOrch,
+        cancelOrchRun: args.cancelOrchRun,
+        getOrchRunStatus: args.getOrchRunStatus,
         // PTY has no canUseTool hook — the durable approval protocol is the
         // only host path for AskUserQuestion/ExitPlanMode. Force the shims
         // on regardless of KANNA_MCP_TOOL_CALLBACKS (issue #215). Paired

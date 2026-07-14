@@ -3,7 +3,7 @@ import type { Server } from "bun"
 import { isErrnoException } from "../shared/errors"
 import { getServerFile, serveHttp, statFile } from "./server-io.adapter"
 import { bin as cloudflaredBin } from "cloudflared"
-import { APP_NAME, getRuntimeProfile } from "../shared/branding"
+import { APP_NAME, getRuntimeProfile, LOG_PREFIX } from "../shared/branding"
 import {
   CLOUDFLARE_TUNNEL_DEFAULTS,
   UPLOAD_MAX_FILE_SIZE_MB_MAX,
@@ -475,6 +475,13 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
       }
       router.scheduleBroadcast()
     },
+  })
+
+  // Resume any orchestration runs interrupted by a restart: requeue in-flight
+  // tasks + rebuild worktree pool (idempotent). Fire-and-forget — the queue
+  // defers scheduling to a macrotask so this never blocks boot.
+  void agent.getOrchestrationQueue().recoverOnStartup().catch((err) => {
+    log.warn(`${LOG_PREFIX} orchestration recoverOnStartup failed`, { err: String(err) })
   })
 
   router = createWsRouter({

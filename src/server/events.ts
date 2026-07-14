@@ -581,6 +581,8 @@ export interface OrchTaskRecord {
   commitSha: string | null
   /** Last completed phase's joined output — resume context after gate/restart. */
   lastPhaseOutput: string | null
+  /** True while a verify step is in flight (verify_started, cleared on completed/terminal). */
+  verifying: boolean
   updatedAt: number
 }
 

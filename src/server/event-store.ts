@@ -29,6 +29,7 @@ import {
   createEmptyState,
 } from "./events"
 import type { OrchRunSnapshot, OrchTaskSnapshot } from "../shared/orchestration-types"
+import { isTaskEventType, nextRunStatus, nextTaskState } from "./orchestration-state-machine"
 import type { ChatPermissionPolicyOverride, ToolRequest, ToolRequestDecision, ToolRequestStatus } from "../shared/permission-policy"
 import { resolveLocalPath } from "./paths"
 import type { CloudflareTunnelEvent } from "./cloudflare-tunnel/events"
@@ -2275,6 +2276,8 @@ export class EventStore implements PushEventStore {
     await this.writeChain
   }
 
+  private readonly orchRunsSubscribers = new Set<() => void>()
+
   private applyOrchestrationEvent(event: OrchestrationEvent) {
     if (event.type === "orch_run_created") {
       const tasksById = new Map<string, OrchTaskRecord>()
@@ -2294,6 +2297,7 @@ export class EventStore implements PushEventStore {
           error: null,
           commitSha: null,
           lastPhaseOutput: null,
+          verifying: false,
           updatedAt: event.timestamp,
         })
       }
@@ -2314,8 +2318,15 @@ export class EventStore implements PushEventStore {
     if (!run) return
     run.eventLog.push(event)
     run.updatedAt = event.timestamp
-    if (event.type === "orch_run_completed") { run.status = "completed"; return }
-    if (event.type === "orch_run_cancelled") { run.status = "cancelled"; return }
+    if (event.type === "orch_run_completed" || event.type === "orch_run_cancelled") {
+      const trans = nextRunStatus(run.status, event.type)
+      if (!trans.ok) {
+        log.warn(`${LOG_PREFIX} dropped illegal orch run transition`, { runId: event.runId, from: run.status, event: event.type })
+        return
+      }
+      run.status = trans.next
+      return
+    }
     if (event.type === "orch_scope_overlap_flagged") return // observability-only, no state fold
     if (event.type === "orch_config_warning") return // observability-only, no state fold
     // Worktree pool fold (F13)
@@ -2334,6 +2345,16 @@ export class EventStore implements PushEventStore {
     }
     const task = run.tasksById.get(event.taskId)
     if (!task) return
+    // FSM guard: drop an illegal task transition rather than corrupt the read
+    // model. The engine only emits legal transitions, so this is a defensive
+    // invariant (also protects replay of an older/foreign log).
+    if (isTaskEventType(event.type)) {
+      const trans = nextTaskState(task.state, event.type)
+      if (!trans.ok) {
+        log.warn(`${LOG_PREFIX} dropped illegal orch task transition`, { runId: event.runId, taskId: event.taskId, from: task.state, event: event.type })
+        return
+      }
+    }
     task.updatedAt = event.timestamp
     const slotOf = (t: OrchTaskRecord) => run.worktrees.find((w) => w.path === t.worktreePath)
     switch (event.type) {
@@ -2352,6 +2373,7 @@ export class EventStore implements PushEventStore {
       case "orch_phase_started":
         task.state = "running"
         task.phaseIndex = event.phaseIndex
+        task.verifying = false
         break
       case "orch_phase_completed":
         task.lastPhaseOutput = event.output
@@ -2364,12 +2386,16 @@ export class EventStore implements PushEventStore {
         // reject: state stays gated; the engine appends orch_task_failed next
         break
       case "orch_verify_started":
+        task.verifying = true // observable stage; task stays "running"
+        break
       case "orch_verify_completed":
-        break // timeline-only (eventLog); task stays "running"
+        task.verifying = false
+        break
       case "orch_task_committed":
         task.state = "committed"
         task.ownerWorkerId = null
         task.commitSha = event.commitSha
+        task.verifying = false
         {
           const slot = slotOf(task)
           if (slot?.heldByTaskId === task.taskId) slot.heldByTaskId = null
@@ -2379,6 +2405,7 @@ export class EventStore implements PushEventStore {
         task.state = "failed"
         task.ownerWorkerId = null
         task.error = event.error
+        task.verifying = false
         {
           const slot = slotOf(task)
           if (slot?.heldByTaskId === task.taskId) slot.heldByTaskId = null
@@ -2389,6 +2416,7 @@ export class EventStore implements PushEventStore {
         // lives in its worktree — re-claim resumes the SAME slot.
         task.state = "queued"
         task.ownerWorkerId = null
+        task.verifying = false
         break
     }
   }
@@ -2401,7 +2429,25 @@ export class EventStore implements PushEventStore {
   appendOrchestrationEvent(event: OrchestrationEvent): Promise<void> {
     this.applyEvent(event)
     this.enqueueDiskAppend(this.orchLogPath, `${JSON.stringify(event)}\n`)
+    this.notifyOrchRunsChanged()
     return Promise.resolve()
+  }
+
+  /**
+   * Observe orchestration read-model changes. The callback fires after each
+   * live orch event is applied (not during boot replay — no subscribers yet).
+   * Mirrors the registry `.subscribe()` pattern; used by ws-router to push the
+   * `orch-runs` topic. Returns an unsubscribe fn.
+   */
+  subscribeOrchRuns(cb: () => void): () => void {
+    this.orchRunsSubscribers.add(cb)
+    return () => { this.orchRunsSubscribers.delete(cb) }
+  }
+
+  private notifyOrchRunsChanged(): void {
+    for (const cb of this.orchRunsSubscribers) {
+      try { cb() } catch (err) { log.warn(`${LOG_PREFIX} orch-runs subscriber threw`, { err }) }
+    }
   }
 
   getOrchRun(runId: string): OrchRunSnapshot | null {
@@ -2430,6 +2476,7 @@ export class EventStore implements PushEventStore {
         attempts: t.attempts,
         error: t.error,
         commitSha: t.commitSha,
+        verifying: t.verifying,
         updatedAt: t.updatedAt,
       }]
     })

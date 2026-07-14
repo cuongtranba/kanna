@@ -1387,6 +1387,8 @@ describe("ws-router", () => {
     const store = {
       state,
       getTunnelEvents: (_chatId: string) => [] as never[],
+      subscribeOrchRuns: () => () => {},
+      getOrchRuns: () => [],
       async setChatReadState(chatId: string, unread: boolean) {
         const chat = state.chatsById.get(chatId)
         if (!chat) throw new Error("Chat not found")
@@ -3216,7 +3218,7 @@ function makeAppSettingsStub(initial?: Partial<AppSettingsSnapshot>) {
 
 function makeTestRouter(appSettings: ReturnType<typeof makeAppSettingsStub>) {
   return createWsRouter({
-    store: { state: createEmptyState() } as never,
+    store: { state: createEmptyState(), subscribeOrchRuns: () => () => {}, getOrchRuns: () => [] } as never,
     agent: {
       getActiveStatuses: () => new Map(),
       getDrainingChatIds: () => new Set(),

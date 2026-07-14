@@ -24,9 +24,10 @@ import type { PtyInstancesSnapshot } from "../../shared/pty-instance"
 import type { ChatPermissionPolicyOverride, ToolRequestDecision } from "../../shared/permission-policy"
 import { usePtyInstancesStore } from "../stores/ptyInstancesStore"
 import { useWorkflowsStore } from "../stores/workflowsStore"
+import { useOrchRunsStore } from "../stores/orchRunsStore"
 import { useOpenRouterModelsStore } from "../stores/openrouterModelsStore"
 import { useKannaStateStore } from "../stores/kannaStateStore"
-import type { WorkflowsSnapshot } from "../../shared/protocol"
+import type { OrchRunsSnapshot, WorkflowsSnapshot } from "../../shared/protocol"
 import { log } from "../../shared/log"
 import type { AnyValue } from "../../shared/errors"
 import { isRecord } from "../../shared/errors"
@@ -1402,6 +1403,12 @@ export function useKannaState(activeChatId: string | null): KannaState {
       useWorkflowsStore.getState().setRuns(snapshot.chatId, snapshot.runs)
     })
   }, [activeChatId, socket])
+
+  useEffect(() => {
+    return socket.subscribe<OrchRunsSnapshot>({ type: "orch-runs" }, (snapshot) => {
+      useOrchRunsStore.getState().setRuns(snapshot.runs)
+    })
+  }, [socket])
 
   useEffect(() => {
     if (selectedProjectId) return

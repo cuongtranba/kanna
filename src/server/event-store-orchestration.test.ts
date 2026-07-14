@@ -167,7 +167,11 @@ describe("EventStore orchestration events", () => {
       workerId: "w-2", worktreePath: "/wt/t2", branch: "b2", baseSha: "base1",
     })
     await store.appendOrchestrationEvent({
-      v: 3, type: "orch_task_committed", timestamp: 4, runId: "r1", taskId: "t2",
+      v: 3, type: "orch_phase_started", timestamp: 4, runId: "r1", taskId: "t2",
+      phaseIndex: 0, phaseName: "implement", workerIds: ["w-2"],
+    })
+    await store.appendOrchestrationEvent({
+      v: 3, type: "orch_task_committed", timestamp: 5, runId: "r1", taskId: "t2",
       commitSha: null,
     })
     const pending = [...store.nonTerminalOrchTasks()]

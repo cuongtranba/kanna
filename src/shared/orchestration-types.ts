@@ -83,6 +83,18 @@ export interface OrchRunConfig {
    * tasks that borrow the slot. Null = none.
    */
   init: { command: string[]; timeoutMs: number } | null
+  /**
+   * Subagent id the host `StartWorker` spawns for every phase (user-callable
+   * wiring). Persisted in `orch_run_created` so the worker resolution survives
+   * restart. Absent = host falls back to its configured default worker.
+   */
+  workerSubagentId?: string
+  /**
+   * Chat that triggered this run (user-callable wiring). Persisted so the host
+   * worker resolves the originating project + OAuth after a restart. Absent for
+   * engine-only test runs.
+   */
+  originChatId?: string
 }
 
 /**
@@ -127,6 +139,8 @@ export interface OrchTaskSnapshot {
   attempts: number
   error: string | null
   commitSha: string | null
+  /** True while a verify step is in flight (folded from verify_started/completed). */
+  verifying: boolean
   updatedAt: number
 }
 
@@ -154,6 +168,69 @@ export interface OrchRunSnapshot {
   worktrees: OrchWorktreeSlot[]
   createdAt: number
   updatedAt: number
+}
+
+// ---------------------------------------------------------------------------
+// User-callable wiring: input contract + canonical output DTOs
+// ---------------------------------------------------------------------------
+
+/**
+ * The entire trigger surface for a user-callable run. A list of task prompts
+ * plus an optional verify command — everything else is a fixed server default
+ * (see `validateOrchRun`). No pipeline / worktree / gate knobs by design.
+ */
+export interface OrchRunInput {
+  tasks: string[]
+  verify?: string
+  subagentId?: string
+}
+
+/** The linear stage a task chip renders — a pure projection off FSM state. */
+export type OrchStage =
+  | "queued"
+  | "implement"
+  | "review"
+  | "fix"
+  | "verify"
+  | "committed"
+  | "failed"
+
+/** Per-status task tallies for a run summary. */
+export interface OrchTaskCounts {
+  total: number
+  queued: number
+  running: number
+  committed: number
+  failed: number
+}
+
+/** Lightweight run row for the list view + WS topic push. */
+export interface OrchRunSummary {
+  runId: string
+  title: string
+  status: OrchRunStatus
+  counts: OrchTaskCounts
+  createdAt: number
+  updatedAt: number
+}
+
+/** Per-task view carried in the run detail — FSM state + derived linear stage. */
+export interface OrchTaskView {
+  taskId: string
+  title: string
+  state: OrchTaskState
+  stage: OrchStage
+  phaseIndex: number
+  attempts: number
+  error: string | null
+  commitSha: string | null
+  updatedAt: number
+}
+
+/** Full drill-in payload for one run — the single shape agent + UI both read. */
+export interface OrchRunDetail extends OrchRunSummary {
+  tasks: OrchTaskView[]
+  verifyEnabled: boolean
 }
 
 export const DEFAULT_ORCH_PHASES: OrchPhaseSpec[] = [
