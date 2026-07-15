@@ -8,6 +8,19 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.2.0](https://github.com/cuongtranba/kanna/compare/v1.1.5...v1.2.0) (2026-07-15)
+
+
+### Features
+
+* **events:** capture run config + model on turn_started for tracing ([#538](https://github.com/cuongtranba/kanna/issues/538)) ([2c08808](https://github.com/cuongtranba/kanna/commit/2c08808e51b164130f480e2221886fc4241f11aa))
+* **orchestration:** make OrchestrationQueue user-callable (simple, linear, no-gate v1) ([#537](https://github.com/cuongtranba/kanna/issues/537)) ([34ac4aa](https://github.com/cuongtranba/kanna/commit/34ac4aaaea60291214077ee842bd7eb4eea110ea))
+
+
+### Bug Fixes
+
+* **agent:** gate background-task keep-alive on settle signal not deadline ([#539](https://github.com/cuongtranba/kanna/issues/539)) ([20c6e1f](https://github.com/cuongtranba/kanna/commit/20c6e1f01aefde45f350484e07ae4c4d35e2ed81))
+
 ## [1.1.5](https://github.com/cuongtranba/kanna/compare/v1.1.4...v1.1.5) (2026-07-13)
 
 
