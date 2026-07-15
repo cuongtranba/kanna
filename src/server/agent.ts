@@ -2521,7 +2521,14 @@ export class AgentCoordinator {
         entryId: userPromptEntry._id,
       })
     }
-    await this.store.recordTurnStarted(args.chatId)
+    await this.store.recordTurnStarted(args.chatId, {
+      provider: args.provider,
+      model: args.model,
+      ...(args.effort !== undefined ? { effort: args.effort } : {}),
+      ...(args.serviceTier !== undefined ? { serviceTier: args.serviceTier } : {}),
+      planMode: args.planMode,
+      driver: this.resolveClaudeDriverPreference(),
+    })
     logSendToStartingProfile(args.profile, "start_turn.turn_started_recorded", {
       chatId: args.chatId,
     })
