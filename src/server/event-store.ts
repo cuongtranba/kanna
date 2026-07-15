@@ -25,6 +25,7 @@ import {
   type SubagentRunEvent,
   type ToolRequestEvent,
   type TurnEvent,
+  type TurnRunConfig,
   cloneTranscriptEntries,
   createEmptyState,
 } from "./events"
@@ -1690,13 +1691,14 @@ export class EventStore implements PushEventStore {
     await this.append(this.queuedMessagesLogPath, event)
   }
 
-  async recordTurnStarted(chatId: string) {
+  async recordTurnStarted(chatId: string, runConfig?: TurnRunConfig) {
     this.requireChat(chatId)
     const event: TurnEvent = {
       v: STORE_VERSION,
       type: "turn_started",
       timestamp: Date.now(),
       chatId,
+      ...(runConfig ? { runConfig } : {}),
     }
     await this.append(this.turnsLogPath, event)
   }

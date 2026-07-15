@@ -315,6 +315,58 @@ describe("EventStore", () => {
     expect(reloaded.getChat(chat.id)?.unread).toBe(false)
   })
 
+  test("recordTurnStarted persists the run config for tracing", async () => {
+    const dataDir = await createTempDataDir()
+    const store = new EventStore(dataDir)
+    await store.initialize()
+
+    const project = await store.openProject("/tmp/project")
+    const chat = await store.createChat(project.id)
+
+    await store.recordTurnStarted(chat.id, {
+      provider: "claude",
+      model: "claude-opus-4-8",
+      effort: "high",
+      planMode: true,
+      driver: "pty",
+    })
+
+    const raw = await readFile(join(dataDir, "turns.jsonl"), "utf8")
+    const started = raw
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line) as Record<string, unknown>)
+      .find((event) => event.type === "turn_started")
+    expect(started).toBeDefined()
+    expect(started!.runConfig).toEqual({
+      provider: "claude",
+      model: "claude-opus-4-8",
+      effort: "high",
+      planMode: true,
+      driver: "pty",
+    })
+  })
+
+  test("recordTurnStarted omits runConfig when none is provided", async () => {
+    const dataDir = await createTempDataDir()
+    const store = new EventStore(dataDir)
+    await store.initialize()
+
+    const project = await store.openProject("/tmp/project")
+    const chat = await store.createChat(project.id)
+
+    await store.recordTurnStarted(chat.id)
+
+    const raw = await readFile(join(dataDir, "turns.jsonl"), "utf8")
+    const started = raw
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line) as Record<string, unknown>)
+      .find((event) => event.type === "turn_started")
+    expect(started).toBeDefined()
+    expect(started!.runConfig).toBeUndefined()
+  })
+
   test("preserves read state after a failed turn across restart", async () => {
     const dataDir = await createTempDataDir()
     const store = new EventStore(dataDir)

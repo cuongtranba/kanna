@@ -1,5 +1,6 @@
 import type {
   AgentProvider,
+  ClaudeDriverPreference,
   KannaStatus,
   ProjectSummary,
   ProviderUsage,
@@ -222,12 +223,28 @@ export type QueuedMessageEvent =
       queuedMessageId: string
     }
 
+/**
+ * Model + run config active when a turn starts. Recorded on `turn_started`
+ * so a turns.jsonl trace shows exactly which provider/model/driver/config
+ * executed each turn. Optional: historical events predate this field.
+ */
+export interface TurnRunConfig {
+  provider: AgentProvider
+  model: string
+  effort?: string
+  serviceTier?: "fast"
+  planMode: boolean
+  /** Resolved claude driver preference at turn start (claude turns only meaningful). */
+  driver: ClaudeDriverPreference
+}
+
 export type TurnEvent =
   | {
       v: 3
       type: "turn_started"
       timestamp: number
       chatId: string
+      runConfig?: TurnRunConfig
     }
   | {
       v: 3

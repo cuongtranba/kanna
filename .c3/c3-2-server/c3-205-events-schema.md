@@ -1,7 +1,7 @@
 ---
 id: c3-205
 c3-version: 4
-c3-seal: db3dfa4b3eb72c604aa38aa59400c31112150e89eb4d57d63669097cfb003e38
+c3-seal: 77705ade135323a25c8c189c8a3e80b886602453d384445ca93f4f898122c963
 title: events-schema
 type: component
 category: foundation
@@ -67,6 +67,7 @@ Owns the discriminated union of every event written to the JSONL log: project ev
 | Event constructors | OUT | Helpers returning typed events with timestamps | c3-210 | src/server/events.ts |
 | share.token_minted event | OUT | { tokenId, chatId, expiresAt, createdAt, createdBy } — appended to shares.jsonl (owned by c3-206) when a share link is created | c3-228 | src/server/events.ts |
 | share.token_revoked event | OUT | { tokenId, revokedAt } — appended to shares.jsonl when a link is revoked or expires | c3-228 | src/server/events.ts |
+| turn_started.runConfig | OUT | Optional { provider, model, effort?, serviceTier?, planMode, driver } capturing the model + run config active when a turn starts; appended to turns.jsonl (owned by c3-206). Optional so historical events replay unchanged | c3-206 | src/server/events.ts |
 
 ## Change Safety
 
