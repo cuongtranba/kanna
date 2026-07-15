@@ -1,6 +1,7 @@
-import { useCallback, useState } from "react"
+import { useCallback } from "react"
 import { Boxes } from "lucide-react"
 import type { OrchRunInput } from "../../shared/orchestration-types"
+import { OrchNewRunDialogStore } from "./OrchNewRunDialog.store"
 import { Button } from "../components/ui/button"
 import { Input } from "../components/ui/input"
 import { Textarea } from "../components/ui/textarea"
@@ -26,21 +27,27 @@ function parseTasks(raw: string): string[] {
   return raw.split("\n").map((l) => l.trim()).filter((l) => l.length > 0)
 }
 
-export function OrchNewRunDialog({ open, onOpenChange, onSubmit }: OrchNewRunDialogProps) {
-  const [tasksText, setTasksText] = useState("")
-  const [verify, setVerify] = useState("")
-  const [errors, setErrors] = useState<string[]>([])
-  const [submitting, setSubmitting] = useState(false)
+export function OrchNewRunDialog(props: OrchNewRunDialogProps) {
+  return (
+    <OrchNewRunDialogStore.Provider init={undefined}>
+      <OrchNewRunDialogInner {...props} />
+    </OrchNewRunDialogStore.Provider>
+  )
+}
+
+function OrchNewRunDialogInner({ open, onOpenChange, onSubmit }: OrchNewRunDialogProps) {
+  const tasksText = OrchNewRunDialogStore.useScopedStore((s) => s.tasksText)
+  const verify = OrchNewRunDialogStore.useScopedStore((s) => s.verify)
+  const errors = OrchNewRunDialogStore.useScopedStore((s) => s.errors)
+  const submitting = OrchNewRunDialogStore.useScopedStore((s) => s.submitting)
+  const setTasksText = OrchNewRunDialogStore.useScopedStore((s) => s.setTasksText)
+  const setVerify = OrchNewRunDialogStore.useScopedStore((s) => s.setVerify)
+  const setErrors = OrchNewRunDialogStore.useScopedStore((s) => s.setErrors)
+  const setSubmitting = OrchNewRunDialogStore.useScopedStore((s) => s.setSubmitting)
+  const reset = OrchNewRunDialogStore.useScopedStore((s) => s.reset)
 
   const tasks = parseTasks(tasksText)
   const canSubmit = tasks.length > 0 && !submitting
-
-  const reset = useCallback(() => {
-    setTasksText("")
-    setVerify("")
-    setErrors([])
-    setSubmitting(false)
-  }, [])
 
   const handleSubmit = useCallback(async () => {
     setErrors([])
@@ -55,7 +62,7 @@ export function OrchNewRunDialog({ open, onOpenChange, onSubmit }: OrchNewRunDia
       setErrors(result.errors)
       setSubmitting(false)
     }
-  }, [tasksText, verify, onSubmit, onOpenChange, reset])
+  }, [tasksText, verify, onSubmit, onOpenChange, reset, setErrors, setSubmitting])
 
   return (
     <Dialog

@@ -1,10 +1,11 @@
-import { useCallback, useState } from "react"
+import { useCallback } from "react"
 import { Boxes, Plus } from "lucide-react"
 import type { OrchRunDetail, OrchRunInput } from "../../shared/orchestration-types"
 import type { KannaSocket } from "./socket"
 import { useOrchRunsStore, selectOrchRuns } from "../stores/orchRunsStore"
 import { OrchestrationSectionWithDetail } from "./OrchestrationSection"
 import { OrchNewRunDialog, type OrchRunSubmitResult } from "./OrchNewRunDialog"
+import { OrchestrationPanelStore } from "./OrchestrationPanel.store"
 import { Button } from "../components/ui/button"
 
 /**
@@ -13,9 +14,18 @@ import { Button } from "../components/ui/button"
  * global store and dispatches WS commands via the socket. Renders nothing when
  * there are no runs and no chat to start one from.
  */
-export function OrchestrationPanel({ socket, chatId }: { socket: KannaSocket; chatId: string | null }) {
+export function OrchestrationPanel(props: { socket: KannaSocket; chatId: string | null }) {
+  return (
+    <OrchestrationPanelStore.Provider init={undefined}>
+      <OrchestrationPanelInner {...props} />
+    </OrchestrationPanelStore.Provider>
+  )
+}
+
+function OrchestrationPanelInner({ socket, chatId }: { socket: KannaSocket; chatId: string | null }) {
   const runs = useOrchRunsStore(selectOrchRuns)
-  const [dialogOpen, setDialogOpen] = useState(false)
+  const dialogOpen = OrchestrationPanelStore.useScopedStore((s) => s.dialogOpen)
+  const setDialogOpen = OrchestrationPanelStore.useScopedStore((s) => s.setDialogOpen)
 
   const getRunDetail = useCallback(
     (runId: string) => socket.command<OrchRunDetail | null>({ type: "orch.getRun", runId }),
