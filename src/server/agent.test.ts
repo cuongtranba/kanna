@@ -151,6 +151,7 @@ describe("normalizeClaudeStreamMessage", () => {
     if (entries[0]?.kind !== "status") throw new Error("unexpected entry")
     expect(entries[0].status).toContain("completed")
     expect(entries[0].status).toContain("CI checks all green")
+    expect(entries[0].backgroundTaskId).toBe("task-7")
   })
 
   test("a failed background task notification still surfaces its status", () => {
@@ -165,6 +166,7 @@ describe("normalizeClaudeStreamMessage", () => {
     expect(entries).toHaveLength(1)
     if (entries[0]?.kind !== "status") throw new Error("unexpected entry")
     expect(entries[0].status).toContain("failed")
+    expect(entries[0].backgroundTaskId).toBe("task-8")
   })
 
   test("an ambient (skip_transcript) task notification is hidden from the inline transcript", () => {
@@ -180,6 +182,7 @@ describe("normalizeClaudeStreamMessage", () => {
     expect(entries).toHaveLength(1)
     if (entries[0]?.kind !== "status") throw new Error("unexpected entry")
     expect(entries[0].hidden).toBe(true)
+    expect(entries[0].backgroundTaskId).toBe("task-9")
   })
 
   test("normalizes Claude usage snapshots from SDK usage payloads", () => {
@@ -2523,6 +2526,106 @@ describe("AgentCoordinator claude integration", () => {
 
     expect(session.backgroundTaskIds.size).toBe(0)
     expect(session.backgroundTaskDeadlineAt).toBe(0)
+
+    coordinator.dispose()
+  })
+
+  test("settle notification removes its task id from the set and allows immediate reap", async () => {
+    const store = createFakeStore()
+    let closeCount = 0
+    // Expose the events queue so the test can push settle entries at a
+    // deterministic time (after the launch turn ends), avoiding setTimeout races.
+    let sessionEvents!: AsyncEventQueue<any>
+    const coordinator = new AgentCoordinator({
+      store: store as never,
+      onStateChange: () => {},
+      claudeSessionLifecycle: { idleMs: 10, maxResidentSessions: 4, sweepIntervalMs: 0, backgroundTaskMaxMs: 100_000 },
+      startClaudeSession: async () => {
+        const events = new AsyncEventQueue<any>()
+        sessionEvents = events
+        return {
+          provider: "claude",
+          stream: events,
+          getAccountInfo: async () => null,
+          interrupt: async () => {},
+          close: () => { closeCount += 1; events.close() },
+          setModel: async () => {},
+          setPermissionMode: async () => {},
+          getSupportedCommands: async () => [],
+          sendPrompt: async () => {
+            events.push({
+              type: "transcript" as const,
+              entry: timestamped({
+                kind: "tool_result",
+                toolId: "toolu_bg1",
+                content: "Command running in background with ID: bgTask1. Output is being written to: /tmp/t1.output. You will be notified when it completes.",
+                isError: false,
+              }),
+            })
+            events.push({
+              type: "transcript" as const,
+              entry: timestamped({
+                kind: "tool_result",
+                toolId: "toolu_bg2",
+                content: "Command running in background with ID: bgTask2. Output is being written to: /tmp/t2.output. You will be notified when it completes.",
+                isError: false,
+              }),
+            })
+            events.push({
+              type: "transcript" as const,
+              entry: timestamped({ kind: "result", subtype: "success", isError: false, durationMs: 0, result: "" }),
+            })
+          },
+        }
+      },
+    })
+
+    await coordinator.send({
+      type: "chat.send",
+      chatId: "chat-1",
+      provider: "claude",
+      content: "launch two bg tasks",
+      model: "claude-opus-4-1",
+    })
+    await waitFor(() => store.turnFinishedCount === 1)
+
+    const session = coordinator.claudeSessions.get("chat-1") as any
+    expect(session.backgroundTaskIds.size).toBe(2)
+    session.lastUsedAt = 0
+
+    // Session not reapable while tasks pending.
+    ;(coordinator as any).sweepIdleClaudeSessions(Date.now())
+    expect(coordinator.claudeSessions.has("chat-1")).toBe(true)
+
+    // Push first settle — set shrinks to 1, still not reapable.
+    sessionEvents.push({
+      type: "transcript" as const,
+      entry: timestamped({
+        kind: "status",
+        status: "Background task completed: task one done",
+        backgroundTaskId: "bgTask1",
+      }),
+    })
+    await waitFor(() => session.backgroundTaskIds.size === 1)
+    expect(session.backgroundTaskIds.has("bgTask1")).toBe(false)
+    expect(session.backgroundTaskIds.has("bgTask2")).toBe(true)
+    ;(coordinator as any).sweepIdleClaudeSessions(Date.now())
+    expect(coordinator.claudeSessions.has("chat-1")).toBe(true)
+
+    // Push second settle — set empty, deadline cleared, session reaps immediately.
+    sessionEvents.push({
+      type: "transcript" as const,
+      entry: timestamped({
+        kind: "status",
+        status: "Background task completed: task two done",
+        backgroundTaskId: "bgTask2",
+      }),
+    })
+    await waitFor(() => session.backgroundTaskIds.size === 0)
+    expect(session.backgroundTaskDeadlineAt).toBe(0)
+    ;(coordinator as any).sweepIdleClaudeSessions(Date.now())
+    expect(coordinator.claudeSessions.has("chat-1")).toBe(false)
+    expect(closeCount).toBe(1)
 
     coordinator.dispose()
   })

@@ -983,11 +983,13 @@ export function normalizeClaudeStreamMessage(message: ClaudeRawSdkMessage): Tran
     const summary = typeof message.summary === "string" && message.summary.length > 0
       ? message.summary
       : "(no summary)"
+    const taskId = typeof message.task_id === "string" ? message.task_id : undefined
     return [timestamped({
       kind: "status",
       messageId,
       status: `Background task ${taskStatus}: ${summary}`,
       hidden: message.skip_transcript === true ? true : undefined,
+      backgroundTaskId: taskId,
       debugRaw,
     })]
   }
@@ -2004,16 +2006,13 @@ export class AgentCoordinator {
   }
 
   /**
-   * True while the session has a Claude-Code background Bash task that launched
-   * within the keep-alive window. Such a task runs as a child of the PTY process
-   * and signals completion via a `<task-notification>` transcript line that the
-   * continuous tail re-enters as a real turn — but only if the process is still
-   * alive. Without this guard the idle reaper / budget enforcer would close the
-   * process mid-flight (the reported failure: a CI-wait job, the turn ended, and
-   * the session reaped exactly one idle window later, killing the child before it
-   * could notify). Deadline-based because Kanna observes no per-id completion in
-   * its entry stream; the bound matches `hasLiveWorkflow`'s "eventually reaps"
-   * model. Lazily clears the set once the deadline has passed.
+   * True while the session has at least one Claude-Code background Bash task
+   * that has not yet settled. Primary gate is set size > 0: settle events
+   * (task_notification) remove their id from the set, so the guard clears the
+   * moment the last task reports. The deadline is a zombie backstop only —
+   * it fires when a settle notification is genuinely lost (SDK crash / dropped
+   * message) and is reset on every launch and settle, so it never expires
+   * during normal execution regardless of task duration.
    */
   private hasPendingBackgroundTask(session: ClaudeSessionState, now: number): boolean {
     if (session.backgroundTaskIds.size === 0) return false
@@ -3639,10 +3638,12 @@ export class AgentCoordinator {
           }
         }
         await this.store.appendMessage(session.chatId, event.entry)
-        // Arm the background-task keep-alive guard the moment Claude Code reports
-        // a `Bash(run_in_background)` launch. Shared SDK + PTY path: keeps the
-        // claude session warm past the idle window so the later
-        // `<task-notification>` can re-enter the agent.
+        // Background-task keep-alive guard (SDK + PTY).
+        // On launch: add the task id and refresh the zombie-backstop deadline.
+        // On settle (task_notification): remove the id — gate primary signal is
+        // set size>0, not the clock. The deadline (default 4h) is refreshed on
+        // every launch and settle so it only fires when a notification is truly
+        // lost (SDK crash / dropped message), never during normal execution.
         if (event.entry.kind === "tool_result") {
           const launchedIds = backgroundTaskIdsFromToolResult(
             event.entry.content,
@@ -3652,6 +3653,16 @@ export class AgentCoordinator {
             session.backgroundTaskDeadlineAt = Date.now() + this.resolveBackgroundTaskMaxMs()
             this.emitStateChange(session.chatId)
           }
+        }
+        if (event.entry.kind === "status" && event.entry.backgroundTaskId) {
+          const settledId = event.entry.backgroundTaskId
+          session.backgroundTaskIds.delete(settledId)
+          if (session.backgroundTaskIds.size > 0) {
+            session.backgroundTaskDeadlineAt = Date.now() + this.resolveBackgroundTaskMaxMs()
+          } else {
+            session.backgroundTaskDeadlineAt = 0
+          }
+          this.emitStateChange(session.chatId)
         }
         const active = this.activeTurns.get(session.chatId)
         if (event.entry.kind === "system_init" && active) {
