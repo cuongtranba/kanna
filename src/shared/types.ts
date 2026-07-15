@@ -1373,6 +1373,7 @@ export interface ResultEntry extends TranscriptEntryBase {
 export interface StatusEntry extends TranscriptEntryBase {
   kind: "status"
   status: string
+  backgroundTaskId?: string
 }
 
 export interface ContextWindowUsageSnapshot {
