@@ -963,6 +963,12 @@ export interface AppSettingsSnapshot {
 export interface SubagentRuntimeSettings {
   runTimeoutMs: number
   defaultLoopSubagentId: string | null
+  /**
+   * Subagent an orchestration run (orch_run) delegates each phase to when the
+   * caller omits an explicit id. Optional: absent = no default (the caller must
+   * pass `subagentId`). Full settings CRUD/UI is a later phase.
+   */
+  defaultOrchSubagentId?: string | null
 }
 
 export interface AppSettingsPatch {

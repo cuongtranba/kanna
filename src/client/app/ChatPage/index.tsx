@@ -34,6 +34,7 @@ import { useShareStore } from "../../components/share/share-store"
 import type { ShareCommandResult } from "../../../shared/session-share/protocol"
 import { ChatInputDock } from "./ChatInputDock"
 import { ChatTranscriptViewport } from "./ChatTranscriptViewport"
+import { OrchestrationPanel } from "../OrchestrationPanel"
 import { TerminalWorkspaceShell } from "./TerminalWorkspaceShell"
 import { useChatPageSidebarActions, EMPTY_DIFF_SNAPSHOT } from "./useChatPageSidebarActions"
 import {
@@ -1050,6 +1051,7 @@ export function ChatPage() {
           onCancelSubagentRun={handleCancelSubagentRun}
           workflowRuns={workflowRuns.length > 0 ? workflowRuns : undefined}
           getWorkflowRunDetail={handleGetWorkflowRunDetail}
+          orchestrationPanel={<OrchestrationPanel socket={state.socket} chatId={state.activeChatId} />}
           getSubagentTranscript={handleGetSubagentTranscript}
           showScrollButton={showScrollToBottom && state.messages.length > 0}
           onIsAtEndChange={onIsAtEndChange}

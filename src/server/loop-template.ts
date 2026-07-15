@@ -11,8 +11,7 @@
  * confines. File creation happens in `loop-template-io.adapter.ts`.
  */
 
-import path from "node:path"
-import { parse as shellParse } from "shell-quote"
+import { confinePathToDir, shellCommandIsParseable } from "./input-validation"
 
 const DEFAULT_TRACKING_FILE = "PROGRESS.md"
 const MAX_GOAL_LEN = 500
@@ -69,47 +68,12 @@ function isNonBlankString<T>(v: T): v is T & string {
   return typeof v === "string" && v.trim().length > 0
 }
 
-function shellCommandIsParseable(cmd: string): boolean {
-  // Balanced quotes: shell-quote is intentionally lenient (an unclosed quote
-  // parses to two tokens rather than throwing), so we enforce quote balance
-  // explicitly. Ignore quote chars escaped with a preceding backslash.
-  let singles = 0
-  let doubles = 0
-  for (let i = 0; i < cmd.length; i += 1) {
-    const ch = cmd[i]
-    if (ch === "\\") { i += 1; continue }
-    if (ch === "'") singles += 1
-    else if (ch === "\"") doubles += 1
-  }
-  if (singles % 2 !== 0 || doubles % 2 !== 0) return false
-
-  try {
-    const tokens = shellParse(cmd)
-    // Empty token list = all-whitespace or comment-only line: reject.
-    return tokens.length > 0
-  } catch {
-    return false
-  }
-}
-
 /** Resolve a user-supplied tracking-file path against `cwd`; reject escapes. */
 function resolveTrackingFile(
   input: string | undefined,
   cwd: string,
 ): { abs: string; rel: string } | { error: string } {
-  const raw = (input ?? DEFAULT_TRACKING_FILE).trim()
-  if (raw === "") return { error: "trackingFile is blank" }
-  const normalized = raw.replaceAll("\\", "/")
-  if (normalized.includes("\0")) return { error: "trackingFile contains a NUL byte" }
-  const cwdAbs = path.resolve(cwd)
-  const abs = path.isAbsolute(normalized)
-    ? path.resolve(normalized)
-    : path.resolve(cwdAbs, normalized)
-  const rel = path.relative(cwdAbs, abs)
-  if (rel === "" || rel.startsWith("..") || path.isAbsolute(rel)) {
-    return { error: `trackingFile must resolve inside the project cwd (${cwd})` }
-  }
-  return { abs, rel }
+  return confinePathToDir(input ?? DEFAULT_TRACKING_FILE, cwd, "trackingFile")
 }
 
 /** Deterministic prompt for the main agent, replayed each loop iteration. */

@@ -27,6 +27,7 @@ import {
 } from "./kanna-mcp-tools/delegate-subagent"
 import type { SubagentOrchestrator } from "./subagent-orchestrator"
 import type { LoopSetupInput } from "./loop-template"
+import type { OrchRunDetail, OrchRunInput } from "../shared/orchestration-types"
 import type { ToolCallbackService } from "./tool-callback"
 import type { ChatPermissionPolicy } from "../shared/permission-policy"
 import { POLICY_DEFAULT } from "../shared/permission-policy"
@@ -93,6 +94,15 @@ export interface KannaMcpArgs extends OfferDownloadArgs {
    * `setup_loop` (same main-chat gating). Omit to hide the tool.
    */
   stopLoop?: () => Promise<void>
+  /**
+   * Backs the `orch_run` / `orch_run_status` / `orch_cancel_run` MCP tools.
+   * Omit to hide them. Main-chat only (wired by the coordinator at depth 0).
+   * `runOrch` validates the task list into the fixed linear pipeline and starts
+   * the run; returns the runId or a flat error list.
+   */
+  runOrch?: (input: OrchRunInput) => Promise<{ ok: true; runId: string } | { ok: false; errors: string[] }>
+  cancelOrchRun?: (runId: string) => Promise<void>
+  getOrchRunStatus?: (runId: string) => OrchRunDetail | null
 }
 
 export type SetupLoopHandlerResult =
@@ -540,6 +550,87 @@ function buildSetupLoopToolList(args: {
   return tools
 }
 
+const ORCH_RUN_DESCRIPTION =
+  "Start a parallel, multi-task coding run. Give a list of task prompts (one "
+  + "per task); each runs the SAME fixed linear pipeline (implement → review → "
+  + "fix → verify → commit) in its OWN isolated git worktree, in parallel. "
+  + "Optionally pass a `verify` shell command run before commit — a task whose "
+  + "change fails verify auto-retries the fix step. There are no gates and no "
+  + "config knobs: the flow is deterministic. Returns a runId; poll "
+  + "`orch_run_status` for progress."
+
+const ORCH_RUN_STATUS_DESCRIPTION =
+  "Get the current status of an orchestration run by runId: overall status, "
+  + "per-task state + linear stage (queued/implement/review/fix/verify/"
+  + "committed/failed), and commit shas."
+
+const ORCH_CANCEL_DESCRIPTION =
+  "Cancel an in-flight orchestration run by runId. Aborts every in-flight task "
+  + "worker; committed tasks are kept."
+
+function buildOrchToolList(args: {
+  runOrch?: (input: OrchRunInput) => Promise<{ ok: true; runId: string } | { ok: false; errors: string[] }>
+  cancelOrchRun?: (runId: string) => Promise<void>
+  getOrchRunStatus?: (runId: string) => OrchRunDetail | null
+  chatId: string | null
+}): KannaSdkToolList {
+  const { runOrch, cancelOrchRun, getOrchRunStatus, chatId } = args
+  if (!runOrch || !cancelOrchRun || !getOrchRunStatus || !chatId) return []
+  return [
+    tool(
+      "orch_run",
+      ORCH_RUN_DESCRIPTION,
+      {
+        tasks: z
+          .array(z.string().min(1))
+          .min(1)
+          .describe("Task prompts — one entry per task. Each runs in its own worktree in parallel."),
+        verify: z
+          .string()
+          .optional()
+          .describe("Optional shell command run before commit (exit 0 = pass). Example: 'bun test'."),
+        subagent_id: z
+          .string()
+          .optional()
+          .describe("Worker subagent id. Optional: falls back to the configured default orchestration subagent."),
+      },
+      async (input) => {
+        const result = await runOrch({ tasks: input.tasks, verify: input.verify, subagentId: input.subagent_id })
+        if (!result.ok) {
+          return {
+            isError: true as const,
+            content: [{ type: "text" as const, text: `orch_run rejected:\n- ${result.errors.join("\n- ")}` }],
+          }
+        }
+        return {
+          content: [{ type: "text" as const, text: `Orchestration run started. runId: ${result.runId}` }],
+        }
+      },
+    ),
+    tool(
+      "orch_run_status",
+      ORCH_RUN_STATUS_DESCRIPTION,
+      { run_id: z.string().min(1).describe("The runId returned by orch_run.") },
+      async (input) => {
+        const detail = getOrchRunStatus(input.run_id)
+        if (!detail) {
+          return { isError: true as const, content: [{ type: "text" as const, text: `run ${input.run_id} not found` }] }
+        }
+        return { content: [{ type: "text" as const, text: JSON.stringify(detail, null, 2) }] }
+      },
+    ),
+    tool(
+      "orch_cancel_run",
+      ORCH_CANCEL_DESCRIPTION,
+      { run_id: z.string().min(1).describe("The runId to cancel.") },
+      async (input) => {
+        await cancelOrchRun(input.run_id)
+        return { content: [{ type: "text" as const, text: `Orchestration run ${input.run_id} cancelled.` }] }
+      },
+    ),
+  ]
+}
+
 export function buildKannaMcpTools(args: KannaMcpArgs): KannaSdkToolList {
   const tunnelGateway = args.tunnelGateway ?? null
   const chatId = args.chatId ?? null
@@ -600,6 +691,12 @@ export function buildKannaMcpTools(args: KannaMcpArgs): KannaSdkToolList {
       chatId,
     }),
     ...buildSetupLoopToolList({ setupLoop: args.setupLoop, stopLoop: args.stopLoop, chatId }),
+    ...buildOrchToolList({
+      runOrch: args.runOrch,
+      cancelOrchRun: args.cancelOrchRun,
+      getOrchRunStatus: args.getOrchRunStatus,
+      chatId,
+    }),
     tool(
       "expose_port",
       EXPOSE_PORT_DESCRIPTION,

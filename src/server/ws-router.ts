@@ -27,6 +27,7 @@ import { ensureProjectDirectory } from "./project-directory.adapter"
 import { TerminalManager } from "./terminal-manager"
 import type { UpdateManager } from "./update-manager"
 import { deriveChatSnapshot, deriveLocalProjectsSnapshot, deriveSidebarData } from "./read-models"
+import { toOrchRunSummary } from "./orchestration-input"
 import { AUTH_DEFAULTS, CLAUDE_AUTH_DEFAULTS, CLAUDE_DRIVER_DEFAULTS, CLAUDE_PTY_LIFECYCLE_DEFAULTS, CLOUDFLARE_TUNNEL_DEFAULTS, DEFAULT_OPENROUTER_SDK_MODEL, UPLOAD_DEFAULTS } from "../shared/types"
 import type {
   AppSettingsPatch,
@@ -979,6 +980,18 @@ export function createWsRouter({
       }
     }
 
+    if (topic.type === "orch-runs") {
+      return {
+        v: PROTOCOL_VERSION,
+        type: "snapshot",
+        id,
+        snapshot: {
+          type: "orch-runs",
+          data: { runs: store.getOrchRuns().map(toOrchRunSummary) },
+        },
+      }
+    }
+
     return {
       v: PROTOCOL_VERSION,
       type: "snapshot",
@@ -1297,6 +1310,26 @@ export function createWsRouter({
       }
     }
   }) ?? (() => {})
+
+  const pushOrchRuns = () => {
+    for (const ws of sockets) {
+      const snapshotSignatures = ensureSnapshotSignatures(ws)
+      for (const [id, topic] of ws.data.subscriptions.entries()) {
+        if (topic.type !== "orch-runs") continue
+        const envelope = createEnvelope(id, topic, undefined, ws)
+        if (envelope.type !== "snapshot") continue
+        const signature = JSON.stringify(envelope.snapshot)
+        if (snapshotSignatures.get(id) === signature) continue
+        snapshotSignatures.set(id, signature)
+        send(ws, envelope)
+      }
+    }
+  }
+  // Optional like the registry subscriptions above: partial store fakes in
+  // tests may not implement it. The real EventStore always does.
+  const disposeOrchRuns: () => void = typeof store.subscribeOrchRuns === "function"
+    ? store.subscribeOrchRuns(pushOrchRuns)
+    : () => {}
 
   agent.setBackgroundErrorReporter?.(broadcastError)
 
@@ -2237,6 +2270,20 @@ export function createWsRouter({
           send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: entries })
           return
         }
+        case "orch.run": {
+          const result = await agent.runOrchestration(command.chatId, command.input)
+          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result })
+          return
+        }
+        case "orch.cancelRun": {
+          await agent.cancelOrchRun(command.runId)
+          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: { ok: true } })
+          return
+        }
+        case "orch.getRun": {
+          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: agent.getOrchRunDetail(command.runId) })
+          return
+        }
       }
 
       await broadcastSnapshots()
@@ -2322,6 +2369,7 @@ export function createWsRouter({
       disposeUpdateEvents()
       disposePtyInstances()
       disposeWorkflows()
+      disposeOrchRuns()
     },
   }
 }
