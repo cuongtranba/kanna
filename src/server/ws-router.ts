@@ -42,6 +42,7 @@ import type { PushManager } from "./push/push-manager"
 import type { SessionShareService } from "./session-share"
 import type { ShareCommandResult } from "../shared/session-share/protocol"
 import { handleSettingsCommand } from "./ws-router-settings"
+import { handleDiffCommand } from "./ws-router-diff"
 
 // Re-export skill utilities so existing callers (tests, server.ts, etc.) keep working.
 export {
@@ -1442,179 +1443,31 @@ export function createWsRouter({
           })
           return
         }
-        case "chat.refreshDiffs": {
-          const { project } = resolveChatProject(command.chatId)
-          const changed = await resolvedDiffStore.refreshSnapshot(project.id, project.localPath)
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
-          if (changed) {
-            void broadcastSnapshots()
-          }
-          return
-        }
-        case "chat.initGit": {
-          const { project } = resolveChatProject(command.chatId)
-          const result = await resolvedDiffStore.initializeGit({
-            projectId: project.id,
-            projectPath: project.localPath,
-          })
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result })
-          if (result.snapshotChanged) {
-            void broadcastSnapshots()
-          }
-          return
-        }
-        case "chat.getGitHubPublishInfo": {
-          const { project } = resolveChatProject(command.chatId)
-          const result = await resolvedDiffStore.getGitHubPublishInfo({
-            projectPath: project.localPath,
-          })
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result })
-          return
-        }
-        case "chat.checkGitHubRepoAvailability": {
-          const result = await resolvedDiffStore.checkGitHubRepoAvailability({
-            owner: command.owner,
-            name: command.name,
-          })
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result })
-          return
-        }
-        case "chat.publishToGitHub": {
-          const { project } = resolveChatProject(command.chatId)
-          const result = await resolvedDiffStore.publishToGitHub({
-            projectId: project.id,
-            projectPath: project.localPath,
-            owner: command.owner,
-            name: command.name,
-            visibility: command.visibility,
-            description: command.description,
-          })
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result })
-          if (result.snapshotChanged) {
-            void broadcastSnapshots()
-          }
-          return
-        }
-        case "chat.listBranches": {
-          const { project } = resolveChatProject(command.chatId)
-          const result = await resolvedDiffStore.listBranches({
-            projectPath: project.localPath,
-          })
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result })
-          return
-        }
-        case "chat.previewMergeBranch": {
-          const { project } = resolveChatProject(command.chatId)
-          const result = await resolvedDiffStore.previewMergeBranch({
-            projectPath: project.localPath,
-            branch: command.branch,
-          })
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result })
-          return
-        }
-        case "chat.mergeBranch": {
-          const { project } = resolveChatProject(command.chatId)
-          const result = await resolvedDiffStore.mergeBranch({
-            projectId: project.id,
-            projectPath: project.localPath,
-            branch: command.branch,
-          })
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result })
-          if (result.snapshotChanged) {
-            void broadcastSnapshots()
-          }
-          return
-        }
-        case "chat.checkoutBranch": {
-          const { project } = resolveChatProject(command.chatId)
-          const result = await resolvedDiffStore.checkoutBranch({
-            projectId: project.id,
-            projectPath: project.localPath,
-            branch: command.branch,
-            bringChanges: command.bringChanges,
-          })
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result })
-          if (result.snapshotChanged) {
-            void broadcastSnapshots()
-          }
-          return
-        }
-        case "chat.syncBranch": {
-          const { project } = resolveChatProject(command.chatId)
-          const result = await resolvedDiffStore.syncBranch({
-            projectId: project.id,
-            projectPath: project.localPath,
-            action: command.action,
-          })
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result })
-          if (result.snapshotChanged) {
-            void broadcastSnapshots()
-          }
-          return
-        }
-        case "chat.createBranch": {
-          const { project } = resolveChatProject(command.chatId)
-          const result = await resolvedDiffStore.createBranch({
-            projectId: project.id,
-            projectPath: project.localPath,
-            name: command.name,
-            baseBranchName: command.baseBranchName,
-          })
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result })
-          if (result.snapshotChanged) {
-            void broadcastSnapshots()
-          }
-          return
-        }
-        case "chat.generateCommitMessage": {
-          const { project } = resolveChatProject(command.chatId)
-          const result = await resolvedDiffStore.generateCommitMessage({
-            projectPath: project.localPath,
-            paths: command.paths,
-          })
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result })
-          return
-        }
-        case "chat.commitDiffs": {
-          const { project } = resolveChatProject(command.chatId)
-          const result = await resolvedDiffStore.commitFiles({
-            projectId: project.id,
-            projectPath: project.localPath,
-            paths: command.paths,
-            summary: command.summary,
-            description: command.description,
-            mode: command.mode,
-          })
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result })
-          if (result.snapshotChanged) {
-            void broadcastSnapshots()
-          }
-          return
-        }
-        case "chat.discardDiffFile": {
-          const { project } = resolveChatProject(command.chatId)
-          const result = await resolvedDiffStore.discardFile({
-            projectId: project.id,
-            projectPath: project.localPath,
-            path: command.path,
-          })
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result })
-          if (result.snapshotChanged) {
-            void broadcastSnapshots()
-          }
-          return
-        }
+        case "chat.refreshDiffs":
+        case "chat.initGit":
+        case "chat.getGitHubPublishInfo":
+        case "chat.checkGitHubRepoAvailability":
+        case "chat.publishToGitHub":
+        case "chat.listBranches":
+        case "chat.previewMergeBranch":
+        case "chat.mergeBranch":
+        case "chat.checkoutBranch":
+        case "chat.syncBranch":
+        case "chat.createBranch":
+        case "chat.generateCommitMessage":
+        case "chat.commitDiffs":
+        case "chat.discardDiffFile":
         case "chat.ignoreDiffFile": {
-          const { project } = resolveChatProject(command.chatId)
-          const result = await resolvedDiffStore.ignoreFile({
-            projectId: project.id,
-            projectPath: project.localPath,
-            path: command.path,
-          })
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result })
-          if (result.snapshotChanged) {
-            void broadcastSnapshots()
-          }
+          await handleDiffCommand(
+            {
+              resolvedDiffStore,
+              resolveChatProject,
+              send: (envelope) => send(ws, envelope),
+              broadcastSnapshots,
+            },
+            command,
+            id,
+          )
           return
         }
         case "chat.cancel": {
