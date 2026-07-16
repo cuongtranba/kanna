@@ -1,6 +1,6 @@
 ---
 id: c3-225
-c3-seal: 6416eadec0eae318a3d9f7016dbdcced2f25c99daff088a2f8091d58c3487665
+c3-seal: 0711555c04550224bd99f1f3bf369cf0edeab9725485c0818bf809509c044040
 title: claude-pty-driver
 type: component
 category: feature
@@ -108,7 +108,7 @@ Owns the Claude CLI PTY transport: spawns the `claude` subprocess (after the smo
 | src/server/claude-pty/tui-control.ts | Contract (TUI prompt input + dialog dismissal) | NBSP marker matching, postDismissOffset reference guard | src/server/claude-pty/tui-control.ts |
 | src/server/claude-pty/pty-cli-args.ts | Contract (Dev-channels CLI flag) | Flag assembly | src/server/claude-pty/pty-cli-args.ts |
 | src/server/claude-pty/pty-memory-sampler.adapter.ts | Contract | ps invocation + parse + tree-RSS sum; ports-and-adapters seal exemption | src/server/claude-pty/pty-memory-sampler.adapter.ts |
-| src/server/claude-pty/driver.test.ts | Change Safety | Test cases per surface | src/server/claude-pty/driver.test.ts |
-| src/server/claude-pty/tui-control.test.ts | Change Safety | Dialog dismissal + reference-guard coverage | src/server/claude-pty/tui-control.test.ts |
-| src/server/claude-pty/pty-cli-args.test.ts | Change Safety | Channel flag presence/absence per session kind | src/server/claude-pty/pty-cli-args.test.ts |
-| src/server/claude-pty/pty-memory-sampler.adapter.test.ts | Change Safety | Parser + tree-collect + integration coverage for sampler | src/server/claude-pty/pty-memory-sampler.adapter.test.ts |
+| src/server/claude-pty/driver.test.ts | Contract | Test cases per surface | src/server/claude-pty/driver.test.ts |
+| src/server/claude-pty/tui-control.test.ts | Contract | Dialog dismissal + reference-guard coverage | src/server/claude-pty/tui-control.test.ts |
+| src/server/claude-pty/pty-cli-args.test.ts | Contract | Channel flag presence/absence per session kind | src/server/claude-pty/pty-cli-args.test.ts |
+| src/server/claude-pty/pty-memory-sampler.adapter.test.ts | Contract | Parser + tree-collect + integration coverage for sampler | src/server/claude-pty/pty-memory-sampler.adapter.test.ts |
