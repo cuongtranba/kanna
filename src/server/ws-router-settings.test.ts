@@ -66,8 +66,8 @@ async function makeDeps(tmpDir: string): Promise<SettingsCommandDeps & { sent: u
       writePatch: async () => snapshot,
       setCloudflareTunnel: async () => snapshot,
       setClaudeAuth: async () => snapshot,
-      createSubagent: async () => ({ id: "s1", name: "Test", description: undefined, instructions: "", provider: "claude" as const, model: "claude-haiku-4-5-20251001", modelOptions: {}, planMode: false, workingDir: undefined, allowedPaths: undefined, triggerMode: "auto" as const, maxTurns: undefined, contextScope: "full" as const, createdAt: 1, updatedAt: 1 }),
-      updateSubagent: async () => ({ id: "s1", name: "Test", description: undefined, instructions: "", provider: "claude" as const, model: "claude-haiku-4-5-20251001", modelOptions: {}, planMode: false, workingDir: undefined, allowedPaths: undefined, triggerMode: "auto" as const, maxTurns: undefined, contextScope: "full" as const, createdAt: 1, updatedAt: 1 }),
+      createSubagent: async () => ({ id: "s1", name: "Test" }) as unknown as Subagent,
+      updateSubagent: async () => ({ id: "s1", name: "Test" }) as unknown as Subagent,
       deleteSubagent: async () => {},
     },
     resolvedAnalytics: { track: mock(() => {}) },
@@ -88,7 +88,7 @@ async function makeDeps(tmpDir: string): Promise<SettingsCommandDeps & { sent: u
 
 describe("isSubagentValidationError", () => {
   test("returns true for validation error shape", () => {
-    const err: SubagentValidationError = { code: "INVALID_NAME", message: "bad name" }
+    const err: SubagentValidationError = { code: "EMPTY_NAME", message: "name is empty" }
     expect(isSubagentValidationError(err)).toBe(true)
   })
 
