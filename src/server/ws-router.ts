@@ -43,6 +43,7 @@ import type { SessionShareService } from "./session-share"
 import type { ShareCommandResult } from "../shared/session-share/protocol"
 import { handleSettingsCommand } from "./ws-router-settings"
 import { handleDiffCommand } from "./ws-router-diff"
+import { handleOrchCommand } from "./ws-router-orch"
 
 // Re-export skill utilities so existing callers (tests, server.ts, etc.) keep working.
 export {
@@ -1725,33 +1726,22 @@ export function createWsRouter({
           send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: { ok: true, kind: "list", data: { shares } } })
           return
         }
-        case "workflows.getRun": {
-          const run = workflowRegistry?.getRun(command.chatId, command.runId) ?? null
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: run })
-          return
-        }
-        case "workflows.getAgentTranscript": {
-          const entries = workflowRegistry?.getAgentTranscript(command.chatId, command.runId, command.agentId) ?? []
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: entries })
-          return
-        }
-        case "subagents.getRun": {
-          const entries = subagentTranscriptRegistry?.getAgentTranscript(command.chatId, command.agentId) ?? []
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: entries })
-          return
-        }
-        case "orch.run": {
-          const result = await agent.runOrchestration(command.chatId, command.input)
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result })
-          return
-        }
-        case "orch.cancelRun": {
-          await agent.cancelOrchRun(command.runId)
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: { ok: true } })
-          return
-        }
+        case "workflows.getRun":
+        case "workflows.getAgentTranscript":
+        case "subagents.getRun":
+        case "orch.run":
+        case "orch.cancelRun":
         case "orch.getRun": {
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: agent.getOrchRunDetail(command.runId) })
+          await handleOrchCommand(
+            {
+              agent,
+              workflowRegistry,
+              subagentTranscriptRegistry,
+              send: (envelope) => send(ws, envelope),
+            },
+            command,
+            id,
+          )
           return
         }
       }
