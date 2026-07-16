@@ -13,6 +13,7 @@ bash scripts/verify-decomp.sh
 
 ## Progress (latest first)
 
+- 2026-07-16 Extract context-window usage math to claude-usage-math.ts (normalizeClaudeUsageSnapshot, resolveFinalTurnUsage, maxClaudeContextWindowFromModelUsage, parseConfiguredContextWindowFromModelId, asRecord, asNumber) + 20 tests. agent.ts: 4614 → 4520 LOC.
 - 2026-07-16 Extract Claude SDK message normaliser (ClaudeRawSdkMessage, getClaudeAssistantMessageUsageId, normalizeClaudeStreamMessage, timestamped, private helpers: stringFromUnknown, normalizeMcpServerEntry, normalizeToolContent, isSdkToClaudeMessage) to claude-message-normalizer.ts + 18 tests. agent.ts: 4998 → 4613 LOC.
 - 2026-07-16 Extract mergeAppSettingsPatch + fallback builders (resolvedDiffStore, resolvedLlmProvider, resolvedAppSettings) to ws-router-defaults.ts (mergeAppSettingsPatch, buildInitialAppSettingsSnapshot, buildFallbackDiffStore, buildFallbackLlmProvider, buildResolvedAppSettings, ResolvedAppSettings) + 24 tests. ws-router.ts: 1548 → 1280 LOC.
 - 2026-07-16 Extract chat WS handlers to ws-router-chat.ts (chat.create/fork/rename/archive/unarchive/delete/markRead/setPolicyOverride/setDraftProtection/send/cancel/stopDraining/loadHistory/respondTool/toolRequestAnswer/respondSubagentTool/cancelSubagentRun — 17 handlers, ChatCommandDeps interface, handleChatCommand) + 18 tests. ws-router.ts: 1617 → 1548 LOC.
@@ -31,44 +32,45 @@ bash scripts/verify-decomp.sh
 
 ## Next chunk
 
-agent.ts (4613 LOC): extract the context-window usage math layer into
-`src/server/claude-usage-math.ts`. This is a cohesive, IO-free module covering
-all pure token-count normalisation and context-window computation logic.
+agent.ts (4520 LOC): extract the Claude SDK harness stream processor into
+`src/server/claude-harness-stream.ts`. This is a cohesive, IO-free async
+generator that bridges the raw `ClaudeRawSdkMessage` stream to typed `HarnessEvent`
+objects — including usage enrichment, cost computation, and limit detection.
 
-Symbols to move (lines ~481–664 in current agent.ts, ~98 lines):
-- `asRecord<T>(value)` private helper
-- `asNumber<T>(value)` private helper
-- `normalizeClaudeUsageSnapshot<T>(value, maxTokens?)` export function
-- `resolveFinalTurnUsage(latestUsageSnapshot, accumulatedUsage, lastKnownContextWindow)` export function
-- `maxClaudeContextWindowFromModelUsage<T>(modelUsage)` export function
-- `parseConfiguredContextWindowFromModelId(modelId)` export function
+Symbols to move (lines ~578–719 in current agent.ts, ~142 lines):
+- `createClaudeHarnessStream(q, configuredContextWindow?, resolveTurnPrice?)` export function
 
-No IO — all pure math / type-narrowing. No adapter suffix needed.
-Imports needed in the new file: `../shared/types` (ContextWindowUsageSnapshot),
-`../shared/errors` (isRecord, AnyValue). No imports from agent.ts.
+No IO — pure stream transformation. No adapter suffix needed.
+Imports needed in the new file:
+- `../shared/types` (ContextWindowUsageSnapshot, ProviderUsage)
+- `../shared/token-pricing` (computeCostUsd, ModelPrice)
+- `./harness-types` (HarnessEvent)
+- `./claude-message-normalizer` (ClaudeRawSdkMessage, normalizeClaudeStreamMessage, getClaudeAssistantMessageUsageId, timestamped)
+- `./claude-usage-math` (normalizeClaudeUsageSnapshot, resolveFinalTurnUsage, maxClaudeContextWindowFromModelUsage)
+- `./auto-continue/limit-detector` (ClaudeLimitDetector)
+No imports from agent.ts (no circular dependency).
+
 Keep re-exports in `agent.ts` for existing callers:
-- `src/server/agent.test.ts` imports all 4 exported functions from `./agent`
-- `src/server/claude-pty/jsonl-to-event.ts` imports `normalizeClaudeUsageSnapshot`,
-  `resolveFinalTurnUsage`, `maxClaudeContextWindowFromModelUsage` from `../agent`
-- `src/server/claude-pty/driver.ts` imports `parseConfiguredContextWindowFromModelId` from `../agent`
+- `src/server/agent.ts` itself (startClaudeSession at ~line 1120)
+- `src/server/claude-pty/parity-matrix.test.ts` (imports from `../agent`)
 
 Files:
-- **NEW** `src/server/claude-usage-math.ts` — all 6 symbols above
-- **CHANGED** `src/server/agent.ts` — remove the 6 symbols, add import +
-  re-export of the 4 public ones. agent.ts: ~4613 → ~4520 LOC.
-- **NEW** `src/server/claude-usage-math.test.ts` — ≥8 tests:
-  - `normalizeClaudeUsageSnapshot`: basic usage, empty usage → null, cache tokens,
-    reasoning tokens, zero usedTokens → null, maxTokens passed through
-  - `resolveFinalTurnUsage`: null latestUsageSnapshot → null, enriches totalProcessedTokens
-    when cumulative > live, adds maxTokens, returns latestUsageSnapshot unchanged when
-    cumulative ≤ live
-  - `maxClaudeContextWindowFromModelUsage`: finds max across multiple models, returns
-    undefined for empty/non-record
-  - `parseConfiguredContextWindowFromModelId`: [1m] suffix → 1_000_000, no suffix → undefined
+- **NEW** `src/server/claude-harness-stream.ts` — the single function above
+- **CHANGED** `src/server/agent.ts` — remove the function, add import +
+  re-export of `createClaudeHarnessStream`. agent.ts: 4520 → ~4378 LOC.
+- **NEW** `src/server/claude-harness-stream.test.ts` — ≥8 tests:
+  - session_token event emitted when sdkMessage.session_id is present
+  - rate_limit_event → rate_limit HarnessEvent
+  - assistant message → context_window_updated entry (timestamped)
+  - result message → enriched result entry with usage + costUsd
+  - normalizeClaudeStreamMessage entries are yielded as transcript events
+  - api_error in turn scrubs result body (apiErrorEmittedInTurn behavior)
+  - cancelled result → interrupted entry
+  - empty stream yields nothing
 
-Run `bun run lint src/server/claude-usage-math.ts src/server/agent.ts`,
+Run `bun run lint src/server/claude-harness-stream.ts src/server/agent.ts`,
 `bun run typecheck`,
-`bun test --conditions production src/server/claude-usage-math.test.ts`,
+`bun test --conditions production src/server/claude-harness-stream.test.ts`,
 commit, push, update this file.
 
 ## Worker rules (every subagent MUST follow)
