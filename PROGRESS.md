@@ -13,6 +13,7 @@ bash scripts/verify-decomp.sh
 
 ## Progress (latest first)
 
+- 2026-07-16 Extract agent-ctrl WS handlers to ws-router-agent-ctrl.ts (autoContinue.{accept,reschedule,cancel}, tunnel.{accept,stop,retry}, pty.cancel, pty.kill — 8 handlers, AgentCtrlCommandDeps/TunnelGatewayDep interfaces, handleAgentCtrlCommand) + 12 tests. ws-router.ts: 1835 → 1800 LOC.
 - 2026-07-16 Extract orch/workflow/subagent WS handlers to ws-router-orch.ts (orch.run/cancelRun/getRun, workflows.getRun/getAgentTranscript, subagents.getRun — 6 handlers, OrchCommandDeps interface, handleOrchCommand) + 9 tests. ws-router.ts: 1845 → 1835 LOC.
 - 2026-07-16 Extract diff/git command handlers to ws-router-diff.ts (15 chat.* diff cases, DiffCommandDeps interface, handleDiffCommand) + 10 tests. ws-router.ts: 1992 → 1845 LOC.
 - 2026-07-16 Extract settings/subagent/MCP/LLM/skills command handlers to ws-router-settings.ts (testOAuthToken, resolveMcpTestBearer, runMcpAutoTest, handleSettingsCommand — 23 command cases) + 7 tests. ws-router.ts: 2277 → 1992 LOC.
@@ -24,7 +25,7 @@ bash scripts/verify-decomp.sh
 
 ## Next chunk
 
-ws-router.ts (1835 LOC): extract the auto-continue, tunnel, and PTY lifecycle command handlers (autoContinue.accept, autoContinue.reschedule, autoContinue.cancel, tunnel.accept, tunnel.stop, tunnel.retry, pty.cancel, pty.kill) into `src/server/ws-router-agent-ctrl.ts`. All 8 handlers delegate to `agent` or `tunnelGateway`/`killPtyInstance` and follow the same pattern: call service → send ack → broadcastChatAndSidebar (for autoContinue/tunnel) or send ack (for pty). Define an `AgentCtrlCommandDeps` interface; create `handleAgentCtrlCommand(deps, command, id)` returning `boolean`; add `ws-router-agent-ctrl.test.ts` with at least 5 tests. Wire the fall-through in ws-router.ts. Verify targeted lint/typecheck/test, commit, push, update this file.
+ws-router.ts (1800 LOC): extract the 6 `push.*` command handlers (push.identifyDevice, push.subscribe, push.unsubscribe, push.test, push.setProjectMute, push.setFocusedChat) into `src/server/ws-router-push.ts`. All 6 handlers delegate to `pushManager` (and `ws.data.pushDeviceId` for device tracking). Define a `PushCommandDeps` interface with `{ pushManager, getPushDeviceId: () => string | undefined, send, broadcastFilteredSnapshots }` (push.subscribe/unsubscribe/setProjectMute trigger broadcastFilteredSnapshots); create `handlePushCommand(deps, command, id): Promise<boolean>`; add `ws-router-push.test.ts` with at least 5 tests. Wire the fall-through in ws-router.ts. Verify targeted lint/typecheck/test, commit, push, update this file.
 
 ## Worker rules (every subagent MUST follow)
 
