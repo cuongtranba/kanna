@@ -44,6 +44,7 @@ import type { ShareCommandResult } from "../shared/session-share/protocol"
 import { handleSettingsCommand } from "./ws-router-settings"
 import { handleDiffCommand } from "./ws-router-diff"
 import { handleOrchCommand } from "./ws-router-orch"
+import { handleAgentCtrlCommand } from "./ws-router-agent-ctrl"
 
 // Re-export skill utilities so existing callers (tests, server.ts, etc.) keep working.
 export {
@@ -1370,46 +1371,23 @@ export function createWsRouter({
           await broadcastFilteredSnapshots({ includeSidebar: true })
           return
         }
-        case "autoContinue.accept": {
-          await agent.acceptAutoContinue(command.chatId, command.scheduleId, command.scheduledAt)
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
-          await broadcastChatAndSidebar(command.chatId)
-          return
-        }
-        case "autoContinue.reschedule": {
-          await agent.rescheduleAutoContinue(command.chatId, command.scheduleId, command.scheduledAt)
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
-          await broadcastChatAndSidebar(command.chatId)
-          return
-        }
-        case "autoContinue.cancel": {
-          await agent.cancelAutoContinue(command.chatId, command.scheduleId, "user")
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
-          await broadcastChatAndSidebar(command.chatId)
-          return
-        }
-        case "tunnel.accept": {
-          if (tunnelGateway) {
-            await tunnelGateway.accept(command.chatId, command.tunnelId)
-          }
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
-          await broadcastChatAndSidebar(command.chatId)
-          return
-        }
-        case "tunnel.stop": {
-          if (tunnelGateway) {
-            await tunnelGateway.stop(command.chatId, command.tunnelId)
-          }
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
-          await broadcastChatAndSidebar(command.chatId)
-          return
-        }
+        case "autoContinue.accept":
+        case "autoContinue.reschedule":
+        case "autoContinue.cancel":
+        case "tunnel.accept":
+        case "tunnel.stop":
         case "tunnel.retry": {
-          if (tunnelGateway) {
-            await tunnelGateway.retry(command.chatId, command.tunnelId)
-          }
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
-          await broadcastChatAndSidebar(command.chatId)
+          await handleAgentCtrlCommand(
+            {
+              agent,
+              tunnelGateway,
+              killPtyInstance,
+              send: (envelope) => send(ws, envelope),
+              broadcastChatAndSidebar,
+            },
+            command,
+            id,
+          )
           return
         }
         case "chat.markRead": {
@@ -1625,32 +1603,19 @@ export function createWsRouter({
           send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
           return
         }
-        case "pty.cancel": {
-          try {
-            await agent.cancel(command.chatId)
-            send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: { ok: true } })
-          } catch (err) {
-            send(ws, {
-              v: PROTOCOL_VERSION,
-              type: "ack",
-              id,
-              result: { ok: false, error: err instanceof Error ? err.message : String(err) },
-            })
-          }
-          return
-        }
+        case "pty.cancel":
         case "pty.kill": {
-          if (!killPtyInstance) {
-            send(ws, {
-              v: PROTOCOL_VERSION,
-              type: "ack",
-              id,
-              result: { ok: false, error: "pty kill not available" },
-            })
-            return
-          }
-          const result = await killPtyInstance(command.chatId)
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result })
+          await handleAgentCtrlCommand(
+            {
+              agent,
+              tunnelGateway,
+              killPtyInstance,
+              send: (envelope) => send(ws, envelope),
+              broadcastChatAndSidebar,
+            },
+            command,
+            id,
+          )
           return
         }
         case "stack.create": {
