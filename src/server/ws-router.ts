@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto"
 import type { AnyValue } from "../shared/errors"
-import { isRecord } from "../shared/errors"
 import { log } from "../shared/log"
 import os from "node:os"
 import type { ServerWebSocket } from "bun"
@@ -42,12 +41,12 @@ import {
   uninstallSkill,
 } from "./ws-router-skills"
 import { handleSettingsCommand } from "./ws-router-settings"
+import { handleChatCommand } from "./ws-router-chat"
+import { handleMiscCommand } from "./ws-router-misc"
 import { importClaudeSessions } from "./claude-session-importer.adapter"
-import { listWorktrees } from "./worktree-store.adapter"
 import type { TunnelGateway } from "./cloudflare-tunnel/gateway"
 import type { PushManager } from "./push/push-manager"
 import type { SessionShareService } from "./session-share"
-import type { ShareCommandResult } from "../shared/session-share/protocol"
 
 const DEFAULT_CHAT_RECENT_LIMIT = 200
 
@@ -1159,6 +1158,39 @@ export function createWsRouter({
         listOpenRouterModels,
       })) return
 
+      if (await handleChatCommand(command, {
+        ack: (result?) => send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result }),
+        setProtectedDraftChatIds: (chatIds) => { ws.data.protectedDraftChatIds = new Set(chatIds) },
+        agent,
+        store,
+        diffStore: resolvedDiffStore,
+        analytics: resolvedAnalytics,
+        tunnelGateway,
+        broadcastChatAndSidebar,
+        broadcastFilteredSnapshots,
+        broadcastSnapshots,
+        resolveChatProject,
+        logSendToStartingProfile,
+      })) return
+
+      if (await handleMiscCommand(command, {
+        ack: (result?) => send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result }),
+        store,
+        terminals,
+        pushManager,
+        agent,
+        killPtyInstance,
+        analytics: resolvedAnalytics,
+        broadcastFilteredSnapshots,
+        pushTerminalSnapshot,
+        getPushDeviceId: () => ws.data.pushDeviceId,
+        setPushDeviceId: (id) => { ws.data.pushDeviceId = id },
+        sessionShare,
+        getOriginHost: () => ws.data.originHost ?? "",
+        workflowRegistry,
+        subagentTranscriptRegistry,
+      })) return
+
       switch (command.type) {
         case "system.ping": {
           send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
@@ -1298,588 +1330,6 @@ export function createWsRouter({
           await openExternal(command)
           send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
           break
-        }
-        case "chat.create": {
-          const chat = await store.createChat(command.projectId, {
-            stackId: command.stackId,
-            stackBindings: command.stackBindings,
-          })
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: { chatId: chat.id } })
-          resolvedAnalytics.track("chat_created")
-          await broadcastChatAndSidebar(chat.id)
-          return
-        }
-        case "chat.fork": {
-          const result = await agent.forkChat(command.chatId)
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result })
-          await broadcastFilteredSnapshots({ includeSidebar: true })
-          return
-        }
-        case "chat.rename": {
-          await store.renameChat(command.chatId, command.title)
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
-          await broadcastChatAndSidebar(command.chatId)
-          return
-        }
-        case "chat.archive": {
-          await store.archiveChat(command.chatId)
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
-          await broadcastFilteredSnapshots({ includeSidebar: true })
-          return
-        }
-        case "chat.unarchive": {
-          await store.unarchiveChat(command.chatId)
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
-          await broadcastChatAndSidebar(command.chatId)
-          return
-        }
-        case "chat.delete": {
-          await agent.cancel(command.chatId)
-          for (const scheduleId of agent.listLiveSchedules(command.chatId)) {
-            await agent.cancelAutoContinue(command.chatId, scheduleId, "chat_deleted")
-          }
-          await agent.closeChat(command.chatId)
-          if (agent.toolCallbackService) {
-            await agent.toolCallbackService.cancelAllForChat(command.chatId, "chat_deleted")
-          }
-          await store.deleteChat(command.chatId)
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
-          resolvedAnalytics.track("chat_deleted")
-          await broadcastFilteredSnapshots({ includeSidebar: true })
-          return
-        }
-        case "autoContinue.accept": {
-          await agent.acceptAutoContinue(command.chatId, command.scheduleId, command.scheduledAt)
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
-          await broadcastChatAndSidebar(command.chatId)
-          return
-        }
-        case "autoContinue.reschedule": {
-          await agent.rescheduleAutoContinue(command.chatId, command.scheduleId, command.scheduledAt)
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
-          await broadcastChatAndSidebar(command.chatId)
-          return
-        }
-        case "autoContinue.cancel": {
-          await agent.cancelAutoContinue(command.chatId, command.scheduleId, "user")
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
-          await broadcastChatAndSidebar(command.chatId)
-          return
-        }
-        case "tunnel.accept": {
-          if (tunnelGateway) {
-            await tunnelGateway.accept(command.chatId, command.tunnelId)
-          }
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
-          await broadcastChatAndSidebar(command.chatId)
-          return
-        }
-        case "tunnel.stop": {
-          if (tunnelGateway) {
-            await tunnelGateway.stop(command.chatId, command.tunnelId)
-          }
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
-          await broadcastChatAndSidebar(command.chatId)
-          return
-        }
-        case "tunnel.retry": {
-          if (tunnelGateway) {
-            await tunnelGateway.retry(command.chatId, command.tunnelId)
-          }
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
-          await broadcastChatAndSidebar(command.chatId)
-          return
-        }
-        case "chat.markRead": {
-          await store.setChatReadState(command.chatId, false)
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
-          await broadcastChatAndSidebar(command.chatId)
-          return
-        }
-        case "chat.setPolicyOverride": {
-          await store.setChatPolicyOverride(command.chatId, command.policyOverride ?? null)
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
-          await broadcastChatAndSidebar(command.chatId)
-          return
-        }
-        case "chat.setDraftProtection": {
-          ws.data.protectedDraftChatIds = new Set(command.chatIds)
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
-          break
-        }
-        case "chat.send": {
-          const result = await agent.send(command)
-          const profile = command.clientTraceId && result.chatId
-            ? agent.getActiveTurnProfile(result.chatId)
-            : null
-          logSendToStartingProfile(profile?.traceId ?? command.clientTraceId, profile?.startedAt, "ws.chat_send_ack", {
-            chatId: result.chatId ?? null,
-          })
-          const payloadBytes = send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result })
-          logSendToStartingProfile(profile?.traceId ?? command.clientTraceId, profile?.startedAt, "ws.chat_send_ack_completed", {
-            chatId: result.chatId ?? null,
-            payloadBytes,
-          })
-          return
-        }
-        case "chat.refreshDiffs": {
-          const { project } = resolveChatProject(command.chatId)
-          const changed = await resolvedDiffStore.refreshSnapshot(project.id, project.localPath)
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
-          if (changed) {
-            void broadcastSnapshots()
-          }
-          return
-        }
-        case "chat.initGit": {
-          const { project } = resolveChatProject(command.chatId)
-          const result = await resolvedDiffStore.initializeGit({
-            projectId: project.id,
-            projectPath: project.localPath,
-          })
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result })
-          if (result.snapshotChanged) {
-            void broadcastSnapshots()
-          }
-          return
-        }
-        case "chat.getGitHubPublishInfo": {
-          const { project } = resolveChatProject(command.chatId)
-          const result = await resolvedDiffStore.getGitHubPublishInfo({
-            projectPath: project.localPath,
-          })
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result })
-          return
-        }
-        case "chat.checkGitHubRepoAvailability": {
-          const result = await resolvedDiffStore.checkGitHubRepoAvailability({
-            owner: command.owner,
-            name: command.name,
-          })
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result })
-          return
-        }
-        case "chat.publishToGitHub": {
-          const { project } = resolveChatProject(command.chatId)
-          const result = await resolvedDiffStore.publishToGitHub({
-            projectId: project.id,
-            projectPath: project.localPath,
-            owner: command.owner,
-            name: command.name,
-            visibility: command.visibility,
-            description: command.description,
-          })
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result })
-          if (result.snapshotChanged) {
-            void broadcastSnapshots()
-          }
-          return
-        }
-        case "chat.listBranches": {
-          const { project } = resolveChatProject(command.chatId)
-          const result = await resolvedDiffStore.listBranches({
-            projectPath: project.localPath,
-          })
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result })
-          return
-        }
-        case "chat.previewMergeBranch": {
-          const { project } = resolveChatProject(command.chatId)
-          const result = await resolvedDiffStore.previewMergeBranch({
-            projectPath: project.localPath,
-            branch: command.branch,
-          })
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result })
-          return
-        }
-        case "chat.mergeBranch": {
-          const { project } = resolveChatProject(command.chatId)
-          const result = await resolvedDiffStore.mergeBranch({
-            projectId: project.id,
-            projectPath: project.localPath,
-            branch: command.branch,
-          })
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result })
-          if (result.snapshotChanged) {
-            void broadcastSnapshots()
-          }
-          return
-        }
-        case "chat.checkoutBranch": {
-          const { project } = resolveChatProject(command.chatId)
-          const result = await resolvedDiffStore.checkoutBranch({
-            projectId: project.id,
-            projectPath: project.localPath,
-            branch: command.branch,
-            bringChanges: command.bringChanges,
-          })
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result })
-          if (result.snapshotChanged) {
-            void broadcastSnapshots()
-          }
-          return
-        }
-        case "chat.syncBranch": {
-          const { project } = resolveChatProject(command.chatId)
-          const result = await resolvedDiffStore.syncBranch({
-            projectId: project.id,
-            projectPath: project.localPath,
-            action: command.action,
-          })
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result })
-          if (result.snapshotChanged) {
-            void broadcastSnapshots()
-          }
-          return
-        }
-        case "chat.createBranch": {
-          const { project } = resolveChatProject(command.chatId)
-          const result = await resolvedDiffStore.createBranch({
-            projectId: project.id,
-            projectPath: project.localPath,
-            name: command.name,
-            baseBranchName: command.baseBranchName,
-          })
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result })
-          if (result.snapshotChanged) {
-            void broadcastSnapshots()
-          }
-          return
-        }
-        case "chat.generateCommitMessage": {
-          const { project } = resolveChatProject(command.chatId)
-          const result = await resolvedDiffStore.generateCommitMessage({
-            projectPath: project.localPath,
-            paths: command.paths,
-          })
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result })
-          return
-        }
-        case "chat.commitDiffs": {
-          const { project } = resolveChatProject(command.chatId)
-          const result = await resolvedDiffStore.commitFiles({
-            projectId: project.id,
-            projectPath: project.localPath,
-            paths: command.paths,
-            summary: command.summary,
-            description: command.description,
-            mode: command.mode,
-          })
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result })
-          if (result.snapshotChanged) {
-            void broadcastSnapshots()
-          }
-          return
-        }
-        case "chat.discardDiffFile": {
-          const { project } = resolveChatProject(command.chatId)
-          const result = await resolvedDiffStore.discardFile({
-            projectId: project.id,
-            projectPath: project.localPath,
-            path: command.path,
-          })
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result })
-          if (result.snapshotChanged) {
-            void broadcastSnapshots()
-          }
-          return
-        }
-        case "chat.ignoreDiffFile": {
-          const { project } = resolveChatProject(command.chatId)
-          const result = await resolvedDiffStore.ignoreFile({
-            projectId: project.id,
-            projectPath: project.localPath,
-            path: command.path,
-          })
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result })
-          if (result.snapshotChanged) {
-            void broadcastSnapshots()
-          }
-          return
-        }
-        case "chat.cancel": {
-          await agent.cancel(command.chatId)
-          // Resolve any open ask-style tool-callback prompts for this chat
-          // so the model's tool_use does not hang on a stranded pending. The
-          // session-close path no longer fires this cascade because it also
-          // ran on transparent respawns (rotation / idle sweep) — see
-          // makeClaudeSessionHandle.close() in agent.ts.
-          if (agent.toolCallbackService) {
-            await agent.toolCallbackService.cancelAllForChat(command.chatId, "chat_cancelled")
-          }
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
-          return
-        }
-        case "chat.stopDraining": {
-          await agent.stopDraining(command.chatId)
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
-          return
-        }
-        case "chat.loadHistory": {
-          const chat = store.getChat(command.chatId)
-          if (!chat) throw new Error("Chat not found")
-          const page = store.getMessagesPageBefore(command.chatId, command.beforeCursor, command.limit)
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: page })
-          return
-        }
-        case "chat.respondTool": {
-          await agent.respondTool(command)
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
-          return
-        }
-        case "chat.toolRequestAnswer": {
-          const toolCallbackSvc = agent.toolCallbackService
-          if (!toolCallbackSvc) throw new Error("tool callback service unavailable")
-          const validKinds = new Set(["allow", "deny", "answer"])
-          if (!isRecord(command.decision) || !validKinds.has(typeof command.decision.kind === "string" ? command.decision.kind : "")) {
-            throw new Error("Invalid tool request decision kind")
-          }
-          const existing = store.getToolRequest(command.toolRequestId)
-          if (!existing || existing.chatId !== command.chatId) {
-            throw new Error("Tool request does not belong to this chat")
-          }
-          await toolCallbackSvc.answer(command.toolRequestId, command.decision)
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
-          await broadcastChatAndSidebar(command.chatId)
-          return
-        }
-        case "chat.respondSubagentTool": {
-          await agent.respondSubagentTool(command)
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
-          return
-        }
-        case "chat.cancelSubagentRun": {
-          await agent.cancelSubagentRun(command)
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
-          return
-        }
-        case "message.enqueue": {
-          const result = await agent.enqueue(command)
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result })
-          await broadcastChatAndSidebar(command.chatId)
-          return
-        }
-        case "message.steer": {
-          await agent.steer(command)
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
-          await broadcastChatAndSidebar(command.chatId)
-          return
-        }
-        case "message.dequeue": {
-          await agent.dequeue(command)
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
-          await broadcastChatAndSidebar(command.chatId)
-          return
-        }
-        case "terminal.create": {
-          const project = store.getProject(command.projectId)
-          if (!project) {
-            throw new Error("Project not found")
-          }
-          const snapshot = terminals.createTerminal({
-            projectPath: project.localPath,
-            terminalId: command.terminalId,
-            cols: command.cols,
-            rows: command.rows,
-            scrollback: command.scrollback,
-          })
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: snapshot })
-          return
-        }
-        case "terminal.input": {
-          terminals.write(command.terminalId, command.data)
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
-          return
-        }
-        case "terminal.resize": {
-          terminals.resize(command.terminalId, command.cols, command.rows)
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
-          return
-        }
-        case "terminal.close": {
-          terminals.close(command.terminalId)
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
-          pushTerminalSnapshot(command.terminalId)
-          return
-        }
-        case "push.identifyDevice": {
-          ws.data.pushDeviceId = command.pushDeviceId
-          if (command.pushDeviceId) {
-            await pushManager.recordDeviceSeen(command.pushDeviceId)
-            await broadcastFilteredSnapshots({ includePushConfig: true })
-          }
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
-          return
-        }
-        case "push.subscribe": {
-          const result = await pushManager.addSubscription({
-            subscription: command.subscription,
-            label: command.label,
-            userAgent: command.userAgent,
-          })
-          ws.data.pushDeviceId = result.id
-          await broadcastFilteredSnapshots({ includePushConfig: true })
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result })
-          return
-        }
-        case "push.unsubscribe": {
-          await pushManager.removeSubscription(command.pushDeviceId, "user_revoked")
-          if (ws.data.pushDeviceId === command.pushDeviceId) {
-            ws.data.pushDeviceId = null
-          }
-          await broadcastFilteredSnapshots({ includePushConfig: true })
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
-          return
-        }
-        case "push.test": {
-          if (ws.data.pushDeviceId) {
-            await pushManager.sendTest(ws.data.pushDeviceId)
-          }
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
-          return
-        }
-        case "push.setProjectMute": {
-          await pushManager.setProjectMute(command.localPath, command.muted)
-          await broadcastFilteredSnapshots({ includePushConfig: true })
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
-          return
-        }
-        case "push.setFocusedChat": {
-          if (ws.data.pushDeviceId) {
-            pushManager.setFocusedChat(ws.data.pushDeviceId, command.chatId)
-          }
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
-          return
-        }
-        case "pty.cancel": {
-          try {
-            await agent.cancel(command.chatId)
-            send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: { ok: true } })
-          } catch (err) {
-            send(ws, {
-              v: PROTOCOL_VERSION,
-              type: "ack",
-              id,
-              result: { ok: false, error: err instanceof Error ? err.message : String(err) },
-            })
-          }
-          return
-        }
-        case "pty.kill": {
-          if (!killPtyInstance) {
-            send(ws, {
-              v: PROTOCOL_VERSION,
-              type: "ack",
-              id,
-              result: { ok: false, error: "pty kill not available" },
-            })
-            return
-          }
-          const result = await killPtyInstance(command.chatId)
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result })
-          return
-        }
-        case "stack.create": {
-          const stack = await store.createStack(command.title, command.projectIds)
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: { stackId: stack.id } })
-          resolvedAnalytics.track("stack_created")
-          await broadcastFilteredSnapshots({ includeSidebar: true })
-          return
-        }
-        case "stack.rename": {
-          await store.renameStack(command.stackId, command.title)
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
-          await broadcastFilteredSnapshots({ includeSidebar: true })
-          return
-        }
-        case "stack.remove": {
-          await store.removeStack(command.stackId)
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
-          await broadcastFilteredSnapshots({ includeSidebar: true })
-          return
-        }
-        case "stack.addProject": {
-          await store.addProjectToStack(command.stackId, command.projectId)
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
-          await broadcastFilteredSnapshots({ includeSidebar: true })
-          return
-        }
-        case "stack.removeProject": {
-          await store.removeProjectFromStack(command.stackId, command.projectId)
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
-          await broadcastFilteredSnapshots({ includeSidebar: true })
-          return
-        }
-        case "stack.listWorktrees": {
-          const project = store.getProject(command.projectId)
-          if (!project) {
-            throw new Error("Project not found")
-          }
-          const worktrees = await listWorktrees(project.localPath)
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: { worktrees } })
-          return
-        }
-        case "share.mint": {
-          if (!sessionShare) {
-            send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: { ok: false, error: { kind: "snapshot_write_failed", message: "session-share service unavailable" } } })
-            return
-          }
-          const r = await sessionShare.mintToken(command.payload, ws.data.originHost ?? "")
-          const result: ShareCommandResult = r.ok
-            ? { ok: true, kind: "mint", data: r.data }
-            : { ok: false, error: r.error }
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result })
-          return
-        }
-        case "share.revoke": {
-          if (!sessionShare) {
-            send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: { ok: false, error: { kind: "not_found" } } })
-            return
-          }
-          const r = await sessionShare.revokeToken(command.payload)
-          const result: ShareCommandResult = r.ok
-            ? { ok: true, kind: "revoke", data: r.data }
-            : { ok: false, error: r.error }
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result })
-          return
-        }
-        case "share.list": {
-          if (!sessionShare) {
-            send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: { ok: true, kind: "list", data: { shares: [] } } })
-            return
-          }
-          const shares = sessionShare.listSharesForChat(command.payload.chatId, ws.data.originHost ?? "")
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: { ok: true, kind: "list", data: { shares } } })
-          return
-        }
-        case "workflows.getRun": {
-          const run = workflowRegistry?.getRun(command.chatId, command.runId) ?? null
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: run })
-          return
-        }
-        case "workflows.getAgentTranscript": {
-          const entries = workflowRegistry?.getAgentTranscript(command.chatId, command.runId, command.agentId) ?? []
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: entries })
-          return
-        }
-        case "subagents.getRun": {
-          const entries = subagentTranscriptRegistry?.getAgentTranscript(command.chatId, command.agentId) ?? []
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: entries })
-          return
-        }
-        case "orch.run": {
-          const result = await agent.runOrchestration(command.chatId, command.input)
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result })
-          return
-        }
-        case "orch.cancelRun": {
-          await agent.cancelOrchRun(command.runId)
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: { ok: true } })
-          return
-        }
-        case "orch.getRun": {
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: agent.getOrchRunDetail(command.runId) })
-          return
         }
       }
 
