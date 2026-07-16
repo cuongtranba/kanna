@@ -13,6 +13,7 @@ bash scripts/verify-decomp.sh
 
 ## Progress (latest first)
 
+- 2026-07-16 Extract push WS handlers to ws-router-push.ts (push.identifyDevice, push.subscribe, push.unsubscribe, push.test, push.setProjectMute, push.setFocusedChat — 6 handlers, PushManagerDep/PushCommandDeps interfaces, handlePushCommand) + 11 tests. ws-router.ts: 1800 → 1771 LOC.
 - 2026-07-16 Extract agent-ctrl WS handlers to ws-router-agent-ctrl.ts (autoContinue.{accept,reschedule,cancel}, tunnel.{accept,stop,retry}, pty.cancel, pty.kill — 8 handlers, AgentCtrlCommandDeps/TunnelGatewayDep interfaces, handleAgentCtrlCommand) + 12 tests. ws-router.ts: 1835 → 1800 LOC.
 - 2026-07-16 Extract orch/workflow/subagent WS handlers to ws-router-orch.ts (orch.run/cancelRun/getRun, workflows.getRun/getAgentTranscript, subagents.getRun — 6 handlers, OrchCommandDeps interface, handleOrchCommand) + 9 tests. ws-router.ts: 1845 → 1835 LOC.
 - 2026-07-16 Extract diff/git command handlers to ws-router-diff.ts (15 chat.* diff cases, DiffCommandDeps interface, handleDiffCommand) + 10 tests. ws-router.ts: 1992 → 1845 LOC.
@@ -25,7 +26,7 @@ bash scripts/verify-decomp.sh
 
 ## Next chunk
 
-ws-router.ts (1800 LOC): extract the 6 `push.*` command handlers (push.identifyDevice, push.subscribe, push.unsubscribe, push.test, push.setProjectMute, push.setFocusedChat) into `src/server/ws-router-push.ts`. All 6 handlers delegate to `pushManager` (and `ws.data.pushDeviceId` for device tracking). Define a `PushCommandDeps` interface with `{ pushManager, getPushDeviceId: () => string | undefined, send, broadcastFilteredSnapshots }` (push.subscribe/unsubscribe/setProjectMute trigger broadcastFilteredSnapshots); create `handlePushCommand(deps, command, id): Promise<boolean>`; add `ws-router-push.test.ts` with at least 5 tests. Wire the fall-through in ws-router.ts. Verify targeted lint/typecheck/test, commit, push, update this file.
+ws-router.ts (1771 LOC): extract the `terminal.*` (4 handlers: terminal.create, terminal.input, terminal.resize, terminal.close), `message.*` (3 handlers: message.enqueue, message.steer, message.dequeue), `stack.*` (6 handlers: stack.create, stack.rename, stack.remove, stack.addProject, stack.removeProject, stack.listWorktrees), and `share.*` (3 handlers: share.mint, share.revoke, share.list) command groups into `src/server/ws-router-misc.ts`. Define a `MiscCommandDeps` interface covering the duck-typed deps from each group: `store` (EventStore methods: getProject, createStack, renameStack, removeStack, addProjectToStack, removeProjectFromStack), `terminals` (TerminalManager), `agent` (enqueue, steer, dequeue), `sessionShare` (optional: mintToken, revokeToken, listSharesForChat), `analytics` (track), `getOriginHost: () => string`, `send`, `broadcastSidebar: () => Promise<void>`, `broadcastChatAndSidebar: (chatId: string) => Promise<void>`. Create `handleMiscCommand(deps, command, id): Promise<boolean>`. Add `ws-router-misc.test.ts` with at least 8 tests covering at least one handler from each group. Wire the fall-through in ws-router.ts. Verify targeted lint/typecheck/test, commit, push, update this file.
 
 ## Worker rules (every subagent MUST follow)
 
