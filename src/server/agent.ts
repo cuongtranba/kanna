@@ -3964,6 +3964,30 @@ export class AgentCoordinator {
           if (!active.cancelRequested) {
             await this.maybeStartNextQueuedMessage(session.chatId)
           }
+        } else if (event.entry.kind === "result" && event.entry.isError) {
+          // Fallback: an errored result carrying a recognizable rate-limit /
+          // auth signature must NOT be silently dropped just because its
+          // prompt-seq did not line up with the active turn. Observed as a 9h
+          // autonomous-loop stall: a synthetic 429 result on an auto-continue
+          // wake turn arrived with the pending prompt-seq queue already drained
+          // (so the seq gate above missed), and the loop died with no resume
+          // schedule — no proposal, no accept — until a human manually resumed.
+          // handleLimitDetection is idempotent (dedupes on a live schedule) and
+          // handleAuthFailure only rotates/proposes, so re-driving detection
+          // here only ever adds a missing resume, never a duplicate. The
+          // auto-resume setting is still honoured inside handleLimitDetection.
+          const resultText = event.entry.result || ""
+          const debugRaw = event.entry.debugRaw ?? ""
+          const detection = this.claudeLimitDetector.detectFromResultText?.(session.chatId, resultText) ?? null
+          const authDetection = detection
+            ? null
+            : this.claudeAuthErrorDetector.detectFromResultText(session.chatId, resultText)
+              ?? this.claudeAuthErrorDetector.detectFromResultText(session.chatId, debugRaw)
+          if (detection) {
+            await this.handleLimitDetection(session.chatId, detection)
+          } else if (authDetection) {
+            await this.handleAuthFailure(session, authDetection)
+          }
         }
 
         this.emitStateChange(session.chatId)

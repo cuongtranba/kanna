@@ -1,6 +1,7 @@
 import crypto from "node:crypto"
 import { LOG_PREFIX } from "../shared/branding"
 import { log } from "../shared/log"
+import { deriveChunkLabel } from "../shared/loop-progress"
 import type {
   AgentProvider,
   ProviderUsage,
@@ -780,6 +781,7 @@ export class SubagentOrchestrator {
     runId?: string
   }): Promise<DelegationOutcome> {
     const runId = args.runId ?? crypto.randomUUID()
+    const label = deriveChunkLabel(args.userInstruction)
     await this.deps.store.appendSubagentEvent({
       v: 3,
       type: "subagent_run_started",
@@ -788,6 +790,7 @@ export class SubagentOrchestrator {
       runId,
       subagentId: args.subagent.id,
       subagentName: args.subagent.name,
+      ...(label ? { label } : {}),
       provider: args.subagent.provider,
       model: args.subagent.model,
       parentUserMessageId: args.parentUserMessageId,

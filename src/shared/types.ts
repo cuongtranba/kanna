@@ -1889,6 +1889,14 @@ export interface SubagentRunSnapshot {
   chatId: string
   subagentId: string | null
   subagentName: string
+  /**
+   * Short human label for this run, derived from the first line of the spawn
+   * prompt (e.g. "Migrate useKannaState.ts"). Null for runs started before this
+   * field existed or by error paths that never carried a prompt. Drives the
+   * Loop Progress panel rows so each round reads as the chunk it worked on
+   * rather than an opaque run id.
+   */
+  label: string | null
   provider: AgentProvider
   model: string
   status: SubagentRunStatus
@@ -1917,6 +1925,41 @@ export interface SubagentRunSnapshot {
   pendingTool: SubagentPendingTool | null
 }
 
+export type LoopRowStatus = "pending" | "running" | "done" | "failed"
+
+export interface LoopRow {
+  runId: string
+  label: string
+  status: LoopRowStatus
+  startedAt: number
+  finishedAt: number | null
+}
+
+export interface LoopRateLimitInfo {
+  /** The live auto-continue schedule id, so the panel's Resume action can accept it. */
+  scheduleId: string
+  /** epoch ms the usage limit resets (and the resume is/would be scheduled for) */
+  resetAt: number
+  tz: string
+  /**
+   * true  → an auto-continue is already scheduled to fire at `resetAt`
+   *         (the loop resumes on its own).
+   * false → the resume is only proposed and waits on the user
+   *         (auto-resume setting off) — render a "Resume" action.
+   */
+  scheduled: boolean
+}
+
+export interface LoopProgressSnapshot {
+  chatId: string
+  /** Whether a loop is currently armed for this chat. */
+  armed: boolean
+  /** Latest first — most recent delegation at the top, mirroring PROGRESS.md. */
+  rows: LoopRow[]
+  /** Non-null while the loop is paused on a Claude usage limit. */
+  rateLimit: LoopRateLimitInfo | null
+}
+
 export interface ChatSnapshot {
   runtime: ChatRuntime
   queuedMessages: QueuedChatMessage[]
@@ -1931,6 +1974,8 @@ export interface ChatSnapshot {
   liveTunnelId: string | null
   resolvedBindings?: ResolvedStackBinding[]
   subagentRuns: Record<string, SubagentRunSnapshot>
+  /** Loop Progress panel view — armed state, per-round rows, rate-limit resume. */
+  loopProgress: LoopProgressSnapshot
 }
 
 export interface ChatHistoryPage {

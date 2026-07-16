@@ -3600,7 +3600,7 @@ describe("AgentCoordinator claude integration", () => {
 
     // Pin the armed state to the test toggle — the send() takeover path would
     // otherwise disarm before the spawn check ever sees an armed loop.
-    coordinator.isLoopArmed = () => (armed ? { subagentId: "sa-1", prompt: "loop prompt" } : null)
+    coordinator.isLoopArmed = () => (armed ? { subagentId: "sa-1", prompt: "loop prompt", armedAt: 0 } : null)
 
     const sendTurn = async (content: string, expectedFinished: number) => {
       await coordinator.send({
@@ -3681,7 +3681,7 @@ describe("AgentCoordinator claude integration", () => {
       },
     })
 
-    coordinator.isLoopArmed = () => (armed ? { subagentId: "sa-1", prompt: "loop prompt" } : null)
+    coordinator.isLoopArmed = () => (armed ? { subagentId: "sa-1", prompt: "loop prompt", armedAt: 0 } : null)
 
     const sendTurn = async (content: string, expectedFinished: number) => {
       await coordinator.send({
@@ -4374,7 +4374,7 @@ describe("AgentCoordinator.deliverSubagentToMain (notification-driven /clear)", 
       onStateChange: () => {},
       startClaudeSession: async () => { throw new Error("not needed") },
     })
-    coordinator.isLoopArmed = () => ({ subagentId: "sa-loop", prompt: "LOOP DISCIPLINE PROMPT" })
+    coordinator.isLoopArmed = () => ({ subagentId: "sa-loop", prompt: "LOOP DISCIPLINE PROMPT", armedAt: 0 })
 
     await (coordinator as unknown as { deliverSubagentToMain: DeliverFn }).deliverSubagentToMain(
       "chat-1",

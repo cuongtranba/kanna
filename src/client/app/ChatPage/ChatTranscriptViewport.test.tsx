@@ -8,6 +8,7 @@ function makeRun(over: Partial<SubagentRunSnapshot> = {}): SubagentRunSnapshot {
     chatId: "c1",
     subagentId: "sa-1",
     subagentName: "alpha",
+    label: null,
     provider: "claude",
     model: "claude-opus-4-7",
     status: "running",

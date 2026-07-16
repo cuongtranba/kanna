@@ -17,7 +17,7 @@ describe("deriveLoopState", () => {
 
   test("loop_armed → armed state with subagentId + prompt", () => {
     const state = deriveLoopState([armed("c1", "sub-1", "LOOP PROMPT")], "c1")
-    expect(state).toEqual({ subagentId: "sub-1", prompt: "LOOP PROMPT" })
+    expect(state).toEqual({ subagentId: "sub-1", prompt: "LOOP PROMPT", armedAt: 1_000 })
   })
 
   test("loop_disarmed after loop_armed → null", () => {
@@ -31,7 +31,7 @@ describe("deriveLoopState", () => {
       disarmed("c1", 2_000),
       armed("c1", "sub-2", "P2", 3_000),
     ], "c1")
-    expect(state).toEqual({ subagentId: "sub-2", prompt: "P2" })
+    expect(state).toEqual({ subagentId: "sub-2", prompt: "P2", armedAt: 3_000 })
   })
 
   test("armed state is per-chat", () => {

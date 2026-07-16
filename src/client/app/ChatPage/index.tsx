@@ -1049,6 +1049,7 @@ export function ChatPage() {
           onTunnelRetry={sendTunnelRetry}
           subagentRuns={state.chatSnapshot?.subagentRuns}
           onCancelSubagentRun={handleCancelSubagentRun}
+          loopProgress={state.chatSnapshot?.loopProgress}
           workflowRuns={workflowRuns.length > 0 ? workflowRuns : undefined}
           getWorkflowRunDetail={handleGetWorkflowRunDetail}
           orchestrationPanel={<OrchestrationPanel socket={state.socket} chatId={state.activeChatId} />}
