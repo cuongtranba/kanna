@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto"
 import type { AnyValue } from "../shared/errors"
-import { isRecord } from "../shared/errors"
 import { log } from "../shared/log"
 import os from "node:os"
 import type { ServerWebSocket } from "bun"
@@ -47,6 +46,7 @@ import { handleAgentCtrlCommand } from "./ws-router-agent-ctrl"
 import { handlePushCommand } from "./ws-router-push"
 import { handleMiscCommand } from "./ws-router-misc"
 import { handleProjectCommand } from "./ws-router-project"
+import { handleChatCommand } from "./ws-router-chat"
 
 // Re-export skill utilities so existing callers (tests, server.ts, etc.) keep working.
 export {
@@ -1205,53 +1205,27 @@ export function createWsRouter({
           )
           return
         }
-        case "chat.create": {
-          const chat = await store.createChat(command.projectId, {
-            stackId: command.stackId,
-            stackBindings: command.stackBindings,
-          })
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: { chatId: chat.id } })
-          resolvedAnalytics.track("chat_created")
-          await broadcastChatAndSidebar(chat.id)
-          return
-        }
-        case "chat.fork": {
-          const result = await agent.forkChat(command.chatId)
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result })
-          await broadcastFilteredSnapshots({ includeSidebar: true })
-          return
-        }
-        case "chat.rename": {
-          await store.renameChat(command.chatId, command.title)
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
-          await broadcastChatAndSidebar(command.chatId)
-          return
-        }
-        case "chat.archive": {
-          await store.archiveChat(command.chatId)
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
-          await broadcastFilteredSnapshots({ includeSidebar: true })
-          return
-        }
-        case "chat.unarchive": {
-          await store.unarchiveChat(command.chatId)
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
-          await broadcastChatAndSidebar(command.chatId)
-          return
-        }
+        case "chat.create":
+        case "chat.fork":
+        case "chat.rename":
+        case "chat.archive":
+        case "chat.unarchive":
         case "chat.delete": {
-          await agent.cancel(command.chatId)
-          for (const scheduleId of agent.listLiveSchedules(command.chatId)) {
-            await agent.cancelAutoContinue(command.chatId, scheduleId, "chat_deleted")
-          }
-          await agent.closeChat(command.chatId)
-          if (agent.toolCallbackService) {
-            await agent.toolCallbackService.cancelAllForChat(command.chatId, "chat_deleted")
-          }
-          await store.deleteChat(command.chatId)
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
-          resolvedAnalytics.track("chat_deleted")
-          await broadcastFilteredSnapshots({ includeSidebar: true })
+          await handleChatCommand(
+            {
+              store,
+              agent,
+              analytics: resolvedAnalytics,
+              setDraftProtection: (chatIds) => { ws.data.protectedDraftChatIds = new Set(chatIds) },
+              logSendProfilingFn: logSendToStartingProfile,
+              send: (envelope) => send(ws, envelope),
+              broadcastChatAndSidebar,
+              broadcastSidebar: () => broadcastFilteredSnapshots({ includeSidebar: true }),
+              broadcastAll: broadcastSnapshots,
+            },
+            command,
+            id,
+          )
           return
         }
         case "autoContinue.accept":
@@ -1273,36 +1247,25 @@ export function createWsRouter({
           )
           return
         }
-        case "chat.markRead": {
-          await store.setChatReadState(command.chatId, false)
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
-          await broadcastChatAndSidebar(command.chatId)
-          return
-        }
-        case "chat.setPolicyOverride": {
-          await store.setChatPolicyOverride(command.chatId, command.policyOverride ?? null)
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
-          await broadcastChatAndSidebar(command.chatId)
-          return
-        }
-        case "chat.setDraftProtection": {
-          ws.data.protectedDraftChatIds = new Set(command.chatIds)
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
-          break
-        }
+        case "chat.markRead":
+        case "chat.setPolicyOverride":
+        case "chat.setDraftProtection":
         case "chat.send": {
-          const result = await agent.send(command)
-          const profile = command.clientTraceId && result.chatId
-            ? agent.getActiveTurnProfile(result.chatId)
-            : null
-          logSendToStartingProfile(profile?.traceId ?? command.clientTraceId, profile?.startedAt, "ws.chat_send_ack", {
-            chatId: result.chatId ?? null,
-          })
-          const payloadBytes = send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result })
-          logSendToStartingProfile(profile?.traceId ?? command.clientTraceId, profile?.startedAt, "ws.chat_send_ack_completed", {
-            chatId: result.chatId ?? null,
-            payloadBytes,
-          })
+          await handleChatCommand(
+            {
+              store,
+              agent,
+              analytics: resolvedAnalytics,
+              setDraftProtection: (chatIds) => { ws.data.protectedDraftChatIds = new Set(chatIds) },
+              logSendProfilingFn: logSendToStartingProfile,
+              send: (envelope) => send(ws, envelope),
+              broadcastChatAndSidebar,
+              broadcastSidebar: () => broadcastFilteredSnapshots({ includeSidebar: true }),
+              broadcastAll: broadcastSnapshots,
+            },
+            command,
+            id,
+          )
           return
         }
         case "chat.refreshDiffs":
@@ -1332,60 +1295,28 @@ export function createWsRouter({
           )
           return
         }
-        case "chat.cancel": {
-          await agent.cancel(command.chatId)
-          // Resolve any open ask-style tool-callback prompts for this chat
-          // so the model's tool_use does not hang on a stranded pending. The
-          // session-close path no longer fires this cascade because it also
-          // ran on transparent respawns (rotation / idle sweep) — see
-          // makeClaudeSessionHandle.close() in agent.ts.
-          if (agent.toolCallbackService) {
-            await agent.toolCallbackService.cancelAllForChat(command.chatId, "chat_cancelled")
-          }
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
-          return
-        }
-        case "chat.stopDraining": {
-          await agent.stopDraining(command.chatId)
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
-          return
-        }
-        case "chat.loadHistory": {
-          const chat = store.getChat(command.chatId)
-          if (!chat) throw new Error("Chat not found")
-          const page = store.getMessagesPageBefore(command.chatId, command.beforeCursor, command.limit)
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: page })
-          return
-        }
-        case "chat.respondTool": {
-          await agent.respondTool(command)
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
-          return
-        }
-        case "chat.toolRequestAnswer": {
-          const toolCallbackSvc = agent.toolCallbackService
-          if (!toolCallbackSvc) throw new Error("tool callback service unavailable")
-          const validKinds = new Set(["allow", "deny", "answer"])
-          if (!isRecord(command.decision) || !validKinds.has(typeof command.decision.kind === "string" ? command.decision.kind : "")) {
-            throw new Error("Invalid tool request decision kind")
-          }
-          const existing = store.getToolRequest(command.toolRequestId)
-          if (!existing || existing.chatId !== command.chatId) {
-            throw new Error("Tool request does not belong to this chat")
-          }
-          await toolCallbackSvc.answer(command.toolRequestId, command.decision)
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
-          await broadcastChatAndSidebar(command.chatId)
-          return
-        }
-        case "chat.respondSubagentTool": {
-          await agent.respondSubagentTool(command)
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
-          return
-        }
+        case "chat.cancel":
+        case "chat.stopDraining":
+        case "chat.loadHistory":
+        case "chat.respondTool":
+        case "chat.toolRequestAnswer":
+        case "chat.respondSubagentTool":
         case "chat.cancelSubagentRun": {
-          await agent.cancelSubagentRun(command)
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
+          await handleChatCommand(
+            {
+              store,
+              agent,
+              analytics: resolvedAnalytics,
+              setDraftProtection: (chatIds) => { ws.data.protectedDraftChatIds = new Set(chatIds) },
+              logSendProfilingFn: logSendToStartingProfile,
+              send: (envelope) => send(ws, envelope),
+              broadcastChatAndSidebar,
+              broadcastSidebar: () => broadcastFilteredSnapshots({ includeSidebar: true }),
+              broadcastAll: broadcastSnapshots,
+            },
+            command,
+            id,
+          )
           return
         }
         case "message.enqueue":
