@@ -45,6 +45,7 @@ import { handleSettingsCommand } from "./ws-router-settings"
 import { handleDiffCommand } from "./ws-router-diff"
 import { handleOrchCommand } from "./ws-router-orch"
 import { handleAgentCtrlCommand } from "./ws-router-agent-ctrl"
+import { handlePushCommand } from "./ws-router-push"
 
 // Re-export skill utilities so existing callers (tests, server.ts, etc.) keep working.
 export {
@@ -1554,53 +1555,23 @@ export function createWsRouter({
           pushTerminalSnapshot(command.terminalId)
           return
         }
-        case "push.identifyDevice": {
-          ws.data.pushDeviceId = command.pushDeviceId
-          if (command.pushDeviceId) {
-            await pushManager.recordDeviceSeen(command.pushDeviceId)
-            await broadcastFilteredSnapshots({ includePushConfig: true })
-          }
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
-          return
-        }
-        case "push.subscribe": {
-          const result = await pushManager.addSubscription({
-            subscription: command.subscription,
-            label: command.label,
-            userAgent: command.userAgent,
-          })
-          ws.data.pushDeviceId = result.id
-          await broadcastFilteredSnapshots({ includePushConfig: true })
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result })
-          return
-        }
-        case "push.unsubscribe": {
-          await pushManager.removeSubscription(command.pushDeviceId, "user_revoked")
-          if (ws.data.pushDeviceId === command.pushDeviceId) {
-            ws.data.pushDeviceId = null
-          }
-          await broadcastFilteredSnapshots({ includePushConfig: true })
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
-          return
-        }
-        case "push.test": {
-          if (ws.data.pushDeviceId) {
-            await pushManager.sendTest(ws.data.pushDeviceId)
-          }
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
-          return
-        }
-        case "push.setProjectMute": {
-          await pushManager.setProjectMute(command.localPath, command.muted)
-          await broadcastFilteredSnapshots({ includePushConfig: true })
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
-          return
-        }
+        case "push.identifyDevice":
+        case "push.subscribe":
+        case "push.unsubscribe":
+        case "push.test":
+        case "push.setProjectMute":
         case "push.setFocusedChat": {
-          if (ws.data.pushDeviceId) {
-            pushManager.setFocusedChat(ws.data.pushDeviceId, command.chatId)
-          }
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
+          await handlePushCommand(
+            {
+              pushManager,
+              getPushDeviceId: () => ws.data.pushDeviceId,
+              setPushDeviceId: (did) => { ws.data.pushDeviceId = did },
+              send: (envelope) => send(ws, envelope),
+              broadcastPushConfig: () => broadcastFilteredSnapshots({ includePushConfig: true }),
+            },
+            command,
+            id,
+          )
           return
         }
         case "pty.cancel":
