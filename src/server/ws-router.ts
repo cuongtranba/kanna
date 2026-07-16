@@ -40,12 +40,12 @@ import { listWorktrees } from "./worktree-store.adapter"
 import type { TunnelGateway } from "./cloudflare-tunnel/gateway"
 import type { PushManager } from "./push/push-manager"
 import type { SessionShareService } from "./session-share"
-import type { ShareCommandResult } from "../shared/session-share/protocol"
 import { handleSettingsCommand } from "./ws-router-settings"
 import { handleDiffCommand } from "./ws-router-diff"
 import { handleOrchCommand } from "./ws-router-orch"
 import { handleAgentCtrlCommand } from "./ws-router-agent-ctrl"
 import { handlePushCommand } from "./ws-router-push"
+import { handleMiscCommand } from "./ws-router-misc"
 
 // Re-export skill utilities so existing callers (tests, server.ts, etc.) keep working.
 export {
@@ -1506,53 +1506,30 @@ export function createWsRouter({
           send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
           return
         }
-        case "message.enqueue": {
-          const result = await agent.enqueue(command)
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result })
-          await broadcastChatAndSidebar(command.chatId)
-          return
-        }
-        case "message.steer": {
-          await agent.steer(command)
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
-          await broadcastChatAndSidebar(command.chatId)
-          return
-        }
-        case "message.dequeue": {
-          await agent.dequeue(command)
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
-          await broadcastChatAndSidebar(command.chatId)
-          return
-        }
-        case "terminal.create": {
-          const project = store.getProject(command.projectId)
-          if (!project) {
-            throw new Error("Project not found")
-          }
-          const snapshot = terminals.createTerminal({
-            projectPath: project.localPath,
-            terminalId: command.terminalId,
-            cols: command.cols,
-            rows: command.rows,
-            scrollback: command.scrollback,
-          })
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: snapshot })
-          return
-        }
-        case "terminal.input": {
-          terminals.write(command.terminalId, command.data)
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
-          return
-        }
-        case "terminal.resize": {
-          terminals.resize(command.terminalId, command.cols, command.rows)
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
-          return
-        }
+        case "message.enqueue":
+        case "message.steer":
+        case "message.dequeue":
+        case "terminal.create":
+        case "terminal.input":
+        case "terminal.resize":
         case "terminal.close": {
-          terminals.close(command.terminalId)
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
-          pushTerminalSnapshot(command.terminalId)
+          await handleMiscCommand(
+            {
+              store,
+              terminals,
+              agent,
+              sessionShare,
+              analytics: resolvedAnalytics,
+              listWorktrees,
+              getOriginHost: () => ws.data.originHost ?? "",
+              send: (envelope) => send(ws, envelope),
+              broadcastSidebar: () => broadcastFilteredSnapshots({ includeSidebar: true }),
+              broadcastChatAndSidebar,
+              pushTerminalSnapshot,
+            },
+            command,
+            id,
+          )
           return
         }
         case "push.identifyDevice":
@@ -1589,77 +1566,32 @@ export function createWsRouter({
           )
           return
         }
-        case "stack.create": {
-          const stack = await store.createStack(command.title, command.projectIds)
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: { stackId: stack.id } })
-          resolvedAnalytics.track("stack_created")
-          await broadcastFilteredSnapshots({ includeSidebar: true })
-          return
-        }
-        case "stack.rename": {
-          await store.renameStack(command.stackId, command.title)
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
-          await broadcastFilteredSnapshots({ includeSidebar: true })
-          return
-        }
-        case "stack.remove": {
-          await store.removeStack(command.stackId)
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
-          await broadcastFilteredSnapshots({ includeSidebar: true })
-          return
-        }
-        case "stack.addProject": {
-          await store.addProjectToStack(command.stackId, command.projectId)
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
-          await broadcastFilteredSnapshots({ includeSidebar: true })
-          return
-        }
-        case "stack.removeProject": {
-          await store.removeProjectFromStack(command.stackId, command.projectId)
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
-          await broadcastFilteredSnapshots({ includeSidebar: true })
-          return
-        }
-        case "stack.listWorktrees": {
-          const project = store.getProject(command.projectId)
-          if (!project) {
-            throw new Error("Project not found")
-          }
-          const worktrees = await listWorktrees(project.localPath)
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: { worktrees } })
-          return
-        }
-        case "share.mint": {
-          if (!sessionShare) {
-            send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: { ok: false, error: { kind: "snapshot_write_failed", message: "session-share service unavailable" } } })
-            return
-          }
-          const r = await sessionShare.mintToken(command.payload, ws.data.originHost ?? "")
-          const result: ShareCommandResult = r.ok
-            ? { ok: true, kind: "mint", data: r.data }
-            : { ok: false, error: r.error }
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result })
-          return
-        }
-        case "share.revoke": {
-          if (!sessionShare) {
-            send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: { ok: false, error: { kind: "not_found" } } })
-            return
-          }
-          const r = await sessionShare.revokeToken(command.payload)
-          const result: ShareCommandResult = r.ok
-            ? { ok: true, kind: "revoke", data: r.data }
-            : { ok: false, error: r.error }
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result })
-          return
-        }
+        case "stack.create":
+        case "stack.rename":
+        case "stack.remove":
+        case "stack.addProject":
+        case "stack.removeProject":
+        case "stack.listWorktrees":
+        case "share.mint":
+        case "share.revoke":
         case "share.list": {
-          if (!sessionShare) {
-            send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: { ok: true, kind: "list", data: { shares: [] } } })
-            return
-          }
-          const shares = sessionShare.listSharesForChat(command.payload.chatId, ws.data.originHost ?? "")
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: { ok: true, kind: "list", data: { shares } } })
+          await handleMiscCommand(
+            {
+              store,
+              terminals,
+              agent,
+              sessionShare,
+              analytics: resolvedAnalytics,
+              listWorktrees,
+              getOriginHost: () => ws.data.originHost ?? "",
+              send: (envelope) => send(ws, envelope),
+              broadcastSidebar: () => broadcastFilteredSnapshots({ includeSidebar: true }),
+              broadcastChatAndSidebar,
+              pushTerminalSnapshot,
+            },
+            command,
+            id,
+          )
           return
         }
         case "workflows.getRun":
