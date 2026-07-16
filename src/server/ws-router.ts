@@ -16,7 +16,7 @@ import type { AnalyticsReporter } from "./analytics"
 import { NoopAnalyticsReporter } from "./analytics"
 import type { AppSettingsManager } from "./app-settings"
 import type { DiscoveredProject } from "./discovery.adapter"
-import { DiffStore, fetchGitHubReleases } from "./diff-store"
+import { DiffStore } from "./diff-store"
 import { EventStore } from "./event-store"
 import { openExternal } from "./external-open"
 import { KeybindingsManager } from "./keybindings"
@@ -30,30 +30,20 @@ import { AUTH_DEFAULTS, CLAUDE_AUTH_DEFAULTS, CLAUDE_DRIVER_DEFAULTS, CLAUDE_PTY
 import type {
   AppSettingsPatch,
   AppSettingsSnapshot,
-  McpServerConfig,
   LlmProviderSnapshot,
   LlmProviderValidationResult,
   OpenRouterModel,
   Subagent,
-  SubagentValidationError,
 } from "../shared/types"
 import { importClaudeSessions } from "./claude-session-importer.adapter"
 import { listWorktrees } from "./worktree-store.adapter"
 import type { TunnelGateway } from "./cloudflare-tunnel/gateway"
 import type { PushManager } from "./push/push-manager"
-import { validateMcpServer } from "./mcp-validator"
-import { startMcpOAuth, completeMcpOAuth, ensureFreshMcpToken } from "./mcp-oauth.adapter"
 import type { SessionShareService } from "./session-share"
 import type { ShareCommandResult } from "../shared/session-share/protocol"
-// Import skill utilities for use in the skills.* command handlers below.
-import {
-  installSkill,
-  listInstalledSkills,
-  searchSkills,
-  uninstallSkill,
-} from "./ws-router-skills"
+import { handleSettingsCommand } from "./ws-router-settings"
 
-// Re-export all skill utilities so existing callers (tests, server.ts, etc.) keep working.
+// Re-export skill utilities so existing callers (tests, server.ts, etc.) keep working.
 export {
   assertSafeSkillId,
   assertSafeSkillSource,
@@ -66,6 +56,9 @@ export {
   searchSkills,
   uninstallSkill,
 } from "./ws-router-skills"
+
+// Re-export settings helpers that tests import from this module.
+export { resolveMcpTestBearer } from "./ws-router-settings"
 
 const DEFAULT_CHAT_RECENT_LIMIT = 200
 
@@ -224,9 +217,6 @@ function send(ws: ServerWebSocket<ClientState>, message: ServerEnvelope) {
   return payload.length
 }
 
-function isSubagentValidationError(value: Subagent | SubagentValidationError): value is SubagentValidationError {
-  return "code" in value && "message" in value
-}
 
 function ensureSnapshotSignatures(ws: ServerWebSocket<ClientState>) {
   if (!ws.data.snapshotSignatures) {
@@ -1219,242 +1209,41 @@ export function createWsRouter({
           })
           return
         }
-        case "settings.readKeybindings": {
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: keybindings.getSnapshot() })
-          return
-        }
-        case "settings.writeKeybindings": {
-          const snapshot = await keybindings.write(command.bindings)
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: snapshot })
-          return
-        }
-        case "settings.readAppSettings": {
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: resolvedAppSettings.getSnapshot() })
-          return
-        }
-        case "settings.writeAppSettings": {
-          const previousAnalyticsEnabled = resolvedAppSettings.getSnapshot().analyticsEnabled
-          if (previousAnalyticsEnabled && !command.analyticsEnabled) {
-            resolvedAnalytics.track("analytics_disabled")
-          }
-          const snapshot = await resolvedAppSettings.write({ analyticsEnabled: command.analyticsEnabled })
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: snapshot })
-          if (!previousAnalyticsEnabled && command.analyticsEnabled) {
-            resolvedAnalytics.track("analytics_enabled")
-          }
-          return
-        }
-        case "appSettings.setCloudflareTunnel": {
-          await resolvedAppSettings.setCloudflareTunnel(command.patch)
-          const snapshot = resolvedAppSettings.getSnapshot()
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: snapshot })
-          return
-        }
-        case "appSettings.setClaudeAuth": {
-          await resolvedAppSettings.setClaudeAuth(command.patch)
-          const snapshot = resolvedAppSettings.getSnapshot()
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: snapshot })
-          return
-        }
-        case "appSettings.testOAuthToken": {
-          const result = await testOAuthToken(command.token)
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result })
-          return
-        }
-        case "settings.writeAppSettingsPatch": {
-          const previousAnalyticsEnabled = resolvedAppSettings.getSnapshot().analyticsEnabled
-          const snapshot = await resolvedAppSettings.writePatch(command.patch)
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: snapshot })
-
-          // Fire-and-forget auto-test for newly created or updated MCP server.
-          const targetId = (() => {
-            const ops = command.patch.customMcpServers
-            if (!ops) return null
-            if (ops.update) return ops.update.id
-            if (ops.create) {
-              // The created entry is the one with no prior match by name —
-              // simplest: pick the entry with the latest createdAt.
-              const list = snapshot.customMcpServers
-              if (list.length === 0) return null
-              return list.reduce((latest, e) => (e.createdAt > latest.createdAt ? e : latest), list[0]!).id
-            }
-            return null
-          })()
-          if (targetId) {
-            void runMcpAutoTest(targetId, resolvedAppSettings)
-          }
-
-          if (command.patch.analyticsEnabled !== undefined && previousAnalyticsEnabled && !snapshot.analyticsEnabled) {
-            resolvedAnalytics.track("analytics_disabled")
-          }
-          if (command.patch.analyticsEnabled !== undefined && !previousAnalyticsEnabled && snapshot.analyticsEnabled) {
-            resolvedAnalytics.track("analytics_enabled")
-          }
-          return
-        }
-        case "subagent.create": {
-          const result = await resolvedAppSettings.createSubagent(command.input)
-          send(ws, {
-            v: PROTOCOL_VERSION,
-            type: "ack",
-            id,
-            result: isSubagentValidationError(result)
-              ? { ok: false, error: result }
-              : { ok: true, subagent: result },
-          })
-          return
-        }
-        case "subagent.update": {
-          const result = await resolvedAppSettings.updateSubagent(command.id, command.patch)
-          send(ws, {
-            v: PROTOCOL_VERSION,
-            type: "ack",
-            id,
-            result: isSubagentValidationError(result)
-              ? { ok: false, error: result }
-              : { ok: true, subagent: result },
-          })
-          return
-        }
-        case "subagent.delete": {
-          await resolvedAppSettings.deleteSubagent(command.id)
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: { ok: true } })
-          return
-        }
-        case "settings.testMcpServer": {
-          const snapshot = resolvedAppSettings.getSnapshot()
-          const entry = snapshot.customMcpServers.find((s) => s.id === command.id)
-          if (!entry) {
-            send(ws, {
-              v: PROTOCOL_VERSION,
-              type: "ack",
-              id,
-              result: {
-                ok: false,
-                message: "MCP server not found",
-                lastTest: { status: "error", testedAt: new Date().toISOString(), message: "not found" } as const,
-              },
-            })
-            return
-          }
-          // Mark pending so the UI sees a spinner while we connect.
-          await resolvedAppSettings.writePatch({
-            customMcpServers: {
-              setTestResult: { id: entry.id, result: { status: "pending", startedAt: new Date().toISOString() } },
-            },
-          })
-          const testBearer = await resolveMcpTestBearer(entry, resolvedAppSettings)
-          const lastTest = await validateMcpServer(entry, testBearer ? { bearer: testBearer } : {})
-          await resolvedAppSettings.writePatch({
-            customMcpServers: { setTestResult: { id: entry.id, result: lastTest } },
-          })
-          send(ws, {
-            v: PROTOCOL_VERSION,
-            type: "ack",
-            id,
-            result: {
-              ok: lastTest.status === "ok",
-              message: lastTest.status === "error" ? lastTest.message : undefined,
-              lastTest,
-            },
-          })
-          return
-        }
-        case "settings.startMcpOAuth": {
-          const snapshot = resolvedAppSettings.getSnapshot()
-          const entry = snapshot.customMcpServers.find((s) => s.id === command.id)
-          if (!entry || entry.transport === "stdio") {
-            send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: { ok: false, error: "not found or unsupported transport" } })
-            return
-          }
-          try {
-            const result = await startMcpOAuth(entry, {
-              persist: (oauth) => void resolvedAppSettings.writePatch({ customMcpServers: { setOAuthState: { id: entry.id, oauth } } }),
-            })
-            send(ws, {
-              v: PROTOCOL_VERSION, type: "ack", id,
-              result: result.kind === "authorizationUrl"
-                ? { ok: true, authorizationUrl: result.authorizationUrl }
-                : { ok: true, alreadyAuthenticated: true },
-            })
-          } catch (err) {
-            send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: { ok: false, error: err instanceof Error ? err.message : "oauth start failed" } })
-          }
-          return
-        }
-        case "settings.completeMcpOAuth": {
-          const snapshot = resolvedAppSettings.getSnapshot()
-          const entry = snapshot.customMcpServers.find((s) => s.id === command.id)
-          if (!entry || entry.transport === "stdio") {
-            send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: { ok: false, error: "not found" } })
-            return
-          }
-          try {
-            const result = await completeMcpOAuth(entry, command.callbackUrl, {
-              persist: (oauth) => void resolvedAppSettings.writePatch({ customMcpServers: { setOAuthState: { id: entry.id, oauth } } }),
-              listTools: async (_serverUrl, accessToken) => {
-                const r = await validateMcpServer(entry, { bearer: accessToken })
-                return r.status === "ok" ? r.toolCount : 0
-              },
-            })
-            send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: { ok: true, testResult: result } })
-          } catch (err) {
-            send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: { ok: false, error: err instanceof Error ? err.message : "oauth complete failed" } })
-          }
-          return
-        }
-        case "settings.readLlmProvider": {
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: await resolvedLlmProvider.read() })
-          return
-        }
-        case "settings.listOpenRouterModels": {
-          const models = listOpenRouterModels ? await listOpenRouterModels() : []
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: models })
-          return
-        }
-        case "settings.getChangelog": {
-          const releases = await fetchGitHubReleases("cuongtranba/kanna")
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: releases })
-          return
-        }
-        case "settings.writeLlmProvider": {
-          const snapshot = await resolvedLlmProvider.write({
-            provider: command.provider,
-            apiKey: command.apiKey,
-            model: command.model,
-            baseUrl: command.baseUrl,
-          })
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: snapshot })
-          return
-        }
-        case "settings.validateLlmProvider": {
-          const result = await resolvedLlmProvider.validate({
-            provider: command.provider,
-            apiKey: command.apiKey,
-            model: command.model,
-            baseUrl: command.baseUrl,
-          })
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result })
-          return
-        }
-        case "skills.search": {
-          const snapshot = await searchSkills(command.query, command.limit)
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: snapshot })
-          return
-        }
-        case "skills.install": {
-          const result = await installSkill(command.source, command.skillId)
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result })
-          return
-        }
-        case "skills.uninstall": {
-          const result = await uninstallSkill(command.skillId)
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result })
-          return
-        }
+        case "settings.readKeybindings":
+        case "settings.writeKeybindings":
+        case "settings.readAppSettings":
+        case "settings.writeAppSettings":
+        case "appSettings.setCloudflareTunnel":
+        case "appSettings.setClaudeAuth":
+        case "appSettings.testOAuthToken":
+        case "settings.writeAppSettingsPatch":
+        case "subagent.create":
+        case "subagent.update":
+        case "subagent.delete":
+        case "settings.testMcpServer":
+        case "settings.startMcpOAuth":
+        case "settings.completeMcpOAuth":
+        case "settings.readLlmProvider":
+        case "settings.listOpenRouterModels":
+        case "settings.getChangelog":
+        case "settings.writeLlmProvider":
+        case "settings.validateLlmProvider":
+        case "skills.search":
+        case "skills.install":
+        case "skills.uninstall":
         case "skills.listInstalled": {
-          const result = await listInstalledSkills()
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result })
+          await handleSettingsCommand(
+            {
+              keybindings,
+              resolvedAppSettings,
+              resolvedAnalytics,
+              resolvedLlmProvider,
+              listOpenRouterModels,
+              send: (envelope) => send(ws, envelope),
+            },
+            command,
+            id,
+          )
           return
         }
         case "project.open": {
@@ -2199,79 +1988,5 @@ export function createWsRouter({
       disposeWorkflows()
       disposeOrchRuns()
     },
-  }
-}
-
-async function testOAuthToken(token: string): Promise<{ ok: boolean; error: string | null }> {
-  const trimmed = typeof token === "string" ? token.trim() : ""
-  if (!trimmed) return { ok: false, error: "Token is empty" }
-  try {
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "anthropic-version": "2023-06-01",
-        "content-type": "application/json",
-        "authorization": `Bearer ${trimmed}`,
-      },
-      body: JSON.stringify({
-        model: "claude-haiku-4-5-20251001",
-        max_tokens: 1,
-        messages: [{ role: "user", content: "ok" }],
-      }),
-      signal: AbortSignal.timeout(10_000),
-    })
-    if (res.status === 401 || res.status === 403) return { ok: false, error: "Unauthorized" }
-    if (res.status === 429) return { ok: true, error: "Token valid but currently rate-limited" }
-    if (!res.ok) return { ok: false, error: `HTTP ${res.status}` }
-    return { ok: true, error: null }
-  } catch (err) {
-    if (err instanceof Error && err.name === "TimeoutError") {
-      return { ok: false, error: "Request timed out after 10s" }
-    }
-    return { ok: false, error: err instanceof Error ? err.message : String(err) }
-  }
-}
-
-/**
- * For an OAuth-authenticated network server, resolve a fresh access token to
- * inject as a Bearer when probing it — the manual "Test" / auto-test path is
- * otherwise tokenless and a healthy OAuth server 401s. Returns undefined for
- * stdio, static-header, or not-yet-authenticated servers (the probe runs with
- * stored headers only). A refresh failure also yields undefined, so the probe
- * surfaces the unauthorized error that correctly signals re-auth is needed.
- */
-export async function resolveMcpTestBearer(
-  entry: McpServerConfig,
-  appSettings: { writePatch(p: AppSettingsPatch): Promise<unknown> },
-): Promise<string | undefined> {
-  if (entry.transport === "stdio" || entry.oauth?.status !== "authenticated") return undefined
-  try {
-    return await ensureFreshMcpToken(entry, {
-      persist: (oauth) =>
-        void appSettings.writePatch({ customMcpServers: { setOAuthState: { id: entry.id, oauth } } }),
-    })
-  } catch {
-    return undefined
-  }
-}
-
-async function runMcpAutoTest(
-  id: string,
-  appSettings: { getSnapshot(): AppSettingsSnapshot; writePatch(p: AppSettingsPatch): Promise<unknown> },
-): Promise<void> {
-  try {
-    const entry = appSettings.getSnapshot().customMcpServers.find((s) => s.id === id)
-    if (!entry) return
-    await appSettings.writePatch({
-      customMcpServers: {
-        setTestResult: { id, result: { status: "pending", startedAt: new Date().toISOString() } },
-      },
-    })
-    const bearer = await resolveMcpTestBearer(entry, appSettings)
-    const result = await validateMcpServer(entry, bearer ? { bearer } : {})
-    await appSettings.writePatch({ customMcpServers: { setTestResult: { id, result } } })
-  } catch (err) {
-    // Auto-test must never throw; log + swallow.
-    log.warn("[kanna/ws-router] runMcpAutoTest failed", String(err))
   }
 }
