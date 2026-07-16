@@ -13,6 +13,7 @@ bash scripts/verify-decomp.sh
 
 ## Progress (latest first)
 
+- 2026-07-16 Extract mergeAppSettingsPatch + fallback builders (resolvedDiffStore, resolvedLlmProvider, resolvedAppSettings) to ws-router-defaults.ts (mergeAppSettingsPatch, buildInitialAppSettingsSnapshot, buildFallbackDiffStore, buildFallbackLlmProvider, buildResolvedAppSettings, ResolvedAppSettings) + 24 tests. ws-router.ts: 1548 → 1280 LOC.
 - 2026-07-16 Extract chat WS handlers to ws-router-chat.ts (chat.create/fork/rename/archive/unarchive/delete/markRead/setPolicyOverride/setDraftProtection/send/cancel/stopDraining/loadHistory/respondTool/toolRequestAnswer/respondSubagentTool/cancelSubagentRun — 17 handlers, ChatCommandDeps interface, handleChatCommand) + 18 tests. ws-router.ts: 1617 → 1548 LOC.
 - 2026-07-16 Extract project/sessions/sidebar/system/update WS handlers to ws-router-project.ts (system.ping, system.openExternal, update.check/install/reload, project.open/create/remove/setStar/readDiffPatch, sessions.importClaude, sidebar.reorderProjectGroups — 12 handlers, ProjectCommandDeps interface, handleProjectCommand) + 17 tests. ws-router.ts: 1703 → 1617 LOC.
 - 2026-07-16 Extract misc WS handlers to ws-router-misc.ts (message.enqueue/steer/dequeue, terminal.create/input/resize/close, stack.create/rename/remove/addProject/removeProject/listWorktrees, share.mint/revoke/list — 16 handlers, MiscCommandDeps interface, handleMiscCommand) + 22 tests. ws-router.ts: 1771 → 1703 LOC.
@@ -29,31 +30,40 @@ bash scripts/verify-decomp.sh
 
 ## Next chunk
 
-ws-router.ts (1548 LOC): extract the `mergeAppSettingsPatch` pure helper and the three
-fallback-default objects (`resolvedDiffStore`, `resolvedLlmProvider`, `resolvedAppSettings`)
-into `src/server/ws-router-defaults.ts`. These 4 constructs span ~260 lines inside
-`createWsRouter` and have no dependency on the factory's captured sockets/broadcast state —
-they only consume types from `shared/types.ts` and the injected manager instances.
+agent.ts (4998 LOC): extract the Claude SDK message normalisation layer into
+`src/server/claude-message-normalizer.ts`. This is a cohesive, IO-free module covering
+the conversion from raw Claude SDK stream messages → typed `TranscriptEntry[]`.
 
-Files to create / change:
-- **NEW** `src/server/ws-router-defaults.ts` — exports:
-  - `mergeAppSettingsPatch(snapshot: AppSettingsSnapshot, patch: AppSettingsPatch): AppSettingsSnapshot` — pure, no IO
-  - `buildFallbackDiffStore()` — returns the noop `DiffStore` shape used when `diffStore` arg is absent
-  - `buildFallbackLlmProvider()` — returns the noop `LlmProvider` shape
-  - `buildResolvedAppSettings(appSettings, mergeAppSettingsPatch)` — returns the `resolvedAppSettings` adapter
-    (wraps optional `AppSettingsManager` with in-memory fallback; depends only on injected `appSettings` arg)
-  - Export the `FallbackDiffStore`, `FallbackLlmProvider`, `ResolvedAppSettings` types
-- **CHANGED** `src/server/ws-router.ts` — import the 4 helpers, delete the inline implementations
-  (~260 lines removed → ws-router.ts: 1548 → ~1290 LOC)
-- **NEW** `src/server/ws-router-defaults.test.ts` — ≥8 tests covering:
-  - mergeAppSettingsPatch: patch.subagents.create, .update, .delete; nested terminal/editor merge;
-    providerDefaults merge; claudeDriver lifecycle merge
-  - buildFallbackDiffStore: returns object with all DiffStore methods
-  - buildFallbackLlmProvider: returns object with read/write/validate methods
-  - buildResolvedAppSettings: getSnapshot returns fallback when no appSettings; writePatch mutates fallback; onChange noop
+Symbols to move (lines ~692–1055 in agent.ts, ~365 lines):
+- `ClaudeRawContentBlock` interface
+- `ClaudeRawMessageBody` interface
+- `ClaudeRawSdkMessage` interface (exported)
+- `getClaudeAssistantMessageUsageId(message)` export function
+- `SYNTHETIC_NON_ERROR_PLACEHOLDERS` const
+- `POLICY_REFUSAL_TEXT_MARKERS` const
+- `normalizeToolContent(c)` helper
+- `isSdkToClaudeMessage(m)` helper
+- `normalizeClaudeStreamMessage(message)` export function (~250 lines)
 
-After extraction, run `bun run lint src/server/ws-router-defaults.ts src/server/ws-router.ts`,
-`bun run typecheck`, `bun test --conditions production src/server/ws-router-defaults.test.ts`,
+No IO — all pure transforms + type predicates. No adapter suffix needed.
+Imports needed in the new file: `../shared/types` (TranscriptEntry and friends),
+`../shared/errors` (isRecord), `./agent` types (but only the ones it creates, none back).
+Keep re-exports in `agent.ts` so all current callers keep working.
+
+Files:
+- **NEW** `src/server/claude-message-normalizer.ts` — all 9 symbols above
+- **CHANGED** `src/server/agent.ts` — remove the 9 symbols, add import +
+  re-export of the 3 public ones (`ClaudeRawSdkMessage`, `getClaudeAssistantMessageUsageId`,
+  `normalizeClaudeStreamMessage`). agent.ts: 4998 → ~4633 LOC.
+- **NEW** `src/server/claude-message-normalizer.test.ts` — ≥8 tests:
+  - `normalizeClaudeStreamMessage`: text block, tool_use block, tool_result block,
+    usage extraction, empty message, SYNTHETIC_NON_ERROR_PLACEHOLDERS filtering
+  - `getClaudeAssistantMessageUsageId`: returns id for assistant message, null for user
+  - `normalizeToolContent`: string, object, null inputs
+
+Run `bun run lint src/server/claude-message-normalizer.ts src/server/agent.ts`,
+`bun run typecheck`,
+`bun test --conditions production src/server/claude-message-normalizer.test.ts`,
 commit, push, update this file.
 
 ## Worker rules (every subagent MUST follow)
