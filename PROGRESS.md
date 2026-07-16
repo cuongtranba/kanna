@@ -13,6 +13,7 @@ bash scripts/verify-decomp.sh
 
 ## Progress (latest first)
 
+- 2026-07-16 Extract Claude SDK harness stream processor to claude-harness-stream.ts (createClaudeHarnessStream — session_token, rate_limit, context_window_updated, result enrichment, api_error scrub, cost attachment) + 12 tests. agent.ts: 4520 → 4380 LOC.
 - 2026-07-16 Extract context-window usage math to claude-usage-math.ts (normalizeClaudeUsageSnapshot, resolveFinalTurnUsage, maxClaudeContextWindowFromModelUsage, parseConfiguredContextWindowFromModelId, asRecord, asNumber) + 20 tests. agent.ts: 4614 → 4520 LOC.
 - 2026-07-16 Extract Claude SDK message normaliser (ClaudeRawSdkMessage, getClaudeAssistantMessageUsageId, normalizeClaudeStreamMessage, timestamped, private helpers: stringFromUnknown, normalizeMcpServerEntry, normalizeToolContent, isSdkToClaudeMessage) to claude-message-normalizer.ts + 18 tests. agent.ts: 4998 → 4613 LOC.
 - 2026-07-16 Extract mergeAppSettingsPatch + fallback builders (resolvedDiffStore, resolvedLlmProvider, resolvedAppSettings) to ws-router-defaults.ts (mergeAppSettingsPatch, buildInitialAppSettingsSnapshot, buildFallbackDiffStore, buildFallbackLlmProvider, buildResolvedAppSettings, ResolvedAppSettings) + 24 tests. ws-router.ts: 1548 → 1280 LOC.
@@ -32,45 +33,44 @@ bash scripts/verify-decomp.sh
 
 ## Next chunk
 
-agent.ts (4520 LOC): extract the Claude SDK harness stream processor into
-`src/server/claude-harness-stream.ts`. This is a cohesive, IO-free async
-generator that bridges the raw `ClaudeRawSdkMessage` stream to typed `HarnessEvent`
-objects — including usage enrichment, cost computation, and limit detection.
+agent.ts (4380 LOC): extract spawn-preparation helpers into
+`src/server/claude-spawn-helpers.ts`. These are cohesive, IO-free functions
+that prepare the Claude SDK/PTY spawn — no dependency on `AgentCoordinator`
+or `startClaudeSession`, so no circular risk.
 
-Symbols to move (lines ~578–719 in current agent.ts, ~142 lines):
-- `createClaudeHarnessStream(q, configuredContextWindow?, resolveTurnPrice?)` export function
+Symbols to move (locate by `grep -n` in current agent.ts):
+- `LOOP_BLOCKED_NATIVE_TOOLS` export const (~9 lines)
+- `BuildCanUseToolArgs` export interface (~10 lines)
+- `buildCanUseTool(args)` export function (~122 lines) — depends on
+  `HarnessToolRequest` (harness-types), `normalizeToolCall`/`KANNA_MCP_SERVER_NAME`
+  (shared/tools), `isRecord` (shared/errors), `ToolCallbackService` (tool-callback),
+  `ChatPermissionPolicy`/`POLICY_DEFAULT` (shared/permission-policy), and the new
+  `LOOP_BLOCKED_NATIVE_TOOLS` constant (same file).
+- `buildClaudeEnv(baseEnv, oauthToken, openrouter?)` export function (~25 lines)
+  — pure env-object builder; no IO.
 
-No IO — pure stream transformation. No adapter suffix needed.
-Imports needed in the new file:
-- `../shared/types` (ContextWindowUsageSnapshot, ProviderUsage)
-- `../shared/token-pricing` (computeCostUsd, ModelPrice)
-- `./harness-types` (HarnessEvent)
-- `./claude-message-normalizer` (ClaudeRawSdkMessage, normalizeClaudeStreamMessage, getClaudeAssistantMessageUsageId, timestamped)
-- `./claude-usage-math` (normalizeClaudeUsageSnapshot, resolveFinalTurnUsage, maxClaudeContextWindowFromModelUsage)
-- `./auto-continue/limit-detector` (ClaudeLimitDetector)
-No imports from agent.ts (no circular dependency).
-
-Keep re-exports in `agent.ts` for existing callers:
-- `src/server/agent.ts` itself (startClaudeSession at ~line 1120)
-- `src/server/claude-pty/parity-matrix.test.ts` (imports from `../agent`)
+No imports from agent.ts (no circular dependency). Keep re-exports in agent.ts
+for existing callers (startClaudeSession uses them internally; external callers
+import them from `../agent`).
 
 Files:
-- **NEW** `src/server/claude-harness-stream.ts` — the single function above
-- **CHANGED** `src/server/agent.ts` — remove the function, add import +
-  re-export of `createClaudeHarnessStream`. agent.ts: 4520 → ~4378 LOC.
-- **NEW** `src/server/claude-harness-stream.test.ts` — ≥8 tests:
-  - session_token event emitted when sdkMessage.session_id is present
-  - rate_limit_event → rate_limit HarnessEvent
-  - assistant message → context_window_updated entry (timestamped)
-  - result message → enriched result entry with usage + costUsd
-  - normalizeClaudeStreamMessage entries are yielded as transcript events
-  - api_error in turn scrubs result body (apiErrorEmittedInTurn behavior)
-  - cancelled result → interrupted entry
-  - empty stream yields nothing
+- **NEW** `src/server/claude-spawn-helpers.ts`
+- **CHANGED** `src/server/agent.ts` — remove the 4 symbols, add
+  `import … from "./claude-spawn-helpers"` + re-exports. agent.ts: 4380 → ~4220 LOC.
+- **NEW** `src/server/claude-spawn-helpers.test.ts` — ≥8 tests:
+  - buildCanUseTool allows non-AskUserQuestion/ExitPlanMode tools unconditionally
+  - buildCanUseTool denies LOOP_BLOCKED_NATIVE_TOOLS when isLoopArmed() is true
+  - buildCanUseTool allows LOOP_BLOCKED_NATIVE_TOOLS when isLoopArmed() is false
+  - buildCanUseTool routes AskUserQuestion through legacy onToolRequest path
+  - buildCanUseTool routes ExitPlanMode through legacy onToolRequest path (deny on unconfirmed)
+  - buildCanUseTool routes through toolCallback when flag=1 and toolCallback provided
+  - buildClaudeEnv strips CLAUDECODE/CLAUDE_CODE_OAUTH_TOKEN from base env
+  - buildClaudeEnv sets ANTHROPIC_BASE_URL for OpenRouter and clears ANTHROPIC_API_KEY
+  - buildClaudeEnv injects oauthToken as CLAUDE_CODE_OAUTH_TOKEN
 
-Run `bun run lint src/server/claude-harness-stream.ts src/server/agent.ts`,
+Run `bun run lint src/server/claude-spawn-helpers.ts src/server/agent.ts`,
 `bun run typecheck`,
-`bun test --conditions production src/server/claude-harness-stream.test.ts`,
+`bun test --conditions production src/server/claude-spawn-helpers.test.ts`,
 commit, push, update this file.
 
 ## Worker rules (every subagent MUST follow)
