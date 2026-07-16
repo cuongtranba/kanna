@@ -13,6 +13,7 @@ bash scripts/verify-decomp.sh
 
 ## Progress (latest first)
 
+- 2026-07-16 Extract chat WS handlers to ws-router-chat.ts (chat.create/fork/rename/archive/unarchive/delete/markRead/setPolicyOverride/setDraftProtection/send/cancel/stopDraining/loadHistory/respondTool/toolRequestAnswer/respondSubagentTool/cancelSubagentRun — 17 handlers, ChatCommandDeps interface, handleChatCommand) + 18 tests. ws-router.ts: 1617 → 1548 LOC.
 - 2026-07-16 Extract project/sessions/sidebar/system/update WS handlers to ws-router-project.ts (system.ping, system.openExternal, update.check/install/reload, project.open/create/remove/setStar/readDiffPatch, sessions.importClaude, sidebar.reorderProjectGroups — 12 handlers, ProjectCommandDeps interface, handleProjectCommand) + 17 tests. ws-router.ts: 1703 → 1617 LOC.
 - 2026-07-16 Extract misc WS handlers to ws-router-misc.ts (message.enqueue/steer/dequeue, terminal.create/input/resize/close, stack.create/rename/remove/addProject/removeProject/listWorktrees, share.mint/revoke/list — 16 handlers, MiscCommandDeps interface, handleMiscCommand) + 22 tests. ws-router.ts: 1771 → 1703 LOC.
 - 2026-07-16 Extract push WS handlers to ws-router-push.ts (push.identifyDevice, push.subscribe, push.unsubscribe, push.test, push.setProjectMute, push.setFocusedChat — 6 handlers, PushManagerDep/PushCommandDeps interfaces, handlePushCommand) + 11 tests. ws-router.ts: 1800 → 1771 LOC.
@@ -28,19 +29,32 @@ bash scripts/verify-decomp.sh
 
 ## Next chunk
 
-ws-router.ts (1617 LOC): extract the remaining 17 direct `chat.*` command handlers into `src/server/ws-router-chat.ts`. Handlers to move: `chat.create` (store.createChat + analytics.track + broadcastChatAndSidebar), `chat.fork` (agent.forkChat + broadcastSidebar), `chat.rename` (store.renameChat + broadcastChatAndSidebar), `chat.archive` (store.archiveChat + broadcastSidebar), `chat.unarchive` (store.unarchiveChat + broadcastChatAndSidebar), `chat.delete` (agent.cancel + listLiveSchedules + cancelAutoContinue + closeChat + toolCallbackService.cancelAllForChat + store.deleteChat + analytics + broadcastSidebar), `chat.markRead` (store.setChatReadState + broadcastChatAndSidebar), `chat.setPolicyOverride` (store.setChatPolicyOverride + broadcastChatAndSidebar), `chat.setDraftProtection` (setDraftProtection dep: `(chatIds: string[]) => void`), `chat.send` (agent.send + agent.getActiveTurnProfile + logSendProfilingFn dep), `chat.cancel` (agent.cancel + toolCallbackService.cancelAllForChat), `chat.stopDraining` (agent.stopDraining), `chat.loadHistory` (store.getChat + store.getMessagesPageBefore), `chat.respondTool` (agent.respondTool), `chat.toolRequestAnswer` (agent.toolCallbackService.answer + store.getToolRequest + broadcastChatAndSidebar), `chat.respondSubagentTool` (agent.respondSubagentTool), `chat.cancelSubagentRun` (agent.cancelSubagentRun).
+ws-router.ts (1548 LOC): extract the `mergeAppSettingsPatch` pure helper and the three
+fallback-default objects (`resolvedDiffStore`, `resolvedLlmProvider`, `resolvedAppSettings`)
+into `src/server/ws-router-defaults.ts`. These 4 constructs span ~260 lines inside
+`createWsRouter` and have no dependency on the factory's captured sockets/broadcast state —
+they only consume types from `shared/types.ts` and the injected manager instances.
 
-Define `ChatCommandDeps` with:
-- `store`: Pick of EventStore (`createChat`, `renameChat`, `archiveChat`, `unarchiveChat`, `deleteChat`, `setChatReadState`, `setChatPolicyOverride`, `getChat`, `getMessagesPageBefore`, `getToolRequest`)
-- `agent`: duck-typed Pick (`send`, `forkChat`, `cancel`, `cancelAutoContinue`, `listLiveSchedules`, `closeChat`, `stopDraining`, `respondTool`, `respondSubagentTool`, `cancelSubagentRun`, `getActiveTurnProfile`, `toolCallbackService?: { cancelAllForChat, answer } | null`)
-- `analytics`: `{ track: (event: string) => void }`
-- `setDraftProtection: (chatIds: string[]) => void` — wraps `ws.data.protectedDraftChatIds = new Set(chatIds)` in caller
-- `logSendProfilingFn: (traceId: string | null | undefined, startedAt: number | null | undefined, stage: string, details?: Record<string, unknown>) => void` — wraps `logSendToStartingProfile` in caller
-- `send: (envelope: ServerEnvelope) => number | undefined` — note: chat.send needs the byte count returned by send()
-- `broadcastChatAndSidebar: (chatId: string) => Promise<void>`
-- `broadcastSidebar: () => Promise<void>` — wraps `broadcastFilteredSnapshots({ includeSidebar: true })`
+Files to create / change:
+- **NEW** `src/server/ws-router-defaults.ts` — exports:
+  - `mergeAppSettingsPatch(snapshot: AppSettingsSnapshot, patch: AppSettingsPatch): AppSettingsSnapshot` — pure, no IO
+  - `buildFallbackDiffStore()` — returns the noop `DiffStore` shape used when `diffStore` arg is absent
+  - `buildFallbackLlmProvider()` — returns the noop `LlmProvider` shape
+  - `buildResolvedAppSettings(appSettings, mergeAppSettingsPatch)` — returns the `resolvedAppSettings` adapter
+    (wraps optional `AppSettingsManager` with in-memory fallback; depends only on injected `appSettings` arg)
+  - Export the `FallbackDiffStore`, `FallbackLlmProvider`, `ResolvedAppSettings` types
+- **CHANGED** `src/server/ws-router.ts` — import the 4 helpers, delete the inline implementations
+  (~260 lines removed → ws-router.ts: 1548 → ~1290 LOC)
+- **NEW** `src/server/ws-router-defaults.test.ts` — ≥8 tests covering:
+  - mergeAppSettingsPatch: patch.subagents.create, .update, .delete; nested terminal/editor merge;
+    providerDefaults merge; claudeDriver lifecycle merge
+  - buildFallbackDiffStore: returns object with all DiffStore methods
+  - buildFallbackLlmProvider: returns object with read/write/validate methods
+  - buildResolvedAppSettings: getSnapshot returns fallback when no appSettings; writePatch mutates fallback; onChange noop
 
-Create `handleChatCommand(deps, command, id): Promise<boolean>`. Add `ws-router-chat.test.ts` with at least 10 tests covering chat.create, chat.delete, chat.send, chat.cancel, chat.toolRequestAnswer, and sidebar broadcast behavior. Wire the 17 case labels + delegate call in ws-router.ts. Verify targeted lint/typecheck/test, commit, push, update this file.
+After extraction, run `bun run lint src/server/ws-router-defaults.ts src/server/ws-router.ts`,
+`bun run typecheck`, `bun test --conditions production src/server/ws-router-defaults.test.ts`,
+commit, push, update this file.
 
 ## Worker rules (every subagent MUST follow)
 
