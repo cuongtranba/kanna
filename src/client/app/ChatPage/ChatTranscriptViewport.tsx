@@ -20,7 +20,7 @@ import {
   useStableResolvedRows,
 } from "../KannaTranscript"
 import type { KannaState } from "../useKannaState"
-import type { AutoContinueSchedule, CloudflareTunnelRecord, SubagentRunSnapshot } from "../../../shared/types"
+import type { AutoContinueSchedule, CloudflareTunnelRecord, LoopProgressSnapshot, SubagentRunSnapshot } from "../../../shared/types"
 import type { ToolRequestDecision } from "../../../shared/permission-policy"
 import { SubagentMessage } from "../../components/messages/SubagentMessage"
 import { SubagentPendingToolCard } from "../../components/messages/SubagentPendingToolCard"
@@ -34,6 +34,7 @@ import {
 import type { EditorPreset } from "../../../shared/protocol"
 import type { WorkflowRun, WorkflowRunSummary } from "../../../shared/workflow-types"
 import { WorkflowsSectionWithDetail } from "../WorkflowsSection"
+import { LoopProgressSection } from "../LoopProgressSection"
 
 export type PendingQuestionRun = SubagentRunSnapshot & {
   pendingTool: NonNullable<SubagentRunSnapshot["pendingTool"]>
@@ -91,6 +92,7 @@ interface ChatTranscriptViewportProps {
   onTunnelRetry?: (tunnelId: string) => void | Promise<void>
   subagentRuns?: Record<string, SubagentRunSnapshot>
   onCancelSubagentRun?: (chatId: string, runId: string) => void
+  loopProgress?: LoopProgressSnapshot
   workflowRuns?: WorkflowRunSummary[]
   getWorkflowRunDetail?: (runId: string) => Promise<WorkflowRun | null>
   /** Slot rendered in the transcript footer, next to the workflows panel. */
@@ -144,6 +146,7 @@ export const ChatTranscriptViewport = memo(({
   onTunnelRetry,
   subagentRuns,
   onCancelSubagentRun,
+  loopProgress,
   workflowRuns,
   getWorkflowRunDetail,
   orchestrationPanel,
@@ -373,6 +376,14 @@ export const ChatTranscriptViewport = memo(({
 
   const listFooter = (
     <div className="mx-auto w-full max-w-[800px]">
+      {loopProgress && (loopProgress.armed || loopProgress.rows.length > 0) ? (
+        <div className="pb-5">
+          <LoopProgressSection
+            loopProgress={loopProgress}
+            onResume={onAutoContinueAccept}
+          />
+        </div>
+      ) : null}
       {workflowRuns && workflowRuns.length > 0 && getWorkflowRunDetail ? (
         <div className="pb-5">
           <WorkflowsSectionWithDetail

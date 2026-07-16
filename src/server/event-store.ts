@@ -897,6 +897,7 @@ export class EventStore implements PushEventStore {
           chatId: e.chatId,
           subagentId: e.subagentId,
           subagentName: e.subagentName,
+          label: e.label ?? null,
           provider: e.provider,
           model: e.model,
           status: "running",

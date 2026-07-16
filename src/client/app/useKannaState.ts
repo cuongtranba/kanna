@@ -248,6 +248,25 @@ function sameSubagentRuns(
   })
 }
 
+function sameLoopProgress(
+  left: ChatSnapshot["loopProgress"],
+  right: ChatSnapshot["loopProgress"],
+) {
+  if (left === right) return true
+  if (left.armed !== right.armed) return false
+  if (left.rows.length !== right.rows.length) return false
+  const rowsMatch = left.rows.every((l, i) => {
+    const r = right.rows[i]
+    return r != null && l.runId === r.runId && l.status === r.status && l.label === r.label
+  })
+  if (!rowsMatch) return false
+  const lr = left.rateLimit
+  const rr = right.rateLimit
+  if ((lr == null) !== (rr == null)) return false
+  if (lr && rr) return lr.resetAt === rr.resetAt && lr.scheduled === rr.scheduled
+  return true
+}
+
 export function sameChatSnapshotCore(left: ChatSnapshot | null, right: ChatSnapshot | null) {
   if (left === right) return true
   if (!left || !right) return false
@@ -261,6 +280,7 @@ export function sameChatSnapshotCore(left: ChatSnapshot | null, right: ChatSnaps
     && sameTunnels(left.tunnels, right.tunnels)
     && left.liveTunnelId === right.liveTunnelId
     && sameSubagentRuns(left.subagentRuns, right.subagentRuns)
+    && sameLoopProgress(left.loopProgress, right.loopProgress)
 }
 
 function mergeTranscriptEntries(olderHistoryEntries: TranscriptEntry[], recentEntries: TranscriptEntry[]) {

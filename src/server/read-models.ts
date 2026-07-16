@@ -7,16 +7,18 @@ import type {
   CustomModelEntry,
   KannaStatus,
   LocalProjectsSnapshot,
+  LoopRateLimitInfo,
   SidebarChatRow,
   SidebarData,
   SidebarProjectGroup,
   StackSummary,
 } from "../shared/types"
 import { mergeCustomModels } from "../shared/types"
+import { buildLoopProgress } from "../shared/loop-progress"
 import type { ChatRecord, ChatTimingState, StoreState } from "./events"
 import { resolveLocalPath } from "./paths"
 import { SERVER_PROVIDERS } from "./provider-catalog"
-import { deriveChatSchedules } from "./auto-continue/read-model"
+import { deriveChatSchedules, deriveLoopState } from "./auto-continue/read-model"
 import { deriveChatTunnels } from "./cloudflare-tunnel/read-model"
 import type { CloudflareTunnelEvent } from "./cloudflare-tunnel/events"
 
@@ -336,6 +338,28 @@ export function deriveChatSnapshot(
       )
     : {}
 
+  const loopState = deriveLoopState(autoContinueEvents, chat.id)
+  const liveSchedule = liveScheduleId ? schedules[liveScheduleId] : undefined
+  const rateLimit: LoopRateLimitInfo | null =
+    loopState
+    && liveSchedule
+    && (liveSchedule.state === "proposed" || liveSchedule.state === "scheduled")
+    && liveSchedule.resetAt != null
+      ? {
+          scheduleId: liveSchedule.scheduleId,
+          resetAt: liveSchedule.resetAt,
+          tz: liveSchedule.tz ?? "system",
+          scheduled: liveSchedule.state === "scheduled",
+        }
+      : null
+  const loopProgress = buildLoopProgress({
+    chatId: chat.id,
+    armed: loopState !== null,
+    loopArmedAt: loopState?.armedAt ?? null,
+    runs: subagentRunsMap ? [...subagentRunsMap.values()] : [],
+    rateLimit,
+  })
+
   return {
     runtime,
     queuedMessages: (state.queuedMessagesByChatId.get(chat.id) ?? []).map((entry) => ({
@@ -352,6 +376,7 @@ export function deriveChatSnapshot(
     tunnels,
     liveTunnelId,
     subagentRuns,
+    loopProgress,
     ...(resolvedBindings !== undefined ? { resolvedBindings } : {}),
   }
 }

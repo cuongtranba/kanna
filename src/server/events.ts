@@ -335,6 +335,9 @@ export type SubagentRunEvent =
       runId: string
       subagentId: string | null
       subagentName: string
+      /** Short prompt-derived label (see SubagentRunSnapshot.label). Optional for
+       *  back-compat: older events and error paths omit it. */
+      label?: string
       provider: AgentProvider
       model: string
       parentUserMessageId: string

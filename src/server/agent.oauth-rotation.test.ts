@@ -928,4 +928,105 @@ describe("AgentCoordinator OAuth rotation", () => {
     },
     10_000,
   )
+
+  test(
+    "errored rate-limit RESULT with no matching active turn still schedules a resume (loop silent-death regression)",
+    async () => {
+      // Regression for the 9h autonomous-loop stall: a synthetic 429 `result`
+      // arriving when the pending prompt-seq queue is already drained (observed
+      // on an auto-continue wake turn) fails the
+      // `completedClaudePromptSeq === active.claudePromptSeq` gate, so the entire
+      // error-handling block — INCLUDING limit detection — was skipped and the
+      // loop died with NO resume schedule (no proposal, no accept). It only
+      // recovered when the user manually typed "resume" hours later. A
+      // recognizable rate-limit result must schedule a resume even when the seq
+      // gate misses. Idempotent: handleLimitDetection dedupes on a live schedule.
+      let tokens: OAuthTokenEntry[] = [makeToken("a")] // single token → no rotation target
+      const pool = new OAuthTokenPool(
+        () => tokens,
+        (id, patch) => {
+          tokens = tokens.map((t) => (t.id === id ? { ...t, ...patch } : t))
+        },
+      )
+
+      const events = new AsyncEventQueue<HarnessEvent>()
+      const store = createFakeStore()
+      const coordinator = new AgentCoordinator({
+        store: store as never,
+        onStateChange: () => {},
+        oauthPool: pool,
+        // auto-resume preference defaults to OFF → the resume is a *proposal*,
+        // respecting the user's setting (not a silent forced accept).
+        startClaudeSession: async () => ({
+          provider: "claude",
+          stream: events,
+          getAccountInfo: async () => null,
+          interrupt: async () => {},
+          close: () => {},
+          setModel: async () => {},
+          setPermissionMode: async () => {},
+          getSupportedCommands: async () => [],
+          sendPrompt: async () => {
+            // Turn 1 finalizes normally, draining the pending prompt-seq…
+            events.push({
+              type: "transcript",
+              entry: {
+                _id: "result-ok",
+                createdAt: Date.now(),
+                kind: "result",
+                subtype: "success",
+                isError: false,
+                durationMs: 10,
+                result: "",
+              } as never,
+            })
+            // …then a synthetic 429 result arrives with the seq queue empty and
+            // no active turn — the gate misses. Pre-fix this was silently dropped.
+            events.push({
+              type: "transcript",
+              entry: {
+                _id: "result-429",
+                createdAt: Date.now(),
+                kind: "result",
+                subtype: "error",
+                isError: true,
+                durationMs: 0,
+                result: "You've hit your limit · resets 4:10am (Asia/Saigon)",
+              } as never,
+            })
+            events.close()
+          },
+        }),
+      })
+
+      await coordinator.send({
+        type: "chat.send",
+        chatId: "chat-1",
+        provider: "claude",
+        content: "test",
+        model: "claude-opus-4-7",
+      })
+
+      await waitFor(
+        () =>
+          store
+            .getAutoContinueEvents("chat-1")
+            .some(
+              (e) => e.kind === "auto_continue_proposed" || e.kind === "auto_continue_accepted",
+            ),
+        4000,
+        "unmatched rate-limit result schedules a resume instead of silent death",
+      )
+
+      const schedule = store
+        .getAutoContinueEvents("chat-1")
+        .find(
+          (e) => e.kind === "auto_continue_proposed" || e.kind === "auto_continue_accepted",
+        )
+      expect(schedule).toBeDefined()
+      // Single-token pool → no rotation; auto-resume off → a proposal (respects setting).
+      expect(schedule!.kind).toBe("auto_continue_proposed")
+    },
+    10_000,
+  )
 })
