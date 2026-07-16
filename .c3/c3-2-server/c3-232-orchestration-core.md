@@ -1,6 +1,6 @@
 ---
 id: c3-232
-c3-seal: 6decbf5cea48cd26c55e85884554869dbac1e0eb475c0740187e84138723566a
+c3-seal: f6c46d97d90c1758cacfeeec1c33a122cee3294781f21bb98391aa27d92171ed
 title: orchestration-core
 type: component
 category: feature
@@ -100,5 +100,5 @@ Does NOT own: single-task delegation (c3-210), WS command routing (c3-208), diff
 | --- | --- | --- | --- |
 | src/server/orchestration-queue.test.ts | ## Contract | Fake StartWorker; fake store; no real git | src/server/orchestration-queue.test.ts |
 | src/server/orchestration-worktree.adapter.test.ts | ## Contract | Real git in temp dir; idempotency assertions | src/server/orchestration-worktree.adapter.test.ts |
-| src/server/orchestration-e2e.test.ts | ## Business Flow | In-process; real worktrees; fake workers | src/server/orchestration-e2e.test.ts |
+| src/server/orchestration-e2e.test.ts | ## Contract | In-process; real worktrees; fake workers (primary business path) | src/server/orchestration-e2e.test.ts |
 | CLAUDE.md Orchestration Core section | ## Purpose and ## Business Flow | Plain language; may omit low-level detail | adr-20260710-orchestration-core |
