@@ -45,6 +45,7 @@
     "install:dev": "bun install && bun run build && bun install -g .",
     "start": "bun run ./src/server/cli.ts",
     "test": "bun test --conditions production --timeout 30000",
+    "verify:client-arch": "bunx ast-grep scan && bun run lint && bun run typecheck && bun run test",
     "prepublishOnly": "bun run build"
   },
   "dependencies": {
@@ -67,6 +68,7 @@
     "@pierre/diffs": "^1.1.12",
     "@radix-ui/react-context-menu": "^2.2.16",
     "@radix-ui/react-select": "^2.2.6",
+    "@tanstack/react-query": "^5.101.2",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/addon-serialize": "^0.14.0",
     "@xterm/addon-web-links": "^0.12.0",
@@ -80,6 +82,7 @@
     "minimatch": "^10.2.5",
     "openai": "^6.34.0",
     "react-resizable-panels": "^4.7.3",
+    "react-use-websocket": "^4.13.0",
     "shell-quote": "^1.8.3",
     "sonner": "^2.0.7",
     "uqr": "^0.1.3",

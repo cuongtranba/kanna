@@ -22,6 +22,8 @@ import {
   type ModelProvider,
   type ModelsEditingState,
 } from "../stores/modelsSectionStore"
+import type { DomPort } from "../ports/domPort"
+import { domAdapter } from "../adapters/dom.adapter"
 
 export interface ModelsSectionHandlers {
   onCreate: (input: CustomModelInput) => Promise<void>
@@ -37,6 +39,7 @@ function isModelProvider(v: string): v is ModelProvider {
 interface ModelsSectionProps {
   models: readonly CustomModelEntry[]
   handlers: ModelsSectionHandlers
+  dom?: DomPort
 }
 
 const PROVIDER_LABEL: Record<ModelProvider, string> = {
@@ -44,7 +47,7 @@ const PROVIDER_LABEL: Record<ModelProvider, string> = {
   codex: "Codex",
 }
 
-export function ModelsSection({ models, handlers }: ModelsSectionProps) {
+export function ModelsSection({ models, handlers, dom = domAdapter }: ModelsSectionProps) {
   const editing = useModelsSectionStore((state) => state.editing)
   const setEditing = useModelsSectionStore((state) => state.setEditing)
   const resetEditorForm = useModelsSectionStore((state) => state.resetEditorForm)
@@ -102,7 +105,7 @@ export function ModelsSection({ models, handlers }: ModelsSectionProps) {
                     model={model}
                     onEdit={() => navigate({ kind: "edit", id: model.id })}
                     onDelete={() => {
-                      if (window.confirm(`Delete model "${model.label}"?`)) {
+                      if (dom.confirmDialog(`Delete model "${model.label}"?`)) {
                         void handlers.onDelete(model.id)
                       }
                     }}

@@ -1,5 +1,6 @@
 import { useEffect } from "react"
 import type { ChatAttachment, HydratedPreviewFileToolCall } from "../../../shared/types"
+import { probeFileUrl } from "../../api/files"
 import { AttachmentFileCard, formatAttachmentSize } from "./AttachmentCard"
 import { classifyAttachmentIcon, friendlyMimeLabel } from "./attachmentPreview"
 import { FilePreviewSheet } from "./file-preview/FilePreviewSheet"
@@ -21,12 +22,11 @@ function PreviewFileMessageInner({ message }: Props) {
   useEffect(() => {
     if (!contentUrl) return
     const controller = new AbortController()
-    fetch(contentUrl, { method: "HEAD", signal: controller.signal })
-      .then((response) => {
-        if (controller.signal.aborted) return
-        setProbeState(response.ok ? "ready" : "missing")
-      })
-      .catch(() => {})
+    probeFileUrl(contentUrl, { signal: controller.signal }).then((probe) => {
+      if (controller.signal.aborted) return
+      if (probe.kind === "ready") setProbeState("ready")
+      else if (probe.kind === "missing") setProbeState("missing")
+    })
     return () => controller.abort()
   }, [contentUrl, setProbeState])
 

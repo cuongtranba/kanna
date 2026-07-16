@@ -26,6 +26,10 @@ import type {
   McpServerTransport,
 } from "../../shared/types"
 import type { KannaState } from "./useKannaState"
+import type { DomPort } from "../ports/domPort"
+import type { ClipboardPort } from "../ports/clipboardPort"
+import { domAdapter } from "../adapters/dom.adapter"
+import { clipboardAdapter } from "../adapters/clipboard.adapter"
 
 const MCP_TRANSPORT_SET = new Set<string>(["stdio", "http", "sse", "ws"])
 function isMcpServerTransport(v: string): v is McpServerTransport {
@@ -118,10 +122,12 @@ function McpRow({
   server,
   handlers,
   onEdit,
+  dom = domAdapter,
 }: {
   server: McpServerConfig
   handlers: McpServersSectionHandlers
   onEdit: () => void
+  dom?: DomPort
 }) {
   const testing = useMcpServersSectionStore((s) => s.testingServerIds.has(server.id))
   const setServerTesting = useMcpServersSectionStore((s) => s.setServerTesting)
@@ -177,7 +183,7 @@ function McpRow({
           variant="ghost"
           size="sm"
           onClick={() => {
-            if (window.confirm(`Delete MCP server "${server.name}"?`)) {
+            if (dom.confirmDialog(`Delete MCP server "${server.name}"?`)) {
               void handlers.onDelete(server.id)
             }
           }}
@@ -242,11 +248,13 @@ function McpServerEditor({
   existingNames,
   onCancel,
   handlers,
+  clipboard = clipboardAdapter,
 }: {
   initial: McpServerConfig | null
   existingNames: Array<{ id: string; name: string }>
   onCancel: () => void
   handlers: McpServersSectionHandlers
+  clipboard?: ClipboardPort
 }) {
   const editorForm = useMcpServersSectionStore((s) => s.editorForm)
   const resetEditorForm = useMcpServersSectionStore((s) => s.resetEditorForm)
@@ -619,7 +627,7 @@ function McpServerEditor({
                           </a>
                           <button
                             type="button"
-                            onClick={() => { void navigator.clipboard.writeText(authFlowUrl) }}
+                            onClick={() => { void clipboard.writeText(authFlowUrl) }}
                             className="ml-1 text-muted-foreground hover:text-foreground"
                             title="Copy URL"
                             aria-label="Copy authorization URL"

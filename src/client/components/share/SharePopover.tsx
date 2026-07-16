@@ -4,6 +4,8 @@ import { Button } from "../ui/button"
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover"
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip"
 import type { ShareSummary } from "../../../shared/session-share/types"
+import type { ClipboardPort } from "../../ports/clipboardPort"
+import { clipboardAdapter } from "../../adapters/clipboard.adapter"
 import { SharePopoverBodyStore } from "./SharePopoverBody.store"
 
 export interface SharePopoverProps {
@@ -31,9 +33,11 @@ export interface SharePopoverBodyProps {
   now: number
   onMint: (chatId: string) => Promise<void>
   onRevoke: (tokenId: string) => Promise<void>
+  clipboard?: ClipboardPort
 }
 
 function SharePopoverBodyInner(props: SharePopoverBodyProps) {
+  const clipboard = props.clipboard ?? clipboardAdapter
   const busy = SharePopoverBodyStore.useScopedStore((s) => s.busy)
   const setBusy = SharePopoverBodyStore.useScopedStore((s) => s.setBusy)
   const activeShares = props.shares.filter((s) => !s.revoked)
@@ -62,7 +66,7 @@ function SharePopoverBodyInner(props: SharePopoverBodyProps) {
                 <Button
                   size="sm"
                   variant="ghost"
-                  onClick={() => { void navigator.clipboard.writeText(s.url) }}
+                  onClick={() => { void clipboard.writeText(s.url) }}
                 >
                   <Copy className="h-3.5 w-3.5 mr-1" />
                   Copy

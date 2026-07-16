@@ -4,20 +4,37 @@ import { Button } from "../../ui/button"
 import { cn } from "../../../lib/utils"
 import { HighlightedCode } from "../../messages/HighlightedCode"
 import { MessageCodeBlockStore } from "./MessageCodeBlock.store"
+import type { ClipboardPort, TimerPort } from "../../../ports"
+import { clipboardAdapter, timerAdapter } from "../../../adapters"
+
+interface MessageCodeBlockPorts {
+  clipboard?: ClipboardPort
+  timer?: TimerPort
+}
 
 // Fenced code block for rendered message bodies: shiki syntax highlighting via
 // HighlightedCode plus a hover copy button. Mirrors the legacy PreBlock chrome
 // from messages/shared.tsx so the Lexical headless render matches the prior
 // react-markdown output.
-function MessageCodeBlockInner({ source, lang }: { source: string; lang: string }) {
+function MessageCodeBlockInner({
+  source,
+  lang,
+  ports = {},
+}: {
+  source: string
+  lang: string
+  ports?: MessageCodeBlockPorts
+}) {
   const copied = MessageCodeBlockStore.useScopedStore((state) => state.copied)
   const setCopied = MessageCodeBlockStore.useScopedStore((state) => state.setCopied)
+  const clipboard = ports.clipboard ?? clipboardAdapter
+  const timer = ports.timer ?? timerAdapter
 
   const handleCopy = useCallback(async () => {
-    await navigator.clipboard.writeText(source)
+    await clipboard.writeText(source)
     setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-  }, [source, setCopied])
+    timer.setTimeout(() => setCopied(false), 2000)
+  }, [source, setCopied, clipboard, timer])
 
   return (
     <div className="relative overflow-x-auto max-w-full min-w-0 no-code-highlight group/pre">
@@ -45,10 +62,18 @@ function MessageCodeBlockInner({ source, lang }: { source: string; lang: string 
   )
 }
 
-export function MessageCodeBlock({ source, lang }: { source: string; lang: string }) {
+export function MessageCodeBlock({
+  source,
+  lang,
+  ports,
+}: {
+  source: string
+  lang: string
+  ports?: MessageCodeBlockPorts
+}) {
   return (
     <MessageCodeBlockStore.Provider init={undefined}>
-      <MessageCodeBlockInner source={source} lang={lang} />
+      <MessageCodeBlockInner source={source} lang={lang} ports={ports} />
     </MessageCodeBlockStore.Provider>
   )
 }

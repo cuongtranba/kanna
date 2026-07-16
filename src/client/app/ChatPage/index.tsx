@@ -1,4 +1,8 @@
 import React, { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, type ComponentProps, type DragEvent, type ReactNode, type RefObject } from "react"
+import type { DomPort } from "../../ports/domPort"
+import type { TimerPort } from "../../ports/timerPort"
+import { domAdapter } from "../../adapters/dom.adapter"
+import { timerAdapter } from "../../adapters/timer.adapter"
 import { type LegendListRef } from "@legendapp/list/react"
 import type { GroupImperativeHandle } from "react-resizable-panels"
 import { useNavigate, useOutletContext } from "react-router-dom"
@@ -63,7 +67,7 @@ const TERMINAL_TOGGLE_DURATION_STYLE: React.CSSProperties & { "--terminal-toggle
   "--terminal-toggle-duration": `${TERMINAL_TOGGLE_ANIMATION_DURATION_MS}ms`,
 }
 
-function useEmptyStateTyping(showEmptyState: boolean, activeChatId: string | null) {
+function useEmptyStateTyping(showEmptyState: boolean, activeChatId: string | null, timer: TimerPort) {
   const typedEmptyStateText = useChatPageStore((s) => s.typedEmptyStateText)
   const isEmptyStateTypingComplete = useChatPageStore((s) => s.isEmptyStateTypingComplete)
   const setTypedEmptyStateText = useChatPageStore((s) => s.setTypedEmptyStateText)
@@ -76,18 +80,18 @@ function useEmptyStateTyping(showEmptyState: boolean, activeChatId: string | nul
     resetEmptyStateTyping()
 
     let characterIndex = 0
-    const interval = window.setInterval(() => {
+    const interval = timer.setInterval(() => {
       characterIndex += 1
       setTypedEmptyStateText(EMPTY_STATE_TEXT.slice(0, characterIndex))
 
       if (characterIndex >= EMPTY_STATE_TEXT.length) {
-        window.clearInterval(interval)
+        timer.clearInterval(interval)
         setIsEmptyStateTypingComplete(true)
       }
     }, EMPTY_STATE_TYPING_INTERVAL_MS)
 
-    return () => window.clearInterval(interval)
-  }, [showEmptyState, activeChatId, resetEmptyStateTyping, setTypedEmptyStateText, setIsEmptyStateTypingComplete])
+    return () => timer.clearInterval(interval)
+  }, [showEmptyState, activeChatId, resetEmptyStateTyping, setTypedEmptyStateText, setIsEmptyStateTypingComplete, timer])
 
   return { typedEmptyStateText, isEmptyStateTypingComplete }
 }
@@ -211,18 +215,15 @@ export function shouldUseMobileRightSidebarOverlay(viewportWidth: number) {
   return viewportWidth > 0 && viewportWidth < MOBILE_RIGHT_SIDEBAR_BREAKPOINT_PX
 }
 
-function useMobileRightSidebarOverlayEnabled() {
+function useMobileRightSidebarOverlayEnabled(dom: DomPort) {
   const viewportWidth = useChatPageStore((s) => s.viewportWidth)
   const setViewportWidth = useChatPageStore((s) => s.setViewportWidth)
 
   useEffect(() => {
-    if (typeof window === "undefined") return
-
-    const updateViewportWidth = () => setViewportWidth(window.innerWidth)
+    const updateViewportWidth = () => setViewportWidth(dom.getInnerWidth())
     updateViewportWidth()
-    window.addEventListener("resize", updateViewportWidth)
-    return () => window.removeEventListener("resize", updateViewportWidth)
-  }, [setViewportWidth])
+    return dom.addWindowListener("resize", updateViewportWidth)
+  }, [setViewportWidth, dom])
 
   return shouldUseMobileRightSidebarOverlay(viewportWidth)
 }
@@ -465,7 +466,14 @@ function ChatWorkspace({
   )
 }
 
-export function ChatPage() {
+export interface ChatPagePorts {
+  dom?: DomPort
+  timer?: TimerPort
+}
+
+export function ChatPage({ ports = {} }: { ports?: ChatPagePorts } = {}) {
+  const dom = ports.dom ?? domAdapter
+  const timer = ports.timer ?? timerAdapter
   const state = useOutletContext<KannaState>()
   const { handleCancel, handleOpenExternal } = state
   const dialog = useAppDialog()
@@ -520,7 +528,7 @@ export function ChatPage() {
   const shouldRenderTerminalLayout = Boolean(projectId && hasTerminals)
   const showRightSidebar = Boolean(projectId && rightSidebarVisibility.isVisible)
   const shouldRenderRightSidebarLayout = Boolean(projectId)
-  const isMobileRightSidebarOverlay = useMobileRightSidebarOverlayEnabled()
+  const isMobileRightSidebarOverlay = useMobileRightSidebarOverlayEnabled(dom)
   const shouldRenderDesktopRightSidebarLayout = shouldRenderRightSidebarLayout && !isMobileRightSidebarOverlay
   const layoutWidth = useLayoutWidth(layoutRootRef)
   const clampRightSidebarSize = useCallback((size: number, widthOverride?: number) => {
@@ -597,7 +605,7 @@ export function ChatPage() {
     showRightSidebar,
   })
 
-  const { typedEmptyStateText, isEmptyStateTypingComplete } = useEmptyStateTyping(showEmptyState, state.activeChatId)
+  const { typedEmptyStateText, isEmptyStateTypingComplete } = useEmptyStateTyping(showEmptyState, state.activeChatId, timer)
 
   useStickyChatFocus({
     rootRef: chatCardRef,
@@ -699,10 +707,10 @@ export function ChatPage() {
 
   const clearShowScrollTimeout = useCallback(() => {
     if (showScrollTimeoutRef.current !== null) {
-      window.clearTimeout(showScrollTimeoutRef.current)
+      timer.clearTimeout(showScrollTimeoutRef.current)
       showScrollTimeoutRef.current = null
     }
-  }, [])
+  }, [timer])
 
   const onIsAtEndChange = useCallback((isAtEnd: boolean) => {
     if (isAtEndRef.current === isAtEnd) return
@@ -714,11 +722,11 @@ export function ChatPage() {
     }
 
     clearShowScrollTimeout()
-    showScrollTimeoutRef.current = window.setTimeout(() => {
+    showScrollTimeoutRef.current = timer.setTimeout(() => {
       setShowScrollToBottom(true)
       showScrollTimeoutRef.current = null
     }, 150)
-  }, [clearShowScrollTimeout, setShowScrollToBottom])
+  }, [clearShowScrollTimeout, setShowScrollToBottom, timer])
 
   const syncIsAtEndFromList = useCallback(() => {
     const state = transcriptListRef.current?.getState?.()
@@ -865,55 +873,48 @@ export function ChatPage() {
       }
     }
 
-    window.addEventListener("keydown", handleGlobalKeydown)
-    return () => window.removeEventListener("keydown", handleGlobalKeydown)
-  }, [addTerminal, handleOpenExternal, handleToggleEmbeddedTerminal, handleToggleRightSidebar, projectId, resolvedKeybindings])
+    return dom.addWindowListener("keydown", handleGlobalKeydown)
+  }, [addTerminal, dom, handleOpenExternal, handleToggleEmbeddedTerminal, handleToggleRightSidebar, projectId, resolvedKeybindings])
 
   useEffect(() => {
-    const frameId = window.requestAnimationFrame(() => {
+    const frameId = timer.requestAnimationFrame(() => {
       syncIsAtEndFromList()
     })
-    const timeoutId = window.setTimeout(() => {
+    const timeoutId = timer.setTimeout(() => {
       syncIsAtEndFromList()
     }, TERMINAL_TOGGLE_ANIMATION_DURATION_MS)
 
     return () => {
-      window.cancelAnimationFrame(frameId)
-      window.clearTimeout(timeoutId)
+      timer.cancelAnimationFrame(frameId)
+      timer.clearTimeout(timeoutId)
     }
-  }, [shouldRenderTerminalLayout, showTerminalPane, syncIsAtEndFromList])
+  }, [shouldRenderTerminalLayout, showTerminalPane, syncIsAtEndFromList, timer])
 
   useEffect(() => {
-    function handleResize() {
+    return dom.addWindowListener("resize", () => {
       syncIsAtEndFromList()
-    }
-
-    window.addEventListener("resize", handleResize)
-    return () => window.removeEventListener("resize", handleResize)
-  }, [syncIsAtEndFromList])
+    })
+  }, [dom, syncIsAtEndFromList])
 
   useEffect(() => {
     if (!showRightSidebar || !isMobileRightSidebarOverlay) return
 
-    const previousOverflow = document.body.style.overflow
-    document.body.style.overflow = "hidden"
+    const previousOverflow = dom.getBodyStyle("overflow")
+    dom.setBodyStyle("overflow", "hidden")
     return () => {
-      document.body.style.overflow = previousOverflow
+      dom.setBodyStyle("overflow", previousOverflow)
     }
-  }, [isMobileRightSidebarOverlay, showRightSidebar])
+  }, [dom, isMobileRightSidebarOverlay, showRightSidebar])
 
   useEffect(() => {
     if (!showRightSidebar || !isMobileRightSidebarOverlay) return
 
-    function handleEscape(event: KeyboardEvent) {
+    return dom.addWindowListener("keydown", (event: KeyboardEvent) => {
       if (event.key !== "Escape") return
       event.preventDefault()
       handleCloseRightSidebar()
-    }
-
-    window.addEventListener("keydown", handleEscape)
-    return () => window.removeEventListener("keydown", handleEscape)
-  }, [handleCloseRightSidebar, isMobileRightSidebarOverlay, showRightSidebar])
+    })
+  }, [dom, handleCloseRightSidebar, isMobileRightSidebarOverlay, showRightSidebar])
 
   useEffect(() => {
     if (!isAtEndRef.current) {
@@ -921,17 +922,17 @@ export function ChatPage() {
     }
 
     let secondFrame: number | null = null
-    const firstFrame = window.requestAnimationFrame(() => {
+    const firstFrame = timer.requestAnimationFrame(() => {
       void transcriptListRef.current?.scrollToEnd?.({ animated: false })
-      secondFrame = window.requestAnimationFrame(() => {
+      secondFrame = timer.requestAnimationFrame(() => {
         void transcriptListRef.current?.scrollToEnd?.({ animated: false })
       })
     })
 
     return () => {
-      window.cancelAnimationFrame(firstFrame)
+      timer.cancelAnimationFrame(firstFrame)
       if (secondFrame !== null) {
-        window.cancelAnimationFrame(secondFrame)
+        timer.cancelAnimationFrame(secondFrame)
       }
     }
   }, [
@@ -941,6 +942,7 @@ export function ChatPage() {
     state.messages.length,
     state.queuedMessages.length,
     state.runtimeStatus,
+    timer,
   ])
 
   useLayoutEffect(() => {

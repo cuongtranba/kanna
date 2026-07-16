@@ -1,0 +1,14 @@
+id: no-raw-websocket-ts
+snapshots:
+  const ws = new WebSocket("wss://example.com"):
+    labels:
+    - source: new WebSocket("wss://example.com")
+      style: primary
+      start: 11
+      end: 45
+  const ws = new WebSocket(url):
+    labels:
+    - source: new WebSocket(url)
+      style: primary
+      start: 11
+      end: 29

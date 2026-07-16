@@ -16,6 +16,10 @@ import type {
   GitHubRepoAvailabilityResult,
 } from "../../../shared/types"
 import { isRecord } from "../../../shared/errors"
+import type { DomPort } from "../../ports/domPort"
+import type { TimerPort } from "../../ports/timerPort"
+import { domAdapter } from "../../adapters/dom.adapter"
+import { timerAdapter } from "../../adapters/timer.adapter"
 import { useStickyState } from "../../hooks/useStickyState"
 import { cn } from "../../lib/utils"
 import { useDiffCommitStore } from "../../stores/diffCommitStore"
@@ -84,6 +88,11 @@ function getDiffPreviewAttachment(projectId: string | null, file: DiffFile): Cha
   }
 }
 
+export interface RightSidebarPorts {
+  dom?: DomPort
+  timer?: TimerPort
+}
+
 export interface DiffFileActions {
   onOpenFile: (path: string) => void
   onOpenInFinder: (path: string) => void
@@ -115,6 +124,7 @@ interface RightSidebarProps extends DiffFileActions {
   onSyncWithRemote: (action: "fetch" | "pull" | "push" | "publish") => Promise<unknown>
   onDiffRenderModeChange: (mode: DiffRenderMode) => void
   onWrapLinesChange: (wrap: boolean) => void
+  ports?: RightSidebarPorts
 }
 
 export function canIgnoreDiffFile(file: DiffFile) {
@@ -241,7 +251,8 @@ function formatFetchTooltip(isoTimestamp?: string) {
   return `Last fetched ${formatRelativeTime(isoTimestamp)}`
 }
 
-function CommitHistoryRow({ entry, isPendingPush = false }: { entry: ChatBranchHistoryEntry; isPendingPush?: boolean }) {
+function CommitHistoryRow({ entry, isPendingPush = false, ports }: { entry: ChatBranchHistoryEntry; isPendingPush?: boolean; ports?: RightSidebarPorts }) {
+  const dom = ports?.dom ?? domAdapter
   const relativeTime = formatRelativeTime(entry.authoredAt)
   const isClickable = Boolean(entry.githubUrl)
   let tagSection: ReactNode
@@ -276,8 +287,8 @@ function CommitHistoryRow({ entry, isPendingPush = false }: { entry: ChatBranchH
       type="button"
       disabled={!isClickable}
       onClick={() => {
-        if (!entry.githubUrl || typeof window === "undefined") return
-        window.open(entry.githubUrl, "_blank", "noopener,noreferrer")
+        if (!entry.githubUrl) return
+        dom.openWindow(entry.githubUrl, "_blank", "noopener,noreferrer")
       }}
       className={cn(
         "flex w-full items-start gap-3 rounded-lg border border-border bg-background pl-3 pr-2 py-2 text-left transition-colors",
@@ -369,13 +380,16 @@ function GitHubPublishModal({
   onGetGitHubPublishInfo,
   onCheckGitHubRepoAvailability,
   onPublish,
+  ports,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
   onGetGitHubPublishInfo: () => Promise<GitHubPublishInfo>
   onCheckGitHubRepoAvailability: (args: { owner: string; name: string }) => Promise<GitHubRepoAvailabilityResult>
   onPublish: (args: { owner: string; name: string; visibility: "public" | "private"; description: string }) => Promise<unknown>
+  ports?: RightSidebarPorts
 }) {
+  const timer = ports?.timer ?? timerAdapter
   const info = useRightSidebarUiStore((store) => store.publishInfo)
   const isLoadingInfo = useRightSidebarUiStore((store) => store.isLoadingPublishInfo)
   const owner = useRightSidebarUiStore((store) => store.publishOwner)
@@ -431,7 +445,7 @@ function GitHubPublishModal({
 
     let cancelled = false
     setIsCheckingAvailability(true)
-    const timeoutId = window.setTimeout(() => {
+    const timeoutId = timer.setTimeout(() => {
       void onCheckGitHubRepoAvailability({ owner: trimmedOwner, name: trimmedName })
         .then((result) => {
           if (cancelled) return
@@ -445,9 +459,9 @@ function GitHubPublishModal({
 
     return () => {
       cancelled = true
-      window.clearTimeout(timeoutId)
+      timer.clearTimeout(timeoutId)
     }
-  }, [info?.authenticated, info?.ghInstalled, name, onCheckGitHubRepoAvailability, open, owner, setAvailability, setIsCheckingAvailability])
+  }, [info?.authenticated, info?.ghInstalled, name, onCheckGitHubRepoAvailability, open, owner, setAvailability, setIsCheckingAvailability, timer])
 
   async function handlePublish() {
     if (!owner.trim() || !name.trim()) return
@@ -1232,6 +1246,7 @@ function DiffFileCard({
   patchError,
   isPatchLoading,
   onLoadPatch,
+  ports,
 }: {
   file: DiffFile
   rootRef: RefObject<HTMLElement | null>
@@ -1248,7 +1263,9 @@ function DiffFileCard({
   patchError?: string
   isPatchLoading: boolean
   onLoadPatch: (path: string) => Promise<string>
+  ports?: RightSidebarPorts
 }) {
+  const dom = ports?.dom ?? domAdapter
   const canIgnore = canIgnoreDiffFile(file)
   const canIgnoreFolder = canIgnoreDiffFolder(file)
   const selectedAttachmentId = DiffFileCardStore.useScopedStore((state) => state.selectedAttachmentId)
@@ -1286,9 +1303,7 @@ function DiffFileCard({
   function handleAttachmentClick(attachment: ChatAttachment) {
     const target = classifyAttachmentPreview(attachment)
     if (target.openInNewTab) {
-      if (typeof window !== "undefined") {
-        window.open(new URL(attachment.contentUrl, window.location.origin).toString(), "_blank", "noopener,noreferrer")
-      }
+      dom.openWindow(new URL(attachment.contentUrl, dom.getOrigin()).toString(), "_blank", "noopener,noreferrer")
       return
     }
     setSelectedAttachmentId(attachment.id)
@@ -1298,13 +1313,9 @@ function DiffFileCard({
     event.preventDefault()
     event.stopPropagation()
     const rect = event.currentTarget.getBoundingClientRect()
-    cardRef.current?.dispatchEvent(new MouseEvent("contextmenu", {
-      bubbles: true,
-      cancelable: true,
-      clientX: rect.left + rect.width / 2,
-      clientY: rect.bottom,
-      view: window,
-    }))
+    if (cardRef.current) {
+      dom.dispatchContextMenuEvent(cardRef.current, rect.left + rect.width / 2, rect.bottom)
+    }
   }
 
   function handleToggleRequest() {
@@ -1563,7 +1574,9 @@ function RightSidebarImpl({
   onLoadPatch,
   onDiffRenderModeChange,
   onWrapLinesChange,
+  ports,
 }: RightSidebarProps) {
+  const dom = ports?.dom ?? domAdapter
   const fileActions: DiffFileActions = useMemo(() => ({
     onOpenFile,
     onOpenInFinder,
@@ -1808,6 +1821,7 @@ function RightSidebarImpl({
               patchError={patchErrorsByPath[file.path]}
               isPatchLoading={Boolean(loadingPatchPaths[file.path])}
               onLoadPatch={handleLoadPatch}
+              ports={ports}
             />
           </DiffFileCardStore.Provider>
         </div>
@@ -1823,6 +1837,7 @@ function RightSidebarImpl({
       loadingPatchPaths,
       patchErrorsByPath,
       patchesByPath,
+      ports,
       projectId,
       setCheckedPath,
       toggleCollapsedPath,
@@ -1927,8 +1942,7 @@ function RightSidebarImpl({
               variant="ghost"
               size="sm"
               onClick={() => {
-                if (typeof window === "undefined") return
-                window.open(compareUrl, "_blank", "noopener,noreferrer")
+                dom.openWindow(compareUrl, "_blank", "noopener,noreferrer")
               }}
               className="h-7 gap-1.5 px-2 text-xs hover:!bg-transparent hover:!border-border/0"
             >
@@ -1965,7 +1979,7 @@ function RightSidebarImpl({
     } else {
       mainContent = (
         <div className="h-full overflow-y-auto [scrollbar-gutter:stable] space-y-1.5 p-1.5">
-          {branchHistory.map((entry, index) => <CommitHistoryRow key={entry.sha} entry={entry} isPendingPush={index < aheadCount} />)}
+          {branchHistory.map((entry, index) => <CommitHistoryRow key={entry.sha} entry={entry} isPendingPush={index < aheadCount} ports={ports} />)}
         </div>
       )
     }
@@ -2193,6 +2207,7 @@ function RightSidebarImpl({
           onGetGitHubPublishInfo={onGetGitHubPublishInfo}
           onCheckGitHubRepoAvailability={onCheckGitHubRepoAvailability}
           onPublish={onSetupGitHub}
+          ports={ports}
         />
       </div>
     </div>

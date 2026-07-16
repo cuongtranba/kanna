@@ -1,5 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react"
 import { useAppSettingsStore } from "../stores/appSettingsStore"
+import type { DomPort } from "../ports/domPort"
+import { domAdapter } from "../adapters/dom.adapter"
 
 export type ThemePreference = "light" | "dark" | "system"
 
@@ -19,38 +21,26 @@ export function getAppleMobileWebAppStatusBarStyle(theme: "light" | "dark") {
   return theme === "dark" ? "black-translucent" : "default"
 }
 
-function upsertHeadMeta(name: string, content: string) {
-  if (typeof document === "undefined") return
-
-  let tag = document.head.querySelector(`meta[name="${name}"]`)
-  if (!tag) {
-    tag = document.createElement("meta")
-    tag.setAttribute("name", name)
-    document.head.appendChild(tag)
-  }
-  tag.setAttribute("content", content)
+function upsertHeadMeta(name: string, content: string, dom: DomPort) {
+  dom.upsertHeadMeta(name, content)
 }
 
-export function syncThemeMetadata(theme: "light" | "dark") {
-  if (typeof document === "undefined" || typeof window === "undefined") return
-
-  const backgroundColor = getComputedStyle(document.body).backgroundColor || getComputedStyle(document.documentElement).backgroundColor
+export function syncThemeMetadata(theme: "light" | "dark", dom: DomPort = domAdapter) {
+  const backgroundColor = dom.getComputedBackgroundColor()
   if (backgroundColor) {
-    upsertHeadMeta("theme-color", backgroundColor)
+    upsertHeadMeta("theme-color", backgroundColor, dom)
   }
-  upsertHeadMeta("apple-mobile-web-app-status-bar-style", getAppleMobileWebAppStatusBarStyle(theme))
-  document.documentElement.style.colorScheme = theme
+  upsertHeadMeta("apple-mobile-web-app-status-bar-style", getAppleMobileWebAppStatusBarStyle(theme), dom)
+  dom.setDocumentElementColorScheme(theme)
 }
 
-const getSystemTheme = (): "light" | "dark" => {
-  if (typeof window === "undefined") return "light"
-  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"
+const getSystemTheme = (dom: DomPort = domAdapter): "light" | "dark" => {
+  return dom.matchesMediaQuery("(prefers-color-scheme: dark)") ? "dark" : "light"
 }
 
-const applyThemeClass = (preference: ThemePreference) => {
-  if (typeof document === "undefined") return
-  const resolved = preference === "system" ? getSystemTheme() : preference
-  document.documentElement.classList.toggle("dark", resolved === "dark")
+const applyThemeClass = (preference: ThemePreference, dom: DomPort = domAdapter) => {
+  const resolved = preference === "system" ? getSystemTheme(dom) : preference
+  dom.toggleDocumentElementClass("dark", resolved === "dark")
 }
 
 const getInitialTheme = (): ThemePreference => {
@@ -58,7 +48,7 @@ const getInitialTheme = (): ThemePreference => {
   return stored && isValidTheme(stored) ? stored : "system"
 }
 
-export function ThemeProvider({ children }: { children: ReactNode }) {
+export function ThemeProvider({ children, dom = domAdapter }: { children: ReactNode; dom?: DomPort }) {
   const settingsTheme = useAppSettingsStore((store) => store.settings?.theme)
   const applyOptimisticPatch = useAppSettingsStore((store) => store.applyOptimisticPatch)
   const [theme, setTheme] = useState<ThemePreference>(getInitialTheme)
@@ -70,33 +60,24 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   }, [settingsTheme, theme])
 
   useEffect(() => {
-    applyThemeClass(theme)
-  }, [theme])
+    applyThemeClass(theme, dom)
+  }, [theme, dom])
 
   useEffect(() => {
-    const resolvedTheme = theme === "system" ? getSystemTheme() : theme
-    syncThemeMetadata(resolvedTheme)
-  }, [theme])
+    const resolvedTheme = theme === "system" ? getSystemTheme(dom) : theme
+    syncThemeMetadata(resolvedTheme, dom)
+  }, [theme, dom])
 
   useEffect(() => {
     if (theme !== "system") return
-    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)")
-    const handleChange = () => {
-      applyThemeClass("system")
-      syncThemeMetadata(getSystemTheme())
-    }
-
-    if (mediaQuery.addEventListener) {
-      mediaQuery.addEventListener("change", handleChange)
-      return () => mediaQuery.removeEventListener("change", handleChange)
-    }
-
-    mediaQuery.addListener(handleChange)
-    return () => mediaQuery.removeListener(handleChange)
-  }, [theme])
+    return dom.addMediaQueryListener("(prefers-color-scheme: dark)", () => {
+      applyThemeClass("system", dom)
+      syncThemeMetadata(getSystemTheme(dom), dom)
+    })
+  }, [theme, dom])
 
   const value = useMemo<ThemeContextValue>(() => {
-    const resolvedTheme = theme === "system" ? getSystemTheme() : theme
+    const resolvedTheme = theme === "system" ? getSystemTheme(dom) : theme
     return {
       theme,
       resolvedTheme,
@@ -105,7 +86,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
         applyOptimisticPatch({ theme: nextTheme })
       },
     }
-  }, [applyOptimisticPatch, theme])
+  }, [applyOptimisticPatch, theme, dom])
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>
 }

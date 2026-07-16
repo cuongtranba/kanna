@@ -18,26 +18,24 @@ import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } 
 import { PtyInstancesIndicator } from "./PtyInstancesIndicator"
 import type { KannaSocket } from "../../app/socket"
 import { useSharePopoverOpen, useSetSharePopoverOpen } from "../../stores/chatNavbarStore"
+import type { DomPort } from "../../ports/domPort"
+import { domAdapter } from "../../adapters/dom.adapter"
 
-function openContextMenuFromButton(event: ReactMouseEvent<HTMLButtonElement>) {
+function openContextMenuFromButton(event: ReactMouseEvent<HTMLButtonElement>, dom: DomPort) {
   event.preventDefault()
   event.stopPropagation()
   const rect = event.currentTarget.getBoundingClientRect()
-  event.currentTarget.dispatchEvent(new MouseEvent("contextmenu", {
-    bubbles: true,
-    cancelable: true,
-    clientX: rect.left + rect.width / 2,
-    clientY: rect.bottom,
-    view: window,
-  }))
+  dom.dispatchContextMenuEvent(event.currentTarget, rect.left + rect.width / 2, rect.bottom)
 }
 
 function NavbarOverflowMenu({
   showOnDesktop,
   onToggleEmbeddedTerminal,
+  dom,
 }: {
   showOnDesktop: boolean
   onToggleEmbeddedTerminal?: () => void
+  dom: DomPort
 }) {
   if (!onToggleEmbeddedTerminal) return null
 
@@ -47,7 +45,7 @@ function NavbarOverflowMenu({
         <Button
           variant="ghost"
           size="none"
-          onClick={openContextMenuFromButton}
+          onClick={(e) => openContextMenuFromButton(e, dom)}
           title="More actions"
           className={cn(
             "border border-border/0 hover:!border-border/0 px-1.5 h-9 hover:!bg-transparent",
@@ -107,6 +105,7 @@ interface Props {
   shareShares?: readonly ShareSummary[]
   onShareMint?: (chatId: string) => Promise<void>
   onShareRevoke?: (tokenId: string) => Promise<void>
+  dom?: DomPort
 }
 
 export function ChatNavbar({
@@ -142,7 +141,9 @@ export function ChatNavbar({
   shareShares,
   onShareMint,
   onShareRevoke,
+  dom: domProp,
 }: Props) {
+  const dom = domProp ?? domAdapter
   const branchLabel = computeBranchLabel({ hasGitRepo, gitStatus, localPath, branchName, homeDir })
   const sharePopoverOpen = useSharePopoverOpen()
   const setSharePopoverOpen = useSetSharePopoverOpen()
@@ -269,6 +270,7 @@ export function ChatNavbar({
                 <NavbarOverflowMenu
                   showOnDesktop={rightSidebarVisible}
                   onToggleEmbeddedTerminal={onToggleEmbeddedTerminal}
+                  dom={dom}
                 />
                 {onToggleEmbeddedTerminal ? (
                 <HotkeyTooltip>

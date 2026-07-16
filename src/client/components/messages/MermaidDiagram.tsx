@@ -6,6 +6,15 @@ import { useTheme } from "../../hooks/useTheme"
 import { MermaidFallbackCodeBlock } from "./shared"
 import { MermaidZoomModal } from "./MermaidZoomModal"
 import { MermaidDiagramStore } from "./MermaidDiagram.store"
+import type { ClipboardPort } from "../../ports/clipboardPort"
+import type { TimerPort } from "../../ports/timerPort"
+import { clipboardAdapter } from "../../adapters/clipboard.adapter"
+import { timerAdapter } from "../../adapters/timer.adapter"
+
+interface MermaidDiagramPorts {
+  clipboard?: ClipboardPort
+  timer?: TimerPort
+}
 
 interface MermaidModule {
   initialize: (config: {
@@ -25,7 +34,7 @@ function loadMermaid(): Promise<MermaidModule> {
   return mermaidPromise
 }
 
-function MermaidDiagramInner({ source }: { source: string }) {
+function MermaidDiagramInner({ source, ports }: { source: string; ports?: MermaidDiagramPorts }) {
   const { resolvedTheme } = useTheme()
   const mermaidTheme: "dark" | "default" = resolvedTheme === "dark" ? "dark" : "default"
   const renderState = MermaidDiagramStore.useScopedStore((s) => s.renderState)
@@ -42,9 +51,9 @@ function MermaidDiagramInner({ source }: { source: string }) {
   const closeZoom = useCallback(() => setZoomOpen(false), [setZoomOpen])
 
   const handleCopy = async () => {
-    await navigator.clipboard.writeText(source)
+    await (ports?.clipboard ?? clipboardAdapter).writeText(source)
     setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+    ;(ports?.timer ?? timerAdapter).setTimeout(() => setCopied(false), 2000)
   }
 
   useEffect(() => {
@@ -113,10 +122,10 @@ function MermaidDiagramInner({ source }: { source: string }) {
   )
 }
 
-export function MermaidDiagram({ source }: { source: string }) {
+export function MermaidDiagram({ source, ports }: { source: string; ports?: MermaidDiagramPorts }) {
   return (
     <MermaidDiagramStore.Provider init={undefined}>
-      <MermaidDiagramInner source={source} />
+      <MermaidDiagramInner source={source} ports={ports} />
     </MermaidDiagramStore.Provider>
   )
 }

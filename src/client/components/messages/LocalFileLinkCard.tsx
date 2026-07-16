@@ -1,4 +1,5 @@
 import { useEffect, useMemo } from "react"
+import { probeFileUrl } from "../../api/files"
 import type { ChatAttachment } from "../../../shared/types"
 import { middleTruncate } from "../../lib/middleTruncate"
 import { toLocalFileUrl } from "../../lib/pathUtils"
@@ -27,21 +28,10 @@ function LocalFileLinkCardInner({ path, linkText }: Props) {
 
   useEffect(() => {
     const controller = new AbortController()
-    fetch(contentUrl, { method: "HEAD", signal: controller.signal })
-      .then((response) => {
-        if (controller.signal.aborted) return
-        if (!response.ok) {
-          setProbe({ kind: response.status === 404 ? "missing" : "error" })
-          return
-        }
-        const mimeType = response.headers.get("Content-Type")?.split(";")[0]?.trim() || "application/octet-stream"
-        const size = Number.parseInt(response.headers.get("Content-Length") ?? "0", 10) || 0
-        setProbe({ kind: "ready", mimeType, size })
-      })
-      .catch(() => {
-        if (controller.signal.aborted) return
-        setProbe({ kind: "error" })
-      })
+    probeFileUrl(contentUrl, { signal: controller.signal }).then((probe) => {
+      if (controller.signal.aborted) return
+      setProbe(probe)
+    })
     return () => controller.abort()
   }, [contentUrl, setProbe])
 

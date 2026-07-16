@@ -2,6 +2,8 @@ import type { AnyValue } from "../../../../shared/errors"
 import type { EditorConfig, LexicalEditor, SerializedLexicalNode, Spread } from "lexical"
 import type { ReactNode } from "react"
 import { DecoratorNode, $applyNodeReplacement } from "lexical"
+import type { DomPort } from "../../../ports/domPort"
+import { domAdapter } from "../../../adapters/dom.adapter"
 import { cn } from "../../../lib/utils"
 
 // ---------------------------------------------------------------------------
@@ -23,11 +25,18 @@ export type SerializedSlashCommandNode = Spread<
 export class SlashCommandNode extends DecoratorNode<ReactNode> {
   readonly __commandName: string
   readonly __hasArgument: boolean
+  readonly __dom: DomPort
 
-  constructor(commandName: string, hasArgument: boolean, key?: string) {
+  constructor(
+    commandName: string,
+    hasArgument: boolean,
+    key?: string,
+    dom: DomPort = domAdapter,
+  ) {
     super(key)
     this.__commandName = commandName
     this.__hasArgument = hasArgument
+    this.__dom = dom
   }
 
   // ── Static interface ──────────────────────────────────────────────────────
@@ -37,7 +46,7 @@ export class SlashCommandNode extends DecoratorNode<ReactNode> {
   }
 
   static clone(node: SlashCommandNode): SlashCommandNode {
-    return new SlashCommandNode(node.__commandName, node.__hasArgument, node.__key)
+    return new SlashCommandNode(node.__commandName, node.__hasArgument, node.__key, node.__dom)
   }
 
   static importJSON(serializedNode: SerializedSlashCommandNode): SlashCommandNode {
@@ -61,7 +70,7 @@ export class SlashCommandNode extends DecoratorNode<ReactNode> {
   // ── DOM ───────────────────────────────────────────────────────────────────
 
   createDOM(_config: EditorConfig, _editor: LexicalEditor): HTMLElement {
-    const span = document.createElement("span")
+    const span = this.__dom.createElement("span")
     span.dataset.lexicalDecorator = "true"
     return span
   }

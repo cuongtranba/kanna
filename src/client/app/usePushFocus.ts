@@ -1,13 +1,20 @@
 import { useEffect } from "react"
+import type { DomPort } from "../ports/domPort"
+import { domAdapter } from "../adapters/dom.adapter"
 import type { KannaSocket } from "./socket"
 
 interface FocusSocket {
   setFocusedChat(chatId: string | null): void
 }
 
+export interface UsePushFocusPorts {
+  dom?: DomPort
+}
+
 interface UsePushFocusArgs {
   socket: Pick<KannaSocket, "setFocusedChat">
   activeChatId: string | null
+  ports?: UsePushFocusPorts
 }
 
 export function resolveFocusedChatId(args: {
@@ -30,28 +37,28 @@ export function applyPushFocus(args: {
   )
 }
 
-export function usePushFocus({ socket, activeChatId }: UsePushFocusArgs): void {
-  useEffect(() => {
-    if (typeof document === "undefined") return
+export function usePushFocus({ socket, activeChatId, ports }: UsePushFocusArgs): void {
+  const dom = ports?.dom ?? domAdapter
 
+  useEffect(() => {
     const apply = () => {
       applyPushFocus({
         socket,
         activeChatId,
-        visibilityState: document.visibilityState,
+        visibilityState: dom.getVisibilityState(),
       })
     }
 
     apply()
-    document.addEventListener("visibilitychange", apply)
-    window.addEventListener("pagehide", apply)
-    window.addEventListener("pageshow", apply)
+    const cleanupVisibility = dom.addDocumentListener("visibilitychange", apply)
+    const cleanupPageHide = dom.addWindowListener("pagehide", apply)
+    const cleanupPageShow = dom.addWindowListener("pageshow", apply)
 
     return () => {
-      document.removeEventListener("visibilitychange", apply)
-      window.removeEventListener("pagehide", apply)
-      window.removeEventListener("pageshow", apply)
+      cleanupVisibility()
+      cleanupPageHide()
+      cleanupPageShow()
       socket.setFocusedChat(null)
     }
-  }, [socket, activeChatId])
+  }, [socket, activeChatId, dom])
 }

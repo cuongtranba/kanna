@@ -3,6 +3,7 @@ import { createElement } from "react"
 import { act } from "react"
 import { createRoot } from "react-dom/client"
 import { MemoryRouter, Routes, Route } from "react-router-dom"
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import "../../lib/testing/setupHappyDom"
 import { SharePage } from "./SharePage"
 import { CHAT_SNAPSHOT_VERSION, type ChatSnapshot } from "../../../shared/session-share/types"
@@ -42,12 +43,15 @@ async function flush() {
 async function mount(token: string): Promise<{ container: HTMLDivElement; cleanup: () => void }> {
   const container = document.createElement("div")
   document.body.appendChild(container)
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   await act(async () => {
     const root = createRoot(container)
     root.render(
-      createElement(MemoryRouter, { initialEntries: [`/share/${token}`] },
-        createElement(Routes, null,
-          createElement(Route, { path: "/share/:token", element: createElement(SharePage) }),
+      createElement(QueryClientProvider, { client: queryClient },
+        createElement(MemoryRouter, { initialEntries: [`/share/${token}`] },
+          createElement(Routes, null,
+            createElement(Route, { path: "/share/:token", element: createElement(SharePage) }),
+          ),
         ),
       ),
     )

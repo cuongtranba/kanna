@@ -1,0 +1,23 @@
+id: no-raw-fetch-ts
+language: typescript
+severity: error
+message: Raw fetch/XMLHttpRequest is banned in src/client outside src/client/api/** — add a queryFn there and call it through React Query.
+note: |
+  See adr-20260715-client-state-effect-architecture. HTTP calls live behind
+  src/client/api/*.ts queryFns backed by adapters/http.adapter.ts; Zustand
+  actions call queryClient.fetchQuery/ensureQueryData instead of fetching
+  directly.
+files:
+  - src/client/**
+ignores:
+  - src/client/**/*.adapter.ts
+  - src/client/**/*.test.ts
+  - src/client/**/*.test.tsx
+  - src/client/api/**
+  - src/client/lib/testing/**
+  - src/client/adapters/testing/**
+rule:
+  any:
+    - pattern: fetch($$$ARGS)
+    - pattern: new XMLHttpRequest($$$ARGS)
+    - pattern: XMLHttpRequest($$$ARGS)

@@ -3,13 +3,17 @@ import { createPortal } from "react-dom"
 import { Minus, Plus, RotateCcw, X } from "lucide-react"
 import { Button } from "../ui/button"
 import { MermaidZoomModalStore } from "./MermaidZoomModal.store"
+import type { DomPort } from "../../ports"
+import { domAdapter } from "../../adapters"
 
 interface Props {
   svg: string
   onClose: () => void
+  ports?: { dom?: DomPort }
 }
 
-function MermaidZoomModalInner({ svg, onClose }: Props) {
+function MermaidZoomModalInner({ svg, onClose, ports }: Props) {
+  const dom = ports?.dom ?? domAdapter
   const scale = MermaidZoomModalStore.useScopedStore((s) => s.scale)
   const offset = MermaidZoomModalStore.useScopedStore((s) => s.offset)
   const drag = MermaidZoomModalStore.useScopedStore((s) => s.drag)
@@ -19,9 +23,8 @@ function MermaidZoomModalInner({ svg, onClose }: Props) {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose() }
-    window.addEventListener("keydown", onKey)
-    return () => window.removeEventListener("keydown", onKey)
-  }, [onClose])
+    return dom.addWindowListener("keydown", onKey)
+  }, [onClose, dom])
 
   const clampScale = (s: number) => Math.min(8, Math.max(0.25, s))
 
@@ -74,14 +77,14 @@ function MermaidZoomModalInner({ svg, onClose }: Props) {
         />
       </div>
     </div>,
-    document.body
+    dom.getBodyElement()
   )
 }
 
-export function MermaidZoomModal({ svg, onClose }: Props) {
+export function MermaidZoomModal({ svg, onClose, ports }: Props) {
   return (
     <MermaidZoomModalStore.Provider init={undefined}>
-      <MermaidZoomModalInner svg={svg} onClose={onClose} />
+      <MermaidZoomModalInner svg={svg} onClose={onClose} ports={ports} />
     </MermaidZoomModalStore.Provider>
   )
 }

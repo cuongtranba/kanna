@@ -1,18 +1,10 @@
 import { useEffect } from "react"
+import { useQuery } from "@tanstack/react-query"
 import { useParams } from "react-router-dom"
-import type { ChatSnapshot, ShareError } from "../../../shared/session-share/types"
+import type { ShareError } from "../../../shared/session-share/types"
+import { shareQueryOptions } from "../../api/share"
 import { ShareViewPage } from "./ShareViewPage"
 import { SharePageStore } from "./SharePage.store"
-
-interface ShareApiOk {
-  ok: true
-  snapshot: ChatSnapshot
-}
-interface ShareApiErr {
-  ok: false
-  error: ShareError
-}
-type ShareApiResponse = ShareApiOk | ShareApiErr
 
 function errorTitle(error: ShareError): string {
   switch (error.kind) {
@@ -37,34 +29,26 @@ function errorMessage(error: ShareError): string {
 function SharePageInner({ token }: { token: string }) {
   const loadState = SharePageStore.useScopedStore((s) => s.loadState)
   const setLoadState = SharePageStore.useScopedStore((s) => s.setLoadState)
+  const query = useQuery(shareQueryOptions(token))
 
   useEffect(() => {
-    let aborted = false
-    const ac = new AbortController()
-    fetch(`/api/share/${encodeURIComponent(token)}`, { signal: ac.signal })
-      .then(async (res) => {
-        const body: ShareApiResponse = await res.json()
-        if (aborted) return
-        if (body.ok) {
-          setLoadState({ kind: "ok", snapshot: body.snapshot })
-        } else {
-          setLoadState({ kind: "error", error: body.error, status: res.status })
-        }
+    if (query.isPending) return
+    if (query.isError) {
+      const err = query.error
+      setLoadState({
+        kind: "error",
+        error: { kind: "snapshot_read_failed", message: err instanceof Error ? err.message : String(err) },
+        status: 0,
       })
-      .catch((err) => {
-        if (aborted) return
-        if (err instanceof Error && err.name === "AbortError") return
-        setLoadState({
-          kind: "error",
-          error: { kind: "snapshot_read_failed", message: String(err) },
-          status: 0,
-        })
-      })
-    return () => {
-      aborted = true
-      ac.abort()
+      return
     }
-  }, [token, setLoadState])
+    const body = query.data
+    if (body.ok) {
+      setLoadState({ kind: "ok", snapshot: body.snapshot })
+    } else {
+      setLoadState({ kind: "error", error: body.error, status: 0 })
+    }
+  }, [query.isPending, query.isError, query.error, query.data, setLoadState])
 
   if (loadState.kind === "loading") {
     return (

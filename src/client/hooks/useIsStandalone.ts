@@ -1,27 +1,21 @@
 import { useState, useEffect } from "react"
+import type { DomPort } from "../ports/domPort"
+import { domAdapter } from "../adapters/dom.adapter"
 
-declare global {
-  interface Navigator {
-    readonly standalone?: boolean
-  }
-}
+const STANDALONE_QUERY = "(display-mode: standalone)"
 
-export function useIsStandalone() {
+export function useIsStandalone(ports: { dom: DomPort } = { dom: domAdapter }) {
   const [isStandalone, setIsStandalone] = useState(() => {
-    if (typeof window === "undefined") return false
-    const isIOSStandalone = navigator.standalone === true
-    const isDisplayStandalone = window.matchMedia("(display-mode: standalone)").matches
+    const isIOSStandalone = ports.dom.isIOSStandalone()
+    const isDisplayStandalone = ports.dom.matchesMediaQuery(STANDALONE_QUERY)
     return isIOSStandalone || isDisplayStandalone
   })
 
   useEffect(() => {
-    const mediaQuery = window.matchMedia("(display-mode: standalone)")
-    const handleChange = (e: MediaQueryListEvent) => {
-      setIsStandalone(e.matches || navigator.standalone === true)
-    }
-    mediaQuery.addEventListener("change", handleChange)
-    return () => mediaQuery.removeEventListener("change", handleChange)
-  }, [])
+    return ports.dom.addMediaQueryListener(STANDALONE_QUERY, (matches) => {
+      setIsStandalone(matches || ports.dom.isIOSStandalone())
+    })
+  }, [ports.dom])
 
   return isStandalone
 }

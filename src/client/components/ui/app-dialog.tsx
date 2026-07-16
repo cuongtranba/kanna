@@ -8,6 +8,8 @@ import {
   useState,
   type ReactNode,
 } from "react"
+import { timerAdapter } from "../../adapters/timer.adapter"
+import type { TimerPort } from "../../ports/timerPort"
 import { Button } from "./button"
 import { Dialog, DialogBody, DialogContent, DialogDescription, DialogFooter, DialogTitle } from "./dialog"
 import { Input } from "./input"
@@ -60,7 +62,18 @@ type DialogState =
 
 const AppDialogContext = createContext<AppDialogContextValue | null>(null)
 
-export function AppDialogProvider({ children }: { children: ReactNode }) {
+interface AppDialogProviderPorts {
+  timer?: TimerPort
+}
+
+export function AppDialogProvider({
+  children,
+  ports = {},
+}: {
+  children: ReactNode
+  ports?: AppDialogProviderPorts
+}) {
+  const timer = ports.timer ?? timerAdapter
   const [dialogState, setDialogState] = useState<DialogState | null>(null)
   const [inputValue, setInputValue] = useState("")
   const inputRef = useRef<HTMLInputElement>(null)
@@ -69,11 +82,11 @@ export function AppDialogProvider({ children }: { children: ReactNode }) {
     if (dialogState?.kind !== "prompt") return
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setInputValue(dialogState.options.initialValue ?? "")
-    setTimeout(() => {
+    timer.setTimeout(() => {
       inputRef.current?.focus()
       inputRef.current?.select()
     }, 0)
-  }, [dialogState])
+  }, [dialogState, timer])
 
   const closeDialog = useCallback(() => {
     setDialogState(null)

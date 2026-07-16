@@ -37,8 +37,17 @@ import {
   MIN_SIDEBAR_WIDTH,
   MAX_SIDEBAR_WIDTH,
 } from "../stores/kannaSidebarStore"
+import type { DomPort } from "../ports/domPort"
+import type { TimerPort } from "../ports/timerPort"
+import { domAdapter } from "../adapters/dom.adapter"
+import { timerAdapter } from "../adapters/timer.adapter"
 
 export { DEFAULT_SIDEBAR_WIDTH, MIN_SIDEBAR_WIDTH, MAX_SIDEBAR_WIDTH, clampSidebarWidth }
+
+export interface KannaSidebarPorts {
+  dom?: DomPort
+  timer?: TimerPort
+}
 
 interface KannaSidebarProps {
   data: SidebarData
@@ -74,6 +83,7 @@ interface KannaSidebarProps {
   onListStackWorktrees: (projectId: string) => Promise<GitWorktree[]>
   editorLabel: string
   updateSnapshot: UpdateSnapshot | null
+  ports?: KannaSidebarPorts
 }
 
 function KannaSidebarImpl({
@@ -110,7 +120,11 @@ function KannaSidebarImpl({
   onListStackWorktrees,
   editorLabel,
   updateSnapshot,
+  ports = {},
 }: KannaSidebarProps) {
+  const dom = ports.dom ?? domAdapter
+  const timer = ports.timer ?? timerAdapter
+
   const location = useLocation()
   const navigate = useNavigate()
   const scrollContainerRef = useRef<HTMLDivElement>(null)
@@ -336,12 +350,12 @@ function KannaSidebarImpl({
   }, [activeChatId, navigate, nowMs, onArchiveChat, onClose, onDeleteChat, onEditChatPermissions, onForkChat, onOpenExternalPath, onRenameChat, resolvedKeybindings, showNumberJumpHints, visibleIndexByChatId])
 
   useEffect(() => {
-    const intervalId = window.setInterval(() => {
+    const intervalId = timer.setInterval(() => {
       setNowMs(Date.now())
     }, 30_000)
 
-    return () => window.clearInterval(intervalId)
-  }, [setNowMs])
+    return () => timer.clearInterval(intervalId)
+  }, [setNowMs, timer])
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
@@ -401,21 +415,21 @@ function KannaSidebarImpl({
       setShowNumberJumpHints(false)
     }
 
-    window.addEventListener("keydown", handleKeyDown)
-    window.addEventListener("keyup", handleKeyUp)
-    window.addEventListener("blur", clearHints)
+    const removeKeyDown = dom.addWindowListener("keydown", handleKeyDown)
+    const removeKeyUp = dom.addWindowListener("keyup", handleKeyUp)
+    const removeBlur = dom.addWindowListener("blur", clearHints)
 
     return () => {
-      window.removeEventListener("keydown", handleKeyDown)
-      window.removeEventListener("keyup", handleKeyUp)
-      window.removeEventListener("blur", clearHints)
+      removeKeyDown()
+      removeKeyUp()
+      removeBlur()
     }
-  }, [currentProjectId, navigate, onClose, onCreateChat, onOpenAddProjectModal, resolvedKeybindings, setShowNumberJumpHints, setStackCreatePanelOpen])
+  }, [currentProjectId, dom, navigate, onClose, onCreateChat, onOpenAddProjectModal, resolvedKeybindings, setShowNumberJumpHints, setStackCreatePanelOpen])
 
   useEffect(() => {
     if (!activeChatId || !scrollContainerRef.current) return
 
-    requestAnimationFrame(() => {
+    timer.requestAnimationFrame(() => {
       const container = scrollContainerRef.current
       const found = container?.querySelector(`[data-chat-id="${activeChatId}"]`)
       const activeElement = found instanceof HTMLElement ? found : null
@@ -433,15 +447,15 @@ function KannaSidebarImpl({
         container.scrollTo({ top: elementCenter - containerCenter, behavior: "smooth" })
       }
     })
-  }, [activeChatId])
+  }, [activeChatId, timer])
 
   useEffect(() => {
     if (!isResizingSidebar) return
 
-    const previousCursor = document.body.style.cursor
-    const previousUserSelect = document.body.style.userSelect
-    document.body.style.cursor = "col-resize"
-    document.body.style.userSelect = "none"
+    const previousCursor = dom.getBodyStyle("cursor")
+    const previousUserSelect = dom.getBodyStyle("user-select")
+    dom.setBodyStyle("cursor", "col-resize")
+    dom.setBodyStyle("user-select", "none")
 
     function handlePointerMove(event: PointerEvent) {
       const resizeStart = resizeStartRef.current
@@ -459,16 +473,16 @@ function KannaSidebarImpl({
       })
     }
 
-    window.addEventListener("pointermove", handlePointerMove)
-    window.addEventListener("pointerup", handlePointerUp, { once: true })
+    const removePointerMove = dom.addWindowListener("pointermove", handlePointerMove)
+    const removePointerUp = dom.addWindowListener("pointerup", handlePointerUp)
 
     return () => {
-      window.removeEventListener("pointermove", handlePointerMove)
-      window.removeEventListener("pointerup", handlePointerUp)
-      document.body.style.cursor = previousCursor
-      document.body.style.userSelect = previousUserSelect
+      removePointerMove()
+      removePointerUp()
+      dom.setBodyStyle("cursor", previousCursor)
+      dom.setBodyStyle("user-select", previousUserSelect)
     }
-  }, [isResizingSidebar, setSidebarWidth, setIsResizingSidebar])
+  }, [dom, isResizingSidebar, setSidebarWidth, setIsResizingSidebar])
 
   const dialog = useAppDialog()
 

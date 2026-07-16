@@ -1,0 +1,7 @@
+id: no-raw-websocket-ts
+valid:
+  - "const { sendJsonMessage } = useWebSocket(url, { share: true })"
+  - socketStore.getState().command("subscribe", payload)
+invalid:
+  - const ws = new WebSocket(url)
+  - const ws = new WebSocket("wss://example.com")

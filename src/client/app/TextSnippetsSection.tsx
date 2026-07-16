@@ -15,6 +15,8 @@ import {
   useTextSnippetsSectionStore,
   type SnippetEditingState,
 } from "../stores/textSnippetsSectionStore"
+import type { DomPort } from "../ports/domPort"
+import { domAdapter } from "../adapters/dom.adapter"
 
 export interface TextSnippetsSectionHandlers {
   onCreate: (input: TextSnippetInput) => Promise<void>
@@ -25,11 +27,12 @@ export interface TextSnippetsSectionHandlers {
 interface TextSnippetsSectionProps {
   snippets: readonly TextSnippet[]
   handlers: TextSnippetsSectionHandlers
+  dom?: DomPort
 }
 
 const SHORTCUT_REGEX = /^\S{1,32}$/
 
-export function TextSnippetsSection({ snippets, handlers }: TextSnippetsSectionProps) {
+export function TextSnippetsSection({ snippets, handlers, dom = domAdapter }: TextSnippetsSectionProps) {
   const editing = useTextSnippetsSectionStore((state) => state.editing)
   const setEditing = useTextSnippetsSectionStore((state) => state.setEditing)
   const resetEditorForm = useTextSnippetsSectionStore((state) => state.resetEditorForm)
@@ -90,7 +93,7 @@ export function TextSnippetsSection({ snippets, handlers }: TextSnippetsSectionP
               snippet={snippet}
               onEdit={() => navigate({ kind: "edit", id: snippet.id })}
               onDelete={() => {
-                if (window.confirm(`Delete snippet "${snippet.shortcut}"?`)) {
+                if (dom.confirmDialog(`Delete snippet "${snippet.shortcut}"?`)) {
                   void handlers.onDelete(snippet.id)
                 }
               }}

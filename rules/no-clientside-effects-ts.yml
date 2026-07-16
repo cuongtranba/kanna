@@ -1,0 +1,31 @@
+id: no-clientside-effects-ts
+language: typescript
+severity: error
+message: Raw storage/timer/DOM globals are banned in src/client — reach them through the typed ports+adapters (StoragePort/TimerPort/DomPort) instead.
+note: |
+  See adr-20260715-client-state-effect-architecture. localStorage/
+  sessionStorage -> adapters/storage.adapter.ts; setTimeout/setInterval/
+  requestAnimationFrame/clear* -> adapters/timer.adapter.ts;
+  document/window/navigator -> adapters/dom.adapter.ts. Only *.adapter.ts
+  files may reference these globals directly.
+files:
+  - src/client/**
+ignores:
+  - src/client/**/*.adapter.ts
+  - src/client/**/*.test.ts
+  - src/client/**/*.test.tsx
+  - src/client/lib/testing/**
+  - src/client/adapters/testing/**
+rule:
+  any:
+    - pattern: localStorage
+    - pattern: sessionStorage
+    - pattern: setTimeout
+    - pattern: setInterval
+    - pattern: clearTimeout
+    - pattern: clearInterval
+    - pattern: requestAnimationFrame
+    - pattern: cancelAnimationFrame
+    - pattern: document
+    - pattern: window
+    - pattern: navigator

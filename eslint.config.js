@@ -41,6 +41,30 @@ const SHARED_CLIENT_SEAL_SYNTAX = [
   },
 ]
 
+// Client-only effect seal (adr-20260715-client-state-effect-architecture):
+// raw WebSocket/fetch/storage/timers/DOM globals are banned in src/client so
+// react-use-websocket / React Query / the typed ports+adapters own every
+// primitive. Reuses the Bun-ban `no-restricted-globals` pattern already
+// established for shared/client + server above. Escape valve is file-scoped
+// (see the ignores list on the block below), not per-rule — *.adapter.ts is
+// the only place these globals may appear directly.
+const CLIENT_EFFECT_SEAL_GLOBALS = [
+  { name: "WebSocket", message: "Raw WebSocket is banned in src/client — use react-use-websocket via SocketBridge/socketStore instead." },
+  { name: "fetch", message: "Raw fetch is banned in src/client outside src/client/api/** — add a queryFn there and call it through React Query." },
+  { name: "XMLHttpRequest", message: "Raw XMLHttpRequest is banned in src/client outside src/client/api/** — add a queryFn there and call it through React Query." },
+  { name: "localStorage", message: "Raw localStorage is banned in src/client — reach it through storage.adapter.ts via StoragePort." },
+  { name: "sessionStorage", message: "Raw sessionStorage is banned in src/client — reach it through storage.adapter.ts via StoragePort." },
+  { name: "setTimeout", message: "Raw setTimeout is banned in src/client — reach it through timer.adapter.ts via TimerPort." },
+  { name: "setInterval", message: "Raw setInterval is banned in src/client — reach it through timer.adapter.ts via TimerPort." },
+  { name: "clearTimeout", message: "Raw clearTimeout is banned in src/client — reach it through timer.adapter.ts via TimerPort." },
+  { name: "clearInterval", message: "Raw clearInterval is banned in src/client — reach it through timer.adapter.ts via TimerPort." },
+  { name: "requestAnimationFrame", message: "Raw requestAnimationFrame is banned in src/client — reach it through timer.adapter.ts via TimerPort." },
+  { name: "cancelAnimationFrame", message: "Raw cancelAnimationFrame is banned in src/client — reach it through timer.adapter.ts via TimerPort." },
+  { name: "document", message: "Raw document is banned in src/client — reach it through dom.adapter.ts via DomPort." },
+  { name: "window", message: "Raw window is banned in src/client — reach it through dom.adapter.ts via DomPort." },
+  { name: "navigator", message: "Raw navigator is banned in src/client — reach it through dom.adapter.ts via DomPort (clipboard/sound have dedicated adapters)." },
+]
+
 export default tseslint.config(
   {
     ignores: [
@@ -165,6 +189,24 @@ export default tseslint.config(
       // Seal selectors + type-strictness (base's no-restricted-syntax is
       // replaced here, so the type-strict selectors must be re-included).
       "no-restricted-syntax": ["error", ...SHARED_CLIENT_SEAL_SYNTAX, ...TYPE_STRICT_SYNTAX],
+    },
+  },
+  {
+    // Client effect seal (adr-20260715-client-state-effect-architecture,
+    // PROGRESS.md chunk 5). Client-only: src/shared has no DOM/fetch/storage
+    // surface to seal. `*.adapter.ts` is the sanctioned direct-primitive
+    // site; tests/testing-helpers legitimately construct/stub these globals.
+    files: ["src/client/**/*.{ts,tsx}"],
+    ignores: [
+      "src/client/**/*.adapter.ts",
+      "src/client/**/*.test.ts",
+      "src/client/**/*.test.tsx",
+      "src/client/lib/testing/**",
+      "src/client/adapters/testing/**",
+      "src/client/api/**",
+    ],
+    rules: {
+      "no-restricted-globals": ["error", ...CLIENT_EFFECT_SEAL_GLOBALS],
     },
   },
   {

@@ -1,7 +1,9 @@
 import type { AnyValue } from "../../../../shared/errors"
+import type { DomPort } from "../../../ports/domPort"
 import type { EditorConfig, LexicalEditor, SerializedLexicalNode, Spread } from "lexical"
 import type { ReactNode } from "react"
 import { DecoratorNode, $applyNodeReplacement } from "lexical"
+import { domAdapter } from "../../../adapters/dom.adapter"
 import { LocalFileLinkCard } from "../../messages/LocalFileLinkCard"
 
 // ---------------------------------------------------------------------------
@@ -27,12 +29,20 @@ export class LocalFileLinkNode extends DecoratorNode<ReactNode> {
   readonly __path: string
   readonly __line: number | undefined
   readonly __column: number | undefined
+  readonly __dom: DomPort
 
-  constructor(path: string, line?: number, column?: number, key?: string) {
+  constructor(
+    path: string,
+    line?: number,
+    column?: number,
+    key?: string,
+    dom: DomPort = domAdapter,
+  ) {
     super(key)
     this.__path = path
     this.__line = line
     this.__column = column
+    this.__dom = dom
   }
 
   // ── Static interface ──────────────────────────────────────────────────────
@@ -47,6 +57,7 @@ export class LocalFileLinkNode extends DecoratorNode<ReactNode> {
       node.__line,
       node.__column,
       node.__key,
+      node.__dom,
     )
   }
 
@@ -78,7 +89,7 @@ export class LocalFileLinkNode extends DecoratorNode<ReactNode> {
   // ── DOM ───────────────────────────────────────────────────────────────────
 
   createDOM(_config: EditorConfig, _editor: LexicalEditor): HTMLElement {
-    return document.createElement("span")
+    return this.__dom.createElement("span")
   }
 
   updateDOM(): boolean {

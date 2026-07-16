@@ -3,6 +3,8 @@ import type { AskUserQuestionAnswerMap, AskUserQuestionItem, AskUserQuestionOpti
 import { cn } from "../../lib/utils"
 import { Button } from "../ui/button"
 import { AskUserQuestionInteractiveStore } from "./AskUserQuestionInteractive.store"
+import type { TimerPort } from "../../ports"
+import { timerAdapter } from "../../adapters"
 
 // ─── Slide-card sub-components (module-private) ─────────────────────────────
 
@@ -148,15 +150,21 @@ function OptionRow({
   )
 }
 
+interface AskUserQuestionInteractivePorts {
+  timer?: TimerPort
+}
+
 export interface AskUserQuestionInteractiveProps {
   questions: AskUserQuestionItem[]
   onSubmit: (answers: AskUserQuestionAnswerMap) => void
   onCancel?: () => void
+  ports?: AskUserQuestionInteractivePorts
 }
 
 function AskUserQuestionInteractiveInner(
-  { questions, onSubmit, onCancel }: AskUserQuestionInteractiveProps,
+  { questions, onSubmit, onCancel, ports = {} }: AskUserQuestionInteractiveProps,
 ): React.ReactElement | null {
+  const timer = ports.timer ?? timerAdapter
   const currentIndex = AskUserQuestionInteractiveStore.useScopedStore((s) => s.currentIndex)
   const answers = AskUserQuestionInteractiveStore.useScopedStore((s) => s.answers)
   const customInputs = AskUserQuestionInteractiveStore.useScopedStore((s) => s.customInputs)
@@ -196,7 +204,7 @@ function AskUserQuestionInteractiveInner(
       setAnswers({ ...answers, [key]: label })
       setCustomInputs({ ...customInputs, [key]: "" })
       if (currentIndex < questions.length - 1) {
-        setTimeout(() => setCurrentIndex(currentIndex + 1), 150)
+        timer.setTimeout(() => setCurrentIndex(currentIndex + 1), 150)
       }
     }
   }
@@ -319,11 +327,11 @@ function AskUserQuestionInteractiveInner(
 }
 
 export function AskUserQuestionInteractive(
-  { questions, onSubmit, onCancel }: AskUserQuestionInteractiveProps,
+  { questions, onSubmit, onCancel, ports }: AskUserQuestionInteractiveProps,
 ): React.ReactElement | null {
   return (
     <AskUserQuestionInteractiveStore.Provider init={undefined}>
-      <AskUserQuestionInteractiveInner questions={questions} onSubmit={onSubmit} onCancel={onCancel} />
+      <AskUserQuestionInteractiveInner questions={questions} onSubmit={onSubmit} onCancel={onCancel} ports={ports} />
     </AskUserQuestionInteractiveStore.Provider>
   )
 }

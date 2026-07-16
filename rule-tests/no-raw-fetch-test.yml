@@ -1,0 +1,7 @@
+id: no-raw-fetch
+valid:
+  - const data = await queryClient.fetchQuery({ queryKey, queryFn })
+  - "const { data } = useQuery({ queryKey, queryFn: fetchAuthStatus })"
+invalid:
+  - const response = await fetch("/api/auth")
+  - const xhr = new XMLHttpRequest()

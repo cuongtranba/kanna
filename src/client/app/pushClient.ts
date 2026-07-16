@@ -1,3 +1,10 @@
+import { localStorageAdapter } from "../adapters/storage.adapter"
+import { domAdapter } from "../adapters/dom.adapter"
+import { notificationAdapter } from "../adapters/notification.adapter"
+import type { StoragePort } from "../ports/storagePort"
+import type { DomPort } from "../ports/domPort"
+import type { NotificationPort } from "../ports/notificationPort"
+
 export type PushPermissionState =
   | "unsupported"
   | "insecure-context"
@@ -9,42 +16,48 @@ export interface PushSupportSnapshot {
   state: PushPermissionState
 }
 
+export interface PushClientPorts {
+  storage?: StoragePort
+  dom?: DomPort
+  notification?: NotificationPort
+}
+
 const PUSH_DEVICE_ID_STORAGE_KEY = "pushDeviceId"
 
-export function getStoredPushDeviceId(): string | null {
-  if (typeof localStorage === "undefined") return null
-  return localStorage.getItem(PUSH_DEVICE_ID_STORAGE_KEY)
+export function getStoredPushDeviceId(ports: PushClientPorts = {}): string | null {
+  const storage = ports.storage ?? localStorageAdapter
+  return storage.getItem(PUSH_DEVICE_ID_STORAGE_KEY)
 }
 
-export function setStoredPushDeviceId(id: string): void {
-  if (typeof localStorage === "undefined") return
-  localStorage.setItem(PUSH_DEVICE_ID_STORAGE_KEY, id)
+export function setStoredPushDeviceId(id: string, ports: PushClientPorts = {}): void {
+  const storage = ports.storage ?? localStorageAdapter
+  storage.setItem(PUSH_DEVICE_ID_STORAGE_KEY, id)
 }
 
-export function clearStoredPushDeviceId(): void {
-  if (typeof localStorage === "undefined") return
-  localStorage.removeItem(PUSH_DEVICE_ID_STORAGE_KEY)
+export function clearStoredPushDeviceId(ports: PushClientPorts = {}): void {
+  const storage = ports.storage ?? localStorageAdapter
+  storage.removeItem(PUSH_DEVICE_ID_STORAGE_KEY)
 }
 
-function isFeatureSupported(): boolean {
-  if (typeof window === "undefined") return false
-  if (typeof Notification === "undefined") return false
-  if (!("serviceWorker" in navigator)) return false
-  if (typeof Reflect.get(globalThis, "PushManager") === "undefined") return false
+function isFeatureSupported(dom: DomPort, notification: NotificationPort): boolean {
+  if (!notification.isSupported()) return false
+  if (!dom.isServiceWorkerSupported()) return false
+  if (!dom.isPushManagerSupported()) return false
   return true
 }
 
-function isSecure(): boolean {
-  if (typeof window === "undefined") return false
-  if (window.isSecureContext) return true
-  const host = window.location?.hostname ?? ""
+function isSecure(dom: DomPort): boolean {
+  if (dom.isSecureContext()) return true
+  const host = dom.getHostname()
   return host === "localhost" || host === "127.0.0.1" || host === "::1"
 }
 
-export function detectPushSupport(): PushSupportSnapshot {
-  if (!isFeatureSupported()) return { state: "unsupported" }
-  if (!isSecure()) return { state: "insecure-context" }
-  switch (Notification.permission) {
+export function detectPushSupport(ports: PushClientPorts = {}): PushSupportSnapshot {
+  const dom = ports.dom ?? domAdapter
+  const notification = ports.notification ?? notificationAdapter
+  if (!isFeatureSupported(dom, notification)) return { state: "unsupported" }
+  if (!isSecure(dom)) return { state: "insecure-context" }
+  switch (notification.getPermission()) {
     case "granted": return { state: "granted" }
     case "denied": return { state: "denied" }
     default: return { state: "default" }
@@ -83,17 +96,20 @@ function deriveLabel(userAgent: string): string {
 export async function subscribePush(args: {
   vapidPublicKey: string
   sendToServer: (payload: PushSubscribeServerCall) => Promise<{ id: string }>
-}): Promise<string> {
-  const support = detectPushSupport()
+} & PushClientPorts): Promise<string> {
+  const dom = args.dom ?? domAdapter
+  const notification = args.notification ?? notificationAdapter
+
+  const support = detectPushSupport({ dom, notification })
   if (support.state === "unsupported") throw new Error("Push not supported in this browser")
   if (support.state === "insecure-context") throw new Error("Push requires a secure context (HTTPS)")
   if (support.state === "denied") throw new Error("Notification permission previously denied")
 
-  const result = await Notification.requestPermission()
+  const result = await notification.requestPermission()
   if (result !== "granted") throw new Error("Notification permission was not granted")
 
-  const reg = await navigator.serviceWorker.register("/sw.js")
-  await navigator.serviceWorker.ready
+  const reg = await dom.registerServiceWorker("/sw.js")
+  await dom.getReadyServiceWorkerRegistration()
   const subscription = await reg.pushManager.subscribe({
     userVisibleOnly: true,
     applicationServerKey: urlBase64ToUint8Array(args.vapidPublicKey),
@@ -105,7 +121,7 @@ export async function subscribePush(args: {
   if (!endpoint || !keys.p256dh || !keys.auth) {
     throw new Error("Subscription returned without endpoint or keys")
   }
-  const ua = navigator.userAgent ?? ""
+  const ua = dom.getUserAgent() ?? ""
   const { id } = await args.sendToServer({
     subscription: { endpoint, keys: { p256dh: keys.p256dh, auth: keys.auth } },
     label: deriveLabel(ua),
@@ -117,8 +133,9 @@ export async function subscribePush(args: {
 export async function unsubscribePush(args: {
   pushDeviceId: string
   sendToServer: (pushDeviceId: string) => Promise<void>
-}): Promise<void> {
-  const reg = await navigator.serviceWorker.ready
+} & PushClientPorts): Promise<void> {
+  const dom = args.dom ?? domAdapter
+  const reg = await dom.getReadyServiceWorkerRegistration()
   const sub = await reg.pushManager.getSubscription()
   if (sub) await sub.unsubscribe()
   await args.sendToServer(args.pushDeviceId)

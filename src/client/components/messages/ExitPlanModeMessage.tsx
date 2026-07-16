@@ -6,15 +6,25 @@ import { cn } from "../../lib/utils"
 import { useTranscriptRenderOptions } from "./render-context"
 import { renderMarkdownToReact } from "../lexical/markdown/lexicalToReact"
 import { ExitPlanModeMessageStore } from "./ExitPlanModeMessage.store"
+import type { ClipboardPort, TimerPort } from "../../ports"
+import { clipboardAdapter, timerAdapter } from "../../adapters"
+
+interface ExitPlanModeMessagePorts {
+  clipboard?: ClipboardPort
+  timer?: TimerPort
+}
 
 interface Props {
   message: Extract<ProcessedToolCall, { toolKind: "exit_plan_mode" }>
   onConfirm: (toolUseId: string, confirmed: boolean, clearContext?: boolean, message?: string) => void
   isLatest: boolean
+  ports?: ExitPlanModeMessagePorts
 }
 
-function ExitPlanModeMessageInner({ message, onConfirm, isLatest }: Props) {
+function ExitPlanModeMessageInner({ message, onConfirm, isLatest, ports = {} }: Props) {
   const renderOptions = useTranscriptRenderOptions()
+  const clipboard = ports.clipboard ?? clipboardAdapter
+  const timer = ports.timer ?? timerAdapter
   const isComplete = Boolean(message.result)
   const expanded = ExitPlanModeMessageStore.useScopedStore((s) => s.expanded)
   const copied = ExitPlanModeMessageStore.useScopedStore((s) => s.copied)
@@ -35,9 +45,9 @@ function ExitPlanModeMessageInner({ message, onConfirm, isLatest }: Props) {
 
   const handleCopy = async () => {
     if (!input?.plan) return
-    await navigator.clipboard.writeText(input.plan)
+    await clipboard.writeText(input.plan)
     setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+    timer.setTimeout(() => setCopied(false), 2000)
   }
 
   const result = isComplete ? message.result : null
@@ -213,10 +223,10 @@ function ExitPlanModeMessageInner({ message, onConfirm, isLatest }: Props) {
   )
 }
 
-export function ExitPlanModeMessage({ message, onConfirm, isLatest }: Props) {
+export function ExitPlanModeMessage({ message, onConfirm, isLatest, ports }: Props) {
   return (
     <ExitPlanModeMessageStore.Provider init={undefined}>
-      <ExitPlanModeMessageInner message={message} onConfirm={onConfirm} isLatest={isLatest} />
+      <ExitPlanModeMessageInner message={message} onConfirm={onConfirm} isLatest={isLatest} ports={ports} />
     </ExitPlanModeMessageStore.Provider>
   )
 }

@@ -7,7 +7,7 @@ import {
   $insertNodes,
   type LexicalEditor,
 } from "lexical"
-import { uploadFile } from "../../../lib/uploadFile"
+import { uploadFile } from "../../../lib/uploadFile.adapter"
 import { $createAttachmentNode } from "../nodes"
 import type { ChatAttachment } from "../../../../shared/types"
 

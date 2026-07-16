@@ -1,25 +1,31 @@
 import { create } from "zustand"
 import type { GitWorktree } from "../../shared/types"
+import { localStorageAdapter } from "../adapters/storage.adapter"
+import type { StoragePort } from "../ports/storagePort"
 
 const SIDEBAR_WIDTH_STORAGE_KEY = "kanna:sidebar-width"
 export const DEFAULT_SIDEBAR_WIDTH = 275
 export const MIN_SIDEBAR_WIDTH = 220
 export const MAX_SIDEBAR_WIDTH = 520
 
+export interface KannaSidebarStorePorts {
+  storage?: StoragePort
+}
+
 export function clampSidebarWidth(width: number) {
   if (!Number.isFinite(width)) return DEFAULT_SIDEBAR_WIDTH
   return Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, Math.round(width)))
 }
 
-function readStoredSidebarWidth() {
-  if (typeof window === "undefined") return DEFAULT_SIDEBAR_WIDTH
-  const stored = window.localStorage.getItem(SIDEBAR_WIDTH_STORAGE_KEY)
+function readStoredSidebarWidth(ports: KannaSidebarStorePorts = {}) {
+  const storage = ports.storage ?? localStorageAdapter
+  const stored = storage.getItem(SIDEBAR_WIDTH_STORAGE_KEY)
   return stored ? clampSidebarWidth(Number(stored)) : DEFAULT_SIDEBAR_WIDTH
 }
 
-function persistSidebarWidth(width: number) {
-  if (typeof window === "undefined") return
-  window.localStorage.setItem(SIDEBAR_WIDTH_STORAGE_KEY, String(clampSidebarWidth(width)))
+function persistSidebarWidth(width: number, ports: KannaSidebarStorePorts = {}) {
+  const storage = ports.storage ?? localStorageAdapter
+  storage.setItem(SIDEBAR_WIDTH_STORAGE_KEY, String(clampSidebarWidth(width)))
 }
 
 const EMPTY_STACK_CHAT_WORKTREES = new Map<string, GitWorktree[]>()

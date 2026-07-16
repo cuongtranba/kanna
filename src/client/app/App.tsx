@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react"
+import { QueryClientProvider } from "@tanstack/react-query"
 import { Navigate, Outlet, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom"
+import { queryClient } from "../query/queryClient"
+import { SocketBridge } from "./SocketBridge"
 import { Flower } from "lucide-react"
 import { ChatPolicyDialog } from "../components/chat-ui/ChatPolicyDialog"
 import { POLICY_DEFAULT } from "../../shared/permission-policy"
@@ -28,9 +31,22 @@ import type { AppSettingsSnapshot } from "../../shared/types"
 import { log } from "../../shared/log"
 import { useAppShellStore } from "../stores/appShellStore"
 import { PasswordScreenStore } from "./PasswordScreen.store"
+import type { DomPort } from "../ports/domPort"
+import type { TimerPort } from "../ports/timerPort"
+import type { StoragePort } from "../ports/storagePort"
+import { domAdapter } from "../adapters/dom.adapter"
+import { timerAdapter } from "../adapters/timer.adapter"
+import { localStorageAdapter } from "../adapters/storage.adapter"
+import { fetchAuthStatus, postAuthLogin } from "../api/auth"
 
 const VERSION_SEEN_STORAGE_KEY = "kanna:last-seen-version"
 const AUTH_STATUS_RETRY_DELAY_MS = 500
+
+export interface AppPorts {
+  dom?: DomPort
+  timer?: TimerPort
+  storage?: StoragePort
+}
 
 interface AuthStatusResponse {
   enabled: boolean
@@ -137,46 +153,43 @@ function PasswordScreen({
   )
 }
 
-function useAppAuthState() {
+function useAppAuthState(ports: AppPorts = {}) {
+  const timer = ports.timer ?? timerAdapter
+  const dom = ports.dom ?? domAdapter
   const authStatus = useAppShellStore((s) => s.authStatus)
   const retryTimeoutRef = useRef<number | null>(null)
   const refreshRef = useRef<() => Promise<void>>(async () => { /* stable ref kept current by useLayoutEffect */ })
 
   const refresh = useCallback(async () => {
     if (retryTimeoutRef.current !== null) {
-      window.clearTimeout(retryTimeoutRef.current)
+      timer.clearTimeout(retryTimeoutRef.current)
       retryTimeoutRef.current = null
     }
 
     const { authStatus: current, setAuthStatus } = useAppShellStore.getState()
     setAuthStatus(current.status === "ready" ? current : { status: "checking" })
 
-    let response: Response
+    let payload: Partial<AuthStatusResponse>
     try {
-      response = await fetch("/auth/status", {
-        method: "GET",
-        cache: "no-store",
-        headers: {
-          Accept: "application/json",
-        },
-      })
+      payload = await fetchAuthStatus()
     } catch {
-      retryTimeoutRef.current = window.setTimeout(() => {
+      retryTimeoutRef.current = timer.setTimeout(() => {
         void refreshRef.current()
       }, AUTH_STATUS_RETRY_DELAY_MS)
       return
     }
 
-    if (shouldRetryAuthStatusRequest(response.ok)) {
-      retryTimeoutRef.current = window.setTimeout(() => {
+    // fetchAuthStatus returns {} on non-ok HTTP; treat as a retry condition
+    const responseOk = Object.keys(payload).length > 0 ? true : null
+    if (shouldRetryAuthStatusRequest(responseOk)) {
+      retryTimeoutRef.current = timer.setTimeout(() => {
         void refreshRef.current()
       }, AUTH_STATUS_RETRY_DELAY_MS)
       return
     }
 
-    const payload: Partial<AuthStatusResponse> = await response.json()
     useAppShellStore.getState().setAuthStatus(getAppAuthStateFromStatus(payload))
-  }, [])
+  }, [timer])
 
   useLayoutEffect(() => {
     refreshRef.current = refresh
@@ -186,28 +199,22 @@ function useAppAuthState() {
     void refresh()
     return () => {
       if (retryTimeoutRef.current !== null) {
-        window.clearTimeout(retryTimeoutRef.current)
+        timer.clearTimeout(retryTimeoutRef.current)
       }
     }
-  }, [refresh])
+  }, [refresh, timer])
 
   const submitPassword = useCallback(async (password: string) => {
-    const response = await fetch("/auth/login", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-      },
-      body: JSON.stringify({ password, next: window.location.pathname + window.location.search }),
-    })
+    const next = dom.getPathname() + dom.getSearch()
+    const ok = await postAuthLogin({ password, next })
 
-    if (!response.ok) {
+    if (!ok) {
       useAppShellStore.getState().setAuthStatus({ status: "locked", error: "Incorrect password. Try again." })
       return
     }
 
     await refresh()
-  }, [refresh])
+  }, [dom, refresh])
 
   return {
     state: authStatus,
@@ -222,12 +229,14 @@ export function shouldRedirectToChangelog(pathname: string, currentVersion: stri
 export function shouldPlayChatNotificationSound(
   appSettings: AppSettingsSnapshot | null,
   preference: ChatSoundPreference,
-  doc: Pick<Document, "visibilityState" | "hasFocus"> = document
+  dom: DomPort = domAdapter,
 ) {
-  return Boolean(appSettings) && shouldPlayChatSound(preference, doc)
+  return Boolean(appSettings) && shouldPlayChatSound(preference, dom)
 }
 
-function KannaLayout() {
+function KannaLayout({ ports = {} }: { ports?: AppPorts } = {}) {
+  const dom = ports.dom ?? domAdapter
+  const storage = ports.storage ?? localStorageAdapter
   const location = useLocation()
   const navigate = useNavigate()
   const params = useParams()
@@ -401,38 +410,38 @@ function KannaLayout() {
   ])
 
   useEffect(() => {
-    const seenVersion = window.localStorage.getItem(VERSION_SEEN_STORAGE_KEY)
+    const seenVersion = storage.getItem(VERSION_SEEN_STORAGE_KEY)
     const shouldRedirect = shouldRedirectToChangelog(location.pathname, currentVersion, seenVersion)
-    window.localStorage.setItem(VERSION_SEEN_STORAGE_KEY, currentVersion)
+    storage.setItem(VERSION_SEEN_STORAGE_KEY, currentVersion)
     if (!shouldRedirect) return
     navigate("/settings/changelog", { replace: true })
-  }, [currentVersion, location.pathname, navigate])
+  }, [currentVersion, location.pathname, navigate, storage])
 
   useLayoutEffect(() => {
-    document.title = APP_NAME
-  }, [location.key])
+    dom.setTitle(APP_NAME)
+  }, [dom, location.key])
 
   useEffect(() => {
     function handlePageShow() {
-      document.title = APP_NAME
+      dom.setTitle(APP_NAME)
     }
 
     function handlePageHide() {
-      document.title = APP_NAME
+      dom.setTitle(APP_NAME)
     }
 
-    window.addEventListener("pageshow", handlePageShow)
-    window.addEventListener("pagehide", handlePageHide)
+    const removePageShow = dom.addWindowListener("pageshow", handlePageShow)
+    const removePageHide = dom.addWindowListener("pagehide", handlePageHide)
     return () => {
-      window.removeEventListener("pageshow", handlePageShow)
-      window.removeEventListener("pagehide", handlePageHide)
+      removePageShow()
+      removePageHide()
     }
-  }, [])
+  }, [dom])
 
   useEffect(() => {
     const notificationCount = getNotificationTitleCount(state.sidebarData)
-    document.title = notificationCount > 0 ? `[${notificationCount}] ${APP_NAME}` : APP_NAME
-  }, [state.sidebarData])
+    dom.setTitle(notificationCount > 0 ? `[${notificationCount}] ${APP_NAME}` : APP_NAME)
+  }, [dom, state.sidebarData])
 
   useEffect(() => {
     const burstCount = getChatSoundBurstCount(previousSidebarDataRef.current, state.sidebarData)
@@ -512,14 +521,17 @@ function AuthedApp() {
 
 export function App() {
   return (
-    <TooltipProvider>
-      <AppDialogProvider>
-        <Routes>
-          <Route path="/share/:token" element={<SharePage />} />
-          <Route path="*" element={<AuthedApp />} />
-        </Routes>
-        <Toaster />
-      </AppDialogProvider>
-    </TooltipProvider>
+    <QueryClientProvider client={queryClient}>
+      <SocketBridge />
+      <TooltipProvider>
+        <AppDialogProvider>
+          <Routes>
+            <Route path="/share/:token" element={<SharePage />} />
+            <Route path="*" element={<AuthedApp />} />
+          </Routes>
+          <Toaster />
+        </AppDialogProvider>
+      </TooltipProvider>
+    </QueryClientProvider>
   )
 }

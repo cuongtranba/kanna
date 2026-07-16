@@ -10,6 +10,8 @@ import { maskToken } from "../../lib/oauthTokenMask"
 import { Input } from "../ui/input"
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "../ui/tooltip"
 import { useOAuthTokenPoolCardStore } from "../../stores/oauthTokenPoolCardStore"
+import type { TimerPort } from "../../ports/timerPort"
+import { timerAdapter } from "../../adapters/timer.adapter"
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -26,6 +28,10 @@ function formatLimitedUntil(msUntilReset: number): string {
 
 // ─── types ───────────────────────────────────────────────────────────────────
 
+interface TokenRowPorts {
+  timer?: TimerPort
+}
+
 export interface OAuthTokenPoolCardProps {
   tokens: OAuthTokenEntry[]
   concurrencyDefault: number
@@ -33,6 +39,7 @@ export interface OAuthTokenPoolCardProps {
   onTest: (token: string) => Promise<{ ok: boolean; error: string | null }>
   /** Timestamp override for test determinism; defaults to Date.now() at render. */
   now?: number
+  ports?: TokenRowPorts
 }
 
 function clampCap(raw: number): number {
@@ -112,6 +119,7 @@ function TokenRow({
   onToggleDisabled,
   onTest,
   onChangeMaxConcurrent,
+  ports,
 }: {
   entry: OAuthTokenEntry
   now: number
@@ -121,7 +129,10 @@ function TokenRow({
   onToggleDisabled: () => void
   onTest: (token: string) => Promise<{ ok: boolean; error: string | null }>
   onChangeMaxConcurrent: (id: string, value: number) => void
+  ports?: TokenRowPorts
 }) {
+  const timer = ports?.timer ?? timerAdapter
+
   const tokenRowStates = useOAuthTokenPoolCardStore((state) => state.tokenRowStates)
   const setTokenRowTesting = useOAuthTokenPoolCardStore((state) => state.setTokenRowTesting)
   const setTokenRowTestResult = useOAuthTokenPoolCardStore((state) => state.setTokenRowTestResult)
@@ -137,10 +148,10 @@ function TokenRow({
       const res = await onTest(entry.token)
       const label = res.ok ? "OK" : (res.error ?? "Error")
       setTokenRowTestResult(entry.id, label)
-      setTimeout(() => setTokenRowTestResult(entry.id, null), 3000)
+      timer.setTimeout(() => setTokenRowTestResult(entry.id, null), 3000)
     } catch {
       setTokenRowTestResult(entry.id, "Error")
-      setTimeout(() => setTokenRowTestResult(entry.id, null), 3000)
+      timer.setTimeout(() => setTokenRowTestResult(entry.id, null), 3000)
     } finally {
       setTokenRowTesting(entry.id, false)
     }
@@ -313,6 +324,7 @@ export function OAuthTokenPoolCard({
   onWrite,
   onTest,
   now: nowProp,
+  ports,
 }: OAuthTokenPoolCardProps) {
   // eslint-disable-next-line react-hooks/purity
   const now = nowProp ?? Date.now()
@@ -376,6 +388,7 @@ export function OAuthTokenPoolCard({
           onToggleDisabled={() => handleToggleDisabled(entry.id)}
           onTest={onTest}
           onChangeMaxConcurrent={handleChangeMaxConcurrent}
+          ports={ports}
         />
       ))}
 

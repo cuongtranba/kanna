@@ -1,0 +1,68 @@
+id: no-clientside-effects
+snapshots:
+  cancelAnimationFrame(handle):
+    labels:
+    - source: cancelAnimationFrame
+      style: primary
+      start: 0
+      end: 20
+  clearInterval(id):
+    labels:
+    - source: clearInterval
+      style: primary
+      start: 0
+      end: 13
+  clearTimeout(id):
+    labels:
+    - source: clearTimeout
+      style: primary
+      start: 0
+      end: 12
+  const id = setInterval(tick, 100):
+    labels:
+    - source: setInterval
+      style: primary
+      start: 11
+      end: 22
+  const value = localStorage.getItem(key):
+    labels:
+    - source: localStorage
+      style: primary
+      start: 14
+      end: 26
+  document.querySelector(".foo"):
+    labels:
+    - source: document
+      style: primary
+      start: 0
+      end: 8
+  navigator.clipboard.writeText(text):
+    labels:
+    - source: navigator
+      style: primary
+      start: 0
+      end: 9
+  requestAnimationFrame(render):
+    labels:
+    - source: requestAnimationFrame
+      style: primary
+      start: 0
+      end: 21
+  sessionStorage.setItem(key, value):
+    labels:
+    - source: sessionStorage
+      style: primary
+      start: 0
+      end: 14
+  setTimeout(callback, 1000):
+    labels:
+    - source: setTimeout
+      style: primary
+      start: 0
+      end: 10
+  window.location.reload():
+    labels:
+    - source: window
+      style: primary
+      start: 0
+      end: 6

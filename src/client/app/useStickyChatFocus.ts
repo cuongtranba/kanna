@@ -1,19 +1,35 @@
 import { useEffect, type RefObject } from "react"
 import {
-  hasActiveFocusOverlay,
   hasActiveTextSelection,
   RESTORE_CHAT_INPUT_FOCUS_EVENT,
   resolveChatFocusAction,
 } from "./chatFocusPolicy"
+import type { DomPort } from "../ports/domPort"
+import type { TimerPort } from "../ports/timerPort"
+import { domAdapter } from "../adapters/dom.adapter"
+import { timerAdapter } from "../adapters/timer.adapter"
+
+interface StickyChatFocusPorts {
+  dom: DomPort
+  timer: TimerPort
+}
 
 interface StickyChatFocusOptions {
   rootRef: RefObject<HTMLElement | null>
   fallbackRef: RefObject<HTMLTextAreaElement | null>
   enabled: boolean
   canCancel: boolean
+  ports?: StickyChatFocusPorts
 }
 
-export function useStickyChatFocus({ rootRef, fallbackRef, enabled, canCancel }: StickyChatFocusOptions) {
+const DEFAULT_PORTS: StickyChatFocusPorts = {
+  dom: domAdapter,
+  timer: timerAdapter,
+}
+
+export function useStickyChatFocus({ rootRef, fallbackRef, enabled, canCancel, ports = DEFAULT_PORTS }: StickyChatFocusOptions) {
+  const { dom, timer } = ports
+
   useEffect(() => {
     if (!enabled) return
 
@@ -27,13 +43,13 @@ export function useStickyChatFocus({ rootRef, fallbackRef, enabled, canCancel }:
 
       if (resolveChatFocusAction({
         trigger: "pointer",
-        activeElement: document.activeElement,
+        activeElement: dom.getActiveElement(),
         pointerStartTarget,
         pointerEndTarget: target,
         root,
         fallback,
-        hasActiveOverlay: hasActiveFocusOverlay(document),
-        hasActiveSelection: hasActiveTextSelection(window.getSelection()),
+        hasActiveOverlay: dom.hasFocusOverlay(),
+        hasActiveSelection: hasActiveTextSelection(dom.getSelection()),
       }) !== "restore") {
         pointerStartTarget = null
         return
@@ -44,13 +60,13 @@ export function useStickyChatFocus({ rootRef, fallbackRef, enabled, canCancel }:
     }
 
     const handlePointerDown = (event: PointerEvent) => {
-      cancelAnimationFrame(rafId)
+      timer.cancelAnimationFrame(rafId)
       pointerStartTarget = event.target instanceof Element ? event.target : null
     }
 
     const handlePointerUp = (event: PointerEvent) => {
-      cancelAnimationFrame(rafId)
-      rafId = window.requestAnimationFrame(() => {
+      timer.cancelAnimationFrame(rafId)
+      rafId = timer.requestAnimationFrame(() => {
         restoreFocusIfNeeded(event.target)
       })
     }
@@ -68,9 +84,9 @@ export function useStickyChatFocus({ rootRef, fallbackRef, enabled, canCancel }:
       const fallback = fallbackRef.current
       if (resolveChatFocusAction({
         trigger: "escape",
-        activeElement: document.activeElement,
+        activeElement: dom.getActiveElement(),
         fallback,
-        hasActiveOverlay: hasActiveFocusOverlay(document),
+        hasActiveOverlay: dom.hasFocusOverlay(),
         canCancel,
         defaultPrevented: event.defaultPrevented,
       }) !== "escape-focus") {
@@ -81,16 +97,17 @@ export function useStickyChatFocus({ rootRef, fallbackRef, enabled, canCancel }:
       fallback?.focus({ preventScroll: true })
     }
 
-    window.addEventListener("pointerdown", handlePointerDown, true)
-    window.addEventListener("pointerup", handlePointerUp, true)
-    window.addEventListener("keydown", handleKeyDown, true)
-    window.addEventListener(RESTORE_CHAT_INPUT_FOCUS_EVENT, handleRestoreFocus)
+    const cleanupPointerDown = dom.addWindowCaptureListener("pointerdown", handlePointerDown)
+    const cleanupPointerUp = dom.addWindowCaptureListener("pointerup", handlePointerUp)
+    const cleanupKeyDown = dom.addWindowCaptureListener("keydown", handleKeyDown)
+    const cleanupRestoreFocus = dom.addWindowCustomListener(RESTORE_CHAT_INPUT_FOCUS_EVENT, handleRestoreFocus)
+
     return () => {
-      cancelAnimationFrame(rafId)
-      window.removeEventListener("pointerdown", handlePointerDown, true)
-      window.removeEventListener("pointerup", handlePointerUp, true)
-      window.removeEventListener("keydown", handleKeyDown, true)
-      window.removeEventListener(RESTORE_CHAT_INPUT_FOCUS_EVENT, handleRestoreFocus)
+      timer.cancelAnimationFrame(rafId)
+      cleanupPointerDown()
+      cleanupPointerUp()
+      cleanupKeyDown()
+      cleanupRestoreFocus()
     }
-  }, [canCancel, enabled, fallbackRef, rootRef])
+  }, [canCancel, dom, enabled, fallbackRef, rootRef, timer])
 }

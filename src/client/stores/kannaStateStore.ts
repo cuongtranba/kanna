@@ -1,8 +1,10 @@
 import { create } from "zustand"
 import type { AppSettingsSnapshot, ChatDiffSnapshot, KeybindingsSnapshot, LlmProviderSnapshot, PushConfigSnapshot, TranscriptEntry, UpdateSnapshot } from "../../shared/types"
 import type { ChatSnapshot, LocalProjectsSnapshot, SidebarData } from "../../shared/types"
+import { sessionStorageAdapter } from "../adapters/storage.adapter"
 import type { SocketStatus } from "../app/socket"
 import type { OptimisticUserPrompt } from "../app/useKannaState"
+import type { StoragePort } from "../ports/storagePort"
 
 interface OptimisticProcessingState {
   scopeId: string
@@ -77,11 +79,15 @@ interface KannaStateStoreState {
   incrementFocusEpoch: () => void
 }
 
+export interface KannaStateStorePorts {
+  storage?: StoragePort
+}
+
 // Read initial UI restart phase from sessionStorage synchronously at module load.
 // This mirrors the original useState lazy-init pattern.
-function readInitialUiRestartPhase(): string | null {
-  if (typeof window === "undefined") return null
-  return window.sessionStorage.getItem("kanna:ui-update-restart")
+function readInitialUiRestartPhase(ports: KannaStateStorePorts = {}): string | null {
+  const storage = ports.storage ?? sessionStorageAdapter
+  return storage.getItem("kanna:ui-update-restart")
 }
 
 export const useKannaStateStore = create<KannaStateStoreState>()((set) => ({

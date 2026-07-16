@@ -1,4 +1,6 @@
 import { useEffect } from "react"
+import type { DomPort } from "../ports/domPort"
+import { domAdapter } from "../adapters/dom.adapter"
 
 export const SIDEBAR_SWIPE_MOBILE_BREAKPOINT_PX = 768
 // Open gesture may start at the very left edge (x = 0): we suppress the
@@ -83,16 +85,25 @@ export function shouldPreventNativeBack(
   return dx < 0
 }
 
+interface SidebarSwipeGesturePorts {
+  dom: DomPort
+}
+
+const DEFAULT_PORTS: SidebarSwipeGesturePorts = {
+  dom: domAdapter,
+}
+
 type UseSidebarSwipeGestureParams = {
   sidebarOpen: boolean
   onOpen: () => void
   onClose: () => void
+  ports?: SidebarSwipeGesturePorts
 }
 
-export function useSidebarSwipeGesture({ sidebarOpen, onOpen, onClose }: UseSidebarSwipeGestureParams) {
-  useEffect(() => {
-    if (typeof window === "undefined") return
+export function useSidebarSwipeGesture({ sidebarOpen, onOpen, onClose, ports = DEFAULT_PORTS }: UseSidebarSwipeGestureParams) {
+  const { dom } = ports
 
+  useEffect(() => {
     let start: SwipePoint | null = null
 
     function handleTouchStart(event: TouchEvent) {
@@ -114,7 +125,7 @@ export function useSidebarSwipeGesture({ sidebarOpen, onOpen, onClose }: UseSide
       const prevent = shouldPreventNativeBack(
         startPoint,
         { x: touch.clientX, y: touch.clientY, t: event.timeStamp },
-        { sidebarOpen, viewportWidth: window.innerWidth }
+        { sidebarOpen, viewportWidth: dom.getInnerWidth() }
       )
       // Claim the gesture from the native edge swipe-back so the move resolves
       // to opening/closing the sidebar instead of navigating history.
@@ -130,7 +141,7 @@ export function useSidebarSwipeGesture({ sidebarOpen, onOpen, onClose }: UseSide
       const outcome = evaluateSidebarSwipe(
         startPoint,
         { x: touch.clientX, y: touch.clientY, t: event.timeStamp },
-        { sidebarOpen, viewportWidth: window.innerWidth }
+        { sidebarOpen, viewportWidth: dom.getInnerWidth() }
       )
       if (outcome === "open") onOpen()
       else if (outcome === "close") onClose()
@@ -140,17 +151,17 @@ export function useSidebarSwipeGesture({ sidebarOpen, onOpen, onClose }: UseSide
       start = null
     }
 
-    window.addEventListener("touchstart", handleTouchStart, { passive: true })
+    const cleanupTouchStart = dom.addWindowListenerWithOptions("touchstart", handleTouchStart, { passive: true })
     // Non-passive so preventDefault() can suppress the native edge swipe-back.
-    window.addEventListener("touchmove", handleTouchMove, { passive: false })
-    window.addEventListener("touchend", handleTouchEnd, { passive: true })
-    window.addEventListener("touchcancel", handleTouchCancel, { passive: true })
+    const cleanupTouchMove = dom.addWindowListenerWithOptions("touchmove", handleTouchMove, { passive: false })
+    const cleanupTouchEnd = dom.addWindowListenerWithOptions("touchend", handleTouchEnd, { passive: true })
+    const cleanupTouchCancel = dom.addWindowListenerWithOptions("touchcancel", handleTouchCancel, { passive: true })
 
     return () => {
-      window.removeEventListener("touchstart", handleTouchStart)
-      window.removeEventListener("touchmove", handleTouchMove)
-      window.removeEventListener("touchend", handleTouchEnd)
-      window.removeEventListener("touchcancel", handleTouchCancel)
+      cleanupTouchStart()
+      cleanupTouchMove()
+      cleanupTouchEnd()
+      cleanupTouchCancel()
     }
-  }, [sidebarOpen, onOpen, onClose])
+  }, [sidebarOpen, onOpen, onClose, dom])
 }

@@ -1,6 +1,12 @@
 import { useEffect, useLayoutEffect, useRef, type RefObject } from "react"
 import type { GroupImperativeHandle } from "react-resizable-panels"
 import { interpolateLayout, TERMINAL_TOGGLE_ANIMATION_DURATION_MS } from "./terminalToggleAnimation"
+import type { TimerPort } from "../ports/timerPort"
+import { timerAdapter } from "../adapters/timer.adapter"
+
+export interface UseRightSidebarToggleAnimationPorts {
+  timer?: TimerPort
+}
 
 type UseRightSidebarToggleAnimationParams = {
   projectId: string | null
@@ -21,7 +27,9 @@ export function useRightSidebarToggleAnimation({
   shouldRenderRightSidebarLayout,
   showRightSidebar,
   rightSidebarSize,
-}: UseRightSidebarToggleAnimationParams): UseRightSidebarToggleAnimationResult {
+  ports,
+}: UseRightSidebarToggleAnimationParams & { ports?: UseRightSidebarToggleAnimationPorts }): UseRightSidebarToggleAnimationResult {
+  const timer = ports?.timer ?? timerAdapter
   const panelGroupRef = useRef<GroupImperativeHandle | null>(null)
   const sidebarPanelRef = useRef<HTMLDivElement | null>(null)
   const sidebarVisualRef = useRef<HTMLDivElement | null>(null)
@@ -35,22 +43,22 @@ export function useRightSidebarToggleAnimation({
   useEffect(() => {
     return () => {
       if (animationFrameRef.current !== null) {
-        window.cancelAnimationFrame(animationFrameRef.current)
+        timer.cancelAnimationFrame(animationFrameRef.current)
       }
       if (animationTimeoutRef.current !== null) {
-        window.clearTimeout(animationTimeoutRef.current)
+        timer.clearTimeout(animationTimeoutRef.current)
       }
     }
-  }, [])
+  }, [timer])
 
   useLayoutEffect(() => {
     if (!shouldRenderRightSidebarLayout) {
       if (animationFrameRef.current !== null) {
-        window.cancelAnimationFrame(animationFrameRef.current)
+        timer.cancelAnimationFrame(animationFrameRef.current)
         animationFrameRef.current = null
       }
       if (animationTimeoutRef.current !== null) {
-        window.clearTimeout(animationTimeoutRef.current)
+        timer.clearTimeout(animationTimeoutRef.current)
         animationTimeoutRef.current = null
       }
       isAnimatingRef.current = false
@@ -61,11 +69,11 @@ export function useRightSidebarToggleAnimation({
     if (!group) return
 
     if (animationFrameRef.current !== null) {
-      window.cancelAnimationFrame(animationFrameRef.current)
+      timer.cancelAnimationFrame(animationFrameRef.current)
       animationFrameRef.current = null
     }
     if (animationTimeoutRef.current !== null) {
-      window.clearTimeout(animationTimeoutRef.current)
+      timer.clearTimeout(animationTimeoutRef.current)
       animationTimeoutRef.current = null
     }
 
@@ -111,20 +119,20 @@ export function useRightSidebarToggleAnimation({
       group.setLayout({ workspace: nextLayout[0], rightSidebar: nextLayout[1] })
 
       if (progress < 1) {
-        animationFrameRef.current = window.requestAnimationFrame(step)
+        animationFrameRef.current = timer.requestAnimationFrame(step)
         return
       }
 
       group.setLayout({ workspace: targetLayout[0], rightSidebar: targetLayout[1] })
       animationFrameRef.current = null
-      animationTimeoutRef.current = window.setTimeout(() => {
+      animationTimeoutRef.current = timer.setTimeout(() => {
         isAnimatingRef.current = false
         animationTimeoutRef.current = null
       }, 0)
     }
 
-    animationFrameRef.current = window.requestAnimationFrame(step)
-  }, [projectId, rightSidebarSize, shouldRenderRightSidebarLayout, showRightSidebar])
+    animationFrameRef.current = timer.requestAnimationFrame(step)
+  }, [projectId, rightSidebarSize, shouldRenderRightSidebarLayout, showRightSidebar, timer])
 
   useEffect(() => {
     if (shouldRenderRightSidebarLayout) return

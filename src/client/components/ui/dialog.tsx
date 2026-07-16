@@ -3,6 +3,8 @@ import * as DialogPrimitive from "@radix-ui/react-dialog"
 import { X } from "lucide-react"
 import { cn } from "../../lib/utils"
 import { FOCUS_FALLBACK_IGNORE_ATTRIBUTE, RESTORE_CHAT_INPUT_FOCUS_EVENT } from "../../app/chatFocusPolicy"
+import type { DomPort } from "../../ports/domPort"
+import { domAdapter } from "../../adapters/dom.adapter"
 
 const Dialog = DialogPrimitive.Root
 const DialogTrigger = DialogPrimitive.Trigger
@@ -34,8 +36,11 @@ const DialogContent = React.forwardRef<
   React.ComponentRef<typeof DialogPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & {
     size?: "sm" | "md" | "lg"
+    ports?: { dom?: DomPort }
   }
->(({ className, children, size = "md", ...props }, ref) => (
+>(({ className, children, size = "md", ports = {}, ...props }, ref) => {
+  const dom = ports.dom ?? domAdapter
+  return (
   <DialogPortal>
     <DialogOverlay />
     <DialogPrimitive.Content
@@ -43,7 +48,7 @@ const DialogContent = React.forwardRef<
       {...{ [FOCUS_FALLBACK_IGNORE_ATTRIBUTE]: "" }}
       onCloseAutoFocus={(event) => {
         event.preventDefault()
-        window.dispatchEvent(new Event(RESTORE_CHAT_INPUT_FOCUS_EVENT))
+        dom.dispatchCustomWindowEvent(RESTORE_CHAT_INPUT_FOCUS_EVENT)
         props.onCloseAutoFocus?.(event)
       }}
       className={cn(
@@ -61,7 +66,8 @@ const DialogContent = React.forwardRef<
       </DialogPrimitive.Close>
     </DialogPrimitive.Content>
   </DialogPortal>
-))
+  )
+})
 DialogContent.displayName = DialogPrimitive.Content.displayName
 
 function DialogHeader({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {

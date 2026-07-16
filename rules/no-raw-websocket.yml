@@ -1,0 +1,20 @@
+id: no-raw-websocket
+language: tsx
+severity: error
+message: Raw WebSocket is banned in src/client — use react-use-websocket via SocketBridge/socketStore instead.
+note: |
+  See adr-20260715-client-state-effect-architecture. SocketBridge mounts
+  useWebSocket(url, { share: true, filter: () => false, onMessage }) and
+  writes sendJsonMessage/readyState into stores/socketStore.ts; consumers
+  call socketStore actions (command/subscribe), never the WebSocket ctor.
+files:
+  - src/client/**
+ignores:
+  - src/client/**/*.test.ts
+  - src/client/**/*.test.tsx
+  - src/client/lib/testing/**
+  - src/client/adapters/testing/**
+rule:
+  any:
+    - pattern: new WebSocket($$$ARGS)
+    - pattern: WebSocket($$$ARGS)

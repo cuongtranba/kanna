@@ -265,20 +265,13 @@ describe("SubmitPlugin — keyboard routing contract", () => {
 
 describe("SubmitPlugin — isTypeaheadMenuOpen guard", () => {
   it("returns true when a typeahead menu element is present", () => {
-    const fakeDoc = {
-      querySelector: (sel: string) =>
-        sel === "[data-kanna-typeahead-menu]" ? ({} as Element) : null,
-    }
-    expect(isTypeaheadMenuOpen(fakeDoc)).toBe(true)
+    const fakeDom = { hasTypeaheadMenuOpen: () => true }
+    expect(isTypeaheadMenuOpen(fakeDom)).toBe(true)
   })
 
   it("returns false when no typeahead menu element is present", () => {
-    const fakeDoc = { querySelector: () => null }
-    expect(isTypeaheadMenuOpen(fakeDoc)).toBe(false)
-  })
-
-  it("returns false when document is undefined (SSR)", () => {
-    expect(isTypeaheadMenuOpen(undefined)).toBe(false)
+    const fakeDom = { hasTypeaheadMenuOpen: () => false }
+    expect(isTypeaheadMenuOpen(fakeDom)).toBe(false)
   })
 
   it("Enter is suppressed (no submit) while a picker menu is open", () => {
