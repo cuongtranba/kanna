@@ -1993,14 +1993,24 @@ export function useKannaState(activeChatId: string | null): KannaState {
 
   const handleSteerQueuedMessage = useCallback(async (queuedMessageId: string) => {
     if (!activeChatId) return
+    // Steering cancels the active turn (status → idle) then restarts a fresh
+    // one. Without an optimistic marker the UI flickers to "done" during that
+    // gap. Mirror handleSend: show processing immediately, ack after the
+    // command resolves (server has appended the prompt + started the turn).
+    const scopeId = activeChatId
+    useKannaStateStore.getState().setOptimisticProcessing({ scopeId, ackedAt: null })
     try {
       await socket.command({
         type: "message.steer",
         chatId: activeChatId,
         queuedMessageId,
       })
+      useKannaStateStore.getState().setOptimisticProcessing((current) => (
+        current?.scopeId === scopeId ? { scopeId, ackedAt: performance.now() } : current
+      ))
       useKannaStateStore.getState().setCommandError(null)
     } catch (error) {
+      useKannaStateStore.getState().setOptimisticProcessing(null)
       useKannaStateStore.getState().setCommandError(error instanceof Error ? error.message : String(error))
     }
   }, [activeChatId, socket])
