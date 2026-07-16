@@ -13,6 +13,7 @@ bash scripts/verify-decomp.sh
 
 ## Progress (latest first)
 
+- 2026-07-16 Extract diff/git command handlers to ws-router-diff.ts (15 chat.* diff cases, DiffCommandDeps interface, handleDiffCommand) + 10 tests. ws-router.ts: 1992 → 1845 LOC.
 - 2026-07-16 Extract settings/subagent/MCP/LLM/skills command handlers to ws-router-settings.ts (testOAuthToken, resolveMcpTestBearer, runMcpAutoTest, handleSettingsCommand — 23 command cases) + 7 tests. ws-router.ts: 2277 → 1992 LOC.
 - 2026-07-16 Extract skill utilities to ws-router-skills.ts (assertSafeSkill*, parseInstalledSkillsLock, listInstalledSkills, searchSkills, buildInstall/UninstallSkillCommand, installSkill, uninstallSkill) + 14 tests. ws-router.ts: 2449 → 2277 LOC.
 
@@ -22,7 +23,7 @@ bash scripts/verify-decomp.sh
 
 ## Next chunk
 
-ws-router.ts (2277 LOC): extract the diff/git command handlers (chat.refreshDiffs, chat.initGit, chat.getGitHubPublishInfo, chat.checkGitHubRepoAvailability, chat.publishToGitHub, chat.listBranches, chat.previewMergeBranch, chat.mergeBranch, chat.checkoutBranch, chat.syncBranch, chat.createBranch, chat.generateCommitMessage, chat.commitDiffs, chat.discardDiffFile, chat.ignoreDiffFile) into `src/server/ws-router-diff.ts`. These 15 handlers all delegate to `resolvedDiffStore` and follow an identical pattern. Create a `handleDiffCommand` function that accepts deps (resolvedDiffStore, resolveChatProject, send, broadcastSnapshots, PROTOCOL_VERSION) and a command union, returns true if handled. Add `ws-router-diff.test.ts`. Verify targeted lint/typecheck/test, commit, push, update this file.
+ws-router.ts (1845 LOC): extract the orchestration, workflow, and subagent-transcript query handlers (orch.run, orch.cancelRun, orch.getRun, workflows.getRun, workflows.getAgentTranscript, subagents.getRun) into `src/server/ws-router-orch.ts`. These 6 handlers delegate to `agent.runOrchestration / cancelOrchRun / getOrchRunDetail`, `workflowRegistry`, and `subagentTranscriptRegistry`. Define an `OrchCommandDeps` interface; create `handleOrchCommand(deps, command, id)` returning `boolean`; add `ws-router-orch.test.ts` with at least 4 tests. Wire the fall-through in ws-router.ts. Verify targeted lint/typecheck/test, commit, push, update this file.
 
 ## Worker rules (every subagent MUST follow)
 
