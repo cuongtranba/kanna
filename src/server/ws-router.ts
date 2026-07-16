@@ -46,6 +46,7 @@ import { handleOrchCommand } from "./ws-router-orch"
 import { handleAgentCtrlCommand } from "./ws-router-agent-ctrl"
 import { handlePushCommand } from "./ws-router-push"
 import { handleMiscCommand } from "./ws-router-misc"
+import { handleProjectCommand } from "./ws-router-project"
 
 // Re-export skill utilities so existing callers (tests, server.ts, etc.) keep working.
 export {
@@ -1167,52 +1168,6 @@ export function createWsRouter({
     const { command, id } = message
     try {
       switch (command.type) {
-        case "system.ping": {
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
-          return
-        }
-        case "update.check": {
-          const snapshot = updateManager
-            ? await updateManager.checkForUpdates({ force: command.force })
-            : {
-                currentVersion: "unknown",
-                latestVersion: null,
-                status: "error",
-                updateAvailable: false,
-                lastCheckedAt: Date.now(),
-                error: "Update manager unavailable.",
-                installAction: "restart",
-                reloadRequestedAt: null,
-              }
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: snapshot })
-          return
-        }
-        case "update.install": {
-          if (!updateManager) {
-            throw new Error("Update manager unavailable.")
-          }
-          const result = await updateManager.installUpdate({ version: command.version })
-          send(ws, {
-            v: PROTOCOL_VERSION,
-            type: "ack",
-            id,
-            result,
-          })
-          return
-        }
-        case "update.reload": {
-          if (!updateManager) {
-            throw new Error("Update manager unavailable.")
-          }
-          const result = await updateManager.forceReload()
-          send(ws, {
-            v: PROTOCOL_VERSION,
-            type: "ack",
-            id,
-            result,
-          })
-          return
-        }
         case "settings.readKeybindings":
         case "settings.writeKeybindings":
         case "settings.readAppSettings":
@@ -1249,79 +1204,6 @@ export function createWsRouter({
             id,
           )
           return
-        }
-        case "project.open": {
-          await ensureProjectDirectory(command.localPath)
-          const normalizedPath = resolveLocalPath(command.localPath)
-          const existingProjectId = store.state.projectIdsByPath.get(normalizedPath)
-          const project = await store.openProject(command.localPath)
-          await refreshDiscovery()
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: { projectId: project.id } })
-          if (!existingProjectId) {
-            resolvedAnalytics.track("project_opened")
-          }
-          break
-        }
-        case "project.create": {
-          await ensureProjectDirectory(command.localPath)
-          const normalizedPath = resolveLocalPath(command.localPath)
-          const existingProjectId = store.state.projectIdsByPath.get(normalizedPath)
-          const project = await store.openProject(command.localPath, command.title)
-          await refreshDiscovery()
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result: { projectId: project.id } })
-          if (!existingProjectId) {
-            resolvedAnalytics.track("project_opened")
-            resolvedAnalytics.track("project_created")
-          }
-          break
-        }
-        case "sessions.importClaude": {
-          const result = await importClaudeSessions({ store })
-          if (result.newProjects > 0) {
-            await refreshDiscovery()
-          }
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result })
-          await broadcastFilteredSnapshots({ includeSidebar: true })
-          break
-        }
-        case "project.remove": {
-          const project = store.getProject(command.projectId)
-          await store.removeProject(command.projectId)
-          if (project) {
-            terminals.closeByCwd(project.localPath)
-          }
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
-          resolvedAnalytics.track("project_removed")
-          break
-        }
-        case "project.setStar": {
-          await store.setProjectStar(command.projectId, command.starred)
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
-          await broadcastFilteredSnapshots({ includeSidebar: true })
-          return
-        }
-        case "sidebar.reorderProjectGroups": {
-          await store.setSidebarProjectOrder(command.projectIds)
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
-          await broadcastFilteredSnapshots({ includeSidebar: true })
-          return
-        }
-        case "project.readDiffPatch": {
-          const project = store.getProject(command.projectId)
-          if (!project) {
-            throw new Error("Project not found")
-          }
-          const result = await resolvedDiffStore.readPatch({
-            projectPath: project.localPath,
-            path: command.path,
-          })
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result })
-          return
-        }
-        case "system.openExternal": {
-          await openExternal(command)
-          send(ws, { v: PROTOCOL_VERSION, type: "ack", id })
-          break
         }
         case "chat.create": {
           const chat = await store.createChat(command.projectId, {
@@ -1606,6 +1488,38 @@ export function createWsRouter({
               workflowRegistry,
               subagentTranscriptRegistry,
               send: (envelope) => send(ws, envelope),
+            },
+            command,
+            id,
+          )
+          return
+        }
+        case "system.ping":
+        case "system.openExternal":
+        case "update.check":
+        case "update.install":
+        case "update.reload":
+        case "project.open":
+        case "project.create":
+        case "project.remove":
+        case "project.setStar":
+        case "project.readDiffPatch":
+        case "sessions.importClaude":
+        case "sidebar.reorderProjectGroups": {
+          await handleProjectCommand(
+            {
+              store,
+              updateManager,
+              diffStore: resolvedDiffStore,
+              analytics: resolvedAnalytics,
+              refreshDiscovery,
+              ensureProjectDirectory,
+              resolveLocalPath,
+              importClaudeSessionsFn: () => importClaudeSessions({ store }),
+              openExternalFn: openExternal,
+              terminals,
+              send: (envelope) => send(ws, envelope),
+              broadcastSidebar: () => broadcastFilteredSnapshots({ includeSidebar: true }),
             },
             command,
             id,
