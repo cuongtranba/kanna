@@ -1,6 +1,6 @@
 ---
 id: adr-20260712-unknown-subagent-roster-error
-c3-seal: 0df0a1fe161c9244c7090b0891f2b0feed141e7261bf150fd5f4867691596431
+c3-seal: 4d8498d1ae14704c3f953d5a241ed1c4bea152126684d9f2073ae05d7f97cef3
 title: unknown-subagent-roster-error
 type: adr
 goal: |-
@@ -67,7 +67,7 @@ it. (2) The `delegate_subagent` tool handler calls the existing
 
 | Rule | Why required | Action | Evidence |
 | --- | --- | --- | --- |
-| rule-colocated-bun-test | Tests colocated in subagent-orchestrator.test.ts and delegate-subagent.test.ts | comply | rule-colocated-bun-test#n8470@v1:sha256:ce58e026c1076cb18ede38f3a4bd73793f28bf1392d299399571ba446985623f "Every Kanna test must sit next to the file under test, share its basename, and run under bun test. No __tests__/ directories, no separate test packages, no " |
+| rule-colocated-bun-test | Tests colocated in subagent-orchestrator.test.ts and delegate-subagent.test.ts | comply | rule-colocated-bun-test#n8470@v1:sha256:ce58e026c1076cb18ede38f3a4bd73793f28bf1392d299399571ba446985623f "Every Kanna test must sit next to the file under test, share its basename, and run under bun test. No tests/ directories, no separate test packages, no " |
 
 ## Work Breakdown
 

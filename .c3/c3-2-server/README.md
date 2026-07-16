@@ -1,7 +1,7 @@
 ---
 id: c3-2
 c3-version: 4
-c3-seal: e41194cbdf3feef514dcfb99b0a83a873b24911a9f5462f1a60a14d5db2b2c23
+c3-seal: b05f2f694e4cfe2bcfa5e3581f7543ae0591ac94f1d9954c9bf99866c7760f47
 title: Server
 type: container
 boundary: service
@@ -52,11 +52,11 @@ Run the local Bun backend: serve HTTP+WebSocket on localhost, coordinate Claude 
 | c3-222 | keybindings | feature | active | Persist user keybindings |
 | c3-223 | cloudflare-tunnel | feature | active | Detect dev-server ports and expose via cloudflared quick tunnels |
 | c3-224 | oauth-token-pool | feature | active | Multi-account OAuth token pool: per-chat reservation, rate-limit/auth-error rotation, refusal classifier |
-| c3-225 | claude-pty-driver | feature | active | Claude CLI PTY transport: parse subprocess stdout JSONL into normalized events, preserve subscription billing |
+| c3-225 | claude-pty-driver |  | active | Claude CLI PTY transport: parse subprocess stdout JSONL into normalized events, preserve subscription billing |
 | c3-226 | kanna-mcp-host | feature | active | Loopback MCP server + built-in shims + durable approval protocol + path-deny |
-| c3-227 | auto-continue | feature | active | Detect rate-limit / auth-error endings, schedule retries, replay queued prompts |
+| c3-227 | auto-continue |  | active | Detect rate-limit / auth-error endings, schedule retries, replay queued prompts |
 | c3-228 | session-share | feature | active | Mint read-only share tokens for finished chats; serve frozen snapshots at /share/:token without auth |
-| c3-229 | workflow-status | feature | active | Disk-watch sidecar read-model for PTY workflow runs; WorkflowRegistry + WorkflowsSnapshot WS topic |
+| c3-229 | workflow-status |  | active | Disk-watch sidecar read-model for PTY workflow runs; WorkflowRegistry + WorkflowsSnapshot WS topic |
 | c3-230 | openrouter-models | feature | active | Tool-capable OpenRouter model catalog: HTTPS fetch + parse + TTL cache; feeds the composer model picker via settings.listOpenRouterModels RPC |
 | c3-231 | local-catalog | feature | active | Scan local Claude skills + slash commands (user, project, plugin) and merge them into ChatSnapshot.slashCommands so the composer / picker mirrors Claude Code |
 | c3-232 | orchestration-core | feature | active | Durable multi-task coding runs: git worktree pool, phase pipeline (implement→review×2→fix), event-sourced state at sourceIndex 8, restart recovery |
