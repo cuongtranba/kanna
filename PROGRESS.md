@@ -4,19 +4,24 @@ Autonomous refactor: split the 5 largest source files below 600 LOC each,
 keeping every gate green. One meaningful extraction per iteration.
 
 ## Goal
-
-Every target file under 600 LOC AND lint + typecheck + full test suite + c3 check all pass.
-
-Target files (baseline LOC):
-- src/server/ws-router.ts — 2449
-- src/server/agent.ts — 4998
-- src/server/event-store.ts — 2537
-- src/server/diff-store.ts — 2251
-- src/shared/types.ts — 2108
+All 5 target files (src/server/ws-router.ts, src/server/agent.ts, src/server/event-store.ts, src/server/diff-store.ts, src/shared/types.ts) are each under 600 LOC AND lint, typecheck, the full test suite, and c3 check all pass.
 
 ## Verify command
-
+```
 bash scripts/verify-decomp.sh
+```
+
+## Progress (latest first)
+
+- 2026-07-16 Extract skill utilities to ws-router-skills.ts (assertSafeSkill*, parseInstalledSkillsLock, listInstalledSkills, searchSkills, buildInstall/UninstallSkillCommand, installSkill, uninstallSkill) + 14 tests. ws-router.ts: 2449 → 2277 LOC.
+
+## Failed approaches
+
+- (none yet)
+
+## Next chunk
+
+ws-router.ts (2277 LOC): extract the diff/git command handlers (chat.refreshDiffs, chat.initGit, chat.getGitHubPublishInfo, chat.checkGitHubRepoAvailability, chat.publishToGitHub, chat.listBranches, chat.previewMergeBranch, chat.mergeBranch, chat.checkoutBranch, chat.syncBranch, chat.createBranch, chat.generateCommitMessage, chat.commitDiffs, chat.discardDiffFile, chat.ignoreDiffFile) into `src/server/ws-router-diff.ts`. These 15 handlers all delegate to `resolvedDiffStore` and follow an identical pattern. Create a `handleDiffCommand` function that accepts deps (resolvedDiffStore, resolveChatProject, send, broadcastSnapshots, PROTOCOL_VERSION) and a command union, returns true if handled. Add `ws-router-diff.test.ts`. Verify targeted lint/typecheck/test, commit, push, update this file.
 
 ## Worker rules (every subagent MUST follow)
 
@@ -37,15 +42,3 @@ bash scripts/verify-decomp.sh
 - **event-store.ts (2537)** → split: core append/replay, snapshot fold, read-model derivations, orchestration-event application, subscriptions.
 - **diff-store.ts (2251)** → split by concern (parsing/adapter IO vs domain read-model vs subscriptions).
 - **shared/types.ts (2108)** → split by domain: chat/message types, provider+model catalog, settings types, subagent/orch types. Keep `types.ts` re-exporting for compat.
-
-## Progress (latest first)
-
-- (none yet)
-
-## Failed approaches
-
-- (none yet)
-
-## Next chunk
-
-ws-router.ts: extract the FIRST cohesive command group into `src/server/ws-router-<domain>.ts` with a colocated test. Start by reading ws-router.ts, grouping its command handlers by domain, and pulling out the largest self-contained group (e.g. diff or workflows commands) into a new module that ws-router.ts imports and delegates to. Keep the WS command routing identical. Add `ws-router-<domain>.test.ts`. Verify targeted lint/typecheck/test on the new files, commit, push, update this file.
