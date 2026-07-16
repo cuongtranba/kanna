@@ -13,6 +13,7 @@ bash scripts/verify-decomp.sh
 
 ## Progress (latest first)
 
+- 2026-07-16 Extract Claude SDK message normaliser (ClaudeRawSdkMessage, getClaudeAssistantMessageUsageId, normalizeClaudeStreamMessage, timestamped, private helpers: stringFromUnknown, normalizeMcpServerEntry, normalizeToolContent, isSdkToClaudeMessage) to claude-message-normalizer.ts + 18 tests. agent.ts: 4998 → 4613 LOC.
 - 2026-07-16 Extract mergeAppSettingsPatch + fallback builders (resolvedDiffStore, resolvedLlmProvider, resolvedAppSettings) to ws-router-defaults.ts (mergeAppSettingsPatch, buildInitialAppSettingsSnapshot, buildFallbackDiffStore, buildFallbackLlmProvider, buildResolvedAppSettings, ResolvedAppSettings) + 24 tests. ws-router.ts: 1548 → 1280 LOC.
 - 2026-07-16 Extract chat WS handlers to ws-router-chat.ts (chat.create/fork/rename/archive/unarchive/delete/markRead/setPolicyOverride/setDraftProtection/send/cancel/stopDraining/loadHistory/respondTool/toolRequestAnswer/respondSubagentTool/cancelSubagentRun — 17 handlers, ChatCommandDeps interface, handleChatCommand) + 18 tests. ws-router.ts: 1617 → 1548 LOC.
 - 2026-07-16 Extract project/sessions/sidebar/system/update WS handlers to ws-router-project.ts (system.ping, system.openExternal, update.check/install/reload, project.open/create/remove/setStar/readDiffPatch, sessions.importClaude, sidebar.reorderProjectGroups — 12 handlers, ProjectCommandDeps interface, handleProjectCommand) + 17 tests. ws-router.ts: 1703 → 1617 LOC.
@@ -30,40 +31,44 @@ bash scripts/verify-decomp.sh
 
 ## Next chunk
 
-agent.ts (4998 LOC): extract the Claude SDK message normalisation layer into
-`src/server/claude-message-normalizer.ts`. This is a cohesive, IO-free module covering
-the conversion from raw Claude SDK stream messages → typed `TranscriptEntry[]`.
+agent.ts (4613 LOC): extract the context-window usage math layer into
+`src/server/claude-usage-math.ts`. This is a cohesive, IO-free module covering
+all pure token-count normalisation and context-window computation logic.
 
-Symbols to move (lines ~692–1055 in agent.ts, ~365 lines):
-- `ClaudeRawContentBlock` interface
-- `ClaudeRawMessageBody` interface
-- `ClaudeRawSdkMessage` interface (exported)
-- `getClaudeAssistantMessageUsageId(message)` export function
-- `SYNTHETIC_NON_ERROR_PLACEHOLDERS` const
-- `POLICY_REFUSAL_TEXT_MARKERS` const
-- `normalizeToolContent(c)` helper
-- `isSdkToClaudeMessage(m)` helper
-- `normalizeClaudeStreamMessage(message)` export function (~250 lines)
+Symbols to move (lines ~481–664 in current agent.ts, ~98 lines):
+- `asRecord<T>(value)` private helper
+- `asNumber<T>(value)` private helper
+- `normalizeClaudeUsageSnapshot<T>(value, maxTokens?)` export function
+- `resolveFinalTurnUsage(latestUsageSnapshot, accumulatedUsage, lastKnownContextWindow)` export function
+- `maxClaudeContextWindowFromModelUsage<T>(modelUsage)` export function
+- `parseConfiguredContextWindowFromModelId(modelId)` export function
 
-No IO — all pure transforms + type predicates. No adapter suffix needed.
-Imports needed in the new file: `../shared/types` (TranscriptEntry and friends),
-`../shared/errors` (isRecord), `./agent` types (but only the ones it creates, none back).
-Keep re-exports in `agent.ts` so all current callers keep working.
+No IO — all pure math / type-narrowing. No adapter suffix needed.
+Imports needed in the new file: `../shared/types` (ContextWindowUsageSnapshot),
+`../shared/errors` (isRecord, AnyValue). No imports from agent.ts.
+Keep re-exports in `agent.ts` for existing callers:
+- `src/server/agent.test.ts` imports all 4 exported functions from `./agent`
+- `src/server/claude-pty/jsonl-to-event.ts` imports `normalizeClaudeUsageSnapshot`,
+  `resolveFinalTurnUsage`, `maxClaudeContextWindowFromModelUsage` from `../agent`
+- `src/server/claude-pty/driver.ts` imports `parseConfiguredContextWindowFromModelId` from `../agent`
 
 Files:
-- **NEW** `src/server/claude-message-normalizer.ts` — all 9 symbols above
-- **CHANGED** `src/server/agent.ts` — remove the 9 symbols, add import +
-  re-export of the 3 public ones (`ClaudeRawSdkMessage`, `getClaudeAssistantMessageUsageId`,
-  `normalizeClaudeStreamMessage`). agent.ts: 4998 → ~4633 LOC.
-- **NEW** `src/server/claude-message-normalizer.test.ts` — ≥8 tests:
-  - `normalizeClaudeStreamMessage`: text block, tool_use block, tool_result block,
-    usage extraction, empty message, SYNTHETIC_NON_ERROR_PLACEHOLDERS filtering
-  - `getClaudeAssistantMessageUsageId`: returns id for assistant message, null for user
-  - `normalizeToolContent`: string, object, null inputs
+- **NEW** `src/server/claude-usage-math.ts` — all 6 symbols above
+- **CHANGED** `src/server/agent.ts` — remove the 6 symbols, add import +
+  re-export of the 4 public ones. agent.ts: ~4613 → ~4520 LOC.
+- **NEW** `src/server/claude-usage-math.test.ts` — ≥8 tests:
+  - `normalizeClaudeUsageSnapshot`: basic usage, empty usage → null, cache tokens,
+    reasoning tokens, zero usedTokens → null, maxTokens passed through
+  - `resolveFinalTurnUsage`: null latestUsageSnapshot → null, enriches totalProcessedTokens
+    when cumulative > live, adds maxTokens, returns latestUsageSnapshot unchanged when
+    cumulative ≤ live
+  - `maxClaudeContextWindowFromModelUsage`: finds max across multiple models, returns
+    undefined for empty/non-record
+  - `parseConfiguredContextWindowFromModelId`: [1m] suffix → 1_000_000, no suffix → undefined
 
-Run `bun run lint src/server/claude-message-normalizer.ts src/server/agent.ts`,
+Run `bun run lint src/server/claude-usage-math.ts src/server/agent.ts`,
 `bun run typecheck`,
-`bun test --conditions production src/server/claude-message-normalizer.test.ts`,
+`bun test --conditions production src/server/claude-usage-math.test.ts`,
 commit, push, update this file.
 
 ## Worker rules (every subagent MUST follow)
