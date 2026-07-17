@@ -15,7 +15,6 @@ import type {
   Subagent,
 } from "../shared/types"
 import type { ClientCommand } from "../shared/protocol"
-import { buildKannaSystemPromptAppend } from "../shared/kanna-system-prompt"
 import { EventStore } from "./event-store"
 import type { AnalyticsReporter } from "./analytics"
 import { NoopAnalyticsReporter } from "./analytics"
@@ -26,12 +25,10 @@ import type { ClaudeSessionHandle, HarnessToolRequest, HarnessTurn } from "./har
 import { startClaudeSession } from "./claude-session-start"
 import {
   isClaudeSdkProvider,
-  normalizeClaudeModelOptions,
-  normalizeServerModel,
 } from "./provider-catalog"
 import { readLlmProviderSnapshot } from "./llm-provider"
 import type { ModelPrice } from "../shared/token-pricing"
-import { providerUsesSdkSession, resolveClaudeApiModelId, type ClaudeDriverPreference, type CustomModelEntry } from "../shared/types"
+import { providerUsesSdkSession, type ClaudeDriverPreference, type CustomModelEntry } from "../shared/types"
 import type { AutoContinueEvent } from "./auto-continue/events"
 import { ClaudeLimitDetector, CodexLimitDetector, type LimitDetection, type LimitDetector } from "./auto-continue/limit-detector"
 import { ClaudeAuthErrorDetector, type AuthErrorDetection } from "./auto-continue/auth-error-detector"
@@ -39,7 +36,6 @@ import type { ScheduleManager } from "./auto-continue/schedule-manager"
 import type { LoopState } from "./auto-continue/read-model"
 import type { TunnelGateway } from "./cloudflare-tunnel/gateway"
 import { OAuthTokenPool } from "./oauth-pool/oauth-token-pool"
-import { maskOauthKey } from "../shared/mask-oauth-key"
 import { SubagentOrchestrator, type BackgroundRunOutcome, type ProviderRunStart } from "./subagent-orchestrator"
 import {
   buildSubagentProviderRunForChat as buildSubagentProviderRunForChatFn,
@@ -165,6 +161,11 @@ import {
   maybeStartNextQueuedMessage as maybeStartNextQueuedMessageFn,
   type SendCommandDeps,
 } from "./claude-send-command"
+import {
+  ensureSlashCommandsLoaded as ensureSlashCommandsLoadedFn,
+  mergeLocalCatalog as mergeLocalCatalogFn,
+  type SlashCommandsDeps,
+} from "./claude-slash-commands"
 
 export type { ClaudeSessionHandle } from "./harness-types"
 
@@ -738,6 +739,27 @@ export class AgentCoordinator {
     }
   }
 
+  private buildSlashCommandsDeps(): SlashCommandsDeps {
+    return {
+      store: this.store,
+      claudeSessions: this.claudeSessions,
+      oauthPool: this.oauthPool,
+      slashCommandsInFlight: this.slashCommandsInFlight,
+      emitStateChange: (chatId) => { this.emitStateChange(chatId) },
+      resolveClaudeDriverPreference: () => this.resolveClaudeDriverPreference(),
+      startClaudeSessionPTY: this.startClaudeSessionPTYFn,
+      startClaudeSessionSDK: this.startClaudeSessionFn,
+      getSubagents: () => this.getSubagents(),
+      getGlobalPromptAppend: () => this.getAppSettingsSnapshot().globalPromptAppend,
+      getEnabledCustomMcpServers: () => this.getEnabledCustomMcpServers(),
+      claudePtyRegistry: this.claudePtyRegistry,
+      ptyInstanceRegistry: this.ptyInstanceRegistry,
+      workflowRegistry: this.workflowRegistry,
+      subagentTranscriptRegistry: this.subagentTranscriptRegistry,
+      localCatalog: this.localCatalog,
+    }
+  }
+
   private resolveClaudeIdleMs(): number {
     return resolveClaudeIdleMsFn(this.buildSessionLifecycleDeps())
   }
@@ -885,110 +907,11 @@ export class AgentCoordinator {
   }
 
   async ensureSlashCommandsLoaded(chatId: string): Promise<void> {
-    const chat = this.store.getChat(chatId)
-    if (!chat) return
-    if (chat.provider === "codex") return
-    if (chat.slashCommands && chat.slashCommands.length > 0) return
-    if (this.slashCommandsInFlight.has(chatId)) return
-
-    const project = this.store.getProject(chat.projectId)
-    if (!project) return
-
-    this.slashCommandsInFlight.add(chatId)
-    this.emitStateChange(chatId)
-    try {
-      let commands: SlashCommand[]
-      const existing = this.claudeSessions.get(chatId)
-      if (existing) {
-        commands = await existing.session.getSupportedCommands()
-      } else {
-        const defaultModel = normalizeServerModel("claude")
-        const defaultOptions = normalizeClaudeModelOptions(defaultModel)
-        // Ephemeral spawn: reserve under a synthetic key so two concurrent
-        // ensureSlashCommandsLoaded calls (different chats) cannot be handed
-        // the same token by lastUsedAt ordering. The lease MUST be released
-        // once the throwaway session closes (audit #2).
-        const lease = this.oauthPool?.pickEphemeral() ?? null
-        // Skip the ephemeral spawn entirely when the pool has tokens but
-        // nothing is usable — avoids 401 against the CLI's keychain fallback
-        // and an opaque "supportedCommands failed" warning. Slash commands
-        // will load on the next turn once a token is available.
-        if (this.oauthPool && this.oauthPool.hasAnyToken() && !lease) {
-          return
-        }
-        const picked = lease?.token ?? null
-        if (picked) this.oauthPool!.markUsed(picked.id)
-        const usePtyEphemeral = this.resolveClaudeDriverPreference() === "pty"
-        const ephemeralSystemPromptAppend = buildKannaSystemPromptAppend(this.getSubagents(), {
-          globalPromptAppend: this.getAppSettingsSnapshot().globalPromptAppend,
-        })
-        try {
-          const ephemeral = usePtyEphemeral
-            ? await this.startClaudeSessionPTYFn({
-                chatId,
-                projectId: project.id,
-                localPath: project.localPath,
-                model: resolveClaudeApiModelId(defaultModel, defaultOptions.contextWindow),
-                effort: defaultOptions.reasoningEffort,
-                planMode: chat.planMode ?? false,
-                sessionToken: chat.sessionTokensByProvider.claude ?? null,
-                forkSession: false,
-                oauthToken: picked?.token ?? null,
-                oauthLabel: picked?.label,
-                oauthKeyMasked: picked ? maskOauthKey(picked.token) : undefined,
-                onToolRequest: async () => null,
-                systemPromptAppend: ephemeralSystemPromptAppend,
-                ptyRegistry: this.claudePtyRegistry ?? undefined,
-                ptyInstanceRegistry: this.ptyInstanceRegistry ?? undefined,
-                workflowRegistry: this.workflowRegistry ?? undefined,
-                subagentTranscriptRegistry: this.subagentTranscriptRegistry ?? undefined,
-                customMcpServers: this.getEnabledCustomMcpServers(),
-                  })
-            : await this.startClaudeSessionFn({
-                projectId: project.id,
-                localPath: project.localPath,
-                model: resolveClaudeApiModelId(defaultModel, defaultOptions.contextWindow),
-                effort: defaultOptions.reasoningEffort,
-                planMode: chat.planMode ?? false,
-                sessionToken: chat.sessionTokensByProvider.claude ?? null,
-                forkSession: false,
-                oauthToken: picked?.token ?? null,
-                onToolRequest: async () => null,
-                systemPromptAppend: ephemeralSystemPromptAppend,
-                customMcpServers: this.getEnabledCustomMcpServers(),
-              })
-          try {
-            commands = await ephemeral.getSupportedCommands()
-          } finally {
-            ephemeral.close()
-          }
-        } finally {
-          lease?.release()
-        }
-      }
-      const merged = this.mergeLocalCatalog(commands, project.localPath)
-      await this.store.recordSessionCommandsLoaded(chatId, merged)
-      this.emitStateChange(chatId)
-    } catch (error) {
-      log.warn("[kanna/agent] ensureSlashCommandsLoaded failed", String(error))
-    } finally {
-      this.slashCommandsInFlight.delete(chatId)
-      this.emitStateChange(chatId)
-    }
+    return ensureSlashCommandsLoadedFn(this.buildSlashCommandsDeps(), chatId)
   }
 
   private mergeLocalCatalog(commands: SlashCommand[], cwd: string): SlashCommand[] {
-    if (!this.localCatalog) return commands
-    let local: SlashCommand[]
-    try {
-      local = this.localCatalog.list(cwd)
-    } catch (error) {
-      log.warn("[kanna/agent] localCatalog.list failed", String(error))
-      return commands
-    }
-    const cliKeys = new Set(commands.map((c) => c.name.toLowerCase()))
-    const filtered = local.filter((entry) => !cliKeys.has(entry.name.toLowerCase()))
-    return [...commands, ...filtered]
+    return mergeLocalCatalogFn(this.buildSlashCommandsDeps(), commands, cwd)
   }
 
   async closeChat(chatId: string) {
