@@ -123,7 +123,9 @@ import { runClaudeSession as runClaudeSessionLoop } from "./claude-session-runne
 import {
   startTurnForChat as startTurnForChatFn,
   type StartTurnDeps,
+  type StartTurnForChatArgs,
 } from "./claude-turn-starter"
+import { runTurn as runTurnFn, type RunTurnDeps } from "./claude-turn-runner"
 import { spawnClaudeTurn, type SpawnClaudeTurnArgs } from "./claude-session-spawner"
 import {
   resolveClaudeIdleMs as resolveClaudeIdleMsFn,
@@ -1509,141 +1511,24 @@ export class AgentCoordinator {
     }
   }
 
-  private async runTurn(active: ActiveTurn) {
-    try {
-      for await (const event of active.turn.stream) {
-        // Once cancelled, stop processing further stream events.
-        // cancel() already removed us from activeTurns and notified the UI.
-        if (active.cancelRequested) break
-
-        if (event.type === "session_token" && event.sessionToken) {
-          await this.store.setSessionTokenForProvider(active.chatId, active.provider, event.sessionToken)
-          const chat = this.store.getChat(active.chatId)
-          if (
-            chat?.pendingForkSessionToken
-            && event.sessionToken !== chat.pendingForkSessionToken.token
-          ) {
-            await this.store.setPendingForkSessionToken(active.chatId, null)
-          }
-          this.emitStateChange(active.chatId)
-          continue
-        }
-
-        if (!event.entry) continue
-        await this.store.appendMessage(active.chatId, event.entry)
-
-        if (event.entry.kind === "system_init") {
-          active.status = "running"
-        }
-
-        if (event.entry.kind === "result") {
-          active.hasFinalResult = true
-          if (event.entry.isError) {
-            await this.store.recordTurnFailed(active.chatId, event.entry.result || "Turn failed")
-          } else if (!active.cancelRequested) {
-            await this.store.recordTurnFinished(active.chatId)
-          }
-          // Remove from activeTurns as soon as the result arrives so the UI
-          // transitions to idle immediately. The stream may still be open
-          // (e.g. background tasks), but the user should be able to send
-          // new messages without having to hit stop first.
-          this.activeTurns.delete(active.chatId)
-          this.drainingStreams.set(active.chatId, { turn: active.turn })
-        }
-
-        this.emitStateChange(active.chatId)
-      }
-    } catch (error) {
-      if (!active.cancelRequested) {
-        const handled = await this.handleLimitError(active.chatId, this.codexLimitDetector, error)
-        if (!handled) {
-          const message = error instanceof Error ? error.message : String(error)
-          await this.store.appendMessage(
-            active.chatId,
-            timestamped({
-              kind: "result",
-              subtype: "error",
-              isError: true,
-              durationMs: 0,
-              result: message,
-            })
-          )
-          await this.store.recordTurnFailed(active.chatId, message)
-        } else {
-          await this.store.recordTurnFailed(active.chatId, "rate_limit")
-        }
-      }
-    } finally {
-      if (active.cancelRequested && !active.cancelRecorded) {
-        await this.store.recordTurnCancelled(active.chatId)
-      }
-      active.turn.close()
-      // Only remove if we're still the active turn for this chat.
-      // We may have already been removed by result handling or cancel(),
-      // and a new turn may have started for the same chatId.
-      if (this.activeTurns.get(active.chatId) === active) {
-        this.activeTurns.delete(active.chatId)
-      }
-      // Stream has fully ended — no longer draining.
-      this.clearDrainingStream(active.chatId)
-      // Turn-scoped reservation: release so another chat can claim this
-      // token while this chat is idle. The rotation race between concurrent
-      // in-flight turns is still serialized — both startClaudeTurn and the
-      // pickActive() inside markLimited/markError run atomically in the JS
-      // event loop, and a token marked limited/errored already drops its
-      // reservation. The next turn for this chat reuses its existing claude
-      // session (no re-pick) or pickActive again if it needs a fresh one.
-      this.oauthPool?.release(active.chatId)
-      this.emitStateChange(active.chatId)
-
-      if (active.postToolFollowUp && !active.cancelRequested) {
-        try {
-          await this.startTurnForChat({
-            chatId: active.chatId,
-            provider: active.provider,
-            content: active.postToolFollowUp.content,
-            attachments: [],
-            model: active.model,
-            effort: active.effort,
-            serviceTier: active.serviceTier,
-            planMode: active.postToolFollowUp.planMode,
-            appendUserPrompt: false,
-          })
-        } catch (error) {
-          const message = error instanceof Error ? error.message : String(error)
-          await this.store.appendMessage(
-            active.chatId,
-            timestamped({
-              kind: "result",
-              subtype: "error",
-              isError: true,
-              durationMs: 0,
-              result: message,
-            })
-          )
-          await this.store.recordTurnFailed(active.chatId, message)
-          this.emitStateChange(active.chatId)
-        }
-      } else if (!active.cancelRequested) {
-        try {
-          await this.maybeStartNextQueuedMessage(active.chatId)
-        } catch (error) {
-          const message = error instanceof Error ? error.message : String(error)
-          await this.store.appendMessage(
-            active.chatId,
-            timestamped({
-              kind: "result",
-              subtype: "error",
-              isError: true,
-              durationMs: 0,
-              result: message,
-            })
-          )
-          await this.store.recordTurnFailed(active.chatId, message)
-          this.emitStateChange(active.chatId)
-        }
-      }
+  private buildRunTurnDeps(): RunTurnDeps {
+    return {
+      store: this.store,
+      activeTurns: this.activeTurns,
+      drainingStreams: this.drainingStreams,
+      oauthPool: this.oauthPool,
+      codexLimitDetector: this.codexLimitDetector,
+      handleLimitError: (chatId, detector, error) => this.handleLimitError(chatId, detector, error),
+      emitStateChange: (chatId) => { this.emitStateChange(chatId) },
+      clearDrainingStream: (chatId) => { this.clearDrainingStream(chatId) },
+      startTurnForChat: (args: StartTurnForChatArgs) => this.startTurnForChat(args),
+      maybeStartNextQueuedMessage: (chatId) => this.maybeStartNextQueuedMessage(chatId),
     }
+  }
+
+  /** Delegates to runTurnFn — see claude-turn-runner.ts. */
+  private async runTurn(active: ActiveTurn): Promise<void> {
+    return runTurnFn(this.buildRunTurnDeps(), active)
   }
 
   /** Delegates to resolveAutoResumeForFn — see claude-autocontinue-commands.ts. */
