@@ -25,7 +25,6 @@ import { EventStore } from "./event-store"
 import type { AnalyticsReporter } from "./analytics"
 import { NoopAnalyticsReporter } from "./analytics"
 import { CodexAppServerManager } from "./codex-app-server"
-import { resolveSubagentRoots } from "./paths"
 import { realpathAdapter } from "./paths-fs.adapter"
 import { type GenerateChatTitleResult, generateTitleForChatDetailed } from "./generate-title"
 import type { ClaudeSessionHandle, HarnessToolRequest, HarnessTurn } from "./harness-types"
@@ -37,7 +36,6 @@ import {
   normalizeClaudeModelOptions,
   normalizeCodexModelOptions,
   normalizeServerModel,
-  openrouterAuthReady,
 } from "./provider-catalog"
 import { readLlmProviderSnapshot } from "./llm-provider"
 import type { ModelPrice } from "../shared/token-pricing"
@@ -51,7 +49,11 @@ import type { TunnelGateway } from "./cloudflare-tunnel/gateway"
 import { OAuthTokenPool } from "./oauth-pool/oauth-token-pool"
 import { maskOauthKey } from "../shared/mask-oauth-key"
 import { SubagentOrchestrator, type BackgroundRunOutcome, type ProviderRunStart } from "./subagent-orchestrator"
-import { buildSubagentProviderRun, type BuildSubagentProviderRunArgs } from "./subagent-provider-run"
+import {
+  buildSubagentProviderRunForChat as buildSubagentProviderRunForChatFn,
+  type SubagentWiringDeps,
+  type BuildSubagentProviderRunForChatArgs,
+} from "./claude-subagent-wiring"
 import { OrchestrationQueue, type WorkerResult, type WorkerSpawnArgs } from "./orchestration-queue"
 import { createOrchWorktreeOps } from "./orchestration-worktree.adapter"
 import { runCommandInWorktree } from "./orchestration-exec-io.adapter"
@@ -661,6 +663,39 @@ export class AgentCoordinator {
       closeClaudeSession: (chatId, session) => this.closeClaudeSession(chatId, session),
       emitAutoContinueEvent: (event) => this.emitAutoContinueEvent(event),
       ensureTrackingFile,
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Subagent wiring deps builder — wires this.* refs into SubagentWiringDeps
+  // ---------------------------------------------------------------------------
+
+  private buildSubagentWiringDeps(): SubagentWiringDeps {
+    return {
+      store: this.store,
+      startClaudeSessionFn: this.startClaudeSessionFn,
+      startClaudeSessionPTYFn: this.startClaudeSessionPTYFn,
+      toolCallback: this.toolCallback,
+      tunnelGateway: this.tunnelGateway,
+      claudePtyRegistry: this.claudePtyRegistry,
+      ptyInstanceRegistry: this.ptyInstanceRegistry,
+      workflowRegistry: this.workflowRegistry,
+      subagentOrchestrator: this.subagentOrchestrator,
+      codexManager: this.codexManager,
+      oauthPool: this.oauthPool,
+      subagentPendingResolvers: this.subagentPendingResolvers,
+      realpath: realpathAdapter,
+      resolveClaudeDriverPreference: () => this.resolveClaudeDriverPreference(),
+      getEnabledCustomMcpServers: () => this.getEnabledCustomMcpServers(),
+      buildOAuthBearers: (servers) => this.buildOAuthBearers(servers),
+      resolveChatPolicy: (chatId) => this.resolveChatPolicy(chatId),
+      emitStateChange: (chatId) => { this.emitStateChange(chatId) },
+      buildPoolUnavailableMessage: (reservedFor, scopeSuffix) =>
+        this.buildPoolUnavailableMessage(reservedFor, scopeSuffix),
+      getAppSettingsSnapshot: () => this.getAppSettingsSnapshot(),
+      readLlmProvider: () => this.readLlmProvider(),
+      subagentPendingKey: (chatId, runId, toolUseId) =>
+        this.subagentPendingKey(chatId, runId, toolUseId),
     }
   }
 
@@ -1304,178 +1339,9 @@ export class AgentCoordinator {
     return shouldProactivelyCompact(usage)
   }
 
-  /**
-   * D6 — subagent Claude starter. When `KANNA_CLAUDE_DRIVER=pty` the
-   * subagent turn runs through the PTY driver (subscription billing)
-   * instead of always falling back to the SDK (API billing). Adapts the
-   * SDK-shaped `startClaudeSession` arg to `StartClaudeSessionPtyArgs`,
-   * injecting the coordinator-owned preflight / toolCallback / tunnel /
-   * policy context and `oneShot: true` so the REPL closes after the
-   * single subagent turn (depends on Phase 4 D7).
-   */
-  private buildClaudeSubagentStarter(): NonNullable<BuildSubagentProviderRunArgs["startClaudeSession"]> {
-    return async (a) => {
-      const enabledMcpServers = this.getEnabledCustomMcpServers()
-      const oauthBearers = await this.buildOAuthBearers(enabledMcpServers)
-      if (this.resolveClaudeDriverPreference() === "pty") {
-        return this.startClaudeSessionPTYFn({
-          chatId: a.chatId ?? "",
-          projectId: a.projectId,
-          localPath: a.localPath,
-          model: a.model,
-          effort: a.effort,
-          planMode: a.planMode,
-          sessionToken: a.sessionToken,
-          forkSession: a.forkSession,
-          oauthToken: a.oauthToken,
-          additionalDirectories: a.additionalDirectories,
-          onToolRequest: a.onToolRequest,
-          systemPromptOverride: a.systemPromptOverride,
-          initialPrompt: a.initialPrompt,
-          subagentOrchestrator: a.subagentOrchestrator,
-          delegationContext: a.delegationContext,
-          toolCallback: this.toolCallback ?? undefined,
-          tunnelGateway: this.tunnelGateway,
-          chatPolicy: a.chatId ? this.resolveChatPolicy(a.chatId) : undefined,
-          oneShot: true,
-          ptyRegistry: this.claudePtyRegistry ?? undefined,
-                ptyInstanceRegistry: this.ptyInstanceRegistry ?? undefined,
-          workflowRegistry: this.workflowRegistry ?? undefined,
-          customMcpServers: enabledMcpServers,
-          oauthBearers,
-          restrictedAllowedPaths: a.restrictedAllowedPaths,
-          keepAlive: a.keepAlive,
-        })
-      }
-      return this.startClaudeSessionFn({ ...a, customMcpServers: enabledMcpServers, oauthBearers })
-    }
-  }
-
-  private buildSubagentProviderRunForChat(args: {
-    subagent: Subagent
-    chatId: string
-    primer: string | null
-    userInstruction: string | null
-    runId: string
-    abortSignal: AbortSignal
-    depth: number
-    ancestorSubagentIds: string[]
-    parentUserMessageId: string
-    /**
-     * Orchestration workers run in an isolated git worktree, not the chat cwd.
-     * When set, this overrides the resolved cwd, disables workingDir/allowedPaths
-     * restriction, and drops additional dirs / stack labelling (the worktree is
-     * a self-contained checkout).
-     */
-    cwdOverride?: string
-  }): ProviderRunStart {
-    const chat = this.store.requireChat(args.chatId)
-    const project = this.store.getProject(chat.projectId)
-    if (!project) throw new Error(`Project ${chat.projectId} not found for chat ${args.chatId}`)
-    const spawn = resolveSpawnPaths(chat, project.localPath)
-    const restriction = args.cwdOverride === undefined
-      && (args.subagent.workingDir !== undefined || args.subagent.allowedPaths !== undefined)
-      ? resolveSubagentRoots(spawn.cwd, args.subagent.workingDir, args.subagent.allowedPaths, realpathAdapter)
-      : null
-
-    const onToolRequest = async (request: HarnessToolRequest): Promise<AnyValue> => {
-      if (request.tool.toolKind !== "ask_user_question"
-          && request.tool.toolKind !== "exit_plan_mode") {
-        // Non-interactive tools (bash, read, write, ...) — SDK handles
-        // them via canUseTool wrapper. No forwarding needed.
-        return null
-      }
-      const toolUseId = request.tool.toolId
-      const key = this.subagentPendingKey(args.chatId, args.runId, toolUseId)
-      await this.store.appendSubagentEvent({
-        v: 3,
-        type: "subagent_tool_pending",
-        timestamp: Date.now(),
-        chatId: args.chatId,
-        runId: args.runId,
-        toolUseId,
-        toolKind: request.tool.toolKind,
-        input: request.tool.input,
-      })
-      this.emitStateChange(args.chatId)
-      this.subagentOrchestrator.notifySubagentToolPending(args.runId)
-      return await new Promise<AnyValue>((resolve, reject) => {
-        // Defensive: if `canUseTool` somehow fires twice for the same
-        // (chatId, runId, toolUseId) — e.g. SDK retry — reject the previous
-        // resolver before overwriting so its Promise doesn't leak.
-        const existing = this.subagentPendingResolvers.get(key)
-        if (existing) {
-          existing.reject(new Error("superseded by retry"))
-        }
-        this.subagentPendingResolvers.set(key, { resolve, reject })
-      })
-    }
-
-    const delegationContext: KannaMcpDelegationContext = {
-      parentSubagentId: args.subagent.id,
-      parentRunId: args.runId,
-      ancestorSubagentIds: [...args.ancestorSubagentIds, args.subagent.id],
-      depth: args.depth + 1,
-      // For sub-spawn-sub, the parent_user_message_id stays anchored to the
-      // chat turn that started the whole chain — that's the attribution the
-      // run_started events use, and the orchestrator's depth/cycle checks
-      // protect against runaway chains.
-      getParentUserMessageId: () => args.parentUserMessageId,
-      // Subagents cannot inherit the user's @-mention authority: manual-trigger
-      // gates are enforced only at the top-level turn where the user typed the mention.
-      getMentionedSubagentIds: () => [],
-    }
-
-    return buildSubagentProviderRun({
-      subagent: args.subagent,
-      chatId: args.chatId,
-      primer: args.primer,
-      userInstruction: args.userInstruction,
-      runId: args.runId,
-      abortSignal: args.abortSignal,
-      cwd: args.cwdOverride ?? restriction?.cwd ?? spawn.cwd,
-      additionalDirectories: args.cwdOverride ? [] : spawn.additionalDirectories,
-      // Only label stack projects for unrestricted runs — a path-restricted
-      // subagent cannot reach every root, so listing them all would mislead.
-      stackProjects: args.cwdOverride || restriction ? [] : resolveStackProjects(chat, (id) => this.store.getProject(id)?.title),
-      allowedPaths: restriction?.allowedPaths,
-      projectId: project.id,
-      startClaudeSession: this.buildClaudeSubagentStarter(),
-      // PTY claude has no native maxTurns (interactive CLI) — the orchestrator
-      // applies a host-side tool-call-count backstop for PTY + Codex runs.
-      claudeDriverIsPty: this.resolveClaudeDriverPreference() === "pty",
-      subagentOrchestrator: this.subagentOrchestrator,
-      delegationContext,
-      codexManager: this.codexManager,
-      onToolRequest,
-      globalPromptAppend: this.getAppSettingsSnapshot().globalPromptAppend,
-      authReady: async (provider) => {
-        if (provider === "openrouter") {
-          return openrouterAuthReady(await this.readLlmProvider())
-        }
-        if (provider === "claude") {
-          const settings = this.getAppSettingsSnapshot()
-          // Pass parent chat id so a token already reserved by the parent
-          // counts as usable. Subagent runs are sequential under the parent
-          // (parent's turn is paused), so sharing the parent's reservation
-          // is correct — see oauth-token-pool isEligible.
-          return Boolean(settings.claudeAuth?.authenticated || this.oauthPool?.hasUsable(args.chatId))
-        }
-        return true
-      },
-      pickOauthToken: () => {
-        // Subagent inherits the parent chat's reservation by re-picking under
-        // the same chatId. pickActive treats the parent's reservation as
-        // owned-by-self (drops + re-binds to chatId), so the lifecycle stays
-        // bound to the parent's close path — no separate subagent release.
-        const picked = this.oauthPool?.pickActive(args.chatId) ?? null
-        if (this.oauthPool && this.oauthPool.hasAnyToken() && !picked) {
-          throw new OAuthPoolUnavailableError(this.buildPoolUnavailableMessage(args.chatId, " for subagent run"))
-        }
-        if (picked) this.oauthPool!.markUsed(picked.id)
-        return picked?.token ?? null
-      },
-    })
+  /** Delegates to buildSubagentProviderRunForChatFn — see claude-subagent-wiring.ts. */
+  private buildSubagentProviderRunForChat(args: BuildSubagentProviderRunForChatArgs): ProviderRunStart {
+    return buildSubagentProviderRunForChatFn(this.buildSubagentWiringDeps(), args)
   }
 
   /**
