@@ -1,6 +1,5 @@
 import { type KannaMcpDelegationContext, type SetupLoopHandlerResult } from "./kanna-mcp"
 import type { LoopSetupInput } from "./loop-template"
-import { reconcileTrackingFile, validateLoopSetup } from "./loop-template"
 import { ensureTrackingFile } from "./loop-template-io.adapter"
 import { homedir } from "node:os"
 import type {
@@ -21,7 +20,6 @@ import {
   shouldProactivelyCompact,
 } from "./proactive-compact"
 import type { ClientCommand } from "../shared/protocol"
-import { LOG_PREFIX } from "../shared/branding"
 import { buildKannaSystemPromptAppend } from "../shared/kanna-system-prompt"
 import { EventStore } from "./event-store"
 import type { AnalyticsReporter } from "./analytics"
@@ -44,11 +42,11 @@ import {
 import { readLlmProviderSnapshot } from "./llm-provider"
 import type { ModelPrice } from "../shared/token-pricing"
 import { providerUsesSdkSession, resolveClaudeApiModelId, type ClaudeDriverPreference, type CustomModelEntry } from "../shared/types"
-import { AUTO_CONTINUE_EVENT_VERSION, type AutoContinueEvent } from "./auto-continue/events"
+import type { AutoContinueEvent } from "./auto-continue/events"
 import { ClaudeLimitDetector, CodexLimitDetector, type LimitDetection, type LimitDetector } from "./auto-continue/limit-detector"
 import { ClaudeAuthErrorDetector, type AuthErrorDetection } from "./auto-continue/auth-error-detector"
 import type { ScheduleManager } from "./auto-continue/schedule-manager"
-import { deriveChatSchedules, deriveLoopState, type LoopState } from "./auto-continue/read-model"
+import type { LoopState } from "./auto-continue/read-model"
 import type { TunnelGateway } from "./cloudflare-tunnel/gateway"
 import { OAuthTokenPool } from "./oauth-pool/oauth-token-pool"
 import { maskOauthKey } from "../shared/mask-oauth-key"
@@ -57,7 +55,6 @@ import { buildSubagentProviderRun, type BuildSubagentProviderRunArgs } from "./s
 import { OrchestrationQueue, type WorkerResult, type WorkerSpawnArgs } from "./orchestration-queue"
 import { createOrchWorktreeOps } from "./orchestration-worktree.adapter"
 import { runCommandInWorktree } from "./orchestration-exec-io.adapter"
-import { toOrchRunDetail, validateOrchRun, type OrchRunContext } from "./orchestration-input"
 import type { OrchRunDetail, OrchRunInput } from "../shared/orchestration-types"
 import type { ToolCallbackService } from "./tool-callback"
 import type { ChatPermissionPolicy } from "../shared/permission-policy"
@@ -152,6 +149,18 @@ import {
   cancelAutoContinue as cancelAutoContinueFn,
   type AutoContinueCommandDeps,
 } from "./claude-autocontinue-commands"
+import {
+  buildOrchWorker as buildOrchWorkerFn,
+  runOrchestration as runOrchestrationFn,
+  cancelOrchRun as cancelOrchRunFn,
+  getOrchRunDetail as getOrchRunDetailFn,
+  deliverSubagentToMain as deliverSubagentToMainFn,
+  setupLoop as setupLoopFn,
+  isLoopArmed as isLoopArmedFn,
+  stopLoop as stopLoopFn,
+  listLiveSchedules as listLiveSchedulesFn,
+  type LoopOrchCommandDeps,
+} from "./claude-loop-orch-commands"
 
 export type { ClaudeSessionHandle } from "./harness-types"
 
@@ -637,6 +646,21 @@ export class AgentCoordinator {
       enqueueMessage: (chatId, content, attachments, options) =>
         this.enqueueMessage(chatId, content, attachments, options),
       maybeStartNextQueuedMessage: (chatId) => this.maybeStartNextQueuedMessage(chatId),
+    }
+  }
+
+  private buildLoopOrchCommandDeps(): LoopOrchCommandDeps {
+    return {
+      store: this.store,
+      orchestrationQueue: this.orchestrationQueue,
+      claudeSessions: this.claudeSessions,
+      activeTurns: this.activeTurns,
+      getSubagents: () => this.getSubagents(),
+      getAppSettingsSnapshot: () => this.getAppSettingsSnapshot(),
+      buildSubagentProviderRunForChat: (args) => this.buildSubagentProviderRunForChat(args),
+      closeClaudeSession: (chatId, session) => this.closeClaudeSession(chatId, session),
+      emitAutoContinueEvent: (event) => this.emitAutoContinueEvent(event),
+      ensureTrackingFile,
     }
   }
 
@@ -1460,80 +1484,32 @@ export class AgentCoordinator {
    * prompt. Origin chat + subagent are read from the persisted run config so
    * this resolves identically on a fresh run and after a restart.
    */
+  /** Delegates to buildOrchWorkerFn — see claude-loop-orch-commands.ts. */
   private async buildOrchWorker(spawn: WorkerSpawnArgs): Promise<WorkerResult> {
-    const run = this.store.getOrchRun(spawn.runId)
-    const chatId = run?.config.originChatId
-    const subagentId = run?.config.workerSubagentId
-    if (!chatId || !subagentId) {
-      return { kind: "failed", error: "orchestration run missing originChatId / workerSubagentId" }
-    }
-    const subagent = this.getSubagents().find((s) => s.id === subagentId)
-    if (!subagent) return { kind: "failed", error: `orchestration worker subagent "${subagentId}" not found` }
-    if (!this.store.getChat(chatId)) return { kind: "failed", error: `orchestration origin chat ${chatId} not found` }
-
-    const providerRun = this.buildSubagentProviderRunForChat({
-      subagent,
-      chatId,
-      primer: null,
-      userInstruction: spawn.prompt,
-      runId: `${spawn.runId}:${spawn.workerId}`,
-      abortSignal: spawn.abortSignal,
-      depth: 0,
-      ancestorSubagentIds: [],
-      parentUserMessageId: spawn.runId,
-      cwdOverride: spawn.cwd,
-    })
-    try {
-      if (!(await providerRun.authReady())) {
-        return { kind: "failed", error: "orchestration worker auth not ready" }
-      }
-      const result = await providerRun.start(() => undefined, () => undefined)
-      return { kind: "completed", text: result.text }
-    } catch (err) {
-      if (spawn.abortSignal.aborted) return { kind: "failed", error: "aborted" }
-      return { kind: "failed", error: err instanceof Error ? err.message : String(err) }
-    }
-  }
-
-  private buildOrchRunContext(chatId: string): OrchRunContext | null {
-    const chat = this.store.getChat(chatId)
-    if (!chat) return null
-    const project = this.store.getProject(chat.projectId)
-    if (!project) return null
-    return {
-      chatId,
-      repoRoot: project.localPath,
-      roster: this.getSubagents().map((s) => ({ id: s.id, name: s.name })),
-      defaultOrchSubagentId: this.getAppSettingsSnapshot().subagentRuntime?.defaultOrchSubagentId ?? null,
-    }
+    return buildOrchWorkerFn(this.buildLoopOrchCommandDeps(), spawn)
   }
 
   /**
    * User-callable entry point (MCP `orch_run` + ws `orch.run`). Validates the
    * task list into the fixed linear config, then starts the run. Returns the
    * runId or the flat validation error list — never a partial run.
+   * Delegates to runOrchestrationFn — see claude-loop-orch-commands.ts.
    */
   async runOrchestration(
     chatId: string,
     input: OrchRunInput,
   ): Promise<{ ok: true; runId: string } | { ok: false; errors: string[] }> {
-    const context = this.buildOrchRunContext(chatId)
-    if (!context) return { ok: false, errors: [`chat ${chatId} not found or has no project`] }
-    const validation = validateOrchRun(input, context)
-    if (!validation.ok) return { ok: false, errors: validation.errors }
-    const runId = await this.orchestrationQueue.createRun(validation.resolved.config, validation.resolved.tasks)
-    return { ok: true, runId }
+    return runOrchestrationFn(this.buildLoopOrchCommandDeps(), chatId, input)
   }
 
-  /** Cancel a run (MCP `orch_cancel_run` + ws `orch.cancelRun`). */
+  /** Cancel a run (MCP `orch_cancel_run` + ws `orch.cancelRun`). Delegates to cancelOrchRunFn. */
   async cancelOrchRun(runId: string): Promise<void> {
-    await this.orchestrationQueue.cancelRun(runId)
+    return cancelOrchRunFn(this.buildLoopOrchCommandDeps(), runId)
   }
 
-  /** Canonical run detail DTO (MCP `orch_run_status` + ws `orch.getRun`). */
+  /** Canonical run detail DTO (MCP `orch_run_status` + ws `orch.getRun`). Delegates to getOrchRunDetailFn. */
   getOrchRunDetail(runId: string): OrchRunDetail | null {
-    const snapshot = this.store.getOrchRun(runId)
-    return snapshot ? toOrchRunDetail(snapshot) : null
+    return getOrchRunDetailFn(this.buildLoopOrchCommandDeps(), runId)
   }
 
   async enqueue(command: Extract<ClientCommand, { type: "message.enqueue" }>) {
@@ -1853,225 +1829,52 @@ export class AgentCoordinator {
   }
 
   /**
-   * The /clear machinery for the loop-orchestration paths (setup_loop,
-   * background delivery). Wiping the store token alone is not enough:
-   * - an in-flight turn keeps streaming and its next `session_token` event
-   *   would re-persist the OLD conversation's token over the wipe (observed
-   *   121 ms after a setup_loop /clear) — so suppress persistence on the
-   *   live session for the rest of its life;
-   * - an idle warm SDK session would be reused in-band by the next turn,
-   *   making the /clear a no-op — so tear it down when no turn is active.
-   */
-  private async clearClaudeSessionContext(chatId: string): Promise<void> {
-    await this.store.setSessionTokenForProvider(chatId, "claude", null)
-    const session = this.claudeSessions.get(chatId)
-    if (!session) return
-    session.suppressSessionTokenPersist = true
-    if (!this.activeTurns.has(chatId)) {
-      this.closeClaudeSession(chatId, session)
-    }
-  }
-
-  /**
    * Deliver a finished `run_in_background` subagent's result back into the
    * main chat as a fresh turn AND clear the main-agent's Claude session so the
    * next turn starts with a fresh context window. Wired as the orchestrator's
-   * `onBackgroundRunComplete` hook.
-   *
-   * Loop-orchestration invariant: main is stateless-in-context / stateful-in-file.
-   * PROGRESS.md is the durability contract; every delivery re-reads it. Subagent
-   * output is NOT carried forward as prompt content — the subagent is expected
-   * to have written its findings into PROGRESS.md before terminating.
-   *
-   * See adr-20260711-notification-driven-loop-orchestration.
+   * `onBackgroundRunComplete` hook. Delegates to deliverSubagentToMainFn —
+   * see claude-loop-orch-commands.ts.
    */
   private async deliverSubagentToMain(
     chatId: string,
     runId: string,
     outcome: BackgroundRunOutcome,
   ): Promise<void> {
-    if (!this.store.getChat(chatId)) return
-
-    // Structured re-entry: the completion is delivered as the same
-    // <task-notification> XML Claude Code's own background agents use
-    // (LocalAgentTask), so the model parses task identity/status with the
-    // format it already knows from native training.
-    //
-    // When a loop is armed, the FULL loop discipline prompt follows the
-    // notification on every wake — not a generic "decide next action" string,
-    // which drifted into self-implementation (the 7.5h marathon-turn bug).
-    // Armed notifications carry NO <result> body: PROGRESS.md is the loop's
-    // only durability contract. Non-loop deliveries include the (truncated)
-    // result since ad-hoc background delegations have no tracking file.
-    const armed = this.isLoopArmed(chatId)
-    const notification = buildTaskNotification(runId, outcome, { includeResult: !armed })
-    let prompt: string
-    if (armed) {
-      prompt = `${notification}\n\n${armed.prompt}`
-    } else if (outcome.status === "completed") {
-      prompt = `${notification}\n\nYour Claude context has been cleared. Read PROGRESS.md if present, then decide the next action.`
-    } else {
-      prompt = `${notification}\n\nYour Claude context has been cleared. Read PROGRESS.md if present; decide whether to retry, try another approach, or stop.`
-    }
-
-    try {
-      // Wipe the main-agent's Claude session token so the next spawn starts
-      // fresh (the /clear equivalent). Codex path is unaffected.
-      await this.clearClaudeSessionContext(chatId)
-      await this.store.appendMessage(chatId, timestamped({ kind: "context_cleared" }))
-
-      const now = Date.now()
-      const scheduleId = crypto.randomUUID()
-      await this.emitAutoContinueEvent({
-        v: AUTO_CONTINUE_EVENT_VERSION,
-        kind: "auto_continue_accepted",
-        timestamp: now,
-        chatId,
-        scheduleId,
-        scheduledAt: now,
-        tz: "system",
-        source: "subagent_background",
-        resetAt: now,
-        detectedAt: now,
-        prompt,
-      })
-    } catch (err) {
-      log.warn(`${LOG_PREFIX} deliverSubagentToMain failed`, { chatId, runId, err })
-    }
+    return deliverSubagentToMainFn(this.buildLoopOrchCommandDeps(), chatId, runId, outcome)
   }
 
   /**
    * Arm an autonomous loop on the main chat. Validates the loop spec, ensures
    * the tracking file exists (writes a skeleton if absent), then /clears the
    * main-agent Claude session and enqueues the templated recurring prompt so
-   * the next turn starts the loop. Backs `mcp__kanna__setup_loop`. See
-   * adr-20260711-setup-loop-template.
+   * the next turn starts the loop. Backs `mcp__kanna__setup_loop`. Delegates
+   * to setupLoopFn — see claude-loop-orch-commands.ts.
    */
   async setupLoop(args: {
     chatId: string
     input: LoopSetupInput
   }): Promise<SetupLoopHandlerResult> {
-    const chat = this.store.getChat(args.chatId)
-    if (!chat) return { ok: false, errors: [`chat ${args.chatId} not found`] }
-    const project = this.store.getProject(chat.projectId)
-    if (!project) return { ok: false, errors: [`project ${chat.projectId} not found`] }
-
-    const validation = validateLoopSetup(args.input, project.localPath, {
-      roster: this.getSubagents().map((s) => ({ id: s.id, name: s.name })),
-      defaultLoopSubagentId: this.getAppSettingsSnapshot().subagentRuntime?.defaultLoopSubagentId ?? null,
-    })
-    if (!validation.ok) return { ok: false, errors: validation.errors }
-
-    const resolved = validation.resolved
-    let created: boolean
-    let reconciled: boolean
-    let reconcileActions: string[]
-    try {
-      const ensureResult = await ensureTrackingFile({
-        absPath: resolved.trackingFileAbs,
-        skeleton: resolved.skeleton,
-        // Deterministic schema reconcile of an EXISTING tracking file: pure
-        // string transform — server-owned sections rewritten to the inputs,
-        // loop history preserved. No model judgement involved.
-        reconcile: (existing) =>
-          reconcileTrackingFile(existing, {
-            goal: resolved.goal,
-            verifyCommand: resolved.verifyCommand,
-            chunkHint: resolved.chunkHint,
-          }),
-      })
-      created = ensureResult.created
-      reconciled = ensureResult.reconciled
-      reconcileActions = ensureResult.actions
-    } catch (err) {
-      return {
-        ok: false,
-        errors: [`ensureTrackingFile failed: ${err instanceof Error ? err.message : String(err)}`],
-      }
-    }
-
-    try {
-      // Wipe main-agent Claude session so the next turn starts fresh with the
-      // rendered loop prompt. Codex untouched. setup_loop runs from INSIDE a
-      // live turn, so the suppression half of clearClaudeSessionContext is
-      // what keeps the wipe from being overwritten by the in-flight stream.
-      await this.clearClaudeSessionContext(args.chatId)
-      await this.store.appendMessage(args.chatId, timestamped({ kind: "context_cleared" }))
-
-      const now = Date.now()
-      // Arm the loop durably: every subsequent background-completion wake
-      // re-injects THIS prompt (not the generic one) and loop turns are
-      // tool-blocked. Superseded by a later setup_loop or cleared by stop_loop
-      // / a real user send. Replays from the auto-continue log on restart.
-      await this.emitAutoContinueEvent({
-        v: AUTO_CONTINUE_EVENT_VERSION,
-        kind: "loop_armed",
-        timestamp: now,
-        chatId: args.chatId,
-        scheduleId: crypto.randomUUID(),
-        subagentId: resolved.subagentId,
-        prompt: resolved.prompt,
-      })
-
-      const scheduleId = crypto.randomUUID()
-      await this.emitAutoContinueEvent({
-        v: AUTO_CONTINUE_EVENT_VERSION,
-        kind: "auto_continue_accepted",
-        timestamp: now,
-        chatId: args.chatId,
-        scheduleId,
-        scheduledAt: now,
-        tz: "system",
-        source: "subagent_background",
-        resetAt: now,
-        detectedAt: now,
-        prompt: resolved.prompt,
-      })
-    } catch (err) {
-      return {
-        ok: false,
-        errors: [`enqueue failed: ${err instanceof Error ? err.message : String(err)}`],
-      }
-    }
-
-    return {
-      ok: true,
-      trackingFileRel: resolved.trackingFileRel,
-      created,
-      reconciled,
-      reconcileActions,
-      prompt: resolved.prompt,
-    }
+    return setupLoopFn(this.buildLoopOrchCommandDeps(), args)
   }
 
-  /** Current armed-loop state for a chat, or null. Pure replay of the auto-continue log. */
+  /** Current armed-loop state for a chat, or null. Delegates to isLoopArmedFn — see claude-loop-orch-commands.ts. */
   isLoopArmed(chatId: string): LoopState | null {
-    return deriveLoopState(this.store.getAutoContinueEvents(chatId), chatId)
+    return isLoopArmedFn(this.buildLoopOrchCommandDeps(), chatId)
   }
 
   /**
    * Disarm an armed loop (restores tools + stops prompt re-injection). Backs
    * the `stop_loop` MCP tool (called by the model on GOAL MET) and the
-   * user-send takeover path. No-op when no loop is armed.
+   * user-send takeover path. No-op when no loop is armed. Delegates to
+   * stopLoopFn — see claude-loop-orch-commands.ts.
    */
   async stopLoop(chatId: string, reason: "goal_met" | "user_send" | "chat_deleted"): Promise<void> {
-    if (!this.isLoopArmed(chatId)) return
-    await this.emitAutoContinueEvent({
-      v: AUTO_CONTINUE_EVENT_VERSION,
-      kind: "loop_disarmed",
-      timestamp: Date.now(),
-      chatId,
-      scheduleId: crypto.randomUUID(),
-      reason,
-    })
+    return stopLoopFn(this.buildLoopOrchCommandDeps(), chatId, reason)
   }
 
+  /** Delegates to listLiveSchedulesFn — see claude-loop-orch-commands.ts. */
   listLiveSchedules(chatId: string): string[] {
-    const { schedules } = deriveChatSchedules(this.store.getAutoContinueEvents(chatId), chatId)
-    return Object.values(schedules)
-      .filter((s) => s.state === "proposed" || s.state === "scheduled")
-      .map((s) => s.scheduleId)
-      .sort()
+    return listLiveSchedulesFn(this.buildLoopOrchCommandDeps(), chatId)
   }
 
   async killPtyInstance(chatId: string): Promise<void> {
