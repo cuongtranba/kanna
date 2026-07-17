@@ -34,11 +34,7 @@ import type { PushEvent, PushEventStore } from "./push/events"
 import type { ShareEvent } from "./session-share/share-projection"
 import { capTranscriptEntry } from "./subagent-entry-cap.adapter"
 import {
-  coalesceContextWindowUpdates,
-  decodeCursor,
   getForkedChatTitle,
-  getHistorySnapshot,
-  getMessagesPageFromEntries,
   logSendToStartingProfile,
 } from "./event-store-helpers"
 import {
@@ -87,22 +83,42 @@ import {
 import { applyStoreEvent } from "./event-store-apply"
 import { applyChatMessageMetadata } from "./event-store-chat-lifecycle"
 import {
-  applyTunnelEventToMap,
   buildSnapshotFile,
   calcShouldTruncateLogs,
   computeLegacyTranscriptStats,
   loadAndReplayLogs,
-  loadPushEventsFromLog,
-  loadShareEventsFromLog,
   loadSnapshotIntoState,
   loadSidebarOrder,
-  loadTunnelEventsFromLog,
   migrateLegacyTranscripts as migrateLegacyTranscriptsImpl,
   truncateLogsAfterSnapshot,
   writeSidebarOrderFile,
   type LegacyTranscriptStats,
   type SnapshotLogPaths,
 } from "./event-store-snapshot"
+import {
+  appendTunnelEvent as appendTunnelEventFn,
+  appendShareEvent as appendShareEventFn,
+  appendPushEvent as appendPushEventFn,
+  getTunnelEvents as getTunnelEventsFn,
+  listTunnelChats as listTunnelChatsFn,
+  loadTunnelEvents as loadTunnelEventsFn,
+  getShareEvents as getShareEventsFn,
+  loadShareEvents as loadShareEventsFn,
+  loadPushEvents as loadPushEventsFn,
+  type PeripheralEventsDeps,
+} from "./event-store-peripheral-events.adapter"
+import {
+  getMessages as getMessagesFn,
+  getQueuedMessages as getQueuedMessagesFn,
+  getQueuedMessage as getQueuedMessageFn,
+  getRecentMessagesPage as getRecentMessagesPageFn,
+  getMessagesPageBefore as getMessagesPageBeforeFn,
+  getRecentChatHistory as getRecentChatHistoryFn,
+  getChatCount as getChatCountFn,
+  getSeenMessageIds as getSeenMessageIdsFn,
+  type CachedTranscriptRef,
+  type MessageReadDeps,
+} from "./event-store-messages.adapter"
 
 const STALE_EMPTY_CHAT_MAX_AGE_MS = 30 * 60 * 1000
 const SIDEBAR_PROJECT_ORDER_FILE = "sidebar-order.json"
@@ -137,7 +153,7 @@ export class EventStore implements PushEventStore {
   private legacySidebarProjectOrder: string[] = []
   private sidebarProjectOrder: string[] = []
   private snapshotHasLegacyMessages = false
-  private cachedTranscript: { chatId: string; entries: TranscriptEntry[] } | null = null
+  private readonly cachedTranscriptRef: CachedTranscriptRef = { value: null }
   private readonly tunnelEventsByChatId = new Map<string, CloudflareTunnelEvent[]>()
   private shareEventsAll: ShareEvent[] = []
   private replayChatProvider = new Map<string, AgentProvider | null>()
@@ -254,7 +270,7 @@ export class EventStore implements PushEventStore {
     this.tunnelEventsByChatId.clear()
     this.sidebarProjectOrder = []
     this.legacySidebarProjectOrder = []
-    this.cachedTranscript = null
+    this.cachedTranscriptRef.value = null
   }
 
   private clearLegacyTranscriptState() {
@@ -308,37 +324,38 @@ export class EventStore implements PushEventStore {
     return path.join(this.transcriptsDir, `${chatId}.jsonl`)
   }
 
-  private loadTranscriptFromDisk(chatId: string) {
-    const transcriptPath = this.transcriptPath(chatId)
-    if (!this.storage.existsSync(transcriptPath)) {
-      return []
-    }
+  // ─── Deps builders ──────────────────────────────────────────────────────────
 
-    const text = this.storage.readTextSync(transcriptPath)
-    if (!text.trim()) return []
-
-    const entries: TranscriptEntry[] = []
-    const seen = this.getSeenMessageIds(chatId)
-    for (const rawLine of text.split("\n")) {
-      const line = rawLine.trim()
-      if (!line) continue
-      const entry: TranscriptEntry & { messageId?: string } = JSON.parse(line)
-      entries.push(entry)
-      const mid = entry.messageId
-      if (typeof mid === "string" && mid.length > 0) {
-        seen.add(mid)
-      }
+  private buildMessageReadDeps(): MessageReadDeps {
+    return {
+      storage: this.storage,
+      transcriptsDir: this.transcriptsDir,
+      cachedTranscriptRef: this.cachedTranscriptRef,
+      legacyMessagesByChatId: this.legacyMessagesByChatId,
+      seenMessageIdsByChatId: this.seenMessageIdsByChatId,
+      queuedMessagesByChatId: this.state.queuedMessagesByChatId,
+      chatsById: this.state.chatsById,
+      listPendingToolRequests: (chatId) => this.listPendingToolRequests(chatId),
     }
-    return entries
   }
 
-  private getSeenMessageIds(chatId: string): Set<string> {
-    let set = this.seenMessageIdsByChatId.get(chatId)
-    if (!set) {
-      set = new Set<string>()
-      this.seenMessageIdsByChatId.set(chatId, set)
+  private buildPeripheralEventsDeps(): PeripheralEventsDeps {
+    return {
+      storage: this.storage,
+      tunnelLogPath: this.tunnelLogPath,
+      sharesLogPath: this.sharesLogPath,
+      pushLogPath: this.pushLogPath,
+      tunnelEventsByChatId: this.tunnelEventsByChatId,
+      shareEventsAll: this.shareEventsAll,
+      getWriteChain: () => this.writeChain,
+      setWriteChain: (p) => { this.writeChain = p },
     }
-    return set
+  }
+
+  // ─── Private transcript helpers (thin delegates) ─────────────────────────
+
+  private getSeenMessageIds(chatId: string): Set<string> {
+    return getSeenMessageIdsFn(this.buildMessageReadDeps(), chatId)
   }
 
   async openProject(localPath: string, title?: string) {
@@ -458,8 +475,8 @@ export class EventStore implements PushEventStore {
           chat.hasMessages = true
           chat.updatedAt = Math.max(chat.updatedAt, createdAt)
         }
-        if (this.cachedTranscript?.chatId === chatId) {
-          this.cachedTranscript = { chatId, entries: cloneTranscriptEntries(sourceEntries) }
+        if (this.cachedTranscriptRef.value?.chatId === chatId) {
+          this.cachedTranscriptRef.value = { chatId, entries: cloneTranscriptEntries(sourceEntries) }
         }
       })
       await this.writeChain
@@ -539,8 +556,8 @@ export class EventStore implements PushEventStore {
 
       const transcriptPath = this.transcriptPath(chat.id)
       await this.storage.remove(transcriptPath)
-      if (this.cachedTranscript?.chatId === chat.id) {
-        this.cachedTranscript = null
+      if (this.cachedTranscriptRef.value?.chatId === chat.id) {
+        this.cachedTranscriptRef.value = null
       }
       await this.removeSubagentResultsDir(chat.projectId, chat.id)
 
@@ -605,8 +622,8 @@ export class EventStore implements PushEventStore {
       await this.storage.appendText(transcriptPath, payload)
       const afterAppendAt = performance.now()
       applyChatMessageMetadata(this.state.chatsById, chatId, entry)
-      if (this.cachedTranscript?.chatId === chatId) {
-        this.cachedTranscript.entries.push({ ...entry })
+      if (this.cachedTranscriptRef.value?.chatId === chatId) {
+        this.cachedTranscriptRef.value.entries.push({ ...entry })
       }
       logSendToStartingProfile("event_store.append_message", {
         chatId,
@@ -726,87 +743,30 @@ export class EventStore implements PushEventStore {
     return [...this.sidebarProjectOrder]
   }
 
+  // ─── Message read methods (thin delegates) ────────────────────────────────
+
   getMessages(chatId: string) {
-    if (this.cachedTranscript?.chatId === chatId) {
-      return cloneTranscriptEntries(this.cachedTranscript.entries)
-    }
-
-    const legacyEntries = this.legacyMessagesByChatId.get(chatId)
-    if (legacyEntries) {
-      this.cachedTranscript = { chatId, entries: cloneTranscriptEntries(legacyEntries) }
-      return cloneTranscriptEntries(this.cachedTranscript.entries)
-    }
-
-    const entries = this.loadTranscriptFromDisk(chatId)
-    this.cachedTranscript = { chatId, entries }
-    return cloneTranscriptEntries(entries)
+    return getMessagesFn(this.buildMessageReadDeps(), chatId)
   }
 
   getQueuedMessages(chatId: string) {
-    const entries = this.state.queuedMessagesByChatId.get(chatId) ?? []
-    return entries.map((entry) => ({
-      ...entry,
-      attachments: [...entry.attachments],
-    }))
+    return getQueuedMessagesFn(this.buildMessageReadDeps(), chatId)
   }
 
   getQueuedMessage(chatId: string, queuedMessageId: string) {
-    return this.getQueuedMessages(chatId).find((entry) => entry.id === queuedMessageId) ?? null
+    return getQueuedMessageFn(this.buildMessageReadDeps(), chatId, queuedMessageId)
   }
 
   getRecentMessagesPage(chatId: string, limit: number): ChatHistoryPage {
-    if (limit <= 0) {
-      return { messages: [], hasOlder: false, olderCursor: null }
-    }
-
-    const entries = coalesceContextWindowUpdates(this.getMessages(chatId))
-    const page = getMessagesPageFromEntries(entries, limit)
-
-    return {
-      messages: page.entries,
-      hasOlder: page.hasOlder,
-      olderCursor: page.olderCursor,
-    }
+    return getRecentMessagesPageFn(this.buildMessageReadDeps(), chatId, limit)
   }
 
   getMessagesPageBefore(chatId: string, beforeCursor: string, limit: number): ChatHistoryPage {
-    if (limit <= 0) {
-      return { messages: [], hasOlder: false, olderCursor: null }
-    }
-
-    const beforeIndex = decodeCursor(beforeCursor)
-    // Coalesce identically to getRecentMessagesPage so cursors (which index the
-    // coalesced array) stay consistent across recent + load-older paging.
-    const entries = coalesceContextWindowUpdates(this.getMessages(chatId))
-    const page = getMessagesPageFromEntries(entries, limit, beforeIndex)
-
-    return {
-      messages: page.entries,
-      hasOlder: page.hasOlder,
-      olderCursor: page.olderCursor,
-    }
+    return getMessagesPageBeforeFn(this.buildMessageReadDeps(), chatId, beforeCursor, limit)
   }
 
   getRecentChatHistory(chatId: string, recentLimit: number) {
-    const page = this.getRecentMessagesPage(chatId, recentLimit)
-    const pending = this.listPendingToolRequests(chatId)
-    const pendingEntries: TranscriptEntry[] = pending.map((req) => ({
-      _id: `pending-tool-request-${req.id}`,
-      createdAt: req.createdAt,
-      kind: "pending_tool_request",
-      toolRequestId: req.id,
-      toolName: req.toolName,
-      arguments: req.arguments,
-    }))
-    const merged = [...page.messages, ...pendingEntries]
-    return {
-      messages: merged,
-      history: getHistorySnapshot({
-        entries: merged,
-        hasOlder: page.hasOlder,
-        olderCursor: page.olderCursor,
-      }, recentLimit),
-    }
+    return getRecentChatHistoryFn(this.buildMessageReadDeps(), chatId, recentLimit)
   }
 
   listProjects() {
@@ -820,7 +780,7 @@ export class EventStore implements PushEventStore {
   }
 
   getChatCount(projectId: string) {
-    return this.listChatsByProject(projectId).length
+    return getChatCountFn(this.buildMessageReadDeps(), projectId)
   }
 
   async getLegacyTranscriptStats(): Promise<LegacyTranscriptStats> {
@@ -855,7 +815,7 @@ export class EventStore implements PushEventStore {
       (chatId) => this.transcriptPath(chatId),
       () => { this.clearLegacyTranscriptState() },
       () => this.snapshotAndTruncateLogs(),
-      () => { this.cachedTranscript = null },
+      () => { this.cachedTranscriptRef.value = null },
       onProgress,
     )
   }
@@ -877,55 +837,42 @@ export class EventStore implements PushEventStore {
     return [...this.state.autoContinueEventsByChatId.keys()]
   }
 
+  // ─── Peripheral event methods (thin delegates) ───────────────────────────
+
   async appendTunnelEvent(event: CloudflareTunnelEvent): Promise<void> {
-    const payload = `${JSON.stringify(event)}\n`
-    this.writeChain = this.writeChain.then(async () => {
-      await this.storage.appendText(this.tunnelLogPath, payload)
-      applyTunnelEventToMap(this.tunnelEventsByChatId, event)
-    })
-    await this.writeChain
+    return appendTunnelEventFn(this.buildPeripheralEventsDeps(), event)
   }
 
   getTunnelEvents(chatId: string): CloudflareTunnelEvent[] {
-    const list = this.tunnelEventsByChatId.get(chatId)
-    return list ? [...list] : []
+    return getTunnelEventsFn(this.buildPeripheralEventsDeps(), chatId)
   }
 
   listTunnelChats(): string[] {
-    return [...this.tunnelEventsByChatId.keys()]
+    return listTunnelChatsFn(this.buildPeripheralEventsDeps())
   }
 
   private async loadTunnelEvents(): Promise<void> {
-    await loadTunnelEventsFromLog(this.storage, this.tunnelLogPath, this.tunnelEventsByChatId)
+    await loadTunnelEventsFn(this.buildPeripheralEventsDeps())
   }
 
   async appendShareEvent(event: ShareEvent): Promise<void> {
-    const payload = `${JSON.stringify(event)}\n`
-    this.writeChain = this.writeChain.then(async () => {
-      await this.storage.appendText(this.sharesLogPath, payload)
-      this.shareEventsAll.push(event)
-    })
-    await this.writeChain
+    return appendShareEventFn(this.buildPeripheralEventsDeps(), event)
   }
 
   getShareEvents(): ShareEvent[] {
-    return [...this.shareEventsAll]
+    return getShareEventsFn(this.buildPeripheralEventsDeps())
   }
 
   private async loadShareEvents(): Promise<void> {
-    await loadShareEventsFromLog(this.storage, this.sharesLogPath, this.shareEventsAll)
+    await loadShareEventsFn(this.buildPeripheralEventsDeps())
   }
 
   async appendPushEvent(event: PushEvent): Promise<void> {
-    const payload = `${JSON.stringify(event)}\n`
-    this.writeChain = this.writeChain.then(async () => {
-      await this.storage.appendText(this.pushLogPath, payload)
-    })
-    await this.writeChain
+    return appendPushEventFn(this.buildPeripheralEventsDeps(), event)
   }
 
   async loadPushEvents(): Promise<PushEvent[]> {
-    return loadPushEventsFromLog(this.storage, this.pushLogPath)
+    return loadPushEventsFn(this.buildPeripheralEventsDeps())
   }
 
   async putToolRequest(req: ToolRequest): Promise<void> {
