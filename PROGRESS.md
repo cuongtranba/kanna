@@ -13,6 +13,7 @@ bash scripts/verify-decomp.sh
 
 ## Progress (latest first)
 
+- 2026-07-18 Extract tool-call types (AskUserQuestion*/TodoItem, ToolCallBase, all *ToolCall, NormalizedToolCall, HydratedToolCallBase, all Hydrated*, HydratedToolCall) to tool-call-types.ts (314 LOC); extract transcript types (McpServerInfo, AccountInfo, ContextWindowUsageSnapshot, TranscriptEntryBase, all *Entry, TranscriptEntry union, HydratedTranscriptMessage, AutoContinuePromptEntry, PendingToolRequestEntry, ToolRequestResolvedEntry) to transcript-types.ts (270 LOC); types.ts: 1731 → 1201 LOC (−530); 121 shared/ tests pass; zero new TS errors.
 - 2026-07-18 Extract provider/model-catalog domain (ProviderModelOption, ClaudeModelOptions, CodexModelOptions, ProviderModelOptionsByProvider, ProviderPreference, ChatProviderPreferences, ModelOptions, DEFAULT_CLAUDE/CODEX_MODEL_OPTIONS, PROVIDERS, getProviderCatalog, CustomModelEntry/Input/Patch, TextSnippet/Input/Patch, mergeCustomModels, providerUsesSdkSession, normalize*/getProvider*/resolve* helpers, OpenRouterModel, DEFAULT_OPENROUTER_SDK_MODEL) to provider-model-types.ts; types.ts re-exports via barrel; 25 tests pass. types.ts: 2108 → 1713 LOC (-395); new file 437 LOC.
 - 2026-07-18 Extract snapshot/persistence layer (loadSnapshotIntoState, buildSnapshotFile, truncateLogsAfterSnapshot, calcShouldTruncateLogs, loadAndReplayLogs, loadSidebarOrder, writeSidebarOrderFile, readSidebarOrderFromProjectsLog, computeLegacyTranscriptStats, migrateLegacyTranscripts, applyTunnelEventToMap, loadTunnelEventsFromLog, loadShareEventsFromLog, loadPushEventsFromLog + getMessagesPageFromEntries to helpers) to event-store-snapshot.ts; EventStore keeps thin delegates; 35 tests. event-store.ts: 1778 → 1462 LOC (-316); new file ~670 LOC.
 - 2026-07-18 Extract chat-lifecycle read-model (applyProjectEvent, applyStackEvent, applyChatLifecycleEvent, updateChatTiming, applyAutoContinueToState, applyChatMessageMetadata) to event-store-chat-lifecycle.ts; all project/stack/chat/turn/queued-message switch cases delegated + private updateTiming method removed + 28 tests. event-store.ts: 2050 → 1778 LOC (-272); new file 441 LOC.
@@ -65,19 +66,22 @@ bash scripts/verify-decomp.sh
 
 ## Next chunk
 
-**shared/types.ts (1713 LOC → target ≤ 1300)**: continue splitting by domain. Provider/model-catalog is done. Next candidates:
+**shared/types.ts (1201 LOC → target ≤ 600)**: tool-call, transcript, and provider-model domains done. Remaining large domains to split:
 
-1. **`src/shared/transcript-entry-types.ts`** (~350 LOC): `TranscriptEntryBase`, all `*Entry` variants (UserPromptEntry, AssistantTextEntry, ToolCallEntry, ResultEntry, etc.), `TranscriptEntry` union, `NormalizedToolCall` union, plus all `*ToolCall` and `*ToolResult` interfaces. References `AgentProvider`, `ChatAttachment`, `McpServerInfo` from types.ts — use `import type`.
-
-2. **`src/shared/hydrated-tool-types.ts`** (~120 LOC): `HydratedToolCallBase`, `HydratedAskUserQuestionToolCall` … `HydratedToolCall` union — the hydrated display-layer variants. Depends on transcript-entry-types, so extract after step 1.
-
-Survey:
+Survey what's left:
 ```bash
-grep -n "^export interface\|^export type" src/shared/types.ts | head -80
+grep -n "^export interface\|^export type\|^export const\|^export enum\|^export function" src/shared/types.ts | head -100
 wc -l src/shared/types.ts
 ```
 
-Expected: types.ts 1713 → ~1300 LOC (-400); new sibling(s) ~350-450 LOC each.
+Likely candidates:
+
+1. **`src/shared/app-settings-types.ts`** (~250 LOC): `AuthSettings`, `AUTH_DEFAULTS`, `OAuthTokenEntry`, `ClaudeAuthSettings`, `OAUTH_TOKEN_*`, `UploadSettings`, `ClaudeDriverPreference`, `ClaudePtyLifecycleSettings`, `ClaudeDriverSettings`, `ClaudeSessionLifecycleStatus`, `ChatSessionStateSnapshot`, `AppSettingsSnapshot`, `SubagentRuntimeSettings`, `AppSettingsPatch`, `GLOBAL_PROMPT_APPEND_MAX_CHARS`, keybinding constants/types. Most of these are settings-domain-only and self-contained.
+
+2. **`src/shared/chat-runtime-types.ts`** (~200 LOC): `ChatTimingCumulativeMs`, `ChatStateTimings`, `ChatRuntime`, `ChatHistorySnapshot`, `SlashCommand`, `ResolvedStackBinding`, `SubagentRunSnapshot`, `LoopRow`, `LoopRateLimitInfo`, `LoopProgressSnapshot`, `ChatSnapshot`, `KannaSnapshot`, `PendingToolSnapshot`, `AutoContinueSchedule`, `CloudflareTunnelSettings/Record`, `GitWorktree`.
+
+Expected: types.ts 1201 → ~700 LOC (−500); two new sibling files ~250 + ~200 LOC each.
+After these two, types.ts should be under the 600 LOC gate.
 
 ## Worker rules (every subagent MUST follow)
 
