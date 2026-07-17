@@ -79,7 +79,6 @@ import {
   normalizeClaudeStreamMessage,
   normalizeToolContent,
 } from "./claude-message-normalizer"
-import { discardedToolResult } from "./claude-sdk-queue"
 export { timestamped, type ClaudeRawSdkMessage, getClaudeAssistantMessageUsageId, normalizeClaudeStreamMessage }
 import {
   normalizeClaudeUsageSnapshot,
@@ -165,6 +164,10 @@ import {
   listLiveSchedules as listLiveSchedulesFn,
   type LoopOrchCommandDeps,
 } from "./claude-loop-orch-commands"
+import {
+  cancelChat as cancelChatFn,
+  type CancelHandlerDeps,
+} from "./claude-cancel-handler"
 
 export type { ClaudeSessionHandle } from "./harness-types"
 
@@ -665,6 +668,25 @@ export class AgentCoordinator {
       closeClaudeSession: (chatId, session) => this.closeClaudeSession(chatId, session),
       emitAutoContinueEvent: (event) => this.emitAutoContinueEvent(event),
       ensureTrackingFile,
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Cancel handler deps builder — wires this.* refs into CancelHandlerDeps
+  // ---------------------------------------------------------------------------
+
+  private buildCancelHandlerDeps(): CancelHandlerDeps {
+    return {
+      drainingStreams: this.drainingStreams,
+      rejectPendingResolversForChat: (chatId) => this.rejectPendingResolversForChat(chatId),
+      cancelChatInOrchestrator: (chatId) => this.subagentOrchestrator.cancelChat(chatId),
+      activeTurns: this.activeTurns,
+      store: this.store,
+      claudeSessions: this.claudeSessions,
+      emitStateChange: (chatId) => this.emitStateChange(chatId),
+      resolveClaudeDriverPreference: () => this.resolveClaudeDriverPreference(),
+      closeClaudeSession: (chatId, session) => this.closeClaudeSession(chatId, session),
+      maybeStartNextQueuedMessage: async (chatId) => { await this.maybeStartNextQueuedMessage(chatId) },
     }
   }
 
@@ -1643,125 +1665,7 @@ export class AgentCoordinator {
   }
 
   async cancel(chatId: string, options?: { hideInterrupted?: boolean; skipQueueDrain?: boolean }) {
-    // Also clean up any draining stream for this chat.
-    const draining = this.drainingStreams.get(chatId)
-    if (draining) {
-      draining.turn.close()
-      this.clearDrainingStream(chatId)
-    }
-
-    // Reject any subagent canUseTool Promises waiting on a user response in
-    // this chat, and signal the orchestrator. Both happen unconditionally —
-    // a chat may have no active main-turn (e.g. just an @mention with the
-    // main turn already ended) while subagents are still running. Without
-    // this, the SDK's canUseTool callback hangs forever, wedging the
-    // subagent session and leaking the resolver entry.
-    this.rejectPendingResolversForChat(chatId)
-    this.subagentOrchestrator.cancelChat(chatId)
-
-    const active = this.activeTurns.get(chatId)
-    if (!active) return
-
-    logClaudeSteer("cancel_requested", {
-      chatId,
-      provider: active.provider,
-      activePromptSeq: active.claudePromptSeq ?? null,
-    })
-
-    // Guard against concurrent cancel() calls — only the first one does work.
-    if (active.cancelRequested) return
-    active.cancelRequested = true
-
-    const pendingTool = active.pendingTool
-    active.pendingTool = null
-
-    if (pendingTool) {
-      const result = discardedToolResult(pendingTool.tool)
-      await this.store.appendMessage(
-        chatId,
-        timestamped({
-          kind: "tool_result",
-          toolId: pendingTool.toolUseId,
-          content: result,
-        })
-      )
-      if (active.provider === "codex" && pendingTool.tool.toolKind === "exit_plan_mode") {
-        pendingTool.resolve(result)
-      }
-    }
-
-    await this.store.appendMessage(chatId, timestamped({ kind: "interrupted", hidden: options?.hideInterrupted }))
-    await this.store.recordTurnCancelled(chatId)
-    active.cancelRecorded = true
-    active.hasFinalResult = true
-
-    // Remove from activeTurns immediately so the UI reflects the cancellation
-    // right away, rather than waiting for interrupt() which may hang.
-    this.activeTurns.delete(chatId)
-
-    // Drain the cancelled prompt's seq from the Claude session's pending
-    // queue. The SDK does not always echo a `result.subtype=cancelled` for
-    // an interrupted prompt — when the stream just ends, the seq would
-    // otherwise linger and cause a FIFO mismatch when the next turn's
-    // result arrives, leaving the chat stuck in "running".
-    if (active.provider === "claude" && active.claudePromptSeq != null) {
-      const session = this.claudeSessions.get(chatId)
-      if (session) {
-        const idx = session.pendingPromptSeqs.indexOf(active.claudePromptSeq)
-        if (idx >= 0) session.pendingPromptSeqs.splice(idx, 1)
-        // The SDK driver's `interrupt()` emits a tail `result` with
-        // subtype `error_during_execution` (empty text) after the splice
-        // above. Mark it pending so runClaudeSession suppresses that one
-        // result instead of rendering "An unknown error occurred." The
-        // `interrupted` entry above is the user-visible cancellation.
-        session.cancelledResultPending += 1
-      }
-    }
-
-    this.emitStateChange(chatId)
-    logClaudeSteer("cancel_active_turn_deleted", {
-      chatId,
-      provider: active.provider,
-      activePromptSeq: active.claudePromptSeq ?? null,
-    })
-
-    // Now attempt to interrupt/close the underlying stream in the background.
-    // This is best-effort — the turn is already removed from active state above,
-    // and runTurn()'s finally block will also call close().
-    try {
-      await Promise.race([
-        active.turn.interrupt(),
-        new Promise((resolve) => setTimeout(resolve, 5_000)),
-      ])
-    } catch {
-      // interrupt() failed — force close
-    }
-    active.turn.close()
-
-    // For Claude under the PTY driver, `active.turn` is a ghost facade over
-    // the long-lived `claudeSessions` entry and its `close()` is a no-op.
-    // The PTY driver's `interrupt()` sends SIGINT which terminates the CLI,
-    // so the underlying session is dead — drop it from the map so the next
-    // turn respawns a fresh `claude --resume <sessionToken>` (preserves
-    // transcript context). For the SDK driver, `interrupt()` is honored
-    // in-band without killing the worker, so reuse is still valid.
-    if (active.provider === "claude" && this.resolveClaudeDriverPreference() === "pty") {
-      const session = this.claudeSessions.get(chatId)
-      if (session) {
-        this.closeClaudeSession(chatId, session)
-      }
-    }
-
-    // Drain the queue. A queued message must auto-start after cancel; the
-    // result-success branch in runClaudeSession is the only other place this
-    // is called, and it can never fire for a cancelled turn (active has been
-    // deleted above before the result event arrives).
-    //
-    // `skipQueueDrain` is passed by callers that handle dequeue themselves
-    // (e.g. `steer`, which dequeues the head message with the steer wrapper).
-    if (!options?.skipQueueDrain) {
-      await this.maybeStartNextQueuedMessage(chatId)
-    }
+    return cancelChatFn(this.buildCancelHandlerDeps(), chatId, options)
   }
 
   async respondTool(command: Extract<ClientCommand, { type: "chat.respondTool" }>) {
