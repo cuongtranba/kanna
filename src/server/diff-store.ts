@@ -1,15 +1,10 @@
-import { createHash } from "node:crypto"
 import path from "node:path"
 import {
   formatGitFailure,
-  getDiffFile,
-  makeTempDir,
   readTextFileOrNull,
-  readTextFileOrThrow,
   rmPathRecursive,
   runCommand,
   runGit,
-  statOrNull,
   summarizeGitFailure,
   writeTextFile,
 } from "./diff-store-io.adapter"
@@ -40,14 +35,35 @@ import {
   sanitizeRepoName,
 } from "./diff-store-git-branch.adapter"
 import type { SelectedBranch } from "./diff-store-git-branch.adapter"
+import {
+  appendGitIgnoreEntry,
+  normalizeRepoRelativePath,
+} from "./diff-store-parse"
+import {
+  createEmptyState,
+  snapshotsEqual,
+} from "./diff-store-state"
+import type { StoredChatDiffState } from "./diff-store-state"
+import {
+  createCommitFailure,
+  createPushFailure,
+  createSyncPushFailure,
+} from "./diff-store-errors"
+import {
+  computeCurrentFiles,
+  createPatch,
+  discardAddedPath,
+  discardRenamedPath,
+  findDirtyPath,
+  listDirtyPaths,
+  readBaseFile,
+  readWorktreeFile,
+} from "./diff-store-file-ops.adapter"
 import type {
-  BranchMetadata,
-  ChatBranchHistorySnapshot,
   ChatBranchListEntry,
   ChatBranchListResult,
   ChatCheckoutBranchResult,
   ChatCreateBranchResult,
-  ChatDiffFile,
   ChatDiffSnapshot,
   BranchActionSuccess,
   BranchActionFailure,
@@ -58,479 +74,12 @@ import type {
   ChatSyncResult,
   DiffCommitMode,
   DiffCommitResult,
-  UpstreamStatus,
 } from "../shared/types"
 import { generateCommitMessageDetailed } from "./generate-commit-message"
-import { inferProjectFileContentType } from "./uploads"
 
 // Re-exports for backwards compatibility with other modules
 export { runGit, formatGitFailure, extractGitHubRepoSlug, fetchGitHubPullRequests, fetchGitHubReleases }
-
-interface StoredChatDiffState extends BranchMetadata, UpstreamStatus {
-  status: ChatDiffSnapshot["status"]
-  files: ChatDiffFile[]
-  branchHistory: ChatBranchHistorySnapshot
-}
-
-function createEmptyState(): StoredChatDiffState {
-  return {
-    status: "unknown",
-    branchName: undefined,
-    defaultBranchName: undefined,
-    hasOriginRemote: undefined,
-    originRepoSlug: undefined,
-    hasUpstream: undefined,
-    aheadCount: undefined,
-    behindCount: undefined,
-    lastFetchedAt: undefined,
-    files: [],
-    branchHistory: { entries: [] },
-  }
-}
-
-function branchMetadataEqual(left: BranchMetadata, right: BranchMetadata) {
-  return left.branchName === right.branchName
-    && left.defaultBranchName === right.defaultBranchName
-    && left.hasOriginRemote === right.hasOriginRemote
-    && left.originRepoSlug === right.originRepoSlug
-    && left.hasUpstream === right.hasUpstream
-}
-
-function upstreamStatusEqual(left: UpstreamStatus, right: UpstreamStatus) {
-  return left.aheadCount === right.aheadCount
-    && left.behindCount === right.behindCount
-    && left.lastFetchedAt === right.lastFetchedAt
-}
-
-function branchHistoryEqual(left: ChatBranchHistorySnapshot, right: ChatBranchHistorySnapshot) {
-  if (left.entries.length !== right.entries.length) return false
-  return left.entries.every((entry, index) => {
-    const other = right.entries[index]
-    return Boolean(other)
-      && entry.sha === other.sha
-      && entry.summary === other.summary
-      && entry.description === other.description
-      && entry.authorName === other.authorName
-      && entry.authoredAt === other.authoredAt
-      && entry.githubUrl === other.githubUrl
-      && entry.tags.length === other.tags.length
-      && entry.tags.every((tag, tagIndex) => tag === other.tags[tagIndex])
-  })
-}
-
-function snapshotsEqual(left: StoredChatDiffState | undefined, right: StoredChatDiffState) {
-  if (!left) {
-    return right.status === "unknown" && right.files.length === 0
-  }
-  if (left.status !== right.status) return false
-  if (!branchMetadataEqual(left, right)) return false
-  if (!upstreamStatusEqual(left, right)) return false
-  if (left.files.length !== right.files.length) return false
-  if (!branchHistoryEqual(left.branchHistory, right.branchHistory)) return false
-  return left.files.every((file, index) => {
-    const other = right.files[index]
-    return Boolean(other)
-      && file.path === other.path
-      && file.changeType === other.changeType
-      && file.isUntracked === other.isUntracked
-      && file.additions === other.additions
-      && file.deletions === other.deletions
-      && file.patchDigest === other.patchDigest
-      && file.mimeType === other.mimeType
-      && file.size === other.size
-  })
-}
-
-interface DirtyPathEntry {
-  path: string
-  previousPath?: string
-  changeType: ChatDiffFile["changeType"]
-  isUntracked: boolean
-}
-
-function createCommitFailure(mode: DiffCommitMode, detail: string): DiffCommitResult {
-  const normalized = detail.toLowerCase()
-  let title = "Commit failed"
-  let message = summarizeGitFailure(detail, "Git could not create the commit.")
-
-  if (normalized.includes("ignored by one of your .gitignore files")) {
-    title = "Ignored files cannot be staged"
-    message = "One or more selected paths are ignored by .gitignore. Unignore them or remove them from the commit selection."
-  }
-
-  return {
-    ok: false,
-    mode,
-    phase: "commit",
-    title,
-    message,
-    detail,
-  }
-}
-
-function createPushFailure(mode: DiffCommitMode, detail: string, snapshotChanged: boolean): DiffCommitResult {
-  const normalized = detail.toLowerCase()
-  let title = "Push failed"
-  let message = summarizeGitFailure(detail, "Git could not push the commit.")
-
-  if (normalized.includes("non-fast-forward") || normalized.includes("fetch first")) {
-    title = "Branch is not up to date"
-    message = "Your branch is behind its remote. Pull or rebase, then try pushing again."
-  } else if (normalized.includes("does not appear to be a git repository")) {
-    title = "No origin remote configured"
-    message = "This repository does not have an origin remote configured."
-  } else if (normalized.includes("has no upstream branch") || normalized.includes("set-upstream")) {
-    title = "No upstream branch configured"
-    message = "This branch does not have an upstream remote branch configured yet."
-  } else if (normalized.includes("merge conflict") || normalized.includes("resolve conflicts")) {
-    title = "Merge conflicts need resolution"
-    message = "Git reported conflicts while preparing the push. Resolve them, then try again."
-  } else if (normalized.includes("permission denied") || normalized.includes("authentication failed") || normalized.includes("could not read from remote repository")) {
-    title = "Remote authentication failed"
-    message = "Git could not authenticate with the remote repository."
-  }
-
-  return {
-    ok: false,
-    mode,
-    phase: "push",
-    title,
-    message,
-    detail,
-    localCommitCreated: true,
-    snapshotChanged,
-  }
-}
-
-function createSyncPushFailure(detail: string, snapshotChanged: boolean): ChatSyncResult {
-  const normalized = detail.toLowerCase()
-  let title = "Push failed"
-  let message = summarizeGitFailure(detail, "Git could not push this branch.")
-
-  if (normalized.includes("non-fast-forward") || normalized.includes("fetch first")) {
-    title = "Branch is not up to date"
-    message = "Your branch is behind its remote. Pull or rebase, then try pushing again."
-  } else if (normalized.includes("has no upstream branch") || normalized.includes("set-upstream")) {
-    title = "No upstream branch configured"
-    message = "This branch does not have an upstream remote branch configured yet."
-  } else if (normalized.includes("merge conflict") || normalized.includes("resolve conflicts")) {
-    title = "Merge conflicts need resolution"
-    message = "Git reported conflicts while preparing the push. Resolve them, then try again."
-  } else if (normalized.includes("permission denied") || normalized.includes("authentication failed") || normalized.includes("could not read from remote repository")) {
-    title = "Remote authentication failed"
-    message = "Git could not authenticate with the remote repository."
-  }
-
-  return {
-    ok: false,
-    action: "push",
-    title,
-    message,
-    detail,
-    snapshotChanged,
-  }
-}
-
-function parseStatusPaths(output: string): DirtyPathEntry[] {
-  const entries: DirtyPathEntry[] = []
-  for (const rawLine of output.split(/\r?\n/u)) {
-    const line = rawLine.trimEnd()
-    if (line.length < 4) continue
-    const statusCode = line.slice(0, 2)
-    const value = line.slice(3)
-    if (!value) continue
-    const isUntracked = statusCode === "??"
-    const isRename = statusCode.includes("R")
-    const isDelete = statusCode.includes("D")
-    const isAdd = statusCode.includes("A") || isUntracked
-    let changeType: ChatDiffFile["changeType"]
-    if (isRename) {
-      changeType = "renamed"
-    } else if (isDelete) {
-      changeType = "deleted"
-    } else if (isAdd) {
-      changeType = "added"
-    } else {
-      changeType = "modified"
-    }
-
-    if (isRename && value.includes(" -> ")) {
-      const [previousPath, nextPath] = value.split(" -> ")
-      if (nextPath) {
-        entries.push({
-          path: nextPath,
-          previousPath: previousPath || undefined,
-          changeType,
-          isUntracked,
-        })
-      }
-      continue
-    }
-
-    entries.push({
-      path: value,
-      changeType,
-      isUntracked,
-    })
-  }
-  return entries.sort((left, right) => left.path.localeCompare(right.path))
-}
-
-async function listDirtyPaths(repoRoot: string) {
-  const status = await runGit(["status", "--short", "--untracked-files=all"], repoRoot)
-  if (status.exitCode !== 0) {
-    throw new Error(status.stderr.trim() || "Failed to read git status")
-  }
-
-  const paths = parseStatusPaths(status.stdout)
-  return paths
-}
-
-async function readWorktreeFile(repoRoot: string, relativePath: string): Promise<string | null> {
-  const absolutePath = path.join(repoRoot, relativePath)
-  const fileInfo = await statOrNull(absolutePath)
-  if (!fileInfo?.isFile()) {
-    return null
-  }
-
-  return await readTextFileOrThrow(absolutePath)
-}
-
-async function readBaseFile(repoRoot: string, baseCommit: string | null, relativePath: string): Promise<string | null> {
-  if (!baseCommit) {
-    return null
-  }
-
-  const result = await runGit(["show", `${baseCommit}:${relativePath}`], repoRoot)
-  if (result.exitCode !== 0) {
-    return null
-  }
-  return result.stdout
-}
-
-async function createPatch(beforePathLabel: string, afterPathLabel: string, beforeText: string | null, afterText: string | null) {
-  const tempDir = await makeTempDir("kanna-diff-")
-  const beforePath = path.join(tempDir, "before")
-  const afterPath = path.join(tempDir, "after")
-
-  try {
-    await writeTextFile(beforePath, beforeText ?? "")
-    await writeTextFile(afterPath, afterText ?? "")
-
-    const result = await runGit(
-      [
-        "diff",
-        "--no-index",
-        "--no-ext-diff",
-        "--text",
-        "--unified=3",
-        "--src-prefix=a/",
-        "--dst-prefix=b/",
-        "before",
-        "after",
-      ],
-      tempDir
-    )
-
-    if (result.exitCode !== 0 && result.exitCode !== 1) {
-      throw new Error(result.stderr.trim() || `Failed to build patch for ${afterPathLabel}`)
-    }
-
-    return result.stdout
-      .replace("diff --git a/before b/after", `diff --git a/${beforePathLabel} b/${afterPathLabel}`)
-      .replace("--- a/before", `--- a/${beforePathLabel}`)
-      .replace("+++ b/after", `+++ b/${afterPathLabel}`)
-  } finally {
-    await rmPathRecursive(tempDir)
-  }
-}
-
-function getContentDigest(args: {
-  changeType: ChatDiffFile["changeType"]
-  beforePath: string
-  afterPath: string
-  beforeText: string | null
-  afterText: string | null
-}) {
-  return createHash("sha1")
-    .update(args.changeType)
-    .update("\u0000")
-    .update(args.beforePath)
-    .update("\u0000")
-    .update(args.afterPath)
-    .update("\u0000")
-    .update(args.beforeText ?? "")
-    .update("\u0000")
-    .update(args.afterText ?? "")
-    .digest("hex")
-}
-
-function parseNumstatValue(value: string) {
-  if (value === "-" || value.trim() === "") return 0
-  const parsed = Number.parseInt(value, 10)
-  return Number.isFinite(parsed) ? parsed : 0
-}
-
-function countTextLines(text: string | null) {
-  if (!text) return 0
-  const lines = text.split(/\r?\n/u)
-  if (lines.at(-1) === "") {
-    lines.pop()
-  }
-  return lines.length
-}
-
-async function getTrackedDiffStats(repoRoot: string, baseCommit: string | null) {
-  const statsByPath = new Map<string, { additions: number; deletions: number }>()
-  if (!baseCommit) {
-    return statsByPath
-  }
-
-  const result = await runGit(["diff", "--numstat", "-z", "-M", baseCommit], repoRoot)
-  if (result.exitCode !== 0) {
-    throw new Error(result.stderr.trim() || "Failed to read git diff stats")
-  }
-
-  const tokens = result.stdout.split("\u0000")
-  for (let index = 0; index < tokens.length;) {
-    const header = tokens[index++] ?? ""
-    if (!header) continue
-
-    const [additionsValue, deletionsValue, pathValue = ""] = header.split("\t")
-    if (typeof additionsValue !== "string" || typeof deletionsValue !== "string") continue
-
-    if (pathValue) {
-      statsByPath.set(pathValue, {
-        additions: parseNumstatValue(additionsValue),
-        deletions: parseNumstatValue(deletionsValue),
-      })
-      continue
-    }
-
-    index += 1
-    const nextPath = tokens[index++] ?? ""
-    if (!nextPath) continue
-    statsByPath.set(nextPath, {
-      additions: parseNumstatValue(additionsValue),
-      deletions: parseNumstatValue(deletionsValue),
-    })
-  }
-
-  return statsByPath
-}
-
-async function computeCurrentFiles(repoRoot: string, baseCommit: string | null): Promise<ChatDiffFile[]> {
-  const currentDirtyPaths = await listDirtyPaths(repoRoot)
-  const trackedStatsByPath = await getTrackedDiffStats(repoRoot, baseCommit)
-  const files: ChatDiffFile[] = []
-
-  for (const entry of currentDirtyPaths) {
-    const relativePath = entry.path
-    const beforePath = entry.previousPath ?? relativePath
-    const beforeText = await readBaseFile(repoRoot, baseCommit, beforePath)
-    const afterText = await readWorktreeFile(repoRoot, relativePath)
-    const absolutePath = path.join(repoRoot, relativePath)
-    const fileInfo = await statOrNull(absolutePath)
-    const file = fileInfo?.isFile() ? getDiffFile(absolutePath) : null
-    const mimeType = file ? inferProjectFileContentType(relativePath, file.type) : undefined
-    const size = fileInfo?.isFile() ? fileInfo.size : undefined
-
-    if (beforeText === afterText && entry.changeType !== "renamed") {
-      continue
-    }
-
-    const trackedStats = trackedStatsByPath.get(relativePath)
-    const additions = trackedStats?.additions ?? countTextLines(afterText)
-    const deletions = trackedStats?.deletions ?? 0
-    files.push({
-      path: relativePath,
-      changeType: entry.changeType,
-      isUntracked: entry.isUntracked,
-      additions,
-      deletions,
-      patchDigest: getContentDigest({
-        changeType: entry.changeType,
-        beforePath,
-        afterPath: relativePath,
-        beforeText,
-        afterText,
-      }),
-      mimeType,
-      size,
-    })
-  }
-
-  return files
-}
-
-function normalizeRepoRelativePath(inputPath: string) {
-  const normalized = path.posix.normalize(inputPath.replaceAll("\\", "/")).replace(/^\.\/+/u, "")
-  if (!normalized || normalized === "." || normalized.startsWith("../") || normalized.includes("/../") || path.posix.isAbsolute(normalized)) {
-    throw new Error(`Invalid diff path: ${inputPath}`)
-  }
-  return normalized
-}
-
-async function findDirtyPath(repoRoot: string, relativePath: string) {
-  const dirtyPaths = await listDirtyPaths(repoRoot)
-  return dirtyPaths.find((entry) => entry.path === relativePath)
-}
-
-async function discardAddedPath(repoRoot: string, repoHasHead: boolean, relativePath: string) {
-  if (repoHasHead) {
-    const resetResult = await runGit(["reset", "--quiet", "HEAD", "--", relativePath], repoRoot)
-    if (resetResult.exitCode !== 0) {
-      throw new Error(formatGitFailure(resetResult) || "Failed to unstage added file")
-    }
-  } else {
-    const rmCachedResult = await runGit(["rm", "--cached", "--force", "--", relativePath], repoRoot)
-    if (rmCachedResult.exitCode !== 0) {
-      throw new Error(formatGitFailure(rmCachedResult) || "Failed to unstage added file")
-    }
-  }
-}
-
-async function discardRenamedPath(repoRoot: string, entry: DirtyPathEntry) {
-  if (!entry.previousPath) {
-    throw new Error(`Missing previous path for renamed file: ${entry.path}`)
-  }
-
-  const resetResult = await runGit(["reset", "--quiet", "HEAD", "--", entry.path], repoRoot)
-  if (resetResult.exitCode !== 0) {
-    throw new Error(formatGitFailure(resetResult) || "Failed to unstage renamed file")
-  }
-
-  const restoreResult = await runGit(["restore", "--staged", "--worktree", "--source=HEAD", "--", entry.previousPath], repoRoot)
-  if (restoreResult.exitCode !== 0) {
-    throw new Error(formatGitFailure(restoreResult) || "Failed to restore renamed file")
-  }
-
-  await rmPathRecursive(path.join(repoRoot, entry.path))
-}
-
-export function appendGitIgnoreEntry(currentContents: string | null, entry: string) {
-  const normalizedContents = currentContents ?? ""
-  const existingEntries = normalizedContents
-    .split(/\r?\n/u)
-    .map((line) => line.trim())
-    .filter(Boolean)
-
-  if (existingEntries.includes(entry)) {
-    return normalizedContents.length > 0 && !normalizedContents.endsWith("\n")
-      ? `${normalizedContents}\n`
-      : normalizedContents
-  }
-
-  let prefix: string
-  if (normalizedContents.length === 0) {
-    prefix = ""
-  } else if (normalizedContents.endsWith("\n")) {
-    prefix = normalizedContents
-  } else {
-    prefix = `${normalizedContents}\n`
-  }
-  return `${prefix}${entry}\n`
-}
+export { appendGitIgnoreEntry } from "./diff-store-parse"
 
 export class DiffStore {
   private readonly states = new Map<string, StoredChatDiffState>()
