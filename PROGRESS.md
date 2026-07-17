@@ -13,6 +13,7 @@ bash scripts/verify-decomp.sh
 
 ## Progress (latest first)
 
+- 2026-07-18 Extract all 18 build*Deps() methods + 2 interface clusters (ClaudeSessionLifecycleOptions, AgentCoordinatorArgs) from AgentCoordinator into agent-deps-builders.ts (424 LOC) and agent-coordinator-types.ts (158 LOC); all 18 builder method bodies replaced with 1-line delegates; ~35 fields changed private→readonly and ~20 methods made non-private with @internal JSDoc to enable external access; removed 5 now-unused imports from agent.ts. agent.ts: 1322 → 968 LOC (−354). ✅
 - 2026-07-18 Wire transcript-write + entity-write adapters into EventStore; replace 34 method bodies with 1-line delegates; extract init cluster to event-store-init.ts (initializeEventStore, clearStorage, shouldSnapshotLogs, loadSnapshot, replayLogs, resetState, clearLegacyTranscriptState, loadSidebarProjectOrder); event-store.ts: 978 → 775 LOC (−203). ✅
 - 2026-07-18 Extract generateCommitMessage + commitFiles + discardFile + ignoreFile from DiffStore → diff-store-commit-ops.adapter.ts (DiffStoreCommitOpsDeps interface + 4 exported fns; buildCommitOpsDeps() + 4 one-liner delegates in DiffStore; 22 new tests pass). diff-store.ts: 661 → 473 LOC (−188). ✅ diff-store.ts DONE.
 - 2026-07-18 Reduce ws-router.ts 1280 → 534 LOC (−746) by extracting 3 new modules: ws-router-utils.ts (224 LOC: ClientState/SnapshotBroadcastFilter/SnapshotComputationCache interfaces + 10 pure utility fns: isBenignStaleStateMessage, isSendToStartingProfilingEnabled, logSendToStartingProfile, countSubscriptionsByTopic, getSidebarProjectOrder, send, ensureSnapshotSignatures, shouldIncludeTopic, getStableChatSnapshotSignature), ws-router-envelope.ts (329 LOC: EnvelopeDeps/EnvelopeBuilder interfaces + createEnvelopeBuilder factory + getSidebarSnapshotCacheEntry — all envelope computation for all 12 topic types), ws-router-broadcast.ts (488 LOC: BroadcastManager class — holds sockets set + pending-broadcast state + pushSnapshots/broadcastSnapshots/broadcastFilteredSnapshots/scheduleBroadcast/scheduleChatStateBroadcast/pushTerminalSnapshot/broadcastError methods + all event-subscription wiring: terminals/keybindings/appSettings/update/ptyInstances/workflows/orchRuns). ws-router.ts DONE (534 < 600). 61 tests pass; eslint 0 warnings; 0 new TS errors. ✅ ws-router.ts DONE.
@@ -79,18 +80,22 @@ bash scripts/verify-decomp.sh
 ## Next chunk
 
 **Remaining files over 600 LOC:**
-- `src/server/event-store.ts`: 775 LOC — still needs ~175 LOC reduction to reach <600
-- `src/server/agent.ts`: 1322 LOC
+- `src/server/agent.ts`: 968 LOC — needs ~368 LOC reduction to reach <600
+- `src/server/event-store.ts`: 775 LOC — needs ~175 LOC reduction to reach <600
 
 **✅ Completed:** diff-store.ts (473 LOC), ws-router.ts (534 LOC), types.ts (422 LOC)
 
-**Focus: `src/server/event-store.ts` (775 LOC → target ≤ 600)**
+**Recommended: `src/server/event-store.ts` (775 LOC → target ≤ 600)** — shorter gap
 
-Remaining extraction opportunities:
-1. **Orch read-model delegates cluster (~55 LOC)**: `appendOrchestrationEvent`, `subscribeOrchRuns`, `notifyOrchRunsChanged`, `orchRunsSubscribers`, `getOrchRun`, `getOrchRuns`, `nonTerminalOrchTasks`, `gatedOrchTasks`, `getOrchTaskSpec`, `getOrchLastPhaseOutput`, `getOrchRunEvents` → these are already one-liner delegates to `event-store-orch.ts`; consider pulling the orch subscription logic into a new `event-store-orch-subscription.ts`.
-2. **Snapshot/legacy cluster (~55 LOC)**: `snapshotAndTruncateLogs` (has inline logPaths), `migrateLegacyTranscripts`, `getLegacyTranscriptStats`, `hasLegacyTranscriptData` → `event-store-snapshot-ops.ts`.
-3. **Subagent + tool-request cluster (~50 LOC)**: `appendSubagentEvent`, `getSubagentRuns`, `runningSubagentRuns`, `putToolRequest`, `getToolRequest`, `listPendingToolRequests`, `resolveToolRequest`, `scanAllToolRequests` → already delegate to other modules; extract the remaining inline logic.
-4. Alternatively: condense the import block + `buildInitDeps` (40 lines) via type-only re-exports.
+Extraction opportunities for event-store.ts:
+1. **Orch read-model delegates cluster (~55 LOC)**: `appendOrchestrationEvent`, `subscribeOrchRuns`, `notifyOrchRunsChanged`, `orchRunsSubscribers`, `getOrchRun`, `getOrchRuns`, `nonTerminalOrchTasks`, `gatedOrchTasks`, `getOrchTaskSpec`, `getOrchLastPhaseOutput`, `getOrchRunEvents` → pull subscription logic into `event-store-orch-subscription.ts`.
+2. **Snapshot/legacy cluster (~55 LOC)**: `snapshotAndTruncateLogs`, `migrateLegacyTranscripts`, `getLegacyTranscriptStats`, `hasLegacyTranscriptData` → `event-store-snapshot-ops.ts`.
+3. **Subagent + tool-request cluster (~50 LOC)**: `appendSubagentEvent`, `getSubagentRuns`, `runningSubagentRuns`, `putToolRequest`, `getToolRequest`, `listPendingToolRequests`, `resolveToolRequest`, `scanAllToolRequests` → extract remaining inline logic.
+
+Extraction opportunities for agent.ts (968 LOC → <600 needs ~370 LOC):
+1. **AgentCoordinator constructor body** (~80 LOC): inline construction logic for `SubagentOrchestrator`, `OrchestrationQueue`, sweep timer setup → could be extracted or condensed.
+2. **sendCommand / startTurn dispatch** (~50 LOC): the inline `sendCommand` + `startTurnForChat` orchestration in the main `send` path.
+3. **Import block condensation** (~40 LOC): ~100 import lines for re-exported symbols could be collapsed into a single barrel or removed if callers import from canonical modules.
 
 ## Worker rules (every subagent MUST follow)
 
