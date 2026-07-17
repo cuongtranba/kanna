@@ -70,7 +70,6 @@ import {
 } from "./claude-spawn-helpers"
 export { LOOP_BLOCKED_NATIVE_TOOLS, buildCanUseTool, buildClaudeEnv, type BuildCanUseToolArgs }
 import { startClaudeSessionPTY, type StartClaudeSessionPtyArgs } from "./claude-pty/driver"
-import { computeWorkflowsDir } from "./claude-pty/jsonl-path.adapter"
 import { ensureFreshMcpToken } from "./mcp-oauth.adapter"
 import { log } from "../shared/log"
 import { type AnyValue, isRecord } from "../shared/errors"
@@ -127,6 +126,16 @@ import {
   type StartTurnDeps,
 } from "./claude-turn-starter"
 import { spawnClaudeTurn, type SpawnClaudeTurnArgs } from "./claude-session-spawner"
+import {
+  resolveClaudeIdleMs as resolveClaudeIdleMsFn,
+  hasLiveWorkflow as hasLiveWorkflowFn,
+  hasPendingBackgroundTask as hasPendingBackgroundTaskFn,
+  closeClaudeSession as closeClaudeSessionFn,
+  maybeRegisterSdkWorkflowsDir as maybeRegisterSdkWorkflowsDirFn,
+  enforceClaudeSessionBudget as enforceClaudeSessionBudgetFn,
+  buildPoolUnavailableMessage as buildPoolUnavailableMessageFn,
+  type SessionLifecycleDeps,
+} from "./claude-session-lifecycle"
 
 export type { ClaudeSessionHandle } from "./harness-types"
 
@@ -575,20 +584,28 @@ export class AgentCoordinator {
     return mergePolicyOverride(this.chatPolicy, override)
   }
 
-  private resolveClaudeIdleMs(): number {
-    const fromSettings = this.getAppSettingsSnapshot().claudeDriver?.lifecycle?.idleTimeoutMs
-    if (typeof fromSettings === "number" && Number.isFinite(fromSettings) && fromSettings > 0) {
-      return Math.round(fromSettings)
+  // ---------------------------------------------------------------------------
+  // Session lifecycle deps builder — wires this.* refs into SessionLifecycleDeps
+  // ---------------------------------------------------------------------------
+
+  private buildSessionLifecycleDeps(): SessionLifecycleDeps {
+    return {
+      getAppSettingsSnapshot: () => this.getAppSettingsSnapshot(),
+      defaultIdleMs: this.claudeSessionLifecycle.idleMs,
+      defaultMaxResidentSessions: this.claudeSessionLifecycle.maxResidentSessions,
+      claudeSessions: this.claudeSessions,
+      activeTurns: this.activeTurns,
+      oauthPool: this.oauthPool,
+      workflowRegistry: this.workflowRegistry,
+      resolveClaudeDriverPreference: () => this.resolveClaudeDriverPreference(),
+      emitStateChange: (chatId: string) => { this.emitStateChange(chatId) },
+      store: this.store,
+      homeDir: homedir(),
     }
-    return this.claudeSessionLifecycle.idleMs
   }
 
-  private resolveClaudeMaxResident(): number {
-    const fromSettings = this.getAppSettingsSnapshot().claudeDriver?.lifecycle?.maxConcurrent
-    if (typeof fromSettings === "number" && Number.isFinite(fromSettings) && fromSettings > 0) {
-      return Math.round(fromSettings)
-    }
-    return this.claudeSessionLifecycle.maxResidentSessions
+  private resolveClaudeIdleMs(): number {
+    return resolveClaudeIdleMsFn(this.buildSessionLifecycleDeps())
   }
 
   /**
@@ -607,7 +624,7 @@ export class AgentCoordinator {
    * eventually reaps.
    */
   private hasLiveWorkflow(chatId: string): boolean {
-    return this.workflowRegistry?.hasActiveRun(chatId, this.resolveClaudeIdleMs(), Date.now()) ?? false
+    return hasLiveWorkflowFn(this.buildSessionLifecycleDeps(), chatId)
   }
 
   private resolveBackgroundTaskMaxMs(): number {
@@ -624,11 +641,7 @@ export class AgentCoordinator {
    * during normal execution regardless of task duration.
    */
   private hasPendingBackgroundTask(session: ClaudeSessionState, now: number): boolean {
-    if (session.backgroundTaskIds.size === 0) return false
-    if (now < session.backgroundTaskDeadlineAt) return true
-    session.backgroundTaskIds.clear()
-    session.backgroundTaskDeadlineAt = 0
-    return false
+    return hasPendingBackgroundTaskFn(session, now)
   }
 
   private isClaudeSessionIdle(chatId: string, session: ClaudeSessionState, now = Date.now()): boolean {
@@ -655,18 +668,7 @@ export class AgentCoordinator {
     session: ClaudeSessionState,
     opts?: { keepReservation?: boolean },
   ): void {
-    if (this.claudeSessions.get(chatId) === session) {
-      this.claudeSessions.delete(chatId)
-    }
-    if (!opts?.keepReservation) {
-      this.oauthPool?.release(chatId)
-    }
-    session.session.close()
-    // For SDK sessions, unregister the workflow dir here. PTY sessions unregister
-    // inside the driver's cleanupResources (driver.ts) — do not double-fire.
-    if (this.resolveClaudeDriverPreference() !== "pty") {
-      this.workflowRegistry?.unregister(chatId)
-    }
+    closeClaudeSessionFn(this.buildSessionLifecycleDeps(), chatId, session, opts)
   }
 
   /**
@@ -676,18 +678,7 @@ export class AgentCoordinator {
    * resolved transcript path in driver.ts cleanup and must not be double-fired).
    */
   private maybeRegisterSdkWorkflowsDir(session: ClaudeSessionState): void {
-    if (!this.workflowRegistry) return
-    if (session.workflowsDirRegistered) return
-    // PTY registers from its own resolved transcript path; SDK derives from session_token.
-    if (this.resolveClaudeDriverPreference() === "pty") return
-    if (!session.sessionToken) return
-    const dir = computeWorkflowsDir({
-      homeDir: homedir(),
-      cwd: session.localPath,
-      sessionId: session.sessionToken,
-    })
-    this.workflowRegistry.register(session.chatId, dir)
-    session.workflowsDirRegistered = true
+    maybeRegisterSdkWorkflowsDirFn(this.buildSessionLifecycleDeps(), session)
   }
 
   private sweepIdleClaudeSessions(now = Date.now()): void {
@@ -699,27 +690,7 @@ export class AgentCoordinator {
   }
 
   private enforceClaudeSessionBudget(protectedChatId?: string): void {
-    const max = this.resolveClaudeMaxResident()
-    if (max <= 0 || this.claudeSessions.size <= max) return
-
-    const now = Date.now()
-    const candidates = [...this.claudeSessions.entries()]
-      .filter(([chatId, session]) => (
-        chatId !== protectedChatId
-        && !this.activeTurns.has(chatId)
-        && session.pendingPromptSeqs.length === 0
-        && !this.hasLiveWorkflow(chatId)
-        && !this.hasPendingBackgroundTask(session, now)
-      ))
-      .sort((a, b) => a[1].lastUsedAt - b[1].lastUsedAt)
-
-    while (this.claudeSessions.size > max && candidates.length > 0) {
-      const next = candidates.shift()
-      if (!next) break
-      const [chatId, session] = next
-      this.closeClaudeSession(chatId, session)
-      this.emitStateChange(chatId)
-    }
+    enforceClaudeSessionBudgetFn(this.buildSessionLifecycleDeps(), protectedChatId)
   }
 
   /**
@@ -730,41 +701,7 @@ export class AgentCoordinator {
    * them. `scopeSuffix` lets the subagent path tag its variant.
    */
   private buildPoolUnavailableMessage(reservedFor: string, scopeSuffix: string): string {
-    const pool = this.oauthPool
-    if (!pool) {
-      return `All OAuth tokens are unavailable${scopeSuffix} (rate-limited, errored, or in use).`
-    }
-    const now = Date.now()
-    const fmtTime = (ms: number) => {
-      const mins = Math.max(0, Math.round((ms - now) / 60_000))
-      if (mins < 60) return `${mins}m`
-      const h = Math.floor(mins / 60)
-      const m = mins % 60
-      return m === 0 ? `${h}h` : `${h}h${m}m`
-    }
-    const lines: string[] = []
-    for (const u of pool.describeUnavailability(reservedFor)) {
-      if (u.reason === "available") continue
-      const label = u.label || u.tokenId.slice(0, 8)
-      if (u.reason === "limited") {
-        lines.push(`  - ${label}: rate-limited (~${fmtTime(u.until)} remaining)`)
-      } else if (u.reason === "reserved") {
-        const refs = u.byChatIds.map((id) => {
-          const chat = this.store.getChat(id)
-          const title = chat?.title || `chat ${id.slice(0, 8)}`
-          return `[${title}](/chat/${id})`
-        })
-        const joined = refs.length === 0 ? "another chat" : refs.join(", ")
-        lines.push(`  - ${label}: in use by ${joined}`)
-      } else if (u.reason === "error") {
-        lines.push(`  - ${label}: errored${u.message ? ` (${u.message})` : ""}`)
-      } else if (u.reason === "disabled") {
-        lines.push(`  - ${label}: disabled`)
-      }
-    }
-    const header = `All OAuth tokens are unavailable${scopeSuffix}:`
-    const footer = "Close the chat holding a contested token, wait for the rate-limit to reset, or add another token."
-    return [header, ...lines, footer].join("\n")
+    return buildPoolUnavailableMessageFn(this.buildSessionLifecycleDeps(), reservedFor, scopeSuffix)
   }
 
   private subagentPendingKey(chatId: string, runId: string, toolUseId: string): string {
