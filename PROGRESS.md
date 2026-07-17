@@ -13,6 +13,7 @@ bash scripts/verify-decomp.sh
 
 ## Progress (latest first)
 
+- 2026-07-17 Extract auto-continue command handlers (~120 lines) to claude-autocontinue-commands.ts (AutoContinueCommandDeps interface, 8 exported fns: resolveAutoResumeFor, emitAutoContinueEvent, getChatSchedule, requireFuture, fireAutoContinue, acceptAutoContinue, rescheduleAutoContinue, cancelAutoContinue) + 26 tests. agent.ts: 2348 → 2300 LOC; new file 256 LOC.
 - 2026-07-17 Extract session error-response handlers (~187 lines) to claude-session-error-handler.ts (SessionErrorHandlerDeps interface, 3 exported fns: handleLimitError, handleLimitDetection, handleAuthFailure; TOKEN_ROTATION_* constants relocated) + 20 tests. agent.ts: 2535 → 2348 LOC; new file 361 LOC.
 - 2026-07-17 Extract session lifecycle helpers (~190 lines) to claude-session-lifecycle.ts (SessionLifecycleDeps interface, 8 exported fns: resolveClaudeIdleMs, resolveClaudeMaxResident, hasLiveWorkflow, hasPendingBackgroundTask, closeClaudeSession, maybeRegisterSdkWorkflowsDir, enforceClaudeSessionBudget, buildPoolUnavailableMessage) + 42 tests. agent.ts: 2599 → 2535 LOC; new file 283 LOC.
 - 2026-07-17 Extract startClaudeTurn (~242 lines) to claude-session-spawner.ts (SpawnClaudeTurnDeps interface, spawnClaudeTurn exported fn) + 17 tests. agent.ts: 2799 → 2599 LOC; new file 401 LOC.
@@ -44,29 +45,33 @@ bash scripts/verify-decomp.sh
 
 ## Next chunk
 
-agent.ts (2348 LOC): the next cohesive group is the **auto-continue schedule
-command handlers** (~120 lines, lines ~1781–1901):
+agent.ts (2300 LOC): the next cohesive group is the **orchestration + loop
+command handlers** (~220 lines, scattered at lines ~1463–1537 + ~1865–2075):
 
-- `resolveAutoResumeFor` — per-chat auto-resume preference lookup (falls back to global setting)
-- `emitAutoContinueEvent` — append event to store + notify scheduleManager + emit state-change
-- `getChatSchedule` — derive the live schedule for a specific scheduleId
-- `requireFuture` — guard: throws if scheduledAt is not in the future
-- `fireAutoContinue` — fires a scheduled auto-continue: enqueues the replay prompt and handles failures
-- `acceptAutoContinue` — user or pool-rotation acceptance of a proposed schedule
-- `rescheduleAutoContinue` — reschedule an active (scheduled) auto-continue to a new time
-- `cancelAutoContinue` — cancel a proposed or scheduled auto-continue
+**Orchestration commands** (5 methods, ~75 lines):
+- `buildOrchWorker` — spawns a single orchestration phase worker via subagent infra
+- `buildOrchRunContext` — derives chat/project context for orchestration validation
+- `runOrchestration` — user-callable MCP+WS entry point: validate + createRun
+- `cancelOrchRun` — cancel a run via the orchestration queue
+- `getOrchRunDetail` — canonical detail DTO for MCP `orch_run_status` + WS `orch.getRun`
 
-These 8 methods form a closed "auto-continue command" unit that AgentCoordinator
-delegates through to the schedule infrastructure. Extract them to
-`src/server/claude-autocontinue-commands.ts` with an `AutoContinueCommandDeps`
-interface and corresponding standalone exports.
+**Loop + background delivery** (6 methods, ~145 lines):
+- `clearClaudeSessionContext` — /clear machinery (wipes session_token, tears down idle sessions)
+- `deliverSubagentToMain` — delivers a finished run_in_background result back into main chat
+- `setupLoop` — validates + creates the loop tracking file + emits auto_continue
+- `isLoopArmed` — read: returns current LoopState or null
+- `stopLoop` — disarms the loop (goal_met / user_send / chat_deleted)
+- `listLiveSchedules` — returns live scheduleIds for the chat
+
+Extract to `src/server/claude-loop-orch-commands.ts` with an
+`LoopOrchCommandDeps` interface and corresponding standalone exports.
 
 Survey:
 ```
-grep -n "private resolveAutoResumeFor\|private async emitAutoContinueEvent\|private getChatSchedule\|private requireFuture\|async fireAutoContinue\|async acceptAutoContinue\|async rescheduleAutoContinue\|async cancelAutoContinue" src/server/agent.ts
+grep -n "private async buildOrchWorker\|private buildOrchRunContext\|async runOrchestration\|async cancelOrchRun\|getOrchRunDetail\|private async clearClaudeSessionContext\|private async deliverSubagentToMain\|async setupLoop\|isLoopArmed\|async stopLoop\|listLiveSchedules" src/server/agent.ts
 ```
 
-Expected: agent.ts 2348 → ~2230 LOC.
+Expected: agent.ts 2300 → ~2090 LOC.
 
 ## Worker rules (every subagent MUST follow)
 

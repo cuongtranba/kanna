@@ -143,6 +143,15 @@ import {
   type SessionErrorHandlerDeps,
   type TokenRotationDedupeEntry,
 } from "./claude-session-error-handler"
+import {
+  resolveAutoResumeFor as resolveAutoResumeForFn,
+  emitAutoContinueEvent as emitAutoContinueEventFn,
+  fireAutoContinue as fireAutoContinueFn,
+  acceptAutoContinue as acceptAutoContinueFn,
+  rescheduleAutoContinue as rescheduleAutoContinueFn,
+  cancelAutoContinue as cancelAutoContinueFn,
+  type AutoContinueCommandDeps,
+} from "./claude-autocontinue-commands"
 
 export type { ClaudeSessionHandle } from "./harness-types"
 
@@ -611,6 +620,23 @@ export class AgentCoordinator {
       emitAutoContinueEvent: (event: AutoContinueEvent) => this.emitAutoContinueEvent(event),
       closeClaudeSession: (chatId: string, session: ClaudeSessionState, opts?: { keepReservation?: boolean }) =>
         this.closeClaudeSession(chatId, session, opts),
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Auto-continue command deps builder — wires this.* refs into AutoContinueCommandDeps
+  // ---------------------------------------------------------------------------
+
+  private buildAutoContinueCommandDeps(): AutoContinueCommandDeps {
+    return {
+      autoResumeByChat: this.autoResumeByChat,
+      getAutoResumePreference: () => this.getAutoResumePreference(),
+      store: this.store,
+      scheduleManager: this.scheduleManager,
+      emitStateChange: (chatId: string) => { this.emitStateChange(chatId) },
+      enqueueMessage: (chatId, content, attachments, options) =>
+        this.enqueueMessage(chatId, content, attachments, options),
+      maybeStartNextQueuedMessage: (chatId) => this.maybeStartNextQueuedMessage(chatId),
     }
   }
 
@@ -1778,25 +1804,14 @@ export class AgentCoordinator {
     }
   }
 
+  /** Delegates to resolveAutoResumeForFn — see claude-autocontinue-commands.ts. */
   private resolveAutoResumeFor(chatId: string): boolean {
-    const cached = this.autoResumeByChat.get(chatId)
-    if (typeof cached === "boolean") return cached
-    return this.getAutoResumePreference()
+    return resolveAutoResumeForFn(this.buildAutoContinueCommandDeps(), chatId)
   }
 
+  /** Delegates to emitAutoContinueEventFn — see claude-autocontinue-commands.ts. */
   private async emitAutoContinueEvent(event: AutoContinueEvent): Promise<void> {
-    await this.store.appendAutoContinueEvent(event)
-    this.scheduleManager?.onEvent(event)
-    this.emitStateChange(event.chatId)
-  }
-
-  private getChatSchedule(chatId: string, scheduleId: string) {
-    const events = this.store.getAutoContinueEvents(chatId)
-    return deriveChatSchedules(events, chatId).schedules[scheduleId]
-  }
-
-  private requireFuture(scheduledAt: number): void {
-    if (scheduledAt <= Date.now()) throw new Error("scheduledAt must be in the future")
+    return emitAutoContinueEventFn(this.buildAutoContinueCommandDeps(), event)
   }
 
   /** Delegates to handleLimitErrorFn — see claude-session-error-handler.ts. */
@@ -1817,87 +1832,24 @@ export class AgentCoordinator {
     return handleAuthFailureFn(this.buildSessionErrorHandlerDeps(), session, detection)
   }
 
+  /** Delegates to fireAutoContinueFn — see claude-autocontinue-commands.ts. */
   async fireAutoContinue(chatId: string, scheduleId: string) {
-    if (!this.store.getChat(chatId)) return
-
-    // `subagent_background` deliveries carry the "Read PROGRESS.md" prompt;
-    // provider-failure schedules carry none and fall back to the literal "continue".
-    const schedule = this.getChatSchedule(chatId, scheduleId)
-    const promptToReplay = schedule?.prompt ?? "continue"
-
-    const event: AutoContinueEvent = {
-      v: AUTO_CONTINUE_EVENT_VERSION,
-      kind: "auto_continue_fired",
-      timestamp: Date.now(),
-      chatId,
-      scheduleId,
-    }
-    try {
-      await this.store.appendAutoContinueEvent(event)
-      await this.enqueueMessage(chatId, promptToReplay, [], { autoContinue: { scheduleId } })
-      await this.maybeStartNextQueuedMessage(chatId)
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
-      await this.store.appendMessage(chatId, timestamped({
-        kind: "result",
-        subtype: "error",
-        isError: true,
-        durationMs: 0,
-        result: `Auto-continue failed: ${message}`,
-      }))
-    }
-
-    this.emitStateChange(chatId)
+    return fireAutoContinueFn(this.buildAutoContinueCommandDeps(), chatId, scheduleId)
   }
 
+  /** Delegates to acceptAutoContinueFn — see claude-autocontinue-commands.ts. */
   async acceptAutoContinue(chatId: string, scheduleId: string, scheduledAt: number): Promise<void> {
-    const schedule = this.getChatSchedule(chatId, scheduleId)
-    if (!schedule) throw new Error("Schedule not found")
-    if (schedule.state !== "proposed") throw new Error("Schedule not pending")
-    this.requireFuture(scheduledAt)
-
-    await this.emitAutoContinueEvent({
-      v: AUTO_CONTINUE_EVENT_VERSION,
-      kind: "auto_continue_accepted",
-      timestamp: Date.now(),
-      chatId,
-      scheduleId,
-      scheduledAt,
-      tz: schedule.tz,
-      source: "user",
-      resetAt: schedule.resetAt,
-      detectedAt: schedule.detectedAt,
-    })
+    return acceptAutoContinueFn(this.buildAutoContinueCommandDeps(), chatId, scheduleId, scheduledAt)
   }
 
+  /** Delegates to rescheduleAutoContinueFn — see claude-autocontinue-commands.ts. */
   async rescheduleAutoContinue(chatId: string, scheduleId: string, scheduledAt: number): Promise<void> {
-    const schedule = this.getChatSchedule(chatId, scheduleId)
-    if (!schedule || schedule.state !== "scheduled") throw new Error("Schedule not active")
-    this.requireFuture(scheduledAt)
-
-    await this.emitAutoContinueEvent({
-      v: AUTO_CONTINUE_EVENT_VERSION,
-      kind: "auto_continue_rescheduled",
-      timestamp: Date.now(),
-      chatId,
-      scheduleId,
-      scheduledAt,
-    })
+    return rescheduleAutoContinueFn(this.buildAutoContinueCommandDeps(), chatId, scheduleId, scheduledAt)
   }
 
+  /** Delegates to cancelAutoContinueFn — see claude-autocontinue-commands.ts. */
   async cancelAutoContinue(chatId: string, scheduleId: string, reason: "user" | "chat_deleted"): Promise<void> {
-    const schedule = this.getChatSchedule(chatId, scheduleId)
-    if (!schedule) return
-    if (schedule.state !== "proposed" && schedule.state !== "scheduled") return
-
-    await this.emitAutoContinueEvent({
-      v: AUTO_CONTINUE_EVENT_VERSION,
-      kind: "auto_continue_cancelled",
-      timestamp: Date.now(),
-      chatId,
-      scheduleId,
-      reason,
-    })
+    return cancelAutoContinueFn(this.buildAutoContinueCommandDeps(), chatId, scheduleId, reason)
   }
 
   /**
