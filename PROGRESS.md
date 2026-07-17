@@ -13,6 +13,7 @@ bash scripts/verify-decomp.sh
 
 ## Progress (latest first)
 
+- 2026-07-17 Extract send/queue handlers (~205 lines) to claude-send-command.ts (SendCommandDeps interface, 6 exported fns: resolveProvider, getProviderSettings, shouldInjectProactiveCompact, enqueueMessage, dequeueAndStartQueuedMessage, maybeStartNextQueuedMessage, sendCommand; buildSendCommandDeps deps-builder in AgentCoordinator) + 31 tests. agent.ts: 1758 → 1553 LOC; new file ~300 LOC.
 - 2026-07-17 Extract cancelChat (~100 lines) to claude-cancel-handler.ts (CancelHandlerDeps interface, standalone cancelChat(deps, chatId, options?) exported fn; buildCancelHandlerDeps deps-builder in AgentCoordinator) + 25 tests. agent.ts: 1854 → 1758 LOC; new file 241 LOC.
 - 2026-07-17 Extract runTurn (~135 lines) to claude-turn-runner.ts (RunTurnDeps interface, standalone runTurn exported fn; buildRunTurnDeps deps-builder in AgentCoordinator) + 15 tests. agent.ts: 1969 → 1854 LOC; new file 213 LOC.
 - 2026-07-17 Extract subagent provider-run wiring (~140 lines) to claude-subagent-wiring.ts (SubagentWiringDeps interface, 2 exported fns: buildClaudeSubagentStarter, buildSubagentProviderRunForChat; buildSubagentWiringDeps deps-builder in AgentCoordinator) + 8 tests. agent.ts: 2103 → 1969 LOC; new file 324 LOC.
@@ -49,23 +50,20 @@ bash scripts/verify-decomp.sh
 
 ## Next chunk
 
-agent.ts (1758 LOC): the next cohesive group is the **send command handler** (~134 lines, lines ~1222–1355):
+agent.ts (1553 LOC): the next cohesive group is the **slash commands loader** (~107 lines, lines ~887–993):
 
-**send** (1 large public method + related helpers):
-- `send` — handles the `chat.send` command: validates cwd, rejects duplicate sends for the active turn, optionally injects a proactive /compact turn, enqueues the message, and starts the turn.
-- `shouldInjectProactiveCompact` — pure helper deciding whether to inject compact.
-- `resolveProvider` / `getProviderSettings` — resolve which provider + settings to use.
-- `enqueueMessage` / `dequeueAndStartQueuedMessage` / `maybeStartNextQueuedMessage` — the message queue pipeline.
+- `ensureSlashCommandsLoaded` — loads slash commands for a chat by spawning an ephemeral claude session (or reusing an existing one) if none are cached. Handles PTY and SDK drivers, OAuth pool ephemeral leases, and local catalog merging.
+- `mergeLocalCatalog` — merges commands from the local `.claude/skills/` catalog into the server-provided list.
 
-Extract to `src/server/claude-send-command.ts` with a
-`SendCommandDeps` interface and standalone exported functions for the above.
+Extract to `src/server/claude-slash-commands.ts` with a
+`SlashCommandsDeps` interface and standalone exported functions.
 
 Survey:
 ```
-grep -n "async send\|enqueueMessage\|dequeueAndStart\|maybeStartNext\|shouldInjectProactive\|resolveProvider\|getProviderSettings" src/server/agent.ts | head -20
+grep -n "ensureSlashCommandsLoaded\|mergeLocalCatalog\|slashCommandsInFlight" src/server/agent.ts | head -20
 ```
 
-Expected: agent.ts 1758 → ~1580 LOC.
+Expected: agent.ts 1553 → ~1446 LOC.
 
 ## Worker rules (every subagent MUST follow)
 
