@@ -1,12 +1,9 @@
 import path from "node:path"
 import {
   formatGitFailure,
-  readTextFileOrNull,
-  rmPathRecursive,
   runCommand,
   runGit,
   summarizeGitFailure,
-  writeTextFile,
 } from "./diff-store-io.adapter"
 import {
   createBranchActionFailure,
@@ -26,26 +23,16 @@ import {
   sanitizeRepoName,
 } from "./diff-store-git-branch.adapter"
 import type { SelectedBranch } from "./diff-store-git-branch.adapter"
-import {
-  appendGitIgnoreEntry,
-  normalizeRepoRelativePath,
-} from "./diff-store-parse"
+import { normalizeRepoRelativePath } from "./diff-store-parse"
 import {
   createEmptyState,
   snapshotsEqual,
 } from "./diff-store-state"
 import type { StoredChatDiffState } from "./diff-store-state"
 import {
-  createCommitFailure,
-  createPushFailure,
-} from "./diff-store-errors"
-import {
   computeCurrentFiles,
   createPatch,
-  discardAddedPath,
-  discardRenamedPath,
   findDirtyPath,
-  listDirtyPaths,
   readBaseFile,
   readWorktreeFile,
 } from "./diff-store-file-ops.adapter"
@@ -62,9 +49,7 @@ import type {
   ChatMergePreviewResult,
   ChatSyncResult,
   DiffCommitMode,
-  DiffCommitResult,
 } from "../shared/types"
-import { generateCommitMessageDetailed } from "./generate-commit-message"
 import {
   checkoutBranch,
   createBranch,
@@ -74,6 +59,13 @@ import {
   syncBranch,
 } from "./diff-store-branch-ops.adapter"
 import type { DiffStoreBranchOpsDeps } from "./diff-store-branch-ops.adapter"
+import {
+  commitFiles,
+  discardFile,
+  generateCommitMessage,
+  ignoreFile,
+} from "./diff-store-commit-ops.adapter"
+import type { DiffStoreCommitOpsDeps } from "./diff-store-commit-ops.adapter"
 
 // Re-exports for backwards compatibility with other modules
 export { runGit, formatGitFailure, extractGitHubRepoSlug, fetchGitHubPullRequests, fetchGitHubReleases }
@@ -392,6 +384,12 @@ export class DiffStore {
     }
   }
 
+  private buildCommitOpsDeps(): DiffStoreCommitOpsDeps {
+    return {
+      refreshSnapshot: (projectId, projectPath) => this.refreshSnapshot(projectId, projectPath),
+    }
+  }
+
   async listBranches(args: {
     projectPath: string
   }): Promise<ChatBranchListResult> {
@@ -443,41 +441,7 @@ export class DiffStore {
     projectPath: string
     paths: string[]
   }) {
-    const normalizedPaths = [...new Set(args.paths.map(normalizeRepoRelativePath))]
-    if (normalizedPaths.length === 0) {
-      throw new Error("Select at least one file")
-    }
-
-    const repo = await resolveRepo(args.projectPath)
-    if (!repo) {
-      throw new Error("Project is not in a git repository")
-    }
-
-    const currentDirtyPaths = await listDirtyPaths(repo.repoRoot)
-    const selectedFiles = await Promise.all(normalizedPaths.map(async (selectedPath) => {
-      const entry = currentDirtyPaths.find((candidate) => candidate.path === selectedPath)
-      if (!entry) {
-        throw new Error(`File is no longer changed: ${selectedPath}`)
-      }
-
-      const beforePath = entry.previousPath ?? selectedPath
-      const beforeText = await readBaseFile(repo.repoRoot, repo.baseCommit, beforePath)
-      const afterText = await readWorktreeFile(repo.repoRoot, selectedPath)
-      const patch = await createPatch(beforePath, selectedPath, beforeText, afterText)
-
-      return {
-        path: selectedPath,
-        changeType: entry.changeType,
-        patch,
-      }
-    }))
-
-    const branchName = await getBranchName(repo.repoRoot)
-    return await generateCommitMessageDetailed({
-      cwd: repo.repoRoot,
-      branchName,
-      files: selectedFiles,
-    })
+    return generateCommitMessage(this.buildCommitOpsDeps(), args)
   }
 
   async commitFiles(args: {
@@ -488,100 +452,7 @@ export class DiffStore {
     description?: string
     mode: DiffCommitMode
   }) {
-    const summary = args.summary.trim()
-    const description = args.description?.trim()
-    if (!summary) {
-      throw new Error("Commit summary is required")
-    }
-
-    const normalizedPaths = [...new Set(args.paths.map(normalizeRepoRelativePath))]
-    if (normalizedPaths.length === 0) {
-      throw new Error("Select at least one file to commit")
-    }
-
-    const repo = await resolveRepo(args.projectPath)
-    if (!repo) {
-      throw new Error("Project is not in a git repository")
-    }
-    const [hasUpstream, originRemoteUrl] = await Promise.all([
-      hasUpstreamBranch(repo.repoRoot),
-      getOriginRemoteUrl(repo.repoRoot),
-    ])
-    const hasOriginRemote = originRemoteUrl !== null
-
-    const currentDirtyEntries = await listDirtyPaths(repo.repoRoot)
-    const currentDirtyPathsByPath = new Map(currentDirtyEntries.map((entry) => [entry.path, entry]))
-    const missingPaths = normalizedPaths.filter((relativePath) => !currentDirtyPathsByPath.has(relativePath))
-    if (missingPaths.length > 0) {
-      throw new Error(`File is no longer changed: ${missingPaths[0]}`)
-    }
-
-    const trackedPaths = normalizedPaths.filter((relativePath) => !currentDirtyPathsByPath.get(relativePath)?.isUntracked)
-    if (trackedPaths.length > 0) {
-      const addTrackedResult = await runGit(["add", "-u", "--", ...trackedPaths], repo.repoRoot)
-      if (addTrackedResult.exitCode !== 0) {
-        return createCommitFailure(args.mode, formatGitFailure(addTrackedResult))
-      }
-    }
-
-    const untrackedPaths = normalizedPaths.filter((relativePath) => currentDirtyPathsByPath.get(relativePath)?.isUntracked)
-    if (untrackedPaths.length > 0) {
-      const addUntrackedResult = await runGit(["add", "--", ...untrackedPaths], repo.repoRoot)
-      if (addUntrackedResult.exitCode !== 0) {
-        return createCommitFailure(args.mode, formatGitFailure(addUntrackedResult))
-      }
-    }
-
-    const commitArgs = ["commit", "--only", "-m", summary]
-    if (description) {
-      commitArgs.push("-m", description)
-    }
-    commitArgs.push("--", ...normalizedPaths)
-
-    const commitResult = await runGit(commitArgs, repo.repoRoot)
-    if (commitResult.exitCode !== 0) {
-      return createCommitFailure(args.mode, formatGitFailure(commitResult))
-    }
-
-    const snapshotChanged = await this.refreshSnapshot(args.projectId, args.projectPath)
-    const branchName = await getBranchName(repo.repoRoot)
-
-    if (args.mode === "commit_only") {
-      return {
-        ok: true,
-        mode: args.mode,
-        branchName,
-        pushed: false,
-        snapshotChanged,
-      } satisfies DiffCommitResult
-    }
-
-    if (!hasUpstream && !hasOriginRemote) {
-      return {
-        ok: true,
-        mode: args.mode,
-        branchName,
-        pushed: false,
-        snapshotChanged,
-      } satisfies DiffCommitResult
-    }
-
-    const pushResult = hasUpstream
-      ? await runGit(["push"], repo.repoRoot)
-      : await runGit(["push", "-u", "origin", "HEAD"], repo.repoRoot)
-    if (pushResult.exitCode !== 0) {
-      return createPushFailure(args.mode, formatGitFailure(pushResult), snapshotChanged)
-    }
-
-    const postPushSnapshotChanged = await this.refreshSnapshot(args.projectId, args.projectPath)
-
-    return {
-      ok: true,
-      mode: args.mode,
-      branchName,
-      pushed: true,
-      snapshotChanged: snapshotChanged || postPushSnapshotChanged,
-    } satisfies DiffCommitResult
+    return commitFiles(this.buildCommitOpsDeps(), args)
   }
 
   async discardFile(args: {
@@ -589,40 +460,7 @@ export class DiffStore {
     projectPath: string
     path: string
   }) {
-    const relativePath = normalizeRepoRelativePath(args.path)
-    const repo = await resolveRepo(args.projectPath)
-    if (!repo) {
-      throw new Error("Project is not in a git repository")
-    }
-
-    const entry = await findDirtyPath(repo.repoRoot, relativePath)
-    if (!entry) {
-      throw new Error(`File is no longer changed: ${relativePath}`)
-    }
-
-    if (entry.isUntracked) {
-      await rmPathRecursive(path.join(repo.repoRoot, entry.path))
-    } else if (entry.changeType === "added") {
-      await discardAddedPath(repo.repoRoot, repo.baseCommit !== null, entry.path)
-      await rmPathRecursive(path.join(repo.repoRoot, entry.path))
-    } else if (entry.changeType === "renamed") {
-      if (!repo.baseCommit) {
-        throw new Error("Cannot discard a rename before the repository has an initial commit")
-      }
-      await discardRenamedPath(repo.repoRoot, entry)
-    } else {
-      if (!repo.baseCommit) {
-        throw new Error("Cannot discard tracked changes before the repository has an initial commit")
-      }
-      const restoreResult = await runGit(["restore", "--staged", "--worktree", "--source=HEAD", "--", entry.path], repo.repoRoot)
-      if (restoreResult.exitCode !== 0) {
-        throw new Error(formatGitFailure(restoreResult) || "Failed to discard file changes")
-      }
-    }
-
-    return {
-      snapshotChanged: await this.refreshSnapshot(args.projectId, args.projectPath),
-    }
+    return discardFile(this.buildCommitOpsDeps(), args)
   }
 
   async ignoreFile(args: {
@@ -630,32 +468,6 @@ export class DiffStore {
     projectPath: string
     path: string
   }) {
-    const ignoreEntry = normalizeRepoRelativePath(args.path)
-    const repo = await resolveRepo(args.projectPath)
-    if (!repo) {
-      throw new Error("Project is not in a git repository")
-    }
-
-    const dirtyPaths = await listDirtyPaths(repo.repoRoot)
-    const exactEntry = dirtyPaths.find((candidate) => candidate.path === ignoreEntry)
-    if (exactEntry && !exactEntry.isUntracked) {
-      throw new Error("Only untracked files can be ignored from the diff viewer")
-    }
-
-    const entry = dirtyPaths.find((candidate) => candidate.isUntracked && (candidate.path === ignoreEntry || candidate.path.startsWith(ignoreEntry)))
-    if (!entry) {
-      throw new Error(`File is no longer changed: ${ignoreEntry}`)
-    }
-
-    const gitignorePath = path.join(repo.repoRoot, ".gitignore")
-    const currentContents = await readTextFileOrNull(gitignorePath)
-    const nextContents = appendGitIgnoreEntry(currentContents, ignoreEntry)
-    if (nextContents !== currentContents) {
-      await writeTextFile(gitignorePath, nextContents)
-    }
-
-    return {
-      snapshotChanged: await this.refreshSnapshot(args.projectId, args.projectPath),
-    }
+    return ignoreFile(this.buildCommitOpsDeps(), args)
   }
 }
