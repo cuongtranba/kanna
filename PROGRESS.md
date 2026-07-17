@@ -13,6 +13,7 @@ bash scripts/verify-decomp.sh
 
 ## Progress (latest first)
 
+- 2026-07-17 Extract subagent run read-model (applySubagentEvent, getSubagentRuns, runningSubagentRuns) to event-store-subagent.ts as pure functions; EventStore delegates via fall-through case + thin wrappers + 19 tests. event-store.ts: 2169 → 2069 LOC; new file 156 LOC.
 - 2026-07-17 Extract orchestration read-model (applyOrchEvent, toOrchRunSnapshot, nonTerminalOrchTasks, gatedOrchTasks, getOrchRun/Runs/TaskSpec/LastPhaseOutput/Events) to event-store-orch.ts as pure functions; EventStore delegates via thin wrappers + 32 tests. event-store.ts: 2350 → 2169 LOC; new file 312 LOC.
 - 2026-07-17 Extract pure helper functions (normalizeSidebarProjectOrder, logSendToStartingProfile, getReplayEventPriority, encodeHistoryCursor, decodeCursor, slashCommandsEqual, coalesceContextWindowUpdates, getHistorySnapshot, getForkedChatTitle + TranscriptPageResult interface) to event-store-helpers.ts + 30 tests. event-store.ts: 2537 → 2351 LOC; new file 206 LOC.
 - 2026-07-17 In-file deps builder refactor: extracted buildSpawnClaudeTurnDeps(): SpawnClaudeTurnDeps and buildRunClaudeSessionDeps(): RunClaudeSessionDeps as private helper methods in AgentCoordinator; reduced startClaudeTurn and runClaudeSession to one-liner delegates consistent with the rest of AgentCoordinator's build*Deps() pattern. Added type imports for SpawnClaudeTurnDeps + RunClaudeSessionDeps. agent.ts: 1317 → 1322 LOC (net +5: method headers added; inline object wrapper lines removed).
@@ -60,21 +61,22 @@ bash scripts/verify-decomp.sh
 
 ## Next chunk
 
-**event-store.ts (2169 LOC)**: extract the subagent run read-model into `event-store-subagent.ts`.
+**event-store.ts (2069 LOC)**: extract the tool-request read-model into `event-store-tool-requests.ts`.
 
-The subagent concern (~150 lines) is cohesive and operates on `subagentRunsByChatId: Map<string, Map<string, SubagentRunSnapshot>>`:
-- Switch cases in `applyEvent`: `subagent_run_started`, `subagent_message_delta`, `subagent_entry_appended`, `subagent_run_completed`, `subagent_run_failed`, `subagent_run_cancelled`, `subagent_tool_pending`, `subagent_tool_resolved` (lines ~712–820)
-- `appendSubagentEvent` (line ~1562) — applies then disk-appends
-- `getSubagentRuns(chatId)` and `*runningSubagentRuns()` (lines ~1586–1598)
+The tool-request concern (~45 lines of pure logic) operates on `toolRequestsById: Map<string, ToolRequest>`:
+- Switch cases in `applyEvent`: `tool_request_put`, `tool_request_resolved` (lines ~728–743)
+- `getToolRequest(id)`, `listPendingToolRequests(chatId)`, `scanAllToolRequests()` (lines ~1948–1994)
 
-**Extraction approach**: standalone pure functions `applySubagentEvent(subagentRunsByChatId, event)`, `getSubagentRunsForChat(subagentRunsByChatId, chatId)`, and `*runningSubagentRuns(subagentRunsByChatId)`. EventStore delegates. `subagentRunsByChatId` stays in `StoreState` (used elsewhere in chat init/destroy).
+**Extraction approach**: standalone pure functions `applyToolRequestEvent(toolRequestsById, event)`, `getToolRequestFromMap(toolRequestsById, id)`, `listPendingToolRequestsFromMap(toolRequestsById, chatId)`, `scanAllToolRequestsFromMap(toolRequestsById)`. EventStore delegates. `toolRequestsById` stays in `StoreState`.
+
+IO methods `putToolRequest` and `resolveToolRequest` stay in the class (they call `this.append`).
 
 Survey the boundaries:
 ```bash
-grep -n "subagent_run_started\|subagent_message_delta\|subagent_entry_appended\|subagent_run_completed\|subagent_run_failed\|subagent_run_cancelled\|subagent_tool_pending\|subagent_tool_resolved\|appendSubagentEvent\|getSubagentRuns\|runningSubagentRuns\|subagentRunsByChatId" src/server/event-store.ts
+grep -n "tool_request_put\|tool_request_resolved\|toolRequestsById\|getToolRequest\|listPendingTool\|scanAllTool\|putToolRequest\|resolveToolRequest" src/server/event-store.ts
 ```
 
-Expected: event-store.ts 2169 → ~2020 LOC; new file `event-store-subagent.ts` ~150 LOC + tests.
+Expected: event-store.ts 2069 → ~2030 LOC; new file `event-store-tool-requests.ts` ~80 LOC + tests.
 
 ## Worker rules (every subagent MUST follow)
 
