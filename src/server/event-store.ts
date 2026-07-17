@@ -62,6 +62,13 @@ import {
   getSubagentRuns as getSubagentRunsFromMap,
   runningSubagentRuns as runningSubagentRunsFromMap,
 } from "./event-store-subagent"
+import {
+  applyToolRequestEvent,
+  deleteToolRequestsForChat,
+  getToolRequest as getToolRequestFromMap,
+  listPendingToolRequests as listPendingToolRequestsFromMap,
+  scanAllToolRequests as scanAllToolRequestsFromMap,
+} from "./event-store-tool-requests"
 
 const SNAPSHOT_THRESHOLD_BYTES = 2 * 1024 * 1024
 const STALE_EMPTY_CHAT_MAX_AGE_MS = 30 * 60 * 1000
@@ -725,20 +732,9 @@ export class EventStore implements PushEventStore {
         applySubagentEvent(this.state.subagentRunsByChatId, e)
         break
       }
-      case "tool_request_put": {
-        this.state.toolRequestsById.set(e.request.id, { ...e.request })
-        break
-      }
+      case "tool_request_put":
       case "tool_request_resolved": {
-        const existing = this.state.toolRequestsById.get(e.id)
-        if (!existing) break
-        this.state.toolRequestsById.set(e.id, {
-          ...existing,
-          status: e.status,
-          decision: e.decision ?? existing.decision,
-          resolvedAt: e.resolvedAt,
-          mismatchReason: e.mismatchReason,
-        })
+        applyToolRequestEvent(this.state.toolRequestsById, e)
         break
       }
       case "orch_run_created":
@@ -1183,11 +1179,7 @@ export class EventStore implements PushEventStore {
       chatId,
     }
     await this.append(this.chatsLogPath, event)
-    for (const [id, req] of this.state.toolRequestsById) {
-      if (req.chatId === chatId) {
-        this.state.toolRequestsById.delete(id)
-      }
-    }
+    deleteToolRequestsForChat(this.state.toolRequestsById, chatId)
     await this.removeSubagentResultsDir(projectId, chatId)
   }
 
@@ -1936,28 +1928,22 @@ export class EventStore implements PushEventStore {
   }
 
   async putToolRequest(req: ToolRequest): Promise<void> {
-    this.state.toolRequestsById.set(req.id, { ...req })
-    await this.append(this.toolRequestsLogPath, {
+    const event: ToolRequestEvent = {
       v: 3,
       type: "tool_request_put",
       timestamp: Date.now(),
       request: req,
-    } satisfies ToolRequestEvent)
+    }
+    applyToolRequestEvent(this.state.toolRequestsById, event)
+    await this.append(this.toolRequestsLogPath, event)
   }
 
   getToolRequest(id: string): ToolRequest | null {
-    const req = this.state.toolRequestsById.get(id)
-    return req ? { ...req } : null
+    return getToolRequestFromMap(this.state.toolRequestsById, id)
   }
 
   listPendingToolRequests(chatId: string): ToolRequest[] {
-    const out: ToolRequest[] = []
-    for (const req of this.state.toolRequestsById.values()) {
-      if (req.chatId !== chatId) continue
-      if (req.status !== "pending") continue
-      out.push({ ...req })
-    }
-    return out
+    return listPendingToolRequestsFromMap(this.state.toolRequestsById, chatId)
   }
 
   async resolveToolRequest(
@@ -1969,17 +1955,10 @@ export class EventStore implements PushEventStore {
       mismatchReason?: string
     },
   ): Promise<void> {
-    const existing = this.state.toolRequestsById.get(id)
-    if (!existing) throw new Error(`resolveToolRequest: unknown id ${id}`)
-    const next: ToolRequest = {
-      ...existing,
-      status: args.status,
-      decision: args.decision ?? existing.decision,
-      resolvedAt: args.resolvedAt,
-      mismatchReason: args.mismatchReason,
+    if (!this.state.toolRequestsById.has(id)) {
+      throw new Error(`resolveToolRequest: unknown id ${id}`)
     }
-    this.state.toolRequestsById.set(id, next)
-    await this.append(this.toolRequestsLogPath, {
+    const event: ToolRequestEvent = {
       v: 3,
       type: "tool_request_resolved",
       timestamp: Date.now(),
@@ -1988,11 +1967,13 @@ export class EventStore implements PushEventStore {
       decision: args.decision,
       resolvedAt: args.resolvedAt,
       mismatchReason: args.mismatchReason,
-    } satisfies ToolRequestEvent)
+    }
+    applyToolRequestEvent(this.state.toolRequestsById, event)
+    await this.append(this.toolRequestsLogPath, event)
   }
 
   scanAllToolRequests(): ToolRequest[] {
-    return [...this.state.toolRequestsById.values()].map((req) => ({ ...req }))
+    return scanAllToolRequestsFromMap(this.state.toolRequestsById)
   }
 
   async flush(): Promise<void> {
