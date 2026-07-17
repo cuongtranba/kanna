@@ -63,13 +63,12 @@ export { LOOP_BLOCKED_NATIVE_TOOLS, buildCanUseTool, buildClaudeEnv, type BuildC
 import { startClaudeSessionPTY, type StartClaudeSessionPtyArgs } from "./claude-pty/driver"
 import { ensureFreshMcpToken } from "./mcp-oauth.adapter"
 import { log } from "../shared/log"
-import { type AnyValue, isRecord } from "../shared/errors"
+import type { AnyValue } from "../shared/errors"
 import {
   timestamped,
   type ClaudeRawSdkMessage,
   getClaudeAssistantMessageUsageId,
   normalizeClaudeStreamMessage,
-  normalizeToolContent,
 } from "./claude-message-normalizer"
 export { timestamped, type ClaudeRawSdkMessage, getClaudeAssistantMessageUsageId, normalizeClaudeStreamMessage }
 import {
@@ -158,6 +157,10 @@ import {
   cancelChat as cancelChatFn,
   type CancelHandlerDeps,
 } from "./claude-cancel-handler"
+import {
+  respondTool as respondToolFn,
+  type ToolRespondDeps,
+} from "./claude-tool-respond"
 import {
   sendCommand as sendCommandFn,
   enqueueMessage as enqueueMessageFn,
@@ -853,6 +856,14 @@ export class AgentCoordinator {
     }
   }
 
+  private buildToolRespondDeps(): ToolRespondDeps {
+    return {
+      activeTurns: this.activeTurns,
+      store: this.store,
+      emitStateChange: (chatId) => { this.emitStateChange(chatId) },
+    }
+  }
+
   private buildSessionStateQueryDeps(): SessionStateQueryDeps {
     return {
       activeTurns: this.activeTurns,
@@ -1358,59 +1369,7 @@ export class AgentCoordinator {
   }
 
   async respondTool(command: Extract<ClientCommand, { type: "chat.respondTool" }>) {
-    const active = this.activeTurns.get(command.chatId)
-    if (!active || !active.pendingTool) {
-      throw new Error("No pending tool request")
-    }
-
-    const pending = active.pendingTool
-    if (pending.toolUseId !== command.toolUseId) {
-      throw new Error("Tool response does not match active request")
-    }
-
-    await this.store.appendMessage(
-      command.chatId,
-      timestamped({
-        kind: "tool_result",
-        toolId: command.toolUseId,
-        content: normalizeToolContent(command.result),
-      })
-    )
-
-    active.pendingTool = null
-    active.status = "running"
-    active.waitStartedAt = null
-
-    if (pending.tool.toolKind === "exit_plan_mode") {
-      const resultRec: Record<string, unknown> = isRecord(command.result) ? command.result : {}
-      const confirmed = Boolean(resultRec.confirmed)
-      const clearContext = Boolean(resultRec.clearContext)
-      const message = typeof resultRec.message === "string" ? resultRec.message : ""
-      if (confirmed && clearContext) {
-        await this.store.setSessionTokenForProvider(command.chatId, active.provider, null)
-        await this.store.appendMessage(command.chatId, timestamped({ kind: "context_cleared" }))
-      }
-
-      if (active.provider === "codex") {
-        active.postToolFollowUp = confirmed
-          ? {
-              content: message
-                ? `Proceed with the approved plan. Additional guidance: ${message}`
-                : "Proceed with the approved plan.",
-              planMode: false,
-            }
-          : {
-              content: message
-                ? `Revise the plan using this feedback: ${message}`
-                : "Revise the plan using this feedback.",
-              planMode: true,
-            }
-      }
-    }
-
-    pending.resolve(command.result)
-
-    this.emitStateChange(command.chatId)
+    return respondToolFn(this.buildToolRespondDeps(), command)
   }
 
   async respondSubagentTool(command: Extract<ClientCommand, { type: "chat.respondSubagentTool" }>) {
