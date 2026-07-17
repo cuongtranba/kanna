@@ -13,6 +13,7 @@ bash scripts/verify-decomp.sh
 
 ## Progress (latest first)
 
+- 2026-07-17 Extract startClaudeTurn (~242 lines) to claude-session-spawner.ts (SpawnClaudeTurnDeps interface, spawnClaudeTurn exported fn) + 17 tests. agent.ts: 2799 → 2599 LOC; new file 401 LOC.
 - 2026-07-17 Extract turn spawning pipeline (startTurnForChat + startTurnAfterTurnStarted) to claude-turn-starter.ts (StartTurnDeps interface, startTurnForChat exported fn) + 12 tests. Moved OAuthPoolUnavailableError to oauth-errors.ts. agent.ts: 3196 → 2799 LOC.
 - 2026-07-17 Extract runClaudeSession session event loop to claude-session-runner.ts (RunClaudeSessionDeps) + 14 tests. Moved PendingToolRequest/ActiveTurn/ClaudeSessionState to claude-session-state.ts. agent.ts: 3675 → 3196 LOC.
 - 2026-07-17 Extract ClaudeSessionHandle to harness-types.ts and startClaudeSession to claude-session-start.ts + 12 tests. agent.ts: 3892 → 3675 LOC.
@@ -41,30 +42,27 @@ bash scripts/verify-decomp.sh
 
 ## Next chunk
 
-agent.ts (2799 LOC): the next largest cohesive block is `startClaudeTurn`
-(~242 lines, ~line 1124 → 1366). It is the private method that picks
-SDK vs PTY driver, enforces session budget, picks/marks OAuth pool token,
-spawns the actual ClaudeSessionHandle (SDK or PTY), registers ClaudeSessionState
-in claudeSessions, and loads slash commands in background. It calls no other
-extracted module and its deps are a well-defined subset (startClaudeSessionFn,
-startClaudeSessionPTYFn, oauthPool, tunnelGateway, claudeSessions,
-subagentOrchestrator, etc.).
+agent.ts (2599 LOC): the next cohesive group is the **session lifecycle
+management** private methods (~190 lines, ~line 578 → 768):
+
+- `resolveClaudeIdleMs` / `resolveClaudeMaxResident` — read lifecycle settings
+- `hasLiveWorkflow` / `hasPendingBackgroundTask` — idle-reaper guards
+- `closeClaudeSession` — tears down a session, releases OAuth token, unregisters workflows
+- `maybeRegisterSdkWorkflowsDir` — registers workflows dir for SDK sessions
+- `enforceClaudeSessionBudget` — evicts LRU idle sessions over the max-resident cap
+- `buildPoolUnavailableMessage` — formats the pool-unavailable refusal message
+
+All eight methods form a closed "session lifecycle" unit with no outward callers
+beyond other lifecycle methods and `spawnClaudeTurn`. Extract them to
+`src/server/claude-session-lifecycle.ts` with a `SessionLifecycleDeps` interface
+and corresponding standalone exports.
 
 Survey:
 ```
-grep -n "private async startClaudeTurn" src/server/agent.ts
+grep -n "private resolveClaudeIdleMs\|private resolveClaudeMaxResident\|private hasLiveWorkflow\|private hasPendingBackgroundTask\|private closeClaudeSession\|private maybeRegisterSdkWorkflowsDir\|private enforceClaudeSessionBudget\|private buildPoolUnavailableMessage" src/server/agent.ts
 ```
 
-Extraction plan:
-1. Read startClaudeTurn in full (~lines 1124-1366).
-2. Identify all `AgentCoordinator` fields it touches.
-3. Create `src/server/claude-session-spawner.ts` with a typed `SpawnClaudeTurnDeps`
-   interface and `spawnClaudeTurn` as a standalone export.
-4. In `AgentCoordinator`, replace the method body with a delegation call.
-4. Create `src/server/claude-turn-starter.test.ts` with ≥8 tests.
-5. Run targeted gates (lint, typecheck, tests).
-
-Expected: agent.ts 3196 → ~2765 LOC.
+Expected: agent.ts 2599 → ~2409 LOC.
 
 ## Worker rules (every subagent MUST follow)
 
