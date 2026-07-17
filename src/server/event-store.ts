@@ -11,7 +11,6 @@ import type { AutoContinueEvent } from "./auto-continue/events"
 import {
   type ChatEvent,
   type ChatRecord,
-  type ChatTimingState,
   type OrchestrationEvent,
   type ProjectEvent,
   type QueuedMessageEvent,
@@ -43,7 +42,6 @@ import { resolveLocalPath } from "./paths"
 import type { CloudflareTunnelEvent } from "./cloudflare-tunnel/events"
 import type { PushEvent, PushEventStore } from "./push/events"
 import type { ShareEvent } from "./session-share/share-projection"
-import { ACTIVE_SESSION_IDLE_GAP_MS } from "./read-models"
 import { capTranscriptEntry } from "./subagent-entry-cap.adapter"
 import {
   coalesceContextWindowUpdates,
@@ -69,6 +67,13 @@ import {
   listPendingToolRequests as listPendingToolRequestsFromMap,
   scanAllToolRequests as scanAllToolRequestsFromMap,
 } from "./event-store-tool-requests"
+import {
+  applyChatLifecycleEvent,
+  applyChatMessageMetadata,
+  applyAutoContinueToState,
+  applyProjectEvent,
+  applyStackEvent,
+} from "./event-store-chat-lifecycle"
 
 const SNAPSHOT_THRESHOLD_BYTES = 2 * 1024 * 1024
 const STALE_EMPTY_CHAT_MAX_AGE_MS = 30 * 60 * 1000
@@ -446,139 +451,25 @@ export class EventStore implements PushEventStore {
     }
     const e: Exclude<StoreEvent, AutoContinueEvent> = event
     switch (e.type) {
-      case "project_opened": {
-        const localPath = resolveLocalPath(e.localPath)
-        const project = {
-          id: e.projectId,
-          localPath,
-          title: e.title,
-          createdAt: e.timestamp,
-          updatedAt: e.timestamp,
-        }
-        this.state.projectsById.set(project.id, project)
-        this.state.projectIdsByPath.set(localPath, project.id)
-        break
-      }
-      case "project_removed": {
-        const project = this.state.projectsById.get(e.projectId)
-        if (!project) break
-        project.deletedAt = e.timestamp
-        project.updatedAt = e.timestamp
-        this.state.projectIdsByPath.delete(project.localPath)
-        break
-      }
-      case "sidebar_project_order_set": {
-        this.state.sidebarProjectOrder = [...e.projectIds]
-        break
-      }
+      case "project_opened":
+      case "project_removed":
+      case "sidebar_project_order_set":
       case "project_star_set": {
-        const project = this.state.projectsById.get(e.projectId)
-        if (!project) break
-        if (e.starredAt == null) {
-          delete project.starredAt
-        } else {
-          project.starredAt = e.starredAt
-        }
-        project.updatedAt = e.timestamp
+        applyProjectEvent(this.state, e)
         break
       }
-      case "chat_created": {
-        const chat: ChatRecord = {
-          id: e.chatId,
-          projectId: e.projectId,
-          title: e.title,
-          createdAt: e.timestamp,
-          updatedAt: e.timestamp,
-          unread: false,
-          provider: null,
-          planMode: false,
-          sessionTokensByProvider: {},
-          sourceHash: null,
-          pendingForkSessionToken: null,
-          hasMessages: false,
-          lastTurnOutcome: null,
-        }
-        if (e.stackId !== undefined) chat.stackId = e.stackId
-        if (e.stackBindings !== undefined) chat.stackBindings = e.stackBindings.map((b) => ({ ...b }))
-        this.state.chatsById.set(chat.id, chat)
-        this.replayChatProvider.set(e.chatId, null)
-        this.state.subagentRunsByChatId.set(e.chatId, new Map())
-        this.updateTiming(e.chatId, e.timestamp, "idle")
-        break
-      }
-      case "chat_renamed": {
-        const chat = this.state.chatsById.get(e.chatId)
-        if (!chat) break
-        chat.title = e.title
-        chat.updatedAt = e.timestamp
-        break
-      }
-      case "chat_deleted": {
-        const chat = this.state.chatsById.get(e.chatId)
-        if (!chat) break
-        chat.deletedAt = e.timestamp
-        chat.updatedAt = e.timestamp
-        this.state.queuedMessagesByChatId.delete(e.chatId)
-        this.state.autoContinueEventsByChatId.delete(e.chatId)
-        this.state.chatTimingsByChatId.delete(e.chatId)
-        this.state.subagentRunsByChatId.delete(e.chatId)
-        break
-      }
-      case "chat_archived": {
-        const chat = this.state.chatsById.get(e.chatId)
-        if (!chat) break
-        chat.archivedAt = e.timestamp
-        chat.updatedAt = e.timestamp
-        break
-      }
-      case "chat_unarchived": {
-        const chat = this.state.chatsById.get(e.chatId)
-        if (!chat) break
-        delete chat.archivedAt
-        chat.updatedAt = e.timestamp
-        break
-      }
-      case "chat_provider_set": {
-        const chat = this.state.chatsById.get(e.chatId)
-        if (!chat) break
-        chat.provider = e.provider
-        chat.updatedAt = e.timestamp
-        this.replayChatProvider.set(e.chatId, e.provider)
-        break
-      }
-      case "chat_plan_mode_set": {
-        const chat = this.state.chatsById.get(e.chatId)
-        if (!chat) break
-        chat.planMode = e.planMode
-        chat.updatedAt = e.timestamp
-        break
-      }
-      case "chat_read_state_set": {
-        const chat = this.state.chatsById.get(e.chatId)
-        if (!chat) break
-        chat.unread = e.unread
-        chat.updatedAt = e.timestamp
-        break
-      }
-      case "chat_source_hash_set": {
-        const chat = this.state.chatsById.get(e.chatId)
-        if (!chat) break
-        chat.sourceHash = e.sourceHash
-        chat.updatedAt = e.timestamp
-        break
-      }
-      case "chat_policy_override_set": {
-        const chat = this.state.chatsById.get(e.chatId)
-        if (!chat) break
-        chat.policyOverride = e.policyOverride
-        chat.updatedAt = e.timestamp
-        break
-      }
+      case "chat_created":
+      case "chat_renamed":
+      case "chat_deleted":
+      case "chat_archived":
+      case "chat_unarchived":
+      case "chat_provider_set":
+      case "chat_plan_mode_set":
+      case "chat_read_state_set":
+      case "chat_source_hash_set":
+      case "chat_policy_override_set":
       case "chat_compact_failures_set": {
-        const chat = this.state.chatsById.get(e.chatId)
-        if (!chat) break
-        chat.compactFailureCount = e.compactFailureCount
-        chat.updatedAt = e.timestamp
+        applyChatLifecycleEvent(this.state, this.replayChatProvider, e)
         break
       }
       case "message_appended": {
@@ -588,137 +479,24 @@ export class EventStore implements PushEventStore {
         this.legacyMessagesByChatId.set(e.chatId, existing)
         break
       }
-      case "queued_message_enqueued": {
-        const existing = this.state.queuedMessagesByChatId.get(e.chatId) ?? []
-        existing.push({
-          ...e.message,
-          attachments: [...e.message.attachments],
-        })
-        this.state.queuedMessagesByChatId.set(e.chatId, existing)
-        const chat = this.state.chatsById.get(e.chatId)
-        if (chat) {
-          chat.updatedAt = e.timestamp
-        }
-        break
-      }
-      case "queued_message_removed": {
-        const existing = this.state.queuedMessagesByChatId.get(e.chatId) ?? []
-        const next = existing.filter((entry) => entry.id !== e.queuedMessageId)
-        if (next.length > 0) {
-          this.state.queuedMessagesByChatId.set(e.chatId, next)
-        } else {
-          this.state.queuedMessagesByChatId.delete(e.chatId)
-        }
-        const chat = this.state.chatsById.get(e.chatId)
-        if (chat) {
-          chat.updatedAt = e.timestamp
-        }
-        break
-      }
-      case "turn_started": {
-        const chat = this.state.chatsById.get(e.chatId)
-        if (!chat) break
-        chat.updatedAt = e.timestamp
-        this.updateTiming(e.chatId, e.timestamp, "running", true, false)
-        break
-      }
-      case "turn_finished": {
-        const chat = this.state.chatsById.get(e.chatId)
-        if (!chat) break
-        chat.updatedAt = e.timestamp
-        chat.unread = true
-        chat.lastTurnOutcome = "success"
-        this.updateTiming(e.chatId, e.timestamp, "idle", false, true)
-        break
-      }
-      case "turn_failed": {
-        const chat = this.state.chatsById.get(e.chatId)
-        if (!chat) break
-        chat.updatedAt = e.timestamp
-        chat.unread = true
-        chat.lastTurnOutcome = "failed"
-        this.updateTiming(e.chatId, e.timestamp, "failed", false, true)
-        break
-      }
-      case "turn_cancelled": {
-        const chat = this.state.chatsById.get(e.chatId)
-        if (!chat) break
-        chat.updatedAt = e.timestamp
-        chat.lastTurnOutcome = "cancelled"
-        this.updateTiming(e.chatId, e.timestamp, "idle", false, true)
-        break
-      }
-      case "session_token_set": {
-        const chat = this.state.chatsById.get(e.chatId)
-        if (!chat) break
-        const provider = e.provider ?? this.replayChatProvider.get(e.chatId) ?? chat.provider
-        if (!provider) break
-        chat.sessionTokensByProvider = {
-          ...chat.sessionTokensByProvider,
-          [provider]: e.sessionToken,
-        }
-        chat.updatedAt = e.timestamp
-        break
-      }
-      case "session_commands_loaded": {
-        const chat = this.state.chatsById.get(e.chatId)
-        if (!chat) break
-        chat.slashCommands = e.commands.map((c) => ({ ...c }))
-        chat.updatedAt = e.timestamp
-        break
-      }
+      case "queued_message_enqueued":
+      case "queued_message_removed":
+      case "turn_started":
+      case "turn_finished":
+      case "turn_failed":
+      case "turn_cancelled":
+      case "session_token_set":
+      case "session_commands_loaded":
       case "pending_fork_session_token_set": {
-        const chat = this.state.chatsById.get(e.chatId)
-        if (!chat) break
-        if (e.pendingForkSessionToken == null) {
-          chat.pendingForkSessionToken = null
-        } else {
-          const provider = e.provider ?? this.replayChatProvider.get(e.chatId) ?? chat.provider
-          if (!provider) break
-          chat.pendingForkSessionToken = { provider, token: e.pendingForkSessionToken }
-        }
-        chat.updatedAt = e.timestamp
+        applyChatLifecycleEvent(this.state, this.replayChatProvider, e)
         break
       }
-      case "stack_added": {
-        const record: StackRecord = {
-          id: e.stackId,
-          title: e.title,
-          projectIds: [...e.projectIds],
-          createdAt: e.timestamp,
-          updatedAt: e.timestamp,
-        }
-        this.state.stacksById.set(record.id, record)
-        break
-      }
-      case "stack_removed": {
-        const stack = this.state.stacksById.get(e.stackId)
-        if (!stack || stack.deletedAt) break
-        stack.deletedAt = e.timestamp
-        stack.updatedAt = e.timestamp
-        break
-      }
-      case "stack_renamed": {
-        const stack = this.state.stacksById.get(e.stackId)
-        if (!stack || stack.deletedAt) break
-        stack.title = e.title
-        stack.updatedAt = e.timestamp
-        break
-      }
-      case "stack_project_added": {
-        const stack = this.state.stacksById.get(e.stackId)
-        if (!stack || stack.deletedAt) break
-        if (stack.projectIds.includes(e.projectId)) break
-        stack.projectIds = [...stack.projectIds, e.projectId]
-        stack.updatedAt = e.timestamp
-        break
-      }
+      case "stack_added":
+      case "stack_removed":
+      case "stack_renamed":
+      case "stack_project_added":
       case "stack_project_removed": {
-        const stack = this.state.stacksById.get(e.stackId)
-        if (!stack || stack.deletedAt) break
-        const next = stack.projectIds.filter((id) => id !== e.projectId)
-        stack.projectIds = next
-        stack.updatedAt = e.timestamp
+        applyStackEvent(this.state.stacksById, e)
         break
       }
       case "subagent_run_started":
@@ -760,62 +538,12 @@ export class EventStore implements PushEventStore {
     }
   }
 
-  private updateTiming(chatId: string, eventTs: number, nextStatus: ChatTimingState["status"], onTurnStart?: boolean, onTurnFinish?: boolean) {
-    const prev = this.state.chatTimingsByChatId.get(chatId)
-    if (!prev) {
-      // chat_created path: seed
-      this.state.chatTimingsByChatId.set(chatId, {
-        status: nextStatus,
-        stateEnteredAt: eventTs,
-        activeSessionStartedAt: eventTs,
-        lastTurnStartedAt: null,
-        lastTurnDurationMs: null,
-        cumulativeMs: { idle: 0, starting: 0, running: 0, failed: 0 },
-      })
-      return
-    }
-
-    const segmentMs = Math.max(0, eventTs - prev.stateEnteredAt)
-    let activeSessionStartedAt = prev.activeSessionStartedAt
-    let cumulativeMs = { ...prev.cumulativeMs }
-
-    // Detect long idle gap when leaving idle -> something
-    if (prev.status === "idle" && nextStatus !== "idle" && segmentMs > ACTIVE_SESSION_IDLE_GAP_MS) {
-      activeSessionStartedAt = eventTs
-      cumulativeMs = { idle: 0, starting: 0, running: 0, failed: 0 }
-    } else {
-      cumulativeMs[prev.status] += segmentMs
-    }
-
-    let lastTurnStartedAt = prev.lastTurnStartedAt
-    let lastTurnDurationMs = prev.lastTurnDurationMs
-    if (onTurnStart) lastTurnStartedAt = eventTs
-    if (onTurnFinish && lastTurnStartedAt != null) lastTurnDurationMs = Math.max(0, eventTs - lastTurnStartedAt)
-
-    this.state.chatTimingsByChatId.set(chatId, {
-      status: nextStatus,
-      stateEnteredAt: eventTs,
-      activeSessionStartedAt,
-      lastTurnStartedAt,
-      lastTurnDurationMs,
-      cumulativeMs,
-    })
-  }
-
   private applyAutoContinueEvent(event: AutoContinueEvent) {
-    const existing = this.state.autoContinueEventsByChatId.get(event.chatId) ?? []
-    existing.push(event)
-    this.state.autoContinueEventsByChatId.set(event.chatId, existing)
+    applyAutoContinueToState(this.state.autoContinueEventsByChatId, event)
   }
 
   private applyMessageMetadata(chatId: string, entry: TranscriptEntry) {
-    const chat = this.state.chatsById.get(chatId)
-    if (!chat) return
-    chat.hasMessages = true
-    if (entry.kind === "user_prompt") {
-      chat.lastMessageAt = entry.createdAt
-    }
-    chat.updatedAt = Math.max(chat.updatedAt, entry.createdAt)
+    applyChatMessageMetadata(this.state.chatsById, chatId, entry)
   }
 
   private enqueueDiskAppend(filePath: string, payload: string): void {
