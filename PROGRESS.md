@@ -13,6 +13,7 @@ bash scripts/verify-decomp.sh
 
 ## Progress (latest first)
 
+- 2026-07-18 Extract 6 branch-operation methods from DiffStore into diff-store-branch-ops.adapter.ts (listBranches, previewMergeBranch, mergeBranch, checkoutBranch, createBranch, syncBranch) with DiffStoreBranchOpsDeps interface + buildBranchOpsDeps() deps-builder in DiffStore; 25 new tests pass. diff-store.ts: 1162 → 661 LOC (−501). ✅
 - 2026-07-18 Wire applyStoreEvent into EventStore (applyEvent was duplicating the 97-line switch from event-store-apply.ts); remove applyAutoContinueEvent/applyMessageMetadata/applyOrchestrationEvent private helpers; also fixed event-store-apply.ts lint (replaced 'as AutoContinueEvent' with isAutoContinueEvent type guard) and event-store-write-ops.ts (added missing ProjectRecord import, narrowed OpenProjectResult event type). event-store.ts: 1134 → 1026 LOC (−108). ✅
 - 2026-07-18 Commit uncommitted parallel extraction: event-store.ts → event-store-write-ops.ts (528 LOC, all write-op event builders: buildOpenProjectResult, buildRemoveProjectEvent, buildSetProjectStarEvent, createStack, renameChat, etc.) and event-store-apply.ts (128 LOC, standalone applyStoreEvent dispatch fn). event-store.ts: 1462 → 1134 LOC (−328). ✅
 - 2026-07-18 Extract 501 LOC from diff-store.ts into 4 new modules: diff-store-parse.ts (pure fns: parseStatusPaths, getContentDigest, parseNumstatValue, countTextLines, normalizeRepoRelativePath, appendGitIgnoreEntry + DirtyPathEntry), diff-store-state.ts (StoredChatDiffState, createEmptyState, branchMetadataEqual, upstreamStatusEqual, branchHistoryEqual, snapshotsEqual), diff-store-errors.ts (createCommitFailure, createPushFailure, createSyncPushFailure), diff-store-file-ops.adapter.ts (listDirtyPaths, readWorktreeFile, readBaseFile, createPatch, getTrackedDiffStats, computeCurrentFiles, findDirtyPath, discardAddedPath, discardRenamedPath). diff-store.ts: 1613 → 1162 LOC (−451); 33 new tests + 32 existing pass. ✅
@@ -71,17 +72,17 @@ bash scripts/verify-decomp.sh
 
 ## Next chunk
 
-**shared/types.ts ✅ DONE (422 LOC)**. Remaining files over 600 LOC (as of last check):
-- `src/server/diff-store.ts`: 1162 LOC — 4 parallel subagents running
-- `src/server/event-store.ts`: 1026 LOC — subagent extracting messages + tunnel/share/push
-- `src/server/agent.ts`: 1322 LOC — subagent extracting build*Deps cluster
-- `src/server/ws-router.ts`: 1280 LOC — subagent extracting utilities + closure blocks
+**diff-store.ts: 661 LOC** — still 61 LOC over target. Extract commit-ops to bring it under 600:
 
-**Next after parallel subagents complete:**
-- diff-store.ts: after branch-ops extraction → extract commit-ops (generateCommitMessage, commitFiles, discardFile, ignoreFile) → diff-store-commit-ops.adapter.ts
-- event-store.ts: after messages + peripheral events → check what remains, likely thin wrappers cluster
-- agent.ts: after build*Deps extraction → constructor and remaining large blocks
-- ws-router.ts: after utilities extraction → snapshot broadcast management, subscription management
+Extract `generateCommitMessage + commitFiles + discardFile + ignoreFile` → `diff-store-commit-ops.adapter.ts`
+
+Pattern (same as branch-ops):
+1. Create `DiffStoreCommitOpsDeps` interface (needs `refreshSnapshot`, and IO helpers)
+2. Create standalone async functions `generateCommitMessage(deps, args)`, `commitFiles(deps, args)`, `discardFile(deps, args)`, `ignoreFile(deps, args)`
+3. Add `buildCommitOpsDeps()` private method to `DiffStore`
+4. Replace each method body with one-liner delegate
+
+Expected result: diff-store.ts ~340 LOC (under 600 ✅)
 
 ## Worker rules (every subagent MUST follow)
 
