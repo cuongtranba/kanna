@@ -13,6 +13,7 @@ bash scripts/verify-decomp.sh
 
 ## Progress (latest first)
 
+- 2026-07-17 Extract isClaudeSteerLoggingEnabled, logClaudeSteer, SendMessageOptions, isSendToStartingProfilingEnabled, elapsedProfileMs, logSendToStartingProfile, SendToStartingProfile to claude-steer-log.ts + 18 tests. agent.ts: 3939 → 3893 LOC.
 - 2026-07-17 Extract AsyncMessageQueue, discardedToolResult, toClaudeMessageStream to claude-sdk-queue.ts + 14 tests. agent.ts: 4007 → 3939 LOC.
 - 2026-07-17 Extract prompt helpers (escapeXmlAttribute, buildAttachmentHintText, buildPromptText, STEERED_MESSAGE_PREFIX, buildSteeredMessageContent, isPromptTooLongMessage, isNoConversationFoundMessage, toSdkEffort, BACKGROUND_TASK_LAUNCH_RE, backgroundTaskIdsFromToolResult, positiveIntegerFromEnv) to claude-prompt-helpers.ts + 35 tests. agent.ts: 4095 → 4007 LOC.
 - 2026-07-17 Extract session-config builders (buildUserMcpServers, resolveSpawnPaths, resolveStackProjects, CLAUDE_TOOLSET, SDK_RESTRICTED_FS_NATIVE_TOOLS, buildTaskNotification, SdkMcpEntry, TASK_NOTIFICATION_RESULT_MAX_CHARS) to claude-session-config.ts + 20 tests. agent.ts: 4219 → 4095 LOC.
@@ -37,41 +38,36 @@ bash scripts/verify-decomp.sh
 
 ## Next chunk
 
-agent.ts (3939 LOC): extract steer-logging and send-to-starting profiling
-helpers into `src/server/claude-steer-log.ts`. These are small pure/env-read
-utilities with no `AgentCoordinator` dependency — safe to move without
-circular-import risk.
+agent.ts (3893 LOC): extract the standalone `startClaudeSession` async
+function (~200 lines) into `src/server/claude-session-start.ts`.
 
-Symbols to move (locate with `grep -n` in current agent.ts, around lines 375–419):
-- `isClaudeSteerLoggingEnabled()` — reads `process.env.KANNA_LOG_CLAUDE_STEER`
-- `logClaudeSteer(stage, details?)` — depends on above + `log`
-- `SendMessageOptions` interface — referenced by `AgentCoordinator.sendMessage`
-- `isSendToStartingProfilingEnabled()` — reads `process.env.KANNA_PROFILE_SEND_TO_STARTING`
-- `elapsedProfileMs(startedAt)` — pure math
-- `logSendToStartingProfile(profile, stage, details?)` — depends on above two + `log`
+**Circular-import guard:** `startClaudeSession` returns `ClaudeSessionHandle`
+(exported from agent.ts). Moving it to a sibling file that imports from
+agent.ts would be circular. Fix first: move `ClaudeSessionHandle` interface
+(currently ~lines 171–183 in agent.ts) into `src/server/harness-types.ts`
+alongside the other harness interfaces. Then agent.ts re-exports it:
+`export type { ClaudeSessionHandle } from "./harness-types"` (existing
+importers see no change). Now `claude-session-start.ts` imports
+`ClaudeSessionHandle` from `./harness-types`, not agent.ts — no cycle.
 
-These ~45 lines form a cohesive "steer + profiling logging" layer.
-`SendToStartingProfile` type (used by `logSendToStartingProfile`) stays in
-agent.ts if it's tightly coupled to `AgentCoordinator`; check with grep first.
+Steps:
+1. `grep -n "ClaudeSessionHandle" src/server/agent.ts` — confirm current lines.
+2. Move `ClaudeSessionHandle` to `src/server/harness-types.ts`; add re-export
+   in agent.ts.
+3. Extract `startClaudeSession` (currently ~lines 375–577) into
+   `src/server/claude-session-start.ts`. It calls `query()`/`startClaudeSessionPTY`,
+   builds the harness stream — pure orchestration, no `AgentCoordinator` field access.
+4. agent.ts: remove the function body, add
+   `import { startClaudeSession } from "./claude-session-start"`.
+5. Create `src/server/claude-session-start.test.ts` with ≥8 tests covering
+   the SDK path (mock `createClaudeHarnessStream`, assert stream returned).
+6. Run targeted gates:
+   `bunx eslint --max-warnings=0 src/server/harness-types.ts src/server/claude-session-start.ts src/server/claude-session-start.test.ts src/server/agent.ts`
+   `node_modules/typescript-7/bin/tsc --noEmit`
+   `bun test --conditions production src/server/claude-session-start.test.ts`
+7. Fix until all green, commit, push, update this file.
 
-Files:
-- **NEW** `src/server/claude-steer-log.ts` — the 6 symbols above
-- **CHANGED** `src/server/agent.ts` — remove symbols, add import; re-export
-  if previously exported. agent.ts: 3939 → ~3895 LOC.
-- **NEW** `src/server/claude-steer-log.test.ts` — ≥8 tests:
-  - isClaudeSteerLoggingEnabled returns false when env unset
-  - isClaudeSteerLoggingEnabled returns true when env = "1"
-  - logClaudeSteer does nothing when logging disabled
-  - logClaudeSteer calls log.info when enabled
-  - isSendToStartingProfilingEnabled returns false/true
-  - elapsedProfileMs returns a non-negative number
-  - logSendToStartingProfile is a no-op when profile is null
-  - logSendToStartingProfile logs when enabled
-
-Run `bunx eslint --max-warnings=0 src/server/claude-steer-log.ts src/server/claude-steer-log.test.ts src/server/agent.ts`,
-`node_modules/typescript-7/bin/tsc --noEmit`,
-`bun test --conditions production src/server/claude-steer-log.test.ts`,
-commit, push, update this file.
+Expected: agent.ts 3893 → ~3685 LOC.
 
 ## Worker rules (every subagent MUST follow)
 
