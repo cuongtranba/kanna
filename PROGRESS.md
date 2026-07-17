@@ -13,6 +13,7 @@ bash scripts/verify-decomp.sh
 
 ## Progress (latest first)
 
+- 2026-07-17 Extract ClaudeSessionHandle to harness-types.ts and startClaudeSession to claude-session-start.ts + 12 tests. agent.ts: 3892 → 3675 LOC.
 - 2026-07-17 Extract isClaudeSteerLoggingEnabled, logClaudeSteer, SendMessageOptions, isSendToStartingProfilingEnabled, elapsedProfileMs, logSendToStartingProfile, SendToStartingProfile to claude-steer-log.ts + 18 tests. agent.ts: 3939 → 3893 LOC.
 - 2026-07-17 Extract AsyncMessageQueue, discardedToolResult, toClaudeMessageStream to claude-sdk-queue.ts + 14 tests. agent.ts: 4007 → 3939 LOC.
 - 2026-07-17 Extract prompt helpers (escapeXmlAttribute, buildAttachmentHintText, buildPromptText, STEERED_MESSAGE_PREFIX, buildSteeredMessageContent, isPromptTooLongMessage, isNoConversationFoundMessage, toSdkEffort, BACKGROUND_TASK_LAUNCH_RE, backgroundTaskIdsFromToolResult, positiveIntegerFromEnv) to claude-prompt-helpers.ts + 35 tests. agent.ts: 4095 → 4007 LOC.
@@ -38,36 +39,24 @@ bash scripts/verify-decomp.sh
 
 ## Next chunk
 
-agent.ts (3893 LOC): extract the standalone `startClaudeSession` async
-function (~200 lines) into `src/server/claude-session-start.ts`.
+agent.ts (3675 LOC): the private `runClaudeSession` method (~414 lines,
+starting around line 2337) is the single largest cohesive block remaining.
+It manages the inner event loop of a running SDK Claude session — consuming
+`HarnessEvent`s, handling transcript entries, managing rate limits, token
+rotation, background task tracking, and session cleanup. It can be extracted
+to `src/server/claude-session-runner.ts` as a standalone `runClaudeSession`
+function that receives an `AgentCoordinator`-shaped deps object.
 
-**Circular-import guard:** `startClaudeSession` returns `ClaudeSessionHandle`
-(exported from agent.ts). Moving it to a sibling file that imports from
-agent.ts would be circular. Fix first: move `ClaudeSessionHandle` interface
-(currently ~lines 171–183 in agent.ts) into `src/server/harness-types.ts`
-alongside the other harness interfaces. Then agent.ts re-exports it:
-`export type { ClaudeSessionHandle } from "./harness-types"` (existing
-importers see no change). Now `claude-session-start.ts` imports
-`ClaudeSessionHandle` from `./harness-types`, not agent.ts — no cycle.
+Survey: `grep -n "private async runClaudeSession" src/server/agent.ts`
 
-Steps:
-1. `grep -n "ClaudeSessionHandle" src/server/agent.ts` — confirm current lines.
-2. Move `ClaudeSessionHandle` to `src/server/harness-types.ts`; add re-export
-   in agent.ts.
-3. Extract `startClaudeSession` (currently ~lines 375–577) into
-   `src/server/claude-session-start.ts`. It calls `query()`/`startClaudeSessionPTY`,
-   builds the harness stream — pure orchestration, no `AgentCoordinator` field access.
-4. agent.ts: remove the function body, add
-   `import { startClaudeSession } from "./claude-session-start"`.
-5. Create `src/server/claude-session-start.test.ts` with ≥8 tests covering
-   the SDK path (mock `createClaudeHarnessStream`, assert stream returned).
-6. Run targeted gates:
-   `bunx eslint --max-warnings=0 src/server/harness-types.ts src/server/claude-session-start.ts src/server/claude-session-start.test.ts src/server/agent.ts`
-   `node_modules/typescript-7/bin/tsc --noEmit`
-   `bun test --conditions production src/server/claude-session-start.test.ts`
-7. Fix until all green, commit, push, update this file.
+Extraction plan:
+1. Identify the method boundaries: `grep -n "private async runClaudeSession\|private async runTurn\|private async generateTitle" src/server/agent.ts`
+2. Extract to `src/server/claude-session-runner.ts` with a typed `RunClaudeSessionDeps` interface for all `AgentCoordinator` fields/methods the function touches.
+3. In `AgentCoordinator`, replace the method body with a call to the extracted function: `return runClaudeSession(this, session)`.
+4. Create `src/server/claude-session-runner.test.ts` with ≥8 tests.
+5. Run targeted gates (lint, typecheck, tests).
 
-Expected: agent.ts 3893 → ~3685 LOC.
+Expected: agent.ts 3675 → ~3260 LOC.
 
 ## Worker rules (every subagent MUST follow)
 
