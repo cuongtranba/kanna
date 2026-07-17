@@ -13,6 +13,7 @@ bash scripts/verify-decomp.sh
 
 ## Progress (latest first)
 
+- 2026-07-18 Extract 5 domain type modules from shared/types.ts: core-types.ts (27 LOC, primitives: AgentProvider/LlmProviderKind/AppThemePreference/ChatSoundPreference/ChatSoundId/DefaultProviderPreference/EditorPreset/KannaStatus etc.), mcp-types.ts (105 LOC, McpServer*/McpOAuth*), subagent-types.ts (198 LOC, Subagent/SubagentRunSnapshot/LoopProgressSnapshot/type guards), app-settings-types.ts (365 LOC, AuthSettings/ClaudeDriverSettings/AppSettingsSnapshot/AppSettingsPatch/KeybindingAction/CloudflareTunnelRecord/type guards), git-diff-types.ts (165 LOC, ChatDiffFile/BranchAction*/ChatSync*/DiffCommit*/GitWorktree). types.ts: 1201 → 422 LOC (−779); 121 shared/ tests pass; zero new TS errors. ✅ types.ts DONE.
 - 2026-07-18 Extract tool-call types (AskUserQuestion*/TodoItem, ToolCallBase, all *ToolCall, NormalizedToolCall, HydratedToolCallBase, all Hydrated*, HydratedToolCall) to tool-call-types.ts (314 LOC); extract transcript types (McpServerInfo, AccountInfo, ContextWindowUsageSnapshot, TranscriptEntryBase, all *Entry, TranscriptEntry union, HydratedTranscriptMessage, AutoContinuePromptEntry, PendingToolRequestEntry, ToolRequestResolvedEntry) to transcript-types.ts (270 LOC); types.ts: 1731 → 1201 LOC (−530); 121 shared/ tests pass; zero new TS errors.
 - 2026-07-18 Extract provider/model-catalog domain (ProviderModelOption, ClaudeModelOptions, CodexModelOptions, ProviderModelOptionsByProvider, ProviderPreference, ChatProviderPreferences, ModelOptions, DEFAULT_CLAUDE/CODEX_MODEL_OPTIONS, PROVIDERS, getProviderCatalog, CustomModelEntry/Input/Patch, TextSnippet/Input/Patch, mergeCustomModels, providerUsesSdkSession, normalize*/getProvider*/resolve* helpers, OpenRouterModel, DEFAULT_OPENROUTER_SDK_MODEL) to provider-model-types.ts; types.ts re-exports via barrel; 25 tests pass. types.ts: 2108 → 1713 LOC (-395); new file 437 LOC.
 - 2026-07-18 Extract snapshot/persistence layer (loadSnapshotIntoState, buildSnapshotFile, truncateLogsAfterSnapshot, calcShouldTruncateLogs, loadAndReplayLogs, loadSidebarOrder, writeSidebarOrderFile, readSidebarOrderFromProjectsLog, computeLegacyTranscriptStats, migrateLegacyTranscripts, applyTunnelEventToMap, loadTunnelEventsFromLog, loadShareEventsFromLog, loadPushEventsFromLog + getMessagesPageFromEntries to helpers) to event-store-snapshot.ts; EventStore keeps thin delegates; 35 tests. event-store.ts: 1778 → 1462 LOC (-316); new file ~670 LOC.
@@ -66,22 +67,26 @@ bash scripts/verify-decomp.sh
 
 ## Next chunk
 
-**shared/types.ts (1201 LOC → target ≤ 600)**: tool-call, transcript, and provider-model domains done. Remaining large domains to split:
+**shared/types.ts ✅ DONE (422 LOC)**. Remaining files over 600 LOC:
+- `src/server/diff-store.ts`: 2251 LOC — the biggest remaining target
+- `src/server/event-store.ts`: 1461 LOC
+- `src/server/agent.ts`: 1322 LOC
+- `src/server/ws-router.ts`: 1280 LOC
 
-Survey what's left:
+**Focus: `src/server/diff-store.ts` (2251 LOC → target ≤ 600)**
+
+Survey the file:
 ```bash
-grep -n "^export interface\|^export type\|^export const\|^export enum\|^export function" src/shared/types.ts | head -100
-wc -l src/shared/types.ts
+grep -n "^export\|^  async\|^  private\|^  public\|^class\|^function\|^// ---" src/server/diff-store.ts | head -100
+wc -l src/server/diff-store.ts
 ```
 
-Likely candidates:
+Likely extraction domains:
+1. **`diff-store-git-ops.ts`** (~400 LOC): git command wrappers (runGit, listBranches, fetchStatus, commitFiles, mergePreview, etc.)
+2. **`diff-store-github.ts`** (~300 LOC): GitHub API wrappers (getPullRequests, publishRepo, getRepoAvailability, etc.)
+3. **`diff-store-worktree.ts`** (~200 LOC): worktree management (listWorktrees, createWorktree, etc.)
 
-1. **`src/shared/app-settings-types.ts`** (~250 LOC): `AuthSettings`, `AUTH_DEFAULTS`, `OAuthTokenEntry`, `ClaudeAuthSettings`, `OAUTH_TOKEN_*`, `UploadSettings`, `ClaudeDriverPreference`, `ClaudePtyLifecycleSettings`, `ClaudeDriverSettings`, `ClaudeSessionLifecycleStatus`, `ChatSessionStateSnapshot`, `AppSettingsSnapshot`, `SubagentRuntimeSettings`, `AppSettingsPatch`, `GLOBAL_PROMPT_APPEND_MAX_CHARS`, keybinding constants/types. Most of these are settings-domain-only and self-contained.
-
-2. **`src/shared/chat-runtime-types.ts`** (~200 LOC): `ChatTimingCumulativeMs`, `ChatStateTimings`, `ChatRuntime`, `ChatHistorySnapshot`, `SlashCommand`, `ResolvedStackBinding`, `SubagentRunSnapshot`, `LoopRow`, `LoopRateLimitInfo`, `LoopProgressSnapshot`, `ChatSnapshot`, `KannaSnapshot`, `PendingToolSnapshot`, `AutoContinueSchedule`, `CloudflareTunnelSettings/Record`, `GitWorktree`.
-
-Expected: types.ts 1201 → ~700 LOC (−500); two new sibling files ~250 + ~200 LOC each.
-After these two, types.ts should be under the 600 LOC gate.
+After these extractions, diff-store.ts keeps thin delegates and stays as the public surface.
 
 ## Worker rules (every subagent MUST follow)
 
