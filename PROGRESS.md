@@ -13,6 +13,7 @@ bash scripts/verify-decomp.sh
 
 ## Progress (latest first)
 
+- 2026-07-18 Extract snapshot/persistence layer (loadSnapshotIntoState, buildSnapshotFile, truncateLogsAfterSnapshot, calcShouldTruncateLogs, loadAndReplayLogs, loadSidebarOrder, writeSidebarOrderFile, readSidebarOrderFromProjectsLog, computeLegacyTranscriptStats, migrateLegacyTranscripts, applyTunnelEventToMap, loadTunnelEventsFromLog, loadShareEventsFromLog, loadPushEventsFromLog + getMessagesPageFromEntries to helpers) to event-store-snapshot.ts; EventStore keeps thin delegates; 35 tests. event-store.ts: 1778 → 1462 LOC (-316); new file ~670 LOC.
 - 2026-07-18 Extract chat-lifecycle read-model (applyProjectEvent, applyStackEvent, applyChatLifecycleEvent, updateChatTiming, applyAutoContinueToState, applyChatMessageMetadata) to event-store-chat-lifecycle.ts; all project/stack/chat/turn/queued-message switch cases delegated + private updateTiming method removed + 28 tests. event-store.ts: 2050 → 1778 LOC (-272); new file 441 LOC.
 - 2026-07-17 Extract tool-request read-model (applyToolRequestEvent, getToolRequest, listPendingToolRequests, scanAllToolRequests, deleteToolRequestsForChat) to event-store-tool-requests.ts as pure functions; EventStore delegates via applyToolRequestEvent in switch + thin wrappers + 14 tests. event-store.ts: 2069 → 2050 LOC; new file 96 LOC.
 - 2026-07-17 Extract subagent run read-model (applySubagentEvent, getSubagentRuns, runningSubagentRuns) to event-store-subagent.ts as pure functions; EventStore delegates via fall-through case + thin wrappers + 19 tests. event-store.ts: 2169 → 2069 LOC; new file 156 LOC.
@@ -63,18 +64,21 @@ bash scripts/verify-decomp.sh
 
 ## Next chunk
 
-**event-store.ts (1778 LOC)**: extract snapshot load/create/migrate logic + the legacy-transcript loaders into `event-store-snapshot.ts`.
+**shared/types.ts (2108 LOC)**: split by domain into focused sibling modules, keeping `types.ts` as a re-export barrel for backward compat.
 
-Target block: `loadSnapshot` (private, ~75 lines), `createSnapshot` (private, ~25 lines), `snapshotAndTruncateLogs` (~20 lines), `migrateLegacyTranscripts` (~30 lines), `getLegacyTranscriptStats` (~25 lines), `shouldSnapshotLogs` (~15 lines), and associated helpers (`resetState`, `clearLegacyTranscriptState`, `loadSidebarProjectOrder`, `loadLegacySidebarProjectOrder`, `readLegacySidebarProjectOrderFromProjectsLog`, `writeSidebarProjectOrderFile`).
-
-All of these are I/O-heavy (use `this.storage`) — group them into a `SnapshotDeps` interface injection pattern: extract the pure logic and pass `storage`, `paths`, and `state` as parameters. Adapter glue stays in `EventStore`.
+Candidate splits:
+- `src/shared/provider-types.ts`: `AgentProvider`, `PROVIDERS`, `ModelEntry`, `ProviderSettings`, `mergeCustomModels`, `CustomModelEntry` (~120 LOC)
+- `src/shared/chat-types.ts`: `TranscriptEntry` and all its variants (user_prompt, assistant, context_window_updated, etc.), `ChatHistoryPage`, `ChatHistorySnapshot`, `QueuedChatMessage` (~250 LOC)
+- `src/shared/settings-types.ts`: `AppSettings`, `AppSettingsPatch`, `McpOAuthState`, `CustomMcpServer`, all settings interfaces (~300 LOC)
+- `src/shared/subagent-types.ts`: `Subagent`, `SubagentRunSnapshot`, `SubagentEntry`, `SubagentRuntimeSettings` (~100 LOC)
+- `src/shared/orch-state-types.ts`: already in `shared/orchestration-types.ts`; verify nothing is duplicated
 
 Survey the boundaries:
 ```bash
-grep -n "loadSnapshot\|createSnapshot\|snapshotAndTruncate\|migrateLegacy\|getLegacyTranscript\|shouldSnapshot\|resetState\|clearLegacyTranscript\|loadSidebarProject\|writeSidebar" src/server/event-store.ts | head -40
+grep -n "^export " src/shared/types.ts | head -60
 ```
 
-Expected: event-store.ts 1778 → ~1600 LOC (-~180); new file ~200 LOC + tests.
+Expected: types.ts 2108 → ~600 LOC (barrel re-exports); each new sibling ~100–300 LOC + targeted tests.
 
 ## Worker rules (every subagent MUST follow)
 
