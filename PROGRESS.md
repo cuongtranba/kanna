@@ -13,6 +13,7 @@ bash scripts/verify-decomp.sh
 
 ## Progress (latest first)
 
+- 2026-07-17 Extract tool-request read-model (applyToolRequestEvent, getToolRequest, listPendingToolRequests, scanAllToolRequests, deleteToolRequestsForChat) to event-store-tool-requests.ts as pure functions; EventStore delegates via applyToolRequestEvent in switch + thin wrappers + 14 tests. event-store.ts: 2069 → 2050 LOC; new file 96 LOC.
 - 2026-07-17 Extract subagent run read-model (applySubagentEvent, getSubagentRuns, runningSubagentRuns) to event-store-subagent.ts as pure functions; EventStore delegates via fall-through case + thin wrappers + 19 tests. event-store.ts: 2169 → 2069 LOC; new file 156 LOC.
 - 2026-07-17 Extract orchestration read-model (applyOrchEvent, toOrchRunSnapshot, nonTerminalOrchTasks, gatedOrchTasks, getOrchRun/Runs/TaskSpec/LastPhaseOutput/Events) to event-store-orch.ts as pure functions; EventStore delegates via thin wrappers + 32 tests. event-store.ts: 2350 → 2169 LOC; new file 312 LOC.
 - 2026-07-17 Extract pure helper functions (normalizeSidebarProjectOrder, logSendToStartingProfile, getReplayEventPriority, encodeHistoryCursor, decodeCursor, slashCommandsEqual, coalesceContextWindowUpdates, getHistorySnapshot, getForkedChatTitle + TranscriptPageResult interface) to event-store-helpers.ts + 30 tests. event-store.ts: 2537 → 2351 LOC; new file 206 LOC.
@@ -61,22 +62,22 @@ bash scripts/verify-decomp.sh
 
 ## Next chunk
 
-**event-store.ts (2069 LOC)**: extract the tool-request read-model into `event-store-tool-requests.ts`.
+**event-store.ts (2050 LOC)**: extract the auto-continue event read-model into `event-store-auto-continue.ts`.
 
-The tool-request concern (~45 lines of pure logic) operates on `toolRequestsById: Map<string, ToolRequest>`:
-- Switch cases in `applyEvent`: `tool_request_put`, `tool_request_resolved` (lines ~728–743)
-- `getToolRequest(id)`, `listPendingToolRequests(chatId)`, `scanAllToolRequests()` (lines ~1948–1994)
+The auto-continue concern (~20 lines of pure logic) operates on `autoContinueEventsByChatId: Map<string, AutoContinueEvent[]>`:
+- `applyAutoContinueEvent(event)` private method (lines ~805–808): 4 lines — folds a single event into the map
+- `getAutoContinueEvents(chatId)` (lines ~1824–1827): 4 lines — returns defensive copy of events for a chat
+- `listAutoContinueChats()` (lines ~1829–1830): 2 lines — returns all chat ids with auto-continue state
+- The `applyEvent` routing guard (line ~443–445): `if ("kind" in event) this.applyAutoContinueEvent(event); return`
 
-**Extraction approach**: standalone pure functions `applyToolRequestEvent(toolRequestsById, event)`, `getToolRequestFromMap(toolRequestsById, id)`, `listPendingToolRequestsFromMap(toolRequestsById, chatId)`, `scanAllToolRequestsFromMap(toolRequestsById)`. EventStore delegates. `toolRequestsById` stays in `StoreState`.
-
-IO methods `putToolRequest` and `resolveToolRequest` stay in the class (they call `this.append`).
+**Extraction approach**: standalone pure functions `applyAutoContinueEventToMap(map, event)`, `getAutoContinueEventsFromMap(map, chatId)`, `listAutoContinueChatsFromMap(map)` in `event-store-auto-continue.ts`. EventStore delegates. `autoContinueEventsByChatId` stays in `StoreState`.
 
 Survey the boundaries:
 ```bash
-grep -n "tool_request_put\|tool_request_resolved\|toolRequestsById\|getToolRequest\|listPendingTool\|scanAllTool\|putToolRequest\|resolveToolRequest" src/server/event-store.ts
+grep -n "autoContinue\|AutoContinue\|auto_continue" src/server/event-store.ts
 ```
 
-Expected: event-store.ts 2069 → ~2030 LOC; new file `event-store-tool-requests.ts` ~80 LOC + tests.
+Expected: event-store.ts 2050 → ~2030 LOC; new file `event-store-auto-continue.ts` ~50 LOC + tests.
 
 ## Worker rules (every subagent MUST follow)
 
