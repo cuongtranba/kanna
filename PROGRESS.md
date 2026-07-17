@@ -13,6 +13,7 @@ bash scripts/verify-decomp.sh
 
 ## Progress (latest first)
 
+- 2026-07-18 Wire transcript-write + entity-write adapters into EventStore; replace 34 method bodies with 1-line delegates; extract init cluster to event-store-init.ts (initializeEventStore, clearStorage, shouldSnapshotLogs, loadSnapshot, replayLogs, resetState, clearLegacyTranscriptState, loadSidebarProjectOrder); event-store.ts: 978 → 775 LOC (−203). ✅
 - 2026-07-18 Extract generateCommitMessage + commitFiles + discardFile + ignoreFile from DiffStore → diff-store-commit-ops.adapter.ts (DiffStoreCommitOpsDeps interface + 4 exported fns; buildCommitOpsDeps() + 4 one-liner delegates in DiffStore; 22 new tests pass). diff-store.ts: 661 → 473 LOC (−188). ✅ diff-store.ts DONE.
 - 2026-07-18 Reduce ws-router.ts 1280 → 534 LOC (−746) by extracting 3 new modules: ws-router-utils.ts (224 LOC: ClientState/SnapshotBroadcastFilter/SnapshotComputationCache interfaces + 10 pure utility fns: isBenignStaleStateMessage, isSendToStartingProfilingEnabled, logSendToStartingProfile, countSubscriptionsByTopic, getSidebarProjectOrder, send, ensureSnapshotSignatures, shouldIncludeTopic, getStableChatSnapshotSignature), ws-router-envelope.ts (329 LOC: EnvelopeDeps/EnvelopeBuilder interfaces + createEnvelopeBuilder factory + getSidebarSnapshotCacheEntry — all envelope computation for all 12 topic types), ws-router-broadcast.ts (488 LOC: BroadcastManager class — holds sockets set + pending-broadcast state + pushSnapshots/broadcastSnapshots/broadcastFilteredSnapshots/scheduleBroadcast/scheduleChatStateBroadcast/pushTerminalSnapshot/broadcastError methods + all event-subscription wiring: terminals/keybindings/appSettings/update/ptyInstances/workflows/orchRuns). ws-router.ts DONE (534 < 600). 61 tests pass; eslint 0 warnings; 0 new TS errors. ✅ ws-router.ts DONE.
 - 2026-07-18 Wire event-store-messages.adapter.ts (getChatCount, getMessages, getQueuedMessages/Message, getRecentMessagesPage, getMessagesPageBefore, getRecentChatHistory, getSeenMessageIds, loadTranscriptFromDisk) + event-store-peripheral-events.adapter.ts (appendTunnelEvent, getTunnelEvents, listTunnelChats, loadTunnelEvents, appendShareEvent, getShareEvents, loadShareEvents, appendPushEvent, loadPushEvents) into event-store.ts; added CachedTranscriptRef pattern, two deps-builder methods (buildMessageReadDeps, buildPeripheralEventsDeps), thin delegates. 39 new tests pass. event-store.ts: 1026 → 973 LOC (−53); new modules 318 LOC. ✅
@@ -78,16 +79,18 @@ bash scripts/verify-decomp.sh
 ## Next chunk
 
 **Remaining files over 600 LOC:**
-- `src/server/event-store.ts`: 973 LOC — still needs extraction to reach <600
+- `src/server/event-store.ts`: 775 LOC — still needs ~175 LOC reduction to reach <600
 - `src/server/agent.ts`: 1322 LOC
 
 **✅ Completed:** diff-store.ts (473 LOC), ws-router.ts (534 LOC), types.ts (422 LOC)
 
-**Focus: `src/server/event-store.ts` (973 LOC → target ≤ 600)**
+**Focus: `src/server/event-store.ts` (775 LOC → target ≤ 600)**
 
 Remaining extraction opportunities:
-1. **Auto-continue + subscriptions cluster (~80 LOC)**: `appendAutoContinueEvent`, `getAutoContinueEvents`, `listAutoContinueChats`, `appendOrchestrationEvent`, `subscribeOrchRuns`, `notifyOrchRunsChanged`, `orchRunsSubscribers` → `event-store-subscriptions.ts`
-2. **Chat mutation cluster (~120 LOC)**: `appendMessage`, `enqueueMessage`, `removeQueuedMessage` (complex write logic) → `event-store-chat-write.adapter.ts`
+1. **Orch read-model delegates cluster (~55 LOC)**: `appendOrchestrationEvent`, `subscribeOrchRuns`, `notifyOrchRunsChanged`, `orchRunsSubscribers`, `getOrchRun`, `getOrchRuns`, `nonTerminalOrchTasks`, `gatedOrchTasks`, `getOrchTaskSpec`, `getOrchLastPhaseOutput`, `getOrchRunEvents` → these are already one-liner delegates to `event-store-orch.ts`; consider pulling the orch subscription logic into a new `event-store-orch-subscription.ts`.
+2. **Snapshot/legacy cluster (~55 LOC)**: `snapshotAndTruncateLogs` (has inline logPaths), `migrateLegacyTranscripts`, `getLegacyTranscriptStats`, `hasLegacyTranscriptData` → `event-store-snapshot-ops.ts`.
+3. **Subagent + tool-request cluster (~50 LOC)**: `appendSubagentEvent`, `getSubagentRuns`, `runningSubagentRuns`, `putToolRequest`, `getToolRequest`, `listPendingToolRequests`, `resolveToolRequest`, `scanAllToolRequests` → already delegate to other modules; extract the remaining inline logic.
+4. Alternatively: condense the import block + `buildInitDeps` (40 lines) via type-only re-exports.
 
 ## Worker rules (every subagent MUST follow)
 

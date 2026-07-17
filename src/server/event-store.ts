@@ -5,17 +5,14 @@ import { log } from "../shared/log"
 import type { StorageBackend } from "./storage/backend"
 import { FsStorageBackend } from "./storage/fs-storage.adapter"
 import type { AgentProvider, ChatHistoryPage, QueuedChatMessage, SlashCommand, StackBinding, SubagentRunSnapshot, TranscriptEntry } from "../shared/types"
-import { STORE_VERSION } from "../shared/types"
 import type { AutoContinueEvent } from "./auto-continue/events"
 import {
-  type ChatEvent,
   type OrchestrationEvent,
   type StackRecord,
   type StoreEvent,
   type StoreState,
   type SubagentRunEvent,
   type TurnRunConfig,
-  cloneTranscriptEntries,
   createEmptyState,
 } from "./events"
 import type { OrchRunSnapshot } from "../shared/orchestration-types"
@@ -34,40 +31,8 @@ import type { PushEvent, PushEventStore } from "./push/events"
 import type { ShareEvent } from "./session-share/share-projection"
 import { capTranscriptEntry } from "./subagent-entry-cap.adapter"
 import {
-  getForkedChatTitle,
-  logSendToStartingProfile,
-} from "./event-store-helpers"
-import {
-  buildAddProjectToStackEvent,
-  buildArchiveChatEvent,
-  buildChatPolicyOverrideEvent,
-  buildChatProviderEvent,
-  buildChatReadStateEvent,
-  buildChatSourceHashEvent,
-  buildCompactFailuresEvent,
-  buildCreateChatEvent,
-  buildCreateStackEvent,
-  buildEnqueueMessageResult,
-  buildOpenProjectResult,
-  buildPendingForkSessionTokenEvent,
-  buildPlanModeEvent,
   buildPutToolRequestEvent,
-  buildRemoveProjectEvent,
-  buildRemoveProjectFromStackEvent,
-  buildRemoveQueuedMessageEvent,
-  buildRemoveStackEvent,
-  buildRenameStackEvent,
-  buildRenameChatEvent,
   buildResolveToolRequestEvent,
-  buildSessionCommandsEvent,
-  buildSessionTokenEvent,
-  buildSetProjectStarEvent,
-  buildTurnCancelledEvent,
-  buildTurnFailedEvent,
-  buildTurnFinishedEvent,
-  buildTurnStartedEvent,
-  buildUnarchiveChatEvent,
-  computeNewSidebarOrder,
 } from "./event-store-write-ops"
 import {
   getSubagentRuns as getSubagentRunsFromMap,
@@ -75,23 +40,16 @@ import {
 } from "./event-store-subagent"
 import {
   applyToolRequestEvent,
-  deleteToolRequestsForChat,
   getToolRequest as getToolRequestFromMap,
   listPendingToolRequests as listPendingToolRequestsFromMap,
   scanAllToolRequests as scanAllToolRequestsFromMap,
 } from "./event-store-tool-requests"
 import { applyStoreEvent } from "./event-store-apply"
-import { applyChatMessageMetadata } from "./event-store-chat-lifecycle"
 import {
   buildSnapshotFile,
-  calcShouldTruncateLogs,
   computeLegacyTranscriptStats,
-  loadAndReplayLogs,
-  loadSnapshotIntoState,
-  loadSidebarOrder,
   migrateLegacyTranscripts as migrateLegacyTranscriptsImpl,
   truncateLogsAfterSnapshot,
-  writeSidebarOrderFile,
   type LegacyTranscriptStats,
   type SnapshotLogPaths,
 } from "./event-store-snapshot"
@@ -119,8 +77,52 @@ import {
   type CachedTranscriptRef,
   type MessageReadDeps,
 } from "./event-store-messages.adapter"
+import {
+  openProject as openProjectFn,
+  removeProject as removeProjectFn,
+  setProjectStar as setProjectStarFn,
+  createStack as createStackFn,
+  renameStack as renameStackFn,
+  removeStack as removeStackFn,
+  addProjectToStack as addProjectToStackFn,
+  removeProjectFromStack as removeProjectFromStackFn,
+  setSidebarProjectOrder as setSidebarProjectOrderFn,
+  createChat as createChatFn,
+  renameChat as renameChatFn,
+  setChatProvider as setChatProviderFn,
+  setPlanMode as setPlanModeFn,
+  setCompactFailureCount as setCompactFailureCountFn,
+  setChatReadState as setChatReadStateFn,
+  setChatPolicyOverride as setChatPolicyOverrideFn,
+  setSourceHash as setSourceHashFn,
+  enqueueMessage as enqueueMessageFn,
+  removeQueuedMessage as removeQueuedMessageFn,
+  recordTurnStarted as recordTurnStartedFn,
+  recordTurnFinished as recordTurnFinishedFn,
+  recordTurnFailed as recordTurnFailedFn,
+  recordTurnCancelled as recordTurnCancelledFn,
+  setSessionTokenForProvider as setSessionTokenForProviderFn,
+  recordSessionCommandsLoaded as recordSessionCommandsLoadedFn,
+  setPendingForkSessionToken as setPendingForkSessionTokenFn,
+  appendAutoContinueEvent as appendAutoContinueEventFn,
+  type EntityWriteDeps,
+  type SessionWriteDeps,
+} from "./event-store-entity-write"
+import {
+  forkChat as forkChatFn,
+  deleteChat as deleteChatFn,
+  archiveChat as archiveChatFn,
+  unarchiveChat as unarchiveChatFn,
+  pruneStaleEmptyChats as pruneStaleEmptyChatsImpl,
+  appendMessage as appendMessageFn,
+  type ChatTranscriptWriteDeps,
+} from "./event-store-transcript-write.adapter"
+import {
+  initializeEventStore,
+  clearEventStoreLegacyTranscriptState,
+  type EventStoreInitDeps,
+} from "./event-store-init"
 
-const STALE_EMPTY_CHAT_MAX_AGE_MS = 30 * 60 * 1000
 const SIDEBAR_PROJECT_ORDER_FILE = "sidebar-order.json"
 
 export class EventStore implements PushEventStore {
@@ -151,7 +153,7 @@ export class EventStore implements PushEventStore {
   // --resume; on cold-wake the reader starts at byte 0 and would re-emit).
   private seenMessageIdsByChatId = new Map<string, Set<string>>()
   private legacySidebarProjectOrder: string[] = []
-  private sidebarProjectOrder: string[] = []
+  private readonly sidebarProjectOrderRef: { value: string[] } = { value: [] }
   private snapshotHasLegacyMessages = false
   private readonly cachedTranscriptRef: CachedTranscriptRef = { value: null }
   private readonly tunnelEventsByChatId = new Map<string, CloudflareTunnelEvent[]>()
@@ -180,123 +182,17 @@ export class EventStore implements PushEventStore {
     this.sidebarProjectOrderPath = path.join(this.dataDir, SIDEBAR_PROJECT_ORDER_FILE)
   }
 
-  private getLogPaths(): SnapshotLogPaths {
-    return {
-      snapshotPath: this.snapshotPath,
-      projectsLogPath: this.projectsLogPath,
-      chatsLogPath: this.chatsLogPath,
-      messagesLogPath: this.messagesLogPath,
-      queuedMessagesLogPath: this.queuedMessagesLogPath,
-      turnsLogPath: this.turnsLogPath,
-      schedulesLogPath: this.schedulesLogPath,
-      stacksLogPath: this.stacksLogPath,
-      toolRequestsLogPath: this.toolRequestsLogPath,
-      orchLogPath: this.orchLogPath,
-    }
-  }
-
   async initialize() {
-    await this.storage.mkdir(this.dataDir)
-    await this.storage.mkdir(this.transcriptsDir)
-    await this.ensureFile(this.projectsLogPath)
-    await this.ensureFile(this.chatsLogPath)
-    await this.ensureFile(this.messagesLogPath)
-    await this.ensureFile(this.queuedMessagesLogPath)
-    await this.ensureFile(this.turnsLogPath)
-    await this.ensureFile(this.schedulesLogPath)
-    await this.ensureFile(this.tunnelLogPath)
-    await this.ensureFile(this.sharesLogPath)
-    await this.ensureFile(this.pushLogPath)
-    await this.ensureFile(this.stacksLogPath)
-    await this.ensureFile(this.toolRequestsLogPath)
-    await this.ensureFile(this.orchLogPath)
-    await this.loadSnapshot()
-    await this.replayLogs()
-    await this.loadTunnelEvents()
-    await this.loadShareEvents()
-    await this.loadSidebarProjectOrder()
-    if (!(await this.hasLegacyTranscriptData()) && await this.shouldSnapshotLogs()) {
-      await this.snapshotAndTruncateLogs()
-    }
-  }
-
-  private async ensureFile(filePath: string) {
-    if (!(await this.storage.exists(filePath))) {
-      await this.storage.writeText(filePath, "")
-    }
-  }
-
-  private async clearStorage() {
-    if (this.storageReset) return
-    this.storageReset = true
-    this.resetState()
-    this.clearLegacyTranscriptState()
-    await Promise.all([
-      this.storage.writeText(this.snapshotPath, ""),
-      this.storage.writeText(this.projectsLogPath, ""),
-      this.storage.writeText(this.chatsLogPath, ""),
-      this.storage.writeText(this.messagesLogPath, ""),
-      this.storage.writeText(this.queuedMessagesLogPath, ""),
-      this.storage.writeText(this.turnsLogPath, ""),
-      this.storage.writeText(this.schedulesLogPath, ""),
-      this.storage.writeText(this.tunnelLogPath, ""),
-      this.storage.writeText(this.sharesLogPath, ""),
-      this.storage.writeText(this.stacksLogPath, ""),
-      this.storage.writeText(this.toolRequestsLogPath, ""),
-      this.storage.writeText(this.orchLogPath, ""),
-    ])
-  }
-
-  private async loadSnapshot() {
-    const result = await loadSnapshotIntoState(
-      this.storage,
-      this.snapshotPath,
-      this.state,
-      this.legacyMessagesByChatId,
-      () => this.clearStorage(),
-    )
-    this.snapshotHasLegacyMessages = result.snapshotHasLegacyMessages
-    this.legacySidebarProjectOrder = result.legacySidebarProjectOrder
-  }
-
-  private resetState() {
-    this.state.projectsById.clear()
-    this.state.projectIdsByPath.clear()
-    this.state.chatsById.clear()
-    this.state.queuedMessagesByChatId.clear()
-    this.state.sidebarProjectOrder = []
-    this.state.autoContinueEventsByChatId.clear()
-    this.state.stacksById.clear()
-    this.tunnelEventsByChatId.clear()
-    this.sidebarProjectOrder = []
-    this.legacySidebarProjectOrder = []
-    this.cachedTranscriptRef.value = null
+    await initializeEventStore(this.buildInitDeps(), {
+      loadTunnelEvents: () => this.loadTunnelEvents(),
+      loadShareEvents: () => this.loadShareEvents(),
+      hasLegacyTranscriptData: () => this.hasLegacyTranscriptData(),
+      snapshotAndTruncateLogs: () => this.snapshotAndTruncateLogs(),
+    })
   }
 
   private clearLegacyTranscriptState() {
-    this.legacyMessagesByChatId.clear()
-    this.snapshotHasLegacyMessages = false
-  }
-
-  private async loadSidebarProjectOrder() {
-    this.sidebarProjectOrder = await loadSidebarOrder(
-      this.storage,
-      this.sidebarProjectOrderPath,
-      this.projectsLogPath,
-      this.dataDir,
-      this.legacySidebarProjectOrder,
-    )
-  }
-
-  private async replayLogs() {
-    await loadAndReplayLogs(
-      this.storage,
-      this.getLogPaths(),
-      () => this.storageReset,
-      (event) => { this.applyEvent(event) },
-      () => this.clearStorage(),
-      () => { this.replayChatProvider.clear() },
-    )
+    clearEventStoreLegacyTranscriptState(this.buildInitDeps())
   }
 
   private applyEvent(event: StoreEvent) {
@@ -326,6 +222,40 @@ export class EventStore implements PushEventStore {
 
   // ─── Deps builders ──────────────────────────────────────────────────────────
 
+  private buildInitDeps(): EventStoreInitDeps {
+    return {
+      storage: this.storage,
+      dataDir: this.dataDir,
+      snapshotPath: this.snapshotPath,
+      projectsLogPath: this.projectsLogPath,
+      chatsLogPath: this.chatsLogPath,
+      messagesLogPath: this.messagesLogPath,
+      queuedMessagesLogPath: this.queuedMessagesLogPath,
+      turnsLogPath: this.turnsLogPath,
+      schedulesLogPath: this.schedulesLogPath,
+      tunnelLogPath: this.tunnelLogPath,
+      sharesLogPath: this.sharesLogPath,
+      pushLogPath: this.pushLogPath,
+      stacksLogPath: this.stacksLogPath,
+      toolRequestsLogPath: this.toolRequestsLogPath,
+      orchLogPath: this.orchLogPath,
+      transcriptsDir: this.transcriptsDir,
+      sidebarProjectOrderPath: this.sidebarProjectOrderPath,
+      state: this.state,
+      legacyMessagesByChatId: this.legacyMessagesByChatId,
+      tunnelEventsByChatId: this.tunnelEventsByChatId,
+      cachedTranscriptRef: this.cachedTranscriptRef,
+      sidebarProjectOrderRef: this.sidebarProjectOrderRef,
+      getLegacySidebarProjectOrder: () => this.legacySidebarProjectOrder,
+      setLegacySidebarProjectOrder: (v) => { this.legacySidebarProjectOrder = v },
+      setSnapshotHasLegacyMessages: (v) => { this.snapshotHasLegacyMessages = v },
+      getStorageReset: () => this.storageReset,
+      setStorageReset: (v) => { this.storageReset = v },
+      replayChatProvider: this.replayChatProvider,
+      applyEvent: (event) => { this.applyEvent(event) },
+    }
+  }
+
   private buildMessageReadDeps(): MessageReadDeps {
     return {
       storage: this.storage,
@@ -352,33 +282,76 @@ export class EventStore implements PushEventStore {
     }
   }
 
-  // ─── Private transcript helpers (thin delegates) ─────────────────────────
+  private buildEntityWriteDeps(): EntityWriteDeps {
+    return {
+      storage: this.storage,
+      dataDir: this.dataDir,
+      sidebarProjectOrderPath: this.sidebarProjectOrderPath,
+      projectsLogPath: this.projectsLogPath,
+      chatsLogPath: this.chatsLogPath,
+      queuedMessagesLogPath: this.queuedMessagesLogPath,
+      stacksLogPath: this.stacksLogPath,
+      projectsById: this.state.projectsById,
+      projectIdsByPath: this.state.projectIdsByPath,
+      chatsById: this.state.chatsById,
+      queuedMessagesByChatId: this.state.queuedMessagesByChatId,
+      stacksById: this.state.stacksById,
+      sidebarProjectOrderRef: this.sidebarProjectOrderRef,
+      getWriteChain: () => this.writeChain,
+      setWriteChain: (p) => { this.writeChain = p },
+      append: (filePath, event) => this.append(filePath, event),
+    }
+  }
+
+  private buildSessionWriteDeps(): SessionWriteDeps {
+    return {
+      chatsById: this.state.chatsById,
+      turnsLogPath: this.turnsLogPath,
+      schedulesLogPath: this.schedulesLogPath,
+      append: (filePath, event) => this.append(filePath, event),
+    }
+  }
+
+  private buildChatTranscriptWriteDeps(): ChatTranscriptWriteDeps {
+    return {
+      storage: this.storage,
+      transcriptsDir: this.transcriptsDir,
+      dataDir: this.dataDir,
+      cachedTranscriptRef: this.cachedTranscriptRef,
+      seenMessageIdsByChatId: this.seenMessageIdsByChatId,
+      chatsById: this.state.chatsById,
+      toolRequestsById: this.state.toolRequestsById,
+      chatsLogPath: this.chatsLogPath,
+      turnsLogPath: this.turnsLogPath,
+      getWriteChain: () => this.writeChain,
+      setWriteChain: (p) => { this.writeChain = p },
+      append: (filePath, event) => this.append(filePath, event),
+      getMessages: (chatId) => this.getMessages(chatId),
+      getSeenMessageIds: (chatId) => this.getSeenMessageIds(chatId),
+      listPendingToolRequests: (chatId) => this.listPendingToolRequests(chatId),
+    }
+  }
+
+  // ─── Private helpers ─────────────────────────────────────────────────────
 
   private getSeenMessageIds(chatId: string): Set<string> {
     return getSeenMessageIdsFn(this.buildMessageReadDeps(), chatId)
   }
 
   async openProject(localPath: string, title?: string) {
-    const result = buildOpenProjectResult(this.state, localPath, title)
-    if (result.kind === "existing") return result.project
-    await this.append(this.projectsLogPath, result.event)
-    return this.state.projectsById.get(result.event.projectId)!
+    return openProjectFn(this.buildEntityWriteDeps(), localPath, title)
   }
 
   async removeProject(projectId: string) {
-    const event = buildRemoveProjectEvent(this.state.projectsById, projectId)
-    await this.append(this.projectsLogPath, event)
+    return removeProjectFn(this.buildEntityWriteDeps(), projectId)
   }
 
   async setProjectStar(projectId: string, starred: boolean) {
-    const event = buildSetProjectStarEvent(this.state.projectsById, projectId, starred)
-    await this.append(this.projectsLogPath, event)
+    return setProjectStarFn(this.buildEntityWriteDeps(), projectId, starred)
   }
 
   async createStack(title: string, projectIds: string[]): Promise<StackRecord> {
-    const event = buildCreateStackEvent(this.state, title, projectIds)
-    await this.append(this.stacksLogPath, event)
-    return this.state.stacksById.get(event.stackId)!
+    return createStackFn(this.buildEntityWriteDeps(), title, projectIds)
   }
 
   getStack(stackId: string): StackRecord | null {
@@ -391,136 +364,50 @@ export class EventStore implements PushEventStore {
   }
 
   async renameStack(stackId: string, title: string): Promise<void> {
-    const event = buildRenameStackEvent(this.state.stacksById, stackId, title)
-    if (event) await this.append(this.stacksLogPath, event)
+    return renameStackFn(this.buildEntityWriteDeps(), stackId, title)
   }
 
   async removeStack(stackId: string): Promise<void> {
-    const event = buildRemoveStackEvent(this.state.stacksById, stackId)
-    if (event) await this.append(this.stacksLogPath, event)
+    return removeStackFn(this.buildEntityWriteDeps(), stackId)
   }
 
   async addProjectToStack(stackId: string, projectId: string): Promise<void> {
-    const event = buildAddProjectToStackEvent(this.state, stackId, projectId)
-    if (event) await this.append(this.stacksLogPath, event)
+    return addProjectToStackFn(this.buildEntityWriteDeps(), stackId, projectId)
   }
 
   async removeProjectFromStack(stackId: string, projectId: string): Promise<void> {
-    const event = buildRemoveProjectFromStackEvent(this.state.stacksById, stackId, projectId)
-    if (event) await this.append(this.stacksLogPath, event)
+    return removeProjectFromStackFn(this.buildEntityWriteDeps(), stackId, projectId)
   }
 
   async setSidebarProjectOrder(projectIds: string[]) {
-    const newOrder = computeNewSidebarOrder(this.state.projectsById, this.sidebarProjectOrder, projectIds)
-    if (!newOrder) return
-    this.writeChain = this.writeChain.then(async () => {
-      await writeSidebarOrderFile(this.storage, this.dataDir, this.sidebarProjectOrderPath, newOrder)
-      this.sidebarProjectOrder = [...newOrder]
-    })
-    return this.writeChain
+    return setSidebarProjectOrderFn(this.buildEntityWriteDeps(), projectIds)
   }
 
   async createChat(
     projectId: string,
     options?: { stackId?: string; stackBindings?: StackBinding[] },
   ): Promise<import("./events").ChatRecord> {
-    const event = buildCreateChatEvent(this.state, projectId, options)
-    await this.append(this.chatsLogPath, event)
-    return this.state.chatsById.get(event.chatId)!
+    return createChatFn(this.buildEntityWriteDeps(), projectId, options)
   }
 
   async forkChat(sourceChatId: string) {
-    const sourceChat = this.requireChat(sourceChatId)
-    const sourceProvider = sourceChat.provider
-    if (!sourceProvider) {
-      throw new Error("Chat cannot be forked")
-    }
-    const sourceSessionToken =
-      sourceChat.sessionTokensByProvider[sourceProvider]
-      ?? (sourceChat.pendingForkSessionToken?.provider === sourceProvider
-        ? sourceChat.pendingForkSessionToken.token
-        : null)
-    if (!sourceSessionToken) {
-      throw new Error("Chat cannot be forked")
-    }
-
-    const chatId = crypto.randomUUID()
-    const createdAt = Date.now()
-    const createEvent: ChatEvent = {
-      v: STORE_VERSION,
-      type: "chat_created",
-      timestamp: createdAt,
-      chatId,
-      projectId: sourceChat.projectId,
-      title: getForkedChatTitle(sourceChat.title),
-      ...(sourceChat.stackId !== undefined ? { stackId: sourceChat.stackId } : {}),
-      ...(sourceChat.stackBindings !== undefined
-        ? { stackBindings: sourceChat.stackBindings.map((b) => ({ ...b })) }
-        : {}),
-    }
-    await this.append(this.chatsLogPath, createEvent)
-    await this.setChatProvider(chatId, sourceProvider)
-    await this.setPlanMode(chatId, sourceChat.planMode)
-    await this.setPendingForkSessionToken(chatId, { provider: sourceProvider, token: sourceSessionToken })
-
-    const sourceEntries = this.getMessages(sourceChatId)
-    if (sourceEntries.length > 0) {
-      const transcriptPath = this.transcriptPath(chatId)
-      const payload = sourceEntries.map((entry) => JSON.stringify(entry)).join("\n")
-      this.writeChain = this.writeChain.then(async () => {
-        await this.storage.mkdir(this.transcriptsDir)
-        await this.storage.writeText(transcriptPath, `${payload}\n`)
-        const chat = this.state.chatsById.get(chatId)
-        if (chat) {
-          chat.hasMessages = true
-          chat.updatedAt = Math.max(chat.updatedAt, createdAt)
-        }
-        if (this.cachedTranscriptRef.value?.chatId === chatId) {
-          this.cachedTranscriptRef.value = { chatId, entries: cloneTranscriptEntries(sourceEntries) }
-        }
-      })
-      await this.writeChain
-    }
-
-    return this.state.chatsById.get(chatId)!
+    return forkChatFn(this.buildChatTranscriptWriteDeps(), sourceChatId)
   }
 
   async renameChat(chatId: string, title: string) {
-    const event = buildRenameChatEvent(this.state.chatsById, chatId, title)
-    if (event) await this.append(this.chatsLogPath, event)
+    return renameChatFn(this.buildEntityWriteDeps(), chatId, title)
   }
 
   async deleteChat(chatId: string) {
-    const chat = this.requireChat(chatId)
-    const projectId = chat.projectId
-    const event: ChatEvent = {
-      v: STORE_VERSION,
-      type: "chat_deleted",
-      timestamp: Date.now(),
-      chatId,
-    }
-    await this.append(this.chatsLogPath, event)
-    deleteToolRequestsForChat(this.state.toolRequestsById, chatId)
-    await this.removeSubagentResultsDir(projectId, chatId)
-  }
-
-  private async removeSubagentResultsDir(projectId: string, chatId: string) {
-    const dir = path.join(
-      this.dataDir, "projects", projectId, "chats", chatId, "subagent-results",
-    )
-    try {
-      await this.storage.remove(dir, { recursive: true })
-    } catch (err) {
-      log.warn(`${LOG_PREFIX} subagent-results cleanup failed`, { chatId, err })
-    }
+    return deleteChatFn(this.buildChatTranscriptWriteDeps(), chatId)
   }
 
   async archiveChat(chatId: string) {
-    await this.append(this.chatsLogPath, buildArchiveChatEvent(this.state.chatsById, chatId))
+    return archiveChatFn(this.buildChatTranscriptWriteDeps(), chatId)
   }
 
   async unarchiveChat(chatId: string) {
-    await this.append(this.chatsLogPath, buildUnarchiveChatEvent(this.state.chatsById, chatId))
+    return unarchiveChatFn(this.buildChatTranscriptWriteDeps(), chatId)
   }
 
   async pruneStaleEmptyChats(args?: {
@@ -529,142 +416,55 @@ export class EventStore implements PushEventStore {
     activeChatIds?: Iterable<string>
     protectedChatIds?: Iterable<string>
   }) {
-    const now = args?.now ?? Date.now()
-    const maxAgeMs = args?.maxAgeMs ?? STALE_EMPTY_CHAT_MAX_AGE_MS
-    const protectedChatIds = new Set([
-      ...(args?.activeChatIds ?? []),
-      ...(args?.protectedChatIds ?? []),
-    ])
-    const prunedChatIds: string[] = []
-
-    for (const chat of this.state.chatsById.values()) {
-      if (chat.deletedAt || chat.archivedAt || protectedChatIds.has(chat.id)) continue
-      if (now - chat.createdAt < maxAgeMs) continue
-      if (chat.hasMessages) continue
-      if (this.getMessages(chat.id).length > 0) {
-        chat.hasMessages = true
-        continue
-      }
-
-      const event: ChatEvent = {
-        v: STORE_VERSION,
-        type: "chat_deleted",
-        timestamp: now,
-        chatId: chat.id,
-      }
-      await this.append(this.chatsLogPath, event)
-
-      const transcriptPath = this.transcriptPath(chat.id)
-      await this.storage.remove(transcriptPath)
-      if (this.cachedTranscriptRef.value?.chatId === chat.id) {
-        this.cachedTranscriptRef.value = null
-      }
-      await this.removeSubagentResultsDir(chat.projectId, chat.id)
-
-      prunedChatIds.push(chat.id)
-    }
-
-    return prunedChatIds
+    return pruneStaleEmptyChatsImpl(this.buildChatTranscriptWriteDeps(), args)
   }
 
   async setChatProvider(chatId: string, provider: AgentProvider) {
-    const ev = buildChatProviderEvent(this.state.chatsById, chatId, provider)
-    if (ev) await this.append(this.chatsLogPath, ev)
+    return setChatProviderFn(this.buildEntityWriteDeps(), chatId, provider)
   }
 
   async setPlanMode(chatId: string, planMode: boolean) {
-    const ev = buildPlanModeEvent(this.state.chatsById, chatId, planMode)
-    if (ev) await this.append(this.chatsLogPath, ev)
+    return setPlanModeFn(this.buildEntityWriteDeps(), chatId, planMode)
   }
 
   async setCompactFailureCount(chatId: string, compactFailureCount: number) {
-    const ev = buildCompactFailuresEvent(this.state.chatsById, chatId, compactFailureCount)
-    if (ev) await this.append(this.chatsLogPath, ev)
+    return setCompactFailureCountFn(this.buildEntityWriteDeps(), chatId, compactFailureCount)
   }
 
   async setChatReadState(chatId: string, unread: boolean) {
-    const ev = buildChatReadStateEvent(this.state.chatsById, chatId, unread)
-    if (ev) await this.append(this.chatsLogPath, ev)
+    return setChatReadStateFn(this.buildEntityWriteDeps(), chatId, unread)
   }
 
   async setChatPolicyOverride(chatId: string, policyOverride: ChatPermissionPolicyOverride | null) {
-    await this.append(this.chatsLogPath, buildChatPolicyOverrideEvent(this.state.chatsById, chatId, policyOverride))
+    return setChatPolicyOverrideFn(this.buildEntityWriteDeps(), chatId, policyOverride)
   }
 
   async appendMessage(chatId: string, entry: TranscriptEntry) {
-    this.requireChat(chatId)
-    const payload = `${JSON.stringify(entry)}\n`
-    const transcriptPath = this.transcriptPath(chatId)
-    const queuedAt = performance.now()
-    this.writeChain = this.writeChain.then(async () => {
-      const startedAt = performance.now()
-      const queueDelayMs = Number((startedAt - queuedAt).toFixed(1))
-      // Dedupe by messageId: if a transcript entry from the same JSONL source
-      // message has already been appended, skip. Server-generated entries
-      // without messageId (e.g. interrupted, context_cleared) always append.
-      const mid = entry.messageId
-      if (typeof mid === "string" && mid.length > 0) {
-        // Ensure the transcript is loaded so the seen set is populated.
-        this.getMessages(chatId)
-        const seen = this.getSeenMessageIds(chatId)
-        if (seen.has(mid)) {
-          logSendToStartingProfile("event_store.append_message_dedup", {
-            chatId,
-            messageId: mid,
-            kind: entry.kind,
-          })
-          return
-        }
-        seen.add(mid)
-      }
-      await this.storage.mkdir(this.transcriptsDir)
-      const beforeAppendAt = performance.now()
-      await this.storage.appendText(transcriptPath, payload)
-      const afterAppendAt = performance.now()
-      applyChatMessageMetadata(this.state.chatsById, chatId, entry)
-      if (this.cachedTranscriptRef.value?.chatId === chatId) {
-        this.cachedTranscriptRef.value.entries.push({ ...entry })
-      }
-      logSendToStartingProfile("event_store.append_message", {
-        chatId,
-        entryId: entry._id,
-        kind: entry.kind,
-        payloadBytes: payload.length,
-        queueDelayMs,
-        appendMs: Number((afterAppendAt - beforeAppendAt).toFixed(1)),
-        totalMs: Number((afterAppendAt - queuedAt).toFixed(1)),
-      })
-    })
-    return this.writeChain
+    return appendMessageFn(this.buildChatTranscriptWriteDeps(), chatId, entry)
   }
 
   async enqueueMessage(chatId: string, message: Omit<QueuedChatMessage, "id" | "createdAt"> & Partial<Pick<QueuedChatMessage, "id" | "createdAt">>) {
-    const { event, queuedMessage } = buildEnqueueMessageResult(this.state.chatsById, chatId, message)
-    await this.append(this.queuedMessagesLogPath, event)
-    return queuedMessage
+    return enqueueMessageFn(this.buildEntityWriteDeps(), chatId, message)
   }
 
   async removeQueuedMessage(chatId: string, queuedMessageId: string) {
-    const event = buildRemoveQueuedMessageEvent(
-      this.state.chatsById, this.state.queuedMessagesByChatId, chatId, queuedMessageId,
-    )
-    await this.append(this.queuedMessagesLogPath, event)
+    return removeQueuedMessageFn(this.buildEntityWriteDeps(), chatId, queuedMessageId)
   }
 
   async recordTurnStarted(chatId: string, runConfig?: TurnRunConfig) {
-    await this.append(this.turnsLogPath, buildTurnStartedEvent(this.state.chatsById, chatId, runConfig))
+    return recordTurnStartedFn(this.buildSessionWriteDeps(), chatId, runConfig)
   }
 
   async recordTurnFinished(chatId: string) {
-    await this.append(this.turnsLogPath, buildTurnFinishedEvent(this.state.chatsById, chatId))
+    return recordTurnFinishedFn(this.buildSessionWriteDeps(), chatId)
   }
 
   async recordTurnFailed(chatId: string, error: string) {
-    await this.append(this.turnsLogPath, buildTurnFailedEvent(this.state.chatsById, chatId, error))
+    return recordTurnFailedFn(this.buildSessionWriteDeps(), chatId, error)
   }
 
   async recordTurnCancelled(chatId: string) {
-    await this.append(this.turnsLogPath, buildTurnCancelledEvent(this.state.chatsById, chatId))
+    return recordTurnCancelledFn(this.buildSessionWriteDeps(), chatId)
   }
 
   async appendSubagentEvent(event: SubagentRunEvent) {
@@ -700,23 +500,19 @@ export class EventStore implements PushEventStore {
   }
 
   async setSessionTokenForProvider(chatId: string, provider: AgentProvider, sessionToken: string | null) {
-    const ev = buildSessionTokenEvent(this.state.chatsById, chatId, provider, sessionToken)
-    if (ev) await this.append(this.turnsLogPath, ev)
+    return setSessionTokenForProviderFn(this.buildSessionWriteDeps(), chatId, provider, sessionToken)
   }
 
   async recordSessionCommandsLoaded(chatId: string, commands: SlashCommand[]) {
-    const ev = buildSessionCommandsEvent(this.state.chatsById, chatId, commands)
-    if (ev) await this.append(this.turnsLogPath, ev)
+    return recordSessionCommandsLoadedFn(this.buildSessionWriteDeps(), chatId, commands)
   }
 
   async setPendingForkSessionToken(chatId: string, value: { provider: AgentProvider; token: string } | null) {
-    const ev = buildPendingForkSessionTokenEvent(this.state.chatsById, chatId, value)
-    if (ev) await this.append(this.turnsLogPath, ev)
+    return setPendingForkSessionTokenFn(this.buildSessionWriteDeps(), chatId, value)
   }
 
   async setSourceHash(chatId: string, sourceHash: string | null) {
-    const ev = buildChatSourceHashEvent(this.state.chatsById, chatId, sourceHash)
-    if (ev) await this.append(this.chatsLogPath, ev)
+    return setSourceHashFn(this.buildEntityWriteDeps(), chatId, sourceHash)
   }
 
   getProject(projectId: string) {
@@ -740,7 +536,7 @@ export class EventStore implements PushEventStore {
   }
 
   getSidebarProjectOrder() {
-    return [...this.sidebarProjectOrder]
+    return [...this.sidebarProjectOrderRef.value]
   }
 
   // ─── Message read methods (thin delegates) ────────────────────────────────
@@ -798,9 +594,21 @@ export class EventStore implements PushEventStore {
 
   async snapshotAndTruncateLogs() {
     const snapshot = buildSnapshotFile(this.state, this.listProjects())
+    const logPaths: SnapshotLogPaths = {
+      snapshotPath: this.snapshotPath,
+      projectsLogPath: this.projectsLogPath,
+      chatsLogPath: this.chatsLogPath,
+      messagesLogPath: this.messagesLogPath,
+      queuedMessagesLogPath: this.queuedMessagesLogPath,
+      turnsLogPath: this.turnsLogPath,
+      schedulesLogPath: this.schedulesLogPath,
+      stacksLogPath: this.stacksLogPath,
+      toolRequestsLogPath: this.toolRequestsLogPath,
+      orchLogPath: this.orchLogPath,
+    }
     await truncateLogsAfterSnapshot(
       this.storage,
-      this.getLogPaths(),
+      logPaths,
       JSON.stringify(snapshot, null, 2),
     )
   }
@@ -820,13 +628,7 @@ export class EventStore implements PushEventStore {
     )
   }
 
-  private async shouldSnapshotLogs() {
-    return calcShouldTruncateLogs(this.storage, this.getLogPaths())
-  }
-
-  async appendAutoContinueEvent(event: AutoContinueEvent) {
-    return this.append(this.schedulesLogPath, event)
-  }
+  async appendAutoContinueEvent(event: AutoContinueEvent) { return appendAutoContinueEventFn(this.buildSessionWriteDeps(), event) }
 
   getAutoContinueEvents(chatId: string): AutoContinueEvent[] {
     const list = this.state.autoContinueEventsByChatId.get(chatId)
