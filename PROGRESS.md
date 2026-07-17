@@ -13,6 +13,7 @@ bash scripts/verify-decomp.sh
 
 ## Progress (latest first)
 
+- 2026-07-17 Extract runClaudeSession session event loop to claude-session-runner.ts (RunClaudeSessionDeps) + 14 tests. Moved PendingToolRequest/ActiveTurn/ClaudeSessionState to claude-session-state.ts. agent.ts: 3675 → 3196 LOC.
 - 2026-07-17 Extract ClaudeSessionHandle to harness-types.ts and startClaudeSession to claude-session-start.ts + 12 tests. agent.ts: 3892 → 3675 LOC.
 - 2026-07-17 Extract isClaudeSteerLoggingEnabled, logClaudeSteer, SendMessageOptions, isSendToStartingProfilingEnabled, elapsedProfileMs, logSendToStartingProfile, SendToStartingProfile to claude-steer-log.ts + 18 tests. agent.ts: 3939 → 3893 LOC.
 - 2026-07-17 Extract AsyncMessageQueue, discardedToolResult, toClaudeMessageStream to claude-sdk-queue.ts + 14 tests. agent.ts: 4007 → 3939 LOC.
@@ -39,24 +40,28 @@ bash scripts/verify-decomp.sh
 
 ## Next chunk
 
-agent.ts (3675 LOC): the private `runClaudeSession` method (~414 lines,
-starting around line 2337) is the single largest cohesive block remaining.
-It manages the inner event loop of a running SDK Claude session — consuming
-`HarnessEvent`s, handling transcript entries, managing rate limits, token
-rotation, background task tracking, and session cleanup. It can be extracted
-to `src/server/claude-session-runner.ts` as a standalone `runClaudeSession`
-function that receives an `AgentCoordinator`-shaped deps object.
+agent.ts (3196 LOC): the next largest cohesive block is the turn spawning
+pipeline — `startTurnForChat` (~180 lines, ~line 1036) + `startTurnAfterTurnStarted`
+(~251 lines, ~line 1217). Together they form the "spawn and route" logic that:
+- picks provider, resolves model/effort/plan-mode, enforces session budget
+- spawns the SDK/PTY claude session or Codex turn
+- handles proactive /compact injection, loop-armed tool-block respawn
+- routes to the codec (runTurn vs runClaudeSession)
 
-Survey: `grep -n "private async runClaudeSession" src/server/agent.ts`
+Survey:
+```
+grep -n "private async startTurnForChat\|private async startTurnAfterTurnStarted" src/server/agent.ts
+```
 
 Extraction plan:
-1. Identify the method boundaries: `grep -n "private async runClaudeSession\|private async runTurn\|private async generateTitle" src/server/agent.ts`
-2. Extract to `src/server/claude-session-runner.ts` with a typed `RunClaudeSessionDeps` interface for all `AgentCoordinator` fields/methods the function touches.
-3. In `AgentCoordinator`, replace the method body with a call to the extracted function: `return runClaudeSession(this, session)`.
-4. Create `src/server/claude-session-runner.test.ts` with ≥8 tests.
+1. Read both methods in full to understand shared state (session, activeTurns, etc.)
+2. Extract to `src/server/claude-turn-starter.ts` with a typed `StartTurnDeps`
+   interface for all `AgentCoordinator` deps touched.
+3. In `AgentCoordinator`, replace both method bodies with delegation calls.
+4. Create `src/server/claude-turn-starter.test.ts` with ≥8 tests.
 5. Run targeted gates (lint, typecheck, tests).
 
-Expected: agent.ts 3675 → ~3260 LOC.
+Expected: agent.ts 3196 → ~2765 LOC.
 
 ## Worker rules (every subagent MUST follow)
 
