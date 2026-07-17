@@ -13,6 +13,7 @@ bash scripts/verify-decomp.sh
 
 ## Progress (latest first)
 
+- 2026-07-17 Extract session lifecycle helpers (~190 lines) to claude-session-lifecycle.ts (SessionLifecycleDeps interface, 8 exported fns: resolveClaudeIdleMs, resolveClaudeMaxResident, hasLiveWorkflow, hasPendingBackgroundTask, closeClaudeSession, maybeRegisterSdkWorkflowsDir, enforceClaudeSessionBudget, buildPoolUnavailableMessage) + 42 tests. agent.ts: 2599 → 2535 LOC; new file 283 LOC.
 - 2026-07-17 Extract startClaudeTurn (~242 lines) to claude-session-spawner.ts (SpawnClaudeTurnDeps interface, spawnClaudeTurn exported fn) + 17 tests. agent.ts: 2799 → 2599 LOC; new file 401 LOC.
 - 2026-07-17 Extract turn spawning pipeline (startTurnForChat + startTurnAfterTurnStarted) to claude-turn-starter.ts (StartTurnDeps interface, startTurnForChat exported fn) + 12 tests. Moved OAuthPoolUnavailableError to oauth-errors.ts. agent.ts: 3196 → 2799 LOC.
 - 2026-07-17 Extract runClaudeSession session event loop to claude-session-runner.ts (RunClaudeSessionDeps) + 14 tests. Moved PendingToolRequest/ActiveTurn/ClaudeSessionState to claude-session-state.ts. agent.ts: 3675 → 3196 LOC.
@@ -42,27 +43,25 @@ bash scripts/verify-decomp.sh
 
 ## Next chunk
 
-agent.ts (2599 LOC): the next cohesive group is the **session lifecycle
-management** private methods (~190 lines, ~line 578 → 768):
+agent.ts (2535 LOC): the next cohesive group is the **session error-response
+handlers** (~210 lines, ~line 1800 → 2007):
 
-- `resolveClaudeIdleMs` / `resolveClaudeMaxResident` — read lifecycle settings
-- `hasLiveWorkflow` / `hasPendingBackgroundTask` — idle-reaper guards
-- `closeClaudeSession` — tears down a session, releases OAuth token, unregisters workflows
-- `maybeRegisterSdkWorkflowsDir` — registers workflows dir for SDK sessions
-- `enforceClaudeSessionBudget` — evicts LRU idle sessions over the max-resident cap
-- `buildPoolUnavailableMessage` — formats the pool-unavailable refusal message
+- `acquireRotationSlot` — deduplicates token-rotation storms within a time window
+- `handleLimitError` — thin wrapper: detect rate-limit from raw error → delegate
+- `handleLimitDetection` — core rate-limit response: marks token limited, rotates pool, schedules auto-resume or cancels active turn
+- `handleAuthFailure` — core auth-error response: rotates OAuth token, closes old session, re-queues message or emits an error transcript entry
 
-All eight methods form a closed "session lifecycle" unit with no outward callers
-beyond other lifecycle methods and `spawnClaudeTurn`. Extract them to
-`src/server/claude-session-lifecycle.ts` with a `SessionLifecycleDeps` interface
-and corresponding standalone exports.
+These four methods form a closed "error-response" unit already referenced in
+`RunClaudeSessionDeps` and `SpawnClaudeTurnDeps`. Extract them to
+`src/server/claude-session-error-handler.ts` with a `SessionErrorHandlerDeps`
+interface and corresponding standalone exports.
 
 Survey:
 ```
-grep -n "private resolveClaudeIdleMs\|private resolveClaudeMaxResident\|private hasLiveWorkflow\|private hasPendingBackgroundTask\|private closeClaudeSession\|private maybeRegisterSdkWorkflowsDir\|private enforceClaudeSessionBudget\|private buildPoolUnavailableMessage" src/server/agent.ts
+grep -n "private acquireRotationSlot\|private async handleLimitError\|private async handleLimitDetection\|private async handleAuthFailure" src/server/agent.ts
 ```
 
-Expected: agent.ts 2599 → ~2409 LOC.
+Expected: agent.ts 2535 → ~2325 LOC.
 
 ## Worker rules (every subagent MUST follow)
 
