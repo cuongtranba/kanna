@@ -109,6 +109,14 @@ export interface LoopOrchCommandDeps {
    * so this module stays IO-free. See `loop-template-io.adapter.ts`.
    */
   ensureTrackingFile(args: EnsureTrackingFileArgs): Promise<EnsureTrackingFileResult>
+
+  /**
+   * Returns the current armed-loop state for a chat, or null if disarmed.
+   * Injected (rather than calling the module-level `isLoopArmed` fn) so
+   * AgentCoordinator can be monkey-patched in tests via
+   * `coordinator.isLoopArmed = () => ({...})`.
+   */
+  isLoopArmed(chatId: string): LoopState | null
 }
 
 // ---------------------------------------------------------------------------

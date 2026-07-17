@@ -128,6 +128,7 @@ export function buildLoopOrchCommandDeps(agent: AgentCoordinator): LoopOrchComma
     closeClaudeSession: (chatId, session) => agent.closeClaudeSession(chatId, session),
     emitAutoContinueEvent: (event) => agent.emitAutoContinueEvent(event),
     ensureTrackingFile,
+    isLoopArmed: (chatId) => agent.isLoopArmed(chatId),
   }
 }
 

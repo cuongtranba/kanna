@@ -139,6 +139,9 @@ function makeDeps(overrides: Partial<LoopOrchCommandDeps> = {}): LoopOrchCommand
       return { created: true, reconciled: false, actions: [], absPath: _args.absPath }
     },
     ...overrides,
+    // isLoopArmed MUST follow the spread: Partial<...> widens it to T|undefined,
+    // placing it after with ?? fallback ensures TS7 always sees a concrete function.
+    isLoopArmed: overrides.isLoopArmed ?? ((_chatId: string) => null),
   }
 }
 
