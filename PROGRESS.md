@@ -13,6 +13,7 @@ bash scripts/verify-decomp.sh
 
 ## Progress (latest first)
 
+- 2026-07-18 Commit two unwired adapter files (event-store-messages.adapter.ts + event-store-peripheral-events.adapter.ts, 318 LOC combined) left by a stalled parallel subagent; fixed lint in messages adapter (removed `as T` cast). Launched 3 parallel subagents: event-store wiring (6973de33), diff-store commit-ops (6ee42445), agent+ws-router (642c1699). Remaining: event-store.ts 1026, diff-store.ts 661, ws-router.ts 1280, agent.ts 1322.
 - 2026-07-18 Add colocated tests for event-store-write-ops.ts (56 tests covering all builder functions: buildOpenProjectResult, buildRemoveProjectEvent, buildSetProjectStarEvent, computeNewSidebarOrder, all stack/chat/turn/queued-message/tool-request builders) and event-store-apply.ts (11 tests covering dispatch routing: project/chat/message/stack/autocontinue/tool-request events); all gates green (eslint, typecheck, bun test 67/67). ✅
 - 2026-07-18 Extract 6 branch-operation methods from DiffStore into diff-store-branch-ops.adapter.ts (listBranches, previewMergeBranch, mergeBranch, checkoutBranch, createBranch, syncBranch) with DiffStoreBranchOpsDeps interface + buildBranchOpsDeps() deps-builder in DiffStore; 25 new tests pass. diff-store.ts: 1162 → 661 LOC (−501). ✅
 - 2026-07-18 Wire applyStoreEvent into EventStore (applyEvent was duplicating the 97-line switch from event-store-apply.ts); remove applyAutoContinueEvent/applyMessageMetadata/applyOrchestrationEvent private helpers; also fixed event-store-apply.ts lint (replaced 'as AutoContinueEvent' with isAutoContinueEvent type guard) and event-store-write-ops.ts (added missing ProjectRecord import, narrowed OpenProjectResult event type). event-store.ts: 1134 → 1026 LOC (−108). ✅
@@ -73,17 +74,12 @@ bash scripts/verify-decomp.sh
 
 ## Next chunk
 
-**diff-store.ts: 661 LOC** — still 61 LOC over target. Extract commit-ops to bring it under 600:
+**All 4 remaining files** (event-store.ts 1026, diff-store.ts 661, ws-router.ts 1280, agent.ts 1322) have parallel subagents running:
+- 6973de33: wire event-store-messages.adapter.ts + event-store-peripheral-events.adapter.ts into event-store.ts
+- 6ee42445: extract diff-store commit-ops (generateCommitMessage + commitFiles + discardFile + ignoreFile) → diff-store-commit-ops.adapter.ts
+- 642c1699: extract large clusters from agent.ts + ws-router.ts
 
-Extract `generateCommitMessage + commitFiles + discardFile + ignoreFile` → `diff-store-commit-ops.adapter.ts`
-
-Pattern (same as branch-ops):
-1. Create `DiffStoreCommitOpsDeps` interface (needs `refreshSnapshot`, and IO helpers)
-2. Create standalone async functions `generateCommitMessage(deps, args)`, `commitFiles(deps, args)`, `discardFile(deps, args)`, `ignoreFile(deps, args)`
-3. Add `buildCommitOpsDeps()` private method to `DiffStore`
-4. Replace each method body with one-liner delegate
-
-Expected result: diff-store.ts ~340 LOC (under 600 ✅)
+After these complete, re-check LOC and dispatch further rounds as needed.
 
 ## Worker rules (every subagent MUST follow)
 
