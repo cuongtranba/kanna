@@ -407,6 +407,12 @@ export class EventStore implements PushEventStore {
           sessionTokensByProvider,
           pendingForkSessionToken,
         })
+        // Mirror the chat_created handler: every live chat needs a subagent-run
+        // map, or subagent_run_started events after a reboot are silently
+        // dropped from the read model (the runs never reach the UI).
+        if (!chat.deletedAt) {
+          this.state.subagentRunsByChatId.set(chat.id, new Map())
+        }
       }
       this.legacySidebarProjectOrder = normalizeSidebarProjectOrder(parsed.sidebarProjectOrder)
       if (parsed.queuedMessages?.length) {
