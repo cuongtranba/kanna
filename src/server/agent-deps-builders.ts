@@ -11,7 +11,7 @@
  * allows external access.
  */
 
-import type { AgentCoordinator } from "./agent"
+import type { AgentCoordinator } from "./agent-coordinator"
 import { ensureFreshMcpToken } from "./mcp-oauth.adapter"
 import { realpathAdapter } from "./paths-fs.adapter"
 import { ensureTrackingFile } from "./loop-template-io.adapter"
