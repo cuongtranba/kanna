@@ -1,13 +1,8 @@
 import type { AnyValue } from "../shared/errors"
 import { log } from "../shared/log"
-import os from "node:os"
 import type { ServerWebSocket } from "bun"
 import { PROTOCOL_VERSION } from "../shared/types"
-import type { ClientEnvelope, PtyInstancesEvent, ServerEnvelope, SubscriptionTopic } from "../shared/protocol"
-import type { PtyInstanceDelta } from "../shared/pty-instance"
-import type { PtyInstanceRegistry } from "./claude-pty/pty-instance-registry"
-import type { WorkflowRegistry } from "./workflow-registry"
-import type { SubagentTranscriptRegistry } from "./subagent-transcript-registry"
+import type { ClientEnvelope } from "../shared/protocol"
 import { isClientEnvelope } from "../shared/protocol"
 import type { AgentCoordinator } from "./agent"
 import type { AnalyticsReporter } from "./analytics"
@@ -22,8 +17,6 @@ import { resolveLocalPath } from "./paths"
 import { ensureProjectDirectory } from "./project-directory.adapter"
 import { TerminalManager } from "./terminal-manager"
 import type { UpdateManager } from "./update-manager"
-import { deriveChatSnapshot, deriveLocalProjectsSnapshot, deriveSidebarData } from "./read-models"
-import { toOrchRunSummary } from "./orchestration-input"
 import type {
   LlmProviderSnapshot,
   LlmProviderValidationResult,
@@ -34,6 +27,9 @@ import { listWorktrees } from "./worktree-store.adapter"
 import type { TunnelGateway } from "./cloudflare-tunnel/gateway"
 import type { PushManager } from "./push/push-manager"
 import type { SessionShareService } from "./session-share"
+import type { PtyInstanceRegistry } from "./claude-pty/pty-instance-registry"
+import type { WorkflowRegistry } from "./workflow-registry"
+import type { SubagentTranscriptRegistry } from "./subagent-transcript-registry"
 import { buildFallbackDiffStore, buildFallbackLlmProvider, buildResolvedAppSettings } from "./ws-router-defaults"
 import { handleSettingsCommand } from "./ws-router-settings"
 import { handleDiffCommand } from "./ws-router-diff"
@@ -43,6 +39,15 @@ import { handlePushCommand } from "./ws-router-push"
 import { handleMiscCommand } from "./ws-router-misc"
 import { handleProjectCommand } from "./ws-router-project"
 import { handleChatCommand } from "./ws-router-chat"
+import {
+  ensureSnapshotSignatures,
+  isBenignStaleStateMessage,
+  logSendToStartingProfile,
+  send,
+} from "./ws-router-utils"
+import type { ClientState } from "./ws-router-utils"
+import { createEnvelopeBuilder } from "./ws-router-envelope"
+import { BroadcastManager } from "./ws-router-broadcast"
 
 // Re-export skill utilities so existing callers (tests, server.ts, etc.) keep working.
 export {
@@ -61,89 +66,9 @@ export {
 // Re-export settings helpers that tests import from this module.
 export { resolveMcpTestBearer } from "./ws-router-settings"
 
-const DEFAULT_CHAT_RECENT_LIMIT = 200
-
-function isSendToStartingProfilingEnabled() {
-  return process.env.KANNA_PROFILE_SEND_TO_STARTING === "1"
-}
-
-function logSendToStartingProfile(
-  traceId: string | null | undefined,
-  startedAt: number | null | undefined,
-  stage: string,
-  details?: Record<string, unknown>
-) {
-  if (!traceId || startedAt === undefined || startedAt === null || !isSendToStartingProfilingEnabled()) {
-    return
-  }
-
-  log.info("[kanna/send->starting][server]", JSON.stringify({
-    traceId,
-    stage,
-    elapsedMs: Number((performance.now() - startedAt).toFixed(1)),
-    ...details,
-  }))
-}
-
-function countSubscriptionsByTopic(ws: ServerWebSocket<ClientState>) {
-  let sidebar = 0
-  let chat = 0
-  let projectGit = 0
-  let localProjects = 0
-  let update = 0
-  let keybindings = 0
-  let appSettings = 0
-  let terminal = 0
-
-  for (const topic of ws.data.subscriptions.values()) {
-    switch (topic.type) {
-      case "sidebar":
-        sidebar += 1
-        break
-      case "chat":
-        chat += 1
-        break
-      case "project-git":
-        projectGit += 1
-        break
-      case "local-projects":
-        localProjects += 1
-        break
-      case "update":
-        update += 1
-        break
-      case "keybindings":
-        keybindings += 1
-        break
-      case "app-settings":
-        appSettings += 1
-        break
-      case "terminal":
-        terminal += 1
-        break
-    }
-  }
-
-  return {
-    total: ws.data.subscriptions.size,
-    sidebar,
-    chat,
-    projectGit,
-    localProjects,
-    update,
-    keybindings,
-    appSettings,
-    terminal,
-  }
-}
-
-export interface ClientState {
-  subscriptions: Map<string, SubscriptionTopic>
-  snapshotSignatures: Map<string, string>
-  protectedDraftChatIds?: Set<string>
-  pushDeviceId?: string | null
-  originHost?: string
-}
+// Re-export for backwards compatibility — callers import these from ws-router.
+export type { ClientState } from "./ws-router-utils"
+export { isBenignStaleStateMessage } from "./ws-router-utils"
 
 interface CreateWsRouterArgs {
   store: EventStore
@@ -173,60 +98,6 @@ interface CreateWsRouterArgs {
   sessionShare?: SessionShareService
 }
 
-interface SnapshotBroadcastFilter {
-  includeSidebar?: boolean
-  includeLocalProjects?: boolean
-  includeUpdate?: boolean
-  includeKeybindings?: boolean
-  includeAppSettings?: boolean
-  includePushConfig?: boolean
-  chatIds?: Set<string>
-  projectIds?: Set<string>
-  terminalIds?: Set<string>
-}
-
-interface SnapshotComputationCache {
-  sidebar?: {
-    data: ReturnType<typeof deriveSidebarData>
-    signature: string
-  }
-}
-
-function getSidebarProjectOrder(store: EventStore) {
-  return typeof store.getSidebarProjectOrder === "function"
-    ? store.getSidebarProjectOrder()
-    : []
-}
-
-// Stale-state command failures happen during normal client/server races
-// (e.g. the user steers a queued message that drained between snapshots).
-// They flood pm2 logs at console.error level; downgrade to console.log.
-const BENIGN_STALE_STATE_MESSAGES = [
-  /^Chat not found$/,
-  /^Queued message not found$/,
-  /^File is no longer changed: /,
-  /^Project not found$/,
-] as const
-
-export function isBenignStaleStateMessage(message: string): boolean {
-  return BENIGN_STALE_STATE_MESSAGES.some((pattern) => pattern.test(message))
-}
-
-function send(ws: ServerWebSocket<ClientState>, message: ServerEnvelope) {
-  const payload = JSON.stringify(message)
-  ws.send(payload)
-  return payload.length
-}
-
-
-function ensureSnapshotSignatures(ws: ServerWebSocket<ClientState>) {
-  if (!ws.data.snapshotSignatures) {
-    ws.data.snapshotSignatures = new Map()
-  }
-
-  return ws.data.snapshotSignatures
-}
-
 export function createWsRouter({
   store,
   diffStore,
@@ -249,644 +120,37 @@ export function createWsRouter({
   subagentTranscriptRegistry,
   sessionShare,
 }: CreateWsRouterArgs) {
-  const sockets = new Set<ServerWebSocket<ClientState>>()
-  let pendingBroadcastTimer: ReturnType<typeof setTimeout> | null = null
-  let pendingBroadcastAll = false
-  const pendingBroadcastChatIds = new Set<string>()
   const resolvedDiffStore = diffStore ?? buildFallbackDiffStore()
   const resolvedLlmProvider = llmProvider ?? buildFallbackLlmProvider()
   const resolvedAppSettings = buildResolvedAppSettings(appSettings)
   const resolvedAnalytics = analytics ?? NoopAnalyticsReporter
 
-  function getProtectedChatIds() {
-    const activeStatuses = agent.getActiveStatuses()
-    const drainingChatIds = typeof agent.getDrainingChatIds === "function"
-      ? agent.getDrainingChatIds()
-      : new Set<string>()
-    return new Set([
-      ...activeStatuses.keys(),
-      ...drainingChatIds.values(),
-    ])
-  }
-
-  function getProtectedDraftChatIds(extraSockets?: Iterable<ServerWebSocket<ClientState>>) {
-    const protectedChatIds = new Set<string>()
-
-    for (const socket of sockets) {
-      for (const chatId of socket.data.protectedDraftChatIds ?? []) {
-        protectedChatIds.add(chatId)
-      }
-    }
-
-    for (const socket of extraSockets ?? []) {
-      for (const chatId of socket.data.protectedDraftChatIds ?? []) {
-        protectedChatIds.add(chatId)
-      }
-    }
-
-    return protectedChatIds
-  }
-
-  async function maybePruneStaleEmptyChats(extraSockets?: Iterable<ServerWebSocket<ClientState>>) {
-    const startedAt = performance.now()
-    const activeChatIds = getProtectedChatIds()
-    const protectedDraftChatIds = getProtectedDraftChatIds(extraSockets)
-    const prunedChatIds = await store.pruneStaleEmptyChats?.({
-      activeChatIds,
-      protectedChatIds: protectedDraftChatIds,
-    })
-    if (isSendToStartingProfilingEnabled()) {
-      log.info("[kanna/send->starting][server]", JSON.stringify({
-        stage: "ws.prune_stale_empty_chats",
-        elapsedMs: Number((performance.now() - startedAt).toFixed(1)),
-        activeChatCount: activeChatIds.size,
-        protectedDraftChatCount: protectedDraftChatIds.size,
-        prunedCount: prunedChatIds?.length ?? 0,
-        totalChatCount: store.state.chatsById.size,
-        totalProjectCount: store.state.projectsById.size,
-      }))
-    }
-  }
-
-  function shouldIncludeTopic(topic: SubscriptionTopic, filter?: SnapshotBroadcastFilter) {
-    if (!filter) {
-      return true
-    }
-
-    if (topic.type === "sidebar") {
-      return Boolean(filter.includeSidebar)
-    }
-    if (topic.type === "local-projects") {
-      return Boolean(filter.includeLocalProjects)
-    }
-    if (topic.type === "update") {
-      return Boolean(filter.includeUpdate)
-    }
-    if (topic.type === "keybindings") {
-      return Boolean(filter.includeKeybindings)
-    }
-    if (topic.type === "app-settings") {
-      return Boolean(filter.includeAppSettings)
-    }
-    if (topic.type === "push-config") {
-      return Boolean(filter.includePushConfig)
-    }
-    if (topic.type === "chat") {
-      return filter.chatIds?.has(topic.chatId) ?? false
-    }
-    if (topic.type === "project-git") {
-      return filter.projectIds?.has(topic.projectId) ?? false
-    }
-    if (topic.type === "terminal") {
-      return filter.terminalIds?.has(topic.terminalId) ?? false
-    }
-
-    return true
-  }
-
-  function getSidebarSnapshotCacheEntry(cache?: SnapshotComputationCache) {
-    if (cache?.sidebar) {
-      return cache.sidebar
-    }
-
-    const startedAt = performance.now()
-    const data = deriveSidebarData(store.state, agent.getActiveStatuses(), {
-      sidebarProjectOrder: getSidebarProjectOrder(store),
-      drainingChatIds: agent.getDrainingChatIds(),
-      claudeSessionStates: agent.getClaudeSessionStates?.(),
-    })
-    const observed = data.projectGroups.flatMap((group) =>
-      group.chats.map((chat) => ({
-        chatId: chat.chatId,
-        projectLocalPath: group.localPath,
-        projectTitle: group.localPath.split("/").filter(Boolean).pop() ?? group.localPath,
-        chatTitle: chat.title,
-        status: chat.status,
-      }))
-    )
-    void pushManager.observeStatuses(observed).catch((error) => {
-      log.warn("[kanna/push] observeStatuses failed", { error })
-    })
-    if (isSendToStartingProfilingEnabled()) {
-      const totalChats = data.projectGroups.reduce((count, group) => count + group.chats.length, 0)
-      log.info("[kanna/send->starting][server]", JSON.stringify({
-        stage: "ws.sidebar_snapshot_built",
-        elapsedMs: Number((performance.now() - startedAt).toFixed(1)),
-        projectGroupCount: data.projectGroups.length,
-        chatCount: totalChats,
-        totalChatCount: store.state.chatsById.size,
-        totalProjectCount: store.state.projectsById.size,
-      }))
-    }
-
-    const sidebar = {
-      data,
-      signature: JSON.stringify({
-        type: "sidebar" as const,
-        data,
-      }),
-    }
-
-    if (cache) {
-      cache.sidebar = sidebar
-    }
-
-    return sidebar
-  }
-
-  function createEnvelope(
-    id: string,
-    topic: SubscriptionTopic,
-    cache?: SnapshotComputationCache,
-    connection?: ServerWebSocket<ClientState>,
-  ): ServerEnvelope {
-    if (topic.type === "sidebar") {
-      const sidebar = getSidebarSnapshotCacheEntry(cache)
-      return {
-        v: PROTOCOL_VERSION,
-        type: "snapshot",
-        id,
-        snapshot: {
-          type: "sidebar",
-          data: sidebar.data,
-        },
-      }
-    }
-
-    if (topic.type === "local-projects") {
-      const discoveredProjects = getDiscoveredProjects()
-      const data = deriveLocalProjectsSnapshot(store.state, discoveredProjects, machineDisplayName, os.homedir())
-
-      return {
-        v: PROTOCOL_VERSION,
-        type: "snapshot",
-        id,
-        snapshot: {
-          type: "local-projects",
-          data,
-        },
-      }
-    }
-
-    if (topic.type === "keybindings") {
-      return {
-        v: PROTOCOL_VERSION,
-        type: "snapshot",
-        id,
-        snapshot: {
-          type: "keybindings",
-          data: keybindings.getSnapshot(),
-        },
-      }
-    }
-
-    if (topic.type === "app-settings") {
-      return {
-        v: PROTOCOL_VERSION,
-        type: "snapshot",
-        id,
-        snapshot: {
-          type: "app-settings",
-          data: resolvedAppSettings.getSnapshot(),
-        },
-      }
-    }
-
-    if (topic.type === "push-config") {
-      return {
-        v: PROTOCOL_VERSION,
-        type: "snapshot",
-        id,
-        snapshot: {
-          type: "push-config",
-          data: pushManager.getConfigSnapshot(connection?.data.pushDeviceId ?? null),
-        },
-      }
-    }
-
-    if (topic.type === "update") {
-      return {
-        v: PROTOCOL_VERSION,
-        type: "snapshot",
-        id,
-        snapshot: {
-          type: "update",
-          data: updateManager?.getSnapshot() ?? {
-            currentVersion: "unknown",
-            latestVersion: null,
-            status: "idle",
-            updateAvailable: false,
-            lastCheckedAt: null,
-            error: null,
-            installAction: "restart",
-            reloadRequestedAt: null,
-          },
-        },
-      }
-    }
-
-    if (topic.type === "terminal") {
-      return {
-        v: PROTOCOL_VERSION,
-        type: "snapshot",
-        id,
-        snapshot: {
-          type: "terminal",
-          data: terminals.getSnapshot(topic.terminalId),
-        },
-      }
-    }
-
-    if (topic.type === "project-git") {
-      return {
-        v: PROTOCOL_VERSION,
-        type: "snapshot",
-        id,
-        snapshot: {
-          type: "project-git",
-          data: store.getProject(topic.projectId)
-            ? resolvedDiffStore.getProjectSnapshot(topic.projectId)
-            : null,
-        },
-      }
-    }
-
-    if (topic.type === "pty-instances") {
-      return {
-        v: PROTOCOL_VERSION,
-        type: "snapshot",
-        id,
-        snapshot: {
-          type: "pty-instances",
-          data: { instances: ptyInstances?.snapshot() ?? [] },
-        },
-      }
-    }
-
-    if (topic.type === "workflows") {
-      return {
-        v: PROTOCOL_VERSION,
-        type: "snapshot",
-        id,
-        snapshot: {
-          type: "workflows",
-          data: { chatId: topic.chatId, runs: workflowRegistry?.snapshot(topic.chatId) ?? [] },
-        },
-      }
-    }
-
-    if (topic.type === "orch-runs") {
-      return {
-        v: PROTOCOL_VERSION,
-        type: "snapshot",
-        id,
-        snapshot: {
-          type: "orch-runs",
-          data: { runs: store.getOrchRuns().map(toOrchRunSummary) },
-        },
-      }
-    }
-
-    return {
-      v: PROTOCOL_VERSION,
-      type: "snapshot",
-      id,
-      snapshot: {
-        type: "chat",
-        data: deriveChatSnapshot(
-          store.state,
-          agent.getActiveStatuses(),
-          agent.getDrainingChatIds(),
-          agent.getSlashCommandsLoadingChatIds(),
-          topic.chatId,
-          (chatId) => store.getRecentChatHistory(chatId, topic.recentLimit ?? DEFAULT_CHAT_RECENT_LIMIT),
-          (chatId) => store.getTunnelEvents(chatId),
-          agent.getWaitStartedAtByChatId(),
-          Date.now(),
-          agent.getClaudeSessionStates?.() ?? new Map(),
-          appSettings?.getSnapshot().customModels ?? [],
-        ),
-      },
-    }
-  }
-
-  // timings.derivedAtMs = Date.now() on every call, making every snapshot unique
-  // and defeating signature-based dedup. Strip timings from the signature so that
-  // idle/finished chats are only sent once instead of on every broadcastSnapshots call.
-  function getStableChatSnapshotSignature(snapshot: Extract<ServerEnvelope, { type: "snapshot" }>["snapshot"]): string {
-    if (snapshot.type === "chat" && snapshot.data?.runtime) {
-      const { timings: _t, ...stableRuntime } = snapshot.data.runtime
-      return JSON.stringify({ type: snapshot.type, data: { ...snapshot.data, runtime: stableRuntime } })
-    }
-    return JSON.stringify(snapshot)
-  }
-
-  async function pushSnapshots(
-    ws: ServerWebSocket<ClientState>,
-    options?: { skipPrune?: boolean; filter?: SnapshotBroadcastFilter; cache?: SnapshotComputationCache }
-  ) {
-    const pushStartedAt = performance.now()
-    if (!options?.skipPrune) {
-      await maybePruneStaleEmptyChats([ws])
-    }
-    const snapshotSignatures = ensureSnapshotSignatures(ws)
-    let sentCount = 0
-    let skippedCount = 0
-    for (const [id, topic] of ws.data.subscriptions.entries()) {
-      if (!shouldIncludeTopic(topic, options?.filter)) {
-        continue
-      }
-      const envelopeStartedAt = performance.now()
-      const envelope = createEnvelope(id, topic, options?.cache, ws)
-      const createdAt = performance.now()
-      if (envelope.type !== "snapshot") continue
-      const signature = topic.type === "sidebar"
-        ? getSidebarSnapshotCacheEntry(options?.cache).signature
-        : getStableChatSnapshotSignature(envelope.snapshot)
-      const signatureReadyAt = topic.type === "sidebar" ? createdAt : performance.now()
-      if (snapshotSignatures.get(id) === signature) {
-        skippedCount += 1
-        continue
-      }
-      snapshotSignatures.set(id, signature)
-      if (topic.type === "chat" && envelope.snapshot.type === "chat" && envelope.snapshot.data?.runtime.status === "starting") {
-        const profile = agent.getActiveTurnProfile(topic.chatId)
-        logSendToStartingProfile(profile?.traceId, profile?.startedAt, "ws.snapshot_sent", {
-          chatId: topic.chatId,
-          status: envelope.snapshot.data.runtime.status,
-          messageCount: envelope.snapshot.data.messages.length,
-          buildMs: Number((createdAt - envelopeStartedAt).toFixed(1)),
-          signatureMs: Number((signatureReadyAt - createdAt).toFixed(1)),
-          signatureBytes: signature.length,
-        })
-      }
-      const payloadBytes = send(ws, envelope)
-      sentCount += 1
-      if (topic.type === "chat" && envelope.snapshot.type === "chat" && envelope.snapshot.data?.runtime.status === "starting") {
-        const profile = agent.getActiveTurnProfile(topic.chatId)
-        logSendToStartingProfile(profile?.traceId, profile?.startedAt, "ws.snapshot_send_completed", {
-          chatId: topic.chatId,
-          payloadBytes,
-        })
-      }
-    }
-    if (isSendToStartingProfilingEnabled()) {
-      log.info("[kanna/send->starting][server]", JSON.stringify({
-        stage: "ws.push_snapshots_completed",
-        elapsedMs: Number((performance.now() - pushStartedAt).toFixed(1)),
-        skipPrune: Boolean(options?.skipPrune),
-        sentCount,
-        skippedCount,
-        ...countSubscriptionsByTopic(ws),
-      }))
-    }
-  }
-
-  async function broadcastSnapshots() {
-    const startedAt = performance.now()
-    let socketCount = 0
-    const cache: SnapshotComputationCache = {}
-    for (const ws of sockets) {
-      socketCount += 1
-      await pushSnapshots(ws, { skipPrune: true, cache })
-    }
-    if (isSendToStartingProfilingEnabled()) {
-      log.info("[kanna/send->starting][server]", JSON.stringify({
-        stage: "ws.broadcast_snapshots_completed",
-        elapsedMs: Number((performance.now() - startedAt).toFixed(1)),
-        pruneMs: 0,
-        socketCount,
-        totalChatCount: store.state.chatsById.size,
-        totalProjectCount: store.state.projectsById.size,
-      }))
-    }
-  }
-
-  async function broadcastFilteredSnapshots(filter: SnapshotBroadcastFilter) {
-    const startedAt = performance.now()
-    let socketCount = 0
-    const cache: SnapshotComputationCache = {}
-    for (const ws of sockets) {
-      socketCount += 1
-      await pushSnapshots(ws, { skipPrune: true, filter, cache })
-    }
-    if (isSendToStartingProfilingEnabled()) {
-      log.info("[kanna/send->starting][server]", JSON.stringify({
-        stage: "ws.broadcast_filtered_snapshots_completed",
-        elapsedMs: Number((performance.now() - startedAt).toFixed(1)),
-        socketCount,
-        includeSidebar: Boolean(filter.includeSidebar),
-        chatCount: filter.chatIds?.size ?? 0,
-        projectCount: filter.projectIds?.size ?? 0,
-      }))
-    }
-  }
-
-  function scheduleBroadcast() {
-    pendingBroadcastAll = true
-    pendingBroadcastChatIds.clear()
-    if (pendingBroadcastTimer) {
-      return
-    }
-    pendingBroadcastTimer = setTimeout(() => {
-      pendingBroadcastTimer = null
-      const shouldBroadcastAll = pendingBroadcastAll
-      const chatIds = new Set(pendingBroadcastChatIds)
-      pendingBroadcastAll = false
-      pendingBroadcastChatIds.clear()
-      if (shouldBroadcastAll) {
-        void broadcastSnapshots()
-        return
-      }
-      if (chatIds.size > 0) {
-        void broadcastFilteredSnapshots({
-          includeSidebar: true,
-          chatIds,
-        })
-      }
-    }, 16)
-  }
-
-  function scheduleChatStateBroadcast(chatId: string) {
-    if (!pendingBroadcastAll) {
-      pendingBroadcastChatIds.add(chatId)
-    }
-    if (pendingBroadcastTimer) {
-      return
-    }
-    pendingBroadcastTimer = setTimeout(() => {
-      pendingBroadcastTimer = null
-      const shouldBroadcastAll = pendingBroadcastAll
-      const chatIds = new Set(pendingBroadcastChatIds)
-      pendingBroadcastAll = false
-      pendingBroadcastChatIds.clear()
-      if (shouldBroadcastAll) {
-        void broadcastSnapshots()
-        return
-      }
-      if (chatIds.size > 0) {
-        void broadcastFilteredSnapshots({
-          includeSidebar: true,
-          chatIds,
-        })
-      }
-    }, 16)
-  }
-
-  async function broadcastChatAndSidebar(chatId: string) {
-    await broadcastFilteredSnapshots({
-      includeSidebar: true,
-      chatIds: new Set([chatId]),
-    })
-  }
-
-  async function broadcastChatStateImmediately(chatId: string) {
-    await broadcastChatAndSidebar(chatId)
-  }
-
-  function broadcastError(message: string) {
-    for (const ws of sockets) {
-      send(ws, {
-        v: PROTOCOL_VERSION,
-        type: "error",
-        message,
-      })
-    }
-  }
-
-  function pushTerminalSnapshot(terminalId: string) {
-    for (const ws of sockets) {
-      const snapshotSignatures = ensureSnapshotSignatures(ws)
-      for (const [id, topic] of ws.data.subscriptions.entries()) {
-        if (topic.type !== "terminal" || topic.terminalId !== terminalId) continue
-        const envelope = createEnvelope(id, topic, undefined, ws)
-        if (envelope.type !== "snapshot") continue
-        const signature = JSON.stringify(envelope.snapshot)
-        if (snapshotSignatures.get(id) === signature) continue
-        snapshotSignatures.set(id, signature)
-        send(ws, envelope)
-      }
-    }
-  }
-
-  function pushTerminalEvent(terminalId: string, event: Extract<ServerEnvelope, { type: "event" }>["event"]) {
-    for (const ws of sockets) {
-      for (const [id, topic] of ws.data.subscriptions.entries()) {
-        if (topic.type !== "terminal" || topic.terminalId !== terminalId) continue
-        send(ws, {
-          v: PROTOCOL_VERSION,
-          type: "event",
-          id,
-          event,
-        })
-      }
-    }
-  }
-
-  const disposeTerminalEvents = terminals.onEvent((event) => {
-    pushTerminalEvent(event.terminalId, event)
+  const envelopeBuilder = createEnvelopeBuilder({
+    store,
+    agent,
+    resolvedAppSettings,
+    keybindings,
+    resolvedDiffStore,
+    ptyInstances,
+    workflowRegistry,
+    machineDisplayName,
+    updateManager,
+    getDiscoveredProjects,
+    terminals,
+    pushManager,
   })
 
-  const disposeKeybindingEvents = keybindings.onChange(() => {
-    for (const ws of sockets) {
-      const snapshotSignatures = ensureSnapshotSignatures(ws)
-      for (const [id, topic] of ws.data.subscriptions.entries()) {
-        if (topic.type !== "keybindings") continue
-        const envelope = createEnvelope(id, topic, undefined, ws)
-        if (envelope.type !== "snapshot") continue
-        const signature = JSON.stringify(envelope.snapshot)
-        if (snapshotSignatures.get(id) === signature) continue
-        snapshotSignatures.set(id, signature)
-        send(ws, envelope)
-      }
-    }
+  const broadcast = new BroadcastManager({
+    agent,
+    store,
+    terminals,
+    keybindings,
+    resolvedAppSettings,
+    updateManager,
+    ptyInstances,
+    workflowRegistry,
+    envelopeBuilder,
   })
-
-  const disposeAppSettingsEvents = resolvedAppSettings.onChange(() => {
-    for (const ws of sockets) {
-      const snapshotSignatures = ensureSnapshotSignatures(ws)
-      for (const [id, topic] of ws.data.subscriptions.entries()) {
-        if (topic.type !== "app-settings") continue
-        const envelope = createEnvelope(id, topic, undefined, ws)
-        if (envelope.type !== "snapshot") continue
-        const signature = JSON.stringify(envelope.snapshot)
-        if (snapshotSignatures.get(id) === signature) continue
-        snapshotSignatures.set(id, signature)
-        send(ws, envelope)
-      }
-    }
-  })
-
-  const disposeUpdateEvents = updateManager?.onChange(() => {
-    for (const ws of sockets) {
-      const snapshotSignatures = ensureSnapshotSignatures(ws)
-      for (const [id, topic] of ws.data.subscriptions.entries()) {
-        if (topic.type !== "update") continue
-        const envelope = createEnvelope(id, topic, undefined, ws)
-        if (envelope.type !== "snapshot") continue
-        const signature = JSON.stringify(envelope.snapshot)
-        if (snapshotSignatures.get(id) === signature) continue
-        snapshotSignatures.set(id, signature)
-        send(ws, envelope)
-      }
-    }
-  }) ?? (() => {})
-
-  function pushPtyInstancesEvent(event: PtyInstancesEvent) {
-    for (const ws of sockets) {
-      for (const [id, topic] of ws.data.subscriptions.entries()) {
-        if (topic.type !== "pty-instances") continue
-        send(ws, { v: PROTOCOL_VERSION, type: "event", id, event })
-      }
-    }
-  }
-
-  const disposePtyInstances: () => void = ptyInstances?.subscribe((delta: PtyInstanceDelta) => {
-    if (delta.type === "added") {
-      pushPtyInstancesEvent({ type: "pty-instances.added", instance: delta.instance })
-    } else if (delta.type === "updated") {
-      pushPtyInstancesEvent({ type: "pty-instances.updated", instance: delta.instance })
-    } else {
-      pushPtyInstancesEvent({ type: "pty-instances.removed", chatId: delta.chatId })
-    }
-  }) ?? (() => {})
-
-  const disposeWorkflows: () => void = workflowRegistry?.subscribe((chatId) => {
-    for (const ws of sockets) {
-      const snapshotSignatures = ensureSnapshotSignatures(ws)
-      for (const [id, topic] of ws.data.subscriptions.entries()) {
-        if (topic.type !== "workflows" || topic.chatId !== chatId) continue
-        const envelope = createEnvelope(id, topic, undefined, ws)
-        if (envelope.type !== "snapshot") continue
-        const signature = JSON.stringify(envelope.snapshot)
-        if (snapshotSignatures.get(id) === signature) continue
-        snapshotSignatures.set(id, signature)
-        send(ws, envelope)
-      }
-    }
-  }) ?? (() => {})
-
-  const pushOrchRuns = () => {
-    for (const ws of sockets) {
-      const snapshotSignatures = ensureSnapshotSignatures(ws)
-      for (const [id, topic] of ws.data.subscriptions.entries()) {
-        if (topic.type !== "orch-runs") continue
-        const envelope = createEnvelope(id, topic, undefined, ws)
-        if (envelope.type !== "snapshot") continue
-        const signature = JSON.stringify(envelope.snapshot)
-        if (snapshotSignatures.get(id) === signature) continue
-        snapshotSignatures.set(id, signature)
-        send(ws, envelope)
-      }
-    }
-  }
-  // Optional like the registry subscriptions above: partial store fakes in
-  // tests may not implement it. The real EventStore always does.
-  const disposeOrchRuns: () => void = typeof store.subscribeOrchRuns === "function"
-    ? store.subscribeOrchRuns(pushOrchRuns)
-    : () => {}
-
-  agent.setBackgroundErrorReporter?.(broadcastError)
 
   function resolveChatProject(chatId: string) {
     const chat = store.getChat(chatId)
@@ -951,9 +215,9 @@ export function createWsRouter({
               setDraftProtection: (chatIds) => { ws.data.protectedDraftChatIds = new Set(chatIds) },
               logSendProfilingFn: logSendToStartingProfile,
               send: (envelope) => send(ws, envelope),
-              broadcastChatAndSidebar,
-              broadcastSidebar: () => broadcastFilteredSnapshots({ includeSidebar: true }),
-              broadcastAll: broadcastSnapshots,
+              broadcastChatAndSidebar: (chatId) => broadcast.broadcastChatAndSidebar(chatId),
+              broadcastSidebar: () => broadcast.broadcastFilteredSnapshots({ includeSidebar: true }),
+              broadcastAll: () => broadcast.broadcastSnapshots(),
             },
             command,
             id,
@@ -972,7 +236,7 @@ export function createWsRouter({
               tunnelGateway,
               killPtyInstance,
               send: (envelope) => send(ws, envelope),
-              broadcastChatAndSidebar,
+              broadcastChatAndSidebar: (chatId) => broadcast.broadcastChatAndSidebar(chatId),
             },
             command,
             id,
@@ -991,9 +255,9 @@ export function createWsRouter({
               setDraftProtection: (chatIds) => { ws.data.protectedDraftChatIds = new Set(chatIds) },
               logSendProfilingFn: logSendToStartingProfile,
               send: (envelope) => send(ws, envelope),
-              broadcastChatAndSidebar,
-              broadcastSidebar: () => broadcastFilteredSnapshots({ includeSidebar: true }),
-              broadcastAll: broadcastSnapshots,
+              broadcastChatAndSidebar: (chatId) => broadcast.broadcastChatAndSidebar(chatId),
+              broadcastSidebar: () => broadcast.broadcastFilteredSnapshots({ includeSidebar: true }),
+              broadcastAll: () => broadcast.broadcastSnapshots(),
             },
             command,
             id,
@@ -1020,7 +284,7 @@ export function createWsRouter({
               resolvedDiffStore,
               resolveChatProject,
               send: (envelope) => send(ws, envelope),
-              broadcastSnapshots,
+              broadcastSnapshots: () => broadcast.broadcastSnapshots(),
             },
             command,
             id,
@@ -1042,9 +306,9 @@ export function createWsRouter({
               setDraftProtection: (chatIds) => { ws.data.protectedDraftChatIds = new Set(chatIds) },
               logSendProfilingFn: logSendToStartingProfile,
               send: (envelope) => send(ws, envelope),
-              broadcastChatAndSidebar,
-              broadcastSidebar: () => broadcastFilteredSnapshots({ includeSidebar: true }),
-              broadcastAll: broadcastSnapshots,
+              broadcastChatAndSidebar: (chatId) => broadcast.broadcastChatAndSidebar(chatId),
+              broadcastSidebar: () => broadcast.broadcastFilteredSnapshots({ includeSidebar: true }),
+              broadcastAll: () => broadcast.broadcastSnapshots(),
             },
             command,
             id,
@@ -1068,9 +332,9 @@ export function createWsRouter({
               listWorktrees,
               getOriginHost: () => ws.data.originHost ?? "",
               send: (envelope) => send(ws, envelope),
-              broadcastSidebar: () => broadcastFilteredSnapshots({ includeSidebar: true }),
-              broadcastChatAndSidebar,
-              pushTerminalSnapshot,
+              broadcastSidebar: () => broadcast.broadcastFilteredSnapshots({ includeSidebar: true }),
+              broadcastChatAndSidebar: (chatId) => broadcast.broadcastChatAndSidebar(chatId),
+              pushTerminalSnapshot: (terminalId) => broadcast.pushTerminalSnapshot(terminalId),
             },
             command,
             id,
@@ -1089,7 +353,7 @@ export function createWsRouter({
               getPushDeviceId: () => ws.data.pushDeviceId,
               setPushDeviceId: (did) => { ws.data.pushDeviceId = did },
               send: (envelope) => send(ws, envelope),
-              broadcastPushConfig: () => broadcastFilteredSnapshots({ includePushConfig: true }),
+              broadcastPushConfig: () => broadcast.broadcastFilteredSnapshots({ includePushConfig: true }),
             },
             command,
             id,
@@ -1104,7 +368,7 @@ export function createWsRouter({
               tunnelGateway,
               killPtyInstance,
               send: (envelope) => send(ws, envelope),
-              broadcastChatAndSidebar,
+              broadcastChatAndSidebar: (chatId) => broadcast.broadcastChatAndSidebar(chatId),
             },
             command,
             id,
@@ -1130,9 +394,9 @@ export function createWsRouter({
               listWorktrees,
               getOriginHost: () => ws.data.originHost ?? "",
               send: (envelope) => send(ws, envelope),
-              broadcastSidebar: () => broadcastFilteredSnapshots({ includeSidebar: true }),
-              broadcastChatAndSidebar,
-              pushTerminalSnapshot,
+              broadcastSidebar: () => broadcast.broadcastFilteredSnapshots({ includeSidebar: true }),
+              broadcastChatAndSidebar: (chatId) => broadcast.broadcastChatAndSidebar(chatId),
+              pushTerminalSnapshot: (terminalId) => broadcast.pushTerminalSnapshot(terminalId),
             },
             command,
             id,
@@ -1182,7 +446,7 @@ export function createWsRouter({
               openExternalFn: openExternal,
               terminals,
               send: (envelope) => send(ws, envelope),
-              broadcastSidebar: () => broadcastFilteredSnapshots({ includeSidebar: true }),
+              broadcastSidebar: () => broadcast.broadcastFilteredSnapshots({ includeSidebar: true }),
             },
             command,
             id,
@@ -1191,7 +455,7 @@ export function createWsRouter({
         }
       }
 
-      await broadcastSnapshots()
+      await broadcast.broadcastSnapshots()
     } catch (error) {
       const messageText = error instanceof Error ? error.message : String(error)
       const benign = isBenignStaleStateMessage(messageText)
@@ -1207,19 +471,19 @@ export function createWsRouter({
 
   return {
     handleOpen(ws: ServerWebSocket<ClientState>) {
-      sockets.add(ws)
+      broadcast.addSocket(ws)
     },
     handleClose(ws: ServerWebSocket<ClientState>) {
       if (ws.data.pushDeviceId) {
         pushManager.clearFocus(ws.data.pushDeviceId)
       }
-      sockets.delete(ws)
+      broadcast.removeSocket(ws)
     },
-    broadcastSnapshots,
-    broadcastChatStateImmediately,
-    scheduleBroadcast,
-    scheduleChatStateBroadcast,
-    pruneStaleEmptyChats: () => maybePruneStaleEmptyChats(),
+    broadcastSnapshots: () => broadcast.broadcastSnapshots(),
+    broadcastChatStateImmediately: (chatId: string) => broadcast.broadcastChatStateImmediately(chatId),
+    scheduleBroadcast: () => broadcast.scheduleBroadcast(),
+    scheduleChatStateBroadcast: (chatId: string) => broadcast.scheduleChatStateBroadcast(chatId),
+    pruneStaleEmptyChats: () => broadcast.maybePruneStaleEmptyChats(),
     async handleMessage(ws: ServerWebSocket<ClientState>, raw: string | Buffer | ArrayBuffer | Uint8Array) {
       let parsed: AnyValue
       try {
@@ -1244,12 +508,12 @@ export function createWsRouter({
         if (parsed.topic.type === "local-projects") {
           void refreshDiscovery().then(() => {
             if (ws.data.subscriptions.has(parsed.id)) {
-              void pushSnapshots(ws, { skipPrune: true })
+              void broadcast.pushSnapshots(ws, { skipPrune: true })
             }
           })
           return
         }
-        await pushSnapshots(ws, { skipPrune: true })
+        await broadcast.pushSnapshots(ws, { skipPrune: true })
         return
       }
 
@@ -1264,17 +528,7 @@ export function createWsRouter({
       await handleCommand(ws, parsed)
     },
     dispose() {
-      if (pendingBroadcastTimer) {
-        clearTimeout(pendingBroadcastTimer)
-      }
-      agent.setBackgroundErrorReporter?.(null)
-      disposeTerminalEvents()
-      disposeKeybindingEvents()
-      disposeAppSettingsEvents()
-      disposeUpdateEvents()
-      disposePtyInstances()
-      disposeWorkflows()
-      disposeOrchRuns()
+      broadcast.dispose()
     },
   }
 }

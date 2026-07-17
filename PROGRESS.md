@@ -13,6 +13,8 @@ bash scripts/verify-decomp.sh
 
 ## Progress (latest first)
 
+- 2026-07-18 Reduce ws-router.ts 1280 → 534 LOC (−746) by extracting 3 new modules: ws-router-utils.ts (224 LOC: ClientState/SnapshotBroadcastFilter/SnapshotComputationCache interfaces + 10 pure utility fns: isBenignStaleStateMessage, isSendToStartingProfilingEnabled, logSendToStartingProfile, countSubscriptionsByTopic, getSidebarProjectOrder, send, ensureSnapshotSignatures, shouldIncludeTopic, getStableChatSnapshotSignature), ws-router-envelope.ts (329 LOC: EnvelopeDeps/EnvelopeBuilder interfaces + createEnvelopeBuilder factory + getSidebarSnapshotCacheEntry — all envelope computation for all 12 topic types), ws-router-broadcast.ts (488 LOC: BroadcastManager class — holds sockets set + pending-broadcast state + pushSnapshots/broadcastSnapshots/broadcastFilteredSnapshots/scheduleBroadcast/scheduleChatStateBroadcast/pushTerminalSnapshot/broadcastError methods + all event-subscription wiring: terminals/keybindings/appSettings/update/ptyInstances/workflows/orchRuns). ws-router.ts DONE (534 < 600). 61 tests pass; eslint 0 warnings; 0 new TS errors. ✅ ws-router.ts DONE.
+- 2026-07-18 Wire event-store-messages.adapter.ts (getChatCount, getMessages, getQueuedMessages/Message, getRecentMessagesPage, getMessagesPageBefore, getRecentChatHistory, getSeenMessageIds, loadTranscriptFromDisk) + event-store-peripheral-events.adapter.ts (appendTunnelEvent, getTunnelEvents, listTunnelChats, loadTunnelEvents, appendShareEvent, getShareEvents, loadShareEvents, appendPushEvent, loadPushEvents) into event-store.ts; added CachedTranscriptRef pattern, two deps-builder methods (buildMessageReadDeps, buildPeripheralEventsDeps), thin delegates. 39 new tests pass. event-store.ts: 1026 → 973 LOC (−53); new modules 318 LOC. ✅
 - 2026-07-18 Commit two unwired adapter files (event-store-messages.adapter.ts + event-store-peripheral-events.adapter.ts, 318 LOC combined) left by a stalled parallel subagent; fixed lint in messages adapter (removed `as T` cast). Launched 3 parallel subagents: event-store wiring (6973de33), diff-store commit-ops (6ee42445), agent+ws-router (642c1699). Remaining: event-store.ts 1026, diff-store.ts 661, ws-router.ts 1280, agent.ts 1322.
 - 2026-07-18 Add colocated tests for event-store-write-ops.ts (56 tests covering all builder functions: buildOpenProjectResult, buildRemoveProjectEvent, buildSetProjectStarEvent, computeNewSidebarOrder, all stack/chat/turn/queued-message/tool-request builders) and event-store-apply.ts (11 tests covering dispatch routing: project/chat/message/stack/autocontinue/tool-request events); all gates green (eslint, typecheck, bun test 67/67). ✅
 - 2026-07-18 Extract 6 branch-operation methods from DiffStore into diff-store-branch-ops.adapter.ts (listBranches, previewMergeBranch, mergeBranch, checkoutBranch, createBranch, syncBranch) with DiffStoreBranchOpsDeps interface + buildBranchOpsDeps() deps-builder in DiffStore; 25 new tests pass. diff-store.ts: 1162 → 661 LOC (−501). ✅
@@ -74,12 +76,17 @@ bash scripts/verify-decomp.sh
 
 ## Next chunk
 
-**All 4 remaining files** (event-store.ts 1026, diff-store.ts 661, ws-router.ts 1280, agent.ts 1322) have parallel subagents running:
-- 6973de33: wire event-store-messages.adapter.ts + event-store-peripheral-events.adapter.ts into event-store.ts
-- 6ee42445: extract diff-store commit-ops (generateCommitMessage + commitFiles + discardFile + ignoreFile) → diff-store-commit-ops.adapter.ts
-- 642c1699: extract large clusters from agent.ts + ws-router.ts
+**Remaining files over 600 LOC:**
+- `src/server/event-store.ts`: 973 LOC — still needs extraction to reach <600
+- `src/server/agent.ts`: 1322 LOC
+- `src/server/diff-store.ts`: 661 LOC
 
-After these complete, re-check LOC and dispatch further rounds as needed.
+**Focus: `src/server/event-store.ts` (973 LOC → target ≤ 600)**
+
+Remaining extraction opportunities:
+1. **Auto-continue + subscriptions cluster (~80 LOC)**: `appendAutoContinueEvent`, `getAutoContinueEvents`, `listAutoContinueChats`, `appendOrchestrationEvent`, `subscribeOrchRuns`, `notifyOrchRunsChanged`, `orchRunsSubscribers` → `event-store-subscriptions.ts`
+2. **Chat mutation cluster (~120 LOC)**: `appendMessage`, `enqueueMessage`, `removeQueuedMessage` (complex write logic) → `event-store-chat-write.adapter.ts`
+3. Alternatively tackle `diff-store.ts` (661 LOC) → extract remaining commit/discard methods
 
 ## Worker rules (every subagent MUST follow)
 
