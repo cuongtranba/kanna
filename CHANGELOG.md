@@ -8,6 +8,18 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.3.0](https://github.com/cuongtranba/kanna/compare/v1.2.0...v1.3.0) (2026-07-17)
+
+
+### Features
+
+* **loop:** resume armed loops through usage limits + Loop Progress panel ([#544](https://github.com/cuongtranba/kanna/issues/544)) ([24d8c98](https://github.com/cuongtranba/kanna/commit/24d8c984e6d660155238dcf07fc7912b02c463df))
+
+
+### Bug Fixes
+
+* **client:** show loading state when steering a queued message ([#542](https://github.com/cuongtranba/kanna/issues/542)) ([3a02138](https://github.com/cuongtranba/kanna/commit/3a02138260a136ad08078e320670a9351aa14aab))
+
 ## [1.2.0](https://github.com/cuongtranba/kanna/compare/v1.1.5...v1.2.0) (2026-07-15)
 
 
