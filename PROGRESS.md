@@ -13,6 +13,7 @@ bash scripts/verify-decomp.sh
 
 ## Progress (latest first)
 
+- 2026-07-17 Extract session-config builders (buildUserMcpServers, resolveSpawnPaths, resolveStackProjects, CLAUDE_TOOLSET, SDK_RESTRICTED_FS_NATIVE_TOOLS, buildTaskNotification, SdkMcpEntry, TASK_NOTIFICATION_RESULT_MAX_CHARS) to claude-session-config.ts + 20 tests. agent.ts: 4219 → 4095 LOC.
 - 2026-07-16 Extract buildCanUseTool + buildClaudeEnv + LOOP_BLOCKED_NATIVE_TOOLS + BuildCanUseToolArgs to claude-spawn-helpers.ts + 15 tests. agent.ts: 4378 → 4219 LOC.
 - 2026-07-16 Extract Claude SDK harness stream processor to claude-harness-stream.ts (createClaudeHarnessStream — session_token, rate_limit, context_window_updated, result enrichment, api_error scrub, cost attachment) + 12 tests. agent.ts: 4520 → 4378 LOC.
 - 2026-07-16 Extract context-window usage math to claude-usage-math.ts (normalizeClaudeUsageSnapshot, resolveFinalTurnUsage, maxClaudeContextWindowFromModelUsage, parseConfiguredContextWindowFromModelId, asRecord, asNumber) + 20 tests. agent.ts: 4614 → 4520 LOC.
@@ -34,38 +35,44 @@ bash scripts/verify-decomp.sh
 
 ## Next chunk
 
-agent.ts (4219 LOC): extract session-config builders into
-`src/server/claude-session-config.ts`. These are cohesive, IO-free functions
-that configure a Claude session (MCP servers, spawn paths, tool constants, notifications)
-— no dependency on `AgentCoordinator`, so no circular risk.
+agent.ts (4095 LOC): extract pure prompt-manipulation helpers into
+`src/server/claude-prompt-helpers.ts`. These are IO-free, cohesive string/XML
+builders with no dependency on `AgentCoordinator` — zero circular-import risk.
 
 Symbols to move (locate by `grep -n` in current agent.ts):
-- `SdkMcpEntry` type (private, ~5 lines) + `buildUserMcpServers` export function (~30 lines) — depends on `McpServerConfig` (shared/types), `KANNA_MCP_SERVER_NAME` (shared/tools)
-- `resolveSpawnPaths` export function (~18 lines) — depends on `ChatRecord` (./events)
-- `resolveStackProjects` export function (~15 lines) — depends on `ChatRecord` (./events), `ResolvedStackBinding` (shared/types)
-- `CLAUDE_TOOLSET` export const (~20 lines)
-- `SDK_RESTRICTED_FS_NATIVE_TOOLS` const (~3 lines) — private, used by startClaudeSession
-- `buildTaskNotification` export function (~25 lines) — depends on `BackgroundRunOutcome` (./subagent-orchestrator)
+- `escapeXmlAttribute` function (~8 lines, private) — pure XML escaper
+- `buildAttachmentHintText` export function (~14 lines) — depends on `ChatAttachment` (shared/types), `escapeXmlAttribute`
+- `buildPromptText` export function (~12 lines) — depends on `ChatAttachment`, `buildAttachmentHintText`
+- `STEERED_MESSAGE_PREFIX` const (~4 lines, private)
+- `buildSteeredMessageContent` function (~5 lines, private) — depends on `STEERED_MESSAGE_PREFIX`
+- `isPromptTooLongMessage` function (~4 lines, private pure)
+- `isNoConversationFoundMessage` function (~3 lines, private pure)
+- `toSdkEffort` export function (~6 lines) — pure SDK effort normaliser
+- `BACKGROUND_TASK_LAUNCH_RE` const (~2 lines, private)
+- `backgroundTaskIdsFromToolResult` export function (~22 lines) — pure background-task id extractor; depends on `isRecord` (shared/errors)
+- `positiveIntegerFromEnv` function (~5 lines, private) — pure env-var parser
 
-No imports from agent.ts (no circular dependency). Keep re-exports in agent.ts.
+No imports from agent.ts (no circular dependency). Keep re-exports/re-use in agent.ts.
 
 Files:
-- **NEW** `src/server/claude-session-config.ts`
-- **CHANGED** `src/server/agent.ts` — remove the 6 symbols, add import + re-exports. agent.ts: 4219 → ~4100 LOC.
-- **NEW** `src/server/claude-session-config.test.ts` — ≥8 tests:
-  - buildUserMcpServers skips disabled servers
-  - buildUserMcpServers skips servers named KANNA_MCP_SERVER_NAME
-  - buildUserMcpServers maps stdio servers correctly
-  - buildUserMcpServers injects Bearer token for oauth network servers
-  - resolveSpawnPaths returns fallback for chat with no stackBindings
-  - resolveSpawnPaths returns primary worktree path + additionalDirectories for stacked chat
-  - resolveStackProjects returns empty list for solo chat
-  - buildTaskNotification includes result body when includeResult is true
-  - buildTaskNotification omits result body when includeResult is false
+- **NEW** `src/server/claude-prompt-helpers.ts`
+- **CHANGED** `src/server/agent.ts` — remove the symbols, add import + re-exports. agent.ts: 4095 → ~3990 LOC.
+- **NEW** `src/server/claude-prompt-helpers.test.ts` — ≥8 tests:
+  - buildAttachmentHintText returns empty string for no attachments
+  - buildAttachmentHintText wraps attachments in kanna-attachments XML
+  - buildPromptText returns trimmed content when no attachments
+  - buildPromptText appends attachment hint when attachments present
+  - buildSteeredMessageContent prepends STEERED_MESSAGE_PREFIX
+  - isPromptTooLongMessage detects "prompt too long" variants
+  - isNoConversationFoundMessage detects the session-id error string
+  - toSdkEffort maps known effort strings and returns undefined for unknown
+  - backgroundTaskIdsFromToolResult extracts ids from string content
+  - backgroundTaskIdsFromToolResult extracts ids from content-block array
+  - positiveIntegerFromEnv returns fallback for undefined/invalid values
 
-Run `bun run lint src/server/claude-session-config.ts src/server/claude-session-config.test.ts src/server/agent.ts`,
+Run `bunx eslint --max-warnings=0 src/server/claude-prompt-helpers.ts src/server/claude-prompt-helpers.test.ts src/server/agent.ts`,
 `bun run typecheck`,
-`bun test --conditions production src/server/claude-session-config.test.ts`,
+`bun test --conditions production src/server/claude-prompt-helpers.test.ts`,
 commit, push, update this file.
 
 ## Worker rules (every subagent MUST follow)
