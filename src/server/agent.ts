@@ -102,7 +102,6 @@ export {
   backgroundTaskIdsFromToolResult,
 }
 import {
-  logClaudeSteer,
   type SendMessageOptions,
   type SendToStartingProfile,
 } from "./claude-steer-log"
@@ -157,6 +156,15 @@ import {
   cancelChat as cancelChatFn,
   type CancelHandlerDeps,
 } from "./claude-cancel-handler"
+import {
+  stopDraining as stopDrainingFn,
+  closeChat as closeChatFn,
+  steer as steerFn,
+  dequeue as dequeueFn,
+  forkChat as forkChatFn,
+  generateTitleInBackground as generateTitleInBackgroundFn,
+  type ChatManagementDeps,
+} from "./claude-chat-management"
 import {
   respondTool as respondToolFn,
   type ToolRespondDeps,
@@ -689,6 +697,28 @@ export class AgentCoordinator {
   }
 
   // ---------------------------------------------------------------------------
+  // Chat management deps builder — wires this.* refs into ChatManagementDeps
+  // ---------------------------------------------------------------------------
+
+  private buildChatManagementDeps(): ChatManagementDeps {
+    return {
+      activeTurns: this.activeTurns,
+      drainingStreams: this.drainingStreams,
+      claudeSessions: this.claudeSessions,
+      autoResumeByChat: this.autoResumeByChat,
+      store: this.store,
+      analytics: this.analytics,
+      cancel: (chatId, options) => this.cancel(chatId, options),
+      closeClaudeSession: (chatId, session, opts) => this.closeClaudeSession(chatId, session, opts),
+      emitStateChange: (chatId) => this.emitStateChange(chatId),
+      generateTitle: (messageContent, cwd) => this.generateTitle(messageContent, cwd),
+      reportBackgroundError: this.reportBackgroundError,
+      dequeueAndStartQueuedMessage: (chatId, queuedMessage, options) =>
+        this.dequeueAndStartQueuedMessage(chatId, queuedMessage, options),
+    }
+  }
+
+  // ---------------------------------------------------------------------------
   // Send command deps builder — wires this.* refs into SendCommandDeps
   // ---------------------------------------------------------------------------
 
@@ -908,11 +938,7 @@ export class AgentCoordinator {
   }
 
   async stopDraining(chatId: string) {
-    const draining = this.drainingStreams.get(chatId)
-    if (!draining) return
-    draining.turn.close()
-    this.clearDrainingStream(chatId)
-    this.emitStateChange(chatId)
+    return stopDrainingFn(this.buildChatManagementDeps(), chatId)
   }
 
   async ensureSlashCommandsLoaded(chatId: string): Promise<void> {
@@ -924,13 +950,7 @@ export class AgentCoordinator {
   }
 
   async closeChat(chatId: string) {
-    await this.stopDraining(chatId)
-    const claudeSession = this.claudeSessions.get(chatId)
-    if (claudeSession) {
-      this.closeClaudeSession(chatId, claudeSession)
-    }
-    this.autoResumeByChat.delete(chatId)
-    this.emitStateChange(chatId)
+    return closeChatFn(this.buildChatManagementDeps(), chatId)
   }
 
   /** Delegates to enqueueMessageFn — see claude-send-command.ts. */
@@ -1117,73 +1137,15 @@ export class AgentCoordinator {
   }
 
   async steer(command: Extract<ClientCommand, { type: "message.steer" }>) {
-    const queuedMessage = this.store.getQueuedMessage(command.chatId, command.queuedMessageId)
-    if (!queuedMessage) {
-      throw new Error("Queued message not found")
-    }
-
-    logClaudeSteer("steer_requested", {
-      chatId: command.chatId,
-      queuedMessageId: command.queuedMessageId,
-      activeTurn: this.activeTurns.has(command.chatId),
-      queuedMessagePreview: queuedMessage.content.slice(0, 160),
-    })
-
-    if (this.activeTurns.has(command.chatId)) {
-      await this.cancel(command.chatId, { hideInterrupted: true, skipQueueDrain: true })
-    }
-
-    logClaudeSteer("steer_after_cancel", {
-      chatId: command.chatId,
-      stillActive: this.activeTurns.has(command.chatId),
-    })
-
-    if (this.activeTurns.has(command.chatId)) {
-      throw new Error("Chat is still running")
-    }
-
-    await this.dequeueAndStartQueuedMessage(command.chatId, queuedMessage, { steered: true })
+    return steerFn(this.buildChatManagementDeps(), command)
   }
 
   async dequeue(command: Extract<ClientCommand, { type: "message.dequeue" }>) {
-    const queuedMessage = this.store.getQueuedMessage(command.chatId, command.queuedMessageId)
-    if (!queuedMessage) {
-      throw new Error("Queued message not found")
-    }
-
-    // Refuse to drop the queued message while a Kanna-injected `/compact`
-    // turn is running. The compact was triggered specifically to make room
-    // for this queued message; auto-draining it after compact completes
-    // would silently lose user intent and waste the compact spend.
-    const active = this.activeTurns.get(command.chatId)
-    if (active?.proactiveCompactInjection) {
-      throw new Error("Cannot remove queued message while compact is running")
-    }
-
-    await this.store.removeQueuedMessage(command.chatId, command.queuedMessageId)
+    return dequeueFn(this.buildChatManagementDeps(), command)
   }
 
   async forkChat(chatId: string) {
-    const chat = this.store.requireChat(chatId)
-    if (this.activeTurns.has(chatId) || this.drainingStreams.has(chatId)) {
-      throw new Error("Chat must be idle before forking")
-    }
-    if (!chat.provider) {
-      throw new Error("Chat must have a provider before forking")
-    }
-    const currentProviderToken = chat.provider
-      ? chat.sessionTokensByProvider[chat.provider] ?? null
-      : null
-    const pendingForkForProvider = chat.pendingForkSessionToken?.provider === chat.provider
-      ? chat.pendingForkSessionToken.token
-      : null
-    if (!currentProviderToken && !pendingForkForProvider) {
-      throw new Error("Chat has no session to fork")
-    }
-
-    const forked = await this.store.forkChat(chatId)
-    this.analytics.track("chat_created")
-    return { chatId: forked.id }
+    return forkChatFn(this.buildChatManagementDeps(), chatId)
   }
 
   private async runClaudeSession(session: ClaudeSessionState) {
@@ -1211,26 +1173,7 @@ export class AgentCoordinator {
   }
 
   private async generateTitleInBackground(chatId: string, messageContent: string, cwd: string, expectedCurrentTitle: string) {
-    try {
-      const result = await this.generateTitle(messageContent, cwd)
-      if (result.failureMessage) {
-        this.reportBackgroundError?.(
-          `[title-generation] chat ${chatId} failed provider title generation: ${result.failureMessage}`
-        )
-      }
-      if (!result.title || result.usedFallback) return
-
-      const chat = this.store.requireChat(chatId)
-      if (chat.title !== expectedCurrentTitle) return
-
-      await this.store.renameChat(chatId, result.title)
-      this.emitStateChange(chatId)
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
-      this.reportBackgroundError?.(
-        `[title-generation] chat ${chatId} failed background title generation: ${message}`
-      )
-    }
+    return generateTitleInBackgroundFn(this.buildChatManagementDeps(), chatId, messageContent, cwd, expectedCurrentTitle)
   }
 
   private buildRunTurnDeps(): RunTurnDeps {
