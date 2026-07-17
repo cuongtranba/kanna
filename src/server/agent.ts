@@ -1,12 +1,10 @@
-import { type KannaMcpDelegationContext, type SetupLoopHandlerResult } from "./kanna-mcp"
+import { type SetupLoopHandlerResult } from "./kanna-mcp"
 import {
   findLastUserMessageId as findLastUserMessageIdFn,
   recreateActiveTurnFromSession as recreateActiveTurnFromSessionFn,
   type SessionRebuildDeps,
 } from "./claude-session-rebuild"
 import type { LoopSetupInput } from "./loop-template"
-import { ensureTrackingFile } from "./loop-template-io.adapter"
-import { homedir } from "node:os"
 import type {
   AgentProvider,
   ChatAttachment,
@@ -23,16 +21,11 @@ import { EventStore } from "./event-store"
 import type { AnalyticsReporter } from "./analytics"
 import { NoopAnalyticsReporter } from "./analytics"
 import { CodexAppServerManager } from "./codex-app-server"
-import { realpathAdapter } from "./paths-fs.adapter"
 import { type GenerateChatTitleResult, generateTitleForChatDetailed } from "./generate-title"
-import type { ClaudeSessionHandle, HarnessToolRequest, HarnessTurn } from "./harness-types"
+import type { ClaudeSessionHandle, HarnessTurn } from "./harness-types"
 import { startClaudeSession } from "./claude-session-start"
-import {
-  isClaudeSdkProvider,
-} from "./provider-catalog"
 import { readLlmProviderSnapshot } from "./llm-provider"
-import type { ModelPrice } from "../shared/token-pricing"
-import { providerUsesSdkSession, type ClaudeDriverPreference, type CustomModelEntry } from "../shared/types"
+import { type ClaudeDriverPreference } from "../shared/types"
 import type { AutoContinueEvent } from "./auto-continue/events"
 import { ClaudeLimitDetector, CodexLimitDetector, type LimitDetection, type LimitDetector } from "./auto-continue/limit-detector"
 import { ClaudeAuthErrorDetector, type AuthErrorDetection } from "./auto-continue/auth-error-detector"
@@ -61,7 +54,6 @@ import {
 } from "./claude-spawn-helpers"
 export { LOOP_BLOCKED_NATIVE_TOOLS, buildCanUseTool, buildClaudeEnv, type BuildCanUseToolArgs }
 import { startClaudeSessionPTY, type StartClaudeSessionPtyArgs } from "./claude-pty/driver"
-import { ensureFreshMcpToken } from "./mcp-oauth.adapter"
 import {
   type ClaudeSessionConfigHelpersDeps,
   resolveClaudeDriverPreference as resolveClaudeDriverPreferenceFn,
@@ -205,144 +197,13 @@ import {
   sweepIdleClaudeSessions as sweepIdleClaudeSessionsFn,
   type SessionStateQueryDeps,
 } from "./claude-session-state-queries"
+import * as agentDepsBuilders from "./agent-deps-builders"
+import type {
+  AgentCoordinatorArgs,
+  ClaudeSessionLifecycleOptions,
+} from "./agent-coordinator-types"
 
 export type { ClaudeSessionHandle } from "./harness-types"
-
-interface ClaudeSessionLifecycleOptions {
-  idleMs: number
-  maxResidentSessions: number
-  sweepIntervalMs: number
-  // Max time a warm PTY session is held open solely because a background Bash
-  // task is still pending (no other activity). Bounds a hung/never-completing
-  // task so it cannot pin a process forever. See
-  // adr-20260604-pty-background-task-keepalive.
-  backgroundTaskMaxMs: number
-}
-
-interface AgentCoordinatorArgs {
-  store: EventStore
-  onStateChange: (chatId?: string, options?: { immediate?: boolean }) => void
-  analytics?: AnalyticsReporter
-  codexManager?: CodexAppServerManager
-  generateTitle?: (messageContent: string, cwd: string) => Promise<GenerateChatTitleResult>
-  tunnelGateway?: TunnelGateway
-  startClaudeSession?: (args: {
-    projectId: string
-    localPath: string
-    model: string
-    effort?: string
-    planMode: boolean
-    sessionToken: string | null
-    forkSession: boolean
-    oauthToken: string | null
-    additionalDirectories?: string[]
-    chatId?: string
-    tunnelGateway?: TunnelGateway | null
-    onToolRequest: (request: HarnessToolRequest) => Promise<AnyValue>
-    /**
-     * Append text for the claude_code preset's `systemPrompt.append`.
-     * Defaults to the static refusal-policy blurb; production callers in
-     * `agent.ts` pass the dynamic value from `buildKannaSystemPromptAppend`
-     * so the subagent roster is embedded.
-     */
-    systemPromptAppend?: string
-    /** When set, redirect the SDK to OpenRouter instead of Anthropic. */
-    openrouterApiKey?: string | null
-    /** Orchestrator for delegate_subagent. Omit to hide the tool. */
-    subagentOrchestrator?: SubagentOrchestrator
-    /** Per-spawn delegation context (depth / ancestor chain / parentUserMessageId resolver). */
-    delegationContext?: KannaMcpDelegationContext
-    /**
-     * Subagent-only override. When set, REPLACES the claude_code preset
-     * append on systemPrompt entirely. Primary chats leave this unset.
-     */
-    systemPromptOverride?: string
-    /**
-     * Subagent-only one-shot prompt. When set, the SDK queue is primed with
-     * this prompt and closed immediately so the session terminates after the
-     * single turn. Primary chats leave this unset and call sendPrompt later.
-     */
-    initialPrompt?: string
-    /** Routes AskUserQuestion/ExitPlanMode through tool-callback when KANNA_MCP_TOOL_CALLBACKS=1. */
-    toolCallback?: ToolCallbackService
-    /** Per-chat permission policy. Defaults to POLICY_DEFAULT if omitted. */
-    chatPolicy?: ChatPermissionPolicy
-    /** Enabled user MCP servers, merged into the SDK's mcpServers map. */
-    customMcpServers?: readonly McpServerConfig[]
-    /** Pre-resolved oauth bearer tokens keyed by server id. */
-    oauthBearers?: ReadonlyMap<string, string>
-    /** Folder-restricted subagent: disallow native FS tools + allowlist mcp__kanna__* + per-run path-deny scope. */
-    restrictedAllowedPaths?: string[]
-    /** Backs the `setup_loop` MCP tool. Omit to hide the tool. */
-    setupLoop?: (input: LoopSetupInput) => Promise<SetupLoopHandlerResult>
-    /** Backs the `stop_loop` MCP tool. Omit to hide the tool. */
-    stopLoop?: () => Promise<void>
-    /** Live check: true while an autonomous loop is armed — blocks direct-edit native tools. */
-    isLoopArmed?: () => boolean
-    /** Backs the `orch_run` / `orch_run_status` / `orch_cancel_run` MCP tools. Main-chat only. */
-    runOrch?: (input: OrchRunInput) => Promise<{ ok: true; runId: string } | { ok: false; errors: string[] }>
-    cancelOrchRun?: (runId: string) => Promise<void>
-    getOrchRunStatus?: (runId: string) => OrchRunDetail | null
-    /** Keep the SDK prompt queue open after the initial prompt to allow multi-turn keep-alive. */
-    keepAlive?: boolean
-    /** Per-turn price for computing cost when the provider doesn't report it (OpenRouter). */
-    turnPrice?: ModelPrice | null
-    /** Overrides the configured context window (OpenRouter model contextLength). */
-    contextWindowOverride?: number
-  }) => Promise<ClaudeSessionHandle>
-  startClaudeSessionPTY?: (args: StartClaudeSessionPtyArgs) => Promise<ClaudeSessionHandle>
-  claudeLimitDetector?: LimitDetector
-  codexLimitDetector?: LimitDetector
-  scheduleManager?: ScheduleManager
-  getAutoResumePreference?: () => boolean
-  /**
-   * Watchdog (ms) for an OpenRouter turn whose SDK stream emits no transcript
-   * entry (no `system_init`) after the session-token handshake. OpenRouter
-   * routes through the Claude SDK; a stalled upstream leaves the stream open
-   * but silent, so the `runClaudeSession` for-await never returns or throws
-   * and the existing fail-close never fires. On timeout the watchdog
-   * interrupts + closes the session so the stream ends and the turn is
-   * recorded failed. OpenRouter-only; cleared on the first entry. Default
-   * 120000 (2 min).
-   */
-  openrouterFirstEntryTimeoutMs?: number
-  getSubagents?: () => Subagent[]
-  getAppSettingsSnapshot?: () => {
-    claudeAuth?: { authenticated?: boolean } | null
-    claudeDriver?: {
-      preference?: ClaudeDriverPreference
-      lifecycle?: { idleTimeoutMs?: number; maxConcurrent?: number }
-    }
-    globalPromptAppend?: string
-    customMcpServers?: readonly McpServerConfig[]
-    customModels?: readonly CustomModelEntry[]
-    subagentRuntime?: { runTimeoutMs?: number; defaultLoopSubagentId?: string | null; defaultOrchSubagentId?: string | null }
-  }
-  throwOnClaudeSessionStart?: boolean
-  oauthPool?: OAuthTokenPool
-  /** Populated on boot; will be consumed by canUseTool in Task 11. */
-  toolCallback?: ToolCallbackService
-  /** Per-chat permission policy forwarded to startClaudeSession. Defaults to POLICY_DEFAULT if omitted. */
-  chatPolicy?: ChatPermissionPolicy
-  /** Claude subprocess lifecycle tuning. Defaults are conservative and may be overridden in tests. */
-  claudeSessionLifecycle?: Partial<ClaudeSessionLifecycleOptions>
-  /** On-disk registry of claude PTY children for crash-orphan reap on next boot. Forwarded to every PTY spawn. */
-  claudePtyRegistry?: import("./claude-pty/pid-registry.adapter").ClaudePtyRegistry
-  /** In-memory live-status registry surfaced to the UI. Forwarded to every PTY spawn. */
-  ptyInstanceRegistry?: import("./claude-pty/pty-instance-registry").PtyInstanceRegistry
-  /** Registry of workflow runs per chat, populated by PTY driver from the on-disk workflows dir. */
-  workflowRegistry?: import("./workflow-registry").WorkflowRegistry
-  /** Registry mapping each chat to its `…/subagents` dir for on-demand Agent child-transcript drill-in. */
-  subagentTranscriptRegistry?: import("./subagent-transcript-registry").SubagentTranscriptRegistry
-  /** Reads the persisted LLM provider snapshot (OpenRouter key source). */
-  readLlmProvider?: () => Promise<LlmProviderSnapshot>
-  /** Lists OpenRouter models (with pricing + contextLength) for cost computation. */
-  listOpenRouterModels?: () => Promise<import("../shared/types").OpenRouterModel[]>
-  /** Local skill + slash command catalog (user, project, plugin scans). */
-  localCatalog?: import("./local-catalog").LocalCatalogService
-  /** Persist updated OAuth state for a custom MCP server (called after token refresh at spawn). */
-  persistOAuthState?: (id: string, oauth: McpOAuthState) => void
-}
 
 
 const DEFAULT_CLAUDE_SESSION_IDLE_MS = 10 * 60 * 1000
@@ -368,26 +229,30 @@ import { OAuthPoolUnavailableError } from "./oauth-errors"
 export { OAuthPoolUnavailableError }
 
 export class AgentCoordinator {
-  private readonly store: EventStore
+  // Fields accessed by agent-deps-builders.ts are intentionally non-private
+  // (readonly instead of private readonly) to allow the external builder
+  // functions to read them without bypassing TypeScript's type system.
+  // `onStateChange` and `claudeSessionSweepTimer` are truly internal and stay private.
+  readonly store: EventStore
   private readonly onStateChange: (chatId?: string, options?: { immediate?: boolean }) => void
-  private readonly analytics: AnalyticsReporter
-  private readonly codexManager: CodexAppServerManager
-  private readonly generateTitle: (messageContent: string, cwd: string) => Promise<GenerateChatTitleResult>
-  private readonly startClaudeSessionFn: NonNullable<AgentCoordinatorArgs["startClaudeSession"]>
-  private readonly startClaudeSessionPTYFn: (args: StartClaudeSessionPtyArgs) => Promise<ClaudeSessionHandle>
-  private reportBackgroundError: ((message: string) => void) | null = null
+  readonly analytics: AnalyticsReporter
+  readonly codexManager: CodexAppServerManager
+  readonly generateTitle: (messageContent: string, cwd: string) => Promise<GenerateChatTitleResult>
+  readonly startClaudeSessionFn: NonNullable<AgentCoordinatorArgs["startClaudeSession"]>
+  readonly startClaudeSessionPTYFn: (args: StartClaudeSessionPtyArgs) => Promise<ClaudeSessionHandle>
+  reportBackgroundError: ((message: string) => void) | null = null
   readonly activeTurns = new Map<string, ActiveTurn>()
   readonly drainingStreams = new Map<string, { turn: HarnessTurn }>()
   readonly claudeSessions = new Map<string, ClaudeSessionState>()
-  private readonly mentionedSubagentIdsByChat = new Map<string, string[]>()
-  private readonly slashCommandsInFlight = new Set<string>()
-  private readonly claudeLimitDetector: LimitDetector
-  private readonly codexLimitDetector: LimitDetector
-  private readonly claudeAuthErrorDetector: ClaudeAuthErrorDetector
-  private readonly scheduleManager: ScheduleManager | null
-  private readonly getAutoResumePreference: () => boolean
-  private readonly getSubagents: () => Subagent[]
-  private readonly getAppSettingsSnapshot: NonNullable<AgentCoordinatorArgs["getAppSettingsSnapshot"]>
+  readonly mentionedSubagentIdsByChat = new Map<string, string[]>()
+  readonly slashCommandsInFlight = new Set<string>()
+  readonly claudeLimitDetector: LimitDetector
+  readonly codexLimitDetector: LimitDetector
+  readonly claudeAuthErrorDetector: ClaudeAuthErrorDetector
+  readonly scheduleManager: ScheduleManager | null
+  readonly getAutoResumePreference: () => boolean
+  readonly getSubagents: () => Subagent[]
+  readonly getAppSettingsSnapshot: NonNullable<AgentCoordinatorArgs["getAppSettingsSnapshot"]>
   private readonly subagentOrchestrator: SubagentOrchestrator
   /** Public accessor for tests + the `delegate_subagent` MCP tool wiring. */
   getSubagentOrchestrator(): SubagentOrchestrator {
@@ -398,15 +263,15 @@ export class AgentCoordinator {
   getOrchestrationQueue(): OrchestrationQueue {
     return this.orchestrationQueue
   }
-  private readonly throwOnClaudeSessionStart: boolean
-  private readonly autoResumeByChat = new Map<string, boolean>()
-  private readonly openrouterFirstEntryTimeoutMs: number
+  readonly throwOnClaudeSessionStart: boolean
+  readonly autoResumeByChat = new Map<string, boolean>()
+  readonly openrouterFirstEntryTimeoutMs: number
   // Per-tokenId rotation dedupe state. When a shared OAuth token throws
   // limit/auth-error against N chats simultaneously, only the first chat
   // pays the cost of marking the pool + picking a fresh target; subsequent
   // chats within TOKEN_ROTATION_DEDUPE_WINDOW_MS reuse the dedupe slot to
   // stagger their respawns by TOKEN_ROTATION_HERD_STAGGER_MS each.
-  private readonly tokenRotationDedupe = new Map<string, TokenRotationDedupeEntry>()
+  readonly tokenRotationDedupe = new Map<string, TokenRotationDedupeEntry>()
   // Per-chat circuit breaker for proactive `/compact` injection lives in the
   // persisted ChatRecord (`compactFailureCount`): increments on every compact
   // attempt that fails (turn errored / cancelled) and resets on success.
@@ -414,21 +279,21 @@ export class AgentCoordinator {
   // compacts on this chat so doomed sessions don't hammer the API on every
   // turn (mirrors claude-code's autoCompact circuit breaker). Persisting it
   // means a server restart cannot reset a doomed chat's breaker to 0.
-  private readonly tunnelGateway: TunnelGateway | null
-  private readonly oauthPool: OAuthTokenPool | null
-  private readonly toolCallback: ToolCallbackService | null
-  private readonly chatPolicy: ChatPermissionPolicy
-  private readonly claudeSessionLifecycle: ClaudeSessionLifecycleOptions
+  readonly tunnelGateway: TunnelGateway | null
+  readonly oauthPool: OAuthTokenPool | null
+  readonly toolCallback: ToolCallbackService | null
+  readonly chatPolicy: ChatPermissionPolicy
+  readonly claudeSessionLifecycle: ClaudeSessionLifecycleOptions
   private readonly claudeSessionSweepTimer: ReturnType<typeof setInterval> | null
-  private readonly claudePtyRegistry: import("./claude-pty/pid-registry.adapter").ClaudePtyRegistry | null
-  private readonly ptyInstanceRegistry: import("./claude-pty/pty-instance-registry").PtyInstanceRegistry | null
-  private readonly workflowRegistry: import("./workflow-registry").WorkflowRegistry | null
-  private readonly subagentTranscriptRegistry: import("./subagent-transcript-registry").SubagentTranscriptRegistry | null
-  private readonly localCatalog: import("./local-catalog").LocalCatalogService | null
-  private readonly readLlmProvider: () => Promise<LlmProviderSnapshot>
-  private readonly listOpenRouterModelsFn: (() => Promise<import("../shared/types").OpenRouterModel[]>) | null
-  private readonly persistOAuthStateFn: ((id: string, oauth: McpOAuthState) => void) | null
-  private readonly subagentPendingResolvers = new Map<
+  readonly claudePtyRegistry: import("./claude-pty/pid-registry.adapter").ClaudePtyRegistry | null
+  readonly ptyInstanceRegistry: import("./claude-pty/pty-instance-registry").PtyInstanceRegistry | null
+  readonly workflowRegistry: import("./workflow-registry").WorkflowRegistry | null
+  readonly subagentTranscriptRegistry: import("./subagent-transcript-registry").SubagentTranscriptRegistry | null
+  readonly localCatalog: import("./local-catalog").LocalCatalogService | null
+  readonly readLlmProvider: () => Promise<LlmProviderSnapshot>
+  readonly listOpenRouterModelsFn: (() => Promise<import("../shared/types").OpenRouterModel[]>) | null
+  readonly persistOAuthStateFn: ((id: string, oauth: McpOAuthState) => void) | null
+  readonly subagentPendingResolvers = new Map<
     string,
     { resolve: (v: AnyValue) => void; reject: (e: Error) => void }
   >()
@@ -571,7 +436,8 @@ export class AgentCoordinator {
     return this.toolCallback
   }
 
-  private emitStateChange(chatId?: string, options?: { immediate?: boolean }) {
+  /** @internal used by agent-deps-builders.ts */
+  emitStateChange(chatId?: string, options?: { immediate?: boolean }) {
     this.onStateChange(chatId, options)
   }
 
@@ -580,33 +446,26 @@ export class AgentCoordinator {
   // ---------------------------------------------------------------------------
 
   private buildClaudeSessionConfigHelpersDeps(): ClaudeSessionConfigHelpersDeps {
-    return {
-      getAppSettingsSnapshot: () => this.getAppSettingsSnapshot(),
-      chatPolicy: this.chatPolicy,
-      store: this.store,
-      ptyInstanceRegistry: this.ptyInstanceRegistry,
-      ensureFreshToken: (server, opts) => ensureFreshMcpToken(server, opts),
-      persistOAuthState: this.persistOAuthStateFn,
-      killProcessTree: async (pid) => {
-        const { killProcessTree } = await import("./claude-pty/pid-registry.adapter")
-        await killProcessTree(pid)
-      },
-    }
+    return agentDepsBuilders.buildClaudeSessionConfigHelpersDeps(this)
   }
 
-  private resolveClaudeDriverPreference(): ClaudeDriverPreference {
+  /** @internal used by agent-deps-builders.ts */
+  resolveClaudeDriverPreference(): ClaudeDriverPreference {
     return resolveClaudeDriverPreferenceFn(this.buildClaudeSessionConfigHelpersDeps())
   }
 
-  private getEnabledCustomMcpServers(): readonly McpServerConfig[] {
+  /** @internal used by agent-deps-builders.ts */
+  getEnabledCustomMcpServers(): readonly McpServerConfig[] {
     return getEnabledCustomMcpServersFn(this.buildClaudeSessionConfigHelpersDeps())
   }
 
-  private async buildOAuthBearers(servers: readonly McpServerConfig[]): Promise<Map<string, string>> {
+  /** @internal used by agent-deps-builders.ts */
+  async buildOAuthBearers(servers: readonly McpServerConfig[]): Promise<Map<string, string>> {
     return buildOAuthBearersFn(this.buildClaudeSessionConfigHelpersDeps(), servers)
   }
 
-  private resolveChatPolicy(chatId: string): ChatPermissionPolicy {
+  /** @internal used by agent-deps-builders.ts */
+  resolveChatPolicy(chatId: string): ChatPermissionPolicy {
     return resolveChatPolicyFn(this.buildClaudeSessionConfigHelpersDeps(), chatId)
   }
 
@@ -615,33 +474,11 @@ export class AgentCoordinator {
   // ---------------------------------------------------------------------------
 
   private buildSessionLifecycleDeps(): SessionLifecycleDeps {
-    return {
-      getAppSettingsSnapshot: () => this.getAppSettingsSnapshot(),
-      defaultIdleMs: this.claudeSessionLifecycle.idleMs,
-      defaultMaxResidentSessions: this.claudeSessionLifecycle.maxResidentSessions,
-      claudeSessions: this.claudeSessions,
-      activeTurns: this.activeTurns,
-      oauthPool: this.oauthPool,
-      workflowRegistry: this.workflowRegistry,
-      resolveClaudeDriverPreference: () => this.resolveClaudeDriverPreference(),
-      emitStateChange: (chatId: string) => { this.emitStateChange(chatId) },
-      store: this.store,
-      homeDir: homedir(),
-    }
+    return agentDepsBuilders.buildSessionLifecycleDeps(this)
   }
 
   private buildSessionErrorHandlerDeps(): SessionErrorHandlerDeps {
-    return {
-      tokenRotationDedupe: this.tokenRotationDedupe,
-      claudeSessions: this.claudeSessions,
-      activeTurns: this.activeTurns,
-      oauthPool: this.oauthPool,
-      store: this.store,
-      resolveAutoResumeFor: (chatId: string) => this.resolveAutoResumeFor(chatId),
-      emitAutoContinueEvent: (event: AutoContinueEvent) => this.emitAutoContinueEvent(event),
-      closeClaudeSession: (chatId: string, session: ClaudeSessionState, opts?: { keepReservation?: boolean }) =>
-        this.closeClaudeSession(chatId, session, opts),
-    }
+    return agentDepsBuilders.buildSessionErrorHandlerDeps(this)
   }
 
   // ---------------------------------------------------------------------------
@@ -649,31 +486,11 @@ export class AgentCoordinator {
   // ---------------------------------------------------------------------------
 
   private buildAutoContinueCommandDeps(): AutoContinueCommandDeps {
-    return {
-      autoResumeByChat: this.autoResumeByChat,
-      getAutoResumePreference: () => this.getAutoResumePreference(),
-      store: this.store,
-      scheduleManager: this.scheduleManager,
-      emitStateChange: (chatId: string) => { this.emitStateChange(chatId) },
-      enqueueMessage: (chatId, content, attachments, options) =>
-        this.enqueueMessage(chatId, content, attachments, options),
-      maybeStartNextQueuedMessage: (chatId) => this.maybeStartNextQueuedMessage(chatId),
-    }
+    return agentDepsBuilders.buildAutoContinueCommandDeps(this)
   }
 
   private buildLoopOrchCommandDeps(): LoopOrchCommandDeps {
-    return {
-      store: this.store,
-      orchestrationQueue: this.orchestrationQueue,
-      claudeSessions: this.claudeSessions,
-      activeTurns: this.activeTurns,
-      getSubagents: () => this.getSubagents(),
-      getAppSettingsSnapshot: () => this.getAppSettingsSnapshot(),
-      buildSubagentProviderRunForChat: (args) => this.buildSubagentProviderRunForChat(args),
-      closeClaudeSession: (chatId, session) => this.closeClaudeSession(chatId, session),
-      emitAutoContinueEvent: (event) => this.emitAutoContinueEvent(event),
-      ensureTrackingFile,
-    }
+    return agentDepsBuilders.buildLoopOrchCommandDeps(this)
   }
 
   // ---------------------------------------------------------------------------
@@ -681,18 +498,7 @@ export class AgentCoordinator {
   // ---------------------------------------------------------------------------
 
   private buildCancelHandlerDeps(): CancelHandlerDeps {
-    return {
-      drainingStreams: this.drainingStreams,
-      rejectPendingResolversForChat: (chatId) => this.rejectPendingResolversForChat(chatId),
-      cancelChatInOrchestrator: (chatId) => this.subagentOrchestrator.cancelChat(chatId),
-      activeTurns: this.activeTurns,
-      store: this.store,
-      claudeSessions: this.claudeSessions,
-      emitStateChange: (chatId) => this.emitStateChange(chatId),
-      resolveClaudeDriverPreference: () => this.resolveClaudeDriverPreference(),
-      closeClaudeSession: (chatId, session) => this.closeClaudeSession(chatId, session),
-      maybeStartNextQueuedMessage: async (chatId) => { await this.maybeStartNextQueuedMessage(chatId) },
-    }
+    return agentDepsBuilders.buildCancelHandlerDeps(this)
   }
 
   // ---------------------------------------------------------------------------
@@ -700,21 +506,7 @@ export class AgentCoordinator {
   // ---------------------------------------------------------------------------
 
   private buildChatManagementDeps(): ChatManagementDeps {
-    return {
-      activeTurns: this.activeTurns,
-      drainingStreams: this.drainingStreams,
-      claudeSessions: this.claudeSessions,
-      autoResumeByChat: this.autoResumeByChat,
-      store: this.store,
-      analytics: this.analytics,
-      cancel: (chatId, options) => this.cancel(chatId, options),
-      closeClaudeSession: (chatId, session, opts) => this.closeClaudeSession(chatId, session, opts),
-      emitStateChange: (chatId) => this.emitStateChange(chatId),
-      generateTitle: (messageContent, cwd) => this.generateTitle(messageContent, cwd),
-      reportBackgroundError: this.reportBackgroundError,
-      dequeueAndStartQueuedMessage: (chatId, queuedMessage, options) =>
-        this.dequeueAndStartQueuedMessage(chatId, queuedMessage, options),
-    }
+    return agentDepsBuilders.buildChatManagementDeps(this)
   }
 
   // ---------------------------------------------------------------------------
@@ -722,17 +514,7 @@ export class AgentCoordinator {
   // ---------------------------------------------------------------------------
 
   private buildSendCommandDeps(): SendCommandDeps {
-    return {
-      store: this.store,
-      activeTurns: this.activeTurns,
-      claudeSessions: this.claudeSessions,
-      autoResumeByChat: this.autoResumeByChat,
-      analytics: this.analytics,
-      getAppSettingsSnapshot: () => this.getAppSettingsSnapshot(),
-      stopLoop: (chatId, reason) => this.stopLoop(chatId, reason),
-      emitStateChange: (chatId) => this.emitStateChange(chatId),
-      startTurnForChat: (args) => this.startTurnForChat(args),
-    }
+    return agentDepsBuilders.buildSendCommandDeps(this)
   }
 
   // ---------------------------------------------------------------------------
@@ -740,56 +522,15 @@ export class AgentCoordinator {
   // ---------------------------------------------------------------------------
 
   private buildSubagentWiringDeps(): SubagentWiringDeps {
-    return {
-      store: this.store,
-      startClaudeSessionFn: this.startClaudeSessionFn,
-      startClaudeSessionPTYFn: this.startClaudeSessionPTYFn,
-      toolCallback: this.toolCallback,
-      tunnelGateway: this.tunnelGateway,
-      claudePtyRegistry: this.claudePtyRegistry,
-      ptyInstanceRegistry: this.ptyInstanceRegistry,
-      workflowRegistry: this.workflowRegistry,
-      subagentOrchestrator: this.subagentOrchestrator,
-      codexManager: this.codexManager,
-      oauthPool: this.oauthPool,
-      subagentPendingResolvers: this.subagentPendingResolvers,
-      realpath: realpathAdapter,
-      resolveClaudeDriverPreference: () => this.resolveClaudeDriverPreference(),
-      getEnabledCustomMcpServers: () => this.getEnabledCustomMcpServers(),
-      buildOAuthBearers: (servers) => this.buildOAuthBearers(servers),
-      resolveChatPolicy: (chatId) => this.resolveChatPolicy(chatId),
-      emitStateChange: (chatId) => { this.emitStateChange(chatId) },
-      buildPoolUnavailableMessage: (reservedFor, scopeSuffix) =>
-        this.buildPoolUnavailableMessage(reservedFor, scopeSuffix),
-      getAppSettingsSnapshot: () => this.getAppSettingsSnapshot(),
-      readLlmProvider: () => this.readLlmProvider(),
-      subagentPendingKey: (chatId, runId, toolUseId) =>
-        this.subagentPendingKey(chatId, runId, toolUseId),
-    }
+    return agentDepsBuilders.buildSubagentWiringDeps(this)
   }
 
   private buildSlashCommandsDeps(): SlashCommandsDeps {
-    return {
-      store: this.store,
-      claudeSessions: this.claudeSessions,
-      oauthPool: this.oauthPool,
-      slashCommandsInFlight: this.slashCommandsInFlight,
-      emitStateChange: (chatId) => { this.emitStateChange(chatId) },
-      resolveClaudeDriverPreference: () => this.resolveClaudeDriverPreference(),
-      startClaudeSessionPTY: this.startClaudeSessionPTYFn,
-      startClaudeSessionSDK: this.startClaudeSessionFn,
-      getSubagents: () => this.getSubagents(),
-      getGlobalPromptAppend: () => this.getAppSettingsSnapshot().globalPromptAppend,
-      getEnabledCustomMcpServers: () => this.getEnabledCustomMcpServers(),
-      claudePtyRegistry: this.claudePtyRegistry,
-      ptyInstanceRegistry: this.ptyInstanceRegistry,
-      workflowRegistry: this.workflowRegistry,
-      subagentTranscriptRegistry: this.subagentTranscriptRegistry,
-      localCatalog: this.localCatalog,
-    }
+    return agentDepsBuilders.buildSlashCommandsDeps(this)
   }
 
-  private resolveClaudeIdleMs(): number {
+  /** @internal used by agent-deps-builders.ts */
+  resolveClaudeIdleMs(): number {
     return resolveClaudeIdleMsFn(this.buildSessionLifecycleDeps())
   }
 
@@ -807,12 +548,14 @@ export class AgentCoordinator {
    * `subagents/workflows/wf_*` transcript dirs (written from second one) and
    * requires activity within one idle window so a stalled/crashed run still
    * eventually reaps.
+   * @internal used by agent-deps-builders.ts
    */
-  private hasLiveWorkflow(chatId: string): boolean {
+  hasLiveWorkflow(chatId: string): boolean {
     return hasLiveWorkflowFn(this.buildSessionLifecycleDeps(), chatId)
   }
 
-  private resolveBackgroundTaskMaxMs(): number {
+  /** @internal used by agent-deps-builders.ts */
+  resolveBackgroundTaskMaxMs(): number {
     return this.claudeSessionLifecycle.backgroundTaskMaxMs
   }
 
@@ -824,8 +567,9 @@ export class AgentCoordinator {
    * it fires when a settle notification is genuinely lost (SDK crash / dropped
    * message) and is reset on every launch and settle, so it never expires
    * during normal execution regardless of task duration.
+   * @internal used by agent-deps-builders.ts
    */
-  private hasPendingBackgroundTask(session: ClaudeSessionState, now: number): boolean {
+  hasPendingBackgroundTask(session: ClaudeSessionState, now: number): boolean {
     return hasPendingBackgroundTaskFn(session, now)
   }
 
@@ -838,8 +582,9 @@ export class AgentCoordinator {
    * before calling close. Without this flag, `release(chatId)` would
    * scan reservedBy for `owner === chatId` and drop the *new* token the
    * rotation just claimed, leaking the rotation's reservation (audit #9d).
+   * @internal used by agent-deps-builders.ts
    */
-  private closeClaudeSession(
+  closeClaudeSession(
     chatId: string,
     session: ClaudeSessionState,
     opts?: { keepReservation?: boolean },
@@ -852,8 +597,9 @@ export class AgentCoordinator {
    * token is known. No-op if the registry is absent, already registered, or
    * the driver preference is PTY (the PTY driver registers from its own
    * resolved transcript path in driver.ts cleanup and must not be double-fired).
+   * @internal used by agent-deps-builders.ts
    */
-  private maybeRegisterSdkWorkflowsDir(session: ClaudeSessionState): void {
+  maybeRegisterSdkWorkflowsDir(session: ClaudeSessionState): void {
     maybeRegisterSdkWorkflowsDirFn(this.buildSessionLifecycleDeps(), session)
   }
 
@@ -861,7 +607,8 @@ export class AgentCoordinator {
     sweepIdleClaudeSessionsFn(this.buildSessionStateQueryDeps(), now)
   }
 
-  private enforceClaudeSessionBudget(protectedChatId?: string): void {
+  /** @internal used by agent-deps-builders.ts */
+  enforceClaudeSessionBudget(protectedChatId?: string): void {
     enforceClaudeSessionBudgetFn(this.buildSessionLifecycleDeps(), protectedChatId)
   }
 
@@ -871,48 +618,31 @@ export class AgentCoordinator {
    * chat to close or which token to add a quota to, instead of seeing the
    * generic "all tokens unavailable" line that doesn't say what's holding
    * them. `scopeSuffix` lets the subagent path tag its variant.
+   * @internal used by agent-deps-builders.ts
    */
-  private buildPoolUnavailableMessage(reservedFor: string, scopeSuffix: string): string {
+  buildPoolUnavailableMessage(reservedFor: string, scopeSuffix: string): string {
     return buildPoolUnavailableMessageFn(this.buildSessionLifecycleDeps(), reservedFor, scopeSuffix)
   }
 
   private buildSubagentToolResponseDeps(): SubagentToolResponseDeps {
-    return {
-      subagentPendingResolvers: this.subagentPendingResolvers,
-      store: this.store,
-      subagentOrchestrator: this.subagentOrchestrator,
-      emitStateChange: (chatId) => { this.emitStateChange(chatId) },
-    }
+    return agentDepsBuilders.buildSubagentToolResponseDeps(this)
   }
 
   private buildToolRespondDeps(): ToolRespondDeps {
-    return {
-      activeTurns: this.activeTurns,
-      store: this.store,
-      emitStateChange: (chatId) => { this.emitStateChange(chatId) },
-    }
+    return agentDepsBuilders.buildToolRespondDeps(this)
   }
 
   private buildSessionStateQueryDeps(): SessionStateQueryDeps {
-    return {
-      activeTurns: this.activeTurns,
-      claudeSessions: this.claudeSessions,
-      drainingStreams: this.drainingStreams,
-      slashCommandsInFlight: this.slashCommandsInFlight,
-      isClaudeSdkProvider: (provider) => isClaudeSdkProvider(provider),
-      hasPendingBackgroundTask: (session, now) => this.hasPendingBackgroundTask(session, now),
-      resolveClaudeIdleMs: () => this.resolveClaudeIdleMs(),
-      hasLiveWorkflow: (chatId) => this.hasLiveWorkflow(chatId),
-      closeClaudeSession: (chatId, session) => { this.closeClaudeSession(chatId, session) },
-      emitStateChange: (chatId) => { this.emitStateChange(chatId) },
-    }
+    return agentDepsBuilders.buildSessionStateQueryDeps(this)
   }
 
-  private subagentPendingKey(chatId: string, runId: string, toolUseId: string): string {
+  /** @internal used by agent-deps-builders.ts */
+  subagentPendingKey(chatId: string, runId: string, toolUseId: string): string {
     return subagentPendingKeyFn(chatId, runId, toolUseId)
   }
 
-  private rejectPendingResolversForChat(chatId: string): void {
+  /** @internal used by agent-deps-builders.ts */
+  rejectPendingResolversForChat(chatId: string): void {
     rejectPendingResolversForChatFn({ subagentPendingResolvers: this.subagentPendingResolvers }, chatId)
   }
 
@@ -932,7 +662,8 @@ export class AgentCoordinator {
     }
   }
 
-  private clearDrainingStream(chatId: string): void {
+  /** @internal used by agent-deps-builders.ts */
+  clearDrainingStream(chatId: string): void {
     this.drainingStreams.delete(chatId)
   }
 
@@ -953,45 +684,27 @@ export class AgentCoordinator {
     return closeChatFn(this.buildChatManagementDeps(), chatId)
   }
 
-  /** Delegates to enqueueMessageFn — see claude-send-command.ts. */
-  private async enqueueMessage(chatId: string, content: string, attachments: ChatAttachment[], options?: SendMessageOptions) {
+  /** @internal Delegates to enqueueMessageFn — see claude-send-command.ts. */
+  async enqueueMessage(chatId: string, content: string, attachments: ChatAttachment[], options?: SendMessageOptions) {
     return enqueueMessageFn(this.buildSendCommandDeps(), chatId, content, attachments, options)
   }
 
-  /** Delegates to dequeueAndStartQueuedMessageFn — see claude-send-command.ts. */
-  private async dequeueAndStartQueuedMessage(chatId: string, queuedMessage: QueuedChatMessage, options?: { steered?: boolean }) {
+  /** @internal Delegates to dequeueAndStartQueuedMessageFn — see claude-send-command.ts. */
+  async dequeueAndStartQueuedMessage(chatId: string, queuedMessage: QueuedChatMessage, options?: { steered?: boolean }) {
     return dequeueAndStartQueuedMessageFn(this.buildSendCommandDeps(), chatId, queuedMessage, options)
   }
 
-  /** Delegates to maybeStartNextQueuedMessageFn — see claude-send-command.ts. */
-  private async maybeStartNextQueuedMessage(chatId: string) {
+  /** @internal Delegates to maybeStartNextQueuedMessageFn — see claude-send-command.ts. */
+  async maybeStartNextQueuedMessage(chatId: string) {
     return maybeStartNextQueuedMessageFn(this.buildSendCommandDeps(), chatId)
   }
 
   private buildStartTurnDeps(): StartTurnDeps {
-    return {
-      activeTurns: this.activeTurns,
-      claudeSessions: this.claudeSessions,
-      drainingStreams: this.drainingStreams,
-      mentionedSubagentIdsByChat: this.mentionedSubagentIdsByChat,
-      store: this.store,
-      codexManager: this.codexManager,
-      subagentOrchestrator: this.subagentOrchestrator,
-      clearDrainingStream: (chatId) => this.clearDrainingStream(chatId),
-      emitStateChange: (chatId, opts) => this.emitStateChange(chatId, opts),
-      resolveClaudeDriverPreference: () => this.resolveClaudeDriverPreference(),
-      getSubagents: () => this.getSubagents(),
-      getAppSettingsSnapshot: () => this.getAppSettingsSnapshot(),
-      generateTitleInBackground: (chatId, content, localPath, optimisticTitle) =>
-        this.generateTitleInBackground(chatId, content, localPath, optimisticTitle),
-      recreateActiveTurnFromSession: (args) => this.recreateActiveTurnFromSession(args),
-      startClaudeTurn: (args) => this.startClaudeTurn(args),
-      findLastUserMessageId: (chatId) => this.findLastUserMessageId(chatId),
-      runTurn: (active) => this.runTurn(active),
-    }
+    return agentDepsBuilders.buildStartTurnDeps(this)
   }
 
-  private async startTurnForChat(args: {
+  /** @internal used by agent-deps-builders.ts (via RunTurnDeps + SendCommandDeps). */
+  async startTurnForChat(args: {
     chatId: string
     provider: AgentProvider
     content: string
@@ -1011,12 +724,7 @@ export class AgentCoordinator {
 
 
   private buildSessionRebuildDeps(): SessionRebuildDeps {
-    return {
-      claudeSessions: this.claudeSessions,
-      activeTurns: this.activeTurns,
-      providerUsesSdkSession,
-      getMessages: (chatId) => this.store.getMessages(chatId),
-    }
+    return agentDepsBuilders.buildSessionRebuildDeps(this)
   }
 
   /** @internal used by agent-deps-builders.ts via buildStartTurnDeps */
@@ -1038,43 +746,7 @@ export class AgentCoordinator {
   }
 
   private buildSpawnClaudeTurnDeps(): SpawnClaudeTurnDeps {
-    return {
-      claudeSessions: this.claudeSessions,
-      activeTurns: this.activeTurns,
-      mentionedSubagentIdsByChat: this.mentionedSubagentIdsByChat,
-      oauthPool: this.oauthPool,
-      store: this.store,
-      startClaudeSessionFn: this.startClaudeSessionFn,
-      startClaudeSessionPTYFn: this.startClaudeSessionPTYFn,
-      subagentOrchestrator: this.subagentOrchestrator,
-      toolCallback: this.toolCallback,
-      tunnelGateway: this.tunnelGateway,
-      claudePtyRegistry: this.claudePtyRegistry,
-      ptyInstanceRegistry: this.ptyInstanceRegistry,
-      workflowRegistry: this.workflowRegistry,
-      subagentTranscriptRegistry: this.subagentTranscriptRegistry,
-      resolveClaudeDriverPreference: () => this.resolveClaudeDriverPreference(),
-      isLoopArmed: (chatId) => this.isLoopArmed(chatId),
-      closeClaudeSession: (chatId, session) => this.closeClaudeSession(chatId, session),
-      enforceClaudeSessionBudget: (chatId) => this.enforceClaudeSessionBudget(chatId),
-      readLlmProvider: () => this.readLlmProvider(),
-      buildPoolUnavailableMessage: (reservedFor, scopeSuffix) =>
-        this.buildPoolUnavailableMessage(reservedFor, scopeSuffix),
-      listOpenRouterModelsFn: this.listOpenRouterModelsFn,
-      getSubagents: () => this.getSubagents(),
-      getAppSettingsSnapshot: () => this.getAppSettingsSnapshot(),
-      getEnabledCustomMcpServers: () => this.getEnabledCustomMcpServers(),
-      buildOAuthBearers: (servers) => this.buildOAuthBearers(servers),
-      setupLoop: (chatId, input) => this.setupLoop({ chatId, input }),
-      stopLoop: (chatId, reason) => this.stopLoop(chatId, reason),
-      runOrchestration: (chatId, input) => this.runOrchestration(chatId, input),
-      cancelOrchRun: (runId) => this.cancelOrchRun(runId),
-      getOrchRunDetail: (runId) => this.getOrchRunDetail(runId),
-      resolveChatPolicy: (chatId) => this.resolveChatPolicy(chatId),
-      runClaudeSession: (session) => { void this.runClaudeSession(session) },
-      mergeLocalCatalog: (commands, cwd) => this.mergeLocalCatalog(commands, cwd),
-      emitStateChange: (chatId) => this.emitStateChange(chatId),
-    }
+    return agentDepsBuilders.buildSpawnClaudeTurnDeps(this)
   }
 
   /** @internal used by agent-deps-builders.ts via buildStartTurnDeps */
@@ -1153,27 +825,7 @@ export class AgentCoordinator {
   }
 
   private buildRunClaudeSessionDeps(): RunClaudeSessionDeps {
-    return {
-      openrouterFirstEntryTimeoutMs: this.openrouterFirstEntryTimeoutMs,
-      claudeSessions: this.claudeSessions,
-      activeTurns: this.activeTurns,
-      oauthPool: this.oauthPool,
-      claudeLimitDetector: this.claudeLimitDetector,
-      claudeAuthErrorDetector: this.claudeAuthErrorDetector,
-      throwOnClaudeSessionStart: this.throwOnClaudeSessionStart,
-      store: this.store,
-      emitStateChange: (chatId) => this.emitStateChange(chatId),
-      handleLimitDetection: (chatId, detection) => this.handleLimitDetection(chatId, detection),
-      maybeRegisterSdkWorkflowsDir: (s) => this.maybeRegisterSdkWorkflowsDir(s),
-      getSubagents: () => this.getSubagents(),
-      resolveBackgroundTaskMaxMs: () => this.resolveBackgroundTaskMaxMs(),
-      mergeLocalCatalog: (commands, cwd) => this.mergeLocalCatalog(commands, cwd),
-      handleLimitError: (chatId, detector, error) => this.handleLimitError(chatId, detector, error),
-      handleAuthFailure: (s, detection) => this.handleAuthFailure(s, detection),
-      closeClaudeSession: (chatId, s) => this.closeClaudeSession(chatId, s),
-      maybeStartNextQueuedMessage: (chatId) => this.maybeStartNextQueuedMessage(chatId),
-      resolveClaudeDriverPreference: () => this.resolveClaudeDriverPreference(),
-    }
+    return agentDepsBuilders.buildRunClaudeSessionDeps(this)
   }
 
   /** @internal used by agent-deps-builders.ts via buildSpawnClaudeTurnDeps */
@@ -1187,18 +839,7 @@ export class AgentCoordinator {
   }
 
   private buildRunTurnDeps(): RunTurnDeps {
-    return {
-      store: this.store,
-      activeTurns: this.activeTurns,
-      drainingStreams: this.drainingStreams,
-      oauthPool: this.oauthPool,
-      codexLimitDetector: this.codexLimitDetector,
-      handleLimitError: (chatId, detector, error) => this.handleLimitError(chatId, detector, error),
-      emitStateChange: (chatId) => { this.emitStateChange(chatId) },
-      clearDrainingStream: (chatId) => { this.clearDrainingStream(chatId) },
-      startTurnForChat: (args) => this.startTurnForChat(args),
-      maybeStartNextQueuedMessage: (chatId) => this.maybeStartNextQueuedMessage(chatId),
-    }
+    return agentDepsBuilders.buildRunTurnDeps(this)
   }
 
   /** @internal used by agent-deps-builders.ts via buildStartTurnDeps; Delegates to runTurnFn. */
