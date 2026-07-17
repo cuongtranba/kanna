@@ -13,6 +13,7 @@ bash scripts/verify-decomp.sh
 
 ## Progress (latest first)
 
+- 2026-07-17 Extract recreateActiveTurnFromSession + findLastUserMessageId (~50 lines) to claude-session-rebuild.ts (SessionRebuildDeps interface, 2 exported fns; buildSessionRebuildDeps deps-builder in AgentCoordinator) + 9 tests. agent.ts: 1447 → 1425 LOC; new file 101 LOC.
 - 2026-07-17 Extract session state queries + idle-reaper (~57 lines) to claude-session-state-queries.ts (SessionStateQueryDeps interface, 8 exported fns: getActiveStatuses, getWaitStartedAtByChatId, getPendingTool, getDrainingChatIds, getSlashCommandsLoadingChatIds, getClaudeSessionStates, isClaudeSessionIdle, sweepIdleClaudeSessions; buildSessionStateQueryDeps deps-builder in AgentCoordinator) + 25 tests. agent.ts: 1461 → 1447 LOC; new file 160 LOC.
 - 2026-07-17 Extract subagent pending tool-response handlers (~50 lines) to claude-subagent-tool-response.ts (SubagentToolResponseDeps interface, 6 exported fns: subagentPendingKey, rejectPendingResolvers, rejectPendingResolversForChat, rejectPendingResolversForRun, respondSubagentTool, cancelSubagentRun; buildSubagentToolResponseDeps deps-builder in AgentCoordinator) + 9 tests. agent.ts: 1476 → 1461 LOC; new file 165 LOC.
 - 2026-07-17 Extract slash commands loader (~107 lines) to claude-slash-commands.ts (SlashCommandsDeps interface, ensureSlashCommandsLoaded + mergeLocalCatalog standalone exported fns; buildSlashCommandsDeps deps-builder in AgentCoordinator) + 13 tests. agent.ts: 1553 → 1476 LOC; new file 234 LOC.
@@ -53,23 +54,21 @@ bash scripts/verify-decomp.sh
 
 ## Next chunk
 
-agent.ts (1447 LOC): next cohesive group is **session-state reconstruction helpers** (~50 lines):
+agent.ts (1425 LOC): next cohesive group is **tool-respond handler** (~54 lines inline, `respondTool` method):
 
-- `recreateActiveTurnFromSession(args)` — builds a ghost ActiveTurn from a live ClaudeSessionState; used when a SDK session is reused without a fresh turn
-- `findLastUserMessageId(chatId)` — scans message history for the most recent user_prompt `_id`
+- `respondTool(command)` — validates the pending tool, appends a `tool_result` entry, handles `exit_plan_mode` clearContext + codex post-tool follow-up, resolves the pending promise.
 
-Extract to `src/server/claude-session-rebuild.ts` with a `SessionRebuildDeps` interface:
-- `claudeSessions: Map<string, ClaudeSessionState>`
+Extract to `src/server/claude-tool-respond.ts` with a `ToolRespondDeps` interface:
 - `activeTurns: Map<string, ActiveTurn>`
-- `providerUsesSdkSession: (provider: AgentProvider) => boolean`
-- `getMessages: (chatId: string) => readonly { kind: string; _id: string }[]`
+- `store: EventStore` (for `appendMessage`, `setSessionTokenForProvider`, `requireChat`)
+- `emitStateChange: (chatId: string) => void`
 
-Locate methods:
+Locate method:
 ```
-grep -n "recreateActiveTurnFromSession\|findLastUserMessageId" src/server/agent.ts
+grep -n "respondTool" src/server/agent.ts
 ```
 
-Expected: agent.ts 1447 → ~1397 LOC.
+Expected: agent.ts 1425 → ~1371 LOC.
 
 ## Worker rules (every subagent MUST follow)
 
