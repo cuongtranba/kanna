@@ -1,4 +1,9 @@
 import { type KannaMcpDelegationContext, type SetupLoopHandlerResult } from "./kanna-mcp"
+import {
+  findLastUserMessageId as findLastUserMessageIdFn,
+  recreateActiveTurnFromSession as recreateActiveTurnFromSessionFn,
+  type SessionRebuildDeps,
+} from "./claude-session-rebuild"
 import type { LoopSetupInput } from "./loop-template"
 import { ensureTrackingFile } from "./loop-template-io.adapter"
 import { homedir } from "node:os"
@@ -974,6 +979,15 @@ export class AgentCoordinator {
   }
 
 
+  private buildSessionRebuildDeps(): SessionRebuildDeps {
+    return {
+      claudeSessions: this.claudeSessions,
+      activeTurns: this.activeTurns,
+      providerUsesSdkSession,
+      getMessages: (chatId) => this.store.getMessages(chatId),
+    }
+  }
+
   private recreateActiveTurnFromSession(args: {
     chatId: string
     provider: AgentProvider
@@ -983,47 +997,11 @@ export class AgentCoordinator {
     planMode: boolean
     clientTraceId?: string
   }): ActiveTurn | undefined {
-    if (!providerUsesSdkSession(args.provider)) return undefined
-    const session = this.claudeSessions.get(args.chatId)
-    if (!session) return undefined
-
-    const ghostTurn: HarnessTurn = {
-      provider: args.provider,
-      stream: { async *[Symbol.asyncIterator]() {} },
-      getAccountInfo: session.session.getAccountInfo,
-      interrupt: session.session.interrupt,
-      close: () => {},
-    }
-
-    const active: ActiveTurn = {
-      chatId: args.chatId,
-      provider: args.provider,
-      turn: ghostTurn,
-      model: session.model,
-      effort: session.effort,
-      serviceTier: args.serviceTier,
-      planMode: session.planMode,
-      status: "waiting_for_user",
-      pendingTool: null,
-      postToolFollowUp: null,
-      hasFinalResult: false,
-      cancelRequested: false,
-      cancelRecorded: false,
-      clientTraceId: args.clientTraceId,
-      waitStartedAt: null,
-      userMessageId: this.findLastUserMessageId(args.chatId),
-    }
-    this.activeTurns.set(args.chatId, active)
-    return active
+    return recreateActiveTurnFromSessionFn(this.buildSessionRebuildDeps(), args)
   }
 
   private findLastUserMessageId(chatId: string): string | null {
-    const messages = this.store.getMessages(chatId)
-    for (let i = messages.length - 1; i >= 0; i -= 1) {
-      const entry = messages[i]
-      if (entry.kind === "user_prompt") return entry._id
-    }
-    return null
+    return findLastUserMessageIdFn(this.buildSessionRebuildDeps(), chatId)
   }
 
   private startClaudeTurn(args: SpawnClaudeTurnArgs): Promise<HarnessTurn> {
