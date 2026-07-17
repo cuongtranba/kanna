@@ -13,6 +13,7 @@ bash scripts/verify-decomp.sh
 
 ## Progress (latest first)
 
+- 2026-07-17 Extract prompt helpers (escapeXmlAttribute, buildAttachmentHintText, buildPromptText, STEERED_MESSAGE_PREFIX, buildSteeredMessageContent, isPromptTooLongMessage, isNoConversationFoundMessage, toSdkEffort, BACKGROUND_TASK_LAUNCH_RE, backgroundTaskIdsFromToolResult, positiveIntegerFromEnv) to claude-prompt-helpers.ts + 35 tests. agent.ts: 4095 → 4007 LOC.
 - 2026-07-17 Extract session-config builders (buildUserMcpServers, resolveSpawnPaths, resolveStackProjects, CLAUDE_TOOLSET, SDK_RESTRICTED_FS_NATIVE_TOOLS, buildTaskNotification, SdkMcpEntry, TASK_NOTIFICATION_RESULT_MAX_CHARS) to claude-session-config.ts + 20 tests. agent.ts: 4219 → 4095 LOC.
 - 2026-07-16 Extract buildCanUseTool + buildClaudeEnv + LOOP_BLOCKED_NATIVE_TOOLS + BuildCanUseToolArgs to claude-spawn-helpers.ts + 15 tests. agent.ts: 4378 → 4219 LOC.
 - 2026-07-16 Extract Claude SDK harness stream processor to claude-harness-stream.ts (createClaudeHarnessStream — session_token, rate_limit, context_window_updated, result enrichment, api_error scrub, cost attachment) + 12 tests. agent.ts: 4520 → 4378 LOC.
@@ -35,44 +36,45 @@ bash scripts/verify-decomp.sh
 
 ## Next chunk
 
-agent.ts (4095 LOC): extract pure prompt-manipulation helpers into
-`src/server/claude-prompt-helpers.ts`. These are IO-free, cohesive string/XML
-builders with no dependency on `AgentCoordinator` — zero circular-import risk.
+agent.ts (4007 LOC): extract SDK queue and tool-result utilities into
+`src/server/claude-sdk-queue.ts`. These are IO-free, have no dependency
+on `AgentCoordinator`, and form a cohesive SDK-plumbing layer — zero
+circular-import risk.
 
 Symbols to move (locate by `grep -n` in current agent.ts):
-- `escapeXmlAttribute` function (~8 lines, private) — pure XML escaper
-- `buildAttachmentHintText` export function (~14 lines) — depends on `ChatAttachment` (shared/types), `escapeXmlAttribute`
-- `buildPromptText` export function (~12 lines) — depends on `ChatAttachment`, `buildAttachmentHintText`
-- `STEERED_MESSAGE_PREFIX` const (~4 lines, private)
-- `buildSteeredMessageContent` function (~5 lines, private) — depends on `STEERED_MESSAGE_PREFIX`
-- `isPromptTooLongMessage` function (~4 lines, private pure)
-- `isNoConversationFoundMessage` function (~3 lines, private pure)
-- `toSdkEffort` export function (~6 lines) — pure SDK effort normaliser
-- `BACKGROUND_TASK_LAUNCH_RE` const (~2 lines, private)
-- `backgroundTaskIdsFromToolResult` export function (~22 lines) — pure background-task id extractor; depends on `isRecord` (shared/errors)
-- `positiveIntegerFromEnv` function (~5 lines, private) — pure env-var parser
+- `AsyncMessageQueue<T>` class (~43 lines) — pure generic async iterable
+  queue; no external imports. Used in `startClaudeSession` to buffer SDK
+  `SDKUserMessage` turns.
+- `discardedToolResult` function (~12 lines) — pure; depends on
+  `NormalizedToolCall` from `./claude-message-normalizer` (shared type).
+  Builds the discard payload for `ask_user_question`/`exit_plan_mode` tools.
+- `toClaudeMessageStream` async generator (~4 lines) — pure; depends on
+  `Query` (from `@anthropic-ai/claude-agent-sdk`), `ClaudeRawSdkMessage`
+  and `isSdkToClaudeMessage` (from `./claude-message-normalizer`). Filters
+  the raw SDK stream to Claude-only messages.
 
-No imports from agent.ts (no circular dependency). Keep re-exports/re-use in agent.ts.
+No imports from `AgentCoordinator` or agent.ts internals (no circular
+dependency). Keep re-exports in agent.ts for any callers.
 
 Files:
-- **NEW** `src/server/claude-prompt-helpers.ts`
-- **CHANGED** `src/server/agent.ts` — remove the symbols, add import + re-exports. agent.ts: 4095 → ~3990 LOC.
-- **NEW** `src/server/claude-prompt-helpers.test.ts` — ≥8 tests:
-  - buildAttachmentHintText returns empty string for no attachments
-  - buildAttachmentHintText wraps attachments in kanna-attachments XML
-  - buildPromptText returns trimmed content when no attachments
-  - buildPromptText appends attachment hint when attachments present
-  - buildSteeredMessageContent prepends STEERED_MESSAGE_PREFIX
-  - isPromptTooLongMessage detects "prompt too long" variants
-  - isNoConversationFoundMessage detects the session-id error string
-  - toSdkEffort maps known effort strings and returns undefined for unknown
-  - backgroundTaskIdsFromToolResult extracts ids from string content
-  - backgroundTaskIdsFromToolResult extracts ids from content-block array
-  - positiveIntegerFromEnv returns fallback for undefined/invalid values
+- **NEW** `src/server/claude-sdk-queue.ts` — the three symbols above
+- **CHANGED** `src/server/agent.ts` — remove symbols, add import; re-export
+  if previously exported (check with grep). agent.ts: 4007 → ~3945 LOC.
+- **NEW** `src/server/claude-sdk-queue.test.ts` — ≥10 tests:
+  - AsyncMessageQueue: push + async iteration yields values in order
+  - AsyncMessageQueue: close() ends iteration
+  - AsyncMessageQueue: push after close throws
+  - AsyncMessageQueue: waiter resolved immediately when queue had pending value
+  - AsyncMessageQueue: multiple consumers wake independently
+  - discardedToolResult: ask_user_question variant returns answers:{}
+  - discardedToolResult: exit_plan_mode variant returns no answers field
+  - discardedToolResult: both variants carry discarded:true
+  - toClaudeMessageStream: filters out non-Claude SDK messages
+  - toClaudeMessageStream: passes through Claude SDK messages unchanged
 
-Run `bunx eslint --max-warnings=0 src/server/claude-prompt-helpers.ts src/server/claude-prompt-helpers.test.ts src/server/agent.ts`,
-`bun run typecheck`,
-`bun test --conditions production src/server/claude-prompt-helpers.test.ts`,
+Run `bunx eslint --max-warnings=0 src/server/claude-sdk-queue.ts src/server/claude-sdk-queue.test.ts src/server/agent.ts`,
+`node_modules/typescript-7/bin/tsc --noEmit`,
+`bun test --conditions production src/server/claude-sdk-queue.test.ts`,
 commit, push, update this file.
 
 ## Worker rules (every subagent MUST follow)
