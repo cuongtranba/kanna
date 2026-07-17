@@ -12,7 +12,6 @@ import type {
   LlmProviderSnapshot,
   McpOAuthState,
   McpServerConfig,
-  ModelOptions,
   NormalizedToolCall,
   PendingToolSnapshot,
   KannaStatus,
@@ -128,6 +127,12 @@ export {
   toSdkEffort,
   backgroundTaskIdsFromToolResult,
 }
+import {
+  logClaudeSteer,
+  logSendToStartingProfile,
+  type SendMessageOptions,
+  type SendToStartingProfile,
+} from "./claude-steer-log"
 
 interface PendingToolRequest {
   toolUseId: string
@@ -366,58 +371,6 @@ interface AgentCoordinatorArgs {
   /** Persist updated OAuth state for a custom MCP server (called after token refresh at spawn). */
   persistOAuthState?: (id: string, oauth: McpOAuthState) => void
 }
-
-interface SendToStartingProfile {
-  traceId: string
-  startedAt: number
-}
-
-function isClaudeSteerLoggingEnabled() {
-  return process.env.KANNA_LOG_CLAUDE_STEER === "1"
-}
-
-function logClaudeSteer(stage: string, details?: Record<string, unknown>) {
-  if (!isClaudeSteerLoggingEnabled()) return
-  log.info("[kanna/claude-steer]", JSON.stringify({
-    stage,
-    ...details,
-  }))
-}
-
-interface SendMessageOptions {
-  provider?: AgentProvider
-  model?: string
-  modelOptions?: ModelOptions
-  effort?: string
-  planMode?: boolean
-  autoContinue?: { scheduleId: string }
-}
-
-function isSendToStartingProfilingEnabled() {
-  return process.env.KANNA_PROFILE_SEND_TO_STARTING === "1"
-}
-
-function elapsedProfileMs(startedAt: number) {
-  return Number((performance.now() - startedAt).toFixed(1))
-}
-
-function logSendToStartingProfile(
-  profile: SendToStartingProfile | null | undefined,
-  stage: string,
-  details?: Record<string, unknown>
-) {
-  if (!profile || !isSendToStartingProfilingEnabled()) {
-    return
-  }
-
-  log.info("[kanna/send->starting][server]", JSON.stringify({
-    traceId: profile.traceId,
-    stage,
-    elapsedMs: elapsedProfileMs(profile.startedAt),
-    ...details,
-  }))
-}
-
 
 async function startClaudeSession(args: {
   projectId: string
