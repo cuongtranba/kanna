@@ -5,7 +5,7 @@ import type { AnyValue } from "../shared/errors"
 import { log } from "../shared/log"
 import type { StorageBackend } from "./storage/backend"
 import { FsStorageBackend } from "./storage/fs-storage.adapter"
-import type { AgentProvider, ChatHistoryPage, ChatHistorySnapshot, QueuedChatMessage, SlashCommand, StackBinding, SubagentRunSnapshot, TranscriptEntry } from "../shared/types"
+import type { AgentProvider, ChatHistoryPage, QueuedChatMessage, SlashCommand, StackBinding, SubagentRunSnapshot, TranscriptEntry } from "../shared/types"
 import { STORE_VERSION } from "../shared/types"
 import type { AutoContinueEvent } from "./auto-continue/events"
 import {
@@ -38,43 +38,22 @@ import type { PushEvent, PushEventStore } from "./push/events"
 import type { ShareEvent } from "./session-share/share-projection"
 import { ACTIVE_SESSION_IDLE_GAP_MS } from "./read-models"
 import { capTranscriptEntry } from "./subagent-entry-cap.adapter"
+import {
+  coalesceContextWindowUpdates,
+  decodeCursor,
+  encodeHistoryCursor,
+  getForkedChatTitle,
+  getHistorySnapshot,
+  getReplayEventPriority,
+  logSendToStartingProfile,
+  normalizeSidebarProjectOrder,
+  slashCommandsEqual,
+  type TranscriptPageResult,
+} from "./event-store-helpers"
 
 const SNAPSHOT_THRESHOLD_BYTES = 2 * 1024 * 1024
 const STALE_EMPTY_CHAT_MAX_AGE_MS = 30 * 60 * 1000
 const SIDEBAR_PROJECT_ORDER_FILE = "sidebar-order.json"
-
-function normalizeSidebarProjectOrder<T>(value: T) {
-  if (!Array.isArray(value)) {
-    return []
-  }
-
-  const seen = new Set<string>()
-  const projectIds: string[] = []
-  for (const entry of value) {
-    if (typeof entry !== "string") continue
-    const projectId = entry.trim()
-    if (!projectId || seen.has(projectId)) continue
-    seen.add(projectId)
-    projectIds.push(projectId)
-  }
-
-  return projectIds
-}
-
-function isSendToStartingProfilingEnabled() {
-  return process.env.KANNA_PROFILE_SEND_TO_STARTING === "1"
-}
-
-function logSendToStartingProfile(stage: string, details?: Record<string, unknown>) {
-  if (!isSendToStartingProfilingEnabled()) {
-    return
-  }
-
-  log.info("[kanna/send->starting][server]", JSON.stringify({
-    stage,
-    ...details,
-  }))
-}
 
 interface LegacyTranscriptStats {
   hasLegacyData: boolean
@@ -83,176 +62,10 @@ interface LegacyTranscriptStats {
   entryCount: number
 }
 
-interface TranscriptPageResult {
-  entries: TranscriptEntry[]
-  hasOlder: boolean
-  olderCursor: string | null
-}
-
 interface ParsedReplayEvent {
   event: StoreEvent
   sourceIndex: number
   lineIndex: number
-}
-
-function getReplayEventPriority(event: StoreEvent): number {
-  const discriminator = "type" in event ? event.type : event.kind
-  switch (discriminator) {
-    case "project_opened":
-    case "project_removed":
-    case "sidebar_project_order_set":
-    case "project_star_set":
-      return 0
-    case "chat_created":
-      return 1
-    case "chat_renamed":
-    case "chat_provider_set":
-    case "chat_plan_mode_set":
-      return 2
-    case "message_appended":
-      return 3
-    case "queued_message_enqueued":
-    case "queued_message_removed":
-      return 4
-    case "turn_started":
-      return 5
-    case "session_token_set":
-    case "session_commands_loaded":
-      return 6
-    case "pending_fork_session_token_set":
-      return 6
-    case "turn_cancelled":
-      return 7
-    case "turn_finished":
-    case "turn_failed":
-      return 8
-    case "chat_read_state_set":
-    case "chat_source_hash_set":
-    case "chat_policy_override_set":
-    case "chat_compact_failures_set":
-      return 9
-    case "chat_deleted":
-    case "chat_archived":
-    case "chat_unarchived":
-      return 10
-    case "auto_continue_proposed":
-    case "auto_continue_accepted":
-    case "auto_continue_rescheduled":
-    case "auto_continue_cancelled":
-    case "auto_continue_fired":
-    case "loop_armed":
-    case "loop_disarmed":
-      return 11
-    case "stack_added":
-    case "stack_removed":
-    case "stack_renamed":
-    case "stack_project_added":
-    case "stack_project_removed":
-      return 0
-    case "subagent_run_started":
-    case "subagent_message_delta":
-    case "subagent_entry_appended":
-    case "subagent_run_completed":
-    case "subagent_run_failed":
-    case "subagent_run_cancelled":
-    case "subagent_tool_pending":
-    case "subagent_tool_resolved":
-      return 5
-    // tool_request_put shares priority 5 with subagent_* events; sourceIndex
-    // tie-break orders them (tool-requests has sourceIndex 7, turns has 5).
-    case "tool_request_put":
-      return 5
-    case "tool_request_resolved":
-      return 6
-    case "orch_run_created":
-    case "orch_worktree_provisioned":
-    case "orch_worktree_init_started":
-    case "orch_worktree_init_completed":
-    case "orch_task_claimed":
-    case "orch_phase_started":
-    case "orch_phase_completed":
-    case "orch_gate_opened":
-    case "orch_gate_resolved":
-    case "orch_scope_overlap_flagged":
-    case "orch_config_warning":
-    case "orch_verify_started":
-    case "orch_verify_completed":
-    case "orch_task_committed":
-    case "orch_task_failed":
-    case "orch_task_requeued":
-    case "orch_run_completed":
-    case "orch_run_cancelled":
-      return 5
-    default: {
-      const _exhaustive: never = discriminator
-      throw new Error(`Unhandled replay event type: ${String(_exhaustive)}`)
-    }
-  }
-}
-
-function encodeHistoryCursor(index: number) {
-  return `idx:${index}`
-}
-
-function decodeCursor(cursor: string) {
-  if (cursor.startsWith("idx:")) {
-    const value = Number.parseInt(cursor.slice("idx:".length), 10)
-    if (!Number.isInteger(value) || value < 0) {
-      throw new Error("Invalid history cursor")
-    }
-    return value
-  }
-
-  throw new Error("Invalid history cursor")
-}
-
-function slashCommandsEqual(a: SlashCommand[], b: SlashCommand[]) {
-  if (a.length !== b.length) return false
-  for (let i = 0; i < a.length; i += 1) {
-    const ai = a[i]
-    const bi = b[i]
-    if (ai.name !== bi.name || ai.description !== bi.description || ai.argumentHint !== bi.argumentHint) {
-      return false
-    }
-  }
-  return true
-}
-
-// `context_window_updated` entries are token-readout noise emitted once per
-// stream tick — only the latest value matters. A single turn can emit hundreds
-// of them, and the bounded live window (getMessagesPageFromEntries) counts each
-// 1:1 against the limit, so a flood evicts real turns (e.g. the user_prompt)
-// out of the snapshot the client renders. Collapsing each maximal run of
-// consecutive cwu entries to its last entry keeps the latest readout while
-// freeing window budget for real turns. Applied only on the live-window read
-// path (not getMessages), so getLatestContextWindowUsage / full-transcript
-// export / importer still observe every persisted cwu.
-function coalesceContextWindowUpdates(entries: TranscriptEntry[]): TranscriptEntry[] {
-  const result: TranscriptEntry[] = []
-  for (let index = 0; index < entries.length; index += 1) {
-    const entry = entries[index]!
-    const next = entries[index + 1]
-    if (entry.kind === "context_window_updated" && next?.kind === "context_window_updated") {
-      // Drop this cwu; the last of the run survives.
-      continue
-    }
-    result.push(entry)
-  }
-  return result
-}
-
-function getHistorySnapshot(page: TranscriptPageResult, recentLimit: number): ChatHistorySnapshot {
-  return {
-    hasOlder: page.hasOlder,
-    olderCursor: page.olderCursor,
-    recentLimit,
-  }
-}
-
-function getForkedChatTitle(title: string) {
-  const trimmed = title.trim()
-  if (!trimmed) return "Fork: New Chat"
-  return trimmed.startsWith("Fork: ") ? trimmed : `Fork: ${trimmed}`
 }
 
 export class EventStore implements PushEventStore {
