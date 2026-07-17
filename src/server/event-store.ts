@@ -57,6 +57,11 @@ import {
   slashCommandsEqual,
   type TranscriptPageResult,
 } from "./event-store-helpers"
+import {
+  applySubagentEvent,
+  getSubagentRuns as getSubagentRunsFromMap,
+  runningSubagentRuns as runningSubagentRunsFromMap,
+} from "./event-store-subagent"
 
 const SNAPSHOT_THRESHOLD_BYTES = 2 * 1024 * 1024
 const STALE_EMPTY_CHAT_MAX_AGE_MS = 30 * 60 * 1000
@@ -709,114 +714,15 @@ export class EventStore implements PushEventStore {
         stack.updatedAt = e.timestamp
         break
       }
-      case "subagent_run_started": {
-        const map = this.state.subagentRunsByChatId.get(e.chatId)
-        if (!map) break
-        map.set(e.runId, {
-          runId: e.runId,
-          chatId: e.chatId,
-          subagentId: e.subagentId,
-          subagentName: e.subagentName,
-          label: e.label ?? null,
-          provider: e.provider,
-          model: e.model,
-          status: "running",
-          parentUserMessageId: e.parentUserMessageId,
-          parentRunId: e.parentRunId,
-          depth: e.depth,
-          startedAt: e.timestamp,
-          finishedAt: null,
-          finalText: null,
-          error: null,
-          usage: null,
-          entries: [],
-          pendingTool: null,
-        })
-        break
-      }
-      case "subagent_message_delta": {
-        const map = this.state.subagentRunsByChatId.get(e.chatId)
-        const run = map?.get(e.runId)
-        if (!run) break
-        run.finalText = (run.finalText ?? "") + e.content
-        break
-      }
-      case "subagent_entry_appended": {
-        const map = this.state.subagentRunsByChatId.get(e.chatId)
-        const run = map?.get(e.runId)
-        if (!run) break
-        run.entries.push(e.entry)
-        // If the entry carries usage (the SDK's terminal "result" message), mirror
-        // it onto run.usage so callers can read it without scanning entries.
-        if (e.entry.kind === "result") {
-          const usage = e.entry.usage
-          const cost = e.entry.costUsd
-          run.usage = {
-            inputTokens: usage?.inputTokens,
-            outputTokens: usage?.outputTokens,
-            cachedInputTokens: usage?.cachedInputTokens,
-            costUsd: cost,
-          }
-        }
-        break
-      }
-      case "subagent_run_completed": {
-        const map = this.state.subagentRunsByChatId.get(e.chatId)
-        const run = map?.get(e.runId)
-        if (!run) break
-        run.status = "completed"
-        run.finishedAt = e.timestamp
-        run.finalText = e.finalContent
-        // Merge: prefer e.usage if present, otherwise keep what subagent_entry_appended
-        // already mirrored. Otherwise null. Without this guard a streaming run
-        // whose completion event omits usage would silently erase it.
-        run.usage = e.usage ?? run.usage ?? null
-        break
-      }
-      case "subagent_run_failed": {
-        const map = this.state.subagentRunsByChatId.get(e.chatId)
-        const run = map?.get(e.runId)
-        if (!run) break
-        run.status = "failed"
-        run.finishedAt = e.timestamp
-        run.error = e.error
-        run.pendingTool = null
-        break
-      }
-      case "subagent_run_cancelled": {
-        const map = this.state.subagentRunsByChatId.get(e.chatId)
-        const run = map?.get(e.runId)
-        if (!run) break
-        run.status = "cancelled"
-        run.finishedAt = e.timestamp
-        run.pendingTool = null
-        break
-      }
-      case "subagent_tool_pending": {
-        const map = this.state.subagentRunsByChatId.get(e.chatId)
-        const run = map?.get(e.runId)
-        if (!run) break
-        run.pendingTool = {
-          toolUseId: e.toolUseId,
-          toolKind: e.toolKind,
-          input: e.input,
-          requestedAt: e.timestamp,
-        }
-        break
-      }
+      case "subagent_run_started":
+      case "subagent_message_delta":
+      case "subagent_entry_appended":
+      case "subagent_run_completed":
+      case "subagent_run_failed":
+      case "subagent_run_cancelled":
+      case "subagent_tool_pending":
       case "subagent_tool_resolved": {
-        const map = this.state.subagentRunsByChatId.get(e.chatId)
-        const run = map?.get(e.runId)
-        if (!run) break
-        run.pendingTool = null
-        const syntheticEntry: TranscriptEntry = {
-          kind: "tool_result",
-          _id: `${e.runId}:${e.toolUseId}:resolved`,
-          createdAt: e.timestamp,
-          toolId: e.toolUseId,
-          content: e.result,
-        }
-        run.entries.push(syntheticEntry)
+        applySubagentEvent(this.state.subagentRunsByChatId, e)
         break
       }
       case "tool_request_put": {
@@ -1584,17 +1490,11 @@ export class EventStore implements PushEventStore {
   }
 
   getSubagentRuns(chatId: string): Record<string, SubagentRunSnapshot> {
-    const map = this.state.subagentRunsByChatId.get(chatId)
-    if (!map) return {}
-    return Object.fromEntries(map.entries())
+    return getSubagentRunsFromMap(this.state.subagentRunsByChatId, chatId)
   }
 
   *runningSubagentRuns(): Iterable<SubagentRunSnapshot> {
-    for (const map of this.state.subagentRunsByChatId.values()) {
-      for (const run of map.values()) {
-        if (run.status === "running") yield run
-      }
-    }
+    yield* runningSubagentRunsFromMap(this.state.subagentRunsByChatId)
   }
 
   async setSessionTokenForProvider(
