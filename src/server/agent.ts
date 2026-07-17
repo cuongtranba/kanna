@@ -12,7 +12,6 @@ import type {
   PendingToolSnapshot,
   KannaStatus,
   QueuedChatMessage,
-  ResolvedStackBinding,
   SlashCommand,
   Subagent,
 } from "../shared/types"
@@ -43,7 +42,6 @@ import {
   openrouterAuthReady,
 } from "./provider-catalog"
 import { readLlmProviderSnapshot } from "./llm-provider"
-import { resolveModelPrice, stripModelVariantSuffix } from "../shared/token-pricing"
 import type { ModelPrice } from "../shared/token-pricing"
 import { providerUsesSdkSession, resolveClaudeApiModelId, type ClaudeDriverPreference, type CustomModelEntry } from "../shared/types"
 import { AUTO_CONTINUE_EVENT_VERSION, type AutoContinueEvent } from "./auto-continue/events"
@@ -128,6 +126,7 @@ import {
   startTurnForChat as startTurnForChatFn,
   type StartTurnDeps,
 } from "./claude-turn-starter"
+import { spawnClaudeTurn, type SpawnClaudeTurnArgs } from "./claude-session-spawner"
 
 export type { ClaudeSessionHandle } from "./harness-types"
 
@@ -1121,247 +1120,47 @@ export class AgentCoordinator {
     return null
   }
 
-  private async startClaudeTurn(args: {
-    chatId: string
-    projectId: string
-    localPath: string
-    additionalDirectories?: string[]
-    stackProjects?: ResolvedStackBinding[]
-    model: string
-    effort?: string
-    planMode: boolean
-    sessionToken: string | null
-    forkSession: boolean
-    onToolRequest: (request: HarnessToolRequest) => Promise<AnyValue>
-    provider: AgentProvider
-  }): Promise<HarnessTurn> {
-    let session = this.claudeSessions.get(args.chatId)
-
-    const driverIsPty = args.provider !== "openrouter"
-      && this.resolveClaudeDriverPreference() === "pty"
-    const loopArmedNow = this.isLoopArmed(args.chatId) !== null
-
-    if (
-      !session ||
-      session.localPath !== args.localPath ||
-      session.effort !== args.effort ||
-      args.forkSession ||
-      session.additionalDirectories.join("|") !== (args.additionalDirectories ?? []).join("|") ||
-      // Both drivers bake the loop tool-block into the spawn (PTY via
-      // --disallowedTools CLI args, SDK via options.disallowedTools), so an
-      // armed-state flip (arm OR disarm) requires a fresh session. The SDK's
-      // dynamic canUseTool deny remains as belt-and-suspenders mid-turn.
-      session.loopArmedAtSpawn !== loopArmedNow
-    ) {
-      if (session) {
-        this.closeClaudeSession(args.chatId, session)
-      }
-
-      this.enforceClaudeSessionBudget(args.chatId)
-      const isOpenRouter = args.provider === "openrouter"
-      const openrouterApiKey = isOpenRouter ? (await this.readLlmProvider()).apiKey : null
-      const picked = isOpenRouter ? null : (this.oauthPool?.pickActive(args.chatId) ?? null)
-      // If the pool is populated but every token is currently unusable
-      // (limited/error/disabled/reserved), refuse to spawn rather than let
-      // the CLI fall back to its keychain auth — that path serves whichever
-      // login the CLI binary's keychain holds, which is typically
-      // expired in a pool-managed setup and produces opaque 401 loops.
-      if (!isOpenRouter && this.oauthPool && this.oauthPool.hasAnyToken() && !picked) {
-        throw new OAuthPoolUnavailableError(this.buildPoolUnavailableMessage(args.chatId, ""))
-      }
-      if (picked) this.oauthPool!.markUsed(picked.id)
-
-      let openrouterTurnPrice: ModelPrice | null = null
-      let openrouterContextWindow: number | undefined
-      if (isOpenRouter && this.listOpenRouterModelsFn) {
-        try {
-          const models = await this.listOpenRouterModelsFn()
-          // OpenRouter routing variants (":nitro", ":floor", ...) aren't their
-          // own /models entries — fall back to the base id for pricing/context.
-          const baseModelId = stripModelVariantSuffix(args.model)
-          const m = models.find((x) => x.id === args.model)
-            ?? models.find((x) => x.id === baseModelId)
-          openrouterTurnPrice = resolveModelPrice(baseModelId, m?.pricing ?? null)
-          if (m && m.contextLength > 0) openrouterContextWindow = m.contextLength
-        } catch (err) {
-          log.warn("[kanna/agent] openrouter pricing lookup failed", String(err))
-        }
-      }
-
-      const usePty = driverIsPty
-      const systemPromptAppend = buildKannaSystemPromptAppend(this.getSubagents(), {
-        globalPromptAppend: this.getAppSettingsSnapshot().globalPromptAppend,
-        stackProjects: args.stackProjects,
-      })
-      const chatIdForCtx = args.chatId
-      const delegationContext: KannaMcpDelegationContext = {
-        parentSubagentId: null,
-        parentRunId: null,
-        ancestorSubagentIds: [],
-        depth: 0,
-        getParentUserMessageId: () => this.activeTurns.get(chatIdForCtx)?.userMessageId ?? null,
-        getMentionedSubagentIds: () => this.mentionedSubagentIdsByChat.get(chatIdForCtx) ?? [],
-      }
-      const enabledMcpServers = this.getEnabledCustomMcpServers()
-      const oauthBearers = await this.buildOAuthBearers(enabledMcpServers)
-      let started: ClaudeSessionHandle
-      try {
-        started = usePty
-          ? await this.startClaudeSessionPTYFn({
-              chatId: args.chatId,
-              projectId: args.projectId,
-              localPath: args.localPath,
-              model: args.model,
-              effort: args.effort,
-              planMode: args.planMode,
-              sessionToken: args.sessionToken,
-              forkSession: args.forkSession,
-              oauthToken: picked?.token ?? null,
-              oauthLabel: picked?.label,
-              oauthKeyMasked: picked ? maskOauthKey(picked.token) : undefined,
-              additionalDirectories: args.additionalDirectories,
-              onToolRequest: args.onToolRequest,
-              systemPromptAppend,
-              subagentOrchestrator: this.subagentOrchestrator,
-              delegationContext,
-              setupLoop: delegationContext.depth === 0
-                ? (input) => this.setupLoop({ chatId: chatIdForCtx, input })
-                : undefined,
-              stopLoop: delegationContext.depth === 0
-                ? () => this.stopLoop(chatIdForCtx, "goal_met")
-                : undefined,
-              isLoopArmed: delegationContext.depth === 0
-                ? () => this.isLoopArmed(chatIdForCtx) !== null
-                : undefined,
-              runOrch: delegationContext.depth === 0
-                ? (input) => this.runOrchestration(chatIdForCtx, input)
-                : undefined,
-              cancelOrchRun: delegationContext.depth === 0
-                ? (runId) => this.cancelOrchRun(runId)
-                : undefined,
-              getOrchRunStatus: delegationContext.depth === 0
-                ? (runId) => this.getOrchRunDetail(runId)
-                : undefined,
-              toolCallback: this.toolCallback ?? undefined,
-              tunnelGateway: this.tunnelGateway,
-              chatPolicy: this.resolveChatPolicy(args.chatId),
-              ptyRegistry: this.claudePtyRegistry ?? undefined,
-                ptyInstanceRegistry: this.ptyInstanceRegistry ?? undefined,
-              workflowRegistry: this.workflowRegistry ?? undefined,
-              subagentTranscriptRegistry: this.subagentTranscriptRegistry ?? undefined,
-              customMcpServers: enabledMcpServers,
-              oauthBearers,
-            })
-          : await this.startClaudeSessionFn({
-              projectId: args.projectId,
-              localPath: args.localPath,
-              model: args.model,
-              effort: args.effort,
-              planMode: args.planMode,
-              sessionToken: args.sessionToken,
-              forkSession: args.forkSession,
-              oauthToken: picked?.token ?? null,
-              openrouterApiKey,
-              additionalDirectories: args.additionalDirectories,
-              chatId: args.chatId,
-              tunnelGateway: this.tunnelGateway,
-              onToolRequest: args.onToolRequest,
-              systemPromptAppend,
-              subagentOrchestrator: this.subagentOrchestrator,
-              delegationContext,
-              setupLoop: delegationContext.depth === 0
-                ? (input) => this.setupLoop({ chatId: chatIdForCtx, input })
-                : undefined,
-              stopLoop: delegationContext.depth === 0
-                ? () => this.stopLoop(chatIdForCtx, "goal_met")
-                : undefined,
-              isLoopArmed: delegationContext.depth === 0
-                ? () => this.isLoopArmed(chatIdForCtx) !== null
-                : undefined,
-              runOrch: delegationContext.depth === 0
-                ? (input) => this.runOrchestration(chatIdForCtx, input)
-                : undefined,
-              cancelOrchRun: delegationContext.depth === 0
-                ? (runId) => this.cancelOrchRun(runId)
-                : undefined,
-              getOrchRunStatus: delegationContext.depth === 0
-                ? (runId) => this.getOrchRunDetail(runId)
-                : undefined,
-              toolCallback: this.toolCallback ?? undefined,
-              chatPolicy: this.resolveChatPolicy(args.chatId),
-              customMcpServers: enabledMcpServers,
-              oauthBearers,
-              turnPrice: openrouterTurnPrice,
-              contextWindowOverride: openrouterContextWindow,
-            })
-      } catch (err) {
-        // Spawn failed before we registered the session — release the OAuth
-        // pool reservation we took at line ~2144. Without this the token
-        // stays "in use" until process restart, eventually starving every
-        // chat once all tokens are reserved.
-        if (picked) this.oauthPool?.release(args.chatId)
-        throw err
-      }
-
-      session = {
-        id: crypto.randomUUID(),
-        chatId: args.chatId,
-        session: started,
-        localPath: args.localPath,
-        additionalDirectories: args.additionalDirectories ?? [],
-        model: args.model,
-        effort: args.effort,
-        planMode: args.planMode,
-        sessionToken: args.sessionToken,
-        accountInfoLoaded: false,
-        nextPromptSeq: 0,
-        pendingPromptSeqs: [],
-        activeTokenId: picked?.id ?? null,
-        oauthKeyMasked: picked ? maskOauthKey(picked.token) : null,
-        oauthLabel: picked?.label ?? null,
-        openrouterKeyMasked: openrouterApiKey ? maskOauthKey(openrouterApiKey) : null,
-        openrouterModel: isOpenRouter ? args.model : null,
-        lastUsedAt: Date.now(),
-        backgroundTaskIds: new Set<string>(),
-        backgroundTaskDeadlineAt: 0,
-        loopArmedAtSpawn: loopArmedNow,
-        cancelledResultPending: 0,
-        suppressSessionTokenPersist: false,
-      }
-      this.claudeSessions.set(args.chatId, session)
-      this.enforceClaudeSessionBudget(args.chatId)
-      void this.runClaudeSession(session)
-      void (async () => {
-        try {
-          const commands = await started.getSupportedCommands()
-          const merged = this.mergeLocalCatalog(commands, args.localPath)
-          await this.store.recordSessionCommandsLoaded(args.chatId, merged)
-          this.emitStateChange(args.chatId)
-        } catch (error) {
-          log.warn("[kanna/agent] failed to load slash commands", String(error))
-        }
-      })()
-    } else {
-      session.lastUsedAt = Date.now()
-      if (session.model !== args.model) {
-        await session.session.setModel(args.model)
-        session.model = args.model
-      }
-      if (session.planMode !== args.planMode) {
-        await session.session.setPermissionMode(args.planMode)
-        session.planMode = args.planMode
-      }
-    }
-
-    return {
-      provider: "claude",
-      stream: {
-        async *[Symbol.asyncIterator]() {},
+  private startClaudeTurn(args: SpawnClaudeTurnArgs): Promise<HarnessTurn> {
+    return spawnClaudeTurn(
+      {
+        claudeSessions: this.claudeSessions,
+        activeTurns: this.activeTurns,
+        mentionedSubagentIdsByChat: this.mentionedSubagentIdsByChat,
+        oauthPool: this.oauthPool,
+        store: this.store,
+        startClaudeSessionFn: this.startClaudeSessionFn,
+        startClaudeSessionPTYFn: this.startClaudeSessionPTYFn,
+        subagentOrchestrator: this.subagentOrchestrator,
+        toolCallback: this.toolCallback,
+        tunnelGateway: this.tunnelGateway,
+        claudePtyRegistry: this.claudePtyRegistry,
+        ptyInstanceRegistry: this.ptyInstanceRegistry,
+        workflowRegistry: this.workflowRegistry,
+        subagentTranscriptRegistry: this.subagentTranscriptRegistry,
+        resolveClaudeDriverPreference: () => this.resolveClaudeDriverPreference(),
+        isLoopArmed: (chatId) => this.isLoopArmed(chatId),
+        closeClaudeSession: (chatId, session) => this.closeClaudeSession(chatId, session),
+        enforceClaudeSessionBudget: (chatId) => this.enforceClaudeSessionBudget(chatId),
+        readLlmProvider: () => this.readLlmProvider(),
+        buildPoolUnavailableMessage: (reservedFor, scopeSuffix) =>
+          this.buildPoolUnavailableMessage(reservedFor, scopeSuffix),
+        listOpenRouterModelsFn: this.listOpenRouterModelsFn,
+        getSubagents: () => this.getSubagents(),
+        getAppSettingsSnapshot: () => this.getAppSettingsSnapshot(),
+        getEnabledCustomMcpServers: () => this.getEnabledCustomMcpServers(),
+        buildOAuthBearers: (servers) => this.buildOAuthBearers(servers),
+        setupLoop: (chatId, input) => this.setupLoop({ chatId, input }),
+        stopLoop: (chatId, reason) => this.stopLoop(chatId, reason),
+        runOrchestration: (chatId, input) => this.runOrchestration(chatId, input),
+        cancelOrchRun: (runId) => this.cancelOrchRun(runId),
+        getOrchRunDetail: (runId) => this.getOrchRunDetail(runId),
+        resolveChatPolicy: (chatId) => this.resolveChatPolicy(chatId),
+        runClaudeSession: (session) => { void this.runClaudeSession(session) },
+        mergeLocalCatalog: (commands, cwd) => this.mergeLocalCatalog(commands, cwd),
+        emitStateChange: (chatId) => this.emitStateChange(chatId),
       },
-      getAccountInfo: session.session.getAccountInfo,
-      interrupt: session.session.interrupt,
-      close: () => {},
-    }
+      args,
+    )
   }
 
   async send(command: Extract<ClientCommand, { type: "chat.send" }>) {
