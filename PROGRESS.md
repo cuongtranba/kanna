@@ -13,6 +13,7 @@ bash scripts/verify-decomp.sh
 
 ## Progress (latest first)
 
+- 2026-07-17 Extract AsyncMessageQueue, discardedToolResult, toClaudeMessageStream to claude-sdk-queue.ts + 14 tests. agent.ts: 4007 → 3939 LOC.
 - 2026-07-17 Extract prompt helpers (escapeXmlAttribute, buildAttachmentHintText, buildPromptText, STEERED_MESSAGE_PREFIX, buildSteeredMessageContent, isPromptTooLongMessage, isNoConversationFoundMessage, toSdkEffort, BACKGROUND_TASK_LAUNCH_RE, backgroundTaskIdsFromToolResult, positiveIntegerFromEnv) to claude-prompt-helpers.ts + 35 tests. agent.ts: 4095 → 4007 LOC.
 - 2026-07-17 Extract session-config builders (buildUserMcpServers, resolveSpawnPaths, resolveStackProjects, CLAUDE_TOOLSET, SDK_RESTRICTED_FS_NATIVE_TOOLS, buildTaskNotification, SdkMcpEntry, TASK_NOTIFICATION_RESULT_MAX_CHARS) to claude-session-config.ts + 20 tests. agent.ts: 4219 → 4095 LOC.
 - 2026-07-16 Extract buildCanUseTool + buildClaudeEnv + LOOP_BLOCKED_NATIVE_TOOLS + BuildCanUseToolArgs to claude-spawn-helpers.ts + 15 tests. agent.ts: 4378 → 4219 LOC.
@@ -36,45 +37,40 @@ bash scripts/verify-decomp.sh
 
 ## Next chunk
 
-agent.ts (4007 LOC): extract SDK queue and tool-result utilities into
-`src/server/claude-sdk-queue.ts`. These are IO-free, have no dependency
-on `AgentCoordinator`, and form a cohesive SDK-plumbing layer — zero
+agent.ts (3939 LOC): extract steer-logging and send-to-starting profiling
+helpers into `src/server/claude-steer-log.ts`. These are small pure/env-read
+utilities with no `AgentCoordinator` dependency — safe to move without
 circular-import risk.
 
-Symbols to move (locate by `grep -n` in current agent.ts):
-- `AsyncMessageQueue<T>` class (~43 lines) — pure generic async iterable
-  queue; no external imports. Used in `startClaudeSession` to buffer SDK
-  `SDKUserMessage` turns.
-- `discardedToolResult` function (~12 lines) — pure; depends on
-  `NormalizedToolCall` from `./claude-message-normalizer` (shared type).
-  Builds the discard payload for `ask_user_question`/`exit_plan_mode` tools.
-- `toClaudeMessageStream` async generator (~4 lines) — pure; depends on
-  `Query` (from `@anthropic-ai/claude-agent-sdk`), `ClaudeRawSdkMessage`
-  and `isSdkToClaudeMessage` (from `./claude-message-normalizer`). Filters
-  the raw SDK stream to Claude-only messages.
+Symbols to move (locate with `grep -n` in current agent.ts, around lines 375–419):
+- `isClaudeSteerLoggingEnabled()` — reads `process.env.KANNA_LOG_CLAUDE_STEER`
+- `logClaudeSteer(stage, details?)` — depends on above + `log`
+- `SendMessageOptions` interface — referenced by `AgentCoordinator.sendMessage`
+- `isSendToStartingProfilingEnabled()` — reads `process.env.KANNA_PROFILE_SEND_TO_STARTING`
+- `elapsedProfileMs(startedAt)` — pure math
+- `logSendToStartingProfile(profile, stage, details?)` — depends on above two + `log`
 
-No imports from `AgentCoordinator` or agent.ts internals (no circular
-dependency). Keep re-exports in agent.ts for any callers.
+These ~45 lines form a cohesive "steer + profiling logging" layer.
+`SendToStartingProfile` type (used by `logSendToStartingProfile`) stays in
+agent.ts if it's tightly coupled to `AgentCoordinator`; check with grep first.
 
 Files:
-- **NEW** `src/server/claude-sdk-queue.ts` — the three symbols above
+- **NEW** `src/server/claude-steer-log.ts` — the 6 symbols above
 - **CHANGED** `src/server/agent.ts` — remove symbols, add import; re-export
-  if previously exported (check with grep). agent.ts: 4007 → ~3945 LOC.
-- **NEW** `src/server/claude-sdk-queue.test.ts` — ≥10 tests:
-  - AsyncMessageQueue: push + async iteration yields values in order
-  - AsyncMessageQueue: close() ends iteration
-  - AsyncMessageQueue: push after close throws
-  - AsyncMessageQueue: waiter resolved immediately when queue had pending value
-  - AsyncMessageQueue: multiple consumers wake independently
-  - discardedToolResult: ask_user_question variant returns answers:{}
-  - discardedToolResult: exit_plan_mode variant returns no answers field
-  - discardedToolResult: both variants carry discarded:true
-  - toClaudeMessageStream: filters out non-Claude SDK messages
-  - toClaudeMessageStream: passes through Claude SDK messages unchanged
+  if previously exported. agent.ts: 3939 → ~3895 LOC.
+- **NEW** `src/server/claude-steer-log.test.ts` — ≥8 tests:
+  - isClaudeSteerLoggingEnabled returns false when env unset
+  - isClaudeSteerLoggingEnabled returns true when env = "1"
+  - logClaudeSteer does nothing when logging disabled
+  - logClaudeSteer calls log.info when enabled
+  - isSendToStartingProfilingEnabled returns false/true
+  - elapsedProfileMs returns a non-negative number
+  - logSendToStartingProfile is a no-op when profile is null
+  - logSendToStartingProfile logs when enabled
 
-Run `bunx eslint --max-warnings=0 src/server/claude-sdk-queue.ts src/server/claude-sdk-queue.test.ts src/server/agent.ts`,
+Run `bunx eslint --max-warnings=0 src/server/claude-steer-log.ts src/server/claude-steer-log.test.ts src/server/agent.ts`,
 `node_modules/typescript-7/bin/tsc --noEmit`,
-`bun test --conditions production src/server/claude-sdk-queue.test.ts`,
+`bun test --conditions production src/server/claude-steer-log.test.ts`,
 commit, push, update this file.
 
 ## Worker rules (every subagent MUST follow)
