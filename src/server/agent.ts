@@ -166,6 +166,14 @@ import {
   mergeLocalCatalog as mergeLocalCatalogFn,
   type SlashCommandsDeps,
 } from "./claude-slash-commands"
+import {
+  subagentPendingKey as subagentPendingKeyFn,
+  rejectPendingResolversForChat as rejectPendingResolversForChatFn,
+  rejectPendingResolversForRun as rejectPendingResolversForRunFn,
+  respondSubagentTool as respondSubagentToolFn,
+  cancelSubagentRun as cancelSubagentRunFn,
+  type SubagentToolResponseDeps,
+} from "./claude-subagent-tool-response"
 
 export type { ClaudeSessionHandle } from "./harness-types"
 
@@ -860,26 +868,25 @@ export class AgentCoordinator {
     return buildPoolUnavailableMessageFn(this.buildSessionLifecycleDeps(), reservedFor, scopeSuffix)
   }
 
-  private subagentPendingKey(chatId: string, runId: string, toolUseId: string): string {
-    return `${chatId}::${runId}::${toolUseId}`
-  }
-
-  private rejectPendingResolvers(predicate: (key: string) => boolean, reason: string) {
-    for (const [key, resolver] of this.subagentPendingResolvers) {
-      if (!predicate(key)) continue
-      this.subagentPendingResolvers.delete(key)
-      resolver.reject(new Error(reason))
+  private buildSubagentToolResponseDeps(): SubagentToolResponseDeps {
+    return {
+      subagentPendingResolvers: this.subagentPendingResolvers,
+      store: this.store,
+      subagentOrchestrator: this.subagentOrchestrator,
+      emitStateChange: (chatId) => { this.emitStateChange(chatId) },
     }
   }
 
-  private rejectPendingResolversForChat(chatId: string) {
-    const prefix = `${chatId}::`
-    this.rejectPendingResolvers((k) => k.startsWith(prefix), "chat cancelled")
+  private subagentPendingKey(chatId: string, runId: string, toolUseId: string): string {
+    return subagentPendingKeyFn(chatId, runId, toolUseId)
   }
 
-  private rejectPendingResolversForRun(chatId: string, runId: string) {
-    const prefix = `${chatId}::${runId}::`
-    this.rejectPendingResolvers((k) => k.startsWith(prefix), "subagent run terminated")
+  private rejectPendingResolversForChat(chatId: string): void {
+    rejectPendingResolversForChatFn({ subagentPendingResolvers: this.subagentPendingResolvers }, chatId)
+  }
+
+  private rejectPendingResolversForRun(chatId: string, runId: string): void {
+    rejectPendingResolversForRunFn({ subagentPendingResolvers: this.subagentPendingResolvers }, chatId, runId)
   }
 
   getActiveTurnProfile(chatId: string): SendToStartingProfile | null {
@@ -1443,34 +1450,12 @@ export class AgentCoordinator {
   }
 
   async respondSubagentTool(command: Extract<ClientCommand, { type: "chat.respondSubagentTool" }>) {
-    const key = this.subagentPendingKey(command.chatId, command.runId, command.toolUseId)
-    const resolver = this.subagentPendingResolvers.get(key)
-    if (!resolver) {
-      // Idempotent: a double-submit (client retry, concurrent WS messages, or
-      // a response arriving after the run already terminated) should not
-      // surface a confusing error to the UI. Resolver-absent = already
-      // resolved or run died; nothing to do.
-      return
-    }
-    this.subagentPendingResolvers.delete(key)
-    await this.store.appendSubagentEvent({
-      v: 3,
-      type: "subagent_tool_resolved",
-      timestamp: Date.now(),
-      chatId: command.chatId,
-      runId: command.runId,
-      toolUseId: command.toolUseId,
-      result: command.result,
-      resolution: "user",
-    })
-    this.subagentOrchestrator.notifySubagentToolResolved(command.runId)
-    resolver.resolve(command.result)
-    this.emitStateChange(command.chatId)
+    return respondSubagentToolFn(this.buildSubagentToolResponseDeps(), command)
   }
 
   async cancelSubagentRun(
     command: Extract<ClientCommand, { type: "chat.cancelSubagentRun" }>,
   ) {
-    this.subagentOrchestrator.cancelRun(command.chatId, command.runId)
+    cancelSubagentRunFn(this.buildSubagentToolResponseDeps(), command)
   }
 }
