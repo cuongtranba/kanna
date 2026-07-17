@@ -117,7 +117,6 @@ import { runClaudeSession as runClaudeSessionLoop, type RunClaudeSessionDeps } f
 import {
   startTurnForChat as startTurnForChatFn,
   type StartTurnDeps,
-  type StartTurnForChatArgs,
 } from "./claude-turn-starter"
 import { runTurn as runTurnFn, type RunTurnDeps } from "./claude-turn-runner"
 import { spawnClaudeTurn, type SpawnClaudeTurnArgs, type SpawnClaudeTurnDeps } from "./claude-session-spawner"
@@ -945,7 +944,8 @@ export class AgentCoordinator {
     return ensureSlashCommandsLoadedFn(this.buildSlashCommandsDeps(), chatId)
   }
 
-  private mergeLocalCatalog(commands: SlashCommand[], cwd: string): SlashCommand[] {
+  /** @internal used by agent-deps-builders.ts via buildRunClaudeSessionDeps / buildSpawnClaudeTurnDeps */
+  mergeLocalCatalog(commands: SlashCommand[], cwd: string): SlashCommand[] {
     return mergeLocalCatalogFn(this.buildSlashCommandsDeps(), commands, cwd)
   }
 
@@ -1019,7 +1019,8 @@ export class AgentCoordinator {
     }
   }
 
-  private recreateActiveTurnFromSession(args: {
+  /** @internal used by agent-deps-builders.ts via buildStartTurnDeps */
+  recreateActiveTurnFromSession(args: {
     chatId: string
     provider: AgentProvider
     model: string
@@ -1031,7 +1032,8 @@ export class AgentCoordinator {
     return recreateActiveTurnFromSessionFn(this.buildSessionRebuildDeps(), args)
   }
 
-  private findLastUserMessageId(chatId: string): string | null {
+  /** @internal used by agent-deps-builders.ts via buildStartTurnDeps */
+  findLastUserMessageId(chatId: string): string | null {
     return findLastUserMessageIdFn(this.buildSessionRebuildDeps(), chatId)
   }
 
@@ -1075,7 +1077,8 @@ export class AgentCoordinator {
     }
   }
 
-  private startClaudeTurn(args: SpawnClaudeTurnArgs): Promise<HarnessTurn> {
+  /** @internal used by agent-deps-builders.ts via buildStartTurnDeps */
+  startClaudeTurn(args: SpawnClaudeTurnArgs): Promise<HarnessTurn> {
     return spawnClaudeTurn(this.buildSpawnClaudeTurnDeps(), args)
   }
 
@@ -1084,8 +1087,8 @@ export class AgentCoordinator {
     return sendCommandFn(this.buildSendCommandDeps(), command)
   }
 
-  /** Delegates to buildSubagentProviderRunForChatFn — see claude-subagent-wiring.ts. */
-  private buildSubagentProviderRunForChat(args: BuildSubagentProviderRunForChatArgs): ProviderRunStart {
+  /** @internal used by agent-deps-builders.ts via buildLoopOrchCommandDeps; Delegates to buildSubagentProviderRunForChatFn. */
+  buildSubagentProviderRunForChat(args: BuildSubagentProviderRunForChatArgs): ProviderRunStart {
     return buildSubagentProviderRunForChatFn(this.buildSubagentWiringDeps(), args)
   }
 
@@ -1173,11 +1176,13 @@ export class AgentCoordinator {
     }
   }
 
-  private async runClaudeSession(session: ClaudeSessionState) {
+  /** @internal used by agent-deps-builders.ts via buildSpawnClaudeTurnDeps */
+  async runClaudeSession(session: ClaudeSessionState) {
     return runClaudeSessionLoop(this.buildRunClaudeSessionDeps(), session)
   }
 
-  private async generateTitleInBackground(chatId: string, messageContent: string, cwd: string, expectedCurrentTitle: string) {
+  /** @internal used by agent-deps-builders.ts via buildChatManagementDeps */
+  async generateTitleInBackground(chatId: string, messageContent: string, cwd: string, expectedCurrentTitle: string) {
     return generateTitleInBackgroundFn(this.buildChatManagementDeps(), chatId, messageContent, cwd, expectedCurrentTitle)
   }
 
@@ -1191,38 +1196,38 @@ export class AgentCoordinator {
       handleLimitError: (chatId, detector, error) => this.handleLimitError(chatId, detector, error),
       emitStateChange: (chatId) => { this.emitStateChange(chatId) },
       clearDrainingStream: (chatId) => { this.clearDrainingStream(chatId) },
-      startTurnForChat: (args: StartTurnForChatArgs) => this.startTurnForChat(args),
+      startTurnForChat: (args) => this.startTurnForChat(args),
       maybeStartNextQueuedMessage: (chatId) => this.maybeStartNextQueuedMessage(chatId),
     }
   }
 
-  /** Delegates to runTurnFn — see claude-turn-runner.ts. */
-  private async runTurn(active: ActiveTurn): Promise<void> {
+  /** @internal used by agent-deps-builders.ts via buildStartTurnDeps; Delegates to runTurnFn. */
+  async runTurn(active: ActiveTurn): Promise<void> {
     return runTurnFn(this.buildRunTurnDeps(), active)
   }
 
-  /** Delegates to resolveAutoResumeForFn — see claude-autocontinue-commands.ts. */
-  private resolveAutoResumeFor(chatId: string): boolean {
+  /** @internal used by agent-deps-builders.ts via buildSessionErrorHandlerDeps; Delegates to resolveAutoResumeForFn. */
+  resolveAutoResumeFor(chatId: string): boolean {
     return resolveAutoResumeForFn(this.buildAutoContinueCommandDeps(), chatId)
   }
 
-  /** Delegates to emitAutoContinueEventFn — see claude-autocontinue-commands.ts. */
-  private async emitAutoContinueEvent(event: AutoContinueEvent): Promise<void> {
+  /** @internal used by agent-deps-builders.ts via buildSessionErrorHandlerDeps + buildLoopOrchCommandDeps; Delegates to emitAutoContinueEventFn. */
+  async emitAutoContinueEvent(event: AutoContinueEvent): Promise<void> {
     return emitAutoContinueEventFn(this.buildAutoContinueCommandDeps(), event)
   }
 
-  /** Delegates to handleLimitErrorFn — see claude-session-error-handler.ts. */
-  private async handleLimitError(chatId: string, detector: LimitDetector, error: AnyValue): Promise<boolean> {
+  /** @internal used by agent-deps-builders.ts via buildRunClaudeSessionDeps + buildRunTurnDeps; Delegates to handleLimitErrorFn. */
+  async handleLimitError(chatId: string, detector: LimitDetector, error: AnyValue): Promise<boolean> {
     return handleLimitErrorFn(this.buildSessionErrorHandlerDeps(), chatId, detector, error)
   }
 
-  /** Delegates to handleLimitDetectionFn — see claude-session-error-handler.ts. */
-  private async handleLimitDetection(chatId: string, detection: LimitDetection): Promise<boolean> {
+  /** @internal used by agent-deps-builders.ts via buildRunClaudeSessionDeps; Delegates to handleLimitDetectionFn. */
+  async handleLimitDetection(chatId: string, detection: LimitDetection): Promise<boolean> {
     return handleLimitDetectionFn(this.buildSessionErrorHandlerDeps(), chatId, detection)
   }
 
-  /** Delegates to handleAuthFailureFn — see claude-session-error-handler.ts. */
-  private async handleAuthFailure(
+  /** @internal used by agent-deps-builders.ts via buildRunClaudeSessionDeps; Delegates to handleAuthFailureFn. */
+  async handleAuthFailure(
     session: ClaudeSessionState,
     detection: AuthErrorDetection,
   ): Promise<boolean> {
