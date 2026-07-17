@@ -13,6 +13,7 @@ bash scripts/verify-decomp.sh
 
 ## Progress (latest first)
 
+- 2026-07-17 Extract pure helper functions (normalizeSidebarProjectOrder, logSendToStartingProfile, getReplayEventPriority, encodeHistoryCursor, decodeCursor, slashCommandsEqual, coalesceContextWindowUpdates, getHistorySnapshot, getForkedChatTitle + TranscriptPageResult interface) to event-store-helpers.ts + 30 tests. event-store.ts: 2537 → 2351 LOC; new file 206 LOC.
 - 2026-07-17 In-file deps builder refactor: extracted buildSpawnClaudeTurnDeps(): SpawnClaudeTurnDeps and buildRunClaudeSessionDeps(): RunClaudeSessionDeps as private helper methods in AgentCoordinator; reduced startClaudeTurn and runClaudeSession to one-liner delegates consistent with the rest of AgentCoordinator's build*Deps() pattern. Added type imports for SpawnClaudeTurnDeps + RunClaudeSessionDeps. agent.ts: 1317 → 1322 LOC (net +5: method headers added; inline object wrapper lines removed).
 - 2026-07-17 Extract 5 session-config helpers (resolveClaudeDriverPreference, getEnabledCustomMcpServers, buildOAuthBearers, resolveChatPolicy, killPtyInstance) to claude-session-config-helpers.ts (ClaudeSessionConfigHelpersDeps interface, 5 exported fns; buildClaudeSessionConfigHelpersDeps deps-builder in AgentCoordinator; ensureFreshToken + killProcessTree injected to preserve side-effect seal; removed now-unused mergePolicyOverride + log imports from agent.ts) + 20 tests. agent.ts: 1327 → 1317 LOC; new module 148 LOC + 232 LOC tests.
 - 2026-07-17 Extract chat management methods (~106 lines: stopDraining, closeChat, steer, dequeue, forkChat, generateTitleInBackground) to claude-chat-management.ts (ChatManagementDeps interface, 6 exported fns; buildChatManagementDeps deps-builder in AgentCoordinator; removed now-unused logClaudeSteer import from agent.ts) + 22 tests. agent.ts: 1384 → 1327 LOC; new module 251 LOC + 395 LOC tests.
@@ -58,26 +59,18 @@ bash scripts/verify-decomp.sh
 
 ## Next chunk
 
-**event-store.ts (2537 LOC)**: extract the private pure helper functions and the subscription layer into sibling modules.
+**event-store.ts (2351 LOC)**: extract the orchestration read-model layer into `event-store-orch.ts`.
 
-Survey the extraction targets:
-```
-grep -n "^function\|^export function\|^const.*=.*function\|^export const" src/server/event-store.ts | head -40
-grep -n "subscribe\|unsubscribe\|Subscriber\|listener" src/server/event-store.ts | head -30
-```
+The orchestration concern (~250 lines, lines ~2097–2351) is self-contained: `applyOrchestrationEvent`, `toOrchRunSnapshot`, `nonTerminalOrchTasks`, `gatedOrchTasks`, `getOrchTaskSpec`, `getOrchLastPhaseOutput`, `getOrchRunEvents`, `subscribeOrchRuns`, `notifyOrchRunsChanged`, plus the `orchRunsSubscribers` set.
 
-Cohesive groups to extract (in order of least coupling → most):
+**Extraction approach**: refactor these as standalone functions that accept `orchRunsById: Map<string, OrchRunRecord>` and a `subscribers: Set<() => void>` (or an `OrchReadModelDeps` interface) instead of `this.state.orchRunsById`. EventStore delegates to them.
 
-1. **Pure helpers** (non-export functions at the top, ~120 lines): `normalizeSidebarProjectOrder`, `isSendToStartingProfilingEnabled`, `logSendToStartingProfile`, `LegacyTranscriptStats`, `TranscriptPageResult`, `ParsedReplayEvent`, `getReplayEventPriority`, `encodeHistoryCursor`, `decodeCursor`, `slashCommandsEqual`, `coalesceContextWindowUpdates`, `getHistorySnapshot`, `getForkedChatTitle` → new `event-store-helpers.ts`, zero dependencies on EventStore class. New file target: ~150 LOC.
-
-2. **Subscription layer** (subscribe/unsubscribe/notify methods + subscriber maps): the pub/sub wiring inside EventStore is self-contained — extract the subscriber maps + subscribe/unsubscribe/notify methods into a `EventStoreSubscriptions` mixin or a standalone `event-store-subscriptions.ts` helper that the class delegates to. This isolates the change-notification concern.
-
-Locate the class method boundaries first:
-```
-grep -n "^\s*subscribe\|^\s*unsubscribe\|^\s*notify\|private.*subscriber\|private.*listeners" src/server/event-store.ts | head -30
+Survey the boundaries:
+```bash
+grep -n "applyOrchestration\|toOrchRun\|orchRuns\|nonTerminal\|gatedOrch\|getOrchTask\|getOrchLast\|getOrchRunEvents\|subscribeOrch\|notifyOrch" src/server/event-store.ts
 ```
 
-Expected: event-store.ts 2537 → ~2380 LOC; new pure-helpers file ~150 LOC.
+Expected: event-store.ts 2351 → ~2100 LOC; new file `event-store-orch.ts` ~250 LOC + tests.
 
 ## Worker rules (every subagent MUST follow)
 
