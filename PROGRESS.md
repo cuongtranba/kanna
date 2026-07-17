@@ -13,6 +13,7 @@ bash scripts/verify-decomp.sh
 
 ## Progress (latest first)
 
+- 2026-07-17 Extract respondTool (~54 lines) to claude-tool-respond.ts (ToolRespondDeps interface, standalone respondTool exported fn; buildToolRespondDeps deps-builder in AgentCoordinator; removed now-unused isRecord + normalizeToolContent imports from agent.ts) + 9 tests. agent.ts: 1425 → 1384 LOC; new file 142 LOC.
 - 2026-07-17 Extract recreateActiveTurnFromSession + findLastUserMessageId (~50 lines) to claude-session-rebuild.ts (SessionRebuildDeps interface, 2 exported fns; buildSessionRebuildDeps deps-builder in AgentCoordinator) + 9 tests. agent.ts: 1447 → 1425 LOC; new file 101 LOC.
 - 2026-07-17 Extract session state queries + idle-reaper (~57 lines) to claude-session-state-queries.ts (SessionStateQueryDeps interface, 8 exported fns: getActiveStatuses, getWaitStartedAtByChatId, getPendingTool, getDrainingChatIds, getSlashCommandsLoadingChatIds, getClaudeSessionStates, isClaudeSessionIdle, sweepIdleClaudeSessions; buildSessionStateQueryDeps deps-builder in AgentCoordinator) + 25 tests. agent.ts: 1461 → 1447 LOC; new file 160 LOC.
 - 2026-07-17 Extract subagent pending tool-response handlers (~50 lines) to claude-subagent-tool-response.ts (SubagentToolResponseDeps interface, 6 exported fns: subagentPendingKey, rejectPendingResolvers, rejectPendingResolversForChat, rejectPendingResolversForRun, respondSubagentTool, cancelSubagentRun; buildSubagentToolResponseDeps deps-builder in AgentCoordinator) + 9 tests. agent.ts: 1476 → 1461 LOC; new file 165 LOC.
@@ -54,21 +55,31 @@ bash scripts/verify-decomp.sh
 
 ## Next chunk
 
-agent.ts (1425 LOC): next cohesive group is **tool-respond handler** (~54 lines inline, `respondTool` method):
+agent.ts (1384 LOC): next cohesive group is **chat management commands** (~106 lines across 6 methods):
 
-- `respondTool(command)` — validates the pending tool, appends a `tool_result` entry, handles `exit_plan_mode` clearContext + codex post-tool follow-up, resolves the pending promise.
+- `stopDraining(chatId)` — lines ~910-917 (~8 lines)
+- `closeChat(chatId)` — lines ~926-934 (~9 lines)
+- `steer(command)` — lines ~1119-1146 (~28 lines)
+- `dequeue(command)` — lines ~1148-1164 (~17 lines)
+- `forkChat(chatId)` — lines ~1166-1187 (~22 lines)
+- `generateTitleInBackground(...)` — lines ~1213-1234 (~22 lines)
 
-Extract to `src/server/claude-tool-respond.ts` with a `ToolRespondDeps` interface:
-- `activeTurns: Map<string, ActiveTurn>`
-- `store: EventStore` (for `appendMessage`, `setSessionTokenForProvider`, `requireChat`)
-- `emitStateChange: (chatId: string) => void`
+Extract to `src/server/claude-chat-management.ts` with a `ChatManagementDeps` interface:
+- `activeTurns` (Map-like get/has)
+- `drainingStreams` (Map-like has/delete)
+- `store` subset (forkChat, renameChat, getQueuedMessage, removeQueuedMessage, requireChat)
+- `autoResumeByChat` (Map-like delete)
+- `analytics` subset (track)
+- `cancel(chatId, opts)`, `closeClaudeSession`, `emitStateChange`
+- `generateTitle`, `reportBackgroundError`
+- `dequeueAndStartQueuedMessage`, `cancel` (for steer delegation)
 
-Locate method:
+Locate methods:
 ```
-grep -n "respondTool" src/server/agent.ts
+grep -n "stopDraining\|closeChat\|async steer\|async dequeue\|forkChat\|generateTitleInBackground" src/server/agent.ts
 ```
 
-Expected: agent.ts 1425 → ~1371 LOC.
+Expected: agent.ts 1384 → ~1278 LOC.
 
 ## Worker rules (every subagent MUST follow)
 
