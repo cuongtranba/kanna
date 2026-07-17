@@ -13,6 +13,7 @@ bash scripts/verify-decomp.sh
 
 ## Progress (latest first)
 
+- 2026-07-17 Extract turn spawning pipeline (startTurnForChat + startTurnAfterTurnStarted) to claude-turn-starter.ts (StartTurnDeps interface, startTurnForChat exported fn) + 12 tests. Moved OAuthPoolUnavailableError to oauth-errors.ts. agent.ts: 3196 → 2799 LOC.
 - 2026-07-17 Extract runClaudeSession session event loop to claude-session-runner.ts (RunClaudeSessionDeps) + 14 tests. Moved PendingToolRequest/ActiveTurn/ClaudeSessionState to claude-session-state.ts. agent.ts: 3675 → 3196 LOC.
 - 2026-07-17 Extract ClaudeSessionHandle to harness-types.ts and startClaudeSession to claude-session-start.ts + 12 tests. agent.ts: 3892 → 3675 LOC.
 - 2026-07-17 Extract isClaudeSteerLoggingEnabled, logClaudeSteer, SendMessageOptions, isSendToStartingProfilingEnabled, elapsedProfileMs, logSendToStartingProfile, SendToStartingProfile to claude-steer-log.ts + 18 tests. agent.ts: 3939 → 3893 LOC.
@@ -40,24 +41,26 @@ bash scripts/verify-decomp.sh
 
 ## Next chunk
 
-agent.ts (3196 LOC): the next largest cohesive block is the turn spawning
-pipeline — `startTurnForChat` (~180 lines, ~line 1036) + `startTurnAfterTurnStarted`
-(~251 lines, ~line 1217). Together they form the "spawn and route" logic that:
-- picks provider, resolves model/effort/plan-mode, enforces session budget
-- spawns the SDK/PTY claude session or Codex turn
-- handles proactive /compact injection, loop-armed tool-block respawn
-- routes to the codec (runTurn vs runClaudeSession)
+agent.ts (2799 LOC): the next largest cohesive block is `startClaudeTurn`
+(~242 lines, ~line 1124 → 1366). It is the private method that picks
+SDK vs PTY driver, enforces session budget, picks/marks OAuth pool token,
+spawns the actual ClaudeSessionHandle (SDK or PTY), registers ClaudeSessionState
+in claudeSessions, and loads slash commands in background. It calls no other
+extracted module and its deps are a well-defined subset (startClaudeSessionFn,
+startClaudeSessionPTYFn, oauthPool, tunnelGateway, claudeSessions,
+subagentOrchestrator, etc.).
 
 Survey:
 ```
-grep -n "private async startTurnForChat\|private async startTurnAfterTurnStarted" src/server/agent.ts
+grep -n "private async startClaudeTurn" src/server/agent.ts
 ```
 
 Extraction plan:
-1. Read both methods in full to understand shared state (session, activeTurns, etc.)
-2. Extract to `src/server/claude-turn-starter.ts` with a typed `StartTurnDeps`
-   interface for all `AgentCoordinator` deps touched.
-3. In `AgentCoordinator`, replace both method bodies with delegation calls.
+1. Read startClaudeTurn in full (~lines 1124-1366).
+2. Identify all `AgentCoordinator` fields it touches.
+3. Create `src/server/claude-session-spawner.ts` with a typed `SpawnClaudeTurnDeps`
+   interface and `spawnClaudeTurn` as a standalone export.
+4. In `AgentCoordinator`, replace the method body with a delegation call.
 4. Create `src/server/claude-turn-starter.test.ts` with ≥8 tests.
 5. Run targeted gates (lint, typecheck, tests).
 

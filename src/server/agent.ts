@@ -4,7 +4,6 @@ import { reconcileTrackingFile, validateLoopSetup } from "./loop-template"
 import { ensureTrackingFile } from "./loop-template-io.adapter"
 import { homedir } from "node:os"
 import type {
-  AccountInfo,
   AgentProvider,
   ChatAttachment,
   LlmProviderSnapshot,
@@ -16,10 +15,7 @@ import type {
   ResolvedStackBinding,
   SlashCommand,
   Subagent,
-  TranscriptEntry,
 } from "../shared/types"
-import type { ChatRecord, ProjectRecord } from "./events"
-import { buildHistoryPrimer, shouldInjectPrimer } from "./history-primer"
 import {
   getLatestContextWindowUsage,
   MAX_CONSECUTIVE_AUTOCOMPACT_FAILURES,
@@ -49,8 +45,7 @@ import {
 import { readLlmProviderSnapshot } from "./llm-provider"
 import { resolveModelPrice, stripModelVariantSuffix } from "../shared/token-pricing"
 import type { ModelPrice } from "../shared/token-pricing"
-import { isCodexReasoningEffort, providerUsesSdkSession, resolveClaudeApiModelId, type ClaudeDriverPreference, type CustomModelEntry } from "../shared/types"
-import { fallbackTitleFromMessage } from "./generate-title"
+import { providerUsesSdkSession, resolveClaudeApiModelId, type ClaudeDriverPreference, type CustomModelEntry } from "../shared/types"
 import { AUTO_CONTINUE_EVENT_VERSION, type AutoContinueEvent } from "./auto-continue/events"
 import { ClaudeLimitDetector, CodexLimitDetector, type LimitDetection, type LimitDetector } from "./auto-continue/limit-detector"
 import { ClaudeAuthErrorDetector, type AuthErrorDetection } from "./auto-continue/auth-error-detector"
@@ -59,7 +54,6 @@ import { deriveChatSchedules, deriveLoopState, type LoopState } from "./auto-con
 import type { TunnelGateway } from "./cloudflare-tunnel/gateway"
 import { OAuthTokenPool } from "./oauth-pool/oauth-token-pool"
 import { maskOauthKey } from "../shared/mask-oauth-key"
-import { parseMentions, type ParsedMention } from "./mention-parser"
 import { SubagentOrchestrator, type BackgroundRunOutcome, type ProviderRunStart } from "./subagent-orchestrator"
 import { buildSubagentProviderRun, type BuildSubagentProviderRunArgs } from "./subagent-provider-run"
 import { OrchestrationQueue, type WorkerResult, type WorkerSpawnArgs } from "./orchestration-queue"
@@ -130,6 +124,10 @@ import {
 } from "./claude-steer-log"
 import type { ActiveTurn, ClaudeSessionState } from "./claude-session-state"
 import { runClaudeSession as runClaudeSessionLoop } from "./claude-session-runner"
+import {
+  startTurnForChat as startTurnForChatFn,
+  type StartTurnDeps,
+} from "./claude-turn-starter"
 
 export type { ClaudeSessionHandle } from "./harness-types"
 
@@ -299,13 +297,9 @@ const DEFAULT_OPENROUTER_FIRST_ENTRY_TIMEOUT_MS = 2 * 60 * 1000
 // another chat). `startTurnForChat` catches this and persists `message` as a
 // `result` transcript entry instead of letting it surface as an ephemeral
 // commandError that gets wiped by the next chat snapshot tick.
-export class OAuthPoolUnavailableError extends Error {
-  readonly kind = "oauth_pool_unavailable" as const
-  constructor(message: string) {
-    super(message)
-    this.name = "OAuthPoolUnavailableError"
-  }
-}
+// Moved to oauth-errors.ts to avoid a circular import with claude-turn-starter.ts.
+import { OAuthPoolUnavailableError } from "./oauth-errors"
+export { OAuthPoolUnavailableError }
 
 export class AgentCoordinator {
   private readonly store: EventStore
@@ -1033,6 +1027,29 @@ export class AgentCoordinator {
     return true
   }
 
+  private buildStartTurnDeps(): StartTurnDeps {
+    return {
+      activeTurns: this.activeTurns,
+      claudeSessions: this.claudeSessions,
+      drainingStreams: this.drainingStreams,
+      mentionedSubagentIdsByChat: this.mentionedSubagentIdsByChat,
+      store: this.store,
+      codexManager: this.codexManager,
+      subagentOrchestrator: this.subagentOrchestrator,
+      clearDrainingStream: (chatId) => this.clearDrainingStream(chatId),
+      emitStateChange: (chatId, opts) => this.emitStateChange(chatId, opts),
+      resolveClaudeDriverPreference: () => this.resolveClaudeDriverPreference(),
+      getSubagents: () => this.getSubagents(),
+      getAppSettingsSnapshot: () => this.getAppSettingsSnapshot(),
+      generateTitleInBackground: (chatId, content, localPath, optimisticTitle) =>
+        this.generateTitleInBackground(chatId, content, localPath, optimisticTitle),
+      recreateActiveTurnFromSession: (args) => this.recreateActiveTurnFromSession(args),
+      startClaudeTurn: (args) => this.startClaudeTurn(args),
+      findLastUserMessageId: (chatId) => this.findLastUserMessageId(chatId),
+      runTurn: (active) => this.runTurn(active),
+    }
+  }
+
   private async startTurnForChat(args: {
     chatId: string
     provider: AgentProvider
@@ -1048,423 +1065,9 @@ export class AgentCoordinator {
     userClearedContext?: boolean
     profile?: SendToStartingProfile | null
   }) {
-    logSendToStartingProfile(args.profile, "start_turn.begin", {
-      chatId: args.chatId,
-      provider: args.provider,
-      appendUserPrompt: args.appendUserPrompt,
-      planMode: args.planMode,
-    })
-
-    // Close any lingering draining stream before starting a new turn.
-    const draining = this.drainingStreams.get(args.chatId)
-    if (draining) {
-      draining.turn.close()
-      this.clearDrainingStream(args.chatId)
-    }
-
-    // A new user turn implicitly clears any prior cancellation marker —
-    // otherwise a Stop-then-resend cycle wedges every delegate_subagent
-    // call in this chat with "Chat cancelled before run started" until
-    // process restart. Mirrors the clear already done by
-    // runMentionsForUserMessage for the @mention path.
-    this.subagentOrchestrator.clearChatCancellation(args.chatId)
-
-    const chat = this.store.requireChat(args.chatId)
-    if (this.activeTurns.has(args.chatId)) {
-      throw new Error("Chat is already running")
-    }
-
-    if (chat.provider !== args.provider) {
-      await this.store.setChatProvider(args.chatId, args.provider)
-      logSendToStartingProfile(args.profile, "start_turn.provider_set", {
-        chatId: args.chatId,
-        provider: args.provider,
-      })
-    }
-    await this.store.setPlanMode(args.chatId, args.planMode)
-    logSendToStartingProfile(args.profile, "start_turn.plan_mode_set", {
-      chatId: args.chatId,
-      planMode: args.planMode,
-    })
-
-    const existingMessages = this.store.getMessages(args.chatId)
-    const shouldGenerateTitle = args.appendUserPrompt && chat.title === "New Chat" && existingMessages.length === 0
-    const optimisticTitle = shouldGenerateTitle ? fallbackTitleFromMessage(args.content) : null
-
-    if (optimisticTitle) {
-      await this.store.renameChat(args.chatId, optimisticTitle)
-      logSendToStartingProfile(args.profile, "start_turn.optimistic_title_set", {
-        chatId: args.chatId,
-        title: optimisticTitle,
-      })
-    }
-
-    const project = this.store.getProject(chat.projectId)
-    if (!project) {
-      throw new Error("Project not found")
-    }
-
-    let appendedUserMessageId: string | null = null
-    if (args.appendUserPrompt) {
-      const parsedMentions = parseMentions(args.content, this.getSubagents())
-      const subagentMentions = parsedMentions
-        .filter((mention): mention is Extract<ParsedMention, { kind: "subagent" }> => mention.kind === "subagent")
-        .map((mention) => ({ subagentId: mention.subagentId, raw: mention.raw }))
-      this.mentionedSubagentIdsByChat.set(
-        args.chatId,
-        subagentMentions.map((m) => m.subagentId),
-      )
-      const unknownSubagentMentions = parsedMentions
-        .filter((mention): mention is Extract<ParsedMention, { kind: "unknown-subagent" }> => mention.kind === "unknown-subagent")
-        .map((mention) => ({ name: mention.name, raw: mention.raw }))
-      const userPromptEntry = timestamped(
-        {
-          kind: "user_prompt",
-          content: args.content,
-          attachments: args.attachments,
-          steered: args.steered,
-          autoContinue: args.autoContinue,
-          ...(subagentMentions.length > 0 ? { subagentMentions } : {}),
-          ...(unknownSubagentMentions.length > 0 ? { unknownSubagentMentions } : {}),
-        },
-        Date.now()
-      )
-      await this.store.appendMessage(args.chatId, userPromptEntry)
-      appendedUserMessageId = userPromptEntry._id
-      logSendToStartingProfile(args.profile, "start_turn.user_prompt_appended", {
-        chatId: args.chatId,
-        entryId: userPromptEntry._id,
-      })
-    }
-    await this.store.recordTurnStarted(args.chatId, {
-      provider: args.provider,
-      model: args.model,
-      ...(args.effort !== undefined ? { effort: args.effort } : {}),
-      ...(args.serviceTier !== undefined ? { serviceTier: args.serviceTier } : {}),
-      planMode: args.planMode,
-      driver: this.resolveClaudeDriverPreference(),
-    })
-    logSendToStartingProfile(args.profile, "start_turn.turn_started_recorded", {
-      chatId: args.chatId,
-    })
-
-    try {
-      await this.startTurnAfterTurnStarted({
-        args,
-        chat,
-        project,
-        existingMessages,
-        shouldGenerateTitle,
-        optimisticTitle,
-        appendedUserMessageId,
-      })
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
-      const isOAuthRefusal = error instanceof OAuthPoolUnavailableError
-      log.error(`${LOG_PREFIX} startTurnForChat failed after turn_started`, {
-        chatId: args.chatId,
-        provider: args.provider,
-        model: args.model,
-        planMode: args.planMode,
-        error: message,
-        stack: error instanceof Error ? error.stack : undefined,
-        kind: isOAuthRefusal ? "oauth_pool_unavailable" : "unknown",
-      })
-      // OAuth-pool refusal: persist the formatted refusal (with chat-link
-      // markdown produced by `buildPoolUnavailableMessage`) as a `result`
-      // transcript entry so the UI's transcript renders it inline and
-      // durably, instead of relying on the ephemeral commandError banner
-      // that gets wiped by the next chat snapshot tick.
-      if (isOAuthRefusal) {
-        try {
-          await this.store.appendMessage(
-            args.chatId,
-            timestamped({
-              kind: "result",
-              subtype: "error",
-              isError: true,
-              durationMs: 0,
-              result: message,
-            })
-          )
-        } catch (appendErr) {
-          log.error(`${LOG_PREFIX} append refusal result entry failed`, {
-            chatId: args.chatId,
-            appendErr: appendErr instanceof Error ? appendErr.message : String(appendErr),
-          })
-        }
-      }
-      try {
-        await this.store.recordTurnFailed(args.chatId, message)
-      } catch (recordErr) {
-        log.error(`${LOG_PREFIX} recordTurnFailed also failed`, {
-          chatId: args.chatId,
-          recordErr: recordErr instanceof Error ? recordErr.message : String(recordErr),
-        })
-      }
-      this.activeTurns.delete(args.chatId)
-      this.emitStateChange(args.chatId, { immediate: true })
-      // Swallow refusals — the transcript entry above is the user-facing
-      // signal. Re-throwing would surface a transient commandError banner
-      // that races with snapshot ticks and visibly flickers (see #235).
-      if (isOAuthRefusal) {
-        return
-      }
-      throw error
-    }
+    return startTurnForChatFn(this.buildStartTurnDeps(), args)
   }
 
-  private async startTurnAfterTurnStarted(ctx: {
-    args: {
-      chatId: string
-      provider: AgentProvider
-      content: string
-      attachments: ChatAttachment[]
-      model: string
-      effort?: string
-      serviceTier?: "fast"
-      planMode: boolean
-      appendUserPrompt: boolean
-      steered?: boolean
-      autoContinue?: { scheduleId: string }
-      userClearedContext?: boolean
-      profile?: SendToStartingProfile | null
-    }
-    chat: ChatRecord
-    project: ProjectRecord
-    existingMessages: TranscriptEntry[]
-    shouldGenerateTitle: boolean
-    optimisticTitle: string | null
-    appendedUserMessageId: string | null
-  }): Promise<void> {
-    const { args, chat, project, existingMessages, shouldGenerateTitle, optimisticTitle, appendedUserMessageId } = ctx
-    if (shouldGenerateTitle) {
-      void this.generateTitleInBackground(args.chatId, args.content, project.localPath, optimisticTitle ?? "New Chat")
-    }
-
-    const onToolRequest = async (request: HarnessToolRequest): Promise<AnyValue> => {
-      let active = this.activeTurns.get(args.chatId)
-      if (!active) {
-        // The prior turn's `result` event already deleted the activeTurn, but
-        // the Claude SDK fired another `canUseTool` — happens when the SDK
-        // self-resumes after a background task notification. Re-promote a
-        // minimal activeTurn from the live session so the question renders
-        // instead of failing with "Chat turn ended unexpectedly".
-        active = this.recreateActiveTurnFromSession(args)
-        if (!active) {
-          throw new Error("Chat turn ended unexpectedly")
-        }
-      }
-
-      active.status = "waiting_for_user"
-      active.waitStartedAt = Date.now()
-      this.emitStateChange(args.chatId)
-
-      return await new Promise<AnyValue>((resolve) => {
-        active.pendingTool = {
-          toolUseId: request.tool.toolId,
-          tool: request.tool,
-          resolve,
-        }
-      })
-    }
-
-    const targetProvider: AgentProvider = args.provider
-    const existingToken = chat.sessionTokensByProvider[targetProvider] ?? null
-    const pendingForkToken = chat.pendingForkSessionToken?.provider === targetProvider
-      ? chat.pendingForkSessionToken.token
-      : null
-    const shouldPrime = shouldInjectPrimer(
-      chat.sessionTokensByProvider,
-      targetProvider,
-      Boolean(args.userClearedContext),
-    )
-    const userPromptText = buildPromptText(args.content, args.attachments)
-    const primer = shouldPrime
-      ? buildHistoryPrimer(existingMessages, targetProvider, userPromptText)
-      : null
-    const promptContent = primer ?? userPromptText
-
-    let turn: HarnessTurn
-    if (isClaudeSdkProvider(args.provider)) {
-      logSendToStartingProfile(args.profile, "start_turn.provider_boot.begin", {
-        chatId: args.chatId,
-        provider: args.provider,
-        model: args.model,
-      })
-      const spawn = resolveSpawnPaths(chat, project.localPath)
-      turn = await this.startClaudeTurn({
-        chatId: args.chatId,
-        projectId: project.id,
-        localPath: spawn.cwd,
-        additionalDirectories: spawn.additionalDirectories,
-        stackProjects: resolveStackProjects(chat, (id) => this.store.getProject(id)?.title),
-        model: args.model,
-        effort: args.effort,
-        planMode: args.planMode,
-        sessionToken: pendingForkToken ?? existingToken,
-        forkSession: pendingForkToken != null,
-        onToolRequest,
-        provider: args.provider,
-      })
-      logSendToStartingProfile(args.profile, "start_turn.provider_boot.ready", {
-        chatId: args.chatId,
-        provider: args.provider,
-        model: args.model,
-      })
-    } else {
-      logSendToStartingProfile(args.profile, "start_turn.provider_boot.begin", {
-        chatId: args.chatId,
-        provider: args.provider,
-        model: args.model,
-      })
-      // Codex single-cwd: peer worktrees not passed to startSession. Cross-root writes use grantRoot.
-      const sessionToken = await this.codexManager.startSession({
-        chatId: args.chatId,
-        cwd: resolveSpawnPaths(chat, project.localPath).cwd,
-        projectId: project.id,
-        model: args.model,
-        serviceTier: args.serviceTier,
-        sessionToken: existingToken,
-        pendingForkSessionToken: pendingForkToken,
-      })
-      if (pendingForkToken && sessionToken) {
-        await this.store.setPendingForkSessionToken(args.chatId, null)
-      }
-      logSendToStartingProfile(args.profile, "start_turn.session_ready", {
-        chatId: args.chatId,
-        provider: args.provider,
-        model: args.model,
-      })
-      turn = await this.codexManager.startTurn({
-        chatId: args.chatId,
-        content: promptContent,
-        model: args.model,
-        effort: isCodexReasoningEffort(args.effort) ? args.effort : undefined,
-        serviceTier: args.serviceTier,
-        planMode: args.planMode,
-        onToolRequest,
-        developerInstructions: this.getAppSettingsSnapshot().globalPromptAppend,
-      })
-      logSendToStartingProfile(args.profile, "start_turn.provider_boot.ready", {
-        chatId: args.chatId,
-        provider: args.provider,
-        model: args.model,
-      })
-    }
-
-    const active: ActiveTurn = {
-      chatId: args.chatId,
-      provider: args.provider,
-      turn,
-      model: args.model,
-      effort: args.effort,
-      serviceTier: args.serviceTier,
-      planMode: args.planMode,
-      status: args.provider === "claude" ? "running" : "starting",
-      pendingTool: null,
-      postToolFollowUp: null,
-      hasFinalResult: false,
-      cancelRequested: false,
-      cancelRecorded: false,
-      clientTraceId: args.profile?.traceId,
-      profilingStartedAt: args.profile?.startedAt,
-      waitStartedAt: null,
-      userMessageId: appendedUserMessageId ?? this.findLastUserMessageId(args.chatId),
-    }
-    this.activeTurns.set(args.chatId, active)
-    logSendToStartingProfile(args.profile, "start_turn.active_turn_registered", {
-      chatId: args.chatId,
-      status: active.status,
-    })
-    this.emitStateChange(args.chatId, { immediate: active.status === "starting" })
-    logSendToStartingProfile(args.profile, "start_turn.state_change_emitted", {
-      chatId: args.chatId,
-      status: active.status,
-    })
-
-    if (turn.getAccountInfo) {
-      void turn.getAccountInfo()
-        .then(async (accountInfo) => {
-          const session = this.claudeSessions.get(args.chatId)
-          let augmented: AccountInfo
-          if (args.provider === "openrouter") {
-            // OpenRouter routes through the SDK with ANTHROPIC_AUTH_TOKEN set to
-            // the OpenRouter key, so the SDK self-reports tokenSource
-            // "ANTHROPIC_AUTH_TOKEN" with no account — mislabeling the chat as
-            // Anthropic. Override with the OpenRouter identity instead.
-            if (!session) return
-            if (session.accountInfoLoaded) return
-            session.accountInfoLoaded = true
-            augmented = {
-              tokenSource: "openrouter",
-              ...(session.openrouterKeyMasked ? { oauthKeyMasked: session.openrouterKeyMasked } : {}),
-              ...(session.openrouterModel ? { organization: session.openrouterModel } : {}),
-            }
-          } else {
-            if (!accountInfo) return
-            augmented = accountInfo
-            if (args.provider === "claude") {
-              if (!session) return
-              if (session.accountInfoLoaded) return
-              session.accountInfoLoaded = true
-              // Mirror the PTY driver's deriveAccountInfoFromOauth: when the
-              // turn was started with a kanna OAuth-pool token, surface its
-              // name as organization and tag the source so the UI renders
-              // "Pool token" identically across drivers. SDK-reported extras
-              // (email, subscriptionType) are preserved.
-              if (session.activeTokenId) {
-                augmented = {
-                  ...accountInfo,
-                  tokenSource: "kanna-oauth-pool",
-                  ...(session.oauthLabel ? { organization: session.oauthLabel } : {}),
-                  ...(session.oauthKeyMasked ? { oauthKeyMasked: session.oauthKeyMasked } : {}),
-                }
-              } else if (session.oauthKeyMasked && !accountInfo.oauthKeyMasked) {
-                augmented = { ...accountInfo, oauthKeyMasked: session.oauthKeyMasked }
-              }
-            }
-          }
-          await this.store.appendMessage(args.chatId, timestamped({ kind: "account_info", accountInfo: augmented }))
-          this.emitStateChange(args.chatId)
-        })
-        .catch(() => undefined)
-    }
-
-    if (providerUsesSdkSession(args.provider)) {
-      // claude and openrouter both deliver their prompt through the SDK
-      // session queue; gating this on `=== "claude"` is what left openrouter's
-      // prompt undelivered, hanging every openrouter turn until the watchdog.
-      const session = this.claudeSessions.get(args.chatId)
-      if (!session) {
-        throw new Error("SDK session was not initialized")
-      }
-      const promptSeq = session.nextPromptSeq + 1
-      session.nextPromptSeq = promptSeq
-      session.pendingPromptSeqs.push(promptSeq)
-      // A new turn starts: clear any stale cancellation marker so a previous
-      // cancel that never produced a tail result can't suppress this turn's
-      // real result.
-      session.cancelledResultPending = 0
-      active.claudePromptSeq = promptSeq
-      logClaudeSteer("claude_prompt_sent", {
-        chatId: args.chatId,
-        sessionId: session.id,
-        promptSeq,
-        activeStatus: active.status,
-        contentPreview: args.content.slice(0, 160),
-        pendingPromptSeqs: [...session.pendingPromptSeqs],
-      })
-      await session.session.sendPrompt(promptContent)
-      session.lastUsedAt = Date.now()
-      logSendToStartingProfile(args.profile, "start_turn.claude_prompt_sent", {
-        chatId: args.chatId,
-      })
-      return
-    }
-
-    void this.runTurn(active)
-  }
 
   private recreateActiveTurnFromSession(args: {
     chatId: string
