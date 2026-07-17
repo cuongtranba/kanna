@@ -10,8 +10,7 @@ import {
   sweepIdleClaudeSessions,
   type SessionStateQueryDeps,
 } from "./claude-session-state-queries"
-import type { ActiveTurn } from "./claude-session-state"
-import type { ClaudeSessionState } from "./claude-session-state"
+import type { ActiveTurn, ClaudeSessionState, PendingToolRequest } from "./claude-session-state"
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -92,12 +91,12 @@ describe("getActiveStatuses", () => {
     const deps = makeDeps({
       activeTurns: new Map([
         ["chat-1", makeActiveTurn({ chatId: "chat-1", status: "running" })],
-        ["chat-2", makeActiveTurn({ chatId: "chat-2", status: "waiting" })],
+        ["chat-2", makeActiveTurn({ chatId: "chat-2", status: "waiting_for_user" })],
       ]),
     })
     const result = getActiveStatuses(deps)
     expect(result.get("chat-1")).toBe("running")
-    expect(result.get("chat-2")).toBe("waiting")
+    expect(result.get("chat-2")).toBe("waiting_for_user")
   })
 })
 
@@ -152,7 +151,7 @@ describe("getPendingTool", () => {
           makeActiveTurn({
             pendingTool: {
               toolUseId: "tool-123",
-              tool: { toolKind: "ask_user_question" } as ActiveTurn["pendingTool"] extends infer T ? (T extends null ? never : T)["tool"] : never,
+              tool: { toolKind: "ask_user_question" } as PendingToolRequest["tool"],
               resolve: () => undefined,
             },
           }),
@@ -316,8 +315,8 @@ describe("sweepIdleClaudeSessions", () => {
 
   it("closes and emits state change for idle sessions", () => {
     const session = makeSession({ chatId: "chat-1", lastUsedAt: 0, pendingPromptSeqs: [] })
-    const closeFn = mock(() => undefined)
-    const emitFn = mock(() => undefined)
+    const closeFn = mock<(chatId: string, session: ClaudeSessionState) => void>(() => undefined)
+    const emitFn = mock<(chatId: string) => void>(() => undefined)
     const deps = makeDeps({
       claudeSessions: new Map([["chat-1", session]]),
       resolveClaudeIdleMs: () => 1,

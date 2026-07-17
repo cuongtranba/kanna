@@ -126,7 +126,7 @@ describe("checkoutBranch", () => {
       checkoutBranch(makeDeps(), {
         projectId: "p1",
         projectPath: dir,
-        branch: { kind: "local", id: "local:main", name: "main", displayName: "main" },
+        branch: { kind: "local", name: "main" },
       })
     ).rejects.toThrow("not in a git repository")
   }, 15_000)
@@ -142,7 +142,7 @@ describe("checkoutBranch", () => {
     const result = await checkoutBranch(makeDeps(), {
       projectId: "p1",
       projectPath: repo,
-      branch: { kind: "local", id: "local:other", name: "other", displayName: "other" },
+      branch: { kind: "local", name: "other" },
       bringChanges: false,
     })
     expect(result.ok).toBe(false)
@@ -160,7 +160,7 @@ describe("checkoutBranch", () => {
     const result = await checkoutBranch(makeDeps(), {
       projectId: "p1",
       projectPath: repo,
-      branch: { kind: "local", id: "local:feature-x", name: "feature-x", displayName: "feature-x" },
+      branch: { kind: "local", name: "feature-x" },
     })
     expect(result.ok).toBe(true)
     if (result.ok) {
@@ -175,7 +175,7 @@ describe("previewMergeBranch", () => {
     await expect(
       previewMergeBranch(makeDeps(), {
         projectPath: dir,
-        branch: { kind: "local", id: "local:main", name: "main", displayName: "main" },
+        branch: { kind: "local", name: "main" },
       })
     ).rejects.toThrow("not in a git repository")
   }, 15_000)
@@ -184,7 +184,7 @@ describe("previewMergeBranch", () => {
     const repo = await makeRepo()
     const result = await previewMergeBranch(makeDeps(), {
       projectPath: repo,
-      branch: { kind: "local", id: "local:main", name: "main", displayName: "main" },
+      branch: { kind: "local", name: "main" },
     })
     expect(result.status).toBe("up_to_date")
     expect(result.currentBranchName).toBe("main")
@@ -199,7 +199,7 @@ describe("previewMergeBranch", () => {
 
     const result = await previewMergeBranch(makeDeps(), {
       projectPath: repo,
-      branch: { kind: "local", id: "local:empty-branch", name: "empty-branch", displayName: "empty-branch" },
+      branch: { kind: "local", name: "empty-branch" },
     })
     expect(result.status).toBe("up_to_date")
     expect(result.commitCount).toBe(0)
@@ -216,7 +216,7 @@ describe("previewMergeBranch", () => {
 
     const result = await previewMergeBranch(makeDeps(), {
       projectPath: repo,
-      branch: { kind: "local", id: "local:with-commits", name: "with-commits", displayName: "with-commits" },
+      branch: { kind: "local", name: "with-commits" },
     })
     expect(result.status).toBe("mergeable")
     expect(result.commitCount).toBe(1)
@@ -231,7 +231,7 @@ describe("mergeBranch", () => {
       mergeBranch(makeDeps(), {
         projectId: "p1",
         projectPath: dir,
-        branch: { kind: "local", id: "local:main", name: "main", displayName: "main" },
+        branch: { kind: "local", name: "main" },
       })
     ).rejects.toThrow("not in a git repository")
   }, 15_000)
@@ -242,7 +242,7 @@ describe("mergeBranch", () => {
     const result = await mergeBranch(makeDeps(), {
       projectId: "p1",
       projectPath: repo,
-      branch: { kind: "local", id: "local:main", name: "main", displayName: "main" },
+      branch: { kind: "local", name: "main" },
     })
     expect(result.ok).toBe(false)
     if (!result.ok) {
@@ -257,7 +257,7 @@ describe("mergeBranch", () => {
     const result = await mergeBranch(makeDeps(), {
       projectId: "p1",
       projectPath: repo,
-      branch: { kind: "local", id: "local:no-new-commits", name: "no-new-commits", displayName: "no-new-commits" },
+      branch: { kind: "local", name: "no-new-commits" },
     })
     expect(result.ok).toBe(false)
     if (!result.ok) {
@@ -276,7 +276,7 @@ describe("mergeBranch", () => {
     const result = await mergeBranch(makeDeps(), {
       projectId: "p1",
       projectPath: repo,
-      branch: { kind: "local", id: "local:to-merge", name: "to-merge", displayName: "to-merge" },
+      branch: { kind: "local", name: "to-merge" },
     })
     expect(result.ok).toBe(true)
     if (result.ok) {

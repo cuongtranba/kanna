@@ -14,7 +14,7 @@ import type { SlashCommand } from "../shared/types"
 // ---------------------------------------------------------------------------
 
 function makeSlashCommand(name: string, description = ""): SlashCommand {
-  return { name, description }
+  return { name, description, argumentHint: "" }
 }
 
 function makeDeps(overrides: Partial<SlashCommandsDeps> = {}): SlashCommandsDeps {
@@ -152,7 +152,7 @@ describe("ensureSlashCommandsLoaded", () => {
 
   test("loads commands from existing session and persists them", async () => {
     const commands = [makeSlashCommand("clear"), makeSlashCommand("help")]
-    let recorded: SlashCommand[] | null = null
+    let recorded: SlashCommand[] = []
     const deps = makeDeps({
       claudeSessions: {
         get: () => ({
@@ -197,7 +197,7 @@ describe("ensureSlashCommandsLoaded", () => {
   test("spawns ephemeral SDK session when no active session and no oauthPool", async () => {
     const cliCommands = [makeSlashCommand("help")]
     const closed = { value: false }
-    let recorded: SlashCommand[] | null = null
+    let recorded: SlashCommand[] = []
     const noopAsync = async () => undefined
     const deps = makeDeps({
       startClaudeSessionSDK: async () => ({
@@ -233,7 +233,7 @@ describe("ensureSlashCommandsLoaded", () => {
   test("merges local catalog commands into loaded commands", async () => {
     const cliCommands = [makeSlashCommand("help")]
     const localCommands = [makeSlashCommand("mylocal")]
-    let recorded: SlashCommand[] | null = null
+    let recorded: SlashCommand[] = []
     const deps = makeDeps({
       claudeSessions: {
         get: () => ({
@@ -257,7 +257,7 @@ describe("ensureSlashCommandsLoaded", () => {
     })
     await ensureSlashCommandsLoaded(deps, "chat-1")
     expect(recorded).toHaveLength(2)
-    expect(recorded?.map((c) => c.name)).toEqual(["help", "mylocal"])
+    expect(recorded.map((c) => c.name)).toEqual(["help", "mylocal"])
   })
 
   test("skips ephemeral spawn when oauthPool has tokens but pickEphemeral returns null", async () => {
