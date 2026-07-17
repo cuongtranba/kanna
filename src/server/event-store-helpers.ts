@@ -4,6 +4,7 @@
  */
 import { log } from "../shared/log"
 import type { ChatHistorySnapshot, SlashCommand, TranscriptEntry } from "../shared/types"
+import { cloneTranscriptEntries } from "./events"
 import type { StoreEvent } from "./events"
 
 export interface TranscriptPageResult {
@@ -203,4 +204,32 @@ export function getForkedChatTitle(title: string): string {
   const trimmed = title.trim()
   if (!trimmed) return "Fork: New Chat"
   return trimmed.startsWith("Fork: ") ? trimmed : `Fork: ${trimmed}`
+}
+
+/**
+ * Slice a page of transcript entries from a flat array.
+ *
+ * - `limit` controls page size; `beforeIndex` (from a cursor) is the
+ *   exclusive upper bound of the window (undefined = latest page).
+ * - Returns stable `TranscriptPageResult` with cloned entries so
+ *   callers cannot mutate the in-memory transcript.
+ */
+export function getMessagesPageFromEntries(
+  entries: TranscriptEntry[],
+  limit: number,
+  beforeIndex?: number,
+): TranscriptPageResult {
+  if (entries.length === 0) {
+    return { entries: [], hasOlder: false, olderCursor: null }
+  }
+  const endIndex =
+    beforeIndex === undefined
+      ? entries.length
+      : Math.max(0, Math.min(beforeIndex, entries.length))
+  const startIndex = Math.max(0, endIndex - limit)
+  return {
+    entries: cloneTranscriptEntries(entries.slice(startIndex, endIndex)),
+    hasOlder: startIndex > 0,
+    olderCursor: startIndex > 0 ? encodeHistoryCursor(startIndex) : null,
+  }
 }

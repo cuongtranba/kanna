@@ -1,7 +1,6 @@
 import { homedir } from "node:os"
 import path from "node:path"
 import { getDataDir, LOG_PREFIX } from "../shared/branding"
-import type { AnyValue } from "../shared/errors"
 import { log } from "../shared/log"
 import type { StorageBackend } from "./storage/backend"
 import { FsStorageBackend } from "./storage/fs-storage.adapter"
@@ -10,11 +9,9 @@ import { STORE_VERSION } from "../shared/types"
 import type { AutoContinueEvent } from "./auto-continue/events"
 import {
   type ChatEvent,
-  type ChatRecord,
   type OrchestrationEvent,
   type ProjectEvent,
   type QueuedMessageEvent,
-  type SnapshotFile,
   type StackEvent,
   type StackRecord,
   type StoreEvent,
@@ -46,14 +43,11 @@ import { capTranscriptEntry } from "./subagent-entry-cap.adapter"
 import {
   coalesceContextWindowUpdates,
   decodeCursor,
-  encodeHistoryCursor,
   getForkedChatTitle,
   getHistorySnapshot,
-  getReplayEventPriority,
+  getMessagesPageFromEntries,
   logSendToStartingProfile,
-  normalizeSidebarProjectOrder,
   slashCommandsEqual,
-  type TranscriptPageResult,
 } from "./event-store-helpers"
 import {
   applySubagentEvent,
@@ -74,23 +68,26 @@ import {
   applyProjectEvent,
   applyStackEvent,
 } from "./event-store-chat-lifecycle"
+import {
+  applyTunnelEventToMap,
+  buildSnapshotFile,
+  calcShouldTruncateLogs,
+  computeLegacyTranscriptStats,
+  loadAndReplayLogs,
+  loadPushEventsFromLog,
+  loadShareEventsFromLog,
+  loadSnapshotIntoState,
+  loadSidebarOrder,
+  loadTunnelEventsFromLog,
+  migrateLegacyTranscripts as migrateLegacyTranscriptsImpl,
+  truncateLogsAfterSnapshot,
+  writeSidebarOrderFile,
+  type LegacyTranscriptStats,
+  type SnapshotLogPaths,
+} from "./event-store-snapshot"
 
-const SNAPSHOT_THRESHOLD_BYTES = 2 * 1024 * 1024
 const STALE_EMPTY_CHAT_MAX_AGE_MS = 30 * 60 * 1000
 const SIDEBAR_PROJECT_ORDER_FILE = "sidebar-order.json"
-
-interface LegacyTranscriptStats {
-  hasLegacyData: boolean
-  sources: Array<"snapshot" | "messages_log">
-  chatCount: number
-  entryCount: number
-}
-
-interface ParsedReplayEvent {
-  event: StoreEvent
-  sourceIndex: number
-  lineIndex: number
-}
 
 export class EventStore implements PushEventStore {
   readonly dataDir: string
@@ -149,6 +146,21 @@ export class EventStore implements PushEventStore {
     this.sidebarProjectOrderPath = path.join(this.dataDir, SIDEBAR_PROJECT_ORDER_FILE)
   }
 
+  private getLogPaths(): SnapshotLogPaths {
+    return {
+      snapshotPath: this.snapshotPath,
+      projectsLogPath: this.projectsLogPath,
+      chatsLogPath: this.chatsLogPath,
+      messagesLogPath: this.messagesLogPath,
+      queuedMessagesLogPath: this.queuedMessagesLogPath,
+      turnsLogPath: this.turnsLogPath,
+      schedulesLogPath: this.schedulesLogPath,
+      stacksLogPath: this.stacksLogPath,
+      toolRequestsLogPath: this.toolRequestsLogPath,
+      orchLogPath: this.orchLogPath,
+    }
+  }
+
   async initialize() {
     await this.storage.mkdir(this.dataDir)
     await this.storage.mkdir(this.transcriptsDir)
@@ -202,78 +214,15 @@ export class EventStore implements PushEventStore {
   }
 
   private async loadSnapshot() {
-    if (!(await this.storage.exists(this.snapshotPath))) return
-
-    try {
-      const text = await this.storage.readText(this.snapshotPath)
-      if (!text.trim()) return
-      const parsed: SnapshotFile = JSON.parse(text)
-      if (parsed.v !== STORE_VERSION) {
-        log.warn(`${LOG_PREFIX} Resetting local chat history for store version ${STORE_VERSION}`)
-        await this.clearStorage()
-        return
-      }
-      for (const project of parsed.projects) {
-        this.state.projectsById.set(project.id, { ...project })
-        this.state.projectIdsByPath.set(project.localPath, project.id)
-      }
-      for (const chat of parsed.chats) {
-        // Access legacy fields from old snapshot data via Reflect.get (avoids `as` casts).
-        const legacySessionToken: string | null | undefined = Reflect.get(chat, "sessionToken")
-        const legacyPendingFork: string | null | { provider: AgentProvider; token: string } | undefined = Reflect.get(chat, "pendingForkSessionToken")
-        const legacyTokensByProvider: Partial<Record<AgentProvider, string | null>> | undefined = Reflect.get(chat, "sessionTokensByProvider")
-
-        const sessionTokensByProvider: Partial<Record<AgentProvider, string | null>> =
-          legacyTokensByProvider ? { ...legacyTokensByProvider } : {}
-        if (
-          typeof legacySessionToken === "string"
-          && chat.provider
-          && sessionTokensByProvider[chat.provider] == null
-        ) {
-          sessionTokensByProvider[chat.provider] = legacySessionToken
-        }
-        let pendingForkSessionToken: ChatRecord["pendingForkSessionToken"] = null
-        if (legacyPendingFork && typeof legacyPendingFork === "object" && "token" in legacyPendingFork) {
-          pendingForkSessionToken = legacyPendingFork
-        } else if (typeof legacyPendingFork === "string" && chat.provider) {
-          pendingForkSessionToken = { provider: chat.provider, token: legacyPendingFork }
-        }
-        this.state.chatsById.set(chat.id, {
-          ...chat,
-          unread: chat.unread ?? false,
-          sessionTokensByProvider,
-          pendingForkSessionToken,
-        })
-      }
-      this.legacySidebarProjectOrder = normalizeSidebarProjectOrder(parsed.sidebarProjectOrder)
-      if (parsed.queuedMessages?.length) {
-        for (const queuedSet of parsed.queuedMessages) {
-          this.state.queuedMessagesByChatId.set(queuedSet.chatId, queuedSet.entries.map((entry) => ({
-            ...entry,
-            attachments: [...entry.attachments],
-          })))
-        }
-      }
-      if (parsed.messages?.length) {
-        this.snapshotHasLegacyMessages = true
-        for (const messageSet of parsed.messages) {
-          this.legacyMessagesByChatId.set(messageSet.chatId, cloneTranscriptEntries(messageSet.entries))
-        }
-      }
-      if (parsed.autoContinueEvents?.length) {
-        for (const entry of parsed.autoContinueEvents) {
-          this.state.autoContinueEventsByChatId.set(entry.chatId, [...entry.events])
-        }
-      }
-      if (parsed.stacks?.length) {
-        for (const stack of parsed.stacks) {
-          this.state.stacksById.set(stack.id, { ...stack, projectIds: [...stack.projectIds] })
-        }
-      }
-    } catch (error) {
-      log.warn(`${LOG_PREFIX} Failed to load snapshot, resetting local history:`, String(error))
-      await this.clearStorage()
-    }
+    const result = await loadSnapshotIntoState(
+      this.storage,
+      this.snapshotPath,
+      this.state,
+      this.legacyMessagesByChatId,
+      () => this.clearStorage(),
+    )
+    this.snapshotHasLegacyMessages = result.snapshotHasLegacyMessages
+    this.legacySidebarProjectOrder = result.legacySidebarProjectOrder
   }
 
   private resetState() {
@@ -296,152 +245,24 @@ export class EventStore implements PushEventStore {
   }
 
   private async loadSidebarProjectOrder() {
-    if (await this.storage.exists(this.sidebarProjectOrderPath)) {
-      try {
-        const text = await this.storage.readText(this.sidebarProjectOrderPath)
-        if (!text.trim()) {
-          this.sidebarProjectOrder = []
-          return
-        }
-        this.sidebarProjectOrder = normalizeSidebarProjectOrder(JSON.parse(text))
-      } catch (error) {
-        log.warn(`${LOG_PREFIX} Failed to load ${SIDEBAR_PROJECT_ORDER_FILE}, ignoring saved order:`, String(error))
-        this.sidebarProjectOrder = []
-      }
-      return
-    }
-
-    const legacySidebarProjectOrder = await this.loadLegacySidebarProjectOrder()
-    this.sidebarProjectOrder = legacySidebarProjectOrder
-    if (legacySidebarProjectOrder.length > 0) {
-      await this.writeSidebarProjectOrderFile(legacySidebarProjectOrder)
-    }
-  }
-
-  private async loadLegacySidebarProjectOrder() {
-    const fromProjectsLog = await this.readLegacySidebarProjectOrderFromProjectsLog()
-    if (fromProjectsLog.length > 0) {
-      return fromProjectsLog
-    }
-    return [...this.legacySidebarProjectOrder]
-  }
-
-  private async readLegacySidebarProjectOrderFromProjectsLog() {
-    if (!(await this.storage.exists(this.projectsLogPath))) return []
-
-    const text = await this.storage.readText(this.projectsLogPath)
-    if (!text.trim()) return []
-
-    const lines = text.split("\n")
-    let lastNonEmpty = -1
-    for (let index = lines.length - 1; index >= 0; index -= 1) {
-      if (lines[index].trim()) {
-        lastNonEmpty = index
-        break
-      }
-    }
-
-    let projectIds: string[] = []
-    for (let index = 0; index < lines.length; index += 1) {
-      const line = lines[index].trim()
-      if (!line) continue
-      try {
-        const event: { v?: number; type?: string; projectIds?: AnyValue } = JSON.parse(line)
-        if (event.v !== STORE_VERSION || event.type !== "sidebar_project_order_set") {
-          continue
-        }
-        projectIds = normalizeSidebarProjectOrder(event.projectIds)
-      } catch (error) {
-        if (index === lastNonEmpty) {
-          log.warn(`${LOG_PREFIX} Ignoring corrupt trailing line in ${path.basename(this.projectsLogPath)} while migrating sidebar order`)
-          return projectIds
-        }
-        log.warn(`${LOG_PREFIX} Failed to migrate sidebar order from ${path.basename(this.projectsLogPath)}:`, String(error))
-        return []
-      }
-    }
-
-    return projectIds
-  }
-
-  private async writeSidebarProjectOrderFile(projectIds: string[]) {
-    await this.storage.mkdir(this.dataDir)
-    await this.storage.writeText(this.sidebarProjectOrderPath, `${JSON.stringify(projectIds, null, 2)}\n`)
+    this.sidebarProjectOrder = await loadSidebarOrder(
+      this.storage,
+      this.sidebarProjectOrderPath,
+      this.projectsLogPath,
+      this.dataDir,
+      this.legacySidebarProjectOrder,
+    )
   }
 
   private async replayLogs() {
-    if (this.storageReset) return
-    const replayEvents = [
-      ...await this.loadReplayEvents(this.projectsLogPath, 0),
-      ...await this.loadReplayEvents(this.stacksLogPath, 1),
-      ...await this.loadReplayEvents(this.chatsLogPath, 2),
-      ...await this.loadReplayEvents(this.messagesLogPath, 3),
-      ...await this.loadReplayEvents(this.queuedMessagesLogPath, 4),
-      ...await this.loadReplayEvents(this.turnsLogPath, 5),
-      ...await this.loadReplayEvents(this.schedulesLogPath, 6),
-      ...await this.loadReplayEvents(this.toolRequestsLogPath, 7),
-      ...await this.loadReplayEvents(this.orchLogPath, 8),
-    ]
-    if (this.storageReset) return
-
-    replayEvents
-      .sort((left, right) => (
-        left.event.timestamp - right.event.timestamp
-        || getReplayEventPriority(left.event) - getReplayEventPriority(right.event)
-        || left.sourceIndex - right.sourceIndex
-        || left.lineIndex - right.lineIndex
-      ))
-      .forEach(({ event }) => {
-        this.applyEvent(event)
-      })
-    this.replayChatProvider.clear()
-  }
-
-  private async loadReplayEvents(filePath: string, sourceIndex: number): Promise<ParsedReplayEvent[]> {
-    if (!(await this.storage.exists(filePath))) return []
-    const text = await this.storage.readText(filePath)
-    if (!text.trim()) return []
-
-    const parsedEvents: ParsedReplayEvent[] = []
-    const lines = text.split("\n")
-    let lastNonEmpty = -1
-    for (let index = lines.length - 1; index >= 0; index -= 1) {
-      if (lines[index].trim()) {
-        lastNonEmpty = index
-        break
-      }
-    }
-
-    for (let index = 0; index < lines.length; index += 1) {
-      const line = lines[index].trim()
-      if (!line) continue
-      try {
-        const event: StoreEvent & { v?: number; type?: string } = JSON.parse(line)
-        if (event.v !== STORE_VERSION) {
-          log.warn(`${LOG_PREFIX} Resetting local history from incompatible event log`)
-          await this.clearStorage()
-          return []
-        }
-        if (event.type === "sidebar_project_order_set") {
-          continue
-        }
-        parsedEvents.push({
-          event,
-          sourceIndex,
-          lineIndex: index,
-        })
-      } catch (error) {
-        if (index === lastNonEmpty) {
-          log.warn(`${LOG_PREFIX} Ignoring corrupt trailing line in ${path.basename(filePath)}`)
-          return parsedEvents
-        }
-        log.warn(`${LOG_PREFIX} Failed to replay ${path.basename(filePath)}, resetting local history:`, String(error))
-        await this.clearStorage()
-        return []
-      }
-    }
-
-    return parsedEvents
+    await loadAndReplayLogs(
+      this.storage,
+      this.getLogPaths(),
+      () => this.storageReset,
+      (event) => { this.applyEvent(event) },
+      () => this.clearStorage(),
+      () => { this.replayChatProvider.clear() },
+    )
   }
 
   private applyEvent(event: StoreEvent) {
@@ -765,7 +586,7 @@ export class EventStore implements PushEventStore {
     }
 
     this.writeChain = this.writeChain.then(async () => {
-      await this.writeSidebarProjectOrderFile(uniqueProjectIds)
+      await writeSidebarOrderFile(this.storage, this.dataDir, this.sidebarProjectOrderPath, uniqueProjectIds)
       this.sidebarProjectOrder = [...uniqueProjectIds]
     })
     return this.writeChain
@@ -1315,20 +1136,6 @@ export class EventStore implements PushEventStore {
     return [...this.sidebarProjectOrder]
   }
 
-  private getMessagesPageFromEntries(entries: TranscriptEntry[], limit: number, beforeIndex?: number): TranscriptPageResult {
-    if (entries.length === 0) {
-      return { entries: [], hasOlder: false, olderCursor: null }
-    }
-
-    const endIndex = beforeIndex === undefined ? entries.length : Math.max(0, Math.min(beforeIndex, entries.length))
-    const startIndex = Math.max(0, endIndex - limit)
-    return {
-      entries: cloneTranscriptEntries(entries.slice(startIndex, endIndex)),
-      hasOlder: startIndex > 0,
-      olderCursor: startIndex > 0 ? encodeHistoryCursor(startIndex) : null,
-    }
-  }
-
   getMessages(chatId: string) {
     if (this.cachedTranscript?.chatId === chatId) {
       return cloneTranscriptEntries(this.cachedTranscript.entries)
@@ -1363,7 +1170,7 @@ export class EventStore implements PushEventStore {
     }
 
     const entries = coalesceContextWindowUpdates(this.getMessages(chatId))
-    const page = this.getMessagesPageFromEntries(entries, limit)
+    const page = getMessagesPageFromEntries(entries, limit)
 
     return {
       messages: page.entries,
@@ -1381,7 +1188,7 @@ export class EventStore implements PushEventStore {
     // Coalesce identically to getRecentMessagesPage so cursors (which index the
     // coalesced array) stay consistent across recent + load-older paging.
     const entries = coalesceContextWindowUpdates(this.getMessages(chatId))
-    const page = this.getMessagesPageFromEntries(entries, limit, beforeIndex)
+    const page = getMessagesPageFromEntries(entries, limit, beforeIndex)
 
     return {
       messages: page.entries,
@@ -1427,122 +1234,44 @@ export class EventStore implements PushEventStore {
   }
 
   async getLegacyTranscriptStats(): Promise<LegacyTranscriptStats> {
-    const messagesLogSize = await this.storage.size(this.messagesLogPath)
-    const sources: LegacyTranscriptStats["sources"] = []
-    if (this.snapshotHasLegacyMessages) {
-      sources.push("snapshot")
-    }
-    if (messagesLogSize > 0) {
-      sources.push("messages_log")
-    }
-
-    let entryCount = 0
-    for (const entries of this.legacyMessagesByChatId.values()) {
-      entryCount += entries.length
-    }
-
-    return {
-      hasLegacyData: sources.length > 0 || this.legacyMessagesByChatId.size > 0,
-      sources,
-      chatCount: this.legacyMessagesByChatId.size,
-      entryCount,
-    }
+    return computeLegacyTranscriptStats(
+      this.storage,
+      this.messagesLogPath,
+      this.snapshotHasLegacyMessages,
+      this.legacyMessagesByChatId,
+    )
   }
 
   async hasLegacyTranscriptData() {
     return (await this.getLegacyTranscriptStats()).hasLegacyData
   }
 
-  private createSnapshot(): SnapshotFile {
-    return {
-      v: STORE_VERSION,
-      generatedAt: Date.now(),
-      projects: this.listProjects().map((project) => ({ ...project })),
-      chats: [...this.state.chatsById.values()]
-        .filter((chat) => !chat.deletedAt)
-        .map((chat) => ({ ...chat })),
-      queuedMessages: [...this.state.queuedMessagesByChatId.entries()]
-        .map(([chatId, entries]) => ({
-          chatId,
-          entries: entries.map((entry) => ({
-            ...entry,
-            attachments: [...entry.attachments],
-          })),
-        })),
-      autoContinueEvents: [...this.state.autoContinueEventsByChatId.entries()].map(([chatId, events]) => ({
-        chatId,
-        events: [...events],
-      })),
-      stacks: [...this.state.stacksById.values()]
-        .filter((stack) => !stack.deletedAt)
-        .map((stack) => ({ ...stack, projectIds: [...stack.projectIds] })),
-    }
-  }
-
   async snapshotAndTruncateLogs() {
-    const snapshot = this.createSnapshot()
-    await this.storage.writeText(this.snapshotPath, JSON.stringify(snapshot, null, 2))
-    await Promise.all([
-      this.storage.writeText(this.projectsLogPath, ""),
-      this.storage.writeText(this.chatsLogPath, ""),
-      this.storage.writeText(this.messagesLogPath, ""),
-      this.storage.writeText(this.queuedMessagesLogPath, ""),
-      this.storage.writeText(this.turnsLogPath, ""),
-      this.storage.writeText(this.schedulesLogPath, ""),
-      this.storage.writeText(this.stacksLogPath, ""),
-      // tunnels.jsonl is NOT compacted into the snapshot — it's left as-is
-      // so that active tunnel state survives server restarts.
-      // tool-requests.jsonl is NOT persisted to the snapshot. After compaction,
-      // in-memory state remains intact for the current process lifetime.
-      // On next server boot, tool-requests will be absent (fail-closed);
-      // Task 7 recoverOnStartup marks them session_closed.
-      this.storage.writeText(this.toolRequestsLogPath, ""),
-    ])
+    const snapshot = buildSnapshotFile(this.state, this.listProjects())
+    await truncateLogsAfterSnapshot(
+      this.storage,
+      this.getLogPaths(),
+      JSON.stringify(snapshot, null, 2),
+    )
   }
 
   async migrateLegacyTranscripts(onProgress?: (message: string) => void) {
     const stats = await this.getLegacyTranscriptStats()
-    if (!stats.hasLegacyData) return false
-
-    const sourceSummary = stats.sources.map((source) => source === "messages_log" ? "messages.jsonl" : "snapshot.json").join(", ")
-    onProgress?.(`${LOG_PREFIX} transcript migration detected: ${stats.chatCount} chats, ${stats.entryCount} entries from ${sourceSummary}`)
-
-    const messageSets = [...this.legacyMessagesByChatId.entries()]
-    onProgress?.(`${LOG_PREFIX} transcript migration: writing ${messageSets.length} per-chat transcript files`)
-
-    await this.storage.mkdir(this.transcriptsDir)
-    const logEveryChat = messageSets.length <= 10
-    for (let index = 0; index < messageSets.length; index += 1) {
-      const [chatId, entries] = messageSets[index]
-      const transcriptPath = this.transcriptPath(chatId)
-      const tempPath = `${transcriptPath}.tmp`
-      const payload = entries.map((entry) => JSON.stringify(entry)).join("\n")
-      await this.storage.writeText(tempPath, payload ? `${payload}\n` : "")
-      await this.storage.rename(tempPath, transcriptPath)
-      if (logEveryChat || (index + 1) % 25 === 0 || index === messageSets.length - 1) {
-        onProgress?.(`${LOG_PREFIX} transcript migration: ${index + 1}/${messageSets.length} chats`)
-      }
-    }
-
-    this.clearLegacyTranscriptState()
-    await this.snapshotAndTruncateLogs()
-    this.cachedTranscript = null
-    onProgress?.(`${LOG_PREFIX} transcript migration complete`)
-    return true
+    return migrateLegacyTranscriptsImpl(
+      this.storage,
+      this.transcriptsDir,
+      stats,
+      this.legacyMessagesByChatId,
+      (chatId) => this.transcriptPath(chatId),
+      () => { this.clearLegacyTranscriptState() },
+      () => this.snapshotAndTruncateLogs(),
+      () => { this.cachedTranscript = null },
+      onProgress,
+    )
   }
 
   private async shouldSnapshotLogs() {
-    const sizes = await Promise.all([
-      this.storage.size(this.projectsLogPath),
-      this.storage.size(this.chatsLogPath),
-      this.storage.size(this.messagesLogPath),
-      this.storage.size(this.queuedMessagesLogPath),
-      this.storage.size(this.turnsLogPath),
-      this.storage.size(this.schedulesLogPath),
-      this.storage.size(this.stacksLogPath),
-      this.storage.size(this.toolRequestsLogPath),
-    ])
-    return sizes.reduce((total, size) => total + size, 0) >= SNAPSHOT_THRESHOLD_BYTES
+    return calcShouldTruncateLogs(this.storage, this.getLogPaths())
   }
 
   async appendAutoContinueEvent(event: AutoContinueEvent) {
@@ -1562,7 +1291,7 @@ export class EventStore implements PushEventStore {
     const payload = `${JSON.stringify(event)}\n`
     this.writeChain = this.writeChain.then(async () => {
       await this.storage.appendText(this.tunnelLogPath, payload)
-      this.applyTunnelEvent(event)
+      applyTunnelEventToMap(this.tunnelEventsByChatId, event)
     })
     await this.writeChain
   }
@@ -1576,27 +1305,8 @@ export class EventStore implements PushEventStore {
     return [...this.tunnelEventsByChatId.keys()]
   }
 
-  private applyTunnelEvent(event: CloudflareTunnelEvent): void {
-    const existing = this.tunnelEventsByChatId.get(event.chatId) ?? []
-    existing.push(event)
-    this.tunnelEventsByChatId.set(event.chatId, existing)
-  }
-
   private async loadTunnelEvents(): Promise<void> {
-    if (!(await this.storage.exists(this.tunnelLogPath))) return
-    const text = await this.storage.readText(this.tunnelLogPath)
-    if (!text.trim()) return
-
-    for (const rawLine of text.split("\n")) {
-      const line = rawLine.trim()
-      if (!line) continue
-      try {
-        const event: CloudflareTunnelEvent = JSON.parse(line)
-        this.applyTunnelEvent(event)
-      } catch {
-        log.warn(`${LOG_PREFIX} Ignoring malformed line in tunnels.jsonl`)
-      }
-    }
+    await loadTunnelEventsFromLog(this.storage, this.tunnelLogPath, this.tunnelEventsByChatId)
   }
 
   async appendShareEvent(event: ShareEvent): Promise<void> {
@@ -1613,19 +1323,7 @@ export class EventStore implements PushEventStore {
   }
 
   private async loadShareEvents(): Promise<void> {
-    if (!(await this.storage.exists(this.sharesLogPath))) return
-    const text = await this.storage.readText(this.sharesLogPath)
-    if (!text.trim()) return
-    for (const rawLine of text.split("\n")) {
-      const line = rawLine.trim()
-      if (!line) continue
-      try {
-        const event: ShareEvent = JSON.parse(line)
-        this.shareEventsAll.push(event)
-      } catch {
-        log.warn(`${LOG_PREFIX} Ignoring malformed line in shares.jsonl`)
-      }
-    }
+    await loadShareEventsFromLog(this.storage, this.sharesLogPath, this.shareEventsAll)
   }
 
   async appendPushEvent(event: PushEvent): Promise<void> {
@@ -1637,22 +1335,7 @@ export class EventStore implements PushEventStore {
   }
 
   async loadPushEvents(): Promise<PushEvent[]> {
-    if (!(await this.storage.exists(this.pushLogPath))) return []
-    const text = await this.storage.readText(this.pushLogPath)
-    if (!text.trim()) return []
-
-    const events: PushEvent[] = []
-    for (const rawLine of text.split("\n")) {
-      const line = rawLine.trim()
-      if (!line) continue
-      try {
-        const pushEvent: PushEvent = JSON.parse(line)
-        events.push(pushEvent)
-      } catch {
-        log.warn(`${LOG_PREFIX} Ignoring malformed line in push.jsonl`)
-      }
-    }
-    return events
+    return loadPushEventsFromLog(this.storage, this.pushLogPath)
   }
 
   async putToolRequest(req: ToolRequest): Promise<void> {
