@@ -13,6 +13,7 @@ bash scripts/verify-decomp.sh
 
 ## Progress (latest first)
 
+- 2026-07-17 Extract session state queries + idle-reaper (~57 lines) to claude-session-state-queries.ts (SessionStateQueryDeps interface, 8 exported fns: getActiveStatuses, getWaitStartedAtByChatId, getPendingTool, getDrainingChatIds, getSlashCommandsLoadingChatIds, getClaudeSessionStates, isClaudeSessionIdle, sweepIdleClaudeSessions; buildSessionStateQueryDeps deps-builder in AgentCoordinator) + 25 tests. agent.ts: 1461 → 1447 LOC; new file 160 LOC.
 - 2026-07-17 Extract subagent pending tool-response handlers (~50 lines) to claude-subagent-tool-response.ts (SubagentToolResponseDeps interface, 6 exported fns: subagentPendingKey, rejectPendingResolvers, rejectPendingResolversForChat, rejectPendingResolversForRun, respondSubagentTool, cancelSubagentRun; buildSubagentToolResponseDeps deps-builder in AgentCoordinator) + 9 tests. agent.ts: 1476 → 1461 LOC; new file 165 LOC.
 - 2026-07-17 Extract slash commands loader (~107 lines) to claude-slash-commands.ts (SlashCommandsDeps interface, ensureSlashCommandsLoaded + mergeLocalCatalog standalone exported fns; buildSlashCommandsDeps deps-builder in AgentCoordinator) + 13 tests. agent.ts: 1553 → 1476 LOC; new file 234 LOC.
 - 2026-07-17 Extract send/queue handlers (~205 lines) to claude-send-command.ts (SendCommandDeps interface, 6 exported fns: resolveProvider, getProviderSettings, shouldInjectProactiveCompact, enqueueMessage, dequeueAndStartQueuedMessage, maybeStartNextQueuedMessage, sendCommand; buildSendCommandDeps deps-builder in AgentCoordinator) + 31 tests. agent.ts: 1758 → 1553 LOC; new file ~300 LOC.
@@ -52,26 +53,23 @@ bash scripts/verify-decomp.sh
 
 ## Next chunk
 
-agent.ts (1461 LOC): next cohesive group is the **session state query + idle-reaper methods** (~57 lines):
+agent.ts (1447 LOC): next cohesive group is **session-state reconstruction helpers** (~50 lines):
 
-- `getActiveStatuses()` — maps activeTurns → KannaStatus per chatId
-- `getWaitStartedAtByChatId()` — maps activeTurns → waitStartedAt per chatId
-- `getPendingTool(chatId)` — returns PendingToolSnapshot for active turn's pending tool
-- `getDrainingChatIds()` — set of chatIds with active draining streams
-- `getSlashCommandsLoadingChatIds()` — set of chatIds with slash commands in-flight
-- `getClaudeSessionStates()` — maps claudeSessions → "warming"|"active"|"idle" per chatId
-- `isClaudeSessionIdle(chatId, session, now)` — private: true when session has no live activity and idle timeout elapsed
-- `sweepIdleClaudeSessions(now)` — private: iterates all sessions, closes idle ones
+- `recreateActiveTurnFromSession(args)` — builds a ghost ActiveTurn from a live ClaudeSessionState; used when a SDK session is reused without a fresh turn
+- `findLastUserMessageId(chatId)` — scans message history for the most recent user_prompt `_id`
 
-Extract to `src/server/claude-session-state-queries.ts` with a
-`SessionStateQueryDeps` interface and standalone exported functions.
+Extract to `src/server/claude-session-rebuild.ts` with a `SessionRebuildDeps` interface:
+- `claudeSessions: Map<string, ClaudeSessionState>`
+- `activeTurns: Map<string, ActiveTurn>`
+- `providerUsesSdkSession: (provider: AgentProvider) => boolean`
+- `getMessages: (chatId: string) => readonly { kind: string; _id: string }[]`
 
-Survey:
+Locate methods:
 ```
-grep -n "getActiveStatuses\|getWaitStartedAt\|getPendingTool\|getDrainingChatIds\|getSlashCommandsLoading\|getClaudeSessionStates\|isClaudeSessionIdle\|sweepIdleClaudeSessions" src/server/agent.ts | head -20
+grep -n "recreateActiveTurnFromSession\|findLastUserMessageId" src/server/agent.ts
 ```
 
-Expected: agent.ts 1461 → ~1404 LOC.
+Expected: agent.ts 1447 → ~1397 LOC.
 
 ## Worker rules (every subagent MUST follow)
 
