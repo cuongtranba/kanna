@@ -13,6 +13,7 @@ bash scripts/verify-decomp.sh
 
 ## Progress (latest first)
 
+- 2026-07-18 Extract provider/model-catalog domain (ProviderModelOption, ClaudeModelOptions, CodexModelOptions, ProviderModelOptionsByProvider, ProviderPreference, ChatProviderPreferences, ModelOptions, DEFAULT_CLAUDE/CODEX_MODEL_OPTIONS, PROVIDERS, getProviderCatalog, CustomModelEntry/Input/Patch, TextSnippet/Input/Patch, mergeCustomModels, providerUsesSdkSession, normalize*/getProvider*/resolve* helpers, OpenRouterModel, DEFAULT_OPENROUTER_SDK_MODEL) to provider-model-types.ts; types.ts re-exports via barrel; 25 tests pass. types.ts: 2108 → 1713 LOC (-395); new file 437 LOC.
 - 2026-07-18 Extract snapshot/persistence layer (loadSnapshotIntoState, buildSnapshotFile, truncateLogsAfterSnapshot, calcShouldTruncateLogs, loadAndReplayLogs, loadSidebarOrder, writeSidebarOrderFile, readSidebarOrderFromProjectsLog, computeLegacyTranscriptStats, migrateLegacyTranscripts, applyTunnelEventToMap, loadTunnelEventsFromLog, loadShareEventsFromLog, loadPushEventsFromLog + getMessagesPageFromEntries to helpers) to event-store-snapshot.ts; EventStore keeps thin delegates; 35 tests. event-store.ts: 1778 → 1462 LOC (-316); new file ~670 LOC.
 - 2026-07-18 Extract chat-lifecycle read-model (applyProjectEvent, applyStackEvent, applyChatLifecycleEvent, updateChatTiming, applyAutoContinueToState, applyChatMessageMetadata) to event-store-chat-lifecycle.ts; all project/stack/chat/turn/queued-message switch cases delegated + private updateTiming method removed + 28 tests. event-store.ts: 2050 → 1778 LOC (-272); new file 441 LOC.
 - 2026-07-17 Extract tool-request read-model (applyToolRequestEvent, getToolRequest, listPendingToolRequests, scanAllToolRequests, deleteToolRequestsForChat) to event-store-tool-requests.ts as pure functions; EventStore delegates via applyToolRequestEvent in switch + thin wrappers + 14 tests. event-store.ts: 2069 → 2050 LOC; new file 96 LOC.
@@ -64,21 +65,19 @@ bash scripts/verify-decomp.sh
 
 ## Next chunk
 
-**shared/types.ts (2108 LOC)**: split by domain into focused sibling modules, keeping `types.ts` as a re-export barrel for backward compat.
+**shared/types.ts (1713 LOC → target ≤ 1300)**: continue splitting by domain. Provider/model-catalog is done. Next candidates:
 
-Candidate splits:
-- `src/shared/provider-types.ts`: `AgentProvider`, `PROVIDERS`, `ModelEntry`, `ProviderSettings`, `mergeCustomModels`, `CustomModelEntry` (~120 LOC)
-- `src/shared/chat-types.ts`: `TranscriptEntry` and all its variants (user_prompt, assistant, context_window_updated, etc.), `ChatHistoryPage`, `ChatHistorySnapshot`, `QueuedChatMessage` (~250 LOC)
-- `src/shared/settings-types.ts`: `AppSettings`, `AppSettingsPatch`, `McpOAuthState`, `CustomMcpServer`, all settings interfaces (~300 LOC)
-- `src/shared/subagent-types.ts`: `Subagent`, `SubagentRunSnapshot`, `SubagentEntry`, `SubagentRuntimeSettings` (~100 LOC)
-- `src/shared/orch-state-types.ts`: already in `shared/orchestration-types.ts`; verify nothing is duplicated
+1. **`src/shared/transcript-entry-types.ts`** (~350 LOC): `TranscriptEntryBase`, all `*Entry` variants (UserPromptEntry, AssistantTextEntry, ToolCallEntry, ResultEntry, etc.), `TranscriptEntry` union, `NormalizedToolCall` union, plus all `*ToolCall` and `*ToolResult` interfaces. References `AgentProvider`, `ChatAttachment`, `McpServerInfo` from types.ts — use `import type`.
 
-Survey the boundaries:
+2. **`src/shared/hydrated-tool-types.ts`** (~120 LOC): `HydratedToolCallBase`, `HydratedAskUserQuestionToolCall` … `HydratedToolCall` union — the hydrated display-layer variants. Depends on transcript-entry-types, so extract after step 1.
+
+Survey:
 ```bash
-grep -n "^export " src/shared/types.ts | head -60
+grep -n "^export interface\|^export type" src/shared/types.ts | head -80
+wc -l src/shared/types.ts
 ```
 
-Expected: types.ts 2108 → ~600 LOC (barrel re-exports); each new sibling ~100–300 LOC + targeted tests.
+Expected: types.ts 1713 → ~1300 LOC (-400); new sibling(s) ~350-450 LOC each.
 
 ## Worker rules (every subagent MUST follow)
 
