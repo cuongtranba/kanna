@@ -10,15 +10,10 @@ import type { AutoContinueEvent } from "./auto-continue/events"
 import {
   type ChatEvent,
   type OrchestrationEvent,
-  type ProjectEvent,
-  type QueuedMessageEvent,
-  type StackEvent,
   type StackRecord,
   type StoreEvent,
   type StoreState,
   type SubagentRunEvent,
-  type ToolRequestEvent,
-  type TurnEvent,
   type TurnRunConfig,
   cloneTranscriptEntries,
   createEmptyState,
@@ -35,7 +30,6 @@ import {
   nonTerminalOrchTasks,
 } from "./event-store-orch"
 import type { ChatPermissionPolicyOverride, ToolRequest, ToolRequestDecision, ToolRequestStatus } from "../shared/permission-policy"
-import { resolveLocalPath } from "./paths"
 import type { CloudflareTunnelEvent } from "./cloudflare-tunnel/events"
 import type { PushEvent, PushEventStore } from "./push/events"
 import type { ShareEvent } from "./session-share/share-projection"
@@ -47,8 +41,39 @@ import {
   getHistorySnapshot,
   getMessagesPageFromEntries,
   logSendToStartingProfile,
-  slashCommandsEqual,
 } from "./event-store-helpers"
+import {
+  buildAddProjectToStackEvent,
+  buildArchiveChatEvent,
+  buildChatPolicyOverrideEvent,
+  buildChatProviderEvent,
+  buildChatReadStateEvent,
+  buildChatSourceHashEvent,
+  buildCompactFailuresEvent,
+  buildCreateChatEvent,
+  buildCreateStackEvent,
+  buildEnqueueMessageResult,
+  buildOpenProjectResult,
+  buildPendingForkSessionTokenEvent,
+  buildPlanModeEvent,
+  buildPutToolRequestEvent,
+  buildRemoveProjectEvent,
+  buildRemoveProjectFromStackEvent,
+  buildRemoveQueuedMessageEvent,
+  buildRemoveStackEvent,
+  buildRenameStackEvent,
+  buildRenameChatEvent,
+  buildResolveToolRequestEvent,
+  buildSessionCommandsEvent,
+  buildSessionTokenEvent,
+  buildSetProjectStarEvent,
+  buildTurnCancelledEvent,
+  buildTurnFailedEvent,
+  buildTurnFinishedEvent,
+  buildTurnStartedEvent,
+  buildUnarchiveChatEvent,
+  computeNewSidebarOrder,
+} from "./event-store-write-ops"
 import {
   applySubagentEvent,
   getSubagentRuns as getSubagentRunsFromMap,
@@ -422,81 +447,26 @@ export class EventStore implements PushEventStore {
   }
 
   async openProject(localPath: string, title?: string) {
-    const normalized = resolveLocalPath(localPath)
-    const existingId = this.state.projectIdsByPath.get(normalized)
-    if (existingId) {
-      const existing = this.state.projectsById.get(existingId)
-      if (existing && !existing.deletedAt) {
-        return existing
-      }
-    }
-
-    const hiddenProject = [...this.state.projectsById.values()]
-      .find((project) => project.localPath === normalized && project.deletedAt)
-    const projectId = hiddenProject?.id ?? crypto.randomUUID()
-    const event: ProjectEvent = {
-      v: STORE_VERSION,
-      type: "project_opened",
-      timestamp: Date.now(),
-      projectId,
-      localPath: normalized,
-      title: title?.trim() || path.basename(normalized) || normalized,
-    }
-    await this.append(this.projectsLogPath, event)
-    return this.state.projectsById.get(projectId)!
+    const result = buildOpenProjectResult(this.state, localPath, title)
+    if (result.kind === "existing") return result.project
+    await this.append(this.projectsLogPath, result.event)
+    return this.state.projectsById.get(result.event.projectId)!
   }
 
   async removeProject(projectId: string) {
-    const project = this.getProject(projectId)
-    if (!project) {
-      throw new Error("Project not found")
-    }
-
-    const event: ProjectEvent = {
-      v: STORE_VERSION,
-      type: "project_removed",
-      timestamp: Date.now(),
-      projectId,
-    }
+    const event = buildRemoveProjectEvent(this.state.projectsById, projectId)
     await this.append(this.projectsLogPath, event)
   }
 
   async setProjectStar(projectId: string, starred: boolean) {
-    const project = this.getProject(projectId)
-    if (!project) {
-      throw new Error("Project not found")
-    }
-    const now = Date.now()
-    const event: ProjectEvent = {
-      v: STORE_VERSION,
-      type: "project_star_set",
-      timestamp: now,
-      projectId,
-      starredAt: starred ? now : null,
-    }
+    const event = buildSetProjectStarEvent(this.state.projectsById, projectId, starred)
     await this.append(this.projectsLogPath, event)
   }
 
   async createStack(title: string, projectIds: string[]): Promise<StackRecord> {
-    const trimmed = title.trim()
-    if (trimmed === "") throw new Error("Stack title cannot be empty")
-    if (projectIds.length < 2) throw new Error("Stack requires at least 2 projects")
-    if (new Set(projectIds).size !== projectIds.length) throw new Error("Stack projectIds contain duplicates")
-    for (const projectId of projectIds) {
-      const project = this.state.projectsById.get(projectId)
-      if (!project || project.deletedAt) throw new Error(`Project not found: ${projectId}`)
-    }
-    const stackId = crypto.randomUUID()
-    const event: StackEvent = {
-      v: STORE_VERSION,
-      type: "stack_added",
-      timestamp: Date.now(),
-      stackId,
-      title: trimmed,
-      projectIds: [...projectIds],
-    }
+    const event = buildCreateStackEvent(this.state, title, projectIds)
     await this.append(this.stacksLogPath, event)
-    return this.state.stacksById.get(stackId)!
+    return this.state.stacksById.get(event.stackId)!
   }
 
   getStack(stackId: string): StackRecord | null {
@@ -509,85 +479,31 @@ export class EventStore implements PushEventStore {
   }
 
   async renameStack(stackId: string, title: string): Promise<void> {
-    const stack = this.state.stacksById.get(stackId)
-    if (!stack || stack.deletedAt) throw new Error("Stack not found")
-    const trimmed = title.trim()
-    if (trimmed === "") throw new Error("Stack title cannot be empty")
-    if (trimmed === stack.title) return
-    const event: StackEvent = {
-      v: STORE_VERSION,
-      type: "stack_renamed",
-      timestamp: Date.now(),
-      stackId,
-      title: trimmed,
-    }
-    await this.append(this.stacksLogPath, event)
+    const event = buildRenameStackEvent(this.state.stacksById, stackId, title)
+    if (event) await this.append(this.stacksLogPath, event)
   }
 
   async removeStack(stackId: string): Promise<void> {
-    const stack = this.state.stacksById.get(stackId)
-    if (!stack) throw new Error("Stack not found")
-    if (stack.deletedAt) return
-    const event: StackEvent = {
-      v: STORE_VERSION,
-      type: "stack_removed",
-      timestamp: Date.now(),
-      stackId,
-    }
-    await this.append(this.stacksLogPath, event)
+    const event = buildRemoveStackEvent(this.state.stacksById, stackId)
+    if (event) await this.append(this.stacksLogPath, event)
   }
 
   async addProjectToStack(stackId: string, projectId: string): Promise<void> {
-    const stack = this.state.stacksById.get(stackId)
-    if (!stack || stack.deletedAt) throw new Error("Stack not found")
-    const project = this.state.projectsById.get(projectId)
-    if (!project || project.deletedAt) throw new Error("Project not found")
-    if (stack.projectIds.includes(projectId)) return
-    const event: StackEvent = {
-      v: STORE_VERSION,
-      type: "stack_project_added",
-      timestamp: Date.now(),
-      stackId,
-      projectId,
-    }
-    await this.append(this.stacksLogPath, event)
+    const event = buildAddProjectToStackEvent(this.state, stackId, projectId)
+    if (event) await this.append(this.stacksLogPath, event)
   }
 
   async removeProjectFromStack(stackId: string, projectId: string): Promise<void> {
-    const stack = this.state.stacksById.get(stackId)
-    if (!stack || stack.deletedAt) throw new Error("Stack not found")
-    if (!stack.projectIds.includes(projectId)) return
-    if (stack.projectIds.length <= 2) {
-      throw new Error("Stack must keep at least 2 projects. Delete the stack instead.")
-    }
-    const event: StackEvent = {
-      v: STORE_VERSION,
-      type: "stack_project_removed",
-      timestamp: Date.now(),
-      stackId,
-      projectId,
-    }
-    await this.append(this.stacksLogPath, event)
+    const event = buildRemoveProjectFromStackEvent(this.state.stacksById, stackId, projectId)
+    if (event) await this.append(this.stacksLogPath, event)
   }
 
   async setSidebarProjectOrder(projectIds: string[]) {
-    const validProjectIds = projectIds.filter((projectId) => {
-      const project = this.state.projectsById.get(projectId)
-      return Boolean(project && !project.deletedAt)
-    })
-
-    const uniqueProjectIds = [...new Set(validProjectIds)]
-    const current = this.sidebarProjectOrder
-    if (
-      uniqueProjectIds.length === current.length
-      && uniqueProjectIds.every((projectId, index) => current[index] === projectId)
-    ) {
-      return
-    }
-
+    const newOrder = computeNewSidebarOrder(this.state.projectsById, this.sidebarProjectOrder, projectIds)
+    if (!newOrder) return
     this.writeChain = this.writeChain.then(async () => {
-      await writeSidebarOrderFile(this.storage, this.dataDir, this.sidebarProjectOrderPath, uniqueProjectIds)
-      this.sidebarProjectOrder = [...uniqueProjectIds]
+      await writeSidebarOrderFile(this.storage, this.dataDir, this.sidebarProjectOrderPath, newOrder)
+      this.sidebarProjectOrder = [...newOrder]
     })
     return this.writeChain
   }
@@ -596,55 +512,9 @@ export class EventStore implements PushEventStore {
     projectId: string,
     options?: { stackId?: string; stackBindings?: StackBinding[] },
   ): Promise<import("./events").ChatRecord> {
-    const project = this.state.projectsById.get(projectId)
-    if (!project || project.deletedAt) {
-      throw new Error("Project not found")
-    }
-
-    if (options?.stackId !== undefined || options?.stackBindings !== undefined) {
-      if (options.stackId === undefined || options.stackBindings === undefined) {
-        throw new Error("stackId and stackBindings must be provided together")
-      }
-      const stack = this.state.stacksById.get(options.stackId)
-      if (!stack || stack.deletedAt) throw new Error("Stack not found")
-      if (options.stackBindings.length === 0) throw new Error("stackBindings cannot be empty")
-      const primaries = options.stackBindings.filter((b) => b.role === "primary")
-      if (primaries.length !== 1) throw new Error("Exactly one primary binding required")
-      const seenProjects = new Set<string>()
-      for (const binding of options.stackBindings) {
-        if (seenProjects.has(binding.projectId)) {
-          throw new Error("Duplicate projectId in stackBindings")
-        }
-        seenProjects.add(binding.projectId)
-        if (!stack.projectIds.includes(binding.projectId)) {
-          throw new Error(`Binding projectId not a member of stack: ${binding.projectId}`)
-        }
-        const peerProject = this.state.projectsById.get(binding.projectId)
-        if (!peerProject || peerProject.deletedAt) {
-          throw new Error(`Project not found: ${binding.projectId}`)
-        }
-        if (typeof binding.worktreePath !== "string" || binding.worktreePath.trim() === "") {
-          throw new Error("worktreePath must be a non-empty string")
-        }
-      }
-      if (primaries[0].projectId !== projectId) {
-        throw new Error("Primary binding projectId must match createChat projectId")
-      }
-    }
-
-    const chatId = crypto.randomUUID()
-    const event: ChatEvent = {
-      v: STORE_VERSION,
-      type: "chat_created",
-      timestamp: Date.now(),
-      chatId,
-      projectId,
-      title: "New Chat",
-      ...(options?.stackId !== undefined ? { stackId: options.stackId } : {}),
-      ...(options?.stackBindings !== undefined ? { stackBindings: options.stackBindings.map((b) => ({ ...b })) } : {}),
-    }
+    const event = buildCreateChatEvent(this.state, projectId, options)
     await this.append(this.chatsLogPath, event)
-    return this.state.chatsById.get(chatId)!
+    return this.state.chatsById.get(event.chatId)!
   }
 
   async forkChat(sourceChatId: string) {
@@ -704,18 +574,8 @@ export class EventStore implements PushEventStore {
   }
 
   async renameChat(chatId: string, title: string) {
-    const trimmed = title.trim()
-    if (!trimmed) return
-    const chat = this.requireChat(chatId)
-    if (chat.title === trimmed) return
-    const event: ChatEvent = {
-      v: STORE_VERSION,
-      type: "chat_renamed",
-      timestamp: Date.now(),
-      chatId,
-      title: trimmed,
-    }
-    await this.append(this.chatsLogPath, event)
+    const event = buildRenameChatEvent(this.state.chatsById, chatId, title)
+    if (event) await this.append(this.chatsLogPath, event)
   }
 
   async deleteChat(chatId: string) {
@@ -744,25 +604,11 @@ export class EventStore implements PushEventStore {
   }
 
   async archiveChat(chatId: string) {
-    this.requireChat(chatId)
-    const event: ChatEvent = {
-      v: STORE_VERSION,
-      type: "chat_archived",
-      timestamp: Date.now(),
-      chatId,
-    }
-    await this.append(this.chatsLogPath, event)
+    await this.append(this.chatsLogPath, buildArchiveChatEvent(this.state.chatsById, chatId))
   }
 
   async unarchiveChat(chatId: string) {
-    this.requireChat(chatId)
-    const event: ChatEvent = {
-      v: STORE_VERSION,
-      type: "chat_unarchived",
-      timestamp: Date.now(),
-      chatId,
-    }
-    await this.append(this.chatsLogPath, event)
+    await this.append(this.chatsLogPath, buildUnarchiveChatEvent(this.state.chatsById, chatId))
   }
 
   async pruneStaleEmptyChats(args?: {
@@ -810,67 +656,27 @@ export class EventStore implements PushEventStore {
   }
 
   async setChatProvider(chatId: string, provider: AgentProvider) {
-    const chat = this.requireChat(chatId)
-    if (chat.provider === provider) return
-    const event: ChatEvent = {
-      v: STORE_VERSION,
-      type: "chat_provider_set",
-      timestamp: Date.now(),
-      chatId,
-      provider,
-    }
-    await this.append(this.chatsLogPath, event)
+    const ev = buildChatProviderEvent(this.state.chatsById, chatId, provider)
+    if (ev) await this.append(this.chatsLogPath, ev)
   }
 
   async setPlanMode(chatId: string, planMode: boolean) {
-    const chat = this.requireChat(chatId)
-    if (chat.planMode === planMode) return
-    const event: ChatEvent = {
-      v: STORE_VERSION,
-      type: "chat_plan_mode_set",
-      timestamp: Date.now(),
-      chatId,
-      planMode,
-    }
-    await this.append(this.chatsLogPath, event)
+    const ev = buildPlanModeEvent(this.state.chatsById, chatId, planMode)
+    if (ev) await this.append(this.chatsLogPath, ev)
   }
 
   async setCompactFailureCount(chatId: string, compactFailureCount: number) {
-    const chat = this.requireChat(chatId)
-    if ((chat.compactFailureCount ?? 0) === compactFailureCount) return
-    const event: ChatEvent = {
-      v: STORE_VERSION,
-      type: "chat_compact_failures_set",
-      timestamp: Date.now(),
-      chatId,
-      compactFailureCount,
-    }
-    await this.append(this.chatsLogPath, event)
+    const ev = buildCompactFailuresEvent(this.state.chatsById, chatId, compactFailureCount)
+    if (ev) await this.append(this.chatsLogPath, ev)
   }
 
   async setChatReadState(chatId: string, unread: boolean) {
-    const chat = this.requireChat(chatId)
-    if (chat.unread === unread) return
-    const event: ChatEvent = {
-      v: STORE_VERSION,
-      type: "chat_read_state_set",
-      timestamp: Date.now(),
-      chatId,
-      unread,
-    }
-    await this.append(this.chatsLogPath, event)
+    const ev = buildChatReadStateEvent(this.state.chatsById, chatId, unread)
+    if (ev) await this.append(this.chatsLogPath, ev)
   }
 
   async setChatPolicyOverride(chatId: string, policyOverride: ChatPermissionPolicyOverride | null) {
-    this.requireChat(chatId)
-    const event: ChatEvent = {
-      v: STORE_VERSION,
-      type: "chat_policy_override_set",
-      timestamp: Date.now(),
-      chatId,
-      policyOverride,
-    }
-    await this.append(this.chatsLogPath, event)
+    await this.append(this.chatsLogPath, buildChatPolicyOverrideEvent(this.state.chatsById, chatId, policyOverride))
   }
 
   async appendMessage(chatId: string, entry: TranscriptEntry) {
@@ -921,89 +727,32 @@ export class EventStore implements PushEventStore {
   }
 
   async enqueueMessage(chatId: string, message: Omit<QueuedChatMessage, "id" | "createdAt"> & Partial<Pick<QueuedChatMessage, "id" | "createdAt">>) {
-    this.requireChat(chatId)
-    const queuedMessage: QueuedChatMessage = {
-      id: message.id ?? crypto.randomUUID(),
-      content: message.content,
-      attachments: [...(message.attachments ?? [])],
-      createdAt: message.createdAt ?? Date.now(),
-      provider: message.provider,
-      model: message.model,
-      modelOptions: message.modelOptions,
-      planMode: message.planMode,
-      autoContinue: message.autoContinue,
-    }
-    const event: QueuedMessageEvent = {
-      v: STORE_VERSION,
-      type: "queued_message_enqueued",
-      timestamp: queuedMessage.createdAt,
-      chatId,
-      message: queuedMessage,
-    }
+    const { event, queuedMessage } = buildEnqueueMessageResult(this.state.chatsById, chatId, message)
     await this.append(this.queuedMessagesLogPath, event)
     return queuedMessage
   }
 
   async removeQueuedMessage(chatId: string, queuedMessageId: string) {
-    this.requireChat(chatId)
-    const existing = this.getQueuedMessages(chatId)
-    if (!existing.some((entry) => entry.id === queuedMessageId)) {
-      throw new Error("Queued message not found")
-    }
-    const event: QueuedMessageEvent = {
-      v: STORE_VERSION,
-      type: "queued_message_removed",
-      timestamp: Date.now(),
-      chatId,
-      queuedMessageId,
-    }
+    const event = buildRemoveQueuedMessageEvent(
+      this.state.chatsById, this.state.queuedMessagesByChatId, chatId, queuedMessageId,
+    )
     await this.append(this.queuedMessagesLogPath, event)
   }
 
   async recordTurnStarted(chatId: string, runConfig?: TurnRunConfig) {
-    this.requireChat(chatId)
-    const event: TurnEvent = {
-      v: STORE_VERSION,
-      type: "turn_started",
-      timestamp: Date.now(),
-      chatId,
-      ...(runConfig ? { runConfig } : {}),
-    }
-    await this.append(this.turnsLogPath, event)
+    await this.append(this.turnsLogPath, buildTurnStartedEvent(this.state.chatsById, chatId, runConfig))
   }
 
   async recordTurnFinished(chatId: string) {
-    this.requireChat(chatId)
-    const event: TurnEvent = {
-      v: STORE_VERSION,
-      type: "turn_finished",
-      timestamp: Date.now(),
-      chatId,
-    }
-    await this.append(this.turnsLogPath, event)
+    await this.append(this.turnsLogPath, buildTurnFinishedEvent(this.state.chatsById, chatId))
   }
 
   async recordTurnFailed(chatId: string, error: string) {
-    this.requireChat(chatId)
-    const event: TurnEvent = {
-      v: STORE_VERSION,
-      type: "turn_failed",
-      timestamp: Date.now(),
-      chatId,
-      error,
-    }
-    await this.append(this.turnsLogPath, event)
+    await this.append(this.turnsLogPath, buildTurnFailedEvent(this.state.chatsById, chatId, error))
   }
 
   async recordTurnCancelled(chatId: string) {
-    this.requireChat(chatId)
-    const event: TurnEvent = {
-      v: STORE_VERSION,
-      type: "turn_cancelled",
-      timestamp: Date.now(),
-      chatId,
-    }
-    await this.append(this.turnsLogPath, event)
+    await this.append(this.turnsLogPath, buildTurnCancelledEvent(this.state.chatsById, chatId))
   }
 
   async appendSubagentEvent(event: SubagentRunEvent) {
@@ -1038,78 +787,24 @@ export class EventStore implements PushEventStore {
     yield* runningSubagentRunsFromMap(this.state.subagentRunsByChatId)
   }
 
-  async setSessionTokenForProvider(
-    chatId: string,
-    provider: AgentProvider,
-    sessionToken: string | null,
-  ) {
-    const chat = this.requireChat(chatId)
-    if ((chat.sessionTokensByProvider[provider] ?? null) === sessionToken) return
-    const event: TurnEvent = {
-      v: STORE_VERSION,
-      type: "session_token_set",
-      timestamp: Date.now(),
-      chatId,
-      sessionToken,
-      provider,
-    }
-    await this.append(this.turnsLogPath, event)
+  async setSessionTokenForProvider(chatId: string, provider: AgentProvider, sessionToken: string | null) {
+    const ev = buildSessionTokenEvent(this.state.chatsById, chatId, provider, sessionToken)
+    if (ev) await this.append(this.turnsLogPath, ev)
   }
 
   async recordSessionCommandsLoaded(chatId: string, commands: SlashCommand[]) {
-    const chat = this.requireChat(chatId)
-    const normalized = commands.map((c) => ({
-      name: c.name,
-      description: c.description,
-      argumentHint: c.argumentHint,
-    }))
-    if (chat.slashCommands && slashCommandsEqual(chat.slashCommands, normalized)) {
-      return
-    }
-    const event: TurnEvent = {
-      v: STORE_VERSION,
-      type: "session_commands_loaded",
-      timestamp: Date.now(),
-      chatId,
-      commands: normalized,
-    }
-    await this.append(this.turnsLogPath, event)
+    const ev = buildSessionCommandsEvent(this.state.chatsById, chatId, commands)
+    if (ev) await this.append(this.turnsLogPath, ev)
   }
 
-  async setPendingForkSessionToken(
-    chatId: string,
-    value: { provider: AgentProvider; token: string } | null,
-  ) {
-    const chat = this.requireChat(chatId)
-    const current = chat.pendingForkSessionToken ?? null
-    const same =
-      (current == null && value == null)
-      || (current != null && value != null
-        && current.provider === value.provider
-        && current.token === value.token)
-    if (same) return
-    const event: TurnEvent = {
-      v: STORE_VERSION,
-      type: "pending_fork_session_token_set",
-      timestamp: Date.now(),
-      chatId,
-      pendingForkSessionToken: value?.token ?? null,
-      provider: value?.provider,
-    }
-    await this.append(this.turnsLogPath, event)
+  async setPendingForkSessionToken(chatId: string, value: { provider: AgentProvider; token: string } | null) {
+    const ev = buildPendingForkSessionTokenEvent(this.state.chatsById, chatId, value)
+    if (ev) await this.append(this.turnsLogPath, ev)
   }
 
   async setSourceHash(chatId: string, sourceHash: string | null) {
-    const chat = this.requireChat(chatId)
-    if (chat.sourceHash === sourceHash) return
-    const event: ChatEvent = {
-      v: STORE_VERSION,
-      type: "chat_source_hash_set",
-      timestamp: Date.now(),
-      chatId,
-      sourceHash,
-    }
-    await this.append(this.chatsLogPath, event)
+    const ev = buildChatSourceHashEvent(this.state.chatsById, chatId, sourceHash)
+    if (ev) await this.append(this.chatsLogPath, ev)
   }
 
   getProject(projectId: string) {
@@ -1339,12 +1034,7 @@ export class EventStore implements PushEventStore {
   }
 
   async putToolRequest(req: ToolRequest): Promise<void> {
-    const event: ToolRequestEvent = {
-      v: 3,
-      type: "tool_request_put",
-      timestamp: Date.now(),
-      request: req,
-    }
+    const event = buildPutToolRequestEvent(req)
     applyToolRequestEvent(this.state.toolRequestsById, event)
     await this.append(this.toolRequestsLogPath, event)
   }
@@ -1359,26 +1049,9 @@ export class EventStore implements PushEventStore {
 
   async resolveToolRequest(
     id: string,
-    args: {
-      status: ToolRequestStatus
-      decision?: ToolRequestDecision
-      resolvedAt: number
-      mismatchReason?: string
-    },
+    args: { status: ToolRequestStatus; decision?: ToolRequestDecision; resolvedAt: number; mismatchReason?: string },
   ): Promise<void> {
-    if (!this.state.toolRequestsById.has(id)) {
-      throw new Error(`resolveToolRequest: unknown id ${id}`)
-    }
-    const event: ToolRequestEvent = {
-      v: 3,
-      type: "tool_request_resolved",
-      timestamp: Date.now(),
-      id,
-      status: args.status,
-      decision: args.decision,
-      resolvedAt: args.resolvedAt,
-      mismatchReason: args.mismatchReason,
-    }
+    const event = buildResolveToolRequestEvent(this.state.toolRequestsById, id, args)
     applyToolRequestEvent(this.state.toolRequestsById, event)
     await this.append(this.toolRequestsLogPath, event)
   }
