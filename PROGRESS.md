@@ -13,6 +13,7 @@ bash scripts/verify-decomp.sh
 
 ## Progress (latest first)
 
+- 2026-07-17 In-file deps builder refactor: extracted buildSpawnClaudeTurnDeps(): SpawnClaudeTurnDeps and buildRunClaudeSessionDeps(): RunClaudeSessionDeps as private helper methods in AgentCoordinator; reduced startClaudeTurn and runClaudeSession to one-liner delegates consistent with the rest of AgentCoordinator's build*Deps() pattern. Added type imports for SpawnClaudeTurnDeps + RunClaudeSessionDeps. agent.ts: 1317 → 1322 LOC (net +5: method headers added; inline object wrapper lines removed).
 - 2026-07-17 Extract 5 session-config helpers (resolveClaudeDriverPreference, getEnabledCustomMcpServers, buildOAuthBearers, resolveChatPolicy, killPtyInstance) to claude-session-config-helpers.ts (ClaudeSessionConfigHelpersDeps interface, 5 exported fns; buildClaudeSessionConfigHelpersDeps deps-builder in AgentCoordinator; ensureFreshToken + killProcessTree injected to preserve side-effect seal; removed now-unused mergePolicyOverride + log imports from agent.ts) + 20 tests. agent.ts: 1327 → 1317 LOC; new module 148 LOC + 232 LOC tests.
 - 2026-07-17 Extract chat management methods (~106 lines: stopDraining, closeChat, steer, dequeue, forkChat, generateTitleInBackground) to claude-chat-management.ts (ChatManagementDeps interface, 6 exported fns; buildChatManagementDeps deps-builder in AgentCoordinator; removed now-unused logClaudeSteer import from agent.ts) + 22 tests. agent.ts: 1384 → 1327 LOC; new module 251 LOC + 395 LOC tests.
 - 2026-07-17 Extract respondTool (~54 lines) to claude-tool-respond.ts (ToolRespondDeps interface, standalone respondTool exported fn; buildToolRespondDeps deps-builder in AgentCoordinator; removed now-unused isRecord + normalizeToolContent imports from agent.ts) + 9 tests. agent.ts: 1425 → 1384 LOC; new file 142 LOC.
@@ -57,21 +58,26 @@ bash scripts/verify-decomp.sh
 
 ## Next chunk
 
-agent.ts (1317 LOC): next cohesive group is **inline deps builders for `startClaudeTurn` and `runClaudeSession`** (~62 lines of inline object literals):
+**event-store.ts (2537 LOC)**: extract the private pure helper functions and the subscription layer into sibling modules.
 
-- `startClaudeTurn` (lines ~1038–1079, ~40 lines) — inlines `SpawnClaudeTurnDeps` directly in the `spawnClaudeTurn(...)` call instead of calling a `buildSpawnClaudeTurnDeps()` helper method. Extract `buildSpawnClaudeTurnDeps(): SpawnClaudeTurnDeps` and reduce `startClaudeTurn` to a one-liner delegate.
-- `runClaudeSession` (lines ~1151–1173, ~22 lines) — inlines `RunClaudeSessionDeps` directly in the `runClaudeSessionLoop(...)` call. Extract `buildRunClaudeSessionDeps(): RunClaudeSessionDeps` and reduce `runClaudeSession` to a one-liner delegate.
-
-Both `SpawnClaudeTurnDeps` (imported from `claude-session-spawner.ts`) and `RunClaudeSessionDeps` (imported from `claude-session-runner.ts`) already exist. The work is just creating the `buildXxxDeps()` methods and tightening the inline delegates.
-
-Locate the inline blocks:
+Survey the extraction targets:
 ```
-grep -n "private startClaudeTurn\|private.*runClaudeSession\|spawnClaudeTurn\|runClaudeSessionLoop" src/server/agent.ts
+grep -n "^function\|^export function\|^const.*=.*function\|^export const" src/server/event-store.ts | head -40
+grep -n "subscribe\|unsubscribe\|Subscriber\|listener" src/server/event-store.ts | head -30
 ```
 
-No new module needed — both `*Deps` types already live in their respective extracted modules. This is purely a deps-builder refactor within `agent.ts`.
+Cohesive groups to extract (in order of least coupling → most):
 
-Expected: agent.ts 1317 → ~1285 LOC.
+1. **Pure helpers** (non-export functions at the top, ~120 lines): `normalizeSidebarProjectOrder`, `isSendToStartingProfilingEnabled`, `logSendToStartingProfile`, `LegacyTranscriptStats`, `TranscriptPageResult`, `ParsedReplayEvent`, `getReplayEventPriority`, `encodeHistoryCursor`, `decodeCursor`, `slashCommandsEqual`, `coalesceContextWindowUpdates`, `getHistorySnapshot`, `getForkedChatTitle` → new `event-store-helpers.ts`, zero dependencies on EventStore class. New file target: ~150 LOC.
+
+2. **Subscription layer** (subscribe/unsubscribe/notify methods + subscriber maps): the pub/sub wiring inside EventStore is self-contained — extract the subscriber maps + subscribe/unsubscribe/notify methods into a `EventStoreSubscriptions` mixin or a standalone `event-store-subscriptions.ts` helper that the class delegates to. This isolates the change-notification concern.
+
+Locate the class method boundaries first:
+```
+grep -n "^\s*subscribe\|^\s*unsubscribe\|^\s*notify\|private.*subscriber\|private.*listeners" src/server/event-store.ts | head -30
+```
+
+Expected: event-store.ts 2537 → ~2380 LOC; new pure-helpers file ~150 LOC.
 
 ## Worker rules (every subagent MUST follow)
 
