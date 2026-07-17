@@ -136,6 +136,13 @@ import {
   buildPoolUnavailableMessage as buildPoolUnavailableMessageFn,
   type SessionLifecycleDeps,
 } from "./claude-session-lifecycle"
+import {
+  handleLimitError as handleLimitErrorFn,
+  handleLimitDetection as handleLimitDetectionFn,
+  handleAuthFailure as handleAuthFailureFn,
+  type SessionErrorHandlerDeps,
+  type TokenRotationDedupeEntry,
+} from "./claude-session-error-handler"
 
 export type { ClaudeSessionHandle } from "./harness-types"
 
@@ -276,17 +283,6 @@ interface AgentCoordinatorArgs {
 }
 
 
-const TOKEN_ROTATION_SCHEDULE_DELAY_MS = 100
-// When a single OAuth token is shared by N chats (per
-// adr-20260522-oauth-token-share-cap), all N chats can detect the same
-// rate-limit / auth-error simultaneously. Each respawn (esp. under PTY) is
-// expensive; offset them by this many ms per additional victim so the cold-
-// boot herd spreads across roughly a second instead of stampeding.
-const TOKEN_ROTATION_HERD_STAGGER_MS = 250
-// Dedupe window for repeat rotation events on the same tokenId. Within this
-// window, secondary detectors only increment the stagger counter; they do
-// not double-mark the pool or double-pick a fresh target via pickActive().
-const TOKEN_ROTATION_DEDUPE_WINDOW_MS = 5_000
 const DEFAULT_CLAUDE_SESSION_IDLE_MS = 10 * 60 * 1000
 const DEFAULT_CLAUDE_SESSION_MAX_RESIDENT = 4
 const DEFAULT_CLAUDE_SESSION_SWEEP_INTERVAL_MS = 60 * 1000
@@ -348,7 +344,7 @@ export class AgentCoordinator {
   // pays the cost of marking the pool + picking a fresh target; subsequent
   // chats within TOKEN_ROTATION_DEDUPE_WINDOW_MS reuse the dedupe slot to
   // stagger their respawns by TOKEN_ROTATION_HERD_STAGGER_MS each.
-  private readonly tokenRotationDedupe = new Map<string, { firstSeenAt: number; staggerCount: number }>()
+  private readonly tokenRotationDedupe = new Map<string, TokenRotationDedupeEntry>()
   // Per-chat circuit breaker for proactive `/compact` injection lives in the
   // persisted ChatRecord (`compactFailureCount`): increments on every compact
   // attempt that fails (turn errored / cancelled) and resets on success.
@@ -601,6 +597,20 @@ export class AgentCoordinator {
       emitStateChange: (chatId: string) => { this.emitStateChange(chatId) },
       store: this.store,
       homeDir: homedir(),
+    }
+  }
+
+  private buildSessionErrorHandlerDeps(): SessionErrorHandlerDeps {
+    return {
+      tokenRotationDedupe: this.tokenRotationDedupe,
+      claudeSessions: this.claudeSessions,
+      activeTurns: this.activeTurns,
+      oauthPool: this.oauthPool,
+      store: this.store,
+      resolveAutoResumeFor: (chatId: string) => this.resolveAutoResumeFor(chatId),
+      emitAutoContinueEvent: (event: AutoContinueEvent) => this.emitAutoContinueEvent(event),
+      closeClaudeSession: (chatId: string, session: ClaudeSessionState, opts?: { keepReservation?: boolean }) =>
+        this.closeClaudeSession(chatId, session, opts),
     }
   }
 
@@ -1789,219 +1799,22 @@ export class AgentCoordinator {
     if (scheduledAt <= Date.now()) throw new Error("scheduledAt must be in the future")
   }
 
-  /**
-   * Returns the additional scheduling delay (ms) for a respawn caused by a
-   * rotation event on `tokenId`. The first detector in a
-   * TOKEN_ROTATION_DEDUPE_WINDOW_MS window gets 0; each later detector gets
-   * an additional TOKEN_ROTATION_HERD_STAGGER_MS so PTY cold-boots spread
-   * out instead of stampeding. Also reports whether this caller is the
-   * first detector (used to skip duplicate markLimited/markError calls).
-   */
-  private acquireRotationSlot(tokenId: string | null): { extraDelayMs: number; isFirst: boolean } {
-    if (!tokenId) return { extraDelayMs: 0, isFirst: true }
-    const now = Date.now()
-    const existing = this.tokenRotationDedupe.get(tokenId)
-    if (!existing || now - existing.firstSeenAt > TOKEN_ROTATION_DEDUPE_WINDOW_MS) {
-      this.tokenRotationDedupe.set(tokenId, { firstSeenAt: now, staggerCount: 0 })
-      return { extraDelayMs: 0, isFirst: true }
-    }
-    existing.staggerCount += 1
-    return { extraDelayMs: existing.staggerCount * TOKEN_ROTATION_HERD_STAGGER_MS, isFirst: false }
-  }
-
+  /** Delegates to handleLimitErrorFn — see claude-session-error-handler.ts. */
   private async handleLimitError(chatId: string, detector: LimitDetector, error: AnyValue): Promise<boolean> {
-    const detection = detector.detect(chatId, error)
-    if (!detection) return false
-    return this.handleLimitDetection(chatId, detection)
+    return handleLimitErrorFn(this.buildSessionErrorHandlerDeps(), chatId, detector, error)
   }
 
+  /** Delegates to handleLimitDetectionFn — see claude-session-error-handler.ts. */
   private async handleLimitDetection(chatId: string, detection: LimitDetection): Promise<boolean> {
-    const live = deriveChatSchedules(this.store.getAutoContinueEvents(chatId), chatId).liveScheduleId
-    if (live !== null) return true
-
-    const session = this.claudeSessions.get(chatId)
-    const limitedTokenId = session?.activeTokenId ?? null
-    const slot = this.acquireRotationSlot(limitedTokenId)
-    if (this.oauthPool && limitedTokenId && slot.isFirst) {
-      this.oauthPool.markLimited(limitedTokenId, detection.resetAt)
-    }
-    const rotationTarget = this.oauthPool?.pickActive(chatId) ?? null
-    const canRotate = rotationTarget !== null
-      && (!limitedTokenId || rotationTarget.id !== limitedTokenId)
-
-    if (this.oauthPool) {
-      log.info("[oauth-pool] rate-limit detected", {
-        chatId,
-        markedLimitedTokenId: limitedTokenId,
-        resetAt: new Date(detection.resetAt).toISOString(),
-        tz: detection.tz,
-        nextTokenId: rotationTarget?.id ?? null,
-        canRotate,
-        herdSlot: slot,
-      })
-    }
-
-    const now = Date.now()
-    const scheduleId = crypto.randomUUID()
-    const base = { v: AUTO_CONTINUE_EVENT_VERSION, timestamp: now, chatId, scheduleId }
-
-    // When no rotation is possible, "wait until rate-limit clears" means waiting
-    // for the earliest token in the pool to become available again — not just
-    // the current detection's resetAt, which would over-shoot if another pool
-    // token has an earlier limitedUntil.
-    const earliestPoolUnlimit = this.oauthPool?.earliestUnlimit() ?? null
-    const waitUntil = earliestPoolUnlimit !== null
-      ? Math.min(detection.resetAt, earliestPoolUnlimit)
-      : detection.resetAt
-
-    let event: AutoContinueEvent
-    if (canRotate) {
-      event = {
-        ...base,
-        kind: "auto_continue_accepted",
-        scheduledAt: now + TOKEN_ROTATION_SCHEDULE_DELAY_MS + slot.extraDelayMs,
-        tz: detection.tz,
-        source: "token_rotation",
-        resetAt: detection.resetAt,
-        detectedAt: now,
-      }
-    } else if (this.resolveAutoResumeFor(chatId)) {
-      event = {
-        ...base,
-        kind: "auto_continue_accepted",
-        scheduledAt: waitUntil,
-        tz: detection.tz,
-        source: "auto_setting",
-        resetAt: waitUntil,
-        detectedAt: now,
-      }
-    } else {
-      event = {
-        ...base,
-        kind: "auto_continue_proposed",
-        detectedAt: now,
-        resetAt: waitUntil,
-        tz: detection.tz,
-      }
-    }
-
-    await this.emitAutoContinueEvent(event)
-    if (canRotate && session) {
-      // Tear down the session bound to the limited token so the next turn
-      // spawns a fresh subprocess with the rotated token's credentials.
-      // Without this, startClaudeTurn reuses the cached session and
-      // sendPrompt is routed to the still-limited token's subprocess.
-      // keepReservation: true — the `pickActive(chatId)` above already
-      // claimed `rotationTarget` under this chatId; the default `release`
-      // path would scan reservedBy for owner===chatId and drop it,
-      // leaking the rotation's reservation (audit #9d).
-      this.closeClaudeSession(chatId, session, { keepReservation: true })
-      const active = this.activeTurns.get(chatId)
-      if (active) {
-        await this.store.recordTurnFailed(chatId, "rate_limit")
-        this.activeTurns.delete(chatId)
-      }
-    }
-    if (!canRotate) {
-      await this.store.appendMessage(chatId, timestamped({
-        kind: "auto_continue_prompt",
-        scheduleId,
-      }))
-    }
-
-    return true
+    return handleLimitDetectionFn(this.buildSessionErrorHandlerDeps(), chatId, detection)
   }
 
-  /**
-   * Handle an OAuth 401 / authentication failure on a live Claude session:
-   *   1. Mark the offending token as `error` in the pool so subsequent
-   *      pickActive() calls skip it.
-   *   2. Try to rotate to another usable token. If one exists, tear down
-   *      the dead session and schedule an immediate auto-continue with
-   *      source `token_rotation` (mirrors the rate-limit rotation path).
-   *   3. If no rotation target exists, surface an auto_continue_proposed
-   *      event so the UI can prompt the user to fix their token pool
-   *      instead of looping silently.
-   *
-   * Returns true when the failure was handled (rotated or proposed),
-   * false otherwise (caller logs the raw error).
-   */
+  /** Delegates to handleAuthFailureFn — see claude-session-error-handler.ts. */
   private async handleAuthFailure(
     session: ClaudeSessionState,
     detection: AuthErrorDetection,
   ): Promise<boolean> {
-    const chatId = session.chatId
-    const live = deriveChatSchedules(this.store.getAutoContinueEvents(chatId), chatId).liveScheduleId
-    if (live !== null) return true
-
-    const erroredTokenId = session.activeTokenId
-    const slot = this.acquireRotationSlot(erroredTokenId)
-    if (this.oauthPool && erroredTokenId && slot.isFirst) {
-      this.oauthPool.markError(erroredTokenId, detection.reason)
-    }
-    const rotationTarget = this.oauthPool?.pickActive(chatId) ?? null
-    const canRotate = rotationTarget !== null
-      && (!erroredTokenId || rotationTarget.id !== erroredTokenId)
-
-    if (this.oauthPool) {
-      log.info("[oauth-pool] auth-error detected", {
-        chatId,
-        markedErrorTokenId: erroredTokenId,
-        reason: detection.reason,
-        nextTokenId: rotationTarget?.id ?? null,
-        canRotate,
-        herdSlot: slot,
-      })
-    }
-
-    const now = Date.now()
-    const scheduleId = crypto.randomUUID()
-    const base = { v: AUTO_CONTINUE_EVENT_VERSION, timestamp: now, chatId, scheduleId }
-
-    // Auth errors mean the token is dead, not throttled — rotate
-    // immediately when possible, no wait window.
-    const event: AutoContinueEvent = canRotate
-      ? {
-          ...base,
-          kind: "auto_continue_accepted",
-          scheduledAt: now + TOKEN_ROTATION_SCHEDULE_DELAY_MS + slot.extraDelayMs,
-          tz: "system",
-          source: "token_rotation",
-          resetAt: now,
-          detectedAt: now,
-        }
-      : {
-          ...base,
-          kind: "auto_continue_proposed",
-          detectedAt: now,
-          resetAt: now,
-          tz: "system",
-        }
-
-    await this.emitAutoContinueEvent(event)
-    if (canRotate) {
-      // Tear down the session bound to the dead token so the next turn
-      // spawns a fresh subprocess with the rotated token in env.
-      // keepReservation: true — `pickActive(chatId)` above already claimed
-      // the rotation target under this chatId. The previous inline close +
-      // delete pair sidestepped `closeClaudeSession` to avoid the
-      // accidental release; route through the helper now that release is
-      // opt-out, for symmetry with the rate-limit rotation path.
-      this.closeClaudeSession(chatId, session, { keepReservation: true })
-      const active = this.activeTurns.get(chatId)
-      if (active) {
-        await this.store.recordTurnFailed(chatId, "auth_error")
-        this.activeTurns.delete(chatId)
-      }
-    }
-    if (!canRotate) {
-      await this.store.appendMessage(chatId, timestamped({
-        kind: "auto_continue_prompt",
-        scheduleId,
-      }))
-    }
-
-    return true
+    return handleAuthFailureFn(this.buildSessionErrorHandlerDeps(), session, detection)
   }
 
   async fireAutoContinue(chatId: string, scheduleId: string) {
