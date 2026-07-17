@@ -13,6 +13,7 @@ bash scripts/verify-decomp.sh
 
 ## Progress (latest first)
 
+- 2026-07-17 Extract session error-response handlers (~187 lines) to claude-session-error-handler.ts (SessionErrorHandlerDeps interface, 3 exported fns: handleLimitError, handleLimitDetection, handleAuthFailure; TOKEN_ROTATION_* constants relocated) + 20 tests. agent.ts: 2535 → 2348 LOC; new file 361 LOC.
 - 2026-07-17 Extract session lifecycle helpers (~190 lines) to claude-session-lifecycle.ts (SessionLifecycleDeps interface, 8 exported fns: resolveClaudeIdleMs, resolveClaudeMaxResident, hasLiveWorkflow, hasPendingBackgroundTask, closeClaudeSession, maybeRegisterSdkWorkflowsDir, enforceClaudeSessionBudget, buildPoolUnavailableMessage) + 42 tests. agent.ts: 2599 → 2535 LOC; new file 283 LOC.
 - 2026-07-17 Extract startClaudeTurn (~242 lines) to claude-session-spawner.ts (SpawnClaudeTurnDeps interface, spawnClaudeTurn exported fn) + 17 tests. agent.ts: 2799 → 2599 LOC; new file 401 LOC.
 - 2026-07-17 Extract turn spawning pipeline (startTurnForChat + startTurnAfterTurnStarted) to claude-turn-starter.ts (StartTurnDeps interface, startTurnForChat exported fn) + 12 tests. Moved OAuthPoolUnavailableError to oauth-errors.ts. agent.ts: 3196 → 2799 LOC.
@@ -43,25 +44,29 @@ bash scripts/verify-decomp.sh
 
 ## Next chunk
 
-agent.ts (2535 LOC): the next cohesive group is the **session error-response
-handlers** (~210 lines, ~line 1800 → 2007):
+agent.ts (2348 LOC): the next cohesive group is the **auto-continue schedule
+command handlers** (~120 lines, lines ~1781–1901):
 
-- `acquireRotationSlot` — deduplicates token-rotation storms within a time window
-- `handleLimitError` — thin wrapper: detect rate-limit from raw error → delegate
-- `handleLimitDetection` — core rate-limit response: marks token limited, rotates pool, schedules auto-resume or cancels active turn
-- `handleAuthFailure` — core auth-error response: rotates OAuth token, closes old session, re-queues message or emits an error transcript entry
+- `resolveAutoResumeFor` — per-chat auto-resume preference lookup (falls back to global setting)
+- `emitAutoContinueEvent` — append event to store + notify scheduleManager + emit state-change
+- `getChatSchedule` — derive the live schedule for a specific scheduleId
+- `requireFuture` — guard: throws if scheduledAt is not in the future
+- `fireAutoContinue` — fires a scheduled auto-continue: enqueues the replay prompt and handles failures
+- `acceptAutoContinue` — user or pool-rotation acceptance of a proposed schedule
+- `rescheduleAutoContinue` — reschedule an active (scheduled) auto-continue to a new time
+- `cancelAutoContinue` — cancel a proposed or scheduled auto-continue
 
-These four methods form a closed "error-response" unit already referenced in
-`RunClaudeSessionDeps` and `SpawnClaudeTurnDeps`. Extract them to
-`src/server/claude-session-error-handler.ts` with a `SessionErrorHandlerDeps`
+These 8 methods form a closed "auto-continue command" unit that AgentCoordinator
+delegates through to the schedule infrastructure. Extract them to
+`src/server/claude-autocontinue-commands.ts` with an `AutoContinueCommandDeps`
 interface and corresponding standalone exports.
 
 Survey:
 ```
-grep -n "private acquireRotationSlot\|private async handleLimitError\|private async handleLimitDetection\|private async handleAuthFailure" src/server/agent.ts
+grep -n "private resolveAutoResumeFor\|private async emitAutoContinueEvent\|private getChatSchedule\|private requireFuture\|async fireAutoContinue\|async acceptAutoContinue\|async rescheduleAutoContinue\|async cancelAutoContinue" src/server/agent.ts
 ```
 
-Expected: agent.ts 2535 → ~2325 LOC.
+Expected: agent.ts 2348 → ~2230 LOC.
 
 ## Worker rules (every subagent MUST follow)
 
