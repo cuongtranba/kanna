@@ -13,6 +13,7 @@ bash scripts/verify-decomp.sh
 
 ## Progress (latest first)
 
+- 2026-07-18 Extract git branch/GitHub functions from diff-store.ts into diff-store-git-branch.adapter.ts (SelectedBranch, resolveRepo, getBranchName, hasUpstreamBranch, getLastFetchedAt, getUpstreamStatusCounts, getOriginRemoteUrl, getGitHubRemoteSlugs, getLocal/RemoteBranchNames, getBranchUpdatedAtMap, resolveDefaultBranchName, getRecentBranchNames, resolveSelectedBranchRef, getMergeCommitCount, predictMergeConflicts, extractGitHubRepoSlug, fetchGitHubPullRequests/Releases, getBranchHistory, createBranchActionFailure/MergeActionFailure, sanitizeRepoName, getGhAuthInfo, getGitHubOwners); also moved runGit/runCommand/formatGitFailure/summarizeGitFailure to diff-store-io.adapter.ts. diff-store.ts: 2251 → 1613 LOC (−638); new adapter 687 LOC; 32 tests pass. ✅
 - 2026-07-18 Extract 5 domain type modules from shared/types.ts: core-types.ts (27 LOC, primitives: AgentProvider/LlmProviderKind/AppThemePreference/ChatSoundPreference/ChatSoundId/DefaultProviderPreference/EditorPreset/KannaStatus etc.), mcp-types.ts (105 LOC, McpServer*/McpOAuth*), subagent-types.ts (198 LOC, Subagent/SubagentRunSnapshot/LoopProgressSnapshot/type guards), app-settings-types.ts (365 LOC, AuthSettings/ClaudeDriverSettings/AppSettingsSnapshot/AppSettingsPatch/KeybindingAction/CloudflareTunnelRecord/type guards), git-diff-types.ts (165 LOC, ChatDiffFile/BranchAction*/ChatSync*/DiffCommit*/GitWorktree). types.ts: 1201 → 422 LOC (−779); 121 shared/ tests pass; zero new TS errors. ✅ types.ts DONE.
 - 2026-07-18 Extract tool-call types (AskUserQuestion*/TodoItem, ToolCallBase, all *ToolCall, NormalizedToolCall, HydratedToolCallBase, all Hydrated*, HydratedToolCall) to tool-call-types.ts (314 LOC); extract transcript types (McpServerInfo, AccountInfo, ContextWindowUsageSnapshot, TranscriptEntryBase, all *Entry, TranscriptEntry union, HydratedTranscriptMessage, AutoContinuePromptEntry, PendingToolRequestEntry, ToolRequestResolvedEntry) to transcript-types.ts (270 LOC); types.ts: 1731 → 1201 LOC (−530); 121 shared/ tests pass; zero new TS errors.
 - 2026-07-18 Extract provider/model-catalog domain (ProviderModelOption, ClaudeModelOptions, CodexModelOptions, ProviderModelOptionsByProvider, ProviderPreference, ChatProviderPreferences, ModelOptions, DEFAULT_CLAUDE/CODEX_MODEL_OPTIONS, PROVIDERS, getProviderCatalog, CustomModelEntry/Input/Patch, TextSnippet/Input/Patch, mergeCustomModels, providerUsesSdkSession, normalize*/getProvider*/resolve* helpers, OpenRouterModel, DEFAULT_OPENROUTER_SDK_MODEL) to provider-model-types.ts; types.ts re-exports via barrel; 25 tests pass. types.ts: 2108 → 1713 LOC (-395); new file 437 LOC.
@@ -68,25 +69,22 @@ bash scripts/verify-decomp.sh
 ## Next chunk
 
 **shared/types.ts ✅ DONE (422 LOC)**. Remaining files over 600 LOC:
-- `src/server/diff-store.ts`: 2251 LOC — the biggest remaining target
+- `src/server/diff-store.ts`: 1613 LOC — needs more extraction to reach <600
 - `src/server/event-store.ts`: 1461 LOC
 - `src/server/agent.ts`: 1322 LOC
 - `src/server/ws-router.ts`: 1280 LOC
 
-**Focus: `src/server/diff-store.ts` (2251 LOC → target ≤ 600)**
+**Focus: `src/server/diff-store.ts` (1613 LOC → target ≤ 600)**
 
-Survey the file:
+The DiffStore class itself (lines ~200-1613) contains about 1400 LOC. Survey it:
 ```bash
-grep -n "^export\|^  async\|^  private\|^  public\|^class\|^function\|^// ---" src/server/diff-store.ts | head -100
-wc -l src/server/diff-store.ts
+grep -n "^  async \|^  private\|^  public\|^  get" src/server/diff-store.ts | head -60
 ```
 
-Likely extraction domains:
-1. **`diff-store-git-ops.ts`** (~400 LOC): git command wrappers (runGit, listBranches, fetchStatus, commitFiles, mergePreview, etc.)
-2. **`diff-store-github.ts`** (~300 LOC): GitHub API wrappers (getPullRequests, publishRepo, getRepoAvailability, etc.)
-3. **`diff-store-worktree.ts`** (~200 LOC): worktree management (listWorktrees, createWorktree, etc.)
-
-After these extractions, diff-store.ts keeps thin delegates and stays as the public surface.
+Likely extractions:
+1. **`diff-store-diff-compute.ts`** (~280 LOC): parseStatusPaths, listDirtyPaths, readWorktreeFile, readBaseFile, createPatch, getContentDigest, parseNumstatValue, countTextLines, getTrackedDiffStats, computeCurrentFiles, normalizeRepoRelativePath, findDirtyPath, discardAddedPath, discardRenamedPath, appendGitIgnoreEntry — these are the diff computation functions (mix of pure + IO adapters, split as needed)
+2. **`diff-store-commit.adapter.ts`** (~300 LOC): DiffStore.commitFiles, generateCommitMessage, discardFile, ignoreFile — commit operations
+3. **`diff-store-branch-ops.adapter.ts`** (~400 LOC): DiffStore.mergeBranch, checkoutBranch, createBranch, syncBranch, previewMergeBranch, listBranches — branch operations from DiffStore class
 
 ## Worker rules (every subagent MUST follow)
 
