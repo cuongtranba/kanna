@@ -9,7 +9,6 @@ import type {
   McpOAuthState,
   McpServerConfig,
   PendingToolSnapshot,
-  KannaStatus,
   QueuedChatMessage,
   SlashCommand,
   Subagent,
@@ -174,6 +173,16 @@ import {
   cancelSubagentRun as cancelSubagentRunFn,
   type SubagentToolResponseDeps,
 } from "./claude-subagent-tool-response"
+import {
+  getActiveStatuses as getActiveStatusesFn,
+  getWaitStartedAtByChatId as getWaitStartedAtByChatIdFn,
+  getPendingTool as getPendingToolFn,
+  getDrainingChatIds as getDrainingChatIdsFn,
+  getSlashCommandsLoadingChatIds as getSlashCommandsLoadingChatIdsFn,
+  getClaudeSessionStates as getClaudeSessionStatesFn,
+  sweepIdleClaudeSessions as sweepIdleClaudeSessionsFn,
+  type SessionStateQueryDeps,
+} from "./claude-session-state-queries"
 
 export type { ClaudeSessionHandle } from "./harness-types"
 
@@ -509,33 +518,23 @@ export class AgentCoordinator {
   }
 
   getActiveStatuses() {
-    const statuses = new Map<string, KannaStatus>()
-    for (const [chatId, turn] of this.activeTurns.entries()) {
-      statuses.set(chatId, turn.status)
-    }
-    return statuses
+    return getActiveStatusesFn(this.buildSessionStateQueryDeps())
   }
 
   getWaitStartedAtByChatId(): Map<string, number> {
-    const out = new Map<string, number>()
-    for (const [chatId, turn] of this.activeTurns.entries()) {
-      if (turn.waitStartedAt != null) out.set(chatId, turn.waitStartedAt)
-    }
-    return out
+    return getWaitStartedAtByChatIdFn(this.buildSessionStateQueryDeps())
   }
 
   getPendingTool(chatId: string): PendingToolSnapshot | null {
-    const pending = this.activeTurns.get(chatId)?.pendingTool
-    if (!pending) return null
-    return { toolUseId: pending.toolUseId, toolKind: pending.tool.toolKind }
+    return getPendingToolFn(this.buildSessionStateQueryDeps(), chatId)
   }
 
   getDrainingChatIds(): Set<string> {
-    return new Set(this.drainingStreams.keys())
+    return getDrainingChatIdsFn(this.buildSessionStateQueryDeps())
   }
 
   getSlashCommandsLoadingChatIds(): Set<string> {
-    return new Set(this.slashCommandsInFlight)
+    return getSlashCommandsLoadingChatIdsFn(this.buildSessionStateQueryDeps())
   }
 
   /**
@@ -543,22 +542,7 @@ export class AgentCoordinator {
    * sidebar badge selector. Chats not present are implicitly `cold`.
    */
   getClaudeSessionStates(): Map<string, "warming" | "active" | "idle"> {
-    const out = new Map<string, "warming" | "active" | "idle">()
-    const now = Date.now()
-    for (const [chatId, session] of this.claudeSessions) {
-      const activeProv = this.activeTurns.get(chatId)?.provider
-      if (activeProv !== undefined && isClaudeSdkProvider(activeProv)) {
-        out.set(chatId, "active")
-      } else if (this.hasPendingBackgroundTask(session, now)) {
-        // Held warm for a background Bash task — surface as "warming", not "idle".
-        out.set(chatId, "warming")
-      } else if (now - session.lastUsedAt >= this.resolveClaudeIdleMs()) {
-        out.set(chatId, "idle")
-      } else {
-        out.set(chatId, "warming")
-      }
-    }
-    return out
+    return getClaudeSessionStatesFn(this.buildSessionStateQueryDeps())
   }
 
   get toolCallbackService(): ToolCallbackService | null {
@@ -808,15 +792,6 @@ export class AgentCoordinator {
     return hasPendingBackgroundTaskFn(session, now)
   }
 
-  private isClaudeSessionIdle(chatId: string, session: ClaudeSessionState, now = Date.now()): boolean {
-    const activeProv = this.activeTurns.get(chatId)?.provider
-    if (activeProv !== undefined && isClaudeSdkProvider(activeProv)) return false
-    if (session.pendingPromptSeqs.length > 0) return false
-    if (this.hasLiveWorkflow(chatId)) return false
-    if (this.hasPendingBackgroundTask(session, now)) return false
-    return now - session.lastUsedAt >= this.resolveClaudeIdleMs()
-  }
-
   /**
    * Tear down a Claude session and (by default) release the OAuth-pool
    * reservation owned by the chat.
@@ -846,11 +821,7 @@ export class AgentCoordinator {
   }
 
   private sweepIdleClaudeSessions(now = Date.now()): void {
-    for (const [chatId, session] of [...this.claudeSessions.entries()]) {
-      if (!this.isClaudeSessionIdle(chatId, session, now)) continue
-      this.closeClaudeSession(chatId, session)
-      this.emitStateChange(chatId)
-    }
+    sweepIdleClaudeSessionsFn(this.buildSessionStateQueryDeps(), now)
   }
 
   private enforceClaudeSessionBudget(protectedChatId?: string): void {
@@ -873,6 +844,21 @@ export class AgentCoordinator {
       subagentPendingResolvers: this.subagentPendingResolvers,
       store: this.store,
       subagentOrchestrator: this.subagentOrchestrator,
+      emitStateChange: (chatId) => { this.emitStateChange(chatId) },
+    }
+  }
+
+  private buildSessionStateQueryDeps(): SessionStateQueryDeps {
+    return {
+      activeTurns: this.activeTurns,
+      claudeSessions: this.claudeSessions,
+      drainingStreams: this.drainingStreams,
+      slashCommandsInFlight: this.slashCommandsInFlight,
+      isClaudeSdkProvider: (provider) => isClaudeSdkProvider(provider),
+      hasPendingBackgroundTask: (session, now) => this.hasPendingBackgroundTask(session, now),
+      resolveClaudeIdleMs: () => this.resolveClaudeIdleMs(),
+      hasLiveWorkflow: (chatId) => this.hasLiveWorkflow(chatId),
+      closeClaudeSession: (chatId, session) => { this.closeClaudeSession(chatId, session) },
       emitStateChange: (chatId) => { this.emitStateChange(chatId) },
     }
   }
