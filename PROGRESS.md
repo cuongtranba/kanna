@@ -13,6 +13,7 @@ bash scripts/verify-decomp.sh
 
 ## Progress (latest first)
 
+- 2026-07-17 Extract cancelChat (~100 lines) to claude-cancel-handler.ts (CancelHandlerDeps interface, standalone cancelChat(deps, chatId, options?) exported fn; buildCancelHandlerDeps deps-builder in AgentCoordinator) + 25 tests. agent.ts: 1854 → 1758 LOC; new file 241 LOC.
 - 2026-07-17 Extract runTurn (~135 lines) to claude-turn-runner.ts (RunTurnDeps interface, standalone runTurn exported fn; buildRunTurnDeps deps-builder in AgentCoordinator) + 15 tests. agent.ts: 1969 → 1854 LOC; new file 213 LOC.
 - 2026-07-17 Extract subagent provider-run wiring (~140 lines) to claude-subagent-wiring.ts (SubagentWiringDeps interface, 2 exported fns: buildClaudeSubagentStarter, buildSubagentProviderRunForChat; buildSubagentWiringDeps deps-builder in AgentCoordinator) + 8 tests. agent.ts: 2103 → 1969 LOC; new file 324 LOC.
 - 2026-07-17 Extract loop + orchestration command handlers (~220 lines) to claude-loop-orch-commands.ts (LoopOrchCommandDeps interface, 11 exported fns: buildOrchWorker, buildOrchRunContext, runOrchestration, cancelOrchRun, getOrchRunDetail, clearClaudeSessionContext, deliverSubagentToMain, setupLoop, isLoopArmed, stopLoop, listLiveSchedules) + 22 tests. agent.ts: 2300 → 2103 LOC; new file 458 LOC.
@@ -48,20 +49,23 @@ bash scripts/verify-decomp.sh
 
 ## Next chunk
 
-agent.ts (1854 LOC): the next cohesive group is the **cancel handler** (~100 lines, lines ~1645–1760):
+agent.ts (1758 LOC): the next cohesive group is the **send command handler** (~134 lines, lines ~1222–1355):
 
-**cancel** (1 method, ~100 lines):
-- `cancel` — handles chat cancellation: drains the draining-stream, rejects subagent resolvers, sets cancelRequested, appends interrupted entry, records turn_cancelled, drains pending prompt seqs from the Claude session, and calls `active.turn.interrupt()`.
+**send** (1 large public method + related helpers):
+- `send` — handles the `chat.send` command: validates cwd, rejects duplicate sends for the active turn, optionally injects a proactive /compact turn, enqueues the message, and starts the turn.
+- `shouldInjectProactiveCompact` — pure helper deciding whether to inject compact.
+- `resolveProvider` / `getProviderSettings` — resolve which provider + settings to use.
+- `enqueueMessage` / `dequeueAndStartQueuedMessage` / `maybeStartNextQueuedMessage` — the message queue pipeline.
 
-Extract to `src/server/claude-cancel-handler.ts` with a
-`CancelHandlerDeps` interface and a standalone `cancelChat(deps, chatId, options)` exported fn.
+Extract to `src/server/claude-send-command.ts` with a
+`SendCommandDeps` interface and standalone exported functions for the above.
 
 Survey:
 ```
-grep -n "async cancel" src/server/agent.ts
+grep -n "async send\|enqueueMessage\|dequeueAndStart\|maybeStartNext\|shouldInjectProactive\|resolveProvider\|getProviderSettings" src/server/agent.ts | head -20
 ```
 
-Expected: agent.ts 1854 → ~1760 LOC.
+Expected: agent.ts 1758 → ~1580 LOC.
 
 ## Worker rules (every subagent MUST follow)
 
