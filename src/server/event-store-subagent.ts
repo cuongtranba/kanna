@@ -1,12 +1,23 @@
 /**
- * Subagent run read-model layer extracted from event-store.ts.
+ * Subagent run read-model and write-path layers extracted from event-store.ts.
  *
- * All functions here are pure folds over the in-memory
- * `subagentRunsByChatId` map — no IO, no class state.  The class in
- * event-store.ts calls these and remains the single owner of the map.
+ * Read functions are pure folds over the in-memory `subagentRunsByChatId` map.
+ * `appendSubagentEvent` has IO via injected deps (enqueueDiskAppend) and
+ * calls capTranscriptEntry for tool_result capping.
  */
 import type { SubagentRunSnapshot, TranscriptEntry } from "../shared/types"
-import type { SubagentRunEvent } from "./events"
+import type { ChatRecord, SubagentRunEvent } from "./events"
+import { capTranscriptEntry } from "./subagent-entry-cap.adapter"
+
+// ─── Write-path deps ──────────────────────────────────────────────────────
+
+export interface AppendSubagentDeps {
+  readonly chatsById: Map<string, ChatRecord>
+  readonly turnsLogPath: string
+  readonly dataDir: string
+  applyEvent: (event: SubagentRunEvent) => void
+  enqueueDiskAppend: (filePath: string, payload: string) => void
+}
 
 /** Alias for the per-chat inner map type used throughout this module. */
 export type SubagentRunMap = Map<string, SubagentRunSnapshot>
@@ -153,4 +164,35 @@ export function* runningSubagentRuns(
       if (run.status === "running") yield run
     }
   }
+}
+
+// ─── Write-path ────────────────────────────────────────────────────────────
+
+/**
+ * Cap tool_result entries, apply in-memory synchronously (so the UI sees the
+ * update immediately), then enqueue the disk append on the write-chain.
+ * Mirrors the ephemeral-event optimisation in the original EventStore method.
+ */
+export async function appendSubagentEvent(
+  deps: AppendSubagentDeps,
+  event: SubagentRunEvent,
+): Promise<void> {
+  let effectiveEvent = event
+  if (event.type === "subagent_entry_appended" && event.entry.kind === "tool_result") {
+    const chat = deps.chatsById.get(event.chatId)
+    if (chat) {
+      effectiveEvent = {
+        ...event,
+        entry: await capTranscriptEntry({
+          entry: event.entry,
+          chatId: event.chatId,
+          runId: event.runId,
+          projectId: chat.projectId,
+          kannaRoot: deps.dataDir,
+        }),
+      }
+    }
+  }
+  deps.applyEvent(effectiveEvent)
+  deps.enqueueDiskAppend(deps.turnsLogPath, `${JSON.stringify(effectiveEvent)}\n`)
 }

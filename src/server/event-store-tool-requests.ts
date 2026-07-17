@@ -1,12 +1,24 @@
 /**
- * Tool-request read-model layer extracted from event-store.ts.
+ * Tool-request read-model and write-path layers extracted from event-store.ts.
  *
- * All functions here are pure folds over the in-memory
- * `toolRequestsById` map — no IO, no class state.  The class in
- * event-store.ts calls these and remains the single owner of the map.
+ * All read functions are pure folds over the in-memory `toolRequestsById` map.
+ * Write functions (putToolRequest, resolveToolRequest) accept a ToolRequestWriteDeps
+ * so they can append to the event log without importing disk IO directly.
  */
 import type { ToolRequest, ToolRequestDecision, ToolRequestStatus } from "../shared/permission-policy"
-import type { ToolRequestEvent } from "./events"
+import type { StoreEvent, ToolRequestEvent } from "./events"
+import {
+  buildPutToolRequestEvent,
+  buildResolveToolRequestEvent,
+} from "./event-store-write-ops"
+
+// ─── Write-path deps ──────────────────────────────────────────────────────
+
+export interface ToolRequestWriteDeps {
+  readonly toolRequestsById: Map<string, ToolRequest>
+  readonly toolRequestsLogPath: string
+  append: (filePath: string, event: StoreEvent) => Promise<void>
+}
 
 /**
  * Apply a single `ToolRequestEvent` to the in-memory `toolRequestsById` map
@@ -89,6 +101,29 @@ export function deleteToolRequestsForChat(
       toolRequestsById.delete(id)
     }
   }
+}
+
+// ─── Write-path functions ──────────────────────────────────────────────────
+
+/** Persist + apply a new tool request. */
+export async function putToolRequest(
+  deps: ToolRequestWriteDeps,
+  req: ToolRequest,
+): Promise<void> {
+  const event = buildPutToolRequestEvent(req)
+  applyToolRequestEvent(deps.toolRequestsById, event)
+  await deps.append(deps.toolRequestsLogPath, event)
+}
+
+/** Persist + apply a tool request resolution. */
+export async function resolveToolRequest(
+  deps: ToolRequestWriteDeps,
+  id: string,
+  args: { status: ToolRequestStatus; decision?: ToolRequestDecision; resolvedAt: number; mismatchReason?: string },
+): Promise<void> {
+  const event = buildResolveToolRequestEvent(deps.toolRequestsById, id, args)
+  applyToolRequestEvent(deps.toolRequestsById, event)
+  await deps.append(deps.toolRequestsLogPath, event)
 }
 
 // Re-export types consumed by event-store.ts method signatures so callers

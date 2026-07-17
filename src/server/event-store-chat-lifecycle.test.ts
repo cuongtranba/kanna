@@ -307,7 +307,7 @@ describe("applyChatLifecycleEvent — queued message events", () => {
       type: "queued_message_enqueued",
       timestamp: TS + 10,
       chatId: "c1",
-      message: { id: "qm1", createdAt: TS + 10, kind: "user", text: "hello", attachments: [] },
+      message: { id: "qm1", createdAt: TS + 10, content: "hello", attachments: [] },
     })
     const queued = state.queuedMessagesByChatId.get("c1")
     expect(queued?.length).toBe(1)
@@ -323,7 +323,7 @@ describe("applyChatLifecycleEvent — queued message events", () => {
       type: "queued_message_enqueued",
       timestamp: TS + 10,
       chatId: "c1",
-      message: { id: "qm1", createdAt: TS + 10, kind: "user", text: "hello", attachments: [] },
+      message: { id: "qm1", createdAt: TS + 10, content: "hello", attachments: [] },
     })
     applyChatLifecycleEvent(state, replay, {
       v: 3, type: "queued_message_removed", timestamp: TS + 20, chatId: "c1", queuedMessageId: "qm1",
@@ -340,12 +340,17 @@ describe("applyAutoContinueToState", () => {
   test("appends event to list", () => {
     const m = new Map<string, AutoContinueEvent[]>()
     const ev: AutoContinueEvent = {
+      v: 3,
       kind: "auto_continue_accepted",
       chatId: "c1",
+      scheduleId: "sched-1",
       timestamp: TS,
-      source: "turn_finished",
+      scheduledAt: TS - 100,
+      tz: "UTC",
+      source: "auto_setting",
+      resetAt: TS + 1000,
+      detectedAt: TS - 200,
       prompt: "continue",
-      subagentId: null,
     }
     applyAutoContinueToState(m, ev)
     applyAutoContinueToState(m, { ...ev, timestamp: TS + 1 })
@@ -368,7 +373,7 @@ describe("applyChatMessageMetadata", () => {
     })
     applyChatMessageMetadata(chatsById, "c1", {
       _id: "msg-1", kind: "user_prompt", createdAt: TS + 500,
-      text: "hi", attachments: [],
+      content: "hi", attachments: [],
     })
     const chat = chatsById.get("c1")!
     expect(chat.hasMessages).toBe(true)
@@ -396,7 +401,7 @@ describe("applyChatMessageMetadata", () => {
     const chatsById = new Map<string, ChatRecord>()
     // should not throw
     applyChatMessageMetadata(chatsById, "ghost", {
-      _id: "msg-3", kind: "user_prompt", createdAt: TS, text: "hi", attachments: [],
+      _id: "msg-3", kind: "user_prompt", createdAt: TS, content: "hi", attachments: [],
     })
     expect(chatsById.size).toBe(0)
   })

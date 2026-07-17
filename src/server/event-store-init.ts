@@ -1,9 +1,11 @@
 /**
- * EventStore initialization helpers extracted from event-store.ts.
+ * EventStore initialization and snapshot/migration helpers extracted from
+ * event-store.ts.
  *
  * Contains initialize, ensureFile, clearStorage, loadSnapshot, resetState,
- * clearLegacyTranscriptState, loadSidebarProjectOrder, replayLogs, and
- * shouldSnapshotLogs — all setup/teardown logic that runs on boot.
+ * clearLegacyTranscriptState, loadSidebarProjectOrder, replayLogs,
+ * shouldSnapshotLogs, snapshotAndTruncateLogs, getLegacyTranscriptStats,
+ * hasLegacyTranscriptData, and migrateLegacyTranscripts.
  *
  * This file does direct disk IO and must be suffixed .ts (not .adapter.ts)
  * because the side-effect seal only applies to files in src/server/** production
@@ -13,18 +15,26 @@
  *
  * Must NOT import from event-store.ts (no circular deps).
  */
+import path from "node:path"
 import type { AgentProvider, TranscriptEntry } from "../shared/types"
 import type { StoreState } from "./events"
 import type { StorageBackend } from "./storage/backend"
 import type { CachedTranscriptRef } from "./event-store-messages.adapter"
 import type { CloudflareTunnelEvent } from "./cloudflare-tunnel/events"
 import {
+  buildSnapshotFile,
   calcShouldTruncateLogs,
+  computeLegacyTranscriptStats,
   loadAndReplayLogs,
   loadSidebarOrder,
   loadSnapshotIntoState,
+  migrateLegacyTranscripts as migrateLegacyTranscriptsImpl,
+  truncateLogsAfterSnapshot,
+  type LegacyTranscriptStats,
   type SnapshotLogPaths,
 } from "./event-store-snapshot"
+
+export type { LegacyTranscriptStats }
 
 // ─── Deps interface ────────────────────────────────────────────────────────
 
@@ -55,6 +65,8 @@ export interface EventStoreInitDeps {
   getLegacySidebarProjectOrder: () => string[]
   /** Sets legacySidebarProjectOrder. */
   setLegacySidebarProjectOrder: (v: string[]) => void
+  /** Gets the current snapshotHasLegacyMessages value. */
+  getSnapshotHasLegacyMessages: () => boolean
   /** Sets snapshotHasLegacyMessages. */
   setSnapshotHasLegacyMessages: (v: boolean) => void
   /** Gets the current storageReset flag. */
@@ -208,4 +220,57 @@ export function resetEventStoreState(deps: EventStoreInitDeps): void {
 
 export function clearEventStoreLegacyTranscriptState(deps: EventStoreInitDeps): void {
   clearLegacyTranscriptState(deps)
+}
+
+// ─── Snapshot / legacy migration ops ─────────────────────────────────────────
+
+export async function getLegacyTranscriptStats(
+  deps: EventStoreInitDeps,
+): Promise<LegacyTranscriptStats> {
+  return computeLegacyTranscriptStats(
+    deps.storage,
+    deps.messagesLogPath,
+    deps.getSnapshotHasLegacyMessages(),
+    deps.legacyMessagesByChatId,
+  )
+}
+
+export async function hasLegacyTranscriptData(deps: EventStoreInitDeps): Promise<boolean> {
+  return (await getLegacyTranscriptStats(deps)).hasLegacyData
+}
+
+export async function snapshotAndTruncateLogs(deps: EventStoreInitDeps): Promise<void> {
+  const projects = [...deps.state.projectsById.values()].filter((p) => !p.deletedAt)
+  const snapshot = buildSnapshotFile(deps.state, projects)
+  const logPaths: SnapshotLogPaths = {
+    snapshotPath: deps.snapshotPath,
+    projectsLogPath: deps.projectsLogPath,
+    chatsLogPath: deps.chatsLogPath,
+    messagesLogPath: deps.messagesLogPath,
+    queuedMessagesLogPath: deps.queuedMessagesLogPath,
+    turnsLogPath: deps.turnsLogPath,
+    schedulesLogPath: deps.schedulesLogPath,
+    stacksLogPath: deps.stacksLogPath,
+    toolRequestsLogPath: deps.toolRequestsLogPath,
+    orchLogPath: deps.orchLogPath,
+  }
+  await truncateLogsAfterSnapshot(deps.storage, logPaths, JSON.stringify(snapshot, null, 2))
+}
+
+export async function migrateLegacyTranscripts(
+  deps: EventStoreInitDeps,
+  onProgress?: (message: string) => void,
+): Promise<boolean> {
+  const stats = await getLegacyTranscriptStats(deps)
+  return migrateLegacyTranscriptsImpl(
+    deps.storage,
+    deps.transcriptsDir,
+    stats,
+    deps.legacyMessagesByChatId,
+    (chatId) => path.join(deps.transcriptsDir, `${chatId}.jsonl`),
+    () => { clearEventStoreLegacyTranscriptState(deps) },
+    () => snapshotAndTruncateLogs(deps),
+    () => { deps.cachedTranscriptRef.value = null },
+    onProgress,
+  )
 }
