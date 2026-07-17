@@ -13,6 +13,7 @@ bash scripts/verify-decomp.sh
 
 ## Progress (latest first)
 
+- 2026-07-18 Extract chat-lifecycle read-model (applyProjectEvent, applyStackEvent, applyChatLifecycleEvent, updateChatTiming, applyAutoContinueToState, applyChatMessageMetadata) to event-store-chat-lifecycle.ts; all project/stack/chat/turn/queued-message switch cases delegated + private updateTiming method removed + 28 tests. event-store.ts: 2050 → 1778 LOC (-272); new file 441 LOC.
 - 2026-07-17 Extract tool-request read-model (applyToolRequestEvent, getToolRequest, listPendingToolRequests, scanAllToolRequests, deleteToolRequestsForChat) to event-store-tool-requests.ts as pure functions; EventStore delegates via applyToolRequestEvent in switch + thin wrappers + 14 tests. event-store.ts: 2069 → 2050 LOC; new file 96 LOC.
 - 2026-07-17 Extract subagent run read-model (applySubagentEvent, getSubagentRuns, runningSubagentRuns) to event-store-subagent.ts as pure functions; EventStore delegates via fall-through case + thin wrappers + 19 tests. event-store.ts: 2169 → 2069 LOC; new file 156 LOC.
 - 2026-07-17 Extract orchestration read-model (applyOrchEvent, toOrchRunSnapshot, nonTerminalOrchTasks, gatedOrchTasks, getOrchRun/Runs/TaskSpec/LastPhaseOutput/Events) to event-store-orch.ts as pure functions; EventStore delegates via thin wrappers + 32 tests. event-store.ts: 2350 → 2169 LOC; new file 312 LOC.
@@ -62,22 +63,18 @@ bash scripts/verify-decomp.sh
 
 ## Next chunk
 
-**event-store.ts (2050 LOC)**: extract the auto-continue event read-model into `event-store-auto-continue.ts`.
+**event-store.ts (1778 LOC)**: extract snapshot load/create/migrate logic + the legacy-transcript loaders into `event-store-snapshot.ts`.
 
-The auto-continue concern (~20 lines of pure logic) operates on `autoContinueEventsByChatId: Map<string, AutoContinueEvent[]>`:
-- `applyAutoContinueEvent(event)` private method (lines ~805–808): 4 lines — folds a single event into the map
-- `getAutoContinueEvents(chatId)` (lines ~1824–1827): 4 lines — returns defensive copy of events for a chat
-- `listAutoContinueChats()` (lines ~1829–1830): 2 lines — returns all chat ids with auto-continue state
-- The `applyEvent` routing guard (line ~443–445): `if ("kind" in event) this.applyAutoContinueEvent(event); return`
+Target block: `loadSnapshot` (private, ~75 lines), `createSnapshot` (private, ~25 lines), `snapshotAndTruncateLogs` (~20 lines), `migrateLegacyTranscripts` (~30 lines), `getLegacyTranscriptStats` (~25 lines), `shouldSnapshotLogs` (~15 lines), and associated helpers (`resetState`, `clearLegacyTranscriptState`, `loadSidebarProjectOrder`, `loadLegacySidebarProjectOrder`, `readLegacySidebarProjectOrderFromProjectsLog`, `writeSidebarProjectOrderFile`).
 
-**Extraction approach**: standalone pure functions `applyAutoContinueEventToMap(map, event)`, `getAutoContinueEventsFromMap(map, chatId)`, `listAutoContinueChatsFromMap(map)` in `event-store-auto-continue.ts`. EventStore delegates. `autoContinueEventsByChatId` stays in `StoreState`.
+All of these are I/O-heavy (use `this.storage`) — group them into a `SnapshotDeps` interface injection pattern: extract the pure logic and pass `storage`, `paths`, and `state` as parameters. Adapter glue stays in `EventStore`.
 
 Survey the boundaries:
 ```bash
-grep -n "autoContinue\|AutoContinue\|auto_continue" src/server/event-store.ts
+grep -n "loadSnapshot\|createSnapshot\|snapshotAndTruncate\|migrateLegacy\|getLegacyTranscript\|shouldSnapshot\|resetState\|clearLegacyTranscript\|loadSidebarProject\|writeSidebar" src/server/event-store.ts | head -40
 ```
 
-Expected: event-store.ts 2050 → ~2030 LOC; new file `event-store-auto-continue.ts` ~50 LOC + tests.
+Expected: event-store.ts 1778 → ~1600 LOC (-~180); new file ~200 LOC + tests.
 
 ## Worker rules (every subagent MUST follow)
 
