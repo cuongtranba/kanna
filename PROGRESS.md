@@ -13,6 +13,7 @@ bash scripts/verify-decomp.sh
 
 ## Progress (latest first)
 
+- 2026-07-17 Extract runTurn (~135 lines) to claude-turn-runner.ts (RunTurnDeps interface, standalone runTurn exported fn; buildRunTurnDeps deps-builder in AgentCoordinator) + 15 tests. agent.ts: 1969 → 1854 LOC; new file 213 LOC.
 - 2026-07-17 Extract subagent provider-run wiring (~140 lines) to claude-subagent-wiring.ts (SubagentWiringDeps interface, 2 exported fns: buildClaudeSubagentStarter, buildSubagentProviderRunForChat; buildSubagentWiringDeps deps-builder in AgentCoordinator) + 8 tests. agent.ts: 2103 → 1969 LOC; new file 324 LOC.
 - 2026-07-17 Extract loop + orchestration command handlers (~220 lines) to claude-loop-orch-commands.ts (LoopOrchCommandDeps interface, 11 exported fns: buildOrchWorker, buildOrchRunContext, runOrchestration, cancelOrchRun, getOrchRunDetail, clearClaudeSessionContext, deliverSubagentToMain, setupLoop, isLoopArmed, stopLoop, listLiveSchedules) + 22 tests. agent.ts: 2300 → 2103 LOC; new file 458 LOC.
 - 2026-07-17 Extract auto-continue command handlers (~120 lines) to claude-autocontinue-commands.ts (AutoContinueCommandDeps interface, 8 exported fns: resolveAutoResumeFor, emitAutoContinueEvent, getChatSchedule, requireFuture, fireAutoContinue, acceptAutoContinue, rescheduleAutoContinue, cancelAutoContinue) + 26 tests. agent.ts: 2348 → 2300 LOC; new file 256 LOC.
@@ -47,20 +48,20 @@ bash scripts/verify-decomp.sh
 
 ## Next chunk
 
-agent.ts (1969 LOC): the next cohesive group is the **turn stream processor** (~135 lines, lines ~1512–1647):
+agent.ts (1854 LOC): the next cohesive group is the **cancel handler** (~100 lines, lines ~1645–1760):
 
-**runTurn** (1 method, ~135 lines):
-- `runTurn` — processes the async harness event stream for an active turn: handles session_token, rate_limit, context_window_updated, result, api_error, cost events; drives title generation, limit/auth-error detection, auto-continue; records turn_completed/turn_failed.
+**cancel** (1 method, ~100 lines):
+- `cancel` — handles chat cancellation: drains the draining-stream, rejects subagent resolvers, sets cancelRequested, appends interrupted entry, records turn_cancelled, drains pending prompt seqs from the Claude session, and calls `active.turn.interrupt()`.
 
-Extract to `src/server/claude-turn-runner.ts` with a
-`RunTurnDeps` interface and a standalone `runTurn(deps, active)` exported fn.
+Extract to `src/server/claude-cancel-handler.ts` with a
+`CancelHandlerDeps` interface and a standalone `cancelChat(deps, chatId, options)` exported fn.
 
 Survey:
 ```
-grep -n "private async runTurn" src/server/agent.ts
+grep -n "async cancel" src/server/agent.ts
 ```
 
-Expected: agent.ts 1969 → ~1840 LOC.
+Expected: agent.ts 1854 → ~1760 LOC.
 
 ## Worker rules (every subagent MUST follow)
 
