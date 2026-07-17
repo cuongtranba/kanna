@@ -52,7 +52,7 @@ import { runCommandInWorktree } from "./orchestration-exec-io.adapter"
 import type { OrchRunDetail, OrchRunInput } from "../shared/orchestration-types"
 import type { ToolCallbackService } from "./tool-callback"
 import type { ChatPermissionPolicy } from "../shared/permission-policy"
-import { mergePolicyOverride, POLICY_DEFAULT } from "../shared/permission-policy"
+import { POLICY_DEFAULT } from "../shared/permission-policy"
 import {
   LOOP_BLOCKED_NATIVE_TOOLS,
   buildCanUseTool,
@@ -62,7 +62,14 @@ import {
 export { LOOP_BLOCKED_NATIVE_TOOLS, buildCanUseTool, buildClaudeEnv, type BuildCanUseToolArgs }
 import { startClaudeSessionPTY, type StartClaudeSessionPtyArgs } from "./claude-pty/driver"
 import { ensureFreshMcpToken } from "./mcp-oauth.adapter"
-import { log } from "../shared/log"
+import {
+  type ClaudeSessionConfigHelpersDeps,
+  resolveClaudeDriverPreference as resolveClaudeDriverPreferenceFn,
+  getEnabledCustomMcpServers as getEnabledCustomMcpServersFn,
+  buildOAuthBearers as buildOAuthBearersFn,
+  resolveChatPolicy as resolveChatPolicyFn,
+  killPtyInstance as killPtyInstanceFn,
+} from "./claude-session-config-helpers"
 import type { AnyValue } from "../shared/errors"
 import {
   timestamped,
@@ -569,46 +576,39 @@ export class AgentCoordinator {
     this.onStateChange(chatId, options)
   }
 
+  // ---------------------------------------------------------------------------
+  // Session config helpers deps builder
+  // ---------------------------------------------------------------------------
+
+  private buildClaudeSessionConfigHelpersDeps(): ClaudeSessionConfigHelpersDeps {
+    return {
+      getAppSettingsSnapshot: () => this.getAppSettingsSnapshot(),
+      chatPolicy: this.chatPolicy,
+      store: this.store,
+      ptyInstanceRegistry: this.ptyInstanceRegistry,
+      ensureFreshToken: (server, opts) => ensureFreshMcpToken(server, opts),
+      persistOAuthState: this.persistOAuthStateFn,
+      killProcessTree: async (pid) => {
+        const { killProcessTree } = await import("./claude-pty/pid-registry.adapter")
+        await killProcessTree(pid)
+      },
+    }
+  }
+
   private resolveClaudeDriverPreference(): ClaudeDriverPreference {
-    const fromSettings = this.getAppSettingsSnapshot().claudeDriver?.preference
-    if (fromSettings === "pty" || fromSettings === "sdk") return fromSettings
-    return process.env.KANNA_CLAUDE_DRIVER === "pty" ? "pty" : "sdk"
+    return resolveClaudeDriverPreferenceFn(this.buildClaudeSessionConfigHelpersDeps())
   }
 
   private getEnabledCustomMcpServers(): readonly McpServerConfig[] {
-    const snap = this.getAppSettingsSnapshot()
-    const list = snap.customMcpServers
-    if (!Array.isArray(list)) return []
-    return list.filter((s) => s.enabled)
+    return getEnabledCustomMcpServersFn(this.buildClaudeSessionConfigHelpersDeps())
   }
 
   private async buildOAuthBearers(servers: readonly McpServerConfig[]): Promise<Map<string, string>> {
-    const bearers = new Map<string, string>()
-    for (const s of servers) {
-      if (s.transport === "stdio" || !s.oauth || s.oauth.status !== "authenticated") continue
-      try {
-        const token = await ensureFreshMcpToken(s, {
-          persist: (oauth) => {
-            if (this.persistOAuthStateFn) this.persistOAuthStateFn(s.id, oauth)
-          },
-        })
-        bearers.set(s.id, token)
-      } catch (err) {
-        log.warn("[kanna/mcp-oauth] token refresh failed for", s.name, String(err))
-      }
-    }
-    return bearers
+    return buildOAuthBearersFn(this.buildClaudeSessionConfigHelpersDeps(), servers)
   }
 
-  /**
-   * Resolves the effective ChatPermissionPolicy for a chat: starts from the
-   * coordinator-wide default, overlays the chat's persisted policyOverride.
-   */
   private resolveChatPolicy(chatId: string): ChatPermissionPolicy {
-    // store.state may be absent in test fakes that don't implement the full
-    // EventStore — fall through to the global default policy in that case.
-    const override = this.store.state?.chatsById?.get(chatId)?.policyOverride ?? null
-    return mergePolicyOverride(this.chatPolicy, override)
+    return resolveChatPolicyFn(this.buildClaudeSessionConfigHelpersDeps(), chatId)
   }
 
   // ---------------------------------------------------------------------------
@@ -1294,17 +1294,7 @@ export class AgentCoordinator {
   }
 
   async killPtyInstance(chatId: string): Promise<void> {
-    const instance = this.ptyInstanceRegistry?.snapshot().find((entry) => entry.chatId === chatId)
-    if (!instance || instance.pid === null) {
-      throw new Error("No live PTY instance for chat")
-    }
-    const { killProcessTree } = await import("./claude-pty/pid-registry.adapter")
-    await killProcessTree(instance.pid)
-    this.ptyInstanceRegistry?.markExitedIfCurrent(chatId, instance.pid, {
-      phase: "exited",
-      exitedAt: Date.now(),
-      lastEventAt: Date.now(),
-    })
+    return killPtyInstanceFn(this.buildClaudeSessionConfigHelpersDeps(), chatId)
   }
 
   async cancel(chatId: string, options?: { hideInterrupted?: boolean; skipQueueDrain?: boolean }) {
