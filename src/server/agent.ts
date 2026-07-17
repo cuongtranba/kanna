@@ -113,14 +113,14 @@ import {
   type SendToStartingProfile,
 } from "./claude-steer-log"
 import type { ActiveTurn, ClaudeSessionState } from "./claude-session-state"
-import { runClaudeSession as runClaudeSessionLoop } from "./claude-session-runner"
+import { runClaudeSession as runClaudeSessionLoop, type RunClaudeSessionDeps } from "./claude-session-runner"
 import {
   startTurnForChat as startTurnForChatFn,
   type StartTurnDeps,
   type StartTurnForChatArgs,
 } from "./claude-turn-starter"
 import { runTurn as runTurnFn, type RunTurnDeps } from "./claude-turn-runner"
-import { spawnClaudeTurn, type SpawnClaudeTurnArgs } from "./claude-session-spawner"
+import { spawnClaudeTurn, type SpawnClaudeTurnArgs, type SpawnClaudeTurnDeps } from "./claude-session-spawner"
 import {
   resolveClaudeIdleMs as resolveClaudeIdleMsFn,
   hasLiveWorkflow as hasLiveWorkflowFn,
@@ -1035,47 +1035,48 @@ export class AgentCoordinator {
     return findLastUserMessageIdFn(this.buildSessionRebuildDeps(), chatId)
   }
 
+  private buildSpawnClaudeTurnDeps(): SpawnClaudeTurnDeps {
+    return {
+      claudeSessions: this.claudeSessions,
+      activeTurns: this.activeTurns,
+      mentionedSubagentIdsByChat: this.mentionedSubagentIdsByChat,
+      oauthPool: this.oauthPool,
+      store: this.store,
+      startClaudeSessionFn: this.startClaudeSessionFn,
+      startClaudeSessionPTYFn: this.startClaudeSessionPTYFn,
+      subagentOrchestrator: this.subagentOrchestrator,
+      toolCallback: this.toolCallback,
+      tunnelGateway: this.tunnelGateway,
+      claudePtyRegistry: this.claudePtyRegistry,
+      ptyInstanceRegistry: this.ptyInstanceRegistry,
+      workflowRegistry: this.workflowRegistry,
+      subagentTranscriptRegistry: this.subagentTranscriptRegistry,
+      resolveClaudeDriverPreference: () => this.resolveClaudeDriverPreference(),
+      isLoopArmed: (chatId) => this.isLoopArmed(chatId),
+      closeClaudeSession: (chatId, session) => this.closeClaudeSession(chatId, session),
+      enforceClaudeSessionBudget: (chatId) => this.enforceClaudeSessionBudget(chatId),
+      readLlmProvider: () => this.readLlmProvider(),
+      buildPoolUnavailableMessage: (reservedFor, scopeSuffix) =>
+        this.buildPoolUnavailableMessage(reservedFor, scopeSuffix),
+      listOpenRouterModelsFn: this.listOpenRouterModelsFn,
+      getSubagents: () => this.getSubagents(),
+      getAppSettingsSnapshot: () => this.getAppSettingsSnapshot(),
+      getEnabledCustomMcpServers: () => this.getEnabledCustomMcpServers(),
+      buildOAuthBearers: (servers) => this.buildOAuthBearers(servers),
+      setupLoop: (chatId, input) => this.setupLoop({ chatId, input }),
+      stopLoop: (chatId, reason) => this.stopLoop(chatId, reason),
+      runOrchestration: (chatId, input) => this.runOrchestration(chatId, input),
+      cancelOrchRun: (runId) => this.cancelOrchRun(runId),
+      getOrchRunDetail: (runId) => this.getOrchRunDetail(runId),
+      resolveChatPolicy: (chatId) => this.resolveChatPolicy(chatId),
+      runClaudeSession: (session) => { void this.runClaudeSession(session) },
+      mergeLocalCatalog: (commands, cwd) => this.mergeLocalCatalog(commands, cwd),
+      emitStateChange: (chatId) => this.emitStateChange(chatId),
+    }
+  }
+
   private startClaudeTurn(args: SpawnClaudeTurnArgs): Promise<HarnessTurn> {
-    return spawnClaudeTurn(
-      {
-        claudeSessions: this.claudeSessions,
-        activeTurns: this.activeTurns,
-        mentionedSubagentIdsByChat: this.mentionedSubagentIdsByChat,
-        oauthPool: this.oauthPool,
-        store: this.store,
-        startClaudeSessionFn: this.startClaudeSessionFn,
-        startClaudeSessionPTYFn: this.startClaudeSessionPTYFn,
-        subagentOrchestrator: this.subagentOrchestrator,
-        toolCallback: this.toolCallback,
-        tunnelGateway: this.tunnelGateway,
-        claudePtyRegistry: this.claudePtyRegistry,
-        ptyInstanceRegistry: this.ptyInstanceRegistry,
-        workflowRegistry: this.workflowRegistry,
-        subagentTranscriptRegistry: this.subagentTranscriptRegistry,
-        resolveClaudeDriverPreference: () => this.resolveClaudeDriverPreference(),
-        isLoopArmed: (chatId) => this.isLoopArmed(chatId),
-        closeClaudeSession: (chatId, session) => this.closeClaudeSession(chatId, session),
-        enforceClaudeSessionBudget: (chatId) => this.enforceClaudeSessionBudget(chatId),
-        readLlmProvider: () => this.readLlmProvider(),
-        buildPoolUnavailableMessage: (reservedFor, scopeSuffix) =>
-          this.buildPoolUnavailableMessage(reservedFor, scopeSuffix),
-        listOpenRouterModelsFn: this.listOpenRouterModelsFn,
-        getSubagents: () => this.getSubagents(),
-        getAppSettingsSnapshot: () => this.getAppSettingsSnapshot(),
-        getEnabledCustomMcpServers: () => this.getEnabledCustomMcpServers(),
-        buildOAuthBearers: (servers) => this.buildOAuthBearers(servers),
-        setupLoop: (chatId, input) => this.setupLoop({ chatId, input }),
-        stopLoop: (chatId, reason) => this.stopLoop(chatId, reason),
-        runOrchestration: (chatId, input) => this.runOrchestration(chatId, input),
-        cancelOrchRun: (runId) => this.cancelOrchRun(runId),
-        getOrchRunDetail: (runId) => this.getOrchRunDetail(runId),
-        resolveChatPolicy: (chatId) => this.resolveChatPolicy(chatId),
-        runClaudeSession: (session) => { void this.runClaudeSession(session) },
-        mergeLocalCatalog: (commands, cwd) => this.mergeLocalCatalog(commands, cwd),
-        emitStateChange: (chatId) => this.emitStateChange(chatId),
-      },
-      args,
-    )
+    return spawnClaudeTurn(this.buildSpawnClaudeTurnDeps(), args)
   }
 
   /** Delegates to sendCommandFn — see claude-send-command.ts. */
@@ -1148,8 +1149,8 @@ export class AgentCoordinator {
     return forkChatFn(this.buildChatManagementDeps(), chatId)
   }
 
-  private async runClaudeSession(session: ClaudeSessionState) {
-    return runClaudeSessionLoop({
+  private buildRunClaudeSessionDeps(): RunClaudeSessionDeps {
+    return {
       openrouterFirstEntryTimeoutMs: this.openrouterFirstEntryTimeoutMs,
       claudeSessions: this.claudeSessions,
       activeTurns: this.activeTurns,
@@ -1169,7 +1170,11 @@ export class AgentCoordinator {
       closeClaudeSession: (chatId, s) => this.closeClaudeSession(chatId, s),
       maybeStartNextQueuedMessage: (chatId) => this.maybeStartNextQueuedMessage(chatId),
       resolveClaudeDriverPreference: () => this.resolveClaudeDriverPreference(),
-    }, session)
+    }
+  }
+
+  private async runClaudeSession(session: ClaudeSessionState) {
+    return runClaudeSessionLoop(this.buildRunClaudeSessionDeps(), session)
   }
 
   private async generateTitleInBackground(chatId: string, messageContent: string, cwd: string, expectedCurrentTitle: string) {
