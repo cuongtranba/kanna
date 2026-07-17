@@ -13,6 +13,7 @@ bash scripts/verify-decomp.sh
 
 ## Progress (latest first)
 
+- 2026-07-17 Extract chat management methods (~106 lines: stopDraining, closeChat, steer, dequeue, forkChat, generateTitleInBackground) to claude-chat-management.ts (ChatManagementDeps interface, 6 exported fns; buildChatManagementDeps deps-builder in AgentCoordinator; removed now-unused logClaudeSteer import from agent.ts) + 22 tests. agent.ts: 1384 → 1327 LOC; new module 251 LOC + 395 LOC tests.
 - 2026-07-17 Extract respondTool (~54 lines) to claude-tool-respond.ts (ToolRespondDeps interface, standalone respondTool exported fn; buildToolRespondDeps deps-builder in AgentCoordinator; removed now-unused isRecord + normalizeToolContent imports from agent.ts) + 9 tests. agent.ts: 1425 → 1384 LOC; new file 142 LOC.
 - 2026-07-17 Extract recreateActiveTurnFromSession + findLastUserMessageId (~50 lines) to claude-session-rebuild.ts (SessionRebuildDeps interface, 2 exported fns; buildSessionRebuildDeps deps-builder in AgentCoordinator) + 9 tests. agent.ts: 1447 → 1425 LOC; new file 101 LOC.
 - 2026-07-17 Extract session state queries + idle-reaper (~57 lines) to claude-session-state-queries.ts (SessionStateQueryDeps interface, 8 exported fns: getActiveStatuses, getWaitStartedAtByChatId, getPendingTool, getDrainingChatIds, getSlashCommandsLoadingChatIds, getClaudeSessionStates, isClaudeSessionIdle, sweepIdleClaudeSessions; buildSessionStateQueryDeps deps-builder in AgentCoordinator) + 25 tests. agent.ts: 1461 → 1447 LOC; new file 160 LOC.
@@ -55,31 +56,22 @@ bash scripts/verify-decomp.sh
 
 ## Next chunk
 
-agent.ts (1384 LOC): next cohesive group is **chat management commands** (~106 lines across 6 methods):
+agent.ts (1327 LOC): next cohesive group is **MCP/OAuth/PTY config helpers** (~58 lines across 5 methods):
 
-- `stopDraining(chatId)` — lines ~910-917 (~8 lines)
-- `closeChat(chatId)` — lines ~926-934 (~9 lines)
-- `steer(command)` — lines ~1119-1146 (~28 lines)
-- `dequeue(command)` — lines ~1148-1164 (~17 lines)
-- `forkChat(chatId)` — lines ~1166-1187 (~22 lines)
-- `generateTitleInBackground(...)` — lines ~1213-1234 (~22 lines)
+- `resolveClaudeDriverPreference()` — private, ~5 lines
+- `getEnabledCustomMcpServers()` — private, ~5 lines
+- `buildOAuthBearers(servers)` — private async, ~16 lines (IO via `ensureFreshMcpToken` adapter — must live in an adapter file or receive it as an injected dep)
+- `resolveChatPolicy(chatId)` — private, ~5 lines
+- `killPtyInstance(chatId)` — public, ~15 lines
 
-Extract to `src/server/claude-chat-management.ts` with a `ChatManagementDeps` interface:
-- `activeTurns` (Map-like get/has)
-- `drainingStreams` (Map-like has/delete)
-- `store` subset (forkChat, renameChat, getQueuedMessage, removeQueuedMessage, requireChat)
-- `autoResumeByChat` (Map-like delete)
-- `analytics` subset (track)
-- `cancel(chatId, opts)`, `closeClaudeSession`, `emitStateChange`
-- `generateTitle`, `reportBackgroundError`
-- `dequeueAndStartQueuedMessage`, `cancel` (for steer delegation)
+Extract to `src/server/claude-session-config-helpers.ts` (pure helpers) and keep `buildOAuthBearers` IO in an adapter via injected `ensureFreshToken` dep (preserving the side-effect seal).
 
 Locate methods:
 ```
-grep -n "stopDraining\|closeChat\|async steer\|async dequeue\|forkChat\|generateTitleInBackground" src/server/agent.ts
+grep -n "resolveClaudeDriverPreference\|getEnabledCustomMcpServers\|buildOAuthBearers\|resolveChatPolicy\|killPtyInstance" src/server/agent.ts
 ```
 
-Expected: agent.ts 1384 → ~1278 LOC.
+Expected: agent.ts 1327 → ~1269 LOC.
 
 ## Worker rules (every subagent MUST follow)
 
