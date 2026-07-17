@@ -13,6 +13,7 @@ bash scripts/verify-decomp.sh
 
 ## Progress (latest first)
 
+- 2026-07-18 Extract orch-subscription cluster, tool-request write-path, and appendSubagentEvent write-path from event-store.ts to dedicated modules: event-store-orch-subscription.ts (OrchSubscriptionDeps + appendOrchestrationEvent + subscribeOrchRuns + notifyOrchRunsChanged + 9 orch read-model wrappers), event-store-tool-requests.ts (ToolRequestWriteDeps + putToolRequest + resolveToolRequest), event-store-subagent.ts (AppendSubagentDeps + appendSubagentEvent); event-store.ts gains 3 buildXxxDeps() builders and one-liner delegates; removed LOG_PREFIX and applyToolRequestEvent unused imports. event-store.ts: 672 → 503 LOC (−169). ✅ event-store.ts DONE. **ALL 5 TARGET FILES COMPLETE** (ws-router 534, agent 46, event-store 503, diff-store 473, types 422).
 - 2026-07-18 Move AgentCoordinator class to agent-coordinator.ts (919 LOC); rewrite agent.ts as a 46-line barrel re-exporting AgentCoordinator + all utility symbols (LOOP_BLOCKED_NATIVE_TOOLS, timestamped, normalizeClaudeUsageSnapshot, createClaudeHarnessStream, buildUserMcpServers, etc.); update agent-deps-builders.ts to import type from ./agent-coordinator to break barrel loop. agent.ts: 968 → 46 LOC (−922). ✅ agent.ts DONE.
 - 2026-07-18 Extract all 18 build*Deps() methods + 2 interface clusters (ClaudeSessionLifecycleOptions, AgentCoordinatorArgs) from AgentCoordinator into agent-deps-builders.ts (424 LOC) and agent-coordinator-types.ts (158 LOC); all 18 builder method bodies replaced with 1-line delegates; ~35 fields changed private→readonly and ~20 methods made non-private with @internal JSDoc to enable external access; removed 5 now-unused imports from agent.ts. agent.ts: 1322 → 968 LOC (−354). ✅
 - 2026-07-18 Wire transcript-write + entity-write adapters into EventStore; replace 34 method bodies with 1-line delegates; extract init cluster to event-store-init.ts (initializeEventStore, clearStorage, shouldSnapshotLogs, loadSnapshot, replayLogs, resetState, clearLegacyTranscriptState, loadSidebarProjectOrder); event-store.ts: 978 → 775 LOC (−203). ✅
@@ -80,17 +81,17 @@ bash scripts/verify-decomp.sh
 
 ## Next chunk
 
-**Remaining files over 600 LOC:**
-- `src/server/event-store.ts`: 775 LOC — needs ~175 LOC reduction to reach <600
+**🎉 ALL 5 TARGET FILES COMPLETE — GOAL MET**
 
-**✅ Completed:** diff-store.ts (473 LOC), ws-router.ts (534 LOC), types.ts (422 LOC), agent.ts (46 LOC barrel)
+| File | Final LOC | Status |
+|------|-----------|--------|
+| src/server/ws-router.ts | 534 | ✅ DONE |
+| src/server/agent.ts | 46 | ✅ DONE |
+| src/server/event-store.ts | 503 | ✅ DONE |
+| src/server/diff-store.ts | 473 | ✅ DONE |
+| src/shared/types.ts | 422 | ✅ DONE |
 
-**Target: `src/server/event-store.ts` (775 LOC → ≤ 600)** — the only remaining file over the cap.
-
-Extraction opportunities for event-store.ts (~175 LOC to cut):
-1. **Orch subscription cluster (~55 LOC)**: `appendOrchestrationEvent`, `subscribeOrchRuns`, `notifyOrchRunsChanged`, `orchRunsSubscribers`, `getOrchRun`, `getOrchRuns`, `nonTerminalOrchTasks`, `gatedOrchTasks`, `getOrchTaskSpec`, `getOrchLastPhaseOutput`, `getOrchRunEvents` → `event-store-orch-subscription.ts`.
-2. **Snapshot/legacy cluster (~55 LOC)**: `snapshotAndTruncateLogs`, `migrateLegacyTranscripts`, `getLegacyTranscriptStats`, `hasLegacyTranscriptData` → `event-store-snapshot-ops.ts`.
-3. **Subagent + tool-request cluster (~50 LOC)**: remaining inline subagent/tool-request delegates that have not yet been extracted.
+Run the verify oracle to confirm all gates green, then the loop terminates.
 
 ## Worker rules (every subagent MUST follow)
 
