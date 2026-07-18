@@ -13,6 +13,7 @@ bash scripts/verify-decomp.sh
 
 ## Progress (latest first)
 
+- 2026-07-18 Fix Bun test-pollution regression (39 → 0 failures): added `StartClaudeSessionDeps` interface + `buildStartClaudeSessionDeps()` factory to `claude-session-start.ts`; reworked `claude-session-start.test.ts` to inject fakes via deps parameter instead of `mock.module()` on sibling modules (`claude-spawn-helpers`, `claude-harness-stream`, `claude-sdk-queue`, `claude-session-config`). Bun's `mock.module` mutates the global registry for the full run with no per-file restore — removing those calls stopped 39 cascade failures across all later test files. commit e2a61d1. ✅
 - 2026-07-18 Fix pre-existing TS7 typecheck errors in 3 test files: (1) diff-store-branch-ops.adapter.test.ts — removed excess `id`/`displayName` props from SelectedBranch input objects (TS2353); (2) claude-session-state-queries.test.ts — "waiting"→"waiting_for_user" KannaStatus, simplify pendingTool cast to `PendingToolRequest["tool"]`, add explicit `mock<Fn>()` generics for closeFn/emitFn tuple types; (3) claude-slash-commands.test.ts — add `!` non-null assertions where TS7 narrows callback-assigned `recorded: SlashCommand[] | null` to `null`. Also deleted untracked event-store-subagent-write.ts (unused draft, type errors, superseded by event-store-subagent.ts). Lint 0, typecheck 0, 38 tests pass. ✅ All gates green.
 - 2026-07-18 Extract orch-subscription cluster, tool-request write-path, and appendSubagentEvent write-path from event-store.ts to dedicated modules: event-store-orch-subscription.ts (OrchSubscriptionDeps + appendOrchestrationEvent + subscribeOrchRuns + notifyOrchRunsChanged + 9 orch read-model wrappers), event-store-tool-requests.ts (ToolRequestWriteDeps + putToolRequest + resolveToolRequest), event-store-subagent.ts (AppendSubagentDeps + appendSubagentEvent); event-store.ts gains 3 buildXxxDeps() builders and one-liner delegates; removed LOG_PREFIX and applyToolRequestEvent unused imports. event-store.ts: 672 → 503 LOC (−169). ✅ event-store.ts DONE. **ALL 5 TARGET FILES COMPLETE** (ws-router 534, agent 46, event-store 503, diff-store 473, types 422).
 - 2026-07-18 Move AgentCoordinator class to agent-coordinator.ts (919 LOC); rewrite agent.ts as a 46-line barrel re-exporting AgentCoordinator + all utility symbols (LOOP_BLOCKED_NATIVE_TOOLS, timestamped, normalizeClaudeUsageSnapshot, createClaudeHarnessStream, buildUserMcpServers, etc.); update agent-deps-builders.ts to import type from ./agent-coordinator to break barrel loop. agent.ts: 968 → 46 LOC (−922). ✅ agent.ts DONE.
@@ -81,6 +82,8 @@ bash scripts/verify-decomp.sh
 - (none yet)
 
 ## Next chunk
+
+Run verify oracle — expect green; loop terminates.
 
 **🎉 ALL 5 TARGET FILES COMPLETE — GOAL MET**
 
