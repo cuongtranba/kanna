@@ -19,7 +19,7 @@ import path from "node:path"
 import type { AgentProvider, TranscriptEntry } from "../shared/types"
 import type { StoreState } from "./events"
 import type { StorageBackend } from "./storage/backend"
-import type { CachedTranscriptRef } from "./event-store-messages.adapter"
+import type { TranscriptCache } from "./event-store-messages.adapter"
 import type { CloudflareTunnelEvent } from "./cloudflare-tunnel/events"
 import {
   buildSnapshotFile,
@@ -59,7 +59,7 @@ export interface EventStoreInitDeps {
   readonly state: StoreState
   readonly legacyMessagesByChatId: Map<string, TranscriptEntry[]>
   readonly tunnelEventsByChatId: Map<string, CloudflareTunnelEvent[]>
-  readonly cachedTranscriptRef: CachedTranscriptRef
+  readonly transcriptCache: TranscriptCache
   readonly sidebarProjectOrderRef: { value: string[] }
   /** Gets the current legacySidebarProjectOrder array reference. */
   getLegacySidebarProjectOrder: () => string[]
@@ -113,7 +113,7 @@ function resetState(deps: EventStoreInitDeps): void {
   deps.tunnelEventsByChatId.clear()
   deps.sidebarProjectOrderRef.value = []
   deps.setLegacySidebarProjectOrder([])
-  deps.cachedTranscriptRef.value = null
+  deps.transcriptCache.invalidateAll()
 }
 
 function clearLegacyTranscriptState(deps: EventStoreInitDeps): void {
@@ -270,7 +270,7 @@ export async function migrateLegacyTranscripts(
     (chatId) => path.join(deps.transcriptsDir, `${chatId}.jsonl`),
     () => { clearEventStoreLegacyTranscriptState(deps) },
     () => snapshotAndTruncateLogs(deps),
-    () => { deps.cachedTranscriptRef.value = null },
+    () => { deps.transcriptCache.invalidateAll() },
     onProgress,
   )
 }

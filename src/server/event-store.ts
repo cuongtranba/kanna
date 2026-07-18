@@ -36,6 +36,7 @@ import {
 } from "./event-store-tool-requests"
 import * as OrchSubscription from "./event-store-orch-subscription"
 import { applyStoreEvent } from "./event-store-apply"
+import { ChatOpLog } from "./chat-op-log"
 import * as PeripheralEvents from "./event-store-peripheral-events.adapter"
 import * as MessageRead from "./event-store-messages.adapter"
 import * as EntityWrite from "./event-store-entity-write"
@@ -82,7 +83,9 @@ export class EventStore implements PushEventStore {
   private legacySidebarProjectOrder: string[] = []
   private readonly sidebarProjectOrderRef: { value: string[] } = { value: [] }
   private snapshotHasLegacyMessages = false
-  private readonly cachedTranscriptRef: MessageRead.CachedTranscriptRef = { value: null }
+  private readonly transcriptCache = new MessageRead.TranscriptCache()
+  /** In-memory delta ring backing the `chat.ops` broadcast path. */
+  readonly chatOps = new ChatOpLog()
   private readonly tunnelEventsByChatId = new Map<string, CloudflareTunnelEvent[]>()
   private shareEventsAll: ShareEvent[] = []
   private replayChatProvider = new Map<string, AgentProvider | null>()
@@ -163,7 +166,7 @@ export class EventStore implements PushEventStore {
       state: this.state,
       legacyMessagesByChatId: this.legacyMessagesByChatId,
       tunnelEventsByChatId: this.tunnelEventsByChatId,
-      cachedTranscriptRef: this.cachedTranscriptRef,
+      transcriptCache: this.transcriptCache,
       sidebarProjectOrderRef: this.sidebarProjectOrderRef,
       getLegacySidebarProjectOrder: () => this.legacySidebarProjectOrder,
       setLegacySidebarProjectOrder: (v) => { this.legacySidebarProjectOrder = v },
@@ -180,7 +183,7 @@ export class EventStore implements PushEventStore {
     return {
       storage: this.storage,
       transcriptsDir: this.transcriptsDir,
-      cachedTranscriptRef: this.cachedTranscriptRef,
+      transcriptCache: this.transcriptCache,
       legacyMessagesByChatId: this.legacyMessagesByChatId,
       seenMessageIdsByChatId: this.seenMessageIdsByChatId,
       queuedMessagesByChatId: this.state.queuedMessagesByChatId,
@@ -237,7 +240,7 @@ export class EventStore implements PushEventStore {
       storage: this.storage,
       transcriptsDir: this.transcriptsDir,
       dataDir: this.dataDir,
-      cachedTranscriptRef: this.cachedTranscriptRef,
+      transcriptCache: this.transcriptCache,
       seenMessageIdsByChatId: this.seenMessageIdsByChatId,
       chatsById: this.state.chatsById,
       toolRequestsById: this.state.toolRequestsById,
@@ -247,8 +250,11 @@ export class EventStore implements PushEventStore {
       setWriteChain: (p) => { this.writeChain = p },
       append: (filePath, event) => this.append(filePath, event),
       getMessages: (chatId) => this.getMessages(chatId),
+      ensureTranscriptLoaded: (chatId) => { MessageRead.getMessagesView(this.buildMessageReadDeps(), chatId) },
       getSeenMessageIds: (chatId) => this.getSeenMessageIds(chatId),
       listPendingToolRequests: (chatId) => this.listPendingToolRequests(chatId),
+      recordChatOp: (chatId, op) => { this.chatOps.record(chatId, op) },
+      clearChatOps: (chatId) => { this.chatOps.clear(chatId) },
     }
   }
 

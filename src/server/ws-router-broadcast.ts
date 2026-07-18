@@ -24,6 +24,7 @@ import type { ResolvedAppSettings } from "./ws-router-defaults"
 import type { EnvelopeBuilder } from "./ws-router-envelope"
 import {
   countSubscriptionsByTopic,
+  ensureChatOpSeqMap,
   ensureSnapshotSignatures,
   getStableChatSnapshotSignature,
   isSendToStartingProfilingEnabled,
@@ -31,6 +32,8 @@ import {
   send,
   shouldIncludeTopic,
 } from "./ws-router-utils"
+import { diffChatMeta } from "./chat-ops-diff"
+import type { ChatMetaSignatures } from "./chat-ops-diff"
 import type { ClientState, SnapshotBroadcastFilter, SnapshotComputationCache } from "./ws-router-utils"
 
 // ── Deps ──────────────────────────────────────────────────────────────────────
@@ -51,6 +54,8 @@ export interface BroadcastManagerDeps {
 
 export class BroadcastManager {
   private readonly sockets = new Set<ServerWebSocket<ClientState>>()
+  /** Last-recorded meta signatures per chat for the chat.ops diff. */
+  private readonly metaSigsByChatId = new Map<string, ChatMetaSignatures>()
   private pendingBroadcastTimer: ReturnType<typeof setTimeout> | null = null
   private pendingBroadcastAll = false
   private readonly pendingBroadcastChatIds = new Set<string>()
@@ -230,6 +235,32 @@ export class BroadcastManager {
     }
   }
 
+  // ── Chat ops (delta) path ───────────────────────────────────────────────────
+
+  /**
+   * Records runtime/section/pending delta ops for a chat into the op-log
+   * (once per broadcast pass — deduped via the shared computation cache).
+   * Ordering authority is the op-log itself: subscribers only ever read
+   * batches out of `chatOps.since`.
+   */
+  private recordMetaOps(chatId: string, cache?: SnapshotComputationCache): void {
+    const { store, envelopeBuilder } = this.deps
+    if (typeof store.chatOps?.record !== "function") return
+    if (typeof envelopeBuilder.deriveChatMeta !== "function") return
+    if (cache) {
+      cache.chatMetaOpsRecordedChatIds ??= new Set()
+      if (cache.chatMetaOpsRecordedChatIds.has(chatId)) return
+      cache.chatMetaOpsRecordedChatIds.add(chatId)
+    }
+    const meta = envelopeBuilder.deriveChatMeta(chatId)
+    if (!meta) return
+    const { ops, next } = diffChatMeta(this.metaSigsByChatId.get(chatId), meta)
+    this.metaSigsByChatId.set(chatId, next)
+    for (const op of ops) {
+      store.chatOps.record(chatId, op)
+    }
+  }
+
   // ── Snapshot push ───────────────────────────────────────────────────────────
 
   async pushSnapshots(
@@ -247,6 +278,41 @@ export class BroadcastManager {
     for (const [id, topic] of ws.data.subscriptions.entries()) {
       if (!shouldIncludeTopic(topic, options?.filter)) {
         continue
+      }
+      if (topic.type === "chat" && typeof this.deps.store.chatOps?.since === "function") {
+        const seqMap = ensureChatOpSeqMap(ws)
+        const tracked = seqMap.get(id)
+        if (tracked !== undefined) {
+          this.recordMetaOps(topic.chatId, options?.cache)
+          const batch = this.deps.store.chatOps.since(topic.chatId, tracked)
+          if (batch !== null) {
+            if (batch.ops.length === 0) {
+              skippedCount += 1
+              continue
+            }
+            seqMap.set(id, batch.toSeq)
+            send(ws, {
+              v: PROTOCOL_VERSION,
+              type: "event",
+              id,
+              event: {
+                type: "chat.ops",
+                chatId: topic.chatId,
+                fromSeq: batch.fromSeq,
+                toSeq: batch.toSeq,
+                ops: batch.ops,
+              },
+            })
+            sentCount += 1
+            continue
+          }
+          // Ring gap — drop tracking AND the snapshot signature so the
+          // fallback full snapshot below always sends and re-arms the
+          // delta path (a signature-dedup skip here would strand the
+          // subscriber outside both paths).
+          seqMap.delete(id)
+          snapshotSignatures.delete(id)
+        }
       }
       const envelopeStartedAt = performance.now()
       const envelope = this.deps.envelopeBuilder.createEnvelope(id, topic, options?.cache, ws)
@@ -274,6 +340,12 @@ export class BroadcastManager {
       }
       const payloadBytes = send(ws, envelope)
       sentCount += 1
+      if (topic.type === "chat" && envelope.snapshot.type === "chat") {
+        const dataSeq = envelope.snapshot.data?.seq
+        if (dataSeq !== undefined) {
+          ensureChatOpSeqMap(ws).set(id, dataSeq)
+        }
+      }
       if (topic.type === "chat" && envelope.snapshot.type === "chat" && envelope.snapshot.data?.runtime.status === "starting") {
         const profile = agent.getActiveTurnProfile(topic.chatId)
         logSendToStartingProfile(profile?.traceId, profile?.startedAt, "ws.snapshot_send_completed", {

@@ -178,7 +178,7 @@ export function slashCommandsEqual(a: SlashCommand[], b: SlashCommand[]): boolea
 // freeing window budget for real turns. Applied only on the live-window read
 // path (not getMessages), so getLatestContextWindowUsage / full-transcript
 // export / importer still observe every persisted cwu.
-export function coalesceContextWindowUpdates(entries: TranscriptEntry[]): TranscriptEntry[] {
+export function coalesceContextWindowUpdates(entries: readonly TranscriptEntry[]): TranscriptEntry[] {
   const result: TranscriptEntry[] = []
   for (let index = 0; index < entries.length; index += 1) {
     const entry = entries[index]!

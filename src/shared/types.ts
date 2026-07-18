@@ -380,6 +380,12 @@ export interface ChatSnapshot {
   subagentRuns: Record<string, SubagentRunSnapshot>
   /** Loop Progress panel view — armed state, per-round rows, rate-limit resume. */
   loopProgress: LoopProgressSnapshot
+  /**
+   * Chat op-log sequence this snapshot reflects. Absent when the producer
+   * has no op-log (share page, legacy paths) — such snapshots never get
+   * `chat.ops` deltas applied on top.
+   */
+  seq?: number
 }
 
 export interface ChatHistoryPage {

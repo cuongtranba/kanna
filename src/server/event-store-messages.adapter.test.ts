@@ -4,7 +4,10 @@ import type { StorageBackend } from "./storage/backend"
 import type { ToolRequest } from "../shared/permission-policy"
 import type { ChatRecord } from "./events"
 import {
+  TranscriptCache,
   getChatCount,
+  getRecentMessagesPageTail,
+  readTranscriptTail,
   getMessages,
   getMessagesPageBefore,
   getQueuedMessage,
@@ -13,7 +16,6 @@ import {
   getRecentMessagesPage,
   getSeenMessageIds,
   loadTranscriptFromDisk,
-  type CachedTranscriptRef,
   type MessageReadDeps,
 } from "./event-store-messages.adapter"
 
@@ -75,7 +77,7 @@ function makeDeps(overrides: Partial<MessageReadDeps> = {}): MessageReadDeps {
   return {
     storage: makeStorage(),
     transcriptsDir: "/data/transcripts",
-    cachedTranscriptRef: { value: null },
+    transcriptCache: new TranscriptCache(),
     legacyMessagesByChatId: new Map(),
     seenMessageIdsByChatId: new Map(),
     queuedMessagesByChatId: new Map(),
@@ -163,10 +165,9 @@ describe("loadTranscriptFromDisk", () => {
 describe("getMessages", () => {
   test("returns from cache when chatId matches", () => {
     const e1 = makeTranscriptEntry("chat-1")
-    const cachedTranscriptRef: CachedTranscriptRef = {
-      value: { chatId: "chat-1", entries: [e1] },
-    }
-    const deps = makeDeps({ cachedTranscriptRef })
+    const transcriptCache = new TranscriptCache()
+    transcriptCache.set("chat-1", [e1])
+    const deps = makeDeps({ transcriptCache })
 
     const result = getMessages(deps, "chat-1")
     expect(result[0]!._id).toBe(e1._id)
@@ -175,33 +176,32 @@ describe("getMessages", () => {
   test("reads from legacy map and populates cache", () => {
     const e1 = makeTranscriptEntry("chat-2")
     const legacyMessagesByChatId = new Map([["chat-2", [e1]]])
-    const cachedTranscriptRef: CachedTranscriptRef = { value: null }
-    const deps = makeDeps({ legacyMessagesByChatId, cachedTranscriptRef })
+    const transcriptCache = new TranscriptCache()
+    const deps = makeDeps({ legacyMessagesByChatId, transcriptCache })
 
     const result = getMessages(deps, "chat-2")
     expect(result[0]!._id).toBe(e1._id)
-    expect(cachedTranscriptRef.value?.chatId).toBe("chat-2")
+    expect(transcriptCache.has("chat-2")).toBe(true)
   })
 
   test("loads from disk when no cache and no legacy data", () => {
     const e1 = makeTranscriptEntry("chat-3")
     const content = `${JSON.stringify(e1)}\n`
     const files = new Map([["/data/transcripts/chat-3.jsonl", content]])
-    const cachedTranscriptRef: CachedTranscriptRef = { value: null }
-    const deps = makeDeps({ storage: makeStorage(files), cachedTranscriptRef })
+    const transcriptCache = new TranscriptCache()
+    const deps = makeDeps({ storage: makeStorage(files), transcriptCache })
 
     const result = getMessages(deps, "chat-3")
     expect(result[0]!._id).toBe(e1._id)
-    expect(cachedTranscriptRef.value?.chatId).toBe("chat-3")
+    expect(transcriptCache.has("chat-3")).toBe(true)
   })
 
   test("returns a clone (not the cached reference)", () => {
     const e1 = makeTranscriptEntry("chat-1")
     const entries = [e1]
-    const cachedTranscriptRef: CachedTranscriptRef = {
-      value: { chatId: "chat-1", entries },
-    }
-    const deps = makeDeps({ cachedTranscriptRef })
+    const transcriptCache = new TranscriptCache()
+    transcriptCache.set("chat-1", entries)
+    const deps = makeDeps({ transcriptCache })
 
     const r1 = getMessages(deps, "chat-1")
     const r2 = getMessages(deps, "chat-1")
@@ -274,10 +274,9 @@ describe("getRecentMessagesPage", () => {
       kind: "assistant_text" as const,
       text: `msg ${i}`,
     }))
-    const cachedTranscriptRef: CachedTranscriptRef = {
-      value: { chatId: "chat-1", entries },
-    }
-    const deps = makeDeps({ cachedTranscriptRef })
+    const transcriptCache = new TranscriptCache()
+    transcriptCache.set("chat-1", entries)
+    const deps = makeDeps({ transcriptCache })
     const page = getRecentMessagesPage(deps, "chat-1", 3)
     expect(page.messages.length).toBe(3)
   })
@@ -289,10 +288,9 @@ describe("getRecentMessagesPage", () => {
       kind: "assistant_text" as const,
       text: `msg ${i}`,
     }))
-    const cachedTranscriptRef: CachedTranscriptRef = {
-      value: { chatId: "chat-1", entries },
-    }
-    const deps = makeDeps({ cachedTranscriptRef })
+    const transcriptCache = new TranscriptCache()
+    transcriptCache.set("chat-1", entries)
+    const deps = makeDeps({ transcriptCache })
     const page = getRecentMessagesPage(deps, "chat-1", 3)
     expect(page.hasOlder).toBe(true)
   })
@@ -361,5 +359,174 @@ describe("getChatCount", () => {
     const deps = makeDeps({ chatsById })
     expect(getChatCount(deps, "proj-1")).toBe(1)
     expect(getChatCount(deps, "proj-2")).toBe(1)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// TranscriptCache (LRU) + window-only cloning
+// ---------------------------------------------------------------------------
+
+describe("TranscriptCache", () => {
+  function countingStorage(files: Map<string, string>): { storage: StorageBackend; reads: () => number } {
+    let readCount = 0
+    const base = makeStorage(files)
+    return {
+      storage: {
+        ...base,
+        readTextSync: (p) => {
+          readCount += 1
+          return files.get(p) ?? ""
+        },
+      },
+      reads: () => readCount,
+    }
+  }
+
+  function transcriptFile(chatId: string): [string, string] {
+    const entries = [
+      JSON.stringify({ _id: `${chatId}-1`, createdAt: 1, kind: "user_prompt", content: "hi" }),
+      JSON.stringify({ _id: `${chatId}-2`, createdAt: 2, kind: "assistant_text", text: "yo" }),
+    ].join("\n")
+    return [`/data/transcripts/${chatId}.jsonl`, `${entries}\n`]
+  }
+
+  test("keeps up to 4 chats; 5th distinct load evicts the LRU", () => {
+    const files = new Map([
+      transcriptFile("chat-a"), transcriptFile("chat-b"), transcriptFile("chat-c"),
+      transcriptFile("chat-d"), transcriptFile("chat-e"),
+    ])
+    const { storage, reads } = countingStorage(files)
+    const deps = makeDeps({ storage, transcriptCache: new TranscriptCache(4) })
+
+    for (const id of ["chat-a", "chat-b", "chat-c", "chat-d"]) getMessages(deps, id)
+    expect(reads()).toBe(4)
+    getMessages(deps, "chat-b") // cache hit, touches LRU order
+    expect(reads()).toBe(4)
+    getMessages(deps, "chat-e") // evicts chat-a (LRU)
+    expect(reads()).toBe(5)
+    getMessages(deps, "chat-b") // still cached
+    expect(reads()).toBe(5)
+    getMessages(deps, "chat-a") // was evicted -> disk again
+    expect(reads()).toBe(6)
+  })
+
+  test("page reads clone only the returned window (mutation does not leak into cache)", () => {
+    const files = new Map([transcriptFile("chat-a")])
+    const deps = makeDeps({ storage: makeStorage(files), transcriptCache: new TranscriptCache(4) })
+
+    const page = getRecentMessagesPage(deps, "chat-a", 10)
+    const first = page.messages[0]
+    if (!first || first.kind !== "user_prompt") throw new Error("expected user_prompt")
+    first.content = "MUTATED"
+
+    const again = getRecentMessagesPage(deps, "chat-a", 10)
+    const againFirst = again.messages[0]
+    if (!againFirst || againFirst.kind !== "user_prompt") throw new Error("expected user_prompt")
+    expect(againFirst.content).toBe("hi")
+  })
+
+  test("appendTo updates a cached chat and no-ops for uncached chats", () => {
+    const files = new Map([transcriptFile("chat-a")])
+    const cache = new TranscriptCache(4)
+    const deps = makeDeps({ storage: makeStorage(files), transcriptCache: cache })
+
+    getMessages(deps, "chat-a")
+    cache.appendTo("chat-a", makeTranscriptEntry("chat-a", "assistant_text", { _id: "appended" }))
+    const page = getRecentMessagesPage(deps, "chat-a", 10)
+    expect(page.messages.some((m) => m._id === "appended")).toBe(true)
+
+    cache.appendTo("chat-z", makeTranscriptEntry("chat-z"))
+    expect(cache.has("chat-z")).toBe(false)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Tail-read fast path (byte-offset cursors)
+// ---------------------------------------------------------------------------
+
+describe("transcript tail-read", () => {
+  function makeSliceStorage(content: string): StorageBackend {
+    const buf = Buffer.from(content, "utf8")
+    const base = makeStorage(new Map([["/data/transcripts/chat-t.jsonl", content]]))
+    return {
+      ...base,
+      sizeSync: () => buf.length,
+      readSliceSync: (_p, start, end) => Uint8Array.prototype.slice.call(buf, start, end),
+    }
+  }
+
+  function entryLine(i: number, text?: string): string {
+    return JSON.stringify({ _id: `e-${i}`, createdAt: i, kind: "assistant_text", text: text ?? `msg ${i} ${"x".repeat(40)}` })
+  }
+
+  function fileOf(count: number): string {
+    return `${Array.from({ length: count }, (_v, i) => entryLine(i)).join("\n")  }\n`
+  }
+
+  test("readTranscriptTail with small chunk grows until minEntries+1 without reading whole file", () => {
+    const content = fileOf(50)
+    const deps = makeDeps({ storage: makeSliceStorage(content) })
+    const tail = readTranscriptTail(deps, "chat-t", 5, undefined, 128)
+    expect(tail).not.toBeNull()
+    expect(tail!.reachedStart).toBe(false)
+    expect(tail!.entries.length).toBeGreaterThan(5)
+    const first = tail!.entries[0]!
+    // firstLineByteOffset points at the raw line of the first parsed entry
+    const at = Buffer.from(content, "utf8").subarray(tail!.lineOffsets[0]!).toString("utf8")
+    expect(at.startsWith(JSON.stringify({ _id: first._id, createdAt: first.createdAt, kind: "assistant_text", text: (first as { text: string }).text }).slice(0, 20))).toBe(true)
+  })
+
+  test("cold getRecentMessagesPage on a small file equals warm page and fills the cache", () => {
+    const content = fileOf(10)
+    const cache = new TranscriptCache(4)
+    const deps = makeDeps({ storage: makeSliceStorage(content), transcriptCache: cache })
+    const coldPage = getRecentMessagesPage(deps, "chat-t", 4)
+    expect(cache.has("chat-t")).toBe(true)
+    const warmPage = getRecentMessagesPage(deps, "chat-t", 4)
+    expect(coldPage.messages.map((m) => m._id)).toEqual(warmPage.messages.map((m) => m._id))
+    expect(coldPage.hasOlder).toBe(true)
+  })
+
+  test("byte-cursor paging walks the whole transcript without a full load", () => {
+    const content = fileOf(23)
+    const cache = new TranscriptCache(4)
+    const deps = makeDeps({ storage: makeSliceStorage(content), transcriptCache: cache })
+
+    const pages: string[][] = []
+    const page = getRecentMessagesPageTail(deps, "chat-t", 5, 64)
+    expect(page).not.toBeNull()
+    pages.unshift(page!.messages.map((m) => m._id))
+    let cursor = page!.olderCursor
+    let guard = 0
+    while (cursor !== null && guard++ < 20) {
+      const older = getMessagesPageBefore(deps, "chat-t", cursor, 5)
+      pages.unshift(older.messages.map((m) => m._id))
+      cursor = older.olderCursor
+    }
+    const all = pages.flat()
+    expect(all).toEqual(Array.from({ length: 23 }, (_v, i) => `e-${i}`))
+    expect(cache.has("chat-t")).toBe(false)
+  })
+
+  test("multibyte content across chunk boundaries parses correctly", () => {
+    const lines = Array.from({ length: 30 }, (_v, i) => entryLine(i, `emoji 🌸🌸🌸 ${i} ${"火水木金土".repeat(6)}`))
+    const content = `${lines.join("\n")  }\n`
+    const deps = makeDeps({ storage: makeSliceStorage(content) })
+    const tail = readTranscriptTail(deps, "chat-t", 8, undefined, 100)
+    expect(tail).not.toBeNull()
+    for (const entry of tail!.entries) {
+      if (entry.kind !== "assistant_text") throw new Error("expected assistant_text")
+      expect(entry.text).toContain("🌸🌸🌸")
+    }
+  })
+
+  test("falls back to full load when storage lacks slice APIs", () => {
+    const content = fileOf(6)
+    const files = new Map([["/data/transcripts/chat-t.jsonl", content]])
+    const cache = new TranscriptCache(4)
+    const deps = makeDeps({ storage: makeStorage(files), transcriptCache: cache })
+    const page = getRecentMessagesPage(deps, "chat-t", 3)
+    expect(page.messages.map((m) => m._id)).toEqual(["e-3", "e-4", "e-5"])
+    expect(cache.has("chat-t")).toBe(true)
   })
 })

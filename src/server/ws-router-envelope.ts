@@ -10,6 +10,7 @@
 import os from "node:os"
 import { log } from "../shared/log"
 import { PROTOCOL_VERSION } from "../shared/types"
+import type { ChatSnapshot } from "../shared/types"
 import type { ServerEnvelope, SubscriptionTopic } from "../shared/protocol"
 import type { ServerWebSocket } from "bun"
 import { deriveChatSnapshot, deriveLocalProjectsSnapshot, deriveSidebarData } from "./read-models"
@@ -127,6 +128,12 @@ export interface EnvelopeBuilder {
     cache?: SnapshotComputationCache,
     connection?: ServerWebSocket<ClientState>,
   ): ServerEnvelope
+  /**
+   * Light chat snapshot (recentLimit 0 — no transcript window; `messages`
+   * carry only the synthetic pending_tool_request rows). Feeds the
+   * meta-diff of the `chat.ops` broadcast path.
+   */
+  deriveChatMeta(chatId: string): ChatSnapshot | null
 }
 
 export function createEnvelopeBuilder(deps: EnvelopeDeps): EnvelopeBuilder {
@@ -147,6 +154,22 @@ export function createEnvelopeBuilder(deps: EnvelopeDeps): EnvelopeBuilder {
 
   function getSidebarSnapshotCacheEntry(cache?: SnapshotComputationCache) {
     return buildSidebarSnapshotCacheEntry(deps, cache)
+  }
+
+  function deriveChatMeta(chatId: string): ChatSnapshot | null {
+    return deriveChatSnapshot(
+      store.state,
+      agent.getActiveStatuses(),
+      agent.getDrainingChatIds(),
+      agent.getSlashCommandsLoadingChatIds(),
+      chatId,
+      (id) => store.getRecentChatHistory(id, 0),
+      (id) => store.getTunnelEvents(id),
+      agent.getWaitStartedAtByChatId(),
+      Date.now(),
+      agent.getClaudeSessionStates?.() ?? new Map(),
+      resolvedAppSettings.getSnapshot().customModels ?? [],
+    )
   }
 
   function createEnvelope(
@@ -302,28 +325,36 @@ export function createEnvelopeBuilder(deps: EnvelopeDeps): EnvelopeBuilder {
       }
     }
 
+    // Capture seq BEFORE deriving: ops recorded mid-derive then overlap the
+    // snapshot, and the client reducer's upsert-by-_id makes that idempotent.
+    // Optional-chained like subscribeOrchRuns: partial store fakes in tests
+    // may not implement chatOps; the real EventStore always does.
+    const seq = typeof store.chatOps?.currentSeq === "function"
+      ? store.chatOps.currentSeq(topic.chatId)
+      : undefined
+    const data = deriveChatSnapshot(
+      store.state,
+      agent.getActiveStatuses(),
+      agent.getDrainingChatIds(),
+      agent.getSlashCommandsLoadingChatIds(),
+      topic.chatId,
+      (chatId) => store.getRecentChatHistory(chatId, topic.recentLimit ?? DEFAULT_CHAT_RECENT_LIMIT),
+      (chatId) => store.getTunnelEvents(chatId),
+      agent.getWaitStartedAtByChatId(),
+      Date.now(),
+      agent.getClaudeSessionStates?.() ?? new Map(),
+      resolvedAppSettings.getSnapshot().customModels ?? [],
+    )
     return {
       v: PROTOCOL_VERSION,
       type: "snapshot",
       id,
       snapshot: {
         type: "chat",
-        data: deriveChatSnapshot(
-          store.state,
-          agent.getActiveStatuses(),
-          agent.getDrainingChatIds(),
-          agent.getSlashCommandsLoadingChatIds(),
-          topic.chatId,
-          (chatId) => store.getRecentChatHistory(chatId, topic.recentLimit ?? DEFAULT_CHAT_RECENT_LIMIT),
-          (chatId) => store.getTunnelEvents(chatId),
-          agent.getWaitStartedAtByChatId(),
-          Date.now(),
-          agent.getClaudeSessionStates?.() ?? new Map(),
-          resolvedAppSettings.getSnapshot().customModels ?? [],
-        ),
+        data: data && seq !== undefined ? { ...data, seq } : data,
       },
     }
   }
 
-  return { getSidebarSnapshotCacheEntry, createEnvelope }
+  return { getSidebarSnapshotCacheEntry, createEnvelope, deriveChatMeta }
 }

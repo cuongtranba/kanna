@@ -85,3 +85,33 @@ Owns the JSONL event log: append-only writes, in-order replay on boot, snapshot 
 | --- | --- | --- | --- |
 | src/server/event-store.ts | c3-206 Contract | Storage detail | src/server/event-store.ts |
 | src/server/event-store.test.ts | c3-206 Contract | Test cases per surface | src/server/event-store.test.ts |
+
+## Chat Op-Log (delta broadcast source)
+
+`EventStore.chatOps` (`src/server/chat-op-log.ts`, pure in-memory) keeps a
+per-chat monotonic `seq` + ring buffer (default 512) of `ChatOp`s.
+`appendMessage` records one `entries.append` op per persisted entry (deduped
+appends record nothing); `deleteChat`/prune clear the chat's log. The ring is
+memory-only — durability stays with the transcript JSONL; a ring miss means
+the WS subscriber falls back to a full snapshot. Parity between the snapshot
+path and the ops path is enforced by `src/server/chat-ops-parity.test.ts`.
+
+## Transcript cache
+
+`TranscriptCache` (`src/server/event-store-messages.adapter.ts`) is a small
+LRU (4 chats) replacing the former single-chat `cachedTranscriptRef`. Page
+reads (`getRecentMessagesPage` / `getMessagesPageBefore`) use the no-clone
+`getMessagesView` and clone only the returned window; the public
+`getMessages` keeps full-clone semantics.
+
+## Transcript tail-read (cold-open fast path)
+
+Cold `getRecentMessagesPage` (cache miss, non-legacy) serves the window via
+`readTranscriptTail` — backward byte-slice reads (`StorageBackend.sizeSync` /
+`readSliceSync`, both OPTIONAL; absent ⇒ full-parse fallback) growing until
+> limit lines or BOF. Older paging uses opaque `byte:<offset>` cursors
+(`idx:` cursors keep working on the warm/full path). Cross-page
+`context_window_updated` coalescing stays exact via a sentinel parse of the
+newer page's first line. When the tail reaches BOF the complete transcript
+is promoted into the cache WITH messageId dedup seeding — partial tails are
+never cached and never touch the dedup set (PTY resume safety).

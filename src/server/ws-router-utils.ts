@@ -14,6 +14,8 @@ import type { EventStore } from "./event-store"
 export interface ClientState {
   subscriptions: Map<string, SubscriptionTopic>
   snapshotSignatures: Map<string, string>
+  /** Per-subscription last-delivered chat op-log seq (ops delta path). */
+  chatOpSeqBySubId?: Map<string, number>
   protectedDraftChatIds?: Set<string>
   pushDeviceId?: string | null
   originHost?: string
@@ -36,6 +38,8 @@ export interface SnapshotComputationCache {
     data: SidebarData
     signature: string
   }
+  /** Chats whose meta ops were already recorded during this broadcast pass. */
+  chatMetaOpsRecordedChatIds?: Set<string>
 }
 
 // ── Profiling helpers ─────────────────────────────────────────────────────────
@@ -163,6 +167,16 @@ export function ensureSnapshotSignatures(
   }
 
   return ws.data.snapshotSignatures
+}
+
+export function ensureChatOpSeqMap(
+  ws: ServerWebSocket<ClientState>
+): Map<string, number> {
+  if (!ws.data.chatOpSeqBySubId) {
+    ws.data.chatOpSeqBySubId = new Map()
+  }
+
+  return ws.data.chatOpSeqBySubId
 }
 
 // ── Topic / envelope helpers ──────────────────────────────────────────────────
