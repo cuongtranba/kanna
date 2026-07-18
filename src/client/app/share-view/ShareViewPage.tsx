@@ -122,7 +122,12 @@ export function ShareViewPage({ snapshot }: ShareViewPageProps) {
         </header>
         <ol className="mx-auto flex w-full max-w-[800px] flex-col gap-6 px-4 py-8 sm:px-6">
           {messages.map((m) => (
-            <li key={m.id} className="contents">
+            // content-visibility skips layout/paint for offscreen rows on
+            // long shared sessions (this list is not virtualized);
+            // contain-intrinsic-size keeps scrollbar geometry stable.
+            // empty:hidden preserves the old display:contents behavior for
+            // null MessageViews (an empty li must not add a flex gap).
+            <li key={m.id} className="[content-visibility:auto] [contain-intrinsic-size:auto_120px] empty:hidden">
               <MessageView message={m} />
             </li>
           ))}
