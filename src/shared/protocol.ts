@@ -26,6 +26,7 @@ import type {
   UpdateSnapshot,
   EditorPreset,
 } from "./types"
+import type { ChatOpsEvent } from "./chat-ops"
 import type { ChatPermissionPolicyOverride, ToolRequestDecision } from "./permission-policy"
 import type { PtyInstanceDelta, PtyInstancesSnapshot } from "./pty-instance"
 import type { WorkflowRunSummary } from "./workflow-types"
@@ -45,7 +46,7 @@ export type SubscriptionTopic =
   | { type: "keybindings" }
   | { type: "app-settings" }
   | { type: "push-config" }
-  | { type: "chat"; chatId: string; recentLimit?: number }
+  | { type: "chat"; chatId: string; recentLimit?: number; since?: number }
   | { type: "project-git"; projectId: string }
   | { type: "terminal"; terminalId: string }
   | { type: "pty-instances" }
@@ -90,7 +91,7 @@ export interface OrchRunsSnapshot {
   runs: OrchRunSummary[]
 }
 
-export type WsEvent = TerminalEvent | PtyInstancesEvent
+export type WsEvent = TerminalEvent | PtyInstancesEvent | ChatOpsEvent
 
 export type ClientCommand =
   | { type: "project.open"; localPath: string }
