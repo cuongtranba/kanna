@@ -33,6 +33,43 @@ import type { OrchRunDetail, OrchRunInput } from "../shared/orchestration-types"
 import type { ModelPrice } from "../shared/token-pricing"
 import type { AnyValue } from "../shared/errors"
 
+/**
+ * Injectable collaborators for startClaudeSession.
+ *
+ * Kept as a second parameter (with a production default via
+ * buildStartClaudeSessionDeps) so tests can supply fakes for the modules that
+ * would otherwise pollute Bun's global module registry via mock.module().
+ */
+export type StartClaudeSessionDeps = {
+  readonly buildCanUseTool: typeof buildCanUseTool
+  readonly buildClaudeEnv: typeof buildClaudeEnv
+  readonly loopBlockedNativeTools: readonly string[]
+  /** Structural constructor type so both AsyncMessageQueue and test fakes satisfy it. */
+  readonly AsyncMessageQueueCtor: { new <T>(): { push(value: T): void; close(): void } & AsyncIterable<T> }
+  readonly toClaudeMessageStream: typeof toClaudeMessageStream
+  readonly createClaudeHarnessStream: typeof createClaudeHarnessStream
+  readonly parseConfiguredContextWindowFromModelId: typeof parseConfiguredContextWindowFromModelId
+  readonly buildUserMcpServers: typeof buildUserMcpServers
+  readonly claudeToolset: readonly string[]
+  readonly sdkRestrictedFsNativeTools: readonly string[]
+}
+
+/** Returns the real (production) dep implementations. */
+export function buildStartClaudeSessionDeps(): StartClaudeSessionDeps {
+  return {
+    buildCanUseTool,
+    buildClaudeEnv,
+    loopBlockedNativeTools: LOOP_BLOCKED_NATIVE_TOOLS,
+    AsyncMessageQueueCtor: AsyncMessageQueue,
+    toClaudeMessageStream,
+    createClaudeHarnessStream,
+    parseConfiguredContextWindowFromModelId,
+    buildUserMcpServers,
+    claudeToolset: CLAUDE_TOOLSET,
+    sdkRestrictedFsNativeTools: SDK_RESTRICTED_FS_NATIVE_TOOLS,
+  }
+}
+
 export async function startClaudeSession(args: {
   projectId: string
   localPath: string
@@ -87,8 +124,10 @@ export async function startClaudeSession(args: {
   turnPrice?: ModelPrice | null
   /** Overrides the configured context window (OpenRouter model contextLength). */
   contextWindowOverride?: number
-}): Promise<ClaudeSessionHandle> {
-  const canUseTool = buildCanUseTool({
+},
+  _deps: StartClaudeSessionDeps = buildStartClaudeSessionDeps(),
+): Promise<ClaudeSessionHandle> {
+  const canUseTool = _deps.buildCanUseTool({
     localPath: args.localPath,
     chatId: args.chatId,
     sessionToken: args.sessionToken,
@@ -98,7 +137,7 @@ export async function startClaudeSession(args: {
     isLoopArmed: args.isLoopArmed,
   })
 
-  const promptQueue = new AsyncMessageQueue<SDKUserMessage>()
+  const promptQueue = new _deps.AsyncMessageQueueCtor<SDKUserMessage>()
 
   const q = query({
     prompt: promptQueue,
@@ -118,14 +157,14 @@ export async function startClaudeSession(args: {
       // model sees, so it cannot even attempt them. The dynamic canUseTool
       // deny stays as belt-and-suspenders; an armed-state flip respawns the
       // session (see loopArmedAtSpawn in startClaudeTurn).
-      ...(args.isLoopArmed?.() ? { disallowedTools: [...LOOP_BLOCKED_NATIVE_TOOLS] } : {}),
+      ...(args.isLoopArmed?.() ? { disallowedTools: [..._deps.loopBlockedNativeTools] } : {}),
       // Per-agent turn bound, threaded from Subagent.maxTurns. The SDK emits
       // a graceful stop at the limit — accumulated output is preserved,
       // matching Claude Code's max_turns_reached semantics.
       ...(args.maxTurns !== undefined ? { maxTurns: args.maxTurns } : {}),
       tools: args.restrictedAllowedPaths && args.restrictedAllowedPaths.length > 0
-        ? CLAUDE_TOOLSET.filter((t) => !new Set<string>(SDK_RESTRICTED_FS_NATIVE_TOOLS).has(t))
-        : [...CLAUDE_TOOLSET],
+        ? _deps.claudeToolset.filter((t) => !new Set<string>(_deps.sdkRestrictedFsNativeTools).has(t))
+        : [..._deps.claudeToolset],
       mcpServers: {
         [KANNA_MCP_SERVER_NAME]: createKannaMcpServer({
           projectId: args.projectId,
@@ -144,7 +183,7 @@ export async function startClaudeSession(args: {
           cancelOrchRun: args.cancelOrchRun,
           getOrchRunStatus: args.getOrchRunStatus,
         }),
-        ...buildUserMcpServers(args.customMcpServers ?? [], args.oauthBearers),
+        ..._deps.buildUserMcpServers(args.customMcpServers ?? [], args.oauthBearers),
       },
       systemPrompt: args.systemPromptOverride != null
         ? args.systemPromptOverride
@@ -155,7 +194,7 @@ export async function startClaudeSession(args: {
           },
       settingSources: ["user", "project", "local"],
       pathToClaudeCodeExecutable: process.env.CLAUDE_EXECUTABLE?.replace(/^~(?=\/|$)/, homedir()) || undefined,
-      env: buildClaudeEnv(process.env, args.oauthToken, args.openrouterApiKey ? { apiKey: args.openrouterApiKey } : null),
+      env: _deps.buildClaudeEnv(process.env, args.oauthToken, args.openrouterApiKey ? { apiKey: args.openrouterApiKey } : null),
     },
   })
 
@@ -187,9 +226,9 @@ export async function startClaudeSession(args: {
 
   return {
     provider: "claude",
-    stream: createClaudeHarnessStream(
-      toClaudeMessageStream(q),
-      args.contextWindowOverride ?? parseConfiguredContextWindowFromModelId(args.model),
+    stream: _deps.createClaudeHarnessStream(
+      _deps.toClaudeMessageStream(q),
+      args.contextWindowOverride ?? _deps.parseConfiguredContextWindowFromModelId(args.model),
       args.turnPrice ? () => args.turnPrice ?? null : undefined,
     ),
     getAccountInfo: async () => {

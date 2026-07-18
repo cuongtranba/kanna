@@ -39,33 +39,28 @@ mock.module("./kanna-mcp", () => ({
   createKannaMcpServer: () => ({ transport: "stdio", command: "echo", args: [] }),
 }))
 
-// Mock claude-spawn-helpers — return trivial stubs
-mock.module("./claude-spawn-helpers", () => ({
-  buildCanUseTool: () => async () => ({ behavior: "allow" }),
-  buildClaudeEnv: (env: unknown) => env,
-  LOOP_BLOCKED_NATIVE_TOOLS: [] as string[],
-}))
-
-// Mock claude-session-config constants
-mock.module("./claude-session-config", () => ({
-  buildUserMcpServers: () => ({}),
-  CLAUDE_TOOLSET: ["Bash", "Read", "Write"],
-  SDK_RESTRICTED_FS_NATIVE_TOOLS: ["Read", "Write"],
-}))
-
-// Mock claude-prompt-helpers
+// Mock claude-prompt-helpers (alphabetically before this file — no cross-file registry leak)
 mock.module("./claude-prompt-helpers", () => ({
   toSdkEffort: (e: unknown) => e ?? undefined,
 }))
 
-// Mock claude-harness-stream — returns a trivially empty async iterable
-mock.module("./claude-harness-stream", () => ({
-  createClaudeHarnessStream: () =>
-    (async function* () {})(),
-}))
+// NOTE: We do NOT mock.module these siblings — that would pollute the global
+// module registry and break their own test files that run later:
+//   ./claude-spawn-helpers, ./claude-harness-stream, ./claude-sdk-queue,
+//   ./claude-usage-math, ./claude-session-config (re-exported by agent.ts)
+// Instead we inject fakes through the StartClaudeSessionDeps parameter.
 
-// Mock claude-sdk-queue — provide a minimal in-memory AsyncMessageQueue stand-in
-class FakeAsyncMessageQueue<T> {
+// ---------------------------------------------------------------------------
+// Import the module under test AFTER mock.module() registrations
+// ---------------------------------------------------------------------------
+import { startClaudeSession, type StartClaudeSessionDeps } from "./claude-session-start"
+
+// ---------------------------------------------------------------------------
+// Fake deps (replace the 4 sibling modules that must not be mock.module-d)
+// ---------------------------------------------------------------------------
+
+/** Minimal queue fake: satisfies the structural AsyncMessageQueueCtor dep. */
+class FakeQueue<T> implements AsyncIterable<T> {
   private items: T[] = []
   private _closed = false
   push(item: T) {
@@ -75,22 +70,31 @@ class FakeAsyncMessageQueue<T> {
   close() { this._closed = true }
   get closed() { return this._closed }
   get pushedItems() { return [...this.items] }
+  [Symbol.asyncIterator](): AsyncIterator<T, undefined> {
+    let i = 0
+    return {
+      next: async (): Promise<IteratorResult<T, undefined>> => {
+        if (i < this.items.length) return { done: false, value: this.items[i++] }
+        return { done: true, value: undefined }
+      },
+    }
+  }
 }
 
-mock.module("./claude-sdk-queue", () => ({
-  AsyncMessageQueue: FakeAsyncMessageQueue,
-  toClaudeMessageStream: (q: unknown) => q,
-}))
-
-// Mock claude-usage-math
-mock.module("./claude-usage-math", () => ({
-  parseConfiguredContextWindowFromModelId: () => undefined,
-}))
-
-// ---------------------------------------------------------------------------
-// Import the module under test AFTER mock.module() registrations
-// ---------------------------------------------------------------------------
-import { startClaudeSession } from "./claude-session-start"
+function makeFakeDeps(): StartClaudeSessionDeps {
+  return {
+    buildCanUseTool: () => async () => ({ behavior: "allow" as const }),
+    buildClaudeEnv: (env) => env,
+    loopBlockedNativeTools: [] as readonly string[],
+    AsyncMessageQueueCtor: FakeQueue,
+    toClaudeMessageStream: () => (async function* () {})(),
+    createClaudeHarnessStream: () => (async function* () {})(),
+    parseConfiguredContextWindowFromModelId: () => undefined,
+    buildUserMcpServers: () => ({}),
+    claudeToolset: ["Bash", "Read", "Write"] as readonly string[],
+    sdkRestrictedFsNativeTools: ["Read", "Write"] as readonly string[],
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Minimal valid args reused across tests
@@ -114,18 +118,18 @@ beforeEach(() => {
 describe("startClaudeSession", () => {
   // ── 1. Shape of returned handle ────────────────────────────────────────
   test("returned handle has provider = 'claude'", async () => {
-    const handle = await startClaudeSession(BASE_ARGS)
+    const handle = await startClaudeSession(BASE_ARGS, makeFakeDeps())
     expect(handle.provider).toBe("claude")
   })
 
   test("returned handle exposes stream as async iterable", async () => {
-    const handle = await startClaudeSession(BASE_ARGS)
+    const handle = await startClaudeSession(BASE_ARGS, makeFakeDeps())
     expect(handle.stream).toBeDefined()
     expect(typeof handle.stream[Symbol.asyncIterator]).toBe("function")
   })
 
   test("returned handle exposes sendPrompt, setModel, setPermissionMode, getSupportedCommands, interrupt, close", async () => {
-    const handle = await startClaudeSession(BASE_ARGS)
+    const handle = await startClaudeSession(BASE_ARGS, makeFakeDeps())
     expect(typeof handle.sendPrompt).toBe("function")
     expect(typeof handle.setModel).toBe("function")
     expect(typeof handle.setPermissionMode).toBe("function")
@@ -136,18 +140,18 @@ describe("startClaudeSession", () => {
 
   // ── 2. keepAlive behaviour ─────────────────────────────────────────────
   test("handle has no pushChannelPrompt when keepAlive is not set", async () => {
-    const handle = await startClaudeSession(BASE_ARGS)
+    const handle = await startClaudeSession(BASE_ARGS, makeFakeDeps())
     expect(handle.pushChannelPrompt).toBeUndefined()
   })
 
   test("handle exposes pushChannelPrompt when keepAlive: true", async () => {
-    const handle = await startClaudeSession({ ...BASE_ARGS, keepAlive: true })
+    const handle = await startClaudeSession({ ...BASE_ARGS, keepAlive: true }, makeFakeDeps())
     expect(typeof handle.pushChannelPrompt).toBe("function")
   })
 
   // ── 3. close() delegates to underlying query ───────────────────────────
   test("close() can be called without throwing", async () => {
-    const handle = await startClaudeSession(BASE_ARGS)
+    const handle = await startClaudeSession(BASE_ARGS, makeFakeDeps())
     expect(() => handle.close()).not.toThrow()
   })
 
@@ -157,7 +161,7 @@ describe("startClaudeSession", () => {
       ...defaultFakeQ(),
       accountInfo: async () => { throw new Error("network error") },
     })
-    const handle = await startClaudeSession(BASE_ARGS)
+    const handle = await startClaudeSession(BASE_ARGS, makeFakeDeps())
     const info = await handle.getAccountInfo?.()
     expect(info).toBeNull()
   })
@@ -168,34 +172,34 @@ describe("startClaudeSession", () => {
       ...defaultFakeQ(),
       supportedCommands: async () => { throw new Error("not ready") },
     })
-    const handle = await startClaudeSession(BASE_ARGS)
+    const handle = await startClaudeSession(BASE_ARGS, makeFakeDeps())
     const cmds = await handle.getSupportedCommands()
     expect(cmds).toEqual([])
   })
 
   // ── 6. SDK options — model is forwarded ───────────────────────────────
   test("SDK options include the model passed to startClaudeSession", async () => {
-    await startClaudeSession({ ...BASE_ARGS, model: "claude-sonnet-4-5" })
+    await startClaudeSession({ ...BASE_ARGS, model: "claude-sonnet-4-5" }, makeFakeDeps())
     const args = capturedQueryArgs as { options: { model: string } }
     expect(args.options.model).toBe("claude-sonnet-4-5")
   })
 
   // ── 7. SDK options — cwd is localPath ─────────────────────────────────
   test("SDK cwd equals localPath", async () => {
-    await startClaudeSession({ ...BASE_ARGS, localPath: "/projects/myapp" })
+    await startClaudeSession({ ...BASE_ARGS, localPath: "/projects/myapp" }, makeFakeDeps())
     const args = capturedQueryArgs as { options: { cwd: string } }
     expect(args.options.cwd).toBe("/projects/myapp")
   })
 
   // ── 8. SDK options — planMode maps to permissionMode ──────────────────
   test("planMode:true maps to permissionMode 'plan'", async () => {
-    await startClaudeSession({ ...BASE_ARGS, planMode: true })
+    await startClaudeSession({ ...BASE_ARGS, planMode: true }, makeFakeDeps())
     const args = capturedQueryArgs as { options: { permissionMode: string } }
     expect(args.options.permissionMode).toBe("plan")
   })
 
   test("planMode:false maps to permissionMode 'acceptEdits'", async () => {
-    await startClaudeSession({ ...BASE_ARGS, planMode: false })
+    await startClaudeSession({ ...BASE_ARGS, planMode: false }, makeFakeDeps())
     const args = capturedQueryArgs as { options: { permissionMode: string } }
     expect(args.options.permissionMode).toBe("acceptEdits")
   })
