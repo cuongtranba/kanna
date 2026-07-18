@@ -12,6 +12,7 @@ import { usePreferencesStore } from "../stores/preferences"
 import { useAppSettingsStore } from "../stores/appSettingsStore"
 import { useChatSoundPreferencesStore } from "../stores/chatSoundPreferencesStore"
 import type { ChatSnapshot, CloudflareTunnelRecord, CloudflareTunnelSettings, GitWorktree, LocalProjectsSnapshot, SidebarChatRow, SidebarData, StackSummary } from "../../shared/types"
+import type { ChatOpsEvent } from "../../shared/chat-ops"
 import type { AskUserQuestionItem } from "../components/messages/types"
 import type { OpenLocalLinkTarget } from "../components/messages/shared"
 import { useAppDialog } from "../components/ui/app-dialog"
@@ -906,6 +907,7 @@ export function useKannaState(activeChatId: string | null): KannaState {
     useKannaStateStore.getState().setUiRestartPhase(null)
   }, [])
   const chatSnapshot = useKannaStateStore((state) => state.chatSnapshot)
+  const chatResyncNonce = useKannaStateStore((state) => state.chatResyncNonce)
   const olderHistoryEntries = useKannaStateStore((state) => state.olderHistoryEntries)
   const isHistoryLoading = useKannaStateStore((state) => state.isHistoryLoading)
   const historyCursor = useKannaStateStore((state) => state.historyCursor)
@@ -1364,7 +1366,7 @@ export function useKannaState(activeChatId: string | null): KannaState {
     })
     useKannaStateStore.getState().setChatSnapshot(null)
     useKannaStateStore.getState().setChatReady(false)
-    const unsubscribe = socket.subscribe<ChatSnapshot | null>({ type: "chat", chatId: activeChatId, recentLimit: INITIAL_CHAT_RECENT_LIMIT }, (snapshot) => {
+    const unsubscribe = socket.subscribe<ChatSnapshot | null, ChatOpsEvent>({ type: "chat", chatId: activeChatId, recentLimit: INITIAL_CHAT_RECENT_LIMIT }, (snapshot) => {
       if (snapshot?.runtime.chatId) {
         const matchingTrace = [...sendToStartingProfilesRef.current.values()]
           .filter((trace) => trace.serverChatId === snapshot.runtime.chatId)
@@ -1390,7 +1392,13 @@ export function useKannaState(activeChatId: string | null): KannaState {
           diffFileCount: 0,
           reusedSnapshot: reused,
         })
-        return reused ? current : snapshot
+        if (!reused) return snapshot
+        // Core unchanged but the op-log seq may have advanced — adopt it so
+        // the next chat.ops event stays contiguous (refs stay stable).
+        if (current && snapshot && current.seq !== snapshot.seq) {
+          return { ...current, seq: snapshot.seq }
+        }
+        return current
       })
       const kannaStore = useKannaStateStore.getState()
       kannaStore.setHistoryCursor(snapshot?.history.olderCursor ?? null)
@@ -1405,6 +1413,13 @@ export function useKannaState(activeChatId: string | null): KannaState {
           snapshot.slashCommandsLoading ?? false,
         )
       }
+    }, (event) => {
+      if (event.type !== "chat.ops" || event.chatId !== activeChatId) return
+      const result = useKannaStateStore.getState().applyChatOpsEvent(activeChatId, event)
+      if (result === "gap") {
+        logKannaState("chat.ops gap — forcing resubscribe", { subscriptionId, activeChatId, fromSeq: event.fromSeq, toSeq: event.toSeq })
+        useKannaStateStore.getState().bumpChatResyncNonce()
+      }
     })
     return () => {
       logKannaState("unsubscribing from chat", {
@@ -1415,7 +1430,7 @@ export function useKannaState(activeChatId: string | null): KannaState {
       })
       unsubscribe()
     }
-  }, [activeChatId, socket])
+  }, [activeChatId, socket, chatResyncNonce])
 
   useEffect(() => {
     if (!activeChatId) return
