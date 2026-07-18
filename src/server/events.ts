@@ -649,6 +649,6 @@ export function createEmptyState(): StoreState {
   }
 }
 
-export function cloneTranscriptEntries(entries: TranscriptEntry[]): TranscriptEntry[] {
+export function cloneTranscriptEntries(entries: readonly TranscriptEntry[]): TranscriptEntry[] {
   return entries.map((entry) => ({ ...entry }))
 }

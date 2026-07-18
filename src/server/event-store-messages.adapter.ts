@@ -21,11 +21,53 @@ import {
   getMessagesPageFromEntries,
 } from "./event-store-helpers"
 
-// ─── Mutable ref for the transcript cache ────────────────────────────────
+// ─── Transcript LRU cache ──────────────────────────────────────────────────
 
-/** Wraps the mutable `cachedTranscript` field so extracted functions can read and replace it. */
-export interface CachedTranscriptRef {
-  value: { chatId: string; entries: TranscriptEntry[] } | null
+/**
+ * Small LRU of fully loaded transcripts (Map insertion order = recency).
+ * Replaces the former single-chat `cachedTranscriptRef` so switching between
+ * a handful of chats does not re-read MB-scale JSONL files from disk.
+ */
+export class TranscriptCache {
+  private readonly byChat = new Map<string, TranscriptEntry[]>()
+
+  constructor(private readonly maxChats: number = 4) {}
+
+  /** Returns the cached entries (touching LRU recency), or undefined. */
+  get(chatId: string): TranscriptEntry[] | undefined {
+    const entries = this.byChat.get(chatId)
+    if (!entries) return undefined
+    this.byChat.delete(chatId)
+    this.byChat.set(chatId, entries)
+    return entries
+  }
+
+  set(chatId: string, entries: TranscriptEntry[]): void {
+    this.byChat.delete(chatId)
+    this.byChat.set(chatId, entries)
+    while (this.byChat.size > this.maxChats) {
+      const oldest = this.byChat.keys().next().value
+      if (oldest === undefined) break
+      this.byChat.delete(oldest)
+    }
+  }
+
+  /** Appends to a cached transcript; no-op when the chat is not cached. */
+  appendTo(chatId: string, entry: TranscriptEntry): void {
+    this.byChat.get(chatId)?.push(entry)
+  }
+
+  has(chatId: string): boolean {
+    return this.byChat.has(chatId)
+  }
+
+  invalidate(chatId: string): void {
+    this.byChat.delete(chatId)
+  }
+
+  invalidateAll(): void {
+    this.byChat.clear()
+  }
 }
 
 // ─── Deps interface ────────────────────────────────────────────────────────
@@ -33,7 +75,7 @@ export interface CachedTranscriptRef {
 export interface MessageReadDeps {
   readonly storage: StorageBackend
   readonly transcriptsDir: string
-  readonly cachedTranscriptRef: CachedTranscriptRef
+  readonly transcriptCache: TranscriptCache
   readonly legacyMessagesByChatId: Map<string, TranscriptEntry[]>
   readonly seenMessageIdsByChatId: Map<string, Set<string>>
   readonly queuedMessagesByChatId: StoreState["queuedMessagesByChatId"]
@@ -91,23 +133,32 @@ export function loadTranscriptFromDisk(
 }
 
 /**
+ * Returns the cached transcript WITHOUT cloning (loads it on miss).
+ * Do-not-mutate contract: callers must treat the array and its entries as
+ * read-only; anything returned to mutation-prone callers must be cloned.
+ */
+export function getMessagesView(deps: MessageReadDeps, chatId: string): readonly TranscriptEntry[] {
+  const cached = deps.transcriptCache.get(chatId)
+  if (cached) return cached
+
+  const legacyEntries = deps.legacyMessagesByChatId.get(chatId)
+  if (legacyEntries) {
+    const copy = cloneTranscriptEntries(legacyEntries)
+    deps.transcriptCache.set(chatId, copy)
+    return copy
+  }
+
+  const entries = loadTranscriptFromDisk(deps, chatId)
+  deps.transcriptCache.set(chatId, entries)
+  return entries
+}
+
+/**
  * Returns cloned transcript entries for `chatId`, using the in-memory cache
  * or loading from disk as needed.
  */
 export function getMessages(deps: MessageReadDeps, chatId: string): TranscriptEntry[] {
-  if (deps.cachedTranscriptRef.value?.chatId === chatId) {
-    return cloneTranscriptEntries(deps.cachedTranscriptRef.value.entries)
-  }
-
-  const legacyEntries = deps.legacyMessagesByChatId.get(chatId)
-  if (legacyEntries) {
-    deps.cachedTranscriptRef.value = { chatId, entries: cloneTranscriptEntries(legacyEntries) }
-    return cloneTranscriptEntries(deps.cachedTranscriptRef.value.entries)
-  }
-
-  const entries = loadTranscriptFromDisk(deps, chatId)
-  deps.cachedTranscriptRef.value = { chatId, entries }
-  return cloneTranscriptEntries(entries)
+  return cloneTranscriptEntries(getMessagesView(deps, chatId))
 }
 
 /** Returns queued messages for a chat, with attachment arrays cloned. */
@@ -141,11 +192,11 @@ export function getRecentMessagesPage(
     return { messages: [], hasOlder: false, olderCursor: null }
   }
 
-  const entries = coalesceContextWindowUpdates(getMessages(deps, chatId))
+  const entries = coalesceContextWindowUpdates(getMessagesView(deps, chatId))
   const page = getMessagesPageFromEntries(entries, limit)
 
   return {
-    messages: page.entries,
+    messages: cloneTranscriptEntries(page.entries),
     hasOlder: page.hasOlder,
     olderCursor: page.olderCursor,
   }
@@ -165,11 +216,11 @@ export function getMessagesPageBefore(
   // Coalesce identically to getRecentMessagesPage so cursors (which index the
   // coalesced array) stay consistent across recent + load-older paging.
   const beforeIndex = decodeCursor(beforeCursor)
-  const entries = coalesceContextWindowUpdates(getMessages(deps, chatId))
+  const entries = coalesceContextWindowUpdates(getMessagesView(deps, chatId))
   const page = getMessagesPageFromEntries(entries, limit, beforeIndex)
 
   return {
-    messages: page.entries,
+    messages: cloneTranscriptEntries(page.entries),
     hasOlder: page.hasOlder,
     olderCursor: page.olderCursor,
   }

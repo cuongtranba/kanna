@@ -83,7 +83,7 @@ export class EventStore implements PushEventStore {
   private legacySidebarProjectOrder: string[] = []
   private readonly sidebarProjectOrderRef: { value: string[] } = { value: [] }
   private snapshotHasLegacyMessages = false
-  private readonly cachedTranscriptRef: MessageRead.CachedTranscriptRef = { value: null }
+  private readonly transcriptCache = new MessageRead.TranscriptCache()
   /** In-memory delta ring backing the `chat.ops` broadcast path. */
   readonly chatOps = new ChatOpLog()
   private readonly tunnelEventsByChatId = new Map<string, CloudflareTunnelEvent[]>()
@@ -166,7 +166,7 @@ export class EventStore implements PushEventStore {
       state: this.state,
       legacyMessagesByChatId: this.legacyMessagesByChatId,
       tunnelEventsByChatId: this.tunnelEventsByChatId,
-      cachedTranscriptRef: this.cachedTranscriptRef,
+      transcriptCache: this.transcriptCache,
       sidebarProjectOrderRef: this.sidebarProjectOrderRef,
       getLegacySidebarProjectOrder: () => this.legacySidebarProjectOrder,
       setLegacySidebarProjectOrder: (v) => { this.legacySidebarProjectOrder = v },
@@ -183,7 +183,7 @@ export class EventStore implements PushEventStore {
     return {
       storage: this.storage,
       transcriptsDir: this.transcriptsDir,
-      cachedTranscriptRef: this.cachedTranscriptRef,
+      transcriptCache: this.transcriptCache,
       legacyMessagesByChatId: this.legacyMessagesByChatId,
       seenMessageIdsByChatId: this.seenMessageIdsByChatId,
       queuedMessagesByChatId: this.state.queuedMessagesByChatId,
@@ -240,7 +240,7 @@ export class EventStore implements PushEventStore {
       storage: this.storage,
       transcriptsDir: this.transcriptsDir,
       dataDir: this.dataDir,
-      cachedTranscriptRef: this.cachedTranscriptRef,
+      transcriptCache: this.transcriptCache,
       seenMessageIdsByChatId: this.seenMessageIdsByChatId,
       chatsById: this.state.chatsById,
       toolRequestsById: this.state.toolRequestsById,
@@ -250,6 +250,7 @@ export class EventStore implements PushEventStore {
       setWriteChain: (p) => { this.writeChain = p },
       append: (filePath, event) => this.append(filePath, event),
       getMessages: (chatId) => this.getMessages(chatId),
+      ensureTranscriptLoaded: (chatId) => { MessageRead.getMessagesView(this.buildMessageReadDeps(), chatId) },
       getSeenMessageIds: (chatId) => this.getSeenMessageIds(chatId),
       listPendingToolRequests: (chatId) => this.listPendingToolRequests(chatId),
       recordChatOp: (chatId, op) => { this.chatOps.record(chatId, op) },

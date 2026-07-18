@@ -27,7 +27,7 @@ import {
 } from "./event-store-write-ops"
 import { deleteToolRequestsForChat } from "./event-store-tool-requests"
 import { applyChatMessageMetadata } from "./event-store-chat-lifecycle"
-import type { CachedTranscriptRef } from "./event-store-messages.adapter"
+import type { TranscriptCache } from "./event-store-messages.adapter"
 import type { ChatOp } from "../shared/chat-ops"
 
 const STALE_EMPTY_CHAT_MAX_AGE_MS = 30 * 60 * 1000
@@ -38,7 +38,7 @@ export interface ChatTranscriptWriteDeps {
   readonly storage: StorageBackend
   readonly transcriptsDir: string
   readonly dataDir: string
-  readonly cachedTranscriptRef: CachedTranscriptRef
+  readonly transcriptCache: TranscriptCache
   readonly seenMessageIdsByChatId: Map<string, Set<string>>
   readonly chatsById: Map<string, ChatRecord>
   readonly toolRequestsById: Map<string, ToolRequest>
@@ -52,6 +52,8 @@ export interface ChatTranscriptWriteDeps {
   append: <T extends StoreEvent>(filePath: string, event: T) => Promise<void>
   /** Returns transcript entries for a chat (from cache or disk). */
   getMessages: (chatId: string) => TranscriptEntry[]
+  /** Loads the transcript into cache (populating seen messageIds) without cloning. */
+  ensureTranscriptLoaded: (chatId: string) => void
   /** Returns (or lazily creates) the seen-messageId dedup set for a chat. */
   getSeenMessageIds: (chatId: string) => Set<string>
   /** Returns pending tool requests for a chat. */
@@ -147,8 +149,8 @@ export async function forkChat(
         chat.hasMessages = true
         chat.updatedAt = Math.max(chat.updatedAt, createdAt)
       }
-      if (deps.cachedTranscriptRef.value?.chatId === chatId) {
-        deps.cachedTranscriptRef.value = { chatId, entries: cloneTranscriptEntries(sourceEntries) }
+      if (deps.transcriptCache.has(chatId)) {
+        deps.transcriptCache.set(chatId, cloneTranscriptEntries(sourceEntries))
       }
     })
     deps.setWriteChain(newChain)
@@ -230,9 +232,7 @@ export async function pruneStaleEmptyChats(
 
     const tPath = transcriptPath(deps, chat.id)
     await deps.storage.remove(tPath)
-    if (deps.cachedTranscriptRef.value?.chatId === chat.id) {
-      deps.cachedTranscriptRef.value = null
-    }
+    deps.transcriptCache.invalidate(chat.id)
     deps.clearChatOps(chat.id)
     await removeSubagentResultsDir(deps, chat.projectId, chat.id)
 
@@ -257,7 +257,7 @@ export async function appendMessage(
     const queueDelayMs = Number((startedAt - queuedAt).toFixed(1))
     const mid = entry.messageId
     if (typeof mid === "string" && mid.length > 0) {
-      deps.getMessages(chatId)
+      deps.ensureTranscriptLoaded(chatId)
       const seen = deps.getSeenMessageIds(chatId)
       if (seen.has(mid)) {
         logSendToStartingProfile("event_store.append_message_dedup", {
@@ -274,9 +274,7 @@ export async function appendMessage(
     await deps.storage.appendText(tPath, payload)
     const afterAppendAt = performance.now()
     applyChatMessageMetadata(deps.chatsById, chatId, entry)
-    if (deps.cachedTranscriptRef.value?.chatId === chatId) {
-      deps.cachedTranscriptRef.value.entries.push({ ...entry })
-    }
+    deps.transcriptCache.appendTo(chatId, { ...entry })
     deps.recordChatOp(chatId, { kind: "entries.append", entries: [{ ...entry }] })
     logSendToStartingProfile("event_store.append_message", {
       chatId,
