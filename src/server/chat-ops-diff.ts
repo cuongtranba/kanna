@@ -30,6 +30,24 @@ type MissingSectionKeys = Exclude<keyof ChatSections, SectionKey>
 const _exhaustive: MissingSectionKeys extends never ? true : never = true
 void _exhaustive
 
+// Explicit literal (no assertions): the type errors if a SectionKey is
+// missing or misspelled, keeping this in lockstep with SECTION_KEYS.
+function buildSectionSignatures(meta: ChatSnapshot): Record<SectionKey, string> {
+  return {
+    queuedMessages: JSON.stringify(meta.queuedMessages),
+    availableProviders: JSON.stringify(meta.availableProviders),
+    slashCommands: JSON.stringify(meta.slashCommands),
+    slashCommandsLoading: JSON.stringify(meta.slashCommandsLoading),
+    schedules: JSON.stringify(meta.schedules),
+    liveScheduleId: JSON.stringify(meta.liveScheduleId),
+    tunnels: JSON.stringify(meta.tunnels),
+    liveTunnelId: JSON.stringify(meta.liveTunnelId),
+    resolvedBindings: JSON.stringify(meta.resolvedBindings ?? null),
+    subagentRuns: JSON.stringify(meta.subagentRuns),
+    loopProgress: JSON.stringify(meta.loopProgress),
+  }
+}
+
 export interface ChatMetaSignatures {
   runtime: string
   pending: string
@@ -46,14 +64,10 @@ export function diffChatMeta(
   prev: ChatMetaSignatures | undefined,
   meta: ChatSnapshot,
 ): { ops: ChatOp[]; next: ChatMetaSignatures } {
-  const sections = {} as Record<SectionKey, string>
-  for (const key of SECTION_KEYS) {
-    sections[key] = JSON.stringify(meta[key] ?? null)
-  }
   const next: ChatMetaSignatures = {
     runtime: runtimeSignature(meta),
     pending: JSON.stringify(meta.messages),
-    sections,
+    sections: buildSectionSignatures(meta),
   }
 
   if (!prev) {
