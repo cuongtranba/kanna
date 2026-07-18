@@ -103,3 +103,15 @@ LRU (4 chats) replacing the former single-chat `cachedTranscriptRef`. Page
 reads (`getRecentMessagesPage` / `getMessagesPageBefore`) use the no-clone
 `getMessagesView` and clone only the returned window; the public
 `getMessages` keeps full-clone semantics.
+
+## Transcript tail-read (cold-open fast path)
+
+Cold `getRecentMessagesPage` (cache miss, non-legacy) serves the window via
+`readTranscriptTail` — backward byte-slice reads (`StorageBackend.sizeSync` /
+`readSliceSync`, both OPTIONAL; absent ⇒ full-parse fallback) growing until
+> limit lines or BOF. Older paging uses opaque `byte:<offset>` cursors
+(`idx:` cursors keep working on the warm/full path). Cross-page
+`context_window_updated` coalescing stays exact via a sentinel parse of the
+newer page's first line. When the tail reaches BOF the complete transcript
+is promoted into the cache WITH messageId dedup seeding — partial tails are
+never cached and never touch the dedup set (PTY resume safety).

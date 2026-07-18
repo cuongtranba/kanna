@@ -46,6 +46,18 @@ export class InMemoryStorageBackend implements StorageBackend {
     return content
   }
 
+  sizeSync(p: string): number {
+    const content = this.files.get(normalize(p))
+    if (content === undefined) return 0
+    return Buffer.byteLength(content, "utf8")
+  }
+
+  readSliceSync(p: string, start: number, endExclusive: number): Uint8Array {
+    const content = this.files.get(normalize(p))
+    if (content === undefined) return new Uint8Array(0)
+    return Uint8Array.prototype.slice.call(Buffer.from(content, "utf8"), start, endExclusive)
+  }
+
   async writeText(p: string, content: string): Promise<void> {
     const norm = normalize(p)
     this.files.set(norm, content)

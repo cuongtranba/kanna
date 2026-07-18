@@ -89,6 +89,183 @@ function transcriptPath(deps: MessageReadDeps, chatId: string): string {
   return path.join(deps.transcriptsDir, `${chatId}.jsonl`)
 }
 
+// ─── Tail-read fast path ───────────────────────────────────────────────────
+
+const TAIL_CHUNK_BYTES = 256 * 1024
+const NEWLINE = 0x0a
+const utf8Decoder = new TextDecoder()
+
+export interface TranscriptTailResult {
+  entries: TranscriptEntry[]
+  /** Absolute byte offset of each entry's raw JSONL line, parallel to `entries`. */
+  lineOffsets: number[]
+  /** True when the slice covered the start of the file (entries are complete up to the end offset). */
+  reachedStart: boolean
+}
+
+function parseJsonlSlice(
+  buf: Uint8Array,
+  sliceStart: number,
+  atStart: boolean,
+): { entries: TranscriptEntry[]; lineOffsets: number[] } {
+  const entries: TranscriptEntry[] = []
+  const lineOffsets: number[] = []
+  let lineStart = 0
+  let skippedPartialFirstLine = atStart
+  for (let i = 0; i <= buf.length; i += 1) {
+    const atEnd = i === buf.length
+    if (!atEnd && buf[i] !== NEWLINE) continue
+    if (!skippedPartialFirstLine) {
+      // The slice may begin mid-line; the first segment is untrustworthy.
+      skippedPartialFirstLine = true
+      lineStart = i + 1
+      continue
+    }
+    if (i > lineStart) {
+      const text = utf8Decoder.decode(buf.subarray(lineStart, i)).trim()
+      if (text) {
+        try {
+          const entry: TranscriptEntry = JSON.parse(text)
+          entries.push(entry)
+          lineOffsets.push(sliceStart + lineStart)
+        } catch {
+          // torn/partial final line — skip
+        }
+      }
+    }
+    lineStart = i + 1
+  }
+  return { entries, lineOffsets }
+}
+
+/**
+ * Reads only the tail of the transcript JSONL (growing backwards until more
+ * than `minEntries` lines or BOF). Returns null when the storage backend has
+ * no byte-slice APIs — callers must fall back to the full-parse path.
+ */
+export function readTranscriptTail(
+  deps: MessageReadDeps,
+  chatId: string,
+  minEntries: number,
+  endOffset?: number,
+  chunkBytes: number = TAIL_CHUNK_BYTES,
+): TranscriptTailResult | null {
+  const { storage } = deps
+  if (typeof storage.readSliceSync !== "function" || typeof storage.sizeSync !== "function") {
+    return null
+  }
+  const tPath = transcriptPath(deps, chatId)
+  if (!storage.existsSync(tPath)) {
+    return { entries: [], lineOffsets: [], reachedStart: true }
+  }
+  const fileSize = storage.sizeSync(tPath)
+  const end = Math.min(endOffset ?? fileSize, fileSize)
+  if (end <= 0) {
+    return { entries: [], lineOffsets: [], reachedStart: true }
+  }
+  let chunk = Math.max(chunkBytes, 64)
+  for (;;) {
+    const start = Math.max(0, end - chunk)
+    const buf = storage.readSliceSync(tPath, start, end)
+    const parsed = parseJsonlSlice(buf, start, start === 0)
+    if (start === 0 || parsed.entries.length > minEntries) {
+      return { ...parsed, reachedStart: start === 0 }
+    }
+    chunk *= 2
+  }
+}
+
+function decodeByteCursor(cursor: string): number | null {
+  if (!cursor.startsWith("byte:")) return null
+  const value = Number.parseInt(cursor.slice("byte:".length), 10)
+  if (!Number.isInteger(value) || value < 0) {
+    throw new Error("Invalid history cursor")
+  }
+  return value
+}
+
+/** Caches a COMPLETE transcript and seeds the messageId dedup set. */
+function seedFullTranscript(deps: MessageReadDeps, chatId: string, entries: TranscriptEntry[]): void {
+  const seen = getSeenMessageIds(deps, chatId)
+  for (const entry of entries) {
+    const mid = entry.messageId
+    if (typeof mid === "string" && mid.length > 0) {
+      seen.add(mid)
+    }
+  }
+  deps.transcriptCache.set(chatId, entries)
+}
+
+/**
+ * Parses the single JSONL line starting at `offset` (the first entry of the
+ * already-served newer page). Used as a coalesce sentinel so a cwu run that
+ * straddles the page boundary collapses exactly like the full-array path.
+ */
+function readEntryAtOffset(deps: MessageReadDeps, chatId: string, offset: number): TranscriptEntry | null {
+  const { storage } = deps
+  if (typeof storage.readSliceSync !== "function" || typeof storage.sizeSync !== "function") return null
+  const tPath = transcriptPath(deps, chatId)
+  const fileSize = storage.sizeSync(tPath)
+  const end = Math.min(offset + 1024 * 1024, fileSize)
+  const buf = storage.readSliceSync(tPath, offset, end)
+  const newlineIdx = buf.indexOf(NEWLINE)
+  if (newlineIdx < 0 && end < fileSize) return null
+  const lineEnd = newlineIdx < 0 ? buf.length : newlineIdx
+  try {
+    const entry: TranscriptEntry = JSON.parse(utf8Decoder.decode(buf.subarray(0, lineEnd)))
+    return entry
+  } catch {
+    return null
+  }
+}
+
+function pageFromTail(tail: TranscriptTailResult, limit: number, nextEntry?: TranscriptEntry | null): ChatHistoryPage {
+  // The sentinel participates in coalescing (so a trailing cwu run collapses
+  // against the newer page's leading cwu) and is then removed.
+  const coalesced = nextEntry
+    ? coalesceContextWindowUpdates([...tail.entries, nextEntry]).slice(0, -1)
+    : coalesceContextWindowUpdates(tail.entries)
+  const startIdx = Math.max(0, coalesced.length - limit)
+  const pageEntries = coalesced.slice(startIdx)
+  const hasOlder = !tail.reachedStart || startIdx > 0
+  let olderCursor: string | null = null
+  const first = pageEntries[0]
+  if (hasOlder && first) {
+    const rawIdx = tail.entries.indexOf(first)
+    const offset = tail.lineOffsets[rawIdx]
+    olderCursor = offset === undefined ? null : `byte:${offset}`
+  } else if (hasOlder && tail.lineOffsets.length > 0) {
+    // Page fully absorbed by coalescing (pure cwu run) — continue paging
+    // from the start of this slice so pagination cannot stall.
+    olderCursor = `byte:${tail.lineOffsets[0]}`
+  }
+  return {
+    messages: cloneTranscriptEntries(pageEntries),
+    hasOlder,
+    olderCursor,
+  }
+}
+
+/**
+ * Serves the most recent page via tail-read, avoiding a full-file parse on
+ * cold open. When the tail turns out to be the whole file, the transcript is
+ * promoted into the cache (with seen-messageId seeding). Returns null when
+ * the backend lacks slice APIs.
+ */
+export function getRecentMessagesPageTail(
+  deps: MessageReadDeps,
+  chatId: string,
+  limit: number,
+  chunkBytes?: number,
+): ChatHistoryPage | null {
+  const tail = readTranscriptTail(deps, chatId, limit, undefined, chunkBytes)
+  if (!tail) return null
+  if (tail.reachedStart) {
+    seedFullTranscript(deps, chatId, tail.entries)
+  }
+  return pageFromTail(tail, limit)
+}
+
 // ─── Exported functions ────────────────────────────────────────────────────
 
 /** Returns (or lazily creates) the seen-messageId dedup set for a chat. */
@@ -192,11 +369,16 @@ export function getRecentMessagesPage(
     return { messages: [], hasOlder: false, olderCursor: null }
   }
 
+  if (!deps.transcriptCache.has(chatId) && !deps.legacyMessagesByChatId.has(chatId)) {
+    const tailPage = getRecentMessagesPageTail(deps, chatId, limit)
+    if (tailPage) return tailPage
+  }
+
   const entries = coalesceContextWindowUpdates(getMessagesView(deps, chatId))
   const page = getMessagesPageFromEntries(entries, limit)
 
   return {
-    messages: cloneTranscriptEntries(page.entries),
+    messages: page.entries,
     hasOlder: page.hasOlder,
     olderCursor: page.olderCursor,
   }
@@ -213,6 +395,15 @@ export function getMessagesPageBefore(
     return { messages: [], hasOlder: false, olderCursor: null }
   }
 
+  // Byte cursors are only ever issued by the tail-read path, whose storage
+  // has slice APIs — so readTranscriptTail cannot return null here.
+  const byteOffset = decodeByteCursor(beforeCursor)
+  if (byteOffset !== null) {
+    const tail = readTranscriptTail(deps, chatId, limit, byteOffset)
+    if (!tail) throw new Error("Invalid history cursor")
+    return pageFromTail(tail, limit, readEntryAtOffset(deps, chatId, byteOffset))
+  }
+
   // Coalesce identically to getRecentMessagesPage so cursors (which index the
   // coalesced array) stay consistent across recent + load-older paging.
   const beforeIndex = decodeCursor(beforeCursor)
@@ -220,7 +411,7 @@ export function getMessagesPageBefore(
   const page = getMessagesPageFromEntries(entries, limit, beforeIndex)
 
   return {
-    messages: cloneTranscriptEntries(page.entries),
+    messages: page.entries,
     hasOlder: page.hasOlder,
     olderCursor: page.olderCursor,
   }

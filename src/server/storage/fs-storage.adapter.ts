@@ -1,5 +1,5 @@
 import { appendFile, mkdir, rename, rm } from "node:fs/promises"
-import { existsSync, readFileSync } from "node:fs"
+import { closeSync, existsSync, openSync, readFileSync, readSync, statSync } from "node:fs"
 import type { StorageBackend } from "./backend"
 
 export class FsStorageBackend implements StorageBackend {
@@ -25,6 +25,26 @@ export class FsStorageBackend implements StorageBackend {
 
   readTextSync(path: string): string {
     return readFileSync(path, "utf8")
+  }
+
+  sizeSync(path: string): number {
+    try {
+      return statSync(path).size
+    } catch {
+      return 0
+    }
+  }
+
+  readSliceSync(path: string, start: number, endExclusive: number): Uint8Array {
+    const length = Math.max(0, endExclusive - start)
+    const buffer = Buffer.alloc(length)
+    const fd = openSync(path, "r")
+    try {
+      const bytesRead = readSync(fd, buffer, 0, length, start)
+      return buffer.subarray(0, bytesRead)
+    } finally {
+      closeSync(fd)
+    }
   }
 
   async writeText(path: string, content: string): Promise<void> {

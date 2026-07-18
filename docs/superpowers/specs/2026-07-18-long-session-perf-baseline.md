@@ -62,16 +62,16 @@ Machine: WSL2 Linux dev box, Bun.
 |----|--------|--------|---------|
 | KR1 stream bytes/tick | ≥90%↓ | 184,227 B → 557 B (**99.7%↓**) | **MET** |
 | KR2 tick CPU | ≥80%↓ | 0.78 ms → 0.007 ms (**99.1%↓**) | **MET** |
-| KR3 cold open | ≥50%↓ | 11 → 6.3 ms (43%↓ @3k); 19.8 → 18.8 ms (5%↓ @10k) | **MISSED — pointless flag raised** |
+| KR3 cold open | ≥50%↓ | with tail-read: 11 → 2.6 ms (**76%↓** @3k); 19.8 → 2.8 ms (**86%↓** @10k) | **MET** (after funded tail-read follow-up) |
 | KR4 re-render scope | affected row only | live chat already virtualized (LegendList, 13 DOM rows @2.5k entries, browser-verified); ops path keeps untouched-entry refs stable; share page gains content-visibility | **MET** (live path) |
 
-KR3 analysis: first-open cost is dominated by the full JSONL read+parse
-(LRU removes it only for RE-opens — second open performs zero disk reads;
-window-clone removed the per-derive full-array clone, visible in
-tickDeriveMs 0.36 → 0.09 ms). Hitting ≥50% on FIRST open requires the
-deferred JSONL tail-read with byte-offset cursors (spec §4). Per the loop
-discipline the evidence funds that follow-up; it is NOT silently included
-here — human decides.
+KR3 history: after the LRU + window-clone change alone, first-open only
+improved 5–43% (full JSONL read+parse dominated) — the `pointless` flag was
+raised and the human funded the deferred tail-read in the same branch.
+Tail-read (byte-slice storage APIs + `readTranscriptTail` + `byte:` cursors,
+falling back to full parse whenever slice APIs are absent) landed KR3 at
+76–86% reduction. Cross-page `context_window_updated` coalescing is kept
+exact via a sentinel read of the newer page's first line.
 
 Reading (baseline):
 - **KR1 basis:** every broadcast tick re-sends ~184 KB per subscriber (the

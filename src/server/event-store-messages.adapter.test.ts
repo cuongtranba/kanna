@@ -6,6 +6,8 @@ import type { ChatRecord } from "./events"
 import {
   TranscriptCache,
   getChatCount,
+  getRecentMessagesPageTail,
+  readTranscriptTail,
   getMessages,
   getMessagesPageBefore,
   getQueuedMessage,
@@ -435,5 +437,96 @@ describe("TranscriptCache", () => {
 
     cache.appendTo("chat-z", makeTranscriptEntry("chat-z"))
     expect(cache.has("chat-z")).toBe(false)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Tail-read fast path (byte-offset cursors)
+// ---------------------------------------------------------------------------
+
+describe("transcript tail-read", () => {
+  function makeSliceStorage(content: string): StorageBackend {
+    const buf = Buffer.from(content, "utf8")
+    const base = makeStorage(new Map([["/data/transcripts/chat-t.jsonl", content]]))
+    return {
+      ...base,
+      sizeSync: () => buf.length,
+      readSliceSync: (_p, start, end) => Uint8Array.prototype.slice.call(buf, start, end),
+    }
+  }
+
+  function entryLine(i: number, text?: string): string {
+    return JSON.stringify({ _id: `e-${i}`, createdAt: i, kind: "assistant_text", text: text ?? `msg ${i} ${"x".repeat(40)}` })
+  }
+
+  function fileOf(count: number): string {
+    return `${Array.from({ length: count }, (_v, i) => entryLine(i)).join("\n")  }\n`
+  }
+
+  test("readTranscriptTail with small chunk grows until minEntries+1 without reading whole file", () => {
+    const content = fileOf(50)
+    const deps = makeDeps({ storage: makeSliceStorage(content) })
+    const tail = readTranscriptTail(deps, "chat-t", 5, undefined, 128)
+    expect(tail).not.toBeNull()
+    expect(tail!.reachedStart).toBe(false)
+    expect(tail!.entries.length).toBeGreaterThan(5)
+    const first = tail!.entries[0]!
+    // firstLineByteOffset points at the raw line of the first parsed entry
+    const at = Buffer.from(content, "utf8").subarray(tail!.lineOffsets[0]!).toString("utf8")
+    expect(at.startsWith(JSON.stringify({ _id: first._id, createdAt: first.createdAt, kind: "assistant_text", text: (first as { text: string }).text }).slice(0, 20))).toBe(true)
+  })
+
+  test("cold getRecentMessagesPage on a small file equals warm page and fills the cache", () => {
+    const content = fileOf(10)
+    const cache = new TranscriptCache(4)
+    const deps = makeDeps({ storage: makeSliceStorage(content), transcriptCache: cache })
+    const coldPage = getRecentMessagesPage(deps, "chat-t", 4)
+    expect(cache.has("chat-t")).toBe(true)
+    const warmPage = getRecentMessagesPage(deps, "chat-t", 4)
+    expect(coldPage.messages.map((m) => m._id)).toEqual(warmPage.messages.map((m) => m._id))
+    expect(coldPage.hasOlder).toBe(true)
+  })
+
+  test("byte-cursor paging walks the whole transcript without a full load", () => {
+    const content = fileOf(23)
+    const cache = new TranscriptCache(4)
+    const deps = makeDeps({ storage: makeSliceStorage(content), transcriptCache: cache })
+
+    const pages: string[][] = []
+    const page = getRecentMessagesPageTail(deps, "chat-t", 5, 64)
+    expect(page).not.toBeNull()
+    pages.unshift(page!.messages.map((m) => m._id))
+    let cursor = page!.olderCursor
+    let guard = 0
+    while (cursor !== null && guard++ < 20) {
+      const older = getMessagesPageBefore(deps, "chat-t", cursor, 5)
+      pages.unshift(older.messages.map((m) => m._id))
+      cursor = older.olderCursor
+    }
+    const all = pages.flat()
+    expect(all).toEqual(Array.from({ length: 23 }, (_v, i) => `e-${i}`))
+    expect(cache.has("chat-t")).toBe(false)
+  })
+
+  test("multibyte content across chunk boundaries parses correctly", () => {
+    const lines = Array.from({ length: 30 }, (_v, i) => entryLine(i, `emoji 🌸🌸🌸 ${i} ${"火水木金土".repeat(6)}`))
+    const content = `${lines.join("\n")  }\n`
+    const deps = makeDeps({ storage: makeSliceStorage(content) })
+    const tail = readTranscriptTail(deps, "chat-t", 8, undefined, 100)
+    expect(tail).not.toBeNull()
+    for (const entry of tail!.entries) {
+      if (entry.kind !== "assistant_text") throw new Error("expected assistant_text")
+      expect(entry.text).toContain("🌸🌸🌸")
+    }
+  })
+
+  test("falls back to full load when storage lacks slice APIs", () => {
+    const content = fileOf(6)
+    const files = new Map([["/data/transcripts/chat-t.jsonl", content]])
+    const cache = new TranscriptCache(4)
+    const deps = makeDeps({ storage: makeStorage(files), transcriptCache: cache })
+    const page = getRecentMessagesPage(deps, "chat-t", 3)
+    expect(page.messages.map((m) => m._id)).toEqual(["e-3", "e-4", "e-5"])
+    expect(cache.has("chat-t")).toBe(true)
   })
 })
