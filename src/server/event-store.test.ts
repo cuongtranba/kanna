@@ -853,6 +853,41 @@ describe("EventStore subagent runs", () => {
     expect(runs[runId].finalText).toBe("hello world")
   })
 
+  test("subagent runs are tracked for chats restored from snapshot.json", async () => {
+    const dataDir = await createTempDataDir()
+    const store = new EventStore(dataDir)
+    await store.initialize()
+    const project = await store.openProject("/tmp/p-sa-snap")
+    const chat = await store.createChat(project.id)
+
+    // Fold chat_created into snapshot.json and truncate the event logs —
+    // the same state a server reboot leaves behind for pre-existing chats.
+    await store.snapshotAndTruncateLogs()
+
+    const rebooted = new EventStore(dataDir)
+    await rebooted.initialize()
+
+    const runId = "r-after-reboot"
+    await rebooted.appendSubagentEvent({
+      v: 3,
+      type: "subagent_run_started",
+      timestamp: chat.createdAt + 1,
+      chatId: chat.id,
+      runId,
+      subagentId: "s1",
+      subagentName: "alpha",
+      provider: "claude",
+      model: "claude-opus-4-7",
+      parentUserMessageId: "u1",
+      parentRunId: null,
+      depth: 0,
+    })
+
+    const runs = rebooted.getSubagentRuns(chat.id)
+    expect(runs[runId]).toBeDefined()
+    expect(runs[runId].status).toBe("running")
+  })
+
   test("subagent_message_delta accumulates into finalText; run_completed sets canonical", async () => {
     const dataDir = await createTempDataDir()
     const store = new EventStore(dataDir)

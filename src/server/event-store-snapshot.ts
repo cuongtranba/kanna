@@ -133,6 +133,12 @@ export async function loadSnapshotIntoState(
         sessionTokensByProvider,
         pendingForkSessionToken,
       })
+      // Mirror the chat_created handler: every live chat needs a subagent-run
+      // map, or subagent_run_started events after a reboot are silently
+      // dropped from the read model (the runs never reach the UI).
+      if (!chat.deletedAt) {
+        state.subagentRunsByChatId.set(chat.id, new Map())
+      }
     }
 
     const legacySidebarProjectOrder = normalizeSidebarProjectOrder(
