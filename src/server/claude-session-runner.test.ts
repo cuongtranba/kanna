@@ -6,17 +6,9 @@
  * produced by the function.
  */
 
-// Mock log to suppress noise in test output
-import { mock } from "bun:test"
-
-mock.module("../shared/log", () => ({
-  log: {
-    info: () => {},
-    warn: () => {},
-    debug: () => {},
-    error: () => {},
-  },
-}))
+// NOTE: do NOT mock.module("../shared/log") here — Bun's mock.module mutates
+// the global registry for the whole test run, turning shared/log into noops
+// for every later test file (analytics.test.ts asserts real log output).
 
 import { describe, test, expect } from "bun:test"
 import { runClaudeSession } from "./claude-session-runner"

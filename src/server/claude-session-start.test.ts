@@ -39,10 +39,9 @@ mock.module("./kanna-mcp", () => ({
   createKannaMcpServer: () => ({ transport: "stdio", command: "echo", args: [] }),
 }))
 
-// Mock claude-prompt-helpers (alphabetically before this file — no cross-file registry leak)
-mock.module("./claude-prompt-helpers", () => ({
-  toSdkEffort: (e: unknown) => e ?? undefined,
-}))
+// NOTE: We do NOT mock.module("./claude-prompt-helpers") — toSdkEffort is pure
+// and safe to use for real; the identity mock leaked into
+// claude-prompt-helpers.test.ts under CI's file ordering.
 
 // NOTE: We do NOT mock.module these siblings — that would pollute the global
 // module registry and break their own test files that run later:
