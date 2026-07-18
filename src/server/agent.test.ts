@@ -23,6 +23,7 @@ import type { ChatPermissionPolicy } from "../shared/permission-policy"
 import { POLICY_DEFAULT } from "../shared/permission-policy"
 import type { HarnessTurn } from "./harness-types"
 import type { ChatAttachment, McpServerConfig, SlashCommand, TranscriptEntry } from "../shared/types"
+import { AUTO_CONTINUE_EVENT_VERSION } from "./auto-continue/events"
 import type { AutoContinueEvent } from "./auto-continue/events"
 import type { WorkflowRegistry } from "./workflow-registry"
 import { AsyncEventQueue } from "./test-helpers/async-event-queue"
@@ -1213,13 +1214,19 @@ describe("AgentCoordinator codex integration", () => {
       content: "run something with a background task",
     })
 
-    // Wait for the result message to be persisted
-    await waitFor(() => store.messages.some((entry) => entry.kind === "result"))
+    // Wait for the active turn to be removed — this happens synchronously
+    // right after recordTurnFinished resolves, which is itself after
+    // appendMessage(result). Using this as the waitFor condition avoids a
+    // microtask-gap race: waiting for messages.some("result") fires one await
+    // before activeTurns.delete, so the assertion would see the turn still set.
+    await waitFor(() => !coordinator.getActiveStatuses().has("chat-1"))
 
     // The active turn should be removed even though the stream is still open.
     // This is the key assertion: the UI should show idle (not "Running...")
     // so the user can send new messages without hitting stop.
     expect(coordinator.getActiveStatuses().has("chat-1")).toBe(false)
+    // Result must have been appended (that's what triggers the removal).
+    expect(store.messages.some((entry) => entry.kind === "result")).toBe(true)
     expect(store.turnFinishedCount).toBe(1)
 
     // The stream is still open, so it should be draining
@@ -4369,12 +4376,21 @@ describe("AgentCoordinator.deliverSubagentToMain (notification-driven /clear)", 
 
   test("armed loop: notification omits <result> (PROGRESS.md is the contract) and the full loop prompt follows", async () => {
     const store = createFakeStore()
+    // Pre-arm the loop via store events so isLoopArmed() returns the armed state.
+    store.autoContinueEvents.push({
+      v: AUTO_CONTINUE_EVENT_VERSION,
+      timestamp: 0,
+      chatId: "chat-1",
+      scheduleId: "loop-schedule-1",
+      kind: "loop_armed",
+      subagentId: "sa-loop",
+      prompt: "LOOP DISCIPLINE PROMPT",
+    })
     const coordinator = new AgentCoordinator({
       store: store as never,
       onStateChange: () => {},
       startClaudeSession: async () => { throw new Error("not needed") },
     })
-    coordinator.isLoopArmed = () => ({ subagentId: "sa-loop", prompt: "LOOP DISCIPLINE PROMPT", armedAt: 0 })
 
     await (coordinator as unknown as { deliverSubagentToMain: DeliverFn }).deliverSubagentToMain(
       "chat-1",
@@ -4382,9 +4398,9 @@ describe("AgentCoordinator.deliverSubagentToMain (notification-driven /clear)", 
       { status: "completed", runId: "run-loop", text: "iteration output that must not leak" },
     )
 
-    const events = store.getAutoContinueEvents("chat-1")
-    expect(events).toHaveLength(1)
-    const ev = events[0]
+    const acEvents = store.getAutoContinueEvents("chat-1").filter((e) => e.kind === "auto_continue_accepted")
+    expect(acEvents).toHaveLength(1)
+    const ev = acEvents[0]
     expect(ev.kind).toBe("auto_continue_accepted")
     if (ev.kind === "auto_continue_accepted") {
       expect(ev.prompt).toContain("<task-notification>")

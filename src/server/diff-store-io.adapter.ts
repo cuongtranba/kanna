@@ -70,3 +70,30 @@ export async function spawnCommandCapture(args: string[]): Promise<SpawnResult> 
 export function getBunEnv(): Record<string, string | undefined> {
   return Bun.env
 }
+
+export const NON_INTERACTIVE_GIT_ENV = {
+  GIT_TERMINAL_PROMPT: "0",
+  GIT_ASKPASS: "echo",
+  SSH_ASKPASS: "echo",
+  GCM_INTERACTIVE: "Never",
+} as const
+
+export function runGit(args: string[], cwd: string) {
+  return spawnGitCapture(args, cwd, { ...getBunEnv(), ...NON_INTERACTIVE_GIT_ENV })
+}
+
+export function runCommand(args: string[]) {
+  return spawnCommandCapture(args)
+}
+
+export function formatGitFailure(result: SpawnResult) {
+  return [result.stderr.trim(), result.stdout.trim()].filter(Boolean).join("\n")
+}
+
+export function summarizeGitFailure(detail: string, fallback: string) {
+  return detail
+    .split(/\r?\n/u)
+    .map((line) => line.trim())
+    .find((line) => line.length > 0)
+    ?? fallback
+}
