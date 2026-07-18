@@ -36,6 +36,7 @@ import {
 } from "./event-store-tool-requests"
 import * as OrchSubscription from "./event-store-orch-subscription"
 import { applyStoreEvent } from "./event-store-apply"
+import { ChatOpLog } from "./chat-op-log"
 import * as PeripheralEvents from "./event-store-peripheral-events.adapter"
 import * as MessageRead from "./event-store-messages.adapter"
 import * as EntityWrite from "./event-store-entity-write"
@@ -83,6 +84,8 @@ export class EventStore implements PushEventStore {
   private readonly sidebarProjectOrderRef: { value: string[] } = { value: [] }
   private snapshotHasLegacyMessages = false
   private readonly cachedTranscriptRef: MessageRead.CachedTranscriptRef = { value: null }
+  /** In-memory delta ring backing the `chat.ops` broadcast path. */
+  readonly chatOps = new ChatOpLog()
   private readonly tunnelEventsByChatId = new Map<string, CloudflareTunnelEvent[]>()
   private shareEventsAll: ShareEvent[] = []
   private replayChatProvider = new Map<string, AgentProvider | null>()
@@ -249,6 +252,8 @@ export class EventStore implements PushEventStore {
       getMessages: (chatId) => this.getMessages(chatId),
       getSeenMessageIds: (chatId) => this.getSeenMessageIds(chatId),
       listPendingToolRequests: (chatId) => this.listPendingToolRequests(chatId),
+      recordChatOp: (chatId, op) => { this.chatOps.record(chatId, op) },
+      clearChatOps: (chatId) => { this.chatOps.clear(chatId) },
     }
   }
 

@@ -28,6 +28,7 @@ import {
 import { deleteToolRequestsForChat } from "./event-store-tool-requests"
 import { applyChatMessageMetadata } from "./event-store-chat-lifecycle"
 import type { CachedTranscriptRef } from "./event-store-messages.adapter"
+import type { ChatOp } from "../shared/chat-ops"
 
 const STALE_EMPTY_CHAT_MAX_AGE_MS = 30 * 60 * 1000
 
@@ -55,6 +56,10 @@ export interface ChatTranscriptWriteDeps {
   getSeenMessageIds: (chatId: string) => Set<string>
   /** Returns pending tool requests for a chat. */
   listPendingToolRequests: (chatId: string) => ToolRequest[]
+  /** Records a delta op for the `chat.ops` broadcast path. */
+  recordChatOp: (chatId: string, op: ChatOp) => void
+  /** Drops the chat's op-log (chat deleted/pruned). */
+  clearChatOps: (chatId: string) => void
 }
 
 // ─── Private helpers ───────────────────────────────────────────────────────
@@ -168,6 +173,7 @@ export async function deleteChat(
   }
   await deps.append(deps.chatsLogPath, event)
   deleteToolRequestsForChat(deps.toolRequestsById, chatId)
+  deps.clearChatOps(chatId)
   await removeSubagentResultsDir(deps, projectId, chatId)
 }
 
@@ -227,6 +233,7 @@ export async function pruneStaleEmptyChats(
     if (deps.cachedTranscriptRef.value?.chatId === chat.id) {
       deps.cachedTranscriptRef.value = null
     }
+    deps.clearChatOps(chat.id)
     await removeSubagentResultsDir(deps, chat.projectId, chat.id)
 
     prunedChatIds.push(chat.id)
@@ -270,6 +277,7 @@ export async function appendMessage(
     if (deps.cachedTranscriptRef.value?.chatId === chatId) {
       deps.cachedTranscriptRef.value.entries.push({ ...entry })
     }
+    deps.recordChatOp(chatId, { kind: "entries.append", entries: [{ ...entry }] })
     logSendToStartingProfile("event_store.append_message", {
       chatId,
       entryId: entry._id,

@@ -1960,3 +1960,43 @@ describe("EventStore deleteChat prunes toolRequestsById", () => {
     expect(reloaded.getChat(chat.id)?.compactFailureCount).toBe(0)
   })
 })
+
+describe("chat op-log integration", () => {
+  test("appendMessage records entries.append ops; messageId dedupe records nothing", async () => {
+    const dataDir = await createTempDataDir()
+    const store = new EventStore(dataDir)
+    await store.initialize()
+    const project = await store.openProject("/tmp/project-ops")
+    const chat = await store.createChat(project.id)
+
+    await store.appendMessage(chat.id, entry("user_prompt", 1, { content: "hi" }))
+    await store.appendMessage(chat.id, entry("assistant_text", 2, { text: "yo" }))
+    await store.flush()
+
+    expect(store.chatOps.currentSeq(chat.id)).toBe(2)
+    const batch = store.chatOps.since(chat.id, 0)
+    expect(batch).not.toBeNull()
+    expect(batch!.ops.map((op) => op.kind)).toEqual(["entries.append", "entries.append"])
+
+    const dup: TranscriptEntry = { _id: "m1", createdAt: 3, kind: "assistant_text", text: "x", messageId: "mid-1" }
+    await store.appendMessage(chat.id, dup)
+    await store.appendMessage(chat.id, { ...dup, _id: "m2" })
+    await store.flush()
+
+    expect(store.chatOps.currentSeq(chat.id)).toBe(3)
+  })
+
+  test("deleteChat clears the chat op-log", async () => {
+    const dataDir = await createTempDataDir()
+    const store = new EventStore(dataDir)
+    await store.initialize()
+    const project = await store.openProject("/tmp/project-ops-2")
+    const chat = await store.createChat(project.id)
+    await store.appendMessage(chat.id, entry("user_prompt", 1, { content: "hi" }))
+    await store.flush()
+    expect(store.chatOps.currentSeq(chat.id)).toBe(1)
+
+    await store.deleteChat(chat.id)
+    expect(store.chatOps.currentSeq(chat.id)).toBe(0)
+  })
+})
