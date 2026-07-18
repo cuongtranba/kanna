@@ -85,6 +85,26 @@ async function main() {
       bytes = payload.length
       void sig
     }
+    // Ops path (post-change): per tick, one entry lands in the op-log and the
+    // broadcast serializes just the delta envelope.
+    let opsMs = 0
+    let opsBytes = 0
+    let lastSeq = store2.chatOps.currentSeq(chat.id)
+    for (let t = 0; t < TICKS; t++) {
+      const o0 = performance.now()
+      store2.chatOps.record(chat.id, { kind: "entries.append", entries: [makeEntry(ENTRY_COUNT + t)] })
+      const batch = store2.chatOps.since(chat.id, lastSeq)
+      if (!batch) throw new Error("unexpected ring gap in bench")
+      const payload = JSON.stringify({
+        v: 1, type: "event", id: "sub-1",
+        event: { type: "chat.ops", chatId: chat.id, fromSeq: batch.fromSeq, toSeq: batch.toSeq, ops: batch.ops },
+      })
+      const o1 = performance.now()
+      lastSeq = batch.toSeq
+      opsMs += o1 - o0
+      opsBytes = payload.length
+    }
+
     console.log(JSON.stringify({
       entries: ENTRY_COUNT,
       coldOpenMs: Number(coldOpenMs.toFixed(1)),
@@ -92,6 +112,8 @@ async function main() {
       signatureMs: Number((sigMs / TICKS).toFixed(2)),
       tickStringifyMs: Number((strMs / TICKS).toFixed(2)),
       tickBytes: bytes,
+      opsTickMs: Number((opsMs / TICKS).toFixed(3)),
+      opsTickBytes: opsBytes,
     }, null, 2))
   } finally {
     rmSync(dir, { recursive: true, force: true })
