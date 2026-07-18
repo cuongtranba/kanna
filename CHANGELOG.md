@@ -8,6 +8,35 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.4.0](https://github.com/cuongtranba/kanna/compare/v1.3.1...v1.4.0) (2026-07-18)
+
+
+### Features
+
+* **client:** apply chat.ops deltas with gap-triggered resync ([7937e4a](https://github.com/cuongtranba/kanna/commit/7937e4a33e7d61f2bd42e0452fc8483ef008d32c))
+* **protocol:** chat.ops event + since on chat topic ([a807472](https://github.com/cuongtranba/kanna/commit/a80747251bc1160ae04f12321c0e439cbd593d03))
+* **server:** chat.ops delta broadcast with snapshot fallback ([32e7725](https://github.com/cuongtranba/kanna/commit/32e7725eee29ff0d1004e286cb63a573dc460ce1))
+* **server:** ChatOpLog ring buffer with per-chat seq ([950cd92](https://github.com/cuongtranba/kanna/commit/950cd9254f7e3ffbcbfa6886d02b11e47dbd7267))
+* **server:** pure chat meta diff -&gt; ops ([d08946c](https://github.com/cuongtranba/kanna/commit/d08946ce9a30e800c674ffdc8d896bcef4196279))
+* **server:** record entries.append ops in appendMessage; stamp seq on chat snapshots ([1682abd](https://github.com/cuongtranba/kanna/commit/1682abd786fd96cb1bd2f5bd9f2212db4e8f9229))
+* **shared:** chat op-log types + pure applyChatOps reducer ([7522aa6](https://github.com/cuongtranba/kanna/commit/7522aa66f45ae9026b18bfe4603e7466e2081ed2))
+
+
+### Bug Fixes
+
+* **server:** replace banned type assertion with typed literal in chat-ops-diff ([8c24b49](https://github.com/cuongtranba/kanna/commit/8c24b49bf272ebbd26ed46db04d14a6b39551ae8))
+
+
+### Performance Improvements
+
+* add long-session benchmark harness + baseline (DKR-1) ([152cb9d](https://github.com/cuongtranba/kanna/commit/152cb9d8596fe9d37a470c334cc09e4dbf9d3a4a))
+* long-session performance — chat.ops delta stream, transcript LRU + tail-read, render windowing ([fad3b5d](https://github.com/cuongtranba/kanna/commit/fad3b5d77d852c51d23ab03709253cbc79814ccb))
+* long-session performance — chat.ops delta stream, transcript LRU + tail-read, render windowing ([fad3b5d](https://github.com/cuongtranba/kanna/commit/fad3b5d77d852c51d23ab03709253cbc79814ccb))
+* post-change bench numbers + KR verdict (KR1/KR2/KR4 met, KR3 flagged) ([019fed9](https://github.com/cuongtranba/kanna/commit/019fed9c1d58a1b352c500dbdd4bc320387cddb5))
+* **server:** JSONL tail-read with byte-offset cursors for cold chat open (KR3) ([e6e02e2](https://github.com/cuongtranba/kanna/commit/e6e02e2e68001fb735c7ed44f4c2ae9fb0134a91))
+* **server:** transcript LRU cache + window-only page cloning ([3e0dd5d](https://github.com/cuongtranba/kanna/commit/3e0dd5dc4b0093f27f47da70e739a0809519d983))
+* **share:** content-visibility windowing on shared-session rows ([ee8affe](https://github.com/cuongtranba/kanna/commit/ee8affe58b3b47b6753c3a6086cc08a204136761))
+
 ## [1.3.1](https://github.com/cuongtranba/kanna/compare/v1.3.0...v1.3.1) (2026-07-18)
 
 
