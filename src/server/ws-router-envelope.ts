@@ -10,6 +10,7 @@
 import os from "node:os"
 import { log } from "../shared/log"
 import { PROTOCOL_VERSION } from "../shared/types"
+import type { ChatSnapshot } from "../shared/types"
 import type { ServerEnvelope, SubscriptionTopic } from "../shared/protocol"
 import type { ServerWebSocket } from "bun"
 import { deriveChatSnapshot, deriveLocalProjectsSnapshot, deriveSidebarData } from "./read-models"
@@ -127,6 +128,12 @@ export interface EnvelopeBuilder {
     cache?: SnapshotComputationCache,
     connection?: ServerWebSocket<ClientState>,
   ): ServerEnvelope
+  /**
+   * Light chat snapshot (recentLimit 0 — no transcript window; `messages`
+   * carry only the synthetic pending_tool_request rows). Feeds the
+   * meta-diff of the `chat.ops` broadcast path.
+   */
+  deriveChatMeta(chatId: string): ChatSnapshot | null
 }
 
 export function createEnvelopeBuilder(deps: EnvelopeDeps): EnvelopeBuilder {
@@ -147,6 +154,22 @@ export function createEnvelopeBuilder(deps: EnvelopeDeps): EnvelopeBuilder {
 
   function getSidebarSnapshotCacheEntry(cache?: SnapshotComputationCache) {
     return buildSidebarSnapshotCacheEntry(deps, cache)
+  }
+
+  function deriveChatMeta(chatId: string): ChatSnapshot | null {
+    return deriveChatSnapshot(
+      store.state,
+      agent.getActiveStatuses(),
+      agent.getDrainingChatIds(),
+      agent.getSlashCommandsLoadingChatIds(),
+      chatId,
+      (id) => store.getRecentChatHistory(id, 0),
+      (id) => store.getTunnelEvents(id),
+      agent.getWaitStartedAtByChatId(),
+      Date.now(),
+      agent.getClaudeSessionStates?.() ?? new Map(),
+      resolvedAppSettings.getSnapshot().customModels ?? [],
+    )
   }
 
   function createEnvelope(
@@ -333,5 +356,5 @@ export function createEnvelopeBuilder(deps: EnvelopeDeps): EnvelopeBuilder {
     }
   }
 
-  return { getSidebarSnapshotCacheEntry, createEnvelope }
+  return { getSidebarSnapshotCacheEntry, createEnvelope, deriveChatMeta }
 }

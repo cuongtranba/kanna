@@ -3877,3 +3877,93 @@ describe("settings.listOpenRouterModels", () => {
     expect(ws.sent).toEqual([{ v: PROTOCOL_VERSION, type: "ack", id: "or-models-2", result: [] }])
   })
 })
+
+describe("chat.ops delta broadcast", () => {
+  async function setupOpsRouter() {
+    const store = createTestEventStore(`/ops-test-${randomUUID()}`)
+    await store.initialize()
+    const project = await store.openProject("/tmp/ops-project")
+    const chat = await store.createChat(project.id)
+    const router = createWsRouter({
+      store: store as never,
+      agent: {
+        getActiveStatuses: () => new Map(),
+        getDrainingChatIds: () => new Set(),
+        getSlashCommandsLoadingChatIds: () => new Set(),
+        getWaitStartedAtByChatId: () => new Map(),
+        ensureSlashCommandsLoaded: async () => {},
+      } as never,
+      terminals: { getSnapshot: () => null, onEvent: () => () => {} } as never,
+      keybindings: { getSnapshot: () => DEFAULT_KEYBINDINGS_SNAPSHOT, onChange: () => () => {} } as never,
+      refreshDiscovery: async () => [],
+      getDiscoveredProjects: () => [],
+      machineDisplayName: "Local Machine",
+      updateManager: null,
+      pushManager: NOOP_PUSH_MANAGER,
+    })
+    const ws = new FakeWebSocket()
+    router.handleOpen(ws as never)
+    await router.handleMessage(
+      ws as never,
+      JSON.stringify({ v: 1, type: "subscribe", id: "chat-sub-ops", topic: { type: "chat", chatId: chat.id } })
+    )
+    return { store, chat, router, ws }
+  }
+
+  function isRecordEnvelope(value: unknown): value is Record<string, unknown> {
+    return typeof value === "object" && value !== null
+  }
+
+  test("tracked subscriber receives entries.append ops instead of snapshots", async () => {
+    const { store, chat, router, ws } = await setupOpsRouter()
+
+    const first = ws.sent[0]
+    if (!isRecordEnvelope(first)) throw new Error("missing initial envelope")
+    expect(first.type).toBe("snapshot")
+
+    await store.appendMessage(chat.id, { _id: "t-1", createdAt: 1, kind: "assistant_text", text: "hello" })
+    await store.flush()
+    await router.broadcastChatStateImmediately(chat.id)
+
+    const second = ws.sent[ws.sent.length - 1]
+    if (!isRecordEnvelope(second)) throw new Error("missing broadcast envelope")
+    expect(second.type).toBe("event")
+    const event = second.event
+    if (!isRecordEnvelope(event)) throw new Error("missing event payload")
+    expect(event.type).toBe("chat.ops")
+    expect(event.chatId).toBe(chat.id)
+    expect(event.toSeq).toBe(1)
+    const ops = event.ops
+    if (!Array.isArray(ops)) throw new Error("ops not array")
+    const appendOps = ops.filter((op) => isRecordEnvelope(op) && op.kind === "entries.append")
+    expect(appendOps).toHaveLength(1)
+  })
+
+  test("ring gap falls back to a full snapshot and re-arms tracking", async () => {
+    const { store, chat, router, ws } = await setupOpsRouter()
+
+    for (let i = 0; i < 600; i++) {
+      store.chatOps.record(chat.id, {
+        kind: "entries.append",
+        entries: [{ _id: `gap-${i}`, createdAt: i, kind: "assistant_text", text: String(i) }],
+      })
+    }
+    await router.broadcastChatStateImmediately(chat.id)
+
+    const last = ws.sent[ws.sent.length - 1]
+    if (!isRecordEnvelope(last)) throw new Error("missing envelope after gap")
+    expect(last.type).toBe("snapshot")
+    const snapshot = last.snapshot
+    if (!isRecordEnvelope(snapshot)) throw new Error("missing snapshot payload")
+    const data = snapshot.data
+    if (!isRecordEnvelope(data)) throw new Error("missing snapshot data")
+    expect(data.seq).toBe(600)
+
+    await store.appendMessage(chat.id, { _id: "after-gap", createdAt: 999, kind: "assistant_text", text: "back" })
+    await store.flush()
+    await router.broadcastChatStateImmediately(chat.id)
+    const afterGap = ws.sent[ws.sent.length - 1]
+    if (!isRecordEnvelope(afterGap)) throw new Error("missing envelope after re-arm")
+    expect(afterGap.type).toBe("event")
+  })
+})
