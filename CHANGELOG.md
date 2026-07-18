@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.3.1](https://github.com/cuongtranba/kanna/compare/v1.3.0...v1.3.1) (2026-07-18)
+
+
+### Bug Fixes
+
+* seed subagentRunsByChatId for chats restored from snapshot.json ([#549](https://github.com/cuongtranba/kanna/issues/549)) ([ca804f8](https://github.com/cuongtranba/kanna/commit/ca804f811c1c5f17cfaf797a601b0829bcb6962b))
+
 ## [1.3.0](https://github.com/cuongtranba/kanna/compare/v1.2.0...v1.3.0) (2026-07-17)
 
 
