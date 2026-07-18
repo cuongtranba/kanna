@@ -100,15 +100,20 @@ move), `stalled`. Goal changes are human-only.
 
 ### 4. Chat-open latency
 
-- Tail-read the transcript JSONL (seek from end, parse only the last N
-  lines) to serve the initial window instead of parsing the whole file.
-  `chat.loadHistory` keeps serving older pages (which may read further
-  back).
-- Widen the single-chat transcript cache to a small LRU (default 4 chats).
+- Widen the single-chat transcript cache to a small LRU (default 4 chats)
+  and clone only the returned page window (≤ recentLimit entries) instead
+  of the full entry array on every read.
+- JSONL tail-read (seek from end, byte-offset cursors) is DEFERRED: funded
+  only if the benchmark shows KR3 still unmet after the LRU + window-clone
+  change (evidence-gated per the OKR loop; cursors are opaque to the
+  client so the encoding can change later without protocol impact).
 
 ### 5. Render cost
 
-- Stable row identity by `_id`; memoize markdown parse per entry content.
+- Stable row identity by `_id`; the message components already carry
+  structural `React.memo` comparators (verified in
+  `KannaTranscript.tsx:419,613,785`), so op-based reference stability makes
+  them effective — no separate markdown cache needed in v1.
 - CSS `content-visibility: auto` (+ `contain-intrinsic-size`) on transcript
   rows for paint/layout windowing.
 - A virtualization library only if post-change metrics still miss KR4 —
