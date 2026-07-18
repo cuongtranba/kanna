@@ -85,3 +85,21 @@ Owns the JSONL event log: append-only writes, in-order replay on boot, snapshot 
 | --- | --- | --- | --- |
 | src/server/event-store.ts | c3-206 Contract | Storage detail | src/server/event-store.ts |
 | src/server/event-store.test.ts | c3-206 Contract | Test cases per surface | src/server/event-store.test.ts |
+
+## Chat Op-Log (delta broadcast source)
+
+`EventStore.chatOps` (`src/server/chat-op-log.ts`, pure in-memory) keeps a
+per-chat monotonic `seq` + ring buffer (default 512) of `ChatOp`s.
+`appendMessage` records one `entries.append` op per persisted entry (deduped
+appends record nothing); `deleteChat`/prune clear the chat's log. The ring is
+memory-only — durability stays with the transcript JSONL; a ring miss means
+the WS subscriber falls back to a full snapshot. Parity between the snapshot
+path and the ops path is enforced by `src/server/chat-ops-parity.test.ts`.
+
+## Transcript cache
+
+`TranscriptCache` (`src/server/event-store-messages.adapter.ts`) is a small
+LRU (4 chats) replacing the former single-chat `cachedTranscriptRef`. Page
+reads (`getRecentMessagesPage` / `getMessagesPageBefore`) use the no-clone
+`getMessagesView` and clone only the returned window; the public
+`getMessages` keeps full-clone semantics.
