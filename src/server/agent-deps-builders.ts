@@ -234,6 +234,7 @@ export function buildSlashCommandsDeps(agent: AgentCoordinator): SlashCommandsDe
     claudeSessions: agent.claudeSessions,
     oauthPool: agent.oauthPool,
     slashCommandsInFlight: agent.slashCommandsInFlight,
+    cliCommandCache: agent.slashCommandCache,
     emitStateChange: (chatId) => { agent.emitStateChange(chatId) },
     resolveClaudeDriverPreference: () => agent.resolveClaudeDriverPreference(),
     startClaudeSessionPTY: agent.startClaudeSessionPTYFn,

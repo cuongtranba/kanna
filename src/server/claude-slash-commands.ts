@@ -113,6 +113,20 @@ export interface SlashCommandsDeps {
    * SLASH_COMMANDS_LOAD_TIMEOUT_MS when omitted.
    */
   timeoutMs?: number
+  /**
+   * Optional per-cwd cache of the RAW CLI command list (built-ins + plugins,
+   * BEFORE the local-catalog merge). CLI commands depend only on the cwd
+   * (project + user + plugin scope), not on the chat, so a brand-new chat can
+   * reuse a sibling chat's result instead of spawning its own throwaway
+   * ephemeral `claude` subprocess. Eliminates the fragile spawn-per-new-chat
+   * path (the observed eternal-loading trigger) for every chat after the
+   * first in a project. Absent = no caching (always spawn). The local catalog
+   * is intentionally NOT cached here — it stays freshly merged on every load.
+   */
+  cliCommandCache?: {
+    get(cwd: string): SlashCommand[] | null
+    set(cwd: string, commands: SlashCommand[]): void
+  }
 }
 
 /** Default hard cap on the slash-command CLI fetch (spawn + getSupportedCommands). */
@@ -178,6 +192,18 @@ export async function ensureSlashCommandsLoaded(
         timeoutMs,
         "getSupportedCommands",
       )
+      deps.cliCommandCache?.set(project.localPath, commands)
+    } else if (deps.cliCommandCache?.get(project.localPath)) {
+      // Cache hit: reuse the CLI command list a sibling chat in this cwd
+      // already fetched — no throwaway ephemeral spawn (the eternal-loading
+      // trigger). The local catalog is still re-merged below.
+      phase = "cache-hit"
+      commands = deps.cliCommandCache.get(project.localPath) ?? []
+      log.info("[kanna/agent] ensureSlashCommandsLoaded cache hit", {
+        chatId,
+        cwd: project.localPath,
+        commandCount: commands.length,
+      })
     } else {
       const defaultModel = normalizeServerModel("claude")
       const defaultOptions = normalizeClaudeModelOptions(defaultModel)
@@ -256,6 +282,7 @@ export async function ensureSlashCommandsLoaded(
             timeoutMs,
             "getSupportedCommands",
           )
+          deps.cliCommandCache?.set(project.localPath, commands)
         } finally {
           ephemeral.close()
         }
