@@ -74,8 +74,19 @@ const DESIGN_RAW_HEX = [
   },
 ]
 
-// Rule 3 — glassmorphism blur ban (filled in Task 2 alongside its burn-down).
-const DESIGN_BACKDROP = []
+// Rule 3 — glassmorphism blur ban.
+const DESIGN_BACKDROP = [
+  {
+    selector: "Literal[value=/backdrop-(blur|filter)/]",
+    message:
+      "Glassmorphism banned (DESIGN.md No-Glassmorphism Rule). Use a solid bg-background surface; no backdrop-blur/backdrop-filter.",
+  },
+  {
+    selector: "TemplateElement[value.raw=/backdrop-(blur|filter)/]",
+    message:
+      "Glassmorphism banned (DESIGN.md No-Glassmorphism Rule). Use a solid bg-background surface; no backdrop-blur/backdrop-filter.",
+  },
+]
 
 // Rule 4 — native `title` ban (filled in Task 3 alongside its burn-down).
 const DESIGN_TITLE = []

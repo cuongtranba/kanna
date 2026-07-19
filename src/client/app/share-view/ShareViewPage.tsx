@@ -106,7 +106,7 @@ export function ShareViewPage({ snapshot }: ShareViewPageProps) {
   return (
     <TranscriptRenderOptionsProvider value={{ readonly: true, localLinkMode: "text" }}>
       <main className="h-[100dvh] overflow-y-auto overscroll-contain bg-background text-foreground">
-        <header className="sticky top-0 z-10 border-b border-border bg-background/95 backdrop-blur">
+        <header className="sticky top-0 z-10 border-b border-border bg-background">
           <div className="mx-auto flex w-full max-w-[800px] items-center gap-3 px-4 py-3 sm:px-6">
             <Flower className="h-5 w-5 text-logo shrink-0" aria-hidden />
             <div className="min-w-0 flex-1">

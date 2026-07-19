@@ -190,7 +190,7 @@ function ExitPlanModeMessageInner({ message, onConfirm, isLatest }: Props) {
           {isComplete && (
             <Button
               variant="ghost"
-              className={`absolute z-10 bottom-2 pr-2.5 !pl-3.5 h-[34px] inline-flex gap-1 text-sm left-[50%] -translate-x-[50%] text-muted-foreground backdrop-blur-sm hover:text-foreground opacity-0 group-hover/plan:opacity-100 transition-all rounded-full border border-border`}
+              className={`absolute z-10 bottom-2 pr-2.5 !pl-3.5 h-[34px] inline-flex gap-1 text-sm left-[50%] -translate-x-[50%] text-muted-foreground bg-background hover:text-foreground opacity-0 group-hover/plan:opacity-100 transition-all rounded-full border border-border`}
               onClick={() => setExpanded(!expanded)}
             >
               {expanded ? "Show Less" : "Show More"}
