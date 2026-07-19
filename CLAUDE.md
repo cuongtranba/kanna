@@ -89,6 +89,49 @@ purify), #286 (call-site selectors), #287 (ratchet infrastructure),
 #288–#302 (burn-down 90 → 0), and the final flip (server override
 moved to `error` + ratchet tooling deleted).
 
+# Design System (MANDATORY)
+
+`DESIGN.md` (repo root) is the single source of truth for Kanna's visual
+system — the warm rose-tinted OKLCH palette (hue ~13°), the Body / Bricolage
+Grotesque / Roboto Mono type pairing, and all named rules. Live tokens are
+defined in `src/index.css` and consumed as Tailwind theme vars
+(`bg-background`, `text-foreground`, `text-destructive`, `bg-warning`, …).
+**Load `DESIGN.md` before any `src/client/**` UI work.**
+
+**Hard gate (enforced, `bun run lint --max-warnings=0`).** `eslint.config.js`
+`DESIGN_GATE_SYNTAX` (applied to `src/shared/** + src/client/**` via
+`no-restricted-syntax`) bans:
+
+1. **Arbitrary hex Tailwind utilities** (`bg-[#…]`, `text-[#…]`, `border-[#…]`,
+   …) — use a token class instead.
+2. **Raw hex color literals** — 6/8-digit (`#rrggbb`, `#rrggbbaa`) plus the
+   pure black/white family (`#000`/`#fff`/`#000000`/`#ffffff`). 3-digit hex is
+   NOT banned generally (it collides with issue refs like `#333` inside string
+   literals); only the black/white forms are. Use CSS vars / token classes.
+3. **`backdrop-blur` / `backdrop-filter`** (No-Glassmorphism Rule) — use a solid
+   `bg-background` surface.
+4. **Native `title` on intrinsic elements** — use the project Tooltip
+   (`src/client/components/ui/tooltip.tsx`) via the `TruncatedText` /
+   `HoverHint` helpers in `src/client/components/ui/truncated-text.tsx`.
+   `iframe` is excluded (its `title` is the WCAG accessibility name, not a
+   tooltip); PascalCase component props named `title` are not matched.
+
+**Sanctioned chokepoint:** `src/client/components/chat-ui/TerminalPane.tsx` is
+exempt from rule 2 only (xterm's `ITheme` API takes hex strings, not CSS vars).
+No other exemptions; do not add `eslint-disable` comments.
+
+**Guidance-only (NOT linted — semantic, would false-positive).** Follow by
+hand:
+- No pulse/glow on status **dots** (`animate-pulse` is fine for skeletons/
+  typeaheads).
+- Kanna Coral on ≤10% of a screen; brand mark + destructive intent only.
+- `tabular-nums` on every duration / count / age / pid / live ticker.
+- Flat by default; depth via contrast + 1px soft edge, not shadow.
+- Pair color with icon / label / weight; color alone never communicates.
+
+The `impeccable` PostToolUse design hook also flags off-ramp font sizes and
+other heuristics; those are advisory, not part of this lint gate.
+
 # Render-loop regression checks
 
 When introducing a new `use*Store` selector or any React hook that derives
