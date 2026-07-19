@@ -3,6 +3,7 @@ import { Plug, Plus, Trash2, RefreshCw, Pencil, ExternalLink, Copy, KeyRound } f
 import { Button } from "../components/ui/button"
 import { Input } from "../components/ui/input"
 import { Textarea } from "../components/ui/textarea"
+import { HoverHint } from "../components/ui/truncated-text"
 import {
   Select,
   SelectContent,
@@ -209,9 +210,11 @@ function TestPill({ result, pending }: { result: McpServerTestResult; pending: b
       )
     case "error":
       return (
-        <span className="text-xs text-red-600" title={result.message}>
-          Failed
-        </span>
+        <HoverHint label={result.message}>
+          <span className="text-xs text-red-600">
+            Failed
+          </span>
+        </HoverHint>
       )
     case "untested":
     default:
@@ -226,9 +229,11 @@ function OAuthPill({ oauth }: { oauth: McpOAuthState | undefined }) {
       return <span className="text-xs text-green-600">OAuth ✓</span>
     case "error":
       return (
-        <span className="text-xs text-red-600" title={oauth.errorMessage}>
-          OAuth error
-        </span>
+        <HoverHint label={oauth.errorMessage}>
+          <span className="text-xs text-red-600">
+            OAuth error
+          </span>
+        </HoverHint>
       )
     default:
       return <span className="text-xs text-muted-foreground">OAuth: unauth</span>
@@ -617,15 +622,16 @@ function McpServerEditor({
                             Open authorization URL
                             <ExternalLink className="h-3 w-3" />
                           </a>
-                          <button
-                            type="button"
-                            onClick={() => { void navigator.clipboard.writeText(authFlowUrl) }}
-                            className="ml-1 text-muted-foreground hover:text-foreground"
-                            title="Copy URL"
-                            aria-label="Copy authorization URL"
-                          >
-                            <Copy className="h-3 w-3" />
-                          </button>
+                          <HoverHint label="Copy URL">
+                            <button
+                              type="button"
+                              onClick={() => { void navigator.clipboard.writeText(authFlowUrl) }}
+                              className="ml-1 text-muted-foreground hover:text-foreground"
+                              aria-label="Copy authorization URL"
+                            >
+                              <Copy className="h-3 w-3" />
+                            </button>
+                          </HoverHint>
                         </div>
                         <div className="grid gap-1">
                           <span className="text-xs text-muted-foreground">

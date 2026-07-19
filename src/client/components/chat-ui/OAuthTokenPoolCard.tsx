@@ -9,6 +9,7 @@ import {
 import { maskToken } from "../../lib/oauthTokenMask"
 import { Input } from "../ui/input"
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "../ui/tooltip"
+import { HoverHint } from "../ui/truncated-text"
 import { useOAuthTokenPoolCardStore } from "../../stores/oauthTokenPoolCardStore"
 
 // ─── helpers ────────────────────────────────────────────────────────────────
@@ -169,7 +170,8 @@ function TokenRow({
 
       {/* right: transient test result + action buttons */}
       <div className="flex shrink-0 items-center gap-2">
-        <label className="inline-flex items-center gap-1 text-xs text-muted-foreground" title="Maximum concurrent chats sharing this OAuth token. Higher = risks Anthropic rate limits.">
+        <HoverHint label="Maximum concurrent chats sharing this OAuth token. Higher = risks Anthropic rate limits.">
+        <label className="inline-flex items-center gap-1 text-xs text-muted-foreground">
           <span>Concurrent</span>
           <Input
             type="number"
@@ -182,6 +184,7 @@ function TokenRow({
             disabled={isDisabled}
           />
         </label>
+        </HoverHint>
         {testResult !== null && (
           <span className="text-xs text-muted-foreground">{testResult}</span>
         )}
@@ -351,10 +354,12 @@ export function OAuthTokenPoolCard({
   return (
     <div>
       <div className="flex items-center justify-between gap-3 pb-3">
-        <label className="flex flex-col gap-0.5 text-sm" title="Default concurrent-chat cap applied to any OAuth token whose row does not override it. Sharing across N chats burns Anthropic quota and risks 429s.">
+        <HoverHint label="Default concurrent-chat cap applied to any OAuth token whose row does not override it. Sharing across N chats burns Anthropic quota and risks 429s.">
+        <label className="flex flex-col gap-0.5 text-sm">
           <span className="font-medium text-foreground">Default concurrency per token</span>
           <span className="text-xs text-muted-foreground">Cap for tokens without an explicit per-row override. Range {OAUTH_TOKEN_MAX_CONCURRENT_MIN}–{OAUTH_TOKEN_MAX_CONCURRENT_MAX}.</span>
         </label>
+        </HoverHint>
         <Input
           type="number"
           value={concurrencyDefault}

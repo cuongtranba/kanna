@@ -88,8 +88,18 @@ const DESIGN_BACKDROP = [
   },
 ]
 
-// Rule 4 — native `title` ban (filled in Task 3 alongside its burn-down).
-const DESIGN_TITLE = []
+// Rule 4 — native `title` tooltip on intrinsic elements (lowercase tag names).
+// PascalCase component props named `title` are NOT matched. `iframe` is
+// excluded: its `title` is the required accessibility name (WCAG /
+// jsx-a11y/iframe-has-title), not a hover tooltip.
+const DESIGN_TITLE = [
+  {
+    selector:
+      "JSXOpeningElement[name.name=/^[a-z]/][name.name!='iframe'] > JSXAttribute[name.name='title']",
+    message:
+      "Native `title` tooltip banned (DESIGN.md). Use the project Tooltip component (src/client/components/ui/tooltip.tsx) as the hover-explanation surface.",
+  },
+]
 
 const DESIGN_GATE_SYNTAX = [
   ...DESIGN_HEX_UTILITY,

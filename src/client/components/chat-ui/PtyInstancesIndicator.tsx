@@ -5,6 +5,7 @@ import { usePtyInstances, usePtyInstancesStore, usePtyLiveCount, usePtyPopoverOp
 import { PtyInstanceRowStore } from "./PtyInstanceRow.store"
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover"
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip"
+import { TruncatedText } from "../ui/truncated-text"
 import type { KannaSocket } from "../../app/socket"
 
 const PHASE_COLOR: Record<PtyInstancePhase, string> = {
@@ -120,23 +121,23 @@ function PtyInstanceRowContent({ instance, onOpenChat, onCancel, onKill }: RowPr
       </div>
 
       <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] text-muted-foreground font-mono tabular-nums">
-        <div className="truncate" title={instance.cwd}>
+        <TruncatedText tooltip={instance.cwd}>
           <span className="text-foreground/40">cwd</span> {shortenCwd(instance.cwd)}
-        </div>
+        </TruncatedText>
         <div>
           <span className="text-foreground/40">pid</span> {instance.pid ?? "—"}
         </div>
-        <div className="truncate" title={instance.model}>
+        <TruncatedText tooltip={instance.model}>
           <span className="text-foreground/40">model</span> {instance.model || "—"}
-        </div>
+        </TruncatedText>
         <div>
           <span className="text-foreground/40">up</span> {formatUptime(instance.startedAt, instance.exitedAt)}
         </div>
         {instance.accountLabel ? (
-          <div className="truncate col-span-2" title={instance.accountLabel}>
+          <TruncatedText className="col-span-2" tooltip={instance.accountLabel}>
             <span className="text-foreground/40">acct</span> {instance.accountLabel}
             {instance.oauthMasked ? <span className="text-foreground/30"> · {instance.oauthMasked}</span> : null}
-          </div>
+          </TruncatedText>
         ) : null}
         {instance.planMode !== null ? (
           <div>
@@ -152,20 +153,20 @@ function PtyInstanceRowContent({ instance, onOpenChat, onCancel, onKill }: RowPr
           </div>
         ) : null}
         {instance.rssBytes !== null ? (
-          <div className="truncate col-span-2" title="Resident memory (current · peak across session)">
+          <TruncatedText className="col-span-2" tooltip="Resident memory (current · peak across session)">
             <span className="text-foreground/40">mem</span> {formatBytes(instance.rssBytes)}
             {instance.rssPeakBytes !== null && instance.rssPeakBytes > instance.rssBytes ? (
               <span className="text-foreground/30"> · peak {formatBytes(instance.rssPeakBytes)}</span>
             ) : null}
-          </div>
+          </TruncatedText>
         ) : null}
         {instance.cpuPercent !== null ? (
-          <div className="truncate col-span-2" title="CPU usage % across process tree (current · peak; >100% = multi-core)">
+          <TruncatedText className="col-span-2" tooltip="CPU usage % across process tree (current · peak; >100% = multi-core)">
             <span className="text-foreground/40">cpu</span> {formatPercent(instance.cpuPercent)}
             {instance.cpuPeakPercent !== null && instance.cpuPeakPercent > instance.cpuPercent ? (
               <span className="text-foreground/30"> · peak {formatPercent(instance.cpuPeakPercent)}</span>
             ) : null}
-          </div>
+          </TruncatedText>
         ) : null}
       </div>
 

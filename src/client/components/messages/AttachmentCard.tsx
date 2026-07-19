@@ -189,7 +189,6 @@ export function AttachmentFileCard({
         <button
           type="button"
           onClick={isDisabled ? undefined : onClick}
-          title={isMention ? attachment.displayName : undefined}
           aria-label={ariaLabel}
           aria-disabled={isDisabled || undefined}
           disabled={isDisabled}

@@ -65,7 +65,6 @@ export function SlashCommandPicker({ items, activeIndex, loading, onSelect, onHo
       className="absolute bottom-full left-0 mb-2 w-full max-w-md md:max-w-xl max-h-64 overflow-auto rounded-md border border-border bg-popover shadow-md"
     >
       {items.map((cmd, i) => {
-        const scopeTitle = cmd.scope ? `${cmd.scope.charAt(0).toUpperCase()}${cmd.scope.slice(1)}` : undefined
         return (
           <li
             key={cmd.name}
@@ -80,7 +79,6 @@ export function SlashCommandPicker({ items, activeIndex, loading, onSelect, onHo
               "flex flex-col gap-0.5 px-3 py-1.5 cursor-pointer text-sm sm:flex-row sm:items-center sm:gap-3",
               i === activeIndex && "bg-accent text-accent-foreground",
             )}
-            title={scopeTitle}
           >
             <div className="flex min-w-0 items-baseline gap-2">
               <span className="font-mono break-all sm:whitespace-nowrap sm:break-normal">/{normalizeCommandName(cmd.name)}</span>
