@@ -22,6 +22,7 @@ import {
 import { CSS } from "@dnd-kit/utilities"
 import { Button } from "../../ui/button"
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../ui/tooltip"
+import { HoverHint } from "../../ui/truncated-text"
 import type { SidebarChatRow, SidebarProjectGroup } from "../../../../shared/types"
 import { APP_NAME } from "../../../../shared/branding"
 import { getPathBasename } from "../../../lib/formatters"
@@ -102,10 +103,10 @@ function EmptyProjectChatButton({
   const disabled = !isConnected || startingLocalPath === localPath
 
   return (
+    <HoverHint label={!isConnected ? `Start ${APP_NAME} to connect` : "New Chat"}>
     <button
       type="button"
       disabled={disabled}
-      title={!isConnected ? `Start ${APP_NAME} to connect` : "New Chat"}
       className={cn(
         "group flex w-full items-center gap-2 pl-2 pr-1 py-1.5 rounded-md text-left cursor-pointer transition-colors duration-150",
         "hover:bg-muted/40",
@@ -118,6 +119,7 @@ function EmptyProjectChatButton({
         New Chat
       </span>
     </button>
+    </HoverHint>
   )
 }
 
@@ -216,7 +218,6 @@ const SortableProjectGroup = memo(({
         ref={setActivatorNodeRef}
         type="button"
         aria-label="Drag to reorder project"
-        title="Drag to reorder"
         className={cn(
           "absolute left-0 top-1/2 -translate-y-1/2 flex h-6 w-4 items-center justify-center rounded-sm text-muted-foreground/60 cursor-grab active:cursor-grabbing touch-none transition-opacity duration-150",
           "opacity-0 md:group-hover/section:opacity-100",

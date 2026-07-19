@@ -72,6 +72,7 @@ import { EDITOR_OPTIONS, EditorIcon } from "../components/editor-icons"
 import { Button, buttonVariants } from "../components/ui/button"
 import { Dialog, DialogBody, DialogContent, DialogFooter, DialogTitle } from "../components/ui/dialog"
 import { Input } from "../components/ui/input"
+import { HoverHint } from "../components/ui/truncated-text"
 import { SettingsHeaderButton } from "../components/ui/settings-header-button"
 import type { EditorPreset } from "../../shared/protocol"
 import { SegmentedControl } from "../components/ui/segmented-control"
@@ -1736,15 +1737,16 @@ export function SettingsPage() {
             <div className="overflow-x-auto pr-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               <div className="flex min-w-max items-center gap-2">
                 <div className=" sticky left-0 bg-gradient-to-r from-background via-background/80 to-transparent px-2  py-1">
-                <button
-                  type="button"
-                  onClick={state.openSidebar}
-                  className="flex shrink-0 items-center p-2 text-sm text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
-                  aria-label="Open sidebar"
-                  title="Open sidebar"
-                >
-                  <Menu className="h-4 w-4 shrink-0" />
-                </button>
+                <HoverHint label="Open sidebar">
+                  <button
+                    type="button"
+                    onClick={state.openSidebar}
+                    className="flex shrink-0 items-center p-2 text-sm text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+                    aria-label="Open sidebar"
+                  >
+                    <Menu className="h-4 w-4 shrink-0" />
+                  </button>
+                </HoverHint>
                 </div>
                 {sidebarItems.map((item) => (
                   <button
@@ -2552,7 +2554,7 @@ export function SettingsPage() {
       </div>
 
       {showFooter ? (
-        <div className="absolute bottom-0 left-0 right-0 border-t border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+        <div className="absolute bottom-0 left-0 right-0 border-t border-border bg-background">
           <div className="px-6 py-[14.25px]">
             <div className="grid gap-3 text-xs text-muted-foreground grid-cols-2 lg:grid-cols-4">
               <div>

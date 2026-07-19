@@ -1,5 +1,6 @@
 import type { LocalProjectsSnapshot, PushConfigSnapshot } from "../../../shared/types"
 import type { PushPermissionState } from "../../app/pushClient"
+import { TruncatedText } from "../ui/truncated-text"
 
 interface PushNotificationsSectionProps {
   permissionState: PushPermissionState
@@ -118,12 +119,13 @@ export function PushNotificationsSection(props: PushNotificationsSectionProps) {
                   onChange={(e) => void props.onMuteToggle(project.localPath, !e.target.checked)}
                   className="h-4 w-4 shrink-0 rounded border-border accent-foreground"
                 />
-                <span
-                  className="min-w-0 flex-1 truncate font-mono text-[12px] text-foreground"
-                  title={project.localPath}
+                <TruncatedText
+                  inline
+                  className="min-w-0 flex-1 font-mono text-[12px] text-foreground"
+                  tooltip={project.localPath}
                 >
                   {project.localPath}
-                </span>
+                </TruncatedText>
               </label>
             </li>
           ))}

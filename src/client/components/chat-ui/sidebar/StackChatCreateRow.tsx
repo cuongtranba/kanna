@@ -7,6 +7,7 @@ import {
 } from "react"
 import * as DialogPrimitive from "@radix-ui/react-dialog"
 import { Button } from "../../ui/button"
+import { TruncatedText } from "../../ui/truncated-text"
 import { cn } from "../../../lib/utils"
 import { useIsMobile } from "../../../hooks/useIsMobile"
 import type { GitWorktree, StackSummary } from "../../../../shared/types"
@@ -129,12 +130,13 @@ function StackChatCreateRowInner({
             return (
               <li key={project.id} className="flex flex-col gap-1.5 min-w-0">
                 <div className="flex items-baseline justify-between gap-2 min-w-0">
-                  <span
-                    className="text-[15px] font-semibold leading-snug truncate min-w-0"
-                    title={project.title}
+                  <TruncatedText
+                    inline
+                    className="text-[15px] font-semibold leading-snug min-w-0"
+                    tooltip={project.title}
                   >
                     {project.title}
-                  </span>
+                  </TruncatedText>
                   {!isSingleProject && (
                     <label className="shrink-0 inline-flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer select-none">
                       <input
