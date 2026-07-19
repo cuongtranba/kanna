@@ -41,6 +41,57 @@ const SHARED_CLIENT_SEAL_SYNTAX = [
   },
 ]
 
+// Design-system hard gate (DESIGN.md). Rules 3 (backdrop) + 4 (title) are
+// appended via their own consts below so this stays readable.
+const DESIGN_HEX_UTILITY = [
+  {
+    selector:
+      "Literal[value=/(bg|text|border|fill|stroke|ring|shadow|from|to|via|decoration|outline|caret|accent|divide)-\\[#/]",
+    message:
+      "Arbitrary hex Tailwind utility banned (DESIGN.md). Use a design token class (bg-background, text-foreground, text-destructive, bg-warning, …).",
+  },
+  {
+    selector:
+      "TemplateElement[value.raw=/(bg|text|border|fill|stroke|ring|shadow|from|to|via|decoration|outline|caret|accent|divide)-\\[#/]",
+    message:
+      "Arbitrary hex Tailwind utility banned (DESIGN.md). Use a design token class (bg-background, text-foreground, text-destructive, bg-warning, …).",
+  },
+]
+
+// Raw hex color literals: 6/8-digit and the pure black/white family. 3-digit
+// hex is NOT banned generally (collides with issue refs like "#333" inside
+// string literals); only black/white 3-digit forms are listed.
+const DESIGN_RAW_HEX = [
+  {
+    selector: "Literal[value=/#([0-9a-fA-F]{6}([0-9a-fA-F]{2})?|000|fff)\\b/i]",
+    message:
+      "Raw hex color banned (DESIGN.md Tint-Everything Rule). Use a CSS var / token (var(--background), var(--foreground)) or a Tailwind token class.",
+  },
+  {
+    selector: "TemplateElement[value.raw=/#([0-9a-fA-F]{6}([0-9a-fA-F]{2})?|000|fff)\\b/i]",
+    message:
+      "Raw hex color banned (DESIGN.md Tint-Everything Rule). Use a CSS var / token (var(--background), var(--foreground)) or a Tailwind token class.",
+  },
+]
+
+// Rule 3 — glassmorphism blur ban (filled in Task 2 alongside its burn-down).
+const DESIGN_BACKDROP = []
+
+// Rule 4 — native `title` ban (filled in Task 3 alongside its burn-down).
+const DESIGN_TITLE = []
+
+const DESIGN_GATE_SYNTAX = [
+  ...DESIGN_HEX_UTILITY,
+  ...DESIGN_RAW_HEX,
+  ...DESIGN_BACKDROP,
+  ...DESIGN_TITLE,
+]
+const DESIGN_GATE_SYNTAX_NO_RAW_HEX = [
+  ...DESIGN_HEX_UTILITY,
+  ...DESIGN_BACKDROP,
+  ...DESIGN_TITLE,
+]
+
 export default tseslint.config(
   {
     ignores: [
@@ -163,8 +214,27 @@ export default tseslint.config(
         },
       ],
       // Seal selectors + type-strictness (base's no-restricted-syntax is
-      // replaced here, so the type-strict selectors must be re-included).
-      "no-restricted-syntax": ["error", ...SHARED_CLIENT_SEAL_SYNTAX, ...TYPE_STRICT_SYNTAX],
+      // replaced here, so the type-strict selectors must be re-included) +
+      // the design-system hard gate (DESIGN.md).
+      "no-restricted-syntax": [
+        "error",
+        ...SHARED_CLIENT_SEAL_SYNTAX,
+        ...TYPE_STRICT_SYNTAX,
+        ...DESIGN_GATE_SYNTAX,
+      ],
+    },
+  },
+  // Sanctioned raw-hex chokepoint: xterm's ITheme takes hex strings, not CSS
+  // vars. TerminalPane keeps every other design-gate + seal rule.
+  {
+    files: ["src/client/components/chat-ui/TerminalPane.tsx"],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        ...SHARED_CLIENT_SEAL_SYNTAX,
+        ...TYPE_STRICT_SYNTAX,
+        ...DESIGN_GATE_SYNTAX_NO_RAW_HEX,
+      ],
     },
   },
   {
