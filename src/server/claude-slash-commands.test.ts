@@ -178,6 +178,30 @@ describe("ensureSlashCommandsLoaded", () => {
     expect(deps.slashCommandsInFlight.has("chat-1")).toBe(false)
   })
 
+  test("clears in-flight flag when getSupportedCommands hangs (timeout guard)", async () => {
+    const neverResolves = new Promise<SlashCommand[]>(() => {})
+    const deps = makeDeps({
+      timeoutMs: 20,
+      claudeSessions: {
+        get: () => ({
+          session: { getSupportedCommands: () => neverResolves },
+        }),
+      },
+    })
+    await ensureSlashCommandsLoaded(deps, "chat-1")
+    expect(deps.slashCommandsInFlight.has("chat-1")).toBe(false)
+  }, 5_000)
+
+  test("clears in-flight flag when ephemeral spawn hangs (timeout guard)", async () => {
+    const neverResolves = new Promise<never>(() => {})
+    const deps = makeDeps({
+      timeoutMs: 20,
+      startClaudeSessionSDK: () => neverResolves,
+    })
+    await ensureSlashCommandsLoaded(deps, "chat-1")
+    expect(deps.slashCommandsInFlight.has("chat-1")).toBe(false)
+  }, 5_000)
+
   test("clears in-flight flag on error from existing session", async () => {
     const deps = makeDeps({
       claudeSessions: {

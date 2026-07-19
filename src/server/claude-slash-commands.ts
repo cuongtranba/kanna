@@ -103,6 +103,36 @@ export interface SlashCommandsDeps {
     | null
     | undefined
   localCatalog: SlashCommandsLocalCatalog | null
+  /**
+   * Hard cap (ms) on the CLI command fetch — the ephemeral spawn and the
+   * `getSupportedCommands()` await. Guards against a subprocess whose
+   * `system_init` never arrives (the SDK's `supportedCommands()` awaits an
+   * initialization promise that then never resolves), which would otherwise
+   * pin the chat in `slashCommandsInFlight` forever and leave the `/` picker
+   * showing an eternal loading skeleton. Defaults to
+   * SLASH_COMMANDS_LOAD_TIMEOUT_MS when omitted.
+   */
+  timeoutMs?: number
+}
+
+/** Default hard cap on the slash-command CLI fetch (spawn + getSupportedCommands). */
+export const SLASH_COMMANDS_LOAD_TIMEOUT_MS = 15_000
+
+/**
+ * Race `work` against a timeout; reject with a labelled error if the timeout
+ * wins. `setTimeout`/`clearTimeout` are host globals (not part of the
+ * side-effect seal), so this stays a pure-layer helper.
+ */
+async function withTimeout<T>(work: Promise<T>, ms: number, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const timeout = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms)
+  })
+  try {
+    return await Promise.race([work, timeout])
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -127,13 +157,19 @@ export async function ensureSlashCommandsLoaded(
   const project = deps.store.getProject(chat.projectId)
   if (!project) return
 
+  const timeoutMs = deps.timeoutMs ?? SLASH_COMMANDS_LOAD_TIMEOUT_MS
+
   deps.slashCommandsInFlight.add(chatId)
   deps.emitStateChange(chatId)
   try {
     let commands: SlashCommand[]
     const existing = deps.claudeSessions.get(chatId)
     if (existing) {
-      commands = await existing.session.getSupportedCommands()
+      commands = await withTimeout(
+        existing.session.getSupportedCommands(),
+        timeoutMs,
+        "getSupportedCommands",
+      )
     } else {
       const defaultModel = normalizeServerModel("claude")
       const defaultOptions = normalizeClaudeModelOptions(defaultModel)
@@ -156,8 +192,9 @@ export async function ensureSlashCommandsLoaded(
         globalPromptAppend: deps.getGlobalPromptAppend(),
       })
       try {
-        const ephemeral = usePtyEphemeral
-          ? await deps.startClaudeSessionPTY({
+        const ephemeral = await withTimeout(
+          usePtyEphemeral
+          ? deps.startClaudeSessionPTY({
               chatId,
               projectId: project.id,
               localPath: project.localPath,
@@ -177,7 +214,7 @@ export async function ensureSlashCommandsLoaded(
               subagentTranscriptRegistry: deps.subagentTranscriptRegistry ?? undefined,
               customMcpServers: deps.getEnabledCustomMcpServers(),
             })
-          : await deps.startClaudeSessionSDK({
+          : deps.startClaudeSessionSDK({
               projectId: project.id,
               localPath: project.localPath,
               model: resolveClaudeApiModelId(defaultModel, defaultOptions.contextWindow),
@@ -189,9 +226,16 @@ export async function ensureSlashCommandsLoaded(
               onToolRequest: async () => null,
               systemPromptAppend: ephemeralSystemPromptAppend,
               customMcpServers: deps.getEnabledCustomMcpServers(),
-            })
+            }),
+          timeoutMs,
+          "ephemeral claude spawn",
+        )
         try {
-          commands = await ephemeral.getSupportedCommands()
+          commands = await withTimeout(
+            ephemeral.getSupportedCommands(),
+            timeoutMs,
+            "getSupportedCommands",
+          )
         } finally {
           ephemeral.close()
         }
@@ -204,6 +248,19 @@ export async function ensureSlashCommandsLoaded(
     deps.emitStateChange(chatId)
   } catch (error) {
     log.warn("[kanna/agent] ensureSlashCommandsLoaded failed", String(error))
+    // Fallback: when the CLI command fetch fails or times out, still surface
+    // the local catalog so the picker recovers instead of showing an eternal
+    // loading skeleton. Recording nothing when the local catalog is empty
+    // keeps the chat retriable on the next subscribe.
+    try {
+      const localOnly = mergeLocalCatalog(deps, [], project.localPath)
+      if (localOnly.length > 0) {
+        await deps.store.recordSessionCommandsLoaded(chatId, localOnly)
+      }
+      deps.emitStateChange(chatId)
+    } catch (fallbackError) {
+      log.warn("[kanna/agent] ensureSlashCommandsLoaded local fallback failed", String(fallbackError))
+    }
   } finally {
     deps.slashCommandsInFlight.delete(chatId)
     deps.emitStateChange(chatId)
