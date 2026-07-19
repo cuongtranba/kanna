@@ -159,12 +159,20 @@ export async function ensureSlashCommandsLoaded(
 
   const timeoutMs = deps.timeoutMs ?? SLASH_COMMANDS_LOAD_TIMEOUT_MS
 
+  // Phase tracker so a stall repro pinpoints WHERE the fetch got stuck
+  // (existing-session vs ephemeral spawn vs the initialize handshake behind
+  // getSupportedCommands). Surfaced with elapsed time in the outcome logs.
+  const startedAt = Date.now()
+  let phase = "start"
+  const elapsed = () => Date.now() - startedAt
+
   deps.slashCommandsInFlight.add(chatId)
   deps.emitStateChange(chatId)
   try {
     let commands: SlashCommand[]
     const existing = deps.claudeSessions.get(chatId)
     if (existing) {
+      phase = "existing-session:getSupportedCommands"
       commands = await withTimeout(
         existing.session.getSupportedCommands(),
         timeoutMs,
@@ -191,7 +199,14 @@ export async function ensureSlashCommandsLoaded(
       const ephemeralSystemPromptAppend = buildKannaSystemPromptAppend(deps.getSubagents(), {
         globalPromptAppend: deps.getGlobalPromptAppend(),
       })
+      log.info("[kanna/agent] ensureSlashCommandsLoaded spawning ephemeral", {
+        chatId,
+        driver: usePtyEphemeral ? "pty" : "sdk",
+        hasOauthLease: picked != null,
+        timeoutMs,
+      })
       try {
+        phase = "ephemeral:spawn"
         const ephemeral = await withTimeout(
           usePtyEphemeral
           ? deps.startClaudeSessionPTY({
@@ -230,7 +245,12 @@ export async function ensureSlashCommandsLoaded(
           timeoutMs,
           "ephemeral claude spawn",
         )
+        log.info("[kanna/agent] ensureSlashCommandsLoaded ephemeral spawned", {
+          chatId,
+          elapsedMs: elapsed(),
+        })
         try {
+          phase = "ephemeral:getSupportedCommands"
           commands = await withTimeout(
             ephemeral.getSupportedCommands(),
             timeoutMs,
@@ -246,8 +266,18 @@ export async function ensureSlashCommandsLoaded(
     const merged = mergeLocalCatalog(deps, commands, project.localPath)
     await deps.store.recordSessionCommandsLoaded(chatId, merged)
     deps.emitStateChange(chatId)
+    log.info("[kanna/agent] ensureSlashCommandsLoaded loaded", {
+      chatId,
+      commandCount: merged.length,
+      elapsedMs: elapsed(),
+    })
   } catch (error) {
-    log.warn("[kanna/agent] ensureSlashCommandsLoaded failed", String(error))
+    log.warn("[kanna/agent] ensureSlashCommandsLoaded failed", {
+      chatId,
+      phase,
+      elapsedMs: elapsed(),
+      error: String(error),
+    })
     // Fallback: when the CLI command fetch fails or times out, still surface
     // the local catalog so the picker recovers instead of showing an eternal
     // loading skeleton. Recording nothing when the local catalog is empty
