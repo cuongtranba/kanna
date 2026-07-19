@@ -1,5 +1,5 @@
 import * as React from "react"
-import { Tooltip, TooltipContent, TooltipTrigger } from "./tooltip"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./tooltip"
 import { cn } from "../../lib/utils"
 
 type TruncatedTextProps = {
@@ -15,8 +15,8 @@ type TruncatedTextProps = {
 
 /**
  * Truncated text with a project-Tooltip hover surface — the DESIGN.md-approved
- * replacement for the native `title` attribute on truncated cells. Requires a
- * `TooltipProvider` ancestor (mounted app-wide in App.tsx).
+ * replacement for the native `title` attribute on truncated cells. Ships its
+ * own `TooltipProvider` so it is self-contained (nested providers are safe).
  */
 export function TruncatedText({
   tooltip,
@@ -27,16 +27,18 @@ export function TruncatedText({
 }: TruncatedTextProps) {
   const triggerClass = cn("truncate", className)
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        {inline ? (
-          <span className={triggerClass}>{children}</span>
-        ) : (
-          <div className={triggerClass}>{children}</div>
-        )}
-      </TooltipTrigger>
-      <TooltipContent side={side}>{tooltip}</TooltipContent>
-    </Tooltip>
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          {inline ? (
+            <span className={triggerClass}>{children}</span>
+          ) : (
+            <div className={triggerClass}>{children}</div>
+          )}
+        </TooltipTrigger>
+        <TooltipContent side={side}>{tooltip}</TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   )
 }
 
@@ -51,14 +53,16 @@ type HoverHintProps = {
 /**
  * Wraps a single element with a project-Tooltip hover surface — the
  * DESIGN.md-approved replacement for a native `title` attribute on icon
- * buttons, badges, and other non-truncated elements. Requires a
- * `TooltipProvider` ancestor (mounted app-wide in App.tsx).
+ * buttons, badges, and other non-truncated elements. Ships its own
+ * `TooltipProvider` so it is self-contained (nested providers are safe).
  */
 export function HoverHint({ label, children, side }: HoverHintProps) {
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>{children}</TooltipTrigger>
-      <TooltipContent side={side}>{label}</TooltipContent>
-    </Tooltip>
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>{children}</TooltipTrigger>
+        <TooltipContent side={side}>{label}</TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   )
 }
