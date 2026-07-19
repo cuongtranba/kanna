@@ -93,6 +93,19 @@ function makeLimitDetection(resetAt = Date.now() + 60_000): LimitDetection {
   return { chatId: "chat-1", resetAt, tz: "system", raw: {} }
 }
 
+/** Fake loop_armed event — arms chatId with the given rendered loop prompt. */
+function makeLoopArmed(chatId: string, prompt: string): AutoContinueEvent {
+  return {
+    v: AUTO_CONTINUE_EVENT_VERSION,
+    kind: "loop_armed",
+    timestamp: Date.now(),
+    chatId,
+    scheduleId: "loop-arm-1",
+    subagentId: "sub-1",
+    prompt,
+  }
+}
+
 /** Build a minimal SessionErrorHandlerDeps. Override fields as needed. */
 function makeDeps(overrides: Partial<SessionErrorHandlerDeps> = {}): SessionErrorHandlerDeps {
   const emittedEvents: AutoContinueEvent[] = []
@@ -337,6 +350,93 @@ describe("handleLimitDetection", () => {
 
     await handleLimitDetection(deps, "chat-1", makeLimitDetection())
     expect(appendedMessages.some(m => m.chatId === "chat-1" && m.entry.kind === "auto_continue_prompt")).toBe(true)
+  })
+
+  test("armed loop + no rotation + autoResume off → accepted at waitUntil with the loop prompt", async () => {
+    const resetAt = Date.now() + 120_000
+    const deps = makeDeps({
+      oauthPool: null,
+      resolveAutoResumeFor: () => false,
+      store: {
+        getAutoContinueEvents: () => [makeLoopArmed("chat-1", "LOOP DISCIPLINE PROMPT")],
+        appendAutoContinueEvent: async () => {},
+        recordTurnFailed: async () => {},
+        appendMessage: async () => {},
+      },
+    })
+    const emitted: AutoContinueEvent[] = []
+    deps.emitAutoContinueEvent = async (ev) => { emitted.push(ev) }
+
+    const result = await handleLimitDetection(deps, "chat-1", makeLimitDetection(resetAt))
+    expect(result).toBe(true)
+    const ev = emitted[0]
+    expect(ev?.kind).toBe("auto_continue_accepted")
+    if (ev?.kind === "auto_continue_accepted") {
+      expect(ev.source).toBe("auto_setting")
+      expect(ev.scheduledAt).toBe(resetAt)
+      expect(ev.prompt).toBe("LOOP DISCIPLINE PROMPT")
+    }
+  })
+
+  test("unarmed + no rotation + autoResume off → still proposed (regression guard)", async () => {
+    const deps = makeDeps({ oauthPool: null, resolveAutoResumeFor: () => false })
+    const emitted: AutoContinueEvent[] = []
+    deps.emitAutoContinueEvent = async (ev) => { emitted.push(ev) }
+
+    await handleLimitDetection(deps, "chat-1", makeLimitDetection())
+    expect(emitted[0]?.kind).toBe("auto_continue_proposed")
+  })
+
+  test("armed loop + rotation available → rotation branch unchanged, no prompt attached", async () => {
+    const session = makeSession({ chatId: "chat-1", activeTokenId: "tok-old" })
+    const deps = makeDeps({
+      oauthPool: {
+        markLimited: () => {},
+        markError: () => {},
+        pickActive: () => ({ id: "tok-new" } as never),
+        earliestUnlimit: () => null,
+      },
+      claudeSessions: new Map([["chat-1", session]]),
+      resolveAutoResumeFor: () => false,
+      store: {
+        getAutoContinueEvents: () => [makeLoopArmed("chat-1", "LOOP DISCIPLINE PROMPT")],
+        appendAutoContinueEvent: async () => {},
+        recordTurnFailed: async () => {},
+        appendMessage: async () => {},
+      },
+    })
+    const emitted: AutoContinueEvent[] = []
+    deps.emitAutoContinueEvent = async (ev) => { emitted.push(ev) }
+
+    await handleLimitDetection(deps, "chat-1", makeLimitDetection())
+    const ev = emitted[0]
+    expect(ev?.kind).toBe("auto_continue_accepted")
+    if (ev?.kind === "auto_continue_accepted") {
+      expect(ev.source).toBe("token_rotation")
+      expect(ev.prompt).toBeUndefined()
+    }
+  })
+
+  test("armed loop + autoResume on → accepted carries the loop prompt", async () => {
+    const deps = makeDeps({
+      oauthPool: null,
+      resolveAutoResumeFor: () => true,
+      store: {
+        getAutoContinueEvents: () => [makeLoopArmed("chat-1", "LOOP DISCIPLINE PROMPT")],
+        appendAutoContinueEvent: async () => {},
+        recordTurnFailed: async () => {},
+        appendMessage: async () => {},
+      },
+    })
+    const emitted: AutoContinueEvent[] = []
+    deps.emitAutoContinueEvent = async (ev) => { emitted.push(ev) }
+
+    await handleLimitDetection(deps, "chat-1", makeLimitDetection())
+    const ev = emitted[0]
+    expect(ev?.kind).toBe("auto_continue_accepted")
+    if (ev?.kind === "auto_continue_accepted") {
+      expect(ev.prompt).toBe("LOOP DISCIPLINE PROMPT")
+    }
   })
 })
 
