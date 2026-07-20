@@ -1,0 +1,40 @@
+id: no-unstable-hook-fn-arg-ts
+language: typescript
+severity: error
+message: Inline function passed to a custom hook — fresh reference every render can retrigger the hook's internal effects in a render loop (React error #185).
+note: |
+  A hook that keys an internal effect on a function argument (e.g.
+  react-use-websocket's reconnect effect on its url arg — PR #561) tears
+  down and re-runs that effect EVERY render when handed an inline
+  arrow/function, which can escalate to React error #185 (Maximum update
+  depth exceeded) when the effect sets state.
+  Fix: bind the function with useCallback/useMemo, or hoist it to module
+  scope. Safe-listed hooks (React built-ins that ref-stash or read the
+  arg once, useShallow, and zustand use*Store selectors) are exempt.
+  If a hook is PROVEN to ref-stash its callbacks, extend the safe-list
+  regex in rules/no-unstable-hook-fn-arg{,-ts}.yml in the same PR.
+files:
+  - src/client/**
+ignores:
+  - src/client/**/*.test.ts
+  - src/client/**/*.test.tsx
+rule:
+  any:
+    - kind: arrow_function
+    - kind: function_expression
+  inside:
+    kind: arguments
+    inside:
+      kind: call_expression
+      has:
+        field: function
+        all:
+          - regex: '^use[A-Z][A-Za-z0-9]*$'
+          - not:
+              regex: '^(useMemo|useCallback|useEffect|useLayoutEffect|useInsertionEffect|useImperativeHandle|useState|useReducer|useRef|useShallow)$'
+          # zustand use*Store selectors are exempt, but useSyncExternalStore
+          # is NOT (inline subscribe resubscribes every render — real hazard)
+          - any:
+              - regex: '^useSyncExternalStore$'
+              - not:
+                  regex: '^use[A-Za-z0-9]*Store$'

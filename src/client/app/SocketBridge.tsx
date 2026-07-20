@@ -18,7 +18,7 @@
  * Component: c3-101 (socket-client)
  */
 
-import { useEffect } from "react"
+import { useEffect, useMemo } from "react"
 import useWebSocket from "react-use-websocket"
 import { domAdapter } from "../adapters/dom.adapter"
 import type { DomPort } from "../ports/domPort"
@@ -43,7 +43,14 @@ export function SocketBridge({ dom = domAdapter }: SocketBridgePorts = {}): null
   const setReadyState = useSocketStore((s) => s.setReadyState)
   const setSendMessage = useSocketStore((s) => s.setSendMessage)
 
-  const { sendMessage, readyState } = useWebSocket(() => getWsUrl(dom), {
+  // wsUrl MUST be a stable reference. useWebSocket's reconnect effect keys on the
+  // url argument (deps: [url, connect, ...]); a fresh `() => getWsUrl(dom)` arrow
+  // every render tore down + reopened the socket each render, and each open fires a
+  // flushSync setReadyState → re-render → new url → reopen. That runaway loop crashed
+  // with React error #185 (Maximum update depth exceeded) and a white page.
+  const wsUrl = useMemo(() => getWsUrl(dom), [dom])
+
+  const { sendMessage, readyState } = useWebSocket(wsUrl, {
     share: true,
     // filter: () => false prevents re-renders from lastMessage / lastJsonMessage state.
     // onMessage receives all frames without triggering React state updates.

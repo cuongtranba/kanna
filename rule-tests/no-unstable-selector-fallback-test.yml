@@ -1,0 +1,18 @@
+id: no-unstable-selector-fallback
+valid:
+  # documented stable-EMPTY pattern
+  - 'const EMPTY = []; const list = useSubagentsStore((s) => s.list ?? EMPTY)'
+  # useShallow wrapper makes the fresh ref safe
+  - 'const list = useStore(useShallow((s) => s.list ?? []))'
+  # fallback to a non-literal is fine
+  - 'const v = useSocketStore((s) => s.value ?? fallback)'
+  # ?? [] outside a store selector is not this rule's business
+  - 'const x = maybe ?? []'
+  # non-store hook with a similar arg untouched
+  - 'const m = useMemo(() => list ?? [], [list])'
+invalid:
+  - 'const list = useSubagentsStore((s) => s.list ?? [])'
+  - 'const byId = useWorkflowsStore((s) => s.byId ?? {})'
+  - 'const items = useStore((s) => s.items || [])'
+  # block-bodied selector
+  - 'const runs = useOrchRunsStore((s) => { return s.runs ?? [] })'
