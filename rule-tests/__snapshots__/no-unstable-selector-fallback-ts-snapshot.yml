@@ -1,0 +1,90 @@
+id: no-unstable-selector-fallback-ts
+snapshots:
+  const byId = useWorkflowsStore((s) => s.byId ?? {}):
+    labels:
+    - source: s.byId ?? {}
+      style: primary
+      start: 38
+      end: 50
+    - source: useWorkflowsStore
+      style: secondary
+      start: 13
+      end: 30
+    - source: useWorkflowsStore((s) => s.byId ?? {})
+      style: secondary
+      start: 13
+      end: 51
+    - source: ((s) => s.byId ?? {})
+      style: secondary
+      start: 30
+      end: 51
+    - source: (s) => s.byId ?? {}
+      style: secondary
+      start: 31
+      end: 50
+  const items = useStore((s) => s.items || []):
+    labels:
+    - source: s.items || []
+      style: primary
+      start: 30
+      end: 43
+    - source: useStore
+      style: secondary
+      start: 14
+      end: 22
+    - source: useStore((s) => s.items || [])
+      style: secondary
+      start: 14
+      end: 44
+    - source: ((s) => s.items || [])
+      style: secondary
+      start: 22
+      end: 44
+    - source: (s) => s.items || []
+      style: secondary
+      start: 23
+      end: 43
+  const list = useSubagentsStore((s) => s.list ?? []):
+    labels:
+    - source: s.list ?? []
+      style: primary
+      start: 38
+      end: 50
+    - source: useSubagentsStore
+      style: secondary
+      start: 13
+      end: 30
+    - source: useSubagentsStore((s) => s.list ?? [])
+      style: secondary
+      start: 13
+      end: 51
+    - source: ((s) => s.list ?? [])
+      style: secondary
+      start: 30
+      end: 51
+    - source: (s) => s.list ?? []
+      style: secondary
+      start: 31
+      end: 50
+  const runs = useOrchRunsStore((s) => { return s.runs ?? [] }):
+    labels:
+    - source: s.runs ?? []
+      style: primary
+      start: 46
+      end: 58
+    - source: useOrchRunsStore
+      style: secondary
+      start: 13
+      end: 29
+    - source: useOrchRunsStore((s) => { return s.runs ?? [] })
+      style: secondary
+      start: 13
+      end: 61
+    - source: ((s) => { return s.runs ?? [] })
+      style: secondary
+      start: 29
+      end: 61
+    - source: (s) => { return s.runs ?? [] }
+      style: secondary
+      start: 30
+      end: 60

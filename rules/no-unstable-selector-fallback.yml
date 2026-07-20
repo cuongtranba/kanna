@@ -1,0 +1,32 @@
+id: no-unstable-selector-fallback
+language: tsx
+severity: error
+message: Store selector returns an inline `?? []` / `?? {}` fallback — fresh reference every call triggers a render loop (React error #185).
+note: |
+  Zustand re-renders when the selector result changes by reference; an inline
+  [] / {} fallback is a new object every store read, so the component
+  re-renders forever (CLAUDE.md "Render-loop regression checks").
+  Fix with a hoisted stable fallback:
+    const EMPTY: Subagent[] = []
+    useStore((s) => s.list ?? EMPTY)
+  or wrap the selector: useStore(useShallow((s) => s.list ?? []))
+files:
+  - src/client/**
+ignores:
+  - src/client/**/*.test.ts
+  - src/client/**/*.test.tsx
+rule:
+  kind: binary_expression
+  regex: '(\?\?|\|\|)\s*(\[\s*\]|\{\s*\})\s*$'
+  inside:
+    stopBy: end
+    any:
+      - kind: arrow_function
+      - kind: function_expression
+    inside:
+      kind: arguments
+      inside:
+        kind: call_expression
+        has:
+          field: function
+          regex: '^use[A-Za-z0-9_]*Store$'

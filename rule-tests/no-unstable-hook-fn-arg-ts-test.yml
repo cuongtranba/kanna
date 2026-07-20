@@ -1,0 +1,27 @@
+id: no-unstable-hook-fn-arg-ts
+valid:
+  # React built-ins that take inline functions by design
+  - 'useEffect(() => { sync() }, [dep])'
+  - 'useMemo(() => getWsUrl(dom), [dom])'
+  - 'useCallback(() => submit(), [submit])'
+  - 'useState(() => expensiveInit())'
+  - 'useRef(async () => {})'
+  - 'useLayoutEffect(() => { measure() })'
+  # zustand selector arrows are read per render, never effect-keyed
+  - 'useSocketStore((s) => s.value)'
+  - 'useAppShellStore((s) => s.authStatus)'
+  - 'useStore(useShallow((s) => s.list ?? []))'
+  # stable binding passed to a custom hook (the PR #561 fix shape)
+  - 'const wsUrl = useMemo(() => getWsUrl(dom), [dom]); useWebSocket(wsUrl, { share: true })'
+  # inline fn NESTED inside an options object is not a direct hook arg
+  - 'useWebSocket(wsUrl, { share: true, filter: () => false })'
+  # not a hook call
+  - 'onClick(() => save())'
+invalid:
+  # the original reconnect flushSync loop bug (PR #561)
+  - 'useWebSocket(() => getWsUrl(dom), { share: true })'
+  - 'useWebSocket(() => getWsUrl(dom))'
+  # any custom hook handed an inline function
+  - 'useDebounce(() => search(q), 300)'
+  - 'usePolling(function poll() { return fetchStatus() }, interval)'
+  - 'useSyncExternalStore((cb) => subscribe(cb), getSnapshot)'
