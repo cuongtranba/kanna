@@ -1,0 +1,14 @@
+id: no-raw-fetch
+snapshots:
+  const response = await fetch("/api/auth"):
+    labels:
+    - source: fetch("/api/auth")
+      style: primary
+      start: 23
+      end: 41
+  const xhr = new XMLHttpRequest():
+    labels:
+    - source: new XMLHttpRequest()
+      style: primary
+      start: 12
+      end: 32

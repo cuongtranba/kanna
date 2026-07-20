@@ -1,4 +1,6 @@
 import { create } from "zustand"
+import { domAdapter } from "../adapters/dom.adapter"
+import type { DomPort } from "../ports/domPort"
 
 /**
  * Singleton store for ChatPage and its child components (ChatTranscriptViewport,
@@ -111,7 +113,13 @@ type ChatPageState =
   & DiffViewSlice
   & TerminalFocusSlice
 
-const INITIAL_VIEWPORT_WIDTH = typeof window === "undefined" ? 0 : window.innerWidth
+export interface ChatPageStorePorts {
+  dom?: DomPort
+}
+
+function getInitialViewportWidth(ports: ChatPageStorePorts = {}): number {
+  return (ports.dom ?? domAdapter).getInnerWidth()
+}
 
 export const useChatPageStore = create<ChatPageState>()((set) => ({
   // Empty-state typing
@@ -134,7 +142,7 @@ export const useChatPageStore = create<ChatPageState>()((set) => ({
   setInputHeight: (height) => set({ inputHeight: height }),
 
   // Mobile right sidebar overlay
-  viewportWidth: INITIAL_VIEWPORT_WIDTH,
+  viewportWidth: getInitialViewportWidth(),
   setViewportWidth: (width) => set({ viewportWidth: width }),
 
   // Fixed terminal height

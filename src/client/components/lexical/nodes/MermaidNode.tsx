@@ -2,6 +2,8 @@ import type { AnyValue } from "../../../../shared/errors"
 import type { EditorConfig, LexicalEditor, SerializedLexicalNode, Spread } from "lexical"
 import type { ReactNode } from "react"
 import { DecoratorNode, $applyNodeReplacement } from "lexical"
+import type { DomPort } from "../../../ports/domPort"
+import { domAdapter } from "../../../adapters/dom.adapter"
 import { MermaidDiagram } from "../../messages/MermaidDiagram"
 
 // ---------------------------------------------------------------------------
@@ -19,10 +21,12 @@ export type SerializedMermaidNode = Spread<
 
 export class MermaidNode extends DecoratorNode<ReactNode> {
   readonly __source: string
+  readonly __dom: DomPort
 
-  constructor(source: string, key?: string) {
+  constructor(source: string, key?: string, dom: DomPort = domAdapter) {
     super(key)
     this.__source = source
+    this.__dom = dom
   }
 
   // ── Static interface ──────────────────────────────────────────────────────
@@ -32,7 +36,7 @@ export class MermaidNode extends DecoratorNode<ReactNode> {
   }
 
   static clone(node: MermaidNode): MermaidNode {
-    return new MermaidNode(node.__source, node.__key)
+    return new MermaidNode(node.__source, node.__key, node.__dom)
   }
 
   static importJSON(serializedNode: SerializedMermaidNode): MermaidNode {
@@ -52,7 +56,7 @@ export class MermaidNode extends DecoratorNode<ReactNode> {
   // ── DOM ───────────────────────────────────────────────────────────────────
 
   createDOM(_config: EditorConfig, _editor: LexicalEditor): HTMLElement {
-    return document.createElement("div")
+    return this.__dom.createElement("div")
   }
 
   updateDOM(): boolean {

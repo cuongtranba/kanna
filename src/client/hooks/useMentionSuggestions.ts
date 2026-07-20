@@ -1,29 +1,23 @@
 import { useEffect, useRef } from "react"
 import { useComposerStore, type MentionSuggestionsState } from "../stores/composerStore"
+import { fetchProjectPaths, type ProjectPath } from "../api/projects"
+import type { HttpPort } from "../ports/httpPort"
+import type { TimerPort } from "../ports/timerPort"
+import { httpAdapter } from "../adapters/http.adapter"
+import { timerAdapter } from "../adapters/timer.adapter"
 
-export interface ProjectPath {
-  path: string
-  kind: "file" | "dir"
-}
+export type { ProjectPath }
 
 const DEBOUNCE_MS = 120
 
-export async function fetchProjectPaths(args: {
-  projectId: string
-  query: string
-  signal: AbortSignal
-}): Promise<ProjectPath[]> {
-  const params = new URLSearchParams({ query: args.query })
-  try {
-    const response = await fetch(`/api/projects/${args.projectId}/paths?${params.toString()}`, {
-      signal: args.signal,
-    })
-    if (!response.ok) return []
-    const payload: { paths?: ProjectPath[] } = await response.json()
-    return payload.paths ?? []
-  } catch {
-    return []
-  }
+interface MentionSuggestionsPorts {
+  http: HttpPort
+  timer: TimerPort
+}
+
+const DEFAULT_PORTS: MentionSuggestionsPorts = {
+  http: httpAdapter,
+  timer: timerAdapter,
 }
 
 const EMPTY_STATE: MentionSuggestionsState = { items: [], loading: false, error: null }
@@ -32,10 +26,12 @@ export function useMentionSuggestions(args: {
   projectId: string | null
   query: string
   enabled: boolean
+  ports?: MentionSuggestionsPorts
 }): MentionSuggestionsState {
+  const { http, timer } = args.ports ?? DEFAULT_PORTS
   const state = useComposerStore((s) => s.mentionSuggestions)
   const setMentionSuggestions = useComposerStore((s) => s.setMentionSuggestions)
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const debounceRef = useRef<number | null>(null)
   const abortRef = useRef<AbortController | null>(null)
 
   useEffect(() => {
@@ -44,28 +40,25 @@ export function useMentionSuggestions(args: {
       return
     }
 
-    if (debounceRef.current) clearTimeout(debounceRef.current)
+    if (debounceRef.current !== null) timer.clearTimeout(debounceRef.current)
     abortRef.current?.abort()
 
     setMentionSuggestions({ items: useComposerStore.getState().mentionSuggestions.items, loading: true, error: null })
     const controller = new AbortController()
     abortRef.current = controller
 
-    debounceRef.current = setTimeout(async () => {
-      const items = await fetchProjectPaths({
-        projectId: args.projectId!,
-        query: args.query,
-        signal: controller.signal,
+    debounceRef.current = timer.setTimeout(() => {
+      void fetchProjectPaths(args.projectId!, args.query, { signal: controller.signal, http }).then((items) => {
+        if (controller.signal.aborted) return
+        setMentionSuggestions({ items, loading: false, error: null })
       })
-      if (controller.signal.aborted) return
-      setMentionSuggestions({ items, loading: false, error: null })
     }, DEBOUNCE_MS)
 
     return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current)
+      if (debounceRef.current !== null) timer.clearTimeout(debounceRef.current)
       controller.abort()
     }
-  }, [args.enabled, args.projectId, args.query, setMentionSuggestions])
+  }, [args.enabled, args.projectId, args.query, http, timer, setMentionSuggestions])
 
   return state
 }

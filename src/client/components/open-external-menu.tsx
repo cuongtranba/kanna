@@ -9,6 +9,8 @@ import { HotkeyTooltip, HotkeyTooltipContent, HotkeyTooltipTrigger } from "./ui/
 import { Button } from "./ui/button"
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger } from "./ui/select"
 import { ContextMenuContent, ContextMenuItem } from "./ui/context-menu"
+import type { StoragePort } from "../ports/storagePort"
+import { localStorageAdapter } from "../adapters/storage.adapter"
 
 export type OpenAppValue = "finder" | "terminal" | "preview" | "default" | `editor:${EditorPreset}`
 
@@ -163,6 +165,10 @@ export function openAppValue(args: {
   args.onOpenExternal("open_editor", getEditorSettings(preset, args.editorCommandTemplate))
 }
 
+export interface OpenExternalSelectPorts {
+  storage?: StoragePort
+}
+
 function OpenExternalSelectInner({
   isMac,
   editorPreset,
@@ -170,6 +176,7 @@ function OpenExternalSelectInner({
   finderShortcut,
   editorShortcut,
   onOpenExternal,
+  ports,
 }: {
   isMac: boolean
   editorPreset: EditorPreset
@@ -177,14 +184,16 @@ function OpenExternalSelectInner({
   finderShortcut?: string[]
   editorShortcut?: string[]
   onOpenExternal: (action: OpenExternalAction, editor?: EditorOpenSettings) => void
+  ports?: OpenExternalSelectPorts
 }) {
+  const storage = ports?.storage ?? localStorageAdapter
   const fallbackValue: OpenAppValue = `editor:${editorPreset}`
   const lastValue = OpenExternalSelectStore.useScopedStore((s) => s.lastValue)
   const setLastValue = OpenExternalSelectStore.useScopedStore((s) => s.setLastValue)
 
   useEffect(() => {
-    setLastValue(normalizeOpenAppValue(window.localStorage.getItem(OPEN_SELECT_STORAGE_KEY), fallbackValue))
-  }, [fallbackValue, setLastValue])
+    setLastValue(normalizeOpenAppValue(storage.getItem(OPEN_SELECT_STORAGE_KEY), fallbackValue))
+  }, [fallbackValue, setLastValue, storage])
 
   const items = useMemo(() => getOpenAppItems({
     editorPreset,
@@ -196,7 +205,7 @@ function OpenExternalSelectInner({
 
   function handleOpenValue(value: OpenAppValue) {
     setLastValue(value)
-    window.localStorage.setItem(OPEN_SELECT_STORAGE_KEY, value)
+    storage.setItem(OPEN_SELECT_STORAGE_KEY, value)
     openAppValue({ value, editorCommandTemplate, onOpenExternal })
   }
 
@@ -258,6 +267,7 @@ export function OpenExternalSelect({
   finderShortcut,
   editorShortcut,
   onOpenExternal,
+  ports,
 }: {
   isMac: boolean
   editorPreset: EditorPreset
@@ -265,6 +275,7 @@ export function OpenExternalSelect({
   finderShortcut?: string[]
   editorShortcut?: string[]
   onOpenExternal: (action: OpenExternalAction, editor?: EditorOpenSettings) => void
+  ports?: OpenExternalSelectPorts
 }) {
   const initialValue: OpenAppValue = `editor:${editorPreset}`
   return (
@@ -276,6 +287,7 @@ export function OpenExternalSelect({
         finderShortcut={finderShortcut}
         editorShortcut={editorShortcut}
         onOpenExternal={onOpenExternal}
+        ports={ports}
       />
     </OpenExternalSelectStore.Provider>
   )

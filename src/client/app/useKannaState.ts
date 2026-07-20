@@ -32,6 +32,15 @@ import type { OrchRunsSnapshot, WorkflowsSnapshot } from "../../shared/protocol"
 import { log } from "../../shared/log"
 import type { AnyValue } from "../../shared/errors"
 import { isRecord } from "../../shared/errors"
+import type { StoragePort } from "../ports/storagePort"
+import type { DomPort } from "../ports/domPort"
+import type { TimerPort } from "../ports/timerPort"
+import type { ClipboardPort } from "../ports/clipboardPort"
+import { localStorageAdapter, sessionStorageAdapter } from "../adapters/storage.adapter"
+import { domAdapter } from "../adapters/dom.adapter"
+import { timerAdapter } from "../adapters/timer.adapter"
+import { clipboardAdapter } from "../adapters/clipboard.adapter"
+import { postAuthLogout, fetchAuthStatus } from "../api/auth"
 
 function shallowProviderTokenEquals(
   a: Partial<Record<AgentProvider, string | null>>,
@@ -319,9 +328,8 @@ export interface OptimisticUserPrompt {
   entry: UserPromptEntry
 }
 
-function readPersistedZustandState(key: string): Record<string, unknown> | null {
-  if (typeof window === "undefined") return null
-  const raw = window.localStorage.getItem(key)
+function readPersistedZustandState(key: string, storage: StoragePort): Record<string, unknown> | null {
+  const raw = storage.getItem(key)
   if (!raw) return null
   try {
     const parsed: { state?: AnyValue } = JSON.parse(raw)
@@ -331,16 +339,14 @@ function readPersistedZustandState(key: string): Record<string, unknown> | null 
   }
 }
 
-function readLegacyBrowserSettingsPatch(): AppSettingsPatch | null {
-  if (typeof window === "undefined") return null
-
+function readLegacyBrowserSettingsPatch(storage: StoragePort): AppSettingsPatch | null {
   const patch: AppSettingsPatch = {}
-  const theme = window.localStorage.getItem(LEGACY_THEME_STORAGE_KEY)
+  const theme = storage.getItem(LEGACY_THEME_STORAGE_KEY)
   if (theme === "light" || theme === "dark" || theme === "system") {
     patch.theme = theme
   }
 
-  const chatSoundState = readPersistedZustandState(LEGACY_CHAT_SOUND_STORAGE_KEY)
+  const chatSoundState = readPersistedZustandState(LEGACY_CHAT_SOUND_STORAGE_KEY, storage)
   if (chatSoundState?.chatSoundPreference === "never" || chatSoundState?.chatSoundPreference === "unfocused" || chatSoundState?.chatSoundPreference === "always") {
     patch.chatSoundPreference = chatSoundState.chatSoundPreference
   }
@@ -358,7 +364,7 @@ function readLegacyBrowserSettingsPatch(): AppSettingsPatch | null {
     patch.chatSoundId = chatSoundState.chatSoundId
   }
 
-  const terminalState = readPersistedZustandState(LEGACY_TERMINAL_STORAGE_KEY)
+  const terminalState = readPersistedZustandState(LEGACY_TERMINAL_STORAGE_KEY, storage)
   if (terminalState) {
     patch.terminal = {}
     if (typeof terminalState.scrollbackLines === "number") {
@@ -385,7 +391,7 @@ function readLegacyBrowserSettingsPatch(): AppSettingsPatch | null {
     }
   }
 
-  const chatPreferencesState = readPersistedZustandState(LEGACY_CHAT_PREFERENCES_STORAGE_KEY)
+  const chatPreferencesState = readPersistedZustandState(LEGACY_CHAT_PREFERENCES_STORAGE_KEY, storage)
   if (chatPreferencesState?.defaultProvider === "last_used" || chatPreferencesState?.defaultProvider === "claude" || chatPreferencesState?.defaultProvider === "codex") {
     patch.defaultProvider = chatPreferencesState.defaultProvider
   }
@@ -399,12 +405,11 @@ function readLegacyBrowserSettingsPatch(): AppSettingsPatch | null {
   return Object.keys(patch).length > 1 ? patch : null
 }
 
-function clearLegacyBrowserSettings() {
-  if (typeof window === "undefined") return
-  window.localStorage.removeItem(LEGACY_THEME_STORAGE_KEY)
-  window.localStorage.removeItem(LEGACY_CHAT_SOUND_STORAGE_KEY)
-  window.localStorage.removeItem(LEGACY_TERMINAL_STORAGE_KEY)
-  window.localStorage.removeItem(LEGACY_CHAT_PREFERENCES_STORAGE_KEY)
+function clearLegacyBrowserSettings(storage: StoragePort) {
+  storage.removeItem(LEGACY_THEME_STORAGE_KEY)
+  storage.removeItem(LEGACY_CHAT_SOUND_STORAGE_KEY)
+  storage.removeItem(LEGACY_TERMINAL_STORAGE_KEY)
+  storage.removeItem(LEGACY_CHAT_PREFERENCES_STORAGE_KEY)
 }
 
 function syncRuntimeStoresFromAppSettings(snapshot: AppSettingsSnapshot) {
@@ -529,17 +534,24 @@ export function applySidebarProjectOrder(
     : nextProjectGroups
 }
 
-export function shouldMarkActiveChatRead(doc: Pick<Document, "visibilityState" | "hasFocus"> = document) {
-  return doc.visibilityState === "visible" && doc.hasFocus()
+export function shouldMarkActiveChatRead(dom?: Pick<DomPort, "getVisibilityState" | "hasFocus">) {
+  const d = dom ?? domAdapter
+  return d.getVisibilityState() === "visible" && d.hasFocus()
 }
 
-function wsUrl() {
-  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:"
-  return `${protocol}//${window.location.host}/ws`
+function wsUrl(dom: DomPort) {
+  const href = dom.getHref()
+  const protocol = href.startsWith("https://") ? "wss:" : "ws:"
+  // Extract host from href: "https://host:port/path" → "host:port"
+  const url = new URL(href)
+  return `${protocol}//${url.host}/ws`
 }
 
-function useKannaSocket() {
-  const socket = useMemo(() => new KannaSocket(wsUrl()), [])
+function useKannaSocket(ports: { dom: DomPort; timer?: import("../ports/timerPort").TimerPort; localStorage?: import("../ports/storagePort").StoragePort; sessionStorage?: import("../ports/storagePort").StoragePort }) {
+  // wsUrl is computed once at mount — the DOM port (and therefore the URL)
+  // never changes during the lifetime of the hook, so the empty dep array is intentional.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const socket = useMemo(() => new KannaSocket(wsUrl(ports.dom), ports), [])
 
   useEffect(() => {
     socket.start()
@@ -571,10 +583,13 @@ interface SendToStartingTrace {
   startingRenderedAt?: number
 }
 
-function isSendToStartingProfilingEnabled() {
+function isSendToStartingProfilingEnabled(
+  sessStore: StoragePort,
+  localStore: StoragePort,
+) {
   try {
-    return window.sessionStorage.getItem(SEND_TO_STARTING_PROFILE_STORAGE_KEY) === "1"
-      || window.localStorage.getItem(SEND_TO_STARTING_PROFILE_STORAGE_KEY) === "1"
+    return sessStore.getItem(SEND_TO_STARTING_PROFILE_STORAGE_KEY) === "1"
+      || localStore.getItem(SEND_TO_STARTING_PROFILE_STORAGE_KEY) === "1"
   } catch {
     return false
   }
@@ -587,9 +602,11 @@ function elapsedTraceMs(startedAt: number) {
 function logSendToStartingTrace(
   trace: SendToStartingTrace | null | undefined,
   stage: string,
-  details?: Record<string, unknown>
+  details?: Record<string, unknown>,
+  session: StoragePort = sessionStorageAdapter,
+  local: StoragePort = localStorageAdapter,
 ) {
-  if (!trace || !isSendToStartingProfilingEnabled()) {
+  if (!trace || !isSendToStartingProfilingEnabled(session, local)) {
     return
   }
 
@@ -686,16 +703,16 @@ export function getNextMeasuredInputHeight(previousHeight: number, measuredHeigh
   return measuredHeight > 0 ? measuredHeight : previousHeight
 }
 
-function getUiUpdateRestartPhase() {
-  return window.sessionStorage.getItem(UI_UPDATE_RESTART_STORAGE_KEY)
+function getUiUpdateRestartPhase(sessStore: StoragePort) {
+  return sessStore.getItem(UI_UPDATE_RESTART_STORAGE_KEY)
 }
 
-function setUiUpdateRestartPhase(phase: "awaiting_disconnect" | "awaiting_server_ready") {
-  window.sessionStorage.setItem(UI_UPDATE_RESTART_STORAGE_KEY, phase)
+function setUiUpdateRestartPhase(phase: "awaiting_disconnect" | "awaiting_server_ready", sessStore: StoragePort) {
+  sessStore.setItem(UI_UPDATE_RESTART_STORAGE_KEY, phase)
 }
 
-function clearUiUpdateRestartPhase() {
-  window.sessionStorage.removeItem(UI_UPDATE_RESTART_STORAGE_KEY)
+function clearUiUpdateRestartPhase(sessStore: StoragePort) {
+  sessStore.removeItem(UI_UPDATE_RESTART_STORAGE_KEY)
 }
 
 export function shouldHandleUiUpdateReloadRequest(
@@ -706,28 +723,24 @@ export function shouldHandleUiUpdateReloadRequest(
   return String(reloadRequestedAt) !== lastHandledReloadRequest
 }
 
-function getLastHandledUiUpdateReloadRequest() {
-  return window.sessionStorage.getItem(UI_UPDATE_RELOAD_REQUEST_STORAGE_KEY)
+function getLastHandledUiUpdateReloadRequest(sessStore: StoragePort) {
+  return sessStore.getItem(UI_UPDATE_RELOAD_REQUEST_STORAGE_KEY)
 }
 
-function setLastHandledUiUpdateReloadRequest(reloadRequestedAt: number) {
-  window.sessionStorage.setItem(UI_UPDATE_RELOAD_REQUEST_STORAGE_KEY, String(reloadRequestedAt))
+function setLastHandledUiUpdateReloadRequest(reloadRequestedAt: number, sessStore: StoragePort) {
+  sessStore.setItem(UI_UPDATE_RELOAD_REQUEST_STORAGE_KEY, String(reloadRequestedAt))
 }
 
 export function getUiUpdateReadinessPath() {
   return "/auth/status"
 }
 
-async function isServerReady(fetchImpl: typeof fetch = fetch) {
-  const response = await fetchImpl(getUiUpdateReadinessPath(), {
-    method: "GET",
-    cache: "no-store",
-    headers: {
-      Accept: "application/json",
-    },
-  })
-
-  return response.ok
+async function isServerReady(signal?: AbortSignal) {
+  const result = await fetchAuthStatus(signal)
+  // fetchAuthStatus returns {} on network error and the parsed body on success.
+  // The /auth/status endpoint always returns ok:true when reachable, so a
+  // non-empty result (with any field) means the server is up.
+  return Object.keys(result).length > 0
 }
 
 export interface ProjectRequest {
@@ -888,9 +901,22 @@ export interface KannaState {
   handleToolRequestAnswer: (toolRequestId: string, decision: ToolRequestDecision) => Promise<void>
 }
 
-export function useKannaState(activeChatId: string | null): KannaState {
+export interface KannaStatePorts {
+  localStore?: StoragePort
+  sessStore?: StoragePort
+  dom?: DomPort
+  timer?: TimerPort
+  clipboard?: ClipboardPort
+}
+
+export function useKannaState(activeChatId: string | null, ports: KannaStatePorts = {}): KannaState {
+  const localStore = ports.localStore ?? localStorageAdapter
+  const sessStore = ports.sessStore ?? sessionStorageAdapter
+  const dom = ports.dom ?? domAdapter
+  const timer = ports.timer ?? timerAdapter
+  const clipboard = ports.clipboard ?? clipboardAdapter
   const navigate = useNavigate()
-  const socket = useKannaSocket()
+  const socket = useKannaSocket({ dom, timer, localStorage: localStore, sessionStorage: sessStore })
   const dialog = useAppDialog()
 
   const sidebarData = useKannaStateStore((state) => state.sidebarData)
@@ -899,13 +925,13 @@ export function useKannaState(activeChatId: string | null): KannaState {
   const updateSnapshot = useKannaStateStore((state) => state.updateSnapshot)
   const uiRestartPhase = useKannaStateStore((state) => state.uiRestartPhase)
   const markUiRestartPhase = useCallback((phase: "awaiting_disconnect" | "awaiting_server_ready") => {
-    setUiUpdateRestartPhase(phase)
+    setUiUpdateRestartPhase(phase, sessStore)
     useKannaStateStore.getState().setUiRestartPhase(phase)
-  }, [])
+  }, [sessStore])
   const clearUiRestartPhase = useCallback(() => {
-    clearUiUpdateRestartPhase()
+    clearUiUpdateRestartPhase(sessStore)
     useKannaStateStore.getState().setUiRestartPhase(null)
-  }, [])
+  }, [sessStore])
   const chatSnapshot = useKannaStateStore((state) => state.chatSnapshot)
   const chatResyncNonce = useKannaStateStore((state) => state.chatResyncNonce)
   const olderHistoryEntries = useKannaStateStore((state) => state.olderHistoryEntries)
@@ -1016,28 +1042,28 @@ export function useKannaState(activeChatId: string | null): KannaState {
 
   useEffect(() => {
     const reloadRequestedAt = updateSnapshot?.reloadRequestedAt
-    if (!shouldHandleUiUpdateReloadRequest(reloadRequestedAt, getLastHandledUiUpdateReloadRequest())) {
+    if (!shouldHandleUiUpdateReloadRequest(reloadRequestedAt, getLastHandledUiUpdateReloadRequest(sessStore))) {
       return
     }
     if (!reloadRequestedAt) {
       return
     }
 
-    setLastHandledUiUpdateReloadRequest(reloadRequestedAt)
+    setLastHandledUiUpdateReloadRequest(reloadRequestedAt, sessStore)
     markUiRestartPhase("awaiting_disconnect")
-  }, [markUiRestartPhase, updateSnapshot?.reloadRequestedAt])
+  }, [markUiRestartPhase, sessStore, updateSnapshot?.reloadRequestedAt])
 
   useEffect(() => {
-    const phase = getUiUpdateRestartPhase()
+    const phase = getUiUpdateRestartPhase(sessStore)
     const reconnectAction = getUiUpdateRestartReconnectAction(phase, connectionStatus)
     if (reconnectAction === "awaiting_server_ready") {
       markUiRestartPhase("awaiting_server_ready")
-      
+
     }
-  }, [connectionStatus, markUiRestartPhase])
+  }, [connectionStatus, markUiRestartPhase, sessStore])
 
   useEffect(() => {
-    if (getUiUpdateRestartPhase() !== "awaiting_server_ready") {
+    if (getUiUpdateRestartPhase(sessStore) !== "awaiting_server_ready") {
       return
     }
 
@@ -1049,7 +1075,7 @@ export function useKannaState(activeChatId: string | null): KannaState {
         if (await isServerReady()) {
           if (cancelled) return
           clearUiRestartPhase()
-          window.location.reload()
+          dom.reload()
           return
         }
       } catch {
@@ -1057,7 +1083,7 @@ export function useKannaState(activeChatId: string | null): KannaState {
       }
 
       if (cancelled) return
-      timeoutId = window.setTimeout(() => {
+      timeoutId = timer.setTimeout(() => {
         void pollServerReadiness()
       }, 500)
     }
@@ -1067,10 +1093,10 @@ export function useKannaState(activeChatId: string | null): KannaState {
     return () => {
       cancelled = true
       if (timeoutId !== null) {
-        window.clearTimeout(timeoutId)
+        timer.clearTimeout(timeoutId)
       }
     }
-  }, [connectionStatus, clearUiRestartPhase])
+  }, [clearUiRestartPhase, connectionStatus, dom, sessStore, timer])
 
   useEffect(() => {
     function handleWindowFocus() {
@@ -1081,11 +1107,8 @@ export function useKannaState(activeChatId: string | null): KannaState {
       })
     }
 
-    window.addEventListener("focus", handleWindowFocus)
-    return () => {
-      window.removeEventListener("focus", handleWindowFocus)
-    }
-  }, [socket, updateSnapshot?.lastCheckedAt])
+    return dom.addWindowListener("focus", handleWindowFocus)
+  }, [dom, socket, updateSnapshot?.lastCheckedAt])
 
   useEffect(() => {
     return socket.subscribe<KeybindingsSnapshot>({ type: "keybindings" }, (snapshot) => {
@@ -1323,12 +1346,12 @@ export function useKannaState(activeChatId: string | null): KannaState {
   useEffect(() => {
     if (connectionStatus !== "connected") return
     if (appSettings?.browserSettingsMigrated !== false) return
-    const patch = readLegacyBrowserSettingsPatch()
+    const patch = readLegacyBrowserSettingsPatch(localStore)
     if (!patch) return
     void handleWriteAppSettings(patch)
-      .then(clearLegacyBrowserSettings)
+      .then(() => clearLegacyBrowserSettings(localStore))
       .catch(() => undefined)
-  }, [appSettings?.browserSettingsMigrated, connectionStatus, handleWriteAppSettings])
+  }, [appSettings?.browserSettingsMigrated, connectionStatus, handleWriteAppSettings, localStore])
 
   useEffect(() => {
     if (connectionStatus !== "connected") return
@@ -1340,14 +1363,14 @@ export function useKannaState(activeChatId: string | null): KannaState {
       useKannaStateStore.getState().incrementFocusEpoch()
     }
 
-    window.addEventListener("focus", handleFocusSignal)
-    document.addEventListener("visibilitychange", handleFocusSignal)
+    const cleanupFocus = dom.addWindowListener("focus", handleFocusSignal)
+    const cleanupVisibility = dom.addDocumentListener("visibilitychange", handleFocusSignal)
 
     return () => {
-      window.removeEventListener("focus", handleFocusSignal)
-      document.removeEventListener("visibilitychange", handleFocusSignal)
+      cleanupFocus()
+      cleanupVisibility()
     }
-  }, [])
+  }, [dom])
 
   useEffect(() => {
     if (!activeChatId) {
@@ -1376,7 +1399,7 @@ export function useKannaState(activeChatId: string | null): KannaState {
           logSendToStartingTrace(matchingTrace, "chat_snapshot_received", {
             status: snapshot.runtime.status,
             messageCount: snapshot.messages.length,
-          })
+          }, sessStore, localStore)
         }
       }
       useKannaStateStore.getState().setChatSnapshot((current) => {
@@ -1430,7 +1453,7 @@ export function useKannaState(activeChatId: string | null): KannaState {
       })
       unsubscribe()
     }
-  }, [activeChatId, socket, chatResyncNonce])
+  }, [activeChatId, localStore, sessStore, socket, chatResyncNonce])
 
   useEffect(() => {
     if (!activeChatId) return
@@ -1479,7 +1502,7 @@ export function useKannaState(activeChatId: string | null): KannaState {
 
   useEffect(() => {
     if (!activeChatId || !sidebarReady) return
-    if (!shouldMarkActiveChatRead()) return
+    if (!shouldMarkActiveChatRead(dom)) return
     const activeSidebarChat = sidebarProjectGroups
       .flatMap((group) => group.chats)
       .find((chat) => chat.chatId === activeChatId)
@@ -1487,7 +1510,7 @@ export function useKannaState(activeChatId: string | null): KannaState {
     void socket.command({ type: "chat.markRead", chatId: activeChatId }).catch((error) => {
       useKannaStateStore.getState().setCommandError(error instanceof Error ? error.message : String(error))
     })
-  }, [activeChatId, focusEpoch, sidebarProjectGroups, sidebarReady, socket])
+  }, [activeChatId, dom, focusEpoch, sidebarProjectGroups, sidebarReady, socket])
 
   useEffect(() => {
     const store = useKannaStateStore.getState()
@@ -1623,15 +1646,15 @@ export function useKannaState(activeChatId: string | null): KannaState {
       return
     }
     const ackedAt = optimisticProcessing.ackedAt
-    const timeoutId = window.setTimeout(() => {
+    const timeoutId = timer.setTimeout(() => {
       useKannaStateStore.getState().setOptimisticProcessing((current) => (
         current?.scopeId === optimisticScopeId && current.ackedAt === ackedAt
           ? null
           : current
       ))
     }, 300)
-    return () => window.clearTimeout(timeoutId)
-  }, [optimisticProcessing, optimisticScopeId, runtime?.status])
+    return () => timer.clearTimeout(timeoutId)
+  }, [optimisticProcessing, optimisticScopeId, runtime?.status, timer])
 
   useEffect(() => {
     if (!activeChatId || runtime?.status !== "starting") {
@@ -1648,8 +1671,8 @@ export function useKannaState(activeChatId: string | null): KannaState {
     matchingTrace.startingStatusAt = performance.now()
     logSendToStartingTrace(matchingTrace, "runtime_status_starting", {
       status: runtime.status,
-    })
-  }, [activeChatId, runtime?.status])
+    }, sessStore, localStore)
+  }, [activeChatId, localStore, runtime?.status, sessStore])
 
   useEffect(() => {
     if (!activeChatId || !runtime || runtime.status === "starting") {
@@ -1665,9 +1688,9 @@ export function useKannaState(activeChatId: string | null): KannaState {
 
     logSendToStartingTrace(matchingTrace, "starting_not_observed", {
       status: runtime.status,
-    })
+    }, sessStore, localStore)
     sendToStartingProfilesRef.current.delete(matchingTrace.traceId)
-  }, [activeChatId, runtime])
+  }, [activeChatId, localStore, runtime, sessStore])
 
   useLayoutEffect(() => {
     if (!activeChatId || runtime?.status !== "starting") {
@@ -1690,9 +1713,9 @@ export function useKannaState(activeChatId: string | null): KannaState {
     matchingTrace.startingRenderedAt = performance.now()
     logSendToStartingTrace(matchingTrace, "starting_render_committed", {
       totalMs: elapsedTraceMs(matchingTrace.startedAt),
-    })
+    }, sessStore, localStore)
     sendToStartingProfilesRef.current.delete(matchingTrace.traceId)
-  }, [activeChatId, runtime?.status])
+  }, [activeChatId, localStore, runtime?.status, sessStore])
 
   useEffect(() => {
     useKannaStateStore.getState().setOptimisticUserPrompts((current) => {
@@ -1843,7 +1866,7 @@ export function useKannaState(activeChatId: string | null): KannaState {
       }
 
       if (result.ok && result.action === "reload") {
-        window.location.reload()
+        dom.reload()
         return
       }
 
@@ -1852,7 +1875,7 @@ export function useKannaState(activeChatId: string | null): KannaState {
       clearUiRestartPhase()
       useKannaStateStore.getState().setCommandError(error instanceof Error ? error.message : String(error))
     }
-  }, [clearUiRestartPhase, dialog, markUiRestartPhase, socket])
+  }, [clearUiRestartPhase, dialog, dom, markUiRestartPhase, socket])
 
   const handleForceReload = useCallback(async () => {
     markUiRestartPhase("awaiting_disconnect")
@@ -1870,7 +1893,7 @@ export function useKannaState(activeChatId: string | null): KannaState {
       }
 
       if (result.action === "reload") {
-        window.location.reload()
+        dom.reload()
         return
       }
 
@@ -1879,27 +1902,17 @@ export function useKannaState(activeChatId: string | null): KannaState {
       clearUiRestartPhase()
       useKannaStateStore.getState().setCommandError(error instanceof Error ? error.message : String(error))
     }
-  }, [clearUiRestartPhase, dialog, markUiRestartPhase, socket])
+  }, [clearUiRestartPhase, dialog, dom, markUiRestartPhase, socket])
 
   const handleSignOut = useCallback(async () => {
     try {
-      const response = await fetch("/auth/logout", {
-        method: "POST",
-        headers: {
-          Accept: "application/json",
-        },
-      })
-
-      if (!response.ok) {
-        throw new Error(`Sign out failed with status ${response.status}`)
-      }
-
+      await postAuthLogout()
       useKannaStateStore.getState().setCommandError(null)
-      window.location.reload()
+      dom.reload()
     } catch (error) {
       useKannaStateStore.getState().setCommandError(error instanceof Error ? error.message : String(error))
     }
-  }, [])
+  }, [dom])
 
   const handleSend = useCallback(async (
     content: string,
@@ -1928,7 +1941,7 @@ export function useKannaState(activeChatId: string | null): KannaState {
       attachments: attachments.length,
       contentLength: content.length,
       contentPreview: sendTrace.contentPreview,
-    })
+    }, sessStore, localStore)
     const requiredMatchCount = countMatchingUserPrompts(serverTranscriptEntries, signature)
       + optimisticUserPrompts.filter((prompt) => prompt.scopeId === optimisticScopeId && prompt.signature === signature).length
       + 1
@@ -1949,7 +1962,7 @@ export function useKannaState(activeChatId: string | null): KannaState {
     logSendToStartingTrace(sendTrace, "optimistic_prompt_added", {
       optimisticId,
       optimisticScopeId,
-    })
+    }, sessStore, localStore)
 
     try {
       let projectId = selectedProjectId ?? sidebarProjectGroups[0]?.groupKey ?? null
@@ -1999,7 +2012,7 @@ export function useKannaState(activeChatId: string | null): KannaState {
       logSendToStartingTrace(sendTrace, "chat_send_ack_received", {
         resultChatId: result.chatId ?? null,
         queued: result.queued ?? false,
-      })
+      }, sessStore, localStore)
 
       if (!activeChatId && result.chatId) {
         useKannaStateStore.getState().setOptimisticUserPrompts((current) => current.map((prompt) => (
@@ -2019,12 +2032,12 @@ export function useKannaState(activeChatId: string | null): KannaState {
       useKannaStateStore.getState().setOptimisticProcessing(null)
       logSendToStartingTrace(sendTrace, "handle_send_failed", {
         error: error instanceof Error ? error.message : String(error),
-      })
+      }, sessStore, localStore)
       sendToStartingProfilesRef.current.delete(clientTraceId)
       useKannaStateStore.getState().setCommandError(error instanceof Error ? error.message : String(error))
       throw error
     }
-  }, [activeChatId, fallbackLocalProjectPath, navigate, optimisticUserPrompts, selectedProjectId, serverTranscriptEntries, sidebarProjectGroups, socket])
+  }, [activeChatId, fallbackLocalProjectPath, localStore, navigate, optimisticUserPrompts, selectedProjectId, serverTranscriptEntries, sessStore, sidebarProjectGroups, socket])
 
   const handleSteerQueuedMessage = useCallback(async (queuedMessageId: string) => {
     if (!activeChatId) return
@@ -2301,15 +2314,12 @@ export function useKannaState(activeChatId: string | null): KannaState {
 
   const handleCopyPath = useCallback(async (localPath: string) => {
     try {
-      if (typeof navigator === "undefined" || !navigator.clipboard?.writeText) {
-        throw new Error("Clipboard is not available")
-      }
-      await navigator.clipboard.writeText(localPath)
+      await clipboard.writeText(localPath)
       useKannaStateStore.getState().setCommandError(null)
     } catch (error) {
       useKannaStateStore.getState().setCommandError(error instanceof Error ? error.message : String(error))
     }
-  }, [])
+  }, [clipboard])
 
   const handleOpenLocalLink = useCallback(async (
     target: OpenLocalLinkTarget,

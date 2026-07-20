@@ -21,6 +21,13 @@ import { cn } from "../lib/utils"
 import { NewProjectModal } from "./NewProjectModal"
 import { Button } from "./ui/button"
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip"
+import type { ClipboardPort, TimerPort } from "../ports"
+import { clipboardAdapter, timerAdapter } from "../adapters"
+
+type CopyPorts = {
+  clipboard?: ClipboardPort
+  timer?: TimerPort
+}
 
 interface LocalDevProps {
   connectionStatus: SocketStatus
@@ -34,14 +41,16 @@ interface LocalDevProps {
   onCreateProject: (project: { mode: "new" | "existing"; localPath: string; title: string }) => Promise<void>
 }
 
-function CopyButtonInner({ text }: { text: string }) {
+function CopyButtonInner({ text, ports = {} }: { text: string; ports?: CopyPorts }) {
   const copied = CopyButtonStore.useScopedStore((s) => s.copied)
   const setCopied = CopyButtonStore.useScopedStore((s) => s.setCopied)
+  const clipboard = ports.clipboard ?? clipboardAdapter
+  const timer = ports.timer ?? timerAdapter
 
   async function handleCopy() {
-    await navigator.clipboard.writeText(text)
+    await clipboard.writeText(text)
     setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+    timer.setTimeout(() => setCopied(false), 2000)
   }
 
   return (

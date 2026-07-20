@@ -1,15 +1,15 @@
 import { useEffect, useState } from "react"
+import type { DomPort } from "../ports/domPort"
+import { domAdapter } from "../adapters/dom.adapter"
 
-export function useIsMobile(maxWidthPx = 640): boolean {
-  const [m, setM] = useState(() => {
-    if (typeof window === "undefined") return false
-    return window.matchMedia(`(max-width: ${maxWidthPx}px)`).matches
-  })
+export function useIsMobile(
+  maxWidthPx = 640,
+  ports: { dom: DomPort } = { dom: domAdapter },
+): boolean {
+  const query = `(max-width: ${maxWidthPx}px)`
+  const [m, setM] = useState(() => ports.dom.matchesMediaQuery(query))
   useEffect(() => {
-    const mq = window.matchMedia(`(max-width: ${maxWidthPx}px)`)
-    const handler = () => setM(mq.matches)
-    mq.addEventListener("change", handler)
-    return () => mq.removeEventListener("change", handler)
-  }, [maxWidthPx])
+    return ports.dom.addMediaQueryListener(query, setM)
+  }, [ports.dom, query])
   return m
 }

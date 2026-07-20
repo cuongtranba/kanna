@@ -1,5 +1,7 @@
 import { useEffect, useRef } from "react"
 import { DEFAULT_NEW_PROJECT_ROOT } from "../../shared/branding"
+import type { TimerPort } from "../ports/timerPort"
+import { timerAdapter } from "../adapters/timer.adapter"
 import { Button } from "./ui/button"
 import {
   Dialog,
@@ -18,10 +20,15 @@ import {
   type NewProjectModalTab,
 } from "../stores/newProjectModalStore"
 
+export interface NewProjectModalPorts {
+  timer?: TimerPort
+}
+
 interface Props {
   open: boolean
   onOpenChange: (open: boolean) => void
   onConfirm: (project: { mode: NewProjectModalTab; localPath: string; title: string }) => void
+  ports?: NewProjectModalPorts
 }
 
 function toKebab(str: string): string {
@@ -33,7 +40,8 @@ function toKebab(str: string): string {
     .replace(/^-|-$/g, "")
 }
 
-export function NewProjectModal({ open, onOpenChange, onConfirm }: Props) {
+export function NewProjectModal({ open, onOpenChange, onConfirm, ports = {} }: Props) {
+  const timer = ports.timer ?? timerAdapter
   const tab = useNewProjectTab()
   const name = useNewProjectName()
   const existingPath = useNewProjectExistingPath()
@@ -47,18 +55,18 @@ export function NewProjectModal({ open, onOpenChange, onConfirm }: Props) {
   useEffect(() => {
     if (open) {
       resetForOpen()
-      setTimeout(() => inputRef.current?.focus(), 0)
+      timer.setTimeout(() => inputRef.current?.focus(), 0)
     }
-  }, [open, resetForOpen])
+  }, [open, resetForOpen, timer])
 
   useEffect(() => {
     if (open) {
-      setTimeout(() => {
+      timer.setTimeout(() => {
         if (tab === "new") inputRef.current?.focus()
         else existingInputRef.current?.focus()
       }, 0)
     }
-  }, [tab, open])
+  }, [tab, open, timer])
 
   const kebab = toKebab(name)
   const newPath = kebab ? `${DEFAULT_NEW_PROJECT_ROOT}/${kebab}` : ""

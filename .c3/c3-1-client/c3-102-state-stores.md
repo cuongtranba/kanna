@@ -1,7 +1,7 @@
 ---
 id: c3-102
 c3-version: 4
-c3-seal: 2bb5b03ad40ccf191e8a94ec80e28abbc87cf6d7b1c9e7f43645e71707a22d12
+c3-seal: d200f783eadc480332255eba6de70441ac2a56c5fd4bb04d503a36c97b94e7e4
 title: state-stores
 type: component
 category: foundation
@@ -34,7 +34,7 @@ Hold UI-local state (chat input, terminal layout, sidebar, preferences) in small
 
 ## Purpose
 
-Owns the browser-side state surface as Zustand stores in three forms: singleton per-concern stores (chat input, sidebar order, terminal layout, preferences) with selective `persist` middleware, the WS-fed `kannaStateStore` holding server snapshots (written exclusively by the `useKannaState` socket pipeline), and the `createScopedStore` factory (`src/client/lib/createScopedStore.tsx`) backing per-instance stores colocated as `<Component>.store.ts` beside their components. Raw `useState` is banned outside the frozen allowlist by the `no-react-usestate` ast-grep gate. Non-goals: route state and derived render caches — those live elsewhere.
+Owns the browser-side state surface as Zustand stores in three forms: singleton per-concern stores (chat input, sidebar order, terminal layout, preferences) with selective `persist` middleware, the WS-fed `kannaStateStore` holding server snapshots (written exclusively by the `useKannaState` socket pipeline), and the `createScopedStore` factory (`src/client/lib/createScopedStore.tsx`) backing per-instance stores colocated as `<Component>.store.ts` beside their components. Additionally owns the `socketStore` singleton (`src/client/stores/socketStore.ts`) for raw WebSocket transport state (readyState + sendMessage), written exclusively by `SocketBridge`, and the `queryClient` server-cache surface (`src/client/query/queryClient.ts`, React Query) used by Zustand actions for imperative HTTP cache access. Raw `useState` is banned outside the frozen allowlist by the `no-react-usestate` ast-grep gate. Non-goals: route state and derived render caches — those live elsewhere.
 
 ## Foundational Flow
 
@@ -73,6 +73,7 @@ Owns the browser-side state surface as Zustand stores in three forms: singleton 
 | useSidebarStore | OUT | Project order, drag state, persistence | c3-111 | src/client/stores |
 | useTerminalStore | OUT | Layout sizes, visibility, persistence | c3-118 | src/client/stores |
 | usePreferencesStore | OUT | Theme, notifications, provider keys | c3-116 | src/client/stores |
+| useSocketStore | OUT | Raw WS transport state (readyState + sendMessage); written only by SocketBridge | c3-101 | src/client/stores/socketStore.ts |
 
 ## Change Safety
 

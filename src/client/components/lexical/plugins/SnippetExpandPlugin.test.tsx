@@ -161,11 +161,7 @@ describe("SnippetExpandPlugin — Tab guard", () => {
   })
 
   it("isTypeaheadMenuOpen detects the menu marker", () => {
-    expect(
-      isTypeaheadMenuOpen({
-        querySelector: (sel: string) => (sel === "[data-kanna-typeahead-menu]" ? ({} as Element) : null),
-      }),
-    ).toBe(true)
+    expect(isTypeaheadMenuOpen({ hasTypeaheadMenuOpen: () => true })).toBe(true)
   })
 })
 

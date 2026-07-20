@@ -3,6 +3,7 @@ import { getAppAuthStateFromStatus, shouldPlayChatNotificationSound, shouldRedir
 import { getChatNotificationSnapshot, getChatSoundBurstCount, getNotificationTitleCount } from "./chatNotifications"
 import { DEFAULT_SIDEBAR_WIDTH, MAX_SIDEBAR_WIDTH, MIN_SIDEBAR_WIDTH, clampSidebarWidth } from "./KannaSidebar"
 import { isBrowserUnfocused, shouldPlayChatSound } from "../lib/chatSounds"
+import { makeFakeDomPort } from "../adapters/testing/makeFakePorts"
 import type { AppSettingsSnapshot, SidebarChatRow } from "../../shared/types"
 
 function createProjectGroup(chats: SidebarChatRow[]) {
@@ -203,35 +204,35 @@ describe("chat sound helpers", () => {
   })
 
   test("treats hidden or blurred pages as unfocused", () => {
-    expect(isBrowserUnfocused({
+    expect(isBrowserUnfocused(makeFakeDomPort({
       visibilityState: "hidden",
-      hasFocus: () => true,
-    })).toBe(true)
-    expect(isBrowserUnfocused({
+      focused: true,
+    }))).toBe(true)
+    expect(isBrowserUnfocused(makeFakeDomPort({
       visibilityState: "visible",
-      hasFocus: () => false,
-    })).toBe(true)
-    expect(isBrowserUnfocused({
+      focused: false,
+    }))).toBe(true)
+    expect(isBrowserUnfocused(makeFakeDomPort({
       visibilityState: "visible",
-      hasFocus: () => true,
-    })).toBe(false)
+      focused: true,
+    }))).toBe(false)
   })
 
   test("applies chat sound preference gates", () => {
-    const focusedDoc = { visibilityState: "visible" as const, hasFocus: () => true }
-    const hiddenDoc = { visibilityState: "hidden" as const, hasFocus: () => false }
+    const focusedDom = makeFakeDomPort({ visibilityState: "visible", focused: true })
+    const hiddenDom = makeFakeDomPort({ visibilityState: "hidden", focused: false })
 
-    expect(shouldPlayChatSound("never", hiddenDoc)).toBe(false)
-    expect(shouldPlayChatSound("always", focusedDoc)).toBe(true)
-    expect(shouldPlayChatSound("unfocused", hiddenDoc)).toBe(true)
-    expect(shouldPlayChatSound("unfocused", focusedDoc)).toBe(false)
+    expect(shouldPlayChatSound("never", hiddenDom)).toBe(false)
+    expect(shouldPlayChatSound("always", focusedDom)).toBe(true)
+    expect(shouldPlayChatSound("unfocused", hiddenDom)).toBe(true)
+    expect(shouldPlayChatSound("unfocused", focusedDom)).toBe(false)
   })
 
   test("blocks notification sounds until app settings are hydrated", () => {
-    const hiddenDoc = { visibilityState: "hidden" as const, hasFocus: () => false }
+    const hiddenDom = makeFakeDomPort({ visibilityState: "hidden", focused: false })
 
-    expect(shouldPlayChatNotificationSound(null, "always", hiddenDoc)).toBe(false)
-    expect(shouldPlayChatNotificationSound({} as AppSettingsSnapshot, "never", hiddenDoc)).toBe(false)
-    expect(shouldPlayChatNotificationSound({} as AppSettingsSnapshot, "always", hiddenDoc)).toBe(true)
+    expect(shouldPlayChatNotificationSound(null, "always", hiddenDom)).toBe(false)
+    expect(shouldPlayChatNotificationSound({} as AppSettingsSnapshot, "never", hiddenDom)).toBe(false)
+    expect(shouldPlayChatNotificationSound({} as AppSettingsSnapshot, "always", hiddenDom)).toBe(true)
   })
 })

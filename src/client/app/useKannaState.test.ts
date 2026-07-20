@@ -189,17 +189,17 @@ describe("getNextMeasuredInputHeight", () => {
 describe("shouldMarkActiveChatRead", () => {
   test("returns true only when the page is visible and focused", () => {
     expect(shouldMarkActiveChatRead({
-      visibilityState: "visible",
+      getVisibilityState: () => "visible" as DocumentVisibilityState,
       hasFocus: () => true,
     })).toBe(true)
 
     expect(shouldMarkActiveChatRead({
-      visibilityState: "hidden",
+      getVisibilityState: () => "hidden" as DocumentVisibilityState,
       hasFocus: () => true,
     })).toBe(false)
 
     expect(shouldMarkActiveChatRead({
-      visibilityState: "visible",
+      getVisibilityState: () => "visible" as DocumentVisibilityState,
       hasFocus: () => false,
     })).toBe(false)
   })

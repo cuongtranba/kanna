@@ -1,4 +1,9 @@
 import { useCallback, useEffect, useMemo, type KeyboardEvent, type ReactNode } from "react"
+import type { DomPort } from "../ports/domPort"
+import type { TimerPort } from "../ports/timerPort"
+import { domAdapter } from "../adapters/dom.adapter"
+import { timerAdapter } from "../adapters/timer.adapter"
+import { fetchAuthStatus } from "../api/auth"
 import {
   BookText,
   Bot,
@@ -688,9 +693,12 @@ function SkillResultCard({
 
 export function SkillsSection({
   state,
+  ports,
 }: {
   state: Pick<KannaState, "connectionStatus" | "socket">
+  ports?: { timer?: TimerPort }
 }) {
+  const timer = ports?.timer ?? timerAdapter
   const socket = state.socket
   const connectionStatus = state.connectionStatus
   const query = useSettingsPageStore((s) => s.skillQuery)
@@ -770,7 +778,7 @@ export function SkillsSection({
     setSearchLoading(true)
     setSearchError(null)
 
-    const timeout = window.setTimeout(() => {
+    const timeout = timer.setTimeout(() => {
       void socket.command<SkillSearchSnapshot>({
         type: "skills.search",
         query: normalizedQuery,
@@ -793,9 +801,9 @@ export function SkillsSection({
 
     return () => {
       cancelled = true
-      window.clearTimeout(timeout)
+      timer.clearTimeout(timeout)
     }
-  }, [connectionStatus, query, socket, setResults, setSearchError, setSearchLoading])
+  }, [connectionStatus, query, socket, setResults, setSearchError, setSearchLoading, timer])
 
   async function installSkill(skill: SkillSearchResult) {
     if (connectionStatus !== "connected") {
@@ -1075,7 +1083,8 @@ export function GlobalInstructionsSection({ state }: { state: KannaState }) {
   )
 }
 
-export function SettingsPage() {
+export function SettingsPage({ ports }: { ports?: { dom?: DomPort } } = {}) {
+  const dom = ports?.dom ?? domAdapter
   const navigate = useNavigate()
   const { sectionId } = useParams<{ sectionId: string }>()
   const state = useOutletContext<KannaState>()
@@ -1216,9 +1225,8 @@ export function SettingsPage() {
 
   useEffect(() => {
     const handler = () => setPushPermissionState(detectPushSupport().state)
-    window.addEventListener("focus", handler)
-    return () => window.removeEventListener("focus", handler)
-  }, [setPushPermissionState])
+    return dom.addWindowListener("focus", handler)
+  }, [dom, setPushPermissionState])
 
   useEffect(() => {
     setEditorCommandDraft(editorCommandTemplate)
@@ -1262,18 +1270,7 @@ export function SettingsPage() {
   useEffect(() => {
     let cancelled = false
 
-    void fetch("/auth/status", {
-      method: "GET",
-      cache: "no-store",
-      headers: {
-        Accept: "application/json",
-      },
-    })
-      .then(async (response) => {
-        if (!response.ok) return { enabled: false }
-        const json: { enabled?: boolean } = await response.json()
-        return json
-      })
+    void fetchAuthStatus()
       .then((payload) => {
         if (cancelled) return
         setAuthEnabled(payload.enabled === true)

@@ -11,14 +11,21 @@ import { log } from "../../shared/log"
 import type { AnyValue } from "../../shared/errors"
 import { generateUUID } from "../lib/utils"
 import { getStoredPushDeviceId } from "./pushClient"
+import type { DomPort } from "../ports/domPort"
+import type { TimerPort } from "../ports/timerPort"
+import type { StoragePort } from "../ports/storagePort"
+import type { WebSocketPort, WebSocketLike } from "../ports/webSocketPort"
+import { domAdapter } from "../adapters/dom.adapter"
+import { timerAdapter } from "../adapters/timer.adapter"
+import { localStorageAdapter, sessionStorageAdapter } from "../adapters/storage.adapter"
+import { webSocketAdapter } from "../adapters/websocket.adapter"
 
-if (typeof navigator !== "undefined" && "serviceWorker" in navigator) {
-  navigator.serviceWorker.addEventListener("message", (event: MessageEvent) => {
-    const data: { type?: string; url?: string } = event.data
-    if (data?.type === "kanna.navigate" && typeof data.url === "string") {
-      window.location.href = data.url
-    }
-  })
+export interface KannaSocketPorts {
+  dom?: DomPort
+  timer?: TimerPort
+  localStorage?: StoragePort
+  sessionStorage?: StoragePort
+  webSocket?: WebSocketPort
 }
 
 type SnapshotListener<T> = (value: T) => void
@@ -37,18 +44,9 @@ interface InternalSubscriptionEntry {
   eventListener?(v: AnyValue): void
 }
 
-function isSendToStartingProfilingEnabled() {
-  try {
-    return window.sessionStorage.getItem(SEND_TO_STARTING_PROFILE_STORAGE_KEY) === "1"
-      || window.localStorage.getItem(SEND_TO_STARTING_PROFILE_STORAGE_KEY) === "1"
-  } catch {
-    return false
-  }
-}
-
 export class KannaSocket {
   private readonly url: string
-  private ws: WebSocket | null = null
+  private ws: WebSocketLike | null = null
   private started = false
   private reconnectTimer: number | null = null
   private reconnectDelayMs = 750
@@ -62,11 +60,19 @@ export class KannaSocket {
   private lastOpenAt = 0
   private lastMessageAt = 0
   private reconnectImmediatelyOnClose = false
+  private serviceWorkerCleanup: (() => void) | null = null
+
+  private readonly dom: DomPort
+  private readonly timer: TimerPort
+  private readonly localStore: StoragePort
+  private readonly sessStore: StoragePort
+  private readonly wsBridge: WebSocketPort
+
   private readonly handleWindowFocus = () => {
     void this.ensureHealthyConnection()
   }
   private readonly handleVisibilityChange = () => {
-    if (document.visibilityState === "visible") {
+    if (this.dom.getVisibilityState() === "visible") {
       this.startHeartbeat()
       void this.ensureHealthyConnection()
       return
@@ -77,8 +83,13 @@ export class KannaSocket {
     void this.ensureHealthyConnection()
   }
 
-  constructor(url: string) {
+  constructor(url: string, ports: KannaSocketPorts = {}) {
     this.url = url
+    this.dom = ports.dom ?? domAdapter
+    this.timer = ports.timer ?? timerAdapter
+    this.localStore = ports.localStorage ?? localStorageAdapter
+    this.sessStore = ports.sessionStorage ?? sessionStorageAdapter
+    this.wsBridge = ports.webSocket ?? webSocketAdapter
   }
 
   start() {
@@ -86,23 +97,33 @@ export class KannaSocket {
       return
     }
     this.started = true
-    window.addEventListener("focus", this.handleWindowFocus)
-    window.addEventListener("online", this.handleOnline)
-    document.addEventListener("visibilitychange", this.handleVisibilityChange)
+
+    // Register service worker message handler via the DOM port.
+    this.serviceWorkerCleanup = this.dom.addServiceWorkerMessageListener((event: MessageEvent) => {
+      const data: { type?: string; url?: string } = event.data
+      if (data?.type === "kanna.navigate" && typeof data.url === "string") {
+        this.dom.setHref(data.url)
+      }
+    })
+
+    this.dom.addWindowListener("focus", this.handleWindowFocus)
+    this.dom.addWindowListener("online", this.handleOnline)
+    this.dom.addDocumentListener("visibilitychange", this.handleVisibilityChange)
     this.connect()
   }
 
   dispose() {
     this.started = false
     if (this.reconnectTimer) {
-      window.clearTimeout(this.reconnectTimer)
+      this.timer.clearTimeout(this.reconnectTimer)
       this.reconnectTimer = null
     }
     this.stopHeartbeat()
     this.clearPingState()
-    window.removeEventListener("focus", this.handleWindowFocus)
-    window.removeEventListener("online", this.handleOnline)
-    document.removeEventListener("visibilitychange", this.handleVisibilityChange)
+    if (this.serviceWorkerCleanup) {
+      this.serviceWorkerCleanup()
+      this.serviceWorkerCleanup = null
+    }
     this.ws?.close()
     this.ws = null
     for (const pending of this.pending.values()) {
@@ -187,12 +208,13 @@ export class KannaSocket {
   }
 
   ensureHealthyConnection() {
-    if (!this.ws || this.ws.readyState === WebSocket.CLOSED || this.ws.readyState === WebSocket.CLOSING) {
+    const WS = this.wsBridge
+    if (!this.ws || this.ws.readyState === WS.CLOSED || this.ws.readyState === WS.CLOSING) {
       this.reconnectNow()
       return Promise.resolve()
     }
 
-    if (this.ws.readyState === WebSocket.CONNECTING) {
+    if (this.ws.readyState === WS.CONNECTING) {
       return Promise.resolve()
     }
 
@@ -203,12 +225,21 @@ export class KannaSocket {
     return this.sendPing()
   }
 
+  private isSendToStartingProfilingEnabled() {
+    try {
+      return this.sessStore.getItem(SEND_TO_STARTING_PROFILE_STORAGE_KEY) === "1"
+        || this.localStore.getItem(SEND_TO_STARTING_PROFILE_STORAGE_KEY) === "1"
+    } catch {
+      return false
+    }
+  }
+
   private connect() {
     if (!this.started) {
       return
     }
     this.emitStatus("connecting")
-    this.ws = new WebSocket(this.url)
+    this.ws = this.wsBridge.create(this.url)
 
     this.ws.addEventListener("open", () => {
       this.reconnectDelayMs = 750
@@ -240,7 +271,8 @@ export class KannaSocket {
     this.ws.addEventListener("message", (event) => {
       this.lastMessageAt = Date.now()
       const receivedAt = performance.now()
-      const rawText = String(event.data)
+      const msgData = event instanceof MessageEvent ? event.data : undefined
+      const rawText = String(msgData)
       let payload: ServerEnvelope
       try {
         payload = JSON.parse(rawText)
@@ -248,7 +280,7 @@ export class KannaSocket {
         return
       }
 
-      if (isSendToStartingProfilingEnabled() && payload.type === "snapshot" && payload.snapshot.type === "chat" && payload.snapshot.data?.runtime.status === "starting") {
+      if (this.isSendToStartingProfilingEnabled() && payload.type === "snapshot" && payload.snapshot.type === "chat" && payload.snapshot.data?.runtime.status === "starting") {
         log.debug("[kanna/send->starting][client-ws]", {
           stage: "socket_message_received",
           receivedAt,
@@ -259,7 +291,7 @@ export class KannaSocket {
         })
       }
 
-      if (isSendToStartingProfilingEnabled() && payload.type === "ack") {
+      if (this.isSendToStartingProfilingEnabled() && payload.type === "ack") {
         log.debug("[kanna/send->starting][client-ws]", {
           stage: "socket_ack_received",
           receivedAt,
@@ -323,7 +355,7 @@ export class KannaSocket {
 
   private scheduleReconnect() {
     if (this.reconnectTimer !== null) return
-    this.reconnectTimer = window.setTimeout(() => {
+    this.reconnectTimer = this.timer.setTimeout(() => {
       this.reconnectTimer = null
       this.connect()
       this.reconnectDelayMs = Math.min(this.reconnectDelayMs * 2, 5_000)
@@ -331,10 +363,11 @@ export class KannaSocket {
   }
 
   private getStatus(): SocketStatus {
-    if (this.ws?.readyState === WebSocket.OPEN) {
+    const WS = this.wsBridge
+    if (this.ws?.readyState === WS.OPEN) {
       return "connected"
     }
-    if (this.ws?.readyState === WebSocket.CONNECTING) {
+    if (this.ws?.readyState === WS.CONNECTING) {
       return "connecting"
     }
     return "disconnected"
@@ -366,7 +399,7 @@ export class KannaSocket {
         throw error
       })
 
-    this.pingTimeoutTimer = window.setTimeout(() => {
+    this.pingTimeoutTimer = this.timer.setTimeout(() => {
       this.clearPingState()
       this.reconnectNow()
     }, PING_TIMEOUT_MS)
@@ -376,17 +409,18 @@ export class KannaSocket {
   }
 
   private reconnectNow() {
+    const WS = this.wsBridge
     if (this.reconnectTimer !== null) {
-      window.clearTimeout(this.reconnectTimer)
+      this.timer.clearTimeout(this.reconnectTimer)
       this.reconnectTimer = null
     }
 
-    if (!this.ws || this.ws.readyState === WebSocket.CLOSED) {
+    if (!this.ws || this.ws.readyState === WS.CLOSED) {
       this.connect()
       return
     }
 
-    if (this.ws.readyState === WebSocket.CONNECTING) {
+    if (this.ws.readyState === WS.CONNECTING) {
       return
     }
 
@@ -395,7 +429,7 @@ export class KannaSocket {
   }
 
   private startHeartbeat() {
-    if (document.visibilityState !== "visible") {
+    if (this.dom.getVisibilityState() !== "visible") {
       return
     }
 
@@ -403,12 +437,13 @@ export class KannaSocket {
       return
     }
 
-    this.heartbeatTimer = window.setInterval(() => {
-      if (document.visibilityState !== "visible") {
+    this.heartbeatTimer = this.timer.setInterval(() => {
+      if (this.dom.getVisibilityState() !== "visible") {
         this.stopHeartbeat()
         return
       }
-      if (this.ws?.readyState !== WebSocket.OPEN) {
+      const WS = this.wsBridge
+      if (this.ws?.readyState !== WS.OPEN) {
         return
       }
       void this.ensureHealthyConnection()
@@ -417,21 +452,22 @@ export class KannaSocket {
 
   private stopHeartbeat() {
     if (this.heartbeatTimer !== null) {
-      window.clearInterval(this.heartbeatTimer)
+      this.timer.clearInterval(this.heartbeatTimer)
       this.heartbeatTimer = null
     }
   }
 
   private clearPingState() {
     if (this.pingTimeoutTimer !== null) {
-      window.clearTimeout(this.pingTimeoutTimer)
+      this.timer.clearTimeout(this.pingTimeoutTimer)
       this.pingTimeoutTimer = null
     }
     this.pingPromise = null
   }
 
   private enqueue(envelope: ClientEnvelope) {
-    if (this.ws?.readyState === WebSocket.OPEN) {
+    const WS = this.wsBridge
+    if (this.ws?.readyState === WS.OPEN) {
       this.sendNow(envelope)
       return
     }

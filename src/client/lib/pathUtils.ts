@@ -3,6 +3,9 @@
  * Supports both local paths (from localPath) and sandbox paths (/home/user/workspace).
  */
 
+import type { DomPort } from "../ports/domPort"
+import { domAdapter } from "../adapters/dom.adapter"
+
 export interface ParsedLocalFileLink {
   path: string
   line?: number
@@ -67,18 +70,18 @@ function parseAbsoluteFileTarget(target: string): ParsedFileTarget | null {
   return null
 }
 
-export function parseLocalFileLink(target: string | undefined | null): ParsedLocalFileLink | null {
+export function parseLocalFileLink(
+  target: string | undefined | null,
+  dom: DomPort = domAdapter,
+): ParsedLocalFileLink | null {
   if (!target) return null
   const trimmed = target.trim()
   if (!trimmed || /^(mailto:|ftp:|file:)/i.test(trimmed)) return null
 
   if (/^https?:/i.test(trimmed)) {
-    if (typeof window === "undefined") {
-      return null
-    }
     try {
       const url = new URL(trimmed)
-      if (url.origin !== window.location.origin || !url.pathname.startsWith("/")) {
+      if (url.origin !== dom.getOrigin() || !url.pathname.startsWith("/")) {
         return null
       }
       return parseAbsoluteFileTarget(`${url.pathname}${url.hash}`)

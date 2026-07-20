@@ -32,8 +32,8 @@ export function isFocusableTarget(element: Element | null): boolean {
   return hasAttributeInTree(element, ALLOW_FOCUS_RETAIN_ATTRIBUTE)
 }
 
-export function hasActiveFocusOverlay(document: Document): boolean {
-  return Boolean(document.querySelector(`[${FOCUS_FALLBACK_IGNORE_ATTRIBUTE}][data-state='open']`))
+export function hasActiveFocusOverlay(doc: Document): boolean {
+  return Boolean(doc.querySelector(`[${FOCUS_FALLBACK_IGNORE_ATTRIBUTE}][data-state='open']`))
 }
 
 export function hasActiveTextSelection(selection: Selection | null | undefined): boolean {
@@ -41,10 +41,10 @@ export function hasActiveTextSelection(selection: Selection | null | undefined):
   return !selection.isCollapsed && selection.toString().trim().length > 0
 }
 
-export function focusNextChatInput(current: HTMLTextAreaElement | null, document: Document) {
+export function focusNextChatInput(current: HTMLTextAreaElement | null, doc: Document) {
   if (!current) return false
 
-  const chatInputs = Array.from(document.querySelectorAll<HTMLTextAreaElement>(`textarea[${CHAT_INPUT_ATTRIBUTE}]`))
+  const chatInputs = Array.from(doc.querySelectorAll<HTMLTextAreaElement>(`textarea[${CHAT_INPUT_ATTRIBUTE}]`))
     .filter((element) => !element.disabled)
 
   if (chatInputs.length === 0) return false

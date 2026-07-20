@@ -1,6 +1,15 @@
 import { useEffect, useRef } from "react"
 import type { CloudflareTunnelRecord, CloudflareTunnelState } from "../../../shared/types"
+import { clipboardAdapter } from "../../adapters/clipboard.adapter"
+import { timerAdapter } from "../../adapters/timer.adapter"
+import type { ClipboardPort } from "../../ports/clipboardPort"
+import type { TimerPort } from "../../ports/timerPort"
 import { TranscriptActionCard, type CardAction } from "./TranscriptActionCard"
+
+export type CloudflareTunnelCardPorts = {
+  timer?: TimerPort
+  clipboard?: ClipboardPort
+}
 
 export interface CloudflareTunnelCardProps {
   record: CloudflareTunnelRecord
@@ -8,6 +17,7 @@ export interface CloudflareTunnelCardProps {
   onStop: (tunnelId: string) => void | Promise<void>
   onRetry: (tunnelId: string) => void | Promise<void>
   onDismiss: (tunnelId: string) => void | Promise<void>
+  ports?: CloudflareTunnelCardPorts
 }
 
 const STATE_TRANSITION_TIMEOUT_MS = 30_000
@@ -18,7 +28,10 @@ export function CloudflareTunnelCard({
   onStop,
   onRetry,
   onDismiss,
+  ports = {},
 }: CloudflareTunnelCardProps) {
+  const timer = ports.timer ?? timerAdapter
+  const clipboard = ports.clipboard ?? clipboardAdapter
   const pendingResolverRef = useRef<(() => void) | null>(null)
   const lastStateRef = useRef<CloudflareTunnelState>(record.state)
 
@@ -33,7 +46,7 @@ export function CloudflareTunnelCard({
   const waitForStateChange = (): Promise<void> =>
     new Promise<void>((resolve) => {
       pendingResolverRef.current = resolve
-      setTimeout(() => {
+      timer.setTimeout(() => {
         if (pendingResolverRef.current === resolve) {
           pendingResolverRef.current = null
           resolve()
@@ -77,7 +90,7 @@ export function CloudflareTunnelCard({
         variant: "secondary",
         onClick: async () => {
           if (!url) return
-          await navigator.clipboard.writeText(url)
+          await clipboard.writeText(url)
         },
       },
       {

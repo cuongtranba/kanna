@@ -2,6 +2,8 @@ import type { AnyValue } from "../../../../shared/errors"
 import type { EditorConfig, LexicalEditor, SerializedLexicalNode, Spread } from "lexical"
 import type { ReactNode } from "react"
 import { DecoratorNode, $applyNodeReplacement } from "lexical"
+import type { DomPort } from "../../../ports/domPort"
+import { domAdapter } from "../../../adapters/dom.adapter"
 import { cn } from "../../../lib/utils"
 
 // ---------------------------------------------------------------------------
@@ -27,12 +29,20 @@ export class MentionNode extends DecoratorNode<ReactNode> {
   readonly __mentionKind: MentionKind
   readonly __value: string
   readonly __label: string
+  readonly __dom: DomPort
 
-  constructor(mentionKind: MentionKind, value: string, label: string, key?: string) {
+  constructor(
+    mentionKind: MentionKind,
+    value: string,
+    label: string,
+    key?: string,
+    dom: DomPort = domAdapter,
+  ) {
     super(key)
     this.__mentionKind = mentionKind
     this.__value = value
     this.__label = label
+    this.__dom = dom
   }
 
   // ── Static interface ──────────────────────────────────────────────────────
@@ -42,7 +52,13 @@ export class MentionNode extends DecoratorNode<ReactNode> {
   }
 
   static clone(node: MentionNode): MentionNode {
-    return new MentionNode(node.__mentionKind, node.__value, node.__label, node.__key)
+    return new MentionNode(
+      node.__mentionKind,
+      node.__value,
+      node.__label,
+      node.__key,
+      node.__dom,
+    )
   }
 
   static importJSON(serializedNode: SerializedMentionNode): MentionNode {
@@ -68,7 +84,7 @@ export class MentionNode extends DecoratorNode<ReactNode> {
   // ── DOM ───────────────────────────────────────────────────────────────────
 
   createDOM(_config: EditorConfig, _editor: LexicalEditor): HTMLElement {
-    const span = document.createElement("span")
+    const span = this.__dom.createElement("span")
     span.dataset.lexicalDecorator = "true"
     return span
   }

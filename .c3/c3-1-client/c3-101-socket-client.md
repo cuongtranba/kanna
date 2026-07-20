@@ -1,7 +1,7 @@
 ---
 id: c3-101
 c3-version: 4
-c3-seal: d77222bf967fcaef5c9e8e6b38f9ca652dfd94faf9e6f9ee5c2b3d8531c12854
+c3-seal: 75552762e0452e389e56085fa0a432daf7afc1d8edc5f40cc2115ae5fcb8a689
 title: socket-client
 type: component
 category: foundation
@@ -69,6 +69,7 @@ Owns the browser-side WebSocket: opens it, reconnects with backoff, decodes inbo
 | subscribe(topic, listener) | OUT | Listener receives typed snapshot pushes until unsubscribed | c3-110 | src/client/app/socket.ts |
 | command(envelope) | OUT | Returns Promise<CommandResult> keyed by correlation id | c3-110 | src/client/app/socket.ts |
 | auth.required event | OUT | Fires when server rejects with 401 | c3-110 | src/client/app/socket.ts |
+| SocketBridge | IN | Mounts useWebSocket (react-use-websocket) with filter:()=>false+onMessage; writes sendMessage+readyState into socketStore | c3-110 | src/client/app/SocketBridge.tsx |
 
 ## Change Safety
 

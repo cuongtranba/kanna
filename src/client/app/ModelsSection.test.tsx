@@ -4,6 +4,11 @@ import { createRoot } from "react-dom/client"
 import "../lib/testing/setupHappyDom"
 import { ModelsSection, type ModelsSectionHandlers } from "./ModelsSection"
 import type { CustomModelEntry } from "../../shared/types"
+import type { DomPort } from "../ports/domPort"
+
+function makeDomFake(confirmResult: boolean): DomPort {
+  return { confirmDialog: () => confirmResult } as unknown as DomPort
+}
 
 const noopHandlers: ModelsSectionHandlers = {
   onCreate: async () => {},
@@ -58,12 +63,11 @@ describe("ModelsSection — list", () => {
   })
 
   test("delete button invokes onDelete with the model id (confirmed)", async () => {
-    const originalConfirm = window.confirm
-    window.confirm = () => true
     const deleted: string[] = []
     const { container, cleanup } = await mount({
       models: [model({ id: "claude-opus-4-8", label: "Opus 4.8" })],
       handlers: { ...noopHandlers, onDelete: async (id) => { deleted.push(id) } },
+      dom: makeDomFake(true),
     })
     const button = container.querySelector<HTMLButtonElement>('[aria-label="Delete Opus 4.8"]')
     expect(button).not.toBeNull()
@@ -71,24 +75,21 @@ describe("ModelsSection — list", () => {
       button!.click()
     })
     expect(deleted).toEqual(["claude-opus-4-8"])
-    window.confirm = originalConfirm
     cleanup()
   })
 
   test("delete is a no-op when confirm is cancelled", async () => {
-    const originalConfirm = window.confirm
-    window.confirm = () => false
     const deleted: string[] = []
     const { container, cleanup } = await mount({
       models: [model({ id: "claude-opus-4-8", label: "Opus 4.8" })],
       handlers: { ...noopHandlers, onDelete: async (id) => { deleted.push(id) } },
+      dom: makeDomFake(false),
     })
     const button = container.querySelector<HTMLButtonElement>('[aria-label="Delete Opus 4.8"]')
     await act(async () => {
       button!.click()
     })
     expect(deleted).toEqual([])
-    window.confirm = originalConfirm
     cleanup()
   })
 })

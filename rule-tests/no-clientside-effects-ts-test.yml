@@ -1,0 +1,17 @@
+id: no-clientside-effects-ts
+valid:
+  - const value = storagePort.getItem(key)
+  - timerPort.setTimeout(callback, 1000)
+  - domPort.querySelector(".foo")
+invalid:
+  - const value = localStorage.getItem(key)
+  - sessionStorage.setItem(key, value)
+  - setTimeout(callback, 1000)
+  - const id = setInterval(tick, 100)
+  - clearTimeout(id)
+  - clearInterval(id)
+  - requestAnimationFrame(render)
+  - cancelAnimationFrame(handle)
+  - document.querySelector(".foo")
+  - window.location.reload()
+  - navigator.clipboard.writeText(text)

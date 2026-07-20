@@ -28,6 +28,8 @@ import { APP_NAME } from "../../../../shared/branding"
 import { getPathBasename } from "../../../lib/formatters"
 import { cn } from "../../../lib/utils"
 import { ProjectSectionMenu } from "./Menus"
+import type { DomPort } from "../../../ports/domPort"
+import { domAdapter } from "../../../adapters/dom.adapter"
 
 interface Props {
   projectGroups: SidebarProjectGroup[]
@@ -46,6 +48,7 @@ interface Props {
   onReorderGroups?: (newOrder: string[]) => void
   isConnected?: boolean
   startingLocalPath?: string | null
+  dom?: DomPort
 }
 
 interface SortableProjectGroupProps {
@@ -64,21 +67,16 @@ interface SortableProjectGroupProps {
   onToggleStar?: (projectId: string, starred: boolean) => void
   isConnected?: boolean
   startingLocalPath?: string | null
+  dom: DomPort
 }
 
 const DRAG_REORDER_TRIGGER_OFFSET_PX = 20
 
-function openContextMenuFromButton(event: ReactMouseEvent<HTMLButtonElement>) {
+function openContextMenuFromButton(event: ReactMouseEvent<HTMLButtonElement>, dom: DomPort) {
   event.preventDefault()
   event.stopPropagation()
   const rect = event.currentTarget.getBoundingClientRect()
-  event.currentTarget.dispatchEvent(new MouseEvent("contextmenu", {
-    bubbles: true,
-    cancelable: true,
-    clientX: rect.left + rect.width / 2,
-    clientY: rect.bottom,
-    view: window,
-  }))
+  dom.dispatchContextMenuEvent(event.currentTarget, rect.left + rect.width / 2, rect.bottom)
 }
 
 type RectLookup = {
@@ -185,6 +183,7 @@ const SortableProjectGroup = memo(({
   onToggleStar,
   isConnected,
   startingLocalPath,
+  dom,
 }: SortableProjectGroupProps) => {
   const { groupKey, localPath } = group
   const isExpanded = expandedGroups.has(groupKey)
@@ -261,7 +260,7 @@ const SortableProjectGroup = memo(({
                   variant="ghost"
                   size="icon"
                   className="size-6 rounded-sm text-muted-foreground hover:text-foreground"
-                  onClick={openContextMenuFromButton}
+                  onClick={(e) => openContextMenuFromButton(e, dom)}
                   aria-label="Project options"
                 >
                   <MoreHorizontal className="size-3.5" />
@@ -385,7 +384,9 @@ const LocalProjectsSectionImpl = function LocalProjectsSection({
   onReorderGroups,
   isConnected,
   startingLocalPath,
+  dom: domProp,
 }: Props) {
+  const dom = domProp ?? domAdapter
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 2 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } }),
@@ -466,6 +467,7 @@ const LocalProjectsSectionImpl = function LocalProjectsSection({
           onToggleStar={onToggleStar}
           isConnected={isConnected}
           startingLocalPath={startingLocalPath}
+          dom={dom}
         />
         ))}
       </SortableContext>

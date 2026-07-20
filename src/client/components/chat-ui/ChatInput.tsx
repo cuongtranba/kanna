@@ -63,7 +63,7 @@ import {
   type ContextWindowSnapshot,
   type SessionTotals,
 } from "../../lib/contextWindow"
-import { uploadFile, UploadAbortedError } from "../../lib/uploadFile"
+import { uploadFile, UploadAbortedError } from "../../lib/uploadFile.adapter"
 import { useAppSettingsStore, selectCustomModels, selectTextSnippets } from "../../stores/appSettingsStore"
 import { createAgentMentionRegex } from "../../../shared/mention-pattern"
 
@@ -81,6 +81,11 @@ import {
 } from "../lexical/plugins"
 import { serializeEditorToWire } from "../lexical/serialize/editorToWireString"
 import { log } from "../../../shared/log"
+import { deleteUploadedFile } from "../../api/files"
+import type { DomPort } from "../../ports/domPort"
+import type { HttpPort } from "../../ports/httpPort"
+import { domAdapter } from "../../adapters/dom.adapter"
+import { httpAdapter } from "../../adapters/http.adapter"
 
 // ---------------------------------------------------------------------------
 // Clipboard helpers (exported — ChatInput.test.ts imports them)
@@ -153,11 +158,8 @@ export function willExceedAttachmentLimit(args: {
 // Touch-device helpers (exported — cursorJump test imports them)
 // ---------------------------------------------------------------------------
 
-export function isTouchDeviceEnvironment(): boolean {
-  if (typeof window === "undefined") return false
-  if ("ontouchstart" in window) return true
-  const nav = typeof navigator !== "undefined" ? navigator : null
-  return (nav?.maxTouchPoints ?? 0) > 0
+export function isTouchDeviceEnvironment(dom: DomPort = domAdapter): boolean {
+  return dom.isTouchDevice()
 }
 
 /**
@@ -196,6 +198,11 @@ type MentionChip =
 // External Props (unchanged contract)
 // ---------------------------------------------------------------------------
 
+export interface ChatInputPorts {
+  dom?: DomPort
+  http?: HttpPort
+}
+
 interface Props {
   onSubmit: (
     value: string,
@@ -223,6 +230,7 @@ interface Props {
   contextWindowSnapshot?: ContextWindowSnapshot | null
   sessionTotals?: SessionTotals | null
   previousPrompt?: string | null
+  ports?: ChatInputPorts
 }
 
 export interface ChatInputHandle {
@@ -279,10 +287,9 @@ function hydrateComposerAttachments(attachments: ChatAttachment[]): ComposerAtta
   }))
 }
 
-async function deleteUploadedAttachment(attachment: ChatAttachment): Promise<void> {
+async function deleteUploadedAttachment(attachment: ChatAttachment, http?: HttpPort): Promise<void> {
   if (!attachment.contentUrl) return
-  const deleteUrl = attachment.contentUrl.replace(/\/content$/, "")
-  await fetch(deleteUrl, { method: "DELETE" }).catch(() => undefined)
+  await deleteUploadedFile(attachment.contentUrl, { http })
 }
 
 // ---------------------------------------------------------------------------
@@ -440,9 +447,12 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
     contextWindowSnapshot = null,
     sessionTotals = null,
     previousPrompt = null,
+    ports,
   },
   forwardedRef,
 ) => {
+  const dom = ports?.dom ?? domAdapter
+  const http = ports?.http ?? httpAdapter
   const {
     getDraft,
     setDraft,
@@ -628,7 +638,7 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
           if (!result) throw new Error("Upload failed")
 
           if (generation !== uploadGenerationRef.current) {
-            void deleteUploadedAttachment(result)
+            void deleteUploadedAttachment(result, http)
             if (previewUrl) URL.revokeObjectURL(previewUrl)
             return
           }
@@ -636,7 +646,7 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
           if (removedAttachmentIdsRef.current.has(tempId)) {
             removedAttachmentIdsRef.current.delete(tempId)
             if (previewUrl) URL.revokeObjectURL(previewUrl)
-            void deleteUploadedAttachment(result)
+            void deleteUploadedAttachment(result, http)
             return
           }
 
@@ -680,7 +690,7 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
         }
       })()
     }
-  }, [projectId, setAttachments, setUploadError])
+  }, [http, projectId, setAttachments, setUploadError])
   // Keep ref pointing to the latest version so the async IIFE can recurse without
   // capturing a stale closure.
   useEffect(() => {
@@ -915,9 +925,8 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
     const handleResize = () => {
       onLayoutChange?.()
     }
-    window.addEventListener("resize", handleResize)
-    return () => window.removeEventListener("resize", handleResize)
-  }, [onLayoutChange])
+    return dom.addWindowListener("resize", handleResize)
+  }, [dom, onLayoutChange])
 
   // ------ Composer state helpers ------
   function updateComposerState(transform: (state: ComposerState) => ComposerState) {
@@ -960,13 +969,11 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
   function handleAttachmentPreview(attachment: ComposerAttachment) {
     const target = classifyAttachmentPreview(attachment)
     if (target.openInNewTab) {
-      if (typeof window !== "undefined") {
-        window.open(
-          new URL(attachment.contentUrl, window.location.origin).toString(),
-          "_blank",
-          "noopener,noreferrer",
-        )
-      }
+      dom.openWindow(
+        new URL(attachment.contentUrl, dom.getOrigin()).toString(),
+        "_blank",
+        "noopener,noreferrer",
+      )
       return
     }
     setSelectedAttachmentId(attachment.id)
@@ -987,7 +994,7 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
     }
     if (attachment.status === "uploaded") {
       removedAttachmentIdsRef.current.delete(attachment.id)
-      void deleteUploadedAttachment(attachment)
+      void deleteUploadedAttachment(attachment, http)
     }
   }
 

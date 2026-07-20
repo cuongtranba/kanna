@@ -7,6 +7,8 @@ import {
   $createParagraphNode,
 } from "lexical"
 import { serializeEditorToWire, type WirePayload } from "../serialize/editorToWireString"
+import type { DomPort } from "../../../ports/domPort"
+import { domAdapter } from "../../../adapters/dom.adapter"
 
 // ---------------------------------------------------------------------------
 // Props
@@ -18,6 +20,8 @@ export type SubmitPayload = WirePayload
 export interface SubmitPluginProps {
   onSubmit: (payload: SubmitPayload) => void
   disabled: boolean
+  /** Injectable DOM port (touch-device + typeahead-menu checks); defaults to the real adapter. */
+  dom?: DomPort
 }
 
 // ---------------------------------------------------------------------------
@@ -31,12 +35,8 @@ export interface SubmitPluginProps {
  * submit on Enter — it bails so the picker's lower-priority KEY_ENTER_COMMAND
  * handler can select the highlighted option instead.
  */
-export function isTypeaheadMenuOpen(
-  doc: Pick<Document, "querySelector"> | undefined = typeof document !== "undefined"
-    ? document
-    : undefined,
-): boolean {
-  return doc?.querySelector("[data-kanna-typeahead-menu]") != null
+export function isTypeaheadMenuOpen(dom: Pick<DomPort, "hasTypeaheadMenuOpen"> = domAdapter): boolean {
+  return dom.hasTypeaheadMenuOpen()
 }
 
 // ---------------------------------------------------------------------------
@@ -54,7 +54,7 @@ export function isTypeaheadMenuOpen(
  * The plugin uses COMMAND_PRIORITY_HIGH so it fires before the default
  * rich-text insertion handler; returning `true` prevents the default.
  */
-export function SubmitPlugin({ onSubmit, disabled }: SubmitPluginProps): null {
+export function SubmitPlugin({ onSubmit, disabled, dom = domAdapter }: SubmitPluginProps): null {
   const [editor] = useLexicalComposerContext()
 
   useEffect(() => {
@@ -72,13 +72,10 @@ export function SubmitPlugin({ onSubmit, disabled }: SubmitPluginProps): null {
         // option. This plugin runs at COMMAND_PRIORITY_HIGH, so returning
         // false here lets the event fall through to the typeahead instead of
         // submitting the raw trigger text.
-        if (isTypeaheadMenuOpen()) return false
+        if (isTypeaheadMenuOpen(dom)) return false
 
         // Touch devices: allow the OS keyboard's Return key to insert newlines.
-        const isTouchDevice =
-          typeof window !== "undefined" &&
-          ("ontouchstart" in window || (typeof navigator !== "undefined" && navigator.maxTouchPoints > 0))
-        if (isTouchDevice) return false
+        if (dom.isTouchDevice()) return false
 
         // Check the editor has content worth sending.
         const payload = serializeEditorToWire(editor)
@@ -101,7 +98,7 @@ export function SubmitPlugin({ onSubmit, disabled }: SubmitPluginProps): null {
       },
       COMMAND_PRIORITY_HIGH,
     )
-  }, [editor, disabled, onSubmit])
+  }, [editor, disabled, onSubmit, dom])
 
   return null
 }

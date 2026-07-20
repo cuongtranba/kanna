@@ -34,7 +34,16 @@ import {
 import type { EditorPreset } from "../../../shared/protocol"
 import type { WorkflowRun, WorkflowRunSummary } from "../../../shared/workflow-types"
 import { WorkflowsSectionWithDetail } from "../WorkflowsSection"
+import { domAdapter } from "../../adapters/dom.adapter"
+import { timerAdapter } from "../../adapters/timer.adapter"
+import type { DomPort } from "../../ports/domPort"
+import type { TimerPort } from "../../ports/timerPort"
 import { LoopProgressSection } from "../LoopProgressSection"
+
+export interface ChatTranscriptViewportPorts {
+  dom?: DomPort
+  timer?: TimerPort
+}
 
 export type PendingQuestionRun = SubagentRunSnapshot & {
   pendingTool: NonNullable<SubagentRunSnapshot["pendingTool"]>
@@ -109,6 +118,7 @@ interface ChatTranscriptViewportProps {
   editorCommandTemplate?: string
   platform?: NodeJS.Platform
   headerOffsetPx?: number
+  ports?: ChatTranscriptViewportPorts
 }
 
 export const ChatTranscriptViewport = memo(({
@@ -162,7 +172,10 @@ export const ChatTranscriptViewport = memo(({
   editorCommandTemplate,
   platform = "darwin",
   headerOffsetPx = CHAT_NAVBAR_OFFSET_PX,
+  ports,
 }: ChatTranscriptViewportProps) => {
+  const dom = ports?.dom ?? domAdapter
+  const timer = ports?.timer ?? timerAdapter
   const previousRowCountRef = useRef(0)
   const localLinkMenuTriggerRef = useRef<HTMLSpanElement | null>(null)
   const toolGroupExpanded = useChatPageStore((s) => s.toolGroupExpanded)
@@ -192,11 +205,11 @@ export const ChatTranscriptViewport = memo(({
     }
 
     onIsAtEndChange(true)
-    const frameId = window.requestAnimationFrame(() => {
+    const frameId = timer.requestAnimationFrame(() => {
       void listRef.current?.scrollToEnd?.({ animated: false })
     })
-    return () => window.cancelAnimationFrame(frameId)
-  }, [listRef, onIsAtEndChange, resolvedRows.length])
+    return () => timer.cancelAnimationFrame(frameId)
+  }, [listRef, onIsAtEndChange, resolvedRows.length, timer])
 
   const { runsByUserMessageId, childrenByParentRunId } = useMemo(() => {
     const topByUser = new Map<string, SubagentRunSnapshot[]>()
@@ -277,7 +290,7 @@ export const ChatTranscriptViewport = memo(({
 
   useEffect(() => {
     let cleanup: (() => void) | undefined
-    const frameId = window.requestAnimationFrame(() => {
+    const frameId = timer.requestAnimationFrame(() => {
       const scrollNode = listRef.current?.getScrollableNode?.()
       if (!(scrollNode instanceof HTMLElement)) {
         return
@@ -295,10 +308,10 @@ export const ChatTranscriptViewport = memo(({
     })
 
     return () => {
-      window.cancelAnimationFrame(frameId)
+      timer.cancelAnimationFrame(frameId)
       cleanup?.()
     }
-  }, [activeChatId, handleScroll, listRef, resolvedRows.length])
+  }, [activeChatId, handleScroll, listRef, resolvedRows.length, timer])
 
   const handleStartReached = useCallback(() => {
     if (isHistoryLoading || !hasOlderHistory) {
@@ -315,20 +328,14 @@ export const ChatTranscriptViewport = memo(({
     }
 
     setLocalLinkMenuTarget(target)
-    window.requestAnimationFrame(() => {
+    timer.requestAnimationFrame(() => {
       const trigger = localLinkMenuTriggerRef.current
       if (!trigger) return
-      const clientX = target.clientX ?? window.innerWidth / 2
-      const clientY = target.clientY ?? window.innerHeight / 2
-      trigger.dispatchEvent(new MouseEvent("contextmenu", {
-        bubbles: true,
-        cancelable: true,
-        clientX,
-        clientY,
-        view: window,
-      }))
+      const clientX = target.clientX ?? dom.getInnerWidth() / 2
+      const clientY = target.clientY ?? dom.getInnerHeight() / 2
+      dom.dispatchContextMenuEvent(trigger, clientX, clientY)
     })
-  }, [onOpenLocalLink, setLocalLinkMenuTarget])
+  }, [dom, onOpenLocalLink, setLocalLinkMenuTarget, timer])
 
   const renderItem = useCallback(({ item }: { item: ResolvedTranscriptRow }) => {
     const userMessageId = item.kind === "single" && item.message.kind === "user_prompt"

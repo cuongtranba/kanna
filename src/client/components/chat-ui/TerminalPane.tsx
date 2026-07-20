@@ -6,6 +6,15 @@ import type { TerminalSnapshot } from "../../../shared/protocol"
 import type { KannaSocket, SocketStatus } from "../../app/socket"
 import { useTheme } from "../../hooks/useTheme"
 import { TerminalPaneStore } from "./TerminalPane.store"
+import type { DomPort } from "../../ports/domPort"
+import type { TimerPort } from "../../ports/timerPort"
+import { domAdapter } from "../../adapters/dom.adapter"
+import { timerAdapter } from "../../adapters/timer.adapter"
+
+export interface TerminalPanePorts {
+  dom?: DomPort
+  timer?: TimerPort
+}
 
 interface Props {
   projectId: string
@@ -17,6 +26,7 @@ interface Props {
   focusRequestVersion?: number
   onPathChange?: (path: string | null) => void
   onCommandSent?: () => void
+  ports?: TerminalPanePorts
 }
 
 const TERMINAL_ANSI_LIGHT = {
@@ -57,16 +67,14 @@ const TERMINAL_ANSI_DARK = {
   brightWhite: "#f8fafc",
 } as const
 
-function readCssVar(name: string, fallback: string): string {
-  if (typeof document === "undefined") return fallback
-  const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim()
-  return value || fallback
+function readCssVar(name: string, fallback: string, dom: DomPort): string {
+  return dom.getCssVar(name, fallback)
 }
 
-function buildTerminalTheme(mode: "light" | "dark"): ITheme {
+function buildTerminalTheme(mode: "light" | "dark", dom: DomPort): ITheme {
   const ansi = mode === "dark" ? TERMINAL_ANSI_DARK : TERMINAL_ANSI_LIGHT
-  const fg = readCssVar("--foreground", mode === "dark" ? "#f8fafc" : "#0f172a")
-  const bg = readCssVar("--background", mode === "dark" ? "#000000" : "#ffffff")
+  const fg = readCssVar("--foreground", mode === "dark" ? "#f8fafc" : "#0f172a", dom)
+  const bg = readCssVar("--background", mode === "dark" ? "#000000" : "#ffffff", dom)
   return {
     foreground: fg,
     background: "transparent",
@@ -85,7 +93,7 @@ function getTerminalSize(terminal: Terminal) {
   }
 }
 
-function getMeasuredTerminalSize(terminal: Terminal, container: HTMLElement) {
+function getMeasuredTerminalSize(terminal: Terminal, container: HTMLElement, dom: DomPort) {
   const xtermElement = terminal.element
   interface TerminalInternals {
     _core?: {
@@ -111,8 +119,8 @@ function getMeasuredTerminalSize(terminal: Terminal, container: HTMLElement) {
   }
 
   const containerRect = container.getBoundingClientRect()
-  const containerStyle = window.getComputedStyle(container)
-  const xtermStyle = window.getComputedStyle(xtermElement)
+  const containerStyle = dom.getComputedStyle(container)
+  const xtermStyle = dom.getComputedStyle(xtermElement)
   const overviewRulerWidth = terminal.options.scrollback === 0 ? 0 : (terminal.options.overviewRuler?.width ?? 14)
   const widthPadding = parseFloat(containerStyle.paddingLeft) + parseFloat(containerStyle.paddingRight) + parseFloat(xtermStyle.paddingLeft) + parseFloat(xtermStyle.paddingRight)
   const heightPadding = parseFloat(containerStyle.paddingTop) + parseFloat(containerStyle.paddingBottom) + parseFloat(xtermStyle.paddingTop) + parseFloat(xtermStyle.paddingBottom)
@@ -211,9 +219,10 @@ function syncTerminalSize(
   container: HTMLElement,
   lastSizeRef: MutableRefObject<{ cols: number; rows: number } | null>,
   hasCreated: boolean,
-  sendResize: (cols: number, rows: number) => void
+  sendResize: (cols: number, rows: number) => void,
+  dom: DomPort
 ) {
-  const nextSize = getMeasuredTerminalSize(terminal, container) ?? getTerminalSize(terminal)
+  const nextSize = getMeasuredTerminalSize(terminal, container, dom) ?? getTerminalSize(terminal)
   if (lastSizeRef.current && lastSizeRef.current.cols === nextSize.cols && lastSizeRef.current.rows === nextSize.rows) {
     return nextSize
   }
@@ -235,7 +244,10 @@ function TerminalPaneInner({
   focusRequestVersion = 0,
   onPathChange,
   onCommandSent,
+  ports = {},
 }: Props) {
+  const dom = ports.dom ?? domAdapter
+  const timer = ports.timer ?? timerAdapter
   const { resolvedTheme } = useTheme()
   const containerRef = useRef<HTMLDivElement>(null)
   const terminalRef = useRef<Terminal | null>(null)
@@ -251,7 +263,7 @@ function TerminalPaneInner({
   const setMetadataConditional = TerminalPaneStore.useScopedStore((state) => state.setMetadataConditional)
   const setMetadataFromExit = TerminalPaneStore.useScopedStore((state) => state.setMetadataFromExit)
   const resetTerminal = TerminalPaneStore.useScopedStore((state) => state.resetTerminal)
-  const terminalTheme = buildTerminalTheme(resolvedTheme === "dark" ? "dark" : "light")
+  const terminalTheme = buildTerminalTheme(resolvedTheme === "dark" ? "dark" : "light", dom)
   const sendInput = useCallback((data: string) => {
     void socket.command({
       type: "terminal.input",
@@ -277,14 +289,14 @@ function TerminalPaneInner({
       const terminalInstance = terminalRef.current
       const element = containerRef.current
       if (!terminalInstance || !element || !hasCreatedRef.current) return
-      syncTerminalSize(terminalInstance, element, lastSizeRef, true, sendResize)
+      syncTerminalSize(terminalInstance, element, lastSizeRef, true, sendResize, dom)
     }
 
-    requestAnimationFrame(() => {
+    timer.requestAnimationFrame(() => {
       sync()
-      setTimeout(sync, 0)
+      timer.setTimeout(sync, 0)
     })
-  }, [sendResize])
+  }, [dom, sendResize, timer])
 
   useEffect(() => {
     onCommandSentRef.current = onCommandSent
@@ -315,7 +327,7 @@ function TerminalPaneInner({
       if (replayStateRef.current) {
         terminal.write(replayStateRef.current)
       }
-      syncTerminalSize(terminal, element, lastSizeRef, false, () => {})
+      syncTerminalSize(terminal, element, lastSizeRef, false, () => {}, dom)
       refreshTerminal(terminal)
       scheduleResizeSync()
     }
@@ -345,7 +357,7 @@ function TerminalPaneInner({
           cols,
           rows,
         }).catch(() => {})
-      })
+      }, dom)
     })
 
     if (element) {
@@ -360,7 +372,7 @@ function TerminalPaneInner({
       terminal.dispose()
       terminalRef.current = null
     }
-  }, [scheduleResizeSync, scrollback, sendInput, sendResize, socket, terminalId, terminalTheme])
+  }, [dom, scheduleResizeSync, scrollback, sendInput, sendResize, socket, terminalId, terminalTheme])
 
   useEffect(() => {
     const terminal = terminalRef.current
@@ -381,10 +393,10 @@ function TerminalPaneInner({
     const terminal = terminalRef.current
     if (!terminal) return
 
-    requestAnimationFrame(() => {
+    timer.requestAnimationFrame(() => {
       terminal.focus()
     })
-  }, [focusRequestVersion])
+  }, [focusRequestVersion, timer])
 
   useEffect(() => {
     if (clearVersion === 0) return
@@ -452,7 +464,7 @@ function TerminalPaneInner({
       const terminal = terminalRef.current
       const element = containerRef.current
       if (!terminal || !element) return
-      const size = getMeasuredTerminalSize(terminal, element) ?? getTerminalSize(terminal)
+      const size = getMeasuredTerminalSize(terminal, element, dom) ?? getTerminalSize(terminal)
       terminal.resize(size.cols, size.rows)
       lastSizeRef.current = size
       void socket.command<TerminalSnapshot | null>({
@@ -482,18 +494,18 @@ function TerminalPaneInner({
         const element = containerRef.current
         if (!terminal || !element) return
 
-        syncTerminalSize(terminal, element, lastSizeRef, false, () => {})
+        syncTerminalSize(terminal, element, lastSizeRef, false, () => {}, dom)
         const rect = element.getBoundingClientRect()
         if (rect.width <= 0 || rect.height <= 0) {
-          requestAnimationFrame(run)
+          timer.requestAnimationFrame(run)
           return
         }
 
         ensureSession()
       }
 
-      requestAnimationFrame(() => {
-        requestAnimationFrame(run)
+      timer.requestAnimationFrame(() => {
+        timer.requestAnimationFrame(run)
       })
     }
 
@@ -527,7 +539,7 @@ function TerminalPaneInner({
         }
       },
     })
-  }, [connectionStatus, projectId, scheduleResizeSync, scrollback, socket, terminalId, setMetadataConditional, setMetadataFromExit, storeSetError])
+  }, [connectionStatus, dom, projectId, scheduleResizeSync, scrollback, socket, terminalId, timer, setMetadataConditional, setMetadataFromExit, storeSetError])
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden pb-4">
@@ -546,3 +558,4 @@ export function TerminalPane(props: Props) {
     </TerminalPaneStore.Provider>
   )
 }
+

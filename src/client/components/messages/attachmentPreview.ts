@@ -1,5 +1,11 @@
 import type { AnyValue } from "../../../shared/errors"
 import type { ChatAttachment } from "../../../shared/types"
+import type { DomPort } from "../../ports/domPort"
+import type { HttpPort } from "../../ports/httpPort"
+import type { TimerPort } from "../../ports/timerPort"
+import { domAdapter } from "../../adapters/dom.adapter"
+import { timerAdapter } from "../../adapters/timer.adapter"
+import { fetchFileTextPreview } from "../../api/files"
 
 export const TEXT_PREVIEW_LIMIT_BYTES = 1024 * 1024
 export const JSON_PREVIEW_LIMIT_BYTES = 256 * 1024
@@ -145,68 +151,29 @@ export function classifyAttachmentIcon(attachment: ChatAttachment): AttachmentIc
   return "file"
 }
 
-export async function fetchTextPreview(url: string, limitBytes: number): Promise<TextPreviewResult> {
+export interface AttachmentPreviewPorts {
+  dom?: DomPort
+  timer?: TimerPort
+  http?: HttpPort
+}
+
+export async function fetchTextPreview(
+  url: string,
+  limitBytes: number,
+  ports: AttachmentPreviewPorts = {},
+): Promise<TextPreviewResult> {
+  const dom = ports.dom ?? domAdapter
+  const timer = ports.timer ?? timerAdapter
   const controller = typeof AbortController !== "undefined" ? new AbortController() : null
-  const timeoutId = typeof window !== "undefined" && controller
-    ? window.setTimeout(() => controller.abort("preview-timeout"), 15000)
+  const timeoutId = controller
+    ? timer.setTimeout(() => controller.abort("preview-timeout"), 15000)
     : null
 
   try {
-    const response = await fetch(resolvePreviewUrl(url), {
+    return await fetchFileTextPreview(resolvePreviewUrl(url, dom), limitBytes, {
       signal: controller?.signal,
-      headers: {
-        Accept: "text/plain, text/markdown, application/json, text/csv, text/tab-separated-values, */*",
-      },
+      http: ports.http,
     })
-    if (!response.ok) {
-      throw new Error(`Preview request failed with status ${response.status}`)
-    }
-
-    if (!response.body) {
-      const text = await response.text()
-      const bytes = new TextEncoder().encode(text)
-      const truncated = bytes.length > limitBytes
-      const content = truncated ? new TextDecoder().decode(bytes.slice(0, limitBytes)) : text
-      return { content, truncated }
-    }
-
-    const reader = response.body.getReader()
-    const chunks: Uint8Array[] = []
-    let received = 0
-    let truncated = false
-
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-      if (!value) continue
-
-      const remaining = limitBytes - received
-      if (remaining <= 0) {
-        truncated = true
-        await reader.cancel()
-        break
-      }
-
-      if (value.byteLength > remaining) {
-        chunks.push(value.slice(0, remaining))
-        received += remaining
-        truncated = true
-        await reader.cancel()
-        break
-      }
-
-      chunks.push(value)
-      received += value.byteLength
-    }
-
-    const bytes = new Uint8Array(received)
-    let offset = 0
-    for (const chunk of chunks) {
-      bytes.set(chunk, offset)
-      offset += chunk.byteLength
-    }
-
-    return { content: new TextDecoder().decode(bytes), truncated }
   } catch (error) {
     if (isPreviewTimeout(error)) {
       throw new Error("Preview request timed out", { cause: error })
@@ -214,7 +181,7 @@ export async function fetchTextPreview(url: string, limitBytes: number): Promise
     throw error
   } finally {
     if (timeoutId !== null) {
-      window.clearTimeout(timeoutId)
+      timer.clearTimeout(timeoutId)
     }
   }
 }
@@ -248,12 +215,8 @@ function getFileExtension(fileName: string) {
   return index >= 0 ? fileName.slice(index).toLowerCase() : ""
 }
 
-function resolvePreviewUrl(url: string) {
-  if (typeof window === "undefined") {
-    return url
-  }
-
-  return new URL(url, document.baseURI || window.location.href).toString()
+function resolvePreviewUrl(url: string, dom: DomPort) {
+  return new URL(url, dom.getBaseURI() || dom.getHref()).toString()
 }
 
 function isPreviewTimeout(error: AnyValue) {

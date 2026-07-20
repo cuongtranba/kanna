@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import type { DomPort } from "../ports/domPort"
 import { isAbsoluteLocalFilePath, parseLocalFileLink, shouldOpenLocalFileLinkInEditor, toLocalFileUrl } from "./pathUtils"
 
 describe("parseLocalFileLink", () => {
@@ -33,28 +34,18 @@ describe("parseLocalFileLink", () => {
   })
 
   test("parses same-origin absolute file urls with a line suffix", () => {
-    const originalWindow = globalThis.window
-    Object.defineProperty(globalThis, "window", {
-      value: {
-        location: {
-          origin: "http://localhost:9000",
-        },
-      },
-      configurable: true,
-    })
+    const fakeDom = { getOrigin: () => "http://localhost:9000" } as DomPort
 
-    try {
-      expect(parseLocalFileLink("http://localhost:9000/Users/jake/Kanna/superwall-agent/scripts/e2b-proxy.mjs:1")).toEqual({
-        path: "/Users/jake/Kanna/superwall-agent/scripts/e2b-proxy.mjs",
-        line: 1,
-        column: undefined,
-      })
-    } finally {
-      Object.defineProperty(globalThis, "window", {
-        value: originalWindow,
-        configurable: true,
-      })
-    }
+    expect(
+      parseLocalFileLink(
+        "http://localhost:9000/Users/jake/Kanna/superwall-agent/scripts/e2b-proxy.mjs:1",
+        fakeDom,
+      ),
+    ).toEqual({
+      path: "/Users/jake/Kanna/superwall-agent/scripts/e2b-proxy.mjs",
+      line: 1,
+      column: undefined,
+    })
   })
 
   test("does not treat web links as local file links", () => {

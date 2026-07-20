@@ -1,55 +1,67 @@
-import { afterEach, describe, expect, test } from "bun:test"
+import { describe, expect, test } from "bun:test"
 import { getAppleMobileWebAppStatusBarStyle, syncThemeMetadata } from "./useTheme"
+import type { ComputedStyleLike, DomPort } from "../ports/domPort"
 
-const originalDocument = globalThis.document
-const originalWindow = globalThis.window
-const originalGetComputedStyle = globalThis.getComputedStyle
+function createFakeDomPort(overrides: Partial<DomPort> = {}): DomPort {
+  const headMeta: Map<string, string> = new Map()
 
-function setGlobal(key: "window" | "document" | "getComputedStyle", value: unknown) {
-  Object.defineProperty(globalThis, key, { value, configurable: true, writable: true })
-}
-
-afterEach(() => {
-  setGlobal("document", originalDocument)
-  setGlobal("window", originalWindow)
-  setGlobal("getComputedStyle", originalGetComputedStyle)
-})
-
-function createFakeDocument() {
-  const headChildren: Array<{ attributes: Map<string, string>; setAttribute: (name: string, value: string) => void; getAttribute: (name: string) => string | null }> = []
-
-  const head = {
-    querySelector(selector: string) {
-      const nameMatch = selector.match(/meta\[name="(.+)"\]/)
-      if (!nameMatch) return null
-      return headChildren.find((child) => child.getAttribute("name") === nameMatch[1]) ?? null
+  const base: DomPort = {
+    getTitle: () => "",
+    setTitle: () => { /* no-op */ },
+    getVisibilityState: () => "visible",
+    hasFocus: () => false,
+    getHref: () => "",
+    getPathname: () => "",
+    getSearch: () => "",
+    reload: () => { /* no-op */ },
+    getUserAgent: () => "",
+    isSecureContext: () => false,
+    getInnerWidth: () => 0,
+    getInnerHeight: () => 0,
+    setBodyStyle: () => { /* no-op */ },
+    getBodyStyle: () => "",
+    addWindowListener: () => () => { /* no-op */ },
+    addDocumentListener: () => () => { /* no-op */ },
+    setHref: () => { /* no-op */ },
+    addServiceWorkerMessageListener: () => () => { /* no-op */ },
+    getActiveElement: () => null,
+    getSelection: () => null,
+    hasFocusOverlay: () => false,
+    hasTypeaheadMenuOpen: () => false,
+    addWindowCaptureListener: () => () => { /* no-op */ },
+    addWindowCustomListener: () => () => { /* no-op */ },
+    getHostname: () => "",
+    isServiceWorkerSupported: () => false,
+    isPushManagerSupported: () => false,
+    registerServiceWorker: () => Promise.reject(new Error("not supported")),
+    getReadyServiceWorkerRegistration: () => Promise.reject(new Error("not supported")),
+    upsertHeadMeta(name: string, content: string) {
+      headMeta.set(name, content)
     },
-    appendChild(element: typeof headChildren[number]) {
-      headChildren.push(element)
-    },
+    getComputedBackgroundColor: () => "rgb(34, 34, 34)",
+    setDocumentElementColorScheme: () => { /* no-op */ },
+    toggleDocumentElementClass: () => { /* no-op */ },
+    matchesMediaQuery: () => false,
+    addMediaQueryListener: () => () => { /* no-op */ },
+    addWindowListenerWithOptions: () => () => { /* no-op */ },
+    isWebShareSupported: () => false,
+    webShare: () => Promise.resolve(),
+    getBaseURI: () => "",
+    triggerDownload: () => { /* no-op */ },
+    getCssVar: (_name: string, fallback: string) => fallback,
+    getComputedStyle: (_element: Element): ComputedStyleLike => ({ paddingLeft: "", paddingRight: "", paddingTop: "", paddingBottom: "" }),
+    getOrigin: () => "http://localhost",
+    openWindow: () => { /* no-op */ },
+    dispatchContextMenuEvent: () => { /* no-op */ },
+    isTouchDevice: () => false,
+    isIOSStandalone: () => false,
+    getBodyElement: () => document.body,
+    confirmDialog: () => true,
+    dispatchCustomWindowEvent: () => { /* no-op */ },
+    createElement: <K extends keyof HTMLElementTagNameMap>(tagName: K): HTMLElementTagNameMap[K] => document.createElement(tagName),
+    ...overrides,
   }
-
-  return {
-    head,
-    body: {},
-    documentElement: {
-      style: {
-        colorScheme: "",
-      },
-    },
-    createElement() {
-      const attributes = new Map<string, string>()
-      return {
-        attributes,
-        setAttribute(name: string, value: string) {
-          attributes.set(name, value)
-        },
-        getAttribute(name: string) {
-          return attributes.get(name) ?? null
-        },
-      }
-    },
-  }
+  return base
 }
 
 describe("getAppleMobileWebAppStatusBarStyle", () => {
@@ -64,18 +76,39 @@ describe("getAppleMobileWebAppStatusBarStyle", () => {
 
 describe("syncThemeMetadata", () => {
   test("updates theme-color and color-scheme from the active theme", () => {
-    const fakeDocument = createFakeDocument()
-    setGlobal("document", fakeDocument)
-    setGlobal("window", {})
-    setGlobal("getComputedStyle", () => ({ backgroundColor: "rgb(34, 34, 34)" }))
+    const colorSchemeSpy: Array<string> = []
+    const headMeta: Map<string, string> = new Map()
 
-    syncThemeMetadata("dark")
+    const dom = createFakeDomPort({
+      getComputedBackgroundColor: () => "rgb(34, 34, 34)",
+      upsertHeadMeta(name: string, content: string) {
+        headMeta.set(name, content)
+      },
+      setDocumentElementColorScheme(scheme) {
+        colorSchemeSpy.push(scheme)
+      },
+    })
 
-    const themeColorTag = fakeDocument.head.querySelector('meta[name="theme-color"]')
-    const statusBarTag = fakeDocument.head.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]')
+    syncThemeMetadata("dark", dom)
 
-    expect(themeColorTag?.getAttribute("content")).toBe("rgb(34, 34, 34)")
-    expect(statusBarTag?.getAttribute("content")).toBe("black-translucent")
-    expect(fakeDocument.documentElement.style.colorScheme).toBe("dark")
+    expect(headMeta.get("theme-color")).toBe("rgb(34, 34, 34)")
+    expect(headMeta.get("apple-mobile-web-app-status-bar-style")).toBe("black-translucent")
+    expect(colorSchemeSpy).toEqual(["dark"])
+  })
+
+  test("skips theme-color when computed background is empty", () => {
+    const headMeta: Map<string, string> = new Map()
+
+    const dom = createFakeDomPort({
+      getComputedBackgroundColor: () => "",
+      upsertHeadMeta(name: string, content: string) {
+        headMeta.set(name, content)
+      },
+    })
+
+    syncThemeMetadata("light", dom)
+
+    expect(headMeta.has("theme-color")).toBe(false)
+    expect(headMeta.get("apple-mobile-web-app-status-bar-style")).toBe("default")
   })
 })

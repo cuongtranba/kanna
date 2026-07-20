@@ -8,12 +8,19 @@ import { toPreviewSourceFromAttachment, type PreviewSource } from "./file-previe
 import { Zap } from "lucide-react"
 import { useTranscriptRenderOptions } from "./render-context"
 import { UserMessageStore } from "./UserMessage.store"
+import type { DomPort } from "../../ports/domPort"
+import { domAdapter } from "../../adapters/dom.adapter"
+
+export interface UserMessagePorts {
+  dom?: DomPort
+}
 
 interface Props {
   content: string
   attachments?: ChatAttachment[]
   steered?: boolean
   autoContinue?: { scheduleId: string }
+  ports?: UserMessagePorts
 }
 
 function parseSystemMessage(content: string) {
@@ -28,7 +35,8 @@ function parseSystemMessage(content: string) {
   }
 }
 
-function UserMessageInner({ content, attachments = [], steered = false, autoContinue }: Props) {
+function UserMessageInner({ content, attachments = [], steered = false, autoContinue, ports }: Props) {
+  const dom = ports?.dom ?? domAdapter
   const selectedAttachmentId = UserMessageStore.useScopedStore((s) => s.selectedAttachmentId)
   const setSelectedAttachmentId = UserMessageStore.useScopedStore((s) => s.setSelectedAttachmentId)
   const renderOptions = useTranscriptRenderOptions()
@@ -54,9 +62,7 @@ function UserMessageInner({ content, attachments = [], steered = false, autoCont
 
     const target = classifyAttachmentPreview(attachment)
     if (target.openInNewTab) {
-      if (typeof window !== "undefined") {
-        window.open(new URL(attachment.contentUrl, document.baseURI || window.location.href).toString(), "_blank", "noopener,noreferrer")
-      }
+      dom.openWindow(new URL(attachment.contentUrl, dom.getBaseURI() || dom.getHref()).toString(), "_blank", "noopener,noreferrer")
       return
     }
 
@@ -114,10 +120,10 @@ function UserMessageInner({ content, attachments = [], steered = false, autoCont
   )
 }
 
-export const UserMessage = memo(({ content, attachments = [], steered = false, autoContinue }: Props) => {
+export const UserMessage = memo(({ content, attachments = [], steered = false, autoContinue, ports }: Props) => {
   return (
     <UserMessageStore.Provider init={undefined}>
-      <UserMessageInner content={content} attachments={attachments} steered={steered} autoContinue={autoContinue} />
+      <UserMessageInner content={content} attachments={attachments} steered={steered} autoContinue={autoContinue} ports={ports} />
     </UserMessageStore.Provider>
   )
 })

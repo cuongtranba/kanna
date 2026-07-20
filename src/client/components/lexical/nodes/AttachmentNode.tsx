@@ -11,6 +11,8 @@ import {
   DecoratorNode,
 } from "lexical"
 import type { ChatAttachment } from "../../../../shared/types"
+import type { DomPort } from "../../../ports/domPort"
+import { domAdapter } from "../../../adapters/dom.adapter"
 import {
   AttachmentFileCard,
   AttachmentImageCard,
@@ -27,6 +29,7 @@ export type SerializedAttachmentNode = Spread<
 
 export class AttachmentNode extends DecoratorNode<ReactNode> {
   __attachment: ChatAttachment
+  readonly __dom: DomPort
 
   // ── Static API ────────────────────────────────────────────────────────────
 
@@ -35,7 +38,7 @@ export class AttachmentNode extends DecoratorNode<ReactNode> {
   }
 
   static clone(node: AttachmentNode): AttachmentNode {
-    return new AttachmentNode(node.__attachment, node.__key)
+    return new AttachmentNode(node.__attachment, node.__key, node.__dom)
   }
 
   static importJSON(serializedNode: SerializedAttachmentNode): AttachmentNode {
@@ -44,9 +47,10 @@ export class AttachmentNode extends DecoratorNode<ReactNode> {
 
   // ── Constructor ───────────────────────────────────────────────────────────
 
-  constructor(attachment: ChatAttachment, key?: NodeKey) {
+  constructor(attachment: ChatAttachment, key?: NodeKey, dom: DomPort = domAdapter) {
     super(key)
     this.__attachment = attachment
+    this.__dom = dom
   }
 
   // ── Instance API ──────────────────────────────────────────────────────────
@@ -76,7 +80,7 @@ export class AttachmentNode extends DecoratorNode<ReactNode> {
   // ── DOM ───────────────────────────────────────────────────────────────────
 
   createDOM(_config: EditorConfig, _editor: LexicalEditor): HTMLElement {
-    const span = document.createElement("span")
+    const span = this.__dom.createElement("span")
     return span
   }
 

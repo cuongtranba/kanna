@@ -1,39 +1,44 @@
 import type { PreviewSource } from "./types"
+import type { DomPort } from "../../../ports/domPort"
+import type { ClipboardPort } from "../../../ports/clipboardPort"
+import { domAdapter } from "../../../adapters/dom.adapter"
+import { clipboardAdapter } from "../../../adapters/clipboard.adapter"
 
 export type ShareOutcome = "shared" | "copied" | "failed"
 
-export async function shareViaWebShare(source: PreviewSource): Promise<ShareOutcome> {
-  const absolute = toAbsoluteUrl(source.contentUrl)
-  if ("share" in navigator && typeof navigator.share === "function") {
+export interface FilePreviewActionsPorts {
+  dom?: DomPort
+  clipboard?: ClipboardPort
+}
+
+export async function shareViaWebShare(
+  source: PreviewSource,
+  ports: FilePreviewActionsPorts = {},
+): Promise<ShareOutcome> {
+  const dom = ports.dom ?? domAdapter
+  const clipboard = ports.clipboard ?? clipboardAdapter
+  const absolute = toAbsoluteUrl(source.contentUrl, dom)
+  if (dom.isWebShareSupported()) {
     try {
-      await navigator.share({ title: source.displayName, url: absolute })
+      await dom.webShare({ title: source.displayName, url: absolute })
       return "shared"
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") return "shared"
     }
   }
-  if (navigator.clipboard?.writeText) {
-    try {
-      await navigator.clipboard.writeText(absolute)
-      return "copied"
-    } catch {
-      return "failed"
-    }
+  try {
+    await clipboard.writeText(absolute)
+    return "copied"
+  } catch {
+    return "failed"
   }
-  return "failed"
 }
 
-export function downloadFile(source: PreviewSource): void {
-  const anchor = document.createElement("a")
-  anchor.href = source.contentUrl
-  anchor.download = source.fileName
-  anchor.rel = "noopener"
-  document.body.appendChild(anchor)
-  anchor.click()
-  anchor.remove()
+export function downloadFile(source: PreviewSource, ports: FilePreviewActionsPorts = {}): void {
+  const dom = ports.dom ?? domAdapter
+  dom.triggerDownload(source.contentUrl, source.fileName)
 }
 
-function toAbsoluteUrl(path: string): string {
-  if (typeof window === "undefined") return path
-  return new URL(path, document.baseURI || window.location.href).toString()
+function toAbsoluteUrl(path: string, dom: DomPort): string {
+  return new URL(path, dom.getBaseURI() || dom.getHref()).toString()
 }

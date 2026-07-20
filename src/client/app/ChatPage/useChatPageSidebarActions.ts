@@ -24,6 +24,15 @@ import {
   resolveDiffFilePath,
   serializeBranchSelection,
 } from "./utils"
+import type { DomPort } from "../../ports/domPort"
+import type { TimerPort } from "../../ports/timerPort"
+import { domAdapter } from "../../adapters/dom.adapter"
+import { timerAdapter } from "../../adapters/timer.adapter"
+
+export interface ChatPageSidebarActionsPorts {
+  dom?: DomPort
+  timer?: TimerPort
+}
 
 export { EMPTY_DIFF_SNAPSHOT }
 
@@ -31,13 +40,17 @@ interface UseChatPageSidebarActionsArgs {
   state: KannaState
   projectId: string | null
   showRightSidebar: boolean
+  ports?: ChatPageSidebarActionsPorts
 }
 
 export function useChatPageSidebarActions({
   state,
   projectId,
   showRightSidebar,
+  ports,
 }: UseChatPageSidebarActionsArgs) {
+  const dom = ports?.dom ?? domAdapter
+  const timer = ports?.timer ?? timerAdapter
   const dialog = useAppDialog()
   const diffRenderMode = useChatPageStore((s) => s.diffRenderMode)
   const wrapDiffLines = useChatPageStore((s) => s.wrapDiffLines)
@@ -79,13 +92,13 @@ export function useChatPageSidebarActions({
       return
     }
     if (terminalDiffRefreshTimeoutRef.current !== null) {
-      window.clearTimeout(terminalDiffRefreshTimeoutRef.current)
+      timer.clearTimeout(terminalDiffRefreshTimeoutRef.current)
     }
-    terminalDiffRefreshTimeoutRef.current = window.setTimeout(() => {
+    terminalDiffRefreshTimeoutRef.current = timer.setTimeout(() => {
       terminalDiffRefreshTimeoutRef.current = null
       refreshDiffs()
     }, 1_000)
-  }, [refreshDiffs, showRightSidebar])
+  }, [refreshDiffs, showRightSidebar, timer])
 
   const handleOpenDiffFile = useCallback((filePath: string) => {
     const projectPath = projectPathRef.current
@@ -586,12 +599,12 @@ export function useChatPageSidebarActions({
       return
     }
 
-    const intervalId = window.setInterval(() => {
+    const intervalId = timer.setInterval(() => {
       refreshDiffs()
     }, DIFF_REFRESH_INTERVAL_MS)
 
-    return () => window.clearInterval(intervalId)
-  }, [projectId, refreshDiffs, showRightSidebar])
+    return () => timer.clearInterval(intervalId)
+  }, [projectId, refreshDiffs, showRightSidebar, timer])
 
   useEffect(() => {
     if (!projectId || !showRightSidebar) {
@@ -618,18 +631,18 @@ export function useChatPageSidebarActions({
     }
 
     function handleDiffRefresh() {
-      if (document.visibilityState !== "visible") return
+      if (dom.getVisibilityState() !== "visible") return
       refreshDiffs()
     }
 
-    window.addEventListener("focus", handleDiffRefresh)
-    document.addEventListener("visibilitychange", handleDiffRefresh)
+    const cleanupFocus = dom.addWindowListener("focus", handleDiffRefresh)
+    const cleanupVisibility = dom.addDocumentListener("visibilitychange", handleDiffRefresh)
 
     return () => {
-      window.removeEventListener("focus", handleDiffRefresh)
-      document.removeEventListener("visibilitychange", handleDiffRefresh)
+      cleanupFocus()
+      cleanupVisibility()
     }
-  }, [projectId, refreshDiffs, showRightSidebar])
+  }, [dom, projectId, refreshDiffs, showRightSidebar])
 
   useEffect(() => {
     if (showRightSidebar && wasProcessingRef.current && !state.isProcessing) {
@@ -641,20 +654,20 @@ export function useChatPageSidebarActions({
   useEffect(() => {
     return () => {
       if (terminalDiffRefreshTimeoutRef.current !== null) {
-        window.clearTimeout(terminalDiffRefreshTimeoutRef.current)
+        timer.clearTimeout(terminalDiffRefreshTimeoutRef.current)
       }
     }
-  }, [])
+  }, [timer])
 
   useEffect(() => {
     if (showRightSidebar) {
       return
     }
     if (terminalDiffRefreshTimeoutRef.current !== null) {
-      window.clearTimeout(terminalDiffRefreshTimeoutRef.current)
+      timer.clearTimeout(terminalDiffRefreshTimeoutRef.current)
       terminalDiffRefreshTimeoutRef.current = null
     }
-  }, [projectId, showRightSidebar])
+  }, [projectId, showRightSidebar, timer])
 
   return {
     diffRenderMode,
