@@ -106,6 +106,13 @@ useStore(useShallow((state) => state.list ?? []))
 Tests can mount a component with effects and assert no loop warnings via
 `renderForLoopCheck` in `src/client/lib/testing/`.
 
+Hard lint gate (`RENDER_LOOP_SYNTAX` in `eslint.config.js`): passing an
+inline function/arrow as `useWebSocket`'s url argument is a
+`no-restricted-syntax` **error** — react-use-websocket's reconnect effect
+keys on the url, so a fresh ref every render tears down + reopens the
+socket in a flushSync loop (React #185, PR #561). Hoist the url or wrap
+it in `useMemo`/`useCallback`.
+
 # Tool Callback Feature Flag (KANNA_MCP_TOOL_CALLBACKS)
 
 Setting `KANNA_MCP_TOOL_CALLBACKS=1` routes `AskUserQuestion` and
