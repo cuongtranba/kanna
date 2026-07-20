@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.5.1](https://github.com/cuongtranba/kanna/compare/v1.5.0...v1.5.1) (2026-07-20)
+
+
+### Bug Fixes
+
+* **deps:** bump claude-agent-sdk 0.2.140 -&gt; 0.3.215 ([#559](https://github.com/cuongtranba/kanna/issues/559)) ([e0b1a13](https://github.com/cuongtranba/kanna/commit/e0b1a13d7b278a08a0d354a55d92fa76e126bd90))
+
 ## [1.5.0](https://github.com/cuongtranba/kanna/compare/v1.4.0...v1.5.0) (2026-07-20)
 
 
