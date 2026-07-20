@@ -78,3 +78,13 @@ Holds the WS envelope discriminated unions: subscribe/unsubscribe/command kinds,
 | Material | Must derive from | Allowed variance | Evidence |
 | --- | --- | --- | --- |
 | src/shared/protocol.ts | c3-302 Contract | Envelope detail | src/shared/protocol.ts |
+
+## Chat ops delta events
+
+`src/shared/chat-ops.ts` defines `ChatOp`
+(`entries.append` / `runtime.set` / `sections.set` / `pending.set`),
+`ChatOpsEvent` (added to `WsEvent`), and the pure `applyChatOps` reducer the
+client folds deltas with. The chat topic gained `since?: number` and
+`ChatSnapshot` gained optional `seq` (absent = producer has no op-log, e.g.
+share page). Contract: fail-safe is always a full snapshot — a seq gap on
+either side degrades to the snapshot path, never silent divergence.

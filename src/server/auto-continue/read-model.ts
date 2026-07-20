@@ -10,6 +10,9 @@ export interface ChatSchedulesProjection {
 export interface LoopState {
   subagentId: string
   prompt: string
+  /** Timestamp of the `loop_armed` event that armed the current loop. Used by
+   *  the Loop Progress panel to exclude delegations from before the arm. */
+  armedAt: number
 }
 
 /**
@@ -27,7 +30,7 @@ export function deriveLoopState(
   for (const event of events) {
     if (event.chatId !== chatId) continue
     if (event.kind === "loop_armed") {
-      state = { subagentId: event.subagentId, prompt: event.prompt }
+      state = { subagentId: event.subagentId, prompt: event.prompt, armedAt: event.timestamp }
     } else if (event.kind === "loop_disarmed") {
       state = null
     }

@@ -192,9 +192,6 @@ export function SlashCommandTypeaheadPlugin({
             : menuOptions.map((option, i) => {
                 const isActive = i === selectedIndex
                 const cmd = option.command
-                const scopeTitle = cmd.scope
-                  ? `${cmd.scope.charAt(0).toUpperCase()}${cmd.scope.slice(1)}`
-                  : undefined
 
                 return (
                   <li
@@ -211,7 +208,6 @@ export function SlashCommandTypeaheadPlugin({
                       "flex flex-col gap-0.5 px-3 py-1.5 cursor-pointer text-sm sm:flex-row sm:items-center sm:gap-3",
                       isActive && "bg-accent text-accent-foreground",
                     )}
-                    title={scopeTitle}
                   >
                     <div className="flex min-w-0 items-baseline gap-2">
                       <span className="font-mono break-all sm:whitespace-nowrap sm:break-normal">

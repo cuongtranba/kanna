@@ -83,12 +83,17 @@ c3-205:
   - src/server/events.ts
   - src/server/harness-types.ts
 c3-206:
+  - src/server/chat-op-log.test.ts
+  - src/server/chat-op-log.ts
+  - src/server/chat-ops-parity.test.ts
   - src/server/event-store.test.ts
   - src/server/event-store.ts
 c3-207:
   - src/server/read-models.test.ts
   - src/server/read-models.ts
 c3-208:
+  - src/server/chat-ops-diff.test.ts
+  - src/server/chat-ops-diff.ts
   - src/server/ws-router.test.ts
   - src/server/ws-router.ts
 c3-209:
@@ -217,6 +222,8 @@ c3-301:
   - src/shared/types.test.ts
   - src/shared/types.ts
 c3-302:
+  - src/shared/chat-ops.test.ts
+  - src/shared/chat-ops.ts
   - src/shared/protocol.ts
 c3-303:
   - src/shared/tools.test.ts

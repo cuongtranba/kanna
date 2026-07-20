@@ -8,6 +8,7 @@ import { Download, Flower, FoldVertical, PanelLeft, UnfoldVertical, X, Menu, Plu
 import { useLocation, useNavigate } from "react-router-dom"
 import { APP_NAME } from "../../shared/branding"
 import { Button } from "../components/ui/button"
+import { HoverHint } from "../components/ui/truncated-text"
 import { useAppDialog } from "../components/ui/app-dialog"
 import { Dialog, DialogBody, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../components/ui/dialog"
 import { formatSidebarAgeLabel, getPathBasename } from "../lib/formatters"
@@ -586,16 +587,17 @@ function KannaSidebarImpl({
             </Button>
           </div>
           <div className="flex items-center justify-self-center gap-2 md:justify-self-auto">
-            <button
-              type="button"
-              onClick={onCollapse}
-              title="Collapse sidebar"
-              aria-label="Collapse sidebar"
-              className="hidden md:flex group/sidebar-collapse relative items-center justify-center h-5 w-5 sm:h-6 sm:w-6"
-            >
-              <Flower className="absolute inset-0.5 h-4 w-4 sm:h-5 sm:w-5 text-logo transition-all duration-200 ease-out opacity-100 scale-100 group-hover/sidebar-collapse:opacity-0 group-hover/sidebar-collapse:scale-0" />
-              <PanelLeft className="absolute inset-0 h-4 w-4 sm:h-6 sm:w-6 text-muted-foreground transition-all duration-200 ease-out opacity-0 scale-0 group-hover/sidebar-collapse:opacity-100 group-hover/sidebar-collapse:scale-80 hover:opacity-50" />
-            </button>
+            <HoverHint label="Collapse sidebar">
+              <button
+                type="button"
+                onClick={onCollapse}
+                aria-label="Collapse sidebar"
+                className="hidden md:flex group/sidebar-collapse relative items-center justify-center h-5 w-5 sm:h-6 sm:w-6"
+              >
+                <Flower className="absolute inset-0.5 h-4 w-4 sm:h-5 sm:w-5 text-logo transition-all duration-200 ease-out opacity-100 scale-100 group-hover/sidebar-collapse:opacity-0 group-hover/sidebar-collapse:scale-0" />
+                <PanelLeft className="absolute inset-0 h-4 w-4 sm:h-6 sm:w-6 text-muted-foreground transition-all duration-200 ease-out opacity-0 scale-0 group-hover/sidebar-collapse:opacity-100 group-hover/sidebar-collapse:scale-80 hover:opacity-50" />
+              </button>
+            </HoverHint>
             <Flower className="h-5 w-5 sm:h-6 sm:w-6 text-logo md:hidden" />
             <span className="font-logo text-base sm:text-md text-foreground">{APP_NAME}</span>
           </div>
@@ -614,12 +616,11 @@ function KannaSidebarImpl({
               <Plus className="h-5 w-5" />
             </Button>
             {showDevBadge ? (
-              <span
-                className="mr-1 hidden md:inline-flex items-center rounded-full border border-border bg-muted px-2 py-0.5 text-[11px] font-bold tracking-wider text-muted-foreground"
-                title="Development build"
-              >
-                DEV
-              </span>
+              <HoverHint label="Development build">
+                <span className="mr-1 hidden md:inline-flex items-center rounded-full border border-border bg-muted px-2 py-0.5 text-[11px] font-bold tracking-wider text-muted-foreground">
+                  DEV
+                </span>
+              </HoverHint>
             ) : null}
             {onImportClaudeSessions ? (
               <Button
@@ -877,7 +878,6 @@ function KannaSidebarImpl({
           aria-orientation="vertical"
           aria-label="Resize sidebar"
           tabIndex={0}
-          title="Resize sidebar"
           className={cn(
             "hidden md:block absolute -right-1 top-3 bottom-3 z-20 w-2 cursor-col-resize rounded-full",
             "focus-visible:outline-none"

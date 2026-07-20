@@ -26,9 +26,11 @@ import type {
   UpdateSnapshot,
   EditorPreset,
 } from "./types"
+import type { ChatOpsEvent } from "./chat-ops"
 import type { ChatPermissionPolicyOverride, ToolRequestDecision } from "./permission-policy"
 import type { PtyInstanceDelta, PtyInstancesSnapshot } from "./pty-instance"
 import type { WorkflowRunSummary } from "./workflow-types"
+import type { OrchRunInput, OrchRunSummary } from "./orchestration-types"
 
 export type { EditorPreset }
 
@@ -44,11 +46,12 @@ export type SubscriptionTopic =
   | { type: "keybindings" }
   | { type: "app-settings" }
   | { type: "push-config" }
-  | { type: "chat"; chatId: string; recentLimit?: number }
+  | { type: "chat"; chatId: string; recentLimit?: number; since?: number }
   | { type: "project-git"; projectId: string }
   | { type: "terminal"; terminalId: string }
   | { type: "pty-instances" }
   | { type: "workflows"; chatId: string }
+  | { type: "orch-runs" }
 
 export interface TerminalSnapshot {
   terminalId: string
@@ -84,7 +87,11 @@ export interface WorkflowsSnapshot {
   runs: WorkflowRunSummary[]
 }
 
-export type WsEvent = TerminalEvent | PtyInstancesEvent
+export interface OrchRunsSnapshot {
+  runs: OrchRunSummary[]
+}
+
+export type WsEvent = TerminalEvent | PtyInstancesEvent | ChatOpsEvent
 
 export type ClientCommand =
   | { type: "project.open"; localPath: string }
@@ -261,6 +268,9 @@ export type ClientCommand =
     }
   | { type: "workflows.getRun"; chatId: string; runId: string }
   | { type: "workflows.getAgentTranscript"; chatId: string; runId: string; agentId: string }
+  | { type: "orch.run"; chatId: string; input: OrchRunInput }
+  | { type: "orch.cancelRun"; runId: string }
+  | { type: "orch.getRun"; runId: string }
   | { type: "subagents.getRun"; chatId: string; agentId: string }
   | {
       type: "message.enqueue"
@@ -323,6 +333,7 @@ export type ServerSnapshot =
   | { type: "terminal"; data: TerminalSnapshot | null }
   | { type: "pty-instances"; data: PtyInstancesSnapshot }
   | { type: "workflows"; data: WorkflowsSnapshot }
+  | { type: "orch-runs"; data: OrchRunsSnapshot }
 
 export type ServerEnvelope =
   | { v: 1; type: "snapshot"; id: string; snapshot: ServerSnapshot }

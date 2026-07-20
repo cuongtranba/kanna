@@ -3,7 +3,7 @@ import { createScopedStore } from "../../lib/createScopedStore"
 type RenderState =
   | { status: "loading" }
   | { status: "ready"; svg: string }
-  | { status: "error" }
+  | { status: "error"; message?: string }
 
 interface MermaidDiagramState {
   renderState: RenderState

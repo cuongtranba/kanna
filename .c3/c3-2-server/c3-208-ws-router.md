@@ -85,3 +85,15 @@ Accepts upgraded WS sockets, decodes typed `ClientEnvelope` payloads, dispatches
 | --- | --- | --- | --- |
 | src/server/ws-router.ts | c3-208 Contract | Routing detail | src/server/ws-router.ts |
 | src/server/ws-router.test.ts | c3-208 Contract | Test cases per surface | src/server/ws-router.test.ts |
+
+## chat.ops delta broadcast
+
+During live turns, chat-topic subscribers with a tracked per-subscription seq
+(`ClientState.chatOpSeqBySubId`) receive `{type:"event", event:{type:"chat.ops",
+fromSeq, toSeq, ops}}` envelopes instead of full snapshots (`pushSnapshots`
+in `ws-router-broadcast.ts`). Meta changes (runtime/sections/pending) are
+diffed once per chat per pass by `recordMetaOps` → `diffChatMeta`
+(`src/server/chat-ops-diff.ts`, pure) and recorded into the op-log so the
+ring stays the single ordering authority. Ring gap ⇒ tracking + snapshot
+signature dropped ⇒ full snapshot re-arms the delta path. Full-snapshot sends
+stamp `data.seq` and initialize tracking.

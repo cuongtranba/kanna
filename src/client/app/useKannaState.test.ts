@@ -333,6 +333,7 @@ describe("getActiveChatSnapshot", () => {
       tunnels: {},
       liveTunnelId: null,
       subagentRuns: {},
+      loopProgress: { chatId: "c", armed: false, rows: [], rateLimit: null },
     }
 
     expect(getActiveChatSnapshot(snapshot, "chat-1")).toEqual(snapshot)
@@ -369,6 +370,7 @@ describe("getActiveChatSnapshot", () => {
       tunnels: {},
       liveTunnelId: null,
       subagentRuns: {},
+      loopProgress: { chatId: "c", armed: false, rows: [], rateLimit: null },
     }
 
     expect(getActiveChatSnapshot(snapshot, "chat-new")).toBeNull()
@@ -538,6 +540,7 @@ function createMinimalChatSnapshot(overrides: Partial<ChatSnapshot> = {}): ChatS
     tunnels: {},
     liveTunnelId: null,
     subagentRuns: {},
+    loopProgress: { chatId: "c", armed: false, rows: [], rateLimit: null },
     ...overrides,
   }
 }
@@ -632,6 +635,7 @@ function createMinimalSubagentRun(overrides: Partial<import("../../shared/types"
     chatId: "chat-1",
     subagentId: "sa-1",
     subagentName: "alpha",
+    label: null,
     provider: "claude",
     model: "claude-opus-4-7",
     status: "running",

@@ -2,6 +2,8 @@ import { create } from "zustand"
 import type { AppSettingsSnapshot, ChatDiffSnapshot, KeybindingsSnapshot, LlmProviderSnapshot, PushConfigSnapshot, TranscriptEntry, UpdateSnapshot } from "../../shared/types"
 import type { ChatSnapshot, LocalProjectsSnapshot, SidebarData } from "../../shared/types"
 import { sessionStorageAdapter } from "../adapters/storage.adapter"
+import { applyChatOps } from "../../shared/chat-ops"
+import type { ChatOpsEvent } from "../../shared/chat-ops"
 import type { SocketStatus } from "../app/socket"
 import type { OptimisticUserPrompt } from "../app/useKannaState"
 import type { StoragePort } from "../ports/storagePort"
@@ -47,6 +49,8 @@ interface KannaStateStoreState {
   optimisticUserPrompts: OptimisticUserPrompt[]
   optimisticProcessing: OptimisticProcessingState | null
   focusEpoch: number
+  /** Bumped when a chat.ops gap forces a resubscribe (fresh snapshot). */
+  chatResyncNonce: number
 
   setSidebarData: (value: SidebarData) => void
   setOptimisticSidebarProjectOrder: (value: string[] | null | ((current: string[] | null) => string[] | null)) => void
@@ -77,6 +81,14 @@ interface KannaStateStoreState {
   setOptimisticUserPrompts: (value: OptimisticUserPrompt[] | ((current: OptimisticUserPrompt[]) => OptimisticUserPrompt[])) => void
   setOptimisticProcessing: (value: OptimisticProcessingState | null | ((current: OptimisticProcessingState | null) => OptimisticProcessingState | null)) => void
   incrementFocusEpoch: () => void
+  /**
+   * Folds a `chat.ops` delta into the active snapshot.
+   * "applied" on contiguous events; "stale" when already covered or for a
+   * different chat; "gap" when the event skips ahead or the baseline has no
+   * seq — caller must resync via bumpChatResyncNonce().
+   */
+  applyChatOpsEvent: (activeChatId: string, event: ChatOpsEvent) => "applied" | "stale" | "gap"
+  bumpChatResyncNonce: () => void
 }
 
 export interface KannaStateStorePorts {
@@ -120,6 +132,7 @@ export const useKannaStateStore = create<KannaStateStoreState>()((set) => ({
   optimisticUserPrompts: EMPTY_OPTIMISTIC_PROMPTS,
   optimisticProcessing: null,
   focusEpoch: 0,
+  chatResyncNonce: 0,
 
   setSidebarData: (value) => set({ sidebarData: value }),
   setOptimisticSidebarProjectOrder: (value) =>
@@ -168,4 +181,30 @@ export const useKannaStateStore = create<KannaStateStoreState>()((set) => ({
       optimisticProcessing: typeof value === "function" ? value(state.optimisticProcessing) : value,
     })),
   incrementFocusEpoch: () => set((state) => ({ focusEpoch: state.focusEpoch + 1 })),
+  applyChatOpsEvent: (activeChatId, event) => {
+    let result: "applied" | "stale" | "gap" = "stale"
+    set((state) => {
+      const current = state.chatSnapshot
+      if (!current || event.chatId !== activeChatId || current.runtime.chatId !== event.chatId) {
+        result = "stale"
+        return {}
+      }
+      if (current.seq === undefined) {
+        result = "gap"
+        return {}
+      }
+      if (event.toSeq <= current.seq) {
+        result = "stale"
+        return {}
+      }
+      if (event.fromSeq > current.seq + 1) {
+        result = "gap"
+        return {}
+      }
+      result = "applied"
+      return { chatSnapshot: applyChatOps(current, event.ops, event.toSeq) }
+    })
+    return result
+  },
+  bumpChatResyncNonce: () => set((state) => ({ chatResyncNonce: state.chatResyncNonce + 1 })),
 }))

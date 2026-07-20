@@ -150,7 +150,6 @@ function IconButton(props: {
         <button
           type="button"
           aria-label={props.label}
-          title={props.label}
           onClick={props.onClick}
           className={cn(
             "flex h-11 w-11 md:h-7 md:w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground",

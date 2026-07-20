@@ -12,6 +12,7 @@ import { usePreferencesStore } from "../stores/preferences"
 import { useAppSettingsStore } from "../stores/appSettingsStore"
 import { useChatSoundPreferencesStore } from "../stores/chatSoundPreferencesStore"
 import type { ChatSnapshot, CloudflareTunnelRecord, CloudflareTunnelSettings, GitWorktree, LocalProjectsSnapshot, SidebarChatRow, SidebarData, StackSummary } from "../../shared/types"
+import type { ChatOpsEvent } from "../../shared/chat-ops"
 import type { AskUserQuestionItem } from "../components/messages/types"
 import type { OpenLocalLinkTarget } from "../components/messages/shared"
 import { useAppDialog } from "../components/ui/app-dialog"
@@ -24,9 +25,10 @@ import type { PtyInstancesSnapshot } from "../../shared/pty-instance"
 import type { ChatPermissionPolicyOverride, ToolRequestDecision } from "../../shared/permission-policy"
 import { usePtyInstancesStore } from "../stores/ptyInstancesStore"
 import { useWorkflowsStore } from "../stores/workflowsStore"
+import { useOrchRunsStore } from "../stores/orchRunsStore"
 import { useOpenRouterModelsStore } from "../stores/openrouterModelsStore"
 import { useKannaStateStore } from "../stores/kannaStateStore"
-import type { WorkflowsSnapshot } from "../../shared/protocol"
+import type { OrchRunsSnapshot, WorkflowsSnapshot } from "../../shared/protocol"
 import { log } from "../../shared/log"
 import type { AnyValue } from "../../shared/errors"
 import { isRecord } from "../../shared/errors"
@@ -256,6 +258,25 @@ function sameSubagentRuns(
   })
 }
 
+function sameLoopProgress(
+  left: ChatSnapshot["loopProgress"],
+  right: ChatSnapshot["loopProgress"],
+) {
+  if (left === right) return true
+  if (left.armed !== right.armed) return false
+  if (left.rows.length !== right.rows.length) return false
+  const rowsMatch = left.rows.every((l, i) => {
+    const r = right.rows[i]
+    return r != null && l.runId === r.runId && l.status === r.status && l.label === r.label
+  })
+  if (!rowsMatch) return false
+  const lr = left.rateLimit
+  const rr = right.rateLimit
+  if ((lr == null) !== (rr == null)) return false
+  if (lr && rr) return lr.resetAt === rr.resetAt && lr.scheduled === rr.scheduled
+  return true
+}
+
 export function sameChatSnapshotCore(left: ChatSnapshot | null, right: ChatSnapshot | null) {
   if (left === right) return true
   if (!left || !right) return false
@@ -269,6 +290,7 @@ export function sameChatSnapshotCore(left: ChatSnapshot | null, right: ChatSnaps
     && sameTunnels(left.tunnels, right.tunnels)
     && left.liveTunnelId === right.liveTunnelId
     && sameSubagentRuns(left.subagentRuns, right.subagentRuns)
+    && sameLoopProgress(left.loopProgress, right.loopProgress)
 }
 
 function mergeTranscriptEntries(olderHistoryEntries: TranscriptEntry[], recentEntries: TranscriptEntry[]) {
@@ -911,6 +933,7 @@ export function useKannaState(activeChatId: string | null, ports: KannaStatePort
     useKannaStateStore.getState().setUiRestartPhase(null)
   }, [sessStore])
   const chatSnapshot = useKannaStateStore((state) => state.chatSnapshot)
+  const chatResyncNonce = useKannaStateStore((state) => state.chatResyncNonce)
   const olderHistoryEntries = useKannaStateStore((state) => state.olderHistoryEntries)
   const isHistoryLoading = useKannaStateStore((state) => state.isHistoryLoading)
   const historyCursor = useKannaStateStore((state) => state.historyCursor)
@@ -1366,7 +1389,7 @@ export function useKannaState(activeChatId: string | null, ports: KannaStatePort
     })
     useKannaStateStore.getState().setChatSnapshot(null)
     useKannaStateStore.getState().setChatReady(false)
-    const unsubscribe = socket.subscribe<ChatSnapshot | null>({ type: "chat", chatId: activeChatId, recentLimit: INITIAL_CHAT_RECENT_LIMIT }, (snapshot) => {
+    const unsubscribe = socket.subscribe<ChatSnapshot | null, ChatOpsEvent>({ type: "chat", chatId: activeChatId, recentLimit: INITIAL_CHAT_RECENT_LIMIT }, (snapshot) => {
       if (snapshot?.runtime.chatId) {
         const matchingTrace = [...sendToStartingProfilesRef.current.values()]
           .filter((trace) => trace.serverChatId === snapshot.runtime.chatId)
@@ -1392,7 +1415,13 @@ export function useKannaState(activeChatId: string | null, ports: KannaStatePort
           diffFileCount: 0,
           reusedSnapshot: reused,
         })
-        return reused ? current : snapshot
+        if (!reused) return snapshot
+        // Core unchanged but the op-log seq may have advanced — adopt it so
+        // the next chat.ops event stays contiguous (refs stay stable).
+        if (current && snapshot && current.seq !== snapshot.seq) {
+          return { ...current, seq: snapshot.seq }
+        }
+        return current
       })
       const kannaStore = useKannaStateStore.getState()
       kannaStore.setHistoryCursor(snapshot?.history.olderCursor ?? null)
@@ -1407,6 +1436,13 @@ export function useKannaState(activeChatId: string | null, ports: KannaStatePort
           snapshot.slashCommandsLoading ?? false,
         )
       }
+    }, (event) => {
+      if (event.type !== "chat.ops" || event.chatId !== activeChatId) return
+      const result = useKannaStateStore.getState().applyChatOpsEvent(activeChatId, event)
+      if (result === "gap") {
+        logKannaState("chat.ops gap — forcing resubscribe", { subscriptionId, activeChatId, fromSeq: event.fromSeq, toSeq: event.toSeq })
+        useKannaStateStore.getState().bumpChatResyncNonce()
+      }
     })
     return () => {
       logKannaState("unsubscribing from chat", {
@@ -1417,7 +1453,7 @@ export function useKannaState(activeChatId: string | null, ports: KannaStatePort
       })
       unsubscribe()
     }
-  }, [activeChatId, localStore, sessStore, socket])
+  }, [activeChatId, localStore, sessStore, socket, chatResyncNonce])
 
   useEffect(() => {
     if (!activeChatId) return
@@ -1425,6 +1461,12 @@ export function useKannaState(activeChatId: string | null, ports: KannaStatePort
       useWorkflowsStore.getState().setRuns(snapshot.chatId, snapshot.runs)
     })
   }, [activeChatId, socket])
+
+  useEffect(() => {
+    return socket.subscribe<OrchRunsSnapshot>({ type: "orch-runs" }, (snapshot) => {
+      useOrchRunsStore.getState().setRuns(snapshot.runs)
+    })
+  }, [socket])
 
   useEffect(() => {
     if (selectedProjectId) return
@@ -1999,14 +2041,24 @@ export function useKannaState(activeChatId: string | null, ports: KannaStatePort
 
   const handleSteerQueuedMessage = useCallback(async (queuedMessageId: string) => {
     if (!activeChatId) return
+    // Steering cancels the active turn (status → idle) then restarts a fresh
+    // one. Without an optimistic marker the UI flickers to "done" during that
+    // gap. Mirror handleSend: show processing immediately, ack after the
+    // command resolves (server has appended the prompt + started the turn).
+    const scopeId = activeChatId
+    useKannaStateStore.getState().setOptimisticProcessing({ scopeId, ackedAt: null })
     try {
       await socket.command({
         type: "message.steer",
         chatId: activeChatId,
         queuedMessageId,
       })
+      useKannaStateStore.getState().setOptimisticProcessing((current) => (
+        current?.scopeId === scopeId ? { scopeId, ackedAt: performance.now() } : current
+      ))
       useKannaStateStore.getState().setCommandError(null)
     } catch (error) {
+      useKannaStateStore.getState().setOptimisticProcessing(null)
       useKannaStateStore.getState().setCommandError(error instanceof Error ? error.message : String(error))
     }
   }, [activeChatId, socket])

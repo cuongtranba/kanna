@@ -197,7 +197,7 @@ describe("validateLoopSetup — rejections", () => {
     )
     expect(result.ok).toBe(false)
     if (result.ok) throw new Error("expected reject")
-    expect(result.errors.some((e) => e.includes("cwd"))).toBe(true)
+    expect(result.errors.some((e) => e.includes("resolve inside"))).toBe(true)
   })
 
   test("rejects an absolute trackingFile path outside cwd", () => {

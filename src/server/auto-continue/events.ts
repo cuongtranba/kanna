@@ -44,9 +44,10 @@ export type AutoContinueEvent =
       resetAt: number
       detectedAt: number
       /**
-       * Prompt to replay when this schedule fires. Present only for
-       * `subagent_background` deliveries; provider-failure schedules omit it
-       * and fire the literal `"continue"`.
+       * Prompt to replay when this schedule fires. Present for
+       * `subagent_background` deliveries and for armed-loop rate-limit
+       * deferrals (the full loop prompt); plain provider-failure schedules
+       * omit it and fire the literal `"continue"`.
        */
       prompt?: string
     })

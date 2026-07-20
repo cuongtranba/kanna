@@ -89,6 +89,49 @@ purify), #286 (call-site selectors), #287 (ratchet infrastructure),
 #288–#302 (burn-down 90 → 0), and the final flip (server override
 moved to `error` + ratchet tooling deleted).
 
+# Design System (MANDATORY)
+
+`DESIGN.md` (repo root) is the single source of truth for Kanna's visual
+system — the warm rose-tinted OKLCH palette (hue ~13°), the Body / Bricolage
+Grotesque / Roboto Mono type pairing, and all named rules. Live tokens are
+defined in `src/index.css` and consumed as Tailwind theme vars
+(`bg-background`, `text-foreground`, `text-destructive`, `bg-warning`, …).
+**Load `DESIGN.md` before any `src/client/**` UI work.**
+
+**Hard gate (enforced, `bun run lint --max-warnings=0`).** `eslint.config.js`
+`DESIGN_GATE_SYNTAX` (applied to `src/shared/** + src/client/**` via
+`no-restricted-syntax`) bans:
+
+1. **Arbitrary hex Tailwind utilities** (`bg-[#…]`, `text-[#…]`, `border-[#…]`,
+   …) — use a token class instead.
+2. **Raw hex color literals** — 6/8-digit (`#rrggbb`, `#rrggbbaa`) plus the
+   pure black/white family (`#000`/`#fff`/`#000000`/`#ffffff`). 3-digit hex is
+   NOT banned generally (it collides with issue refs like `#333` inside string
+   literals); only the black/white forms are. Use CSS vars / token classes.
+3. **`backdrop-blur` / `backdrop-filter`** (No-Glassmorphism Rule) — use a solid
+   `bg-background` surface.
+4. **Native `title` on intrinsic elements** — use the project Tooltip
+   (`src/client/components/ui/tooltip.tsx`) via the `TruncatedText` /
+   `HoverHint` helpers in `src/client/components/ui/truncated-text.tsx`.
+   `iframe` is excluded (its `title` is the WCAG accessibility name, not a
+   tooltip); PascalCase component props named `title` are not matched.
+
+**Sanctioned chokepoint:** `src/client/components/chat-ui/TerminalPane.tsx` is
+exempt from rule 2 only (xterm's `ITheme` API takes hex strings, not CSS vars).
+No other exemptions; do not add `eslint-disable` comments.
+
+**Guidance-only (NOT linted — semantic, would false-positive).** Follow by
+hand:
+- No pulse/glow on status **dots** (`animate-pulse` is fine for skeletons/
+  typeaheads).
+- Kanna Coral on ≤10% of a screen; brand mark + destructive intent only.
+- `tabular-nums` on every duration / count / age / pid / live ticker.
+- Flat by default; depth via contrast + 1px soft edge, not shadow.
+- Pair color with icon / label / weight; color alone never communicates.
+
+The `impeccable` PostToolUse design hook also flags off-ramp font sizes and
+other heuristics; those are advisory, not part of this lint gate.
+
 # Render-loop regression checks
 
 When introducing a new `use*Store` selector or any React hook that derives
@@ -606,7 +649,7 @@ adr-20260616-subagent-run-in-background.
   timeout. Every delivery is a real event, never a self-poll — no runaway
   budget is meaningful here.
 
-# Orchestration Core (Plan A — engine only)
+# Orchestration Core (Plan A — engine)
 
 `OrchestrationQueue` in `src/server/orchestration-queue.ts` drives durable, multi-task, multi-phase coding runs. It is a sibling of `SubagentOrchestrator` inside `AgentCoordinator`'s dependency tree.
 
@@ -634,7 +677,77 @@ adr-20260616-subagent-run-in-background.
 
 - **Tests:** `orchestration-queue.test.ts` (32 cases: scheduling, phase pipeline, hand-back, gates, scope overlap, restart, verify, cancel), `orchestration-worktree.adapter.test.ts` (5 real-git cases), `orchestration-e2e.test.ts` (1 acceptance test: 4 tasks × 3 phases, real worktrees). All run with `bun test --conditions production`.
 
-- **WS wiring (not yet landed):** `createRun` / `cancelRun` / `resolveGate` / `waitForRun` will be exposed as `ws-router` commands in a follow-on PR.
+# Orchestration — User-Callable Wiring (simple, linear, no-gate v1)
+
+The engine above is now **user-callable** via MCP tools, WS commands, and a UI
+panel. v1 is deliberately simple: **one fixed linear pipeline, no gates, trigger
+= a task list only.** The heavier config surface (custom phases, gates, scope
+paths) stays engine-internal.
+
+- **Fixed flow.** A run is `DEFAULT_ORCH_PHASES` (implement → adversarial-review
+  → fix) with `gates: []`, `worktreePoolSize = maxParallelTasks = min(tasks, 4)`,
+  `repoRoot` = chat cwd, `baseBranch = "main"`. Verify runs only when the caller
+  supplies a command (wrapped as `["sh","-c",<cmd>]`). Two config fields are
+  added for the wiring and persisted in `orch_run_created`: `workerSubagentId`
+  (which subagent executes each phase) and `originChatId` (project + OAuth
+  resolution, restart-safe).
+
+- **Input validation (pure, single funnel).** `validateOrchRun(input, context)`
+  in `src/server/orchestration-input.ts` is the ONLY path into `createRun` —
+  mirrors `loop-template.ts`. Rejects (flat error list): empty / >8 tasks, blank
+  / oversize task, unparseable verify command, unknown / unresolved subagent.
+  Returns the fixed `OrchRunConfig` + `OrchTaskSpec[]`. Shared pure helpers
+  (`shellCommandIsParseable`, `confinePathToDir`) live in
+  `src/server/input-validation.ts` (extracted from loop-template so loop + orch
+  validate identically).
+
+- **Observable state machine (pure, guarded).**
+  `src/server/orchestration-state-machine.ts` encodes the run/task transition
+  tables. `event-store.ts` `applyOrchestrationEvent` routes every task/run
+  transition through `nextTaskState` / `nextRunStatus`; an **illegal transition
+  is logged + dropped** (never corrupts the read model). `projectStage(state,
+  phaseIndex, phaseKinds, verifying)` derives the single linear UI stage
+  (`queued|implement|review|fix|verify|committed|failed`); a `verifying` bool is
+  folded from `orch_verify_started/completed`.
+
+- **Canonical DTOs.** `OrchRunSummary` / `OrchRunDetail` (+ `OrchTaskView` with
+  FSM `state` + derived `stage`) in `shared/orchestration-types.ts`, produced by
+  `toOrchRunSummary` / `toOrchRunDetail` — the SINGLE shape emitted over MCP
+  `orch_run_status`, WS `orch.getRun`, and the `orch-runs` topic push.
+
+- **AgentCoordinator wiring (`agent.ts`).** Owns the `OrchestrationQueue`
+  (`getOrchestrationQueue()`). `runOrchestration(chatId, input)` validates then
+  `createRun`s; `cancelOrchRun`, `getOrchRunDetail` back the tools/commands.
+  `buildOrchWorker` (the `StartWorker`) reuses `buildSubagentProviderRun` with a
+  `cwdOverride` = the task worktree, resolving `workerSubagentId` +
+  `originChatId` from the persisted run config (restart-safe). `runVerify` /
+  `runInit` = `orchestration-exec-io.adapter.ts` (`runCommandInWorktree`, a Bun
+  spawn leaf). `recoverOnStartup()` is fired at boot in `server.ts`.
+
+- **MCP tools (`kanna-mcp.ts`, MAIN chat only — depth 0).** `orch_run({ tasks,
+  verify?, subagent_id? })`, `orch_run_status({ run_id })`,
+  `orch_cancel_run({ run_id })`. Threaded through both drivers alongside
+  `setup_loop`.
+
+- **WS transport.** `protocol.ts`: commands `orch.run` / `orch.cancelRun` /
+  `orch.getRun`; global topic `{type:"orch-runs"}` + `OrchRunsSnapshot`.
+  `event-store.subscribeOrchRuns(cb)` fires after each applied orch event;
+  `ws-router.ts` pushes the `orch-runs` snapshot (signature-deduped).
+
+- **Client UI.** `orchRunsStore` (stable `EMPTY`) + a global `orch-runs`
+  subscription in `useKannaState`. `OrchestrationPanel` (chat-footer slot in
+  `ChatTranscriptViewport`) renders the live run list + a "New run" trigger;
+  `OrchNewRunDialog` is the entire trigger surface (one task-per-line textarea +
+  optional verify command); `OrchestrationSection` renders rows + per-task stage
+  chips + a Cancel action. Tones follow DESIGN.md semantics (amber = running,
+  sage = committed, coral = failed, blue = verify; no pulse).
+
+- **`defaultOrchSubagentId`** (`SubagentRuntimeSettings`, optional) is the worker
+  fallback when the caller omits `subagentId`. Full settings CRUD/UI is a later
+  phase; v1 callers pass `subagentId` explicitly (the dialog/tool send it).
+
+- **Out of scope (v1):** gates + hard-gate approval UI, custom phases, per-task
+  scope paths from the simple trigger, a global cross-chat runs page.
 
 # Notification-Driven Loop Orchestration (supersedes Agent Self-Scheduled Wake)
 

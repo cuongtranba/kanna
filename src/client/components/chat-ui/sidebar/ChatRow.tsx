@@ -3,6 +3,7 @@ import { Archive, ShieldAlert, Split } from "lucide-react"
 import type { ClaudeSessionLifecycleStatus, SidebarChatRow } from "../../../../shared/types"
 import { Button } from "../../ui/button"
 import { Kbd } from "../../ui/kbd"
+import { HoverHint } from "../../ui/truncated-text"
 import { cn, normalizeChatId } from "../../../lib/utils"
 import { formatCompactDuration, formatLiveDuration } from "../../../lib/formatDuration"
 import { statusLabel } from "../../../lib/statusLabel"
@@ -146,13 +147,14 @@ function ChatRowImpl({
       {(() => {
         const badge = sessionStateBadge(chat.sessionState)
         return badge ? (
-          <span
-            className={cn("shrink-0 text-[10px] leading-none", badge.tone)}
-            title={badge.title}
-            aria-label={badge.title}
-          >
-            {badge.glyph}
-          </span>
+          <HoverHint label={badge.title}>
+            <span
+              className={cn("shrink-0 text-[10px] leading-none", badge.tone)}
+              aria-label={badge.title}
+            >
+              {badge.glyph}
+            </span>
+          </HoverHint>
         ) : null
       })()}
       {chat.hasPolicyOverride ? (

@@ -157,7 +157,7 @@ export function ChatNavbar({
       )}
     >
       <div className="relative flex items-center gap-2 w-full">
-        <div className={`flex items-center gap-1 flex-shrink-0 border border-border/0 rounded-2xl ${sidebarCollapsed ? 'px-1.5  border-border' : ''} p-1 backdrop-blur-lg`}>
+        <div className={`flex items-center gap-1 flex-shrink-0 border border-border/0 rounded-2xl ${sidebarCollapsed ? 'px-1.5  border-border' : ''} p-1`}>
           <Button
             variant="ghost"
             size="icon-mobile"
@@ -247,14 +247,14 @@ export function ChatNavbar({
           <div className="flex-1 min-w-0" />
         )}
 
-        <div className="flex items-center flex-shrink-0 border border-border rounded-2xl backdrop-blur-lg">
+        <div className="flex items-center flex-shrink-0 border border-border rounded-2xl">
           <PtyInstancesIndicator socket={socket} onOpenChat={onOpenPtyChat} />
         </div>
 
         {localPath && (onOpenExternal || onToggleEmbeddedTerminal || onToggleRightSidebar) ? (
           <div className="flex items-center gap-2 flex-shrink-0">
             {onOpenExternal ? (
-              <div className="hidden py-0.5 md:block border border-border rounded-2xl backdrop-blur-lg">
+              <div className="hidden py-0.5 md:block border border-border rounded-2xl">
                 <OpenExternalSelect
                   isMac={isMac}
                   editorPreset={editorPreset}
@@ -266,7 +266,7 @@ export function ChatNavbar({
               </div>
             ) : null}
             {(onToggleEmbeddedTerminal || onToggleRightSidebar) ? (
-              <div className="flex items-center border border-border rounded-2xl px-2 py-0.5 backdrop-blur-lg">
+              <div className="flex items-center border border-border rounded-2xl px-2 py-0.5">
                 <NavbarOverflowMenu
                   showOnDesktop={rightSidebarVisible}
                   onToggleEmbeddedTerminal={onToggleEmbeddedTerminal}

@@ -106,7 +106,7 @@ export function ShareViewPage({ snapshot }: ShareViewPageProps) {
   return (
     <TranscriptRenderOptionsProvider value={{ readonly: true, localLinkMode: "text" }}>
       <main className="h-[100dvh] overflow-y-auto overscroll-contain bg-background text-foreground">
-        <header className="sticky top-0 z-10 border-b border-border bg-background/95 backdrop-blur">
+        <header className="sticky top-0 z-10 border-b border-border bg-background">
           <div className="mx-auto flex w-full max-w-[800px] items-center gap-3 px-4 py-3 sm:px-6">
             <Flower className="h-5 w-5 text-logo shrink-0" aria-hidden />
             <div className="min-w-0 flex-1">
@@ -122,7 +122,12 @@ export function ShareViewPage({ snapshot }: ShareViewPageProps) {
         </header>
         <ol className="mx-auto flex w-full max-w-[800px] flex-col gap-6 px-4 py-8 sm:px-6">
           {messages.map((m) => (
-            <li key={m.id} className="contents">
+            // content-visibility skips layout/paint for offscreen rows on
+            // long shared sessions (this list is not virtualized);
+            // contain-intrinsic-size keeps scrollbar geometry stable.
+            // empty:hidden preserves the old display:contents behavior for
+            // null MessageViews (an empty li must not add a flex gap).
+            <li key={m.id} className="[content-visibility:auto] [contain-intrinsic-size:auto_120px] empty:hidden">
               <MessageView message={m} />
             </li>
           ))}

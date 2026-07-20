@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useId } from "react"
-import { Check, Code2, Copy, Maximize2 } from "lucide-react"
+import { AlertTriangle, Check, Code2, Copy, Maximize2 } from "lucide-react"
 import { Button } from "../ui/button"
 import { cn } from "../../lib/utils"
 import { useTheme } from "../../hooks/useTheme"
@@ -10,6 +10,7 @@ import type { ClipboardPort } from "../../ports/clipboardPort"
 import type { TimerPort } from "../../ports/timerPort"
 import { clipboardAdapter } from "../../adapters/clipboard.adapter"
 import { timerAdapter } from "../../adapters/timer.adapter"
+import { toError } from "../../../shared/errors"
 
 interface MermaidDiagramPorts {
   clipboard?: ClipboardPort
@@ -38,6 +39,7 @@ function MermaidDiagramInner({ source, ports }: { source: string; ports?: Mermai
   const { resolvedTheme } = useTheme()
   const mermaidTheme: "dark" | "default" = resolvedTheme === "dark" ? "dark" : "default"
   const renderState = MermaidDiagramStore.useScopedStore((s) => s.renderState)
+  const errorMessage = renderState.status === "error" ? renderState.message : undefined
   const showSource = MermaidDiagramStore.useScopedStore((s) => s.showSource)
   const zoomOpen = MermaidDiagramStore.useScopedStore((s) => s.zoomOpen)
   const copied = MermaidDiagramStore.useScopedStore((s) => s.copied)
@@ -68,8 +70,9 @@ function MermaidDiagramInner({ source, ports }: { source: string; ports?: Mermai
         const { svg } = await mermaid.render(domId, source)
         if (!cancelled) setRenderState({ status: "ready", svg })
       })
-      .catch(() => {
-        if (!cancelled) setRenderState({ status: "error" })
+      .catch((err) => {
+        const message = toError(err).message
+        if (!cancelled) setRenderState({ status: "error", message })
       })
     return () => {
       cancelled = true
@@ -77,7 +80,18 @@ function MermaidDiagramInner({ source, ports }: { source: string; ports?: Mermai
   }, [source, mermaidTheme, domId, setRenderState])
 
   if (renderState.status === "error") {
-    return <MermaidFallbackCodeBlock source={source} />
+    return (
+      <div className="my-3">
+        <div className="flex items-start gap-1.5 text-xs text-destructive mb-1">
+          <AlertTriangle className="size-3.5 shrink-0 mt-px" />
+          <span>
+            Couldn&apos;t render this Mermaid diagram
+            {errorMessage ? <span className="text-muted-foreground"> — {errorMessage}</span> : null}
+          </span>
+        </div>
+        <MermaidFallbackCodeBlock source={source} />
+      </div>
+    )
   }
   if (renderState.status === "loading") {
     return (

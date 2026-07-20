@@ -57,6 +57,12 @@ describe("MermaidDiagram", () => {
     expect(container!.innerHTML).not.toContain("data-mermaid")
   })
 
+  test("shows an error badge with the parse message when render throws", async () => {
+    await renderAndSettle(<MermaidDiagram source={"INVALID DIAGRAM"} />)
+    expect(container!.textContent).toContain("Couldn't render this Mermaid diagram")
+    expect(container!.textContent).toContain("parse error")
+  })
+
   test("passes mermaid theme 'dark' when resolvedTheme is dark", async () => {
     themeValue = "dark"
     await renderAndSettle(<MermaidDiagram source={"graph TD\nA-->B"} />)

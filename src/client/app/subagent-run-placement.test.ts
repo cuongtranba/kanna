@@ -13,6 +13,7 @@ function makeRun(overrides: Partial<SubagentRunSnapshot>): SubagentRunSnapshot {
     chatId: "chat-1",
     subagentId: "sub-a",
     subagentName: "Sub A",
+    label: null,
     provider: "claude",
     model: "",
     status: "running",

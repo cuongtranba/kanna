@@ -38,6 +38,7 @@ import { useShareStore } from "../../components/share/share-store"
 import type { ShareCommandResult } from "../../../shared/session-share/protocol"
 import { ChatInputDock } from "./ChatInputDock"
 import { ChatTranscriptViewport } from "./ChatTranscriptViewport"
+import { OrchestrationPanel } from "../OrchestrationPanel"
 import { TerminalWorkspaceShell } from "./TerminalWorkspaceShell"
 import { useChatPageSidebarActions, EMPTY_DIFF_SNAPSHOT } from "./useChatPageSidebarActions"
 import {
@@ -366,7 +367,7 @@ const MobileSidebarPane = memo(({
     >
       <button
         type="button"
-        className="absolute inset-0 bg-black/45 backdrop-blur-[1px]"
+        className="absolute inset-0 bg-black/45"
         aria-label="Close changes sidebar"
         onClick={onClose}
       />
@@ -1050,8 +1051,10 @@ export function ChatPage({ ports = {} }: { ports?: ChatPagePorts } = {}) {
           onTunnelRetry={sendTunnelRetry}
           subagentRuns={state.chatSnapshot?.subagentRuns}
           onCancelSubagentRun={handleCancelSubagentRun}
+          loopProgress={state.chatSnapshot?.loopProgress}
           workflowRuns={workflowRuns.length > 0 ? workflowRuns : undefined}
           getWorkflowRunDetail={handleGetWorkflowRunDetail}
+          orchestrationPanel={<OrchestrationPanel socket={state.socket} chatId={state.activeChatId} />}
           getSubagentTranscript={handleGetSubagentTranscript}
           showScrollButton={showScrollToBottom && state.messages.length > 0}
           onIsAtEndChange={onIsAtEndChange}

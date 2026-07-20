@@ -335,6 +335,9 @@ export type SubagentRunEvent =
       runId: string
       subagentId: string | null
       subagentName: string
+      /** Short prompt-derived label (see SubagentRunSnapshot.label). Optional for
+       *  back-compat: older events and error paths omit it. */
+      label?: string
       provider: AgentProvider
       model: string
       parentUserMessageId: string
@@ -598,6 +601,8 @@ export interface OrchTaskRecord {
   commitSha: string | null
   /** Last completed phase's joined output — resume context after gate/restart. */
   lastPhaseOutput: string | null
+  /** True while a verify step is in flight (verify_started, cleared on completed/terminal). */
+  verifying: boolean
   updatedAt: number
 }
 
@@ -644,6 +649,6 @@ export function createEmptyState(): StoreState {
   }
 }
 
-export function cloneTranscriptEntries(entries: TranscriptEntry[]): TranscriptEntry[] {
+export function cloneTranscriptEntries(entries: readonly TranscriptEntry[]): TranscriptEntry[] {
   return entries.map((entry) => ({ ...entry }))
 }

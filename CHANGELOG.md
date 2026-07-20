@@ -8,6 +8,81 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.5.0](https://github.com/cuongtranba/kanna/compare/v1.4.0...v1.5.0) (2026-07-20)
+
+
+### Features
+
+* **loop:** defer 429 wake to quota reset when loop is armed ([#553](https://github.com/cuongtranba/kanna/issues/553)) ([0556374](https://github.com/cuongtranba/kanna/commit/0556374e3876a87ace246307fd91e4ac27a5b65d))
+
+
+### Bug Fixes
+
+* **messages:** show error badge when a Mermaid diagram fails to render ([51c9f78](https://github.com/cuongtranba/kanna/commit/51c9f784b2c5d0212005b076f922cfa07d597c4d))
+* **messages:** show error badge when a Mermaid diagram fails to render ([80d2617](https://github.com/cuongtranba/kanna/commit/80d2617c2658b07ab62b1996e0a9e2e873e2d125))
+* **slash-commands:** stop the / picker hanging on eternal loading ([#557](https://github.com/cuongtranba/kanna/issues/557)) ([279162d](https://github.com/cuongtranba/kanna/commit/279162d0be3b9eac19ddc7ebc8d9ad552a8bbfd0))
+
+## [1.4.0](https://github.com/cuongtranba/kanna/compare/v1.3.1...v1.4.0) (2026-07-18)
+
+
+### Features
+
+* **client:** apply chat.ops deltas with gap-triggered resync ([7937e4a](https://github.com/cuongtranba/kanna/commit/7937e4a33e7d61f2bd42e0452fc8483ef008d32c))
+* **protocol:** chat.ops event + since on chat topic ([a807472](https://github.com/cuongtranba/kanna/commit/a80747251bc1160ae04f12321c0e439cbd593d03))
+* **server:** chat.ops delta broadcast with snapshot fallback ([32e7725](https://github.com/cuongtranba/kanna/commit/32e7725eee29ff0d1004e286cb63a573dc460ce1))
+* **server:** ChatOpLog ring buffer with per-chat seq ([950cd92](https://github.com/cuongtranba/kanna/commit/950cd9254f7e3ffbcbfa6886d02b11e47dbd7267))
+* **server:** pure chat meta diff -&gt; ops ([d08946c](https://github.com/cuongtranba/kanna/commit/d08946ce9a30e800c674ffdc8d896bcef4196279))
+* **server:** record entries.append ops in appendMessage; stamp seq on chat snapshots ([1682abd](https://github.com/cuongtranba/kanna/commit/1682abd786fd96cb1bd2f5bd9f2212db4e8f9229))
+* **shared:** chat op-log types + pure applyChatOps reducer ([7522aa6](https://github.com/cuongtranba/kanna/commit/7522aa66f45ae9026b18bfe4603e7466e2081ed2))
+
+
+### Bug Fixes
+
+* **server:** replace banned type assertion with typed literal in chat-ops-diff ([8c24b49](https://github.com/cuongtranba/kanna/commit/8c24b49bf272ebbd26ed46db04d14a6b39551ae8))
+
+
+### Performance Improvements
+
+* add long-session benchmark harness + baseline (DKR-1) ([152cb9d](https://github.com/cuongtranba/kanna/commit/152cb9d8596fe9d37a470c334cc09e4dbf9d3a4a))
+* long-session performance — chat.ops delta stream, transcript LRU + tail-read, render windowing ([fad3b5d](https://github.com/cuongtranba/kanna/commit/fad3b5d77d852c51d23ab03709253cbc79814ccb))
+* long-session performance — chat.ops delta stream, transcript LRU + tail-read, render windowing ([fad3b5d](https://github.com/cuongtranba/kanna/commit/fad3b5d77d852c51d23ab03709253cbc79814ccb))
+* post-change bench numbers + KR verdict (KR1/KR2/KR4 met, KR3 flagged) ([019fed9](https://github.com/cuongtranba/kanna/commit/019fed9c1d58a1b352c500dbdd4bc320387cddb5))
+* **server:** JSONL tail-read with byte-offset cursors for cold chat open (KR3) ([e6e02e2](https://github.com/cuongtranba/kanna/commit/e6e02e2e68001fb735c7ed44f4c2ae9fb0134a91))
+* **server:** transcript LRU cache + window-only page cloning ([3e0dd5d](https://github.com/cuongtranba/kanna/commit/3e0dd5dc4b0093f27f47da70e739a0809519d983))
+* **share:** content-visibility windowing on shared-session rows ([ee8affe](https://github.com/cuongtranba/kanna/commit/ee8affe58b3b47b6753c3a6086cc08a204136761))
+
+## [1.3.1](https://github.com/cuongtranba/kanna/compare/v1.3.0...v1.3.1) (2026-07-18)
+
+
+### Bug Fixes
+
+* seed subagentRunsByChatId for chats restored from snapshot.json ([#549](https://github.com/cuongtranba/kanna/issues/549)) ([ca804f8](https://github.com/cuongtranba/kanna/commit/ca804f811c1c5f17cfaf797a601b0829bcb6962b))
+
+## [1.3.0](https://github.com/cuongtranba/kanna/compare/v1.2.0...v1.3.0) (2026-07-17)
+
+
+### Features
+
+* **loop:** resume armed loops through usage limits + Loop Progress panel ([#544](https://github.com/cuongtranba/kanna/issues/544)) ([24d8c98](https://github.com/cuongtranba/kanna/commit/24d8c984e6d660155238dcf07fc7912b02c463df))
+
+
+### Bug Fixes
+
+* **client:** show loading state when steering a queued message ([#542](https://github.com/cuongtranba/kanna/issues/542)) ([3a02138](https://github.com/cuongtranba/kanna/commit/3a02138260a136ad08078e320670a9351aa14aab))
+
+## [1.2.0](https://github.com/cuongtranba/kanna/compare/v1.1.5...v1.2.0) (2026-07-15)
+
+
+### Features
+
+* **events:** capture run config + model on turn_started for tracing ([#538](https://github.com/cuongtranba/kanna/issues/538)) ([2c08808](https://github.com/cuongtranba/kanna/commit/2c08808e51b164130f480e2221886fc4241f11aa))
+* **orchestration:** make OrchestrationQueue user-callable (simple, linear, no-gate v1) ([#537](https://github.com/cuongtranba/kanna/issues/537)) ([34ac4aa](https://github.com/cuongtranba/kanna/commit/34ac4aaaea60291214077ee842bd7eb4eea110ea))
+
+
+### Bug Fixes
+
+* **agent:** gate background-task keep-alive on settle signal not deadline ([#539](https://github.com/cuongtranba/kanna/issues/539)) ([20c6e1f](https://github.com/cuongtranba/kanna/commit/20c6e1f01aefde45f350484e07ae4c4d35e2ed81))
+
 ## [1.1.5](https://github.com/cuongtranba/kanna/compare/v1.1.4...v1.1.5) (2026-07-13)
 
 

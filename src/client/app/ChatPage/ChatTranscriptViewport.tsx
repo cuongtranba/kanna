@@ -20,7 +20,7 @@ import {
   useStableResolvedRows,
 } from "../KannaTranscript"
 import type { KannaState } from "../useKannaState"
-import type { AutoContinueSchedule, CloudflareTunnelRecord, SubagentRunSnapshot } from "../../../shared/types"
+import type { AutoContinueSchedule, CloudflareTunnelRecord, LoopProgressSnapshot, SubagentRunSnapshot } from "../../../shared/types"
 import type { ToolRequestDecision } from "../../../shared/permission-policy"
 import { SubagentMessage } from "../../components/messages/SubagentMessage"
 import { SubagentPendingToolCard } from "../../components/messages/SubagentPendingToolCard"
@@ -38,6 +38,7 @@ import { domAdapter } from "../../adapters/dom.adapter"
 import { timerAdapter } from "../../adapters/timer.adapter"
 import type { DomPort } from "../../ports/domPort"
 import type { TimerPort } from "../../ports/timerPort"
+import { LoopProgressSection } from "../LoopProgressSection"
 
 export interface ChatTranscriptViewportPorts {
   dom?: DomPort
@@ -100,8 +101,11 @@ interface ChatTranscriptViewportProps {
   onTunnelRetry?: (tunnelId: string) => void | Promise<void>
   subagentRuns?: Record<string, SubagentRunSnapshot>
   onCancelSubagentRun?: (chatId: string, runId: string) => void
+  loopProgress?: LoopProgressSnapshot
   workflowRuns?: WorkflowRunSummary[]
   getWorkflowRunDetail?: (runId: string) => Promise<WorkflowRun | null>
+  /** Slot rendered in the transcript footer, next to the workflows panel. */
+  orchestrationPanel?: React.ReactNode
   getSubagentTranscript?: GetSubagentTranscript
   showScrollButton: boolean
   onIsAtEndChange: (isAtEnd: boolean) => void
@@ -152,8 +156,10 @@ export const ChatTranscriptViewport = memo(({
   onTunnelRetry,
   subagentRuns,
   onCancelSubagentRun,
+  loopProgress,
   workflowRuns,
   getWorkflowRunDetail,
+  orchestrationPanel,
   getSubagentTranscript,
   showScrollButton,
   onIsAtEndChange,
@@ -377,6 +383,14 @@ export const ChatTranscriptViewport = memo(({
 
   const listFooter = (
     <div className="mx-auto w-full max-w-[800px]">
+      {loopProgress && (loopProgress.armed || loopProgress.rows.length > 0) ? (
+        <div className="pb-5">
+          <LoopProgressSection
+            loopProgress={loopProgress}
+            onResume={onAutoContinueAccept}
+          />
+        </div>
+      ) : null}
       {workflowRuns && workflowRuns.length > 0 && getWorkflowRunDetail ? (
         <div className="pb-5">
           <WorkflowsSectionWithDetail
@@ -385,6 +399,7 @@ export const ChatTranscriptViewport = memo(({
           />
         </div>
       ) : null}
+      {orchestrationPanel ? <div className="pb-5">{orchestrationPanel}</div> : null}
       {liveTunnelRecord && onTunnelAccept && onTunnelStop && onTunnelRetry && (
         <div className="pb-5">
           <CloudflareTunnelCard
