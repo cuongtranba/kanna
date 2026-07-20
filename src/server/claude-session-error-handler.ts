@@ -14,7 +14,7 @@ import type { TranscriptEntry } from "../shared/types"
 import { AUTO_CONTINUE_EVENT_VERSION, type AutoContinueEvent } from "./auto-continue/events"
 import type { LimitDetection, LimitDetector } from "./auto-continue/limit-detector"
 import type { AuthErrorDetection } from "./auto-continue/auth-error-detector"
-import { deriveChatSchedules } from "./auto-continue/read-model"
+import { deriveChatSchedules, deriveLoopState } from "./auto-continue/read-model"
 import { log } from "../shared/log"
 import { type AnyValue } from "../shared/errors"
 import type { OAuthTokenEntry } from "../shared/types"
@@ -171,8 +171,16 @@ export async function handleLimitDetection(
   chatId: string,
   detection: LimitDetection,
 ): Promise<boolean> {
-  const live = deriveChatSchedules(deps.store.getAutoContinueEvents(chatId), chatId).liveScheduleId
+  const autoContinueEvents = deps.store.getAutoContinueEvents(chatId)
+  const live = deriveChatSchedules(autoContinueEvents, chatId).liveScheduleId
   if (live !== null) return true
+
+  // An armed loop implies auto-resume on rate limit: the loop is autonomous by
+  // definition, so a proposal card waiting for a human click would stall it
+  // for hours (observed in production). The stored loop prompt rides the
+  // accepted event so the deferred wake re-injects the full loop discipline
+  // even if the session was idle-reaped during the wait.
+  const loop = deriveLoopState(autoContinueEvents, chatId)
 
   const session = deps.claudeSessions.get(chatId)
   const limitedTokenId = session?.activeTokenId ?? null
@@ -220,7 +228,7 @@ export async function handleLimitDetection(
       resetAt: detection.resetAt,
       detectedAt: now,
     }
-  } else if (deps.resolveAutoResumeFor(chatId)) {
+  } else if (deps.resolveAutoResumeFor(chatId) || loop !== null) {
     event = {
       ...base,
       kind: "auto_continue_accepted",
@@ -229,6 +237,7 @@ export async function handleLimitDetection(
       source: "auto_setting",
       resetAt: waitUntil,
       detectedAt: now,
+      ...(loop !== null ? { prompt: loop.prompt } : {}),
     }
   } else {
     event = {
