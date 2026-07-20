@@ -45,7 +45,12 @@ export interface BuildCanUseToolArgs {
  * Exported so unit tests can exercise the dual-routing logic without
  * going through the full `startClaudeSession` factory.
  */
-export function buildCanUseTool(args: BuildCanUseToolArgs): CanUseTool {
+// Return type is narrowed from the SDK's `Promise<PermissionResult | null>`:
+// this callback always answers (never suppresses the control response), so
+// callers — including tests — get a non-null PermissionResult.
+export function buildCanUseTool(
+  args: BuildCanUseToolArgs,
+): (...params: Parameters<CanUseTool>) => Promise<PermissionResult> {
   return async (toolName, input, options) => {
     // Loop-armed turns: the orchestrator may only Read/Bash(verify)/delegate.
     // Block direct edits + the native Agent tool so it cannot self-implement.

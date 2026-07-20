@@ -20,7 +20,7 @@ function makeArgs(overrides: Partial<BuildCanUseToolArgs> = {}): BuildCanUseTool
   }
 }
 
-const TOOL_OPTIONS = { toolUseID: "tool-use-1", signal: new AbortController().signal }
+const TOOL_OPTIONS = { toolUseID: "tool-use-1", requestId: "req-1", signal: new AbortController().signal }
 
 // ── LOOP_BLOCKED_NATIVE_TOOLS ────────────────────────────────────────────────
 
