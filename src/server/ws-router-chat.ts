@@ -1,12 +1,13 @@
-import { isRecord } from "../shared/errors"
+import { isRecord, type AnyValue } from "../shared/errors"
 import type { ClientCommand } from "../shared/protocol"
+import type { ChatHistoryPage } from "../shared/types"
 import type { AgentCoordinator } from "./agent"
 import type { DiffStore } from "./diff-store"
 import type { EventStore } from "./event-store"
 import type { TunnelGateway } from "./cloudflare-tunnel/gateway"
 
 export type ChatCommandContext = {
-  ack: (result?: unknown) => number
+  ack: (result?: AnyValue | ChatHistoryPage) => number
   setProtectedDraftChatIds: (chatIds: string[]) => void
   agent: AgentCoordinator
   store: Pick<

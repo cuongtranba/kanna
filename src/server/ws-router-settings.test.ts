@@ -1,6 +1,67 @@
 import { describe, expect, mock, test } from "bun:test"
-import type { McpServerConfig } from "../shared/types"
+import { AUTH_DEFAULTS, CLAUDE_AUTH_DEFAULTS, CLAUDE_DRIVER_DEFAULTS, CLAUDE_PTY_LIFECYCLE_DEFAULTS, CLOUDFLARE_TUNNEL_DEFAULTS, DEFAULT_KEYBINDINGS, DEFAULT_OPENROUTER_SDK_MODEL, UPLOAD_DEFAULTS } from "../shared/types"
+import type { AppSettingsSnapshot, KeybindingsSnapshot, McpServerConfig, OpenRouterModel } from "../shared/types"
 import { handleSettingsCommand, resolveMcpTestBearer, testOAuthToken } from "./ws-router-settings"
+
+const DEFAULT_KEYBINDINGS_SNAPSHOT: KeybindingsSnapshot = {
+  bindings: DEFAULT_KEYBINDINGS,
+  warning: null,
+  filePathDisplay: "~/.kanna/keybindings.json",
+}
+
+const DEFAULT_APP_SETTINGS_SNAPSHOT: AppSettingsSnapshot = {
+  analyticsEnabled: true,
+  cloudflareTunnel: CLOUDFLARE_TUNNEL_DEFAULTS,
+  auth: AUTH_DEFAULTS,
+  claudeAuth: CLAUDE_AUTH_DEFAULTS,
+  browserSettingsMigrated: false,
+  theme: "system",
+  chatSoundPreference: "always",
+  chatSoundId: "funk",
+  terminal: {
+    scrollbackLines: 1_000,
+    minColumnWidth: 450,
+  },
+  editor: {
+    preset: "cursor",
+    commandTemplate: "cursor {path}",
+  },
+  defaultProvider: "last_used",
+  providerDefaults: {
+    claude: {
+      model: "claude-opus-4-7",
+      modelOptions: {
+        reasoningEffort: "high",
+        contextWindow: "200k",
+      },
+      planMode: false,
+    },
+    codex: {
+      model: "gpt-5.5",
+      modelOptions: {
+        reasoningEffort: "high",
+        fastMode: false,
+      },
+      planMode: false,
+    },
+    openrouter: {
+      model: DEFAULT_OPENROUTER_SDK_MODEL,
+      modelOptions: {},
+      planMode: false,
+    },
+  },
+  warning: null,
+  filePathDisplay: "~/.kanna/data/settings.json",
+  uploads: UPLOAD_DEFAULTS,
+  subagents: [],
+  customMcpServers: [],
+  customModels: [],
+  textSnippets: [],
+  claudeDriver: { ...CLAUDE_DRIVER_DEFAULTS, lifecycle: { ...CLAUDE_PTY_LIFECYCLE_DEFAULTS } },
+  globalPromptAppend: "",
+  shareDefaultTtlHours: 24,
+  subagentRuntime: { runTimeoutMs: 600_000, defaultLoopSubagentId: null },
+}
 
 describe("testOAuthToken", () => {
   test("returns error for empty token", async () => {
@@ -70,19 +131,15 @@ describe("handleSettingsCommand", () => {
       ctx: {
         ack: (result?: unknown) => { acked.push(result) },
         keybindings: {
-          getSnapshot: () => ({ bindings: {} as Record<string, string[]> }),
-          write: async (bindings: Record<string, string[]>) => ({ bindings }),
+          getSnapshot: () => DEFAULT_KEYBINDINGS_SNAPSHOT,
+          write: async () => DEFAULT_KEYBINDINGS_SNAPSHOT,
         },
         appSettings: {
-          getSnapshot: () => ({
-            analyticsEnabled: false,
-            customMcpServers: [],
-            subagents: [],
-          }) as ReturnType<Parameters<typeof handleSettingsCommand>[1]["appSettings"]["getSnapshot"]>,
-          write: async (v: { analyticsEnabled: boolean }) => ({ analyticsEnabled: v.analyticsEnabled }) as ReturnType<Parameters<typeof handleSettingsCommand>[1]["appSettings"]["write"]>,
-          writePatch: async () => ({ analyticsEnabled: false, customMcpServers: [], subagents: [] }) as ReturnType<Parameters<typeof handleSettingsCommand>[1]["appSettings"]["writePatch"]>,
-          setCloudflareTunnel: async () => ({}) as ReturnType<Parameters<typeof handleSettingsCommand>[1]["appSettings"]["setCloudflareTunnel"]>,
-          setClaudeAuth: async () => ({}) as ReturnType<Parameters<typeof handleSettingsCommand>[1]["appSettings"]["setClaudeAuth"]>,
+          getSnapshot: () => ({ ...DEFAULT_APP_SETTINGS_SNAPSHOT, analyticsEnabled: false }),
+          write: async (v: { analyticsEnabled: boolean }) => ({ ...DEFAULT_APP_SETTINGS_SNAPSHOT, analyticsEnabled: v.analyticsEnabled }),
+          writePatch: async () => DEFAULT_APP_SETTINGS_SNAPSHOT,
+          setCloudflareTunnel: async () => DEFAULT_APP_SETTINGS_SNAPSHOT,
+          setClaudeAuth: async () => DEFAULT_APP_SETTINGS_SNAPSHOT,
           createSubagent: async () => ({ code: "NOT_FOUND" as const, message: "stub" }),
           updateSubagent: async () => ({ code: "NOT_FOUND" as const, message: "stub" }),
           deleteSubagent: async () => {},
@@ -130,19 +187,15 @@ describe("handleSettingsCommand", () => {
   })
 
   test("settings.listOpenRouterModels calls the provider when configured", async () => {
-    const models = [{ id: "m1" }]
-    const { ctx, acked } = makeCtx({ listOpenRouterModels: async () => models as ReturnType<NonNullable<Parameters<typeof handleSettingsCommand>[1]["listOpenRouterModels"]>> })
+    const models: OpenRouterModel[] = [{ id: "m1", label: "m1", contextLength: 0 }]
+    const { ctx, acked } = makeCtx({ listOpenRouterModels: async () => models })
     const handled = await handleSettingsCommand({ type: "settings.listOpenRouterModels" }, ctx)
     expect(handled).toBe(true)
     expect(acked[0]).toBe(models)
   })
 
   test("settings.writeAppSettings tracks analytics_disabled when disabling", async () => {
-    const getSnapshot = mock(() => ({
-      analyticsEnabled: true,
-      customMcpServers: [],
-      subagents: [],
-    }) as ReturnType<Parameters<typeof handleSettingsCommand>[1]["appSettings"]["getSnapshot"]>)
+    const getSnapshot = mock(() => ({ ...DEFAULT_APP_SETTINGS_SNAPSHOT, analyticsEnabled: true }))
     const { ctx, tracked } = makeCtx({
       appSettings: {
         ...makeCtx().ctx.appSettings,

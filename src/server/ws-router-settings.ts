@@ -1,3 +1,4 @@
+import type { AnyValue } from "../shared/errors"
 import { log } from "../shared/log"
 import type { ClientCommand } from "../shared/protocol"
 import type {
@@ -95,7 +96,7 @@ async function runMcpAutoTest(
 }
 
 export type SettingsCommandContext = {
-  ack: (result?: unknown) => void
+  ack: (result?: AnyValue) => void
   keybindings: {
     getSnapshot(): KeybindingsSnapshot
     write(bindings: Record<string, string[]>): Promise<KeybindingsSnapshot>

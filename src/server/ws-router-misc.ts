@@ -1,3 +1,4 @@
+import type { AnyValue } from "../shared/errors"
 import type { ClientCommand } from "../shared/protocol"
 import type { ShareCommandResult } from "../shared/session-share/protocol"
 import type { AgentCoordinator } from "./agent"
@@ -10,7 +11,7 @@ import type { WorkflowRegistry } from "./workflow-registry"
 import { listWorktrees } from "./worktree-store.adapter"
 
 export type MiscCommandContext = {
-  ack: (result?: unknown) => void
+  ack: (result?: AnyValue) => void
   store: Pick<EventStore, "getProject" | "createStack" | "renameStack" | "removeStack" | "addProjectToStack" | "removeProjectFromStack">
   terminals: TerminalManager
   pushManager: PushManager
