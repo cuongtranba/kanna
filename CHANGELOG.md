@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.5.2](https://github.com/cuongtranba/kanna/compare/v1.5.1...v1.5.2) (2026-07-20)
+
+
+### Bug Fixes
+
+* **client:** stop SocketBridge reconnect loop + ast-grep render-loop gates ([#562](https://github.com/cuongtranba/kanna/issues/562)) ([7ee3920](https://github.com/cuongtranba/kanna/commit/7ee392012ee486f45482543a61ba9556cb104b32))
+
 ## [1.5.1](https://github.com/cuongtranba/kanna/compare/v1.5.0...v1.5.1) (2026-07-20)
 
 
