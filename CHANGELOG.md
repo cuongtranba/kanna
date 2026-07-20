@@ -8,6 +8,20 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.5.0](https://github.com/cuongtranba/kanna/compare/v1.4.0...v1.5.0) (2026-07-20)
+
+
+### Features
+
+* **loop:** defer 429 wake to quota reset when loop is armed ([#553](https://github.com/cuongtranba/kanna/issues/553)) ([0556374](https://github.com/cuongtranba/kanna/commit/0556374e3876a87ace246307fd91e4ac27a5b65d))
+
+
+### Bug Fixes
+
+* **messages:** show error badge when a Mermaid diagram fails to render ([51c9f78](https://github.com/cuongtranba/kanna/commit/51c9f784b2c5d0212005b076f922cfa07d597c4d))
+* **messages:** show error badge when a Mermaid diagram fails to render ([80d2617](https://github.com/cuongtranba/kanna/commit/80d2617c2658b07ab62b1996e0a9e2e873e2d125))
+* **slash-commands:** stop the / picker hanging on eternal loading ([#557](https://github.com/cuongtranba/kanna/issues/557)) ([279162d](https://github.com/cuongtranba/kanna/commit/279162d0be3b9eac19ddc7ebc8d9ad552a8bbfd0))
+
 ## [1.4.0](https://github.com/cuongtranba/kanna/compare/v1.3.1...v1.4.0) (2026-07-18)
 
 
