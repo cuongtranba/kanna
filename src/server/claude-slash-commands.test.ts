@@ -178,6 +178,30 @@ describe("ensureSlashCommandsLoaded", () => {
     expect(deps.slashCommandsInFlight.has("chat-1")).toBe(false)
   })
 
+  test("clears in-flight flag when getSupportedCommands hangs (timeout guard)", async () => {
+    const neverResolves = new Promise<SlashCommand[]>(() => {})
+    const deps = makeDeps({
+      timeoutMs: 20,
+      claudeSessions: {
+        get: () => ({
+          session: { getSupportedCommands: () => neverResolves },
+        }),
+      },
+    })
+    await ensureSlashCommandsLoaded(deps, "chat-1")
+    expect(deps.slashCommandsInFlight.has("chat-1")).toBe(false)
+  }, 5_000)
+
+  test("clears in-flight flag when ephemeral spawn hangs (timeout guard)", async () => {
+    const neverResolves = new Promise<never>(() => {})
+    const deps = makeDeps({
+      timeoutMs: 20,
+      startClaudeSessionSDK: () => neverResolves,
+    })
+    await ensureSlashCommandsLoaded(deps, "chat-1")
+    expect(deps.slashCommandsInFlight.has("chat-1")).toBe(false)
+  }, 5_000)
+
   test("clears in-flight flag on error from existing session", async () => {
     const deps = makeDeps({
       claudeSessions: {
@@ -273,5 +297,83 @@ describe("ensureSlashCommandsLoaded", () => {
     })
     await expect(ensureSlashCommandsLoaded(deps, "chat-1")).resolves.toBeUndefined()
     expect(deps.slashCommandsInFlight.has("chat-1")).toBe(false)
+  })
+
+  test("reuses cached CLI commands and skips the ephemeral spawn", async () => {
+    const cached = [makeSlashCommand("help"), makeSlashCommand("clear")]
+    let recorded: SlashCommand[] = []
+    let spawnCalled = false
+    const deps = makeDeps({
+      cliCommandCache: {
+        get: (cwd) => (cwd === "/tmp/proj" ? cached : null),
+        set: () => undefined,
+      },
+      startClaudeSessionSDK: async () => {
+        spawnCalled = true
+        throw new Error("ephemeral spawn must NOT run on a cache hit")
+      },
+      store: {
+        getChat: () => ({
+          provider: "claude" as const,
+          slashCommands: null,
+          planMode: false,
+          projectId: "proj-1",
+          sessionTokensByProvider: { claude: null },
+        }),
+        getProject: () => ({ id: "proj-1", localPath: "/tmp/proj" }),
+        recordSessionCommandsLoaded: async (_chatId, cmds) => {
+          recorded = cmds
+        },
+      },
+    })
+    await ensureSlashCommandsLoaded(deps, "chat-1")
+    expect(spawnCalled).toBe(false)
+    expect(recorded.map((c) => c.name)).toEqual(["help", "clear"])
+    expect(deps.slashCommandsInFlight.has("chat-1")).toBe(false)
+  })
+
+  test("populates the cache after an ephemeral spawn (raw CLI commands)", async () => {
+    const cliCommands = [makeSlashCommand("help")]
+    const cacheSets: Array<{ cwd: string; commands: SlashCommand[] }> = []
+    const noopAsync = async () => undefined
+    const deps = makeDeps({
+      cliCommandCache: {
+        get: () => null,
+        set: (cwd, commands) => { cacheSets.push({ cwd, commands }) },
+      },
+      localCatalog: { list: () => [makeSlashCommand("mylocal")] },
+      startClaudeSessionSDK: async () => ({
+        provider: "claude" as const,
+        stream: (async function* () {})(),
+        interrupt: noopAsync,
+        close: () => undefined,
+        sendPrompt: noopAsync,
+        setModel: noopAsync,
+        setPermissionMode: noopAsync,
+        getSupportedCommands: async () => cliCommands,
+      }),
+    })
+    await ensureSlashCommandsLoaded(deps, "chat-1")
+    expect(cacheSets).toHaveLength(1)
+    expect(cacheSets[0]?.cwd).toBe("/tmp/proj")
+    // Cache holds RAW CLI commands, not the local-catalog merge.
+    expect(cacheSets[0]?.commands.map((c) => c.name)).toEqual(["help"])
+  })
+
+  test("populates the cache from an existing session's commands", async () => {
+    const cliCommands = [makeSlashCommand("clear")]
+    const cacheSets: Array<{ cwd: string; commands: SlashCommand[] }> = []
+    const deps = makeDeps({
+      cliCommandCache: {
+        get: () => null,
+        set: (cwd, commands) => { cacheSets.push({ cwd, commands }) },
+      },
+      claudeSessions: {
+        get: () => ({ session: { getSupportedCommands: async () => cliCommands } }),
+      },
+    })
+    await ensureSlashCommandsLoaded(deps, "chat-1")
+    expect(cacheSets).toHaveLength(1)
+    expect(cacheSets[0]?.commands.map((c) => c.name)).toEqual(["clear"])
   })
 })
