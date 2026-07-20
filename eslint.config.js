@@ -22,21 +22,6 @@ const UNKNOWN_BAN = {
 }
 const TYPE_STRICT_SYNTAX = [AS_CAST_BAN, UNKNOWN_BAN]
 
-// Render-loop seal: react-use-websocket's reconnect effect keys on the url
-// argument (deps: [url, connect, ...]). An inline function/arrow url is a
-// fresh reference every render → socket teardown + reopen each render → the
-// open's flushSync setReadyState re-renders → React error #185 white page
-// (see PR #561 / SocketBridge.tsx). The url MUST be a hoisted constant or a
-// useMemo/useCallback-stable binding.
-const RENDER_LOOP_SYNTAX = [
-  {
-    selector:
-      "CallExpression[callee.name='useWebSocket'][arguments.0.type=/^(ArrowFunctionExpression|FunctionExpression)$/]",
-    message:
-      "Inline function url passed to useWebSocket creates a fresh reference every render, retriggering its reconnect effect in a flushSync loop (React #185). Hoist the url or wrap it in useMemo/useCallback keyed on stable deps.",
-  },
-]
-
 // Side-effect seal for shared/client (extracted so overrides can recompose it).
 const SHARED_CLIENT_SEAL_SYNTAX = [
   {
@@ -157,7 +142,7 @@ export default tseslint.config(
       // Type strictness: ban any / as / unknown (as const allowed).
       "@typescript-eslint/no-this-alias": strict,
       "@typescript-eslint/no-explicit-any": strict,
-      "no-restricted-syntax": ["error", ...TYPE_STRICT_SYNTAX, ...RENDER_LOOP_SYNTAX],
+      "no-restricted-syntax": ["error", ...TYPE_STRICT_SYNTAX],
 
       "@typescript-eslint/no-unused-vars": ["warn", { argsIgnorePattern: "^_", varsIgnorePattern: "^_" }],
       "@typescript-eslint/no-empty-object-type": "off",
@@ -203,7 +188,7 @@ export default tseslint.config(
       ],
       // Seal selectors + type-strictness (base's no-restricted-syntax is
       // replaced here, so the type-strict selectors must be re-included).
-      "no-restricted-syntax": ["error", ...SHARED_CLIENT_SEAL_SYNTAX, ...TYPE_STRICT_SYNTAX, ...RENDER_LOOP_SYNTAX],
+      "no-restricted-syntax": ["error", ...SHARED_CLIENT_SEAL_SYNTAX, ...TYPE_STRICT_SYNTAX],
     },
   },
   {
@@ -277,7 +262,7 @@ export default tseslint.config(
   {
     files: ["src/shared/errors.ts"],
     rules: {
-      "no-restricted-syntax": ["error", ...SHARED_CLIENT_SEAL_SYNTAX, AS_CAST_BAN, ...RENDER_LOOP_SYNTAX],
+      "no-restricted-syntax": ["error", ...SHARED_CLIENT_SEAL_SYNTAX, AS_CAST_BAN],
     },
   },
   // Tests + fixtures + test-helpers legitimately use console, `any`, `as`

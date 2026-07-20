@@ -106,12 +106,37 @@ useStore(useShallow((state) => state.list ?? []))
 Tests can mount a component with effects and assert no loop warnings via
 `renderForLoopCheck` in `src/client/lib/testing/`.
 
-Hard lint gate (`RENDER_LOOP_SYNTAX` in `eslint.config.js`): passing an
-inline function/arrow as `useWebSocket`'s url argument is a
-`no-restricted-syntax` **error** — react-use-websocket's reconnect effect
-keys on the url, so a fresh ref every render tears down + reopens the
-socket in a flushSync loop (React #185, PR #561). Hoist the url or wrap
-it in `useMemo`/`useCallback`.
+**Hard AST gate (ast-grep, wired into CI via `bun run lint:usestate`).**
+Two rule pairs in `rules/` (tsx + `-ts` typescript variants, tests in
+`rule-tests/`, run `bunx ast-grep test`) ban the React #185 class at
+`severity: error`:
+
+- `no-unstable-usewebsocket-url` — inline arrow/function as
+  `useWebSocket`'s url argument. react-use-websocket's reconnect effect
+  keys on the url, so a fresh ref every render tears down + reopens the
+  socket in a flushSync loop (PR #561). Hoist the url or bind it with
+  `useMemo`/`useCallback`.
+- `no-unstable-selector-fallback` — a `use*Store` selector returning
+  inline `?? []` / `?? {}` (or `|| []` / `|| {}`) without `useShallow`.
+
+# React Frontend Rules (MANDATORY when touching src/client)
+
+When editing or adding React code under `src/client/**`:
+
+1. **Reference stability first.** Any value passed to a hook that feeds
+   effect deps (urls, configs, selectors, derived collections) MUST be
+   reference-stable across renders: hoisted constant, module-level
+   `EMPTY`, `useMemo`/`useCallback`, or `useShallow`. Never an inline
+   arrow/object/array where a library effect-keys on it.
+2. **New unstable-ref hazards get an ast-grep rule.** When a new hook or
+   library exhibits the same effect-keyed-argument behaviour, add a rule
+   pair in `rules/` + test in `rule-tests/` (follow the
+   `no-unstable-usewebsocket-url` template) in the SAME PR as the fix —
+   the doc note alone is not a gate.
+3. **Loop-check tests.** Components with effects that write stores should
+   be covered by `renderForLoopCheck` (`src/client/lib/testing/`).
+4. **Verify before done:** `bunx ast-grep test`, `bun run lint:usestate`,
+   `bun run lint`, and for UI behaviour changes open the browser.
 
 # Tool Callback Feature Flag (KANNA_MCP_TOOL_CALLBACKS)
 

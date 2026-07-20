@@ -1,0 +1,26 @@
+id: no-unstable-usewebsocket-url
+language: tsx
+severity: error
+message: Inline function url passed to useWebSocket — fresh reference every render retriggers its reconnect effect in a flushSync loop (React error #185).
+note: |
+  react-use-websocket's reconnect effect keys on the url argument
+  (deps: [url, connect, ...]). A fresh arrow each render tears down and
+  reopens the socket every render; each open fires flushSync(setReadyState)
+  -> re-render -> new url -> reopen, until React throws #185 (white page).
+  Root cause of PR #561 (SocketBridge.tsx).
+  Fix: hoist the url to a constant, or bind it with useMemo/useCallback
+  keyed on stable deps: const wsUrl = useMemo(() => getWsUrl(dom), [dom]).
+files:
+  - src/client/**
+ignores:
+  - src/client/**/*.test.ts
+  - src/client/**/*.test.tsx
+rule:
+  any:
+    - pattern: useWebSocket($URL)
+    - pattern: useWebSocket($URL, $$$REST)
+constraints:
+  URL:
+    any:
+      - kind: arrow_function
+      - kind: function_expression
