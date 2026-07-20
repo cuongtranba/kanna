@@ -5468,7 +5468,7 @@ describe("buildCanUseTool — loop-armed tool-block", () => {
       const result = await canUseTool(
         toolName,
         { any: "input" },
-        { toolUseID: "t", signal: new AbortController().signal },
+        { toolUseID: "t", requestId: "req-t", signal: new AbortController().signal },
       )
       expect(result.behavior).toBe("deny")
     }
@@ -5484,7 +5484,7 @@ describe("buildCanUseTool — loop-armed tool-block", () => {
       const result = await canUseTool(
         toolName,
         {},
-        { toolUseID: "t", signal: new AbortController().signal },
+        { toolUseID: "t", requestId: "req-t", signal: new AbortController().signal },
       )
       expect(result.behavior).toBe("allow")
     }
@@ -5499,7 +5499,7 @@ describe("buildCanUseTool — loop-armed tool-block", () => {
     const result = await canUseTool(
       "Edit",
       {},
-      { toolUseID: "t", signal: new AbortController().signal },
+      { toolUseID: "t", requestId: "req-t", signal: new AbortController().signal },
     )
     expect(result.behavior).toBe("allow")
   })
@@ -5539,7 +5539,7 @@ describe("buildCanUseTool", () => {
     const result = await canUseTool(
       "AskUserQuestion",
       { questions: [{ id: "q1", question: "What color?" }] },
-      { toolUseID: "tool-use-1", signal: new AbortController().signal },
+      { toolUseID: "tool-use-1", requestId: "req-tool-use-1", signal: new AbortController().signal },
     )
 
     // Legacy path must be taken: onToolRequest called once, toolCallback NOT called
@@ -5590,7 +5590,7 @@ describe("buildCanUseTool", () => {
       const result = await canUseTool(
         "AskUserQuestion",
         { questions: [{ id: "q1", question: "What color?" }] },
-        { toolUseID: "tool-use-2", signal: new AbortController().signal },
+        { toolUseID: "tool-use-2", requestId: "req-tool-use-2", signal: new AbortController().signal },
       )
 
       // Flag-on path: toolCallback called once, legacy onToolRequest NOT called
@@ -5630,7 +5630,7 @@ describe("buildCanUseTool", () => {
       const result = await canUseTool(
         "AskUserQuestion",
         { questions: [{ id: "q1", question: "Proceed?" }] },
-        { toolUseID: "tool-use-3", signal: new AbortController().signal },
+        { toolUseID: "tool-use-3", requestId: "req-tool-use-3", signal: new AbortController().signal },
       )
 
       expect(result.behavior).toBe("deny")
@@ -5661,7 +5661,7 @@ describe("buildCanUseTool", () => {
       await canUseTool(
         "AskUserQuestion",
         { questions: [{ id: "q1", question: "Hello?" }] },
-        { toolUseID: "tool-use-4", signal: new AbortController().signal },
+        { toolUseID: "tool-use-4", requestId: "req-tool-use-4", signal: new AbortController().signal },
       )
 
       expect(onToolRequestCallCount).toBe(1)
@@ -5682,7 +5682,7 @@ describe("buildCanUseTool", () => {
         onToolRequest: async () => { onToolRequestCallCount++; return null },
       })
 
-      const result = await canUseTool("Bash", { command: "ls" }, { toolUseID: "tool-use-5", signal: new AbortController().signal })
+      const result = await canUseTool("Bash", { command: "ls" }, { toolUseID: "tool-use-5", requestId: "req-tool-use-5", signal: new AbortController().signal })
 
       expect(result.behavior).toBe("allow")
       expect(onToolRequestCallCount).toBe(0)
