@@ -1,0 +1,92 @@
+id: no-unstable-hook-fn-arg-ts
+snapshots:
+  useDebounce(() => search(q), 300):
+    labels:
+    - source: () => search(q)
+      style: primary
+      start: 12
+      end: 27
+    - source: useDebounce
+      style: secondary
+      start: 0
+      end: 11
+    - source: useDebounce(() => search(q), 300)
+      style: secondary
+      start: 0
+      end: 33
+    - source: (() => search(q), 300)
+      style: secondary
+      start: 11
+      end: 33
+  usePolling(function poll() { return fetchStatus() }, interval):
+    labels:
+    - source: function poll() { return fetchStatus() }
+      style: primary
+      start: 11
+      end: 51
+    - source: usePolling
+      style: secondary
+      start: 0
+      end: 10
+    - source: usePolling(function poll() { return fetchStatus() }, interval)
+      style: secondary
+      start: 0
+      end: 62
+    - source: (function poll() { return fetchStatus() }, interval)
+      style: secondary
+      start: 10
+      end: 62
+  useSyncExternalStore((cb) => subscribe(cb), getSnapshot):
+    labels:
+    - source: (cb) => subscribe(cb)
+      style: primary
+      start: 21
+      end: 42
+    - source: useSyncExternalStore
+      style: secondary
+      start: 0
+      end: 20
+    - source: useSyncExternalStore((cb) => subscribe(cb), getSnapshot)
+      style: secondary
+      start: 0
+      end: 56
+    - source: ((cb) => subscribe(cb), getSnapshot)
+      style: secondary
+      start: 20
+      end: 56
+  useWebSocket(() => getWsUrl(dom)):
+    labels:
+    - source: () => getWsUrl(dom)
+      style: primary
+      start: 13
+      end: 32
+    - source: useWebSocket
+      style: secondary
+      start: 0
+      end: 12
+    - source: useWebSocket(() => getWsUrl(dom))
+      style: secondary
+      start: 0
+      end: 33
+    - source: (() => getWsUrl(dom))
+      style: secondary
+      start: 12
+      end: 33
+  'useWebSocket(() => getWsUrl(dom), { share: true })':
+    labels:
+    - source: () => getWsUrl(dom)
+      style: primary
+      start: 13
+      end: 32
+    - source: useWebSocket
+      style: secondary
+      start: 0
+      end: 12
+    - source: 'useWebSocket(() => getWsUrl(dom), { share: true })'
+      style: secondary
+      start: 0
+      end: 50
+    - source: '(() => getWsUrl(dom), { share: true })'
+      style: secondary
+      start: 12
+      end: 50

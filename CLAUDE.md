@@ -111,11 +111,18 @@ Two rule pairs in `rules/` (tsx + `-ts` typescript variants, tests in
 `rule-tests/`, run `bunx ast-grep test`) ban the React #185 class at
 `severity: error`:
 
-- `no-unstable-usewebsocket-url` — inline arrow/function as
-  `useWebSocket`'s url argument. react-use-websocket's reconnect effect
-  keys on the url, so a fresh ref every render tears down + reopens the
-  socket in a flushSync loop (PR #561). Hoist the url or bind it with
-  `useMemo`/`useCallback`.
+- `no-unstable-hook-fn-arg` — an inline arrow/function passed as a
+  direct argument to ANY custom hook (`use[A-Z]...`). A hook that keys
+  an internal effect on that argument re-runs the effect every render
+  (react-use-websocket's reconnect effect on its url arg caused PR
+  #561's flushSync loop). Bind with `useCallback`/`useMemo` or hoist.
+  Safe-list (exempt): React built-ins that ref-stash or read the arg
+  once (`useMemo`/`useCallback`/`useEffect`/`useLayoutEffect`/
+  `useInsertionEffect`/`useImperativeHandle`/`useState`/`useReducer`/
+  `useRef`), `useShallow`, and zustand `use*Store` selectors.
+  `useSyncExternalStore` stays FLAGGED (inline subscribe resubscribes
+  every render). A hook proven to ref-stash its callbacks may be added
+  to the safe-list regex in both rule variants, in the same PR.
 - `no-unstable-selector-fallback` — a `use*Store` selector returning
   inline `?? []` / `?? {}` (or `|| []` / `|| {}`) without `useShallow`.
 
@@ -128,11 +135,11 @@ When editing or adding React code under `src/client/**`:
    reference-stable across renders: hoisted constant, module-level
    `EMPTY`, `useMemo`/`useCallback`, or `useShallow`. Never an inline
    arrow/object/array where a library effect-keys on it.
-2. **New unstable-ref hazards get an ast-grep rule.** When a new hook or
-   library exhibits the same effect-keyed-argument behaviour, add a rule
-   pair in `rules/` + test in `rule-tests/` (follow the
-   `no-unstable-usewebsocket-url` template) in the SAME PR as the fix —
-   the doc note alone is not a gate.
+2. **Hook callbacks are gated generically.** `no-unstable-hook-fn-arg`
+   already flags inline functions to any custom hook. Never weaken it by
+   safe-listing a hook without proof it ref-stashes its callbacks; for a
+   NEW anti-pattern shape (not a fn-arg), add a rule pair in `rules/` +
+   test in `rule-tests/` in the SAME PR — a doc note alone is not a gate.
 3. **Loop-check tests.** Components with effects that write stores should
    be covered by `renderForLoopCheck` (`src/client/lib/testing/`).
 4. **Verify before done:** `bunx ast-grep test`, `bun run lint:usestate`,
