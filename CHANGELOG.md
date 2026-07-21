@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.6.0](https://github.com/cuongtranba/kanna/compare/v1.5.2...v1.6.0) (2026-07-21)
+
+
+### Features
+
+* **loop:** mdast structured tracking-file access to bound loop context ([#564](https://github.com/cuongtranba/kanna/issues/564)) ([f442766](https://github.com/cuongtranba/kanna/commit/f442766794bf784ccc1463b6178a24df5b651245))
+
 ## [1.5.2](https://github.com/cuongtranba/kanna/compare/v1.5.1...v1.5.2) (2026-07-20)
 
 
