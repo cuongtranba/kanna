@@ -14,8 +14,6 @@
 import { confinePathToDir, shellCommandIsParseable } from "./input-validation"
 
 const DEFAULT_TRACKING_FILE = "PROGRESS.md"
-const MAX_GOAL_LEN = 500
-const MAX_CHUNK_HINT_LEN = 2000
 
 export interface LoopSetupInput {
   /** Human-readable goal. Kept short — the model doesn't need prose here. */
@@ -88,18 +86,20 @@ function renderLoopPrompt(args: {
     "You are the ORCHESTRATOR of an autonomous loop. You do NOT do the work",
     "yourself — you delegate it. Follow these steps EXACTLY every turn:",
     "",
-    `1. Read ${trackingFileRel}.`,
+    `1. Read the current plan by SECTION — do NOT read the whole ${trackingFileRel}.`,
+    `   Call mcp__kanna__query_tracking_file({ sections: ["Next chunk", "Progress"], list_limit: 5 })`,
+    `   (defaults to ${trackingFileRel}). This keeps the file off your context as it grows.`,
     `2. Run the verify command with Bash: \`${verifyCommand}\`. Check its exit code.`,
     "3. If the verify command exited 0, the goal is met. Print a one-line",
     `   "GOAL MET: ${goal}" message, then call mcp__kanna__stop_loop({}) and`,
     "   END THIS TURN. Do NOT call delegate_subagent.",
-    "4. Otherwise, pick the \"Next chunk\" from the tracking file and delegate it",
+    "4. Otherwise, take the \"Next chunk\" from step 1 and delegate it",
     "   with EXACTLY this call (the subagent is fixed by configuration):",
     "",
     "     mcp__kanna__delegate_subagent({",
     `       subagent_id: "${subagentId}",`,
     "       run_in_background: true,",
-    `       prompt: "Do the next chunk in ${trackingFileRel}. Verify locally with \`${verifyCommand}\`. On success: append a Progress row to ${trackingFileRel} (chunk done + timestamp) and set the next chunk. On failure: append a Failed-approaches row with a short reason. Terminate when done.",`,
+    `       prompt: "Do the next chunk in ${trackingFileRel}. To read the plan, call mcp__kanna__query_tracking_file (by section — never read the whole file). Verify locally with \`${verifyCommand}\`. On success: call mcp__kanna__append_tracking_row({ section: \\"Progress\\", entry: \\"- <date> <chunk> DONE\\", position: \\"top\\" }) and append the next chunk under \\"Next chunk\\". On failure: append_tracking_row({ section: \\"Failed approaches\\", entry: \\"- <reason>\\" }). Never Read or Edit the whole tracking file. Terminate when done.",`,
     "     })",
     "",
     "5. End your turn. Kanna will /clear your context and re-fire this exact",
@@ -109,6 +109,9 @@ function renderLoopPrompt(args: {
     "- You are the orchestrator. NEVER edit code yourself: do NOT use Edit,",
     "  Write, MultiEdit, or the Task/Agent tool. Kanna blocks these tools in",
     "  loop turns; attempting them wastes the turn.",
+    `- NEVER read the whole ${trackingFileRel}. Use mcp__kanna__query_tracking_file`,
+    "  (read) and mcp__kanna__append_tracking_row (write) so the file stays off",
+    "  your context no matter how large it grows.",
     "- Exactly ONE delegate_subagent per turn, then END THE TURN immediately.",
     "- All progress lives in the tracking file, never in your context.",
     "",
@@ -278,8 +281,6 @@ export function validateLoopSetup(
 
   if (!isNonBlankString(input.goal)) {
     errors.push("goal is required and must be a non-empty string")
-  } else if (input.goal.length > MAX_GOAL_LEN) {
-    errors.push(`goal exceeds max length ${MAX_GOAL_LEN}`)
   }
 
   if (!isNonBlankString(input.verifyCommand)) {
@@ -288,12 +289,8 @@ export function validateLoopSetup(
     errors.push("verifyCommand is not a parseable shell command (unmatched quotes / empty)")
   }
 
-  if (input.chunkHint !== undefined) {
-    if (typeof input.chunkHint !== "string") {
-      errors.push("chunkHint must be a string when provided")
-    } else if (input.chunkHint.length > MAX_CHUNK_HINT_LEN) {
-      errors.push(`chunkHint exceeds max length ${MAX_CHUNK_HINT_LEN}`)
-    }
+  if (input.chunkHint !== undefined && typeof input.chunkHint !== "string") {
+    errors.push("chunkHint must be a string when provided")
   }
 
   // Resolve the worker: explicit param wins, else the configured default.
@@ -334,6 +331,8 @@ export function validateLoopSetup(
     "delegate_subagent",
     "run_in_background: true",
     "stop_loop",
+    "query_tracking_file",
+    "append_tracking_row",
     "GOAL MET",
     "END THIS TURN",
     "/clear",

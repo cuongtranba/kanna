@@ -27,6 +27,9 @@ import {
 } from "./kanna-mcp-tools/delegate-subagent"
 import type { SubagentOrchestrator } from "./subagent-orchestrator"
 import type { LoopSetupInput } from "./loop-template"
+import { confinePathToDir } from "./input-validation"
+import { resolveStructuredDoc } from "../shared/structured-doc/registry"
+import { readDoc, writeDoc } from "./structured-doc-io.adapter"
 import type { OrchRunDetail, OrchRunInput } from "../shared/orchestration-types"
 import type { ToolCallbackService } from "./tool-callback"
 import type { ChatPermissionPolicy } from "../shared/permission-policy"
@@ -631,6 +634,122 @@ function buildOrchToolList(args: {
   ]
 }
 
+const QUERY_TRACKING_FILE_DESCRIPTION =
+  "Read a structured markdown tracking file (e.g. the loop's PROGRESS.md) by "
+  + "SECTION instead of loading the whole file. Returns only the requested "
+  + "sections, so context stays bounded no matter how large the file grows on "
+  + "disk. In a loop turn, query just the sections you need (e.g. 'Next chunk' "
+  + "plus the latest few 'Progress' rows via list_limit) rather than reading "
+  + "the entire file."
+
+const APPEND_TRACKING_ROW_DESCRIPTION =
+  "Append one entry under a section of a structured markdown tracking file "
+  + "(e.g. add a Progress row to PROGRESS.md) WITHOUT reading the whole file "
+  + "first. Prefer this over Edit/Write for the loop tracking file — it keeps "
+  + "the append off your context. Use position 'top' for newest-first logs "
+  + "like Progress."
+
+const trackingDocError = (text: string) => ({
+  isError: true as const,
+  content: [{ type: "text" as const, text }],
+})
+
+/**
+ * `query_tracking_file` + `append_tracking_row`: bound the loop tracking
+ * file's context cost at the read/append boundary. Registered whenever a
+ * chat is present, so both the main orchestrator and its subagents get them.
+ * Paths are confined to the chat cwd; the format is dispatched by extension
+ * through the structured-doc registry (`.md` today). See the loop-template
+ * renderLoopPrompt which instructs the model to use these instead of Read/Edit.
+ */
+function buildTrackingDocToolList(args: { cwd: string; chatId: string | null }): KannaSdkToolList {
+  if (!args.chatId) return []
+  const cwd = args.cwd
+  return [
+    tool(
+      "query_tracking_file",
+      QUERY_TRACKING_FILE_DESCRIPTION,
+      {
+        file: z
+          .string()
+          .optional()
+          .describe("Path relative to the project cwd. Defaults to PROGRESS.md."),
+        sections: z
+          .array(z.string().min(1))
+          .optional()
+          .describe(
+            "Section names to return, prefix-matched case-insensitively (e.g. 'progress' matches 'Progress (latest first)'). Omit to return every section.",
+          ),
+        list_limit: z
+          .number()
+          .int()
+          .min(1)
+          .optional()
+          .describe("Keep only the first N items of the first list in each returned section (e.g. latest N Progress rows)."),
+      },
+      async (input) => {
+        const confined = confinePathToDir(input.file ?? "PROGRESS.md", cwd, "file")
+        if ("error" in confined) return trackingDocError(confined.error)
+        const doc = resolveStructuredDoc(path.extname(confined.abs))
+        if (!doc) {
+          return trackingDocError(`structured query supports .md files only (got ${confined.rel})`)
+        }
+        const content = await readDoc(confined.abs)
+        if (content === null) return trackingDocError(`file not found: ${confined.rel}`)
+        const result = doc.query(content, { sections: input.sections, listLimit: input.list_limit })
+        const missingNote =
+          result.missing.length > 0 ? `\n\n(no section matched: ${result.missing.join(", ")})` : ""
+        const body = result.content.length > 0 ? result.content : "(no matching sections)\n"
+        return { content: [{ type: "text" as const, text: `${body}${missingNote}` }] }
+      },
+    ),
+    tool(
+      "append_tracking_row",
+      APPEND_TRACKING_ROW_DESCRIPTION,
+      {
+        file: z
+          .string()
+          .optional()
+          .describe("Path relative to the project cwd. Defaults to PROGRESS.md."),
+        section: z
+          .string()
+          .min(1)
+          .describe("Target section, prefix-matched (e.g. 'progress', 'failed approaches')."),
+        entry: z
+          .string()
+          .min(1)
+          .describe("Raw markdown to insert, e.g. '- 2026-07-21 chunk 4 DONE'."),
+        position: z
+          .enum(["top", "bottom"])
+          .optional()
+          .describe("'top' inserts under the heading (newest-first logs); 'bottom' (default) appends at the end of the section."),
+      },
+      async (input) => {
+        const confined = confinePathToDir(input.file ?? "PROGRESS.md", cwd, "file")
+        if ("error" in confined) return trackingDocError(confined.error)
+        const doc = resolveStructuredDoc(path.extname(confined.abs))
+        if (!doc) {
+          return trackingDocError(`structured append supports .md files only (got ${confined.rel})`)
+        }
+        const content = await readDoc(confined.abs)
+        if (content === null) {
+          return trackingDocError(`file not found: ${confined.rel} (run setup_loop to create it first)`)
+        }
+        const result = doc.append(content, {
+          section: input.section,
+          entry: input.entry,
+          position: input.position,
+        })
+        await writeDoc(confined.abs, result.content)
+        const note = result.created ? " (section created)" : ""
+        return {
+          content: [{ type: "text" as const, text: `Appended to "${input.section}" in ${confined.rel}${note}.` }],
+        }
+      },
+    ),
+  ]
+}
+
 export function buildKannaMcpTools(args: KannaMcpArgs): KannaSdkToolList {
   const tunnelGateway = args.tunnelGateway ?? null
   const chatId = args.chatId ?? null
@@ -691,6 +810,7 @@ export function buildKannaMcpTools(args: KannaMcpArgs): KannaSdkToolList {
       chatId,
     }),
     ...buildSetupLoopToolList({ setupLoop: args.setupLoop, stopLoop: args.stopLoop, chatId }),
+    ...buildTrackingDocToolList({ cwd, chatId }),
     ...buildOrchToolList({
       runOrch: args.runOrch,
       cancelOrchRun: args.cancelOrchRun,

@@ -871,8 +871,9 @@ The server owns the template so the prompt is deterministic. See
 
 - **Pure validator** (`src/server/loop-template.ts`): rejects blank goal /
   unparseable verify command (unbalanced quotes) / `trackingFile` outside cwd
-  / NUL byte / oversize inputs. Returns a flat error list (does not
-  fail-fast); the tool surfaces the list as `isError`.
+  / NUL byte. Returns a flat error list (does not fail-fast); the tool
+  surfaces the list as `isError`. (There is intentionally NO length cap on
+  `goal` / `chunkHint` — those were removed.)
 - **Deterministic tracking-file reconcile** (`reconcileTrackingFile`, pure,
   same module): when the tracking file already EXISTS, it is reconciled
   against the canonical schema instead of being silently trusted — a pure
@@ -899,8 +900,50 @@ The server owns the template so the prompt is deterministic. See
 - **Rendered prompt invariants** (asserted structurally in `validateLoopSetup`):
   the recurring prompt MUST contain the tracking-file path, the verify
   command, `delegate_subagent`, `run_in_background: true`, `GOAL MET`,
-  `END THIS TURN`, and `/clear`. Future edits to the template that drop
-  any of these fail validation.
+  `END THIS TURN`, `/clear`, `query_tracking_file`, and `append_tracking_row`.
+  Future edits to the template that drop any of these fail validation.
+
+## Structured tracking-file access (mdast — bounds loop context growth)
+
+Both the main orchestrator and its subagents are FRESH Claude spawns every
+loop iteration, so nothing accumulates ACROSS iterations. The one thing that
+persists and grows is the tracking file (PROGRESS.md) — and reading it whole
+each iteration made per-turn context scale O(file size). The fix bounds it at
+the READ + APPEND boundary via structured, section-scoped access instead of
+capping the file.
+
+- **Pure engine** (`src/shared/structured-doc/`): a format-agnostic port
+  (`StructuredDoc`: `sections` / `query` / `append`) + an extension registry
+  (`resolveStructuredDoc(ext)` — `.md` → the mdast adapter today; add a
+  format = one adapter + one registry row). The markdown adapter uses mdast
+  (`mdast-util-from-markdown` + `micromark-extension-gfm`) purely as a PARSER
+  to locate section + list-item boundaries by source `position` offset; every
+  slice is taken from the ORIGINAL string, so queries/appends are
+  byte-faithful (no reserialization of untouched content). NO IO — allowed in
+  `src/shared/**` under the side-effect seal.
+- **IO leaf** (`src/server/structured-doc-io.adapter.ts`): `readDoc` /
+  `writeDoc` byte IO only.
+- **MCP tools** (`kanna-mcp.ts`, `buildTrackingDocToolList`): registered
+  whenever a `chatId` is present — so BOTH the main orchestrator AND subagents
+  get them (no `depth === 0` gate, unlike setup_loop). Self-contained: they
+  confine the path to the chat cwd (`confinePathToDir`), dispatch by extension
+  through the registry, and call the IO leaf — no coordinator/spawner
+  threading.
+  - `query_tracking_file({ file?, sections?, list_limit? })` — returns only
+    the requested sections (default file `PROGRESS.md`); `list_limit` keeps
+    the first N items of a section's first list (e.g. latest N Progress rows)
+    with a one-line elision marker. The whole file never enters context.
+  - `append_tracking_row({ file?, section, entry, position? })` — inserts one
+    entry under a section (`position: "top"` for newest-first logs) without a
+    read-before-edit of the whole file.
+- **Loop prompt wiring** (`renderLoopPrompt`): the orchestrator step 1 and the
+  delegated-subagent prompt both instruct `query_tracking_file` (read) +
+  `append_tracking_row` (write) and forbid reading/editing the whole file. The
+  two tool names are asserted in the structural invariant.
+- **Trade-off:** the file still grows unbounded ON DISK — that is intentional
+  (history preserved); only context is bounded. `reconcileTrackingFile` stays
+  line-based (byte-exact round-trip contract) and is untouched — the engine is
+  additive, used only by the query/append path.
 
 ## Loop-armed state + hard tool-block (adr-20260712-loop-orchestration-hardening)
 

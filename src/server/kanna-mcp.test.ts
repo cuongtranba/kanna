@@ -555,6 +555,127 @@ describe("setup_loop tool", () => {
   })
 })
 
+describe("query_tracking_file + append_tracking_row tools", () => {
+  function toolMap(tools: ReturnType<typeof buildKannaMcpTools>) {
+    const m = new Map<string, { handler: (i: Record<string, unknown>) => Promise<{ content: Array<{ type: string; text: string }>; isError?: boolean }> }>()
+    for (const t of tools) {
+      m.set(t.name, {
+        handler: (i) => (
+          t as { handler: (x: Record<string, unknown>, e: unknown) => Promise<{ content: Array<{ type: string; text: string }>; isError?: boolean }> }
+        ).handler(i, undefined),
+      })
+    }
+    return m
+  }
+
+  const PROGRESS = [
+    "## Goal",
+    "eslint passes",
+    "",
+    "## Progress (latest first)",
+    "- chunk 3 DONE",
+    "- chunk 2 DONE",
+    "- chunk 1 DONE",
+    "",
+    "## Next chunk",
+    "chunk 4",
+    "",
+  ].join("\n")
+
+  let dir: string
+  beforeAll(async () => {
+    dir = await mkdtemp(path.join(os.tmpdir(), "kanna-trackdoc-"))
+    await writeFile(path.join(dir, "PROGRESS.md"), PROGRESS)
+  })
+  afterAll(async () => {
+    if (dir) await rm(dir, { recursive: true, force: true })
+  })
+
+  const argsFor = (localPath: string) => ({
+    projectId: "p",
+    localPath,
+    chatId: "c",
+    sessionId: "s",
+    chatPolicy: POLICY_DEFAULT,
+    tunnelGateway: null,
+  })
+
+  test("registered when chatId present; hidden when absent", () => {
+    expect(buildKannaMcpTools(argsFor(dir)).map((t) => t.name)).toContain("query_tracking_file")
+    expect(buildKannaMcpTools(argsFor(dir)).map((t) => t.name)).toContain("append_tracking_row")
+    const noChat = buildKannaMcpTools({ ...argsFor(dir), chatId: undefined })
+    expect(noChat.map((t) => t.name)).not.toContain("query_tracking_file")
+    expect(noChat.map((t) => t.name)).not.toContain("append_tracking_row")
+  })
+
+  test("query returns only requested sections, list-capped", async () => {
+    const tools = toolMap(buildKannaMcpTools(argsFor(dir)))
+    const res = await tools.get("query_tracking_file")!.handler({
+      sections: ["next chunk", "progress"],
+      list_limit: 2,
+    })
+    expect(res.isError).toBeUndefined()
+    expect(res.content[0].text).toContain("chunk 4")
+    expect(res.content[0].text).toContain("chunk 3 DONE")
+    expect(res.content[0].text).not.toContain("chunk 1 DONE")
+    expect(res.content[0].text).toContain("+1 older entries omitted")
+    expect(res.content[0].text).not.toContain("## Goal")
+  })
+
+  test("query on a missing file → isError", async () => {
+    const tools = toolMap(buildKannaMcpTools(argsFor(dir)))
+    const res = await tools.get("query_tracking_file")!.handler({ file: "NOPE.md" })
+    expect(res.isError).toBe(true)
+    expect(res.content[0].text).toContain("file not found")
+  })
+
+  test("query rejects a path escaping cwd", async () => {
+    const tools = toolMap(buildKannaMcpTools(argsFor(dir)))
+    const res = await tools.get("query_tracking_file")!.handler({ file: "../escape.md" })
+    expect(res.isError).toBe(true)
+    expect(res.content[0].text).toContain("resolve inside")
+  })
+
+  test("query rejects a non-markdown extension", async () => {
+    await writeFile(path.join(dir, "data.json"), "{}")
+    const tools = toolMap(buildKannaMcpTools(argsFor(dir)))
+    const res = await tools.get("query_tracking_file")!.handler({ file: "data.json" })
+    expect(res.isError).toBe(true)
+    expect(res.content[0].text).toContain(".md files only")
+  })
+
+  test("append inserts a newest-first Progress row; re-query sees it", async () => {
+    const scratch = await mkdtemp(path.join(os.tmpdir(), "kanna-trackdoc-w-"))
+    await writeFile(path.join(scratch, "PROGRESS.md"), PROGRESS)
+    const tools = toolMap(buildKannaMcpTools(argsFor(scratch)))
+    const appended = await tools.get("append_tracking_row")!.handler({
+      section: "progress",
+      entry: "- chunk 4 DONE",
+      position: "top",
+    })
+    expect(appended.isError).toBeUndefined()
+    expect(appended.content[0].text).toContain("Appended")
+    const res = await tools.get("query_tracking_file")!.handler({
+      sections: ["progress"],
+      list_limit: 1,
+    })
+    expect(res.content[0].text).toContain("chunk 4 DONE")
+    expect(res.content[0].text).toContain("+3 older entries omitted")
+    await rm(scratch, { recursive: true, force: true })
+  })
+
+  test("append on a missing file → isError", async () => {
+    const tools = toolMap(buildKannaMcpTools(argsFor(dir)))
+    const res = await tools.get("append_tracking_row")!.handler({
+      file: "GONE.md",
+      section: "progress",
+      entry: "- x",
+    })
+    expect(res.isError).toBe(true)
+    expect(res.content[0].text).toContain("run setup_loop")
+  })
+})
+
 describe("resolveWorkspaceFile", () => {
   test("resolves a markdown file and returns local-file contentUrl", async () => {
     const mdPath = path.join(tempRoot, "spec.md")
