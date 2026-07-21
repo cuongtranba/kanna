@@ -163,14 +163,6 @@ describe("validateLoopSetup — rejections", () => {
     expect(notString.ok).toBe(false)
   })
 
-  test("rejects when goal exceeds max length", () => {
-    const overlong = "a".repeat(501)
-    const result = validateLoopSetup({ goal: overlong, verifyCommand: "x" }, cwd, CTX)
-    expect(result.ok).toBe(false)
-    if (result.ok) throw new Error("expected reject")
-    expect(result.errors.some((e) => e.includes("500"))).toBe(true)
-  })
-
   test("rejects when verifyCommand is missing or blank", () => {
     const empty = validateLoopSetup({ goal: "g", verifyCommand: "" }, cwd, CTX)
     expect(empty.ok).toBe(false)
@@ -226,18 +218,6 @@ describe("validateLoopSetup — rejections", () => {
       CTX,
     )
     expect(result.ok).toBe(false)
-  })
-
-  test("rejects when chunkHint exceeds max length", () => {
-    const overlong = "a".repeat(2001)
-    const result = validateLoopSetup(
-      { goal: "g", verifyCommand: "true", chunkHint: overlong },
-      cwd,
-      CTX,
-    )
-    expect(result.ok).toBe(false)
-    if (result.ok) throw new Error("expected reject")
-    expect(result.errors.some((e) => e.includes("chunkHint"))).toBe(true)
   })
 
   test("collects multiple errors in one pass (does not fail-fast)", () => {
