@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.6.1](https://github.com/cuongtranba/kanna/compare/v1.6.0...v1.6.1) (2026-07-21)
+
+
+### Bug Fixes
+
+* **wiki:** rename Screenshot pages .md-&gt;.mdx so imports/JSX render ([#566](https://github.com/cuongtranba/kanna/issues/566)) ([8ebdb96](https://github.com/cuongtranba/kanna/commit/8ebdb9671f830778b19b0f68e4543761574718d7))
+
 ## [1.6.0](https://github.com/cuongtranba/kanna/compare/v1.5.2...v1.6.0) (2026-07-21)
 
 
