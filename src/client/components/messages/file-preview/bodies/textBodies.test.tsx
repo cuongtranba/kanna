@@ -1,10 +1,15 @@
 import "../../../../lib/testing/setupHappyDom"
 import { describe, expect, test, mock, beforeEach, afterEach } from "bun:test"
+
+mock.module("../../../../hooks/useTheme", () => ({
+  useTheme: () => ({ resolvedTheme: "dark", theme: "dark", setTheme: () => {} }),
+}))
+
 import { renderToStaticMarkup } from "react-dom/server"
 import { TextBody } from "./TextBody"
 import { JsonBody } from "./JsonBody"
 import { MarkdownBody } from "./MarkdownBody"
-import { __clearTextBodyCacheForTests } from "./textLoader"
+import { __clearTextBodyCacheForTests, __seedTextBodyCacheForTests } from "./textLoader"
 import type { PreviewSource } from "../types"
 
 const makeSrc = (mime: string, name: string): PreviewSource => ({
@@ -32,5 +37,27 @@ describe("TextBody/JsonBody/MarkdownBody static markup", () => {
   test("MarkdownBody uses prose wrapper", () => {
     const html = renderToStaticMarkup(<MarkdownBody source={makeSrc("text/markdown", "a.md")} />)
     expect(html).toContain("prose")
+  })
+
+  test("MarkdownBody renders mermaid fences as diagrams, not plain code", () => {
+    const src = makeSrc("text/markdown", "plan.md")
+    __seedTextBodyCacheForTests(src, {
+      status: "ready",
+      content: "# Plan\n\n```mermaid\nflowchart TB\n  A --> B\n```\n",
+      truncated: false,
+    })
+    const html = renderToStaticMarkup(<MarkdownBody source={src} />)
+    expect(html).toContain("group/mermaid")
+  })
+
+  test("MarkdownBody renders GFM tables as html tables", () => {
+    const src = makeSrc("text/markdown", "table.md")
+    __seedTextBodyCacheForTests(src, {
+      status: "ready",
+      content: "| a | b |\n| --- | --- |\n| 1 | 2 |\n",
+      truncated: false,
+    })
+    const html = renderToStaticMarkup(<MarkdownBody source={src} />)
+    expect(html).toContain("<table")
   })
 })

@@ -382,6 +382,16 @@ function renderMarkdownSegment(markdown: string): ReactNode {
 // ---------------------------------------------------------------------------
 
 /**
+ * Render a standalone markdown document (e.g. a previewed .md file) to a
+ * React tree with the full message transformer set — mermaid fences become
+ * MermaidDiagram blocks, GFM tables/lists/code render as in chat messages.
+ * No <think>-segment pre-pass: file content is not an assistant message.
+ */
+export function renderMarkdownDocument(markdown: string): ReactNode {
+  return renderMarkdownSegment(markdown)
+}
+
+/**
  * Render an assistant message text to a React tree.
  *
  * Pre-pass: splits out `<think>…</think>` segments using parseThinkingSegments.

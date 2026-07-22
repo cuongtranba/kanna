@@ -81,7 +81,7 @@ export function classifyAttachmentPreview(attachment: ChatAttachment): Attachmen
       ? { kind: "json", openInNewTab: false }
       : { kind: "external", openInNewTab: true }
   }
-  if (extension === ".md") {
+  if (isMarkdownAttachment(attachment)) {
     return { kind: "markdown", openInNewTab: false }
   }
   if (mimeType === "text/csv" || mimeType === "text/tab-separated-values") {
@@ -137,12 +137,12 @@ export function classifyAttachmentIcon(attachment: ChatAttachment): AttachmentIc
   if (mimeType.startsWith("image/")) return "image"
   if (mimeType === "application/pdf" || extension === ".pdf") return "pdf"
   if (mimeType === "application/json" || extension === ".json" || extension === ".jsonc") return "json"
-  if (extension === ".md") return "markdown"
+  if (isMarkdownAttachment(attachment)) return "markdown"
   if (mimeType === "text/csv" || mimeType === "text/tab-separated-values" || extension === ".csv" || extension === ".tsv") return "table"
   if (mimeType.startsWith("audio/") || AUDIO_EXTENSIONS.has(extension)) return "audio"
   if (mimeType.startsWith("video/") || VIDEO_EXTENSIONS.has(extension)) return "video"
   if (mimeType.includes("zip") || mimeType.includes("archive") || ARCHIVE_EXTENSIONS.has(extension)) return "archive"
-  if (mimeType === "text/vnd.mermaid" || extension === ".mmd" || extension === ".mermaid") return "mermaid"
+  if (isMermaidAttachment(attachment)) return "mermaid"
   if (CODE_OR_CONFIG_EXTENSIONS.has(extension)) {
     if (extension === ".txt") return "text"
     return "code"
@@ -213,6 +213,30 @@ export function parseDelimitedPreview(content: string, delimiter: "," | "\t"): T
 function getFileExtension(fileName: string) {
   const index = fileName.lastIndexOf(".")
   return index >= 0 ? fileName.slice(index).toLowerCase() : ""
+}
+
+function mimeEssence(mimeType: string) {
+  return mimeType.split(";")[0]?.trim().toLowerCase() ?? ""
+}
+
+// displayName may be a human label (e.g. preview_file's `label`) with no
+// extension, so fall back to the on-disk relativePath before giving up.
+function attachmentExtensions(attachment: ChatAttachment): string[] {
+  return [getFileExtension(attachment.displayName), getFileExtension(attachment.relativePath)]
+}
+
+const MARKDOWN_MIME_ESSENCES = new Set(["text/markdown", "text/x-markdown"])
+
+function isMarkdownAttachment(attachment: ChatAttachment): boolean {
+  if (MARKDOWN_MIME_ESSENCES.has(mimeEssence(attachment.mimeType))) return true
+  return attachmentExtensions(attachment).includes(".md")
+}
+
+const MERMAID_EXTENSIONS = new Set([".mmd", ".mermaid"])
+
+function isMermaidAttachment(attachment: ChatAttachment): boolean {
+  if (mimeEssence(attachment.mimeType) === "text/vnd.mermaid") return true
+  return attachmentExtensions(attachment).some((ext) => MERMAID_EXTENSIONS.has(ext))
 }
 
 function resolvePreviewUrl(url: string, dom: DomPort) {
