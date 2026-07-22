@@ -211,3 +211,66 @@ describe("normalizeClaudeStreamMessage", () => {
     expect(si.slashCommands).toEqual(["help"])
   })
 })
+
+// ---------------------------------------------------------------------------
+// system/background_tasks_changed (SDK level signal — keep-alive guard source)
+// ---------------------------------------------------------------------------
+
+describe("normalizeClaudeStreamMessage background_tasks_changed", () => {
+  test("produces hidden status entry with REPLACE snapshot of task ids", () => {
+    const msg: ClaudeRawSdkMessage = {
+      type: "system",
+      subtype: "background_tasks_changed",
+      tasks: [
+        { task_id: "a6de6ce841521b5df", task_type: "local_agent", description: "Task 3 implementer" },
+        { task_id: "bsh42", task_type: "local_bash", description: "test watcher" },
+      ],
+    }
+    const entries = normalizeClaudeStreamMessage(msg)
+    expect(entries).toHaveLength(1)
+    const entry = entries[0] as { kind: string; hidden?: boolean; backgroundTaskIdsSnapshot?: string[] }
+    expect(entry.kind).toBe("status")
+    expect(entry.hidden).toBe(true)
+    expect(entry.backgroundTaskIdsSnapshot).toEqual(["a6de6ce841521b5df", "bsh42"])
+  })
+
+  test("empty tasks list produces empty snapshot (clears the guard)", () => {
+    const msg: ClaudeRawSdkMessage = {
+      type: "system",
+      subtype: "background_tasks_changed",
+      tasks: [],
+    }
+    const entries = normalizeClaudeStreamMessage(msg)
+    expect(entries).toHaveLength(1)
+    expect((entries[0] as { backgroundTaskIdsSnapshot?: string[] }).backgroundTaskIdsSnapshot).toEqual([])
+  })
+
+  test("excludes in_process_teammate tasks (long-lived by design, would pin the session)", () => {
+    const msg: ClaudeRawSdkMessage = {
+      type: "system",
+      subtype: "background_tasks_changed",
+      tasks: [
+        { task_id: "tm1", task_type: "in_process_teammate", description: "teammate" },
+        { task_id: "a99", task_type: "local_agent", description: "worker" },
+      ],
+    }
+    const entries = normalizeClaudeStreamMessage(msg)
+    expect((entries[0] as { backgroundTaskIdsSnapshot?: string[] }).backgroundTaskIdsSnapshot).toEqual(["a99"])
+  })
+
+  test("malformed tasks entries are skipped, missing tasks field yields empty snapshot", () => {
+    const malformed: ClaudeRawSdkMessage = {
+      type: "system",
+      subtype: "background_tasks_changed",
+      tasks: [{ description: "no id" } as never, { task_id: "ok1", task_type: "local_agent", description: "" }],
+    }
+    expect(
+      (normalizeClaudeStreamMessage(malformed)[0] as { backgroundTaskIdsSnapshot?: string[] }).backgroundTaskIdsSnapshot,
+    ).toEqual(["ok1"])
+
+    const missing: ClaudeRawSdkMessage = { type: "system", subtype: "background_tasks_changed" }
+    expect(
+      (normalizeClaudeStreamMessage(missing)[0] as { backgroundTaskIdsSnapshot?: string[] }).backgroundTaskIdsSnapshot,
+    ).toEqual([])
+  })
+})

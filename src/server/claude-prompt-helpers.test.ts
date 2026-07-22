@@ -209,6 +209,33 @@ describe("backgroundTaskIdsFromToolResult", () => {
     expect(backgroundTaskIdsFromToolResult(null)).toEqual([])
     expect(backgroundTaskIdsFromToolResult(42)).toEqual([])
   })
+
+  // Real AgentTool background-launch payload captured from a live 0.3.215
+  // transcript (chat dd05b76e, 2026-07-22): the reaper killed a session while
+  // this launch's agent was mid-flight because the id was never armed.
+  test("extracts agentId from Agent background-launch result", () => {
+    const text =
+      "Async agent launched successfully. (This tool result is internal metadata — never quote or paste any part of it, including the agentId below, into a user-facing reply.)\n" +
+      "agentId: a6de6ce841521b5df (internal ID - do not mention to user. Use SendMessage with to: 'a6de6ce841521b5df' to continue this agent.)\n" +
+      "The agent is working in the background. You will be notified automatically when it completes."
+    expect(backgroundTaskIdsFromToolResult(text)).toEqual(["a6de6ce841521b5df"])
+  })
+
+  test("extracts agentId from Agent launch in content-block array", () => {
+    const blocks = [{ type: "text", text: "Async agent launched successfully.\nagentId: a0e6405fdd8aa967a (internal ID)" }]
+    expect(backgroundTaskIdsFromToolResult(blocks)).toEqual(["a0e6405fdd8aa967a"])
+  })
+
+  test("does not extract agentId-like text without the launch marker", () => {
+    expect(backgroundTaskIdsFromToolResult("the config field agentId: abc123 is deprecated")).toEqual([])
+  })
+
+  test("extracts both bash and agent ids from mixed content", () => {
+    const text =
+      "Command running in background with ID: bsh1\n" +
+      "Async agent launched successfully.\nagentId: a17777d9e3cf9a6a3 (internal ID)"
+    expect(backgroundTaskIdsFromToolResult(text)).toEqual(["bsh1", "a17777d9e3cf9a6a3"])
+  })
 })
 
 // ---------------------------------------------------------------------------

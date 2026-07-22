@@ -466,6 +466,76 @@ describe("runClaudeSession", () => {
     expect(resolveBackgroundCalled).toBeGreaterThan(0)
   })
 
+  test("status entry with backgroundTaskIdsSnapshot REPLACES the guard set", async () => {
+    // Pre-arm with a stale id: the level signal must replace, not merge, so a
+    // missed settle bookend can never wedge a stale running indicator.
+    const session = makeSession({ backgroundTaskIds: new Set(["stale1"]) })
+
+    const snapshotEntry = {
+      _id: "status-snap-1",
+      createdAt: Date.now(),
+      kind: "status",
+      status: "Background tasks: 2 running",
+      hidden: true,
+      backgroundTaskIdsSnapshot: ["a6de6ce841521b5df", "bsh42"],
+    } as unknown as TranscriptEntry
+
+    const deps = makeDeps(session)
+    session.session.stream = fakeStream([{ type: "transcript", entry: snapshotEntry }])
+
+    await runClaudeSession(deps, session)
+
+    expect([...session.backgroundTaskIds].sort()).toEqual(["a6de6ce841521b5df", "bsh42"])
+    expect(session.backgroundTaskIds.has("stale1")).toBe(false)
+    expect(session.backgroundTaskDeadlineAt).toBeGreaterThan(0)
+  })
+
+  test("empty backgroundTaskIdsSnapshot clears the guard set and deadline", async () => {
+    const session = makeSession({
+      backgroundTaskIds: new Set(["a1", "b2"]),
+      backgroundTaskDeadlineAt: Date.now() + 100_000,
+    })
+
+    const snapshotEntry = {
+      _id: "status-snap-2",
+      createdAt: Date.now(),
+      kind: "status",
+      status: "Background tasks: 0 running",
+      hidden: true,
+      backgroundTaskIdsSnapshot: [],
+    } as unknown as TranscriptEntry
+
+    const deps = makeDeps(session)
+    session.session.stream = fakeStream([{ type: "transcript", entry: snapshotEntry }])
+
+    await runClaudeSession(deps, session)
+
+    expect(session.backgroundTaskIds.size).toBe(0)
+    expect(session.backgroundTaskDeadlineAt).toBe(0)
+  })
+
+  test("appending any transcript entry bumps lastUsedAt (self-wake turns keep the session warm)", async () => {
+    // A task-notification self-wake streams entries without a Kanna-driven
+    // turn, so lastUsedAt must track stream activity or the idle reaper kills
+    // the session mid-work (chat dd05b76e, 2026-07-22).
+    const session = makeSession({ lastUsedAt: 0 })
+
+    const textEntry = {
+      _id: "txt-1",
+      createdAt: Date.now(),
+      kind: "assistant_text",
+      text: "working...",
+    } as unknown as TranscriptEntry
+
+    const before = Date.now()
+    const deps = makeDeps(session)
+    session.session.stream = fakeStream([{ type: "transcript", entry: textEntry }])
+
+    await runClaudeSession(deps, session)
+
+    expect(session.lastUsedAt).toBeGreaterThanOrEqual(before)
+  })
+
   test("thrown exception with no limit/auth detection → error result appended and turn failed", async () => {
     const session = makeSession()
     const active = makeActiveTurn(session.chatId)

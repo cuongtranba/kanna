@@ -168,6 +168,13 @@ export interface StatusEntry extends TranscriptEntryBase {
   kind: "status"
   status: string
   backgroundTaskId?: string
+  /**
+   * Level snapshot from `system/background_tasks_changed` — the full set of
+   * live background task ids after a membership change. REPLACE semantics:
+   * the session runner swaps its keep-alive guard set for this payload, so a
+   * missed edge bookend can never wedge a stale running indicator.
+   */
+  backgroundTaskIdsSnapshot?: string[]
 }
 
 export interface ContextWindowUpdatedEntry extends TranscriptEntryBase {

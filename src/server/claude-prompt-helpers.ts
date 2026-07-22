@@ -104,6 +104,16 @@ export function toSdkEffort(effort: string | undefined): "low" | "medium" | "hig
 // report multiple launches in theory; capture every id.
 const BACKGROUND_TASK_LAUNCH_RE = /Command running in background with ID:\s*(\w+)/g
 
+// Claude Code's AgentTool background launch (`Agent(run_in_background: true)`)
+// emits "Async agent launched successfully." followed by an `agentId:` line
+// (AgentTool async_launched result). The marker gate prevents arming on
+// incidental "agentId:" text in unrelated tool output. On the SDK driver the
+// `background_tasks_changed` level signal is the primary arm source; this
+// regex is the only launch signal on the PTY driver (transcript JSONL carries
+// no system events on CLI ≥ 2.1.x) and a version-skew fallback on SDK.
+const ASYNC_AGENT_LAUNCH_MARKER = "Async agent launched successfully"
+const ASYNC_AGENT_ID_RE = /agentId:\s*(\w+)/g
+
 /** Extract background-task ids from a tool_result entry's content (string or content blocks). */
 export function backgroundTaskIdsFromToolResult<T>(content: T): string[] {
   let text = ""
@@ -124,6 +134,11 @@ export function backgroundTaskIdsFromToolResult<T>(content: T): string[] {
   const ids: string[] = []
   for (const match of text.matchAll(BACKGROUND_TASK_LAUNCH_RE)) {
     if (match[1]) ids.push(match[1])
+  }
+  if (text.includes(ASYNC_AGENT_LAUNCH_MARKER)) {
+    for (const match of text.matchAll(ASYNC_AGENT_ID_RE)) {
+      if (match[1] && !ids.includes(match[1])) ids.push(match[1])
+    }
   }
   return ids
 }
