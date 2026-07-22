@@ -102,6 +102,8 @@ export interface ClaudeRawSdkMessage {
   status?: string | null
   summary?: string
   skip_transcript?: boolean
+  // SDK background_tasks_changed payload (level signal; ids + type only)
+  tasks?: { task_id?: string; task_type?: string; description?: string }[]
   durationMs?: number
   pendingWorkflowCount?: number
   usage?: AnyValue
@@ -381,6 +383,35 @@ export function normalizeClaudeStreamMessage(message: ClaudeRawSdkMessage): Tran
       status: `Background task ${taskStatus}: ${summary}`,
       hidden: message.skip_transcript === true ? true : undefined,
       backgroundTaskId: taskId,
+      debugRaw,
+    })]
+  }
+
+  // SDKBackgroundTasksChangedMessage: the full set of live background tasks
+  // after a membership change (launch, completion, kill, backgrounding). A
+  // LEVEL signal with REPLACE semantics — per the SDK docs, consumers that
+  // need "is background work running" should swap their set for each payload
+  // instead of pairing task_started/task_notification edges, so a missed
+  // bookend can never wedge a stale indicator. This feeds the session
+  // keep-alive guard: without it the idle reaper killed sessions mid-flight
+  // background Agent runs (the launch tool_result regex only knew Bash).
+  // `in_process_teammate` is excluded — teammates are long-lived by design
+  // (running for their whole lifetime; see claude-code gh-30008), so arming
+  // on them would pin the session until the deadline backstop.
+  if (message.type === "system" && message.subtype === "background_tasks_changed") {
+    const tasks = Array.isArray(message.tasks) ? message.tasks : []
+    const ids: string[] = []
+    for (const task of tasks) {
+      if (typeof task.task_id !== "string" || task.task_id.length === 0) continue
+      if (task.task_type === "in_process_teammate") continue
+      ids.push(task.task_id)
+    }
+    return [timestamped({
+      kind: "status",
+      messageId,
+      status: `Background tasks: ${ids.length} running`,
+      hidden: true,
+      backgroundTaskIdsSnapshot: ids,
       debugRaw,
     })]
   }

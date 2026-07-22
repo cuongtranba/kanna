@@ -981,30 +981,40 @@ either; CC hardcodes 200 only for its fork agent). Enforcement:
   native (abort, not graceful); the `nativeMaxTurns` flag prevents the
   backstop from clobbering the SDK's graceful stop.
 
-# Background Bash Task Keep-Alive (KANNA_PTY_BACKGROUND_TASK_MAX_MS)
+# Background Task Keep-Alive (Bash + Agent + Workflow — KANNA_PTY_BACKGROUND_TASK_MAX_MS)
 
-Claude-Code background Bash tasks (`Bash(run_in_background: true)`, e.g. a
-`gh pr checks` CI poll) run as children of the PTY `claude` process and report
-completion via a `<task-notification>` transcript line. That line is
-`type=user` with `isMeta != true`, so the `jsonl-to-event.ts` auto-wake filter
-does NOT drop it — the continuous transcript tail (`runClaudeSession` stream
-loop in `agent.ts`) re-enters it as a real turn. The ONLY failure was the idle
-reaper: a turn ends with a background task still running, no `activeTurn` /
-`pendingPromptSeq` / live workflow keeps the session busy, so
-`isClaudeSessionIdle` reaped the PTY exactly one idle window
-(`DEFAULT_CLAUDE_SESSION_IDLE_MS`, 10 min) later — killing the child before it
-could notify. See `adr-20260604-pty-background-task-keepalive`.
+Claude-Code background tasks (`Bash(run_in_background: true)`, background
+`Agent`/Task-tool runs, workflows) run as children of the claude process. If
+the idle reaper (`isClaudeSessionIdle`) fires while one is in flight, the
+child dies with the process — silently, since a reap is not an error (this
+killed a mid-flight background Agent one second after its commit; see
+`adr-20260722-background-agent-keepalive` and, for the original Bash-only fix,
+`adr-20260604-pty-background-task-keepalive`).
 
 - **Guard.** `hasPendingBackgroundTask(session, now)` mirrors `hasLiveWorkflow`:
   consulted by both `isClaudeSessionIdle` and `enforceClaudeSessionBudget`, it
-  holds the session warm while a launched task is within its keep-alive window.
-- **Detection.** The stream consumer parses each `tool_result` for Claude Code's
-  exact `Command running in background with ID: <id>` line
-  (`backgroundTaskIdsFromToolResult`), records the id, and arms
-  `backgroundTaskDeadlineAt = now + KANNA_PTY_BACKGROUND_TASK_MAX_MS`. The later
-  `<task-notification>` produces no Kanna entry, so the guard is **deadline-based**
-  (no per-id completion signal), matching the workflow guard's "eventually
-  reaps" model. The deadline lazily clears once passed.
+  holds the session warm while `backgroundTaskIds` is non-empty and within the
+  deadline backstop.
+- **Primary signal (SDK driver).** The SDK's `system/background_tasks_changed`
+  LEVEL event — the full set of live background tasks after every membership
+  change, REPLACE semantics (a missed edge bookend can never wedge a stale
+  set). Normalized to a hidden `status` entry carrying
+  `backgroundTaskIdsSnapshot`; the runner swaps `session.backgroundTaskIds`
+  for each snapshot. `in_process_teammate` tasks are filtered (long-lived by
+  design; claude-code gh-30008 excludes them from its own wait loop too).
+  `system/task_notification` remains the per-task edge clear.
+- **Fallback / PTY detection.** The stream consumer parses each `tool_result`
+  (`backgroundTaskIdsFromToolResult`) for BashTool's
+  `Command running in background with ID: <id>` line AND AgentTool's
+  `Async agent launched successfully… agentId: <id>` launch text (marker-gated
+  so incidental "agentId:" strings never arm). This is the only launch signal
+  on the PTY driver (CLI ≥ 2.1.x writes no system rows to the transcript
+  JSONL, so the guard there is **deadline-based**) and a version-skew fallback
+  on SDK. Duplicate arms vs the level signal are harmless (Set).
+- **Stream activity bump.** The runner refreshes `session.lastUsedAt` on every
+  appended transcript entry, so task-notification self-wake turns (which start
+  no Kanna turn) never count as idle — mirrors claude-code's own invariant
+  that the idle timer starts only after its run loop exits.
 - **Clear.** A real user `chat.send` (NOT auto-continue / agent wakes, which
   bypass `send`) releases the guard so the session reaps normally afterward.
 - **Bound.** `KANNA_PTY_BACKGROUND_TASK_MAX_MS` (default 1_800_000 = 30 min,

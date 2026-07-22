@@ -230,12 +230,21 @@ export async function runClaudeSession(
         }
       }
       await deps.store.appendMessage(session.chatId, event.entry)
+      // Stream activity keeps the session warm. Task-notification self-wakes
+      // stream entries without a Kanna-driven turn (no activeTurn, no
+      // lastUsedAt bump at turn start), so without this the idle reaper's
+      // clock runs from the last real turn and kills the session mid-work —
+      // mirrors claude-code's own invariant that the idle timer starts only
+      // after the run loop exits.
+      session.lastUsedAt = Date.now()
       // Background-task keep-alive guard (SDK + PTY).
       // On launch: add the task id and refresh the zombie-backstop deadline.
       // On settle (task_notification): remove the id — gate primary signal is
       // set size>0, not the clock. The deadline (default 4h) is refreshed on
       // every launch and settle so it only fires when a notification is truly
       // lost (SDK crash / dropped message), never during normal execution.
+      // A `backgroundTaskIdsSnapshot` status entry (SDK background_tasks_changed
+      // level signal) REPLACES the whole set — authoritative over both edges.
       if (event.entry.kind === "tool_result") {
         const launchedIds = backgroundTaskIdsFromToolResult(
           event.entry.content,
@@ -246,7 +255,13 @@ export async function runClaudeSession(
           deps.emitStateChange(session.chatId)
         }
       }
-      if (event.entry.kind === "status" && event.entry.backgroundTaskId) {
+      if (event.entry.kind === "status" && event.entry.backgroundTaskIdsSnapshot) {
+        session.backgroundTaskIds = new Set(event.entry.backgroundTaskIdsSnapshot)
+        session.backgroundTaskDeadlineAt = session.backgroundTaskIds.size > 0
+          ? Date.now() + deps.resolveBackgroundTaskMaxMs()
+          : 0
+        deps.emitStateChange(session.chatId)
+      } else if (event.entry.kind === "status" && event.entry.backgroundTaskId) {
         const settledId = event.entry.backgroundTaskId
         session.backgroundTaskIds.delete(settledId)
         if (session.backgroundTaskIds.size > 0) {
