@@ -154,6 +154,48 @@ describe("classifyAttachmentIcon", () => {
   test("returns mermaid for text/vnd.mermaid mime with unknown extension", () => {
     expect(classifyAttachmentIcon(makeAttachment({ displayName: "diagram", mimeType: "text/vnd.mermaid" }))).toBe("mermaid")
   })
+
+  test("returns markdown for text/markdown mime when displayName is a label without extension", () => {
+    expect(classifyAttachmentIcon(makeAttachment({
+      displayName: "Plan — Pipeline Home implementation",
+      mimeType: "text/markdown; charset=utf-8",
+    }))).toBe("markdown")
+  })
+
+  test("returns markdown via relativePath extension when displayName is a label", () => {
+    expect(classifyAttachmentIcon(makeAttachment({
+      displayName: "Implementation plan",
+      mimeType: "application/octet-stream",
+      relativePath: "docs/plan.md",
+    }))).toBe("markdown")
+  })
+
+  test("returns mermaid via relativePath extension when displayName is a label", () => {
+    expect(classifyAttachmentIcon(makeAttachment({
+      displayName: "Architecture diagram",
+      mimeType: "text/plain",
+      relativePath: "docs/arch.mmd",
+    }))).toBe("mermaid")
+  })
+})
+
+describe("classifyAttachmentPreview — markdown detection", () => {
+  test("routes text/markdown mime to markdown preview when displayName is a label", () => {
+    const target = classifyAttachmentPreview(makeAttachment({
+      displayName: "Plan — Pipeline Home implementation",
+      mimeType: "text/markdown; charset=utf-8",
+    }))
+    expect(target.kind).toBe("markdown")
+  })
+
+  test("routes relativePath .md to markdown preview when displayName is a label", () => {
+    const target = classifyAttachmentPreview(makeAttachment({
+      displayName: "Implementation plan",
+      mimeType: "application/octet-stream",
+      relativePath: "docs/plan.md",
+    }))
+    expect(target.kind).toBe("markdown")
+  })
 })
 
 describe("friendlyMimeLabel — mermaid", () => {

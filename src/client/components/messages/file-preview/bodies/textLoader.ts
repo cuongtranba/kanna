@@ -73,3 +73,7 @@ export function useTextBodyContent(source: PreviewSource): TextLoadState {
 export function __clearTextBodyCacheForTests() {
   bodyCache.clear()
 }
+
+export function __seedTextBodyCacheForTests(source: PreviewSource, state: TextLoadState) {
+  bodyCache.set(cacheKeyFor(source), state)
+}
