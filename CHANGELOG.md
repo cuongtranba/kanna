@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.6.3](https://github.com/cuongtranba/kanna/compare/v1.6.2...v1.6.3) (2026-07-22)
+
+
+### Bug Fixes
+
+* **agent:** keep session alive during background Agent runs ([#570](https://github.com/cuongtranba/kanna/issues/570)) ([a9350fb](https://github.com/cuongtranba/kanna/commit/a9350fb10b294fe898d554f404caaa4b5bf64071))
+
 ## [1.6.2](https://github.com/cuongtranba/kanna/compare/v1.6.1...v1.6.2) (2026-07-22)
 
 
