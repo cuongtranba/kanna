@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.6.2](https://github.com/cuongtranba/kanna/compare/v1.6.1...v1.6.2) (2026-07-22)
+
+
+### Bug Fixes
+
+* **file-preview:** render markdown + mermaid in file viewer regardless of label ([#568](https://github.com/cuongtranba/kanna/issues/568)) ([058c1b7](https://github.com/cuongtranba/kanna/commit/058c1b7a9f60dde0d57c614ed1a599b42bb440e4))
+
 ## [1.6.1](https://github.com/cuongtranba/kanna/compare/v1.6.0...v1.6.1) (2026-07-21)
 
 
