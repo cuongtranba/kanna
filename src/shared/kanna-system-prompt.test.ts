@@ -143,6 +143,12 @@ describe("buildKannaSystemPromptAppend", () => {
     expect(KANNA_SYSTEM_PROMPT_BASE).toContain("pasting or summarizing its content")
   })
 
+  test("KANNA_SYSTEM_PROMPT_BASE includes the workflow-resume args guardrail", () => {
+    expect(KANNA_SYSTEM_PROMPT_BASE).toContain("resumeFromRunId")
+    expect(KANNA_SYSTEM_PROMPT_BASE).toContain("`args`")
+    expect(KANNA_SYSTEM_PROMPT_BASE).toContain("verbatim")
+  })
+
   describe("stackProjects option", () => {
     test("returns BASE fast-path when stackProjects empty and nothing else set", () => {
       expect(buildKannaSystemPromptAppend([], { stackProjects: [] })).toBe(KANNA_SYSTEM_PROMPT_BASE)
