@@ -233,6 +233,22 @@ export interface OrchRunDetail extends OrchRunSummary {
   verifyEnabled: boolean
 }
 
+export type OrchReviewSeverity = "critical" | "major" | "minor"
+
+/**
+ * One structured finding from an adversarial-review worker. Reviewers are
+ * prompted to emit a fenced JSON array of these; the engine parses tolerantly
+ * (`parseReviewFindings`) and falls back to the raw reviewer text when the
+ * output does not conform — a malformed reply never fails the run.
+ */
+export interface OrchReviewFinding {
+  file: string
+  line: number | null
+  problem: string
+  suggestedFix: string | null
+  severity: OrchReviewSeverity | null
+}
+
 export const DEFAULT_ORCH_PHASES: OrchPhaseSpec[] = [
   {
     name: "implement",
@@ -246,7 +262,7 @@ export const DEFAULT_ORCH_PHASES: OrchPhaseSpec[] = [
     kind: "review",
     parallel: 2,
     promptTemplate:
-      "You are an adversarial reviewer. You see ONLY this diff. Find real bugs — logic errors, edge cases, broken invariants. Report each as file:line + problem + suggested fix. If none, reply NO_FINDINGS.\n\nDiff:\n{{DIFF}}",
+      'You are an adversarial reviewer. You see ONLY this diff. Find real bugs — logic errors, edge cases, broken invariants. If there are none, reply exactly NO_FINDINGS. Otherwise reply with ONLY a fenced ```json code block containing an array of findings, each shaped {"file": string, "line": number|null, "problem": string, "suggestedFix": string|null, "severity": "critical"|"major"|"minor"}.\n\nDiff:\n{{DIFF}}',
   },
   {
     name: "fix",

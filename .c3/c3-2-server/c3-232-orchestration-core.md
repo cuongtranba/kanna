@@ -1,6 +1,6 @@
 ---
 id: c3-232
-c3-seal: f6c46d97d90c1758cacfeeec1c33a122cee3294781f21bb98391aa27d92171ed
+c3-seal: 54c7b4a2a8792f34ecb315058e794ef3b36025a84674cdbe78638f7c2c4a3e63
 title: orchestration-core
 type: component
 category: feature
@@ -32,7 +32,7 @@ Drive durable, multi-task, multi-phase coding runs: create per-run git worktree 
 
 ## Purpose
 
-Owns: `src/server/orchestration-queue.ts` (OrchestrationQueue class), `src/server/orchestration-git.adapter.ts` (commitAll, diffAgainstBase), `src/server/orchestration-worktree.adapter.ts` (ensureWorktree, resetHard, removeWorktree), `src/shared/orchestration-types.ts` (pure types), and the 18-variant OrchestrationEvent extensions in events.ts / event-store.ts.
+Owns: `src/server/orchestration-queue.ts` (OrchestrationQueue class), `src/server/orchestration-diff.ts` (boundDiff — pure {{DIFF}} budget packing), `src/server/orchestration-review.ts` (parseReviewFindings / dedupeFindings / renderFindings / combineReviewOutputs — pure structured-review pipeline), `src/server/orchestration-git.adapter.ts` (commitAll, diffAgainstBase), `src/server/orchestration-worktree.adapter.ts` (ensureWorktree, resetHard, removeWorktree), `src/shared/orchestration-types.ts` (pure types), and the 18-variant OrchestrationEvent extensions in events.ts / event-store.ts.
 
 Does NOT own: single-task delegation (c3-210), WS command routing (c3-208), diff rendering (c3-215), event store infrastructure (c3-206).
 
@@ -52,7 +52,7 @@ Does NOT own: single-task delegation (c3-210), WS command routing (c3-208), diff
 | --- | --- | --- |
 | createRun | Validates OrchRunConfig, appends orch_run_created, provisions pool, appends orch_worktree_provisioned × N, seeds all tasks as orch_task_queued | c3-206 |
 | Task scheduling | schedule() claims a free worktree slot (orch_task_claimed), spawns runTask per task | N.A - new component, no existing entity |
-| Phase pipeline (F4) | Ordered OrchPhaseSpec list; each phase spawns fresh worker via StartWorker; {{TASK}}, {{DIFF}}, {{PRIOR}} template vars assembled by composePrompt | N.A - new component, no existing entity |
+| Phase pipeline (F4) | Ordered OrchPhaseSpec list; each phase spawns fresh worker via StartWorker; {{TASK}}, {{DIFF}}, {{PRIOR}} template vars assembled by composePrompt. {{DIFF}} is bounded by boundDiff (orchestration-diff.ts, 64k budget, per-file packing with omitted markers). Review-kind phase outputs are combined by combineReviewOutputs (orchestration-review.ts): conformant fenced-JSON OrchReviewFinding replies are merged, deduped across parallel reviewers, and rendered as the {{PRIOR}} block; any unparsed reply falls back to the raw join | N.A - new component, no existing entity |
 | Hand-back (F2) | After last phase: commitAll → orch_task_committed; on failure → orch_task_failed; on requeue → orch_task_requeued + resetHard | N.A - new component, no existing entity |
 | Gate protocol (F5) | Hard gate: task enters orch_task_gated state, blocks in awaitGate until resolveGate; soft gate: emit events and continue | N.A - new component, no existing entity |
 | Verify step (F12) | config.verify.command run post-completion; non-zero re-runs fix phase with output as {{PRIOR}}; exhausted → failed | N.A - new component, no existing entity |

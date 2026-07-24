@@ -1,7 +1,7 @@
 ---
 id: c3-206
 c3-version: 4
-c3-seal: 53b5fc2b9ef2492a08a4e5d13f15d0feae8a86d0383b99a08062f992e43ca7e4
+c3-seal: ad04bf9c16844d50e91c35cbe1668be91e088714b0a807bf4d6f24694245baa3
 title: event-store
 type: component
 category: foundation
@@ -109,9 +109,10 @@ reads (`getRecentMessagesPage` / `getMessagesPageBefore`) use the no-clone
 Cold `getRecentMessagesPage` (cache miss, non-legacy) serves the window via
 `readTranscriptTail` — backward byte-slice reads (`StorageBackend.sizeSync` /
 `readSliceSync`, both OPTIONAL; absent ⇒ full-parse fallback) growing until
+
 > limit lines or BOF. Older paging uses opaque `byte:<offset>` cursors
-(`idx:` cursors keep working on the warm/full path). Cross-page
-`context_window_updated` coalescing stays exact via a sentinel parse of the
-newer page's first line. When the tail reaches BOF the complete transcript
-is promoted into the cache WITH messageId dedup seeding — partial tails are
-never cached and never touch the dedup set (PTY resume safety).
+> (`idx:` cursors keep working on the warm/full path). Cross-page
+> `context_window_updated` coalescing stays exact via a sentinel parse of the
+> newer page's first line. When the tail reaches BOF the complete transcript
+> is promoted into the cache WITH messageId dedup seeding — partial tails are
+> never cached and never touch the dedup set (PTY resume safety).

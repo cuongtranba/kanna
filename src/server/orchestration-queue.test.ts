@@ -208,6 +208,60 @@ describe("OrchestrationQueue phase pipeline", () => {
     expect(calls[3]!.prompt).toContain("do 1")
   })
 
+  test("structured review outputs are deduped + rendered into the fix prompt", async () => {
+    const { store } = await makeStore()
+    const prompts: Array<{ phaseIndex: number; prompt: string }> = []
+    const reviewReplies = [
+      '```json\n[{"file":"a.ts","line":7,"problem":"race on init","severity":"major"}]\n```',
+      '```json\n[{"file":"a.ts","line":7,"problem":"initialization race","severity":"critical"},{"file":"b.ts","line":null,"problem":"typo"}]\n```',
+    ]
+    let reviewCall = 0
+    const startWorker: StartWorker = async (args) => {
+      prompts.push({ phaseIndex: args.phaseIndex, prompt: args.prompt })
+      if (args.phase.kind === "review") return { kind: "completed", text: reviewReplies[reviewCall++]! }
+      return { kind: "completed", text: "ok" }
+    }
+    const config = makeConfig({
+      phases: [
+        { name: "implement", kind: "implement", parallel: 1, promptTemplate: "IMPL {{TASK}}" },
+        { name: "review", kind: "review", parallel: 2, promptTemplate: "REVIEW {{DIFF}}" },
+        { name: "fix", kind: "fix", parallel: 1, promptTemplate: "FIX {{PRIOR}}" },
+      ],
+    })
+    const q = new OrchestrationQueue({ store, worktrees: fakeWorktreeOps(), startWorker })
+    const runId = await q.createRun(config, tasks(1))
+    await q.waitForRun(runId)
+    const fixPrompt = prompts.find((p) => p.phaseIndex === 2)!.prompt
+    expect(fixPrompt).toContain("Review findings (2 reviewers, deduped):")
+    expect(fixPrompt).toContain("[critical] a.ts:7")
+    expect(fixPrompt).toContain("typo")
+    // the two overlapping a.ts:7 findings collapsed into one row
+    expect(fixPrompt.match(/a\.ts:7/gu)).toHaveLength(1)
+  })
+
+  test("oversized {{DIFF}} is bounded before reaching review workers", async () => {
+    const { store } = await makeStore()
+    const hugeBody = Array.from({ length: 40_000 }, () => "+padding line").join("\n")
+    const wt = fakeWorktreeOps()
+    wt.diffAgainstBase = async () => `diff --git a/bun.lock b/bun.lock\n--- a/bun.lock\n+++ b/bun.lock\n@@ @@\n${hugeBody}\n`
+    let reviewPrompt = ""
+    const startWorker: StartWorker = async (args) => {
+      if (args.phase.kind === "review") reviewPrompt = args.prompt
+      return { kind: "completed", text: "ok" }
+    }
+    const config = makeConfig({
+      phases: [
+        { name: "implement", kind: "implement", parallel: 1, promptTemplate: "IMPL {{TASK}}" },
+        { name: "review", kind: "review", parallel: 1, promptTemplate: "REVIEW {{DIFF}}" },
+      ],
+    })
+    const q = new OrchestrationQueue({ store, worktrees: wt, startWorker })
+    const runId = await q.createRun(config, tasks(1))
+    await q.waitForRun(runId)
+    expect(reviewPrompt).toContain("DIFF TRUNCATED")
+    expect(reviewPrompt.length).toBeLessThan(70_000)
+  })
+
   test("phase failure marks task failed, run still completes (other tasks unaffected)", async () => {
     const { store } = await makeStore()
     const wt = fakeWorktreeOps()

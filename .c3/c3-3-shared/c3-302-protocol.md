@@ -1,7 +1,7 @@
 ---
 id: c3-302
 c3-version: 4
-c3-seal: aa952cd5f176df00d11ddf8885ec33a65f29f19b54c3040cc8bb509232423331
+c3-seal: 7aa2388128e1cf8ffcdde820755bae922de36fd2a7b460b10aa9f3d1a97fa760
 title: protocol
 type: component
 category: foundation

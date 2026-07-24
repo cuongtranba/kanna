@@ -12,6 +12,8 @@ import type {
   OrchTaskSpec,
 } from "../shared/orchestration-types"
 import type { OrchestrationEvent } from "./events"
+import { boundDiff } from "./orchestration-diff"
+import { combineReviewOutputs } from "./orchestration-review"
 
 /** Subset of EventStore the engine needs (keeps the engine fake-able). */
 export interface OrchEventStore {
@@ -430,11 +432,13 @@ export class OrchestrationQueue {
           })
           return
         }
-        prior = results
+        const completedTexts = results
           .map((r) => (r.kind === "completed" ? r.text : ""))
           .filter(Boolean)
-          .join("\n\n---\n\n")
-          .slice(0, MAX_PHASE_OUTPUT_CHARS)
+        prior = (phase.kind === "review"
+          ? combineReviewOutputs(completedTexts)
+          : completedTexts.join("\n\n---\n\n")
+        ).slice(0, MAX_PHASE_OUTPUT_CHARS)
         await this.deps.store.appendOrchestrationEvent({
           v: 3, type: "orch_phase_completed", timestamp: this.now(), runId, taskId,
           phaseIndex, output: prior, outputChars: prior.length,
@@ -528,7 +532,7 @@ export class OrchestrationQueue {
       .replaceAll("{{PRIOR}}", prior)
     if (prompt.includes("{{DIFF}}")) {
       const diff = await this.deps.worktrees.diffAgainstBase(wtPath, baseRef)
-      prompt = prompt.replaceAll("{{DIFF}}", diff)
+      prompt = prompt.replaceAll("{{DIFF}}", boundDiff(diff))
     }
     if (contextPrompt) {
       prompt = `${contextPrompt}\n\n---\n\n${prompt}`
