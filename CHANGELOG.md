@@ -8,6 +8,14 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.6.4](https://github.com/cuongtranba/kanna/compare/v1.6.3...v1.6.4) (2026-07-24)
+
+
+### Bug Fixes
+
+* **external-open:** bridge open folder/default/terminal to Windows under WSL2 ([#573](https://github.com/cuongtranba/kanna/issues/573)) ([2e5bcd1](https://github.com/cuongtranba/kanna/commit/2e5bcd1aaf67615987091f97ec0b11468b8cc727))
+* **plan:** render mermaid diagrams in ExitPlanMode plans ([#572](https://github.com/cuongtranba/kanna/issues/572)) ([a8c9671](https://github.com/cuongtranba/kanna/commit/a8c96717341675988944877e4e1d30df981fc64f))
+
 ## [1.6.3](https://github.com/cuongtranba/kanna/compare/v1.6.2...v1.6.3) (2026-07-22)
 
 
