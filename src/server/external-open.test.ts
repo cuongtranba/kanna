@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { buildDefaultOpenCommand, buildEditorCommand, buildPreviewCommand, tokenizeCommandTemplate } from "./external-open"
+import { buildDefaultOpenCommand, buildEditorCommand, buildPreviewCommand, buildWslOpenCommand, tokenizeCommandTemplate } from "./external-open"
 
 describe("tokenizeCommandTemplate", () => {
   test("keeps quoted arguments together", () => {
@@ -108,5 +108,42 @@ describe("buildDefaultOpenCommand", () => {
       command: "xdg-open",
       args: ["/tmp/mock.png"],
     })
+  })
+})
+
+describe("buildWslOpenCommand", () => {
+  const windowsPath = "\\\\wsl.localhost\\Ubuntu\\home\\cuong\\repo\\kanna"
+  const explorerBinary = "/mnt/c/Windows/explorer.exe"
+  const cmdBinary = "/mnt/c/Windows/System32/cmd.exe"
+
+  test("opens a directory in Explorer for open_finder", () => {
+    expect(
+      buildWslOpenCommand({ action: "open_finder", windowsPath, isDirectory: true, explorerBinary, cmdBinary: null })
+    ).toEqual({ command: explorerBinary, args: [windowsPath] })
+  })
+
+  test("reveals a file with /select, for open_finder", () => {
+    const filePath = "\\\\wsl.localhost\\Ubuntu\\home\\cuong\\repo\\kanna\\mock.png"
+    expect(
+      buildWslOpenCommand({ action: "open_finder", windowsPath: filePath, isDirectory: false, explorerBinary, cmdBinary: null })
+    ).toEqual({ command: explorerBinary, args: [`/select,${filePath}`] })
+  })
+
+  test("opens with the default handler for open_default", () => {
+    expect(
+      buildWslOpenCommand({ action: "open_default", windowsPath, isDirectory: false, explorerBinary, cmdBinary: null })
+    ).toEqual({ command: explorerBinary, args: [windowsPath] })
+  })
+
+  test("launches Windows Terminal via cmd start for open_terminal", () => {
+    expect(
+      buildWslOpenCommand({ action: "open_terminal", windowsPath, isDirectory: true, explorerBinary, cmdBinary })
+    ).toEqual({ command: cmdBinary, args: ["/c", "start", "", "wt.exe", "-d", windowsPath] })
+  })
+
+  test("rejects open_terminal when cmd.exe cannot be located", () => {
+    expect(() =>
+      buildWslOpenCommand({ action: "open_terminal", windowsPath, isDirectory: true, explorerBinary, cmdBinary: null })
+    ).toThrow("Unable to locate cmd.exe to launch a Windows terminal")
   })
 })

@@ -4,6 +4,10 @@ import type { ClientCommand, EditorOpenSettings, EditorPreset } from "../shared/
 import { resolveLocalPath } from "./paths"
 import { canOpenMacApp, hasCommand, spawnDetached } from "./process-utils.adapter"
 import { statPathOrNull } from "./fs-stat.adapter"
+import { isWsl, resolveWindowsExecutable, toWindowsPath } from "./wsl.adapter"
+
+const WIN_EXPLORER = "C:\\Windows\\explorer.exe"
+const WIN_CMD = "C:\\Windows\\System32\\cmd.exe"
 
 type OpenExternalCommand = Extract<ClientCommand, { type: "system.openExternal" }>
 
@@ -108,6 +112,33 @@ export async function openExternal(command: OpenExternalCommand) {
     }
   }
 
+  if (
+    platform === "linux"
+    && isWsl()
+    && (command.action === "open_finder" || command.action === "open_default" || command.action === "open_terminal")
+  ) {
+    if (command.action === "open_default" && !info) {
+      throw new Error(`Path not found: ${resolvedPath}`)
+    }
+    const windowsPath = toWindowsPath(resolvedPath)
+    if (!windowsPath) {
+      throw new Error(`Unable to resolve Windows path for: ${resolvedPath}`)
+    }
+    // Windows dirs are often absent from the WSL $PATH (interop appendWindowsPath
+    // disabled), so resolve the binaries to absolute paths instead of bare names.
+    const explorerBinary = resolveWindowsExecutable(WIN_EXPLORER) ?? "explorer.exe"
+    const cmdBinary = command.action === "open_terminal" ? resolveWindowsExecutable(WIN_CMD) : null
+    const wslCommand = buildWslOpenCommand({
+      action: command.action,
+      windowsPath,
+      isDirectory: info?.isDirectory() ?? false,
+      explorerBinary,
+      cmdBinary,
+    })
+    await spawnDetached(wslCommand.command, wslCommand.args)
+    return
+  }
+
   if (command.action === "open_preview") {
     throw new Error("Preview is only available on macOS")
   }
@@ -173,6 +204,32 @@ export function buildPreviewCommand(args: {
     throw new Error("Preview cannot open directories")
   }
   return { command: "open", args: ["-a", "Preview", args.localPath] }
+}
+
+export function buildWslOpenCommand(args: {
+  action: "open_finder" | "open_default" | "open_terminal"
+  windowsPath: string
+  isDirectory: boolean
+  explorerBinary: string
+  cmdBinary: string | null
+}): CommandSpec {
+  if (args.action === "open_terminal") {
+    if (!args.cmdBinary) {
+      throw new Error("Unable to locate cmd.exe to launch a Windows terminal")
+    }
+    // `start` resolves wt.exe on the Windows-side PATH (WindowsApps), which the
+    // WSL $PATH does not carry; -d sets the starting directory.
+    return { command: args.cmdBinary, args: ["/c", "start", "", "wt.exe", "-d", args.windowsPath] }
+  }
+  if (args.action === "open_default") {
+    // explorer.exe opens a file with its default handler and a directory in Explorer.
+    return { command: args.explorerBinary, args: [args.windowsPath] }
+  }
+  // open_finder: reveal a file in its folder, or open the directory itself.
+  if (args.isDirectory) {
+    return { command: args.explorerBinary, args: [args.windowsPath] }
+  }
+  return { command: args.explorerBinary, args: [`/select,${args.windowsPath}`] }
 }
 
 export function buildDefaultOpenCommand(args: {
