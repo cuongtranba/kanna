@@ -80,7 +80,6 @@ export interface RunClaudeSessionDeps {
   maybeRegisterSdkWorkflowsDir(session: ClaudeSessionState): void
   getSubagents(): Subagent[]
   resolveBackgroundTaskMaxMs(): number
-  mergeLocalCatalog(commands: SlashCommand[], cwd: string): SlashCommand[]
   handleLimitError(chatId: string, detector: LimitDetector, error: AnyValue): Promise<boolean>
   handleAuthFailure(session: ClaudeSessionState, detection: AuthErrorDetection): Promise<boolean>
   closeClaudeSession(chatId: string, session: ClaudeSessionState): void
@@ -282,21 +281,10 @@ export async function runClaudeSession(
         ) {
           await deps.store.setPendingForkSessionToken(session.chatId, null)
         }
-        // Refresh the chat's slashCommands from the live system_init list
-        // every spawn. The cold-start `getSupportedCommands()` call right
-        // after spawn often returns the static fallback because system_init
-        // hadn't arrived yet; this overwrites that with the canonical list
-        // (skills + plugins + built-ins, no `/` prefix).
-        if (Array.isArray(event.entry.slashCommands)) {
-          const names = event.entry.slashCommands
-          const commands: SlashCommand[] = names.map((name) => ({
-            name,
-            description: "",
-            argumentHint: "",
-          }))
-          const merged = deps.mergeLocalCatalog(commands, session.localPath)
-          await deps.store.recordSessionCommandsLoaded(session.chatId, merged)
-        }
+        // NOTE: the chat's slashCommands are populated exclusively from the
+        // local disk catalog on chat-open (`ensureSlashCommandsLoaded`); the
+        // CLI `system_init` command list is intentionally NOT merged in here,
+        // so the picker never surfaces built-in / plugin CLI commands.
         logClaudeSteer("claude_event_system_init", {
           chatId: session.chatId,
           sessionId: session.id,

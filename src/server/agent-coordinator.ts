@@ -13,7 +13,6 @@ import type {
   McpServerConfig,
   PendingToolSnapshot,
   QueuedChatMessage,
-  SlashCommand,
   Subagent,
 } from "../shared/types"
 import type { ClientCommand } from "../shared/protocol"
@@ -28,7 +27,6 @@ import { readLlmProviderSnapshot } from "./llm-provider"
 import { type ClaudeDriverPreference } from "../shared/types"
 import type { AutoContinueEvent } from "./auto-continue/events"
 import { ClaudeLimitDetector, CodexLimitDetector, type LimitDetection, type LimitDetector } from "./auto-continue/limit-detector"
-import { SlashCommandCache } from "./slash-command-cache"
 import { ClaudeAuthErrorDetector, type AuthErrorDetection } from "./auto-continue/auth-error-detector"
 import type { ScheduleManager } from "./auto-continue/schedule-manager"
 import type { LoopState } from "./auto-continue/read-model"
@@ -134,7 +132,6 @@ import {
 } from "./claude-send-command"
 import {
   ensureSlashCommandsLoaded as ensureSlashCommandsLoadedFn,
-  mergeLocalCatalog as mergeLocalCatalogFn,
   type SlashCommandsDeps,
 } from "./claude-slash-commands"
 import {
@@ -198,7 +195,6 @@ export class AgentCoordinator {
   readonly claudeSessions = new Map<string, ClaudeSessionState>()
   readonly mentionedSubagentIdsByChat = new Map<string, string[]>()
   readonly slashCommandsInFlight = new Set<string>()
-  readonly slashCommandCache = new SlashCommandCache()
   readonly claudeLimitDetector: LimitDetector
   readonly codexLimitDetector: LimitDetector
   readonly claudeAuthErrorDetector: ClaudeAuthErrorDetector
@@ -626,11 +622,6 @@ export class AgentCoordinator {
 
   async ensureSlashCommandsLoaded(chatId: string): Promise<void> {
     return ensureSlashCommandsLoadedFn(this.buildSlashCommandsDeps(), chatId)
-  }
-
-  /** @internal used by agent-deps-builders.ts via buildRunClaudeSessionDeps / buildSpawnClaudeTurnDeps */
-  mergeLocalCatalog(commands: SlashCommand[], cwd: string): SlashCommand[] {
-    return mergeLocalCatalogFn(this.buildSlashCommandsDeps(), commands, cwd)
   }
 
   async closeChat(chatId: string) {
