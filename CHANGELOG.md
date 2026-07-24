@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.7.1](https://github.com/cuongtranba/kanna/compare/v1.7.0...v1.7.1) (2026-07-24)
+
+
+### Bug Fixes
+
+* **slash:** populate / picker from local project+user skills only, drop Claude CLI init ([#578](https://github.com/cuongtranba/kanna/issues/578)) ([ba2c5ac](https://github.com/cuongtranba/kanna/commit/ba2c5acd585d150321ae6c59e3a7da926885fa71))
+
 ## [1.7.0](https://github.com/cuongtranba/kanna/compare/v1.6.4...v1.7.0) (2026-07-24)
 
 
