@@ -8,6 +8,18 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.7.0](https://github.com/cuongtranba/kanna/compare/v1.6.4...v1.7.0) (2026-07-24)
+
+
+### Features
+
+* **orch:** bound {{DIFF}} injection and structure adversarial-review output ([#575](https://github.com/cuongtranba/kanna/issues/575)) ([35cfe80](https://github.com/cuongtranba/kanna/commit/35cfe8022d524a5638c859ed86961fed6e3bbbbb))
+
+
+### Bug Fixes
+
+* **prompt:** guard workflow resume against dropped args ([#576](https://github.com/cuongtranba/kanna/issues/576)) ([e283ec9](https://github.com/cuongtranba/kanna/commit/e283ec997ce38d7320aabb3184b46018ca4e52e8))
+
 ## [1.6.4](https://github.com/cuongtranba/kanna/compare/v1.6.3...v1.6.4) (2026-07-24)
 
 
