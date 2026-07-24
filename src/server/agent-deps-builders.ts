@@ -231,21 +231,8 @@ export function buildSubagentWiringDeps(agent: AgentCoordinator): SubagentWiring
 export function buildSlashCommandsDeps(agent: AgentCoordinator): SlashCommandsDeps {
   return {
     store: agent.store,
-    claudeSessions: agent.claudeSessions,
-    oauthPool: agent.oauthPool,
     slashCommandsInFlight: agent.slashCommandsInFlight,
-    cliCommandCache: agent.slashCommandCache,
     emitStateChange: (chatId) => { agent.emitStateChange(chatId) },
-    resolveClaudeDriverPreference: () => agent.resolveClaudeDriverPreference(),
-    startClaudeSessionPTY: agent.startClaudeSessionPTYFn,
-    startClaudeSessionSDK: agent.startClaudeSessionFn,
-    getSubagents: () => agent.getSubagents(),
-    getGlobalPromptAppend: () => agent.getAppSettingsSnapshot().globalPromptAppend,
-    getEnabledCustomMcpServers: () => agent.getEnabledCustomMcpServers(),
-    claudePtyRegistry: agent.claudePtyRegistry,
-    ptyInstanceRegistry: agent.ptyInstanceRegistry,
-    workflowRegistry: agent.workflowRegistry,
-    subagentTranscriptRegistry: agent.subagentTranscriptRegistry,
     localCatalog: agent.localCatalog,
   }
 }
@@ -373,7 +360,6 @@ export function buildSpawnClaudeTurnDeps(agent: AgentCoordinator): SpawnClaudeTu
     getOrchRunDetail: (runId) => agent.getOrchRunDetail(runId),
     resolveChatPolicy: (chatId) => agent.resolveChatPolicy(chatId),
     runClaudeSession: (session) => { void agent.runClaudeSession(session) },
-    mergeLocalCatalog: (commands, cwd) => agent.mergeLocalCatalog(commands, cwd),
     emitStateChange: (chatId) => { agent.emitStateChange(chatId) },
   }
 }
@@ -397,7 +383,6 @@ export function buildRunClaudeSessionDeps(agent: AgentCoordinator): RunClaudeSes
     maybeRegisterSdkWorkflowsDir: (session) => { agent.maybeRegisterSdkWorkflowsDir(session) },
     getSubagents: () => agent.getSubagents(),
     resolveBackgroundTaskMaxMs: () => agent.resolveBackgroundTaskMaxMs(),
-    mergeLocalCatalog: (commands, cwd) => agent.mergeLocalCatalog(commands, cwd),
     handleLimitError: (chatId, detector, error) => agent.handleLimitError(chatId, detector, error),
     handleAuthFailure: (session, detection) => agent.handleAuthFailure(session, detection),
     closeClaudeSession: (chatId, session) => { agent.closeClaudeSession(chatId, session) },

@@ -138,7 +138,6 @@ function makeDeps(overrides: Partial<SpawnClaudeTurnDeps> = {}): SpawnClaudeTurn
     getOrchRunDetail: () => null,
     resolveChatPolicy: () => POLICY_DEFAULT,
     runClaudeSession: () => {},
-    mergeLocalCatalog: (commands) => commands,
     emitStateChange: () => {},
     ...overrides,
   }

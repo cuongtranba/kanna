@@ -149,7 +149,6 @@ export interface SpawnClaudeTurnDeps {
   resolveChatPolicy: (chatId: string) => ChatPermissionPolicy
   /** Fires the session event loop. Return value is discarded (fire-and-forget). */
   runClaudeSession: (session: ClaudeSessionState) => void
-  mergeLocalCatalog: (commands: SlashCommand[], cwd: string) => SlashCommand[]
   emitStateChange: (chatId: string) => void
 }
 
@@ -367,16 +366,9 @@ export async function spawnClaudeTurn(
     deps.claudeSessions.set(args.chatId, session)
     deps.enforceClaudeSessionBudget(args.chatId)
     void deps.runClaudeSession(session)
-    void (async () => {
-      try {
-        const commands = await started.getSupportedCommands()
-        const merged = deps.mergeLocalCatalog(commands, args.localPath)
-        await deps.store.recordSessionCommandsLoaded(args.chatId, merged)
-        deps.emitStateChange(args.chatId)
-      } catch (error) {
-        log.warn("[kanna/agent] failed to load slash commands", String(error))
-      }
-    })()
+    // Slash commands are populated exclusively from the local disk catalog on
+    // chat-open (`ensureSlashCommandsLoaded`); no CLI `getSupportedCommands()`
+    // refresh here — the picker never surfaces built-in / plugin CLI commands.
   } else {
     session.lastUsedAt = Date.now()
     if (session.model !== args.model) {

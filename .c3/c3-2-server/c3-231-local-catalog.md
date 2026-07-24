@@ -1,6 +1,6 @@
 ---
 id: c3-231
-c3-seal: 5b9bcc8d1ffa8619a16cbc247ac9ba35f4f03e58556185203b8ee7c88bb5bb74
+c3-seal: 90c634786ddf78791feeaad7d93bb20d7a4a23fab1baa2b7a3232778c8fef41b
 title: local-catalog
 type: component
 category: feature
@@ -47,10 +47,10 @@ Owns the disk scan + dedupe + cache that turns raw `SKILL.md` and `.md` command 
 | Aspect | Detail | Reference |
 | --- | --- | --- |
 | Outcome | User sees all local skills + commands when typing / | c3-115 |
-| Primary path | AgentCoordinator merges local list into ChatSnapshot.slashCommands | c3-210 |
+| Primary path | AgentCoordinator loads the local list (project + personal scopes) into ChatSnapshot.slashCommands on chat-open; no CLI merge | c3-210 |
 | Alternate — cache hit | Same cwd within TTL returns cached list without rescanning | c3-231 |
 | Alternate — invalidate | invalidate(cwd?) drops cache row(s) | c3-231 |
-| Failure — scan throws | Error logged; merge falls back to CLI list only | c3-210 |
+| Failure — scan throws | Error logged; the picker shows an empty list (no CLI fallback) | c3-210 |
 
 ## Governance
 

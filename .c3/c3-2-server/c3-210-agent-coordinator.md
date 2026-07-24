@@ -1,7 +1,7 @@
 ---
 id: c3-210
 c3-version: 4
-c3-seal: 7727dfceac7eb9ebfe77dca8c25de939b67bd7fd0f2dfada7b3b4160c6a4ac65
+c3-seal: ae89d159d180aa3930c22ac55ba05ef207633f031aaa675dddc3071685c2c7d1
 title: agent-coordinator
 type: component
 category: feature
@@ -67,7 +67,7 @@ Owns the agent turn lifecycle: receives `chat.send` commands, picks the provider
 | ref-colocated-bun-test | ref | Tests live next to coordinator | must follow | agent-coordinator.test.ts |
 | rule-colocated-bun-test | rule | Coordinator test suites enforce colocated-bun-test rule | must follow | agent.*.test.ts colocated with agent.ts |
 | c3-229 | ref | Workflow runs surfaced into ChatSnapshot via the coordinator | wired compliance target beats uncited local prose | workflow status panel wiring |
-| c3-231 | ref | Coordinator merges local-catalog list into ChatSnapshot.slashCommands at every record site | wired compliance target beats uncited local prose | Local-skill catalog merge wiring |
+| c3-231 | ref | Coordinator loads the local-catalog list (project + personal scopes) into ChatSnapshot.slashCommands on chat-open; no CLI/getSupportedCommands merge | wired compliance target beats uncited local prose | Local-skill catalog sole-source wiring |
 
 ## Contract
 

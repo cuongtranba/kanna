@@ -155,7 +155,6 @@ function makeDeps(session: ClaudeSessionState, overrides: Partial<RunClaudeSessi
     maybeRegisterSdkWorkflowsDir: () => {},
     getSubagents: () => [],
     resolveBackgroundTaskMaxMs: () => 3_600_000,
-    mergeLocalCatalog: (cmds) => cmds,
     handleLimitError: async () => false,
     handleAuthFailure: async () => false,
     closeClaudeSession: () => {},

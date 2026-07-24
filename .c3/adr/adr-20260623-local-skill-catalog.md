@@ -1,10 +1,10 @@
 ---
 id: adr-20260623-local-skill-catalog
-c3-seal: 561319094eda6839167bb507fdcd04eb38c6cf6a5d37ab565f55e5f7238e1f3f
+c3-seal: 4e6be9b89d15125128a8a15a14a354a883bf0dca2f2265ae0307b704268db85e
 title: local-skill-catalog
 type: adr
 goal: Surface every locally invocable Claude Code slash entry — user `~/.claude/{skills,commands}`, project `<cwd>/.claude/{skills,commands}`, and plugin-installed skills/commands under `~/.claude/plugins/**` — in Kanna's composer `/` picker, by merging a disk-scanned catalog into the existing `ChatSnapshot.slashCommands` list.
-status: proposed
+status: superseded
 date: "2026-06-23"
 ---
 
