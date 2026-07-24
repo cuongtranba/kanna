@@ -4,7 +4,7 @@ import type { ProcessedToolCall } from "./types"
 import { Button } from "../ui/button"
 import { cn } from "../../lib/utils"
 import { useTranscriptRenderOptions } from "./render-context"
-import { renderMarkdownToReact } from "../lexical/markdown/lexicalToReact"
+import { renderMarkdownDocument } from "../lexical/markdown/renderMessage"
 import { ExitPlanModeMessageStore } from "./ExitPlanModeMessage.store"
 import type { ClipboardPort, TimerPort } from "../../ports"
 import { clipboardAdapter, timerAdapter } from "../../adapters"
@@ -209,7 +209,7 @@ function ExitPlanModeMessageInner({ message, onConfirm, isLatest, ports = {} }: 
           )}
           {input?.plan ? (
             <div className="prose prose-sm dark:prose-invert max-w-none">
-              {renderMarkdownToReact(input.plan)}
+              {renderMarkdownDocument(input.plan)}
               <div className="mt-5" />
             </div>
           ) : (
