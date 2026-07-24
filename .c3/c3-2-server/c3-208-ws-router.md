@@ -1,7 +1,7 @@
 ---
 id: c3-208
 c3-version: 4
-c3-seal: 839496fab0554464dd0e2c1752d0ebcc6aeaa27f9c766e77528fbe4565a15e21
+c3-seal: 3ed605cbece1a85957fad22d49d240b56b84d3e428be9a712e171aa79e788a5a
 title: ws-router
 type: component
 category: foundation
