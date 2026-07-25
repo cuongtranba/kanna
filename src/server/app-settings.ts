@@ -37,6 +37,8 @@ import {
   OAUTH_TOKEN_MAX_CONCURRENT_MIN,
   OAUTH_TOKEN_VALUE_MAX,
   PROVIDERS,
+  PUSH_DEFAULTS,
+  isValidVapidSubject,
   supportsClaudeMaxReasoningEffort,
   UPLOAD_DEFAULTS,
   UPLOAD_MAX_FILE_SIZE_MB_MAX,
@@ -74,6 +76,7 @@ import {
   type OAuthTokenEntry,
   type OAuthTokenStatus,
   type ProviderPreference,
+  type PushSettings,
   type Subagent,
   type SubagentContextScope,
   type SubagentInput,
@@ -110,6 +113,7 @@ interface AppSettingsFile {
     openrouter?: Partial<ProviderPreference<Record<string, never>>>
   }
   cloudflareTunnel?: Record<string, unknown>
+  push?: Record<string, unknown>
   auth?: Record<string, unknown>
   claudeAuth?: Record<string, unknown>
   uploads?: Record<string, unknown>
@@ -412,6 +416,29 @@ function normalizeCloudflareTunnel<T>(value: T, warnings: string[]): CloudflareT
   }
 
   return { enabled, cloudflaredPath, mode }
+}
+
+function normalizePushSettings<T>(value: T, warnings: string[]): PushSettings {
+  const pushSource = isPlainObject(value) ? value : null
+  if (value !== undefined && !pushSource) {
+    warnings.push("push must be an object")
+  }
+
+  const raw = pushSource?.contactSubject
+  if (raw !== undefined && typeof raw !== "string") {
+    warnings.push("push.contactSubject must be a string")
+    return { contactSubject: PUSH_DEFAULTS.contactSubject }
+  }
+
+  const trimmed = typeof raw === "string" ? raw.trim() : ""
+  if (trimmed && !isValidVapidSubject(trimmed)) {
+    warnings.push(
+      "push.contactSubject must be a mailto: address or https: URL with a routable domain",
+    )
+    return { contactSubject: PUSH_DEFAULTS.contactSubject }
+  }
+
+  return { contactSubject: trimmed || PUSH_DEFAULTS.contactSubject }
 }
 
 function normalizeAuthSettings<T>(value: T, warnings: string[]): AuthSettings {
@@ -929,6 +956,7 @@ function toFilePayload(state: AppSettingsState) {
     defaultProvider: state.defaultProvider,
     providerDefaults: state.providerDefaults,
     cloudflareTunnel: state.cloudflareTunnel,
+    push: state.push,
     auth: state.auth,
     claudeAuth: state.claudeAuth,
     uploads: state.uploads,
@@ -957,6 +985,7 @@ function toSnapshot(state: AppSettingsState): AppSettingsSnapshot {
     warning: state.warning,
     filePathDisplay: state.filePathDisplay,
     cloudflareTunnel: state.cloudflareTunnel,
+    push: state.push,
     auth: state.auth,
     claudeAuth: state.claudeAuth,
     uploads: state.uploads,
@@ -997,6 +1026,7 @@ function normalizeAppSettings<T>(
   }
 
   const cloudflareTunnel = normalizeCloudflareTunnel(source?.cloudflareTunnel, warnings)
+  const push = normalizePushSettings(source?.push, warnings)
   const auth = normalizeAuthSettings(source?.auth, warnings)
   const claudeAuth = normalizeClaudeAuth(source?.claudeAuth, warnings)
   const uploads = normalizeUploadSettings(source?.uploads, warnings)
@@ -1039,6 +1069,7 @@ function normalizeAppSettings<T>(
     warning: null,
     filePathDisplay: formatDisplayPath(filePath),
     cloudflareTunnel,
+    push,
     auth,
     claudeAuth,
     uploads,
@@ -1077,6 +1108,7 @@ function toComparablePayload(source: AppSettingsFile) {
     defaultProvider: source.defaultProvider,
     providerDefaults: source.providerDefaults,
     cloudflareTunnel: source.cloudflareTunnel,
+    push: source.push,
     auth: source.auth,
     claudeAuth: source.claudeAuth,
     uploads: source.uploads,
@@ -1659,6 +1691,10 @@ function applyPatch(state: AppSettingsState, patch: AppSettingsPatch): AppSettin
     cloudflareTunnel: {
       ...state.cloudflareTunnel,
       ...patch.cloudflareTunnel,
+    },
+    push: {
+      ...state.push,
+      ...patch.push,
     },
     auth: {
       ...state.auth,

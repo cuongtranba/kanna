@@ -16,6 +16,7 @@ import { createAuthSessionStore } from "./auth-session-store.adapter"
 import { EventStore } from "./event-store"
 import { PushManager, realWebPushSender } from "./push/push-manager"
 import { loadOrGenerateVapidKeys } from "./push/vapid.adapter"
+import { resolveVapidSubject } from "../shared/vapid-subject"
 import { AgentCoordinator } from "./agent"
 import { POLICY_DEFAULT } from "../shared/permission-policy"
 import type { LimitDetector } from "./auto-continue/limit-detector"
@@ -228,12 +229,6 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     onStateChange: (chatId) => broadcastChatState?.(chatId),
   })
   const vapid = await loadOrGenerateVapidKeys(store.dataDir)
-  const pushManager = new PushManager({
-    store,
-    sender: realWebPushSender,
-    vapid,
-  })
-  await pushManager.initialize()
   await diffStore.initialize()
   await store.migrateLegacyTranscripts(options.onMigrationProgress)
   let discoveredProjects: DiscoveredProject[] = []
@@ -271,6 +266,17 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
   const keybindings = new KeybindingsManager()
   const appSettings = new AppSettingsManager(path.join(store.dataDir, "settings.json"))
   await appSettings.initialize()
+  const pushManager = new PushManager({
+    store,
+    sender: realWebPushSender,
+    vapid,
+    // Resolve the VAPID subject at send time from the user setting (falling
+    // back to the persisted vapid.json subject, then the neutral default) so
+    // an edit in Settings → Push takes effect without a restart.
+    getContactSubject: () =>
+      resolveVapidSubject(appSettings.getSnapshot().push.contactSubject, vapid.subject),
+  })
+  await pushManager.initialize()
 
   const openrouterModelCache = new OpenRouterModelCache({
     fetchRaw: fetchOpenRouterModelsRaw,

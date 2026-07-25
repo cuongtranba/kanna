@@ -15,11 +15,15 @@ const baseProjects: LocalProjectsSnapshot["projects"] = [
 ]
 
 const noopHandlers = {
+  contactSubject: "mailto:kanna@example.com",
+  contactSubjectDraft: "mailto:kanna@example.com",
+  onContactSubjectDraftChange: () => {},
   onEnable: async () => {},
   onDisable: async () => {},
   onTest: async () => {},
   onMuteToggle: async () => {},
   onRemoveDevice: async () => {},
+  onContactSubjectSave: async () => {},
 }
 
 describe("PushNotificationsSection", () => {
@@ -94,6 +98,41 @@ describe("PushNotificationsSection", () => {
     expect(html).toMatch(/Send test/i)
     expect(html).toMatch(/\/tmp\/a/)
     expect(html).toMatch(/\/tmp\/b/)
+  })
+
+  test("shows the contact subject field and its helper when subscribed", () => {
+    const html = renderToStaticMarkup(
+      <PushNotificationsSection
+        permissionState="granted"
+        config={{
+          ...baseConfig,
+          devices: [{ id: "d1", label: "iPhone", userAgent: "ua", createdAt: 0, lastSeenAt: 0, isCurrentDevice: true }],
+        }}
+        projects={baseProjects}
+        currentDeviceId="d1"
+        {...noopHandlers}
+      />
+    )
+    expect(html).toMatch(/Contact for delivery/i)
+    expect(html).toMatch(/require a contact/i)
+  })
+
+  test("flags an invalid contact subject draft", () => {
+    const html = renderToStaticMarkup(
+      <PushNotificationsSection
+        permissionState="granted"
+        config={{
+          ...baseConfig,
+          devices: [{ id: "d1", label: "iPhone", userAgent: "ua", createdAt: 0, lastSeenAt: 0, isCurrentDevice: true }],
+        }}
+        projects={baseProjects}
+        currentDeviceId="d1"
+        {...noopHandlers}
+        contactSubjectDraft="mailto:kanna@localhost"
+      />
+    )
+    expect(html).toMatch(/routable domain/i)
+    expect(html).toMatch(/aria-invalid="true"/)
   })
 
   test("does not render endpoint or keys for any device", () => {

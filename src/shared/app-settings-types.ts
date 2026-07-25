@@ -10,6 +10,7 @@ import type {
   DefaultProviderPreference,
   LlmProviderKind,
 } from "./core-types"
+import { DEFAULT_VAPID_SUBJECT } from "./vapid-subject"
 import type {
   ChatProviderPreferences,
   ProviderPreference,
@@ -150,6 +151,24 @@ export interface ChatSessionStateSnapshot {
 // Cloudflare tunnel
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Push notifications
+// ---------------------------------------------------------------------------
+
+/**
+ * User-configurable Web Push settings. `contactSubject` is the VAPID `sub`
+ * (JWT subject) claim used to sign push messages — push services reject a
+ * malformed one (Apple returns `403 BadJwtToken`). Validated via
+ * `isValidVapidSubject` in `src/shared/vapid-subject.ts`.
+ */
+export interface PushSettings {
+  contactSubject: string
+}
+
+export const PUSH_DEFAULTS: PushSettings = {
+  contactSubject: DEFAULT_VAPID_SUBJECT,
+}
+
 export type CloudflareTunnelMode = "always-ask" | "auto-expose"
 
 export interface CloudflareTunnelSettings {
@@ -252,6 +271,7 @@ export interface AppSettingsSnapshot {
   warning: string | null
   filePathDisplay: string
   cloudflareTunnel: CloudflareTunnelSettings
+  push: PushSettings
   auth: AuthSettings
   claudeAuth: ClaudeAuthSettings
   uploads: UploadSettings
@@ -298,6 +318,7 @@ export interface AppSettingsPatch {
     openrouter?: Partial<ProviderPreference<OpenRouterModelOptions>>
   }
   cloudflareTunnel?: Partial<CloudflareTunnelSettings>
+  push?: Partial<PushSettings>
   auth?: Partial<AuthSettings>
   claudeAuth?: Partial<ClaudeAuthSettings>
   uploads?: Partial<UploadSettings>

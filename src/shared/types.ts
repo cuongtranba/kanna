@@ -9,6 +9,7 @@ export * from "./transcript-types"
 export * from "./mcp-types"
 export * from "./subagent-types"
 export * from "./app-settings-types"
+export * from "./vapid-subject"
 export * from "./git-diff-types"
 
 // Import the re-exported names we reference in the body of this file.

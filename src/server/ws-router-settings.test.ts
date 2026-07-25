@@ -10,6 +10,7 @@ import {
   CLAUDE_PTY_LIFECYCLE_DEFAULTS,
   CLOUDFLARE_TUNNEL_DEFAULTS,
   DEFAULT_OPENROUTER_SDK_MODEL,
+  PUSH_DEFAULTS,
   UPLOAD_DEFAULTS,
 } from "../shared/types"
 import { KeybindingsManager } from "./keybindings"
@@ -39,6 +40,7 @@ function makeSnapshot(): AppSettingsSnapshot {
     warning: null,
     filePathDisplay: "~/.kanna/data/settings.json",
     cloudflareTunnel: CLOUDFLARE_TUNNEL_DEFAULTS,
+    push: PUSH_DEFAULTS,
     auth: AUTH_DEFAULTS,
     claudeAuth: CLAUDE_AUTH_DEFAULTS,
     uploads: UPLOAD_DEFAULTS,

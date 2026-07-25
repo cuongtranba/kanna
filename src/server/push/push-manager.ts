@@ -44,6 +44,12 @@ export interface PushManagerArgs {
   store: PushEventStore
   sender: WebPushSender
   vapid: VapidKeypair
+  /**
+   * Resolves the VAPID `sub` (JWT subject) claim at send time, so a change to
+   * the user's `push.contactSubject` setting takes effect without a restart.
+   * Falls back to `vapid.subject` when omitted (tests / legacy callers).
+   */
+  getContactSubject?: () => string
   now?: () => number
 }
 
@@ -57,6 +63,7 @@ export class PushManager {
   private readonly store: PushEventStore
   private readonly sender: WebPushSender
   private readonly vapid: VapidKeypair
+  private readonly getContactSubject: () => string
   private readonly now: () => number
   private readonly subscriptions = new Map<string, PushSubscriptionRecord>()
   private readonly mutedProjects = new Set<string>()
@@ -70,6 +77,7 @@ export class PushManager {
     this.store = args.store
     this.sender = args.sender
     this.vapid = args.vapid
+    this.getContactSubject = args.getContactSubject ?? (() => this.vapid.subject)
     this.now = args.now ?? Date.now
   }
 
@@ -305,11 +313,12 @@ export class PushManager {
   private async deliver(sub: PushSubscriptionRecord, payload: PushPayload): Promise<void> {
     const body = JSON.stringify(payload)
     const endpointHost = safeEndpointHost(sub.endpoint)
+    const subject = this.getContactSubject()
     log.info("[kanna/push] deliver: sending", {
       id: sub.id,
       endpoint: endpointHost,
       kind: payload.kind,
-      vapidSubject: this.vapid.subject,
+      vapidSubject: subject,
       vapidPublicKeyHead: this.vapid.publicKey.slice(0, 12),
     })
     try {
@@ -317,7 +326,7 @@ export class PushManager {
         TTL: 60,
         urgency: urgencyFor(payload.kind),
         vapidDetails: {
-          subject: this.vapid.subject,
+          subject,
           publicKey: this.vapid.publicKey,
           privateKey: this.vapid.privateKey,
         },
@@ -336,8 +345,19 @@ export class PushManager {
         responseBody,
         message: error instanceof Error ? error.message : String(error),
       })
-      if (status === 410 || status === 404 || status === 403) {
+      if (status === 410 || status === 404) {
+        // The push service says this subscription is truly gone (Not Found /
+        // Gone) — safe to drop it.
         await this.removeSubscription(sub.id, "expired")
+      } else if (status === 401 || status === 403) {
+        // Auth/JWT rejection (e.g. Apple `403 BadJwtToken`) — a SERVER VAPID
+        // misconfiguration, NOT a dead subscription. Deleting the device here
+        // is the bug that made every subscribe self-destruct. Keep it and warn
+        // loudly so the operator fixes the contact subject in Settings → Push.
+        log.error(
+          "[kanna/push] VAPID auth rejected — check push contact subject in Settings; subscription kept",
+          { id: sub.id, endpoint: endpointHost, status, vapidSubject: subject },
+        )
       }
     }
   }

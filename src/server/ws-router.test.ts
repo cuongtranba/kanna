@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto"
 import { mkdtemp, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
-import { AUTH_DEFAULTS, CLAUDE_AUTH_DEFAULTS, CLAUDE_DRIVER_DEFAULTS, CLAUDE_PTY_LIFECYCLE_DEFAULTS, CLOUDFLARE_TUNNEL_DEFAULTS, DEFAULT_OPENROUTER_SDK_MODEL, PROTOCOL_VERSION, UPLOAD_DEFAULTS } from "../shared/types"
+import { AUTH_DEFAULTS, CLAUDE_AUTH_DEFAULTS, CLAUDE_DRIVER_DEFAULTS, CLAUDE_PTY_LIFECYCLE_DEFAULTS, CLOUDFLARE_TUNNEL_DEFAULTS, DEFAULT_OPENROUTER_SDK_MODEL, PROTOCOL_VERSION, PUSH_DEFAULTS, UPLOAD_DEFAULTS } from "../shared/types"
 import type { AppSettingsSnapshot, KeybindingsSnapshot, LlmProviderSnapshot, McpServerConfig, McpServerTestResult, OpenRouterModel, UpdateSnapshot } from "../shared/types"
 import { createEmptyState } from "./events"
 import {
@@ -81,6 +81,7 @@ const DEFAULT_KEYBINDINGS_SNAPSHOT: KeybindingsSnapshot = {
 const DEFAULT_APP_SETTINGS_SNAPSHOT: AppSettingsSnapshot = {
   analyticsEnabled: true,
   cloudflareTunnel: CLOUDFLARE_TUNNEL_DEFAULTS,
+  push: PUSH_DEFAULTS,
   auth: AUTH_DEFAULTS,
   claudeAuth: CLAUDE_AUTH_DEFAULTS,
   browserSettingsMigrated: false,

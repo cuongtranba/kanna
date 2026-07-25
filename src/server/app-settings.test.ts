@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test"
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
-import { AUTH_DEFAULTS, CLAUDE_AUTH_DEFAULTS, CLAUDE_DRIVER_DEFAULTS, CLAUDE_PTY_LIFECYCLE_DEFAULTS, CLOUDFLARE_TUNNEL_DEFAULTS, DEFAULT_OPENROUTER_SDK_MODEL, GLOBAL_PROMPT_APPEND_MAX_CHARS, UPLOAD_DEFAULTS } from "../shared/types"
+import { AUTH_DEFAULTS, CLAUDE_AUTH_DEFAULTS, CLAUDE_DRIVER_DEFAULTS, CLAUDE_PTY_LIFECYCLE_DEFAULTS, CLOUDFLARE_TUNNEL_DEFAULTS, DEFAULT_OPENROUTER_SDK_MODEL, GLOBAL_PROMPT_APPEND_MAX_CHARS, PUSH_DEFAULTS, UPLOAD_DEFAULTS } from "../shared/types"
 import { AppSettingsManager, readAppSettingsSnapshot, seedCustomModelsFromBuiltins } from "./app-settings"
 import type { AppSettingsSnapshot, McpOAuthState, SubagentInput } from "../shared/types"
 
@@ -77,6 +77,7 @@ function expectedSettingsSnapshot(filePath: string, overrides: Partial<AppSettin
     warning: null,
     filePathDisplay: filePath,
     cloudflareTunnel: CLOUDFLARE_TUNNEL_DEFAULTS,
+    push: PUSH_DEFAULTS,
     auth: AUTH_DEFAULTS,
     claudeAuth: CLAUDE_AUTH_DEFAULTS,
     uploads: UPLOAD_DEFAULTS,
@@ -225,6 +226,44 @@ describe("cloudflareTunnel normalization", () => {
     const snapshot = await readAppSettingsSnapshot(filePath)
     expect(snapshot.cloudflareTunnel.mode).toBe("always-ask")
     expect(snapshot.warning).toContain("cloudflareTunnel.mode")
+  })
+
+  test("defaults push.contactSubject when absent", async () => {
+    const filePath = await writeSettingsFile({ analyticsEnabled: true })
+    const snapshot = await readAppSettingsSnapshot(filePath)
+    expect(snapshot.push.contactSubject).toBe(PUSH_DEFAULTS.contactSubject)
+    expect(snapshot.warning).toBeNull()
+  })
+
+  test("preserves a valid push.contactSubject", async () => {
+    const filePath = await writeSettingsFile({
+      push: { contactSubject: "mailto:me@corp.com" },
+    })
+    const snapshot = await readAppSettingsSnapshot(filePath)
+    expect(snapshot.push.contactSubject).toBe("mailto:me@corp.com")
+  })
+
+  test("rejects an invalid push.contactSubject and resets to default with warning", async () => {
+    const filePath = await writeSettingsFile({
+      push: { contactSubject: "mailto:kanna@localhost" },
+    })
+    const snapshot = await readAppSettingsSnapshot(filePath)
+    expect(snapshot.push.contactSubject).toBe(PUSH_DEFAULTS.contactSubject)
+    expect(snapshot.warning).toContain("push.contactSubject")
+  })
+
+  test("writeAppSettingsPatch persists a valid push.contactSubject and rejects an invalid one", async () => {
+    const filePath = await writeSettingsFile({ analyticsEnabled: true })
+    const manager = trackManager(new AppSettingsManager(filePath))
+    await manager.initialize()
+    await manager.writePatch({ push: { contactSubject: "https://kanna.example.dev" } })
+    expect((await readAppSettingsSnapshot(filePath)).push.contactSubject).toBe(
+      "https://kanna.example.dev",
+    )
+    await manager.writePatch({ push: { contactSubject: "mailto:x@localhost" } })
+    expect((await readAppSettingsSnapshot(filePath)).push.contactSubject).toBe(
+      PUSH_DEFAULTS.contactSubject,
+    )
   })
 
   test("setCloudflareTunnel persists patch to disk and round-trips through readAppSettingsSnapshot", async () => {
