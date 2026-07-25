@@ -3,6 +3,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { loadOrGenerateVapidKeys } from "./vapid.adapter"
+import { DEFAULT_VAPID_SUBJECT } from "../../shared/vapid-subject"
 
 const tempDirs: string[] = []
 
@@ -23,7 +24,7 @@ describe("loadOrGenerateVapidKeys", () => {
 
     expect(result.publicKey).toMatch(/^[A-Za-z0-9_-]{60,90}$/)
     expect(result.privateKey).toMatch(/^[A-Za-z0-9_-]{40,60}$/)
-    expect(result.subject).toBe("mailto:bacuongtr@gmail.com")
+    expect(result.subject).toBe(DEFAULT_VAPID_SUBJECT)
 
     const onDisk = JSON.parse(await readFile(join(dir, "vapid.json"), "utf8"))
     expect(onDisk.publicKey).toBe(result.publicKey)
@@ -59,6 +60,41 @@ describe("loadOrGenerateVapidKeys", () => {
     const result = await loadOrGenerateVapidKeys(dir)
     expect(result.publicKey).toMatch(/^[A-Za-z0-9_-]{60,90}$/)
     expect(result.privateKey).toMatch(/^[A-Za-z0-9_-]{40,60}$/)
+  })
+
+  test("self-heals an invalid stored subject, keeping the keypair", async () => {
+    const dir = await tempDir()
+    const { writeFile } = await import("node:fs/promises")
+    // Legacy poison subject that makes Apple return 403 BadJwtToken.
+    const original = {
+      publicKey: "BExamplePublicKey_000000000000000000000000000000000000000000000000000000000000000000",
+      privateKey: "ExamplePrivateKey_00000000000000000000000",
+      subject: "mailto:kanna@localhost",
+    }
+    await writeFile(join(dir, "vapid.json"), JSON.stringify(original))
+
+    const result = await loadOrGenerateVapidKeys(dir)
+    expect(result.publicKey).toBe(original.publicKey) // keypair preserved
+    expect(result.privateKey).toBe(original.privateKey)
+    expect(result.subject).toBe(DEFAULT_VAPID_SUBJECT) // subject healed
+
+    const onDisk = JSON.parse(await readFile(join(dir, "vapid.json"), "utf8"))
+    expect(onDisk.subject).toBe(DEFAULT_VAPID_SUBJECT) // re-persisted
+    expect(onDisk.publicKey).toBe(original.publicKey)
+  })
+
+  test("preserves a valid stored subject", async () => {
+    const dir = await tempDir()
+    const { writeFile } = await import("node:fs/promises")
+    const original = {
+      publicKey: "BExamplePublicKey_000000000000000000000000000000000000000000000000000000000000000000",
+      privateKey: "ExamplePrivateKey_00000000000000000000000",
+      subject: "mailto:ops@team.dev",
+    }
+    await writeFile(join(dir, "vapid.json"), JSON.stringify(original))
+
+    const result = await loadOrGenerateVapidKeys(dir)
+    expect(result.subject).toBe("mailto:ops@team.dev")
   })
 
   test("persists the file with 0600 permissions", async () => {

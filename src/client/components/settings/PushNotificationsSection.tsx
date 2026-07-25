@@ -1,5 +1,8 @@
 import type { LocalProjectsSnapshot, PushConfigSnapshot } from "../../../shared/types"
+import { isValidVapidSubject } from "../../../shared/vapid-subject"
+import { cn } from "../../lib/utils"
 import type { PushPermissionState } from "../../app/pushClient"
+import { Input } from "../ui/input"
 import { TruncatedText } from "../ui/truncated-text"
 
 interface PushNotificationsSectionProps {
@@ -7,11 +10,18 @@ interface PushNotificationsSectionProps {
   config: PushConfigSnapshot
   projects: LocalProjectsSnapshot["projects"]
   currentDeviceId: string | null
+  /** The committed server VAPID contact subject (JWT `sub`), the dirty baseline. */
+  contactSubject: string
+  /** The editable draft (held in the settings-page store, not local state). */
+  contactSubjectDraft: string
+  onContactSubjectDraftChange: (value: string) => void
   onEnable: () => Promise<void>
   onDisable: () => Promise<void>
   onTest: () => Promise<void>
   onMuteToggle: (localPath: string, muted: boolean) => Promise<void>
   onRemoveDevice: (id: string) => Promise<void>
+  /** Persist a new contact subject (validated) to app settings. */
+  onContactSubjectSave: (value: string) => Promise<void>
 }
 
 const secondaryButton =
@@ -63,6 +73,13 @@ export function PushNotificationsSection(props: PushNotificationsSectionProps) {
 
   const muted = new Set(props.config.preferences.mutedProjectPaths)
 
+  const trimmedSubject = props.contactSubjectDraft.trim()
+  const subjectValid = isValidVapidSubject(trimmedSubject)
+  const subjectDirty = trimmedSubject !== props.contactSubject
+  const commitSubject = () => {
+    if (subjectValid && subjectDirty) void props.onContactSubjectSave(trimmedSubject)
+  }
+
   return (
     <div className="flex w-full min-w-0 flex-col gap-5 md:w-[440px]">
       <div className="flex flex-wrap items-center gap-2">
@@ -76,6 +93,41 @@ export function PushNotificationsSection(props: PushNotificationsSectionProps) {
         <button type="button" onClick={() => void props.onDisable()} className={secondaryButton}>
           Disable
         </button>
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <div className={sectionLabel}>Contact for delivery</div>
+        <Input
+          type="text"
+          inputMode="email"
+          spellCheck={false}
+          autoCapitalize="none"
+          value={props.contactSubjectDraft}
+          onChange={(e) => props.onContactSubjectDraftChange(e.target.value)}
+          onBlur={commitSubject}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault()
+              commitSubject()
+            }
+          }}
+          placeholder="mailto:you@example.com"
+          aria-label="Push contact subject"
+          aria-invalid={trimmedSubject !== "" && !subjectValid}
+          className={cn("font-mono", trimmedSubject !== "" && !subjectValid && "border-destructive")}
+        />
+        {trimmedSubject !== "" && !subjectValid ? (
+          <p className="text-xs text-destructive">
+            Must be a <code className={codeChip}>mailto:</code> address or{" "}
+            <code className={codeChip}>https:</code> URL with a routable domain (not localhost).
+          </p>
+        ) : (
+          <p className="text-xs text-muted-foreground">
+            Push services require a contact <code className={codeChip}>mailto:</code> or{" "}
+            <code className={codeChip}>https:</code> URL to sign notifications. Set your own so
+            delivery isn&rsquo;t rejected.
+          </p>
+        )}
       </div>
 
       <div className="flex flex-col gap-2">

@@ -58,6 +58,7 @@ interface SettingsPageState {
   analyticsDialogOpen: boolean
   tunnelError: string | null
   cloudflaredPathDraft: string
+  pushContactSubjectDraft: string
   shareDefaultTtlDraft: string
   llmProviderDraft: LlmProviderDraft
   llmProviderError: string | null
@@ -113,6 +114,7 @@ interface SettingsPageState {
   setAnalyticsDialogOpen: (open: boolean) => void
   setTunnelError: (error: string | null) => void
   setCloudflaredPathDraft: (draft: string) => void
+  setPushContactSubjectDraft: (draft: string) => void
   setShareDefaultTtlDraft: (draft: string) => void
   setLlmProviderDraft: (draft: LlmProviderDraft) => void
   setLlmProviderError: (error: string | null) => void
@@ -165,6 +167,7 @@ export const useSettingsPageStore = create<SettingsPageState>()((set, get) => ({
   analyticsDialogOpen: false,
   tunnelError: null,
   cloudflaredPathDraft: "",
+  pushContactSubjectDraft: "",
   shareDefaultTtlDraft: "",
   llmProviderDraft: {
     provider: "openai",
@@ -252,6 +255,7 @@ export const useSettingsPageStore = create<SettingsPageState>()((set, get) => ({
   setAnalyticsDialogOpen: (open) => set({ analyticsDialogOpen: open }),
   setTunnelError: (error) => set({ tunnelError: error }),
   setCloudflaredPathDraft: (draft) => set({ cloudflaredPathDraft: draft }),
+  setPushContactSubjectDraft: (draft) => set({ pushContactSubjectDraft: draft }),
   setShareDefaultTtlDraft: (draft) => set({ shareDefaultTtlDraft: draft }),
   setLlmProviderDraft: (draft) => set({ llmProviderDraft: draft }),
   setLlmProviderError: (error) => set({ llmProviderError: error }),

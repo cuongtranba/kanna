@@ -265,6 +265,93 @@ describe("PushManager subscriptions", () => {
     void id
   })
 
+  test("404 response purges the subscription as expired", async () => {
+    await manager.initialize()
+    const { id } = await manager.addSubscription({
+      subscription: { endpoint: "https://push.example/x", keys: { p256dh: "p", auth: "a" } },
+      label: "iPhone",
+      userAgent: "ua",
+    })
+    sender.errorByEndpoint.set("https://push.example/x", { statusCode: 404 })
+
+    nowMs = 2000
+    await manager.observeStatuses([chat({ status: "running" })])
+    nowMs = 3000
+    await manager.observeStatuses([chat({ status: "waiting_for_user" })])
+
+    expect(manager.listDevices()).toEqual([])
+    const removed = store.events.find(e => e.kind === "subscription_removed")
+    expect(removed && "reason" in removed && removed.reason).toBe("expired")
+    void id
+  })
+
+  test("403 auth rejection leaves the subscription intact (not a dead device)", async () => {
+    // Regression: Apple `403 BadJwtToken` from a misconfigured VAPID subject is
+    // a server config error, NOT a gone subscription. Deleting the device here
+    // was the bug that made every subscribe self-destruct on the first push.
+    await manager.initialize()
+    const { id } = await manager.addSubscription({
+      subscription: { endpoint: "https://push.example/x", keys: { p256dh: "p", auth: "a" } },
+      label: "iPhone",
+      userAgent: "ua",
+    })
+    sender.errorByEndpoint.set("https://push.example/x", { statusCode: 403 })
+
+    nowMs = 2000
+    await manager.observeStatuses([chat({ status: "running" })])
+    nowMs = 3000
+    await manager.observeStatuses([chat({ status: "waiting_for_user" })])
+
+    expect(manager.listDevices().map(d => d.id)).toContain(id)
+    expect(store.events.find(e => e.kind === "subscription_removed")).toBeUndefined()
+  })
+
+  test("401 auth rejection leaves the subscription intact", async () => {
+    await manager.initialize()
+    const { id } = await manager.addSubscription({
+      subscription: { endpoint: "https://push.example/x", keys: { p256dh: "p", auth: "a" } },
+      label: "iPhone",
+      userAgent: "ua",
+    })
+    sender.errorByEndpoint.set("https://push.example/x", { statusCode: 401 })
+
+    nowMs = 2000
+    await manager.observeStatuses([chat({ status: "running" })])
+    nowMs = 3000
+    await manager.observeStatuses([chat({ status: "waiting_for_user" })])
+
+    expect(manager.listDevices().map(d => d.id)).toContain(id)
+    expect(store.events.find(e => e.kind === "subscription_removed")).toBeUndefined()
+  })
+
+  test("getContactSubject overrides the vapid subject at send time", async () => {
+    const captured: string[] = []
+    const capturingSender: WebPushSender = {
+      async send(_sub, _payload, opts) {
+        captured.push(opts.vapidDetails.subject)
+      },
+    }
+    const dynamicManager = new PushManager({
+      store,
+      sender: capturingSender,
+      vapid: VAPID,
+      now: () => nowMs,
+      getContactSubject: () => "mailto:override@corp.com",
+    })
+    await dynamicManager.initialize()
+    await dynamicManager.addSubscription({
+      subscription: { endpoint: "https://push.example/y", keys: { p256dh: "p", auth: "a" } },
+      label: "iPhone",
+      userAgent: "ua",
+    })
+    nowMs = 2000
+    await dynamicManager.observeStatuses([chat({ status: "running" })])
+    nowMs = 3000
+    await dynamicManager.observeStatuses([chat({ status: "waiting_for_user" })])
+
+    expect(captured).toEqual(["mailto:override@corp.com"])
+  })
+
   test("5xx response leaves the subscription intact", async () => {
     await manager.initialize()
     const { id } = await manager.addSubscription({

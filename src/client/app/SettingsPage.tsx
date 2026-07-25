@@ -1165,6 +1165,8 @@ export function SettingsPage({ ports }: { ports?: { dom?: DomPort } } = {}) {
   const setTunnelError = useSettingsPageStore((s) => s.setTunnelError)
   const cloudflaredPathDraft = useSettingsPageStore((s) => s.cloudflaredPathDraft)
   const setCloudflaredPathDraft = useSettingsPageStore((s) => s.setCloudflaredPathDraft)
+  const pushContactSubjectDraft = useSettingsPageStore((s) => s.pushContactSubjectDraft)
+  const setPushContactSubjectDraft = useSettingsPageStore((s) => s.setPushContactSubjectDraft)
   const shareDefaultTtlHours = appSettings?.shareDefaultTtlHours ?? 24
   const shareDefaultTtlDraft = useSettingsPageStore((s) => s.shareDefaultTtlDraft)
   const setShareDefaultTtlDraft = useSettingsPageStore((s) => s.setShareDefaultTtlDraft)
@@ -1266,6 +1268,11 @@ export function SettingsPage({ ports }: { ports?: { dom?: DomPort } } = {}) {
     if (!appSettings) return
     setCloudflaredPathDraft(appSettings.cloudflareTunnel.cloudflaredPath)
   }, [appSettings, setCloudflaredPathDraft])
+
+  useEffect(() => {
+    if (!appSettings) return
+    setPushContactSubjectDraft(appSettings.push.contactSubject)
+  }, [appSettings, setPushContactSubjectDraft])
 
   useEffect(() => {
     let cancelled = false
@@ -2062,6 +2069,15 @@ export function SettingsPage({ ports }: { ports?: { dom?: DomPort } } = {}) {
                             config={state.pushConfig}
                             projects={state.localProjects?.projects ?? []}
                             currentDeviceId={pushDeviceId}
+                            contactSubject={appSettings?.push.contactSubject ?? ""}
+                            contactSubjectDraft={pushContactSubjectDraft}
+                            onContactSubjectDraftChange={setPushContactSubjectDraft}
+                            onContactSubjectSave={async (value) => {
+                              await state.socket.command({
+                                type: "settings.writeAppSettingsPatch",
+                                patch: { push: { contactSubject: value } },
+                              })
+                            }}
                             onEnable={async () => {
                               if (!state.pushConfig) return
                               const id = await subscribePush({
