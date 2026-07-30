@@ -101,6 +101,8 @@ export interface ChatCommandDeps {
    * Used for the chat.setDraftProtection fall-through broadcast.
    */
   broadcastAll: () => Promise<void>
+  /** Stops the live-tail follow for a chat (user takeover or chat deletion). */
+  followedSessionRegistry?: { stop(chatId: string, reason: "user_takeover" | "chat_deleted"): void }
 }
 
 // ---------------------------------------------------------------------------
@@ -128,6 +130,7 @@ export async function handleChatCommand(
     broadcastChatAndSidebar,
     broadcastSidebar,
     broadcastAll,
+    followedSessionRegistry,
   } = deps
 
   switch (command.type) {
@@ -166,6 +169,7 @@ export async function handleChatCommand(
       return true
     }
     case "chat.delete": {
+      followedSessionRegistry?.stop(command.chatId, "chat_deleted")
       await agent.cancel(command.chatId)
       for (const scheduleId of agent.listLiveSchedules(command.chatId)) {
         await agent.cancelAutoContinue(command.chatId, scheduleId, "chat_deleted")
@@ -200,6 +204,7 @@ export async function handleChatCommand(
       return true
     }
     case "chat.send": {
+      if (command.chatId) followedSessionRegistry?.stop(command.chatId, "user_takeover")
       const result = await agent.send(command)
       const profile = command.clientTraceId && result.chatId
         ? agent.getActiveTurnProfile(result.chatId)

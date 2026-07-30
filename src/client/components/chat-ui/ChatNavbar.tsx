@@ -18,6 +18,7 @@ import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } 
 import { PtyInstancesIndicator } from "./PtyInstancesIndicator"
 import type { KannaSocket } from "../../app/socket"
 import { useSharePopoverOpen, useSetSharePopoverOpen } from "../../stores/chatNavbarStore"
+import { useFollowedSessionsStore, selectIsFollowing } from "../../stores/followedSessionsStore"
 import type { DomPort } from "../../ports/domPort"
 import { domAdapter } from "../../adapters/dom.adapter"
 
@@ -69,6 +70,27 @@ function NavbarOverflowMenu({
         ) : null}
       </ContextMenuContent>
     </ContextMenu>
+  )
+}
+
+function FollowingPill({ chatId }: { chatId?: string }) {
+  const isFollowing = useFollowedSessionsStore(selectIsFollowing(chatId))
+  if (!isFollowing) return null
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span
+          className="inline-flex items-center gap-1.5 px-1.5 py-0.5 rounded-full text-[10px] font-mono uppercase tracking-wide flex-shrink-0"
+          style={{ background: "color-mix(in oklch, var(--muted) 60%, transparent)" }}
+        >
+          <span aria-hidden className="inline-block w-[6px] h-[6px] rounded-full" style={{ backgroundColor: "var(--warning)" }} />
+          <span style={{ color: "var(--warning)" }}>following</span>
+        </span>
+      </TooltipTrigger>
+      <TooltipContent side="bottom">
+        Live view of an external Claude session. Sending a message takes over and stops following.
+      </TooltipContent>
+    </Tooltip>
   )
 }
 
@@ -246,6 +268,8 @@ export function ChatNavbar({
         ) : (
           <div className="flex-1 min-w-0" />
         )}
+
+        <FollowingPill chatId={currentChatId} />
 
         <div className="flex items-center flex-shrink-0 border border-border rounded-2xl">
           <PtyInstancesIndicator socket={socket} onOpenChat={onOpenPtyChat} />

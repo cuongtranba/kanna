@@ -357,6 +357,11 @@ export class AgentCoordinator {
     return getActiveStatusesFn(this.buildSessionStateQueryDeps())
   }
 
+  /** Returns true when a Kanna turn is currently active on the given chat. */
+  hasActiveTurn(chatId: string): boolean {
+    return this.activeTurns.has(chatId)
+  }
+
   getWaitStartedAtByChatId(): Map<string, number> {
     return getWaitStartedAtByChatIdFn(this.buildSessionStateQueryDeps())
   }

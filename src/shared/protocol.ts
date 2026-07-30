@@ -52,6 +52,7 @@ export type SubscriptionTopic =
   | { type: "pty-instances" }
   | { type: "workflows"; chatId: string }
   | { type: "orch-runs" }
+  | { type: "followed-sessions" }
 
 export interface TerminalSnapshot {
   terminalId: string
@@ -89,6 +90,10 @@ export interface WorkflowsSnapshot {
 
 export interface OrchRunsSnapshot {
   runs: OrchRunSummary[]
+}
+
+export interface FollowedSessionsSnapshot {
+  chatIds: string[]
 }
 
 export interface SingleImportResultRow {
@@ -348,6 +353,7 @@ export type ServerSnapshot =
   | { type: "pty-instances"; data: PtyInstancesSnapshot }
   | { type: "workflows"; data: WorkflowsSnapshot }
   | { type: "orch-runs"; data: OrchRunsSnapshot }
+  | { type: "followed-sessions"; data: FollowedSessionsSnapshot }
 
 export type ServerEnvelope =
   | { v: 1; type: "snapshot"; id: string; snapshot: ServerSnapshot }

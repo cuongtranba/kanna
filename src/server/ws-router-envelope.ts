@@ -21,6 +21,7 @@ import type { TerminalManager } from "./terminal-manager"
 import type { KeybindingsManager } from "./keybindings"
 import type { PtyInstanceRegistry } from "./claude-pty/pty-instance-registry"
 import type { WorkflowRegistry } from "./workflow-registry"
+import type { FollowedSessionRegistry } from "./followed-session-registry"
 import type { UpdateManager } from "./update-manager"
 import type { PushManager } from "./push/push-manager"
 import type { DiffStore } from "./diff-store"
@@ -48,6 +49,7 @@ export interface EnvelopeDeps {
     "commitFiles" | "discardFile" | "ignoreFile" | "readPatch">
   ptyInstances?: PtyInstanceRegistry
   workflowRegistry?: WorkflowRegistry
+  followedSessionRegistry?: FollowedSessionRegistry
   machineDisplayName: string
   updateManager: UpdateManager | null
   getDiscoveredProjects: () => DiscoveredProject[]
@@ -145,6 +147,7 @@ export function createEnvelopeBuilder(deps: EnvelopeDeps): EnvelopeBuilder {
     resolvedDiffStore,
     ptyInstances,
     workflowRegistry,
+    followedSessionRegistry,
     machineDisplayName,
     updateManager,
     getDiscoveredProjects,
@@ -321,6 +324,18 @@ export function createEnvelopeBuilder(deps: EnvelopeDeps): EnvelopeBuilder {
         snapshot: {
           type: "orch-runs",
           data: { runs: store.getOrchRuns().map(toOrchRunSummary) },
+        },
+      }
+    }
+
+    if (topic.type === "followed-sessions") {
+      return {
+        v: PROTOCOL_VERSION,
+        type: "snapshot",
+        id,
+        snapshot: {
+          type: "followed-sessions",
+          data: { chatIds: followedSessionRegistry?.followedChatIds() ?? [] },
         },
       }
     }
