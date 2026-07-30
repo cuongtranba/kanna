@@ -59,7 +59,7 @@ edits to `CLAUDE.md` and `wiki/`; C3 CLI for the ADR apply.
   with two lines (mirrors the shape plan-04's spike Task 1 checks for). `appendLine` lets the test
   grow the main file after the initial import to exercise the live-tail delta path.
 
-- [ ] **Step 1: Write the fixture module.**
+- [x] **Step 1: Write the fixture module.**
 
 ```ts
 // src/server/__fixtures__/tribe-session-fixture.ts
@@ -115,7 +115,7 @@ export function writeTribeSessionFixture(
 }
 ```
 
-- [ ] **Step 2: Commit** — `git commit -m "test(server): Tribe-shaped session fixture builder for E2E"`
+- [x] **Step 2: Commit** — `git commit -m "test(server): Tribe-shaped session fixture builder for E2E"`
   (no failing-test step: this is a fixture-only helper with no independent behavior to assert;
   Task 2 is its first real exercise and proves it works).
 
