@@ -1,0 +1,44 @@
+{
+  "v": 1,
+  "campaign": "kanna-session-import",
+  "run": {
+    "startedAt": "2026-07-30T23:42:03.083Z",
+    "endedAt": "2026-07-30T23:42:17.841Z",
+    "exitCode": 0,
+    "reason": "done"
+  },
+  "cards": {
+    "foundation": {
+      "outcome": "shipped",
+      "pr": 583,
+      "mergeSha": "79b9460d7fcd46ea9f3ed978ee92b602830ec5f7"
+    },
+    "ui": {
+      "outcome": "shipped",
+      "pr": 584,
+      "mergeSha": "7dea312577954915a85b8c368fdc4033e0432916"
+    },
+    "live": {
+      "outcome": "shipped",
+      "pr": 585,
+      "mergeSha": "a58fd5ac3c9410a4ff91ffbe334414cc93e4b0c4"
+    },
+    "drill": {
+      "outcome": "shipped",
+      "pr": 586,
+      "mergeSha": "b4a9278360382b6cd1921bd71b05a24c921b1313"
+    },
+    "join": {
+      "outcome": "shipped",
+      "pr": 587,
+      "mergeSha": "27c69731b6559a2f5fda4990b70dfffb2e11360a"
+    }
+  },
+  "pending": [],
+  "stats": {
+    "shipped": 5,
+    "escalated": 0,
+    "blocked": 0,
+    "notReached": 0
+  }
+}
