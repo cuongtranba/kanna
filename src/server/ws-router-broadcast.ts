@@ -541,6 +541,26 @@ export class BroadcastManager {
     }
   }
 
+  /**
+   * Pushed on `FollowedSessionRegistry` membership change. Public — unlike
+   * the other registries above, the registry's `onChange` dep is a single
+   * callback wired from server.ts (no internal pubsub to subscribe to here).
+   */
+  pushFollowedSessions(): void {
+    for (const ws of this.sockets) {
+      const snapshotSignatures = ensureSnapshotSignatures(ws)
+      for (const [id, topic] of ws.data.subscriptions.entries()) {
+        if (topic.type !== "followed-sessions") continue
+        const envelope = this.deps.envelopeBuilder.createEnvelope(id, topic, undefined, ws)
+        if (envelope.type !== "snapshot") continue
+        const signature = JSON.stringify(envelope.snapshot)
+        if (snapshotSignatures.get(id) === signature) continue
+        snapshotSignatures.set(id, signature)
+        send(ws, envelope)
+      }
+    }
+  }
+
   // ── Cleanup ─────────────────────────────────────────────────────────────────
 
   dispose(): void {

@@ -230,6 +230,10 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
   // the callback is a no-op, which is the correct behaviour for the
   // recoverOnStartup pass (no connected client to broadcast to anyway).
   let broadcastChatState: ((chatId: string) => void) | null = null
+  // Same deferred-holder pattern as broadcastChatState above: the registry is
+  // constructed before the router exists, so its onChange dep forwards here
+  // until the holder is populated once createWsRouter returns.
+  let pushFollowedSessions: (() => void) | null = null
   const toolCallback: ToolCallbackService = await initToolCallbackOnBoot({
     store,
     serverSecret: process.env.KANNA_SERVER_SECRET ?? crypto.randomUUID(),
@@ -505,8 +509,7 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     },
     isTurnActive: (chatId) => agent.hasActiveTurn(chatId),
     now: Date.now,
-    // Wired to the real broadcast once the router exists (below).
-    onChange: () => {},
+    onChange: () => pushFollowedSessions?.(),
     activeWindowMs: parsePositiveIntEnv(
       process.env.KANNA_IMPORT_FOLLOW_ACTIVE_WINDOW_MS,
       IMPORT_FOLLOW_ACTIVE_WINDOW_MS,
@@ -555,6 +558,9 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
   // next unrelated event, leaving prompts invisible).
   broadcastChatState = (chatId: string) => {
     router.scheduleChatStateBroadcast(chatId)
+  }
+  pushFollowedSessions = () => {
+    router.pushFollowedSessions()
   }
   scheduleManager.rehydrate(
     store.listAutoContinueChats().flatMap((chatId) => store.getAutoContinueEvents(chatId))

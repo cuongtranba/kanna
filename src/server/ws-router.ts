@@ -136,6 +136,7 @@ export function createWsRouter({
     resolvedDiffStore,
     ptyInstances,
     workflowRegistry,
+    followedSessionRegistry,
     machineDisplayName,
     updateManager,
     getDiscoveredProjects,
@@ -496,6 +497,7 @@ export function createWsRouter({
     scheduleBroadcast: () => broadcast.scheduleBroadcast(),
     scheduleChatStateBroadcast: (chatId: string) => broadcast.scheduleChatStateBroadcast(chatId),
     pruneStaleEmptyChats: () => broadcast.maybePruneStaleEmptyChats(),
+    pushFollowedSessions: () => broadcast.pushFollowedSessions(),
     async handleMessage(ws: ServerWebSocket<ClientState>, raw: string | Buffer | ArrayBuffer | Uint8Array) {
       let parsed: AnyValue
       try {
