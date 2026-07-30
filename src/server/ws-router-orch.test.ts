@@ -3,6 +3,11 @@ import type { OrchCommandDeps, OrchAgentDep } from "./ws-router-orch"
 import { handleOrchCommand } from "./ws-router-orch"
 import type { ClientCommand } from "../shared/protocol"
 import type { ChatRecord, ProjectRecord } from "./events"
+import { encodeCwd } from "./claude-pty/jsonl-path.adapter"
+
+// encodeCwd() realpath()s the cwd, so the project fixture below must be a
+// path that actually exists on whatever machine runs the test.
+const REAL_CWD = process.cwd()
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -153,7 +158,7 @@ describe("handleOrchCommand", () => {
       getAgentTranscript: mock(() => entries),
     }
     const chat = { id: "c-1", projectId: "p-1", sessionTokensByProvider: { claude: "sess-1" } } as unknown as ChatRecord
-    const project = { id: "p-1", localPath: "/Users/home/repos/kanna" } as unknown as ProjectRecord
+    const project = { id: "p-1", localPath: REAL_CWD } as unknown as ProjectRecord
     const store: OrchCommandDeps["store"] = {
       getChat: mock(() => chat),
       getProject: mock(() => project),
@@ -169,7 +174,7 @@ describe("handleOrchCommand", () => {
     expect(sa.register).toHaveBeenCalledTimes(1)
     const [registeredChatId, registeredDir] = (sa.register as ReturnType<typeof mock>).mock.calls[0]
     expect(registeredChatId).toBe("c-1")
-    expect(registeredDir).toEndWith("/-Users-home-repos-kanna/sess-1/subagents")
+    expect(registeredDir).toEndWith(`/${encodeCwd(REAL_CWD)}/sess-1/subagents`)
     expect(sa.getAgentTranscript).toHaveBeenCalledWith("c-1", "ag-2")
   })
 
