@@ -46,6 +46,7 @@ interface KannaSidebarState {
   stackChatWorktrees: Map<string, GitWorktree[]>
   stackChatLoading: boolean
   isImporting: boolean
+  importDialogOpen: boolean
 
   // Actions
   setCollapsedSections: (updater: (previous: Set<string>) => Set<string>) => void
@@ -65,6 +66,7 @@ interface KannaSidebarState {
   setStackChatWorktrees: (worktrees: Map<string, GitWorktree[]>) => void
   setStackChatLoading: (loading: boolean) => void
   setIsImporting: (importing: boolean) => void
+  setImportDialogOpen: (open: boolean) => void
 }
 
 export const useKannaSidebarStore = create<KannaSidebarState>()((set) => ({
@@ -83,6 +85,7 @@ export const useKannaSidebarStore = create<KannaSidebarState>()((set) => ({
   stackChatWorktrees: EMPTY_STACK_CHAT_WORKTREES,
   stackChatLoading: false,
   isImporting: false,
+  importDialogOpen: false,
 
   setCollapsedSections: (updater) =>
     set((state) => ({ collapsedSections: updater(state.collapsedSections) })),
@@ -131,6 +134,8 @@ export const useKannaSidebarStore = create<KannaSidebarState>()((set) => ({
   setStackChatLoading: (loading) => set({ stackChatLoading: loading }),
 
   setIsImporting: (importing) => set({ isImporting: importing }),
+
+  setImportDialogOpen: (open) => set({ importDialogOpen: open }),
 }))
 
 // Re-export helpers that are used in KannaSidebar

@@ -9,8 +9,8 @@ import { useLocation, useNavigate } from "react-router-dom"
 import { APP_NAME } from "../../shared/branding"
 import { Button } from "../components/ui/button"
 import { HoverHint } from "../components/ui/truncated-text"
-import { useAppDialog } from "../components/ui/app-dialog"
 import { Dialog, DialogBody, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../components/ui/dialog"
+import { ImportSessionsDialog } from "../components/ImportSessionsDialog"
 import { formatSidebarAgeLabel, getPathBasename } from "../lib/formatters"
 import { getSidebarChatTimestamp } from "../lib/sidebarChats"
 import { cn } from "../lib/utils"
@@ -72,6 +72,7 @@ interface KannaSidebarProps {
   onEditChatPermissions?: (chatId: string) => void
   onOpenAddProjectModal: () => void
   onImportClaudeSessions?: () => Promise<void>
+  onImportClaudeSessionIds?: (sessionIds: string[]) => Promise<void>
   onCopyPath: (localPath: string) => void
   onOpenExternalPath: (action: "open_finder" | "open_editor", localPath: string) => void
   onHideProject: (projectId: string) => void
@@ -109,6 +110,7 @@ function KannaSidebarImpl({
   onEditChatPermissions,
   onOpenAddProjectModal,
   onImportClaudeSessions,
+  onImportClaudeSessionIds,
   onCopyPath,
   onOpenExternalPath,
   onHideProject,
@@ -148,6 +150,7 @@ function KannaSidebarImpl({
   const stackChatWorktrees = useKannaSidebarStore((s) => s.stackChatWorktrees)
   const stackChatLoading = useKannaSidebarStore((s) => s.stackChatLoading)
   const isImporting = useKannaSidebarStore((s) => s.isImporting)
+  const importDialogOpen = useKannaSidebarStore((s) => s.importDialogOpen)
 
   const setCollapsedSections = useKannaSidebarStore((s) => s.setCollapsedSections)
   const setExpandedGroups = useKannaSidebarStore((s) => s.setExpandedGroups)
@@ -165,6 +168,7 @@ function KannaSidebarImpl({
   const setStackChatWorktrees = useKannaSidebarStore((s) => s.setStackChatWorktrees)
   const setStackChatLoading = useKannaSidebarStore((s) => s.setStackChatLoading)
   const setIsImporting = useKannaSidebarStore((s) => s.setIsImporting)
+  const setImportDialogOpen = useKannaSidebarStore((s) => s.setImportDialogOpen)
 
   const resolvedKeybindings = useMemo(() => getResolvedKeybindings(keybindings), [keybindings])
 
@@ -485,16 +489,8 @@ function KannaSidebarImpl({
     }
   }, [dom, isResizingSidebar, setSidebarWidth, setIsResizingSidebar])
 
-  const dialog = useAppDialog()
-
-  const handleImport = useCallback(async () => {
+  const handleImportAll = useCallback(async () => {
     if (isImporting || !onImportClaudeSessions) return
-    const confirmed = await dialog.confirm({
-      title: "Import Claude sessions",
-      description: "Scan ~/.claude/projects/ and import all sessions into Kanna? Already-imported sessions are skipped.",
-      confirmLabel: "Import",
-    })
-    if (!confirmed) return
     setIsImporting(true)
     try {
       await onImportClaudeSessions()
@@ -502,8 +498,22 @@ function KannaSidebarImpl({
       log.error("[kanna/import] failed", String(error))
     } finally {
       setIsImporting(false)
+      setImportDialogOpen(false)
     }
-  }, [dialog, isImporting, onImportClaudeSessions, setIsImporting])
+  }, [isImporting, onImportClaudeSessions, setIsImporting, setImportDialogOpen])
+
+  const handleImportSessionIds = useCallback(async (sessionIds: string[]) => {
+    if (isImporting || !onImportClaudeSessionIds) return
+    setIsImporting(true)
+    try {
+      await onImportClaudeSessionIds(sessionIds)
+    } catch (error) {
+      log.error("[kanna/import] failed", String(error))
+    } finally {
+      setIsImporting(false)
+      setImportDialogOpen(false)
+    }
+  }, [isImporting, onImportClaudeSessionIds, setIsImporting, setImportDialogOpen])
 
   const hasVisibleChats = activeVisibleCount > 0
   const isLocalProjectsActive = location.pathname === "/"
@@ -626,7 +636,7 @@ function KannaSidebarImpl({
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={() => void handleImport()}
+                onClick={() => setImportDialogOpen(true)}
                 disabled={isImporting}
                 className="inline-flex size-10 rounded-lg hover:!border-border/0"
                 title="Import Claude Code sessions"
@@ -945,6 +955,16 @@ function KannaSidebarImpl({
           </DialogBody>
         </DialogContent>
       </Dialog>
+
+      {onImportClaudeSessions ? (
+        <ImportSessionsDialog
+          open={importDialogOpen}
+          busy={isImporting}
+          onClose={() => setImportDialogOpen(false)}
+          onImportAll={() => void handleImportAll()}
+          onImportSessions={(sessionIds) => void handleImportSessionIds(sessionIds)}
+        />
+      ) : null}
 
       {open ? <div className="fixed inset-0 bg-black/40 z-40 md:hidden" onClick={onClose} /> : null}
     </>
