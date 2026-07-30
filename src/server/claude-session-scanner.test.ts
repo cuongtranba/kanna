@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { mkdirSync, mkdtempSync, writeFileSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
-import { scanClaudeSessions } from "./claude-session-scanner.adapter"
+import { locateClaudeSessionFile, scanClaudeSessions } from "./claude-session-scanner.adapter"
 
 function makeTempClaudeHome(): { home: string; cleanup: () => void } {
   const home = mkdtempSync(path.join(tmpdir(), "kanna-claude-home-"))
@@ -42,6 +42,36 @@ describe("scanClaudeSessions", () => {
       expect(sessions[0].sessionId).toBe("sess-abc")
       expect(sessions[0].filePath).toBe(sessionPath)
       rmSync(realProj, { recursive: true, force: true })
+    } finally {
+      cleanup()
+    }
+  })
+})
+
+describe("locateClaudeSessionFile", () => {
+  test("finds the file in any project dir", () => {
+    const { home, cleanup } = makeTempClaudeHome()
+    try {
+      const dirA = path.join(home, ".claude", "projects", "dir-a")
+      const dirB = path.join(home, ".claude", "projects", "dir-b")
+      mkdirSync(dirA, { recursive: true })
+      mkdirSync(dirB, { recursive: true })
+      writeFileSync(path.join(dirA, "other.jsonl"), "{}\n", "utf8")
+      const target = path.join(dirB, "4f9c2b1e-8a31-4c7d-9b2e-1a2b3c4d5e6f.jsonl")
+      writeFileSync(target, "{}\n", "utf8")
+
+      const found = locateClaudeSessionFile(home, "4f9c2b1e-8a31-4c7d-9b2e-1a2b3c4d5e6f")
+      expect(found).toBe(target)
+    } finally {
+      cleanup()
+    }
+  })
+
+  test("returns null when absent or projects dir missing", () => {
+    const { home, cleanup } = makeTempClaudeHome()
+    try {
+      expect(locateClaudeSessionFile(home, "00000000-0000-4000-8000-000000000000")).toBeNull()
+      expect(locateClaudeSessionFile(path.join(home, "nope"), "00000000-0000-4000-8000-000000000000")).toBeNull()
     } finally {
       cleanup()
     }

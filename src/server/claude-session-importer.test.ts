@@ -3,7 +3,8 @@ import { createHash } from "node:crypto"
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
-import { importClaudeSessions } from "./claude-session-importer.adapter"
+import { importClaudeSessions, importSessionsByIds } from "./claude-session-importer.adapter"
+import type { SessionImportedInfo } from "./claude-session-importer.adapter"
 import { createTestEventStore } from "./storage/test-helpers"
 
 function fresh() {
@@ -417,6 +418,102 @@ describe("importClaudeSessions", () => {
       expect(second.updated).toBe(1)
       expect(second.skipped).toBe(0)
       expect(store.getMessages(chats[0].id).length).toBe(4)
+    } finally {
+      ctx.cleanup()
+    }
+  })
+})
+
+describe("importSessionsByIds", () => {
+  test("imports exactly one session and leaves siblings untouched", async () => {
+    const ctx = fresh()
+    try {
+      const realProjB = mkdtempSync(path.join(tmpdir(), "kanna-proj-b-"))
+      const SESSION_A_ID = "4f9c2b1e-8a31-4c7d-9b2e-1a2b3c4d5e6f"
+      const SESSION_B_ID = "0f9c2b1e-8a31-4c7d-9b2e-1a2b3c4d5e6f"
+      seedSession(ctx.homeDir, ctx.realProj, SESSION_A_ID)
+      seedSession(ctx.homeDir, realProjB, SESSION_B_ID)
+      const store = createTestEventStore(ctx.dataDir)
+      await store.initialize()
+
+      const result = await importSessionsByIds({ store, homeDir: ctx.homeDir, sessionIds: [SESSION_A_ID] })
+      expect(result.results).toEqual([
+        expect.objectContaining({ sessionId: SESSION_A_ID, status: "created", chatId: expect.any(String) }),
+      ])
+
+      const tokens = [...store.state.chatsById.values()].map((c) => c.sessionTokensByProvider.claude)
+      expect(tokens).toContain(SESSION_A_ID)
+      expect(tokens).not.toContain(SESSION_B_ID)
+      rmSync(realProjB, { recursive: true, force: true })
+    } finally {
+      ctx.cleanup()
+    }
+  })
+
+  test("unknown id → not_found; garbage id → invalid_id", async () => {
+    const ctx = fresh()
+    try {
+      const store = createTestEventStore(ctx.dataDir)
+      await store.initialize()
+
+      const result = await importSessionsByIds({
+        store,
+        homeDir: ctx.homeDir,
+        sessionIds: ["00000000-0000-4000-8000-000000000000", "garbage"],
+      })
+      expect(result.results[0]).toMatchObject({ status: "failed", error: "not_found" })
+      expect(result.results[1]).toMatchObject({ status: "failed", error: "invalid_id" })
+    } finally {
+      ctx.cleanup()
+    }
+  })
+
+  test("re-import unchanged → skipped with same chatId", async () => {
+    const ctx = fresh()
+    try {
+      const SESSION_ID = "4f9c2b1e-8a31-4c7d-9b2e-1a2b3c4d5e6f"
+      seedSession(ctx.homeDir, ctx.realProj, SESSION_ID)
+      const store = createTestEventStore(ctx.dataDir)
+      await store.initialize()
+
+      const first = await importSessionsByIds({ store, homeDir: ctx.homeDir, sessionIds: [SESSION_ID] })
+      const again = await importSessionsByIds({ store, homeDir: ctx.homeDir, sessionIds: [SESSION_ID] })
+      expect(again.results[0]).toMatchObject({ status: "skipped", chatId: first.results[0].chatId })
+    } finally {
+      ctx.cleanup()
+    }
+  })
+
+  test("grown file → updated and fires onSessionImported with source path", async () => {
+    const ctx = fresh()
+    try {
+      const SESSION_ID = "4f9c2b1e-8a31-4c7d-9b2e-1a2b3c4d5e6f"
+      const folderName = ctx.realProj.replace(/\//g, "-")
+      const projDir = path.join(ctx.homeDir, ".claude", "projects", folderName)
+      const jsonlPath = path.join(projDir, `${SESSION_ID}.jsonl`)
+      seedSession(ctx.homeDir, ctx.realProj, SESSION_ID)
+      const store = createTestEventStore(ctx.dataDir)
+      await store.initialize()
+
+      await importSessionsByIds({ store, homeDir: ctx.homeDir, sessionIds: [SESSION_ID] })
+
+      const line3 = JSON.stringify({
+        type: "user", uuid: "u2", sessionId: SESSION_ID, cwd: ctx.realProj,
+        timestamp: "2026-04-20T10:00:02.000Z",
+        message: { role: "user", content: "second" },
+      })
+      const existing = readFileSync(jsonlPath, "utf8")
+      writeFileSync(jsonlPath, `${existing}${line3}\n`, "utf8")
+
+      const seen: SessionImportedInfo[] = []
+      const result = await importSessionsByIds({
+        store,
+        homeDir: ctx.homeDir,
+        sessionIds: [SESSION_ID],
+        onSessionImported: (i) => seen.push(i),
+      })
+      expect(result.results[0].status).toBe("updated")
+      expect(seen[0]).toMatchObject({ sessionId: SESSION_ID, sourcePath: jsonlPath })
     } finally {
       ctx.cleanup()
     }

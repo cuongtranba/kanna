@@ -7,14 +7,14 @@
  *   update.check, update.install, update.reload,
  *   project.open, project.create, project.remove, project.setStar,
  *   project.readDiffPatch,
- *   sessions.importClaude,
+ *   sessions.importClaude, sessions.importClaudeSession,
  *   sidebar.reorderProjectGroups
  *
  * Extracted from ws-router.ts.
  */
 import { PROTOCOL_VERSION } from "../shared/types"
 import type { UpdateInstallResult, UpdateSnapshot } from "../shared/types"
-import type { ClientCommand, ServerEnvelope } from "../shared/protocol"
+import type { ClientCommand, ImportSessionsByIdsResult, ServerEnvelope } from "../shared/protocol"
 import type { ImportClaudeSessionsResult } from "./claude-session-importer.adapter"
 
 // ---------------------------------------------------------------------------
@@ -74,6 +74,11 @@ export interface ProjectCommandDeps {
    */
   importClaudeSessionsFn: () => Promise<ImportClaudeSessionsResult>
   /**
+   * Imports specific Claude sessions by id.
+   * Caller pre-binds the store so the function signature is simple.
+   */
+  importSessionsByIdsFn: (sessionIds: string[]) => Promise<ImportSessionsByIdsResult>
+  /**
    * Opens an external application (editor, Finder, browser …).
    * Caller pre-binds any internal deps.
    */
@@ -113,6 +118,7 @@ export async function handleProjectCommand(
     ensureProjectDirectory,
     resolveLocalPath,
     importClaudeSessionsFn,
+    importSessionsByIdsFn,
     openExternalFn,
     terminals,
     send,
@@ -232,6 +238,15 @@ export async function handleProjectCommand(
     // -----------------------------------------------------------------------
     case "sessions.importClaude": {
       const result = await importClaudeSessionsFn()
+      if (result.newProjects > 0) {
+        await refreshDiscovery()
+      }
+      send({ v: PROTOCOL_VERSION, type: "ack", id, result })
+      await broadcastSidebar()
+      return true
+    }
+    case "sessions.importClaudeSession": {
+      const result = await importSessionsByIdsFn(command.sessionIds)
       if (result.newProjects > 0) {
         await refreshDiscovery()
       }

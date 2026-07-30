@@ -27,7 +27,7 @@
 **Interfaces:**
 - Produces: the ADR id `adr-20260730-import-single-claude-session` referenced by later `c3 change apply` (final kanna PR of the project).
 
-- [ ] **Step 1: Set up the c3 handle and read the ADR schema**
+- [x] **Step 1: Set up the c3 handle and read the ADR schema**
 
 ```bash
 c3() { C3X_MODE=agent bash /Users/home/.claude/plugins/cache/c3-skill-marketplace/c3-skill/11.0.0/skills/c3/bin/c3x.sh "$@"; }
@@ -36,15 +36,15 @@ c3 schema adr
 
 Read the REJECT IF block first; author the body to that contract (do not draft freehand).
 
-- [ ] **Step 2: Create the ADR**
+- [x] **Step 2: Create the ADR**
 
 `c3 add adr import-single-claude-session --file body.md` where `body.md` (write it in the scratchpad, not the repo) covers, per the schema's sections: context = this SPEC's §1 (cite `SPEC.md` in `~/Downloads/kanna-session-import/`); decision = D1/D2/D6 from SPEC §3; affected topology = c3-214 (discovery), c3-3 (protocol types), c3-117 (UI, later PR).
 
-- [ ] **Step 3: Author change-unit patches for the c3-214 doc drift**
+- [x] **Step 3: Author change-unit patches for the c3-214 doc drift**
 
 `c3 change new adr-20260730-import-single-claude-session`, then author patches (per `references/change.md` flow) that: (a) fix c3-214's Contract/Change Safety rows citing `src/server/discovery.ts` → `src/server/discovery.adapter.ts`; (b) remove the "Filesystem watch triggers incremental rescan" claim (no watch exists); (c) add codemap bindings for `claude-session-importer.adapter.ts`, `claude-session-scanner.adapter.ts`, `claude-session-parser.adapter.ts`, `claude-session-mapper.ts` to c3-214. Do NOT `change apply` yet — patches land with the final kanna PR.
 
-- [ ] **Step 4: Validate and commit**
+- [x] **Step 4: Validate and commit**
 
 ```bash
 c3 check
@@ -60,7 +60,7 @@ git add .c3 && git commit -m "docs: ADR for single-session import (change-unit o
 **Interfaces:**
 - Produces: `extractSessionId(input: string): string | null` — lowercase UUID or null. Also `extractSessionIds(input: string): string[]` — split on whitespace/commas/newlines, extract each, dedupe, drop nulls. PR B's dialog and Task 4's handler both consume these exact names.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 // src/shared/claude-session-id.test.ts
@@ -88,12 +88,12 @@ describe("extractSessionIds", () => {
 })
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `bun test --conditions production src/shared/claude-session-id.test.ts`
 Expected: FAIL — module not found.
 
-- [ ] **Step 3: Minimal implementation**
+- [x] **Step 3: Minimal implementation**
 
 ```ts
 // src/shared/claude-session-id.ts
@@ -118,9 +118,9 @@ export function extractSessionIds(input: string): string[] {
 }
 ```
 
-- [ ] **Step 4: Run to verify pass** — same command, Expected: PASS.
+- [x] **Step 4: Run to verify pass** — same command, Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/shared/claude-session-id.ts src/shared/claude-session-id.test.ts
@@ -137,7 +137,7 @@ git commit -m "feat(shared): extract Claude session uuids from pasted text"
 - Consumes: nothing new.
 - Produces: `locateClaudeSessionFile(homeDir: string, sessionId: string): string | null` — absolute path of `~/.claude/projects/<any-dir>/<sessionId>.jsonl` or null. Task 4 consumes it.
 
-- [ ] **Step 1: Write the failing test** (append to the existing describe-style; reuse the file's temp-dir setup helpers — the existing two cases show the pattern of building a fake `~/.claude/projects` tree under a tmpdir)
+- [x] **Step 1: Write the failing test** (append to the existing describe-style; reuse the file's temp-dir setup helpers — the existing two cases show the pattern of building a fake `~/.claude/projects` tree under a tmpdir)
 
 ```ts
 test("locateClaudeSessionFile finds the file in any project dir", () => {
@@ -154,9 +154,9 @@ test("locateClaudeSessionFile returns null when absent or projects dir missing",
 })
 ```
 
-- [ ] **Step 2: Run to verify fail** — `bun test --conditions production src/server/claude-session-scanner.test.ts` → FAIL (not exported).
+- [x] **Step 2: Run to verify fail** — `bun test --conditions production src/server/claude-session-scanner.test.ts` → FAIL (not exported).
 
-- [ ] **Step 3: Minimal implementation** (append to the adapter)
+- [x] **Step 3: Minimal implementation** (append to the adapter)
 
 ```ts
 /**
@@ -175,9 +175,9 @@ export function locateClaudeSessionFile(homeDir: string, sessionId: string): str
 }
 ```
 
-- [ ] **Step 4: Run to verify pass** — same command; ALL cases (old + new) PASS.
+- [x] **Step 4: Run to verify pass** — same command; ALL cases (old + new) PASS.
 
-- [ ] **Step 5: Commit** — `git commit -m "feat(server): locate one Claude session transcript by uuid"`
+- [x] **Step 5: Commit** — `git commit -m "feat(server): locate one Claude session transcript by uuid"`
 
 ### Task 4: Extract `importOneSession` (refactor, wall-guarded)
 
@@ -201,9 +201,9 @@ export async function importOneSession(
 ): Promise<ImportOutcome>
 ```
 
-- [ ] **Step 1: Snapshot the wall** — run `bun test --conditions production src/server/claude-session-importer.test.ts`; Expected: PASS (baseline, 10 cases).
+- [x] **Step 1: Snapshot the wall** — run `bun test --conditions production src/server/claude-session-importer.test.ts`; Expected: PASS (baseline, 10 cases).
 
-- [ ] **Step 2: Extract.** Move the loop body of `importClaudeSessions` (current lines ~200–270: existing-chat lookup, `backfillImportedChatTitle`, hash-match skip, `applyDelta` + `setSourceHash`, cwd check, `mapClaudeRecordsToEntries` empty-skip, `openProject`/`createChat`/`setChatProvider`/`renameChat`/append/`setSessionTokenForProvider`/`setSourceHash`) into `importOneSession` returning `ImportOutcome`:
+- [x] **Step 2: Extract.** Move the loop body of `importClaudeSessions` (current lines ~200–270: existing-chat lookup, `backfillImportedChatTitle`, hash-match skip, `applyDelta` + `setSourceHash`, cwd check, `mapClaudeRecordsToEntries` empty-skip, `openProject`/`createChat`/`setChatProvider`/`renameChat`/append/`setSessionTokenForProvider`/`setSourceHash`) into `importOneSession` returning `ImportOutcome`:
   - existing chat + hash match → `titleBackfilled ? {status:"updated",chatId} : {status:"skipped",chatId}`
   - existing chat + hash changed → delta; `appended>0 || titleBackfilled ? updated : skipped` (both carry chatId); always `setSourceHash`
   - store error on existing path → `{status:"failed",reason:"store_error"}` (keep the `console.error`)
@@ -213,9 +213,9 @@ export async function importOneSession(
 
   Rewrite the bulk loop to call it and map: created→`imported+=1` (+`newProjects+=1` when `newProject`); updated→`updated+=1`; skipped→`skipped+=1`; failed→`failed+=1`. Keep `onProgress` calls exactly where they are today (after scan-count increment; after a created outcome).
 
-- [ ] **Step 3: Verify the wall** — rerun the importer suite AND `git diff --stat src/server/claude-session-importer.test.ts` (must be empty). Then full `bun run test`.
+- [x] **Step 3: Verify the wall** — rerun the importer suite AND `git diff --stat src/server/claude-session-importer.test.ts` (must be empty). Then full `bun run test`.
 
-- [ ] **Step 4: Commit** — `git commit -m "refactor(server): extract importOneSession from bulk import loop"`
+- [x] **Step 4: Commit** — `git commit -m "refactor(server): extract importOneSession from bulk import loop"`
 
 ### Task 5: Command + handler + client hook
 
@@ -253,7 +253,7 @@ export interface ImportSessionsByIdsArgs {
 export async function importSessionsByIds(args: ImportSessionsByIdsArgs): Promise<ImportSessionsByIdsResult>
 ```
 
-- [ ] **Step 1: Write the failing tests** (append; reuse the store/tmp-home fixtures already built in this test file — same setup the bulk cases use)
+- [x] **Step 1: Write the failing tests** (append; reuse the store/tmp-home fixtures already built in this test file — same setup the bulk cases use)
 
 ```ts
 describe("importSessionsByIds", () => {
@@ -288,9 +288,9 @@ describe("importSessionsByIds", () => {
 })
 ```
 
-- [ ] **Step 2: Run to verify fail** — importer suite → new block FAILS, old 10 cases PASS.
+- [x] **Step 2: Run to verify fail** — importer suite → new block FAILS, old 10 cases PASS.
 
-- [ ] **Step 3: Implement `importSessionsByIds`**
+- [x] **Step 3: Implement `importSessionsByIds`**
 
 ```ts
 export async function importSessionsByIds(args: ImportSessionsByIdsArgs): Promise<ImportSessionsByIdsResult> {
@@ -322,9 +322,9 @@ export async function importSessionsByIds(args: ImportSessionsByIdsArgs): Promis
 
 (`statSync` is already imported in this adapter; `parseClaudeSessionFile` needs importing from `./claude-session-parser.adapter`.)
 
-- [ ] **Step 4: Run to verify pass** — importer suite fully green.
+- [x] **Step 4: Run to verify pass** — importer suite fully green.
 
-- [ ] **Step 5: Wire protocol + ws-router + client hook** (no new tests; typechecked by lint/build, exercised by PR B/E2E)
+- [x] **Step 5: Wire protocol + ws-router + client hook** (no new tests; typechecked by lint/build, exercised by PR B/E2E)
 
 `protocol.ts`: add the union member next to `sessions.importClaude`.
 
@@ -371,7 +371,7 @@ EOF
 
 ## Self-review checklist (run after writing code, before PR)
 
-- [ ] `git diff` on the four existing test files shows ZERO changes except the appended `describe("importSessionsByIds")` block.
-- [ ] `sessions.importClaude` handler untouched.
-- [ ] Result interfaces live in `src/shared/protocol.ts` (client-importable), adapter re-imports them.
-- [ ] `onSessionImported` fires for created AND updated AND skipped-with-chatId (PR C needs re-paste to re-arm the tail — a `skipped` re-paste still carries chatId; verify the implementation calls it whenever `chatId` is set, as written in Step 3).
+- [x] `git diff` on the four existing test files shows ZERO changes except the appended `describe("importSessionsByIds")` block.
+- [x] `sessions.importClaude` handler untouched.
+- [x] Result interfaces live in `src/shared/protocol.ts` (client-importable), adapter re-imports them.
+- [x] `onSessionImported` fires for created AND updated AND skipped-with-chatId (PR C needs re-paste to re-arm the tail — a `skipped` re-paste still carries chatId; verify the implementation calls it whenever `chatId` is set, as written in Step 3).

@@ -110,6 +110,7 @@ function makeDeps(
       newProjects: options.importResult?.newProjects ?? 0,
       ...options.importResult,
     })),
+    importSessionsByIdsFn: mock(async () => ({ results: [], newProjects: 0 })),
     openExternalFn: options.openExternalFn ?? mock(async () => {}),
     send: (envelope) => { sent.push(envelope) },
     broadcastSidebar: mock(async () => { sidebarBroadcasts++ }),
