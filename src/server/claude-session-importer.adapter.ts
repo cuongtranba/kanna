@@ -184,6 +184,81 @@ async function applyDelta(
   return entries.length
 }
 
+export type ImportOutcome =
+  | { status: "created"; chatId: string; newProject: boolean }
+  | { status: "updated"; chatId: string }
+  | { status: "skipped"; chatId?: string }
+  | { status: "failed"; reason: "cwd_missing" | "store_error" }
+
+export async function importOneSession(
+  store: EventStore,
+  session: ParsedClaudeSession,
+): Promise<ImportOutcome> {
+  // Check if a chat already exists for this sessionId
+  let existingChat: ChatRecord | undefined
+  for (const chat of store.state.chatsById.values()) {
+    if (!chat.deletedAt && chat.sessionTokensByProvider.claude === session.sessionId) {
+      existingChat = chat
+      break
+    }
+  }
+
+  if (existingChat) {
+    try {
+      const titleBackfilled = await backfillImportedChatTitle(store, existingChat, session)
+
+      // Hash match → nothing new to do beyond possible title backfill
+      if (existingChat.sourceHash === session.sourceHash) {
+        return titleBackfilled
+          ? { status: "updated", chatId: existingChat.id }
+          : { status: "skipped", chatId: existingChat.id }
+      }
+
+      // Hash changed → append only new records
+      const appended = await applyDelta(store, existingChat.id, session)
+      const outcome: ImportOutcome = appended > 0 || titleBackfilled
+        ? { status: "updated", chatId: existingChat.id }
+        : { status: "skipped", chatId: existingChat.id }
+      await store.setSourceHash(existingChat.id, session.sourceHash)
+      return outcome
+    } catch (error) {
+      log.error("[kanna/import] failed to update session", session.filePath, String(error))
+      return { status: "failed", reason: "store_error" }
+    }
+  }
+
+  // No existing chat — new import path
+  if (!cwdExists(session.cwd)) {
+    return { status: "failed", reason: "cwd_missing" }
+  }
+
+  const entries = mapClaudeRecordsToEntries(session.records)
+  if (entries.length === 0) {
+    return { status: "skipped" }
+  }
+
+  try {
+    const projectBefore = store.state.projectIdsByPath.get(session.cwd)
+    const project = await store.openProject(session.cwd)
+    const newProject = !projectBefore
+
+    const chat = await store.createChat(project.id)
+    await store.setChatProvider(chat.id, "claude")
+    await store.renameChat(chat.id, deriveTitle(session))
+
+    for (const entry of entries) {
+      await store.appendMessage(chat.id, entry)
+    }
+
+    await store.setSessionTokenForProvider(chat.id, "claude", session.sessionId)
+    await store.setSourceHash(chat.id, session.sourceHash)
+    return { status: "created", chatId: chat.id, newProject }
+  } catch (error) {
+    log.error("[kanna/import] failed to import session", session.filePath, String(error))
+    return { status: "failed", reason: "store_error" }
+  }
+}
+
 export async function importClaudeSessions(
   args: ImportClaudeSessionsArgs,
 ): Promise<ImportClaudeSessionsResult> {
@@ -201,76 +276,22 @@ export async function importClaudeSessions(
     scanned += 1
     if (onProgress) onProgress({ scanned, imported })
 
-    // Check if a chat already exists for this sessionId
-    let existingChat: ChatRecord | undefined
-    for (const chat of store.state.chatsById.values()) {
-      if (!chat.deletedAt && chat.sessionTokensByProvider.claude === session.sessionId) {
-        existingChat = chat
+    const outcome = await importOneSession(store, session)
+    switch (outcome.status) {
+      case "created":
+        imported += 1
+        if (outcome.newProject) newProjects += 1
+        if (onProgress) onProgress({ scanned, imported })
         break
-      }
-    }
-
-    if (existingChat) {
-      try {
-        const titleBackfilled = await backfillImportedChatTitle(store, existingChat, session)
-
-        // Hash match → nothing new to do beyond possible title backfill
-        if (existingChat.sourceHash === session.sourceHash) {
-          if (titleBackfilled) {
-            updated += 1
-          } else {
-            skipped += 1
-          }
-          continue
-        }
-
-        // Hash changed → append only new records
-        const appended = await applyDelta(store, existingChat.id, session)
-        if (appended > 0 || titleBackfilled) {
-          updated += 1
-        } else {
-          skipped += 1
-        }
-        await store.setSourceHash(existingChat.id, session.sourceHash)
-      } catch (error) {
-        log.error("[kanna/import] failed to update session", session.filePath, String(error))
+      case "updated":
+        updated += 1
+        break
+      case "skipped":
+        skipped += 1
+        break
+      case "failed":
         failed += 1
-      }
-      continue
-    }
-
-    // No existing chat — new import path
-    if (!cwdExists(session.cwd)) {
-      failed += 1
-      continue
-    }
-
-    const entries = mapClaudeRecordsToEntries(session.records)
-    if (entries.length === 0) {
-      skipped += 1
-      continue
-    }
-
-    try {
-      const projectBefore = store.state.projectIdsByPath.get(session.cwd)
-      const project = await store.openProject(session.cwd)
-      if (!projectBefore) newProjects += 1
-
-      const chat = await store.createChat(project.id)
-      await store.setChatProvider(chat.id, "claude")
-      await store.renameChat(chat.id, deriveTitle(session))
-
-      for (const entry of entries) {
-        await store.appendMessage(chat.id, entry)
-      }
-
-      await store.setSessionTokenForProvider(chat.id, "claude", session.sessionId)
-      await store.setSourceHash(chat.id, session.sourceHash)
-      imported += 1
-      if (onProgress) onProgress({ scanned, imported })
-    } catch (error) {
-      log.error("[kanna/import] failed to import session", session.filePath, String(error))
-      failed += 1
+        break
     }
   }
 

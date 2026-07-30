@@ -201,9 +201,9 @@ export async function importOneSession(
 ): Promise<ImportOutcome>
 ```
 
-- [ ] **Step 1: Snapshot the wall** — run `bun test --conditions production src/server/claude-session-importer.test.ts`; Expected: PASS (baseline, 10 cases).
+- [x] **Step 1: Snapshot the wall** — run `bun test --conditions production src/server/claude-session-importer.test.ts`; Expected: PASS (baseline, 10 cases).
 
-- [ ] **Step 2: Extract.** Move the loop body of `importClaudeSessions` (current lines ~200–270: existing-chat lookup, `backfillImportedChatTitle`, hash-match skip, `applyDelta` + `setSourceHash`, cwd check, `mapClaudeRecordsToEntries` empty-skip, `openProject`/`createChat`/`setChatProvider`/`renameChat`/append/`setSessionTokenForProvider`/`setSourceHash`) into `importOneSession` returning `ImportOutcome`:
+- [x] **Step 2: Extract.** Move the loop body of `importClaudeSessions` (current lines ~200–270: existing-chat lookup, `backfillImportedChatTitle`, hash-match skip, `applyDelta` + `setSourceHash`, cwd check, `mapClaudeRecordsToEntries` empty-skip, `openProject`/`createChat`/`setChatProvider`/`renameChat`/append/`setSessionTokenForProvider`/`setSourceHash`) into `importOneSession` returning `ImportOutcome`:
   - existing chat + hash match → `titleBackfilled ? {status:"updated",chatId} : {status:"skipped",chatId}`
   - existing chat + hash changed → delta; `appended>0 || titleBackfilled ? updated : skipped` (both carry chatId); always `setSourceHash`
   - store error on existing path → `{status:"failed",reason:"store_error"}` (keep the `console.error`)
@@ -213,9 +213,9 @@ export async function importOneSession(
 
   Rewrite the bulk loop to call it and map: created→`imported+=1` (+`newProjects+=1` when `newProject`); updated→`updated+=1`; skipped→`skipped+=1`; failed→`failed+=1`. Keep `onProgress` calls exactly where they are today (after scan-count increment; after a created outcome).
 
-- [ ] **Step 3: Verify the wall** — rerun the importer suite AND `git diff --stat src/server/claude-session-importer.test.ts` (must be empty). Then full `bun run test`.
+- [x] **Step 3: Verify the wall** — rerun the importer suite AND `git diff --stat src/server/claude-session-importer.test.ts` (must be empty). Then full `bun run test`.
 
-- [ ] **Step 4: Commit** — `git commit -m "refactor(server): extract importOneSession from bulk import loop"`
+- [x] **Step 4: Commit** — `git commit -m "refactor(server): extract importOneSession from bulk import loop"`
 
 ### Task 5: Command + handler + client hook
 
