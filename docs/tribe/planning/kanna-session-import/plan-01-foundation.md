@@ -137,7 +137,7 @@ git commit -m "feat(shared): extract Claude session uuids from pasted text"
 - Consumes: nothing new.
 - Produces: `locateClaudeSessionFile(homeDir: string, sessionId: string): string | null` — absolute path of `~/.claude/projects/<any-dir>/<sessionId>.jsonl` or null. Task 4 consumes it.
 
-- [ ] **Step 1: Write the failing test** (append to the existing describe-style; reuse the file's temp-dir setup helpers — the existing two cases show the pattern of building a fake `~/.claude/projects` tree under a tmpdir)
+- [x] **Step 1: Write the failing test** (append to the existing describe-style; reuse the file's temp-dir setup helpers — the existing two cases show the pattern of building a fake `~/.claude/projects` tree under a tmpdir)
 
 ```ts
 test("locateClaudeSessionFile finds the file in any project dir", () => {
@@ -154,9 +154,9 @@ test("locateClaudeSessionFile returns null when absent or projects dir missing",
 })
 ```
 
-- [ ] **Step 2: Run to verify fail** — `bun test --conditions production src/server/claude-session-scanner.test.ts` → FAIL (not exported).
+- [x] **Step 2: Run to verify fail** — `bun test --conditions production src/server/claude-session-scanner.test.ts` → FAIL (not exported).
 
-- [ ] **Step 3: Minimal implementation** (append to the adapter)
+- [x] **Step 3: Minimal implementation** (append to the adapter)
 
 ```ts
 /**
@@ -175,9 +175,9 @@ export function locateClaudeSessionFile(homeDir: string, sessionId: string): str
 }
 ```
 
-- [ ] **Step 4: Run to verify pass** — same command; ALL cases (old + new) PASS.
+- [x] **Step 4: Run to verify pass** — same command; ALL cases (old + new) PASS.
 
-- [ ] **Step 5: Commit** — `git commit -m "feat(server): locate one Claude session transcript by uuid"`
+- [x] **Step 5: Commit** — `git commit -m "feat(server): locate one Claude session transcript by uuid"`
 
 ### Task 4: Extract `importOneSession` (refactor, wall-guarded)
 
