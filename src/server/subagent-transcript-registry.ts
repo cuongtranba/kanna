@@ -6,6 +6,8 @@ export interface SubagentTranscriptRegistry {
   /** Bind a chat to the `<projectDir>/<claude-uuid>/subagents` dir. */
   register(chatId: string, subagentsDir: string): void
   unregister(chatId: string): void
+  /** Whether a chat currently has a registered subagents dir (live or lazily derived). */
+  has(chatId: string): boolean
   /**
    * Read + parse `subagents/agent-<agentId>.jsonl` into transcript entries.
    * Returns [] for an unknown chat or a missing file. Parses each line with
@@ -32,6 +34,9 @@ export function createSubagentTranscriptRegistry(
     },
     unregister(chatId) {
       dirByChat.delete(chatId)
+    },
+    has(chatId) {
+      return dirByChat.has(chatId)
     },
     getAgentTranscript(chatId, agentId) {
       const dir = dirByChat.get(chatId)
