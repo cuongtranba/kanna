@@ -1,5 +1,12 @@
 import { describe, expect, mock, test } from "bun:test"
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
+import path from "node:path"
 import { createFollowedSessionRegistry, type FollowedSessionRegistryDeps } from "./followed-session-registry"
+import { statSessionFile } from "./followed-session-io.adapter"
+import { importOneSession, importSessionsByIds, type SessionImportedInfo } from "./claude-session-importer.adapter"
+import { parseClaudeSessionFile } from "./claude-session-parser.adapter"
+import { createTestEventStore } from "./storage/test-helpers"
 
 function makeRegistry(over: Partial<FollowedSessionRegistryDeps> = {}) {
   let nowMs = 1_000_000
@@ -69,5 +76,78 @@ describe("FollowedSessionRegistry", () => {
     reg.consider(INFO)
     reg.stop("chat-1", "chat_deleted")
     expect(calls).toEqual([["chat-1"], []])
+  })
+})
+
+describe("FollowedSessionRegistry integration (real fs + importer)", () => {
+  test("consider + tick delta-imports growth into the event store", async () => {
+    const dataDir = mkdtempSync(path.join(tmpdir(), "kanna-data-"))
+    const homeDir = mkdtempSync(path.join(tmpdir(), "kanna-home-"))
+    const realProj = mkdtempSync(path.join(tmpdir(), "kanna-proj-"))
+    try {
+      const sessionId = "8f1c2b3e-9a41-4c7d-9b2e-1a2b3c4d5e6f"
+      const folderName = realProj.replace(/\//g, "-")
+      const projDir = path.join(homeDir, ".claude", "projects", folderName)
+      mkdirSync(projDir, { recursive: true })
+      const jsonlPath = path.join(projDir, `${sessionId}.jsonl`)
+      const line1 = JSON.stringify({
+        type: "user", uuid: "u1", sessionId, cwd: realProj,
+        timestamp: "2026-04-20T10:00:00.000Z",
+        message: { role: "user", content: "hi" },
+      })
+      const line2 = JSON.stringify({
+        type: "assistant", uuid: "a1", sessionId, cwd: realProj,
+        timestamp: "2026-04-20T10:00:01.000Z",
+        message: { role: "assistant", id: "m1", content: [{ type: "text", text: "hello" }] },
+      })
+      writeFileSync(jsonlPath, `${line1}\n${line2}\n`, "utf8")
+
+      const store = createTestEventStore(dataDir)
+      await store.initialize()
+
+      let followedInfo: SessionImportedInfo | null = null
+      const importResult = await importSessionsByIds({
+        store,
+        homeDir,
+        sessionIds: [sessionId],
+        onSessionImported: (info) => { followedInfo = info },
+      })
+      const chatId = importResult.results[0].chatId
+      if (!chatId) throw new Error("expected chatId from import")
+
+      const registry = createFollowedSessionRegistry({
+        statFile: statSessionFile,
+        runDelta: async (deltaChatId, sourcePath) => {
+          const session = parseClaudeSessionFile(sourcePath)
+          if (session) await importOneSession(store, session)
+        },
+        isTurnActive: () => false,
+        now: () => Date.now(),
+        onChange: () => {},
+        activeWindowMs: 600_000,
+        idleMs: 600_000,
+      })
+      if (!followedInfo) throw new Error("expected onSessionImported to fire")
+      registry.consider(followedInfo)
+      expect(registry.isFollowing(chatId)).toBe(true)
+
+      const line3 = JSON.stringify({
+        type: "user", uuid: "u2", sessionId, cwd: realProj,
+        timestamp: "2026-04-20T10:00:02.000Z",
+        message: { role: "user", content: "second" },
+      })
+      const existing = `${line1}\n${line2}\n`
+      writeFileSync(jsonlPath, `${existing}${line3}\n`, "utf8")
+
+      const before = store.getMessages(chatId).length
+      await registry.tick()
+      const after = store.getMessages(chatId)
+      expect(after.length).toBeGreaterThan(before)
+      expect(after.some((entry) => entry.kind === "user_prompt" && entry.content === "second")).toBe(true)
+    } finally {
+      rmSync(dataDir, { recursive: true, force: true })
+      rmSync(homeDir, { recursive: true, force: true })
+      rmSync(realProj, { recursive: true, force: true })
+    }
   })
 })

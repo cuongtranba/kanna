@@ -53,6 +53,10 @@ import { createWorkflowRegistry } from "./workflow-registry"
 import { LocalCatalogService } from "./local-catalog"
 import { scanLocalCatalog } from "./local-catalog-io.adapter"
 import { createSubagentTranscriptRegistry } from "./subagent-transcript-registry"
+import { createFollowedSessionRegistry } from "./followed-session-registry"
+import { statSessionFile } from "./followed-session-io.adapter"
+import { importOneSession } from "./claude-session-importer.adapter"
+import { parseClaudeSessionFile } from "./claude-session-parser.adapter"
 import { listWorkflowRunDirs, readWorkflowDir, readWorkflowRunJournal, watchWorkflowDir, watchWorkflowRunDirs } from "./workflow-watch-io.adapter"
 import { readWorkflowAgentTranscriptLines } from "./workflow-agent-transcript-io.adapter"
 import { SnapshotStore } from "./session-share/snapshot-store.adapter"
@@ -128,6 +132,9 @@ export function buildAgentAppSettingsView(snapshot: AppSettingsSnapshot): AgentA
 
 const MAX_UPLOAD_FILES = 50
 const STALE_EMPTY_CHAT_PRUNE_INTERVAL_MS = 60 * 1000
+const IMPORT_FOLLOW_POLL_MS = 2000
+const IMPORT_FOLLOW_ACTIVE_WINDOW_MS = 600_000
+const IMPORT_FOLLOW_IDLE_MS = 600_000
 const MULTIPART_OVERHEAD_BYTES = 16 * 1024 * 1024
 const MAX_REQUEST_BODY_BYTES = UPLOAD_MAX_FILE_SIZE_MB_MAX * 1024 * 1024 + MULTIPART_OVERHEAD_BYTES
 
@@ -490,6 +497,23 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     log.warn(`${LOG_PREFIX} orchestration recoverOnStartup failed`, { err: String(err) })
   })
 
+  const followedSessionRegistry = createFollowedSessionRegistry({
+    statFile: statSessionFile,
+    runDelta: async (_chatId, sourcePath) => {
+      const session = parseClaudeSessionFile(sourcePath)
+      if (session) await importOneSession(store, session)
+    },
+    isTurnActive: (chatId) => agent.hasActiveTurn(chatId),
+    now: Date.now,
+    // Wired to the real broadcast once the router exists (below).
+    onChange: () => {},
+    activeWindowMs: parsePositiveIntEnv(
+      process.env.KANNA_IMPORT_FOLLOW_ACTIVE_WINDOW_MS,
+      IMPORT_FOLLOW_ACTIVE_WINDOW_MS,
+    ),
+    idleMs: parsePositiveIntEnv(process.env.KANNA_IMPORT_FOLLOW_IDLE_MS, IMPORT_FOLLOW_IDLE_MS),
+  })
+
   router = createWsRouter({
     store,
     diffStore,
@@ -513,6 +537,7 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     ptyInstances: ptyInstanceRegistry,
     workflowRegistry,
     subagentTranscriptRegistry,
+    followedSessionRegistry,
     killPtyInstance: async (chatId: string) => {
       try {
         await agent.killPtyInstance(chatId)
@@ -540,6 +565,10 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     void router.pruneStaleEmptyChats()
       .then(() => router.broadcastSnapshots())
   }, STALE_EMPTY_CHAT_PRUNE_INTERVAL_MS)
+  const followedSessionTickInterval = setInterval(
+    () => { void followedSessionRegistry.tick() },
+    parsePositiveIntEnv(process.env.KANNA_IMPORT_FOLLOW_POLL_MS, IMPORT_FOLLOW_POLL_MS),
+  )
 
   const distDir = options.distDir ?? path.join(import.meta.dir, "..", "..", "dist", "client")
 
@@ -691,6 +720,7 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     tunnelGateway.shutdown()
     snapshotSweepHandle.stop()
     clearInterval(staleEmptyChatPruneInterval)
+    clearInterval(followedSessionTickInterval)
     for (const chatId of [...agent.activeTurns.keys()]) {
       await agent.cancel(chatId)
     }

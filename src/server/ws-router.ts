@@ -30,6 +30,7 @@ import type { SessionShareService } from "./session-share"
 import type { PtyInstanceRegistry } from "./claude-pty/pty-instance-registry"
 import type { WorkflowRegistry } from "./workflow-registry"
 import type { SubagentTranscriptRegistry } from "./subagent-transcript-registry"
+import type { FollowedSessionRegistry } from "./followed-session-registry"
 import { buildFallbackDiffStore, buildFallbackLlmProvider, buildResolvedAppSettings } from "./ws-router-defaults"
 import { handleSettingsCommand } from "./ws-router-settings"
 import { handleDiffCommand } from "./ws-router-diff"
@@ -95,6 +96,7 @@ interface CreateWsRouterArgs {
   killPtyInstance?: (chatId: string) => Promise<{ ok: boolean; error?: string }>
   workflowRegistry?: WorkflowRegistry
   subagentTranscriptRegistry?: SubagentTranscriptRegistry
+  followedSessionRegistry?: FollowedSessionRegistry
   sessionShare?: SessionShareService
 }
 
@@ -118,6 +120,7 @@ export function createWsRouter({
   killPtyInstance,
   workflowRegistry,
   subagentTranscriptRegistry,
+  followedSessionRegistry,
   sessionShare,
 }: CreateWsRouterArgs) {
   const resolvedDiffStore = diffStore ?? buildFallbackDiffStore()
@@ -218,6 +221,7 @@ export function createWsRouter({
               broadcastChatAndSidebar: (chatId) => broadcast.broadcastChatAndSidebar(chatId),
               broadcastSidebar: () => broadcast.broadcastFilteredSnapshots({ includeSidebar: true }),
               broadcastAll: () => broadcast.broadcastSnapshots(),
+              followedSessionRegistry,
             },
             command,
             id,
@@ -258,6 +262,7 @@ export function createWsRouter({
               broadcastChatAndSidebar: (chatId) => broadcast.broadcastChatAndSidebar(chatId),
               broadcastSidebar: () => broadcast.broadcastFilteredSnapshots({ includeSidebar: true }),
               broadcastAll: () => broadcast.broadcastSnapshots(),
+              followedSessionRegistry,
             },
             command,
             id,
@@ -309,6 +314,7 @@ export function createWsRouter({
               broadcastChatAndSidebar: (chatId) => broadcast.broadcastChatAndSidebar(chatId),
               broadcastSidebar: () => broadcast.broadcastFilteredSnapshots({ includeSidebar: true }),
               broadcastAll: () => broadcast.broadcastSnapshots(),
+              followedSessionRegistry,
             },
             command,
             id,
@@ -444,7 +450,11 @@ export function createWsRouter({
               ensureProjectDirectory,
               resolveLocalPath,
               importClaudeSessionsFn: () => importClaudeSessions({ store }),
-              importSessionsByIdsFn: (sessionIds) => importSessionsByIds({ store, sessionIds }),
+              importSessionsByIdsFn: (sessionIds) => importSessionsByIds({
+                store,
+                sessionIds,
+                onSessionImported: (info) => followedSessionRegistry?.consider(info),
+              }),
               openExternalFn: openExternal,
               terminals,
               send: (envelope) => send(ws, envelope),
