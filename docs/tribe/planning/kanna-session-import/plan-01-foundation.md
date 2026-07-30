@@ -60,7 +60,7 @@ git add .c3 && git commit -m "docs: ADR for single-session import (change-unit o
 **Interfaces:**
 - Produces: `extractSessionId(input: string): string | null` — lowercase UUID or null. Also `extractSessionIds(input: string): string[]` — split on whitespace/commas/newlines, extract each, dedupe, drop nulls. PR B's dialog and Task 4's handler both consume these exact names.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 // src/shared/claude-session-id.test.ts
@@ -88,12 +88,12 @@ describe("extractSessionIds", () => {
 })
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `bun test --conditions production src/shared/claude-session-id.test.ts`
 Expected: FAIL — module not found.
 
-- [ ] **Step 3: Minimal implementation**
+- [x] **Step 3: Minimal implementation**
 
 ```ts
 // src/shared/claude-session-id.ts
@@ -118,9 +118,9 @@ export function extractSessionIds(input: string): string[] {
 }
 ```
 
-- [ ] **Step 4: Run to verify pass** — same command, Expected: PASS.
+- [x] **Step 4: Run to verify pass** — same command, Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/shared/claude-session-id.ts src/shared/claude-session-id.test.ts
