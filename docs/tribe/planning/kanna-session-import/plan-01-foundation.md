@@ -27,7 +27,7 @@
 **Interfaces:**
 - Produces: the ADR id `adr-20260730-import-single-claude-session` referenced by later `c3 change apply` (final kanna PR of the project).
 
-- [ ] **Step 1: Set up the c3 handle and read the ADR schema**
+- [x] **Step 1: Set up the c3 handle and read the ADR schema**
 
 ```bash
 c3() { C3X_MODE=agent bash /Users/home/.claude/plugins/cache/c3-skill-marketplace/c3-skill/11.0.0/skills/c3/bin/c3x.sh "$@"; }
@@ -36,15 +36,15 @@ c3 schema adr
 
 Read the REJECT IF block first; author the body to that contract (do not draft freehand).
 
-- [ ] **Step 2: Create the ADR**
+- [x] **Step 2: Create the ADR**
 
 `c3 add adr import-single-claude-session --file body.md` where `body.md` (write it in the scratchpad, not the repo) covers, per the schema's sections: context = this SPEC's §1 (cite `SPEC.md` in `~/Downloads/kanna-session-import/`); decision = D1/D2/D6 from SPEC §3; affected topology = c3-214 (discovery), c3-3 (protocol types), c3-117 (UI, later PR).
 
-- [ ] **Step 3: Author change-unit patches for the c3-214 doc drift**
+- [x] **Step 3: Author change-unit patches for the c3-214 doc drift**
 
 `c3 change new adr-20260730-import-single-claude-session`, then author patches (per `references/change.md` flow) that: (a) fix c3-214's Contract/Change Safety rows citing `src/server/discovery.ts` → `src/server/discovery.adapter.ts`; (b) remove the "Filesystem watch triggers incremental rescan" claim (no watch exists); (c) add codemap bindings for `claude-session-importer.adapter.ts`, `claude-session-scanner.adapter.ts`, `claude-session-parser.adapter.ts`, `claude-session-mapper.ts` to c3-214. Do NOT `change apply` yet — patches land with the final kanna PR.
 
-- [ ] **Step 4: Validate and commit**
+- [x] **Step 4: Validate and commit**
 
 ```bash
 c3 check
