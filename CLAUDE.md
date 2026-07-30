@@ -1090,6 +1090,23 @@ subagent files). See `adr-20260603-workflow-disk-watch-read-model`.
 
 Out of scope: global cross-chat view, stop/relaunch.
 
+# Single-Session Import Live-Tail (KANNA_IMPORT_FOLLOW_*)
+
+`FollowedSessionRegistry` (`src/server/followed-session-registry.ts`) stat-polls
+a single-session import's source Claude transcript file and re-imports the
+delta as the source grows, so an imported chat that is still actively being
+written to by Claude Code keeps catching up. Three env vars tune it, all
+consumed in `src/server/server.ts`:
+
+- `KANNA_IMPORT_FOLLOW_POLL_MS` — stat-poll tick interval driving
+  `followedSessionRegistry.tick()`. Default `2000`.
+- `KANNA_IMPORT_FOLLOW_ACTIVE_WINDOW_MS` — a single-session import only
+  auto-arms tailing when the source file's mtime is within this window of
+  "now" (otherwise the source is treated as already finished). Default
+  `600000`.
+- `KANNA_IMPORT_FOLLOW_IDLE_MS` — the registry stops following a session
+  after this long with no file growth. Default `600000`.
+
 # Tests
 
 `bun run test` MUST pass locally before any push or PR. CI (`.github/workflows/test.yml`)

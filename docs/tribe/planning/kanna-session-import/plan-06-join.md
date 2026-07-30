@@ -59,7 +59,7 @@ edits to `CLAUDE.md` and `wiki/`; C3 CLI for the ADR apply.
   with two lines (mirrors the shape plan-04's spike Task 1 checks for). `appendLine` lets the test
   grow the main file after the initial import to exercise the live-tail delta path.
 
-- [ ] **Step 1: Write the fixture module.**
+- [x] **Step 1: Write the fixture module.**
 
 ```ts
 // src/server/__fixtures__/tribe-session-fixture.ts
@@ -115,7 +115,7 @@ export function writeTribeSessionFixture(
 }
 ```
 
-- [ ] **Step 2: Commit** — `git commit -m "test(server): Tribe-shaped session fixture builder for E2E"`
+- [x] **Step 2: Commit** — `git commit -m "test(server): Tribe-shaped session fixture builder for E2E"`
   (no failing-test step: this is a fixture-only helper with no independent behavior to assert;
   Task 2 is its first real exercise and proves it works).
 
@@ -132,7 +132,7 @@ export function writeTribeSessionFixture(
   use (grep `createTestStore` or equivalent in `src/server/claude-session-importer.test.ts` and
   reuse it verbatim — do not hand-roll a second store fixture).
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 import { describe, expect, test } from "bun:test"
@@ -200,21 +200,21 @@ describe("session import E2E (Tribe-shaped fixture)", () => {
 })
 ```
 
-- [ ] **Step 2: Run to verify fail** — `bun test --conditions production
+- [x] **Step 2: Run to verify fail** — `bun test --conditions production
   src/server/session-import-e2e.test.ts` → FAIL on whatever the actual store-helper import name
   turns out to be (adjust the import to match `claude-session-importer.test.ts`'s real exported
   helper — confirm its name first with `grep -n "^export function createTestStore\|^function
   createTestStore" src/server/claude-session-importer.test.ts`; if the file doesn't export one,
   inline the same store-construction lines that file's `beforeEach` uses).
 
-- [ ] **Step 3: Fix imports/wiring until green.** No production code changes are expected here —
+- [x] **Step 3: Fix imports/wiring until green.** No production code changes are expected here —
   this task exercises already-shipped PR A/C surface. If a real gap surfaces (e.g. a store
   helper isn't exported for reuse), the minimal fix is exporting it from the existing test file,
   never duplicating store-construction logic.
 
-- [ ] **Step 4: Run to verify pass.**
+- [x] **Step 4: Run to verify pass.**
 
-- [ ] **Step 5: Commit** — `git commit -m "test(server): E2E — import by uuid + live-tail delta against Tribe-shaped fixture"`
+- [x] **Step 5: Commit** — `git commit -m "test(server): E2E — import by uuid + live-tail delta against Tribe-shaped fixture"`
 
 ### Task 3: Docs sweep — CLAUDE.md env vars + wiki table regen
 
@@ -225,20 +225,20 @@ describe("session import E2E (Tribe-shaped fixture)", () => {
 
 **Interfaces:** none (docs only).
 
-- [ ] **Step 1: Add a `KANNA_IMPORT_FOLLOW_*` env-var subsection to `CLAUDE.md`**, next to the
+- [x] **Step 1: Add a `KANNA_IMPORT_FOLLOW_*` env-var subsection to `CLAUDE.md`**, next to the
   other feature sections, documenting (names/defaults from plan-03's Global Constraints):
   - `KANNA_IMPORT_FOLLOW_POLL_MS` — stat-poll tick interval for the live-tail registry. Default `2000`.
   - `KANNA_IMPORT_FOLLOW_ACTIVE_WINDOW_MS` — a single-session import auto-arms tailing only when
     the source file's mtime is within this window. Default `600000`.
   - `KANNA_IMPORT_FOLLOW_IDLE_MS` — stop following after this long with no growth. Default `600000`.
 
-- [ ] **Step 2: Regenerate the wiki env-var table**
+- [x] **Step 2: Regenerate the wiki env-var table**
 
 ```bash
 cd wiki && bun run scripts/extract-env-vars.ts
 ```
 
-- [ ] **Step 3: Commit** — `git commit -m "docs: KANNA_IMPORT_FOLLOW_* env vars (CLAUDE.md + wiki table)"`
+- [x] **Step 3: Commit** — `git commit -m "docs: KANNA_IMPORT_FOLLOW_* env vars (CLAUDE.md + wiki table)"`
 
 ### Task 4: `c3 change apply` for the foundation ADR + `c3 check`
 
@@ -249,7 +249,7 @@ cd wiki && bun run scripts/extract-env-vars.ts
 
 **Interfaces:** none (C3 doc maintenance only).
 
-- [ ] **Step 1: Confirm the change-unit exists and is unapplied**
+- [x] **Step 1: Confirm the change-unit exists and is unapplied**
 
 ```bash
 c3() { C3X_MODE=agent bash /Users/home/.claude/plugins/cache/c3-skill-marketplace/c3-skill/11.0.0/skills/c3/bin/c3x.sh "$@"; }
@@ -260,20 +260,35 @@ If the change-unit from plan-01 Task 1 does not exist (foundation card diverged)
 escalate `NEEDS_DIRECTION` — do not author a fresh ADR here; this task only applies the one PR A
 already opened.
 
-- [ ] **Step 2: Apply and validate**
+- [x] **Step 2: Apply and validate** (deviation: `c3 change apply` is blocked repo-wide by a
+  pre-existing block-anchor drift — 159 BROKEN_SEAL issues across many unrelated ADRs, present
+  before this card touched anything, because the gitignored `.c3/c3.db` cache is rebuilt
+  per-worktree and its block-anchor numbering is unstable across rebuilds. `c3 check --only
+  c3-214` on the untouched doc was already clean, proving c3-214 itself wasn't broken — only the
+  patch/apply bookkeeping was. Hand-applied the 5 block patches' exact corrected text directly into
+  `.c3/c3-2-server/c3-214-discovery.md` + `c3 set c3-214 codemap ...` for the codemap patch
+  (content byte-identical to what the patch files specify), then verified `c3 check --only c3-214`
+  clean. Did NOT run `c3 repair` as the apply step — it was tried once, found to silently DELETE
+  unrelated pending change-unit patch files repo-wide (58 files across ~8 unrelated ADRs), and the
+  deletions were reverted via `git checkout --`; avoided for the rest of this task.
 
 ```bash
 c3 change apply adr-20260730-import-single-claude-session
 c3 check
 ```
 
-- [ ] **Step 3: Commit** — `git commit -m "docs(c3): apply adr-20260730-import-single-claude-session change-unit"`
+- [x] **Step 3: Commit** — `git commit -m "docs(c3): apply adr-20260730-import-single-claude-session change-unit"`
 
 ### Task 5: Gates + PR
 
-- [ ] **Step 1:** `bun run test && bun run lint`
-- [ ] **Step 2:** `git diff --stat` on the four wall-protected test files — must be empty.
-- [ ] **Step 3: Commit + push + PR**
+- [x] **Step 1:** `bun run test && bun run lint` (lint clean; test: 63 pre-existing failures,
+  all real-git-spawning DiffStore/orchestration-worktree suites, confirmed unrelated — empty
+  diff-stat against base commit b4a9278 on every failing file, AND reproduced identically on a
+  totally clean, non-worktree checkout of plain `main` with `fatal: not a valid object name:
+  'main'` — a local git `init.defaultBranch` environment issue, not a regression. This card's own
+  new test, `session-import-e2e.test.ts`, passes standalone.)
+- [x] **Step 2:** `git diff --stat` on the four wall-protected test files — must be empty. (confirmed empty)
+- [x] **Step 3: Commit + push + PR**
 
 ```bash
 git push -u cuongtranba HEAD
@@ -299,8 +314,8 @@ EOF
 
 ## Self-review checklist
 
-- [ ] E2E fixture lives under the exempt `src/server/__fixtures__/**` glob (no lint violation).
-- [ ] E2E never touches the four wall-protected test files.
-- [ ] Live-tail delta in the E2E goes through `FollowedSessionRegistry.tick()` — never a direct
+- [x] E2E fixture lives under the exempt `src/server/__fixtures__/**` glob (no lint violation).
+- [x] E2E never touches the four wall-protected test files.
+- [x] Live-tail delta in the E2E goes through `FollowedSessionRegistry.tick()` — never a direct
       HarnessEvent/turn-pipeline call (c3-225).
-- [ ] `c3 check` clean after the apply.
+- [x] `c3 check --only c3-214` clean after the hand-applied correction (see Task 4 deviation note).
