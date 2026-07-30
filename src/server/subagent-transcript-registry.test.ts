@@ -46,6 +46,15 @@ describe("subagent-transcript-registry", () => {
     expect(reg.getAgentTranscript("chat-1", "abc")).toEqual([])
   })
 
+  test("has() reflects register/unregister", () => {
+    const reg = createSubagentTranscriptRegistry({ readAgentTranscriptLines: () => SIDECHAIN_LINES })
+    expect(reg.has("chat-1")).toBe(false)
+    reg.register("chat-1", "/sub")
+    expect(reg.has("chat-1")).toBe(true)
+    reg.unregister("chat-1")
+    expect(reg.has("chat-1")).toBe(false)
+  })
+
   test("skips blank / unparseable lines without throwing", () => {
     const reg = createSubagentTranscriptRegistry({
       readAgentTranscriptLines: () => ["{not json", "", SIDECHAIN_LINES[0]],

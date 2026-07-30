@@ -14,6 +14,8 @@ import type { ClientCommand, ServerEnvelope } from "../shared/protocol"
 import type { OrchRunInput, OrchRunDetail } from "../shared/orchestration-types"
 import type { WorkflowRegistry } from "./workflow-registry"
 import type { SubagentTranscriptRegistry } from "./subagent-transcript-registry"
+import type { EventStore } from "./event-store"
+import { deriveImportedSubagentsDir } from "./imported-subagents-dir"
 
 // ---------------------------------------------------------------------------
 // Dep interface (duck-typed; avoids circular imports with ws-router.ts)
@@ -35,9 +37,32 @@ export interface OrchCommandDeps {
   /** Optional workflow registry (may be absent if not configured). */
   workflowRegistry: Pick<WorkflowRegistry, "getRun" | "getAgentTranscript"> | undefined
   /** Optional subagent transcript registry. */
-  subagentTranscriptRegistry: Pick<SubagentTranscriptRegistry, "getAgentTranscript"> | undefined
+  subagentTranscriptRegistry: Pick<SubagentTranscriptRegistry, "has" | "register" | "getAgentTranscript"> | undefined
+  /** Chat/project lookup, used to lazily derive the subagents dir for imported chats. */
+  store: Pick<EventStore, "getChat" | "getProject">
   /** Pre-bound to the current WebSocket; called to send an ack envelope. */
   send: (envelope: ServerEnvelope) => void
+}
+
+/**
+ * For an imported chat with no live-driver registration yet, lazily derive
+ * and register its `subagents/` dir so `subagents.getRun` can serve
+ * drill-in reads. A no-op when already registered (live registrations,
+ * driver-owned, always win) or when the chat/project/session-token lookup
+ * comes up short.
+ */
+function ensureSubagentDirRegistered(
+  registry: Pick<SubagentTranscriptRegistry, "has" | "register">,
+  store: Pick<EventStore, "getChat" | "getProject">,
+  chatId: string,
+): void {
+  if (registry.has(chatId)) return
+  const chat = store.getChat(chatId)
+  const token = chat?.sessionTokensByProvider.claude
+  if (!chat || !token) return
+  const project = store.getProject(chat.projectId)
+  if (!project) return
+  registry.register(chatId, deriveImportedSubagentsDir({ cwd: project.localPath, claudeSessionToken: token }))
 }
 
 // ---------------------------------------------------------------------------
@@ -55,7 +80,7 @@ export async function handleOrchCommand(
   command: ClientCommand,
   id: string,
 ): Promise<boolean> {
-  const { agent, workflowRegistry, subagentTranscriptRegistry, send } = deps
+  const { agent, workflowRegistry, subagentTranscriptRegistry, store, send } = deps
 
   switch (command.type) {
     case "workflows.getRun": {
@@ -69,6 +94,7 @@ export async function handleOrchCommand(
       return true
     }
     case "subagents.getRun": {
+      if (subagentTranscriptRegistry) ensureSubagentDirRegistered(subagentTranscriptRegistry, store, command.chatId)
       const entries = subagentTranscriptRegistry?.getAgentTranscript(command.chatId, command.agentId) ?? []
       send({ v: PROTOCOL_VERSION, type: "ack", id, result: entries })
       return true

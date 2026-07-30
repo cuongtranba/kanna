@@ -19,6 +19,14 @@ export interface ClaudeSessionUserRecord extends ClaudeSessionRecordBase {
       | { type: "tool_result"; tool_use_id: string; content?: string | Array<Record<string, unknown>>; is_error?: boolean }
     >
   }
+  /**
+   * Sidecar claude-code writes as a SIBLING of `message` (not nested inside
+   * it) on the tool_result record for the native `Agent`/`Task` tool — carries
+   * `agentId`/`agentType`/`status`/token+duration stats. Consumed via
+   * ToolResultEntry.debugRaw by src/client/lib/parseTranscript.ts's
+   * getSubagentTaskResultFromDebug, which powers subagent drill-in.
+   */
+  toolUseResult?: Record<string, unknown>
 }
 
 export interface ClaudeSessionAssistantRecord extends ClaudeSessionRecordBase {

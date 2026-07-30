@@ -421,6 +421,7 @@ export function createWsRouter({
               agent,
               workflowRegistry,
               subagentTranscriptRegistry,
+              store,
               send: (envelope) => send(ws, envelope),
             },
             command,

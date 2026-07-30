@@ -76,6 +76,29 @@ describe("mapClaudeRecordsToEntries", () => {
     }
   })
 
+  test("user tool_result carrying a sibling toolUseResult (Task/Agent tool) → entry.debugRaw round-trips agentId", () => {
+    const records: ClaudeSessionRecord[] = [
+      {
+        type: "user",
+        uuid: "u2",
+        timestamp: baseTs,
+        message: {
+          role: "user",
+          content: [{ type: "tool_result", tool_use_id: "tu-1", content: "done" }],
+        },
+        toolUseResult: { agentId: "agent-abc123", agentType: "Hunter", status: "completed" },
+      },
+    ]
+    const entries = mapClaudeRecordsToEntries(records)
+    expect(entries.length).toBe(1)
+    expect(entries[0].kind).toBe("tool_result")
+    if (entries[0].kind === "tool_result") {
+      expect(entries[0].debugRaw).toBeDefined()
+      const parsed = JSON.parse(entries[0].debugRaw ?? "{}")
+      expect(parsed.toolUseResult.agentId).toBe("agent-abc123")
+    }
+  })
+
   test("skips summary and system records", () => {
     const records: ClaudeSessionRecord[] = [
       { type: "summary", summary: "x" },

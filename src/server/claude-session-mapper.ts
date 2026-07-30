@@ -48,6 +48,11 @@ function mapUserRecord(record: ClaudeSessionUserRecord): TranscriptEntry[] {
         toolId: block.tool_use_id,
         content: typeof block.content === "string" ? block.content : block.content ?? null,
         isError: block.is_error === true,
+        // Mirror the live path (claude-message-normalizer.ts): stash the
+        // whole raw record so the client can recover the `toolUseResult`
+        // sidecar (agentId etc.) the native Agent/Task tool writes as a
+        // sibling of `message`, not nested inside the tool_result block.
+        debugRaw: record.toolUseResult ? JSON.stringify(record) : undefined,
       }
       entries.push(resultEntry)
     }
