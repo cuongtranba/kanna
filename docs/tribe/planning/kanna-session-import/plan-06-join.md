@@ -132,7 +132,7 @@ export function writeTribeSessionFixture(
   use (grep `createTestStore` or equivalent in `src/server/claude-session-importer.test.ts` and
   reuse it verbatim — do not hand-roll a second store fixture).
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 import { describe, expect, test } from "bun:test"
@@ -200,21 +200,21 @@ describe("session import E2E (Tribe-shaped fixture)", () => {
 })
 ```
 
-- [ ] **Step 2: Run to verify fail** — `bun test --conditions production
+- [x] **Step 2: Run to verify fail** — `bun test --conditions production
   src/server/session-import-e2e.test.ts` → FAIL on whatever the actual store-helper import name
   turns out to be (adjust the import to match `claude-session-importer.test.ts`'s real exported
   helper — confirm its name first with `grep -n "^export function createTestStore\|^function
   createTestStore" src/server/claude-session-importer.test.ts`; if the file doesn't export one,
   inline the same store-construction lines that file's `beforeEach` uses).
 
-- [ ] **Step 3: Fix imports/wiring until green.** No production code changes are expected here —
+- [x] **Step 3: Fix imports/wiring until green.** No production code changes are expected here —
   this task exercises already-shipped PR A/C surface. If a real gap surfaces (e.g. a store
   helper isn't exported for reuse), the minimal fix is exporting it from the existing test file,
   never duplicating store-construction logic.
 
-- [ ] **Step 4: Run to verify pass.**
+- [x] **Step 4: Run to verify pass.**
 
-- [ ] **Step 5: Commit** — `git commit -m "test(server): E2E — import by uuid + live-tail delta against Tribe-shaped fixture"`
+- [x] **Step 5: Commit** — `git commit -m "test(server): E2E — import by uuid + live-tail delta against Tribe-shaped fixture"`
 
 ### Task 3: Docs sweep — CLAUDE.md env vars + wiki table regen
 
