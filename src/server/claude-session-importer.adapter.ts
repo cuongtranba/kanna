@@ -4,7 +4,10 @@ import type { EventStore } from "./event-store"
 import type { ChatRecord } from "./events"
 import { mapClaudeRecordsToEntries } from "./claude-session-mapper"
 import { log } from "../shared/log"
-import { scanClaudeSessions } from "./claude-session-scanner.adapter"
+import { scanClaudeSessions, locateClaudeSessionFile } from "./claude-session-scanner.adapter"
+import { parseClaudeSessionFile } from "./claude-session-parser.adapter"
+import { extractSessionId } from "../shared/claude-session-id"
+import type { ImportSessionsByIdsResult, SingleImportResultRow } from "../shared/protocol"
 import type { AnyValue } from "../shared/errors"
 import { isRecord } from "../shared/errors"
 import type {
@@ -296,4 +299,58 @@ export async function importClaudeSessions(
   }
 
   return { imported, updated, skipped, failed, newProjects }
+}
+
+export interface SessionImportedInfo {
+  chatId: string
+  sessionId: string
+  sourcePath: string
+  sourceMtimeMs: number
+}
+
+export interface ImportSessionsByIdsArgs {
+  store: EventStore
+  sessionIds: string[]
+  homeDir?: string
+  onSessionImported?: (info: SessionImportedInfo) => void
+}
+
+export async function importSessionsByIds(args: ImportSessionsByIdsArgs): Promise<ImportSessionsByIdsResult> {
+  const { store, sessionIds, homeDir = homedir(), onSessionImported } = args
+  const results: SingleImportResultRow[] = []
+  let newProjects = 0
+  for (const raw of sessionIds) {
+    const sessionId = extractSessionId(raw)
+    if (!sessionId) {
+      results.push({ sessionId: raw, status: "failed", error: "invalid_id" })
+      continue
+    }
+    const filePath = locateClaudeSessionFile(homeDir, sessionId)
+    if (!filePath) {
+      results.push({ sessionId, status: "failed", error: "not_found" })
+      continue
+    }
+    const session = parseClaudeSessionFile(filePath)
+    if (!session) {
+      results.push({ sessionId, status: "failed", error: "parse_failed" })
+      continue
+    }
+    const outcome = await importOneSession(store, session)
+    if (outcome.status === "failed") {
+      results.push({ sessionId, status: "failed", error: outcome.reason })
+      continue
+    }
+    if (outcome.status === "created" && outcome.newProject) newProjects += 1
+    const chatId = outcome.chatId
+    const title = chatId ? store.state.chatsById.get(chatId)?.title : undefined
+    results.push({ sessionId, status: outcome.status, chatId, title })
+    if (chatId && onSessionImported) {
+      try {
+        onSessionImported({ chatId, sessionId, sourcePath: filePath, sourceMtimeMs: statSync(filePath).mtimeMs })
+      } catch {
+        // seam must never fail the import
+      }
+    }
+  }
+  return { results, newProjects }
 }

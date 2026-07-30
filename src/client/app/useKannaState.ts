@@ -20,7 +20,7 @@ import { processTranscriptMessages } from "../lib/parseTranscript"
 import { generateUUID } from "../lib/utils"
 import { canCancelStatus, getLatestToolIds, isProcessingStatus } from "./derived"
 import { KannaSocket, type SocketStatus } from "./socket"
-import type { EditorOpenSettings, OpenExternalAction, PtyInstancesEvent } from "../../shared/protocol"
+import type { EditorOpenSettings, ImportSessionsByIdsResult, OpenExternalAction, PtyInstancesEvent } from "../../shared/protocol"
 import type { PtyInstancesSnapshot } from "../../shared/pty-instance"
 import type { ChatPermissionPolicyOverride, ToolRequestDecision } from "../../shared/permission-policy"
 import { usePtyInstancesStore } from "../stores/ptyInstancesStore"
@@ -871,6 +871,7 @@ export interface KannaState {
   handleCreateStackChat: (primaryProjectId: string, stackId: string, stackBindings: Array<{ projectId: string; worktreePath: string; role: "primary" | "additional" }>) => Promise<void>
   handleListStackWorktrees: (projectId: string) => Promise<GitWorktree[]>
   importClaudeSessions: () => Promise<{ imported: number; updated: number; skipped: number; failed: number; newProjects: number }>
+  importClaudeSession: (sessionIds: string[]) => Promise<ImportSessionsByIdsResult>
   handleCopyPath: (localPath: string) => Promise<void>
   handleOpenExternal: (action: OpenExternalAction, editor?: EditorOpenSettings) => Promise<void>
   handleOpenExternalPath: (action: "open_finder" | "open_editor", localPath: string) => Promise<void>
@@ -2277,6 +2278,10 @@ export function useKannaState(activeChatId: string | null, ports: KannaStatePort
     return result
   }, [socket])
 
+  const importClaudeSession = useCallback(async (sessionIds: string[]) => {
+    return await socket.command<ImportSessionsByIdsResult>({ type: "sessions.importClaudeSession", sessionIds })
+  }, [socket])
+
   const openExternal = useCallback(async (command: {
     action: OpenExternalAction
     localPath: string
@@ -2552,6 +2557,7 @@ export function useKannaState(activeChatId: string | null, ports: KannaStatePort
     handleCreateStackChat,
     handleListStackWorktrees,
     importClaudeSessions,
+    importClaudeSession,
     handleCopyPath,
     handleOpenExternal,
     handleOpenExternalPath,

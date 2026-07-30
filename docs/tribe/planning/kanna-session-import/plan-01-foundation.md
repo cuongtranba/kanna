@@ -253,7 +253,7 @@ export interface ImportSessionsByIdsArgs {
 export async function importSessionsByIds(args: ImportSessionsByIdsArgs): Promise<ImportSessionsByIdsResult>
 ```
 
-- [ ] **Step 1: Write the failing tests** (append; reuse the store/tmp-home fixtures already built in this test file — same setup the bulk cases use)
+- [x] **Step 1: Write the failing tests** (append; reuse the store/tmp-home fixtures already built in this test file — same setup the bulk cases use)
 
 ```ts
 describe("importSessionsByIds", () => {
@@ -288,9 +288,9 @@ describe("importSessionsByIds", () => {
 })
 ```
 
-- [ ] **Step 2: Run to verify fail** — importer suite → new block FAILS, old 10 cases PASS.
+- [x] **Step 2: Run to verify fail** — importer suite → new block FAILS, old 10 cases PASS.
 
-- [ ] **Step 3: Implement `importSessionsByIds`**
+- [x] **Step 3: Implement `importSessionsByIds`**
 
 ```ts
 export async function importSessionsByIds(args: ImportSessionsByIdsArgs): Promise<ImportSessionsByIdsResult> {
@@ -322,9 +322,9 @@ export async function importSessionsByIds(args: ImportSessionsByIdsArgs): Promis
 
 (`statSync` is already imported in this adapter; `parseClaudeSessionFile` needs importing from `./claude-session-parser.adapter`.)
 
-- [ ] **Step 4: Run to verify pass** — importer suite fully green.
+- [x] **Step 4: Run to verify pass** — importer suite fully green.
 
-- [ ] **Step 5: Wire protocol + ws-router + client hook** (no new tests; typechecked by lint/build, exercised by PR B/E2E)
+- [x] **Step 5: Wire protocol + ws-router + client hook** (no new tests; typechecked by lint/build, exercised by PR B/E2E)
 
 `protocol.ts`: add the union member next to `sessions.importClaude`.
 
@@ -371,7 +371,7 @@ EOF
 
 ## Self-review checklist (run after writing code, before PR)
 
-- [ ] `git diff` on the four existing test files shows ZERO changes except the appended `describe("importSessionsByIds")` block.
-- [ ] `sessions.importClaude` handler untouched.
-- [ ] Result interfaces live in `src/shared/protocol.ts` (client-importable), adapter re-imports them.
-- [ ] `onSessionImported` fires for created AND updated AND skipped-with-chatId (PR C needs re-paste to re-arm the tail — a `skipped` re-paste still carries chatId; verify the implementation calls it whenever `chatId` is set, as written in Step 3).
+- [x] `git diff` on the four existing test files shows ZERO changes except the appended `describe("importSessionsByIds")` block.
+- [x] `sessions.importClaude` handler untouched.
+- [x] Result interfaces live in `src/shared/protocol.ts` (client-importable), adapter re-imports them.
+- [x] `onSessionImported` fires for created AND updated AND skipped-with-chatId (PR C needs re-paste to re-arm the tail — a `skipped` re-paste still carries chatId; verify the implementation calls it whenever `chatId` is set, as written in Step 3).

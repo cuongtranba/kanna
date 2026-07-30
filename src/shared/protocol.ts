@@ -91,12 +91,26 @@ export interface OrchRunsSnapshot {
   runs: OrchRunSummary[]
 }
 
+export interface SingleImportResultRow {
+  sessionId: string
+  status: "created" | "updated" | "skipped" | "failed"
+  chatId?: string
+  title?: string
+  error?: "invalid_id" | "not_found" | "cwd_missing" | "parse_failed" | "store_error"
+}
+
+export interface ImportSessionsByIdsResult {
+  results: SingleImportResultRow[]
+  newProjects: number
+}
+
 export type WsEvent = TerminalEvent | PtyInstancesEvent | ChatOpsEvent
 
 export type ClientCommand =
   | { type: "project.open"; localPath: string }
   | { type: "project.create"; localPath: string; title: string }
   | { type: "sessions.importClaude" }
+  | { type: "sessions.importClaudeSession"; sessionIds: string[] }
   | { type: "project.remove"; projectId: string }
   | { type: "project.setStar"; projectId: string; starred: boolean }
   | { type: "sidebar.reorderProjectGroups"; projectIds: string[] }
