@@ -266,6 +266,7 @@ function KannaLayout({ ports = {} }: { ports?: AppPorts } = {}) {
     handleToggleProjectStar,
     handleReorderProjectGroups,
     importClaudeSessions,
+    importClaudeSession,
   } = state
   const handleSidebarCreateChat = useCallback((projectId: string) => {
     void handleCreateChat(projectId)
@@ -326,6 +327,24 @@ function KannaLayout({ ports = {} }: { ports?: AppPorts } = {}) {
     }
   }, [dialog, importClaudeSessions])
 
+  const handleImportClaudeSessionIds = useCallback(async (sessionIds: string[]) => {
+    try {
+      const result = await importClaudeSession(sessionIds)
+      const firstChat = result.results.find((r) => r.chatId)
+      const failures = result.results.filter((r) => r.status === "failed")
+      if (failures.length > 0) {
+        await dialog.alert({
+          title: firstChat ? "Imported with errors" : "Import failed",
+          description: failures.map((f) => `${f.sessionId}: ${f.error}`).join("\n"),
+        })
+      }
+      if (firstChat?.chatId) navigate(`/chat/${firstChat.chatId}`)
+    } catch (error) {
+      log.error("[kanna/import] failed", String(error))
+      await dialog.alert({ title: "Import failed", description: "See console for details." })
+    }
+  }, [dialog, importClaudeSession, navigate])
+
   const permissionsChatId = useAppShellStore((s) => s.permissionsChatId)
   const setPermissionsChatId = useAppShellStore((s) => s.setPermissionsChatId)
   const handleSidebarEditPermissions = useCallback((chatId: string) => {
@@ -360,6 +379,7 @@ function KannaLayout({ ports = {} }: { ports?: AppPorts } = {}) {
       onEditChatPermissions={handleSidebarEditPermissions}
       onOpenAddProjectModal={handleOpenAddProjectModal}
       onImportClaudeSessions={handleImportClaudeSessions}
+      onImportClaudeSessionIds={handleImportClaudeSessionIds}
       onCopyPath={handleSidebarCopyPath}
       onOpenExternalPath={handleSidebarOpenExternalPath}
       onHideProject={handleSidebarHideProject}
@@ -376,6 +396,7 @@ function KannaLayout({ ports = {} }: { ports?: AppPorts } = {}) {
   ), [
     handleOpenAddProjectModal,
     handleImportClaudeSessions,
+    handleImportClaudeSessionIds,
     handleSidebarCopyPath,
     handleSidebarCreateChat,
     handleSidebarArchiveChat,
