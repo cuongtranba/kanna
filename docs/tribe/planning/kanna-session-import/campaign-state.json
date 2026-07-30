@@ -1,0 +1,75 @@
+{
+  "v": 1,
+  "campaign": "kanna-session-import",
+  "planning": { "mode": "shaman" },
+  "mergePolicy": "regular",
+  "sequence": ["foundation", "ui", "live", "drill", "join"],
+  "schemaLockPaths": [],
+  "docsOnlyPaths": ["docs/", ".c3/", "wiki/"],
+  "ownerOnlyEscalations": [
+    "changing any SPEC.md §4 wall (import-all-unchanged, side-effect-seal, turn-pipeline-isolation, single-writer, suite-green)",
+    "dropping a unit/PR from the plan",
+    "reordering PR A (foundation) out of its must-merge-first position"
+  ],
+  "cards": {
+    "foundation": {
+      "status": "staged",
+      "spec": "docs/tribe/planning/kanna-session-import/SPEC.md",
+      "plan": "docs/tribe/planning/kanna-session-import/plan-01-foundation.md",
+      "branch": null,
+      "baseSha": null,
+      "pr": null,
+      "mergeSha": null,
+      "sessionId": null,
+      "updatedAt": null
+    },
+    "ui": {
+      "status": "staged",
+      "spec": "docs/tribe/planning/kanna-session-import/SPEC.md",
+      "plan": "docs/tribe/planning/kanna-session-import/plan-02-ui.md",
+      "branch": null,
+      "baseSha": null,
+      "pr": null,
+      "mergeSha": null,
+      "sessionId": null,
+      "updatedAt": null,
+      "dependsOn": ["foundation"]
+    },
+    "live": {
+      "status": "staged",
+      "spec": "docs/tribe/planning/kanna-session-import/SPEC.md",
+      "plan": "docs/tribe/planning/kanna-session-import/plan-03-live.md",
+      "branch": null,
+      "baseSha": null,
+      "pr": null,
+      "mergeSha": null,
+      "sessionId": null,
+      "updatedAt": null,
+      "dependsOn": ["foundation"]
+    },
+    "drill": {
+      "status": "staged",
+      "spec": "docs/tribe/planning/kanna-session-import/SPEC.md",
+      "plan": "docs/tribe/planning/kanna-session-import/plan-04-drill.md",
+      "branch": null,
+      "baseSha": null,
+      "pr": null,
+      "mergeSha": null,
+      "sessionId": null,
+      "updatedAt": null,
+      "dependsOn": ["foundation"]
+    },
+    "join": {
+      "status": "staged",
+      "spec": "docs/tribe/planning/kanna-session-import/SPEC.md",
+      "plan": "docs/tribe/planning/kanna-session-import/plan-06-join.md",
+      "branch": null,
+      "baseSha": null,
+      "pr": null,
+      "mergeSha": null,
+      "sessionId": null,
+      "updatedAt": null,
+      "dependsOn": ["ui", "live"]
+    }
+  }
+}
