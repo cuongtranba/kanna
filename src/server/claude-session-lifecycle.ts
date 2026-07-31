@@ -131,19 +131,30 @@ export function hasLiveWorkflow(deps: SessionLifecycleDeps, chatId: string): boo
 
 /**
  * True while the session has at least one Claude-Code background Bash task
- * that has not yet settled. Primary gate is set size > 0: settle events
- * (task_notification) remove their id from the set, so the guard clears the
- * moment the last task reports. The deadline is a zombie backstop only —
- * it fires when a settle notification is genuinely lost (SDK crash / dropped
- * message) and is reset on every launch and settle, so it never expires
- * during normal execution regardless of task duration.
+ * that has not yet settled AND its keep-alive deadline has not expired.
+ * Primary gate is set size > 0: settle events (task_notification) remove
+ * their id from the set, so the guard clears the moment the last task
+ * reports.
+ *
+ * PURE — an expired deadline does NOT clear the set here. The deadline is
+ * refreshed only on launch/settle/snapshot edges, so a quiet long-running
+ * task (e.g. a 30+ min CI watch) expires it while still healthy; the expired
+ * state is escalation input for the sweep's wake path, which must still see
+ * which task ids were pending. Clearing inside a predicate also let
+ * unrelated read paths (the sidebar badge query) destroy the guard as a
+ * side effect. See adr-20260801-background-task-wake-escalation.
  */
 export function hasPendingBackgroundTask(session: ClaudeSessionState, now: number): boolean {
-  if (session.backgroundTaskIds.size === 0) return false
-  if (now < session.backgroundTaskDeadlineAt) return true
-  session.backgroundTaskIds.clear()
-  session.backgroundTaskDeadlineAt = 0
-  return false
+  return session.backgroundTaskIds.size > 0 && now < session.backgroundTaskDeadlineAt
+}
+
+/**
+ * True when background tasks are still pending but their keep-alive deadline
+ * has lapsed. The sweep escalates this state to a visible wake (or, once the
+ * wake budget is exhausted, a visible teardown) instead of a silent reap.
+ */
+export function backgroundTaskGuardExpired(session: ClaudeSessionState, now: number): boolean {
+  return session.backgroundTaskIds.size > 0 && now >= session.backgroundTaskDeadlineAt
 }
 
 /**
@@ -213,14 +224,15 @@ export function enforceClaudeSessionBudget(
   const max = resolveClaudeMaxResident(deps)
   if (max <= 0 || deps.claudeSessions.size <= max) return
 
-  const now = Date.now()
   const candidates = [...deps.claudeSessions.entries()]
     .filter(([chatId, session]) => (
       chatId !== protectedChatId
       && !deps.activeTurns.has(chatId)
       && session.pendingPromptSeqs.length === 0
       && !hasLiveWorkflow(deps, chatId)
-      && !hasPendingBackgroundTask(session, now)
+      // Any non-empty task-id set protects from eviction — including an
+      // expired guard mid wake-escalation (bounded by the sweep's wake cap).
+      && session.backgroundTaskIds.size === 0
     ))
     .sort((a, b) => a[1].lastUsedAt - b[1].lastUsedAt)
 

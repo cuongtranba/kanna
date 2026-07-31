@@ -53,6 +53,7 @@ function makeSession(overrides: Partial<ClaudeSessionState> = {}): ClaudeSession
     lastUsedAt: 0,
     backgroundTaskIds: new Set(),
     backgroundTaskDeadlineAt: 0,
+    backgroundTaskWakeCount: 0,
     loopArmedAtSpawn: false,
     cancelledResultPending: 0,
     suppressSessionTokenPersist: false,
@@ -511,6 +512,55 @@ describe("runClaudeSession", () => {
 
     expect(session.backgroundTaskIds.size).toBe(0)
     expect(session.backgroundTaskDeadlineAt).toBe(0)
+  })
+
+  test("empty→non-empty transition restores the watchdog wake budget (launch edge)", async () => {
+    // A fresh watch epoch gets a fresh wake budget
+    // (adr-20260801-background-task-wake-escalation).
+    const session = makeSession({ backgroundTaskWakeCount: 3 })
+    const bgToolResultEntry = {
+      _id: "tool-res-reset",
+      createdAt: Date.now(),
+      kind: "tool_result",
+      content: "Command running in background with ID: fresh1",
+    } as unknown as TranscriptEntry
+    const deps = makeDeps(session)
+    session.session.stream = fakeStream([{ type: "transcript", entry: bgToolResultEntry }])
+
+    await runClaudeSession(deps, session)
+
+    expect(session.backgroundTaskIds.has("fresh1")).toBe(true)
+    expect(session.backgroundTaskWakeCount).toBe(0)
+  })
+
+  test("empty→non-empty snapshot restores the wake budget; non-empty→non-empty keeps it", async () => {
+    const session = makeSession({ backgroundTaskWakeCount: 2 })
+    const snapA = {
+      _id: "snap-reset-a",
+      createdAt: Date.now(),
+      kind: "status",
+      status: "Background tasks: 1 running",
+      hidden: true,
+      backgroundTaskIdsSnapshot: ["t1"],
+    } as unknown as TranscriptEntry
+    const deps = makeDeps(session)
+    session.session.stream = fakeStream([{ type: "transcript", entry: snapA }])
+    await runClaudeSession(deps, session)
+    expect(session.backgroundTaskWakeCount).toBe(0)
+
+    // Same epoch continues (set stays non-empty): budget must NOT reset.
+    session.backgroundTaskWakeCount = 1
+    const snapB = {
+      _id: "snap-reset-b",
+      createdAt: Date.now(),
+      kind: "status",
+      status: "Background tasks: 2 running",
+      hidden: true,
+      backgroundTaskIdsSnapshot: ["t1", "t2"],
+    } as unknown as TranscriptEntry
+    session.session.stream = fakeStream([{ type: "transcript", entry: snapB }])
+    await runClaudeSession(deps, session)
+    expect(session.backgroundTaskWakeCount).toBe(1)
   })
 
   test("appending any transcript entry bumps lastUsedAt (self-wake turns keep the session warm)", async () => {

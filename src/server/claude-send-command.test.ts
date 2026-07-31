@@ -50,7 +50,7 @@ type DepsOptions = {
   removedMessages?: Array<{ chatId: string; id: string }>
   createdChats?: string[]
   analyticsEvents?: string[]
-  session?: { backgroundTaskIds: Set<string>; backgroundTaskDeadlineAt: number } | null
+  session?: { backgroundTaskIds: Set<string>; backgroundTaskDeadlineAt: number; backgroundTaskWakeCount: number } | null
   customModels?: readonly CustomModelEntry[]
 }
 
@@ -108,6 +108,7 @@ function makeDeps(opts: DepsOptions = {}): SendCommandDeps & { startTurnCalled: 
     claudeSessions: {
       get: (_chatId: string) => opts.session ?? undefined,
     },
+    resolveBackgroundTaskMaxMs: () => 1_800_000,
     autoResumeByChat: {
       set: (_chatId: string, _value: boolean) => {},
     },
@@ -388,19 +389,26 @@ describe("sendCommand", () => {
     expect(deps.startTurnCalled[0]?.content).toBe("start now")
   })
 
-  test("clears background task state on existing session", async () => {
+  test("re-arms (not clears) background task keep-alive on user send", async () => {
+    // A user chatting mid-watch must not disarm the guard: clearing here let
+    // the idle reaper silently kill a healthy CI watch ~10 min after any user
+    // message (adr-20260801-background-task-wake-escalation). Instead the
+    // send refreshes the deadline and restores the wake budget.
     const session = {
       backgroundTaskIds: new Set(["task-1"]),
       backgroundTaskDeadlineAt: 9999,
+      backgroundTaskWakeCount: 2,
     }
     const d = makeDeps({ session })
+    const before = Date.now()
     await sendCommand(d, {
       type: "chat.send",
       content: "hi",
       chatId: "chat-1",
     } as Parameters<typeof sendCommand>[1])
-    expect(session.backgroundTaskIds.size).toBe(0)
-    expect(session.backgroundTaskDeadlineAt).toBe(0)
+    expect(session.backgroundTaskIds.size).toBe(1)
+    expect(session.backgroundTaskDeadlineAt).toBeGreaterThanOrEqual(before + 1_800_000)
+    expect(session.backgroundTaskWakeCount).toBe(0)
   })
 
   test("tracks message_sent analytics", async () => {

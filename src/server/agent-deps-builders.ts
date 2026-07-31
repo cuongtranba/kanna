@@ -182,6 +182,7 @@ export function buildSendCommandDeps(agent: AgentCoordinator): SendCommandDeps {
     store: agent.store,
     activeTurns: agent.activeTurns,
     claudeSessions: agent.claudeSessions,
+    resolveBackgroundTaskMaxMs: () => agent.resolveBackgroundTaskMaxMs(),
     autoResumeByChat: agent.autoResumeByChat,
     analytics: agent.analytics,
     getAppSettingsSnapshot: () => agent.getAppSettingsSnapshot(),
@@ -275,9 +276,17 @@ export function buildSessionStateQueryDeps(agent: AgentCoordinator): SessionStat
     isClaudeSdkProvider: (provider) => isClaudeSdkProvider(provider),
     hasPendingBackgroundTask: (session, now) => agent.hasPendingBackgroundTask(session, now),
     resolveClaudeIdleMs: () => agent.resolveClaudeIdleMs(),
+    resolveBackgroundTaskMaxMs: () => agent.resolveBackgroundTaskMaxMs(),
+    resolveBackgroundTaskMaxWakes: () => agent.resolveBackgroundTaskMaxWakes(),
     hasLiveWorkflow: (chatId) => agent.hasLiveWorkflow(chatId),
     closeClaudeSession: (chatId, session) => { agent.closeClaudeSession(chatId, session) },
     emitStateChange: (chatId) => { agent.emitStateChange(chatId) },
+    wakeBackgroundTaskSession: (chatId, taskIds, wakeNumber, maxWakes) => {
+      agent.wakeBackgroundTaskSession(chatId, taskIds, wakeNumber, maxWakes)
+    },
+    notifyBackgroundTasksAbandoned: (chatId, taskIds) => {
+      agent.notifyBackgroundTasksAbandoned(chatId, taskIds)
+    },
   }
 }
 

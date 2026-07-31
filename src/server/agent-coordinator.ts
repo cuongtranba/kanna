@@ -54,8 +54,14 @@ import {
   resolveChatPolicy as resolveChatPolicyFn,
   killPtyInstance as killPtyInstanceFn,
 } from "./claude-session-config-helpers"
-import type { AnyValue } from "../shared/errors"
-import { positiveIntegerFromEnv } from "./claude-prompt-helpers"
+import { toError, type AnyValue } from "../shared/errors"
+import {
+  positiveIntegerFromEnv,
+  buildBackgroundTaskWakePrompt,
+  buildBackgroundTasksAbandonedMessage,
+} from "./claude-prompt-helpers"
+import { timestamped } from "./claude-message-normalizer"
+import { log } from "../shared/log"
 import {
   type SendMessageOptions,
   type SendToStartingProfile,
@@ -164,6 +170,13 @@ const DEFAULT_CLAUDE_SESSION_SWEEP_INTERVAL_MS = 60 * 1000
 // Keep a PTY session warm up to 30 min while a background Bash task is pending —
 // comfortably longer than the 10-min idle window and typical CI durations.
 const DEFAULT_PTY_BACKGROUND_TASK_MAX_MS = 30 * 60 * 1000
+// Max watchdog wakes per background-task watch epoch. Each expiry of the
+// backgroundTaskMaxMs window with tasks still pending wakes the session (the
+// agent re-checks + reports to the user) instead of silently reaping it; when
+// the budget is gone the sweep closes the session with a visible notice.
+// Default 3 → up to ~2h of keep-alive with a user-visible check-in every 30min.
+// See adr-20260801-background-task-wake-escalation.
+const DEFAULT_BACKGROUND_TASK_MAX_WAKES = 3
 // OpenRouter-only watchdog: a stalled upstream leaves the SDK stream open but
 // silent after the session-token handshake, so the runClaudeSession for-await
 // never ends and the existing fail-close never fires. Abort if no transcript
@@ -330,6 +343,8 @@ export class AgentCoordinator {
         ?? positiveIntegerFromEnv(process.env.KANNA_CLAUDE_SESSION_SWEEP_INTERVAL_MS, DEFAULT_CLAUDE_SESSION_SWEEP_INTERVAL_MS),
       backgroundTaskMaxMs: args.claudeSessionLifecycle?.backgroundTaskMaxMs
         ?? positiveIntegerFromEnv(process.env.KANNA_PTY_BACKGROUND_TASK_MAX_MS, DEFAULT_PTY_BACKGROUND_TASK_MAX_MS),
+      backgroundTaskMaxWakes: args.claudeSessionLifecycle?.backgroundTaskMaxWakes
+        ?? positiveIntegerFromEnv(process.env.KANNA_BACKGROUND_TASK_MAX_WAKES, DEFAULT_BACKGROUND_TASK_MAX_WAKES),
     }
     this.claudeSessionSweepTimer = this.claudeSessionLifecycle.sweepIntervalMs > 0
       ? setInterval(() => { this.sweepIdleClaudeSessions() }, this.claudeSessionLifecycle.sweepIntervalMs)
@@ -511,6 +526,65 @@ export class AgentCoordinator {
   /** @internal used by agent-deps-builders.ts */
   resolveBackgroundTaskMaxMs(): number {
     return this.claudeSessionLifecycle.backgroundTaskMaxMs
+  }
+
+  /** @internal used by agent-deps-builders.ts */
+  resolveBackgroundTaskMaxWakes(): number {
+    return this.claudeSessionLifecycle.backgroundTaskMaxWakes
+  }
+
+  /**
+   * Watchdog wake for a still-pending background task whose keep-alive
+   * deadline lapsed (sweep escalation). Enqueues an agent-directed prompt on
+   * the chat and starts it via the normal queued-message path, so the warm
+   * session is reused and the agent re-checks the task and reports to the
+   * user. Fire-and-forget: failures are logged and reported, never thrown
+   * into the sweep. See adr-20260801-background-task-wake-escalation.
+   * @internal used by agent-deps-builders.ts
+   */
+  wakeBackgroundTaskSession(
+    chatId: string,
+    taskIds: string[],
+    wakeNumber: number,
+    maxWakes: number,
+  ): void {
+    const prompt = buildBackgroundTaskWakePrompt(taskIds, wakeNumber, maxWakes)
+    log.info("[kanna/agent] background-task watchdog wake", { chatId, taskIds, wakeNumber, maxWakes })
+    void this.enqueueMessage(chatId, prompt, [], {
+      autoContinue: { scheduleId: `bg-task-wake-${wakeNumber}` },
+    })
+      .then(() => this.maybeStartNextQueuedMessage(chatId))
+      .catch((error) => {
+        const message = toError(error).message
+        log.error("[kanna/agent] background-task watchdog wake failed", { chatId, message })
+        this.reportBackgroundError?.(`Background-task watchdog wake failed for chat ${chatId}: ${message}`)
+      })
+  }
+
+  /**
+   * Visible abandonment notice: the wake budget ran out and the sweep closed
+   * the session while background task(s) were still pending (the CLI kills
+   * its child tasks on shutdown). The one invariant of the escalation design
+   * is that this never happens silently.
+   * @internal used by agent-deps-builders.ts
+   */
+  notifyBackgroundTasksAbandoned(chatId: string, taskIds: string[]): void {
+    log.warn("[kanna/agent] background task(s) abandoned at session close", { chatId, taskIds })
+    void this.store.appendMessage(
+      chatId,
+      timestamped({
+        kind: "result",
+        subtype: "error",
+        isError: true,
+        durationMs: 0,
+        result: buildBackgroundTasksAbandonedMessage(taskIds),
+      }),
+    )
+      .then(() => { this.emitStateChange(chatId) })
+      .catch((error) => {
+        const message = toError(error).message
+        log.error("[kanna/agent] background-task abandonment notice failed", { chatId, message })
+      })
   }
 
   /**

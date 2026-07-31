@@ -2370,10 +2370,25 @@ describe("AgentCoordinator claude integration", () => {
     expect(coordinator.claudeSessions.has("chat-1")).toBe(true)
     expect(closeCount).toBe(0)
 
-    // Past the deadline, the guard releases and the idle session reaps.
+    // Past the deadline the guard does NOT silently release: the sweep fires
+    // a watchdog wake (visible to the user) and re-arms the deadline
+    // (adr-20260801-background-task-wake-escalation).
     ;(coordinator as any).sweepIdleClaudeSessions(deadline + 1)
+    expect(coordinator.claudeSessions.has("chat-1")).toBe(true)
+    expect(closeCount).toBe(0)
+    expect(session.backgroundTaskWakeCount).toBe(1)
+    expect(session.backgroundTaskDeadlineAt).toBeGreaterThan(deadline)
+
+    // Only when the wake budget is exhausted AND the session is time-idle
+    // does the sweep close it — with a visible abandonment notice.
+    session.backgroundTaskWakeCount = 3
+    session.lastUsedAt = 0
+    const finalDeadline = session.backgroundTaskDeadlineAt as number
+    ;(coordinator as any).sweepIdleClaudeSessions(finalDeadline + 1)
     expect(coordinator.claudeSessions.has("chat-1")).toBe(false)
     expect(closeCount).toBe(1)
+    await waitFor(() => store.messages.some((m: any) =>
+      typeof m.result === "string" && m.result.includes("bgABC123")))
 
     coordinator.dispose()
   })
@@ -2482,7 +2497,7 @@ describe("AgentCoordinator claude integration", () => {
     coordinator.dispose()
   })
 
-  test("a real chat.send clears a stale background-task guard", async () => {
+  test("a real chat.send re-arms (never clears) a pending background-task guard", async () => {
     const store = createFakeStore()
     const coordinator = new AgentCoordinator({
       store: store as never,
@@ -2519,8 +2534,10 @@ describe("AgentCoordinator claude integration", () => {
     await waitFor(() => store.turnFinishedCount === 1)
 
     const session = coordinator.claudeSessions.get("chat-1") as any
-    session.backgroundTaskIds = new Set(["bgStale"])
-    session.backgroundTaskDeadlineAt = Date.now() + 100_000
+    session.backgroundTaskIds = new Set(["bgPending"])
+    session.backgroundTaskDeadlineAt = Date.now() + 5_000
+    session.backgroundTaskWakeCount = 2
+    const before = Date.now()
 
     await coordinator.send({
       type: "chat.send",
@@ -2531,8 +2548,12 @@ describe("AgentCoordinator claude integration", () => {
     })
     await waitFor(() => store.turnFinishedCount === 2)
 
-    expect(session.backgroundTaskIds.size).toBe(0)
-    expect(session.backgroundTaskDeadlineAt).toBe(0)
+    // Clearing here let the idle reaper silently kill a healthy watch ~10min
+    // after any user message. The send now refreshes the keep-alive window
+    // and restores the wake budget; pending ids stay until settle/snapshot.
+    expect(session.backgroundTaskIds.size).toBe(1)
+    expect(session.backgroundTaskDeadlineAt).toBeGreaterThanOrEqual(before + 100_000)
+    expect(session.backgroundTaskWakeCount).toBe(0)
 
     coordinator.dispose()
   })

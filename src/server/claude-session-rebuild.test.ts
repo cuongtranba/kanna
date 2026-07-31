@@ -51,6 +51,7 @@ function makeSession(overrides: Partial<ClaudeSessionState> = {}): ClaudeSession
     lastUsedAt: 0,
     backgroundTaskIds: new Set(),
     backgroundTaskDeadlineAt: 0,
+    backgroundTaskWakeCount: 0,
     // loopArmedAtSpawn is optional per the type - omit it
     ...overrides,
   } as ClaudeSessionState

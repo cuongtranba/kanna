@@ -59,7 +59,11 @@ interface ActiveTurnsMap {
 
 /** Subset of the claudeSessions map used by the send command handler. */
 interface ClaudeSessionsMap {
-  get(chatId: string): { backgroundTaskIds: Set<string>; backgroundTaskDeadlineAt: number } | undefined
+  get(chatId: string): {
+    backgroundTaskIds: Set<string>
+    backgroundTaskDeadlineAt: number
+    backgroundTaskWakeCount: number
+  } | undefined
 }
 
 /** Subset of the autoResumeByChat map used by the send command handler. */
@@ -83,8 +87,11 @@ export interface SendCommandDeps {
   /** The active-turns map. Read-only from the handler's perspective (has/get). */
   activeTurns: ActiveTurnsMap
 
-  /** The claude-sessions map. Used to clear background-task state on user send. */
+  /** The claude-sessions map. Used to re-arm background-task state on user send. */
   claudeSessions: ClaudeSessionsMap
+
+  /** Background-task keep-alive window in ms (for the user-send re-arm). */
+  resolveBackgroundTaskMaxMs(): number
 
   /** Per-chat auto-resume preference map. */
   autoResumeByChat: AutoResumeByChatMap
@@ -291,13 +298,17 @@ export async function sendCommand(
     : null
   let chatId = command.chatId
 
-  // A real user chat.send means the agent is active again — release any
-  // background-task keep-alive guard so the session reaps normally afterward.
-  // Auto-continue / agent wakes bypass `send` and intentionally do NOT clear it.
+  // A real user chat.send RE-ARMS (never clears) any background-task
+  // keep-alive guard. Clearing here let the idle reaper silently kill a
+  // healthy long-running watch ~10 min after any user message — the same
+  // silent-death class adr-20260801-background-task-wake-escalation fixes
+  // in the sweep. Pending ids stay authoritative (settle edges / snapshots
+  // remove them); the send just refreshes the deadline and restores the
+  // watchdog wake budget.
   const existingClaudeSession = chatId ? deps.claudeSessions.get(chatId) : undefined
-  if (existingClaudeSession) {
-    existingClaudeSession.backgroundTaskIds.clear()
-    existingClaudeSession.backgroundTaskDeadlineAt = 0
+  if (existingClaudeSession && existingClaudeSession.backgroundTaskIds.size > 0) {
+    existingClaudeSession.backgroundTaskDeadlineAt = Date.now() + deps.resolveBackgroundTaskMaxMs()
+    existingClaudeSession.backgroundTaskWakeCount = 0
   }
 
   // A real user send is a takeover: disarm any armed loop so tools are

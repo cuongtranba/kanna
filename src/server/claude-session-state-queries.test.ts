@@ -70,9 +70,13 @@ function makeDeps(overrides?: Partial<SessionStateQueryDeps>): SessionStateQuery
     isClaudeSdkProvider: mock(() => false),
     hasPendingBackgroundTask: mock(() => false),
     resolveClaudeIdleMs: mock(() => 600_000),
+    resolveBackgroundTaskMaxMs: mock(() => 1_800_000),
+    resolveBackgroundTaskMaxWakes: mock(() => 3),
     hasLiveWorkflow: mock(() => false),
     closeClaudeSession: mock(() => undefined),
     emitStateChange: mock(() => undefined),
+    wakeBackgroundTaskSession: mock(() => undefined),
+    notifyBackgroundTasksAbandoned: mock(() => undefined),
     ...overrides,
   }
 }
@@ -340,5 +344,141 @@ describe("sweepIdleClaudeSessions", () => {
     })
     sweepIdleClaudeSessions(deps, Date.now())
     expect(closeFn.mock.calls.length).toBe(0)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// sweepIdleClaudeSessions — background-task guard expiry escalation
+// (adr-20260801-background-task-wake-escalation: an expired guard on a
+// still-pending task must produce a visible wake, never a silent close)
+// ---------------------------------------------------------------------------
+
+describe("sweepIdleClaudeSessions background-task escalation", () => {
+  function makeExpiredSession(overrides?: Partial<ClaudeSessionState>): ClaudeSessionState {
+    return makeSession({
+      chatId: "chat-1",
+      lastUsedAt: 0,
+      pendingPromptSeqs: [],
+      backgroundTaskIds: new Set(["bsh1"]),
+      backgroundTaskDeadlineAt: Date.now() - 1,
+      backgroundTaskWakeCount: 0,
+      ...overrides,
+    })
+  }
+
+  it("fires a wake instead of closing when the guard expires with budget left", () => {
+    const session = makeExpiredSession()
+    const closeFn = mock(() => undefined)
+    const wakeFn = mock<SessionStateQueryDeps["wakeBackgroundTaskSession"]>(() => undefined)
+    const now = Date.now()
+    const deps = makeDeps({
+      claudeSessions: new Map([["chat-1", session]]),
+      resolveClaudeIdleMs: () => 1,
+      closeClaudeSession: closeFn,
+      wakeBackgroundTaskSession: wakeFn,
+    })
+    sweepIdleClaudeSessions(deps, now)
+    expect(closeFn.mock.calls.length).toBe(0)
+    expect(wakeFn.mock.calls.length).toBe(1)
+    expect(wakeFn.mock.calls[0]?.[0]).toBe("chat-1")
+    expect(wakeFn.mock.calls[0]?.[1]).toEqual(["bsh1"])
+    expect(wakeFn.mock.calls[0]?.[2]).toBe(1)
+    expect(session.backgroundTaskWakeCount).toBe(1)
+    expect(session.backgroundTaskDeadlineAt).toBe(now + 1_800_000)
+  })
+
+  it("consumes the wake budget across sweeps until the cap", () => {
+    const session = makeExpiredSession()
+    const wakeFn = mock<SessionStateQueryDeps["wakeBackgroundTaskSession"]>(() => undefined)
+    const closeFn = mock(() => undefined)
+    const deps = makeDeps({
+      claudeSessions: new Map([["chat-1", session]]),
+      resolveClaudeIdleMs: () => 1,
+      resolveBackgroundTaskMaxWakes: () => 2,
+      closeClaudeSession: closeFn,
+      wakeBackgroundTaskSession: wakeFn,
+    })
+    let now = Date.now()
+    sweepIdleClaudeSessions(deps, now)
+    now = session.backgroundTaskDeadlineAt + 1
+    sweepIdleClaudeSessions(deps, now)
+    expect(wakeFn.mock.calls.length).toBe(2)
+    expect(session.backgroundTaskWakeCount).toBe(2)
+    expect(closeFn.mock.calls.length).toBe(0)
+  })
+
+  it("closes visibly (notify) once the wake budget is exhausted and the session is idle", () => {
+    const session = makeExpiredSession({ backgroundTaskWakeCount: 3 })
+    const closeFn = mock(() => undefined)
+    const notifyFn = mock<SessionStateQueryDeps["notifyBackgroundTasksAbandoned"]>(() => undefined)
+    const wakeFn = mock<SessionStateQueryDeps["wakeBackgroundTaskSession"]>(() => undefined)
+    const deps = makeDeps({
+      claudeSessions: new Map([["chat-1", session]]),
+      resolveClaudeIdleMs: () => 1,
+      closeClaudeSession: closeFn,
+      notifyBackgroundTasksAbandoned: notifyFn,
+      wakeBackgroundTaskSession: wakeFn,
+    })
+    sweepIdleClaudeSessions(deps, Date.now())
+    expect(wakeFn.mock.calls.length).toBe(0)
+    expect(closeFn.mock.calls.length).toBe(1)
+    expect(notifyFn.mock.calls.length).toBe(1)
+    expect(notifyFn.mock.calls[0]?.[0]).toBe("chat-1")
+    expect(notifyFn.mock.calls[0]?.[1]).toEqual(["bsh1"])
+    expect(session.backgroundTaskIds.size).toBe(0)
+    expect(session.backgroundTaskDeadlineAt).toBe(0)
+  })
+
+  it("defers the exhausted-budget close while the session was recently used", () => {
+    const session = makeExpiredSession({ backgroundTaskWakeCount: 3, lastUsedAt: Date.now() })
+    const closeFn = mock(() => undefined)
+    const notifyFn = mock(() => undefined)
+    const deps = makeDeps({
+      claudeSessions: new Map([["chat-1", session]]),
+      resolveClaudeIdleMs: () => 600_000,
+      closeClaudeSession: closeFn,
+      notifyBackgroundTasksAbandoned: notifyFn,
+    })
+    sweepIdleClaudeSessions(deps, Date.now())
+    expect(closeFn.mock.calls.length).toBe(0)
+    expect(notifyFn.mock.calls.length).toBe(0)
+    expect(session.backgroundTaskIds.size).toBe(1)
+  })
+
+  it("re-arms without consuming wake budget when a claude turn is active", () => {
+    const session = makeExpiredSession()
+    const wakeFn = mock(() => undefined)
+    const closeFn = mock(() => undefined)
+    const now = Date.now()
+    const deps = makeDeps({
+      claudeSessions: new Map([["chat-1", session]]),
+      activeTurns: new Map([["chat-1", makeActiveTurn({ provider: "claude" })]]),
+      isClaudeSdkProvider: () => true,
+      resolveClaudeIdleMs: () => 1,
+      closeClaudeSession: closeFn,
+      wakeBackgroundTaskSession: wakeFn,
+    })
+    sweepIdleClaudeSessions(deps, now)
+    expect(wakeFn.mock.calls.length).toBe(0)
+    expect(closeFn.mock.calls.length).toBe(0)
+    expect(session.backgroundTaskWakeCount).toBe(0)
+    expect(session.backgroundTaskDeadlineAt).toBe(now + 1_800_000)
+  })
+
+  it("still closes sessions whose guard is empty (normal idle path unchanged)", () => {
+    const session = makeSession({
+      chatId: "chat-1",
+      lastUsedAt: 0,
+      backgroundTaskIds: new Set(),
+      backgroundTaskDeadlineAt: 0,
+    })
+    const closeFn = mock(() => undefined)
+    const deps = makeDeps({
+      claudeSessions: new Map([["chat-1", session]]),
+      resolveClaudeIdleMs: () => 1,
+      closeClaudeSession: closeFn,
+    })
+    sweepIdleClaudeSessions(deps, Date.now())
+    expect(closeFn.mock.calls.length).toBe(1)
   })
 })
