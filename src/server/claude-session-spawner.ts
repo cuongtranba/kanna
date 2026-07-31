@@ -359,6 +359,7 @@ export async function spawnClaudeTurn(
       lastUsedAt: Date.now(),
       backgroundTaskIds: new Set<string>(),
       backgroundTaskDeadlineAt: 0,
+      backgroundTaskWakeCount: 0,
       loopArmedAtSpawn: loopArmedNow,
       cancelledResultPending: 0,
       suppressSessionTokenPersist: false,

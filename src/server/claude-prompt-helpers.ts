@@ -144,6 +144,47 @@ export function backgroundTaskIdsFromToolResult<T>(content: T): string[] {
 }
 
 // ---------------------------------------------------------------------------
+// Background-task watchdog wake prompts
+// (adr-20260801-background-task-wake-escalation)
+// ---------------------------------------------------------------------------
+
+/**
+ * Agent-directed watchdog prompt sent when a background task's keep-alive
+ * window lapses while the task is still pending. The agent must resolve the
+ * situation VISIBLY: report results if the task finished, post a progress
+ * update if it is still running, or stop a stuck task and say so.
+ */
+export function buildBackgroundTaskWakePrompt(
+  taskIds: string[],
+  wakeNumber: number,
+  maxWakes: number,
+): string {
+  const ids = taskIds.join(", ")
+  return [
+    "<background-task-check>",
+    `Background task(s) still pending: ${ids}. Kanna woke this session to keep them alive and keep the user informed (check ${wakeNumber} of ${maxWakes} before the session is reclaimed).`,
+    "Check each task's status now (use TaskOutput with block=false, or Read its output file).",
+    "- If a task has finished: deliver its results to the user now.",
+    "- If it is still running and making progress: post a one-line progress update for the user, then end your turn — you will be woken again when it completes or at the next check.",
+    "- If it looks stuck or pointless: stop it with TaskStop and tell the user what happened and what you recommend instead.",
+    "</background-task-check>",
+  ].join("\n")
+}
+
+/**
+ * Visible chat notice for the terminal escalation step: the wake budget ran
+ * out and the session (with its still-pending background task children) was
+ * closed. Rendered as an error result entry in the chat.
+ */
+export function buildBackgroundTasksAbandonedMessage(taskIds: string[]): string {
+  const ids = taskIds.join(", ")
+  return [
+    `Background task(s) ${ids} did not settle after repeated watchdog checks, so the idle session holding them was reclaimed and the task(s) were terminated.`,
+    "Ask me to re-check whatever they were watching (e.g. the CI run) and I will pick it up in a fresh session.",
+  ].join(" ")
+}
+
+// ---------------------------------------------------------------------------
 // Env-var helpers
 // ---------------------------------------------------------------------------
 

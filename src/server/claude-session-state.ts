@@ -75,6 +75,14 @@ export interface ClaudeSessionState {
   // mid-flight. See adr-20260604-pty-background-task-keepalive.
   backgroundTaskIds: Set<string>
   backgroundTaskDeadlineAt: number
+  // Number of watchdog wakes fired for the current watch epoch. The deadline
+  // above is refreshed only on launch/settle/snapshot edges, so a quiet
+  // long-running task (a 30+ min CI watch) expires it while perfectly healthy.
+  // Instead of silently reaping, the sweep wakes the session (bounded by
+  // backgroundTaskMaxWakes) so the agent re-checks and reports to the user.
+  // Reset to 0 when the id set transitions empty→non-empty and on user send.
+  // See adr-20260801-background-task-wake-escalation.
+  backgroundTaskWakeCount: number
   // Armed-loop state captured at spawn. Both drivers bake the loop tool-block
   // into the spawn (PTY: --disallowedTools CLI args; SDK: options.disallowedTools
   // so the model never sees the blocked tools — Claude Code's filter-at-spawn

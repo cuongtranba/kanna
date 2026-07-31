@@ -249,13 +249,18 @@ export async function runClaudeSession(
           event.entry.content,
         )
         if (launchedIds.length > 0) {
+          // empty→non-empty = a fresh watch epoch: restore the watchdog
+          // wake budget (adr-20260801-background-task-wake-escalation).
+          if (session.backgroundTaskIds.size === 0) session.backgroundTaskWakeCount = 0
           for (const id of launchedIds) session.backgroundTaskIds.add(id)
           session.backgroundTaskDeadlineAt = Date.now() + deps.resolveBackgroundTaskMaxMs()
           deps.emitStateChange(session.chatId)
         }
       }
       if (event.entry.kind === "status" && event.entry.backgroundTaskIdsSnapshot) {
+        const wasEmpty = session.backgroundTaskIds.size === 0
         session.backgroundTaskIds = new Set(event.entry.backgroundTaskIdsSnapshot)
+        if (wasEmpty && session.backgroundTaskIds.size > 0) session.backgroundTaskWakeCount = 0
         session.backgroundTaskDeadlineAt = session.backgroundTaskIds.size > 0
           ? Date.now() + deps.resolveBackgroundTaskMaxMs()
           : 0

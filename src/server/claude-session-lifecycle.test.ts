@@ -60,6 +60,7 @@ function makeSession(overrides: Partial<ClaudeSessionState> = {}): ClaudeSession
     lastUsedAt: Date.now(),
     backgroundTaskIds: new Set<string>(),
     backgroundTaskDeadlineAt: 0,
+    backgroundTaskWakeCount: 0,
     loopArmedAtSpawn: false,
     workflowsDirRegistered: false,
     cancelledResultPending: 0,
@@ -249,7 +250,10 @@ describe("hasPendingBackgroundTask", () => {
     expect(hasPendingBackgroundTask(session, now)).toBe(true)
   })
 
-  test("returns false and clears state when deadline expired", () => {
+  test("returns false when deadline expired WITHOUT clearing state", () => {
+    // The expired guard is escalation input for the sweep
+    // (adr-20260801-background-task-wake-escalation) — a pure query must not
+    // destroy it, or the wake path never sees which tasks were pending.
     const now = Date.now()
     const session = makeSession({
       backgroundTaskIds: new Set(["task-1"]),
@@ -257,8 +261,8 @@ describe("hasPendingBackgroundTask", () => {
     })
     const result = hasPendingBackgroundTask(session, now)
     expect(result).toBe(false)
-    expect(session.backgroundTaskIds.size).toBe(0)
-    expect(session.backgroundTaskDeadlineAt).toBe(0)
+    expect(session.backgroundTaskIds.size).toBe(1)
+    expect(session.backgroundTaskDeadlineAt).toBe(now - 1)
   })
 })
 

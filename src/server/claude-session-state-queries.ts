@@ -12,6 +12,7 @@
 
 import type { AgentProvider, KannaStatus, PendingToolSnapshot } from "../shared/types"
 import type { ActiveTurn, ClaudeSessionState } from "./claude-session-state"
+import { backgroundTaskGuardExpired } from "./claude-session-lifecycle"
 
 // ---------------------------------------------------------------------------
 // Deps interface
@@ -32,12 +33,34 @@ export interface SessionStateQueryDeps {
   hasPendingBackgroundTask: (session: ClaudeSessionState, now: number) => boolean
   /** Resolves the effective idle timeout in milliseconds. */
   resolveClaudeIdleMs: () => number
+  /** Resolves the background-task keep-alive window in milliseconds. */
+  resolveBackgroundTaskMaxMs: () => number
+  /** Resolves the max watchdog wakes per background-task watch epoch. */
+  resolveBackgroundTaskMaxWakes: () => number
   /** Returns true when the chat has an in-flight Workflow. */
   hasLiveWorkflow: (chatId: string) => boolean
   /** Tears down and cleans up a Claude session. */
   closeClaudeSession: (chatId: string, session: ClaudeSessionState) => void
   /** Notifies subscribers that state has changed for the given chat. */
   emitStateChange: (chatId: string) => void
+  /**
+   * Fire-and-forget: wake the warm session with a watchdog prompt so the
+   * agent re-checks its still-pending background task(s) and reports to the
+   * user. Must not throw (IO stays behind the deps seal).
+   */
+  wakeBackgroundTaskSession: (
+    chatId: string,
+    taskIds: string[],
+    wakeNumber: number,
+    maxWakes: number,
+  ) => void
+  /**
+   * Fire-and-forget: post a visible chat message that the listed background
+   * task(s) were abandoned because the session was reclaimed after the wake
+   * budget ran out. The one guarantee this module keeps: a pending
+   * background task never dies silently.
+   */
+  notifyBackgroundTasksAbandoned: (chatId: string, taskIds: string[]) => void
 }
 
 // ---------------------------------------------------------------------------
@@ -144,7 +167,60 @@ export function isClaudeSessionIdle(
 }
 
 /**
- * Iterates all live Claude sessions and closes any that are idle.
+ * Escalate a session whose background-task keep-alive deadline lapsed while
+ * task ids are still pending. Invariant: a pending background task never
+ * dies silently (adr-20260801-background-task-wake-escalation). In order:
+ *
+ * 1. Session visibly busy (active Claude turn / queued prompts / live
+ *    workflow) — just re-arm the deadline; the activity itself will settle
+ *    or re-arm the guard. No wake budget consumed.
+ * 2. Wake budget left — consume one wake: re-arm the deadline and prompt
+ *    the warm session to re-check its task(s) and report to the user.
+ * 3. Budget exhausted — once the session is also time-idle, clear the
+ *    guard, close the session (the CLI kills its child tasks on shutdown),
+ *    and post a visible abandonment notice to the chat. While the session
+ *    was recently active (a wake turn just ran), defer to the next sweep so
+ *    an imminent settle self-wake still wins.
+ */
+function escalateExpiredBackgroundTaskGuard(
+  deps: SessionStateQueryDeps,
+  chatId: string,
+  session: ClaudeSessionState,
+  now: number,
+): void {
+  const activeProv = deps.activeTurns.get(chatId)?.provider
+  const hasActiveClaudeTurn = activeProv !== undefined && deps.isClaudeSdkProvider(activeProv)
+  const busy = hasActiveClaudeTurn
+    || session.pendingPromptSeqs.length > 0
+    || deps.hasLiveWorkflow(chatId)
+  if (busy) {
+    session.backgroundTaskDeadlineAt = now + deps.resolveBackgroundTaskMaxMs()
+    return
+  }
+  const maxWakes = deps.resolveBackgroundTaskMaxWakes()
+  if (session.backgroundTaskWakeCount < maxWakes) {
+    session.backgroundTaskWakeCount += 1
+    session.backgroundTaskDeadlineAt = now + deps.resolveBackgroundTaskMaxMs()
+    deps.wakeBackgroundTaskSession(
+      chatId,
+      [...session.backgroundTaskIds],
+      session.backgroundTaskWakeCount,
+      maxWakes,
+    )
+    return
+  }
+  if (now - session.lastUsedAt < deps.resolveClaudeIdleMs()) return
+  const abandonedIds = [...session.backgroundTaskIds]
+  session.backgroundTaskIds.clear()
+  session.backgroundTaskDeadlineAt = 0
+  deps.closeClaudeSession(chatId, session)
+  deps.notifyBackgroundTasksAbandoned(chatId, abandonedIds)
+  deps.emitStateChange(chatId)
+}
+
+/**
+ * Iterates all live Claude sessions; escalates expired background-task
+ * guards (wake, never silent-close) and closes any remaining idle sessions.
  *
  * Mirrors the private `sweepIdleClaudeSessions` on AgentCoordinator.
  */
@@ -153,6 +229,10 @@ export function sweepIdleClaudeSessions(
   now = Date.now(),
 ): void {
   for (const [chatId, session] of [...deps.claudeSessions.entries()]) {
+    if (backgroundTaskGuardExpired(session, now)) {
+      escalateExpiredBackgroundTaskGuard(deps, chatId, session, now)
+      continue
+    }
     if (!isClaudeSessionIdle(deps, chatId, session, now)) continue
     deps.closeClaudeSession(chatId, session)
     deps.emitStateChange(chatId)

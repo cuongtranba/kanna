@@ -58,6 +58,13 @@ export interface ClaudeSessionLifecycleOptions {
    * task so it cannot pin a process forever.
    * See adr-20260604-pty-background-task-keepalive. */
   backgroundTaskMaxMs: number
+  /** Max watchdog wakes per background-task watch epoch. When the
+   * backgroundTaskMaxMs deadline lapses with tasks still pending, the sweep
+   * wakes the session (agent re-checks + reports to the user) instead of
+   * silently reaping it, up to this many times; then it closes the session
+   * with a visible abandonment notice.
+   * See adr-20260801-background-task-wake-escalation. */
+  backgroundTaskMaxWakes: number
 }
 
 export interface AgentCoordinatorArgs {

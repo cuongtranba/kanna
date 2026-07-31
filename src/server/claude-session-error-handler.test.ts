@@ -63,6 +63,7 @@ function makeSession(overrides: Partial<ClaudeSessionState> = {}): ClaudeSession
     lastUsedAt: Date.now(),
     backgroundTaskIds: new Set<string>(),
     backgroundTaskDeadlineAt: 0,
+    backgroundTaskWakeCount: 0,
     loopArmedAtSpawn: false,
     cancelledResultPending: 0,
     suppressSessionTokenPersist: false,
