@@ -8,6 +8,14 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.8.1](https://github.com/cuongtranba/kanna/compare/v1.8.0...v1.8.1) (2026-07-31)
+
+
+### Bug Fixes
+
+* **agent:** escalate expired background-task guards to visible wakes, never silent reaps ([c2f777e](https://github.com/cuongtranba/kanna/commit/c2f777ed8eb19313e46f62289d60d34a9eb89d84))
+* **agent:** escalate expired background-task guards to visible wakes, never silent reaps ([3c9595b](https://github.com/cuongtranba/kanna/commit/3c9595b506f343ec9c3f892430f74465e1f592e5))
+
 ## [1.8.0](https://github.com/cuongtranba/kanna/compare/v1.7.1...v1.8.0) (2026-07-30)
 
 
