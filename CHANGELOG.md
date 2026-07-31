@@ -8,6 +8,32 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.8.0](https://github.com/cuongtranba/kanna/compare/v1.7.1...v1.8.0) (2026-07-30)
+
+
+### Features
+
+* **client:** import dialog with paste-a-session-id ([7d32ce0](https://github.com/cuongtranba/kanna/commit/7d32ce0793ab3b5946dc4fb941808d0934d31320))
+* **client:** live-tail WS push + following pill in chat header ([bf5b652](https://github.com/cuongtranba/kanna/commit/bf5b652c0fb6665dad0988b06edc22e3054d76ff))
+* import dialog with paste-a-session-id ([7dea312](https://github.com/cuongtranba/kanna/commit/7dea312577954915a85b8c368fdc4033e0432916))
+* import specific Claude sessions by id (foundation) ([79b9460](https://github.com/cuongtranba/kanna/commit/79b9460d7fcd46ea9f3ed978ee92b602830ec5f7))
+* live tail for imported Claude sessions (PR C — WS-Live) ([a58fd5a](https://github.com/cuongtranba/kanna/commit/a58fd5ac3c9410a4ff91ffbe334414cc93e4b0c4))
+* **server:** derive subagents dir for imported chats ([472681a](https://github.com/cuongtranba/kanna/commit/472681a20d849dbe3eb981791b48c0c2bf21f25e))
+* **server:** followed-session registry (pure core) for live import tail ([bc9d103](https://github.com/cuongtranba/kanna/commit/bc9d103b7642468e485d579db8c816915f8223c1))
+* **server:** import specific Claude sessions by id (sessions.importClaudeSession) ([cbd8c9b](https://github.com/cuongtranba/kanna/commit/cbd8c9b1582f2a031d1ce6e42c247265dcd48193))
+* **server:** live tail for imported sessions (stat-poll delta) ([5eefce3](https://github.com/cuongtranba/kanna/commit/5eefce385192f6a65b1fc1727d9116b9fabb4236))
+* **server:** locate one Claude session transcript by uuid ([4cdde5c](https://github.com/cuongtranba/kanna/commit/4cdde5cc4a1ac4deaea527aacd191a94d3b43456))
+* **server:** subagent drill-in for imported chats (WS-Drill) ([b4a9278](https://github.com/cuongtranba/kanna/commit/b4a9278360382b6cd1921bd71b05a24c921b1313))
+* **server:** subagent drill-in for imported chats via lazy dir derivation ([bae79ec](https://github.com/cuongtranba/kanna/commit/bae79ec52151e45c01fb359913fb9c08654b0388))
+* **shared:** extract Claude session uuids from pasted text ([9c3f9ad](https://github.com/cuongtranba/kanna/commit/9c3f9ad96852bcc3d10de68292528e758e537f19))
+
+
+### Bug Fixes
+
+* **push:** make VAPID contact subject configurable; stop deleting devices on 403 ([#580](https://github.com/cuongtranba/kanna/issues/580)) ([55062e3](https://github.com/cuongtranba/kanna/commit/55062e3f1cb278c479f5821867dc60c4a7bf0306))
+* **server:** enrich imported tool_result entries with toolUseResult debugRaw ([4d031df](https://github.com/cuongtranba/kanna/commit/4d031df4b819205637d7ac8ee0f397f4371f5c03))
+* **test:** stop hardcoding a local absolute path in encodeCwd fixtures ([be79e2b](https://github.com/cuongtranba/kanna/commit/be79e2b3affb13f198153d87435b6d64bc13d4cc))
+
 ## [1.7.1](https://github.com/cuongtranba/kanna/compare/v1.7.0...v1.7.1) (2026-07-24)
 
 
