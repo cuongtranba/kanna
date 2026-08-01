@@ -296,7 +296,7 @@ gh pr create --repo cuongtranba/kanna --base main \
   --title "test+docs: E2E for single-session import/live-tail, env-var docs, c3 apply" \
   --body "$(cat <<'EOF'
 Join task for the single-session-import + live-Tribe-visualization project (see
-docs/tribe/planning/kanna-session-import/SPEC.md). Depends on PR A (foundation), PR B (ui),
+docs/superpowers/specs/2026-07-30-kanna-session-import-design.md). Depends on PR A (foundation), PR B (ui),
 PR C (live) already merged.
 
 - E2E: import a Tribe-shaped session (main JSONL + subagents/ sidecar) by uuid, assert the
