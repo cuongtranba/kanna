@@ -4,6 +4,22 @@ Version: 3 (ground truth — supersedes `docs/plans/2026-07-30-single-session-im
 Date: 2026-07-30
 Owner ruling: any design acceptable as long as the existing import-all flow is not broken.
 
+## Delivery
+
+| Card | PR | Merge commit | Plan |
+| --- | --- | --- | --- |
+| foundation | #583 | `79b9460d7fcd` | `docs/superpowers/plans/2026-07-30-kanna-session-import-01-foundation.md` |
+| ui | #584 | `7dea31257795` | `docs/superpowers/plans/2026-07-30-kanna-session-import-02-ui.md` |
+| live | #585 | `a58fd5ac3c94` | `docs/superpowers/plans/2026-07-30-kanna-session-import-03-live.md` |
+| drill | #586 | `b4a927836038` | `docs/superpowers/plans/2026-07-30-kanna-session-import-04-drill.md` |
+| join | #587 | `27c69731b655` | `docs/superpowers/plans/2026-07-30-kanna-session-import-06-join.md` |
+
+PR #582 and PR #588 were campaign-orchestration bookkeeping (Tribe runner
+state) and carried no product code — they are not listed above. The
+campaign's operational state (`campaign-state.json`, escalations, run logs)
+now lives outside this repo, under the Tribe's own `~/.tribe/` home; this
+table is the sole in-repo record of which PR shipped which card.
+
 ## 1. Problem
 
 Kanna's only import gesture is all-or-nothing: `sessions.importClaude` (no
