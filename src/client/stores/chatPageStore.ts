@@ -80,6 +80,8 @@ import type { OpenLocalLinkTarget } from "../components/messages/shared"
 interface LocalLinkMenuSlice {
   localLinkMenuTarget: OpenLocalLinkTarget | null
   setLocalLinkMenuTarget: (target: OpenLocalLinkTarget | null) => void
+  /** Drive the local-link context menu from its open-change value: closing clears the target. */
+  setLocalLinkMenuOpen: (open: boolean) => void
 }
 
 // ─── Diff render mode / wrap lines (useChatPageSidebarActions) ───────────────
@@ -162,6 +164,8 @@ export const useChatPageStore = create<ChatPageState>()((set) => ({
   // Local link menu target
   localLinkMenuTarget: null,
   setLocalLinkMenuTarget: (target) => set({ localLinkMenuTarget: target }),
+  setLocalLinkMenuOpen: (open) =>
+    set((state) => (open || state.localLinkMenuTarget === null ? state : { localLinkMenuTarget: null })),
 
   // Diff view
   diffRenderMode: "unified",
