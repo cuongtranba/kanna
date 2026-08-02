@@ -11,6 +11,7 @@ import {
 
 const nowMs = 1_000_000
 const hourMs = 60 * 60 * 1_000
+const HEADING_TESTID = 'data-testid="sidebar-section-heading"'
 
 function createChat(chatId: string, lastMessageAt: number): SidebarChatRow {
   return {
@@ -33,10 +34,12 @@ function renderSection(
     expandedGroups = new Set<string>(),
     collapsedSections = new Set<string>(),
     onNewLocalChat,
+    heading,
   }: {
     expandedGroups?: Set<string>
     collapsedSections?: Set<string>
     onNewLocalChat?: (localPath: string) => void
+    heading?: string
   } = {}
 ) {
   return renderToStaticMarkup(createElement(
@@ -44,6 +47,7 @@ function renderSection(
     null,
     createElement(LocalProjectsSection, {
       projectGroups,
+      heading,
       editorLabel: "Cursor",
       collapsedSections,
       expandedGroups,
@@ -151,6 +155,45 @@ describe("LocalProjectsSection", () => {
     })
 
     expect(html).not.toContain("New Chat")
+  })
+
+  test("labels the list with its own heading so it is not read as part of the section above", () => {
+    const projectGroups: SidebarProjectGroup[] = [{
+      groupKey: "project-a",
+      localPath: "/tmp/project-a",
+      chats: [],
+      previewChats: [],
+      olderChats: [],
+      defaultCollapsed: false,
+      starredAt: 42,
+    }]
+
+    const html = renderSection(projectGroups, { heading: "Starred" })
+
+    expect(html).toContain(HEADING_TESTID)
+    expect(html.indexOf(HEADING_TESTID)).toBeLessThan(html.indexOf("project-a"))
+    expect(html.slice(html.indexOf(HEADING_TESTID))).toContain("Starred")
+  })
+
+  test("omits the heading when no heading is supplied", () => {
+    const projectGroups: SidebarProjectGroup[] = [{
+      groupKey: "project-a",
+      localPath: "/tmp/project-a",
+      chats: [],
+      previewChats: [],
+      olderChats: [],
+      defaultCollapsed: false,
+    }]
+
+    const html = renderSection(projectGroups)
+
+    expect(html).not.toContain(HEADING_TESTID)
+  })
+
+  test("omits the heading when the list is empty", () => {
+    const html = renderSection([], { heading: "Starred" })
+
+    expect(html).not.toContain(HEADING_TESTID)
   })
 
   test("starts the downward reorder preview when dragged top plus 20px crosses the target center", () => {

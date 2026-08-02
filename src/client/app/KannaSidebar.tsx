@@ -790,6 +790,7 @@ function KannaSidebarImpl({
               <>
                 <LocalProjectsSection
                   projectGroups={starredProjectGroupsWithoutStackChats}
+                  heading="Starred"
                   editorLabel={editorLabel}
                   collapsedSections={collapsedSections}
                   expandedGroups={expandedGroups}
@@ -809,14 +810,12 @@ function KannaSidebarImpl({
                   onToggleStar={onToggleStar}
                   isConnected={connectionStatus === "connected"}
                 />
-                {data.projectGroups.length > 0 && (
-                  <div className="mx-3 my-1 border-t border-border/50" />
-                )}
               </>
             )}
 
             <LocalProjectsSection
               projectGroups={projectGroupsWithoutStackChats}
+              heading="Projects"
               editorLabel={editorLabel}
               onReorderGroups={onReorderProjectGroups}
               collapsedSections={collapsedSections}
