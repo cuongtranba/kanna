@@ -1,5 +1,5 @@
 import { describe, expect, mock, test } from "bun:test"
-import type { OrchCommandDeps, OrchAgentDep } from "./ws-router-orch"
+import type { OrchCommandDeps } from "./ws-router-orch"
 import { handleOrchCommand } from "./ws-router-orch"
 import type { ClientCommand } from "../shared/protocol"
 import type { ChatRecord, ProjectRecord } from "./events"
@@ -13,24 +13,13 @@ const REAL_CWD = process.cwd()
 // Helpers
 // ---------------------------------------------------------------------------
 
-function makeAgent(overrides: Partial<OrchAgentDep> = {}): OrchAgentDep {
-  return {
-    runOrchestration: mock(async () => ({ ok: true as const, runId: "run-1" })),
-    cancelOrchRun: mock(async () => {}),
-    getOrchRunDetail: mock(() => null),
-    ...overrides,
-  }
-}
-
 function makeDeps(
-  agentOverrides?: Partial<OrchAgentDep>,
   wfOverride?: OrchCommandDeps["workflowRegistry"],
   saOverride?: OrchCommandDeps["subagentTranscriptRegistry"],
   storeOverride?: OrchCommandDeps["store"],
 ): OrchCommandDeps & { sent: unknown[] } {
   const sent: unknown[] = []
   return {
-    agent: makeAgent(agentOverrides),
     workflowRegistry: wfOverride,
     subagentTranscriptRegistry: saOverride,
     store: storeOverride ?? { getChat: () => null, getProject: () => null },
@@ -55,6 +44,18 @@ describe("handleOrchCommand", () => {
     expect(deps.sent).toHaveLength(0)
   })
 
+  // The orchestration feature is retired: these command types are no longer
+  // part of the protocol, so a client that still sends one must fall through
+  // to the router's unknown-command path rather than be silently acked.
+  test("orch.* commands are unroutable (hard-break per adr-20260802-retire-orchestration-core)", async () => {
+    for (const type of ["orch.run", "orch.cancelRun", "orch.getRun"]) {
+      const deps = makeDeps()
+      const handled = await handleOrchCommand(deps, { type } as unknown as ClientCommand, "r0")
+      expect(handled).toBe(false)
+      expect(deps.sent).toHaveLength(0)
+    }
+  })
+
   // ---------------------------------------------------------------------------
   // workflows.getRun
   // ---------------------------------------------------------------------------
@@ -67,7 +68,7 @@ describe("handleOrchCommand", () => {
       getRun: mock(() => run),
       getAgentTranscript: mock(() => []),
     }
-    const deps = makeDeps(undefined, wf)
+    const deps = makeDeps(wf)
     const handled = await handleOrchCommand(
       deps,
       { type: "workflows.getRun", chatId: "c-1", runId: "wf-1" },
@@ -102,7 +103,7 @@ describe("handleOrchCommand", () => {
       getRun: mock(() => null),
       getAgentTranscript: mock(() => entries),
     }
-    const deps = makeDeps(undefined, wf)
+    const deps = makeDeps(wf)
     const handled = await handleOrchCommand(
       deps,
       { type: "workflows.getAgentTranscript", chatId: "c-1", runId: "wf-1", agentId: "ag-1" },
@@ -126,7 +127,7 @@ describe("handleOrchCommand", () => {
       register: mock(() => {}),
       getAgentTranscript: mock(() => entries),
     }
-    const deps = makeDeps(undefined, undefined, sa)
+    const deps = makeDeps(undefined, sa)
     const handled = await handleOrchCommand(
       deps,
       { type: "subagents.getRun", chatId: "c-1", agentId: "ag-2" },
@@ -138,7 +139,7 @@ describe("handleOrchCommand", () => {
   })
 
   test("subagents.getRun — returns empty array when registry absent", async () => {
-    const deps = makeDeps(undefined, undefined, undefined)
+    const deps = makeDeps(undefined, undefined)
     const handled = await handleOrchCommand(
       deps,
       { type: "subagents.getRun", chatId: "c-1", agentId: "ag-2" },
@@ -163,7 +164,7 @@ describe("handleOrchCommand", () => {
       getChat: mock(() => chat),
       getProject: mock(() => project),
     }
-    const deps = makeDeps(undefined, undefined, sa, store)
+    const deps = makeDeps(undefined, sa, store)
     const handled = await handleOrchCommand(
       deps,
       { type: "subagents.getRun", chatId: "c-1", agentId: "ag-2" },
@@ -188,7 +189,7 @@ describe("handleOrchCommand", () => {
       getChat: mock(() => { throw new Error("should not be reached") }),
       getProject: mock(() => { throw new Error("should not be reached") }),
     }
-    const deps = makeDeps(undefined, undefined, sa, store)
+    const deps = makeDeps(undefined, sa, store)
     const handled = await handleOrchCommand(
       deps,
       { type: "subagents.getRun", chatId: "c-1", agentId: "ag-2" },
@@ -210,7 +211,7 @@ describe("handleOrchCommand", () => {
       getChat: mock(() => chat),
       getProject: mock(() => { throw new Error("should not be reached") }),
     }
-    const deps = makeDeps(undefined, undefined, sa, store)
+    const deps = makeDeps(undefined, sa, store)
     const handled = await handleOrchCommand(
       deps,
       { type: "subagents.getRun", chatId: "c-1", agentId: "ag-2" },
@@ -218,55 +219,5 @@ describe("handleOrchCommand", () => {
     )
     expect(handled).toBe(true)
     expect(sa.register).not.toHaveBeenCalled()
-  })
-
-  // ---------------------------------------------------------------------------
-  // orch.run
-  // ---------------------------------------------------------------------------
-
-  test("orch.run — delegates to agent.runOrchestration and acks with result", async () => {
-    const orchResult = { ok: true as const, runId: "run-42" }
-    const deps = makeDeps({ runOrchestration: mock(async () => orchResult) })
-    const handled = await handleOrchCommand(
-      deps,
-      { type: "orch.run", chatId: "c-1", input: { tasks: ["task A"] } },
-      "r6",
-    )
-    expect(handled).toBe(true)
-    expect(deps.agent.runOrchestration).toHaveBeenCalledWith("c-1", { tasks: ["task A"] })
-    expect((deps.sent[0] as { result: unknown }).result).toEqual(orchResult)
-  })
-
-  // ---------------------------------------------------------------------------
-  // orch.cancelRun
-  // ---------------------------------------------------------------------------
-
-  test("orch.cancelRun — delegates to agent.cancelOrchRun and acks ok", async () => {
-    const deps = makeDeps()
-    const handled = await handleOrchCommand(
-      deps,
-      { type: "orch.cancelRun", runId: "run-42" },
-      "r7",
-    )
-    expect(handled).toBe(true)
-    expect(deps.agent.cancelOrchRun).toHaveBeenCalledWith("run-42")
-    expect((deps.sent[0] as { result: unknown }).result).toEqual({ ok: true })
-  })
-
-  // ---------------------------------------------------------------------------
-  // orch.getRun
-  // ---------------------------------------------------------------------------
-
-  test("orch.getRun — delegates to agent.getOrchRunDetail and acks with detail", async () => {
-    const detail = { runId: "run-42", status: "running" } as unknown as ReturnType<OrchAgentDep["getOrchRunDetail"]>
-    const deps = makeDeps({ getOrchRunDetail: mock(() => detail) })
-    const handled = await handleOrchCommand(
-      deps,
-      { type: "orch.getRun", runId: "run-42" },
-      "r8",
-    )
-    expect(handled).toBe(true)
-    expect(deps.agent.getOrchRunDetail).toHaveBeenCalledWith("run-42")
-    expect((deps.sent[0] as { result: unknown }).result).toBe(detail)
   })
 })

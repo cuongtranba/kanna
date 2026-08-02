@@ -412,13 +412,9 @@ export function createWsRouter({
         }
         case "workflows.getRun":
         case "workflows.getAgentTranscript":
-        case "subagents.getRun":
-        case "orch.run":
-        case "orch.cancelRun":
-        case "orch.getRun": {
+        case "subagents.getRun": {
           await handleOrchCommand(
             {
-              agent,
               workflowRegistry,
               subagentTranscriptRegistry,
               store,

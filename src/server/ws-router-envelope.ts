@@ -14,7 +14,6 @@ import type { ChatSnapshot } from "../shared/types"
 import type { ServerEnvelope, SubscriptionTopic } from "../shared/protocol"
 import type { ServerWebSocket } from "bun"
 import { deriveChatSnapshot, deriveLocalProjectsSnapshot, deriveSidebarData } from "./read-models"
-import { toOrchRunSummary } from "./orchestration-input"
 import type { EventStore } from "./event-store"
 import type { AgentCoordinator } from "./agent"
 import type { TerminalManager } from "./terminal-manager"
@@ -316,18 +315,6 @@ export function createEnvelopeBuilder(deps: EnvelopeDeps): EnvelopeBuilder {
       }
     }
 
-    if (topic.type === "orch-runs") {
-      return {
-        v: PROTOCOL_VERSION,
-        type: "snapshot",
-        id,
-        snapshot: {
-          type: "orch-runs",
-          data: { runs: store.getOrchRuns().map(toOrchRunSummary) },
-        },
-      }
-    }
-
     if (topic.type === "followed-sessions") {
       return {
         v: PROTOCOL_VERSION,
@@ -342,7 +329,7 @@ export function createEnvelopeBuilder(deps: EnvelopeDeps): EnvelopeBuilder {
 
     // Capture seq BEFORE deriving: ops recorded mid-derive then overlap the
     // snapshot, and the client reducer's upsert-by-_id makes that idempotent.
-    // Optional-chained like subscribeOrchRuns: partial store fakes in tests
+    // Optional-chained like the registry subscriptions: partial store fakes in tests
     // may not implement chatOps; the real EventStore always does.
     const seq = typeof store.chatOps?.currentSeq === "function"
       ? store.chatOps.currentSeq(topic.chatId)

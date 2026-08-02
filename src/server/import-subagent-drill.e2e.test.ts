@@ -87,11 +87,6 @@ describe("subagent drill-in for imported chats (e2e)", () => {
       const sent: ServerEnvelope[] = []
       const handled = await handleOrchCommand(
         {
-          agent: {
-            runOrchestration: async () => ({ ok: true as const, runId: "unused" }),
-            cancelOrchRun: async () => {},
-            getOrchRunDetail: () => null,
-          },
           workflowRegistry: undefined,
           subagentTranscriptRegistry: registry,
           store: { getChat: (id) => store.getChat(id), getProject: (id) => store.getProject(id) },
