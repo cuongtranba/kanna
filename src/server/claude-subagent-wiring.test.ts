@@ -207,23 +207,6 @@ describe("buildSubagentProviderRunForChat", () => {
     )
   })
 
-  test("cwdOverride suppresses restriction and additionalDirectories", () => {
-    const capturedStartArgs: unknown[] = []
-    const deps = makeDeps({
-      startClaudeSessionFn: async (a) => {
-        capturedStartArgs.push(a)
-        return {} as never
-      },
-    })
-    const args: BuildSubagentProviderRunForChatArgs = {
-      ...BASE_ARGS,
-      cwdOverride: "/tmp/worktree",
-    }
-    const result = buildSubagentProviderRunForChat(deps, args)
-    // The ProviderRunStart is constructed — just verify it's valid
-    expect(typeof result.start).toBe("function")
-  })
-
   test("delegation context increments depth and chains ancestorSubagentIds", () => {
     // We verify the ProviderRunStart is created correctly with depth 0+1=1
     // by checking the function doesn't throw with proper args

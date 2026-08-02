@@ -125,13 +125,6 @@ export interface BuildSubagentProviderRunForChatArgs {
   depth: number
   ancestorSubagentIds: string[]
   parentUserMessageId: string
-  /**
-   * Orchestration workers run in an isolated git worktree, not the chat cwd.
-   * When set, this overrides the resolved cwd, disables workingDir/allowedPaths
-   * restriction, and drops additional dirs / stack labelling (the worktree is
-   * a self-contained checkout).
-   */
-  cwdOverride?: string
 }
 
 // ---------------------------------------------------------------------------
@@ -204,8 +197,7 @@ export function buildSubagentProviderRunForChat(
   if (!project) throw new Error(`Project ${chat.projectId} not found for chat ${args.chatId}`)
   const spawn = resolveSpawnPaths(chat, project.localPath)
   const restriction =
-    args.cwdOverride === undefined &&
-    (args.subagent.workingDir !== undefined || args.subagent.allowedPaths !== undefined)
+    args.subagent.workingDir !== undefined || args.subagent.allowedPaths !== undefined
       ? resolveSubagentRoots(
           spawn.cwd,
           args.subagent.workingDir,
@@ -271,14 +263,13 @@ export function buildSubagentProviderRunForChat(
     userInstruction: args.userInstruction,
     runId: args.runId,
     abortSignal: args.abortSignal,
-    cwd: args.cwdOverride ?? restriction?.cwd ?? spawn.cwd,
-    additionalDirectories: args.cwdOverride ? [] : spawn.additionalDirectories,
+    cwd: restriction?.cwd ?? spawn.cwd,
+    additionalDirectories: spawn.additionalDirectories,
     // Only label stack projects for unrestricted runs — a path-restricted
     // subagent cannot reach every root, so listing them all would mislead.
-    stackProjects:
-      args.cwdOverride || restriction
-        ? []
-        : resolveStackProjects(chat, (id) => deps.store.getProject(id)?.title),
+    stackProjects: restriction
+      ? []
+      : resolveStackProjects(chat, (id) => deps.store.getProject(id)?.title),
     allowedPaths: restriction?.allowedPaths,
     projectId: project.id,
     startClaudeSession: buildClaudeSubagentStarter(deps),
