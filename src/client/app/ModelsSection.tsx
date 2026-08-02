@@ -1,4 +1,4 @@
-import { useMemo } from "react"
+import { useCallback, useMemo } from "react"
 import { Plus, Trash2, Pencil, Cpu } from "lucide-react"
 import { Button } from "../components/ui/button"
 import { Input } from "../components/ui/input"
@@ -170,6 +170,11 @@ function ModelEditor({
   const setEditorId = useModelsSectionStore((state) => state.setEditorId)
   const setEditorLabel = useModelsSectionStore((state) => state.setEditorLabel)
   const setEditorModelProvider = useModelsSectionStore((state) => state.setEditorModelProvider)
+  // The guard is a TS type predicate narrowing string -> ModelProvider, so it
+  // belongs at the boundary, not in the store.
+  const handleProviderChange = useCallback((value: string) => {
+    if (isModelProvider(value)) setEditorModelProvider(value)
+  }, [setEditorModelProvider])
   const setEditorSupportsEffort = useModelsSectionStore((state) => state.setEditorSupportsEffort)
   const setEditorSubmitting = useModelsSectionStore((state) => state.setEditorSubmitting)
   const setEditorError = useModelsSectionStore((state) => state.setEditorError)
@@ -226,7 +231,7 @@ function ModelEditor({
         <span className="text-sm font-medium">Provider</span>
         <Select
           value={modelProvider}
-          onValueChange={(value) => { if (isModelProvider(value)) setEditorModelProvider(value) }}
+          onValueChange={handleProviderChange}
           disabled={isEdit}
         >
           <SelectTrigger className="min-w-[180px]">
