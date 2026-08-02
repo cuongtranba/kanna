@@ -11,7 +11,7 @@ import { TruncatedText } from "../../ui/truncated-text"
 import { cn } from "../../../lib/utils"
 import { useIsMobile } from "../../../hooks/useIsMobile"
 import type { GitWorktree, StackSummary } from "../../../../shared/types"
-import { createScopedStore } from "../../../lib/createScopedStore"
+import { stackChatCreateRowStore } from "./StackChatCreateRow.store"
 
 interface StackChatCreateRowProps {
   stack: StackSummary
@@ -22,37 +22,6 @@ interface StackChatCreateRowProps {
   }) => Promise<void>
   onCancel: () => void
 }
-
-interface StackChatCreateRowInit {
-  initialPrimaryProjectId: string
-  initialSelectedWorktrees: Map<string, string>
-}
-
-interface StackChatCreateRowState {
-  selectedWorktrees: Map<string, string>
-  primaryProjectId: string
-  isSubmitting: boolean
-  errorMessage: string | null
-  setSelectedWorktrees: (updater: (prev: Map<string, string>) => Map<string, string>) => void
-  setPrimaryProjectId: (id: string) => void
-  setIsSubmitting: (submitting: boolean) => void
-  setErrorMessage: (message: string | null) => void
-}
-
-const stackChatCreateRowStore = createScopedStore<
-  StackChatCreateRowInit,
-  StackChatCreateRowState
->("StackChatCreateRow", (init) => (set) => ({
-  selectedWorktrees: init.initialSelectedWorktrees,
-  primaryProjectId: init.initialPrimaryProjectId,
-  isSubmitting: false,
-  errorMessage: null,
-  setSelectedWorktrees: (updater) =>
-    set((state) => ({ selectedWorktrees: updater(state.selectedWorktrees) })),
-  setPrimaryProjectId: (id) => set({ primaryProjectId: id }),
-  setIsSubmitting: (submitting) => set({ isSubmitting: submitting }),
-  setErrorMessage: (message) => set({ errorMessage: message }),
-}))
 
 function StackChatCreateRowInner({
   stack,
@@ -68,7 +37,7 @@ function StackChatCreateRowInner({
   const primaryProjectId = stackChatCreateRowStore.useScopedStore((s) => s.primaryProjectId)
   const isSubmitting = stackChatCreateRowStore.useScopedStore((s) => s.isSubmitting)
   const errorMessage = stackChatCreateRowStore.useScopedStore((s) => s.errorMessage)
-  const setSelectedWorktrees = stackChatCreateRowStore.useScopedStore((s) => s.setSelectedWorktrees)
+  const selectWorktree = stackChatCreateRowStore.useScopedStore((s) => s.selectWorktree)
   const setPrimaryProjectId = stackChatCreateRowStore.useScopedStore((s) => s.setPrimaryProjectId)
   const setIsSubmitting = stackChatCreateRowStore.useScopedStore((s) => s.setIsSubmitting)
   const setErrorMessage = stackChatCreateRowStore.useScopedStore((s) => s.setErrorMessage)
@@ -155,13 +124,7 @@ function StackChatCreateRowInner({
 
                 <select
                   value={selectedPath}
-                  onChange={(e) => {
-                    setSelectedWorktrees((prev) => {
-                      const next = new Map(prev)
-                      next.set(project.id, e.target.value)
-                      return next
-                    })
-                  }}
+                  onChange={(e) => selectWorktree(project.id, e.target.value)}
                   disabled={onlyOneWorktree}
                   className="w-full text-[13px] font-mono tabular-nums border border-border rounded-md px-2 py-1.5 bg-background text-foreground truncate disabled:opacity-70 disabled:cursor-not-allowed"
                   aria-label={`Worktree for ${project.title}`}
