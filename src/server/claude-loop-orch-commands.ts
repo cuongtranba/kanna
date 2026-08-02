@@ -19,10 +19,7 @@ import { timestamped } from "./claude-message-normalizer"
 import { buildTaskNotification } from "./claude-session-config"
 import { validateLoopSetup, reconcileTrackingFile, type LoopSetupInput } from "./loop-template"
 import type { EnsureTrackingFileArgs, EnsureTrackingFileResult } from "./loop-template-io.adapter"
-import { validateOrchRun, toOrchRunDetail, type OrchRunContext } from "./orchestration-input"
-import type { OrchRunDetail, OrchRunInput, OrchRunConfig, OrchTaskSpec, OrchRunSnapshot } from "../shared/orchestration-types"
-import type { WorkerSpawnArgs, WorkerResult } from "./orchestration-queue"
-import type { BackgroundRunOutcome, ProviderRunStart } from "./subagent-orchestrator"
+import type { BackgroundRunOutcome } from "./subagent-orchestrator"
 import type { ClaudeSessionState } from "./claude-session-state"
 import type { SetupLoopHandlerResult } from "./kanna-mcp"
 import { log } from "../shared/log"
@@ -33,18 +30,11 @@ import { log } from "../shared/log"
 
 /** Subset of EventStore used by these handlers. */
 interface LoopOrchCommandStore {
-  getOrchRun(runId: string): OrchRunSnapshot | null
   getChat(chatId: string): { id: string; projectId: string } | null
   getProject(projectId: string): { localPath: string; id: string } | null
   getAutoContinueEvents(chatId: string): AutoContinueEvent[]
   setSessionTokenForProvider(chatId: string, provider: AgentProvider, token: string | null): Promise<void>
   appendMessage(chatId: string, entry: TranscriptEntry): Promise<void>
-}
-
-/** Subset of OrchestrationQueue used by these handlers. */
-interface LoopOrchCommandOrchQueue {
-  createRun(config: OrchRunConfig, tasks: OrchTaskSpec[]): Promise<string>
-  cancelRun(runId: string): Promise<void>
 }
 
 // ---------------------------------------------------------------------------
@@ -54,9 +44,6 @@ interface LoopOrchCommandOrchQueue {
 export interface LoopOrchCommandDeps {
   /** EventStore — subset used by these handlers. */
   store: LoopOrchCommandStore
-
-  /** OrchestrationQueue — subset used by these handlers. */
-  orchestrationQueue: LoopOrchCommandOrchQueue
 
   /** Live Claude sessions map owned by the coordinator (read-only). */
   claudeSessions: Pick<Map<string, ClaudeSessionState>, "get">
@@ -70,27 +57,9 @@ export interface LoopOrchCommandDeps {
   /** Returns the current app settings snapshot for subagentRuntime config. */
   getAppSettingsSnapshot(): {
     subagentRuntime?: {
-      defaultOrchSubagentId?: string | null
       defaultLoopSubagentId?: string | null
     } | null
   }
-
-  /**
-   * Builds a provider-run start bundle for an orchestration worker subagent.
-   * Delegates to `AgentCoordinator.buildSubagentProviderRunForChat`.
-   */
-  buildSubagentProviderRunForChat(args: {
-    subagent: Subagent
-    chatId: string
-    primer: string | null
-    userInstruction: string | null
-    runId: string
-    abortSignal: AbortSignal
-    depth: number
-    ancestorSubagentIds: string[]
-    parentUserMessageId: string
-    cwdOverride?: string
-  }): ProviderRunStart
 
   /**
    * Tears down the given Claude session. No permit semantics here — caller
@@ -122,111 +91,6 @@ export interface LoopOrchCommandDeps {
 // ---------------------------------------------------------------------------
 // Exported standalone functions
 // ---------------------------------------------------------------------------
-
-// ── Orchestration commands ──────────────────────────────────────────────────
-
-/**
- * Spawn a single orchestration phase worker. Looks up the run's persisted
- * config for origin chat + subagent, then delegates to the coordinator's
- * subagent provider-run machinery. Origin chat + subagent are read from the
- * persisted run config so this resolves identically on a fresh run and after
- * a restart.
- */
-export async function buildOrchWorker(
-  deps: LoopOrchCommandDeps,
-  spawn: WorkerSpawnArgs,
-): Promise<WorkerResult> {
-  const run = deps.store.getOrchRun(spawn.runId)
-  const chatId = run?.config.originChatId
-  const subagentId = run?.config.workerSubagentId
-  if (!chatId || !subagentId) {
-    return { kind: "failed", error: "orchestration run missing originChatId / workerSubagentId" }
-  }
-  const subagent = deps.getSubagents().find((s) => s.id === subagentId)
-  if (!subagent) return { kind: "failed", error: `orchestration worker subagent "${subagentId}" not found` }
-  if (!deps.store.getChat(chatId)) return { kind: "failed", error: `orchestration origin chat ${chatId} not found` }
-
-  const providerRun = deps.buildSubagentProviderRunForChat({
-    subagent,
-    chatId,
-    primer: null,
-    userInstruction: spawn.prompt,
-    runId: `${spawn.runId}:${spawn.workerId}`,
-    abortSignal: spawn.abortSignal,
-    depth: 0,
-    ancestorSubagentIds: [],
-    parentUserMessageId: spawn.runId,
-    cwdOverride: spawn.cwd,
-  })
-  try {
-    if (!(await providerRun.authReady())) {
-      return { kind: "failed", error: "orchestration worker auth not ready" }
-    }
-    const result = await providerRun.start(() => undefined, () => undefined)
-    return { kind: "completed", text: result.text }
-  } catch (err) {
-    if (spawn.abortSignal.aborted) return { kind: "failed", error: "aborted" }
-    return { kind: "failed", error: err instanceof Error ? err.message : String(err) }
-  }
-}
-
-/**
- * Derive chat/project context for orchestration validation. Returns null when
- * the chat or project is not found.
- */
-export function buildOrchRunContext(
-  deps: LoopOrchCommandDeps,
-  chatId: string,
-): OrchRunContext | null {
-  const chat = deps.store.getChat(chatId)
-  if (!chat) return null
-  const project = deps.store.getProject(chat.projectId)
-  if (!project) return null
-  return {
-    chatId,
-    repoRoot: project.localPath,
-    roster: deps.getSubagents().map((s) => ({ id: s.id, name: s.name })),
-    defaultOrchSubagentId: deps.getAppSettingsSnapshot().subagentRuntime?.defaultOrchSubagentId ?? null,
-  }
-}
-
-/**
- * User-callable entry point (MCP `orch_run` + ws `orch.run`). Validates the
- * task list into the fixed linear config, then starts the run. Returns the
- * runId or the flat validation error list — never a partial run.
- */
-export async function runOrchestration(
-  deps: LoopOrchCommandDeps,
-  chatId: string,
-  input: OrchRunInput,
-): Promise<{ ok: true; runId: string } | { ok: false; errors: string[] }> {
-  const context = buildOrchRunContext(deps, chatId)
-  if (!context) return { ok: false, errors: [`chat ${chatId} not found or has no project`] }
-  const validation = validateOrchRun(input, context)
-  if (!validation.ok) return { ok: false, errors: validation.errors }
-  const runId = await deps.orchestrationQueue.createRun(
-    validation.resolved.config,
-    validation.resolved.tasks,
-  )
-  return { ok: true, runId }
-}
-
-/** Cancel a run (MCP `orch_cancel_run` + ws `orch.cancelRun`). */
-export async function cancelOrchRun(
-  deps: LoopOrchCommandDeps,
-  runId: string,
-): Promise<void> {
-  await deps.orchestrationQueue.cancelRun(runId)
-}
-
-/** Canonical run detail DTO (MCP `orch_run_status` + ws `orch.getRun`). */
-export function getOrchRunDetail(
-  deps: LoopOrchCommandDeps,
-  runId: string,
-): OrchRunDetail | null {
-  const snapshot = deps.store.getOrchRun(runId)
-  return snapshot ? toOrchRunDetail(snapshot) : null
-}
 
 // ── Loop + background delivery ──────────────────────────────────────────────
 

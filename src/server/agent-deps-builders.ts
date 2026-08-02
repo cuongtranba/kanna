@@ -113,18 +113,16 @@ export function buildAutoContinueCommandDeps(agent: AgentCoordinator): AutoConti
 }
 
 // ---------------------------------------------------------------------------
-// 5. Loop / orch commands
+// 5. Loop commands
 // ---------------------------------------------------------------------------
 
 export function buildLoopOrchCommandDeps(agent: AgentCoordinator): LoopOrchCommandDeps {
   return {
     store: agent.store,
-    orchestrationQueue: agent.getOrchestrationQueue(),
     claudeSessions: agent.claudeSessions,
     activeTurns: agent.activeTurns,
     getSubagents: () => agent.getSubagents(),
     getAppSettingsSnapshot: () => agent.getAppSettingsSnapshot(),
-    buildSubagentProviderRunForChat: (args) => agent.buildSubagentProviderRunForChat(args),
     closeClaudeSession: (chatId, session) => agent.closeClaudeSession(chatId, session),
     emitAutoContinueEvent: (event) => agent.emitAutoContinueEvent(event),
     ensureTrackingFile,

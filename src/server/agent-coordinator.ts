@@ -38,9 +38,6 @@ import {
   type SubagentWiringDeps,
   type BuildSubagentProviderRunForChatArgs,
 } from "./claude-subagent-wiring"
-import { OrchestrationQueue, type WorkerResult, type WorkerSpawnArgs } from "./orchestration-queue"
-import { createOrchWorktreeOps } from "./orchestration-worktree.adapter"
-import { runCommandInWorktree } from "./orchestration-exec-io.adapter"
 import type { ToolCallbackService } from "./tool-callback"
 import type { ChatPermissionPolicy } from "../shared/permission-policy"
 import { POLICY_DEFAULT } from "../shared/permission-policy"
@@ -100,7 +97,6 @@ import {
   type AutoContinueCommandDeps,
 } from "./claude-autocontinue-commands"
 import {
-  buildOrchWorker as buildOrchWorkerFn,
   deliverSubagentToMain as deliverSubagentToMainFn,
   setupLoop as setupLoopFn,
   isLoopArmed as isLoopArmedFn,
@@ -216,11 +212,6 @@ export class AgentCoordinator {
   getSubagentOrchestrator(): SubagentOrchestrator {
     return this.subagentOrchestrator
   }
-  private readonly orchestrationQueue: OrchestrationQueue
-  /** Public accessor for tests + the `orch_*` MCP tool + ws-router wiring. */
-  getOrchestrationQueue(): OrchestrationQueue {
-    return this.orchestrationQueue
-  }
   readonly throwOnClaudeSessionStart: boolean
   readonly autoResumeByChat = new Map<string, boolean>()
   readonly openrouterFirstEntryTimeoutMs: number
@@ -317,13 +308,6 @@ export class AgentCoordinator {
       runTimeoutMs: (this.getAppSettingsSnapshot().subagentRuntime?.runTimeoutMs
         ?? positiveIntegerFromEnv(process.env.KANNA_SUBAGENT_RUN_TIMEOUT_MS, 0))
         || undefined,
-    })
-    this.orchestrationQueue = new OrchestrationQueue({
-      store: this.store,
-      worktrees: createOrchWorktreeOps(),
-      startWorker: (a) => this.buildOrchWorker(a),
-      runVerify: runCommandInWorktree,
-      runInit: runCommandInWorktree,
     })
     this.throwOnClaudeSessionStart = args.throwOnClaudeSessionStart ?? false
     this.tunnelGateway = args.tunnelGateway ?? null
@@ -781,17 +765,6 @@ export class AgentCoordinator {
   /** @internal used by agent-deps-builders.ts via buildLoopOrchCommandDeps; Delegates to buildSubagentProviderRunForChatFn. */
   buildSubagentProviderRunForChat(args: BuildSubagentProviderRunForChatArgs): ProviderRunStart {
     return buildSubagentProviderRunForChatFn(this.buildSubagentWiringDeps(), args)
-  }
-
-  /**
-   * StartWorker adapter for the OrchestrationQueue: spawn the run's configured
-   * worker subagent against the task worktree (`spawn.cwd`) with the phase
-   * prompt. Origin chat + subagent are read from the persisted run config so
-   * this resolves identically on a fresh run and after a restart.
-   */
-  /** Delegates to buildOrchWorkerFn — see claude-loop-orch-commands.ts. */
-  private async buildOrchWorker(spawn: WorkerSpawnArgs): Promise<WorkerResult> {
-    return buildOrchWorkerFn(this.buildLoopOrchCommandDeps(), spawn)
   }
 
   async enqueue(command: Extract<ClientCommand, { type: "message.enqueue" }>) {
