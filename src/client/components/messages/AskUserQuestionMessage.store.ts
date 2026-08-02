@@ -1,16 +1,29 @@
+import type { StateCreator } from "zustand"
 import { createScopedStore } from "../../lib/createScopedStore"
 import type { AskUserQuestionAnswerMap } from "../../../shared/types"
 
-interface AskUserQuestionMessageState {
+export interface AskUserQuestionMessageState {
   submittedAnswers: AskUserQuestionAnswerMap | null
   isSubmitted: boolean
-  setSubmittedAnswers: (submittedAnswers: AskUserQuestionAnswerMap | null) => void
-  setIsSubmitted: (isSubmitted: boolean) => void
+
+  /** Record the answers and flip to submitted — one transition, not two writes. */
+  markSubmitted: (answers: AskUserQuestionAnswerMap) => void
 }
 
-interface AskUserQuestionMessageInit {
+export interface AskUserQuestionMessageInit {
   savedAnswers: AskUserQuestionAnswerMap | null
   isComplete: boolean
+}
+
+export function createAskUserQuestionMessageState(
+  { savedAnswers, isComplete }: AskUserQuestionMessageInit,
+): StateCreator<AskUserQuestionMessageState> {
+  return (set) => ({
+    submittedAnswers: savedAnswers ?? null,
+    isSubmitted: isComplete,
+
+    markSubmitted: (answers) => set({ submittedAnswers: answers, isSubmitted: true }),
+  })
 }
 
 export const AskUserQuestionMessageStore = createScopedStore<
@@ -18,11 +31,5 @@ export const AskUserQuestionMessageStore = createScopedStore<
   AskUserQuestionMessageState
 >(
   "AskUserQuestionMessage",
-  ({ savedAnswers, isComplete }) =>
-    (set) => ({
-      submittedAnswers: savedAnswers ?? null,
-      isSubmitted: isComplete,
-      setSubmittedAnswers: (submittedAnswers) => set({ submittedAnswers }),
-      setIsSubmitted: (isSubmitted) => set({ isSubmitted }),
-    }),
+  createAskUserQuestionMessageState,
 )

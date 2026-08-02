@@ -1,3 +1,4 @@
+import { useCallback } from "react"
 import { MessageCircleQuestion } from "lucide-react"
 import type { ProcessedToolCall, AskUserQuestionItem } from "./types"
 import type { AskUserQuestionAnswerMap } from "../../../shared/types"
@@ -31,8 +32,12 @@ function AskUserQuestionMessageInner({ message, onSubmit, isLatest }: Props) {
 
   const submittedAnswers = AskUserQuestionMessageStore.useScopedStore((s) => s.submittedAnswers)
   const isSubmitted = AskUserQuestionMessageStore.useScopedStore((s) => s.isSubmitted)
-  const setSubmittedAnswers = AskUserQuestionMessageStore.useScopedStore((s) => s.setSubmittedAnswers)
-  const setIsSubmitted = AskUserQuestionMessageStore.useScopedStore((s) => s.setIsSubmitted)
+  const markSubmitted = AskUserQuestionMessageStore.useScopedStore((s) => s.markSubmitted)
+
+  const handleSubmit = useCallback((finalAnswers: AskUserQuestionAnswerMap) => {
+    markSubmitted(finalAnswers)
+    onSubmit(message.toolId, questions, finalAnswers)
+  }, [markSubmitted, onSubmit, message.toolId, questions])
 
   // Completed state
   if (isSubmitted || isComplete) {
@@ -138,11 +143,7 @@ function AskUserQuestionMessageInner({ message, onSubmit, isLatest }: Props) {
   return (
     <AskUserQuestionInteractive
       questions={questions}
-      onSubmit={(finalAnswers) => {
-        setSubmittedAnswers(finalAnswers)
-        setIsSubmitted(true)
-        onSubmit(message.toolId, questions, finalAnswers)
-      }}
+      onSubmit={handleSubmit}
     />
   )
 }
