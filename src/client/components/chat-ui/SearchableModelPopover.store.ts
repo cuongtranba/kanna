@@ -1,20 +1,33 @@
+import type { StateCreator } from "zustand"
 import { createScopedStore } from "../../lib/createScopedStore"
 
-interface SearchableModelPopoverState {
+export interface SearchableModelPopoverState {
   open: boolean
   query: string
-  setOpen: (open: boolean) => void
+
   setQuery: (query: string) => void
+  /**
+   * Drive the popover from a single boolean: opening keeps the query, closing
+   * clears it. Callers pass the raw open-change value, no branching in the view.
+   */
+  setPopoverOpen: (open: boolean) => void
   closeAndClearQuery: () => void
+}
+
+export function createSearchableModelPopoverState(): StateCreator<SearchableModelPopoverState> {
+  return (set) => ({
+    open: false,
+    query: "",
+
+    setQuery: (query) => set({ query }),
+
+    setPopoverOpen: (open) => set(open ? { open: true } : { open: false, query: "" }),
+
+    closeAndClearQuery: () => set({ open: false, query: "" }),
+  })
 }
 
 export const SearchableModelPopoverStore = createScopedStore<void, SearchableModelPopoverState>(
   "SearchableModelPopover",
-  () => (set) => ({
-    open: false,
-    query: "",
-    setOpen: (open) => set({ open }),
-    setQuery: (query) => set({ query }),
-    closeAndClearQuery: () => set({ open: false, query: "" }),
-  }),
+  createSearchableModelPopoverState,
 )

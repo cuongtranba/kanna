@@ -1,5 +1,5 @@
 import { useCallback, useMemo } from "react"
-import type { ReactNode, RefObject } from "react"
+import type { MouseEvent as ReactMouseEvent, ReactNode, RefObject } from "react"
 import { $createTextNode, $insertNodes, TextNode } from "lexical"
 import type { LexicalEditor } from "lexical"
 import {
@@ -171,6 +171,17 @@ export function SlashCommandTypeaheadPlugin({
       if (anchorElementRef.current == null) return null
       if (menuOptions.length === 0 && !loading) return null
 
+      // Plain function, not a hook: menuRenderFn is itself a callback.
+      // Keeps the handler out of the JSX attribute (selectOptionAndCleanUp
+      // is a Lexical callback, not a store action).
+      const handleOptionMouseDown = (
+        event: ReactMouseEvent<HTMLLIElement>,
+        option: SlashCommandMenuOption,
+      ) => {
+        event.preventDefault()
+        selectOptionAndCleanUp(option)
+      }
+
       return (
         <ul
           role="listbox"
@@ -199,10 +210,7 @@ export function SlashCommandTypeaheadPlugin({
                     ref={option.setRefElement}
                     role="option"
                     aria-selected={isActive}
-                    onMouseDown={(e) => {
-                      e.preventDefault()
-                      selectOptionAndCleanUp(option)
-                    }}
+                    onMouseDown={(e) => handleOptionMouseDown(e, option)}
                     onMouseEnter={() => setHighlightedIndex(i)}
                     className={cn(
                       "flex flex-col gap-0.5 px-3 py-1.5 cursor-pointer text-sm sm:flex-row sm:items-center sm:gap-3",

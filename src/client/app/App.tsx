@@ -353,6 +353,14 @@ function KannaLayout({ ports = {} }: { ports?: AppPorts } = {}) {
       navigate(`/chat/${chatId}`)
     }
   }, [navigate, setPermissionsChatId, state.activeChatId])
+  // Closes over an async command on the state prop, so it stays in the
+  // component; the store only learns that the dialog closed.
+  const handleApplyChatPolicy = useCallback((next: Parameters<typeof state.handleSetChatPolicyOverride>[1]) => {
+    if (!permissionsChatId) return
+    void state.handleSetChatPolicyOverride(permissionsChatId, next).catch(() => undefined)
+    setPermissionsChatId(null)
+  }, [permissionsChatId, state, setPermissionsChatId])
+
   const permissionsChatTitle = state.chatSnapshot?.runtime.title ?? "Chat"
   const permissionsCurrentOverride = state.chatSnapshot?.runtime.policyOverride ?? null
 
@@ -506,11 +514,7 @@ function KannaLayout({ ports = {} }: { ports?: AppPorts } = {}) {
         baseline={POLICY_DEFAULT}
         current={permissionsCurrentOverride}
         onCancel={() => setPermissionsChatId(null)}
-        onApply={(next) => {
-          if (!permissionsChatId) return
-          void state.handleSetChatPolicyOverride(permissionsChatId, next).catch(() => undefined)
-          setPermissionsChatId(null)
-        }}
+        onApply={handleApplyChatPolicy}
       />
     </div>
   )

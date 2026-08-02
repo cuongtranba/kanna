@@ -146,3 +146,32 @@ describe("rightSidebarStore", () => {
     })
   })
 })
+
+describe("rightSidebarStore — commit field actions", () => {
+  beforeEach(() => {
+    useRightSidebarStore.setState({ size: DEFAULT_RIGHT_SIDEBAR_SIZE, projects: {}, projectUi: {} })
+  })
+
+  test("setCommitSummary leaves the description untouched", () => {
+    useRightSidebarStore.getState().setCommitDraft("p1", { summary: "old", description: "body" })
+    useRightSidebarStore.getState().setCommitSummary("p1", "feat: new")
+
+    expect(useRightSidebarStore.getState().projectUi.p1?.summary).toBe("feat: new")
+    expect(useRightSidebarStore.getState().projectUi.p1?.description).toBe("body")
+  })
+
+  test("setCommitDescription leaves the summary untouched", () => {
+    useRightSidebarStore.getState().setCommitDraft("p1", { summary: "feat: x", description: "old" })
+    useRightSidebarStore.getState().setCommitDescription("p1", "new body")
+
+    expect(useRightSidebarStore.getState().projectUi.p1?.summary).toBe("feat: x")
+    expect(useRightSidebarStore.getState().projectUi.p1?.description).toBe("new body")
+  })
+
+  test("re-setting the same value is a no-op", () => {
+    useRightSidebarStore.getState().setCommitSummary("p1", "same")
+    const after = useRightSidebarStore.getState()
+    after.setCommitSummary("p1", "same")
+    expect(useRightSidebarStore.getState()).toBe(after)
+  })
+})

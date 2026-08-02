@@ -1,0 +1,70 @@
+id: no-jsx-inline-state-logic
+language: tsx
+severity: error
+message: State-transition logic inline in a JSX attribute — move the transition into a named Zustand action, or extract a useCallback handler.
+note: |
+  State transitions must live in exactly one place. An inline JSX-attribute
+  arrow that mutates state and is more than a single call scatters that logic
+  into the render tree, where it cannot be tested or reused.
+  Two legal remedies — pick by what the handler closes over:
+    1. PURE state transition (only store state) -> one named store action.
+         onClick={() => { setPanelOpen(false); setEditId(null) }}
+       becomes
+         closeStackPanel: () => set({ stackCreatePanelOpen: false, stackEditId: null })
+         onClick={closeStackPanel}
+    2. Orchestration over PROPS, refs, or async I/O -> extract a useCallback
+       handler in the component. Props, refs and I/O must NOT be absorbed into
+       a store; a ref stays a ref.
+         onClick={() => { onRemoveStack(id); clearDeleteConfirm() }}
+       becomes
+         const handleDelete = useCallback(() => { ... }, [...])
+         onClick={handleDelete}
+  Still fine: a bare reference (onClick={handleX}), a single-call arrow
+  (onClick={() => closePanel()} or onClick={() => { closePanel() }}), and
+  multi-statement handlers that touch no state (e.g. preventDefault + track).
+  The callee verb list is deliberately broader than ^set[A-Z] because migrated
+  actions are named toggleX/openY/closeZ — a ^set-only regex would be blind to
+  exactly the code this rule asks you to write. When you introduce a new action
+  verb, extend the regex AND add a rule-tests case in the same PR.
+  This rule is intentionally tsx-only — `jsx_attribute` does not exist in the
+  typescript grammar, so a `-ts` twin cannot be written.
+  See rule-zustand-store (.c3/rules/rule-zustand-store.md).
+files:
+  - src/client/**
+ignores:
+  - src/client/**/*.test.ts
+  - src/client/**/*.test.tsx
+  - src/client/components/ui/**
+rule:
+  kind: arrow_function
+  inside:
+    stopBy: end
+    kind: jsx_attribute
+  all:
+    - has:
+        field: body
+        kind: statement_block
+        any:
+          # two or more statements: a composed transition
+          - has:
+              nthChild: 2
+              stopBy: neighbor
+          # a lone if/else: branching logic, still logic
+          - has:
+              kind: if_statement
+              stopBy: neighbor
+    - has:
+        # Stop at function boundaries. With `stopBy: end` a pure render prop
+        # matches merely because a nested handler mutates, so fixing the nested
+        # handler would clear two reports at once and break the migration's
+        # progress signal. A nested handler is its own violation.
+        stopBy:
+          any:
+            - kind: arrow_function
+            - kind: function_expression
+            - kind: function_declaration
+        kind: call_expression
+        has:
+          field: function
+          kind: identifier
+          regex: '^(set|toggle|clear|reset|open|close|select|begin|finish|mark|dismiss|apply)[A-Z]'

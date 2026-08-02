@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef, type CSSProperties } from "react"
+import { memo, useCallback, useEffect, useMemo, useRef, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react"
 
 /** Returns CSS custom properties as a React-compatible style object via Object.assign. */
 function cssVars(vars: Record<`--${string}`, string>): CSSProperties {
@@ -33,7 +33,6 @@ import { log } from "../../shared/log"
 import {
   useKannaSidebarStore,
   clampSidebarWidth,
-  persistSidebarWidth,
   DEFAULT_SIDEBAR_WIDTH,
   MIN_SIDEBAR_WIDTH,
   MAX_SIDEBAR_WIDTH,
@@ -132,8 +131,6 @@ function KannaSidebarImpl({
   const navigate = useNavigate()
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const resizeStartRef = useRef<{ pointerX: number; width: number } | null>(null)
-  const initializedCollapsedGroupKeysRef = useRef<Set<string>>(new Set())
-  const expandedGroupsSnapshotRef = useRef<Set<string>>(new Set())
 
   const collapsedSections = useKannaSidebarStore((s) => s.collapsedSections)
   const expandedGroups = useKannaSidebarStore((s) => s.expandedGroups)
@@ -152,21 +149,27 @@ function KannaSidebarImpl({
   const isImporting = useKannaSidebarStore((s) => s.isImporting)
   const importDialogOpen = useKannaSidebarStore((s) => s.importDialogOpen)
 
-  const setCollapsedSections = useKannaSidebarStore((s) => s.setCollapsedSections)
-  const setExpandedGroups = useKannaSidebarStore((s) => s.setExpandedGroups)
+  const reconcileSidebarGroups = useKannaSidebarStore((s) => s.reconcileSidebarGroups)
+  const toggleSectionCollapsed = useKannaSidebarStore((s) => s.toggleSectionCollapsed)
+  const toggleGroupExpanded = useKannaSidebarStore((s) => s.toggleGroupExpanded)
+  const toggleAllSectionsCollapsed = useKannaSidebarStore((s) => s.toggleAllSectionsCollapsed)
   const setNowMs = useKannaSidebarStore((s) => s.setNowMs)
   const setShowNumberJumpHints = useKannaSidebarStore((s) => s.setShowNumberJumpHints)
   const setSidebarWidth = useKannaSidebarStore((s) => s.setSidebarWidth)
+  const nudgeSidebarWidth = useKannaSidebarStore((s) => s.nudgeSidebarWidth)
+  const commitSidebarWidth = useKannaSidebarStore((s) => s.commitSidebarWidth)
   const setSidebarWidthAndPersist = useKannaSidebarStore((s) => s.setSidebarWidthAndPersist)
   const setIsResizingSidebar = useKannaSidebarStore((s) => s.setIsResizingSidebar)
   const setArchivedProjectId = useKannaSidebarStore((s) => s.setArchivedProjectId)
-  const setExpandedStackIds = useKannaSidebarStore((s) => s.setExpandedStackIds)
-  const setStackCreatePanelOpen = useKannaSidebarStore((s) => s.setStackCreatePanelOpen)
-  const setStackEditId = useKannaSidebarStore((s) => s.setStackEditId)
+  const toggleStackExpanded = useKannaSidebarStore((s) => s.toggleStackExpanded)
+  const openStackCreatePanel = useKannaSidebarStore((s) => s.openStackCreatePanel)
+  const openStackEditPanel = useKannaSidebarStore((s) => s.openStackEditPanel)
+  const closeStackPanel = useKannaSidebarStore((s) => s.closeStackPanel)
   const setStackDeleteConfirmId = useKannaSidebarStore((s) => s.setStackDeleteConfirmId)
-  const setStackChatCreateId = useKannaSidebarStore((s) => s.setStackChatCreateId)
-  const setStackChatWorktrees = useKannaSidebarStore((s) => s.setStackChatWorktrees)
-  const setStackChatLoading = useKannaSidebarStore((s) => s.setStackChatLoading)
+  const beginStackChatCreate = useKannaSidebarStore((s) => s.beginStackChatCreate)
+  const finishStackChatCreate = useKannaSidebarStore((s) => s.finishStackChatCreate)
+  const endStackChatCreateLoading = useKannaSidebarStore((s) => s.endStackChatCreateLoading)
+  const closeStackChatCreate = useKannaSidebarStore((s) => s.closeStackChatCreate)
   const setIsImporting = useKannaSidebarStore((s) => s.setIsImporting)
   const setImportDialogOpen = useKannaSidebarStore((s) => s.setImportDialogOpen)
 
@@ -224,22 +227,69 @@ function KannaSidebarImpl({
   const handleStartStackChat = useCallback(async (stackId: string) => {
     const stack = data.stacks.find((s) => s.id === stackId)
     if (!stack) return
-    setStackChatCreateId(stackId)
-    setStackChatLoading(true)
+    beginStackChatCreate(stackId)
     try {
       const entries = await Promise.all(
         stack.projectIds.map(async (projectId) => [projectId, await onListStackWorktrees(projectId)] as const)
       )
-      setStackChatWorktrees(new Map(entries))
+      finishStackChatCreate(new Map(entries))
     } finally {
-      setStackChatLoading(false)
+      endStackChatCreateLoading()
     }
-  }, [data.stacks, onListStackWorktrees, setStackChatCreateId, setStackChatLoading, setStackChatWorktrees])
+  }, [data.stacks, onListStackWorktrees, beginStackChatCreate, finishStackChatCreate, endStackChatCreateLoading])
 
-  const closeStackChatCreate = useCallback(() => {
-    setStackChatCreateId(null)
-    setStackChatWorktrees(new Map())
-  }, [setStackChatCreateId, setStackChatWorktrees])
+  // Each of these closes over a PROP (or a ref), so it stays in the component;
+  // only the state transitions live in kannaSidebarStore.
+  const handleCreateStackChat = useCallback(async (
+    stackId: string,
+    { primaryProjectId, stackBindings }: { primaryProjectId: string; stackBindings: StackBinding[] },
+  ) => {
+    onCreateStackChat(primaryProjectId, stackId, stackBindings)
+    closeStackChatCreate()
+  }, [onCreateStackChat, closeStackChatCreate])
+
+  const handleStackPanelSubmit = useCallback(async (title: string, projectIds: string[]) => {
+    if (stackEditId) {
+      onRenameStack(stackEditId, title)
+    } else {
+      onCreateStack(title, projectIds)
+    }
+    closeStackPanel()
+  }, [stackEditId, onRenameStack, onCreateStack, closeStackPanel])
+
+  const handleConfirmDeleteStack = useCallback((stackId: string) => {
+    onRemoveStack(stackId)
+    setStackDeleteConfirmId(null)
+  }, [onRemoveStack, setStackDeleteConfirmId])
+
+  const handleOpenArchivedChat = useCallback((chatId: string) => {
+    onOpenArchivedChat(chatId)
+    setArchivedProjectId(null)
+    onClose()
+  }, [onOpenArchivedChat, setArchivedProjectId, onClose])
+
+  const handleArchivedDialogOpenChange = useCallback((dialogOpen: boolean) => {
+    if (!dialogOpen) setArchivedProjectId(null)
+  }, [setArchivedProjectId])
+
+  // Writes resizeStartRef: a ref, deliberately not store state — the drag
+  // origin must not trigger a render on every pointer move.
+  const handleResizeStart = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    resizeStartRef.current = { pointerX: event.clientX, width: sidebarWidth }
+    setIsResizingSidebar(true)
+  }, [sidebarWidth, setIsResizingSidebar])
+
+  // Maps a key to a width intent; the clamping lives in the store.
+  const handleResizeKeyDown = useCallback((event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (event.key === "ArrowLeft") nudgeSidebarWidth(-16)
+    else if (event.key === "ArrowRight") nudgeSidebarWidth(16)
+    else if (event.key === "Home") setSidebarWidthAndPersist(MIN_SIDEBAR_WIDTH)
+    else if (event.key === "End") setSidebarWidthAndPersist(MAX_SIDEBAR_WIDTH)
+    else if (event.key === "Enter") setSidebarWidthAndPersist(DEFAULT_SIDEBAR_WIDTH)
+    else return
+    event.preventDefault()
+  }, [nudgeSidebarWidth, setSidebarWidthAndPersist])
 
   const projectIdByPath = useMemo(
     () => new Map([...data.starredProjectGroups, ...data.projectGroups].map((group) => [group.localPath, group.groupKey])),
@@ -257,58 +307,12 @@ function KannaSidebarImpl({
   }, [visibleChats])
 
   useEffect(() => {
-    setCollapsedSections((previous) => {
-      const next = new Set<string>()
-      const allGroups = [...data.starredProjectGroups, ...data.projectGroups]
-      const projectKeys = new Set(allGroups.map((group) => group.groupKey))
-      const initializedKeys = initializedCollapsedGroupKeysRef.current
+    reconcileSidebarGroups([...data.starredProjectGroups, ...data.projectGroups])
+  }, [data.starredProjectGroups, data.projectGroups, reconcileSidebarGroups])
 
-      for (const key of previous) {
-        if (projectKeys.has(key)) {
-          next.add(key)
-        }
-      }
+  const toggleSection = toggleSectionCollapsed
 
-      initializedCollapsedGroupKeysRef.current = new Set(
-        [...initializedKeys].filter((key) => projectKeys.has(key))
-      )
-
-      for (const group of allGroups) {
-        if (initializedCollapsedGroupKeysRef.current.has(group.groupKey)) continue
-        initializedCollapsedGroupKeysRef.current.add(group.groupKey)
-        if (group.defaultCollapsed) {
-          next.add(group.groupKey)
-        }
-      }
-
-      if (next.size === previous.size && [...next].every((key) => previous.has(key))) {
-        return previous
-      }
-
-      return next
-    })
-  }, [data.starredProjectGroups, data.projectGroups, setCollapsedSections])
-
-  const toggleSection = useCallback((key: string) => {
-    setCollapsedSections((previous) => {
-      const next = new Set(previous)
-      if (next.has(key)) {
-        next.delete(key)
-      } else {
-        next.add(key)
-      }
-      return next
-    })
-  }, [setCollapsedSections])
-
-  const toggleExpandedGroup = useCallback((key: string) => {
-    setExpandedGroups((previous) => {
-      const next = new Set(previous)
-      if (next.has(key)) next.delete(key)
-      else next.add(key)
-      return next
-    })
-  }, [setExpandedGroups])
+  const toggleExpandedGroup = toggleGroupExpanded
 
   const allSidebarGroupKeys = useMemo(
     () => [...data.starredProjectGroups, ...data.projectGroups].map((g) => g.groupKey),
@@ -318,16 +322,8 @@ function KannaSidebarImpl({
     && allSidebarGroupKeys.every((key) => collapsedSections.has(key))
 
   const toggleAllSections = useCallback(() => {
-    if (allSidebarGroupKeys.length === 0) return
-    if (allSectionsCollapsed) {
-      setCollapsedSections(() => new Set())
-      setExpandedGroups(() => expandedGroupsSnapshotRef.current)
-      return
-    }
-    expandedGroupsSnapshotRef.current = expandedGroups
-    setCollapsedSections(() => new Set(allSidebarGroupKeys))
-    setExpandedGroups(() => new Set())
-  }, [allSidebarGroupKeys, allSectionsCollapsed, expandedGroups, setCollapsedSections, setExpandedGroups])
+    toggleAllSectionsCollapsed(allSidebarGroupKeys)
+  }, [allSidebarGroupKeys, toggleAllSectionsCollapsed])
 
   const renderChatRow = useCallback((chat: SidebarChatRow) => {
     const visibleIndex = visibleIndexByChatId.get(chat.chatId)
@@ -386,7 +382,7 @@ function KannaSidebarImpl({
 
       if (isSidebarModifierShortcut(resolvedKeybindings, "newStack", event)) {
         event.preventDefault()
-        setStackCreatePanelOpen(true)
+        openStackCreatePanel()
         return
       }
 
@@ -429,7 +425,7 @@ function KannaSidebarImpl({
       removeKeyUp()
       removeBlur()
     }
-  }, [currentProjectId, dom, navigate, onClose, onCreateChat, onOpenAddProjectModal, resolvedKeybindings, setShowNumberJumpHints, setStackCreatePanelOpen])
+  }, [currentProjectId, dom, navigate, onClose, onCreateChat, onOpenAddProjectModal, resolvedKeybindings, setShowNumberJumpHints, openStackCreatePanel])
 
   useEffect(() => {
     if (!activeChatId || !scrollContainerRef.current) return
@@ -471,11 +467,7 @@ function KannaSidebarImpl({
     function handlePointerUp() {
       setIsResizingSidebar(false)
       resizeStartRef.current = null
-      setSidebarWidth((current) => {
-        const next = clampSidebarWidth(current)
-        persistSidebarWidth(next)
-        return next
-      })
+      commitSidebarWidth()
     }
 
     const removePointerMove = dom.addWindowListener("pointermove", handlePointerMove)
@@ -487,7 +479,7 @@ function KannaSidebarImpl({
       dom.setBodyStyle("cursor", previousCursor)
       dom.setBodyStyle("user-select", previousUserSelect)
     }
-  }, [dom, isResizingSidebar, setSidebarWidth, setIsResizingSidebar])
+  }, [dom, isResizingSidebar, setSidebarWidth, setIsResizingSidebar, commitSidebarWidth])
 
   const handleImportAll = useCallback(async () => {
     if (isImporting || !onImportClaudeSessions) return
@@ -701,17 +693,9 @@ function KannaSidebarImpl({
               stacks={data.stacks}
               projects={stackProjects}
               expandedStackIds={expandedStackIds}
-              onToggleExpanded={(stackId) => setExpandedStackIds((prev) => {
-                const next = new Set(prev)
-                if (next.has(stackId)) next.delete(stackId)
-                else next.add(stackId)
-                return next
-              })}
-              onOpenCreatePanel={() => setStackCreatePanelOpen(true)}
-              onOpenStackMenu={(stackId) => {
-                setStackEditId(stackId)
-                setStackCreatePanelOpen(true)
-              }}
+              onToggleExpanded={toggleStackExpanded}
+              onOpenCreatePanel={openStackCreatePanel}
+              onOpenStackMenu={openStackEditPanel}
               onDeleteStack={(stackId) => setStackDeleteConfirmId(stackId)}
               onStartChat={(stackId) => { void handleStartStackChat(stackId) }}
               renderChatCreate={(stack) => {
@@ -726,10 +710,7 @@ function KannaSidebarImpl({
                   <StackChatCreateRow
                     stack={stack}
                     projects={rowProjects}
-                    onCreate={async ({ primaryProjectId, stackBindings }) => {
-                      onCreateStackChat(primaryProjectId, stack.id, stackBindings)
-                      closeStackChatCreate()
-                    }}
+                    onCreate={(args) => handleCreateStackChat(stack.id, args)}
                     onCancel={closeStackChatCreate}
                   />
                 )
@@ -744,19 +725,8 @@ function KannaSidebarImpl({
                 projects={stackProjects}
                 initialProjectIds={stackEditId ? (data.stacks.find(s => s.id === stackEditId)?.projectIds ?? []) : []}
                 initialTitle={stackEditId ? (data.stacks.find(s => s.id === stackEditId)?.title ?? "") : ""}
-                onSubmit={async (title, projectIds) => {
-                  if (stackEditId) {
-                    onRenameStack(stackEditId, title)
-                  } else {
-                    onCreateStack(title, projectIds)
-                  }
-                  setStackCreatePanelOpen(false)
-                  setStackEditId(null)
-                }}
-                onCancel={() => {
-                  setStackCreatePanelOpen(false)
-                  setStackEditId(null)
-                }}
+                onSubmit={handleStackPanelSubmit}
+                onCancel={closeStackPanel}
               />
             )}
 
@@ -770,7 +740,7 @@ function KannaSidebarImpl({
                     <button
                       type="button"
                       className="text-xs px-2 py-1 rounded bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                      onClick={() => { onRemoveStack(stackDeleteConfirmId); setStackDeleteConfirmId(null) }}
+                      onClick={() => handleConfirmDeleteStack(stackDeleteConfirmId)}
                     >
                       Delete
                     </button>
@@ -891,36 +861,17 @@ function KannaSidebarImpl({
             "hidden md:block absolute -right-1 top-3 bottom-3 z-20 w-2 cursor-col-resize rounded-full",
             "focus-visible:outline-none"
           )}
-          onPointerDown={(event) => {
-            event.preventDefault()
-            resizeStartRef.current = {
-              pointerX: event.clientX,
-              width: sidebarWidth,
-            }
-            setIsResizingSidebar(true)
-          }}
+          onPointerDown={handleResizeStart}
           onDoubleClick={() => {
             setSidebarWidthAndPersist(DEFAULT_SIDEBAR_WIDTH)
           }}
-          onKeyDown={(event) => {
-            let nextWidth: number | null = null
-            if (event.key === "ArrowLeft") nextWidth = sidebarWidth - 16
-            else if (event.key === "ArrowRight") nextWidth = sidebarWidth + 16
-            else if (event.key === "Home") nextWidth = MIN_SIDEBAR_WIDTH
-            else if (event.key === "End") nextWidth = MAX_SIDEBAR_WIDTH
-            else if (event.key === "Enter") nextWidth = DEFAULT_SIDEBAR_WIDTH
-            if (nextWidth === null) return
-            event.preventDefault()
-            setSidebarWidthAndPersist(nextWidth)
-          }}
+          onKeyDown={handleResizeKeyDown}
         />
       </div>
 
       <Dialog
         open={Boolean(archivedProject)}
-        onOpenChange={(dialogOpen) => {
-          if (!dialogOpen) setArchivedProjectId(null)
-        }}
+        onOpenChange={handleArchivedDialogOpenChange}
       >
         <DialogContent size="md">
           <DialogHeader>
@@ -936,11 +887,7 @@ function KannaSidebarImpl({
                   key={chat.chatId}
                   type="button"
                   className="flex w-full items-center justify-between gap-3 rounded-lg border border-border/0 px-3 py-2 text-left transition-colors hover:border-border hover:bg-muted"
-                  onClick={() => {
-                    onOpenArchivedChat(chat.chatId)
-                    setArchivedProjectId(null)
-                    onClose()
-                  }}
+                  onClick={() => handleOpenArchivedChat(chat.chatId)}
                 >
                   <span className="min-w-0 truncate text-sm">{chat.title}</span>
                   <span className="shrink-0 text-xs text-muted-foreground">

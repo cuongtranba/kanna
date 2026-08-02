@@ -1,0 +1,41 @@
+id: no-jsx-inline-state-updater
+language: tsx
+severity: error
+message: Functional state updater inline in a JSX attribute — the transition belongs in a named Zustand action, not the component.
+note: |
+  A store setter that takes an updater (prev => next) forces every caller to
+  re-derive the previous value in the component, so the same transition gets
+  rewritten at each call site. Replace the setter with a named intent action
+  that derives the previous value INSIDE the store:
+    // bad
+    onToggle={(id) => setExpandedIds((prev) => { ... })}
+    // good — store
+    toggleExpanded: (id) => set((state) => ({ ... }))
+    // good — component
+    onToggle={toggleExpanded}
+  Delete the updater-shaped setter from the store's state interface once the
+  last caller is gone; leaving it invites the pattern straight back in.
+  This rule is intentionally tsx-only — `jsx_attribute` does not exist in the
+  typescript grammar, so a `-ts` twin cannot be written.
+  See rule-zustand-store (.c3/rules/rule-zustand-store.md).
+files:
+  - src/client/**
+ignores:
+  - src/client/**/*.test.ts
+  - src/client/**/*.test.tsx
+  - src/client/components/ui/**
+rule:
+  kind: call_expression
+  all:
+    - has:
+        field: function
+        kind: identifier
+        regex: '^set[A-Z]'
+    - has:
+        field: arguments
+        has:
+          kind: arrow_function
+          stopBy: neighbor
+    - inside:
+        stopBy: end
+        kind: jsx_attribute

@@ -24,6 +24,9 @@ interface RightSidebarState {
   setViewMode: (projectId: string, viewMode: ProjectRightSidebarUiState["viewMode"]) => void
   setCommitDraft: (projectId: string, draft: Pick<ProjectRightSidebarUiState, "summary" | "description">) => void
   clearCommitDraft: (projectId: string) => void
+  /** Set one commit field without the caller re-passing its sibling. */
+  setCommitSummary: (projectId: string, summary: string) => void
+  setCommitDescription: (projectId: string, description: string) => void
   clearProject: (projectId: string) => void
 }
 
@@ -164,6 +167,20 @@ export const useRightSidebarStore = create<RightSidebarState>()(
               description: draft.description,
             },
           },
+        }
+      }),
+      setCommitSummary: (projectId, summary) => set((state) => {
+        const current = state.projectUi[projectId] ?? createDefaultProjectUiState()
+        if (current.summary === summary) return state
+        return {
+          projectUi: { ...state.projectUi, [projectId]: { ...current, summary } },
+        }
+      }),
+      setCommitDescription: (projectId, description) => set((state) => {
+        const current = state.projectUi[projectId] ?? createDefaultProjectUiState()
+        if (current.description === description) return state
+        return {
+          projectUi: { ...state.projectUi, [projectId]: { ...current, description } },
         }
       }),
       clearCommitDraft: (projectId) => set((state) => {

@@ -16,26 +16,20 @@ function MermaidZoomModalInner({ svg, onClose, ports }: Props) {
   const dom = ports?.dom ?? domAdapter
   const scale = MermaidZoomModalStore.useScopedStore((s) => s.scale)
   const offset = MermaidZoomModalStore.useScopedStore((s) => s.offset)
-  const drag = MermaidZoomModalStore.useScopedStore((s) => s.drag)
-  const setScale = MermaidZoomModalStore.useScopedStore((s) => s.setScale)
-  const setOffset = MermaidZoomModalStore.useScopedStore((s) => s.setOffset)
-  const setDrag = MermaidZoomModalStore.useScopedStore((s) => s.setDrag)
+  const zoomIn = MermaidZoomModalStore.useScopedStore((s) => s.zoomIn)
+  const zoomOut = MermaidZoomModalStore.useScopedStore((s) => s.zoomOut)
+  const resetView = MermaidZoomModalStore.useScopedStore((s) => s.resetView)
+  const beginDrag = MermaidZoomModalStore.useScopedStore((s) => s.beginDrag)
+  const dragTo = MermaidZoomModalStore.useScopedStore((s) => s.dragTo)
+  const endDrag = MermaidZoomModalStore.useScopedStore((s) => s.endDrag)
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose() }
     return dom.addWindowListener("keydown", onKey)
   }, [onClose, dom])
 
-  const clampScale = (s: number) => Math.min(8, Math.max(0.25, s))
-
-  const onPointerDown = (e: ReactPointerEvent) => {
-    setDrag({ x: e.clientX - offset.x, y: e.clientY - offset.y })
-  }
-  const onPointerMove = (e: ReactPointerEvent) => {
-    if (!drag) return
-    setOffset({ x: e.clientX - drag.x, y: e.clientY - drag.y })
-  }
-  const onPointerUp = () => setDrag(null)
+  const onPointerDown = (e: ReactPointerEvent) => beginDrag(e.clientX, e.clientY)
+  const onPointerMove = (e: ReactPointerEvent) => dragTo(e.clientX, e.clientY)
 
   return createPortal(
     <div
@@ -46,15 +40,15 @@ function MermaidZoomModalInner({ svg, onClose, ports }: Props) {
     >
       <div className="flex justify-end gap-1 p-2">
         <Button variant="ghost" size="icon" aria-label="Zoom out"
-          className="h-9 w-9" onClick={() => setScale(clampScale(scale - 0.25))}>
+          className="h-9 w-9" onClick={zoomOut}>
           <Minus className="h-4 w-4" />
         </Button>
         <Button variant="ghost" size="icon" aria-label="Zoom in"
-          className="h-9 w-9" onClick={() => setScale(clampScale(scale + 0.25))}>
+          className="h-9 w-9" onClick={zoomIn}>
           <Plus className="h-4 w-4" />
         </Button>
         <Button variant="ghost" size="icon" aria-label="Reset view"
-          className="h-9 w-9" onClick={() => { setScale(1); setOffset({ x: 0, y: 0 }) }}>
+          className="h-9 w-9" onClick={resetView}>
           <RotateCcw className="h-4 w-4" />
         </Button>
         <Button variant="ghost" size="icon" aria-label="Close"
@@ -66,8 +60,8 @@ function MermaidZoomModalInner({ svg, onClose, ports }: Props) {
         className="flex-1 overflow-hidden touch-none cursor-grab active:cursor-grabbing"
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp}
-        onPointerLeave={onPointerUp}
+        onPointerUp={endDrag}
+        onPointerLeave={endDrag}
       >
         <div
           data-mermaid-stage

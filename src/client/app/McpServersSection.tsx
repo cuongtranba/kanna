@@ -265,6 +265,11 @@ function McpServerEditor({
   const resetEditorForm = useMcpServersSectionStore((s) => s.resetEditorForm)
   const setEditorName = useMcpServersSectionStore((s) => s.setEditorName)
   const setEditorTransport = useMcpServersSectionStore((s) => s.setEditorTransport)
+  // TS type predicate narrowing string -> McpServerTransport: a boundary
+  // concern, not a store transition.
+  const handleTransportChange = useCallback((v: string) => {
+    if (isMcpServerTransport(v)) setEditorTransport(v)
+  }, [setEditorTransport])
   const setEditorCommand = useMcpServersSectionStore((s) => s.setEditorCommand)
   const setEditorArgsText = useMcpServersSectionStore((s) => s.setEditorArgsText)
   const setEditorEnvText = useMcpServersSectionStore((s) => s.setEditorEnvText)
@@ -478,7 +483,7 @@ function McpServerEditor({
         <span className="text-xs font-medium text-foreground">Transport</span>
         <Select
           value={transport}
-          onValueChange={(v) => { if (isMcpServerTransport(v)) setEditorTransport(v) }}
+          onValueChange={handleTransportChange}
         >
           <SelectTrigger>
             <SelectValue />

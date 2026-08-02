@@ -1135,6 +1135,38 @@ export function SettingsPage({ ports }: { ports?: { dom?: DomPort } } = {}) {
   const setPushPermissionState = useSettingsPageStore((s) => s.setPushPermissionState)
   const pushDeviceId = useSettingsPageStore((s) => s.pushDeviceId)
   const setPushDeviceId = useSettingsPageStore((s) => s.setPushDeviceId)
+
+  // Async push/WS orchestration: stays in the component. Stores never absorb I/O;
+  // settingsPageStore only learns the resulting device id.
+  const handleEnablePush = useCallback(async () => {
+    if (!state.pushConfig) return
+    const id = await subscribePush({
+      vapidPublicKey: state.pushConfig.vapidPublicKey,
+      sendToServer: async (payload) => {
+        const result = await state.socket.command<{ id: string }>({
+          type: "push.subscribe",
+          subscription: payload.subscription,
+          label: payload.label,
+          userAgent: payload.userAgent,
+        })
+        setStoredPushDeviceId(result.id)
+        return { id: result.id }
+      },
+    })
+    setPushDeviceId(id)
+  }, [state.pushConfig, state.socket, setPushDeviceId])
+
+  const handleDisablePush = useCallback(async () => {
+    if (!pushDeviceId) return
+    await unsubscribePush({
+      pushDeviceId,
+      sendToServer: async (id) => {
+        await state.socket.command({ type: "push.unsubscribe", pushDeviceId: id })
+      },
+    })
+    clearStoredPushDeviceId()
+    setPushDeviceId(null)
+  }, [pushDeviceId, state.socket, setPushDeviceId])
   const scrollbackDraft = useSettingsPageStore((s) => s.scrollbackDraft)
   const setScrollbackDraft = useSettingsPageStore((s) => s.setScrollbackDraft)
   const minColumnWidthDraft = useSettingsPageStore((s) => s.minColumnWidthDraft)
@@ -1155,6 +1187,7 @@ export function SettingsPage({ ports }: { ports?: { dom?: DomPort } } = {}) {
   const setEditorCommandDraft = useSettingsPageStore((s) => s.setEditorCommandDraft)
   const keybindingDrafts = useSettingsPageStore((s) => s.keybindingDrafts)
   const setKeybindingDrafts = useSettingsPageStore((s) => s.setKeybindingDrafts)
+  const setKeybindingDraft = useSettingsPageStore((s) => s.setKeybindingDraft)
   const keybindingsError = useSettingsPageStore((s) => s.keybindingsError)
   const setKeybindingsError = useSettingsPageStore((s) => s.setKeybindingsError)
   const appSettingsError = useSettingsPageStore((s) => s.appSettingsError)
@@ -2078,34 +2111,8 @@ export function SettingsPage({ ports }: { ports?: { dom?: DomPort } } = {}) {
                                 patch: { push: { contactSubject: value } },
                               })
                             }}
-                            onEnable={async () => {
-                              if (!state.pushConfig) return
-                              const id = await subscribePush({
-                                vapidPublicKey: state.pushConfig.vapidPublicKey,
-                                sendToServer: async (payload) => {
-                                  const result = await state.socket.command<{ id: string }>({
-                                    type: "push.subscribe",
-                                    subscription: payload.subscription,
-                                    label: payload.label,
-                                    userAgent: payload.userAgent,
-                                  })
-                                  setStoredPushDeviceId(result.id)
-                                  return { id: result.id }
-                                },
-                              })
-                              setPushDeviceId(id)
-                            }}
-                            onDisable={async () => {
-                              if (!pushDeviceId) return
-                              await unsubscribePush({
-                                pushDeviceId,
-                                sendToServer: async (id) => {
-                                  await state.socket.command({ type: "push.unsubscribe", pushDeviceId: id })
-                                },
-                              })
-                              clearStoredPushDeviceId()
-                              setPushDeviceId(null)
-                            }}
+                            onEnable={handleEnablePush}
+                            onDisable={handleDisablePush}
                             onTest={async () => {
                               await state.socket.command({ type: "push.test" })
                             }}
@@ -2513,10 +2520,7 @@ export function SettingsPage({ ports }: { ports?: { dom?: DomPort } } = {}) {
                             <Input
                               type="text"
                               value={currentValue}
-                              onChange={(event) => {
-                                const nextValue = event.target.value
-                                setKeybindingDrafts({ ...keybindingDrafts, [action]: nextValue })
-                              }}
+                              onChange={(event) => setKeybindingDraft(action, event.target.value)}
                               onBlur={() => {
                                 void commitKeybindings()
                               }}

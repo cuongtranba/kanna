@@ -109,6 +109,8 @@ interface SettingsPageState {
   setClaudeMaxConcurrentDraft: (draft: string) => void
   setEditorCommandDraft: (draft: string) => void
   setKeybindingDrafts: (drafts: Record<string, string>) => void
+  /** Set one action's draft; the map is rebuilt inside the store. */
+  setKeybindingDraft: (action: string, value: string) => void
   setKeybindingsError: (error: string | null) => void
   setAppSettingsError: (error: string | null) => void
   setAnalyticsDialogOpen: (open: boolean) => void
@@ -250,6 +252,12 @@ export const useSettingsPageStore = create<SettingsPageState>()((set, get) => ({
   setClaudeMaxConcurrentDraft: (draft) => set({ claudeMaxConcurrentDraft: draft }),
   setEditorCommandDraft: (draft) => set({ editorCommandDraft: draft }),
   setKeybindingDrafts: (drafts) => set({ keybindingDrafts: drafts }),
+  setKeybindingDraft: (action, value) =>
+    set((state) =>
+      state.keybindingDrafts[action] === value
+        ? state
+        : { keybindingDrafts: { ...state.keybindingDrafts, [action]: value } },
+    ),
   setKeybindingsError: (error) => set({ keybindingsError: error }),
   setAppSettingsError: (error) => set({ appSettingsError: error }),
   setAnalyticsDialogOpen: (open) => set({ analyticsDialogOpen: open }),

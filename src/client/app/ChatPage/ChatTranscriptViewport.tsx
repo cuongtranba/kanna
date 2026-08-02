@@ -180,6 +180,7 @@ export const ChatTranscriptViewport = memo(({
   const resetToolGroupExpanded = useChatPageStore((s) => s.resetToolGroupExpanded)
   const localLinkMenuTarget = useChatPageStore((s) => s.localLinkMenuTarget)
   const setLocalLinkMenuTarget = useChatPageStore((s) => s.setLocalLinkMenuTarget)
+  const setLocalLinkMenuOpen = useChatPageStore((s) => s.setLocalLinkMenuOpen)
   const isMac = platform === "darwin"
 
   const rawRows = useMemo(() => buildResolvedTranscriptRows(messages, {
@@ -478,11 +479,7 @@ export const ChatTranscriptViewport = memo(({
       </OpenLocalLinkProvider>
       </SubagentTranscriptFetchProvider>
 
-      <ContextMenu onOpenChange={(open) => {
-        if (!open) {
-          setLocalLinkMenuTarget(null)
-        }
-      }}>
+      <ContextMenu onOpenChange={setLocalLinkMenuOpen}>
         <ContextMenuTrigger asChild>
           <span
             ref={localLinkMenuTriggerRef}

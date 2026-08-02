@@ -1,0 +1,68 @@
+id: no-jsx-inline-state-updater
+snapshots:
+  <Row onToggle={(id) => setExpandedIds((prev) => { const n = new Set(prev); n.add(id); return n })} />:
+    labels:
+    - source: setExpandedIds((prev) => { const n = new Set(prev); n.add(id); return n })
+      style: primary
+      start: 23
+      end: 97
+    - source: setExpandedIds
+      style: secondary
+      start: 23
+      end: 37
+    - source: (prev) => { const n = new Set(prev); n.add(id); return n }
+      style: secondary
+      start: 38
+      end: 96
+    - source: (prev) => { const n = new Set(prev); n.add(id); return n }
+      style: secondary
+      start: 38
+      end: 96
+    - source: onToggle={(id) => setExpandedIds((prev) => { const n = new Set(prev); n.add(id); return n })}
+      style: secondary
+      start: 5
+      end: 98
+  <button onClick={() => setSidebarWidth((current) => current + 16)} />:
+    labels:
+    - source: setSidebarWidth((current) => current + 16)
+      style: primary
+      start: 23
+      end: 65
+    - source: setSidebarWidth
+      style: secondary
+      start: 23
+      end: 38
+    - source: (current) => current + 16
+      style: secondary
+      start: 39
+      end: 64
+    - source: (current) => current + 16
+      style: secondary
+      start: 39
+      end: 64
+    - source: onClick={() => setSidebarWidth((current) => current + 16)}
+      style: secondary
+      start: 8
+      end: 66
+  <select onChange={(e) => { setSelected((prev) => new Map(prev).set(k, e.target.value)) }} />:
+    labels:
+    - source: setSelected((prev) => new Map(prev).set(k, e.target.value))
+      style: primary
+      start: 27
+      end: 86
+    - source: setSelected
+      style: secondary
+      start: 27
+      end: 38
+    - source: (prev) => new Map(prev).set(k, e.target.value)
+      style: secondary
+      start: 39
+      end: 85
+    - source: (prev) => new Map(prev).set(k, e.target.value)
+      style: secondary
+      start: 39
+      end: 85
+    - source: onChange={(e) => { setSelected((prev) => new Map(prev).set(k, e.target.value)) }}
+      style: secondary
+      start: 8
+      end: 89

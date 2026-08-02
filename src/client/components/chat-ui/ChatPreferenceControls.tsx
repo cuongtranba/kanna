@@ -1,4 +1,4 @@
-import { useMemo, type ComponentType, type SVGProps } from "react"
+import { useCallback, useMemo, type ComponentType, type SVGProps } from "react"
 import { Box, Brain, Gauge, ListTodo, LockOpen, Search, SquareMenu, SquareMinus } from "lucide-react"
 import {
   CLAUDE_CONTEXT_WINDOW_OPTIONS,
@@ -215,9 +215,15 @@ function SearchableModelPopoverContent({
 }) {
   const open = SearchableModelPopoverStore.useScopedStore((state) => state.open)
   const query = SearchableModelPopoverStore.useScopedStore((state) => state.query)
-  const setOpen = SearchableModelPopoverStore.useScopedStore((state) => state.setOpen)
+  const setPopoverOpen = SearchableModelPopoverStore.useScopedStore((state) => state.setPopoverOpen)
   const setQuery = SearchableModelPopoverStore.useScopedStore((state) => state.setQuery)
   const closeAndClearQuery = SearchableModelPopoverStore.useScopedStore((state) => state.closeAndClearQuery)
+
+  // Closes over the onSelect prop, so it stays in the component.
+  const handleSelectModel = useCallback((id: string) => {
+    onSelect(id)
+    closeAndClearQuery()
+  }, [onSelect, closeAndClearQuery])
 
   const selectedLabel = models.find((m) => m.id === selectedModel)?.label ?? selectedModel
   const filtered = useMemo(() => {
@@ -239,10 +245,7 @@ function SearchableModelPopoverContent({
     modelsContent = filtered.map((candidate) => (
       <PopoverMenuItem
         key={candidate.id}
-        onClick={() => {
-          onSelect(candidate.id)
-          closeAndClearQuery()
-        }}
+        onClick={() => handleSelectModel(candidate.id)}
         selected={selectedModel === candidate.id}
         icon={<Box className="h-4 w-4 text-muted-foreground" />}
         label={candidate.label}
@@ -252,7 +255,7 @@ function SearchableModelPopoverContent({
   }
 
   return (
-    <Popover open={open} onOpenChange={(v) => { if (v) setOpen(true); else closeAndClearQuery() }}>
+    <Popover open={open} onOpenChange={setPopoverOpen}>
       <PopoverTrigger asChild>
         <button
           type="button"
