@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.8.2](https://github.com/cuongtranba/kanna/compare/v1.8.1...v1.8.2) (2026-08-02)
+
+
+### Bug Fixes
+
+* **event-store:** stop reading and truncating legacy orch.jsonl ([545bc8a](https://github.com/cuongtranba/kanna/commit/545bc8ab88704145cbc5958a4a45d2b58e67d0a2))
+
 ## [1.8.1](https://github.com/cuongtranba/kanna/compare/v1.8.0...v1.8.1) (2026-07-31)
 
 
