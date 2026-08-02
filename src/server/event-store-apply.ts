@@ -18,7 +18,6 @@ import {
 } from "./event-store-chat-lifecycle"
 import { applySubagentEvent } from "./event-store-subagent"
 import { applyToolRequestEvent } from "./event-store-tool-requests"
-import { applyOrchEvent } from "./event-store-orch"
 
 function isAutoContinueEvent(event: StoreEvent): event is AutoContinueEvent {
   return "kind" in event
@@ -108,25 +107,5 @@ export function applyStoreEvent(
       applyToolRequestEvent(state.toolRequestsById, e)
       break
     }
-    case "orch_run_created":
-    case "orch_worktree_provisioned":
-    case "orch_worktree_init_started":
-    case "orch_worktree_init_completed":
-    case "orch_task_claimed":
-    case "orch_phase_started":
-    case "orch_phase_completed":
-    case "orch_gate_opened":
-    case "orch_gate_resolved":
-    case "orch_scope_overlap_flagged":
-    case "orch_config_warning":
-    case "orch_verify_started":
-    case "orch_verify_completed":
-    case "orch_task_committed":
-    case "orch_task_failed":
-    case "orch_task_requeued":
-    case "orch_run_completed":
-    case "orch_run_cancelled":
-      applyOrchEvent(state.orchRunsById, e)
-      break
   }
 }

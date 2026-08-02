@@ -115,25 +115,6 @@ export function getReplayEventPriority(event: StoreEvent): number {
       return 5
     case "tool_request_resolved":
       return 6
-    case "orch_run_created":
-    case "orch_worktree_provisioned":
-    case "orch_worktree_init_started":
-    case "orch_worktree_init_completed":
-    case "orch_task_claimed":
-    case "orch_phase_started":
-    case "orch_phase_completed":
-    case "orch_gate_opened":
-    case "orch_gate_resolved":
-    case "orch_scope_overlap_flagged":
-    case "orch_config_warning":
-    case "orch_verify_started":
-    case "orch_verify_completed":
-    case "orch_task_committed":
-    case "orch_task_failed":
-    case "orch_task_requeued":
-    case "orch_run_completed":
-    case "orch_run_cancelled":
-      return 5
     default: {
       const _exhaustive: never = discriminator
       throw new Error(`Unhandled replay event type: ${String(_exhaustive)}`)
