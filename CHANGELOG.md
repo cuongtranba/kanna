@@ -8,6 +8,19 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.9.0](https://github.com/cuongtranba/kanna/compare/v1.8.2...v1.9.0) (2026-08-02)
+
+
+### Features
+
+* **agent:** surface self-wake status + live background task list ([#606](https://github.com/cuongtranba/kanna/issues/606)) ([d5a6512](https://github.com/cuongtranba/kanna/commit/d5a6512dc4ae1750714d5e1789d5e5cb18885da5))
+* **client:** ban state-transition logic written inline in JSX props ([#605](https://github.com/cuongtranba/kanna/issues/605)) ([2adaa35](https://github.com/cuongtranba/kanna/commit/2adaa351e1491aefdc2e298a47dd43552c0262a5))
+
+
+### Bug Fixes
+
+* **sidebar:** label starred and unstarred project lists ([#603](https://github.com/cuongtranba/kanna/issues/603)) ([75ef663](https://github.com/cuongtranba/kanna/commit/75ef6633764e609a831a641222ac01238ff281ca))
+
 ## [1.8.2](https://github.com/cuongtranba/kanna/compare/v1.8.1...v1.8.2) (2026-08-02)
 
 
