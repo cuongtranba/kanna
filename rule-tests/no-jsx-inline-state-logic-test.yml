@@ -1,0 +1,34 @@
+id: no-jsx-inline-state-logic
+valid:
+  # bare reference to a named action or extracted handler
+  - '<button onClick={handleCloseStackPanel} />'
+  - '<Row onToggleExpanded={toggleStackExpanded} />'
+  # single-call arrow, expression body
+  - '<button onClick={() => closeStackPanel()} />'
+  # single-call arrow, block body with exactly one statement
+  - '<button onClick={() => { closeStackPanel() }} />'
+  # single call that forwards a loop variable is still a single call
+  - '<button onClick={() => handlePickModel(candidate.id)} />'
+  # multi-statement handler that touches no state at all
+  - '<a onClick={(e) => { e.preventDefault(); trackClick(href) }} />'
+  # multi-statement transition living OUTSIDE a JSX attribute (the fixed shape)
+  - 'const handleClose = useCallback(() => { setPanelOpen(false); setEditId(null) }, [])'
+  # render prop returning JSX: multi-statement, but derivation is not mutation
+  - '<List renderRow={(row) => { const label = row.title ?? row.id; return <Row label={label} onPick={handlePick} /> }} />'
+invalid:
+  # KannaSidebar.tsx:711 / :756 — two store writes composed in the view
+  - '<button onClick={() => { setStackCreatePanelOpen(false); setStackEditId(null) }} />'
+  # RightSidebar.tsx:2130 — guard clause plus a write
+  - '<input onChange={() => { if (!projectId) return; setCommitDraft(projectId, draft) }} />'
+  # KannaSidebar.tsx:773 — prop callback plus a store write
+  - '<button onClick={() => { onRemoveStack(id); setStackDeleteConfirmId(null) }} />'
+  # async orchestration ending in a state write
+  - '<Modal onApply={async (next) => { await save(next); closePolicyDialog() }} />'
+  # lone if/else branch — one statement, but still branching logic in the view
+  - '<Popover onOpenChange={(open) => { if (open) setOpen(true); else closeAndClearQuery() }} />'
+  # nested handler inside a render prop is its own violation
+  - '<List renderRow={(row) => <Row onPick={() => { setPicked(row.id); closeList() }} />} />'
+  # a multi-statement render prop wrapping a mutating handler: the snapshot must
+  # pin the INNER arrow only, so fixing it clears exactly one report (see the
+  # function-boundary stopBy in the rule)
+  - '<List renderRow={(row) => { const label = row.title; return <Row label={label} onPick={() => { setPicked(row.id); closeList() }} /> }} />'

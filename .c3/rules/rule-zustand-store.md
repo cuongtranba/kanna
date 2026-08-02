@@ -1,20 +1,20 @@
 ---
 id: rule-zustand-store
-c3-seal: d45b04f2981cd37ca9120723d14497d987618b1246f53630b8c3a80d9d95b87a
+c3-seal: 6ea3d8976bb160fbf45f423f09392272e5dfd408fc6d77ba4214686bd39650f6
 title: zustand-store
 type: rule
-goal: All client state in Kanna lives in Zustand stores. Singleton feature state lives under `src/client/stores/<concern>Store.ts` (one concern per file, colocated `<concern>Store.test.ts`); per-instance component state lives in a colocated `<Component>.store.ts` built with `createScopedStore` from `src/client/lib/createScopedStore.tsx`. Server-derived truth lives ONLY in the WS-fed `kannaStateStore`, written exclusively by the `useKannaState` socket pipeline. Raw `useState` outside the frozen allowlist fails the `no-react-usestate` ast-grep CI gate (`bun run lint:usestate`).
+goal: All client state in Kanna lives in Zustand stores, and so does every transition of it. Singleton feature state lives under `src/client/stores/<concern>Store.ts` (one concern per file, colocated `<concern>Store.test.ts`); per-instance component state lives in a colocated `<Component>.store.ts` built with `createScopedStore` from `src/client/lib/createScopedStore.tsx`. Stores expose named intent actions (`toggleStackExpanded`, `closeStackPanel`), never updater-shaped passthrough setters. Server-derived truth lives ONLY in the WS-fed `kannaStateStore`, written exclusively by the `useKannaState` socket pipeline. Raw `useState` outside the frozen allowlist fails the `no-react-usestate` ast-grep CI gate, and state-transition logic written inline in a JSX attribute fails the `no-jsx-inline-state-logic` / `no-jsx-inline-state-updater` gates (all via `bun run lint:usestate`).
 ---
 
 # zustand-store
 
 ## Goal
 
-All client state in Kanna lives in Zustand stores. Singleton feature state lives under `src/client/stores/<concern>Store.ts` (one concern per file, colocated `<concern>Store.test.ts`); per-instance component state lives in a colocated `<Component>.store.ts` built with `createScopedStore` from `src/client/lib/createScopedStore.tsx`. Server-derived truth lives ONLY in the WS-fed `kannaStateStore`, written exclusively by the `useKannaState` socket pipeline. Raw `useState` outside the frozen allowlist fails the `no-react-usestate` ast-grep CI gate (`bun run lint:usestate`).
+All client state in Kanna lives in Zustand stores, and so does every transition of it. Singleton feature state lives under `src/client/stores/<concern>Store.ts` (one concern per file, colocated `<concern>Store.test.ts`); per-instance component state lives in a colocated `<Component>.store.ts` built with `createScopedStore` from `src/client/lib/createScopedStore.tsx`. Stores expose named intent actions (`toggleStackExpanded`, `closeStackPanel`), never updater-shaped passthrough setters. Server-derived truth lives ONLY in the WS-fed `kannaStateStore`, written exclusively by the `useKannaState` socket pipeline. Raw `useState` outside the frozen allowlist fails the `no-react-usestate` ast-grep CI gate, and state-transition logic written inline in a JSX attribute fails the `no-jsx-inline-state-logic` / `no-jsx-inline-state-updater` gates (all via `bun run lint:usestate`).
 
 ## Rule
 
-Client state stores take exactly two forms. (1) Singleton feature stores: `create<TState>()` from `zustand`, at `src/client/stores/<concern>(Store)?.ts`, exposing a single hook (`use<Concern>Store`). (2) Per-instance scoped stores (component rendered N times): `createScopedStore(displayName, createState)` from `src/client/lib/createScopedStore.tsx`, colocated as `<Component>.store.ts` next to the component, subtree wrapped in the returned `Provider`. Persist only via `zustand/middleware`'s `persist` — never custom `localStorage` writes. Selectors returning collections must return stable references (module-level `EMPTY` constant or `useShallow`) — never inline `?? []` / `?? {}` (React error #185). New `React.useState` outside the frozen allowlist fails `bun run lint:usestate`.
+Client state stores take exactly two forms. (1) Singleton feature stores: `create<TState>()` from `zustand`, at `src/client/stores/<concern>(Store)?.ts`, exposing a single hook (`use<Concern>Store`). (2) Per-instance scoped stores (component rendered N times): `createScopedStore(displayName, createState)` from `src/client/lib/createScopedStore.tsx`, colocated as `<Component>.store.ts` next to the component, subtree wrapped in the returned `Provider`. Persist only via `zustand/middleware`'s `persist` — never custom `localStorage` writes. Selectors returning collections must return stable references (module-level `EMPTY` constant or `useShallow`) — never inline `?? []` / `?? {}` (React error #185). New `React.useState` outside the frozen allowlist fails `bun run lint:usestate`. A store's public surface is **named intent actions**, not passthrough setters: the action takes the minimal arguments (`(entityId, ...args)`), derives the previous value INSIDE the store, and returns `state` unchanged on a no-op. Updater-shaped setters (`setX((prev) => next)`) are banned — they push the transition back to every caller. State-transition logic must never be written inline in a JSX attribute: an inline handler that mutates state may only be a bare reference or a single call. A pure transition becomes one store action; orchestration over props, refs, or async I/O becomes an extracted `useCallback` handler in the component — stores never absorb props, refs, or I/O, and a `useRef` stays a `useRef`. Enforced by the `no-jsx-inline-state-logic` and `no-jsx-inline-state-updater` ast-grep gates, which are tsx-only because `jsx_attribute` does not exist in the typescript grammar; a new store-action verb requires extending the gate's callee regex plus a `rule-tests/` case in the same PR.
 
 ## Golden Example
 
@@ -68,6 +68,7 @@ File: `src/client/stores/preferences.ts` (colocated test: `src/client/stores/pre
 | Feature store holds its own copy of a server snapshot (chats: ChatSnapshot[]) | Server snapshots live only in the WS-fed kannaStateStore, written by the useKannaState socket pipeline | Two sources of truth diverge; socket reconnect overwrites the copy mid-edit |
 | localStorage.setItem("foo", ...) directly in store | persist middleware with name: key | Custom writes bypass schema versioning + migrate; reload corrupts state |
 | Singleton store file at src/client/app/myStore.ts | src/client/stores/myStore.ts for singletons; colocated <Component>.store.ts via createScopedStore for per-instance state | Singleton stores outside stores/ break the directory contract; only createScopedStore stores may colocate with their component |
+| onClick={() => { setPanelOpen(false); setEditId(null) }} — two store writes composed in a JSX attribute | One named action: closeStackPanel: () => set({ stackCreatePanelOpen: false, stackEditId: null }), then onClick={closeStackPanel} | The transition is re-implemented at every call site, is unreachable from a store test, and drifts when one site is updated and the others are not |
 
 ## Scope
 
@@ -75,6 +76,7 @@ File: `src/client/stores/preferences.ts` (colocated test: `src/client/stores/pre
 
 - All UI-local state for the client app: chat input, preferences, sidebar collapse, terminal layout, sound prefs, slash-command picker state, etc.
 - Both persisted (`persist`) and ephemeral (no middleware) stores
+- - Where transitions are written, not only where state is stored: every inline JSX-attribute handler under `src/client/**` that mutates store state, in both singleton and scoped stores
 
 **Does NOT apply to:**
 

@@ -1,0 +1,184 @@
+id: no-jsx-inline-state-logic
+snapshots:
+  <List renderRow={(row) => <Row onPick={() => { setPicked(row.id); closeList() }} />} />:
+    labels:
+    - source: () => { setPicked(row.id); closeList() }
+      style: primary
+      start: 39
+      end: 79
+    - source: closeList()
+      style: secondary
+      start: 66
+      end: 77
+    - source: '{ setPicked(row.id); closeList() }'
+      style: secondary
+      start: 45
+      end: 79
+    - source: setPicked
+      style: secondary
+      start: 47
+      end: 56
+    - source: setPicked(row.id)
+      style: secondary
+      start: 47
+      end: 64
+    - source: onPick={() => { setPicked(row.id); closeList() }}
+      style: secondary
+      start: 31
+      end: 80
+  ? <List renderRow={(row) => { const label = row.title; return <Row label={label} onPick={() => { setPicked(row.id); closeList() }} /> }} />
+  : labels:
+    - source: () => { setPicked(row.id); closeList() }
+      style: primary
+      start: 87
+      end: 127
+    - source: closeList()
+      style: secondary
+      start: 114
+      end: 125
+    - source: '{ setPicked(row.id); closeList() }'
+      style: secondary
+      start: 93
+      end: 127
+    - source: setPicked
+      style: secondary
+      start: 95
+      end: 104
+    - source: setPicked(row.id)
+      style: secondary
+      start: 95
+      end: 112
+    - source: onPick={() => { setPicked(row.id); closeList() }}
+      style: secondary
+      start: 79
+      end: 128
+  <Modal onApply={async (next) => { await save(next); closePolicyDialog() }} />:
+    labels:
+    - source: async (next) => { await save(next); closePolicyDialog() }
+      style: primary
+      start: 16
+      end: 73
+    - source: closePolicyDialog()
+      style: secondary
+      start: 52
+      end: 71
+    - source: '{ await save(next); closePolicyDialog() }'
+      style: secondary
+      start: 32
+      end: 73
+    - source: closePolicyDialog
+      style: secondary
+      start: 52
+      end: 69
+    - source: closePolicyDialog()
+      style: secondary
+      start: 52
+      end: 71
+    - source: onApply={async (next) => { await save(next); closePolicyDialog() }}
+      style: secondary
+      start: 7
+      end: 74
+  <Popover onOpenChange={(open) => { if (open) setOpen(true); else closeAndClearQuery() }} />:
+    labels:
+    - source: (open) => { if (open) setOpen(true); else closeAndClearQuery() }
+      style: primary
+      start: 23
+      end: 87
+    - source: if (open) setOpen(true); else closeAndClearQuery()
+      style: secondary
+      start: 35
+      end: 85
+    - source: '{ if (open) setOpen(true); else closeAndClearQuery() }'
+      style: secondary
+      start: 33
+      end: 87
+    - source: setOpen
+      style: secondary
+      start: 45
+      end: 52
+    - source: setOpen(true)
+      style: secondary
+      start: 45
+      end: 58
+    - source: onOpenChange={(open) => { if (open) setOpen(true); else closeAndClearQuery() }}
+      style: secondary
+      start: 9
+      end: 88
+  <button onClick={() => { onRemoveStack(id); setStackDeleteConfirmId(null) }} />:
+    labels:
+    - source: () => { onRemoveStack(id); setStackDeleteConfirmId(null) }
+      style: primary
+      start: 17
+      end: 75
+    - source: setStackDeleteConfirmId(null)
+      style: secondary
+      start: 44
+      end: 73
+    - source: '{ onRemoveStack(id); setStackDeleteConfirmId(null) }'
+      style: secondary
+      start: 23
+      end: 75
+    - source: setStackDeleteConfirmId
+      style: secondary
+      start: 44
+      end: 67
+    - source: setStackDeleteConfirmId(null)
+      style: secondary
+      start: 44
+      end: 73
+    - source: onClick={() => { onRemoveStack(id); setStackDeleteConfirmId(null) }}
+      style: secondary
+      start: 8
+      end: 76
+  <button onClick={() => { setStackCreatePanelOpen(false); setStackEditId(null) }} />:
+    labels:
+    - source: () => { setStackCreatePanelOpen(false); setStackEditId(null) }
+      style: primary
+      start: 17
+      end: 79
+    - source: setStackEditId(null)
+      style: secondary
+      start: 57
+      end: 77
+    - source: '{ setStackCreatePanelOpen(false); setStackEditId(null) }'
+      style: secondary
+      start: 23
+      end: 79
+    - source: setStackCreatePanelOpen
+      style: secondary
+      start: 25
+      end: 48
+    - source: setStackCreatePanelOpen(false)
+      style: secondary
+      start: 25
+      end: 55
+    - source: onClick={() => { setStackCreatePanelOpen(false); setStackEditId(null) }}
+      style: secondary
+      start: 8
+      end: 80
+  <input onChange={() => { if (!projectId) return; setCommitDraft(projectId, draft) }} />:
+    labels:
+    - source: () => { if (!projectId) return; setCommitDraft(projectId, draft) }
+      style: primary
+      start: 17
+      end: 83
+    - source: setCommitDraft(projectId, draft)
+      style: secondary
+      start: 49
+      end: 81
+    - source: '{ if (!projectId) return; setCommitDraft(projectId, draft) }'
+      style: secondary
+      start: 23
+      end: 83
+    - source: setCommitDraft
+      style: secondary
+      start: 49
+      end: 63
+    - source: setCommitDraft(projectId, draft)
+      style: secondary
+      start: 49
+      end: 81
+    - source: onChange={() => { if (!projectId) return; setCommitDraft(projectId, draft) }}
+      style: secondary
+      start: 7
+      end: 84

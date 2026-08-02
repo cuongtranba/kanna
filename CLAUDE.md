@@ -169,6 +169,29 @@ Two rule pairs in `rules/` (tsx + `-ts` typescript variants, tests in
 - `no-unstable-selector-fallback` — a `use*Store` selector returning
   inline `?? []` / `?? {}` (or `|| []` / `|| {}`) without `useShallow`.
 
+Two further rules keep state TRANSITIONS in the store (ADR
+`adr-20260802-ban-jsx-inline-state-logic`, `rule-zustand-store`). Both are
+**tsx-only on purpose** — `jsx_attribute` does not exist in the typescript
+grammar, so a `-ts` twin is impossible, not merely redundant; do not "fix"
+the missing pair:
+
+- `no-jsx-inline-state-updater` — a functional updater (`setX((prev) => …)`)
+  passed to a `set*` call inside a JSX attribute. Replace the updater-shaped
+  setter with a named action that derives the previous value INSIDE the
+  store, then delete the setter from the state interface.
+- `no-jsx-inline-state-logic` — an inline JSX-attribute arrow that calls a
+  mutation-shaped identifier and is more than a single call (a block body
+  with 2+ statements, or a lone `if_statement`). Two remedies, chosen by
+  what the handler closes over: a PURE transition becomes one named store
+  action; orchestration over props, refs, or async I/O becomes an extracted
+  `useCallback` — stores never absorb props, refs, or I/O, and a `useRef`
+  stays a `useRef`. The callee regex is deliberately broader than
+  `^set[A-Z]` (it covers `toggle|clear|reset|open|close|…`) because migrated
+  actions carry those verbs; introducing a NEW action verb means extending
+  the regex AND adding a `rule-tests/` case in the same PR. Never silence a
+  false positive with an `ignores` entry — extract the handler, or add a
+  `not:` clause plus a pinning fixture.
+
 # React Frontend Rules (MANDATORY when touching src/client)
 
 When editing or adding React code under `src/client/**`:

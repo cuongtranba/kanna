@@ -1,0 +1,20 @@
+id: no-jsx-inline-state-updater
+valid:
+  # bare reference to a named store action — the shape this rule pushes you to
+  - '<Row onToggle={toggleExpanded} />'
+  # single call, no updater argument
+  - '<button onClick={() => setPanelOpen(true)} />'
+  # setter with a plain (non-arrow) argument
+  - '<button onClick={() => setStackEditId(stack.id)} />'
+  # an updater outside a JSX attribute is this rule''s non-target
+  # (no-jsx-inline-state-logic does not cover it either — that is deliberate)
+  - 'const handleToggle = useCallback(() => setIds((prev) => nextIds(prev)), [])'
+  # non-setter callee taking an arrow (e.g. array callbacks) must not match
+  - '<Row onPick={(id) => stacks.find((s) => s.id === id)} />'
+invalid:
+  # the KannaSidebar.tsx:704 Set-toggle that prompted this rule
+  - '<Row onToggle={(id) => setExpandedIds((prev) => { const n = new Set(prev); n.add(id); return n })} />'
+  # StackChatCreateRow.tsx:159 — Map updater inside a block body
+  - '<select onChange={(e) => { setSelected((prev) => new Map(prev).set(k, e.target.value)) }} />'
+  # concise updater body still re-derives previous state in the component
+  - '<button onClick={() => setSidebarWidth((current) => current + 16)} />'
