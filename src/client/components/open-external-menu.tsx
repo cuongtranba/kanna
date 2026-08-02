@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react"
+import { useCallback, useEffect, useMemo } from "react"
 import { OpenExternalSelectStore } from "./OpenExternalSelect.store"
 import { ChevronDown } from "lucide-react"
 import type { EditorOpenSettings, EditorPreset, OpenExternalAction } from "../../shared/protocol"
@@ -321,16 +321,20 @@ export function OpenExternalContextMenuContent({
     includeDefault,
   })
 
+  // openAppValue is a module-level helper, not a store action; this is an
+  // extraction to keep the handler out of the JSX attribute.
+  const handleSelectApp = useCallback((event: Event, value: OpenAppValue) => {
+    event.preventDefault()
+    openAppValue({ value, editorCommandTemplate, onOpenExternal })
+  }, [editorCommandTemplate, onOpenExternal])
+
   return (
     <ContextMenuContent className="rounded-lg p-1">
       {items.map((item) => (
         <ContextMenuItem
           key={item.value}
           className={`${OPEN_APP_MENU_ITEM_CLASS_NAME} ${OPEN_APP_CONTEXT_MENU_ITEM_CLASS_NAME}`}
-          onSelect={(event) => {
-            event.preventDefault()
-            openAppValue({ value: item.value, editorCommandTemplate, onOpenExternal })
-          }}
+          onSelect={(event) => handleSelectApp(event, item.value)}
         >
           <OpenAppMenuItemContent value={item.value} label={item.label} isMac={isMac} />
         </ContextMenuItem>
