@@ -80,6 +80,45 @@ describe("SharePopoverBody", () => {
     }
   })
 
+  test("Mint disables the button while in flight and re-enables it after settle", async () => {
+    let release: (() => void) | undefined
+    const inFlight = new Promise<void>((resolve) => { release = resolve })
+    const { container, cleanup } = await mountBody({
+      chatId: "c1",
+      shares: [],
+      onMint: async () => inFlight,
+    })
+    try {
+      const btn = () => container.querySelector("button[data-share-mint]") as HTMLButtonElement
+      expect(btn().disabled).toBe(false)
+
+      await act(async () => { btn().click() })
+      expect(btn().disabled).toBe(true)
+      expect(container.innerHTML).toContain("Creating…")
+
+      await act(async () => { release!(); await inFlight })
+      expect(btn().disabled).toBe(false)
+      expect(container.innerHTML).toContain("Create share link")
+    } finally {
+      cleanup()
+    }
+  })
+
+  test("Mint re-enables the button when onMint rejects", async () => {
+    const { container, cleanup } = await mountBody({
+      chatId: "c1",
+      shares: [],
+      onMint: async () => { throw new Error("mint failed") },
+    })
+    try {
+      const btn = () => container.querySelector("button[data-share-mint]") as HTMLButtonElement
+      await act(async () => { btn().click() })
+      expect(btn().disabled).toBe(false)
+    } finally {
+      cleanup()
+    }
+  })
+
   test("Renders active share with copy + revoke + expiry text", async () => {
     const { container, cleanup } = await mountBody({
       chatId: "c1",

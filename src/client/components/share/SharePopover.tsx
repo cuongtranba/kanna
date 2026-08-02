@@ -1,4 +1,4 @@
-import { useMemo } from "react"
+import { useCallback, useMemo } from "react"
 import { Copy, Link2Off } from "lucide-react"
 import { Button } from "../ui/button"
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover"
@@ -42,16 +42,28 @@ function SharePopoverBodyInner(props: SharePopoverBodyProps) {
   const setBusy = SharePopoverBodyStore.useScopedStore((s) => s.setBusy)
   const activeShares = props.shares.filter((s) => !s.revoked)
 
+  const { onMint, chatId } = props
+  const handleMint = useCallback(async () => {
+    setBusy(true)
+    try {
+      await onMint(chatId)
+    } catch {
+      // Contained on purpose: a failed mint must not escape as an unhandled
+      // rejection (the previous `void p.finally()` let it), and this client has
+      // no error-surfacing affordance yet. The button re-enables so the user
+      // can retry.
+    } finally {
+      setBusy(false)
+    }
+  }, [onMint, chatId, setBusy])
+
   return (
     <>
       <Button
         variant="default"
         disabled={busy}
         data-share-mint=""
-        onClick={() => {
-          setBusy(true)
-          void props.onMint(props.chatId).finally(() => { setBusy(false) })
-        }}
+        onClick={() => { void handleMint() }}
       >
         {busy ? "Creating…" : "Create share link"}
       </Button>
