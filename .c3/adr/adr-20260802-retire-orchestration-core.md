@@ -1,10 +1,10 @@
 ---
 id: adr-20260802-retire-orchestration-core
-c3-seal: d65dec7736dc7e01490975d721b0f804f2e7f7eb647117b72eb6490b7a016c44
+c3-seal: e55a06af18981b15bc39cc51becc988b0bef11ad159febc5e209a8d6d8ee31fc
 title: retire-orchestration-core
 type: adr
 goal: Retire component `c3-232 orchestration-core` in full — the durable multi-task, multi-phase orchestration engine (`OrchestrationQueue`), its worktree pool, its 18-variant `OrchestrationEvent` union and `orch.jsonl` log, the three MCP tools (`orch_run`, `orch_run_status`, `orch_cancel_run`), the `orch.*` WS commands and the `orch-runs` topic, and the entire client Orchestration panel. Single-task subagent delegation (`c3-210` / `SubagentOrchestrator` / `delegate_subagent`) and the notification-driven autonomous loop (`setup_loop` / `stop_loop`) are explicitly out of scope and must survive unchanged.
-status: proposed
+status: accepted
 date: "2026-08-02"
 ---
 
