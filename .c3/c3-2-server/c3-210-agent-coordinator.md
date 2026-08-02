@@ -1,7 +1,7 @@
 ---
 id: c3-210
 c3-version: 4
-c3-seal: ae89d159d180aa3930c22ac55ba05ef207633f031aaa675dddc3071685c2c7d1
+c3-seal: 2bb0de60610a6b013eb5f0d7d2acd70ecf020e3cdfd1b8be2524e1f0328d9e02
 title: agent-coordinator
 type: component
 category: feature
@@ -55,6 +55,7 @@ Owns the agent turn lifecycle: receives `chat.send` commands, picks the provider
 | Subagent live progress | onEntry fires onRunProgress directly (not chained on write chain) so UI updates synchronously with in-memory state; onChunk fires trailing-edge throttled (~100ms) onRunProgress for streaming text visibility. See adr-20260519-subagent-live-progress-decouple. | c3-207 |
 | Alternate — cancel | chat.cancel propagates to provider | c3-211 |
 | Alternate — resume | Resume reuses live session if available | c3-211 |
+| Alternate — background self-wake | Task-notification wake turns stream with no ActiveTurn; ClaudeSessionState.selfWakeActive overlays status "running" via getActiveStatuses, getBackgroundTasksByChatId feeds ChatRuntime.backgroundTasks, and cancel interrupts the warm session (adr-20260802-background-selfwake-status-ui) | c3-207 |
 | Failure — provider error | Emits typed failure event; surfaces to client | c3-205 |
 
 ## Governance

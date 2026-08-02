@@ -50,7 +50,7 @@ type DepsOptions = {
   removedMessages?: Array<{ chatId: string; id: string }>
   createdChats?: string[]
   analyticsEvents?: string[]
-  session?: { backgroundTaskIds: Set<string>; backgroundTaskDeadlineAt: number; backgroundTaskWakeCount: number } | null
+  session?: { backgroundTasks: Map<string, { taskType: null; description: null; startedAt: number }>; backgroundTaskDeadlineAt: number; backgroundTaskWakeCount: number } | null
   customModels?: readonly CustomModelEntry[]
 }
 
@@ -395,7 +395,7 @@ describe("sendCommand", () => {
     // message (adr-20260801-background-task-wake-escalation). Instead the
     // send refreshes the deadline and restores the wake budget.
     const session = {
-      backgroundTaskIds: new Set(["task-1"]),
+      backgroundTasks: new Map([["task-1", { taskType: null, description: null, startedAt: 0 }]]),
       backgroundTaskDeadlineAt: 9999,
       backgroundTaskWakeCount: 2,
     }
@@ -406,7 +406,7 @@ describe("sendCommand", () => {
       content: "hi",
       chatId: "chat-1",
     } as Parameters<typeof sendCommand>[1])
-    expect(session.backgroundTaskIds.size).toBe(1)
+    expect(session.backgroundTasks.size).toBe(1)
     expect(session.backgroundTaskDeadlineAt).toBeGreaterThanOrEqual(before + 1_800_000)
     expect(session.backgroundTaskWakeCount).toBe(0)
   })

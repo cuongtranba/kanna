@@ -273,4 +273,23 @@ describe("normalizeClaudeStreamMessage background_tasks_changed", () => {
       (normalizeClaudeStreamMessage(missing)[0] as { backgroundTaskIdsSnapshot?: string[] }).backgroundTaskIdsSnapshot,
     ).toEqual([])
   })
+
+  test("snapshot carries per-task metadata (taskType + description) for the UI", () => {
+    const msg: ClaudeRawSdkMessage = {
+      type: "system",
+      subtype: "background_tasks_changed",
+      tasks: [
+        { task_id: "a6de6ce841521b5df", task_type: "local_agent", description: "Task 3 implementer" },
+        { task_id: "bsh42", task_type: "local_bash", description: "" },
+        { task_id: "tm1", task_type: "in_process_teammate", description: "teammate" },
+      ],
+    }
+    const entry = normalizeClaudeStreamMessage(msg)[0] as {
+      backgroundTasksSnapshot?: { id: string; taskType: string | null; description: string | null }[]
+    }
+    expect(entry.backgroundTasksSnapshot).toEqual([
+      { id: "a6de6ce841521b5df", taskType: "local_agent", description: "Task 3 implementer" },
+      { id: "bsh42", taskType: "local_bash", description: null },
+    ])
+  })
 })

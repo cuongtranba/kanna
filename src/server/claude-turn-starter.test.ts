@@ -236,7 +236,7 @@ describe("startTurnForChat", () => {
         openrouterKeyMasked: null,
         openrouterModel: null,
         lastUsedAt: Date.now(),
-        backgroundTaskIds: new Set<string>(),
+        backgroundTasks: new Map(),
         backgroundTaskDeadlineAt: 0,
     backgroundTaskWakeCount: 0,
         loopArmedAtSpawn: false,

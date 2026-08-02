@@ -175,6 +175,13 @@ export interface StatusEntry extends TranscriptEntryBase {
    * missed edge bookend can never wedge a stale running indicator.
    */
   backgroundTaskIdsSnapshot?: string[]
+  /**
+   * Per-task metadata riding the same `background_tasks_changed` snapshot
+   * (same order/filter as `backgroundTaskIdsSnapshot`). Carries the SDK's
+   * `task_type` + `description` so the UI can show WHICH tasks are running,
+   * mirroring Claude Code's /tasks list.
+   */
+  backgroundTasksSnapshot?: { id: string; taskType: string | null; description: string | null }[]
 }
 
 export interface ContextWindowUpdatedEntry extends TranscriptEntryBase {

@@ -1,5 +1,6 @@
 import process from "node:process"
 import type {
+  ChatBackgroundTask,
   ChatRuntime,
   ChatSnapshot,
   ChatStateTimings,
@@ -269,6 +270,8 @@ export function deriveTimings(
   }
 }
 
+const EMPTY_BACKGROUND_TASKS: ChatBackgroundTask[] = []
+
 export function deriveChatSnapshot(
   state: StoreState,
   activeStatuses: Map<string, KannaStatus>,
@@ -281,6 +284,7 @@ export function deriveChatSnapshot(
   nowMs: number = Date.now(),
   claudeSessionStates: Map<string, ClaudeSessionLifecycleStatus> = new Map(),
   customModels: readonly CustomModelEntry[] = [],
+  backgroundTasksByChatId: Map<string, ChatBackgroundTask[]> = new Map(),
 ): ChatSnapshot | null {
   const chat = state.chatsById.get(chatId)
   if (!chat || chat.deletedAt) return null
@@ -306,6 +310,7 @@ export function deriveChatSnapshot(
     ),
     policyOverride: chat.policyOverride ?? null,
     sessionState: claudeSessionStates.get(chat.id) ?? "cold",
+    backgroundTasks: backgroundTasksByChatId.get(chat.id) ?? EMPTY_BACKGROUND_TASKS,
   }
 
   const transcript = getMessages(chat.id)

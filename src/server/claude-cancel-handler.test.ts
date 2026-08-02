@@ -78,7 +78,9 @@ function makeSession(overrides: Partial<ClaudeSessionState> = {}): ClaudeSession
     openrouterKeyMasked: null,
     openrouterModel: null,
     lastUsedAt: Date.now(),
-    backgroundTaskIds: new Set<string>(),
+    backgroundTasks: new Map(),
+    selfWakeActive: false,
+    recentToolDescriptions: new Map(),
     backgroundTaskDeadlineAt: 0,
     backgroundTaskWakeCount: 0,
     loopArmedAtSpawn: false,
@@ -169,6 +171,73 @@ describe("no active turn", () => {
     await cancelChat(deps, "chat-1")
     expect(closed).toBe(true)
     expect(drainingStreams.has("chat-1")).toBe(false)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// No active turn — self-wake turn interrupt
+// ---------------------------------------------------------------------------
+
+describe("self-wake turn cancel", () => {
+  test("interrupts the session stream, appends interrupted, clears the flag", async () => {
+    let interrupted = false
+    const session = makeSession({ selfWakeActive: true })
+    session.session = {
+      ...session.session,
+      interrupt: async () => { interrupted = true },
+    }
+    const appendedMessages: TranscriptEntry[] = []
+    const stateChanges: string[] = []
+    const deps = makeDeps({
+      claudeSessions: new Map([["chat-1", session]]),
+      appendedMessages,
+      stateChanges,
+    })
+
+    await cancelChat(deps, "chat-1")
+
+    expect(interrupted).toBe(true)
+    expect(session.selfWakeActive).toBe(false)
+    expect(session.cancelledResultPending).toBe(1)
+    expect(appendedMessages.map((entry) => entry.kind)).toContain("interrupted")
+    expect(stateChanges).toContain("chat-1")
+  })
+
+  test("PTY driver drops the dead session after a self-wake interrupt", async () => {
+    const session = makeSession({ selfWakeActive: true })
+    session.session = {
+      ...session.session,
+      interrupt: async () => {},
+    }
+    const closedSessions: string[] = []
+    const deps = makeDeps({
+      claudeSessions: new Map([["chat-1", session]]),
+      closedSessions,
+      driver: "pty",
+    })
+
+    await cancelChat(deps, "chat-1")
+
+    expect(closedSessions).toContain("chat-1")
+  })
+
+  test("no self-wake, no session interrupt — stays a no-op", async () => {
+    let interrupted = false
+    const session = makeSession({ selfWakeActive: false })
+    session.session = {
+      ...session.session,
+      interrupt: async () => { interrupted = true },
+    }
+    const appendedMessages: TranscriptEntry[] = []
+    const deps = makeDeps({
+      claudeSessions: new Map([["chat-1", session]]),
+      appendedMessages,
+    })
+
+    await cancelChat(deps, "chat-1")
+
+    expect(interrupted).toBe(false)
+    expect(appendedMessages.length).toBe(0)
   })
 })
 

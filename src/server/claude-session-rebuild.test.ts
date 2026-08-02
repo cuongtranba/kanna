@@ -49,7 +49,7 @@ function makeSession(overrides: Partial<ClaudeSessionState> = {}): ClaudeSession
     openrouterKeyMasked: null,
     openrouterModel: null,
     lastUsedAt: 0,
-    backgroundTaskIds: new Set(),
+    backgroundTasks: new Map(),
     backgroundTaskDeadlineAt: 0,
     backgroundTaskWakeCount: 0,
     // loopArmedAtSpawn is optional per the type - omit it

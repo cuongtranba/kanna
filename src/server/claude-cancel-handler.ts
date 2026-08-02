@@ -133,7 +133,40 @@ export async function cancelChat(
   deps.cancelChatInOrchestrator(chatId)
 
   const active = deps.activeTurns.get(chatId)
-  if (!active) return
+  if (!active) {
+    // No Kanna turn — but a task-notification self-wake turn may be
+    // streaming on the warm session (surfaced as "running" by
+    // getActiveStatuses). Stop must reach it: interrupt the session
+    // stream directly, mirroring the active-turn path below.
+    const session = deps.claudeSessions.get(chatId)
+    if (session?.selfWakeActive) {
+      session.selfWakeActive = false
+      // The SDK answers interrupt() with a tail error result (subtype
+      // error_during_execution, empty text); suppress it exactly like a
+      // cancelled Kanna turn so it never renders as an unknown error.
+      session.cancelledResultPending += 1
+      await deps.store.appendMessage(
+        chatId,
+        timestamped({ kind: "interrupted", hidden: options?.hideInterrupted }),
+      )
+      deps.emitStateChange(chatId)
+      try {
+        await Promise.race([
+          session.session.interrupt(),
+          new Promise<void>((resolve) => setTimeout(resolve, 5_000)),
+        ])
+      } catch {
+        // best-effort — the flag is already cleared and the UI reflects idle
+      }
+      // PTY interrupt sends SIGINT which kills the CLI — drop the dead
+      // session so the next turn respawns (same as the active-turn path).
+      if (deps.resolveClaudeDriverPreference() === "pty") {
+        deps.closeClaudeSession(chatId, session)
+        deps.emitStateChange(chatId)
+      }
+    }
+    return
+  }
 
   logClaudeSteer("cancel_requested", {
     chatId,

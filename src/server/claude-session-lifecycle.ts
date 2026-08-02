@@ -145,7 +145,7 @@ export function hasLiveWorkflow(deps: SessionLifecycleDeps, chatId: string): boo
  * side effect. See adr-20260801-background-task-wake-escalation.
  */
 export function hasPendingBackgroundTask(session: ClaudeSessionState, now: number): boolean {
-  return session.backgroundTaskIds.size > 0 && now < session.backgroundTaskDeadlineAt
+  return session.backgroundTasks.size > 0 && now < session.backgroundTaskDeadlineAt
 }
 
 /**
@@ -154,7 +154,7 @@ export function hasPendingBackgroundTask(session: ClaudeSessionState, now: numbe
  * wake budget is exhausted, a visible teardown) instead of a silent reap.
  */
 export function backgroundTaskGuardExpired(session: ClaudeSessionState, now: number): boolean {
-  return session.backgroundTaskIds.size > 0 && now >= session.backgroundTaskDeadlineAt
+  return session.backgroundTasks.size > 0 && now >= session.backgroundTaskDeadlineAt
 }
 
 /**
@@ -230,9 +230,13 @@ export function enforceClaudeSessionBudget(
       && !deps.activeTurns.has(chatId)
       && session.pendingPromptSeqs.length === 0
       && !hasLiveWorkflow(deps, chatId)
-      // Any non-empty task-id set protects from eviction — including an
+      // Any non-empty task set protects from eviction — including an
       // expired guard mid wake-escalation (bounded by the sweep's wake cap).
-      && session.backgroundTaskIds.size === 0
+      && session.backgroundTasks.size === 0
+      // A streaming self-wake turn is genuinely active work; evicting it
+      // kills the model mid-turn. The idle reaper still covers a wedged
+      // flag via lastUsedAt, so this cannot pin a session forever.
+      && !session.selfWakeActive
     ))
     .sort((a, b) => a[1].lastUsedAt - b[1].lastUsedAt)
 

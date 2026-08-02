@@ -24,6 +24,7 @@ function makeRuntime(chatId: string): ChatRuntime {
     },
     policyOverride: null,
     sessionState: "cold",
+    backgroundTasks: [],
   }
 }
 

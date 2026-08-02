@@ -1,6 +1,6 @@
 ---
 id: adr-20260801-background-task-wake-escalation
-c3-seal: 5bf4c6b3fe54683245997afe3d0d473dcba795ab899fb05e389665831a60f6b1
+c3-seal: e355b5a928c492138912acf5fd21f9c6e2dfa93ebf9e1aa67f595e58b6636381
 title: background-task-wake-escalation
 type: adr
 goal: |-
@@ -77,13 +77,13 @@ visible abandonment notice (error result entry) to the chat. While the
 last wake turn is still fresh, defer to the next sweep so an imminent
 settle self-wake wins.
 
-3. **User send re-arms, never clears.** `chat.send` refreshes the deadline
+1. **User send re-arms, never clears.** `chat.send` refreshes the deadline
 and restores the wake budget; pending ids are removed only by settle
 edges / snapshots.
-4. **Wake budget scopes to a watch epoch.** `backgroundTaskWakeCount` resets
+2. **Wake budget scopes to a watch epoch.** `backgroundTaskWakeCount` resets
 when the id set transitions empty→non-empty (launch edge or snapshot) and
 on user send.
-5. **Budget eviction protects any non-empty id set** (including an expired
+3. **Budget eviction protects any non-empty id set** (including an expired
 guard mid-escalation) — bounded by the wake cap, so a zombie set cannot
 pin a session forever.
 

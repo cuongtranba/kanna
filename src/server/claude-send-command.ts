@@ -60,7 +60,7 @@ interface ActiveTurnsMap {
 /** Subset of the claudeSessions map used by the send command handler. */
 interface ClaudeSessionsMap {
   get(chatId: string): {
-    backgroundTaskIds: Set<string>
+    backgroundTasks: ReadonlyMap<string, unknown>
     backgroundTaskDeadlineAt: number
     backgroundTaskWakeCount: number
   } | undefined
@@ -306,7 +306,7 @@ export async function sendCommand(
   // remove them); the send just refreshes the deadline and restores the
   // watchdog wake budget.
   const existingClaudeSession = chatId ? deps.claudeSessions.get(chatId) : undefined
-  if (existingClaudeSession && existingClaudeSession.backgroundTaskIds.size > 0) {
+  if (existingClaudeSession && existingClaudeSession.backgroundTasks.size > 0) {
     existingClaudeSession.backgroundTaskDeadlineAt = Date.now() + deps.resolveBackgroundTaskMaxMs()
     existingClaudeSession.backgroundTaskWakeCount = 0
   }

@@ -141,6 +141,53 @@ describe("read models", () => {
       "gpt-5.3-codex",
       "gpt-5.3-codex-spark",
     ])
+    expect(chat?.runtime.backgroundTasks).toEqual([])
+  })
+
+  test("threads live background tasks onto the chat runtime", () => {
+    const state = createEmptyState()
+    state.projectsById.set("project-1", {
+      id: "project-1",
+      localPath: "/tmp/project",
+      title: "Project",
+      createdAt: 1,
+      updatedAt: 1,
+    })
+    state.chatsById.set("chat-1", {
+      id: "chat-1",
+      projectId: "project-1",
+      title: "Chat",
+      createdAt: 1,
+      updatedAt: 1,
+      unread: false,
+      provider: "claude",
+      planMode: false,
+      sessionTokensByProvider: {},
+      sourceHash: null,
+      lastTurnOutcome: null,
+    })
+
+    const tasks = [
+      { id: "bsh42", taskType: "local_bash", description: "CI watch", startedAt: 100 },
+    ]
+    const chat = deriveChatSnapshot(
+      state,
+      new Map(),
+      new Set(),
+      new Set(),
+      "chat-1",
+      () => ({
+        messages: [],
+        history: { hasOlder: false, olderCursor: null, recentLimit: 200 },
+      }),
+      () => [],
+      new Map(),
+      Date.now(),
+      new Map(),
+      [],
+      new Map([["chat-1", tasks]]),
+    )
+    expect(chat?.runtime.backgroundTasks).toEqual(tasks)
   })
 
   test("prefers saved project metadata over discovered entries for the same path", () => {

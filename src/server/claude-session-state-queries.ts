@@ -10,7 +10,7 @@
  * the deps interface.
  */
 
-import type { AgentProvider, KannaStatus, PendingToolSnapshot } from "../shared/types"
+import type { AgentProvider, ChatBackgroundTask, KannaStatus, PendingToolSnapshot } from "../shared/types"
 import type { ActiveTurn, ClaudeSessionState } from "./claude-session-state"
 import { backgroundTaskGuardExpired } from "./claude-session-lifecycle"
 
@@ -69,13 +69,46 @@ export interface SessionStateQueryDeps {
 
 /**
  * Returns a map of chatId → KannaStatus for all currently active turns.
+ *
+ * Task-notification self-wake turns run on the warm Claude session WITHOUT
+ * an ActiveTurn (no turn_started/turn_finished events exist for them), so
+ * they are folded in here as "running" — the chat surfaces as busy in the
+ * composer/sidebar while the model actually works, and deriveStatus stays a
+ * pure overlay (no event-sourced timing state is touched).
  */
 export function getActiveStatuses(deps: SessionStateQueryDeps): Map<string, KannaStatus> {
   const statuses = new Map<string, KannaStatus>()
   for (const [chatId, turn] of deps.activeTurns.entries()) {
     statuses.set(chatId, turn.status)
   }
+  for (const [chatId, session] of deps.claudeSessions.entries()) {
+    if (statuses.has(chatId)) continue
+    if (session.selfWakeActive) statuses.set(chatId, "running")
+  }
   return statuses
+}
+
+/**
+ * Live Claude-Code background tasks per chat, shaped for the UI (mirrors
+ * Claude Code's /tasks list). Sorted oldest-first so labels are stable.
+ */
+export function getBackgroundTasksByChatId(
+  deps: SessionStateQueryDeps,
+): Map<string, ChatBackgroundTask[]> {
+  const out = new Map<string, ChatBackgroundTask[]>()
+  for (const [chatId, session] of deps.claudeSessions.entries()) {
+    if (session.backgroundTasks.size === 0) continue
+    const tasks: ChatBackgroundTask[] = [...session.backgroundTasks.entries()]
+      .map(([id, meta]) => ({
+        id,
+        taskType: meta.taskType,
+        description: meta.description,
+        startedAt: meta.startedAt,
+      }))
+      .sort((a, b) => a.startedAt - b.startedAt || a.id.localeCompare(b.id))
+    out.set(chatId, tasks)
+  }
+  return out
 }
 
 /**
@@ -129,6 +162,9 @@ export function getClaudeSessionStates(
   for (const [chatId, session] of deps.claudeSessions) {
     const activeProv = deps.activeTurns.get(chatId)?.provider
     if (activeProv !== undefined && deps.isClaudeSdkProvider(activeProv)) {
+      out.set(chatId, "active")
+    } else if (session.selfWakeActive) {
+      // A self-wake turn is streaming — genuinely active work, not warming.
       out.set(chatId, "active")
     } else if (deps.hasPendingBackgroundTask(session, now)) {
       // Held warm for a background Bash task — surface as "warming", not "idle".
@@ -203,15 +239,15 @@ function escalateExpiredBackgroundTaskGuard(
     session.backgroundTaskDeadlineAt = now + deps.resolveBackgroundTaskMaxMs()
     deps.wakeBackgroundTaskSession(
       chatId,
-      [...session.backgroundTaskIds],
+      [...session.backgroundTasks.keys()],
       session.backgroundTaskWakeCount,
       maxWakes,
     )
     return
   }
   if (now - session.lastUsedAt < deps.resolveClaudeIdleMs()) return
-  const abandonedIds = [...session.backgroundTaskIds]
-  session.backgroundTaskIds.clear()
+  const abandonedIds = [...session.backgroundTasks.keys()]
+  session.backgroundTasks.clear()
   session.backgroundTaskDeadlineAt = 0
   deps.closeClaudeSession(chatId, session)
   deps.notifyBackgroundTasksAbandoned(chatId, abandonedIds)

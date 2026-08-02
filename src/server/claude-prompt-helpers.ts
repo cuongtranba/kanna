@@ -3,7 +3,8 @@
  * Extracted from agent.ts to keep it lean.
  */
 
-import type { ChatAttachment } from "../shared/types"
+import type { ChatAttachment, NormalizedToolCall } from "../shared/types"
+import type { SessionBackgroundTask } from "./claude-session-state"
 import { isRecord } from "../shared/errors"
 
 // ---------------------------------------------------------------------------
@@ -141,6 +142,47 @@ export function backgroundTaskIdsFromToolResult<T>(content: T): string[] {
     }
   }
   return ids
+}
+
+/**
+ * Human description for a tool call, used to label a background task whose
+ * launch was seen only through the tool_result regex (PTY driver; SDK version
+ * skew). Bash carries `description` (else the command itself); other tools
+ * (Agent/Task) expose `description` on the raw input.
+ */
+export function toolCallDescription(tool: NormalizedToolCall): string | null {
+  if (tool.toolKind === "bash") {
+    const description = tool.input.description ?? tool.input.command
+    return typeof description === "string" && description.length > 0 ? description : null
+  }
+  const raw = tool.rawInput?.description
+  return typeof raw === "string" && raw.length > 0 ? raw : null
+}
+
+/**
+ * REPLACE-semantics fold of a `background_tasks_changed` snapshot over the
+ * session's live task map. Ids absent from the snapshot drop out; surviving
+ * ids keep their first-seen `startedAt` and any previously learned metadata
+ * (the snapshot wins when it carries a value). Pure — `now` injected.
+ */
+export function mergeBackgroundTaskSnapshot(
+  previous: ReadonlyMap<string, SessionBackgroundTask>,
+  ids: readonly string[],
+  meta: readonly { id: string; taskType: string | null; description: string | null }[] | undefined,
+  now: number,
+): Map<string, SessionBackgroundTask> {
+  const metaById = new Map((meta ?? []).map((entry) => [entry.id, entry]))
+  const next = new Map<string, SessionBackgroundTask>()
+  for (const id of ids) {
+    const prev = previous.get(id)
+    const snapshotMeta = metaById.get(id)
+    next.set(id, {
+      taskType: snapshotMeta?.taskType ?? prev?.taskType ?? null,
+      description: snapshotMeta?.description ?? prev?.description ?? null,
+      startedAt: prev?.startedAt ?? now,
+    })
+  }
+  return next
 }
 
 // ---------------------------------------------------------------------------

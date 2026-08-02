@@ -7,9 +7,11 @@ import {
   isNoConversationFoundMessage,
   toSdkEffort,
   backgroundTaskIdsFromToolResult,
+  mergeBackgroundTaskSnapshot,
+  toolCallDescription,
   positiveIntegerFromEnv,
 } from "./claude-prompt-helpers"
-import type { ChatAttachment } from "../shared/types"
+import type { ChatAttachment, NormalizedToolCall } from "../shared/types"
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -271,5 +273,85 @@ describe("positiveIntegerFromEnv", () => {
 
   test("returns fallback for non-numeric string", () => {
     expect(positiveIntegerFromEnv("abc", 5)).toBe(5)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// toolCallDescription
+// ---------------------------------------------------------------------------
+
+describe("toolCallDescription", () => {
+  test("bash: prefers description, falls back to command", () => {
+    const withDescription = {
+      kind: "tool",
+      toolKind: "bash",
+      toolName: "Bash",
+      toolId: "t1",
+      input: { command: "sleep 600", description: "Watch the deploy" },
+    } as unknown as NormalizedToolCall
+    expect(toolCallDescription(withDescription)).toBe("Watch the deploy")
+
+    const commandOnly = {
+      kind: "tool",
+      toolKind: "bash",
+      toolName: "Bash",
+      toolId: "t2",
+      input: { command: "bun test --watch" },
+    } as unknown as NormalizedToolCall
+    expect(toolCallDescription(commandOnly)).toBe("bun test --watch")
+  })
+
+  test("non-bash: reads description off rawInput, null when absent", () => {
+    const agentCall = {
+      kind: "tool",
+      toolKind: "subagent_task",
+      toolName: "Agent",
+      toolId: "t3",
+      input: { subagentType: "general-purpose" },
+      rawInput: { description: "Summarise benchmark", prompt: "..." },
+    } as unknown as NormalizedToolCall
+    expect(toolCallDescription(agentCall)).toBe("Summarise benchmark")
+
+    const bare = {
+      kind: "tool",
+      toolKind: "glob",
+      toolName: "Glob",
+      toolId: "t4",
+      input: { pattern: "*" },
+    } as unknown as NormalizedToolCall
+    expect(toolCallDescription(bare)).toBeNull()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// mergeBackgroundTaskSnapshot
+// ---------------------------------------------------------------------------
+
+describe("mergeBackgroundTaskSnapshot", () => {
+  test("REPLACE semantics: absent ids drop, new ids appear with snapshot meta", () => {
+    const previous = new Map([
+      ["gone", { taskType: null, description: "stale", startedAt: 1 }],
+      ["kept", { taskType: null, description: null, startedAt: 2 }],
+    ])
+    const next = mergeBackgroundTaskSnapshot(
+      previous,
+      ["kept", "fresh"],
+      [
+        { id: "kept", taskType: "local_bash", description: "CI watch" },
+        { id: "fresh", taskType: "local_agent", description: null },
+      ],
+      1_000,
+    )
+    expect(next.has("gone")).toBe(false)
+    expect(next.get("kept")).toEqual({ taskType: "local_bash", description: "CI watch", startedAt: 2 })
+    expect(next.get("fresh")).toEqual({ taskType: "local_agent", description: null, startedAt: 1_000 })
+  })
+
+  test("snapshot without meta preserves previously learned labels", () => {
+    const previous = new Map([
+      ["t1", { taskType: "local_bash", description: "Watch deploy", startedAt: 5 }],
+    ])
+    const next = mergeBackgroundTaskSnapshot(previous, ["t1"], undefined, 999)
+    expect(next.get("t1")).toEqual({ taskType: "local_bash", description: "Watch deploy", startedAt: 5 })
   })
 })

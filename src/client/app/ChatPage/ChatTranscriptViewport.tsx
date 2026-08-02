@@ -20,7 +20,7 @@ import {
   useStableResolvedRows,
 } from "../KannaTranscript"
 import type { KannaState } from "../useKannaState"
-import type { AutoContinueSchedule, CloudflareTunnelRecord, LoopProgressSnapshot, SubagentRunSnapshot } from "../../../shared/types"
+import type { AutoContinueSchedule, ChatBackgroundTask, CloudflareTunnelRecord, LoopProgressSnapshot, SubagentRunSnapshot } from "../../../shared/types"
 import type { ToolRequestDecision } from "../../../shared/permission-policy"
 import { SubagentMessage } from "../../components/messages/SubagentMessage"
 import { SubagentPendingToolCard } from "../../components/messages/SubagentPendingToolCard"
@@ -39,6 +39,7 @@ import { timerAdapter } from "../../adapters/timer.adapter"
 import type { DomPort } from "../../ports/domPort"
 import type { TimerPort } from "../../ports/timerPort"
 import { LoopProgressSection } from "../LoopProgressSection"
+import { BackgroundTasksSection } from "../BackgroundTasksSection"
 
 export interface ChatTranscriptViewportPorts {
   dom?: DomPort
@@ -103,6 +104,7 @@ interface ChatTranscriptViewportProps {
   onCancelSubagentRun?: (chatId: string, runId: string) => void
   loopProgress?: LoopProgressSnapshot
   workflowRuns?: WorkflowRunSummary[]
+  backgroundTasks?: ChatBackgroundTask[]
   getWorkflowRunDetail?: (runId: string) => Promise<WorkflowRun | null>
   getSubagentTranscript?: GetSubagentTranscript
   showScrollButton: boolean
@@ -156,6 +158,7 @@ export const ChatTranscriptViewport = memo(({
   onCancelSubagentRun,
   loopProgress,
   workflowRuns,
+  backgroundTasks,
   getWorkflowRunDetail,
   getSubagentTranscript,
   showScrollButton,
@@ -407,6 +410,11 @@ export const ChatTranscriptViewport = memo(({
           />
         </div>
       )}
+      {backgroundTasks && backgroundTasks.length > 0 ? (
+        <div className="pb-5">
+          <BackgroundTasksSection tasks={backgroundTasks} />
+        </div>
+      ) : null}
       {isProcessing ? <ProcessingMessage status={runtimeStatus ?? undefined} /> : null}
       {queuedMessages.map((message) => (
         <QueuedUserMessage
