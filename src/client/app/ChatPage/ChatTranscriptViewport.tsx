@@ -104,8 +104,6 @@ interface ChatTranscriptViewportProps {
   loopProgress?: LoopProgressSnapshot
   workflowRuns?: WorkflowRunSummary[]
   getWorkflowRunDetail?: (runId: string) => Promise<WorkflowRun | null>
-  /** Slot rendered in the transcript footer, next to the workflows panel. */
-  orchestrationPanel?: React.ReactNode
   getSubagentTranscript?: GetSubagentTranscript
   showScrollButton: boolean
   onIsAtEndChange: (isAtEnd: boolean) => void
@@ -159,7 +157,6 @@ export const ChatTranscriptViewport = memo(({
   loopProgress,
   workflowRuns,
   getWorkflowRunDetail,
-  orchestrationPanel,
   getSubagentTranscript,
   showScrollButton,
   onIsAtEndChange,
@@ -399,7 +396,6 @@ export const ChatTranscriptViewport = memo(({
           />
         </div>
       ) : null}
-      {orchestrationPanel ? <div className="pb-5">{orchestrationPanel}</div> : null}
       {liveTunnelRecord && onTunnelAccept && onTunnelStop && onTunnelRetry && (
         <div className="pb-5">
           <CloudflareTunnelCard
