@@ -50,7 +50,6 @@ export interface SnapshotLogPaths {
   schedulesLogPath: string
   stacksLogPath: string
   toolRequestsLogPath: string
-  orchLogPath: string
 }
 
 /** Returned by {@link loadSnapshotIntoState}. */
@@ -352,7 +351,6 @@ export async function loadAndReplayLogs(
     ...await loadReplayEventsFromFile(storage, paths.turnsLogPath, 5, clearStorage),
     ...await loadReplayEventsFromFile(storage, paths.schedulesLogPath, 6, clearStorage),
     ...await loadReplayEventsFromFile(storage, paths.toolRequestsLogPath, 7, clearStorage),
-    ...await loadReplayEventsFromFile(storage, paths.orchLogPath, 8, clearStorage),
   ]
 
   if (isStorageReset()) return

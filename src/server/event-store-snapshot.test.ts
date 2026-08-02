@@ -88,7 +88,6 @@ const PATHS: SnapshotLogPaths = {
   schedulesLogPath: "/data/schedules.jsonl",
   stacksLogPath: "/data/stacks.jsonl",
   toolRequestsLogPath: "/data/tool-requests.jsonl",
-  orchLogPath: "/data/orch.jsonl",
 }
 
 // ---------------------------------------------------------------------------
@@ -593,5 +592,40 @@ describe("loadAndReplayLogs", () => {
       () => { cleared = true },
     )
     expect(cleared).toBe(true)
+  })
+
+  // Orchestration is retired (adr-20260802-retire-orchestration-core), but
+  // installs that used it still hold an orch.jsonl on disk. That file must
+  // never re-enter replay: getReplayEventPriority throws on an unknown type
+  // from INSIDE the .sort() comparator, which no try/catch guards — reading
+  // one legacy line would take the whole boot down. The log is also user
+  // data, so it must survive byte-for-byte.
+  test("a legacy orch.jsonl is neither replayed nor rewritten", async () => {
+    const legacy = [
+      JSON.stringify({ v: STORE_VERSION, type: "orch_run_created", timestamp: 50, runId: "run-1", config: {}, tasks: [] }),
+      JSON.stringify({ v: STORE_VERSION, type: "orch_task_claimed", timestamp: 60, runId: "run-1", taskId: "t1" }),
+      JSON.stringify({ v: STORE_VERSION, type: "orch_run_completed", timestamp: 70, runId: "run-1" }),
+    ].map((line) => `${line}\n`).join("")
+    const live = JSON.stringify({ v: STORE_VERSION, type: "project_opened", timestamp: 100, projectId: "p1", localPath: "/", title: "T" })
+    const storage = makeStorage({
+      "/data/orch.jsonl": legacy,
+      "/data/projects.jsonl": `${live}\n`,
+    })
+
+    const applied: StoreEvent[] = []
+    let clearCalled = false
+    await loadAndReplayLogs(
+      storage, PATHS,
+      () => false,
+      (event) => { applied.push(event) },
+      async () => { clearCalled = true },
+      () => {},
+    )
+
+    // StoreEvent is a union of `type`-tagged and `kind`-tagged variants.
+    expect(applied.map((e) => ("type" in e ? e.type : e.kind))).toEqual(["project_opened"])
+    expect(clearCalled).toBe(false)
+    expect(storage.readTextSync("/data/orch.jsonl")).toBe(legacy)
+    expect(storage.written.has("/data/orch.jsonl")).toBe(false)
   })
 })

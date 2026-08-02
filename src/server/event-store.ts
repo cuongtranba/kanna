@@ -160,7 +160,6 @@ export class EventStore implements PushEventStore {
       pushLogPath: this.pushLogPath,
       stacksLogPath: this.stacksLogPath,
       toolRequestsLogPath: this.toolRequestsLogPath,
-      orchLogPath: this.orchLogPath,
       transcriptsDir: this.transcriptsDir,
       sidebarProjectOrderPath: this.sidebarProjectOrderPath,
       state: this.state,
