@@ -33,6 +33,12 @@ import { domAdapter } from "../../../adapters/dom.adapter"
 
 interface Props {
   projectGroups: SidebarProjectGroup[]
+  /**
+   * Label rendered above the list. Without it the list reads as a continuation of
+   * whichever section precedes it in the sidebar (e.g. Stacks). Omitted when the
+   * list is empty so no orphan label is left behind.
+   */
+  heading?: string
   editorLabel: string
   collapsedSections: Set<string>
   expandedGroups: Set<string>
@@ -367,8 +373,22 @@ const SortableProjectGroup = memo(({
   )
 })
 
+function SectionHeading({ label }: { label: string }) {
+  return (
+    <div className="pl-2 pr-2 pt-2 pb-1 flex items-center gap-1">
+      <span
+        data-testid="sidebar-section-heading"
+        className="flex-1 min-w-0 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground"
+      >
+        {label}
+      </span>
+    </div>
+  )
+}
+
 const LocalProjectsSectionImpl = function LocalProjectsSection({
   projectGroups,
+  heading,
   editorLabel,
   collapsedSections,
   expandedGroups,
@@ -443,35 +463,38 @@ const LocalProjectsSectionImpl = function LocalProjectsSection({
   }
 
   return (
-    <DndContext
-      sensors={sensors}
-      collisionDetection={collisionDetection}
-      onDragEnd={handleDragEnd}
-    >
-      <SortableContext items={groupIds} strategy={verticalListSortingStrategy}>
-        {projectGroups.map((group) => (
-        <SortableProjectGroup
-          key={group.groupKey}
-          group={group}
-          editorLabel={editorLabel}
-          collapsedSections={collapsedSections}
-          expandedGroups={expandedGroups}
-          onToggleSection={onToggleSection}
-          onToggleExpandedGroup={onToggleExpandedGroup}
-          renderChatRow={renderChatRow}
-          onShowArchivedProject={onShowArchivedProject}
-          onNewLocalChat={onNewLocalChat}
-          onCopyPath={onCopyPath}
-          onOpenExternalPath={onOpenExternalPath}
-          onHideProject={onHideProject}
-          onToggleStar={onToggleStar}
-          isConnected={isConnected}
-          startingLocalPath={startingLocalPath}
-          dom={dom}
-        />
-        ))}
-      </SortableContext>
-    </DndContext>
+    <>
+      {heading && projectGroups.length > 0 ? <SectionHeading label={heading} /> : null}
+      <DndContext
+        sensors={sensors}
+        collisionDetection={collisionDetection}
+        onDragEnd={handleDragEnd}
+      >
+        <SortableContext items={groupIds} strategy={verticalListSortingStrategy}>
+          {projectGroups.map((group) => (
+            <SortableProjectGroup
+              key={group.groupKey}
+              group={group}
+              editorLabel={editorLabel}
+              collapsedSections={collapsedSections}
+              expandedGroups={expandedGroups}
+              onToggleSection={onToggleSection}
+              onToggleExpandedGroup={onToggleExpandedGroup}
+              renderChatRow={renderChatRow}
+              onShowArchivedProject={onShowArchivedProject}
+              onNewLocalChat={onNewLocalChat}
+              onCopyPath={onCopyPath}
+              onOpenExternalPath={onOpenExternalPath}
+              onHideProject={onHideProject}
+              onToggleStar={onToggleStar}
+              isConnected={isConnected}
+              startingLocalPath={startingLocalPath}
+              dom={dom}
+            />
+          ))}
+        </SortableContext>
+      </DndContext>
+    </>
   )
 }
 
