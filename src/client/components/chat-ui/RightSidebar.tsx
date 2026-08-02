@@ -1,7 +1,7 @@
 import { LegendList, type LegendListRef } from "@legendapp/list/react"
 import { PatchDiff } from "@pierre/diffs/react"
 import { AlertTriangle, ArrowUp, Ban, Building2, Check, ChevronDown, ChevronUp, Code, Columns2, Copy, Download, Ellipsis, FileText, FolderOpen, GitBranch, GitBranchPlus, Github, GitMerge, GitPullRequest, Globe, LoaderCircle, Lock, Minus, PencilLine, PenLine, RefreshCw, Rows3, Search, Trash2, Upload, UserRound, WrapText } from "lucide-react"
-import { memo, useCallback, useEffect, useMemo, useRef, type MouseEvent as ReactMouseEvent, type ReactNode, type RefObject } from "react"
+import { memo, useCallback, useEffect, useMemo, useRef, type ChangeEvent as ReactChangeEvent, type MouseEvent as ReactMouseEvent, type ReactNode, type RefObject } from "react"
 import type {
   ChatAttachment,
   ChatBranchHistoryEntry,
@@ -403,6 +403,10 @@ function GitHubPublishModal({
   const setOwner = useRightSidebarUiStore((store) => store.setPublishOwner)
   const setName = useRightSidebarUiStore((store) => store.setPublishName)
   const setVisibility = useRightSidebarUiStore((store) => store.setPublishVisibility)
+  // TS type predicate narrowing string -> RepoVisibility: a boundary concern.
+  const handleVisibilityChange = useCallback((value: string) => {
+    if (isRepoVisibility(value)) setVisibility(value)
+  }, [setVisibility])
   const setDescription = useRightSidebarUiStore((store) => store.setPublishDescription)
   const setAvailability = useRightSidebarUiStore((store) => store.setPublishAvailability)
   const setIsCheckingAvailability = useRightSidebarUiStore((store) => store.setIsCheckingPublishAvailability)
@@ -603,7 +607,7 @@ function GitHubPublishModal({
           </div>
         </div>
         <div className="space-y-2">
-          <Select value={visibility} onValueChange={(value) => { if (isRepoVisibility(value)) setVisibility(value) }}>
+          <Select value={visibility} onValueChange={handleVisibilityChange}>
             <SelectTrigger className="pl-[11px] [&>span]:flex [&>span]:items-center [&>span]:gap-2">
               <SelectValue placeholder="Select visibility" />
             </SelectTrigger>
@@ -1018,6 +1022,10 @@ function BranchSwitcher({
   const setIsMutating = useRightSidebarUiStore((store) => store.setBranchSwitcherIsMutating)
   const setQuery = useRightSidebarUiStore((store) => store.setBranchSwitcherQuery)
   const setEntryView = useRightSidebarUiStore((store) => store.setBranchSwitcherEntryView)
+  // TS type predicate narrowing string -> EntryView: a boundary concern.
+  const handleEntryViewChange = useCallback((value: string) => {
+    if (isEntryView(value)) setEntryView(value)
+  }, [setEntryView])
   const setBranchList = useRightSidebarUiStore((store) => store.setBranchList)
   const setError = useRightSidebarUiStore((store) => store.setBranchSwitcherError)
 
@@ -1189,7 +1197,7 @@ function BranchSwitcher({
           />
           <SegmentedControl
             value={entryView}
-            onValueChange={(value) => { if (isEntryView(value)) setEntryView(value) }}
+            onValueChange={handleEntryViewChange}
             size="sm"
             className="w-full"
             optionClassName="flex-1 justify-center"
@@ -1620,11 +1628,45 @@ function RightSidebarImpl({
   const toggleCollapsedPath = useRightSidebarStore((store) => store.toggleCollapsedPath)
   const setViewMode = useRightSidebarStore((store) => store.setViewMode)
   const setCommitDraft = useRightSidebarStore((store) => store.setCommitDraft)
+  const setCommitSummary = useRightSidebarStore((store) => store.setCommitSummary)
+  const setCommitDescription = useRightSidebarStore((store) => store.setCommitDescription)
   const clearCommitDraft = useRightSidebarStore((store) => store.clearCommitDraft)
   const checkedPaths = useDiffCommitStore((store) => (projectId ? (store.checkedPathsByProjectId[projectId] ?? EMPTY_CHECKED_PATHS) : EMPTY_CHECKED_PATHS))
   const reconcileCheckedPaths = useDiffCommitStore((store) => store.reconcileProject)
-  const setCheckedPath = useDiffCommitStore((store) => store.setChecked)
-  const setAllCheckedPaths = useDiffCommitStore((store) => store.setAllChecked)
+  const toggleCheckedPath = useDiffCommitStore((store) => store.toggleChecked)
+  const toggleAllCheckedPaths = useDiffCommitStore((store) => store.toggleAllChecked)
+  // These wrap the projectId guard (projectId is a prop, so it stays here).
+  // The state transitions themselves live in the stores.
+  const handleToggleCollapsed = useCallback((path: string) => {
+    if (!projectId) return
+    toggleCollapsedPath(projectId, path)
+  }, [projectId, toggleCollapsedPath])
+
+  const handleToggleChecked = useCallback((path: string) => {
+    if (!projectId) return
+    toggleCheckedPath(projectId, path)
+  }, [projectId, toggleCheckedPath])
+
+  const handleToggleAllChecked = useCallback(() => {
+    if (!projectId) return
+    toggleAllCheckedPaths(projectId, filePaths)
+  }, [projectId, toggleAllCheckedPaths, filePaths])
+
+  const handleViewModeChange = useCallback((value: string) => {
+    if (!projectId) return
+    if (isSidebarViewMode(value)) setViewMode(projectId, value)
+  }, [projectId, setViewMode])
+
+  const handleSummaryChange = useCallback((event: ReactChangeEvent<HTMLInputElement>) => {
+    if (!projectId) return
+    setCommitSummary(projectId, event.target.value)
+  }, [projectId, setCommitSummary])
+
+  const handleDescriptionChange = useCallback((event: ReactChangeEvent<HTMLTextAreaElement>) => {
+    if (!projectId) return
+    setCommitDescription(projectId, event.target.value)
+  }, [projectId, setCommitDescription])
+
   const previousHasChangesRef = useRef(hasChanges)
 
   useEffect(() => {
@@ -1807,14 +1849,8 @@ function RightSidebarImpl({
               editorLabel={editorLabel}
               diffRenderMode={diffRenderMode}
               wrapLines={wrapLines}
-              onToggleCollapsed={() => {
-                if (!projectId) return
-                toggleCollapsedPath(projectId, file.path)
-              }}
-              onToggleChecked={() => {
-                if (!projectId) return
-                setCheckedPath(projectId, file.path, !isChecked)
-              }}
+              onToggleCollapsed={() => handleToggleCollapsed(file.path)}
+              onToggleChecked={() => handleToggleChecked(file.path)}
               fileActions={fileActions}
               patch={patchesByPath[file.path]}
               patchError={patchErrorsByPath[file.path]}
@@ -1837,9 +1873,9 @@ function RightSidebarImpl({
       patchErrorsByPath,
       patchesByPath,
       ports,
+      handleToggleChecked,
+      handleToggleCollapsed,
       projectId,
-      setCheckedPath,
-      toggleCollapsedPath,
       wrapLines,
     ],
   )
@@ -2052,10 +2088,7 @@ function RightSidebarImpl({
                       checked={allSelected}
                       mixed={someSelected}
                       label={stageCheckboxLabel}
-                      onClick={() => {
-                        if (!projectId || diffs.files.length === 0) return
-                        setAllCheckedPaths(projectId, filePaths, someSelected ? true : !allSelected)
-                      }}
+                      onClick={handleToggleAllChecked}
                     />
                     <span>{selectedCount} files</span>
                   </div>
@@ -2064,10 +2097,7 @@ function RightSidebarImpl({
                   <div className="pointer-events-auto">
                     <SegmentedControl
                       value={viewMode}
-                      onValueChange={(value) => {
-                        if (!projectId) return
-                        if (isSidebarViewMode(value)) setViewMode(projectId, value)
-                      }}
+                      onValueChange={handleViewModeChange}
                       size="sm"
                       optionClassName="flex-1 justify-center"
                       options={[
@@ -2127,13 +2157,7 @@ function RightSidebarImpl({
                     <div className="space-y-0 rounded-xl mx-auto max-w-[700px]">
                       <Input
                         value={summary}
-                        onChange={(event) => {
-                          if (!projectId) return
-                          setCommitDraft(projectId, {
-                            summary: event.target.value,
-                            description,
-                          })
-                        }}
+                        onChange={handleSummaryChange}
                         onKeyDown={handleCommitKeyDown}
                         placeholder="Commit message (override)"
                         className="rounded-t-xl rounded-b-none px-3"
@@ -2141,13 +2165,7 @@ function RightSidebarImpl({
                       />
                       <Textarea
                         value={description}
-                        onChange={(event) => {
-                          if (!projectId) return
-                          setCommitDraft(projectId, {
-                            summary,
-                            description: event.target.value,
-                          })
-                        }}
+                        onChange={handleDescriptionChange}
                         onKeyDown={handleCommitKeyDown}
                         placeholder="Description"
                         rows={5}

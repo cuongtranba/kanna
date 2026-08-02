@@ -4,8 +4,13 @@ import { persist } from "zustand/middleware"
 interface DiffCommitState {
   checkedPathsByProjectId: Record<string, Record<string, boolean>>
   reconcileProject: (projectId: string, paths: string[]) => void
-  setChecked: (projectId: string, path: string, checked: boolean) => void
-  setAllChecked: (projectId: string, paths: string[], checked: boolean) => void
+  /** Flip one path; the previous value is read inside the store (unknown = checked). */
+  toggleChecked: (projectId: string, path: string) => void
+  /**
+   * Flip the whole set. Mirrors the tri-state header checkbox: anything less
+   * than fully-selected selects all, fully-selected clears all.
+   */
+  toggleAllChecked: (projectId: string, paths: string[]) => void
 }
 
 export const useDiffCommitStore = create<DiffCommitState>()(
@@ -28,24 +33,30 @@ export const useDiffCommitStore = create<DiffCommitState>()(
           },
         }
       }),
-      setChecked: (projectId, path, checked) => set((state) => ({
-        checkedPathsByProjectId: {
-          ...state.checkedPathsByProjectId,
-          [projectId]: {
-            ...(state.checkedPathsByProjectId[projectId] ?? {}),
-            [path]: checked,
+      toggleChecked: (projectId, path) => set((state) => {
+        const current = state.checkedPathsByProjectId[projectId] ?? {}
+        return {
+          checkedPathsByProjectId: {
+            ...state.checkedPathsByProjectId,
+            [projectId]: { ...current, [path]: !(current[path] ?? true) },
           },
-        },
-      })),
-      setAllChecked: (projectId, paths, checked) => set((state) => ({
-        checkedPathsByProjectId: {
-          ...state.checkedPathsByProjectId,
-          [projectId]: {
-            ...(state.checkedPathsByProjectId[projectId] ?? {}),
-            ...Object.fromEntries(paths.map((path) => [path, checked])),
+        }
+      }),
+      toggleAllChecked: (projectId, paths) => set((state) => {
+        if (paths.length === 0) return state
+        const current = state.checkedPathsByProjectId[projectId] ?? {}
+        const allSelected = paths.every((path) => current[path] ?? true)
+        const next = !allSelected
+        return {
+          checkedPathsByProjectId: {
+            ...state.checkedPathsByProjectId,
+            [projectId]: {
+              ...current,
+              ...Object.fromEntries(paths.map((path) => [path, next])),
+            },
           },
-        },
-      })),
+        }
+      }),
     }),
     {
       name: "diff-commit-selections",
