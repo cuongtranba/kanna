@@ -7,7 +7,6 @@ import { FsStorageBackend } from "./storage/fs-storage.adapter"
 import type { AgentProvider, ChatHistoryPage, QueuedChatMessage, SlashCommand, StackBinding, SubagentRunSnapshot, TranscriptEntry } from "../shared/types"
 import type { AutoContinueEvent } from "./auto-continue/events"
 import {
-  type OrchestrationEvent,
   type StackRecord,
   type StoreEvent,
   type StoreState,
@@ -15,7 +14,6 @@ import {
   type TurnRunConfig,
   createEmptyState,
 } from "./events"
-import type { OrchRunSnapshot } from "../shared/orchestration-types"
 import type { ChatPermissionPolicyOverride, ToolRequest, ToolRequestDecision, ToolRequestStatus } from "../shared/permission-policy"
 import type { CloudflareTunnelEvent } from "./cloudflare-tunnel/events"
 import type { PushEvent, PushEventStore } from "./push/events"
@@ -34,7 +32,6 @@ import {
   resolveToolRequest as resolveToolRequestFn,
   type ToolRequestWriteDeps,
 } from "./event-store-tool-requests"
-import * as OrchSubscription from "./event-store-orch-subscription"
 import { applyStoreEvent } from "./event-store-apply"
 import { ChatOpLog } from "./chat-op-log"
 import * as PeripheralEvents from "./event-store-peripheral-events.adapter"
@@ -70,7 +67,6 @@ export class EventStore implements PushEventStore {
   private readonly pushLogPath: string
   private readonly stacksLogPath: string
   private readonly toolRequestsLogPath: string
-  private readonly orchLogPath: string
   private readonly transcriptsDir: string
   private readonly sidebarProjectOrderPath: string
   private legacyMessagesByChatId = new Map<string, TranscriptEntry[]>()
@@ -107,7 +103,6 @@ export class EventStore implements PushEventStore {
     this.pushLogPath = path.join(this.dataDir, "push.jsonl")
     this.stacksLogPath = path.join(this.dataDir, "stacks.jsonl")
     this.toolRequestsLogPath = path.join(this.dataDir, "tool-requests.jsonl")
-    this.orchLogPath = path.join(this.dataDir, "orch.jsonl")
     this.transcriptsDir = path.join(this.dataDir, "transcripts")
     this.sidebarProjectOrderPath = path.join(this.dataDir, SIDEBAR_PROJECT_ORDER_FILE)
   }
@@ -160,7 +155,6 @@ export class EventStore implements PushEventStore {
       pushLogPath: this.pushLogPath,
       stacksLogPath: this.stacksLogPath,
       toolRequestsLogPath: this.toolRequestsLogPath,
-      orchLogPath: this.orchLogPath,
       transcriptsDir: this.transcriptsDir,
       sidebarProjectOrderPath: this.sidebarProjectOrderPath,
       state: this.state,
@@ -258,15 +252,6 @@ export class EventStore implements PushEventStore {
     }
   }
 
-  private buildOrchSubscriptionDeps(): OrchSubscription.OrchSubscriptionDeps {
-    return {
-      orchRunsById: this.state.orchRunsById,
-      orchLogPath: this.orchLogPath,
-      orchRunsSubscribers: this.orchSubscriptionState.orchRunsSubscribers,
-      applyEvent: (e) => { this.applyEvent(e) },
-      enqueueDiskAppend: (fp, p) => { this.enqueueDiskAppend(fp, p) },
-    }
-  }
 
   private buildToolRequestWriteDeps(): ToolRequestWriteDeps {
     return {
@@ -480,30 +465,4 @@ export class EventStore implements PushEventStore {
   scanAllToolRequests(): ToolRequest[] { return scanAllToolRequestsFromMap(this.state.toolRequestsById) }
 
   async flush(): Promise<void> { await this.writeChain }
-
-  private readonly orchSubscriptionState = OrchSubscription.createOrchSubscriptionState()
-
-  appendOrchestrationEvent(event: OrchestrationEvent): Promise<void> { return OrchSubscription.appendOrchestrationEvent(this.buildOrchSubscriptionDeps(), event) }
-
-  subscribeOrchRuns(cb: () => void): () => void { return OrchSubscription.subscribeOrchRuns(this.buildOrchSubscriptionDeps(), cb) }
-
-  getOrchRun(runId: string): OrchRunSnapshot | null { return OrchSubscription.getOrchRun(this.state.orchRunsById, runId) }
-
-  getOrchRuns(): OrchRunSnapshot[] { return OrchSubscription.getOrchRuns(this.state.orchRunsById) }
-
-  *nonTerminalOrchTasks(): Iterable<{ runId: string; taskId: string; state: "claimed" | "running" }> {
-    yield* OrchSubscription.nonTerminalOrchTasks(this.state.orchRunsById)
-  }
-
-  *gatedOrchTasks(): Iterable<{ runId: string; taskId: string; phaseIndex: number }> {
-    yield* OrchSubscription.gatedOrchTasks(this.state.orchRunsById)
-  }
-
-  getOrchTaskSpec(runId: string, taskId: string): { prompt: string; scopePaths: string[] } | null {
-    return OrchSubscription.getOrchTaskSpec(this.state.orchRunsById, runId, taskId)
-  }
-
-  getOrchLastPhaseOutput(runId: string, taskId: string): string | null { return OrchSubscription.getOrchLastPhaseOutput(this.state.orchRunsById, runId, taskId) }
-
-  getOrchRunEvents(runId: string): OrchestrationEvent[] { return OrchSubscription.getOrchRunEvents(this.state.orchRunsById, runId) }
 }

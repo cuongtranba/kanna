@@ -223,8 +223,15 @@ describe("getReplayEventPriority", () => {
     expect(getReplayEventPriority(makeEvent("loop_armed"))).toBe(11)
   })
 
-  test("orch events have priority 5", () => {
-    expect(getReplayEventPriority(makeEvent("orch_run_created"))).toBe(5)
-    expect(getReplayEventPriority(makeEvent("orch_task_committed"))).toBe(5)
+  // Orchestration is retired (adr-20260802-retire-orchestration-core). These
+  // types are no longer known, so they must hit the exhaustive default — the
+  // switch stays strict for genuinely unknown future types. Reaching this
+  // throw is only safe because orch.jsonl was removed from the replay set
+  // first; see the sibling test in event-store-snapshot.test.ts.
+  test("retired orch_* types are unknown and hit the exhaustive throw", () => {
+    expect(() => getReplayEventPriority(makeEvent("orch_run_created")))
+      .toThrow(/Unhandled replay event type: orch_run_created/)
+    expect(() => getReplayEventPriority(makeEvent("orch_task_committed")))
+      .toThrow(/Unhandled replay event type: orch_task_committed/)
   })
 })

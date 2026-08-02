@@ -5,7 +5,7 @@ import path from "node:path"
 import { importSessionsByIds } from "./claude-session-importer.adapter"
 import { createTestEventStore } from "./storage/test-helpers"
 import { createSubagentTranscriptRegistry } from "./subagent-transcript-registry"
-import { handleOrchCommand } from "./ws-router-orch"
+import { handleObservabilityCommand } from "./ws-router-observability"
 import { encodeCwd } from "./claude-pty/jsonl-path.adapter"
 import type { ServerEnvelope } from "../shared/protocol"
 
@@ -85,13 +85,8 @@ describe("subagent drill-in for imported chats (e2e)", () => {
       expect(registry.has(chatId)).toBe(false)
 
       const sent: ServerEnvelope[] = []
-      const handled = await handleOrchCommand(
+      const handled = await handleObservabilityCommand(
         {
-          agent: {
-            runOrchestration: async () => ({ ok: true as const, runId: "unused" }),
-            cancelOrchRun: async () => {},
-            getOrchRunDetail: () => null,
-          },
           workflowRegistry: undefined,
           subagentTranscriptRegistry: registry,
           store: { getChat: (id) => store.getChat(id), getProject: (id) => store.getProject(id) },

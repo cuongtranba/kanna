@@ -38,10 +38,6 @@ import {
   type SubagentWiringDeps,
   type BuildSubagentProviderRunForChatArgs,
 } from "./claude-subagent-wiring"
-import { OrchestrationQueue, type WorkerResult, type WorkerSpawnArgs } from "./orchestration-queue"
-import { createOrchWorktreeOps } from "./orchestration-worktree.adapter"
-import { runCommandInWorktree } from "./orchestration-exec-io.adapter"
-import type { OrchRunDetail, OrchRunInput } from "../shared/orchestration-types"
 import type { ToolCallbackService } from "./tool-callback"
 import type { ChatPermissionPolicy } from "../shared/permission-policy"
 import { POLICY_DEFAULT } from "../shared/permission-policy"
@@ -101,17 +97,13 @@ import {
   type AutoContinueCommandDeps,
 } from "./claude-autocontinue-commands"
 import {
-  buildOrchWorker as buildOrchWorkerFn,
-  runOrchestration as runOrchestrationFn,
-  cancelOrchRun as cancelOrchRunFn,
-  getOrchRunDetail as getOrchRunDetailFn,
   deliverSubagentToMain as deliverSubagentToMainFn,
   setupLoop as setupLoopFn,
   isLoopArmed as isLoopArmedFn,
   stopLoop as stopLoopFn,
   listLiveSchedules as listLiveSchedulesFn,
-  type LoopOrchCommandDeps,
-} from "./claude-loop-orch-commands"
+  type LoopCommandDeps,
+} from "./claude-loop-commands"
 import {
   cancelChat as cancelChatFn,
   type CancelHandlerDeps,
@@ -220,11 +212,6 @@ export class AgentCoordinator {
   getSubagentOrchestrator(): SubagentOrchestrator {
     return this.subagentOrchestrator
   }
-  private readonly orchestrationQueue: OrchestrationQueue
-  /** Public accessor for tests + the `orch_*` MCP tool + ws-router wiring. */
-  getOrchestrationQueue(): OrchestrationQueue {
-    return this.orchestrationQueue
-  }
   readonly throwOnClaudeSessionStart: boolean
   readonly autoResumeByChat = new Map<string, boolean>()
   readonly openrouterFirstEntryTimeoutMs: number
@@ -321,13 +308,6 @@ export class AgentCoordinator {
       runTimeoutMs: (this.getAppSettingsSnapshot().subagentRuntime?.runTimeoutMs
         ?? positiveIntegerFromEnv(process.env.KANNA_SUBAGENT_RUN_TIMEOUT_MS, 0))
         || undefined,
-    })
-    this.orchestrationQueue = new OrchestrationQueue({
-      store: this.store,
-      worktrees: createOrchWorktreeOps(),
-      startWorker: (a) => this.buildOrchWorker(a),
-      runVerify: runCommandInWorktree,
-      runInit: runCommandInWorktree,
     })
     this.throwOnClaudeSessionStart = args.throwOnClaudeSessionStart ?? false
     this.tunnelGateway = args.tunnelGateway ?? null
@@ -458,8 +438,8 @@ export class AgentCoordinator {
     return agentDepsBuilders.buildAutoContinueCommandDeps(this)
   }
 
-  private buildLoopOrchCommandDeps(): LoopOrchCommandDeps {
-    return agentDepsBuilders.buildLoopOrchCommandDeps(this)
+  private buildLoopCommandDeps(): LoopCommandDeps {
+    return agentDepsBuilders.buildLoopCommandDeps(this)
   }
 
   // ---------------------------------------------------------------------------
@@ -782,43 +762,9 @@ export class AgentCoordinator {
     return sendCommandFn(this.buildSendCommandDeps(), command)
   }
 
-  /** @internal used by agent-deps-builders.ts via buildLoopOrchCommandDeps; Delegates to buildSubagentProviderRunForChatFn. */
+  /** @internal used by agent-deps-builders.ts via buildLoopCommandDeps; Delegates to buildSubagentProviderRunForChatFn. */
   buildSubagentProviderRunForChat(args: BuildSubagentProviderRunForChatArgs): ProviderRunStart {
     return buildSubagentProviderRunForChatFn(this.buildSubagentWiringDeps(), args)
-  }
-
-  /**
-   * StartWorker adapter for the OrchestrationQueue: spawn the run's configured
-   * worker subagent against the task worktree (`spawn.cwd`) with the phase
-   * prompt. Origin chat + subagent are read from the persisted run config so
-   * this resolves identically on a fresh run and after a restart.
-   */
-  /** Delegates to buildOrchWorkerFn — see claude-loop-orch-commands.ts. */
-  private async buildOrchWorker(spawn: WorkerSpawnArgs): Promise<WorkerResult> {
-    return buildOrchWorkerFn(this.buildLoopOrchCommandDeps(), spawn)
-  }
-
-  /**
-   * User-callable entry point (MCP `orch_run` + ws `orch.run`). Validates the
-   * task list into the fixed linear config, then starts the run. Returns the
-   * runId or the flat validation error list — never a partial run.
-   * Delegates to runOrchestrationFn — see claude-loop-orch-commands.ts.
-   */
-  async runOrchestration(
-    chatId: string,
-    input: OrchRunInput,
-  ): Promise<{ ok: true; runId: string } | { ok: false; errors: string[] }> {
-    return runOrchestrationFn(this.buildLoopOrchCommandDeps(), chatId, input)
-  }
-
-  /** Cancel a run (MCP `orch_cancel_run` + ws `orch.cancelRun`). Delegates to cancelOrchRunFn. */
-  async cancelOrchRun(runId: string): Promise<void> {
-    return cancelOrchRunFn(this.buildLoopOrchCommandDeps(), runId)
-  }
-
-  /** Canonical run detail DTO (MCP `orch_run_status` + ws `orch.getRun`). Delegates to getOrchRunDetailFn. */
-  getOrchRunDetail(runId: string): OrchRunDetail | null {
-    return getOrchRunDetailFn(this.buildLoopOrchCommandDeps(), runId)
   }
 
   async enqueue(command: Extract<ClientCommand, { type: "message.enqueue" }>) {
@@ -875,7 +821,7 @@ export class AgentCoordinator {
     return resolveAutoResumeForFn(this.buildAutoContinueCommandDeps(), chatId)
   }
 
-  /** @internal used by agent-deps-builders.ts via buildSessionErrorHandlerDeps + buildLoopOrchCommandDeps; Delegates to emitAutoContinueEventFn. */
+  /** @internal used by agent-deps-builders.ts via buildSessionErrorHandlerDeps + buildLoopCommandDeps; Delegates to emitAutoContinueEventFn. */
   async emitAutoContinueEvent(event: AutoContinueEvent): Promise<void> {
     return emitAutoContinueEventFn(this.buildAutoContinueCommandDeps(), event)
   }
@@ -923,14 +869,14 @@ export class AgentCoordinator {
    * main chat as a fresh turn AND clear the main-agent's Claude session so the
    * next turn starts with a fresh context window. Wired as the orchestrator's
    * `onBackgroundRunComplete` hook. Delegates to deliverSubagentToMainFn —
-   * see claude-loop-orch-commands.ts.
+   * see claude-loop-commands.ts.
    */
   private async deliverSubagentToMain(
     chatId: string,
     runId: string,
     outcome: BackgroundRunOutcome,
   ): Promise<void> {
-    return deliverSubagentToMainFn(this.buildLoopOrchCommandDeps(), chatId, runId, outcome)
+    return deliverSubagentToMainFn(this.buildLoopCommandDeps(), chatId, runId, outcome)
   }
 
   /**
@@ -938,33 +884,33 @@ export class AgentCoordinator {
    * the tracking file exists (writes a skeleton if absent), then /clears the
    * main-agent Claude session and enqueues the templated recurring prompt so
    * the next turn starts the loop. Backs `mcp__kanna__setup_loop`. Delegates
-   * to setupLoopFn — see claude-loop-orch-commands.ts.
+   * to setupLoopFn — see claude-loop-commands.ts.
    */
   async setupLoop(args: {
     chatId: string
     input: LoopSetupInput
   }): Promise<SetupLoopHandlerResult> {
-    return setupLoopFn(this.buildLoopOrchCommandDeps(), args)
+    return setupLoopFn(this.buildLoopCommandDeps(), args)
   }
 
-  /** Current armed-loop state for a chat, or null. Delegates to isLoopArmedFn — see claude-loop-orch-commands.ts. */
+  /** Current armed-loop state for a chat, or null. Delegates to isLoopArmedFn — see claude-loop-commands.ts. */
   isLoopArmed(chatId: string): LoopState | null {
-    return isLoopArmedFn(this.buildLoopOrchCommandDeps(), chatId)
+    return isLoopArmedFn(this.buildLoopCommandDeps(), chatId)
   }
 
   /**
    * Disarm an armed loop (restores tools + stops prompt re-injection). Backs
    * the `stop_loop` MCP tool (called by the model on GOAL MET) and the
    * user-send takeover path. No-op when no loop is armed. Delegates to
-   * stopLoopFn — see claude-loop-orch-commands.ts.
+   * stopLoopFn — see claude-loop-commands.ts.
    */
   async stopLoop(chatId: string, reason: "goal_met" | "user_send" | "chat_deleted"): Promise<void> {
-    return stopLoopFn(this.buildLoopOrchCommandDeps(), chatId, reason)
+    return stopLoopFn(this.buildLoopCommandDeps(), chatId, reason)
   }
 
-  /** Delegates to listLiveSchedulesFn — see claude-loop-orch-commands.ts. */
+  /** Delegates to listLiveSchedulesFn — see claude-loop-commands.ts. */
   listLiveSchedules(chatId: string): string[] {
-    return listLiveSchedulesFn(this.buildLoopOrchCommandDeps(), chatId)
+    return listLiveSchedulesFn(this.buildLoopCommandDeps(), chatId)
   }
 
   async killPtyInstance(chatId: string): Promise<void> {

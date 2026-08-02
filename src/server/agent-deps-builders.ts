@@ -23,7 +23,7 @@ import type { ClaudeSessionConfigHelpersDeps } from "./claude-session-config-hel
 import type { SessionLifecycleDeps } from "./claude-session-lifecycle"
 import type { SessionErrorHandlerDeps } from "./claude-session-error-handler"
 import type { AutoContinueCommandDeps } from "./claude-autocontinue-commands"
-import type { LoopOrchCommandDeps } from "./claude-loop-orch-commands"
+import type { LoopCommandDeps } from "./claude-loop-commands"
 import type { CancelHandlerDeps } from "./claude-cancel-handler"
 import type { ChatManagementDeps } from "./claude-chat-management"
 import type { SendCommandDeps } from "./claude-send-command"
@@ -113,18 +113,16 @@ export function buildAutoContinueCommandDeps(agent: AgentCoordinator): AutoConti
 }
 
 // ---------------------------------------------------------------------------
-// 5. Loop / orch commands
+// 5. Loop commands
 // ---------------------------------------------------------------------------
 
-export function buildLoopOrchCommandDeps(agent: AgentCoordinator): LoopOrchCommandDeps {
+export function buildLoopCommandDeps(agent: AgentCoordinator): LoopCommandDeps {
   return {
     store: agent.store,
-    orchestrationQueue: agent.getOrchestrationQueue(),
     claudeSessions: agent.claudeSessions,
     activeTurns: agent.activeTurns,
     getSubagents: () => agent.getSubagents(),
     getAppSettingsSnapshot: () => agent.getAppSettingsSnapshot(),
-    buildSubagentProviderRunForChat: (args) => agent.buildSubagentProviderRunForChat(args),
     closeClaudeSession: (chatId, session) => agent.closeClaudeSession(chatId, session),
     emitAutoContinueEvent: (event) => agent.emitAutoContinueEvent(event),
     ensureTrackingFile,
@@ -364,9 +362,6 @@ export function buildSpawnClaudeTurnDeps(agent: AgentCoordinator): SpawnClaudeTu
     buildOAuthBearers: (servers) => agent.buildOAuthBearers(servers),
     setupLoop: (chatId, input) => agent.setupLoop({ chatId, input }),
     stopLoop: (chatId, reason) => agent.stopLoop(chatId, reason),
-    runOrchestration: (chatId, input) => agent.runOrchestration(chatId, input),
-    cancelOrchRun: (runId) => agent.cancelOrchRun(runId),
-    getOrchRunDetail: (runId) => agent.getOrchRunDetail(runId),
     resolveChatPolicy: (chatId) => agent.resolveChatPolicy(chatId),
     runClaudeSession: (session) => { void agent.runClaudeSession(session) },
     emitStateChange: (chatId) => { agent.emitStateChange(chatId) },

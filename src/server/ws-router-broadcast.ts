@@ -3,7 +3,7 @@
  *
  * BroadcastManager — owns the connected-socket set, pending-broadcast state,
  * and all snapshot-push / broadcast methods. Wires event subscriptions
- * (terminals, keybindings, appSettings, update, ptyInstances, workflows, orch)
+ * (terminals, keybindings, appSettings, update, ptyInstances, workflows)
  * and exposes a `dispose()` to tear them down.
  *
  * Extracted from ws-router.ts to reduce its size.
@@ -66,7 +66,6 @@ export class BroadcastManager {
   private readonly disposeUpdateEvents: () => void
   private readonly disposePtyInstances: () => void
   private readonly disposeWorkflows: () => void
-  private readonly disposeOrchRuns: () => void
 
   constructor(private readonly deps: BroadcastManagerDeps) {
     const {
@@ -77,7 +76,6 @@ export class BroadcastManager {
       updateManager,
       ptyInstances,
       workflowRegistry,
-      store,
     } = deps
 
     // Wire background error reporter
@@ -162,13 +160,6 @@ export class BroadcastManager {
         }
       }
     }) ?? (() => {})
-
-    // Orchestration run pushes
-    // Optional like the registry subscriptions above: partial store fakes in
-    // tests may not implement it. The real EventStore always does.
-    this.disposeOrchRuns = typeof store.subscribeOrchRuns === "function"
-      ? store.subscribeOrchRuns(() => this.pushOrchRuns())
-      : () => {}
   }
 
   // ── Socket lifecycle ────────────────────────────────────────────────────────
@@ -526,21 +517,6 @@ export class BroadcastManager {
     }
   }
 
-  private pushOrchRuns(): void {
-    for (const ws of this.sockets) {
-      const snapshotSignatures = ensureSnapshotSignatures(ws)
-      for (const [id, topic] of ws.data.subscriptions.entries()) {
-        if (topic.type !== "orch-runs") continue
-        const envelope = this.deps.envelopeBuilder.createEnvelope(id, topic, undefined, ws)
-        if (envelope.type !== "snapshot") continue
-        const signature = JSON.stringify(envelope.snapshot)
-        if (snapshotSignatures.get(id) === signature) continue
-        snapshotSignatures.set(id, signature)
-        send(ws, envelope)
-      }
-    }
-  }
-
   /**
    * Pushed on `FollowedSessionRegistry` membership change. Public — unlike
    * the other registries above, the registry's `onChange` dep is a single
@@ -575,6 +551,5 @@ export class BroadcastManager {
     this.disposeUpdateEvents()
     this.disposePtyInstances()
     this.disposeWorkflows()
-    this.disposeOrchRuns()
   }
 }

@@ -29,7 +29,6 @@ import type { ToolCallbackService } from "./tool-callback"
 import type { ChatPermissionPolicy } from "../shared/permission-policy"
 import type { StartClaudeSessionPtyArgs } from "./claude-pty/driver"
 import type { AnyValue } from "../shared/errors"
-import type { OrchRunDetail, OrchRunInput } from "../shared/orchestration-types"
 import type { ModelPrice } from "../shared/token-pricing"
 
 /** App settings snapshot returned by `getAppSettingsSnapshot`. */
@@ -45,7 +44,6 @@ export interface AppSettingsSnapshot {
   subagentRuntime?: {
     runTimeoutMs?: number
     defaultLoopSubagentId?: string | null
-    defaultOrchSubagentId?: string | null
   }
 }
 
@@ -115,10 +113,6 @@ export interface AgentCoordinatorArgs {
     stopLoop?: () => Promise<void>
     /** Live check: true while an autonomous loop is armed. */
     isLoopArmed?: () => boolean
-    /** Backs the `orch_run` / `orch_run_status` / `orch_cancel_run` MCP tools. Main-chat only. */
-    runOrch?: (input: OrchRunInput) => Promise<{ ok: true; runId: string } | { ok: false; errors: string[] }>
-    cancelOrchRun?: (runId: string) => Promise<void>
-    getOrchRunStatus?: (runId: string) => OrchRunDetail | null
     /** Keep the SDK prompt queue open after the initial prompt for multi-turn keep-alive. */
     keepAlive?: boolean
     /** Per-turn price for computing cost when the provider doesn't report it (OpenRouter). */

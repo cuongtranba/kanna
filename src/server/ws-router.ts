@@ -34,7 +34,7 @@ import type { FollowedSessionRegistry } from "./followed-session-registry"
 import { buildFallbackDiffStore, buildFallbackLlmProvider, buildResolvedAppSettings } from "./ws-router-defaults"
 import { handleSettingsCommand } from "./ws-router-settings"
 import { handleDiffCommand } from "./ws-router-diff"
-import { handleOrchCommand } from "./ws-router-orch"
+import { handleObservabilityCommand } from "./ws-router-observability"
 import { handleAgentCtrlCommand } from "./ws-router-agent-ctrl"
 import { handlePushCommand } from "./ws-router-push"
 import { handleMiscCommand } from "./ws-router-misc"
@@ -412,13 +412,9 @@ export function createWsRouter({
         }
         case "workflows.getRun":
         case "workflows.getAgentTranscript":
-        case "subagents.getRun":
-        case "orch.run":
-        case "orch.cancelRun":
-        case "orch.getRun": {
-          await handleOrchCommand(
+        case "subagents.getRun": {
+          await handleObservabilityCommand(
             {
-              agent,
               workflowRegistry,
               subagentTranscriptRegistry,
               store,

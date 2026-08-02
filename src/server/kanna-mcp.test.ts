@@ -6,7 +6,7 @@ import type { TranscriptEntry } from "../shared/types"
 import { buildDelegateProgressEmitter, buildKannaMcpTools, resolveOfferDownload, resolveWorkspaceFile } from "./kanna-mcp"
 import { POLICY_DEFAULT } from "../shared/permission-policy"
 import type { SubagentOrchestrator } from "./subagent-orchestrator"
-import type { KannaMcpDelegationContext } from "./kanna-mcp"
+import type { KannaMcpDelegationContext, SetupLoopHandlerResult } from "./kanna-mcp"
 
 let tempRoot: string
 
@@ -279,7 +279,10 @@ interface FakeOrchestratorState {
   lastClose: { chatId: string; runId: string; reason: string } | null
 }
 
-function buildKannaMcpForTest(opts: { withDelegation: boolean }): {
+function buildKannaMcpForTest(opts: {
+  withDelegation: boolean
+  extraArgs?: Partial<Parameters<typeof buildKannaMcpTools>[0]>
+}): {
   tools: Map<string, { handler: (input: Record<string, unknown>) => Promise<{ content: Array<{ type: string; text: string }>; isError?: boolean }> }>
   fakeOrch: FakeOrchestratorState
 } {
@@ -333,6 +336,7 @@ function buildKannaMcpForTest(opts: { withDelegation: boolean }): {
           delegationContext,
         }
       : {}),
+    ...opts.extraArgs,
   })
 
   const toolMap = new Map<string, { handler: (input: Record<string, unknown>) => Promise<{ content: Array<{ type: string; text: string }>; isError?: boolean }> }>()
@@ -414,6 +418,39 @@ describe("schedule_wakeup tool removed", () => {
     } as const
     const tools = buildKannaMcpTools({ ...baseArgs })
     expect(tools.map((t) => t.name)).not.toContain("schedule_wakeup")
+  })
+})
+
+describe("orchestration tools removed", () => {
+  // `orch` names two unrelated features here. The multi-task orchestration
+  // engine is retired; SubagentOrchestrator (delegate_subagent) and the
+  // autonomous loop are NOT — hence the positive guards at the end.
+  test("no orch_* registered even when every orch handler is supplied (hard-break per adr-20260802-retire-orchestration-core)", () => {
+    const { tools } = buildKannaMcpForTest({
+      withDelegation: true,
+      // The three orch handlers are passed deliberately, cast through the
+      // removed shape: a build that still registered the tools would light up.
+      extraArgs: {
+        setupLoop: async () => ({ ok: true }) as unknown as SetupLoopHandlerResult,
+        stopLoop: async () => {},
+        ...({
+          runOrch: async () => ({ ok: true as const, runId: "run-1" }),
+          cancelOrchRun: async () => {},
+          getOrchRunStatus: () => null,
+        } as Record<string, unknown>),
+      },
+    })
+
+    expect(tools.has("orch_run")).toBe(false)
+    expect(tools.has("orch_run_status")).toBe(false)
+    expect(tools.has("orch_cancel_run")).toBe(false)
+
+    // Surviving features must still register from the very same call.
+    expect(tools.has("delegate_subagent")).toBe(true)
+    expect(tools.has("send_subagent_message")).toBe(true)
+    expect(tools.has("close_subagent")).toBe(true)
+    expect(tools.has("setup_loop")).toBe(true)
+    expect(tools.has("stop_loop")).toBe(true)
   })
 })
 
