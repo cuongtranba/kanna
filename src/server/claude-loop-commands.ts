@@ -1,9 +1,10 @@
 /**
- * Standalone loop-orchestration command handlers for AgentCoordinator.
+ * Standalone autonomous-loop + subagent-delivery command handlers for
+ * AgentCoordinator.
  *
- * Extracted from agent.ts so the 11 related private/public methods live in
+ * Extracted from agent.ts so the related private/public methods live in
  * their own testable module. The coordinator delegates to these functions by
- * passing an object literal that satisfies `LoopOrchCommandDeps`.
+ * passing an object literal that satisfies `LoopCommandDeps`.
  *
  * Side-effect seal: this module contains NO direct IO (no node:fs, no HTTP
  * calls, no Bun primitives). Every effectful operation is injected through
@@ -29,7 +30,7 @@ import { log } from "../shared/log"
 // ---------------------------------------------------------------------------
 
 /** Subset of EventStore used by these handlers. */
-interface LoopOrchCommandStore {
+interface LoopCommandStore {
   getChat(chatId: string): { id: string; projectId: string } | null
   getProject(projectId: string): { localPath: string; id: string } | null
   getAutoContinueEvents(chatId: string): AutoContinueEvent[]
@@ -41,9 +42,9 @@ interface LoopOrchCommandStore {
 // Dependency bundle injected by AgentCoordinator
 // ---------------------------------------------------------------------------
 
-export interface LoopOrchCommandDeps {
+export interface LoopCommandDeps {
   /** EventStore — subset used by these handlers. */
-  store: LoopOrchCommandStore
+  store: LoopCommandStore
 
   /** Live Claude sessions map owned by the coordinator (read-only). */
   claudeSessions: Pick<Map<string, ClaudeSessionState>, "get">
@@ -106,7 +107,7 @@ export interface LoopOrchCommandDeps {
  *   the next turn (which would make the /clear a no-op).
  */
 export async function clearClaudeSessionContext(
-  deps: LoopOrchCommandDeps,
+  deps: LoopCommandDeps,
   chatId: string,
 ): Promise<void> {
   await deps.store.setSessionTokenForProvider(chatId, "claude", null)
@@ -132,7 +133,7 @@ export async function clearClaudeSessionContext(
  * See adr-20260711-notification-driven-loop-orchestration.
  */
 export async function deliverSubagentToMain(
-  deps: LoopOrchCommandDeps,
+  deps: LoopCommandDeps,
   chatId: string,
   runId: string,
   outcome: BackgroundRunOutcome,
@@ -195,7 +196,7 @@ export async function deliverSubagentToMain(
  * adr-20260711-setup-loop-template.
  */
 export async function setupLoop(
-  deps: LoopOrchCommandDeps,
+  deps: LoopCommandDeps,
   args: {
     chatId: string
     input: LoopSetupInput
@@ -295,7 +296,7 @@ export async function setupLoop(
 }
 
 /** Current armed-loop state for a chat, or null. Pure replay of the auto-continue log. */
-export function isLoopArmed(deps: LoopOrchCommandDeps, chatId: string): LoopState | null {
+export function isLoopArmed(deps: LoopCommandDeps, chatId: string): LoopState | null {
   return deriveLoopState(deps.store.getAutoContinueEvents(chatId), chatId)
 }
 
@@ -305,7 +306,7 @@ export function isLoopArmed(deps: LoopOrchCommandDeps, chatId: string): LoopStat
  * user-send takeover path. No-op when no loop is armed.
  */
 export async function stopLoop(
-  deps: LoopOrchCommandDeps,
+  deps: LoopCommandDeps,
   chatId: string,
   reason: "goal_met" | "user_send" | "chat_deleted",
 ): Promise<void> {
@@ -321,7 +322,7 @@ export async function stopLoop(
 }
 
 /** Returns live schedule IDs (proposed or scheduled) for the given chat. */
-export function listLiveSchedules(deps: LoopOrchCommandDeps, chatId: string): string[] {
+export function listLiveSchedules(deps: LoopCommandDeps, chatId: string): string[] {
   const { schedules } = deriveChatSchedules(deps.store.getAutoContinueEvents(chatId), chatId)
   return Object.values(schedules)
     .filter((s) => s.state === "proposed" || s.state === "scheduled")

@@ -23,7 +23,7 @@ import type { ClaudeSessionConfigHelpersDeps } from "./claude-session-config-hel
 import type { SessionLifecycleDeps } from "./claude-session-lifecycle"
 import type { SessionErrorHandlerDeps } from "./claude-session-error-handler"
 import type { AutoContinueCommandDeps } from "./claude-autocontinue-commands"
-import type { LoopOrchCommandDeps } from "./claude-loop-orch-commands"
+import type { LoopCommandDeps } from "./claude-loop-commands"
 import type { CancelHandlerDeps } from "./claude-cancel-handler"
 import type { ChatManagementDeps } from "./claude-chat-management"
 import type { SendCommandDeps } from "./claude-send-command"
@@ -116,7 +116,7 @@ export function buildAutoContinueCommandDeps(agent: AgentCoordinator): AutoConti
 // 5. Loop commands
 // ---------------------------------------------------------------------------
 
-export function buildLoopOrchCommandDeps(agent: AgentCoordinator): LoopOrchCommandDeps {
+export function buildLoopCommandDeps(agent: AgentCoordinator): LoopCommandDeps {
   return {
     store: agent.store,
     claudeSessions: agent.claudeSessions,

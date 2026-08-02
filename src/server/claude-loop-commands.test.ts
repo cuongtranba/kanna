@@ -1,7 +1,7 @@
 /**
  * Tests for the extracted loop-orchestration command handlers.
  *
- * Each test builds a minimal `LoopOrchCommandDeps` fake and asserts the
+ * Each test builds a minimal `LoopCommandDeps` fake and asserts the
  * correct behaviour of the function under test. No real IO or OS calls.
  */
 
@@ -18,8 +18,8 @@ import {
   clearClaudeSessionContext,
   deliverSubagentToMain,
   stopLoop,
-  type LoopOrchCommandDeps,
-} from "./claude-loop-orch-commands"
+  type LoopCommandDeps,
+} from "./claude-loop-commands"
 
 // ---------------------------------------------------------------------------
 // Fake store builder
@@ -69,7 +69,7 @@ function makeStore(overrides: Partial<FakeStore> = {}): FakeStore {
 // Fake dep builder
 // ---------------------------------------------------------------------------
 
-function makeDeps(overrides: Partial<LoopOrchCommandDeps> = {}): LoopOrchCommandDeps {
+function makeDeps(overrides: Partial<LoopCommandDeps> = {}): LoopCommandDeps {
   const store = makeStore()
   const emittedEvents: AutoContinueEvent[] = []
   const closedSessions: string[] = []
@@ -107,7 +107,7 @@ function makeDeps(overrides: Partial<LoopOrchCommandDeps> = {}): LoopOrchCommand
 // is the machine-checkable statement of which of the two survives.
 describe("module surface", () => {
   test("exports only the loop + delivery handlers", async () => {
-    const mod = await import("./claude-loop-orch-commands")
+    const mod = await import("./claude-loop-commands")
     expect(Object.keys(mod).sort()).toEqual([
       "clearClaudeSessionContext",
       "deliverSubagentToMain",

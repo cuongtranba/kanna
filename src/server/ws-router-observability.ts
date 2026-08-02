@@ -1,5 +1,5 @@
 /**
- * ws-router-orch.ts
+ * ws-router-observability.ts
  *
  * WS command handlers for workflow observability and subagent-transcript
  * queries:
@@ -19,7 +19,7 @@ import { deriveImportedSubagentsDir } from "./imported-subagents-dir"
 // Dep interface (duck-typed; avoids circular imports with ws-router.ts)
 // ---------------------------------------------------------------------------
 
-export interface OrchCommandDeps {
+export interface ObservabilityCommandDeps {
   /** Optional workflow registry (may be absent if not configured). */
   workflowRegistry: Pick<WorkflowRegistry, "getRun" | "getAgentTranscript"> | undefined
   /** Optional subagent transcript registry. */
@@ -61,8 +61,8 @@ function ensureSubagentDirRegistered(
  * Returns `true` when the command was handled (caller should `return`).
  * Returns `false` when the command type is outside this module's scope.
  */
-export async function handleOrchCommand(
-  deps: OrchCommandDeps,
+export async function handleObservabilityCommand(
+  deps: ObservabilityCommandDeps,
   command: ClientCommand,
   id: string,
 ): Promise<boolean> {
