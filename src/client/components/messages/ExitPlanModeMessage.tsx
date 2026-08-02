@@ -1,4 +1,4 @@
-import { useRef, useEffect, type ReactNode } from "react"
+import { useCallback, useRef, useEffect, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react"
 import { Check, CheckCheck, Pencil, CornerDownLeft, ChevronDown, Copy, Send } from "lucide-react"
 import type { ProcessedToolCall } from "./types"
 import { Button } from "../ui/button"
@@ -32,9 +32,22 @@ function ExitPlanModeMessageInner({ message, onConfirm, isLatest, ports = {} }: 
   const editMessage = ExitPlanModeMessageStore.useScopedStore((s) => s.editMessage)
   const setExpanded = ExitPlanModeMessageStore.useScopedStore((s) => s.setExpanded)
   const setCopied = ExitPlanModeMessageStore.useScopedStore((s) => s.setCopied)
-  const setShowEditInput = ExitPlanModeMessageStore.useScopedStore((s) => s.setShowEditInput)
   const setEditMessage = ExitPlanModeMessageStore.useScopedStore((s) => s.setEditMessage)
+  const openEdit = ExitPlanModeMessageStore.useScopedStore((s) => s.openEdit)
+  const cancelEdit = ExitPlanModeMessageStore.useScopedStore((s) => s.cancelEdit)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  // Closes over the onConfirm prop and the DOM event, so it stays in the
+  // component; only the state transition (cancelEdit) lives in the store.
+  const handleEditKeyDown = useCallback((e: ReactKeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === "Enter" && !e.shiftKey && editMessage.trim()) {
+      e.preventDefault()
+      onConfirm(message.toolId, false, undefined, editMessage.trim())
+    }
+    if (e.key === "Escape") {
+      cancelEdit()
+    }
+  }, [editMessage, onConfirm, message.toolId, cancelEdit])
   const input = message.input
 
   useEffect(() => {
@@ -107,7 +120,7 @@ function ExitPlanModeMessageInner({ message, onConfirm, isLatest, ports = {} }: 
               <Button
                 size="sm"
                 variant="outline"
-                onClick={() => setShowEditInput(true)}
+                onClick={openEdit}
                 className="rounded-full border-border flex-1 md:flex-initial md:order-first"
               >
                 <Pencil className="h-4 w-4 mr-1.5" />
@@ -132,16 +145,7 @@ function ExitPlanModeMessageInner({ message, onConfirm, isLatest, ports = {} }: 
               ref={textareaRef}
               value={editMessage}
               onChange={(e) => setEditMessage(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey && editMessage.trim()) {
-                  e.preventDefault()
-                  onConfirm(message.toolId, false, undefined, editMessage.trim())
-                }
-                if (e.key === "Escape") {
-                  setShowEditInput(false)
-                  setEditMessage("")
-                }
-              }}
+              onKeyDown={handleEditKeyDown}
               placeholder="Describe what you'd like to change..."
               rows={3}
               className="w-full rounded-2xl border border-border bg-muted dark:bg-card px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground resize-none outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
@@ -150,10 +154,7 @@ function ExitPlanModeMessageInner({ message, onConfirm, isLatest, ports = {} }: 
               <Button
                 size="sm"
                 variant="ghost"
-                onClick={() => {
-                  setShowEditInput(false)
-                  setEditMessage("")
-                }}
+                onClick={cancelEdit}
                 className="rounded-full text-muted-foreground"
               >
                 Cancel
