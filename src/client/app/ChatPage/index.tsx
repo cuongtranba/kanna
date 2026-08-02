@@ -4,7 +4,7 @@ import type { TimerPort } from "../../ports/timerPort"
 import { domAdapter } from "../../adapters/dom.adapter"
 import { timerAdapter } from "../../adapters/timer.adapter"
 import { type LegendListRef } from "@legendapp/list/react"
-import type { GroupImperativeHandle } from "react-resizable-panels"
+import type { GroupImperativeHandle, Layout } from "react-resizable-panels"
 import { useNavigate, useOutletContext } from "react-router-dom"
 import type { ChatInputHandle } from "../../components/chat-ui/ChatInput"
 import { ChatNavbar } from "../../components/chat-ui/ChatNavbar"
@@ -572,6 +572,15 @@ export function ChatPage({ ports = {} }: { ports?: ChatPagePorts } = {}) {
     showRightSidebar,
     rightSidebarSize: effectiveRightSidebarSize,
   })
+
+  // Deliberately NOT a store action: this guard reads isRightSidebarAnimating,
+  // a useRef. The ref must stay a ref — promoting it to store state would make
+  // it reactive and re-render the panel group mid-animation, which is exactly
+  // what the guard exists to prevent.
+  const handleRightSidebarLayoutChanged = useCallback((layout: Layout) => {
+    if (!showRightSidebar || isRightSidebarAnimating.current) return
+    setRightSidebarSize(clampRightSidebarSize(layout.rightSidebar))
+  }, [showRightSidebar, isRightSidebarAnimating, setRightSidebarSize, clampRightSidebarSize])
 
   const {
     diffRenderMode,
@@ -1200,13 +1209,7 @@ export function ChatPage({ ports = {} }: { ports?: ChatPagePorts } = {}) {
               rightSidebar: clampedRightSidebarSize,
             })
           }}
-          onLayoutChanged={(layout) => {
-            if (!showRightSidebar || isRightSidebarAnimating.current) {
-              return
-            }
-
-            setRightSidebarSize(clampRightSidebarSize(layout.rightSidebar))
-          }}
+          onLayoutChanged={handleRightSidebarLayoutChanged}
         >
           <ResizablePanel
             id="workspace"
