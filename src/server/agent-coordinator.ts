@@ -41,7 +41,6 @@ import {
 import { OrchestrationQueue, type WorkerResult, type WorkerSpawnArgs } from "./orchestration-queue"
 import { createOrchWorktreeOps } from "./orchestration-worktree.adapter"
 import { runCommandInWorktree } from "./orchestration-exec-io.adapter"
-import type { OrchRunDetail, OrchRunInput } from "../shared/orchestration-types"
 import type { ToolCallbackService } from "./tool-callback"
 import type { ChatPermissionPolicy } from "../shared/permission-policy"
 import { POLICY_DEFAULT } from "../shared/permission-policy"
@@ -102,9 +101,6 @@ import {
 } from "./claude-autocontinue-commands"
 import {
   buildOrchWorker as buildOrchWorkerFn,
-  runOrchestration as runOrchestrationFn,
-  cancelOrchRun as cancelOrchRunFn,
-  getOrchRunDetail as getOrchRunDetailFn,
   deliverSubagentToMain as deliverSubagentToMainFn,
   setupLoop as setupLoopFn,
   isLoopArmed as isLoopArmedFn,
@@ -796,29 +792,6 @@ export class AgentCoordinator {
   /** Delegates to buildOrchWorkerFn — see claude-loop-orch-commands.ts. */
   private async buildOrchWorker(spawn: WorkerSpawnArgs): Promise<WorkerResult> {
     return buildOrchWorkerFn(this.buildLoopOrchCommandDeps(), spawn)
-  }
-
-  /**
-   * User-callable entry point (MCP `orch_run` + ws `orch.run`). Validates the
-   * task list into the fixed linear config, then starts the run. Returns the
-   * runId or the flat validation error list — never a partial run.
-   * Delegates to runOrchestrationFn — see claude-loop-orch-commands.ts.
-   */
-  async runOrchestration(
-    chatId: string,
-    input: OrchRunInput,
-  ): Promise<{ ok: true; runId: string } | { ok: false; errors: string[] }> {
-    return runOrchestrationFn(this.buildLoopOrchCommandDeps(), chatId, input)
-  }
-
-  /** Cancel a run (MCP `orch_cancel_run` + ws `orch.cancelRun`). Delegates to cancelOrchRunFn. */
-  async cancelOrchRun(runId: string): Promise<void> {
-    return cancelOrchRunFn(this.buildLoopOrchCommandDeps(), runId)
-  }
-
-  /** Canonical run detail DTO (MCP `orch_run_status` + ws `orch.getRun`). Delegates to getOrchRunDetailFn. */
-  getOrchRunDetail(runId: string): OrchRunDetail | null {
-    return getOrchRunDetailFn(this.buildLoopOrchCommandDeps(), runId)
   }
 
   async enqueue(command: Extract<ClientCommand, { type: "message.enqueue" }>) {

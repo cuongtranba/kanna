@@ -29,7 +29,6 @@ import type { SubagentOrchestrator } from "./subagent-orchestrator"
 import type { TunnelGateway } from "./cloudflare-tunnel/gateway"
 import type { ToolCallbackService } from "./tool-callback"
 import type { ChatPermissionPolicy } from "../shared/permission-policy"
-import type { OrchRunDetail, OrchRunInput } from "../shared/orchestration-types"
 import type { ModelPrice } from "../shared/token-pricing"
 import type { AnyValue } from "../shared/errors"
 
@@ -108,10 +107,6 @@ export async function startClaudeSession(args: {
   stopLoop?: () => Promise<void>
   /** Live check: true while an autonomous loop is armed — blocks direct-edit native tools. */
   isLoopArmed?: () => boolean
-  /** Backs the `orch_run` / `orch_run_status` / `orch_cancel_run` MCP tools. Main-chat only. */
-  runOrch?: (input: OrchRunInput) => Promise<{ ok: true; runId: string } | { ok: false; errors: string[] }>
-  cancelOrchRun?: (runId: string) => Promise<void>
-  getOrchRunStatus?: (runId: string) => OrchRunDetail | null
   /**
    * Agentic-turn bound passed natively to the SDK query() (Claude Code's
    * per-agent frontmatter maxTurns analog): the SDK stops gracefully and
@@ -179,9 +174,6 @@ export async function startClaudeSession(args: {
           restrictedAllowedPaths: args.restrictedAllowedPaths,
           setupLoop: args.setupLoop,
           stopLoop: args.stopLoop,
-          runOrch: args.runOrch,
-          cancelOrchRun: args.cancelOrchRun,
-          getOrchRunStatus: args.getOrchRunStatus,
         }),
         ..._deps.buildUserMcpServers(args.customMcpServers ?? [], args.oauthBearers),
       },

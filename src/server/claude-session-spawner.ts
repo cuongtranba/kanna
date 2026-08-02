@@ -42,7 +42,6 @@ import type { KannaMcpDelegationContext, SetupLoopHandlerResult } from "./kanna-
 import type { LoopSetupInput } from "./loop-template"
 import type { LoopState } from "./auto-continue/read-model"
 import type { ChatPermissionPolicy } from "../shared/permission-policy"
-import type { OrchRunDetail, OrchRunInput } from "../shared/orchestration-types"
 import type { StartClaudeSessionPtyArgs } from "./claude-pty/driver"
 import type { SubagentOrchestrator } from "./subagent-orchestrator"
 import type { TunnelGateway } from "./cloudflare-tunnel/gateway"
@@ -140,12 +139,6 @@ export interface SpawnClaudeTurnDeps {
   buildOAuthBearers: (servers: readonly McpServerConfig[]) => Promise<Map<string, string>>
   setupLoop: (chatId: string, input: LoopSetupInput) => Promise<SetupLoopHandlerResult>
   stopLoop: (chatId: string, reason: "goal_met" | "user_send" | "chat_deleted") => Promise<void>
-  runOrchestration: (
-    chatId: string,
-    input: OrchRunInput,
-  ) => Promise<{ ok: true; runId: string } | { ok: false; errors: string[] }>
-  cancelOrchRun: (runId: string) => Promise<void>
-  getOrchRunDetail: (runId: string) => OrchRunDetail | null
   resolveChatPolicy: (chatId: string) => ChatPermissionPolicy
   /** Fires the session event loop. Return value is discarded (fire-and-forget). */
   runClaudeSession: (session: ClaudeSessionState) => void
@@ -269,15 +262,6 @@ export async function spawnClaudeTurn(
             isLoopArmed: delegationContext.depth === 0
               ? () => deps.isLoopArmed(chatIdForCtx) !== null
               : undefined,
-            runOrch: delegationContext.depth === 0
-              ? (input) => deps.runOrchestration(chatIdForCtx, input)
-              : undefined,
-            cancelOrchRun: delegationContext.depth === 0
-              ? (runId) => deps.cancelOrchRun(runId)
-              : undefined,
-            getOrchRunStatus: delegationContext.depth === 0
-              ? (runId) => deps.getOrchRunDetail(runId)
-              : undefined,
             toolCallback: deps.toolCallback ?? undefined,
             tunnelGateway: deps.tunnelGateway,
             chatPolicy: deps.resolveChatPolicy(args.chatId),
@@ -313,15 +297,6 @@ export async function spawnClaudeTurn(
               : undefined,
             isLoopArmed: delegationContext.depth === 0
               ? () => deps.isLoopArmed(chatIdForCtx) !== null
-              : undefined,
-            runOrch: delegationContext.depth === 0
-              ? (input) => deps.runOrchestration(chatIdForCtx, input)
-              : undefined,
-            cancelOrchRun: delegationContext.depth === 0
-              ? (runId) => deps.cancelOrchRun(runId)
-              : undefined,
-            getOrchRunStatus: delegationContext.depth === 0
-              ? (runId) => deps.getOrchRunDetail(runId)
               : undefined,
             toolCallback: deps.toolCallback ?? undefined,
             chatPolicy: deps.resolveChatPolicy(args.chatId),
