@@ -401,10 +401,16 @@ export function normalizeClaudeStreamMessage(message: ClaudeRawSdkMessage): Tran
   if (message.type === "system" && message.subtype === "background_tasks_changed") {
     const tasks = Array.isArray(message.tasks) ? message.tasks : []
     const ids: string[] = []
+    const meta: { id: string; taskType: string | null; description: string | null }[] = []
     for (const task of tasks) {
       if (typeof task.task_id !== "string" || task.task_id.length === 0) continue
       if (task.task_type === "in_process_teammate") continue
       ids.push(task.task_id)
+      meta.push({
+        id: task.task_id,
+        taskType: typeof task.task_type === "string" && task.task_type.length > 0 ? task.task_type : null,
+        description: typeof task.description === "string" && task.description.length > 0 ? task.description : null,
+      })
     }
     return [timestamped({
       kind: "status",
@@ -412,6 +418,7 @@ export function normalizeClaudeStreamMessage(message: ClaudeRawSdkMessage): Tran
       status: `Background tasks: ${ids.length} running`,
       hidden: true,
       backgroundTaskIdsSnapshot: ids,
+      backgroundTasksSnapshot: meta,
       debugRaw,
     })]
   }

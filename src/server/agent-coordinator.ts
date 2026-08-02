@@ -8,6 +8,7 @@ import type { LoopSetupInput } from "./loop-template"
 import type {
   AgentProvider,
   ChatAttachment,
+  ChatBackgroundTask,
   LlmProviderSnapshot,
   McpOAuthState,
   McpServerConfig,
@@ -147,6 +148,7 @@ import {
   getDrainingChatIds as getDrainingChatIdsFn,
   getSlashCommandsLoadingChatIds as getSlashCommandsLoadingChatIdsFn,
   getClaudeSessionStates as getClaudeSessionStatesFn,
+  getBackgroundTasksByChatId as getBackgroundTasksByChatIdFn,
   sweepIdleClaudeSessions as sweepIdleClaudeSessionsFn,
   type SessionStateQueryDeps,
 } from "./claude-session-state-queries"
@@ -379,6 +381,14 @@ export class AgentCoordinator {
    */
   getClaudeSessionStates(): Map<string, "warming" | "active" | "idle"> {
     return getClaudeSessionStatesFn(this.buildSessionStateQueryDeps())
+  }
+
+  /**
+   * Live Claude-Code background tasks per chat (UI-shaped). Threaded into
+   * deriveChatSnapshot so the composer can list what is running.
+   */
+  getBackgroundTasksByChatId(): Map<string, ChatBackgroundTask[]> {
+    return getBackgroundTasksByChatIdFn(this.buildSessionStateQueryDeps())
   }
 
   get toolCallbackService(): ToolCallbackService | null {

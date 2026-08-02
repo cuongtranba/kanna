@@ -2175,7 +2175,7 @@ describe("AgentCoordinator claude integration", () => {
         pendingPromptSeqs: [],
         activeTokenId: null,
         lastUsedAt,
-        backgroundTaskIds: new Set<string>(),
+        backgroundTasks: new Map(),
         backgroundTaskDeadlineAt: 0,
       } as any)
     }
@@ -2232,7 +2232,7 @@ describe("AgentCoordinator claude integration", () => {
         pendingPromptSeqs: [],
         activeTokenId: null,
         lastUsedAt: 0,
-        backgroundTaskIds: new Set<string>(),
+        backgroundTasks: new Map(),
         backgroundTaskDeadlineAt: 0,
       } as any)
     }
@@ -2293,7 +2293,7 @@ describe("AgentCoordinator claude integration", () => {
         pendingPromptSeqs: [],
         activeTokenId: null,
         lastUsedAt,
-        backgroundTaskIds: new Set<string>(),
+        backgroundTasks: new Map(),
         backgroundTaskDeadlineAt: 0,
       } as any)
     }
@@ -2359,7 +2359,7 @@ describe("AgentCoordinator claude integration", () => {
     await waitFor(() => store.turnFinishedCount === 1)
 
     const session = coordinator.claudeSessions.get("chat-1") as any
-    expect(session.backgroundTaskIds.has("bgABC123")).toBe(true)
+    expect(session.backgroundTasks.has("bgABC123")).toBe(true)
     const deadline = session.backgroundTaskDeadlineAt as number
     expect(deadline).toBeGreaterThan(0)
 
@@ -2434,7 +2434,7 @@ describe("AgentCoordinator claude integration", () => {
     await waitFor(() => store.turnFinishedCount === 1)
 
     const session = coordinator.claudeSessions.get("chat-1") as any
-    expect(session.backgroundTaskIds.size).toBe(0)
+    expect(session.backgroundTasks.size).toBe(0)
     session.lastUsedAt = 0
     ;(coordinator as any).sweepIdleClaudeSessions(100)
     expect(coordinator.claudeSessions.has("chat-1")).toBe(false)
@@ -2478,7 +2478,7 @@ describe("AgentCoordinator claude integration", () => {
         pendingPromptSeqs: [],
         activeTokenId: null,
         lastUsedAt,
-        backgroundTaskIds: new Set(bg?.ids ?? []),
+        backgroundTasks: new Map((bg?.ids ?? []).map((id) => [id, { taskType: null, description: null, startedAt: 0 }] as const)),
         backgroundTaskDeadlineAt: bg?.deadlineAt ?? 0,
       } as any)
     }
@@ -2534,7 +2534,7 @@ describe("AgentCoordinator claude integration", () => {
     await waitFor(() => store.turnFinishedCount === 1)
 
     const session = coordinator.claudeSessions.get("chat-1") as any
-    session.backgroundTaskIds = new Set(["bgPending"])
+    session.backgroundTasks = new Map([["bgPending", { taskType: null, description: null, startedAt: 0 }]])
     session.backgroundTaskDeadlineAt = Date.now() + 5_000
     session.backgroundTaskWakeCount = 2
     const before = Date.now()
@@ -2551,7 +2551,7 @@ describe("AgentCoordinator claude integration", () => {
     // Clearing here let the idle reaper silently kill a healthy watch ~10min
     // after any user message. The send now refreshes the keep-alive window
     // and restores the wake budget; pending ids stay until settle/snapshot.
-    expect(session.backgroundTaskIds.size).toBe(1)
+    expect(session.backgroundTasks.size).toBe(1)
     expect(session.backgroundTaskDeadlineAt).toBeGreaterThanOrEqual(before + 100_000)
     expect(session.backgroundTaskWakeCount).toBe(0)
 
@@ -2618,7 +2618,7 @@ describe("AgentCoordinator claude integration", () => {
     await waitFor(() => store.turnFinishedCount === 1)
 
     const session = coordinator.claudeSessions.get("chat-1") as any
-    expect(session.backgroundTaskIds.size).toBe(2)
+    expect(session.backgroundTasks.size).toBe(2)
     session.lastUsedAt = 0
 
     // Session not reapable while tasks pending.
@@ -2634,9 +2634,9 @@ describe("AgentCoordinator claude integration", () => {
         backgroundTaskId: "bgTask1",
       }),
     })
-    await waitFor(() => session.backgroundTaskIds.size === 1)
-    expect(session.backgroundTaskIds.has("bgTask1")).toBe(false)
-    expect(session.backgroundTaskIds.has("bgTask2")).toBe(true)
+    await waitFor(() => session.backgroundTasks.size === 1)
+    expect(session.backgroundTasks.has("bgTask1")).toBe(false)
+    expect(session.backgroundTasks.has("bgTask2")).toBe(true)
     ;(coordinator as any).sweepIdleClaudeSessions(Date.now())
     expect(coordinator.claudeSessions.has("chat-1")).toBe(true)
 
@@ -2649,7 +2649,7 @@ describe("AgentCoordinator claude integration", () => {
         backgroundTaskId: "bgTask2",
       }),
     })
-    await waitFor(() => session.backgroundTaskIds.size === 0)
+    await waitFor(() => session.backgroundTasks.size === 0)
     expect(session.backgroundTaskDeadlineAt).toBe(0)
     ;(coordinator as any).sweepIdleClaudeSessions(Date.now())
     expect(coordinator.claudeSessions.has("chat-1")).toBe(false)

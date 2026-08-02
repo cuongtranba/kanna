@@ -19,10 +19,25 @@ import {
   isPromptTooLongMessage,
   isNoConversationFoundMessage,
   backgroundTaskIdsFromToolResult,
+  mergeBackgroundTaskSnapshot,
+  toolCallDescription,
 } from "./claude-prompt-helpers"
 import { timestamped } from "./claude-message-normalizer"
 import { logClaudeSteer } from "./claude-steer-log"
 import type { ClaudeSessionState, ActiveTurn, SlashCommand } from "./claude-session-state"
+
+// Bounded FIFO for toolId → description lookups feeding background-task labels.
+const RECENT_TOOL_DESCRIPTION_LIMIT = 64
+
+// Entry kinds that prove the model is actively producing a self-wake turn.
+// `status` / `context_window_updated` / housekeeping kinds intentionally do
+// NOT arm — a lone level snapshot must never wedge the chat in "running".
+const SELF_WAKE_ARMING_KINDS: ReadonlySet<TranscriptEntry["kind"]> = new Set([
+  "assistant_text",
+  "assistant_thinking",
+  "tool_call",
+  "tool_result",
+])
 
 // ---------------------------------------------------------------------------
 // Structural auth-error detector — only the methods called in this module.
@@ -236,6 +251,38 @@ export async function runClaudeSession(
       // mirrors claude-code's own invariant that the idle timer starts only
       // after the run loop exits.
       session.lastUsedAt = Date.now()
+      // Remember recent tool_call descriptions so a background launch seen
+      // only through the tool_result regex (PTY driver; SDK version skew)
+      // can label the task in the UI with the launching call's description.
+      if (event.entry.kind === "tool_call") {
+        const description = toolCallDescription(event.entry.tool)
+        if (description) {
+          session.recentToolDescriptions.set(event.entry.tool.toolId, description)
+          while (session.recentToolDescriptions.size > RECENT_TOOL_DESCRIPTION_LIMIT) {
+            const oldest = session.recentToolDescriptions.keys().next().value
+            if (oldest === undefined) break
+            session.recentToolDescriptions.delete(oldest)
+          }
+        }
+      }
+      // Task-notification self-wake turns stream entries with NO ActiveTurn
+      // (they never pass through Kanna's turn machinery, so no turn_started/
+      // turn_finished events exist). Track that live window on the session so
+      // getActiveStatuses surfaces the chat as "running" (spinner + Stop in
+      // the composer) while the model actually works. Armed by model-activity
+      // entries, disarmed by the wake turn's terminal `result`. Self-healing:
+      // the flag dies with the session (idle reaper still keys on lastUsedAt).
+      if (!deps.activeTurns.has(session.chatId)) {
+        if (event.entry.kind === "result") {
+          if (session.selfWakeActive) {
+            session.selfWakeActive = false
+            deps.emitStateChange(session.chatId)
+          }
+        } else if (SELF_WAKE_ARMING_KINDS.has(event.entry.kind) && !session.selfWakeActive) {
+          session.selfWakeActive = true
+          deps.emitStateChange(session.chatId)
+        }
+      }
       // Background-task keep-alive guard (SDK + PTY).
       // On launch: add the task id and refresh the zombie-backstop deadline.
       // On settle (task_notification): remove the id — gate primary signal is
@@ -251,24 +298,38 @@ export async function runClaudeSession(
         if (launchedIds.length > 0) {
           // empty→non-empty = a fresh watch epoch: restore the watchdog
           // wake budget (adr-20260801-background-task-wake-escalation).
-          if (session.backgroundTaskIds.size === 0) session.backgroundTaskWakeCount = 0
-          for (const id of launchedIds) session.backgroundTaskIds.add(id)
+          if (session.backgroundTasks.size === 0) session.backgroundTaskWakeCount = 0
+          const launchDescription = session.recentToolDescriptions.get(event.entry.toolId) ?? null
+          for (const id of launchedIds) {
+            if (!session.backgroundTasks.has(id)) {
+              session.backgroundTasks.set(id, {
+                taskType: null,
+                description: launchDescription,
+                startedAt: Date.now(),
+              })
+            }
+          }
           session.backgroundTaskDeadlineAt = Date.now() + deps.resolveBackgroundTaskMaxMs()
           deps.emitStateChange(session.chatId)
         }
       }
       if (event.entry.kind === "status" && event.entry.backgroundTaskIdsSnapshot) {
-        const wasEmpty = session.backgroundTaskIds.size === 0
-        session.backgroundTaskIds = new Set(event.entry.backgroundTaskIdsSnapshot)
-        if (wasEmpty && session.backgroundTaskIds.size > 0) session.backgroundTaskWakeCount = 0
-        session.backgroundTaskDeadlineAt = session.backgroundTaskIds.size > 0
+        const wasEmpty = session.backgroundTasks.size === 0
+        session.backgroundTasks = mergeBackgroundTaskSnapshot(
+          session.backgroundTasks,
+          event.entry.backgroundTaskIdsSnapshot,
+          event.entry.backgroundTasksSnapshot,
+          Date.now(),
+        )
+        if (wasEmpty && session.backgroundTasks.size > 0) session.backgroundTaskWakeCount = 0
+        session.backgroundTaskDeadlineAt = session.backgroundTasks.size > 0
           ? Date.now() + deps.resolveBackgroundTaskMaxMs()
           : 0
         deps.emitStateChange(session.chatId)
       } else if (event.entry.kind === "status" && event.entry.backgroundTaskId) {
         const settledId = event.entry.backgroundTaskId
-        session.backgroundTaskIds.delete(settledId)
-        if (session.backgroundTaskIds.size > 0) {
+        session.backgroundTasks.delete(settledId)
+        if (session.backgroundTasks.size > 0) {
           session.backgroundTaskDeadlineAt = Date.now() + deps.resolveBackgroundTaskMaxMs()
         } else {
           session.backgroundTaskDeadlineAt = 0

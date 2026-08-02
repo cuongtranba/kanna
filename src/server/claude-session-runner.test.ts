@@ -51,7 +51,9 @@ function makeSession(overrides: Partial<ClaudeSessionState> = {}): ClaudeSession
     openrouterKeyMasked: null,
     openrouterModel: null,
     lastUsedAt: 0,
-    backgroundTaskIds: new Set(),
+    backgroundTasks: new Map(),
+    selfWakeActive: false,
+    recentToolDescriptions: new Map(),
     backgroundTaskDeadlineAt: 0,
     backgroundTaskWakeCount: 0,
     loopArmedAtSpawn: false,
@@ -461,7 +463,7 @@ describe("runClaudeSession", () => {
 
     await runClaudeSession(deps, session)
 
-    expect(session.backgroundTaskIds.has(taskId)).toBe(true)
+    expect(session.backgroundTasks.has(taskId)).toBe(true)
     expect(session.backgroundTaskDeadlineAt).toBeGreaterThan(0)
     expect(resolveBackgroundCalled).toBeGreaterThan(0)
   })
@@ -469,7 +471,7 @@ describe("runClaudeSession", () => {
   test("status entry with backgroundTaskIdsSnapshot REPLACES the guard set", async () => {
     // Pre-arm with a stale id: the level signal must replace, not merge, so a
     // missed settle bookend can never wedge a stale running indicator.
-    const session = makeSession({ backgroundTaskIds: new Set(["stale1"]) })
+    const session = makeSession({ backgroundTasks: new Map([["stale1", { taskType: null, description: null, startedAt: 0 }]]) })
 
     const snapshotEntry = {
       _id: "status-snap-1",
@@ -485,14 +487,14 @@ describe("runClaudeSession", () => {
 
     await runClaudeSession(deps, session)
 
-    expect([...session.backgroundTaskIds].sort()).toEqual(["a6de6ce841521b5df", "bsh42"])
-    expect(session.backgroundTaskIds.has("stale1")).toBe(false)
+    expect([...session.backgroundTasks.keys()].sort()).toEqual(["a6de6ce841521b5df", "bsh42"])
+    expect(session.backgroundTasks.has("stale1")).toBe(false)
     expect(session.backgroundTaskDeadlineAt).toBeGreaterThan(0)
   })
 
   test("empty backgroundTaskIdsSnapshot clears the guard set and deadline", async () => {
     const session = makeSession({
-      backgroundTaskIds: new Set(["a1", "b2"]),
+      backgroundTasks: new Map([["a1", { taskType: null, description: null, startedAt: 0 }], ["b2", { taskType: null, description: null, startedAt: 0 }]]),
       backgroundTaskDeadlineAt: Date.now() + 100_000,
     })
 
@@ -510,7 +512,7 @@ describe("runClaudeSession", () => {
 
     await runClaudeSession(deps, session)
 
-    expect(session.backgroundTaskIds.size).toBe(0)
+    expect(session.backgroundTasks.size).toBe(0)
     expect(session.backgroundTaskDeadlineAt).toBe(0)
   })
 
@@ -529,7 +531,7 @@ describe("runClaudeSession", () => {
 
     await runClaudeSession(deps, session)
 
-    expect(session.backgroundTaskIds.has("fresh1")).toBe(true)
+    expect(session.backgroundTasks.has("fresh1")).toBe(true)
     expect(session.backgroundTaskWakeCount).toBe(0)
   })
 
@@ -561,6 +563,132 @@ describe("runClaudeSession", () => {
     session.session.stream = fakeStream([{ type: "transcript", entry: snapB }])
     await runClaudeSession(deps, session)
     expect(session.backgroundTaskWakeCount).toBe(1)
+  })
+
+  test("backgroundTasksSnapshot meta labels tasks; surviving ids keep startedAt", async () => {
+    const session = makeSession({
+      backgroundTasks: new Map([["keep1", { taskType: null, description: "old label", startedAt: 111 }]]),
+    })
+    const snapshotEntry = {
+      _id: "status-meta-1",
+      createdAt: Date.now(),
+      kind: "status",
+      status: "Background tasks: 2 running",
+      hidden: true,
+      backgroundTaskIdsSnapshot: ["keep1", "new2"],
+      backgroundTasksSnapshot: [
+        { id: "keep1", taskType: "local_bash", description: null },
+        { id: "new2", taskType: "local_agent", description: "Watch CI checks" },
+      ],
+    } as unknown as TranscriptEntry
+    const deps = makeDeps(session)
+    session.session.stream = fakeStream([{ type: "transcript", entry: snapshotEntry }])
+
+    await runClaudeSession(deps, session)
+
+    const keep = session.backgroundTasks.get("keep1")
+    expect(keep?.startedAt).toBe(111)
+    expect(keep?.taskType).toBe("local_bash")
+    expect(keep?.description).toBe("old label")
+    const fresh = session.backgroundTasks.get("new2")
+    expect(fresh?.taskType).toBe("local_agent")
+    expect(fresh?.description).toBe("Watch CI checks")
+    expect(fresh?.startedAt).toBeGreaterThan(0)
+  })
+
+  test("launch tool_result inherits the launching tool_call's description", async () => {
+    const session = makeSession()
+    const toolCallEntry = {
+      _id: "tc-bg-1",
+      createdAt: Date.now(),
+      kind: "tool_call",
+      tool: {
+        kind: "tool",
+        toolKind: "bash",
+        toolName: "Bash",
+        toolId: "toolu_bg1",
+        input: { command: "sleep 600", description: "Watch the deploy" },
+      },
+    } as unknown as TranscriptEntry
+    const toolResultEntry = {
+      _id: "tr-bg-1",
+      createdAt: Date.now(),
+      kind: "tool_result",
+      toolId: "toolu_bg1",
+      content: "Command running in background with ID: bglabeled1",
+    } as unknown as TranscriptEntry
+    const deps = makeDeps(session)
+    session.session.stream = fakeStream([
+      { type: "transcript", entry: toolCallEntry },
+      { type: "transcript", entry: toolResultEntry },
+    ])
+
+    await runClaudeSession(deps, session)
+
+    expect(session.backgroundTasks.get("bglabeled1")?.description).toBe("Watch the deploy")
+  })
+
+  test("self-wake: model entries with no active turn arm selfWakeActive; result disarms", async () => {
+    const session = makeSession()
+    const observed: boolean[] = []
+    const deps = makeDeps(session, {
+      emitStateChange: () => observed.push(session.selfWakeActive),
+    })
+    const assistantEntry = {
+      _id: "sw-text-1",
+      createdAt: Date.now(),
+      kind: "assistant_text",
+      text: "working on it",
+    } as unknown as TranscriptEntry
+    session.session.stream = fakeStream([
+      { type: "transcript", entry: assistantEntry },
+      { type: "transcript", entry: fakeResultEntry(false) },
+    ])
+
+    await runClaudeSession(deps, session)
+
+    expect(observed).toContain(true)
+    expect(session.selfWakeActive).toBe(false)
+  })
+
+  test("entries during an active Kanna turn never arm selfWakeActive", async () => {
+    const session = makeSession()
+    session.pendingPromptSeqs = [1]
+    const active = makeActiveTurn(session.chatId)
+    const deps = makeDeps(session, {
+      activeTurns: new Map([[session.chatId, active]]),
+    })
+    const assistantEntry = {
+      _id: "sw-text-2",
+      createdAt: Date.now(),
+      kind: "assistant_text",
+      text: "normal turn output",
+    } as unknown as TranscriptEntry
+    session.session.stream = fakeStream([
+      { type: "transcript", entry: assistantEntry },
+    ])
+
+    await runClaudeSession(deps, session)
+
+    expect(session.selfWakeActive).toBe(false)
+  })
+
+  test("status snapshot entries alone never arm selfWakeActive", async () => {
+    const session = makeSession()
+    const snapshotEntry = {
+      _id: "sw-snap-1",
+      createdAt: Date.now(),
+      kind: "status",
+      status: "Background tasks: 1 running",
+      hidden: true,
+      backgroundTaskIdsSnapshot: ["t1"],
+    } as unknown as TranscriptEntry
+    const deps = makeDeps(session)
+    session.session.stream = fakeStream([{ type: "transcript", entry: snapshotEntry }])
+
+    await runClaudeSession(deps, session)
+
+    expect(session.selfWakeActive).toBe(false)
   })
 
   test("appending any transcript entry bumps lastUsedAt (self-wake turns keep the session warm)", async () => {

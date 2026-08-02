@@ -1,6 +1,6 @@
 ---
 id: adr-20260730-import-single-claude-session
-c3-seal: e19531ebf778434135c3c56cdf7cf0caacbc64cdb7b947a7b214a577ba16dcd7
+c3-seal: e9731e6d913a99def37a729972e56ece242fe54222bbd91f47e87bc1871fde27
 title: import-single-claude-session
 type: adr
 goal: |-
@@ -169,7 +169,7 @@ this ADR's patches and verification.
 | Rule | Why required | Evidence | Action |
 | --- | --- | --- | --- |
 | rule-strong-typing | Same boundary-typing requirement as ref-strong-typing above, at the rule-enforcement layer (component c3-302 uses: rule-strong-typing) — the new ImportOutcome/SingleImportResultRow/ImportSessionsByIdsResult types and the new ClientCommand union member must be named exports, not any | rule-strong-typing#n8914@v1:sha256:ab9d03265e99a9527350c213d779cbb270675fd943f331a80652bf0b80e692f8 "All boundary types must be named exports (interface or discriminated union) declared in src/shared/** or the owning module — never any, never an untyped i" | comply |
-| rule-colocated-bun-test | New test cases for extractSessionId/extractSessionIds, locateClaudeSessionFile, and importSessionsByIds must sit next to (or be appended to) their existing colocated *.test.ts files, never a separate __tests__/ tree | rule-colocated-bun-test#n8853@v1:sha256:6c733a6bc908ab2c89a563a0429d06eb34d56731aaa4a18067213c18dbdf6c8f "All test files must live in the same directory as the file under test and be named <module>.test.ts or <module>.test.tsx; live integration tests must be nam" | comply |
+| rule-colocated-bun-test | New test cases for extractSessionId/extractSessionIds, locateClaudeSessionFile, and importSessionsByIds must sit next to (or be appended to) their existing colocated *.test.ts files, never a separate tests/ tree | rule-colocated-bun-test#n8853@v1:sha256:6c733a6bc908ab2c89a563a0429d06eb34d56731aaa4a18067213c18dbdf6c8f "All test files must live in the same directory as the file under test and be named <module>.test.ts or <module>.test.tsx; live integration tests must be nam" | comply |
 | rule-zustand-store | This ADR's PR A is server-only (no client store touched) | rule-zustand-store#n8946@v1:sha256:eddb1e4ed99a17547a630f5997a2ad234b79ac5be15bc1d151f3e09d9cb9df2c "Client state stores take exactly two forms. (1) Singleton feature stores: create<TState>() from zustand, at src/client/stores/<concern>(Store)?.ts, exposi" | N.A - no client code in scope for this ADR/PR |
 | rule-mcp-name-reserved | This ADR does not touch MCP server registration | rule-mcp-name-reserved#n8885@v1:sha256:43f075905d532466b3b381df83682cb06b7a18c7e5df1ef5b0ec403f8bf458db "User MCP server names registered in customMcpServers must never equal" | N.A - unrelated surface |
 

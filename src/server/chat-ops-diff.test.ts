@@ -23,6 +23,7 @@ function makeRuntime(overrides?: Partial<ChatRuntime>): ChatRuntime {
     },
     policyOverride: null,
     sessionState: "cold",
+    backgroundTasks: [],
     ...overrides,
   }
 }

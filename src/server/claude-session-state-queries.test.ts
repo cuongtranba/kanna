@@ -1,6 +1,7 @@
 import { describe, it, expect, mock } from "bun:test"
 import {
   getActiveStatuses,
+  getBackgroundTasksByChatId,
   getWaitStartedAtByChatId,
   getPendingTool,
   getDrainingChatIds,
@@ -35,7 +36,7 @@ function makeSession(overrides?: Partial<ClaudeSessionState>): ClaudeSessionStat
     openrouterKeyMasked: null,
     openrouterModel: null,
     lastUsedAt: Date.now(),
-    backgroundTaskIds: new Set(),
+    backgroundTasks: new Map(),
     backgroundTaskDeadlineAt: 0,
     loopArmedAtSpawn: false,
     ...overrides,
@@ -101,6 +102,56 @@ describe("getActiveStatuses", () => {
     const result = getActiveStatuses(deps)
     expect(result.get("chat-1")).toBe("running")
     expect(result.get("chat-2")).toBe("waiting_for_user")
+  })
+
+  it("surfaces a self-wake session as running when it has no active turn", () => {
+    const deps = makeDeps({
+      claudeSessions: new Map([["chat-1", makeSession({ selfWakeActive: true })]]),
+    })
+    expect(getActiveStatuses(deps).get("chat-1")).toBe("running")
+  })
+
+  it("an active turn's status wins over the self-wake flag", () => {
+    const deps = makeDeps({
+      activeTurns: new Map([["chat-1", makeActiveTurn({ status: "waiting_for_user" })]]),
+      claudeSessions: new Map([["chat-1", makeSession({ selfWakeActive: true })]]),
+    })
+    expect(getActiveStatuses(deps).get("chat-1")).toBe("waiting_for_user")
+  })
+
+  it("idle sessions with no self-wake stay absent", () => {
+    const deps = makeDeps({
+      claudeSessions: new Map([["chat-1", makeSession({ selfWakeActive: false })]]),
+    })
+    expect(getActiveStatuses(deps).has("chat-1")).toBe(false)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// getBackgroundTasksByChatId
+// ---------------------------------------------------------------------------
+
+describe("getBackgroundTasksByChatId", () => {
+  it("omits chats with no background tasks", () => {
+    const deps = makeDeps({
+      claudeSessions: new Map([["chat-1", makeSession()]]),
+    })
+    expect(getBackgroundTasksByChatId(deps).size).toBe(0)
+  })
+
+  it("maps task metadata to UI shape sorted oldest-first", () => {
+    const session = makeSession({
+      backgroundTasks: new Map([
+        ["b2", { taskType: "local_agent", description: "Later task", startedAt: 200 }],
+        ["a1", { taskType: "local_bash", description: "Earlier task", startedAt: 100 }],
+      ]),
+    })
+    const deps = makeDeps({ claudeSessions: new Map([["chat-1", session]]) })
+    const tasks = getBackgroundTasksByChatId(deps).get("chat-1")
+    expect(tasks).toEqual([
+      { id: "a1", taskType: "local_bash", description: "Earlier task", startedAt: 100 },
+      { id: "b2", taskType: "local_agent", description: "Later task", startedAt: 200 },
+    ])
   })
 })
 
@@ -359,7 +410,7 @@ describe("sweepIdleClaudeSessions background-task escalation", () => {
       chatId: "chat-1",
       lastUsedAt: 0,
       pendingPromptSeqs: [],
-      backgroundTaskIds: new Set(["bsh1"]),
+      backgroundTasks: new Map([["bsh1", { taskType: null, description: null, startedAt: 0 }]]),
       backgroundTaskDeadlineAt: Date.now() - 1,
       backgroundTaskWakeCount: 0,
       ...overrides,
@@ -425,7 +476,7 @@ describe("sweepIdleClaudeSessions background-task escalation", () => {
     expect(notifyFn.mock.calls.length).toBe(1)
     expect(notifyFn.mock.calls[0]?.[0]).toBe("chat-1")
     expect(notifyFn.mock.calls[0]?.[1]).toEqual(["bsh1"])
-    expect(session.backgroundTaskIds.size).toBe(0)
+    expect(session.backgroundTasks.size).toBe(0)
     expect(session.backgroundTaskDeadlineAt).toBe(0)
   })
 
@@ -442,7 +493,7 @@ describe("sweepIdleClaudeSessions background-task escalation", () => {
     sweepIdleClaudeSessions(deps, Date.now())
     expect(closeFn.mock.calls.length).toBe(0)
     expect(notifyFn.mock.calls.length).toBe(0)
-    expect(session.backgroundTaskIds.size).toBe(1)
+    expect(session.backgroundTasks.size).toBe(1)
   })
 
   it("re-arms without consuming wake budget when a claude turn is active", () => {
@@ -469,7 +520,7 @@ describe("sweepIdleClaudeSessions background-task escalation", () => {
     const session = makeSession({
       chatId: "chat-1",
       lastUsedAt: 0,
-      backgroundTaskIds: new Set(),
+      backgroundTasks: new Map(),
       backgroundTaskDeadlineAt: 0,
     })
     const closeFn = mock(() => undefined)

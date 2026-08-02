@@ -322,6 +322,21 @@ export interface ChatStateTimings {
   cumulativeMs: ChatTimingCumulativeMs
 }
 
+/**
+ * A live Claude-Code background task (`Bash(run_in_background: true)`,
+ * background Agent run, workflow) tracked on the chat's warm session.
+ * Mirrors Claude Code's own /tasks view: id + type + human description.
+ */
+export interface ChatBackgroundTask {
+  id: string
+  /** SDK `task_type` when known (e.g. "local_bash", "local_agent"); null when only the launch regex saw it. */
+  taskType: string | null
+  /** SDK payload description, else the launching tool call's description/command. */
+  description: string | null
+  /** Epoch ms the server first observed the task. */
+  startedAt: number
+}
+
 export interface ChatRuntime {
   chatId: string
   projectId: string
@@ -337,6 +352,8 @@ export interface ChatRuntime {
   policyOverride: ChatPermissionPolicyOverride | null
   /** Current claude PTY session lifecycle state for this chat. `cold` when no live session. */
   sessionState: ClaudeSessionLifecycleStatus
+  /** Live Claude-Code background tasks on this chat's warm session. Empty when none. */
+  backgroundTasks: ChatBackgroundTask[]
 }
 
 export interface ChatHistorySnapshot {

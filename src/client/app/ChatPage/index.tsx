@@ -1061,6 +1061,7 @@ export function ChatPage({ ports = {} }: { ports?: ChatPagePorts } = {}) {
           onCancelSubagentRun={handleCancelSubagentRun}
           loopProgress={state.chatSnapshot?.loopProgress}
           workflowRuns={workflowRuns.length > 0 ? workflowRuns : undefined}
+          backgroundTasks={state.runtime?.backgroundTasks}
           getWorkflowRunDetail={handleGetWorkflowRunDetail}
           getSubagentTranscript={handleGetSubagentTranscript}
           showScrollButton={showScrollToBottom && state.messages.length > 0}

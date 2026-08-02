@@ -58,7 +58,9 @@ function makeSession(overrides: Partial<ClaudeSessionState> = {}): ClaudeSession
     openrouterKeyMasked: null,
     openrouterModel: null,
     lastUsedAt: Date.now(),
-    backgroundTaskIds: new Set<string>(),
+    backgroundTasks: new Map(),
+    selfWakeActive: false,
+    recentToolDescriptions: new Map(),
     backgroundTaskDeadlineAt: 0,
     backgroundTaskWakeCount: 0,
     loopArmedAtSpawn: false,
@@ -237,14 +239,14 @@ describe("hasLiveWorkflow", () => {
 
 describe("hasPendingBackgroundTask", () => {
   test("returns false when backgroundTaskIds is empty", () => {
-    const session = makeSession({ backgroundTaskIds: new Set(), backgroundTaskDeadlineAt: 0 })
+    const session = makeSession({ backgroundTasks: new Map(), backgroundTaskDeadlineAt: 0 })
     expect(hasPendingBackgroundTask(session, Date.now())).toBe(false)
   })
 
   test("returns true when task ids present and deadline not expired", () => {
     const now = Date.now()
     const session = makeSession({
-      backgroundTaskIds: new Set(["task-1"]),
+      backgroundTasks: new Map([["task-1", { taskType: null, description: null, startedAt: 0 }]]),
       backgroundTaskDeadlineAt: now + 60_000,
     })
     expect(hasPendingBackgroundTask(session, now)).toBe(true)
@@ -256,12 +258,12 @@ describe("hasPendingBackgroundTask", () => {
     // destroy it, or the wake path never sees which tasks were pending.
     const now = Date.now()
     const session = makeSession({
-      backgroundTaskIds: new Set(["task-1"]),
+      backgroundTasks: new Map([["task-1", { taskType: null, description: null, startedAt: 0 }]]),
       backgroundTaskDeadlineAt: now - 1,
     })
     const result = hasPendingBackgroundTask(session, now)
     expect(result).toBe(false)
-    expect(session.backgroundTaskIds.size).toBe(1)
+    expect(session.backgroundTasks.size).toBe(1)
     expect(session.backgroundTaskDeadlineAt).toBe(now - 1)
   })
 })

@@ -1,6 +1,6 @@
 ---
 id: adr-20260802-retire-orchestration-core
-c3-seal: e55a06af18981b15bc39cc51becc988b0bef11ad159febc5e209a8d6d8ee31fc
+c3-seal: 96cde4dd135b6a9195e75d5c7f06bdfcf99995536025c3dec92bbf25ae4d1c9c
 title: retire-orchestration-core
 type: adr
 goal: Retire component `c3-232 orchestration-core` in full — the durable multi-task, multi-phase orchestration engine (`OrchestrationQueue`), its worktree pool, its 18-variant `OrchestrationEvent` union and `orch.jsonl` log, the three MCP tools (`orch_run`, `orch_run_status`, `orch_cancel_run`), the `orch.*` WS commands and the `orch-runs` topic, and the entire client Orchestration panel. Single-task subagent delegation (`c3-210` / `SubagentOrchestrator` / `delegate_subagent`) and the notification-driven autonomous loop (`setup_loop` / `stop_loop`) are explicitly out of scope and must survive unchanged.
@@ -83,7 +83,7 @@ Delete `c3-232` outright rather than finish its wiring, and land the removal as 
 | bun run test | Green; only the pre-existing unrelated ws-router.test.ts > startMcpOAuth failure present on origin/main remains; test-file count drops by 11 |
 | bun run check (typecheck + lint --max-warnings=0 + build:client) | Clean |
 | bunx ast-grep scan | Clean |
-| rg 'OrchRun|orch_|orch\.|orch-runs|OrchestrationQueue|orchestration-' src/ CLAUDE.md | Zero hits; residual case-insensitive orch hits are only SubagentOrchestrator / subagent-orchestrator / fakeOrch |
+| rg 'OrchRun | orch_ |
 | Replay regression test in event-store-snapshot.test.ts | Legacy orch.jsonl fixture yields zero applied orch_* events, no clearStorage call, byte-identical file |
 | getReplayEventPriority throw test in event-store-helpers.test.ts | Throws Unhandled replay event type: orch_run_created — exhaustive contract preserved for unknown types |
 | Export-shape test on the loop command module | Object.keys equals exactly the six surviving loop/delivery handlers |

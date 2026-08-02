@@ -37,7 +37,7 @@ import { maskOauthKey } from "../shared/mask-oauth-key"
 import { log } from "../shared/log"
 import { OAuthPoolUnavailableError } from "./oauth-errors"
 import type { ClaudeSessionHandle, HarnessTurn, HarnessToolRequest } from "./harness-types"
-import type { ActiveTurn, ClaudeSessionState, SlashCommand } from "./claude-session-state"
+import type { ActiveTurn, ClaudeSessionState, SessionBackgroundTask, SlashCommand } from "./claude-session-state"
 import type { KannaMcpDelegationContext, SetupLoopHandlerResult } from "./kanna-mcp"
 import type { LoopSetupInput } from "./loop-template"
 import type { LoopState } from "./auto-continue/read-model"
@@ -332,9 +332,11 @@ export async function spawnClaudeTurn(
       openrouterKeyMasked: openrouterApiKey ? maskOauthKey(openrouterApiKey) : null,
       openrouterModel: isOpenRouter ? args.model : null,
       lastUsedAt: Date.now(),
-      backgroundTaskIds: new Set<string>(),
+      backgroundTasks: new Map<string, SessionBackgroundTask>(),
       backgroundTaskDeadlineAt: 0,
       backgroundTaskWakeCount: 0,
+      selfWakeActive: false,
+      recentToolDescriptions: new Map<string, string>(),
       loopArmedAtSpawn: loopArmedNow,
       cancelledResultPending: 0,
       suppressSessionTokenPersist: false,

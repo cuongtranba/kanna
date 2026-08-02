@@ -944,6 +944,30 @@ killed a mid-flight background Agent one second after its commit; see
   via `positiveIntegerFromEnv`) caps how long a hung/never-completing task can
   pin a process. Trade-off: a quick task still holds the session warm up to the
   max (no early-clear) — acceptable and bounded; raise/lower per deployment.
+- **Self-wake status + task list UI
+  (adr-20260802-background-selfwake-status-ui).** Task-notification self-wake
+  turns stream entries with NO ActiveTurn, so the turn-event fold alone left
+  the chat "idle" while the model worked (observed: 70+ min of post-turn work
+  with a static composer arrow). `ClaudeSessionState.selfWakeActive` tracks
+  the live wake window — armed by the runner on model-activity entries
+  (assistant_text / assistant_thinking / tool_call / tool_result) with no
+  active turn, disarmed on the wake turn's `result`, dead with the session —
+  and `getActiveStatuses` overlays it as status `"running"` (pure live
+  overlay; event-sourced turn timings untouched). `cancelChat` gained a
+  no-active-turn branch: when `selfWakeActive`, it appends `interrupted`,
+  interrupts the session stream in-band (SDK; PTY drops the dead session),
+  and suppresses the interrupt tail result via `cancelledResultPending`.
+  The guard set was upgraded `backgroundTaskIds: Set<string>` →
+  `backgroundTasks: Map<string, SessionBackgroundTask>` (single source;
+  `taskType`/`description` from the `background_tasks_changed` snapshot —
+  the normalizer now emits `backgroundTasksSnapshot` meta alongside the ids —
+  with the launch-regex fallback enriched from the launching tool_call's
+  description via `session.recentToolDescriptions`). Per-chat task lists
+  flow `getBackgroundTasksByChatId` → `deriveChatSnapshot` →
+  `ChatRuntime.backgroundTasks` → `BackgroundTasksSection` (chat footer,
+  /tasks-style: type icon + description + id + live elapsed). Budget
+  eviction skips `selfWakeActive` sessions; the idle reaper still keys on
+  `lastUsedAt`, so a wedged flag cannot pin a session forever.
 
 # Workflow Status Panel (disk-watch, read-only — SDK + PTY)
 

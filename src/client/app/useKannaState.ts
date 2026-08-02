@@ -53,6 +53,23 @@ function shallowProviderTokenEquals(
   return true
 }
 
+function sameBackgroundTasks(
+  left: ChatSnapshot["runtime"]["backgroundTasks"] | undefined,
+  right: ChatSnapshot["runtime"]["backgroundTasks"] | undefined,
+) {
+  const a = left ?? []
+  const b = right ?? []
+  if (a.length !== b.length) return false
+  return a.every((task, index) => {
+    const other = b[index]
+    return other !== undefined
+      && task.id === other.id
+      && task.taskType === other.taskType
+      && task.description === other.description
+      && task.startedAt === other.startedAt
+  })
+}
+
 function sameRuntime(left: ChatSnapshot["runtime"] | null | undefined, right: ChatSnapshot["runtime"] | null | undefined) {
   if (left === right) return true
   if (!left || !right) return false
@@ -65,6 +82,7 @@ function sameRuntime(left: ChatSnapshot["runtime"] | null | undefined, right: Ch
     && left.provider === right.provider
     && left.planMode === right.planMode
     && shallowProviderTokenEquals(left.sessionTokensByProvider, right.sessionTokensByProvider)
+    && sameBackgroundTasks(left.backgroundTasks, right.backgroundTasks)
 }
 
 function sameTranscriptEntries(left: ChatSnapshot["messages"] | null | undefined, right: ChatSnapshot["messages"] | null | undefined) {

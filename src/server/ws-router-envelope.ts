@@ -171,6 +171,7 @@ export function createEnvelopeBuilder(deps: EnvelopeDeps): EnvelopeBuilder {
       Date.now(),
       agent.getClaudeSessionStates?.() ?? new Map(),
       resolvedAppSettings.getSnapshot().customModels ?? [],
+      agent.getBackgroundTasksByChatId?.() ?? new Map(),
     )
   }
 
@@ -346,6 +347,7 @@ export function createEnvelopeBuilder(deps: EnvelopeDeps): EnvelopeBuilder {
       Date.now(),
       agent.getClaudeSessionStates?.() ?? new Map(),
       resolvedAppSettings.getSnapshot().customModels ?? [],
+      agent.getBackgroundTasksByChatId?.() ?? new Map(),
     )
     return {
       v: PROTOCOL_VERSION,

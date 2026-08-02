@@ -17,6 +17,18 @@ export interface PendingToolRequest {
   resolve: (result: AnyValue) => void
 }
 
+/**
+ * Metadata for one live Claude-Code background task on this session.
+ * `taskType`/`description` come from the SDK `background_tasks_changed`
+ * payload when available, else from the launching tool call (Bash command
+ * description / Agent task description). `startedAt` is first-seen time.
+ */
+export interface SessionBackgroundTask {
+  taskType: string | null
+  description: string | null
+  startedAt: number
+}
+
 export interface ActiveTurn {
   chatId: string
   provider: AgentProvider
@@ -70,10 +82,11 @@ export interface ClaudeSessionState {
   // Claude-Code background Bash tasks (`Bash(run_in_background: true)`) run as
   // children of this PTY process and notify completion via a `<task-notification>`
   // transcript line that the continuous tail re-enters as a real turn — but ONLY
-  // if the process is still alive. Track launched task ids + a keep-alive
-  // deadline so the idle reaper / budget enforcer does not tear the process down
-  // mid-flight. See adr-20260604-pty-background-task-keepalive.
-  backgroundTaskIds: Set<string>
+  // if the process is still alive. Track launched task ids (keyed map, with the
+  // task metadata surfaced to the UI) + a keep-alive deadline so the idle reaper
+  // / budget enforcer does not tear the process down mid-flight.
+  // See adr-20260604-pty-background-task-keepalive.
+  backgroundTasks: Map<string, SessionBackgroundTask>
   backgroundTaskDeadlineAt: number
   // Number of watchdog wakes fired for the current watch epoch. The deadline
   // above is refreshed only on launch/settle/snapshot edges, so a quiet
@@ -83,6 +96,19 @@ export interface ClaudeSessionState {
   // Reset to 0 when the id set transitions empty→non-empty and on user send.
   // See adr-20260801-background-task-wake-escalation.
   backgroundTaskWakeCount: number
+  // True while a task-notification self-wake turn is streaming entries on
+  // this session WITHOUT a Kanna-driven turn (no ActiveTurn). Armed by the
+  // runner on model-activity entries with no active turn, disarmed on the
+  // turn's `result`/`interrupted` entry. Surfaced as KannaStatus "running"
+  // by getActiveStatuses so the UI reflects the work (spinner + Stop) even
+  // though no turn_started event exists.
+  selfWakeActive: boolean
+  // toolId → human description for recently streamed tool_call entries
+  // (bounded FIFO). Lets the launch-regex fallback (tool_result "running in
+  // background with ID: …") attach the launching call's description to the
+  // background task when no background_tasks_changed snapshot arrives (PTY
+  // driver; SDK version skew).
+  recentToolDescriptions: Map<string, string>
   // Armed-loop state captured at spawn. Both drivers bake the loop tool-block
   // into the spawn (PTY: --disallowedTools CLI args; SDK: options.disallowedTools
   // so the model never sees the blocked tools — Claude Code's filter-at-spawn
