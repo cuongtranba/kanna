@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useId } from "react"
-import { AlertTriangle, Check, Code2, Copy, Maximize2 } from "lucide-react"
+import { AlertTriangle, Check, Code2, Copy, Maximize2, RefreshCw } from "lucide-react"
 import { Button } from "../ui/button"
 import { cn } from "../../lib/utils"
 import { useTheme } from "../../hooks/useTheme"
@@ -10,12 +10,10 @@ import type { ClipboardPort } from "../../ports/clipboardPort"
 import type { TimerPort } from "../../ports/timerPort"
 import { clipboardAdapter } from "../../adapters/clipboard.adapter"
 import { timerAdapter } from "../../adapters/timer.adapter"
+import { domAdapter } from "../../adapters/dom.adapter"
+import type { DomPort } from "../../ports/domPort"
 import { toError } from "../../../shared/errors"
-
-interface MermaidDiagramPorts {
-  clipboard?: ClipboardPort
-  timer?: TimerPort
-}
+import { createLazyLoader, isStaleChunkError } from "../../lib/lazyModule"
 
 interface MermaidModule {
   initialize: (config: {
@@ -26,20 +24,26 @@ interface MermaidModule {
   render: (id: string, text: string) => Promise<{ svg: string }>
 }
 
-let mermaidPromise: Promise<MermaidModule> | null = null
-
-function loadMermaid(): Promise<MermaidModule> {
-  if (!mermaidPromise) {
-    mermaidPromise = import("mermaid").then((m): MermaidModule => m.default)
-  }
-  return mermaidPromise
+interface MermaidDiagramPorts {
+  clipboard?: ClipboardPort
+  timer?: TimerPort
+  dom?: DomPort
+  /** Override the mermaid bundle loader — tests use this to simulate a stale chunk. */
+  loadMermaid?: () => Promise<MermaidModule>
 }
+
+// Shared across every diagram on the page: one mermaid bundle, loaded once. The
+// loader deliberately does NOT cache failures — see lazyModule.ts.
+const loadMermaid = createLazyLoader(() =>
+  import("mermaid").then((m): MermaidModule => m.default)
+)
 
 function MermaidDiagramInner({ source, ports }: { source: string; ports?: MermaidDiagramPorts }) {
   const { resolvedTheme } = useTheme()
   const mermaidTheme: "dark" | "default" = resolvedTheme === "dark" ? "dark" : "default"
   const renderState = MermaidDiagramStore.useScopedStore((s) => s.renderState)
   const errorMessage = renderState.status === "error" ? renderState.message : undefined
+  const isStaleChunk = renderState.status === "error" && renderState.kind === "stale-chunk"
   const showSource = MermaidDiagramStore.useScopedStore((s) => s.showSource)
   const zoomOpen = MermaidDiagramStore.useScopedStore((s) => s.zoomOpen)
   const copied = MermaidDiagramStore.useScopedStore((s) => s.copied)
@@ -58,9 +62,11 @@ function MermaidDiagramInner({ source, ports }: { source: string; ports?: Mermai
     ;(ports?.timer ?? timerAdapter).setTimeout(() => setCopied(false), 2000)
   }
 
+  const load = ports?.loadMermaid ?? loadMermaid
+
   useEffect(() => {
     let cancelled = false
-    loadMermaid()
+    load()
       .then(async (mermaid) => {
         mermaid.initialize({
           startOnLoad: false,
@@ -71,14 +77,42 @@ function MermaidDiagramInner({ source, ports }: { source: string; ports?: Mermai
         if (!cancelled) setRenderState({ status: "ready", svg })
       })
       .catch((err) => {
-        const message = toError(err).message
-        if (!cancelled) setRenderState({ status: "error", message })
+        if (cancelled) return
+        const error = toError(err)
+        // A missing chunk is an app-version problem, not a diagram problem —
+        // surfacing the raw loader message here would blame the wrong thing.
+        if (isStaleChunkError(error)) {
+          setRenderState({ status: "error", kind: "stale-chunk" })
+          return
+        }
+        setRenderState({ status: "error", message: error.message })
       })
     return () => {
       cancelled = true
     }
-  }, [source, mermaidTheme, domId, setRenderState])
+  }, [source, mermaidTheme, domId, setRenderState, load])
 
+  if (isStaleChunk) {
+    return (
+      <div className="my-3">
+        <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1">
+          <AlertTriangle className="size-3.5 shrink-0" />
+          <span>This diagram needs the latest version of the app.</span>
+          <Button
+            variant="ghost"
+            size="sm"
+            aria-label="Reload the app"
+            className="h-6 px-2 text-xs"
+            onClick={() => (ports?.dom ?? domAdapter).reload()}
+          >
+            <RefreshCw className="size-3 mr-1" />
+            Reload
+          </Button>
+        </div>
+        <MermaidFallbackCodeBlock source={source} />
+      </div>
+    )
+  }
   if (renderState.status === "error") {
     return (
       <div className="my-3">

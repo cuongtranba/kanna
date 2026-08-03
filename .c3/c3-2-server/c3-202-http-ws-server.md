@@ -1,7 +1,7 @@
 ---
 id: c3-202
 c3-version: 4
-c3-seal: 9edb58941b3df0e29c03bea5f1b4a22048ea237daad62740005a755a6a3e2652
+c3-seal: e735a97c3aedd6d7b52c1681f6a8380ca47843c92dd579e3722d6a20eda1a578
 title: http-ws-server
 type: component
 category: foundation
@@ -64,7 +64,7 @@ Hosts the Bun-side HTTP server, serves built client assets, exposes API + upgrad
 
 | Surface | Direction | Contract | Boundary | Evidence |
 | --- | --- | --- | --- | --- |
-| HTTP listener | IN | Serves static assets + API + upgrade | c3-101 | src/server/http.ts |
+| HTTP listener | IN | Serves static assets + API + upgrade; a request whose last path segment carries a non-.html extension is an asset request and 404s when the file is absent — only extensionless navigation paths fall back to index.html | c3-101 | src/server/server.ts |
 | WS upgrade hookup | OUT | Hands socket to ws-router | c3-208 | src/server/http.ts |
 | /health | OUT | Liveness probe | c3-2 | src/server/http.ts |
 | /share/:token | OUT | Public read-only snapshot endpoint dispatched BEFORE the auth gate; serves frozen chat snapshot JSON | c3-228 | src/server/http.ts |
@@ -75,7 +75,7 @@ Hosts the Bun-side HTTP server, serves built client assets, exposes API + upgrad
 | Risk | Trigger | Detection | Required Verification |
 | --- | --- | --- | --- |
 | Auth bypass | Middleware order regression | Unauthenticated requests succeed | bun run check + smoke src/server/http.ts with --password |
-| Static asset 404 | Build path drift | UI fails to load | bun run check against src/server/http.ts |
+| Static asset 404 | Build path drift, or a tab left open across a deploy requesting a deleted hashed chunk | Asset request answers 200 text/html instead of 404, so the browser reports "Failed to fetch dynamically imported module" | bun test --conditions production src/server/static-serve.test.ts |
 
 ## Derived Materials
 

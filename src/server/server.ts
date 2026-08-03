@@ -998,6 +998,22 @@ async function handleProjectPaths(req: Request, url: URL, store: EventStore) {
   }
 }
 
+/**
+ * True when the path names a build artifact rather than a client route — i.e. its
+ * last segment carries a file extension. Every SPA route is extensionless (`/`,
+ * `/chat/:chatId`, `/settings/:sectionId`, `/workflows/:chatId`, `/share/:token`),
+ * so an extension is a reliable "this is a file" signal.
+ *
+ * `.html` is excluded: those are navigation documents that keep falling back to the
+ * shell.
+ */
+function isAssetRequest(requestedPath: string): boolean {
+  const lastSegment = requestedPath.slice(requestedPath.lastIndexOf("/") + 1)
+  const dot = lastSegment.lastIndexOf(".")
+  if (dot <= 0) return false
+  return lastSegment.slice(dot).toLowerCase() !== ".html"
+}
+
 async function serveStatic(distDir: string, pathname: string) {
   const requestedPath = pathname === "/" ? "/index.html" : pathname
   const filePath = path.join(distDir, requestedPath)
@@ -1007,6 +1023,20 @@ async function serveStatic(distDir: string, pathname: string) {
   if (await file.exists()) {
     return new Response(file, {
       headers: getStaticHeaders(requestedPath),
+    })
+  }
+
+  // Never answer a missing asset with the SPA shell. A tab left open across a deploy
+  // requests hashed chunks this build no longer ships; returning `200 index.html`
+  // makes the browser fail with an opaque "Failed to fetch dynamically imported
+  // module" instead of a clean 404 the client can recognize and recover from.
+  if (isAssetRequest(requestedPath)) {
+    return new Response("Not found", {
+      status: 404,
+      headers: {
+        "Content-Type": "text/plain; charset=utf-8",
+        "Cache-Control": "no-store",
+      },
     })
   }
 

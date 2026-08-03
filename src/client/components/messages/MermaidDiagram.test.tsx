@@ -3,6 +3,7 @@ import { describe, expect, test, mock, afterEach } from "bun:test"
 import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { renderForLoopCheck } from "../../lib/testing/renderForLoopCheck"
+import { makeFakeDomPort } from "../../adapters/testing/makeFakePorts"
 
 let lastInitTheme: string | null = null
 let themeValue: "light" | "dark" = "light"
@@ -100,6 +101,111 @@ describe("MermaidDiagram", () => {
 
   test("does not trigger a React render loop", async () => {
     const result = await renderForLoopCheck(<MermaidDiagram source={"graph TD\nA-->B"} />)
+    await result.cleanup()
+    expect(result.loopWarnings).toEqual([])
+    expect(result.thrown).toBeNull()
+  })
+})
+
+// Regression suite for the stale-chunk incident: a tab left open across a deploy
+// requests a hashed mermaid chunk the new build no longer ships, so `import("mermaid")`
+// rejects. See src/client/lib/lazyModule.ts.
+describe("MermaidDiagram — stale chunk after a deploy", () => {
+  const STALE_CHUNK_MESSAGE =
+    "Failed to fetch dynamically imported module: http://localhost:3210/assets/mermaid.core-BxJivhhJ.js"
+
+  const workingMermaid = {
+    initialize: () => {},
+    render: async (_id: string, text: string) => ({ svg: `<svg data-mermaid="1">${text}</svg>` }),
+  }
+
+  test("tells the user the app needs reloading instead of blaming the diagram", async () => {
+    const loadMermaid = async () => {
+      throw new Error(STALE_CHUNK_MESSAGE)
+    }
+    await renderAndSettle(
+      <MermaidDiagram source={"graph TD\nA-->B"} ports={{ loadMermaid }} />
+    )
+
+    expect(container!.textContent).toContain("latest version")
+    // The raw module-loader message is noise for the user.
+    expect(container!.textContent).not.toContain("Failed to fetch dynamically imported module")
+  })
+
+  test("offers a reload control that calls dom.reload()", async () => {
+    const dom = makeFakeDomPort()
+    const loadMermaid = async () => {
+      throw new Error(STALE_CHUNK_MESSAGE)
+    }
+    await renderAndSettle(
+      <MermaidDiagram source={"graph TD\nA-->B"} ports={{ loadMermaid, dom }} />
+    )
+
+    const reload = container!.querySelector('[aria-label="Reload the app"]') as HTMLButtonElement
+    expect(reload).not.toBeNull()
+    expect(dom.reloaded).toBe(false)
+
+    await act(async () => { reload.click() })
+
+    expect(dom.reloaded).toBe(true)
+  })
+
+  test("still shows the diagram source so nothing is lost", async () => {
+    const loadMermaid = async () => {
+      throw new Error(STALE_CHUNK_MESSAGE)
+    }
+    await renderAndSettle(
+      <MermaidDiagram source={"graph TD\nA-->B"} ports={{ loadMermaid }} />
+    )
+
+    expect(container!.innerHTML).toContain("<pre")
+    expect(container!.textContent).toContain("A-->B")
+  })
+
+  test("a rejected load is not cached — a later diagram retries and renders", async () => {
+    // The core defect: the old loader cached the rejected promise, so once one chunk
+    // load failed every later diagram in the tab stayed broken for the life of the tab.
+    let calls = 0
+    const loadMermaid = async () => {
+      calls += 1
+      if (calls === 1) throw new Error(STALE_CHUNK_MESSAGE)
+      return workingMermaid
+    }
+
+    await renderAndSettle(<MermaidDiagram source={"graph TD\nA-->B"} ports={{ loadMermaid }} />)
+    expect(container!.textContent).toContain("latest version")
+
+    // A second diagram mounts later (new message arrives, or the user scrolls).
+    await act(async () => { root?.unmount() })
+    container?.remove()
+    await renderAndSettle(<MermaidDiagram source={"graph TD\nC-->D"} ports={{ loadMermaid }} />)
+
+    expect(calls).toBe(2)
+    expect(container!.innerHTML).toContain("data-mermaid")
+    expect(container!.textContent).not.toContain("latest version")
+  })
+
+  test("an ordinary syntax error does NOT offer a reload", async () => {
+    const loadMermaid = async () => ({
+      initialize: () => {},
+      render: async () => { throw new Error("Parse error on line 2") },
+    })
+    await renderAndSettle(
+      <MermaidDiagram source={"graph TD\nA-->B"} ports={{ loadMermaid }} />
+    )
+
+    expect(container!.textContent).toContain("Couldn't render this Mermaid diagram")
+    expect(container!.textContent).toContain("Parse error on line 2")
+    expect(container!.querySelector('[aria-label="Reload the app"]')).toBeNull()
+  })
+
+  test("does not trigger a React render loop in the stale-chunk state", async () => {
+    const loadMermaid = async () => {
+      throw new Error(STALE_CHUNK_MESSAGE)
+    }
+    const result = await renderForLoopCheck(
+      <MermaidDiagram source={"graph TD\nA-->B"} ports={{ loadMermaid }} />
+    )
     await result.cleanup()
     expect(result.loopWarnings).toEqual([])
     expect(result.thrown).toBeNull()
