@@ -126,6 +126,36 @@ pm2 restart kanna
 
 The pm2 process keeps the same env and args; only the binary on disk changes.
 
+### Tabs left open across an upgrade
+
+The client bundle is content-hashed, so an upgrade deletes the previous `dist/client/assets/*`
+chunks. A browser tab that was loaded *before* the restart keeps running the old entry chunk
+and will request a hashed chunk that no longer exists the moment it hits a lazily-loaded
+feature (Mermaid diagrams, syntax highlighting). **Reloading the tab is the fix** — nothing is
+wrong with the deploy.
+
+How this is contained:
+
+- The server answers a missing asset with a real `404`. A request whose last path segment has
+  a non-`.html` extension is treated as an asset; only extensionless navigation paths
+  (`/`, `/chat/:id`, `/settings/:section`, `/workflows/:id`, `/share/:token`) fall back to
+  `index.html`. Before this, a missing chunk returned `200 index.html`, and the browser
+  reported the misleading `Failed to fetch dynamically imported module`.
+- Lazy imports go through `createLazyLoader` (`src/client/lib/lazyModule.ts`), which caches the
+  resolved module but **never** the rejection — so a later mount retries instead of staying
+  broken for the life of the tab.
+- A Mermaid diagram that hits this shows "This diagram needs the latest version of the app"
+  with a **Reload** button, and keeps showing the diagram source.
+
+To confirm the served build is self-consistent after a deploy:
+
+```bash
+# The entry chunk referenced by index.html must exist on disk
+curl -s http://127.0.0.1:3210/ | grep -o '/assets/index-[^"]*\.js'
+# Any /assets/ miss must be 404, never text/html
+curl -sI http://127.0.0.1:3210/assets/does-not-exist.js | head -2
+```
+
 ## Troubleshooting 401
 
 1. `pm2 env 0 | grep CLAUDE` — must be empty. If not, restart daemon under `env -i`.

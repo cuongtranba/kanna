@@ -1,7 +1,7 @@
 ---
 id: c3-114
 c3-version: 4
-c3-seal: 73bcbf17ee76135ddef6e7f74e2ac26d9828d367bfbe46c5823ae5c7dfd557a2
+c3-seal: eefaa12c6b1c7a06dde4b15c29f727d1ec89bb0e61b143f2e9e03076f6a3fed4
 title: messages-renderer
 type: component
 category: feature
@@ -75,6 +75,7 @@ Owns the per-kind UI for transcript entries — text, tool_use, tool_result, pla
 | --- | --- | --- | --- |
 | Missing kind handler | New entry kind added without renderer | Fallback shows in UI | bun run check against src/client/components/messages/ |
 | Collapsed default regression | Default expand-state change | User overwhelmed by long blocks | bun run check + manual review of src/client/components/messages/ |
+| Stale lazy chunk | A renderer lazy-imports a bundle (mermaid, shiki) and the tab outlives the deploy that deleted that hashed chunk | Diagram or highlight fails with "Failed to fetch dynamically imported module"; caching the rejected promise breaks every later instance in the tab | bun test --conditions production src/client/lib/lazyModule.test.ts src/client/components/messages/MermaidDiagram.test.tsx |
 
 ## Derived Materials
 

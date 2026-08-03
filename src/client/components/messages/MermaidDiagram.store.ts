@@ -3,7 +3,10 @@ import { createScopedStore } from "../../lib/createScopedStore"
 type RenderState =
   | { status: "loading" }
   | { status: "ready"; svg: string }
-  | { status: "error"; message?: string }
+  // `kind: "stale-chunk"` means the mermaid bundle itself could not be fetched
+  // because the tab is older than the deployed build — recoverable by reloading,
+  // and not the diagram author's fault.
+  | { status: "error"; message?: string; kind?: "stale-chunk" }
 
 interface MermaidDiagramState {
   renderState: RenderState
