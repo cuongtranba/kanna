@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.9.1](https://github.com/cuongtranba/kanna/compare/v1.9.0...v1.9.1) (2026-08-03)
+
+
+### Bug Fixes
+
+* **server:** 404 missing assets instead of serving the SPA shell ([#607](https://github.com/cuongtranba/kanna/issues/607)) ([b2ba0d7](https://github.com/cuongtranba/kanna/commit/b2ba0d784a6b5c652c384432ba41fe5753da5e94))
+
 ## [1.9.0](https://github.com/cuongtranba/kanna/compare/v1.8.2...v1.9.0) (2026-08-02)
 
 
