@@ -30,7 +30,9 @@ function StackChatCreateRowInner({
   onCancel,
 }: StackChatCreateRowProps): ReactNode {
   const filteredProjects = projects.filter((p) => stack.projectIds.includes(p.id))
-  const isMobile = useIsMobile()
+  // Deliberately the `sm` pivot, not the app-wide `md` (BREAKPOINT_MD): this row
+  // only needs to restack its worktree pickers on genuinely narrow phones.
+  const isMobile = useIsMobile(640)
   const errorId = useId()
 
   const selectedWorktrees = stackChatCreateRowStore.useScopedStore((s) => s.selectedWorktrees)

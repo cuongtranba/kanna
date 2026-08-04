@@ -27,6 +27,7 @@ import { AppBootstrap } from "./AppBootstrap"
 import { SharePage } from "./share-view/SharePage"
 import { useKannaState } from "./useKannaState"
 import { useSidebarSwipeGesture } from "./sidebarSwipeGesture"
+import { useViewportSubscription } from "../stores/viewportStore"
 import type { AppSettingsSnapshot } from "../../shared/types"
 import { log } from "../../shared/log"
 import { useAppShellStore } from "../stores/appShellStore"
@@ -246,6 +247,7 @@ function KannaLayout({ ports = {} }: { ports?: AppPorts } = {}) {
   const chatSoundId = useChatSoundPreferencesStore((store) => store.chatSoundId)
   const showMobileOpenButton = location.pathname === "/"
   const currentVersion = SDK_CLIENT_APP.split("/")[1] ?? "unknown"
+  useViewportSubscription()
   useSidebarSwipeGesture({
     sidebarOpen: state.sidebarOpen,
     onOpen: state.openSidebar,

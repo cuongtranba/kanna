@@ -3,6 +3,9 @@ import {
   DEFAULT_SIDEBAR_WIDTH,
   MAX_SIDEBAR_WIDTH,
   MIN_SIDEBAR_WIDTH,
+  SIDEBAR_CONTENT_MIN_WIDTH,
+  SIDEBAR_CONTENT_MIN_WIDTH_SETTINGS,
+  resolveSidebarWidth,
   useKannaSidebarStore,
 } from "./kannaSidebarStore"
 
@@ -216,5 +219,67 @@ describe("kannaSidebarStore — width", () => {
 
     s().setSidebarWidth(0)
     expect(s().sidebarWidth).toBe(MIN_SIDEBAR_WIDTH)
+  })
+})
+
+describe("resolveSidebarWidth", () => {
+  test("honours the requested width when the viewport can afford it", () => {
+    expect(resolveSidebarWidth({ requestedWidth: MAX_SIDEBAR_WIDTH, viewportWidth: 1440 })).toBe(
+      MAX_SIDEBAR_WIDTH,
+    )
+  })
+
+  // The defect this function exists to fix: clampSidebarWidth ignored the
+  // viewport, so a 900px window with a 520px sidebar left 380px of chat.
+  test("gives the content column its minimum before the sidebar gets its wish", () => {
+    expect(resolveSidebarWidth({ requestedWidth: MAX_SIDEBAR_WIDTH, viewportWidth: 900 })).toBe(
+      900 - SIDEBAR_CONTENT_MIN_WIDTH,
+    )
+  })
+
+  test("never yields less than the sidebar floor, even on a tiny viewport", () => {
+    expect(resolveSidebarWidth({ requestedWidth: MAX_SIDEBAR_WIDTH, viewportWidth: 560 })).toBe(
+      MIN_SIDEBAR_WIDTH,
+    )
+    expect(resolveSidebarWidth({ requestedWidth: MAX_SIDEBAR_WIDTH, viewportWidth: 100 })).toBe(
+      MIN_SIDEBAR_WIDTH,
+    )
+  })
+
+  // Hydration renders before any measurement; collapsing to the floor here
+  // would show a narrow sidebar that visibly jumps wider on the first frame.
+  test("passes the stored width through when the viewport is unmeasured", () => {
+    expect(resolveSidebarWidth({ requestedWidth: MAX_SIDEBAR_WIDTH, viewportWidth: 0 })).toBe(
+      MAX_SIDEBAR_WIDTH,
+    )
+  })
+
+  test("still clamps the request to the sidebar's own bounds", () => {
+    expect(resolveSidebarWidth({ requestedWidth: 10_000, viewportWidth: 4000 })).toBe(
+      MAX_SIDEBAR_WIDTH,
+    )
+    expect(resolveSidebarWidth({ requestedWidth: 10, viewportWidth: 1440 })).toBe(
+      MIN_SIDEBAR_WIDTH,
+    )
+    expect(resolveSidebarWidth({ requestedWidth: Number.NaN, viewportWidth: 1440 })).toBe(
+      DEFAULT_SIDEBAR_WIDTH,
+    )
+  })
+
+  test("reserves more room for the settings split layout", () => {
+    const args = { requestedWidth: MAX_SIDEBAR_WIDTH, viewportWidth: 1000 }
+    expect(resolveSidebarWidth(args)).toBe(MAX_SIDEBAR_WIDTH)
+    expect(
+      resolveSidebarWidth({ ...args, contentMinWidth: SIDEBAR_CONTENT_MIN_WIDTH_SETTINGS }),
+    ).toBe(1000 - SIDEBAR_CONTENT_MIN_WIDTH_SETTINGS)
+  })
+
+  test("is monotonic in viewport width", () => {
+    let previous = 0
+    for (let viewportWidth = 300; viewportWidth <= 2000; viewportWidth += 10) {
+      const width = resolveSidebarWidth({ requestedWidth: MAX_SIDEBAR_WIDTH, viewportWidth })
+      expect(width).toBeGreaterThanOrEqual(previous)
+      previous = width
+    }
   })
 })

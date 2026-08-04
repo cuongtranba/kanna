@@ -12,9 +12,44 @@ export interface KannaSidebarStorePorts {
   storage?: StoragePort
 }
 
+/** Narrowest the main content column may become before the sidebar yields. */
+export const SIDEBAR_CONTENT_MIN_WIDTH = 400
+/** Settings is a two-column split, so it needs more room than a chat transcript. */
+export const SIDEBAR_CONTENT_MIN_WIDTH_SETTINGS = 720
+
 export function clampSidebarWidth(width: number) {
   if (!Number.isFinite(width)) return DEFAULT_SIDEBAR_WIDTH
   return Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, Math.round(width)))
+}
+
+export interface ResolveSidebarWidthArgs {
+  /** The width the user asked for (stored preference or live drag). */
+  requestedWidth: number
+  /** Measured window width; 0 when unmeasured. */
+  viewportWidth: number
+  contentMinWidth?: number
+}
+
+/**
+ * Clamp the sidebar against the viewport as well as its own bounds.
+ *
+ * `clampSidebarWidth` alone only honours [MIN, MAX], so on a 900px window a
+ * 520px sidebar left 380px of chat. Here the content column is served first:
+ * the sidebar gets whatever is left over, but never drops below its own floor.
+ *
+ * An unmeasured viewport passes the request straight through — collapsing during
+ * hydration would render a narrow sidebar that jumps wider on the first frame.
+ */
+export function resolveSidebarWidth({
+  requestedWidth,
+  viewportWidth,
+  contentMinWidth = SIDEBAR_CONTENT_MIN_WIDTH,
+}: ResolveSidebarWidthArgs) {
+  const requested = clampSidebarWidth(requestedWidth)
+  if (!Number.isFinite(viewportWidth) || viewportWidth <= 0) return requested
+
+  const affordable = Math.min(MAX_SIDEBAR_WIDTH, viewportWidth - contentMinWidth)
+  return Math.max(MIN_SIDEBAR_WIDTH, Math.min(affordable, requested))
 }
 
 function readStoredSidebarWidth(ports: KannaSidebarStorePorts = {}) {

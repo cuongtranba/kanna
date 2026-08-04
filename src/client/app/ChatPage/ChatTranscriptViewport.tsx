@@ -19,6 +19,7 @@ import {
   type ResolvedTranscriptRow,
   useStableResolvedRows,
 } from "../KannaTranscript"
+import { buildTranscriptGapClassMap } from "../transcriptSpacing"
 import type { KannaState } from "../useKannaState"
 import type { AutoContinueSchedule, ChatBackgroundTask, CloudflareTunnelRecord, LoopProgressSnapshot, SubagentRunSnapshot } from "../../../shared/types"
 import type { ToolRequestDecision } from "../../../shared/permission-policy"
@@ -227,6 +228,10 @@ export const ChatTranscriptViewport = memo(({
     latestToolIds,
   }), [isProcessing, latestToolIds, localPath, messages])
   const resolvedRows = useStableResolvedRows(rawRows)
+  // Kept beside the rows rather than written onto them: useStableResolvedRows
+  // reuses unchanged row objects, so a gap stored on a row would go stale
+  // whenever only its neighbour changed.
+  const gapClassByRowId = useMemo(() => buildTranscriptGapClassMap(resolvedRows), [resolvedRows])
 
   useEffect(() => {
     resetToolGroupExpanded()
@@ -383,7 +388,10 @@ export const ChatTranscriptViewport = memo(({
       : null
     const rowRuns = userMessageId ? runsByUserMessageId.get(userMessageId) ?? [] : []
     return (
-      <div className="mx-auto w-full max-w-[800px] pb-5" data-transcript-row-id={item.id}>
+      <div
+        className={cn("mx-auto w-full max-w-[800px]", gapClassByRowId.get(item.id) ?? "pt-4")}
+        data-transcript-row-id={item.id}
+      >
         <KannaTranscriptRow
           row={item}
           toolGroupExpanded={item.kind === "tool-group" ? (toolGroupExpanded[item.id] ?? false) : undefined}
@@ -400,7 +408,7 @@ export const ChatTranscriptViewport = memo(({
         {rowRuns.map((run) => renderRunTree(run, 0))}
       </div>
     )
-  }, [handleToolGroupExpandedChange, onAskUserQuestionSubmit, onExitPlanModeConfirm, onToolRequestAnswer, schedules, onAutoContinueAccept, onAutoContinueReschedule, onAutoContinueCancel, toolGroupExpanded, runsByUserMessageId, renderRunTree, activeChatId])
+  }, [handleToolGroupExpandedChange, onAskUserQuestionSubmit, onExitPlanModeConfirm, onToolRequestAnswer, schedules, onAutoContinueAccept, onAutoContinueReschedule, onAutoContinueCancel, toolGroupExpanded, runsByUserMessageId, renderRunTree, activeChatId, gapClassByRowId])
 
   const listHeader = (
     <div className="mx-auto w-full max-w-[800px]" style={{ paddingTop: `${headerOffsetPx}px` }}>
@@ -422,9 +430,10 @@ export const ChatTranscriptViewport = memo(({
   const liveTunnelRecord = liveTunnelId && tunnels ? tunnels[liveTunnelId] : undefined
 
   const listFooter = (
-    <div className="mx-auto w-full max-w-[800px]">
+    // pt-4 replaces the trailing air the last row used to provide via pb-5.
+    <div className="mx-auto w-full max-w-[800px] pt-4">
       {loopProgress && (loopProgress.armed || loopProgress.rows.length > 0) ? (
-        <div className="pb-5">
+        <div className="pb-4">
           <LoopProgressSection
             loopProgress={loopProgress}
             onResume={onAutoContinueAccept}
@@ -432,7 +441,7 @@ export const ChatTranscriptViewport = memo(({
         </div>
       ) : null}
       {workflowRuns && workflowRuns.length > 0 && getWorkflowRunDetail ? (
-        <div className="pb-5">
+        <div className="pb-4">
           <WorkflowsSectionWithDetail
             runs={workflowRuns}
             getRunDetail={getWorkflowRunDetail}
@@ -440,7 +449,7 @@ export const ChatTranscriptViewport = memo(({
         </div>
       ) : null}
       {liveTunnelRecord && onTunnelAccept && onTunnelStop && onTunnelRetry && (
-        <div className="pb-5">
+        <div className="pb-4">
           <CloudflareTunnelCard
             record={liveTunnelRecord}
             onAccept={onTunnelAccept}
@@ -451,7 +460,7 @@ export const ChatTranscriptViewport = memo(({
         </div>
       )}
       {backgroundTasks && backgroundTasks.length > 0 ? (
-        <div className="pb-5">
+        <div className="pb-4">
           <BackgroundTasksSection tasks={backgroundTasks} />
         </div>
       ) : null}
@@ -542,7 +551,9 @@ export const ChatTranscriptViewport = memo(({
           onStartReached={handleStartReached}
           onStartReachedThreshold={0.1}
           className="h-full flex-1 overflow-x-hidden overscroll-y-contain px-3 scroll-pt-[72px] [scrollbar-gutter:auto]"
-          contentContainerStyle={{ paddingBottom: transcriptPaddingBottom + 10 }}
+          // Rows now pad above rather than below, so the last row contributes no
+          // trailing air of its own; make up the difference here.
+          contentContainerStyle={{ paddingBottom: transcriptPaddingBottom + 30 }}
           ListHeaderComponent={listHeader}
           ListFooterComponent={listFooter}
         />

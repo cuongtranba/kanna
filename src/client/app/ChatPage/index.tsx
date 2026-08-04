@@ -3,6 +3,7 @@ import type { DomPort } from "../../ports/domPort"
 import type { TimerPort } from "../../ports/timerPort"
 import { domAdapter } from "../../adapters/dom.adapter"
 import { timerAdapter } from "../../adapters/timer.adapter"
+import { isMobileViewport } from "../../lib/viewport"
 import { type LegendListRef } from "@legendapp/list/react"
 import type { GroupImperativeHandle, Layout } from "react-resizable-panels"
 import { useNavigate, useOutletContext } from "react-router-dom"
@@ -209,10 +210,8 @@ function useTranscriptPaddingBottom() {
   }
 }
 
-const MOBILE_RIGHT_SIDEBAR_BREAKPOINT_PX = 768
-
 export function shouldUseMobileRightSidebarOverlay(viewportWidth: number) {
-  return viewportWidth > 0 && viewportWidth < MOBILE_RIGHT_SIDEBAR_BREAKPOINT_PX
+  return isMobileViewport(viewportWidth)
 }
 
 function useMobileRightSidebarOverlayEnabled(dom: DomPort) {
