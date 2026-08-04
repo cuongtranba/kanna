@@ -1,6 +1,6 @@
 ---
 id: c3-231
-c3-seal: 90c634786ddf78791feeaad7d93bb20d7a4a23fab1baa2b7a3232778c8fef41b
+c3-seal: ca977aa5d42f297cd878ccd6045600ae4cd14b2e80a2dc2abdf7797dce64c45c
 title: local-catalog
 type: component
 category: feature
@@ -38,8 +38,8 @@ Owns the disk scan + dedupe + cache that turns raw `SKILL.md` and `.md` command 
 | --- | --- | --- |
 | Precondition | Server boot constructs the service with a scan adapter | c3-201 |
 | Input — adapter | scanLocalCatalog({cwd, homeDir}) returns RawCatalogEntry[] | c3-2 |
-| Input — chat cwd | Provided by AgentCoordinator from project.localPath | c3-210 |
-| Internal state | cwd → SlashCommand[] map with TTL expiry (30 s default) | c3-231 |
+| Input — project cwd | Resolved by the ws-router envelope from project.localPath for the project-commands topic | c3-208 |
+| Internal state | cwd → SlashCommand[] map, revalidated against mtime stamps (scanned roots, gating settings files, every scanned file); TTL is only a backstop ceiling | c3-231 |
 | Initialization | Lazy: first list(cwd) triggers scan + cache fill | c3-231 |
 
 ## Business Flow
@@ -47,10 +47,10 @@ Owns the disk scan + dedupe + cache that turns raw `SKILL.md` and `.md` command 
 | Aspect | Detail | Reference |
 | --- | --- | --- |
 | Outcome | User sees all local skills + commands when typing / | c3-115 |
-| Primary path | AgentCoordinator loads the local list (project + personal scopes) into ChatSnapshot.slashCommands on chat-open; no CLI merge | c3-210 |
-| Alternate — cache hit | Same cwd within TTL returns cached list without rescanning | c3-231 |
+| Primary path | The project-commands envelope reads the list synchronously per project; every scope is surfaced, no CLI merge, no async load | c3-208 |
+| Alternate — cache hit | Same cwd with every mtime stamp unchanged returns the cached list without rescanning | c3-231 |
 | Alternate — invalidate | invalidate(cwd?) drops cache row(s) | c3-231 |
-| Failure — scan throws | Error logged; the picker shows an empty list (no CLI fallback) | c3-210 |
+| Failure — scan throws | Error logged; the picker shows an empty list, which reads as "nothing matches" because there is no loading state | c3-208 |
 
 ## Governance
 
@@ -66,7 +66,7 @@ Owns the disk scan + dedupe + cache that turns raw `SKILL.md` and `.md` command 
 | --- | --- | --- | --- | --- |
 | LocalCatalogService.list | OUT | cwd → SlashCommand[] sorted, deduped, user-invocable only | c3-210 | src/server/local-catalog.ts |
 | scanLocalCatalog | OUT | Pure IO; returns RawCatalogEntry[] from disk | c3-231 | src/server/local-catalog-io.adapter.ts |
-| Cache TTL | OUT | 30s default; configurable per service instance | c3-231 | src/server/local-catalog.ts |
+| Cache freshness | OUT | mtime stamps via the injected statMtimes port; no port ⇒ no caching; TTL ceiling configurable per instance | c3-231 | src/server/local-catalog.ts |
 
 ## Change Safety
 
@@ -74,7 +74,7 @@ Owns the disk scan + dedupe + cache that turns raw `SKILL.md` and `.md` command 
 | --- | --- | --- | --- |
 | Frontmatter parser drift | Anthropic changes SKILL.md frontmatter | Wrong description / hidden entries | bun test src/server/local-catalog-io.adapter.test.ts |
 | Precedence inversion | Scope ordering bug | Personal skill shadows project skill | bun test src/server/local-catalog.test.ts |
-| Stale cache after edit | TTL too long for dev loop | Edit not reflected within 30s | LocalCatalogService.invalidate(cwd) in src/server/local-catalog.ts; bun test src/server/local-catalog.test.ts |
+| Stale cache after edit | Stamp set misses a path a change touches | Edit not reflected until the TTL ceiling | bun test src/server/local-catalog.test.ts |
 
 ## Derived Materials
 

@@ -1,7 +1,7 @@
 ---
 id: c3-115
 c3-version: 4
-c3-seal: 10a0e4dde713e1e974f74c48cab18647f058d3b9c272c45a54257b408a4f66cd
+c3-seal: 6110afb1f265099a69fc3e2102de0d72d6eeae0d785b2e815c747978ba44e6ea
 title: chat-ui-chrome
 type: component
 category: feature
@@ -50,7 +50,7 @@ Owns the composer and surrounding chrome: Lexical rich-text editor input, provid
 | --- | --- | --- |
 | Outcome | User sends a message to the agent with chosen provider/model | c3-1 |
 | Primary path | Type → choose model → click Send → emit chat.send command | c3-208 |
-| Alternate — mention/slash picker | @ and / typeahead open at start OR after whitespace (not only line start); Arrow keys navigate with scroll-into-view; Enter or click inserts a chip node, never submits | c3-231 |
+| Alternate — mention/slash picker | @ and / typeahead open at start OR after whitespace (not only line start); Arrow keys navigate with scroll-into-view; Enter or click inserts a chip node, never submits; the slash list is project-keyed so a new chat renders it with no fetch | c3-231 |
 | Alternate — drag-attach | Drop file → upload → reference inserted in payload | c3-217 |
 | Alternate — provider switch | Picker writes to preferences store; persists across sessions | ref-zustand-store |
 | Failure — send rejected | Show inline banner; retain text in store | c3-115 |
@@ -62,7 +62,7 @@ Owns the composer and surrounding chrome: Lexical rich-text editor input, provid
 | ref-provider-adapter | ref | Use normalized catalog, not per-provider forms | must follow | One UI for all providers |
 | ref-zustand-store | ref | Persist pending input + preferences | must follow | Survives reload |
 | rule-zustand-store | rule | All local UI state in chat-ui-chrome lives in zustand stores, not React state | wired compliance target beats uncited local prose | Added by c3x wire for explicit compliance review. |
-| c3-231 | ref | Picker consumes the merged slashCommands list including local skills + commands surfaced by local-catalog | wired compliance target beats uncited local prose | Local-skill catalog wiring |
+| c3-231 | ref | Picker reads a project-keyed store fed by the project-commands snapshot: every local scope, no merge, no loading state | wired compliance target beats uncited local prose | Local-skill catalog wiring |
 
 ## Contract
 
