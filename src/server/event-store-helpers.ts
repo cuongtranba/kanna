@@ -3,7 +3,7 @@
  * No EventStore class dependencies. No IO side effects.
  */
 import { log } from "../shared/log"
-import type { ChatHistorySnapshot, SlashCommand, TranscriptEntry } from "../shared/types"
+import type { ChatHistorySnapshot, TranscriptEntry } from "../shared/types"
 import { cloneTranscriptEntries } from "./events"
 import type { StoreEvent } from "./events"
 
@@ -46,8 +46,24 @@ export function logSendToStartingProfile(stage: string, details?: Record<string,
   }))
 }
 
+/**
+ * Event types that shipped in an earlier version and have since been retired.
+ *
+ * `STORE_VERSION` is deliberately NOT bumped when an event is retired — a
+ * version mismatch is fail-closed and wipes the user's entire history — so an
+ * existing `turns.jsonl` keeps carrying these lines until the next compaction.
+ * They apply as no-ops (the apply switch simply has no case for them), but the
+ * replay sort below still has to price them, or startup throws on the first
+ * legacy line.
+ *
+ * - `session_commands_loaded`: the `/` picker's catalog, once persisted per
+ *   chat, now derived per project and never stored.
+ */
+const RETIRED_EVENT_TYPES = new Set<string>(["session_commands_loaded"])
+
 export function getReplayEventPriority(event: StoreEvent): number {
   const discriminator = "type" in event ? event.type : event.kind
+  if (RETIRED_EVENT_TYPES.has(discriminator)) return 6
   switch (discriminator) {
     case "project_opened":
     case "project_removed":
@@ -68,7 +84,6 @@ export function getReplayEventPriority(event: StoreEvent): number {
     case "turn_started":
       return 5
     case "session_token_set":
-    case "session_commands_loaded":
       return 6
     case "pending_fork_session_token_set":
       return 6
@@ -136,18 +151,6 @@ export function decodeCursor(cursor: string): number {
   }
 
   throw new Error("Invalid history cursor")
-}
-
-export function slashCommandsEqual(a: SlashCommand[], b: SlashCommand[]): boolean {
-  if (a.length !== b.length) return false
-  for (let i = 0; i < a.length; i += 1) {
-    const ai = a[i]
-    const bi = b[i]
-    if (ai.name !== bi.name || ai.description !== bi.description || ai.argumentHint !== bi.argumentHint) {
-      return false
-    }
-  }
-  return true
 }
 
 // `context_window_updated` entries are token-readout noise emitted once per

@@ -1,32 +1,28 @@
 import { create } from "zustand"
 import type { SlashCommand } from "../../shared/types"
 
+/**
+ * The composer `/` picker's catalog, keyed by project.
+ *
+ * Keyed by project, not chat, because the catalog is derived from the project's
+ * cwd: every chat in a project shares one list, so opening a new chat needs no
+ * fetch of its own. There is deliberately no loading flag — the server builds
+ * the list synchronously and ships it in the first snapshot frame.
+ */
 interface SlashCommandsState {
-  byChatId: Record<string, SlashCommand[]>
-  loadingByChatId: Record<string, boolean>
-  setForChat: (chatId: string, commands: SlashCommand[]) => void
-  setLoadingForChat: (chatId: string, loading: boolean) => void
-  clear: (chatId: string) => void
+  byProjectId: Record<string, SlashCommand[]>
+  setForProject: (projectId: string, commands: SlashCommand[]) => void
+  clear: (projectId: string) => void
 }
 
 export const useSlashCommandsStore = create<SlashCommandsState>()((set) => ({
-  byChatId: {},
-  loadingByChatId: {},
-  setForChat: (chatId, commands) =>
-    set((state) => ({ byChatId: { ...state.byChatId, [chatId]: commands } })),
-  setLoadingForChat: (chatId, loading) =>
+  byProjectId: {},
+  setForProject: (projectId, commands) =>
+    set((state) => ({ byProjectId: { ...state.byProjectId, [projectId]: commands } })),
+  clear: (projectId) =>
     set((state) => {
-      const current = state.loadingByChatId[chatId] ?? false
-      if (current === loading) return state
-      return { loadingByChatId: { ...state.loadingByChatId, [chatId]: loading } }
-    }),
-  clear: (chatId) =>
-    set((state) => {
-      const hadCommands = chatId in state.byChatId
-      const hadLoading = chatId in state.loadingByChatId
-      if (!hadCommands && !hadLoading) return state
-      const { [chatId]: _c, ...byChatId } = state.byChatId
-      const { [chatId]: _l, ...loadingByChatId } = state.loadingByChatId
-      return { byChatId, loadingByChatId }
+      if (!(projectId in state.byProjectId)) return state
+      const { [projectId]: _dropped, ...byProjectId } = state.byProjectId
+      return { byProjectId }
     }),
 }))

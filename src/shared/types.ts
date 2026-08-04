@@ -374,6 +374,17 @@ export interface SlashCommand {
   scope?: SlashCommandScope
 }
 
+/**
+ * The composer `/` picker's catalog for one project. Keyed by project because
+ * it is derived purely from that project's cwd (plus the user's own
+ * `~/.claude`), never from a chat — so every chat in a project shares one list
+ * and a freshly opened chat needs no load of its own.
+ */
+export interface ProjectCommandsSnapshot {
+  projectId: string
+  commands: SlashCommand[]
+}
+
 export interface ResolvedStackBinding {
   projectId: string
   projectTitle: string
@@ -388,8 +399,6 @@ export interface ChatSnapshot {
   messages: TranscriptEntry[]
   history: ChatHistorySnapshot
   availableProviders: ProviderCatalogEntry[]
-  slashCommands: SlashCommand[]
-  slashCommandsLoading: boolean
   schedules: Record<string, AutoContinueSchedule>
   liveScheduleId: string | null
   tunnels: Record<string, CloudflareTunnelRecord>

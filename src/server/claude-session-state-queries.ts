@@ -25,8 +25,6 @@ export interface SessionStateQueryDeps {
   claudeSessions: Map<string, ClaudeSessionState>
   /** Streams currently draining (only `.keys()` is consumed). */
   drainingStreams: { keys(): IterableIterator<string> }
-  /** chatIds with a slash-commands load in-flight. */
-  slashCommandsInFlight: ReadonlySet<string>
   /** Returns true when the given provider is a Claude SDK provider. */
   isClaudeSdkProvider: (provider: AgentProvider) => boolean
   /** Returns true when the session has a pending background Bash task. */
@@ -141,13 +139,6 @@ export function getPendingTool(
  */
 export function getDrainingChatIds(deps: SessionStateQueryDeps): Set<string> {
   return new Set(deps.drainingStreams.keys())
-}
-
-/**
- * Returns the set of chatIds that have a slash-commands load in-flight.
- */
-export function getSlashCommandsLoadingChatIds(deps: SessionStateQueryDeps): Set<string> {
-  return new Set(deps.slashCommandsInFlight)
 }
 
 /**

@@ -7,7 +7,7 @@ import {
   MenuOption,
 } from "@lexical/react/LexicalTypeaheadMenuPlugin"
 import type { MenuTextMatch, TriggerFn } from "@lexical/react/LexicalTypeaheadMenuPlugin"
-import { useSlashCommands, useSlashCommandsLoading } from "../../../hooks/useSlashCommands"
+import { useSlashCommands } from "../../../hooks/useSlashCommands"
 import { filterCommands, normalizeCommandName } from "../../../lib/slash-commands"
 import type { SlashCommand } from "../../../../shared/types"
 import { $createSlashCommandNode } from "../nodes/SlashCommandNode"
@@ -78,7 +78,11 @@ export function dedupeCommandsByName(commands: SlashCommand[]): SlashCommand[] {
 // ---------------------------------------------------------------------------
 
 export interface SlashCommandTypeaheadPluginProps {
-  chatId: string | null
+  /**
+   * The catalog is keyed by project, not chat: it comes from the project's cwd,
+   * so every chat in a project shares one already-cached list.
+   */
+  projectId: string | null
   /**
    * When false the plugin renders nothing (mirrors the ChatInput gating that
    * only shows the slash picker when selectedProvider === "claude").
@@ -98,14 +102,13 @@ function clampDescription(text: string): string {
 }
 
 export function SlashCommandTypeaheadPlugin({
-  chatId,
+  projectId,
   enabled,
 }: SlashCommandTypeaheadPluginProps): ReactNode {
   const query = useComposerStore((state) => state.slashQuery)
   const setQuery = useComposerStore((state) => state.setSlashQuery)
 
-  const slashCommands = useSlashCommands(chatId)
-  const loading = useSlashCommandsLoading(chatId)
+  const slashCommands = useSlashCommands(projectId)
 
   const triggerFn = useSlashTrigger()
 
@@ -169,7 +172,9 @@ export function SlashCommandTypeaheadPlugin({
     ) => {
       if (!enabled) return null
       if (anchorElementRef.current == null) return null
-      if (menuOptions.length === 0 && !loading) return null
+      // No loading state to render: the catalog arrives with the project
+      // snapshot, so an empty list means "nothing matches", never "not yet".
+      if (menuOptions.length === 0) return null
 
       // Plain function, not a hook: menuRenderFn is itself a callback.
       // Keeps the handler out of the JSX attribute (selectOptionAndCleanUp
@@ -188,62 +193,50 @@ export function SlashCommandTypeaheadPlugin({
           data-kanna-typeahead-menu="slash"
           className="absolute bottom-full left-0 mb-2 w-full max-w-md md:max-w-xl max-h-64 overflow-auto rounded-md border border-border bg-popover shadow-md"
         >
-          {loading && menuOptions.length === 0
-            ? Array.from({ length: 4 }).map((_, i) => (
-                <li
-                  key={i}
-                  className="flex flex-col gap-1 px-3 py-1.5 sm:flex-row sm:items-center sm:gap-3"
-                  aria-hidden="true"
-                >
-                  <span className="h-3 w-28 rounded bg-muted animate-pulse" />
-                  <span className="hidden h-3 w-16 rounded bg-muted/70 animate-pulse sm:inline-block" />
-                  <span className="h-3 w-40 max-w-full rounded bg-muted/60 animate-pulse sm:ml-auto" />
-                </li>
-              ))
-            : menuOptions.map((option, i) => {
-                const isActive = i === selectedIndex
-                const cmd = option.command
+          {menuOptions.map((option, i) => {
+            const isActive = i === selectedIndex
+            const cmd = option.command
 
-                return (
-                  <li
-                    key={option.key}
-                    ref={option.setRefElement}
-                    role="option"
-                    aria-selected={isActive}
-                    onMouseDown={(e) => handleOptionMouseDown(e, option)}
-                    onMouseEnter={() => setHighlightedIndex(i)}
-                    className={cn(
-                      "flex flex-col gap-0.5 px-3 py-1.5 cursor-pointer text-sm sm:flex-row sm:items-center sm:gap-3",
-                      isActive && "bg-accent text-accent-foreground",
-                    )}
-                  >
-                    <div className="flex min-w-0 items-baseline gap-2">
-                      <span className="font-mono break-all sm:whitespace-nowrap sm:break-normal">
-                        /{normalizeCommandName(cmd.name)}
-                      </span>
-                      {cmd.kind === "skill" ? (
-                        <span className="shrink-0 rounded-sm border border-border bg-muted px-1 py-px text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                          skill
-                        </span>
-                      ) : null}
-                      {cmd.argumentHint ? (
-                        <span className="shrink-0 font-mono text-xs text-muted-foreground whitespace-nowrap">
-                          {cmd.argumentHint}
-                        </span>
-                      ) : null}
-                    </div>
-                    {cmd.description ? (
-                      <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground sm:text-right">
-                        {clampDescription(cmd.description)}
-                      </span>
-                    ) : null}
-                  </li>
-                )
-              })}
+            return (
+              <li
+                key={option.key}
+                ref={option.setRefElement}
+                role="option"
+                aria-selected={isActive}
+                onMouseDown={(e) => handleOptionMouseDown(e, option)}
+                onMouseEnter={() => setHighlightedIndex(i)}
+                className={cn(
+                  "flex flex-col gap-0.5 px-3 py-1.5 cursor-pointer text-sm sm:flex-row sm:items-center sm:gap-3",
+                  isActive && "bg-accent text-accent-foreground",
+                )}
+              >
+                <div className="flex min-w-0 items-baseline gap-2">
+                  <span className="font-mono break-all sm:whitespace-nowrap sm:break-normal">
+                    /{normalizeCommandName(cmd.name)}
+                  </span>
+                  {cmd.kind === "skill" ? (
+                    <span className="shrink-0 rounded-sm border border-border bg-muted px-1 py-px text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                      skill
+                    </span>
+                  ) : null}
+                  {cmd.argumentHint ? (
+                    <span className="shrink-0 font-mono text-xs text-muted-foreground whitespace-nowrap">
+                      {cmd.argumentHint}
+                    </span>
+                  ) : null}
+                </div>
+                {cmd.description ? (
+                  <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground sm:text-right">
+                    {clampDescription(cmd.description)}
+                  </span>
+                ) : null}
+              </li>
+            )
+          })}
         </ul>
       )
     },
-    [enabled, loading],
+    [enabled],
   )
 
   // When disabled, still mount the plugin but with no options so it never opens.

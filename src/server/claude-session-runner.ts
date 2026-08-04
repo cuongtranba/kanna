@@ -24,7 +24,7 @@ import {
 } from "./claude-prompt-helpers"
 import { timestamped } from "./claude-message-normalizer"
 import { logClaudeSteer } from "./claude-steer-log"
-import type { ClaudeSessionState, ActiveTurn, SlashCommand } from "./claude-session-state"
+import type { ClaudeSessionState, ActiveTurn } from "./claude-session-state"
 
 // Bounded FIFO for toolId → description lookups feeding background-task labels.
 const RECENT_TOOL_DESCRIPTION_LIMIT = 64
@@ -66,7 +66,6 @@ interface RunClaudeSessionStore {
   setCompactFailureCount(chatId: string, count: number): Promise<void>
   recordTurnCancelled(chatId: string): Promise<void>
   getChat(chatId: string): { compactFailureCount?: number; pendingForkSessionToken?: { token: string } | null } | null | undefined
-  recordSessionCommandsLoaded(chatId: string, commands: SlashCommand[]): Promise<void>
 }
 
 // ---------------------------------------------------------------------------
@@ -347,10 +346,9 @@ export async function runClaudeSession(
         ) {
           await deps.store.setPendingForkSessionToken(session.chatId, null)
         }
-        // NOTE: the chat's slashCommands are populated exclusively from the
-        // local disk catalog on chat-open (`ensureSlashCommandsLoaded`); the
-        // CLI `system_init` command list is intentionally NOT merged in here,
-        // so the picker never surfaces built-in / plugin CLI commands.
+        // NOTE: the composer picker is served by the project-scoped
+        // `project-commands` topic, straight off the local disk catalog. The
+        // CLI `system_init` command list is intentionally NOT merged in here.
         logClaudeSteer("claude_event_system_init", {
           chatId: session.chatId,
           sessionId: session.id,

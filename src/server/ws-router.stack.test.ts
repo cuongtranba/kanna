@@ -67,10 +67,8 @@ async function buildRouterWithStore() {
     agent: {
       getActiveStatuses: () => new Map(),
       getDrainingChatIds: () => new Set(),
-      getSlashCommandsLoadingChatIds: () => new Set(),
-      getWaitStartedAtByChatId: () => new Map(),
-      ensureSlashCommandsLoaded: async () => {},
-    } as never,
+            getWaitStartedAtByChatId: () => new Map(),
+          } as never,
     terminals: {
       getSnapshot: () => null,
       onEvent: () => () => {},

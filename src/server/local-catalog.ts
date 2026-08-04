@@ -1,3 +1,4 @@
+import path from "node:path"
 import type { SlashCommand } from "../shared/types"
 import type { CatalogKind, CatalogScope, RawCatalogEntry } from "./local-catalog-io.adapter"
 
@@ -5,16 +6,50 @@ export interface LocalCatalogScanner {
   (args: { cwd: string; homeDir?: string }): RawCatalogEntry[]
 }
 
+/** Injected port: mtime in ms per path, `0` when the path cannot be stat'ed. */
+export interface LocalCatalogStatMtimes {
+  (paths: readonly string[]): number[]
+}
+
 export interface LocalCatalogServiceOptions {
   scan: LocalCatalogScanner
+  /**
+   * Freshness port. Without it the service cannot tell a stale cache row from a
+   * fresh one, so it deliberately caches nothing — always correct, never stale.
+   */
+  statMtimes?: LocalCatalogStatMtimes
+  /** Backstop ceiling for changes mtime stamps cannot see. */
   cacheTtlMs?: number
   now?: () => number
-  homeDir?: string
+  /** Required: the personal-scope roots are derived from it, for both the scan and its stamps. */
+  homeDir: string
 }
 
 interface CacheRow {
   entries: SlashCommand[]
+  /** path → mtime at scan time; a single mismatch invalidates the row. */
+  stamps: Map<string, number>
   expiresAt: number
+}
+
+/**
+ * Everything `scanLocalCatalog` consults but does not return an entry for.
+ * Stamping the directories catches skills being added or removed; stamping the
+ * settings files catches a plugin being enabled or disabled. An existing
+ * SKILL.md edited in place bumps none of these, which is why
+ * `LocalCatalogService.list` stamps each scanned file as well.
+ */
+export function catalogRootDirs(args: { cwd: string; homeDir: string }): string[] {
+  return [
+    path.join(args.cwd, ".claude", "skills"),
+    path.join(args.cwd, ".claude", "commands"),
+    path.join(args.cwd, ".claude", "settings.json"),
+    path.join(args.cwd, ".claude", "settings.local.json"),
+    path.join(args.homeDir, ".claude", "skills"),
+    path.join(args.homeDir, ".claude", "commands"),
+    path.join(args.homeDir, ".claude", "settings.json"),
+    path.join(args.homeDir, ".claude", "plugins", "installed_plugins.json"),
+  ]
 }
 
 const SCOPE_PRIORITY: Record<CatalogScope, number> = {
@@ -65,42 +100,48 @@ export function reduceCatalog(raw: readonly RawCatalogEntry[]): SlashCommand[] {
     .sort((a, b) => a.name.localeCompare(b.name))
 }
 
-export function mergeWithCli(cli: readonly SlashCommand[], local: readonly SlashCommand[]): SlashCommand[] {
-  const cliNames = new Set(cli.map((c) => normaliseKey(c.name)))
-  const cliNormalised = cli.map<SlashCommand>((c) => ({
-    name: c.name,
-    description: c.description,
-    argumentHint: c.argumentHint,
-    kind: c.kind ?? "command",
-    scope: c.scope ?? "builtin",
-  }))
-  const localFiltered = local.filter((entry) => !cliNames.has(normaliseKey(entry.name)))
-  return [...cliNormalised, ...localFiltered]
-}
-
 export class LocalCatalogService {
   private readonly cache = new Map<string, CacheRow>()
   private readonly scan: LocalCatalogScanner
+  private readonly statMtimes: LocalCatalogStatMtimes | undefined
   private readonly ttl: number
   private readonly now: () => number
-  private readonly homeDir: string | undefined
+  private readonly homeDir: string
 
   constructor(opts: LocalCatalogServiceOptions) {
     this.scan = opts.scan
-    this.ttl = opts.cacheTtlMs ?? 30_000
+    this.statMtimes = opts.statMtimes
+    this.ttl = opts.cacheTtlMs ?? 300_000
     this.now = opts.now ?? Date.now
     this.homeDir = opts.homeDir
   }
 
   list(cwd: string): SlashCommand[] {
-    const key = cwd
-    const cached = this.cache.get(key)
     const now = this.now()
-    if (cached && cached.expiresAt > now) return cached.entries
+    const cached = this.cache.get(cwd)
+    if (cached && cached.expiresAt > now && this.stampsUnchanged(cached.stamps)) return cached.entries
     const raw = this.scan({ cwd, homeDir: this.homeDir })
     const entries = reduceCatalog(raw)
-    this.cache.set(key, { entries, expiresAt: now + this.ttl })
+    this.cache.set(cwd, { entries, stamps: this.readStamps(cwd, raw), expiresAt: now + this.ttl })
     return entries
+  }
+
+  /** Empty stamps mean "unstampable" — the row can never be trusted again. */
+  private stampsUnchanged(stamps: Map<string, number>): boolean {
+    if (!this.statMtimes || stamps.size === 0) return false
+    const paths = [...stamps.keys()]
+    const current = this.statMtimes(paths)
+    return paths.every((p, i) => current[i] === stamps.get(p))
+  }
+
+  private readStamps(cwd: string, raw: readonly RawCatalogEntry[]): Map<string, number> {
+    if (!this.statMtimes) return new Map()
+    const paths = [
+      ...catalogRootDirs({ cwd, homeDir: this.homeDir }),
+      ...new Set(raw.map((entry) => entry.filePath)),
+    ]
+    const current = this.statMtimes(paths)
+    return new Map(paths.map((p, i) => [p, current[i] ?? 0]))
   }
 
   invalidate(cwd?: string): void {

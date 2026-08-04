@@ -78,7 +78,6 @@ export function applyStoreEvent(
     case "turn_failed":
     case "turn_cancelled":
     case "session_token_set":
-    case "session_commands_loaded":
     case "pending_fork_session_token_set": {
       applyChatLifecycleEvent(state, replayChatProvider, e)
       break

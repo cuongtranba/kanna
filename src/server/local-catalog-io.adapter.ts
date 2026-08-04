@@ -105,6 +105,19 @@ function safeStatMtime(filePath: string): number {
   }
 }
 
+/** The home directory the scanner falls back to when none is injected. */
+export function defaultHomeDir(): string {
+  return homedir()
+}
+
+/**
+ * Freshness stamps for the cache layer: mtime in ms per path, `0` for anything
+ * that cannot be stat'ed (missing, unreadable). Order matches the input.
+ */
+export function statMtimes(paths: readonly string[]): number[] {
+  return paths.map(safeStatMtime)
+}
+
 function safeReaddir(dir: string): string[] {
   try {
     return readdirSync(dir)
@@ -228,171 +241,185 @@ function scanCommandsDir(args: {
   return entries
 }
 
-function scanPluginDir(pluginDir: string, pluginName: string): RawCatalogEntry[] {
-  const entries: RawCatalogEntry[] = []
-  entries.push(
-    ...scanSkillsDir({
-      baseDir: path.join(pluginDir, "skills"),
-      scope: "plugin",
-      pluginName,
-      namespace: pluginName,
-    }),
-  )
-  entries.push(
-    ...scanCommandsDir({
-      baseDir: path.join(pluginDir, "commands"),
-      scope: "plugin",
-      pluginName,
-      namespace: pluginName,
-    }),
-  )
-  const rootSkill = path.join(pluginDir, "SKILL.md")
-  if (existsSync(rootSkill)) {
-    const fm = parseFrontmatter(rootSkill)
-    const base = fm.name ?? pluginName
-    const commandName = `${pluginName}:${base}`
-    entries.push({
-      name: commandName,
-      displayName: fm.name ?? commandName,
-      description: fm.description,
-      argumentHint: fm.argumentHint,
-      userInvocable: fm.userInvocable,
-      kind: "skill",
-      scope: "plugin",
-      pluginName,
-      filePath: rootSkill,
-      mtimeMs: safeStatMtime(rootSkill),
-    })
-  }
-  return entries
-}
+// ---------------------------------------------------------------------------
+// Plugin discovery
+//
+// A plugin's skills are invocable only while the plugin is enabled, and their
+// command names come from the *plugin* name — never the marketplace folder. So
+// discovery is driven by the three files that decide both, rather than by
+// walking whatever happens to sit under `~/.claude/plugins`:
+//
+//   settings.json          `enabledPlugins`: which `<plugin>@<marketplace>` are live
+//   installed_plugins.json `installPath`:    where each plugin's files actually are
+//   marketplace.json       `plugins[].skills[]`: the subset a plugin exposes
+//
+// Walking the tree instead surfaces disabled plugins and a marketplace's own
+// test fixtures, and mislabels every skill in a marketplace whose plugins all
+// declare `source: "./"` — emitting `/name`s the CLI rejects.
+// ---------------------------------------------------------------------------
 
-interface MarketplacePlugin {
-  name: string
-  /** Absolute resolved directory the plugin's files live under. */
-  sourceDir: string
+function readJsonFile(filePath: string): AnyValue | null {
+  if (!existsSync(filePath)) return null
+  try {
+    return JSON.parse(readFileSync(filePath, "utf8"))
+  } catch {
+    return null
+  }
 }
 
 /**
- * Read a marketplace's `.claude-plugin/marketplace.json` and map each declared
- * plugin's local `source` directory to its real plugin name. Claude namespaces
- * a plugin's slash commands by the plugin name, NOT the marketplace folder
- * name, so this mapping is what lets the picker emit a command the CLI accepts.
- * Non-string sources (git/github) have no local dir and are skipped.
+ * `<plugin>@<marketplace>` keys enabled for this cwd. Project settings layer
+ * over personal ones, so a repo can enable a plugin its owner has switched off
+ * globally (and `settings.local.json` wins over the committed file).
  */
-function readMarketplacePlugins(marketPath: string): MarketplacePlugin[] {
-  const manifestPath = path.join(marketPath, ".claude-plugin", "marketplace.json")
-  if (!existsSync(manifestPath)) return []
-  let parsed: AnyValue
-  try {
-    parsed = JSON.parse(readFileSync(manifestPath, "utf8"))
-  } catch {
-    return []
+function readEnabledPluginKeys(args: { cwd: string; homeDir: string }): Set<string> {
+  const enabled = new Set<string>()
+  const sources = [
+    path.join(args.homeDir, ".claude", "settings.json"),
+    path.join(args.cwd, ".claude", "settings.json"),
+    path.join(args.cwd, ".claude", "settings.local.json"),
+  ]
+  for (const source of sources) {
+    const parsed = readJsonFile(source)
+    if (!isRecord(parsed) || !isRecord(parsed.enabledPlugins)) continue
+    for (const [key, value] of Object.entries(parsed.enabledPlugins)) {
+      if (value === true) enabled.add(key)
+      else if (value === false) enabled.delete(key)
+    }
   }
-  if (!isRecord(parsed)) return []
-  const plugins = parsed.plugins
-  if (!Array.isArray(plugins)) return []
-  const out: MarketplacePlugin[] = []
-  for (const raw of plugins) {
-    if (!isRecord(raw)) continue
-    const name = raw.name
-    const source = raw.source
-    if (typeof name !== "string" || name.length === 0) continue
-    if (typeof source !== "string") continue
-    out.push({ name, sourceDir: path.resolve(marketPath, source) })
+  return enabled
+}
+
+/**
+ * `<plugin>@<marketplace>` → the directory its files were installed to. A
+ * plugin can be installed at both user and project scope; the user-scope
+ * install wins, matching how the CLI resolves a plugin outside its project.
+ */
+function readInstalledPluginPaths(homeDir: string): Map<string, string> {
+  const parsed = readJsonFile(path.join(homeDir, ".claude", "plugins", "installed_plugins.json"))
+  const out = new Map<string, string>()
+  if (!isRecord(parsed) || !isRecord(parsed.plugins)) return out
+  for (const [key, installs] of Object.entries(parsed.plugins)) {
+    if (!Array.isArray(installs)) continue
+    let fallback: string | null = null
+    let preferred: string | null = null
+    for (const install of installs) {
+      if (!isRecord(install)) continue
+      const installPath = install.installPath
+      if (typeof installPath !== "string" || installPath.length === 0) continue
+      fallback ??= installPath
+      if (install.scope === "user") preferred ??= installPath
+    }
+    const resolved = preferred ?? fallback
+    if (resolved) out.set(key, resolved)
   }
   return out
 }
 
 /**
- * Find the declared plugin whose source directory is the nearest ancestor of
- * `dir` (the most specific match wins). Returns its name, else the marketplace
- * folder name as the fallback namespace for un-manifested marketplaces.
+ * The skill directories a marketplace manifest declares for one plugin,
+ * resolved against its install root. `null` means the manifest says nothing, in
+ * which case every `skills/*` directory counts.
  */
-function resolvePluginNamespace(plugins: readonly MarketplacePlugin[], dir: string, fallback: string): string {
-  let best: MarketplacePlugin | null = null
-  for (const plugin of plugins) {
-    const isOwned = dir === plugin.sourceDir || dir.startsWith(plugin.sourceDir + path.sep)
-    if (!isOwned) continue
-    if (!best || plugin.sourceDir.length > best.sourceDir.length) best = plugin
+function readDeclaredSkillDirs(args: {
+  homeDir: string
+  marketplace: string
+  pluginName: string
+  installPath: string
+}): string[] | null {
+  const parsed = readJsonFile(
+    path.join(args.homeDir, ".claude", "plugins", "marketplaces", args.marketplace, ".claude-plugin", "marketplace.json"),
+  )
+  if (!isRecord(parsed) || !Array.isArray(parsed.plugins)) return null
+  for (const raw of parsed.plugins) {
+    if (!isRecord(raw) || raw.name !== args.pluginName) continue
+    const declared: AnyValue[] = raw.skills
+    if (!Array.isArray(declared)) return null
+    return declared
+      .filter((entry): entry is string => typeof entry === "string" && entry.length > 0)
+      .map((entry) => path.resolve(args.installPath, entry))
   }
-  return best?.name ?? fallback
+  return null
 }
 
-function scanPluginsRoot(pluginsRoot: string): RawCatalogEntry[] {
-  if (!existsSync(pluginsRoot)) return []
+/**
+ * Unlike a personal or project skill — where frontmatter `name` is only a
+ * display label — a plugin skill's `name` replaces the last segment of the
+ * command, keeping the plugin prefix (`my-plugin/skills/review` with
+ * `name: fancy` → `/my-plugin:fancy`).
+ */
+function buildPluginSkillEntry(skillFile: string, pluginName: string, fallbackSegment: string): RawCatalogEntry {
+  const fm = parseFrontmatter(skillFile)
+  const commandName = `${pluginName}:${fm.name ?? fallbackSegment}`
+  return {
+    name: commandName,
+    displayName: fm.name ?? commandName,
+    description: fm.description,
+    argumentHint: fm.argumentHint,
+    userInvocable: fm.userInvocable,
+    kind: "skill",
+    scope: "plugin",
+    pluginName,
+    filePath: skillFile,
+    mtimeMs: safeStatMtime(skillFile),
+  }
+}
+
+function scanPluginSkillDirs(skillDirs: readonly string[], pluginName: string): RawCatalogEntry[] {
   const entries: RawCatalogEntry[] = []
-  for (const child of safeReaddir(pluginsRoot)) {
-    if (child === "marketplaces") continue
-    const childPath = path.join(pluginsRoot, child)
-    let st: ReturnType<typeof statSync>
+  for (const dir of skillDirs) {
+    const skillFile = path.join(dir, "SKILL.md")
+    if (!existsSync(skillFile)) continue
+    entries.push(buildPluginSkillEntry(skillFile, pluginName, path.basename(dir)))
+  }
+  return entries
+}
+
+function childDirectories(baseDir: string): string[] {
+  if (!existsSync(baseDir)) return []
+  const out: string[] = []
+  for (const child of safeReaddir(baseDir)) {
+    const childPath = path.join(baseDir, child)
     try {
-      st = statSync(childPath)
+      if (statSync(childPath).isDirectory()) out.push(childPath)
     } catch {
       continue
     }
-    if (!st.isDirectory()) continue
-    entries.push(...scanPluginDir(childPath, child))
   }
-  const marketplaces = path.join(pluginsRoot, "marketplaces")
-  if (existsSync(marketplaces)) {
-    for (const market of safeReaddir(marketplaces)) {
-      const marketPath = path.join(marketplaces, market)
-      let st: ReturnType<typeof statSync>
-      try {
-        st = statSync(marketPath)
-      } catch {
-        continue
-      }
-      if (!st.isDirectory()) continue
-      const plugins = readMarketplacePlugins(marketPath)
-      const skillsDir = path.join(marketPath, "skills")
-      if (existsSync(skillsDir)) {
-        const ns = resolvePluginNamespace(plugins, skillsDir, market)
-        entries.push(
-          ...scanSkillsDir({
-            baseDir: skillsDir,
-            scope: "plugin",
-            pluginName: ns,
-            namespace: ns,
-          }),
-        )
-      }
-      const commandsDir = path.join(marketPath, "commands")
-      if (existsSync(commandsDir)) {
-        const ns = resolvePluginNamespace(plugins, commandsDir, market)
-        entries.push(
-          ...scanCommandsDir({
-            baseDir: commandsDir,
-            scope: "plugin",
-            pluginName: ns,
-            namespace: ns,
-          }),
-        )
-      }
-      for (const child of safeReaddir(marketPath)) {
-        if (child === "skills" || child === "commands") continue
-        const childPath = path.join(marketPath, child)
-        let cst: ReturnType<typeof statSync>
-        try {
-          cst = statSync(childPath)
-        } catch {
-          continue
-        }
-        if (!cst.isDirectory()) continue
-        const flatSkill = path.join(childPath, "SKILL.md")
-        if (existsSync(flatSkill)) {
-          const ns = resolvePluginNamespace(plugins, childPath, market)
-          entries.push(
-            buildEntryFromSkill({
-              filePath: flatSkill,
-              commandName: `${ns}:${child}`,
-              scope: "plugin",
-              pluginName: ns,
-            }),
-          )
-        }
-      }
+  return out
+}
+
+function scanEnabledPlugins(args: { cwd: string; homeDir: string }): RawCatalogEntry[] {
+  const enabled = readEnabledPluginKeys(args)
+  if (enabled.size === 0) return []
+  const installPaths = readInstalledPluginPaths(args.homeDir)
+  const entries: RawCatalogEntry[] = []
+
+  for (const key of enabled) {
+    const separator = key.lastIndexOf("@")
+    if (separator <= 0) continue
+    const pluginName = key.slice(0, separator)
+    const marketplace = key.slice(separator + 1)
+    const installPath = installPaths.get(key)
+    // An enabled plugin with no install on disk is skipped, never guessed at:
+    // a wrong root would emit `/name`s the CLI rejects.
+    if (!installPath || !existsSync(installPath)) continue
+
+    const declared = readDeclaredSkillDirs({ homeDir: args.homeDir, marketplace, pluginName, installPath })
+    entries.push(
+      ...scanPluginSkillDirs(declared ?? childDirectories(path.join(installPath, "skills")), pluginName),
+    )
+    entries.push(
+      ...scanCommandsDir({
+        baseDir: path.join(installPath, "commands"),
+        scope: "plugin",
+        pluginName,
+        namespace: pluginName,
+      }),
+    )
+    const rootSkill = path.join(installPath, "SKILL.md")
+    if (existsSync(rootSkill)) {
+      entries.push(buildPluginSkillEntry(rootSkill, pluginName, pluginName))
     }
   }
   return entries
@@ -433,6 +460,6 @@ export function scanLocalCatalog(args: ScanLocalCatalogArgs): RawCatalogEntry[] 
       namespace: null,
     }),
   )
-  entries.push(...scanPluginsRoot(path.join(home, ".claude", "plugins")))
+  entries.push(...scanEnabledPlugins({ cwd: args.cwd, homeDir: home }))
   return entries
 }

@@ -382,13 +382,6 @@ export function applyChatLifecycleEvent(
       chat.updatedAt = event.timestamp
       break
     }
-    case "session_commands_loaded": {
-      const chat = state.chatsById.get(event.chatId)
-      if (!chat) break
-      chat.slashCommands = event.commands.map((c) => ({ ...c }))
-      chat.updatedAt = event.timestamp
-      break
-    }
     case "pending_fork_session_token_set": {
       const chat = state.chatsById.get(event.chatId)
       if (!chat) break

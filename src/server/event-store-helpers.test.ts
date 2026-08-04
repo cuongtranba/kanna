@@ -9,7 +9,6 @@ import {
   getHistorySnapshot,
   getReplayEventPriority,
   normalizeSidebarProjectOrder,
-  slashCommandsEqual,
   type TranscriptPageResult,
 } from "./event-store-helpers"
 
@@ -65,32 +64,6 @@ describe("decodeCursor", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// slashCommandsEqual
-// ---------------------------------------------------------------------------
-describe("slashCommandsEqual", () => {
-  test("returns true for two empty arrays", () => {
-    expect(slashCommandsEqual([], [])).toBe(true)
-  })
-
-  test("returns false when lengths differ", () => {
-    expect(slashCommandsEqual(
-      [{ name: "a", description: "d", argumentHint: "" }],
-      [],
-    )).toBe(false)
-  })
-
-  test("returns true for identical arrays", () => {
-    const cmds = [{ name: "foo", description: "bar", argumentHint: "<hint>" }]
-    expect(slashCommandsEqual(cmds, cmds)).toBe(true)
-  })
-
-  test("returns false when a field differs", () => {
-    const a = [{ name: "foo", description: "bar", argumentHint: "" }]
-    const b = [{ name: "foo", description: "baz", argumentHint: "" }]
-    expect(slashCommandsEqual(a, b)).toBe(false)
-  })
-})
 
 // ---------------------------------------------------------------------------
 // coalesceContextWindowUpdates
@@ -233,5 +206,12 @@ describe("getReplayEventPriority", () => {
       .toThrow(/Unhandled replay event type: orch_run_created/)
     expect(() => getReplayEventPriority(makeEvent("orch_task_committed")))
       .toThrow(/Unhandled replay event type: orch_task_committed/)
+  })
+
+  // Unlike orch_*, session_commands_loaded lives in turns.jsonl, which is still
+  // replayed — and STORE_VERSION is deliberately unchanged, so a shipped user's
+  // log still carries these lines. Throwing here would break their startup.
+  test("retired session_commands_loaded is priced instead of throwing", () => {
+    expect(getReplayEventPriority(makeEvent("session_commands_loaded"))).toBe(6)
   })
 })

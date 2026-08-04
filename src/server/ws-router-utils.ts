@@ -73,6 +73,7 @@ export function countSubscriptionsByTopic(ws: ServerWebSocket<ClientState>): {
   sidebar: number
   chat: number
   projectGit: number
+  projectCommands: number
   localProjects: number
   update: number
   keybindings: number
@@ -82,6 +83,7 @@ export function countSubscriptionsByTopic(ws: ServerWebSocket<ClientState>): {
   let sidebar = 0
   let chat = 0
   let projectGit = 0
+  let projectCommands = 0
   let localProjects = 0
   let update = 0
   let keybindings = 0
@@ -98,6 +100,9 @@ export function countSubscriptionsByTopic(ws: ServerWebSocket<ClientState>): {
         break
       case "project-git":
         projectGit += 1
+        break
+      case "project-commands":
+        projectCommands += 1
         break
       case "local-projects":
         localProjects += 1
@@ -122,6 +127,7 @@ export function countSubscriptionsByTopic(ws: ServerWebSocket<ClientState>): {
     sidebar,
     chat,
     projectGit,
+    projectCommands,
     localProjects,
     update,
     keybindings,
@@ -211,6 +217,9 @@ export function shouldIncludeTopic(
     return filter.chatIds?.has(topic.chatId) ?? false
   }
   if (topic.type === "project-git") {
+    return filter.projectIds?.has(topic.projectId) ?? false
+  }
+  if (topic.type === "project-commands") {
     return filter.projectIds?.has(topic.projectId) ?? false
   }
   if (topic.type === "terminal") {

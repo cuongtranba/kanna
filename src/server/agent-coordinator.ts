@@ -130,10 +130,6 @@ import {
   type SendCommandDeps,
 } from "./claude-send-command"
 import {
-  ensureSlashCommandsLoaded as ensureSlashCommandsLoadedFn,
-  type SlashCommandsDeps,
-} from "./claude-slash-commands"
-import {
   subagentPendingKey as subagentPendingKeyFn,
   rejectPendingResolversForChat as rejectPendingResolversForChatFn,
   rejectPendingResolversForRun as rejectPendingResolversForRunFn,
@@ -146,7 +142,6 @@ import {
   getWaitStartedAtByChatId as getWaitStartedAtByChatIdFn,
   getPendingTool as getPendingToolFn,
   getDrainingChatIds as getDrainingChatIdsFn,
-  getSlashCommandsLoadingChatIds as getSlashCommandsLoadingChatIdsFn,
   getClaudeSessionStates as getClaudeSessionStatesFn,
   getBackgroundTasksByChatId as getBackgroundTasksByChatIdFn,
   sweepIdleClaudeSessions as sweepIdleClaudeSessionsFn,
@@ -201,7 +196,6 @@ export class AgentCoordinator {
   readonly drainingStreams = new Map<string, { turn: HarnessTurn }>()
   readonly claudeSessions = new Map<string, ClaudeSessionState>()
   readonly mentionedSubagentIdsByChat = new Map<string, string[]>()
-  readonly slashCommandsInFlight = new Set<string>()
   readonly claudeLimitDetector: LimitDetector
   readonly codexLimitDetector: LimitDetector
   readonly claudeAuthErrorDetector: ClaudeAuthErrorDetector
@@ -371,10 +365,6 @@ export class AgentCoordinator {
     return getDrainingChatIdsFn(this.buildSessionStateQueryDeps())
   }
 
-  getSlashCommandsLoadingChatIds(): Set<string> {
-    return getSlashCommandsLoadingChatIdsFn(this.buildSessionStateQueryDeps())
-  }
-
   /**
    * Snapshot of live claude PTY session states per chat. Used by the
    * sidebar badge selector. Chats not present are implicitly `cold`.
@@ -482,10 +472,6 @@ export class AgentCoordinator {
 
   private buildSubagentWiringDeps(): SubagentWiringDeps {
     return agentDepsBuilders.buildSubagentWiringDeps(this)
-  }
-
-  private buildSlashCommandsDeps(): SlashCommandsDeps {
-    return agentDepsBuilders.buildSlashCommandsDeps(this)
   }
 
   /** @internal used by agent-deps-builders.ts */
@@ -687,10 +673,6 @@ export class AgentCoordinator {
 
   async stopDraining(chatId: string) {
     return stopDrainingFn(this.buildChatManagementDeps(), chatId)
-  }
-
-  async ensureSlashCommandsLoaded(chatId: string): Promise<void> {
-    return ensureSlashCommandsLoadedFn(this.buildSlashCommandsDeps(), chatId)
   }
 
   async closeChat(chatId: string) {

@@ -16,6 +16,7 @@ import type {
   LlmProviderSnapshot,
   LocalProjectsSnapshot,
   ModelOptions,
+  ProjectCommandsSnapshot,
   PushConfigSnapshot,
   PushSubscribeRequestPayload,
   SidebarData,
@@ -47,6 +48,7 @@ export type SubscriptionTopic =
   | { type: "push-config" }
   | { type: "chat"; chatId: string; recentLimit?: number; since?: number }
   | { type: "project-git"; projectId: string }
+  | { type: "project-commands"; projectId: string }
   | { type: "terminal"; terminalId: string }
   | { type: "pty-instances" }
   | { type: "workflows"; chatId: string }
@@ -340,6 +342,7 @@ export type ServerSnapshot =
   | { type: "push-config"; data: PushConfigSnapshot }
   | { type: "chat"; data: ChatSnapshot | null }
   | { type: "project-git"; data: ChatDiffSnapshot | null }
+  | { type: "project-commands"; data: ProjectCommandsSnapshot }
   | { type: "terminal"; data: TerminalSnapshot | null }
   | { type: "pty-instances"; data: PtyInstancesSnapshot }
   | { type: "workflows"; data: WorkflowsSnapshot }

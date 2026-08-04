@@ -43,9 +43,20 @@ export function shouldShowPicker(
   return { open: true, query: match[1] ?? "" }
 }
 
+/**
+ * Skills the user wrote (project, personal) rank above ones that arrived with a
+ * plugin. Plugin scope is the bulk of the catalog, so without this a `/` press
+ * buries the handful of commands the user actually authored.
+ */
+const SCOPE_RANK: Record<string, number> = { project: 0, personal: 0, builtin: 1, plugin: 2 }
+
+function byScopeThenName(a: SlashCommand, b: SlashCommand): number {
+  const rank = (SCOPE_RANK[a.scope ?? ""] ?? 1) - (SCOPE_RANK[b.scope ?? ""] ?? 1)
+  return rank !== 0 ? rank : a.name.localeCompare(b.name)
+}
+
 export function filterCommands(list: SlashCommand[], query: string): SlashCommand[] {
-  const byName = (a: SlashCommand, b: SlashCommand) => a.name.localeCompare(b.name)
-  if (query === "") return [...list].sort(byName)
+  if (query === "") return [...list].sort(byScopeThenName)
 
   const q = query.toLowerCase()
   const prefix: SlashCommand[] = []
@@ -55,5 +66,6 @@ export function filterCommands(list: SlashCommand[], query: string): SlashComman
     if (name.startsWith(q)) prefix.push(cmd)
     else if (name.includes(q)) substring.push(cmd)
   }
-  return [...prefix.sort(byName), ...substring.sort(byName)]
+  // Match tier wins over scope: a prefix hit is always more relevant.
+  return [...prefix.sort(byScopeThenName), ...substring.sort(byScopeThenName)]
 }

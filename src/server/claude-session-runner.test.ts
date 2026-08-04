@@ -151,7 +151,6 @@ function makeDeps(session: ClaudeSessionState, overrides: Partial<RunClaudeSessi
       setCompactFailureCount: async () => {},
       recordTurnCancelled: async () => {},
       getChat: () => null,
-      recordSessionCommandsLoaded: async () => {},
     },
     emitStateChange: () => {},
     handleLimitDetection: async () => false,

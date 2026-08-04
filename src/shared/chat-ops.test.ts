@@ -55,8 +55,6 @@ function makeSnapshot(messages: TranscriptEntry[]): ChatSnapshot {
     messages,
     history: { hasOlder: false, olderCursor: null, recentLimit: 200 },
     availableProviders: [],
-    slashCommands: [],
-    slashCommandsLoading: false,
     schedules: {},
     liveScheduleId: null,
     tunnels: {},
@@ -113,9 +111,9 @@ describe("applyChatOps", () => {
   test("sections.set replaces only named keys", () => {
     const base = makeSnapshot([textEntry("a")])
     const result = applyChatOps(base, [
-      { kind: "sections.set", sections: { slashCommandsLoading: true } },
+      { kind: "sections.set", sections: { liveScheduleId: "sched-1" } },
     ], 2)
-    expect(result.slashCommandsLoading).toBe(true)
+    expect(result.liveScheduleId).toBe("sched-1")
     expect(result.schedules).toBe(base.schedules)
     expect(result.subagentRuns).toBe(base.subagentRuns)
   })

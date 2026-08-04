@@ -10,7 +10,7 @@
  */
 
 import path from "node:path"
-import type { AgentProvider, QueuedChatMessage, SlashCommand, StackBinding } from "../shared/types"
+import type { AgentProvider, QueuedChatMessage, StackBinding } from "../shared/types"
 import { STORE_VERSION } from "../shared/types"
 import type { ChatPermissionPolicyOverride, ToolRequest, ToolRequestDecision, ToolRequestStatus } from "../shared/permission-policy"
 import type {
@@ -27,7 +27,6 @@ import type {
   TurnRunConfig,
 } from "./events"
 import { resolveLocalPath } from "./paths"
-import { slashCommandsEqual } from "./event-store-helpers"
 
 // ─── Internal helper ───────────────────────────────────────────────────────
 
@@ -449,25 +448,6 @@ export function buildSessionTokenEvent(
   return {
     v: STORE_VERSION, type: "session_token_set", timestamp: Date.now(),
     chatId, sessionToken, provider,
-  }
-}
-
-/** Builds the `session_commands_loaded` event, or `null` if commands are unchanged. */
-export function buildSessionCommandsEvent(
-  chatsById: Map<string, ChatRecord>,
-  chatId: string,
-  commands: SlashCommand[],
-): TurnEvent | null {
-  const chat = requireChat(chatsById, chatId)
-  const normalized = commands.map((c) => ({
-    name: c.name,
-    description: c.description,
-    argumentHint: c.argumentHint,
-  }))
-  if (chat.slashCommands && slashCommandsEqual(chat.slashCommands, normalized)) return null
-  return {
-    v: STORE_VERSION, type: "session_commands_loaded", timestamp: Date.now(),
-    chatId, commands: normalized,
   }
 }
 

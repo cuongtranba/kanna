@@ -37,7 +37,7 @@ import { maskOauthKey } from "../shared/mask-oauth-key"
 import { log } from "../shared/log"
 import { OAuthPoolUnavailableError } from "./oauth-errors"
 import type { ClaudeSessionHandle, HarnessTurn, HarnessToolRequest } from "./harness-types"
-import type { ActiveTurn, ClaudeSessionState, SessionBackgroundTask, SlashCommand } from "./claude-session-state"
+import type { ActiveTurn, ClaudeSessionState, SessionBackgroundTask } from "./claude-session-state"
 import type { KannaMcpDelegationContext, SetupLoopHandlerResult } from "./kanna-mcp"
 import type { LoopSetupInput } from "./loop-template"
 import type { LoopState } from "./auto-continue/read-model"
@@ -67,7 +67,6 @@ interface SpawnOAuthPool {
 
 /** Subset of EventStore used by spawnClaudeTurn (only for slash-command load). */
 interface SpawnStore {
-  recordSessionCommandsLoaded(chatId: string, commands: SlashCommand[]): Promise<void>
 }
 
 // ---------------------------------------------------------------------------
@@ -344,9 +343,8 @@ export async function spawnClaudeTurn(
     deps.claudeSessions.set(args.chatId, session)
     deps.enforceClaudeSessionBudget(args.chatId)
     void deps.runClaudeSession(session)
-    // Slash commands are populated exclusively from the local disk catalog on
-    // chat-open (`ensureSlashCommandsLoaded`); no CLI `getSupportedCommands()`
-    // refresh here — the picker never surfaces built-in / plugin CLI commands.
+    // Slash commands come from the local disk catalog via the project-scoped
+    // `project-commands` topic; no CLI `getSupportedCommands()` refresh here.
   } else {
     session.lastUsedAt = Date.now()
     if (session.model !== args.model) {

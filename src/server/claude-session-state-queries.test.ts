@@ -5,7 +5,6 @@ import {
   getWaitStartedAtByChatId,
   getPendingTool,
   getDrainingChatIds,
-  getSlashCommandsLoadingChatIds,
   getClaudeSessionStates,
   isClaudeSessionIdle,
   sweepIdleClaudeSessions,
@@ -67,7 +66,6 @@ function makeDeps(overrides?: Partial<SessionStateQueryDeps>): SessionStateQuery
     activeTurns: new Map(),
     claudeSessions: new Map(),
     drainingStreams: new Map(),
-    slashCommandsInFlight: new Set(),
     isClaudeSdkProvider: mock(() => false),
     hasPendingBackgroundTask: mock(() => false),
     resolveClaudeIdleMs: mock(() => 600_000),
@@ -235,24 +233,6 @@ describe("getDrainingChatIds", () => {
     expect(result.has("chat-a")).toBe(true)
     expect(result.has("chat-b")).toBe(true)
     expect(result.size).toBe(2)
-  })
-})
-
-// ---------------------------------------------------------------------------
-// getSlashCommandsLoadingChatIds
-// ---------------------------------------------------------------------------
-
-describe("getSlashCommandsLoadingChatIds", () => {
-  it("returns empty set when no slash commands in flight", () => {
-    const deps = makeDeps()
-    expect(getSlashCommandsLoadingChatIds(deps).size).toBe(0)
-  })
-
-  it("mirrors the slashCommandsInFlight set", () => {
-    const deps = makeDeps({ slashCommandsInFlight: new Set(["chat-1", "chat-2"]) })
-    const result = getSlashCommandsLoadingChatIds(deps)
-    expect(result.has("chat-1")).toBe(true)
-    expect(result.has("chat-2")).toBe(true)
   })
 })
 

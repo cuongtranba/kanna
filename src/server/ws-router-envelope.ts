@@ -14,6 +14,7 @@ import type { ChatSnapshot } from "../shared/types"
 import type { ServerEnvelope, SubscriptionTopic } from "../shared/protocol"
 import type { ServerWebSocket } from "bun"
 import { deriveChatSnapshot, deriveLocalProjectsSnapshot, deriveSidebarData } from "./read-models"
+import { localCommandsForCwd } from "./claude-slash-commands"
 import type { EventStore } from "./event-store"
 import type { AgentCoordinator } from "./agent"
 import type { TerminalManager } from "./terminal-manager"
@@ -163,7 +164,6 @@ export function createEnvelopeBuilder(deps: EnvelopeDeps): EnvelopeBuilder {
       store.state,
       agent.getActiveStatuses(),
       agent.getDrainingChatIds(),
-      agent.getSlashCommandsLoadingChatIds(),
       chatId,
       (id) => store.getRecentChatHistory(id, 0),
       (id) => store.getTunnelEvents(id),
@@ -292,6 +292,27 @@ export function createEnvelopeBuilder(deps: EnvelopeDeps): EnvelopeBuilder {
       }
     }
 
+    // Built inline: the catalog is a synchronous disk read behind an
+    // mtime-validated cache, so there is nothing to await and no loading state
+    // to represent. The list is in this first frame, or the project is unknown.
+    if (topic.type === "project-commands") {
+      const project = store.getProject(topic.projectId)
+      return {
+        v: PROTOCOL_VERSION,
+        type: "snapshot",
+        id,
+        snapshot: {
+          type: "project-commands",
+          data: {
+            projectId: topic.projectId,
+            commands: project
+              ? localCommandsForCwd({ localCatalog: agent.localCatalog }, project.localPath)
+              : [],
+          },
+        },
+      }
+    }
+
     if (topic.type === "pty-instances") {
       return {
         v: PROTOCOL_VERSION,
@@ -339,7 +360,6 @@ export function createEnvelopeBuilder(deps: EnvelopeDeps): EnvelopeBuilder {
       store.state,
       agent.getActiveStatuses(),
       agent.getDrainingChatIds(),
-      agent.getSlashCommandsLoadingChatIds(),
       topic.chatId,
       (chatId) => store.getRecentChatHistory(chatId, topic.recentLimit ?? DEFAULT_CHAT_RECENT_LIMIT),
       (chatId) => store.getTunnelEvents(chatId),

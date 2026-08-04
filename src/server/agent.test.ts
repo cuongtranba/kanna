@@ -2659,8 +2659,8 @@ describe("AgentCoordinator claude integration", () => {
   })
 
   test("does not load slash commands from the CLI on a fresh Claude session", async () => {
-    // Slash commands come exclusively from the local disk catalog on chat-open
-    // (ensureSlashCommandsLoaded); a real turn's spawn must NOT call the CLI's
+    // Slash commands come exclusively from the local disk catalog, served by
+    // the project-commands topic; a real turn's spawn must NOT call the CLI's
     // getSupportedCommands nor record any CLI-derived command list.
     const events = new AsyncEventQueue<any>()
     const store = createFakeStore()
@@ -3723,138 +3723,6 @@ describe("AgentCoordinator claude integration", () => {
     expect(spawnCount).toBe(3)
 
     for (const q of queues) q.close()
-  })
-})
-
-describe("AgentCoordinator.ensureSlashCommandsLoaded", () => {
-  test("loads commands from the local catalog (project + personal only) without spawning Claude", async () => {
-    const store = createFakeStore()
-    const stateChanges: Array<string | undefined> = []
-    // Catalog returns all three scopes; the picker must keep project + personal
-    // and drop plugin — with no CLI spawn at all.
-    const fakeLocalCatalog = {
-      list: (): SlashCommand[] => [
-        { name: "proj-skill", description: "", argumentHint: "", kind: "skill", scope: "project" },
-        { name: "user-skill", description: "", argumentHint: "", kind: "skill", scope: "personal" },
-        { name: "cf:sandbox", description: "", argumentHint: "", kind: "skill", scope: "plugin" },
-      ],
-    }
-    let startCount = 0
-    const coordinator = new AgentCoordinator({
-      store: store as never,
-      onStateChange: (chatId) => { stateChanges.push(chatId) },
-      localCatalog: fakeLocalCatalog as never,
-      startClaudeSession: async () => {
-        startCount += 1
-        return {
-          provider: "claude",
-          stream: new AsyncEventQueue<any>(),
-          getAccountInfo: async () => null,
-          interrupt: async () => {},
-          close: () => {},
-          setModel: async () => {},
-          setPermissionMode: async () => {},
-          getSupportedCommands: async () => [],
-          sendPrompt: async () => {},
-        }
-      },
-    })
-
-    await coordinator.ensureSlashCommandsLoaded("chat-1")
-
-    expect(startCount).toBe(0)
-    expect(store.commandsLoaded).toHaveLength(1)
-    expect(store.commandsLoaded[0].commands.map((c: SlashCommand) => c.name)).toEqual([
-      "proj-skill",
-      "user-skill",
-    ])
-    expect(stateChanges).toContain("chat-1")
-  })
-
-  test("skips when commands already loaded for the chat", async () => {
-    const store = createFakeStore()
-    store.chat.slashCommands = [
-      { name: "help", description: "", argumentHint: "" },
-    ]
-    let startCount = 0
-    const coordinator = new AgentCoordinator({
-      store: store as never,
-      onStateChange: () => {},
-      startClaudeSession: async () => {
-        startCount += 1
-        return {
-          provider: "claude",
-          stream: new AsyncEventQueue<any>(),
-          getAccountInfo: async () => null,
-          interrupt: async () => {},
-          close: () => {},
-          setModel: async () => {},
-          setPermissionMode: async () => {},
-          getSupportedCommands: async () => [],
-          sendPrompt: async () => {},
-        }
-      },
-    })
-
-    await coordinator.ensureSlashCommandsLoaded("chat-1")
-
-    expect(startCount).toBe(0)
-    expect(store.commandsLoaded).toHaveLength(0)
-  })
-
-  test("skips chats whose provider is codex", async () => {
-    const store = createFakeStore()
-    store.chat.provider = "codex"
-    let startCount = 0
-    const coordinator = new AgentCoordinator({
-      store: store as never,
-      onStateChange: () => {},
-      startClaudeSession: async () => {
-        startCount += 1
-        return {
-          provider: "claude",
-          stream: new AsyncEventQueue<any>(),
-          getAccountInfo: async () => null,
-          interrupt: async () => {},
-          close: () => {},
-          setModel: async () => {},
-          setPermissionMode: async () => {},
-          getSupportedCommands: async () => [],
-          sendPrompt: async () => {},
-        }
-      },
-    })
-
-    await coordinator.ensureSlashCommandsLoaded("chat-1")
-
-    expect(startCount).toBe(0)
-    expect(store.commandsLoaded).toHaveLength(0)
-  })
-
-  test("dedupes concurrent calls via in-flight guard", async () => {
-    const store = createFakeStore()
-    let listCount = 0
-    const fakeLocalCatalog = {
-      list: (): SlashCommand[] => {
-        listCount += 1
-        return [{ name: "plan", description: "", argumentHint: "", kind: "skill", scope: "project" }]
-      },
-    }
-    const coordinator = new AgentCoordinator({
-      store: store as never,
-      onStateChange: () => {},
-      localCatalog: fakeLocalCatalog as never,
-    })
-
-    const p1 = coordinator.ensureSlashCommandsLoaded("chat-1")
-    const p2 = coordinator.ensureSlashCommandsLoaded("chat-1")
-
-    await Promise.all([p1, p2])
-
-    // The in-flight guard makes the second concurrent call a no-op: the catalog
-    // is scanned and recorded exactly once.
-    expect(listCount).toBe(1)
-    expect(store.commandsLoaded).toHaveLength(1)
   })
 })
 

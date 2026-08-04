@@ -11,7 +11,7 @@ import { useSlashCommandsStore } from "../stores/slashCommandsStore"
 import { usePreferencesStore } from "../stores/preferences"
 import { useAppSettingsStore } from "../stores/appSettingsStore"
 import { useChatSoundPreferencesStore } from "../stores/chatSoundPreferencesStore"
-import type { ChatSnapshot, CloudflareTunnelRecord, CloudflareTunnelSettings, GitWorktree, LocalProjectsSnapshot, SidebarChatRow, SidebarData, StackSummary } from "../../shared/types"
+import type { ChatSnapshot, CloudflareTunnelRecord, CloudflareTunnelSettings, GitWorktree, LocalProjectsSnapshot, ProjectCommandsSnapshot, SidebarChatRow, SidebarData, StackSummary } from "../../shared/types"
 import type { ChatOpsEvent } from "../../shared/chat-ops"
 import type { AskUserQuestionItem } from "../components/messages/types"
 import type { OpenLocalLinkTarget } from "../components/messages/shared"
@@ -293,6 +293,21 @@ function sameLoopProgress(
   if ((lr == null) !== (rr == null)) return false
   if (lr && rr) return lr.resetAt === rr.resetAt && lr.scheduled === rr.scheduled
   return true
+}
+
+/**
+ * Fold a `project-commands` snapshot into the picker's store.
+ *
+ * Guards on the subscribed project: a snapshot that arrives for a different
+ * project (an in-flight frame from the project we just left) must not overwrite
+ * the current project's list.
+ */
+export function applyProjectCommandsSnapshot(
+  subscribedProjectId: string,
+  snapshot: ProjectCommandsSnapshot | null,
+): void {
+  if (!snapshot || snapshot.projectId !== subscribedProjectId) return
+  useSlashCommandsStore.getState().setForProject(snapshot.projectId, snapshot.commands)
 }
 
 export function sameChatSnapshotCore(left: ChatSnapshot | null, right: ChatSnapshot | null) {
@@ -1447,14 +1462,6 @@ export function useKannaState(activeChatId: string | null, ports: KannaStatePort
       kannaStore.setHasOlderHistory(snapshot?.history.hasOlder ?? false)
       kannaStore.setChatReady(true)
       kannaStore.setCommandError(null)
-      if (snapshot) {
-        const store = useSlashCommandsStore.getState()
-        store.setForChat(snapshot.runtime.chatId, snapshot.slashCommands ?? [])
-        store.setLoadingForChat(
-          snapshot.runtime.chatId,
-          snapshot.slashCommandsLoading ?? false,
-        )
-      }
     }, (event) => {
       if (event.type !== "chat.ops" || event.chatId !== activeChatId) return
       const result = useKannaStateStore.getState().applyChatOpsEvent(activeChatId, event)
@@ -1593,6 +1600,20 @@ export function useKannaState(activeChatId: string | null, ports: KannaStatePort
 
     return unsubscribe
   }, [activeProjectId, socket])
+
+  // The composer picker's catalog is per project, so it is fetched once per
+  // project rather than per chat — opening another chat in the same project
+  // renders the list from cache with no round trip.
+  useEffect(() => {
+    if (!activeProjectId) {
+      return
+    }
+    return socket.subscribe<ProjectCommandsSnapshot>(
+      { type: "project-commands", projectId: activeProjectId },
+      (snapshot) => { applyProjectCommandsSnapshot(activeProjectId, snapshot) },
+    )
+  }, [activeProjectId, socket])
+
   useEffect(() => {
     logKannaState("active snapshot resolved", {
       routeChatId: activeChatId,

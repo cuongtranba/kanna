@@ -8,7 +8,7 @@
  *
  * Must NOT import from event-store.ts (no circular deps).
  */
-import type { AgentProvider, QueuedChatMessage, SlashCommand, StackBinding } from "../shared/types"
+import type { AgentProvider, QueuedChatMessage, StackBinding } from "../shared/types"
 import type { ChatPermissionPolicyOverride } from "../shared/permission-policy"
 import type { AutoContinueEvent } from "./auto-continue/events"
 import type { ChatRecord, StackRecord, StoreEvent, StoreState, TurnRunConfig } from "./events"
@@ -32,7 +32,6 @@ import {
   buildRemoveStackEvent,
   buildRenameStackEvent,
   buildRenameChatEvent,
-  buildSessionCommandsEvent,
   buildSessionTokenEvent,
   buildSetProjectStarEvent,
   buildTurnCancelledEvent,
@@ -317,15 +316,6 @@ export async function setSessionTokenForProvider(
   sessionToken: string | null,
 ) {
   const ev = buildSessionTokenEvent(deps.chatsById, chatId, provider, sessionToken)
-  if (ev) await deps.append(deps.turnsLogPath, ev)
-}
-
-export async function recordSessionCommandsLoaded(
-  deps: SessionWriteDeps,
-  chatId: string,
-  commands: SlashCommand[],
-) {
-  const ev = buildSessionCommandsEvent(deps.chatsById, chatId, commands)
   if (ev) await deps.append(deps.turnsLogPath, ev)
 }
 

@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test"
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { scanLocalCatalog } from "./local-catalog-io.adapter"
+import { scanLocalCatalog, statMtimes } from "./local-catalog-io.adapter"
 
 const dirs: string[] = []
 function tmp(prefix: string): string {
@@ -29,6 +29,26 @@ function writeCommand(dir: string, name: string, content: string): string {
   writeFileSync(file, content)
   return file
 }
+
+describe("statMtimes", () => {
+  test("returns a positive mtime for a real path and 0 for a missing one", () => {
+    const cwd = tmp("lci-")
+    const file = writeSkill(cwd, "deploy", "description: Ship it\n")
+    const [real, missing] = statMtimes([file, join(cwd, "nope")])
+    expect(real).toBeGreaterThan(0)
+    expect(missing).toBe(0)
+  })
+
+  test("preserves input order", () => {
+    const cwd = tmp("lci-")
+    const file = writeSkill(cwd, "deploy", "description: Ship it\n")
+    expect(statMtimes([join(cwd, "nope"), file, join(cwd, "nope2")])).toEqual([
+      0,
+      statMtimes([file])[0]!,
+      0,
+    ])
+  })
+})
 
 describe("local-catalog-io.adapter", () => {
   test("parses project skill with full frontmatter", () => {
@@ -78,69 +98,14 @@ describe("local-catalog-io.adapter", () => {
     expect(got.map((e) => `${e.scope}:${e.name}`).sort()).toEqual(["personal:shared", "project:proj-only"])
   })
 
-  test("plugin marketplace skill is namespaced", () => {
+  test("plugin dirs on disk are ignored unless an enabled plugin claims them", () => {
     const cwd = tmp("lci-")
     const home = tmp("lci-home-")
+    // A marketplace checkout with skills, but nothing enabled and nothing installed.
     const skillDir = join(home, ".claude", "plugins", "marketplaces", "acme", "skills", "lint")
     mkdirSync(skillDir, { recursive: true })
     writeFileSync(join(skillDir, "SKILL.md"), "---\ndescription: lint stuff\n---\n")
-    const got = scanLocalCatalog({ cwd, homeDir: home })
-    expect(got).toHaveLength(1)
-    expect(got[0]!.name).toBe("acme:lint")
-    expect(got[0]!.scope).toBe("plugin")
-    expect(got[0]!.pluginName).toBe("acme")
-  })
-
-  test("marketplace manifest maps source dir to real plugin name", () => {
-    const cwd = tmp("lci-")
-    const home = tmp("lci-home-")
-    // okra-style layout: marketplace folder != plugin name, source "./"
-    const marketPath = join(home, ".claude", "plugins", "marketplaces", "okra-marketplace")
-    const manifestDir = join(marketPath, ".claude-plugin")
-    mkdirSync(manifestDir, { recursive: true })
-    writeFileSync(
-      join(manifestDir, "marketplace.json"),
-      JSON.stringify({ name: "okra-marketplace", plugins: [{ name: "okra", source: "./" }] }),
-    )
-    const skillDir = join(marketPath, "skills", "reverse-tornado-okr")
-    mkdirSync(skillDir, { recursive: true })
-    writeFileSync(join(skillDir, "SKILL.md"), "---\ndescription: okr loop\n---\n")
-    const got = scanLocalCatalog({ cwd, homeDir: home })
-    expect(got).toHaveLength(1)
-    expect(got[0]!.name).toBe("okra:reverse-tornado-okr")
-    expect(got[0]!.pluginName).toBe("okra")
-  })
-
-  test("marketplace manifest maps a subdir source to its plugin name", () => {
-    const cwd = tmp("lci-")
-    const home = tmp("lci-home-")
-    const marketPath = join(home, ".claude", "plugins", "marketplaces", "multi")
-    const manifestDir = join(marketPath, ".claude-plugin")
-    mkdirSync(manifestDir, { recursive: true })
-    writeFileSync(
-      join(manifestDir, "marketplace.json"),
-      JSON.stringify({ name: "multi", plugins: [{ name: "alpha", source: "./alpha" }] }),
-    )
-    const skillDir = join(marketPath, "alpha", "SKILL.md")
-    mkdirSync(join(marketPath, "alpha"), { recursive: true })
-    writeFileSync(skillDir, "---\ndescription: a\n---\n")
-    const got = scanLocalCatalog({ cwd, homeDir: home })
-    expect(got).toHaveLength(1)
-    expect(got[0]!.name).toBe("alpha:alpha")
-    expect(got[0]!.pluginName).toBe("alpha")
-  })
-
-  test("plugin top-level commands dir is namespaced", () => {
-    const cwd = tmp("lci-")
-    const home = tmp("lci-home-")
-    const cmdDir = join(home, ".claude", "plugins", "devops", "commands")
-    mkdirSync(cmdDir, { recursive: true })
-    writeFileSync(join(cmdDir, "audit.md"), "audit content\n")
-    const got = scanLocalCatalog({ cwd, homeDir: home })
-    expect(got).toHaveLength(1)
-    expect(got[0]!.name).toBe("devops:audit")
-    expect(got[0]!.kind).toBe("command")
-    expect(got[0]!.pluginName).toBe("devops")
+    expect(scanLocalCatalog({ cwd, homeDir: home })).toEqual([])
   })
 
   test("malformed frontmatter degrades gracefully", () => {
@@ -159,5 +124,199 @@ describe("local-catalog-io.adapter", () => {
     const cwd = tmp("lci-")
     const home = tmp("lci-home-")
     expect(scanLocalCatalog({ cwd, homeDir: home })).toEqual([])
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Plugin discovery
+//
+// A plugin's slash commands are only invocable when the plugin is *enabled*,
+// and their names come from the plugin name — not the marketplace folder. These
+// tests pin the three files that decide both: settings.json (`enabledPlugins`),
+// installed_plugins.json (`installPath`), and the marketplace manifest's
+// per-plugin `skills[]` subset.
+// ---------------------------------------------------------------------------
+
+function writeJson(file: string, value: unknown): void {
+  mkdirSync(join(file, ".."), { recursive: true })
+  writeFileSync(file, JSON.stringify(value))
+}
+
+interface PluginFixture {
+  /** `<plugin>@<marketplace>` */
+  key: string
+  enabled?: boolean
+  /** Skill dir name → frontmatter body, created under `<installPath>/skills/`. */
+  skills?: Record<string, string>
+  /** Command file name (without `.md`) → body, under `<installPath>/commands/`. */
+  commands?: Record<string, string>
+  /** Frontmatter for a plugin-root SKILL.md. */
+  rootSkill?: string
+  /** Manifest `skills[]` paths, relative to the plugin root. */
+  declaredSkills?: string[]
+}
+
+/** Lays out a `~/.claude` tree the way `claude plugin install` leaves it. */
+function writePluginHome(home: string, plugins: PluginFixture[]): void {
+  const enabledPlugins: Record<string, boolean> = {}
+  const installed: Record<string, unknown[]> = {}
+  const byMarketplace = new Map<string, Record<string, unknown>[]>()
+
+  for (const p of plugins) {
+    const [name, marketplace] = p.key.split("@") as [string, string]
+    const installPath = join(home, ".claude", "plugins", "cache", marketplace, name, "1.0.0")
+    enabledPlugins[p.key] = p.enabled ?? true
+    installed[p.key] = [{ scope: "user", installPath, version: "1.0.0" }]
+
+    for (const [skill, frontmatter] of Object.entries(p.skills ?? {})) {
+      const dir = join(installPath, "skills", skill)
+      mkdirSync(dir, { recursive: true })
+      writeFileSync(join(dir, "SKILL.md"), `---\n${frontmatter}---\n\nbody\n`)
+    }
+    for (const [command, body] of Object.entries(p.commands ?? {})) {
+      const dir = join(installPath, "commands")
+      mkdirSync(dir, { recursive: true })
+      writeFileSync(join(dir, `${command}.md`), body)
+    }
+    if (p.rootSkill !== undefined) {
+      mkdirSync(installPath, { recursive: true })
+      writeFileSync(join(installPath, "SKILL.md"), `---\n${p.rootSkill}---\n\nbody\n`)
+    }
+
+    const entry: Record<string, unknown> = { name, source: "./" }
+    if (p.declaredSkills) entry.skills = p.declaredSkills
+    const list = byMarketplace.get(marketplace) ?? []
+    list.push(entry)
+    byMarketplace.set(marketplace, list)
+  }
+
+  writeJson(join(home, ".claude", "settings.json"), { enabledPlugins })
+  writeJson(join(home, ".claude", "plugins", "installed_plugins.json"), { version: 2, plugins: installed })
+  for (const [marketplace, entries] of byMarketplace) {
+    writeJson(
+      join(home, ".claude", "plugins", "marketplaces", marketplace, ".claude-plugin", "marketplace.json"),
+      { name: marketplace, plugins: entries },
+    )
+  }
+}
+
+describe("local-catalog-io.adapter plugin discovery", () => {
+  test("scans an enabled plugin's skills, namespaced by plugin name", () => {
+    const cwd = tmp("lci-")
+    const home = tmp("lci-home-")
+    writePluginHome(home, [
+      { key: "skill-stack@skill-stack-marketplace", skills: { dokploy: "description: deploy\n" } },
+    ])
+    const got = scanLocalCatalog({ cwd, homeDir: home })
+    expect(got).toHaveLength(1)
+    expect(got[0]!.name).toBe("skill-stack:dokploy")
+    expect(got[0]!.scope).toBe("plugin")
+    expect(got[0]!.pluginName).toBe("skill-stack")
+    expect(got[0]!.description).toBe("deploy")
+  })
+
+  test("a disabled plugin contributes nothing", () => {
+    const cwd = tmp("lci-")
+    const home = tmp("lci-home-")
+    writePluginHome(home, [
+      { key: "on@m", skills: { alpha: "description: a\n" } },
+      { key: "off@m", enabled: false, skills: { beta: "description: b\n" } },
+    ])
+    expect(scanLocalCatalog({ cwd, homeDir: home }).map((e) => e.name)).toEqual(["on:alpha"])
+  })
+
+  test("the marketplace manifest's skills[] restricts what a plugin exposes", () => {
+    const cwd = tmp("lci-")
+    const home = tmp("lci-home-")
+    writePluginHome(home, [
+      {
+        key: "document-skills@anthropic-agent-skills",
+        declaredSkills: ["./skills/xlsx", "./skills/pdf"],
+        skills: {
+          xlsx: "description: sheets\n",
+          pdf: "description: pdfs\n",
+          "theme-factory": "description: not exposed by this plugin\n",
+        },
+      },
+    ])
+    expect(scanLocalCatalog({ cwd, homeDir: home }).map((e) => e.name).sort()).toEqual([
+      "document-skills:pdf",
+      "document-skills:xlsx",
+    ])
+  })
+
+  test("falls back to every skills/* dir when the manifest declares no subset", () => {
+    const cwd = tmp("lci-")
+    const home = tmp("lci-home-")
+    writePluginHome(home, [
+      { key: "p@m", skills: { one: "description: 1\n", two: "description: 2\n" } },
+    ])
+    expect(scanLocalCatalog({ cwd, homeDir: home }).map((e) => e.name).sort()).toEqual(["p:one", "p:two"])
+  })
+
+  test("a plugin skill's frontmatter name replaces only the last segment", () => {
+    const cwd = tmp("lci-")
+    const home = tmp("lci-home-")
+    writePluginHome(home, [
+      { key: "my-plugin@m", skills: { review: "name: fancy\ndescription: r\n" } },
+    ])
+    const got = scanLocalCatalog({ cwd, homeDir: home })
+    expect(got).toHaveLength(1)
+    expect(got[0]!.name).toBe("my-plugin:fancy")
+  })
+
+  test("plugin commands keep their literal-colon stem", () => {
+    const cwd = tmp("lci-")
+    const home = tmp("lci-home-")
+    writePluginHome(home, [
+      { key: "skill-stack@m", commands: { "go:audit": "audit body\n", stack: "stack body\n" } },
+    ])
+    expect(scanLocalCatalog({ cwd, homeDir: home }).map((e) => e.name).sort()).toEqual([
+      "skill-stack:go:audit",
+      "skill-stack:stack",
+    ])
+  })
+
+  test("a plugin-root SKILL.md takes its whole last segment from frontmatter name", () => {
+    const cwd = tmp("lci-")
+    const home = tmp("lci-home-")
+    writePluginHome(home, [{ key: "ymir@ymir", rootSkill: "name: ymir\ndescription: y\n" }])
+    expect(scanLocalCatalog({ cwd, homeDir: home }).map((e) => e.name)).toEqual(["ymir:ymir"])
+  })
+
+  test("a plugin-root SKILL.md without a name falls back to the plugin name", () => {
+    const cwd = tmp("lci-")
+    const home = tmp("lci-home-")
+    writePluginHome(home, [{ key: "solo@m", rootSkill: "description: s\n" }])
+    expect(scanLocalCatalog({ cwd, homeDir: home }).map((e) => e.name)).toEqual(["solo:solo"])
+  })
+
+  test("skills outside an installed plugin root are never scanned", () => {
+    const cwd = tmp("lci-")
+    const home = tmp("lci-home-")
+    writePluginHome(home, [{ key: "skill-stack@skill-stack-marketplace", skills: { real: "description: r\n" } }])
+    // A marketplace checkout carries test fixtures the CLI never surfaces.
+    const fixture = join(
+      home, ".claude", "plugins", "marketplaces", "skill-stack-marketplace",
+      "tests", "fixtures", "mocks", "skills", "mock-skill-alpha",
+    )
+    mkdirSync(fixture, { recursive: true })
+    writeFileSync(join(fixture, "SKILL.md"), "---\ndescription: mock\n---\n")
+    expect(scanLocalCatalog({ cwd, homeDir: home }).map((e) => e.name)).toEqual(["skill-stack:real"])
+  })
+
+  test("an enabled plugin with no install on disk is skipped, not guessed", () => {
+    const cwd = tmp("lci-")
+    const home = tmp("lci-home-")
+    writeJson(join(home, ".claude", "settings.json"), { enabledPlugins: { "ghost@m": true } })
+    expect(scanLocalCatalog({ cwd, homeDir: home })).toEqual([])
+  })
+
+  test("project settings can enable a plugin for its own cwd", () => {
+    const cwd = tmp("lci-")
+    const home = tmp("lci-home-")
+    writePluginHome(home, [{ key: "proj-only@m", enabled: false, skills: { go: "description: g\n" } }])
+    writeJson(join(cwd, ".claude", "settings.json"), { enabledPlugins: { "proj-only@m": true } })
+    expect(scanLocalCatalog({ cwd, homeDir: home }).map((e) => e.name)).toEqual(["proj-only:go"])
   })
 })
