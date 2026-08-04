@@ -399,8 +399,6 @@ export interface ChatSnapshot {
   messages: TranscriptEntry[]
   history: ChatHistorySnapshot
   availableProviders: ProviderCatalogEntry[]
-  slashCommands: SlashCommand[]
-  slashCommandsLoading: boolean
   schedules: Record<string, AutoContinueSchedule>
   liveScheduleId: string | null
   tunnels: Record<string, CloudflareTunnelRecord>

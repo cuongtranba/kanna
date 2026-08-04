@@ -54,7 +54,7 @@ describe("chat ops parity (snapshot path vs ops path)", () => {
 
       function deriveFull(): ChatSnapshot {
         const snapshot = deriveChatSnapshot(
-          store.state, activeStatuses, new Set(), new Set(), chat.id,
+          store.state, activeStatuses, new Set(), chat.id,
           (chatId) => store.getRecentChatHistory(chatId, FULL_LIMIT),
           (chatId) => store.getTunnelEvents(chatId),
           new Map(), FIXED_NOW, new Map(), [],
@@ -65,7 +65,7 @@ describe("chat ops parity (snapshot path vs ops path)", () => {
 
       function deriveMeta(): ChatSnapshot {
         const snapshot = deriveChatSnapshot(
-          store.state, activeStatuses, new Set(), new Set(), chat.id,
+          store.state, activeStatuses, new Set(), chat.id,
           (chatId) => store.getRecentChatHistory(chatId, 0),
           (chatId) => store.getTunnelEvents(chatId),
           new Map(), FIXED_NOW, new Map(), [],

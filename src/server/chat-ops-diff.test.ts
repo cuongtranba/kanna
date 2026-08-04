@@ -46,8 +46,6 @@ function makeMeta(overrides?: Partial<ChatSnapshot>): ChatSnapshot {
     messages: [],
     history: { hasOlder: false, olderCursor: null, recentLimit: 0 },
     availableProviders: [],
-    slashCommands: [],
-    slashCommandsLoading: false,
     schedules: {},
     liveScheduleId: null,
     tunnels: {},

@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { canForkChat, deriveChatSnapshot, deriveLocalProjectsSnapshot, deriveSidebarData, deriveTimings, stackSummaries } from "./read-models"
 import type { ChatRecord } from "./events"
 import { createEmptyState } from "./events"
-import type { AgentProvider, SlashCommand } from "../shared/types"
+import type { AgentProvider } from "../shared/types"
 
 describe("read models", () => {
   test("include provider data in sidebar rows", () => {
@@ -119,7 +119,6 @@ describe("read models", () => {
       state,
       new Map(),
       new Set(),
-      new Set(),
       "chat-1",
       () => ({
         messages: [],
@@ -173,7 +172,6 @@ describe("read models", () => {
     const chat = deriveChatSnapshot(
       state,
       new Map(),
-      new Set(),
       new Set(),
       "chat-1",
       () => ({
@@ -546,54 +544,6 @@ describe("read models", () => {
     expect(sidebar.stacks[0]?.title).toBe("Integration")
   })
 
-  test("passes slash commands from ChatRecord through to ChatSnapshot", () => {
-    const slashCommands: SlashCommand[] = [
-      { name: "review", description: "r", argumentHint: "<pr>" },
-    ]
-    const state = createEmptyState()
-    state.projectsById.set("project-1", {
-      id: "project-1",
-      localPath: "/tmp/project",
-      title: "Project",
-      createdAt: 1,
-      updatedAt: 1,
-    })
-    state.projectIdsByPath.set("/tmp/project", "project-1")
-    state.chatsById.set("chat-1", {
-      id: "chat-1",
-      projectId: "project-1",
-      title: "Chat",
-      createdAt: 1,
-      updatedAt: 1,
-      unread: false,
-      provider: "claude",
-      planMode: false,
-      sessionTokensByProvider: {},
-      sourceHash: null,
-      lastTurnOutcome: null,
-      slashCommands,
-    })
-
-    const snapshot = deriveChatSnapshot(
-      state,
-      new Map(),
-      new Set(),
-      new Set(),
-      "chat-1",
-      () => ({
-        messages: [],
-        history: {
-          hasOlder: false,
-          olderCursor: null,
-          recentLimit: 200,
-        },
-      }),
-      () => []
-    )
-
-    expect(snapshot?.slashCommands).toEqual(slashCommands)
-  })
-
   test("availableProviders includes custom models", () => {
     const state = createEmptyState()
     state.projectsById.set("project-1", {
@@ -624,7 +574,6 @@ describe("read models", () => {
     const snap = deriveChatSnapshot(
       state,
       new Map(),
-      new Set(),
       new Set(),
       "chat-1",
       () => ({ messages: [], history: { hasOlder: false, olderCursor: null, recentLimit: 200 } }),
@@ -667,7 +616,7 @@ describe("deriveChatSnapshot subagent immutability", () => {
     state.subagentRunsByChatId.set("c1", runMap)
 
     const snap1 = deriveChatSnapshot(
-      state, new Map(), new Set(), new Set(), "c1",
+      state, new Map(), new Set(), "c1",
       () => ({ messages: [], history: { hasOlder: false, olderCursor: null, recentLimit: 200 } }),
       () => []
     )
@@ -699,7 +648,6 @@ describe("deriveChatSnapshot schedules", () => {
       state,
       new Map(),
       new Set(),
-      new Set(),
       "c1",
       () => ({ messages: [], history: { hasOlder: false, olderCursor: null, recentLimit: 0 } }),
       () => []
@@ -725,7 +673,6 @@ describe("deriveChatSnapshot schedules", () => {
     const snapshot = deriveChatSnapshot(
       state,
       new Map(),
-      new Set(),
       new Set(),
       "c1",
       () => ({ messages: [], history: { hasOlder: false, olderCursor: null, recentLimit: 0 } }),
@@ -834,7 +781,6 @@ describe("deriveChatSnapshot resolvedBindings", () => {
     return deriveChatSnapshot(
       state,
       new Map(),
-      new Set(),
       new Set(),
       chatId,
       () => ({ messages: [], history: { hasOlder: false, olderCursor: null, recentLimit: 200 } }),

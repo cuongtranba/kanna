@@ -55,8 +55,6 @@ function makeSnapshot(messages: TranscriptEntry[]): ChatSnapshot {
     messages,
     history: { hasOlder: false, olderCursor: null, recentLimit: 200 },
     availableProviders: [],
-    slashCommands: [],
-    slashCommandsLoading: false,
     schedules: {},
     liveScheduleId: null,
     tunnels: {},

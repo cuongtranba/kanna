@@ -307,7 +307,7 @@ describe("ws-router", () => {
   test("acks system.ping without broadcasting snapshots", async () => {
     const router = createWsRouter({
       store: { state: createEmptyState() } as never,
-      agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set(), getSlashCommandsLoadingChatIds: () => new Set(), getWaitStartedAtByChatId: () => new Map(), ensureSlashCommandsLoaded: async () => {} } as never,
+      agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set(), getWaitStartedAtByChatId: () => new Map() } as never,
       terminals: {
         getSnapshot: () => null,
         onEvent: () => () => {},
@@ -349,7 +349,7 @@ describe("ws-router", () => {
     const writes: Array<Pick<LlmProviderSnapshot, "provider" | "apiKey" | "model" | "baseUrl">> = []
     const router = createWsRouter({
       store: { state: createEmptyState() } as never,
-      agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set(), getSlashCommandsLoadingChatIds: () => new Set(), getWaitStartedAtByChatId: () => new Map(), ensureSlashCommandsLoaded: async () => {} } as never,
+      agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set(), getWaitStartedAtByChatId: () => new Map() } as never,
       terminals: {
         getSnapshot: () => null,
         onEvent: () => () => {},
@@ -880,7 +880,7 @@ describe("ws-router", () => {
   test("acks terminal.input without rebroadcasting terminal snapshots", async () => {
     const router = createWsRouter({
       store: { state: createEmptyState() } as never,
-      agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set(), getSlashCommandsLoadingChatIds: () => new Set(), getWaitStartedAtByChatId: () => new Map(), ensureSlashCommandsLoaded: async () => {} } as never,
+      agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set(), getWaitStartedAtByChatId: () => new Map() } as never,
       terminals: {
         getSnapshot: () => null,
         onEvent: () => () => {},
@@ -925,7 +925,7 @@ describe("ws-router", () => {
   test("subscribes and unsubscribes chat topics", async () => {
     const router = createWsRouter({
       store: { state: createEmptyState() } as never,
-      agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set(), getSlashCommandsLoadingChatIds: () => new Set(), getWaitStartedAtByChatId: () => new Map(), ensureSlashCommandsLoaded: async () => {} } as never,
+      agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set(), getWaitStartedAtByChatId: () => new Map() } as never,
       terminals: {
         getSnapshot: () => null,
         onEvent: () => () => {},
@@ -998,10 +998,8 @@ describe("ws-router", () => {
           return new Map()
         },
         getDrainingChatIds: () => new Set(),
-        getSlashCommandsLoadingChatIds: () => new Set(),
-        getWaitStartedAtByChatId: () => new Map(),
-        ensureSlashCommandsLoaded: async () => {},
-      } as never,
+                getWaitStartedAtByChatId: () => new Map(),
+              } as never,
       terminals: {
         getSnapshot: () => null,
         onEvent: () => () => {},
@@ -1066,7 +1064,7 @@ describe("ws-router", () => {
         ignoreFile: async () => ({ snapshotChanged: false }),
         readPatch: async () => ({ patch: "" }),
       } as never,
-      agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set(), getSlashCommandsLoadingChatIds: () => new Set(), getWaitStartedAtByChatId: () => new Map(), ensureSlashCommandsLoaded: async () => {} } as never,
+      agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set(), getWaitStartedAtByChatId: () => new Map() } as never,
       terminals: {
         getSnapshot: () => null,
         onEvent: () => () => {},
@@ -1230,7 +1228,7 @@ describe("ws-router", () => {
         ignoreFile: async () => ({ snapshotChanged: false }),
         readPatch: async () => ({ patch: "diff --git a/app.txt b/app.txt" }),
       } as never,
-      agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set(), getSlashCommandsLoadingChatIds: () => new Set(), getWaitStartedAtByChatId: () => new Map(), ensureSlashCommandsLoaded: async () => {} } as never,
+      agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set(), getWaitStartedAtByChatId: () => new Map() } as never,
       terminals: {
         getSnapshot: () => null,
         onEvent: () => () => {},
@@ -1314,7 +1312,7 @@ describe("ws-router", () => {
         ignoreFile: async () => ({ snapshotChanged: false }),
         readPatch: async () => ({ patch: "" }),
       } as never,
-      agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set(), getSlashCommandsLoadingChatIds: () => new Set(), getWaitStartedAtByChatId: () => new Map(), ensureSlashCommandsLoaded: async () => {} } as never,
+      agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set(), getWaitStartedAtByChatId: () => new Map() } as never,
       terminals: {
         getSnapshot: () => null,
         onEvent: () => () => {},
@@ -1425,7 +1423,7 @@ describe("ws-router", () => {
         }),
         getChat: () => state.chatsById.get("chat-1") ?? null,
       } as never,
-      agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set(), getSlashCommandsLoadingChatIds: () => new Set(), getWaitStartedAtByChatId: () => new Map(), ensureSlashCommandsLoaded: async () => {} } as never,
+      agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set(), getWaitStartedAtByChatId: () => new Map() } as never,
       terminals: {
         getSnapshot: () => null,
         onEvent: () => () => {},
@@ -1655,7 +1653,7 @@ describe("ws-router", () => {
           sidebarProjectOrder = [...projectIds]
         },
       } as never,
-      agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set(), getSlashCommandsLoadingChatIds: () => new Set(), getWaitStartedAtByChatId: () => new Map(), ensureSlashCommandsLoaded: async () => {} } as never,
+      agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set(), getWaitStartedAtByChatId: () => new Map() } as never,
       terminals: {
         getSnapshot: () => null,
         onEvent: () => () => {},
@@ -1894,7 +1892,7 @@ describe("ws-router", () => {
           return ["chat-stale"]
         },
       } as never,
-      agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set(), getSlashCommandsLoadingChatIds: () => new Set(), getWaitStartedAtByChatId: () => new Map(), ensureSlashCommandsLoaded: async () => {} } as never,
+      agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set(), getWaitStartedAtByChatId: () => new Map() } as never,
       terminals: {
         getSnapshot: () => null,
         onEvent: () => () => {},
@@ -1977,7 +1975,7 @@ describe("ws-router", () => {
           return []
         },
       } as never,
-      agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set(), getSlashCommandsLoadingChatIds: () => new Set(), getWaitStartedAtByChatId: () => new Map(), ensureSlashCommandsLoaded: async () => {} } as never,
+      agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set(), getWaitStartedAtByChatId: () => new Map() } as never,
       terminals: {
         getSnapshot: () => null,
         onEvent: () => () => {},
@@ -2082,7 +2080,7 @@ describe("ws-router", () => {
 
     const router = createWsRouter({
       store: { state: createEmptyState() } as never,
-      agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set(), getSlashCommandsLoadingChatIds: () => new Set(), getWaitStartedAtByChatId: () => new Map(), ensureSlashCommandsLoaded: async () => {} } as never,
+      agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set(), getWaitStartedAtByChatId: () => new Map() } as never,
       terminals: {
         getSnapshot: () => null,
         onEvent: () => () => {},
@@ -2190,7 +2188,7 @@ describe("ws-router", () => {
 
     const router = createWsRouter({
       store: { state: createEmptyState() } as never,
-      agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set(), getSlashCommandsLoadingChatIds: () => new Set(), getWaitStartedAtByChatId: () => new Map(), ensureSlashCommandsLoaded: async () => {} } as never,
+      agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set(), getWaitStartedAtByChatId: () => new Map() } as never,
       terminals: {
         getSnapshot: () => null,
         onEvent: () => () => {},
@@ -2331,7 +2329,7 @@ describe("ws-router", () => {
         getTunnelEvents: (_chatId: string) => [] as never[],
       } as never,
       diffStore: diffStore as never,
-      agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set(), getSlashCommandsLoadingChatIds: () => new Set(), getWaitStartedAtByChatId: () => new Map(), ensureSlashCommandsLoaded: async () => {} } as never,
+      agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set(), getWaitStartedAtByChatId: () => new Map() } as never,
       terminals: {
         getSnapshot: () => null,
         onEvent: () => () => {},
@@ -2429,7 +2427,7 @@ describe("ws-router", () => {
           return { snapshotChanged: false }
         },
       } as never,
-      agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set(), getSlashCommandsLoadingChatIds: () => new Set(), getWaitStartedAtByChatId: () => new Map(), ensureSlashCommandsLoaded: async () => {} } as never,
+      agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set(), getWaitStartedAtByChatId: () => new Map() } as never,
       terminals: {
         getSnapshot: () => null,
         onEvent: () => () => {},
@@ -2482,10 +2480,8 @@ describe("ws-router", () => {
       agent: {
         getActiveStatuses: () => new Map(),
         getDrainingChatIds: () => new Set(),
-        getSlashCommandsLoadingChatIds: () => new Set(),
-        getWaitStartedAtByChatId: () => new Map(),
-        ensureSlashCommandsLoaded: async () => {},
-        acceptAutoContinue: async (_chatId: string, _scheduleId: string, _scheduledAt: number) => {},
+                getWaitStartedAtByChatId: () => new Map(),
+                acceptAutoContinue: async (_chatId: string, _scheduleId: string, _scheduledAt: number) => {},
         rescheduleAutoContinue: async (_chatId: string, _scheduleId: string, _scheduledAt: number) => {},
         cancelAutoContinue: async (_chatId: string, _scheduleId: string, _reason: string) => {},
         listLiveSchedules: (_chatId: string): string[] => [],
@@ -2934,10 +2930,8 @@ test("ws-router: chat.toolRequestAnswer broadcasts chat snapshot after answering
       agent: {
         getActiveStatuses: () => new Map(),
         getDrainingChatIds: () => new Set(),
-        getSlashCommandsLoadingChatIds: () => new Set(),
-        getWaitStartedAtByChatId: () => new Map(),
-        ensureSlashCommandsLoaded: async () => {},
-        toolCallbackService: toolCallbackSvc,
+                getWaitStartedAtByChatId: () => new Map(),
+                toolCallbackService: toolCallbackSvc,
       } as never,
       terminals: {
         getSnapshot: () => null,
@@ -3020,10 +3014,8 @@ test("ws-router: chat.toolRequestAnswer throws when toolRequestId belongs to dif
       agent: {
         getActiveStatuses: () => new Map(),
         getDrainingChatIds: () => new Set(),
-        getSlashCommandsLoadingChatIds: () => new Set(),
-        getWaitStartedAtByChatId: () => new Map(),
-        ensureSlashCommandsLoaded: async () => {},
-        toolCallbackService: toolCallbackSvc,
+                getWaitStartedAtByChatId: () => new Map(),
+                toolCallbackService: toolCallbackSvc,
       } as never,
       terminals: {
         getSnapshot: () => null,
@@ -3102,10 +3094,8 @@ test("ws-router: chat.toolRequestAnswer throws on invalid decision.kind", async 
       agent: {
         getActiveStatuses: () => new Map(),
         getDrainingChatIds: () => new Set(),
-        getSlashCommandsLoadingChatIds: () => new Set(),
-        getWaitStartedAtByChatId: () => new Map(),
-        ensureSlashCommandsLoaded: async () => {},
-        toolCallbackService: toolCallbackSvc,
+                getWaitStartedAtByChatId: () => new Map(),
+                toolCallbackService: toolCallbackSvc,
       } as never,
       terminals: {
         getSnapshot: () => null,
@@ -3183,10 +3173,8 @@ test("ws-router: chat.toolRequestAnswer resolves a pending tool request", async 
       agent: {
         getActiveStatuses: () => new Map(),
         getDrainingChatIds: () => new Set(),
-        getSlashCommandsLoadingChatIds: () => new Set(),
-        getWaitStartedAtByChatId: () => new Map(),
-        ensureSlashCommandsLoaded: async () => {},
-        toolCallbackService: toolCallbackSvc,
+                getWaitStartedAtByChatId: () => new Map(),
+                toolCallbackService: toolCallbackSvc,
       } as never,
       terminals: {
         getSnapshot: () => null,
@@ -3334,10 +3322,8 @@ function makeTestRouter(appSettings: ReturnType<typeof makeAppSettingsStub>) {
     agent: {
       getActiveStatuses: () => new Map(),
       getDrainingChatIds: () => new Set(),
-      getSlashCommandsLoadingChatIds: () => new Set(),
-      getWaitStartedAtByChatId: () => new Map(),
-      ensureSlashCommandsLoaded: async () => {},
-    } as never,
+            getWaitStartedAtByChatId: () => new Map(),
+          } as never,
     terminals: {
       getSnapshot: () => null,
       onEvent: () => () => {},
@@ -3862,7 +3848,7 @@ describe("settings.writeAppSettingsPatch auto-test", () => {
 
     const router = createWsRouter({
       store: { state: createEmptyState() } as never,
-      agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set(), getSlashCommandsLoadingChatIds: () => new Set(), getWaitStartedAtByChatId: () => new Map(), ensureSlashCommandsLoaded: async () => {} } as never,
+      agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set(), getWaitStartedAtByChatId: () => new Map() } as never,
       terminals: { getSnapshot: () => null, onEvent: () => () => {} } as never,
       keybindings: { getSnapshot: () => DEFAULT_KEYBINDINGS_SNAPSHOT, onChange: () => () => {} } as never,
       refreshDiscovery: async () => [],
@@ -3890,7 +3876,7 @@ describe("settings.writeAppSettingsPatch auto-test", () => {
 
     const router = createWsRouter({
       store: { state: createEmptyState() } as never,
-      agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set(), getSlashCommandsLoadingChatIds: () => new Set(), getWaitStartedAtByChatId: () => new Map(), ensureSlashCommandsLoaded: async () => {} } as never,
+      agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set(), getWaitStartedAtByChatId: () => new Map() } as never,
       terminals: { getSnapshot: () => null, onEvent: () => () => {} } as never,
       keybindings: { getSnapshot: () => DEFAULT_KEYBINDINGS_SNAPSHOT, onChange: () => () => {} } as never,
       refreshDiscovery: async () => [],
@@ -3918,7 +3904,7 @@ describe("settings.writeAppSettingsPatch auto-test", () => {
 
     const router = createWsRouter({
       store: { state: createEmptyState() } as never,
-      agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set(), getSlashCommandsLoadingChatIds: () => new Set(), getWaitStartedAtByChatId: () => new Map(), ensureSlashCommandsLoaded: async () => {} } as never,
+      agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set(), getWaitStartedAtByChatId: () => new Map() } as never,
       terminals: { getSnapshot: () => null, onEvent: () => () => {} } as never,
       keybindings: { getSnapshot: () => DEFAULT_KEYBINDINGS_SNAPSHOT, onChange: () => () => {} } as never,
       refreshDiscovery: async () => [],
@@ -3945,7 +3931,7 @@ describe("settings.listOpenRouterModels", () => {
     const MODELS: OpenRouterModel[] = [{ id: "a/b", label: "A B", contextLength: 100 }]
     const router = createWsRouter({
       store: { state: createEmptyState() } as never,
-      agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set(), getSlashCommandsLoadingChatIds: () => new Set(), getWaitStartedAtByChatId: () => new Map(), ensureSlashCommandsLoaded: async () => {} } as never,
+      agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set(), getWaitStartedAtByChatId: () => new Map() } as never,
       terminals: { getSnapshot: () => null, onEvent: () => () => {} } as never,
       keybindings: { getSnapshot: () => DEFAULT_KEYBINDINGS_SNAPSHOT, onChange: () => () => {} } as never,
       listOpenRouterModels: async () => MODELS,
@@ -3969,7 +3955,7 @@ describe("settings.listOpenRouterModels", () => {
   test("returns empty array when listOpenRouterModels dep is not provided", async () => {
     const router = createWsRouter({
       store: { state: createEmptyState() } as never,
-      agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set(), getSlashCommandsLoadingChatIds: () => new Set(), getWaitStartedAtByChatId: () => new Map(), ensureSlashCommandsLoaded: async () => {} } as never,
+      agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set(), getWaitStartedAtByChatId: () => new Map() } as never,
       terminals: { getSnapshot: () => null, onEvent: () => () => {} } as never,
       keybindings: { getSnapshot: () => DEFAULT_KEYBINDINGS_SNAPSHOT, onChange: () => () => {} } as never,
       refreshDiscovery: async () => [],
@@ -4001,10 +3987,8 @@ describe("chat.ops delta broadcast", () => {
       agent: {
         getActiveStatuses: () => new Map(),
         getDrainingChatIds: () => new Set(),
-        getSlashCommandsLoadingChatIds: () => new Set(),
-        getWaitStartedAtByChatId: () => new Map(),
-        ensureSlashCommandsLoaded: async () => {},
-      } as never,
+                getWaitStartedAtByChatId: () => new Map(),
+              } as never,
       terminals: { getSnapshot: () => null, onEvent: () => () => {} } as never,
       keybindings: { getSnapshot: () => DEFAULT_KEYBINDINGS_SNAPSHOT, onChange: () => () => {} } as never,
       refreshDiscovery: async () => [],

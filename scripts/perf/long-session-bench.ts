@@ -65,7 +65,6 @@ async function main() {
         store2.state,
         new Map(),
         new Set(),
-        new Set(),
         chat.id,
         (chatId) => store2.getRecentChatHistory(chatId, RECENT_LIMIT),
         (chatId) => store2.getTunnelEvents(chatId),

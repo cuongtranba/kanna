@@ -344,9 +344,8 @@ export async function spawnClaudeTurn(
     deps.claudeSessions.set(args.chatId, session)
     deps.enforceClaudeSessionBudget(args.chatId)
     void deps.runClaudeSession(session)
-    // Slash commands are populated exclusively from the local disk catalog on
-    // chat-open (`ensureSlashCommandsLoaded`); no CLI `getSupportedCommands()`
-    // refresh here — the picker never surfaces built-in / plugin CLI commands.
+    // Slash commands come from the local disk catalog via the project-scoped
+    // `project-commands` topic; no CLI `getSupportedCommands()` refresh here.
   } else {
     session.lastUsedAt = Date.now()
     if (session.model !== args.model) {

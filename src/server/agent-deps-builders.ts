@@ -28,7 +28,6 @@ import type { CancelHandlerDeps } from "./claude-cancel-handler"
 import type { ChatManagementDeps } from "./claude-chat-management"
 import type { SendCommandDeps } from "./claude-send-command"
 import type { SubagentWiringDeps } from "./claude-subagent-wiring"
-import type { SlashCommandsDeps } from "./claude-slash-commands"
 import type { SubagentToolResponseDeps } from "./claude-subagent-tool-response"
 import type { ToolRespondDeps } from "./claude-tool-respond"
 import type { SessionStateQueryDeps } from "./claude-session-state-queries"
@@ -224,19 +223,6 @@ export function buildSubagentWiringDeps(agent: AgentCoordinator): SubagentWiring
 }
 
 // ---------------------------------------------------------------------------
-// 10. Slash commands
-// ---------------------------------------------------------------------------
-
-export function buildSlashCommandsDeps(agent: AgentCoordinator): SlashCommandsDeps {
-  return {
-    store: agent.store,
-    slashCommandsInFlight: agent.slashCommandsInFlight,
-    emitStateChange: (chatId) => { agent.emitStateChange(chatId) },
-    localCatalog: agent.localCatalog,
-  }
-}
-
-// ---------------------------------------------------------------------------
 // 11. Subagent tool response
 // ---------------------------------------------------------------------------
 
@@ -270,7 +256,6 @@ export function buildSessionStateQueryDeps(agent: AgentCoordinator): SessionStat
     activeTurns: agent.activeTurns,
     claudeSessions: agent.claudeSessions,
     drainingStreams: agent.drainingStreams,
-    slashCommandsInFlight: agent.slashCommandsInFlight,
     isClaudeSdkProvider: (provider) => isClaudeSdkProvider(provider),
     hasPendingBackgroundTask: (session, now) => agent.hasPendingBackgroundTask(session, now),
     resolveClaudeIdleMs: () => agent.resolveClaudeIdleMs(),

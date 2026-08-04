@@ -347,10 +347,9 @@ export async function runClaudeSession(
         ) {
           await deps.store.setPendingForkSessionToken(session.chatId, null)
         }
-        // NOTE: the chat's slashCommands are populated exclusively from the
-        // local disk catalog on chat-open (`ensureSlashCommandsLoaded`); the
-        // CLI `system_init` command list is intentionally NOT merged in here,
-        // so the picker never surfaces built-in / plugin CLI commands.
+        // NOTE: the composer picker is served by the project-scoped
+        // `project-commands` topic, straight off the local disk catalog. The
+        // CLI `system_init` command list is intentionally NOT merged in here.
         logClaudeSteer("claude_event_system_init", {
           chatId: session.chatId,
           sessionId: session.id,
