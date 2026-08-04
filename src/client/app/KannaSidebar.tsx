@@ -36,7 +36,11 @@ import {
   DEFAULT_SIDEBAR_WIDTH,
   MIN_SIDEBAR_WIDTH,
   MAX_SIDEBAR_WIDTH,
+  SIDEBAR_CONTENT_MIN_WIDTH,
+  SIDEBAR_CONTENT_MIN_WIDTH_SETTINGS,
+  resolveSidebarWidth,
 } from "../stores/kannaSidebarStore"
+import { useViewportStore } from "../stores/viewportStore"
 import type { DomPort } from "../ports/domPort"
 import type { TimerPort } from "../ports/timerPort"
 import { domAdapter } from "../adapters/dom.adapter"
@@ -136,7 +140,17 @@ function KannaSidebarImpl({
   const expandedGroups = useKannaSidebarStore((s) => s.expandedGroups)
   const nowMs = useKannaSidebarStore((s) => s.nowMs)
   const showNumberJumpHints = useKannaSidebarStore((s) => s.showNumberJumpHints)
-  const sidebarWidth = useKannaSidebarStore((s) => s.sidebarWidth)
+  const requestedSidebarWidth = useKannaSidebarStore((s) => s.sidebarWidth)
+  const viewportWidth = useViewportStore((s) => s.width)
+  // Settings is a two-column split, so it needs a wider content minimum than a
+  // chat transcript before the sidebar is allowed to take the space.
+  const sidebarWidth = resolveSidebarWidth({
+    requestedWidth: requestedSidebarWidth,
+    viewportWidth,
+    contentMinWidth: location.pathname.startsWith("/settings")
+      ? SIDEBAR_CONTENT_MIN_WIDTH_SETTINGS
+      : SIDEBAR_CONTENT_MIN_WIDTH,
+  })
   const isResizingSidebar = useKannaSidebarStore((s) => s.isResizingSidebar)
   const archivedProjectId = useKannaSidebarStore((s) => s.archivedProjectId)
   const expandedStackIds = useKannaSidebarStore((s) => s.expandedStackIds)
