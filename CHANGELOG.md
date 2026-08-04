@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.10.0](https://github.com/cuongtranba/kanna/compare/v1.9.1...v1.10.0) (2026-08-04)
+
+
+### Features
+
+* **slash-picker:** serve the command catalog per project, not per chat ([#609](https://github.com/cuongtranba/kanna/issues/609)) ([80dd7b7](https://github.com/cuongtranba/kanna/commit/80dd7b77c408012eae027be2117e9fa226a4a430))
+
 ## [1.9.1](https://github.com/cuongtranba/kanna/compare/v1.9.0...v1.9.1) (2026-08-03)
 
 
