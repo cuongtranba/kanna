@@ -233,6 +233,37 @@ still **exclusively** gates the 8 built-in shims
 (`read/glob/grep/bash/edit/write/webfetch/websearch`) and the SDK
 driver's `canUseTool` routing — those are never force-enabled under PTY.
 
+## Pending-tool lifecycle invariant (legacy `canUseTool` path)
+
+On the legacy path the parked request is nothing but an in-memory promise:
+`ActiveTurn.pendingTool.resolve` IS the SDK worker's `canUseTool`
+continuation. Drop it and that worker blocks forever, `respondTool` throws
+`"No pending tool request"`, and the chat is wedged with no way back —
+under the SDK driver `interrupt()` is in-band, so the session survives and
+nothing else frees it.
+
+**An `ActiveTurn` is NEVER removed from `activeTurns` while holding an
+unresolved `pendingTool`.** `settlePendingTool()`
+(`claude-session-runner.ts`) enforces this at both drop sites; `cancelChat`
+resolves for **every** provider and tool kind (not just codex +
+`exit_plan_mode`, which is what previously made Stop unable to unwedge a
+parked claude turn).
+
+Settling uses `discardedToolResult` → `{discarded: true}`, and
+`buildCanUseTool` short-circuits that to `behavior: "deny"`. Without the
+short-circuit its legacy branch maps *any* result to `behavior: "allow"`,
+so the SDK would actually execute `AskUserQuestion` with empty answers and
+overwrite the "Discarded" marker.
+
+**Ghost turns.** When the SDK self-resumes after a background-task
+notification it calls `canUseTool` outside any Kanna turn;
+`recreateActiveTurnFromSession` rebuilds a minimal `ActiveTurn` and parks
+the resolve on it. A ghost sent no prompt, so it carries no
+`claudePromptSeq` and is flagged `rebuiltFromSession`. The result matcher
+must never claim it — it used to, because `active.claudePromptSeq ?? null`
+coerced `undefined` to `null` and matched any null completed seq, deleting
+the very turn holding the parked resolve.
+
 Optional `KANNA_SERVER_SECRET` env var stabilises HMAC tool-request ids
 across the process lifetime. Cross-restart idempotency does not matter
 because `recoverOnStartup()` fail-closes all pending records on boot.

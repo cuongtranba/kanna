@@ -127,6 +127,19 @@ export function buildCanUseTool(
     // ── Legacy path (flag off OR toolCallback not provided) ────────────────
     const result = await args.onToolRequest({ tool })
 
+    // cancelChat settles a parked pendingTool with `{discarded:true}` so the
+    // worker is never left blocked. That is NOT an answer: without this guard
+    // the ask_user_question branch below maps it to `behavior:"allow"` with
+    // empty answers, the SDK actually executes the tool, and its own
+    // tool_result overwrites the "Discarded" marker already written to the
+    // transcript. Deny instead — the tool never runs.
+    if (isRecord(result) && result.discarded === true) {
+      return {
+        behavior: "deny",
+        message: "The user cancelled this turn before answering.",
+      } satisfies PermissionResult
+    }
+
     if (tool.toolKind === "ask_user_question") {
       const record: Record<string, unknown> = isRecord(result) ? result : {}
       return {

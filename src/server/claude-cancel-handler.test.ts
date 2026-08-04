@@ -450,26 +450,65 @@ describe("pending tool", () => {
     expect(resolved).toMatchObject({ discarded: true })
   })
 
-  test("does NOT resolve pendingTool when provider=claude (non-codex)", async () => {
-    let resolved = false
+  // Previously this asserted the OPPOSITE ("does NOT resolve pendingTool when
+  // provider=claude"), which pinned a wedge: cancelChat nulled pendingTool and
+  // deleted the turn while the SDK worker stayed blocked inside canUseTool, so
+  // respondTool threw "No pending tool request" and Stop could never recover
+  // the chat. Under the SDK driver interrupt() is in-band and the session
+  // survives, so nothing else ever freed it. Resolving (never rejecting — a
+  // rejection throws inside the SDK worker) is the only in-band way out.
+  function makePendingTool(
+    toolKind: "ask_user_question" | "exit_plan_mode",
+    toolId: string,
+    resolve: (result: unknown) => void,
+  ): NonNullable<ActiveTurn["pendingTool"]> {
+    const tool = toolKind === "ask_user_question"
+      ? { kind: "tool", toolKind: "ask_user_question", toolName: "AskUserQuestion", toolId, input: { questions: [] } }
+      : { kind: "tool", toolKind: "exit_plan_mode", toolName: "ExitPlanMode", toolId, input: {} }
+    return { toolUseId: toolId, tool, resolve } as unknown as NonNullable<ActiveTurn["pendingTool"]>
+  }
+
+  test.each([
+    ["claude", "ask_user_question"],
+    ["claude", "exit_plan_mode"],
+    ["codex", "ask_user_question"],
+    ["openrouter", "exit_plan_mode"],
+  ] as const)(
+    "resolves pendingTool with the discarded payload (provider=%s, toolKind=%s)",
+    async (provider, toolKind) => {
+      let resolved: unknown = undefined
+      const active = makeActiveTurn({
+        provider,
+        pendingTool: makePendingTool(toolKind, "tool-use-3", (result) => { resolved = result }),
+      })
+      const deps = makeDeps({ activeTurns: new Map([["chat-1", active]]) })
+
+      await cancelChat(deps, "chat-1")
+
+      expect(resolved).toMatchObject({ discarded: true })
+    },
+  )
+
+  test("appends the discarded tool_result BEFORE resolving", async () => {
+    // Share one array so append/resolve interleaving is observable: the
+    // transcript must already carry the discarded marker by the time the SDK
+    // worker is released, otherwise the UI can render an unanswered card.
+    const appendedMessages: TranscriptEntry[] = []
+    let appendedWhenResolved = -1
     const active = makeActiveTurn({
       provider: "claude",
-      pendingTool: {
-        toolUseId: "tool-use-3",
-        tool: {
-          kind: "tool",
-          toolKind: "exit_plan_mode",
-          toolName: "ExitPlanMode",
-          toolId: "tool-use-3",
-          input: {},
-        },
-        resolve: () => { resolved = true },
-      },
+      pendingTool: makePendingTool("ask_user_question", "tool-use-4", () => {
+        appendedWhenResolved = appendedMessages.length
+      }),
     })
-    const activeTurns = new Map([["chat-1", active]])
-    const deps = makeDeps({ activeTurns })
+    const deps = makeDeps({ activeTurns: new Map([["chat-1", active]]), appendedMessages })
+
     await cancelChat(deps, "chat-1")
-    expect(resolved).toBe(false)
+
+    const appendIdx = appendedMessages.findIndex((m) => m.kind === "tool_result")
+    expect(appendIdx).toBeGreaterThanOrEqual(0)
+    // The tool_result was already in the transcript when the worker resumed.
+    expect(appendedWhenResolved).toBeGreaterThan(appendIdx)
   })
 })
 

@@ -412,4 +412,53 @@ describe("startTurnForChat — starting-turn marker", () => {
     // The first boot's identity-guarded cleanup must leave the second alone.
     expect(deps.startingTurns.get("chat-1")).toBe(second)
   })
+
+  test("onToolRequest parks the resolve on a rebuilt ghost turn when the prior turn already finalized", async () => {
+    let captured: ((request: { tool: unknown }) => Promise<unknown>) | null = null
+    const ghost = {
+      chatId: "chat-1",
+      provider: "claude" as const,
+      pendingTool: null,
+      status: "starting",
+      waitStartedAt: null,
+    } as unknown as ActiveTurn
+
+    const deps = makeDeps({
+      startClaudeTurn: mock(async (args: { onToolRequest: (r: { tool: unknown }) => Promise<unknown> }) => {
+        captured = args.onToolRequest
+        return makeFakeTurn()
+      }) as unknown as StartTurnDeps["startClaudeTurn"],
+      recreateActiveTurnFromSession: mock(() => ghost),
+    })
+    // The claude path delivers its prompt through the SDK session queue.
+    deps.claudeSessions.set("chat-1", {
+      id: "sess-1",
+      chatId: "chat-1",
+      nextPromptSeq: 0,
+      pendingPromptSeqs: [],
+      cancelledResultPending: 0,
+      lastUsedAt: 0,
+      session: { sendPrompt: async () => {} },
+    } as unknown as ClaudeSessionState)
+
+    await startTurnForChat(deps, makeArgs({ provider: "claude", model: "claude-opus-4-5" }))
+    expect(captured).not.toBeNull()
+
+    // Simulate the SDK self-resuming after a background-task notification:
+    // the turn that owned this session is already gone from activeTurns.
+    deps.activeTurns.delete("chat-1")
+
+    const tool = {
+      kind: "tool",
+      toolKind: "ask_user_question",
+      toolName: "ask_user_question",
+      toolId: "toolu_x",
+      input: { questions: [] },
+    }
+    // Never resolves — this IS the parked canUseTool continuation. Do not await.
+    void captured!({ tool })
+
+    expect(ghost.pendingTool?.toolUseId).toBe("toolu_x")
+    expect(ghost.status).toBe("waiting_for_user")
+  })
 })

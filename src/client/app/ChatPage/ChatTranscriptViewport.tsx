@@ -2,7 +2,7 @@ import { LegendList, type LegendListRef } from "@legendapp/list/react"
 import type { AnyValue } from "../../../shared/errors"
 import { memo, useCallback, useEffect, useMemo, useRef } from "react"
 import { useChatPageStore } from "../../stores/chatPageStore"
-import { ArrowDown, Bot, Flower, Upload } from "lucide-react"
+import { ArrowDown, Bot, Flower, MessageCircleQuestion, Upload } from "lucide-react"
 import { AnimatedShinyText } from "../../components/ui/animated-shiny-text"
 import { DrainingIndicator } from "../../components/messages/DrainingIndicator"
 import { QueuedUserMessage } from "../../components/messages/QueuedUserMessage"
@@ -24,6 +24,9 @@ import type { AutoContinueSchedule, ChatBackgroundTask, CloudflareTunnelRecord, 
 import type { ToolRequestDecision } from "../../../shared/permission-policy"
 import { SubagentMessage } from "../../components/messages/SubagentMessage"
 import { SubagentPendingToolCard } from "../../components/messages/SubagentPendingToolCard"
+import { AskUserQuestionMessage } from "../../components/messages/AskUserQuestionMessage"
+import { TranscriptRenderOptionsProvider } from "../../components/messages/render-context"
+import type { ProcessedToolCall } from "../../components/messages/types"
 import { renderChatLinks } from "../../components/messages/renderChatLinks"
 import React from "react"
 import { CloudflareTunnelCard } from "../../components/chat-ui/CloudflareTunnelCard"
@@ -48,6 +51,38 @@ export interface ChatTranscriptViewportPorts {
 
 export type PendingQuestionRun = SubagentRunSnapshot & {
   pendingTool: NonNullable<SubagentRunSnapshot["pendingTool"]>
+}
+
+export type PendingMainQuestion = Extract<ProcessedToolCall, { toolKind: "ask_user_question" }>
+
+/** Stable option objects — the render-context memo keys on reference identity. */
+const FOOTER_SURFACE_OPTIONS = { askUserQuestionSurface: "footer" } as const
+const INLINE_SURFACE_OPTIONS = { askUserQuestionSurface: "inline" } as const
+
+/**
+ * The main agent's own AskUserQuestion still awaiting an answer, or null.
+ *
+ * `latestToolIds.AskUserQuestion` is already "latest UNRESOLVED" — but that
+ * means latest in the transcript, NOT last on screen: background tasks stream
+ * hundreds of entries below a parked question, burying it. Selecting it here
+ * lets the viewport re-render the actionable card in the footer.
+ *
+ * Pure so it can be unit-tested without rendering the virtualized list.
+ */
+export function selectPendingMainQuestion(
+  messages: readonly KannaState["messages"][number][],
+  latestToolIds: Record<string, string | null>,
+): PendingMainQuestion | null {
+  const id = latestToolIds.AskUserQuestion
+  if (!id) return null
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index]
+    if (message.id !== id) continue
+    if (message.kind !== "tool" || message.toolKind !== "ask_user_question") return null
+    // Guard a latestToolIds prop one tick staler than `messages`.
+    return message.result ? null : message
+  }
+  return null
 }
 
 /**
@@ -237,6 +272,10 @@ export const ChatTranscriptViewport = memo(({
   // at the footer so a question never stays buried under its historical
   // user_prompt anchor. See adr-20260618-subagent-pending-question-footer-surface.
   const pendingQuestionRuns = useMemo(() => collectPendingQuestionRuns(subagentRuns), [subagentRuns])
+  const pendingMainQuestion = useMemo(
+    () => selectPendingMainQuestion(messages, latestToolIds),
+    [messages, latestToolIds],
+  )
 
   const renderRunTree = useCallback((run: SubagentRunSnapshot, depth: number): React.ReactNode => {
     const children = childrenByParentRunId.get(run.runId) ?? []
@@ -433,6 +472,23 @@ export const ChatTranscriptViewport = memo(({
           {renderChatLinks(commandError)}
         </div>
       ) : null}
+      {pendingMainQuestion ? (
+        <div className="mb-3" data-testid={`main-pending-footer:${pendingMainQuestion.toolId}`}>
+          <div className="mb-1.5 flex items-center gap-2 text-xs font-medium text-muted-foreground">
+            <MessageCircleQuestion className="h-3.5 w-3.5 shrink-0" />
+            <span><span className="text-foreground">Claude</span> needs your input</span>
+          </div>
+          {/* Reset to "inline" so this instance renders the actionable card;
+              the transcript row above degrades to a pointer. */}
+          <TranscriptRenderOptionsProvider value={INLINE_SURFACE_OPTIONS}>
+            <AskUserQuestionMessage
+              message={pendingMainQuestion}
+              onSubmit={onAskUserQuestionSubmit}
+              isLatest
+            />
+          </TranscriptRenderOptionsProvider>
+        </div>
+      ) : null}
       {pendingQuestionRuns.length > 0 && onSubagentAskUserQuestionSubmit && onSubagentExitPlanModeSubmit
         ? pendingQuestionRuns.map((run) => (
             <div
@@ -465,6 +521,12 @@ export const ChatTranscriptViewport = memo(({
     <>
       <SubagentTranscriptFetchProvider value={getSubagentTranscript ?? null}>
       <OpenLocalLinkProvider onOpenLocalLink={handleOpenLocalLinkClick}>
+      {/* Always mounted — only the VALUE flips. Mounting conditionally would
+          change the tree shape and remount every row, resetting per-row
+          scoped stores (tool-group expansion, in-progress answer drafts). */}
+      <TranscriptRenderOptionsProvider
+        value={pendingMainQuestion ? FOOTER_SURFACE_OPTIONS : INLINE_SURFACE_OPTIONS}
+      >
         <LegendList<ResolvedTranscriptRow>
           ref={listRef}
           data={resolvedRows}
@@ -484,6 +546,7 @@ export const ChatTranscriptViewport = memo(({
           ListHeaderComponent={listHeader}
           ListFooterComponent={listFooter}
         />
+      </TranscriptRenderOptionsProvider>
       </OpenLocalLinkProvider>
       </SubagentTranscriptFetchProvider>
 

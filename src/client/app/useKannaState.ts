@@ -2430,6 +2430,10 @@ export function useKannaState(activeChatId: string | null, ports: KannaStatePort
       })
     } catch (error) {
       useKannaStateStore.getState().setCommandError(error instanceof Error ? error.message : String(error))
+      // Rethrow so AskUserQuestionMessage can undo its optimistic
+      // markSubmitted — swallowing here left the card reading "Answers" while
+      // the turn stayed parked. Mirrors handleSend.
+      throw error
     }
   }, [activeChatId, socket])
 

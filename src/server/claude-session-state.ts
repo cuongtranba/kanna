@@ -60,6 +60,18 @@ export interface ActiveTurn {
   provider: AgentProvider
   turn: HarnessTurn
   claudePromptSeq?: number
+  /**
+   * True when this turn was rebuilt from a live session by
+   * `recreateActiveTurnFromSession` — the SDK calls `canUseTool` outside any
+   * Kanna turn when it self-resumes after a background-task notification.
+   *
+   * A ghost never sent a prompt, so it carries no `claudePromptSeq`. It must
+   * never be treated as a finalize candidate: the result matcher's
+   * `active.claudePromptSeq ?? null` coerced `undefined` to `null`, matched
+   * any null completed seq, and deleted the very turn holding a parked
+   * `pendingTool` — orphaning the SDK's resolve fn and wedging the chat.
+   */
+  rebuiltFromSession?: true
   model: string
   effort?: string
   serviceTier?: "fast"

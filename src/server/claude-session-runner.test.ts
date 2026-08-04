@@ -767,3 +767,120 @@ describe("runClaudeSession", () => {
     expect(failedReasons).toContain("session stream ended without a result")
   })
 })
+
+// ---------------------------------------------------------------------------
+// Ghost turns + parked pendingTool
+//
+// When the SDK self-resumes after a background-task notification it calls
+// `canUseTool` outside any Kanna turn. `onToolRequest` rebuilds a minimal
+// "ghost" ActiveTurn (claude-session-rebuild.ts) and parks the SDK's resolve
+// fn on it. That ghost has no `claudePromptSeq`, so the result matcher below
+// used to claim it (`undefined ?? null === null`) and delete it, orphaning the
+// resolve — the SDK worker then blocks inside canUseTool forever and
+// respondTool throws "No pending tool request".
+// ---------------------------------------------------------------------------
+
+/** Minimal ask_user_question tool call satisfying PendingToolRequest.tool. */
+function askUserQuestionTool(toolId: string) {
+  return {
+    kind: "tool",
+    toolKind: "ask_user_question",
+    toolName: "ask_user_question",
+    toolId,
+    input: { questions: [] },
+  } as unknown as NonNullable<ActiveTurn["pendingTool"]>["tool"]
+}
+
+describe("runClaudeSession — ghost turn / pending-tool orphaning", () => {
+  test("a result does not finalize a session-rebuilt ghost turn holding a pendingTool", async () => {
+    const session = makeSession({ pendingPromptSeqs: [] })
+    const active = makeActiveTurn(session.chatId, {
+      claudePromptSeq: undefined,
+      rebuiltFromSession: true,
+      status: "waiting_for_user",
+      pendingTool: {
+        toolUseId: "toolu_ghost",
+        tool: askUserQuestionTool("toolu_ghost"),
+        resolve: () => {},
+      },
+    })
+    const finishedFor: string[] = []
+
+    const deps = makeDeps(session, {
+      activeTurns: new Map([[session.chatId, active]]),
+      store: {
+        ...makeDeps(session).store,
+        recordTurnFinished: async (chatId) => { finishedFor.push(chatId) },
+      },
+    })
+    session.session.stream = fakeStream([{ type: "entry", entry: fakeResultEntry(false) }] as unknown as HarnessEvent[])
+
+    await runClaudeSession(deps, session)
+
+    // The ghost is not a finalize candidate: it never sent a prompt.
+    expect(finishedFor).toHaveLength(0)
+  })
+
+  test("a parked pendingTool is settled, not dropped, when the stream ends", async () => {
+    const session = makeSession({ pendingPromptSeqs: [] })
+    const resolved: unknown[] = []
+    const active = makeActiveTurn(session.chatId, {
+      claudePromptSeq: undefined,
+      rebuiltFromSession: true,
+      status: "waiting_for_user",
+      pendingTool: {
+        toolUseId: "toolu_ghost",
+        tool: askUserQuestionTool("toolu_ghost"),
+        resolve: (value: unknown) => { resolved.push(value) },
+      },
+    })
+
+    const deps = makeDeps(session, { activeTurns: new Map([[session.chatId, active]]) })
+    session.session.stream = fakeStream([])
+
+    await runClaudeSession(deps, session)
+
+    // Never leave the SDK worker blocked inside canUseTool.
+    expect(resolved).toHaveLength(1)
+    expect(resolved[0]).toMatchObject({ discarded: true })
+    expect(active.pendingTool).toBeNull()
+  })
+
+  test("a real turn with a matching prompt-seq still finalizes", async () => {
+    const session = makeSession({ pendingPromptSeqs: [5] })
+    const active = makeActiveTurn(session.chatId, { claudePromptSeq: 5 })
+    const finishedFor: string[] = []
+
+    const deps = makeDeps(session, {
+      activeTurns: new Map([[session.chatId, active]]),
+      store: {
+        ...makeDeps(session).store,
+        recordTurnFinished: async (chatId) => { finishedFor.push(chatId) },
+      },
+    })
+    session.session.stream = fakeStream([{ type: "entry", entry: fakeResultEntry(false) }] as unknown as HarnessEvent[])
+
+    await runClaudeSession(deps, session)
+
+    expect(finishedFor).toEqual([session.chatId])
+  })
+
+  test("a real turn whose seq was already drained is not finalized by a null completed seq", async () => {
+    const session = makeSession({ pendingPromptSeqs: [] })
+    const active = makeActiveTurn(session.chatId, { claudePromptSeq: 5 })
+    const finishedFor: string[] = []
+
+    const deps = makeDeps(session, {
+      activeTurns: new Map([[session.chatId, active]]),
+      store: {
+        ...makeDeps(session).store,
+        recordTurnFinished: async (chatId) => { finishedFor.push(chatId) },
+      },
+    })
+    session.session.stream = fakeStream([{ type: "entry", entry: fakeResultEntry(false) }] as unknown as HarnessEvent[])
+
+    await runClaudeSession(deps, session)
+
+    expect(finishedFor).toHaveLength(0)
+  })
+})

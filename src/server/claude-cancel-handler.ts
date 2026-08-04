@@ -227,9 +227,15 @@ export async function cancelChat(
         content: result,
       }),
     )
-    if (active.provider === "codex" && pendingTool.tool.toolKind === "exit_plan_mode") {
-      pendingTool.resolve(result)
-    }
+    // Always settle — for every provider and tool kind. Dropping the resolve
+    // left the SDK worker blocked inside canUseTool while the ActiveTurn was
+    // deleted below, so respondTool could only throw "No pending tool
+    // request": Stop was unable to recover the chat. Under the SDK driver
+    // interrupt() is in-band and the session survives, so nothing else frees
+    // it. Resolve, never reject — a rejection surfaces as an unhandled
+    // transport error inside the worker. `discarded: true` makes
+    // buildCanUseTool deny the call so the tool never actually executes.
+    pendingTool.resolve(result)
   }
 
   await deps.store.appendMessage(
