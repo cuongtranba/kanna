@@ -1,7 +1,7 @@
 ---
 id: c3-102
 c3-version: 4
-c3-seal: d200f783eadc480332255eba6de70441ac2a56c5fd4bb04d503a36c97b94e7e4
+c3-seal: b56564fe3fd3714d5b51012842123b57085251ae7a243e641065498b2c85f12c
 title: state-stores
 type: component
 category: foundation
@@ -74,6 +74,7 @@ Owns the browser-side state surface as Zustand stores in three forms: singleton 
 | useTerminalStore | OUT | Layout sizes, visibility, persistence | c3-118 | src/client/stores |
 | usePreferencesStore | OUT | Theme, notifications, provider keys | c3-116 | src/client/stores |
 | useSocketStore | OUT | Raw WS transport state (readyState + sendMessage); written only by SocketBridge | c3-101 | src/client/stores/socketStore.ts |
+| useViewportStore | OUT | Measured window size behind one shell-mounted resize subscription; 0 until first measurement | c3-110, c3-111 | src/client/stores/viewportStore.ts |
 
 ## Change Safety
 

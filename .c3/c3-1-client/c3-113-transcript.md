@@ -1,7 +1,7 @@
 ---
 id: c3-113
 c3-version: 4
-c3-seal: a7295207954690cc4cca0c902e8c387e94e3ca00035d147ef83af0c50f7584b5
+c3-seal: c3d1409d2be7bd09cc6f170338276d3e14209c4ba62b7e7c5307616844a10845
 title: transcript
 type: component
 category: feature
@@ -66,6 +66,7 @@ Renders the virtualized list of hydrated transcript entries inside the chat page
 | <KannaTranscript> | OUT | Receives entries; renders virtualized list | c3-112 | src/client/app/KannaTranscript.tsx |
 | Renderer dispatch | IN | Pulls per-kind component from c3-114 map | c3-114 | src/client/app/KannaTranscript.tsx |
 | Scroll-anchor callback | OUT | Reports bottom-pin state to parent | c3-112 | src/client/app/KannaTranscript.tsx |
+| Row rhythm lookup | OUT | Gap-above class per row id, derived from each adjacent row pair | c3-112 | src/client/app/transcriptSpacing.ts |
 
 ## Change Safety
 
@@ -73,9 +74,11 @@ Renders the virtualized list of hydrated transcript entries inside the chat page
 | --- | --- | --- | --- |
 | Virtualization breakage | Item-size estimator edit | Items overlap or list jitters | bun run test src/client/app/KannaTranscript.test.tsx + manual streaming smoke |
 | Autoscroll regression | Scroll-anchor heuristic edit | User loses pin to bottom unexpectedly | bun run test src/client/app/KannaTranscript.test.tsx + manual scroll smoke |
+| Row-spacing re-measure jitter | Gap moved from padding-above to padding-below, or gap stored on the reused row object | Transcript jitters at the bottom anchor while streaming, or a row keeps a stale gap after a neighbour changes kind | bun run test src/client/app/transcriptSpacing.test.ts + manual streaming scrollback |
 
 ## Derived Materials
 
 | Material | Must derive from | Allowed variance | Evidence |
 | --- | --- | --- | --- |
 | src/client/app/KannaTranscript.tsx | c3-113 Contract | Virtualization library detail | src/client/app/KannaTranscript.tsx |
+| src/client/app/transcriptSpacing.ts | c3-113 Contract | Tone buckets and gap values may be retuned | src/client/app/transcriptSpacing.test.ts |

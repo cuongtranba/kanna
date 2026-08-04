@@ -1,7 +1,7 @@
 ---
 id: c3-110
 c3-version: 4
-c3-seal: 94e1e94d1fec5ece2405ba51a402e28297fd2598709f26ca3a44f7a905d36c86
+c3-seal: 9dc03af1e954b8e7e0edd74257b24185748f065f5df9df573e893e34a4a65e1b
 title: app-shell
 type: component
 category: feature
@@ -66,6 +66,7 @@ Composes the React tree at boot: react-router, the central `useKannaState` hook,
 | Mounted <Routes> | OUT | Provides routes for chat-page, settings, projects | c3-112, c3-116, c3-117 | src/client/app/App.tsx |
 | useKannaState() hook | OUT | Returns snapshot-derived view models | c3-112, c3-115 | src/client/app/useKannaState.ts |
 | Global keybinding handlers | OUT | Dispatches commands like number-jump, toggle terminal | c3-111, c3-118 | src/client/hooks |
+| Viewport measurement | OUT | Mounts the single window-resize subscription and owns BREAKPOINT_MD, the one responsive pivot | c3-102, c3-111, c3-112 | src/client/lib/viewport.ts |
 
 ## Change Safety
 

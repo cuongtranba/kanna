@@ -1,7 +1,7 @@
 ---
 id: c3-111
 c3-version: 4
-c3-seal: 5f07faa569c29efd4f95a08d7866162fffde5f0c611325d5c255d2cbdde1b35d
+c3-seal: ef4c635e719798d0857509036331c20f2de761750f54462e4d7ca3865e35b9a0
 title: sidebar
 type: component
 category: feature
@@ -75,6 +75,7 @@ Renders the project-first navigation: project groups with their chats, live agen
 | --- | --- | --- | --- |
 | Reorder desync | Local persisted order differs from server | Sidebar items appear out of order on cold load | bun run test src/client/app/sidebarNumberJump.test.ts plus manual reorder smoke |
 | Drag breaking accessibility | dnd-kit upgrade | Keyboard reorder fails | bun run check + keyboard nav smoke on src/client/app/sidebarNumberJump.ts |
+| Stored width lost to the clamp | Viewport clamp written back to storage instead of only to the rendered width | Sidebar never returns to the user's chosen width after the window widens | bun run test src/client/stores/kannaSidebarStore.test.ts + widen-window smoke |
 
 ## Derived Materials
 

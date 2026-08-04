@@ -39,6 +39,8 @@ c3-113:
   - src/client/app/KannaTranscript.tsx
   - src/client/app/subagent-run-placement.test.ts
   - src/client/app/subagent-run-placement.ts
+  - src/client/app/transcriptSpacing.test.ts
+  - src/client/app/transcriptSpacing.ts
 c3-114:
   - src/client/components/lexical/markdown/**
   - src/client/components/messages/**/*.ts
