@@ -1,8 +1,10 @@
 import { useEffect } from "react"
 import type { DomPort } from "../ports/domPort"
 import { domAdapter } from "../adapters/dom.adapter"
+import { BREAKPOINT_MD } from "../lib/viewport"
 
-export const SIDEBAR_SWIPE_MOBILE_BREAKPOINT_PX = 768
+/** Re-exported for existing callers; `lib/viewport` owns the value. */
+export const SIDEBAR_SWIPE_MOBILE_BREAKPOINT_PX = BREAKPOINT_MD
 // Open gesture may start at the very left edge (x = 0): we suppress the
 // browser/PWA native back gesture in this band via shouldPreventNativeBack,
 // so the edge swipe opens the panel instead of navigating back.
