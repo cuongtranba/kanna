@@ -102,7 +102,9 @@ function UserMessageInner({ content, attachments = [], steered = false, autoCont
                 className="size-3.5 shrink-0 text-muted-foreground"
               />
             ) : null}
-            <div className="min-w-0 flex-1 rounded-[20px] border border-border bg-muted px-3.5 py-1.5 text-primary prose prose-sm prose-invert [&_p]:whitespace-pre-line">
+            {/* rounded-tr-sm clips one corner so the bubble reads as a speech
+                tail — the only orientation cue, since there is no avatar. */}
+            <div className="min-w-0 flex-1 rounded-[20px] rounded-tr-sm border border-border bg-muted px-3.5 py-1.5 text-primary prose prose-sm prose-invert [&_p]:whitespace-pre-line">
               {renderMarkdownToReact(parsedContent.body)}
             </div>
           </div>
