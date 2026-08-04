@@ -25,6 +25,25 @@ import {
 import { timestamped } from "./claude-message-normalizer"
 import { logClaudeSteer } from "./claude-steer-log"
 import type { ClaudeSessionState, ActiveTurn } from "./claude-session-state"
+import { discardedToolResult } from "./claude-sdk-queue"
+
+/**
+ * Settle a parked `pendingTool` before its ActiveTurn is dropped.
+ *
+ * Invariant: an ActiveTurn is NEVER removed from `activeTurns` while holding
+ * an unresolved `pendingTool`. The resolve fn is the SDK worker's `canUseTool`
+ * continuation — drop it and that worker blocks forever, `respondTool` throws
+ * "No pending tool request", and the chat is wedged with no way back.
+ *
+ * Clears the field before resolving so a second call is a no-op (resolving an
+ * already-settled promise is inert anyway, but this keeps the state honest).
+ */
+function settlePendingTool(active: ActiveTurn | undefined): void {
+  const pending = active?.pendingTool
+  if (!active || !pending) return
+  active.pendingTool = null
+  pending.resolve(discardedToolResult(pending.tool))
+}
 
 // Bounded FIFO for toolId → description lookups feeding background-task labels.
 const RECENT_TOOL_DESCRIPTION_LIMIT = 64
@@ -411,7 +430,18 @@ export async function runClaudeSession(
         continue
       }
 
-      if (event.entry.kind === "result" && active && completedClaudePromptSeq === (active.claudePromptSeq ?? null)) {
+      if (
+        event.entry.kind === "result"
+        && active
+        // A ghost turn (rebuilt because the SDK self-resumed and called
+        // canUseTool outside any Kanna turn) never sent a prompt, so it is
+        // never the turn this result belongs to. Both conjuncts express the
+        // same invariant — no prompt, no finalize — the flag semantically,
+        // the null-check defensively for any future seq-less producer.
+        && !active.rebuiltFromSession
+        && active.claudePromptSeq != null
+        && completedClaudePromptSeq === active.claudePromptSeq
+      ) {
         active.hasFinalResult = true
         // True once a rate-limit / auth-error was routed through
         // handleLimitDetection / handleAuthFailure. Those paths already
@@ -462,6 +492,7 @@ export async function runClaudeSession(
           // notification is a follow-up ADR. Model can delegate a status-check
           // subagent if it needs event-driven workflow wake.
         }
+        settlePendingTool(active)
         deps.activeTurns.delete(session.chatId)
         // Turn-scoped reservation: release on turn end so other chats can
         // claim the same token while this chat is idle. The next turn for
@@ -579,6 +610,7 @@ export async function runClaudeSession(
           log.warn("[kanna/agent] stream ended with no final result — recording turn failure", { chatId: session.chatId, sessionId: session.id })
           await deps.store.recordTurnFailed(session.chatId, "session stream ended without a result")
         }
+        settlePendingTool(active)
         deps.activeTurns.delete(session.chatId)
       }
     }

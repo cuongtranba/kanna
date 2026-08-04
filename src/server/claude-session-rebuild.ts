@@ -66,6 +66,11 @@ export function recreateActiveTurnFromSession(
     chatId: args.chatId,
     provider: args.provider,
     turn: ghostTurn,
+    // No prompt was ever sent for this turn, so it carries no
+    // claudePromptSeq. Mark it so the result matcher in
+    // claude-session-runner never claims (and deletes) it while it holds a
+    // parked pendingTool.
+    rebuiltFromSession: true,
     model: session.model,
     effort: session.effort,
     serviceTier: args.serviceTier,

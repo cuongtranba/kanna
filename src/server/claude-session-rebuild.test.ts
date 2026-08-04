@@ -222,4 +222,25 @@ describe("recreateActiveTurnFromSession", () => {
     }
     expect(events).toHaveLength(0)
   })
+
+  test("marks the rebuilt turn so the prompt-seq matcher never claims it", () => {
+    const session = makeSession({ chatId: "chat-4" })
+    const deps = makeDeps({
+      claudeSessions: new Map([["chat-4", session]]),
+      activeTurns: new Map(),
+      providerUsesSdkSession: () => true,
+    })
+
+    const result = recreateActiveTurnFromSession(deps, {
+      chatId: "chat-4",
+      provider: "claude",
+      model: "claude-opus-4-5",
+      planMode: false,
+    })
+
+    // A ghost sent no prompt: it must carry no seq AND be flagged.
+    // claude-session-runner's result matcher keys on both.
+    expect(result?.rebuiltFromSession).toBe(true)
+    expect(result?.claudePromptSeq).toBeUndefined()
+  })
 })
