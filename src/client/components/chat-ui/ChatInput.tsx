@@ -1203,7 +1203,7 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
                 <HistoryPlugin />
                 <MentionTypeaheadPlugin projectId={projectId ?? null} />
                 <SlashCommandTypeaheadPlugin
-                  chatId={chatId ?? null}
+                  projectId={projectId ?? null}
                   enabled={selectedProvider === "claude"}
                 />
                 <PasteImagePlugin projectId={projectId ?? null} onUploadError={handleUploadError} />

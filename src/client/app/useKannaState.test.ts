@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import {
+  applyProjectCommandsSnapshot,
   applySidebarProjectOrder,
   countMatchingUserPrompts,
   getActiveChatSnapshot,
@@ -20,6 +21,7 @@ import {
   shouldAutoFollowTranscript,
 } from "./useKannaState"
 import type { ChatAttachment, ChatSnapshot, SidebarData, UserPromptEntry } from "../../shared/types"
+import { useSlashCommandsStore } from "../stores/slashCommandsStore"
 
 function createSidebarData(): SidebarData {
   return {
@@ -722,5 +724,35 @@ describe("sameChatSnapshotCore subagent fields", () => {
     const a = createMinimalChatSnapshot({ subagentRuns: { "run-1": run } })
     const b = createMinimalChatSnapshot({ subagentRuns: { "run-1": { ...run } } })
     expect(sameChatSnapshotCore(a, b)).toBe(true)
+  })
+})
+
+describe("applyProjectCommandsSnapshot", () => {
+  test("writes the commands under the project id", () => {
+    useSlashCommandsStore.setState({ byProjectId: {} })
+    applyProjectCommandsSnapshot("p1", {
+      projectId: "p1",
+      commands: [{ name: "deploy", description: "", argumentHint: "" }],
+    })
+    expect(useSlashCommandsStore.getState().byProjectId.p1).toEqual([
+      { name: "deploy", description: "", argumentHint: "" },
+    ])
+  })
+
+  // An in-flight frame from the project we just left must not clobber the
+  // project we just switched to.
+  test("ignores a snapshot for a different project", () => {
+    useSlashCommandsStore.setState({ byProjectId: {} })
+    applyProjectCommandsSnapshot("p1", {
+      projectId: "p2",
+      commands: [{ name: "stale", description: "", argumentHint: "" }],
+    })
+    expect(useSlashCommandsStore.getState().byProjectId).toEqual({})
+  })
+
+  test("ignores a null snapshot", () => {
+    useSlashCommandsStore.setState({ byProjectId: {} })
+    applyProjectCommandsSnapshot("p1", null)
+    expect(useSlashCommandsStore.getState().byProjectId).toEqual({})
   })
 })
