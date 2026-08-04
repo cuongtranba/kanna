@@ -63,7 +63,7 @@ import {
   type SendMessageOptions,
   type SendToStartingProfile,
 } from "./claude-steer-log"
-import type { ActiveTurn, ClaudeSessionState } from "./claude-session-state"
+import type { ActiveTurn, ClaudeSessionState, StartingTurn } from "./claude-session-state"
 import { runClaudeSession as runClaudeSessionLoop, type RunClaudeSessionDeps } from "./claude-session-runner"
 import {
   startTurnForChat as startTurnForChatFn,
@@ -193,6 +193,13 @@ export class AgentCoordinator {
   readonly startClaudeSessionPTYFn: (args: StartClaudeSessionPtyArgs) => Promise<ClaudeSessionHandle>
   reportBackgroundError: ((message: string) => void) | null = null
   readonly activeTurns = new Map<string, ActiveTurn>()
+  /**
+   * Turns claimed by `startTurnForChat` whose provider session is still
+   * booting — the window before an `ActiveTurn` exists. Cancel, send-queueing
+   * and status derivation all consult this so the chat is never mistaken for
+   * idle mid-spawn.
+   */
+  readonly startingTurns = new Map<string, StartingTurn>()
   readonly drainingStreams = new Map<string, { turn: HarnessTurn }>()
   readonly claudeSessions = new Map<string, ClaudeSessionState>()
   readonly mentionedSubagentIdsByChat = new Map<string, string[]>()
@@ -909,7 +916,7 @@ export class AgentCoordinator {
     return killPtyInstanceFn(this.buildClaudeSessionConfigHelpersDeps(), chatId)
   }
 
-  async cancel(chatId: string, options?: { hideInterrupted?: boolean; skipQueueDrain?: boolean }) {
+  async cancel(chatId: string, options?: { hideInterrupted?: boolean }) {
     return cancelChatFn(this.buildCancelHandlerDeps(), chatId, options)
   }
 

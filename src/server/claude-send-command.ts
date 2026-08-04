@@ -57,6 +57,11 @@ interface ActiveTurnsMap {
   get(chatId: string): { proactiveCompactInjection?: boolean } | undefined
 }
 
+/** Subset of the startingTurns map used by the send command handler. */
+interface StartingTurnsMap {
+  has(chatId: string): boolean
+}
+
 /** Subset of the claudeSessions map used by the send command handler. */
 interface ClaudeSessionsMap {
   get(chatId: string): {
@@ -86,6 +91,13 @@ export interface SendCommandDeps {
 
   /** The active-turns map. Read-only from the handler's perspective (has/get). */
   activeTurns: ActiveTurnsMap
+
+  /**
+   * Turns whose provider session is still booting. Checked alongside
+   * `activeTurns` everywhere "is this chat busy?" is asked — `activeTurns`
+   * alone let a second send race a concurrent turn during the spawn.
+   */
+  startingTurns: StartingTurnsMap
 
   /** The claude-sessions map. Used to re-arm background-task state on user send. */
   claudeSessions: ClaudeSessionsMap
@@ -271,7 +283,7 @@ export async function maybeStartNextQueuedMessage(
   deps: SendCommandDeps,
   chatId: string,
 ): Promise<boolean> {
-  if (deps.activeTurns.has(chatId)) return false
+  if (deps.activeTurns.has(chatId) || deps.startingTurns.has(chatId)) return false
   const nextQueuedMessage = typeof deps.store.getQueuedMessages === "function"
     ? deps.store.getQueuedMessages(chatId)[0]
     : undefined
@@ -340,7 +352,10 @@ export async function sendCommand(
     deps.autoResumeByChat.set(chatId, command.autoResumeOnRateLimit)
   }
 
-  if (deps.activeTurns.has(chatId)) {
+  // `startingTurns` matters here: a turn is not in `activeTurns` until its
+  // provider session has finished spawning, so gating on `activeTurns` alone
+  // let a send during that window start a second, concurrent turn.
+  if (deps.activeTurns.has(chatId) || deps.startingTurns.has(chatId)) {
     deps.analytics.track("message_sent")
     const queuedMessage = await enqueueMessage(deps, chatId, command.content, command.attachments ?? [], {
       provider: command.provider,

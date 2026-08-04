@@ -39,6 +39,7 @@ const NO_ATTACHMENTS: ChatAttachment[] = []
 
 type DepsOptions = {
   activeChatIds?: string[]
+  startingChatIds?: string[]
   queuedMessages?: QueuedChatMessage[]
   chatProvider?: "claude" | "openrouter" | "codex" | null
   chatCompactFailures?: number
@@ -56,6 +57,7 @@ type DepsOptions = {
 
 function makeDeps(opts: DepsOptions = {}): SendCommandDeps & { startTurnCalled: StartTurnForChatArgs[] } {
   const activeChatIds = new Set(opts.activeChatIds ?? [])
+  const startingChatIds = new Set(opts.startingChatIds ?? [])
   const queuedMessages: QueuedChatMessage[] = opts.queuedMessages ?? []
   const stopLoopCalled = opts.stopLoopCalled ?? []
   const emitStateCalled = opts.emitStateCalled ?? []
@@ -104,6 +106,9 @@ function makeDeps(opts: DepsOptions = {}): SendCommandDeps & { startTurnCalled: 
     activeTurns: {
       has: (chatId: string) => activeChatIds.has(chatId),
       get: (_chatId: string) => undefined,
+    },
+    startingTurns: {
+      has: (chatId: string) => startingChatIds.has(chatId),
     },
     claudeSessions: {
       get: (_chatId: string) => opts.session ?? undefined,
@@ -307,6 +312,13 @@ describe("maybeStartNextQueuedMessage", () => {
     expect(result).toBe(false)
   })
 
+  test("returns false while a turn is still booting", async () => {
+    const deps = makeDeps({ startingChatIds: ["chat-1"], queuedMessages: [makeQueuedMessage()] })
+    const result = await maybeStartNextQueuedMessage(deps, "chat-1")
+    expect(result).toBe(false)
+    expect(deps.startTurnCalled.length).toBe(0)
+  })
+
   test("dequeues and starts when idle and messages exist", async () => {
     const queuedMessages = [makeQueuedMessage({ content: "queued msg" })]
     const deps = makeDeps({ queuedMessages })
@@ -376,6 +388,24 @@ describe("sendCommand", () => {
     } as Parameters<typeof sendCommand>[1])
     expect(result.queued).toBe(true)
     expect(result.queuedMessageId).toMatch(/^qm-enqueued-/)
+  })
+
+  test("enqueues rather than spawning a concurrent turn while one is booting", async () => {
+    // Regression: the queue gate used to check activeTurns only, which is not
+    // populated until the provider session spawns — so a second send during
+    // that window started a second turn that clobbered the first.
+    const d = makeDeps({
+      startingChatIds: ["chat-1"],
+      chatProvider: "claude",
+      analyticsEvents,
+    })
+    const result = await sendCommand(d, {
+      type: "chat.send",
+      content: "second message",
+      chatId: "chat-1",
+    } as Parameters<typeof sendCommand>[1])
+    expect(result.queued).toBe(true)
+    expect(d.startTurnCalled.length).toBe(0)
   })
 
   test("starts a turn directly when idle", async () => {

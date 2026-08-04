@@ -11,7 +11,7 @@
  */
 
 import type { AgentProvider, ChatBackgroundTask, KannaStatus, PendingToolSnapshot } from "../shared/types"
-import type { ActiveTurn, ClaudeSessionState } from "./claude-session-state"
+import type { ActiveTurn, ClaudeSessionState, StartingTurn } from "./claude-session-state"
 import { backgroundTaskGuardExpired } from "./claude-session-lifecycle"
 
 // ---------------------------------------------------------------------------
@@ -21,6 +21,8 @@ import { backgroundTaskGuardExpired } from "./claude-session-lifecycle"
 export interface SessionStateQueryDeps {
   /** Live turn state keyed by chatId. */
   activeTurns: Map<string, ActiveTurn>
+  /** Turns whose provider session is still booting, keyed by chatId. */
+  startingTurns: Map<string, StartingTurn>
   /** Live Claude session state keyed by chatId. */
   claudeSessions: Map<string, ClaudeSessionState>
   /** Streams currently draining (only `.keys()` is consumed). */
@@ -68,16 +70,23 @@ export interface SessionStateQueryDeps {
 /**
  * Returns a map of chatId → KannaStatus for all currently active turns.
  *
- * Task-notification self-wake turns run on the warm Claude session WITHOUT
- * an ActiveTurn (no turn_started/turn_finished events exist for them), so
- * they are folded in here as "running" — the chat surfaces as busy in the
- * composer/sidebar while the model actually works, and deriveStatus stays a
- * pure overlay (no event-sourced timing state is touched).
+ * Two states also render as busy without an ActiveTurn, and are folded in as
+ * overlays (deriveStatus stays pure — no event-sourced timing state is touched):
+ *
+ * - A turn whose provider session is still BOOTING. `startTurnForChat` only
+ *   registers the ActiveTurn after the spawn resolves, so without this the
+ *   chat reported "idle" for seconds while the user watched a Stop button.
+ * - Task-notification self-wake turns, which run on the warm Claude session
+ *   with no turn_started/turn_finished events at all.
  */
 export function getActiveStatuses(deps: SessionStateQueryDeps): Map<string, KannaStatus> {
   const statuses = new Map<string, KannaStatus>()
   for (const [chatId, turn] of deps.activeTurns.entries()) {
     statuses.set(chatId, turn.status)
+  }
+  for (const chatId of deps.startingTurns.keys()) {
+    if (statuses.has(chatId)) continue
+    statuses.set(chatId, "starting")
   }
   for (const [chatId, session] of deps.claudeSessions.entries()) {
     if (statuses.has(chatId)) continue

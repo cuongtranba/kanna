@@ -1390,6 +1390,76 @@ describe("AgentCoordinator codex integration", () => {
     expect(interruptedMessages).toHaveLength(1)
   })
 
+  test("a single cancel stops a turn whose provider session is still booting", async () => {
+    // The reported "Stop needs two clicks" bug: the ActiveTurn is registered
+    // only AFTER the provider session spawns, so a cancel landing during that
+    // window used to find nothing and return silently — the turn then started
+    // anyway and the user had to press Stop again.
+    let releaseBoot!: () => void
+    let signalBootStarted!: () => void
+    const bootStarted = new Promise<void>((resolve) => { signalBootStarted = resolve })
+    const bootGate = new Promise<void>((resolve) => { releaseBoot = resolve })
+    let streamStarted = false
+    let turnClosed = false
+
+    const fakeCodexManager = {
+      async startSession() {},
+      async startTurn(): Promise<HarnessTurn> {
+        signalBootStarted()
+        await bootGate
+        // A stream that records being consumed and then never settles. Written
+        // as a bare iterator rather than a generator so `streamStarted` flips
+        // exactly when someone starts iterating.
+        const stream: AsyncIterable<never> = {
+          [Symbol.asyncIterator]() {
+            streamStarted = true
+            return { next: () => new Promise<never>(() => {}) }
+          },
+        }
+        return {
+          provider: "codex",
+          stream,
+          interrupt: async () => {},
+          close: () => { turnClosed = true },
+        }
+      },
+    }
+
+    const store = createFakeStore()
+    const coordinator = new AgentCoordinator({
+      store: store as never,
+      onStateChange: () => {},
+      codexManager: fakeCodexManager as never,
+    })
+
+    const sendPromise = coordinator.send({
+      type: "chat.send",
+      chatId: "chat-1",
+      provider: "codex",
+      content: "do something",
+    })
+
+    // Mid-boot the chat must already report busy, or the composer would show
+    // Send and a second send could race in a concurrent turn.
+    await bootStarted
+    expect(coordinator.getActiveStatuses().get("chat-1")).toBe("starting")
+
+    // ONE cancel, while the provider is still spawning.
+    await coordinator.cancel("chat-1")
+    expect(coordinator.getActiveStatuses().has("chat-1")).toBe(false)
+
+    releaseBoot()
+    await sendPromise
+    await new Promise((resolve) => setTimeout(resolve, 20))
+
+    // The boot resolved after the cancel — it must tear itself down rather
+    // than registering and running.
+    expect(coordinator.getActiveStatuses().has("chat-1")).toBe(false)
+    expect(streamStarted).toBe(false)
+    expect(turnClosed).toBe(true)
+    expect(store.messages.filter((entry) => entry.kind === "interrupted")).toHaveLength(1)
+  })
+
   test("concurrent cancel calls only produce a single interrupted message", async () => {
     let resolveStream!: () => void
 
@@ -1618,7 +1688,11 @@ describe("AgentCoordinator codex integration", () => {
     expect(startTurnCalls).toEqual(["plan this"])
   })
 
-  test("cancel() drains the queue: a follow-up queued message auto-starts after stop", async () => {
+  test("cancel() parks the queue: a follow-up queued message does NOT auto-start after stop", async () => {
+    // Stop means stop. Auto-starting the next queued message put the chat
+    // straight back into "running", so Stop looked like it needed a second
+    // press. The queued message stays parked with its Send now / Remove
+    // actions instead.
     let releaseInterrupt!: () => void
     const interrupted = new Promise<void>((resolve) => {
       releaseInterrupt = resolve
@@ -1692,11 +1766,12 @@ describe("AgentCoordinator codex integration", () => {
     expect(store.queuedMessages).toHaveLength(1)
 
     await coordinator.cancel("chat-1")
+    await new Promise((resolve) => setTimeout(resolve, 20))
 
-    // The queued message must have been consumed and started as the second turn.
-    await waitFor(() => startTurnCalls.length === 2)
-    expect(startTurnCalls).toEqual(["first prompt", "queued follow up"])
-    expect(store.queuedMessages).toHaveLength(0)
+    // No second turn, and the queued message is still there for the user.
+    expect(startTurnCalls).toEqual(["first prompt"])
+    expect(store.queuedMessages).toHaveLength(1)
+    expect(coordinator.getActiveStatuses().has("chat-1")).toBe(false)
   })
 })
 

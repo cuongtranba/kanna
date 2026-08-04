@@ -80,7 +80,7 @@ export interface ChatManagementDeps {
   /** Analytics reporter for tracking events. */
   analytics: AnalyticsSubset
   /** Cancel the active turn for a chat. */
-  cancel(chatId: string, options?: { hideInterrupted?: boolean; skipQueueDrain?: boolean }): Promise<void>
+  cancel(chatId: string, options?: { hideInterrupted?: boolean }): Promise<void>
   /** Close the Claude session for a chat, freeing its process slot. */
   closeClaudeSession(chatId: string, session: ClaudeSessionState, opts?: { keepReservation?: boolean }): void
   /** Notify listeners that the observable state for chatId has changed. */
@@ -148,7 +148,7 @@ export async function steer(
   })
 
   if (deps.activeTurns.has(command.chatId)) {
-    await deps.cancel(command.chatId, { hideInterrupted: true, skipQueueDrain: true })
+    await deps.cancel(command.chatId, { hideInterrupted: true })
   }
 
   logClaudeSteer("steer_after_cancel", {

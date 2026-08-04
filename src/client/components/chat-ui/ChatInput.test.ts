@@ -9,6 +9,7 @@ import {
   trimTrailingPastedNewlines,
   willExceedAttachmentLimit,
   isTouchDeviceEnvironment,
+  isStopAffordance,
   shouldRefreshPickerOnSelection,
 } from "./ChatInput"
 
@@ -297,6 +298,27 @@ describe("ChatInput", () => {
     )
 
     expect(html).toContain('aria-label="Stop"')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Send / Stop affordance
+// ---------------------------------------------------------------------------
+
+describe("isStopAffordance", () => {
+  test("is Stop only while a turn is cancellable and the composer is empty", () => {
+    expect(isStopAffordance(true, false)).toBe(true)
+  })
+
+  test("is Send when text is staged, even mid-turn", () => {
+    // The click handler sends (queueing behind the running turn) in this
+    // state, so the label and icon must agree — they used to say "Stop".
+    expect(isStopAffordance(true, true)).toBe(false)
+  })
+
+  test("is Send when no turn is cancellable", () => {
+    expect(isStopAffordance(false, false)).toBe(false)
+    expect(isStopAffordance(false, true)).toBe(false)
   })
 })
 

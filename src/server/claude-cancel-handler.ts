@@ -11,7 +11,7 @@
  */
 
 import type { ClaudeDriverPreference, TranscriptEntry } from "../shared/types"
-import type { ActiveTurn, ClaudeSessionState } from "./claude-session-state"
+import type { ActiveTurn, ClaudeSessionState, StartingTurn } from "./claude-session-state"
 import type { HarnessTurn } from "./harness-types"
 import { logClaudeSteer } from "./claude-steer-log"
 import { discardedToolResult } from "./claude-sdk-queue"
@@ -39,6 +39,12 @@ interface ActiveTurnsMap {
   delete(chatId: string): boolean
 }
 
+/** Subset of the startingTurns map used by the cancel handler. */
+interface StartingTurnsMap {
+  get(chatId: string): StartingTurn | undefined
+  delete(chatId: string): boolean
+}
+
 /** Subset of the claudeSessions map used by the cancel handler. */
 interface ClaudeSessionsMap {
   get(chatId: string): ClaudeSessionState | undefined
@@ -61,6 +67,13 @@ export interface CancelHandlerDeps {
   /** The active-turns map. The handler reads and deletes from it. */
   activeTurns: ActiveTurnsMap
 
+  /**
+   * Turns whose provider session is still booting (no `ActiveTurn` yet).
+   * The handler marks and removes entries here so Stop lands during the
+   * spawn window instead of no-oping.
+   */
+  startingTurns: StartingTurnsMap
+
   /** Store — for appending transcript entries and recording the cancelled turn. */
   store: CancelStore
 
@@ -79,9 +92,6 @@ export interface CancelHandlerDeps {
    * claude-session-lifecycle.ts.
    */
   closeClaudeSession(chatId: string, session: ClaudeSessionState): void
-
-  /** Dequeue and start the next message waiting in the chat queue, if any. */
-  maybeStartNextQueuedMessage(chatId: string): Promise<void>
 }
 
 // ---------------------------------------------------------------------------
@@ -93,7 +103,11 @@ export interface CancelHandlerDeps {
  *
  * 1. Closes any draining stream for the chat.
  * 2. Rejects pending `canUseTool` Promises and signals the subagent orchestrator.
- * 3. If there is an active turn:
+ * 3. If there is no active turn, falls back in order to the two states that
+ *    also render as busy: a turn whose provider session is still booting
+ *    (`startingTurns`) and a task-notification self-wake turn on the warm
+ *    session. Only a genuinely idle chat is a no-op.
+ * 4. If there is an active turn:
  *    a. Guards against concurrent cancel calls.
  *    b. Discards any pending tool request and appends a `tool_result` entry.
  *    c. Appends an `interrupted` transcript entry and records `turn_cancelled`.
@@ -102,19 +116,18 @@ export interface CancelHandlerDeps {
  *    f. Emits a state-change event.
  *    g. Interrupts and closes the underlying stream (best-effort, 5 s timeout).
  *    h. For PTY driver: drops the dead Claude session from the map.
- *    i. Optionally drains the message queue (unless `skipQueueDrain` is set).
+ *
+ * Never starts a queued message — see the closing comment.
  *
  * @param deps   Injected dependencies — all coordinator state arrives through here.
  * @param chatId The chat to cancel.
  * @param options
  *   - `hideInterrupted`  If true, the `interrupted` transcript entry is hidden.
- *   - `skipQueueDrain`   If true, skip the `maybeStartNextQueuedMessage` call.
- *                        Used by callers (e.g. `steer`) that handle dequeue themselves.
  */
 export async function cancelChat(
   deps: CancelHandlerDeps,
   chatId: string,
-  options?: { hideInterrupted?: boolean; skipQueueDrain?: boolean },
+  options?: { hideInterrupted?: boolean },
 ): Promise<void> {
   // Also clean up any draining stream for this chat.
   const draining = deps.drainingStreams.get(chatId)
@@ -134,6 +147,29 @@ export async function cancelChat(
 
   const active = deps.activeTurns.get(chatId)
   if (!active) {
+    // No ActiveTurn yet — but the turn may still be BOOTING. `startTurnForChat`
+    // registers the ActiveTurn only after the provider session spawns (seconds
+    // on a cold chat), and the composer shows Stop for that whole window. Mark
+    // the starting turn so the booting turn tears itself down when the spawn
+    // resolves, and give the user immediate feedback here rather than making
+    // them wait out the boot.
+    const starting = deps.startingTurns.get(chatId)
+    if (starting) {
+      starting.cancelRequested = true
+      // Drop the marker so the chat reports idle on the very next snapshot.
+      // `startTurnForChat` holds its own reference and re-checks the flag, and
+      // its cleanup is identity-guarded, so removing it here is safe even if a
+      // fresh turn starts before the old boot finishes.
+      deps.startingTurns.delete(chatId)
+      await deps.store.appendMessage(
+        chatId,
+        timestamped({ kind: "interrupted", hidden: options?.hideInterrupted }),
+      )
+      await deps.store.recordTurnCancelled(chatId)
+      deps.emitStateChange(chatId)
+      return
+    }
+
     // No Kanna turn — but a task-notification self-wake turn may be
     // streaming on the warm session (surfaced as "running" by
     // getActiveStatuses). Stop must reach it: interrupt the session
@@ -261,14 +297,10 @@ export async function cancelChat(
     }
   }
 
-  // Drain the queue. A queued message must auto-start after cancel; the
-  // result-success branch in runClaudeSession is the only other place this
-  // is called, and it can never fire for a cancelled turn (active has been
-  // deleted above before the result event arrives).
-  //
-  // `skipQueueDrain` is passed by callers that handle dequeue themselves
-  // (e.g. `steer`, which dequeues the head message with the steer wrapper).
-  if (!options?.skipQueueDrain) {
-    await deps.maybeStartNextQueuedMessage(chatId)
-  }
+  // Deliberately NO queue drain here. Stop means stop: handing the chat
+  // straight to the next queued message put it back into "running" in the
+  // same tick, so Stop appeared to need a second press. Queued messages stay
+  // parked with their "Send now" / "Remove" actions; a turn that ends
+  // normally still drains them (see claude-turn-runner.ts, which likewise
+  // skips the drain when cancelRequested is set).
 }

@@ -165,7 +165,7 @@ describe("steer", () => {
     }
 
     await steer(deps, { type: "message.steer", chatId: "c1", queuedMessageId: "qm-1" })
-    expect(cancelFn).toHaveBeenCalledWith("c1", { hideInterrupted: true, skipQueueDrain: true })
+    expect(cancelFn).toHaveBeenCalledWith("c1", { hideInterrupted: true })
     expect(dequeueStartFn).toHaveBeenCalledWith("c1", qm, { steered: true })
   })
 

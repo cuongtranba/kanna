@@ -7,7 +7,7 @@
 
 import { describe, test, expect, beforeEach } from "bun:test"
 import { cancelChat, type CancelHandlerDeps } from "./claude-cancel-handler"
-import type { ActiveTurn, ClaudeSessionState } from "./claude-session-state"
+import type { ActiveTurn, ClaudeSessionState, StartingTurn } from "./claude-session-state"
 import type { HarnessTurn, ClaudeSessionHandle } from "./harness-types"
 import type { TranscriptEntry } from "../shared/types"
 
@@ -91,9 +91,20 @@ function makeSession(overrides: Partial<ClaudeSessionState> = {}): ClaudeSession
   }
 }
 
+function makeStartingTurn(overrides: Partial<StartingTurn> = {}): StartingTurn {
+  return {
+    chatId: "chat-1",
+    provider: "claude",
+    startedAt: Date.now(),
+    cancelRequested: false,
+    ...overrides,
+  }
+}
+
 type DepOverrides = {
   drainingStreams?: Map<string, { turn: HarnessTurn }>
   activeTurns?: Map<string, ActiveTurn>
+  startingTurns?: Map<string, StartingTurn>
   claudeSessions?: Map<string, ClaudeSessionState>
   appendedMessages?: TranscriptEntry[]
   turnCancelledFor?: string[]
@@ -101,13 +112,13 @@ type DepOverrides = {
   rejectCalled?: string[]
   orchestratorCancelled?: string[]
   closedSessions?: string[]
-  queueDrained?: string[]
   driver?: "sdk" | "pty"
 }
 
 function makeDeps(overrides: DepOverrides = {}): CancelHandlerDeps {
   const drainingStreams: Map<string, { turn: HarnessTurn }> = overrides.drainingStreams ?? new Map()
   const activeTurns: Map<string, ActiveTurn> = overrides.activeTurns ?? new Map()
+  const startingTurns: Map<string, StartingTurn> = overrides.startingTurns ?? new Map()
   const claudeSessions: Map<string, ClaudeSessionState> = overrides.claudeSessions ?? new Map()
   const appendedMessages = overrides.appendedMessages ?? []
   const turnCancelledFor = overrides.turnCancelledFor ?? []
@@ -115,7 +126,6 @@ function makeDeps(overrides: DepOverrides = {}): CancelHandlerDeps {
   const rejectCalled = overrides.rejectCalled ?? []
   const orchestratorCancelled = overrides.orchestratorCancelled ?? []
   const closedSessions = overrides.closedSessions ?? []
-  const queueDrained = overrides.queueDrained ?? []
   const driver = overrides.driver ?? "sdk"
 
   return {
@@ -123,6 +133,7 @@ function makeDeps(overrides: DepOverrides = {}): CancelHandlerDeps {
     rejectPendingResolversForChat: (chatId) => { rejectCalled.push(chatId) },
     cancelChatInOrchestrator: (chatId) => { orchestratorCancelled.push(chatId) },
     activeTurns,
+    startingTurns,
     store: {
       appendMessage: async (_chatId, entry) => { appendedMessages.push(entry) },
       recordTurnCancelled: async (chatId) => { turnCancelledFor.push(chatId) },
@@ -131,7 +142,6 @@ function makeDeps(overrides: DepOverrides = {}): CancelHandlerDeps {
     emitStateChange: (chatId) => { stateChanges.push(chatId) },
     resolveClaudeDriverPreference: () => driver,
     closeClaudeSession: (chatId) => { closedSessions.push(chatId) },
-    maybeStartNextQueuedMessage: async (chatId) => { queueDrained.push(chatId) },
   }
 }
 
@@ -156,13 +166,6 @@ describe("no active turn", () => {
     expect(appendedMessages.length).toBe(0)
   })
 
-  test("queue is not drained when no active turn", async () => {
-    const queueDrained: string[] = []
-    const deps = makeDeps({ queueDrained })
-    await cancelChat(deps, "chat-1")
-    expect(queueDrained.length).toBe(0)
-  })
-
   test("closes and removes a draining stream if present", async () => {
     let closed = false
     const fakeTurn = makeFakeTurn({ close: () => { closed = true } })
@@ -171,6 +174,91 @@ describe("no active turn", () => {
     await cancelChat(deps, "chat-1")
     expect(closed).toBe(true)
     expect(drainingStreams.has("chat-1")).toBe(false)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// No active turn — cancel during the provider-boot window
+//
+// Regression: startTurnForChat registers the ActiveTurn only AFTER the provider
+// session spawns, so Stop pressed during that window used to hit `if (!active)
+// return` and no-op silently — the user had to press Stop a second time.
+// ---------------------------------------------------------------------------
+
+describe("starting turn cancel (provider-boot window)", () => {
+  test("marks the starting turn cancelled so the booting turn tears itself down", async () => {
+    const starting = makeStartingTurn()
+    const startingTurns = new Map([["chat-1", starting]])
+    const deps = makeDeps({ startingTurns })
+
+    await cancelChat(deps, "chat-1")
+
+    expect(starting.cancelRequested).toBe(true)
+  })
+
+  test("removes the marker so the chat reports idle immediately", async () => {
+    const startingTurns = new Map([["chat-1", makeStartingTurn()]])
+    const stateChanges: string[] = []
+    const deps = makeDeps({ startingTurns, stateChanges })
+
+    await cancelChat(deps, "chat-1")
+
+    expect(startingTurns.has("chat-1")).toBe(false)
+    expect(stateChanges).toContain("chat-1")
+  })
+
+  test("appends exactly one interrupted entry and records the cancelled turn", async () => {
+    const startingTurns = new Map([["chat-1", makeStartingTurn()]])
+    const appendedMessages: TranscriptEntry[] = []
+    const turnCancelledFor: string[] = []
+    const deps = makeDeps({ startingTurns, appendedMessages, turnCancelledFor })
+
+    await cancelChat(deps, "chat-1")
+
+    const interrupted = appendedMessages.filter((entry) => entry.kind === "interrupted")
+    expect(interrupted).toHaveLength(1)
+    expect(turnCancelledFor).toEqual(["chat-1"])
+  })
+
+  test("honours hideInterrupted on the starting-turn path", async () => {
+    const startingTurns = new Map([["chat-1", makeStartingTurn()]])
+    const appendedMessages: TranscriptEntry[] = []
+    const deps = makeDeps({ startingTurns, appendedMessages })
+
+    await cancelChat(deps, "chat-1", { hideInterrupted: true })
+
+    const interrupted = appendedMessages.find((entry) => entry.kind === "interrupted")
+    expect(interrupted).toMatchObject({ hidden: true })
+  })
+
+  test("leaves other chats' starting turns untouched", async () => {
+    const other = makeStartingTurn({ chatId: "chat-2" })
+    const startingTurns = new Map([
+      ["chat-1", makeStartingTurn()],
+      ["chat-2", other],
+    ])
+    const deps = makeDeps({ startingTurns })
+
+    await cancelChat(deps, "chat-1")
+
+    expect(other.cancelRequested).toBe(false)
+    expect(startingTurns.has("chat-2")).toBe(true)
+  })
+
+  test("an ActiveTurn takes precedence over a stale starting marker", async () => {
+    const starting = makeStartingTurn()
+    const active = makeActiveTurn()
+    const turnCancelledFor: string[] = []
+    const deps = makeDeps({
+      activeTurns: new Map([["chat-1", active]]),
+      startingTurns: new Map([["chat-1", starting]]),
+      turnCancelledFor,
+    })
+
+    await cancelChat(deps, "chat-1")
+
+    expect(active.cancelRequested).toBe(true)
+    expect(turnCancelledFor).toEqual(["chat-1"])
   })
 })
 
@@ -518,25 +606,23 @@ describe("interrupt and close", () => {
 })
 
 // ---------------------------------------------------------------------------
-// Queue drain options
+// Queued messages
+//
+// Stop means stop: cancelling must never hand the chat straight to the next
+// queued message. It used to, so with anything queued the chat went back to
+// "running" in the same tick and Stop needed a second press. Queued messages
+// stay parked and keep their "Send now" / "Remove" actions in the transcript.
 // ---------------------------------------------------------------------------
 
-describe("queue drain", () => {
-  test("drains queue by default", async () => {
-    const queueDrained: string[] = []
+describe("queued messages", () => {
+  test("cancelling an active turn does not start the next queued message", async () => {
     const active = makeActiveTurn()
     const activeTurns = new Map([["chat-1", active]])
-    const deps = makeDeps({ activeTurns, queueDrained })
-    await cancelChat(deps, "chat-1")
-    expect(queueDrained).toContain("chat-1")
-  })
+    const deps = makeDeps({ activeTurns })
 
-  test("skips queue drain when skipQueueDrain is true", async () => {
-    const queueDrained: string[] = []
-    const active = makeActiveTurn()
-    const activeTurns = new Map([["chat-1", active]])
-    const deps = makeDeps({ activeTurns, queueDrained })
-    await cancelChat(deps, "chat-1", { skipQueueDrain: true })
-    expect(queueDrained.length).toBe(0)
+    await cancelChat(deps, "chat-1")
+
+    // The dep is gone entirely — the cancel path has no way to start a turn.
+    expect("maybeStartNextQueuedMessage" in deps).toBe(false)
   })
 })
