@@ -45,4 +45,37 @@ describe("AskUserQuestionMessage.store", () => {
     expect(store.getState().submittedAnswers).toEqual(ANSWERS)
     expect(store.getState().isSubmitted).toBe(true)
   })
+
+  // markSubmitted is optimistic — it flips the card to "Answers" before the
+  // server has accepted anything. Without a rollback a failed chat.respondTool
+  // leaves the card looking answered while the turn is still parked.
+  test("markSubmitFailed rolls isSubmitted back and records the error", () => {
+    store.getState().markSubmitted(ANSWERS)
+    store.getState().markSubmitFailed("No pending tool request")
+
+    expect(store.getState().isSubmitted).toBe(false)
+    expect(store.getState().submitError).toBe("No pending tool request")
+    // The user's picks are kept so the card can be re-submitted as-is.
+    expect(store.getState().submittedAnswers).toEqual(ANSWERS)
+  })
+
+  test("markSubmitted clears a previous submitError", () => {
+    store.getState().markSubmitted(ANSWERS)
+    store.getState().markSubmitFailed("boom")
+    store.getState().markSubmitted(ANSWERS)
+
+    expect(store.getState().isSubmitted).toBe(true)
+    expect(store.getState().submitError).toBeNull()
+  })
+
+  test("markSubmitFailed is a no-op when nothing is submitted and the error is unchanged", () => {
+    const before = store.getState()
+    before.markSubmitFailed(null)
+
+    expect(store.getState()).toBe(before)
+  })
+
+  test("seeds submitError as null", () => {
+    expect(store.getState().submitError).toBeNull()
+  })
 })

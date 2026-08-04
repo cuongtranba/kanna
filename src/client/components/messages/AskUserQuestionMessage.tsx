@@ -2,6 +2,7 @@ import { useCallback } from "react"
 import { MessageCircleQuestion } from "lucide-react"
 import type { ProcessedToolCall, AskUserQuestionItem } from "./types"
 import type { AskUserQuestionAnswerMap } from "../../../shared/types"
+import { errorMessage } from "../../../shared/errors"
 import { cn } from "../../lib/utils"
 import { useTranscriptRenderOptions } from "./render-context"
 import { AskUserQuestionInteractive } from "./AskUserQuestionInteractive"
@@ -9,7 +10,12 @@ import { AskUserQuestionMessageStore } from "./AskUserQuestionMessage.store"
 
 interface Props {
   message: Extract<ProcessedToolCall, { toolKind: "ask_user_question" }>
-  onSubmit: (toolUseId: string, questions: AskUserQuestionItem[], answers: AskUserQuestionAnswerMap) => void
+  /**
+   * Returns a promise on the live chat path (chat.respondTool) so a rejected
+   * submit can roll the optimistic card back. Widened — not narrowed to
+   * Promise<void> — so existing `() => undefined` callers still type-check.
+   */
+  onSubmit: (toolUseId: string, questions: AskUserQuestionItem[], answers: AskUserQuestionAnswerMap) => void | Promise<void>
   isLatest: boolean
 }
 
@@ -33,11 +39,22 @@ function AskUserQuestionMessageInner({ message, onSubmit, isLatest }: Props) {
   const submittedAnswers = AskUserQuestionMessageStore.useScopedStore((s) => s.submittedAnswers)
   const isSubmitted = AskUserQuestionMessageStore.useScopedStore((s) => s.isSubmitted)
   const markSubmitted = AskUserQuestionMessageStore.useScopedStore((s) => s.markSubmitted)
+  const markSubmitFailed = AskUserQuestionMessageStore.useScopedStore((s) => s.markSubmitFailed)
+  const submitError = AskUserQuestionMessageStore.useScopedStore((s) => s.submitError)
 
+  // Orchestration over a prop + async I/O, so it stays an extracted useCallback
+  // rather than moving into the store (rule-zustand-store / no-jsx-inline-state-logic).
   const handleSubmit = useCallback((finalAnswers: AskUserQuestionAnswerMap) => {
     markSubmitted(finalAnswers)
-    onSubmit(message.toolId, questions, finalAnswers)
-  }, [markSubmitted, onSubmit, message.toolId, questions])
+    try {
+      const settled = onSubmit(message.toolId, questions, finalAnswers)
+      if (settled && typeof settled.then === "function") {
+        void settled.catch((error) => { markSubmitFailed(errorMessage(error)) })
+      }
+    } catch (error) {
+      markSubmitFailed(errorMessage(error))
+    }
+  }, [markSubmitted, markSubmitFailed, onSubmit, message.toolId, questions])
 
   // Completed state
   if (isSubmitted || isComplete) {
@@ -141,10 +158,20 @@ function AskUserQuestionMessageInner({ message, onSubmit, isLatest }: Props) {
 
   // Active state — delegate to AskUserQuestionInteractive
   return (
-    <AskUserQuestionInteractive
-      questions={questions}
-      onSubmit={handleSubmit}
-    />
+    <div className="w-full">
+      {submitError ? (
+        <div
+          className="mb-2 rounded-xl border border-destructive/20 bg-destructive/5 px-4 py-3 text-sm text-destructive whitespace-pre-wrap"
+          data-testid={`ask-user-question-error:${message.toolId}`}
+        >
+          {submitError}
+        </div>
+      ) : null}
+      <AskUserQuestionInteractive
+        questions={questions}
+        onSubmit={handleSubmit}
+      />
+    </div>
   )
 }
 

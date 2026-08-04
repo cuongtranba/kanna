@@ -402,11 +402,13 @@ interface TranscriptSingleRowProps {
   isLatestTodoWrite: boolean
   hideResult: boolean
   isFinalStatus: boolean
+  // Widened (not narrowed to Promise<void>) so a rejected chat.respondTool can
+  // roll the optimistic card back while `() => undefined` callers still fit.
   onAskUserQuestionSubmit: (
     toolUseId: string,
     questions: AskUserQuestionItem[],
     answers: AskUserQuestionAnswerMap
-  ) => void
+  ) => void | Promise<void>
   onExitPlanModeConfirm: (toolUseId: string, confirmed: boolean, clearContext?: boolean, message?: string) => void
   onToolRequestAnswer?: (toolRequestId: string, decision: ToolRequestDecision) => void
   schedules: Record<string, AutoContinueSchedule>
@@ -708,11 +710,13 @@ interface KannaTranscriptProps {
   latestToolIds: Record<string, string | null>
   onOpenLocalLink: (target: OpenLocalLinkTarget) => void
   chatId?: string
+  // Widened (not narrowed to Promise<void>) so a rejected chat.respondTool can
+  // roll the optimistic card back while `() => undefined` callers still fit.
   onAskUserQuestionSubmit: (
     toolUseId: string,
     questions: AskUserQuestionItem[],
     answers: AskUserQuestionAnswerMap
-  ) => void
+  ) => void | Promise<void>
   onExitPlanModeConfirm: (toolUseId: string, confirmed: boolean, clearContext?: boolean, message?: string) => void
   onToolRequestAnswer?: (toolRequestId: string, decision: ToolRequestDecision) => void
   schedules?: Record<string, AutoContinueSchedule>
@@ -768,11 +772,13 @@ interface KannaTranscriptRowProps {
   row: ResolvedTranscriptRow
   toolGroupExpanded?: boolean
   onToolGroupExpandedChange: (groupId: string, next: boolean) => void
+  // Widened (not narrowed to Promise<void>) so a rejected chat.respondTool can
+  // roll the optimistic card back while `() => undefined` callers still fit.
   onAskUserQuestionSubmit: (
     toolUseId: string,
     questions: AskUserQuestionItem[],
     answers: AskUserQuestionAnswerMap
-  ) => void
+  ) => void | Promise<void>
   onExitPlanModeConfirm: (toolUseId: string, confirmed: boolean, clearContext?: boolean, message?: string) => void
   onToolRequestAnswer?: (toolRequestId: string, decision: ToolRequestDecision) => void
   schedules: Record<string, AutoContinueSchedule>
