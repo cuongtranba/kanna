@@ -280,6 +280,29 @@ const NOOP_PUSH_MANAGER = {
   sendTest: async () => {},
 } as never
 
+/** The non-agent deps every router test needs, so a test only spells out what it exercises. */
+function baseRouterDeps(state: ReturnType<typeof createEmptyState>) {
+  return {
+    store: {
+      state,
+      getProject: (id: string) => state.projectsById.get(id) ?? null,
+    } as never,
+    terminals: {
+      getSnapshot: () => null,
+      onEvent: () => () => {},
+    } as never,
+    keybindings: {
+      getSnapshot: () => DEFAULT_KEYBINDINGS_SNAPSHOT,
+      onChange: () => () => {},
+    } as never,
+    refreshDiscovery: async () => [],
+    getDiscoveredProjects: () => [],
+    machineDisplayName: "Local Machine",
+    updateManager: null,
+    pushManager: NOOP_PUSH_MANAGER,
+  }
+}
+
 describe("ws-router", () => {
   test("acks system.ping without broadcasting snapshots", async () => {
     const router = createWsRouter({
@@ -1084,6 +1107,96 @@ describe("ws-router", () => {
           branchHistory: { entries: [] },
         },
       },
+    })
+  })
+
+  // The composer picker's catalog is a property of the project's cwd, not of a
+  // chat. Delivering it as chat state meant the first snapshot always went out
+  // empty-and-loading and the real list arrived later as a chat.ops delta the
+  // picker's store never reads — a skeleton that never resolved. These two
+  // tests pin the replacement: the data is in the FIRST frame, or it is empty.
+  test("subscribing to project-commands returns the local catalog in the first snapshot", async () => {
+    const state = createEmptyState()
+    state.projectsById.set("project-1", {
+      id: "project-1",
+      localPath: "/tmp/project",
+      title: "Project",
+      createdAt: 1,
+      updatedAt: 1,
+    })
+
+    const router = createWsRouter({
+      ...baseRouterDeps(state),
+      agent: {
+        getActiveStatuses: () => new Map(),
+        getDrainingChatIds: () => new Set(),
+        getWaitStartedAtByChatId: () => new Map(),
+        localCatalog: {
+          list: (cwd: string) => [
+            { name: "deploy", description: `from ${cwd}`, argumentHint: "", kind: "skill", scope: "project" },
+            { name: "skill-stack:dokploy", description: "", argumentHint: "", kind: "skill", scope: "plugin" },
+          ],
+        },
+      } as never,
+    })
+    const ws = new FakeWebSocket()
+    router.handleOpen(ws as never)
+
+    await router.handleMessage(
+      ws as never,
+      JSON.stringify({
+        v: 1,
+        type: "subscribe",
+        id: "project-commands-sub-1",
+        topic: { type: "project-commands", projectId: "project-1" },
+      })
+    )
+
+    expect(ws.sent[0]).toEqual({
+      v: PROTOCOL_VERSION,
+      type: "snapshot",
+      id: "project-commands-sub-1",
+      snapshot: {
+        type: "project-commands",
+        data: {
+          projectId: "project-1",
+          commands: [
+            { name: "deploy", description: "from /tmp/project", argumentHint: "", kind: "skill", scope: "project" },
+            { name: "skill-stack:dokploy", description: "", argumentHint: "", kind: "skill", scope: "plugin" },
+          ],
+        },
+      },
+    })
+  })
+
+  test("project-commands for an unknown project is an empty list, not a throw", async () => {
+    const router = createWsRouter({
+      ...baseRouterDeps(createEmptyState()),
+      agent: {
+        getActiveStatuses: () => new Map(),
+        getDrainingChatIds: () => new Set(),
+        getWaitStartedAtByChatId: () => new Map(),
+        localCatalog: { list: () => [{ name: "x", description: "", argumentHint: "" }] },
+      } as never,
+    })
+    const ws = new FakeWebSocket()
+    router.handleOpen(ws as never)
+
+    await router.handleMessage(
+      ws as never,
+      JSON.stringify({
+        v: 1,
+        type: "subscribe",
+        id: "project-commands-sub-2",
+        topic: { type: "project-commands", projectId: "ghost" },
+      })
+    )
+
+    expect(ws.sent[0]).toEqual({
+      v: PROTOCOL_VERSION,
+      type: "snapshot",
+      id: "project-commands-sub-2",
+      snapshot: { type: "project-commands", data: { projectId: "ghost", commands: [] } },
     })
   })
 
