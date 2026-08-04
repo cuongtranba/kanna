@@ -45,19 +45,18 @@ describe("localCommandsForCwd", () => {
     expect(localCommandsForCwd(makeDeps({ localCatalog: null }), "/cwd")).toEqual([])
   })
 
-  test("keeps project + personal scopes, drops plugin + builtin", () => {
+  test("surfaces every locally invocable scope, including plugins", () => {
     const deps = makeDeps({
       localCatalog: {
         list: () => [
           makeSlashCommand("proj-skill", "project"),
           makeSlashCommand("user-skill", "personal"),
           makeSlashCommand("cloudflare:sandbox", "plugin"),
-          makeSlashCommand("help", "builtin"),
         ],
       },
     })
     const result = localCommandsForCwd(deps, "/cwd")
-    expect(result.map((c) => c.name)).toEqual(["proj-skill", "user-skill"])
+    expect(result.map((c) => c.name)).toEqual(["proj-skill", "user-skill", "cloudflare:sandbox"])
   })
 
   test("returns [] when localCatalog.list throws", () => {
@@ -112,7 +111,7 @@ describe("ensureSlashCommandsLoaded", () => {
     await expect(ensureSlashCommandsLoaded(deps, "chat-1")).resolves.toBeUndefined()
   })
 
-  test("loads local project + personal commands and persists them; clears in-flight", async () => {
+  test("loads the local catalog and persists it; clears in-flight", async () => {
     let recorded: SlashCommand[] = []
     const deps = makeDeps({
       localCatalog: {
@@ -131,7 +130,7 @@ describe("ensureSlashCommandsLoaded", () => {
       },
     })
     await ensureSlashCommandsLoaded(deps, "chat-1")
-    expect(recorded.map((c) => c.name)).toEqual(["proj-skill", "user-skill"])
+    expect(recorded.map((c) => c.name)).toEqual(["proj-skill", "user-skill", "cloudflare:sandbox"])
     expect(deps.slashCommandsInFlight.has("chat-1")).toBe(false)
   })
 

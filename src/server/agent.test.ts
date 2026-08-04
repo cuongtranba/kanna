@@ -3727,11 +3727,10 @@ describe("AgentCoordinator claude integration", () => {
 })
 
 describe("AgentCoordinator.ensureSlashCommandsLoaded", () => {
-  test("loads commands from the local catalog (project + personal only) without spawning Claude", async () => {
+  test("loads every scope from the local catalog without spawning Claude", async () => {
     const store = createFakeStore()
     const stateChanges: Array<string | undefined> = []
-    // Catalog returns all three scopes; the picker must keep project + personal
-    // and drop plugin — with no CLI spawn at all.
+    // Every locally invocable scope reaches the picker — with no CLI spawn at all.
     const fakeLocalCatalog = {
       list: (): SlashCommand[] => [
         { name: "proj-skill", description: "", argumentHint: "", kind: "skill", scope: "project" },
@@ -3767,6 +3766,7 @@ describe("AgentCoordinator.ensureSlashCommandsLoaded", () => {
     expect(store.commandsLoaded[0].commands.map((c: SlashCommand) => c.name)).toEqual([
       "proj-skill",
       "user-skill",
+      "cf:sandbox",
     ])
     expect(stateChanges).toContain("chat-1")
   })

@@ -99,21 +99,21 @@ export async function ensureSlashCommandsLoaded(
 }
 
 /**
- * The local command catalog for a cwd, restricted to project + personal (user)
- * scopes. Plugin-scope entries and CLI built-ins are excluded. A scan failure
- * degrades to an empty list (logged) rather than throwing.
+ * The local command catalog for a cwd: every entry the scanner found, across
+ * project, personal, and plugin scopes. The scanner already restricts plugin
+ * scope to *enabled* plugins, so filtering here would only hide commands the
+ * SDK would happily accept. A scan failure degrades to an empty list (logged)
+ * rather than throwing.
  */
 export function localCommandsForCwd(
   deps: Pick<SlashCommandsDeps, "localCatalog">,
   cwd: string,
 ): SlashCommand[] {
   if (!deps.localCatalog) return []
-  let local: SlashCommand[]
   try {
-    local = deps.localCatalog.list(cwd)
+    return deps.localCatalog.list(cwd)
   } catch (error) {
     log.warn("[kanna/agent] localCatalog.list failed", String(error))
     return []
   }
-  return local.filter((entry) => entry.scope === "project" || entry.scope === "personal")
 }

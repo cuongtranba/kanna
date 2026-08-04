@@ -33,17 +33,22 @@ interface CacheRow {
 }
 
 /**
- * The directories `scanLocalCatalog` walks. Stamping these catches skills being
- * added or removed; stamping each scanned file (see `LocalCatalogService.list`)
- * catches an existing SKILL.md being edited in place, which bumps no directory.
+ * Everything `scanLocalCatalog` consults but does not return an entry for.
+ * Stamping the directories catches skills being added or removed; stamping the
+ * settings files catches a plugin being enabled or disabled. An existing
+ * SKILL.md edited in place bumps none of these, which is why
+ * `LocalCatalogService.list` stamps each scanned file as well.
  */
 export function catalogRootDirs(args: { cwd: string; homeDir: string }): string[] {
   return [
     path.join(args.cwd, ".claude", "skills"),
     path.join(args.cwd, ".claude", "commands"),
+    path.join(args.cwd, ".claude", "settings.json"),
+    path.join(args.cwd, ".claude", "settings.local.json"),
     path.join(args.homeDir, ".claude", "skills"),
     path.join(args.homeDir, ".claude", "commands"),
-    path.join(args.homeDir, ".claude", "plugins"),
+    path.join(args.homeDir, ".claude", "settings.json"),
+    path.join(args.homeDir, ".claude", "plugins", "installed_plugins.json"),
   ]
 }
 

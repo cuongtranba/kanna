@@ -78,6 +78,30 @@ describe("filterCommands", () => {
     ]
     expect(filterCommands(list, "review")).toEqual([])
   })
+
+  // Plugin scope is the bulk of the catalog, so the skills the user wrote
+  // themselves must not be pushed below a wall of `plugin:name` entries.
+  test("your own skills rank above plugin skills within a match tier", () => {
+    const list: SlashCommand[] = [
+      { name: "aaa:deploy", description: "", argumentHint: "", scope: "plugin" },
+      { name: "zzz-deploy", description: "", argumentHint: "", scope: "personal" },
+      { name: "mmm-deploy", description: "", argumentHint: "", scope: "project" },
+    ]
+    expect(filterCommands(list, "").map((c) => c.name)).toEqual([
+      "mmm-deploy",
+      "zzz-deploy",
+      "aaa:deploy",
+    ])
+  })
+
+  test("scope rank never outranks match tier", () => {
+    const list: SlashCommand[] = [
+      { name: "deploy-now", description: "", argumentHint: "", scope: "plugin" },
+      { name: "run-deploy", description: "", argumentHint: "", scope: "personal" },
+    ]
+    // A personal substring match still loses to a plugin prefix match.
+    expect(filterCommands(list, "deploy").map((c) => c.name)).toEqual(["deploy-now", "run-deploy"])
+  })
 })
 
 describe("applyCommandToInput", () => {

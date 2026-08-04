@@ -71,15 +71,33 @@ describe("reduceCatalog", () => {
 })
 
 describe("catalogRootDirs", () => {
-  test("lists the project and personal roots the scanner walks", () => {
+  test("stamps the scanned roots and the settings files that gate plugins", () => {
     const roots = catalogRootDirs({ cwd: "/proj", homeDir: "/home/u" })
     expect(roots).toEqual([
       "/proj/.claude/skills",
       "/proj/.claude/commands",
+      "/proj/.claude/settings.json",
+      "/proj/.claude/settings.local.json",
       "/home/u/.claude/skills",
       "/home/u/.claude/commands",
-      "/home/u/.claude/plugins",
+      "/home/u/.claude/settings.json",
+      "/home/u/.claude/plugins/installed_plugins.json",
     ])
+  })
+
+  test("enabling a plugin invalidates the cache", () => {
+    let calls = 0
+    const { svc, mtimes } = makeStampedService(() => {
+      calls += 1
+      return []
+    })
+    svc.list("/proj")
+    svc.list("/proj")
+    expect(calls).toBe(1)
+
+    mtimes.set("/home/u/.claude/settings.json", 5)
+    svc.list("/proj")
+    expect(calls).toBe(2)
   })
 })
 
