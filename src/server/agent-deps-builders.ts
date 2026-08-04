@@ -139,12 +139,12 @@ export function buildCancelHandlerDeps(agent: AgentCoordinator): CancelHandlerDe
     rejectPendingResolversForChat: (chatId) => agent.rejectPendingResolversForChat(chatId),
     cancelChatInOrchestrator: (chatId) => agent.getSubagentOrchestrator().cancelChat(chatId),
     activeTurns: agent.activeTurns,
+    startingTurns: agent.startingTurns,
     store: agent.store,
     claudeSessions: agent.claudeSessions,
     emitStateChange: (chatId) => agent.emitStateChange(chatId),
     resolveClaudeDriverPreference: () => agent.resolveClaudeDriverPreference(),
     closeClaudeSession: (chatId, session) => agent.closeClaudeSession(chatId, session),
-    maybeStartNextQueuedMessage: async (chatId) => { await agent.maybeStartNextQueuedMessage(chatId) },
   }
 }
 
@@ -178,6 +178,7 @@ export function buildSendCommandDeps(agent: AgentCoordinator): SendCommandDeps {
   return {
     store: agent.store,
     activeTurns: agent.activeTurns,
+    startingTurns: agent.startingTurns,
     claudeSessions: agent.claudeSessions,
     resolveBackgroundTaskMaxMs: () => agent.resolveBackgroundTaskMaxMs(),
     autoResumeByChat: agent.autoResumeByChat,
@@ -254,6 +255,7 @@ export function buildToolRespondDeps(agent: AgentCoordinator): ToolRespondDeps {
 export function buildSessionStateQueryDeps(agent: AgentCoordinator): SessionStateQueryDeps {
   return {
     activeTurns: agent.activeTurns,
+    startingTurns: agent.startingTurns,
     claudeSessions: agent.claudeSessions,
     drainingStreams: agent.drainingStreams,
     isClaudeSdkProvider: (provider) => isClaudeSdkProvider(provider),
@@ -280,6 +282,7 @@ export function buildSessionStateQueryDeps(agent: AgentCoordinator): SessionStat
 export function buildStartTurnDeps(agent: AgentCoordinator): StartTurnDeps {
   return {
     activeTurns: agent.activeTurns,
+    startingTurns: agent.startingTurns,
     claudeSessions: agent.claudeSessions,
     drainingStreams: agent.drainingStreams,
     mentionedSubagentIdsByChat: agent.mentionedSubagentIdsByChat,
@@ -289,6 +292,7 @@ export function buildStartTurnDeps(agent: AgentCoordinator): StartTurnDeps {
     clearDrainingStream: (chatId) => agent.clearDrainingStream(chatId),
     emitStateChange: (chatId, opts) => agent.emitStateChange(chatId, opts),
     resolveClaudeDriverPreference: () => agent.resolveClaudeDriverPreference(),
+    closeClaudeSession: (chatId, session) => agent.closeClaudeSession(chatId, session),
     getSubagents: () => agent.getSubagents(),
     getAppSettingsSnapshot: () => agent.getAppSettingsSnapshot(),
     generateTitleInBackground: (chatId, content, localPath, optimisticTitle) =>

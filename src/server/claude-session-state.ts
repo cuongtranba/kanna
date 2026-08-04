@@ -29,6 +29,32 @@ export interface SessionBackgroundTask {
   startedAt: number
 }
 
+/**
+ * A turn that has been requested but whose provider session is still booting.
+ *
+ * `startTurnForChat` only registers an `ActiveTurn` AFTER `startClaudeTurn`
+ * resolves — a full SDK/PTY session spawn on a cold chat, i.e. seconds. For
+ * that whole window the chat had no server-side record at all, so `chat.cancel`
+ * found nothing and returned silently (the user had to press Stop a second
+ * time once the turn finally registered), a second `chat.send` started a
+ * concurrent turn instead of queueing, and the snapshot reported `idle`.
+ *
+ * `ActiveTurn.turn` is a non-optional `HarnessTurn`, which does not exist yet
+ * during the boot — hence this separate, deliberately minimal record. It is
+ * registered synchronously before the first `await` and removed in a `finally`.
+ */
+export interface StartingTurn {
+  chatId: string
+  provider: AgentProvider
+  startedAt: number
+  /**
+   * Set by `cancelChat` when Stop lands mid-boot. `startTurnForChat` reads it
+   * once the provider session resolves and tears the fresh turn down instead
+   * of registering it.
+   */
+  cancelRequested: boolean
+}
+
 export interface ActiveTurn {
   chatId: string
   provider: AgentProvider

@@ -10,7 +10,7 @@ import {
   sweepIdleClaudeSessions,
   type SessionStateQueryDeps,
 } from "./claude-session-state-queries"
-import type { ActiveTurn, ClaudeSessionState, PendingToolRequest } from "./claude-session-state"
+import type { ActiveTurn, ClaudeSessionState, PendingToolRequest, StartingTurn } from "./claude-session-state"
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -61,9 +61,20 @@ function makeActiveTurn(overrides?: Partial<ActiveTurn>): ActiveTurn {
   } as ActiveTurn
 }
 
+function makeStartingTurn(overrides?: Partial<StartingTurn>): StartingTurn {
+  return {
+    chatId: "chat-1",
+    provider: "claude",
+    startedAt: Date.now(),
+    cancelRequested: false,
+    ...overrides,
+  }
+}
+
 function makeDeps(overrides?: Partial<SessionStateQueryDeps>): SessionStateQueryDeps {
   return {
     activeTurns: new Map(),
+    startingTurns: new Map(),
     claudeSessions: new Map(),
     drainingStreams: new Map(),
     isClaudeSdkProvider: mock(() => false),
@@ -122,6 +133,21 @@ describe("getActiveStatuses", () => {
       claudeSessions: new Map([["chat-1", makeSession({ selfWakeActive: false })]]),
     })
     expect(getActiveStatuses(deps).has("chat-1")).toBe(false)
+  })
+
+  it("surfaces a booting turn as starting", () => {
+    const deps = makeDeps({
+      startingTurns: new Map([["chat-1", makeStartingTurn()]]),
+    })
+    expect(getActiveStatuses(deps).get("chat-1")).toBe("starting")
+  })
+
+  it("an active turn's status wins over a stale starting marker", () => {
+    const deps = makeDeps({
+      activeTurns: new Map([["chat-1", makeActiveTurn({ status: "running" })]]),
+      startingTurns: new Map([["chat-1", makeStartingTurn()]]),
+    })
+    expect(getActiveStatuses(deps).get("chat-1")).toBe("running")
   })
 })
 

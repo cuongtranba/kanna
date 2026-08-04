@@ -20,7 +20,7 @@ import type {
 import { isCodexReasoningEffort, providerUsesSdkSession } from "../shared/types"
 import { isClaudeSdkProvider } from "./provider-catalog"
 import type { ChatRecord, ProjectRecord } from "./events"
-import type { ActiveTurn, ClaudeSessionState } from "./claude-session-state"
+import type { ActiveTurn, ClaudeSessionState, StartingTurn } from "./claude-session-state"
 import type { AnyValue } from "../shared/errors"
 import type { HarnessTurn, HarnessToolRequest } from "./harness-types"
 import type { EventStore } from "./event-store"
@@ -84,6 +84,13 @@ export interface StartTurnAppSettings {
 export interface StartTurnDeps {
   // Maps (mutable — methods read and write these)
   activeTurns: Map<string, ActiveTurn>
+  /**
+   * Turns whose provider session is still booting. Registered synchronously
+   * here before the first `await` and removed in a `finally`, so cancel /
+   * send-queueing / status derivation all see the chat as busy during the
+   * spawn window.
+   */
+  startingTurns: Map<string, StartingTurn>
   claudeSessions: Map<string, ClaudeSessionState>
   drainingStreams: Map<string, { turn: HarnessTurn }>
   mentionedSubagentIdsByChat: Map<string, string[]>
@@ -97,6 +104,12 @@ export interface StartTurnDeps {
   clearDrainingStream: (chatId: string) => void
   emitStateChange: (chatId: string, options?: { immediate?: boolean }) => void
   resolveClaudeDriverPreference: () => ClaudeDriverPreference
+  /**
+   * Tear down a Claude session. Only used when a cancel lands mid-boot under
+   * the PTY driver, where interrupting the fresh turn kills the CLI and the
+   * session in `claudeSessions` is left dead.
+   */
+  closeClaudeSession: (chatId: string, session: ClaudeSessionState) => void
   getSubagents: () => Subagent[]
   getAppSettingsSnapshot: () => StartTurnAppSettings
   /** Fired in background (return value discarded). */
@@ -130,6 +143,8 @@ export interface StartTurnForChatArgs {
 
 interface StartTurnAfterTurnStartedCtx {
   args: StartTurnForChatArgs
+  /** This boot's marker — checked once the provider session resolves. */
+  starting: StartingTurn
   chat: ChatRecord
   project: ProjectRecord
   existingMessages: TranscriptEntry[]
@@ -174,10 +189,45 @@ export async function startTurnForChat(
   deps.subagentOrchestrator.clearChatCancellation(args.chatId)
 
   const chat = deps.store.requireChat(args.chatId)
-  if (deps.activeTurns.has(args.chatId)) {
+  if (deps.activeTurns.has(args.chatId) || deps.startingTurns.has(args.chatId)) {
     throw new Error("Chat is already running")
   }
 
+  // Claim the chat BEFORE the first await. Everything from here to the
+  // `activeTurns.set` below is async (store writes, then a full provider
+  // session spawn), and until this marker existed the chat looked idle to
+  // cancel, to `chat.send`, and to the snapshot — so Stop silently no-oped
+  // and a second send raced in a concurrent turn.
+  const starting: StartingTurn = {
+    chatId: args.chatId,
+    provider: args.provider,
+    startedAt: Date.now(),
+    cancelRequested: false,
+  }
+  deps.startingTurns.set(args.chatId, starting)
+  deps.emitStateChange(args.chatId, { immediate: true })
+
+  try {
+    await startTurnForChatInner(deps, args, starting, chat)
+  } finally {
+    // Identity-guarded: a cancel may have removed this marker and a newer turn
+    // may have registered its own. Only ever clear our own.
+    if (deps.startingTurns.get(args.chatId) === starting) {
+      deps.startingTurns.delete(args.chatId)
+    }
+  }
+}
+
+/**
+ * The original body of `startTurnForChat`, minus the starting-marker
+ * bookkeeping its caller now owns.
+ */
+async function startTurnForChatInner(
+  deps: StartTurnDeps,
+  args: StartTurnForChatArgs,
+  starting: StartingTurn,
+  chat: ChatRecord,
+): Promise<void> {
   if (chat.provider !== args.provider) {
     await deps.store.setChatProvider(args.chatId, args.provider)
     logSendToStartingProfile(args.profile, "start_turn.provider_set", {
@@ -255,6 +305,7 @@ export async function startTurnForChat(
   try {
     await startTurnAfterTurnStarted(deps, {
       args,
+      starting,
       chat,
       project,
       existingMessages,
@@ -329,7 +380,7 @@ async function startTurnAfterTurnStarted(
   deps: StartTurnDeps,
   ctx: StartTurnAfterTurnStartedCtx,
 ): Promise<void> {
-  const { args, chat, project, existingMessages, shouldGenerateTitle, optimisticTitle, appendedUserMessageId } = ctx
+  const { args, starting, chat, project, existingMessages, shouldGenerateTitle, optimisticTitle, appendedUserMessageId } = ctx
   if (shouldGenerateTitle) {
     void deps.generateTitleInBackground(args.chatId, args.content, project.localPath, optimisticTitle ?? "New Chat")
   }
@@ -447,6 +498,35 @@ async function startTurnAfterTurnStarted(
       provider: args.provider,
       model: args.model,
     })
+  }
+
+  // Stop landed while the provider session was booting. `cancelChat` has
+  // already written the `interrupted` entry and flipped the chat to idle, so
+  // tear the freshly-spawned turn down silently — never register it, never
+  // run it.
+  if (starting.cancelRequested) {
+    logSendToStartingProfile(args.profile, "start_turn.cancelled_during_boot", {
+      chatId: args.chatId,
+      provider: args.provider,
+    })
+    try {
+      await Promise.race([
+        turn.interrupt(),
+        new Promise<void>((resolve) => setTimeout(resolve, 5_000)),
+      ])
+    } catch {
+      // best-effort — close() below is the backstop
+    }
+    turn.close()
+    // Under PTY the turn handle is a ghost facade over the long-lived session
+    // and interrupt() sends SIGINT, killing the CLI — drop the dead session so
+    // the next turn respawns. Mirrors the active-turn path in
+    // claude-cancel-handler.ts.
+    if (args.provider === "claude" && deps.resolveClaudeDriverPreference() === "pty") {
+      const session = deps.claudeSessions.get(args.chatId)
+      if (session) deps.closeClaudeSession(args.chatId, session)
+    }
+    return
   }
 
   const active: ActiveTurn = {

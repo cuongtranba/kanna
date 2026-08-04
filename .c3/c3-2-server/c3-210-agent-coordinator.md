@@ -1,7 +1,7 @@
 ---
 id: c3-210
 c3-version: 4
-c3-seal: 523bb19b40f296cd6f567a05b34407e72e3e13ae798e6b22bcf5faa196fe2212
+c3-seal: 06f93bdd4f11da699a75cbb3a871d315573de01e92f90573fda923cf8e1981ac
 title: agent-coordinator
 type: component
 category: feature
@@ -53,7 +53,7 @@ Owns the agent turn lifecycle: receives `chat.send` commands, picks the provider
 | Outcome | UI streams a coherent turn from any supported provider | c3-101 |
 | Primary path | chat.send → start session → stream events → finalize turn | c3-208 |
 | Subagent live progress | onEntry fires onRunProgress directly (not chained on write chain) so UI updates synchronously with in-memory state; onChunk fires trailing-edge throttled (~100ms) onRunProgress for streaming text visibility. See adr-20260519-subagent-live-progress-decouple. | c3-207 |
-| Alternate — cancel | chat.cancel propagates to provider | c3-211 |
+| Alternate — cancel | chat.cancel propagates to provider; reaches a turn at any lifecycle point (booting / active / self-wake) | c3-211 |
 | Alternate — resume | Resume reuses live session if available | c3-211 |
 | Alternate — background self-wake | Task-notification wake turns stream with no ActiveTurn; ClaudeSessionState.selfWakeActive overlays status "running" via getActiveStatuses, getBackgroundTasksByChatId feeds ChatRuntime.backgroundTasks, and cancel interrupts the warm session (adr-20260802-background-selfwake-status-ui) | c3-207 |
 | Failure — provider error | Emits typed failure event; surfaces to client | c3-205 |
@@ -76,7 +76,8 @@ Owns the agent turn lifecycle: receives `chat.send` commands, picks the provider
 | --- | --- | --- | --- | --- |
 | runTurn(command) | IN | Drives a single turn from chat.send | c3-208 | src/server/agent-coordinator.ts |
 | Transcript events | OUT | Append-only typed events | c3-206 | src/server/agent-coordinator.ts |
-| Cancel callback | IN | Propagates cancel to provider | c3-211 | src/server/agent-coordinator.ts |
+| Cancel callback | IN | Propagates cancel to provider. Falls back through the states that render busy without an ActiveTurn: a startingTurns entry (provider session still booting) is marked cancelRequested + dropped and the interrupted/turn_cancelled pair written immediately, then the booting turn tears itself down silently on resolve; else a selfWakeActive session is interrupted directly. Never starts a queued message — Stop parks the queue. See adr-20260804-cancel-during-turn-boot | c3-211 | src/server/claude-cancel-handler.ts, src/server/claude-turn-starter.ts |
+| startingTurns | OUT | Per-chat marker registered synchronously by startTurnForChat before its first await and removed in an identity-guarded finally, covering the window before an ActiveTurn exists. Read by cancelChat, by sendCommand/maybeStartNextQueuedMessage (busy check — prevents a concurrent turn on a second send mid-boot), and by getActiveStatuses (surfaces as starting) | c3-207 | src/server/claude-session-state.ts, src/server/agent-coordinator.ts |
 | delegateRun({keepAlive?}) | IN | subagent_id resolved by exact id, else unambiguous exact name (id wins on collision, ambiguous name → UNKNOWN_SUBAGENT); a target with triggerMode==="manual" whose id is NOT in args.mentionedSubagentIds fails MANUAL_ONLY (the user must @-mention it); runs subagent turn 1; on keepAlive completion registers a live session (no /exit) and returns runId; over KANNA_SUBAGENT_MAX_LIVE per chat fails CAP_EXCEEDED | c3-226 | src/server/subagent-orchestrator.ts |
 | delegateRun({background?}) | IN | Launches the run detached and returns {status:"async_launched", runId} immediately; the run still flows through spawnRun (permit, RunState, timeout, abort, events); on terminal fires onBackgroundRunComplete. Mutually exclusive with keepAlive | c3-226 | src/server/subagent-orchestrator.ts |
 | getMentionedSubagentIds() | IN | Per-turn getter on KannaMcpDelegationContext supplying the subagent ids the user @-mentioned in the message that started the turn; threaded from agent.ts (mentionedSubagentIdsByChat, sourced from parseMentions) and consumed by delegateRun's MANUAL_ONLY gate; subagent sub-spawn contexts pass an empty set so a subagent cannot drive a manual subagent | c3-226 | src/server/agent.ts, src/server/kanna-mcp.ts, src/server/kanna-mcp-tools/delegate-subagent.ts |

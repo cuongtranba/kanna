@@ -5,7 +5,7 @@
 import { describe, test, expect, mock } from "bun:test"
 import { startTurnForChat, type StartTurnDeps, type StartTurnForChatArgs } from "./claude-turn-starter"
 import { OAuthPoolUnavailableError } from "./oauth-errors"
-import type { ActiveTurn, ClaudeSessionState } from "./claude-session-state"
+import type { ActiveTurn, ClaudeSessionState, StartingTurn } from "./claude-session-state"
 import type { HarnessTurn } from "./harness-types"
 
 // ---------------------------------------------------------------------------
@@ -43,6 +43,7 @@ function makeFakeProjectRecord() {
 
 function makeDeps(overrides: Partial<StartTurnDeps> = {}): StartTurnDeps {
   const activeTurns = new Map<string, ActiveTurn>()
+  const startingTurns = new Map<string, StartingTurn>()
   const claudeSessions = new Map<string, ClaudeSessionState>()
   const drainingStreams = new Map<string, { turn: HarnessTurn }>()
   const mentionedSubagentIdsByChat = new Map<string, string[]>()
@@ -54,6 +55,7 @@ function makeDeps(overrides: Partial<StartTurnDeps> = {}): StartTurnDeps {
 
   const deps: StartTurnDeps = {
     activeTurns,
+    startingTurns,
     claudeSessions,
     drainingStreams,
     mentionedSubagentIdsByChat,
@@ -83,6 +85,7 @@ function makeDeps(overrides: Partial<StartTurnDeps> = {}): StartTurnDeps {
     clearDrainingStream: mock(() => {}),
     emitStateChange: mock(() => {}),
     resolveClaudeDriverPreference: mock(() => "sdk" as const),
+    closeClaudeSession: mock(() => {}),
     getSubagents: mock(() => []),
     getAppSettingsSnapshot: mock(() => ({ globalPromptAppend: undefined })),
     generateTitleInBackground: mock(async () => {}),
@@ -263,5 +266,150 @@ describe("startTurnForChat", () => {
     const deps = makeDeps()
     await startTurnForChat(deps, makeArgs({ provider: "codex" }))
     expect(deps.runTurn as ReturnType<typeof mock>).toHaveBeenCalledTimes(1)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Provider-boot window
+//
+// Regression: the ActiveTurn is only registered AFTER the provider session
+// spawns, so for that whole window (seconds on a cold chat) the chat had no
+// server-side record — Stop no-oped and a second chat.send started a
+// concurrent turn. A StartingTurn marker now covers the gap.
+// ---------------------------------------------------------------------------
+
+/** A promise plus its resolver, for pausing a mocked provider boot. */
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((res) => { resolve = res })
+  return { promise, resolve }
+}
+
+describe("startTurnForChat — starting-turn marker", () => {
+  test("registers a starting marker before the provider boot and clears it on success", async () => {
+    const gate = deferred<HarnessTurn>()
+    const deps = makeDeps({ codexManager: {
+      startSession: mock(async () => null),
+      startTurn: mock(() => gate.promise),
+    } as unknown as StartTurnDeps["codexManager"] })
+
+    const pending = startTurnForChat(deps, makeArgs({ provider: "codex" }))
+    // Let the pre-boot awaits settle, then assert the marker exists while the
+    // provider is still booting and no ActiveTurn has been registered yet.
+    await Promise.resolve()
+    await new Promise((r) => setTimeout(r, 0))
+    expect(deps.startingTurns.has("chat-1")).toBe(true)
+    expect(deps.activeTurns.has("chat-1")).toBe(false)
+
+    gate.resolve(makeFakeTurn())
+    await pending
+
+    expect(deps.startingTurns.has("chat-1")).toBe(false)
+    expect(deps.activeTurns.has("chat-1")).toBe(true)
+  })
+
+  test("throws when a starting marker already exists (concurrent boot)", async () => {
+    const deps = makeDeps()
+    deps.startingTurns.set("chat-1", {
+      chatId: "chat-1",
+      provider: "codex",
+      startedAt: Date.now(),
+      cancelRequested: false,
+    })
+
+    await expect(startTurnForChat(deps, makeArgs())).rejects.toThrow("Chat is already running")
+  })
+
+  test("clears the marker when the boot throws", async () => {
+    const deps = makeDeps({
+      startClaudeTurn: mock(async () => { throw new Error("spawn failed") }),
+    })
+
+    await expect(
+      startTurnForChat(deps, makeArgs({ provider: "claude", model: "claude-opus-4-5" })),
+    ).rejects.toThrow("spawn failed")
+
+    expect(deps.startingTurns.has("chat-1")).toBe(false)
+  })
+
+  test("cancel during the boot tears the fresh turn down instead of registering it", async () => {
+    const gate = deferred<HarnessTurn>()
+    const interrupt = mock(async () => {})
+    const close = mock(() => {})
+    const deps = makeDeps({ codexManager: {
+      startSession: mock(async () => null),
+      startTurn: mock(() => gate.promise),
+    } as unknown as StartTurnDeps["codexManager"] })
+
+    const pending = startTurnForChat(deps, makeArgs({ provider: "codex" }))
+    await new Promise((r) => setTimeout(r, 0))
+
+    // Simulate cancelChat landing mid-boot.
+    const starting = deps.startingTurns.get("chat-1")!
+    starting.cancelRequested = true
+    deps.startingTurns.delete("chat-1")
+
+    gate.resolve({ ...makeFakeTurn(), interrupt, close })
+    await pending
+
+    expect(deps.activeTurns.has("chat-1")).toBe(false)
+    expect(deps.runTurn as ReturnType<typeof mock>).not.toHaveBeenCalled()
+    expect(interrupt).toHaveBeenCalledTimes(1)
+    expect(close).toHaveBeenCalledTimes(1)
+  })
+
+  test("cancel during a claude PTY boot also drops the dead session", async () => {
+    const gate = deferred<HarnessTurn>()
+    const closeClaudeSession = mock(() => {})
+    const deps = makeDeps({
+      resolveClaudeDriverPreference: mock(() => "pty" as const),
+      closeClaudeSession,
+    })
+    deps.startClaudeTurn = mock(() => {
+      deps.claudeSessions.set("chat-1", { chatId: "chat-1" } as unknown as ClaudeSessionState)
+      return gate.promise
+    })
+
+    const pending = startTurnForChat(deps, makeArgs({ provider: "claude", model: "claude-opus-4-5" }))
+    await new Promise((r) => setTimeout(r, 0))
+
+    const starting = deps.startingTurns.get("chat-1")!
+    starting.cancelRequested = true
+    deps.startingTurns.delete("chat-1")
+
+    gate.resolve(makeFakeTurn())
+    await pending
+
+    expect(deps.activeTurns.has("chat-1")).toBe(false)
+    expect(closeClaudeSession).toHaveBeenCalledTimes(1)
+  })
+
+  test("a cancelled boot does not clear a newer turn's marker", async () => {
+    const gate = deferred<HarnessTurn>()
+    const deps = makeDeps({ codexManager: {
+      startSession: mock(async () => null),
+      startTurn: mock(() => gate.promise),
+    } as unknown as StartTurnDeps["codexManager"] })
+
+    const pending = startTurnForChat(deps, makeArgs({ provider: "codex" }))
+    await new Promise((r) => setTimeout(r, 0))
+
+    // Cancel removes the first marker, then a fresh turn registers its own.
+    const first = deps.startingTurns.get("chat-1")!
+    first.cancelRequested = true
+    deps.startingTurns.delete("chat-1")
+    const second: StartingTurn = {
+      chatId: "chat-1",
+      provider: "codex",
+      startedAt: Date.now(),
+      cancelRequested: false,
+    }
+    deps.startingTurns.set("chat-1", second)
+
+    gate.resolve(makeFakeTurn())
+    await pending
+
+    // The first boot's identity-guarded cleanup must leave the second alone.
+    expect(deps.startingTurns.get("chat-1")).toBe(second)
   })
 })

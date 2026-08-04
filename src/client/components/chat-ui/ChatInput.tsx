@@ -141,6 +141,17 @@ export function trimTrailingPastedNewlines(text: string): string {
   return text.replace(/(?:\r\n|\r|\n)+$/, "")
 }
 
+/**
+ * Send and Stop share one button. It only acts as Stop when a turn is
+ * cancellable AND the composer is empty — with text staged it sends, queueing
+ * behind the running turn. The label, the icon and the click handler all
+ * derive from this so they cannot drift (the label used to ignore the staged
+ * text and announce "Stop" while the button would actually send).
+ */
+export function isStopAffordance(canCancel: boolean, hasTextToSend: boolean): boolean {
+  return canCancel && !hasTextToSend
+}
+
 export function willExceedAttachmentLimit(args: {
   currentAttachmentCount: number
   queuedAttachmentCount: number
@@ -1232,10 +1243,10 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
               }}
               disabled={disabled || (!canCancel && !canSubmit) || hasPendingUploads}
               size="icon"
-              aria-label={canCancel ? "Stop" : "Send message"}
+              aria-label={isStopAffordance(Boolean(canCancel), hasTextToSend) ? "Stop" : "Send message"}
               className="flex-shrink-0 bg-primary text-background rounded-full cursor-pointer h-11 w-11 mb-1 -mr-0.5 md:mr-0 md:mb-1.5 touch-manipulation disabled:opacity-50"
             >
-              {canCancel && !hasTextToSend ? (
+              {isStopAffordance(Boolean(canCancel), hasTextToSend) ? (
                 <div className="w-3 h-3 md:w-4 md:h-4 rounded-xs bg-current" />
               ) : (
                 <ArrowUp className="h-5 w-5 md:h-6 md:w-6" />
