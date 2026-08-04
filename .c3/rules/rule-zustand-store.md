@@ -1,6 +1,6 @@
 ---
 id: rule-zustand-store
-c3-seal: 6ea3d8976bb160fbf45f423f09392272e5dfd408fc6d77ba4214686bd39650f6
+c3-seal: 084ac8e84f91e1ee7a0cb238f17b75a635d54c8d30a6565eedc2c153fff6829b
 title: zustand-store
 type: rule
 goal: All client state in Kanna lives in Zustand stores, and so does every transition of it. Singleton feature state lives under `src/client/stores/<concern>Store.ts` (one concern per file, colocated `<concern>Store.test.ts`); per-instance component state lives in a colocated `<Component>.store.ts` built with `createScopedStore` from `src/client/lib/createScopedStore.tsx`. Stores expose named intent actions (`toggleStackExpanded`, `closeStackPanel`), never updater-shaped passthrough setters. Server-derived truth lives ONLY in the WS-fed `kannaStateStore`, written exclusively by the `useKannaState` socket pipeline. Raw `useState` outside the frozen allowlist fails the `no-react-usestate` ast-grep CI gate, and state-transition logic written inline in a JSX attribute fails the `no-jsx-inline-state-logic` / `no-jsx-inline-state-updater` gates (all via `bun run lint:usestate`).
@@ -76,7 +76,9 @@ File: `src/client/stores/preferences.ts` (colocated test: `src/client/stores/pre
 
 - All UI-local state for the client app: chat input, preferences, sidebar collapse, terminal layout, sound prefs, slash-command picker state, etc.
 - Both persisted (`persist`) and ephemeral (no middleware) stores
-- - Where transitions are written, not only where state is stored: every inline JSX-attribute handler under `src/client/**` that mutates store state, in both singleton and scoped stores
+- Where transitions are written, not only where state is stored: every inline JSX-attribute handler under `src/client/**` that mutates store state, in both singleton and scoped stores
+Where transitions are written, not only where state is stored: every inline JSX-attribute handler under `src/client/**` that mutates store state, in both singleton and scoped stores
+
 
 **Does NOT apply to:**
 

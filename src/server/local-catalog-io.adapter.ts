@@ -105,6 +105,19 @@ function safeStatMtime(filePath: string): number {
   }
 }
 
+/** The home directory the scanner falls back to when none is injected. */
+export function defaultHomeDir(): string {
+  return homedir()
+}
+
+/**
+ * Freshness stamps for the cache layer: mtime in ms per path, `0` for anything
+ * that cannot be stat'ed (missing, unreadable). Order matches the input.
+ */
+export function statMtimes(paths: readonly string[]): number[] {
+  return paths.map(safeStatMtime)
+}
+
 function safeReaddir(dir: string): string[] {
   try {
     return readdirSync(dir)

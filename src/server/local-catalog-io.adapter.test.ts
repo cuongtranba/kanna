@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test"
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { scanLocalCatalog } from "./local-catalog-io.adapter"
+import { scanLocalCatalog, statMtimes } from "./local-catalog-io.adapter"
 
 const dirs: string[] = []
 function tmp(prefix: string): string {
@@ -29,6 +29,26 @@ function writeCommand(dir: string, name: string, content: string): string {
   writeFileSync(file, content)
   return file
 }
+
+describe("statMtimes", () => {
+  test("returns a positive mtime for a real path and 0 for a missing one", () => {
+    const cwd = tmp("lci-")
+    const file = writeSkill(cwd, "deploy", "description: Ship it\n")
+    const [real, missing] = statMtimes([file, join(cwd, "nope")])
+    expect(real).toBeGreaterThan(0)
+    expect(missing).toBe(0)
+  })
+
+  test("preserves input order", () => {
+    const cwd = tmp("lci-")
+    const file = writeSkill(cwd, "deploy", "description: Ship it\n")
+    expect(statMtimes([join(cwd, "nope"), file, join(cwd, "nope2")])).toEqual([
+      0,
+      statMtimes([file])[0]!,
+      0,
+    ])
+  })
+})
 
 describe("local-catalog-io.adapter", () => {
   test("parses project skill with full frontmatter", () => {

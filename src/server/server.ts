@@ -51,7 +51,7 @@ import { initToolCallbackOnBoot, type ToolCallbackService } from "./tool-callbac
 import { SessionShareService } from "./session-share"
 import { createWorkflowRegistry } from "./workflow-registry"
 import { LocalCatalogService } from "./local-catalog"
-import { scanLocalCatalog } from "./local-catalog-io.adapter"
+import { defaultHomeDir, scanLocalCatalog, statMtimes } from "./local-catalog-io.adapter"
 import { createSubagentTranscriptRegistry } from "./subagent-transcript-registry"
 import { createFollowedSessionRegistry } from "./followed-session-registry"
 import { statSessionFile } from "./followed-session-io.adapter"
@@ -440,7 +440,11 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
   )
   setQuickResponseOAuthPool(oauthPool)
 
-  const localCatalog = new LocalCatalogService({ scan: scanLocalCatalog })
+  const localCatalog = new LocalCatalogService({
+    scan: scanLocalCatalog,
+    statMtimes,
+    homeDir: defaultHomeDir(),
+  })
   let agent!: AgentCoordinator
   const scheduleManager = new ScheduleManager({
     fire: async (chatId, scheduleId) => {

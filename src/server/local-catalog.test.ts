@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import type { RawCatalogEntry } from "./local-catalog-io.adapter"
-import { LocalCatalogService, mergeWithCli, reduceCatalog } from "./local-catalog"
-import type { SlashCommand } from "../shared/types"
+import type { LocalCatalogScanner } from "./local-catalog"
+import { LocalCatalogService, catalogRootDirs, reduceCatalog } from "./local-catalog"
 
 function raw(partial: Partial<RawCatalogEntry> & Pick<RawCatalogEntry, "name" | "kind" | "scope">): RawCatalogEntry {
   return {
@@ -70,57 +70,145 @@ describe("reduceCatalog", () => {
   })
 })
 
-describe("mergeWithCli", () => {
-  test("CLI entries win on case-insensitive collision", () => {
-    const cli: SlashCommand[] = [{ name: "model", description: "cli model", argumentHint: "" }]
-    const local: SlashCommand[] = [
-      { name: "Model", description: "shadow", argumentHint: "", kind: "skill", scope: "personal" },
-      { name: "deploy", description: "local", argumentHint: "", kind: "skill", scope: "project" },
-    ]
-    const merged = mergeWithCli(cli, local)
-    expect(merged.map((m) => m.name)).toEqual(["model", "deploy"])
-    expect(merged[0]!.kind).toBe("command")
-    expect(merged[0]!.scope).toBe("builtin")
-  })
-
-  test("local entries pass through when no CLI collision", () => {
-    const merged = mergeWithCli(
-      [{ name: "help", description: "", argumentHint: "" }],
-      [{ name: "c3", description: "c3 skill", argumentHint: "", kind: "skill", scope: "personal" }],
-    )
-    expect(merged).toHaveLength(2)
+describe("catalogRootDirs", () => {
+  test("lists the project and personal roots the scanner walks", () => {
+    const roots = catalogRootDirs({ cwd: "/proj", homeDir: "/home/u" })
+    expect(roots).toEqual([
+      "/proj/.claude/skills",
+      "/proj/.claude/commands",
+      "/home/u/.claude/skills",
+      "/home/u/.claude/commands",
+      "/home/u/.claude/plugins",
+    ])
   })
 })
 
-describe("LocalCatalogService", () => {
-  test("caches scan results until ttl expires", () => {
+/**
+ * Builds a service whose freshness stamps are driven by a mutable map, so a
+ * test can simulate "a file on disk changed" without touching a real disk.
+ */
+function makeStampedService(scan: LocalCatalogScanner, opts?: { ttl?: number; now?: () => number }) {
+  const mtimes = new Map<string, number>()
+  let statCalls = 0
+  const svc = new LocalCatalogService({
+    scan,
+    homeDir: "/home/u",
+    statMtimes: (paths) => {
+      statCalls += 1
+      return paths.map((p) => mtimes.get(p) ?? 0)
+    },
+    cacheTtlMs: opts?.ttl,
+    now: opts?.now,
+  })
+  return { svc, mtimes, statCalls: () => statCalls }
+}
+
+describe("LocalCatalogService freshness", () => {
+  test("serves from cache while every stamp is unchanged", () => {
     let calls = 0
-    let clock = 1_000
-    const svc = new LocalCatalogService({
-      scan: () => {
-        calls += 1
-        return [raw({ name: `n-${calls}`, kind: "skill", scope: "project" })]
-      },
-      cacheTtlMs: 1_000,
-      now: () => clock,
+    const { svc, mtimes, statCalls } = makeStampedService(() => {
+      calls += 1
+      return [raw({ name: `n-${calls}`, kind: "skill", scope: "project", filePath: "/proj/.claude/skills/a/SKILL.md" })]
     })
+    mtimes.set("/proj/.claude/skills", 10)
+    mtimes.set("/proj/.claude/skills/a/SKILL.md", 20)
+
     expect(svc.list("/proj").map((e) => e.name)).toEqual(["n-1"])
     expect(svc.list("/proj").map((e) => e.name)).toEqual(["n-1"])
     expect(calls).toBe(1)
+    // One stamp-read on the miss, one validation on the hit: the hit is earned
+    // by re-stat'ing, not assumed from the clock.
+    expect(statCalls()).toBe(2)
+  })
+
+  test("rescans when a scanned file's mtime changes", () => {
+    let calls = 0
+    const { svc, mtimes } = makeStampedService(() => {
+      calls += 1
+      return [raw({ name: `n-${calls}`, kind: "skill", scope: "project", filePath: "/proj/.claude/skills/a/SKILL.md" })]
+    })
+    mtimes.set("/proj/.claude/skills/a/SKILL.md", 20)
+    expect(svc.list("/proj").map((e) => e.name)).toEqual(["n-1"])
+
+    // Editing a SKILL.md's frontmatter bumps no directory — only the file.
+    mtimes.set("/proj/.claude/skills/a/SKILL.md", 21)
+    expect(svc.list("/proj").map((e) => e.name)).toEqual(["n-2"])
+    expect(calls).toBe(2)
+  })
+
+  test("rescans when a root directory's mtime changes", () => {
+    let calls = 0
+    const { svc, mtimes } = makeStampedService(() => {
+      calls += 1
+      return [raw({ name: `n-${calls}`, kind: "skill", scope: "personal", filePath: "/home/u/.claude/skills/a/SKILL.md" })]
+    })
+    mtimes.set("/home/u/.claude/skills", 10)
+    expect(svc.list("/proj").map((e) => e.name)).toEqual(["n-1"])
+
+    // A brand-new skill folder bumps its parent root.
+    mtimes.set("/home/u/.claude/skills", 11)
+    expect(svc.list("/proj").map((e) => e.name)).toEqual(["n-2"])
+    expect(calls).toBe(2)
+  })
+
+  test("treats a vanished file as changed", () => {
+    let calls = 0
+    const { svc, mtimes } = makeStampedService(() => {
+      calls += 1
+      return [raw({ name: `n-${calls}`, kind: "skill", scope: "project", filePath: "/proj/.claude/skills/a/SKILL.md" })]
+    })
+    mtimes.set("/proj/.claude/skills/a/SKILL.md", 20)
+    svc.list("/proj")
+
+    mtimes.delete("/proj/.claude/skills/a/SKILL.md")
+    expect(svc.list("/proj").map((e) => e.name)).toEqual(["n-2"])
+    expect(calls).toBe(2)
+  })
+
+  test("rescans after the ttl ceiling even when every stamp is unchanged", () => {
+    let calls = 0
+    let clock = 1_000
+    const { svc, mtimes } = makeStampedService(
+      () => {
+        calls += 1
+        return [raw({ name: `n-${calls}`, kind: "skill", scope: "project", filePath: "/proj/.claude/skills/a/SKILL.md" })]
+      },
+      { ttl: 1_000, now: () => clock },
+    )
+    mtimes.set("/proj/.claude/skills/a/SKILL.md", 20)
+    expect(svc.list("/proj").map((e) => e.name)).toEqual(["n-1"])
+    expect(calls).toBe(1)
+
     clock += 2_000
     expect(svc.list("/proj").map((e) => e.name)).toEqual(["n-2"])
     expect(calls).toBe(2)
   })
 
-  test("invalidate clears cache", () => {
+  test("never caches when no statMtimes adapter is injected", () => {
     let calls = 0
     const svc = new LocalCatalogService({
+      homeDir: "/home/u",
       scan: () => {
         calls += 1
         return []
       },
     })
+    svc.list("/proj")
+    svc.list("/proj")
+    expect(calls).toBe(2)
+  })
+})
+
+describe("LocalCatalogService", () => {
+  test("invalidate clears cache", () => {
+    let calls = 0
+    const { svc } = makeStampedService(() => {
+      calls += 1
+      return []
+    })
     svc.list("/a")
+    svc.list("/a")
+    expect(calls).toBe(1)
     svc.invalidate("/a")
     svc.list("/a")
     expect(calls).toBe(2)
@@ -128,14 +216,14 @@ describe("LocalCatalogService", () => {
 
   test("scopes cache per cwd", () => {
     let calls = 0
-    const svc = new LocalCatalogService({
-      scan: ({ cwd }) => {
-        calls += 1
-        return [raw({ name: `n-${cwd.replace(/\W/g, "")}`, kind: "skill", scope: "project" })]
-      },
+    const { svc } = makeStampedService(({ cwd }) => {
+      calls += 1
+      return [raw({ name: `n-${cwd.replace(/\W/g, "")}`, kind: "skill", scope: "project" })]
     })
     svc.list("/a")
     svc.list("/b")
+    expect(calls).toBe(2)
+    expect(svc.list("/a").map((e) => e.name)).toEqual(["n-a"])
     expect(calls).toBe(2)
   })
 })
