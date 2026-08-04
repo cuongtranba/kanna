@@ -101,10 +101,13 @@ function MessageView({ message }: { message: ChatSnapshotMessage }) {
   }
 }
 
+// Module-level so the provider's memo actually holds across renders.
+const SHARE_VIEW_RENDER_OPTIONS = { readonly: true, localLinkMode: "text" } as const
+
 export function ShareViewPage({ snapshot }: ShareViewPageProps) {
   const { chatMeta, messages } = snapshot
   return (
-    <TranscriptRenderOptionsProvider value={{ readonly: true, localLinkMode: "text" }}>
+    <TranscriptRenderOptionsProvider value={SHARE_VIEW_RENDER_OPTIONS}>
       <main className="h-[100dvh] overflow-y-auto overscroll-contain bg-background text-foreground">
         <header className="sticky top-0 z-10 border-b border-border bg-background">
           <div className="mx-auto flex w-full max-w-[800px] items-center gap-3 px-4 py-3 sm:px-6">

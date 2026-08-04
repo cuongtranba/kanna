@@ -29,6 +29,52 @@ function getQuestionKey(question: AskUserQuestionItem): string {
   return question.id || question.question
 }
 
+/**
+ * Non-actionable rendering of a question set: the text stays readable, the
+ * options collapse to a muted summary line. Shared by the readonly (share
+ * view) branch and the "answer moved to the footer" branch so the two can
+ * never drift.
+ */
+function QuestionSummaryCard({
+  questions,
+  statusLabel,
+  testId,
+}: {
+  questions: AskUserQuestionItem[]
+  statusLabel: string
+  testId?: string
+}) {
+  return (
+    <div className="w-full" data-testid={testId}>
+      <div className="rounded-2xl border border-border overflow-hidden">
+        <div className="font-medium text-sm p-3 px-4 pr-5 bg-muted border-b border-border flex flex-row items-center justify-between gap-3">
+          <p>Question{questions.length !== 1 ? "s" : ""}</p>
+          <p className="text-muted-foreground">{statusLabel}</p>
+        </div>
+        {questions.map((question, index) => (
+          <div
+            key={getQuestionKey(question)}
+            className={cn(
+              "w-full p-3 pt-2.5 pl-4 pr-5 bg-background flex items-start justify-between gap-3",
+              index < questions.length - 1 && "border-b border-border",
+            )}
+          >
+            <div className="flex-1 min-w-0">
+              {question.header && (
+                <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground text-pretty">{question.header}</div>
+              )}
+              <div className="text-sm text-pretty">{question.question}</div>
+            </div>
+            <div className="max-w-[50%] text-right text-xs text-muted-foreground text-pretty">
+              {question.options?.map((option) => option.label).join(", ") || "Freeform response"}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 function AskUserQuestionMessageInner({ message, onSubmit, isLatest }: Props) {
   const renderOptions = useTranscriptRenderOptions()
   const questions = message.input.questions
@@ -113,35 +159,7 @@ function AskUserQuestionMessageInner({ message, onSubmit, isLatest }: Props) {
   }
 
   if (renderOptions.readonly) {
-    return (
-      <div className="w-full">
-        <div className="rounded-2xl border border-border overflow-hidden">
-          <div className="font-medium text-sm p-3 px-4 pr-5 bg-muted border-b border-border flex flex-row items-center justify-between gap-3">
-            <p>Question{questions.length !== 1 ? "s" : ""}</p>
-            <p className="text-muted-foreground">Awaiting response</p>
-          </div>
-          {questions.map((question, index) => (
-            <div
-              key={getQuestionKey(question)}
-              className={cn(
-                "w-full p-3 pt-2.5 pl-4 pr-5 bg-background flex items-start justify-between gap-3",
-                index < questions.length - 1 && "border-b border-border",
-              )}
-            >
-              <div className="flex-1 min-w-0">
-                {question.header && (
-                  <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground text-pretty">{question.header}</div>
-                )}
-                <div className="text-sm text-pretty">{question.question}</div>
-              </div>
-              <div className="max-w-[50%] text-right text-xs text-muted-foreground text-pretty">
-                {question.options?.map((option) => option.label).join(", ") || "Freeform response"}
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    )
+    return <QuestionSummaryCard questions={questions} statusLabel="Awaiting response" />
   }
 
   // Pending state (not latest)
@@ -153,6 +171,19 @@ function AskUserQuestionMessageInner({ message, onSubmit, isLatest }: Props) {
           <span className="text-sm text-muted-foreground">Questions pending (newer question active)</span>
         </div>
       </div>
+    )
+  }
+
+  // The actionable card has moved to the footer above the composer, so this
+  // row degrades to a pointer. Background tasks can stream 100+ entries below
+  // a parked question, burying it — the footer is the one place to answer.
+  if (renderOptions.askUserQuestionSurface === "footer") {
+    return (
+      <QuestionSummaryCard
+        questions={questions}
+        statusLabel="Answer below"
+        testId={`ask-user-question-moved:${message.toolId}`}
+      />
     )
   }
 

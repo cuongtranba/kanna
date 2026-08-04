@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { SubagentPendingTool, SubagentRunSnapshot } from "../../../shared/types"
-import { collectPendingQuestionRuns } from "./ChatTranscriptViewport"
+import { collectPendingQuestionRuns, selectPendingMainQuestion } from "./ChatTranscriptViewport"
 
 function makeRun(over: Partial<SubagentRunSnapshot> = {}): SubagentRunSnapshot {
   return {
@@ -68,5 +68,64 @@ describe("collectPendingQuestionRuns", () => {
     const runs = { r1: makeRun({ pendingTool: pending(100) }) }
     const [run] = collectPendingQuestionRuns(runs)
     expect(run.pendingTool.requestedAt).toBe(100)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// selectPendingMainQuestion
+//
+// The MAIN agent's question is not "naturally last" the way the 2026-06-18
+// subagent ADR assumed: Claude-Code background tasks stream 100+ entries into
+// the same transcript below a parked question, burying it off-screen.
+// ---------------------------------------------------------------------------
+
+type AnyMessage = Parameters<typeof selectPendingMainQuestion>[0][number]
+
+function askMessage(id: string, over: Record<string, unknown> = {}): AnyMessage {
+  return {
+    id,
+    kind: "tool",
+    toolKind: "ask_user_question",
+    toolName: "AskUserQuestion",
+    toolId: `toolu-${id}`,
+    input: { questions: [{ question: "Pick one" }] },
+    result: undefined,
+    ...over,
+  } as unknown as AnyMessage
+}
+
+function textMessage(id: string): AnyMessage {
+  return { id, kind: "assistant", text: "hi" } as unknown as AnyMessage
+}
+
+describe("selectPendingMainQuestion", () => {
+  test("returns null when there is no unresolved AskUserQuestion", () => {
+    expect(selectPendingMainQuestion([textMessage("a")], { AskUserQuestion: null })).toBeNull()
+  })
+
+  test("returns the unresolved question the id points at, even when buried", () => {
+    const messages = [askMessage("q1"), ...Array.from({ length: 50 }, (_, i) => textMessage(`t${i}`))]
+    const found = selectPendingMainQuestion(messages, { AskUserQuestion: "q1" })
+    expect(found?.id).toBe("q1")
+  })
+
+  test("returns null when the referenced question already has a result", () => {
+    const messages = [askMessage("q1", { result: { answers: {} } })]
+    expect(selectPendingMainQuestion(messages, { AskUserQuestion: "q1" })).toBeNull()
+  })
+
+  test("returns null when the id points at a different tool kind", () => {
+    const messages = [{ id: "q1", kind: "tool", toolKind: "exit_plan_mode" } as unknown as AnyMessage]
+    expect(selectPendingMainQuestion(messages, { AskUserQuestion: "q1" })).toBeNull()
+  })
+
+  test("returns null when the id is not present in messages", () => {
+    expect(selectPendingMainQuestion([textMessage("a")], { AskUserQuestion: "missing" })).toBeNull()
+  })
+
+  test("ignores an older unresolved question when a newer id is set", () => {
+    const messages = [askMessage("q1"), askMessage("q2")]
+    const found = selectPendingMainQuestion(messages, { AskUserQuestion: "q2" })
+    expect(found?.id).toBe("q2")
   })
 })

@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client"
 import "../../lib/testing/setupHappyDom"
 import type { AskUserQuestionAnswerMap, AskUserQuestionItem } from "../../../shared/types"
 import { AskUserQuestionMessage } from "./AskUserQuestionMessage"
+import { TranscriptRenderOptionsProvider } from "./render-context"
 import type { ProcessedToolCall } from "./types"
 
 type AskMessage = Extract<ProcessedToolCall, { toolKind: "ask_user_question" }>
@@ -117,3 +118,71 @@ describe("AskUserQuestionMessage — optimistic submit rollback", () => {
     container.remove()
   })
 })
+
+// The main agent's question can be buried by background-task output, so the
+// actionable card moves to the footer above the composer. The inline row must
+// then degrade to a pointer — exactly one place to answer.
+describe("AskUserQuestionMessage — askUserQuestionSurface", () => {
+  async function renderWith(surface: "inline" | "footer" | undefined, message = makeMessage()) {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const node = (
+      <AskUserQuestionMessage message={message} onSubmit={() => undefined} isLatest />
+    )
+    await act(async () => {
+      createRoot(container).render(
+        surface
+          ? <TranscriptRenderOptionsProvider value={{ askUserQuestionSurface: surface }}>{node}</TranscriptRenderOptionsProvider>
+          : node,
+      )
+    })
+    return container
+  }
+
+  test("degrades to a non-actionable pointer when the surface is footer", async () => {
+    const container = await renderWith("footer")
+
+    expect(container.querySelector('[data-testid="ask-user-question-moved:toolu_1"]')).not.toBeNull()
+    // Question text stays readable so the transcript still reads as a narrative.
+    expect(container.textContent).toContain("Pick one")
+    expect(container.textContent).toContain("Answer below")
+    // ...but nothing here is clickable.
+    expect(container.querySelectorAll("button")).toHaveLength(0)
+    container.remove()
+  })
+
+  test("renders the interactive card when the surface is inline (the default)", async () => {
+    const container = await renderWith(undefined)
+
+    expect(container.querySelector('[data-testid="ask-user-question-moved:toolu_1"]')).toBeNull()
+    const buttons = Array.from(container.querySelectorAll("button")).map((b) => b.textContent?.trim())
+    expect(buttons).toContain("Alpha")
+    container.remove()
+  })
+
+  test("a completed question ignores the footer surface", async () => {
+    const completed = makeMessage({ result: { answers: { "Pick one": ["Alpha"] } } } as never)
+    const container = await renderWith("footer", completed)
+
+    expect(container.querySelector('[data-testid="ask-user-question-moved:toolu_1"]')).toBeNull()
+    expect(container.textContent).toContain("Answers")
+    container.remove()
+  })
+
+  test("readonly still wins over the footer surface", async () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    await act(async () => {
+      createRoot(container).render(
+        <TranscriptRenderOptionsProvider value={{ readonly: true, askUserQuestionSurface: "footer" }}>
+          <AskUserQuestionMessage message={makeMessage()} onSubmit={() => undefined} isLatest />
+        </TranscriptRenderOptionsProvider>,
+      )
+    })
+
+    expect(container.textContent).toContain("Awaiting response")
+    expect(container.querySelector('[data-testid="ask-user-question-moved:toolu_1"]')).toBeNull()
+    container.remove()
+  })
+})
+
