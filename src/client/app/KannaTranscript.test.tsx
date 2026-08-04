@@ -9,7 +9,10 @@ import {
   type StableResolvedTranscriptRowsState,
 } from "./KannaTranscript"
 
-const ROW_WRAPPER_CLASS = "mx-auto max-w-[800px] pb-5"
+// Count rows by their stable identity attribute, not by their spacing classes:
+// these tests assert how many rows render, which is independent of how much air
+// sits between them.
+const ROW_WRAPPER_MARKER = "data-transcript-row-id="
 
 function renderTranscript(messages: HydratedTranscriptMessage[]) {
   return renderToStaticMarkup(
@@ -25,7 +28,7 @@ function renderTranscript(messages: HydratedTranscriptMessage[]) {
 }
 
 function countRowWrappers(html: string) {
-  return html.split(ROW_WRAPPER_CLASS).length - 1
+  return html.split(ROW_WRAPPER_MARKER).length - 1
 }
 
 function createToolMessage(id: string, toolId = id): HydratedTranscriptMessage {

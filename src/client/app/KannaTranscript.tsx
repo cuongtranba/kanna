@@ -945,6 +945,7 @@ function KannaTranscriptInner({
           <div
             key={row.id}
             className="mx-auto max-w-[800px] pb-5"
+            data-transcript-row-id={row.id}
           >
             <KannaTranscriptRow
               row={row}
