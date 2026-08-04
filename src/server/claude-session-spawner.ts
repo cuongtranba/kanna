@@ -37,7 +37,7 @@ import { maskOauthKey } from "../shared/mask-oauth-key"
 import { log } from "../shared/log"
 import { OAuthPoolUnavailableError } from "./oauth-errors"
 import type { ClaudeSessionHandle, HarnessTurn, HarnessToolRequest } from "./harness-types"
-import type { ActiveTurn, ClaudeSessionState, SessionBackgroundTask, SlashCommand } from "./claude-session-state"
+import type { ActiveTurn, ClaudeSessionState, SessionBackgroundTask } from "./claude-session-state"
 import type { KannaMcpDelegationContext, SetupLoopHandlerResult } from "./kanna-mcp"
 import type { LoopSetupInput } from "./loop-template"
 import type { LoopState } from "./auto-continue/read-model"
@@ -67,7 +67,6 @@ interface SpawnOAuthPool {
 
 /** Subset of EventStore used by spawnClaudeTurn (only for slash-command load). */
 interface SpawnStore {
-  recordSessionCommandsLoaded(chatId: string, commands: SlashCommand[]): Promise<void>
 }
 
 // ---------------------------------------------------------------------------

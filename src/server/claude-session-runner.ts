@@ -24,7 +24,7 @@ import {
 } from "./claude-prompt-helpers"
 import { timestamped } from "./claude-message-normalizer"
 import { logClaudeSteer } from "./claude-steer-log"
-import type { ClaudeSessionState, ActiveTurn, SlashCommand } from "./claude-session-state"
+import type { ClaudeSessionState, ActiveTurn } from "./claude-session-state"
 
 // Bounded FIFO for toolId → description lookups feeding background-task labels.
 const RECENT_TOOL_DESCRIPTION_LIMIT = 64
@@ -66,7 +66,6 @@ interface RunClaudeSessionStore {
   setCompactFailureCount(chatId: string, count: number): Promise<void>
   recordTurnCancelled(chatId: string): Promise<void>
   getChat(chatId: string): { compactFailureCount?: number; pendingForkSessionToken?: { token: string } | null } | null | undefined
-  recordSessionCommandsLoaded(chatId: string, commands: SlashCommand[]): Promise<void>
 }
 
 // ---------------------------------------------------------------------------

@@ -5,7 +5,6 @@ import type {
   ProjectSummary,
   ProviderUsage,
   QueuedChatMessage,
-  SlashCommand,
   StackBinding,
   SubagentErrorCode,
   SubagentRunSnapshot,
@@ -36,7 +35,6 @@ export interface ChatRecord {
   hasMessages?: boolean
   lastMessageAt?: number
   lastTurnOutcome: "success" | "failed" | "cancelled" | null
-  slashCommands?: SlashCommand[]
   stackId?: string
   stackBindings?: StackBinding[]
   /** Per-chat permission policy overlay; merges over the global defaults. */
@@ -262,13 +260,6 @@ export type TurnEvent =
       chatId: string
       sessionToken: string | null
       provider?: AgentProvider
-    }
-  | {
-      v: 3
-      type: "session_commands_loaded"
-      timestamp: number
-      chatId: string
-      commands: Array<{ name: string; description: string; argumentHint: string }>
     }
   | {
       v: 3

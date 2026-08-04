@@ -4,7 +4,7 @@ import { getDataDir } from "../shared/branding"
 import { log } from "../shared/log"
 import type { StorageBackend } from "./storage/backend"
 import { FsStorageBackend } from "./storage/fs-storage.adapter"
-import type { AgentProvider, ChatHistoryPage, QueuedChatMessage, SlashCommand, StackBinding, SubagentRunSnapshot, TranscriptEntry } from "../shared/types"
+import type { AgentProvider, ChatHistoryPage, QueuedChatMessage, StackBinding, SubagentRunSnapshot, TranscriptEntry } from "../shared/types"
 import type { AutoContinueEvent } from "./auto-continue/events"
 import {
   type StackRecord,
@@ -358,7 +358,6 @@ export class EventStore implements PushEventStore {
 
   async setSessionTokenForProvider(chatId: string, provider: AgentProvider, sessionToken: string | null) { return EntityWrite.setSessionTokenForProvider(this.buildSessionWriteDeps(), chatId, provider, sessionToken) }
 
-  async recordSessionCommandsLoaded(chatId: string, commands: SlashCommand[]) { return EntityWrite.recordSessionCommandsLoaded(this.buildSessionWriteDeps(), chatId, commands) }
 
   async setPendingForkSessionToken(chatId: string, value: { provider: AgentProvider; token: string } | null) {
     return EntityWrite.setPendingForkSessionToken(this.buildSessionWriteDeps(), chatId, value)
