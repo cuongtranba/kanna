@@ -10,7 +10,7 @@
 import type { ChatRuntime, ChatSnapshot, TranscriptEntry } from "./types"
 
 export type ChatSections = Pick<ChatSnapshot,
-  | "queuedMessages" | "availableProviders" | "slashCommands" | "slashCommandsLoading"
+  | "queuedMessages" | "availableProviders"
   | "schedules" | "liveScheduleId" | "tunnels" | "liveTunnelId"
   | "resolvedBindings" | "subagentRuns" | "loopProgress">
 

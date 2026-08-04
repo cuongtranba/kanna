@@ -10,11 +10,9 @@ import type { ChatSnapshot } from "../shared/types"
 
 // keyof-typed so adding a ChatSections key without updating this list fails
 // the exhaustiveness check below.
-const SECTION_KEYS = [
+export const SECTION_KEYS = [
   "queuedMessages",
   "availableProviders",
-  "slashCommands",
-  "slashCommandsLoading",
   "schedules",
   "liveScheduleId",
   "tunnels",
@@ -36,8 +34,6 @@ function buildSectionSignatures(meta: ChatSnapshot): Record<SectionKey, string> 
   return {
     queuedMessages: JSON.stringify(meta.queuedMessages),
     availableProviders: JSON.stringify(meta.availableProviders),
-    slashCommands: JSON.stringify(meta.slashCommands),
-    slashCommandsLoading: JSON.stringify(meta.slashCommandsLoading),
     schedules: JSON.stringify(meta.schedules),
     liveScheduleId: JSON.stringify(meta.liveScheduleId),
     tunnels: JSON.stringify(meta.tunnels),
