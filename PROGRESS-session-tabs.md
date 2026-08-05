@@ -62,6 +62,27 @@ bash scripts/verify-session-tabs.sh
   assert non-empty output) — component-level tests cannot catch a
   missing-Provider regression.
 
+## Oracle contract (READ THIS — the oracle matches names EXACTLY)
+
+`scripts/verify-session-tabs.sh` goes green only when the whole repo is green
+AND these six tests exist, run, and pass. It matches the `test("...")` name
+**verbatim** in the junit report, so a paraphrase does not count. Put each in
+whatever file is natural; the oracle does not care where they live.
+
+| Test name (exact) | What it must actually prove |
+| --- | --- |
+| `renders the chat route through the real router` | Mount the REAL router (`<App/>` or the real `RouterProvider`) at `/chat/:someId` in jsdom and assert the rendered tree is NON-EMPTY. Do not hand-mount a Provider — the whole point is to catch a Provider mounted below its consumer. This is the test that would have caught the blank-page crash. |
+| `N open chats produce N tabs` | Open 3 distinct chats; assert the tab strip shows exactly 3 tabs. Then close one and assert 2. |
+| `two chat tabs render two different transcripts` | Two chat tabs mounted SIMULTANEOUSLY with different chatIds, each fed different transcript data; assert both are in the output and that tab A shows A's content and tab B shows B's — not the same content twice. |
+| `keyboard switches to the next chat tab` | Dispatch the real keyboard shortcut and assert the active tab changes. `cmd+1..9` is unavailable (browsers own it) — use `cmd+ctrl+1..9` / next-prev. |
+| `updating chatA does not affect chatB slice reference` | Already exists in `chatStateStore.test.ts`. Keep it passing. |
+| `opens exactly ONE connection for two consumers` | Already exists in `KannaSocketProvider.test.tsx`. Keep it passing. |
+
+Only the first four are new work. Do NOT rename the last two.
+
+A test that mounts the component directly while the real route is broken is
+exactly the failure this contract exists to prevent — see Failed approaches.
+
 ## Next chunk
 
 **0.8 + 0.9 together — per-chat-tab scoped store AND the ChatPage split**
