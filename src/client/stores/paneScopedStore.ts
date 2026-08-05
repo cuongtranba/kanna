@@ -1,3 +1,4 @@
+import { noteTabActivated } from "../components/panes/paneRetention"
 import type { OpenLocalLinkTarget } from "../components/messages/shared"
 import { createScopedStore } from "../lib/createScopedStore"
 
@@ -55,6 +56,12 @@ interface PaneScopedState {
   wrapDiffLines: boolean
   setDiffRenderMode: (mode: "unified" | "split") => void
   setWrapDiffLines: (wrap: boolean) => void
+
+  // ─── Tab retention ────────────────────────────────────────────────────────
+  /** Most-recently-activated tab ids first; drives which tabs stay mounted. */
+  tabRecency: readonly string[]
+  /** Named transition — the previous value is derived inside the store. */
+  noteTabActivated: (tabId: string) => void
 }
 
 export const PaneScopedStore = createScopedStore<void, PaneScopedState>(
@@ -91,5 +98,15 @@ export const PaneScopedStore = createScopedStore<void, PaneScopedState>(
     wrapDiffLines: false,
     setDiffRenderMode: (mode) => set({ diffRenderMode: mode }),
     setWrapDiffLines: (wrap) => set({ wrapDiffLines: wrap }),
+
+    // Tab retention
+    tabRecency: [],
+    noteTabActivated: (tabId) =>
+      set((state) => {
+        const next = noteTabActivated(state.tabRecency, tabId)
+        // Same reference means "already most recent" — skip the write so
+        // re-activating the current tab cannot publish a new snapshot.
+        return next === state.tabRecency ? state : { tabRecency: next }
+      }),
   }),
 )
