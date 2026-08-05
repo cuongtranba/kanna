@@ -8,6 +8,23 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.11.0](https://github.com/cuongtranba/kanna/compare/v1.10.0...v1.11.0) (2026-08-05)
+
+
+### Features
+
+* **client:** finish the pane tree — retention, phone view, keyboard, drag-and-drop ([#618](https://github.com/cuongtranba/kanna/issues/618)) ([fdf25a9](https://github.com/cuongtranba/kanna/commit/fdf25a9bd631341fcfe736703344fc2dfd5e1283))
+* **client:** port paseo layout/IA foundations — breakpoints, sidebar clamp, transcript rhythm ([#614](https://github.com/cuongtranba/kanna/issues/614)) ([490d6b4](https://github.com/cuongtranba/kanna/commit/490d6b463c2abe55902d4c87419fa67b53e4af99))
+* **client:** replace the chat route's fixed layout with a user-editable pane tree ([#616](https://github.com/cuongtranba/kanna/issues/616)) ([e71c5e7](https://github.com/cuongtranba/kanna/commit/e71c5e7279fed8d8f88db51732c2b37a2b3012c5))
+
+
+### Bug Fixes
+
+* a parked AskUserQuestion can no longer wedge a chat ([#613](https://github.com/cuongtranba/kanna/issues/613)) ([3afca2f](https://github.com/cuongtranba/kanna/commit/3afca2fc346cdbd035bcfcb7e10ba74fbb1a9e9f))
+* **agent:** stop a turn on the first click, including mid-boot ([#611](https://github.com/cuongtranba/kanna/issues/611)) ([5f18484](https://github.com/cuongtranba/kanna/commit/5f18484954f06859d3d4799f43896bbd53f07f80))
+* **loop:** gate GOAL MET on the plan, refuse bad setups at arm time ([#617](https://github.com/cuongtranba/kanna/issues/617)) ([63d4d0e](https://github.com/cuongtranba/kanna/commit/63d4d0e1b8b67f9f2906f64e6b6ed17edbca7b97))
+* **subagent:** match the claude spawn gate to the main chat ([#615](https://github.com/cuongtranba/kanna/issues/615)) ([a03e24f](https://github.com/cuongtranba/kanna/commit/a03e24f6ef63b73566ea229e62a333719e58b95e))
+
 ## [1.10.0](https://github.com/cuongtranba/kanna/compare/v1.9.1...v1.10.0) (2026-08-04)
 
 
