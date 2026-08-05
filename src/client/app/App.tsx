@@ -27,6 +27,7 @@ import { AppBootstrap } from "./AppBootstrap"
 import { SharePage } from "./share-view/SharePage"
 import { useKannaState } from "./useKannaState"
 import { KannaSocketProvider } from "./KannaSocketProvider"
+import { AppGlobalProvider } from "./AppGlobalProvider"
 import { useSidebarSwipeGesture } from "./sidebarSwipeGesture"
 import { useViewportSubscription } from "../stores/viewportStore"
 import type { AppSettingsSnapshot } from "../../shared/types"
@@ -236,7 +237,7 @@ export function shouldPlayChatNotificationSound(
   return Boolean(appSettings) && shouldPlayChatSound(preference, dom)
 }
 
-function KannaLayout({ ports = {} }: { ports?: AppPorts } = {}) {
+function KannaLayoutInner({ ports = {} }: { ports?: AppPorts } = {}) {
   const dom = ports.dom ?? domAdapter
   const storage = ports.storage ?? localStorageAdapter
   const location = useLocation()
@@ -520,6 +521,23 @@ function KannaLayout({ ports = {} }: { ports?: AppPorts } = {}) {
         onApply={handleApplyChatPolicy}
       />
     </div>
+  )
+}
+
+/**
+ * Outer shell: mounts `AppGlobalProvider` (one set of global socket
+ * subscriptions) and renders `KannaLayoutInner` as its child.
+ *
+ * Splitting into two components is necessary because a React context provider
+ * only affects CHILDREN, not the component that renders it. Placing the
+ * provider here ensures `KannaLayoutInner` (and everything it renders) reads
+ * from a single shared `AppGlobalState` instance.
+ */
+function KannaLayout({ ports = {} }: { ports?: AppPorts } = {}) {
+  return (
+    <AppGlobalProvider>
+      <KannaLayoutInner ports={ports} />
+    </AppGlobalProvider>
   )
 }
 

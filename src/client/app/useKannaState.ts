@@ -14,8 +14,7 @@ import type { OpenLocalLinkTarget } from "../components/messages/shared"
 import { processTranscriptMessages } from "../lib/parseTranscript"
 import { generateUUID } from "../lib/utils"
 import { canCancelStatus, getLatestToolIds, isProcessingStatus } from "./derived"
-import { KannaSocket, type SocketStatus } from "./socket"
-import { useOptionalKannaSocket } from "./KannaSocketProvider"
+import type { KannaSocket, SocketStatus } from "./socket"
 import type { ChatPermissionPolicyOverride, ToolRequestDecision } from "../../shared/permission-policy"
 import { useWorkflowsStore } from "../stores/workflowsStore"
 import { useOpenRouterModelsStore } from "../stores/openrouterModelsStore"
@@ -27,13 +26,11 @@ import type { AnyValue } from "../../shared/errors"
 import type { StoragePort } from "../ports/storagePort"
 import type { DomPort } from "../ports/domPort"
 import type { TimerPort } from "../ports/timerPort"
-import type { ClipboardPort } from "../ports/clipboardPort"
 import { localStorageAdapter, sessionStorageAdapter } from "../adapters/storage.adapter"
 import { domAdapter } from "../adapters/dom.adapter"
 import { timerAdapter } from "../adapters/timer.adapter"
-import { clipboardAdapter } from "../adapters/clipboard.adapter"
-import { useAppGlobalState } from "./useAppGlobalState"
 import type { ProjectRequest } from "./useAppGlobalState"
+import { useAppGlobalContext } from "./AppGlobalProvider"
 
 // Re-export pure helpers / types that have moved to useAppGlobalState but
 // are imported by consumers from this module (backward-compat, zero consumer changes).
@@ -430,24 +427,6 @@ export function shouldMarkActiveChatRead(dom?: Pick<DomPort, "getVisibilityState
   return d.getVisibilityState() === "visible" && d.hasFocus()
 }
 
-/**
- * The socket for this hook instance.
- *
- * The connection itself is owned by `KannaSocketProvider` above the router, so
- * that N mounted chat tabs share ONE WebSocket instead of opening one each.
- * `ports.socket` stays supported so a test can drive the hook without standing
- * up a provider.
- */
-function useResolvedSocket(injected: KannaSocket | undefined): KannaSocket {
-  const fromContext = useOptionalKannaSocket()
-  const socket = injected ?? fromContext
-  if (!socket) {
-    throw new Error(
-      "useKannaState needs a KannaSocket: mount a KannaSocketProvider or pass ports.socket",
-    )
-  }
-  return socket
-}
 
 function logKannaState(message: string, details?: AnyValue) {
   void message
@@ -694,12 +673,6 @@ export interface KannaStatePorts {
   sessStore?: StoragePort
   dom?: DomPort
   timer?: TimerPort
-  clipboard?: ClipboardPort
-  /**
-   * Overrides the socket from `KannaSocketProvider`. For tests only —
-   * production shares the one connection the provider owns.
-   */
-  socket?: KannaSocket
 }
 
 export function useKannaState(activeChatId: string | null, ports: KannaStatePorts = {}): KannaState {
@@ -707,9 +680,12 @@ export function useKannaState(activeChatId: string | null, ports: KannaStatePort
   const sessStore = ports.sessStore ?? sessionStorageAdapter
   const dom = ports.dom ?? domAdapter
   const timer = ports.timer ?? timerAdapter
-  const clipboard = ports.clipboard ?? clipboardAdapter
   const navigate = useNavigate()
-  const socket = useResolvedSocket(ports.socket)
+  // App-global state is owned by AppGlobalProvider (mounted once at KannaLayout).
+  // Reading it via context prevents duplicate global socket subscriptions when
+  // multiple useKannaState instances mount (one per open chat tab).
+  const appGlobal = useAppGlobalContext()
+  const socket = appGlobal.socket
   // Derived early so the chatStateStore selectors below can capture it without
   // a separate variable hoisted over hook calls.
   const optimisticScopeId = activeChatId ?? NEW_CHAT_OPTIMISTIC_SCOPE
@@ -742,27 +718,11 @@ export function useKannaState(activeChatId: string | null, ports: KannaStatePort
   })
   const editorLabel = getEditorPresetLabel(useTerminalPreferencesStore((store) => store.editorPreset))
 
-  // Compute runtime early so it can be passed to useAppGlobalState below.
-  // On first render chatSnapshot is null, so runtime will be null — appGlobal
-  // handles that gracefully (handlers that need runtime skip when it is null).
   const activeChatSnapshot = useMemo(
     () => getActiveChatSnapshot(chatSnapshot, activeChatId),
     [activeChatId, chatSnapshot]
   )
   const runtime = activeChatSnapshot?.runtime ?? null
-
-  // ---- app-global state (8 topics, UI restart, focus, handlers) --------
-
-  const appGlobal = useAppGlobalState(
-    socket,
-    localStore,
-    sessStore,
-    dom,
-    timer,
-    clipboard,
-    activeChatId,
-    runtime,
-  )
 
   // Convenience aliases consumed by per-chat logic below.
   const { connectionStatus } = appGlobal
