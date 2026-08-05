@@ -26,6 +26,8 @@ import { WorkflowsPage } from "./WorkflowsPage"
 import { AppBootstrap } from "./AppBootstrap"
 import { SharePage } from "./share-view/SharePage"
 import { useKannaState } from "./useKannaState"
+import { KannaSocketProvider } from "./KannaSocketProvider"
+import { AppGlobalProvider } from "./AppGlobalProvider"
 import { useSidebarSwipeGesture } from "./sidebarSwipeGesture"
 import { useViewportSubscription } from "../stores/viewportStore"
 import type { AppSettingsSnapshot } from "../../shared/types"
@@ -235,7 +237,7 @@ export function shouldPlayChatNotificationSound(
   return Boolean(appSettings) && shouldPlayChatSound(preference, dom)
 }
 
-function KannaLayout({ ports = {} }: { ports?: AppPorts } = {}) {
+function KannaLayoutInner({ ports = {} }: { ports?: AppPorts } = {}) {
   const dom = ports.dom ?? domAdapter
   const storage = ports.storage ?? localStorageAdapter
   const location = useLocation()
@@ -522,6 +524,23 @@ function KannaLayout({ ports = {} }: { ports?: AppPorts } = {}) {
   )
 }
 
+/**
+ * Outer shell: mounts `AppGlobalProvider` (one set of global socket
+ * subscriptions) and renders `KannaLayoutInner` as its child.
+ *
+ * Splitting into two components is necessary because a React context provider
+ * only affects CHILDREN, not the component that renders it. Placing the
+ * provider here ensures `KannaLayoutInner` (and everything it renders) reads
+ * from a single shared `AppGlobalState` instance.
+ */
+function KannaLayout({ ports = {} }: { ports?: AppPorts } = {}) {
+  return (
+    <AppGlobalProvider>
+      <KannaLayoutInner ports={ports} />
+    </AppGlobalProvider>
+  )
+}
+
 function AuthedApp() {
   const auth = useAppAuthState()
 
@@ -533,16 +552,21 @@ function AuthedApp() {
     return <PasswordScreen error={auth.state.error} onSubmit={auth.submitPassword} />
   }
 
+  // The socket provider sits INSIDE the auth gate (an unauthenticated visitor
+  // must not open a connection) but ABOVE the router, so route changes — and,
+  // later, multiple mounted chat tabs — all share the one WebSocket.
   return (
-    <Routes>
-      <Route element={<KannaLayout />}>
-        <Route path="/" element={<LocalProjectsPage />} />
-        <Route path="/settings" element={<Navigate to="/settings/general" replace />} />
-        <Route path="/settings/:sectionId" element={<SettingsPage />} />
-        <Route path="/chat/:chatId" element={<ChatPage />} />
-        <Route path="/workflows/:chatId" element={<WorkflowsPage />} />
-      </Route>
-    </Routes>
+    <KannaSocketProvider>
+      <Routes>
+        <Route element={<KannaLayout />}>
+          <Route path="/" element={<LocalProjectsPage />} />
+          <Route path="/settings" element={<Navigate to="/settings/general" replace />} />
+          <Route path="/settings/:sectionId" element={<SettingsPage />} />
+          <Route path="/chat/:chatId" element={<ChatPage />} />
+          <Route path="/workflows/:chatId" element={<WorkflowsPage />} />
+        </Route>
+      </Routes>
+    </KannaSocketProvider>
   )
 }
 

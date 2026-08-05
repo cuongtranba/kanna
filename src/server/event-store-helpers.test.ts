@@ -9,6 +9,7 @@ import {
   getHistorySnapshot,
   getReplayEventPriority,
   normalizeSidebarProjectOrder,
+  UNKNOWN_EVENT_PRIORITY,
   type TranscriptPageResult,
 } from "./event-store-helpers"
 
@@ -197,15 +198,34 @@ describe("getReplayEventPriority", () => {
   })
 
   // Orchestration is retired (adr-20260802-retire-orchestration-core). These
-  // types are no longer known, so they must hit the exhaustive default — the
-  // switch stays strict for genuinely unknown future types. Reaching this
-  // throw is only safe because orch.jsonl was removed from the replay set
-  // first; see the sibling test in event-store-snapshot.test.ts.
-  test("retired orch_* types are unknown and hit the exhaustive throw", () => {
-    expect(() => getReplayEventPriority(makeEvent("orch_run_created")))
-      .toThrow(/Unhandled replay event type: orch_run_created/)
-    expect(() => getReplayEventPriority(makeEvent("orch_task_committed")))
-      .toThrow(/Unhandled replay event type: orch_task_committed/)
+  // types are no longer in the union, so they take the unknown-type path —
+  // priced, not thrown. orch.jsonl is out of the replay set, so this is only
+  // reachable if such a line reappears in a replayed log.
+  test("retired orch_* types are priced as unknown instead of throwing", () => {
+    expect(getReplayEventPriority(makeEvent("orch_run_created")))
+      .toBe(UNKNOWN_EVENT_PRIORITY)
+    expect(getReplayEventPriority(makeEvent("orch_task_committed")))
+      .toBe(UNKNOWN_EVENT_PRIORITY)
+  })
+
+  // Regression: a stray `turn_resume_attempted` row in turns.jsonl — written by
+  // PR #493 (v0.108.0), a branch that never landed on main — took the whole
+  // server down on boot. An unknown type is data written by a DIFFERENT code
+  // version; `applyStoreEvent` has no default case, so it is a no-op on apply
+  // either way. Throwing here converted an ignorable event into a dead server.
+  test("an unknown event type from another code version is priced, not thrown", () => {
+    expect(getReplayEventPriority(makeEvent("turn_resume_attempted")))
+      .toBe(UNKNOWN_EVENT_PRIORITY)
+    expect(getReplayEventPriority(makeEvent("some_future_event")))
+      .toBe(UNKNOWN_EVENT_PRIORITY)
+  })
+
+  // The sort is a total order, so an unknown type still has to compare
+  // sanely against known ones rather than yielding NaN/undefined.
+  test("the unknown priority is a finite number that orders deterministically", () => {
+    const unknown = getReplayEventPriority(makeEvent("turn_resume_attempted"))
+    expect(Number.isFinite(unknown)).toBe(true)
+    expect(getReplayEventPriority(makeEvent("another_unknown"))).toBe(unknown)
   })
 
   // Unlike orch_*, session_commands_loaded lives in turns.jsonl, which is still
