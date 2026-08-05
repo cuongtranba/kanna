@@ -1,8 +1,21 @@
-import { Fragment, type ReactNode, useCallback } from "react"
+import { useDroppable } from "@dnd-kit/core"
+import { Fragment, type ReactNode, useCallback, useMemo } from "react"
 import type { Layout } from "react-resizable-panels"
-import { isGroup, type PaneGroup, type PaneLayout, type PaneLeaf, type PaneNode } from "../../lib/paneTree"
+import {
+  isGroup,
+  type PaneGroup,
+  type PaneLayout,
+  type PaneLeaf,
+  type PaneNode,
+  type SplitPosition,
+} from "../../lib/paneTree"
 import { cn } from "../../lib/utils"
+import { isMobileViewport } from "../../lib/viewport"
+import { usePaneDragStore } from "../../stores/paneDragStore"
+import { useViewportStore } from "../../stores/viewportStore"
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "../ui/resizable"
+import { flattenLayoutForMobile } from "./mobileLayout"
+import type { PaneDropIntent } from "./paneDropGeometry"
 
 /**
  * Renders a pane tree as nested resizable groups.
@@ -78,17 +91,48 @@ function PaneView({ node, focusedPaneId, renderPane, onFocusPane }: NodeViewProp
   const isFocused = focusedPaneId === node.id
   const handleFocus = useCallback(() => onFocusPane(node.id), [node.id, onFocusPane])
 
+  // Panes are the drop targets for a tab drag; the indicator is rendered here
+  // because the draggable tab is nowhere near this node in the React tree.
+  const { setNodeRef } = useDroppable({ id: node.id })
+  const isDropTarget = usePaneDragStore((state) => state.overPaneId === node.id)
+  const intent = usePaneDragStore((state) => state.intent)
+
   return (
     // Focus follows a pointer press anywhere in the pane, so the keyboard
     // commands (split, close, focus-direction) always have a subject.
     <div
+      ref={setNodeRef}
       data-pane-id={node.id}
       data-pane-focused={isFocused ? "true" : "false"}
-      className={cn("flex h-full min-h-0 min-w-0 flex-col overflow-hidden")}
+      className={cn("relative flex h-full min-h-0 min-w-0 flex-col overflow-hidden")}
       onPointerDownCapture={handleFocus}
     >
       {renderPane(node, isFocused)}
+      {isDropTarget && intent ? <PaneDropIndicator intent={intent} /> : null}
     </div>
+  )
+}
+
+/** Half-pane band for a split, full outline for a merge. */
+const DROP_ZONE_CLASS: Record<SplitPosition, string> = {
+  left: "inset-y-0 left-0 w-1/2",
+  right: "inset-y-0 right-0 w-1/2",
+  top: "inset-x-0 top-0 h-1/2",
+  bottom: "inset-x-0 bottom-0 h-1/2",
+}
+
+function PaneDropIndicator({ intent }: { intent: PaneDropIntent }) {
+  return (
+    <div
+      aria-hidden="true"
+      data-pane-drop={intent.kind === "merge" ? "merge" : `split-${intent.position}`}
+      className={cn(
+        // Above the pane content but never interactive — a drop target that
+        // swallowed pointer events would cancel the drag it is previewing.
+        "pointer-events-none absolute z-10 border border-destructive bg-destructive/[0.08]",
+        intent.kind === "merge" ? "inset-0" : DROP_ZONE_CLASS[intent.position],
+      )}
+    />
   )
 }
 
@@ -101,5 +145,24 @@ function NodeView(props: NodeViewProps) {
 }
 
 export function SplitContainer({ layout, ...rest }: SplitContainerProps) {
+  const viewportWidth = useViewportStore((state) => state.width)
+
+  // Below the md breakpoint the tree collapses to one pane carrying every tab
+  // (see flattenLayoutForMobile). `isMobileViewport` is false at width 0 — the
+  // pre-measurement state — so SSR and first paint fall through to the tree
+  // rather than flashing the phone view.
+  const mobilePane = useMemo(
+    () => (isMobileViewport(viewportWidth) ? flattenLayoutForMobile(layout) : null),
+    [viewportWidth, layout],
+  )
+
+  if (mobilePane) {
+    return (
+      <div data-pane-mobile="true" className="flex h-full min-h-0 min-w-0 flex-col">
+        <NodeView {...rest} node={mobilePane} focusedPaneId={mobilePane.id} />
+      </div>
+    )
+  }
+
   return <NodeView {...rest} node={layout.root} focusedPaneId={layout.focusedPaneId} />
 }

@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { DEFAULT_KEYBINDINGS } from "../../shared/types"
 import type { KeybindingsSnapshot, SidebarProjectGroup } from "../../shared/types"
 import {
   getSidebarJumpTargetIndex,
@@ -9,6 +10,7 @@ import {
 
 const KEYBINDINGS: KeybindingsSnapshot = {
   bindings: {
+    ...DEFAULT_KEYBINDINGS,
     toggleEmbeddedTerminal: ["cmd+j"],
     toggleRightSidebar: ["cmd+b"],
     openInFinder: ["cmd+alt+f"],

@@ -49,13 +49,6 @@ interface MobileRightSidebarSlice {
   setViewportWidth: (width: number) => void
 }
 
-// ─── Fixed terminal height ────────────────────────────────────────────────────
-
-interface FixedTerminalHeightSlice {
-  fixedTerminalHeight: number
-  setFixedTerminalHeight: (height: number) => void
-}
-
 // ─── Scroll to bottom ────────────────────────────────────────────────────────
 
 interface ScrollToBottomSlice {
@@ -108,7 +101,6 @@ type ChatPageState =
   & LayoutWidthSlice
   & TranscriptPaddingSlice
   & MobileRightSidebarSlice
-  & FixedTerminalHeightSlice
   & ScrollToBottomSlice
   & ToolGroupExpandedSlice
   & LocalLinkMenuSlice
@@ -146,10 +138,6 @@ export const useChatPageStore = create<ChatPageState>()((set) => ({
   // Mobile right sidebar overlay
   viewportWidth: getInitialViewportWidth(),
   setViewportWidth: (width) => set({ viewportWidth: width }),
-
-  // Fixed terminal height
-  fixedTerminalHeight: 0,
-  setFixedTerminalHeight: (height) => set({ fixedTerminalHeight: height }),
 
   // Scroll to bottom
   showScrollToBottom: false,

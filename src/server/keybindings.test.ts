@@ -54,6 +54,7 @@ describe("normalizeKeybindings", () => {
 
     expect(snapshot).toEqual({
       bindings: {
+        ...DEFAULT_KEYBINDINGS,
         toggleEmbeddedTerminal: ["cmd+k", "ctrl+`"],
         toggleRightSidebar: ["ctrl+shift+b"],
         openInFinder: ["cmd+alt+f"],
@@ -125,6 +126,7 @@ describe("KeybindingsManager", () => {
 
     expect(snapshot).toEqual({
       bindings: {
+        ...DEFAULT_KEYBINDINGS,
         toggleEmbeddedTerminal: ["cmd+k"],
         toggleRightSidebar: ["ctrl+shift+b"],
         openInFinder: ["cmd+alt+f"],

@@ -1,9 +1,11 @@
-import { useCallback, useLayoutEffect, useRef } from "react"
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react"
 import type { PaneLeaf, SplitPosition } from "../../lib/paneTree"
+import { cn } from "../../lib/utils"
 import { PaneScopedStore } from "../../stores/paneScopedStore"
 import type { PaneContentRegistry } from "./paneContentRegistry"
 import { renderPaneContent } from "./paneContentRegistry"
 import { PaneTabStrip } from "./PaneTabStrip"
+import { selectRetainedTabIds } from "./paneRetention"
 import type { TabPresentationContext } from "./tabPresentation"
 
 /**
@@ -92,7 +94,20 @@ function PaneShellInner({
     [pane.focusedTabId, pane.tabs, pane.id, onSplit],
   )
 
-  const activeTab = pane.tabs.find((t) => t.tabId === pane.focusedTabId) ?? pane.tabs[0]
+  // A pane with no explicit focus still shows its first tab.
+  const activeTabId = pane.focusedTabId ?? pane.tabs[0]?.tabId ?? null
+
+  const tabRecency = PaneScopedStore.useScopedStore((s) => s.tabRecency)
+  const noteTabActivated = PaneScopedStore.useScopedStore((s) => s.noteTabActivated)
+
+  useEffect(() => {
+    if (activeTabId) noteTabActivated(activeTabId)
+  }, [activeTabId, noteTabActivated])
+
+  const retainedTabIds = useMemo(
+    () => new Set(selectRetainedTabIds({ tabs: pane.tabs, activeTabId, recency: tabRecency })),
+    [pane.tabs, activeTabId, tabRecency],
+  )
 
   return (
     <div ref={containerRef} className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
@@ -105,8 +120,35 @@ function PaneShellInner({
         onCloseTab={onCloseTab}
         onSplit={handleSplit}
       />
-      <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
-        {activeTab ? renderPaneContent(registry, activeTab.target, pane, isFocused) : null}
+      {/*
+        Retained tabs are all mounted and absolutely stacked. `visibility:hidden`
+        (not `display:none`) keeps each one's layout box, so scroll offsets and
+        xterm's measured geometry survive a tab switch; `inert` takes the hidden
+        subtrees out of the focus and accessibility trees.
+      */}
+      <div className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden">
+        {pane.tabs
+          .filter((tab) => retainedTabIds.has(tab.tabId))
+          .map((tab) => {
+            const isActiveTab = tab.tabId === activeTabId
+            return (
+              <div
+                key={tab.tabId}
+                className={cn(
+                  // flex-COL, not the default row: a row container sizes each
+                  // child to its content width, which collapsed the chat card to
+                  // 24px in a 1117px pane. A column stretches children across
+                  // the cross axis, so any registry content fills the pane
+                  // without needing its own flex-1.
+                  "absolute inset-0 flex min-h-0 min-w-0 flex-col",
+                  !isActiveTab && "invisible pointer-events-none",
+                )}
+                inert={!isActiveTab}
+              >
+                {renderPaneContent(registry, tab.target, pane, isFocused && isActiveTab)}
+              </div>
+            )
+          })}
       </div>
     </div>
   )

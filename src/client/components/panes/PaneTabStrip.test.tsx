@@ -85,3 +85,22 @@ describe("PaneTabStrip", () => {
     expect(render(createPane("p", [chat]))).toContain("height:36px")
   })
 })
+
+describe("PaneTabStrip split availability", () => {
+  test("marks the split actions unavailable when the pane has one tab", () => {
+    // The engine refuses this split (it would strand an empty pane), so the
+    // button must not offer it. Found by driving the real app in a browser:
+    // the split produced a pane with no tabs, no content, and no close button.
+    const html = render(createPane("p1", [chat]))
+
+    expect(html).toContain('aria-label="Split right"')
+    expect(html).toContain('aria-disabled="true"')
+  })
+
+  test("offers the split once a second tab exists", () => {
+    const html = render(createPane("p1", [chat, t1]))
+
+    expect(html).toContain('aria-label="Split right"')
+    expect(html).not.toContain('aria-disabled="true"')
+  })
+})

@@ -27,13 +27,33 @@ File diffs and commit diffs render directly in the transcript — no need to swi
 
 ## Embedded terminal
 
-Per-project xterm terminal in a resizable side panel. macOS and Linux only.
+Per-project xterm terminal, opened as a tab in any pane. macOS and Linux only.
 
 <Screenshot
   light="/screenshots/light/chat-transcript.png"
   dark="/screenshots/dark/chat-transcript.png"
   alt="Embedded xterm terminal panel"
 />
+
+## Split panes & tabs
+
+The chat page is a pane tree you arrange yourself. Each pane holds a strip of
+tabs — the transcript, the changes view, and any number of terminals — and every
+pane can be split, resized, and closed. The arrangement is saved per project, so
+it is there when you come back.
+
+Two ways to rearrange:
+
+- **Drag a tab.** Drop it in the middle of a pane to move it there, or onto one
+  of that pane's edges to split it and place the tab in the new half.
+- **Use the keyboard.** Focus a pane in any direction, split it, cycle its tabs,
+  or close the active one — see [Keybindings](/reference/keybindings/).
+
+Switching tabs does not tear down the one you left: terminals keep their
+scrollback and running process, and the transcript keeps its scroll position.
+
+On a phone the tree collapses to a single pane that carries every tab, so
+nothing you arranged on a desktop becomes unreachable on a narrow screen.
 
 ## Slash commands & @-mentions
 

@@ -99,8 +99,11 @@ describe("splitPane", () => {
     expect(getTreeDepth(layout!.root)).toBe(3)
   })
 
-  // Splitting out a pane's LAST tab must not delete the pane being split.
-  test("splitting the only tab of a pane keeps the source pane alive and empty", () => {
+  // This asserted the opposite until a browser check showed what it produced.
+  // The emptied source pane does survive the detach (`preserveEmptyPaneId`), but
+  // an empty pane has no tabs — so no close button and no content, leaving dead
+  // space the user cannot remove. The split is refused instead.
+  test("splitting the only tab of a pane is refused rather than stranding it", () => {
     const layout: PaneLayout = {
       root: createPane("p1", [term("a")], TA),
       focusedPaneId: "p1",
@@ -108,11 +111,7 @@ describe("splitPane", () => {
     const next = splitPane(layout, {
       tabId: TA, targetPaneId: "p1", position: "right", ids: ids("1"),
     })
-    expect(next).not.toBeNull()
-    if (!next) return
-    const panes = collectPanes(next.root)
-    expect(panes.map((pane) => pane.id)).toEqual(["p1", "pane-1"])
-    expect(panes[0]?.tabs).toEqual([])
+    expect(next).toBeNull()
   })
 
   test("rejects a split that would exceed the depth cap", () => {
@@ -366,5 +365,66 @@ describe("resizeGroup", () => {
 describe("default pane id", () => {
   test("is stable so a fresh layout is recognisable", () => {
     expect(DEFAULT_PANE_ID).toBe("main")
+  })
+})
+
+describe("splitPane refuses to strand an empty pane", () => {
+  // An empty pane has no tabs, so its strip has no close button and no content:
+  // it is dead space the user cannot get rid of. The only way to produce one was
+  // splitting a pane's sole tab out of it, so that is refused at the engine.
+  test("returns null when the tab is the target pane's only tab", () => {
+    const layout: PaneLayout = {
+      root: createPane("p1", [createTab({ kind: "chat" }, 0)]),
+      focusedPaneId: "p1",
+    }
+
+    const result = splitPane(layout, {
+      tabId: "chat",
+      targetPaneId: "p1",
+      position: "right",
+      ids: { paneId: "p2", groupId: "g1" },
+    })
+
+    expect(result).toBeNull()
+  })
+
+  test("still splits when the pane has another tab to keep", () => {
+    const layout: PaneLayout = {
+      root: createPane("p1", [createTab({ kind: "chat" }, 0), createTab({ kind: "changes" }, 0)]),
+      focusedPaneId: "p1",
+    }
+
+    const result = splitPane(layout, {
+      tabId: "chat",
+      targetPaneId: "p1",
+      position: "right",
+      ids: { paneId: "p2", groupId: "g1" },
+    })
+
+    expect(result).not.toBeNull()
+    expect(collectPanes(result!.root)).toHaveLength(2)
+    expect(collectPanes(result!.root).every((pane) => pane.tabs.length > 0)).toBe(true)
+  })
+
+  test("still splits when the tab is dragged in from another pane", () => {
+    // The source pane empties and collapses, which is correct — the drop target
+    // keeps its own tabs, so nothing is stranded.
+    const layout: PaneLayout = {
+      root: createGroup("g0", "horizontal", [
+        createPane("pa", [createTab({ kind: "chat" }, 0)]),
+        createPane("pb", [createTab({ kind: "changes" }, 0)]),
+      ]),
+      focusedPaneId: "pa",
+    }
+
+    const result = splitPane(layout, {
+      tabId: "chat",
+      targetPaneId: "pb",
+      position: "bottom",
+      ids: { paneId: "p2", groupId: "g1" },
+    })
+
+    expect(result).not.toBeNull()
+    expect(collectPanes(result!.root).every((pane) => pane.tabs.length > 0)).toBe(true)
   })
 })

@@ -42,10 +42,12 @@ import { useWorkflowsStore, selectRuns } from "../../stores/workflowsStore"
 import { useShallow } from "zustand/react/shallow"
 import type { WorkflowRun } from "../../../shared/workflow-types"
 import type { TranscriptEntry } from "../../../shared/types"
-import { createDefaultLayout, type PaneLayout } from "../../lib/paneTree"
+import { collectPanes, createDefaultLayout, type PaneLayout, type SplitPosition } from "../../lib/paneTree"
 import { usePaneLayoutStore } from "../../stores/paneLayoutStore"
 import { SplitContainer } from "../../components/panes/SplitContainer"
 import { PaneShell, type SplitArgs } from "../../components/panes/PaneShell"
+import { isTypingTarget, resolvePaneCommand } from "../../components/panes/paneKeyboard"
+import { PaneDndProvider } from "../../components/panes/PaneDndProvider"
 import type { PaneContentRegistry } from "../../components/panes/paneContentRegistry"
 import type { TabPresentationContext } from "../../components/panes/tabPresentation"
 
@@ -295,6 +297,13 @@ export function ChatPage({ ports = {} }: { ports?: ChatPagePorts } = {}) {
   const closeTab = usePaneLayoutStore((s) => s.closeTab)
   const splitPane = usePaneLayoutStore((s) => s.splitPane)
   const setGroupSizes = usePaneLayoutStore((s) => s.setGroupSizes)
+  const focusAdjacentPane = usePaneLayoutStore((s) => s.focusAdjacentPane)
+  const cycleFocusedPaneTab = usePaneLayoutStore((s) => s.cycleFocusedPaneTab)
+  const closeFocusedTab = usePaneLayoutStore((s) => s.closeFocusedTab)
+  const splitFocusedPane = usePaneLayoutStore((s) => s.splitFocusedPane)
+  const moveTabToPane = usePaneLayoutStore((s) => s.moveTabToPane)
+  const openTab = usePaneLayoutStore((s) => s.openTab)
+  const getPaneLayout = usePaneLayoutStore((s) => s.getLayout)
 
   // One-time seed from the legacy terminal + sidebar stores when the project
   // first loads.  seedFromLegacy is a no-op if the layout already exists.
@@ -309,14 +318,41 @@ export function ChatPage({ ports = {} }: { ports?: ChatPagePorts } = {}) {
     })
   }, [projectId, seedFromLegacy, terminalLayout, rightSidebarVisibility, globalRightSidebarSize])
 
+  // Keep the tree's tabs in step with the two sources that own their existence:
+  // the terminal list (server-backed PTYs) and the changes-view toggle.
+  //
+  // Reconciling here rather than at each call site is what makes the navbar
+  // buttons, the keybindings, and the split-terminal action all work — every one
+  // of them writes those sources, and none of them knows about panes. Without
+  // this the tree could only ever hold the tabs the one-time seed gave it.
+  useEffect(() => {
+    if (!projectId) return
+
+    const tabs = collectPanes(getPaneLayout(projectId).root).flatMap((pane) => pane.tabs)
+    const terminalIds = new Set(terminalLayout.terminals.map((terminal) => terminal.id))
+
+    for (const id of terminalIds) {
+      const known = tabs.some(
+        (tab) => tab.target.kind === "terminal" && tab.target.terminalId === id,
+      )
+      if (!known) openTab(projectId, { kind: "terminal", terminalId: id })
+    }
+
+    for (const tab of tabs) {
+      if (tab.target.kind === "terminal" && !terminalIds.has(tab.target.terminalId)) {
+        closeTab(projectId, tab.tabId)
+      }
+    }
+
+    const changesTab = tabs.find((tab) => tab.target.kind === "changes")
+    if (showRightSidebar && !changesTab) openTab(projectId, { kind: "changes" })
+    if (!showRightSidebar && changesTab) closeTab(projectId, changesTab.tabId)
+  }, [projectId, terminalLayout.terminals, showRightSidebar, openTab, closeTab, getPaneLayout])
+
   // Stable pane action callbacks.
   const handleSelectTab = useCallback(
     (tabId: string) => { if (projectId) focusTab(projectId, tabId) },
     [projectId, focusTab],
-  )
-  const handleCloseTab = useCallback(
-    (tabId: string) => { if (projectId) closeTab(projectId, tabId) },
-    [projectId, closeTab],
   )
   const handleSplitPane = useCallback(
     ({ tabId, paneId, position }: SplitArgs) => {
@@ -332,6 +368,19 @@ export function ChatPage({ ports = {} }: { ports?: ChatPagePorts } = {}) {
   const handleResizeGroup = useCallback(
     (groupId: string, sizes: number[]) => { if (projectId) setGroupSizes(projectId, groupId, sizes) },
     [projectId, setGroupSizes],
+  )
+
+  // Drag-and-drop: drop a tab into a pane's middle to merge, onto an edge to split.
+  const handleMoveTab = useCallback(
+    (tabId: string, toPaneId: string) => { if (projectId) moveTabToPane(projectId, tabId, toPaneId) },
+    [projectId, moveTabToPane],
+  )
+  const handleSplitWithTab = useCallback(
+    (tabId: string, paneId: string, position: SplitPosition) => {
+      if (!projectId) return
+      splitPane(projectId, { tabId, targetPaneId: paneId, position })
+    },
+    [projectId, splitPane],
   )
 
   // Tab-strip presentation context: terminal titles from the legacy store.
@@ -461,6 +510,30 @@ export function ChatPage({ ports = {} }: { ports?: ChatPagePorts } = {}) {
     removeTerminal(currentProjectId, terminalId)
   }, [removeTerminal, state.socket])
 
+  // Closing a tab must close whatever OWNS it, or the reconcile effect above
+  // simply puts the tab straight back. Defined after handleRemoveTerminal, which
+  // it calls.
+  const handleCloseTab = useCallback(
+    (tabId: string) => {
+      if (!projectId) return
+
+      const tab = collectPanes(getPaneLayout(projectId).root)
+        .flatMap((pane) => pane.tabs)
+        .find((candidate) => candidate.tabId === tabId)
+
+      if (tab?.target.kind === "terminal") {
+        handleRemoveTerminal(projectId, tab.target.terminalId)
+        return
+      }
+      if (tab?.target.kind === "changes") {
+        toggleRightSidebar(projectId)
+        return
+      }
+
+      closeTab(projectId, tabId)
+    },
+    [projectId, closeTab, getPaneLayout, handleRemoveTerminal, toggleRightSidebar],
+  )
   const clearShowScrollTimeout = useCallback(() => {
     if (showScrollTimeoutRef.current !== null) {
       timer.clearTimeout(showScrollTimeoutRef.current)
@@ -626,11 +699,38 @@ export function ChatPage({ ports = {} }: { ports?: ChatPagePorts } = {}) {
       if (actionMatchesEvent(resolvedKeybindings, "addSplitTerminal", event)) {
         event.preventDefault()
         addTerminal(projectId)
+        return
+      }
+
+      // Pane commands resolve through one pure mapper, so the whole keyboard
+      // surface is testable without a DOM. The typing flag only suppresses
+      // MODIFIER-LESS bindings — see resolvePaneCommand.
+      const target = event.target
+      const command = resolvePaneCommand(
+        resolvedKeybindings,
+        event,
+        isTypingTarget(target instanceof HTMLElement ? target : null),
+      )
+      if (!command) return
+
+      event.preventDefault()
+      switch (command.kind) {
+        case "focus":
+          focusAdjacentPane(projectId, command.direction)
+          return
+        case "split":
+          splitFocusedPane(projectId, command.position)
+          return
+        case "closeTab":
+          closeFocusedTab(projectId)
+          return
+        case "cycleTab":
+          cycleFocusedPaneTab(projectId, command.delta)
       }
     }
 
     return dom.addWindowListener("keydown", handleGlobalKeydown)
-  }, [addTerminal, dom, handleOpenExternal, handleToggleEmbeddedTerminal, handleToggleRightSidebar, projectId, resolvedKeybindings])
+  }, [addTerminal, closeFocusedTab, cycleFocusedPaneTab, dom, focusAdjacentPane, handleOpenExternal, handleToggleEmbeddedTerminal, handleToggleRightSidebar, projectId, resolvedKeybindings, splitFocusedPane])
 
   useEffect(() => {
     const frameId = timer.requestAnimationFrame(() => {
@@ -873,23 +973,26 @@ export function ChatPage({ ports = {} }: { ports?: ChatPagePorts } = {}) {
       rightSidebarContentProps ? (
         <ChatSidebarContent {...rightSidebarContentProps} />
       ) : null,
-    terminal: (_target) => (
-      <TerminalWorkspaceShell
-        projectId={projectId!}
-        fixedTerminalHeight={0}
-        terminalLayout={terminalLayout}
-        addTerminal={addTerminal}
-        socket={state.socket}
-        connectionStatus={state.connectionStatus}
-        scrollback={scrollback}
-        minColumnWidth={minColumnWidth}
-        splitTerminalShortcut={resolvedKeybindings.bindings.addSplitTerminal}
-        focusRequestVersion={0}
-        onTerminalCommandSent={scheduleTerminalDiffRefresh}
-        onRemoveTerminal={handleRemoveTerminal}
-        onTerminalLayout={setTerminalSizes}
-      />
-    ),
+    // `isFocused` is the pane's, so a terminal takes keyboard focus exactly when
+    // its pane does. TerminalPane treats 0 as "no request" and focuses on any
+    // change, so toggling 0/1 never steals focus from another pane.
+    terminal: (_target, _pane, isFocused) =>
+      projectId === null ? null : (
+        <TerminalWorkspaceShell
+          projectId={projectId}
+          terminalLayout={terminalLayout}
+          addTerminal={addTerminal}
+          socket={state.socket}
+          connectionStatus={state.connectionStatus}
+          scrollback={scrollback}
+          minColumnWidth={minColumnWidth}
+          splitTerminalShortcut={resolvedKeybindings.bindings.addSplitTerminal}
+          focusRequestVersion={isFocused ? 1 : 0}
+          onTerminalCommandSent={scheduleTerminalDiffRefresh}
+          onRemoveTerminal={handleRemoveTerminal}
+          onTerminalLayout={setTerminalSizes}
+        />
+      ),
   }
 
   // ─── Layout ──────────────────────────────────────────────────────────────────
@@ -897,22 +1000,24 @@ export function ChatPage({ ports = {} }: { ports?: ChatPagePorts } = {}) {
   return (
     <div ref={layoutRootRef} className={CHAT_PAGE_LAYOUT_ROOT_CLASS}>
       {projectId ? (
-        <SplitContainer
-          layout={paneLayout}
-          renderPane={(pane, isFocused) => (
-            <PaneShell
-              pane={pane}
-              isFocused={isFocused}
-              registry={registry}
-              presentation={presentation}
-              onSelectTab={handleSelectTab}
-              onCloseTab={handleCloseTab}
-              onSplit={handleSplitPane}
-            />
-          )}
-          onFocusPane={handleFocusPane}
-          onResizeGroup={handleResizeGroup}
-        />
+        <PaneDndProvider onMoveTab={handleMoveTab} onSplitWithTab={handleSplitWithTab}>
+          <SplitContainer
+            layout={paneLayout}
+            renderPane={(pane, isFocused) => (
+              <PaneShell
+                pane={pane}
+                isFocused={isFocused}
+                registry={registry}
+                presentation={presentation}
+                onSelectTab={handleSelectTab}
+                onCloseTab={handleCloseTab}
+                onSplit={handleSplitPane}
+              />
+            )}
+            onFocusPane={handleFocusPane}
+            onResizeGroup={handleResizeGroup}
+          />
+        </PaneDndProvider>
       ) : (
         chatCard
       )}

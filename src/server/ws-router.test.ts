@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { DEFAULT_KEYBINDINGS } from "../shared/types"
 import { randomUUID } from "node:crypto"
 import { mkdtemp, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
@@ -62,6 +63,7 @@ class FakeWebSocket {
 
 const DEFAULT_KEYBINDINGS_SNAPSHOT: KeybindingsSnapshot = {
   bindings: {
+    ...DEFAULT_KEYBINDINGS,
     toggleEmbeddedTerminal: ["cmd+j", "ctrl+`"],
     toggleRightSidebar: ["ctrl+b"],
     openInFinder: ["cmd+alt+f"],
@@ -2123,6 +2125,7 @@ describe("ws-router", () => {
         command: {
           type: "settings.writeKeybindings",
           bindings: {
+            ...DEFAULT_KEYBINDINGS,
             toggleEmbeddedTerminal: ["cmd+k"],
             toggleRightSidebar: ["ctrl+shift+b"],
             openInFinder: ["cmd+shift+g"],
@@ -2143,6 +2146,7 @@ describe("ws-router", () => {
       id: "keybindings-write-1",
       result: {
         bindings: {
+          ...DEFAULT_KEYBINDINGS,
           toggleEmbeddedTerminal: ["cmd+k"],
           toggleRightSidebar: ["ctrl+shift+b"],
           openInFinder: ["cmd+shift+g"],
