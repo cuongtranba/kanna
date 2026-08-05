@@ -10,6 +10,8 @@ bash scripts/verify-session-tabs.sh
 
 ## Progress (latest first)
 
+- 2026-08-05 chunk 0.6 DONE — project-git + project-commands moved to useAppGlobalState; subscribes once per distinct open projectId (paneLayoutStore keys + selectedProjectId + runtimeProjectId); sameDiffs/shouldPreserveExistingProjectDiffs moved to useAppGlobalState; no call-site changes; ast-grep + lint + typecheck + 521 tests pass / 0 fail
+
 - 2026-08-05 chunk 1 paneTree flat model DONE — sessionPanes.ts: PaneTree/Pane types + openPane/closePane/selectPane/nextPane/prevPane; exported from index.ts; index.test.ts: 17 tests covering dedup, close-last, close-active-selects-nearest, keyboard wrap-around; 135 pass / 0 fail
 
 - 2026-08-05 chunk 0.5 chatNavigator port DONE (10 navigate() calls replaced, verify:client-arch 4880/0)
@@ -44,25 +46,31 @@ bash scripts/verify-session-tabs.sh
 
 ## Next chunk
 
-**0.6 — project-git + project-commands move to app-global, once per distinct projectId**
+**0.7 — isPrimaryChatInstance predicate + gate route-affecting effects**
 
-Move `project-git` and `project-commands` socket subscriptions from `useKannaState.ts`
-into `useAppGlobalState.ts`, subscribing once per DISTINCT projectId (the one real
-dedupe case: two tabs open on the same project must not double-subscribe).
-`projectDiffSnapshots` is already keyed by projectId so the snapshot state is fine.
+Add a pure predicate `isPrimaryChatInstance(chatId, activeChatId)` that returns
+true only when the given chatId is the ROUTE chatId (the "primary" instance).
+Gate the three route-affecting side-effects in `useKannaState.ts` behind it:
+
+1. The not-in-sidebar bounce (~lines 1505-1519): fires `closeChat()` to
+   navigate away when the active chat is removed from the sidebar.
+2. `setSelectedProjectId` (~line 1521): sets the selected project when the
+   active chat's project changes.
+3. `chat.markRead` (~line 1529): marks the chat as read.
+
+A BACKGROUND tab (one whose chatId ≠ the route chatId) must never trigger
+these effects — it would yank the app to a different route or steal push focus.
 
 Steps:
-1. Identify the `project-git` and `project-commands` subscription blocks in
-   `useKannaState.ts` (they subscribe on `activeChatId`'s projectId or similar).
-2. Move them into `useAppGlobalState.ts` under a `useEffect` that tracks the SET
-   of open projectIds, subscribing once and unsubscribing when the last tab for
-   that projectId closes.
-3. `useKannaState` continues to spread the `AppGlobalState` result, so call sites
-   are unchanged.
-4. Confirm `projectDiffSnapshots` is still correctly keyed and mutated.
+1. Write `isPrimaryChatInstance(chatId: string | null, activeChatId: string | null): boolean`
+   in `src/client/app/derived.ts` (or a new `src/client/app/chatInstance.ts`).
+2. Write a unit test for the predicate (pure function, easy).
+3. In `useKannaState.ts`, gate each of the three effects with `if (!isPrimary) return`.
+   `activeChatId` (the route chatId) is already in scope.
+4. Confirm existing tests still pass — no behaviour change for the single-tab case.
 
 Verify with: `bun test --conditions production src/client/app/ src/client/stores/ && bun run lint --max-warnings=0`
-Baseline: 4880+ pass / 0 fail (additive/refactor only, no behaviour change)
+Baseline: 521+ pass / 0 fail (additive/refactor only, no behaviour change)
 
 ## Context for every worker (read this first)
 
